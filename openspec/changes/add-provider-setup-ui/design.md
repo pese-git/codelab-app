@@ -32,7 +32,7 @@
 - **CLI:**
   - `ProviderCommands`/`McpServerCommands` из `run.dart`;
   - `PickerSpec` общий для REPL и TUI;
-  - `LineEditor` со скрытым вводом — у `StdinSecretInput`.
+  - скрытый ввод — `StdinSecretInput` (`codelab_agent_io`, через `codelab_setup/io.dart`): без Ctrl+R и Ctrl+U, сам подписывается на `stdin` и закрывает fd 0 отменой подписки; у `LineEditor` CLI (`lib/src/input/`) скрытого режима нет (уточнение подготовки итерации 4a, D15).
 - **Активный черновик `add-agent-os-secret-backends`** (0/14, «после 1.0»). Он добавляет хранилища ОС за тем же `SecretStore` и меняет только `openSecretStore` и `auto`. Типы, которыми пользуется B (`DescribedSecretStore`, `SecretBackendInfo`, `SecretAdmin`), он не трогает (его proposal, «Не входит»).
 
 Ограничения:
@@ -236,7 +236,7 @@ ProviderSetupFlow({
 - **Правка (`editing`).** Старт с `EnteringBaseUrl`, вид и id зафиксированы, шаг «API type» в строке шагов отмечен пройденным. Цель записи — слой, где лежит провайдер (`user` или `projectLocal`), переключателя «This project only» нет. «Edit» неактивна по тем же отказам, что «Remove»: `notEditable`, `multipleLayers`, `layerUnreadable` (D9), с тем же текстом подсказки. Правило одно — функция моста `providerEditRefusal(snapshot, providerId)` (отказ или `null`); страница берёт подсказку из неё, а автомат проверяет то же правило и отказывает в правке `editing`, для которого оно даёт отказ, без записи — неактивная кнопка не единственный рубеж (решение оркестратора, ревью итерации 3). Литеральный ключ в файле (`KeyLiteralInConfig`, D10): варианта «оставить ключ» нет — app не читает литерал (SETUP-1), а проверка без ключа дала бы ложный `unauthorized`; шаг ключа показывает `The key is written in config.yaml. Choose where to keep it instead.`, и любой выбранный источник вместе с собственными правками ключа даёт `UnsetValue("providers.<id>.api_key")` — как R4-4 у `provider add` (spec agent-configuration «Подкоманды записи и чтения конфига»).
 - **Правка: адрес с userinfo в конфиге.** Если `base_url` провайдера в файле содержит userinfo (записан вручную), шаг адреса не показывает его: поле заполняется адресом без userinfo, и шаг сразу несёт ошибку `Remove the user name and password from the address.` (Q11). Значение userinfo не попадает ни в состояние, ни в журнал (SETUP-1).
 - **Правка: модель и «Make default».** В `ChoosingModel` текущая модель провайдера выделена; «Make default» на «Review» отражает текущее состояние — включён, если `agent.default_model` указывает на этого провайдера, иначе выключен, пока пользователь не сменит выбор.
-- **`forceDefault`.** Первый запуск CLI (D16) и баннер D26 создают мастер с `forceDefault: true`: агент без `agent.default_model` не стартует, поэтому снять «Make default» там нельзя, флажок показан выбранным и неактивным.
+- **`forceDefault`.** Первый запуск CLI (D16) и баннер D26 создают мастер с `forceDefault: true`: снять «Make default» там нельзя, флажок показан выбранным и неактивным. *Уточнение после change `optional-default-model` (подготовка итерации 4a):* ключ `agent.default_model` больше не обязателен, поэтому причина другая. Мастер этих входов открывается при `providerSetupNeeded`, а он истинен и для явной модели без провайдеров (`agent.default_model: gw/m`, `CODELAB_MODEL`): без записи `agent.default_model` такая модель осталась бы указывать в пустоту. Кроме того, явная модель после мастера побеждает последнюю выбранную (design.md change `optional-default-model`, D12, п. 3). Поведение не меняется.
 
 **Шаги диалога app и ключи** (решение оркестратора; отображение состояний на строку шагов):
 
@@ -296,7 +296,9 @@ final class ProviderSetupCommitter {
   Future<AgentConfigSnapshot> reload({required String cwd});   // свежий снимок после ConfigConflict
 }
 enum KeyRollback { none, deleted, failed }   // что стало с созданным на шаге 1 секретом
-enum PlanRefusal { providerExists, providerMissing, layerUnreadable }   // отказ «Save» до записи
+// lib/src/provider/provider_setup_state.dart — отказ «Save» до записи; notEditable и multipleLayers —
+// правило providerEditRefusal для режима правки (D7, ревью итерации 3)
+enum PlanRefusal { providerExists, providerMissing, layerUnreadable, notEditable, multipleLayers }
 sealed class ProviderCommitOutcome {}
 final class ProviderCommitted extends ProviderCommitOutcome { final ConfigSaved saved; final bool keyReplaced; }
 final class ProviderKeyAppeared extends ProviderCommitOutcome {}                         // шаг 1, конфиг не писался
@@ -502,9 +504,40 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
   - Неполный набор с `--yes` (нет модели, окно неизвестно) — код `64` с именем недостающего флага.
   - Отказ проверки без `--skip-check` — код `1` и `codelab: provider check failed: <kind> (<scheme://host:port>)`, файл не изменён.
   - Набор правок совпадает с ядром.
-- **Без обязательных флагов на TTY** (stdin и stdout — терминал) — интерактивный мастер. Без TTY — прежний код `64` с прежним текстом.
+- **Без флагов ядра на TTY** (stdin и stdout — терминал, клиентских флагов нет) — интерактивный мастер. Без TTY или с флагами ядра без клиентских флагов — `ProviderCommands.add` ядра без изменений (неполный набор — прежний `64` с прежним текстом; Q13, ниже).
 - **Шаги мастера** — вопросы `LineEditor`, выбор — список со стрелками (как `CliSetup`). Ключ вводится без эха тем же скрытым вводом, что у `StdinSecretInput` (Ctrl+R показывает и прячет, Ctrl+U очищает; U-17). Ctrl+C — выход `130`, конфиг не изменён.
 - **Тексты** — артборд `CliSetup` с реальным бэкендом: `Store in file as "codelab/anthropic"`. При read-only бэкенде этой строки нет, а под вопросом печатается причина D3.
+
+**Сверка с кодом (подготовка итерации 4a, 2026-11-06).** Состояние `develop` после итераций 1–3, `optional-default-model` (PR #252) и `redact-cli-stdio-profile-args`:
+- **Флаговая форма** — `_runProvider` в `lib/src/run.dart`: `ProviderCommands().add(ProviderAddOptions(…), StdinSecretInput())`. Парсер — `_providerParser()` в `cli_args.dart`; позиционный id сейчас обязателен (`_checkArgumentCount(sub, 1, …)`). Сценарий «Мастер provider add на TTY» запускает `codelab provider add` без id (`Saved provider "local-<port>"`), поэтому id необязателен только для мастера на TTY. Без TTY остаётся прежний код `64` с прежним текстом (`provider add needs the provider id` или `missing required options: …` ядра). Переданный id мастер применяет на «Review» событием `ReviewEdited(providerId:)`.
+- **Скрытый ввод мастера** — собственное поле CLI поверх порта `Terminal` и `KeyDecoder` (`lib/src/input/`), а не `StdinSecretInput`. Причины: у `StdinSecretInput` нет Ctrl+R и Ctrl+U; он сам подписывается на `stdin` (single-subscription), а отмена подписки закрывает fd 0. После него ни REPL первого запуска, ни ввод TUI уже не прочитают терминал. Эхо поля — `*` по числу рун, Ctrl+R показывает и прячет, Ctrl+U очищает (U-17). `KeyDecoder` получает `Key.ctrlR` (`0x12`). Буфер поля не попадает в `History` и `cli_history`. `StdinSecretInput` остаётся только у `--api-key-stdin` флаговой формы и `codelab secret set`.
+- **Сборка автомата.** `isLocalHost` — функция kit (`codelab_client_core`, единственное определение в monorepo, D8; своей копии в CLI нет). Логгер — `Logger` ядра из основного бареля `codelab_embedded`: основной барель моста его не реэкспортирует. Используется логгер, который `run.dart` уже строит для встроенного агента (с `--verbose` — stderr, иначе тишина). `entry` (D18) — `cli` для мастера `provider add` на TTY и `/provider add`, `flags` для клиентских флагов, `firstRun` для D16. Порты — `providerKeysOf(await ClientSecretAccess.open(…), home:)`, `FileAgentConfigStore(paths:, environment:, secrets:)`, `ioProviderCheck()`. Их строит только `run.dart`: `codelab_setup/io.dart` разрешён только там (сторож). Построчный мастер `lib/src/setup/` получает готовый `ProviderSetupFlow` и знает только основной барель моста.
+- **Когда мастер, когда флаги, когда ядро** (решение Q13, 2026-11-06). Флаги ядра — `--kind`, `--base-url`, `--model`, `--context-window`, `--api-key-secret`, `--api-key-env`, `--api-key-stdin`, `--default`; слоевые `--project`/`--local` и позиционный id к ним не относятся:
+  - есть хотя бы один клиентский флаг (`--preset`, `--yes`, `--skip-check`) → автомат без вопросов по флагам (ниже);
+  - клиентских флагов нет, флагов ядра нет, stdin и stdout — терминал → мастер на TTY (`entry: cli`);
+  - иначе (флаги ядра есть — полный набор или нет; или нет терминала) → `ProviderCommands.add` ядра без изменений: вывод, коды и байты как у `codelab-agent provider add` (в том числе неполный набор на TTY — прежний `64`).
+- **Автомат по флагам** (`entry: flags`):
+  - пресет — `--preset <id>` (`openai`, `anthropic`, `openrouter`, `ollama`, `custom-openai`, `custom-anthropic`); без `--preset` — по `--kind`: `openai-compatible` → `custom-openai`, `anthropic` → `custom-anthropic`; ни `--preset`, ни `--kind` → недостающий флаг `--preset`;
+  - `--base-url` → `BaseUrlSubmitted`; без него — адрес пресета, у `custom-*` — недостающий флаг `--base-url`; ключ: `--api-key-env` → `UseEnvVar`, `--api-key-stdin` → `StoreSecret` (значение — `StdinSecretInput`), ничего → `NoKey`; `--api-key-secret` с клиентскими флагами не поддерживается — `KeyChoice` моста знает только секрет `codelab/<id>`, мост не меняется; `--model` → `ModelChosen` (или `ModelEnteredManually`, если модели нет в списке ответа), `--context-window` → `ModelDetailsSubmitted`; `--default` → `ReviewEdited(makeDefault: true)`, `--local` → цель `projectLocal`, `--project` → код `64` (слой 3 клиенты не пишут, SETUP-3), id → `ReviewEdited(providerId:)`;
+  - `--skip-check` не отменяет проверку: она идёт всегда, а флаг разрешает `SkipCheck(confirmed: true)` только при `unreachable` и `timeout` (SETUP-4); прочие отказы — код `1`;
+  - на «Review» без `--yes`: на TTY — сводка и `? Save? [Y/n]` (Enter или `y` — запись, `n` — код `130` без записи); без терминала — код `64`;
+  - запись — `Saved provider "<id>". Models are available in /model.` в stdout, код `0`; отказы ключа и записи — строки таблицы ниже, код `1`.
+- **Тексты ошибок флагов** (stderr, справка `provider` после пустой строки, stdout пуст; присланные значения не цитируются, CFG-10):
+
+  | Ситуация | Строка | Код |
+  |---|---|---|
+  | неизвестный `--preset` | `codelab: unknown --preset; use openai, anthropic, openrouter, ollama, custom-openai or custom-anthropic` | `64` |
+  | `--kind` не совпадает с видом `--preset` | `codelab: --kind does not match --preset` | `64` |
+  | `--kind gemini` с клиентским флагом | `codelab: --kind gemini is not supported with --preset, --yes or --skip-check; use the core flags only` | `64` |
+  | `--api-key-secret` с клиентским флагом | `codelab: --api-key-secret is not supported with --preset, --yes or --skip-check; use --api-key-stdin or --api-key-env` | `64` |
+  | `--project` с клиентским флагом | `codelab: --project is not supported with --preset, --yes or --skip-check; use --local or the user config` | `64` |
+  | недостающее значение | `codelab: missing required options: <флаги через ", ">` (формат ядра) | `64` |
+  | `http://` к нелокальному хосту (`isLocalHost` ложен), с `--yes` или без | `codelab: --base-url sends the key unencrypted to <host>; use https, or run "codelab provider add" on a terminal to confirm` (`<host>` — только хост) | `64` |
+  | ошибка шага адреса (не `http`/`https`, userinfo) | `codelab: --base-url: <текст ошибки шага D7>` | `64` |
+  | «Review» без `--yes` и без терминала | `codelab: provider add needs --yes without a terminal` | `64` |
+  | отказ проверки | `codelab: provider check failed: <kind> (<scheme://host:port>)` | `1` |
+  | ключ не принят (`--api-key-stdin` при бэкенде только для чтения, ошибка шага ключа, `ProviderKeyNotStored`) | `codelab: provider add failed: <readOnlyHint, текст ошибки шага или reason>` | `1` |
+  | запись не удалась (`PlanRefusal`, `SaveFailed`) | `codelab: provider add failed: <текст отказа D9 или outcome D18>` | `1` |
 
 ### D16. CLI: мастер первого запуска (U-17)
 
@@ -513,13 +546,25 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
 - `ConfigBroken` (проблемы, кроме отсутствия провайдера с моделью) → мастер не запускается, старт идёт прежним путём: `EmbeddedAgentConfigException`, код `64`;
 - `NoProviderConfigured` (нет ни одного провайдера с моделью; признак — общий `providerSetupNeeded` моста, D26) → текст `CliSetup` (`No model provider is configured for the embedded agent.` …) и мастер с `ConfigTarget.user()`, `makeDefault: true`. `Done` → старт агента (он читает уже записанный файл). `Cancelled`/Ctrl+C → `130`;
 - `ProviderKeyMissing`:
-  - бэкенд пишет → `Store a key for "<id>" in <backend>? [Y/n]` и шаг ключа в режиме правки;
+  - бэкенд пишет → `Store a key for "<id>" in <backend>? [Y/n]` и ввод только ключа без мастера (решение Q12, ниже «Сверка с кодом»);
   - «нет» → подсказка и обычный старт;
   - read-only → строка §12.4.3, шаг 4, и обычный старт: первый ход даст прежнюю ошибку ключа.
 
   Отступление от §12.4.3 (там выход `1`): блокировать REPL, где пользователь может выбрать модель другого провайдера, хуже, чем показать подсказку (D24).
 
 Без TTY и в `-p` поведение прежнее (решение Q4): `codelab -p` без конфига — код `64` с подсказкой `config check`. Мастер не запускается для внешних агентов (§12.4.3, шаг 7).
+
+**Сверка с кодом (подготовка итерации 4a, 2026-11-06):**
+- **Где.** Не `composition_root.dart`: он собирает только `buildCliRuntime` и по правилу сторожа не видит `codelab_setup/io.dart`, а снимок (`FileAgentConfigStore`) и порт ключей (`providerKeysOf`) живут в `io.dart`. Первый запуск вызывает `run.dart` в `_runRepl` и `_runTui`. Это происходит после `resolveAgentProfile` (только `EmbeddedProfile`) и до `buildCliRuntime`, то есть до первого `connect`. Логика ветвления — `lib/src/setup/first_run.dart` на основном бареле моста. Он получает готовые снимок, `ProviderKeys` и фабрику мастера (`entry: firstRun`, `forceDefault: true`, цель `user`). `-p` и `_runHeadless` готовность не вычисляют.
+- **Признак.** `NoProviderConfigured` — по `providerSetupNeeded` (D26 после change `optional-default-model`): нет ни одной модели (событие `config.model.none`) или явная модель без провайдеров. Провайдер с моделью без `agent.default_model` — `ProviderReady` по `CoreConfig.defaultModel`, мастер не нужен.
+- **Сбой снимка или порта ключей** (исключение `snapshot`/`ClientSecretAccess.open`) — мастер не запускается, старт идёт прежним путём: проблему конфига покажет открытие агента (`EmbeddedAgentConfigException`, код `64`), как у признака app (D26).
+- **Один владелец stdin.** `io.stdin` — single-subscription, и отмена подписки закрывает fd 0 (D15). Поэтому мастер первого запуска и следующий за ним REPL читают клавиши из одного потока: `run.dart` создаёт его один раз и отдаёт мастеру, затем `Repl`. Для `--ui tui` тот же поток передаётся `Program` (`withInput`) или освобождается так, чтобы `dart_tui` смог прочитать терминал. Механизм выбирает исполнитель, критерий — PTY-e2e 4.4 (первый запуск, затем ход в REPL и в `--ui tui`). Ctrl+C в raw-режиме приходит байтом `0x03`: мастер переводит его в `Cancel` → код `130`, терминал восстановлен.
+- **`ProviderKeyMissing` — «только ключ»** (решение Q12 (а), 2026-11-06). Мастер `ProviderSetupFlow` не запускается, конфиг не меняется, мост не меняется. Причина: `ProviderSetupFlow` с `editing` начинает с адреса и снова проводит проверку, модель и «Review» (D7, «Правка»), а конфиг уже ссылается на ключ — не хватает только значения. Ветви по `ProviderKeyMissing.reference` и `backend`:
+  - `secret <имя>`, `backend.writable` → `Store a key for "<id>" in <backend>? [Y/n]`. Enter или `y` → скрытое поле D15 `? API key ›` (пустое значение → строка `Enter the API key.` и поле снова); `ProviderKeys.write(<имя>, SecretValue)`: `ProviderKeyCreated`/`ProviderKeyReplaced` → `Saved the key as "<имя>" in <backend>. Starting the embedded agent…` и обычный старт; `ProviderKeyRefused(reason)` → `Could not store the key: <reason>` и обычный старт. `n` → `Starting without a key for "<id>". Store it later with: codelab secret set <имя>` и обычный старт. Ctrl+C на вопросе или в поле → код `130`, ничего не записано;
+  - `secret <имя>`, бэкенд только для чтения → `No writable secret store (<backend.unavailableReason>). Set <SecretNames.envOverride(имя)> or the provider's api_key_env variable.` и обычный старт;
+  - `env <VAR>` (любой бэкенд) → `The key for "<id>" is read from <VAR>, which is not set. Set it and restart codelab.` и обычный старт.
+
+  Все строки — в stdout до старта агента. Первый ход без ключа даёт прежнюю ошибку ключа (D24). Значение ключа нигде не печатается; имя секрета и переменной — не секрет (их печатает и `codelab provider list`), но в события журнала не попадают (D18).
 
 ### D17. CLI: `/provider` и `/settings` в REPL и TUI
 
@@ -528,6 +573,21 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
 **`/provider add|list|remove`** вызывают те же обработчики, что подкоманды. Порт `SetupCommands` собирает `run.dart`, а REPL и TUI получают его через `ReplContext`: правило «`codelab_setup/io.dart` только из `run.dart`» не меняется. Для `RemoteReadOnly`/`NotManaged` — строка §12.4.8, шаг 3. После записи — `Saved provider "<id>". Models are available in /model.` (агент сам пришлёт `config_option_update`).
 
 **Мастер в REPL** — построчный, как у `codelab provider add` (D15).
+
+**Сверка с кодом (подготовка итерации 4a, 2026-11-06):**
+- **Порт `SetupCommands`** — новый интерфейс CLI в `lib/src/setup/setup_commands.dart`. Его типы — только основной барель моста и свои типы CLI. `ConfigCommandResult` из `io.dart` в `repl/` не попадает: порт отдаёт свой результат CLI (код, строки stdout и stderr). Реализацию строит `run.dart` (`ProviderCommands().list/remove`, фабрика `ProviderSetupFlow` по D15, `FileAgentConfigStore` для `/settings`) и передаёт её в `Repl(…)` и `TuiRunner(…)`. `ReplContext` получает член `setup`. Его реализуют `Repl`, `TuiCommandContext` (в 4a — только проброс порта, без оверлеев 4b) и тестовые контексты (`narrow_context_test.dart`). TUI берёт тот же список команд `mvpReplCommands`. Поэтому в 4a `/provider` и `/settings` в `--ui tui` не показываются в slash-меню и `/help` и не исполняются: построчный мастер внутри кадра TUI невозможен. Они появляются в TUI в 4b вместе с оверлеями (4.15).
+- **Чьи настройки.** Команда вызывает `resolveSettingsAccess` для профиля текущего подключения (`ReplContext.profile`): `EmbeddedProfile` → `embedded`; `StdioProfile` → `stdio` с `command`, `args`, `env`; `WebSocketProfile` → `RemoteReadOnly`. `RemoteReadOnly` и `NotManaged` дают строку §12.4.8, шаг 3 без записи (SETUP-2).
+- **Ввод мастера в REPL** идёт через ту же подписку `Repl` на `Terminal.input`. Новая подписка на `stdin` запрещена (D15, D16). Пока идёт мастер, `_onKey` отдаёт клавиши ему, как блоку одобрения (`ReplInputState`). Решение Q14 (а), 2026-11-06:
+  - `/provider add`, пока у активной сессии идёт ход (состояние ввода не `editing`) → строка `Finish or cancel the current turn first (Ctrl+C), then run /provider add.`, мастер не открывается; поэтому запрос разрешения при открытом мастере в REPL не возникает;
+  - Ctrl+C и Esc в мастере → `Cancel` автомата и строка `Provider setup cancelled.`; REPL не выходит, двойной Ctrl+C выхода REPL мастером не засчитывается; в `Saving` Ctrl+C и Esc игнорируются (D21);
+  - REPL без терминала (построчный ввод) → `/provider add needs a terminal; run "codelab provider add" with flags instead.`;
+  - после записи — `Saved provider "<id>". Models are available in /model.`.
+- **`/settings`** строит строки из `SettingFieldView` моста. Этого типа и реэкспорта `SettingsRegistry`, `SettingDescriptor`, `SettingScope`, `SettingType` в основном бареле пока нет, хотя их требует spec client-agent-setup «Состав моста codelab_setup для настройки агента» (`codelab_setup/AGENTS.md` §1 и §3: «приходит с потребителем `/settings`»). Поэтому итерация 4a начинается задачей `[agent]` 4.0a: `SettingFieldView`, `settingFieldsOf(AgentConfigSnapshot)` по образцу `providerEntriesOf` (значение и источник по `origins`, `null` — значение по умолчанию; ключи `providers.*` раскрываются по id провайдеров снимка) и реэкспорт перечисленных типов вместе с `ConfigValueException` — ошибкой `parseCliValue`. Модель строк и выбор слоя записи CLI (`lib/src/setup/settings_rows.dart`, без `dart_tui`) работают поверх неё. Решение Q15, 2026-11-06:
+  - столбец `source`: `default` (значение по умолчанию), `user`, `project`, `local`, `config` (`CODELAB_CONFIG`/`--config`, `ConfigSourceKind.extraFile`), `env` (переменные окружения, `ConfigSourceKind.environment`). Ключ с источником `config` или `env` не редактируется: `<key> is set by <config|env>; it cannot be changed here.`;
+  - `/settings <key> <value>` → `Updated <key> in <path>`, для `restartRequired` — с ` (applies after restart)` в той же строке; ошибка разбора `parseCliValue` → `<key>: expected <expected>` (текст `ConfigValueException`, значение не цитируется);
+  - `/settings <key> --reset` → `Removed <key> from <path>` (с той же пометкой), ключа в слое нет → `<key> is not set in <path>` — тексты `codelab config unset`;
+  - неизвестный ключ или ключ не `scope: shared` → `Unknown setting <key>. Run /settings to list them.`;
+  - исходы записи `ConfigConflict` → `The config file changed; run the command again.`, `ConfigRejected` → `codelab: <key>: <текст проблемы валидатора>`, `ConfigInlineSecret` → `Use codelab secret set <name>`.
 
 **Мастер в `--ui tui`** — модальный экран TUI. Он ведёт тот же автомат `ProviderSetupFlow`, что подкоманда и REPL; шаги, вопросы и тексты — по артборду `CliSetup`:
 - `? API type` — список со стрелками;
@@ -669,11 +729,11 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
 | `codelab_agent_core` | `McpSessionTools.changes`, `AgentRuntime.mcpStatus` (D12); публичные `builtinModelInfo` и `safeDefaultContextWindow` для подсказки окна мастера (D7, итерация 3) | core |
 | `codelab_agent_io` | `ClientSecretAccess` (D4) | io |
 | `codelab_embedded` | `EmbeddedAgent.mcpStatus`, реэкспорт `McpServerSummary`, `McpServerState` | мост |
-| `codelab_setup` | основной барель §12.4.2 (D2, D5–D9), `io.dart`: `FileAgentConfigStore`, `ClientSecretAccess`, `ioProviderCheck`; `http` | мост |
+| `codelab_setup` | основной барель §12.4.2 (D2, D5–D9; итерация 4a — `SettingFieldView`, `settingFieldsOf`, реэкспорт `SettingsRegistry`, `SettingDescriptor`, `SettingScope`, `SettingType`, `ConfigValueException`, D17), `io.dart`: `FileAgentConfigStore`, `ClientSecretAccess`, `ioProviderCheck`; `http` | мост |
 | `codelab_client_core` | `SecretTokenRef`, `ProfileSecrets`, `SecretText`, `ProfileCommitter`, `ProfileProbe(token:)`, `ProfileSecretSource(stored:)` (D13) | core, web-безопасно |
 | `codelab_ui` | виджеты D19 | ui |
 | `apps/codelab_desktop` | `codelab_setup`; страницы, Cubit-ы, мастер, правки «Connection» и «Add profile»; сборка `lib/app/` | app |
-| `apps/codelab_cli` | мастер, первый запуск, `/provider`, `/settings`, `ProfileSecrets` | app |
+| `apps/codelab_cli` | мастер, первый запуск, `/provider`, `/settings`, `ProfileSecrets`; порт `SetupCommands` и `lib/src/setup/` на основном бареле моста, IO-порты собирает только `run.dart` (D15–D17) | app |
 
 Направление зависимостей:
 
@@ -875,5 +935,11 @@ Smoke CLI показал: при 401/403 рукопожатия WebSocket и CLI
 - **Q10** — (а): `codelab-agent provider add` при отсутствии `agent.default_model` во всех слоях ставит его сам — отдельный change `[agent]` вне этого change (MODIFIED agent-configuration), пункт backlog `delivery-roadmap.md` §10.4. В этом change флаговая форма `codelab provider add` остаётся байт в байт равной `codelab-agent` (D15).
 - **Q11** — (а): userinfo в `base_url` мастера отклоняется с подсказкой, query и fragment разрешены (D7).
 - **D26** — признак `providerSetupNeeded(AgentConfigSnapshot)` по снимку без изменения ядра; **D7** — неснимаемый «Make default» (`forceDefault`) в мастере из баннера и при первом запуске CLI — подтверждены.
+
+Решения пользователя 2026-11-06 (подготовка итерации 4a; рекомендации архитектора приняты целиком):
+- **Q12** — (а) «только ключ»: при `ProviderKeyMissing` со ссылкой `secret <имя>` и записываемым бэкендом — скрытый ввод и запись только секрета (`ProviderKeys.write`), конфиг не трогается; ссылка `env <VAR>` — подсказка и обычный старт; ответ «нет» — свой текст. Мост не меняется (D16).
+- **Q13** — (1) мастер только без флагов ядра, неполный набор на TTY — прежний `64` побайтово как `codelab-agent`; (2) без `--preset`: `--kind openai-compatible` → `custom-openai`, `--kind anthropic` → `custom-anthropic`, `--kind gemini` с клиентскими флагами — `64`; (3) `--yes` не подтверждает `http://` к нелокальному хосту — `64` (SETUP-10) (D15).
+- **Q14** — (а) `/provider add` во время хода — отказ строкой; Ctrl+C и Esc в мастере закрывают только мастер (D17).
+- **Q15** — (1) источники `config` (`CODELAB_CONFIG`/`--config`) и `env` (переменные окружения), такие ключи не редактируются; (2) после записи — `Updated <key> in <path>` и ` (applies after restart)` для `restartRequired` (D17).
 
 Открытых вопросов нет.
