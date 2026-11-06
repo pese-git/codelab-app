@@ -1,4 +1,6 @@
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_setup/codelab_setup.dart'
+    show AgentConfigSnapshot, ConfigTarget, ProviderSetupState, SettingsAccess;
 
 import '../../input/key_decoder.dart';
 import '../../render/terminal_renderer.dart';
@@ -100,4 +102,46 @@ final class ThoughtsMsg extends TuiMsg {
 /// `/clear`: заметки клиента убираются из транскрипта.
 final class ClearNotesMsg extends TuiMsg {
   const ClearNotesMsg();
+}
+
+/// Открыть мастер `/provider add` с номером [id] на состоянии [state]
+/// (design.md change `add-provider-setup-ui`, D17). [pathOf] даёт путь файла
+/// слоя для сводки.
+final class OpenWizardMsg extends TuiMsg {
+  const OpenWizardMsg(this.id, this.state, {this.pathOf});
+
+  final int id;
+  final ProviderSetupState state;
+  final String Function(ConfigTarget target)? pathOf;
+}
+
+/// Новое состояние автомата для мастера с номером [id]; чужой номер
+/// игнорируется (поздние состояния прошлого мастера, AGENTS.md §9).
+final class WizardStateMsg extends TuiMsg {
+  const WizardStateMsg(this.id, this.state);
+
+  final int id;
+  final ProviderSetupState state;
+}
+
+/// Открыть экран `/settings` с номером [id]; [snapshot] — `null` для чужого
+/// агента (локальный конфиг ему не принадлежит, SETUP-2).
+final class OpenSettingsMsg extends TuiMsg {
+  const OpenSettingsMsg(this.id, {required this.access, this.snapshot});
+
+  final int id;
+  final SettingsAccess access;
+  final AgentConfigSnapshot? snapshot;
+}
+
+/// Исход записи экрана настроек: строка [line] и новый снимок [snapshot].
+final class SettingsAppliedMsg extends TuiMsg {
+  const SettingsAppliedMsg(this.id, {required this.line, this.snapshot});
+
+  final int id;
+  final String line;
+
+  /// `null` — снимок перечитать не удалось: экран остаётся на старом и выходит
+  /// из режима записи (D21).
+  final AgentConfigSnapshot? snapshot;
 }

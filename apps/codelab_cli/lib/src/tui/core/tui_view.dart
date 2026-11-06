@@ -6,7 +6,9 @@ import '../../render/ansi.dart';
 import '../../strings.dart';
 import 'frame.dart';
 import 'status_line.dart';
+import 'overlay_view.dart';
 import 'tui_chrome.dart';
+import 'tui_overlay.dart';
 import 'tui_model.dart';
 
 /// Кадр полноэкранного режима по модели экрана.
@@ -30,7 +32,8 @@ Frame render(TuiModel model, TuiChrome chrome) {
   final color = model.color;
   final lines = <String>[];
 
-  final picker = model.overlay == null
+  final modal = isModalOverlay(model.overlay);
+  final picker = model.overlay is! PickerOverlay
       ? const <String>[]
       : (chrome.picker ?? const <String>[]).take(model.size.rows ~/ 2).toList();
   final transcript = transcriptLines(model);
@@ -49,7 +52,15 @@ Frame render(TuiModel model, TuiChrome chrome) {
   }
 
   final (int, int)? cursor;
-  if (approvalOf(model) case final prompt?) {
+  if (modal) {
+    // Модальный экран вместо зоны одобрения и композера (spec codelab-tui
+    // «Кадр TUI»); ожидающее одобрение видно в статус-строке.
+    final overlay = model.overlay!;
+    final top = lines.length;
+    lines.addAll(overlayLinesOf(overlay, width: width, rows: model.size.rows));
+    final at = overlayCursorOf(overlay);
+    cursor = at == null ? null : (top + at.$1, min(at.$2, width - 1));
+  } else if (approvalOf(model) case final prompt?) {
     lines.addAll(approvalLines(model, prompt));
     cursor = null;
   } else {
@@ -123,6 +134,7 @@ StatusInfo statusInfoOf(TuiModel model, TuiChrome chrome) {
     mode: option('mode'),
     model: option('model'),
     queued: session?.queue.length ?? 0,
+    approvalPending: isModalOverlay(model.overlay) && approvalOf(model) != null,
     spinner: model.running ? chrome.spinner : null,
     elapsed: model.running && started != null
         ? chrome.now.difference(started)

@@ -139,6 +139,7 @@ final class WizardStep {
     this.waiting = false,
     this.saving = false,
     this.savedProviderId,
+    this.savedHasKey = false,
     this.failure,
     this.cancelled = false,
     this.backend,
@@ -174,6 +175,11 @@ final class WizardStep {
 
   /// Мастер закончен записью провайдера с этим id.
   final String? savedProviderId;
+
+  /// У записанного провайдера есть ключ (`api_key_secret` или
+  /// `api_key_env`): агент подхватит его модели только после перезапуска
+  /// (R0-4); без ключа — на лету.
+  final bool savedHasKey;
 
   /// Мастер закончен отказом записи: строка для человека.
   final String? failure;
@@ -347,7 +353,10 @@ WizardStep wizardStepOf(
       final text = saveFailureText(failure);
       return WizardStep(notes: [text], failure: text);
     case Done(:final plan):
-      return WizardStep(savedProviderId: plan.providerId);
+      return WizardStep(
+        savedProviderId: plan.providerId,
+        savedHasKey: plan.key is! NoKey,
+      );
     case Cancelled():
       return const WizardStep(cancelled: true);
   }
@@ -409,3 +418,13 @@ WizardStep _keyStep(ChoosingKey state) {
     backend: backend,
   );
 }
+
+/// Строка об успешной записи провайдера: единственный источник для
+/// подкоманды, `/provider add` и оверлея TUI.
+///
+/// Почему две формы: провайдера с ключом встроенный агент подхватывает после
+/// перезапуска (правило R0-4 не меняется), без ключа — на лету через
+/// `config_option_update` (design.md change `add-provider-setup-ui`, D15).
+String savedProviderLine(String providerId, {required bool hasKey}) => hasKey
+    ? 'Saved provider "$providerId". Restart codelab to use its models.'
+    : 'Saved provider "$providerId". Models are available in /model.';

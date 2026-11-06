@@ -239,8 +239,7 @@ Future<SetupCommandResult> runProviderAddByFlags({
       Done(:final plan) => SetupCommandResult(
         exitCode: okExit,
         stdout: [
-          'Saved provider "${plan.providerId}". Models are available in '
-              '/model.',
+          savedProviderLine(plan.providerId, hasKey: plan.key is! NoKey),
         ],
       ),
       SaveFailed(:final failure) => _failed(saveFailureText(failure)),

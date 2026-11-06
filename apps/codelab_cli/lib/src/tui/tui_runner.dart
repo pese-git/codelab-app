@@ -124,7 +124,7 @@ final class TuiRunner {
 
   final SetupCommands? _setup;
 
-  final _router = CommandRouter(mvpReplCommands);
+  final _router = CommandRouter(replCommands);
   TuiCommandContext? _context;
   tea.Program? _program;
 
@@ -173,6 +173,11 @@ final class TuiRunner {
       history: _history,
       onQuit: (code) => _code ??= code,
       runCommand: _runCommand,
+      // Мастер и экран настроек живут в контексте: он держит единственную
+      // подписку на `flow.states` и порт записи (D17, D21).
+      wizardEvent: (event, id) => _context?.wizardEvent(event, overlayId: id),
+      applySetting: (id, key, raw, layer, explicit) async => _context
+          ?.applySettingFor(id, key, raw, layer, explicitLayer: explicit),
     );
     final app = TuiApp(
       model: TuiModel.initial(
@@ -182,7 +187,7 @@ final class TuiRunner {
         unicode: _unicode,
         color: _color,
         cwd: _cwd,
-        commands: mvpReplCommands,
+        commands: replCommands,
       ),
       input: TuiInput(),
       effects: effects,

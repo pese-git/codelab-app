@@ -81,6 +81,7 @@ final class TuiInput {
         'd' => Key.ctrlD,
         'e' => Key.ctrlE,
         'l' => Key.ctrlL,
+        'r' => Key.ctrlR,
         'u' => Key.ctrlU,
         _ => null,
       };

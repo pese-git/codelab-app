@@ -1,5 +1,7 @@
 import 'package:codelab_setup/codelab_setup.dart';
 
+import '../repl/picker_spec.dart';
+
 /// Строки `/settings`: ключи реестра со `scope: shared` (design.md change
 /// `add-provider-setup-ui`, D17, Q15). `trusted_projects` показывается, но не
 /// правится ([isTrustBoundary]).
@@ -63,13 +65,36 @@ String? settingKeyRefusal(String key) {
   return null;
 }
 
+/// Отказ по строке [row] (до записи): ключ ([settingKeyRefusal]), источник
+/// `config`/`env`, замаскированное значение; `null` — строку можно менять.
+///
+/// Единое место для `applySetting` и экрана настроек TUI: замаскированное
+/// значение (литеральный секрет, в том числе элемент списка) нельзя ни
+/// переписать, ни сбросить вслепую (D17, D20).
+String? settingRowRefusal(SettingFieldView row) {
+  if (settingKeyRefusal(row.key) case final refusal?) {
+    return refusal;
+  }
+  if (isExternalSource(row)) {
+    return '${row.key} is set by ${row.sourceName}; it cannot be changed here.';
+  }
+  if (row.masked) {
+    return 'Use codelab secret set <name>';
+  }
+  return null;
+}
+
 /// Записывает или сбрасывает [key] в слое [layer] и возвращает строку исхода
 /// (design.md change `add-provider-setup-ui`, D17, Q15).
 ///
 /// Почему одна функция: REPL (`/settings`) и оверлей TUI проверяют и пишут
 /// одинаково, своих текстов у оверлея нет (SETUP-3, SETUP-6).
 ///
-/// Как использовать: [raw] — введённая строка (`null` — сброс); слой выбирает
+/// Как использовать: [access] (если передан) нужен для правила «ключ слоя
+/// `local` или `project` без цели `projectLocal` не пишется в `user` по
+/// умолчанию»; [explicitLayer] (явный выбор слоя, ctrl+u) это правило снимает
+/// — пользователь сам выбрал `user`, но источники `config`/`env` и маска
+/// остаются отказом. [raw] — введённая строка (`null` — сброс); слой выбирает
 /// вызывающий (`user`, `projectLocal`; слой 3 не пишется никогда). Цепочка:
 /// отказ по ключу ([settingKeyRefusal]), источник `config`/`env`, нечитаемый
 /// слой, разбор `parseCliValue`, `apply`. Значение в текст не попадает
@@ -80,13 +105,29 @@ Future<String> applySetting(
   String key, {
   String? raw,
   required ConfigLayer layer,
+  EditableSettings? access,
+  bool explicitLayer = false,
 }) async {
   if (settingKeyRefusal(key) case final refusal?) {
     return refusal;
   }
   final descriptor = editableDescriptorOf(key)!;
   final row = settingRowsOf(snapshot).where((r) => r.key == key).firstOrNull;
-  if (isExternalSource(row)) {
+  if (row != null) {
+    if (settingRowRefusal(row) case final refusal?) {
+      return refusal;
+    }
+  }
+  // Ключ слоя `local` или `project`, а цели `projectLocal` нет: запись в
+  // `user` перекрыта значением того слоя — не пишем молча (решения
+  // пользователя, ревью 4b).
+  final kind = row?.source?.kind;
+  if (access != null &&
+      (kind == ConfigSourceKind.projectLocal ||
+          kind == ConfigSourceKind.project) &&
+      layer != ConfigLayer.projectLocal &&
+      !explicitLayer &&
+      !access.targets.any((t) => t.layer == ConfigLayer.projectLocal)) {
     return '$key is set by ${row!.sourceName}; it cannot be changed here.';
   }
   final base = snapshot.layers[layer];
@@ -132,10 +173,13 @@ Future<String> applySetting(
 
 /// Слой записи для строки [row] экрана настроек (D17, D24).
 ///
-/// `toUser` (Ctrl+U) — всегда `user`. Иначе: источник `local` — `projectLocal`;
-/// `project` — `projectLocal`, если у [access] есть такая цель, иначе `user`
-/// (слой 3 не пишется, SETUP-3); `default`/`user` — `user`; `config`/`env` —
-/// `null` (ключ задан извне). Ключи слоя `project` правятся, хотя
+/// Ключ слоя `local` или `project` без цели `projectLocal` у [access] даёт
+/// `null` (`<key> is set by local|project; it cannot be changed here.`).
+///
+/// `toUser` (Ctrl+U) — всегда `user`. Иначе: источник `local` или `project` —
+/// `projectLocal`, если у [access] есть такая цель, иначе отказ (`null`; слой 3
+/// не пишется, SETUP-3, и молча в `user` не пишем); `default`/`user` — `user`;
+/// `config`/`env` — `null` (ключ задан извне). Ключи слоя `project` правятся, хотя
 /// `SettingFieldView.editable` у них `false`: он говорит «этот файл не
 /// пишется», а не «ключ нельзя менять».
 ConfigLayer? settingWriteLayerOf(
@@ -151,8 +195,24 @@ ConfigLayer? settingWriteLayerOf(
   );
   return switch (row.source?.kind) {
     ConfigSourceKind.extraFile || ConfigSourceKind.environment => null,
-    ConfigSourceKind.projectLocal || ConfigSourceKind.project =>
-      hasLocal ? ConfigLayer.projectLocal : ConfigLayer.user,
+    // Ключ слоя `local`, а цели нет: молча писать в `user` нельзя — значение
+    // слоя `local` его перекроет (отказ, как у `config`/`env`).
+    ConfigSourceKind.projectLocal => hasLocal ? ConfigLayer.projectLocal : null,
+    // Слой 3 пишется в `projectLocal`; цели нет — молча в `user` не пишем.
+    ConfigSourceKind.project => hasLocal ? ConfigLayer.projectLocal : null,
     ConfigSourceKind.user || null => ConfigLayer.user,
   };
 }
+
+/// Список `/settings` для REPL: по строке `key value source` на ключ, пункт
+/// запускает `/settings <key>`.
+PickerSpec settingsPickerOf(AgentConfigSnapshot snapshot) => PickerSpec(
+  title: 'Settings (key, value, source):',
+  items: [
+    for (final row in settingRowsOf(snapshot))
+      PickerItem(
+        label: '${row.key}  ${row.displayValue}  ${row.sourceName}',
+        line: '/settings ${row.key}',
+      ),
+  ],
+);

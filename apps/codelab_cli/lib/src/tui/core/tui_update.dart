@@ -1,4 +1,6 @@
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_setup/codelab_setup.dart'
+    show AgentConfigSnapshot, ProviderSetupState;
 
 import '../../input/key_bindings.dart';
 import '../../input/key_decoder.dart';
@@ -7,7 +9,9 @@ import '../../repl/command_router.dart';
 import '../../repl/picker_spec.dart';
 import '../../strings.dart';
 import 'composer.dart';
+import 'overlay_update.dart';
 import 'transcript_lines.dart';
+import 'tui_overlay.dart';
 import 'tui_cmd.dart';
 import 'tui_model.dart';
 import 'tui_msg.dart';
@@ -33,6 +37,12 @@ const exitWindow = Duration(seconds: 1);
 /// равно ловит исключения (`reduceGuarded`, §12.2.7, шаг 7).
 (TuiModel, List<TuiCmd>) reduce(TuiModel model, TuiMsg msg) => switch (msg) {
   KeyMsg(:final key, :final at) => _key(model, key, at),
+  // Под модальным экраном вставка идёт в его поле, а не в композер.
+  PasteMsg(:final text) when isModalOverlay(model.overlay) => overlayPaste(
+    model,
+    model.overlay!,
+    text,
+  ),
   PasteMsg(:final text) => (
     model.copyWith(composer: model.composer.paste(text)),
     const [],
@@ -60,17 +70,76 @@ const exitWindow = Duration(seconds: 1);
     const [],
   ),
   OpenPickerMsg(:final spec) => (
-    spec.items.isEmpty ? model : model.copyWith(overlay: () => spec),
+    spec.items.isEmpty
+        ? model
+        : model.copyWith(overlay: () => PickerOverlay(spec)),
     const [],
   ),
   PickerChosenMsg(:final index) => _chosen(model, index),
-  PickerClosedMsg() => (model.copyWith(overlay: () => null), const []),
+  PickerClosedMsg() => (
+    model.overlay is PickerOverlay
+        ? model.copyWith(overlay: () => null)
+        : model,
+    const [],
+  ),
+  OpenWizardMsg(:final id, :final state, :final pathOf) => (
+    model.copyWith(
+      overlay: () => ProviderWizardOverlay.of(id, state, pathOf: pathOf),
+    ),
+    const [],
+  ),
+  WizardStateMsg(:final id, :final state) => (
+    _wizardState(model, id, state),
+    const [],
+  ),
+  OpenSettingsMsg(:final id, :final access, :final snapshot) => (
+    model.copyWith(
+      overlay: () =>
+          SettingsOverlay.open(id, access: access, snapshot: snapshot),
+    ),
+    const [],
+  ),
+  SettingsAppliedMsg(:final id, :final line, :final snapshot) => (
+    _settingsApplied(model, id, line, snapshot),
+    const [],
+  ),
   ThoughtsMsg(:final mode) => (model.copyWith(thoughts: mode), const []),
   ClearNotesMsg() => (model.copyWith(notes: const []), const []),
 };
 
+/// Состояние автомата: чужой номер игнорируется; `Done`, `Cancelled` и отказ
+/// записи закрывают экран (одна точка правды — автомат, D17).
+TuiModel _wizardState(TuiModel model, int id, ProviderSetupState state) {
+  final overlay = model.overlay;
+  if (overlay is! ProviderWizardOverlay || overlay.id != id) {
+    return model;
+  }
+  final next = wizardStateOverlay(overlay, state);
+  return model.copyWith(overlay: () => next);
+}
+
+TuiModel _settingsApplied(
+  TuiModel model,
+  int id,
+  String line,
+  AgentConfigSnapshot? snapshot,
+) {
+  final overlay = model.overlay;
+  if (overlay is! SettingsOverlay || overlay.id != id) {
+    return model;
+  }
+  return model.copyWith(
+    overlay: () => snapshot == null
+        ? overlay.withLine(line)
+        : overlay.withSnapshot(snapshot, line),
+  );
+}
+
 (TuiModel, List<TuiCmd>) _chosen(TuiModel model, int index) {
-  final spec = model.overlay;
+  final spec = switch (model.overlay) {
+    PickerOverlay(:final spec) => spec,
+    _ => null,
+  };
   final closed = model.copyWith(overlay: () => null);
   if (spec == null || index < 0 || index >= spec.items.length) {
     return (closed, const []);
@@ -118,6 +187,11 @@ TuiModel _note(TuiModel model, String text) => model.copyWith(
 );
 
 (TuiModel, List<TuiCmd>) _key(TuiModel model, KeyEvent key, DateTime at) {
+  // Модальный экран получает клавиши раньше зоны одобрения и композера:
+  // Enter не отправляет промпт, Esc закрывает экран, а не отменяет ход (D17).
+  if (isModalOverlay(model.overlay)) {
+    return overlayKey(model, model.overlay!, key);
+  }
   if (approvalOf(model) case final prompt?) {
     return _approvalKey(model, prompt, key);
   }
@@ -253,17 +327,19 @@ TuiModel _complete(TuiModel model) {
   }
   if (result.candidates.length > 1) {
     next = next.copyWith(
-      overlay: () => PickerSpec(
-        items: [
-          for (final candidate in result.candidates)
-            PickerItem(
-              label:
-                  '${candidate.label}  ${candidate.description}'
-                  '${candidate.fromAgent ? ' (agent)' : ''}',
-              line: '${candidate.label} ',
-            ),
-        ],
-        action: PickerAction.insert,
+      overlay: () => PickerOverlay(
+        PickerSpec(
+          items: [
+            for (final candidate in result.candidates)
+              PickerItem(
+                label:
+                    '${candidate.label}  ${candidate.description}'
+                    '${candidate.fromAgent ? ' (agent)' : ''}',
+                line: '${candidate.label} ',
+              ),
+          ],
+          action: PickerAction.insert,
+        ),
       ),
     );
   }

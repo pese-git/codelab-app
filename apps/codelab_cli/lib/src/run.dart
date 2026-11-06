@@ -45,6 +45,7 @@ import 'setup/prompt_line.dart';
 import 'setup/prompt_reader.dart';
 import 'setup/provider_wizard.dart';
 import 'setup/setup_commands.dart';
+import 'setup/wizard_steps.dart' show savedProviderLine;
 import 'render/output_surface.dart';
 import 'render/sanitize.dart';
 import 'repl/repl.dart';
@@ -464,10 +465,8 @@ Future<int?> _providerAdd(
     pathOf: built.pathOf,
   );
   switch (result) {
-    case ProviderWizardSaved(:final providerId):
-      io.stdout.writeln(
-        'Saved provider "$providerId". Models are available in /model.',
-      );
+    case ProviderWizardSaved(:final providerId, :final hasKey):
+      io.stdout.writeln(savedProviderLine(providerId, hasKey: hasKey));
       return okExit;
     case ProviderWizardCancelled():
       return sigintExit;

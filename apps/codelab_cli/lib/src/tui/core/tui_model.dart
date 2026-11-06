@@ -3,11 +3,12 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../../render/terminal_renderer.dart';
 import '../../repl/approval_prompt.dart';
-import '../../repl/picker_spec.dart';
 import '../../repl/repl_command.dart';
 import 'composer.dart';
 import 'frame.dart';
+import 'overlay_view.dart';
 import 'transcript_lines.dart';
+import 'tui_overlay.dart';
 
 /// Размер терминала в колонках и строках.
 final class TerminalSize {
@@ -113,7 +114,7 @@ final class TuiModel {
   final bool color;
   final String cwd;
   final List<ReplCommand> commands;
-  final PickerSpec? overlay;
+  final TuiOverlay? overlay;
   final ApprovalRequestId? detailsFor;
 
   /// Идёт ли ход: клавиши Esc и Ctrl+C отменяют его.
@@ -131,7 +132,7 @@ final class TuiModel {
     ThoughtsMode? thoughts,
     DateTime? Function()? turnStartedAt,
     DateTime? Function()? lastInterrupt,
-    PickerSpec? Function()? overlay,
+    TuiOverlay? Function()? overlay,
     ApprovalRequestId? Function()? detailsFor,
   }) => TuiModel._(
     profile: profile,
@@ -225,6 +226,9 @@ List<String> _wrapEntries(String hint, int width) {
 /// Сколько строк занимает низ экрана: зона одобрения или композер (не
 /// больше 10 строк, дальше он прокручивается).
 int composerRows(TuiModel model) {
+  if (isModalOverlay(model.overlay)) {
+    return overlayHeight(model);
+  }
   final prompt = approvalOf(model);
   if (prompt != null) {
     return approvalLines(model, prompt).length;
@@ -258,3 +262,12 @@ int newSinceHold(TuiModel model) {
   final count = transcriptLines(model).length - model.scroll.holdTotal;
   return count < 0 ? 0 : count;
 }
+
+/// Высота модального экрана в строках кадра.
+int overlayHeight(TuiModel model) => model.overlay == null
+    ? 0
+    : overlayLinesOf(
+        model.overlay!,
+        width: model.size.columns,
+        rows: model.size.rows,
+      ).length;

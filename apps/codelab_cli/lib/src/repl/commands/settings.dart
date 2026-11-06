@@ -2,6 +2,7 @@ import 'package:codelab_setup/codelab_setup.dart';
 
 import '../../setup/settings_access.dart';
 import '../../setup/settings_rows.dart';
+import '../../setup/settings_screen.dart';
 import '../picker_spec.dart';
 import '../repl_command.dart';
 
@@ -41,11 +42,16 @@ final class SettingsCommand implements ReplCommand {
       cwd: context.cwd,
       codelabHome: setup.codelabHome,
     );
-    if (readOnlyLineOf(access) case final line?) {
-      context.say(line);
+    if (access is! EditableSettings) {
+      if (args.isEmpty) {
+        // Список (и экран TUI) для чужого агента — только чтение.
+        context.showSettings(SettingsScreen(access: access));
+      } else {
+        context.say(readOnlyLineOf(access)!);
+      }
       return;
     }
-    final editable = access as EditableSettings;
+    final editable = access;
     final local = args.contains('--local');
     final reset = args.contains('--reset');
     final words = [
@@ -60,12 +66,20 @@ final class SettingsCommand implements ReplCommand {
     final store = await setup.configStore(scope);
     final snapshot = await store.snapshot(cwd: scope.cwd);
     if (words.isEmpty) {
-      _list(context, snapshot);
+      context.showSettings(
+        SettingsScreen(
+          access: editable,
+          scope: scope,
+          store: store,
+          snapshot: snapshot,
+        ),
+      );
       return;
     }
     final key = words.first;
-    // Единственное место проверок записи — `applySetting` (D17); пикер
-    // значений тоже не открывается для отказных ключей.
+    // Отказ по самому ключу нужен и до пикера значений (он для таких ключей
+    // не открывается); остальные проверки записи — источник, замаскированное
+    // значение, слой — только в `applySetting` (D17), своей копии здесь нет.
     if (settingKeyRefusal(key) case final refusal?) {
       context.say(refusal);
       return;
@@ -87,22 +101,7 @@ final class SettingsCommand implements ReplCommand {
         key,
         raw: reset ? null : words.skip(1).join(' '),
         layer: layer,
-      ),
-    );
-  }
-
-  void _list(ReplContext context, AgentConfigSnapshot snapshot) {
-    final rows = settingRowsOf(snapshot);
-    context.pick(
-      PickerSpec(
-        title: 'Settings (key, value, source):',
-        items: [
-          for (final row in rows)
-            PickerItem(
-              label: '${row.key}  ${row.displayValue}  ${row.sourceName}',
-              line: '/settings ${row.key}',
-            ),
-        ],
+        access: editable,
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:codelab_setup/codelab_setup.dart'
 import '../input/key_bindings.dart';
 import '../render/terminal_renderer.dart';
 import '../setup/provider_wizard.dart';
+import '../setup/settings_screen.dart';
 import '../setup/setup_commands.dart';
 import 'picker_spec.dart';
 
@@ -92,6 +93,10 @@ abstract interface class ReplContext {
   /// Порт настройки агента для `/provider` и `/settings`; `null` — хост его
   /// не собрал (design.md change `add-provider-setup-ui`, D17).
   SetupCommands? get setup;
+
+  /// Экран `/settings` без аргументов: REPL печатает список, TUI открывает
+  /// оверлей (D17).
+  void showSettings(SettingsScreen screen);
 
   /// У активной сессии идёт ход или ждётся одобрение: мастеру `/provider add`
   /// в это время не место (решение Q14, D17).
