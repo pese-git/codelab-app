@@ -46,6 +46,7 @@ library;
 
 export 'src/io/file_agent_config_store.dart' show FileAgentConfigStore;
 export 'src/io/io_provider_check.dart' show ioProviderCheck;
+export 'src/io/provider_keys.dart' show providerKeysOf;
 export 'src/io/secret_deleter.dart' show secretDeleterOf;
 
 export 'package:codelab_agent_io/codelab_agent_io.dart'

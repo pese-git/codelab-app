@@ -61,12 +61,25 @@ final class ProviderSettingsUnreadable extends ProviderSettingsLoaded {
 /// Вид баннера результата записи.
 enum ProviderBannerKind { saved, conflict, error }
 
+/// Действие, которое страница может предложить в баннере.
+///
+/// Почему перечисление, а не колбэк: баннер живёт в состоянии Cubit, а
+/// состояние не хранит замыканий; что значит действие, знает только Cubit
+/// (design.md change `add-provider-setup-ui`, D9).
+enum ProviderBannerAction {
+  /// «Connect»: подключить окно к профилю по умолчанию (агент не запущен).
+  connect,
+}
+
 /// Баннер результата записи (ключ `providers-banner`).
 final class ProviderBanner {
-  const ProviderBanner(this.kind, this.text);
+  const ProviderBanner(this.kind, this.text, {this.action});
 
   final ProviderBannerKind kind;
   final String text;
+
+  /// Кнопка баннера (`providers-banner-connect`); `null` — без кнопки.
+  final ProviderBannerAction? action;
 
   @override
   String toString() => 'ProviderBanner(${kind.name})';
@@ -147,6 +160,8 @@ final class ProviderRow {
     required this.source,
     required this.isDefault,
     required this.editable,
+    this.canEdit = false,
+    this.editHint,
     required this.canRemove,
     this.removeHint,
     this.canCheck = true,
@@ -176,6 +191,15 @@ final class ProviderRow {
 
   /// Слои `user` и `projectLocal`; иначе «Edit» и «Remove» нет (SETUP-3).
   final bool editable;
+
+  /// «Edit» доступна: редактируемый слой, провайдер лежит в одном слое и файл
+  /// слоя читается — те же отказы, что у «Remove» (`notEditable`,
+  /// `multipleLayers`, `layerUnreadable`; design.md change
+  /// `add-provider-setup-ui`, D7, D9).
+  final bool canEdit;
+
+  /// Подсказка неактивной «Edit» (`null` — «Edit» активна или её нет).
+  final String? editHint;
 
   /// «Remove» доступна: редактируемый и не последний.
   final bool canRemove;
@@ -208,6 +232,8 @@ final class ProviderRow {
     source: source,
     isDefault: isDefault,
     editable: editable,
+    canEdit: canEdit,
+    editHint: editHint,
     canRemove: canRemove,
     removeHint: removeHint,
     canCheck: canCheck,

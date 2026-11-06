@@ -20,6 +20,7 @@ import 'package:codelab_acp_transports/codelab_acp_transports.dart'
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../app/provider_setup_offer.dart';
 import '../../../core/platform/connection_preferences.dart';
 import '../../../core/platform/dock_layout_store.dart';
 import '../../../core/platform/project_folder_picker.dart';
@@ -35,7 +36,10 @@ import 'transcript_view_cubit.dart';
 import 'ui_mappers.dart' show paletteCatalogOf;
 
 export 'connection_cubit.dart'
-    show CodeLabStdioTransportFactory, CodeLabWebSocketTransportFactory;
+    show
+        CodeLabStdioTransportFactory,
+        CodeLabWebSocketTransportFactory,
+        ProviderSetupNotice;
 export 'layout_cubit.dart'
     show
         kDockMaxWidth,
@@ -91,6 +95,7 @@ final class CodeLabShellParts {
     Logger? logger,
     Logger? eventLogger,
     ProfileSecretSource? tokenSecrets,
+    ProviderSetupOffer? providerSetupOffer,
   }) {
     final changes = ShellChanges();
     final diagnostics = ShellDiagnostics(logger: logger);
@@ -119,6 +124,7 @@ final class CodeLabShellParts {
       preferences: preferences,
       eventLogger: eventLogger,
       tokenSecrets: tokenSecrets,
+      providerSetupOffer: providerSetupOffer,
     );
     return CodeLabShellParts._(
       changes: changes,
@@ -282,6 +288,15 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       _connection.connect(profile);
 
   Future<void> reconnect() => _connection.reconnect();
+
+  /// Однократный запуск мастера из баннера (D26).
+  Future<void> runProviderSetup(Future<void> Function() action) =>
+      _connection.runProviderSetup(action);
+
+  /// Переподключает встроенного агента после записи провайдера из баннера,
+  /// если новой попытки с момента сбоя не было (D26).
+  Future<void> connectAfterProviderSetup(ProviderSetupNotice notice) =>
+      _connection.connectAfterProviderSetup(notice);
 
   /// «Connect on start» (D8): app зовёт его после первого кадра; один раз.
   Future<void> connectOnStart() => _connection.connectOnStart();
@@ -488,6 +503,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       profileLabel: connection.selectedProfileLabel,
       connectionDetail: connection.selectedConnectionDetail,
       connectionMessage: connection.connectionMessage,
+      providerSetupNotice: connection.providerSetupNotice,
       currentSessionLabel: sessions.currentSessionLabel,
       currentSessionDetail: sessions.currentSessionDetail,
       sessions: sessions.sessions,
