@@ -1343,6 +1343,39 @@ providers:
       expect(result.stdout.last, 'Config: invalid (issues: 1)');
     });
 
+    test('the choice of the model adds no store reads: the same reads as with '
+        'an explicit agent.default_model (CFG-10)', () async {
+      // `ConfigLoader` хранилища не принимает вовсе (структурная гарантия
+      // загрузки). `config check` сам спрашивает хранилище о состоянии
+      // секретов (прежнее поведение), поэтому выбор модели проверяется
+      // сравнением: чтений ровно столько же, сколько при явной модели.
+      final withRef = gwOnly.replaceFirst(
+        '    models:',
+        '    api_key_secret: codelab/gw\n    models:',
+      );
+      ConfigCommands commandsOver(_CountingSecretStore store) => ConfigCommands(
+        openStore: ({required choice, required environment, required home}) =>
+            store,
+      );
+
+      write('$home/config.yaml', '${withRef}agent:\n  default_model: gw/m\n');
+      final explicit = _CountingSecretStore({
+        'codelab/gw': 'sk-test-leak-0123',
+      });
+      await check(commands: commandsOver(explicit));
+
+      write('$home/config.yaml', withRef);
+      final implicit = _CountingSecretStore({
+        'codelab/gw': 'sk-test-leak-0123',
+      });
+      final result = await check(commands: commandsOver(implicit));
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(implicit.reads, explicit.reads);
+      expect(result.stdout.join('\n'), isNot(contains('sk-test-leak')));
+    });
+
     test('no secret reaches the line when the provider has a secret '
         'reference', () async {
       write(
@@ -1435,4 +1468,32 @@ final class _UnavailableStore implements DescribedSecretStore {
 
   @override
   Future<List<String>> names() async => const [];
+}
+
+/// Хранилище, считающее чтения значений: `config check` смотрит имена, но не
+/// значения секретов.
+final class _CountingSecretStore implements DescribedSecretStore {
+  _CountingSecretStore(Map<String, String> initial)
+    : _inner = MemorySecretStore(initial);
+
+  final MemorySecretStore _inner;
+  final reads = <String>[];
+
+  @override
+  SecretBackendInfo get backend => _inner.backend;
+
+  @override
+  Future<String?> read(String name) {
+    reads.add(name);
+    return _inner.read(name);
+  }
+
+  @override
+  Future<void> write(String name, String value) => _inner.write(name, value);
+
+  @override
+  Future<void> delete(String name) => _inner.delete(name);
+
+  @override
+  Future<List<String>> names() => _inner.names();
 }

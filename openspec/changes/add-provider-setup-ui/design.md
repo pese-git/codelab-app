@@ -795,7 +795,7 @@ Smoke CLI показал: при 401/403 рукопожатия WebSocket и CLI
 
 ### D26. Встроенный агент без провайдера: баннер с «Add provider»
 
-Решение пользователя 2026-11-06, итерация 3. На новой установке встроенный агент не открывается: `EmbeddedAgentConfigException` (`agent.default_model: required` …), и баннер соединения показывает сырой текст проблем с подсказкой `codelab config check`, без пути к настройке.
+Решение пользователя 2026-11-06, итерация 3. На новой установке встроенный агент не открывается: `EmbeddedAgentConfigException` (`agent.default_model: no model is configured; add a provider with at least one model` …; до change `optional-default-model` — `agent.default_model: required`), и баннер соединения показывает сырой текст проблем с подсказкой `codelab config check`, без пути к настройке.
 
 - **Признак** — чистая функция моста `providerSetupNeeded(AgentConfigSnapshot snapshot)` в основном бареле `codelab_setup`. Истинна, если у загрузки есть проблемы, все они — `ConfigIssueKind.value` ключа `agent.default_model`, и выполнено одно из двух:
   - среди проблем есть проблема с событием `config.model.none` — ни у одного провайдера нет модели: новая установка, пустой файл, провайдеры без моделей (design.md change `optional-default-model`, D4);
@@ -817,7 +817,7 @@ Smoke CLI показал: при 401/403 рукопожатия WebSocket и CLI
 - Полный onboarding остаётся отдельным change (Q3).
 
 *Альтернативы:*
-- разбирать текст `message` на `agent.default_model: required` — хрупко и расходится с CLI;
+- разбирать текст `message` (`no model is configured…`, прежде `agent.default_model: required`) — хрупко и расходится с CLI; текст уже менялся вместе с валидатором (change `optional-default-model`, D4);
 - открывать страницу Providers вместо мастера — лишний шаг, а пустая страница в итерации 2 и так ведёт в мастер;
 - типизированное исключение в `ClientWorkspace` — меняет публичный API kit ради одного случая встроенного агента.
 

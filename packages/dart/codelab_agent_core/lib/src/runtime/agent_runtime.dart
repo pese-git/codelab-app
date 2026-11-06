@@ -293,7 +293,12 @@ final class AgentRuntimeImpl implements AgentRuntime {
     // Явная модель вызывающего — выбор пользователя: запоминается после
     // записи в журнал (D6). Автоматический выбор память не трогает.
     if (spec.model != null) {
-      await _rememberModel(model, sessionLogger, header.id);
+      await rememberLastModel(
+        services.lastModel,
+        model,
+        sessionLogger,
+        header.id,
+      );
     }
     // «Живая» для перезагрузки — возвращённая вызывающему (ACP-8: до ответа
     // `session/new` уведомлений нет).
@@ -337,6 +342,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
       effort: settings.effort,
     );
     final model = _resolve(start, picked, settings.effort);
+    if (last != null && source != DefaultModelSource.lastUsed) {
+      // Память есть, но модели в каталоге сессии нет (провайдер удалён или
+      // сессия вне корня запуска): причину видно в логе, содержимого файла
+      // состояния в записи нет (§16).
+      logger.log(
+        LogLevel.info,
+        'model.last_used.ignored',
+        fields: {'session_id': sessionId.value, 'reason': 'not in catalog'},
+      );
+    }
     logger.log(
       LogLevel.info,
       'session.model.selected',
@@ -348,16 +363,6 @@ final class AgentRuntimeImpl implements AgentRuntime {
     );
     return model;
   }
-
-  /// Запоминает явный выбор модели в `LastModelStore` (D6). Сбой не
-  /// пробрасывается: модель сессии уже записана в журнал, отказывать из-за
-  /// файла состояния нельзя (приоритет 4); ошибка не теряется — событие
-  /// `model.last_used.write_failed {reason}` без текста ошибки.
-  Future<void> _rememberModel(
-    ModelRef model,
-    Logger logger,
-    SessionId sessionId,
-  ) => rememberLastModel(services.lastModel, model, logger, sessionId);
 
   /// Сессия не вернулась вызывающему: серверы MCP, подключённые в `_open`,
   /// закрываются, иначе их процессы пережили бы неудавшийся `session/new`.
@@ -437,11 +442,6 @@ final class AgentRuntimeImpl implements AgentRuntime {
     );
     try {
       await session._heal();
-      // Явная модель вызывающего запоминается; восстановленная из журнала и
-      // модель конфигурации — нет (D6).
-      if (model != null) {
-        await _rememberModel(chosen, session._logger, id);
-      }
       if (restored.model case final journal?
           when journal.provider != chosen.provider ||
               journal.modelId != chosen.id) {
@@ -456,6 +456,17 @@ final class AgentRuntimeImpl implements AgentRuntime {
         );
         await session._writer.append(
           (id, parent, at) => _modelChange(id, parent, at, chosen),
+        );
+      }
+      // Явная модель вызывающего запоминается после `model_change` (как у
+      // `setModel`, D6); восстановленная из журнала и модель конфигурации —
+      // нет.
+      if (model != null) {
+        await rememberLastModel(
+          services.lastModel,
+          chosen,
+          session._logger,
+          id,
         );
       }
       session._restoreHistory();
@@ -3140,9 +3151,17 @@ final class _Session implements AgentSession {
 }
 
 /// Запись явного выбора в порт последней модели (design.md change
-/// `optional-default-model`, D6): `null`-порт — память не подключена. Сбой
-/// перехватывается и логируется `model.last_used.write_failed {reason}` с
-/// именем типа ошибки, без её текста (путь или секрет в сообщении).
+/// `optional-default-model`, D6).
+///
+/// Почему отдельная функция: три точки (`createSession(spec.model)`,
+/// `loadSession(model:)`, `setModel`) пишут одинаково, и сбой памяти не должен
+/// ломать ни одну из них (приоритет 4: модель сессии уже в журнале).
+///
+/// Как использовать: вызывать после записи `model_change` в журнал; [port]
+/// `null` — память не подключена, вызов ничего не делает. Сбой перехватывается
+/// и логируется `model.last_used.write_failed {session_id, reason}` с именем
+/// типа ошибки, без её текста (путь или секрет в сообщении); наружу ничего не
+/// бросается.
 Future<void> rememberLastModel(
   LastModelStore? port,
   ModelRef model,

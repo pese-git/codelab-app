@@ -3,7 +3,12 @@
 library;
 
 import 'package:codelab_agent_core/codelab_agent_core.dart'
-    show ConfigIssue, ConfigIssueKind, SecretBackendInfo, SecretNames;
+    show
+        ConfigIssue,
+        ConfigIssueKind,
+        SecretBackendInfo,
+        SecretNames,
+        modelNoneEvent;
 
 import '../config/agent_config_store.dart';
 import '../views/provider_entry_view.dart';
@@ -24,7 +29,8 @@ final class ProviderReady extends ProviderReadiness {
   String toString() => 'ProviderReady($model)';
 }
 
-/// Нет провайдеров или `agent.default_model`, других проблем нет: нужен мастер.
+/// Нет ни одной модели (провайдеров нет или у них нет моделей), других
+/// проблем нет: нужен мастер.
 final class NoProviderConfigured extends ProviderReadiness {
   const NoProviderConfigured();
 
@@ -64,10 +70,15 @@ final class ConfigBroken extends ProviderReadiness {
 ///
 /// Почему по типизированным проблемам: текст проблем не разбирается (он
 /// меняется вместе с валидатором). Условие: проблемы загрузки есть, все они —
-/// вида `value` ключа `agent.default_model`, и при этом ключа нет ни в одном
-/// применённом слое либо в конфиге нет ни одного провайдера. Любая другая
-/// проблема (`budget.max_steps: 0`) или модель, указывающая на неверное имя
-/// при существующих провайдерах, мастером не лечится (D26).
+/// вида `value` ключа `agent.default_model`, и при этом есть проблема с
+/// событием `config.model.none` (ядро: нет ни одной модели) либо в конфиге нет
+/// ни одного провайдера (явная модель без провайдеров). Ключ
+/// `agent.default_model` необязателен (design.md change
+/// `optional-default-model`, D1–D4, D12): провайдер с моделью даёт рабочую
+/// модель и без него, поэтому «нет листа `agent.default_model`» признаком не
+/// служит. Любая другая проблема (`budget.max_steps: 0`) или явная модель с
+/// неверным именем при существующих провайдерах мастером не лечится (D26
+/// `add-provider-setup-ui`).
 ///
 /// Как использовать: один признак для CLI (первый запуск) и app (баннер
 /// «Add provider»); `checkProviderReadiness` построен на нём.
@@ -84,7 +95,7 @@ bool providerSetupNeeded(AgentConfigSnapshot snapshot) {
   if (!onlyDefaultModel) {
     return false;
   }
-  return !snapshot.leaves.containsKey('agent.default_model') ||
+  return issues.any((issue) => issue.event == modelNoneEvent) ||
       providerIdsOf(snapshot).isEmpty;
 }
 
@@ -108,11 +119,15 @@ Future<ProviderReadiness> checkProviderReadiness(
   if (snapshot.loaded.issues.isNotEmpty) {
     return ConfigBroken(snapshot.loaded.issues);
   }
-  final model = snapshot.defaultModel;
-  if (model == null) {
+  // Модель — как у ядра (`CoreConfig.defaultModel`: явная или первая модель
+  // первого доступного провайдера, D1–D3 `optional-default-model`), а не лист
+  // `agent.default_model`. Алгоритм выбора здесь не повторяется.
+  final core = snapshot.loaded.config;
+  if (core == null) {
     return const NoProviderConfigured();
   }
-  final id = model.split('/').first;
+  final id = core.defaultModel.provider;
+  final model = '$id/${core.defaultModel.id}';
   if (providerString(snapshot, id, 'api_key_secret') case final name?) {
     final override = env[SecretNames.envOverride(name)];
     if ((override == null || override.isEmpty) && !await keys.stored(name)) {

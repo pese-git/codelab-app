@@ -90,6 +90,17 @@ void main() {
       expect(tmpFiles(), isEmpty);
     });
 
+    test('a missing CODELAB_HOME is created with 0700, then state/ '
+        '(as ConfigWriter does)', () async {
+      final fresh = '${tmp.path}/fresh/home';
+      final other = FileLastModelStore(codelabHome: fresh, logger: logger);
+
+      await other.write(const ModelId('a/x'));
+
+      expect(File('$fresh/state/last-model.json').existsSync(), isTrue);
+      expect(Directory(fresh).statSync().mode & 0x1FF, 0x1C0); // 0700
+    }, skip: Platform.isWindows ? 'POSIX modes only' : false);
+
     test('unknown fields are ignored on read (forward compatibility of the '
         'own format)', () async {
       Directory('$home/state').createSync();
@@ -165,6 +176,42 @@ void main() {
         expect(tmpFiles(), isEmpty);
       });
     }
+
+    test('a link to a file larger than 4 KiB: too large, the target is not '
+        'read to the end', () async {
+      Directory('$home/state').createSync();
+      final target = File('${tmp.path}/big.json')
+        ..writeAsStringSync('{"v": 1, "model": "a/x", "pad": "${'z' * 9000}"}');
+      Link(store.path).createSync(target.path);
+
+      expect(await store.read(), isNull);
+
+      final event = logger.eventsOf('model.last_used.ignored').single;
+      expect(event.fields['reason'], 'too large');
+    });
+
+    test('a directory in place of the file: not a file', () async {
+      Directory(store.path).createSync(recursive: true);
+
+      expect(await store.read(), isNull);
+
+      final event = logger.eventsOf('model.last_used.ignored').single;
+      expect(event.fields['reason'], 'not a file');
+    });
+
+    test('a FIFO in place of the file does not block: not a file', () async {
+      Directory('$home/state').createSync();
+      final made = Process.runSync('/usr/bin/mkfifo', [store.path]);
+      if (made.exitCode != 0) {
+        markTestSkipped('mkfifo is not available');
+        return;
+      }
+
+      expect(await store.read(), isNull);
+
+      final event = logger.eventsOf('model.last_used.ignored').single;
+      expect(event.fields['reason'], 'not a file');
+    }, skip: Platform.isWindows ? 'no FIFO on Windows' : false);
 
     test('an explicit write replaces a damaged file', () async {
       Directory('$home/state').createSync();
