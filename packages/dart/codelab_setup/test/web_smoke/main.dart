@@ -18,6 +18,7 @@ final class SetupWebSmokeReport {
     required this.entries,
     required this.removal,
     required this.wizard,
+    required this.settings,
   });
 
   final String access;
@@ -27,6 +28,10 @@ final class SetupWebSmokeReport {
 
   /// Правки плана мастера, прошедшего от пресета до обзора.
   final List<String> wizard;
+
+  /// Строки `/settings` снимка: `ключ:источник` для заданных ключей и число
+  /// строк реестра `shared`; проверяет реэкспорт `SettingsRegistry` и др.
+  final List<String> settings;
 }
 
 /// Клиент, который отвечает списком моделей без сети.
@@ -134,6 +139,28 @@ Future<List<String>> _runWizard(AgentConfigSnapshot snapshot) async {
   return edits;
 }
 
+/// Строки `/settings` и символы реестра, реэкспортированные мостом.
+List<String> _settingRows(AgentConfigSnapshot snapshot) {
+  final rows = settingFieldsOf(snapshot);
+  final kind = SettingsRegistry.lookup('providers.a.kind')!;
+  Object? parsed;
+  try {
+    SettingsRegistry.parseCliValue(
+      SettingsRegistry.lookup('budget.max_steps')!,
+      'x',
+    );
+  } on ConfigValueException catch (e) {
+    parsed = e.expected;
+  }
+  return [
+    for (final r in rows)
+      if (r.source != null) '${r.key}:${r.sourceName}',
+    'type:${kind.type == SettingType.enumeration}',
+    'scope:${kind.scope == SettingScope.shared}',
+    'bad:${parsed != null}',
+  ];
+}
+
 /// Прогоняет доступ, проверку `/models`, список провайдеров и удаление.
 Future<SetupWebSmokeReport> runSetupWebSmoke() async {
   final access = resolveSettingsAccess(
@@ -183,6 +210,7 @@ Future<SetupWebSmokeReport> runSetupWebSmoke() async {
     entries: [for (final entry in entries) '${entry.id}:${entry.key.label}'],
     removal: removal.runtimeType.toString(),
     wizard: await _runWizard(snapshot),
+    settings: _settingRows(snapshot),
   );
 }
 
