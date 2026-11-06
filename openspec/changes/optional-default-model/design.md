@@ -25,7 +25,7 @@ ACP-сервер (`codelab_agent_acp/lib/src/agent_server.dart:336`) вызыв�
 - Конфиг с провайдером и моделью валиден без `agent.default_model`; агент стартует после одного `provider add`.
 - Явная модель конфига всегда побеждает и проверяется строго.
 - Выбор модели новой сессии виден в логах с источником (§16) и в `config check`.
-- Признак «нужна настройка провайдера» клиентов продолжает работать без правки кода.
+- Признак «нужна настройка провайдера» клиентов (`providerSetupNeeded`) опирается на структурное событие `config.model.none`, а не на отсутствие ключа; `checkProviderReadiness` вычисляет модель как ядро (D12).
 - Ни одного нового обращения к хранилищу секретов при загрузке и выборе (приоритет 1).
 
 **Non-Goals:**
@@ -98,7 +98,7 @@ ACP-сервер (`codelab_agent_acp/lib/src/agent_server.dart:336`) вызыв�
 - `message`: `no model is configured; add a provider with at least one model`.
 
 Почему тот же ключ и вид:
-- признак `providerSetupNeeded` итерации 3 (все проблемы — `value` с ключом `agent.default_model`, И листа нет ИЛИ нет `providers.*`) и `AgentConfigSnapshot.startProblems` (`_isMissingKey`: вид `value`, листа ключа нет) продолжают давать `true` на пустом `CODELAB_HOME` без правки кода моста;
+- признак `providerSetupNeeded` итерации 3 (все проблемы — `value` с ключом `agent.default_model`, И листа нет ИЛИ нет `providers.*`) и `AgentConfigSnapshot.startProblems` (`_isMissingKey`: вид `value`, листа ключа нет) продолжают давать `true` на пустом `CODELAB_HOME`; событие `config.model.none` позволяет признаку перейти со «нет листа» на структурное поле (D12, п. 1);
 - ключ называет единственное действие пользователя, которое снимает проблему без мастера: `config set agent.default_model`. Сценарии `provider remove`, R3-1 и подсказки CLI построены вокруг этого ключа.
 
 Почему новый текст: `required` больше неправда — ключ необязателен. Текст говорит, что сделать.
@@ -226,18 +226,20 @@ ACP не меняется:
 
 Новых методов, полей, `_meta` и состояний нет. Golden-фикстуры `codelab_acp_testing` задают `default_model` в сценарии (`set-config-option-model.json`, `session-new-modes-config.json`) и не меняются.
 
-Клиенты кода не меняют. `codelab_setup` — без правки кода: признак итерации 3 и `startProblems` работают на D4. Разбиение по зонам: `[agent]` — все задачи; `[client]`/`[desktop]` — нет.
+Клиенты (`apps/*`, `codelab_client_*`) кода не меняют. `codelab_setup` правится в объёме D12: `providerSetupNeeded` и `checkProviderReadiness` (раздел 7 `tasks.md`); `startProblems` работает на D4 без правки. Разбиение по зонам: `[agent]` — все задачи (включая `codelab_setup`); `[client]`/`[desktop]` — нет.
 
 ### D12. Влияние на `add-provider-setup-ui` (итерация 3, согласование с основной сессией)
 
-1. **Пустой конфиг** (провайдеров нет или у них нет моделей): ровно одна проблема `key: agent.default_model`, `kind: ConfigIssueKind.value`, `event: config.model.none`, `message: no model is configured; add a provider with at least one model`. Листа `agent.default_model` нет. `providerSetupNeeded` итерации 3 даёт `true` без правки кода. Тест `provider_setup_needed_test.dart` на настоящем загрузчике проходит. Если он сверяет текст `required` — это нарушение его же правила «без разбора текста», и тест надо поправить. Рекомендация: со временем сузить признак до `event == 'config.model.none'`. Тогда «явная модель не в каталоге при пустых `providers`» (`CODELAB_MODEL=x/y` без провайдеров) перестанет давать мастер. Сейчас она даёт `true` и раньше давала так же, поэтому это не регресс.
+1. **Пустой конфиг** (провайдеров нет или у них нет моделей): ровно одна проблема `key: agent.default_model`, `kind: ConfigIssueKind.value`, `event: config.model.none`, `message: no model is configured; add a provider with at least one model`. Листа `agent.default_model` нет.
+
+   **Признак сужается этим change** (решение пользователя 2026-11-06, после слияния итерации 3): `providerSetupNeeded` истинен, если все проблемы — `value` ключа `agent.default_model` и (среди них есть `event == 'config.model.none'` или в конфиге нет листов `providers.*`). Прежняя ветка «листа `agent.default_model` нет ни в одном слое» удаляется: без ключа при провайдере с моделью проблемы загрузки нет (D3), а на пустом конфиге её заменяет событие. Ветка «нет `providers.*`» остаётся, чтобы явная модель без провайдеров (`agent.default_model: gw/m`, `CODELAB_MODEL=x/y`) по-прежнему вела в мастер, а не в `ConfigBroken`, — как в итерации 3. Текст `message` не разбирается. Результаты сценария признака на настоящем загрузчике: пустой дом — `true`; провайдер без ключа модели — `false` (было `true`); модель без провайдеров — `true`; `budget.max_steps: 0` — `false`; `gw/typo` при провайдере `gw` — `false`.
 2. **Провайдеры есть, у всех недоступен ключ** (незаданные `api_key_env` или `UnusableKeyRef`): **проблемы нет** (D3). Загрузка валидна, агент стартует с первой моделью первого провайдера, `providerSetupNeeded` даёт `false` (пустой список проблем), **мастер не показывается**. Пользователь видит предупреждения `config.provider.key_missing` (`config check`) и ошибку первого хода. Состояние «ключ не найден» — забота `checkProviderReadiness` (`ProviderKeyMissing`) и страницы Providers, а не мастера «добавить провайдера». Провайдер с `api_key_secret` без секрета при загрузке тоже валиден — хранилище не читается (D2).
-3. **D26 и `forceDefault`/`makeDefault`**: D26 по механизму не меняется (признак, баннер, `ProviderSetupOffer`, переподключение). Уточнить нужно только текст D26 и спеки `client-agent-setup`/`agent-workbench-ui`:
+3. **D26 и `forceDefault`/`makeDefault`**: D26 по механизму (баннер, `ProviderSetupOffer`, переподключение) не меняется; меняется условие признака (п. 1). Текст D26, D16 и спеки `client-agent-setup`/`agent-workbench-ui` правятся прямо в каталоге change `add-provider-setup-ui` в этой ветке — по согласованию с его сессией 2026-11-06: тот change не архивирован, и текст меняется в одном PR с поведением (задача 7.3a):
    - «нет `agent.default_model`» как отдельная причина исчезает;
    - остаётся «нет провайдера с моделью» (проблема D4);
    - пример текста `agent.default_model: required` в D26 и в сценарии `client-agent-setup` («проблема с текстом `agent.default_model: required`, но другого ключа») заменяется на новый текст.
 
-   Конфиг «провайдеры есть, ключа модели нет» больше не даёт `NoProviderConfigured`: агент стартует, и `checkProviderReadiness` должен вычислять модель так же, как ядро — `CoreConfig.defaultModel` (явная или первый провайдер), а не только по листу `agent.default_model`. `makeDefault: true` мастера (в этом worktree имени `forceDefault` нет — видимо, оно есть только в коде итерации 3) можно оставить: явная модель после мастера корректна и побеждает последнюю выбранную. Решение «оставить явную или полагаться на неявную» — за change `add-provider-setup-ui`. Этот change его не навязывает.
+   Конфиг «провайдеры есть, ключа модели нет» больше не даёт `NoProviderConfigured`: агент стартует, и `checkProviderReadiness` должен вычислять модель так же, как ядро — `CoreConfig.defaultModel` (явная или первый провайдер), а не только по листу `agent.default_model`. `makeDefault: true` и `forceDefault` мастера (D7 итерации 3) остаются: явная модель после мастера корректна и побеждает последнюю выбранную. Решение «оставить явную или полагаться на неявную» — за change `add-provider-setup-ui`. Этот change его не навязывает.
 
 4. **Порядок слияния** (решение пользователя 2026-11-06): итерация 3 `add-provider-setup-ui` вливается в `develop` первой. Этот change перед pull request обновляется от `develop` и в своём объёме правит то, что итерация 3 зафиксировала под обязательный ключ: тексты `agent.default_model: required` в её тестах и спеках, а также `checkProviderReadiness` — модель вычисляется как в ядре (`CoreConfig.defaultModel`), а не по листу (задачи раздела 7 `tasks.md`).
 
@@ -256,7 +258,7 @@ ACP не меняется:
 - **Forward compatibility ACP**: не затронута. Формат файла версионирован (`v`).
 - **Web-безопасность**: порт и функция выбора — в web-безопасном ядре; файловая реализация — в `codelab_agent_io` и `codelab_embedded/io.dart`; web-барель `codelab_embedded` порт не создаёт. `web-compile` нужен из-за правки ядра.
 - **Allowlist PKG-2**: новых зависимостей нет — `dart:convert`, `dart:io` в io, ядро без новых импортов.
-- **Параллельная итерация 3 `add-provider-setup-ui`**: тексты проблем в её тестах и спеках (D12) надо поправить при слиянии. Порядок слияния — в открытых вопросах.
+- **Итерация 3 `add-provider-setup-ui`** влита в `develop` первой; признак, `checkProviderReadiness`, её тесты и формулировки спек правятся этим change (D12, раздел 7 `tasks.md`).
 
 ## Migration Plan
 

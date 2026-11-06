@@ -20,7 +20,7 @@ ACP не меняется: `configOptions` опции `model` по-прежне�
 
 ## Не входит
 
-- Мастер провайдера app и CLI, баннер «Add provider», `providerSetupNeeded`, `checkProviderReadiness` (change `add-provider-setup-ui`, итерация 3) — меняются только по согласованию (design.md, D10); код этого change их не трогает.
+- Мастер провайдера app и CLI, баннер «Add provider», `providerSetupNeeded`, `checkProviderReadiness` (change `add-provider-setup-ui`, итерация 3) — меняются только в объёме D12 design.md (согласовано с сессией того change 2026-11-06): признак `providerSetupNeeded` опирается на событие `config.model.none`, `checkProviderReadiness` берёт модель как ядро; мастер, баннер и запись `agent.default_model` мастером не меняются.
 - Показ неявной модели на странице Providers (тег «Default (auto)») — отдельная задача UX.
 - Модель по проекту (последняя модель на `cwd`), история нескольких моделей, `agent.fallback`, `agent.summary_model`, роли `llm.roles.*`.
 - Последняя модель при `loadSession` без модели журнала и для базы агента сессии: там остаётся `CoreConfig.defaultModel` (D5).
@@ -28,7 +28,7 @@ ACP не меняется: `configOptions` опции `model` по-прежне�
 
 ## Impact
 
-- Пакеты: `codelab_agent_core` (конфиг, перезагрузка, рантайм, новый порт), `codelab_agent_io` (файл состояния, `config check`, `provider remove`, PERM-11), `codelab_embedded` (подключение порта в `io.dart`), `apps/codelab_agent` (подключение порта в `AgentHost`). Клиенты (`apps/codelab_cli`, `apps/codelab_desktop`, `codelab_client_*`) кода не меняют; `codelab_setup` — без изменений кода.
+- Пакеты: `codelab_agent_core` (конфиг, перезагрузка, рантайм, новый порт), `codelab_agent_io` (файл состояния, `config check`, `provider remove`, PERM-11), `codelab_embedded` (подключение порта в `io.dart`), `apps/codelab_agent` (подключение порта в `AgentHost`). Клиенты (`apps/codelab_cli`, `apps/codelab_desktop`, `codelab_client_*`) кода не меняют; `codelab_setup` — `providerSetupNeeded` и `checkProviderReadiness` (D12); формулировки спек и design.md change `add-provider-setup-ui` (D16, D26).
 - Публичный API ядра: новое поле `CoreConfig.defaultModelSource`, enum источника, порт `LastModelStore`, поле `AgentCoreServices.lastModel` (необязательное). Публичный API `codelab_agent_io`: `FileLastModelStore`.
 - Пользовательские данные: новый файл `$CODELAB_HOME/state/last-model.json` без секретов; существующие конфиги с ключом работают как раньше.
 - Тесты и спеки, фиксирующие `agent.default_model: required`, перечислены в `tasks.md` (§2).

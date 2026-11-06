@@ -510,8 +510,8 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
 
 `composition_root.dart` до запуска встроенного агента (без `--agent`, `-a embedded`, `-a default`) вызывает `checkProviderReadiness(snapshot, secrets, env)` — **только если stdin и stdout — TTY и режим не `-p`** (SETUP-7):
 - `ProviderReady` → обычный старт;
-- `ConfigBroken` (проблемы, кроме отсутствия провайдера и `agent.default_model`) → мастер не запускается, старт идёт прежним путём: `EmbeddedAgentConfigException`, код `64`;
-- `NoProviderConfigured` (нет файла, нет провайдеров или нет `agent.default_model`; признак — общий `providerSetupNeeded` моста, D26) → текст `CliSetup` (`No model provider is configured for the embedded agent.` …) и мастер с `ConfigTarget.user()`, `makeDefault: true`. `Done` → старт агента (он читает уже записанный файл). `Cancelled`/Ctrl+C → `130`;
+- `ConfigBroken` (проблемы, кроме отсутствия провайдера с моделью) → мастер не запускается, старт идёт прежним путём: `EmbeddedAgentConfigException`, код `64`;
+- `NoProviderConfigured` (нет ни одного провайдера с моделью; признак — общий `providerSetupNeeded` моста, D26) → текст `CliSetup` (`No model provider is configured for the embedded agent.` …) и мастер с `ConfigTarget.user()`, `makeDefault: true`. `Done` → старт агента (он читает уже записанный файл). `Cancelled`/Ctrl+C → `130`;
 - `ProviderKeyMissing`:
   - бэкенд пишет → `Store a key for "<id>" in <backend>? [Y/n]` и шаг ключа в режиме правки;
   - «нет» → подсказка и обычный старт;
@@ -798,12 +798,14 @@ Smoke CLI показал: при 401/403 рукопожатия WebSocket и CLI
 Решение пользователя 2026-11-06, итерация 3. На новой установке встроенный агент не открывается: `EmbeddedAgentConfigException` (`agent.default_model: required` …), и баннер соединения показывает сырой текст проблем с подсказкой `codelab config check`, без пути к настройке.
 
 - **Признак** — чистая функция моста `providerSetupNeeded(AgentConfigSnapshot snapshot)` в основном бареле `codelab_setup`. Истинна, если у загрузки есть проблемы, все они — `ConfigIssueKind.value` ключа `agent.default_model`, и выполнено одно из двух:
-  - ключа `agent.default_model` нет ни в одном применённом слое (`snapshot.startProblems`, итерация 2) — новая установка, пустой файл, провайдеры без модели по умолчанию;
-  - в конфиге нет ни одного листа `providers.*` (модель по умолчанию указывает в пустоту).
+  - среди проблем есть проблема с событием `config.model.none` — ни у одного провайдера нет модели: новая установка, пустой файл, провайдеры без моделей (design.md change `optional-default-model`, D4);
+  - в конфиге нет ни одного листа `providers.*` (явная модель по умолчанию указывает в пустоту).
+
+  *Уточнение change `optional-default-model` (2026-11-06).* `agent.default_model` стал необязательным: без ключа агент берёт последнюю выбранную модель или первую модель первого провайдера (D3), поэтому «провайдеры есть, ключа модели нет» — не проблема загрузки и мастера не требует. Признак опирается на событие `config.model.none` проблемы `value` ключа `agent.default_model`, а не на отсутствие листа; прежняя ветка «ключа нет ни в одном слое» удалена. `checkProviderReadiness` берёт модель так же, как ядро (`CoreConfig.defaultModel`: явный ключ или первая модель первого провайдера), а не из листа конфига.
 
   Любая другая проблема — `false`; в частности `agent.default_model: gw/typo` при заданном провайдере `gw` — обычная ошибка конфига.
 
-  *Почему снимок, а не только `ConfigIssue`* (подготовка итерации 3, решение оркестратора; уточняет первоначальную формулировку «по `key` и `kind`»): валидатор ядра даёт одну и ту же проблему `value` ключа `agent.default_model` и для отсутствующего ключа (`required`), и для модели вне каталога (`… is not in the model catalog`). По `key` и `kind` их не различить, а текст `message` разбирать нельзя. Отличает их только то, есть ли ключ в слоях, — это уже вычисляет `AgentConfigSnapshot.startProblems`. Альтернатива — новый `ConfigIssueKind` или поле в `ConfigIssue` ядра — меняет публичный тип ядра и все его `switch` ради одного признака клиента; отклонена (§13).
+  *Почему снимок, а не только `ConfigIssue`* (подготовка итерации 3, решение оркестратора; уточняет первоначальную формулировку «по `key` и `kind`»): валидатор ядра даёт одну и ту же проблему `value` ключа `agent.default_model` и для отсутствия моделей, и для модели вне каталога (`… is not in the model catalog`). По `key` и `kind` их не различить, а текст `message` разбирать нельзя. До change `optional-default-model` их отличало наличие ключа в слоях (`AgentConfigSnapshot.startProblems`); теперь — структурное поле `ConfigIssue.event` (`config.model.none`). Альтернатива — новый `ConfigIssueKind` или поле в `ConfigIssue` ядра — меняет публичный тип ядра и все его `switch` ради одного признака клиента; отклонена (§13).
 
   Эту же функцию использует `checkProviderReadiness`, чтобы отличить `NoProviderConfigured` от `ConfigBroken`, — app (этот баннер) и CLI (первый запуск, D16) не расходятся. Какие `kind` и ключи даёт валидатор, фиксирует тест моста на настоящем загрузчике (пустой `CODELAB_HOME`, провайдеры без модели, модель без провайдеров, модель вне каталога): при смене валидатора тест падает, а не признак тихо ломается.
 
