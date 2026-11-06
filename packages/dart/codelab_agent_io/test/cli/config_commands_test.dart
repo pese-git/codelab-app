@@ -1207,6 +1207,158 @@ mcp:
       expectUnavailable(result, 'larger than 1 MiB');
     });
   });
+
+  // ---- строка Default model (optional-default-model, D9; задача 3.4) --------
+
+  group('Default model: <p>/<m> (<source>)', () {
+    const gwOnly = '''
+providers:
+  gw:
+    kind: openai-compatible
+    base_url: https://x/v1
+    models:
+      m: {}
+      m2: {}
+''';
+
+    String lastModelPath() => '$home/state/last-model.json';
+
+    test('a provider without agent.default_model: gw/m (first-provider), '
+        'no "required", valid (scenario "Модель первого провайдера в '
+        'config check")', () async {
+      write('$home/config.yaml', gwOnly);
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(result.stdout.last, 'Config: valid');
+      expect(result.stdout.join('\n'), isNot(contains('required')));
+      // Строка стоит перед последней.
+      expect(
+        result.stdout.indexOf('Default model: gw/m (first-provider)'),
+        result.stdout.length - 2,
+      );
+    });
+
+    test('an explicit key: the source is config (scenario "Источник модели '
+        'в config check", variant 1)', () async {
+      write('$home/config.yaml', '${gwOnly}agent:\n  default_model: gw/m\n');
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m (config)'));
+    });
+
+    test('the explicit key wins over the state file, which is not even '
+        'needed', () async {
+      write('$home/config.yaml', '${gwOnly}agent:\n  default_model: gw/m\n');
+      write(lastModelPath(), '{"v": 1, "model": "gw/m2"}');
+
+      final result = await check();
+
+      expect(result.stdout, contains('Default model: gw/m (config)'));
+    });
+
+    test('a last model of the catalog: last-used (variant 2); the file is '
+        'only read', () async {
+      write('$home/config.yaml', gwOnly);
+      write(lastModelPath(), '{"v": 1, "model": "gw/m2"}');
+      final before = File(lastModelPath()).readAsBytesSync();
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m2 (last-used)'));
+      expect(File(lastModelPath()).readAsBytesSync(), before);
+    });
+
+    test('a last model outside the catalog gives first-provider without a '
+        'warning', () async {
+      write('$home/config.yaml', gwOnly);
+      write(lastModelPath(), '{"v": 1, "model": "gone/z"}');
+
+      final result = await check();
+
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(
+        result.stdout.where((l) => l.contains('last model state ignored')),
+        isEmpty,
+      );
+    });
+
+    test('an unreadable state file: a warning with the path and the reason, '
+        'then the next step; the file is untouched (variant 3)', () async {
+      write('$home/config.yaml', gwOnly);
+      write(lastModelPath(), 'not json sk-test-leak-0123456789');
+      final before = File(lastModelPath()).readAsBytesSync();
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(
+        result.stdout,
+        contains(
+          allOf(
+            startsWith(
+              'warning: ${lastModelPath()}: last model state ignored: ',
+            ),
+          ),
+        ),
+      );
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(result.stdout.last, 'Config: valid');
+      expect(result.stdout.join('\n'), isNot(contains('sk-test-leak')));
+      expect(File(lastModelPath()).readAsBytesSync(), before);
+    });
+
+    test('an invalid config has no Default model line', () async {
+      write('$cwd/.codelab/config.yaml', 'budget:\n  max_stepz: 3\n');
+
+      final result = await check();
+
+      expect(result.exitCode, 1);
+      expect(
+        result.stdout.where((l) => l.startsWith('Default model:')),
+        isEmpty,
+      );
+    });
+
+    test('an empty CODELAB_HOME: one problem with the new text, no Default '
+        'model, code 1', () async {
+      final result = await check();
+
+      expect(result.exitCode, 1);
+      expect(
+        result.stdout,
+        contains(
+          endsWith(
+            'agent.default_model: no model is configured; add a provider '
+            'with at least one model',
+          ),
+        ),
+      );
+      expect(result.stdout.join('\n'), isNot(contains('required')));
+      expect(result.stdout.last, 'Config: invalid (issues: 1)');
+    });
+
+    test('no secret reaches the line when the provider has a secret '
+        'reference', () async {
+      write(
+        '$home/config.yaml',
+        gwOnly.replaceFirst(
+          '    models:',
+          '    api_key_secret: codelab/gw\n    models:',
+        ),
+      );
+
+      final result = await check();
+
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(result.stdout.join('\n'), isNot(contains('codelab/gw')));
+    });
+  });
 }
 
 /// Источник, бросающий исключение с «секретным» текстом: в вывод попадает

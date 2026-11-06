@@ -18,6 +18,14 @@ import 'schema.dart' show defaultProjectContextMaxBytes;
 export 'schema.dart'
     show defaultProjectContextMaxBytes, maxProjectContextMaxBytes;
 
+/// ЗАГЛУШКА красных тестов change `optional-default-model` (D1): только
+/// значения enum; doc-комментарий и логика — задача 1.2.
+///
+/// Источник модели: `config` — явная `agent.default_model`, `lastUsed` —
+/// последняя выбранная (только рантайм), `firstProvider` — первый провайдер.
+/// Проводные имена: `config`, `last-used`, `first-provider`.
+enum DefaultModelSource { config, lastUsed, firstProvider }
+
 /// Часть конфигурации, относящаяся к разрешениям (`agent-core-architecture`
 /// §7, §15.3, §15.4).
 ///
@@ -144,6 +152,7 @@ final class DeferredConfigParts {
 final class CoreConfig {
   const CoreConfig({
     required this.defaultModel,
+    this.defaultModelSource = DefaultModelSource.config,
     this.permissions = const PermissionsConfig(),
     this.budget = const TurnBudget(),
     this.compaction = const CompactionOverrides(),
@@ -358,6 +367,10 @@ final class CoreConfig {
   }
 
   final ModelRef defaultModel;
+
+  /// ЗАГЛУШКА (задача 1.2, D1): источник [defaultModel]. Пока всегда
+  /// `config` — резолвер его не вычисляет.
+  final DefaultModelSource defaultModelSource;
 
   /// Уровень рассуждения новой сессии (`agent.effort`, §2.12.3, §15.4);
   /// доходит до запроса только у модели с рассуждением.

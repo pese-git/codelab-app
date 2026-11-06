@@ -2,6 +2,7 @@ import '../config/config_source.dart';
 import '../env/execution_env.dart';
 import '../llm/model_catalog.dart';
 import '../llm/stream_function.dart';
+import 'last_model_store.dart';
 import '../mcp/mcp_connector.dart';
 import '../permissions/agent_config_paths.dart';
 import '../permissions/gate.dart';
@@ -42,6 +43,7 @@ final class AgentCoreServices {
     this.secrets,
     this.config,
     this.agentConfigPaths,
+    this.lastModel,
   });
 
   /// Local | ACP client | memory (tests).
@@ -114,4 +116,8 @@ final class AgentCoreServices {
   /// (`--llm-script`, web, тесты): действует список §7.6.1 относительно
   /// корня сессии.
   final AgentConfigPaths? agentConfigPaths;
+
+  /// ЗАГЛУШКА (задача 2.2, D6): память последней явно выбранной модели.
+  /// `null` — памяти нет: шаг 2 выбора пропускается, запись не выполняется.
+  final LastModelStore? lastModel;
 }
