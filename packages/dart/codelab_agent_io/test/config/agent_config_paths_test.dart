@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:codelab_agent_core/codelab_agent_core.dart' show ModelId;
 import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:test/test.dart';
 
@@ -60,6 +61,7 @@ void main() {
     expect(paths.paths, [
       ...watched,
       '$base/state/state/last-model.json',
+      '$base/state/state',
       '$base/state/agents',
       '$base/state/prompts',
     ]);
@@ -99,6 +101,38 @@ void main() {
     );
 
     expect(paths.paths, contains('$base/real/m.json'));
+    // Лексический путь тоже под защитой: запись `FileLastModelStore`
+    // (`rename` поверх ссылки) заменяет ссылку обычным файлом, и по
+    // канонической цели защита больше не сработала бы.
+    expect(paths.paths, contains('$base/state/state/last-model.json'));
+    expect(paths.paths, contains('$base/state/state'));
+  });
+
+  test('after FileLastModelStore.write replaced the link, the lexical path '
+      'is still protected', () async {
+    Directory('$base/root').createSync();
+    Directory('$base/real').createSync();
+    Directory('$base/state/state').createSync(recursive: true);
+    Link('$base/state/state/last-model.json').createSync('$base/real/m.json');
+    File('$base/real/m.json').writeAsStringSync('{}');
+    final environment = env(codelabHome: '$base/state');
+
+    await FileLastModelStore(
+      codelabHome: '$base/state',
+    ).write(const ModelId('a/x'));
+    final paths = agentConfigPathsFor(
+      cwd: '$base/root',
+      environment: environment,
+    );
+
+    expect(
+      FileSystemEntity.typeSync(
+        '$base/state/state/last-model.json',
+        followLinks: false,
+      ),
+      FileSystemEntityType.file,
+    );
+    expect(paths.paths, contains('$base/state/state/last-model.json'));
   });
 
   test('secrets.yaml is protected with any backend', () {

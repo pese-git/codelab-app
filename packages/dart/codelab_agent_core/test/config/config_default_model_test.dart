@@ -1,7 +1,6 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
-import '../support/fake_secret_store.dart';
 import 'config_support.dart';
 
 /// Модель по умолчанию без `agent.default_model` (agent-configuration
@@ -71,9 +70,9 @@ void main() {
 
     test('a secret reference counts as available and the store is not '
         'touched (scenario "Ссылка на секрет не читается при выборе")', () {
-      // Загрузка чистая и хранилище не получает: счётчик фейка остаётся
-      // нулевым по построению (CFG-10, D4 `add-agent-secret-store`).
-      final store = FakeSecretStore();
+      // Загрузка чистая и хранилища не получает вовсе (CFG-10, D4
+      // `add-agent-secret-store`); счётчик обращений проверяется в тесте
+      // `codelab_agent_io` (`config check` с подставленным хранилищем).
       final result = load([
         layer(
           providersOnly({
@@ -89,7 +88,6 @@ void main() {
         result.config!.defaultModelSource,
         DefaultModelSource.firstProvider,
       );
-      expect(store.reads, isEmpty);
     });
 
     test('a provider with a secret reference before an env one wins by '
@@ -279,6 +277,90 @@ void main() {
         full.withoutProject!.defaultModelSource,
         DefaultModelSource.firstProvider,
       );
+    });
+
+    test('a trusted project layer adds a provider after the user ones: both '
+        'snapshots start on the first provider of the user', () {
+      final result = load([
+        layer(
+          withValues(
+            providersOnly({
+              'u': provider(['um']),
+            }),
+            {
+              'trusted_projects': ['/proj'],
+            },
+          ),
+        ),
+        project({
+          'providers': {
+            'a': provider(['pm']),
+          },
+        }),
+      ], projectRoot: '/proj');
+
+      expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+      final full = result.config!;
+      final bare = full.withoutProject!;
+      expect(refOf(bare), 'u/um');
+      expect(bare.defaultModelSource, DefaultModelSource.firstProvider);
+      expect(full.defaultModelSource, DefaultModelSource.firstProvider);
+      // Порядок провайдеров — порядок слияния слоёв: ключи пользователя идут
+      // раньше ключей проекта, поэтому провайдер проекта не становится первым.
+      expect(refOf(full), 'u/um');
+    });
+
+    test('the only provider comes from the trusted project: the bare snapshot '
+        'has no model of its own and takes the model of the full one', () {
+      final result = load([
+        layer(const {
+          'trusted_projects': ['/proj'],
+        }),
+        project({
+          'providers': {
+            'a': provider(['pm']),
+          },
+        }),
+      ], projectRoot: '/proj');
+
+      expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+      final full = result.config!;
+      expect(refOf(full), 'a/pm');
+      expect(refOf(full.withoutProject!), 'a/pm');
+      expect(
+        full.withoutProject!.defaultModelSource,
+        DefaultModelSource.firstProvider,
+      );
+    });
+
+    test('only the project provider is available: the full snapshot starts on '
+        'it (D2), the bare one on the user provider without a key (D3) '
+        '(scenario "Доступен только провайдер проекта")', () {
+      final result = load([
+        layer(
+          withValues(
+            providersOnly({
+              'u': provider(['x'], extra: {'api_key_env': 'U_KEY'}),
+            }),
+            {
+              'trusted_projects': ['/proj'],
+            },
+          ),
+        ),
+        project({
+          'providers': {
+            'p': provider(['y']),
+          },
+        }),
+      ], projectRoot: '/proj');
+
+      expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+      final full = result.config!;
+      expect(refOf(full), 'p/y');
+      expect(full.defaultModelSource, DefaultModelSource.firstProvider);
+      final bare = full.withoutProject!;
+      expect(refOf(bare), 'u/x');
+      expect(bare.defaultModelSource, DefaultModelSource.firstProvider);
     });
   });
 }

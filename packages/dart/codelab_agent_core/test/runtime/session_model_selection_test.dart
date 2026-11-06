@@ -113,6 +113,13 @@ void main() {
         'first-provider',
       );
       expect(last.writes, isEmpty);
+      // Память есть, а модели нет в каталоге: причина видна в логе (§16), без
+      // содержимого файла состояния.
+      final ignored = h.logger.eventsOf('model.last_used.ignored').single;
+      expect(ignored.level, LogLevel.info);
+      expect(ignored.fields['reason'], 'not in catalog');
+      expect(ignored.fields['session_id'], session.id.value);
+      expect(ignored.fields.toString(), isNot(contains('gone/z')));
     });
 
     test('without the port the step is skipped', () async {
@@ -244,6 +251,27 @@ void main() {
       );
 
       expect(last.writes, [const ModelId('b/y')]);
+    });
+
+    test('loadSession(model:) writes after the model_change of the same '
+        'operation (D6)', () async {
+      final store = MemorySessionStore();
+      final first = harness(store: store);
+      final created = await create(first);
+      await first.core.runtime.dispose();
+      final last = _FakeLastModel();
+      final h = harness(store: store, lastModel: last);
+      last.onWrite = () => last.journalAtWrite = (store).textOf(created.id);
+
+      await h.core.runtime.loadSession(
+        created.id,
+        const SessionHostPorts(),
+        model: by,
+      );
+
+      expect(last.writes, [const ModelId('b/y')]);
+      // Журнал создан с a/x; на момент записи в него уже внесён b/y.
+      expect(last.journalAtWrite, contains('"modelId":"y"'));
     });
 
     test('restoring the model from the journal does not write', () async {

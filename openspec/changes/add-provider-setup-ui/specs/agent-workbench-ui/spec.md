@@ -22,7 +22,7 @@
 
 #### Scenario: Новая установка
 - **WHEN** app с пустым `CODELAB_HOME` подключается к встроенному агенту
-- **THEN** баннер показывает `No model provider is configured for the embedded agent.` и «Add provider», текста `agent.default_model: required` и `codelab config check` в нём нет
+- **THEN** баннер показывает `No model provider is configured for the embedded agent.` и «Add provider», текста `no model is configured` (сырая проблема `config.model.none`, design.md change `optional-default-model`, D4) и `codelab config check` в нём нет
 
 #### Scenario: Провайдер добавлен из баннера
 - **WHEN** пользователь нажимает «Add provider» в баннере, проходит мастер и сохраняет провайдера

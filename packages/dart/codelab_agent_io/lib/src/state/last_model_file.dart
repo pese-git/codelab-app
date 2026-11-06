@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
+import '../secrets/secret_process_runner.dart';
 import '../session/write_queue.dart';
 
 /// Файловая память последней явно выбранной модели
@@ -29,19 +30,24 @@ import '../session/write_queue.dart';
 /// файла. Чтение: нет файла — `null` молча; большой (> 4 KiB), нечитаемый или
 /// чужой версии файл — `null` и событие `model.last_used.ignored {path,
 /// reason}` уровня `warning` (`reason` — категория, без содержимого файла);
-/// файл не переписывается. Кэша нет: файл читается на каждый вызов.
+/// файл не переписывается; сначала `stat`: не обычный файл (каталог, FIFO) — `not a file`, больше 4 KiB — `too large` без чтения, чтение ограничено. Запись создаёт отсутствующий `$CODELAB_HOME` с правами `0700`. Кэша нет: файл читается на каждый вызов.
 ///
 /// Как использовать: хост создаёт один раз —
 /// `FileLastModelStore(codelabHome: home, logger: logger)` — и кладёт в
 /// `AgentCoreServices.lastModel`; `config check` вызывает только [read]. В
 /// файле только идентификатор модели, секретов нет.
 final class FileLastModelStore implements LastModelStore {
-  FileLastModelStore({required this.codelabHome, Logger? logger})
-    : _logger = logger;
+  FileLastModelStore({
+    required this.codelabHome,
+    Logger? logger,
+    SecretProcessRunner? processRunner,
+  }) : _logger = logger,
+       _runner = processRunner ?? IoSecretProcessRunner();
 
   /// Корень `$CODELAB_HOME` (`codelabHomeOf`).
   final String codelabHome;
   final Logger? _logger;
+  final SecretProcessRunner _runner;
 
   /// Предел размера файла: настоящий файл — десятки байт, больше — чужой.
   static const _maxBytes = 4096;
@@ -53,12 +59,27 @@ final class FileLastModelStore implements LastModelStore {
 
   @override
   Future<ModelId?> read() async {
-    final file = File(path);
     try {
-      if (!await file.exists()) {
-        return null;
+      // Сначала `stat` (со ссылками): подмена файла каталогом, FIFO или
+      // огромным файлом не должна блокировать и раздувать память выбора
+      // модели (приоритет 4).
+      final stat = await File(path).stat();
+      switch (stat.type) {
+        case FileSystemEntityType.notFound:
+          return null;
+        case FileSystemEntityType.file:
+          break;
+        default:
+          return _ignore('not a file');
       }
-      final bytes = await file.readAsBytes();
+      if (stat.size > _maxBytes) {
+        return _ignore('too large');
+      }
+      // Чтение ограничено: файл мог вырасти между `stat` и открытием.
+      final bytes = <int>[];
+      await for (final chunk in File(path).openRead(0, _maxBytes + 1)) {
+        bytes.addAll(chunk);
+      }
       if (bytes.length > _maxBytes) {
         return _ignore('too large');
       }
@@ -99,6 +120,22 @@ final class FileLastModelStore implements LastModelStore {
 
   @override
   Future<void> write(ModelId model) => writeQueue.run(path, () async {
+    // Отсутствующий `$CODELAB_HOME` создаётся с правами `0700`, как у
+    // `ConfigWriter` и `FileSecretStore` (там лежат секреты); существующий
+    // каталог не трогается.
+    final homeDir = Directory(codelabHome);
+    if (!await homeDir.exists()) {
+      await homeDir.create(recursive: true);
+      if (!Platform.isWindows) {
+        final result = await _runner.run(chmodExecutablePath(), [
+          '700',
+          codelabHome,
+        ], timeout: const Duration(seconds: 5));
+        if (result.exitCode != 0 || result.timedOut) {
+          throw FileSystemException('cannot set permissions', codelabHome);
+        }
+      }
+    }
     await Directory('$codelabHome/state').create(recursive: true);
     final tmp = File('$path.tmp-$pid-${_random.nextInt(1 << 32)}');
     try {

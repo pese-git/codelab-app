@@ -311,15 +311,16 @@ final class ProviderSetupCommitter {
 
 // .../provider/provider_readiness.dart — для мастера первого запуска
 sealed class ProviderReadiness {}
-final class ProviderReady extends ProviderReadiness { final String model; }
-final class NoProviderConfigured extends ProviderReadiness {}              // нет default_model / провайдеров
+final class ProviderReady extends ProviderReadiness { final String model; }   // CoreConfig.defaultModel: явная или первый провайдер
+final class NoProviderConfigured extends ProviderReadiness {}              // нет провайдера с моделью
 final class ProviderKeyMissing extends ProviderReadiness {
   final String providerId; final String reference;                          // "secret codelab/openai" | "env OPENAI_API_KEY"
   final SecretBackendInfo backend;                                           // куда предлагать сохранить ключ
 }
 final class ConfigBroken extends ProviderReadiness { final List<ConfigIssue> issues; }
-/// «Нет провайдера» — по снимку: все проблемы — `value` ключа agent.default_model, и ключа нет
-/// в слоях либо нет ни одного провайдера (design.md change `add-provider-setup-ui`, D26).
+/// «Нет провайдера» — по снимку: все проблемы — `value` ключа agent.default_model, и среди них есть
+/// событие `config.model.none` (ни у одного провайдера нет модели) либо нет ни одного провайдера
+/// (design.md change `add-provider-setup-ui`, D26; change `optional-default-model`, D12).
 bool providerSetupNeeded(AgentConfigSnapshot snapshot);
 /// Наличие секрета — ProviderKeys.stored (names() бэкенда) и переопределение SecretNames.envOverride
 /// в env; значение не читается. Порт ProviderKeys, а не DescribedSecretStore: у клиентов есть только
