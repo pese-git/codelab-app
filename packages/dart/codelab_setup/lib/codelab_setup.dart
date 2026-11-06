@@ -62,6 +62,7 @@ export 'package:codelab_agent_core/codelab_agent_core.dart'
 export 'src/access/settings_access.dart';
 export 'src/config/agent_config_store.dart';
 export 'src/config/config_source_view.dart';
+export 'src/config/display_base_url.dart';
 export 'src/provider/http_provider_check.dart';
 export 'src/provider/provider_check.dart';
 export 'src/provider/provider_keys.dart';

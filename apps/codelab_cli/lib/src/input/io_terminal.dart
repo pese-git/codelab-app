@@ -16,7 +16,11 @@ import 'terminal.dart';
 /// повторном вызове — его зовут `finally` REPL и обработчик сигналов. На
 /// Windows и без `/dev/tty` — запасной путь `echoMode`/`lineMode`.
 final class IoTerminal implements Terminal {
-  IoTerminal();
+  /// [input] — общий поток stdin (`SharedStdin.stream`); без него терминал
+  /// читает `io.stdin` напрямую (подкоманды без перехода мастер → REPL).
+  IoTerminal({Stream<List<int>>? input}) : _input = input;
+
+  final Stream<List<int>>? _input;
 
   /// Настройки `stty -g` до raw-режима; `null` — режим не менялся через
   /// `stty`.
@@ -24,7 +28,7 @@ final class IoTerminal implements Terminal {
   var _raw = false;
 
   @override
-  Stream<List<int>> get input => io.stdin;
+  Stream<List<int>> get input => _input ?? io.stdin;
 
   @override
   StringSink get output => io.stdout;

@@ -14,6 +14,7 @@ import '../repl/command_router.dart';
 import '../repl/commands/commands.dart';
 import '../repl/repl_command.dart';
 import '../session_setup.dart';
+import '../setup/setup_commands.dart';
 import '../strings.dart';
 import 'core/status_line.dart';
 import 'core/tui_chrome.dart';
@@ -72,6 +73,8 @@ final class TuiRunner {
     Duration cancelGrace = const Duration(seconds: 2),
     DateTime Function()? clock,
     SecretSource? tokenSource,
+    Stream<List<int>>? input,
+    SetupCommands? setup,
   }) : _workspace = workspace,
        _profile = profile,
        _cwd = cwd,
@@ -86,7 +89,13 @@ final class TuiRunner {
        _color = color,
        _output = output ?? stdout,
        _errorOutput = errorOutput ?? stderr,
-       _programOptions = programOptions,
+       _programOptions = [
+         // Общий поток stdin: мастер первого запуска читал тот же терминал, и
+         // второй `listen` на `io.stdin` невозможен (D15, D16).
+         if (input != null) tea.withInput(input),
+         ...programOptions,
+       ],
+       _setup = setup,
        _cancelGrace = cancelGrace,
        _tokenSource = tokenSource,
        _clock = clock ?? DateTime.now;
@@ -112,6 +121,8 @@ final class TuiRunner {
   final List<tea.ProgramOption> _programOptions;
   final Duration _cancelGrace;
   final DateTime Function() _clock;
+
+  final SetupCommands? _setup;
 
   final _router = CommandRouter(mvpReplCommands);
   TuiCommandContext? _context;
@@ -199,6 +210,7 @@ final class TuiRunner {
       resolveProfile: _resolveProfile,
       tokenSource: _tokenSource,
       clock: _clock,
+      setup: _setup,
     )..attach(handle);
     _context = context;
     // Исход хода, которого не видно из транскрипта: отмена и сбой без

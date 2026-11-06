@@ -1,7 +1,11 @@
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_setup/codelab_setup.dart'
+    show ConfigTarget, ProviderSetupFlow;
 
 import '../input/key_bindings.dart';
 import '../render/terminal_renderer.dart';
+import '../setup/provider_wizard.dart';
+import '../setup/setup_commands.dart';
 import 'picker_spec.dart';
 
 /// Клиентская команда REPL (`/new`, `/model`, …).
@@ -84,4 +88,25 @@ abstract interface class ReplContext {
 
   /// Промпты убраны из очереди командой: у них не будет исхода хода.
   void forgetQueued(int count);
+
+  /// Порт настройки агента для `/provider` и `/settings`; `null` — хост его
+  /// не собрал (design.md change `add-provider-setup-ui`, D17).
+  SetupCommands? get setup;
+
+  /// У активной сессии идёт ход или ждётся одобрение: мастеру `/provider add`
+  /// в это время не место (решение Q14, D17).
+  bool get turnRunning;
+
+  /// Есть терминал с посимвольным вводом; без него мастер невозможен.
+  bool get hasTerminal;
+
+  /// Отдаёт клавиши мастеру до его завершения. Подписку на `Terminal.input`
+  /// ведёт сам контекст (D15, D17): здесь второй подписки не появляется.
+  /// [pathOf] — путь файла слоя для сводки.
+  Future<ProviderWizardResult> runWizard(
+    ProviderSetupFlow flow, {
+    String? providerId,
+    ConfigTarget? target,
+    String Function(ConfigTarget target)? pathOf,
+  });
 }

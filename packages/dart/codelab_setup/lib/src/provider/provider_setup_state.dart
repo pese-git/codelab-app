@@ -5,6 +5,7 @@ library;
 import 'package:codelab_agent_core/codelab_agent_core.dart'
     show ConfigTarget, SecretBackendInfo;
 
+import '../config/display_base_url.dart' as display;
 import 'provider_check.dart';
 import 'provider_presets.dart';
 import 'provider_setup_committer.dart';
@@ -55,18 +56,7 @@ final class ProviderDraft {
   final PlannedModel? model;
 
   /// Адрес для показа: схема, хост, порт и путь без userinfo, query и fragment.
-  String? get displayBaseUrl {
-    final uri = baseUrl == null ? null : Uri.tryParse(baseUrl!);
-    if (uri == null || uri.host.isEmpty) {
-      return null;
-    }
-    return Uri(
-      scheme: uri.scheme,
-      host: uri.host,
-      port: uri.hasPort ? uri.port : null,
-      path: uri.path,
-    ).toString();
-  }
+  String? get displayBaseUrl => display.displayBaseUrl(baseUrl);
 
   ProviderDraft copyWith({
     String? providerId,

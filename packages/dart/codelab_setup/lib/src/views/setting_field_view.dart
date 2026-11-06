@@ -9,7 +9,8 @@ import 'package:codelab_agent_core/codelab_agent_core.dart'
         SettingDescriptor,
         SettingScope,
         SettingType,
-        SettingsRegistry;
+        SettingsRegistry,
+        displaySafeConfigValue;
 
 import '../config/agent_config_store.dart';
 import '../config/config_source_view.dart';
@@ -52,9 +53,12 @@ final class SettingFieldView {
   /// Дескриптор реестра: тип редактора, границы, `restartRequired`, слои.
   final SettingDescriptor descriptor;
 
-  /// Заданное значение: `bool`, `int`, `double`, строка или список; `null` —
-  /// ключ нигде не задан ([source] тоже `null`) либо тип `map`/`mapList`
-  /// (см. [entryCount]).
+  /// Заданное значение, уже очищенное от литеральных секретов (`<redacted>`):
+  /// `bool`, `int`, `double`, строка или список; `null` — ключ нигде не задан
+  /// ([source] тоже `null`) либо тип `map`/`mapList` (см. [entryCount]).
+  ///
+  /// Только для показа. Для правки подставлять его нельзя: сырое значение
+  /// берётся из снимка (`AgentConfigSnapshot.leaves`).
   final Object? value;
 
   /// Откуда пришло значение; `null` — значение по умолчанию. Ключ слоя
@@ -157,7 +161,7 @@ SettingFieldView _rowOf(
     return SettingFieldView(
       key: key,
       descriptor: descriptor,
-      value: snapshot.leaves[key],
+      value: _safe(key, snapshot.leaves[key]),
       source: snapshot.origins[key],
     );
   }
@@ -211,3 +215,16 @@ Iterable<String> _expand(AgentConfigSnapshot snapshot, String pattern) {
   }
   return keys;
 }
+
+/// Скрывает литеральные секреты в значении перед показом (R0-2; не мягче
+/// `provider list` и `config get`).
+///
+/// Почему здесь только обход: файл мог быть правлен руками, и в `base_url`
+/// лежат userinfo или токен в query. Правило одно на все выводы —
+/// `displaySafeConfigValue` ядра; его же зовёт `config get`/`provider list`,
+/// поэтому выводы не расходятся. Здесь обходятся скаляры и элементы списков;
+/// значения карт сюда не доходят ([SettingFieldView.entryCount]).
+Object? _safe(String key, Object? value) => switch (value) {
+  final List<Object?> items => [for (final item in items) _safe(key, item)],
+  _ => displaySafeConfigValue(key, value),
+};

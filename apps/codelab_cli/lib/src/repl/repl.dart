@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_setup/codelab_setup.dart'
+    show ConfigTarget, ProviderSetupFlow;
 import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgentConfigException;
 
@@ -16,6 +18,8 @@ import '../render/output_surface.dart';
 import '../render/sanitize.dart';
 import '../render/terminal_renderer.dart';
 import '../session_setup.dart';
+import '../setup/provider_wizard.dart';
+import '../setup/setup_commands.dart';
 import '../strings.dart';
 import 'command_router.dart';
 import 'commands/commands.dart';
@@ -64,13 +68,14 @@ final class Repl implements ReplContext {
     String? model,
     String? mode,
     KeyBindings? keys,
-    List<ReplCommand> commands = mvpReplCommands,
+    List<ReplCommand> commands = replCommands,
     ProfileResolver? resolveProfile,
     Duration escapeTimeout = const Duration(milliseconds: 50),
     Duration exitWindow = const Duration(seconds: 1),
     Duration cancelGrace = const Duration(seconds: 2),
     DateTime Function()? clock,
     SecretSource? tokenSource,
+    SetupCommands? setup,
   }) : _workspace = workspace,
        _terminal = terminal,
        _profile = profile,
@@ -90,10 +95,16 @@ final class Repl implements ReplContext {
        _exitWindow = exitWindow,
        _cancelGrace = cancelGrace,
        _tokenSource = tokenSource,
+       _setup = setup,
        _clock = clock ?? DateTime.now;
 
   final ClientWorkspace _workspace;
   final Terminal _terminal;
+  final SetupCommands? _setup;
+
+  /// Мастер `/provider add`, пока он открыт: клавиши идут ему, как блоку
+  /// одобрения (D17). Подписка на ввод одна — эта же.
+  LineWizard? _wizard;
   ConnectionProfile _profile;
 
   /// Источник токена профиля для текста отказа по токену
@@ -261,6 +272,51 @@ final class Repl implements ReplContext {
   }
 
   @override
+  SetupCommands? get setup => _setup;
+
+  @override
+  bool get turnRunning => _active.state != ReplInputState.editing;
+
+  @override
+  bool get hasTerminal => _terminal.hasTerminal;
+
+  @override
+  Future<ProviderWizardResult> runWizard(
+    ProviderSetupFlow flow, {
+    String? providerId,
+    ConfigTarget? target,
+    String Function(ConfigTarget target)? pathOf,
+  }) async {
+    // Повторная проверка (Q14): пока команда ждала снимок и автомат, мог
+    // начаться ход; под мастером он идти не должен.
+    if (turnRunning) {
+      await flow.dispose();
+      return const ProviderWizardRefused(
+        'Finish or cancel the current turn first (Ctrl+C), then run '
+        '/provider add.',
+      );
+    }
+    final session = _active..hideInput();
+    final wizard = LineWizard(
+      flow: flow,
+      output: _terminal.output,
+      providerId: providerId,
+      target: target,
+      pathOf: pathOf,
+      columns: _terminal.columns,
+    );
+    _wizard = wizard;
+    wizard.start();
+    try {
+      return await wizard.result;
+    } finally {
+      _wizard = null;
+      await wizard.dispose();
+      session.drawInput();
+    }
+  }
+
+  @override
   KeyBindings get keys => _keys;
 
   @override
@@ -416,6 +472,10 @@ final class Repl implements ReplContext {
   void _onKey(KeyEvent event) {
     final session = _session;
     if (session == null || _exit.isCompleted) {
+      return;
+    }
+    if (_wizard case final wizard?) {
+      wizard.onKey(event);
       return;
     }
     if (session.state == ReplInputState.awaitingApproval) {
@@ -649,6 +709,14 @@ final class Repl implements ReplContext {
   Future<void> _finish(int code) async {
     if (_exit.isCompleted) {
       return;
+    }
+    if (_wizard case final wizard?) {
+      // Мастер в записи доводит её до конца (D21), но не дольше 10 с.
+      wizard.inputClosed();
+      await wizard.result.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => const ProviderWizardCancelled(),
+      );
     }
     final session = _session;
     if (session != null && session.state != ReplInputState.editing) {

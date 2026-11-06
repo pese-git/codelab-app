@@ -30,6 +30,10 @@ enum Key {
   ctrlD('Ctrl+D'),
   ctrlE('Ctrl+E'),
   ctrlL('Ctrl+L'),
+
+  /// Показать и спрятать значение в скрытом поле ключа мастера провайдера
+  /// (design.md change `add-provider-setup-ui`, D15, U-17).
+  ctrlR('Ctrl+R'),
   ctrlU('Ctrl+U');
 
   const Key(this.label);
@@ -274,6 +278,7 @@ final class KeyDecoder {
     0x0a: Key.ctrlJ,
     0x0c: Key.ctrlL,
     0x0d: Key.enter,
+    0x12: Key.ctrlR,
     0x15: Key.ctrlU,
     0x7f: Key.backspace,
   };
