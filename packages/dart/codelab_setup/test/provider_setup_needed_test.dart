@@ -15,13 +15,28 @@ void main() {
   setUp(() => home = RealHome.create('provider_setup_needed_test'));
   tearDown(() => home.dispose());
 
-  test('пустой дом — true', () async {
-    expect(providerSetupNeeded(await home.load()), isTrue);
+  test('пустой дом — true; проблема — agent.default_model, вид value, '
+      'событие config.model.none', () async {
+    final snapshot = await home.load();
+
+    expect(providerSetupNeeded(snapshot), isTrue);
+    final issue = snapshot.loaded.issues.single;
+    expect(issue.key, 'agent.default_model');
+    expect(issue.kind, ConfigIssueKind.value);
+    expect(issue.event, 'config.model.none');
   });
 
-  test('провайдер без agent.default_model — true', () async {
+  // Change `optional-default-model`, D3, D12: `agent.default_model` больше не
+  // обязателен, агент стартует на первой модели первого провайдера, и мастер
+  // «добавить провайдера» не нужен.
+  test('провайдер без agent.default_model — false (агент стартует на первом '
+      'провайдере)', () async {
     home.writeConfig(gatewayProvider);
-    expect(providerSetupNeeded(await home.load()), isTrue);
+
+    final snapshot = await home.load();
+
+    expect(snapshot.loaded.issues, isEmpty);
+    expect(providerSetupNeeded(snapshot), isFalse);
   });
 
   test('agent.default_model без провайдеров — true', () async {

@@ -81,6 +81,109 @@ void main() {
       expect(await check(snapshot, {'K': 'v'}), isA<ProviderReady>());
     });
 
+    // Change `optional-default-model`, D12: модель берётся как у ядра
+    // (`CoreConfig.defaultModel`: явная или первый доступный провайдер), а не
+    // из листа `agent.default_model`.
+    test('провайдер с моделью без agent.default_model и заданным ключом — '
+        'ProviderReady(gw/m)', () async {
+      home.writeConfig(
+        gatewayProvider.replaceFirst(
+          '    models:',
+          '    api_key_env: GW_KEY\n    models:',
+        ),
+      );
+      final snapshot = await home.load({'GW_KEY': 'sk-test-leak-0123'});
+
+      final result = await check(snapshot, {'GW_KEY': 'sk-test-leak-0123'});
+
+      expect((result as ProviderReady).model, 'gw/m');
+    });
+
+    test('провайдер без agent.default_model и без ключа в окружении — '
+        'ProviderKeyMissing(env GW_KEY)', () async {
+      home.writeConfig(
+        gatewayProvider.replaceFirst(
+          '    models:',
+          '    api_key_env: GW_KEY\n    models:',
+        ),
+      );
+
+      final result = await check(await home.load());
+
+      final missing = result as ProviderKeyMissing;
+      expect(missing.providerId, 'gw');
+      expect(missing.reference, 'env GW_KEY');
+    });
+
+    test(
+      'api_key_secret без agent.default_model и без секрета — '
+      'ProviderKeyMissing(secret …); секрет есть — ProviderReady(gw/m)',
+      () async {
+        home.writeConfig(
+          gatewayProvider.replaceFirst(
+            '    models:',
+            '    api_key_secret: codelab/p\n    models:',
+          ),
+        );
+        final snapshot = await home.load();
+
+        expect(
+          (await check(snapshot) as ProviderKeyMissing).reference,
+          'secret codelab/p',
+        );
+        keys.storedNames.add('codelab/p');
+        expect((await check(snapshot) as ProviderReady).model, 'gw/m');
+      },
+    );
+
+    test('модель — первая модель первого доступного провайдера, как у ядра: '
+        'провайдер без переменной ключа пропускается', () async {
+      home.writeConfig('''
+providers:
+  a:
+    kind: openai-compatible
+    base_url: https://a.test/v1
+    api_key_env: A_KEY
+    models:
+      x: {}
+  b:
+    kind: openai-compatible
+    base_url: https://b.test/v1
+    api_key_env: B_KEY
+    models:
+      y: {}
+      z: {}
+''');
+      final env = {'B_KEY': 'sk-test-leak-0123'};
+      final snapshot = await home.load(env);
+
+      final result = await check(snapshot, env);
+
+      expect((result as ProviderReady).model, 'b/y');
+    });
+
+    test('явная agent.default_model побеждает первого провайдера', () async {
+      home.writeConfig('''
+providers:
+  a:
+    kind: openai-compatible
+    base_url: https://a.test/v1
+    models:
+      x: {}
+  b:
+    kind: openai-compatible
+    base_url: https://b.test/v1
+    models:
+      y: {}
+agent:
+  default_model: b/y
+''');
+
+      final result = await check(await home.load());
+
+      expect((result as ProviderReady).model, 'b/y');
+    });
+
     test('полный конфиг без ключа — ProviderReady(model)', () async {
       home.writeConfig('${gatewayProvider}agent:\n  default_model: gw/m\n');
       final result = await check(await home.load());
