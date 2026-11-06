@@ -130,6 +130,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(rawInputIn(WorkbenchInspectorPane), findsWidgets);
 
+      // При ширине окна меньше 1280 px (окно e2e на macOS — 800×600) док
+      // выдвигается поверх ленты с затемнением, и клик мимо только закрывает
+      // его (`CodeLabLayoutClass.dockAsColumn`, change
+      // `redesign-workbench-shell`). Пользователь сначала убирает док, поэтому
+      // и тест убирает его до нажатия «Allow»; панель Protocol при этом
+      // остаётся открытой вкладкой.
+      shellCubit.dismissDockOverlay();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.ensureVisible(find.byKey(CodeLabApprovalPrompt.allowKey));
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.byKey(CodeLabApprovalPrompt.allowKey));
       await tester.pump();
 
@@ -141,10 +151,17 @@ void main() {
           DateTime.now().isBefore(turnDeadline)) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      await tester.pumpAndSettle();
+      // Ход проверяется до `pumpAndSettle`: незавершённый ход оставляет
+      // спиннер кнопки отправки, и тест висел бы до общего таймаута вместо
+      // понятного падения здесь.
+      expect(shellCubit.state.isPromptSubmitting, isFalse);
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 100),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 10),
+      );
 
       expect(find.text('approved: allow_once'), findsWidgets);
-      expect(shellCubit.state.isPromptSubmitting, isFalse);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
