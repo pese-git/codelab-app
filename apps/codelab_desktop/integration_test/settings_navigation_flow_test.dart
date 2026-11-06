@@ -33,7 +33,7 @@ Future<void> _pressCommandComma(WidgetTester tester) async {
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Cmd/Ctrl+, opens "Connection" on the first launch, the last '
+  testWidgets('Cmd/Ctrl+, opens "Connection" on the first launch, the chosen '
       'page is remembered, Esc returns to the session', (tester) async {
     await tester.pumpWidget(E2eAgent.current.bootstrap());
     await tester.pumpAndSettle();
@@ -43,7 +43,9 @@ void main() {
     await _pressCommandComma(tester);
 
     // Первое открытие: страницы ещё нет в настройках, открывается
-    // «Connection».
+    // «Connection». Запоминается только страница, которую пользователь
+    // выбрал (spec app-settings «Первое открытие»: slug пишется «после выбора
+    // страницы»; `NavigationCubit.openSettings`), поэтому ключ ещё пуст.
     expect(connection, findsOneWidget);
     expect(
       find.byKey(const ValueKey('connection-add-profile')),
@@ -53,7 +55,18 @@ void main() {
       (await SharedPreferences.getInstance()).getString(
         'codelab.settings.last_page',
       ),
-      'connection',
+      isNull,
+    );
+
+    // Выбор страницы запоминает её slug.
+    await tester.tap(find.byKey(const ValueKey('settings-nav-providers')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings-providers')), findsOneWidget);
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        'codelab.settings.last_page',
+      ),
+      'providers',
     );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -61,9 +74,10 @@ void main() {
     expect(connection, findsNothing);
     expect(find.byKey(CodeLabSessionSidebar.settingsKey), findsOneWidget);
 
-    // Повторное открытие — на последней странице.
+    // Повторное открытие — на последней выбранной странице.
     await _pressCommandComma(tester);
-    expect(connection, findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-providers')), findsOneWidget);
+    expect(find.byKey(const ValueKey('connection-add-profile')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

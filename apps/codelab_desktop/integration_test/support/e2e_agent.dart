@@ -84,6 +84,21 @@ final class E2eAgent {
             'through ACP fs/* and terminal/*]'
       : '';
 
+  /// Пропустить тест, который проверяет запуск дочернего stdio-процесса
+  /// агента (записи `Starting stdio ACP agent:` / `Stdio ACP agent started:`).
+  ///
+  /// Причина: встроенный агент работает в процессе app и подключается без
+  /// дочернего процесса, поэтому этих записей у него нет; своё подключение он
+  /// пишет как `Starting embedded ACP agent:` (design.md change
+  /// `add-embedded-agent-mode`, D8, D10).
+  bool get skipStdioProcess => kind == E2eAgentKind.embedded;
+
+  /// Суффикс описания stdio-теста: при пропуске причина видна в выводе
+  /// раннера.
+  String get skipStdioProcessNote => skipStdioProcess
+      ? ' [skipped: the embedded agent starts no stdio child process]'
+      : '';
+
   /// Пропустить тесты, которым нужен процесс `codelab-agent serve --ws`:
   /// есть только в режиме `dart`; у scripted-агента сервера WebSocket нет, у
   /// встроенного — тоже.
@@ -124,8 +139,11 @@ final class E2eAgent {
   ).save(profile);
 
   /// Данные следующего подключения встроенного агента: их задаёт [launch], а
-  /// открыватель scope читает в момент подключения. Поэтому `bootstrap()`
-  /// можно звать до `launch()`, как делают тесты.
+  /// открыватель scope читает в момент подключения. Поэтому порядок
+  /// `bootstrap()` и `launch()` любой, а перезапуск app внутри теста
+  /// (повторный `bootstrap()`) подключается с теми же данными. Сбрасывает их
+  /// `addTearDown`, который регистрирует [launch]: данные прошлого теста не
+  /// попадают в подключение нового.
   _EmbeddedSetup? _embeddedSetup;
 
   /// Корень приложения теста.
@@ -138,11 +156,8 @@ final class E2eAgent {
   /// Как использовать: `await tester.pumpWidget(E2eAgent.current.bootstrap())`.
   /// Каждый вызов создаёт новый root scope, поэтому перезапуск app в тесте
   /// закрывает прежний `closeCodeLabRootScope()`.
-  Widget bootstrap({ProfileSecrets? profileSecrets}) {
-    // Данные прошлого теста не должны попасть в подключение нового.
-    _embeddedSetup = null;
-    return _bootstrap(profileSecrets);
-  }
+  Widget bootstrap({ProfileSecrets? profileSecrets}) =>
+      _bootstrap(profileSecrets);
 
   /// Окружение app теста: временный `CODELAB_HOME` и токен WebSocket-агента.
   Map<String, String> get _environment => {
@@ -265,6 +280,10 @@ final class E2eAgent {
         );
       case E2eAgentKind.embedded:
         _embeddedSetup = _EmbeddedSetup.of(mode, tempDir);
+        // Сброс в конце теста, а не в `bootstrap()`: тест вправе вызвать
+        // `launch()` до `bootstrap()` и перезапустить app внутри себя
+        // (session_list_load_flow_test).
+        addTearDown(() => _embeddedSetup = null);
         return E2eLaunch._(
           command: '',
           args: '',
