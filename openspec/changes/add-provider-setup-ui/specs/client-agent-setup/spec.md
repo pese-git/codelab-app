@@ -199,19 +199,19 @@
 ### Requirement: Готовность провайдера
 `checkProviderReadiness(snapshot, secrets, env)` SHALL возвращать:
 - `ProviderReady(model)`;
-- `NoProviderConfigured` — нет файла, провайдеров или `agent.default_model`, и других проблем нет; признак SHALL вычислять функция моста `providerSetupNeeded(snapshot)`, общая для CLI и app: все проблемы загрузки — вида `value` ключа `agent.default_model`, и при этом ключа нет ни в одном применённом слое либо в конфиге нет ни одного провайдера. Текст проблем НЕ SHALL разбираться (design.md change `add-provider-setup-ui`, D26);
-- `ProviderKeyMissing(providerId, reference, backend)` — у провайдера модели по умолчанию нет ключа: секрета нет в `names()` и нет переменной `CODELAB_SECRET_<…>`, либо не задана `api_key_env`;
+- `NoProviderConfigured` — нет ни одного провайдера с моделью (нет файла, нет провайдеров или у них нет моделей), и других проблем нет; признак SHALL вычислять функция моста `providerSetupNeeded(snapshot)`, общая для CLI и app: все проблемы загрузки — вида `value` ключа `agent.default_model`, и при этом среди них есть проблема с событием `config.model.none` либо в конфиге нет ни одного провайдера. Отсутствие ключа `agent.default_model` само по себе мастера не требует: агент стартует с первой моделью первого провайдера (design.md change `optional-default-model`, D3–D4). Текст проблем НЕ SHALL разбираться (design.md change `add-provider-setup-ui`, D26);
+- `ProviderKeyMissing(providerId, reference, backend)` — у провайдера модели по умолчанию (`CoreConfig.defaultModel`: явный ключ или первая модель первого провайдера) нет ключа: секрета нет в `names()` и нет переменной `CODELAB_SECRET_<…>`, либо не задана `api_key_env`;
 - `ConfigBroken(issues)` — прочие проблемы валидатора.
 
 Значения ключей НЕ SHALL читаться.
 
 #### Scenario: Признак «нет провайдера» по типизированным проблемам
 - **WHEN** `providerSetupNeeded` получает снимки настоящего загрузчика: пустой `CODELAB_HOME`; провайдер `gw` без `agent.default_model`; `agent.default_model: gw/m` без провайдеров; пустой `CODELAB_HOME` плюс `budget.max_steps: 0`; провайдер `gw` и `agent.default_model: gw/typo`
-- **THEN** результаты — `true`, `true`, `true`, `false`, `false`
+- **THEN** результаты — `true`, `false`, `true`, `false`, `false`
 
 #### Scenario: Состояния готовности
-- **WHEN** функция вызывается для пустого `CODELAB_HOME`, для конфига с `api_key_secret: codelab/p` без секрета, для `api_key_env: K` при незаданной `K`, для `budget.max_steps: 0` и для полного конфига
-- **THEN** результаты — `NoProviderConfigured`, `ProviderKeyMissing(reference: secret codelab/p)`, `ProviderKeyMissing(reference: env K)`, `ConfigBroken` и `ProviderReady`
+- **WHEN** функция вызывается для пустого `CODELAB_HOME`, для конфига с `api_key_secret: codelab/p` без секрета, для `api_key_env: K` при незаданной `K`, для `budget.max_steps: 0`, для полного конфига и для провайдера `gw` с моделью `m` и заданной `api_key_env` без `agent.default_model`
+- **THEN** результаты — `NoProviderConfigured`, `ProviderKeyMissing(reference: secret codelab/p)`, `ProviderKeyMissing(reference: env K)`, `ConfigBroken`, `ProviderReady` и `ProviderReady(gw/m)`
 
 ### Requirement: Статус ключа и удаление провайдера
 `KeyStatusView` SHALL иметь пять видов: ключ в хранилище (`Key: in <backend>`), ключ отсутствует в хранилище (`Key: missing in <backend>`), переменная окружения (`Key: env <VAR> (set|not set)`), без ключа (`No key`) и литеральный ключ в файле конфига `KeyLiteralInConfig` (`Key: in config file (plain text)`). Ни один вид НЕ SHALL содержать значения ключа.
