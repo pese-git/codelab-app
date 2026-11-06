@@ -21,9 +21,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/platform/home_path_label.dart';
 import 'provider_settings_session.dart';
 import 'provider_settings_state.dart';
+import 'provider_wizard_cubit.dart';
 
 export 'provider_settings_session.dart';
 export 'provider_settings_state.dart';
+export 'provider_wizard_cubit.dart' show ProviderWizardCubit;
 
 /// Страница «Providers»: настройки провайдеров агента текущего подключения.
 ///
@@ -65,7 +67,9 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     required String Function() projectDirectory,
     Logger? logger,
     DateTime Function()? now,
+    Future<void> Function()? connect,
   }) : _workspace = workspace,
+       _connect = connect,
        _defaultProfile = defaultProfile,
        _open = open,
        _environment = environment,
@@ -88,6 +92,11 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
   final Logger? _logger;
   final DateTime Function() _now;
 
+  /// «Connect» баннера после записи без запущенного агента: подключение окна
+  /// к профилю по умолчанию (`ConnectionCommands.connect`, D9); `null` — кнопки
+  /// нет.
+  final Future<void> Function()? _connect;
+
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
   StreamSubscription<Object?>? _viewSubscription;
   SessionId? _boundSession;
@@ -101,6 +110,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
   var _loadAttempt = 0;
 
   ProviderSettingsSession? _session;
+  EditableSettings? _access;
   AgentConfigSnapshot? _snapshot;
   List<ProviderEntryView> _entries = const [];
   String? _activeModel;
@@ -174,6 +184,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
 
   void _setReadOnly(String notice, {String? hint, required String access}) {
     _session = null;
+    _access = null;
     _snapshot = null;
     _entries = const [];
     _logger?.debug(
@@ -237,6 +248,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
       return;
     }
     _session = session;
+    _access = access;
     _snapshot = snapshot;
     _entries = entries;
     // Итоги и идущие проверки исчезнувших провайдеров не переживают
@@ -258,6 +270,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
 
   void _setUnreadable(List<String> problems, {bool log = true}) {
     _session = null;
+    _access = null;
     _snapshot = null;
     _entries = const [];
     if (log) {
@@ -314,6 +327,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
   ProviderRow _rowOf(ProviderEntryView entry) {
     final editable = entry.editable;
     final onlyOne = _entries.length == 1;
+    final editRefusal = editable ? _editRefusal(entry) : null;
     final source = entry.source;
     final definedIn = editable
         ? null
@@ -357,6 +371,8 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
           : homePathLabel(source.label, _environment),
       isDefault: entry.isDefault,
       editable: editable,
+      canEdit: editable && editRefusal == null,
+      editHint: editRefusal,
       canRemove: editable && !onlyOne,
       unencryptedHost: _unencryptedHost(entry),
       canCheck:
@@ -400,6 +416,91 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     final other? => other,
     null => 'Unknown kind',
   };
+
+  /// Почему «Edit» неактивна: правило моста `providerEditRefusal`, общее с
+  /// «Remove» и с проверкой автомата при «Save» (D7, D9); тексты разные для
+  /// `notEditable` и `multipleLayers`.
+  String? _editRefusal(ProviderEntryView entry) {
+    final snapshot = _snapshot;
+    if (snapshot == null) {
+      return null;
+    }
+    final refusal = providerEditRefusal(snapshot, entry.id);
+    return refusal == null ? null : _refusalText(refusal);
+  }
+
+  // --- Мастер провайдера ----------------------------------------------------
+
+  /// Открывает мастер на сессии страницы: добавление или правка [editId].
+  ///
+  /// Автомат строит сессия composition root (`openWizard`): порт ключей и
+  /// значение ключа в Cubit не попадают (SETUP-1, D7). `null` — мастер
+  /// недоступен: страница не в состоянии записи, провайдера нет или «Edit» для
+  /// него неактивна.
+  Future<ProviderWizardCubit?> openWizard({String? editId}) async {
+    final session = _session;
+    final access = _access;
+    final current = state;
+    if (current is! ProviderSettingsReady ||
+        current.saving ||
+        session == null ||
+        access == null) {
+      return null;
+    }
+    ProviderEntryView? editing;
+    if (editId != null) {
+      editing = _entries.where((e) => e.id == editId).firstOrNull;
+      if (editing == null ||
+          _editRefusal(editing) != null ||
+          !editing.editable) {
+        return null;
+      }
+    }
+    try {
+      final flow = await session.openWizard(editing: editing);
+      if (isClosed) {
+        await flow.dispose();
+        return null;
+      }
+      return ProviderWizardCubit(
+        flow: flow,
+        access: access,
+        backendId: session.backend.id,
+        editingId: editId,
+        isAgentConnected: _agentConnected,
+      );
+    } on Object catch (error) {
+      _logger?.warning(
+        'provider_settings.unreadable',
+        context: {'error_type': error.runtimeType.toString()},
+      );
+      _banner = const ProviderBanner(
+        ProviderBannerKind.error,
+        'Cannot open the provider wizard: the agent config cannot be read.',
+      );
+      _publishReady();
+      return null;
+    }
+  }
+
+  /// После `ConfigSaved` мастера: баннер [banner] и перечитывание снимка
+  /// (D9, spec app-settings «Мастер провайдера в app»).
+  Future<void> wizardSaved(ProviderBanner banner) async {
+    _banner = banner;
+    await reload();
+  }
+
+  /// «Connect» баннера: подключает окно к профилю по умолчанию.
+  Future<void> connectAgent() async {
+    final connect = _connect;
+    if (connect != null) {
+      await connect();
+    }
+  }
+
+  /// Агент подключён: `WorkspaceState.connection` — `Connected` или
+  /// `Reconnecting` (D9).
+  bool _agentConnected() => _connectedProfile(_workspace.current) != null;
 
   // --- «Default model» ----------------------------------------------------
 
@@ -695,10 +796,10 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     ProviderRemovalRefusal.defaultOverridden =>
       'The default model is set in a file CodeLab does not write. Change it '
           'there first.',
-    ProviderRemovalRefusal.notEditable ||
+    ProviderRemovalRefusal.notEditable =>
+      'This provider is defined in a read-only file. Change it there.',
     ProviderRemovalRefusal.multipleLayers =>
-      'This provider is defined in a read-only file or in several places. '
-          'Change it there.',
+      'This provider is defined in several config files. Change it there.',
     ProviderRemovalRefusal.unknownProvider ||
     ProviderRemovalRefusal.layerUnreadable =>
       'The provider settings changed. Review the page and try again.',

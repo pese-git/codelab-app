@@ -7,6 +7,7 @@ import '../../application/shell_cubit.dart';
 import '../workbench_shell.dart'
     show openConnectionSettings, selectPaletteCommand;
 import '../../application/ui_mappers.dart' show projectNameOf;
+import 'provider_setup_banner.dart';
 
 class WorkbenchMainPane extends StatelessWidget {
   const WorkbenchMainPane({
@@ -58,6 +59,14 @@ class WorkbenchMainPane extends StatelessWidget {
     final showConnectionScreen =
         state.transcriptRows.isEmpty &&
         state.connectionStatus != CodeLabConnectionStatus.connected;
+    // Встроенный агент не открылся только из-за отсутствия провайдера: вместо
+    // сырого текста проблем — понятная причина и «Add provider» (D26).
+    final notice = state.connectionStatus == CodeLabConnectionStatus.failed
+        ? state.providerSetupNotice
+        : null;
+    final connectionMessage = notice == null
+        ? state.connectionMessage
+        : noProviderMessage;
     final Widget content;
     if (showConnectionScreen) {
       content = LayoutBuilder(
@@ -82,10 +91,15 @@ class WorkbenchMainPane extends StatelessWidget {
                     // Причина сбоя видна и до первой записи ленты, а не
                     // только в баннере над ней.
                     description:
-                        state.connectionMessage ??
+                        connectionMessage ??
                         'Connect an ACP agent to start a session.',
+                    extraAction: notice == null
+                        ? null
+                        : providerSetupAction(context, cubit, notice),
                     onConnect: cubit.connect,
-                    onReconnect: cubit.reconnect,
+                    // «Connect» уже повторяет попытку; с «Add provider»
+                    // третья кнопка перенесла бы ряд на вторую строку.
+                    onReconnect: notice == null ? cubit.reconnect : null,
                     onConfigureConnection: () =>
                         openConnectionSettings(context),
                   ),
@@ -119,9 +133,12 @@ class WorkbenchMainPane extends StatelessWidget {
           if (_bannerStatusOf(state.connectionStatus) case final status?) ...[
             CodeLabConnectionBanner(
               status: status,
-              message: state.connectionMessage,
+              message: connectionMessage,
               onReconnect: cubit.reconnect,
               onConfigureConnection: () => openConnectionSettings(context),
+              extraAction: notice == null
+                  ? null
+                  : providerSetupAction(context, cubit, notice),
             ),
             const SizedBox(height: 12),
           ],

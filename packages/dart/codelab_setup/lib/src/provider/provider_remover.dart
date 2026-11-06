@@ -117,6 +117,37 @@ final class ProviderRemovalRefused extends ProviderRemovalOutcome {
   String toString() => 'ProviderRemovalRefused(${reason.name})';
 }
 
+/// Можно ли править или удалять провайдера [id] записью конфига.
+///
+/// Почему одна функция: правило «провайдер лежит в одном редактируемом слое,
+/// файл которого читается» общее для удаления ([ProviderRemover.remove]) и
+/// правки в мастере (`ProviderSetupFlow`, `ConfirmSave` при `editing`); две
+/// копии расходились бы (ревью итерации 3).
+///
+/// Отказы: `unknownProvider` (нет в снимке), `notEditable` (лист в слое 3,
+/// `--config` или окружении), `multipleLayers` (листья в нескольких слоях: один
+/// `apply` пишет один слой), `layerUnreadable` (файл слоя не читается).
+/// `null` — править можно.
+ProviderRemovalRefusal? providerEditRefusal(
+  AgentConfigSnapshot snapshot,
+  String id,
+) {
+  if (!providerIdsOf(snapshot).contains(id)) {
+    return ProviderRemovalRefusal.unknownProvider;
+  }
+  final origins = providerOriginsOf(snapshot, id);
+  if (origins.isEmpty || origins.any((o) => !o.editable)) {
+    return ProviderRemovalRefusal.notEditable;
+  }
+  if (origins.map((o) => o.kind).toSet().length > 1) {
+    return ProviderRemovalRefusal.multipleLayers;
+  }
+  if (snapshot.layers[origins.single.layer!] == null) {
+    return ProviderRemovalRefusal.layerUnreadable;
+  }
+  return null;
+}
+
 /// Порядок удаления провайдера: одна запись конфига, затем (по желанию)
 /// секрет.
 ///
@@ -206,21 +237,11 @@ final class ProviderRemover {
     bool deleteStoredKey = false,
   }) async {
     final ids = providerIdsOf(snapshot);
-    if (!ids.contains(providerId)) {
-      return _refuse(ProviderRemovalRefusal.unknownProvider);
+    if (providerEditRefusal(snapshot, providerId) case final refusal?) {
+      return _refuse(refusal);
     }
-    final origins = providerOriginsOf(snapshot, providerId);
-    if (origins.isEmpty || origins.any((o) => !o.editable)) {
-      return _refuse(ProviderRemovalRefusal.notEditable);
-    }
-    if (origins.map((o) => o.kind).toSet().length > 1) {
-      return _refuse(ProviderRemovalRefusal.multipleLayers);
-    }
-    final layer = origins.single.layer!;
-    final base = snapshot.layers[layer];
-    if (base == null) {
-      return _refuse(ProviderRemovalRefusal.layerUnreadable);
-    }
+    final layer = providerOriginsOf(snapshot, providerId).single.layer!;
+    final base = snapshot.layers[layer]!;
     if (ids.length == 1) {
       return _refuse(ProviderRemovalRefusal.lastProvider);
     }

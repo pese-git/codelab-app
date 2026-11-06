@@ -48,13 +48,20 @@ export 'package:codelab_agent_core/codelab_agent_core.dart'
         SecretBackendInfo,
         SecretNames,
         SetValue,
+        UnsetValue,
         before1Note;
 export 'src/access/settings_access.dart';
 export 'src/config/agent_config_store.dart';
 export 'src/config/config_source_view.dart';
 export 'src/provider/http_provider_check.dart';
 export 'src/provider/provider_check.dart';
+export 'src/provider/provider_keys.dart';
+export 'src/provider/provider_presets.dart';
+export 'src/provider/provider_readiness.dart';
 export 'src/provider/provider_remover.dart';
+export 'src/provider/provider_setup_committer.dart';
+export 'src/provider/provider_setup_flow.dart';
+export 'src/provider/provider_setup_plan.dart';
 export 'src/secret/secret_value.dart';
 export 'src/views/key_status_view.dart';
 export 'src/views/provider_entry_view.dart'

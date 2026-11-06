@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/app_scope.dart';
 import '../application/provider_settings_cubit.dart';
+import 'provider_wizard_dialog.dart';
 
 /// Тело страницы «Providers» для таблицы `settingsPageBuilders`.
 ///
@@ -71,9 +72,10 @@ class _ProvidersPageHostState extends State<ProvidersPageHost> {
 /// недоступны: строка показывает статус и имя (SETUP-1).
 ///
 /// Как использовать: Cubit берётся из `BlocProvider` выше по дереву. «Add
-/// provider» и «Edit» неактивны до мастера провайдера (итерация 3 change):
-/// виджет показывает их, чтобы разметка совпала с артбордом. Раскрытие строк —
-/// эфемерное состояние виджета.
+/// provider» и «Edit» открывают `ProviderWizardDialog` на автомате, который
+/// строит Cubit страницы (`openWizard`); после записи страница показывает
+/// баннер мастера и перечитывает снимок. Раскрытие строк — эфемерное
+/// состояние виджета.
 class ProvidersPage extends StatefulWidget {
   const ProvidersPage({super.key});
 
@@ -85,9 +87,23 @@ class _ProvidersPageState extends State<ProvidersPage> {
   /// Раскрытые строки (id) — эфемерное состояние виджета (`state-management.md`).
   final _expanded = <String>{};
 
-  static const _wizardPending =
-      'Use codelab provider add in a terminal; the wizard comes in a later '
-      'version.';
+  /// Открывает мастер: добавление или правка [editId]. Владелец Cubit мастера
+  /// — эта страница: после закрытия диалога она закрывает его (отмена
+  /// проверки, сброс ключа) и при записи показывает баннер.
+  Future<void> _openWizard({String? editId}) async {
+    final cubit = context.read<ProviderSettingsCubit>();
+    final wizard = await cubit.openWizard(editId: editId);
+    if (wizard == null || !mounted) {
+      await wizard?.close();
+      return;
+    }
+    await showProviderWizardDialog(context, wizard);
+    final banner = wizard.savedBanner;
+    await wizard.close();
+    if (banner != null && !cubit.isClosed) {
+      await cubit.wizardSaved(banner);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -115,15 +131,12 @@ class _ProvidersPageState extends State<ProvidersPage> {
           child: CodeLabText('Providers', role: CodeLabTextRole.title),
         ),
         if (withAdd)
-          Tooltip(
-            message: _wizardPending,
-            child: const CodeLabButton(
-              key: ValueKey('providers-add'),
-              label: 'Add provider',
-              icon: FluentIcons.add,
-              emphasis: CodeLabButtonEmphasis.primary,
-              onPressed: null,
-            ),
+          CodeLabButton(
+            key: const ValueKey('providers-add'),
+            label: 'Add provider',
+            icon: FluentIcons.add,
+            emphasis: CodeLabButtonEmphasis.primary,
+            onPressed: () => unawaited(_openWizard()),
           ),
       ],
     ),
@@ -134,6 +147,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
     InfoBarSeverity severity,
     String title, {
     String? content,
+    Widget? action,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
     child: InfoBar(
@@ -142,6 +156,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
       content: content == null ? null : Text(content),
       severity: severity,
       isLong: true,
+      action: action,
     ),
   );
 
@@ -197,11 +212,24 @@ class _ProvidersPageState extends State<ProvidersPage> {
       children: [
         _header(withAdd: true),
         if (state.banner case final banner?)
-          _bar(const ValueKey('providers-banner'), switch (banner.kind) {
-            ProviderBannerKind.saved => InfoBarSeverity.success,
-            ProviderBannerKind.conflict => InfoBarSeverity.warning,
-            ProviderBannerKind.error => InfoBarSeverity.error,
-          }, banner.text),
+          _bar(
+            const ValueKey('providers-banner'),
+            switch (banner.kind) {
+              ProviderBannerKind.saved => InfoBarSeverity.success,
+              ProviderBannerKind.conflict => InfoBarSeverity.warning,
+              ProviderBannerKind.error => InfoBarSeverity.error,
+            },
+            banner.text,
+            action: switch (banner.action) {
+              ProviderBannerAction.connect => CodeLabButton(
+                key: const ValueKey('providers-banner-connect'),
+                label: 'Connect',
+                icon: FluentIcons.plug_connected,
+                onPressed: () => unawaited(cubit.connectAgent()),
+              ),
+              null => null,
+            },
+          ),
         Padding(
           padding: const EdgeInsets.only(bottom: 4),
           child: CodeLabSettingsRow(
@@ -287,6 +315,12 @@ class _ProvidersPageState extends State<ProvidersPage> {
                     key: ValueKey('providers-empty'),
                   ),
                 ),
+                CodeLabButton(
+                  key: const ValueKey('providers-empty-add'),
+                  label: 'Add provider',
+                  icon: FluentIcons.add,
+                  onPressed: () => unawaited(_openWizard()),
+                ),
               ],
             ),
           )
@@ -306,6 +340,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
                   }
                 }),
                 onCheck: () => unawaited(cubit.check(row.id)),
+                onEdit: () => unawaited(_openWizard(editId: row.id)),
                 onRemove: () => unawaited(_confirmRemove(cubit, row.id)),
                 bodyStyle: body,
                 monoStyle: mono,
@@ -425,6 +460,7 @@ class _ProviderCard extends StatelessWidget {
     required this.busy,
     required this.onToggle,
     required this.onCheck,
+    required this.onEdit,
     required this.onRemove,
     required this.bodyStyle,
     required this.monoStyle,
@@ -435,6 +471,7 @@ class _ProviderCard extends StatelessWidget {
   final bool busy;
   final ValueChanged<bool> onToggle;
   final VoidCallback onCheck;
+  final VoidCallback onEdit;
   final VoidCallback onRemove;
   final TextStyle? bodyStyle;
   final TextStyle? monoStyle;
@@ -541,6 +578,10 @@ class _ProviderCard extends StatelessWidget {
     );
   }
 
+  /// Подсказка неактивной кнопки, если она есть.
+  static Widget _withHint(String? hint, Widget button) =>
+      hint == null ? button : Tooltip(message: hint, child: button);
+
   /// Check, Edit и Remove: в свёрнутом заголовке без рамки, в раскрытом теле —
   /// «Check» и «Edit» обычные, «Remove» без рамки (артборд). У строки
   /// нередактируемого слоя только «Check».
@@ -565,20 +606,17 @@ class _ProviderCard extends StatelessWidget {
       ),
       if (row.editable) ...[
         const SizedBox(width: 4),
-        Tooltip(
-          message: _ProvidersPageState._wizardPending,
-          child: CodeLabButton(
+        _withHint(
+          row.editHint,
+          CodeLabButton(
             key: ValueKey('providers-edit-${row.id}'),
             label: 'Edit',
             emphasis: secondary,
-            onPressed: null,
+            onPressed: row.canEdit && !busy ? onEdit : null,
           ),
         ),
         const SizedBox(width: 4),
-        if (row.removeHint case final hint?)
-          Tooltip(message: hint, child: remove)
-        else
-          remove,
+        _withHint(row.removeHint, remove),
       ],
     ];
   }

@@ -9,6 +9,7 @@ import 'codelab_key_value_list.dart';
 import 'codelab_prompt_composer.dart';
 import 'codelab_settings_row.dart';
 import 'codelab_settings_section.dart';
+import 'codelab_step_breadcrumb.dart';
 import 'codelab_tool_call_summary.dart';
 import 'codelab_view_mode.dart';
 import '../atomics/atomics.dart';
@@ -284,6 +285,40 @@ Widget _keyValueSample() {
       ),
     ],
   );
+}
+
+@Preview(
+  name: 'Step breadcrumb',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 60),
+)
+Widget codelabStepBreadcrumbPreview() {
+  return const _AcpPreviewSurface(child: _BreadcrumbSample());
+}
+
+@Preview(
+  name: 'Step breadcrumb (dark)',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 60),
+  brightness: Brightness.dark,
+)
+Widget codelabStepBreadcrumbDarkPreview() {
+  return const _AcpPreviewSurface(
+    brightness: Brightness.dark,
+    child: _BreadcrumbSample(),
+  );
+}
+
+class _BreadcrumbSample extends StatelessWidget {
+  const _BreadcrumbSample();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CodeLabStepBreadcrumb(
+      steps: ['API type', 'Base URL', 'Key', 'Check', 'Model', 'Review'],
+      current: 3,
+    );
+  }
 }
 
 class _AcpPreviewSurface extends StatelessWidget {

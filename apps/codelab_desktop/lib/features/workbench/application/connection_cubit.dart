@@ -23,6 +23,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabConnectionStatus;
 
+import '../../../app/provider_setup_offer.dart';
 import '../../../core/platform/connection_preferences.dart';
 import '../../settings/application/connection_commands.dart';
 import '../../settings/application/default_profile_resolver.dart';
@@ -59,6 +60,29 @@ ConnectionProfile stdioConnectionProfileOf(
   runInProjectDirectory: true,
 );
 
+/// Метка сбоя попытки встроенного агента: «не настроен провайдер».
+///
+/// Почему отдельный объект: баннер предлагает «Add provider», а после записи
+/// конфига окно должно переподключить встроенного агента, но только если с
+/// момента сбоя не началась другая попытка (AGENTS.md §9; design.md change
+/// `add-provider-setup-ui`, D21, D26). Непрозрачность и сравнение по
+/// тождеству (`identical`) заменяют номер попытки, который наружу не
+/// выходит.
+///
+/// Как использовать: `ConnectionCubit` создаёт метку при сбое попытки
+/// встроенного агента с истинным признаком и публикует в
+/// `WindowConnectionState.providerSetupNotice`; UI передаёт её обратно в
+/// `ConnectionCubit.connectAfterProviderSetup`. [cwd] — папка проекта сбоя,
+/// по ней мастер решает, доступно ли «This project only».
+final class ProviderSetupNotice {
+  const ProviderSetupNotice._(this.cwd);
+
+  final String cwd;
+
+  @override
+  String toString() => 'ProviderSetupNotice';
+}
+
 /// Профиль текущего окна и статус соединения.
 ///
 /// Почему: раньше состояние держало черновик формы (тип, команда, адрес,
@@ -75,10 +99,15 @@ final class WindowConnectionState {
     required this.connectionStatus,
     required this.profile,
     this.connectionMessage,
+    this.providerSetupNotice,
   });
 
   final CodeLabConnectionStatus connectionStatus;
   final ConnectionProfile profile;
+
+  /// Метка последнего сбоя встроенного агента «не настроен провайдер»;
+  /// `null` — сбой другой или попытки были позже (D26).
+  final ProviderSetupNotice? providerSetupNotice;
 
   /// Причина из `ConnectionLost` или `ConnectionFailed` kit — текст баннера
   /// соединения (design D6 change `add-connection-and-error-states`);
@@ -113,6 +142,7 @@ final class WindowConnectionState {
     CodeLabConnectionStatus? connectionStatus,
     ConnectionProfile? profile,
     Object? connectionMessage = _unset,
+    Object? providerSetupNotice = _unset,
   }) => WindowConnectionState(
     connectionStatus: connectionStatus ?? this.connectionStatus,
     profile: profile ?? this.profile,
@@ -120,6 +150,9 @@ final class WindowConnectionState {
     connectionMessage: identical(connectionMessage, _unset)
         ? this.connectionMessage
         : connectionMessage as String?,
+    providerSetupNotice: identical(providerSetupNotice, _unset)
+        ? this.providerSetupNotice
+        : providerSetupNotice as ProviderSetupNotice?,
   );
 
   static const Object _unset = Object();
@@ -158,7 +191,9 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     ConnectionPreferences? preferences,
     Logger? eventLogger,
     ProfileSecretSource? tokenSecrets,
+    ProviderSetupOffer? providerSetupOffer,
   }) : _tokenSecrets = tokenSecrets,
+       _setupOffer = providerSetupOffer,
        _workspace = workspace,
        _diagnostics = diagnostics,
        _settings = settings,
@@ -192,6 +227,14 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   /// до подключения (D13); значение не сохраняется.
   final ProfileSecretSource? _tokenSecrets;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
+
+  /// Признак «нужен провайдер», который выставил резолвер встроенного агента
+  /// (D26); читается синхронно в обработчике сбоя своей попытки.
+  final ProviderSetupOffer? _setupOffer;
+
+  /// Метка текущего сбоя; источник правды для [connectAfterProviderSetup],
+  /// `state.providerSetupNotice` её отражает. Любая новая попытка сбрасывает.
+  ProviderSetupNotice? _notice;
 
   /// Профиль по умолчанию уже подставлен (или не нужен): `connect()` без
   /// профиля не ждёт.
@@ -258,6 +301,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     // папки) тогда не вытесняет попытку A, которая уже в kit (safety MEDIUM,
     // AGENTS.md §9).
     final intent = ++_intent;
+    _dropSetupNotice();
     var target = profile;
     if (target == null) {
       if (!_defaultResolved) {
@@ -364,7 +408,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         _recordStaleAttempt(error);
         return;
       }
-      _publishFailure(rejection);
+      _publishFailure(rejection, profile: target, intent: intent);
       _diagnostics.record(
         rejection ??
             _byType(
@@ -388,6 +432,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     final profile = _accepted ?? state.profile;
     final detail = WindowConnectionState._detailOf(profile);
     final intent = ++_intent;
+    _dropSetupNotice();
     _profileChosen = true;
     if (!_validate(profile, action: 'reconnecting')) {
       _rejectBeforeConnect();
@@ -453,7 +498,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         _recordStaleAttempt(error);
         return;
       }
-      _publishFailure(rejection);
+      _publishFailure(rejection, profile: profile, intent: intent);
       _diagnostics.record(
         rejection ??
             _byType(
@@ -469,6 +514,49 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         source: 'transport',
       );
     }
+  }
+
+  /// Переподключает встроенного агента после записи провайдера из баннера,
+  /// если с момента сбоя [notice] не началась другая попытка (D21, D26).
+  ///
+  /// Почему сравнение по тождеству: диалог мастера модальный, но попытку могут
+  /// начать без пользователя («Connect on start», переподключение kit), а
+  /// подключение к чужому профилю нельзя перебивать встроенным агентом
+  /// (AGENTS.md §9). Новая попытка метку сбрасывает; тогда пишется
+  /// `provider_wizard.reconnect_skipped` и ничего не делается.
+  Future<void> connectAfterProviderSetup(ProviderSetupNotice notice) async {
+    if (isClosed || !identical(_notice, notice)) {
+      _eventLogger?.debug('provider_wizard.reconnect_skipped');
+      return;
+    }
+    _eventLogger?.info('provider_wizard.reconnect');
+    await connect(embeddedConnectionProfile);
+  }
+
+  var _setupActionOpen = false;
+
+  /// Выполняет [action] мастера из баннера не более одного раза одновременно:
+  /// второй клик, пока первый открывает мастер, игнорируется (владелец —
+  /// Cubit, а не виджет; D26).
+  Future<void> runProviderSetup(Future<void> Function() action) async {
+    if (_setupActionOpen) {
+      return;
+    }
+    _setupActionOpen = true;
+    try {
+      await action();
+    } finally {
+      _setupActionOpen = false;
+    }
+  }
+
+  /// Сбрасывает метку «нужен провайдер»: началась новая попытка (D26).
+  void _dropSetupNotice() {
+    if (_notice == null) {
+      return;
+    }
+    _notice = null;
+    emit(state._copyWith(providerSetupNotice: null));
   }
 
   /// «Connect on start» (D8): один раз после первого кадра и восстановления
@@ -538,6 +626,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     // статус (новая попытка, соединение) сбрасывает его.
     if (workspace.connection is! ConnectionFailed) {
       _tokenRejection = null;
+      _dropSetupNotice();
     }
     final message = switch (workspace.connection) {
       ConnectionFailed() when _tokenRejection != null => _tokenRejection,
@@ -598,10 +687,24 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   /// Ставит `failed` и запоминает [rejection]: баннер показывает его, а не
   /// текст kit, который `_handleWorkspaceChange` уже мог записать (kit
   /// публикует `ConnectionFailed` до того, как `connect` бросит ошибку).
-  void _publishFailure(String? rejection) {
+  void _publishFailure(
+    String? rejection, {
+    required ConnectionProfile profile,
+    required int intent,
+  }) {
     _tokenRejection = rejection;
+    // Метка принадлежит этой попытке встроенного агента: порт читается
+    // синхронно, пока его значение не перезаписала более поздняя попытка
+    // резолвера (D26). Отказ по токену к встроенному агенту не относится.
+    // Намерение могло смениться, пока попытка ждала предварительные `await`
+    // (проверка папки): тогда метка чужая и её выставлять нельзя (D21).
+    final needed = profile is EmbeddedProfile && intent == _intent
+        ? _setupOffer?.value
+        : null;
+    _notice = needed == null ? null : ProviderSetupNotice._(needed.cwd);
     emit(
       state._copyWith(
+        providerSetupNotice: _notice,
         connectionStatus: CodeLabConnectionStatus.failed,
         // Без отказа по токену — текст kit текущего состояния, а не прежний
         // `connectionMessage`: он мог остаться от прошлой попытки.
