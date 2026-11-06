@@ -156,9 +156,9 @@ void main() {
       }
     });
 
-    // Загрузка требует `agent.default_model`, поэтому первая запись в пустой
-    // слой несёт и провайдера, и модель по умолчанию одной правкой (как
-    // `provider add --default`, D6).
+    // Первая запись в пустой слой может нести и провайдера, и явную модель по
+    // умолчанию одной правкой (как `provider add --default`, D6); без ключа
+    // модель выбирается неявно (`optional-default-model`, D1).
     const firstProvider = [
       SetValue('providers.p.kind', 'openai-compatible'),
       SetValue('providers.p.base_url', 'https://llm.test/v1'),
@@ -585,16 +585,25 @@ mcp:
         r.warnings.map((w) => w.key).join(',');
 
     test(
-      'пустой слой: budget.max_steps пишется, default_model — предупреждение',
+      'пустой слой: budget.max_steps пишется, нет модели — предупреждение '
+      'config.model.none (сценарий «Первая запись в пустой конфиг»)',
       () async {
         final result = await apply([const SetValue('budget.max_steps', 40)]);
 
         expect(loadYaml(h.read(h.userPath))['budget']['max_steps'], 40);
-        expect(keysOf(result), contains('agent.default_model'));
+        final warning = result.warnings.singleWhere(
+          (w) => w.key == 'agent.default_model',
+        );
+        expect(warning.event, 'config.model.none');
+        expect(
+          warning.message,
+          'no model is configured; add a provider with at least one model',
+        );
       },
     );
 
-    test('провайдер без default_model в пустой конфиг записывается', () async {
+    test('провайдер без моделей в пустой конфиг записывается; нет модели — '
+        'прежнее предупреждение config.model.none', () async {
       final result = await apply([
         const SetValue('providers.p.kind', 'openai-compatible'),
         const SetValue('providers.p.base_url', 'https://llm.test/v1'),
@@ -602,6 +611,27 @@ mcp:
 
       expect(File(h.userPath).existsSync(), isTrue);
       expect(keysOf(result), contains('agent.default_model'));
+      expect(
+        result.warnings
+            .singleWhere((w) => w.key == 'agent.default_model')
+            .event,
+        'config.model.none',
+      );
+    });
+
+    test('первый провайдер с моделью без agent.default_model: записывается '
+        'без предупреждений (сценарий «Первый провайдер без модели по '
+        'умолчанию»)', () async {
+      final result = await apply([
+        const SetValue('providers.gw.kind', 'openai-compatible'),
+        const SetValue('providers.gw.base_url', 'https://x/v1'),
+        const SetValue('providers.gw.models.m.context_window', 8192),
+      ]);
+
+      expect(File(h.userPath).existsSync(), isTrue);
+      expect(result.warnings, isEmpty);
+      expect(loadYaml(h.read(h.userPath)).containsKey('agent'), isFalse);
+      expect(load().config!.defaultModel.id, 'm');
     });
 
     test(
