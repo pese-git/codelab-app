@@ -27,5 +27,11 @@ void main() {
       'scope:true',
       'bad:true',
     ]);
+    expect(report.mcp, [
+      'upsert:docs',
+      'secret:codelab/mcp/docs/authorization',
+      'entry:docs:user:true',
+      'valid:true',
+    ]);
   });
 }
