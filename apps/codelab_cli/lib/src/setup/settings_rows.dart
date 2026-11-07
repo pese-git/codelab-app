@@ -8,8 +8,41 @@ import '../repl/picker_spec.dart';
 ///
 /// Почему отдельный файл без `dart_tui`: те же строки нужны REPL и экрану
 /// настроек TUI (4b), а выбор слоя записи и отказы — общие правила.
-List<SettingFieldView> settingRowsOf(AgentConfigSnapshot snapshot) =>
-    settingFieldsOf(snapshot);
+List<SettingFieldView> settingRowsOf(AgentConfigSnapshot snapshot) {
+  final rows = settingFieldsOf(snapshot);
+  // Мост отдаёт `providers.*` по дескрипторам, внутри — по id провайдера;
+  // экран показывает блок на провайдера (D17): провайдеры по алфавиту id,
+  // внутри блока — порядок дескрипторов реестра. Блок встаёт на место первой
+  // строки провайдера, остальные строки остаются на своих местах.
+  String? providerId(SettingFieldView row) {
+    final parts = row.key.split('.');
+    return parts.length > 2 && parts.first == 'providers' ? parts[1] : null;
+  }
+
+  final byProvider = <String, List<SettingFieldView>>{};
+  for (final row in rows) {
+    if (providerId(row) case final id?) {
+      byProvider.putIfAbsent(id, () => []).add(row);
+    }
+  }
+  if (byProvider.isEmpty) {
+    return rows;
+  }
+  final ids = byProvider.keys.toList()..sort();
+  final out = <SettingFieldView>[];
+  var placed = false;
+  for (final row in rows) {
+    if (providerId(row) == null) {
+      out.add(row);
+    } else if (!placed) {
+      placed = true;
+      for (final id in ids) {
+        out.addAll(byProvider[id]!);
+      }
+    }
+  }
+  return out;
+}
 
 /// Граница доверия: клиент её показывает и не меняет (решение пользователя).
 bool isTrustBoundary(String key) => key == 'trusted_projects';
