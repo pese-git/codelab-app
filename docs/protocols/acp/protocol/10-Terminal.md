@@ -10,13 +10,14 @@ The terminal methods allow Agents to execute shell commands within the Client's 
 
 ## Checking Support
 
-Before attempting to use terminal methods, Agents **MUST** verify that the Client supports this capability by checking the [Client Capabilities](./initialization#client-capabilities) field in the `initialize` response:
+Before attempting to use terminal methods, Agents **MUST** verify that the Client supports this capability by checking the [Client Capabilities](https://agentclientprotocol.com/protocol/v1/initialization.md#client-capabilities) field in the Client's `initialize` request:
 
-```json highlight={7} theme={null}
+```json highlight={8} theme={null}
 {
   "jsonrpc": "2.0",
   "id": 0,
-  "result": {
+  "method": "initialize",
+  "params": {
     "protocolVersion": 1,
     "clientCapabilities": {
       "terminal": true
@@ -31,7 +32,7 @@ If `terminal` is `false` or not present, the Agent **MUST NOT** attempt to call 
 
 The `terminal/create` method starts a command in a new terminal:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 5,
@@ -52,46 +53,46 @@ The `terminal/create` method starts a command in a new terminal:
 }
 ```
 
-<ParamField path="sessionId" type="SessionId" required>
-  The [Session ID](./session-setup#session-id) for this request
-</ParamField>
+**sessionId** `SessionId` *required*
 
-<ParamField path="command" type="string" required>
-  The command to execute
-</ParamField>
+The [Session ID](https://agentclientprotocol.com/protocol/v1/session-setup.md#session-id) for this request
 
-<ParamField path="args" type="string[]">
-  Array of command arguments
-</ParamField>
+**command** `string` *required*
 
-<ParamField path="env" type="EnvVariable[]">
-  Environment variables for the command.
+The command to execute
 
-  Each variable has:
+**args** `string[]`
 
-  * `name`: The environment variable name
-  * `value`: The environment variable value
-</ParamField>
+Array of command arguments
 
-<ParamField path="cwd" type="string">
-  Working directory for the command (absolute path)
-</ParamField>
+**env** `EnvVariable[]`
 
-<ParamField path="outputByteLimit" type="number">
-  Maximum number of output bytes to retain. Once exceeded, earlier output is
-  truncated to stay within this limit.
+Environment variables for the command.
 
-  When the limit is exceeded, the Client truncates from the beginning of the output
-  to stay within the limit.
+Each variable has:
 
-  The Client **MUST** ensure truncation happens at a character boundary to maintain valid
-  string output, even if this means the retained output is slightly less than the
-  specified limit.
-</ParamField>
+* `name`: The environment variable name
+* `value`: The environment variable value
+
+**cwd** `string`
+
+Working directory for the command. Must be an absolute path.
+
+**outputByteLimit** `number`
+
+Maximum number of output bytes to retain. Once exceeded, earlier output is
+truncated to stay within this limit.
+
+When the limit is exceeded, the Client truncates from the beginning of the output
+to stay within the limit.
+
+The Client **MUST** ensure truncation happens at a character boundary to maintain valid
+string output, even if this means the retained output is slightly less than the
+specified limit.
 
 The Client returns a Terminal ID immediately without waiting for completion:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 5,
@@ -105,16 +106,16 @@ This allows the command to run in the background while the Agent performs other 
 
 After creating the terminal, the Agent can use the `terminal/wait_for_exit` method to wait for the command to complete.
 
-<Note>
-  The Agent **MUST** release the terminal using `terminal/release` when it's no
-  longer needed.
-</Note>
+> [!NOTE]
+>
+> The Agent **MUST** release the terminal using `terminal/release` when it's no
+> longer needed.
 
 ## Embedding in Tool Calls
 
-Terminals can be embedded directly in [tool calls](./tool-calls) to provide real-time output to users:
+Terminals can be embedded directly in [tool calls](https://agentclientprotocol.com/protocol/v1/tool-calls.md) to provide real-time output to users:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "method": "session/update",
@@ -143,7 +144,7 @@ When a terminal is embedded in a tool call, the Client displays live output as i
 
 The `terminal/output` method retrieves the current terminal output without waiting for the command to complete:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 6,
@@ -157,7 +158,7 @@ The `terminal/output` method retrieves the current terminal output without waiti
 
 The Client responds with the current output and exit status (if the command has finished):
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 6,
@@ -172,26 +173,26 @@ The Client responds with the current output and exit status (if the command has 
 }
 ```
 
-<ResponseField name="output" type="string" required>
-  The terminal output captured so far
-</ResponseField>
+**output** `string` *required*
 
-<ResponseField name="truncated" type="boolean" required>
-  Whether the output was truncated due to byte limits
-</ResponseField>
+The terminal output captured so far
 
-<ResponseField name="exitStatus" type="TerminalExitStatus">
-  Present only if the command has exited. Contains:
+**truncated** `boolean` *required*
 
-  * `exitCode`: The process exit code (may be null)
-  * `signal`: The signal that terminated the process (may be null)
-</ResponseField>
+Whether the output was truncated due to byte limits
+
+**exitStatus** `TerminalExitStatus`
+
+Present only if the command has exited. Contains:
+
+* `exitCode`: The process exit code (may be null)
+* `signal`: The signal that terminated the process (may be null)
 
 ## Waiting for Exit
 
 The `terminal/wait_for_exit` method returns once the command completes:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 7,
@@ -205,7 +206,7 @@ The `terminal/wait_for_exit` method returns once the command completes:
 
 The Client responds once the command exits:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 7,
@@ -216,19 +217,19 @@ The Client responds once the command exits:
 }
 ```
 
-<ResponseField name="exitCode" type="number">
-  The process exit code (may be null if terminated by signal)
-</ResponseField>
+**exitCode** `number`
 
-<ResponseField name="signal" type="string">
-  The signal that terminated the process (may be null if exited normally)
-</ResponseField>
+The process exit code (may be null if terminated by signal)
+
+**signal** `string`
+
+The signal that terminated the process (may be null if exited normally)
 
 ## Killing Commands
 
 The `terminal/kill` method terminates a command without releasing the terminal:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 8,
@@ -264,7 +265,7 @@ Agents can implement command timeouts by combining terminal methods:
 
 The `terminal/release` kills the command if still running and releases all resources:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 9,
@@ -280,5 +281,12 @@ After release the terminal ID becomes invalid for all other `terminal/*` methods
 
 If the terminal was added to a tool call, the client **SHOULD** continue to display its output after release.
 
+## Security
 
-Built with [Mintlify](https://mintlify.com).
+The Client runs these commands itself, so it is responsible for checking them. A permission request from the Agent does not replace the Client's own checks.
+
+* Clients **SHOULD** require `cwd` to be inside the session's [root set](https://agentclientprotocol.com/protocol/v1/session-setup.md#workspace-root-security) and apply their own permission policy to the full `command`, `args`, and `env`. Clients that approve commands automatically **SHOULD** include `env` in what the policy matches.
+* Clients **SHOULD** display `terminal/output` with terminal control sequences neutralized, so that it cannot write the clipboard, send input or query responses, or open links without user action.
+
+
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.

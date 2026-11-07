@@ -3,7 +3,7 @@
   "spec": [
     "13-Session Config Options.md#from-the-client",
     "13-Session Config Options.md#initial-state",
-    "13-Session Config Options.md#configoptionvalue",
+    "13-Session Config Options.md#sessionconfigselectoption",
     "01-Overview.md#error-handling",
     "02-Initialization.md#mcp-capabilities"
   ],
