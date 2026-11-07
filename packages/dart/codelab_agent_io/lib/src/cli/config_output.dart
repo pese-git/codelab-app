@@ -4,11 +4,6 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import '../config/environment_layer.dart' show environmentLayerVariables;
 
-/// Замена непрозрачного поддерева схемы (R0-2): схемы его листьев в этой
-/// сборке нет, и правило имён не гарантирует, что секрет не лежит под
-/// безобидным именем.
-const opaqueMask = '<opaque: edit the file>';
-
 /// Маскирует значение для вывода `config get` и `provider list` (R0-2;
 /// design.md change `add-config-writer-and-reload`, D6; agent-configuration
 /// «Подкоманды записи и чтения конфига»).
@@ -121,7 +116,6 @@ String configLayerName(ConfigLayerKind kind) => switch (kind) {
 };
 
 final _plainName = RegExp(r'^[A-Za-z0-9_\-]+$');
-final _reference = RegExp(r'\$\{[^}]+\}');
 
 /// Путь списка `args` сервера MCP: `mcp.servers[gh].args`, `mcp.servers[0].args`.
 final _argsPath = RegExp(r'^mcp\.servers\[[^\]]+\]\.args$');
@@ -133,9 +127,6 @@ final _argsElementPath = RegExp(
 
 /// Путь глубже элемента `args`.
 final _argsDeeperPath = RegExp(r'^mcp\.servers\[[^\]]+\]\.args\[[^\]]+\][.\[]');
-
-/// Ведущие дефисы имени флага.
-final _leadingDashes = RegExp(r'^-+');
 
 /// Шаблоны ключей реестра по сегментам: нужны проверке «под узлом есть схема».
 final List<List<String>> _patterns = [
@@ -179,82 +170,17 @@ final class _Masker {
     }
   }
 
-  /// Маскирует элементы `mcp.servers[*].args` (R4-6, OQ3; design.md change
-  /// `add-config-literal-secrets-and-migrate`, D5).
-  ///
-  /// Почему отдельно от листьев: аргументы — плоский список строк, имени у
-  /// элемента нет, а токен приходит парой `--token <значение>` или
-  /// `--token=<значение>`. Правила по порядку для элемента:
-  /// - значение слоя без файла (`env`, флаги) → метка источника, как у
-  ///   прочих листьев ([_foreignLabel]), проверяется один раз для списка;
-  /// - литерал по шаблону §12.4 ([literalSecretTag]) → [redactedMask];
-  /// - элемент (любого типа) после флага `-…` с секретным именем (то же
-  ///   правило, что у заголовков, [isSecretLikeName]; ложные срабатывания
-  ///   вроде `--max-tokens` допустимы: скрыть лишнее дешевле) →
-  ///   [redactedMask]; исключения: следующий `--флаг` и чистая ссылка
-  ///   `${…}` без литеральной части (fail closed: `${X}literal` скрывается);
-  /// - `--<секретное имя>=<значение>` → `--<имя>=<redacted>` с теми же
-  ///   исключениями;
-  /// - прочее, включая ссылки и несекретные флаги, — как есть.
-  /// Граница: короткие флаги (`-p hunter2`) не маскируются — по имени
-  /// `p` секретность не определить. Действует при любом `--layer`: слой
-  /// выбирает значение, а не правила.
+  /// Маскирует элементы `mcp.servers[*].args` (R4-6, OQ3; D5 change
+  /// `add-config-literal-secrets-and-migrate`): значение слоя без файла
+  /// (`env`, флаги) → метка источника ([_foreignLabel]), иначе правила
+  /// `maskMcpArgs` ядра — они же у строки MCP-сервера в мосте `codelab_setup`
+  /// (D11): одна функция показа `args`, второй копии нет.
   List<Object?> _maskArgs(List<Object?> args) {
     if (_foreignLabel('mcp.servers') case final label?) {
       return [for (final _ in args) label];
     }
-    final result = <Object?>[];
-    var afterSecretFlag = false;
-    for (final item in args) {
-      final wasSecretFlag = afterSecretFlag;
-      afterSecretFlag = false;
-      // Вложенный список или отображение — невалидный `args` ручной правки.
-      // Схемы листьев нет, секрет под любым именем не отличить, поэтому
-      // [opaqueMask], как у прочих неописанных поддеревьев ([_unknownContainer]).
-      if (item is Map || item is List) {
-        result.add(opaqueMask);
-        continue;
-      }
-      if (item is! String) {
-        result.add(wasSecretFlag ? redactedMask : item);
-        continue;
-      }
-      if (literalSecretTag(item) != null) {
-        result.add(redactedMask);
-        continue;
-      }
-      // Значение после секретного флага: не `--флаг`, не пусто и не чистая
-      // ссылка. Один дефис (`-s3cr3t`) значение, а не флаг известной формы.
-      if (wasSecretFlag && !item.startsWith('--')) {
-        result.add(_hidesLiteral(item) ? redactedMask : item);
-        continue;
-      }
-      if (!item.startsWith('-')) {
-        result.add(item);
-        continue;
-      }
-      final eq = item.indexOf('=');
-      final flagName = (eq < 0 ? item : item.substring(0, eq)).replaceFirst(
-        _leadingDashes,
-        '',
-      );
-      final secretFlag = isSecretLikeName(flagName);
-      if (eq < 0) {
-        afterSecretFlag = secretFlag;
-        result.add(item);
-      } else if (secretFlag && _hidesLiteral(item.substring(eq + 1))) {
-        result.add('${item.substring(0, eq)}=$redactedMask');
-      } else {
-        result.add(item);
-      }
-    }
-    return result;
+    return maskMcpArgs(args);
   }
-
-  /// Значение секретного флага содержит литерал: оно не пусто и вне ссылок
-  /// `${…}` остаётся текст.
-  bool _hidesLiteral(String value) =>
-      value.replaceAll(_reference, '').isNotEmpty;
 
   /// Один элемент `args`, адресованный путём `…args[<индекс>]` (см.
   /// [maskConfigValue]): родительский список берётся из слоя, маскируется
@@ -293,11 +219,11 @@ final class _Masker {
     // мог быть значением секретного флага, поэтому идёт по правилу значения.
     if (value.startsWith('--')) {
       final eq = value.indexOf('=');
-      return eq < 0 || !_hidesLiteral(value.substring(eq + 1))
+      return eq < 0 || !hidesConfigLiteral(value.substring(eq + 1))
           ? value
           : '${value.substring(0, eq)}=$redactedMask';
     }
-    return _hidesLiteral(value) ? redactedMask : value;
+    return hidesConfigLiteral(value) ? redactedMask : value;
   }
 
   Object? _leaf(Object? value, String path) {

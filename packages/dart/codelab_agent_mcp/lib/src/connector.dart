@@ -226,6 +226,21 @@ final class _ConnectedSession implements McpSessionTools {
   var _servers = <_Server>[];
   var _closed = false;
 
+  /// Поток [changes]: один контроллер на сессию, закрывается в [close].
+  /// Асинхронный: подписчик не выполняется внутри автомата (повторный вход в
+  /// супервизор из обработчика исключён).
+  final _changes = StreamController<List<McpServerSummary>>.broadcast();
+
+  /// Шлёт подписчикам полный список сводок (design.md change
+  /// `add-provider-setup-ui`, D12). После `close()` ничего не шлёт: поздние
+  /// события закрывающихся попыток до хоста не доходят (D21).
+  void _notify() {
+    if (_closed || _changes.isClosed || !_changes.hasListener) {
+      return;
+    }
+    _changes.add(List.unmodifiable(servers));
+  }
+
   /// Закрытие сессии: обрывает рукопожатия, висящие до `connectTimeout`.
   final _abort = Completer<void>();
 
@@ -311,6 +326,7 @@ final class _ConnectedSession implements McpSessionTools {
       'from': previous.name,
       'to': next.name,
     });
+    _notify();
   }
 
   // --- автомат -----------------------------------------------------------
@@ -484,6 +500,8 @@ final class _ConnectedSession implements McpSessionTools {
         unawaited(_closeClient(s));
       }
       _refreshPending = true;
+      // Число инструментов появилось после `_setState`: событие повторяется.
+      _notify();
     } else if (!same && !_starting) {
       // Новый набор после переподключения доходит до реестра через
       // `takeUpdate` на границе шага (D11).
@@ -612,6 +630,9 @@ final class _ConnectedSession implements McpSessionTools {
     for (final server in _servers) server.summary(),
   ];
 
+  @override
+  Stream<List<McpServerSummary>> get changes => _changes.stream;
+
   /// Строит `McpTool` сервера, если определения ещё не превращались в
   /// инструменты (логи `mcp.tool.invalid` — один раз на набор).
   List<McpTool> _build(_Server server) => server.built ??= [
@@ -728,6 +749,7 @@ final class _ConnectedSession implements McpSessionTools {
         'removed': (was.difference(now).toList()..sort()),
       });
     }
+    _notify();
     return McpToolsUpdate(tools: tools, servers: servers);
   }
 
@@ -798,6 +820,10 @@ final class _ConnectedSession implements McpSessionTools {
       for (final s in _servers)
         if (!kept.contains(s)) s,
     ];
+    final orderChanged =
+        next.length != _servers.length ||
+        [for (final s in next) s.config.name].join('\u0000') !=
+            [for (final s in _servers) s.config.name].join('\u0000');
     for (final s in leaving) {
       // Флаг до первого `await`: параллельные `setEnabled`/`reconnect` и
       // идущая попытка видят, что сервер уходит, и не оживляют его.
@@ -825,6 +851,9 @@ final class _ConnectedSession implements McpSessionTools {
     final rejected = _resolve(fresh);
     await Future.wait([for (final s in rejected) _closeClient(s)]);
     _refreshPending = true;
+    if (leaving.isNotEmpty || toStart.isNotEmpty || orderChanged) {
+      _notify();
+    }
   }
 
   _Server? _find(String name) {
@@ -895,6 +924,7 @@ final class _ConnectedSession implements McpSessionTools {
       }
     }
     await Future.wait([for (final s in _servers) _closeClient(s)]);
+    await _changes.close();
   }
 }
 

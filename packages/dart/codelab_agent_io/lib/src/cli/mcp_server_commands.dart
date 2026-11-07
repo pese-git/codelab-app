@@ -177,9 +177,6 @@ final class McpServerCommands {
   final SecretCommands _secrets;
   final ConfigEditRunner _runner;
 
-  /// Имя не должно ломать запись пути `mcp.servers[<name>]`.
-  static final _nameFormat = RegExp(r'^[^\s\[\]"]+$');
-
   /// `add`: добавляет сервер или заменяет одноимённый на месте (D6).
   ///
   /// Ошибки использования (код `64`): нет или неизвестен `--type`, нет
@@ -202,7 +199,7 @@ final class McpServerCommands {
       exitCode: configUsageExit,
       stderr: ['mcp add: $message'],
     );
-    if (!_nameFormat.hasMatch(options.name)) {
+    if (!isValidMcpServerName(options.name)) {
       return usage('the server name must not contain whitespace, [, ] or "');
     }
     // Один флаг `-stdin` на вызов: stdin один, два значения потребовали бы
@@ -586,7 +583,7 @@ final class McpServerCommands {
   Future<ConfigCommandResult> remove(McpRemoveOptions options) async {
     // Имя проверяется как у `add`: `a]` или `a b` не должны превратиться в
     // чужой путь `mcp.servers[…]`.
-    if (!_nameFormat.hasMatch(options.name)) {
+    if (!isValidMcpServerName(options.name)) {
       return const ConfigCommandResult(
         exitCode: configUsageExit,
         stderr: [

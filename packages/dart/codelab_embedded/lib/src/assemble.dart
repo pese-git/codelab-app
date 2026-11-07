@@ -170,6 +170,10 @@ final class _Agent implements EmbeddedAgent {
   final bool secretsInConfig;
 
   @override
+  McpStatusPort? mcpStatus(String sessionId) =>
+      _core.runtime.mcpStatus(SessionId(sessionId));
+
+  @override
   Future<void> get closed => _closed.future;
 
   /// Зона агента: в ней живут `serve`, обработчики сервера, ходы и `dispose`

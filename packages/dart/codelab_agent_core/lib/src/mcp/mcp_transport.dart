@@ -74,12 +74,17 @@ final class McpRequestAbort {
   final bool retryable;
 }
 
-/// Почему транспорт закрыт: текст попадает в `mcp.server.failed` и в
-/// результат-ошибку «disconnected during the call». Формируется кодом
+/// Почему транспорт закрыт: текст попадает в `mcp.server.failed`, в
+/// результат-ошибку «disconnected during the call» и в `lastError` сводки
+/// сервера (`McpServerSummary`, а через неё — в UI хоста). Формируется кодом
 /// транспорта и не содержит ни заголовков, ни значений `env` (D13).
 final class McpTransportClosed {
   const McpTransportClosed(this.reason, {this.exitCode});
 
+  /// Контракт (D13): текст кода CodeLab — без URL, аргументов, значений
+  /// `env` и `headers` и текстов сервера (stderr, тел ответов). Реализация
+  /// транспорта, нарушившая его, раскрывает секреты в UI статуса; ядро и
+  /// коннектор причину не фильтруют.
   final String reason;
 
   /// Код выхода процесса stdio; у HTTP `null`.
@@ -114,6 +119,9 @@ abstract interface class McpTransportFactory {
 final class McpTransportException implements Exception {
   const McpTransportException(this.message);
 
+  /// Контракт (D13): текст кода CodeLab — без URL, аргументов, значений
+  /// `env` и `headers` и текстов сервера. Он попадает в `lastError` сводки
+  /// сервера и в UI статуса, коннектор его не фильтрует.
   final String message;
 
   @override
