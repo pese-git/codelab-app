@@ -155,6 +155,49 @@ mcp:
     });
   });
 
+  group('порядок слияния', () {
+    test('порядок строк совпадает с итоговым списком загрузчика ядра '
+        '(merge.dart): первое появление, замена на месте', () async {
+      final home = RealHome.create('mcp_order_');
+      addTearDown(home.dispose);
+      String servers(List<String> names) => [
+        'mcp:',
+        '  servers:',
+        for (final n in names) ...[
+          '    - name: $n',
+          '      type: http',
+          '      url: https://$n.test/mcp',
+        ],
+      ].join('\n');
+      home.writeConfig(
+        'trusted_projects:\n  - ${home.project}\n'
+        'agent:\n  default_model: gw/m\n$gatewayProvider'
+        '${servers(['a', 'b', 'c'])}\n',
+      );
+      Directory('${home.project}/.codelab').createSync(recursive: true);
+      File(
+        '${home.project}/.codelab/config.yaml',
+      ).writeAsStringSync(servers(['d', 'b']));
+      File(
+        '${home.project}/.codelab/config.local.yaml',
+      ).writeAsStringSync(servers(['e', 'a', 'd']));
+
+      final snapshot = await home.load();
+
+      // Итог загрузчика плоский: `mcp.servers[<name>].<поле>` в порядке
+      // итогового списка.
+      final merged = <String>[];
+      for (final key in snapshot.loaded.values.keys) {
+        final match = RegExp(r'^mcp\.servers\[([^\]]+)\]').firstMatch(key);
+        if (match != null && !merged.contains(match.group(1))) {
+          merged.add(match.group(1)!);
+        }
+      }
+      expect(merged, ['a', 'b', 'c', 'd', 'e']);
+      expect([for (final e in mcpServerEntriesOf(snapshot)) e.name], merged);
+    });
+  });
+
   group('маскирование значений (R0-2, SETUP-1)', () {
     test('литерал в заголовке скрыт и помечен masked; ссылки и обычные '
         'значения — как есть', () {
@@ -176,7 +219,11 @@ mcp:
       final e = entry(list, 'gh');
       expect(e.headers['Authorization'], '<redacted>');
       expect(e.headers['X-Ref'], r'${secret:codelab/mcp/gh/x-ref}');
-      expect(e.headers['X-Team'], 'core');
+      expect(
+        e.headers['X-Team'],
+        '<redacted>',
+        reason: 'значение заголовка — только чистая ссылка \${…}',
+      );
       expect(e.masked, isTrue);
       expect('${e.headers} ${e.target} $e', isNot(contains(leak)));
     });
@@ -185,7 +232,13 @@ mcp:
       final list = mcpServerEntriesOf(
         mcpSnapshot(
           user: [
-            httpServer('gh', headers: {'X-Team': 'core'}),
+            httpServer(
+              'gh',
+              headers: {
+                'X-Ref': r'${secret:codelab/mcp/gh/x-ref}',
+                'X-Env': r'${TEAM}',
+              },
+            ),
             stdioServer('s', env: {'LOG_LEVEL': 'debug'}),
           ],
         ),
@@ -193,6 +246,32 @@ mcp:
 
       expect(entry(list, 'gh').masked, isFalse);
       expect(entry(list, 's').masked, isFalse);
+    });
+
+    test('заголовок с токеном под нейтральным именем (X-Workspace) скрыт: '
+        'значение headers показывается только если это чистая ссылка', () {
+      final e = entry(
+        mcpServerEntriesOf(
+          mcpSnapshot(
+            user: [
+              httpServer(
+                'gh',
+                headers: {
+                  'X-Workspace': 'ws-4f9a8c2d71b3e605',
+                  'X-Mixed': r'Bearer ${secret:codelab/mcp/gh/x-mixed}',
+                  'X-Plain': r'${secret:codelab/mcp/gh/x-plain}',
+                },
+              ),
+            ],
+          ),
+        ),
+        'gh',
+      );
+
+      expect(e.headers['X-Workspace'], '<redacted>');
+      expect(e.headers['X-Mixed'], '<redacted>');
+      expect(e.headers['X-Plain'], r'${secret:codelab/mcp/gh/x-plain}');
+      expect(e.masked, isTrue);
     });
 
     test(

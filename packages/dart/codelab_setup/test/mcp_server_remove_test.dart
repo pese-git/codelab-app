@@ -216,6 +216,60 @@ void main() {
       },
     );
 
+    test('Remove трогает только секреты пространства codelab/mcp/<name>/: '
+        'ручной \${secret:shared} остаётся (kept), хранилище не '
+        'трогается', () async {
+      keys = FakeProviderKeys(stored: {authorization, 'shared'});
+      rebuild();
+      config.snapshotValue = mcpSnapshot();
+      final snapshot = mcpSnapshot(
+        user: [
+          httpServer(
+            'github',
+            headers: {
+              'Authorization': '\${secret:$authorization}',
+              'X-Shared': '\${secret:shared}',
+            },
+          ),
+        ],
+      );
+
+      final outcome = await remover.remove(snapshot, name: 'github');
+
+      expect((outcome as McpServerRemoved).secrets, {
+        authorization: SecretCleanup.deleted,
+        'shared': SecretCleanup.kept,
+      });
+      expect(keys.journal.where((j) => j.startsWith('delete')), [
+        'delete $authorization',
+      ]);
+      expect(keys.storedNames, contains('shared'));
+    });
+
+    test(
+      'чужое пространство того же вида (codelab/mcp/other/x) тоже kept',
+      () async {
+        keys = FakeProviderKeys(stored: {'codelab/mcp/other/x'});
+        rebuild();
+        config.snapshotValue = mcpSnapshot();
+        final snapshot = mcpSnapshot(
+          user: [
+            httpServer(
+              'github',
+              headers: {'X': '\${secret:codelab/mcp/other/x}'},
+            ),
+          ],
+        );
+
+        final outcome = await remover.remove(snapshot, name: 'github');
+
+        expect((outcome as McpServerRemoved).secrets, {
+          'codelab/mcp/other/x': SecretCleanup.kept,
+        });
+        expect(keys.journal.where((j) => j.startsWith('delete')), isEmpty);
+      },
+    );
+
     test('сервер без секретов: ни одного обращения к хранилищу', () async {
       final outcome = await remover.remove(
         mcpSnapshot(user: [httpServer('plain')]),
@@ -246,13 +300,22 @@ void main() {
   });
 
   group('«Disable here» / «Enable here» для сервера слоя 3 (Q21)', () {
+    // Файл `config.local.yaml` читается (пока пуст): слой в снимке есть.
     final project = mcpSnapshot(
       project: [stdioServer('playwright', command: 'pw')],
+      projectLocal: const [],
+    );
+    const access = EditableSettings(
+      ConfigPaths(codelabHome: '/h', projectDir: mcpCwd),
     );
 
     test('disableHere пишет {name, enabled: false} в projectLocal, проектный '
         'файл не затрагивается', () async {
-      final outcome = await committer.disableHere(project, 'playwright');
+      final outcome = await committer.disableHere(
+        project,
+        'playwright',
+        access: access,
+      );
 
       expect(outcome, isA<McpServerWritten>());
       final applied = config.applied.single;
@@ -262,13 +325,38 @@ void main() {
       expect(applied.base.target, const ConfigTarget.projectLocal(mcpCwd));
     });
 
-    test('disableHere: основа — снимок projectLocal, даже если слоя ещё нет '
-        'в снимке', () async {
-      // Файла `config.local.yaml` может не быть: основа — пустой снимок слоя.
-      final outcome = await committer.disableHere(project, 'playwright');
+    test('нечитаемый config.local.yaml (слоя нет в снимке) — отказ '
+        'layerUnreadable, а не ConfigConflict', () async {
+      final unreadable = mcpSnapshot(
+        project: [stdioServer('playwright', command: 'pw')],
+      );
 
-      expect(outcome, isA<McpServerWritten>());
-      expect(config.applied.single.base.path, endsWith('config.local.yaml'));
+      final outcome = await committer.disableHere(
+        unreadable,
+        'playwright',
+        access: access,
+      );
+
+      expect(
+        (outcome as McpServerRefused).reason,
+        McpServerRefusal.layerUnreadable,
+      );
+      expect(config.applied, isEmpty);
+    });
+
+    test('профиль без цели projectLocal (папка проекта неизвестна) — отказ '
+        'noProjectTarget, запись не идёт (D5, SETUP-3)', () async {
+      final outcome = await committer.disableHere(
+        project,
+        'playwright',
+        access: const EditableSettings(ConfigPaths(codelabHome: '/h')),
+      );
+
+      expect(
+        (outcome as McpServerRefused).reason,
+        McpServerRefusal.noProjectTarget,
+      );
+      expect(config.applied, isEmpty);
     });
 
     test('disableHere только для сервера слоя 3: user-сервер и неизвестный — '
@@ -276,8 +364,13 @@ void main() {
       final user = await committer.disableHere(
         mcpSnapshot(user: [httpServer('u')]),
         'u',
+        access: access,
       );
-      final unknown = await committer.disableHere(project, 'nope');
+      final unknown = await committer.disableHere(
+        project,
+        'nope',
+        access: access,
+      );
 
       expect((user as McpServerRefused).reason, McpServerRefusal.notProject);
       expect(
@@ -330,7 +423,11 @@ void main() {
     test('конфликт записи пробрасывается без автоповтора (SETUP-6)', () async {
       config.outcome = const ConfigConflict('/w/.codelab/config.local.yaml');
 
-      final outcome = await committer.disableHere(project, 'playwright');
+      final outcome = await committer.disableHere(
+        project,
+        'playwright',
+        access: access,
+      );
 
       expect((outcome as McpServerNotWritten).outcome, isA<ConfigConflict>());
       expect(config.applied, hasLength(1));

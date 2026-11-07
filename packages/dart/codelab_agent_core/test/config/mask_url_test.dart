@@ -107,6 +107,34 @@ void main() {
     });
   });
 
+  group('maskMcpArgs (R4-6)', () {
+    test('значение после секретного флага и --флаг=значение скрыты', () {
+      expect(
+        maskMcpArgs(['--token', 'hunter2', '--verbose', '--api-key=abc', '-y']),
+        ['--token', redactedMask, '--verbose', '--api-key=$redactedMask', '-y'],
+      );
+    });
+
+    test('литерал по шаблону скрыт, ссылки и несекретное — как есть', () {
+      expect(maskMcpArgs(['x', leak, r'--token', r'${secret:codelab/t}']), [
+        'x',
+        redactedMask,
+        '--token',
+        r'${secret:codelab/t}',
+      ]);
+    });
+
+    test('вложенный список или карта — opaqueMask', () {
+      expect(
+        maskMcpArgs([
+          ['a'],
+          {'k': 'v'},
+        ]),
+        [opaqueMask, opaqueMask],
+      );
+    });
+  });
+
   group('isSecretScalarName', () {
     test('счётчики токенов не секретны, а token и keys — секретны', () {
       expect(isSecretScalarName('max_tokens'), isFalse);

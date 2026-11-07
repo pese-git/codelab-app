@@ -171,9 +171,7 @@ final class FakeMcpSessionTools implements McpSessionTools {
   /// Поток состояний серверов (agent-mcp-client «Поток состояний серверов
   /// сессии»; design.md change `add-provider-setup-ui`, D12): широковещательный,
   /// без повтора последнего значения, закрывается в [close].
-  ///
-  /// Пока `McpSessionTools.changes` нет в интерфейсе (задача 5.7), член не
-  /// помечен `@override`; после появления в интерфейсе аннотацию добавить.
+  @override
   Stream<List<McpServerSummary>> get changes => _changes.stream;
 
   /// Имитация смены состояния сервера: обновляет [servers] и шлёт список в
@@ -218,7 +216,8 @@ final class FakeMcpSessionTools implements McpSessionTools {
     }
     if (toolsOnReplace case final next?) {
       tools = next(servers);
-      this.servers = [
+      // Как настоящий коннектор: смена состава серверов — событие `changes`.
+      emit([
         for (final s in servers)
           McpServerSummary(
             name: s.name,
@@ -226,7 +225,7 @@ final class FakeMcpSessionTools implements McpSessionTools {
                 .where((t) => t.name.startsWith(mcpServerPrefix(s.name)))
                 .length,
           ),
-      ];
+      ]);
     }
   }
 

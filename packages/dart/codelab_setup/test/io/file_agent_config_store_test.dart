@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'package:codelab_agent_core/codelab_agent_core.dart'
-    show UpsertMcpServer;
 import 'package:codelab_agent_core/testing.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:codelab_setup/io.dart';
