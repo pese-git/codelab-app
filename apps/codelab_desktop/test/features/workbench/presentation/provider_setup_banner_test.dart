@@ -16,7 +16,7 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
-    show EmbeddedAgent, EmbeddedAgentConfigException;
+    show EmbeddedAgent, EmbeddedAgentConfigException, McpStatusPort;
 import 'package:codelab_setup/codelab_setup.dart'
     show
         CheckOk,
@@ -37,6 +37,10 @@ const _noProvider = 'No model provider is configured for the embedded agent.';
 Finder _key(String key) => find.byKey(ValueKey(key));
 
 final class _Agent implements EmbeddedAgent {
+  // Статус MCP в этом тесте не нужен: фейк сессий не открывает.
+  @override
+  McpStatusPort? mcpStatus(String sessionId) => null;
+
   final _closed = Completer<void>();
 
   @override

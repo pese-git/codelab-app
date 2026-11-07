@@ -1326,6 +1326,10 @@ final class _Tools implements McpSessionTools {
   Completer<void>? replaceGate;
   Completer<void>? enableGate;
 
+  /// Поток состояний (D12): этим тестам события не нужны, поток пуст.
+  @override
+  Stream<List<McpServerSummary>> get changes => const Stream.empty();
+
   /// Если задано, чтение `servers` или `reconnect` бросает его.
   Object? failServers;
   Object? failReconnect;

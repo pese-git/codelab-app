@@ -533,6 +533,10 @@ final class SpyMcpSession implements McpSessionTools {
   @override
   List<McpServerSummary> get servers => const [];
 
+  /// Поток состояний (D12): этим тестам события не нужны, поток пуст.
+  @override
+  Stream<List<McpServerSummary>> get changes => const Stream.empty();
+
   @override
   McpToolsUpdate? takeUpdate() => null;
 

@@ -44,8 +44,11 @@ void main() {
   });
 
   Future<String> open({bool withServer = true}) async {
+    // Профиль требует оба транспорта (`stdio` и `http`), как у настоящего
+    // хоста: фабрика в памяти обслуживает оба.
+    final factory = FakeMcpTransportFactory(servers);
     final connector = McpClientConnector(
-      transports: McpTransports(stdio: FakeMcpTransportFactory(servers)),
+      transports: McpTransports(stdio: factory, http: factory),
       clock: clock,
     );
     final services = memoryServices(

@@ -55,16 +55,28 @@ void main() {
     );
   });
 
-  test('событие несёт retryIn у failed и текст кода CodeLab без текста '
-      'сервера и секретов', () async {
+  // Причина сбоя (`lastError`) формируется транспортом и пробрасывается
+  // коннектором как есть (контракт D13 на `McpTransportClosed.reason` и
+  // `McpTransportException.message`: без URL, аргументов, env и текстов
+  // сервера), поэтому тест не подставляет маркер в причину фейка — это
+  // проверка транспорта, а не коннектора. Здесь проверяется, что значения
+  // `env` из конфигурации в событие не попадают.
+  test('событие несёт retryIn у failed и текст кода CodeLab: значения env '
+      'сервера и секретов в нём нет', () async {
     final rig = SupervisorRig({
       'docs': fakeServer(['t']),
     });
-    final session = await rig.connect([stdio('docs')]);
+    final session = await rig.connect([
+      McpStdioServerConfig(
+        name: 'docs',
+        command: '/usr/bin/docs',
+        env: {'DOCS_TOKEN': leak},
+      ),
+    ]);
     final events = <List<McpServerSummary>>[];
     session.changes.listen(events.add);
 
-    await rig.crash('docs', reason: 'died with $leak in stderr');
+    await rig.crash('docs');
 
     final failed = events.last.single;
     expect(failed.state, McpServerState.failed);
@@ -231,5 +243,75 @@ void main() {
     await session.close();
 
     await done.future.timeout(const Duration(seconds: 1));
+  });
+
+  test('close() во время подключения: после вызова подписчик не получает '
+      'ни одного события (в том числе failed «connection cancelled»), '
+      'поток завершается', () async {
+    final rig = SupervisorRig({
+      'docs': fakeServer(['t']),
+    });
+    final session = await rig.connect([stdio('docs')]);
+    await rig.crash('docs');
+    final retryIn = summaryOf(session, 'docs').retryIn!;
+    // Повтор зависает в `open`: сервер остаётся в `connecting`, пока сессию
+    // закрывают.
+    final gate = rig.spy.gate = Completer<void>();
+    await rig.clock.elapse(retryIn);
+    expect(summaryOf(session, 'docs').state, McpServerState.connecting);
+    final seen = record(session);
+    final done = Completer<void>();
+    session.changes.listen((_) {}, onDone: done.complete);
+
+    final closing = session.close();
+    gate.complete();
+    await closing;
+    await rig.settle();
+    await rig.clock.elapse(retryIn * 2);
+
+    await done.future.timeout(const Duration(seconds: 1));
+    expect(seen, isEmpty, reason: 'после close() событий нет');
+  });
+
+  test('close() при живом сервере: событий после вызова нет, поток '
+      'завершается', () async {
+    final rig = SupervisorRig({
+      'docs': fakeServer(['t']),
+    });
+    final session = await rig.connect([stdio('docs')]);
+    final seen = record(session);
+    final done = Completer<void>();
+    session.changes.listen((_) {}, onDone: done.complete);
+
+    await session.close();
+    await rig.settle();
+
+    await done.future.timeout(const Duration(seconds: 1));
+    expect(seen, isEmpty);
+  });
+
+  test('takeUpdate() в окне между началом close() и закрытием потока события '
+      'не шлёт', () async {
+    final rig = SupervisorRig({
+      'docs': fakeServer(['t']),
+    });
+    final session = await rig.connect([stdio('docs')]);
+    // После `reconnect` ждёт обновление набора: `takeUpdate` обычно уведомил бы
+    // подписчиков.
+    await session.reconnect('docs');
+    await rig.settle();
+    final seen = record(session);
+    final done = Completer<void>();
+    session.changes.listen((_) {}, onDone: done.complete);
+
+    final closing = session.close();
+    // `close()` ещё закрывает клиентов (await), поток открыт, но сессия уже
+    // закрыта: поздний `takeUpdate` хоста не должен породить событие.
+    session.takeUpdate();
+    await closing;
+    await rig.settle();
+
+    await done.future.timeout(const Duration(seconds: 1));
+    expect(seen, isEmpty);
   });
 }

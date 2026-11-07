@@ -189,6 +189,39 @@ void main() {
     });
   });
 
+  group('таблица активного типа', () {
+    test('stdio: секреты headers не пишутся и не попадают в элемент', () {
+      final draft = McpServerDraft(
+        name: 'a',
+        kind: McpTransportKind.stdio,
+        command: 'srv',
+        env: {'TOKEN': McpValueDraft.secret(SecretValue('e'))},
+        headers: {'Authorization': McpValueDraft.secret(SecretValue(leak))},
+      );
+
+      final server = (draft.toEdits().single as UpsertMcpServer).server;
+
+      expect(draft.secretsToWrite().keys, ['codelab/mcp/a/token']);
+      expect(server, isNot(contains('headers')));
+      expect(jsonEncode(server), isNot(contains('authorization')));
+    });
+
+    test('http: секреты env не пишутся и не попадают в элемент', () {
+      final draft = McpServerDraft(
+        name: 'a',
+        kind: McpTransportKind.http,
+        url: 'https://h/mcp',
+        env: {'TOKEN': McpValueDraft.secret(SecretValue(leak))},
+        headers: {'Authorization': McpValueDraft.secret(SecretValue('h'))},
+      );
+
+      final server = (draft.toEdits().single as UpsertMcpServer).server;
+
+      expect(draft.secretsToWrite().keys, ['codelab/mcp/a/authorization']);
+      expect(server, isNot(contains('env')));
+    });
+  });
+
   group('validate()', () {
     List<String> fields(McpServerDraft draft, {Set<String> taken = const {}}) =>
         [for (final p in draft.validate(existingNames: taken)) p.field.name];
@@ -285,6 +318,90 @@ void main() {
         McpDraftField.headers,
         McpDraftField.headers,
       ]);
+    });
+
+    test('переименование при правке запрещено (originalName != name)', () {
+      final renamed = McpServerDraft.fromElement({
+        'name': 'github',
+        'type': 'http',
+        'url': 'https://h/mcp',
+      }).copyWith(name: 'github2');
+
+      final problems = renamed.validate();
+
+      expect(problems.map((p) => p.field), [McpDraftField.name]);
+      expect(
+        problems.single.message,
+        'Remove the server and add it again to rename it.',
+      );
+      expect(renamed.toEdits(), isEmpty);
+    });
+
+    test('правка без смены имени переименованием не считается', () {
+      final same = McpServerDraft.fromElement({
+        'name': 'github',
+        'type': 'http',
+        'url': 'https://h/mcp',
+      }).copyWith(url: 'https://h2/mcp');
+
+      expect(same.validate(), isEmpty);
+    });
+
+    test('коллизия имён секретов после нормализации forMcp — проблема '
+        'таблицы', () {
+      // `X Token` и `X-Token` дают один `codelab/mcp/a/x-token`.
+      final draft = McpServerDraft(
+        name: 'a',
+        kind: McpTransportKind.http,
+        url: 'https://h/mcp',
+        headers: {
+          'X Token': McpValueDraft.secret(SecretValue('one')),
+          'X-Token': McpValueDraft.secret(SecretValue('two')),
+        },
+      );
+
+      expect(draft.validate().map((p) => p.field), [McpDraftField.headers]);
+      expect(draft.toEdits(), isEmpty);
+    });
+
+    test('новый секрет, совпавший по имени с хранимой ссылкой другого ключа '
+        'той же таблицы, — коллизия', () {
+      // `token` даёт `codelab/mcp/x/token`, а ключ `TOKEN` уже ссылается на
+      // него же: запись нового значения затёрла бы чужой секрет.
+      final draft = McpServerDraft(
+        name: 'x',
+        kind: McpTransportKind.stdio,
+        command: 'srv',
+        env: {
+          'TOKEN': McpValueDraft.stored(r'${secret:codelab/mcp/x/token}'),
+          'token': McpValueDraft.secret(SecretValue('new')),
+        },
+      );
+
+      expect(draft.validate().map((p) => p.field), [McpDraftField.env]);
+      expect(draft.toEdits(), isEmpty);
+    });
+
+    test('замена секрета под тем же ключом коллизией не считается', () {
+      final draft = McpServerDraft(
+        name: 'x',
+        kind: McpTransportKind.stdio,
+        command: 'srv',
+        env: {'TOKEN': McpValueDraft.secret(SecretValue('new'))},
+      );
+
+      expect(draft.validate(), isEmpty);
+    });
+
+    test('неактивная таблица не проверяется', () {
+      final draft = McpServerDraft(
+        name: 'a',
+        kind: McpTransportKind.http,
+        url: 'https://h/mcp',
+        env: {'': McpValueDraft.text('x')},
+      );
+
+      expect(draft.validate(), isEmpty);
     });
 
     test('корректный черновик проблем не имеет', () {

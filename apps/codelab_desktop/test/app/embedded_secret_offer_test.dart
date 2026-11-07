@@ -19,13 +19,17 @@ import 'package:codelab_desktop/app/secret_migration_offer.dart';
 import 'package:codelab_desktop/features/workbench/application/secret_migration_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/secret_migration_runner.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
-    show EmbeddedAgent, EmbeddedAgentOpener;
+    show EmbeddedAgent, EmbeddedAgentOpener, McpStatusPort;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/recording_logger.dart';
 import '../support/test_app_scope.dart';
 
 final class _FakeAgent implements EmbeddedAgent {
+  // Статус MCP в этом тесте не нужен: фейк сессий не открывает.
+  @override
+  McpStatusPort? mcpStatus(String sessionId) => null;
+
   _FakeAgent({required this.secretsInConfig});
 
   @override

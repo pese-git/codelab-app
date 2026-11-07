@@ -23,6 +23,10 @@ const _profile = ConnectionProfile.embedded(
 /// Агент с управляемым `dispose`: пока [disposeGate] не завершён, `dispose`
 /// висит.
 final class _FakeAgent implements EmbeddedAgent {
+  // Статус MCP в этом тесте не нужен: фейк сессий не открывает.
+  @override
+  McpStatusPort? mcpStatus(String sessionId) => null;
+
   _FakeAgent(this.name);
 
   final String name;

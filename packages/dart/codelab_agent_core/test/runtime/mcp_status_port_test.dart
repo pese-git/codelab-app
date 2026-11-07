@@ -201,7 +201,9 @@ final class _Rig {
     );
     ModelCatalog catalogOf(CoreConfig config) =>
         StaticModelCatalog(config.providers, logger: logger);
-    final fake = FakeMcpConnector();
+    // `toolsOnReplace`: фейк повторяет, что оставил бы настоящий коннектор
+    // после `replaceServers` (иначе список серверов не меняется).
+    final fake = FakeMcpConnector(toolsOnReplace: (_) => const []);
     final initial = source.initial.config!;
     final built = buildAgentCore(
       profile: HostProfile.of(

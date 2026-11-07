@@ -15,10 +15,14 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_desktop/app/embedded_transport_resolver.dart';
 import 'package:codelab_desktop/app/provider_setup_offer.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
-    show EmbeddedAgent, EmbeddedAgentConfigException;
+    show EmbeddedAgent, EmbeddedAgentConfigException, McpStatusPort;
 import 'package:flutter_test/flutter_test.dart';
 
 final class _FakeAgent implements EmbeddedAgent {
+  // Статус MCP в этом тесте не нужен: фейк сессий не открывает.
+  @override
+  McpStatusPort? mcpStatus(String sessionId) => null;
+
   @override
   bool get secretsInConfig => false;
 

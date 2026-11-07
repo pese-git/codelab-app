@@ -58,6 +58,10 @@ final class _SilentLogger implements Logger {
 /// поэтому ворота держат только путь резолвера: именно его ждёт закрытие
 /// scope.
 final class _TrackedAgent implements EmbeddedAgent {
+  // Статус MCP в этом тесте не нужен: фейк сессий не открывает.
+  @override
+  McpStatusPort? mcpStatus(String sessionId) => null;
+
   _TrackedAgent(this.inner, {required this.disposeGate});
 
   final EmbeddedAgent inner;

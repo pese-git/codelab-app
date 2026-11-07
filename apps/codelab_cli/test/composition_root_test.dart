@@ -28,6 +28,10 @@ const _script = {
 /// Агент, чей `dispose` не возвращается, пока тест не отпустит его: повисший
 /// агент не должен держать выход CLI вечно.
 final class _HangingDispose implements embedded.EmbeddedAgent {
+  // Статус MCP в этом тесте не нужен: фейк сессий не открывает.
+  @override
+  embedded.McpStatusPort? mcpStatus(String sessionId) => null;
+
   _HangingDispose(this._inner);
 
   final embedded.EmbeddedAgent _inner;

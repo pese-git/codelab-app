@@ -17,6 +17,10 @@ import 'support/fake_cli_io.dart';
 
 /// Агент, чей `dispose` висит, пока тест не отпустит его.
 final class _HangingDispose implements embedded.EmbeddedAgent {
+  // Статус MCP в этом тесте не нужен: фейк сессий не открывает.
+  @override
+  embedded.McpStatusPort? mcpStatus(String sessionId) => null;
+
   _HangingDispose(this._inner);
 
   final embedded.EmbeddedAgent _inner;
