@@ -377,7 +377,7 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
 2. InfoBar результата записи (ниже);
 3. подпись `<n> servers · Composition from the config · agent status below`;
 4. Expander на сервер:
-   - заголовок `<name> <type> <source>` и цель (команда или URL без значений секретов; `env`, `headers` и `args` маскируются, как `codelab mcp list`, R0-2);
+   - заголовок `<name> <type> <source>` и цель (команда или URL без значений секретов; `args`, `env` и `headers` проходят правило ядра `displaySafeConfigValue` и `maskUrl` для URL — то же, что у `provider list`, `config get` и `SettingFieldView` (R0-2, D20); `codelab mcp list` эти поля вовсе не печатает, поэтому образцом служить не может);
    - ToggleSwitch `enabled`;
    - в раскрытом виде — редактор `McpServerDraft`:
      - имя, тип (RadioButton `stdio`/`http`), поля типа;
@@ -391,8 +391,8 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
   - При read-only бэкенде флажок «Secret» неактивен с подсказкой D3, а литеральное значение, похожее на ключ, писатель отклоняет (`ConfigInlineSecret`).
   - Существующий секрет с тем же именем не перезаписывается без выбора «Replace it» (как D7).
   - Поле значения секрета при правке показывает «stored», а не значение. Пустое поле означает «не менять» (`McpValueDraft.secret(keep)`).
-- **Toggle** пишет `UpsertMcpServer({name, enabled})` в слой сервера. Для сервера слоя 3 toggle неактивен, а «Disable here» пишет `enabled: false` в `projectLocal`.
-- **Remove** — `RemoveMcpServer(name)`. После `ConfigSaved` удаляются секреты с префиксом `codelab/mcp/<name>/` из `names()` (SETUP-24). Сервер слоя 3 удалить нельзя.
+- **Toggle** пишет `UpsertMcpServer` с сырым элементом слоя сервера и изменённым `enabled` (ниже, «Сверка с кодом»). Для сервера слоя 3 toggle неактивен, а «Disable here» пишет `{name, enabled: false}` в `projectLocal`; «Enable here» — `RemoveMcpServer(name)` из `projectLocal` (решение Q21).
+- **Remove** — `RemoveMcpServer(name)`. После `ConfigSaved` удаляются только секреты, на которые ссылался удалённый элемент через `${secret:…}` в `env` и `headers`, и только если на них не осталось ссылок в свежем снимке — правило `ProviderRemover` (SETUP-24, D9; решение Q22). Префикс `codelab/mcp/<name>/` не используется: `SecretNames.forMcp` приводит имя к нижнему регистру, и у `GitHub` и `github` он общий. Сервер слоя 3 удалить нельзя.
 - **Проверка после записи** — локально, а не через `/config check` (отступление от §12.4.6, шаг 6). После `ConfigSaved` Cubit берёт свежий `snapshot`, и `FileAgentConfigStore` загружает конфиг с окружением агента из D5: процесс app для встроенного агента, процесс app плюс `env` профиля для stdio `codelab-agent`. Если в `loaded.issues` есть ошибки, показывается InfoBar `error` холста:
   - `Saved, but the agent rejected the new config`;
   - `Config: invalid`;
@@ -404,6 +404,15 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
 
   Почему не `/config check`: команда агента — это ход в сессии пользователя (видна в ленте, встаёт в очередь при идущем ходе), а для встроенного агента тот же загрузчик в том же процессе даёт тот же ответ без протокола. Для stdio-агента окружение восстанавливается из профиля. Остаточное расхождение (агент запущен с другим окружением снаружи CodeLab) — риск ниже.
 
+**Сверка с кодом (подготовка итерации 5, 2026-11-08; `develop` после PR #256):**
+- **Запись элемента целиком.** `UpsertMcpServer` заменяет элемент `mcp.servers` по `name` целиком: ключи, которых нет в карте, удаляются (`yaml_document_edit.dart`, `_upsertServer`). Слияние слоёв тоже заменяет сервер с тем же `name` целиком (`merge.dart`, `_mergeServers`). Поэтому:
+  - toggle `enabled` сервера слоя `user`/`projectLocal` пишет `UpsertMcpServer` с **сырым элементом своего слоя** (из `ConfigSnapshot` этого слоя, со ссылками `${secret:…}` и `${VAR}` как в файле) и изменённым `enabled`; `{name, enabled}` без остальных полей стёр бы команду, URL, `env` и `headers`;
+  - черновик правки (`McpServerDraft`) строится из того же сырого элемента слоя, а не из `McpServerEntryView` (у вида значения замаскированы); признак «значение замаскировано» берётся у моста, а не сравнением с литералом маски (как `SettingFieldView.masked`, D17);
+  - вид строки (`McpServerEntryView`) строится по элементу слоя-источника, а не по итоговому списку: элемент-переопределение `projectLocal` заменяет сервер целиком.
+  - «Disable here» для сервера слоя 3 (решение пользователя 2026-11-08, Q21 (а)) пишет `UpsertMcpServer({name, enabled: false})` в `projectLocal`: конфиг валиден, выключенный неполный элемент ядро «тихо» выбрасывает из списка серверов (`resolve.dart`). «Enable here» — `RemoveMcpServer(name)` из `projectLocal`, проектное определение снова действует. Строка страницы строится по элементу проектного слоя с пометкой `disabled here` (ключ `mcp-enable-here-<name>` у кнопки), в таблице «Agent status» такого сервера нет. Копия элемента в `projectLocal` отклонена: она затеняла бы будущие правки проектного файла.
+- **Порядок «секрет → конфиг → откат» живёт в мосте**, а не в Cubit-е: `McpServerCommitter` (`codelab_setup/lib/src/mcp/`) по образцу `ProviderSetupCommitter` (D9) — перепроверка `stored` при `replaceSecret: false`, откат только созданных секретов, исключение `apply` → имя типа, `KeyRollback`. Порт секретов — тот же `ProviderKeys` (`stored`, `write`, `delete` работают с любым именем; `providerKeysOf` уже есть в `io.dart`), второго порта не вводится. Удаление сервера — `McpServerRemover` с тем же правилом «секрет удаляется только после `ConfigSaved` и только если на него не осталось ссылок `${secret:…}` в свежем снимке», что у `ProviderRemover` (SETUP-24, D9); кандидаты — только секреты, на которые ссылался удалённый элемент (решение Q22 (а)).
+- **Имя сервера** (решение Q20 (а)) — одно правило ядра, то же, что у `codelab mcp add` (`^[^\s\[\]"]+$`, сейчас приватное `_nameFormat` в `codelab_agent_io`): оно переносится в ядро публичной функцией `isValidMcpServerName(String)` и реэкспортируется основным барелем моста; `McpServerDraft.validate()` и `McpServerCommands.add/remove` пользуются ею. Ошибка шага — `Use a name without spaces, [, ] or ".`.
+
 Ключи:
 - тело — `settings-mcp`;
 - строка — `mcp-<part>-<name>`, где `<part>`: `row`, `toggle`, `save`, `reconnect`, `remove`, `disable-here`;
@@ -412,9 +421,15 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
 ### D12. «Agent status»: живая таблица встроенного агента и `/mcp list` для остальных
 
 **Встроенный агент** — структурный статус без ACP (SETUP-11):
-- **ядро** (`[agent]`): `McpSessionTools` получает `Stream<List<McpServerSummary>> get changes`. Событие — при каждой смене состояния, числа инструментов или ошибки сервера. Поток закрывается вместе с `close()`. `AgentRuntime` даёт хосту `McpStatusPort? mcpStatus(SessionId)` — снимок `servers`, `changes` и `reconnect(name)`; без MCP — `null`. Это OQ4 `17-5-agent-setup.md` с потребителем, без отдельного `McpSupervisor` (там же, «Отступление 8.10»);
+- **ядро** (`[agent]`): `McpSessionTools` (интерфейс ядра; единственная рабочая реализация — `_ConnectedSession` в `codelab_agent_mcp/lib/src/connector.dart`, плюс фейки тестов ядра `test/mcp/fake_mcp_connector.dart`) получает `Stream<List<McpServerSummary>> get changes`. Событие — при каждой смене состояния, числа инструментов или ошибки сервера. Поток закрывается вместе с `close()`. `AgentRuntime` даёт хосту `McpStatusPort? mcpStatus(SessionId)` — снимок `servers`, `changes` и `reconnect(name)`; без MCP — `null`. Это OQ4 `17-5-agent-setup.md` с потребителем, без отдельного `McpSupervisor` (там же, «Отступление 8.10»);
 - **`codelab_embedded`** (`[agent]`): `EmbeddedAgent.mcpStatus(String sessionId)` поверх порта рантайма. Реэкспорт `McpServerSummary`, `McpServerState` в основном бареле — без `dart:io`;
 - **app** (`[desktop]`): `McpSettingsCubit` подписывается на `changes` активной сессии. Подписка одна; её владелец — Cubit (AGENTS.md §9). Смена активной сессии, переподключение и `close()` отменяют подписку. Таблица — `SERVER · STATE · TOOLS · LAST ERROR · Actions` холста, «Reconnect» строки вызывает `reconnect(name)`. Подпись — `Live from the embedded agent · <hh:mm>`.
+
+**Сверка с кодом (подготовка итерации 5, 2026-11-08):**
+- `McpSessionTools` у сессии появляется не всегда при открытии: без серверов `_McpState.tools` — `null`, а первый сервер, добавленный перезагрузкой конфига (`_applyConfigMcp` → `_replaceMcp`), создаёт его позже. Поэтому порт, возвращаемый один раз при открытии страницы, пропустил бы сервер, добавленный этой же страницей. Решение Q18 (а): порт есть у любой открытой сессии — `servers` пуст, пока серверов нет, `changes` присылает список, когда серверы появились, сменились или исчезли (рантайм переподписывается на новый `McpSessionTools` сессии); `null` — только для неизвестной или закрытой сессии.
+- «Reload all» встроенного агента — `reconnect(name)` порта для каждого сервера не в `disabled`, по очереди (spec app-settings «Reload all — переподключение всех»); перечитывание конфига отдельно не запускается: агент следит за файлом сам (§17.5.6).
+- `EmbeddedAgent` — интерфейс `codelab_embedded/lib/src/embedded_agent.dart`; `mcpStatus` получает id сессии ACP, который у встроенного агента совпадает с `SessionId` рантайма (проверяет тест 5.2).
+- Подвал панели артборда `Mcp` — «From McpSupervisor of the embedded agent…»; `McpSupervisor` не вводится (OQ4). Подвал — `From the embedded agent. For a stdio or remote agent this panel shows the reply of /mcp list as text.` (решение Q23, D24); без открытой сессии панель показывает `Open a session to see live status`.
 
 Как app узнаёт `EmbeddedAgent` текущего подключения: `EmbeddedTransportResolver` (`lib/app/`) уже держит текущего агента. Он получает метод `currentAgent`, а Cubit — узкий порт `EmbeddedMcpStatusSource` из composition root. Виджеты агента не видят.
 
@@ -763,6 +778,7 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
 |---|---|---|
 | `codelab_agent_core` | `McpSessionTools.changes`, `AgentRuntime.mcpStatus` (D12); публичные `builtinModelInfo` и `safeDefaultContextWindow` для подсказки окна мастера (D7, итерация 3); итерация 4a — в публичный API ядра перенесены из `codelab_agent_io` без изменения поведения функции маскирования значений конфига (`maskUrl`, `redactedMask`), функция безопасного показа значения листа конфига `Object? displaySafeConfigValue(String path, Object? value)` (R0-2) и правило имени секретного скаляра `isSecretScalarName` (`secret_name_rule.dart`): одно правило для `provider list`, `config get` и `SettingFieldView` моста (D17) | core |
 | `codelab_agent_io` | `ClientSecretAccess` (D4) | io |
+| `codelab_agent_mcp` | `_ConnectedSession.changes` — реализация потока состояний `McpSessionTools` (D12, итерация 5) | io |
 | `codelab_embedded` | `EmbeddedAgent.mcpStatus`, реэкспорт `McpServerSummary`, `McpServerState` | мост |
 | `codelab_setup` | основной барель §12.4.2 (D2, D5–D9; итерация 4a — `SettingFieldView`, `settingFieldsOf`, реэкспорт `SettingsRegistry`, `SettingDescriptor`, `SettingScope`, `SettingType`, `ConfigValueException`, D17), `io.dart`: `FileAgentConfigStore`, `ClientSecretAccess`, `ioProviderCheck`; `http`; `SettingFieldView` маскирует литеральные секреты тем же правилом ядра, что `provider list`/`config get`; `String? displayBaseUrl(String? url)` экспортируется из основного бареля — одна реализация для `ProviderEntryView`, мастера и CLI | мост |
 | `codelab_client_core` | `SecretTokenRef`, `ProfileSecrets`, `SecretText`, `ProfileCommitter`, `ProfileProbe(token:)`, `ProfileSecretSource(stored:)` (D13) | core, web-безопасно |
@@ -864,6 +880,8 @@ Allowlist ядра (PKG-2) не меняется: поток состояний 
 | Пресеты (`CliSetup`) | 6 пресетов | те же 6 (Q5) | — |
 | MCP «Secret» (`Mcp`) | `Secret — stored in keychain as …` | `Secret — stored in <backend> as …`; неактивен при read-only | D3 |
 | Проверка после записи MCP | ответ `/config check` агента | локальная загрузка конфига с окружением агента, тот же InfoBar и текст (D11) | без хода в сессии пользователя |
+| Подвал «Agent status» (`Mcp`) | `From McpSupervisor of the embedded agent. …` | `From the embedded agent. For a stdio or remote agent this panel shows the reply of /mcp list as text.`; без открытой сессии — `Open a session to see live status` | `McpSupervisor` не вводится (OQ4); решение пользователя 2026-11-08, Q23 |
+| «Disable here» сервера проектного слоя (`Mcp`) | «Disable here» и `Off` | «Disable here» пишет `{name, enabled: false}` в `.codelab/config.local.yaml`, строка с пометкой `disabled here` и кнопкой «Enable here» (удаление переопределения) | слияние `mcp.servers` заменяет элемент целиком; Q21 |
 | «Agent status» вне процесса | текст `/mcp list` | по явной кнопке, только без идущего хода (D12, Q2) | ход виден в ленте и встаёт в очередь |
 | Токен (`AddProfile`) | «No token», «Use stored secret», «Store a new token» | + «From environment variable» четвёртым вариантом (D14) | в 1.0 бэкенд по умолчанию только для чтения; решение A, D13 |
 | `Token secret` (`Connection`) | редактируемое поле, `keychain-macos · set` | текст имени и `<backend> · set\|missing` | правки профиля в 1.0 нет (§12.4.9, шаг 8) |
@@ -985,5 +1003,12 @@ Smoke CLI показал: при 401/403 рукопожатия WebSocket и CLI
 
 Решение пользователя 2026-11-07 (итерация 4b):
 - **Q17** — правило R0-4 (провайдер с ключом применяется только после перезапуска агента) не меняется; CLI пишет честную строку: с ключом — `Saved provider "<id>". Restart codelab to use its models.`, без ключа — прежняя `… Models are available in /model.`; первый запуск не затронут (D15, D16, D17). То же для app (решение 2026-11-07): при подключённом агенте и ключе в плане баннер `Provider <id> saved. Its models are available after Restart agent (Settings › Connection).` — задача 6.1a итерации 6.
+
+Решения пользователя 2026-11-08 (подготовка итерации 5; рекомендации приняты целиком):
+- **Q18** — (а): порт `mcpStatus` есть у любой открытой сессии, `servers` пуст без серверов, `changes` присылает появившиеся; `null` — только для неизвестной или закрытой сессии (D12).
+- **Q20** — (а): одно правило имени MCP-сервера ядра (как `codelab mcp add`), мост его экспортирует (D11).
+- **Q21** — (а): «Disable here» — `{name, enabled: false}` в `projectLocal`, «Enable here» — `RemoveMcpServer(name)` из `projectLocal`, строка видна по проектному слою с пометкой `disabled here` (D11, D24).
+- **Q22** — (а): «Remove» удаляет только секреты, на которые ссылался удалённый элемент, и только без оставшихся ссылок — правило `ProviderRemover` (D11).
+- **Q23** — подвал `From the embedded agent. For a stdio or remote agent this panel shows the reply of /mcp list as text.`, без сессии — `Open a session to see live status` (D12, D24).
 
 Открытых вопросов нет.
