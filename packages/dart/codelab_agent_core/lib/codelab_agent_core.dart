@@ -22,6 +22,7 @@ export 'src/config/config_source.dart';
 export 'src/config/config_tree.dart';
 export 'src/config/core_config.dart';
 export 'src/config/host_settings.dart';
+export 'src/config/secret_references.dart';
 export 'src/config/inline_secrets.dart'
     show
         InlineSecretFinding,
@@ -32,7 +33,13 @@ export 'src/config/inline_secrets.dart'
 export 'src/config/key_path.dart'
     show KeyPath, KeyPathSegment, nearestKey, splitKeyPath;
 export 'src/config/mask_url.dart'
-    show displaySafeConfigValue, maskUrl, redactedMask;
+    show
+        displaySafeConfigValue,
+        hidesConfigLiteral,
+        maskMcpArgs,
+        maskUrl,
+        opaqueMask,
+        redactedMask;
 export 'src/config/redact_settings.dart';
 export 'src/config/secret_name_rule.dart';
 export 'src/config/settings_registry.dart' hide coveringDescriptors;
@@ -77,6 +84,8 @@ export 'src/loop/loop_config.dart'
 export 'src/loop/turn_budget.dart';
 export 'src/mcp/mcp_connector.dart';
 export 'src/mcp/mcp_server_config.dart';
+export 'src/mcp/mcp_server_name.dart';
+export 'src/mcp/mcp_status_port.dart';
 export 'src/mcp/mcp_tool_name.dart';
 export 'src/mcp/mcp_transport.dart';
 export 'src/permissions/agent_config_paths.dart' show AgentConfigPaths;

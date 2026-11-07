@@ -7,6 +7,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart'
 
 import '../config/agent_config_store.dart';
 import '../config/config_values.dart';
+import '../config/secret_references.dart';
 import '../views/provider_entry_view.dart';
 
 /// Итог удаления секрета хранилищем.
@@ -47,6 +48,12 @@ enum SecretCleanup {
   /// После записи в конфиге нашлась ссылка на секрет (другой слой, правка
   /// другого процесса): секрет не удалён (SETUP-24).
   stillReferenced,
+
+  /// Секрет вне пространства, которое создаёт страница (MCP-сервер ссылался
+  /// на чужое имя, например `${secret:shared}`): он принадлежит пользователю
+  /// и не удаляется независимо от ссылок (design.md change
+  /// `add-provider-setup-ui`, D11, решение Q22).
+  kept,
 }
 
 /// Почему удаление отклонено до записи.
@@ -191,38 +198,13 @@ final class ProviderRemover {
     // Ссылка `${secret:<name>}` может стоять в любой строке конфига (заголовки
     // и `env` MCP-серверов, заголовки других провайдеров), а `api_key_secret`
     // другого провайдера — тоже ссылка: общий секрет не удаляется.
-    return _isReferenced(snapshot, name, exceptProvider: providerId)
+    return snapshotReferencesSecret(
+          snapshot,
+          name,
+          exceptPrefix: 'providers.$providerId.',
+        )
         ? null
         : name;
-  }
-
-  /// Есть ли в конфиге ссылка на секрет [name]: значение, равное имени
-  /// (`api_key_secret`), или подстановка `${secret:<name>}` в любой строке.
-  ///
-  /// Почему по всем строкам и слоям, включая недоверенный проект: пропустить
-  /// ссылку значит удалить секрет, который кто-то использует; лишняя ссылка
-  /// стоит только неудалённого секрета (SETUP-24, fail-safe). Экранированный
-  /// литерал тоже считается ссылкой по той же причине.
-  static bool _isReferenced(
-    AgentConfigSnapshot snapshot,
-    String name, {
-    String? exceptProvider,
-  }) {
-    final marker = '\${secret:$name}';
-    bool inValue(Object? value) => switch (value) {
-      String() => value == name || value.contains(marker),
-      List<Object?>() => value.any(inValue),
-      Map<Object?, Object?>() => value.values.any(inValue),
-      _ => false,
-    };
-    final own = exceptProvider == null ? null : 'providers.$exceptProvider.';
-    bool inLeaves(Map<String, Object?> leaves) => leaves.entries.any(
-      (e) => (own == null || !e.key.startsWith(own)) && inValue(e.value),
-    );
-    return inLeaves(snapshot.leaves) ||
-        snapshot.layers.values.any(
-          (layer) => inLeaves(flattenConfigValues(layer.values)),
-        );
   }
 
   /// Удаляет провайдера [providerId] из конфига по [snapshot].
@@ -286,7 +268,7 @@ final class ProviderRemover {
     } on Object {
       return ProviderRemoved(saved: outcome, secret: SecretCleanup.failed);
     }
-    if (_isReferenced(fresh, secretName)) {
+    if (snapshotReferencesSecret(fresh, secretName)) {
       return ProviderRemoved(
         saved: outcome,
         secret: SecretCleanup.stillReferenced,

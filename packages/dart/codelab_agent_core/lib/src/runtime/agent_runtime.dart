@@ -33,6 +33,7 @@ import '../loop/agent_events.dart';
 import '../loop/loop_config.dart';
 import '../mcp/mcp_connector.dart';
 import '../mcp/mcp_server_config.dart';
+import '../mcp/mcp_status_port.dart';
 import '../mcp/mcp_tool_name.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
@@ -142,6 +143,17 @@ abstract interface class AgentRuntime {
   /// Состояние конфигурации на момент вызова; без источника — снимок
   /// сборки без источников.
   ConfigStatus configStatus();
+
+  /// Порт состояния MCP-серверов открытой сессии [id] для хоста (design.md
+  /// change `add-provider-setup-ui`, D12, решение Q18): снимок `servers`,
+  /// поток `changes` и `reconnect(name)`.
+  ///
+  /// Порт есть у любой открытой сессии: без серверов `servers` пуст, а
+  /// `changes` пришлёт список, когда серверы появятся после перезагрузки
+  /// конфига (рантайм переподписывается на новый `McpSessionTools` сам).
+  /// `null` — сессия неизвестна или закрыта. Поток закрывается вместе с
+  /// сессией и с `dispose()`.
+  McpStatusPort? mcpStatus(SessionId id);
 
   /// Отменяет идущие ходы, дожидается записи журналов и закрывает потоки
   /// событий.
@@ -942,6 +954,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
       sources: result.sources,
       values: result.values,
     );
+  }
+
+  @override
+  McpStatusPort? mcpStatus(SessionId id) {
+    for (final session in _sessions) {
+      if (session.id == id && !session._closed) {
+        return session._mcpStatus;
+      }
+    }
+    return null;
   }
 
   @override
@@ -1759,6 +1781,40 @@ final class _McpState {
   var summaries = const <McpServerSummary>[];
   var _names = <String>[];
 
+  /// Поток состояний серверов для `McpStatusPort` (D12, Q18): один
+  /// контроллер на сессию. Он переживает смену `McpSessionTools` (первый
+  /// сервер после перезагрузки конфига создаёт его позже) и закрывается
+  /// только с сессией. `sync`: событие коннектора доходит до подписчика
+  /// порта в том же вызове, как у самого коннектора.
+  final _status = StreamController<List<McpServerSummary>>.broadcast(
+    sync: true,
+  );
+  StreamSubscription<List<McpServerSummary>>? _statusSubscription;
+  var _statusClosed = false;
+
+  Stream<List<McpServerSummary>> get statusChanges => _status.stream;
+
+  /// Подписка на `changes` нового `McpSessionTools` (Q18): сразу шлёт текущий
+  /// список — подписчик порта, взятого до появления сервера, узнаёт о нём без
+  /// нового `mcpStatus`. Вызывается из [apply], то есть один раз за сессию:
+  /// `McpSessionTools` создаётся при первом подключении и не заменяется, а
+  /// дальнейшие перезагрузки идут через его `replaceServers`. Отмена прежней
+  /// подписки — защита на случай, если рантайм когда-нибудь начнёт заменять
+  /// `McpSessionTools`; сегодня она ничего не отменяет.
+  void _watch(McpSessionTools connected) {
+    unawaited(_statusSubscription?.cancel());
+    _statusSubscription = null;
+    if (_statusClosed) {
+      return;
+    }
+    _statusSubscription = connected.changes.listen((list) {
+      if (!_statusClosed) {
+        _status.add(List.unmodifiable(list));
+      }
+    });
+    _status.add(List.unmodifiable(connected.servers));
+  }
+
   /// Первая регистрация после подключения.
   void apply(
     McpSessionTools connected,
@@ -1767,6 +1823,7 @@ final class _McpState {
     SessionId id,
   ) {
     tools = connected;
+    _watch(connected);
     _replace(connected.tools, connected.servers, registry, logger, id);
   }
 
@@ -1823,7 +1880,34 @@ final class _McpState {
     summaries = List.unmodifiable(nextSummaries);
   }
 
-  Future<void> close() async => tools?.close();
+  Future<void> close() async {
+    // Поток порта закрывается первым: события закрывающегося коннектора и
+    // поздние события после `close()` до хоста не доходят (D21).
+    _statusClosed = true;
+    await _statusSubscription?.cancel();
+    _statusSubscription = null;
+    await _status.close();
+    await tools?.close();
+  }
+}
+
+/// Порт состояния MCP сессии: `servers` — живое состояние коннектора,
+/// `changes` — поток `_McpState`, `reconnect` — действие через очередь замен.
+final class _SessionMcpStatus implements McpStatusPort {
+  _SessionMcpStatus(this._state, this._reconnect);
+
+  final _McpState _state;
+  final Future<void> Function(String name) _reconnect;
+
+  @override
+  List<McpServerSummary> get servers =>
+      List.unmodifiable(_state.tools?.servers ?? const <McpServerSummary>[]);
+
+  @override
+  Stream<List<McpServerSummary>> get changes => _state.statusChanges;
+
+  @override
+  Future<void> reconnect(String name) => _reconnect(name);
 }
 
 final class _Session implements AgentSession {
@@ -2022,6 +2106,18 @@ final class _Session implements AgentSession {
   final ExecutionEnv _env;
   final ToolRegistry _registry;
   final _McpState _mcp;
+
+  /// Порт состояния MCP для хоста (D12, Q18): создаётся один раз и живёт
+  /// столько же, сколько сессия; `reconnect` идёт через очередь замен.
+  late final McpStatusPort _mcpStatus = _SessionMcpStatus(
+    _mcp,
+    (name) => _runMcpAction(
+      (tools) => tools.reconnect(name),
+      server: name,
+      action: 'reconnect',
+      cancelled: () => false,
+    ),
+  );
   final Future<void> Function(List<McpServerConfig> servers) _replaceMcp;
 
   /// Серверы клиента (`session/new`, `session/load`, `setMcpServers`): при

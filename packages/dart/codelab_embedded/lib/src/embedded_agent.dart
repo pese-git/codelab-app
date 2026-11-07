@@ -1,4 +1,5 @@
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
+import 'package:codelab_agent_core/codelab_agent_core.dart' show McpStatusPort;
 
 /// Встроенный агент, соединённый с клиентом парой `InProcessAcpLink`.
 ///
@@ -26,6 +27,20 @@ abstract interface class EmbeddedAgent {
   /// — актуальным станет после переподключения (D8, п. 1). Мигратор для app
   /// живёт в `io.dart`, этот барель web-безопасен.
   bool get secretsInConfig;
+
+  /// Состояние MCP-серверов сессии [sessionId] для хоста (design.md change
+  /// `add-provider-setup-ui`, D12, решение Q18; SETUP-11).
+  ///
+  /// Почему здесь: хосту (desktop) нужна живая таблица «Agent status» без
+  /// промпта и без разбора текста `/mcp list`, а `package:codelab_agent_*` ему
+  /// импортировать нельзя (PKG-4). Идентификатор сессии ACP у встроенного
+  /// агента совпадает с `SessionId` рантайма.
+  ///
+  /// Как использовать: порт есть у любой открытой сессии (без серверов
+  /// `servers` пуст, `changes` пришлёт появившиеся позже); `null` — сессия
+  /// неизвестна или закрыта. Потоки порта закрываются с сессией и с
+  /// [dispose].
+  McpStatusPort? mcpStatus(String sessionId);
 
   /// Завершается после [dispose], явного или вызванного закрытием соединения.
   Future<void> get closed;

@@ -109,6 +109,19 @@ abstract interface class McpSessionTools {
   /// `/mcp list`.
   List<McpServerSummary> get servers;
 
+  /// Полный список сводок [servers] после каждой смены состояния сервера
+  /// (`connecting`, `connected`, `failed`, `disabled`), числа его
+  /// инструментов, `lastError` или состава серверов (`replaceServers`,
+  /// `setEnabled`, `reconnect`) (design.md change `add-provider-setup-ui`,
+  /// D12; `17-5-agent-setup.md`, OQ4).
+  ///
+  /// Поток широковещательный, НЕ повторяет последнее значение новому
+  /// подписчику (снимок — [servers]) и закрывается в [close]. Сводки
+  /// подчиняются правилам [servers]: `lastError` — текст кода CodeLab без
+  /// текстов сервера и секретов. Хост получает его через `McpStatusPort`
+  /// рантайма, а не напрямую.
+  Stream<List<McpServerSummary>> get changes;
+
   /// Ожидающий результат `notifications/tools/list_changed`; забирает и
   /// очищает (D6). Ядро зовёт его только на границе шага и перед ходом.
   McpToolsUpdate? takeUpdate();

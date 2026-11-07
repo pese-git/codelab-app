@@ -55,6 +55,9 @@ final class McpEraCache {
 final class McpConnectException implements Exception {
   const McpConnectException(this.reason);
 
+  /// Контракт (D13): текст кода CodeLab — без URL, аргументов, значений `env`
+  /// и `headers` и текстов сервера. Он попадает в `lastError` сводки сервера
+  /// и в UI статуса.
   final String reason;
 
   @override

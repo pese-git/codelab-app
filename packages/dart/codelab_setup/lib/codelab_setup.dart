@@ -49,6 +49,7 @@ export 'package:codelab_agent_core/codelab_agent_core.dart'
         ConfigSnapshot,
         ConfigTarget,
         ConfigValueException,
+        RemoveMcpServer,
         RemoveTable,
         SecretBackendInfo,
         SecretNames,
@@ -58,11 +59,17 @@ export 'package:codelab_agent_core/codelab_agent_core.dart'
         SettingType,
         SettingsRegistry,
         UnsetValue,
-        before1Note;
+        UpsertMcpServer,
+        before1Note,
+        isValidMcpServerName;
 export 'src/access/settings_access.dart';
 export 'src/config/agent_config_store.dart';
 export 'src/config/config_source_view.dart';
 export 'src/config/display_base_url.dart';
+export 'src/mcp/mcp_server_committer.dart';
+export 'src/mcp/mcp_server_draft.dart';
+export 'src/mcp/mcp_server_remover.dart';
+export 'src/mcp/mcp_transport_kind.dart';
 export 'src/provider/http_provider_check.dart';
 export 'src/provider/provider_check.dart';
 export 'src/provider/provider_keys.dart';
@@ -74,6 +81,7 @@ export 'src/provider/provider_setup_flow.dart';
 export 'src/provider/provider_setup_plan.dart';
 export 'src/secret/secret_value.dart';
 export 'src/views/key_status_view.dart';
+export 'src/views/mcp_server_entry_view.dart';
 export 'src/views/provider_entry_view.dart'
     show ProviderEntryView, providerEntriesOf;
 export 'src/views/setting_field_view.dart';
