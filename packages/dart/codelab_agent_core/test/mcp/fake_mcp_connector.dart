@@ -164,6 +164,27 @@ final class FakeMcpSessionTools implements McpSessionTools {
   @override
   List<McpServerSummary> servers;
 
+  final _changes = StreamController<List<McpServerSummary>>.broadcast(
+    sync: true,
+  );
+
+  /// Поток состояний серверов (agent-mcp-client «Поток состояний серверов
+  /// сессии»; design.md change `add-provider-setup-ui`, D12): широковещательный,
+  /// без повтора последнего значения, закрывается в [close].
+  ///
+  /// Пока `McpSessionTools.changes` нет в интерфейсе (задача 5.7), член не
+  /// помечен `@override`; после появления в интерфейсе аннотацию добавить.
+  Stream<List<McpServerSummary>> get changes => _changes.stream;
+
+  /// Имитация смены состояния сервера: обновляет [servers] и шлёт список в
+  /// [changes], как настоящий коннектор (`codelab_agent_mcp`).
+  void emit(List<McpServerSummary> next) {
+    servers = next;
+    if (!_changes.isClosed) {
+      _changes.add(next);
+    }
+  }
+
   /// Аргументы каждого вызова `replaceServers`, по порядку.
   final replaced = <List<McpServerConfig>>[];
 
@@ -220,5 +241,6 @@ final class FakeMcpSessionTools implements McpSessionTools {
   Future<void> close() async {
     closed++;
     onClose?.call();
+    await _changes.close();
   }
 }

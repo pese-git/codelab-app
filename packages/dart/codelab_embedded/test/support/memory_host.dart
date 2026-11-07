@@ -40,7 +40,11 @@ EmbeddedAgentConfig memoryConfig({
 
 /// Службы хоста над памятью: окружение, журнал, секреты; часы и id —
 /// детерминированные (PKG-6).
-EmbeddedHostServices memoryServices(Logger logger, web.Client http) {
+EmbeddedHostServices memoryServices(
+  Logger logger,
+  web.Client http, {
+  McpConnector? mcp,
+}) {
   final clock = FakeClock();
   return EmbeddedHostServices(
     baseEnv: MemoryExecutionEnv(cwd: '/t', clock: clock),
@@ -58,5 +62,6 @@ EmbeddedHostServices memoryServices(Logger logger, web.Client http) {
     ids: SequentialIdGenerator(),
     random: Random(0),
     platform: 'test',
+    mcp: mcp,
   );
 }

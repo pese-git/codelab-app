@@ -19,6 +19,7 @@ final class SetupWebSmokeReport {
     required this.removal,
     required this.wizard,
     required this.settings,
+    required this.mcp,
   });
 
   final String access;
@@ -32,6 +33,11 @@ final class SetupWebSmokeReport {
   /// Строки `/settings` снимка: `ключ:источник` для заданных ключей и число
   /// строк реестра `shared`; проверяет реэкспорт `SettingsRegistry` и др.
   final List<String> settings;
+
+  /// Черновик MCP-сервера, его правка и строка страницы по снимку: проверяет,
+  /// что `McpServerDraft`, `McpServerEntryView` и реэкспорт `UpsertMcpServer`
+  /// в основном бареле собираются без `dart:io` (D11, D20).
+  final List<String> mcp;
 }
 
 /// Клиент, который отвечает списком моделей без сети.
@@ -161,6 +167,48 @@ List<String> _settingRows(AgentConfigSnapshot snapshot) {
   ];
 }
 
+/// Черновик MCP-сервера с секретным заголовком и строка страницы по снимку.
+List<String> _mcpSmoke() {
+  final draft = McpServerDraft(
+    name: 'docs',
+    kind: McpTransportKind.http,
+    url: 'https://docs.invalid/mcp',
+    headers: {'Authorization': McpValueDraft.secret(SecretValue('smoke'))},
+  );
+  final snapshot = AgentConfigSnapshot.fromLayers(
+    cwd: '/web',
+    layers: {
+      ConfigLayer.user: ConfigSnapshot(
+        target: const ConfigTarget.user(),
+        path: '/home/config.yaml',
+        fingerprint: 'f',
+        values: {
+          'mcp': {
+            'servers': [
+              {
+                'name': 'docs',
+                'type': 'http',
+                'url': 'https://docs.invalid/mcp',
+                'headers': {'Authorization': 'Bearer smoke-literal-token'},
+              },
+            ],
+          },
+        },
+      ),
+    },
+    loaded: const ConfigLoadResult(),
+    secrets: const SecretBackendInfo(id: 'env', writable: false),
+  );
+  final entry = mcpServerEntriesOf(snapshot).single;
+  return [
+    for (final edit in draft.toEdits())
+      edit is UpsertMcpServer ? 'upsert:${edit.server['name']}' : '?',
+    for (final name in draft.secretsToWrite().keys) 'secret:$name',
+    'entry:${entry.name}:${entry.source.kind.name}:${entry.masked}',
+    'valid:${isValidMcpServerName('docs')}',
+  ];
+}
+
 /// Прогоняет доступ, проверку `/models`, список провайдеров и удаление.
 Future<SetupWebSmokeReport> runSetupWebSmoke() async {
   final access = resolveSettingsAccess(
@@ -211,6 +259,7 @@ Future<SetupWebSmokeReport> runSetupWebSmoke() async {
     removal: removal.runtimeType.toString(),
     wizard: await _runWizard(snapshot),
     settings: _settingRows(snapshot),
+    mcp: _mcpSmoke(),
   );
 }
 

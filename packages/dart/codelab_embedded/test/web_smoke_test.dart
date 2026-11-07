@@ -15,5 +15,12 @@ void main() {
     expect(report.toolNames, containsAll(['read', 'write', 'edit']));
     expect(report.toolNames, isNot(contains('exec')));
     expect(report.transportState, AcpTransportState.idle);
+    expect(report.unknownSessionStatus, isNull);
+    expect(report.mcpStates, [
+      'x:connecting',
+      'x:connected',
+      'x:failed',
+      'x:disabled',
+    ]);
   });
 }

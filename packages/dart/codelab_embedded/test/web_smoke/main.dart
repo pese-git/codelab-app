@@ -5,7 +5,10 @@
 // (design.md change `add-embedded-agent-mode`, D3).
 import 'dart:math';
 
-import 'package:codelab_agent_core/codelab_agent_core.dart';
+// McpServerState и McpServerSummary должны прийти из основного бареля
+// `codelab_embedded` (реэкспорт, D12), а не из ядра напрямую.
+import 'package:codelab_agent_core/codelab_agent_core.dart'
+    hide McpServerState, McpServerSummary;
 import 'package:codelab_agent_core/testing.dart';
 import 'package:codelab_embedded/codelab_embedded.dart';
 import 'package:http/http.dart' as web;
@@ -17,11 +20,21 @@ final class EmbeddedWebSmokeReport {
     required this.profile,
     required this.toolNames,
     required this.transportState,
+    required this.unknownSessionStatus,
+    required this.mcpStates,
   });
 
   final String profile;
   final List<String> toolNames;
   final Enum transportState;
+
+  /// `mcpStatus` неизвестной сессии (embedded-agent «Состояние MCP-серверов
+  /// для хоста»; design.md change `add-provider-setup-ui`, D12): `null`.
+  final Object? unknownSessionStatus;
+
+  /// Имена `McpServerState` и сводка `McpServerSummary` основного бареля:
+  /// реэкспорт без `dart:io` проверяет сама компиляция в JS и Wasm.
+  final List<String> mcpStates;
 }
 
 /// Клиент без сети: запрос к провайдеру в smoke не уходит.
@@ -84,6 +97,11 @@ Future<EmbeddedWebSmokeReport> runEmbeddedWebSmoke() async {
     profile: plan['profile']! as String,
     toolNames: (plan['tools']! as List).cast<String>(),
     transportState: agent.clientTransport.state,
+    unknownSessionStatus: agent.mcpStatus('unknown'),
+    mcpStates: [
+      for (final state in McpServerState.values)
+        '${const McpServerSummary(name: 'x', toolCount: 0).name}:${state.name}',
+    ],
   );
   await agent.dispose();
   return report;
