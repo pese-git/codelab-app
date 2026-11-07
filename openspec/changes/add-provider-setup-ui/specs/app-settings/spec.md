@@ -128,7 +128,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 Правила записи:
 - значение с флажком «Secret» SHALL записываться в хранилище под `SecretNames.forMcp(name, key)`, а в конфиг — `${secret:<имя>}`, в порядке «секрет → конфиг → откат» (SETUP-5). При бэкенде только для чтения флажок SHALL быть неактивен с причиной бэкенда. Существующий секрет с тем же именем НЕ SHALL перезаписываться без явного выбора «Replace it». Сохранённое секретное значение SHALL показываться как `stored`, пустое поле при правке SHALL означать «не менять»;
 - переключатель `enabled` SHALL писать `UpsertMcpServer` в слой сервера; у сервера слоя 3 переключатель неактивен, а кнопка «Disable here» SHALL писать `{name, enabled: false}` в `projectLocal`; такая строка SHALL оставаться видимой по проектному слою с пометкой `disabled here` и кнопкой «Enable here», которая SHALL удалять переопределение (`RemoveMcpServer(name)` из `projectLocal`) (решение Q21 design.md). Переключатель и правка сервера своего слоя SHALL писать элемент слоя целиком с изменённым полем, без потери остальных ключей;
-- «Remove» SHALL писать `RemoveMcpServer(name)` и после `ConfigSaved` удалять только секреты, на которые ссылался удалённый элемент через `${secret:…}`, и только если на них не осталось ссылок в конфиге (решение Q22 design.md; правило удаления провайдера, SETUP-24); сервер слоя 3 удалить нельзя.
+- «Remove» SHALL писать `RemoveMcpServer(name)` и после `ConfigSaved` удалять только секреты, созданные страницей для этого сервера (имена `codelab/mcp/<сервер>/<ключ>`), на которые ссылался удалённый элемент через `${secret:…}`, и только если на них не осталось ссылок в конфиге; прочие имена из ссылок SHALL оставаться, а страница SHALL показывать их как `kept` с именем (решение Q22 design.md; правило удаления провайдера, SETUP-24); сервер слоя 3 удалить нельзя.
 
 После `ConfigSaved` страница SHALL проверять новый конфиг загрузкой с окружением агента (design.md, D11) и при ошибках показывать InfoBar `error` (ключ `mcp-rejected`): `Saved, but the agent rejected the new config`, `Config: invalid`, проблемы с путём ключа, `The agent keeps running on the previous config until this is fixed.` и кнопку `Edit <server>`. Предупреждения `ConfigSaved.warnings` SHALL показываться баннером `saved`.
 
@@ -151,6 +151,14 @@ Composition root SHALL делать видимыми страницы «Connecti
 #### Scenario: Удаление с секретами
 - **WHEN** пользователь удаляет `github`, у которого заголовок ссылается на `${secret:codelab/mcp/github/authorization}`, а у сервера `GitHub` в том же файле есть секрет `codelab/mcp/github/token`
 - **THEN** элемент `github` удалён из `mcp.servers`, после записи удалён только `codelab/mcp/github/authorization`; секрет `codelab/mcp/github/token` на месте; при отказе записи оба секрета на месте; секрет, на который ссылается другой сервер, не удаляется
+
+#### Scenario: Ручной секрет остаётся
+- **WHEN** пользователь удаляет сервер `docs`, у которого `env` ссылается на `${secret:team/docs-token}`, записанный `codelab secret set`
+- **THEN** элемент удалён, секрет `team/docs-token` на месте, страница показывает `kept` и имя `team/docs-token`
+
+#### Scenario: Вопрос о замене секрета называет имя
+- **WHEN** при сохранении сервера `GitHub` с секретным заголовком `Authorization` в хранилище уже есть `codelab/mcp/github/authorization` (секрет сервера `github`)
+- **THEN** вопрос «Replace it» называет имя `codelab/mcp/github/authorization`, без выбора секрет не перезаписывается
 
 ### Requirement: Панель «Agent status» страницы MCP servers
 Панель «Agent status» (ключ `mcp-status`) SHALL показывать состояние серверов агента активной сессии (design.md, D12):
