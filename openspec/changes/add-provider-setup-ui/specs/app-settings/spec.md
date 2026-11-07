@@ -123,12 +123,12 @@ Composition root SHALL делать видимыми страницы «Connecti
 - **THEN** диалог закрыт, запрос закрыт, файлы не изменены, журнал содержит `provider_wizard.check_discarded`
 
 ### Requirement: Страница «MCP servers»
-Страница «MCP servers» для `EditableSettings` SHALL показывать по артборду `Mcp` (design.md, D11) серверы эффективного конфига: имя, тип, источник (`user`, `this project`, `defined in <file>`), цель (команда или URL с маскированными `args`, `env` и `headers`, как `codelab mcp list`), переключатель `enabled`. Раскрытая строка SHALL содержать редактор `McpServerDraft` (имя, тип, поля типа, строки `headers`/`env` с флажком «Secret», «Save to User config» / «This project only», «Save», «Reconnect», «Remove»).
+Страница «MCP servers» для `EditableSettings` SHALL показывать по артборду `Mcp` (design.md, D11) серверы эффективного конфига: имя, тип, источник (`user`, `this project`, `defined in <file>`), цель (команда или URL; `args`, `env` и `headers` — по правилу безопасного показа значений конфига ядра, как `codelab provider list` и `codelab config get`), переключатель `enabled`. Раскрытая строка SHALL содержать редактор `McpServerDraft` (имя, тип, поля типа, строки `headers`/`env` с флажком «Secret», «Save to User config» / «This project only», «Save», «Reconnect», «Remove»).
 
 Правила записи:
 - значение с флажком «Secret» SHALL записываться в хранилище под `SecretNames.forMcp(name, key)`, а в конфиг — `${secret:<имя>}`, в порядке «секрет → конфиг → откат» (SETUP-5). При бэкенде только для чтения флажок SHALL быть неактивен с причиной бэкенда. Существующий секрет с тем же именем НЕ SHALL перезаписываться без явного выбора «Replace it». Сохранённое секретное значение SHALL показываться как `stored`, пустое поле при правке SHALL означать «не менять»;
-- переключатель `enabled` SHALL писать `UpsertMcpServer` в слой сервера; у сервера слоя 3 переключатель неактивен, а кнопка «Disable here» SHALL писать `enabled: false` в `projectLocal`;
-- «Remove» SHALL писать `RemoveMcpServer(name)` и после `ConfigSaved` удалять секреты с префиксом `codelab/mcp/<name>/`; сервер слоя 3 удалить нельзя.
+- переключатель `enabled` SHALL писать `UpsertMcpServer` в слой сервера; у сервера слоя 3 переключатель неактивен, а кнопка «Disable here» SHALL писать `{name, enabled: false}` в `projectLocal`; такая строка SHALL оставаться видимой по проектному слою с пометкой `disabled here` и кнопкой «Enable here», которая SHALL удалять переопределение (`RemoveMcpServer(name)` из `projectLocal`) (решение Q21 design.md). Переключатель и правка сервера своего слоя SHALL писать элемент слоя целиком с изменённым полем, без потери остальных ключей;
+- «Remove» SHALL писать `RemoveMcpServer(name)` и после `ConfigSaved` удалять только секреты, на которые ссылался удалённый элемент через `${secret:…}`, и только если на них не осталось ссылок в конфиге (решение Q22 design.md; правило удаления провайдера, SETUP-24); сервер слоя 3 удалить нельзя.
 
 После `ConfigSaved` страница SHALL проверять новый конфиг загрузкой с окружением агента (design.md, D11) и при ошибках показывать InfoBar `error` (ключ `mcp-rejected`): `Saved, but the agent rejected the new config`, `Config: invalid`, проблемы с путём ключа, `The agent keeps running on the previous config until this is fixed.` и кнопку `Edit <server>`. Предупреждения `ConfigSaved.warnings` SHALL показываться баннером `saved`.
 
@@ -142,17 +142,22 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 #### Scenario: Сервер проектного слоя
 - **WHEN** сервер `playwright` задан в `<project>/.codelab/config.yaml`, и пользователь нажимает «Disable here»
-- **THEN** `<project>/.codelab/config.local.yaml` содержит `playwright` с `enabled: false`, проектный файл не изменён, «Remove» у строки нет
+- **THEN** `<project>/.codelab/config.local.yaml` содержит `playwright` с `enabled: false`, проектный файл не изменён, «Remove» у строки нет, строка показывает `disabled here` и «Enable here»
+
+#### Scenario: Enable here
+- **WHEN** у сервера `playwright` проектного слоя есть переопределение `enabled: false` в `config.local.yaml`, и пользователь нажимает «Enable here»
+- **THEN** элемент `playwright` удалён из `config.local.yaml`, проектный файл не изменён, сервер снова в эффективном конфиге с командой проектного файла
 
 #### Scenario: Удаление с секретами
-- **WHEN** пользователь удаляет `github` с секретом `codelab/mcp/github/authorization`
-- **THEN** элемент `github` удалён из `mcp.servers`, после записи удалён секрет; при отказе записи секрет на месте
+- **WHEN** пользователь удаляет `github`, у которого заголовок ссылается на `${secret:codelab/mcp/github/authorization}`, а у сервера `GitHub` в том же файле есть секрет `codelab/mcp/github/token`
+- **THEN** элемент `github` удалён из `mcp.servers`, после записи удалён только `codelab/mcp/github/authorization`; секрет `codelab/mcp/github/token` на месте; при отказе записи оба секрета на месте; секрет, на который ссылается другой сервер, не удаляется
 
 ### Requirement: Панель «Agent status» страницы MCP servers
 Панель «Agent status» (ключ `mcp-status`) SHALL показывать состояние серверов агента активной сессии (design.md, D12):
 - для встроенного агента — таблицу `SERVER · STATE · TOOLS · LAST ERROR` из потока состояний встроенного агента (spec embedded-agent «Состояние MCP-серверов для хоста») с подписью `Live from the embedded agent · <hh:mm>`; «Reconnect» строки SHALL вызывать переподключение сервера, «Reload all» — переподключение всех. Подписка SHALL быть одна; смена активной сессии, переподключение и закрытие страницы SHALL её отменять;
 - для агента вне процесса — текст ответа `/mcp list` моноширинным блоком без разбора (SETUP-11). Команды `/mcp list`, `/mcp reload <name>`, `/mcp reload` SHALL отправляться обычным промптом активной сессии только по явной кнопке пользователя («Refresh», «Reconnect», «Reload all») и только когда соединение `Connected` и у сессии нет идущего хода; иначе кнопки неактивны. Ответ, пришедший после смены активной сессии или закрытия страницы, НЕ SHALL менять панель;
-- без открытой сессии или если агент не объявил `/mcp` — `Open a session to see live status`.
+- без открытой сессии или если агент не объявил `/mcp` — `Open a session to see live status`;
+- подвал панели — `From the embedded agent. For a stdio or remote agent this panel shows the reply of /mcp list as text.` (решение Q23 design.md).
 
 Страница НЕ SHALL отправлять команды агенту без действия пользователя.
 
