@@ -36,3 +36,17 @@
 - **WHEN** `config.yaml` задаёт провайдера и `agent.default_model`, но содержит `budget.max_steps: 0`; либо задаёт провайдера `gw` и `agent.default_model: gw/typo`, которой нет в каталоге
 - **THEN** баннер показывает прежний текст проблемы с подсказкой `codelab config check`, действия «Add provider» нет
 
+### Requirement: Тег неизвестного риска одобрения
+Строка вызова с ждущим одобрением SHALL показывать для клиентского уровня риска `unknown` тег `Unknown risk` тоном предупреждения, дополняя набор тегов требования «Tool call as a one-line row» (решение пользователя 2026-11-08, design.md change `add-provider-setup-ui`, Q32, D27).
+
+#### Scenario: MCP-инструмент с подсказкой «только чтение»
+- **WHEN** встроенный агент запрашивает разрешение на вызов MCP-инструмента, сервер которого объявил `readOnlyHint: true`
+- **THEN** строка вызова показывает подпись по имени инструмента и тег `Unknown risk`, а не `Read` и `Read-only`
+
+### Requirement: Заметка исхода хода в ленте
+Лента SHALL показывать `NoticeItem` вида `turnStopped` (spec acp-client-kit «Инкрементальная проекция транскрипта») строкой заметки после вывода хода, тем же видом, что заметку `emptyTurn` (design.md change `add-provider-setup-ui`, Q33, D27).
+
+#### Scenario: Молчаливый max_tokens
+- **WHEN** ход встроенного агента после размышлений завершается с `stopReason: max_tokens`
+- **THEN** лента показывает под размышлениями строку `The model reached its token limit, so the turn ended.`
+

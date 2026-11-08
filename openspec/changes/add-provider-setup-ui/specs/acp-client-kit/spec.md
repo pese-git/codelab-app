@@ -35,7 +35,42 @@
 - **WHEN** источник прочитал `secret:codelab/ws` = `a`, после чего другой процесс заменил значение на `b`, и транспорт открывается снова
 - **THEN** второе чтение возвращает `b`
 
+### Requirement: Инкрементальная проекция транскрипта
+`TranscriptProjector` SHALL строить `TranscriptItem` сессии инкрементально по новым `session/update`: дельты `agent_message_chunk` и `agent_thought_chunk` подряд дописываются в один элемент того же вида, любое другое обновление закрывает отрезок; `tool_call` с известным `toolCallId` обновляет существующий элемент, а не добавляет второй; статус и одобрение вызова берутся из read-модели хода ядра клиента; запрос разрешения привязывается к `ToolCallItem` по `toolCallId`, а для вызова без `tool_call` — к элементу вызова в конце хода; сорвавшийся ход добавляет `NoticeItem` вида `error` с типизированным сбоем хода (`PromptFailure`), завершённый ход без вывода агента — `NoticeItem` вида `emptyTurn`; ход, завершённый с `stopReason` `max_tokens`, `max_turn_requests` или `refusal`, — `NoticeItem` вида `turnStopped` всегда, даже при выводе агента, и вместо `emptyTurn` у хода без вывода (решение пользователя 2026-11-08, design.md change `add-provider-setup-ui`, Q33, D27). Тексты `turnStopped`: `max_tokens` — `The model reached its token limit, so the turn ended.`; `max_turn_requests` — `The turn reached the limit of model requests.`; `refusal` — `The agent refused to continue.`. Повторно обработанный снимок сессии SHALL быть no-op. Для любой последовательности обновлений результат инкрементальной проекции SHALL совпадать с проекцией с нуля по всем ходам сессии.
+
+#### Scenario: Свойство на корпусе фикстур
+- **WHEN** выполняется `transcript_projector_test.dart: incremental projection equals full rebuild for every fixture`
+- **THEN** для каждой фикстуры корпуса с ролью `client` на каждом шаге инкрементальная проекция равна проекции с нуля
+
+#### Scenario: Повторная доставка tool_call
+- **WHEN** агент дважды присылает `tool_call` с одним `toolCallId`
+- **THEN** транскрипт содержит один `ToolCallItem` на прежней позиции с полями второго кадра
+
+#### Scenario: Заметка о сбое несёт причину агента
+- **WHEN** ход срывается ответом агента, как в фикстуре `acp/prompt-failed-provider-auth`
+- **THEN** `NoticeItem` вида `error` этого хода несёт `PromptFailure.agent` с `errorClass: "auth"`, сообщением агента и `retryable: false`
+
+#### Scenario: Ход упёрся в лимит токенов после размышлений
+- **WHEN** ход содержит только `agent_thought_chunk` и завершается ответом агента с `stopReason: max_tokens`
+- **THEN** транскрипт хода содержит `ThoughtItem` и один `NoticeItem` вида `turnStopped` с текстом `The model reached its token limit, so the turn ended.`; `NoticeItem` вида `emptyTurn` нет
+
+#### Scenario: Отказ агента после текста
+- **WHEN** ход содержит `agent_message_chunk` и завершается с `stopReason: refusal`
+- **THEN** после `AgentTextItem` хода есть `NoticeItem` вида `turnStopped` с текстом `The agent refused to continue.`; ход `end_turn` и `cancelled` такой заметки не получает
+
 ## ADDED Requirements
+
+### Requirement: Неизвестный уровень риска вызова
+Клиентский уровень риска одобрения (`ApprovalRiskLevel` пакета `codelab_client_acp`) SHALL иметь значение `unknown` для вызова, вид которого (`ToolKind` ACP) — `other` или не передан; `read`, `search` и `think` остаются `readOnly`. `unknown` SHALL ранжироваться выше `readOnly` и ниже `localWrite`, а решение режима разрешений клиента для него SHALL требовать явного одобрения (AGENTS.md §10: неизвестная потенциально опасная capability не считается безопасной; решение пользователя 2026-11-08, design.md change `add-provider-setup-ui`, Q32, D27). Новых полей и значений ACP это не вводит.
+
+#### Scenario: Вид other
+- **WHEN** агент запрашивает разрешение на вызов с `kind: other` без содержимого diff и терминала
+- **THEN** уровень риска одобрения — `unknown`, инспектор показывает `unknown`, CLI — `unknown risk`
+
+#### Scenario: Вид не передан
+- **WHEN** `tool_call` пришёл без `kind`
+- **THEN** уровень риска — `unknown`, а не `readOnly`
+
 
 ### Requirement: Порт хранилища секретов профилей
 Kit SHALL объявлять порт `ProfileSecrets` (`codelab_client_core/lib/src/connection/profile_secrets.dart`, чистый Dart) с описанием бэкенда (`id`, `writable`, `unavailableReason`), `names()`, `isSet(name)`, `store(name, SecretText)`, `delete(name)` и `read(name)` (design.md, D13). Результаты `store` и `delete` SHALL быть типизированными (`Stored`, `Exists`, `ReadOnly`, `Failed`; `Deleted`, `NotSet`, `ReadOnly`, `Failed`) и НЕ SHALL содержать значения. Реализацию SHALL давать composition root хоста. Kit НЕ SHALL зависеть от `codelab_setup` и пакетов агента.
