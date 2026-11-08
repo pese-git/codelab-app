@@ -315,21 +315,18 @@ final class E2eCliAgent {
   /// `package:codelab_agent_*` (сторож): агент — отдельный процесс.
   static Future<String> agentKernel() => _kernel ??= _compileAgent();
 
-  static Future<String> _compileAgent() async {
+  static Future<String> _compileAgent() {
     final agent = '$appDirectory/../codelab_agent';
-    final dir = await Directory.systemTemp.createTemp('codelab_agent_kernel_');
-    final output = '${dir.path}/codelab_agent.dill';
-    final result = await Process.run(dartExecutable(), [
-      'compile',
-      'kernel',
-      '$agent/bin/codelab_agent.dart',
-      '-o',
-      output,
-    ], workingDirectory: agent);
-    if (result.exitCode != 0) {
-      throw StateError('cannot compile codelab-agent: ${result.stderr}');
-    }
-    return output;
+    return compileTestKernel(
+      'codelab_agent.dill',
+      (work, output) => Process.run(dartExecutable(), [
+        'compile',
+        'kernel',
+        '$agent/bin/codelab_agent.dart',
+        '-o',
+        output,
+      ], workingDirectory: agent),
+    );
   }
 }
 
