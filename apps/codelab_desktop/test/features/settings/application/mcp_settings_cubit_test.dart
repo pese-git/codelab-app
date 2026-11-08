@@ -2282,6 +2282,60 @@ mcp:
       expect((status(cubit) as McpAgentStatusLive).rows.single.tools, '7');
     });
 
+    // Smoke итерации 6: после «Restart agent» поток workspace приходит раньше,
+    // чем у новой сессии появляется порт состояния MCP. Привязка, не нашедшая
+    // порт, повторяется на следующем изменении workspace (без таймера), пока
+    // есть открытая сессия при `Connected`.
+    test('a port that appears after Connected is bound on the next workspace '
+        'change: Live without leaving the page (restart order)', () async {
+      source.ports.remove(_s1);
+      final cubit = make();
+      await cubit.reload();
+      expect(status(cubit), isA<McpAgentStatusUnavailable>());
+
+      source.ports[_s1] = port;
+      connect(embeddedConnectionProfile, active: _s1);
+
+      expect(status(cubit), isA<McpAgentStatusLive>());
+      expect(port.listeners, 1);
+    });
+
+    test('Restart agent order: the old port is cancelled at the restart, the '
+        'new one is bound once it appears, one subscription', () async {
+      final cubit = make();
+      await cubit.reload();
+      expect(status(cubit), isA<McpAgentStatusLive>());
+
+      workspace.emit(
+        WorkspaceState(
+          connection: const ConnectionView.connecting(),
+          profile: embeddedConnectionProfile,
+          activeSessionId: _s1,
+        ),
+      );
+      expect(port.listeners, 0);
+      // Новое соединение уже `Connected`, порта у сессии ещё нет.
+      final fresh = FakeMcpStatusPort(
+        'p2',
+        servers: [mcpSummary('github', tools: 9)],
+        journal: port.journal,
+      );
+      source.ports.remove(_s1);
+      connect(embeddedConnectionProfile, active: _s1);
+      expect(status(cubit), isA<McpAgentStatusUnavailable>());
+
+      // Сессия открыта на новом агенте: следующее изменение workspace.
+      source.ports[_s1] = fresh;
+      connect(embeddedConnectionProfile, active: _s1);
+      connect(embeddedConnectionProfile, active: _s1);
+
+      final live = status(cubit) as McpAgentStatusLive;
+      expect(live.rows.single.tools, '9');
+      expect(fresh.listeners, 1);
+      expect(port.listeners, 0);
+      expect(port.journal, ['listen p1', 'cancel p1', 'listen p2']);
+    });
+
     test('a change of the profile cancels the subscription', () async {
       final cubit = make();
       await cubit.reload();
