@@ -1282,6 +1282,12 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     if (!structural && !reconnected) {
       if (!embedded) {
         _setStatus(_textStatus());
+      } else if (connected && _port == null && ws.activeSessionId != null) {
+        // После «Restart agent» поток workspace приходит раньше, чем у новой
+        // сессии появляется порт: привязка повторяется на следующем изменении
+        // workspace, пока порта нет (без таймера; закрытая сессия даёт
+        // `null` и остаётся недоступной).
+        _bindEmbedded(ws.activeSessionId!);
       }
       return;
     }
@@ -1301,26 +1307,11 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       return;
     }
     if (embedded) {
-      final port = connected ? _statusSource.statusOf(id) : null;
-      if (port == null) {
+      if (connected) {
+        _bindEmbedded(id);
+      } else {
         _setStatus(const McpAgentStatusUnavailable());
-        return;
       }
-      _port = port;
-      _portSubscription = port.changes.listen(
-        (servers) => _setStatus(_liveStatus(servers)),
-        onDone: () {
-          // Сессия или агент закрыты: панель недоступна до следующего
-          // `Connected`.
-          if (identical(_port, port)) {
-            _portSubscription = null;
-            _port = null;
-            _setStatus(const McpAgentStatusUnavailable());
-          }
-        },
-      );
-      _logger?.debug('mcp_settings.status_subscribed', context: _ctx());
-      _setStatus(_liveStatus(port.servers));
       return;
     }
     final handle = _workspace.session(id);
@@ -1330,6 +1321,32 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       });
     }
     _setStatus(_textStatus());
+  }
+
+  /// Подписывается на порт состояния MCP сессии [id] встроенного агента;
+  /// без порта панель недоступна. Подписка одна: вызывающий уже отменил
+  /// прежнюю ([_unbindStatus]) или порта не было (`_port == null`).
+  void _bindEmbedded(SessionId id) {
+    final port = _statusSource.statusOf(id);
+    if (port == null) {
+      _setStatus(const McpAgentStatusUnavailable());
+      return;
+    }
+    _port = port;
+    _portSubscription = port.changes.listen(
+      (servers) => _setStatus(_liveStatus(servers)),
+      onDone: () {
+        // Сессия или агент закрыты: панель недоступна до следующего
+        // `Connected` или изменения workspace с открытой сессией.
+        if (identical(_port, port)) {
+          _portSubscription = null;
+          _port = null;
+          _setStatus(const McpAgentStatusUnavailable());
+        }
+      },
+    );
+    _logger?.debug('mcp_settings.status_subscribed', context: _ctx());
+    _setStatus(_liveStatus(port.servers));
   }
 
   void _unbindStatus() {
