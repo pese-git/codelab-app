@@ -751,6 +751,7 @@ final class CodeLabPresentationModule extends Module {
           forceDefault: true,
           // Баннер виден, пока агент не открылся: подключения нет.
           isAgentConnected: () => false,
+          logger: _settingsLogger(),
         );
       } on Object catch (error) {
         _settingsLogger().warning(

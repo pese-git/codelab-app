@@ -468,6 +468,11 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
         backendId: session.backend.id,
         editingId: editId,
         isAgentConnected: _agentConnected,
+        before: _snapshot,
+        logger: _logger,
+        readSnapshot: () => session.config.snapshot(
+          cwd: access.cwd ?? access.paths.codelabHome,
+        ),
       );
     } on Object catch (error) {
       _logger?.warning(
