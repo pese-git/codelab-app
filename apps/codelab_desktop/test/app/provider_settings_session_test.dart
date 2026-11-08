@@ -10,11 +10,13 @@ import 'dart:io';
 
 import 'package:codelab_desktop/app/provider_settings_session.dart';
 import 'package:codelab_desktop/features/settings/application/provider_settings_session.dart';
+import 'package:codelab_desktop/features/settings/application/provider_wizard_cubit.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:codelab_setup/io.dart' as setup;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fake_provider_settings.dart';
+import '../support/real_config_session.dart' show realHomeConfig;
 
 final class _CapturingCheck implements ProviderCheck {
   final seen = <SecretValue?>[];
@@ -44,12 +46,15 @@ void main() {
     check = _CapturingCheck();
   });
 
-  Future<ProviderSettingsSession> open(Map<String, String> env) async {
+  Future<ProviderSettingsSession> open(
+    Map<String, String> env, {
+    ProviderCheck? useCheck,
+  }) async {
     final environment = {'CODELAB_HOME': home.path, ...env};
     return openProviderSettingsSession(
       EditableSettings(ConfigPaths(codelabHome: home.path)),
       environment,
-      check: check,
+      check: useCheck ?? check,
       logger: const _Silent(),
     );
   }
@@ -171,6 +176,99 @@ providers:
     });
     expect(await session.isSecretSet(name), isFalse);
   });
+
+  // Ревью 6a, Q35: подсказка «Restart agent» после мастера на настоящей
+  // IO-сессии и настоящем `CODELAB_HOME`. Снимок «до» берёт Cubit мастера
+  // (он же читает свежий после записи), правило даёт мост. Хранилище
+  // секретов — по умолчанию (`env`, только чтение; хранилищ ОС в этой версии
+  // нет), ключ провайдера берётся из переменной окружения теста.
+  group('the Restart agent hint on the IO session (Q35)', () {
+    const env = {'LLM_KEY': 'value-from-env'};
+
+    Future<void> until(bool Function() ok) async {
+      for (var i = 0; i < 300 && !ok(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(ok(), isTrue);
+    }
+
+    Future<ProviderWizardCubit> wizard(
+      ProviderSettingsSession session, {
+      ProviderEntryView? editing,
+    }) async {
+      final access = EditableSettings(ConfigPaths(codelabHome: home.path));
+      final before = await session.config.snapshot(cwd: home.path);
+      final flow = await session.openWizard(editing: editing);
+      return ProviderWizardCubit(
+        flow: flow,
+        access: access,
+        backendId: session.backend.id,
+        editingId: editing?.id,
+        isAgentConnected: () => true,
+        before: before,
+        readSnapshot: () => session.config.snapshot(cwd: home.path),
+      );
+    }
+
+    Future<void> walk(ProviderWizardCubit cubit, String model) async {
+      await until(() => cubit.state.setup is EnteringBaseUrl);
+      cubit.dispatch(const BaseUrlSubmitted('https://llm.example/v1'));
+      await until(() => cubit.state.setup is ChoosingKey);
+      cubit.dispatch(const KeySubmitted(UseEnvVar('LLM_KEY')));
+      await until(() => cubit.state.setup is ChoosingModel);
+      cubit.dispatch(ModelChosen(model));
+      await until(() => cubit.state.setup is Reviewing);
+      cubit.dispatch(const ConfirmSave());
+      await until(() => cubit.state.setup is Done);
+    }
+
+    test('a new provider with a key points to Restart agent; editing its '
+        'models with the same key does not', () async {
+      // Нужен загружаемый конфиг «до»: из пустого дома `loaded.config` нет и
+      // мост ничего не называет.
+      File('${home.path}/config.yaml').writeAsStringSync(realHomeConfig);
+      final models = _ModelsCheck();
+      final session = await open(env, useCheck: models);
+
+      final add = await wizard(session);
+      add.dispatch(const PresetChosen('custom-openai'));
+      await walk(add, 'm1');
+      expect(
+        add.savedBanner!.text,
+        'Provider llm-example saved. Its models are available after Restart '
+        'agent (Settings › Connection).',
+      );
+      await add.close();
+
+      final snapshot = await session.config.snapshot(cwd: home.path);
+      final entry = (await providerEntriesOf(
+        snapshot,
+        environment: {...env},
+        isSecretSet: session.isSecretSet,
+      )).firstWhere((e) => e.id == 'llm-example');
+      models.names = ['m1', 'm2'];
+      final edit = await wizard(session, editing: entry);
+      await walk(edit, 'm2');
+      expect(edit.savedBanner!.text, 'Provider llm-example saved.');
+      await edit.close();
+    });
+  });
+}
+
+/// Проверка `/models` с окном контекста: мастер не спрашивает его отдельно.
+final class _ModelsCheck implements ProviderCheck {
+  List<String> names = ['m1'];
+
+  @override
+  Future<ProviderCheckResult> listModels(
+    String kind,
+    Uri baseUrl,
+    SecretValue? key, {
+    Duration timeout = defaultProviderCheckTimeout,
+    CancelToken? cancel,
+  }) async => CheckOk([
+    for (final name in names) RemoteModel(name, contextWindow: 8000),
+  ]);
 }
 
 final class _Silent implements setup.Logger {

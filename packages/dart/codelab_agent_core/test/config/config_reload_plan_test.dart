@@ -1,8 +1,4 @@
-// Тест плана перезагрузки читает внутренний `planConfigReload`: это шов
-// тестов, а не публичный API (PKG-5).
 import 'package:codelab_agent_core/codelab_agent_core.dart';
-import 'package:codelab_agent_core/src/config/config_reload_plan.dart'
-    show planConfigReload;
 import 'package:test/test.dart';
 
 import 'config_support.dart' show layer;

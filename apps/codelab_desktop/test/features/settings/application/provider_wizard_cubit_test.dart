@@ -10,12 +10,14 @@
 // поле, которое вводит «пользователь».
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:codelab_desktop/features/settings/application/provider_wizard_cubit.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_provider_settings.dart';
+import '../../../support/real_config_session.dart';
 import '../../../support/recording_logger.dart';
 
 const _home = '/home/u/.codelab';
@@ -512,47 +514,6 @@ void main() {
       expect(cubit.savedBanner!.action, isNull);
     });
 
-    // Задача 6.1a change `add-provider-setup-ui` (Q17; spec app-settings,
-    // баннер `saved`): агент читает ключ при открытии, поэтому с ключом в
-    // плане модели провайдера доступны только после «Restart agent». Красные
-    // до реализации `ProviderWizardCubit._bannerFor` по `done.plan.key`.
-    const restartText =
-        'Provider llm-example saved. Its models are available after Restart '
-        'agent (Settings › Connection).';
-
-    test('6.1a banner: a new stored key with a running agent points to '
-        'Restart agent', () async {
-      final cubit = await open();
-      await walkToReview(cubit, key: StoreSecret(SecretValue(leakMarker)));
-      cubit.dispatch(const ConfirmSave());
-      await pumpEventQueue(times: 20);
-
-      expect(cubit.savedBanner!.kind, ProviderBannerKind.saved);
-      expect(cubit.savedBanner!.text, restartText);
-      expect(cubit.savedBanner!.action, isNull);
-      expect(cubit.savedBanner!.text, isNot(contains(leakMarker)));
-    });
-
-    test('6.1a banner: KeepStoredSecret points to Restart agent', () async {
-      session.secrets['codelab/llm-example'] = 'old-value';
-      final cubit = await open();
-      await walkToReview(cubit, key: const KeepStoredSecret());
-      cubit.dispatch(const ConfirmSave());
-      await pumpEventQueue(times: 20);
-
-      expect(cubit.savedBanner!.text, restartText);
-    });
-
-    test('6.1a banner: UseEnvVar points to Restart agent', () async {
-      session.wizardEnvironment = const {'LLM_KEY': 'value-from-env'};
-      final cubit = await open();
-      await walkToReview(cubit, key: const UseEnvVar('LLM_KEY'));
-      cubit.dispatch(const ConfirmSave());
-      await pumpEventQueue(times: 20);
-
-      expect(cubit.savedBanner!.text, restartText);
-    });
-
     test('6.1a banner: a replaced key keeps its own text; no key and a '
         'missing agent keep theirs', () async {
       session.secrets['codelab/llm-example'] = 'old-value';
@@ -754,5 +715,308 @@ void main() {
     expect(everything, isNot(contains(leakMarker)));
     expect(everything, isNot(contains('sk-test-leak')));
     await subscription.cancel();
+  });
+
+  // Задача 6.1a change `add-provider-setup-ui` (Q17, Q35; spec app-settings,
+  // баннер `saved`): подсказка про «Restart agent» — только если мост по
+  // снимкам до и после записи (`restartRequiredProviders`, правило ядра
+  // `planConfigReload`) называет провайдера. Снимки читает настоящее
+  // хранилище (`RealConfigSession`), правило не подменяется.
+  group('the banner after a write that needs Restart agent (6.1a, Q35)', () {
+    late Directory root;
+    late RealConfigSession real;
+    final cubitsReal = <ProviderWizardCubit>[];
+
+    const restartText =
+        'Provider llm-example saved. Its models are available after Restart '
+        'agent (Settings › Connection).';
+
+    setUp(() {
+      root = Directory.systemTemp.createTempSync('codelab_wizard_restart_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      Directory('${root.path}/home').createSync();
+      Directory('${root.path}/project').createSync();
+    });
+
+    tearDown(() async {
+      for (final cubit in cubitsReal) {
+        await cubit.close();
+      }
+      cubitsReal.clear();
+    });
+
+    Future<ProviderWizardCubit> openReal({
+      String config = realHomeConfig,
+      String? editing,
+    }) async {
+      real = await RealConfigSession.open(
+        home: '${root.path}/home',
+        project: '${root.path}/project',
+        config: config,
+      );
+      ProviderEntryView? entry;
+      if (editing != null) {
+        final snapshot = await real.config.snapshot(
+          cwd: '${root.path}/project',
+        );
+        entry = (await providerEntriesOf(
+          snapshot,
+          environment: real.environment,
+          isSecretSet: real.isSecretSet,
+        )).firstWhere((e) => e.id == editing);
+      }
+      final before = await real.config.snapshot(cwd: '${root.path}/project');
+      final flow = await real.openWizard(editing: entry);
+      final cubit = ProviderWizardCubit(
+        flow: flow,
+        access: real.access,
+        backendId: 'file',
+        editingId: editing,
+        isAgentConnected: () => true,
+        before: before,
+        readSnapshot: () => real.config.snapshot(cwd: '${root.path}/project'),
+      );
+      cubitsReal.add(cubit);
+      return cubit;
+    }
+
+    /// Настоящий файловый ввод-вывод не укладывается в фиксированное число
+    /// проходов очереди событий: ждём `Done` по состоянию, а не по счёту.
+    Future<void> untilDone(ProviderWizardCubit cubit) async {
+      for (var i = 0; i < 300 && cubit.state.setup is! Done; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await pumpEventQueue(times: 5);
+    }
+
+    Future<void> walkNew(ProviderWizardCubit cubit, KeyChoice key) async {
+      cubit.dispatch(const PresetChosen('custom-openai'));
+      await pumpEventQueue();
+      cubit.dispatch(const BaseUrlSubmitted('https://llm.example/v1'));
+      await pumpEventQueue();
+      cubit.dispatch(KeySubmitted(key));
+      await pumpEventQueue();
+      real.wizardCheck.respond(
+        const CheckOk([RemoteModel('m1', contextWindow: 8000)]),
+      );
+      await pumpEventQueue();
+      cubit.dispatch(const ModelChosen('m1'));
+      await pumpEventQueue();
+      cubit.dispatch(const ConfirmSave());
+      await untilDone(cubit);
+    }
+
+    test('a new stored key points to Restart agent', () async {
+      final cubit = await openReal();
+
+      await walkNew(cubit, StoreSecret(SecretValue(leakMarker)));
+
+      expect(cubit.state.setup, isA<Done>());
+      expect(cubit.savedBanner!.kind, ProviderBannerKind.saved);
+      expect(cubit.savedBanner!.text, restartText);
+      expect(cubit.savedBanner!.action, isNull);
+      expect(cubit.savedBanner!.text, isNot(contains(leakMarker)));
+    });
+
+    test('UseEnvVar for a new provider points to Restart agent', () async {
+      final cubit = await openReal();
+      real.environment = const {'LLM_KEY': 'value-from-env'};
+
+      await walkNew(cubit, const UseEnvVar('LLM_KEY'));
+
+      expect(cubit.savedBanner!.text, restartText);
+    });
+
+    test('a new provider without a key is plain saved', () async {
+      final cubit = await openReal();
+
+      await walkNew(cubit, const NoKey());
+
+      expect(cubit.savedBanner!.text, 'Provider llm-example saved.');
+    });
+
+    test(
+      'KeepStoredSecret for a new provider points to Restart agent',
+      () async {
+        final cubit = await openReal();
+        real.secrets['codelab/llm-example'] = 'old-value';
+
+        await walkNew(cubit, const KeepStoredSecret());
+
+        expect(cubit.savedBanner!.text, restartText);
+      },
+    );
+
+    test('editing the models of an existing provider with the same key has '
+        'no hint (Q35)', () async {
+      final cubit = await openReal(
+        config:
+            '''
+$realHomeConfig
+  llm-example:
+    kind: openai-compatible
+    base_url: https://llm.example/v1
+    api_key_secret: codelab/llm-example
+    models:
+      m1:
+        context_window: 8000
+''',
+        editing: 'llm-example',
+      );
+      real.secrets['codelab/llm-example'] = 'old-value';
+
+      cubit.dispatch(const BaseUrlSubmitted('https://llm.example/v1'));
+      await pumpEventQueue();
+      cubit.dispatch(const KeySubmitted(KeepStoredSecret()));
+      await pumpEventQueue();
+      real.wizardCheck.respond(
+        const CheckOk([
+          RemoteModel('m1', contextWindow: 8000),
+          RemoteModel('m2', contextWindow: 8000),
+        ]),
+      );
+      await pumpEventQueue();
+      cubit.dispatch(const ModelChosen('m2'));
+      await pumpEventQueue();
+      cubit.dispatch(const ConfirmSave());
+      await untilDone(cubit);
+
+      expect(cubit.state.setup, isA<Done>());
+      expect(cubit.savedBanner!.text, 'Provider llm-example saved.');
+    });
+
+    test('a failing read of the fresh snapshot ends without a hint and is '
+        'logged with the error type only', () async {
+      real = await RealConfigSession.open(
+        home: '${root.path}/home',
+        project: '${root.path}/project',
+      );
+      final hintLog = RecordingLogger();
+      final before = await real.config.snapshot(cwd: '${root.path}/project');
+      final cubit = ProviderWizardCubit(
+        flow: await real.openWizard(),
+        access: real.access,
+        backendId: 'file',
+        isAgentConnected: () => true,
+        before: before,
+        readSnapshot: () => throw StateError('boom $leakMarker'),
+        logger: hintLog,
+      );
+      cubitsReal.add(cubit);
+
+      await walkNew(cubit, StoreSecret(SecretValue(leakMarker)));
+
+      expect(cubit.savedBanner!.text, 'Provider llm-example saved.');
+      final warning = hintLog.entries.singleWhere(
+        (e) => e['event'] == 'provider_wizard.restart_hint_failed',
+      );
+      expect(warning['error_type'], 'StateError');
+      expect(hintLog.entries.toString(), isNot(contains(leakMarker)));
+    });
+
+    test('two wizards in a row: each compares with its own snapshot', () async {
+      final first = await openReal();
+      await walkNew(first, StoreSecret(SecretValue(leakMarker)));
+      expect(first.savedBanner!.text, restartText);
+
+      // Второй мастер открыт уже поверх записанного: его «до» включает
+      // первый провайдер, поэтому правка моделей подсказки не даёт.
+      final snapshotNow = await real.config.snapshot(
+        cwd: '${root.path}/project',
+      );
+      final entry = (await providerEntriesOf(
+        snapshotNow,
+        environment: real.environment,
+        isSecretSet: real.isSecretSet,
+      )).firstWhere((e) => e.id == 'llm-example');
+      final flow = await real.openWizard(editing: entry);
+      final second = ProviderWizardCubit(
+        flow: flow,
+        access: real.access,
+        backendId: 'file',
+        editingId: 'llm-example',
+        isAgentConnected: () => true,
+        before: snapshotNow,
+        readSnapshot: () => real.config.snapshot(cwd: '${root.path}/project'),
+      );
+      cubitsReal.add(second);
+      second.dispatch(const BaseUrlSubmitted('https://llm.example/v1'));
+      await pumpEventQueue();
+      second.dispatch(const KeySubmitted(KeepStoredSecret()));
+      await pumpEventQueue();
+      real.wizardCheck.respond(
+        const CheckOk([RemoteModel('m1', contextWindow: 8000)]),
+      );
+      await pumpEventQueue();
+      second.dispatch(const ModelChosen('m1'));
+      await pumpEventQueue();
+      second.dispatch(const ConfirmSave());
+      await untilDone(second);
+
+      expect(second.savedBanner!.text, 'Provider llm-example saved.');
+    });
+
+    test('closing the Cubit while the hint is computed does not throw; a '
+        'slow read ends without a hint after the timeout', () async {
+      final gate = Completer<AgentConfigSnapshot>();
+      final hintLog = RecordingLogger();
+      real = await RealConfigSession.open(
+        home: '${root.path}/home',
+        project: '${root.path}/project',
+      );
+      final before = await real.config.snapshot(cwd: '${root.path}/project');
+      // Настоящий автомат с отложенным чтением снимка: проверяется расчёт
+      // подсказки, а не поток `Done`.
+      Future<ProviderWizardCubit> open(Duration timeout) async {
+        final flow = await real.openWizard();
+        final cubit = ProviderWizardCubit(
+          flow: flow,
+          access: real.access,
+          backendId: 'file',
+          isAgentConnected: () => true,
+          before: before,
+          readSnapshot: () => gate.future,
+          restartHintTimeout: timeout,
+          logger: hintLog,
+        );
+        cubitsReal.add(cubit);
+        return cubit;
+      }
+
+      // Тайм-аут нулевой, чтение не завершается: `Done` публикуется без
+      // подсказки, предупреждение называет `TimeoutException` (без таймеров
+      // реального времени).
+      final slow = await open(Duration.zero);
+      await walkNew(slow, StoreSecret(SecretValue(leakMarker)));
+      await pumpEventQueue(times: 40);
+      expect(slow.state.setup, isA<Done>());
+      expect(slow.savedBanner!.text, 'Provider llm-example saved.');
+      final warning = hintLog.entries.singleWhere(
+        (e) => e['event'] == 'provider_wizard.restart_hint_failed',
+      );
+      expect(warning['error_type'], 'TimeoutException');
+
+      final closing = await open(const Duration(seconds: 5));
+      real.secrets.clear();
+      closing.dispatch(const PresetChosen('custom-openai'));
+      await pumpEventQueue();
+      closing.dispatch(const BaseUrlSubmitted('https://other.example/v1'));
+      await pumpEventQueue();
+      closing.dispatch(KeySubmitted(StoreSecret(SecretValue('v'))));
+      await pumpEventQueue();
+      real.wizardCheck.respond(
+        const CheckOk([RemoteModel('m1', contextWindow: 8000)]),
+      );
+      await pumpEventQueue();
+      closing.dispatch(const ModelChosen('m1'));
+      await pumpEventQueue();
+      closing.dispatch(const ConfirmSave());
+      await untilDone(closing);
+      await closing.close();
+      gate.complete(before);
+      await pumpEventQueue(times: 20);
+
+      expect(closing.isClosed, isTrue);
+    });
   });
 }

@@ -9,6 +9,7 @@
 // (SETUP-1).
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' show SessionId;
 import 'package:codelab_client_core/codelab_client_core.dart';
@@ -18,6 +19,7 @@ import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_provider_settings.dart';
+import '../../../support/real_config_session.dart';
 import '../../../support/recording_logger.dart';
 
 const _home = '/home/u/.codelab';
@@ -1170,5 +1172,62 @@ void main() {
       expect(await cubit.remove('team'), isFalse);
       expect(store.applied, isEmpty);
     });
+  });
+
+  // Ревью 6a, Q35: мастер, открытый со страницы «Providers», берёт снимок
+  // «до» у Cubit страницы и после записи называет провайдера, который агент
+  // применит только после «Restart agent». Настоящее хранилище во временном
+  // `CODELAB_HOME`, правило даёт мост.
+  test('a wizard opened from the page points to Restart agent after a new '
+      'provider with a key', () async {
+    final root = Directory.systemTemp.createTempSync('codelab_providers_hint_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    Directory('${root.path}/home').createSync();
+    Directory('${root.path}/project').createSync();
+    final real = await RealConfigSession.open(
+      home: '${root.path}/home',
+      project: '${root.path}/project',
+    );
+    real.environment = const {'LLM_KEY': 'value-from-env'};
+    workspace.emit(
+      WorkspaceState(
+        connection: const ConnectionView.connected(),
+        profile: embeddedConnectionProfile,
+      ),
+    );
+    final page = ProviderSettingsCubit(
+      workspace: workspace,
+      defaultProfile: () async => embeddedConnectionProfile,
+      open: (access, env) async => real,
+      environment: const {'HOME': '/home/u'},
+      codelabHome: '${root.path}/home',
+      projectDirectory: () => '${root.path}/project',
+    );
+    cubits.add(page);
+    await page.reload();
+
+    final wizard = (await page.openWizard())!;
+    wizard.dispatch(const PresetChosen('custom-openai'));
+    await pumpEventQueue();
+    wizard.dispatch(const BaseUrlSubmitted('https://llm.example/v1'));
+    await pumpEventQueue();
+    wizard.dispatch(const KeySubmitted(UseEnvVar('LLM_KEY')));
+    await pumpEventQueue();
+    real.wizardCheck.respond(
+      const CheckOk([RemoteModel('m1', contextWindow: 8000)]),
+    );
+    await pumpEventQueue();
+    wizard.dispatch(const ModelChosen('m1'));
+    await pumpEventQueue();
+    wizard.dispatch(const ConfirmSave());
+    await pumpEventQueue(times: 40);
+
+    expect(wizard.state.setup, isA<Done>());
+    expect(
+      wizard.savedBanner!.text,
+      'Provider llm-example saved. Its models are available after Restart '
+      'agent (Settings › Connection).',
+    );
+    await wizard.close();
   });
 }

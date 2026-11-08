@@ -1563,6 +1563,84 @@ void main() {
       expect(saved['stored_refs'], isA<int>());
     });
 
+    test('the reload after a passed write failed: the saved event is still '
+        'written, restart_required false (review 6a)', () async {
+      store.user = {};
+      session.secrets.clear();
+      store.onApply = () => store.snapshotError = StateError('boom');
+      final cubit = make();
+      await cubit.reload();
+      store.onApply = () => store.snapshotError = StateError('boom');
+
+      await cubit.save(_newGithub(name: 'fresh', headers: const {}));
+
+      expect(event('mcp_settings.saved')['restart_required'], isFalse);
+      expect(events().where((e) => e == 'mcp_settings.save_failed'), isEmpty);
+    });
+
+    test('an exception after a passed write reaches _exclusive: the write '
+        'stays saved — one saved event, no save_failed, no error banner '
+        '(review 6a)', () async {
+      store.user = {};
+      session.secrets.clear();
+      final cubit = make();
+      await cubit.reload();
+      // Сборка состояния после записи бросает один раз (после `commit`).
+      store.onApply = () => session.backendErrorOnce = StateError('boom');
+
+      final saved = await cubit.save(
+        _newGithub(name: 'fresh', headers: const {}),
+      );
+
+      expect(saved, isTrue);
+      final state = current(cubit);
+      expect(state.banner?.kind, McpBannerKind.saved);
+      expect(state.banner?.lines.first, 'Server fresh saved.');
+      expect(state.saving, isFalse);
+      expect(
+        logger.entries.where((e) => e['event'] == 'mcp_settings.saved'),
+        hasLength(1),
+      );
+      expect(
+        logger.entries.where((e) => e['event'] == 'mcp_settings.save_failed'),
+        isEmpty,
+      );
+    });
+
+    test('an exception after a passed switch or Remove keeps the write: no '
+        'error banner, no save_failed (review 6a)', () async {
+      final cubit = make();
+      await cubit.reload();
+      // Сборка состояния бросает один раз — после записи, внутри `apply`.
+      store.onApply = () =>
+          session.backendErrorOnce = StateError('boom $leakMarker');
+
+      expect(await cubit.setEnabled('github', enabled: false), isTrue);
+
+      expect(current(cubit).banner?.kind, isNot(McpBannerKind.error));
+      expect(current(cubit).saving, isFalse);
+
+      await cubit.reload();
+      store.onApply = () =>
+          session.backendErrorOnce = StateError('boom $leakMarker');
+
+      expect(await cubit.remove('postgres'), isTrue);
+
+      expect(current(cubit).banner?.lines.first, 'Server postgres removed.');
+      expect(
+        logger.entries.where((e) => e['event'] == 'mcp_settings.save_failed'),
+        isEmpty,
+      );
+      // Позднее исключение после успешной записи не теряется: предупреждение
+      // с типом исключения, без текста (ревью 6a).
+      final hint = logger.entries.where(
+        (e) => e['event'] == 'mcp_settings.restart_hint_failed',
+      );
+      expect(hint, hasLength(2));
+      expect(hint.every((e) => e['error_type'] == 'StateError'), isTrue);
+      expect(logger.entries.toString(), isNot(contains(leakMarker)));
+    });
+
     test(
       'a row carries its ready draft (the page does not build it)',
       () async {
@@ -1772,6 +1850,181 @@ mcp:
         );
       },
     );
+
+    test('Enable here names Restart agent when the bridge lists the server '
+        '(review 6a)', () async {
+      final project = '${root.path}/project';
+      Directory('$project/.codelab').createSync();
+      File('$project/.codelab/config.yaml').writeAsStringSync('''
+mcp:
+  servers:
+    - name: playwright
+      type: stdio
+      command: npx
+''');
+      File('$project/.codelab/config.local.yaml').writeAsStringSync('''
+mcp:
+  servers:
+    - name: playwright
+      enabled: false
+''');
+      final cubit = await openReal(
+        config: '$realHomeConfig\ntrusted_projects:\n  - $project\n',
+      );
+      expect(row(current(cubit), 'playwright').canEnableHere, isTrue);
+
+      expect(await cubit.enableHere('playwright'), isTrue);
+
+      expect(
+        current(cubit).banner?.lines.first,
+        'Server playwright enabled. It starts after Restart agent '
+        '(Settings › Connection).',
+      );
+    });
+
+    test('Enable here without a restart has no banner', () async {
+      final project = '${root.path}/project';
+      Directory('$project/.codelab').createSync();
+      File('$project/.codelab/config.yaml').writeAsStringSync('''
+mcp:
+  servers:
+    - name: web
+      type: http
+      url: https://mcp.example.test/mcp/
+''');
+      File('$project/.codelab/config.local.yaml').writeAsStringSync('''
+mcp:
+  servers:
+    - name: web
+      enabled: false
+''');
+      final cubit = await openReal(
+        config: '$realHomeConfig\ntrusted_projects:\n  - $project\n',
+      );
+
+      expect(await cubit.enableHere('web'), isTrue);
+
+      expect(current(cubit).banner, isNull);
+    });
+
+    test('a deferred write, then a plain one: the state of the first does '
+        'not leak into the second (review 6a)', () async {
+      final cubit = await openReal();
+      await cubit.save(stdio('fresh'));
+      expect(event('mcp_settings.saved')['restart_required'], isTrue);
+
+      await cubit.save(
+        McpServerDraft(
+          name: 'web',
+          kind: McpTransportKind.http,
+          url: 'https://mcp.example.test/mcp/',
+        ),
+      );
+
+      expect(current(cubit).banner?.lines.first, 'Server web saved.');
+      expect(event('mcp_settings.saved')['restart_required'], isFalse);
+      expect(
+        logger.entries.where((e) => e['event'] == 'mcp_settings.saved'),
+        hasLength(2),
+      );
+    });
+
+    test('a throwing switch does not leak "enabled" into the next write '
+        '(review 6a)', () async {
+      final cubit = await openReal(
+        config:
+            '''
+$realHomeConfig
+mcp:
+  servers:
+    - name: docs
+      type: stdio
+      command: docs-mcp
+      enabled: false
+    - name: extra
+      type: stdio
+      command: extra-mcp
+''',
+      );
+      real.portError = StateError('boom $leakMarker');
+      expect(await cubit.setEnabled('docs', enabled: true), isFalse);
+      real.portError = null;
+
+      expect(await cubit.remove('extra'), isTrue);
+
+      expect(current(cubit).banner?.lines.first, 'Server extra removed.');
+    });
+
+    test('the write passed but the page was closed during the commit: the '
+        'saved event is still written with restart_required false '
+        '(review 6a)', () async {
+      final gate = Completer<void>();
+      final cubit = await openReal();
+      real.mcpKeys.onWrite = () => gate.future;
+
+      final saving = cubit.save(
+        McpServerDraft(
+          name: 'fresh',
+          kind: McpTransportKind.http,
+          url: 'https://mcp.example.test/mcp/',
+          headers: {'Authorization': McpValueDraft.secret(SecretValue('x'))},
+        ),
+      );
+      await pumpEventQueue();
+      await cubit.close();
+      gate.complete();
+      await saving;
+
+      expect(event('mcp_settings.saved')['restart_required'], isFalse);
+    });
+
+    test(
+      'the connection changed during the write: no hint (review 6a)',
+      () async {
+        final gate = Completer<void>();
+        final cubit = await openReal();
+        real.mcpKeys.onWrite = () => gate.future;
+
+        final saving = cubit.save(
+          McpServerDraft(
+            name: 'fresh',
+            kind: McpTransportKind.http,
+            url: 'https://mcp.example.test/mcp/',
+            headers: {'Authorization': McpValueDraft.secret(SecretValue('x'))},
+          ),
+        );
+        await pumpEventQueue();
+        connect(_ownAgent);
+        gate.complete();
+        await saving;
+        await pumpEventQueue();
+
+        expect(
+          logger.entries.where((e) => e['event'] == 'mcp_settings.saved'),
+          hasLength(1),
+        );
+        expect(event('mcp_settings.saved')['restart_required'], isFalse);
+      },
+    );
+
+    test('a failing restart rule keeps the write saved without a hint and '
+        'logs restart_hint_failed with the error type (review 6a)', () async {
+      final cubit = await openReal();
+      real.breakRestartRule = true;
+
+      expect(await cubit.save(stdio('fresh')), isTrue);
+
+      expect(current(cubit).banner?.lines.first, 'Server fresh saved.');
+      final failed = logger.entries.singleWhere(
+        (e) => e['event'] == 'mcp_settings.restart_hint_failed',
+      );
+      expect(failed['error_type'], 'StateError');
+      expect(event('mcp_settings.saved')['restart_required'], isFalse);
+      expect(
+        logger.entries.where((e) => e['event'] == 'mcp_settings.save_failed'),
+        isEmpty,
+      );
+    });
 
     test('disabling with the switch needs no restart: no banner', () async {
       final cubit = await openReal(
