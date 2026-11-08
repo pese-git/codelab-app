@@ -798,9 +798,9 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
 | `provider_wizard.cancelled` / `event_ignored` | debug | `state` |
 | `mcp_settings.loaded` | debug | `servers` (число), `access: editable \| remote \| not_managed` (как `provider_settings.loaded`) |
 | `mcp_settings.unreadable` | warning | `error_type` |
-| `mcp_settings.saved` | info | `server`, `type: stdio \| http`, `target: user \| local`, `secret_refs` (число ссылок `${secret:…}` в элементе), `replaced` (число заменённых секретов), `secrets_deleted`, `secrets_kept`, `secrets_failed` (осиротевшие секреты после правки, ревью 5b; числа, без имён) |
+| `mcp_settings.saved` | info | `server`, `type: stdio \| http`, `target: user \| local`, `stored_refs` (число ссылок `${secret:…}` в элементе), `replaced` (число заменённых секретов), `cleanup_deleted`, `cleanup_kept`, `cleanup_failed` (осиротевшие секреты после правки, ревью 5b; числа, без имён) |
 | `mcp_settings.toggled` | info | `server`, `action: enable \| disable \| disable_here \| enable_here`, `target: user \| local` |
-| `mcp_settings.removed` | info | `server`, `secrets_deleted`, `secrets_kept` (`kept` и `stillReferenced`), `secrets_failed` — числа; имена секретов не пишутся |
+| `mcp_settings.removed` | info | `server`, `cleanup_deleted`, `cleanup_kept` (`kept` и `stillReferenced`), `cleanup_failed` — числа; имена секретов не пишутся |
 | `mcp_settings.save_failed` | warning | `server`, `operation: save \| toggle \| remove`, `outcome: conflict \| rejected \| inline_secret \| secret_failed \| secret_appeared \| invalid \| refused \| stale \| error` (`stale` — подключение или конфиг страницы сменились до записи, D11), `refusal?` (`McpServerRefusal.name`), `rollback?` (`KeyRollback`, только `save`: `secret_failed` и неудачная запись конфига), `error_type?` (только при `error`). Пишется при любом неуспехе, в том числе `invalid` (включая занятое имя до `commit`), `secret_appeared` (гонка после вопроса «Replace it»; сам вопрос неуспехом не считается) и `error` при исключении хранилища (ревью 5b) |
 | `mcp_settings.rejected_after_save` | warning | `server`, `issues` (число) |
 | `mcp_settings.status_subscribed` / `status_unsubscribed` | debug | — (`session_id` — корреляцией логгера) |
@@ -812,6 +812,8 @@ final class ProviderConfigNotSaved extends ProviderCommitOutcome {
 | `connection_profile.token_deleted` / `token_delete_failed` | info / warning | `profile_id`, `backend`, `error_type?` |
 | `connection_profile.token_secret_missing` | warning | `profile_id` — секрет `secret:` не задан перед подключением (D13) |
 | `secrets.client.backend` | info | `backend`, `writable`, `reason?` — `unavailableReason` бэкенда, текст без значений (D3) |
+
+Поля-счётчики `mcp_settings.*` не содержат в имени слов, которые маскирует редактор журнала (`SecretRedactor`: `secret`, `token`, `auth`, `key` и т. п.), иначе числа заменялись бы на `<redacted>`: `stored_refs`, `cleanup_deleted`, `cleanup_kept`, `cleanup_failed` (smoke 5b, 2026-11-08; прежние имена — `secret_refs`, `secrets_*`). Правило редактора не ослабляется.
 
 `connection_profile.saved` получает `token: none | env | secret` (было `none | env`). Все пять событий `connection_profile.token_*` несут `profile_id` и `backend`, как требует spec app-settings «События журнала настроек без секретов» (решение оркестратора, ревью итерации 1).
 
@@ -1110,5 +1112,6 @@ Smoke CLI показал: при 401/403 рукопожатия WebSocket и CLI
 - **Скрытые значения в редакторе** (MEDIUM-1): маска с плейсхолдером `Hidden — leave empty to keep`, сырое значение остаётся в черновике до правки поля, новое вводится целиком; маркер на экран не выходит (D11, D24).
 - **Осиротевшие секреты после правки** (LOW-2): удаляются после `ConfigSaved` по правилу «Remove» (Q22), итог — в баннере `saved` (D11, D24). Технические решения ревью (HIGH-1, LOW-3, MEDIUM-2, архитектурные MAJOR/MINOR, LOW-2 дубликат ключа, LOW-4, сторож `codelab_embedded`) — D11, D12, D18, D20; задачи 5.12–5.14.
 
-Открытых вопросов нет.
+Открытый вопрос (smoke итерации 5b на macOS, 2026-11-08; решать при подготовке итерации 6, задача 6.1b):
+- **Q31. Как страница «MCP servers» сообщает, что сервер заработает только после перезапуска агента.** Новый `stdio`-сервер, повторное включение (`enabled: false → true`) и новый `http`-сервер с секретом встроенный агент откладывает (`config.reload.restart_required`, R0-1/R0-4), а страница показывает `Server <name> saved.` и `On`. Нужно решить: (1) текст — баннер `saved` по образцу Q17 (`… Restart agent (Settings › Connection).`) и/или пометка строки; (2) источник признака — `ConfigSaved.restartRequiredKeys` моста, если он покрывает `mcp.servers[<имя>]` по правилам перезагрузки, иначе предсказание в мосте по правилу `config_reload_plan.dart` (одна реализация, `[agent]`) или сигнал от `EmbeddedAgent` (отчёт перезагрузки `ConfigReloadReport.restartRequiredKeys` до хоста сейчас не доходит); (3) поведение для агента вне процесса. Рекомендация будет дана при подготовке итерации 6 после проверки (2).
 
