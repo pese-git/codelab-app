@@ -66,6 +66,7 @@ export 'src/access/settings_access.dart';
 export 'src/config/agent_config_store.dart';
 export 'src/config/config_source_view.dart';
 export 'src/config/display_base_url.dart';
+export 'src/mcp/mcp_restart.dart';
 export 'src/mcp/mcp_server_committer.dart';
 export 'src/mcp/mcp_server_draft.dart';
 export 'src/mcp/mcp_server_remover.dart';

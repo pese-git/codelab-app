@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:codelab_client_acp/codelab_client_acp.dart' show Logger;
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -80,6 +81,10 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
     required EditableSettings access,
     required String backendId,
     required bool Function() isAgentConnected,
+    this.before,
+    this.readSnapshot,
+    this.restartHintTimeout = const Duration(seconds: 5),
+    this.logger,
     this.editingId,
     this.forceDefault = false,
   }) : _flow = flow,
@@ -94,6 +99,23 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
   final EditableSettings _access;
   final String _backendId;
   final bool Function() _isAgentConnected;
+
+  /// Снимок конфига страницы, с которой открыт мастер (а не снимок
+  /// `ProviderSetupFlow`), и чтение свежего снимка после записи: по ним Cubit
+  /// вызывает `restartRequiredProviders` моста (Q35). Без них подсказки нет.
+  /// Каждый мастер сравнивает со своим снимком. Погрешность: внешняя правка
+  /// между загрузкой страницы и открытием мастера или после конфликта записи
+  /// (база автомата обновляется, [before] остаётся прежним) даёт лишнюю
+  /// подсказку; на запись это не влияет.
+  final AgentConfigSnapshot? before;
+  final Future<AgentConfigSnapshot> Function()? readSnapshot;
+
+  /// Сколько ждать расчёт подсказки: по истечении `Done` публикуется без неё.
+  final Duration restartHintTimeout;
+
+  /// Журнал настроек: сбой расчёта подсказки пишется предупреждением
+  /// `provider_wizard.restart_hint_failed` с типом исключения (D18).
+  final Logger? logger;
   late final StreamSubscription<ProviderSetupState> _subscription;
 
   /// Id редактируемого провайдера; `null` — добавление.
@@ -167,9 +189,51 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
       _conflict = false;
     }
     if (setup is Done) {
-      _savedBanner = _bannerFor(setup);
+      // Баннер ждёт сравнения снимков (Q35): состояние `Done` публикуется
+      // после него, диалог закрывается позже и читает готовый баннер.
+      unawaited(_finishDone(setup));
+      return;
     }
     emit(_stateOf(setup, _backendId, _access, conflict: _conflict));
+  }
+
+  /// Публикует `Done` после расчёта подсказки «Restart agent».
+  ///
+  /// Расчёт ограничен [restartHintTimeout]: чтение снимка не должно держать
+  /// диалог открытым. До этого срока (по умолчанию 5 с) `Done` не опубликован,
+  /// и закрытие мастера в это окно не покажет баннер, хотя конфиг уже записан. Если Cubit закрыли во время расчёта, поздний результат
+  /// отбрасывается проверкой `isClosed`: ни баннер, ни состояние не меняются,
+  /// исключений нет (владелец уже прочитал `savedBanner` или не будет).
+  Future<void> _finishDone(Done done) async {
+    final needsRestart = _isAgentConnected() && !done.committed.keyReplaced
+        ? await _needsRestart(done.plan.providerId)
+        : false;
+    if (isClosed) {
+      return;
+    }
+    _savedBanner = _bannerFor(done, needsRestart: needsRestart);
+    emit(_stateOf(done, _backendId, _access, conflict: _conflict));
+  }
+
+  /// Называет ли мост провайдера [id] по снимкам до и после записи; любой сбой
+  /// или тайм-аут — `false`.
+  Future<bool> _needsRestart(String id) async {
+    final snapshotBefore = before;
+    final read = readSnapshot;
+    if (snapshotBefore == null || read == null) {
+      return false;
+    }
+    try {
+      final fresh = await read().timeout(restartHintTimeout);
+      return restartRequiredProviders(snapshotBefore, fresh).contains(id);
+    } on Object catch (error) {
+      // Тайм-аут и сбой чтения не мешают итогу записи, но не теряются.
+      logger?.warning(
+        'provider_wizard.restart_hint_failed',
+        context: {'error_type': error.runtimeType.toString()},
+      );
+      return false;
+    }
   }
 
   static ProviderWizardState _stateOf(
@@ -186,10 +250,13 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
         : null,
   );
 
-  /// Баннер страницы после записи (D9): без запущенного агента — «Connect»;
-  /// при замене ключа — напоминание про «Restart agent» (резолвер агента
-  /// держит старое значение).
-  ProviderBanner _bannerFor(Done done) {
+  /// Баннер страницы после записи (D9, Q17, Q35): без запущенного агента —
+  /// «Connect»; при замене ключа — напоминание про «Restart agent» (резолвер
+  /// агента держит старое значение); если мост по снимкам до и после записи
+  /// называет провайдера ([needsRestart], правило ядра `planConfigReload`) —
+  /// модели появятся после «Restart agent»; иначе — простой итог (правка
+  /// моделей и провайдер без ключа применяются сразу).
+  ProviderBanner _bannerFor(Done done, {required bool needsRestart}) {
     if (!_isAgentConnected()) {
       return const ProviderBanner(
         ProviderBannerKind.saved,
@@ -203,6 +270,9 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
       done.committed.keyReplaced
           ? 'Provider $id saved. The new key is used after Restart agent '
                 '(Settings › Connection).'
+          : needsRestart
+          ? 'Provider $id saved. Its models are available after Restart '
+                'agent (Settings › Connection).'
           : 'Provider $id saved.',
     );
   }

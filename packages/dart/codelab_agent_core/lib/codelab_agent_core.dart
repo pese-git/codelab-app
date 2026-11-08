@@ -18,6 +18,8 @@ export 'src/commands/expand_command.dart';
 export 'src/commands/slash_command.dart';
 export 'src/config/config_edit.dart';
 export 'src/config/config_issue.dart';
+export 'src/config/config_reload_plan.dart'
+    show ConfigReloadPlan, planConfigReload;
 export 'src/config/config_source.dart';
 export 'src/config/config_tree.dart';
 export 'src/config/core_config.dart';

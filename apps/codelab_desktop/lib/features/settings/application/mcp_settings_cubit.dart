@@ -126,6 +126,28 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
   var _afterWrite = false;
   String? _writtenServer;
 
+  // Признак «сервер начнёт работать после Restart agent» (Q31, D11 «Итерация
+  // 6»). Решение принимается после перечитывания снимка, поэтому исходные
+  // данные хранятся между записью и `_loadEditable`. Состояние сбрасывается в
+  // начале и в конце КАЖДОЙ записи (`_exclusive`): брошенное исключение не
+  // должно протечь в следующую запись.
+  _RestartCheck? _restart;
+  var _restartRequired = false;
+
+  /// Вид и хвост баннера успешной правки: подсказку про перезапуск строят по
+  /// признаку, а не поиском текста готового баннера.
+  McpBannerKind? _savedKind;
+  List<String>? _savedTail;
+
+  /// Поля события `mcp_settings.saved`; пишется после перечитывания снимка,
+  /// когда известен `restart_required`, и всегда — в `finally` записи.
+  Map<String, Object?>? _pendingSaved;
+
+  /// Запись этой операции прошла (любой вид: сохранение, переключатель,
+  /// «Enable/Disable here», «Remove»). Выставляется в `_finishWrite` до
+  /// перечитывания: исключение позже не превращает успех в «not saved».
+  var _writePassed = false;
+
   // --- Панель «Agent status» --------------------------------------------------
 
   McpAgentStatus _agentStatus = const McpAgentStatusUnavailable();
@@ -300,6 +322,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     _session = session;
     _access = access;
     _snapshot = snapshot;
+    _applyRestartHint(snapshot);
     final rows = mcpServerEntriesOf(snapshot);
     _logger?.debug(
       'mcp_settings.loaded',
@@ -317,6 +340,82 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     // `_saving` здесь не трогается: перечитывание посреди записи не должно
     // разрешать вторую запись (D21); сбрасывает его только `_finishWrite`.
     _emit(_buildReady());
+  }
+
+  /// После своей записи сравнивает снимок страницы до записи со свежим
+  /// (`restartRequiredServers` моста по правилу ядра `planConfigReload`) и,
+  /// если подключение то же, что при начале записи, а сервер в списке,
+  /// строит баннер «starts after Restart agent». Включение без баннера
+  /// получает его только в этом случае (Q31). Сбой расчёта подсказки не
+  /// превращает успешную запись в «not saved»: подсказки нет, пишется
+  /// предупреждение с типом исключения.
+  void _applyRestartHint(AgentConfigSnapshot snapshot) {
+    _restartRequired = false;
+    final check = _restart;
+    final profile = _connectedProfile(_workspace.current);
+    if (!_afterWrite ||
+        check == null ||
+        profile == null ||
+        profile != check.profile) {
+      return;
+    }
+    try {
+      if (!restartRequiredServers(
+        check.before,
+        snapshot,
+      ).contains(check.server)) {
+        return;
+      }
+    } on Object catch (error) {
+      _logger?.warning(
+        'mcp_settings.restart_hint_failed',
+        context: {'error_type': error.runtimeType.toString()},
+      );
+      return;
+    }
+    _restartRequired = true;
+    const hint = 'It starts after Restart agent (Settings › Connection).';
+    final server = check.server;
+    if (check.enabling) {
+      _banner = McpBanner(McpBannerKind.saved, [
+        'Server $server enabled. $hint',
+      ]);
+    } else if (_savedKind case final kind?) {
+      _banner = McpBanner(kind, [
+        'Server $server saved. $hint',
+        ...?_savedTail,
+      ]);
+    }
+  }
+
+  /// Данные расчёта подсказки: снимок страницы до записи, сервер, включение
+  /// и подключение на момент начала записи.
+  void _startRestartCheck(
+    AgentConfigSnapshot before,
+    String server, {
+    bool enabling = false,
+  }) {
+    _restart = _RestartCheck(
+      before: before,
+      server: server,
+      enabling: enabling,
+      profile: _connectedProfile(_workspace.current),
+    );
+  }
+
+  /// Пишет отложенное `mcp_settings.saved` и сбрасывает состояние подсказки.
+  void _finishRestartCheck() {
+    if (_pendingSaved case final fields?) {
+      _pendingSaved = null;
+      _logger?.info(
+        'mcp_settings.saved',
+        context: {...fields, 'restart_required': _restartRequired},
+      );
+    }
+    _restart = null;
+    _restartRequired = false;
+    _savedKind = null;
+    _savedTail = null;
   }
 
   static const _blockingKinds = {
@@ -605,6 +704,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     }
     _draftIssues = null;
     _replaceQuestion = null;
+    _startRestartCheck(snapshot, draft.name);
     _beginWrite();
     final outcome = await committer.commit(
       draft,
@@ -613,6 +713,16 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       cwd: snapshot.cwd,
     );
     if (isClosed) {
+      // Запись прошла, а страницу закрыли: событие всё равно пишется, без
+      // подсказки (D18).
+      if (outcome is McpServerCommitted) {
+        _pendingSaved = _savedFields(
+          draft,
+          layer,
+          outcome.replacedSecrets.length,
+          _cleanupSummary(outcome.secrets),
+        );
+      }
       return outcome is McpServerCommitted;
     }
     final name = draft.name;
@@ -623,36 +733,32 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
         :final secrets,
       ):
         final cleanup = _cleanupSummary(secrets);
-        _logger?.info(
-          'mcp_settings.saved',
-          context: {
-            'server': name,
-            'type': draft.kind.name,
-            'target': _targetName(layer),
-            'stored_refs': _secretRefs(draft),
-            'replaced': replacedSecrets.length,
-            'cleanup_deleted': cleanup.deleted,
-            'cleanup_kept': cleanup.kept,
-            'cleanup_failed': cleanup.failed,
-          },
+        _pendingSaved = _savedFields(
+          draft,
+          layer,
+          replacedSecrets.length,
+          cleanup,
         );
         if (original == null) {
           _newServerOpen = false;
         }
+        _savedKind = cleanup.failed > 0
+            ? McpBannerKind.error
+            : McpBannerKind.saved;
+        _savedTail = [
+          for (final warning in saved.warnings)
+            warning.key.isEmpty
+                ? warning.message
+                : '${warning.key}: ${warning.message}',
+          ...cleanup.lines,
+        ];
         await _finishWrite(
           server: name,
           wrote: true,
-          banner: McpBanner(
-            cleanup.failed > 0 ? McpBannerKind.error : McpBannerKind.saved,
-            [
-              'Server $name saved.',
-              for (final warning in saved.warnings)
-                warning.key.isEmpty
-                    ? warning.message
-                    : '${warning.key}: ${warning.message}',
-              ...cleanup.lines,
-            ],
-          ),
+          banner: McpBanner(_savedKind!, [
+            'Server $name saved.',
+            ..._savedTail!,
+          ]),
         );
         return true;
       case McpServerInvalid(:final problems):
@@ -747,6 +853,22 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     return (lines: lines, deleted: deleted, kept: kept, failed: failed);
   }
 
+  Map<String, Object?> _savedFields(
+    McpServerDraft draft,
+    ConfigLayer layer,
+    int replaced,
+    ({List<String> lines, int deleted, int kept, int failed}) cleanup,
+  ) => {
+    'server': draft.name,
+    'type': draft.kind.name,
+    'target': _targetName(layer),
+    'stored_refs': _secretRefs(draft),
+    'replaced': replaced,
+    'cleanup_deleted': cleanup.deleted,
+    'cleanup_kept': cleanup.kept,
+    'cleanup_failed': cleanup.failed,
+  };
+
   static int _secretRefs(McpServerDraft draft) {
     final table = draft.kind == McpTransportKind.stdio
         ? draft.env
@@ -776,6 +898,9 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
         }
         if (!row.canToggle) {
           return false;
+        }
+        if (enabled) {
+          _startRestartCheck(snapshot, name, enabling: true);
         }
         _beginWrite();
         final outcome = await session.mcpCommitter().setEnabled(
@@ -825,6 +950,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     if (snapshot == null || session == null) {
       return false;
     }
+    _startRestartCheck(snapshot, name, enabling: true);
     _beginWrite();
     final outcome = await session.mcpRemover().enableHere(snapshot, name: name);
     return _finishToggle(name, outcome, action: 'enable_here', target: 'local');
@@ -978,25 +1104,40 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       return false;
     }
     _writing = true;
+    _writePassed = false;
+    _finishRestartCheck();
     try {
       return await action();
     } on Object catch (error) {
       if (!isClosed) {
         _saving = false;
-        _banner = const McpBanner(McpBannerKind.error, [
-          'The change was not saved because of an error.',
-        ]);
-        _logSaveFailed(
-          server: server,
-          operation: operation,
-          outcome: 'error',
-          errorType: error.runtimeType.toString(),
-        );
+        if (!_writePassed) {
+          _banner = const McpBanner(McpBannerKind.error, [
+            'The change was not saved because of an error.',
+          ]);
+          _logSaveFailed(
+            server: server,
+            operation: operation,
+            outcome: 'error',
+            errorType: error.runtimeType.toString(),
+          );
+        }
+        // Иначе запись прошла, а упало позднее перечитывание: итог записи
+        // остаётся «saved», а сбой не теряется — предупреждение с типом
+        // исключения (расчёт подсказки «Restart agent» не выполнен).
+        if (_writePassed) {
+          _logger?.warning(
+            'mcp_settings.restart_hint_failed',
+            context: {'error_type': error.runtimeType.toString()},
+          );
+        }
         _publishReady();
       }
-      return false;
+      return _writePassed;
     } finally {
       _writing = false;
+      _writePassed = false;
+      _finishRestartCheck();
     }
   }
 
@@ -1088,6 +1229,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       _writtenServer = server;
     }
     _saving = false;
+    _writePassed = wrote;
     await _reload(afterWrite: wrote);
   }
 
@@ -1349,11 +1491,13 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     _sending = false;
     switch (outcome) {
       case PromptCompleted(:final turn):
-        _replyText = [
-          for (final update in turn.updates)
-            if (update is AgentMessageChunk && update.content is TextContent)
-              (update.content as TextContent).text,
-        ].join();
+        _replyText = _unfenced(
+          [
+            for (final update in turn.updates)
+              if (update is AgentMessageChunk && update.content is TextContent)
+                (update.content as TextContent).text,
+          ].join(),
+        );
         _replyNotice = null;
       case PromptQueued():
         _replyNotice = _listFailed;
@@ -1363,6 +1507,37 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
         _discarded(command, 'failed', id);
     }
     _setStatus(_textStatus());
+  }
+
+  /// Снимает ОДНО внешнее markdown-ограждение ответа (Q34 (б), D11 «Итерация
+  /// 6»): ядро ставит его для ленты чата, а панель показывает текст в
+  /// моноширинном блоке. Только если весь ответ (без пробельных строк по
+  /// краям) — одна строка ``` с необязательным словом языка, тело и строка
+  /// ``` и внутри нет другой строки-ограждения; иначе текст как есть. Разбора
+  /// содержимого нет (SETUP-11).
+  static String _unfenced(String text) {
+    final lines = text.split(RegExp(r'\r?\n'));
+    var start = 0;
+    var end = lines.length;
+    while (start < end && lines[start].trim().isEmpty) {
+      start++;
+    }
+    while (end > start && lines[end - 1].trim().isEmpty) {
+      end--;
+    }
+    if (end - start < 2) {
+      return text;
+    }
+    final open = RegExp(r'^\s*```[A-Za-z0-9_+.-]*\s*$');
+    final close = RegExp(r'^\s*```\s*$');
+    if (!open.hasMatch(lines[start]) || !close.hasMatch(lines[end - 1])) {
+      return text;
+    }
+    final inner = lines.sublist(start + 1, end - 1);
+    if (inner.any((line) => line.trimLeft().startsWith('```'))) {
+      return text;
+    }
+    return inner.join('\n');
   }
 
   void _discarded(String command, String reason, SessionId? session) =>
@@ -1398,4 +1573,24 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     await _workspaceSubscription.cancel();
     return super.close();
   }
+}
+
+/// Исходные данные расчёта подсказки «starts after Restart agent».
+final class _RestartCheck {
+  const _RestartCheck({
+    required this.before,
+    required this.server,
+    required this.enabling,
+    required this.profile,
+  });
+
+  /// Снимок страницы до записи.
+  final AgentConfigSnapshot before;
+  final String server;
+
+  /// Запись — включение (переключателем или «Enable here»).
+  final bool enabling;
+
+  /// Подключение на момент начала записи: подсказка только при том же.
+  final ConnectionProfile? profile;
 }
