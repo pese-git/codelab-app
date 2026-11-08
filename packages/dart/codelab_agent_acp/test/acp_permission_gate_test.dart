@@ -49,6 +49,29 @@ void main() {
     'outcome': {'outcome': 'selected', 'optionId': optionId},
   };
 
+  test(
+    'MCP-вызов: toolCall.kind other уходит клиенту как есть (D27, Q32)',
+    () async {
+      answer((_) => selected('reject_once'));
+      final request = PermissionRequest(
+        toolCallId: 'call_mcp',
+        tool: 'mcp__github__search',
+        kind: ToolKind.other,
+        tier: ToolTier.exec,
+        title: 'mcp__github__search',
+        rawInput: const {'q': 'x'},
+        pattern: '{"q":"x"}',
+        allowAlwaysOffered: true,
+      );
+
+      await gate.request(request, CancelToken.none);
+
+      final toolCall =
+          (ch.client.requests.single.params! as Map)['toolCall']! as Map;
+      expect(toolCall['kind'], 'other');
+    },
+  );
+
   test('the request matches §13.9: toolCall, diff and four options', () async {
     answer((_) => selected('allow_once'));
 

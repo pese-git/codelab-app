@@ -79,6 +79,23 @@ void main() {
       ]);
     });
 
+    test('MCP-вызов: kind other доходит до tool_call без подмены (D27, '
+        'Q32)', () {
+      final event = ToolCallStarted(
+        s,
+        toolCallId: 'call_mcp',
+        tool: 'mcp__github__search',
+        kind: ToolKind.other,
+        title: 'mcp__github__search',
+        input: const {'q': 'x'},
+      );
+
+      final updates = project(event);
+
+      expect(updates.single['kind'], 'other');
+      expect(updates.single['status'], 'pending');
+    });
+
     test('in_progress comes from markInProgress', () {
       expect(inProgressUpdate('call_1').toJson(), {
         'sessionUpdate': 'tool_call_update',

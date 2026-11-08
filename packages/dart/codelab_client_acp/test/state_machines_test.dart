@@ -272,6 +272,62 @@ void main() {
       );
     });
 
+    // Повторный `tool_call` с тем же id не снижает показанный риск
+    // (review 6b, L-2; D27).
+    test('a repeated tool_call does not lower the shown risk', () {
+      final withOther = PromptTurnStateMachine.applyUpdate(
+        PromptTurnStateMachine.start(_pendingTurn).stateOrThrow,
+        const SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: ToolCallId('tool-1'),
+            title: 'Lookup',
+            kind: ToolKind.other,
+          ),
+        ),
+      ).stateOrThrow;
+      final repeated = PromptTurnStateMachine.applyUpdate(
+        withOther,
+        const SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: ToolCallId('tool-1'),
+            title: 'Lookup',
+            kind: ToolKind.read,
+          ),
+        ),
+      ).stateOrThrow;
+
+      final record = repeated.toolCalls[const ToolCallId('tool-1')]!;
+      expect(record.riskLevel, ApprovalRiskLevel.unknown);
+      expect(record.kind, ToolKind.read);
+    });
+
+    test('a status-only update keeps the risk of a read call', () {
+      final withRead = PromptTurnStateMachine.applyUpdate(
+        PromptTurnStateMachine.start(_pendingTurn).stateOrThrow,
+        const SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: ToolCallId('tool-1'),
+            title: 'Read',
+            kind: ToolKind.read,
+          ),
+        ),
+      ).stateOrThrow;
+      final updated = PromptTurnStateMachine.applyUpdate(
+        withRead,
+        const SessionUpdate.toolCallUpdate(
+          toolCallUpdate: ToolCallUpdate(
+            toolCallId: ToolCallId('tool-1'),
+            status: ToolCallStatus.completed,
+          ),
+        ),
+      ).stateOrThrow;
+
+      expect(
+        updated.toolCalls[const ToolCallId('tool-1')]?.riskLevel,
+        ApprovalRiskLevel.readOnly,
+      );
+    });
+
     // Чанки — приращения текста без id и номера (ACP не даёт ключа
     // дедупликации, `streaming.md` §8): одинаковые соседние дельты вроде
     // `----------------` в таблице Markdown — разные куски ответа.

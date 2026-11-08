@@ -88,7 +88,7 @@ void main() {
     );
 
     test(
-      'kind comes from explicit annotations only, tier is always exec',
+      'kind is always other whatever the annotations say, tier is always exec',
       () async {
         final tools = await _tools(h, [
           const FakeMcpTool('r', annotations: {'readOnlyHint': true}),
@@ -98,7 +98,6 @@ void main() {
           ),
           const FakeMcpTool('x', annotations: {'destructiveHint': true}),
           const FakeMcpTool('o'),
-          // Подсказка «только чтение» сильнее остальных.
           const FakeMcpTool(
             'both',
             annotations: {'readOnlyHint': true, 'destructiveHint': true},
@@ -108,11 +107,11 @@ void main() {
         expect(
           [for (final t in tools) t.kind],
           [
-            ToolKind.read,
-            ToolKind.edit,
-            ToolKind.execute,
             ToolKind.other,
-            ToolKind.read,
+            ToolKind.other,
+            ToolKind.other,
+            ToolKind.other,
+            ToolKind.other,
           ],
         );
         expect(tools.map((t) => t.tier).toSet(), {ToolTier.exec});

@@ -138,6 +138,106 @@ void main() {
     );
   });
 
+  // Неизвестный уровень риска (design D27, решение Q32; spec acp-client-kit
+  // «Неизвестный уровень риска вызова»): `other` и отсутствующий вид — не
+  // «только чтение», потому что вид от недоверенного сервера ничего не
+  // гарантирует (AGENTS.md §10).
+  group('unknown approval risk', () {
+    ApprovalRiskLevel classify(ToolKind kind) =>
+        ApprovalPolicy.classifyToolCall(
+          ToolCall(
+            toolCallId: const ToolCallId('t-1'),
+            title: 'Lookup',
+            kind: kind,
+          ),
+        );
+
+    test('kind other classifies as unknown', () {
+      expect(classify(ToolKind.other), ApprovalRiskLevel.unknown);
+    });
+
+    test('a tool call update without kind classifies as unknown', () {
+      expect(
+        ApprovalPolicy.classifyToolCallUpdate(
+          const ToolCallUpdate(toolCallId: ToolCallId('t-1'), title: 'Lookup'),
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+    });
+
+    test('read, search and think stay readOnly', () {
+      for (final kind in [ToolKind.read, ToolKind.search, ToolKind.think]) {
+        expect(classify(kind), ApprovalRiskLevel.readOnly, reason: '$kind');
+      }
+    });
+
+    test('the rank of unknown is between readOnly and localWrite', () {
+      expect(
+        ApprovalPolicy.max(
+          ApprovalRiskLevel.readOnly,
+          ApprovalRiskLevel.unknown,
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+      expect(
+        ApprovalPolicy.max(
+          ApprovalRiskLevel.unknown,
+          ApprovalRiskLevel.readOnly,
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+      expect(
+        ApprovalPolicy.max(
+          ApprovalRiskLevel.unknown,
+          ApprovalRiskLevel.localWrite,
+        ),
+        ApprovalRiskLevel.localWrite,
+      );
+      expect(
+        ApprovalPolicy.max(
+          ApprovalRiskLevel.localWrite,
+          ApprovalRiskLevel.unknown,
+        ),
+        ApprovalRiskLevel.localWrite,
+      );
+    });
+
+    test('a riskier content raises unknown to the riskier level', () {
+      expect(
+        ApprovalPolicy.classifyToolCall(
+          const ToolCall(
+            toolCallId: ToolCallId('t-2'),
+            title: 'Lookup',
+            kind: ToolKind.other,
+            rawInput: {'url': 'https://example.com'},
+          ),
+        ),
+        ApprovalRiskLevel.network,
+      );
+    });
+
+    test('decidePermission requires explicit approval in every mode', () {
+      for (final mode in PermissionMode.values) {
+        expect(
+          ApprovalPolicy.decidePermission(
+            mode: mode,
+            riskLevel: ApprovalRiskLevel.unknown,
+          ),
+          PermissionModeDecision.requireExplicitApproval,
+          reason: '$mode',
+        );
+        expect(
+          ApprovalPolicy.requiresExplicitApproval(
+            mode: mode,
+            riskLevel: ApprovalRiskLevel.unknown,
+          ),
+          isTrue,
+          reason: '$mode',
+        );
+      }
+    });
+  });
+
   test('decides permission mode behavior from risk levels', () {
     expect(
       ApprovalPolicy.decidePermission(

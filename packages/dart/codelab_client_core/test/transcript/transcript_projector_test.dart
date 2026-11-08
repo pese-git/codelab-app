@@ -318,6 +318,122 @@ void main() {
       await agent.end(turn);
     });
   });
+
+  // Заметка исхода хода (design D27, решение Q33; spec acp-client-kit
+  // «Инкрементальная проекция транскрипта», сценарии «Ход упёрся в лимит
+  // токенов после размышлений» и «Отказ агента после текста»). Тексты — по
+  // смыслу `StopReason` из `docs/protocols/acp/protocol/05-Prompt Turn.md`.
+  group('turn stopped notice', () {
+    late _Agent agent;
+
+    setUp(() async {
+      agent = _Agent();
+      await agent.start();
+    });
+    tearDown(() => agent.dispose());
+
+    List<NoticeItem> notices() => agent.items.whereType<NoticeItem>().toList();
+
+    test('max_tokens after thoughts only: one turnStopped notice and no '
+        'emptyTurn one', () async {
+      final turn = await agent.prompt('go');
+      agent.update(_thought('thinking'));
+      await agent.end(turn, stopReason: 'max_tokens');
+
+      final found = notices();
+      expect(found.map((n) => n.kind), [NoticeKind.turnStopped]);
+      expect(found.single.id, endsWith('/stopped'));
+      expect(
+        found.single.text,
+        'The model reached its token limit, so the turn ended.',
+      );
+      expect(agent.items.last, same(found.single));
+    });
+
+    test('the notice id is "<turnId>/stopped"', () async {
+      final turn = await agent.prompt('go');
+      await agent.end(turn, stopReason: 'max_tokens');
+
+      final session = agent.application.sessionById(agent.sessionId)!;
+      final turnId = session.turns.single.id.value;
+      expect(notices().single.id, '$turnId/stopped');
+    });
+
+    test(
+      'max_tokens with no output at all: only turnStopped, no emptyTurn',
+      () async {
+        final turn = await agent.prompt('go');
+        await agent.end(turn, stopReason: 'max_tokens');
+
+        expect(notices().map((n) => n.kind), [NoticeKind.turnStopped]);
+      },
+    );
+
+    test(
+      'refusal after agent text keeps the text and adds the notice',
+      () async {
+        final turn = await agent.prompt('go');
+        agent.update(_message('I cannot help with that'));
+        await agent.end(turn, stopReason: 'refusal');
+
+        expect(agent.items.whereType<AgentTextItem>(), hasLength(1));
+        final found = notices();
+        expect(found.map((n) => n.kind), [NoticeKind.turnStopped]);
+        expect(found.single.text, 'The agent refused to continue.');
+        expect(agent.items.last, same(found.single));
+      },
+    );
+
+    test('max_turn_requests gives its own text', () async {
+      final turn = await agent.prompt('go');
+      agent.update(_message('partial'));
+      await agent.end(turn, stopReason: 'max_turn_requests');
+
+      expect(notices().single.kind, NoticeKind.turnStopped);
+      expect(
+        notices().single.text,
+        'The turn reached the limit of model requests.',
+      );
+    });
+
+    test('end_turn with output has no notice', () async {
+      final turn = await agent.prompt('go');
+      agent.update(_message('done'));
+      await agent.end(turn);
+
+      expect(notices(), isEmpty);
+    });
+
+    test('cancelled with output has no turnStopped notice', () async {
+      final turn = await agent.prompt('go');
+      agent.update(_message('half'));
+      await agent.end(turn, stopReason: 'cancelled');
+
+      expect(notices().where((n) => n.kind == NoticeKind.turnStopped), isEmpty);
+    });
+
+    test(
+      'cancelled without output keeps emptyTurn and has no turnStopped',
+      () async {
+        final turn = await agent.prompt('go');
+        await agent.end(turn, stopReason: 'cancelled');
+
+        expect(notices().map((n) => n.kind), [NoticeKind.emptyTurn]);
+      },
+    );
+
+    test(
+      'incremental projection equals a full rebuild after a stopped turn',
+      () async {
+        final turn = await agent.prompt('go');
+        agent.update(_thought('thinking'));
+        await agent.end(turn, stopReason: 'max_tokens');
+
+        final session = agent.application.sessionById(agent.sessionId)!;
+        expect(agent.items, projectTranscript(session));
+      },
+    );
+  });
 }
 
 Map<String, Object?> _message(String text) => {
@@ -417,11 +533,11 @@ final class _Agent {
     );
   }
 
-  Future<void> end(_Turn turn) async {
+  Future<void> end(_Turn turn, {String stopReason = 'end_turn'}) async {
     transport.emitInbound(
       JsonRpcMessage.response(
         id: turn.request.id,
-        result: const {'stopReason': 'end_turn'},
+        result: {'stopReason': stopReason},
       ),
     );
     await turn.done;
