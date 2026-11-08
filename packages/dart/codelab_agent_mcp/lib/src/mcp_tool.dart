@@ -16,7 +16,9 @@ const mcpDescriptionLimit = 2048;
 /// встроенные, — через единую точку исполнения с политикой разрешений
 /// (TOOL-1, P-01), — но решения о нём принимает не модель и не сервер: сервер
 /// недоверен. Поэтому `tier` всегда `exec`, `outputTrust` всегда `untrusted`,
-/// а аннотации сервера влияют только на `kind` (отображение).
+/// а аннотации сервера на решения и вид не влияют: `kind` всегда
+/// `ToolKind.other` (D27, решение Q32 (а); agent-tools «MCP-инструменты»,
+/// сценарий «Вид не зависит от аннотаций»).
 ///
 /// Как использовать: коннектор вызывает [create] для каждого определения из
 /// `tools/list`; `null` — инструмент заведомо непригоден и уже записан в лог
@@ -29,12 +31,10 @@ final class McpTool extends AgentTool {
     required String name,
     required String description,
     required Map<String, Object?> parameters,
-    required ToolKind kind,
   }) : _client = client,
        _name = name,
        _description = description,
-       _parameters = parameters,
-       _kind = kind;
+       _parameters = parameters;
 
   /// Строит инструмент или возвращает `null` с логом `mcp.tool.invalid`
   /// (нет имени, `inputSchema` не объект) — остальные инструменты сервера
@@ -101,7 +101,6 @@ final class McpTool extends AgentTool {
       name: mcpToolName(server, definition.name),
       description: description,
       parameters: Map<String, Object?>.from(schema),
-      kind: _kindOf(definition.annotations),
     );
   }
 
@@ -112,7 +111,6 @@ final class McpTool extends AgentTool {
   final String _name;
   final String _description;
   final Map<String, Object?> _parameters;
-  final ToolKind _kind;
 
   @override
   String get name => _name;
@@ -123,10 +121,15 @@ final class McpTool extends AgentTool {
   @override
   Map<String, Object?> get parameters => _parameters;
 
-  /// Вид только по явным значениям аннотаций, без умолчаний спецификации
-  /// MCP; это подсказка для отображения, а не для решений политики (D7).
+  /// Всегда [ToolKind.other], какие бы аннотации ни прислал сервер.
+  ///
+  /// Почему: `readOnlyHint`, `destructiveHint`, `openWorldHint` — недоверенные
+  /// подсказки сервера, а вид попадает в `tool_call`, запрос разрешения и
+  /// журнал сессии; ложный `read` внушал бы пользователю безопасность вызова
+  /// (Q32 (а), D27). Политика разрешений от вида не зависит: `tier` всегда
+  /// `exec`.
   @override
-  ToolKind get kind => _kind;
+  ToolKind get kind => ToolKind.other;
 
   @override
   ToolTier get tier => ToolTier.exec;
@@ -163,21 +166,6 @@ final class McpTool extends AgentTool {
 
   static String _firstNonEmpty(List<String?> candidates) =>
       candidates.firstWhere((c) => c != null && c.isNotEmpty)!;
-
-  static ToolKind _kindOf(Map<String, Object?>? annotations) {
-    if (annotations == null) {
-      return ToolKind.other;
-    }
-    if (annotations['readOnlyHint'] == true) {
-      return ToolKind.read;
-    }
-    if (annotations['destructiveHint'] == true) {
-      return annotations['openWorldHint'] == false
-          ? ToolKind.edit
-          : ToolKind.execute;
-    }
-    return ToolKind.other;
-  }
 }
 
 /// Сводит блоки `CallToolResult` в один `TextContent` в порядке блоков, так

@@ -196,6 +196,14 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
             severity: CodeLabNoticeSeverity.info,
             body: text,
           ),
+        // Заметка исхода хода (Q33, D27): лимит токенов, лимит запросов,
+        // отказ агента — информационная строка, как `emptyTurn`.
+        NoticeItem(kind: NoticeKind.turnStopped, :final text) =>
+          CodeLabNoticeRow(
+            id: 'notice-${index + 1}',
+            severity: CodeLabNoticeSeverity.info,
+            body: text,
+          ),
         NoticeItem(kind: NoticeKind.emptyTurn, :final text) => CodeLabNoticeRow(
           id: 'notice-${index + 1}',
           severity: CodeLabNoticeSeverity.info,
@@ -312,6 +320,7 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
 
 CodeLabApprovalRisk _approvalRiskOf(ApprovalRiskLevel risk) => switch (risk) {
   ApprovalRiskLevel.readOnly => CodeLabApprovalRisk.readOnly,
+  ApprovalRiskLevel.unknown => CodeLabApprovalRisk.unknown,
   ApprovalRiskLevel.localWrite => CodeLabApprovalRisk.localWrite,
   ApprovalRiskLevel.network => CodeLabApprovalRisk.network,
   ApprovalRiskLevel.shell => CodeLabApprovalRisk.shell,

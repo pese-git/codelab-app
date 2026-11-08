@@ -1066,7 +1066,10 @@ final class AcpClientApplication {
         return;
       }
 
-      final toolCall = _toolCallRecordFromUpdate(permissionRequest.toolCall);
+      final toolCall = _toolCallRecordFromUpdate(
+        permissionRequest.toolCall,
+        known: activeTurn.toolCalls[permissionRequest.toolCall.toolCallId],
+      );
       final approval = ApprovalRequest(
         id: approvalId,
         sessionId: permissionRequest.sessionId,
@@ -2057,12 +2060,22 @@ final class AcpClientApplication {
     return ApprovalRequestId('permission-${requestId.toJsonValue()}');
   }
 
-  ToolCallRecord _toolCallRecordFromUpdate(ToolCallUpdate update) {
-    final riskLevel = ApprovalPolicy.classifyToolCallUpdate(update);
+  /// Запись вызова для запроса одобрения; [known] — запись хода с тем же
+  /// `toolCallId`. Риск считает общее правило `ApprovalPolicy` (review 6b,
+  /// L-1): запрос без `kind` берёт вид известного вызова, а риск не ниже
+  /// уже известного.
+  ToolCallRecord _toolCallRecordFromUpdate(
+    ToolCallUpdate update, {
+    ToolCallRecord? known,
+  }) {
+    final riskLevel = ApprovalPolicy.classifyToolCallUpdateWithin(
+      known,
+      update,
+    );
     return ToolCallRecord(
       id: update.toolCallId,
       title: update.title ?? update.toolCallId.value,
-      kind: update.kind ?? ToolKind.other,
+      kind: update.kind ?? known?.kind ?? ToolKind.other,
       status: update.status ?? ToolCallStatus.pending,
       riskLevel: riskLevel,
       content: update.content ?? const [],

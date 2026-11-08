@@ -1582,7 +1582,9 @@ $PromptFailureCopyWith<$Res>? get failure {
 /// @nodoc
 mixin _$ApprovalRequest {
 
- ApprovalRequestId get id; SessionId get sessionId; PromptTurnId get turnId; ToolCallRecord get toolCall; List<PermissionOption> get options; ApprovalRiskLevel get riskLevel;/// Агент пометил запрос `_meta.codelab.critical: true` (в запросе или
+ ApprovalRequestId get id; SessionId get sessionId; PromptTurnId get turnId; ToolCallRecord get toolCall; List<PermissionOption> get options;/// Без классификации вид неизвестен — как у `kind` по умолчанию (`other`):
+/// безопасное значение по умолчанию требует явного одобрения (D27).
+ ApprovalRiskLevel get riskLevel;/// Агент пометил запрос `_meta.codelab.critical: true` (в запросе или
 /// в его `toolCall`): опасная команда, которую headless-политика
 /// `allow-all` не разрешает (design.md change `add-codelab-cli`, D9).
  bool get critical; ApprovalStatus get status; PermissionOptionId? get selectedOptionId; DateTime? get requestedAt; DateTime? get resolvedAt;
@@ -1829,7 +1831,7 @@ return $default(_that.id,_that.sessionId,_that.turnId,_that.toolCall,_that.optio
 
 
 class _ApprovalRequest extends ApprovalRequest {
-  const _ApprovalRequest({required this.id, required this.sessionId, required this.turnId, required this.toolCall, required final  List<PermissionOption> options, this.riskLevel = ApprovalRiskLevel.readOnly, this.critical = false, this.status = ApprovalStatus.pending, this.selectedOptionId, this.requestedAt, this.resolvedAt}): _options = options,super._();
+  const _ApprovalRequest({required this.id, required this.sessionId, required this.turnId, required this.toolCall, required final  List<PermissionOption> options, this.riskLevel = ApprovalRiskLevel.unknown, this.critical = false, this.status = ApprovalStatus.pending, this.selectedOptionId, this.requestedAt, this.resolvedAt}): _options = options,super._();
   
 
 @override final  ApprovalRequestId id;
@@ -1843,6 +1845,8 @@ class _ApprovalRequest extends ApprovalRequest {
   return EqualUnmodifiableListView(_options);
 }
 
+/// Без классификации вид неизвестен — как у `kind` по умолчанию (`other`):
+/// безопасное значение по умолчанию требует явного одобрения (D27).
 @override@JsonKey() final  ApprovalRiskLevel riskLevel;
 /// Агент пометил запрос `_meta.codelab.critical: true` (в запросе или
 /// в его `toolCall`): опасная команда, которую headless-политика
@@ -1971,7 +1975,8 @@ $PermissionOptionIdCopyWith<$Res>? get selectedOptionId {
 /// @nodoc
 mixin _$ToolCallRecord {
 
- ToolCallId get id; String get title; ToolKind get kind; ToolCallStatus get status; ApprovalRiskLevel get riskLevel; List<ToolCallContent> get content; List<ToolCallLocation> get locations; Map<String, Object?>? get rawInput; Map<String, Object?>? get rawOutput;/// The call was unfinished when the client sent `session/cancel`. ACP
+ ToolCallId get id; String get title; ToolKind get kind; ToolCallStatus get status;/// Согласовано с `kind` по умолчанию (`other`) и `_riskForKind` (D27).
+ ApprovalRiskLevel get riskLevel; List<ToolCallContent> get content; List<ToolCallLocation> get locations; Map<String, Object?>? get rawInput; Map<String, Object?>? get rawOutput;/// The call was unfinished when the client sent `session/cancel`. ACP
 /// has no `cancelled` tool call status, so such a call is kept as
 /// [ToolCallStatus.failed] with this flag set.
  bool get cancelledByClient; DateTime? get startedAt; DateTime? get completedAt;
@@ -2180,13 +2185,14 @@ return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_th
 
 
 class _ToolCallRecord extends ToolCallRecord {
-  const _ToolCallRecord({required this.id, required this.title, this.kind = ToolKind.other, this.status = ToolCallStatus.pending, this.riskLevel = ApprovalRiskLevel.readOnly, final  List<ToolCallContent> content = const [], final  List<ToolCallLocation> locations = const [], final  Map<String, Object?>? rawInput, final  Map<String, Object?>? rawOutput, this.cancelledByClient = false, this.startedAt, this.completedAt}): _content = content,_locations = locations,_rawInput = rawInput,_rawOutput = rawOutput,super._();
+  const _ToolCallRecord({required this.id, required this.title, this.kind = ToolKind.other, this.status = ToolCallStatus.pending, this.riskLevel = ApprovalRiskLevel.unknown, final  List<ToolCallContent> content = const [], final  List<ToolCallLocation> locations = const [], final  Map<String, Object?>? rawInput, final  Map<String, Object?>? rawOutput, this.cancelledByClient = false, this.startedAt, this.completedAt}): _content = content,_locations = locations,_rawInput = rawInput,_rawOutput = rawOutput,super._();
   
 
 @override final  ToolCallId id;
 @override final  String title;
 @override@JsonKey() final  ToolKind kind;
 @override@JsonKey() final  ToolCallStatus status;
+/// Согласовано с `kind` по умолчанию (`other`) и `_riskForKind` (D27).
 @override@JsonKey() final  ApprovalRiskLevel riskLevel;
  final  List<ToolCallContent> _content;
 @override@JsonKey() List<ToolCallContent> get content {
