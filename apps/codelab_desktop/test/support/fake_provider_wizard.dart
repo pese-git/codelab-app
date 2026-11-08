@@ -78,6 +78,13 @@ final class FakeWizardKeys implements ProviderKeys {
 
   final journal = <String>[];
 
+  /// Исход удаления секрета (страница «MCP servers», задача 5.4: `failed` —
+  /// баннер с `codelab secret delete <имя>`).
+  SecretDeletion deletion = SecretDeletion.deleted;
+
+  /// Причина отказа записи секрета (`McpSecretNotStored`); `null` — пишет.
+  String? refusal;
+
   @override
   Future<bool> stored(String name) async {
     journal.add('stored $name');
@@ -94,6 +101,9 @@ final class FakeWizardKeys implements ProviderKeys {
   @override
   Future<ProviderKeyWrite> write(String name, SecretValue value) async {
     journal.add('write $name');
+    if (refusal case final reason?) {
+      return ProviderKeyRefused(reason);
+    }
     final existed = secrets.containsKey(name);
     secrets[name] = value.reveal();
     return existed ? const ProviderKeyReplaced() : const ProviderKeyCreated();
@@ -102,8 +112,10 @@ final class FakeWizardKeys implements ProviderKeys {
   @override
   Future<SecretDeletion> delete(String name) async {
     journal.add('delete $name');
-    secrets.remove(name);
-    return SecretDeletion.deleted;
+    if (deletion != SecretDeletion.failed) {
+      secrets.remove(name);
+    }
+    return deletion;
   }
 }
 

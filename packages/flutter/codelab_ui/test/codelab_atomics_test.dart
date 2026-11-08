@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   _dialogTitleTests();
+  _monospaceBlockTests();
   testWidgets(
     'CodeLabResizeHandle reports the total drag distance via onDelta',
     (tester) async {
@@ -88,5 +89,86 @@ void _dialogTitleTests() {
     final text = tester.widget<Text>(find.text('Title'));
     expect(text.style?.fontSize, 20);
     expect(text.style?.fontWeight, FontWeight.w600);
+  });
+}
+
+/// `CodeLabMonospaceBlock` (задача 5.6 change `add-provider-setup-ui`; D19):
+/// моноширинный блок ответа `/mcp list` — без разбора, с переносом и
+/// выделением. Красный тест: атома ещё нет (реализация — задача 5.9).
+///
+/// Ожидаемый API: `CodeLabMonospaceBlock(String data, {Key? key})`. Блок
+/// рисует текст `SelectableText` в стиле роли `CodeLabTextRole.mono`
+/// (`CodeLabText.styleOf`), текст не меняет и не разбирает.
+void _monospaceBlockTests() {
+  const reply =
+      'github   connected   42 tools\n'
+      'postgres failed      ECONNREFUSED 127.0.0.1:5432';
+
+  Future<void> pumpBlock(WidgetTester tester, String data, double width) =>
+      tester.pumpWidget(
+        FluentApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(width: width, child: CodeLabMonospaceBlock(data)),
+          ),
+        ),
+      );
+
+  testWidgets('CodeLabMonospaceBlock shows the text as is in the mono role', (
+    tester,
+  ) async {
+    await pumpBlock(tester, reply, 600);
+
+    final selectable = tester.widget<SelectableText>(
+      find.descendant(
+        of: find.byType(CodeLabMonospaceBlock),
+        matching: find.byType(SelectableText),
+      ),
+    );
+    expect(selectable.data, reply);
+    final mono = CodeLabText.styleOf(
+      tester.element(find.byType(CodeLabMonospaceBlock)),
+      CodeLabTextRole.mono,
+    )!;
+    expect(selectable.style?.fontFamily, mono.fontFamily);
+    expect(selectable.style?.fontSize, mono.fontSize);
+  });
+
+  testWidgets('CodeLabMonospaceBlock keeps line breaks', (tester) async {
+    await pumpBlock(tester, 'one', 600);
+    final single = tester.getSize(find.byType(CodeLabMonospaceBlock)).height;
+
+    await pumpBlock(tester, 'one\ntwo\nthree', 600);
+    final triple = tester.getSize(find.byType(CodeLabMonospaceBlock)).height;
+
+    expect(triple, greaterThan(single));
+  });
+
+  testWidgets('CodeLabMonospaceBlock wraps a long line instead of '
+      'overflowing', (tester) async {
+    const long =
+        'postgres failed ECONNREFUSED 127.0.0.1:5432 and the next attempt '
+        'is in 24 seconds';
+    await pumpBlock(tester, long, 800);
+    final wide = tester.getSize(find.byType(CodeLabMonospaceBlock));
+
+    await pumpBlock(tester, long, 160);
+    final narrow = tester.getSize(find.byType(CodeLabMonospaceBlock));
+
+    expect(tester.takeException(), isNull);
+    expect(narrow.width, lessThanOrEqualTo(160));
+    expect(narrow.height, greaterThan(wide.height));
+  });
+
+  testWidgets('CodeLabMonospaceBlock text can be selected', (tester) async {
+    await pumpBlock(tester, 'github connected', 600);
+
+    final selectable = tester.widget<SelectableText>(
+      find.byType(SelectableText),
+    );
+    expect(selectable.enableInteractiveSelection, isTrue);
+    await tester.tap(find.byType(SelectableText));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
   });
 }

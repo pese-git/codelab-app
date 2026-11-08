@@ -115,6 +115,61 @@ void main() {
     expect(await session.isSecretSet('codelab/other'), isFalse);
     expect(session.backend.id, 'env');
   });
+
+  // Задача 5.4 change `add-provider-setup-ui` (design.md D11 «Сверка с кодом
+  // перед итерацией 5b»; задача 5.10): порты записи страницы «MCP servers»
+  // собраны на `providerKeysOf` того же хранилища, что и `isSecretSet`.
+  test('mcpCommitter and mcpRemover work on the secret store that '
+      'isSecretSet reads', () async {
+    const name = 'codelab/mcp/github/authorization';
+    Process.runSync('/bin/chmod', ['700', home.path]);
+    File('${home.path}/config.yaml').writeAsStringSync('''
+secrets:
+  backend: file
+agent:
+  default_model: gw/m
+providers:
+  gw:
+    kind: openai-compatible
+    base_url: https://gw.test/v1
+    models:
+      m:
+        context_window: 8000
+''');
+    final session = await open({'HOME': home.path});
+    expect(session.backend.id, 'file');
+    final snapshot = await session.config.snapshot(cwd: home.path);
+    final draft = McpServerDraft(
+      name: 'github',
+      kind: McpTransportKind.http,
+      url: 'https://mcp.test/mcp',
+      headers: {
+        'Authorization': McpValueDraft.secret(
+          SecretValue('Bearer $leakMarker'),
+        ),
+      },
+    );
+
+    final saved = await session.mcpCommitter().commit(
+      draft,
+      snapshot.layers[ConfigLayer.user]!,
+    );
+
+    expect(saved, isA<McpServerCommitted>());
+    expect(await session.isSecretSet(name), isTrue);
+    final text = File('${home.path}/config.yaml').readAsStringSync();
+    expect(text, contains('\${secret:$name}'));
+    expect(text, isNot(contains(leakMarker)));
+
+    final fresh = await session.config.snapshot(cwd: home.path);
+    final removed = await session.mcpRemover().remove(fresh, name: 'github');
+
+    expect(removed, isA<McpServerRemoved>());
+    expect((removed as McpServerRemoved).secrets, {
+      name: SecretCleanup.deleted,
+    });
+    expect(await session.isSecretSet(name), isFalse);
+  });
 }
 
 final class _Silent implements setup.Logger {

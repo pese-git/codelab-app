@@ -81,6 +81,28 @@ void main() {
     );
   });
 
+  // Задача 5.6 change `add-provider-setup-ui` (D19): превью организма
+  // `CodeLabStatusTable` в светлой и тёмной теме — функции
+  // `codelabStatusTablePreview` и `codelabStatusTableDarkPreview` в
+  // `codelab_organism_previews.dart` (реализация — задача 5.9).
+  testWidgets('status table previews render in both themes', (tester) async {
+    await tester.pumpWidget(codelabStatusTablePreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabStatusTable), findsOneWidget);
+    // Строка с действием, строка сбоя и выключенная строка без действия.
+    expect(find.byType(CodeLabButton), findsWidgets);
+    expect(find.byType(CodeLabStatusIndicator), findsWidgets);
+
+    await tester.pumpWidget(codelabStatusTableDarkPreview());
+    expect(tester.takeException(), isNull);
+    expect(
+      FluentTheme.of(
+        tester.element(find.byType(CodeLabStatusTable)),
+      ).brightness,
+      Brightness.dark,
+    );
+  });
+
   testWidgets('organism previews render in bounded preview surfaces', (
     tester,
   ) async {
