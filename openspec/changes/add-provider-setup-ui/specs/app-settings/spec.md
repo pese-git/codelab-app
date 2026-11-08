@@ -16,7 +16,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 Для `RemoteReadOnly` и `NotManaged` страницы НЕ SHALL читать локальный конфиг и НЕ SHALL показывать кнопок записи (SETUP-2). Они SHALL показывать InfoBar уровня `warning`: `Read-only: this agent runs on <scheme://host:port>. Change providers and MCP on that host: codelab provider add, codelab mcp add, codelab config set.` или `Provider settings are managed by <agentName>.` (ключи `providers-read-only`, `mcp-read-only`). «Providers» в этом состоянии SHALL показывать текущую модель активной сессии из `configOptions`, а «MCP servers» — только панель «Agent status».
 
-Если `config.yaml` не разбирается или нарушает схему, страница SHALL показывать проблемы загрузчика с путём ключа (ключи `providers-unreadable`, `mcp-unreadable`) и НЕ SHALL предлагать запись: битый файл пользователя не перезаписывается.
+Если `config.yaml` не разбирается или нарушает схему, страница SHALL показывать проблемы загрузчика с путём ключа (ключи `providers-unreadable`, `mcp-unreadable`) и НЕ SHALL предлагать запись: битый файл пользователя не перезаписывается. Для страницы «MCP servers» «не разбирается или нарушает схему» — это нечитаемый слой или проблемы видов `syntax`, `profile`, `unknownKey`, `type`; проблемы видов `value`, `semantic`, `inlineSecret` (например, незаданная переменная подстановки), кроме отсутствия обязательного ключа (`agent.default_model` без провайдеров), НЕ SHALL блокировать запись и показываются InfoBar `mcp-rejected` (требование «Страница «MCP servers»»; решение Q26 design.md).
 
 #### Scenario: WebSocket-агент только для чтения
 - **WHEN** окно подключено к профилю `wss://devbox:7420/acp`, а в локальном `~/.codelab/config.yaml` есть провайдер `local`
@@ -128,9 +128,10 @@ Composition root SHALL делать видимыми страницы «Connecti
 Правила записи:
 - значение с флажком «Secret» SHALL записываться в хранилище под `SecretNames.forMcp(name, key)`, а в конфиг — `${secret:<имя>}`, в порядке «секрет → конфиг → откат» (SETUP-5). При бэкенде только для чтения флажок SHALL быть неактивен с причиной бэкенда. Существующий секрет с тем же именем НЕ SHALL перезаписываться без явного выбора «Replace it». Сохранённое секретное значение SHALL показываться как `stored`, пустое поле при правке SHALL означать «не менять»;
 - переключатель `enabled` SHALL писать `UpsertMcpServer` в слой сервера; у сервера слоя 3 переключатель неактивен, а кнопка «Disable here» SHALL писать `{name, enabled: false}` в `projectLocal`; такая строка SHALL оставаться видимой по проектному слою с пометкой `disabled here` и кнопкой «Enable here», которая SHALL удалять переопределение (`RemoveMcpServer(name)` из `projectLocal`) (решение Q21 design.md). Переключатель и правка сервера своего слоя SHALL писать элемент слоя целиком с изменённым полем, без потери остальных ключей;
-- «Remove» SHALL писать `RemoveMcpServer(name)` и после `ConfigSaved` удалять только секреты, созданные страницей для этого сервера (имена `codelab/mcp/<сервер>/<ключ>`), на которые ссылался удалённый элемент через `${secret:…}`, и только если на них не осталось ссылок в конфиге; прочие имена из ссылок SHALL оставаться, а страница SHALL показывать их как `kept` с именем (решение Q22 design.md; правило удаления провайдера, SETUP-24); сервер слоя 3 удалить нельзя.
+- «Add server» SHALL открывать карточку `New server` в начале списка с пустым редактором, «Save» и «Cancel»; «Cancel» SHALL убирать карточку без записи. Пустой список SHALL показывать `No MCP servers yet.` и «Add server». При правке существующего сервера имя и цель «Save to» SHALL быть только для чтения: переименование и перенос между слоями — «Remove» и «Add server» (решения Q25, Q27 design.md);
+- «Remove» SHALL сначала спрашивать подтверждение `Remove <name>?` со списком секретов страницы, которые будут удалены; без подтверждения запись НЕ SHALL выполняться. Затем «Remove» SHALL писать `RemoveMcpServer(name)` и после `ConfigSaved` удалять только секреты, созданные страницей для этого сервера (имена `codelab/mcp/<сервер>/<ключ>`), на которые ссылался удалённый элемент через `${secret:…}`, и только если на них не осталось ссылок в конфиге; прочие имена из ссылок SHALL оставаться, а страница SHALL показывать их как `kept` с именем (решение Q22 design.md; правило удаления провайдера, SETUP-24); баннер итога SHALL называть каждый оставшийся или не удалённый секрет (`kept`, «ещё используется», «не удалось удалить» с командой `codelab secret delete <имя>`; design.md, D11); сервер слоя 3 удалить нельзя. Раскрытая строка `disabled here` SHALL показывать пояснение `<name> is disabled in .codelab/config.local.yaml. "Enable here" removes this override.`
 
-После `ConfigSaved` страница SHALL проверять новый конфиг загрузкой с окружением агента (design.md, D11) и при ошибках показывать InfoBar `error` (ключ `mcp-rejected`): `Saved, but the agent rejected the new config`, `Config: invalid`, проблемы с путём ключа, `The agent keeps running on the previous config until this is fixed.` и кнопку `Edit <server>`. Предупреждения `ConfigSaved.warnings` SHALL показываться баннером `saved`.
+После `ConfigSaved` страница SHALL проверять новый конфиг загрузкой с окружением агента (design.md, D11) и при ошибках показывать InfoBar `error` (ключ `mcp-rejected`): `Saved, but the agent rejected the new config`, `Config: invalid`, проблемы с путём ключа, `The agent keeps running on the previous config until this is fixed.` и кнопку `Edit <server>`. Если такие проблемы есть при открытии или перечитывании страницы без своей записи, InfoBar `mcp-rejected` SHALL показываться с заголовком `The agent rejects the current config` и тем же остальным содержимым, а запись SHALL оставаться доступной (решение Q26 design.md). Предупреждения `ConfigSaved.warnings` SHALL показываться баннером `saved`.
 
 #### Scenario: Сервер с секретным заголовком
 - **WHEN** при `secrets.backend: file` пользователь добавляет `http`-сервер `github` с заголовком `Authorization` = `Bearer sk-test-leak-0123456789`, помеченным «Secret»
@@ -138,7 +139,23 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 #### Scenario: Отклонённый агентом конфиг
 - **WHEN** пользователь сохраняет stdio-сервер `postgres` с `env` `DATABASE_URL=${PG_URL}`, а `PG_URL` не задана в окружении встроенного агента
-- **THEN** файл записан, показан InfoBar `mcp-rejected` с `Config: invalid` и путём `mcp.servers.postgres.env.DATABASE_URL`, промпт в сессию не отправлялся
+- **THEN** файл записан, показан InfoBar `mcp-rejected` с `Config: invalid` и путём `mcp.servers[postgres].env.DATABASE_URL` (формат пути ключа загрузчика; design.md, D24), промпт в сессию не отправлялся
+
+#### Scenario: Открытие страницы с отклонённым конфигом
+- **WHEN** в `config.yaml` есть stdio-сервер `postgres` с `env` `DATABASE_URL=${PG_URL}`, `PG_URL` не задана в окружении агента, и пользователь открывает «MCP servers»
+- **THEN** страница показывает список серверов и InfoBar `mcp-rejected` с заголовком `The agent rejects the current config`, путём `mcp.servers[postgres].env.DATABASE_URL` и кнопкой `Edit postgres`; «Save» и «Add server» доступны, `mcp-unreadable` не показан
+
+#### Scenario: Битый YAML блокирует запись
+- **WHEN** пользовательский `config.yaml` не разбирается
+- **THEN** страница показывает `mcp-unreadable` с проблемой загрузчика, кнопок записи нет
+
+#### Scenario: Подтверждение удаления
+- **WHEN** пользователь нажимает «Remove» у сервера `github` с заголовком `${secret:codelab/mcp/github/authorization}` и затем «Cancel» в подтверждении
+- **THEN** подтверждение называло `Remove github?` и `codelab/mcp/github/authorization`, файл и хранилище не изменены
+
+#### Scenario: Новый сервер и отмена
+- **WHEN** пользователь нажимает «Add server», вводит имя и нажимает «Cancel»
+- **THEN** карточка `New server` исчезает, файл не изменён
 
 #### Scenario: Сервер проектного слоя
 - **WHEN** сервер `playwright` задан в `<project>/.codelab/config.yaml`, и пользователь нажимает «Disable here»
@@ -162,9 +179,9 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 ### Requirement: Панель «Agent status» страницы MCP servers
 Панель «Agent status» (ключ `mcp-status`) SHALL показывать состояние серверов агента активной сессии (design.md, D12):
-- для встроенного агента — таблицу `SERVER · STATE · TOOLS · LAST ERROR` из потока состояний встроенного агента (spec embedded-agent «Состояние MCP-серверов для хоста») с подписью `Live from the embedded agent · <hh:mm>`; «Reconnect» строки SHALL вызывать переподключение сервера, «Reload all» — переподключение всех. Подписка SHALL быть одна; смена активной сессии, переподключение и закрытие страницы SHALL её отменять;
-- для агента вне процесса — текст ответа `/mcp list` моноширинным блоком без разбора (SETUP-11). Команды `/mcp list`, `/mcp reload <name>`, `/mcp reload` SHALL отправляться обычным промптом активной сессии только по явной кнопке пользователя («Refresh», «Reconnect», «Reload all») и только когда соединение `Connected` и у сессии нет идущего хода; иначе кнопки неактивны. Ответ, пришедший после смены активной сессии или закрытия страницы, НЕ SHALL менять панель;
-- без открытой сессии или если агент не объявил `/mcp` — `Open a session to see live status`;
+- для встроенного агента — при открытой сессии, независимо от объявления команды `/mcp` (решение Q24 design.md), — таблицу `SERVER · STATE · TOOLS · LAST ERROR` из потока состояний встроенного агента (spec embedded-agent «Состояние MCP-серверов для хоста») с подписью `Live from the embedded agent · <hh:mm>`; «Reconnect» строки SHALL вызывать переподключение сервера, «Reload all» — переподключение всех. Подписка SHALL быть одна; смена активной сессии, переподключение и закрытие страницы SHALL её отменять;
+- для агента вне процесса — текст ответа `/mcp list` моноширинным блоком без разбора (SETUP-11). Команды `/mcp list`, `/mcp reload <name>`, `/mcp reload` SHALL отправляться обычным промптом активной сессии только по явной кнопке пользователя («Refresh», «Reconnect», «Reload all») и только когда соединение `Connected` и у сессии нет идущего хода; иначе кнопки неактивны. Ответ, пришедший после смены активной сессии или закрытия страницы, НЕ SHALL менять панель. Панель SHALL показывать ответ последней команды страницы как есть: «Refresh» — ответ `/mcp list`, «Reconnect» — ответ `/mcp reload <name>`, «Reload all» — ответ `/mcp reload`; после `/mcp reload` страница НЕ SHALL сама отправлять `/mcp list` (решение Q29 design.md). Если ход команды не завершился ответом, панель SHALL показывать `/mcp list did not complete. Try Refresh again.` и сохранять прежний текст. Без объявленной агентом команды `/mcp` панель SHALL быть недоступной (ниже); при объявленной команде, но без `Connected`, во время хода или при непустой очереди панель SHALL оставаться текстовой с неактивными кнопками;
+- без открытой сессии или если агент вне процесса не объявил `/mcp` — `Open a session to see live status`;
 - подвал панели — `From the embedded agent. For a stdio or remote agent this panel shows the reply of /mcp list as text.` (решение Q23 design.md).
 
 Страница НЕ SHALL отправлять команды агенту без действия пользователя.
@@ -176,6 +193,18 @@ Composition root SHALL делать видимыми страницы «Connecti
 #### Scenario: Текст /mcp list для stdio-агента
 - **WHEN** окно подключено к локальному `codelab-agent serve --stdio`, сессия свободна, и пользователь нажимает «Refresh»
 - **THEN** сессия получает промпт `/mcp list`, панель показывает текст ответа как есть
+
+#### Scenario: Встроенный агент без команды /mcp
+- **WHEN** встроенный агент открыл сессию, но не объявил команду `mcp` в `available_commands_update`
+- **THEN** панель показывает таблицу из порта состояния MCP сессии (пустую, если серверов нет), а не `Open a session to see live status`
+
+#### Scenario: Ответ /mcp reload в панели
+- **WHEN** окно подключено к локальному `codelab-agent serve --stdio`, панель показывает текст прежнего `/mcp list`, сессия свободна, и пользователь нажимает «Reconnect» у `github`
+- **THEN** сессия получает ровно один промпт `/mcp reload github`, панель показывает текст его ответа как есть, промпт `/mcp list` после него не отправляется
+
+#### Scenario: Сбой /mcp list
+- **WHEN** панель stdio-агента уже показывает текст прежнего ответа, пользователь нажимает «Refresh», и ход завершается ошибкой
+- **THEN** панель показывает `/mcp list did not complete. Try Refresh again.` и прежний текст, текста исключения на экране нет
 
 #### Scenario: Нет запросов во время хода
 - **WHEN** у активной сессии stdio-агента идёт ход

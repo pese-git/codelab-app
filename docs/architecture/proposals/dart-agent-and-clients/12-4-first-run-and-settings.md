@@ -696,10 +696,13 @@ stateDiagram-v2
      формат принадлежит агенту. Команда и ответ видны в ленте сессии как обычный ход; ответ,
      пришедший после смены сессии или закрытия страницы, отбрасывается.
 
-   Без активной сессии или если агент не объявил `/mcp` в `available_commands_update` →
-   `McpAgentStatus.unavailable` с подсказкой «Open a session to see live status».
+   Без активной сессии или если агент вне процесса не объявил `/mcp` в `available_commands_update` →
+   `McpAgentStatus.unavailable` с подсказкой «Open a session to see live status»; встроенному агенту
+   команда не нужна — достаточно открытой сессии и порта (решение Q24 change `add-provider-setup-ui`).
 3. **Добавление и правка.** Редактор `McpServerDraft` содержит поля:
-   * имя `[A-Za-z0-9_-]+`, уникальное в эффективном конфиге;
+   * имя по правилу ядра `isValidMcpServerName` — то же, что у `codelab mcp add` (непустое, без
+     пробелов, `[`, `]` и `"`; решение Q20 change `add-provider-setup-ui`), уникальное в эффективном
+     конфиге; при правке имя только для чтения (переименование — удаление и добавление);
    * тип;
    * для `stdio` — `command`, `args`, `env`;
    * для `http` — `url` (`http`/`https`), `headers`;
@@ -715,10 +718,15 @@ stateDiagram-v2
    пометить его «Secret». `validate()` выполняется до записи; запись — одна правка
    `UpsertMcpServer(map)`. Сохранение идёт тем же порядком «секрет → конфиг → откат секрета», что
    в §12.4.4, шаг 8.
-4. **Удаление.** Правка `RemoveMcpServer(name)`. Затем, после `ConfigSaved`, удаляются секреты с
-   префиксом `codelab/mcp/<name>/`. Сервер из слоя 3 удалить нельзя; можно выключить его в
-   `ConfigTarget.projectLocal(cwd)` правкой `UpsertMcpServer({"name": name, "enabled": false})`
-   (слияние по `name`, §15.2).
+4. **Удаление.** Правка `RemoveMcpServer(name)`. Затем, после `ConfigSaved`, удаляются только
+   секреты, на которые удалённый элемент ссылался через `${secret:…}` в `env` и `headers`, если имя
+   лежит в пространстве страницы `codelab/mcp/<name>/` и в свежем снимке на него не осталось ссылок;
+   прочие имена остаются (исход `kept`), префикс сам по себе не основание — у `GitHub` и `github`
+   он общий (`McpServerRemover`; решение Q22 change `add-provider-setup-ui`, SETUP-24). Сервер из
+   слоя 3 удалить нельзя; «Disable here» выключает его в `ConfigTarget.projectLocal(cwd)` правкой
+   `UpsertMcpServer({"name": name, "enabled": false})` (слияние по `name` заменяет элемент целиком,
+   §15.2), «Enable here» убирает это переопределение `RemoveMcpServer(name)` из того же слоя
+   (решение Q21).
 5. **Применение.** После `ConfigSaved` агент перечитывает конфиг сам и присылает
    `available_commands_update` (MCP prompts как команды). Кнопка «Reconnect» строки — для
    встроенного агента `reconnect(name)` порта состояния MCP (`EmbeddedAgent.mcpStatus`), для
@@ -1449,16 +1457,20 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
 * `app:mcp_settings_flow_test.dart` (E-13):
   1. добавить `http`-сервер с секретным заголовком → в конфиге
      `Authorization: "${secret:codelab/mcp/github/authorization}"`, значение только в хранилище;
-  2. агент (встроенный, scripted MCP-сервер из `codelab_acp_testing`) присылает
-     `available_commands_update`; «Agent status» показывает `connected` и число инструментов из
+  2. агент (встроенный, открыт настоящим открывателем на временном `CODELAB_HOME`; MCP-сервер —
+     фейковый сервер на loopback HTTP с одним инструментом из `codelab_embedded/testing.dart`, его URL
+     и есть адрес `github` шага 1; решение Q28 change `add-provider-setup-ui`) открывает сессию;
+     «Agent status» показывает `connected` и число инструментов из
      `EmbeddedAgent.mcpStatus(sessionId)` (поток `McpSessionTools.changes`, change `add-provider-setup-ui`, D12);
   3. «Reconnect» вызывает `reconnect("github")` порта состояния, строка проходит
      `connecting → connected` через поток; тот же сценарий с локальным stdio-агентом по кнопке
      отправляет `/mcp reload github`, по «Refresh» — `/mcp list` и показывает текст ответа без
      изменений (SETUP-11);
-  4. удалить → запись и секреты `codelab/mcp/github/*` удалены;
+  4. удалить (подтверждение `Remove github?` со списком секретов) → элемент удалён, секрет `codelab/mcp/github/authorization`, на который он ссылался,
+     удалён (Q22);
   5. сервер из проектного слоя — только «Disable here», запись `enabled: false` в
-     `config.local.yaml` (SETUP-3).
+     `config.local.yaml`, строка `disabled here`; «Enable here» убирает переопределение, проектный
+     файл не меняется (SETUP-3, Q21).
 * `app:settings_navigation_flow_test.dart` (SETUP-17): Cmd/Ctrl+, открывает «Connection»
   при первом запуске и последнюю страницу после, Esc возвращает к сессии — сделано change
   `add-app-settings-shell`; порядок пунктов навигации в этом change проверяет widget-тест
