@@ -205,9 +205,11 @@ class _McpPageState extends State<McpPage> {
                   role: CodeLabTextRole.strong,
                 ),
               ),
-              const CodeLabStatusIndicator(
-                label: 'Composition from the config · agent status below',
-                tone: CodeLabStatusTone.active,
+              const Flexible(
+                child: CodeLabStatusIndicator(
+                  label: 'Composition from the config · agent status below',
+                  tone: CodeLabStatusTone.active,
+                ),
               ),
             ],
           ),
@@ -953,7 +955,9 @@ class _McpEditorState extends State<_McpEditor> {
                     setState(() => _target = layer);
                   }
                 },
-                child: Row(
+                child: Wrap(
+                  spacing: 20,
+                  runSpacing: 6,
                   children: [
                     RadioButton<ConfigLayer>(
                       key: const ValueKey('mcp-draft-target-user'),
@@ -961,7 +965,6 @@ class _McpEditorState extends State<_McpEditor> {
                       enabled: _isNew,
                       content: const Text('User config'),
                     ),
-                    const SizedBox(width: 20),
                     RadioButton<ConfigLayer>(
                       key: const ValueKey('mcp-draft-target-local'),
                       value: ConfigLayer.projectLocal,
@@ -1026,6 +1029,7 @@ class _McpEditorState extends State<_McpEditor> {
           Row(
             children: [
               Expanded(
+                flex: 10, // Артборд: колонки ключа и значения 1fr : 1.4fr.
                 child: TextBox(
                   key: ValueKey('mcp-draft-key-$i'),
                   controller: row.key,
@@ -1076,15 +1080,17 @@ class _McpEditorState extends State<_McpEditor> {
                     }
                   })
                 : null,
-            content: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(text: 'Secret — stored in ${storage.backendId}'),
-                  if (secretName != null) ...[
-                    const TextSpan(text: ' as '),
-                    TextSpan(text: secretName, style: mono),
+            content: Flexible(
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: 'Secret — stored in ${storage.backendId}'),
+                    if (secretName != null) ...[
+                      const TextSpan(text: ' as '),
+                      TextSpan(text: secretName, style: mono),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

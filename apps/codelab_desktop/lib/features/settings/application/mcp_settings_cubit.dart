@@ -629,11 +629,11 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
             'server': name,
             'type': draft.kind.name,
             'target': _targetName(layer),
-            'secret_refs': _secretRefs(draft),
+            'stored_refs': _secretRefs(draft),
             'replaced': replacedSecrets.length,
-            'secrets_deleted': cleanup.deleted,
-            'secrets_kept': cleanup.kept,
-            'secrets_failed': cleanup.failed,
+            'cleanup_deleted': cleanup.deleted,
+            'cleanup_kept': cleanup.kept,
+            'cleanup_failed': cleanup.failed,
           },
         );
         if (original == null) {
@@ -909,9 +909,9 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
               'mcp_settings.removed',
               context: {
                 'server': name,
-                'secrets_deleted': cleanup.deleted,
-                'secrets_kept': cleanup.kept,
-                'secrets_failed': cleanup.failed,
+                'cleanup_deleted': cleanup.deleted,
+                'cleanup_kept': cleanup.kept,
+                'cleanup_failed': cleanup.failed,
               },
             );
             await _finishWrite(
