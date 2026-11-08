@@ -167,7 +167,27 @@ void main() {
       final access = await _secrets(home);
       expect(await access.isSet(_authorization), isTrue);
 
-      // Шаг 2: агент сам подхватывает конфиг; таблица — из потока порта.
+      // Новый сервер с секретом агент не подхватывает на лету: он откладывает
+      // его до перезапуска (R0-4, `config.reload.restart_required`,
+      // `config_reload_plan.dart`; подсказку на странице добавит итерация
+      // 6.1b, решение Q31). Пользователь перезапускает агента кнопкой
+      // «Restart agent» на странице «Connection» и возвращается на «MCP
+      // servers».
+      await tester.tap(_key('settings-nav-connection'));
+      await tester.pumpAndSettle();
+      await _tapKey(tester, _key('connection-restart-agent'));
+      await tester.pump(const Duration(seconds: 1));
+      await _pumpWhile(
+        tester,
+        () =>
+            shellCubit.state.connectionStatus !=
+            CodeLabConnectionStatus.connected,
+      );
+      await shellCubit.createSession();
+      await tester.tap(_key('settings-nav-mcp-servers'));
+      await tester.pumpAndSettle();
+
+      // Шаг 2: после перезапуска таблица — из потока порта нового агента.
       await _pumpUntil(tester, _key('mcp-status-row-github'));
       await _pumpUntil(
         tester,
@@ -350,19 +370,26 @@ mcp:
       await _pumpWhile(tester, () => !buttonsActive());
       expect(prompts(), ['/mcp list']);
       expect(panelText(), contains('github'));
-      final listText = panelText();
 
       // «Reconnect» строки отправляет ровно один `/mcp reload github`; после
-      // него `/mcp list` сам не уходит, а панель показывает ответ reload.
+      // него `/mcp list` сам не уходит. Ядро на `/mcp reload <id>` отвечает
+      // той же таблицей, что на `/mcp list` (`builtin_commands.dart`, `_mcp`),
+      // поэтому текст может совпасть: конец хода видно по активным кнопкам.
       await tester.tap(_key('mcp-row-github'));
       await tester.pumpAndSettle();
       await _tapKey(tester, _key('mcp-reconnect-github'));
-      await _pumpWhile(
+      await _pumpUntil(
         tester,
-        () => !buttonsActive() || panelText() == listText,
+        find.byWidgetPredicate(
+          (w) =>
+              w.key == const ValueKey('mcp-status-refresh') &&
+              w is CodeLabButton &&
+              prompts().length == 2 &&
+              w.onPressed != null,
+        ),
       );
       expect(prompts(), ['/mcp list', '/mcp reload github']);
-      expect(panelText(), isNot(listText));
+      expect(panelText(), contains('github'));
 
       await _shutdown(tester);
     },
