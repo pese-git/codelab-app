@@ -159,6 +159,7 @@ void main() {
       'mcp:\n'
       '  servers:\n'
       '    - name: github\n'
+      '      type: http\n'
       '      url: ${host!.url}\n'
       '      headers:\n'
       '        Authorization: "Bearer $marker"\n',

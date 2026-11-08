@@ -87,3 +87,16 @@ Map<String, Object?> stdioServer(
   'env': ?env,
   ...extra,
 };
+
+/// Свежий снимок после записи, как его отдаёт `FileAgentConfigStore`: все три
+/// файловых слоя прочитаны (отсутствующий файл — пустой слой). Очистка
+/// секретов требует именно такой снимок (`cleanUpSecrets`, fail-safe).
+AgentConfigSnapshot freshMcpSnapshot({
+  List<Map<String, Object?>>? user,
+  List<Map<String, Object?>>? project,
+  List<Map<String, Object?>>? projectLocal,
+}) => mcpSnapshot(
+  user: user,
+  project: project ?? const [],
+  projectLocal: projectLocal ?? const [],
+);

@@ -165,6 +165,8 @@ void main() {
     );
 
     await tester.tap(find.byKey(const ValueKey('act-github')));
+    // Нажатие кнопки Fluent оставляет таймер: дать ему отработать.
+    await tester.pumpAndSettle();
     expect(calls, 1);
   });
 

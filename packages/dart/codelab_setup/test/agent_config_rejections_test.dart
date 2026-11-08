@@ -109,6 +109,20 @@ void main() {
     expect(snapshot.startProblems, isEmpty);
   });
 
+  test('стартовая проблема value без события и без ключа в слоях — не в '
+      'rejections (только незаданная переменная)', () {
+    const missingKey = ConfigIssue(
+      kind: ConfigIssueKind.value,
+      key: 'agent.small_model',
+      source: file,
+      message: 'required',
+    );
+    final snapshot = snapshotWith([missingKey, unsetVariable]);
+
+    expect(snapshot.startProblems, [missingKey, unsetVariable]);
+    expect(snapshot.rejections, [unsetVariable]);
+  });
+
   test('синтаксис, unknownKey и type — в issues и не в rejections', () {
     final snapshot = snapshotWith([syntax, unknownKey, typeIssue]);
 

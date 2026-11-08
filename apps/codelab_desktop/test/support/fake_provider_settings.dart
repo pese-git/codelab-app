@@ -40,6 +40,10 @@ final class FakeAgentConfigStore implements AgentConfigStore {
 
   /// Слой `user` не разобрался: его нет в карте снимка.
   bool omitUserLayer = false;
+
+  /// Слой `projectLocal` не разобрался (нечитаемый файл): его нет в карте.
+  /// Отсутствующий файл, как у настоящего хранилища, — пустой слой.
+  bool omitProjectLocalLayer = false;
   SecretBackendInfo backend;
 
   /// Пути слоёв для проверки `defined in <file>`.
@@ -73,21 +77,22 @@ final class FakeAgentConfigStore implements AgentConfigStore {
             target: const ConfigTarget.user(),
             path: userPath,
             fingerprint: 'fp-user-$snapshots',
-            values: user,
+            values: _copy(user),
           ),
-        if (project case final values?)
-          ConfigLayer.project: ConfigSnapshot(
-            target: ConfigTarget.project('/work/app'),
-            path: projectPath,
-            fingerprint: 'fp-project',
-            values: values,
-          ),
-        if (projectLocal case final values?)
+        // Настоящее хранилище читает все три слоя: отсутствующий файл —
+        // пустой слой (мост опирается на это, очистка секретов).
+        ConfigLayer.project: ConfigSnapshot(
+          target: ConfigTarget.project('/work/app'),
+          path: projectPath,
+          fingerprint: 'fp-project',
+          values: _copy(project ?? const {}),
+        ),
+        if (!omitProjectLocalLayer)
           ConfigLayer.projectLocal: ConfigSnapshot(
             target: const ConfigTarget.projectLocal('/work/app'),
             path: projectLocalPath,
             fingerprint: 'fp-local',
-            values: values,
+            values: _copy(projectLocal ?? const {}),
           ),
       },
       loaded: ConfigLoadResult(issues: issues),
@@ -171,6 +176,20 @@ final class FakeAgentConfigStore implements AgentConfigStore {
       'servers': servers,
     };
   }
+
+  /// Снимок слоя не должен меняться вместе с картой двойника: настоящий
+  /// `ConfigSnapshot` неизменяем, а мост читает прежний элемент после записи
+  /// (очистка осиротевших секретов, ревью 5b).
+  static Map<String, Object?> _copy(Map<String, Object?> map) =>
+      _deep(map) as Map<String, Object?>;
+
+  static Object? _deep(Object? value) => switch (value) {
+    Map() => <String, Object?>{
+      for (final e in value.entries) '${e.key}': _deep(e.value),
+    },
+    List() => [for (final item in value) _deep(item)],
+    _ => value,
+  };
 
   static void _remove(Map<String, Object?> map, List<String> path) {
     if (path.length == 1) {
@@ -279,20 +298,29 @@ final class FakeProviderSettingsSession implements ProviderSettingsSession {
     backend: store.backend,
   );
 
-  /// Имена, которые [isSecretSet] скрывает, хотя секрет уже есть: гонка
-  /// «секрет появился после вопроса» (`McpSecretAppeared`).
-  final hiddenFromIsSet = <String>{};
-
   /// Запись MCP-сервера страницы: настоящий `McpServerCommitter` моста на
-  /// двойниках. Станет `@override` вместе с методом интерфейса
-  /// `ProviderSettingsSession` (задача 5.10); до этого — обычный метод.
-  McpServerCommitter mcpCommitter() =>
-      McpServerCommitter(config: store, keys: mcpKeys);
+  /// двойниках.
+  /// Исключение из `mcpCommitter()`/`mcpRemover()`: мост сам ловит сбои
+  /// хранилища и писателя, а страница обязана пережить и неожиданное
+  /// исключение ПОСЛЕ начала записи (ревью 5b).
+  Object? portError;
+
+  @override
+  McpServerCommitter mcpCommitter() {
+    if (portError case final error?) {
+      throw error;
+    }
+    return McpServerCommitter(config: store, keys: mcpKeys);
+  }
 
   /// Удаление MCP-сервера страницы: настоящий `McpServerRemover` моста.
-  /// Станет `@override` вместе с интерфейсом (задача 5.10).
-  McpServerRemover mcpRemover() =>
-      McpServerRemover(config: store, keys: mcpKeys);
+  @override
+  McpServerRemover mcpRemover() {
+    if (portError case final error?) {
+      throw error;
+    }
+    return McpServerRemover(config: store, keys: mcpKeys);
+  }
 
   @override
   AgentConfigStore get config => store;
@@ -303,7 +331,7 @@ final class FakeProviderSettingsSession implements ProviderSettingsSession {
   @override
   Future<bool> isSecretSet(String name) async {
     isSetCalls.add(name);
-    return secrets.containsKey(name) && !hiddenFromIsSet.contains(name);
+    return secrets.containsKey(name);
   }
 
   @override
@@ -397,6 +425,18 @@ final class FakeSessionHandle implements SessionHandle {
   /// Промпты, отправленные через `send`, по порядку.
   final sent = <String>[];
 
+  /// Элементы очереди, убранные через `queue.remove` (id), по порядку.
+  final removedFromQueue = <String>[];
+
+  /// `false` — элемент очереди уже ушёл к агенту: `queue.remove` вернёт
+  /// `null` (гонка, ревью 5b).
+  bool queueKeepsItem = true;
+
+  late final _FakeQueue _queue = _FakeQueue(removedFromQueue);
+
+  @override
+  PromptQueue get queue => _queue;
+
   /// Исход `send`; `null` — ход без ответа.
   Future<PromptOutcome> Function(String text)? onSend;
 
@@ -404,9 +444,15 @@ final class FakeSessionHandle implements SessionHandle {
   Future<PromptOutcome> send(String text) {
     sent.add(text);
     final handler = onSend;
-    return handler != null
+    final result = handler != null
         ? handler(text)
         : Future.value(PromptCompleted(id, _emptyTurn(id)));
+    return result.then((outcome) {
+      if (outcome is PromptQueued && queueKeepsItem) {
+        _queue.known[outcome.item.id] = outcome.item;
+      }
+      return outcome;
+    });
   }
 
   final views = StreamController<SessionView>.broadcast(sync: true);
@@ -436,3 +482,28 @@ PromptTurn _emptyTurn(SessionId id, {List<SessionUpdate> updates = const []}) =>
 /// `AgentThoughtChunk`), как его отдаёт `SessionHandle.send`.
 PromptCompleted completedTurn(SessionId id, List<SessionUpdate> chunks) =>
     PromptCompleted(id, _emptyTurn(id, updates: chunks));
+
+/// Очередь двойника: помнит, что из неё убрали.
+final class _FakeQueue implements PromptQueue {
+  _FakeQueue(this._removed);
+
+  final List<String> _removed;
+
+  /// Элементы, которые `send` поставил в очередь и которых ещё не убрали.
+  final known = <String, QueuedPrompt>{};
+
+  @override
+  List<QueuedPrompt> get items => [...known.values];
+
+  @override
+  QueuedPrompt? remove(String id) {
+    _removed.add(id);
+    return known.remove(id);
+  }
+
+  @override
+  Future<PromptOutcome?> sendNow(String id) async => null;
+
+  @override
+  void clear() {}
+}

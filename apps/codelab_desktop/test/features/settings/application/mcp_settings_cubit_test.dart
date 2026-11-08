@@ -147,13 +147,19 @@ void main() {
   late List<McpSettingsCubit> cubits;
   late List<({EditableSettings access, Map<String, String> env})> opened;
   FutureOr<void> Function()? onOpen;
+  Object? defaultProfileError;
   var projectDir = '/work/app';
   var clock = DateTime(2026, 11, 8, 14, 2);
 
   McpSettingsCubit make({String? home = _home}) {
     final cubit = McpSettingsCubit(
       workspace: workspace,
-      defaultProfile: () async => embeddedConnectionProfile,
+      defaultProfile: () async {
+        if (defaultProfileError case final error?) {
+          throw error;
+        }
+        return embeddedConnectionProfile;
+      },
       open: (access, env) async {
         opened.add((access: access, env: env));
         await onOpen?.call();
@@ -182,6 +188,7 @@ void main() {
     cubits = [];
     opened = [];
     onOpen = null;
+    defaultProfileError = null;
     projectDir = '/work/app';
     clock = DateTime(2026, 11, 8, 14, 2);
   });
@@ -478,6 +485,7 @@ void main() {
         'store before the config, the file gets only the reference and '
         'the log has no marker', () async {
       store.user = {};
+      session.secrets.clear();
       store.onApply = () => session.mcpKeys.journal.add('apply');
       final cubit = make();
       await cubit.reload();
@@ -486,7 +494,10 @@ void main() {
       final saved = await cubit.save(_newGithub());
 
       expect(saved, isTrue);
+      // `stored` дважды: проверка занятости до записи и перепроверка в
+      // `commit` (одно правило, `occupiedSecrets`).
       expect(session.mcpKeys.journal, [
+        'stored $_authorization',
         'stored $_authorization',
         'write $_authorization',
         'apply',
@@ -509,6 +520,9 @@ void main() {
         'target': 'user',
         'secret_refs': 1,
         'replaced': 0,
+        'secrets_deleted': 0,
+        'secrets_kept': 0,
+        'secrets_failed': 0,
         'event': 'mcp_settings.saved',
         'level': 'info',
       });
@@ -550,6 +564,8 @@ void main() {
       expect(saved, isFalse);
       expect(store.applied, isEmpty);
       expect(current(cubit).banner?.kind, McpBannerKind.error);
+      // Причина — именно нет папки проекта, а не нечитаемый слой (SETUP-3).
+      expect(event('mcp_settings.save_failed')['refusal'], 'noProjectTarget');
     });
 
     test('a taken name is a draft problem before commit: nothing is written, '
@@ -601,11 +617,11 @@ void main() {
       final first = await cubit.save(draft);
 
       expect(first, isFalse);
-      expect(session.isSetCalls, contains(_authorization));
+      expect(session.mcpKeys.journal, ['stored $_authorization']);
       expect(current(cubit).replaceQuestion!.names, [_authorization]);
       expect(current(cubit).replaceQuestion!.server, isNull);
       expect(store.applied, isEmpty);
-      expect(session.mcpKeys.journal, isEmpty);
+      expect(session.mcpKeys.journal, isNot(contains('write $_authorization')));
       expect(session.secrets[_authorization], leakMarker);
 
       final second = await cubit.save(draft, replaceSecrets: {_authorization});
@@ -631,7 +647,7 @@ void main() {
     test('a secret that appears after the question (McpSecretAppeared) '
         'asks the same question and writes nothing', () async {
       session.secrets[_authorization] = 'created-elsewhere';
-      session.hiddenFromIsSet.add(_authorization);
+      session.mcpKeys.hideFirstStored.add(_authorization);
       final cubit = make();
       await cubit.reload();
 
@@ -662,6 +678,7 @@ void main() {
     test('a conflict shows the banner, rolls back the new secret, re-reads '
         'and does not retry (SETUP-6)', () async {
       store.user = {};
+      session.secrets.clear();
       store.nextOutcome = const ConfigConflict(FakeAgentConfigStore.userPath);
       final cubit = make();
       await cubit.reload();
@@ -1013,6 +1030,7 @@ void main() {
         'write (layerUnreadable)', () async {
       store.project = _layer([_playwright()]);
       // Слоя `projectLocal` нет в снимке: файл не разобрался.
+      store.omitProjectLocalLayer = true;
       final cubit = make();
       await cubit.reload();
 
@@ -1181,6 +1199,366 @@ void main() {
       final failed = event('mcp_settings.save_failed');
       expect(failed['operation'], 'remove');
       expect(failed['outcome'], 'conflict');
+    });
+  });
+
+  group('review 5b fixes', () {
+    test('an exception of the secret store during Save is an error banner, '
+        'a log event with the type only, and Save works again', () async {
+      session.mcpKeys.storedError = StateError('boom $leakMarker');
+      final cubit = make();
+      await cubit.reload();
+
+      final saved = await cubit.save(_newGithub(name: 'fresh'));
+
+      expect(saved, isFalse);
+      final state = current(cubit);
+      expect(state.banner?.kind, McpBannerKind.error);
+      expect(state.saving, isFalse);
+      expect(store.applied, isEmpty);
+      final failed = event('mcp_settings.save_failed');
+      expect(failed['outcome'], 'error');
+      expect(failed['operation'], 'save');
+      expect(failed['error_type'], 'StateError');
+      expect(logger.entries.toString(), isNot(contains(leakMarker)));
+      expect(state.toString(), isNot(contains(leakMarker)));
+      expect(state.banner.toString(), isNot(contains('boom')));
+
+      session.mcpKeys.storedError = null;
+      session.secrets.clear();
+      expect(await cubit.save(_newGithub(name: 'fresh')), isTrue);
+    });
+
+    test(
+      'an exception while the default profile is read is not lost',
+      () async {
+        defaultProfileError = StateError('boom $leakMarker');
+        final cubit = make();
+
+        await cubit.reload();
+
+        expect(cubit.state, isA<McpSettingsUnreadable>());
+        final unreadable = event('mcp_settings.unreadable');
+        expect(unreadable['error_type'], 'StateError');
+        expect(logger.entries.toString(), isNot(contains(leakMarker)));
+      },
+    );
+
+    test('a draft problem and a secret that appeared are logged as '
+        'save_failed with their outcome', () async {
+      final cubit = make();
+      await cubit.reload();
+
+      await cubit.save(_newGithub(name: 'postgres'));
+
+      expect(event('mcp_settings.save_failed'), {
+        'server': 'postgres',
+        'operation': 'save',
+        'outcome': 'invalid',
+        'event': 'mcp_settings.save_failed',
+        'level': 'warning',
+      });
+
+      session.secrets[_authorization] = 'created-elsewhere';
+      session.mcpKeys.hideFirstStored.add(_authorization);
+      await cubit.save(_newGithub(name: 'GitHub'));
+
+      expect(event('mcp_settings.save_failed')['outcome'], 'secret_appeared');
+      expect(event('mcp_settings.save_failed')['operation'], 'save');
+    });
+
+    test('a connection that changed during Save stops the write with a '
+        'banner', () async {
+      final gate = Completer<void>();
+      session.mcpKeys.onStored = () => gate.future;
+      final cubit = make();
+      await cubit.reload();
+
+      final saving = cubit.save(_newGithub(name: 'fresh'));
+      await pumpEventQueue();
+      session.mcpKeys.onStored = null;
+      await cubit.reload();
+      gate.complete();
+      final saved = await saving;
+
+      expect(saved, isFalse);
+      expect(store.applied, isEmpty);
+      expect(
+        session.mcpKeys.journal.where((e) => e.startsWith('write')),
+        isEmpty,
+      );
+      expect(current(cubit).banner?.kind, McpBannerKind.error);
+      expect(current(cubit).saving, isFalse);
+    });
+
+    test('a secret orphaned by an edit is deleted after the write and the '
+        'banner names the ones that stay or fail (LOW-2)', () async {
+      final cubit = make();
+      await cubit.reload();
+      final plain = cubit
+          .draftFor('github')!
+          .copyWith(headers: {'Authorization': McpValueDraft.text('plain')});
+
+      final saved = await cubit.save(plain);
+
+      expect(saved, isTrue);
+      expect(session.secrets, isNot(contains(_authorization)));
+      expect(current(cubit).banner?.kind, McpBannerKind.saved);
+      expect(current(cubit).banner?.lines, ['Server github saved.']);
+      expect(event('mcp_settings.saved')['secrets_deleted'], 1);
+      expect(logger.entries.toString(), isNot(contains(_authorization)));
+    });
+
+    test('an orphaned secret that cannot be deleted is an error banner with '
+        'the command', () async {
+      session.mcpKeys.deletion = SecretDeletion.failed;
+      final cubit = make();
+      await cubit.reload();
+      final plain = cubit
+          .draftFor('github')!
+          .copyWith(headers: {'Authorization': McpValueDraft.text('plain')});
+
+      await cubit.save(plain);
+
+      expect(current(cubit).banner?.kind, McpBannerKind.error);
+      expect(
+        current(cubit).banner?.lines,
+        contains(
+          '$_authorization could not be deleted. Delete it with: '
+          'codelab secret delete $_authorization',
+        ),
+      );
+      expect(event('mcp_settings.saved')['secrets_failed'], 1);
+    });
+
+    test('a refused write whose rollback failed names the leftover secret; a '
+        'replaced secret is reported too (D9)', () async {
+      store.user = {};
+      session.secrets.clear();
+      session.mcpKeys.deletion = SecretDeletion.failed;
+      store.nextOutcome = const ConfigConflict(FakeAgentConfigStore.userPath);
+      final cubit = make();
+      await cubit.reload();
+
+      await cubit.save(_newGithub());
+
+      final lines = current(cubit).banner!.lines.join('\n');
+      expect(lines, contains('codelab secret delete $_authorization'));
+      expect(lines, isNot(contains(leakMarker)));
+
+      session.secrets[_authorization] = 'old';
+      store.nextOutcome = const ConfigConflict(FakeAgentConfigStore.userPath);
+      await cubit.save(_newGithub(), replaceSecrets: {_authorization});
+
+      expect(
+        current(cubit).banner!.lines.join('\n'),
+        contains('$_authorization was already replaced'),
+      );
+    });
+
+    test(
+      'an exception AFTER the write began resets saving, shows an error '
+      'banner and the next write works (toggle, remove, Enable here)',
+      () async {
+        final cubit = make();
+        await cubit.reload();
+        session.portError = StateError('boom $leakMarker');
+
+        for (final (operation, run) in <(String, Future<bool> Function())>[
+          ('toggle', () => cubit.setEnabled('github', enabled: false)),
+          ('remove', () => cubit.remove('github')),
+          ('toggle', () => cubit.enableHere('github')),
+        ]) {
+          expect(await run(), isFalse, reason: operation);
+
+          final state = current(cubit);
+          expect(state.saving, isFalse, reason: operation);
+          expect(state.banner?.kind, McpBannerKind.error, reason: operation);
+          final failed = event('mcp_settings.save_failed');
+          expect(failed['operation'], operation);
+          expect(failed['outcome'], 'error');
+          expect(failed['error_type'], 'StateError');
+          expect(state.banner.toString(), isNot(contains('boom')));
+          expect(logger.entries.toString(), isNot(contains(leakMarker)));
+        }
+
+        session.portError = null;
+        expect(await cubit.setEnabled('github', enabled: false), isTrue);
+        expect(store.applied, hasLength(1));
+      },
+    );
+
+    test('a queued /mcp prompt is removed from the queue even when the page '
+        'was closed or the session changed meanwhile (L-2)', () async {
+      final handle = externalSession(id: _s1);
+      connect(_ownAgent, active: _s1);
+      final cubit = make();
+      await cubit.reload();
+      final reply = Completer<PromptOutcome>();
+      handle.onSend = (_) => reply.future;
+
+      final pending = cubit.refresh();
+      await pumpEventQueue();
+      externalSession(id: _s2);
+      connect(_ownAgent, active: _s2);
+      reply.complete(
+        PromptQueued(_s1, const QueuedPrompt(id: 'q1', text: '/mcp list')),
+      );
+      await pending;
+      expect(handle.removedFromQueue, ['q1']);
+
+      final second = externalSession(id: _s1);
+      connect(_ownAgent, active: _s1);
+      final closing = Completer<PromptOutcome>();
+      second.onSend = (_) => closing.future;
+      final late = cubit.refresh();
+      await pumpEventQueue();
+      await cubit.close();
+      closing.complete(
+        PromptQueued(_s1, const QueuedPrompt(id: 'q2', text: '/mcp list')),
+      );
+      await late;
+
+      expect(second.removedFromQueue, ['q2']);
+    });
+
+    test('a connection that changed during Save is logged as a stale save '
+        '(LOW-4)', () async {
+      final gate = Completer<void>();
+      session.mcpKeys.onStored = () => gate.future;
+      final cubit = make();
+      await cubit.reload();
+
+      final saving = cubit.save(_newGithub(name: 'fresh'));
+      await pumpEventQueue();
+      session.mcpKeys.onStored = null;
+      await cubit.reload();
+      gate.complete();
+      await saving;
+
+      final failed = event('mcp_settings.save_failed');
+      expect(failed['operation'], 'save');
+      expect(failed['outcome'], 'stale');
+      expect(failed['server'], 'fresh');
+    });
+
+    test('the editor reports a rejected draft through the Cubit: the problem '
+        'is in the state and the event is save_failed invalid', () async {
+      final cubit = make();
+      await cubit.reload();
+      cubit.openNewServer();
+
+      cubit.rejectDraft(
+        server: null,
+        name: 'fresh',
+        problems: const [
+          McpDraftProblem(McpDraftField.headers, 'Two values are named X.'),
+        ],
+      );
+
+      final issues = current(cubit).draftIssues!;
+      expect(issues.server, isNull);
+      expect(issues.problems.single.message, 'Two values are named X.');
+      expect(event('mcp_settings.save_failed'), {
+        'server': 'fresh',
+        'operation': 'save',
+        'outcome': 'invalid',
+        'event': 'mcp_settings.save_failed',
+        'level': 'warning',
+      });
+      expect(store.applied, isEmpty);
+    });
+
+    test('a queued prompt that already left the queue is logged as '
+        'already_sent', () async {
+      final handle = externalSession(id: _s1);
+      connect(_ownAgent, active: _s1);
+      handle.queueKeepsItem = false;
+      handle.onSend = (_) async =>
+          PromptQueued(_s1, const QueuedPrompt(id: 'q9', text: '/mcp list'));
+      final cubit = make();
+      await cubit.reload();
+
+      await cubit.refresh();
+
+      expect(handle.removedFromQueue, ['q9']);
+      expect(event('mcp_settings.command_discarded'), {
+        'command': 'list',
+        'reason': 'already_sent',
+        'session_id': 's1',
+        'event': 'mcp_settings.command_discarded',
+        'level': 'debug',
+      });
+      expect((status(cubit) as McpAgentStatusText).notice, _listFailed);
+    });
+
+    test('a refused second secret rolls back the first; when the rollback '
+        'fails the banner names exactly the leftover (L-4)', () async {
+      store.user = {};
+      session.secrets.clear();
+      session.mcpKeys
+        ..refusal = 'the store is read-only'
+        ..refuseOnly = 'codelab/mcp/fresh/b'
+        ..deletion = SecretDeletion.failed;
+      final cubit = make();
+      await cubit.reload();
+
+      await cubit.save(
+        McpServerDraft(
+          name: 'fresh',
+          kind: McpTransportKind.http,
+          url: 'https://api.example.test/mcp/',
+          headers: {
+            'A': McpValueDraft.secret(SecretValue('one')),
+            'B': McpValueDraft.secret(SecretValue('two')),
+          },
+        ),
+      );
+
+      final lines = current(cubit).banner!.lines;
+      expect(current(cubit).banner?.kind, McpBannerKind.error);
+      expect(
+        lines,
+        contains(
+          'codelab/mcp/fresh/a could not be deleted. Delete it with: '
+          'codelab secret delete codelab/mcp/fresh/a',
+        ),
+      );
+      expect(lines.join('\n'), isNot(contains('fresh/b could not')));
+      final failed = event('mcp_settings.save_failed');
+      expect(failed['outcome'], 'secret_failed');
+      expect(failed['rollback'], 'failed');
+      expect(store.applied, isEmpty);
+    });
+
+    test(
+      'a row carries its ready draft (the page does not build it)',
+      () async {
+        final state = await ready(make());
+
+        expect(row(state, 'github').draft?.name, 'github');
+        expect(
+          row(state, 'github').draft?.headers['Authorization'],
+          isA<McpStoredSecret>(),
+        );
+      },
+    );
+
+    test('the state of the session is re-read before /mcp is sent', () async {
+      final handle = externalSession(id: _s1);
+      connect(_ownAgent, active: _s1);
+      final cubit = make();
+      await cubit.reload();
+
+      // Ход начался, а событие `view` ещё не пришло.
+      handle.current = const SessionView(
+        revision: 2,
+        status: SessionStatusView.running,
+        agentCommands: [AgentCommandView(name: 'mcp', description: 'MCP')],
+      );
+      await cubit.refresh();
+
+      expect(handle.sent, isEmpty);
     });
   });
 
@@ -1383,6 +1761,7 @@ void main() {
         expect(event('mcp_settings.status_reconnect'), {
           'server': 'postgres',
           'scope': 'one',
+          'session_id': 's1',
           'event': 'mcp_settings.status_reconnect',
           'level': 'info',
         });
@@ -1460,6 +1839,7 @@ void main() {
       expect(text.notice, isNull);
       expect(event('mcp_settings.command_sent'), {
         'command': 'list',
+        'session_id': 's1',
         'event': 'mcp_settings.command_sent',
         'level': 'info',
       });
@@ -1636,6 +2016,7 @@ void main() {
       expect(event('mcp_settings.command_discarded'), {
         'command': 'list',
         'reason': 'session_changed',
+        'session_id': 's1',
         'event': 'mcp_settings.command_discarded',
         'level': 'debug',
       });
@@ -1682,6 +2063,8 @@ void main() {
         expect(text.toString(), isNot(contains('boom')));
         expect(event('mcp_settings.command_discarded')['reason'], key);
       }
+      // Встав в очередь, `/mcp list` не должен уйти позже сам (ревью 5b).
+      expect(handle.removedFromQueue, ['q']);
 
       handle.onSend = (_) async => completedTurn(_s1, [_msg('new text')]);
       await cubit.refresh();

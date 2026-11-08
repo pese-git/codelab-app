@@ -78,6 +78,17 @@ final class FakeWizardKeys implements ProviderKeys {
 
   final journal = <String>[];
 
+  /// Исключение, которое бросает [stored] (хранилище недоступно; ревью 5b).
+  Object? storedError;
+
+  /// Ожидание внутри [stored]: тест успевает сменить подключение посреди
+  /// «Save» (ревью 5b, LOW-4).
+  Future<void> Function()? onStored;
+
+  /// Имена, которые первый вызов [stored] скрывает, хотя секрет уже есть:
+  /// гонка «секрет появился после вопроса» (`McpSecretAppeared`).
+  final hideFirstStored = <String>{};
+
   /// Исход удаления секрета (страница «MCP servers», задача 5.4: `failed` —
   /// баннер с `codelab secret delete <имя>`).
   SecretDeletion deletion = SecretDeletion.deleted;
@@ -85,9 +96,20 @@ final class FakeWizardKeys implements ProviderKeys {
   /// Причина отказа записи секрета (`McpSecretNotStored`); `null` — пишет.
   String? refusal;
 
+  /// Если задано, отказ [refusal] касается только этого имени, остальные
+  /// записи проходят (частичная запись нескольких секретов, ревью 5b).
+  String? refuseOnly;
+
   @override
   Future<bool> stored(String name) async {
     journal.add('stored $name');
+    await onStored?.call();
+    if (storedError case final error?) {
+      throw error;
+    }
+    if (hideFirstStored.remove(name)) {
+      return false;
+    }
     return secrets.containsKey(name);
   }
 
@@ -101,7 +123,8 @@ final class FakeWizardKeys implements ProviderKeys {
   @override
   Future<ProviderKeyWrite> write(String name, SecretValue value) async {
     journal.add('write $name');
-    if (refusal case final reason?) {
+    if (refusal case final reason?
+        when refuseOnly == null || refuseOnly == name) {
       return ProviderKeyRefused(reason);
     }
     final existed = secrets.containsKey(name);
