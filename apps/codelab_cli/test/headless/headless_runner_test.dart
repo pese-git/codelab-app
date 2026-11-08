@@ -112,6 +112,64 @@ void main() {
     expect(stderr.toString(), isNotEmpty);
   });
 
+  // Заметка исхода хода (design D27, Q33; spec acp-client-kit «Инкрементальная
+  // проекция транскрипта»): headless печатает заметку kit-а в stderr, а код
+  // выхода остаётся прежним (ход завершён ответом агента, `exitCodeOf`).
+  test('max_tokens after thoughts prints the stop notice to stderr and '
+      'keeps exit code 1', () async {
+    final outcome = start(runner());
+    await agent.acceptNewSession('s1');
+    final prompt = await agent.next(sessionPromptMethod);
+    agent
+      ..update('s1', {
+        'sessionUpdate': 'agent_thought_chunk',
+        'content': {'type': 'text', 'text': 'thinking'},
+      })
+      ..respond(prompt, {'stopReason': 'max_tokens'});
+
+    final result = await outcome;
+    expect(result, isA<TurnCompleted>());
+    expect(exitCodeOf(result), 1);
+    expect(stdout.toString(), isEmpty);
+    expect(
+      stderr.toString(),
+      contains(
+        'codelab: The model reached its token limit, so the turn ended.',
+      ),
+    );
+    expect(stderr.toString(), isNot(contains('empty response')));
+  });
+
+  test('refusal after text keeps the answer on stdout and prints the notice '
+      'to stderr', () async {
+    final outcome = start(runner());
+    await agent.acceptNewSession('s1');
+    final prompt = await agent.next(sessionPromptMethod);
+    agent
+      ..chunk('s1', 'I cannot do that')
+      ..respond(prompt, {'stopReason': 'refusal'});
+
+    final result = await outcome;
+    expect(exitCodeOf(result), 1);
+    expect(stdout.toString(), 'I cannot do that\n');
+    expect(
+      stderr.toString(),
+      contains('codelab: The agent refused to continue.'),
+    );
+  });
+
+  test('end_turn with an answer prints no stop notice', () async {
+    final outcome = start(runner());
+    await agent.acceptNewSession('s1');
+    final prompt = await agent.next(sessionPromptMethod);
+    agent
+      ..chunk('s1', 'done')
+      ..respond(prompt, {'stopReason': 'end_turn'});
+
+    expect(exitCodeOf(await outcome), 0);
+    expect(stderr.toString(), isEmpty);
+  });
+
   test('a JSON-RPC error on session/prompt fails the turn with the '
       'agent message', () async {
     final outcome = start(runner());

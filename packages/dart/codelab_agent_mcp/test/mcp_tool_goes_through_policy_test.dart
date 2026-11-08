@@ -95,7 +95,7 @@ void main() {
 
       final finished = await run(session, 'write');
 
-      // Аннотация меняет `kind`, а не решение политики (D7).
+      // Аннотация не меняет ни `kind` (всегда other, Q32), ни решение политики.
       expect(gate.requests, isEmpty);
       expect(server.calls, isEmpty);
       expect(finished.single.outcome, ToolOutcome.rejected);
@@ -120,7 +120,7 @@ void main() {
     await run(session, 'peek');
 
     expect(gate.requests, hasLength(1));
-    expect(gate.requests.single.kind, ToolKind.read);
+    expect(gate.requests.single.kind, ToolKind.other);
     expect(server.calls, isEmpty);
   });
 

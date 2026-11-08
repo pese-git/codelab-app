@@ -35,10 +35,11 @@ PendingApprovalView _approval({
   String? command = 'dart test',
   Map<String, Object?>? rawInput = const {'command': 'dart test'},
   bool critical = false,
+  ApprovalRiskLevel risk = ApprovalRiskLevel.shell,
 }) => PendingApprovalView(
   approvalId: const ApprovalRequestId('a1'),
   sessionId: const SessionId('s1'),
-  risk: ApprovalRiskLevel.shell,
+  risk: risk,
   command: command,
   rawInput: rawInput,
   options: options,
@@ -78,6 +79,28 @@ void main() {
         '  [y] allow once  [a] allow always  [n] reject once  '
         '[N] reject always  [?] details  [Esc] cancel',
       );
+    });
+
+    // design D27, Q32: вид `other` и отсутствующий вид — «unknown risk», а не
+    // «read-only»; подсказка недоверенного сервера не снижает риск.
+    test('an unknown risk is shown as "unknown risk"', () {
+      final prompt = ApprovalPrompt(
+        _approval(risk: ApprovalRiskLevel.unknown),
+        title: 'Lookup',
+        cwd: '/work',
+      );
+
+      expect(prompt.block.first, 'Permission: Lookup (unknown risk)');
+    });
+
+    test('an unknown risk and critical are both in the title', () {
+      final prompt = ApprovalPrompt(
+        _approval(risk: ApprovalRiskLevel.unknown, critical: true),
+        title: 'Lookup',
+        cwd: '/work',
+      );
+
+      expect(prompt.block.first, 'Permission: Lookup (unknown risk, critical)');
     });
 
     test('a critical request says so in the title', () {

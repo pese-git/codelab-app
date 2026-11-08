@@ -32,6 +32,16 @@ void main() {
     expect(CodeLabSettingsNavItem, isA<Type>());
   });
 
+  // Задача 6.1c-3 change `add-provider-setup-ui` (Q32; spec agent-workbench-ui
+  // «Тег неизвестного риска одобрения»; design.md D27): вызов без вида или с
+  // видом `other` не помечается «только чтение». Красный до реализации.
+  test('CodeLabApprovalRisk.unknown has the tag "Unknown risk" with the '
+      'warning tone', () {
+    expect(CodeLabApprovalRisk.unknown.label, 'Unknown risk');
+    expect(CodeLabApprovalRisk.unknown.tone, CodeLabTone.warning);
+    expect(CodeLabApprovalRisk.values, contains(CodeLabApprovalRisk.unknown));
+  });
+
   testWidgets('renders command palette default command list', (tester) async {
     await tester.pumpWidget(
       const FluentApp(

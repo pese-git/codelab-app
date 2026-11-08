@@ -235,6 +235,66 @@ void main() {
       );
     });
 
+    // Задача 6.1c-3 change `add-provider-setup-ui` (Q32; design.md D27):
+    // неизвестный уровень риска клиента — тег «Unknown risk» в ленте.
+    test('an unknown risk level maps to the unknown tag, not to read-only', () {
+      const pending = PendingApprovalView(
+        approvalId: ApprovalRequestId('permission-1'),
+        sessionId: SessionId('session-1'),
+        risk: ApprovalRiskLevel.unknown,
+        options: [_allowOnce, _rejectOnce],
+        focused: true,
+      );
+
+      final entries = transcriptRowsOf(
+        const [
+          TranscriptItem.toolCall(
+            id: 't1/tool-call-1',
+            toolCallId: ToolCallId('call-1'),
+            title: 'Query',
+            details: ToolCallView(
+              kind: ToolKind.other,
+              status: ToolCallStatusView.queued,
+            ),
+            approval: pending,
+          ),
+        ],
+        cwd: '/work',
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+      );
+
+      final approval =
+          entries.single.approval! as CodeLabTranscriptApprovalPending;
+      expect(approval.risk, CodeLabApprovalRisk.unknown);
+    });
+
+    // Задача 6.1d-2 (Q33; D27): заметка исхода хода — строка ленты по образцу
+    // `emptyTurn`, информационная.
+    test('a turn-stopped notice becomes an info notice row', () {
+      final rows = transcriptRowsOf(
+        const [
+          TranscriptItem.notice(
+            id: 't1/stopped',
+            kind: NoticeKind.turnStopped,
+            text: 'The model reached its token limit, so the turn ended.',
+          ),
+        ],
+        cwd: '/work',
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+      );
+
+      final notice = rows.single as CodeLabNoticeRow;
+      expect(rows.single.kind, 'notice');
+      expect(notice.id, 'notice-1');
+      expect(notice.severity, CodeLabNoticeSeverity.info);
+      expect(
+        notice.body,
+        'The model reached its token limit, so the turn ended.',
+      );
+    });
+
     test('a pending approval is interactive and answers through the '
         'callback with its own identity', () {
       const pending = PendingApprovalView(
