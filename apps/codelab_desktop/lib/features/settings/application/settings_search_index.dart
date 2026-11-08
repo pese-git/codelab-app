@@ -32,6 +32,7 @@ final class SettingsSearchIndex {
       'key storage',
       'base url',
     ],
+    SettingsPage.mcpServers: ['mcp', 'server', 'tools', 'headers'],
   };
 
   static List<SettingsPage> search(

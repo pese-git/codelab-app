@@ -47,6 +47,19 @@ abstract interface class ProviderSettingsSession {
     ProviderWizardEntry entry = ProviderWizardEntry.app,
   });
 
+  /// Запись MCP-сервера страницы «MCP servers»: порядок «секрет → конфиг →
+  /// откат» (`McpServerCommitter` моста, D11 «Сверка с кодом перед итерацией
+  /// 5b»).
+  ///
+  /// Почему в сессии: порт `ProviderKeys` собирается из IO-бареля моста
+  /// (`providerKeysOf`), которого в `features/` быть не должно (SETUP-9);
+  /// второго открывателя и второго порта секретов нет.
+  McpServerCommitter mcpCommitter();
+
+  /// Удаление MCP-сервера и «Enable here» страницы: секрет — только после
+  /// `ConfigSaved` и без оставшихся ссылок (`McpServerRemover`, SETUP-24).
+  McpServerRemover mcpRemover();
+
   /// Запрашивает список моделей провайдера. Ключ по ссылке [key] читает сам
   /// адаптер и сразу передаёт проверке; в Cubit значение не попадает.
   ///

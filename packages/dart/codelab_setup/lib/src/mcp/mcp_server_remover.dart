@@ -3,13 +3,13 @@
 library;
 
 import 'package:codelab_agent_core/codelab_agent_core.dart'
-    show ConfigLayer, RemoveMcpServer, secretReferencesIn;
+    show ConfigLayer, RemoveMcpServer;
 
 import '../config/agent_config_store.dart';
-import '../config/secret_references.dart';
 import '../provider/provider_keys.dart';
-import '../provider/provider_remover.dart' show SecretCleanup, SecretDeletion;
+import '../provider/provider_remover.dart' show SecretCleanup;
 import 'mcp_layers.dart';
+import 'mcp_secret_cleanup.dart';
 import 'mcp_server_committer.dart';
 
 /// Итог [McpServerRemover.remove].
@@ -99,8 +99,9 @@ final class McpServerRemover {
     if (base == null) {
       return const McpServerRemovalRefused(McpServerRefusal.layerUnreadable);
     }
-    final candidates = _candidates(server.element);
-    final namespace = mcpSecretNamespace(name);
+    // Все ссылки элемента: чужие попадают в итог как `kept`, поэтому список
+    // шире публичных кандидатов, но фильтр общий (`secretCandidatesOf`).
+    final candidates = referencedSecrets(server.element);
 
     final ConfigSaveOutcome outcome;
     try {
@@ -118,29 +119,47 @@ final class McpServerRemover {
       return McpServerRemoved(saved: outcome, secrets: const {});
     }
     // Между снимком и записью другой процесс мог добавить ссылку: конфиг
-    // читается заново (SETUP-24). Без свежего снимка безопасность удаления не
-    // доказана — секреты остаются.
-    final AgentConfigSnapshot fresh;
-    try {
-      fresh = await _config.snapshot(cwd: snapshot.cwd);
-    } on Object {
-      return McpServerRemoved(
-        saved: outcome,
-        secrets: {for (final c in candidates) c: SecretCleanup.failed},
-      );
-    }
-    final secrets = <String, SecretCleanup>{};
-    for (final candidate in candidates) {
-      // Чужое имя (`${secret:shared}`) создал не мастер страницы: оно
-      // принадлежит пользователю и не удаляется (решение пользователя, ревью
-      // 5a; Q22).
-      secrets[candidate] = !candidate.startsWith(namespace)
-          ? SecretCleanup.kept
-          : snapshotReferencesSecret(fresh, candidate)
-          ? SecretCleanup.stillReferenced
-          : await _delete(candidate);
-    }
+    // читается заново (SETUP-24). Чужое имя (`${secret:shared}`) создал не
+    // мастер страницы: оно принадлежит пользователю и не удаляется (решение
+    // пользователя, ревью 5a; Q22) — итог `kept`.
+    final owned = inPageNamespace(name, candidates);
+    final cleaned = await cleanUpSecrets(
+      config: _config,
+      keys: _keys,
+      cwd: snapshot.cwd,
+      candidates: owned,
+    );
+    final secrets = {
+      for (final candidate in candidates)
+        candidate: cleaned[candidate] ?? SecretCleanup.kept,
+    };
     return McpServerRemoved(saved: outcome, secrets: secrets);
+  }
+
+  /// Секреты, которые удаление [name] попытается удалить: подтверждение в app
+  /// показывает именно их (Q30, design.md D11).
+  ///
+  /// Почему здесь: правило одно на подтверждение и на [remove] — иначе список
+  /// на экране разойдётся с тем, что будет удалено. Кандидат — секрет
+  /// пространства `codelab/mcp/<name>/` из `${secret:…}` в `env` и `headers`
+  /// элемента; ручные и чужие секреты не кандидаты (в [remove] это `kept`).
+  /// Секрет, на который ссылается другой элемент, остаётся кандидатом: итог
+  /// `stillReferenced` [remove] определяет по свежему снимку после записи.
+  ///
+  /// Как использовать: чистая функция по снимку, хранилища не трогает.
+  /// Неизвестный сервер, сервер слоя 3 и «disabled here» дают пустой список
+  /// (как отказы [remove]: `unknownServer`, `notEditable`).
+  static List<String> secretCandidatesOf(
+    AgentConfigSnapshot snapshot,
+    String name,
+  ) {
+    final server = effectiveMcpServer(snapshot, name);
+    if (server == null ||
+        server.layer == ConfigLayer.project ||
+        server.disabledHere) {
+      return const [];
+    }
+    return inPageNamespace(name, referencedSecrets(server.element));
   }
 
   /// «Enable here» (Q21): убирает переопределение `{name, enabled: false}`
@@ -167,40 +186,6 @@ final class McpServerRemover {
         outcome: null,
         errorType: error.runtimeType.toString(),
       );
-    }
-  }
-
-  /// Секреты, на которые ссылается элемент в `env` и `headers`, по порядку.
-  List<String> _candidates(Map<String, Object?> element) {
-    final names = <String>[];
-    for (final field in ['env', 'headers']) {
-      final table = element[field];
-      if (table is! Map<Object?, Object?>) {
-        continue;
-      }
-      for (final value in table.values) {
-        if (value is! String) {
-          continue;
-        }
-        for (final name in secretReferencesIn(value)) {
-          if (!names.contains(name)) {
-            names.add(name);
-          }
-        }
-      }
-    }
-    return names;
-  }
-
-  Future<SecretCleanup> _delete(String name) async {
-    try {
-      return switch (await _keys.delete(name)) {
-        SecretDeletion.deleted => SecretCleanup.deleted,
-        SecretDeletion.notSet => SecretCleanup.alreadyAbsent,
-        SecretDeletion.failed => SecretCleanup.failed,
-      };
-    } on Object {
-      return SecretCleanup.failed;
     }
   }
 }

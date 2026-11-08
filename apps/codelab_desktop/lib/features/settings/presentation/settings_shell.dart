@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../../app/navigation/settings_page.dart';
 import '../application/settings_search_index.dart';
 import 'connection_page.dart';
+import 'mcp_page.dart';
 import 'providers_page.dart';
 
 /// Тела страниц настроек.
@@ -21,6 +22,7 @@ final Map<SettingsPage, WidgetBuilder> settingsPageBuilders =
     Map.unmodifiable(<SettingsPage, WidgetBuilder>{
       SettingsPage.connection: buildConnectionPage,
       SettingsPage.providers: buildProvidersPage,
+      SettingsPage.mcpServers: buildMcpPage,
     });
 
 /// Ширина окна, меньше которой навигация настроек уходит наверх.

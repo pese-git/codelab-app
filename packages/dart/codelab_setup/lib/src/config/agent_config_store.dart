@@ -11,7 +11,8 @@ import 'package:codelab_agent_core/codelab_agent_core.dart'
         ConfigLayer,
         ConfigLoadResult,
         ConfigSnapshot,
-        SecretBackendInfo;
+        SecretBackendInfo,
+        unsetVariableEvent;
 
 import 'config_source_view.dart';
 import 'config_values.dart';
@@ -144,6 +145,30 @@ final class AgentConfigSnapshot {
     for (final issue in loaded.issues)
       if (_isMissingKey(issue)) issue,
   ];
+
+  /// Проблемы, из-за которых агент ОТКЛОНИТ конфиг (Q30 (в), design.md change
+  /// `add-provider-setup-ui`, D11, Q26): виды `value`, `semantic` и
+  /// `inlineSecret` из [issues] плюс стартовые проблемы с событием
+  /// `unsetVariable` (незаданная `${VAR}`, например в `env` MCP-сервера).
+  ///
+  /// Почему отдельный геттер: [issues] и [startProblems] нельзя менять —
+  /// страница Providers и CLI на них завязаны. Страница MCP строит по
+  /// `rejections` состояние «агент отклонил конфиг», не блокируя запись.
+  /// Не входят: синтаксис, `profile`, `unknownKey`, `type` (они блокируют
+  /// страницу через [issues]) и прочие стартовые проблемы отсутствия ключа
+  /// (`config.model.none`, D26).
+  List<ConfigIssue> get rejections => [
+    for (final issue in loaded.issues)
+      if (_rejectionKinds.contains(issue.kind) &&
+          (!_isMissingKey(issue) || issue.event == unsetVariableEvent))
+        issue,
+  ];
+
+  static const _rejectionKinds = {
+    ConfigIssueKind.value,
+    ConfigIssueKind.semantic,
+    ConfigIssueKind.inlineSecret,
+  };
 
   bool _isMissingKey(ConfigIssue issue) {
     if (issue.kind != ConfigIssueKind.value ||

@@ -43,6 +43,13 @@ List<Map<String, Object?>> layerMcpServers(
       isIgnoredByTrust(snapshot.loaded, layer, 'mcp.servers')) {
     return const [];
   }
+  return mcpServerElementsOf(values);
+}
+
+/// Элементы `mcp.servers` из сырых значений слоя (как в файле); элементы без
+/// строкового `name` пропускаются. Одна реализация разбора для списка
+/// страницы и для очистки секретов прежнего элемента.
+List<Map<String, Object?>> mcpServerElementsOf(Map<String, Object?> values) {
   final servers = (values['mcp'] is Map<Object?, Object?>)
       ? (values['mcp'] as Map<Object?, Object?>)['servers']
       : null;

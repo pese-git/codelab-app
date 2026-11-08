@@ -12,6 +12,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart'
         soleSecretReference;
 
 import '../secret/secret_value.dart';
+import 'mcp_masking.dart';
 import 'mcp_transport_kind.dart';
 
 /// Значение `env` или `headers` в форме.
@@ -212,6 +213,46 @@ final class McpServerDraft {
     extra: _extra,
   );
 
+  /// Ключи, чьи значения список маскирует: `command`, `url`, `args`,
+  /// `env.<KEY>`, `headers.<KEY>` (независимо от активного типа). Правило общее со строкой списка
+  /// (`McpServerEntryView`, `mcp_masking.dart`).
+  ///
+  /// Почему: черновик хранит сырое значение (запись пишет элемент целиком, и
+  /// маска стёрла бы его), а форма не должна показывать то, что список
+  /// скрыл. App по этому набору выводит маску «пусто = не менять» вместо
+  /// значения. Секреты (`McpNewSecret`, `McpStoredSecret`) маскируются формой
+  /// всегда и в набор не входят.
+  Set<String> get maskedValues {
+    // Все поля независимо от активного типа: переключение stdio ↔ http не
+    // должно открывать то, что строка списка скрывает.
+    final out = <String>{};
+    if (command.isNotEmpty &&
+        mcpDisplayValue(name, 'command', command) != command) {
+      out.add('command');
+    }
+    if (url.isNotEmpty && mcpDisplayValue(name, 'url', url) != url) {
+      out.add('url');
+    }
+    if (args.isNotEmpty &&
+        mcpDisplayArgs(args).join('\u0000') != args.join('\u0000')) {
+      out.add('args');
+    }
+    for (final MapEntry(:key, :value) in env.entries) {
+      if (value is McpTextValue &&
+          mcpDisplayValue(name, 'env.${mcpKeySegment(key)}', value.value) !=
+              value.value) {
+        out.add('env.$key');
+      }
+    }
+    for (final MapEntry(:key, :value) in headers.entries) {
+      if (value is McpTextValue &&
+          mcpDisplayHeader(value.value) != value.value) {
+        out.add('headers.$key');
+      }
+    }
+    return out;
+  }
+
   /// Проблемы до записи; пусто — черновик годится. [existingNames] — имена
   /// серверов эффективного конфига (уникальность).
   List<McpDraftProblem> validate({Set<String> existingNames = const {}}) {
@@ -287,7 +328,19 @@ final class McpServerDraft {
       for (final value in table.values)
         if (value is McpStoredSecret && value.name != null) value.name!,
     };
+    // Ключи, равные после `trim`, — один и тот же ключ для человека: молча
+    // схлопнуть нельзя, пользователь выбирает, какое значение оставить.
+    final seen = <String>{};
     for (final MapEntry(:key, :value) in table.entries) {
+      if (key.trim().isNotEmpty && key != key.trim()) {
+        // Пробелы по краям попали бы в имя переменной или заголовка как есть.
+        out.add(McpDraftProblem(field, 'Remove spaces around the name $key.'));
+        continue;
+      }
+      if (key.trim().isNotEmpty && !seen.add(key.trim())) {
+        out.add(McpDraftProblem(field, 'Two values are named ${key.trim()}.'));
+        continue;
+      }
       if (key.trim().isEmpty) {
         out.add(McpDraftProblem(field, 'Enter a name for every value.'));
       } else if (value is McpNewSecret && value.value.reveal().isEmpty) {
