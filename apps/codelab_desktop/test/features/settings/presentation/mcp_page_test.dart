@@ -17,6 +17,8 @@
 // или поле ввода (как на страницах Connection и Providers), поля редактора —
 // `mcp-draft-*` внутри `mcp-row-<name>` или `mcp-new`.
 
+import 'dart:io';
+
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show AgentMessageChunk, SessionId, TextContent;
 import 'package:codelab_client_core/codelab_client_core.dart';
@@ -32,6 +34,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_mcp_status.dart';
 import '../../../support/fake_provider_settings.dart';
+import '../../../support/real_config_session.dart';
 import '../../../support/recording_logger.dart';
 
 const _authorization = 'codelab/mcp/github/authorization';
@@ -122,11 +125,14 @@ void main() {
     projectDir = '/work/app';
   });
 
-  Future<McpSettingsCubit> openPage(WidgetTester tester) async {
+  Future<McpSettingsCubit> openPage(
+    WidgetTester tester, {
+    ProviderSettingsSession? realSession,
+  }) async {
     final cubit = McpSettingsCubit(
       workspace: workspace,
       defaultProfile: () async => embeddedConnectionProfile,
-      open: (access, env) async => session,
+      open: (access, env) async => realSession ?? session,
       environment: const {'HOME': '/home/u'},
       codelabHome: '/home/u/.codelab',
       projectDirectory: () => projectDir,
@@ -135,7 +141,12 @@ void main() {
       now: () => DateTime(2026, 11, 8, 14, 2),
     );
     addTearDown(cubit.close);
-    await cubit.reload();
+    // Настоящий файловый ввод-вывод не идёт в fake-async зоне теста.
+    if (realSession == null) {
+      await cubit.reload();
+    } else {
+      await tester.runAsync(cubit.reload);
+    }
     await tester.pumpWidget(
       FluentApp(
         home: ScaffoldPage(
@@ -1441,6 +1452,135 @@ void main() {
       );
       expect(find.textContaining('boom'), findsNothing);
       expect(find.textContaining(leakMarker), findsNothing);
+    });
+  });
+
+  // Задача 6.1b-2 change `add-provider-setup-ui` (Q31): текст баннера
+  // `saved` после записи сервера, который агент применит после «Restart
+  // agent». Признак — настоящая функция моста по снимкам настоящего
+  // хранилища, запись идёт через `runAsync` (файловый ввод-вывод).
+  group('the saved banner after a write that needs Restart agent (6.1b-2)', () {
+    late Directory root;
+
+    setUp(() {
+      root = Directory.systemTemp.createTempSync('codelab_mcp_page_restart_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      Directory('${root.path}/home').createSync();
+      Directory('${root.path}/project').createSync();
+    });
+
+    Future<(McpSettingsCubit, RealConfigSession)> openReal(
+      WidgetTester tester, {
+      String config = realHomeConfig,
+    }) async {
+      final real = await tester.runAsync(
+        () => RealConfigSession.open(
+          home: '${root.path}/home',
+          project: '${root.path}/project',
+          config: config,
+        ),
+      );
+      projectDir = '${root.path}/project';
+      connect(embeddedConnectionProfile);
+      final cubit = await openPage(tester, realSession: real);
+      return (cubit, real!);
+    }
+
+    testWidgets('a new stdio server: the banner names Restart agent', (
+      tester,
+    ) async {
+      final (cubit, _) = await openReal(tester);
+
+      await tester.runAsync(
+        () => cubit.save(
+          McpServerDraft(
+            name: 'fresh',
+            kind: McpTransportKind.stdio,
+            command: 'npx',
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.descendant(
+          of: _key('mcp-banner'),
+          matching: find.text(
+            'Server fresh saved. It starts after Restart agent '
+            '(Settings › Connection).',
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the switch that enables a server: the banner says enabled '
+        'and names Restart agent', (tester) async {
+      final (cubit, _) = await openReal(
+        tester,
+        config:
+            '''
+$realHomeConfig
+mcp:
+  servers:
+    - name: docs
+      type: stdio
+      command: docs-mcp
+      enabled: false
+''',
+      );
+
+      await tester.runAsync(() => cubit.setEnabled('docs', enabled: true));
+      await tester.pump();
+
+      expect(
+        find.descendant(
+          of: _key('mcp-banner'),
+          matching: find.text(
+            'Server docs enabled. It starts after Restart agent '
+            '(Settings › Connection).',
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
+  // Задача 6.1e (Q34): панель показывает ответ без внешнего ограждения.
+  group('the fence of the /mcp reply on the page (6.1e)', () {
+    testWidgets('a fenced reply is shown without the fence lines; a reply '
+        'with text around the block is shown as it is', (tester) async {
+      connect(_ownAgent, active: _s1);
+      final handle = externalSession();
+      handle.onSend = (_) async => completedTurn(_s1, [
+        AgentMessageChunk(
+          content: const TextContent(
+            text: '```text\nMCP servers (1)\ngithub connected 3\n```',
+          ),
+        ),
+      ]);
+      await openPage(tester);
+
+      await tester.tap(_key('mcp-status-refresh'));
+      await settle(tester);
+
+      final block = tester.widget<CodeLabMonospaceBlock>(
+        _key('mcp-status-text'),
+      );
+      expect(block.data, 'MCP servers (1)\ngithub connected 3');
+      expect(find.textContaining('```'), findsNothing);
+
+      const around = 'Servers:\n```\nA\n```';
+      handle.onSend = (_) async => completedTurn(_s1, [
+        AgentMessageChunk(content: const TextContent(text: around)),
+      ]);
+      await tester.tap(_key('mcp-status-refresh'));
+      await settle(tester);
+
+      expect(
+        tester.widget<CodeLabMonospaceBlock>(_key('mcp-status-text')).data,
+        around,
+      );
     });
   });
 }

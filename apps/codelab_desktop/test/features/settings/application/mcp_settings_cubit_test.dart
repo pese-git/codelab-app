@@ -26,6 +26,7 @@
 // состояние и журнал его видеть не должны (SETUP-1, D18).
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show
@@ -44,6 +45,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_mcp_status.dart';
 import '../../../support/fake_provider_settings.dart';
+import '../../../support/real_config_session.dart';
 import '../../../support/recording_logger.dart';
 
 const _home = '/home/u/.codelab';
@@ -524,6 +526,7 @@ void main() {
         'cleanup_deleted': 0,
         'cleanup_kept': 0,
         'cleanup_failed': 0,
+        'restart_required': false,
         'event': 'mcp_settings.saved',
         'level': 'info',
       });
@@ -1588,6 +1591,291 @@ void main() {
       await cubit.refresh();
 
       expect(handle.sent, isEmpty);
+    });
+  });
+
+  // Задача 6.1b-2 change `add-provider-setup-ui` (Q31; design.md D11
+  // «Итерация 6: сервер, отложенный до перезапуска»): признак даёт настоящая
+  // функция моста `restartRequiredServers(before, after)` по снимкам
+  // настоящего `FileAgentConfigStore` (правило ядра `planConfigReload`), а не
+  // мок. Красные до реализации в `McpSettingsCubit` и до функции моста
+  // (задача 6.1b-1).
+  group('a server that starts only after Restart agent (6.1b-2, Q31)', () {
+    late Directory root;
+    late RealConfigSession real;
+
+    const restartSaved =
+        'Server fresh saved. It starts after Restart agent '
+        '(Settings › Connection).';
+
+    setUp(() async {
+      root = Directory.systemTemp.createTempSync('codelab_mcp_restart_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      Directory('${root.path}/home').createSync();
+      Directory('${root.path}/project').createSync();
+    });
+
+    Future<McpSettingsCubit> openReal({
+      String config = realHomeConfig,
+      bool agentConnected = true,
+    }) async {
+      real = await RealConfigSession.open(
+        home: '${root.path}/home',
+        project: '${root.path}/project',
+        config: config,
+      );
+      if (agentConnected) {
+        connect(embeddedConnectionProfile);
+      }
+      final cubit = McpSettingsCubit(
+        workspace: workspace,
+        defaultProfile: () async => embeddedConnectionProfile,
+        open: (access, env) async => real,
+        environment: {'HOME': '${root.path}/home'},
+        codelabHome: '${root.path}/home',
+        projectDirectory: () => '${root.path}/project',
+        statusSource: source,
+        logger: logger,
+        now: () => clock,
+      );
+      cubits.add(cubit);
+      await cubit.reload();
+      return cubit;
+    }
+
+    McpServerDraft stdio(String name) => McpServerDraft(
+      name: name,
+      kind: McpTransportKind.stdio,
+      command: 'npx',
+    );
+
+    test(
+      'a new stdio server names Restart agent and the event says so',
+      () async {
+        final cubit = await openReal();
+
+        expect(await cubit.save(stdio('fresh')), isTrue);
+
+        expect(current(cubit).banner?.kind, McpBannerKind.saved);
+        expect(current(cubit).banner?.lines.first, restartSaved);
+        expect(event('mcp_settings.saved')['restart_required'], isTrue);
+      },
+    );
+
+    test(
+      'a new http server with a secret header names Restart agent',
+      () async {
+        final cubit = await openReal();
+
+        await cubit.save(
+          McpServerDraft(
+            name: 'fresh',
+            kind: McpTransportKind.http,
+            url: 'https://mcp.example.test/mcp/',
+            headers: {'Authorization': McpValueDraft.secret(SecretValue('x'))},
+          ),
+        );
+
+        expect(current(cubit).banner?.lines.first, restartSaved);
+        expect(event('mcp_settings.saved')['restart_required'], isTrue);
+      },
+    );
+
+    test('a new http server without substitutions is plain saved', () async {
+      final cubit = await openReal();
+
+      await cubit.save(
+        McpServerDraft(
+          name: 'fresh',
+          kind: McpTransportKind.http,
+          url: 'https://mcp.example.test/mcp/',
+        ),
+      );
+
+      expect(current(cubit).banner?.lines.first, 'Server fresh saved.');
+      expect(event('mcp_settings.saved')['restart_required'], isFalse);
+    });
+
+    test(
+      'a key outside the connection of an enabled server is plain saved',
+      () async {
+        final cubit = await openReal(
+          config:
+              '''
+$realHomeConfig
+mcp:
+  servers:
+    - name: web
+      type: http
+      url: https://mcp.example.test/mcp/
+''',
+        );
+
+        final draft = cubit.draftFor('web')!;
+        await cubit.save(draft.copyWith(enabled: true));
+
+        expect(current(cubit).banner?.lines.first, 'Server web saved.');
+        expect(event('mcp_settings.saved')['restart_required'], isFalse);
+      },
+    );
+
+    test(
+      'changed arguments of an enabled stdio server name Restart agent',
+      () async {
+        final cubit = await openReal(
+          config:
+              '''
+$realHomeConfig
+mcp:
+  servers:
+    - name: docs
+      type: stdio
+      command: docs-mcp
+      args: [--root, /tmp]
+''',
+        );
+
+        await cubit.save(
+          cubit.draftFor('docs')!.copyWith(args: ['--root', '/x']),
+        );
+
+        expect(
+          current(cubit).banner?.lines.first,
+          'Server docs saved. It starts after Restart agent '
+          '(Settings › Connection).',
+        );
+      },
+    );
+
+    test(
+      'enabling with the switch names Restart agent in its own words',
+      () async {
+        final cubit = await openReal(
+          config:
+              '''
+$realHomeConfig
+mcp:
+  servers:
+    - name: docs
+      type: stdio
+      command: docs-mcp
+      enabled: false
+''',
+        );
+
+        expect(await cubit.setEnabled('docs', enabled: true), isTrue);
+
+        expect(
+          current(cubit).banner?.lines.first,
+          'Server docs enabled. It starts after Restart agent '
+          '(Settings › Connection).',
+        );
+      },
+    );
+
+    test('disabling with the switch needs no restart: no banner', () async {
+      final cubit = await openReal(
+        config:
+            '''
+$realHomeConfig
+mcp:
+  servers:
+    - name: docs
+      type: stdio
+      command: docs-mcp
+''',
+      );
+
+      await cubit.setEnabled('docs', enabled: false);
+
+      expect(current(cubit).banner, isNull);
+    });
+
+    test('without a connected agent the banner is plain saved', () async {
+      final cubit = await openReal(agentConnected: false);
+
+      await cubit.save(stdio('fresh'));
+
+      expect(current(cubit).banner?.lines.first, 'Server fresh saved.');
+    });
+  });
+
+  // Задача 6.1e change `add-provider-setup-ui` (Q34 (б); design.md D11
+  // «Итерация 6: ограждение ответа `/mcp list`»): ядро ставит markdown-
+  // ограждение для ленты чата; панель снимает ОДНО внешнее, только если весь
+  // ответ — один огороженный блок. Красные до реализации склейки ответа.
+  group('the fence of the /mcp reply (6.1e, Q34)', () {
+    late FakeSessionHandle handle;
+
+    setUp(() {
+      handle = externalSession(id: _s1);
+      connect(_ownAgent, active: _s1);
+    });
+
+    Future<String?> replyText(
+      List<String> chunks, {
+      bool reload = false,
+    }) async {
+      handle.onSend = (_) async =>
+          completedTurn(_s1, [for (final c in chunks) _msg(c)]);
+      final cubit = make();
+      await cubit.reload();
+      if (reload) {
+        await cubit.reloadAll();
+      } else {
+        await cubit.refresh();
+      }
+      return (status(cubit) as McpAgentStatusText).text;
+    }
+
+    const table = 'MCP servers (1)\ngithub connected 3';
+
+    test('one fenced block with a language loses its fence lines', () async {
+      expect(await replyText(['```text\n$table\n```']), table);
+    });
+
+    test(
+      'a fence without a language is removed too, also over chunks',
+      () async {
+        expect(
+          await replyText([
+            '```\nMCP servers (1)\n',
+            'github connected 3\n```',
+          ]),
+          table,
+        );
+      },
+    );
+
+    test('blank lines around the block do not matter', () async {
+      expect(await replyText(['\n\n```text\n$table\n```\n\n']), table);
+    });
+
+    test('text before or after the block stays as it is', () async {
+      const before = 'Servers:\n```text\n$table\n```';
+      const after = '```text\n$table\n```\nDone.';
+      expect(await replyText([before]), before);
+      expect(await replyText([after]), after);
+    });
+
+    test('two blocks stay as they are', () async {
+      const two = '```\nA\n```\n```\nB\n```';
+      expect(await replyText([two]), two);
+    });
+
+    test('a block with an inner fence line stays as it is', () async {
+      const inner = '```text\nA\n```\nB\n```';
+      expect(await replyText([inner]), inner);
+    });
+
+    test('an opening fence alone stays as it is', () async {
+      const open = '```text\n$table';
+      expect(await replyText([open]), open);
+    });
+
+    test('a reply to /mcp reload without a fence stays as it is', () async {
+      const reload = 'Reloaded github: connected';
+      expect(await replyText([reload], reload: true), reload);
     });
   });
 

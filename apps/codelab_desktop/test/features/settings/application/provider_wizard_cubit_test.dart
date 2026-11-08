@@ -512,6 +512,65 @@ void main() {
       expect(cubit.savedBanner!.action, isNull);
     });
 
+    // Задача 6.1a change `add-provider-setup-ui` (Q17; spec app-settings,
+    // баннер `saved`): агент читает ключ при открытии, поэтому с ключом в
+    // плане модели провайдера доступны только после «Restart agent». Красные
+    // до реализации `ProviderWizardCubit._bannerFor` по `done.plan.key`.
+    const restartText =
+        'Provider llm-example saved. Its models are available after Restart '
+        'agent (Settings › Connection).';
+
+    test('6.1a banner: a new stored key with a running agent points to '
+        'Restart agent', () async {
+      final cubit = await open();
+      await walkToReview(cubit, key: StoreSecret(SecretValue(leakMarker)));
+      cubit.dispatch(const ConfirmSave());
+      await pumpEventQueue(times: 20);
+
+      expect(cubit.savedBanner!.kind, ProviderBannerKind.saved);
+      expect(cubit.savedBanner!.text, restartText);
+      expect(cubit.savedBanner!.action, isNull);
+      expect(cubit.savedBanner!.text, isNot(contains(leakMarker)));
+    });
+
+    test('6.1a banner: KeepStoredSecret points to Restart agent', () async {
+      session.secrets['codelab/llm-example'] = 'old-value';
+      final cubit = await open();
+      await walkToReview(cubit, key: const KeepStoredSecret());
+      cubit.dispatch(const ConfirmSave());
+      await pumpEventQueue(times: 20);
+
+      expect(cubit.savedBanner!.text, restartText);
+    });
+
+    test('6.1a banner: UseEnvVar points to Restart agent', () async {
+      session.wizardEnvironment = const {'LLM_KEY': 'value-from-env'};
+      final cubit = await open();
+      await walkToReview(cubit, key: const UseEnvVar('LLM_KEY'));
+      cubit.dispatch(const ConfirmSave());
+      await pumpEventQueue(times: 20);
+
+      expect(cubit.savedBanner!.text, restartText);
+    });
+
+    test('6.1a banner: a replaced key keeps its own text; no key and a '
+        'missing agent keep theirs', () async {
+      session.secrets['codelab/llm-example'] = 'old-value';
+      final replaced = await open();
+      await walkToReview(
+        replaced,
+        key: StoreSecret(SecretValue(leakMarker)),
+        replaceExisting: true,
+      );
+      replaced.dispatch(const ConfirmSave());
+      await pumpEventQueue(times: 20);
+      expect(
+        replaced.savedBanner!.text,
+        'Provider llm-example saved. The new key is used after Restart agent '
+        '(Settings › Connection).',
+      );
+    });
+
     test('a conflict returns to Review with the same plan and the banner; '
         'nothing is retried', () async {
       store.nextOutcome = const ConfigConflict(FakeAgentConfigStore.userPath);
