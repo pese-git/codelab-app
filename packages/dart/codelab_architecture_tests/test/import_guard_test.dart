@@ -1074,6 +1074,47 @@ void main() {
     );
   });
 
+  test('allows agent_mcp/testing.dart only in the testing layer of the '
+      'embedded agent', () {
+    const import = "import 'package:codelab_agent_mcp/testing.dart';\n";
+    final tmp = Directory.systemTemp.createTempSync('guard_mcp_testing_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeLib(tmp, 'src/testing/fake_mcp_http_host.dart', import);
+    writeLib(tmp, 'testing.dart', import);
+    writeLib(tmp, 'src/io/opener.dart', import);
+    writeLib(tmp, 'io.dart', import);
+    writeLib(tmp, 'src/assemble.dart', import);
+
+    final violations = [
+      for (final rule in rules.where(
+        (r) => r.dir == 'packages/dart/codelab_embedded/lib',
+      ))
+        ...scan(
+          tmp.path,
+          PackageRule(
+            'lib',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+
+    expect(violations, hasLength(3));
+    expect(
+      violations,
+      containsAll([
+        endsWith(
+          'lib/src/io/opener.dart:1 -> package:codelab_agent_mcp/testing.dart',
+        ),
+        endsWith('lib/io.dart:1 -> package:codelab_agent_mcp/testing.dart'),
+        endsWith(
+          'lib/src/assemble.dart:1 -> package:codelab_agent_mcp/testing.dart',
+        ),
+      ]),
+    );
+  });
+
   // Дыра, найденная ревью итерации 2: правило первого уровня снимает запреты
   // с `io.dart`, `src/io/` и `testing.dart` целиком, поэтому ссылки между ними
   // оно не видит. Открыватель настольных хостов не должен тянуть сценарий

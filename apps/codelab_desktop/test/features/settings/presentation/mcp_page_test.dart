@@ -197,10 +197,10 @@ void main() {
       expect(_key('settings-mcp'), findsOneWidget);
       expect(find.text('MCP servers'), findsWidgets);
       expect(_key('mcp-add'), findsOneWidget);
+      // Два блока артборда: слева число серверов, справа индикатор.
+      expect(find.text('3 servers'), findsOneWidget);
       expect(
-        find.text(
-          '3 servers · Composition from the config · agent status below',
-        ),
+        find.text('Composition from the config · agent status below'),
         findsOneWidget,
       );
       for (final part in const ['row', 'toggle']) {
@@ -377,6 +377,270 @@ void main() {
             .checked,
         isFalse,
       );
+    });
+
+    testWidgets('arguments are one per line as they are: an argument with a '
+        'space survives an edit of another field (decision 2026-11-08)', (
+      tester,
+    ) async {
+      store.user = _layer([
+        {
+          'name': 'docs',
+          'type': 'stdio',
+          'command': 'docs-mcp',
+          'args': ['--root', '~/My Docs'],
+        },
+      ]);
+      await openPage(tester);
+      await expand(tester, 'docs');
+
+      expect(find.text('One argument per line.'), findsOneWidget);
+      expect(
+        _editable(tester, _in('mcp-row-docs', 'mcp-draft-args')),
+        '--root\n~/My Docs',
+      );
+
+      await tester.enterText(
+        _in('mcp-row-docs', 'mcp-draft-command'),
+        'docs-mcp2',
+      );
+      await tester.tap(_key('mcp-save-docs'));
+      await settle(tester);
+
+      final element =
+          (store.applied.single.edits.single as UpsertMcpServer).server;
+      expect(element['command'], 'docs-mcp2');
+      expect(element['args'], ['--root', '~/My Docs']);
+    });
+
+    testWidgets('an edited arguments field is split by lines only; empty '
+        'lines are dropped', (tester) async {
+      store.user = _layer([
+        {'name': 'docs', 'type': 'stdio', 'command': 'docs-mcp'},
+      ]);
+      await openPage(tester);
+      await expand(tester, 'docs');
+
+      await tester.enterText(
+        _in('mcp-row-docs', 'mcp-draft-args'),
+        '--root\n~/My Docs\n\nextra  ',
+      );
+      await tester.tap(_key('mcp-save-docs'));
+      await settle(tester);
+
+      final element =
+          (store.applied.single.edits.single as UpsertMcpServer).server;
+      expect(element['args'], ['--root', '~/My Docs', 'extra  ']);
+    });
+
+    testWidgets('values the row masks are not shown in the editor and Save '
+        'without a touch keeps them as they are (review 5b, MEDIUM-1)', (
+      tester,
+    ) async {
+      final stdio = {
+        'name': 'tok',
+        'type': 'stdio',
+        'command': 'tok-mcp',
+        'args': ['--token', leakMarker],
+        'env': {'API_TOKEN': leakMarker},
+      };
+      final http = {
+        'name': 'web',
+        'type': 'http',
+        'url': 'https://api.example.test/mcp/?token=$leakMarker',
+        'headers': {'X-Workspace': leakMarker},
+      };
+      store.user = _layer([stdio, http]);
+      await openPage(tester);
+      await expand(tester, 'tok');
+      await expand(tester, 'web');
+
+      expect(find.textContaining(leakMarker), findsNothing);
+      expect(find.textContaining(leakMarker, findRichText: true), findsNothing);
+
+      await tester.tap(_key('mcp-save-tok'));
+      await settle(tester);
+      await tester.tap(_key('mcp-save-web'));
+      await settle(tester);
+
+      final saved = [
+        for (final apply in store.applied)
+          (apply.edits.single as UpsertMcpServer).server,
+      ];
+      expect(saved[0]['args'], ['--token', leakMarker]);
+      expect(saved[0]['env'], {'API_TOKEN': leakMarker});
+      expect(
+        saved[1]['url'],
+        'https://api.example.test/mcp/?token=$leakMarker',
+      );
+      expect(saved[1]['headers'], {'X-Workspace': leakMarker});
+    });
+
+    testWidgets('a masked command is hidden and Save without a touch keeps '
+        'it byte for byte; hidden values of the other table stay hidden '
+        'after a switch of the type (second review 5b)', (tester) async {
+      final command = ' tok-mcp --key=$leakMarker ';
+      store.user = _layer([
+        {
+          'name': 'tok',
+          'type': 'stdio',
+          'command': command,
+          'env': {'API_TOKEN': leakMarker},
+          'headers': {'X-Workspace': leakMarker},
+        },
+      ]);
+      await openPage(tester);
+      await expand(tester, 'tok');
+
+      expect(find.textContaining(leakMarker), findsNothing);
+      await tester.tap(_in('mcp-row-tok', 'mcp-draft-type-http'));
+      await settle(tester);
+      expect(find.textContaining(leakMarker), findsNothing);
+      await tester.tap(_in('mcp-row-tok', 'mcp-draft-type-stdio'));
+      await settle(tester);
+
+      await tester.tap(_key('mcp-save-tok'));
+      await settle(tester);
+
+      final element =
+          (store.applied.single.edits.single as UpsertMcpServer).server;
+      expect(element['command'], command);
+      expect(element['env'], {'API_TOKEN': leakMarker});
+    });
+
+    testWidgets('a key with spaces around it is a problem of the bridge '
+        'draft, shown under the form', (tester) async {
+      await openPage(tester);
+      await tester.tap(_key('mcp-add'));
+      await settle(tester);
+      await tester.enterText(_in('mcp-new', 'mcp-draft-name'), 'fresh');
+      await tester.enterText(_in('mcp-new', 'mcp-draft-command'), 'npx');
+      await tester.tap(_in('mcp-new', 'mcp-draft-add-row'));
+      await settle(tester);
+      await tester.enterText(_in('mcp-new', 'mcp-draft-key-0'), 'TOKEN ');
+
+      await tester.tap(_key('mcp-new-save'));
+      await settle(tester);
+
+      expect(
+        find.descendant(
+          of: _key('mcp-new'),
+          matching: find.text('Remove spaces around the name TOKEN .'),
+        ),
+        findsOneWidget,
+      );
+      expect(store.applied, isEmpty);
+    });
+
+    testWidgets('two rows without a name are the bridge problem, not a '
+        'duplicate', (tester) async {
+      await openPage(tester);
+      await tester.tap(_key('mcp-add'));
+      await settle(tester);
+      await tester.enterText(_in('mcp-new', 'mcp-draft-name'), 'fresh');
+      await tester.enterText(_in('mcp-new', 'mcp-draft-command'), 'npx');
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(_in('mcp-new', 'mcp-draft-add-row'));
+        await settle(tester);
+      }
+
+      await tester.tap(_key('mcp-new-save'));
+      await settle(tester);
+
+      expect(
+        find.descendant(
+          of: _key('mcp-new'),
+          matching: find.text('Enter a name for every value.'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Two values are named'), findsNothing);
+      expect(store.applied, isEmpty);
+    });
+
+    testWidgets('leftover headers and url of a stdio server stay hidden after '
+        'a switch to http and Save keeps them raw (L-c)', (tester) async {
+      final url = 'https://api.example.test/mcp/?token=$leakMarker';
+      store.user = _layer([
+        {
+          'name': 'tok',
+          'type': 'stdio',
+          'command': 'tok-mcp',
+          'url': url,
+          'headers': {'X-Workspace': leakMarker},
+        },
+      ]);
+      await openPage(tester);
+      await expand(tester, 'tok');
+
+      await tester.tap(_in('mcp-row-tok', 'mcp-draft-type-http'));
+      await settle(tester);
+
+      expect(find.textContaining(leakMarker), findsNothing);
+      expect(find.textContaining(leakMarker, findRichText: true), findsNothing);
+
+      await tester.tap(_key('mcp-save-tok'));
+      await settle(tester);
+
+      final element =
+          (store.applied.single.edits.single as UpsertMcpServer).server;
+      expect(element['url'], url);
+      expect(element['headers'], {'X-Workspace': leakMarker});
+    });
+
+    testWidgets('typing into a masked field replaces the value as a whole', (
+      tester,
+    ) async {
+      store.user = _layer([
+        {
+          'name': 'web',
+          'type': 'http',
+          'url': 'https://api.example.test/mcp/',
+          'headers': {'X-Workspace': leakMarker},
+        },
+      ]);
+      await openPage(tester);
+      await expand(tester, 'web');
+
+      await tester.enterText(_in('mcp-row-web', 'mcp-draft-value-0'), 'new');
+      await tester.tap(_key('mcp-save-web'));
+      await settle(tester);
+
+      final element =
+          (store.applied.single.edits.single as UpsertMcpServer).server;
+      expect(element['headers'], {'X-Workspace': 'new'});
+    });
+
+    testWidgets('two rows with the same name are a form problem, not '
+        'collapsed silently', (tester) async {
+      await openPage(tester);
+      await tester.tap(_key('mcp-add'));
+      await settle(tester);
+      await tester.enterText(_in('mcp-new', 'mcp-draft-name'), 'fresh');
+      await tester.tap(_in('mcp-new', 'mcp-draft-type-http'));
+      await settle(tester);
+      await tester.enterText(
+        _in('mcp-new', 'mcp-draft-url'),
+        'https://x.example.test/mcp/',
+      );
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(_in('mcp-new', 'mcp-draft-add-row'));
+        await settle(tester);
+        await tester.enterText(_in('mcp-new', 'mcp-draft-key-$i'), 'X-Team');
+        await tester.enterText(_in('mcp-new', 'mcp-draft-value-$i'), 'v$i');
+      }
+
+      await tester.tap(_key('mcp-new-save'));
+      await settle(tester);
+
+      expect(
+        find.descendant(
+          of: _key('mcp-new'),
+          matching: find.text('Two values are named X-Team.'),
+        ),
+        findsOneWidget,
+      );
+      expect(store.applied, isEmpty);
     });
 
     testWidgets('Save writes the edited element of its own layer', (
@@ -652,12 +916,58 @@ void main() {
       expect(store.applied, isEmpty);
       expect(session.secrets[_authorization], leakMarker);
 
-      await tester.tap(find.text('Replace it'));
+      await tester.tap(_key('mcp-replace-confirm'));
       await settle(tester);
 
       expect(store.applied, hasLength(1));
       expect(session.secrets[_authorization], 'Bearer x');
       expect(_key('mcp-replace-secret'), findsNothing);
+    });
+
+    testWidgets('the replace question states the consequences and "Keep it" '
+        'closes it without a write', (tester) async {
+      await openPage(tester);
+      await tester.tap(_key('mcp-add'));
+      await settle(tester);
+      await tester.enterText(_in('mcp-new', 'mcp-draft-name'), 'GitHub');
+      await tester.tap(_in('mcp-new', 'mcp-draft-type-http'));
+      await settle(tester);
+      await tester.enterText(
+        _in('mcp-new', 'mcp-draft-url'),
+        'https://x.example.test/mcp/',
+      );
+      await tester.tap(_in('mcp-new', 'mcp-draft-add-row'));
+      await settle(tester);
+      await tester.enterText(
+        _in('mcp-new', 'mcp-draft-key-0'),
+        'Authorization',
+      );
+      await tester.enterText(_in('mcp-new', 'mcp-draft-value-0'), 'Bearer x');
+      await tester.tap(_in('mcp-new', 'mcp-draft-secret-0'));
+      await settle(tester);
+      await tester.tap(_key('mcp-new-save'));
+      await settle(tester);
+
+      for (final text in const [
+        'The new value replaces the secret for every server that refers to it.',
+        'A running agent keeps the old value until the server reconnects.',
+      ]) {
+        expect(
+          find.descendant(
+            of: _key('mcp-replace-secret'),
+            matching: find.text(text),
+          ),
+          findsOneWidget,
+          reason: text,
+        );
+      }
+
+      await tester.tap(_key('mcp-replace-keep'));
+      await settle(tester);
+
+      expect(_key('mcp-replace-secret'), findsNothing);
+      expect(store.applied, isEmpty);
+      expect(session.secrets[_authorization], leakMarker);
     });
 
     testWidgets('a read-only backend makes the Secret box inactive and '

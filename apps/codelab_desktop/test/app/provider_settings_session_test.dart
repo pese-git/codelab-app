@@ -153,6 +153,7 @@ providers:
     final saved = await session.mcpCommitter().commit(
       draft,
       snapshot.layers[ConfigLayer.user]!,
+      cwd: home.path,
     );
 
     expect(saved, isA<McpServerCommitted>());

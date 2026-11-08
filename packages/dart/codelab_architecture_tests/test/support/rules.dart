@@ -94,7 +94,13 @@ const rules = [
   // (сторож сканирует только `lib/` пакетов).
   PackageRule(
     'packages/dart/codelab_embedded/lib',
-    forbidden: ['package:codelab_agent_io/testing.dart'],
+    // `package:codelab_agent_mcp/testing.dart` (фейковый MCP-сервер) — тоже
+    // только слой `testing` моста (`FakeMcpHttpHost`; change
+    // `add-provider-setup-ui`, Q28).
+    forbidden: [
+      'package:codelab_agent_io/testing.dart',
+      'package:codelab_agent_mcp/testing.dart',
+    ],
     // Seal: `io.dart` и `src/io/` не ссылаются на `testing.dart` и
     // `src/testing/` ни пакетным, ни относительным путём (D3, D8).
     exclude: ['testing.dart', 'src/testing/'],

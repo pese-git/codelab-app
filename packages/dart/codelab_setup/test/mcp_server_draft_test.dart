@@ -408,4 +408,123 @@ void main() {
       expect(github().validate(existingNames: {'other'}), isEmpty);
     });
   });
+
+  group('maskedValues и дубликаты ключей (ревью 5b)', () {
+    // Набор ключей, которые список маскирует тем же правилом
+    // (`mcp_masking.dart`); черновик хранит сырое значение.
+    test('http: url с токеном в query и заголовок с литералом', () {
+      final draft = McpServerDraft(
+        name: 'gh',
+        kind: McpTransportKind.http,
+        url: 'https://mcp.test/mcp?token=$leak',
+        headers: {
+          'X-Workspace': McpValueDraft.text(leak),
+          'X-Ref': McpValueDraft.text('\${TEAM}'),
+          'Authorization': McpValueDraft.secret(SecretValue(leak)),
+        },
+      );
+
+      expect(draft.maskedValues, {'url', 'headers.X-Workspace'});
+      expect(draft.url, contains(leak), reason: 'сырое значение хранится');
+      expect('${draft.maskedValues}', isNot(contains(leak)));
+    });
+
+    test('stdio: args и env по имени ключа', () {
+      final draft = McpServerDraft(
+        name: 'pg',
+        kind: McpTransportKind.stdio,
+        command: 'srv',
+        args: ['--api-key', leak],
+        env: {
+          'API_TOKEN': McpValueDraft.text(leak),
+          'LOG_LEVEL': McpValueDraft.text('debug'),
+        },
+      );
+
+      expect(draft.maskedValues, {'args', 'env.API_TOKEN'});
+    });
+
+    test('обычный черновик: набор пуст', () {
+      expect(
+        McpServerDraft(
+          name: 'a',
+          kind: McpTransportKind.http,
+          url: 'https://h/mcp',
+        ).maskedValues,
+        isEmpty,
+      );
+    });
+
+    test('дубликат ключа после trim — проблема, а не молчаливое слияние', () {
+      for (final field in ['env', 'headers']) {
+        final table = {
+          'TOKEN': McpValueDraft.text('a'),
+          ' TOKEN ': McpValueDraft.text('b'),
+        };
+        final draft = field == 'env'
+            ? McpServerDraft(
+                name: 'a',
+                kind: McpTransportKind.stdio,
+                command: 'srv',
+                env: table,
+              )
+            : McpServerDraft(
+                name: 'a',
+                kind: McpTransportKind.http,
+                url: 'https://h/mcp',
+                headers: table,
+              );
+
+        final problems = draft.validate();
+
+        expect(problems, hasLength(1), reason: field);
+        expect(
+          problems.single.field,
+          field == 'env' ? McpDraftField.env : McpDraftField.headers,
+        );
+      }
+    });
+
+    test('command с токеном маскируется тем же правилом, что в списке', () {
+      final draft = McpServerDraft(
+        name: 'gh',
+        kind: McpTransportKind.stdio,
+        command: '/usr/bin/srv --token=$leak',
+      );
+
+      expect(draft.maskedValues, contains('command'));
+    });
+
+    test('набор не зависит от активного типа: после переключения '
+        'маскируется то же', () {
+      final draft = McpServerDraft(
+        name: 'gh',
+        kind: McpTransportKind.http,
+        url: 'https://mcp.test/mcp?token=$leak',
+        command: 'srv',
+        args: ['--api-key', leak],
+        env: {'API_TOKEN': McpValueDraft.text(leak)},
+        headers: {'X-Workspace': McpValueDraft.text(leak)},
+      );
+
+      final all = {'url', 'args', 'env.API_TOKEN', 'headers.X-Workspace'};
+      expect(draft.maskedValues, all);
+      expect(draft.copyWith(kind: McpTransportKind.stdio).maskedValues, all);
+    });
+
+    test('ключ с пробелами по краям — проблема черновика', () {
+      final draft = McpServerDraft(
+        name: 'a',
+        kind: McpTransportKind.stdio,
+        command: 'srv',
+        env: {' TOKEN': McpValueDraft.text('a')},
+      );
+
+      final problems = draft.validate();
+
+      expect(problems, hasLength(1));
+      expect(problems.single.field, McpDraftField.env);
+      expect(problems.single.message, 'Remove spaces around the name  TOKEN.');
+    });
+  });
 }
