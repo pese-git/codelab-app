@@ -12,12 +12,85 @@ import 'codelab_progress_checklist.dart';
 import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
 import 'codelab_settings_navigation.dart';
+import 'codelab_status_table.dart';
 import 'codelab_tool_dock.dart';
 import 'codelab_transcript_panel.dart';
 import 'codelab_transcript_row.dart';
 import 'codelab_workbench_layout.dart';
 
 const codelabOrganismPreviewGroup = 'ACP organisms';
+
+@Preview(
+  name: 'Status table',
+  group: codelabOrganismPreviewGroup,
+  size: Size(820, 260),
+)
+Widget codelabStatusTablePreview() {
+  return const _AcpOrganismPreviewSurface(child: _StatusTableSample());
+}
+
+@Preview(
+  name: 'Status table dark',
+  group: codelabOrganismPreviewGroup,
+  size: Size(820, 260),
+  brightness: Brightness.dark,
+)
+Widget codelabStatusTableDarkPreview() {
+  return const _AcpOrganismPreviewSurface(
+    brightness: Brightness.dark,
+    child: _StatusTableSample(),
+  );
+}
+
+/// Пример панели «Agent status» (артборд `Mcp`): подключённый сервер, сбой с
+/// повтором и выключенный сервер без действия.
+class _StatusTableSample extends StatelessWidget {
+  const _StatusTableSample();
+
+  @override
+  Widget build(BuildContext context) {
+    return CodeLabStatusTable(
+      columns: const ['SERVER', 'STATE', 'TOOLS', 'LAST ERROR'],
+      rows: [
+        CodeLabStatusTableRow(
+          cells: const [
+            CodeLabStatusTableCell('github', mono: true),
+            CodeLabStatusTableCell('connected', tone: CodeLabStatusTone.active),
+            CodeLabStatusTableCell('42'),
+            CodeLabStatusTableCell('—', muted: true),
+          ],
+          action: CodeLabStatusTableAction(
+            label: 'Reconnect',
+            onPressed: codelabPreviewReconnect,
+          ),
+        ),
+        CodeLabStatusTableRow(
+          cells: const [
+            CodeLabStatusTableCell('postgres', mono: true),
+            CodeLabStatusTableCell(
+              'failed · retry in 24 s',
+              tone: CodeLabStatusTone.danger,
+            ),
+            CodeLabStatusTableCell('0'),
+            CodeLabStatusTableCell('ECONNREFUSED 127.0.0.1:5432', mono: true),
+          ],
+          action: CodeLabStatusTableAction(
+            label: 'Reconnect',
+            onPressed: codelabPreviewReconnect,
+          ),
+        ),
+        const CodeLabStatusTableRow(
+          cells: [
+            CodeLabStatusTableCell('playwright', mono: true),
+            CodeLabStatusTableCell('disabled', tone: CodeLabStatusTone.idle),
+            CodeLabStatusTableCell('—', muted: true),
+            CodeLabStatusTableCell('—', muted: true),
+          ],
+        ),
+      ],
+    );
+  }
+}
 
 @Preview(
   name: 'Transcript panel conversation',
@@ -514,9 +587,15 @@ Widget codelabSettingsNavigationPreview() {
 }
 
 class _AcpOrganismPreviewSurface extends StatelessWidget {
-  const _AcpOrganismPreviewSurface({required this.child});
+  const _AcpOrganismPreviewSurface({
+    required this.child,
+    this.brightness = Brightness.light,
+  });
 
   final Widget child;
+
+  /// Тема превью: тёмный вариант нужен таблице с тегами и обводками (D19).
+  final Brightness brightness;
 
   @override
   Widget build(BuildContext context) {
@@ -531,7 +610,7 @@ class _AcpOrganismPreviewSurface extends StatelessWidget {
       child: Directionality(
         textDirection: TextDirection.ltr,
         child: FluentTheme(
-          data: FluentThemeData(),
+          data: FluentThemeData(brightness: brightness),
           child: Builder(
             builder: (context) {
               // Подсказки (`Tooltip`) сайдбара и app bar требуют `Overlay`, а

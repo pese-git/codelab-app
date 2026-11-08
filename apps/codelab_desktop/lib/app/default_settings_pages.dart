@@ -9,9 +9,14 @@ import 'navigation/settings_page.dart';
 /// подставляют свой набор через `settingsPages:`.
 ///
 /// Как использовать: change `add-app-settings-shell` добавил «Connection»,
-/// change `add-provider-setup-ui` (итерация 2) — «Providers» (Migration Plan,
-/// п. 2; SETUP-17); следующие страницы появятся вместе со своими телами.
+/// change `add-provider-setup-ui` — «Providers» (итерация 2) и «MCP servers»
+/// (итерация 5; Migration Plan, п. 2; SETUP-17); следующие страницы появятся
+/// вместе со своими телами.
 /// Страница из набора ДОЛЖНА иметь построитель в `settingsPageBuilders`.
 const defaultSettingsPages = SettingsPages(
-  available: {SettingsPage.connection, SettingsPage.providers},
+  available: {
+    SettingsPage.connection,
+    SettingsPage.providers,
+    SettingsPage.mcpServers,
+  },
 );

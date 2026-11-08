@@ -68,6 +68,7 @@ import '../features/settings/application/connection_settings_cubit.dart';
 import '../features/settings/application/default_profile_resolver.dart';
 import '../features/settings/application/embedded_profile.dart';
 import '../features/settings/application/profiles_unavailable.dart';
+import '../features/settings/application/mcp_settings_cubit.dart';
 import '../features/settings/application/provider_settings_cubit.dart';
 import '../features/settings/application/provider_wizard_cubit.dart';
 import '../features/workbench/application/secret_migration_cubit.dart';
@@ -79,6 +80,7 @@ import 'client_profile_secrets.dart'
 import 'reopenable_profile_secrets.dart';
 import 'default_settings_pages.dart';
 import 'embedded_logger.dart';
+import 'embedded_mcp_status_source.dart';
 import 'embedded_secret_migration_runner.dart';
 import 'embedded_transport_resolver.dart';
 import 'provider_settings_session.dart';
@@ -704,6 +706,25 @@ final class CodeLabPresentationModule extends Module {
         connect: () => currentScope.resolve<CodeLabShellCubit>().connect(),
       );
     });
+    // Страница «MCP servers»: новый Cubit на каждое открытие (D11); сессия
+    // настроек и доступ — те же, что у «Providers», порт состояния MCP
+    // встроенного агента берётся у резолвера текущего соединения (D12).
+    bind<McpSettingsCubit>().toProvide(() {
+      final environment = currentScope.resolve<ConnectionEnvironment>();
+      return McpSettingsCubit(
+        workspace: currentScope.resolve<ClientWorkspace>(),
+        defaultProfile: currentScope.resolve<DefaultProfileResolver>().resolve,
+        open: openSettings,
+        environment: environment.variables,
+        codelabHome: environment.codelabHome,
+        projectDirectory: () =>
+            currentScope.resolve<CodeLabShellParts>().settings.projectDirectory,
+        statusSource: ResolverMcpStatusSource(
+          currentScope.resolve<EmbeddedTransportResolver>(),
+        ),
+        logger: _settingsLogger(),
+      );
+    });
     // Мастер из баннера «Встроенный агент без провайдера» (D26): сессия
     // настроек встроенного профиля — той же фабрикой, что у страницы
     // «Providers»; цель по умолчанию `user`, «Make default» не снимается.
@@ -911,6 +932,7 @@ final class CodeLabDependencies {
     required this.createConnectionSettingsCubit,
     required this.createAddProfileCubit,
     required this.createProviderSettingsCubit,
+    required this.createMcpSettingsCubit,
     required this.openEmbeddedWizard,
   });
 
@@ -938,6 +960,10 @@ final class CodeLabDependencies {
   /// Создаёт Cubit страницы «Providers»; страница владеет им и закрывает
   /// (design.md change `add-provider-setup-ui`, D10).
   final ProviderSettingsCubit Function() createProviderSettingsCubit;
+
+  /// Создаёт Cubit страницы «MCP servers»; страница владеет им и закрывает
+  /// (design.md change `add-provider-setup-ui`, D11).
+  final McpSettingsCubit Function() createMcpSettingsCubit;
 
   /// Открывает мастер встроенного агента из баннера соединения; владелец
   /// закрывает Cubit после диалога (design.md change `add-provider-setup-ui`,
@@ -1021,6 +1047,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     createConnectionSettingsCubit: _scope.resolve<ConnectionSettingsCubit>,
     createAddProfileCubit: _scope.resolve<AddProfileCubit>,
     createProviderSettingsCubit: _scope.resolve<ProviderSettingsCubit>,
+    createMcpSettingsCubit: _scope.resolve<McpSettingsCubit>,
     openEmbeddedWizard: _scope.resolve<EmbeddedWizardOpener>(),
   );
 

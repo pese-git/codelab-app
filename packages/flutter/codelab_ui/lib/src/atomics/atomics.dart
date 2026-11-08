@@ -2,6 +2,7 @@ export 'codelab_badge.dart';
 export 'codelab_button.dart';
 export 'codelab_dialog_title.dart';
 export 'codelab_icon.dart';
+export 'codelab_monospace_block.dart';
 export 'codelab_progress_indicator.dart';
 export 'codelab_resize_handle.dart';
 export 'codelab_status_indicator.dart';

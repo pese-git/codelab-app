@@ -9,9 +9,10 @@ import 'package:codelab_agent_core/codelab_agent_core.dart'
 import '../access/settings_access.dart';
 import '../config/agent_config_store.dart';
 import '../provider/provider_keys.dart';
-import '../provider/provider_remover.dart' show SecretDeletion;
+import '../provider/provider_remover.dart' show SecretCleanup, SecretDeletion;
 import '../provider/provider_setup_committer.dart' show KeyRollback;
 import 'mcp_layers.dart';
+import 'mcp_secret_cleanup.dart';
 import 'mcp_server_draft.dart';
 
 /// Почему запись или удаление отклонены до обращения к файлу и хранилищу.
@@ -45,14 +46,21 @@ sealed class McpServerCommitOutcome {
 
 /// Записано. [replacedSecrets] — секреты, заменённые под тем же именем:
 /// работающий агент держит прежнее значение до перезапуска сервера.
+///
+/// [secrets] — судьба секретов страницы (`codelab/mcp/<name>/…`), на которые
+/// прежний элемент ссылался, а новый — нет (сняли «Secret», сменили тип,
+/// удалили строку): имя → итог по правилу `McpServerRemover` (Q22). Пусто,
+/// если такой очистки не было; чужие и ручные секреты сюда не попадают.
 final class McpServerCommitted extends McpServerCommitOutcome {
   const McpServerCommitted({
     required this.saved,
     required this.replacedSecrets,
+    this.secrets = const {},
   });
 
   final ConfigSaved saved;
   final List<String> replacedSecrets;
+  final Map<String, SecretCleanup> secrets;
 
   @override
   String toString() => 'McpServerCommitted(${replacedSecrets.length} replaced)';
@@ -81,14 +89,38 @@ final class McpSecretAppeared extends McpServerCommitOutcome {
 }
 
 /// Хранилище отказало; конфиг не писался, созданные секреты откачены.
-/// [reason] — текст без значения.
+/// [reason] — текст без значения. Исключение хранилища — не этот исход, а
+/// [McpServerNotSaved] с `errorType` (SETUP-1).
+///
+/// [rollback] и [notRolledBack] — итог отката ранее созданных секретов, как у
+/// [McpServerNotSaved]: неоткаченные остались в хранилище, и Cubit показывает
+/// именно их.
 final class McpSecretNotStored extends McpServerCommitOutcome {
-  const McpSecretNotStored(this.reason);
+  const McpSecretNotStored(
+    this.reason, {
+    this.rollback = KeyRollback.none,
+    this.notRolledBack = const [],
+  });
 
   final String reason;
+  final KeyRollback rollback;
+  final List<String> notRolledBack;
 
   @override
   String toString() => 'McpSecretNotStored';
+}
+
+/// Ответ [McpServerCommitter.occupiedSecrets]: [names] — секреты черновика,
+/// уже лежащие в хранилище; [errorType] — имя типа исключения хранилища
+/// (тогда [names] пусто, текст исключения не передаётся).
+final class McpSecretCheck {
+  const McpSecretCheck({this.names = const [], this.errorType});
+
+  final List<String> names;
+  final String? errorType;
+
+  @override
+  String toString() => 'McpSecretCheck(${names.length}, $errorType)';
 }
 
 /// Конфиг не записан: [outcome] — конфликт, отказ валидатора или
@@ -100,12 +132,17 @@ final class McpServerNotSaved extends McpServerCommitOutcome {
     required this.errorType,
     required this.replacedSecrets,
     required this.rollback,
+    this.notRolledBack = const [],
   });
 
   final ConfigSaveOutcome? outcome;
   final String? errorType;
   final List<String> replacedSecrets;
   final KeyRollback rollback;
+
+  /// Созданные секреты, которые откат не смог удалить: они остались в
+  /// хранилище, Cubit показывает именно их. Пусто при `none` и `deleted`.
+  final List<String> notRolledBack;
 
   @override
   String toString() =>
@@ -177,13 +214,41 @@ final class McpServerCommitter {
   final AgentConfigStore _config;
   final ProviderKeys _keys;
 
+  /// Какие секреты [draft] уже заняты в хранилище (кроме [replaceSecrets]).
+  ///
+  /// Почему публичный: вопрос «Replace it» в app и `McpSecretAppeared` в
+  /// [commit] должны следовать одному правилу и одному `stored`. Исключение
+  /// хранилища возвращается именем типа ([McpSecretCheck.errorType]), а не
+  /// бросается (SETUP-1).
+  Future<McpSecretCheck> occupiedSecrets(
+    McpServerDraft draft, {
+    Set<String> replaceSecrets = const {},
+  }) async {
+    final occupied = <String>[];
+    try {
+      for (final name in draft.secretsToWrite().keys) {
+        if (!replaceSecrets.contains(name) && await _keys.stored(name)) {
+          occupied.add(name);
+        }
+      }
+    } on Object catch (error) {
+      return McpSecretCheck(errorType: error.runtimeType.toString());
+    }
+    return McpSecretCheck(names: occupied);
+  }
+
   /// Записывает [draft] в слой [base]. [replaceSecrets] — имена, которые
   /// пользователь выбрал заменить («Replace it»): для них перепроверка
   /// `stored` не выполняется.
+  ///
+  /// [cwd] — папка проекта для свежего снимка после записи (очистка секретов,
+  /// которые прежний элемент потерял); обязательна: у слоя `user` в цели
+  /// папки проекта нет.
   Future<McpServerCommitOutcome> commit(
     McpServerDraft draft,
     ConfigSnapshot base, {
     Set<String> replaceSecrets = const {},
+    required String cwd,
   }) async {
     final problems = draft.validate();
     if (problems.isNotEmpty) {
@@ -191,20 +256,36 @@ final class McpServerCommitter {
     }
     final secrets = draft.secretsToWrite();
     // Имена проверяются все до первой записи: частичной записи нет.
-    final appeared = <String>[];
-    for (final name in secrets.keys) {
-      if (!replaceSecrets.contains(name) && await _keys.stored(name)) {
-        appeared.add(name);
-      }
+    final check = await occupiedSecrets(draft, replaceSecrets: replaceSecrets);
+    if (check.errorType case final type?) {
+      return McpServerNotSaved(
+        outcome: null,
+        errorType: type,
+        replacedSecrets: const [],
+        rollback: KeyRollback.none,
+      );
     }
-    if (appeared.isNotEmpty) {
-      return McpSecretAppeared(appeared);
+    if (check.names.isNotEmpty) {
+      return McpSecretAppeared(check.names);
     }
 
     final created = <String>[];
     final replaced = <String>[];
     for (final MapEntry(:key, :value) in secrets.entries) {
-      switch (await _keys.write(key, value)) {
+      final ProviderKeyWrite written;
+      try {
+        written = await _keys.write(key, value);
+      } on Object catch (error) {
+        final rolledBack = await _rollback(created);
+        return McpServerNotSaved(
+          outcome: null,
+          errorType: error.runtimeType.toString(),
+          replacedSecrets: replaced,
+          rollback: rolledBack.result,
+          notRolledBack: rolledBack.left,
+        );
+      }
+      switch (written) {
         case ProviderKeyCreated():
           created.add(key);
         case ProviderKeyReplaced():
@@ -212,8 +293,12 @@ final class McpServerCommitter {
           // `SecretUpdated`, откатывать нечего (D9).
           replaced.add(key);
         case ProviderKeyRefused(:final reason):
-          await _rollback(created);
-          return McpSecretNotStored(reason);
+          final rolledBack = await _rollback(created);
+          return McpSecretNotStored(
+            reason,
+            rollback: rolledBack.result,
+            notRolledBack: rolledBack.left,
+          );
       }
     }
 
@@ -227,31 +312,86 @@ final class McpServerCommitter {
       errorType = error.runtimeType.toString();
     }
     if (outcome case final ConfigSaved saved) {
-      return McpServerCommitted(saved: saved, replacedSecrets: replaced);
+      return McpServerCommitted(
+        saved: saved,
+        replacedSecrets: replaced,
+        secrets: await _cleanUp(draft, base, cwd),
+      );
     }
+    final rolledBack = await _rollback(created);
     return McpServerNotSaved(
       outcome: outcome,
       errorType: errorType,
       replacedSecrets: replaced,
-      rollback: await _rollback(created),
+      rollback: rolledBack.result,
+      notRolledBack: rolledBack.left,
     );
   }
 
-  /// Удаляет созданные секреты; сбой хранилища не теряет исход записи.
-  Future<KeyRollback> _rollback(List<String> created) async {
-    if (created.isEmpty) {
-      return KeyRollback.none;
+  /// Секреты страницы, на которые прежний элемент ссылался, а новый нет:
+  /// удаляются по правилу `McpServerRemover` (Q22, одна реализация).
+  Future<Map<String, SecretCleanup>> _cleanUp(
+    McpServerDraft draft,
+    ConfigSnapshot base,
+    String cwd,
+  ) async {
+    final original = draft.originalName;
+    final old = original == null ? null : _elementOf(base, original);
+    if (old == null) {
+      return const {};
     }
-    var failed = false;
-    for (final name in created) {
-      try {
-        final deletion = await _keys.delete(name);
-        failed = failed || deletion == SecretDeletion.failed;
-      } on Object {
-        failed = true;
+    final kept = <String>{};
+    for (final edit in draft.toEdits()) {
+      if (edit is UpsertMcpServer) {
+        kept.addAll(referencedSecrets(edit.server));
       }
     }
-    return failed ? KeyRollback.failed : KeyRollback.deleted;
+    final candidates = [
+      for (final secret in inPageNamespace(draft.name, referencedSecrets(old)))
+        if (!kept.contains(secret)) secret,
+    ];
+    if (candidates.isEmpty) {
+      return const {};
+    }
+    return cleanUpSecrets(
+      config: _config,
+      keys: _keys,
+      cwd: cwd,
+      candidates: candidates,
+    );
+  }
+
+  /// Сырой элемент `mcp.servers` слоя [base] с именем [name] или `null`.
+  Map<String, Object?>? _elementOf(ConfigSnapshot base, String name) {
+    for (final element in mcpServerElementsOf(base.values)) {
+      if (element['name'] == name) {
+        return element;
+      }
+    }
+    return null;
+  }
+
+  /// Удаляет созданные секреты; сбой хранилища не теряет исход записи.
+  Future<({KeyRollback result, List<String> left})> _rollback(
+    List<String> created,
+  ) async {
+    if (created.isEmpty) {
+      return (result: KeyRollback.none, left: const <String>[]);
+    }
+    final left = <String>[];
+    for (final name in created) {
+      try {
+        if (await _keys.delete(name) == SecretDeletion.failed) {
+          left.add(name);
+        }
+      } on Object {
+        left.add(name);
+      }
+    }
+    return (
+      result: left.isEmpty ? KeyRollback.deleted : KeyRollback.failed,
+      left: left,
+    );
   }
 
   /// Переключатель `enabled`: сырой элемент слоя сервера [name] целиком с

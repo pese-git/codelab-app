@@ -2,18 +2,12 @@
 /// change `add-provider-setup-ui`, D11 «Сверка с кодом», D17; R0-2, SETUP-1).
 library;
 
-import 'package:codelab_agent_core/codelab_agent_core.dart'
-    show
-        ConfigLayer,
-        KeyPath,
-        displaySafeConfigValue,
-        hidesConfigLiteral,
-        maskMcpArgs,
-        redactedMask;
+import 'package:codelab_agent_core/codelab_agent_core.dart' show ConfigLayer;
 
 import '../config/agent_config_store.dart';
 import '../config/config_source_view.dart';
 import '../mcp/mcp_layers.dart';
+import '../mcp/mcp_masking.dart';
 import '../mcp/mcp_transport_kind.dart';
 
 /// Сервер в списке страницы «MCP servers».
@@ -134,11 +128,11 @@ McpServerEntryView _entryOf(
   var masked = false;
 
   String text(String key, Object? raw) {
-    final shown = displaySafeConfigValue(_path(name, key), '$raw');
+    final shown = mcpDisplayValue(name, key, '$raw');
     if (shown != '$raw') {
       masked = true;
     }
-    return '$shown';
+    return shown;
   }
 
   // Значение заголовка показывается только если это чистая ссылка `${…}`
@@ -147,11 +141,11 @@ McpServerEntryView _entryOf(
   // правилу имён и шаблонов, как у `config get` и `provider list`: нейтральные
   // (`LOG_LEVEL`) показываются открыто и там.
   String header(String raw) {
-    if (hidesConfigLiteral(raw)) {
+    final shown = mcpDisplayHeader(raw);
+    if (shown != raw) {
       masked = true;
-      return redactedMask;
     }
-    return raw;
+    return shown;
   }
 
   Map<String, String> table(String field) {
@@ -163,13 +157,13 @@ McpServerEntryView _entryOf(
       for (final entry in raw.entries)
         '${entry.key}': field == 'headers'
             ? header('${entry.value}')
-            : text('$field.${_segment('${entry.key}')}', entry.value),
+            : text('$field.${mcpKeySegment('${entry.key}')}', entry.value),
     };
   }
 
   final rawArgs = element['args'];
   final args = rawArgs is List<Object?>
-      ? [for (final item in maskMcpArgs(rawArgs)) '$item']
+      ? mcpDisplayArgs(rawArgs)
       : const <String>[];
   if (rawArgs is List<Object?> &&
       [for (final item in rawArgs) '$item'].join('\u0000') !=
@@ -195,9 +189,3 @@ McpServerEntryView _entryOf(
   );
   return entry;
 }
-
-String _segment(String key) => KeyPath.root.child(key).value;
-
-/// Путь листа строки в формате `KeyPath`: `mcp.servers[<name>].<поле>`.
-String _path(String name, String field) =>
-    '${KeyPath.root.child('mcp').child('servers').at(name).value}.$field';

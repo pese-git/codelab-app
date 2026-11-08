@@ -115,6 +115,20 @@ final class _IoProviderSettingsSession implements ProviderSettingsSession {
     );
   }
 
+  /// Порт ключей страницы «MCP servers»: `providerKeysOf` поверх того же
+  /// `ClientSecretAccess`, что у `isSecretSet` и мастера, поэтому запись
+  /// секрета видна `isSecretSet` (D11).
+  ProviderKeys _mcpKeys() =>
+      setup.providerKeysOf(_secrets, home: _access.paths.codelabHome);
+
+  @override
+  McpServerCommitter mcpCommitter() =>
+      McpServerCommitter(config: config, keys: _mcpKeys());
+
+  @override
+  McpServerRemover mcpRemover() =>
+      McpServerRemover(config: config, keys: _mcpKeys());
+
   @override
   Future<ProviderCheckResult> checkProvider({
     required String kind,
