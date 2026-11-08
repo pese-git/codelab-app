@@ -20,9 +20,8 @@ import 'support/mcp_snapshots.dart';
 /// Снимки — настоящий `FileAgentConfigStore` во временном `CODELAB_HOME`;
 /// секреты — только имена, значений нет.
 ///
-/// Ожидаемый API (задача 6.1b-1 → реализация): `List<String>
-/// restartRequiredServers(AgentConfigSnapshot before, AgentConfigSnapshot
-/// after)` в `lib/src/mcp/mcp_restart.dart`, экспорт основного бареля.
+/// API: `restartRequiredServers(before, after)` → `List<String>` в
+/// `lib/src/mcp/mcp_restart.dart`, экспорт основного бареля.
 void main() {
   late Directory root;
   late String home;
@@ -140,8 +139,49 @@ providers:
       final after = await snapshotOf([
         stdio('fs', extra: '      call_timeout: 90s\n'),
       ]);
+      // Без этого пустой ответ мог бы означать отклонённый конфиг.
+      expect(after.loaded.config, isNotNull, reason: '${after.loaded.issues}');
 
       expect(restartRequiredServers(before, after), isEmpty);
+    });
+
+    test('правка args выключенного сервера (R6-1 откладывает её в ядре): '
+        'сервер не назван, он не запустится', () async {
+      final before = await snapshotOf([
+        stdio('fs', args: '[a]', enabled: false),
+      ]);
+      final after = await snapshotOf([
+        stdio('fs', args: '[b]', enabled: false),
+      ]);
+
+      expect(restartRequiredServers(before, after), isEmpty);
+    });
+
+    test('выключение вместе со сменой args: пусто', () async {
+      final before = await snapshotOf([stdio('fs', args: '[a]')]);
+      final after = await snapshotOf([
+        stdio('fs', args: '[b]', enabled: false),
+      ]);
+
+      expect(restartRequiredServers(before, after), isEmpty);
+    });
+
+    test('имя с символами, ломающими разбор ключа показа (".", "]", "[", '
+        'кавычка): сервер назван (имена берутся из plan.deferred.servers, а не '
+        'из restartRequiredKeys)', () async {
+      for (final name in ['my.srv', 'a]b', 'a[b', 'a"b']) {
+        final before = await snapshotOf([]);
+        final after = await snapshotOf([
+          stdio('"${name.replaceAll('"', r'\"')}"'),
+        ]);
+        expect(
+          after.loaded.config,
+          isNotNull,
+          reason: '$name: ${after.loaded.issues}',
+        );
+
+        expect(restartRequiredServers(before, after), [name], reason: name);
+      }
     });
 
     test('удаление сервера: пусто', () async {
@@ -188,6 +228,128 @@ providers:
       expect(restartRequiredServers(noConfig, good), isEmpty);
       expect(restartRequiredServers(good, noConfig), isEmpty);
       expect(restartRequiredServers(noConfig, noConfig), isEmpty);
+    });
+  });
+
+  group('restartRequiredProviders (Q35): провайдер ждёт перезапуска', () {
+    // Те же правила ядра (`planConfigReload`, R0-4): провайдер «с ключом»
+    // (`api_key_secret`, `api_key_env`, `${…}` в адресе и заголовках)
+    // откладывается целиком, если он новый или сменилась группа адреса и
+    // аутентификации; модели существующего провайдера применяются сразу.
+    const base = '''
+agent:
+  default_model: p/m
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    models:
+      m:
+        context_window: 32000
+''';
+
+    String provider(
+      String id, {
+      String baseUrl = 'https://q.test/v1',
+      String key = '',
+      String models = '      m2:\n        context_window: 32000\n',
+    }) =>
+        '  $id:\n'
+        '    kind: openai-compatible\n'
+        '    base_url: $baseUrl\n'
+        '$key'
+        '    models:\n'
+        '$models';
+
+    Future<AgentConfigSnapshot> configOf(String text) async {
+      File('$home/config.yaml').writeAsStringSync(text);
+      return store.snapshot(cwd: project);
+    }
+
+    const secretKey = '    api_key_secret: codelab/q\n';
+
+    test('новый провайдер с api_key_secret: в списке (R0-4)', () async {
+      final before = await configOf(base);
+      final after = await configOf('$base${provider('q', key: secretKey)}');
+      expect(after.loaded.config, isNotNull, reason: '${after.loaded.issues}');
+
+      expect(restartRequiredProviders(before, after), ['q']);
+    });
+
+    test('новый провайдер с api_key_env: в списке', () async {
+      final before = await configOf(base);
+      final after = await configOf(
+        '$base${provider('q', key: '    api_key_env: Q_KEY\n')}',
+      );
+      expect(after.loaded.config, isNotNull, reason: '${after.loaded.issues}');
+
+      expect(restartRequiredProviders(before, after), ['q']);
+    });
+
+    test('новый провайдер без ключа: пусто (правило ядра)', () async {
+      final before = await configOf(base);
+      final after = await configOf('$base${provider('q')}');
+      expect(after.loaded.config, isNotNull, reason: '${after.loaded.issues}');
+
+      expect(restartRequiredProviders(before, after), isEmpty);
+    });
+
+    test('правка моделей существующего провайдера с прежним ключом: пусто '
+        '(применяется сразу)', () async {
+      final before = await configOf('$base${provider('q', key: secretKey)}');
+      final after = await configOf(
+        '$base${provider('q', key: secretKey, models: '      m2:\n'
+            '        context_window: 32000\n      m3:\n'
+            '        context_window: 32000\n')}',
+      );
+      expect(after.loaded.config, isNotNull, reason: '${after.loaded.issues}');
+
+      expect(restartRequiredProviders(before, after), isEmpty);
+    });
+
+    test('смена base_url существующего провайдера с ключом: в списке', () async {
+      final before = await configOf('$base${provider('q', key: secretKey)}');
+      final after = await configOf(
+        '$base${provider('q', baseUrl: 'https://other.test/v1', key: secretKey)}',
+      );
+
+      expect(restartRequiredProviders(before, after), ['q']);
+    });
+
+    test('смена ключа существующего провайдера: в списке', () async {
+      final before = await configOf('$base${provider('q', key: secretKey)}');
+      final after = await configOf(
+        '$base${provider('q', key: '    api_key_secret: codelab/other\n')}',
+      );
+
+      expect(restartRequiredProviders(before, after), ['q']);
+    });
+
+    test('смена base_url существующего провайдера без ключа: пусто '
+        '(правило ядра)', () async {
+      final before = await configOf('$base${provider('q')}');
+      final after = await configOf(
+        '$base${provider('q', baseUrl: 'https://other.test/v1')}',
+      );
+
+      expect(restartRequiredProviders(before, after), isEmpty);
+    });
+
+    test('порядок как в конфиге after', () async {
+      final before = await configOf(base);
+      final after = await configOf(
+        '$base${provider('z', key: secretKey)}${provider('a', key: secretKey)}',
+      );
+
+      expect(restartRequiredProviders(before, after), ['z', 'a']);
+    });
+
+    test('у снимка нет loaded.config: пусто', () async {
+      final good = await configOf(base);
+      final noConfig = mcpSnapshot(user: [stdioServer('other')]);
+
+      expect(restartRequiredProviders(noConfig, good), isEmpty);
+      expect(restartRequiredProviders(good, noConfig), isEmpty);
     });
   });
 }

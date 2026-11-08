@@ -9,10 +9,21 @@ import 'package:test/test.dart';
 void main() {
   test('planConfigReload и ConfigReloadPlan импортируются из бареля', () {
     final ConfigLoadResult empty = CoreConfig.fromLayers(const [
-      ConfigTree(kind: ConfigLayerKind.user, source: 'values', values: {}),
+      ConfigTree(
+        kind: ConfigLayerKind.user,
+        source: 'values',
+        values: {
+          'providers': {
+            'p': {
+              'kind': 'openai-compatible',
+              'base_url': 'https://p.test/v1',
+              'models': {'m': <String, Object?>{}},
+            },
+          },
+        },
+      ),
     ], environment: const {});
     final config = empty.config;
-    // Пустой конфиг без модели по умолчанию допустим (optional-default-model).
     expect(config, isNotNull, reason: empty.issues.join('\n'));
 
     final ConfigReloadPlan plan = planConfigReload(

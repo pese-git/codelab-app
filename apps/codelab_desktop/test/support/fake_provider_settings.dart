@@ -66,9 +66,16 @@ final class FakeAgentConfigStore implements AgentConfigStore {
 
   var snapshots = 0;
 
+  /// Исключение, которое бросает [snapshot] (перечитывание после записи
+  /// упало, ревью 6a).
+  Object? snapshotError;
+
   @override
   Future<AgentConfigSnapshot> snapshot({required String cwd}) async {
     snapshots++;
+    if (snapshotError case final error?) {
+      throw error;
+    }
     return AgentConfigSnapshot.fromLayers(
       cwd: cwd,
       layers: {
@@ -325,8 +332,18 @@ final class FakeProviderSettingsSession implements ProviderSettingsSession {
   @override
   AgentConfigStore get config => store;
 
+  /// Исключение, которое [backend] бросает ОДИН раз: ошибка при сборке
+  /// состояния страницы после успешной записи (ревью 6a).
+  Object? backendErrorOnce;
+
   @override
-  SecretBackendInfo get backend => store.backend;
+  SecretBackendInfo get backend {
+    if (backendErrorOnce case final error?) {
+      backendErrorOnce = null;
+      throw error;
+    }
+    return store.backend;
+  }
 
   @override
   Future<bool> isSecretSet(String name) async {

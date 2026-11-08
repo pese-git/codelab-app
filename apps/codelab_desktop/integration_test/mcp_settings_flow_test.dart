@@ -159,6 +159,18 @@ void main() {
       await _tapKey(tester, _in('mcp-new', 'mcp-draft-secret-0'));
       await _tapKey(tester, _key('mcp-new-save'));
       await _pumpUntil(tester, _key('mcp-row-github'));
+      // Агент отложит сервер с секретом до перезапуска (R0-4): страница
+      // говорит об этом сразу после записи (6.1b, Q31).
+      expect(
+        find.descendant(
+          of: _key('mcp-banner'),
+          matching: find.text(
+            'Server github saved. It starts after Restart agent '
+            '(Settings › Connection).',
+          ),
+        ),
+        findsOneWidget,
+      );
 
       final config = File('$home/config.yaml').readAsStringSync();
       expect(config, contains('\${secret:$_authorization}'));

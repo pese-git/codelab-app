@@ -2,8 +2,6 @@
 // (PKG-5); рантайм только применяет его результат (design.md change
 // `add-config-writer-and-reload`, D8).
 import 'package:codelab_agent_core/codelab_agent_core.dart';
-import 'package:codelab_agent_core/src/config/config_reload_plan.dart'
-    show ConfigReloadPlan, planConfigReload;
 import 'package:test/test.dart';
 
 import '../config/config_support.dart' show baseValues, layer, withValues;

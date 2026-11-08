@@ -12,7 +12,6 @@ import 'package:codelab_client_core/codelab_client_core.dart' show isLocalHost;
 import 'package:codelab_desktop/app/embedded_logger.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 
-import 'fake_provider_settings.dart';
 import 'recording_logger.dart';
 
 /// Вызов [ProviderCheck.listModels].
@@ -89,6 +88,9 @@ final class FakeWizardKeys implements ProviderKeys {
   /// гонка «секрет появился после вопроса» (`McpSecretAppeared`).
   final hideFirstStored = <String>{};
 
+  /// Ожидание внутри [write] (смена подключения посреди записи, ревью 6a).
+  Future<void> Function()? onWrite;
+
   /// Исход удаления секрета (страница «MCP servers», задача 5.4: `failed` —
   /// баннер с `codelab secret delete <имя>`).
   SecretDeletion deletion = SecretDeletion.deleted;
@@ -123,6 +125,7 @@ final class FakeWizardKeys implements ProviderKeys {
   @override
   Future<ProviderKeyWrite> write(String name, SecretValue value) async {
     journal.add('write $name');
+    await onWrite?.call();
     if (refusal case final reason?
         when refuseOnly == null || refuseOnly == name) {
       return ProviderKeyRefused(reason);
@@ -145,7 +148,7 @@ final class FakeWizardKeys implements ProviderKeys {
 /// Автомат поверх двойников: тот же набор портов, что собирает composition
 /// root, но без файлов и сети.
 Future<ProviderSetupFlow> buildWizardFlow({
-  required FakeAgentConfigStore store,
+  required AgentConfigStore store,
   required FakeWizardKeys keys,
   required FakeWizardCheck check,
   required EditableSettings access,
