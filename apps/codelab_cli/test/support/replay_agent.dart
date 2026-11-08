@@ -20,26 +20,19 @@ Future<String> replayAgentProfile({String? fixturePath}) async {
 
 Future<String>? _kernel;
 
-Future<String> _compile() async {
-  final dir = await Directory.systemTemp.createTemp('fixture_replay_kernel_');
-  final source = await writeFixtureReplayAgent(dir);
-  final packages = await fixtureReplayPackageConfig();
-  final output = '${dir.path}/fixture_replay_agent.dill';
-  final result = await Process.run(dartExecutable(), [
-    'compile',
-    'kernel',
-    '--packages=$packages',
-    source.path,
-    '-o',
-    output,
-  ]);
-  if (result.exitCode != 0) {
-    throw StateError(
-      'dart compile kernel failed:\n${result.stdout}\n${result.stderr}',
-    );
-  }
-  return output;
-}
+Future<String> _compile() =>
+    compileTestKernel('fixture_replay_agent.dill', (work, output) async {
+      final source = await writeFixtureReplayAgent(work);
+      final packages = await fixtureReplayPackageConfig();
+      return Process.run(dartExecutable(), [
+        'compile',
+        'kernel',
+        '--packages=$packages',
+        source.path,
+        '-o',
+        output,
+      ]);
+    });
 
 /// Каталог корпуса golden-фикстур.
 String get corpusDirectory => defaultFixtureCorpusDirectory();
