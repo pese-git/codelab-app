@@ -280,6 +280,23 @@ providers:
         CodeLabConnectionStatus.connected,
       );
       expect(_key('connection-banner-add-provider'), findsNothing);
+      // Агент читает ключ при открытии: модели нового провайдера появляются
+      // после «Restart agent» (Q17, задача 6.1a), поэтому тест перезапускает
+      // агента кнопкой на странице «Connection», как пользователь.
+      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+      await tester.pumpAndSettle();
+      await _tapKey(tester, 'settings-nav-connection');
+      await _tapKey(tester, 'connection-restart-agent');
+      await tester.pump(const Duration(seconds: 1));
+      for (
+        var i = 0;
+        i < 200 &&
+            shellCubit.state.connectionStatus !=
+                CodeLabConnectionStatus.connected;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
       await shellCubit.createSession();
       for (
         var i = 0;
