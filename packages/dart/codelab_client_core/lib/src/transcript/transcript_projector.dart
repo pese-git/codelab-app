@@ -374,13 +374,23 @@ List<TranscriptItem> _notices(
   // дал бы вторую строку «Completed with stopReason unknown» — у такого хода
   // нет stopReason (spec `acp-client-kit`: `error` для сорвавшегося хода,
   // `emptyTurn` — для завершённого без вывода агента).
+  // Ход, остановленный по лимиту или отказом, объясняет заметка `turnStopped`
+  // ниже — она заменяет `emptyTurn` (D27, Q33).
   if (!hasAgentItems &&
       turn.isTerminal &&
-      turn.status != PromptTurnStatus.failed)
+      turn.status != PromptTurnStatus.failed &&
+      _stoppedNoticeText(turn.stopReason) == null)
     TranscriptItem.notice(
       id: '${turn.id.value}/completed',
       kind: NoticeKind.emptyTurn,
       text: 'Completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
+    ),
+  if (turn.status != PromptTurnStatus.failed &&
+      _stoppedNoticeText(turn.stopReason) != null)
+    TranscriptItem.notice(
+      id: '${turn.id.value}/stopped',
+      kind: NoticeKind.turnStopped,
+      text: _stoppedNoticeText(turn.stopReason)!,
     ),
   if (turn.status == PromptTurnStatus.failed && turn.failureMessage != null)
     TranscriptItem.notice(
@@ -391,6 +401,16 @@ List<TranscriptItem> _notices(
       failure: turn.failure,
     ),
 ];
+
+/// Текст заметки исхода хода (D27, Q33); `null` — заметка не нужна.
+/// Смысл причин — `docs/protocols/acp/protocol/05-Prompt Turn.md`.
+String? _stoppedNoticeText(StopReason? reason) => switch (reason) {
+  StopReason.maxTokens =>
+    'The model reached its token limit, so the turn ended.',
+  StopReason.maxTurnRequests => 'The turn reached the limit of model requests.',
+  StopReason.refusal => 'The agent refused to continue.',
+  StopReason.endTurn || StopReason.cancelled || null => null,
+};
 
 ToolCallView _callView(ToolCallRecord record) => ToolCallView(
   kind: record.kind,

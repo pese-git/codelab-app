@@ -105,6 +105,8 @@ final class ApprovalPrompt {
 
   static String _risk(ApprovalRiskLevel risk) => switch (risk) {
     ApprovalRiskLevel.readOnly => 'read-only',
+    // Вид `other`/без вида: не «только чтение» (D27, Q32).
+    ApprovalRiskLevel.unknown => 'unknown risk',
     ApprovalRiskLevel.localWrite => 'local write',
     ApprovalRiskLevel.network => 'network',
     ApprovalRiskLevel.shell => 'shell',

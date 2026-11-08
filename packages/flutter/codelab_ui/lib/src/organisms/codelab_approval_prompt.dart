@@ -5,13 +5,25 @@ import '../molecules/molecules.dart';
 
 /// Риск действия, о котором агент спрашивает разрешения; его определяет
 /// политика приложения, лента только показывает тег.
-enum CodeLabApprovalRisk { readOnly, localWrite, network, shell, destructive }
+///
+/// [unknown] — клиент не знает вида вызова (`other` или вида нет, например
+/// MCP-инструмент): такой вызов не помечается «только чтение» (design.md
+/// change `add-provider-setup-ui`, D27, Q32).
+enum CodeLabApprovalRisk {
+  readOnly,
+  unknown,
+  localWrite,
+  network,
+  shell,
+  destructive,
+}
 
 /// Подпись и тон тега риска в шапке строки вызова (change
 /// `lighten-approval-block`, D6).
 extension CodeLabApprovalRiskTag on CodeLabApprovalRisk {
   String get label => switch (this) {
     CodeLabApprovalRisk.readOnly => 'Read-only',
+    CodeLabApprovalRisk.unknown => 'Unknown risk',
     CodeLabApprovalRisk.localWrite => 'Local write',
     CodeLabApprovalRisk.network => 'Network',
     CodeLabApprovalRisk.shell => 'Shell',
@@ -20,6 +32,7 @@ extension CodeLabApprovalRiskTag on CodeLabApprovalRisk {
 
   CodeLabTone get tone => switch (this) {
     CodeLabApprovalRisk.readOnly => CodeLabTone.success,
+    CodeLabApprovalRisk.unknown => CodeLabTone.warning,
     CodeLabApprovalRisk.localWrite => CodeLabTone.warning,
     CodeLabApprovalRisk.network => CodeLabTone.warning,
     CodeLabApprovalRisk.shell => CodeLabTone.danger,

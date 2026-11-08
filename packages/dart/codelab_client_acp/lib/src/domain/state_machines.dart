@@ -1182,7 +1182,13 @@ PromptTurn _applyUpdateToTurn(PromptTurn turn, SessionUpdate update) {
       update,
       ToolCallRecord.fromToolCall(
         toolCall,
-        riskLevel: ApprovalPolicy.classifyToolCall(toolCall),
+        // Повторный `tool_call` с тем же id обновляет данные записи, но не
+        // снижает уже показанный риск (review 6b, L-2; D27).
+        riskLevel: ApprovalPolicy.max(
+          turn.toolCalls[toolCall.toolCallId]?.riskLevel ??
+              ApprovalRiskLevel.readOnly,
+          ApprovalPolicy.classifyToolCall(toolCall),
+        ),
       ),
     ),
     ToolCallUpdateSessionUpdate(:final toolCallUpdate) => _applyToolCallUpdate(
@@ -1263,10 +1269,8 @@ ToolCallRecord _mergeToolCallUpdate(
     kind: update.kind ?? current?.kind ?? ToolKind.other,
     status: status,
     cancelledByClient: cancelledByClient && status != ToolCallStatus.completed,
-    riskLevel: ApprovalPolicy.max(
-      current?.riskLevel ?? ApprovalRiskLevel.readOnly,
-      ApprovalPolicy.classifyToolCallUpdate(update),
-    ),
+    // Единое правило риска с запросом одобрения (L-1, D27).
+    riskLevel: ApprovalPolicy.classifyToolCallUpdateWithin(current, update),
     content: update.content ?? current?.content ?? const [],
     locations: update.locations ?? current?.locations ?? const [],
     rawInput: update.rawInput ?? current?.rawInput,

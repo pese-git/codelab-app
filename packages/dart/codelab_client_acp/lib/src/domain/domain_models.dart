@@ -108,7 +108,25 @@ sealed class PromptTurn with _$PromptTurn {
   };
 }
 
-enum ApprovalRiskLevel { readOnly, localWrite, network, shell, destructive }
+/// Уровень риска вызова инструмента для политики одобрений.
+///
+/// Почему [unknown]: вид `ToolKind.other` (и отсутствующий вид) ничего не
+/// гарантирует — так агент помечает, например, MCP-инструменты, а их
+/// аннотации недоверенные; считать такой вызов «только чтением» нельзя
+/// (design.md `add-provider-setup-ui` D27, Q32; AGENTS.md §10).
+///
+/// Для чего: [unknown] по рангу между [readOnly] и [localWrite]
+/// (`ApprovalPolicy.max`), а `ApprovalPolicy.decidePermission` требует для
+/// него явного одобрения в любом режиме. Хосты показывают его отдельной
+/// меткой («unknown risk»).
+enum ApprovalRiskLevel {
+  readOnly,
+  unknown,
+  localWrite,
+  network,
+  shell,
+  destructive,
+}
 
 enum ApprovalStatus { pending, selected, cancelled }
 
@@ -122,7 +140,10 @@ sealed class ApprovalRequest with _$ApprovalRequest {
     required PromptTurnId turnId,
     required ToolCallRecord toolCall,
     required List<PermissionOption> options,
-    @Default(ApprovalRiskLevel.readOnly) ApprovalRiskLevel riskLevel,
+
+    /// Без классификации вид неизвестен — как у `kind` по умолчанию (`other`):
+    /// безопасное значение по умолчанию требует явного одобрения (D27).
+    @Default(ApprovalRiskLevel.unknown) ApprovalRiskLevel riskLevel,
 
     /// Агент пометил запрос `_meta.codelab.critical: true` (в запросе или
     /// в его `toolCall`): опасная команда, которую headless-политика
@@ -146,7 +167,9 @@ sealed class ToolCallRecord with _$ToolCallRecord {
     required String title,
     @Default(ToolKind.other) ToolKind kind,
     @Default(ToolCallStatus.pending) ToolCallStatus status,
-    @Default(ApprovalRiskLevel.readOnly) ApprovalRiskLevel riskLevel,
+
+    /// Согласовано с `kind` по умолчанию (`other`) и `_riskForKind` (D27).
+    @Default(ApprovalRiskLevel.unknown) ApprovalRiskLevel riskLevel,
     @Default([]) List<ToolCallContent> content,
     @Default([]) List<ToolCallLocation> locations,
     Map<String, Object?>? rawInput,
@@ -162,7 +185,7 @@ sealed class ToolCallRecord with _$ToolCallRecord {
 
   factory ToolCallRecord.fromToolCall(
     ToolCall toolCall, {
-    ApprovalRiskLevel riskLevel = ApprovalRiskLevel.readOnly,
+    ApprovalRiskLevel riskLevel = ApprovalRiskLevel.unknown,
   }) {
     return ToolCallRecord(
       id: toolCall.toolCallId,
