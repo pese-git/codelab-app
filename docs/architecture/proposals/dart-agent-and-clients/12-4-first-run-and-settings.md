@@ -1460,7 +1460,10 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
   2. агент (встроенный, открыт настоящим открывателем на временном `CODELAB_HOME`; MCP-сервер —
      фейковый сервер на loopback HTTP с одним инструментом из `codelab_embedded/testing.dart`, его URL
      и есть адрес `github` шага 1; решение Q28 change `add-provider-setup-ui`) открывает сессию;
-     «Agent status» показывает `connected` и число инструментов из
+     новый сервер с секретом работающий агент откладывает до перезапуска (R0-4,
+     `config.reload.restart_required`), поэтому тест сначала нажимает «Restart agent» (или открывает
+     агента после записи шага 1), и только затем «Agent status» показывает `connected` и число
+     инструментов из
      `EmbeddedAgent.mcpStatus(sessionId)` (поток `McpSessionTools.changes`, change `add-provider-setup-ui`, D12);
   3. «Reconnect» вызывает `reconnect("github")` порта состояния, строка проходит
      `connecting → connected` через поток; тот же сценарий с локальным stdio-агентом по кнопке
