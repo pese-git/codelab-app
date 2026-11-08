@@ -34,6 +34,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
         SessionId,
         SessionUpdate,
         TextContent;
+import 'package:codelab_client_acp/codelab_client_acp.dart' show SecretRedactor;
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
 import 'package:codelab_desktop/features/settings/application/mcp_settings_cubit.dart';
@@ -518,11 +519,11 @@ void main() {
         'server': 'github',
         'type': 'http',
         'target': 'user',
-        'secret_refs': 1,
+        'stored_refs': 1,
         'replaced': 0,
-        'secrets_deleted': 0,
-        'secrets_kept': 0,
-        'secrets_failed': 0,
+        'cleanup_deleted': 0,
+        'cleanup_kept': 0,
+        'cleanup_failed': 0,
         'event': 'mcp_settings.saved',
         'level': 'info',
       });
@@ -1112,9 +1113,9 @@ void main() {
       expect(state.rows.map((r) => r.name), ['GitHub', 'docs']);
       expect(event('mcp_settings.removed'), {
         'server': 'github',
-        'secrets_deleted': 1,
-        'secrets_kept': 0,
-        'secrets_failed': 0,
+        'cleanup_deleted': 1,
+        'cleanup_kept': 0,
+        'cleanup_failed': 0,
         'event': 'mcp_settings.removed',
         'level': 'info',
       });
@@ -1134,7 +1135,7 @@ void main() {
         'Server docs removed.',
         'team/docs-token is kept: it was not created by this page.',
       ]);
-      expect(event('mcp_settings.removed')['secrets_kept'], 1);
+      expect(event('mcp_settings.removed')['cleanup_kept'], 1);
       expect(logger.entries.toString(), isNot(contains('team/docs-token')));
     });
 
@@ -1161,7 +1162,7 @@ void main() {
           'Server github removed.',
           '$_authorization is kept because other settings still use it.',
         ]);
-        expect(event('mcp_settings.removed')['secrets_kept'], 1);
+        expect(event('mcp_settings.removed')['cleanup_kept'], 1);
       },
     );
 
@@ -1181,7 +1182,7 @@ void main() {
         '$_authorization could not be deleted. Delete it with: '
             'codelab secret delete $_authorization',
       ]);
-      expect(event('mcp_settings.removed')['secrets_failed'], 1);
+      expect(event('mcp_settings.removed')['cleanup_failed'], 1);
     });
 
     test('a refused write keeps the server and every secret', () async {
@@ -1305,7 +1306,7 @@ void main() {
       expect(session.secrets, isNot(contains(_authorization)));
       expect(current(cubit).banner?.kind, McpBannerKind.saved);
       expect(current(cubit).banner?.lines, ['Server github saved.']);
-      expect(event('mcp_settings.saved')['secrets_deleted'], 1);
+      expect(event('mcp_settings.saved')['cleanup_deleted'], 1);
       expect(logger.entries.toString(), isNot(contains(_authorization)));
     });
 
@@ -1328,7 +1329,7 @@ void main() {
           'codelab secret delete $_authorization',
         ),
       );
-      expect(event('mcp_settings.saved')['secrets_failed'], 1);
+      expect(event('mcp_settings.saved')['cleanup_failed'], 1);
     });
 
     test('a refused write whose rollback failed names the leftover secret; a '
@@ -1529,6 +1530,34 @@ void main() {
       expect(failed['outcome'], 'secret_failed');
       expect(failed['rollback'], 'failed');
       expect(store.applied, isEmpty);
+    });
+
+    test('no mcp_settings event field is masked by the log redactor, so the '
+        'counters stay numbers (smoke 5b)', () async {
+      final cubit = make();
+      await cubit.reload();
+      final plain = cubit
+          .draftFor('github')!
+          .copyWith(headers: {'Authorization': McpValueDraft.text('plain')});
+      await cubit.save(plain);
+      await cubit.save(_newGithub(name: 'fresh'));
+      await cubit.remove('postgres');
+
+      final events = [
+        for (final e in logger.entries)
+          if ('${e['event']}'.startsWith('mcp_settings.')) e,
+      ];
+      expect(events, isNotEmpty);
+      for (final entry in events) {
+        expect(
+          const SecretRedactor().redactMap(Map.of(entry)),
+          entry,
+          reason: '${entry['event']}',
+        );
+      }
+      final saved = event('mcp_settings.saved');
+      expect(saved['cleanup_deleted'], isA<int>());
+      expect(saved['stored_refs'], isA<int>());
     });
 
     test(

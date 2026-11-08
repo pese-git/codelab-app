@@ -588,6 +588,41 @@ void main() {
       expect(element['headers'], {'X-Workspace': leakMarker});
     });
 
+    testWidgets('the name field of a header row is wide enough for '
+        'Authorization and DATABASE_URL at the smoke window width; a narrow '
+        'window does not overflow (smoke 5b)', (tester) async {
+      final view = TestWidgetsFlutterBinding.ensureInitialized()
+          .platformDispatcher
+          .views
+          .single;
+      view.physicalSize = const Size(1176, 1400);
+      await openPage(tester);
+      await tester.tap(_key('mcp-add'));
+      await settle(tester);
+      await tester.tap(_in('mcp-new', 'mcp-draft-add-row'));
+      await settle(tester);
+      await tester.enterText(
+        _in('mcp-new', 'mcp-draft-key-0'),
+        'Authorization',
+      );
+      await settle(tester);
+
+      final field = _in('mcp-new', 'mcp-draft-key-0');
+      final value = _in('mcp-new', 'mcp-draft-value-0');
+      // Моноширинный текст 12.5 px: 13 символов ≈ 100 px плюс поля поля ввода.
+      expect(tester.getSize(field).width, greaterThanOrEqualTo(160));
+      // Как на артборде, ключ уже значения, но не крошечный.
+      expect(
+        tester.getSize(field).width,
+        lessThan(tester.getSize(value).width),
+      );
+      expect(tester.takeException(), isNull);
+
+      view.physicalSize = const Size(640, 1400);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('typing into a masked field replaces the value as a whole', (
       tester,
     ) async {
