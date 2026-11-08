@@ -299,23 +299,47 @@ void main() {
     expect(backs, 2);
   });
 
-  test('the production set shows Connection and Providers in the Agent '
-      'group (SETUP-17)', () {
+  test('the production set shows Connection, Providers and MCP servers in '
+      'the Agent group (SETUP-17)', () {
     expect(defaultSettingsPages.visible, [
       SettingsPage.connection,
       SettingsPage.providers,
+      SettingsPage.mcpServers,
     ]);
   });
 
-  testWidgets('Three pages of the Agent group: Connection and Providers in '
-      'this order, no App title', (tester) async {
+  // Задача 5.5 change `add-provider-setup-ui` (spec app-settings «Страницы
+  // Providers и MCP servers в навигации», сценарий «Три страницы группы
+  // Agent»): красный до задачи 5.10 (`SettingsPage.mcpServers` в
+  // `defaultSettingsPages` и `settingsPageBuilders`).
+  testWidgets('Three pages of the Agent group: Connection, Providers and '
+      'MCP servers in this order, no App title', (tester) async {
     await pumpShell(tester, available: defaultSettingsPages.available);
 
+    expect(_nav(SettingsPage.mcpServers), findsOneWidget);
+    expect(SettingsPage.mcpServers.navKey, 'settings-nav-mcp-servers');
     final connection = tester.getTopLeft(_nav(SettingsPage.connection));
     final providers = tester.getTopLeft(_nav(SettingsPage.providers));
+    final mcp = tester.getTopLeft(_nav(SettingsPage.mcpServers));
     expect(connection.dy, lessThan(providers.dy));
+    expect(providers.dy, lessThan(mcp.dy));
     expect(find.text('Agent'), findsOneWidget);
     expect(find.text('App'), findsNothing);
+    expect(settingsPageBuilders, contains(SettingsPage.mcpServers));
+  });
+
+  testWidgets('search "headers" keeps MCP servers', (tester) async {
+    await pumpShell(tester, available: defaultSettingsPages.available);
+
+    await tester.enterText(
+      find.byKey(CodeLabSettingsNavigation.searchKey),
+      'headers',
+    );
+    await tester.pumpAndSettle();
+
+    expect(_nav(SettingsPage.mcpServers), findsOneWidget);
+    expect(_nav(SettingsPage.providers), findsNothing);
+    expect(_nav(SettingsPage.connection), findsNothing);
   });
 
   testWidgets('search "api key" keeps Providers', (tester) async {
@@ -394,6 +418,19 @@ void main() {
       ]) {
         expect(SettingsSearchIndex.search(pages, word), [
           SettingsPage.providers,
+        ], reason: word);
+      }
+    });
+
+    test('matches MCP servers keywords', () {
+      const pages = [
+        SettingsPage.connection,
+        SettingsPage.providers,
+        SettingsPage.mcpServers,
+      ];
+      for (final word in const ['mcp', 'server', 'tools', 'headers']) {
+        expect(SettingsSearchIndex.search(pages, word), [
+          SettingsPage.mcpServers,
         ], reason: word);
       }
     });

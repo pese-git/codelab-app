@@ -9,7 +9,10 @@
 
 import 'dart:async';
 
-import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' show SessionId;
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
+    show SessionId, SessionUpdate;
+import 'package:codelab_client_acp/codelab_client_acp.dart'
+    show PromptTurn, PromptTurnId;
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/settings/application/provider_settings_session.dart';
 import 'package:codelab_setup/codelab_setup.dart';
@@ -124,6 +127,25 @@ final class FakeAgentConfigStore implements AgentConfigStore {
               _remove(layer, key.split('.'));
             case SetValue(:final key, :final value):
               _set(layer, key.split('.'), value);
+            case UpsertMcpServer(:final server):
+              // Страница «MCP servers» (задача 5.4): элемент `mcp.servers`
+              // заменяется по `name` целиком, как в настоящем писателе.
+              _editServers(layer, (servers) {
+                final index = servers.indexWhere(
+                  (s) => s is Map && s['name'] == server['name'],
+                );
+                if (index >= 0) {
+                  servers[index] = {...server};
+                } else {
+                  servers.add({...server});
+                }
+              });
+            case RemoveMcpServer(:final name):
+              _editServers(
+                layer,
+                (servers) =>
+                    servers.removeWhere((s) => s is Map && s['name'] == name),
+              );
             default:
               break;
           }
@@ -131,6 +153,23 @@ final class FakeAgentConfigStore implements AgentConfigStore {
       }
     }
     return outcome;
+  }
+
+  /// Правит список `mcp.servers` слоя; слой должен быть изменяемой картой.
+  static void _editServers(
+    Map<String, Object?> layer,
+    void Function(List<Object?> servers) edit,
+  ) {
+    final mcp = layer['mcp'];
+    final servers = mcp is Map && mcp['servers'] is List
+        ? [...(mcp['servers'] as List<Object?>)]
+        : <Object?>[];
+    edit(servers);
+    layer['mcp'] = <String, Object?>{
+      if (mcp is Map)
+        for (final e in mcp.entries) '${e.key}': e.value,
+      'servers': servers,
+    };
   }
 
   static void _remove(Map<String, Object?> map, List<String> path) {
@@ -231,6 +270,30 @@ final class FakeProviderSettingsSession implements ProviderSettingsSession {
   SecretDeletion deletion = SecretDeletion.deleted;
   FutureOr<void> Function(String name)? onDelete;
 
+  /// Порт ключей страницы «MCP servers» (задача 5.4): те же секреты, что у
+  /// [isSecretSet], но через `ProviderKeys`, как собирает composition root
+  /// (`providerKeysOf` того же хранилища, задача 5.10). `journal` показывает
+  /// порядок «секрет → конфиг → откат».
+  late final FakeWizardKeys mcpKeys = FakeWizardKeys(
+    secrets,
+    backend: store.backend,
+  );
+
+  /// Имена, которые [isSecretSet] скрывает, хотя секрет уже есть: гонка
+  /// «секрет появился после вопроса» (`McpSecretAppeared`).
+  final hiddenFromIsSet = <String>{};
+
+  /// Запись MCP-сервера страницы: настоящий `McpServerCommitter` моста на
+  /// двойниках. Станет `@override` вместе с методом интерфейса
+  /// `ProviderSettingsSession` (задача 5.10); до этого — обычный метод.
+  McpServerCommitter mcpCommitter() =>
+      McpServerCommitter(config: store, keys: mcpKeys);
+
+  /// Удаление MCP-сервера страницы: настоящий `McpServerRemover` моста.
+  /// Станет `@override` вместе с интерфейсом (задача 5.10).
+  McpServerRemover mcpRemover() =>
+      McpServerRemover(config: store, keys: mcpKeys);
+
   @override
   AgentConfigStore get config => store;
 
@@ -240,7 +303,7 @@ final class FakeProviderSettingsSession implements ProviderSettingsSession {
   @override
   Future<bool> isSecretSet(String name) async {
     isSetCalls.add(name);
-    return secrets.containsKey(name);
+    return secrets.containsKey(name) && !hiddenFromIsSet.contains(name);
   }
 
   @override
@@ -319,11 +382,33 @@ final class FakeWorkspace implements ClientWorkspace {
 }
 
 /// Сессия с опциями конфигурации.
+///
+/// Для панели «Agent status» (задача 5.4) умеет `send`: тексты промптов
+/// складываются в [sent], исход задаёт [onSend] (по умолчанию — пустой ход).
 final class FakeSessionHandle implements SessionHandle {
-  FakeSessionHandle(this.current);
+  FakeSessionHandle(this.current, {SessionId? id}) : id = id ?? SessionId('s1');
+
+  @override
+  final SessionId id;
 
   @override
   SessionView current;
+
+  /// Промпты, отправленные через `send`, по порядку.
+  final sent = <String>[];
+
+  /// Исход `send`; `null` — ход без ответа.
+  Future<PromptOutcome> Function(String text)? onSend;
+
+  @override
+  Future<PromptOutcome> send(String text) {
+    sent.add(text);
+    final handler = onSend;
+    return handler != null
+        ? handler(text)
+        : Future.value(PromptCompleted(id, _emptyTurn(id)));
+  }
+
   final views = StreamController<SessionView>.broadcast(sync: true);
 
   @override
@@ -338,3 +423,16 @@ final class FakeSessionHandle implements SessionHandle {
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName}');
 }
+
+PromptTurn _emptyTurn(SessionId id, {List<SessionUpdate> updates = const []}) =>
+    PromptTurn(
+      id: PromptTurnId('turn'),
+      sessionId: id,
+      prompt: const [],
+      updates: updates,
+    );
+
+/// Исход хода с ответом агента [chunks] (`AgentMessageChunk`/
+/// `AgentThoughtChunk`), как его отдаёт `SessionHandle.send`.
+PromptCompleted completedTurn(SessionId id, List<SessionUpdate> chunks) =>
+    PromptCompleted(id, _emptyTurn(id, updates: chunks));

@@ -431,6 +431,171 @@ void main() {
 
       expect((outcome as McpServerNotWritten).outcome, isA<ConfigConflict>());
       expect(config.applied, hasLength(1));
+
+      group('кандидаты на удаление: McpServerRemover.secretCandidatesOf (Q30, '
+          'design.md D11 «Уточнения по красным тестам 5b», Q22)', () {
+        // Одна реализация правила: подтверждение удаления в app показывает ровно
+        // те секреты, которые `remove` затем попробует удалить. Кандидат — секрет
+        // пространства `codelab/mcp/<name>/` из `${secret:…}` в `env` и `headers`
+        // удалённого элемента. «Ещё нужен другому серверу» (`stillReferenced`)
+        // решает `remove` по свежему снимку после записи, поэтому такой секрет
+        // остаётся кандидатом (в подтверждении страница честно предупреждает, что
+        // он может уцелеть).
+
+        List<String> candidates(AgentConfigSnapshot snapshot, String name) =>
+            McpServerRemover.secretCandidatesOf(snapshot, name);
+
+        test('только секреты пространства страницы из env и headers: чужие '
+            r'(${secret:shared}), литералы и ${VAR} не кандидаты', () {
+          final snapshot = mcpSnapshot(
+            user: [
+              stdioServer(
+                'gh',
+                env: {
+                  'A': '\${secret:codelab/mcp/gh/a}',
+                  'B': '\${PG_URL}',
+                  'C': 'plain',
+                  'D': '\${secret:shared}',
+                },
+              ),
+            ],
+          );
+
+          expect(candidates(snapshot, 'gh'), ['codelab/mcp/gh/a']);
+        });
+
+        test('env и headers вместе, по порядку, ссылка внутри текста тоже '
+            'кандидат, повторы схлопнуты', () {
+          final snapshot = mcpSnapshot(
+            user: [
+              httpServer(
+                'gh',
+                headers: {
+                  'Authorization': 'Bearer \${secret:codelab/mcp/gh/auth}',
+                  'X-Again': '\${secret:codelab/mcp/gh/auth}',
+                  'X-Other': '\${secret:codelab/mcp/gh/other}',
+                },
+                extra: {
+                  'env': {'E': '\${secret:codelab/mcp/gh/env}'},
+                },
+              ),
+            ],
+          );
+
+          expect(candidates(snapshot, 'gh'), [
+            'codelab/mcp/gh/env',
+            'codelab/mcp/gh/auth',
+            'codelab/mcp/gh/other',
+          ]);
+        });
+
+        test('ручной секрет вне codelab/mcp/<name>/ не кандидат, в том числе '
+            'чужое пространство того же вида', () {
+          final snapshot = mcpSnapshot(
+            user: [
+              httpServer(
+                'github',
+                headers: {
+                  'A': '\${secret:my/own/token}',
+                  'B': '\${secret:codelab/mcp/other/x}',
+                },
+              ),
+            ],
+          );
+
+          expect(candidates(snapshot, 'github'), isEmpty);
+        });
+
+        test(
+          'пространство общее у GitHub и github: регистр имени не важен',
+          () {
+            final snapshot = mcpSnapshot(
+              user: [
+                httpServer('GitHub', headers: {'X': '\${secret:$token}'}),
+              ],
+            );
+
+            expect(candidates(snapshot, 'GitHub'), [token]);
+          },
+        );
+
+        test('секрет, на который ссылается другой сервер, остаётся кандидатом: '
+            'stillReferenced решает remove, а не список', () async {
+          final snapshot = twoServers(authorizationRef: '\${secret:$token}');
+          // Свежий снимок после записи: `GitHub` ещё ссылается на общий секрет.
+          config.snapshotValue = mcpSnapshot(
+            user: [
+              httpServer('GitHub', headers: {'X-Token': '\${secret:$token}'}),
+            ],
+          );
+          keys = FakeProviderKeys(stored: {token});
+          rebuild();
+
+          final listed = candidates(snapshot, 'github');
+          final outcome = await remover.remove(snapshot, name: 'github');
+
+          expect(listed, [token]);
+          expect((outcome as McpServerRemoved).secrets, {
+            token: SecretCleanup.stillReferenced,
+          });
+        });
+
+        test('совпадает с не-kept ключами McpServerRemoved.secrets для тех же '
+            'входов', () async {
+          keys = FakeProviderKeys(stored: {authorization, 'shared'});
+          rebuild();
+          config.snapshotValue = mcpSnapshot();
+          final snapshot = mcpSnapshot(
+            user: [
+              httpServer(
+                'github',
+                headers: {
+                  'Authorization': '\${secret:$authorization}',
+                  'X-Shared': '\${secret:shared}',
+                  'X-Var': '\${TOKEN}',
+                },
+              ),
+            ],
+          );
+
+          final listed = candidates(snapshot, 'github');
+          final outcome = await remover.remove(snapshot, name: 'github');
+
+          final removed = (outcome as McpServerRemoved).secrets;
+          expect(removed.keys, containsAll([authorization, 'shared']));
+          expect(listed, [
+            for (final e in removed.entries)
+              if (e.value != SecretCleanup.kept) e.key,
+          ]);
+        });
+
+        test('сервер без ссылок и неизвестное имя — пустой список', () {
+          final snapshot = mcpSnapshot(user: [httpServer('plain')]);
+
+          expect(candidates(snapshot, 'plain'), isEmpty);
+          expect(candidates(snapshot, 'nope'), isEmpty);
+        });
+
+        test('сервер слоя 3 не удаляется, поэтому кандидатов нет (как remove: '
+            'notEditable)', () {
+          final snapshot = mcpSnapshot(
+            project: [
+              stdioServer('pw', env: {'K': '\${secret:codelab/mcp/pw/k}'}),
+            ],
+            projectLocal: const [],
+          );
+
+          expect(candidates(snapshot, 'pw'), isEmpty);
+        });
+
+        test('чистая функция: хранилища конфига и ключей не трогаются', () {
+          candidates(twoServers(), 'github');
+
+          expect(config.applied, isEmpty);
+          expect(keys.journal, isEmpty);
+          expect(journal, isEmpty);
+        });
+      });
     });
   });
 }

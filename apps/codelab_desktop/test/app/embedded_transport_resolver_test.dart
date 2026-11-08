@@ -171,4 +171,69 @@ void main() {
     expect(offer.value, isNull);
     await resolver.close();
   });
+
+  // Задача 5.4 change `add-provider-setup-ui` (design.md D12 «Механизм в
+  // коде»): страница «MCP servers» берёт порт состояния MCP у агента
+  // текущего соединения через `currentAgent`. Красные до задачи 5.10.
+  group('currentAgent (D12)', () {
+    test('is null before open, the agent after a successful open and null '
+        'after close()', () async {
+      failOpen = false;
+      final resolver = make();
+      expect(resolver.currentAgent, isNull);
+
+      await resolver.open(_profile, projectDirectory: '/work/app');
+
+      expect(resolver.currentAgent, isA<_FakeAgent>());
+
+      await resolver.close();
+
+      expect(resolver.currentAgent, isNull);
+    });
+
+    test('a failed open leaves no current agent', () async {
+      final resolver = make();
+
+      await expectLater(
+        resolver.open(_profile, projectDirectory: '/work/app'),
+        throwsA(isA<ClientWorkspaceException>()),
+      );
+
+      expect(resolver.currentAgent, isNull);
+      await resolver.close();
+    });
+
+    test('an open that was superseded never becomes current; the newer '
+        'agent does', () async {
+      final agents = <_FakeAgent>[];
+      final gate = Completer<void>();
+      final resolver = EmbeddedTransportResolver(({
+        required cwd,
+        required hostProfile,
+      }) async {
+        final agent = _FakeAgent();
+        agents.add(agent);
+        if (agents.length == 1) {
+          await gate.future;
+        }
+        return agent;
+      }, setupOffer: offer);
+
+      final first = resolver.open(_profile, projectDirectory: '/work/app');
+      final firstResult = expectLater(
+        first,
+        throwsA(isA<EmbeddedOpenCancelledException>()),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(resolver.currentAgent, isNull);
+      final second = resolver.open(_profile, projectDirectory: '/work/app');
+      gate.complete();
+      await firstResult;
+      await second;
+
+      expect(agents, hasLength(2));
+      expect(resolver.currentAgent, same(agents[1]));
+      await resolver.close();
+    });
+  });
 }

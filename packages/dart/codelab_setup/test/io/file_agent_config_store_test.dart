@@ -202,6 +202,72 @@ providers:
       }
     });
 
+    group('отклонённый конфиг: rejections (Q30 (в), D11)', () {
+      // Настоящий загрузчик: незаданная `${PG_URL}` в `env` MCP-сервера делает
+      // конфиг отклонённым для агента, но файл читается и правится.
+      const postgres = '''
+mcp:
+  servers:
+    - name: postgres
+      type: stdio
+      command: /usr/bin/pg-mcp
+      env:
+        DATABASE_URL: \${PG_URL}
+''';
+
+      test('незаданная переменная: путь элемента и событие, issues и '
+          'startProblems прежние', () async {
+        write(userFile(), '$provider$postgres');
+        final store = await open();
+
+        final snapshot = await store.snapshot(cwd: project);
+
+        final rejection = snapshot.rejections.single;
+        expect(rejection.kind, ConfigIssueKind.value);
+        expect(rejection.key, 'mcp.servers[postgres].env.DATABASE_URL');
+        expect(rejection.event, 'config.variable.unset');
+        expect(snapshot.issues, isEmpty);
+        expect(snapshot.startProblems, [rejection]);
+      });
+
+      test('новая установка с той же ссылкой: config.model.none остаётся '
+          'в startProblems и не попадает в rejections', () async {
+        write(userFile(), 'secrets:\n  backend: file\n$postgres');
+        final store = await open();
+
+        final snapshot = await store.snapshot(cwd: project);
+
+        expect(snapshot.rejections.map((i) => i.key), [
+          'mcp.servers[postgres].env.DATABASE_URL',
+        ]);
+        expect(
+          snapshot.startProblems.map((i) => i.event),
+          containsAll(['config.model.none', 'config.variable.unset']),
+        );
+        expect(snapshot.issues, isEmpty);
+      });
+
+      test('переменная задана в окружении: rejections пуст, значение не '
+          'попадает в проблемы', () async {
+        write(userFile(), '$provider$postgres');
+        final store = await open(env: const {'PG_URL': leak});
+
+        final snapshot = await store.snapshot(cwd: project);
+
+        expect(snapshot.rejections, isEmpty);
+        expect('${snapshot.loaded.issues}', isNot(contains(leak)));
+      });
+
+      test('новая установка без MCP: rejections пуст', () async {
+        write(userFile(), 'secrets:\n  backend: file\n');
+        final store = await open();
+
+        final snapshot = await store.snapshot(cwd: project);
+
+        expect(snapshot.rejections, isEmpty);
+      });
+    });
+
     group('неверный ключ из внешнего источника — не «отсутствует»', () {
       const bad = 'nope/none';
 
