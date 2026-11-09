@@ -354,9 +354,15 @@
   - маркер `sk-test-leak-0123456789` не найден в логах тестов, состояниях Cubit-ов, выводе CLI, `config.yaml` и `profiles.json`;
   - ревью `architecture-reviewer` и `acp-safety-reviewer`;
   - пункт ревью: из холста (`dc-runtime.js`, разметка артбордов) ничего не скопировано (AGENTS.md §5).
-- [ ] 6.5 `[desktop]` Ручная проверка на macOS-сборке разработчика (не CI, не условие merge; после влития 6a и 6b). Уже проверено 2026-11-08 (smoke и регрессия 5b): MCP-сервер stdio (`dart mcp-server`) — живая таблица и «Reconnect»; ход встроенного агента через LM Studio; сервер с секретом — после «Restart agent». Осталось:
+- [x] 6.5 `[desktop]` Ручная проверка на macOS-сборке разработчика (не CI, не условие merge; после влития 6a и 6b). Уже проверено 2026-11-08 (smoke и регрессия 5b): MCP-сервер stdio (`dart mcp-server`) — живая таблица и «Reconnect»; ход встроенного агента через LM Studio; сервер с секретом — после «Restart agent». Осталось:
   - app из Finder с `secrets.backend: file`: «Store a new token» → `codelab -a <id>` подключается тем же токеном;
   - мастер провайдера с настоящим ключом → баннер 6.1a `Provider <id> saved. Its models are available after Restart agent (Settings › Connection).`, после «Restart agent» — модель в селекторе и ход встроенного агента (Q17);
   - ~~MCP-сервер stdio → живая таблица, «Reconnect»~~ — проверено 2026-11-08; после 6.1b — баннер про «Restart agent» для нового сервера;
   - `codelab` на пустом `CODELAB_HOME` в терминале → мастер первого запуска;
   - `codelab --ui tui`: `/provider add` с настоящим ключом (маска, Ctrl+R) и `/settings` в iTerm2 и Terminal.app.
+  - Проверено 2026-11-09 на `develop` f8323410 (изолированный `CODELAB_HOME`, LM Studio, тестовые токен и ключ; значения не попали ни в журналы, ни в `config.yaml`/`profiles.json`, ни в вывод CLI/TUI):
+    - app, запущенный через LaunchServices (`open`, как из Finder) с `secrets.backend: file`: профиль WebSocket «Store a new token» — «Test connection» `Reachable`, в `profiles.json` только `secret:codelab/profiles/manual-ws/token`, значение — в `secrets.yaml`; `codelab -a manual-ws -p …` подключился тем же токеном, ход выполнен;
+    - мастер провайдера (правка `lmstudio`, ключ из переменной окружения) — баннер `Provider lmstudio saved. Its models are available after Restart agent (Settings › Connection).`; после «Restart agent» — модели в селекторе и ход встроенного агента;
+    - `codelab` на пустом `CODELAB_HOME` — мастер первого запуска до сохранения и первого хода;
+    - `codelab --ui tui`: `/provider add` — маска ключа, Ctrl+R показывает и прячет, ключ в `secrets.yaml` (0600), в `config.yaml` — `api_key_secret`; `/settings` открывается.
+    Отличия от формулировки: TUI прогнан в псевдотерминале, внешний вид в iTerm2 и Terminal.app вживую не смотрели; ключ провайдера фиктивный (LM Studio принимает любой).
