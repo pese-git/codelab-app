@@ -282,7 +282,10 @@ final class McpSecretsException implements Exception { final String reason; }  /
 `McpSessionTools.changes` — широковещательный поток полных списков `McpServerSummary` после каждой
 смены состояния, числа инструментов, ошибки или состава серверов, без повтора последнего значения,
 закрывается в `close()`; `AgentRuntime.mcpStatus(SessionId)` — порт хоста (снимок `servers`,
-`changes`, `reconnect(name)`, `null` без MCP или для закрытой сессии); `EmbeddedAgent.mcpStatus` в
+`changes`, `reconnect(name)`; порт есть у любой открытой сессии — без серверов `servers` пуст, а
+серверы, появившиеся после перезагрузки конфига, приходят в `changes`; `null` — только для
+неизвестной или закрытой сессии; решение Q18 change) — `McpStatusPort`
+(`codelab_agent_core/lib/src/mcp/mcp_status_port.dart`); `EmbeddedAgent.mcpStatus` в
 `codelab_embedded` поверх него. ACP не меняется.
 
 **Правки конфига** — чистые типы ядра (`codelab_agent_core/lib/src/config/config_edit.dart`): их
@@ -1525,13 +1528,17 @@ docs      session  stdio      failed     4      process exited with code 1 (retr
 та же, что у сбоя подключения (§15.5, §12.3), с добавленным `action`.
 
 Постоянные изменения (добавить, изменить, удалить, выключить сервер) делают клиенты через
-`ConfigWriter` (§17.5.5); агент подхватывает их перезагрузкой. Страница настроек app для
+`ConfigWriter` (§17.5.5); агент подхватывает их перезагрузкой, кроме отложенных до перезапуска
+(таблица §17.5.6; клиенты узнают их функциями моста `restartRequiredServers` и
+`restartRequiredProviders` поверх `planConfigReload`, change `add-provider-setup-ui`, D11, Q31, Q35).
+Страница настроек app для
 встроенного агента читает состояние серверов через `EmbeddedAgent.mcpStatus` и вызывает
 `reconnect` (change `add-provider-setup-ui`, D12; OQ4 закрыт); для локального stdio-агента и
 удалённого агента — отправляет `/mcp list` и `/mcp reload <id>` обычным `session/prompt` только по
 кнопке пользователя и только без идущего хода (SETUP-11).
-Машиночитаемый статус по ACP — не часть этого раздела; расширение `_meta.codelab`/`_codelab/*` —
-только отдельным OpenSpec (OQ4).
+Машиночитаемый статус по ACP — не часть этого раздела: OQ4 закрыт портом хоста без расширения
+ACP; расширение `_meta.codelab`/`_codelab/*` для агента вне процесса — только отдельным OpenSpec
+(SETUP-11).
 
 ## 17.5.8. Алгоритм: реестр настроек (E-15)
 
