@@ -59,10 +59,11 @@ void main() {
     for (final d in files.diagnostics) d.code,
   ];
 
-  group('search from cwd up to the git root', () {
-    // E-01: `core/project-context-agents-md-leaf-first`.
-    test('core/project-context-agents-md-leaf-first: the root file comes '
-        'before the file of cwd', () async {
+  // Строка E-01 матрицы agent-parity-goals: id — первый литерал внешней
+  // группы, иначе полное имя в JSON-отчёте не начинается с id (change
+  // `switch-default-agent-to-dart`, D3).
+  group('core/project-context-agents-md-leaf-first', () {
+    test('the root file comes before the file of cwd', () async {
       write('$repo/AGENTS.md', 'rule A');
       write('$pkg/AGENTS.md', 'rule B');
 
@@ -125,7 +126,9 @@ void main() {
       expect(prompt, contains('# Project instructions'));
       expect(prompt.indexOf('rule A'), lessThan(prompt.indexOf('rule B')));
     });
+  });
 
+  group('search from cwd up to the git root', () {
     test('cwd is the git root: one level', () async {
       write('$repo/AGENTS.md', 'rule A');
       write('$base/AGENTS.md', 'above the repository');
