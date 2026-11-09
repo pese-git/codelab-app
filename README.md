@@ -20,7 +20,7 @@ Monorepo CodeLab на Dart и Flutter: desktop-клиент (`apps/codelab_deskt
 | `packages/dart/codelab_agent_io` | `dart:io`-реализации портов ядра агента: файлы, процессы, журналы сессий |
 | `packages/dart/codelab_agent_acp` | ACP-сервер агента: проекция `AgentRuntime` в протокол |
 | `packages/dart/codelab_agent_mcp` | MCP-клиент агента: dual-era JSON-RPC, streamable HTTP, проекция инструментов MCP в `AgentTool` |
-| `packages/dart/codelab_setup` | мост настроек агента для клиентов: реэкспорт чистых типов конфигурации и общих подкоманд `config` (`io.dart`) |
+| `packages/dart/codelab_setup` | мост настроек агента для клиентов: реэкспорт чистых типов конфигурации и общих подкоманд `config`, мастер провайдера (`ProviderSetupFlow`, пресеты, проверка `/models`), модели страниц Providers и MCP servers и их запись (`ProviderSetupCommitter`, `McpServerCommitter`, `McpServerRemover`); `io.dart` — `ClientSecretAccess` и IO-адаптеры |
 | `packages/dart/codelab_embedded` | мост встроенного агента для клиентов: агент в процессе клиента через `InProcessAcpLink`; основной барель web-безопасен, `io.dart` — настольный открыватель, `testing.dart` — сценарий модели для тестов |
 | `packages/dart/codelab_architecture_tests` | сторож границ пакетов и схемы имён (`melos run guard`) |
 | `packages/flutter/codelab_ui` | Fluent UI виджеты рабочего места |
