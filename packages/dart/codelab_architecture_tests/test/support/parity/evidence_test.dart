@@ -237,6 +237,121 @@ void main() {
     });
   });
 
+  // Задача 2.16 (D3, уточнение 2026-11-10): id засчитывается, только если он
+  // начинает полное имя теста в отчёте, то есть первый литерал `test(` или
+  // `group(` не вложен в другой `group(`. Иначе полное имя начинается с имени
+  // внешней группы, и тест в статусе получает `not-run` (E-01).
+  group('id во вложенном test( или group( не засчитывается (D3)', () {
+    void core(String source) =>
+        _write('packages/dart/codelab_agent_core/test/a_test.dart', source);
+
+    test('Id во вложенном тесте: test внутри чужого group — missing', () {
+      core('''
+void main() {
+  group('other', () {
+    test('core/x: nested', () {});
+  });
+}
+''');
+
+      expect(_check([_row('C-01', '`core/x`')]).failures, [
+        'C-01 core/x missing',
+      ]);
+    });
+
+    test('Id во внешней группе: group на верхнем уровне main — существует', () {
+      core('''
+void main() {
+  group('core/x', () {
+    test('y', () {});
+    test('z', () {});
+  });
+}
+''');
+
+      expect(_check([_row('C-01', '`core/x`')]).failures, isEmpty);
+    });
+
+    test('вложенная группа внутри группы с id — существует: полное имя '
+        'начинается с id', () {
+      core('''
+void main() {
+  group('core/x', () {
+    group('inner', () {
+      test('y', () {});
+    });
+  });
+}
+''');
+
+      expect(_check([_row('C-01', '`core/x`')]).failures, isEmpty);
+    });
+
+    test('вложенный group с id внутри чужой группы — missing', () {
+      core('''
+void main() {
+  group('other', () {
+    group('core/x', () {
+      test('y', () {});
+    });
+  });
+}
+''');
+
+      expect(_check([_row('C-01', '`core/x`')]).failures, [
+        'C-01 core/x missing',
+      ]);
+    });
+
+    test('test на верхнем уровне main — существует, в том числе в цикле for '
+        'и в локальной функции main', () {
+      core('''
+void main() {
+  test('core/x', () {});
+  for (final n in [1, 2]) {
+    test('core/y: \$n', () {});
+  }
+  void local() {
+    test('core/z', () {});
+  }
+  local();
+}
+''');
+
+      expect(
+        _check([_row('C-01', '`core/x`, `core/y`, `core/z`')]).failures,
+        isEmpty,
+      );
+    });
+
+    test('вложенный и верхний уровень вместе: засчитывается верхний', () {
+      core('''
+void main() {
+  group('other', () {
+    test('core/x: nested', () {});
+  });
+  test('core/x: top level', () {});
+}
+''');
+
+      expect(_check([_row('C-01', '`core/x`')]).failures, isEmpty);
+    });
+
+    test('cli/<id> подчиняется тому же правилу', () {
+      _write('apps/codelab_cli/test/e2e/flow_test.dart', '''
+void main() {
+  group('other', () {
+    test('cli/x: nested', () {});
+  });
+}
+''');
+
+      expect(_check([_row('U-01', '`cli/x`')]).failures, [
+        'U-01 cli/x missing',
+      ]);
+    });
+  });
+
   group('храповик knownGaps', () {
     const gap = KnownGap('R-08', 'acp/slash-help', '2.1');
 
