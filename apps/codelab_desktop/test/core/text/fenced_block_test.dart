@@ -39,6 +39,15 @@ void main() {
       expect(unfenceSingleBlock('```text\nbody still streaming'), isNull);
     });
 
+    test('a closing line with a language word is not a closing fence', () {
+      expect(unfenceSingleBlock('```text\nbody\n```text'), isNull);
+    });
+
+    test('an empty block gives an empty string', () {
+      // Прежнее поведение `_unfenced` (Q34): пустое тело — не «как есть».
+      expect(unfenceSingleBlock('```\n```'), '');
+    });
+
     test('plain text and a single line are left as is', () {
       expect(unfenceSingleBlock('Just an answer.'), isNull);
       expect(unfenceSingleBlock('```'), isNull);
