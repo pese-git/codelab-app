@@ -37,11 +37,12 @@
 
 ## 3. Проверки
 
-- [ ] 3.1 `[protocol]` `fvm dart format` изменённых файлов; `fvm dart analyze` и `fvm dart test` в `packages/dart/codelab_acp_protocol`, `packages/dart/codelab_acp_testing`, `packages/dart/codelab_agent_acp`; `melos run conformance:agent` (новая фикстура пропускается с причиной).
-- [ ] 3.2 `[client]` `fvm dart format`, `fvm dart analyze`, `fvm dart test` в `packages/dart/codelab_client_acp` и `packages/dart/codelab_client_core`; `melos run conformance:client`; `fvm dart analyze` в `apps/codelab_cli` (exhaustive switch по `ToolKind` в CLI нет, но пакет зависит от протокола).
+- [x] 3.1 `[protocol]` `fvm dart format` изменённых файлов; `fvm dart analyze` и `fvm dart test` в `packages/dart/codelab_acp_protocol`, `packages/dart/codelab_acp_testing`, `packages/dart/codelab_agent_acp`; `melos run conformance:agent` (новая фикстура пропускается с причиной).
+- [x] 3.2 `[client]` `fvm dart format`, `fvm dart analyze`, `fvm dart test` в `packages/dart/codelab_client_acp` и `packages/dart/codelab_client_core`; `melos run conformance:client`; `fvm dart analyze` в `apps/codelab_cli` (exhaustive switch по `ToolKind` в CLI нет, но пакет зависит от протокола).
 - [x] 3.3 `[desktop]` `fvm flutter analyze` и `fvm flutter test test/features/workbench/application/ui_mappers_test.dart` в `apps/codelab_desktop`.
-- [ ] 3.4 `[protocol]` `melos run guard` (пакетов и импортов не добавлено — должен быть зелёным без правок `rules.dart`) и `melos run web-compile` (протокол остаётся web-безопасным). Полный `melos run check` — по просьбе пользователя: изменён общий протокольный пакет (§21).
-- [ ] 3.5 `[protocol]` `openspec validate tolerate-unknown-tool-kind --strict` зелёный; дельты `add-provider-setup-ui` не правятся, порядок архивации — после него (proposal «Impact»).
+- [x] 3.4 `[protocol]` `melos run guard` (пакетов и импортов не добавлено — должен быть зелёным без правок `rules.dart`) и `melos run web-compile` (протокол остаётся web-безопасным). Полный `melos run check` — по просьбе пользователя: изменён общий протокольный пакет (§21).
+- [x] 3.5 `[protocol]` `openspec validate tolerate-unknown-tool-kind --strict` зелёный; дельты `add-provider-setup-ui` не правятся, порядок архивации — после него (proposal «Impact»).
+  Проверено 2026-11-09 на `develop` 4761cbf7 (после влития #262 и архива `add-provider-setup-ui`): 3.1–3.5 зелёные — format без изменений; analyze без замечаний; тесты `codelab_acp_protocol` 135, `codelab_acp_testing` 273, `codelab_agent_acp` 235, `codelab_client_acp` 242, `codelab_client_core` 329; `conformance:agent` 57, `conformance:client` 40, `guard` 110, `web-compile`, `openspec validate --strict`.
 
 ## 4. Исправления по ревью
 
