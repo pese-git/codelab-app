@@ -459,9 +459,9 @@ Transport implementations должны поддерживать:
 
   ```json
   {
-    "name": "Codelab Agent",
+    "name": "codelab-agent (stdio)",
     "type": "custom",
-    "command": "codelab",
+    "command": "codelab-agent",
     "args": ["serve", "--stdio"],
     "env": {
       "CODELAB_LOG_LEVEL": "DEBUG"
@@ -481,7 +481,10 @@ Transport implementations должны поддерживать:
 - command, cwd, args и environment для запуска `codelab-agent` отображаются в
   inspector/debug diagnostics с redaction secrets;
 - built-in profile можно редактировать перед запуском, но default должен
-  соответствовать Zed-compatible config: `codelab serve --stdio`.
+  соответствовать Zed-compatible config: `codelab-agent serve --stdio`. Встроенное
+  описание — значение по умолчанию «Add profile», а профиль по умолчанию — встроенный
+  агент (`openspec/changes/switch-default-agent-to-dart/design.md`, D10; до
+  переключения здесь был Python-агент `codelab serve --stdio`).
 
 ## 11. Наблюдаемость
 

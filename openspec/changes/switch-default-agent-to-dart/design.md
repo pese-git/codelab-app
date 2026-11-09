@@ -183,12 +183,14 @@
 
 - В `checks` для событий `schedule` и `workflow_dispatch`:
   - выставляется `CODELAB_TEST_REPORT_DIR=$GITHUB_WORKSPACE/parity-results`;
-  - шаг `actions/upload-artifact@v4` с `if: always()` публикует `parity-results-${{ matrix.job }}`.
+  - шаг `leaks` (`report_leaks_test.dart`, D16) с `if: always()` проверяет каталог отчётов в окружении джоба;
+  - шаг `actions/upload-artifact@v4` с `if: always() && steps.leaks.outcome == 'success'` публикует `parity-results-${{ matrix.job }}`: при утечке секрета джоб красный, артефакт не публикуется.
+  - Секреты, которые получают тесты, задаются на уровне джоба: иначе шаг `leaks` их не видит. Сейчас таких секретов в CI нет.
   На pull request и push переменная не задаётся: отчёты там не нужны, а вывод и время не меняются.
 - Новый джоб `parity`:
   - `needs: [scope, checks]`;
   - `if: always() && needs.scope.result == 'success' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')`;
-  - шаги: checkout, prepare (FVM), `actions/download-artifact@v4` с `pattern: parity-results-*` и `merge-multiple: true` в `parity-results/`, запись `meta.json`, `fvm dart test packages/dart/codelab_architecture_tests/test/parity_evidence_test.dart` с `CODELAB_PARITY_RESULTS=parity-results`, загрузка `parity-results` (`retention-days: 90`) с `if: always()`.
+  - шаги: checkout, prepare (FVM), `actions/download-artifact@v4` с `pattern: parity-results-*` и `merge-multiple: true` в `parity-results/`, запись `meta.json`, `fvm dart test packages/dart/codelab_architecture_tests/test/parity_evidence_test.dart` с `CODELAB_PARITY_RESULTS=parity-results`, проверка утечек (шаг `leaks`) и загрузка `parity-results` (`retention-days: 90`) с `if: always() && steps.leaks.outcome == 'success'`.
   - Итог печатается и в `$GITHUB_STEP_SUMMARY`: таблица `строка | доказательство | статус | источник`.
 - `ci` (агрегатор) добавляет `parity` в `needs` и принимает `success|skipped`. На pull request джоб `parity` — `skipped`, и branch protection не меняется.
 - `parity` идёт и после красного `checks`: отчёт о том, какие строки Must упали, нужен именно тогда.
@@ -201,7 +203,7 @@
 ### D8. `codelab test-scenario --junit <файл>`
 
 - Флаг регистрируется у подкоманды `test-scenario` (`cli_args.dart`).
-- Путь открывается на запись **до** запуска первого агента. Если открыть нельзя — код `64` и `codelab: cannot write --junit <путь>: <текст ОС>`, агент не запускается. Ошибка пути не должна стоить прогона корпуса.
+- Путь открывается на запись **до** запуска первого агента. Если открыть нельзя — код `64` и `codelab: cannot write --junit <путь>: <текст ОС>`, агент не запускается. Ошибка пути не должна стоить прогона корпуса. Путь — отсутствующий или обычный файл (symlink, каталог, устройство — `64`), папка отчёта допускает запись; существующий файл не меняется, пока прогон не дошёл до записи, а сама запись атомарна (временный каталог рядом и `rename`).
 - Файл пишется после последней фикстуры, в том числе при `FAIL`, при «не сыграна ни одна фикстура» (пустой `testsuite`) и при сбое запуска агента. Прерывание сигналом файл не дописывает: частичный отчёт хуже отсутствующего, потому что parity увидит в нём `not-run`.
 - Схема:
   ```xml
@@ -218,7 +220,7 @@
 
 ### D9. Отчёты Flutter-тестов app
 
-Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §21). Их отчёты появляются только из локального прогона в `release/<version>`: `CODELAB_TEST_REPORT_DIR=<каталог> fvm dart run melos run test:e2e:app:dart-agent` и `…:embedded`. Скрипт `test:e2e:app:*` (прогон по одному файлу) пишет `app/<режим>/<файл>.json` и `app/meta.json` с коммитом, версией macOS (`sw_vers -productVersion`) и временем.
+Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §21). Их отчёты появляются только из локального прогона в `release/<version>`: `CODELAB_TEST_REPORT_DIR=<каталог> fvm dart run melos run test:e2e:app:dart-agent` и `…:embedded`. Скрипт `test:e2e:app:*` (прогон по одному файлу) пишет `app/<режим>/<файл>.json` и `app/<режим>/meta.json` с коммитом, версией macOS (`sw_vers -productVersion`) и временем.
 
 Поэтому статус `app:<файл>` проверяется отдельно:
 - без `CODELAB_PARITY_APP_RESULTS` доказательства `app:` получают статус `deferred`. Он печатается, но тест не роняет: ночной прогон на `develop` проверяет всё, кроме app;
@@ -305,7 +307,8 @@ Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §2
 ### D16. Безопасность и наблюдаемость отчётов
 
 - Отчёты `package:test` содержат печать тестов (`print`-события) и тексты ошибок. В тестах используются только вымышленные секреты (маркер `sk-test-leak-0123456789`), поэтому публикация артефактов допустима.
-- Тест `parity` сам проверяет, что ни один файл `parity-results/` не содержит значений длиной от 8 символов из окружения процесса с именами `*_TOKEN`, `*_KEY`, `*_SECRET`: CI-секретов в ночном прогоне нет, но проверка дешёвая. При совпадении — ошибка, значение не печатается.
+- Утечки ищет `findSecretLeaks` (`test/support/parity/reports.dart`). В файлах отчёта не должно быть: значений длиной от 8 символов из окружения процесса с именем, оканчивающимся (или целиком равным) `TOKEN`, `KEY`, `SECRET`, `PASSWORD`, `PASS`, `PAT`, `CREDENTIAL(S)`, `AUTH` без учёта регистра, в сыром, JSON- и XML-экранированном виде; маркера `sk-test-leak-` — но он блокирует только в отчётах app: в отчётах CI это предупреждение в логе (упавший тест может честно напечатать маркер в тексте ожидания, и снимать публикацию отчёта джоба из-за этого нельзя); любая символическая ссылка в каталоге отчётов — ошибка. Для отчётов app (`CODELAB_PARITY_APP_RESULTS`, они попадают в репозиторий) ещё значения `HOME` и путей `/Users/<имя>/`, `/home/<имя>/`: в CI этот флаг не включается, потому что `flutter test` пишет там абсолютные пути рабочей копии. При совпадении — ошибка с именем файла и причины, значение не печатается.
+- Проверка идёт в окружении того джоба, который породил отчёт, и до `upload-artifact`: каждый джоб `checks` и `parity` запускают `report_leaks_test.dart` (`CODELAB_REPORT_LEAKS_DIR`), а артефакт загружается только при зелёном результате. Тест `parity_evidence_test` проверяет то же ещё раз в группе статуса.
 - Trace Zed (`acp-trace.jsonl` с `trace_payload: true`) содержит тексты промптов и файлов. Проверка Zed проводится на тестовом проекте без секретов. Фрагменты trace в `evidence/zed/` редактируются по правилу `observability.md` до коммита (задача 4.3).
 - Итог `parity` печатается строками `<строка> <доказательство> <статус> [<источник>] [<причина>]`, отсортированными по id строки, и в Step Summary. По одному запуску видно, что именно открыто.
 
@@ -349,7 +352,8 @@ Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §2
   - `setup.mcp`: `mcp-http-tool-call` (E-03), `mcp-stdio-tool-call` (E-02), `mcp-result-fenced` (P-16), `mcp-tool-permission` (P-01), `set-mode-plan-rejects-mcp-write` (P-01), `session-new-with-mcp` (R-24);
   - `setup.sessions`: `session-load-interrupted-turn` (S-13);
   - `setup.transport`: `stdio-framing-large-line` (R-13), `ws-auth-bearer-required` (R-12);
-- `fs_flow_test` (T-01) и `terminal_flow_test` (T-08) в режиме встроенного агента app пропускают себя по testing-quality «Встроенный режим в e2e и conformance».
+- `fs_flow_test` (T-01) и `terminal_flow_test` (T-08) в режиме встроенного агента app пропускают себя по testing-quality «Встроенный режим в e2e и conformance»;
+- `cli/headless-print-basic: a stored profile is used with -a <id>` и `cli/connect-profiles-stdio-ws-embedded` в `cli-embedded.json` пропускаются с причиной `the embedded agent is built in and cannot be stored in profiles.json`: встроенный агент зарезервирован и в `profiles.json` не хранится (codelab-cli «Профили подключения CLI»). Обязательный источник `cli-dart.json` их проходит.
 
 **Только app (9 строк):** D-01, D-02, D-03, D-04, R-18–R-22 — плюс app-часть строк C-05, T-01, T-08, P-02, K-02, U-06, R-11, R-12, R-13. До прогона в `release/*` их статус — `deferred` (D9).
 

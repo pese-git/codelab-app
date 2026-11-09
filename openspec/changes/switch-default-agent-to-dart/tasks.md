@@ -50,63 +50,64 @@
 
 ### 1a. Разбор матрицы и существование доказательств (9.1)
 
-- [ ] 1.1 `[protocol]` Тест (testing-quality «Проверка доказательств матрицы целей»: «Сломанная строка таблицы», «Число строк Must не совпадает со сводкой»): `test/support/parity/matrix_parser_test.dart` на временной матрице. Проверяет:
+- [x] 1.1 `[protocol]` Тест (testing-quality «Проверка доказательств матрицы целей»: «Сломанная строка таблицы», «Число строк Must не совпадает со сводкой»): `test/support/parity/matrix_parser_test.dart` на временной матрице. Проверяет:
   - выбор строк Must из таблиц §3 по колонке «Приоритет» и всех строк §4.1;
   - пропуск подтаблиц «Дано / Когда / Тогда» и §4.2;
   - `\|` в ячейке;
   - ошибку с номером строки на лишнюю ячейку;
   - сверку с итогом §7.
   Красный.
-- [ ] 1.2 `[protocol]` Реализация: `test/support/parity/matrix_parser.dart` (D2).
-- [ ] 1.3 `[protocol]` Тест («Нет файла фикстуры», «Id только в комментарии», «Известный пробел», «Устаревшая запись knownGaps»): `evidence_test.dart` на временном дереве. Проверяет:
+- [x] 1.2 `[protocol]` Реализация: `test/support/parity/matrix_parser.dart` (D2).
+- [x] 1.3 `[protocol]` Тест («Нет файла фикстуры», «Id только в комментарии», «Известный пробел», «Устаревшая запись knownGaps»): `evidence_test.dart` на временном дереве. Проверяет:
   - извлечение всех видов доказательств из ячейки (D3), включая повтор, шаблоны и пути;
   - поиск `cli/<id>` и `core/<id>` по первому литералу `test(` и `group(`, в том числе разбитому на соседние литералы;
   - игнорирование комментариев;
   - работу храповика.
   Красный.
-- [ ] 1.4 `[protocol]` Реализация: `test/support/parity/evidence.dart` и группа `matrix evidence exists` в `parity_evidence_test.dart` на настоящей матрице. `knownGaps` заполняется по оценке design.md («Оценка масштаба 9.2», 10 строк) с номерами задач итерации 2. `fvm dart run melos run guard` зелёный.
+- [x] 1.4 `[protocol]` Реализация: `test/support/parity/evidence.dart` и группа `matrix evidence exists` в `parity_evidence_test.dart` на настоящей матрице. `knownGaps` заполняется по оценке design.md («Оценка масштаба 9.2», 10 строк) с номерами задач итерации 2. `fvm dart run melos run guard` зелёный. U-03 — пробел статуса (`not-run` из-за `scripted-only`), не существования, в `knownGaps` не входит; он закрывается задачей 2.8.
 
 ### 1b. Отчёты и статусы (9.1)
 
-- [ ] 1.5 `[protocol]` Тест («Без отчётов», «Каталог отчётов без meta.json», «Тест scripted-only в режиме dart», «Падение в дополнительном источнике», «Пропуск по спецификации в дополнительном источнике», «Отчёты app не переданы»): `reports_test.dart` и `verdict_test.dart` на временных отчётах. Проверяет:
+- [x] 1.5 `[protocol]` Тест («Без отчётов», «Каталог отчётов без meta.json», «Тест scripted-only в режиме dart», «Падение в дополнительном источнике», «Пропуск по спецификации в дополнительном источнике», «Отчёты app не переданы»): `reports_test.dart` и `verdict_test.dart` на временных отчётах. Проверяет:
   - чтение событий JSON-репортёра `package:test` (`testStart`, `testDone`, `error`, `done`, `suite.path`) и JUnit `test-scenario` (D6);
   - сопоставление полного имени с id;
   - все статусы D5, `allowedSkips` и `deferred`;
   - сортировку и формат строк итога;
   - `run_attempt > 1` с предупреждением.
   Красный.
-- [ ] 1.6 `[protocol]` Реализация: `reports.dart`, `verdict.dart`, группа `matrix evidence passed` в `parity_evidence_test.dart` (D4–D6, D9).
-- [ ] 1.7 `[protocol]` Тест («Секрет окружения в отчёте»): значение `FOO_TOKEN` найдено в файле отчёта, тест падает с именем файла без значения; значения короче 8 символов не проверяются. Красный.
-- [ ] 1.8 `[protocol]` Реализация: проверка утечки в `parity_evidence_test.dart` (D16).
+- [x] 1.6 `[protocol]` Реализация: `reports.dart`, `verdict.dart`, группа `matrix evidence passed` в `parity_evidence_test.dart` (D4–D6, D9).
+- [x] 1.7 `[protocol]` Тест («Секрет окружения в отчёте»): значение `FOO_TOKEN` найдено в файле отчёта, тест падает с именем файла без значения; значения короче 8 символов не проверяются. Красный.
+- [x] 1.8 `[protocol]` Реализация: проверка утечки в `parity_evidence_test.dart` (D16).
 
 ### 1c. `test-scenario --junit` (9.1)
 
-- [ ] 1.9 `[client]` Тест (cli-scenario-driver «JUnit-отчёт test-scenario»: все шесть сценариев): `apps/codelab_cli/test/scenario/junit_report_test.dart` — модульный тест записи и экранирования. Дополнение `test_scenario_command_test.dart` — прогон против `FixtureReplayAgent` и `embedded`, `FAIL`, пустой фильтр, неоткрываемый путь (`64` до запуска агента), маркер `sk-test-leak-0123456789`. Красный.
-- [ ] 1.10 `[client]` Реализация: флаг `--junit` в `cli_args.dart`, запись в `lib/src/scenario/junit_report.dart`, открытие до первого агента и запись после последней фикстуры в `test_scenario_command.dart` (D8). Справка `codelab test-scenario --help` и `apps/codelab_cli/AGENTS.md` (раздел драйвера фикстур).
+- [x] 1.9 `[client]` Тест (cli-scenario-driver «JUnit-отчёт test-scenario»: все шесть сценариев): `apps/codelab_cli/test/scenario/junit_report_test.dart` — модульный тест записи и экранирования. Дополнение `test_scenario_command_test.dart` — прогон против `FixtureReplayAgent` и `embedded`, `FAIL`, пустой фильтр, неоткрываемый путь (`64` до запуска агента), маркер `sk-test-leak-0123456789`. Красный.
+- [x] 1.10 `[client]` Реализация: флаг `--junit` в `cli_args.dart`, запись в `lib/src/scenario/junit_report.dart`, открытие до первого агента и запись после последней фикстуры в `test_scenario_command.dart` (D8). Справка `codelab test-scenario --help` и `apps/codelab_cli/AGENTS.md` (раздел драйвера фикстур).
 
 ### 1d. Машинные отчёты и ночной CI (9.1)
 
-- [ ] 1.11 `[protocol]` Тест (testing-quality «Ночная проверка доказательств в CI», «Правка только матрицы»): `ci_scope_test.dart` — изменение только `docs/architecture/proposals/agent-parity-goals.md` даёт джоб `guard`, а изменение другого документа по-прежнему не даёт джобов. Красный.
-- [ ] 1.12 `[protocol]` Реализация: `tool/ci/ci_scope.dart` (D7).
+- [x] 1.11 `[protocol]` Тест (testing-quality «Ночная проверка доказательств в CI», «Правка только матрицы»): `ci_scope_test.dart` — изменение только `docs/architecture/proposals/agent-parity-goals.md` даёт джоб `guard`, а изменение другого документа по-прежнему не даёт джобов. Красный.
+- [x] 1.12 `[protocol]` Реализация: `tool/ci/ci_scope.dart` (D7).
 - [ ] 1.13 `[protocol]` Скрипты Melos (testing-quality «Машинные отчёты прогонов»: все сценарии) и `.github/workflows/ci.yml` (D6, D7):
   - добавки `${CODELAB_TEST_REPORT_DIR:+…}` в `test`, `test:dart`, `conformance:agent`, `conformance:client`, `conformance:embedded`, `test:e2e:cli:dart-agent`, `test:e2e:cli:embedded`, `test:e2e:app:dart-agent`, `test:e2e:app:embedded`;
   - экранирование `\$MELOS_PACKAGE_NAME`;
-  - `app/meta.json` в скриптах app;
+  - `app/<режим>/meta.json` в скриптах app (на режим: режимы пишут в один каталог по очереди);
   - загрузка артефактов в `checks` только для `schedule` и `workflow_dispatch`;
   - джоб `parity`, `meta.json`, Step Summary;
   - `parity` в `needs` агрегатора `ci`.
   Проверка вручную: сценарии «Без переменной», «Отчёт e2e CLI», «Отчёт пакета через melos exec», «Упавший тест в отчёте» выполнены локально, а команды и результат записаны в описание pull request. Workflow — критерий «Ночной запуск публикует отчёты» и «Pull request без parity» на первом запуске (1.14).
+  До 2.11 ночной `ci` красный ожидаемо (`knownGaps`, статусы `missing` и `not-run`, D4): это сигнал ворот, а не поломка.
 - [ ] 1.14 `[protocol]` Первый ночной прогон вручную (`workflow_dispatch` на ветке итерации или на `develop` после merge): артефакт `parity-results` получен. Итог `parity` перенесён в итерацию 2 списком задач «строка → доказательство → статус → задача» с исполнителем по пакету теста. Запуск указан в описании pull request итерации 2.
 
 ### 1e. Встроенное описание stdio-агента (9.3)
 
-- [ ] 1.15 `[protocol]` Тест (agent-transports «Референсный профиль codelab-agent»: «Описание указывает на Dart-агента», «Нет умолчаний Python-агента»): `codelab_acp_transports_test.dart` ожидает `codelab-agent (stdio)`, `codelab-agent`, `['serve', '--stdio']`, `CODELAB_LOG_LEVEL=DEBUG`. Красный.
-- [ ] 1.16 `[client]` Тест («Черновик «Add profile» совпадает с описанием», «Нет умолчаний Python-агента»): `profile_draft_test.dart` — команда и аргументы stdio-черновика по умолчанию равны `codelabAgentStdioProfile.command` и `args`. Красный до 1.17, потому что описание ещё `codelab serve`.
-- [ ] 1.17 `[protocol]` Реализация: `codelabAgentStdioProfile` в `transport_configs.dart` (D10). Doc-комментарий константы — почему, для чего, как использовать (`AGENTS.md` §15). Тесты 1.15 и 1.16 зелёные.
-- [ ] 1.18 `[client]` Рефакторинг под зелёным 1.16: `ProfileDraft` берёт значения по умолчанию из описания вместо своих литералов — один источник (D10).
-- [ ] 1.19 `[agent]` Приёмочный тест границы («Описание подключается»; исключение TDD для интеграционных тестов, дорожная карта §9.1): тест бинаря в `apps/codelab_agent/test/` запускает процесс с `codelabAgentStdioProfile.args` и `env` и `--llm-script test/llm_scripts/hello.json` и получает ответ `initialize` с `protocolVersion: 1`. Кода агента не требует.
-- [ ] 1.20 `[desktop]` Сверка app: `widget_test.dart` и `test/support/test_app_scope.dart` работают с новым описанием. Метка stdio-профиля в тестах, которые проверяют текст (`label`), обновлена явно, с обоснованием D10 в комментарии теста. `fvm flutter test` app зелёный, `fvm flutter analyze` интеграционных тестов зелёный.
-- [ ] 1.21 `[protocol]` `fvm dart run melos run web-compile` зелёный.
+- [x] 1.15 `[protocol]` Тест (agent-transports «Референсный профиль codelab-agent»: «Описание указывает на Dart-агента», «Нет умолчаний Python-агента»): `codelab_acp_transports_test.dart` ожидает `codelab-agent (stdio)`, `codelab-agent`, `['serve', '--stdio']`, `CODELAB_LOG_LEVEL=DEBUG`. Красный.
+- [x] 1.16 `[client]` Тест («Черновик «Add profile» совпадает с описанием», «Нет умолчаний Python-агента»): `profile_draft_test.dart` — команда и аргументы stdio-черновика по умолчанию равны `codelabAgentStdioProfile.command` и `args`. Красный до 1.17, потому что описание ещё `codelab serve`.
+- [x] 1.17 `[protocol]` Реализация: `codelabAgentStdioProfile` в `transport_configs.dart` (D10). Doc-комментарий константы — почему, для чего, как использовать (`AGENTS.md` §15). Тесты 1.15 и 1.16 зелёные.
+- [x] 1.18 `[client]` Рефакторинг под зелёным 1.16: `ProfileDraft` берёт значения по умолчанию из описания вместо своих литералов — один источник (D10).
+- [x] 1.19 `[agent]` Приёмочный тест границы («Описание подключается»; исключение TDD для интеграционных тестов, дорожная карта §9.1): тест бинаря в `apps/codelab_agent/test/` запускает процесс с `codelabAgentStdioProfile.args` и `env` и `--llm-script test/llm_scripts/hello.json` и получает ответ `initialize` с `protocolVersion: 1`. Кода агента не требует.
+- [x] 1.20 `[desktop]` Сверка app: `widget_test.dart` и `test/support/test_app_scope.dart` работают с новым описанием. Метка stdio-профиля в тестах, которые проверяют текст (`label`), обновлена явно, с обоснованием D10 в комментарии теста. `fvm flutter test` app зелёный, `fvm flutter analyze` интеграционных тестов зелёный.
+- [x] 1.21 `[protocol]` `fvm dart run melos run web-compile` зелёный.
 
 ## 2. Закрытие пробелов Must (итерация 2, 9.2)
 
@@ -138,7 +139,7 @@
 - [ ] 3.6 `[protocol]` Корневой `AGENTS.md` §5 — итоговый состав пакетов, профиль по умолчанию — встроенный агент, роль `codelab` и `codelab-agent`, Python-агент вне monorepo и заморожен (D13).
 - [ ] 3.7 `[protocol]` `docs/architecture/testing.md`: TDD §9.0 п. 3 с исключениями (а)–(д), итерации §9.0 п. 8, `parity_evidence_test`, правило имени теста «первый литерал — id», `CODELAB_TEST_REPORT_DIR`, ночной `parity` (D3–D7).
 - [ ] 3.8 `[agent]` `layers-and-dependencies.md` (агентские пакеты и мосты), `acp-boundary.md` (агентская сторона), `permissions.md` (разрешения агента и клиентский показ), `platform-integration.md` (встроенный агент в процессе app и `codelab-agent` как процесс), `technology-stack.md` (`args`, `yaml`, `yaml_edit`; без `toml`) — по D13.
-- [ ] 3.9 `[desktop]` `apps/codelab_desktop/AGENTS.md`: описание stdio-агента по D10, если раздел «Профили подключения» его упоминает.
+- [x] 3.9 `[desktop]` `apps/codelab_desktop/AGENTS.md`: описание stdio-агента по D10, если раздел «Профили подключения» его упоминает. Правка не потребовалась: раздел уже описывает stdio-`codelab-agent` (проверено 2026-11-09, итерация 1).
 
 ## 4. Ворота MVP (итерация 4; не блокирует итерации 1–3)
 

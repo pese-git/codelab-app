@@ -96,7 +96,7 @@
 - `conformance:agent` и `conformance:client` — `dart/<пакет>.conformance.json`;
 - `test:e2e:cli:dart-agent` и `test:e2e:cli:embedded` — `cli-dart.json` и `cli-embedded.json`;
 - `conformance:embedded` — JUnit `scenario-embedded.xml` (`codelab test-scenario --junit`);
-- `test:e2e:app:dart-agent` и `test:e2e:app:embedded` — `app/<режим>/<файл>.json` на каждый файл и `app/meta.json` с коммитом, версией macOS и временем.
+- `test:e2e:app:dart-agent` и `test:e2e:app:embedded` — `app/<режим>/<файл>.json` на каждый файл и `app/<режим>/meta.json` с коммитом, версией macOS и временем.
 
 Скрипт SHALL создавать нужные подкаталоги. Без переменной команды скриптов, их вывод и коды выхода SHALL оставаться прежними. Упавший тест SHALL попадать в отчёт, а код выхода скрипта — оставаться ненулевым.
 
@@ -118,17 +118,17 @@
 
 ### Requirement: Ночная проверка доказательств в CI
 CI SHALL ночью публиковать машинные отчёты и проверять по ним доказательства матрицы целей. Для событий `schedule` и `workflow_dispatch` в `.github/workflows/ci.yml` (design.md change `switch-default-agent-to-dart`, D7):
-- каждый джоб матрицы `checks` SHALL выполняться с `CODELAB_TEST_REPORT_DIR` и публиковать каталог отчётов артефактом `parity-results-<джоб>` даже при падении джоба;
+- каждый джоб матрицы `checks` SHALL выполняться с `CODELAB_TEST_REPORT_DIR` и публиковать каталог отчётов артефактом `parity-results-<джоб>` даже при падении джоба, кроме случая утечки секрета: если проверка утечек, выполненная в окружении джоба перед загрузкой, нашла значение секрета, артефакт НЕ SHALL публиковаться, а джоб SHALL быть красным;
 - джоб `parity` SHALL запускаться после `checks`, в том числе после красного `checks`;
 - `parity` SHALL собрать артефакты в `parity-results/` и записать `parity-results/meta.json` с полями `commit`, `ref`, `event`, `run_id`, `run_attempt`, `created_at`;
 - `parity` SHALL выполнить `fvm dart test packages/dart/codelab_architecture_tests/test/parity_evidence_test.dart` с `CODELAB_PARITY_RESULTS=parity-results`;
-- `parity` SHALL опубликовать `parity-results` артефактом со сроком хранения 90 дней и вывести итог в Step Summary.
+- `parity` SHALL опубликовать `parity-results` артефактом со сроком хранения 90 дней и вывести итог в Step Summary; перед загрузкой он SHALL так же проверить утечки, и при утечке артефакт НЕ SHALL публиковаться.
 
 Для `pull_request` и `push` переменная отчётов НЕ SHALL задаваться, а джоб `parity` НЕ SHALL запускаться. Агрегатор `ci` SHALL принимать результат `parity` `success` или `skipped`.
 
 Правило охвата pull request (`tool/ci/ci_scope.dart`): изменение `docs/architecture/proposals/agent-parity-goals.md` SHALL добавлять джоб `guard`, даже если остальные изменённые файлы — только документация.
 
-`parity_evidence_test` SHALL падать, если значение длиной от 8 символов переменной окружения процесса с именем, оканчивающимся на `_TOKEN`, `_KEY` или `_SECRET`, найдено в каком-либо файле `parity-results/`. Само значение он НЕ SHALL печатать.
+Проверка утечек (design.md change `switch-default-agent-to-dart`, D16) SHALL падать, если в файле каталога отчётов найдено значение длиной от 8 символов переменной окружения процесса из набора имён D16 (`TOKEN`, `KEY`, `SECRET` и другие, без учёта регистра; в сыром, JSON- и XML-экранированном виде), а также если в каталоге есть символическая ссылка. Маркер `sk-test-leak-` блокирует только в отчётах app; в отчётах CI он даёт предупреждение в логе. Само значение проверка НЕ SHALL печатать.
 
 #### Scenario: Ночной запуск публикует отчёты
 - **WHEN** CI запускается по `schedule`
