@@ -392,6 +392,106 @@ void main() {
       );
     });
 
+    group('agent reply fencing (6.1i)', () {
+      List<CodeLabTranscriptRow> rowsOf(String text) => transcriptRowsOf(
+        [TranscriptItem.agentText(id: 'a1', text: text)],
+        cwd: '/work',
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+      );
+
+      test('a /mcp list reply becomes a preformatted row without fences', () {
+        final row =
+            rowsOf('```text\nMCP servers (1)\n  a  ok\n```').single
+                as CodeLabAgentTextRow;
+
+        expect(row.preformatted, isTrue);
+        expect(row.text, 'MCP servers (1)\n  a  ok');
+      });
+
+      test('prose stays as is and is not preformatted', () {
+        final row = rowsOf('Hello there.').single as CodeLabAgentTextRow;
+
+        expect(row.preformatted, isFalse);
+        expect(row.text, 'Hello there.');
+      });
+
+      test('an unclosed fence of a running turn stays as is', () {
+        const text = '```text\nMCP servers (1)';
+        final row = rowsOf(text).single as CodeLabAgentTextRow;
+
+        expect(row.preformatted, isFalse);
+        expect(row.text, text);
+      });
+    });
+
+    group('one tag for a cancelled call (6.1j-2)', () {
+      CodeLabToolCallRow rowOf(
+        ToolCallStatusView status,
+        ApprovalStateView? approval,
+      ) =>
+          transcriptRowsOf(
+                [
+                  TranscriptItem.toolCall(
+                    id: 't1/tool-call-1',
+                    toolCallId: const ToolCallId('call-1'),
+                    title: 'Clean',
+                    details: ToolCallView(
+                      kind: ToolKind.execute,
+                      status: status,
+                    ),
+                    approval: approval,
+                  ),
+                ],
+                cwd: '/work',
+                approvalsEnabled: true,
+                onApprovalSelected: (_, _) {},
+              ).single
+              as CodeLabToolCallRow;
+
+      ResolvedApprovalView resolved(ApprovalOutcomeView outcome) =>
+          ResolvedApprovalView(label: outcome.name, outcome: outcome);
+
+      test('a cancelled approval on a cancelled call has no outcome tag', () {
+        final row = rowOf(
+          ToolCallStatusView.cancelled,
+          resolved(ApprovalOutcomeView.cancelled),
+        );
+
+        expect(row.status, CodeLabToolCallStatus.cancelled);
+        expect(row.approval, isNull);
+      });
+
+      test('allowed, rejected and unknown outcomes keep their tag', () {
+        for (final outcome in [
+          ApprovalOutcomeView.allowed,
+          ApprovalOutcomeView.rejected,
+          ApprovalOutcomeView.unknown,
+        ]) {
+          final row = rowOf(ToolCallStatusView.cancelled, resolved(outcome));
+
+          expect(
+            (row.approval! as CodeLabTranscriptApprovalResolved).label,
+            outcome.name,
+            reason: outcome.name,
+          );
+        }
+      });
+
+      test('a cancelled approval with a late completed call keeps both', () {
+        final row = rowOf(
+          ToolCallStatusView.succeeded,
+          resolved(ApprovalOutcomeView.cancelled),
+        );
+
+        expect(row.status, CodeLabToolCallStatus.succeeded);
+        expect(
+          (row.approval! as CodeLabTranscriptApprovalResolved).outcome,
+          CodeLabApprovalOutcome.cancelled,
+        );
+      });
+    });
+
     test('a resolved approval is a compact label', () {
       final entries = transcriptRowsOf(
         const [

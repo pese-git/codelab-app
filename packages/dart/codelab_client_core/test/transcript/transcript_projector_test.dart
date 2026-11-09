@@ -434,6 +434,122 @@ void main() {
       },
     );
   });
+
+  // Реплей `session/load` (spec acp-client-kit «Реплей session/load без
+  // заметки исхода»; D27, Q36): ACP не передаёт `stopReason` реплея, исход
+  // хода клиент не хранит, поэтому у ходов реплея нет заметок `turnStopped` и
+  // `emptyTurn`; живой ход после загрузки получает заметку как обычно.
+  // Характеризационный тест: зелёный сразу, фиксирует принятое ограничение.
+  group('turn stopped notice after session/load', () {
+    late _Agent agent;
+
+    setUp(() async {
+      agent = _Agent();
+      await agent.start();
+    });
+    tearDown(() => agent.dispose());
+
+    test('a replayed thought-only turn has no notice, a live max_tokens turn '
+        'of the loaded session has turnStopped', () async {
+      final loaded = await agent.loadReplayed('s-2', [
+        {
+          'sessionUpdate': 'user_message_chunk',
+          'content': {'type': 'text', 'text': 'think about it'},
+        },
+        _thought('thinking'),
+      ]);
+      final replayItems = agent.items;
+      expect(replayItems.whereType<ThoughtItem>(), hasLength(1));
+      expect(replayItems.whereType<NoticeItem>(), isEmpty);
+
+      final request = agent._next(sessionPromptMethod);
+      final done = agent.application.sendPrompt(
+        SendPromptCommand(
+          sessionId: loaded,
+          prompt: [ContentBlock.text(text: 'go on')],
+        ),
+      );
+      agent.transport.emitInbound(
+        JsonRpcMessage.response(
+          id: (await request).id,
+          result: {'stopReason': 'max_tokens'},
+        ),
+      );
+      await done;
+
+      final notices = agent.items.whereType<NoticeItem>();
+      expect(notices.map((n) => n.kind), [NoticeKind.turnStopped]);
+      expect(agent.items.whereType<ThoughtItem>(), hasLength(1));
+    });
+  });
+
+  // Отмена хода с ожидающим approval вызова без `tool_call` (6.1j-1; spec
+  // agent-workbench-ui «Отмена хода»; D27, Q38): вызов получает статус
+  // `cancelled`, а не `queued`.
+  group('cancelled approval for an unannounced tool call', () {
+    late _Agent agent;
+
+    setUp(() async {
+      agent = _Agent();
+      await agent.start();
+    });
+    tearDown(() => agent.dispose());
+
+    ToolCallItem ghost() => agent.items.whereType<ToolCallItem>().single;
+
+    test('a pending approval cancelled by the turn cancellation: status is '
+        'cancelled, not queued', () async {
+      final turn = await agent.prompt('go');
+      agent.requestPermission(
+        id: 1,
+        toolCallId: 'ghost',
+        status: ToolCallStatus.pending,
+      );
+      expect(ghost().details?.status, ToolCallStatusView.queued);
+
+      await agent.application.cancelTurn(
+        CancelTurnCommand(sessionId: agent.sessionId),
+      );
+
+      expect(
+        (ghost().approval! as ResolvedApprovalView).outcome,
+        ApprovalOutcomeView.cancelled,
+      );
+      expect(ghost().details?.status, ToolCallStatusView.cancelled);
+
+      await agent.end(turn, stopReason: 'cancelled');
+    });
+
+    test('an approval selected before the cancellation keeps the previous '
+        'status', () async {
+      final turn = await agent.prompt('go');
+      agent.requestPermission(
+        id: 1,
+        toolCallId: 'ghost',
+        status: ToolCallStatus.pending,
+      );
+      await agent.application.respondToPermission(
+        RespondToPermissionCommand.selected(
+          sessionId: agent.sessionId,
+          approvalId: const ApprovalRequestId('permission-1'),
+          optionId: const PermissionOptionId('allow-once'),
+        ),
+      );
+      final before = ghost().details?.status;
+
+      await agent.application.cancelTurn(
+        CancelTurnCommand(sessionId: agent.sessionId),
+      );
+
+      expect(
+        (ghost().approval! as ResolvedApprovalView).outcome,
+        ApprovalOutcomeView.allowed,
+      );
+      expect(ghost().details?.status, before);
+
+      await agent.end(turn, stopReason: 'cancelled');
+    });
+  });
 }
 
 Map<String, Object?> _message(String text) => {
@@ -484,6 +600,32 @@ final class _Agent {
     await created;
   }
 
+  /// Загружает вторую сессию `session/load` с реплеем [replay] (ACP не
+  /// передаёт `stopReason` реплея — `03-Session Setup.md`) и возвращает её id.
+  Future<SessionId> loadReplayed(
+    String id,
+    List<Map<String, Object?>> replay,
+  ) async {
+    final request = _next(sessionLoadMethod);
+    final loading = application.loadSession(
+      LoadSessionCommand(sessionId: SessionId(id), cwd: '/work'),
+    );
+    final sent = await request;
+    for (final update in replay) {
+      transport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: {'sessionId': id, 'update': update},
+        ),
+      );
+    }
+    transport.emitInbound(
+      JsonRpcMessage.response(id: sent.id, result: const <String, Object?>{}),
+    );
+    await loading;
+    return SessionId(id);
+  }
+
   Future<_Turn> prompt(String text) async {
     final request = _next(sessionPromptMethod);
     final done = application.sendPrompt(
@@ -502,7 +644,11 @@ final class _Agent {
     ),
   );
 
-  void requestPermission({required int id, required String toolCallId}) {
+  void requestPermission({
+    required int id,
+    required String toolCallId,
+    ToolCallStatus status = ToolCallStatus.inProgress,
+  }) {
     transport.emitInbound(
       JsonRpcMessage.request(
         id: JsonRpcId.integer(id),
@@ -513,7 +659,7 @@ final class _Agent {
             toolCallId: ToolCallId(toolCallId),
             title: 'Run $toolCallId',
             kind: ToolKind.execute,
-            status: ToolCallStatus.inProgress,
+            status: status,
             rawInput: const {'command': 'dart test'},
           ),
           options: const [
