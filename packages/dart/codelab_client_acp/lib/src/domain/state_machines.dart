@@ -71,8 +71,20 @@ sealed class PromptTurnStateEvent with _$PromptTurnStateEvent {
   const factory PromptTurnStateEvent.start({DateTime? startedAt}) =
       PromptTurnStartRequested;
 
-  const factory PromptTurnStateEvent.update({required SessionUpdate update}) =
-      PromptTurnUpdateReceived;
+  /// Применяет обновление сессии к ходу.
+  ///
+  /// Почему есть [toolKindUnrecognized]: кодек сводит незнакомый вид вызова к
+  /// `other` (D1), и по DTO он неотличим от явного `other`; признак,
+  /// посчитанный приложением по сырому payload (D4), несёт это различие в
+  /// машину состояний (D9, change `tolerate-unknown-tool-kind`).
+  ///
+  /// Как использовать: `true` только для `tool_call_update` с незнакомым
+  /// видом. Поле влияет лишь на вид записи для отображения (запись сохраняет
+  /// прежний вид вместо `other`); риск от него не зависит.
+  const factory PromptTurnStateEvent.update({
+    required SessionUpdate update,
+    @Default(false) bool toolKindUnrecognized,
+  }) = PromptTurnUpdateReceived;
 
   const factory PromptTurnStateEvent.requestApproval({
     required ApprovalRequest approval,
@@ -114,8 +126,15 @@ sealed class SessionStateEvent with _$SessionStateEvent {
     DateTime? startedAt,
   }) = SessionTurnStartRequested;
 
-  const factory SessionStateEvent.update({required SessionUpdate update}) =
-      SessionUpdateReceived;
+  /// Применяет обновление к активному ходу сессии.
+  ///
+  /// [toolKindUnrecognized] передаётся ходу как есть: вид вызова в обновлении
+  /// был незнаком кодеку (D9); влияет только на вид записи для отображения,
+  /// подробности — в [PromptTurnStateEvent.update].
+  const factory SessionStateEvent.update({
+    required SessionUpdate update,
+    @Default(false) bool toolKindUnrecognized,
+  }) = SessionUpdateReceived;
 
   const factory SessionStateEvent.requestApproval({
     required ApprovalRequest approval,
@@ -305,7 +324,8 @@ class PromptTurnStateMachine {
         turn,
         startedAt: startedAt,
       ),
-      PromptTurnUpdateReceived(:final update) => _applyUpdate(turn, update),
+      PromptTurnUpdateReceived(:final update, :final toolKindUnrecognized) =>
+        _applyUpdate(turn, update, toolKindUnrecognized),
       PromptTurnApprovalRequested(:final approval) => _requestApproval(
         turn,
         approval,
@@ -351,9 +371,16 @@ class PromptTurnStateMachine {
 
   static StateTransitionResult<PromptTurn> applyUpdate(
     PromptTurn turn,
-    SessionUpdate update,
-  ) {
-    return reduce(turn, PromptTurnStateEvent.update(update: update));
+    SessionUpdate update, {
+    bool toolKindUnrecognized = false,
+  }) {
+    return reduce(
+      turn,
+      PromptTurnStateEvent.update(
+        update: update,
+        toolKindUnrecognized: toolKindUnrecognized,
+      ),
+    );
   }
 
   static StateTransitionResult<PromptTurn> requestApproval(
@@ -451,12 +478,17 @@ class PromptTurnStateMachine {
   static StateTransitionResult<PromptTurn> _applyUpdate(
     PromptTurn turn,
     SessionUpdate update,
+    bool toolKindUnrecognized,
   ) {
     if (turn.isTerminal) {
       return _ignored(turn, 'terminal prompt turn ignores late updates');
     }
 
-    final next = _applyUpdateToTurn(turn, update);
+    final next = _applyUpdateToTurn(
+      turn,
+      update,
+      toolKindUnrecognized: toolKindUnrecognized,
+    );
     if (next == turn) {
       return _ignored(
         turn,
@@ -653,7 +685,8 @@ class SessionStateMachine {
         turn,
         startedAt: startedAt,
       ),
-      SessionUpdateReceived(:final update) => _applyUpdate(session, update),
+      SessionUpdateReceived(:final update, :final toolKindUnrecognized) =>
+        _applyUpdate(session, update, toolKindUnrecognized),
       SessionApprovalRequested(:final approval) => _requestApproval(
         session,
         approval,
@@ -713,11 +746,22 @@ class SessionStateMachine {
     );
   }
 
+  /// Применяет обновление к сессии; [toolKindUnrecognized] — вид вызова в
+  /// [update] был незнаком кодеку (D9 change `tolerate-unknown-tool-kind`):
+  /// запись сохраняет прежний вид для отображения, а риск остаётся не ниже
+  /// `unknown` за счёт `kind: other` в самом DTO.
   static StateTransitionResult<AcpSession> applyUpdate(
     AcpSession session,
-    SessionUpdate update,
-  ) {
-    return reduce(session, SessionStateEvent.update(update: update));
+    SessionUpdate update, {
+    bool toolKindUnrecognized = false,
+  }) {
+    return reduce(
+      session,
+      SessionStateEvent.update(
+        update: update,
+        toolKindUnrecognized: toolKindUnrecognized,
+      ),
+    );
   }
 
   /// Раскладывает историю, повторённую агентом в ответ на `session/load`,
@@ -741,10 +785,14 @@ class SessionStateMachine {
   /// `session/load` с буфером обновлений этой сессии в порядке прихода;
   /// [nextTurnId] выдаёт идентификаторы ходов. Ходы добавляются к
   /// `session.turns`; сессия должна быть без активного хода.
+  /// [toolKindUnrecognizedAt] — индексы в [updates], чей вид вызова был
+  /// незнаком кодеку (D9 change `tolerate-unknown-tool-kind`); буфер реплея
+  /// — список только для добавления, поэтому индексы стабильны.
   static AcpSession replayHistory(
     AcpSession session,
     List<SessionUpdate> updates, {
     required PromptTurnId Function() nextTurnId,
+    Set<int> toolKindUnrecognizedAt = const {},
   }) {
     var current = session;
     PromptTurn? turn;
@@ -763,7 +811,8 @@ class SessionStateMachine {
       turn = null;
     }
 
-    for (final update in updates) {
+    for (var index = 0; index < updates.length; index++) {
+      final update = updates[index];
       final scoped = _applySessionScopedUpdate(current, update);
       if (scoped != null) {
         current = scoped;
@@ -795,6 +844,7 @@ class SessionStateMachine {
               status: PromptTurnStatus.running,
             ),
         update,
+        toolKindUnrecognized: toolKindUnrecognizedAt.contains(index),
       );
     }
     closeTurn();
@@ -937,6 +987,7 @@ class SessionStateMachine {
   static StateTransitionResult<AcpSession> _applyUpdate(
     AcpSession session,
     SessionUpdate update,
+    bool toolKindUnrecognized,
   ) {
     // Сессионные обновления (команды, опции, режим, заголовок) относятся к
     // сессии, а не к ходу: ACP разрешает их «в любой момент сессии», в том
@@ -953,7 +1004,11 @@ class SessionStateMachine {
         return _applied(scoped);
       }
 
-      final turn = PromptTurnStateMachine.applyUpdate(activeTurn, update);
+      final turn = PromptTurnStateMachine.applyUpdate(
+        activeTurn,
+        update,
+        toolKindUnrecognized: toolKindUnrecognized,
+      );
       return _sessionResultFromTurnResult(scoped, turn);
     }
 
@@ -962,7 +1017,11 @@ class SessionStateMachine {
       return _ignored(session, 'session has no active prompt turn');
     }
 
-    final turn = PromptTurnStateMachine.applyUpdate(activeTurn, update);
+    final turn = PromptTurnStateMachine.applyUpdate(
+      activeTurn,
+      update,
+      toolKindUnrecognized: toolKindUnrecognized,
+    );
     return _sessionResultFromTurnResult(session, turn);
   }
 
@@ -1175,7 +1234,11 @@ StateTransitionResult<T> _rejected<T>(String reason) {
   return StateTransitionResult.rejected(reason: reason);
 }
 
-PromptTurn _applyUpdateToTurn(PromptTurn turn, SessionUpdate update) {
+PromptTurn _applyUpdateToTurn(
+  PromptTurn turn,
+  SessionUpdate update, {
+  bool toolKindUnrecognized = false,
+}) {
   return switch (update) {
     ToolCallSessionUpdate(:final toolCall) => _applyToolCallUpdate(
       turn,
@@ -1197,6 +1260,7 @@ PromptTurn _applyUpdateToTurn(PromptTurn turn, SessionUpdate update) {
       _mergeToolCallUpdate(
         turn.toolCalls[toolCallUpdate.toolCallId],
         toolCallUpdate,
+        toolKindUnrecognized: toolKindUnrecognized,
       ),
     ),
     // Чанки — приращения без id и номера: повторная доставка неотличима от
@@ -1253,10 +1317,20 @@ PromptTurn _applyToolCallUpdate(
   );
 }
 
+/// Сливает `tool_call_update` с записью вызова.
+///
+/// [toolKindUnrecognized] (D9 change `tolerate-unknown-tool-kind`): вид в
+/// обновлении был незнаком кодеку и сведён к `other`. Тогда метка вызова
+/// (`kind`) берётся из записи — `Run` у `execute` не превращается в `other`;
+/// без записи остаётся `other`. Признак управляет только видом: риск ниже
+/// считает [ApprovalPolicy.classifyToolCallUpdateWithin] по `kind: other` в
+/// DTO как `max(риск записи, unknown)`. Явный `kind: other` агента признака
+/// не получает и перезаписывает вид по общему правилу.
 ToolCallRecord _mergeToolCallUpdate(
   ToolCallRecord? current,
-  ToolCallUpdate update,
-) {
+  ToolCallUpdate update, {
+  bool toolKindUnrecognized = false,
+}) {
   // A call the client cancelled stays ended unless the agent reports how it
   // actually ended: a late non-final status does not put it back to work.
   final cancelledByClient = current?.cancelledByClient ?? false;
@@ -1266,7 +1340,9 @@ ToolCallRecord _mergeToolCallUpdate(
   return ToolCallRecord(
     id: update.toolCallId,
     title: update.title ?? current?.title ?? update.toolCallId.value,
-    kind: update.kind ?? current?.kind ?? ToolKind.other,
+    kind: toolKindUnrecognized && current != null
+        ? current.kind
+        : update.kind ?? current?.kind ?? ToolKind.other,
     status: status,
     cancelledByClient: cancelledByClient && status != ToolCallStatus.completed,
     // Единое правило риска с запросом одобрения (L-1, D27).

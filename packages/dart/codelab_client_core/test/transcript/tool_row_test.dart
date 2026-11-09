@@ -233,7 +233,7 @@ void main() {
   group('mode switch and unknown kind', () {
     test('a mode switch shows the Mode label and the title as detail', () {
       expect(
-        _format(_switchMode, title: 'Ready for implementation'),
+        _format(ToolKind.switchMode, title: 'Ready for implementation'),
         const ToolRowView(label: 'Mode', detail: 'Ready for implementation'),
       );
     });
@@ -247,7 +247,7 @@ void main() {
 
     test('no row exposes wire names of kinds', () {
       for (final row in [
-        _format(_switchMode, title: 'Ready for implementation'),
+        _format(ToolKind.switchMode, title: 'Ready for implementation'),
         _format(ToolKind.other, title: 'Plan sync'),
       ]) {
         final text = '${row.label} ${row.detail} ${row.secondary ?? ''}';
@@ -257,7 +257,3 @@ void main() {
     });
   });
 }
-
-/// `ToolKind.switchMode` по имени: пока значения нет, красным становится
-/// только сам тест, а не компиляция всего файла (задача 1.7).
-ToolKind get _switchMode => ToolKind.values.byName('switchMode');

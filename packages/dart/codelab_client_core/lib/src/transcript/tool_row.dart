@@ -88,6 +88,9 @@ abstract final class ToolRowFormatter {
     ToolKind.execute => 'Run',
     ToolKind.fetch => 'Fetch',
     ToolKind.think => 'Think',
+    // Смена режима сессии (`switch_mode`, ACP `17-Schema.md`); wire-имя в
+    // строку не попадает (D7 change `tolerate-unknown-tool-kind`).
+    ToolKind.switchMode => 'Mode',
     ToolKind.other => title.trim().isEmpty ? 'Tool' : title.trim(),
   };
 
@@ -155,6 +158,11 @@ abstract final class ToolRowFormatter {
           (_, final d?) => d,
           _ => '',
         };
+      case ToolKind.switchMode:
+        // Полей `rawInput` для `switch_mode` ACP не определяет, догадок об их
+        // именах нет: деталь пуста, и общее правило §12.1.6 подставляет
+        // `title` вызова (D7 change `tolerate-unknown-tool-kind`).
+        return '';
       case ToolKind.other:
         for (final key in const [
           'command',

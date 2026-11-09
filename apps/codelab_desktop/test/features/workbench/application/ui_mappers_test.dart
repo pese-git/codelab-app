@@ -23,6 +23,49 @@ const _rejectOnce = PermissionOption(
   kind: PermissionOptionKind.rejectOnce,
 );
 
+// Три варианта, которые агент присылает для смены режима (switch_mode).
+const _autoAccept = PermissionOption(
+  optionId: PermissionOptionId('auto-accept'),
+  name: 'Yes, and auto-accept all actions',
+  kind: PermissionOptionKind.allowAlways,
+);
+const _manualAccept = PermissionOption(
+  optionId: PermissionOptionId('manual-accept'),
+  name: 'Yes, and manually accept actions',
+  kind: PermissionOptionKind.allowOnce,
+);
+const _stay = PermissionOption(
+  optionId: PermissionOptionId('stay'),
+  name: 'No, stay in architect mode',
+  kind: PermissionOptionKind.rejectOnce,
+);
+
+/// Строка ленты для вызова заданного вида с запросом разрешения и риском
+/// `unknown` (change `tolerate-unknown-tool-kind`, D5).
+CodeLabToolCallRow _rowOf(ToolKind kind, String title) {
+  final rows = transcriptRowsOf(
+    [
+      TranscriptItem.toolCall(
+        id: 't1/tool-call-1',
+        toolCallId: const ToolCallId('call-1'),
+        title: title,
+        details: ToolCallView(kind: kind, status: ToolCallStatusView.queued),
+        approval: const PendingApprovalView(
+          approvalId: ApprovalRequestId('permission-1'),
+          sessionId: SessionId('session-1'),
+          risk: ApprovalRiskLevel.unknown,
+          options: [_autoAccept, _manualAccept, _stay],
+          focused: true,
+        ),
+      ),
+    ],
+    cwd: '/work',
+    approvalsEnabled: true,
+    onApprovalSelected: (_, _) {},
+  );
+  return rows.single as CodeLabToolCallRow;
+}
+
 void main() {
   test('connection views map to the connection status badge', () {
     expect(
@@ -598,6 +641,38 @@ void main() {
         ),
       ],
     );
+  });
+
+  // Вызов смены режима и вызова без известного вида в ленте (задача 1.10
+  // change `tolerate-unknown-tool-kind`; agent-workbench-ui «Вызов смены режима
+  // и неизвестного вида в ленте»; design.md D5, D7).
+  group('transcriptRowsOf switch_mode and other calls', () {
+    test('a switch_mode call reads "Mode <title>" with the unknown-risk tag '
+        'and the three agent options', () {
+      final row = _rowOf(ToolKind.switchMode, 'Ready for implementation');
+
+      expect(row.label, 'Mode');
+      expect(row.detail, 'Ready for implementation');
+      final approval = row.approval! as CodeLabTranscriptApprovalPending;
+      expect(approval.risk, CodeLabApprovalRisk.unknown);
+      expect(approval.options.map((option) => option.id), [
+        'auto-accept',
+        'manual-accept',
+        'stay',
+      ]);
+      expect(row.text, isNot(contains('switch_mode')));
+    });
+
+    test('an other call shows its title and the unknown-risk tag', () {
+      final row = _rowOf(ToolKind.other, 'Plan sync');
+
+      expect(row.label, 'Plan sync');
+      expect(
+        (row.approval! as CodeLabTranscriptApprovalPending).risk,
+        CodeLabApprovalRisk.unknown,
+      );
+      expect(row.text, isNot(contains('future_kind')));
+    });
   });
 
   group('planEntriesOf', () {

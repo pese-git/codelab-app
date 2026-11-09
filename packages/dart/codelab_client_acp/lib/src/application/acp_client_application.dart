@@ -161,7 +161,7 @@ final class AcpClientApplication {
   /// сессии вместо применения к прежнему состоянию; [loadSession] после
   /// ответа раскладывает их в ходы (`SessionStateMachine.replayHistory`) и
   /// убирает буфер при любом исходе запроса.
-  final _sessionReplays = <SessionId, List<SessionUpdate>>{};
+  final _sessionReplays = <SessionId, List<_BufferedUpdate>>{};
 
   /// Число `session/new` в полёте и обновления неизвестных сессий, пришедшие
   /// за это время.
@@ -178,7 +178,7 @@ final class AcpClientApplication {
   /// остаётся, буфер очищается — обновления так и не созданных сессий
   /// отбрасываются, как прежде.
   var _sessionsBeingCreated = 0;
-  final _earlyUpdates = <SessionId, List<SessionUpdate>>{};
+  final _earlyUpdates = <SessionId, List<_BufferedUpdate>>{};
 
   /// Сессии, чей ход прервала замена транспорта.
   ///
@@ -296,8 +296,17 @@ final class AcpClientApplication {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    for (final update in early) {
-      session = SessionStateMachine.applyUpdate(session, update).stateOrThrow;
+    // Признак незнакомого вида лежит рядом с обновлением и доходит до домена
+    // (D9 change `tolerate-unknown-tool-kind`). Обновление вызова здесь всё
+    // равно будет отброшено: у новой сессии нет хода, а `_applyUpdate`
+    // отбрасывает обновления вызовов без хода; признак сохраняется ради
+    // единообразия с реплеем.
+    for (final buffered in early) {
+      session = SessionStateMachine.applyUpdate(
+        session,
+        buffered.update,
+        toolKindUnrecognized: buffered.toolKindUnrecognized,
+      ).stateOrThrow;
     }
 
     _storeSession(session);
@@ -307,7 +316,7 @@ final class AcpClientApplication {
   Future<AcpSession> loadSession(LoadSessionCommand command) async {
     // Буфер заводится до отправки: реплей может прийти раньше, чем `await`
     // вернёт управление.
-    final replay = <SessionUpdate>[];
+    final replay = <_BufferedUpdate>[];
     _sessionReplays[command.sessionId] = replay;
     final LoadSessionResponse response;
     try {
@@ -338,8 +347,14 @@ final class AcpClientApplication {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
-      replay,
+      [for (final buffered in replay) buffered.update],
       nextTurnId: () => PromptTurnId('turn-${_nextTurnId++}'),
+      // Индексы признака стабильны: буфер реплея — список только для
+      // добавления, которым владеет одна загрузка (D9).
+      toolKindUnrecognizedAt: {
+        for (var i = 0; i < replay.length; i++)
+          if (replay[i].toolKindUnrecognized) i,
+      },
     );
     // Ответ приходит после реплея и описывает итоговое состояние сессии,
     // поэтому его режимы и опции главнее обновлений из реплея.
@@ -1054,6 +1069,15 @@ final class AcpClientApplication {
         return;
       }
 
+      // До проверки активного хода: запрос, отвеченный `cancelled` из-за
+      // отсутствия хода, тоже фиксируется (D4).
+      final toolKindUnrecognized = _logUnrecognizedToolKind(
+        rawToolCall: _rawField(request.params, 'toolCall'),
+        method: request.method,
+        sessionId: permissionRequest.sessionId.value,
+        toolCallId: permissionRequest.toolCall.toolCallId.value,
+      );
+
       final session = _sessions[permissionRequest.sessionId];
       final activeTurn = session?.activeTurn;
       // A cancelling turn answers late permission requests `cancelled` like
@@ -1069,6 +1093,7 @@ final class AcpClientApplication {
       final toolCall = _toolCallRecordFromUpdate(
         permissionRequest.toolCall,
         known: activeTurn.toolCalls[permissionRequest.toolCall.toolCallId],
+        toolKindUnrecognized: toolKindUnrecognized,
       );
       final approval = ApprovalRequest(
         id: approvalId,
@@ -1747,27 +1772,57 @@ final class AcpClientApplication {
     try {
       final sessionNotification =
           decodeAcpNotificationParams(notification) as SessionNotification;
+      final update = sessionNotification.update;
+      // Признак считается один раз по сырым params и едет рядом с
+      // обновлением через буферы реплея и раннего применения (D4, D9). Запись
+      // журнала пишется при приёме, до буферов: реплей тоже фиксируется.
+      var toolKindUnrecognized = false;
+      final toolCallId = switch (update) {
+        ToolCallSessionUpdate(:final toolCall) => toolCall.toolCallId,
+        ToolCallUpdateSessionUpdate(:final toolCallUpdate) =>
+          toolCallUpdate.toolCallId,
+        _ => null,
+      };
+      if (toolCallId != null) {
+        final recognizedAsUnknown = _logUnrecognizedToolKind(
+          rawToolCall: _rawField(notification.params, 'update'),
+          method: notification.method,
+          sessionId: sessionNotification.sessionId.value,
+          toolCallId: toolCallId.value,
+          sessionUpdate: update is ToolCallSessionUpdate
+              ? 'tool_call'
+              : 'tool_call_update',
+        );
+        // `tool_call` признак не получает: его вид — `other` без записи, на
+        // которую можно опереться (D9).
+        toolKindUnrecognized =
+            recognizedAsUnknown && update is ToolCallUpdateSessionUpdate;
+      }
+      final buffered = (
+        update: update,
+        toolKindUnrecognized: toolKindUnrecognized,
+      );
+
+      final replay = _sessionReplays[sessionNotification.sessionId];
       // Реплей загружаемой сессии идёт в буфер, даже если сессия с тем же id
       // уже есть: история заменит прежнее состояние после ответа.
-      final replay = _sessionReplays[sessionNotification.sessionId];
       if (replay != null) {
-        replay.add(sessionNotification.update);
+        replay.add(buffered);
         return;
       }
 
       final session = _sessions[sessionNotification.sessionId];
       if (session == null) {
         if (_sessionsBeingCreated > 0) {
-          (_earlyUpdates[sessionNotification.sessionId] ??= []).add(
-            sessionNotification.update,
-          );
+          (_earlyUpdates[sessionNotification.sessionId] ??= []).add(buffered);
         }
         return;
       }
 
       final next = SessionStateMachine.applyUpdate(
         session,
-        sessionNotification.update,
+        update,
+        toolKindUnrecognized: toolKindUnrecognized,
       ).stateOrThrow;
       _storeSession(next);
     } on Object catch (error) {
@@ -1779,6 +1834,68 @@ final class AcpClientApplication {
         context: {'method': notification.method, 'params': notification.params},
       );
     }
+  }
+
+  /// Поле сырого объекта `params` (`update` / `toolCall`) или `null`.
+  ///
+  /// Почему сырой payload: после мягкого разбора (D1) незнакомый вид в DTO
+  /// неотличим от явного `other`, поэтому признак «вид незнаком» считается по
+  /// исходным данным (D4).
+  Object? _rawField(Object? params, String name) =>
+      params is Map ? params[name] : null;
+
+  /// Пишет одну запись WARN, если сырой `kind` вызова незнаком клиенту, и
+  /// возвращает, был ли он незнаком.
+  ///
+  /// Почему журнал, а не [_recordDiagnostic]: деградация (вид сведён к
+  /// `other`, D1) не мешает работе, а диагностика сессий добавляла бы запись
+  /// каждой сессии и публиковала состояние на каждое такое сообщение — по той
+  /// же причине, что и у [_skipUnsupportedSessionUpdate]. Уровень WARN, а не
+  /// DEBUG: клиент не пропускает данные, а меняет их смысл, и это должно быть
+  /// видно в release-журнале без трассировки (D4; `observability.md` §8).
+  ///
+  /// Без payload (`observability.md` §11): только корреляция и усечённое
+  /// до 64 символов значение вида, пропущенное через [SecretRedactor].
+  /// Полный кадр остаётся в developer-only protocol-трассировке.
+  ///
+  /// Как использовать: вызывать сразу после успешного разбора, до ветвления
+  /// на буферы и проверку активного хода; [sessionUpdate] — только для
+  /// `session/update`.
+  bool _logUnrecognizedToolKind({
+    required Object? rawToolCall,
+    required String method,
+    required String sessionId,
+    required String toolCallId,
+    String? sessionUpdate,
+  }) {
+    final rawKind = unrecognizedToolKind(rawToolCall);
+    if (rawKind == null) {
+      return false;
+    }
+    // Сначала маскирование по полной строке, затем усечение (D4): обратный
+    // порядок разрезал бы секрет (PEM-блок) до того, как шаблон его узнает, и
+    // фрагмент ушёл бы в журнал без маскирования.
+    final redacted = _redactor.redactText(rawKind);
+    final truncated = redacted.length > 64
+        ? redacted.substring(0, 64)
+        : redacted;
+    _logger
+        .bind({logComponentKey: protocolComponent})
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: sessionId,
+          toolCallId: toolCallId,
+        )
+        .warning(
+          'Unknown ACP tool kind treated as other.',
+          context: {
+            'source': 'application.protocol',
+            'method': method,
+            'sessionUpdate': ?sessionUpdate,
+            'toolKind': truncated,
+          },
+        );
+    return true;
   }
 
   /// A `session/update` of a kind this client does not model (e.g.
@@ -2064,9 +2181,16 @@ final class AcpClientApplication {
   /// `toolCallId`. Риск считает общее правило `ApprovalPolicy` (review 6b,
   /// L-1): запрос без `kind` берёт вид известного вызова, а риск не ниже
   /// уже известного.
+  ///
+  /// [toolKindUnrecognized] (D9 change `tolerate-unknown-tool-kind`): вид в
+  /// запросе был незнаком кодеку и сведён к `other`; метка берётся из [known]
+  /// (без записи — `other`), а риск по-прежнему `max(риск записи, unknown)`
+  /// из `kind: other` в DTO. Явный `other` агента признака не получает и
+  /// перезаписывает вид.
   ToolCallRecord _toolCallRecordFromUpdate(
     ToolCallUpdate update, {
     ToolCallRecord? known,
+    bool toolKindUnrecognized = false,
   }) {
     final riskLevel = ApprovalPolicy.classifyToolCallUpdateWithin(
       known,
@@ -2075,7 +2199,9 @@ final class AcpClientApplication {
     return ToolCallRecord(
       id: update.toolCallId,
       title: update.title ?? update.toolCallId.value,
-      kind: update.kind ?? known?.kind ?? ToolKind.other,
+      kind: toolKindUnrecognized && known != null
+          ? known.kind
+          : update.kind ?? known?.kind ?? ToolKind.other,
       status: update.status ?? ToolCallStatus.pending,
       riskLevel: riskLevel,
       content: update.content ?? const [],
@@ -2201,3 +2327,9 @@ PromptFailure _promptFailureOf(Object error) => switch (error) {
   ),
   _ => PromptFailure.unknown(message: '$error'),
 };
+
+/// Обновление сессии в буфере (реплей `session/load`, ранние обновления) вместе
+/// с признаком «вид вызова был незнаком кодеку» (D9 change
+/// `tolerate-unknown-tool-kind`): признак считается один раз по сырым params
+/// при приёме и не теряется, пока обновление ждёт применения.
+typedef _BufferedUpdate = ({SessionUpdate update, bool toolKindUnrecognized});

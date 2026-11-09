@@ -110,10 +110,12 @@ sealed class PromptTurn with _$PromptTurn {
 
 /// Уровень риска вызова инструмента для политики одобрений.
 ///
-/// Почему [unknown]: вид `ToolKind.other` (и отсутствующий вид) ничего не
-/// гарантирует — так агент помечает, например, MCP-инструменты, а их
+/// Почему [unknown]: вид `ToolKind.other` (и отсутствующий вид), смена режима
+/// `ToolKind.switchMode` и незнакомый вид (кодек сводит его к `other`) ничего
+/// не гарантируют — так агент помечает, например, MCP-инструменты, а их
 /// аннотации недоверенные; считать такой вызов «только чтением» нельзя
-/// (design.md `add-provider-setup-ui` D27, Q32; AGENTS.md §10).
+/// (design.md `add-provider-setup-ui` D27, Q32; `tolerate-unknown-tool-kind`
+/// D5, D9; AGENTS.md §10).
 ///
 /// Для чего: [unknown] по рангу между [readOnly] и [localWrite]
 /// (`ApprovalPolicy.max`), а `ApprovalPolicy.decidePermission` требует для

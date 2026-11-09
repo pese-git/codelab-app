@@ -8,9 +8,6 @@ import 'package:test/test.dart';
 /// инструмента»). Незнакомая строка `kind` — подсказка отображения из
 /// будущей версии ACP (`17-Schema.md#toolkind`), поэтому сводится к `other`,
 /// а не ломает весь `tool_call` или запрос разрешения.
-///
-/// До задачи 2.1 файл не компилируется (нет `ToolKind.switchMode` и
-/// `unrecognizedToolKind`) — это ожидаемый красный результат TDD.
 SessionUpdate _decodeUpdate(Map<String, Object?> update) {
   final notification =
       decodeAcpNotificationParams(
