@@ -32,8 +32,9 @@ final class CodeLabUserRow extends CodeLabTranscriptRow {
   final String text;
 }
 
-/// Ответ агента простым текстом. Change `add-transcript-markdown` заменит
-/// его блоками markdown, не трогая остальные строки.
+/// Ответ агента простым текстом или, при [preformatted], моноширинным
+/// блоком. Change `add-transcript-markdown` заменит простой текст блоками
+/// markdown, не трогая остальные строки.
 final class CodeLabAgentTextRow extends CodeLabTranscriptRow {
   const CodeLabAgentTextRow({
     required this.id,
@@ -46,7 +47,8 @@ final class CodeLabAgentTextRow extends CodeLabTranscriptRow {
   final String text;
 
   /// Текст — содержимое одного огороженного блока (6.1i): рисуется
-  /// моноширинным блоком. ЗАГЛУШКА красной фазы: виджет флаг не читает.
+  /// моноширинным блоком без разбора (Q37, D27). Флаг вычисляет маппер app
+  /// (`unfenceSingleBlock`), виджет сам ограждения не ищет.
   final bool preformatted;
 }
 

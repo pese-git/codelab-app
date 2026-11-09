@@ -19,6 +19,8 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' show FluentIcons, VoidCallback;
 
+import '../../../core/text/fenced_block.dart';
+
 /// Модели инспектора — модели kit (`InspectorProjection`, design D9);
 /// прежние имена остаются для виджетов и тестов.
 typedef CodeLabInspectorCategory = InspectorCategory;
@@ -156,10 +158,17 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
           id: 'prompt-${index + 1}',
           text: text,
         ),
-        AgentTextItem(:final text) => CodeLabAgentTextRow(
-          id: 'agent-${index + 1}',
-          text: text,
-        ),
+        // Ответ одним огороженным блоком (например, `/mcp list` ядра) лента
+        // рисует моноширинно без строк ограждения; решение принимает app, а
+        // не виджет (Q37, D27).
+        AgentTextItem(:final text) => switch (unfenceSingleBlock(text)) {
+          final inner? => CodeLabAgentTextRow(
+            id: 'agent-${index + 1}',
+            text: inner,
+            preformatted: true,
+          ),
+          null => CodeLabAgentTextRow(id: 'agent-${index + 1}', text: text),
+        },
         ThoughtItem(:final text) => CodeLabThoughtRow(
           id: 'thought-${index + 1}',
           text: text,
@@ -238,6 +247,7 @@ CodeLabToolCallRow _toolCallRowOf(
     output: details?.textOutput ?? const [],
     approval: _transcriptApprovalOf(
       call.approval,
+      callStatus: details?.status,
       enabled: approvalsEnabled,
       onSelected: onApprovalSelected,
     ),
@@ -291,12 +301,21 @@ String? _failureBodyOf(PromptFailure? failure) => switch (failure) {
 /// Одобрение встроено в строку вызова: ожидающее — интерактивная карточка,
 /// решённое — тег исхода (embed-approval-in-thread/design.md,
 /// Decisions 1–3).
+///
+/// [callStatus] — статус вызова строки: при отменённом одобрении и статусе
+/// `cancelled` тега исхода нет, строку маркирует тег статуса (Q38, D27).
 CodeLabTranscriptApproval? _transcriptApprovalOf(
   ApprovalStateView? approval, {
+  required ToolCallStatusView? callStatus,
   required bool enabled,
   required ApprovalOptionChosen onSelected,
 }) => switch (approval) {
   null => null,
+  // Ход отменён, пока вызов ждал решения: тег статуса уже читается
+  // «Cancelled», второй такой же тег исхода не нужен (Q38, D27).
+  ResolvedApprovalView(outcome: ApprovalOutcomeView.cancelled)
+      when callStatus == ToolCallStatusView.cancelled =>
+    null,
   ResolvedApprovalView(:final label, :final outcome) =>
     CodeLabTranscriptApproval.resolved(
       label: label,

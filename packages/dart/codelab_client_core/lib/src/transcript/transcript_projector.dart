@@ -350,6 +350,21 @@ TranscriptItem _toolItem(
 /// ACP разрешает `session/request_permission` для вызова без `tool_call`;
 /// одобрение должно быть видно, поэтому такой вызов встаёт в конец хода —
 /// место, которое ни одно событие не задало точнее.
+///
+/// Отмена хода: запись вызова пришла из `session/request_permission`, поэтому
+/// `cancelTurn` её не помечает (`cancelledByClient` ставится только объявленным
+/// `tool_call`) и вызов остался бы `queued`/`running`. Статус берётся из живой
+/// записи хода (`turn.toolCalls`), а не из снимка в одобрении: поздний
+/// `tool_call_update` ходу в `cancelling` ещё принимается. Вызов становится
+/// `cancelled`, только если одобрение отменено, ход в `cancelling` или уже
+/// завершён (`completed`, `failed`, `cancelled` и прочие; ход может закрыться
+/// ошибкой или `end_turn` вместо `stopReason: cancelled`), статус записи
+/// нетерминален (`pending`, `inProgress`) и она не помечена
+/// `cancelledByClient` (D27, Q38: один тег «Cancelled» в app). После
+/// завершения хода нетерминальный вызов с отменённым одобрением тоже
+/// показывается `cancelled`: он так и не исполнился. Отмена одобрения
+/// отдельной командой при идущем ходе, терминальные `completed`/`failed` и
+/// одобрения, выбранные до отмены, статус не меняют.
 List<TranscriptItem> _unannouncedApprovalItems(
   PromptTurn turn,
   Set<ToolCallId> seen,
@@ -361,10 +376,32 @@ List<TranscriptItem> _unannouncedApprovalItems(
         id: _toolItemId(turn.id, approval.toolCall.id),
         toolCallId: approval.toolCall.id,
         title: approval.toolCall.title,
-        details: _callView(approval.toolCall),
+        details: _callView(_cancelledWithTurn(turn, approval)),
         approval: _approvalView(approval, focused),
       ),
 ];
+
+/// Запись вызова без `tool_call` для показа: при отмене хода вместе с
+/// одобрением нетерминальный вызов помечается отменённым (см.
+/// [_unannouncedApprovalItems]).
+ToolCallRecord _cancelledWithTurn(PromptTurn turn, ApprovalRequest approval) {
+  final record = turn.toolCalls[approval.toolCall.id] ?? approval.toolCall;
+  // `cancelling` или завершённый ход: после отмены ход может закрыться не
+  // `stopReason: cancelled`, а ошибкой `session/prompt` (`failed`) или
+  // нарушившим ACP `end_turn` (`completed`).
+  final turnCancelled =
+      turn.status == PromptTurnStatus.cancelling || turn.isTerminal;
+  final nonTerminal =
+      record.status == ToolCallStatus.pending ||
+      record.status == ToolCallStatus.inProgress;
+  if (approval.status == ApprovalStatus.cancelled &&
+      turnCancelled &&
+      nonTerminal &&
+      !record.cancelledByClient) {
+    return record.copyWith(cancelledByClient: true);
+  }
+  return record;
+}
 
 /// Заметки конца хода: `emptyTurn`, `turnStopped` и `error`.
 ///
@@ -373,9 +410,9 @@ List<TranscriptItem> _unannouncedApprovalItems(
 ///
 /// Ограничение: после `session/load` у ходов реплея нет `stopReason` — ACP его
 /// в реплее не передаёт (`03-Session Setup.md`, «Loading a Session»), а исход
-/// хода клиент не хранит. Поэтому у таких ходов нет ни `turnStopped`, ни
-/// `emptyTurn` (`isTerminal` без причины считается завершённым без вывода
-/// только у живого хода). Это принятое решение, а не дефект проекции: D27,
+/// хода клиент не хранит. Поэтому у таких ходов нет `turnStopped`; ход реплея
+/// без вывода агента по-прежнему получает `emptyTurn` («stopReason unknown»).
+/// Это принятое решение, а не дефект проекции: D27,
 /// Q36 (а); сценарий spec `acp-client-kit` «Реплей session/load без заметки
 /// исхода». Живой ход после загрузки получает заметку как обычно.
 List<TranscriptItem> _notices(
