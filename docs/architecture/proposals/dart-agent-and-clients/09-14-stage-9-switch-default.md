@@ -44,7 +44,7 @@
 5. **9.5. Предупреждение о Python-сессиях** в пользовательской документации: сохранённые сессии
    Python-агента не переносятся, мигратора нет (agent-core-architecture §16.1, задача 3.7).
 6. **9.6. Онбординг** (Should — не блокирует MVP): нет ключа провайдера → мастер в CLI и экран настройки в app вместо голой
-   ошибки (U-17, D-05; §12.4.3–§12.4.5). Выполняет change [`add-provider-setup-ui`](../../../../openspec/changes/add-provider-setup-ui/design.md): мастер первого
+   ошибки (U-17, D-05; §12.4.3–§12.4.5). Выполняет change [`add-provider-setup-ui`](../../../../openspec/changes/archive/2026-11-09-add-provider-setup-ui/design.md): мастер первого
    запуска CLI только на TTY, без TTY и в `-p` — прежний код `64` (D16, решение Q4); страница
    Providers и мастер в app (D10, D7). Onboarding app (D-11) — отдельный change после
    `add-app-navigation-shell` (решение Q3).

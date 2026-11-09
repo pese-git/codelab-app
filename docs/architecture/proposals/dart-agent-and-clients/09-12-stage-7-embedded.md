@@ -93,7 +93,7 @@
      `apps/codelab_desktop/lib/app/embedded_transport_resolver.dart` в composition root, таймаут
      закрытия 10 s (`embedded.close_timeout`), номер попытки подключения в `ClientWorkspace` против
      гонки повторного Connect (D6, D9). Should-часть (`codelab_setup` для мастера, D-05) — в change
-     [`add-provider-setup-ui`](../../../../openspec/changes/add-provider-setup-ui/design.md) (создан 2026-11-05; итерации 2–3, D23).
+     [`add-provider-setup-ui`](../../../../openspec/changes/archive/2026-11-09-add-provider-setup-ui/design.md) (создан 2026-11-05; итерации 2–3, D23).
    * **7.6** — в CLI без `--agent` берётся профиль `default`, иначе встроенный агент (D13, п. 1;
      *изменено change `add-app-settings-shell`, D21: всегда встроенный агент*);
      резолвер — `apps/codelab_cli/lib/src/embedded_transport_resolver.dart`, открыватель — из
@@ -331,7 +331,7 @@ final class IsolateAcpLink {
   `packages/dart/codelab_embedded/test/io/test_secret_store_process_test.dart`
   (`CODELAB_TEST_SECRET_STORE` только в сборке с `CODELAB_ALLOW_TEST_SECRETS`).
 * Should (не блокирует MVP): `codelab_setup` для мастера, страница провайдеров app (D-05) и
-  мастер — тесты §12.4.13 зелёные. **Перенесено** в change [`add-provider-setup-ui`](../../../../openspec/changes/add-provider-setup-ui/design.md)
+  мастер — тесты §12.4.13 зелёные. **Перенесено** в change [`add-provider-setup-ui`](../../../../openspec/changes/archive/2026-11-09-add-provider-setup-ui/design.md)
   (создан 2026-11-05; `delivery-roadmap.md` §10.1); этап 7 закрывается без него.
 
 **Зависимости.** Этапы 6 и 8 (порядок D3: `{6, 8} → 7`): CLI-клиент этапа 6, загрузка

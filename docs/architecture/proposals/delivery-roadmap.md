@@ -492,7 +492,7 @@ token», порядок «секрет → профиль» с откатом и
 статусы U-06, D-04 и R-12 — в `agent-parity-goals.md`. Хранилище секретов для токена остаётся за
 `add-provider-setup-ui`, D-10 и U-26 (M5) — справка и переподключение без lease и `restart()`.
 
-Change `add-provider-setup-ui` (создан 2026-11-05; [design.md](../../../openspec/changes/add-provider-setup-ui/design.md),
+Change `add-provider-setup-ui` (создан 2026-11-05; [design.md](../../../openspec/changes/archive/2026-11-09-add-provider-setup-ui/design.md),
 D23) идёт итерациями: 0 — документы; 1 — токены профилей в хранилище секретов агента («Use stored
 secret», «Store a new token», ссылка `secret:<имя>`) и ребро `codelab_desktop → codelab_setup`;
 2 — страница Providers; 3 — мастер провайдера в app; 4 — CLI: мастер `codelab provider add`, первый
