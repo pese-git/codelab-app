@@ -23,6 +23,20 @@
    (в том числе тег `scripted-only` в режиме `dart`) и отсутствие в отчёте считаются
    незакрытой строкой. Падает со списком строк и причиной: `missing` (нет файла или теста),
    `not-run` (нет в отчёте), `failed`, `skipped`.
+   Уточнения change [`switch-default-agent-to-dart`](../../../../openspec/changes/switch-default-agent-to-dart/design.md) (решения пользователя 2026-11-09):
+   * правило `skip` — по источникам (D5, Q5): у каждого вида доказательства обязательный источник,
+     где нужен `pass` (`acp/` — `conformance:agent` или транспортный драйвер `codelab-agent`;
+     `cli/` — `test:e2e:cli:dart-agent`; `app:` — `test:e2e:app:dart-agent`). Пропуск в
+     дополнительном источнике (`test-scenario` против встроенного агента, режим встроенного агента
+     app) допустим только с причиной из перечня `allowedSkips` со ссылкой на спецификацию;
+   * путь файла теста в критерии — доказательство (все тесты файла `pass`); `acp/*` и `app:*` —
+     весь корпус и все файлы `integration_test` (D3, Q4);
+   * существование доказательств проверяется в каждом прогоне сторожа с временным храповиком
+     `knownGaps`, статус — только по отчётам (`CODELAB_PARITY_RESULTS`, D4);
+   * в ночном прогоне на `develop` доказательства `app:` получают статус `deferred`; ворота MVP —
+     итоговый прогон теста с отчётом третьей ночи и отчётами app (`CODELAB_PARITY_APP_RESULTS`,
+     D9, Q6). Ночные отчёты — артефакты CI, отчёт третьей ночи и отчёты app — в каталоге
+     `evidence/` change.
 2. **9.2.** Закрыть оставшиеся строки Must (по отчёту 9.1).
 3. **9.3. Профили по умолчанию:** в app — «Встроенный агент» (не нужен отдельный бинарь) и
    встроенный профиль «codelab-agent (stdio)» с командой `codelab-agent serve --stdio` вместо
@@ -34,6 +48,11 @@
    п. 1 change `add-embedded-agent-mode`).
    Встроенный stdio-профиль «codelab-agent (stdio)» остаётся за 9.3: в этом change свой stdio-агент
    сохраняется через «Add profile», где по умолчанию `codelab-agent serve --stdio`.
+   **Итог 9.3** (change `switch-default-agent-to-dart`, D10, D11; решения пользователя
+   2026-11-09, Q1, Q2): `codelabAgentStdioProfile` — `codelab-agent (stdio)`,
+   `codelab-agent serve --stdio`, единственный источник значений по умолчанию «Add profile»;
+   отдельной встроенной строки stdio на странице «Connection» нет. Сохранённые профили с
+   `codelab serve` не переписываются — замена команды описана в пользовательской документации.
 4. **9.4. Поставка** (Should — не блокирует MVP; веха «продукт 1.0») по §12.7: `release.yml`, артефакты `codelab` и `codelab-agent` для пяти
    целей, подписанный `SHA256SUMS`, скрипты `install.sh` / `install.ps1` и каналы (U-29),
    происхождение сборки; инструкция установки. Переключение по умолчанию МОЖЕТ выйти
@@ -63,6 +82,12 @@
    README репозитория со ссылками на установку и `PRIVACY.md` (D-18), конфигурация (`config.yaml`), LiteLLM Proxy как `baseUrl`, ручной перенос настроек Python-агента
    из `codelab.toml` по таблице соответствия ключей (agent-core-architecture §15.7) вместо команды
    `codelab config migrate`, которой нет.
+   **Распределение** (change `switch-default-agent-to-dart`, D12, D13; решение пользователя
+   2026-11-09, Q7): этот change — архитектурные документы, `AGENTS.md` §5 и пользовательская
+   документация MVP в `docs/user/` (сборка из исходников, `config.yaml`, LiteLLM Proxy, ручной
+   перенос, предупреждение о Python-сессиях, Zed). Установка и `docs/release/verify.md` — с
+   change `add-release-pipeline-and-installer` (9.4); `PRIVACY.md` и ссылка на него в README — с
+   change `add-privacy-policy` (D-18).
 8. **9.8. Ручная проверка совместимости с Zed** — чек-лист ниже («Чек-лист Zed»); проводит
    ответственный за релиз. Сверка с другим ACP-агентом — не на глаз, а диффом trace на том же
    сценарии (там же).
@@ -73,14 +98,18 @@
    со строкой Must матрицы. Тогда Python-агент удаляется вместе с Python TUI отдельным change
    `retire-python-agent`; команда `codelab` принадлежит CLI, `codelab serve` — алиас на
    `codelab-agent serve` в течение этой одной `stable`-версии.
+   Заморозка, удаление и алиас — scope `retire-python-agent` (решение пользователя 2026-11-09, Q3):
+   алиас появляется не позже первого выпуска с установщиком, который ставит `codelab` под общим
+   именем (9.4); политика заморозки публикуется до ворот MVP (change `switch-default-agent-to-dart`, D1).
 11. **9.11. Решение о песочнице ОС (P-13):** пересмотреть Won't «сейчас» по модели угроз после
     переключения по умолчанию: оставить границу папки и одобрения, песочница только на macOS или
     полноценная песочница на трёх ОС (agent-core-architecture §16.3). Итог — ADR; при решении
     «делать» — строка P-13 в матрице получает приоритет и этап, при «не делать» — снимается
     пометка «сейчас».
 
-**OpenSpec change.** `switch-default-agent-to-dart` (scope: профили по умолчанию, онбординг,
-предупреждение о непереносимых Python-сессиях), `add-release-pipeline-and-installer` (scope:
+**OpenSpec change.** [`switch-default-agent-to-dart`](../../../../openspec/changes/switch-default-agent-to-dart/proposal.md)
+(scope: 9.1, 9.2, вторая половина 9.3, 9.5, 9.7 без установки и `PRIVACY.md`, таблица 9.8 и ворота
+MVP; онбординг 9.6 сделан change `add-provider-setup-ui`), `add-release-pipeline-and-installer` (scope:
 поставка 9.4, U-29, §12.7.2–§12.7.6, §12.7.8), `add-signed-app-distributions` (D-16) и
 `add-privacy-policy` (D-18, §12.7.7) и `retire-python-agent` (scope: заморозка, сроки удаления,
 алиасы команд). Смена значения по умолчанию `ui.mode` в CLI с `line` на `tui` после приёмки

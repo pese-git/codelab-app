@@ -208,6 +208,14 @@ macOS и Linux, ручная проверка Windows откладывается
 затем этап 9: задачи 9.1–9.3, 9.5, 9.7, 9.8. Задача 9.9 начинается с заморозки Python-агента
 сразу после переключения; задачи 9.4, 9.6, 9.11 и удаление Python-агента относятся к M4.
 
+**OpenSpec change этапа 9** — [`switch-default-agent-to-dart`](../../../openspec/changes/switch-default-agent-to-dart/proposal.md):
+итерации 0–3 — 9.1 (`parity_evidence_test`, машинные отчёты, ночной джоб `parity`,
+`codelab test-scenario --junit`), вторая половина 9.3 (`codelabAgentStdioProfile` —
+`codelab-agent serve --stdio`), 9.2 по отчёту 9.1, 9.5 и 9.7 без установки и `PRIVACY.md`;
+итерация 4 — ворота MVP (три ночи, три прогона app на macOS в `release/<version>`, чек-лист Zed
+9.8, подписи). Заморозка Python-агента и алиас `codelab serve` — change `retire-python-agent`,
+политика заморозки нужна до ворот (решения пользователя 2026-11-09, design.md change, D1, Q3).
+
 **Критерии выхода.**
 
 * `parity_evidence_test.dart` зелёный: у каждой строки Must есть доказательство (задача 9.1);
