@@ -87,7 +87,7 @@ final class SessionHeader {
 | `command` | object | необязательно, только у `user`; `source: "template"` — с этапа 8.7 (design.md change `add-agent-project-files`, D8), `skill` и `plugin` — после MVP: сообщение получено разворачиванием команды — `{"source": "skill" \| "template" \| "plugin", "name", "args"}` (`args` — как введены). По нему реплей показывает исходный текст `/skill:<name> <args>` или `/<name> <args>`, а пины узнают об активации skill (§17.2.3, §17.2.7); `plugin` — результат `CommandPrompt` команды плагина (§17.14.3.3) |
 | `auxUsage` | object | после MVP, только у `toolResult`: `{model, usage}` вспомогательного запроса инструмента (`inspect_image`, §17.11.5); читается журналом usage (§12.6.1) |
 | `spill` | object | с этапа 3, необязательно, только у `toolResult`: результат вынесен в файл — `{n, path, bytes, lines, trust, source}`; `path` — относительно `sessions/`, `trust` — `"trusted"` \| `"untrusted"`, `source` — `source` ограды исходного результата; `message.content` — огороженный фрагмент (§17.4.5) |
-| `origin` | string | необязательно; откуда сообщение, если его написал не пользователь напрямую. `"steer"` (после MVP, только у `user`) — сообщение пользователя, доставленное посреди хода (steering, §17.7.5); вместе с ним `steerId`. Реплей его **не** пропускает: это слова пользователя, они уходят `user_message_chunk` с `_meta.codelab.steer` (§13.5, шаг 5). `"subagent_notice"` (после MVP, только у `user`) — уведомление фонового субагента, а не слова пользователя; вместе с ним `subagentId`. Реплей его пропускает, по нему восстанавливаются недоставленные уведомления (§17.3.8, SUB-14). `"job_notice"` (после MVP, только у `user`) — уведомление о завершении фоновой команды (§17.9.6); вместе с ним `jobId`. Реплей его пропускает, по нему восстанавливаются недоставленные уведомления (JOB-4). `"loop_nudge"` (MVP, только у `user`) — подсказка цикла после пустого ответа модели (§5.4.1); вместе с ним `nudge: "empty_response"` и `attempt` (int, номер повтора с 1). Реплей её пропускает; транскрипт после загрузки её содержит, поэтому payload следующего хода тот же, что в живой сессии. `"loop_note"` (MVP, только у `assistant`) — синтетическая заметка цикла, когда повторы пустого ответа исчерпаны (§5.4.1); вместе с ним `nudge`: `"empty_response"` или (после MVP) `"deadline"`. Реплей отдаёт её обычным текстом агента (`agent_message_chunk`). `"deadline_notice"` (после MVP, только у `user`) — уведомление о пороге дедлайна (§17.12.5); вместе с ним `deadlineId` и `thresholds` (`[50, 10, 1]`-подмножество). Реплей его пропускает. `"parent_message"` (после MVP, только у `user`, только в журнале субагента) — сообщение родителя `task_send` (§17.3.8.1); вместе с ним `run` и `toolCallId`. `"subagent_resume"` (после MVP, только у `user`, только в журнале субагента) — текст продолжения `task_resume`; вместе с ним `run` и `failure`. Какие значения — слова пользователя, решает только `isUserWords` (§8.2.5) |
+| `origin` | string | необязательно; откуда сообщение, если его написал не пользователь напрямую. `"steer"` (после MVP, только у `user`) — сообщение пользователя, доставленное посреди хода (steering, §17.7.5); вместе с ним `steerId`. Реплей его **не** пропускает: это слова пользователя, они уходят `user_message_chunk` с `_meta.codelab.steer` (§13.5, шаг 5). `"subagent_notice"` (после MVP, только у `user`) — уведомление фонового субагента, а не слова пользователя; вместе с ним `subagentId`. Реплей его пропускает, по нему восстанавливаются недоставленные уведомления (§17.3.8, SUB-14). `"job_notice"` (после MVP, только у `user`) — уведомление о завершении фоновой команды (§17.9.6); вместе с ним `jobId`. Реплей его пропускает, по нему восстанавливаются недоставленные уведомления (JOB-4). `"loop_nudge"` (MVP, только у `user`) — подсказка цикла после пустого ответа модели (§5.4.1); вместе с ним `nudge: "empty_response"` и `attempt` (int, номер повтора с 1). Реплей её пропускает; транскрипт после загрузки её содержит, поэтому payload следующего хода тот же, что в живой сессии. `"loop_note"` (MVP, только у `assistant`) — синтетическая заметка цикла, когда повторы пустого ответа исчерпаны (§5.4.1); вместе с ним `nudge`: `"empty_response"` или (после MVP) `"deadline"`. Реплей отдаёт её обычным текстом агента (`agent_message_chunk`). `"deadline_notice"` (после MVP, только у `user`) — уведомление о пороге дедлайна (§17.12.5); вместе с ним `deadlineId` и `thresholds` (`[50, 10, 1]`-подмножество). Реплей его пропускает. `"parent_message"` (после MVP, только у `user`, только в журнале субагента) — сообщение родителя `agent_send` (§17.3.8.1); вместе с ним `run` и `toolCallId`. `"subagent_resume"` (после MVP, только у `user`, только в журнале субагента) — текст продолжения `agent_resume`; вместе с ним `run` и `failure`. Какие значения — слова пользователя, решает только `isUserWords` (§8.2.5) |
 
 `outcome`, `diff`/`diffs`, `toolMeta`, `spill`, `auxUsage`, `command` и `origin` (с `subagentId`, `steerId`, `jobId`, `deadlineId` и `thresholds`, `nudge` и `attempt` или `run`, `toolCallId`, `failure`) — поля **записи**, а не сообщения: модель их не видит, `Message`
 остаётся ровно в форме §2.2, а реплей (§13.5) получает итоговый статус, diff и заголовок вызова.
@@ -200,7 +200,7 @@ isUserWords(r):
                                          записи проецируются в user-сообщения, но слов
                                          пользователя не содержат)
 2  r.message.role != user → false     (assistant, toolResult; loop_note — assistant)
-3  r.origin отсутствует → true        (промпт session/prompt; в журнале субагента — задача task)
+3  r.origin отсутствует → true        (промпт session/prompt; в журнале субагента — задание вызова agent)
 4  o := RecordOrigin.parse(r.origin)
    o != null → classifyOrigin(o) == userWords
 5  o == null (журнал записан более новой версией) → false;
@@ -214,7 +214,7 @@ isUserWordsEvent(m, origin): m.role != user → false; origin == null → true;
 пользователя при сжатии и не показывается в ленте как реплика человека. Сам текст из контекста
 модели не пропадает: `buildLlmContext` (§8.7) берёт все записи `message` независимо от `origin`.
 
-**Журнал субагента.** Принципал дочерней сессии — родитель, а не человек: задача `task` (без
+**Журнал субагента.** Принципал дочерней сессии — родитель, а не человек: задача `agent` (без
 `origin`) и `parent_message` (§17.3.8.1) для ребёнка — «слова пользователя» (по ним ребёнок
 сжимается и отвечает), `subagent_resume` — служебный текст. Журнал ребёнка в `session/list` не
 попадает (SUB-9), поэтому заголовок и `/resume` его не видят.
@@ -360,7 +360,7 @@ List<MessageRecord> healInterruptedTurn(SessionSnapshot s, IdGenerator ids, Cloc
 | `ContextCompacted` | `compaction` (пишется **до** события, событие подтверждает запись) | **да** |
 | `SessionTitleChanged` (событие уровня `AgentSession`, дополняет §5.3) | `session_info` | нет |
 | `SubagentStarted` (после MVP, уровень `AgentSession`, §17.3.2) | `subagent` со `status: "running"` | **да** |
-| `SubagentFinished` (после MVP) | `subagent` с итоговым `status`, `report`, `usage` (пишется **до** `ToolCallFinished(task)`, SUB-10) | **да** |
+| `SubagentFinished` (после MVP) | `subagent` с итоговым `status`, `report`, `usage` (пишется **до** `ToolCallFinished(agent)`, SUB-10) | **да** |
 | `SubagentProgress` (после MVP) | ничего | — |
 | `switchBranch` / `rewind` `AgentSession` (после MVP, §17.6.5) | `branch` (пишется **до** `BranchChanged`, событие подтверждает запись) | **да** |
 | `rename` (после MVP, §17.6.4) | `session_info` с `source: "user"` | нет |
@@ -735,7 +735,7 @@ healInterruptedTurn(snapshot):
        content: [text("Tool call was interrupted: the agent process stopped before the result " +
                       "was recorded. The tool may have partially run. Check the current state " +
                       "(for example, re-read the file) before retrying.")]})
-2a. после MVP — вызов `task` (§17.3.6): s := последняя запись subagent с toolCallId == вызов.id
+2a. после MVP — вызов `agent` (§17.3.6): s := последняя запись subagent с toolCallId == вызов.id
      s.status ∈ {completed, failed} → вместо синтетического результата — результат из s.report и
        s.status с обёрткой §17.3.5, outcome записи = completed | failed (отчёт не теряется)
      иначе (s нет или status running) → синтетический interrupted шага 2, затем запись

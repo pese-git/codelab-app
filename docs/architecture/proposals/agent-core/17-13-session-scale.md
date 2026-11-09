@@ -373,7 +373,7 @@ usage и временем. Экспорт — только CLI (`codelab traject
 | `steps[].metrics` | object? | `{prompt_tokens, completion_tokens, cached_tokens, cost_usd, extra: {cache_write_tokens, reasoning_tokens?}}` |
 | `steps[].extra` | object | `{record_id, stop_reason?, duration_ms?, origin?, context_management?, images?}`; `context_management: {type, boundary}` — соглашение RFC для шагов `system`, меняющих окно контекста |
 | `final_metrics` | object | `{total_prompt_tokens, total_completion_tokens, total_cached_tokens, total_cost_usd, total_steps, extra: {wall_ms, tool_calls, subagent_usage?}}` |
-| `subagent_trajectories[]` | array? | при `--subagents nest`: полные валидные траектории ATIF-v1.7 детей (свои `schema_version`, `trajectory_id`, `agent`, `step_id` с 1); вызов `task` ссылается на них `subagent_trajectory_ref` |
+| `subagent_trajectories[]` | array? | при `--subagents nest`: полные валидные траектории ATIF-v1.7 детей (свои `schema_version`, `trajectory_id`, `agent`, `step_id` с 1); вызов `agent` ссылается на них `subagent_trajectory_ref` |
 | `extra.codelab` | object | `{title, cwd?, leaf_id, events[], redaction}` |
 
 `prompt_tokens = input + cacheRead + cacheWrite`, `cached_tokens = cacheRead`,
@@ -432,7 +432,7 @@ export(sessionRef, flags):
    model_change, mode_change, config_change, plan, label, session_info, pin, job, custom →
      extra.codelab.events[]: {after_step, type, record_id, …поля записи}
    subagent → при nestSubagents: subagent_trajectories[] += export(журнал ребёнка, те же
-     флаги), а результат вызова task получает subagent_trajectory_ref: [{trajectory_id,
+     флаги), а результат вызова agent получает subagent_trajectory_ref: [{trajectory_id,
      session_id, extra: {subagent_id, agent}}]; иначе только event
 5  картинки: omit → extra.images[] = {mime_type, bytes, sha256}, message — строка;
    files (только с --out) → файлы <каталог out>/images/<sha256>.<ext> (запись tmp + rename,
@@ -493,7 +493,7 @@ codelab trajectory export --last --out run.json --redact strict
   `codelab trajectory export <id>` → документ проходит `trajectory.schema.json` и совпадает с
   golden; `schema_version == "ATIF-v1.7"`; в документе нет полей вне RFC 0001 v1.7 (проверка
   по списку полей версии, специфичное — только в `extra`); `--images files` пишет файлы в
-  `images/` и ссылки `ContentPart`; при `--subagents nest` у результата `task` есть
+  `images/` и ссылки `ContentPart`; при `--subagents nest` у результата `agent` есть
   `subagent_trajectory_ref`, указывающий на `trajectory_id` элемента `subagent_trajectories`;
   fork-сессия помечает унаследованные шаги `is_copied_context`; каждый `toolResult` пути — ровно в одном `observation.results` своего вызова; суммы
   `final_metrics` равны суммам шагов; секрет в результате `exec` и в аргументе `write` заменён

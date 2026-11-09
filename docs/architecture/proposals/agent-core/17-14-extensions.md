@@ -473,7 +473,7 @@ Future<void> main(List<String> args) => runCodelabAgent(args, plugins: [AcmeTrac
         с именем элемента); остальные — в план
   4. проверка имён:
      инструмент: ^[a-z][a-z0-9_]{0,63}$, не начинается с "mcp__"; совпадает со встроенным
-       инструментом плана (включая task, task_status, task_cancel, job_output, job_kill, lsp,
+       инструментом плана (включая agent, agent_status, agent_cancel, job_output, job_kill, lsp,
        web_fetch, web_search, skill) или инструментом другого плагина →
        HostWiringException("plugin <p>: tool <t> collides with <builtin | plugin q>")
      команда: правило name; совпадает с любой встроенной командой плана §13.4 (compact, mode, model,

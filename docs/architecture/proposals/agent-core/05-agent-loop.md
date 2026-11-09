@@ -523,13 +523,13 @@ abstract interface class AgentRuntime {
   /// (§17.3.6), заголовок с полем parent; в listSessions не попадает.
   Future<AgentSession> createChildSession(ChildSessionSpec spec);
   /// После MVP (§17.3.8.1): открыть существующую дочернюю сессию из её журнала для нового прогона
-  /// (task_send, task_resume). Под lease родителя; heal (§8.8) уже выполнен при open родителя.
+  /// (agent_send, agent_resume). Под lease родителя; heal (§8.8) уже выполнен при open родителя.
   Future<AgentSession> openChildSession(ChildSessionSpec spec, SessionId childSessionId);
   Future<void> dispose();
 }
 final class ChildSessionSpec {                        // после MVP, §17.3.3
   final AgentSession parent; final SubagentId subagentId; final SubagentSpec subagent;
-  final List<AgentTool> tools;                        // пересечение с родителем без task и update_plan (SUB-1)
+  final List<AgentTool> tools;                        // пересечение с родителем без agent выше max_depth; задачи — детский набор (SUB-1)
   final ModelRef model; final TurnBudget budget;
   final PermissionMode Function() mode;               // narrow(parentMode(), type.mode) на каждое решение (SUB-2)
   final PermissionGate? gate;                         // SubagentPermissionGate над gate родителя

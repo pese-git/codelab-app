@@ -84,7 +84,12 @@ design.md change `add-embedded-agent-mode`, D4.
 | `authMethods` | `[]`; после MVP при `services.login != null` — по методу `codelab-login-<id>` на провайдер с входом по подписке (§17.10.6) | аутентификации на уровне ACP нет (§13.3) |
 
 После MVP `agentCapabilities._meta.codelab` объявляет расширения, введённые через OpenSpec
-(§13.12): `subagentBoard` (§17.3.7), `subagentWake: true` — агент поддерживает пробуждение
+(§13.12). Схема объявления (change `add-subagents-and-tasks`, §17.3.7): блок отправляется, только
+если клиент объявил `clientCapabilities._meta.codelab` (объект, возможно пустой); значение каждого
+ключа — объект с целым `version`; нет ключа — нет расширения; неизвестные ключи игнорируются.
+Этапы 1 и 2 субагентов объявляют `subagents: {"version": 1, "maxDepth": <n>}` и
+`subagentToolCalls: {"version": 1}` (оба при `subagents.enabled`) и `tasks: {"version": 1}`
+(§17.16.5). Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
 (§17.3.8), `sessionTree: {"version": 1}` — методы `_codelab/session/*`
 (§17.6.10), `steering: {"maxBytes", "maxPending"}` — метод `_codelab/session/steer`, только при
 `steering.enabled` (§17.7.2.2), `jobs: {"version": 1}` — методы `_codelab/jobs/*` (§17.9.11), `sessionSearch: {"version": 1, "maxLimit": 50, "scopes": ["cwd", "all"]}` — метод `_codelab/session/search`, только при `sessions.search.enabled` и `sessionPersistence`; `"all"` — только при `sessions.search.allow_all` (§17.6.17). Это единственное исключение из правила «ровно эти поля»:
@@ -574,7 +579,7 @@ change `switch-default-agent-to-dart`); до него `/<server>:<prompt>` — �
 | `ToolCallFinished` со `spill` (с этапа 3, §17.4) | `tool_call_update` | статус по `outcome`, как в строках выше; `content` — фрагмент вынесенного результата (начало, маркер `[output spilled: …]` с абсолютным путём на машине агента, конец), побайтово равный тексту для модели; `locations` путь выноса не получает; `_meta.codelab.spill` — только после OpenSpec (§13.12) |
 | `ToolPairingRepaired` | — | лог `tool.pairing_repaired` |
 | `StepEnded` | — | лог |
-| `PlanUpdated` | `plan` | `entries` целиком (`content`, `priority`, `status`) |
+| `PlanUpdated` (до change `add-subagents-and-tasks`) | `plan` | `entries` целиком (`content`, `priority`, `status`); заменяется `TaskListChanged` (ниже) |
 | `ModeChanged` | `current_mode_update` | `currentModeId`; плюс `config_option_update`, если изменение не было ответом на запрос клиента |
 | `CommandsChanged` | `available_commands_update` | `availableCommands` |
 | `ConfigOptionChanged` | `config_option_update` | полный снимок `configOptions` |
@@ -582,8 +587,10 @@ change `switch-default-agent-to-dart`); до него `/<server>:<prompt>` — �
 | `BranchChanged` (после MVP) | `session_info_update` | при объявленном `sessionTree` — `_meta.codelab.branchChanged: {leafId, fromLeafId, reason}`, всем подключённым; без расширения не передаётся (ответ команды предлагает перезагрузить сессию, §17.6.10) |
 | `SessionAccessChanged` (после MVP) | `session_info_update` | при объявленном `sessionTree` — `_meta.codelab.readOnly: {owner}` или `null` (`leaseAvailable`); лог `session.lease.lost` при `leaseLost`/`foreignWrite` (§17.6.8) |
 | `ContextCompacted` | — | лог; при `/compact` — `agent_message_chunk` с итогом `Compacted: 118400 → 21950 tokens.` |
-| `SubagentStarted`, `SubagentFinished` (после MVP) | — | лог `subagent.start` / `subagent.end`; при согласованной доске — `_codelab/subagents/update` (§17.3.7); у прогона `run ≥ 2` — те же кадры; title вызова `task_send`/`task_resume` — `… (follow-up <run>)` / `… (resume <run>)` (§17.3.8.1) |
-| `SubagentProgress` (после MVP) | — | только доска `_codelab/subagents/update`; строку прогресса уже несёт `ToolCallProgress(task)` (§17.3.7) |
+| `SubagentStarted`, `SubagentFinished` (после MVP) | — | лог `subagent.start` / `subagent.end`; при согласованной доске — `_codelab/subagents/update` (§17.3.7); у прогона `run ≥ 2` — те же кадры; title вызова `agent_send`/`agent_resume` — `… (follow-up <run>)` / `… (resume <run>)` (§17.3.8.1) |
+| `SubagentProgress` (после MVP) | — | только доска `_codelab/subagents/update`; строку прогресса уже несёт `ToolCallProgress(agent)` (§17.3.7) |
+| `SubagentActivity` (change `add-subagents-and-tasks`) | — или `tool_call`/`tool_call_update` | клиенту с `subagentToolCalls` — вызовы потомков с `_meta.codelab.parentToolCallId` (§17.3.7, «Шаги потомков деревом»); остальным — не отправляется (SUB-12) |
+| `TaskListChanged` (change `add-subagents-and-tasks`) | `plan` | весь список, у entry `_meta.codelab.task` (§17.16.5) |
 | `ToolCallStarted(exec)` с `run_in_background` (после MVP, §17.9) | `tool_call` | `title: "Run in background: <command>"`, `kind: "execute"`; `ToolCallFinished` — сразу `completed` с текстом запуска (и терминалом во внешнем режиме) |
 | `JobStarted`, `JobSettled` (после MVP) | — | лог `job.start`/`job.end`; при согласованном `jobBoard` — `_codelab/jobs/update` и поздний `tool_call_update` с `_meta.codelab.job` (§17.9.11) |
 | `AgentError` | — | лог и trace; итог хода — через ответ (§13.8) |
@@ -823,7 +830,11 @@ OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, 
 | `_meta.codelab.turnEnded` | `session_info_update` после переподключения | итог хода, ответ на который отправить некуда |
 | `_meta.codelab.critical` (`critical`, `label`) | `toolCall` в `session/request_permission` критической команды (§7.8) | клиент выделяет опасный вызов; `allow_always` не предлагается |
 | `SetSessionModeRequest` в `codelab_acp_protocol` | кодек | метод уже есть в спецификации, нет в модели |
-| `_meta.codelab.subagent` (после MVP, §17.3.7) | `session/request_permission` от субагента; `tool_call_update` `task` со `status: failed` (`failure`) | связь запроса с вызовом `task` и типом ребёнка |
+| `clientCapabilities._meta.codelab` (change `add-subagents-and-tasks`) | `initialize`, запрос клиента | клиент CodeLab просит блок объявлений агента; без него ответ `initialize` не меняется |
+| capability `subagents: {"version", "maxDepth"}`, `subagentToolCalls: {"version"}`, `tasks: {"version"}` (change `add-subagents-and-tasks`) | `agentCapabilities._meta.codelab` в `initialize` | агент поддерживает `agent` с вложенностью до `maxDepth` и `_meta.codelab.task` у plan entries |
+| `_meta.codelab.subagent` `{id, agent, description, depth, path, parentToolCallId}` (change `add-subagents-and-tasks`, §17.3.7) | `toolCall` в `session/request_permission` от потомка; `tool_call_update` `agent` со `status: failed` (`{id, failure}`) | связь запроса с вызовом `agent` корневой сессии и с потомком любой глубины |
+| `_meta.codelab.parentToolCallId` (change `add-subagents-and-tasks`, этап 2, §17.3.7) | `tool_call`, `tool_call_update` вызовов потомков — только клиенту с `clientCapabilities._meta.codelab.subagentToolCalls`, вживую и при реплее | шаги потомков деревом: клиент вкладывает вызов в строку вызова `agent` с этим id |
+| `_meta.codelab.task` `{id, owner, blockedBy}` (change `add-subagents-and-tasks`, §17.16.5) | entries `plan` вживую и при реплее | id, владелец и зависимости пункта списка задач; без расширения — обычный план |
 | capability `subagentBoard` (после MVP) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize` | согласование доски субагентов (U-21) |
 | `_codelab/subagents/update`, `/list`, `/cancel`, `/history` (после MVP) | уведомление и методы | доска субагентов: снимки, отмена ребёнка, реплей журнала ребёнка (§17.3.7); `pendingNotices` для фонового режима (§17.3.8); поля снимка `run`, `followUps` и `_meta.codelab.subagentRun` в `/history` (§17.3.8.1) |
 | capability `subagentWake` и `_meta.codelab.wake: true` на `session/prompt` с `prompt: []` (после MVP) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize`; `session/prompt` | пробуждение: клиент открывает ход только для доставки уведомлений фоновых субагентов; агент сам ход не начинает (§17.3.8, SUB-13) |
