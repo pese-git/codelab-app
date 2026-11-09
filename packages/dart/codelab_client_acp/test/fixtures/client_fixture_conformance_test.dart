@@ -259,4 +259,32 @@ final _stateChecks = <String, _StateCheck>{
     );
     expect(session.diagnostics, isEmpty);
   },
+  // Незнакомый вид вызова и `switch_mode` (change `tolerate-unknown-tool-kind`,
+  // D8; acp-golden-fixtures «Состояние после прогона»). Красный, пока клиент
+  // отвечает `cancelled` на запрос разрешения с незнакомым видом.
+  'acp/tool-kind-unknown-tolerated': (user, _) {
+    final turn = _lastTurn(user);
+    expect(turn.status, PromptTurnStatus.completed);
+
+    final future = _toolCall(user, 'call_future');
+    expect(future.kind, ToolKind.other);
+    expect(future.status, ToolCallStatus.completed);
+    expect(future.riskLevel, ApprovalRiskLevel.unknown);
+
+    final mode = _toolCall(user, 'call_switch_mode_001');
+    expect(mode.kind, _switchMode);
+    expect(mode.riskLevel, ApprovalRiskLevel.unknown);
+
+    // Хук выбирает `reject`, а не `cancelled`: запрос дошёл до пользователя.
+    expect(turn.approvals.values.single.status, ApprovalStatus.selected);
+    expect(
+      user.app.diagnostics.where((d) => d.severity == DiagnosticSeverity.error),
+      isEmpty,
+    );
+  },
 };
+
+/// `ToolKind.switchMode` по имени: пока значения нет, красным становится
+/// только сам тест, а не компиляция всего файла (TDD, change
+/// `tolerate-unknown-tool-kind`, задача 1.9).
+ToolKind get _switchMode => ToolKind.values.byName('switchMode');

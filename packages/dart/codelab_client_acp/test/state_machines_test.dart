@@ -1180,6 +1180,194 @@ void main() {
       ]);
     });
   });
+
+  // Незнакомый вид вызова и смена режима (change `tolerate-unknown-tool-kind`,
+  // D5, D9; approval-safety «Риск вызова неизвестного вида и смены режима»).
+  group('Risk of an unknown tool kind and mode switch', () {
+    const callId = ToolCallId('tool-1');
+
+    ToolCallRecord record(ToolKind kind, ApprovalRiskLevel risk) =>
+        ToolCallRecord(id: callId, title: 'x', kind: kind, riskLevel: risk);
+
+    test('switchMode without diff or terminal is unknown', () {
+      expect(
+        ApprovalPolicy.classifyToolCall(
+          const ToolCall(
+            toolCallId: callId,
+            title: 'Ready for implementation',
+            kind: ToolKind.switchMode,
+          ),
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+    });
+
+    test('unknown risk is never allowed without approval in any mode', () {
+      for (final mode in PermissionMode.values) {
+        expect(
+          ApprovalPolicy.decidePermission(
+            mode: mode,
+            riskLevel: ApprovalRiskLevel.unknown,
+          ),
+          isNot(PermissionModeDecision.allowWithoutApproval),
+          reason: '$mode',
+        );
+      }
+    });
+
+    test('an update with an explicit other kind lifts a read record', () {
+      expect(
+        ApprovalPolicy.classifyToolCallUpdateWithin(
+          record(ToolKind.read, ApprovalRiskLevel.readOnly),
+          const ToolCallUpdate(toolCallId: callId, kind: ToolKind.other),
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+    });
+
+    test('an unrecognized kind (decoded as other) lifts a read record and '
+        'a later explicit read does not lower it', () {
+      final lifted = ApprovalPolicy.classifyToolCallUpdateWithin(
+        record(ToolKind.read, ApprovalRiskLevel.readOnly),
+        const ToolCallUpdate(toolCallId: callId, kind: ToolKind.other),
+      );
+      expect(lifted, ApprovalRiskLevel.unknown);
+      expect(
+        ApprovalPolicy.classifyToolCallUpdateWithin(
+          record(ToolKind.read, lifted),
+          const ToolCallUpdate(toolCallId: callId, kind: ToolKind.read),
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+    });
+
+    test('an execute record stays shell under other or switchMode', () {
+      for (final kind in [ToolKind.other, ToolKind.switchMode]) {
+        expect(
+          ApprovalPolicy.classifyToolCallUpdateWithin(
+            record(ToolKind.execute, ApprovalRiskLevel.shell),
+            ToolCallUpdate(toolCallId: callId, kind: kind),
+          ),
+          ApprovalRiskLevel.shell,
+          reason: '$kind',
+        );
+      }
+    });
+
+    test('without a record an other kind is unknown', () {
+      expect(
+        ApprovalPolicy.classifyToolCallUpdateWithin(
+          null,
+          const ToolCallUpdate(toolCallId: callId, kind: ToolKind.other),
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+    });
+  });
+
+  // Признак `toolKindUnrecognized` управляет только видом для отображения;
+  // нижняя граница риска следует из `kind: other` в DTO (D9).
+  group('toolKindUnrecognized (D9)', () {
+    const callId = ToolCallId('call-1');
+    const readCall = SessionUpdate.toolCall(
+      toolCall: ToolCall(
+        toolCallId: callId,
+        title: 'Read a.txt',
+        kind: ToolKind.read,
+      ),
+    );
+    const otherUpdate = SessionUpdate.toolCallUpdate(
+      toolCallUpdate: ToolCallUpdate(
+        toolCallId: callId,
+        kind: ToolKind.other,
+        status: ToolCallStatus.inProgress,
+      ),
+    );
+
+    AcpSession running() => SessionStateMachine.startTurn(
+      const AcpSession(id: _sessionId, cwd: '/workspace'),
+      _pendingTurn,
+    ).stateOrThrow;
+
+    ToolCallRecord? recordOf(AcpSession session) =>
+        session.turns.last.toolCalls[callId];
+
+    test('a flagged update keeps the kind of the record, risk is unknown', () {
+      final withRead = SessionStateMachine.applyUpdate(
+        running(),
+        readCall,
+      ).stateOrThrow;
+      final updated = SessionStateMachine.applyUpdate(
+        withRead,
+        otherUpdate,
+        toolKindUnrecognized: true,
+      ).stateOrThrow;
+
+      expect(recordOf(updated)?.kind, ToolKind.read);
+      expect(recordOf(updated)?.riskLevel, ApprovalRiskLevel.unknown);
+    });
+
+    test('an unflagged other update overwrites the kind', () {
+      final withRead = SessionStateMachine.applyUpdate(
+        running(),
+        readCall,
+      ).stateOrThrow;
+      final updated = SessionStateMachine.applyUpdate(
+        withRead,
+        otherUpdate,
+      ).stateOrThrow;
+
+      expect(recordOf(updated)?.kind, ToolKind.other);
+      expect(recordOf(updated)?.riskLevel, ApprovalRiskLevel.unknown);
+    });
+
+    test('a flagged update without a record gives kind other', () {
+      final updated = SessionStateMachine.applyUpdate(
+        running(),
+        otherUpdate,
+        toolKindUnrecognized: true,
+      ).stateOrThrow;
+
+      expect(recordOf(updated)?.kind, ToolKind.other);
+    });
+
+    test('replayHistory honours toolKindUnrecognizedAt', () {
+      var next = 0;
+      final replayed = SessionStateMachine.replayHistory(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        const [readCall, otherUpdate],
+        nextTurnId: () => PromptTurnId('replay-${next++}'),
+        toolKindUnrecognizedAt: const {1},
+      );
+
+      expect(recordOf(replayed)?.kind, ToolKind.read);
+      expect(recordOf(replayed)?.riskLevel, ApprovalRiskLevel.unknown);
+    });
+
+    test('a repeated flagged update is a duplicate and keeps unknown risk', () {
+      final withRead = SessionStateMachine.applyUpdate(
+        running(),
+        readCall,
+      ).stateOrThrow;
+      final first = SessionStateMachine.applyUpdate(
+        withRead,
+        otherUpdate,
+        toolKindUnrecognized: true,
+      ).stateOrThrow;
+      final second = SessionStateMachine.applyUpdate(
+        first,
+        otherUpdate,
+        toolKindUnrecognized: true,
+      );
+
+      expect(second, isA<IgnoredStateTransition<AcpSession>>());
+      expect(
+        recordOf(second.stateOrThrow)?.riskLevel,
+        ApprovalRiskLevel.unknown,
+      );
+      expect(recordOf(second.stateOrThrow)?.kind, ToolKind.read);
+    });
+  });
 }
 
 const _sessionId = SessionId('session-1');
