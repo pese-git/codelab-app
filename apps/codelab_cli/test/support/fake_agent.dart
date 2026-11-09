@@ -167,6 +167,7 @@ final class FakeAgent {
     required String toolCallId,
     ToolKind kind = ToolKind.execute,
     bool critical = false,
+    Map<String, Object?>? rawInput = const {'command': 'dart test'},
     List<PermissionOption> options = defaultOptions,
   }) => transport.emitInbound(
     JsonRpcMessage.request(
@@ -179,7 +180,7 @@ final class FakeAgent {
           title: 'Run $toolCallId',
           kind: kind,
           status: ToolCallStatus.pending,
-          rawInput: const {'command': 'dart test'},
+          rawInput: rawInput,
           meta: critical
               ? const {
                   'codelab': {'critical': true},
