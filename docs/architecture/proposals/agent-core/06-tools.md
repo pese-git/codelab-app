@@ -15,7 +15,7 @@
 ```dart
 enum ToolTier { read, write, network, exec }   // по умолчанию exec (TOOL-5); network — выход в сеть
                                                // по адресу, выбранному моделью (после MVP, §17.1),
-                                               // и task с удалённым A2A-агентом (tierOf, §17.15.3)
+                                               // и agent с удалённым A2A-агентом (tierOf, §17.15.3)
 enum ToolExecutionMode { parallel, sequential }
 enum ToolKind { read, edit, delete, move, search, execute, think, fetch, other }   // = ACP ToolKind
 enum ContentTrust { trusted, untrusted }
@@ -54,13 +54,13 @@ abstract base class AgentTool {
   ToolKind kindOf(Map<String, Object?> args) => kind;          // ACP kind, PermissionRequest.kind
   ToolExecutionMode? executionModeOf(Map<String, Object?> args) => executionMode;   // режим пакета (§5.5)
   bool offersAllowAlways(Map<String, Object?> args) => true;   // false → вариант allow_always не предлагается
-  String get permissionKeyName => name;   // после MVP (§17.3.8.1): task_send, task_resume → 'task'; ключ PermissionKey и PolicyRules (§7.3)
+  String get permissionKeyName => name;   // после MVP (§17.3.8.1): agent_send, agent_resume → 'agent'; ключ PermissionKey и PolicyRules (§7.3)
   /// Асинхронная подготовка после preflight и до разрешений (§6.3.1, шаг 3b). Ошибка — текст для
   /// модели, вопрос человеку не задаётся. presentation заменяет present(args, ctx) в запросе разрешения.
   Future<ToolPreparation> prepare(Map<String, Object?> args, ToolContext ctx) async => const ToolPrepared();
   Future<ToolExecutionResult> execute(Map<String, Object?> args, ToolContext ctx);
   ArgsRewrite? rewriteArgs(Map<String, Object?> rawArgs) => null;   // после MVP, P-14 (§17.12.6): только exec
-  bool get heartbeat => true;   // после MVP, C-09 (§17.12.3): false у task, task_send, task_resume
+  bool get heartbeat => true;   // после MVP, C-09 (§17.12.3): false у agent, agent_send, agent_resume
   ToolSchema toSchema() => ToolSchema(name: name, description: description, parameters: parameters);
 }
 
@@ -465,8 +465,8 @@ bool toolEnabled(String name, List<ToolSwitch> switches);   // последни�
 `on`/`off` — без учёта регистра. Пустое значение (`--tools ""`) — ничего не меняет.
 
 **Селекторы.** Имя встроенного инструмента из фиксированного списка `read`, `write`, `edit`,
-`ls`, `search`, `exec`, `update_plan`, `web_fetch`, `web_search`, `skill`, `task`, `task_status`,
-`task_cancel`, `task_send`, `task_resume`, `task_observe`, `lsp`, `job_output`, `job_kill`, `memory`, `inspect_image`, `checkpoint`, `ask`,
+`ls`, `search`, `exec`, `update_plan`, `web_fetch`, `web_search`, `skill`, `agent`, `agent_status`,
+`agent_cancel`, `agent_send`, `agent_resume`, `agent_observe`, `lsp`, `job_output`, `job_kill`, `memory`, `inspect_image`, `checkpoint`, `ask`,
 `session_history`, `discover_tools`, `context_expand` (последние — после MVP, §17.11, §17.13.4;
 имя известно всегда, даже если capability выключена),
 имя MCP-инструмента `mcp__<server>__<tool>` или шаблон `mcp__<server>__*`, `mcp__*`. `*`
@@ -476,7 +476,7 @@ bool toolEnabled(String name, List<ToolSwitch> switches);   // последни�
 
 | Случай | Сообщение |
 |---|---|
-| неизвестное имя встроенного инструмента | `tools.disabled[1]: неизвестный инструмент exce (может быть, exec?). Известные инструменты: ask, checkpoint, context_expand, discover_tools, edit, exec, inspect_image, job_kill, job_output, ls, lsp, memory, read, search, session_history, skill, task, task_cancel, task_observe, task_resume, task_send, task_status, update_plan, web_fetch, web_search, write` (для флага и переменной — префикс `--tools` или `CODELAB_TOOLS`) |
+| неизвестное имя встроенного инструмента | `tools.disabled[1]: неизвестный инструмент exce (может быть, exec?). Известные инструменты: ask, checkpoint, context_expand, discover_tools, edit, exec, inspect_image, job_kill, job_output, ls, lsp, memory, read, search, session_history, skill, task, agent_cancel, agent_observe, agent_resume, agent_send, agent_status, update_plan, web_fetch, web_search, write` (для флага и переменной — префикс `--tools` или `CODELAB_TOOLS`) |
 | неверный формат элемента | `--tools: ожидалось <tool>=on или <tool>=off, получено "exec:off"` |
 | `*` не в конце MCP-шаблона или у встроенного имени | `--tools: шаблон * допустим только в форме mcp__<server>__* или mcp__*: "ex*"` |
 | `on` для встроенного инструмента, чья capability выключена профилем, сервисом или конфигом | `--tools exec=on: инструмент недоступен: capability shellExec выключена (на платформе нет shell)` |
@@ -488,8 +488,8 @@ MCP-селектор, которому при создании сессии не
 **Алгоритм применения.**
 
 1. `buildAgentCore` (§10.7, шаг 5f): после сборки реестра встроенных инструментов удалить из него
-   каждый инструмент с `toolEnabled(name, switches) == false`. Выключение `task` удаляет и
-   `task_status`, `task_cancel`, `task_send`, `task_resume`, `task_observe` (без `task` им нечем управлять); выключение `exec` удаляет и
+   каждый инструмент с `toolEnabled(name, switches) == false`. Выключение `agent` удаляет и
+   `agent_status`, `agent_cancel`, `agent_send`, `agent_resume`, `agent_observe` (без `agent` им нечем управлять); выключение `exec` удаляет и
    `job_output`, `job_kill` (после MVP, §17.9). `on` для инструмента, которого нет
    в реестре из-за capability, — ошибка из таблицы выше.
 2. MCP-инструменты (на сессию, в том числе после переподключения и `tools/list_changed`,
@@ -868,7 +868,7 @@ essential`, §17.11.9). Схемы, тексты и алгоритмы — §17.
 * `mcp_tool_adapter_test.dart`: имя `mcp__<server>__<tool>` из 80 символов → ровно 64 символа: первые 56, `_`, 7 hex-символов SHA-256 полного имени; два имени с общими первыми 56 символами дают разные имена; сокращение детерминировано между запусками; `readOnlyHint: true` → `kind: read`, `destructiveHint: true` → `edit` или `execute` по `openWorldHint`, без аннотаций → `other`; `tier` всегда `exec`, `readOnlyHint: true` не снимает вопрос одобрения в режиме `standard`.
 * `fence_test.dart`: MCP-результат с `ignore previous instructions` и поддельным закрывающим маркером попадает в запрос к модели целиком внутри ограды (TOOL-10).
 * `misuse_breaker_test.dart` — критерий матрицы **`core/misuse-breaker-blocks-repeat`** (C-08), scripted LLM с `warnAfter = 3`, `blockAfter = 6`: семь шагов подряд с вызовом `read {"limit":"ten"}` → ответы 1–2 без предупреждения, 3–5 с `[Warning: this exact call has failed <n> times …]`, 6 — с `… is now blocked until the turn ends.]`, 7 — `Blocked: this exact call to read has already failed 6 times …`, outcome `failed`, `validate` и gate на седьмом не вызывались; `{"path":"a","limit":"ten"}` и `{"limit":"ten","path":"a"}` — один ключ, `{"limit":10}` — другой и исполняется; шесть отказов разрешения подряд и шесть `exec` с ненулевым кодом не блокируются; `loop.misuse.enabled: false` → блокировки нет; ACP-проекция — `tool_call_update` `failed` с текстом блокировки (TOOL-11).
-* `tool_switches_test.dart` (ядро): `tools.disabled: [exec, mcp__github__*]` в глобальном конфиге + `CODELAB_TOOLS=exec=on` → `exec` есть; флаг `--tools exec=off` поверх → нет; `mcp__github__create_issue=on` после шаблона `mcp__github__*=off` возвращает один инструмент; проектный `tools.disabled: []` не возвращает глобально выключенный `exec` (объединение); схемы запроса, `Available tools` и системный промпт не содержат `exec` и секции `tools/exec`; определение агента с `tools: [read, exec]` даёт только `read`; субагент не получает `exec`; режим `standard` спрашивает одобрение на `write` как без выключения; `exec=on` в профиле `mobile` → `ConfigException` про `shellExec`; `exce=off` → ошибка со списком и подсказкой `exec`; выключение `task` убирает `task_status` и `task_cancel` (TOOL-12, TOOL-13).
+* `tool_switches_test.dart` (ядро): `tools.disabled: [exec, mcp__github__*]` в глобальном конфиге + `CODELAB_TOOLS=exec=on` → `exec` есть; флаг `--tools exec=off` поверх → нет; `mcp__github__create_issue=on` после шаблона `mcp__github__*=off` возвращает один инструмент; проектный `tools.disabled: []` не возвращает глобально выключенный `exec` (объединение); схемы запроса, `Available tools` и системный промпт не содержат `exec` и секции `tools/exec`; определение агента с `tools: [read, exec]` даёт только `read`; субагент не получает `exec`; режим `standard` спрашивает одобрение на `write` как без выключения; `exec=on` в профиле `mobile` → `ConfigException` про `shellExec`; `exce=off` → ошибка со списком и подсказкой `exec`; выключение `agent` убирает `agent_status` и `agent_cancel` (TOOL-12, TOOL-13).
 * `cli/tools-flag-disables-exec` (критерий матрицы T-26, сценарий CLI на scripted провайдере): `codelab -p "list files" --tools exec=off` со встроенным агентом → первый запрос к модели не содержит схемы `exec` и секции `tools/exec`; модель зовёт `exec` → результат `Tool "exec" is not available. Available tools: …` без вопроса одобрения; код выхода 0; `--tools exce=off` → ошибка со списком инструментов, код выхода 64.
 * `builtin_tools_golden_test.dart`: каждый инструмент на `MemoryExecutionEnv` — вывод совпадает с golden; `search` с glob `**/*.dart`; `exec` на `MemoryExecutionEnv` → текст `Shell commands are not available...`.
 

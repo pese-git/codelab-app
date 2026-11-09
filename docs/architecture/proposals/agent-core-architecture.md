@@ -105,7 +105,7 @@ Date: 2026-10-21
 | 17 | [Спецификации после MVP](agent-core/17-0-post-mvp.md) | `agent-core/17-0-post-mvp.md` | 49 |
 | 17.1 | [Web-инструменты: `web_fetch` и `web_search`](agent-core/17-1-web-tools.md) | `agent-core/17-1-web-tools.md` | 703 |
 | 17.2 | [Skills и шаблоны промптов](agent-core/17-2-skills-and-templates.md) | `agent-core/17-2-skills-and-templates.md` | 695 |
-| 17.3 | [Субагенты: инструмент `task`](agent-core/17-3-subagents.md) | `agent-core/17-3-subagents.md` | 1242 |
+| 17.3 | [Субагенты: инструмент `agent`](agent-core/17-3-subagents.md) | `agent-core/17-3-subagents.md` | 1446 |
 | 17.4 | [Вынос огромного результата инструмента в файл (T-28)](agent-core/17-4-output-spill.md) | `agent-core/17-4-output-spill.md` | 428 |
 | 17.5 | [Настройка агента: провайдеры, секреты, реестр настроек, живая перезагрузка](agent-core/17-5-agent-setup.md) | `agent-core/17-5-agent-setup.md` | 1037 |
 | 17.6 | [Управление сессиями: переименование, ветки, перемотка, lease](agent-core/17-6-session-management.md) | `agent-core/17-6-session-management.md` | 1007 |
@@ -118,3 +118,4 @@ Date: 2026-10-21
 | 17.13 | [Масштаб сессий](agent-core/17-13-session-scale.md) | `agent-core/17-13-session-scale.md` | 1002 |
 | 17.14 | [Расширения: хуки, плагины, обмен провайдерами, Terminal-Bench](agent-core/17-14-extensions.md) | `agent-core/17-14-extensions.md` | 1233 |
 | 17.15 | [A2A: удалённые агенты и агент как A2A-сервер](agent-core/17-15-a2a.md) | `agent-core/17-15-a2a.md` | 606 |
+| 17.16 | [Список задач сессии (менеджер задач)](agent-core/17-16-task-list.md) | `agent-core/17-16-task-list.md` | 281 |

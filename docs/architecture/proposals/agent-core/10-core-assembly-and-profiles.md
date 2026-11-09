@@ -99,7 +99,7 @@ final class AgentCoreServices {                    // всё внешнее, ч�
   final ImagePreparer? images;                     // после MVP (§17.11.2.1): null → картинки не уменьшаются, лимиты как в MVP; desktop/CLI — IsolateImagePreparer из codelab_agent_images/io.dart, web — PureDartImagePreparer
   final ByteProcessLauncher? hookLauncher;         // после MVP (§17.14.2.2): null → userHooks off
   final List<CodelabPlugin> plugins;               // после MVP (§17.14.3.2): собранные в бинарь, по умолчанию const []
-  final RemoteAgentConnector? remoteAgents;        // после MVP (§17.15.2): A2aRemoteAgentConnector; null → типов a2a:* в task нет
+  final RemoteAgentConnector? remoteAgents;        // после MVP (§17.15.2): A2aRemoteAgentConnector; null → типов a2a:* в agent нет
   final Logger logger; final Clock clock; final IdGenerator ids;
   final String platform;                           // для system/base (§11.5): ядро не читает dart:io; хост — Platform.operatingSystem
   final Random random;                             // PKG-6: случайность (джиттер повторов) даёт хост; в тестах Random(42)
@@ -419,10 +419,10 @@ buildAgentCore(profile, services, config, streamFunction):
         в реестр сессии поверх базового (§6.4)
      d. после MVP: network и tools.web.enabled → web_fetch, web_search (после ls/search, до MCP, §17.1.2);
         skills → skill (на сессию, если SkillCatalog.modelVisible не пуст, §17.2.3);
-        subagents.enabled → task (на сессию, enum типов из определений агентов, §17.3.2; при
+        subagents.enabled → agent (на сессию, enum типов из определений агентов, §17.3.2; при
           services.remoteAgents — и типы a2a:<имя> из a2a.agents, §17.15.3);
-        subagents.background → ещё task_status, task_cancel (§17.3.8);
-        subagents.follow_ups → ещё task_send, task_resume, task_observe (§17.3.8.1; run_in_background в их схемах — только при subagents.background);
+        subagents.background → ещё agent_status, agent_cancel (§17.3.8);
+        subagents.follow_ups → ещё agent_send, agent_resume, agent_observe (§17.3.8.1; run_in_background в их схемах — только при subagents.background);
         languageServers → lsp (на сессию: LanguageServerToolFactory.openSession, после web_fetch и
           web_search, до MCP; хук сессии afterToolCall ставится после хуков хоста, §17.8.2, §5.2);
         backgroundJobs → параметр run_in_background у exec, job_output, job_kill (вместе с exec, §17.9.2.3);
@@ -435,7 +435,7 @@ buildAgentCore(profile, services, config, streamFunction):
      e. дубликат имени → HostWiringException (HOST-5); MCP-коллизия при подключении → сервер
         отключается с причиной, сессия продолжает работу
      f. выключенные инструменты (§6.3.8): удалить из реестра инструменты с toolEnabled == false;
-        выключение task удаляет task_status, task_cancel, task_send, task_resume, task_observe; выключение exec — job_output, job_kill;
+        выключение agent удаляет agent_status, agent_cancel, agent_send, agent_resume, agent_observe; выключение exec — job_output, job_kill;
         on для отсутствующего встроенного → ConfigException; plan.disabledTools := имя → source
      g. после MVP: ToolLoadPlan сессии (tools.load, tools.mounted; §17.11.9) — какие схемы видимы
 6. разрешения: PermissionPolicyFactory(mode: config.permissions.mode ?? profile.defaultMode (конфиг заменяет режим профиля, §10.5), gate,

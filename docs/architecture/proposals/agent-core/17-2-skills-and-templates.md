@@ -2,7 +2,7 @@
 
 > Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
-← [17.1. Web-инструменты: `web_fetch` и `web_search`](17-1-web-tools.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.3. Субагенты: инструмент `task`](17-3-subagents.md) →
+← [17.1. Web-инструменты: `web_fetch` и `web_search`](17-1-web-tools.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.3. Субагенты: инструмент `agent`](17-3-subagents.md) →
 
 Цели E-06, E-07, K-06 (точки расширения E-18, E-19 — §17.2.13). Раздел добавляет capability
 `skills` (§10.2), инструмент `skill`, секции системного промпта `skills/catalog` и (после 1.0)
@@ -851,4 +851,4 @@ the whole session, including after the conversation history is compacted.
 
 ---
 
-← [17.1. Web-инструменты: `web_fetch` и `web_search`](17-1-web-tools.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.3. Субагенты: инструмент `task`](17-3-subagents.md) →
+← [17.1. Web-инструменты: `web_fetch` и `web_search`](17-1-web-tools.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.3. Субагенты: инструмент `agent`](17-3-subagents.md) →

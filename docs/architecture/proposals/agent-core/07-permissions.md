@@ -84,7 +84,7 @@ final class PermissionPolicy {
 
 `ToolTier` объявляет инструмент: `read` — только чтение, `write` — изменение файлов в рабочей
 папке, `network` — выход в сеть по адресу, выбранному моделью (после MVP, `web_fetch`, §17.1),
-`exec` — команды и всё неизвестное (MCP). После MVP уровень `network` получает и `task` с
+`exec` — команды и всё неизвестное (MCP). После MVP уровень `network` получает и `agent` с
 удалённым A2A-агентом (`agent: "a2a:<имя>"`, §17.15.3): прогон отправляет текст задачи на внешний адрес. Политика берёт уровень вызова `tool.tierOf(args)`
 (§6.2): по умолчанию это объявленный `tier`, а у `lsp` уровень зависит от действия (`rename` —
 `write`, остальные — `read`, §17.8.9). Таблица `mode × tier` («спросить» = вызов
@@ -152,7 +152,7 @@ alwaysAsk(0) < write(1) < acceptEdits(2) < yolo(3) < autopilot(4)
 
 ```text
 decide(tool, args, id):
-  key = PermissionKey(tool.permissionKeyName, tool.permissionPattern(args))   # по умолчанию name; task_send/task_resume → "task" (§17.3.8.1, SUB-18)
+  key = PermissionKey(tool.permissionKeyName, tool.permissionPattern(args))   # по умолчанию name; agent_send/agent_resume → "agent" (§17.3.8.1, SUB-18)
   critical = tool.name == 'exec' ? findCritical(args.command) : null       # §7.6
   1  if rules.toolPolicies[tool] == deny or key in rules.denyPatterns or key in rejectAlways:
          return Denied('denied by configuration' | 'previously rejected by the user')
@@ -183,8 +183,8 @@ ask(reason, allowAlwaysOffered = true):
     cancelled   → Denied('permission request was cancelled')
 ```
 
-После MVP `rules.toolPolicies[tool]` ищется по `tool.permissionKeyName`: правило для `task`
-применяется и к `task_send`, `task_resume` (тот же ключ, §17.3.8.1); `task_observe` — уровень
+После MVP `rules.toolPolicies[tool]` ищется по `tool.permissionKeyName`: правило для `agent`
+применяется и к `agent_send`, `agent_resume` (тот же ключ, §17.3.8.1); `agent_observe` — уровень
 `read`, вид `think`, своё имя.
 
 Текст отказа для модели: `Permission denied for <tool>: <reason>. Do not retry the same call; choose another approach or ask the user.`

@@ -1,15 +1,22 @@
-# 17.3. Субагенты: инструмент `task`
+# 17.3. Субагенты: инструмент `agent`
 
 > Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [17.2. Skills и шаблоны промптов](17-2-skills-and-templates.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.4. Вынос огромного результата инструмента в файл (T-28)](17-4-output-spill.md) →
 
 Цели: C-06 (основная), C-17, H-05, U-21, L-10, R-15, S-09, S-13; удалённые A2A-агенты как типы
-`task` (E-22) — §17.15.3.
+`agent` (E-22) — §17.15.3.
+
+> Изменения 2026-11-09 и 2026-11-10 (вложенность до 3 вместо глубины 1, лимиты дерева,
+> `SubagentActivity`, таблица этапов, схема объявления `_meta.codelab`, шаги потомков деревом,
+> переименование инструмента `task` → `agent` и семейства `task_*` → `agent_*`; команда фоновой работы
+> осталась `/tasks`) — по решениям пользователя, в статусе Proposed до одобрения OpenSpec change
+> `add-subagents-and-tasks` (design.md, D20, D21). Слово task в CodeLab означает только пункт
+> списка задач (§17.16).
 
 ## 17.3.1. Назначение
 
-Инструмент `task` запускает **дочернего агента** (субагента) с отдельным контекстом: свой
+Инструмент `agent` запускает **дочернего агента** (субагента) с отдельным контекстом: свой
 системный промпт, своя история, свой набор инструментов и свой бюджет. Родитель передаёт ему
 задачу текстом и получает обратно **только итоговый отчёт** — промежуточные шаги ребёнка в
 контекст родителя не попадают. Так родитель может поручить исследование большого кода,
@@ -18,12 +25,34 @@
 
 | Что делает раздел | Чего раздел не делает |
 |---|---|
-| описывает инструмент `task`, типы субагентов, параллельный запуск с лимитом, итоговый отчёт (в том числе по JSON-схеме), журнал ребёнка, разрешения, отмену, проекцию в ACP, ожидание в headless | фоновый режим (`run_in_background`, §17.3.8) вводит без хода, начатого агентом: отчёт доставляется через steering или с ближайшим `session/prompt`; не вводит вложенных субагентов (глубина — 1); не вводит обмен сообщениями между родителем и работающим ребёнком (сообщение ребёнку, сдавшему отчёт, и повторный запуск упавшего — §17.3.8.1); удалённых агентов не исполняет сам — их типы `a2a:<имя>` и прогон поверх A2A описаны в §17.15.3 |
+| описывает инструмент `agent`, типы субагентов, вложенность до `max_depth` (не больше 3), параллельный запуск с лимитами на всё дерево, итоговый отчёт (в том числе по JSON-схеме), журнал ребёнка, разрешения, отмену, проекцию в ACP, ожидание в headless | фоновый режим (`run_in_background`, §17.3.8) вводит без хода, начатого агентом: отчёт доставляется через steering или с ближайшим `session/prompt`; глубже 3 уровней субагентов не бывает (§17.3.3, шаг 2); не вводит обмен сообщениями между родителем и работающим ребёнком (сообщение ребёнку, сдавшему отчёт, и повторный запуск упавшего — §17.3.8.1); удалённых агентов не исполняет сам — их типы `a2a:<имя>` и прогон поверх A2A описаны в §17.15.3; список задач сессии, которым пользуются родитель и дети, — §17.16 |
 
 Субагент — это обычная `AgentSession` ядра (§5.6) с особой сборкой: ни цикл (§5), ни единая
 точка исполнения (§6.3.1), ни политика разрешений (§7) не получают специальных веток для детей.
-Всё особенное сосредоточено в трёх местах: `TaskTool`, `SubagentManager` и обёртка
-`PermissionGate` родителя.
+Всё особенное сосредоточено в четырёх местах: `SubagentTool`, `SubagentManager` (по одному на
+сессию-родителя любого уровня), `SubagentTree` (один на корневую сессию: общие лимиты, очередь
+слотов и очередь вопросов всего дерева) и обёртка `PermissionGate` родителя.
+
+**Термины.** *Корневая сессия* — сессия пользователя, глубина 0. *Ребёнок* — субагент, глубина
+1–3; у ребёнка глубины 1 родитель — корневая сессия, у ребёнка глубины 2 — ребёнок глубины 1 и
+так далее. *Дерево* — корневая сессия и все её потомки.
+
+**Этапы внедрения (решение пользователя 2026-11-09).** Раздел описывает конечное устройство.
+Реализация поэтапная; каждый этап встаёт в точки расширения базового этапа без смены
+используемых сигнатур (дорожная карта §9, пункт «в»):
+
+| Этап | Объём | Где описано | OpenSpec |
+|---|---|---|---|
+| 1 — база | `agent` с типами `general`, `explore`, `review`, `plan`; вложенность до `max_depth`; лимиты дерева; состояния хэндла сразу полные (`queued`…`cancelled`); дочерние `CancelToken`; журнал ребёнка и запись `subagent`; события ребёнка внутри ядра с `parentToolCallId` и id субагента (`SubagentActivity`); запрос разрешения ребёнка через gate родителя; список задач §17.16 вместо `update_plan` | §17.3.2–§17.3.7 без доски, §17.3.10–§17.3.14, §17.16 | `add-subagents-and-tasks` |
+| 2 — шаги ребёнка деревом | `tool_call` потомков на проводе с `_meta.codelab.parentToolCallId` для клиентов с `subagentToolCalls`; меняет SUB-12 | §17.3.7, «Шаги потомков деревом» | `add-subagents-and-tasks`, итерация 5 |
+| 3 — фон и пробуждение | `run_in_background`, `agent_status`, `agent_cancel`, `wake` | §17.3.8, §17.3.9 | отдельный change, 1.x (первый) |
+| 4 — продолжение ребёнка (C-17) | `agent_send`, `agent_resume`, `agent_observe`; `output_schema` и ремонт отчёта | §17.3.8.1, §17.3.5 | отдельный change, 1.x (третий) |
+| 5 — доска (U-21, D-25) и `/tasks` | `_codelab/subagents/*`, доска app и CLI | §17.3.7, §17.3.8 | `add-subagent-board`, 1.x (второй) |
+| 6 — фоновые команды (T-10) | `_codelab/jobs/*` на той же доске | §17.9 | `add-background-jobs`, 1.x (четвёртый) |
+| позже | общий список задач между сессиями; изоляция ребёнка в git worktree | — | — |
+
+Решение пользователя 2026-11-10: 1.0 = этапы 1 и 2 (change `add-subagents-and-tasks`); этапы 3 → 5 →
+4 → 6 — начало пула 1.x в этом порядке (дорожная карта §6.2, §6.4).
 
 ## 17.3.2. Контракт
 
@@ -47,7 +76,7 @@ final class AgentDefinition {                // §15.8, где поля scope и
 Во frontmatter Markdown-определения добавляется необязательное поле `scope`
 (`session` | `subagent` | `both`, по умолчанию `both`). Поле `role` во frontmatter не
 допускается: оно есть только у встроенных типов. `session` — определение видно только в опции
-`agent` сессии (§15.8); `subagent` — только как тип в `task`; `both` — в обоих местах.
+`agent` сессии (§15.8); `subagent` — только как тип в `agent`; `both` — в обоих местах.
 
 Встроенные типы (`source: 'builtin:<name>'`, тело — файл `prompts/subagent/types/<name>.md`, §11.2):
 
@@ -68,21 +97,21 @@ final class AgentDefinition {                // §15.8, где поля scope и
 **Удалённые типы (после MVP, §17.15.3).** Каждый `a2a.agents.<имя>` конфига даёт определение с
 `name: "a2a:<имя>"`, `scope: subagent`, описанием из конфига и полем `remote` (`RemoteAgentInfo`).
 Такой тип входит в `enum` наравне с локальными, но исполняется не дочерней `AgentSession`, а
-прогоном A2A через порт `RemoteAgentConnector`: `tierOf` у `task` — `network`, ключ разрешения —
-`("task", "a2a:<имя>")`, отчёт — `untrusted` с `source="a2a:<имя>"`.
+прогоном A2A через порт `RemoteAgentConnector`: `tierOf` у `agent` — `network`, ключ разрешения —
+`("agent", "a2a:<имя>")`, отчёт — `untrusted` с `source="a2a:<имя>"`.
 
 **Инструмент.**
 
 ```dart
-final class TaskTool extends AgentTool {
-  TaskTool(this.manager, this.types);         // types — снимок на момент создания сессии
+final class SubagentTool extends AgentTool {
+  SubagentTool(this.manager, this.types);         // types — снимок на момент создания сессии
   final SubagentManager manager;
   final List<AgentDefinition> types;          // scope subagent | both, отсортированы по name
-  @override String get name => 'task';
+  @override String get name => 'agent';
   @override ToolTier get tier => ToolTier.read;         // сам запуск ничего не меняет (§17.3.3, шаг 1)
   @override ToolKind get kind => ToolKind.think;
   @override ContentTrust outputTrust(Map<String, Object?> args) => ContentTrust.untrusted;
-  @override String permissionPattern(Map<String, Object?> args) => args['agent'] as String;
+  @override String permissionPattern(Map<String, Object?> args) => args['type'] as String;
   @override ToolPresentation present(Map<String, Object?> args);   // title: 'Subagent <agent>: <description>'
   @override Future<ToolExecutionResult> execute(Map<String, Object?> args, ToolContext ctx);
 }
@@ -93,9 +122,9 @@ final class TaskTool extends AgentTool {
 
 ```json
 {"type":"object","required":["description","prompt"],"properties":{
-  "description":{"type":"string","description":"Short title of the task, 3-60 characters. Shown to the user."},
+  "description":{"type":"string","description":"Short title of the work, 3-60 characters. Shown to the user."},
   "prompt":{"type":"string","description":"Complete instructions for the subagent: the goal, relevant paths, constraints and the expected shape of the report. The subagent does not see this conversation."},
-  "agent":{"type":"string","enum":["explore","general","plan","review"],"default":"general","description":"Agent type. See the tool description for the list."},
+  "type":{"type":"string","enum":["explore","general","plan","review"],"default":"general","description":"Subagent type. See the tool description for the list."},
   "output_schema":{"type":["object","null"],"description":"Optional JSON Schema for the final report. When set, the report is a JSON value that matches it."}}}
 ```
 
@@ -103,37 +132,50 @@ final class TaskTool extends AgentTool {
 не создаётся): `description` — 3–60 символов после обрезки пробелов; `prompt` — 1–32768
 символов; `output_schema` — объект, у которого есть `type` (иначе
 `output_schema must be a JSON Schema object with a "type" key.`). Тексты ошибок:
-`Invalid task: description must be 3-60 characters.` и `Invalid task: prompt must be 1-32768 characters.`
+`Invalid agent call: description must be 3-60 characters.` и `Invalid agent call: prompt must be 1-32768 characters.`
 
-Описание инструмента (`prompts/tool_descriptions/task.md`, переменные `maxConcurrent`, `agentList`):
+Описание инструмента (`prompts/tool_descriptions/agent.md`, переменные `maxConcurrent`,
+`nesting`, `background`, `agentList`):
 
 ```text
-Launch a subagent: a separate agent with its own context that does one self-contained task and returns a single final report.
+Launch a subagent: a separate agent with its own context that does one self-contained assignment and returns a single final report.
 Use it to explore a large codebase, review changes or draft a plan without filling your own context.
 The subagent does not see this conversation: put everything it needs into `prompt`.
-Several task calls in one response run in parallel, at most {{maxConcurrent}} at a time.
-You receive only the final report, not the subagent's intermediate steps.
-Set run_in_background to keep working while the subagent runs: its report arrives later as a notice.
-Subagents cannot ask the user questions and cannot start other subagents.
+Several agent calls in one response run in parallel, at most {{maxConcurrent}} at a time.
+You receive only the final report, not the subagent's intermediate steps.{{background}}
+Subagents cannot ask the user questions. {{nesting}}
 
 Agent types:
 {{agentList}}
 ```
 
-`agentList` — строки `- <name>: <description>` в порядке `name`.
+`agentList` — строки `- <name>: <description>` в порядке `name`. `nesting` зависит от глубины
+вызывающего: `depth + 1 < max_depth` → `A subagent may start its own subagents, up to <max_depth - depth - 1> more level(s) below it.`;
+иначе → `Subagents you start cannot start other subagents.` `background` — пустая строка в
+базовом этапе; с этапом 3 (§17.3.8) — `\nSet run_in_background to keep working while the subagent runs: its report arrives later as a notice.`
+Текст описания для одной глубины детерминирован, поэтому схема и описание стабильны для prompt
+cache (§11). Схема `agent` базового этапа — без `output_schema` и `run_in_background`; оба поля
+добавляются своими этапами (таблица этапов выше) без смены остальных полей. Поле `task`
+(необязательное, id пункта списка задач §17.16) есть только в схеме корневой сессии: ребёнок,
+получивший слот, становится владельцем этого пункта (§17.16.4).
 
 **Менеджер и хэндл.**
 
 ```dart
 typedef SubagentId = String;                  // 'sub_' + 8 символов [0-9a-z] от IdGenerator
 
+/// waiting — ребёнок ждёт решения пользователя или своих детей (поле waitingFor снимка).
 enum SubagentState { queued, running, waiting, completed, failed, cancelled }
+enum SubagentWait { approval, subagents }
 enum SubagentFailure { error, budgetExceeded, invalidOutput, interrupted, refused }
 
 final class SubagentSpec {
   final SessionId parentSessionId; final String parentToolCallId;
+  final int depth;                             // 1..max_depth; глубина ребёнка, а не родителя
+  final List<SubagentId> path;                 // id предков-субагентов от глубины 1, без самого ребёнка
   final AgentDefinition type; final String description, prompt;
-  final Map<String, Object?>? outputSchema;
+  final String? taskId;                        // пункт списка задач §17.16, только от корневой сессии
+  final Map<String, Object?>? outputSchema;    // этап 4; в базе всегда null
 }
 
 final class SubagentReport {
@@ -159,12 +201,23 @@ abstract interface class SubagentHandle {
 
 final class SubagentSnapshot {
   final SubagentId id; final String parentToolCallId, agent, description;
-  final SubagentState state; final int steps, toolCalls; final Usage usage;
+  final int depth;
+  final SubagentState state; final SubagentWait? waitingFor;   // только при state == waiting
+  final int steps, toolCalls; final Usage usage;               // usage — вместе с потомками
+  final int activeChildren;                   // потомки ребёнка в queued | running | waiting
   final DateTime startedAt; final DateTime? endedAt;
-  final String? lastActivity;                 // title последнего ToolCallStarted ребёнка
+  final String? lastActivity;                 // title последнего ToolCallStarted ребёнка или его потомка
 }
 
-abstract interface class SubagentManager {     // один на родительскую AgentSession
+/// Общее состояние дерева: один экземпляр на корневую сессию (§17.3.4).
+abstract interface class SubagentTree {
+  int get maxDepth;                            // subagents.max_depth
+  Future<SlotLease> acquire(SubagentId id, {required bool resume});   // resume — родитель, дождавшийся детей
+  int get spawnedThisTurn;                     // счётчик max_per_turn за ход корневой сессии
+  PermissionGate wrapGate(PermissionGate rootGate);   // общая FIFO вопросов дерева (SUB-3)
+}
+
+abstract interface class SubagentManager {     // один на AgentSession, у которой есть agent (любой глубины)
   /// Ставит задачу в очередь и сразу возвращает хэндл (state = queued).
   /// SubagentLimitException, если исчерпан max_per_turn.
   SubagentHandle spawn(SubagentSpec spec, CancelToken cancel);
@@ -194,22 +247,43 @@ final class SubagentFinished extends AgentEvent {
 |---|---|---|
 | `SubagentStarted` | ребёнок получил слот, его журнал создан, до первого запроса к модели | `SessionWriter`: запись `subagent` со `status: "running"` (`durable`) |
 | `SubagentProgress` | смена состояния, `StepEnded` ребёнка, `ToolCallStarted` ребёнка — не чаще раза в `progress_interval`; смена состояния — всегда | ничего |
-| `SubagentFinished` | отчёт готов (после проверки схемы), до возврата из `TaskTool.execute` | запись `subagent` с итоговым `status` и `report` (`durable`) |
+| `SubagentFinished` | отчёт готов (после проверки схемы), до возврата из `SubagentTool.execute` | запись `subagent` с итоговым `status` и `report` (`durable`) |
 
 Порядок в потоке родителя для одного вызова:
-`ToolCallStarted(task)` → `SubagentStarted` → `SubagentProgress`×N (вперемешку с
-`ToolCallProgress(task)`) → `SubagentFinished` → `ToolCallFinished(task)`. Ребёнок, отменённый в
+`ToolCallStarted(agent)` → `SubagentStarted` → `SubagentProgress`×N (вперемешку с
+`ToolCallProgress(agent)`) → `SubagentFinished` → `ToolCallFinished(agent)`. Ребёнок, отменённый в
 очереди, не даёт `SubagentStarted`: только `SubagentFinished(cancelled)`.
+
+**События ребёнка в потоке родителя.** Каждое событие дочерней сессии (`MessageDelta`,
+`ToolCallStarted`, `TurnEnded` и остальные §5.3) сессия родителя переизлучает обёрнутым:
+
+```dart
+final class SubagentActivity extends AgentEvent {   // sessionId — родительский
+  final SubagentId subagentId;                // ребёнок, чьё событие внутри
+  final String parentToolCallId;              // вызов agent В СЕССИИ РОДИТЕЛЯ, запустивший ребёнка
+  final List<SubagentId> path;                // предки ребёнка от глубины 1, без него самого
+  final int depth;                            // глубина ребёнка
+  final AgentEvent event;                     // исходное событие ребёнка, никогда не SubagentActivity
+}
+```
+
+Обёртка плоская: событие внука, пришедшее родителю от ребёнка уже обёрнутым, переизлучается с тем
+же `event`, а `path` и `depth` берутся из исходной обёртки — вложенных `SubagentActivity` не
+бывает. Так поток корневой сессии содержит все события дерева с адресом каждого, и дерево шагов
+(этап 2) — чистая проекция этого потока без нового API. `SessionWriter` родителя
+`SubagentActivity` не пишет (у ребёнка свой журнал); ACP-проекция базового этапа их не отправляет
+(SUB-12); переизлучение ждёт подписчиков родителя так же, как любое событие (LOOP-2), поэтому
+медленный подписчик тормозит ребёнка, а не теряет его события.
 
 ## 17.3.3. Алгоритм: запуск дочернего агента
 
 ```mermaid
 flowchart TD
-    A["вызов task после разрешений"] --> B{"лимит на ход исчерпан?"}
+    A["вызов agent после разрешений"] --> B{"лимит на ход исчерпан?"}
     B -->|да| E1["ошибка: subagent limit reached"]
     B -->|нет| C{"тип найден и разрешён?"}
     C -->|нет| E2["ошибка: unknown agent type"]
-    C -->|да| D["инструменты: родитель ∩ тип минус task и update_plan"]
+    C -->|да| D["инструменты: родитель ∩ тип; agent только выше max_depth; задачи — детский набор"]
     D --> F["режим: min родителя и типа, запреты объединяются"]
     F --> G["модель: определение, роль, модель родителя"]
     G --> H["бюджет ребёнка и токен-потомок токена хода"]
@@ -218,11 +292,11 @@ flowchart TD
 ```
 
 ```text
-TaskTool.execute(args, ctx):
- 1  вызов task уже прошёл единую точку исполнения: валидацию, разрешения (tier read, шаблон
+SubagentTool.execute(args, ctx):
+ 1  вызов agent уже прошёл единую точку исполнения: валидацию, разрешения (tier read, шаблон
     allow_always — имя типа: «разрешить всегда» на explore не разрешает general), хуки
  2  проверки §17.3.2 → при ошибке результат-ошибка
- 3  type := types.byName(args.agent); нет → `Unknown agent type "<x>". Available: <имена через ", ">.`
+ 3  type := types.byName(args.type); нет → `Unknown agent type "<x>". Available: <имена через ", ">.`
  4  handle := manager.spawn(SubagentSpec(...), ctx.cancel)
       SubagentLimitException → `Subagent limit reached: at most <N> subagents per turn. Combine the
       remaining work into fewer tasks or do it yourself.` (outcome failed)
@@ -234,16 +308,21 @@ TaskTool.execute(args, ctx):
 
 `SubagentManager.spawn` строит ребёнка из **текущего** состояния родителя:
 
-1. **Счётчик.** `turnCount` — число `spawn` в текущем ходе родителя (сбрасывается в
-   `AgentSession.prompt()`). `turnCount >= max_per_turn` → `SubagentLimitException`.
-2. **Глубина.** Ребёнок всегда глубины 1: инструмента `task` в его наборе нет (шаг 3), поэтому
-   вложенный запуск невозможен по построению, а не проверкой во время исполнения.
+1. **Счётчик.** `SubagentTree.spawnedThisTurn` — число `spawn` во всём дереве за текущий ход
+   **корневой** сессии (сбрасывается в её `AgentSession.prompt()`); запуски внуков считаются
+   наравне с запусками детей. `spawnedThisTurn >= max_per_turn` → `SubagentLimitException`.
+2. **Глубина.** `depth` ребёнка = глубина родителя + 1 (корневая сессия — 0). Инструмент `agent`
+   входит в набор ребёнка, только если `depth < max_depth` (шаг 3), поэтому запуск глубже
+   `max_depth` невозможен по построению, а не проверкой во время исполнения. `max_depth` — 1…3,
+   по умолчанию 3 (§17.3.10); `max_depth: 1` даёт прежнее поведение «у ребёнка нет `agent`».
 3. **Инструменты.** `base` := инструменты схем текущего шага родителя (уже суженные профилем хоста
    и выбранным определением агента родителя, §15.8 шаг 5; `base` уже без выключенных
    инструментов, §6.3.8). `tools` := `type.tools == null ? base :
-   base ∩ type.tools` (шаблоны `*` — по префиксу, как в §15.8), затем минус `task` и
-   `update_plan`. План принадлежит сессии родителя и её UI; ребёнок, рисующий свой план, сбил бы
-   клиента. Инструмент типа, которого нет у родителя, молча не добавляется (CFG-7 сохраняется:
+   base ∩ type.tools` (шаблоны `*` — по префиксу, как в §15.8); затем `agent` убирается, если
+   `depth == max_depth`; инструменты списка задач (§17.16) заменяются детским вариантом: ребёнок
+   читает весь список, но меняет только статус пунктов, владелец которых — он сам, и пунктов не
+   создаёт (§17.16.4). Список один на дерево и принадлежит корневой сессии и её UI; ребёнок, ведущий
+   свой отдельный план, сбил бы клиента. Инструмент типа, которого нет у родителя, молча не добавляется (CFG-7 сохраняется:
    список только сужает). MCP-инструменты ребёнок использует через **те же** подключения
    родителя; блокировки путей (§6.3.4) — общие для процесса, поэтому параллельные дети, пишущие
    один файл, сериализуются. После MVP `memory`, `ask`, `checkpoint`, `discover_tools` в набор
@@ -257,18 +336,24 @@ TaskTool.execute(args, ctx):
    `ask` + тип `plan` → `alwaysAsk` с тем же запретом; родитель `plan` + тип `general` → запрет
    `write`/`exec`; родитель `bypass` + тип `review` (`standard`) → `write`; родитель
    `accept-edits` + тип `standard` → `write`. Если родитель сменил
-   режим посреди хода, следующий вызов ребёнка проверяется уже по новому режиму.
+   режим посреди хода, следующий вызов ребёнка проверяется уже по новому режиму. Для внука
+   `parentMode()` — эффективный режим его родителя-ребёнка, поэтому сужение идёт по всей цепочке:
+   потомок любой глубины не мягче ни одного предка (SUB-2).
 5. **Правила.** `PolicyRules` (deny из конфига, per-tool policy) — те же, что у родителя.
    Множества `allowAlways`/`rejectAlways` (`PermissionDecisionStore`, §7.2) ребёнок **не копирует, а разделяет** с родительской
    сессией: решение «разрешить всегда», принятое в запросе ребёнка, сохраняется в сессии
    родителя (пользователь видел запрос в сессии родителя) и действует для родителя и всех его
-   детей до закрытия сессии. Grants на ход (`grantForTurn`) ребёнок читает из текущего хода
-   родителя, но не может их менять.
-6. **Gate.** `gate := SubagentPermissionGate(parentGate, handle)` (ниже). Если у родителя gate
-   нет, у ребёнка его тоже нет (PERM-5).
+   детей до закрытия сессии. С вложенностью хранилище решений одно на дерево — хранилище
+   корневой сессии: решение, принятое в запросе внука, действует для всего дерева. Grants на ход (`grantForTurn`) ребёнок читает из текущего хода
+   корневой сессии, но не может их менять.
+6. **Gate.** `gate := SubagentPermissionGate(rootGate, handle)` (ниже): запрос потомка любой
+   глубины идёт в gate **корневой** сессии — только её знает клиент ACP. Если у корневой сессии
+   gate нет, у потомков его тоже нет (PERM-5).
 7. **Модель.** Первое доступное: `type.model`; модель роли `type.role` (L-10); модель роли
    `subagent`; текущая модель родителя. Недоступная модель определения — ошибка определения ещё
-   при загрузке (§15.8), до `task` она не доходит. Цепочка роли — по §17.10.5.
+   при загрузке (§15.8), до `agent` она не доходит. Цепочка роли — по §17.10.5. Пока ролей моделей
+   нет (L-10 не реализована), базовый этап берёт `type.model`, иначе текущую модель родителя;
+   поле `role` у встроенных типов появляется вместе с L-10 без смены остальных шагов.
 8. **Промпт.** `composeSystemPrompt` (§11.5) для набора инструментов ребёнка с режимом `effective`,
    затем секции `prompts/subagent/system.md` (ниже), `## Agent profile: <name>` с телом
    определения (как в §15.8, шаг 2) и, если задана `output_schema`, секция
@@ -278,10 +363,16 @@ TaskTool.execute(args, ctx):
    maxCost: subagents.max_cost, maxDuration: subagents.max_duration)`. Время ожидания одобрения
    не входит в `maxDuration` (как §5.2). После MVP ребёнок получает `SessionDeadline` родителя
    (только чтение, §17.12.5); проверки финального ответа (§17.12.4) не наследуются.
+   **Бюджет предков.** Свой `TurnBudget` ребёнка — верхняя граница, но не единственная: на каждой
+   границе шага ребёнок проверяет и остаток бюджетов всех предков вплоть до бюджета хода корневой
+   сессии (`maxTokens`, `maxCost`; usage потомков уже учтён в них, §17.3.4, шаг 7). Исчерпан
+   бюджет любого предка → ребёнок останавливается так же, как по своему (`failed`,
+   `budget_exceeded:<limit>`). Так дерево целиком не тратит больше бюджета хода корневой сессии.
 10. **Отмена.** `childSource := CancelTokenSource(parent: cancel)`, где `cancel` — токен хода
    родителя из `ToolContext` (CAN-3: отмена хода отменяет всех детей; отмена ребёнка через
-   `manager.cancel` не трогает родителя). Steering родителя детям не доставляется.
-11. **Очередь.** Хэндл в состоянии `queued` встаёт в FIFO семафора (§17.3.4).
+   `manager.cancel` не трогает родителя). Токен внука — потомок токена хода ребёнка, поэтому
+   `session/cancel` корневой сессии каскадом отменяет всё дерево синхронно. Steering родителя детям не доставляется.
+11. **Очередь.** Хэндл в состоянии `queued` встаёт в очередь слотов дерева (§17.3.4).
 
 При получении слота: создать дочернюю сессию через `AgentRuntime.createChildSession` (§5.6,
 `ChildSessionSpec`; журнал по §17.3.6), эмитить `SubagentStarted`, вызвать `child.prompt([TextContent(prompt)], cancel:
@@ -292,9 +383,9 @@ childSource.token)`. По `TurnEnded` ребёнка — построить от
 `prompts/subagent/system.md` (`id: subagent.system`, без переменных):
 
 ```text
-You are a subagent. Another agent started you to complete one task and will read only your final message.
+You are a subagent. Another agent started you to complete one assignment and will read only your final message.
 - Work autonomously. You cannot ask the user or the other agent questions. If something is ambiguous, choose the most reasonable interpretation and state it in your report.
-- Stay within the task. Do not start unrelated work.
+- Stay within the assignment. Do not start unrelated work.
 - Your final message is the report. Make it self-contained: findings, file paths with line numbers, what you changed (if anything) and what remains uncertain. Do not narrate your intermediate steps.
 ```
 
@@ -310,50 +401,73 @@ Your final message must be only a JSON value that matches this JSON Schema. Do n
 
 | Поле запроса | Значение |
 |---|---|
-| `toolCallId` | `<parentToolCallId>/<childToolCallId>`, например `call_3/call_1`: уникален в сессии родителя (PERM-4) и связывает запрос с вызовом `task` |
-| `title` | `[<agent>: <description>] <title ребёнка>`, например `[review: Check the diff] Run git diff --stat` |
+| `toolCallId` | цепочка вызовов от корневой сессии через `/`: `<agent корня>/<вызов ребёнка>` для глубины 1 (`call_3/call_1`), `<agent корня>/<agent ребёнка>/<вызов внука>` для глубины 2 (`call_3/call_2/call_1`) и так далее. Уникален в корневой сессии (PERM-4) и начинается с id вызова `agent`, который клиент видел. Клиент НЕ ДОЛЖЕН разбирать id: связь даёт `_meta.codelab.subagent` (§17.3.7) |
+| `title` | `[<agent>: <description>] <title потомка>` — тип и заголовок **того** ребёнка, чей вызов, например `[review: Check the diff] Run git diff --stat` |
 | `rawInput`, `locations`, `diffs`, `reason`, `allowAlwaysOffered`, `kind`, `tier` | как у ребёнка, без изменений (PERM-6) |
-| `sessionId` (на проводе) | родительский: `AcpPermissionGate` родителя знает только его |
+| `sessionId` (на проводе) | корневой сессии: `AcpPermissionGate` знает только её |
 
-Запросы детей одной родительской сессии **сериализуются**: у `SubagentPermissionGate` общая FIFO,
-в каждый момент к пользователю уходит не больше одного запроса от детей; запрос самого родителя
-очередь не ждёт (родитель во время `task` новых вызовов не делает, кроме параллельных в том же
-пакете). Пока запрос ребёнка ждёт ответа или своей очереди, хэндл в состоянии `waiting`. Отмена
-токена ребёнка снимает его запрос из очереди и даёт `cancelled` (PERM-7).
+Запросы всех потомков одной корневой сессии **сериализуются**: у дерева одна FIFO
+(`SubagentTree`), в каждый момент к пользователю уходит не больше одного запроса от потомков;
+запрос самой корневой сессии очередь не ждёт (во время `agent` она новых вызовов не делает, кроме
+параллельных в том же пакете). Пока запрос ребёнка ждёт ответа или своей очереди, хэндл в
+состоянии `waiting` с `waitingFor: approval`; слот при этом **не** освобождается (§17.3.4).
+Отмена токена ребёнка снимает его запрос из очереди и даёт `cancelled` (PERM-7).
 
 ## 17.3.4. Алгоритм: параллелизм и ожидание
 
-1. **Параллельность задаёт пакет.** `task` не объявляет `executionMode`, поэтому несколько вызовов
-   `task` в одном ответе модели исполняются параллельно (§5.5). Если в пакете есть
-   `sequential`-инструмент, весь пакет, включая `task`, идёт последовательно (LOOP-4).
-2. **Семафор.** У `SubagentManager` семафор на `max_concurrent` слотов (по умолчанию 3) на
-   родительскую сессию. `spawn` сверх лимита ставит хэндл в FIFO в порядке вызовов `spawn` —
-   для параллельного пакета это порядок `ToolCallStarted`, то есть порядок вызовов в ответе.
-3. **Отмена в очереди.** Хэндл, отменённый в состоянии `queued`, удаляется из FIFO, слот не
+1. **Параллельность задаёт пакет.** `agent` не объявляет `executionMode`, поэтому несколько вызовов
+   `agent` в одном ответе модели исполняются параллельно (§5.5). Если в пакете есть
+   `sequential`-инструмент, весь пакет, включая `agent`, идёт последовательно (LOOP-4).
+2. **Слоты дерева.** У `SubagentTree` `max_concurrent` слотов (по умолчанию 3) на всё дерево
+   корневой сессии; корневая сессия слота не занимает. Слот держит ребёнок, который **сам
+   работает**: ждёт модель, исполняет инструмент или ждёт решения пользователя. `spawn` сверх
+   лимита ставит хэндл в очередь в порядке вызовов `spawn` — для параллельного пакета это порядок
+   `ToolCallStarted`, то есть порядок вызовов в ответе.
+   **Ожидание детей освобождает слот.** Ребёнок, вызвавший блокирующий `agent`, на время ожидания
+   своих детей переходит в `waiting` (`waitingFor: subagents`) и **возвращает слот** дереву. Когда
+   все дети его пакета терминальны, он снова берёт слот — `acquire(resume: true)` — и только потом
+   делает следующий запрос к модели. Очередь слотов двухуровневая: сначала возвращающиеся
+   родители (FIFO между собой), затем новые дети (FIFO).
+   **Почему нет взаимоблокировки.** Держатель слота никогда не ждёт другого слота: он ждёт только
+   модель, инструмент или пользователя, и каждое из ожиданий кончается без участия очереди слотов.
+   Значит, держатели всегда освобождают слоты, а очередь движется. Приоритет возвращающихся
+   родителей не даёт новым детям бесконечно занимать освободившиеся слоты, пока родитель с
+   готовыми результатами стоит в очереди (SUB-23). При `max_depth: 1` правило не срабатывает:
+   ребёнок без `agent` детей не ждёт.
+3. **Отмена в очереди.** Хэндл, отменённый в состоянии `queued`, удаляется из очереди, слот не
    занимает, журнал не создаётся, `report` завершается `cancelled` без единого запроса к модели.
-4. **Прогресс.** Пока ребёнок работает, вызов `task` родителя остаётся в `in_progress` (хук
-   `markInProgress`, §13.7). `TaskTool` вызывает `ctx.onUpdate` с одной строкой прогресса при
+   Отменённый родитель, стоящий в очереди за слотом после ожидания детей, тоже удаляется из
+   очереди: доделывать ход ему не нужно, его отчёт — `cancelled`.
+4. **Прогресс.** Пока ребёнок работает, вызов `agent` родителя остаётся в `in_progress` (хук
+   `markInProgress`, §13.7). `SubagentTool` вызывает `ctx.onUpdate` с одной строкой прогресса при
    каждом `SubagentProgress` и, если событий не было, раз в `heartbeat_interval` (по умолчанию
    15 с) — чтобы клиент видел, что вызов жив. Строка (для человека, формат фиксирован ради golden):
-   `<agent> · <state> · <steps> steps · <toolCalls> tool calls · <tokens> tokens[ · <lastActivity>]`,
-   где `tokens` — `input + output` с суффиксом `k` от 1000 с одним знаком (`12.3k`), а
-   `lastActivity` — title последнего вызова ребёнка, обрезанный до 60 символов.
+   `<agent> · <state> · <steps> steps · <toolCalls> tool calls · <tokens> tokens[ · <n> subagents][ · <lastActivity>]`,
+   где `tokens` — `input + output` ребёнка вместе с потомками с суффиксом `k` от 1000 с одним
+   знаком (`12.3k`), `<n> subagents` — число активных потомков (`activeChildren`, если больше 0), а
+   `lastActivity` — title последнего вызова ребёнка или его потомка, обрезанный до 60 символов.
 5. **Ожидание.** Родительский шаг ждёт все вызовы пакета (`Future.wait`, §5.5): ход родителя не
    продолжается, пока не завершены все дети этого пакета. Ни один блокирующий ребёнок не
-   переживает вызов `task`, который его запустил, а значит, и ход родителя (SUB-4); фоновые дети
-   (§17.3.8) в пакет не входят: их вызов `task` завершается сразу.
-6. **Порядок результатов.** `ToolCallFinished(task)` приходят в порядке завершения детей,
+   переживает вызов `agent`, который его запустил, а значит, и ход родителя (SUB-4); фоновые дети
+   (§17.3.8) в пакет не входят: их вызов `agent` завершается сразу.
+6. **Порядок результатов.** `ToolCallFinished(agent)` приходят в порядке завершения детей,
    сообщения-результаты в транскрипте родителя — в порядке вызовов (LOOP-3). Порядок записей
    `subagent` в журнале родителя — порядок событий.
 7. **Учёт usage.** `Usage` ребёнка добавляется к usage хода родителя отдельной строкой
    `subagentUsage` в `TurnUsage` (§12.6) и учитывается в `maxTokens`/`maxCost` бюджета хода
    родителя на ближайшей границе шага родителя (LOOP-12). Так родитель не может обойти бюджет,
-   раздав работу детям.
-8. **Отмена хода родителя.** Токен хода отменён → токены всех детей отменены (CAN-3). `TaskTool`
+   раздав работу детям. Usage внука входит в usage ребёнка, а через него — в usage корневой
+   сессии: учёт транзитивный. Пока родитель ждёт детей, его бюджет проверяют сами дети на своих
+   границах шага (§17.3.3, шаг 9, «Бюджет предков»), поэтому дерево не уходит за бюджет корня,
+   даже если корень долго не доходит до своей границы шага.
+8. **Отмена хода родителя.** Токен хода отменён → токены всех детей отменены (CAN-3), каскадом до
+   самой глубокой глубины. `SubagentTool`
    ждёт `TurnEnded` каждого ребёнка не дольше `cancel_grace` (по умолчанию 10 с), затем
    возвращает `cancelled`. По истечении `cancel_grace` хэндл помечается `cancelled`, лог
    `subagent.cancel_grace_exceeded`; дочерняя сессия закрывается в фоне. `TurnEnded(cancelled)`
-   родителя приходит после `ToolCallFinished` всех `task` (CAN-5).
+   родителя приходит после `ToolCallFinished` всех `agent` (CAN-5). Все токены дерева отменяются в
+   один момент, поэтому `cancel_grace` на каждом уровне отсчитывается от одного и того же момента
+   и вложенность не умножает ожидание.
 
 ## 17.3.5. Алгоритм: итоговый отчёт
 
@@ -411,12 +525,12 @@ Reply with only a JSON value that matches the schema. Do not add any other text.
 | `cancelled` | — | `Tool call was cancelled` (стандартный текст §6.3.1) | `true` |
 
 Вхождения `</subagent-report` в тексте отчёта экранируются заменой `<` на `&lt;` (как §6.3.6,
-шаг 1). Затем результат проходит обычное усечение (§6.3.5) и ограду: `task` всегда `untrusted`
-(`source="task"`). Отчёт — пересказ того, что ребёнок прочёл в файлах, выводе команд и
+шаг 1). Затем результат проходит обычное усечение (§6.3.5) и ограду: `agent` всегда `untrusted`
+(`source="agent"`). Отчёт — пересказ того, что ребёнок прочёл в файлах, выводе команд и
 MCP-ответах, то есть транзитивно содержит недоверенные данные; инструкции внутри отчёта родитель
 исполнять не должен (TOOL-10 по смыслу).
 
-`task` не `spillable`: отчёт уже ограничен `report_max_bytes`. Выносы ребёнка (§17.4) лежат в
+`agent` не `spillable`: отчёт уже ограничен `report_max_bytes`. Выносы ребёнка (§17.4) лежат в
 его собственном каталоге выноса (§17.3.6); пути к ним в тексте отчёта родителю бесполезны —
 `BoundedEnv` родителя этот каталог не содержит, и `read` по такому пути даёт `outsideWorkspace`.
 
@@ -439,7 +553,14 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 `readOnlyRoots` его `BoundedEnv`; каталог выноса родителя ребёнку недоступен, и наоборот
 (SPL-5).
 
-Имя каталога — имя файла родителя без `.jsonl`; имя файла ребёнка — по правилу §8.9. `list`
+**Вложенность — плоско.** Журналы потомков любой глубины лежат в одном каталоге `subagents/`
+**корневой** сессии, а не в каталогах своих родителей: вложенные каталоги на глубине 3 дали бы
+путь длиннее 260 символов Windows уже при обычном `CODELAB_HOME`. Дерево восстанавливается по
+заголовкам (`parent.sessionId` — прямой родитель, `parent.depth`) и записям `subagent` в журнале
+прямого родителя: запись о внуке лежит в журнале ребёнка. Каталог выноса у каждого потомка свой,
+рядом с его журналом.
+
+Имя каталога — имя файла корневой сессии без `.jsonl`; имя файла ребёнка — по правилу §8.9. `list`
 (§8.10, шаг 1) перебирает только `sessions/*/*.jsonl`, поэтому дочерние журналы в `session/list`
 **не попадают** и сводку родителя не меняют: ребёнок — деталь вызова инструмента, а не сессия
 пользователя. `index.json` дочерние журналы не содержит.
@@ -447,8 +568,11 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 **Заголовок ребёнка** — обычный заголовок §8.2.1 с новым необязательным полем `parent`:
 
 ```json
-{"type":"session","version":1,"id":"01JB8Q3A1D2E3F4G5H6J7K8M9N","cwd":"/work/demo","created":"2026-10-21T08:00:05.120Z","agent":{"name":"codelab-agent","version":"0.1.0"},"parent":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","toolCallId":"call_3","subagentId":"sub_k3f9a1c2","agent":"explore","depth":1}}
+{"type":"session","version":1,"id":"01JB8Q3A1D2E3F4G5H6J7K8M9N","cwd":"/work/demo","created":"2026-10-21T08:00:05.120Z","agent":{"name":"codelab-agent","version":"0.1.0"},"parent":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","rootSessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","toolCallId":"call_3","subagentId":"sub_k3f9a1c2","agent":"explore","depth":1}}
 ```
+
+`parent.sessionId` — прямой родитель (у внука — ребёнок), `parent.rootSessionId` — корневая
+сессия дерева, `parent.toolCallId` — вызов `agent` в журнале прямого родителя.
 
 Первая запись дерева ребёнка — `model_change` с моделью ребёнка, затем `mode_change` с
 эффективным режимом на момент запуска, затем `message` с промптом задачи. Остальные записи — как
@@ -460,7 +584,7 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 | Поле | Тип | Смысл |
 |---|---|---|
 | `subagentId` | string | `sub_…` |
-| `toolCallId` | string | вызов `task`, запустивший ребёнка |
+| `toolCallId` | string | вызов `agent`, запустивший ребёнка |
 | `agent`, `description` | string | тип и заголовок |
 | `childSessionId` | string? | `null`, если ребёнок отменён в очереди |
 | `journal` | string? | путь журнала ребёнка относительно `sessions/` |
@@ -475,25 +599,27 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 {"type":"subagent","id":"c8x1z2v3","parentId":"b7n2m4k1","timestamp":"2026-10-21T08:00:41.900Z","subagentId":"sub_k3f9a1c2","toolCallId":"call_3","agent":"explore","description":"Find auth code","childSessionId":"01JB8Q3A1D2E3F4G5H6J7K8M9N","journal":"…","status":"completed","report":"Auth is in lib/auth/session.dart:12-80 …","usage":{"input":21400,"output":930,"cacheRead":0,"cacheWrite":0}}
 ```
 
-Записи `subagent` ставятся в дерево родителя после assistant-сообщения с вызовом `task` и до
+Записи `subagent` ставятся в дерево родителя после assistant-сообщения с вызовом `agent` и до
 его результата; цепочка `parentId` остаётся линейной (параллельные дети пишут по очереди через
-общую очередь записи, SES-4). Итоговая запись пишется **до** `ToolCallFinished(task)` и с
+общую очередь записи, SES-4). Итоговая запись пишется **до** `ToolCallFinished(agent)` и с
 `durable` — это точка восстановления отчёта.
 
-**Lease (S-09, §17.6.8).** Lease родительской сессии покрывает все её дочерние журналы:
+**Lease (S-09, §17.6.8).** Lease корневой сессии покрывает журналы всех потомков:
 отдельный lease на ребёнка не берётся, писатель дочерних журналов — только процесс-владелец lease
 родителя; проверка lease перед записью общая, сравнение ревизии ведётся для каждого файла
 отдельно. Fork родителя копирует журналы детей на скопированном пути под новыми `SessionId`
 ребёнка с `parent.sessionId` новой сессии (§17.6.7).
 `session/load` с id дочерней сессии → `-32602` с `data: {"codelab": {"reason":
 "subagentSession", "parentSessionId": "<id>"}}`: история ребёнка открывается только через
-родителя (просмотр — расширение доски, §17.3.7).
+родителя (просмотр — расширение доски, §17.3.7). Ответ `subagentSession` требует поиска id среди
+дочерних журналов и вводится вместе с доской (этап 5); в базовом этапе хранилище дочерние журналы
+по id не находит, и `session/load` с id ребёнка даёт обычное «сессия не найдена» (`-32002`).
 
 **Прерывание (S-13).** Субагент после сбоя **не перезапускается**. `healInterruptedTurn`
-родителя (§8.8) получает правило для `task`:
+родителя (§8.8) получает правило для `agent`:
 
 ```text
-для каждого missing-вызова с toolName == "task":
+для каждого missing-вызова с toolName == "agent":
   s := последняя запись subagent с toolCallId == вызов.id
   s.status == completed | failed (итог записан, результат — нет: сбой между записью и результатом)
       → результат из s.report и s.status с обёрткой §17.3.5; outcome записи = completed | failed
@@ -502,28 +628,30 @@ $CODELAB_HOME/sessions/<cwd-slug>/
       → стандартный синтетический результат interrupted (§8.8)
       → дописать subagent{status: "failed", failure: "interrupted"} для s.subagentId
       → открыть журнал ребёнка, выполнить его healInterruptedTurn и записать результат в его файл
+        (то же правило рекурсивно: прерванный agent ребёнка лечит журналы внуков)
 ```
 
-Так параллельный пакет из двух `task`, где первый ребёнок успел закончить, а второй — нет,
+Так параллельный пакет из двух `agent`, где первый ребёнок успел закончить, а второй — нет,
 после перезапуска даёт модели отчёт первого и `interrupted` для второго; ни один ребёнок не
 запускается снова. Реплей (§13.5) показывает первый вызов `completed`, второй — `failed` с
 `_meta.codelab.outcome: "interrupted"`.
 
 ## 17.3.7. Проекция в ACP
 
-**Стандартная проекция.** Вызов `task` — обычный вызов инструмента (§13.7):
+**Стандартная проекция.** Вызов `agent` — обычный вызов инструмента (§13.7):
 
 | Что | Кадр | Поля |
 |---|---|---|
-| `ToolCallStarted(task)` | `tool_call` | `kind: "think"`, `title: "Subagent explore: Find auth code"`, `status: "pending"`, `rawInput` (все аргументы, включая `prompt`) |
+| `ToolCallStarted(agent)` | `tool_call` | `kind: "think"`, `title: "Subagent explore: Find auth code"`, `status: "pending"`, `rawInput` (все аргументы, включая `prompt`) |
 | `markInProgress` | `tool_call_update` | `status: "in_progress"` |
-| `ToolCallProgress(task)` | `tool_call_update` | `content: [{"type":"content","content":{"type":"text","text":"<строка прогресса>"}}]` — заменяет предыдущую строку (в ACP `content` обновления заменяет коллекцию) |
-| `ToolCallFinished(task)` | `tool_call_update` | `status: "completed"` или `"failed"`; `content` — один текстовый блок с **телом** отчёта (без обёртки `<subagent-report>` и ограды: клиент показывает человеку текст); для `failed` — `_meta.codelab.subagent.failure` |
+| `ToolCallProgress(agent)` | `tool_call_update` | `content: [{"type":"content","content":{"type":"text","text":"<строка прогресса>"}}]` — заменяет предыдущую строку (в ACP `content` обновления заменяет коллекцию) |
+| `ToolCallFinished(agent)` | `tool_call_update` | `status: "completed"` или `"failed"`; `content` — один текстовый блок с **телом** отчёта (без обёртки `<subagent-report>` и ограды: клиент показывает человеку текст); для `failed` — `_meta.codelab.subagent.failure` |
 | `SubagentStarted`, `SubagentFinished` | — | лог `subagent.start` / `subagent.end`; доска (ниже) |
 | `SubagentProgress` | — | только доска (ниже); строку прогресса уже несёт `ToolCallProgress` |
-| запрос разрешения ребёнка | `session/request_permission` | `sessionId` родителя, `toolCall.toolCallId: "call_3/call_1"`, `title` с префиксом, `_meta: {"codelab": {"subagent": {"id": "sub_…", "parentToolCallId": "call_3", "agent": "review"}}}` |
+| запрос разрешения потомка | `session/request_permission` | `sessionId` корневой сессии, `toolCall.toolCallId: "call_3/call_1"` (цепочка, §17.3.3), `title` с префиксом, `toolCall._meta: {"codelab": {"subagent": {"id": "sub_…", "agent": "review", "description": "Check the diff", "depth": 1, "path": [], "parentToolCallId": "call_3"}}}`; `parentToolCallId` — вызов `agent` **корневой** сессии, который клиент видел (первый сегмент цепочки), `path` — id предков-субагентов от глубины 1 |
+| `SubagentActivity` | — / `tool_call`, `tool_call_update` | клиенту без `subagentToolCalls` — не отправляется (SUB-12); клиенту с ним — вызовы потомков, ниже «Шаги потомков деревом» |
 
-**Вызовы инструментов ребёнка не проецируются** как `tool_call` верхнего уровня. Причины:
+**Вызовы инструментов ребёнка не проецируются** клиенту, не согласовавшему дерево, как `tool_call` верхнего уровня. Причины:
 (1) в ACP нет вложенности вызовов — три параллельных ребёнка по десять вызовов превратили бы
 ленту сессии в 30 перемешанных строк без связи с задачами; (2) суть субагента — родитель и
 пользователь видят итог, а не шаги; (3) детали доступны отдельно — в журнале ребёнка и на
@@ -531,17 +659,49 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 пользователь не может одобрить действие. Его `toolCallId` клиенту заранее не объявлен;
 клиент ДОЛЖЕН показать такой запрос самостоятельно, используя `title`, `rawInput` и `content`
 запроса (golden `acp/prompt-subagent-permission`). `_meta.codelab.subagent` — расширение через
-OpenSpec.
+OpenSpec (change `add-subagents-and-tasks`).
+
+**Объявление в `initialize` (базовый этап).** Агент перечисляет поддержанные расширения CodeLab в
+`agentCapabilities._meta.codelab` (§13.2), только если клиент объявил
+`clientCapabilities._meta.codelab` (объект, возможно пустой): сторонний клиент получает ответ
+`initialize` без изменений. Значение каждого ключа — объект с целым `version`; отсутствие ключа —
+расширения нет; неизвестные ключи обе стороны игнорируют. Базовый этап объявляет
+`subagents: {"version": 1, "maxDepth": <max_depth>}` (только при `subagents.enabled`) и
+`tasks: {"version": 1}` (§17.16). Данные расширений (`_meta.codelab.subagent`,
+`_meta.codelab.task`) агент отправляет независимо от объявления клиента — как `_meta.codelab.critical`:
+клиент без поддержки `_meta` их игнорирует. Капабилити доски и пробуждения (`subagentBoard`,
+`subagentWake`) следуют той же схеме — объект с `version` вместо `true` — и вводятся своими этапами.
+
+**Шаги потомков деревом (этап 2; решение пользователя 2026-11-10, design.md change
+`add-subagents-and-tasks`, D21).** Клиент, понимающий вложенность, объявляет
+`clientCapabilities._meta.codelab.subagentToolCalls: {"version": 1}`; агент при `subagents.enabled`
+объявляет тот же ключ. Только такому клиенту адаптер проецирует `SubagentActivity`:
+
+| Событие потомка | Кадр | Поля |
+|---|---|---|
+| `ToolCallStarted` | `tool_call` | как у вызова корня (§13.7); `toolCallId` — цепочка от вызова `agent` корня (тот же id, что у запроса разрешения этого вызова); `_meta.codelab.parentToolCallId` — `toolCallId` на проводе вызова `agent`, запустившего потомка |
+| `ToolCallProgress`, `ToolCallFinished` | `tool_call_update` | как у корня, с тем же `_meta.codelab.parentToolCallId` |
+| прочие (`MessageDelta`, `ThoughtDelta`, `TurnEnded`…) | — | не отправляются: итог потомка — отчёт |
+
+Запрос разрешения потомка у такого клиента приходит после `tool_call` своего вызова и встаёт в
+его строку стандартным путём ACP. Когда вызов `agent` становится терминальным, адаптер до его
+`tool_call_update` закрывает ещё открытые вызовы поддерева: `tool_call_update` `failed` с
+`_meta.codelab.outcome: "cancelled"` — поздние события отписанного потомка (§17.3.4, шаг 8) не
+дойдут, а строка не должна остаться «Running». `session/load` такому клиенту проигрывает вызовы
+потомков из их журналов (по записям `subagent`, рекурсивно) сразу после кадра `tool_call` вызова
+`agent`. Клиенты (kit, app, CLI) строят дерево по `parentToolCallId`; вызов с неизвестным
+родителем показывается на верхнем уровне. Фикстуры: `acp/prompt-subagent-tool-tree`,
+`acp/session-load-subagent-tool-tree`.
 
 **Доска субагентов (U-21) — предложение, вводится через OpenSpec.** Расширение `_codelab/subagents`
-включается, только если клиент объявил `clientCapabilities._meta.codelab.subagentBoard: true`, а
-агент — `agentCapabilities._meta.codelab.subagentBoard: true` в `initialize`. Предлагаемая форма:
+включается, только если клиент объявил `clientCapabilities._meta.codelab.subagentBoard: {"version": 1}`, а
+агент — `agentCapabilities._meta.codelab.subagentBoard: {"version": 1}` в `initialize`. Предлагаемая форма:
 
 | Метод | Направление | Параметры → результат |
 |---|---|---|
 | `_codelab/subagents/update` (уведомление) | агент → клиент | `{sessionId, subagents: [SubagentSnapshotJson], pendingNotices}` — полный снимок детей текущего хода и активных фоновых детей (`"background": true` в снимке); `pendingNotices` — число недоставленных уведомлений (§17.3.8); на каждый `SubagentStarted`/`Progress`/`Finished` и изменение очереди уведомлений, не чаще `progress_interval`; для фоновых детей отправляется и вне хода |
 | `_codelab/subagents/list` | клиент → агент | `{sessionId}` → `{subagents: [...]}`: все дети сессии, включая завершённые (по записям `subagent` журнала) |
-| `_codelab/subagents/cancel` | клиент → агент | `{sessionId, subagentId}` → `{}`; `SubagentManager.cancel`; вызов `task` получает `cancelled`, ход родителя продолжается |
+| `_codelab/subagents/cancel` | клиент → агент | `{sessionId, subagentId}` → `{}`; `SubagentManager.cancel`; вызов `agent` получает `cancelled`, ход родителя продолжается |
 | `_codelab/subagents/history` | клиент → агент | `{sessionId, subagentId}` → `{updates: [SessionUpdate]}` — реплей журнала ребёнка (§13.5) без отправки в ленту сессии |
 
 ```json
@@ -556,9 +716,9 @@ OpenSpec.
 
 ## 17.3.8. Фоновый режим
 
-**Назначение.** Блокирующий `task` держит ход родителя, пока ребёнок не закончит. Для долгой
+**Назначение.** Блокирующий `agent` держит ход родителя, пока ребёнок не закончит. Для долгой
 независимой работы (исследовать соседний пакет, пока родитель правит текущий) модель запускает
-ребёнка **в фоне**: вызов `task` сразу возвращает идентификатор, родитель продолжает работу, а
+ребёнка **в фоне**: вызов `agent` сразу возвращает идентификатор, родитель продолжает работу, а
 отчёт приходит позже **уведомлением**.
 
 **Ограничение ACP, которое определяет устройство.** Ход начинается только по `session/prompt`
@@ -571,7 +731,7 @@ OpenSpec.
 | ход не идёт | уведомление ждёт в очереди сессии и входит в контекст **перед** сообщением пользователя следующего `session/prompt` (поведение `steer` без хода, §5.6) | нет |
 | ход не идёт, клиент поддерживает пробуждение | агент сообщает клиенту `_codelab/subagents/update` с `pendingNotices > 0`; клиент по своей политике отправляет `session/prompt` с `_meta.codelab.wake: true` — ход начинает **клиент** | да, через OpenSpec |
 
-**Контракт.** Схема параметров `task` (§17.3.2) получает поле:
+**Контракт.** Схема параметров `agent` (§17.3.2) получает поле:
 
 ```json
 "run_in_background":{"type":"boolean","default":false,"description":"Run the subagent in the background. The call returns at once with the subagent id; the report arrives later as a separate notice. Use it for long independent work while you continue. Background subagents cannot ask the user for approval while you are idle."}
@@ -596,30 +756,30 @@ final class SubagentNotice {
 }
 ```
 
-Два новых инструмента регистрируются вместе с `task` (§10.7), только если
+Два новых инструмента регистрируются вместе с `agent` (§10.7), только если
 `subagents.background = true` (по умолчанию `true`):
 
 | Инструмент | Параметры | tier / kind | Результат (видит модель) |
 |---|---|---|---|
-| `task_status` | `id` (необязательный); `wait_seconds` (0–120, по умолчанию 0) | `read` / `think` | без `id` — строки `<id> <agent> <state> <steps> steps "<description>"` по всем фоновым детям сессии; с `id` — то же для одного; при `wait_seconds > 0` ждёт, пока ребёнок (или любой, если `id` нет) не станет терминальным, но не дольше `wait_seconds`; завершённый за время ожидания ребёнок сразу получает уведомление в этом же результате |
-| `task_cancel` | `id` (обязательный) | `read` / `think` | `Cancelled subagent <id>.` или `Subagent <id> is not running (state: <state>).`; отмена только уменьшает работу, поэтому разрешение не спрашивается в `standard` |
+| `agent_status` | `id` (необязательный); `wait_seconds` (0–120, по умолчанию 0) | `read` / `think` | без `id` — строки `<id> <agent> <state> <steps> steps "<description>"` по всем фоновым детям сессии; с `id` — то же для одного; при `wait_seconds > 0` ждёт, пока ребёнок (или любой, если `id` нет) не станет терминальным, но не дольше `wait_seconds`; завершённый за время ожидания ребёнок сразу получает уведомление в этом же результате |
+| `agent_cancel` | `id` (обязательный) | `read` / `think` | `Cancelled subagent <id>.` или `Subagent <id> is not running (state: <state>).`; отмена только уменьшает работу, поэтому разрешение не спрашивается в `standard` |
 
-Описания инструментов — `prompts/tool_descriptions/task_status.md` и `task_cancel.md` (§11.2).
+Описания инструментов — `prompts/tool_descriptions/agent_status.md` и `agent_cancel.md` (§11.2).
 
-**Алгоритм: запуск в фоне.** `TaskTool.execute` (§17.3.3) при `run_in_background: true`:
+**Алгоритм: запуск в фоне.** `SubagentTool.execute` (§17.3.3) при `run_in_background: true`:
 
 ```text
 1-3  как в §17.3.3 (проверки, тип)
 4    лимит: фоновых детей сессии в состоянии queued | running | waiting < max_background
      (по умолчанию 4), иначе `Background subagent limit reached: at most <N> run at once.
-     Wait for a notice or cancel one with task_cancel.` (outcome failed); max_per_turn — общий
+     Wait for a notice or cancel one with agent_cancel.` (outcome failed); max_per_turn — общий
 5    handle := manager.spawn(spec{background: true}, sessionToken)
        токен — потомок токена СЕССИИ, а не хода: session/cancel хода фоновых детей не трогает;
        closeAll (закрытие сессии, выход процесса) — отменяет
 6    вернуть сразу (без ожидания) TextContent:
        `Started background subagent <id> (<agent>): "<description>". You will receive its report
-        as a notice when it finishes. Use task_status to check progress and task_cancel to stop it.`
-     outcome completed; ToolCallFinished(task) — сразу
+        as a notice when it finishes. Use agent_status to check progress and agent_cancel to stop it.`
+     outcome completed; ToolCallFinished(agent) — сразу
 ```
 
 Ребёнок занимает тот же семафор `max_concurrent`, что и блокирующие (§17.3.4); очередь общая,
@@ -653,7 +813,7 @@ FIFO. Бюджет ребёнка — свой `TurnBudget` (§17.3.3, шаг 9)
      <subagent-notice id="<id>" agent="<agent>" status="<status>" description="<description>">
      The background subagent finished. Its report follows. Continue your work with it.
      </subagent-notice>
-     + wrapReport(report) (§17.3.5) внутри ограды untrusted-content source="task"
+     + wrapReport(report) (§17.3.5) внутри ограды untrusted-content source="agent"
 4  ход идёт → agent.steer(message, origin: SubagentNoticeOrigin(id)) (§5.6); иначе — ждать следующего prompt()
 5  доставка = запись в журнал message{role: user, origin: "subagent_notice", subagentId} и
    MessageStarted; из pending уведомление удаляется только после этой записи
@@ -681,8 +841,8 @@ FIFO. Бюджет ребёнка — свой `TurnBudget` (§17.3.3, шаг 9)
 управление без расширения протокола.
 
 **Пробуждение (через OpenSpec).** Агент, поддерживающий пробуждение, объявляет
-`agentCapabilities._meta.codelab.subagentWake: true` в ответе `initialize`. Если и клиент объявил
-`clientCapabilities._meta.codelab.subagentWake: true`, агент при `pendingNoticeCount > 0` и
+`agentCapabilities._meta.codelab.subagentWake: {"version": 1}` в ответе `initialize`. Если и клиент объявил
+`clientCapabilities._meta.codelab.subagentWake: {"version": 1}`, агент при `pendingNoticeCount > 0` и
 отсутствии хода шлёт `_codelab/subagents/update` с полем `pendingNotices`. Клиент МОЖЕТ ответить
 `session/prompt` с `prompt: []` (пустой список блоков) и `_meta: {"codelab": {"wake": true}}`; агент
 выполняет ход только из уведомлений. Без согласованной capability агент такой `session/prompt` с
@@ -711,7 +871,7 @@ sequenceDiagram
     participant SM as "SubagentManager"
     participant CH as "Фоновый ребёнок"
     CL->>PA: session/prompt
-    PA->>SM: task run_in_background true
+    PA->>SM: agent run_in_background true
     SM-->>PA: Started background subagent sub_1
     PA-->>CL: ответ end_turn
     SM->>CH: prompt, токен сессии
@@ -726,30 +886,30 @@ sequenceDiagram
 ### 17.3.8.1. Продолжение работы с субагентом (C-17)
 
 **Назначение.** Отчёт ребёнка часто требует уточнения («а где вызывается `verifyToken`?»), а
-ребёнок, упавший на сбое провайдера или прерванный, уже проделал половину работы. Новый `task`
+ребёнок, упавший на сбое провайдера или прерванный, уже проделал половину работы. Новый `agent`
 начал бы с нуля и потратил бы окно ребёнка на повторное чтение тех же файлов. Три инструмента
-продолжают работу с **уже запущенным** ребёнком по его `SubagentId`: `task_send` — новое сообщение
-ребёнку, сдавшему отчёт; `task_resume` — повторный запуск ребёнка, не закончившего работу;
-`task_observe` — последние сообщения ребёнка без загрузки его контекста в контекст родителя.
+продолжают работу с **уже запущенным** ребёнком по его `SubagentId`: `agent_send` — новое сообщение
+ребёнку, сдавшему отчёт; `agent_resume` — повторный запуск ребёнка, не закончившего работу;
+`agent_observe` — последние сообщения ребёнка без загрузки его контекста в контекст родителя.
 Обмена сообщениями с **работающим** ребёнком раздел не вводит: steering родителя детям по-прежнему
 не доставляется (§17.3.3, шаг 10).
 
-**Прогон.** Каждый запуск ребёнка — **прогон** с номером `run` (первый — `task`, `run = 1`; каждый
-`task_send` и `task_resume` — следующий номер). Прогон — один ход дочерней `AgentSession` в **том же**
+**Прогон.** Каждый запуск ребёнка — **прогон** с номером `run` (первый — `agent`, `run = 1`; каждый
+`agent_send` и `agent_resume` — следующий номер). Прогон — один ход дочерней `AgentSession` в **том же**
 журнале ребёнка (§17.3.6): история прежних прогонов сохраняется, ребёнок видит её как обычную
 историю своей сессии (и сжимает её по §9, как любая сессия). Состояния хэндла (§17.3.11) относятся
 к прогону: `completed`, `failed`, `cancelled` терминальны для прогона, продолжение — новый прогон с
 новым `report`, а не переход назад.
 
 **Кого можно продолжить.** Ребёнок **известен** сессии, если на активной ветке родителя есть запись
-`subagent` с его `subagentId` (после перемотки до вызова `task` ребёнок неизвестен). Его состояние —
+`subagent` с его `subagentId` (после перемотки до вызова `agent` ребёнок неизвестен). Его состояние —
 итоговая запись последнего прогона:
 
-| Состояние последнего прогона | `task_send` | `task_resume` |
+| Состояние последнего прогона | `agent_send` | `agent_resume` |
 |---|---|---|
 | `queued`, `running`, `waiting` | ошибка «still running» | ошибка «still running» |
-| `completed`; `failed` с `budgetExceeded`, `invalidOutput`, `refused` (ход ребёнка закончился штатно — **ожидает**) | новый прогон с сообщением родителя | ошибка «use task_send» |
-| `failed` с `error`, `interrupted`; `cancelled` (ход не закончен) | ошибка «use task_resume» | новый прогон с текстом продолжения |
+| `completed`; `failed` с `budgetExceeded`, `invalidOutput`, `refused` (ход ребёнка закончился штатно — **ожидает**) | новый прогон с сообщением родителя | ошибка «use agent_send» |
+| `failed` с `error`, `interrupted`; `cancelled` (ход не закончен) | ошибка «use agent_resume» | новый прогон с текстом продолжения |
 
 **Контракт.**
 
@@ -777,40 +937,40 @@ final class SubagentResumeOrigin extends MessageOrigin { final int run; final St
 
 | Инструмент | Параметры | tier / kind | `outputTrust` | `permissionPattern` |
 |---|---|---|---|---|
-| `task_send` | `id` (обязательный), `message` (1–32768 символов), `run_in_background` (по умолчанию `false`) | `read` / `think` | `untrusted` | тип ребёнка (`agent`), ключ решения — `PermissionKey("task", <agent>)` |
-| `task_resume` | `id` (обязательный), `note` (необязательный, до 4000 символов), `run_in_background` (по умолчанию `false`) | `read` / `think` | `untrusted` | то же |
-| `task_observe` | `id` (обязательный), `last` (1–`observe_max`, по умолчанию `observe_default`), `include_tools` (по умолчанию `false`) | `read` / `think` | `untrusted` (`source="task"`) | `id` |
+| `agent_send` | `id` (обязательный), `message` (1–32768 символов), `run_in_background` (по умолчанию `false`) | `read` / `think` | `untrusted` | тип ребёнка (`agent`), ключ решения — `PermissionKey("agent", <agent>)` |
+| `agent_resume` | `id` (обязательный), `note` (необязательный, до 4000 символов), `run_in_background` (по умолчанию `false`) | `read` / `think` | `untrusted` | то же |
+| `agent_observe` | `id` (обязательный), `last` (1–`observe_max`, по умолчанию `observe_default`), `include_tools` (по умолчанию `false`) | `read` / `think` | `untrusted` (`source="agent"`) | `id` |
 
-`task_send` и `task_resume` проходят ту же политику, что `task`: решение «разрешить всегда» и
-правила `PolicyRules`, заданные для `task` с типом `<agent>`, действуют и на них (новый геттер
-`AgentTool.permissionKeyName => 'task'`, §7.3). Инструменты регистрируются вместе с `task` (§10.7),
+`agent_send` и `agent_resume` проходят ту же политику, что `agent`: решение «разрешить всегда» и
+правила `PolicyRules`, заданные для `agent` с типом `<agent>`, действуют и на них (новый геттер
+`AgentTool.permissionKeyName => 'agent'`, §7.3). Инструменты регистрируются вместе с `agent` (§10.7),
 если `subagents.follow_ups = true`; `run_in_background` в их схеме есть, только если
-`subagents.background = true`. Описания — `prompts/tool_descriptions/task_send.md`,
-`task_resume.md`, `task_observe.md` (§11.2), по строке:
+`subagents.background = true`. Описания — `prompts/tool_descriptions/agent_send.md`,
+`agent_resume.md`, `agent_observe.md` (§11.2), по строке:
 
 ```text
-task_send: Send a new instruction to a subagent that already returned its report. It continues in its own context and returns a new report.
-task_resume: Restart a subagent whose last run failed or was cancelled. It continues from its own history; finished tool calls are not repeated.
-task_observe: Show the last messages of a subagent (running or finished) without its full history. Use it to check progress or to quote its work.
+agent_send: Send a new instruction to a subagent that already returned its report. It continues in its own context and returns a new report.
+agent_resume: Restart a subagent whose last run failed or was cancelled. It continues from its own history; finished tool calls are not repeated.
+agent_observe: Show the last messages of a subagent (running or finished) without its full history. Use it to check progress or to quote its work.
 ```
 
-**Алгоритм: `task_send` и `task_resume`.**
+**Алгоритм: `agent_send` и `agent_resume`.**
 
 ```text
-1  единая точка исполнения (§6.3.1): валидация, разрешения по ключу ("task", agent ребёнка), хуки
+1  единая точка исполнения (§6.3.1): валидация, разрешения по ключу ("agent", agent ребёнка), хуки
 2  s := последняя запись subagent с id на активной ветке родителя; нет → `Unknown subagent <id>.
    Known: <id через ", ">.` (список пуст → `No subagents in this session.`)
 3  проверка таблицы «Кого можно продолжить»; ребёнок уже в прогоне, запущенном этим же пакетом
-   (два task_send одному id в одном ответе) → второй получает «still running»
-4  лимиты: прогонов ребёнка сверх первого ≥ max_follow_ups, или task_resume при числе
-   продолжений через resume ≥ max_resumes → ошибка лимита; turnCount ≥ max_per_turn (общий с task,
+   (два agent_send одному id в одном ответе) → второй получает «still running»
+4  лимиты: прогонов ребёнка сверх первого ≥ max_follow_ups, или agent_resume при числе
+   продолжений через resume ≥ max_resumes → ошибка лимита; turnCount ≥ max_per_turn (общий с agent,
    §17.3.3, шаг 1); фоновый прогон — и max_background (§17.3.8)
 5  handle := manager.followUp(id, request, cancel); run := s.run + 1
      токен — потомок токена хода (блокирующий) или сессии (фоновый), как §17.3.3 шаг 10 и §17.3.8 шаг 5
      инструменты := tools_прогона_1 ∩ базовый набор текущего шага родителя (SUB-1; разрешения
        ребёнка не расширяются, даже если родитель получил новые инструменты)
      режим, правила, gate, модель, бюджет (свежий TurnBudget на прогон) — заново по §17.3.3, шаги 4–9
-     слот семафора max_concurrent — как у task (§17.3.4)
+     слот семафора max_concurrent — как у agent (§17.3.4)
 6  при получении слота: дочерняя сессия открыта (держится idle_keep после отчёта) или
    открывается заново из журнала ребёнка (AgentRuntime.openChildSession, §5.6; heal §8.8 уже
    выполнен при open родителя); запись subagent{status: running, run, followUp: send | resume,
@@ -818,21 +978,21 @@ task_observe: Show the last messages of a subagent (running or finished) without
 7  сообщение прогона (user-сообщение ребёнка, durable):
      send   → message с origin "parent_message" и текстом args.message
      resume → message с origin "subagent_resume"; текст prompts/subagent/resume.md:
-       Your previous run stopped before it finished ({{reason}}). Continue the same task from
+       Your previous run stopped before it finished ({{reason}}). Continue the same assignment from
        where you stopped. Tool calls that already have results are done: do not repeat them
        unless their result shows they must be repeated.{{note}}
        reason := "error: <сообщение AgentError, до 200 символов>" | "the process stopped" | "it was cancelled"
        note := "\n\nNote from the agent that started you:\n" + args.note, если задан
      resume прогона, чьё сообщение parent_message в журнал ребёнка не попало (сбой между шагами
-       6 и 7) → вместо текста продолжения повторяется message из аргументов исходного task_send
+       6 и 7) → вместо текста продолжения повторяется message из аргументов исходного agent_send
 8  child.prompt([сообщение]); отчёт — buildReport (§17.3.5) по последнему ответу этого прогона,
-   ремонт по output_schema исходного task — ровно один раз на прогон
+   ремонт по output_schema исходного agent — ровно один раз на прогон
 9  блокирующий: прогресс и ожидание как §17.3.3, шаги 5–7; результат — wrapReport с атрибутом
    run="<run>"; фоновый: сразу `Started run <run> of background subagent <id> (<agent>).`,
    отчёт — уведомлением §17.3.8 с атрибутом run="<run>"
 ```
 
-**Алгоритм: `task_observe`.** Снимок активной ветки журнала ребёнка: для работающего — из памяти
+**Алгоритм: `agent_observe`.** Снимок активной ветки журнала ребёнка: для работающего — из памяти
 его `AgentSession`, иначе `openReadOnly` (§8.3) без lease ребёнка (его покрывает lease родителя) и
 без записи. Берутся последние `last` записей `message` (без `toolResult`, если не `include_tools`);
 строка — `[<run>] <role|origin> <HH:mm>: <текст>`, где роль — `parent` для слов принципала (первое
@@ -845,10 +1005,10 @@ task_observe: Show the last messages of a subagent (running or finished) without
 
 **Журнал и сбой.** Запись `subagent` (§17.3.6) получает поля `run` (int, отсутствует — `1`) и
 `followUp` (`"send"` | `"resume"`); `toolCallId` — вызов, запустивший **этот** прогон. Правило
-лечения `task` (§17.3.6, «Прерывание») применяется и к `task_send`/`task_resume`: поиск по
+лечения `agent` (§17.3.6, «Прерывание») применяется и к `agent_send`/`agent_resume`: поиск по
 `toolCallId`; итог записан → результат из записи, иначе `interrupted` для прогона, ребёнок сам не
-перезапускается — его можно продолжить `task_resume`. Отмена хода родителя отменяет блокирующий
-прогон (`cancelled`, SUB-6); `task_cancel` и `/tasks cancel` отменяют текущий прогон ребёнка.
+перезапускается — его можно продолжить `agent_resume`. Отмена хода родителя отменяет блокирующий
+прогон (`cancelled`, SUB-6); `agent_cancel` и `/tasks cancel` отменяют текущий прогон ребёнка.
 Fork родителя (§17.6.7) копирует журналы детей: в новой сессии те же `subagentId` продолжаются в
 копиях. Сессия только для чтения (SESM-12) ходов не выполняет, поэтому инструменты в ней не
 вызываются.
@@ -859,7 +1019,7 @@ Fork родителя (§17.6.7) копирует журналы детей: в 
 
 **ACP и клиент.** Стандартная проекция §13.7: `tool_call` с `kind: "think"`; title —
 `Subagent <agent>: <description> (follow-up <run>)`, `… (resume <run>)`, `Observe subagent <id>`;
-у `task_send`/`task_resume` строки прогресса и итог — как у `task` (§17.3.7). Снимок доски
+у `agent_send`/`agent_resume` строки прогресса и итог — как у `agent` (§17.3.7). Снимок доски
 (`_codelab/subagents/update`, `/list`) получает поля `run` и `followUps` — расширение через
 OpenSpec вместе с доской; `_codelab/subagents/history` отдаёт `parent_message` как
 `user_message_chunk` с `_meta.codelab.subagentRun: <run>`, `subagent_resume` пропускает.
@@ -871,49 +1031,49 @@ OpenSpec вместе с доской; `_codelab/subagents/history` отдаёт
 
 | Случай | Текст |
 |---|---|
-| ребёнок работает | `Subagent <id> is still running (state: <state>). Wait for its report with task_status or cancel it with task_cancel.` |
-| `task_send` к незаконченному | `Subagent <id> did not finish its last run (<failure>). Use task_resume to continue it.` |
-| `task_resume` к ожидающему | `Subagent <id> finished its last run (<status>). Use task_send to give it a new instruction.` |
-| лимит продолжений | `Follow-up limit reached for subagent <id>: at most <N> follow-ups. Start a new task instead.` |
+| ребёнок работает | `Subagent <id> is still running (state: <state>). Wait for its report with agent_status or cancel it with agent_cancel.` |
+| `agent_send` к незаконченному | `Subagent <id> did not finish its last run (<failure>). Use agent_resume to continue it.` |
+| `agent_resume` к ожидающему | `Subagent <id> finished its last run (<status>). Use agent_send to give it a new instruction.` |
+| лимит продолжений | `Follow-up limit reached for subagent <id>: at most <N> follow-ups. Start a new subagent instead.` |
 | лимит resume | `Resume limit reached for subagent <id>: at most <N> resumes.` |
 | журнал ребёнка не открывается | `Subagent <id> cannot be continued: its journal is unavailable (<reason>).` |
-| пустое `message` | `Invalid task_send: message must be 1-32768 characters.` |
+| пустое `message` | `Invalid agent_send: message must be 1-32768 characters.` |
 
 **Инварианты** (дополняют §17.3.12):
 
 * **SUB-17.** Продолжение не создаёт нового ребёнка: прогон `run ≥ 2` идёт в той же дочерней сессии и
   том же журнале; история прежних прогонов в журнале не меняется (SES-1).
 * **SUB-18.** Набор инструментов прогона — подмножество набора первого прогона и текущего набора
-  родителя; режим и правила вычисляются как при `task` (SUB-1, SUB-2); `task_send`/`task_resume`
-  решаются по ключу разрешения `task` того же типа.
-* **SUB-19.** У ребёнка не больше одного активного прогона; `task_send` принимается только ожидающим
-  ребёнком, `task_resume` — только незаконченным.
-* **SUB-20.** `task_resume` не повторяет вызовы, у которых в журнале ребёнка есть результат
+  родителя; режим и правила вычисляются как при `agent` (SUB-1, SUB-2); `agent_send`/`agent_resume`
+  решаются по ключу разрешения `agent` того же типа.
+* **SUB-19.** У ребёнка не больше одного активного прогона; `agent_send` принимается только ожидающим
+  ребёнком, `agent_resume` — только незаконченным.
+* **SUB-20.** `agent_resume` не повторяет вызовы, у которых в журнале ребёнка есть результат
   (SES-9, SES-10); сообщение прогона, не попавшее в журнал ребёнка, при resume доставляется один раз.
 * **SUB-21.** Прогонов сверх первого у ребёнка не больше `max_follow_ups`, из них resume — не больше
   `max_resumes`; каждый прогон учитывается в `max_per_turn`, `max_concurrent`, бюджете хода
   родителя (SUB-11) и, если фоновый, в `max_background`.
-* **SUB-22.** `task_observe` ничего не пишет ни в журнал ребёнка, ни в журнал родителя и не меняет
+* **SUB-22.** `agent_observe` ничего не пишет ни в журнал ребёнка, ни в журнал родителя и не меняет
   состояние ребёнка; его результат всегда `untrusted`.
 
 **Как проверить.**
 
-* `core/task-send-to-idle-child` (`subagent_follow_up_test.dart`, scripted LLM): `task` → отчёт;
-  `task_send` тому же id → ребёнок получает второе user-сообщение с `origin: "parent_message"` в
+* `core/agent-send-to-idle-child` (`subagent_follow_up_test.dart`, scripted LLM): `agent` → отчёт;
+  `agent_send` тому же id → ребёнок получает второе user-сообщение с `origin: "parent_message"` в
   том же файле, запрос к модели ребёнка содержит историю прогона 1; результат `<subagent-report …
-  run="2">`; `task_send` работающему ребёнку и ребёнку с `failed(error)` — тексты таблицы ошибок;
-  шестой `task_send` при `max_follow_ups = 5` — ошибка лимита (SUB-17, SUB-19, SUB-21).
-* `core/task-resume-failed-child` (`subagent_resume_follow_up_test.dart`): ребёнок падает на
-  `ErrorEvent` после двух выполненных `exec` → `task_resume` → fake-инструмент вызван ровно два
+  run="2">`; `agent_send` работающему ребёнку и ребёнку с `failed(error)` — тексты таблицы ошибок;
+  шестой `agent_send` при `max_follow_ups = 5` — ошибка лимита (SUB-17, SUB-19, SUB-21).
+* `core/agent-resume-failed-child` (`subagent_resume_follow_up_test.dart`): ребёнок падает на
+  `ErrorEvent` после двух выполненных `exec` → `agent_resume` → fake-инструмент вызван ровно два
   раза, сообщение `subagent_resume` с текстом шаблона; процесс убит во время прогона 2 → после
-  `open` прогон `interrupted`, повторный `task_resume` работает (SUB-20).
+  `open` прогон `interrupted`, повторный `agent_resume` работает (SUB-20).
 * `subagent_follow_up_tools_test.dart`: родитель потерял `exec` после прогона 1 → прогон 2 без
-  `exec`; «разрешить всегда» на `task` `general` действует на `task_send` к `general`;
+  `exec`; «разрешить всегда» на `agent` `general` действует на `agent_send` к `general`;
   `rejectAlways` — тоже (SUB-18).
 * `subagent_observe_test.dart`: `last: 3` у работающего ребёнка — три последние строки, журналы
   побайтово не изменены; `include_tools`; обрезка `observe_max_bytes`; отменённый в очереди —
   текст «no history» (SUB-22).
-* `acp/prompt-subagent-follow-up`: `tool_call` `task_send` с `kind: "think"` и title
+* `acp/prompt-subagent-follow-up`: `tool_call` `agent_send` с `kind: "think"` и title
   `… (follow-up 2)`, строки прогресса, `completed` с телом отчёта.
 
 ## 17.3.9. Headless: ожидание перед выходом (H-05)
@@ -962,9 +1122,10 @@ codelab -p, после ответа на session/prompt (любого stopReason
 
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
-| `enabled` | bool | `true` | `false` — инструмент `task` не регистрируется (правило «выключено — невидимо», §10.9) |
-| `max_concurrent` | int | `3` | слотов семафора на родительскую сессию; 1–8, иначе `ConfigException` |
-| `max_per_turn` | int | `10` | запусков `task` за ход родителя; 1–50 |
+| `enabled` | bool | `true` | `false` — инструмент `agent` не регистрируется (правило «выключено — невидимо», §10.9) |
+| `max_depth` | int | `3` | наибольшая глубина потомка; 1–3, иначе `ConfigException`; `1` — у детей нет `agent` |
+| `max_concurrent` | int | `3` | слотов на всё дерево корневой сессии (§17.3.4); 1–8, иначе `ConfigException` |
+| `max_per_turn` | int | `10` | запусков `agent` во всём дереве за ход корневой сессии; 1–50 |
 | `max_steps` | int | `30` | `TurnBudget.maxSteps` ребёнка |
 | `max_tokens` | int | нет | `TurnBudget.maxTokens` ребёнка |
 | `max_cost` | float | нет | `TurnBudget.maxCost` ребёнка, USD |
@@ -974,22 +1135,27 @@ codelab -p, после ответа на session/prompt (любого stopReason
 | `heartbeat_interval` | duration | `"15s"` | строка прогресса при отсутствии событий |
 | `cancel_grace` | duration | `"10s"` | ожидание остановки детей после отмены хода |
 | `drain_timeout` | duration | `"60s"` | значение `--drain-timeout` по умолчанию для `codelab -p` (§17.3.9) |
-| `background` | bool | `true` | фоновый режим (§17.3.8): параметр `run_in_background` и инструменты `task_status`, `task_cancel`; `false` — параметра и инструментов нет в схемах |
+| `background` | bool | `true` | фоновый режим (§17.3.8): параметр `run_in_background` и инструменты `agent_status`, `agent_cancel`; `false` — параметра и инструментов нет в схемах |
 | `max_background` | int | `4` | одновременно активных фоновых детей сессии; 0–8 |
 | `auto_wake` | bool | `true` | клиентская политика REPL и app: будить агента (`_meta.codelab.wake`), когда есть недоставленные уведомления и пользователь не печатает; без согласованного `subagentWake` не действует |
 | `max_wakes` | int | `3` | значение `--max-wakes` по умолчанию для `codelab -p` (§17.3.9) |
-| `follow_ups` | bool | `true` | инструменты `task_send`, `task_resume`, `task_observe` (§17.3.8.1); `false` — их нет в схемах |
+| `follow_ups` | bool | `true` | инструменты `agent_send`, `agent_resume`, `agent_observe` (§17.3.8.1); `false` — их нет в схемах |
 | `max_follow_ups` | int | `5` | прогонов ребёнка сверх первого; 0–20 |
-| `max_resumes` | int | `2` | из них через `task_resume`; 0–`max_follow_ups` |
+| `max_resumes` | int | `2` | из них через `agent_resume`; 0–`max_follow_ups` |
 | `idle_keep` | duration | `"2m"` | сколько дочерняя сессия остаётся открытой после отчёта; потом закрывается и для продолжения открывается из журнала |
-| `observe_default` | int | `10` | `last` у `task_observe` по умолчанию |
+| `observe_default` | int | `10` | `last` у `agent_observe` по умолчанию |
 | `observe_max` | int | `50` | максимум `last`; 1–200 |
-| `observe_message_max_chars` | int | `2000` | обрезка одного сообщения в `task_observe` |
-| `observe_max_bytes` | int | `16384` | предел результата `task_observe` |
+| `observe_message_max_chars` | int | `2000` | обрезка одного сообщения в `agent_observe` |
+| `observe_max_bytes` | int | `16384` | предел результата `agent_observe` |
 
 Модель субагента по умолчанию — роль `subagent` (`llm.roles.subagent.models = [...]`, L-10);
 `explore`, `review`, `plan` сначала пробуют роли `smol`, `slow`, `plan`. Проектный конфиг может
-только ужесточать `subagents` (меньшие лимиты, `enabled = false`), как `permissions` (§15.3).
+только ужесточать `subagents` (меньшие лимиты, в том числе `max_depth`, `enabled = false`), как `permissions` (§15.3).
+
+Базовый этап вводит ключи `enabled`, `max_depth`, `max_concurrent`, `max_per_turn`, `max_steps`,
+`max_tokens`, `max_cost`, `max_duration`, `report_max_bytes`, `progress_interval`,
+`heartbeat_interval`, `cancel_grace`. Остальные ключи таблицы появляются со своими этапами: ключ
+схемы без потребителя давал бы `config.key.not_applied` (CFG-5).
 
 Флаги `codelab -p --drain-timeout <длительность>` и `--max-wakes <n>` переопределяют `drain_timeout` и `max_wakes`. Проектный конфиг может выключить `background` и уменьшить `max_background`, но не включить их.
 
@@ -999,8 +1165,8 @@ codelab -p, после ответа на session/prompt (любого stopReason
 `standard`, ACP-сессия `01JB8Q2W6R9T3M5K7N1P4X8Z0C`. Модель родителя отвечает двумя вызовами:
 
 ```json
-[{"type":"toolCall","id":"call_3","name":"task","arguments":{"description":"Find token validation","agent":"explore","prompt":"Find where access tokens are validated in this repository. Report file paths with line ranges and a one-line summary of each check."}},
- {"type":"toolCall","id":"call_4","name":"task","arguments":{"description":"Check token tests","agent":"review","prompt":"List tests under test/ that cover access token validation. Run `git diff --stat` to see if validation code changed. Report covered and uncovered cases.","output_schema":{"type":"object","required":["covered","uncovered"],"properties":{"covered":{"type":"array","items":{"type":"string"}},"uncovered":{"type":"array","items":{"type":"string"}}}}}}]
+[{"type":"toolCall","id":"call_3","name":"agent","arguments":{"description":"Find token validation","type":"explore","prompt":"Find where access tokens are validated in this repository. Report file paths with line ranges and a one-line summary of each check."}},
+ {"type":"toolCall","id":"call_4","name":"agent","arguments":{"description":"Check token tests","type":"review","prompt":"List tests under test/ that cover access token validation. Run `git diff --stat` to see if validation code changed. Report covered and uncovered cases.","output_schema":{"type":"object","required":["covered","uncovered"],"properties":{"covered":{"type":"array","items":{"type":"string"}},"uncovered":{"type":"array","items":{"type":"string"}}}}}}]
 ```
 
 Оба вызова — tier `read` в режиме `standard` → разрешены без вопроса. Ребёнок `explore` получает
@@ -1009,7 +1175,7 @@ codelab -p, после ответа на session/prompt (любого stopReason
 вопроса. Кадры на проводе (уведомления сокращены до `update`):
 
 ```json
-{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","update":{"sessionUpdate":"tool_call","toolCallId":"call_3","title":"Subagent explore: Find token validation","kind":"think","status":"pending","rawInput":{"description":"Find token validation","agent":"explore","prompt":"Find where access tokens are validated …"}}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","update":{"sessionUpdate":"tool_call","toolCallId":"call_3","title":"Subagent explore: Find token validation","kind":"think","status":"pending","rawInput":{"description":"Find token validation","type":"explore","prompt":"Find where access tokens are validated …"}}}}
 {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","update":{"sessionUpdate":"tool_call","toolCallId":"call_4","title":"Subagent review: Check token tests","kind":"think","status":"pending","rawInput":{"…":"…"}}}}
 {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_3","status":"in_progress"}}}
 {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_4","status":"in_progress"}}}
@@ -1023,7 +1189,7 @@ codelab -p, после ответа на session/prompt (любого stopReason
 Что видит модель родителя в результатах (после ограды §6.3.6):
 
 ```text
-<untrusted-content source="task">
+<untrusted-content source="agent">
 <subagent-report id="sub_k3f9a1c2" agent="explore" status="completed" steps="4" tool_calls="7">
 Token validation:
 - lib/auth/token.dart:14-52 verifyToken: signature and expiry
@@ -1033,7 +1199,7 @@ Token validation:
 ```
 
 ```text
-<untrusted-content source="task">
+<untrusted-content source="agent">
 <subagent-report id="sub_p2r7t9w1" agent="review" status="completed" steps="3" tool_calls="4">
 {"covered":["bad signature","expired token"],"uncovered":["missing header"]}
 </subagent-report>
@@ -1047,12 +1213,12 @@ Token validation:
 ```mermaid
 sequenceDiagram
     participant PL as "Цикл родителя"
-    participant TT as "TaskTool"
+    participant TT as "SubagentTool"
     participant SM as "SubagentManager"
     participant CH as "Дочерний AgentSession"
     participant PG as "PermissionGate родителя"
     participant CL as "ACP-клиент"
-    PL->>TT: execute task, agent review
+    PL->>TT: execute agent, type review
     TT->>SM: spawn(spec, cancel хода)
     SM->>SM: слот семафора, журнал ребёнка, запись subagent running
     SM-->>PL: SubagentStarted
@@ -1079,8 +1245,8 @@ stateDiagram-v2
     [*] --> queued: spawn
     queued --> running: слот получен, журнал создан
     queued --> cancelled: отмена в очереди
-    running --> waiting: запрос разрешения
-    waiting --> running: решение пользователя
+    running --> waiting: запрос разрешения или ожидание своих детей
+    waiting --> running: решение пользователя или слот после детей
     running --> completed: отчёт принят
     running --> failed: ошибка, бюджет или невалидный отчёт
     running --> cancelled: отмена токена
@@ -1090,38 +1256,51 @@ stateDiagram-v2
     cancelled --> [*]
 ```
 
-Состояния `completed`, `failed`, `cancelled` — терминальные для прогона; обратного перехода нет: продолжение (`task_send`, `task_resume`) — новый прогон с новым `report` (§17.3.8.1). Ремонт
+Состояния `completed`, `failed`, `cancelled` — терминальные для прогона; обратного перехода нет: продолжение (`agent_send`, `agent_resume`) — новый прогон с новым `report` (§17.3.8.1). Ремонт
 отчёта по схеме (§17.3.5, шаг 3) идёт в состоянии `running`.
 
 ## 17.3.12. Инварианты
 
-1. **SUB-1.** Набор инструментов ребёнка — подмножество набора схем текущего шага родителя; `task` и `update_plan` в нём отсутствуют всегда.
-2. **SUB-2.** Эффективный режим ребёнка не мягче режима родителя ни в один момент: он вычисляется при каждом решении как `narrow(parentMode(), type.mode)`; запреты уровней объединяются. `PolicyRules` у ребёнка те же, что у родителя.
-3. **SUB-3.** Каждый запрос разрешения ребёнка проходит через gate родителя с `sessionId` родителя, `toolCallId` вида `<parentToolCallId>/<childToolCallId>` и title с префиксом `[<agent>: <description>] `; запросы детей одной сессии уходят пользователю по одному.
-4. **SUB-4.** Блокирующий ребёнок не переживает вызов `task`, который его запустил: `ToolCallFinished(task)` эмитится только после терминального состояния хэндла (или истечения `cancel_grace`). Фоновый ребёнок (§17.3.8) не переживает родительскую сессию: его токен — потомок токена сессии, `closeAll` его отменяет, а `session/cancel` хода — нет.
-5. **SUB-5.** Одновременно в состоянии `running` или `waiting` не больше `max_concurrent` детей одной сессии; запусков за ход — не больше `max_per_turn`; ребёнок, отменённый в очереди, не делает ни одного запроса к модели и не создаёт журнал.
-6. **SUB-6.** Отмена токена хода родителя отменяет всех его блокирующих детей (фоновых — нет: их токен — потомок токена сессии, §17.3.8); отмена ребёнка не отменяет родителя и других детей.
-7. **SUB-7.** В контекст модели родителя от ребёнка попадает только результат `task`: обёртка `<subagent-report>` внутри ограды `untrusted-content`; сообщения ребёнка в транскрипт и журнал родителя не попадают.
+1. **SUB-1.** Набор инструментов ребёнка — подмножество набора схем текущего шага родителя; `agent` в нём есть только при `depth < max_depth`; инструменты списка задач — только детский вариант (чтение и статус своих пунктов, §17.16.4); `update_plan` в ядре больше нет.
+2. **SUB-2.** Эффективный режим ребёнка не мягче режима родителя ни в один момент: он вычисляется при каждом решении как `narrow(parentMode(), type.mode)`; запреты уровней объединяются; для потомка любой глубины сужение идёт по всей цепочке предков. `PolicyRules` и хранилище решений «всегда» — общие для дерева, хранилище — корневой сессии.
+3. **SUB-3.** Каждый запрос разрешения потомка любой глубины проходит через gate корневой сессии с её `sessionId`, `toolCallId`-цепочкой от вызова `agent` корня и title с префиксом `[<agent>: <description>] `; запросы потомков одного дерева уходят пользователю по одному.
+4. **SUB-4.** Блокирующий ребёнок не переживает вызов `agent`, который его запустил: `ToolCallFinished(agent)` эмитится только после терминального состояния хэндла (или истечения `cancel_grace`). Фоновый ребёнок (§17.3.8) не переживает родительскую сессию: его токен — потомок токена сессии, `closeAll` его отменяет, а `session/cancel` хода — нет.
+5. **SUB-5.** Одновременно слот держат не больше `max_concurrent` потомков одного дерева (в `running` или `waiting` с `waitingFor: approval`; ребёнок, ждущий своих детей, слота не держит); запусков во всём дереве за ход корневой сессии — не больше `max_per_turn`; ребёнок, отменённый в очереди, не делает ни одного запроса к модели и не создаёт журнал.
+6. **SUB-6.** Отмена токена хода родителя отменяет всех его блокирующих детей и, каскадом, их потомков (фоновых — нет: их токен — потомок токена сессии, §17.3.8); отмена ребёнка не отменяет родителя, других детей и их потомков.
+7. **SUB-7.** В контекст модели родителя от ребёнка попадает только результат `agent`: обёртка `<subagent-report>` внутри ограды `untrusted-content`; сообщения ребёнка в транскрипт и журнал родителя не попадают.
 8. **SUB-8.** При заданной `output_schema` отчёт `completed` всегда валиден по схеме; ремонт выполняется не более одного раза; иначе — `failed` с `invalid_output`.
-9. **SUB-9.** История ребёнка — в отдельном журнале в каталоге `<файл родителя без .jsonl>/subagents/`; заголовок содержит `parent.sessionId` и `parent.toolCallId`; журнал родителя содержит записи `subagent` со ссылкой на журнал; дочерние журналы не входят в `session/list`.
-10. **SUB-10.** Итоговая запись `subagent` с отчётом пишется (`durable`) до `ToolCallFinished(task)`. После сбоя ребёнок не перезапускается: вызов `task` получает результат из итоговой записи, если она есть, иначе — `interrupted`.
-11. **SUB-11.** Usage блокирующих детей входит в usage хода родителя и в проверку его `maxTokens`/`maxCost`; usage фонового ребёнка — в usage сессии и хода, в котором доставлено его уведомление.
-12. **SUB-12.** Вызовы инструментов ребёнка не отправляются клиенту как `tool_call`; от ребёнка на провод уходят только запросы разрешения (и, при согласованном расширении, снимки доски).
+9. **SUB-9.** История потомка любой глубины — в отдельном журнале в каталоге `<файл корневой сессии без .jsonl>/subagents/`; заголовок содержит `parent.sessionId` (прямой родитель), `parent.rootSessionId`, `parent.toolCallId` и `parent.depth`; журнал прямого родителя содержит записи `subagent` со ссылкой на журнал; дочерние журналы не входят в `session/list`.
+10. **SUB-10.** Итоговая запись `subagent` с отчётом пишется (`durable`) до `ToolCallFinished(agent)`. После сбоя ребёнок не перезапускается: вызов `agent` получает результат из итоговой записи, если она есть, иначе — `interrupted`.
+11. **SUB-11.** Usage блокирующих детей входит в usage хода родителя и в проверку его `maxTokens`/`maxCost`, транзитивно до корневой сессии; потомок останавливается, когда исчерпан бюджет его или любого предка; usage фонового ребёнка — в usage сессии и хода, в котором доставлено его уведомление.
+12. **SUB-12.** Клиенту без `clientCapabilities._meta.codelab.subagentToolCalls` вызовы инструментов потомков не отправляются как `tool_call`; от потомков к нему уходят только запросы разрешения (и, при согласованном расширении, снимки доски). Клиенту с `subagentToolCalls` вызовы потомков уходят `tool_call`/`tool_call_update` с цепочкой `toolCallId` и `_meta.codelab.parentToolCallId`, а при завершении вызова `agent` открытых вызовов его поддерева не остаётся (этап 2); тексты и мысли потомков не отправляются никому.
 13. **SUB-13.** Агент никогда не начинает ход сам: уведомление фонового ребёнка входит в контекст только внутри хода — через `steer` идущего хода или в начале хода, открытого `session/prompt` клиента (в том числе пробуждением `_meta.codelab.wake`).
 14. **SUB-14.** Каждое уведомление фонового ребёнка доставляется в контекст родителя ровно один раз: недоставленные восстанавливаются после сбоя по итоговым записям `subagent` без `message` с `origin: "subagent_notice"`; доставленные не повторяются.
 15. **SUB-15.** Фоновый ребёнок не отправляет `session/request_permission`, пока у родителя нет хода: вызов, требующий вопроса, получает отказ `Approval is not available: the session is idle…`; решения без вопроса применяются как обычно.
 16. **SUB-16.** Одновременно активных фоновых детей сессии не больше `max_background`; фоновые и блокирующие дети делят один семафор `max_concurrent` и общий счётчик `max_per_turn`.
-17. **SUB-17 – SUB-22.** Продолжение работы с ребёнком (`task_send`, `task_resume`, `task_observe`) — §17.3.8.1, «Инварианты».
+17. **SUB-17 – SUB-22.** Продолжение работы с ребёнком (`agent_send`, `agent_resume`, `agent_observe`) — §17.3.8.1, «Инварианты».
+18. **SUB-23.** Держатель слота дерева никогда не ждёт другого слота: ребёнок, ждущий своих детей, слот возвращает и получает его снова раньше новых детей очереди. Поэтому при любом `max_depth` и `max_concurrent ≥ 1` дерево не попадает во взаимоблокировку на слотах.
+19. **SUB-24.** Глубина потомка не больше `max_depth` (≤ 3): у потомка глубины `max_depth` инструмента `agent` нет. Каждое событие потомка доходит до потока корневой сессии ровно одной обёрткой `SubagentActivity` с его `subagentId`, `path` и `parentToolCallId`.
 
 ## 17.3.13. Обоснование решения
 
 * **Тип субагента = `AgentDefinition`.** Один формат (§15.8) для «агента сессии» и «типа задачи»:
-  пользователь пишет `reviewer.md` один раз и получает и опцию `agent`, и тип `task`. Поле
+  пользователь пишет `reviewer.md` один раз и получает и опцию `agent`, и тип `agent`. Поле
   `scope` нужно, чтобы определение-задача (например, генератор JSON-отчёта) не засоряло список
   агентов сессии.
-* **Глубина 1, без настройки.** Вложенные дети умножают стоимость геометрически, а общий семафор
-  при глубине 2 даёт взаимоблокировку: все слоты заняты детьми, которые ждут слотов для внуков.
-  Отсутствие `task` в наборе ребёнка исключает это по построению.
+* **Глубина до 3, настройкой (решение пользователя 2026-11-09; было — «глубина 1 без
+  настройки»).** Цель — поведение уровня Claude Code, где субагент может поручить часть работы
+  своему субагенту. Прежние возражения сняты устройством, а не запретом:
+  * *взаимоблокировка слотов* (все слоты у детей, которые ждут слотов для внуков) невозможна:
+    ждущий детей родитель слот возвращает, держатели слотов чужих слотов не ждут (SUB-23);
+  * *геометрический рост стоимости* ограничен лимитами дерева, а не уровня: один `max_concurrent`,
+    один `max_per_turn` и бюджет хода корневой сессии, который проверяют все потомки (SUB-11);
+  * *потеря контроля пользователя*: все вопросы потомков идут через gate корня с адресом
+    `_meta.codelab.subagent`, режим сужается по всей цепочке (SUB-2, SUB-3).
+  Потолок 3 — граница здравого смысла и длины цепочки `toolCallId`; `max_depth: 1` возвращает
+  прежнее поведение. Альтернативы: (а) отдельный семафор на каждый уровень — без
+  взаимоблокировки, но параллельность растёт с глубиной и не ограничена одним числом; (б)
+  резервирование слотов под внуков при запуске ребёнка — простаивающие слоты и сложный учёт;
+  (в) оставить глубину 1 — противоречит решению пользователя.
 * **Режим вычисляется при каждом решении.** Снимок режима на старте позволил бы ребёнку
   продолжать править файлы после того, как пользователь переключил родителя в `plan`.
 * **Разрешения через gate родителя, `allowAlways` общий.** У ребёнка нет своего клиента: ACP
@@ -1148,28 +1327,47 @@ stateDiagram-v2
   показать; зависший запрос остановил бы ребёнка навсегда. Отказ с понятной причиной оставляет
   ребёнку возможность закончить и описать в отчёте, что нужно одобрить.
 * **Отмена хода не трогает фоновых детей.** Пользователь, прервавший текущий ответ, не обязательно
-  хочет потерять долгую фоновую работу; для неё есть `/tasks cancel` и `task_cancel`.
+  хочет потерять долгую фоновую работу; для неё есть `/tasks cancel` и `agent_cancel`.
 * **Лимит 3 по умолчанию.** Больше параллельных детей упираются в rate limit провайдера и в
   очередь одобрений; 3 дают выигрыш на типичной задаче «исследовать два-три места кода».
+* **Источник поведения.** Ориентир — наблюдаемое поведение Claude Code (Anthropic): субагенты с
+  отдельным контекстом, вложенность и общий список задач. Код, промпты, описания инструментов и
+  тексты Claude Code не воспроизводятся; все тексты раздела написаны заново (`AGENTS.md` §5,
+  [§7а](../dart-agent-and-clients/07-decision-sources.md#7а-политика-стороннего-кода)). Записи в
+  `THIRD_PARTY_NOTICES.md` не нужно: конкретный внешний алгоритм, список или таблица не повторяются.
 
 ## 17.3.14. Как проверить
 
-* `task_tool_schema_test.dart`: `enum` поля `agent` — встроенные типы и определения со `scope`
+* `agent_tool_schema_test.dart`: `enum` поля `type` — встроенные типы и определения со `scope`
   `subagent`/`both`, по алфавиту; определение со `scope: session` отсутствует; описание
   инструмента рендерится с `maxConcurrent` и `agentList`; неверные `description`/`prompt` —
   ошибки с текстами §17.3.2, ребёнок не создан.
 * `subagent_tools_intersection_test.dart`: родитель с профилем без `exec` + тип `review` →
-  набор `read`, `ls`, `search`; `task` и `update_plan` отсутствуют всегда (SUB-1).
+  набор `read`, `ls`, `search`; при `max_depth: 3` у ребёнка глубины 1 и 2 есть `agent`, у глубины 3
+  нет; при `max_depth: 1` `agent` нет у ребёнка; инструменты списка задач у ребёнка — детский
+  вариант (SUB-1, SUB-24).
+* `subagent_nested_slots_test.dart` (`core/subagent-nested-no-deadlock`): `max_concurrent: 1`,
+  `max_depth: 3`, ребёнок запускает внука, внук — правнука → все трое завершаются, ни один не
+  ждёт слот дольше работы держателя; родитель, дождавшийся детей, получает слот раньше нового
+  ребёнка, поставленного в очередь позже (SUB-23); пакет из трёх `agent` корня, каждый из которых
+  запускает по два внука, при `max_concurrent: 2` — в любой момент не больше двух держателей слота
+  (SUB-5).
+* `subagent_tree_budget_test.dart`: бюджет хода корня `maxTokens` исчерпан usage внука, пока корень
+  и ребёнок ждут → внук останавливается на своей границе шага с `budget_exceeded:tokens`, usage
+  внука входит в `TurnEnded.usage` корня (SUB-11); `max_per_turn: 3` считает запуски внуков.
+* `subagent_activity_test.dart`: события внука приходят в поток корня одной обёрткой
+  `SubagentActivity` с `depth: 2`, `path: [id ребёнка]` и `parentToolCallId` вызова `agent` ребёнка;
+  журнал корня их не содержит; журнал внука — в `subagents/` корня (SUB-9, SUB-24).
 * `subagent_mode_narrow_test.dart`: таблица `parentMode × type.mode` из §17.3.3, шаг 4; родитель
   переключён в `plan` посреди работы ребёнка → следующий `write` ребёнка отклонён (SUB-2).
 * `subagent_permission_prefix_test.dart`: запрос ребёнка приходит в fake gate родителя с
   `toolCallId` `call_3/call_1`, title с префиксом; два ребёнка просят одновременно → второй
   запрос уходит только после ответа на первый; `allow_always` в ребёнке действует для родителя;
   `reject_always` родителя действует для ребёнка (SUB-3).
-* `core/task-two-children-parallel` (`task_parallel_test.dart`, scripted LLM для родителя и
-  детей): два `task` в одном ответе — оба ребёнка стартуют до завершения любого; `max_concurrent
+* `core/agent-two-children-parallel` (`agent_parallel_test.dart`, scripted LLM для родителя и
+  детей): два `agent` в одном ответе — оба ребёнка стартуют до завершения любого; `max_concurrent
   = 1` — второй стартует после первого; порядок результатов в транскрипте — порядок вызовов,
-  `ToolCallFinished` — порядок завершения; четыре `task` при `max_concurrent = 3` — один в
+  `ToolCallFinished` — порядок завершения; четыре `agent` при `max_concurrent = 3` — один в
   `queued`; одиннадцатый вызов при `max_per_turn = 10` — ошибка лимита (SUB-5, LOOP-3).
 * `subagent_cancel_test.dart`: отмена хода родителя → оба ребёнка `cancelled`, `TurnEnded`
   родителя после двух `ToolCallFinished(cancelled)`; ребёнок в очереди не вызывает модель и не
@@ -1179,7 +1377,7 @@ stateDiagram-v2
   JSON внутри fenced-блока извлекается; отчёт длиннее `report_max_bytes` усечён с пометкой
   (SUB-8).
 * `subagent_report_wrapper_test.dart`: обёртка и атрибуты для каждого исхода таблицы §17.3.5;
-  `</subagent-report` в тексте экранирован; результат внутри `untrusted-content source="task"`
+  `</subagent-report` в тексте экранирован; результат внутри `untrusted-content source="agent"`
   (SUB-7).
 * `subagent_budget_test.dart`: `max_steps = 2` у ребёнка → `failed` с
   `budget_exceeded:steps`; usage ребёнка входит в `TurnEnded.usage` родителя и останавливает
@@ -1197,7 +1395,13 @@ stateDiagram-v2
 * `acp/prompt-subagent-permission`: ребёнок `review` просит `exec`; кадр
   `session/request_permission` с `sessionId` родителя, `toolCallId` `call_4/call_2`, префиксом
   title и `_meta.codelab.subagent`; `reject_once` → ребёнок продолжает и сдаёт отчёт (PERM-7).
-* `acp/session-load-subagent-interrupted`: реплей после сбоя показывает завершённый `task` как
+* `acp/prompt-subagent-nested-permission`: внук глубины 2 просит `exec` → `toolCallId`
+  `call_1/call_1/call_1`, `_meta.codelab.subagent` с `depth: 2`, `path` из id ребёнка и
+  `parentToolCallId: "call_1"` (SUB-3).
+* `acp/initialize-codelab-extensions`: клиент объявил `clientCapabilities._meta.codelab: {}` →
+  ответ содержит `agentCapabilities._meta.codelab.subagents` с `maxDepth` и `tasks`; клиент без
+  этого объявления получает ответ `acp/initialize-capabilities` без изменений.
+* `acp/session-load-subagent-interrupted`: реплей после сбоя показывает завершённый `agent` как
   `completed`, прерванный — `failed` с `_meta.codelab.outcome: "interrupted"`.
 * `cli/headless-drains-background-job`: scripted-агент объявляет расширение списка фоновой
   работы и после ответа на `session/prompt` сообщает один элемент `running`, через 2 с —
@@ -1209,7 +1413,7 @@ stateDiagram-v2
   завершён записью результата `cancelled`.
 * `acp_projection_exhaustive_test.dart` (ACP-6): строки таблицы §17.3.7 есть для
   `SubagentStarted`, `SubagentProgress`, `SubagentFinished`.
-* `subagent_background_test.dart` (`core/task-background-notice-steered`): `task` с
+* `subagent_background_test.dart` (`core/agent-background-notice-steered`): `agent` с
   `run_in_background: true` возвращается сразу с текстом `Started background subagent …`, ход
   родителя продолжается; ребёнок завершается во время хода → уведомление доставлено `steer` на
   ближайшей границе шага; ребёнок завершается после хода → уведомление входит в контекст перед
@@ -1219,15 +1423,15 @@ stateDiagram-v2
   запрос через gate с префиксом; после хода → отказ `Approval is not available: the session is
   idle…` без кадра `session/request_permission`; вызов из `allowAlways` исполняется без вопроса
   (SUB-15).
-* `subagent_background_resume_test.dart` (`core/task-background-notice-once`): процесс убит после
+* `subagent_background_resume_test.dart` (`core/agent-background-notice-once`): процесс убит после
   итоговой записи фонового ребёнка, но до доставки → после `open` уведомление доставлено при
   следующем `prompt()` ровно один раз; убит до итоговой записи → `interrupted`, ребёнок не
   перезапущен; повторный `open` после доставки уведомления не повторяет (SUB-14).
 * `subagent_background_limits_test.dart`: пятый фоновый при `max_background = 4` → ошибка
-  лимита; фоновые и блокирующие делят `max_concurrent` (SUB-16); `task_status` с
-  `wait_seconds: 5` возвращает уведомление ребёнка, завершившегося за время ожидания; `task_cancel`
+  лимита; фоновые и блокирующие делят `max_concurrent` (SUB-16); `agent_status` с
+  `wait_seconds: 5` возвращает уведомление ребёнка, завершившегося за время ожидания; `agent_cancel`
   неизвестного id — текст `Subagent <id> is not running…`.
-* `acp/prompt-subagent-background`: `tool_call` `task` сразу `completed` с текстом запуска; ответ
+* `acp/prompt-subagent-background`: `tool_call` `agent` сразу `completed` с текстом запуска; ответ
   `end_turn`; следующий `session/prompt` — модель получает уведомление перед сообщением
   пользователя; при реплее (`session/load`) уведомление не отправляется как `user_message_chunk`.
 * `acp/slash-tasks`: `/tasks` перечисляет фоновых детей, `/tasks cancel <id>` отменяет; модель не

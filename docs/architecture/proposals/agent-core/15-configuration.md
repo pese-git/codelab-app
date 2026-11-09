@@ -1032,7 +1032,7 @@ Do not modify files.
 | `model` | string | нет | `"<provider>/<model>"` из конфига (§15.4); неизвестная модель — ошибка определения |
 | `mode` | string | нет | `plan`, `ask`, `standard`, `accept-edits`, `bypass` (§13.6); `autopilot` запрещён (CFG-4) |
 | `tools` | string[] | нет | список имён инструментов; `*` в конце — префиксный шаблон (`mcp__github__*`); без поля — все инструменты профиля (для субагента — все инструменты родителя, §17.3.3) |
-| `scope` | `session` \| `subagent` \| `both` | нет | после MVP: где определение доступно — опция `agent` сессии, тип в `task` (§17.3.2) или оба; по умолчанию `both` |
+| `scope` | `session` \| `subagent` \| `both` | нет | после MVP: где определение доступно — опция `agent` сессии, тип в `agent` (§17.3.2) или оба; по умолчанию `both` |
 | тело | text | да | непустое; не больше 32 КиБ |
 
 Неизвестное поле frontmatter — ошибка определения (как CFG-1). Разбор — полноценный YAML
@@ -1058,7 +1058,7 @@ final class AgentDefinition {
 // Определения сессии приходят из порта хоста ProjectFilesSource при createSession/loadSession
 // (parseAgentDefinitions → AgentSession.agents, design.md change add-agent-project-files, D1, D10);
 // ACP-адаптер строит из AgentSession.agents опцию `agent` (scope session | both),
-// после MVP TaskTool — enum типов (scope subagent | both, §17.3.2).
+// после MVP SubagentTool — enum типов (scope subagent | both, §17.3.2).
 ```
 
 **Алгоритм применения.**
