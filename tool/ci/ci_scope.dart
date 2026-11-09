@@ -152,13 +152,21 @@ const _embeddedCli = {'codelab_cli', 'codelab_embedded'};
 /// Точка входа `web-compile` собирает ядро агента и его зависимости.
 const _webSmoke = 'codelab_agent_core';
 
+/// Матрица целей: документ, который разбирает `parity_evidence_test` сторожа.
+///
+/// Почему: разбор (`switch-default-agent-to-dart`, D2) ломается от правки
+/// таблицы, а правка только документации обычно не запускает ни одного джоба —
+/// поломка вскрылась бы лишь ночью (D7).
+const _parityMatrix = 'docs/architecture/proposals/agent-parity-goals.md';
+
 /// Считает джобы CI для [changedFiles] (пути от корня репозитория).
 ///
 /// Правила (`AGENTS.md` §21):
 /// * [fullReason] задан (push, `release/*`, ночной запуск) или изменён файл
 ///   вне пакетов workspace и вне документации — полный прогон [fullJobs];
 /// * только документация (`docs/`, `openspec/`, `.claude/`, `*.md` в корне,
-///   `AGENTS.md`, `README.md` и `CHANGELOG.md` пакетов) — без джобов;
+///   `AGENTS.md`, `README.md` и `CHANGELOG.md` пакетов) — без джобов, кроме
+///   матрицы целей [_parityMatrix]: её правка добавляет `guard` (D7);
 /// * иначе `format` по всему репозиторию (он быстрый), `analyze` и `test`
 ///   для затронутых пакетов, `guard` всегда, остальное — по границе.
 CiScope ciScope({
@@ -172,7 +180,9 @@ CiScope ciScope({
 
   final changed = <String>{};
   final outside = <String>[];
+  var matrixChanged = false;
   for (final file in changedFiles) {
+    if (file == _parityMatrix) matrixChanged = true;
     if (_isDocumentation(file)) continue;
     final owner = packages
         .where((pkg) => file.startsWith('${pkg.dir}/'))
@@ -190,7 +200,12 @@ CiScope ciScope({
       reason: 'changed outside workspace packages: ${outside.join(', ')}',
     );
   }
-  if (changed.isEmpty) return const CiScope(full: false, jobs: []);
+  if (changed.isEmpty) {
+    return CiScope(
+      full: false,
+      jobs: [if (matrixChanged) const CiJob('guard', 'guard')],
+    );
+  }
 
   final affected = _withDependents(changed, packages);
   final scoped = (affected.toList()..sort()).join(',');

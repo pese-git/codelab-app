@@ -1,3 +1,6 @@
+import 'package:codelab_acp_transports/codelab_acp_transports.dart'
+    show codelabAgentStdioProfile;
+
 import 'connection_profile.dart';
 import 'profile_ids.dart';
 import 'profile_parsing.dart';
@@ -234,21 +237,34 @@ final class ProfileDraft {
     required this.kind,
     this.id = '',
     this.label = '',
-    this.command = 'codelab-agent',
-    this.args = 'serve --stdio',
+    String? command,
+    String? args,
     this.env = '',
     this.runInProjectDirectory = true,
     this.url = '',
     this.token = const NoToken(),
-  });
+  }) : _command = command,
+       _args = args;
 
   final ProfileKind kind;
   final String id;
   final String label;
-  final String command;
 
-  /// Строка аргументов; разбирает `parseShellWords`.
-  final String args;
+  // Явно заданные значения; `null` — умолчание из [codelabAgentStdioProfile].
+  // Поле, а не `const`-умолчание параметра: свойство константы не является
+  // константным выражением, а литерал `'codelab-agent'` был бы вторым
+  // источником того же значения (design.md change
+  // `switch-default-agent-to-dart`, D10).
+  final String? _command;
+  final String? _args;
+
+  /// Команда stdio-агента; по умолчанию — `command` описания
+  /// [codelabAgentStdioProfile] (`codelab-agent`), без умолчаний Python-агента.
+  String get command => _command ?? codelabAgentStdioProfile.command;
+
+  /// Строка аргументов; разбирает `parseShellWords`. По умолчанию — `args`
+  /// описания [codelabAgentStdioProfile] (`serve --stdio`).
+  String get args => _args ?? codelabAgentStdioProfile.args.join(' ');
 
   /// Строки `KEY=value`; разбирает `parseEnvLines`.
   final String env;

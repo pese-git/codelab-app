@@ -8,6 +8,10 @@ on:
     - cron: "0 3 * * *" # nightly full run of the Dart VM suites
   workflow_dispatch: # full run of any branch on request
 
+# Read-only token: no job writes to the repository or to pull requests.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -60,20 +64,118 @@ jobs:
       - uses: ./.github/actions/prepare
       # MELOS_PACKAGES narrows melos exec to the affected packages; it is set
       # only when non-empty, because an empty value selects no packages at all.
+      #
+      # CODELAB_TEST_REPORT_DIR (machine reports of the Melos scripts) is set
+      # only for the nightly run and workflow_dispatch: pull requests and
+      # pushes keep their output and timing (design.md change
+      # switch-default-agent-to-dart, D7). An empty value means "no reports".
       - env:
           PACKAGES: ${{ matrix.packages }}
+          CODELAB_TEST_REPORT_DIR: >-
+            ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+            && format('{0}/parity-results', github.workspace) || '' }}
         run: |
           if [ -n "$PACKAGES" ]; then export MELOS_PACKAGES="$PACKAGES"; fi
           for s in ${{ matrix.scripts }}; do fvm dart run melos run "$s" || exit 1; done
+      # Reports are published even when the job failed: the parity job names
+      # the Must rows that went red (D7). But never with a leaked secret: the
+      # check runs in the environment of this very job, before the upload
+      # (D16); the upload is skipped when it fails.
+      # Rule: secrets that tests receive must be set at the JOB level
+      # (`env:` of the job), otherwise this step does not see their values and
+      # cannot detect a leak. Today CI has no such secrets.
+      - id: leaks
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        env:
+          CODELAB_REPORT_LEAKS_DIR: ${{ github.workspace }}/parity-results
+        run: fvm dart test packages/dart/codelab_architecture_tests/test/report_leaks_test.dart
+      - if: always() && steps.leaks.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-results-${{ matrix.job }}
+          path: parity-results
+          if-no-files-found: warn
+
+  # Nightly check of the evidence of the Must rows of the goals matrix
+  # (docs/architecture/proposals/agent-parity-goals.md, §1.4): reads the
+  # reports of the checks job. Runs after a red checks job too, and is skipped
+  # on pull requests and pushes (D7).
+  parity:
+    needs: [scope, checks]
+    if: >-
+      always() && needs.scope.result == 'success'
+      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: parity-results-*
+          merge-multiple: true
+          path: parity-results
+      - name: Write meta.json
+        env:
+          COMMIT: ${{ github.sha }}
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          mkdir -p parity-results
+          jq -nc \
+            --arg commit "$COMMIT" --arg ref "$REF" --arg event "$EVENT" \
+            --arg run_id "$RUN_ID" --argjson run_attempt "$RUN_ATTEMPT" \
+            --arg created_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{commit: $commit, ref: $ref, event: $event, run_id: $run_id, run_attempt: $run_attempt, created_at: $created_at}' \
+            > parity-results/meta.json
+      - name: Check evidence of the Must rows
+        env:
+          CODELAB_PARITY_RESULTS: ${{ github.workspace }}/parity-results
+        run: |
+          set -o pipefail
+          fvm dart test --reporter expanded packages/dart/codelab_architecture_tests/test/parity_evidence_test.dart \
+            | tee "$RUNNER_TEMP/parity-output.txt"
+      # The table repeats the lines the test prints: row, evidence, status,
+      # source and reason (D16). Lines are taken from the log, so the test
+      # needs no knowledge of the CI.
+      - name: Step Summary
+        if: always()
+        run: |
+          {
+            echo '### Parity: evidence of the Must rows'
+            echo
+            grep -m1 '^{' "$RUNNER_TEMP/parity-output.txt" || echo '(no meta.json line)'
+            echo
+            echo '| row | evidence | status | source and reason |'
+            echo '|---|---|---|---|'
+            grep -E '^[A-Z]+-[0-9]+ ' "$RUNNER_TEMP/parity-output.txt" | awk '!seen[$0]++' |
+              awk '{ rest = ""; for (i = 4; i <= NF; i++) rest = rest (i > 4 ? " " : "") $i; gsub(/\|/, "\\|", rest); print "| " $1 " | " $2 " | " $3 " | " rest " |" }'
+          } >> "$GITHUB_STEP_SUMMARY"
+      # The merged artifact lives 90 days: publish it only if neither the
+      # per-job artifacts nor meta.json leaked a secret (D16).
+      - id: leaks
+        if: always()
+        env:
+          CODELAB_REPORT_LEAKS_DIR: ${{ github.workspace }}/parity-results
+        run: fvm dart test packages/dart/codelab_architecture_tests/test/report_leaks_test.dart
+      - if: always() && steps.leaks.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-results
+          path: parity-results
+          retention-days: 90
 
   # The one status to require in branch protection: green when every scheduled
-  # check passed or there was nothing to check (documentation only).
+  # check passed or there was nothing to check (documentation only). parity is
+  # skipped on pull requests and pushes.
   ci:
-    needs: [scope, checks]
+    needs: [scope, checks, parity]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "scope=${{ needs.scope.result }} checks=${{ needs.checks.result }}"
+          echo "scope=${{ needs.scope.result }} checks=${{ needs.checks.result }} parity=${{ needs.parity.result }}"
           [ "${{ needs.scope.result }}" = success ] || exit 1
           case "${{ needs.checks.result }}" in success|skipped) ;; *) exit 1;; esac
+          case "${{ needs.parity.result }}" in success|skipped) ;; *) exit 1;; esac

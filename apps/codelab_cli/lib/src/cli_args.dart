@@ -102,6 +102,7 @@ final class CliOptions {
     required this.argvHasSecret,
     required this.ui,
     this.filter,
+    this.junit,
     this.subcommand,
   });
 
@@ -158,6 +159,11 @@ final class CliOptions {
 
   /// `test-scenario --filter`: glob по id фикстуры; `null` — все.
   final String? filter;
+
+  /// `test-scenario --junit`: путь JUnit-отчёта прогона; `null` — отчёта нет
+  /// (spec cli-scenario-driver «JUnit-отчёт test-scenario»; design.md change
+  /// `switch-default-agent-to-dart`, D8).
+  final String? junit;
 
   /// Разбор листовой подкоманды `config get|set|…`, `provider add|…`,
   /// `mcp add|…` (имя — `subcommand.name`, аргументы — `subcommand.rest`):
@@ -288,6 +294,11 @@ ArgParser _parser() {
           'timeout',
           valueHelp: 'duration',
           help: 'Wait for an agent frame (default 30s).',
+        )
+        ..addOption(
+          'junit',
+          valueHelp: 'file',
+          help: 'Write a JUnit XML report of the run to this file.',
         ),
     );
   return parser;
@@ -479,7 +490,7 @@ Usage:
   codelab provider add                    on a terminal: guided setup (or --preset <id> --yes ...)
   codelab mcp add|list|remove ...         manage MCP servers in config
   codelab secret set|delete|list|migrate   manage secrets (set reads the value on stdin)
-  codelab test-scenario <file-or-dir>... --agent <profile> [--filter <glob>] [--timeout <d>]
+  codelab test-scenario <file-or-dir>... --agent <profile> [--filter <glob>] [--timeout <d>] [--junit <file>]
 
 Options:
 ${_parser().usage}
@@ -548,6 +559,7 @@ CliOptions parseCliArgs(List<String> args) {
       positional: command.rest,
       agent: command.option('agent'),
       filter: command.option('filter'),
+      junit: command.option('junit'),
       argvHasSecret: args.contains('secret'),
       // Ожидание кадра агента; по умолчанию 30 с (spec cli-scenario-driver).
       timeout: _parseDuration(
@@ -874,6 +886,7 @@ CliOptions _options(
   String? cwd,
   String? agent,
   String? filter,
+  String? junit,
   Duration? timeout,
   bool argvHasSecret = false,
   ArgResults? subcommand,
@@ -882,6 +895,7 @@ CliOptions _options(
   positional: List.unmodifiable(positional),
   agent: agent ?? results.option('agent'),
   filter: filter,
+  junit: junit,
   cwd: cwd ?? results.option('cwd'),
   model: results.option('model'),
   configMode: results.option('mode'),
