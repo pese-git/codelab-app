@@ -191,9 +191,10 @@ void main() {
     }
   });
 
-  // core/pairing-survives-cancel: ответ с двумя вызовами оборван отменой до
+  // Строка C-01 матрицы (`core/pairing-survives-cancel`): ответ с двумя вызовами оборван отменой до
   // результатов; следующий ход всё равно уходит модели с парными вызовами.
-  test('pairing survives a cancel between calls and results', () async {
+  test('core/pairing-survives-cancel: a cancel between calls and results '
+      'keeps the pairing', () async {
     final clock = FakeClock();
     final requests = <LlmContext>[];
     final h = await loop.LoopHarness.create(

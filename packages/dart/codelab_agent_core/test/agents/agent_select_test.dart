@@ -144,157 +144,167 @@ void main() {
     });
   });
 
-  group('select and return (R-15)', () {
-    test('the profile section, model, mode and only the listed schemas; '
-        'default restores everything', () async {
-      final h = build([textStep('one'), textStep('two'), textStep('three')]);
-      final session = await open(h);
-      await session.prompt([const TextContent('go')]);
-      final before = h.requestedContexts.first;
+  group(
+    'core/agent-definition-markdown-frontmatter: select and return (R-15)',
+    () {
+      test('the profile section, model, mode and only the listed schemas; '
+          'default restores everything', () async {
+        final h = build([textStep('one'), textStep('two'), textStep('three')]);
+        final session = await open(h);
+        await session.prompt([const TextContent('go')]);
+        final before = h.requestedContexts.first;
 
-      await session.setAgent('reviewer');
-      await session.prompt([const TextContent('go')]);
-      final during = h.requestedContexts[1];
-      expect(session.agent, 'reviewer');
-      expect(session.mode, ModeId.plan);
-      expect(session.model.id, 'other');
-      expect(h.requestedModels[1].id, 'other');
-      expect(
-        during.systemPrompt,
-        endsWith('# Agent profile: reviewer\n\nReview carefully.\n'),
-      );
-      expect(toolNames(during), ['read', 'ls', 'search', 'mcp__github__issue']);
-      expect(during.systemPrompt, contains('You are CodeLab'));
-      expect(during.systemPrompt, contains('untrusted-content'));
-      expect(during.systemPrompt, isNot(contains('mcp__other__')));
+        await session.setAgent('reviewer');
+        await session.prompt([const TextContent('go')]);
+        final during = h.requestedContexts[1];
+        expect(session.agent, 'reviewer');
+        expect(session.mode, ModeId.plan);
+        expect(session.model.id, 'other');
+        expect(h.requestedModels[1].id, 'other');
+        expect(
+          during.systemPrompt,
+          endsWith('# Agent profile: reviewer\n\nReview carefully.\n'),
+        );
+        expect(toolNames(during), [
+          'read',
+          'ls',
+          'search',
+          'mcp__github__issue',
+        ]);
+        expect(during.systemPrompt, contains('You are CodeLab'));
+        expect(during.systemPrompt, contains('untrusted-content'));
+        expect(during.systemPrompt, isNot(contains('mcp__other__')));
 
-      await session.setAgent('default');
-      await session.prompt([const TextContent('go')]);
-      final after = h.requestedContexts[2];
-      expect(session.agent, 'default');
-      expect(session.mode, ModeId.standard);
-      expect(session.model.id, 'model-1');
-      expect(after.systemPrompt, before.systemPrompt);
-      expect(toolNames(after), toolNames(before));
-    });
-
-    test('the body is a value: no template processing', () async {
-      final h = build(
-        [textStep('one')],
-        agents: [agentFile('odd', body: 'Use {{name}} and {{ body }} as is.')],
-      );
-      final session = await open(h);
-
-      await session.setAgent('odd');
-      await session.prompt([const TextContent('go')]);
-
-      expect(
-        h.requestedContexts.single.systemPrompt,
-        endsWith(
-          '# Agent profile: odd\n\nUse {{name}} and {{ body }} as is.\n',
-        ),
-      );
-    });
-
-    test('the choice goes to the journal as config_change; the following '
-        'model and mode changes are their own records', () async {
-      final store = MemorySessionStore();
-      final h = build(const [], store: store);
-      final session = await open(h);
-
-      await session.setAgent('reviewer');
-      await session.setAgent('default');
-
-      final records = [
-        for (final line in const LineSplitter().convert(
-          store.textOf(session.id)!,
-        ))
-          jsonDecode(line) as Map<String, Object?>,
-      ];
-      final types = [for (final r in records) r['type']];
-      final first = types.indexOf('config_change');
-      expect(records[first]['optionId'], 'agent');
-      expect(records[first]['value'], 'reviewer');
-      // Запись выбора идёт раньше своих model_change/mode_change: по ней
-      // восстановление находит базу (D11).
-      expect(types.sublist(first, first + 3), [
-        'config_change',
-        'model_change',
-        'mode_change',
-      ]);
-      expect(
-        [
-          for (final r in records)
-            if (r['type'] == 'config_change') r['value'],
-        ],
-        ['reviewer', 'default'],
-      );
-    });
-
-    test('agent.selected has the facts and never the body', () async {
-      final h = build(const []);
-      final session = await open(h);
-
-      await session.setAgent('reviewer');
-
-      final log = h.logger.eventsOf('agent.selected').single;
-      expect(log.fields, {
-        'session_id': session.id.value,
-        'agent': 'reviewer',
-        'source': '/home/.codelab/agents/reviewer.md',
-        'model': 'test/other',
-        'mode': 'plan',
-        'mode_applied': true,
-        'tools': 4,
+        await session.setAgent('default');
+        await session.prompt([const TextContent('go')]);
+        final after = h.requestedContexts[2];
+        expect(session.agent, 'default');
+        expect(session.mode, ModeId.standard);
+        expect(session.model.id, 'model-1');
+        expect(after.systemPrompt, before.systemPrompt);
+        expect(toolNames(after), toolNames(before));
       });
-      expect(
-        [for (final r in h.logger.records) r.toString()].join('\n'),
-        isNot(contains('Review carefully')),
-      );
-    });
 
-    test('reselecting the current agent is a no-op', () async {
-      final store = MemorySessionStore();
-      final h = build(const [], store: store);
-      final session = await open(h);
-      await session.setAgent('reviewer');
-      final size = store.textOf(session.id)!.length;
+      test('the body is a value: no template processing', () async {
+        final h = build(
+          [textStep('one')],
+          agents: [
+            agentFile('odd', body: 'Use {{name}} and {{ body }} as is.'),
+          ],
+        );
+        final session = await open(h);
 
-      await session.setAgent('reviewer');
+        await session.setAgent('odd');
+        await session.prompt([const TextContent('go')]);
 
-      expect(store.textOf(session.id)!.length, size);
-      expect(h.logger.eventsOf('agent.selected'), hasLength(1));
-    });
+        expect(
+          h.requestedContexts.single.systemPrompt,
+          endsWith(
+            '# Agent profile: odd\n\nUse {{name}} and {{ body }} as is.\n',
+          ),
+        );
+      });
 
-    test('a switch between agents counts from the same base', () async {
-      final h = build(const [], agents: [reviewer, agentFile('plain')]);
-      final session = await open(h);
+      test('the choice goes to the journal as config_change; the following '
+          'model and mode changes are their own records', () async {
+        final store = MemorySessionStore();
+        final h = build(const [], store: store);
+        final session = await open(h);
 
-      await session.setAgent('reviewer');
-      await session.setAgent('plain');
+        await session.setAgent('reviewer');
+        await session.setAgent('default');
 
-      // `plain` не задаёт ни модель, ни режим: действует база, а не
-      // значения предыдущего агента.
-      expect(session.model.id, 'model-1');
-      expect(session.mode, ModeId.standard);
-      await session.setAgent('default');
-      expect(session.model.id, 'model-1');
-    });
+        final records = [
+          for (final line in const LineSplitter().convert(
+            store.textOf(session.id)!,
+          ))
+            jsonDecode(line) as Map<String, Object?>,
+        ];
+        final types = [for (final r in records) r['type']];
+        final first = types.indexOf('config_change');
+        expect(records[first]['optionId'], 'agent');
+        expect(records[first]['value'], 'reviewer');
+        // Запись выбора идёт раньше своих model_change/mode_change: по ней
+        // восстановление находит базу (D11).
+        expect(types.sublist(first, first + 3), [
+          'config_change',
+          'model_change',
+          'mode_change',
+        ]);
+        expect(
+          [
+            for (final r in records)
+              if (r['type'] == 'config_change') r['value'],
+          ],
+          ['reviewer', 'default'],
+        );
+      });
 
-    test('a mode or model chosen by the user while an agent is active does '
-        'not move the base', () async {
-      final h = build(const []);
-      final session = await open(h);
-      await session.setAgent('reviewer');
+      test('agent.selected has the facts and never the body', () async {
+        final h = build(const []);
+        final session = await open(h);
 
-      await session.setMode(ModeId.acceptEdits);
-      await session.setModel(const ModelId('test/model-1'));
-      await session.setAgent('default');
+        await session.setAgent('reviewer');
 
-      expect(session.mode, ModeId.standard);
-      expect(session.model.id, 'model-1');
-    });
-  });
+        final log = h.logger.eventsOf('agent.selected').single;
+        expect(log.fields, {
+          'session_id': session.id.value,
+          'agent': 'reviewer',
+          'source': '/home/.codelab/agents/reviewer.md',
+          'model': 'test/other',
+          'mode': 'plan',
+          'mode_applied': true,
+          'tools': 4,
+        });
+        expect(
+          [for (final r in h.logger.records) r.toString()].join('\n'),
+          isNot(contains('Review carefully')),
+        );
+      });
+
+      test('reselecting the current agent is a no-op', () async {
+        final store = MemorySessionStore();
+        final h = build(const [], store: store);
+        final session = await open(h);
+        await session.setAgent('reviewer');
+        final size = store.textOf(session.id)!.length;
+
+        await session.setAgent('reviewer');
+
+        expect(store.textOf(session.id)!.length, size);
+        expect(h.logger.eventsOf('agent.selected'), hasLength(1));
+      });
+
+      test('a switch between agents counts from the same base', () async {
+        final h = build(const [], agents: [reviewer, agentFile('plain')]);
+        final session = await open(h);
+
+        await session.setAgent('reviewer');
+        await session.setAgent('plain');
+
+        // `plain` не задаёт ни модель, ни режим: действует база, а не
+        // значения предыдущего агента.
+        expect(session.model.id, 'model-1');
+        expect(session.mode, ModeId.standard);
+        await session.setAgent('default');
+        expect(session.model.id, 'model-1');
+      });
+
+      test('a mode or model chosen by the user while an agent is active does '
+          'not move the base', () async {
+        final h = build(const []);
+        final session = await open(h);
+        await session.setAgent('reviewer');
+
+        await session.setMode(ModeId.acceptEdits);
+        await session.setModel(const ModelId('test/model-1'));
+        await session.setAgent('default');
+
+        expect(session.mode, ModeId.standard);
+        expect(session.model.id, 'model-1');
+      });
+    },
+  );
 
   group('tools (CFG-7)', () {
     test('a call outside the set is a tool error with no permission request '
