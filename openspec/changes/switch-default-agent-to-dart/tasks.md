@@ -17,7 +17,7 @@
 - 3 — документация (9.5, 9.7);
 - 4 — ворота MVP (не блокирует итерации 1–3).
 
-Зависимости: 1 ← 0; 2 ← 1 (список по отчёту 1.14); 3 ← 0; 4 ← 1, 2, 3 и политика заморозки `retire-python-agent` (D1).
+Зависимости: 1 ← 0; 2 ← 1 (список по отчёту 1.14); 3 ← 0; 4 ← 1, 2, 3, change `add-agent-builtin-slash-commands` (задача 4.0, Q9) и политика заморозки `retire-python-agent` (D1).
 
 Проверки каждой задачи — только для затронутого (`AGENTS.md` §21):
 - `fvm dart format` изменённых файлов;
@@ -64,7 +64,7 @@
   - игнорирование комментариев;
   - работу храповика.
   Красный.
-- [x] 1.4 `[protocol]` Реализация: `test/support/parity/evidence.dart` и группа `matrix evidence exists` в `parity_evidence_test.dart` на настоящей матрице. `knownGaps` заполняется по оценке design.md («Оценка масштаба 9.2», 10 строк) с номерами задач итерации 2. `fvm dart run melos run guard` зелёный. U-03 — пробел статуса (`not-run` из-за `scripted-only`), не существования, в `knownGaps` не входит; он закрывается задачей 2.8.
+- [x] 1.4 `[protocol]` Реализация: `test/support/parity/evidence.dart` и группа `matrix evidence exists` в `parity_evidence_test.dart` на настоящей матрице. `knownGaps` заполняется по оценке design.md («Оценка масштаба 9.2», 10 строк) с номерами задач итерации 2. `fvm dart run melos run guard` зелёный. U-03 — пробел статуса (`not-run` из-за `scripted-only`), не существования, в `knownGaps` не входит; он закрывается change `add-agent-builtin-slash-commands` (задача 2.8 перенесена туда решением Q9, 2026-11-10).
 
 ### 1b. Отчёты и статусы (9.1)
 
@@ -113,24 +113,50 @@
 
 ## 2. Закрытие пробелов Must (итерация 2, 9.2)
 
-Список ниже — предварительный (design.md, «Оценка масштаба 9.2»). Задача 2.0 заменяет его отчётом 1.14. Каждая пара закрывает строку Must; её запись удаляется из `knownGaps` в той же задаче.
+Список ниже — по отчёту 1.14 (задача 2.0) и шагу красных тестов (design.md, «Оценка масштаба 9.2», итог 2026-11-10). Каждая пара закрывает строку Must; её запись удаляется из `knownGaps` в той же задаче. Встроенные слэш-команды агента (K-02, R-08, U-03) перенесены в change `add-agent-builtin-slash-commands` (решение Q9): задачи 2.1–2.4 и 2.8–2.9 здесь **не выполняются**, а их красные тесты (фикстуры `slash-compact`, `slash-help`, `slash-mode-plan`, вариант e2e U-03) переходят в тот change.
 
 - [x] 2.0 `[protocol]` Список задач итерации обновлён по отчёту 1.14 (2026-11-09). `missing` 11 — задачи 2.1–2.7 (как в оценке); `not-run` U-03 `cli/slash-menu-merges-agent-commands` — 2.8; `not-run` E-01 `core/project-context-agents-md-leaf-first` — 2.12–2.13; `skipped` R-17 `packages/dart/codelab_agent_acp/test/conformance_test.dart` — 2.14–2.15; `failed` нет.
-- [ ] 2.1 `[protocol]` Тест (K-02, `acp/slash-compact`): фикстура `/compact` по сценарию приёмки K-02 (§9.2, §9.5, §9.7, §13.6 ядра). `conformance:agent` красный, если агент расходится.
-- [ ] 2.2 `[agent]` Реализация: если 2.1 красный — исправление агента по спецификации `agent-compaction`. Фикстура меняется только со ссылкой на спецификацию (acp-golden-fixtures «Правила изменения фикстур»).
-- [ ] 2.3 `[protocol]` Тест (R-08, `acp/slash-help`, `acp/slash-mode-plan`, `acp/mcp-prompt-command`): сверка сценария приёмки R-08 с существующими `slash-mcp-list`, `prompt-template-command` и `available-commands-no-tools`. Недостающие фикстуры написаны; если сценарий покрыт существующей, строка матрицы правится со ссылкой на сценарий.
-- [ ] 2.4 `[agent]` Реализация для 2.3, если фикстура красная.
-- [ ] 2.5 `[agent]` Тест (R-14, `core/litellm-proxy-base-url`): адаптер OpenAI-совместимого API с `baseUrl` LiteLLM Proxy (`MockClient`): путь `/chat/completions` от `baseUrl`, заголовок ключа, стриминг (§2.7 ядра). Красный, если поведение расходится, иначе приёмочный.
-- [ ] 2.6 `[agent]` Реализация для 2.5 при необходимости.
-- [ ] 2.7 `[agent]` Имена тестов (C-01, P-01, P-16, E-05, R-15, R-16): `core/pairing-survives-cancel`, `core/no-tool-bypasses-gate`, `core/mcp-tool-cannot-declare-trusted`, `core/mcp-tool-name-sanitized`, `core/agent-definition-markdown-frontmatter`, `core/config-legacy-found-warning` стали первым литералом `test(` или `group(` в файлах из оценки. Поведение тестов не меняется; комментарии рядом переведены, если менялась сущность (`AGENTS.md` §15). Группа `matrix evidence exists` без этих записей `knownGaps` зелёная.
-- [ ] 2.8 `[client]` Тест (U-03, `cli/slash-menu-merges-agent-commands`): вариант PTY-e2e без тега `scripted-only`. Против Dart-агента и встроенного агента меню Tab показывает клиентские команды и команды агента (`/compact`, `/config`, `/mcp`) с пометкой `(agent)`. Ожидания — из `test/e2e/support/e2e_agent.dart`. Красный, если меню расходится.
-- [ ] 2.9 `[client]` Реализация для 2.8 при необходимости.
-- [ ] 2.10 `[protocol]` Строки по Q4 (а): правило путей и шаблонов (D3, D5) покрыто тестом `verdict_test.dart` для L-06, T-05, P-08, R-17, R-23, H-04 и D-04; новых id нет.
-- [ ] 2.11 `[protocol]` `knownGaps` пуст, константа и проверка устаревания удалены (D4). `workflow_dispatch` даёт зелёный `parity` без `app:` (`deferred`); запуск указан в описании pull request.
-- [ ] 2.12 `[agent]` Разбор (E-01, `core/project-context-agents-md-leaf-first`, `not-run`): доказательство существует в исходниках (группа `exists` зелёная), но в отчёте 1.14 теста с таким id нет. Найти причину: тест в пакете, чей отчёт не пишется; id не первым литералом в итоговом имени (`group` + `test`); тег или условный пропуск. Тест на причину, затем исправление (имя теста, скрипт отчёта или правило D3) — без ослабления проверки.
-- [ ] 2.13 `[agent]` Реализация для 2.12; повторный прогон даёт E-01 `pass`.
-- [ ] 2.14 `[protocol]` Тест (R-17, путь `packages/dart/codelab_agent_acp/test/conformance_test.dart`, `skipped`): в файле пропущена фикстура с ролями `[client]` без `agent` (`acp/errors-unknown-session-update-tolerated`) — пропуск по роли задан спецификацией корпуса. По Q4 (а) путь закрыт, только если все тесты файла `pass`; по Q5 (б) пропуск в обязательном источнике открывает строку. Нужно решение: применять `allowedSkips` со ссылкой на спецификацию и к доказательству-пути, сузить критерий R-17 в матрице до тестов, которые действительно доказывают строку, или не порождать тесты для чужих ролей в conformance агента. Вопрос — пользователю до реализации.
-- [ ] 2.15 `[protocol]` Реализация по решению 2.14; R-17 `pass`.
+- [ ] 2.1 `[protocol]` ~~Тест (K-02, `acp/slash-compact`)~~ — **перенесено** в `add-agent-builtin-slash-commands` (Q9, 2026-11-10), не выполняется в этом change.
+- [ ] 2.2 `[agent]` ~~Реализация для 2.1~~ — **перенесено** в `add-agent-builtin-slash-commands` (Q9).
+- [ ] 2.3 `[protocol]` ~~Тест (R-08, `acp/slash-help`, `acp/slash-mode-plan`, `acp/mcp-prompt-command`)~~ — **перенесено** в `add-agent-builtin-slash-commands` (Q9); `acp/mcp-prompt-command` убран из R-08 решением Q10 (задача 2.18).
+- [ ] 2.4 `[agent]` ~~Реализация для 2.3~~ — **перенесено** в `add-agent-builtin-slash-commands` (Q9).
+- [x] 2.5 `[agent]` Тест (R-14, `core/litellm-proxy-base-url`): адаптер OpenAI-совместимого API с `baseUrl` LiteLLM Proxy (`MockClient`): путь `/chat/completions` от `baseUrl`, заголовок ключа, стриминг (§2.7 ядра). Приёмочный: зелёный сразу, поведение уже есть — `packages/dart/codelab_agent_core/test/llm/litellm_proxy_base_url_test.dart`, внешняя группа `core/litellm-proxy-base-url` (5 тестов, 2026-11-10). Запись `knownGaps` R-14 удалена.
+- [x] 2.6 `[agent]` Реализация для 2.5 — не требуется: 2.5 зелёный без изменений кода.
+- [x] 2.7 `[agent]` Имена тестов (C-01, P-01, P-16, E-05, R-15, R-16): id становится первым литералом **внешнего** `test(` или `group(` (D3, уточнение 2026-11-10). Поведение тестов не меняется; комментарии рядом переведены, если менялась сущность (`AGENTS.md` §15):
+  - C-01 — `packages/dart/codelab_agent_core/test/scenarios/read_edit_exec_test.dart:196` → `test('core/pairing-survives-cancel: …')`;
+  - P-01 — `packages/dart/codelab_agent_core/test/permissions/no_bypass_test.dart:15` → `test('core/no-tool-bypasses-gate: …')`;
+  - P-16 — `packages/dart/codelab_agent_core/test/tools/fence_test.dart:93` → `test('core/mcp-tool-cannot-declare-trusted: …')`;
+  - E-05 — `packages/dart/codelab_agent_core/test/mcp/mcp_tool_name_test.dart` — тесты файла обёрнуты в `group('core/mcp-tool-name-sanitized', …)`;
+  - R-15 — `packages/dart/codelab_agent_core/test/agents/agent_select_test.dart:147` → `group('core/agent-definition-markdown-frontmatter: select and return (R-15)', …)`;
+  - R-16 — `packages/dart/codelab_agent_io/test/config/config_legacy_found_test.dart` — тесты файла обёрнуты в `group('core/config-legacy-found-warning', …)`.
+  Записи `knownGaps` C-01, P-01, P-16, E-05, R-15, R-16 удалены; группа `matrix evidence exists` зелёная.
+- [ ] 2.8 `[client]` ~~Тест (U-03, `cli/slash-menu-merges-agent-commands`) против Dart- и встроенного агента~~ — **перенесено** в `add-agent-builtin-slash-commands` (Q9): красный по той же причине, что K-02 и R-08.
+- [ ] 2.9 `[client]` ~~Реализация для 2.8~~ — **перенесено** в `add-agent-builtin-slash-commands` (Q9).
+- [x] 2.10 `[protocol]` Строки по Q4 (а): правило путей и шаблонов (D3, D5) покрыто тестом `verdict_test.dart` (группа «правило путей и шаблонов на строках Must (Q4, задача 2.10)», 27 тестов) для L-06, T-05, P-08, R-17, R-23, H-04 и D-04; новых id нет. Проверено 2026-11-10: `fvm dart test test/support/parity/verdict_test.dart` — все тесты группы зелёные (красные в файле только тесты 2.14 до 2.15).
+- [ ] 2.11 `[protocol]` `knownGaps` содержит только записи K-02 (`acp/slash-compact`) и R-08 (`acp/slash-help`, `acp/slash-mode-plan`); вместо номера задачи — ссылка `add-agent-builtin-slash-commands` (Q9, D4). Записи R-14, C-01, P-01, P-16, E-05, R-15, R-16 и `acp/mcp-prompt-command` удалены. `workflow_dispatch` даёт `parity`, где открыты только K-02, R-08 и U-03 (`not-run`) со ссылкой на новый change, а `app:` — `deferred`; запуск указан в описании pull request. Пустой список и удаление константы — после merge `add-agent-builtin-slash-commands` (задача 4.0).
+- [ ] 2.12 `[agent]` Тест (E-01, `core/project-context-agents-md-leaf-first`, `not-run`). Причина найдена (2026-11-10): тест вложен в `group('search from cwd up to the git root')` (`packages/dart/codelab_agent_io/test/project/project_context_loader_test.dart:62`), полное имя в отчёте начинается с имени группы, а статическая проверка D3 смотрела литерал `test(` отдельно. Красный тест на причину — задача 2.16 (уточнение D3: E-01 становится `missing` в группе `exists`).
+- [x] 2.13 `[agent]` Реализация для 2.12: тест вынесен в собственную внешнюю группу `group('core/project-context-agents-md-leaf-first', …)` на верхнем уровне `main` (поведение теста не меняется); группа `exists` после 2.17 зелёная, повторный прогон даёт E-01 `pass`.
+- [ ] 2.14 `[protocol]` Тест (R-17, путь `packages/dart/codelab_agent_acp/test/conformance_test.dart`, `skipped`; решение Q8, 2026-11-10): перечень `allowedSkips` применяется и к доказательству-пути. В файле пропущена фикстура с ролями `[client]` без `agent` (`acp/errors-unknown-session-update-tolerated`) — пропуск по роли задан спецификацией корпуса. `verdict_test.dart` проверяет на временных отчётах:
+  - пропуск файла с причиной из `allowedSkips` не открывает строку: `pass`;
+  - пропуск с причиной вне перечня — `skipped`;
+  - на настоящем перечне (`allowed_skips.dart`) R-17-подобный случай (`has roles [client] without "agent"`) даёт `pass`.
+  Красный до 2.15.
+- [ ] 2.15 `[protocol]` Реализация по Q8 в `verdict.dart` (`_fold` для вида «путь теста»: пропуск из `allowedSkips` не открывает строку); R-17 `pass`; D3 и D5 уже уточнены (2026-11-10).
+- [ ] 2.16 `[protocol]` Тест (testing-quality «Проверка доказательств матрицы целей», сценарии «Id во вложенном тесте», «Id во внешней группе»; D3, уточнение 2026-11-10): `evidence_test.dart` на временном дереве проверяет:
+  - `test('core/x: …')` внутри `group('другое имя', …)` — `core/x` `missing`;
+  - `group('core/x', …)` на верхнем уровне `main` с вложенными тестами других имён — существует;
+  - `test('core/x')` на верхнем уровне внутри цикла `for` или локальной функции `main` — существует;
+  - вложенный `group('core/x')` внутри другой группы — `missing`;
+  - соседние литералы и комментарии — как прежде.
+  На настоящем дереве до 2.13 E-01 — `missing`. Красный.
+- [ ] 2.17 `[protocol]` Реализация уточнения D3 в `test/support/parity/evidence.dart`: учёт вложенности вызовов `group(` (по скобкам тела, с пропуском строк и комментариев) при поиске первого литерала. Вместе с 2.13 группа `matrix evidence exists` зелёная без записи E-01 в `knownGaps`.
+- [ ] 2.18 `[protocol]` Матрица `docs/architecture/proposals/agent-parity-goals.md` (решения Q9, Q10; 2026-11-10):
+  - R-08 — без `acp/mcp-prompt-command`, пометка о change `add-agent-builtin-slash-commands`;
+  - новая строка Should E-24 «MCP prompts как слэш-команды» (§3.6, этап 9+);
+  - H-04 — полный путь `apps/codelab_cli/test/scenario/codelab_agent_corpus_test.dart`;
+  - K-02, U-03 — пометка о change `add-agent-builtin-slash-commands`;
+  - итоги §7 пересчитаны (Must 77, Should 81).
+  Разбор матрицы (`matrix_parser`) даёт 77 строк Must; `guard` зелёный. Выполнено в документах 2026-11-10; проверка `guard` — вместе с 2.11.
 
 ## 3. Документация (итерация 3, 9.5, 9.7)
 
@@ -151,6 +177,7 @@
 
 Проводят ответственный за релиз и владелец продукта. Результаты записываются в таблицы `proposal.md` («Ворота MVP») и design.md («Чек-лист Zed»).
 
+- [ ] 4.0 `[protocol]` Условие ворот (Q9, D4, D14): change `add-agent-builtin-slash-commands` слит в `develop`, его записи удалены из `knownGaps`, константа `knownGaps` и проверка устаревания удалены (если это не сделал сам тот change), строки K-02, R-08 и U-03 в ночном `parity` — `pass` (кроме `deferred` у `app:`). Счёт трёх ночей (4.1) начинается после этого.
 - [ ] 4.1 `[protocol]` Три ночи подряд на `develop`: обязательные джобы и `parity` зелёные в трёх последовательных запусках по `schedule` без ручного перезапуска (`run_attempt` 1). Красный или пропущенный запуск обнуляет счёт. Ссылки, коммиты и даты — в `proposal.md`. Отчёт третьей ночи сохранён в `evidence/nightly/` этого change (Q6).
 - [ ] 4.2 `[desktop]` Ветка `release/<version>` от `develop` после 4.1. Три последовательных зелёных прогона на одном коммите на macOS без перезапуска упавших тестов: `test:e2e:app:*`, `test:e2e:app:dart-agent`, `test:e2e:app:embedded` с `CODELAB_TEST_REPORT_DIR`. Отчёты, версия macOS и коммит — в `proposal.md`; сырые JSON — в `evidence/app/run-<n>/` этого change, если суммарно меньше ~5 МБ, иначе сводка (Q6, D9; пути относительные).
 - [ ] 4.3 `[agent]` Чек-лист Zed (9.8): все 11 шагов. Версия Zed, сборка, доказательства в `evidence/zed/` (trace отредактирован по `observability.md`, D16) и подпись ответственного за релиз — в design.md. Сверка с другим агентом — только если он выбран.
