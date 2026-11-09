@@ -517,6 +517,138 @@ void main() {
       );
       expect(ghost().details?.status, ToolCallStatusView.cancelled);
 
+      // Ответ агента переводит ход из `cancelling` в `cancelled`: статус
+      // вызова и совпадение с проекцией с нуля не меняются.
+      await agent.end(turn, stopReason: 'cancelled');
+      final session = agent.application.sessionById(agent.sessionId)!;
+      expect(session.turns.single.status, PromptTurnStatus.cancelled);
+      expect(ghost().details?.status, ToolCallStatusView.cancelled);
+      expect(agent.items, projectTranscript(session));
+    });
+
+    test('an in_progress call with a cancelled approval becomes cancelled, '
+        'not running', () async {
+      final turn = await agent.prompt('go');
+      agent.requestPermission(id: 1, toolCallId: 'ghost');
+      expect(ghost().details?.status, ToolCallStatusView.running);
+
+      await agent.application.cancelTurn(
+        CancelTurnCommand(sessionId: agent.sessionId),
+      );
+
+      expect(ghost().details?.status, ToolCallStatusView.cancelled);
+
+      await agent.end(turn, stopReason: 'cancelled');
+    });
+
+    test('a late completed update after the cancellation wins over the '
+        'cancelled approval', () async {
+      final turn = await agent.prompt('go');
+      agent.requestPermission(
+        id: 1,
+        toolCallId: 'ghost',
+        status: ToolCallStatus.pending,
+      );
+      await agent.application.cancelTurn(
+        CancelTurnCommand(sessionId: agent.sessionId),
+      );
+      agent.update({
+        'sessionUpdate': 'tool_call_update',
+        'toolCallId': 'ghost',
+        'status': 'completed',
+      });
+
+      expect(ghost().details?.status, ToolCallStatusView.succeeded);
+      expect(
+        (ghost().approval! as ResolvedApprovalView).outcome,
+        ApprovalOutcomeView.cancelled,
+      );
+      final session = agent.application.sessionById(agent.sessionId)!;
+      expect(agent.items, projectTranscript(session));
+
+      await agent.end(turn, stopReason: 'cancelled');
+    });
+
+    test('a turn cancelled by the client but closed by a prompt error keeps '
+        'the call cancelled', () async {
+      final turn = await agent.prompt('go');
+      agent.requestPermission(
+        id: 1,
+        toolCallId: 'ghost',
+        status: ToolCallStatus.pending,
+      );
+      await agent.application.cancelTurn(
+        CancelTurnCommand(sessionId: agent.sessionId),
+      );
+      agent.transport.emitInbound(
+        JsonRpcMessage.response(
+          id: turn.request.id,
+          error: const JsonRpcError(code: -32603, message: 'agent crashed'),
+        ),
+      );
+      await turn.done.then<void>((_) {}, onError: (_) {});
+
+      final session = agent.application.sessionById(agent.sessionId)!;
+      expect(ghost().details?.status, ToolCallStatusView.cancelled);
+      expect(agent.items, projectTranscript(session));
+    });
+
+    test('a turn cancelled by the client but closed with end_turn keeps the '
+        'call cancelled', () async {
+      final turn = await agent.prompt('go');
+      agent.requestPermission(
+        id: 1,
+        toolCallId: 'ghost',
+        status: ToolCallStatus.pending,
+      );
+      await agent.application.cancelTurn(
+        CancelTurnCommand(sessionId: agent.sessionId),
+      );
+      await agent.end(turn);
+
+      final session = agent.application.sessionById(agent.sessionId)!;
+      expect(ghost().details?.status, ToolCallStatusView.cancelled);
+      expect(agent.items, projectTranscript(session));
+    });
+
+    test('an approval cancelled on its own while the turn goes on keeps '
+        'the call status', () async {
+      final turn = await agent.prompt('go');
+      agent.requestPermission(
+        id: 1,
+        toolCallId: 'ghost',
+        status: ToolCallStatus.pending,
+      );
+      await agent.application.respondToPermission(
+        RespondToPermissionCommand.cancelled(
+          sessionId: agent.sessionId,
+          approvalId: const ApprovalRequestId('permission-1'),
+        ),
+      );
+
+      expect(
+        (ghost().approval! as ResolvedApprovalView).outcome,
+        ApprovalOutcomeView.cancelled,
+      );
+      expect(ghost().details?.status, ToolCallStatusView.queued);
+
+      await agent.end(turn);
+    });
+
+    test('a terminal status of an unannounced call survives a cancelled '
+        'approval', () async {
+      final turn = await agent.prompt('go');
+      agent.requestPermission(
+        id: 1,
+        toolCallId: 'ghost',
+        status: ToolCallStatus.completed,
+      );
+      await agent.application.cancelTurn(
+        CancelTurnCommand(sessionId: agent.sessionId),
+      );
+
+      expect(ghost().details?.status, ToolCallStatusView.succeeded);
+
       await agent.end(turn, stopReason: 'cancelled');
     });
 

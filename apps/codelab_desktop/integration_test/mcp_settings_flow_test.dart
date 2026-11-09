@@ -181,10 +181,9 @@ void main() {
 
       // Новый сервер с секретом агент не подхватывает на лету: он откладывает
       // его до перезапуска (R0-4, `config.reload.restart_required`,
-      // `config_reload_plan.dart`; подсказку на странице добавит итерация
-      // 6.1b, решение Q31). Пользователь перезапускает агента кнопкой
-      // «Restart agent» на странице «Connection» и возвращается на «MCP
-      // servers».
+      // `config_reload_plan.dart`; Q31). Пользователь перезапускает агента
+      // кнопкой «Restart agent» на странице «Connection» и возвращается на
+      // «MCP servers».
       await tester.tap(_key('settings-nav-connection'));
       await tester.pumpAndSettle();
       await _tapKey(tester, _key('connection-restart-agent'));
