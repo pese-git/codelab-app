@@ -1,4 +1,6 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
+import 'package:codelab_client_acp/codelab_client_acp.dart'
+    show ApprovalRiskLevel;
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../cli_args.dart';
@@ -40,6 +42,13 @@ final class ApprovalDecision {
 /// Как использовать: раннер вызывает функцию на каждый новый
 /// `PendingApprovalView`; [kind] — вид вызова инструмента из транскрипта
 /// (`null` — неизвестен, считается не-чтением).
+///
+/// `read-only` разрешает запрос, только если вид `read` **и** уровень риска
+/// одобрения — `readOnly`. Одного вида из транскрипта мало: при незнакомом
+/// виде или `switch_mode` в запросе разрешения вид записи сохраняется (D9),
+/// а риск поднимается до `unknown`, при `execute` — до `shell`. Решает риск
+/// (design.md change `tolerate-unknown-tool-kind`, D5, D9; `AGENTS.md` §10):
+/// по умолчанию неизвестное запрещено.
 ApprovalDecision decideApproval(
   PendingApprovalView approval,
   ApprovePolicy policy, {
@@ -51,7 +60,7 @@ ApprovalDecision decideApproval(
       ApprovalReason.policy,
     ),
     ApprovePolicy.readOnly => (
-      kind == ToolKind.read
+      kind == ToolKind.read && approval.risk == ApprovalRiskLevel.readOnly
           ? PermissionOptionKind.allowOnce
           : PermissionOptionKind.rejectOnce,
       ApprovalReason.policy,
