@@ -305,7 +305,7 @@ Kit SHALL сохранять снимок рабочего пространст�
 ### Requirement: Строка инструмента без сырого JSON
 `ToolCallView` SHALL нести `rawInput`, пути `locations` и текст текстовых элементов `content` вызова. `ToolRowFormatter.format` SHALL быть чистой функцией `ToolCallItem` и `cwd` сессии, возвращающей `ToolRowView` с меткой, деталью и необязательной второй строкой по `dart-agent-and-clients` §12.1.6, без поля времени.
 
-Метка SHALL определяться видом вызова: `read` → `Read`, `edit` → `Edit`, `delete` → `Delete`, `move` → `Move`, `search` → `Search`, `execute` → `Run`, `fetch` → `Fetch`, `think` → `Think`, `other` → `title` вызова.
+Метка SHALL определяться видом вызова: `read` → `Read`, `edit` → `Edit`, `delete` → `Delete`, `move` → `Move`, `search` → `Search`, `execute` → `Run`, `fetch` → `Fetch`, `think` → `Think`, `switch_mode` → `Mode`, `other` → `title` вызова. Вызов, чей строковый `kind` клиент не знает, имеет вид `other` (требование «Неизвестный вид вызова инструмента» acp-protocol-client) и получает метку по `title`. У `switch_mode` нет своих полей `rawInput`: его деталь берётся общим правилом из `title` (design.md change `tolerate-unknown-tool-kind`, D7).
 
 Деталь SHALL браться первым подходящим правилом §12.1.6 из скалярных полей `rawInput` или `locations` и никогда не из сериализации объекта; путь внутри `cwd` SHALL показываться относительно `cwd`; у `fetch` SHALL отбрасываться схема и query-строка; управляющие символы SHALL заменяться пробелом; значение SHALL проходить маскирование секретов и SHALL быть не длиннее 160 символов с `…`. Если деталь пуста или совпадает с меткой, а `title` отличается от метки, деталью SHALL становиться `title`.
 
@@ -326,6 +326,14 @@ Kit SHALL сохранять снимок рабочего пространст�
 #### Scenario: Инструмент без скалярных полей
 - **WHEN** форматируется вызов `other` с `title` "mcp__db__stats" и `rawInput` `{"items": [1, 2]}`
 - **THEN** метка `mcp__db__stats`, деталь пуста, JSON не показан
+
+#### Scenario: Смена режима
+- **WHEN** форматируется вызов `switch_mode` с `title` "Ready for implementation" и без `rawInput`
+- **THEN** метка `Mode`, деталь `Ready for implementation`, слово `switch_mode` не показано
+
+#### Scenario: Вызов незнакомого вида
+- **WHEN** форматируется вызов, пришедший с `kind: "future_kind"` и `title` "Plan sync"
+- **THEN** метка `Plan sync`, как у вида `other`, слово `future_kind` не показано
 
 ### Requirement: Черновик профиля подключения
 `codelab_client_core` SHALL предоставлять `ProfileDraft` — неизменяемый черновик профиля stdio или WebSocket. Это одна логика для «Add connection profile» в app и для будущей формы CLI (`dart-agent-and-clients` §12.4.9; design.md change `add-app-settings-shell`, D11). У черновика две операции:
