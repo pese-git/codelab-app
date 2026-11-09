@@ -23,6 +23,11 @@ const _stage0Fixtures = {
   'acp/errors-unknown-session-update-tolerated',
 };
 
+/// Клиентская фикстура change `tolerate-unknown-tool-kind` (D8; acp-golden-
+/// fixtures «Фикстура неизвестного вида вызова»): роль только `client`,
+/// Dart-агент незнакомых видов не выдаёт.
+const _toolKindFixtures = {'acp/tool-kind-unknown-tolerated'};
+
 /// Корпус этапа 4 полностью — 35 фикстур §14.2: 33 агентского прогона в
 /// памяти (design.md change `add-dart-agent-acp-server`, D8) и 2
 /// транспортные (`add-codelab-agent-binary`, D8); фикстуры выноса — в
@@ -101,7 +106,13 @@ void main() {
       ..._stage4Fixtures,
       ..._stage8McpFixtures,
       ..._stage8ProjectFilesFixtures,
+      ..._toolKindFixtures,
     });
+  });
+
+  test('the unknown tool kind fixture is played by the client role only', () {
+    final fixture = corpus.singleWhere((f) => _toolKindFixtures.contains(f.id));
+    expect(fixture.roles, {FixtureRole.client});
   });
 
   test('MCP and project files fixtures are played by the agent role only', () {

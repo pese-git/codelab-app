@@ -105,6 +105,7 @@ void main() {
         'execute',
         'think',
         'fetch',
+        'switch_mode',
         'other',
       ]);
     });
@@ -180,8 +181,11 @@ void main() {
         () => ToolCallUpdate.fromJson({'title': 'missing id'}),
         throwsA(isA<JsonRpcProtocolException>()),
       );
+      // Незнакомая строка вида — не ошибка, а `other` (change
+      // `tolerate-unknown-tool-kind`, D1); не-строка остаётся ошибкой формы.
+      expect(ToolKind.fromJson('mutate'), ToolKind.other);
       expect(
-        () => ToolKind.fromJson('mutate'),
+        () => ToolKind.fromJson(7),
         throwsA(isA<JsonRpcProtocolException>()),
       );
       expect(
