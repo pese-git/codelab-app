@@ -46,28 +46,50 @@ melos:
       run: fvm dart run melos exec -c 4 -- "fvm dart analyze ."
 
     test:
-      description: Run all Dart and Flutter tests.
-      run: fvm dart run melos exec -c 1 --dir-exists=test --fail-fast -- "fvm flutter test"
+      description: Run all Dart and Flutter tests (with CODELAB_TEST_REPORT_DIR also flutter/<package>.json per package).
+      # Машинные отчёты (change switch-default-agent-to-dart, D6): при заданной
+      # CODELAB_TEST_REPORT_DIR (абсолютный путь) у каждого пакета появляется
+      # JSON-репортёр package:test. `\$MELOS_PACKAGE_NAME` экранирован, иначе
+      # внешняя оболочка подставит пустое значение до melos exec.
+      run: >-
+        { [ -z "$CODELAB_TEST_REPORT_DIR" ] || mkdir -p "$CODELAB_TEST_REPORT_DIR/flutter"; } &&
+        fvm dart run melos exec -c 1 --dir-exists=test --fail-fast --
+        "fvm flutter test ${CODELAB_TEST_REPORT_DIR:+--file-reporter \"json:$CODELAB_TEST_REPORT_DIR/flutter/\$MELOS_PACKAGE_NAME.json\"}"
 
     protocol-conformance:
       description: Run ACP protocol conformance checks.
       run: fvm dart test packages/dart/codelab_acp_protocol/test
 
     conformance:client:
-      description: Play the golden ACP fixture corpus against AcpClientApplication (client role).
-      run: fvm dart test packages/dart/codelab_client_acp/test/fixtures
+      description: Play the golden ACP fixture corpus against AcpClientApplication (client role; with CODELAB_TEST_REPORT_DIR also dart/codelab_client_acp.conformance.json).
+      run: >-
+        { [ -z "$CODELAB_TEST_REPORT_DIR" ] || mkdir -p "$CODELAB_TEST_REPORT_DIR/dart"; } &&
+        fvm dart test packages/dart/codelab_client_acp/test/fixtures
+        ${CODELAB_TEST_REPORT_DIR:+--file-reporter "json:$CODELAB_TEST_REPORT_DIR/dart/codelab_client_acp.conformance.json"}
 
     conformance:agent:
-      description: Play the golden ACP fixture corpus against AcpAgentServer (agent role).
-      run: fvm dart test packages/dart/codelab_agent_acp/test/conformance_test.dart
+      description: Play the golden ACP fixture corpus against AcpAgentServer (agent role; with CODELAB_TEST_REPORT_DIR also dart/codelab_agent_acp.conformance.json).
+      run: >-
+        { [ -z "$CODELAB_TEST_REPORT_DIR" ] || mkdir -p "$CODELAB_TEST_REPORT_DIR/dart"; } &&
+        fvm dart test packages/dart/codelab_agent_acp/test/conformance_test.dart
+        ${CODELAB_TEST_REPORT_DIR:+--file-reporter "json:$CODELAB_TEST_REPORT_DIR/dart/codelab_agent_acp.conformance.json"}
 
     conformance:embedded:
       description: Play the golden ACP fixture corpus against the embedded agent in the CLI process (codelab test-scenario --agent embedded; no child process, no network).
-      run: cd apps/codelab_cli && fvm dart run bin/codelab.dart test-scenario ../../packages/dart/codelab_acp_testing/fixtures/acp --agent embedded
+      # С CODELAB_TEST_REPORT_DIR (абсолютный путь: каталог команды —
+      # apps/codelab_cli) пишет JUnit scenario-embedded.xml (D6, D8).
+      run: >-
+        { [ -z "$CODELAB_TEST_REPORT_DIR" ] || mkdir -p "$CODELAB_TEST_REPORT_DIR"; } &&
+        cd apps/codelab_cli && fvm dart run bin/codelab.dart test-scenario
+        ../../packages/dart/codelab_acp_testing/fixtures/acp --agent embedded
+        ${CODELAB_TEST_REPORT_DIR:+--junit "$CODELAB_TEST_REPORT_DIR/scenario-embedded.xml"}
 
     test:dart:
-      description: Run tests of pure Dart packages with the Dart test runner.
-      run: fvm dart run melos exec -c 4 --no-flutter --dir-exists=test --fail-fast -- "fvm dart test"
+      description: Run tests of pure Dart packages with the Dart test runner (with CODELAB_TEST_REPORT_DIR also dart/<package>.json per package).
+      run: >-
+        { [ -z "$CODELAB_TEST_REPORT_DIR" ] || mkdir -p "$CODELAB_TEST_REPORT_DIR/dart"; } &&
+        fvm dart run melos exec -c 4 --no-flutter --dir-exists=test --fail-fast --
+        "fvm dart test ${CODELAB_TEST_REPORT_DIR:+--file-reporter \"json:$CODELAB_TEST_REPORT_DIR/dart/\$MELOS_PACKAGE_NAME.json\"}"
 
     guard:
       description: Run architecture guards — forbidden imports and the core dependency allowlist.
@@ -137,11 +159,17 @@ melos:
 
     test:e2e:cli:dart-agent:
       description: Run the codelab_cli end-to-end tests except scripted-only against codelab-agent with --llm-script (kernel compiled by the test, Dart VM; part of check).
-      run: CODELAB_E2E_AGENT=dart fvm dart test apps/codelab_cli/test/e2e --exclude-tags scripted-only
+      run: >-
+        { [ -z "$CODELAB_TEST_REPORT_DIR" ] || mkdir -p "$CODELAB_TEST_REPORT_DIR"; } &&
+        CODELAB_E2E_AGENT=dart fvm dart test apps/codelab_cli/test/e2e --exclude-tags scripted-only
+        ${CODELAB_TEST_REPORT_DIR:+--file-reporter "json:$CODELAB_TEST_REPORT_DIR/cli-dart.json"}
 
     test:e2e:cli:embedded:
       description: Run the codelab_cli end-to-end tests except scripted-only with the embedded agent (CLI from the test entry point test/e2e/support/embedded_cli_main.dart with a model script, Dart VM; part of check).
-      run: CODELAB_E2E_AGENT=embedded fvm dart test apps/codelab_cli/test/e2e --exclude-tags scripted-only
+      run: >-
+        { [ -z "$CODELAB_TEST_REPORT_DIR" ] || mkdir -p "$CODELAB_TEST_REPORT_DIR"; } &&
+        CODELAB_E2E_AGENT=embedded fvm dart test apps/codelab_cli/test/e2e --exclude-tags scripted-only
+        ${CODELAB_TEST_REPORT_DIR:+--file-reporter "json:$CODELAB_TEST_REPORT_DIR/cli-embedded.json"}
 
     test:e2e:cli:python-agent:
       description: Run the plain-turn codelab_cli end-to-end tests (tag python-agent) against the Python agent `codelab serve --stdio` with the mock provider; skipped with a reason without it (local only, not part of check).
@@ -152,16 +180,21 @@ melos:
       # По одному файлу на запуск: `flutter test integration_test -d macos`
       # на macOS не поднимает приложение после первого файла («Failed to
       # foreground app; open returned 1»). Код выхода — ненулевой, если упал
-      # хотя бы один файл; остальные файлы всё равно прогоняются. Код 79 —
+      # хотя бы один файл; остальные файлы всё равно прогоняются. С
+      # CODELAB_TEST_REPORT_DIR (абсолютный путь) пишет app/dart-agent/<файл>.json
+      # и app/dart-agent/meta.json (change switch-default-agent-to-dart, D6, D9). Код 79 —
       # «No tests ran» из package:test: в файле только scripted-only тесты,
       # это пропуск файла, а не падение.
       run: >-
         fvm dart run melos run build:agent &&
+        { [ -z "$CODELAB_TEST_REPORT_DIR" ] || { mkdir -p "$CODELAB_TEST_REPORT_DIR/app/dart-agent" &&
+        printf '{"commit":"%s","macos":"%s","created_at":"%s"}\n' "$(git rev-parse HEAD)" "$(sw_vers -productVersion)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        > "$CODELAB_TEST_REPORT_DIR/app/dart-agent/meta.json"; }; } &&
         cd apps/codelab_desktop && {
         status=0;
         for file in integration_test/*_test.dart; do
         echo "== $file";
-        fvm flutter test "$file" -d macos --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=dart --dart-define=CODELAB_E2E_AGENT_BIN=../../build/bin/codelab-agent;
+        fvm flutter test "$file" -d macos --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=dart --dart-define=CODELAB_E2E_AGENT_BIN=../../build/bin/codelab-agent ${CODELAB_TEST_REPORT_DIR:+--file-reporter "json:$CODELAB_TEST_REPORT_DIR/app/dart-agent/$(basename "$file").json"};
         code=$?;
         if [ $code -eq 79 ]; then echo "SKIPPED (scripted-only): $file";
         elif [ $code -ne 0 ]; then echo "FAILED: $file"; status=1; fi;
@@ -171,6 +204,9 @@ melos:
 
     test:e2e:app:embedded:
       description: Run every codelab_desktop macOS integration test except scripted-only with the embedded agent (type "Embedded agent", model script instead of a child process; fs_flow and terminal_flow skip themselves), one file per flutter test run (release/* only, not part of check).
+      # С CODELAB_TEST_REPORT_DIR (абсолютный путь: цикл идёт в
+      # apps/codelab_desktop) пишет app/embedded/<файл>.json и app/embedded/meta.json
+      # (change switch-default-agent-to-dart, D6, D9).
       # Тот же цикл по файлам, что у `test:e2e:app:dart-agent`: на macOS
       # `flutter test integration_test -d macos` не поднимает приложение после
       # первого файла. Бинарь агента не собирается: агент встроен в приложение
@@ -179,11 +215,14 @@ melos:
       # ran» из package:test: в файле только scripted-only тесты, это пропуск
       # файла, а не падение.
       run: >-
+        { [ -z "$CODELAB_TEST_REPORT_DIR" ] || { mkdir -p "$CODELAB_TEST_REPORT_DIR/app/embedded" &&
+        printf '{"commit":"%s","macos":"%s","created_at":"%s"}\n' "$(git rev-parse HEAD)" "$(sw_vers -productVersion)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        > "$CODELAB_TEST_REPORT_DIR/app/embedded/meta.json"; }; } &&
         cd apps/codelab_desktop && {
         status=0;
         for file in integration_test/*_test.dart; do
         echo "== $file";
-        fvm flutter test "$file" -d macos --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=embedded;
+        fvm flutter test "$file" -d macos --exclude-tags scripted-only --dart-define=CODELAB_E2E_AGENT=embedded ${CODELAB_TEST_REPORT_DIR:+--file-reporter "json:$CODELAB_TEST_REPORT_DIR/app/embedded/$(basename "$file").json"};
         code=$?;
         if [ $code -eq 79 ]; then echo "SKIPPED (scripted-only): $file";
         elif [ $code -ne 0 ]; then echo "FAILED: $file"; status=1; fi;
