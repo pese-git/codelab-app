@@ -31,7 +31,10 @@ import 'support/test_app_scope.dart';
 import 'support/transcript_rows.dart';
 
 /// stdio-профиль окна вместо прежней формы подключения (задача 2.4 change
-/// `add-app-settings-shell`, D6): по умолчанию — `codelabAgentStdioProfile`.
+/// `add-app-settings-shell`, D6). Метка и команда — произвольные литералы теста
+/// (прежние значения описания), а не `codelabAgentStdioProfile`: тесты этого
+/// хелпера проверяют профиль окна, а не встроенное описание (D10 change
+/// `switch-default-agent-to-dart`).
 ConnectionProfile _stdioProfile({
   String command = 'codelab',
   List<String> args = const ['serve', '--stdio'],
@@ -99,7 +102,9 @@ void main() {
     expect(find.byType(CodeLabSessionPaneHeader), findsOneWidget);
     expect(find.byKey(CodeLabWorkbenchLayout.dockKey), findsNothing);
     expect(find.byType(WorkbenchDebugLogPane), findsNothing);
-    expect(find.text('Codelab Agent'), findsWidgets);
+    // D10 (switch-default-agent-to-dart): имя описания stdio-агента теперь
+    // `codelab-agent (stdio)`; значение проверяется явно, не ослабляется.
+    expect(find.text('codelab-agent (stdio)'), findsWidgets);
     expect(
       find.text('Connect an ACP agent to start a session.'),
       findsOneWidget,
@@ -117,7 +122,8 @@ void main() {
     expect(scope.resolve<StdioAcpAgentProfile>(), codelabAgentStdioProfile);
     expect(
       scope.resolve<CodeLabShellCubit>().state.connectionDetail,
-      'codelab',
+      // D10: команда описания — `codelab-agent` (было `codelab`).
+      'codelab-agent',
     );
     expect(scope.resolve<AcpClientApplication>(), isA<AcpClientApplication>());
     expect(scope.resolve<AcpTransport>(), same(binding.transport));
@@ -169,7 +175,9 @@ void main() {
 
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
     expect(shellCubit.state.transportLabel, 'stdio');
-    expect(find.text('Codelab Agent'), findsWidgets);
+    // D10 (switch-default-agent-to-dart): имя описания stdio-агента теперь
+    // `codelab-agent (stdio)`; значение проверяется явно, не ослабляется.
+    expect(find.text('codelab-agent (stdio)'), findsWidgets);
 
     const endpoint = 'wss://agent.example.test/acp';
     await tester.runAsync(
@@ -235,7 +243,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Профиль по умолчанию тестовой сборки — stdio-профиль с меткой
-    // `Codelab Agent`: его строка стоит на странице.
+    // `codelab-agent (stdio)` (`testStdioProfile`, D10): его строка стоит на
+    // странице.
     expect(
       find.byKey(ValueKey('connection-profile-row-${testStdioProfile.id}')),
       findsOneWidget,

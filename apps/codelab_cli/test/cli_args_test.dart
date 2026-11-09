@@ -228,6 +228,22 @@ void main() {
     expect(options.timeout, const Duration(seconds: 10));
   });
 
+  // Task 1.10 change `switch-default-agent-to-dart`; D8.
+  test('test-scenario --junit takes a file and is listed in the help', () {
+    final options = parseCliArgs([
+      'test-scenario',
+      'x',
+      '-a',
+      'stdio:agent',
+      '--junit',
+      'out/r.xml',
+    ]);
+
+    expect(options.junit, 'out/r.xml');
+    expect(parseCliArgs(['test-scenario', 'x']).junit, isNull);
+    expect(cliUsage(), contains('--junit <file>'));
+  });
+
   test('test-scenario without --timeout waits 30s for a frame', () {
     final options = parseCliArgs(['test-scenario', 'x', '-a', 'stdio:agent']);
 
