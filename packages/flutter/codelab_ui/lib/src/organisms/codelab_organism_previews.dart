@@ -118,6 +118,11 @@ Widget codelabTranscriptPanelPreview() {
             id: 'agent-1',
             text: 'I will inspect the workspace checks first.',
           ),
+          CodeLabAgentTextRow(
+            id: 'agent-block-1',
+            text: 'MCP servers (1)\n  docs  connected  3 tools',
+            preformatted: true,
+          ),
           CodeLabToolCallRow(
             id: 'tool-1',
             status: CodeLabToolCallStatus.succeeded,

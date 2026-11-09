@@ -328,9 +328,9 @@ class _TranscriptRowView extends StatelessWidget {
   Widget build(BuildContext context) {
     return switch (row) {
       CodeLabUserRow(:final text) => _UserBubble(text: text),
-      CodeLabAgentTextRow(:final text) => Align(
+      CodeLabAgentTextRow(:final text, :final preformatted) => Align(
         alignment: Alignment.centerLeft,
-        child: CodeLabText(text),
+        child: preformatted ? CodeLabMonospaceBlock(text) : CodeLabText(text),
       ),
       CodeLabThoughtRow(:final text, :final streaming) => CodeLabThoughtBlock(
         text: text,

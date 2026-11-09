@@ -25,6 +25,7 @@ import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/platform/home_path_label.dart';
+import '../../../core/text/fenced_block.dart';
 import 'embedded_mcp_status_source.dart';
 import 'mcp_settings_state.dart';
 import 'provider_settings_session.dart';
@@ -1508,13 +1509,13 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     _sending = false;
     switch (outcome) {
       case PromptCompleted(:final turn):
-        _replyText = _unfenced(
-          [
-            for (final update in turn.updates)
-              if (update is AgentMessageChunk && update.content is TextContent)
-                (update.content as TextContent).text,
-          ].join(),
-        );
+        final reply = [
+          for (final update in turn.updates)
+            if (update is AgentMessageChunk && update.content is TextContent)
+              (update.content as TextContent).text,
+        ].join();
+        // Одно внешнее ограждение снимается общей функцией (Q34, Q37).
+        _replyText = unfenceSingleBlock(reply) ?? reply;
         _replyNotice = null;
       case PromptQueued():
         _replyNotice = _listFailed;
@@ -1524,37 +1525,6 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
         _discarded(command, 'failed', id);
     }
     _setStatus(_textStatus());
-  }
-
-  /// Снимает ОДНО внешнее markdown-ограждение ответа (Q34 (б), D11 «Итерация
-  /// 6»): ядро ставит его для ленты чата, а панель показывает текст в
-  /// моноширинном блоке. Только если весь ответ (без пробельных строк по
-  /// краям) — одна строка ``` с необязательным словом языка, тело и строка
-  /// ``` и внутри нет другой строки-ограждения; иначе текст как есть. Разбора
-  /// содержимого нет (SETUP-11).
-  static String _unfenced(String text) {
-    final lines = text.split(RegExp(r'\r?\n'));
-    var start = 0;
-    var end = lines.length;
-    while (start < end && lines[start].trim().isEmpty) {
-      start++;
-    }
-    while (end > start && lines[end - 1].trim().isEmpty) {
-      end--;
-    }
-    if (end - start < 2) {
-      return text;
-    }
-    final open = RegExp(r'^\s*```[A-Za-z0-9_+.-]*\s*$');
-    final close = RegExp(r'^\s*```\s*$');
-    if (!open.hasMatch(lines[start]) || !close.hasMatch(lines[end - 1])) {
-      return text;
-    }
-    final inner = lines.sublist(start + 1, end - 1);
-    if (inner.any((line) => line.trimLeft().startsWith('```'))) {
-      return text;
-    }
-    return inner.join('\n');
   }
 
   void _discarded(String command, String reason, SessionId? session) =>
