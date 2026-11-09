@@ -135,7 +135,7 @@ stdout в режиме `--stdio` SHALL нести только кадры JSON-R
 
 Каталог моделей SHALL содержать модели всех провайдеров конфигурации, а запросы SHALL маршрутизироваться по провайдеру модели. Сессии SHALL храниться в `JsonlSessionStore` под `sessions.dir` (по умолчанию `$CODELAB_HOME/sessions`) с политикой `sessions.fsync`. Исключение — сценарий `--llm-script`: журнал SHALL вестись только по `--sessions-dir` (без него — в памяти), а явно заданные `sessions.dir` и `sessions.fsync` из `--config` НЕ SHALL применяться и SHALL давать по предупреждению `config.key.not_applied {key, source}` (решение пользователя 2026-10-30): сценарий не трогает `$CODELAB_HOME` и пользовательские журналы. Сужение `profile.agent-serve.*` SHALL применяться к профилю; расширение профиля SHALL быть ошибкой конфига.
 
-Невалидный конфиг SHALL завершать процесс кодом `64` до старта транспорта. В stderr и в лог `serve.config.invalid` SHALL выводиться каждая проблема с файлом, строкой, столбцом и путём ключа. Отсутствие модели по умолчанию (ни `agent.default_model`, ни `--provider` с `--model`, ни `--llm-script`) SHALL быть проблемой `agent.default_model: required`. Неизвестная переменная `CODELAB_*` SHALL давать предупреждение в лог. Значения `CODELAB_API_KEY`, ключей из `api_key_env` и подстановок `${ENV}` НЕ SHALL попадать в лог, текст ошибок и строковое представление опций.
+Невалидный конфиг SHALL завершать процесс кодом `64` до старта транспорта. В stderr и в лог `serve.config.invalid` SHALL выводиться каждая проблема с файлом, строкой, столбцом и путём ключа. Отсутствие любой модели (ни провайдера с моделью в слоях конфига, ни `--provider` с `--model`, ни `--llm-script`) SHALL быть проблемой `agent.default_model: no model is configured; add a provider with at least one model` с событием `config.model.none`; провайдер с моделью без `agent.default_model` — валидный конфиг, модель новой сессии выбирается требованием `agent-runtime` «Модель новой сессии». Бинарь без `--llm-script` SHALL передавать ядру файловую память последней модели `$CODELAB_HOME/state/last-model.json` (`agent-runtime` «Последняя выбранная модель»). Неизвестная переменная `CODELAB_*` SHALL давать предупреждение в лог. Значения `CODELAB_API_KEY`, ключей из `api_key_env` и подстановок `${ENV}` НЕ SHALL попадать в лог, текст ошибок и строковое представление опций.
 
 С `--llm-script` бинарь НЕ SHALL читать `$CODELAB_HOME/config.yaml`, проектные слои и не искать `codelab.toml`; `--config` SHALL читаться.
 
@@ -165,9 +165,13 @@ stdout в режиме `--stdio` SHALL нести только кадры JSON-R
 - **WHEN** бинарь запущен с `--model gpt` без `--provider`; во втором варианте — с `--model a/x --model b/y` без `--provider`
 - **THEN** в обоих вариантах код `64` и текст ошибки использования в stderr до загрузки конфига
 
-#### Scenario: Нет модели по умолчанию
-- **WHEN** бинарь запущен `serve --stdio` без `--provider`, без `--llm-script`, а ни один слой не задаёт `agent.default_model`
-- **THEN** код `64`, stderr содержит `agent.default_model: required`
+#### Scenario: Нет ни одной модели
+- **WHEN** бинарь запущен `serve --stdio` без `--provider`, без `--llm-script`, а ни один слой не объявляет провайдера с моделью
+- **THEN** код `64`, stderr содержит `agent.default_model: no model is configured; add a provider with at least one model`
+
+#### Scenario: Провайдер без модели по умолчанию
+- **WHEN** `config.yaml` объявляет только провайдера `gw` с моделью `m` без `agent.default_model`, а бинарь запущен `serve --stdio`
+- **THEN** транспорт стартует, `session/new` возвращает опцию `model` с `currentValue` `gw/m`
 
 #### Scenario: Относительный CODELAB_CONFIG
 - **WHEN** бинарь запущен с `CODELAB_CONFIG=.codelab/extra.yaml`
