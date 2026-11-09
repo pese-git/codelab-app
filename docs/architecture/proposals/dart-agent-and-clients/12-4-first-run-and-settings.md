@@ -340,18 +340,24 @@ final class ProviderEntryView {
   final ConfigSourceView source;           // файл и слой, где определён провайдер
   final bool editable;                     // false для слоя 3, --config и переменных окружения
 }
-final class McpServerEntryView {
-  final String name; final McpServerType type;                // stdio | http
-  final String target;                     // "npx -y …" или URL без секретов
-  final bool enabled; final List<String> secretRefs;          // имена из ${secret:<name>} в env/headers
+final class McpServerEntryView {         // mcpServerEntriesOf(snapshot); строка по элементу слоя-источника
+  final String name; final McpTransportKind kind;             // stdio | http
+  final String? command; final List<String> args;             // args — maskMcpArgs ядра
+  final String? url;                                          // maskUrl
+  final Map<String, String> env; final Map<String, String> headers;   // headers — только чистая ссылка ${…}, иначе <redacted>
+  final bool enabled; final bool disabledHere;                // disabledHere — переопределение «Disable here» в слое 4
   final ConfigSourceView source; final bool editable;
+  final bool masked;                       // маскирование изменило хотя бы одно значение
+  String get target;                       // "npx -y …" или URL без секретов
 }
-final class McpServerDraft {               // форма добавления и правки; validate() → List<ConfigIssue>
-  final String name; final McpServerType type;
-  final String? command; final List<String> args; final String? url;
-  final List<McpValueDraft> env; final List<McpValueDraft> headers;   // plain(value) | secret(SecretValue | keep)
-  final bool enabled; final ConfigTarget target;
-  /// [UpsertMcpServer(map)]; значение secret(…) пишется как "${secret:<SecretNames.forMcp(name, key)>}".
+final class McpServerDraft {               // форма добавления и правки; validate({existingNames}) → List<McpDraftProblem>
+  final String name; final McpTransportKind kind;
+  final String command; final List<String> args; final String url;
+  final Map<String, McpValueDraft> env; final Map<String, McpValueDraft> headers;
+                                           // McpTextValue(text) | McpNewSecret(SecretValue) | McpStoredSecret(ref)
+  final bool enabled;                      // цель записи выбирает страница: base — слой user или projectLocal
+  /// [UpsertMcpServer(map)] — элемент целиком, неизвестные ключи сохраняются;
+  /// McpNewSecret пишется как "${secret:<SecretNames.forMcp(name, key)>}", McpStoredSecret — как был.
   List<ConfigEdit> toEdits();
   Map<String, SecretValue> secretsToWrite();   // "codelab/mcp/<name>/<key>" (нижний регистр, SecretNames.forMcp)
 }
@@ -365,6 +371,26 @@ final class SettingFieldView {             // строка общего реда
 (§15.5, §17.5.4); новых ключей схемы клиенты не вводят. Значение, помеченное «Secret», целиком
 заменяется ссылкой (`Authorization: "${secret:codelab/mcp/github/authorization}"`); если
 пользователь вписал ссылку сам (`"Bearer ${secret:…}"`), черновик сохраняет её как обычный текст.
+
+**Запись MCP-серверов в мосте** (change `add-provider-setup-ui`, D11, Q21, Q22, Q30, Q31, Q35;
+`codelab_setup/lib/src/mcp/`, основной барель). Порт секретов — тот же `ProviderKeys`, второго нет:
+* `McpServerCommitter` — `occupiedSecrets(draft, {replaceSecrets})` → `McpSecretCheck{names,
+  errorType}` (вопрос «Replace it» и исход `McpSecretAppeared` следуют одному `stored`);
+  `commit(draft, base, {replaceSecrets, cwd})` → `McpServerCommitOutcome` (`McpServerCommitted`,
+  `McpServerInvalid`, `McpSecretAppeared`, `McpSecretNotStored`, `McpServerNotSaved`) в порядке
+  «секрет → конфиг → откат»; `setEnabled` и `disableHere` → `McpServerWriteOutcome`
+  (`McpServerWritten`, `McpServerNotWritten`, `McpServerRefused`);
+* `McpServerRemover` — `remove` → `McpServerRemovalOutcome` (`McpServerRemoved` с итогом по
+  каждому секрету, `McpServerRemovalNotSaved`, `McpServerRemovalRefused`), `enableHere` и
+  статическая `secretCandidatesOf(snapshot, name)` — список подтверждения «Remove» по тому же
+  правилу, что удаление (SETUP-24);
+* `AgentConfigSnapshot.rejections` — проблемы, из-за которых агент отклонит записанный конфиг
+  (`value`, `semantic`, `inlineSecret` и незаданная переменная `config.variable.unset`), основа
+  баннера `rejected` (шаг 6 §12.4.6; Q30);
+* `restartRequiredServers(before, after)` и `restartRequiredProviders(before, after)`
+  (`mcp_restart.dart`) — имена серверов и id провайдеров из `planConfigReload(...).deferred`
+  ядра: что работающий агент отложит до перезапуска; по ним страницы пишут подсказку «after
+  Restart agent» (§12.4.5, §12.4.6). Правило одно — в ядре, копии в мосте и в app нет.
 
 **Состояния Cubit-ов app.** Feature `apps/codelab_desktop/lib/features/settings/`:
 `application/` содержит Cubit-ы, `presentation/` — страницы. IO-реализации собирает composition
@@ -393,19 +419,33 @@ final class ProviderSettingsReady extends ProviderSettingsState {
 }
 
 // .../application/provider_wizard_cubit.dart — тонкая обёртка: state = ProviderSetupState
-// .../application/mcp_settings_cubit.dart
+// .../application/mcp_settings_state.dart (Cubit — mcp_settings_cubit.dart)
 sealed class McpSettingsState {}
 final class McpSettingsLoading extends McpSettingsState {}
-final class McpSettingsReadOnly extends McpSettingsState { final SettingsAccess access; final McpAgentStatus status; }
-final class McpSettingsReady extends McpSettingsState {
-  final List<McpServerEntryView> servers;
-  final McpServerDraft? editing;           // открыт редактор
-  final McpAgentStatus status;
-  final SettingsBanner? banner;
+sealed class McpSettingsLoaded extends McpSettingsState { final McpAgentStatus agentStatus; }
+final class McpSettingsReadOnly extends McpSettingsLoaded { final String notice; final String? hint; }
+final class McpSettingsUnreadable extends McpSettingsLoaded { final List<String> problems; }
+final class McpSettingsReady extends McpSettingsLoaded {
+  final List<McpServerRow> rows;           // McpServerEntryView + источник, разрешённые действия, черновик, note
+  final McpSecretStorage secretStorage;    // id бэкенда, writable, причина недоступности
+  final bool canSaveToProject; final bool newServerOpen; final bool saving;
+  final McpBanner? banner;                 // saved | conflict | error — итог и строки подробностей
+  final McpRejectedConfig? rejected;       // «Saved, but the agent rejected the new config» (шаг 6 §12.4.6)
+  final McpReplaceQuestion? replaceQuestion; final McpDraftIssues? draftIssues;
 }
-sealed class McpAgentStatus {}             // unavailable(reason) | loading | reply(text, at) | failed(message)
-                                           // | live(List<McpServerSummary>) — только встроенный агент, §12.4.6
+sealed class McpAgentStatus {}
+final class McpAgentStatusUnavailable extends McpAgentStatus {}            // «Open a session to see live status»
+final class McpAgentStatusLive extends McpAgentStatus {                    // только встроенный агент, §12.4.6
+  final List<McpStatusRow> rows; final DateTime updatedAt;                // из McpServerSummary
+}
+final class McpAgentStatusText extends McpAgentStatus {                    // агент вне процесса: ответ /mcp как есть
+  final String? text; final bool sending; final bool canSend; final String? notice;
+}
 ```
+
+Состав состояний сверен с кодом `develop` 7482d610 (подготовка итерации 6c change
+`add-provider-setup-ui`, 2026-11-09); подробности полей — doc-комментарии
+`mcp_settings_state.dart`.
 
 **Сторож запуска** (`apps/codelab_desktop/lib/app/boot/`; чистый Dart без Flutter, кроме
 `boot_host.dart`):
@@ -671,9 +711,14 @@ stateDiagram-v2
   `ProviderCheck`; номер проверки на строку, повтор и уход со страницы отменяют прежнюю;
 * без провайдеров — `No providers yet. The embedded agent needs one to run a turn.` и «Add provider»;
   битый `config.yaml` — ошибка загрузчика без записи (`ProviderSettingsUnreadable`);
-* после записи ключа под тем же именем баннер добавляет `The new key is used after Restart agent
-  (Settings › Connection).`; если агент не подключён — `Saved. Connect to start the agent with the new
-  provider.` и «Connect»;
+* баннер после записи мастера решает правило ядра, а не вид ключа (решение Q35, D11 «Итерация 6:
+  баннер провайдера по правилу ядра»): если агент подключён и `restartRequiredProviders(снимок
+  страницы до записи, свежий снимок)` называет провайдера — `Provider <id> saved. Its models are
+  available after Restart agent (Settings › Connection).`; иначе при замене ключа — `Provider <id>
+  saved. The new key is used after Restart agent (Settings › Connection).`, в остальных случаях —
+  `Provider <id> saved.`; если агент не подключён — `Saved. Connect to start the agent with the new
+  provider.` и «Connect». Расчёт подсказки ограничен 5 с; сбой или тайм-аут дают баннер без
+  подсказки и событие `provider_wizard.restart_hint_failed`, итог записи не меняется;
 * секрет удаляется только после `ConfigSaved` (SETUP-24).
 
 ## 12.4.6. Алгоритм: страница MCP-серверов (E-13)
@@ -734,6 +779,20 @@ stateDiagram-v2
    отправляются только по кнопке и только без идущего хода; автоматического повтора `/mcp list` нет,
    свежий статус даёт кнопка «Refresh» (SETUP-11; change `add-provider-setup-ui`, D12). Встроенному агенту повтор не
    нужен: состояние приходит потоком.
+
+   Не всё работающий агент применяет на лету: новый `stdio`-сервер, повторное включение и новый
+   `http`-сервер с подстановкой `${…}` он откладывает до перезапуска (`planConfigReload` ядра,
+   R0-1, R0-4, R6-1). После записи страница сравнивает свой снимок до записи со свежим
+   (`restartRequiredServers`) и, если агент подключён и сервер в списке, пишет в баннере
+   `Server <name> saved. It starts after Restart agent (Settings › Connection).` (запись) или
+   `Server <name> enabled. It starts after Restart agent (Settings › Connection).` (переключатель,
+   «Enable here»); иначе — прежний `Server <name> saved.` или баннера нет (решение Q31 change
+   `add-provider-setup-ui`, D11). Успех записи фиксируется по исходу моста до расчёта подсказки:
+   сбой перечитывания или подсказки не превращает итог в «not saved» (`restart_hint_failed`).
+
+   Текст ответа `/mcp list` ядро оформляет для ленты чата одним блоком ```` ```text ````. Панель
+   снимает одно внешнее ограждение, только если весь ответ — ровно один огороженный блок; иначе
+   текст показывается как есть (решение Q34 (б), D11). Разбора содержимого нет (SETUP-11).
 6. **Невалидный результат.** Если агент отклонил бы новый конфиг (файл записан, но перечитывание
    не проходит — например, переменная `${GITHUB_TOKEN}` не задана в окружении агента: писатель
    считает это предупреждением, загрузчик агента — ошибкой), агент работает на старом конфиге.
@@ -1411,6 +1470,11 @@ change `add-agent-secret-store`, D7, D13), реализация — в `codelab_
 | `provider_setup_commit_test.dart: keychain failure writes no config` | SETUP-5 |
 | `provider_readiness_test.dart: no default model, missing secret, unset env, broken config` | U-17 |
 | `mcp_server_draft_test.dart: validation, secret refs and edits for stdio and http` | E-13 |
+| `mcp_server_commit_test.dart` — `McpServerCommitter`: порядок «секрет → конфиг → откат», `occupiedSecrets` и `McpSecretAppeared`, `setEnabled`, `disableHere` | E-13, SETUP-5 |
+| `mcp_server_remove_test.dart` — `McpServerRemover`: `remove` и секреты после `ConfigSaved`, `secretCandidatesOf`, `enableHere` | E-13, SETUP-24 |
+| `agent_config_rejections_test.dart` — `AgentConfigSnapshot.rejections`: что агент отклонит, что нет (Q30) | E-13 |
+| `mcp_restart_test.dart` — `restartRequiredServers` и `restartRequiredProviders` на снимках настоящего `FileAgentConfigStore` (Q31, Q35) | E-13, D-05 |
+| `views/mcp_server_entry_view_test.dart` — маскирование `args`, `env`, `url`, `headers` строки страницы | E-13, SETUP-1 |
 | `settings_access_test.dart: embedded editable, codelab-agent stdio editable, third-party not managed, ws read-only` | SETUP-2 |
 | `settings_access_test.dart: targets never include project layer or --config file` | SETUP-3 |
 | `file_agent_config_store_test.dart` (`test/io/`): `each ConfigWriter exception maps to its outcome, inline secret before generic config exception` | SETUP-6 |
@@ -1442,13 +1506,16 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
 * `cli/settings-remote-read-only`: REPL с `ws://` scripted-агентом, `/provider add` → сообщение
   read-only, локальный конфиг не изменён (SETUP-2).
 
-**Интеграционные тесты app** (`apps/codelab_desktop/integration_test/`, macOS). В scope зависимостей
-подменяются `SecretStore` (в памяти) и `CODELAB_HOME` (временный каталог). `/models` отдаёт
-локальный `HttpServer`.
+**Интеграционные тесты app** (`apps/codelab_desktop/integration_test/`, macOS). `CODELAB_HOME` —
+временный каталог; хранилище секретов — бэкенд `file` в нём (`secrets.backend: file` пишет сам тест,
+`integration_test/support/e2e_agent.dart`, `openFileSecrets`), настоящие `~/.codelab` и хранилище ОС
+не затрагиваются. `/models` отдаёт локальный `HttpServer`.
 
 * `app:embedded_provider_settings_flow_test.dart` (D-05, L-24):
-  1. встроенный профиль, пустой конфиг → «Add provider» → мастер до «Save» → строка провайдера
-     с `Key: in memory` (id бэкенда тестового хранилища); ключа нет в файле; модель видна в селекторе композера;
+  1. встроенный профиль, пустой конфиг → баннер соединения «Add provider» (D26) → мастер до «Save» →
+     строка провайдера с `Key: in file`; ключа нет в файле конфига; модели нового провайдера
+     агент видит после «Restart agent» на странице «Connection» (решение Q17), и только тогда модель
+     появляется в селекторе композера;
   2. «Check» с неверным ключом в хранилище → `unauthorized` у строки;
   3. «Edit» с `KeepStoredSecret` меняет `base_url`, секрет не тронут;
   4. файл изменён тестом между чтением и записью → баннер конфликта, черновик на месте (SETUP-6);
@@ -1457,6 +1524,7 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
 * `app:mcp_settings_flow_test.dart` (E-13):
   1. добавить `http`-сервер с секретным заголовком → в конфиге
      `Authorization: "${secret:codelab/mcp/github/authorization}"`, значение только в хранилище;
+     баннер `Server github saved. It starts after Restart agent (Settings › Connection).` (Q31);
   2. агент (встроенный, открыт настоящим открывателем на временном `CODELAB_HOME`; MCP-сервер —
      фейковый сервер на loopback HTTP с одним инструментом из `codelab_embedded/testing.dart`, его URL
      и есть адрес `github` шага 1; решение Q28 change `add-provider-setup-ui`) открывает сессию;
@@ -1552,14 +1620,22 @@ stdio-резолвера переключателя типа нет (SETUP-22).
 * `codelab_agent_io` — `secrets/client_secret_access_test.dart` (`ClientSecretAccess`: порядок «переменная,
   затем бэкенд», без кэша, бэкенд по пользовательскому слою), `secret_read_only_hint_test.dart`;
 * `codelab_agent_core` — `mcp/mcp_session_changes_test.dart`, `runtime/mcp_status_port_test.dart`;
-  `codelab_embedded` — `embedded_mcp_status_test.dart` (статус без промпта, закрытие при `dispose`);
+  `codelab_agent_mcp` — `connector_changes_test.dart` (поток состояний `_ConnectedSession`),
+  `mcp_tool_kind_test.dart` (вид `other` у любого MCP-инструмента, Q32);
+  `codelab_embedded` — `embedded_mcp_status_test.dart` (статус без промпта, закрытие при `dispose`),
+  `fake_mcp_http_host_test.dart` (фейковый MCP-сервер loopback HTTP из `testing.dart` для
+  `app:mcp_settings_flow_test.dart`, Q28);
 * `codelab_setup` — тесты таблицы выше, а также `http_provider_check_test.dart: redirect is not followed`
   (SETUP-23) и `client_secret_access_exports_test.dart`;
 * kit — `profile_token_ref_test.dart` (форма `secret:`), `profile_secrets_test.dart`,
   `profile_commit_test.dart`, `profile_probe_test.dart` (новый токен из памяти);
 * app — `provider_settings_cubit_test.dart`, `provider_wizard_cubit_test.dart`,
   `mcp_settings_cubit_test.dart`, `providers_page_test.dart`, `provider_wizard_dialog_test.dart`,
-  `mcp_page_test.dart`; правки `add_profile_*_test.dart`, `connection_page_test.dart`;
+  `mcp_page_test.dart`; правки `add_profile_*_test.dart`, `connection_page_test.dart`; лента —
+  `features/workbench/application/ui_mappers_test.dart` (`Unknown risk`, заметка `turnStopped`,
+  Q32, Q33), `features/workbench/presentation/turn_stopped_notice_test.dart`;
+* kit, лента — `codelab_client_acp` (`ApprovalRiskLevel.unknown`, Q32) и
+  `codelab_client_core/test/transcript/` (заметка `turnStopped`, Q33);
 * `codelab_ui` — `codelab_key_value_list_test.dart`, `codelab_step_breadcrumb_test.dart`,
   `codelab_status_table_test.dart`, `CodeLabMonospaceBlock` в `codelab_atomics_test.dart`;
 * CLI — `setup/provider_wizard_cli_test.dart`, `setup/first_run_test.dart`,

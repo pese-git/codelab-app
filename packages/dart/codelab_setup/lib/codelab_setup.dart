@@ -1,7 +1,7 @@
 /// Основной барель моста `codelab_setup`: настройка Dart-агента для клиентов
 /// (`dart-agent-and-clients` §12.4.2; design.md changes
 /// `add-agent-configuration`, D14, OQ2 (а), и `add-provider-setup-ui`, D2, D5,
-/// D6, D8, D10).
+/// D6, D7, D8, D9, D10, D11, D26).
 ///
 /// Почему: клиенты (`apps/*`) не импортируют `package:codelab_agent_*`
 /// напрямую (`AGENTS.md` §5), а типы конфигурации, доступ к настройкам, снимок
@@ -30,10 +30,23 @@
 ///   `ioProviderCheck()` в `io.dart`;
 /// - `ProviderRemover` — удаление провайдера одним `apply` и секрета после
 ///   `ConfigSaved` (SETUP-24);
-/// - `SecretValue` — значение секрета, которое не печатается (SETUP-1).
+/// - `SecretValue` — значение секрета, которое не печатается (SETUP-1);
+/// - мастер провайдера (D2, D7, D9, D26): `ProviderSetupFlow` — автомат,
+///   который строит composition root с портами `ProviderCheck`, `ProviderKeys`
+///   и `ProviderSetupCommitter` («секрет → конфиг», откат созданного секрета);
+///   пресеты — `ProviderPresets.all`, итог — `ProviderSetupPlan.toEdits()`;
+/// - готовность: `providerSetupNeeded(snapshot)` — «нет провайдера» по
+///   типизированным проблемам загрузчика, `checkProviderReadiness` — модель и
+///   ключ готовы к ходу;
+/// - MCP-серверы (D11): `McpServerDraft` — форма, `mcpServerEntriesOf` —
+///   строки страницы; запись — `McpServerCommitter` (`commit`, `setEnabled`,
+///   `disableHere`), удаление — `McpServerRemover` (`remove`, `enableHere`);
+///   `AgentConfigSnapshot.rejections` — проблемы, из-за которых агент отклонит
+///   конфиг (Q30);
+/// - `restartRequiredServers(before, after)` и `restartRequiredProviders` —
+///   что агент отложит до перезапуска (Q31, Q35); правило одно, в
+///   `planConfigReload` ядра, мост лишь называет имена.
 ///
-/// Мастер провайдера, пресеты, готовность и черновик MCP-сервера придут сюда
-/// со своими потребителями (итерации 3–5 change `add-provider-setup-ui`).
 library;
 
 export 'package:codelab_agent_core/codelab_agent_core.dart'
