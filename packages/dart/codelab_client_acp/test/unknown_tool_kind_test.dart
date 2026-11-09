@@ -9,7 +9,7 @@ import 'package:test/test.dart';
 // Незнакомый и новый вид вызова инструмента (change
 // `tolerate-unknown-tool-kind`, D1, D4, D5, D9; acp-protocol-client
 // «Неизвестный вид вызова инструмента», approval-safety «Риск вызова
-// неизвестного вида и смены режима»). Красные тесты: поведения ещё нет.
+// неизвестного вида и смены режима»).
 const _sessionId = SessionId('session-1');
 const _warnEvent = 'Unknown ACP tool kind treated as other.';
 
@@ -112,7 +112,7 @@ void main() {
         'title': 'secret-title',
         'kind': 'future_kind',
         'status': 'pending',
-        'rawInput': {'command': 'secret-raw-input'},
+        'rawInput': {'note': 'secret-raw-input'},
       });
       await _pump();
 
@@ -171,6 +171,7 @@ void main() {
         expect(entry['session_id'], 'session-1');
         expect(entry['toolKind'], 'future_kind');
         expect(entry['component'], 'protocol');
+        expect(entry['level'], 'warning');
         for (final banned in ['title', 'rawInput', 'content', 'payload']) {
           expect(entry.containsKey(banned), isFalse, reason: banned);
         }
@@ -214,15 +215,117 @@ void main() {
       emitPermission(51, {'toolCallId': 'call-1', 'kind': 'switch_mode'});
       await _pump();
 
-      expect(callOf('call-1')?.kind, _switchMode);
+      expect(callOf('call-1')?.kind, ToolKind.switchMode);
       expect(callOf('call-1')?.riskLevel, ApprovalRiskLevel.unknown);
       final approval = turnOf().approvals.values.single;
-      expect(approval.toolCall.kind, _switchMode);
+      expect(approval.toolCall.kind, ToolKind.switchMode);
       expect(approval.riskLevel, ApprovalRiskLevel.unknown);
       expect(warnings(), isEmpty);
       expect(answeredCancelled(), isFalse);
 
       await finishPrompt(turn);
+    });
+
+    // acp-protocol-client «Неизвестный вид вызова инструмента»: запись при
+    // приёме, до проверки хода; design.md «Risks», отмена.
+    test('a future_kind permission request during cancelling is answered '
+        'cancelled, logged once and creates no approval', () async {
+      final turn = startPrompt();
+      await _pump();
+      await client.cancelTurn(const CancelTurnCommand(sessionId: _sessionId));
+      expect(turnOf().status, PromptTurnStatus.cancelling);
+      captured.clear();
+
+      emitPermission(60, {'toolCallId': 'call-1', 'kind': 'future_kind'});
+      await _pump();
+
+      expect(answeredCancelled(), isTrue);
+      expect(warnings(), hasLength(1));
+      expect(warnings().single['method'], 'session/request_permission');
+      expect(turnOf().approvals, isEmpty);
+
+      await finishPrompt(turn);
+    });
+
+    test('tool_call without kind then tool_call_update with kind null: the '
+        'kind of the record is other and nothing is logged', () async {
+      final turn = startPrompt();
+      await _pump();
+
+      emitUpdate({
+        'sessionUpdate': 'tool_call',
+        'toolCallId': 'call-1',
+        'title': 'x',
+      });
+      emitUpdate({
+        'sessionUpdate': 'tool_call_update',
+        'toolCallId': 'call-1',
+        'kind': null,
+        'status': 'in_progress',
+      });
+      await _pump();
+
+      expect(callOf('call-1')?.kind, ToolKind.other);
+      expect(callOf('call-1')?.status, ToolCallStatus.inProgress);
+      expect(warnings(), isEmpty);
+      expect(errors(), isEmpty);
+
+      await finishPrompt(turn);
+    });
+
+    // D4: маскирование по полной строке, затем усечение; иначе PEM-блок
+    // режется до того, как шаблон его узнает.
+    test('a PEM block in kind is masked before truncation: the record has '
+        'neither the header nor a body fragment', () async {
+      final turn = startPrompt();
+      await _pump();
+
+      final body = 'MIIEowIBAAKCAQEA' * 8;
+      emitUpdate({
+        'sessionUpdate': 'tool_call',
+        'toolCallId': 'call-1',
+        'title': 'x',
+        'kind':
+            '-----BEGIN RSA PRIVATE KEY-----\n$body\n'
+            '-----END RSA PRIVATE KEY-----',
+      });
+      await _pump();
+
+      final entry = warnings().single;
+      final dumped = jsonEncode(entry);
+      expect(dumped, isNot(contains('BEGIN RSA PRIVATE KEY')));
+      expect(dumped, isNot(contains('MIIEowIBAAKC')));
+
+      await finishPrompt(turn);
+    });
+
+    test('tool_call with future_kind for an unknown session: one record '
+        'with its session_id, the update is dropped', () async {
+      emitUpdate({
+        'sessionUpdate': 'tool_call',
+        'toolCallId': 'call-1',
+        'title': 'x',
+        'kind': 'future_kind',
+      });
+      transport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: {
+            'sessionId': 'ghost-session',
+            'update': {
+              'sessionUpdate': 'tool_call',
+              'toolCallId': 'call-2',
+              'title': 'x',
+              'kind': 'future_kind',
+            },
+          },
+        ),
+      );
+      await _pump();
+
+      final ghost = warnings().where((e) => e['session_id'] == 'ghost-session');
+      expect(ghost, hasLength(1));
+      expect(client.sessionById(const SessionId('ghost-session')), isNull);
     });
 
     test('a non-string kind keeps the old behaviour', () async {
@@ -471,8 +574,10 @@ void main() {
           turn.toolCalls[const ToolCallId('call-8')]?.riskLevel,
           ApprovalRiskLevel.unknown,
         );
-        // Запись WARN — на каждое сообщение, в том числе в реплее.
-        expect(warnings(), hasLength(3));
+        // Запись WARN — на каждое сообщение с незнакомым видом (call-7 и
+        // update call-8), в том числе в реплее; tool_call call-8 вида read
+        // записи не даёт.
+        expect(warnings(), hasLength(2));
       },
     );
 
@@ -545,8 +650,3 @@ Future<void> _createSession(
   );
   await future;
 }
-
-/// `ToolKind.switchMode` по имени: пока значения нет, красным становится
-/// только сам тест, а не компиляция всего файла (TDD, change
-/// `tolerate-unknown-tool-kind`, задача 1.5).
-ToolKind get _switchMode => ToolKind.values.byName('switchMode');

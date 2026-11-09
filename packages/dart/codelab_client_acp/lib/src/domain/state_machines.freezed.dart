@@ -946,11 +946,11 @@ return cancel(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( DateTime? startedAt)?  start,TResult Function( SessionUpdate update)?  update,TResult Function( ApprovalRequest approval)?  requestApproval,TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult Function( StopReason stopReason,  DateTime? completedAt)?  complete,TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  fail,TResult Function( DateTime? completedAt)?  cancel,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( DateTime? startedAt)?  start,TResult Function( SessionUpdate update,  bool toolKindUnrecognized)?  update,TResult Function( ApprovalRequest approval)?  requestApproval,TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult Function( StopReason stopReason,  DateTime? completedAt)?  complete,TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  fail,TResult Function( DateTime? completedAt)?  cancel,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case PromptTurnStartRequested() when start != null:
 return start(_that.startedAt);case PromptTurnUpdateReceived() when update != null:
-return update(_that.update);case PromptTurnApprovalRequested() when requestApproval != null:
+return update(_that.update,_that.toolKindUnrecognized);case PromptTurnApprovalRequested() when requestApproval != null:
 return requestApproval(_that.approval);case PromptTurnApprovalSelected() when selectApproval != null:
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case PromptTurnApprovalCancelled() when cancelApproval != null:
 return cancelApproval(_that.approvalId,_that.resolvedAt);case PromptTurnCompleted() when complete != null:
@@ -974,11 +974,11 @@ return cancel(_that.completedAt);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( DateTime? startedAt)  start,required TResult Function( SessionUpdate update)  update,required TResult Function( ApprovalRequest approval)  requestApproval,required TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)  selectApproval,required TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)  cancelApproval,required TResult Function( StopReason stopReason,  DateTime? completedAt)  complete,required TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)  fail,required TResult Function( DateTime? completedAt)  cancel,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( DateTime? startedAt)  start,required TResult Function( SessionUpdate update,  bool toolKindUnrecognized)  update,required TResult Function( ApprovalRequest approval)  requestApproval,required TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)  selectApproval,required TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)  cancelApproval,required TResult Function( StopReason stopReason,  DateTime? completedAt)  complete,required TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)  fail,required TResult Function( DateTime? completedAt)  cancel,}) {final _that = this;
 switch (_that) {
 case PromptTurnStartRequested():
 return start(_that.startedAt);case PromptTurnUpdateReceived():
-return update(_that.update);case PromptTurnApprovalRequested():
+return update(_that.update,_that.toolKindUnrecognized);case PromptTurnApprovalRequested():
 return requestApproval(_that.approval);case PromptTurnApprovalSelected():
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case PromptTurnApprovalCancelled():
 return cancelApproval(_that.approvalId,_that.resolvedAt);case PromptTurnCompleted():
@@ -998,11 +998,11 @@ return cancel(_that.completedAt);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( DateTime? startedAt)?  start,TResult? Function( SessionUpdate update)?  update,TResult? Function( ApprovalRequest approval)?  requestApproval,TResult? Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult? Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult? Function( StopReason stopReason,  DateTime? completedAt)?  complete,TResult? Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  fail,TResult? Function( DateTime? completedAt)?  cancel,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( DateTime? startedAt)?  start,TResult? Function( SessionUpdate update,  bool toolKindUnrecognized)?  update,TResult? Function( ApprovalRequest approval)?  requestApproval,TResult? Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult? Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult? Function( StopReason stopReason,  DateTime? completedAt)?  complete,TResult? Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  fail,TResult? Function( DateTime? completedAt)?  cancel,}) {final _that = this;
 switch (_that) {
 case PromptTurnStartRequested() when start != null:
 return start(_that.startedAt);case PromptTurnUpdateReceived() when update != null:
-return update(_that.update);case PromptTurnApprovalRequested() when requestApproval != null:
+return update(_that.update,_that.toolKindUnrecognized);case PromptTurnApprovalRequested() when requestApproval != null:
 return requestApproval(_that.approval);case PromptTurnApprovalSelected() when selectApproval != null:
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case PromptTurnApprovalCancelled() when cancelApproval != null:
 return cancelApproval(_that.approvalId,_that.resolvedAt);case PromptTurnCompleted() when complete != null:
@@ -1086,10 +1086,11 @@ as DateTime?,
 
 
 class PromptTurnUpdateReceived implements PromptTurnStateEvent {
-  const PromptTurnUpdateReceived({required this.update});
+  const PromptTurnUpdateReceived({required this.update, this.toolKindUnrecognized = false});
   
 
  final  SessionUpdate update;
+@JsonKey() final  bool toolKindUnrecognized;
 
 /// Create a copy of PromptTurnStateEvent
 /// with the given fields replaced by the non-null parameter values.
@@ -1101,16 +1102,16 @@ $PromptTurnUpdateReceivedCopyWith<PromptTurnUpdateReceived> get copyWith => _$Pr
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PromptTurnUpdateReceived&&(identical(other.update, update) || other.update == update));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PromptTurnUpdateReceived&&(identical(other.update, update) || other.update == update)&&(identical(other.toolKindUnrecognized, toolKindUnrecognized) || other.toolKindUnrecognized == toolKindUnrecognized));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,update);
+int get hashCode => Object.hash(runtimeType,update,toolKindUnrecognized);
 
 @override
 String toString() {
-  return 'PromptTurnStateEvent.update(update: $update)';
+  return 'PromptTurnStateEvent.update(update: $update, toolKindUnrecognized: $toolKindUnrecognized)';
 }
 
 
@@ -1121,7 +1122,7 @@ abstract mixin class $PromptTurnUpdateReceivedCopyWith<$Res> implements $PromptT
   factory $PromptTurnUpdateReceivedCopyWith(PromptTurnUpdateReceived value, $Res Function(PromptTurnUpdateReceived) _then) = _$PromptTurnUpdateReceivedCopyWithImpl;
 @useResult
 $Res call({
- SessionUpdate update
+ SessionUpdate update, bool toolKindUnrecognized
 });
 
 
@@ -1138,10 +1139,11 @@ class _$PromptTurnUpdateReceivedCopyWithImpl<$Res>
 
 /// Create a copy of PromptTurnStateEvent
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? update = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? update = null,Object? toolKindUnrecognized = null,}) {
   return _then(PromptTurnUpdateReceived(
 update: null == update ? _self.update : update // ignore: cast_nullable_to_non_nullable
-as SessionUpdate,
+as SessionUpdate,toolKindUnrecognized: null == toolKindUnrecognized ? _self.toolKindUnrecognized : toolKindUnrecognized // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -1742,12 +1744,12 @@ return cancelTurn(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( DateTime? updatedAt)?  activate,TResult Function( PromptTurn turn,  DateTime? startedAt)?  startTurn,TResult Function( SessionUpdate update)?  update,TResult Function( ApprovalRequest approval)?  requestApproval,TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult Function( StopReason stopReason,  DateTime? completedAt)?  completeTurn,TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  failTurn,TResult Function( DateTime? completedAt)?  cancelTurn,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( DateTime? updatedAt)?  activate,TResult Function( PromptTurn turn,  DateTime? startedAt)?  startTurn,TResult Function( SessionUpdate update,  bool toolKindUnrecognized)?  update,TResult Function( ApprovalRequest approval)?  requestApproval,TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult Function( StopReason stopReason,  DateTime? completedAt)?  completeTurn,TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  failTurn,TResult Function( DateTime? completedAt)?  cancelTurn,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case SessionActivateRequested() when activate != null:
 return activate(_that.updatedAt);case SessionTurnStartRequested() when startTurn != null:
 return startTurn(_that.turn,_that.startedAt);case SessionUpdateReceived() when update != null:
-return update(_that.update);case SessionApprovalRequested() when requestApproval != null:
+return update(_that.update,_that.toolKindUnrecognized);case SessionApprovalRequested() when requestApproval != null:
 return requestApproval(_that.approval);case SessionApprovalSelected() when selectApproval != null:
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case SessionApprovalCancelled() when cancelApproval != null:
 return cancelApproval(_that.approvalId,_that.resolvedAt);case SessionTurnCompleted() when completeTurn != null:
@@ -1771,12 +1773,12 @@ return cancelTurn(_that.completedAt);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( DateTime? updatedAt)  activate,required TResult Function( PromptTurn turn,  DateTime? startedAt)  startTurn,required TResult Function( SessionUpdate update)  update,required TResult Function( ApprovalRequest approval)  requestApproval,required TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)  selectApproval,required TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)  cancelApproval,required TResult Function( StopReason stopReason,  DateTime? completedAt)  completeTurn,required TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)  failTurn,required TResult Function( DateTime? completedAt)  cancelTurn,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( DateTime? updatedAt)  activate,required TResult Function( PromptTurn turn,  DateTime? startedAt)  startTurn,required TResult Function( SessionUpdate update,  bool toolKindUnrecognized)  update,required TResult Function( ApprovalRequest approval)  requestApproval,required TResult Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)  selectApproval,required TResult Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)  cancelApproval,required TResult Function( StopReason stopReason,  DateTime? completedAt)  completeTurn,required TResult Function( String message,  PromptFailure? failure,  DateTime? completedAt)  failTurn,required TResult Function( DateTime? completedAt)  cancelTurn,}) {final _that = this;
 switch (_that) {
 case SessionActivateRequested():
 return activate(_that.updatedAt);case SessionTurnStartRequested():
 return startTurn(_that.turn,_that.startedAt);case SessionUpdateReceived():
-return update(_that.update);case SessionApprovalRequested():
+return update(_that.update,_that.toolKindUnrecognized);case SessionApprovalRequested():
 return requestApproval(_that.approval);case SessionApprovalSelected():
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case SessionApprovalCancelled():
 return cancelApproval(_that.approvalId,_that.resolvedAt);case SessionTurnCompleted():
@@ -1796,12 +1798,12 @@ return cancelTurn(_that.completedAt);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( DateTime? updatedAt)?  activate,TResult? Function( PromptTurn turn,  DateTime? startedAt)?  startTurn,TResult? Function( SessionUpdate update)?  update,TResult? Function( ApprovalRequest approval)?  requestApproval,TResult? Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult? Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult? Function( StopReason stopReason,  DateTime? completedAt)?  completeTurn,TResult? Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  failTurn,TResult? Function( DateTime? completedAt)?  cancelTurn,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( DateTime? updatedAt)?  activate,TResult? Function( PromptTurn turn,  DateTime? startedAt)?  startTurn,TResult? Function( SessionUpdate update,  bool toolKindUnrecognized)?  update,TResult? Function( ApprovalRequest approval)?  requestApproval,TResult? Function( ApprovalRequestId approvalId,  PermissionOptionId optionId,  DateTime? resolvedAt)?  selectApproval,TResult? Function( ApprovalRequestId approvalId,  DateTime? resolvedAt)?  cancelApproval,TResult? Function( StopReason stopReason,  DateTime? completedAt)?  completeTurn,TResult? Function( String message,  PromptFailure? failure,  DateTime? completedAt)?  failTurn,TResult? Function( DateTime? completedAt)?  cancelTurn,}) {final _that = this;
 switch (_that) {
 case SessionActivateRequested() when activate != null:
 return activate(_that.updatedAt);case SessionTurnStartRequested() when startTurn != null:
 return startTurn(_that.turn,_that.startedAt);case SessionUpdateReceived() when update != null:
-return update(_that.update);case SessionApprovalRequested() when requestApproval != null:
+return update(_that.update,_that.toolKindUnrecognized);case SessionApprovalRequested() when requestApproval != null:
 return requestApproval(_that.approval);case SessionApprovalSelected() when selectApproval != null:
 return selectApproval(_that.approvalId,_that.optionId,_that.resolvedAt);case SessionApprovalCancelled() when cancelApproval != null:
 return cancelApproval(_that.approvalId,_that.resolvedAt);case SessionTurnCompleted() when completeTurn != null:
@@ -1962,10 +1964,11 @@ $PromptTurnCopyWith<$Res> get turn {
 
 
 class SessionUpdateReceived implements SessionStateEvent {
-  const SessionUpdateReceived({required this.update});
+  const SessionUpdateReceived({required this.update, this.toolKindUnrecognized = false});
   
 
  final  SessionUpdate update;
+@JsonKey() final  bool toolKindUnrecognized;
 
 /// Create a copy of SessionStateEvent
 /// with the given fields replaced by the non-null parameter values.
@@ -1977,16 +1980,16 @@ $SessionUpdateReceivedCopyWith<SessionUpdateReceived> get copyWith => _$SessionU
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionUpdateReceived&&(identical(other.update, update) || other.update == update));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SessionUpdateReceived&&(identical(other.update, update) || other.update == update)&&(identical(other.toolKindUnrecognized, toolKindUnrecognized) || other.toolKindUnrecognized == toolKindUnrecognized));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,update);
+int get hashCode => Object.hash(runtimeType,update,toolKindUnrecognized);
 
 @override
 String toString() {
-  return 'SessionStateEvent.update(update: $update)';
+  return 'SessionStateEvent.update(update: $update, toolKindUnrecognized: $toolKindUnrecognized)';
 }
 
 
@@ -1997,7 +2000,7 @@ abstract mixin class $SessionUpdateReceivedCopyWith<$Res> implements $SessionSta
   factory $SessionUpdateReceivedCopyWith(SessionUpdateReceived value, $Res Function(SessionUpdateReceived) _then) = _$SessionUpdateReceivedCopyWithImpl;
 @useResult
 $Res call({
- SessionUpdate update
+ SessionUpdate update, bool toolKindUnrecognized
 });
 
 
@@ -2014,10 +2017,11 @@ class _$SessionUpdateReceivedCopyWithImpl<$Res>
 
 /// Create a copy of SessionStateEvent
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? update = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? update = null,Object? toolKindUnrecognized = null,}) {
   return _then(SessionUpdateReceived(
 update: null == update ? _self.update : update // ignore: cast_nullable_to_non_nullable
-as SessionUpdate,
+as SessionUpdate,toolKindUnrecognized: null == toolKindUnrecognized ? _self.toolKindUnrecognized : toolKindUnrecognized // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
