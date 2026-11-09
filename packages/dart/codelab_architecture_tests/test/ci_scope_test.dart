@@ -71,6 +71,35 @@ void main() {
     expect(scope.jobs, isEmpty);
   });
 
+  test('Правка только матрицы: изменение agent-parity-goals.md даёт джоб '
+      'guard (change switch-default-agent-to-dart, D7)', () {
+    // Разбор матрицы (D2) ломается от правки таблицы, поэтому pull request,
+    // который меняет только её, обязан прогнать сторож, а не ждать ночи.
+    final scope = _scope(['docs/architecture/proposals/agent-parity-goals.md']);
+
+    expect(scope.full, isFalse);
+    expect(scope.jobs.map((j) => j.job), ['guard']);
+    expect(_byName(scope)['guard']!.scripts, 'guard');
+  });
+
+  test('матрица рядом с другой документацией по-прежнему даёт guard', () {
+    final scope = _scope([
+      'docs/architecture/testing.md',
+      'docs/architecture/proposals/agent-parity-goals.md',
+      'openspec/changes/x/tasks.md',
+    ]);
+
+    expect(scope.full, isFalse);
+    expect(scope.jobs.map((j) => j.job), ['guard']);
+  });
+
+  test('другой документ из docs/proposals по-прежнему не даёт джобов', () {
+    final scope = _scope(['docs/architecture/proposals/delivery-roadmap.md']);
+
+    expect(scope.full, isFalse);
+    expect(scope.jobs, isEmpty);
+  });
+
   test('a file outside the packages runs everything unscoped', () {
     for (final file in [
       'pubspec.lock',

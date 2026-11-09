@@ -3,6 +3,7 @@
 // SETUP-22; design.md, D11).
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:test/test.dart';
 
@@ -82,6 +83,30 @@ void main() {
         ProfileDraftIssueCode.labelEmpty,
       });
     });
+  });
+
+  // Task 1.16 change `switch-default-agent-to-dart`; spec acp-client-kit
+  // «Черновик «Add profile» совпадает с описанием», «Нет умолчаний
+  // Python-агента»; design.md, D10: один источник умолчаний.
+  group('stdio defaults come from codelabAgentStdioProfile (D10)', () {
+    test('command and args of the default stdio draft equal the built-in '
+        'description', () {
+      const draft = ProfileDraft(kind: ProfileKind.stdio);
+
+      expect(draft.command, codelabAgentStdioProfile.command);
+      expect(draft.args, codelabAgentStdioProfile.args.join(' '));
+      expect(parseShellWords(draft.args), codelabAgentStdioProfile.args);
+    });
+
+    test(
+      'no Python agent defaults: the draft never offers `codelab serve`',
+      () {
+        const draft = ProfileDraft(kind: ProfileKind.stdio);
+
+        expect(draft.command, 'codelab-agent');
+        expect(draft.args, 'serve --stdio');
+      },
+    );
   });
 
   group('stdio', () {
