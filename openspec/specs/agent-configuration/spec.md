@@ -69,7 +69,7 @@
 - Неверный тип SHALL давать проблему `type` с ожидаемым типом. Для `bool` строки `yes`, `no`, `on`, `off`, `y`, `n` — ошибка с подсказкой `use true or false`. `null` у ключа схемы — ошибка. `int` НЕ SHALL принимать `2.0`, `float` SHALL принимать `2`. `30s` и `"30s"` SHALL быть равны.
 - `permissions.mode: autopilot` в любом файловом слое SHALL быть проблемой (CFG-4).
 - Семантические проверки §15.5, шаг 8:
-  - `agent.default_model` задан (`agent.default_model: required`), его провайдер объявлен, а модель есть в `providers.<p>.models`;
+  - если `agent.default_model` задан в каком-либо слое, его провайдер объявлен, а модель есть в `providers.<p>.models`; невалидное значение SHALL быть проблемой этого ключа без отката на другую модель. Незаданный `agent.default_model` проблемой НЕ SHALL быть, если в конфиге есть провайдер с моделью (требование «Модель по умолчанию без agent.default_model»);
   - `openai-compatible` имеет `base_url`;
   - имена `mcp.servers` уникальны, `stdio` имеет `command`, `http` имеет `url`;
   - `reserve_tokens > 0`, `keep_recent_tokens > 0`, `max_steps ≥ 1`;
@@ -116,6 +116,10 @@
 #### Scenario: autopilot в файле
 - **WHEN** `config.yaml` задаёт `permissions.mode: autopilot`
 - **THEN** загрузка даёт проблему `permissions.mode`, а флаг `--permission-mode autopilot` того же запуска допустим
+
+#### Scenario: Провайдер без agent.default_model
+- **WHEN** единственный слой объявляет провайдера `gw` с моделью `m` и не задаёт `agent.default_model`
+- **THEN** проблем нет, `CoreConfig.defaultModel` — `gw/m`, `CoreConfig.defaultModelSource` — `firstProvider`
 
 ### Requirement: Доверие к проектному конфигу
 Оба проектных слоя — `<cwd>/.codelab/config.yaml` и `<cwd>/.codelab/config.local.yaml` — SHALL подчиняться правилам доверия §15.3, пока проект не в `trusted_projects` (решение пользователя 2026-10-30). Проект доверенный, если его канонический корень есть в `trusted_projects` глобального слоя (`user` или `appStorage`). Загрузчик (`codelab_agent_io`) SHALL канонизировать корень проекта и каждый элемент `trusted_projects` (раскрыть `~`, `.`/`..` и symlink; несуществующий путь — нормализация без раскрытия symlink) до сравнения: иначе `trusted_projects: [/work/link]` для проекта `/work/real` (или наоборот) давал бы разный ответ в зависимости от записи пути. В `trusted_projects` SHALL допускаться только абсолютные пути (относительный — проблема). Относительный путь SHALL давать проблему `expected an absolute path` с ключом `trusted_projects[i]`; `~` SHALL раскрываться. `trusted_projects` в проектных слоях SHALL отбрасываться с предупреждением `config.project.untrusted_key` (`ignored: trusted_projects is read only from the global config`), а в слое `--config` — быть проблемой. Без доверия:
@@ -298,6 +302,7 @@
 - первая строка — `Sources: <источники через ", ">`, где источники — `ConfigLoadResult.sources` как есть, по порядку слоёв: `defaults`, затем канонические абсолютные пути прочитанных файлов, затем `env`, если есть переменные-ключи (например `Sources: defaults, /home/u/.codelab/config.yaml, /work/demo/.codelab/config.yaml`);
 - каждая проблема — строка `ConfigIssue.toString()`: `<location>: <key>: <message>`, без `<key>: `, если ключ пустой; `<location>` — `<source>:<line>:<column>` или `<source>`, если позиции нет; подсказка (`did you mean max_steps?`) — часть `<message>`;
 - каждое предупреждение — строка `warning: <location>: [<key>: ]<message>` в той же форме, включая `config.legacy_found` и `config.env.unknown`. Текст `config.legacy_found` НЕ SHALL повторять путь, уже стоящий в `<location>`. Неизвестные `CODELAB_*` SHALL распознаваться в `ConfigLoader` (`codelab_agent_io`), а не в каждом бинаре: правило одно для `serve` и обеих подкоманд. `CODELAB_TEST_SECRET_STORE` SHALL считаться известной только в сборке с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true`; в обычной сборке она SHALL давать `config.env.unknown`, как любая неизвестная `CODELAB_*`, и НЕ SHALL читаться (agent-core §15.6);
+- при валидном конфиге перед последней строкой — `Default model: <provider>/<model> (<source>)`: модель, которую получит новая сессия без явной модели (требование `agent-runtime` «Модель новой сессии»), и её источник — `config`, `last-used` или `first-provider`. Для источника `last-used` подкоманда SHALL читать файл последней модели `$CODELAB_HOME/state/last-model.json` (требование `agent-runtime` «Последняя выбранная модель») только для чтения; нечитаемый файл SHALL давать строку `warning: <path>: last model state ignored: <reason>` и выбор следующего шага, а не проблему. При невалидном конфиге строки `Default model:` нет;
 - последняя строка — `Config: valid` или `Config: invalid (issues: <n>)`, где `<n>` — число проблем; предупреждения проблемами не считаются.
 
 Код выхода SHALL быть `0` при валидном конфиге (с предупреждениями тоже), `1` при проблемах, `64` при ошибке использования. Ошибка использования — несуществующий каталог `--cwd` и `ConfigUsageException` загрузчика (`CODELAB_CONFIG` с расширением `.toml` или относительный): текст ошибки идёт в stderr, stdout SHALL быть пустым. Подкоманда НЕ SHALL писать файлы и печатать значения секретов. Обе подкоманды SHALL использовать одну реализацию `ConfigCommands` из `codelab_agent_io`.
@@ -312,7 +317,7 @@
 
 #### Scenario: Подсказка о codelab.toml
 - **WHEN** `CODELAB_HOME` пуст, в `cwd` есть только `codelab.toml`, а `config check` запускается в этом `cwd`
-- **THEN** stdout содержит строку `warning: <cwd>/codelab.toml: codelab.toml is not used by the Dart agent…`, в тексте после локации путь `<cwd>/codelab.toml` не повторяется; единственная проблема — `agent.default_model: required`, последняя строка `Config: invalid (issues: 1)`, код `1`
+- **THEN** stdout содержит строку `warning: <cwd>/codelab.toml: codelab.toml is not used by the Dart agent…`, в тексте после локации путь `<cwd>/codelab.toml` не повторяется; единственная проблема — `agent.default_model: no model is configured; add a provider with at least one model`, последняя строка `Config: invalid (issues: 1)`, код `1`
 
 #### Scenario: CODELAB_CONFIG учитывается
 - **WHEN** `CODELAB_CONFIG=<tmp>/extra.yaml` (абсолютный путь), файл содержит неизвестный ключ, а `config check` запускается без флагов
@@ -333,6 +338,14 @@
 #### Scenario: Тестовое хранилище в обычной сборке
 - **WHEN** агент собран без `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true`, `config.yaml` валиден, окружение содержит `CODELAB_TEST_SECRET_STORE=<tmp>/test-secrets`, а `config check` запускается в этом `cwd`
 - **THEN** stdout содержит строку `warning: …` предупреждения `config.env.unknown`, называющую `CODELAB_TEST_SECRET_STORE`, но не её значение; каталог `<tmp>/test-secrets` не читается и не создаётся; последняя строка `Config: valid`, код `0`
+
+#### Scenario: Модель первого провайдера в config check
+- **WHEN** `config.yaml` объявляет только провайдера `gw` с моделью `m` без `agent.default_model`, файла `$CODELAB_HOME/state/last-model.json` нет, и запускается `config check`
+- **THEN** код `0`, stdout содержит `Default model: gw/m (first-provider)`, последняя строка `Config: valid`, строки с `required` нет
+
+#### Scenario: Источник модели в config check
+- **WHEN** в первом варианте `config.yaml` задаёт `agent.default_model: gw/m`; во втором ключа нет, а `$CODELAB_HOME/state/last-model.json` называет модель `gw/m2` каталога; в третьем файл состояния содержит не JSON
+- **THEN** stdout содержит соответственно `Default model: gw/m (config)`, `Default model: gw/m2 (last-used)` и строку `warning: …last-model.json: last model state ignored: …` вместе с `Default model: gw/m (first-provider)`; во всех вариантах код `0`, файл состояния не изменён
 
 ### Requirement: Наблюдаемость загрузки конфигурации
 Успешная загрузка SHALL писать `host.config.loaded {sources, warnings, project_root, transport, models}` (`transport` — `stdio` или `ws`, `models` — id моделей каталога). Каждое предупреждение загрузки SHALL писаться отдельным событием своего имени (`config.env.unknown`, `config.project.untrusted_key`, `config.key.not_applied`, `config.provider.key_missing`, `config.file.ignored`, `config.legacy_found`, `mcp.server.skipped`) и SHALL нести поле `message` — английский текст `ConfigIssue.message` без значений. Событие `config.secret.unavailable` НЕ SHALL писаться: ссылки на секреты разрешаются при запросе и подключении (requirement «Секреты только ссылками»). Значения ключей конфигурации, переменных и секретов НЕ SHALL попадать в эти события и в текст проблем: только пути ключей, имена переменных и секретов, источники.
@@ -604,8 +617,12 @@
 - **THEN** `ConfigException` с новой проблемой `budget.max_steps`, байты файла не изменены, tmp и lock отсутствуют
 
 #### Scenario: Первая запись в пустой конфиг
-- **WHEN** `$CODELAB_HOME` пуст, и применяется `SetValue("budget.max_steps", 40)` или правки `provider add` без `--default`
-- **THEN** файл записан, `ConfigWriteResult.warnings` содержит проблему `agent.default_model` (`required`), исключения нет
+- **WHEN** `$CODELAB_HOME` пуст, и применяется `SetValue("budget.max_steps", 40)`
+- **THEN** файл записан, `ConfigWriteResult.warnings` содержит проблему `agent.default_model` с событием `config.model.none` (`no model is configured; add a provider with at least one model`), исключения нет
+
+#### Scenario: Первый провайдер без модели по умолчанию
+- **WHEN** `$CODELAB_HOME` пуст, и одной правкой применяются `SetValue` ключей `providers.gw.kind`, `providers.gw.base_url` и `providers.gw.models.m.context_window` без `agent.default_model`
+- **THEN** файл записан, `ConfigWriteResult.warnings` пуст, исключения нет
 
 #### Scenario: Правка не вносит новую ошибку
 - **WHEN** `agent.default_model: gw/m`, провайдер `gw` — единственный, и применяется `RemoveTable("providers.gw")`
@@ -779,7 +796,8 @@
 - **`provider add <id>`** для существующего провайдера SHALL обновлять его (upsert): переданные флаги перезаписывают свои поля, остальные поля и модели сохраняются.
 - **Источник ключа** (R4-4): `provider add` с любым из `--api-key-stdin`, `--api-key-secret`, `--api-key-env` SHALL заменять источник ключа целиком — поля другого источника (`api_key_secret`, `api_key_env`, литеральный `api_key`) удаляются той же записью. Пары `api_key_env` + `api_key_secret` у провайдера после команды НЕ SHALL быть. Без флага ключа источник не меняется.
 - **Недостающие обязательные флаги** `provider add` (`--kind`, `--model`, `--context-window`) SHALL перечисляться все одной строкой stderr.
-- **`provider remove`** при ссылке из `agent.*` SHALL завершаться кодом `1`, stderr SHALL содержать `change the model first: config set agent.default_model <provider>/<model>`.
+- **`provider remove`** при ссылке из явного `agent.*` (`agent.default_model` любого слоя) SHALL завершаться кодом `1`, stderr SHALL содержать `change the model first: config set agent.default_model <provider>/<model>`. Если удаление оставляет конфиг без провайдера с моделью (новая проблема с событием `config.model.none`), код SHALL быть `1` с этой проблемой, но без подсказки `change the model first`. Модель провайдера, которая записана только как последняя выбранная (требование `agent-runtime` «Последняя выбранная модель»), удалению НЕ SHALL мешать: файл состояния не меняется, следующая сессия выбирает модель по следующему шагу.
+- **`provider add`** без `--default` SHALL НЕ трогать `agent.default_model`; модель новой сессии без ключа выбирается правилом требования «Модель по умолчанию без agent.default_model». С `--default` поведение прежнее.
 - **`mcp add` и `mcp remove`** SHALL отклонять имя сервера с пробелом, `[`, `]` или `"` кодом `64`.
 - **`mcp remove <name>`** SHALL искать сервер только по `name`, никогда по номеру элемента списка.
 - **Ошибка разбора аргументов** `config set`, `config unset`, `provider` и `mcp` SHALL печатать фиксированную фразу (`invalid arguments for config set`, `invalid arguments for config unset`, `invalid arguments for provider`, `invalid arguments for mcp`) и справку, не цитируя слова argv.
@@ -812,7 +830,7 @@
 
 #### Scenario: config set и get
 - **WHEN** в пустом `$CODELAB_HOME` вызывается `config set budget.max_steps 40`, затем `config get budget.max_steps`
-- **THEN** первый — код `0`, `Updated budget.max_steps in <home>/config.yaml` и строка `warning: agent.default_model: required` (прежняя проблема конфига, R3-1), второй — `40` и слой `user`
+- **THEN** первый — код `0`, `Updated budget.max_steps in <home>/config.yaml` и строка `warning: agent.default_model: no model is configured; add a provider with at least one model` (прежняя проблема конфига, R3-1), второй — `40` и слой `user`
 
 #### Scenario: get не раскрывает переменную
 - **WHEN** `providers.gw.headers.X-Token` в файле равен `"${GW_TOKEN}"`, окружение содержит `GW_TOKEN=t-123`, и вызывается `config get providers.gw.headers --layer merged`
@@ -913,6 +931,18 @@
 #### Scenario: Неизвестный ключ set
 - **WHEN** вызывается `config set budget.max_stepz 10`
 - **THEN** код `64`, stderr подсказывает `budget.max_steps`, файл не изменён
+
+#### Scenario: provider add в пустом CODELAB_HOME без --default
+- **WHEN** `$CODELAB_HOME` пуст, окружение содержит `GW_KEY` (непустое значение), вызывается `provider add gw --kind openai-compatible --base-url https://x/v1 --model m --context-window 8192 --api-key-env GW_KEY` без `--default`, затем `config check`
+- **THEN** первый — код `0`, stdout `Updated providers.gw in <home>/config.yaml` без строк `warning:`, в файле нет `default_model`; второй — `Default model: gw/m (first-provider)` и `Config: valid`
+
+#### Scenario: provider remove единственного провайдера без ключа модели
+- **WHEN** `config.yaml` объявляет только провайдера `gw` с моделью `m` без `agent.default_model`, и вызывается `provider remove gw`
+- **THEN** код `1`, stderr содержит проблему `agent.default_model: no model is configured; add a provider with at least one model` и не содержит `change the model first`; файл не изменён
+
+#### Scenario: provider remove провайдера последней модели
+- **WHEN** `config.yaml` объявляет провайдеров `a` (модель `x`) и `b` (модель `y`) без `agent.default_model`, `$CODELAB_HOME/state/last-model.json` называет `b/y`, и вызывается `provider remove b`
+- **THEN** код `0`, `providers.b` удалён, файл состояния не изменён; `config check` печатает `Default model: a/x (first-provider)`
 
 ### Requirement: Ключи config.watch и config.poll_interval
 Схема SHALL принимать и применять `config.watch` (`bool`, по умолчанию `true`) и `config.poll_interval` (`duration`, по умолчанию `2s`, допустимо `1s..60s`) в слоях `user`, `projectLocal` и `--config`/`CODELAB_CONFIG` (design.md, D7). В проектном слое 3 и в `config.local.yaml` недоверенного проекта раздел `config` SHALL отбрасываться с `config.project.untrusted_key`. Оба ключа SHALL быть `restartRequired`. Предупреждения `config.key.not_applied` они больше НЕ SHALL давать.
@@ -1135,4 +1165,61 @@
 #### Scenario: Имя заголовка похоже на токен
 - **WHEN** вызывается `mcp add gh --type http --url https://h --header-stdin ghp_<36 символов>`
 - **THEN** код `64`, stderr содержит `expects a header or variable name, not a secret value` и не содержит `ghp_`; stdin не читается
+
+### Requirement: Модель по умолчанию без agent.default_model
+`agent.default_model` SHALL быть необязательным ключом (design.md change `optional-default-model`, D1–D4). `CoreConfig.fromLayers` SHALL всегда давать в валидном `CoreConfig` модель уровня конфига `defaultModel` (`ModelRef`) и её источник `defaultModelSource` (`config` или `firstProvider`):
+1. **Явная модель.** Если `agent.default_model` задан в каком-либо слое — файлы, `CODELAB_CONFIG`/`--config`, `CODELAB_MODEL`, предконфигурация `CODELAB_PROVIDER_CONFIG`/`CODELAB_PROVIDER_*`, флаги `serve`, — `defaultModel` SHALL быть этой моделью с источником `config`. Невалидное значение SHALL быть проблемой ключа, как раньше; отката на шаг 2 НЕ SHALL быть.
+2. **Первый доступный провайдер.** Иначе `defaultModel` SHALL быть первой моделью (порядок `providers.<id>.models`) первого доступного провайдера в порядке `CoreConfig.providers`, источник — `firstProvider`. Провайдер SHALL считаться доступным, если у него есть хотя бы одна модель, для него нет записи `providerProblems` (переменная `api_key_env` не задана или пуста), и его ключ не `UnusableKeyRef`. Провайдер без ключа (локальный сервер) и провайдер со ссылкой `api_key_secret` SHALL считаться доступными без обращения к хранилищу секретов: загрузка НЕ SHALL читать хранилище для выбора модели.
+3. **Нет доступных.** Если провайдеры с моделями есть, но ни один не доступен, `defaultModel` SHALL быть первой моделью первого провайдера с моделями, источник — `firstProvider`; загрузка SHALL быть успешной, а предупреждения `config.provider.key_missing` — прежними.
+4. **Нет моделей.** Если ни у одного провайдера нет модели (в том числе провайдеров нет вовсе), загрузка SHALL давать проблему с ключом `agent.default_model`, видом `value`, событием `config.model.none` и текстом `no model is configured; add a provider with at least one model`. Ключ и вид этой проблемы SHALL оставаться `agent.default_model` и `value`, а листа `agent.default_model` в слоях при ней нет: признак «нужна настройка провайдера» клиентов (`codelab_setup`) определяется по ключу и виду или по событию `config.model.none` и НЕ SHALL разбирать текст. Конфиг, где провайдеры с моделями есть, но ни один не доступен (шаг 3), проблем не даёт, и признак настройки провайдера для него ложен.
+
+Снимок без проектных слоёв (D9 change `add-agent-configuration`), если сам не задаёт ключ, SHALL выбирать модель так: явную модель полного снимка (источник `config`) — копировать как есть, с источником `config`; иначе — вычислять неявную модель по своим провайдерам правилом шагов 2–3 с источником `firstProvider` (провайдер проектного слоя вне корня недоступен); и только если у снимка без проекта нет ни одной модели — брать модель полного снимка с её источником. При перезагрузке конфига модель с источником `firstProvider` SHALL вычисляться заново по провайдерам итогового снимка после подстановки отложенных частей (`CoreConfig.withDeferred`): отложенный до перезапуска новый провайдер её не даёт. Смена неявной модели SHALL действовать для новых сессий и НЕ SHALL давать ключ в `pendingRestartKeys`.
+
+#### Scenario: Первая модель первого провайдера
+- **WHEN** конфиг объявляет провайдеров `a` (модели `x1`, `x2`) и `b` (модель `y`) в этом порядке без `agent.default_model`
+- **THEN** `defaultModel` — `a/x1`, источник `firstProvider`, проблем нет
+
+#### Scenario: Первый провайдер без ключа
+- **WHEN** провайдер `a` задаёт `api_key_env: A_KEY`, переменная не задана, а следующий провайдер `b` задаёт `api_key_env: B_KEY`, и `B_KEY` задана; `agent.default_model` нет
+- **THEN** `defaultModel` — первая модель `b`, источник `firstProvider`; предупреждение `config.provider.key_missing` для `a` прежнее
+
+#### Scenario: Ссылка на секрет не читается при выборе
+- **WHEN** единственный провайдер `gw` задаёт `api_key_secret: codelab/gw`, секрета в хранилище нет, `agent.default_model` нет
+- **THEN** `defaultModel` — первая модель `gw`; при загрузке фейковое хранилище секретов не получило ни одного вызова
+
+#### Scenario: Нет доступных провайдеров
+- **WHEN** оба провайдера `a` и `b` задают `api_key_env` с незаданными переменными, `agent.default_model` нет
+- **THEN** загрузка успешна, `defaultModel` — первая модель `a`, источник `firstProvider`, два предупреждения `config.provider.key_missing`
+
+#### Scenario: Нет ни одного провайдера
+- **WHEN** `$CODELAB_HOME` пуст, окружение не задаёт `CODELAB_MODEL` и `CODELAB_PROVIDER_*`
+- **THEN** одна проблема: `key` — `agent.default_model`, `kind` — `value`, `event` — `config.model.none`, текст `no model is configured; add a provider with at least one model`; `CoreConfig` не построен; тот же итог — у провайдера без моделей (`providers.gw: {kind: openai-compatible, base_url: https://x/v1}`)
+
+#### Scenario: Явная модель на несуществующую модель
+- **WHEN** конфиг объявляет провайдера `gw` с моделью `m` и задаёт `agent.default_model: gw/zzz`
+- **THEN** проблема `agent.default_model` (`gw/zzz is not in the model catalog; …`), `CoreConfig` не построен, отката на `gw/m` нет
+
+#### Scenario: CODELAB_MODEL — явная модель
+- **WHEN** файлы объявляют провайдеров `a` (модель `x`) и `b` (модель `y`) без ключа, окружение — `CODELAB_MODEL=b/y`
+- **THEN** `defaultModel` — `b/y`, источник `config`
+
+#### Scenario: Снимок без проекта при явной модели
+- **WHEN** пользовательский слой объявляет провайдера `u` (модель `x`), доверенный проектный слой — провайдера `p` (модель `y`) и `agent.default_model: p/y`
+- **THEN** у снимка без проекта `defaultModel` — `p/y`, источник `config`, как у полного снимка
+
+#### Scenario: Провайдеры пользователя и проекта
+- **WHEN** пользовательский слой объявляет провайдера `u` (модель `x`) с доступным ключом, доверенный проектный слой — провайдера `p` (модель `y`); `agent.default_model` нет ни в одном слое
+- **THEN** ключи пользователя при слиянии идут раньше ключей проекта, поэтому у обоих снимков `defaultModel` — `u/x`, источник `firstProvider`
+
+#### Scenario: Доступен только провайдер проекта
+- **WHEN** пользовательский слой объявляет провайдера `u` (модель `x`) с `api_key_env: U_KEY`, переменная `U_KEY` не задана; доверенный проектный слой — провайдера `p` (модель `y`) с доступным ключом; `agent.default_model` нет
+- **THEN** у полного снимка `defaultModel` — `p/y` (первый доступный, D2); у снимка без проекта (сессия вне корня) — `u/x` (своих доступных нет, первый провайдер снимка, D3); оба с источником `firstProvider`
+
+#### Scenario: Снимок без проекта без своих моделей
+- **WHEN** пользовательский слой не объявляет провайдеров, доверенный проектный слой объявляет провайдера `p` (модель `y`), `agent.default_model` нет
+- **THEN** у полного снимка `defaultModel` — `p/y`, источник `firstProvider`; у снимка без проекта — тоже `p/y` с источником `firstProvider` (модель полного снимка), проблемы `config.model.none` нет
+
+#### Scenario: Отложенный новый провайдер не становится моделью
+- **WHEN** применённый снимок — провайдер `b` (модель `y`) без ключа модели, неявная модель `b/y`; перезагрузка добавляет перед ним провайдера `a` с `api_key_secret` (отложен до перезапуска)
+- **THEN** итог `applied`, неявная модель снимка — `b/y`, `pendingRestartKeys` содержит `providers.a` и не содержит `agent.default_model`; проблемы `validateSnapshot` нет
 
