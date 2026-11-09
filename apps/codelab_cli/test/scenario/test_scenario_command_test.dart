@@ -441,22 +441,145 @@ void main() {
       expect(cases(xml), isEmpty);
     });
 
+    // Агент-маркер: `touch <файл>` создаёт файл при запуске. Признак
+    // «агент запускался» однозначен и не зависит от того, что напечатал stdout.
+    String markerAgent(String marker) => 'stdio:touch $marker';
+
+    test(
+      'control: the marker agent leaves its marker when it starts',
+      () async {
+        final marker = '${dir.path}/started-control';
+        final run = await _testScenario([
+          _fixture('acp/initialize-capabilities').sourcePath!,
+          '--agent',
+          markerAgent(marker),
+          '--junit',
+          report(),
+        ]);
+
+        expect(run.code, 1, reason: run.stdout);
+        expect(File(marker).existsSync(), isTrue, reason: run.stdout);
+      },
+    );
+
     test('an unwritable path is 64 before any agent starts', () async {
       const path = '/nonexistent-dir/r.xml';
+      final marker = '${dir.path}/started';
       final run = await _testScenario([
-        corpusDirectory,
+        _fixture('acp/initialize-capabilities').sourcePath!,
         '--agent',
-        await replayAgentProfile(),
+        markerAgent(marker),
         '--junit',
         path,
       ]);
 
       expect(run.code, 64);
       expect(run.stderr, contains('codelab: cannot write --junit $path:'));
-      // Агент не запускался: ни одной строки PASS/FAIL/SKIP в stdout.
+      // Агент не запускался: маркер не создан (контроль — тест выше).
+      expect(File(marker).existsSync(), isFalse);
       expect(run.status, isEmpty, reason: run.stdout);
       expect(File(path).existsSync(), isFalse);
     });
+
+    test('the probe never touches an existing report when the fixtures '
+        'are broken (64)', () async {
+      final existing = File(report())..writeAsStringSync('previous report');
+
+      final run = await _testScenario([
+        '${dir.path}/no-such-fixture.json',
+        '--agent',
+        'embedded',
+        '--junit',
+        existing.path,
+      ]);
+
+      expect(run.code, 64, reason: run.stderr);
+      expect(existing.readAsStringSync(), 'previous report');
+    });
+
+    test('a symlink as the report path is 64 and its target is '
+        'untouched', () async {
+      final target = File('${dir.path}/target.xml')
+        ..writeAsStringSync('target text');
+      final link = Link('${dir.path}/link.xml')..createSync(target.path);
+      final marker = '${dir.path}/started-link';
+
+      final run = await _testScenario([
+        _fixture('acp/initialize-capabilities').sourcePath!,
+        '--agent',
+        markerAgent(marker),
+        '--junit',
+        link.path,
+      ]);
+
+      expect(run.code, 64, reason: run.stdout);
+      expect(run.stderr, contains('codelab: cannot write --junit'));
+      expect(target.readAsStringSync(), 'target text');
+      expect(File(marker).existsSync(), isFalse);
+    });
+
+    test('a directory as the report path is 64', () async {
+      final run = await _testScenario([
+        _fixture('acp/initialize-capabilities').sourcePath!,
+        '--agent',
+        'embedded',
+        '--junit',
+        dir.path,
+      ]);
+
+      expect(run.code, 64, reason: run.stdout);
+      expect(run.stderr, contains('codelab: cannot write --junit'));
+    });
+
+    test('the final write replaces an existing report and leaves no '
+        'temporary files', () async {
+      File(report()).writeAsStringSync('previous report');
+
+      final run = await _testScenario([
+        corpusDirectory,
+        '--agent',
+        await replayAgentProfile(),
+        '--filter',
+        'acp/initialize-capabilities',
+        '--junit',
+        report(),
+      ]);
+
+      expect(run.code, 0, reason: run.stdout + run.stderr);
+      expect(File(report()).readAsStringSync(), contains('<testsuite '));
+      expect(dir.listSync().map((e) => e.path.split('/').last).toList(), [
+        'r.xml',
+      ]);
+    });
+
+    test(
+      'a read-only folder with a writable existing report is 64 before '
+      'any agent starts (the final write needs the folder)',
+      () async {
+        final locked = Directory('${dir.path}/locked')..createSync();
+        final existing = File('${locked.path}/r.xml')
+          ..writeAsStringSync('previous report');
+        final marker = '${dir.path}/started-locked';
+        await Process.run('chmod', ['555', locked.path]);
+        addTearDown(() => Process.run('chmod', ['755', locked.path]));
+
+        final run = await _testScenario([
+          _fixture('acp/initialize-capabilities').sourcePath!,
+          '--agent',
+          markerAgent(marker),
+          '--junit',
+          existing.path,
+        ]);
+
+        expect(run.code, 64, reason: run.stdout + run.stderr);
+        expect(run.stderr, contains('codelab: cannot write --junit'));
+        expect(File(marker).existsSync(), isFalse);
+        expect(existing.readAsStringSync(), 'previous report');
+      },
+      skip: Platform.environment['USER'] == 'root'
+          ? 'root ignores folder permissions'
+          : false,
+    );
 
     test('agent arguments never reach the file (D16)', () async {
       const marker = 'sk-test-leak-0123456789';

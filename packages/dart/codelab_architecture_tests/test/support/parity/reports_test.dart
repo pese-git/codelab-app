@@ -94,6 +94,24 @@ void main() {
       expect(readJsonReport(file).tests.map((t) => t.name), ['a', 'b']);
     });
 
+    test(
+      'причина пропуска markTestSkipped приходит событием print со skip',
+      () {
+        final file = _tree.put('r.json', '''
+{"type":"suite","suite":{"id":0,"platform":"vm","path":"test/a_test.dart"}}
+{"type":"testStart","test":{"id":1,"name":"acp/x","suiteID":0,"groupIDs":[],"metadata":{"skip":false,"skipReason":null}}}
+{"type":"print","testID":1,"messageType":"skip","message":"acp/x has roles [agent] without \\"client\\""}
+{"type":"testDone","testID":1,"result":"success","skipped":true,"hidden":false}
+{"type":"done","success":true}
+''');
+
+        final test = readJsonReport(file).tests.single;
+
+        expect(test.outcome, TestOutcome.skipped);
+        expect(test.skipReason, 'acp/x has roles [agent] without "client"');
+      },
+    );
+
     test('битая строка JSON — ошибка с именем файла', () {
       final file = _tree.put('broken.json', '{"type":"start"}\n{not json\n');
 

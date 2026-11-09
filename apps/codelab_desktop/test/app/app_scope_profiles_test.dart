@@ -381,7 +381,9 @@ void main() {
     await tester.pump();
 
     expect(starts, 1);
-    expect(shell.state.profileLabel, 'Codelab Agent');
+    // D10 (switch-default-agent-to-dart): имя описания stdio-агента
+    // изменено с `Codelab Agent` на `codelab-agent (stdio)`.
+    expect(shell.state.profileLabel, 'codelab-agent (stdio)');
     // Ещё кадры не создают второго подключения.
     await tester.pump(const Duration(seconds: 1));
     expect(starts, 1);

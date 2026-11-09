@@ -85,9 +85,8 @@ void main() {
     });
   });
 
-  // Task 1.16 change `switch-default-agent-to-dart`; spec acp-client-kit
-  // «Черновик «Add profile» совпадает с описанием», «Нет умолчаний
-  // Python-агента»; design.md, D10: один источник умолчаний.
+  // Task 1.16 change `switch-default-agent-to-dart`; spec agent-transports
+  // «Референсный профиль codelab-agent»; design.md, D10: один источник умолчаний.
   group('stdio defaults come from codelabAgentStdioProfile (D10)', () {
     test('command and args of the default stdio draft equal the built-in '
         'description', () {

@@ -55,11 +55,11 @@ void main() {
     );
   });
 
-  test('Codelab Agent profile creates stdio transport config', () {
+  test('codelab-agent profile creates stdio transport config', () {
     expect(
       codelabAgentStdioProfile.toTransportConfig(),
       const StdioAcpTransportConfig(
-        command: 'codelab',
+        command: 'codelab-agent',
         args: ['serve', '--stdio'],
         env: {'CODELAB_LOG_LEVEL': 'DEBUG'},
       ),
