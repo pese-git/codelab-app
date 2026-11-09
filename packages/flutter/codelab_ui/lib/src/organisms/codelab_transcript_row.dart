@@ -35,11 +35,19 @@ final class CodeLabUserRow extends CodeLabTranscriptRow {
 /// Ответ агента простым текстом. Change `add-transcript-markdown` заменит
 /// его блоками markdown, не трогая остальные строки.
 final class CodeLabAgentTextRow extends CodeLabTranscriptRow {
-  const CodeLabAgentTextRow({required this.id, required this.text});
+  const CodeLabAgentTextRow({
+    required this.id,
+    required this.text,
+    this.preformatted = false,
+  });
 
   @override
   final String id;
   final String text;
+
+  /// Текст — содержимое одного огороженного блока (6.1i): рисуется
+  /// моноширинным блоком. ЗАГЛУШКА красной фазы: виджет флаг не читает.
+  final bool preformatted;
 }
 
 /// Мысли модели: текст как есть, без markdown (§12.1.2, шаг 7).

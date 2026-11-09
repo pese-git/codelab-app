@@ -469,6 +469,77 @@ void main() {
     });
   });
 
+  group('preformatted agent reply (6.1i-1)', () {
+    testWidgets('a preformatted row is a monospace block', (tester) async {
+      await tester.pumpWidget(
+        _panel(const [
+          CodeLabAgentTextRow(
+            id: 'agent-1',
+            text: 'MCP servers (1)\n  a  ok',
+            preformatted: true,
+          ),
+        ]),
+      );
+
+      final block = find.byType(CodeLabMonospaceBlock);
+      expect(block, findsOneWidget);
+      expect(
+        tester.widget<CodeLabMonospaceBlock>(block).data,
+        'MCP servers (1)\n  a  ok',
+      );
+    });
+
+    testWidgets('a plain row is not a monospace block', (tester) async {
+      await tester.pumpWidget(
+        _panel(const [CodeLabAgentTextRow(id: 'agent-1', text: 'Hello')]),
+      );
+
+      expect(find.byType(CodeLabMonospaceBlock), findsNothing);
+      expect(find.text('Hello'), findsOneWidget);
+    });
+  });
+
+  group('tool call tags of a cancelled call (6.1j-2)', () {
+    int cancelledTags() => find.text('Cancelled').evaluate().length;
+
+    testWidgets('a cancelled call without an outcome tag shows one tag', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel(const [
+          CodeLabToolCallRow(
+            id: 'tool-1',
+            status: CodeLabToolCallStatus.cancelled,
+            label: 'Run',
+          ),
+        ]),
+      );
+
+      expect(cancelledTags(), 1);
+    });
+
+    testWidgets('a cancelled call and a late-done outcome keep both tags', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel([
+          CodeLabToolCallRow(
+            id: 'tool-1',
+            status: CodeLabToolCallStatus.succeeded,
+            label: 'Run',
+            approval: CodeLabTranscriptApproval.resolved(
+              label: 'Cancelled',
+              outcome: CodeLabApprovalOutcome.cancelled,
+            ),
+          ),
+        ]),
+      );
+
+      expect(cancelledTags(), 1);
+      expect(find.text('Done'), findsOneWidget);
+    });
+  });
+
   group('notices', () {
     testWidgets('an info notice is a neutral line, not an InfoBar', (
       tester,

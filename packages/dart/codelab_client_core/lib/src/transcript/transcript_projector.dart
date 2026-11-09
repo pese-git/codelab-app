@@ -366,6 +366,18 @@ List<TranscriptItem> _unannouncedApprovalItems(
       ),
 ];
 
+/// Заметки конца хода: `emptyTurn`, `turnStopped` и `error`.
+///
+/// Почему: ход не должен заканчиваться молча (D27, Q33), а причину берём
+/// только из `stopReason` ответа на `session/prompt`.
+///
+/// Ограничение: после `session/load` у ходов реплея нет `stopReason` — ACP его
+/// в реплее не передаёт (`03-Session Setup.md`, «Loading a Session»), а исход
+/// хода клиент не хранит. Поэтому у таких ходов нет ни `turnStopped`, ни
+/// `emptyTurn` (`isTerminal` без причины считается завершённым без вывода
+/// только у живого хода). Это принятое решение, а не дефект проекции: D27,
+/// Q36 (а); сценарий spec `acp-client-kit` «Реплей session/load без заметки
+/// исхода». Живой ход после загрузки получает заметку как обычно.
 List<TranscriptItem> _notices(
   PromptTurn turn, {
   required bool hasAgentItems,
