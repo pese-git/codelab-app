@@ -188,3 +188,16 @@
 - **WHEN** тест импортирует `package:codelab_embedded/io.dart` и вызывает `SecretMigrator` с `--dry-run` над временным `CODELAB_HOME` с литеральным `api_key`
 - **THEN** отчёт содержит пункт для `providers.<id>.api_key` без значения; основной барель `SecretMigrator` не экспортирует (`melos run guard`, `web-compile` зелёные)
 
+### Requirement: Состояние MCP-серверов для хоста
+`EmbeddedAgent` SHALL предоставлять `mcpStatus(String sessionId)` поверх порта состояния MCP рантайма (spec agent-mcp-client «Поток состояний серверов сессии»; design.md change `add-provider-setup-ui`, D12): снимок сводок, поток изменений и переподключение сервера по имени. Для неизвестной или закрытой сессии результат SHALL быть `null`; для открытой сессии без MCP-серверов — порт с пустым снимком, который покажет серверы, появившиеся позже (решение Q18 design.md). Основной барель `codelab_embedded` SHALL реэкспортировать `McpServerSummary` и `McpServerState` без `dart:io`, чтобы хост не импортировал `package:codelab_agent_*` (PKG-4). После `dispose()` агента потоки SHALL быть закрыты.
+
+Статус встроенного агента SHALL приходить только этим путём: хост НЕ SHALL разбирать текст `/mcp list` и НЕ SHALL отправлять промпт ради статуса (SETUP-11).
+
+#### Scenario: Статус без промпта
+- **WHEN** встроенный агент со сценарным MCP-сервером `github` открыл сессию `s1`, и хост вызывает `mcpStatus('s1')`
+- **THEN** снимок содержит `github` в `connected` с числом инструментов, а журнал сессии и транспорт ACP не получили ни одного промпта
+
+#### Scenario: Закрытие агента
+- **WHEN** хост подписан на поток `mcpStatus('s1')`, и агент получает `dispose()`
+- **THEN** поток завершается, ресурсы MCP освобождены
+
