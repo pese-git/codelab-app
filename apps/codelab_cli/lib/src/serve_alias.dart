@@ -48,6 +48,8 @@ const serveAliasRecursion =
 /// Переменная-маркер в окружении дочернего процесса: не секрет. Если `codelab
 /// serve` видит её у себя, значит, его запустил другой алиас (скрипт-обёртка
 /// `codelab-agent → codelab serve` обходит проверку канонического пути, D7).
+/// То же имя записано в известных переменных `ConfigLoader` агента
+/// (`codelab_agent_io`, задача 1.14): иначе агент писал бы `config.env.unknown`.
 const serveAliasMarker = 'CODELAB_SERVE_ALIAS_ACTIVE';
 
 /// Сообщение о сбое `Process.start`; [message] — `ProcessException.message`
