@@ -60,10 +60,19 @@ final class StopSignals {
 /// Как использовать: `runCodelab(…, signals: SignalSeam(sigint: …, sigterm:
 /// …, forceExit: codes.add))`.
 final class SignalSeam {
-  const SignalSeam({this.sigint, this.sigterm, this.forceExit = exit});
+  const SignalSeam({
+    this.sigint,
+    this.sigterm,
+    this.sighup,
+    this.forceExit = exit,
+  });
 
   final Stream<ProcessSignal>? sigint;
   final Stream<ProcessSignal>? sigterm;
+
+  /// Только для алиаса `codelab serve`: закрытие терминала (`SIGHUP`)
+  /// пересылается агенту (change `retire-python-agent`, D10).
+  final Stream<ProcessSignal>? sighup;
   final void Function(int code) forceExit;
 }
 
