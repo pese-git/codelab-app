@@ -398,27 +398,27 @@ Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §2
 
 Заполняет и подписывает ответственный за релиз (план этапа 9, «Чек-лист Zed»). Версия Zed фиксируется до начала и не меняется во время проверки.
 
-- Версия Zed: —
-- Дата проверки: —
-- Сборка `codelab-agent`: коммит —, `build:agent`; в `args` Zed — `--log-file <путь> --log-level debug` (Q11)
-- ОС: —
-- Тестовый проект: — (без секретов, D16)
-- Агент для сверки журналов ACP: не выбран / имя и версия —
-- Доказательства (Q11): `evidence/zed/<шаг>-*.png`, `evidence/zed/<шаг>-acp.log` (фрагмент журнала ACP Zed, `dev: open acp logs`) и `evidence/zed/<шаг>-agent.jsonl` (фрагмент лога агента `--log-file`, уровень `debug`); оба отредактированы по `observability.md` до коммита (D16)
+- Версия Zed: 1.27.0 stable (`c84af5b9`)
+- Дата проверки: 2026-11-10
+- Сборка `codelab-agent`: коммит `003b4d4d` (`develop`, с исправлением отмены pese-git/codelab-app#277), `build:agent`; в `args` Zed — `--log-file <путь> --log-level debug` (Q11)
+- ОС: macOS 27.0.1
+- Тестовый проект: проект пользователя вместо подготовленного — отклонение от D16, см. [`evidence/zed/README.md`](evidence/zed/README.md); агент работал только с созданным им `hello.py`, секретов в проверке нет
+- Агент для сверки журналов ACP: не выбран
+- Доказательства (Q11), скриншоты не сохранялись: `evidence/zed/<шаг>-*.png`, `evidence/zed/<шаг>-acp.log` (фрагмент журнала ACP Zed, `dev: open acp logs`) и `evidence/zed/<шаг>-agent.jsonl` (фрагмент лога агента `--log-file`, уровень `debug`); оба отредактированы по `observability.md` до коммита (D16)
 
 | № | Шаг | Пройдено, если | Итог | Скриншот | Журнал ACP Zed и лог агента | Примечание |
 |---|---|---|---|---|---|---|
-| 1 | подключение | Zed показывает агента готовым; `initialize` с ответом `protocolVersion: 1` | — | — | — | — |
-| 2 | возможности | ответ `initialize` содержит `loadSession`, `promptCapabilities`, `mcpCapabilities`; Zed не сообщает о несовместимости | — | — | — | — |
-| 3 | промпт и стриминг | текст приходит частями до ответа на `session/prompt`; все `session/update` хода — раньше ответа | — | — | — | — |
-| 4 | инструмент и одобрение «разрешить» | `tool_call` → `session/request_permission` → после «allow» — `tool_call_update` `completed` | — | — | — | — |
-| 5 | одобрение «отклонить» | после «reject» — `tool_call_update` `failed`, ход завершается `end_turn` | — | — | — | — |
-| 6 | файлы | чтение и правка через `fs/read_text_file` и `fs/write_text_file` Zed; правка видна в буфере | — | — | — | — |
-| 7 | терминал | команда через `terminal/create` и `terminal/output`, вывод виден в Zed | — | — | — | — |
-| 8 | отмена | `session/cancel`; ход завершается `stopReason: cancelled` за 5 с | — | — | — | — |
-| 9 | `session/load` | после перезапуска Zed сессия открывается; реплей до ответа на `session/load` восстанавливает историю | — | — | — | — |
-| 10 | режим и модель | `session/set_config_option` (или `session/set_mode`); следующий ход в новом режиме | — | — | — | — |
-| 11 | отключение | процесс `codelab-agent` завершается за 5 с, журнал сессии дописан | — | — | — | — |
+| 1 | подключение | Zed показывает агента готовым; `initialize` с ответом `protocolVersion: 1` | пройден | — | `01-02-acp.log`, `01-02-agent.jsonl` | — |
+| 2 | возможности | ответ `initialize` содержит `loadSession`, `promptCapabilities`, `mcpCapabilities`; Zed не сообщает о несовместимости | пройден | — | `01-02-acp.log`, `01-02-agent.jsonl` | — |
+| 3 | промпт и стриминг | текст приходит частями до ответа на `session/prompt`; все `session/update` хода — раньше ответа | пройден | — | `03-acp.log` | 16 `agent_thought_chunk` и 16 `agent_message_chunk` до `end_turn`; событий агента уровня `debug` у хода без инструментов нет |
+| 4 | инструмент и одобрение «разрешить» | `tool_call` → `session/request_permission` → после «allow» — `tool_call_update` `completed` | пройден | — | `04-06-acp.log`, `04-06-agent.jsonl` | `allow_once` → `permission.decided allowOnce` |
+| 5 | одобрение «отклонить» | после «reject» — `tool_call_update` `failed`, ход завершается `end_turn` | пройден | — | `05-acp.log`, `05-agent.jsonl` | `reject_once` → `permission.denied`; повтора вызова нет |
+| 6 | файлы | чтение и правка через `fs/read_text_file` и `fs/write_text_file` Zed; правка видна в буфере | пройден | — | `04-06-acp.log` | правка видна в буфере `hello.py` (проверил пользователь) |
+| 7 | терминал | команда через `terminal/create` и `terminal/output`, вывод виден в Zed | пройден | — | `07-acp.log`, `07-agent.jsonl` | `create` → `wait_for_exit` → `output` → `release`; первая попытка (`python`, код 127) — `failed`, вторая (`python3`) — `completed` |
+| 8 | отмена | `session/cancel`; ход завершается `stopReason: cancelled` за 5 с | пройден | — | `08-acp.log`, `08-agent.jsonl`, `session-journal-summary.txt` | две отмены, обе — `cancelled` сразу после `session/cancel`, в журнале `aborted/aborted`. В первом прогоне журнал писал `error/network` — исправлено pese-git/codelab-app#277, шаг повторён |
+| 9 | `session/load` | после перезапуска Zed сессия открывается; реплей до ответа на `session/load` восстанавливает историю | пройден | — | `09-acp.log`, `09-agent.jsonl` | реплей сообщений, вызовов инструментов, режима и опций — до ответа на `session/load` |
+| 10 | режим и модель | `session/set_config_option` (или `session/set_mode`); следующий ход в новом режиме | пройден | — | `10-acp.log`, `10-agent.jsonl` | `set_config_option mode=plan` → `current_mode_update`; в следующем ходе правка отклонена режимом `plan` (`failed`, без запроса одобрения) |
+| 11 | отключение | процесс `codelab-agent` завершается за 5 с, журнал сессии дописан | пройден | — | `11-agent.jsonl`, `session-journal-summary.txt` | после закрытия Zed процессов не осталось, журнал записан до последнего ответа. `serve.stop` в логе нет: похоже, Zed завершает процесс `SIGKILL`; на `SIGTERM` агент пишет `serve.stop` с кодом 143 |
 
 Сверка с другим ACP-агентом (если выбран): шаги 3–5 и 8 на одном промпте. Журналы ACP Zed обоих агентов нормализуются по id, времени и текстам модели и сравниваются по порядку методов и форме сообщений.
 
