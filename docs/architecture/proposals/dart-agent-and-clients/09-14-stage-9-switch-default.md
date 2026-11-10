@@ -101,7 +101,7 @@
    Заморозка, удаление и алиас — scope `retire-python-agent` (решение пользователя 2026-11-09, Q3):
    алиас появляется не позже первого выпуска с установщиком, который ставит `codelab` под общим
    именем (9.4); политика заморозки публикуется до ворот MVP (change `switch-default-agent-to-dart`, D1).
-   **Итог 9.9** (change [`retire-python-agent`](../../../../openspec/changes/retire-python-agent/design.md),
+   **Итог 9.9** (change [`retire-python-agent`](../../../../openspec/changes/archive/2026-11-10-retire-python-agent/design.md),
    D1–D13; решения пользователя 2026-11-10, Q1–Q8):
    * политика заморозки — раздел [«Поддержка Python-агента»](../../../user/migrating-from-python-agent.md#поддержка-python-агента)
      пользовательской документации и баннер в README `pese-git/codelab-agent`; действует с её
@@ -117,6 +117,23 @@
      change `remove-python-agent` после подписи условия (D13, Q6); Python TUI и Python-агент —
      завершающий тег и архивирование репозитория владельцем (внешние шаги, Q8); алиаса
      `codelab connect` нет (Q7).
+
+   **Открытые внешние шаги 9.9.** Change `retire-python-agent` заархивирован 2026-11-10. Его внешние
+   шаги не закрыты и перенесены сюда (решение пользователя 2026-11-10). Полные формулировки — задачи
+   E.1–E.6 в [`tasks.md`](../../../../openspec/changes/archive/2026-11-10-retire-python-agent/tasks.md)
+   архива. Выполняет владелец `pese-git/codelab-agent` (Q8):
+   * [ ] **E.1** — баннер «Заморожен: только исправления безопасности» в README `pese-git/codelab-agent`
+     и та же строка в описании репозитория. Вместе с merge итерации 0 закрывает задачу 4.4 change
+     `switch-default-agent-to-dart`, ссылка на коммит — в его `proposal.md` (D5);
+   * [ ] **E.2** — метка `parity-regression` и шаблон issue «Регрессия относительно Python-агента» в
+     трекере `codelab-app` (D4); Security Advisories в Python-репозитории (D2);
+   * [ ] **E.3** — в `release/<version>` первой `stable`: запись в `CHANGELOG.md` «`codelab serve`
+     deprecated» (D11);
+   * [ ] **E.4** — после подписи таблицы D4: архивировать `pese-git/codelab-agent` вместе с Python TUI;
+   * [ ] **E.5** — после подписи таблицы D4, до E.4: завершающий тег и запись о прекращении поддержки
+     в README. Выпуска на PyPI нет (Q8);
+   * [ ] **E.6** — после выполнения условия D4: change `remove-python-agent` в этом репозитории. Он
+     снимает и маркер алиаса из известных переменных агента (D13).
 11. **9.11. Решение о песочнице ОС (P-13):** пересмотреть Won't «сейчас» по модели угроз после
     переключения по умолчанию: оставить границу папки и одобрения, песочница только на macOS или
     полноценная песочница на трёх ОС (agent-core-architecture §16.3). Итог — ADR; при решении

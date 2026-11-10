@@ -214,7 +214,7 @@ macOS и Linux, ручная проверка Windows откладывается
 `codelab-agent serve --stdio`), 9.2 по отчёту 9.1, 9.5 и 9.7 без установки и `PRIVACY.md`;
 итерация 4 — ворота MVP (три ночи, три прогона app на macOS в `release/<version>`, чек-лист Zed
 9.8, подписи). Заморозка Python-агента и алиас `codelab serve` — change
-[`retire-python-agent`](../../../openspec/changes/retire-python-agent/proposal.md): политика заморозки
+[`retire-python-agent`](../../../openspec/changes/archive/2026-11-10-retire-python-agent/proposal.md): политика заморозки
 нужна до ворот (решения пользователя 2026-11-09, design.md change, D1, Q3) и опубликована разделом
 [«Поддержка Python-агента»](../../user/migrating-from-python-agent.md#поддержка-python-агента)
 (design.md change `retire-python-agent`, D1–D5).
