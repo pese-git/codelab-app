@@ -54,3 +54,19 @@
 - **WHEN** сессия с деревом вызовов загружается дважды подряд в один `ClientWorkspace`
 - **THEN** у каждого вызова `agent` ровно столько детей, сколько в журнале
 
+### Requirement: Итог и хвост субагента
+`ToolCallView` вызова `agent` SHALL получать `subagentSummary` (`toolCalls`, `inputTokens`, `outputTokens`, `duration`) из `_meta.codelab.subagent.summary` финального обновления (design.md change `add-subagents-and-tasks`, D24). Отсутствие, неверная форма или неизвестные ключи SHALL давать `null` или игнорироваться без отказа обработки. Kit SHALL давать готовую строку итога `N tool calls · N.Nk tokens · <время>` (токены — `input + output`, `k` с одним знаком; время — `48s`, `2m 05s`, `1h 02m`).
+
+Для работающего вызова `agent` с потомками в дереве (acp-client-kit «Дерево вызовов потомков») `SessionView` SHALL давать «хвост» (D25): три последних по времени вызова его поддерева в порядке прихода и `moreCount` — число остальных вызовов поддерева. Без вызовов потомков хвост пуст, и представление показывает строку прогресса.
+
+#### Scenario: Итог в представлении
+- **WHEN** финальный `tool_call_update` вызова `agent` несёт `summary` `{"toolCalls": 4, "tokens": {"input": 15200, "output": 3000}, "durationMs": 48000, "future": 1}`
+- **THEN** строка итога — `4 tool calls · 18.2k tokens · 48s`, неизвестный ключ проигнорирован
+
+#### Scenario: Сторонний агент без итога
+- **WHEN** вызов `agent` завершается без `_meta.codelab.subagent.summary`
+- **THEN** `subagentSummary == null`, строки итога нет
+
+#### Scenario: Хвост из пяти вызовов
+- **WHEN** у работающего вызова `agent` пять вызовов потомков
+- **THEN** хвост — три последних, `moreCount` — 2

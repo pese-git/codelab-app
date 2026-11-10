@@ -9,7 +9,7 @@
 - `message` с сообщением в канонической JSON-форме §2.2 и полями записи `outcome`, `diff`, `toolMeta`, `origin`;
 - `model_change`, `mode_change`, `config_change`, `compaction`, `label`, `leaf`, `session_info`, `custom` (§8.2.4);
 - `task` — операция над списком задач: `op`, `actor`, `items` (полные снимки изменённых пунктов), `deleted` (§17.16.6);
-- `subagent` — связь с журналом ребёнка: `subagentId`, `toolCallId`, `agent`, `description`, `childSessionId`, `journal`, `status`, `failure`, `report`, `usage` (§17.3.6);
+- `subagent` — связь с журналом ребёнка: `subagentId`, `toolCallId`, `agent`, `description`, `childSessionId`, `journal`, `status`, `failure`, `report`, `usage`, `toolCalls`, `durationMs` (§17.3.6);
 - `plan` — запись старого формата: новые журналы её не пишут, читатель SHALL её понимать всегда.
 
 Поля записи (`outcome`, `diff`, `toolMeta`, `origin` и сопутствующие) SHALL лежать на верхнем уровне объекта рядом с общими полями и НЕ SHALL попадать в сообщение, которое видит модель. Записи `task`, `subagent`, `plan` в контекст модели не входят.

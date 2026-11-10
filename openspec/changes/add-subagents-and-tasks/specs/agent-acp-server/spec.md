@@ -80,7 +80,7 @@
 ### Requirement: Расширения протокола этапа 4
 Сервер SHALL отправлять только расширения, введённые утверждёнными changes (ACP-2):
 - change `add-dart-agent-acp-server`: `_meta.codelab.outcome`, `_meta.codelab.budgetExceeded`, `data.codelab` (`errorClass`, `message`, `retryable`, `reason`), `_meta.codelab.turnEnded`, `_meta.codelab.critical`;
-- change `add-subagents-and-tasks`: блок `agentCapabilities._meta.codelab` (`subagents`, `subagentToolCalls`, `tasks`), `_meta.codelab.task` у entries `plan`, `_meta.codelab.subagent` у `toolCall` в `session/request_permission` и у `tool_call_update` вызова `agent` со `status: failed`, `_meta.codelab.parentToolCallId` у `tool_call`/`tool_call_update` вызовов потомков (только клиенту с `subagentToolCalls`).
+- change `add-subagents-and-tasks`: блок `agentCapabilities._meta.codelab` (`subagents`, `subagentToolCalls`, `tasks`), `_meta.codelab.task` у entries `plan`, `_meta.codelab.subagent` у `toolCall` в `session/request_permission` и у финального `tool_call_update` вызова `agent` (`summary`, при `failed` — `failure`), `_meta.codelab.parentToolCallId` у `tool_call`/`tool_call_update` вызовов потомков (только клиенту с `subagentToolCalls`).
 
 Каждое расширение SHALL быть перечислено в §13.12 документа ядра со ссылкой на свой change. Новых методов и корневых полей ACP сервер НЕ SHALL вводить (`15-Extensibility.md`).
 
@@ -98,7 +98,7 @@
 | `TaskListChanged` | `session/update` `plan` со всем списком в порядке создания; у entry `content` = `subject`, `priority`, `status` и `_meta: {"codelab": {"agent": {"id", "owner", "blockedBy"}}}`; пустой список — `entries: []` (TSK-5) |
 | `ToolCallStarted(agent)` | `tool_call` с `kind: think` и `title` `Subagent <agent>: <description>` |
 | `ToolCallProgress(agent)` | `tool_call_update` с одним текстовым блоком строки прогресса, заменяющим предыдущий |
-| `ToolCallFinished(agent)` | `tool_call_update` со `status` и телом отчёта без обёртки `<subagent-report>` и без ограды; при `failed` — `_meta.codelab.subagent: {"id", "failure"}` |
+| `ToolCallFinished(agent)` | `tool_call_update` со `status` и телом отчёта без обёртки `<subagent-report>` и без ограды; всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` из `SubagentReport` (с потомками, D24); при `failed` — ещё `failure` |
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | не отправляются; логи `subagent.start`, `subagent.end` |
 | `SubagentActivity` | клиенту без `subagentToolCalls` — не отправляется (SUB-12); клиенту с ним — требование «Шаги потомков деревом» |
 
@@ -113,6 +113,10 @@
 #### Scenario: Вызов agent
 - **WHEN** модель вызывает `agent` с типом `explore`, ребёнок делает три вызова и сдаёт отчёт
 - **THEN** клиент получает `tool_call` с `kind: think` и title `Subagent explore: …`, `in_progress`, хотя бы одну строку прогресса и `completed` с телом отчёта; ни одного `tool_call` с id вызова ребёнка (фикстура `acp/prompt-subagent-tool-call`)
+
+#### Scenario: Итог субагента
+- **WHEN** ребёнок `explore` сделал 4 вызова, потратил 15 200 входных и 3 000 выходных токенов за 48 с, затем завершился; во втором варианте ход отменён во время работы ребёнка
+- **THEN** финальный `tool_call_update` вызова `agent` содержит `_meta.codelab.subagent.summary` `{"toolCalls": 4, "tokens": {"input": 15200, "output": 3000}, "durationMs": 48000}`; во втором варианте — `status: failed`, `_meta.codelab.outcome: "cancelled"` и `summary` с фактическими значениями; при `session/load` реплей вызова `agent` несёт тот же `summary` из итоговой записи `subagent`
 
 #### Scenario: Запрос разрешения ребёнка
 - **WHEN** ребёнок `review` просит `exec git diff --stat`, клиент отвечает `reject_once`

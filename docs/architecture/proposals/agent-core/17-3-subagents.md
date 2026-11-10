@@ -186,7 +186,7 @@ final class SubagentReport {
   final String text;                          // финальный текст ребёнка (после усечения)
   final Object? json;                         // разобранный отчёт, если задана output_schema и он валиден
   final bool truncated;
-  final int steps, toolCalls; final Usage usage; final Duration duration;
+  final int steps, toolCalls; final Usage usage; final Duration duration;   // toolCalls и usage — вместе со всеми потомками (транзитивно, §17.3.4, шаг 7)
 }
 
 abstract interface class SubagentHandle {
@@ -591,7 +591,8 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 | `status` | string | `running`, `completed`, `failed`, `cancelled` |
 | `failure` | string? | `budget_exceeded:<limit>`, `invalid_output`, `error`, `refused`, `interrupted` |
 | `report` | string? | у итоговой записи: тело `<subagent-report>` после усечения (без обёртки) |
-| `usage` | object? | у итоговой записи: usage ребёнка (формат §8.2.3) |
+| `usage` | object? | у итоговой записи: usage ребёнка вместе с потомками (формат §8.2.3) |
+| `toolCalls`, `durationMs` | int? | у итоговой записи: вызовы ребёнка вместе с потомками и длительность; вместе с `usage` дают `_meta.codelab.subagent.summary` при реплее (D24 change `add-subagents-and-tasks`) |
 | `background` | bool? | `true` у фонового ребёнка (§17.3.8); отсутствует — блокирующий |
 
 ```json
@@ -645,7 +646,7 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 | `ToolCallStarted(agent)` | `tool_call` | `kind: "think"`, `title: "Subagent explore: Find auth code"`, `status: "pending"`, `rawInput` (все аргументы, включая `prompt`) |
 | `markInProgress` | `tool_call_update` | `status: "in_progress"` |
 | `ToolCallProgress(agent)` | `tool_call_update` | `content: [{"type":"content","content":{"type":"text","text":"<строка прогресса>"}}]` — заменяет предыдущую строку (в ACP `content` обновления заменяет коллекцию) |
-| `ToolCallFinished(agent)` | `tool_call_update` | `status: "completed"` или `"failed"`; `content` — один текстовый блок с **телом** отчёта (без обёртки `<subagent-report>` и ограды: клиент показывает человеку текст); для `failed` — `_meta.codelab.subagent.failure` |
+| `ToolCallFinished(agent)` | `tool_call_update` | `status: "completed"` или `"failed"` (отмена — `failed` с `_meta.codelab.outcome: "cancelled"`); `content` — один текстовый блок с **телом** отчёта (без обёртки `<subagent-report>` и ограды: клиент показывает человеку текст); всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` — итог ребёнка вместе с потомками из `SubagentReport` (`toolCalls`, `usage`, `duration`; решение пользователя 2026-11-10, design.md change `add-subagents-and-tasks`, D24); для `failed` — ещё `failure` |
 | `SubagentStarted`, `SubagentFinished` | — | лог `subagent.start` / `subagent.end`; доска (ниже) |
 | `SubagentProgress` | — | только доска (ниже); строку прогресса уже несёт `ToolCallProgress` |
 | запрос разрешения потомка | `session/request_permission` | `sessionId` корневой сессии, `toolCall.toolCallId: "call_3/call_1"` (цепочка, §17.3.3), `title` с префиксом, `toolCall._meta: {"codelab": {"subagent": {"id": "sub_…", "agent": "review", "description": "Check the diff", "depth": 1, "path": [], "parentToolCallId": "call_3"}}}`; `parentToolCallId` — вызов `agent` **корневой** сессии, который клиент видел (первый сегмент цепочки), `path` — id предков-субагентов от глубины 1 |
@@ -692,6 +693,11 @@ OpenSpec (change `add-subagents-and-tasks`).
 `agent`. Клиенты (kit, app, CLI) строят дерево по `parentToolCallId`; вызов с неизвестным
 родителем показывается на верхнем уровне. Фикстуры: `acp/prompt-subagent-tool-tree`,
 `acp/session-load-subagent-tool-tree`.
+
+Пока вызов `agent` идёт, клиент с деревом может показывать в свёрнутой строке «хвост» — три
+последних вызова потомков и строку `+N more tool calls · Nk tokens`; это проекция клиента над
+вызовами с `parentToolCallId`, агент для неё ничего сверх таблицы не шлёт (design.md change
+`add-subagents-and-tasks`, D25). Без дерева клиент показывает строку прогресса `ToolCallProgress`.
 
 **Доска субагентов (U-21) — предложение, вводится через OpenSpec.** Расширение `_codelab/subagents`
 включается, только если клиент объявил `clientCapabilities._meta.codelab.subagentBoard: {"version": 1}`, а

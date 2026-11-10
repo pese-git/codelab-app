@@ -174,6 +174,8 @@ final class TaskListChanged extends AgentEvent {   // заменяет PlanUpdat
 * Порядок entries — порядок создания пунктов. Список, опустевший после удаления, — `plan` с
   `entries: []`.
 * `task_list` и `task_get` список не меняют и `plan` не дают.
+* Клиенты показывают список чек-листом; в `--ui tui` блок списка над композером прячется и
+  показывается Ctrl+T (design.md change `add-subagents-and-tasks`, D26).
 * Поддержку агент объявляет `agentCapabilities._meta.codelab.tasks: {"version": 1}` по схеме
   объявления §17.3.7 (только клиенту, объявившему `clientCapabilities._meta.codelab`); данные
   `_meta.codelab.task` уходят всегда.
