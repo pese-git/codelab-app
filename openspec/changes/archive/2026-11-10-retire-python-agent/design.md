@@ -1,13 +1,13 @@
 ## Context
 
 Источники:
-- [план этапа 9](../../../docs/architecture/proposals/dart-agent-and-clients/09-14-stage-9-switch-default.md), задача 9.9 и абзац «OpenSpec change»;
-- [матрица целей](../../../docs/architecture/proposals/agent-parity-goals.md): §6 (критерий вывода Python-агента — «после этого Python-агент получает только исправления безопасности до удаления»), §4 (блок «не регрессировать»);
-- design.md change [`switch-default-agent-to-dart`](../switch-default-agent-to-dart/design.md): D1 (9.9 — этот change), D11 (сохранённые профили с `codelab serve`), D14 (ворота ждут политику заморозки), решения Q2 и Q3; задача 4.4 его `tasks.md`;
-- [дорожная карта](../../../docs/architecture/proposals/delivery-roadmap.md): §4.4 (заморозка — в M3 сразу после переключения), §4.5 (удаление — M4, «допустимо в 1.0.x»);
-- [`10-risks.md`](../../../docs/architecture/proposals/dart-agent-and-clients/10-risks.md) (конфликт имени `codelab`, двойное сопровождение); допущения 4 и 5 в [`11-assumptions-and-open-questions.md`](../../../docs/architecture/proposals/dart-agent-and-clients/11-assumptions-and-open-questions.md); [`02-current-system.md`](../../../docs/architecture/proposals/dart-agent-and-clients/02-current-system.md) (Python-агент вне monorepo);
-- [§12.7](../../../docs/architecture/proposals/dart-agent-and-clients/12-7-release-and-distribution.md): `<bin-dir>` установщика с обоими бинарями, `--cli-only`, правило semver §12.7.8;
-- пользовательская документация [`docs/user/migrating-from-python-agent.md`](../../../docs/user/migrating-from-python-agent.md);
+- [план этапа 9](../../../../docs/architecture/proposals/dart-agent-and-clients/09-14-stage-9-switch-default.md), задача 9.9 и абзац «OpenSpec change»;
+- [матрица целей](../../../../docs/architecture/proposals/agent-parity-goals.md): §6 (критерий вывода Python-агента — «после этого Python-агент получает только исправления безопасности до удаления»), §4 (блок «не регрессировать»);
+- design.md change [`switch-default-agent-to-dart`](../../switch-default-agent-to-dart/design.md): D1 (9.9 — этот change), D11 (сохранённые профили с `codelab serve`), D14 (ворота ждут политику заморозки), решения Q2 и Q3; задача 4.4 его `tasks.md`;
+- [дорожная карта](../../../../docs/architecture/proposals/delivery-roadmap.md): §4.4 (заморозка — в M3 сразу после переключения), §4.5 (удаление — M4, «допустимо в 1.0.x»);
+- [`10-risks.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/10-risks.md) (конфликт имени `codelab`, двойное сопровождение); допущения 4 и 5 в [`11-assumptions-and-open-questions.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/11-assumptions-and-open-questions.md); [`02-current-system.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/02-current-system.md) (Python-агент вне monorepo);
+- [§12.7](../../../../docs/architecture/proposals/dart-agent-and-clients/12-7-release-and-distribution.md): `<bin-dir>` установщика с обоими бинарями, `--cli-only`, правило semver §12.7.8;
+- пользовательская документация [`docs/user/migrating-from-python-agent.md`](../../../../docs/user/migrating-from-python-agent.md);
 - спецификации `codelab-cli`, `agent-binary` («Команда serve», «Жизненный цикл процесса»), `testing-quality` («PTY-e2e терминального клиента»).
 
 Что есть в коде (`develop` на `2218d1db`):
