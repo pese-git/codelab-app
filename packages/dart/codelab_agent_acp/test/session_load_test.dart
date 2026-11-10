@@ -141,7 +141,10 @@ void main() {
         {'content': 'Fix', 'priority': 'high', 'status': 'pending'},
       ]);
       expect(updates[7]['currentModeId'], 'standard');
-      expect(updates[9]['availableCommands'], isEmpty);
+      expect(updates[9]['availableCommands'], [
+        ...builtinCommandsBeforeConfig,
+        builtinHelpCommand,
+      ]);
       expect(updates[10]['title'], 'Read README.md');
       final result = response.resultMap;
       expect((result['modes']! as Map)['currentModeId'], 'standard');

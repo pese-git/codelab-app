@@ -23,65 +23,122 @@ import '../support/manual_stream.dart';
 /// конфига — `_Source` с воротами загрузки.
 void main() {
   group('the list of the session commands', () {
-    test('config and mcp come first, then the templates '
-        '(scenario "Встроенные команды идут первыми")', () async {
+    test('the builtin commands come first in the order of §13.4, then the '
+        'templates (scenario "Встроенные команды идут первыми", D2)', () async {
       final rig = await _Rig.create(templates: ['review']);
       final session = await rig.session();
 
       expect(
         [for (final c in session.commands) c.name],
-        ['config', 'mcp', 'review'],
+        [
+          'compact',
+          'mode',
+          'model',
+          'status',
+          'config',
+          'mcp',
+          'help',
+          'review',
+        ],
       );
       expect(
         [for (final c in session.commands) c.source],
         [
-          SlashCommandSource.builtin,
-          SlashCommandSource.builtin,
+          ...List.filled(7, SlashCommandSource.builtin),
           SlashCommandSource.template,
         ],
       );
     });
 
-    test('the declarations are byte for byte (D12)', () async {
-      final rig = await _Rig.create();
+    test('without a ConfigSource, the capability compaction and the '
+        'capability mcp: mode, model, status, help (scenario "Без capability '
+        'compaction и без конфига")', () async {
+      final rig = await _Rig.create(
+        withSource: false,
+        compaction: false,
+        mcpCapability: false,
+      );
       final session = await rig.session();
 
-      final config = session.commands[0];
-      expect(config.name, 'config');
-      expect(config.description, 'Reload or check the agent config');
-      expect(config.inputHint, 'reload | check');
-      final mcp = session.commands[1];
-      expect(mcp.name, 'mcp');
-      expect(mcp.description, 'List, reload, enable or disable MCP servers');
       expect(
-        mcp.inputHint,
-        'list | reload [<id>] | enable <id> | disable <id>',
+        [for (final c in session.commands) c.name],
+        ['mode', 'model', 'status', 'help'],
       );
     });
 
-    test('without a ConfigSource there is no config: the prompt goes to the '
-        'model as text (scenario "Без источника конфига")', () async {
+    test('the declarations are byte for byte (D2, §13.4)', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+
+      Map<String, String?> of(String name) {
+        final c = session.commands.singleWhere((c) => c.name == name);
+        return {'description': c.description, 'hint': c.inputHint};
+      }
+
+      expect(of('compact'), {
+        'description': 'Compact the session history',
+        'hint': '[focus]',
+      });
+      expect(of('mode'), {
+        'description': 'Switch the session mode',
+        'hint': 'plan | ask | standard | accept-edits | bypass',
+      });
+      expect(of('model'), {
+        'description': 'Switch the model',
+        'hint': 'provider/model',
+      });
+      expect(of('status'), {
+        'description':
+            'Show the model, mode, working directory and MCP servers',
+        'hint': null,
+      });
+      expect(of('config'), {
+        'description': 'Reload or check the agent config',
+        'hint': 'reload | check',
+      });
+      expect(of('mcp'), {
+        'description': 'List, reload, enable or disable MCP servers',
+        'hint': 'list | reload [<id>] | enable <id> | disable <id>',
+      });
+      expect(of('help'), {'description': 'List commands', 'hint': null});
+    });
+
+    test('without a ConfigSource there is no config: the answer is Unknown '
+        'command, the model is not asked (scenario "Без источника конфига", '
+        'D4)', () async {
       final rig = await _Rig.create(withSource: false);
       final session = await rig.session();
 
-      expect([for (final c in session.commands) c.name], ['mcp']);
-      await session.prompt(const [TextContent('/config reload')]);
+      expect([
+        for (final c in session.commands) c.name,
+      ], isNot(contains('config')));
+      final reply = await rig.ask(session, '/config reload');
 
-      expect(rig.streamCalls, 1);
-      expect(rig.lastUserText, '/config reload');
+      expect(
+        reply.text,
+        'Unknown command: /config. Run /help to list commands.',
+      );
+      expect(reply.result.reason, TurnEndReason.completed);
+      expect(rig.streamCalls, 0);
     });
 
-    test('configCommand: false (serve --ws) hides config, mcp stays; the '
-        'prompt goes to the model (scenario "WebSocket без /config", '
-        'R0-3)', () async {
+    test('configCommand: false (serve --ws) hides config, mcp stays; /config '
+        'check is an unknown command and nothing is loaded (scenario '
+        '"WebSocket без /config", R0-3)', () async {
       final rig = await _Rig.create(configCommand: false);
       final session = await rig.session();
 
-      expect([for (final c in session.commands) c.name], ['mcp']);
-      await session.prompt(const [TextContent('/config check')]);
+      expect(
+        [for (final c in session.commands) c.name],
+        ['compact', 'mode', 'model', 'status', 'mcp', 'help'],
+      );
+      final reply = await rig.ask(session, '/config check');
 
-      expect(rig.streamCalls, 1);
-      expect(rig.lastUserText, '/config check');
+      expect(
+        reply.text,
+        'Unknown command: /config. Run /help to list commands.',
+      );
+      expect(rig.streamCalls, 0);
       expect(rig.source.loads, 0, reason: 'nothing was loaded');
     });
 
@@ -96,30 +153,19 @@ void main() {
       expect(rig.runtime.appliedValues['budget.max_steps'], 20);
     });
 
-    test('with the capability mcp off there is no mcp; the prompt goes to '
-        'the model (D12)', () async {
+    test('with the capability mcp off there is no mcp: /mcp list is an '
+        'unknown command (D4)', () async {
       final rig = await _Rig.create(mcpCapability: false);
       final session = await rig.session();
 
-      expect([for (final c in session.commands) c.name], ['config']);
-      await session.prompt(const [TextContent('/mcp list')]);
+      expect([
+        for (final c in session.commands) c.name,
+      ], isNot(contains('mcp')));
+      final reply = await rig.ask(session, '/mcp list');
 
-      expect(rig.streamCalls, 1);
-      expect(rig.lastUserText, '/mcp list');
+      expect(reply.text, 'Unknown command: /mcp. Run /help to list commands.');
+      expect(rig.streamCalls, 0);
     });
-
-    test(
-      'an unknown /x without a template goes to the model as before',
-      () async {
-        final rig = await _Rig.create();
-        final session = await rig.session();
-
-        await session.prompt(const [TextContent('/frobnicate now')]);
-
-        expect(rig.streamCalls, 1);
-        expect(rig.lastUserText, '/frobnicate now');
-      },
-    );
 
     test('a reload does not change the list of a live session '
         '(scenario "Перезагрузка не меняет список")', () async {
@@ -136,6 +182,336 @@ void main() {
         'Restart required: trusted_projects',
       );
       expect([for (final c in session.commands) c.name], before);
+    });
+  });
+
+  group('an unknown command (agent-slash-commands "Неизвестная команда", '
+      'D3, D4, R-08)', () {
+    test('the answer is text, the model is not asked, the journal is not '
+        'touched (scenario "Неизвестная команда не уходит модели")', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+      final journal = rig.store.textOf(session.id);
+
+      final reply = await rig.ask(session, '/nope x');
+
+      expect(reply.text, 'Unknown command: /nope. Run /help to list commands.');
+      expect(
+        [for (final e in reply.events) e.runtimeType],
+        [TurnStarted, MessageStarted, MessageDelta, MessageEnded, TurnEnded],
+      );
+      expect((reply.events.last as TurnEnded).reason, TurnEndReason.completed);
+      expect(rig.streamCalls, 0);
+      expect(rig.store.textOf(session.id), journal);
+    });
+
+    test('the slot is free afterwards', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+
+      await rig.ask(session, '/nope');
+      final result = await session.prompt(const [TextContent('hello')]);
+
+      expect(result.reason, TurnEndReason.completed);
+      expect(rig.streamCalls, 1);
+    });
+
+    test('a long name is cut to 64 runes; the log has the session and the '
+        'size only, never the name (scenario "Длинное имя обрезается", '
+        '§16)', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+      final name = 'a' * 100;
+
+      final reply = await rig.ask(session, '/$name');
+
+      expect(
+        reply.text,
+        'Unknown command: /${'a' * 64}. Run /help to list commands.',
+      );
+      final log = rig.logger.eventsOf('command.unknown').single;
+      expect(log.level, LogLevel.info);
+      expect(log.fields.keys.toSet(), {'session_id', 'name_bytes'});
+      expect(log.fields['session_id'], session.id.value);
+      expect(log.fields['name_bytes'], isA<int>());
+      expect(
+        [for (final r in rig.logger.records) r.toString()].join('\n'),
+        isNot(contains('aaaaaaaa')),
+      );
+    });
+
+    test('the log of /nope secret-token-123 has neither the name nor the '
+        'arguments', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+
+      await rig.ask(session, '/nope secret-token-123');
+
+      final all = [for (final r in rig.logger.records) r.toString()].join('\n');
+      expect(all, isNot(contains('nope')));
+      expect(all, isNot(contains('secret-token-123')));
+      expect(rig.logger.eventsOf('command.unknown'), hasLength(1));
+    });
+
+    test('a name with a colon (MCP prompt form) is unknown too: MCP prompts '
+        'are out of this version (E-24)', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+
+      final reply = await rig.ask(session, '/github:review 12');
+
+      expect(
+        reply.text,
+        'Unknown command: /github:review. Run /help to list commands.',
+      );
+      expect(rig.streamCalls, 0);
+    });
+
+    test('a path is not a command: the model gets the text unchanged '
+        '(scenario "Путь — не команда")', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+
+      await session.prompt(const [TextContent('/usr/bin/foo is broken')]);
+
+      expect(rig.streamCalls, 1);
+      expect(rig.lastUserText, '/usr/bin/foo is broken');
+      expect(rig.logger.eventsOf('command.unknown'), isEmpty);
+    });
+
+    test('a leading space is not a command: the model gets the text '
+        '(scenario "Ведущий пробел — не команда")', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+
+      await session.prompt(const [TextContent(' /nope x')]);
+
+      expect(rig.streamCalls, 1);
+      expect(rig.lastUserText, ' /nope x');
+      expect(rig.logger.eventsOf('command.unknown'), isEmpty);
+    });
+
+    test('a template is not an unknown command (step 3 of D3)', () async {
+      final rig = await _Rig.create(templates: ['review']);
+      final session = await rig.session();
+
+      await session.prompt(const [TextContent('/review now')]);
+
+      expect(rig.streamCalls, 1);
+      expect(rig.logger.eventsOf('command.unknown'), isEmpty);
+    });
+  });
+
+  group('/status (scenario "/status без конфига", D7, Q2)', () {
+    test('without a ConfigSource: exactly four lines', () async {
+      final rig = await _Rig.create(withSource: false);
+      final session = await rig.session();
+
+      final reply = await rig.ask(session, '/status');
+
+      expect(
+        reply.text,
+        'Model: a/m1\n'
+        'Mode: ${session.mode.value}\n'
+        'Working directory: /proj\n'
+        'MCP servers: none',
+      );
+      expect(rig.streamCalls, 0);
+    });
+
+    test('the servers in the order of McpSessionTools.servers with the '
+        'state', () async {
+      final rig = await _Rig.create(
+        withSource: false,
+        servers: [_http('a'), _http('b')],
+      );
+      final session = await rig.session();
+      rig
+          .tools(session)
+          .preset(
+            const McpServerSummary(
+              name: 'b',
+              toolCount: 0,
+              origin: McpServerOrigin.config,
+              transport: 'http',
+              state: McpServerState.failed,
+            ),
+          );
+
+      final reply = await rig.ask(session, '/status');
+
+      expect(
+        reply.text.split('\n').last,
+        'MCP servers: a (connected), b (failed)',
+      );
+    });
+
+    test('with a config: Config: ok after the four lines', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+
+      final reply = await rig.ask(session, '/status');
+
+      expect(reply.text.split('\n'), [
+        'Model: a/m1',
+        'Mode: ${session.mode.value}',
+        'Working directory: /proj',
+        'MCP servers: none',
+        'Config: ok',
+      ]);
+    });
+
+    test('a failed reload: one issue, then the plural', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+      _put(rig.user, 'compaction.reserve_token', 1);
+      await rig.runtime.reloadConfig();
+      final failedAt = rig.clock.now().toUtc().toIso8601String();
+
+      final one = await rig.ask(session, '/status');
+      _put(rig.user, 'budget.max_step', 1);
+      await rig.runtime.reloadConfig();
+      final two = await rig.ask(session, '/status');
+
+      expect(
+        one.text.split('\n').last,
+        'Config: reload failed at $failedAt (1 issue). Run /config check.',
+      );
+      expect(
+        two.text.split('\n').last,
+        'Config: reload failed at $failedAt (2 issues). Run /config check.',
+      );
+    });
+
+    test('pending keys: the Restart required line', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+      _put(rig.user, 'trusted_projects', ['/proj']);
+      await rig.runtime.reloadConfig();
+
+      final reply = await rig.ask(session, '/status');
+
+      expect(reply.text.split('\n').skip(4), [
+        'Config: ok',
+        'Restart required: trusted_projects',
+      ]);
+    });
+
+    test('configCommand: false hides Config and Restart required even '
+        'after a failed reload (R0-3, D7)', () async {
+      final rig = await _Rig.create(configCommand: false);
+      final session = await rig.session();
+      _put(rig.user, 'compaction.reserve_token', 1);
+      _put(rig.user, 'trusted_projects', ['/proj']);
+      rig.source.signal();
+      await pumpEventQueue();
+
+      final reply = await rig.ask(session, '/status');
+
+      expect(reply.text.split('\n'), hasLength(4));
+      expect(reply.text, isNot(contains('Config')));
+      expect(reply.text, isNot(contains('Restart required')));
+    });
+
+    test('the arguments are ignored; the log has name and subcommand show; '
+        'the journal is not touched', () async {
+      final rig = await _Rig.create(withSource: false);
+      final session = await rig.session();
+      final journal = rig.store.textOf(session.id);
+
+      final plain = await rig.ask(session, '/status');
+      final withArgs = await rig.ask(session, '/status secret-token-123');
+
+      expect(withArgs.text, plain.text);
+      expect(rig.store.textOf(session.id), journal);
+      expect(
+        [for (final l in rig.logger.eventsOf('command.builtin')) l.fields],
+        [
+          for (var i = 0; i < 2; i++)
+            {
+              'session_id': session.id.value,
+              'name': 'status',
+              'subcommand': 'show',
+            },
+        ],
+      );
+      expect(
+        [for (final r in rig.logger.records) r.toString()].join('\n'),
+        isNot(contains('secret-token-123')),
+      );
+    });
+  });
+
+  group('/help (scenario "/help перечисляет команды", D7, Q1)', () {
+    test('Commands: and a line per command in the order of '
+        'AgentSession.commands, the template with (template)', () async {
+      final rig = await _Rig.create(
+        templates: ['review'],
+        hints: {'review': '<path> [focus]'},
+      );
+      final session = await rig.session();
+
+      final reply = await rig.ask(session, '/help');
+
+      expect(
+        reply.text,
+        'Commands:\n'
+        '/compact [focus] - Compact the session history\n'
+        '/mode plan | ask | standard | accept-edits | bypass - '
+        'Switch the session mode\n'
+        '/model provider/model - Switch the model\n'
+        '/status - Show the model, mode, working directory and MCP servers\n'
+        '/config reload | check - Reload or check the agent config\n'
+        '/mcp list | reload [<id>] | enable <id> | disable <id> - '
+        'List, reload, enable or disable MCP servers\n'
+        '/help - List commands\n'
+        '/review <path> [focus] - Do review (template)',
+      );
+      expect(reply.text.endsWith('\n'), isFalse);
+      expect(rig.streamCalls, 0);
+    });
+
+    test('the list follows the declared commands: without config, '
+        'compaction and mcp it is the four lines', () async {
+      final rig = await _Rig.create(
+        withSource: false,
+        compaction: false,
+        mcpCapability: false,
+      );
+      final session = await rig.session();
+
+      final reply = await rig.ask(session, '/help');
+
+      expect(reply.text.split('\n'), [
+        'Commands:',
+        '/mode plan | ask | standard | accept-edits | bypass - '
+            'Switch the session mode',
+        '/model provider/model - Switch the model',
+        '/status - Show the model, mode, working directory and MCP servers',
+        '/help - List commands',
+      ]);
+    });
+
+    test('the arguments are ignored; the log has name help and subcommand '
+        'show', () async {
+      final rig = await _Rig.create(withSource: false);
+      final session = await rig.session();
+
+      final plain = await rig.ask(session, '/help');
+      final withArgs = await rig.ask(session, '/help status');
+
+      expect(withArgs.text, plain.text);
+      expect(
+        [for (final l in rig.logger.eventsOf('command.builtin')) l.fields],
+        [
+          for (var i = 0; i < 2; i++)
+            {
+              'session_id': session.id.value,
+              'name': 'help',
+              'subcommand': 'show',
+            },
+        ],
+      );
     });
   });
 
@@ -1452,9 +1828,12 @@ final class _ResolvingEnv implements ExecutionEnv, PathResolver {
 }
 
 final class _Port implements ProjectFilesSource {
-  _Port(this.names, {this.trustedOnly = const []});
+  _Port(this.names, {this.trustedOnly = const [], this.hints = const {}});
 
   final List<String> names;
+
+  /// `argument-hint` шаблонов по имени; шаблон без записи — без frontmatter.
+  final Map<String, String> hints;
 
   /// Шаблоны проекта: отдаются только доверенному проекту (D4).
   final List<String> trustedOnly;
@@ -1468,6 +1847,9 @@ final class _Port implements ProjectFilesSource {
           scope: ExtensionScope.user,
           body: 'Do $name',
           bodyLine: 1,
+          frontmatter: hints[name] == null
+              ? null
+              : layer({'argument-hint': hints[name]}),
         ),
     ],
   );
@@ -1484,6 +1866,7 @@ final class _Rig {
     this.manual,
     this._calls,
     this._contexts,
+    this.clock,
   );
 
   static Future<_Rig> create({
@@ -1492,11 +1875,16 @@ final class _Rig {
     bool withSource = true,
     bool configCommand = true,
     bool mcpCapability = true,
+    bool compaction = true,
     bool hold = false,
     List<String> templates = const [],
     List<String> trustedTemplates = const [],
+    Map<String, String> hints = const {},
   }) async {
-    final user = _user(servers, extra);
+    final user = _user(servers, {
+      if (!compaction) 'compaction': {'enabled': false},
+      ...extra,
+    });
     final clock = FakeClock();
     final logger = RecordingLogger(clock: clock);
     final store = MemorySessionStore();
@@ -1542,7 +1930,7 @@ final class _Rig {
         config: withSource ? source : null,
         projectFiles: templates.isEmpty && trustedTemplates.isEmpty
             ? null
-            : _Port(templates, trustedOnly: trustedTemplates),
+            : _Port(templates, trustedOnly: trustedTemplates, hints: hints),
       ),
       config: initial,
       streamFunction: stream(),
@@ -1565,6 +1953,7 @@ final class _Rig {
       manual,
       calls,
       contexts,
+      clock,
     );
   }
 
@@ -1577,6 +1966,9 @@ final class _Rig {
   final ManualStream? manual;
   final List<int> _calls;
   final List<LlmContext> _contexts;
+
+  /// Часы рантайма: от них берётся `lastFailureAt` для `/status`.
+  final FakeClock clock;
 
   AgentRuntimeImpl get runtime => built.runtime as AgentRuntimeImpl;
 

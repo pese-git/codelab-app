@@ -144,6 +144,8 @@ final class E2eCliAgent {
       models: const [],
       completedToolRow: '',
       agentCommands: const [],
+      prefixedAgentCommands: const [],
+      agentHelpAnswer: const [],
       sessionAnswer: unsupported,
       listedSession: unsupported,
       savedSessions: unsupported,
@@ -164,6 +166,8 @@ final class E2eCliAgent {
         models: const ['gpt-5', 'gpt-4'],
         completedToolRow: '✓ Run',
         agentCommands: const ['/compact'],
+        prefixedAgentCommands: const ['/agent:plan'],
+        agentHelpAnswer: const [],
         sessionAnswer: (prompt) => 'echo: $prompt',
         listedSession: (_) => 'codelab-list-session-1',
         savedSessions: () {
@@ -295,10 +299,16 @@ final class E2eCliAgent {
     rejectedAnswer: 'approved',
     models: const ['scripted/gpt-5', 'scripted/gpt-4'],
     completedToolRow: '✓ Write',
-    // U-03: команды, которые Dart-агент и встроенный агент объявляют в
-    // `available_commands_update`; меню Tab показывает их с пометкой
-    // `(agent)` (tasks 2.8 change `switch-default-agent-to-dart`).
-    agentCommands: const ['/compact', '/config', '/mcp'],
+    // U-03, tasks 1.7 change `add-agent-builtin-slash-commands`: Dart-агент
+    // и встроенный агент объявляют `compact` (capability `compaction` в
+    // профилях включена, Q10), `status`, `mcp`. Агентская `config` в сценарий
+    // не входит (Q8). Одноимённые `help`, `mode`, `model` клиент оставляет
+    // себе, команды агента идут с префиксом `/agent:` (D10).
+    agentCommands: const ['/compact', '/status', '/mcp'],
+    prefixedAgentCommands: const ['/agent:help', '/agent:mode', '/agent:model'],
+    // Ответ агента на `/agent:help` (формат Q1): заголовок и строки команд;
+    // у `compact` есть подсказка `[focus]` (agent-slash-commands «Встроенные команды MVP»).
+    agentHelpAnswer: const ['Commands:', '/compact [focus] - ', '/status - '],
     sessionAnswer: (_) => 'session answer',
     // Заголовок сессии Dart-агент берёт из первого промпта.
     listedSession: (firstPrompt) => firstPrompt,
@@ -352,6 +362,8 @@ final class E2eCliLaunch {
     required this.models,
     required this.completedToolRow,
     required this.agentCommands,
+    required this.prefixedAgentCommands,
+    required this.agentHelpAnswer,
     required String Function(String prompt) sessionAnswer,
     required String Function(String firstPrompt) listedSession,
     required int Function() savedSessions,
@@ -395,10 +407,18 @@ final class E2eCliLaunch {
   /// Строка завершённого вызова в ходе `with_tool_calls`.
   final String completedToolRow;
 
-  /// Команды агента, которые меню Tab обязано показать (U-03): у scripted —
-  /// из режима `with_available_commands`, у Dart-агента и встроенного —
-  /// `/compact`, `/config`, `/mcp`.
+  /// Команды агента без конфликта имён: меню Tab показывает их с пометкой
+  /// `(agent)` (U-03). У scripted — из режима `with_available_commands`.
   final List<String> agentCommands;
+
+  /// Команды агента, одноимённые клиентским: меню показывает их как
+  /// `/agent:<имя>` (D10, codelab-cli «Одноимённые команды клиента и
+  /// Dart-агента»).
+  final List<String> prefixedAgentCommands;
+
+  /// Фрагменты ответа агента на `/agent:help`; пусто — у агента нет такой
+  /// команды (scripted).
+  final List<String> agentHelpAnswer;
 
   final String Function(String) _sessionAnswer;
   final String Function(String) _listedSession;

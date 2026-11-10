@@ -145,6 +145,49 @@ void main() {
     expect(logger.eventsOf('host.plan'), hasLength(1));
   });
 
+  // Встроенные команды объявляет ядро, поэтому встроенный агент (app и
+  // `codelab`) получает их так же, как бинарь (agent-slash-commands «Список
+  // команд сессии»; design.md change `add-agent-builtin-slash-commands`, D1,
+  // D2; K-02, R-08). Сценарий модели без `ConfigSource` — `config` не
+  // объявляется (D13 change `add-config-writer-and-reload`).
+  test('session/new announces the builtin commands in the order of §13.4 '
+      'and no config (no ConfigSource)', () async {
+    await open(<Map<String, Object?>>[]);
+    await pumpEventQueue();
+
+    final names = [
+      for (final update in client!.updates)
+        if (update['sessionUpdate'] == 'available_commands_update')
+          for (final c in update['availableCommands']! as List)
+            (c as Map)['name'],
+    ];
+    expect(names, containsAllInOrder(['compact', 'mode', 'model', 'status']));
+    expect(names.last, 'help');
+    expect(names, isNot(contains('config')));
+  });
+
+  test('/help and /mode plan are answered by the embedded agent without the '
+      'model (the script has no steps)', () async {
+    final sessionId = await open(<Map<String, Object?>>[]);
+
+    expect(await client!.prompt(sessionId, '/help'), 'end_turn');
+    expect(
+      client!.agentText,
+      startsWith('Commands:\n/compact [focus] - Compact the session history'),
+    );
+    expect(await client!.prompt(sessionId, '/mode plan'), 'end_turn');
+    expect(client!.agentText, endsWith('Mode: plan.'));
+    expect(
+      client!.updates.where((u) => u['sessionUpdate'] == 'current_mode_update'),
+      isNotEmpty,
+    );
+    expect(await client!.prompt(sessionId, '/nope'), 'end_turn');
+    expect(
+      client!.agentText,
+      endsWith('Unknown command: /nope. Run /help to list commands.'),
+    );
+  });
+
   test('embedded profiles are assembled by their own names', () async {
     for (final name in ['embedded-cli', 'embedded-app-desktop']) {
       final sessionId = await open([text('ok')], hostProfile: name);

@@ -71,7 +71,11 @@ void main() {
     // Содержимое файлов не попадает в лог (D14).
     expect(agent.stderrText, isNot(contains('project-rule-text')));
     expect(agent.stderrText, isNot(contains('user-rule-text')));
-    // Шаблоны пользователя сценарий тоже не читает.
+    // Шаблоны пользователя сценарий тоже не читает: в списке только
+    // встроенные команды сессии (сценарий «Сценарий не читает CODELAB_HOME»;
+    // D2 change `add-agent-builtin-slash-commands`). `config` у сценария не
+    // объявляется: источника конфигурации нет (D13 change
+    // `add-config-writer-and-reload`).
     final commands = [
       for (final m in seen)
         if (m case {
@@ -82,9 +86,14 @@ void main() {
             },
           },
         })
-          ...list,
+          for (final c in list) (c! as Map)['name'],
     ];
-    expect(commands, isEmpty);
+    expect(
+      commands,
+      containsAllInOrder(['compact', 'mode', 'model', 'status', 'help']),
+    );
+    expect(commands, isNot(contains('review')));
+    expect(commands, isNot(contains('config')));
   }, timeout: const Timeout(Duration(seconds: 90)));
 
   // D17: под `--llm-script` `CODELAB_HOME` не раскрывается и не проверяется:
