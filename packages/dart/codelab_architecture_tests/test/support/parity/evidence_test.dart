@@ -25,11 +25,8 @@ void _fixture(String id) =>
 MatrixRow _row(String id, String criterion) =>
     MatrixRow(id: id, line: 1, criterion: criterion);
 
-ExistenceReport _check(
-  List<MatrixRow> rows, {
-  List<KnownGap> knownGaps = const [],
-}) =>
-    checkEvidenceExists(rows: rows, repoRoot: _root.path, knownGaps: knownGaps);
+ExistenceReport _check(List<MatrixRow> rows) =>
+    checkEvidenceExists(rows: rows, repoRoot: _root.path);
 
 void main() {
   setUp(() {
@@ -80,7 +77,6 @@ void main() {
       final report = _check([_row('R-08', '`acp/slash-help`')]);
 
       expect(report.failures, isEmpty);
-      expect(report.knownGapLines, isEmpty);
     });
 
     test('строка Must без единого доказательства — missing', () {
@@ -405,46 +401,6 @@ void main() {
       expect(_check([_row('U-01', '`cli/x`')]).failures, [
         'U-01 cli/x missing',
       ]);
-    });
-  });
-
-  group('храповик knownGaps', () {
-    const gap = KnownGap('R-08', 'acp/slash-help', '2.1');
-
-    test('Известный пробел: проходит и печатает known gap', () {
-      final report = _check(
-        [_row('R-08', '`acp/slash-help`')],
-        knownGaps: [gap],
-      );
-
-      expect(report.failures, isEmpty);
-      expect(report.knownGapLines, [
-        allOf(startsWith('known gap: R-08 acp/slash-help'), contains('2.1')),
-      ]);
-    });
-
-    test('Устаревшая запись knownGaps: фикстура есть — тест падает', () {
-      _fixture('slash-help');
-
-      final report = _check(
-        [_row('R-08', '`acp/slash-help`')],
-        knownGaps: [gap],
-      );
-
-      expect(report.failures, [
-        startsWith('stale known gap: R-08 acp/slash-help'),
-      ]);
-      expect(report.knownGapLines, isEmpty);
-    });
-
-    test('пробел вне списка по-прежнему роняет проверку', () {
-      final report = _check(
-        [_row('R-08', '`acp/slash-help`, `acp/slash-mode-plan`')],
-        knownGaps: [gap],
-      );
-
-      expect(report.failures, ['R-08 acp/slash-mode-plan missing']);
-      expect(report.knownGapLines, hasLength(1));
     });
   });
 }

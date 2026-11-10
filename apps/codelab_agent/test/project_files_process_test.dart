@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
@@ -76,6 +77,14 @@ void main() {
     // D2 change `add-agent-builtin-slash-commands`). `config` у сценария не
     // объявляется: источника конфигурации нет (D13 change
     // `add-config-writer-and-reload`).
+    // `available_commands_update` приходит после ответа на `session/new`
+    // (`14-Slash Commands.md`): дочитываем stdout до него, без пауз по
+    // времени. Пустой список кадров сделал бы проверку ниже пустой.
+    while (!seen.any(_isCommandsUpdate)) {
+      final line = await agent.nextStdoutLine();
+      expect(line, isNotNull, reason: agent.stderrText);
+      seen.add(jsonDecode(line!) as Map<String, Object?>);
+    }
     final commands = [
       for (final m in seen)
         if (m case {
@@ -202,3 +211,10 @@ void main() {
     expect(agent.stderrText, isNot(contains('project-rule-text')));
   }, timeout: const Timeout(Duration(seconds: 90)));
 }
+
+/// Кадр `available_commands_update`.
+bool _isCommandsUpdate(Map<String, Object?> message) => switch (message) {
+  {'params': {'update': {'sessionUpdate': 'available_commands_update'}}} =>
+    true,
+  _ => false,
+};
