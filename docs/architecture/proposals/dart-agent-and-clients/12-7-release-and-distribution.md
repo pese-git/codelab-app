@@ -305,6 +305,11 @@ Actions из тега, подписанное происхождение, кот
 
 * **Версии** — semver: `X.Y.Z` для `stable`, `X.Y.Z-beta.N` для `beta`. Ломающее изменение CLI,
   конфигурации или `stream-json` (§12.5) — major; новая цель или команда — minor.
+  Исключение — переходный алиас: команда, помеченная в `CHANGELOG.md` первой `stable`, где она
+  есть, как «deprecated, will be removed», не входит в контракт стабильного CLI и снимается
+  minor-версией, но не patch-версией. Сейчас это одна команда — `codelab serve` → `codelab-agent
+  serve`; она снимается первой minor-версией после условия удаления Python-агента (change
+  `retire-python-agent`, D11; решение пользователя 2026-11-10, Q3).
 * **CHANGELOG.md** в формате Keep a Changelog: раздел `## [X.Y.Z] - YYYY-MM-DD` обязателен для
   тега; `RELEASE_NOTES.md` релиза — этот раздел. Раздел «Privacy» — при любой правке
   `PRIVACY.md`.

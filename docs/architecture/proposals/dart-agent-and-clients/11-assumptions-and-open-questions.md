@@ -19,8 +19,10 @@
 3. Существующие JSON-сессии Python не переносятся: форматы разные, журналы живут в разных каталогах (agent-core-architecture §8.9, §16.1).
 4. Python TUI заменяется codelab_cli; Web UI через textual-serve не нужен после перехода.
 5. Имена команд: клиент — `codelab` (привычная пользователям команда), агент — `codelab-agent`.
-   Сейчас `codelab` в Python объединяет `serve` и `connect`; после перехода `codelab serve` один
-   релиз остаётся алиасом на `codelab-agent serve`.
+   Сейчас `codelab` в Python объединяет `serve` и `connect`; после перехода `codelab serve` остаётся
+   переходным алиасом на `codelab-agent serve`: он есть в первой `stable` с пометкой deprecated и
+   снимается первой minor-версией после условия удаления Python-агента; алиаса `codelab connect`
+   нет (change `retire-python-agent`, D11; решения пользователя 2026-11-10, Q3, Q7).
 6. melos 8 читает конфигурацию из секции `melos:` корневого `pubspec.yaml` (**подтверждено** в задаче 0.1: `melos.yaml` уже не читался, три скрипта из него были недоступны), поэтому `melos.yaml`
    можно удалить (проверить на этапе 0 командой `melos list` до и после).
 
