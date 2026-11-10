@@ -109,6 +109,12 @@ const environmentLayerVariables = {
 /// `config.env.unknown` называет её имя (§15.6; design.md change
 /// `add-agent-secret-store`, D14). Условие вычисляется при компиляции:
 /// окружением процесса его не включить (§12.4.13).
+///
+/// `CODELAB_SERVE_ALIAS_ACTIVE` — маркер переходного алиаса `codelab serve`:
+/// алиас ставит его агенту при каждом запуске, поэтому без записи здесь
+/// каждый такой запуск давал бы ложное предупреждение. Агент маркер не
+/// читает (change `retire-python-agent`, Q10, D7). Запись временная: снимается
+/// вместе с алиасом в change `remove-python-agent` (D13).
 const _knownVariables = {
   'CODELAB_HOME',
   'CODELAB_CONFIG',
@@ -124,6 +130,7 @@ const _knownVariables = {
   'CODELAB_DEBUG_LLM_SNAPSHOT',
   'CODELAB_AGENT_TOKEN',
   'CODELAB_POWER_HELPER',
+  'CODELAB_SERVE_ALIAS_ACTIVE',
   if (bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS'))
     'CODELAB_TEST_SECRET_STORE',
 };
