@@ -213,8 +213,11 @@ macOS и Linux, ручная проверка Windows откладывается
 `codelab test-scenario --junit`), вторая половина 9.3 (`codelabAgentStdioProfile` —
 `codelab-agent serve --stdio`), 9.2 по отчёту 9.1, 9.5 и 9.7 без установки и `PRIVACY.md`;
 итерация 4 — ворота MVP (три ночи, три прогона app на macOS в `release/<version>`, чек-лист Zed
-9.8, подписи). Заморозка Python-агента и алиас `codelab serve` — change `retire-python-agent`,
-политика заморозки нужна до ворот (решения пользователя 2026-11-09, design.md change, D1, Q3).
+9.8, подписи). Заморозка Python-агента и алиас `codelab serve` — change
+[`retire-python-agent`](../../../openspec/changes/retire-python-agent/proposal.md): политика заморозки
+нужна до ворот (решения пользователя 2026-11-09, design.md change, D1, Q3) и опубликована разделом
+[«Поддержка Python-агента»](../../user/migrating-from-python-agent.md#поддержка-python-агента)
+(design.md change `retire-python-agent`, D1–D5).
 
 **Критерии выхода.**
 
@@ -252,7 +255,10 @@ macOS и Linux, ручная проверка Windows откладывается
   подписанный `SHA256SUMS`, `install.sh` / `install.ps1` (критерии U-29, D-16, D-18);
 * критерии приёмки всех строк §6.1 зелёные;
 * документы §6.3 приняты; ADR о песочнице ОС (9.11) принят, строка P-13 матрицы исправлена;
-* Python-агент удалён после одного релизного цикла без регрессий (задача 9.9) — допустимо в 1.0.x.
+* Python-агент заморожен, алиас `codelab serve` есть в первой `stable` с пометкой deprecated. Удаление —
+  после одного релизного цикла без регрессий (задача 9.9): change `remove-python-agent` по условию
+  D4 change `retire-python-agent`; сам алиас снимается первой minor-версией после условия, не
+  patch-версией 1.0.x (§12.7.8, решение пользователя 2026-11-10, Q3).
 
 **Блокирует.** 1.x и этап 10.
 

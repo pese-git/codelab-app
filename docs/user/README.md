@@ -18,6 +18,7 @@ CodeLab — рабочее место для работы с AI-агентами
 2. [Настройка](configuration.md) — `config.yaml`, секреты, `codelab config check`, LiteLLM Proxy.
 3. [Переход с Python-агента](migrating-from-python-agent.md) — что изменилось и как перенести настройки.
    - Сессии Python-агента не переносятся — [подробности](migrating-from-python-agent.md#сессии-python-агента-не-переносятся).
+   - Python-агент заморожен: только исправления безопасности, условия удаления — [поддержка Python-агента](migrating-from-python-agent.md#поддержка-python-агента).
 4. [Zed](zed.md) — подключение `codelab-agent serve --stdio` к Zed.
 
 До выпуска 1.0 тексты промптов и вывод инструментов в журналах сессий и логах агента не редактируются — [что попадает в логи и журналы](configuration.md#что-попадает-в-логи-и-журналы).
