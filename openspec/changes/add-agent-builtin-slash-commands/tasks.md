@@ -42,20 +42,23 @@
 
 ## 2. Реализация ядра
 
-- [ ] 2.1 `[agent]` `BuiltinCommands` (`codelab_agent_core/lib/src/commands/builtin_commands.dart`): объявление `compact`, `mode`, `model`, `status`, `help` по §13.4 и порядок D2; `match` для всех объявленных команд и результат «неизвестная команда» для слова по регулярному выражению без команды и шаблона (D3, D4); тексты ответов; порты ручного сжатия, смены режима и модели, снимка состояния и списка команд (D1). Doc-комментарии — почему, для чего, как (`AGENTS.md` §15). Тесты 1.3 по разбору и текстам зелёные.
-- [ ] 2.2 `[agent]` `AgentSession.prompt` (`runtime/`): порядок разбора D3; исполнение новых команд в слоте хода по правилам D12 change `add-config-writer-and-reload`; `/compact` через компактор с `manual` и ожиданием `afterTurn` (D5); `/mode`, `/model` через `setMode` / `setModel` с порядком событий D6; логи D12. Тесты 1.3 зелёные.
-- [ ] 2.3 `[protocol]` Мост ACP: тест 1.4 зелёный без изменения проекции; если `ModeChanged` от команды не даёт `config_option_update` — исправление в `codelab_agent_acp` по §13.6 п. 4 и §13.7 (таблица проекции).
-- [ ] 2.4 `[protocol]` `conformance:agent` и `conformance:embedded` зелёные на фикстурах 1.1–1.2; `test-scenario --agent embedded` проигрывает `slash-help` и `slash-mode-plan`.
-- [ ] 2.5 `[agent]` Тесты хостов 1.5 зелёные; `fvm dart run melos run web-compile` зелёный.
+- [x] 2.1 `[agent]` `BuiltinCommands` (`codelab_agent_core/lib/src/commands/builtin_commands.dart`): объявление `compact`, `mode`, `model`, `status`, `help` по §13.4 и порядок D2; `match` для всех объявленных команд и результат «неизвестная команда» для слова по регулярному выражению без команды и шаблона (D3, D4); тексты ответов; порты ручного сжатия, смены режима и модели, снимка состояния и списка команд (D1). Doc-комментарии — почему, для чего, как (`AGENTS.md` §15). Тесты 1.3 по разбору и текстам зелёные.
+- [x] 2.2 `[agent]` `AgentSession.prompt` (`runtime/`): порядок разбора D3; исполнение новых команд в слоте хода по правилам D12 change `add-config-writer-and-reload`; `/compact` через компактор с `manual` и ожиданием `afterTurn` (D5); `/mode`, `/model` через `setMode` / `setModel` с порядком событий D6; логи D12. Тесты 1.3 зелёные.
+- [x] 2.3 `[protocol]` Мост ACP: тест 1.4 зелёный без изменения проекции; если `ModeChanged` от команды не даёт `config_option_update` — исправление в `codelab_agent_acp` по §13.6 п. 4 и §13.7 (таблица проекции).
+- [x] 2.4 `[protocol]` `conformance:agent` и `conformance:embedded` зелёные на фикстурах 1.1–1.2; `test-scenario --agent embedded` проигрывает `slash-help` и `slash-mode-plan`.
+- [x] 2.5 `[agent]` Тесты хостов 1.5 зелёные; `fvm dart run melos run web-compile` зелёный.
+
+- [x] 2.6 `[agent]` По двойному ревью (2026-11-10, D14): команды `compact`, `mode`, `model` ждут свою работу и отвечают по факту (применено — сообщение и `end_turn`; отмена до применения — `cancelled` без записи и события смены); `close()` ждёт идущую команду до закрытия журнала; общий разбор строки `parseCommandLine` (`commands/command_line.dart`); `enum BuiltinName` и `sealed BuiltinInvocation` (D1); порядок событий `/model` с `ModelOptionsChanged` в тесте ядра. Тесты подтверждены мутациями.
+- [x] 2.7 `[protocol]` По двойному ревью: мост признаёт эхом только `changeId` своего клиентского запроса, `config_option_update` чужой смены (например, `/mode` во время `set_config_option`) отправляется до ответа на `session/prompt`; заметка `effort` §2.12.3 при `/model` по `ModelOptionsChanged` (§13.6). Детерминированный тест удержания. Отмена после применения `/mode plan`: кадры смены и сообщение до ответа, ответ `cancelled` (ACP-5, D14; `session_bridge_echo_test.dart`); закрытие сессии при `/mode` в очереди смен — отмена, а не сбой (ядро).
 
 ## 3. Клиенты
 
-- [ ] 3.1 `[client]` Реализация для 1.7: помощник `e2e_agent.dart` (команды агента по виду агента), сценарий режима для `dart` и `embedded`; изменений `codelab_client_core` не ожидается — если меню расходится со спецификацией, правка `CommandCatalog` по codelab-cli. `test:e2e:cli:dart-agent` и `test:e2e:cli:embedded` зелёные.
-- [ ] 3.2 `[desktop]` Реализация для 1.8: помощник `integration_test/support/e2e_agent.dart` (ответ на `/compact` по режиму). `fvm flutter analyze` app зелёный; тест на устройстве — в `release/*`.
+- [x] 3.1 `[client]` Реализация для 1.7: помощник `e2e_agent.dart` (команды агента по виду агента), сценарий режима для `dart` и `embedded`; изменений `codelab_client_core` не ожидается — если меню расходится со спецификацией, правка `CommandCatalog` по codelab-cli. `test:e2e:cli:dart-agent` и `test:e2e:cli:embedded` зелёные.
+- [x] 3.2 `[desktop]` Реализация для 1.8: помощник `integration_test/support/e2e_agent.dart` (ответ на `/compact` по режиму). `fvm flutter analyze` app зелёный; тест на устройстве — в `release/*` (прогон на устройстве — в release/*).
 
 ## 4. Матрица и ворота
 
-- [ ] 4.1 `[protocol]` `packages/dart/codelab_architecture_tests/test/parity_evidence_test.dart`: записи K-02 и R-08 удалены из `knownGaps`; если список пуст — удалены константа и проверка устаревания (D4 change `switch-default-agent-to-dart`). `guard` зелёный.
+- [x] 4.1 `[protocol]` `packages/dart/codelab_architecture_tests/test/parity_evidence_test.dart`: записи K-02 и R-08 удалены из `knownGaps`; если список пуст — удалены константа и проверка устаревания (D4 change `switch-default-agent-to-dart`). `guard` зелёный.
 - [ ] 4.2 `[protocol]` Ночной `parity` (`workflow_dispatch` на ветке или после merge): K-02, R-08 и U-03 — `pass` (app-часть K-02 — `deferred`). Запуск — в описании pull request; итог — в задаче 4.0 change `switch-default-agent-to-dart`.
 - [ ] 4.3 `[protocol]` Матрица `agent-parity-goals.md`: в K-02, R-08, U-03 пометка «закрыто change `add-agent-builtin-slash-commands`» с файлами тестов и фикстур (§1.5); R-07 — встроенные команды в списке закрыты этим change, MCP prompts — E-24.
 - [ ] 4.4 `[protocol]` Архивирование — только по просьбе пользователя. При слиянии дельт: строка Purpose `agent-slash-commands` («`/x` без шаблона и без встроенной команды уходит модели как есть») приведена к «Неизвестная команда»; Purpose упоминает встроенные команды MVP.

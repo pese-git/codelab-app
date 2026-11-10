@@ -49,3 +49,18 @@
 - **THEN** кадр после ответа `session/new` — `available_commands_update` ровно с командами `compact`, `mode`, `model`, `status`, `mcp`, `help` (встроенные; capability `compaction` и `mcp` агентского прогона включены, `config` нет — ядро без `ConfigSource`) и `{"name":"review","description":…,"input":{"hint":"<path> [focus]"}}` в этом порядке, без имён `read`, `exec` и `mcp__fake__echo` (фикстура `acp/available-commands-no-tools`, R-07)
 
 Шаблон лежит в проекте, а не в `$CODELAB_HOME/prompts/`: формат фикстур пишет файлы только в `cwd` через `setup.files` (acp-golden-fixtures). Пользовательскую область (`$CODELAB_HOME/prompts/*.md`) покрывает тест хоста `apps/codelab_agent/test/agent_host_project_files_test.dart`.
+
+### Requirement: session/cancel
+`session/cancel` SHALL отменять токен хода; ожидающие `session/request_permission` этой сессии завершаются `cancelled` (отказ), `fs/*` — ошибкой `aborted`, `terminal/wait_for_exit` — `terminal/kill`, `terminal/output`, `terminal/release`. Ответ на `session/prompt` SHALL быть `stopReason: cancelled`, даже если отмена вызвала ошибки провайдера или инструментов (ACP-5). Отмена без хода SHALL логироваться `acp.cancel.no_turn` и ничего не отправлять.
+
+#### Scenario: Отмена посреди команды
+- **WHEN** клиент отменяет ход, пока `exec` ждёт `terminal/wait_for_exit`
+- **THEN** агент отправляет `terminal/kill`, `terminal/output`, `terminal/release`, затем `tool_call_update` `failed` с `outcome: "cancelled"` и ответ `stopReason: cancelled`
+
+#### Scenario: Отмена /mode после применения
+- **WHEN** сессия в режиме `standard`, приходит `session/prompt` с `/mode plan`, и `session/cancel` приходит после того, как запись `mode_change` дописана
+- **THEN** кадры идут в порядке: `current_mode_update` с `plan`, `config_option_update`, `agent_message_chunk` с `Mode: plan.`, затем ответ на `session/prompt` со `stopReason: cancelled` (ACP-5, `05-Prompt Turn.md` «Cancellation»: уведомления — до ответа); после ответа кадров этого хода нет; режим сессии — `plan` (design.md change `add-agent-builtin-slash-commands`, D14)
+
+#### Scenario: Отмена /mode до применения
+- **WHEN** `session/cancel` для хода `/mode plan` приходит до применения смены
+- **THEN** ни `current_mode_update`, ни `config_option_update`, ни `agent_message_chunk` нет, ответ — `stopReason: cancelled`, режим — `standard`
