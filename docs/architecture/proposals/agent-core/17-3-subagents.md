@@ -643,7 +643,7 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 
 | Что | Кадр | Поля |
 |---|---|---|
-| `ToolCallStarted(agent)` | `tool_call` | `kind: "think"`, `title: "Subagent explore: Find auth code"`, `status: "pending"`, `rawInput` (все аргументы, включая `prompt`) |
+| `ToolCallStarted(agent)` | `tool_call` | `kind: "think"`, `title: "Subagent explore: Find auth code"`, `status: "pending"`, `rawInput` (все аргументы, включая `prompt`), `_meta.codelab.subagent: {"id": "sub_…", "type": "explore"}` — клиент опознаёт вызов субагента с первого кадра; `id` резервируется в `present` и переносится в `ToolCallStarted.subagent`, при реплее — из записи `subagent` (решение пользователя 2026-11-10, design.md change `add-subagents-and-tasks`, D28) |
 | `markInProgress` | `tool_call_update` | `status: "in_progress"` |
 | `ToolCallProgress(agent)` | `tool_call_update` | `content: [{"type":"content","content":{"type":"text","text":"<строка прогресса>"}}]` — заменяет предыдущую строку (в ACP `content` обновления заменяет коллекцию) |
 | `ToolCallFinished(agent)` | `tool_call_update` | `status: "completed"` или `"failed"` (отмена — `failed` с `_meta.codelab.outcome: "cancelled"`); `content` — один текстовый блок с **телом** отчёта (без обёртки `<subagent-report>` и ограды: клиент показывает человеку текст); всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` — итог ребёнка вместе с потомками из `SubagentReport` (`toolCalls`, `usage`, `duration`; решение пользователя 2026-11-10, design.md change `add-subagents-and-tasks`, D24); для `failed` — ещё `failure` |
