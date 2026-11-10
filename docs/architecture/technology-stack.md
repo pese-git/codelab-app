@@ -39,6 +39,8 @@
 | Lints                      | `flutter_lints`         |
 | Terminal UI (`codelab_cli`) | `dart_tui`             |
 | Разбор аргументов CLI (`codelab_agent`, `codelab_cli`) | `args` |
+| Чтение `config.yaml` и frontmatter агента (`codelab_agent_io`) | `yaml` |
+| Правка `config.yaml` с сохранением комментариев (`codelab_agent_io`) | `yaml_edit` |
 
 Технологии из этой таблицы считаются **утверждёнными решениями проекта**.
 
@@ -763,6 +765,25 @@ Architectural dependency rules важнее технической доступ�
 Проверка по §25: средствами SDK задача решается только своим разборщиком; competing framework нет; пакет чистый Dart (Linux, macOS, Windows, AOT `dart compile exe`), SDK `>=3.3`; native configuration нет; тестируется вызовом разбора без процесса (`serve_flags_test.dart`); security — пакет не читает окружение и файлы, значения флагов в справку не попадают; лицензия BSD-3-Clause, сопровождает команда Dart. Пакет уже был транзитивной зависимостью workspace.
 
 Версия: `^2.7.0` в `apps/codelab_agent/pubspec.yaml`, точная — в `pubspec.lock`.
+
+---
+
+## 20в. Конфигурация агента — `yaml` и `yaml_edit`; TOML не используется
+
+Единственный формат конфигурации Dart-агента — YAML 1.2 в строгом профиле (`config.yaml`; `docs/architecture/proposals/agent-core/15-configuration.md` §15.1, §15.5). Две технологии, обе в `codelab_agent_io`:
+
+| Технология | Назначение | Где используется |
+|---|---|---|
+| [`yaml`](https://pub.dev/packages/yaml) (publisher `dart.dev`) | чтение YAML с позициями узлов: файл, строка и столбец в сообщениях об ошибках; тот же разборщик читает frontmatter определений агентов и skills | `codelab_agent_io`: `ConfigLoader`, `yaml_reader`, загрузчик файлов проекта |
+| [`yaml_edit`](https://pub.dev/packages/yaml_edit) (publisher `dart.dev`) | запись конфига с сохранением комментариев, порядка и стиля ключей | `codelab_agent_io`: `ConfigWriter` (`codelab config set/unset`, `provider add`, страницы настроек) |
+
+1. **Назначение.** `yaml` даёт ошибкам конфигурации точное место в файле; `yaml_edit` позволяет командам и страницам настроек менять одну запись, не переписывая файл пользователя целиком.
+2. **Где не используются.** `codelab_agent_core` YAML не читает и разборщиков не импортирует (CFG-5): схема и валидатор — чистая функция ядра `CoreConfig.fromLayers` над уже разобранным деревом, поэтому ядро остаётся web-безопасным с зависимостями `http`, `meta`, `collection`, `async`, `crypto`. Клиенты получают чтение и запись конфига через мост `codelab_setup`, а не через прямую зависимость.
+3. **`toml` не используется.** `codelab.toml` Python-агента Dart-агент не читает и не переводит (решение пользователя 2026-10-29): агент только предупреждает, что нашёл старый файл, а перенос делается вручную по таблице §15.7. Пакет `toml` в зависимости не добавляется.
+4. **Влияние на architecture boundaries.** Нет: оба пакета — чистый Dart; allowlist зависимостей `codelab_agent_io` в `pubspec_allowlist_test.dart` содержит `yaml` и `yaml_edit`.
+5. **Заменяет ли существующую технологию.** Нет. `args` (раздел 20б) разбирает аргументы процесса, а не файлы конфигурации.
+
+Версии: `yaml: ^3.1.3`, `yaml_edit: ^2.2.4` в `packages/dart/codelab_agent_io/pubspec.yaml`, точные — в `pubspec.lock`.
 
 ---
 

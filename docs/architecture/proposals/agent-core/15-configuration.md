@@ -595,9 +595,9 @@ capability `memory` off), `max_notes` (`500`, `10..10000`, на scope), `note_ma
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
 | `level` | `"trace"`…`"error"` | `"info"` | уровень `Logger` |
-| `file` | path | `$CODELAB_HOME/logs/agent.log` | sink логов; переопределяется `--log-file` и `CODELAB_LOG_FILE` (§12.3.1) |
-| `trace` | bool | `true` | protocol trace (§12.5) |
-| `trace_payload` | bool | `false` | payload кадров; только debug-сборка |
+| `file` | path | — (файл не пишется) | sink логов; переопределяется `--log-file` и `CODELAB_LOG_FILE` (§12.3.1); без значения каталог `$CODELAB_HOME/logs` не создаётся (OQ5 (а) change `add-agent-configuration`) |
+| `trace` | bool | `true` | protocol trace (§12.5); после MVP: ключ читается, не применяется (`config.key.not_applied`; Q11 change `switch-default-agent-to-dart`) |
+| `trace_payload` | bool | `false` | payload кадров; только debug-сборка; после MVP: ключ читается, не применяется (`config.key.not_applied`; Q11 change `switch-default-agent-to-dart`) |
 | `llm_snapshot` | `"off"` \| `"headers"` \| `"body"` | `"off"` | после MVP: снимок запроса при зависании (§17.10.10) |
 
 **`secrets`** (с этапа 8.9, §17.5.4; change `add-agent-secret-store`, D7) — только пользовательский
