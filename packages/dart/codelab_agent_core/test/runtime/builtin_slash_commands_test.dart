@@ -156,6 +156,11 @@ void main() {
         anyOf(startsWith('Compacted: '), 'Nothing to compact.'),
       );
       expect(
+        reply.events.whereType<ContextCompacted>(),
+        isNotEmpty,
+        reason: 'the background compaction did end during the wait',
+      );
+      expect(
         reply.events.indexWhere((e) => e is ContextCompacted),
         lessThan(reply.events.indexWhere((e) => e is TurnStarted)),
         reason: 'the background compaction ended before the command began',
@@ -443,11 +448,15 @@ void main() {
       expect(reply.text, 'Model: a/m2.');
       expect(reply.result.reason, TurnEndReason.completed);
       expect(
+        [for (final e in reply.events) e.runtimeType],
         [
-          for (final e in reply.events)
-            if (e is! ModelOptionsChanged) e.runtimeType,
+          TurnStarted,
+          ModelOptionsChanged,
+          MessageStarted,
+          MessageDelta,
+          MessageEnded,
+          TurnEnded,
         ],
-        [TurnStarted, MessageStarted, MessageDelta, MessageEnded, TurnEnded],
       );
       expect(session.model.id, 'm2');
       final added = (await rig.records(session)).skip(before.length).toList();
@@ -523,6 +532,168 @@ void main() {
         [for (final r in rig.logger.records) r.toString()].join('\n'),
         isNot(contains('secret/model-xyz')),
       );
+    });
+  });
+
+  group('state-changing commands always wait for their work (D14)', () {
+    test('/mode: cancel during the held journal write — the change is '
+        'applied, the answer is by fact, no event after TurnEnded', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+      rig.gate.arm((r) => r is ModeChangeRecord);
+
+      final command = rig.ask(session, '/mode plan');
+      await rig.gate.reached;
+      await session.cancel();
+      await pumpEventQueue();
+      rig.gate.release();
+      final reply = await command;
+
+      expect(reply.result.reason, TurnEndReason.completed);
+      expect(reply.text, 'Mode: plan.');
+      expect(session.mode, ModeId.plan);
+      expect(reply.events.last, isA<TurnEnded>());
+      expect(
+        reply.events.indexWhere((e) => e is ModeChanged),
+        lessThan(reply.events.indexWhere((e) => e is TurnEnded)),
+      );
+      expect(reply.events.whereType<TurnEnded>(), hasLength(1));
+    });
+
+    test('/mode: cancelled before the change — cancelled, no record, no '
+        'ModeChanged', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+      final before = await rig.records(session);
+      final source = CancelTokenSource()..cancel();
+
+      final reply = await rig.ask(session, '/mode plan', cancel: source.token);
+
+      expect(reply.result.reason, TurnEndReason.cancelled);
+      expect(reply.events.whereType<ModeChanged>(), isEmpty);
+      expect(reply.text, '');
+      expect(session.mode, ModeId.standard);
+      expect((await rig.records(session)).length, before.length);
+    });
+
+    test('/model: cancelled before the change — cancelled, the model and '
+        'the journal are unchanged', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+      final before = await rig.records(session);
+      final source = CancelTokenSource()..cancel();
+
+      final reply = await rig.ask(session, '/model a/m2', cancel: source.token);
+
+      expect(reply.result.reason, TurnEndReason.cancelled);
+      expect(reply.events.whereType<ModelOptionsChanged>(), isEmpty);
+      expect(session.model.id, 'm1');
+      expect((await rig.records(session)).length, before.length);
+    });
+
+    test('/compact: cancel after the check, during the held compaction '
+        'record — applied: the text, ContextCompacted before TurnEnded, '
+        'end_turn', () async {
+      final rig = await _Rig.create(steps: _twoTurns());
+      final session = await rig.session();
+      await rig.history(session);
+      rig.gate.arm((r) => r is CompactionRecord);
+
+      final command = rig.ask(session, '/compact');
+      await rig.gate.reached;
+      await session.cancel();
+      await pumpEventQueue();
+      rig.gate.release();
+      final reply = await command;
+
+      expect(reply.result.reason, TurnEndReason.completed);
+      expect(reply.text, startsWith('Compacted: '));
+      expect(reply.events.last, isA<TurnEnded>());
+      expect(
+        reply.events.indexWhere((e) => e is ContextCompacted),
+        lessThan(reply.events.indexWhere((e) => e is TurnEnded)),
+      );
+      expect(
+        (await rig.records(session)).whereType<CompactionRecord>(),
+        hasLength(1),
+      );
+    });
+
+    test('close() while /mode waits in the queue of changes behind a held '
+        'client setMode: cancelled, no AgentError, no failed warning, no '
+        'records after the close', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+      rig.gate.arm((r) => r is ModeChangeRecord);
+      final client = session.setMode(ModeId.ask);
+      await rig.gate.reached;
+      final before = await rig.records(session);
+
+      final command = rig.ask(session, '/mode plan');
+      await pumpEventQueue();
+      final closing = session.close();
+      await pumpEventQueue();
+      rig.gate.release();
+      await client;
+      await closing;
+      final reply = await command;
+
+      expect(reply.result.reason, TurnEndReason.cancelled);
+      expect(reply.events.whereType<AgentError>(), isEmpty);
+      expect(rig.logger.eventsOf('command.builtin.failed'), isEmpty);
+      expect(rig.logger.eventsOf('command.builtin.cancelled'), hasLength(1));
+      expect(session.mode, ModeId.ask, reason: 'only the client change');
+      final after = await rig.records(session);
+      expect(
+        [for (final r in after.skip(before.length)) r.runtimeType],
+        [ModeChangeRecord],
+        reason: 'the held client record only; nothing of /mode plan',
+      );
+    });
+
+    test('close() during /compact waits for the work: no record is written '
+        'after the close (summary answers after the cancel)', () async {
+      final rig = await _Rig.create(
+        steps: _twoTurns(),
+        holdSummary: 0,
+        holdIgnoresCancel: true,
+      );
+      final session = await rig.session();
+      await rig.history(session);
+      final before = await rig.records(session);
+      final command = rig.ask(session, '/compact');
+      await pumpEventQueue();
+      expect(rig.summaryCalls, 1);
+
+      var closed = false;
+      final closing = session.close().whenComplete(() => closed = true);
+      await pumpEventQueue();
+      expect(closed, isFalse, reason: 'close waits for the running command');
+      rig.finishHeld('## Summary\n- late');
+      await closing;
+      final reply = await command;
+
+      expect(reply.result.reason, TurnEndReason.cancelled);
+      expect((await rig.records(session)).length, before.length);
+    });
+  });
+
+  group('only the first text block is a command (D3)', () {
+    test('a command in the second block or inside a resource wrapper does '
+        'not change the mode', () async {
+      final rig = await _Rig.create();
+      final session = await rig.session();
+
+      await session.prompt(const [
+        TextContent('hello'),
+        TextContent('/mode bypass'),
+      ]);
+      await session.prompt(const [
+        TextContent('<resource uri="file:///a">/mode bypass</resource>'),
+      ]);
+
+      expect(session.mode, ModeId.standard);
+      expect(rig.streamCalls, 2, reason: 'both prompts went to the model');
     });
   });
 
@@ -620,6 +791,7 @@ final class _Rig {
     this._manual,
     this._requests,
     this.requestedModels,
+    this.gate,
   );
 
   /// [steps] — ответы scripted-модели по порядку запросов (ходы и запросы
@@ -630,6 +802,7 @@ final class _Rig {
     List<Map<String, Object?>> steps = const [],
     bool compaction = true,
     int? holdSummary,
+    bool holdIgnoresCancel = false,
   }) async {
     final user = <String, Object?>{
       'providers': {
@@ -665,6 +838,7 @@ final class _Rig {
       'steps': [...steps, for (var i = 0; i < 10; i++) textStep('ok')],
     }, clock: clock);
     final store = MemorySessionStore();
+    final gate = _GateStore(store);
     final manual = ManualStream(clock);
     final requests = <LlmContext>[];
     final models = <ModelRef>[];
@@ -679,7 +853,7 @@ final class _Rig {
           logger: logger,
           clock: clock,
           ids: SequentialIdGenerator(),
-          sessions: store,
+          sessions: gate,
           models: StaticModelCatalog(config.providers, logger: logger),
         ),
         config: config,
@@ -689,7 +863,13 @@ final class _Rig {
           // Запрос суммаризатора узнаётся по ключу кэша (`<сессия>:summary`).
           if (context.cacheKey?.endsWith(':summary') ?? false) {
             if (summaries++ == holdSummary) {
-              return manual.call(ref, context, cancel: cancel);
+              // Поставщик, не реагирующий на отмену: проверяет, что `close()`
+              // ждёт работу команды, а не полагается на быстрый выход (D14).
+              return manual.call(
+                ref,
+                context,
+                cancel: holdIgnoresCancel ? null : cancel,
+              );
             }
           }
           return scripted.call(ref, context, cancel: cancel);
@@ -700,6 +880,7 @@ final class _Rig {
       manual,
       requests,
       models,
+      gate,
     );
     addTearDown(rig.built.runtime.dispose);
     return rig;
@@ -713,6 +894,9 @@ final class _Rig {
 
   /// Модель каждого запроса в порядке запросов.
   final List<ModelRef> requestedModels;
+
+  /// Ворота записи журнала: держат запись выбранного вида до `release()`.
+  final _GateStore gate;
 
   AgentRuntime get runtime => built.runtime;
 
@@ -766,9 +950,68 @@ final class _Rig {
   }) async {
     final events = <AgentEvent>[];
     final subscription = session.events.listen(events.add);
+    // Поздний подписчик получает события предыдущего хода из буфера сессии
+    // (`AgentSession.events`): ответ команды — только то, что пришло после.
+    await pumpEventQueue();
+    events.clear();
     final result = await session.prompt([TextContent(text)], cancel: cancel);
     await pumpEventQueue();
     await subscription.cancel();
     return _Reply(events, result);
   }
+}
+
+/// Хранилище, которое держит запись журнала выбранного вида, пока тест не
+/// отпустит её: так «команда уже начала смену, а запись ещё идёт» становится
+/// детерминированным состоянием без пауз по времени.
+final class _GateStore implements SessionStore {
+  _GateStore(this.inner);
+
+  final MemorySessionStore inner;
+  bool Function(SessionRecord record)? _holds;
+  Completer<void>? _gate;
+  final _reached = Completer<void>();
+
+  /// Следующая запись, для которой [holds] истинно, ждёт [release].
+  void arm(bool Function(SessionRecord record) holds) {
+    _holds = holds;
+    _gate = Completer<void>();
+  }
+
+  /// Запись дошла до ворот и ждёт.
+  Future<void> get reached => _reached.future;
+
+  void release() => _gate!.complete();
+
+  @override
+  Future<void> create(SessionHeader header) => inner.create(header);
+
+  @override
+  Future<void> append(
+    SessionId id,
+    SessionRecord record, {
+    bool durable = false,
+  }) async {
+    final gate = _gate;
+    if (gate != null && (_holds?.call(record) ?? false)) {
+      if (!_reached.isCompleted) {
+        _reached.complete();
+      }
+      await gate.future;
+    }
+    await inner.append(id, record, durable: durable);
+  }
+
+  @override
+  Future<void> flush(SessionId id) => inner.flush(id);
+
+  @override
+  Future<SessionSnapshot> open(SessionId id) => inner.open(id);
+
+  @override
+  Future<SessionPage> list({String? cwd, String? cursor, int pageSize = 50}) =>
+      inner.list(cwd: cwd, cursor: cursor, pageSize: pageSize);
+
+  @override
+  Future<void> close(SessionId id) => inner.close(id);
 }

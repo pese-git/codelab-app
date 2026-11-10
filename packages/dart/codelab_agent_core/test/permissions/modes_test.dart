@@ -90,4 +90,17 @@ void main() {
     expect(() => ModeId.parse('autopilot'), throwsArgumentError);
     expect(() => ModeId.parse('code'), throwsArgumentError);
   });
+
+  test('tryParse: main ids, old synonyms (§13.6), null for the rest', () {
+    for (final mode in ModeId.values) {
+      expect(ModeId.tryParse(mode.value), mode);
+    }
+    expect(ModeId.tryParse('architect'), ModeId.plan);
+    expect(ModeId.tryParse('debug'), ModeId.standard);
+    expect(ModeId.tryParse('acceptEdits'), ModeId.acceptEdits);
+    expect(ModeId.tryParse('code'), ModeId.bypass);
+    expect(ModeId.tryParse('autopilot'), isNull);
+    expect(ModeId.tryParse('turbo'), isNull);
+    expect(ModeId.tryParse(''), isNull);
+  });
 }
