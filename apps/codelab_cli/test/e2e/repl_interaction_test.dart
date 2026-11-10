@@ -83,32 +83,54 @@ Future<void> main() async {
     expect(await pty.exitCode, 0);
   }, skip: skip);
 
-  test(
-    'cli/slash-menu-merges-agent-commands',
-    () async {
-      final pty = await repl(
-        CodelabCompatibleStdioAgentMode.withAvailableCommands,
+  // U-03. Один тест на все агенты: имя начинается с id матрицы parity, и
+  // режимы `dart` и `embedded` дают ему статус вместо `not-run` из-за тега
+  // `scripted-only` (design.md change `switch-default-agent-to-dart`, D3, D5;
+  // tasks 2.8). Scripted-агент объявляет команды режимом
+  // `with_available_commands`, у Dart-агента и встроенного агента сценария
+  // для этого нет: они объявляют собственные команды в режиме `normal`.
+  test('cli/slash-menu-merges-agent-commands', () async {
+    final scripted = E2eCliAgent.current.isScripted;
+    final pty = await repl(
+      scripted
+          ? CodelabCompatibleStdioAgentMode.withAvailableCommands
+          : CodelabCompatibleStdioAgentMode.normal,
+    );
+    await pty.waitFor('> ');
+    // Команды агент объявляет после ответа на `session/new`: ждём, пока
+    // они дойдут, по Tab на их префиксе.
+    final from = pty.text.length;
+    pty.write('/\t');
+    // Команды агента идут в меню после клиентских: ждём последнюю и её
+    // пометку, чтобы не читать меню на середине вывода.
+    await pty.waitFor(launch.agentCommands.last, from: from);
+    await pty.waitFor(
+      '(agent)',
+      from: pty.text.lastIndexOf(launch.agentCommands.last),
+    );
+    final menu = pty.text.substring(from);
+    // Пометка проверяется на строке самой команды: у клиента есть своя
+    // `/config`, и одно имя в меню не доказывает, что есть команда агента.
+    for (final command in launch.agentCommands) {
+      expect(
+        menu,
+        matches(RegExp('${RegExp.escape(command)} [^\\n]*\\(agent\\)')),
+        reason: 'the menu has no agent command $command',
       );
-      await pty.waitFor('> ');
-      // Команды агент объявляет после ответа на `session/new`: ждём, пока
-      // они дойдут, по Tab на их префиксе.
-      final from = pty.text.length;
-      pty.write('/\t');
-      await pty.waitFor('/compact', from: from);
-      expect(pty.text.substring(from), contains('(agent)'));
-      expect(pty.text.substring(from), contains('/agent:plan'));
-      expect(pty.text.substring(from), contains('/help'));
+    }
+    expect(menu, contains('/help'));
+    if (scripted) {
+      expect(menu, contains('/agent:plan'));
+    }
 
-      pty.write('\x15');
+    pty.write('\x15');
+    if (scripted) {
       await send(pty, '/agent:plan the release', 'echo: /plan the release');
       await send(pty, '/plan', 'No plan yet.');
-      pty.write('\x04');
-      expect(await pty.exitCode, 0);
-      // Dart-агент объявит свои команды на этапе 8 (R-07, R-08).
-    },
-    skip: skip,
-    tags: scriptedOnly,
-  );
+    }
+    pty.write('\x04');
+    expect(await pty.exitCode, 0);
+  }, skip: skip);
 
   test('cli/client-commands-smoke', () async {
     final pty = await repl(

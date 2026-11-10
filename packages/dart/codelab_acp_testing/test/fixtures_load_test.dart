@@ -94,6 +94,15 @@ const _stage8ProjectFilesFixtures = {
   'acp/slash-mcp-list',
 };
 
+/// Встроенные slash-команды агента, закрывающие строки Must K-02 и R-08
+/// (change `switch-default-agent-to-dart`, задачи 2.1 и 2.3): команды
+/// исполняет агент, поэтому роль только `agent`.
+const _slashCommandFixtures = {
+  'acp/slash-compact',
+  'acp/slash-help',
+  'acp/slash-mode-plan',
+};
+
 void main() {
   final corpus = loadFixtureCorpus();
   final protocolDirectory = protocolSpecDirectory();
@@ -106,6 +115,7 @@ void main() {
       ..._stage4Fixtures,
       ..._stage8McpFixtures,
       ..._stage8ProjectFilesFixtures,
+      ..._slashCommandFixtures,
       ..._toolKindFixtures,
     });
   });
@@ -119,7 +129,8 @@ void main() {
     for (final fixture in corpus.where(
       (f) =>
           _stage8McpFixtures.contains(f.id) ||
-          _stage8ProjectFilesFixtures.contains(f.id),
+          _stage8ProjectFilesFixtures.contains(f.id) ||
+          _slashCommandFixtures.contains(f.id),
     )) {
       expect(fixture.roles, {FixtureRole.agent}, reason: fixture.id);
     }
