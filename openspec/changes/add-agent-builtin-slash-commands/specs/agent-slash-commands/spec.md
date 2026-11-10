@@ -14,7 +14,7 @@
 - сжатие выполнено — `Compacted: <tokensBefore> → <tokensAfter> tokens.` (`→` — U+2192; `agent-core-architecture` §13.7); запись `compaction` пишется в журнал по правилам `agent-compaction`, сама команда — нет;
 - `NothingToCompact` — `Nothing to compact.`;
 - `CompactionFailed` — событие `AgentError` класса `compaction` без `retrying`, затем `TurnEnded` с `failed`, без сообщения агента; журнал не меняется (CMP-3);
-- отмена во время генерации резюме — `TurnEnded` с `cancelled` без сообщения агента, записи `compaction` нет.
+- отмена во время генерации резюме, пришедшая до применения сжатия, — `TurnEnded` с `cancelled` без сообщения агента, записи `compaction` нет; отмена после применения — правило отмены ниже.
 
 **`/mode [<id>]`**:
 - `<id>` — режим таблицы `agent-core-architecture` §13.6 или его устаревший синоним; синоним нормализуется, `autopilot` режимом сессии не является (§10.5). Команда SHALL вызывать `AgentSession.setMode` — тот же путь, что `session/set_config_option` с `configId: "mode"`: запись `mode_change` и событие `ModeChanged`, — затем отвечать `Mode: <id>.` с основным id;
@@ -22,7 +22,7 @@
 - неизвестный `<id>` — `Unknown mode: <id>. Available: plan, ask, standard, accept-edits, bypass.`, режим не меняется.
 
 **`/model [<provider/model>]`**:
-- модель есть в `ModelCatalog` — `AgentSession.setModel` (запись `model_change`, событие `ConfigOptionChanged` с полным снимком опций, правила `effort` §13.6), затем ответ `Model: <provider/model>.`;
+- модель есть в `ModelCatalog` — `AgentSession.setModel` (запись `model_change`, правила `effort` §13.6), затем событие `ModelOptionsChanged` — событие хода команды; мост проецирует его в `config_option_update` с полным снимком опций (capability `agent-runtime`, «Живая перезагрузка конфигурации»), затем ответ `Model: <provider/model>.`;
 - без аргумента — `Model: <текущая модель>. Run /model <provider/model> to switch.`;
 - модели нет в каталоге или аргумент начинается с `--` (форма `--role` — после MVP, §17.10.5) — `Unknown model: <аргумент>. Run /status to see the current model.`, модель не меняется.
 
@@ -36,6 +36,8 @@
 
 **`/help`** — первая строка `Commands:`, затем по строке на каждую команду `AgentSession.commands` в её порядке: `/<name>` и, при `inputHint`, пробел и подсказка, затем ` - ` и описание; у команды шаблона в конце ` (template)` (`agent-core-architecture` §17.2.9). Аргументы `/help` игнорируются.
 
+**Отмена команд, меняющих состояние** (`/compact`, `/mode`, `/model`; design.md change `add-agent-builtin-slash-commands`, D14): команда SHALL дожидаться своей работы и отвечать по факту. Итог «по факту» — уровень ядра (`TurnEnded`, `TurnResult`): смена применена (запись `compaction`, `mode_change` или `model_change` в журнале) — событие смены, если есть, сообщение агента и `TurnEnded` с `endTurn`, даже если отмена пришла после применения; отмена успела до применения — `TurnEnded` с `cancelled`, без записи в журнале, без события смены и без сообщения. Все события хода команды SHALL публиковаться до её `TurnEnded`. На проводе ACP при любом `session/cancel` ответ на `session/prompt` SHALL быть `stopReason: cancelled` (ACP-5; требование «session/cancel» capability `agent-acp-server`), а кадры смены, применённой до отмены, и сообщение агента уходят до этого ответа. Закрытие сессии во время команды SHALL отменять команду и ждать её завершения до закрытия журнала: запись, начатая командой, либо дописана целиком, либо не начата.
+
 Команды `mode` и `model` меняют состояние сессии, поэтому их записи `mode_change` и `model_change` SHALL попадать в журнал и восстанавливаться `session/load`, как после `session/set_config_option`; текст промпта и ответ команды в журнал НЕ SHALL попадать.
 
 #### Scenario: /compact с указанием
@@ -47,8 +49,20 @@
 - **THEN** ответ — ровно `Nothing to compact.`, суммаризатор не вызван, журнал без новых записей
 
 #### Scenario: Отмена /compact
-- **WHEN** во время генерации резюме по `/compact` приходит `session/cancel`
+- **WHEN** во время генерации резюме по `/compact` приходит `session/cancel` — до применения сжатия
 - **THEN** `TurnEnded` с `cancelled` без сообщения агента, записи `compaction` нет, слот хода свободен
+
+#### Scenario: Отмена /compact после применения
+- **WHEN** суммаризатор вернул резюме, запись `compaction` дописана, и в этот момент приходит `session/cancel`
+- **THEN** события ядра — сообщение `Compacted: <X> → <Y> tokens.` и `TurnEnded` с `endTurn`; в журнале одна запись `compaction`; после `TurnEnded` событий этого хода нет; по ACP сообщение уходит до ответа, а ответ — `stopReason: cancelled` (ACP-5)
+
+#### Scenario: Отмена /mode
+- **WHEN** приходит `/mode plan`, и `session/cancel` приходит во время его исполнения
+- **THEN** итог — один из двух: смена применена (запись `mode_change`, `ModeChanged(plan)`, сообщение `Mode: plan.`, `TurnEnded` с `endTurn`) либо не применена (режим прежний, ни записи `mode_change`, ни `ModeChanged`, `TurnEnded` с `cancelled`); смешанного итога (событие смены без записи или запись без события) нет
+
+#### Scenario: Закрытие сессии во время /compact
+- **WHEN** во время генерации резюме по `/compact` сессия закрывается
+- **THEN** закрытие ждёт завершения отменённой команды и только затем закрывает журнал; журнал читается без повреждённой записи, запись `compaction` либо целая, либо её нет; ошибок в зоне хоста нет
 
 #### Scenario: /mode plan
 - **WHEN** сессия в режиме `standard`, и приходит `/mode plan`
@@ -60,7 +74,7 @@
 
 #### Scenario: Неизвестная модель
 - **WHEN** в каталоге нет `x/y`, и приходит `/model x/y`
-- **THEN** ответ — `Unknown model: x/y. Run /status to see the current model.`, `ConfigOptionChanged` нет
+- **THEN** ответ — `Unknown model: x/y. Run /status to see the current model.`, `ModelOptionsChanged` нет, записи `model_change` нет
 
 #### Scenario: /help перечисляет команды
 - **WHEN** у сессии объявлены встроенные команды и шаблон `review` с `argument-hint: "<path> [focus]"`, и приходит `/help`

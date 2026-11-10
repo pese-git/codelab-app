@@ -17,7 +17,7 @@
 - **Фикстуры** (`acp-golden-fixtures`): новые `acp/slash-compact`, `acp/slash-help`, `acp/slash-mode-plan` (готовы, красные тесты, перенесены из итерации 2 `switch-default-agent-to-dart`); точные списки команд в `acp/available-commands-no-tools`, `acp/prompt-template-command` и `acp/slash-mcp-list` обновляются со ссылкой на это требование.
 - **E2E CLI U-03**: вариант `cli/slash-menu-merges-agent-commands` против Dart- и встроенного агента (без тега `scripted-only`); проверка одноимённых команд клиента и агента через `/help`, `/mode`, `/model` → `/agent:<имя>` (`codelab-cli`, сценарий «Одноимённые команды клиента и Dart-агента»).
 - **Интеграционный тест палитры app** (`testing-quality`, MODIFIED): тест без тега для встроенной `compact` во всех режимах и `scripted-only` тест для полного сценария scripted-агента; пропуск в режиме `dart` убирается.
-- **Сопутствующие правки спецификаций**, где список команд был «пуст» или «ровно `mcp` и шаблон»: `agent-acp-server` («session/new»), `agent-binary` («Файлы проекта в бинаре», «Перезагрузка конфига в serve»), `agent-project-context` («Порт файлов проекта»).
+- **Сопутствующие правки спецификаций**, где список команд был «пуст» или «ровно `mcp` и шаблон»: `agent-acp-server` («session/new»; «session/cancel» — отмена команды, меняющей состояние, D14), `agent-binary` («Файлы проекта в бинаре», «Перезагрузка конфига в serve»), `agent-project-context` («Порт файлов проекта»).
 - **Матрица и ворота**: записи K-02 и R-08 удаляются из `knownGaps` (`parity_evidence_test.dart`); если список пуст — удаляется и константа с проверкой устаревания (D4 change `switch-default-agent-to-dart`).
 
 ## Не входит
@@ -39,7 +39,8 @@
 ### Modified Capabilities
 
 - `agent-slash-commands` — ADDED «Встроенные команды MVP», «Неизвестная команда»; MODIFIED «Список команд сессии», «Разворачивание команды», «Встроенные команды config и mcp».
-- `agent-acp-server` — MODIFIED «session/new» (состав и порядок `available_commands_update`).
+- `agent-runtime` — MODIFIED «Живая перезагрузка конфигурации»: `ModelOptionsChanged` публикуется и при смене модели командой `/model`, тогда оно — событие хода и буферизуется в его истории (design.md, D6).
+- `agent-acp-server` — MODIFIED «session/new» (состав и порядок `available_commands_update`), «session/cancel» (кадры смены, применённой командой до отмены, — до ответа `cancelled`; D14).
 - `agent-binary` — MODIFIED «Файлы проекта в бинаре», «Перезагрузка конфига в serve» (ответ на `/config` по WebSocket).
 - `agent-project-context` — MODIFIED «Порт файлов проекта» (список команд без порта).
 - `acp-golden-fixtures` — ADDED «Фикстуры встроенных команд агента»; MODIFIED «Фикстуры файлов проекта этапа 8».
