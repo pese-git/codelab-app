@@ -362,6 +362,99 @@ void main() {
     });
   });
 
+  test('abort error of the response body (real IOClient) yields aborted, not '
+      'network (LLM-7)', () async {
+    // sync: true — ошибка тела доходит до разбора в том же повороте, что и
+    // срабатывание abortTrigger, как у IOClient.
+    final body = StreamController<List<int>>(sync: true);
+    // Как IOClient: после abortTrigger поток тела падает с
+    // RequestAbortedException раньше, чем сработает путь отмены ядра.
+    final client = MockClient.streaming((request, _) async {
+      unawaited(
+        (request as http.Abortable).abortTrigger!.then(
+          (_) => body.addError(http.RequestAbortedException()),
+        ),
+      );
+      return http.StreamedResponse(
+        body.stream,
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      );
+    });
+    final harness = ProviderHarness();
+    final services = CoreLlmServices(
+      httpClient: client,
+      clock: harness.clock,
+      random: harness.services.random,
+      logger: harness.logger,
+    );
+    final source = CancelTokenSource();
+    final events = <AssistantMessageEvent>[];
+    final done = Completer<void>();
+    openAiCompatibleStreamFunction(_config, services)(
+      _model,
+      _context,
+      cancel: source.token,
+    ).listen(events.add, onDone: done.complete);
+
+    body.add(
+      utf8.encode(
+        'data: {"choices":[{"index":0,"delta":{"content":"Hel"}}]}\n\n',
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    source.cancel();
+    await done.future.timeout(const Duration(seconds: 1));
+
+    final error = events.last as ErrorEvent;
+    expect(error.error.stopReason, StopReason.aborted);
+    expect(error.error.errorClass, LlmErrorClass.aborted);
+    expect(error.error.errorMessage, isNot(contains('connection failed')));
+  });
+
+  test('a body error without cancel stays a network failure (LLM-7 '
+      'does not swallow real failures)', () async {
+    // Пара к тесту выше: подмена на отмену — только при отменённом токене,
+    // обрыв соединения посреди тела без отмены остаётся `network`.
+    final body = StreamController<List<int>>(sync: true);
+    final client = MockClient.streaming(
+      (request, _) async => http.StreamedResponse(
+        body.stream,
+        200,
+        headers: {'content-type': 'text/event-stream'},
+      ),
+    );
+    final harness = ProviderHarness();
+    final services = CoreLlmServices(
+      httpClient: client,
+      clock: harness.clock,
+      random: harness.services.random,
+      logger: harness.logger,
+    );
+    final source = CancelTokenSource();
+    final events = <AssistantMessageEvent>[];
+    final done = Completer<void>();
+    openAiCompatibleStreamFunction(_config, services)(
+      _model,
+      _context,
+      cancel: source.token,
+    ).listen(events.add, onDone: done.complete);
+
+    body
+      ..add(
+        utf8.encode(
+          'data: {"choices":[{"index":0,"delta":{"content":"Hel"}}]}\n\n',
+        ),
+      )
+      ..addError(http.ClientException('Connection reset by peer'));
+    await done.future.timeout(const Duration(seconds: 1));
+
+    final error = events.last as ErrorEvent;
+    expect(error.error.stopReason, StopReason.error);
+    expect(error.error.errorClass, LlmErrorClass.network);
+    expect(error.error.errorMessage, contains('connection failed'));
+  });
+
   test(
     'cancel mid-stream yields ErrorEvent(aborted) and closes the request',
     () async {

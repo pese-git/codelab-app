@@ -295,6 +295,53 @@ void main() {
       expect(_final(events).stopReason, StopReason.aborted);
       expect(bodyCancelled, isTrue);
     });
+    test(
+      'abort error of the response body (real IOClient) is aborted',
+      () async {
+        // sync: true — ошибка тела доходит до разбора в том же повороте, что и
+        // срабатывание abortTrigger, как у IOClient.
+        final body = StreamController<List<int>>(sync: true);
+        final client = MockClient.streaming((request, _) async {
+          unawaited(
+            (request as http.Abortable).abortTrigger!.then(
+              (_) => body.addError(http.RequestAbortedException()),
+            ),
+          );
+          return http.StreamedResponse(
+            body.stream,
+            200,
+            headers: {'content-type': 'text/event-stream'},
+          );
+        });
+        final harness = ProviderHarness();
+        final services = CoreLlmServices(
+          httpClient: client,
+          clock: harness.clock,
+          random: harness.services.random,
+          logger: harness.logger,
+        );
+        final source = CancelTokenSource();
+        final events = <AssistantMessageEvent>[];
+        final done = Completer<void>();
+        anthropicStreamFunction(_config(), services)(
+          _model(),
+          _context([_user('hi')]),
+          cancel: source.token,
+        ).listen(events.add, onDone: done.complete);
+
+        body.add(utf8.encode(readSseFixture('anthropic/no_message_stop.sse')));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        source.cancel();
+        await done.future.timeout(const Duration(seconds: 1));
+
+        expect(_final(events).stopReason, StopReason.aborted);
+        expect(_final(events).errorClass, LlmErrorClass.aborted);
+        expect(
+          _final(events).errorMessage,
+          isNot(contains('connection failed')),
+        );
+      },
+    );
   });
 
   group('request', () {
