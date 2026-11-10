@@ -65,6 +65,10 @@ final class SessionBridge {
 
   late final AgentSession session;
   late final acp.SessionId _id;
+
+  /// Модель сессии на момент последней сверки заметки §2.12.3: смену командой
+  /// `/model` мост видит только по `ModelOptionsChanged`, `before` у него нет.
+  late ModelRef _knownModel;
   StreamSubscription<AgentEvent>? _events;
 
   /// Идущий ход: завершается по `TurnEnded`.
@@ -142,6 +146,7 @@ final class SessionBridge {
   /// Подключает созданную или загруженную сессию и начинает проекцию.
   void attach(AgentSession session) {
     this.session = session;
+    _knownModel = session.model;
     _id = acp.SessionId(session.id.value);
     _events = session.events.listen(_onEvent);
   }
@@ -241,6 +246,11 @@ final class SessionBridge {
       );
     } finally {
       _turn = null;
+      // Кадры смены режима, придержанные клиентским запросом, уходят до
+      // ответа на `session/prompt` (ACP-3).
+      if (_heldConfigUpdates.isNotEmpty) {
+        await _configQueue;
+      }
     }
   }
 
@@ -293,6 +303,18 @@ final class SessionBridge {
   /// Ожидание эха режима с данным `changeId`.
   final _echoWaiters = <int, Completer<void>>{};
 
+  /// `config_option_update` смен режима, пришедших во время клиентского
+  /// запроса, по `changeId`.
+  ///
+  /// Почему: `changeId` своего вызова клиентский запрос узнаёт только после
+  /// возврата ядра, а `ModeChanged` встроенной команды (`/mode`) может прийти
+  /// раньше и тоже несёт `changeId`. Подавлять нужно только эхо запроса
+  /// (ACP-11), поэтому кадры держатся до `result.changeId`: чужие уходят
+  /// клиенту при завершении запроса, эхо — отбрасывается. Гонка редкая;
+  /// цена — кадр команды приходит позже её текста, но до ответа на
+  /// `session/prompt` (ACP-3, см. [prompt]).
+  final _heldConfigUpdates = <int, acp.SessionUpdate>{};
+
   /// Выполняет смену ядра под очередью; если вызов изменил режим, ждёт его
   /// эха (`current_mode_update` уже в очереди кадров), чтобы ответ встал
   /// после него. `config_option_update` на эхо запроса не шлётся (ACP-11).
@@ -300,13 +322,24 @@ final class SessionBridge {
       _queued(() async {
         _clientChangeActive = true;
         _echoedChanges.clear();
+        int? ownChangeId;
         try {
           final result = await change();
+          ownChangeId = result.changeId;
           if (result.mode != null &&
               !_echoedChanges.contains(result.changeId)) {
             await (_echoWaiters[result.changeId] = Completer<void>()).future;
           }
         } finally {
+          // Эхо запроса (`ownChangeId`) отбрасывается, кадры чужих смен —
+          // например, `/mode` во время запроса — уходят клиенту.
+          for (final MapEntry(key: id, value: update)
+              in _heldConfigUpdates.entries) {
+            if (id != ownChangeId) {
+              _send(update);
+            }
+          }
+          _heldConfigUpdates.clear();
           _clientChangeActive = false;
           _echoedChanges.clear();
           _echoWaiters.clear();
@@ -350,7 +383,7 @@ final class SessionBridge {
   /// заметка первым `agent_message_chunk` следующего хода; переход на модель
   /// с рассуждением её снимает.
   void _noteEffort(ModelRef before) {
-    final after = session.model;
+    final after = _knownModel = session.model;
     if (before.supportsReasoning && !after.supportsReasoning) {
       _effortNote =
           'Reasoning effort is not supported by '
@@ -493,21 +526,29 @@ final class SessionBridge {
         _announced.add(toolCallId);
       case _:
     }
-    final clientEcho =
+    // Возможное эхо клиентского запроса: решение, чьё это `changeId`,
+    // принимает `_clientChange` по результату вызова ядра.
+    final maybeEcho =
         event is ModeChanged && event.changeId != null && _clientChangeActive;
     for (final update in projectEvent(
       event,
       configOptions: () => configOptions,
     )) {
-      if (clientEcho && update is acp.ConfigOptionUpdate) {
+      if (maybeEcho && update is acp.ConfigOptionUpdate) {
+        _heldConfigUpdates[event.changeId!] = update;
         continue;
       }
       _send(update);
     }
     switch (event) {
-      case ModeChanged(:final changeId?) when clientEcho:
+      case ModeChanged(:final changeId?) when maybeEcho:
         _echoedChanges.add(changeId);
         _echoWaiters.remove(changeId)?.complete();
+      case ModelOptionsChanged():
+        // Модель могла смениться командой `/model` (agent-slash-commands,
+        // правила `effort` §13.6, п. 1); при перезагрузке каталога модель
+        // прежняя, и заметка не меняется.
+        _noteEffort(_knownModel);
       case ToolCallStarted(:final toolCallId):
         _awaitingAnnounce.remove(toolCallId)?.complete();
         if (_earlyInProgress.remove(toolCallId)) {

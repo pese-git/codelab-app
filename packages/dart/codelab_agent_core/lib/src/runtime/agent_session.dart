@@ -54,17 +54,18 @@ abstract interface class AgentSession {
   /// шага.
   Future<void> setEffort(ReasoningEffort effort);
 
-  /// Команды сессии: сначала встроенные (`config`, `mcp`; design.md change
-  /// `add-config-writer-and-reload`, D12), затем команды шаблонов проекта и
-  /// пользователя в байтовом порядке имён (design.md change
-  /// `add-agent-project-files`, D7, D9).
+  /// Команды сессии: сначала встроенные в порядке §13.4 — `compact`, `mode`,
+  /// `model`, `status`, `config`, `mcp`, `help` (design.md changes
+  /// `add-config-writer-and-reload`, D12, и `add-agent-builtin-slash-commands`,
+  /// D2), затем команды шаблонов проекта и пользователя в байтовом порядке имён
+  /// (design.md change `add-agent-project-files`, D7, D9).
   ///
-  /// `config` объявлена, если ядру передан `ConfigSource` и `buildAgentCore`
-  /// вызван с `configCommand: true`; `mcp` — при включённой capability `mcp`.
-  /// Список строится при открытии сессии и не меняется до её закрытия. ACP-
-  /// адаптер публикует его как `available_commands_update`; инструменты
-  /// модели в него не входят (R-07). Без встроенных команд и без порта файлов
-  /// проекта список пуст.
+  /// `compact` объявлена при включённой capability `compaction`; `config` —
+  /// если ядру передан `ConfigSource` и `buildAgentCore` вызван с
+  /// `configCommand: true`; `mcp` — при включённой capability `mcp`; `mode`,
+  /// `model`, `status` и `help` — всегда. Список строится при открытии сессии и
+  /// не меняется до её закрытия. ACP-адаптер публикует его как
+  /// `available_commands_update`; инструменты модели в него не входят (R-07).
   List<SlashCommand> get commands;
 
   /// Определения агентов со `scope` `session` и `both` в байтовом порядке имён
@@ -110,12 +111,15 @@ abstract interface class AgentSession {
   /// доставлены подписчикам [events], не ставящим подписку на паузу, — так
   /// мост ACP строит ответ на `session/prompt` по `TurnEnded` (ACP-3).
   ///
-  /// Встроенные команды `/config` и `/mcp` (первый текстовый блок, слово до
-  /// первого пробельного символа) исполняются здесь же, без модели и без
-  /// записи в журнал (CFG-18): события `TurnStarted`, одно сообщение агента,
-  /// `TurnEnded(completed)`; отмена — `TurnEnded(cancelled)` без текста, сбой
-  /// — `AgentError` и `TurnEnded(failed)`. Команда занимает слот хода, но
-  /// ходом модели не является (D12).
+  /// Встроенные команды (`compact`, `mode`, `model`, `status`, `config`, `mcp`,
+  /// `help`; первый текстовый блок, слово до первого пробельного символа)
+  /// исполняются здесь же, без модели и без записи промпта в журнал (CFG-18):
+  /// события `TurnStarted`, одно сообщение агента, `TurnEnded(completed)`;
+  /// отмена — `TurnEnded(cancelled)` без текста, сбой — `AgentError` и
+  /// `TurnEnded(failed)`. Слово `/x` без команды и без шаблона — ответ
+  /// `Unknown command` без модели (D3, D4 change
+  /// `add-agent-builtin-slash-commands`). Команда занимает слот хода, но ходом
+  /// модели не является (D12).
   Future<TurnResult> prompt(List<ContentBlock> content, {CancelToken? cancel});
 
   Future<void> cancel();

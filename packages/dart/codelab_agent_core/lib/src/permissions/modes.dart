@@ -42,6 +42,28 @@ extension type const ModeId._(String value) {
       values.where((m) => m.value == id).firstOrNull ??
       (throw ArgumentError.value(id, 'id', 'unknown mode'));
 
+  /// Устаревшие id режимов (`agent-core-architecture` §13.6, таблица режимов):
+  /// принимаются на входе, наружу всегда уходит основной id.
+  static const _synonyms = {
+    'architect': plan,
+    'debug': standard,
+    'acceptEdits': acceptEdits,
+    'code': bypass,
+  };
+
+  /// Режим по основному id или устаревшему синониму; `null` — значения нет.
+  ///
+  /// Почему в ядре: синонимы нужны и мосту ACP (`session/set_config_option`),
+  /// и команде `/mode` (design.md change `add-agent-builtin-slash-commands`,
+  /// D6); одна таблица не даёт им разойтись. `autopilot` режимом сессии не
+  /// является (§10.5) и тоже даёт `null`.
+  ///
+  /// Как использовать: `ModeId.tryParse(clientValue)`; `null` — неизвестный
+  /// режим (мост отвечает `-32602`, команда — `Unknown mode`). В отличие от
+  /// [parse], не бросает и знает синонимы.
+  static ModeId? tryParse(String id) =>
+      values.where((m) => m.value == id).firstOrNull ?? _synonyms[id];
+
   PermissionMode get permissionMode => switch (value) {
     'ask' => PermissionMode.alwaysAsk,
     'accept-edits' => PermissionMode.acceptEdits,

@@ -1155,6 +1155,11 @@ final class AgentRuntimeImpl implements AgentRuntime {
           ? reloadConfig
           : null,
       checkConfig: checkConfig,
+      // `/status` показывает конфигурацию только там, где объявлена `/config`
+      // (R0-3, D7 change `add-agent-builtin-slash-commands`).
+      configStatus: services.config != null && configCommand
+          ? configStatus
+          : null,
       mcpCommand: profile.isOn(HostCapability.mcp),
       // Снимок на момент применения, а не на момент создания сессии: после
       // перезагрузки конфига сервера конфига берутся из нового снимка (D10).
@@ -1931,6 +1936,7 @@ final class _Session implements AgentSession {
     required List<McpServerConfig> clientMcp,
     required Future<ConfigApplyReport> Function()? reloadConfig,
     required Future<ConfigLoadResult> Function() checkConfig,
+    required ConfigStatus Function()? configStatus,
     required bool mcpCommand,
     required AgentCoreServices services,
     required Logger logger,
@@ -1966,6 +1972,7 @@ final class _Session implements AgentSession {
        _templates = List.unmodifiable(templates),
        commands = List.unmodifiable([
          ...BuiltinCommands.declare(
+           compact: compactionOn,
            config: reloadConfig != null,
            mcp: mcpCommand,
          ),
@@ -2002,7 +2009,17 @@ final class _Session implements AgentSession {
           rethrow;
         }
       },
+      configStatus: configStatus,
+      compactNow: _compactionOn ? _compactNow : null,
+      templateNames: {for (final t in _templates) t.name},
       mcpDeclared: mcpCommand,
+      currentMode: () => _mode,
+      setMode: setMode,
+      currentModel: () => '${_model.provider}/${_model.id}',
+      hasModel: (model) => _catalog.resolve(ModelId(model)) != null,
+      setModel: _setModelFromCommand,
+      workingDirectory: cwd,
+      commands: () => commands,
       servers: () => _mcp.tools?.servers ?? const [],
       reconnect: (name, cancelled) => _runMcpAction(
         (tools) => tools.reconnect(name),
@@ -2037,6 +2054,10 @@ final class _Session implements AgentSession {
   /// от `_agent.isRunning` флаг — команда не ход модели и не откладывает
   /// замену серверов до `TurnEnded` (D10).
   var _builtinRunning = false;
+
+  /// Работа идущей команды с записью состояния (`compact`, `mode`, `model`):
+  /// `close()` ждёт её до закрытия журнала, как `_background` (D14).
+  Future<Object?>? _builtinStateWork;
 
   /// Сигнал отмены ожидания ответа команды (`session/cancel`, токен
   /// промпта); перезагрузка, начатая рантаймом, при этом доводится до конца.
@@ -2436,12 +2457,21 @@ final class _Session implements AgentSession {
   /// ожидания (PKG-6).
   Future<void> _drainSubscribers() => Future<void>(() {});
 
-  /// Исполняет встроенную команду без модели и без журнала (CFG-18, D12):
-  /// события хода публикуются мимо писателя журнала, ответ — одно сообщение.
+  /// Исполняет встроенную команду без модели (CFG-18, D12): события хода
+  /// публикуются мимо писателя журнала, ответ — одно сообщение; ни промпт, ни
+  /// ответ в журнал не пишутся, а запись состояния самой командой
+  /// (`mode_change`, `model_change`, `compaction`) — пишется.
   ///
-  /// Слот занят на всё время команды. Отмена (`session/cancel`, токен
-  /// промпта) завершает ход `cancelled` без текста и освобождает слот;
-  /// начатая перезагрузка доводится до конца — её результат общий.
+  /// Слот занят на всё время команды. Команды без побочных записей (`status`,
+  /// `help`, `config`, `mcp`, неизвестная) при отмене (`session/cancel`, токен
+  /// промпта) сразу завершают ход `cancelled` без текста; начатая
+  /// перезагрузка доводится до конца — её результат общий.
+  ///
+  /// Команды, меняющие состояние (`compact`, `mode`, `model`), всегда ждут
+  /// свою работу, а ответ строится по факту (D14): применено — сообщение и
+  /// `completed`; отмена пришла до применения — `cancelled` без записи и без
+  /// события смены. Так ни одно событие смены не приходит после `TurnEnded`,
+  /// а `close()` ждёт работу и не оставляет записи после закрытия журнала.
   Future<TurnResult> _runBuiltin(
     BuiltinInvocation call,
     List<ContentBlock> content,
@@ -2449,11 +2479,25 @@ final class _Session implements AgentSession {
   ) async {
     _builtinRunning = true;
     final cancelled = _builtinCancel = Completer<void>();
+    // Тот же сигнал отмены токеном для команд с записью: компактор отменяет
+    // запрос суммаризатора и не пишет запись `compaction` (CMP-4), `/mode` и
+    // `/model` не начинают смену.
+    // Родитель — токен промпта: уже отменённый токен отменяет команду до
+    // первого действия, а не через оборот микрозадач (D14).
+    final stopSource = CancelTokenSource(parent: cancel);
+    cancelled.future.then((_) => stopSource.cancel());
     cancel?.onCancel.then((_) {
       if (!cancelled.isCompleted) {
         cancelled.complete();
       }
     });
+    // Имя и подкоманда для логов; у неизвестной команды набранного слова нет
+    // ни в одном поле (D4, §16).
+    final (logName, logSub) = switch (call) {
+      final BuiltinCall c => (c.name.name, c.subcommand),
+      UnknownCall() => ('unknown', 'unknown'),
+    };
+    final stateful = call is BuiltinCall && call.name.changesState;
     try {
       _ended = null;
       final now = _services.clock.now();
@@ -2464,35 +2508,61 @@ final class _Session implements AgentSession {
           input: [UserMessage(content, timestamp: now)],
         ),
       );
-      _logger.log(
-        LogLevel.info,
-        'command.builtin',
-        fields: {
-          'session_id': id.value,
-          'name': call.name,
-          'subcommand': call.subcommand,
-        },
-      );
+      switch (call) {
+        case UnknownCall(:final nameBytes):
+          _logger.log(
+            LogLevel.info,
+            'command.unknown',
+            fields: {'session_id': id.value, 'name_bytes': nameBytes},
+          );
+        case BuiltinCall():
+          _logger.log(
+            LogLevel.info,
+            'command.builtin',
+            fields: {
+              'session_id': id.value,
+              'name': logName,
+              'subcommand': logSub,
+            },
+          );
+      }
       // Ошибка `run` или порта становится исходом, а не необработанной
       // ошибкой: после отмены её никто не ждёт.
       final work = _builtin
-          .run(call, cancelled: () => cancelled.isCompleted)
-          .then<({String? text, Object? error})>(
-            (text) => (text: text, error: null),
-            onError: (Object error) => (text: null, error: error),
+          .run(
+            call,
+            cancelled: () => cancelled.isCompleted,
+            cancel: stopSource.token,
+          )
+          .then<({BuiltinReply? reply, Object? error})>(
+            (reply) => (reply: reply, error: null),
+            onError: (Object error) => (reply: null, error: error),
           );
-      final outcome = await Future.any<({String? text, Object? error})?>([
-        work,
-        cancelled.future.then((_) => null),
-      ]);
-      if (outcome == null) {
+      if (stateful) {
+        _builtinStateWork = work;
+      }
+      final outcome = stateful
+          ? await work
+          : await Future.any<({BuiltinReply? reply, Object? error})?>([
+              work,
+              cancelled.future.then((_) => null),
+            ]);
+      // Отмена порта могла прийти ошибкой раньше сигнала: это отмена, а не
+      // провал команды.
+      // Закрытая сессия: смена, стоявшая в очереди `_serial`, получила
+      // `StateError('the session is closed')` — это следствие отмены закрытием,
+      // а не сбой команды (ложное предупреждение в логе не нужно).
+      if (outcome == null ||
+          (cancelled.isCompleted &&
+              (outcome.error is CancelledException ||
+                  (_closed && outcome.error is StateError)))) {
         _logger.log(
           LogLevel.info,
           'command.builtin.cancelled',
           fields: {
             'session_id': id.value,
-            'name': call.name,
-            'subcommand': call.subcommand,
+            'name': logName,
+            'subcommand': logSub,
           },
         );
         _publish(
@@ -2508,8 +2578,8 @@ final class _Session implements AgentSession {
           'command.builtin.failed',
           fields: {
             'session_id': id.value,
-            'name': call.name,
-            'subcommand': call.subcommand,
+            'name': logName,
+            'subcommand': logSub,
             'error_class': errorClass,
           },
         );
@@ -2523,8 +2593,14 @@ final class _Session implements AgentSession {
         _publish(
           TurnEnded(id, reason: TurnEndReason.failed, usage: const Usage()),
         );
+      } else if (outcome.reply is BuiltinTurnFailed) {
+        // `AgentError(compaction)` уже опубликован компактором (Q9): ход
+        // кончается `failed` без сообщения агента.
+        _publish(
+          TurnEnded(id, reason: TurnEndReason.failed, usage: const Usage()),
+        );
       } else {
-        final text = outcome.text!;
+        final text = (outcome.reply! as BuiltinText).text;
         final message = AssistantMessage(
           content: [TextContent(text)],
           model: _model,
@@ -2544,6 +2620,7 @@ final class _Session implements AgentSession {
       return TurnResult(reason: ended.reason, usage: ended.usage);
     } finally {
       _builtinCancel = null;
+      _builtinStateWork = null;
       _builtinRunning = false;
     }
   }
@@ -2965,6 +3042,9 @@ final class _Session implements AgentSession {
     _backgroundCancel?.cancel(const ShutdownCancel());
     await _agent.waitForIdle();
     await _background;
+    // Сжатие или смена по команде не должны писать в журнал после его
+    // закрытия (D14): отменённый компактор доходит до выхода, смена — до конца.
+    await _builtinStateWork;
     // Начатая смена конфигурации доходит до конца (запись журнала), стоявшие
     // за ней получают StateError.
     await _configTail;
@@ -3082,6 +3162,7 @@ final class _Session implements AgentSession {
     CompactionTrigger trigger,
     CancelToken cancel, {
     required void Function(LlmContextProjection projection) onCompacted,
+    String? focus,
   }) {
     final model = _agent.config.model;
     final settings = _settings;
@@ -3104,9 +3185,42 @@ final class _Session implements AgentSession {
       cancel: cancel,
       emit: _sessionEvent,
       onCompacted: onCompacted,
+      focus: focus,
       summaryModel: '${model.provider}/${model.id}',
       logger: _logger,
     );
+  }
+
+  /// Ручное сжатие по `/compact [focus]` (design.md change
+  /// `add-agent-builtin-slash-commands`, D5; §9.5).
+  ///
+  /// Почему здесь, а не в `BuiltinCommands`: компактор работает с писателем
+  /// журнала и транскриптом агента. Фоновое `afterTurn` к этому моменту уже
+  /// дождались в начале [prompt], а слот хода исключает параллельный промпт:
+  /// двух сжатий одной ветки одновременно нет. Параметры `compaction.*`
+  /// берутся из снимка на границе хода, как у обычного хода (CFG-16).
+  Future<CompactionOutcome> _compactNow(String? focus, CancelToken cancel) {
+    _refreshSettings();
+    return _compact(
+      CompactionTrigger.manual,
+      cancel,
+      onCompacted: (p) => _agent.replaceTranscript(_withModel(p.messages)),
+      focus: focus,
+    );
+  }
+
+  /// `/model <provider/model>`: `setModel` и событие смены опции `model`.
+  ///
+  /// Почему [ModelOptionsChanged]: смену сделала не опция клиента, поэтому
+  /// клиенту нужен `config_option_update` с полным снимком опций; мост ACP
+  /// уже проецирует это событие так (§13.6 п. 4, §13.7), строя снимок из
+  /// текущего состояния сессии. Событие идёт после записи `model_change` и
+  /// до сообщения агента (D6, Q3).
+  Future<String> _setModelFromCommand(String model) async {
+    final result = await setModel(ModelId(model));
+    _publish(ModelOptionsChanged(id));
+    final changed = result.model!;
+    return '${changed.provider}/${changed.id}';
   }
 
   /// Аварийное сжатие цикла (`preflight`, `overflow`): новый контекст шага

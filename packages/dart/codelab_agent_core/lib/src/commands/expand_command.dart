@@ -1,4 +1,5 @@
 import 'arguments.dart';
+import 'command_line.dart';
 import 'command_template.dart';
 import 'slash_command.dart';
 
@@ -89,8 +90,10 @@ sealed class CommandExpansion {
 
 /// Текст не команда шаблона: он уходит модели без изменений.
 ///
-/// Почему и для неизвестной команды: ответ «Unknown command» требует
-/// механизма встроенных команд (OQ1), которого пока нет.
+/// Неизвестную команду (слово без шаблона и без встроенной команды) не
+/// отличает: ответ «Unknown command» даёт `BuiltinCommands.match` раньше, до
+/// вызова этой функции (design.md change `add-agent-builtin-slash-commands`,
+/// D3, D4).
 ///
 /// Как использовать: константный экземпляр, создаёт [expandCommand].
 final class NotACommand extends CommandExpansion {
@@ -114,42 +117,32 @@ final class Expanded extends CommandExpansion {
   final CommandRef command;
 }
 
-final _commandWord = RegExp(r'^[A-Za-z0-9][A-Za-z0-9:_-]*$');
-final _whitespace = RegExp(r'\s');
-
 /// Разворачивает `/<имя> <аргументы>` шаблоном (§17.2.6 шаги 1 и 4 в объёме
 /// шаблонов; D8).
 ///
-/// Почему `NotACommand` для неизвестной команды: ответ «Unknown command» без
-/// вызова модели требует механизма, который вводит change встроенных команд
-/// (OQ1); до него `/nope x` и путь `/usr/bin/foo` уходят модели, как раньше.
+/// Почему `NotACommand` для слова без шаблона: «Unknown command» отвечает
+/// `BuiltinCommands.match` на шаге 4 разбора D3 (change
+/// `add-agent-builtin-slash-commands`); здесь только шаблоны (шаг 3).
 ///
 /// Как использовать: [text] — первый текстовый блок промпта; результат
 /// [Expanded.text] заменяет его, остальные блоки идут следом. Функция чистая:
 /// не исполняет shell и не читает файлы (SKL-8).
 CommandExpansion expandCommand(String text, List<CommandTemplate> templates) {
-  if (!text.startsWith('/')) {
+  final line = parseCommandLine(text);
+  if (line == null) {
     return const NotACommand();
   }
-  final end = text.indexOf(_whitespace);
-  final word = text.substring(1, end < 0 ? text.length : end);
-  if (!_commandWord.hasMatch(word)) {
-    return const NotACommand();
-  }
-  final template = templates.where((t) => t.name == word).firstOrNull;
+  final template = templates.where((t) => t.name == line.word).firstOrNull;
   if (template == null) {
     return const NotACommand();
   }
-  var raw = end < 0 ? '' : text.substring(end).trimLeft();
-  // Завершающий перевод строки снимается и в CRLF: `\r` не должен попасть в
-  // `$ARGUMENTS` и в `command.args` журнала.
-  if (raw.endsWith('\r\n')) {
-    raw = raw.substring(0, raw.length - 2);
-  } else if (raw.endsWith('\n')) {
-    raw = raw.substring(0, raw.length - 1);
-  }
+  final raw = line.raw;
   return Expanded(
     substituteArguments(template.body, raw, splitArguments(raw)),
-    CommandRef(source: SlashCommandSource.template.wire, name: word, args: raw),
+    CommandRef(
+      source: SlashCommandSource.template.wire,
+      name: line.word,
+      args: raw,
+    ),
   );
 }

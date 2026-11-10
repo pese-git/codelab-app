@@ -31,20 +31,6 @@ import 'support/parity/reports.dart';
 import 'support/parity/verdict.dart';
 import 'support/repo_root.dart';
 
-/// Известные пробелы существования: пары «строка, доказательство» (D4).
-///
-/// Остались только фикстуры встроенных slash-команд: их вместе с реализацией
-/// агента вводит отдельный change `add-agent-builtin-slash-commands`
-/// (решение Q9). Храповик: список может только уменьшаться. Запись, чьё
-/// доказательство уже существует, роняет группу как устаревшую; новый пробел
-/// вне списка роняет её же. Запись удаляется в том change, который добавляет
-/// фикстуру; пустой список и проверку устаревания тогда убирает он же.
-const knownGaps = <KnownGap>[
-  KnownGap('K-02', 'acp/slash-compact', 'add-agent-builtin-slash-commands'),
-  KnownGap('R-08', 'acp/slash-help', 'add-agent-builtin-slash-commands'),
-  KnownGap('R-08', 'acp/slash-mode-plan', 'add-agent-builtin-slash-commands'),
-];
-
 void main() {
   final root = repoRoot();
   final matrixFile = File(
@@ -59,17 +45,8 @@ void main() {
 
     test('every Must row has existing evidence', () {
       final matrix = parseMatrix(matrixFile.readAsStringSync());
-      final report = checkEvidenceExists(
-        rows: matrix.mustRows,
-        repoRoot: root,
-        knownGaps: knownGaps,
-      );
+      final report = checkEvidenceExists(rows: matrix.mustRows, repoRoot: root);
 
-      for (final line in report.knownGapLines) {
-        // Известный пробел должен быть виден в выводе сторожа (D4).
-        // ignore: avoid_print
-        print(line);
-      }
       expect(
         report.failures,
         isEmpty,
