@@ -833,7 +833,7 @@ D27; артборд 30b холста «CodeLab Desktop — Feature UI/UX», ст
 `jobBoard: {"version": 1}`. Доска есть, только если агент объявил ту же capability; иначе дети и задачи
 видны только как строки `tool_call` ленты и как ответ команды агента `/tasks` из палитры.
 
-1. **Субагенты.** Строка — снимок `_codelab/subagents/update`: `agent` (A2A — тип
+1. **Субагенты.** Строка — снимок `_codelab/subagents/update`: `type` (A2A — тип
    `a2a:<name>`, E-22), `description`, `state`, время по `startedAt`/`endedAt`, `steps`,
    `toolCalls`, `tokens`, `cost`, `lastActivity`, номер запуска `run` (C-17); фоновые дети
    (`background: true`) остаются на доске вне хода.
