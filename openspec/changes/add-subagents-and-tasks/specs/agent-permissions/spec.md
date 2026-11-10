@@ -30,7 +30,7 @@
 - `toolCallId` — цепочка id вызовов через `/` от вызова `agent` корневой сессии до вызова потомка; уникальна в корневой сессии (PERM-4);
 - `title` — `[<agent>: <description>] <title вызова>` того потомка, чей вызов;
 - `rawInput`, `locations`, diff, `reason`, `allowAlwaysOffered`, `kind`, `tier` и пометка критической команды — без изменений (PERM-6, PERM-9);
-- запрос несёт сведения о потомке (`id`, `agent`, `description`, `depth`, `path`, `parentToolCallId` корня) для `_meta.codelab.subagent`.
+- запрос несёт сведения о потомке (`id`, `type`, `description`, `depth`, `path`, `parentToolCallId` корня) для `_meta.codelab.subagent`.
 
 Запросы потомков одного дерева SHALL уходить пользователю по одному в порядке поступления; запрос самой корневой сессии очереди не ждёт. Пока запрос ждёт, хэндл потомка в `waiting` с `waitingFor: approval`. Отмена токена потомка SHALL снимать его запрос с исходом `cancelled` (PERM-7).
 

@@ -102,7 +102,7 @@
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | не отправляются; логи `subagent.start`, `subagent.end` |
 | `SubagentActivity` | клиенту без `subagentToolCalls` — не отправляется (SUB-12); клиенту с ним — требование «Шаги потомков деревом» |
 
-`AcpPermissionGate` для запроса потомка SHALL отправлять `session/request_permission` с `sessionId` корневой сессии, `toolCall.toolCallId` — цепочкой, `title` с префиксом и `toolCall._meta.codelab.subagent` с полями `id`, `agent`, `description`, `depth`, `path`, `parentToolCallId`. Пометка `critical` сохраняется в том же `_meta.codelab`.
+`AcpPermissionGate` для запроса потомка SHALL отправлять `session/request_permission` с `sessionId` корневой сессии, `toolCall.toolCallId` — цепочкой, `title` с префиксом и `toolCall._meta.codelab.subagent` с полями `id`, `type`, `description`, `depth`, `path`, `parentToolCallId`. Пометка `critical` сохраняется в том же `_meta.codelab`.
 
 Данные `_meta.codelab.task` и `_meta.codelab.subagent` SHALL отправляться независимо от объявления клиента в `initialize`.
 
