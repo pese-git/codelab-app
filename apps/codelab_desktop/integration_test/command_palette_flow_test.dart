@@ -80,6 +80,25 @@ Finder _paletteRow(String slash) => find.descendant(
   matching: find.text(slash),
 );
 
+/// Нажимает строку палитры [slash], предварительно прокрутив к ней список:
+/// у Dart-агента команд больше, чем помещается в 260 px списка, и строка
+/// может лежать за его видимой областью (как у пользователя — прокруткой).
+Future<void> _tapPaletteRow(WidgetTester tester, String slash) async {
+  await tester.ensureVisible(_paletteRow(slash));
+  await tester.pumpAndSettle();
+  await tester.tap(_paletteRow(slash));
+  await tester.pumpAndSettle();
+}
+
+/// Закрывает app и root scope Cherrypick в конце теста: следующий тест файла
+/// создаёт новый scope (`bootstrap()`), без закрытия прежний остаётся и
+/// `CodeLabShellCubit` не разрешается (как в connection_profiles_flow_test).
+Future<void> _shutdown(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pumpAndSettle();
+  await closeCodeLabRootScope();
+}
+
 /// Вводит [text] в композер, как пользователь, и выбирает подсвеченную
 /// команду inline-палитры клавишей `Enter`.
 Future<void> _pickInline(WidgetTester tester, String text) async {
@@ -141,8 +160,7 @@ void main() {
       expect(ids, isNot(contains('compact')));
 
       // Выбор вставляет команду и ничего не отправляет.
-      await tester.tap(_paletteRow('/compact'));
-      await tester.pumpAndSettle();
+      await _tapPaletteRow(tester, '/compact');
       expect(_composerText(tester), '/compact ');
       expect(_transcript(tester), isEmpty);
 
@@ -156,6 +174,7 @@ void main() {
             !_cubit(tester).state.isPromptSubmitting,
       );
       expect(_transcript(tester), ['/compact', E2eAgent.current.compactReply]);
+      await _shutdown(tester);
     },
   );
 
@@ -205,8 +224,7 @@ void main() {
       expect(ids, isNot(contains('plan')));
 
       // 2. Выбор вставляет команду в композер и ничего не отправляет.
-      await tester.tap(_paletteRow('/compact'));
-      await tester.pumpAndSettle();
+      await _tapPaletteRow(tester, '/compact');
       expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
       expect(_composerText(tester), '/compact ');
       expect(_transcript(tester), isEmpty);
@@ -239,13 +257,13 @@ void main() {
       // 5. Команда клиента выполняется в app без `session/prompt`.
       final sessionsBefore = _cubit(tester).state.sessions.length;
       await _openPalette(tester);
-      await tester.tap(_paletteRow('/new'));
-      await tester.pumpAndSettle();
+      await _tapPaletteRow(tester, '/new');
       await _waitFor(
         tester,
         () => _cubit(tester).state.sessions.length == sessionsBefore + 1,
       );
       expect(_transcript(tester), isEmpty);
+      await _shutdown(tester);
     },
   );
 }
