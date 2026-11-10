@@ -312,7 +312,7 @@ loadSkillCatalog(req, fs):
 ```
 
 Пространства имён команд не пересекаются: skills вызываются как `skill:<name>` (двоеточие
-запрещено в именах шаблонов), MCP prompts — как `<server>:<prompt>` (R-08; имя содержит двоеточие), встроенные
+запрещено в именах шаблонов), MCP prompts (после MVP) — как `<server>:<prompt>` (E-24; имя содержит двоеточие), встроенные
 команды — без двоеточия и имеют высший приоритет; порядок поиска имени — §13.6 (встроенная
 команда → команда плагина → шаблон → `skill:` → MCP prompt). Шаблон с именем любой встроенной
 команды плана (список и порядок — §13.4) или, после MVP, команды плагина не загружается:
@@ -393,18 +393,18 @@ expandCommand(text, catalog, plan):
 2. cmd — встроенная команда плана → BuiltinCommand(cmd, raw)          // §13.6, R-08
 3. после MVP: cmd — команда плагина из plan.pluginCommands → PluginInvocation(command, raw)   // §17.14.3
 4. t := catalog.template(cmd):
-   args := splitArguments(raw)      // FormatException → CommandFailed("Unterminated quote in arguments.");
-                                    // до change встроенных команд — незакрытая кавычка закрывается концом ввода (ниже)
+   args := splitArguments(raw)      // незакрытая кавычка закрывается концом ввода (ниже; Q7 (а)
+                                    // change `add-agent-builtin-slash-commands`), ошибки разбора нет
    body := substituteArguments(t.body, raw, args)
    вернуть Expanded(body, CommandRef(template, t.name, raw))
-5. cmd начинается с "skill:" и skills в плане:
+5. после MVP: cmd начинается с "skill:" и skills в плане:
    s := catalog.skill(cmd без "skill:"); нет или !s.userInvocable →
         CommandFailed("Unknown skill: <name>. Run /help to list commands.")
    args, body — как в шаге 4 для s.body
    text := Prompts.skillsInvoked.render(name, dir: s.dir, body)
    вернуть Expanded(text, CommandRef(skill, s.name, raw))
-6. cmd — имя MCP prompt (`<server>:<prompt>`) → NotACommand: его разворачивает `AgentSession`
-   через MCP-клиент (§13.6)
+6. после MVP (E-24): cmd — имя MCP prompt (`<server>:<prompt>`) → NotACommand: его разворачивает
+   `AgentSession` через MCP-клиент (§13.6)
 7. иначе — CommandFailed("Unknown command: /<cmd>. Run /help to list commands.") (§13.6, R-08):
    модель не вызывается
 ```
@@ -424,15 +424,21 @@ The user invoked the skill "{{name}}". Follow its instructions for this request.
 исходном порядке. `CommandFailed` — ответ `agent_message_chunk` с текстом и `end_turn`, модель
 не вызывается, в журнал ничего не пишется (R-08).
 
-**Этап 8.7 (только шаблоны).** Механизма «ответ агента без модели» до change встроенных команд нет
-(решение пользователя 2026-10-30, OQ1 design.md change `add-agent-project-files`), поэтому до него действуют два отступления (D8):
-незакрытая кавычка закрывается концом ввода (`/review "error handling` → `$1 = error handling`), а
-шаги 5–7 не выполняются — `/x` без шаблона `x` уходит модели как обычный текст (поведение этапа 4).
-Change встроенных команд вводит `CommandFailed` и ответ «Unknown command» как изменение поведения.
+**Этап 8.7 (только шаблоны).** Механизма «ответ агента без модели» до change встроенных команд не
+было (решение пользователя 2026-10-30, OQ1 design.md change `add-agent-project-files`), поэтому
+этап ввёл два отступления (D8): незакрытая кавычка закрывается концом ввода, а шаги 5–7 не
+выполнялись — `/x` без шаблона `x` уходил модели как обычный текст (поведение этапа 4).
+С change `add-agent-builtin-slash-commands` (D3, D4) шаг 7 действует: `/x` без встроенной команды
+и шаблона — `CommandFailed` с ответом «Unknown command», модель не вызывается (изменение
+поведения). Шаги 5 (`skill:`) и 6 (MCP prompt, E-24) — после MVP; до них `/skill:<name>` и
+`/<server>:<prompt>` доходят до шага 7. Незакрытая кавычка по-прежнему закрывается концом ввода
+(`/review "error handling` → `$1 = error handling`; Q7 (а) того change): `CommandFailed` для неё
+нет — ни одна строка Must этого не требует, а ошибка изменила бы поведение работающих шаблонов.
 
 **Аргументы.** `splitArguments(raw)`: разделитель — пробельные символы; `"…"` и `'…'`
 группируют слово (кавычки снимаются); внутри `"…"` экранируются `\"` и `\\`, внутри `'…'`
-экранирования нет; вне кавычек `\` перед любым символом даёт этот символ.
+экранирования нет; вне кавычек `\` перед любым символом даёт этот символ; незакрытая кавычка
+закрывается концом ввода (D8 change `add-agent-project-files`).
 
 `substituteArguments(body, raw, args)` — один проход слева направо:
 

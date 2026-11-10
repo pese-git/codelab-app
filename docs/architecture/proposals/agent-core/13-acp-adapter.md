@@ -162,10 +162,15 @@ design.md change `add-embedded-agent-mode`, D4.
    начинается со встроенных `config` (только при `services.config != null` и
    `configCommand: true`; у `serve --ws` её нет — R0-3) и `mcp` (при включённой capability `mcp`;
    у `serve --ws` она выключена) — первыми, в порядке правила ниже, затем шаблоны (design.md change
-   `add-config-writer-and-reload`, D12; OQ1 (а) того change). Других встроенных команд в 8.10 нет;
-   список не меняется до закрытия сессии, в том числе при перезагрузке конфига (D9). Фикстуры этапов 0 и 4
-   сверяют список через `$any` (§14.2); `acp/available-commands-no-tools` ожидает `mcp` перед
-   шаблоном.
+   `add-config-writer-and-reload`, D12; OQ1 (а) того change). Встроенные команды MVP добавил change
+   `add-agent-builtin-slash-commands` (D2): список — `compact` (только при включённой capability
+   `compaction`), `mode`, `model`, `status`, `config`, `mcp`, `help` в порядке правила ниже, затем
+   шаблоны; например, с конфигом, `compaction` и `mcp` — `compact, mode, model, status, config, mcp,
+   help, review`, без них — `mode, model, status, help`. Элементы MVP — как в примере ниже (подсказка
+   `model` — `provider/model`). Список не меняется до закрытия сессии, в том числе при перезагрузке
+   конфига (D9). Фикстуры этапов 0 и 4 сверяют список через `$any` (§14.2); точные списки
+   `acp/available-commands-no-tools`, `acp/prompt-template-command` и `acp/slash-mcp-list`
+   обновлены этим change.
 
 ```json
 {"jsonrpc":"2.0","id":1,"result":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","modes":{"currentModeId":"standard","availableModes":[{"id":"plan","name":"Plan","description":"Read and plan only, no changes"},{"id":"ask","name":"Ask","description":"Approve every call, including reads"},{"id":"standard","name":"Standard","description":"Reads without asking, edits and commands with approval"},{"id":"accept-edits","name":"Accept edits","description":"Reads and edits without asking, commands and network with approval"},{"id":"bypass","name":"Bypass","description":"No approval except for critical commands, agent config edits and network access"}]},"configOptions":[{"id":"mode","name":"Mode","category":"mode","type":"select","currentValue":"standard","options":[{"value":"plan","name":"Plan"},{"value":"ask","name":"Ask"},{"value":"standard","name":"Standard"},{"value":"accept-edits","name":"Accept edits"},{"value":"bypass","name":"Bypass"}]},{"id":"model","name":"Model","category":"model","type":"select","currentValue":"openai/gpt-4o","options":[{"value":"openai/gpt-4o","name":"GPT-4o"},{"value":"anthropic/claude-sonnet-4","name":"Claude Sonnet 4"}]}]}}
@@ -412,11 +417,45 @@ OpenSpec change этапа 4 добавляет `SetSessionModeRequest`/`SetSess
 уведомление `current_mode_update`. До этого изменения метод отвечает `-32601`, а клиенты
 используют `configOptions` (их спецификация называет предпочтительным способом).
 
-Slash-команды приходят обычным `session/prompt` с текстом `/<имя> <аргументы>` (R-08). MVP:
-`/compact [<указание>]` (§9.5; текст после имени команды — `SummaryRequest.focus`, §9.2; ответ — `agent_message_chunk` с итогом сжатия), `/mode <id>`, `/model <id>`,
-`/status` (модель, режим, `cwd`, MCP-серверы), `/help`, а также MCP prompts как команды с именем
-`<server>:<prompt>` (имя сервера из конфига, двоеточие отделяет пространство имён; встроенные
-команды двоеточия не содержат). После MVP добавляются шаблоны `/<template>` и `/skill:<name>`
+Slash-команды приходят обычным `session/prompt` с текстом `/<имя> <аргументы>` (R-08). MVP
+(change `add-agent-builtin-slash-commands`, D1–D7; тексты — спецификация `agent-slash-commands`,
+«Встроенные команды MVP»): `/compact [<указание>]`, `/mode [<id>]`, `/model [<provider/model>]`,
+`/status`, `/help`. Команды исполняет `AgentSession` без модели: ответ — одно сообщение агента
+(`agent_message_chunk`) с фиксированным английским текстом, строки соединяются `\n`, затем
+`stopReason: end_turn`; ни промпт, ни ответ в журнал не пишутся. Ответы:
+
+* `/compact [<указание>]` — ручное сжатие с триггером `manual` (§9.5; непустой текст после имени —
+  `SummaryRequest.focus`, §9.2); идущее фоновое сжатие `afterTurn` команда ждёт. Итог —
+  `Compacted: <X> → <Y> tokens.` (§13.7), пустой регион — `Nothing to compact.`; отказ — событие
+  `AgentError(compaction)` и `TurnEnded(failed)` без сообщения, мост отвечает `-32603` (§13.8);
+  отмена во время резюме — `stopReason: cancelled`, записи `compaction` нет. Объявляется только
+  при capability `compaction`.
+* `/mode <id>` — `AgentSession.setMode` (тот же путь, что `configId: "mode"`: запись
+  `mode_change`, `ModeChanged`), затем `Mode: <id>.` с основным id; синонимы таблицы выше
+  нормализуются. Без аргумента — `Mode: <текущий id>. Available: plan, ask, standard,
+  accept-edits, bypass.`; неизвестный id (в том числе `autopilot`) — `Unknown mode: <id>.
+  Available: plan, ask, standard, accept-edits, bypass.`, режим не меняется.
+* `/model <provider/model>` — модель из `ModelCatalog` → `AgentSession.setModel` (запись
+  `model_change`, правила `effort` ниже), затем `Model: <provider/model>.`. Без аргумента —
+  `Model: <текущая модель>. Run /model <provider/model> to switch.`; модели нет в каталоге или
+  аргумент начинается с `--` (форма `--role` — после MVP, §17.10.5) — `Unknown model: <аргумент>.
+  Run /status to see the current model.`, модель не меняется.
+* Порядок кадров `/mode` и `/model`: сначала смена — `current_mode_update` и `config_option_update`
+  (`/mode`) или `config_option_update` (`/model`; смена пришла не запросом клиента, п. 4), затем
+  `agent_message_chunk`, затем ответ `end_turn`. Записи `mode_change` и `model_change` — данные
+  сессии: `session/load` восстанавливает режим и модель, реплей не содержит текстов команд.
+* `/status` — строки `Model: <provider/model>`, `Mode: <id>`, `Working directory: <cwd>`,
+  `MCP servers: none` или `MCP servers: <id> (<state>), …`; строки `Config` и `Restart required`
+  (ниже) — только если в сессии объявлена `config`, поэтому по WebSocket их нет (R0-3).
+* `/help` — первая строка `Commands:`, затем по строке на команду `AgentSession.commands` в
+  порядке §13.4: `/<name>[ <hint>] - <description>`, у шаблона в конце ` (template)` (§17.2.9).
+  Аргументы `/status` и `/help` игнорируются.
+
+MCP prompts как команды с именем `<server>:<prompt>` (имя сервера из конфига, двоеточие отделяет
+пространство имён; встроенные команды двоеточия не содержат) — после MVP, строка Should E-24
+[матрицы целей](../agent-parity-goals.md), будущий change (решение пользователя 2026-11-10, Q10
+change `switch-default-agent-to-dart`); до него `/<server>:<prompt>` — неизвестная команда
+(правило 3). После MVP добавляются шаблоны `/<template>` и `/skill:<name>`
 (§17.2.6), `/config reload|check` (§17.5.6) и `/mcp list|reload [<id>]|enable <id>|disable <id>`
 (§17.5.7), команды сессии `/rename <title>`, `/branches`, `/branch <n> | <record id>`,
 `/rewind [<n> | <record id>]`, `/fork [<n> | <record id>]`, `/label <text> | clear` (§17.6.10;
@@ -427,9 +466,11 @@ Slash-команды приходят обычным `session/prompt` с тек�
 `agent_message_chunk` с фиксированным английским текстом и `stopReason: end_turn`, в журнал не
 пишутся и модели не отправляются; `/status` получает строку `Config: ok` или
 `Config: reload failed at <ISO-время> (<n> issues). Run /config check.` (при одной проблеме — `1 issue`, R7-2) и, если есть отложенные
-ключи, `Restart required: <ключи>` (§17.5.6) — вместе с change встроенных команд, не в 8.10. В MVP `/status` также показывает строку
-`System prompt: custom (<source>)` или `System prompt: appended (<source>)`, если базовый промпт
-заменён или дополнен (§11.6.1), и `Tools disabled: <names>`, если инструменты выключены (§6.3.8).
+ключи, `Restart required: <ключи>` (§17.5.6) — с change `add-agent-builtin-slash-commands`, не в
+8.10, и только при объявленной `config`. Строки `System prompt: custom (<source>)` или
+`System prompt: appended (<source>)`, если базовый промпт заменён или дополнен (§11.6.1), и
+`Tools disabled: <names>`, если инструменты выключены (§6.3.8), `/status` получает вместе с этими
+настройками (E-08, §6.3.8): в change `add-agent-builtin-slash-commands` их в ядре ещё нет.
 
 После 9 (§17.10–§17.14) — те же правила ответа:
 
@@ -461,21 +502,26 @@ Slash-команды приходят обычным `session/prompt` с тек�
 сессии: второй `session/prompt` во время неё отклоняется тем же путём, что во время хода модели;
 ходом модели она не является, поэтому замена серверов, вызванная `/mcp reload`, применяется до
 ответа. По WebSocket `/config` не объявляется и не исполняется (R0-3): ответ раскрывал бы пути и
-тексты проблем конфига машины агента. Пока нет change встроенных команд,
-`/x` для любого другого `x` без шаблона уходит модели как обычный текст — правило 3 ниже
-(`Unknown command`) вступает в силу вместе с ним. Новых методов, полей и `_meta` нет.
+тексты проблем конфига машины агента. В 8.10 `/x` для любого другого `x` без шаблона
+уходил модели как обычный текст; правило 3 ниже (`Unknown command`) действует с change
+`add-agent-builtin-slash-commands` (D4): этот механизм он расширил командами MVP, а необъявленные
+`/config` и `/mcp` (WebSocket, нет `ConfigSource`, выключена capability `mcp`) стали неизвестными
+командами (Q6). Новых методов, полей и `_meta` нет.
 
 Разбор:
 
 1. Первый текстовый блок начинается с `/`, а слово после него (до первого пробельного символа)
    соответствует `^[A-Za-z0-9][A-Za-z0-9:_-]*$` — это команда. Иначе (например,
    `/usr/bin/foo is broken`) текст уходит модели как обычное сообщение.
-2. Известная команда исполняется агентом; MCP prompt разворачивается в сообщение пользователя.
-   После MVP порядок поиска имени: встроенная команда → команда плагина (§17.14.3) → шаблон →
-   `skill:` → MCP prompt.
+2. Известная команда исполняется агентом: в MVP порядок поиска имени — объявленная в сессии
+   встроенная команда → шаблон (§17.2.6, шаги 2 и 4). После MVP: встроенная команда → команда
+   плагина (§17.14.3) → шаблон → `skill:` → MCP prompt (E-24; MCP prompt разворачивается в
+   сообщение пользователя).
 3. **Неизвестная команда** модели не отправляется: ответ — `agent_message_chunk` с текстом
-   `Unknown command: /<name>. Run /help to list commands.` и `stopReason: end_turn`; в журнал
-   ничего не пишется (R-08).
+   `Unknown command: /<name>. Run /help to list commands.` (`<name>` обрезается до 64 символов по
+   рунам) и `stopReason: end_turn`; в журнал ничего не пишется (R-08). Лог —
+   `command.unknown {session_id, name_bytes}` без имени (§12). Действует с change
+   `add-agent-builtin-slash-commands` (D4).
 
 ## 13.7. `session/prompt`, проекция событий и `session/cancel`
 
