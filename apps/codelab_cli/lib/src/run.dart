@@ -50,6 +50,7 @@ import 'render/output_surface.dart';
 import 'render/sanitize.dart';
 import 'repl/repl.dart';
 import 'scenario/test_scenario_command.dart';
+import 'serve_alias.dart';
 import 'tui/tui_runner.dart';
 import 'signals.dart';
 
@@ -151,8 +152,14 @@ Future<int> _run(
     case CliCommand.secret:
       return _runSecret(options, environment, io);
     case CliCommand.serveAlias:
-      // ЗАГЛУШКА шага «красные тесты»: ветку пишет задача 1.6.
-      throw UnimplementedError('runServeAlias');
+      // До домашнего каталога, профилей и логгера: алиас ничего этого не
+      // открывает (change `retire-python-agent`, D8).
+      return runServeAlias(
+        options.positional,
+        environment: environment,
+        io: io,
+        signals: signalSeam,
+      );
     case CliCommand.headless:
       return _runHeadless(options, environment, io, embeddedOpener, signalSeam);
     case CliCommand.repl when options.ui == UiMode.tui:

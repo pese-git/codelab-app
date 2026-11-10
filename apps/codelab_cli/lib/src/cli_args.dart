@@ -506,6 +506,17 @@ $before1Note''';
 /// Как использовать: вызывается `runCodelab` один раз; ошибка —
 /// [UsageError] с текстом для stderr.
 CliOptions parseCliArgs(List<String> args) {
+  // Алиас распознаётся до `ArgParser`: `--help`, `--stdio`, `--port` и прочие
+  // флаги принадлежат `codelab-agent`, а не `codelab`. Только первое слово:
+  // `codelab -v serve` и `codelab -- serve` — первое сообщение REPL (change
+  // `retire-python-agent`, D8, решение Q2).
+  if (args.firstOrNull == 'serve') {
+    return _options(
+      CliCommand.serveAlias,
+      _parser().parse(const []),
+      positional: args.skip(1).toList(),
+    );
+  }
   final ArgResults results;
   try {
     results = _parser().parse(args);
