@@ -1,0 +1,9 @@
+{"ts": "2026-11-10T16:40:18.364693Z", "level": "info", "event": "secrets.backend.selected", "backend": "env", "path": null, "reason": "OS keychain backends are not available in this version; set secrets.backend: file or CODELAB_SECRET_* variables"}
+{"ts": "2026-11-10T16:40:18.365060Z", "level": "info", "event": "host.config.loaded", "sources": ["defaults", "<checklist-dir>/home/config.yaml", "flags"], "warnings": 0, "project_root": "<project>", "transport": "stdio", "models": ["lm/qwen/qwen3.5-9b", "lm/qwen/qwen3-1.7b"]}
+{"ts": "2026-11-10T16:40:18.366718Z", "level": "info", "event": "config.watch.fallback", "path": "<project>/.codelab/config.yaml", "reason": "PathNotFoundException"}
+{"ts": "2026-11-10T16:40:18.366896Z", "level": "info", "event": "config.watch.fallback", "path": "<project>/.codelab/config.local.yaml", "reason": "PathNotFoundException"}
+{"ts": "2026-11-10T16:40:18.367647Z", "level": "info", "event": "host.plan", "profile": "agent-serve", "tools": ["read", "write", "edit", "update_plan", "exec", "ls", "search"], "off": {}}
+{"ts": "2026-11-10T16:40:18.367765Z", "level": "info", "event": "serve.stdio.start"}
+{"ts": "2026-11-10T16:40:18.370996Z", "level": "warning", "event": "llm.catalog.default_used", "model": "lm/qwen/qwen3.5-9b", "fields": ["maxOutputTokens", "supportsImages", "supportsReasoning", "hiddenReasoning"]}
+{"ts": "2026-11-10T16:40:18.372200Z", "level": "info", "event": "commands.loaded", "session_id": "01M731SB5E1H51DTGZ07EM1PMV", "count": 0, "project": false}
+{"ts": "2026-11-10T16:40:18.372234Z", "level": "info", "event": "agents.loaded", "session_id": "01M731SB5E1H51DTGZ07EM1PMV", "names": []}

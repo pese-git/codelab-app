@@ -1,0 +1,4 @@
+{"ts": "2026-11-10T16:45:10.197518Z", "level": "debug", "event": "permission.asked", "tool_call_id": "213877256", "tool": "exec", "tier": "exec", "critical": false}
+{"ts": "2026-11-10T16:45:13.465148Z", "level": "debug", "event": "permission.decided", "tool_call_id": "213877256", "decision": "allowOnce"}
+{"ts": "2026-11-10T16:45:16.245393Z", "level": "debug", "event": "permission.asked", "tool_call_id": "714870302", "tool": "exec", "tier": "exec", "critical": false}
+{"ts": "2026-11-10T16:45:18.052734Z", "level": "debug", "event": "permission.decided", "tool_call_id": "714870302", "decision": "allowOnce"}
