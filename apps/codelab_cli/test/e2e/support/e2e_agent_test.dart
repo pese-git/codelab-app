@@ -149,6 +149,34 @@ void main() {
       );
     });
 
+    // Задача 1.9 change `retire-python-agent`, D12: Dart CLI с алиасом на
+    // `serve --help` уходит в `codelab-agent serve --help` — код 64, справка
+    // в stderr, пустой stdout. Признака Python-агента (код 0 и `--stdio` в
+    // stdout) нет. Тест закрепляет зависимость от того, что у
+    // `codelab-agent serve` нет `--help` с кодом 0.
+    test('codelab with the serve alias (codelab-agent help in stderr, '
+        'code 64) is a skip reason', () async {
+      final bin = await Directory('${dir.path}/bin').create();
+      final file = File('${bin.path}/codelab')
+        ..writeAsStringSync(
+          '#!/bin/sh\n'
+          'echo \'codelab: "codelab serve" is deprecated and will be removed '
+          'in a future release; use "codelab-agent serve" instead.\' >&2\n'
+          'echo "Usage: codelab-agent serve [--stdio] [--port <n>]" >&2\n'
+          'exit 64\n',
+        );
+      await Process.run('chmod', ['+x', file.path]);
+      final agent = E2eCliAgent.fromEnvironment({
+        'CODELAB_E2E_AGENT': 'python',
+        'PATH': bin.path,
+      });
+
+      expect(
+        await agent.unavailable(),
+        'Python agent (codelab serve) is not installed',
+      );
+    });
+
     test('the Python agent starts with the mock provider in its own '
         'CODELAB_HOME', () async {
       final agent = E2eCliAgent.fromEnvironment(

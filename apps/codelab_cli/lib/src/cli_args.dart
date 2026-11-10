@@ -41,6 +41,10 @@ enum CliCommand {
   provider,
   mcp,
   secret,
+
+  /// Переходный алиас `codelab serve …` (change `retire-python-agent`, D8);
+  /// [CliOptions.positional] — слова после `serve` без изменений.
+  serveAlias,
   version,
   help,
 }
