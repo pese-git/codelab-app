@@ -74,8 +74,9 @@
   - kit:
     - `initialize` с `clientCapabilities._meta.codelab` (acp-protocol-client «Запрос initialize клиента CodeLab», «Агент без блока объявлений», «Будущая версия расширения»);
     - `PlanEntryView` (acp-client-kit «Метаданные пунктов плана»: три сценария);
-  - CLI: REPL «План с задачами» (codelab-cli); TUI «Ctrl+T прячет список задач» (codelab-tui, D26);
-  - app: widget-тест чек-листа (agent-workbench-ui «Чек-лист задач с id, владельцем и блокерами»).
+    - `TaskOpsItem` (acp-client-kit «Операции со списком задач в ленте»: «Слияние созданий», «Отклонённая операция», «Сторонний агент»; D27);
+  - CLI: REPL «План с задачами», «Тихая строка операций со списком» (codelab-cli); TUI «Ctrl+T прячет список задач» и тихая строка операций (codelab-tui, D26, D27);
+  - app: widget-тесты agent-workbench-ui «Чек-лист задач с id, владельцем и блокерами» (включая «Сводка скрыта при открытой панели Plan»), «Тихие строки операций со списком задач» («Четыре создания подряд», «Ошибка операции видна»).
 - [ ] 1.2 `[agent]` `TaskList`, `TaskItem`, `TaskOp`, `TaskActor`, `TaskListChanged` и четыре инструмента в `lib/src/tools/tasks/` по §17.16.2–§17.16.3. Сюда входят:
   - замок операций;
   - проверки и тексты ошибок;
@@ -95,8 +96,9 @@
   - клиентские фикстуры с кадром `initialize`;
   - перечень расширений §13.12 и проверка ACP-2 (1.1, ACP).
 - [ ] 1.6 `[client]` `codelab_client_acp`: `clientCapabilities._meta.codelab` в `initialize` и терпимый разбор `agentCapabilities._meta.codelab`. `codelab_client_core`: поля `PlanEntryView`, незавершённые блокеры, метка владельца (1.1, kit). `fvm dart run build_runner build` после изменения freezed-моделей.
-- [ ] 1.7 `[client]` REPL и `--ui tui`: формат плана `#<id> [<status>] <subject>` с владельцем и блокерами; в TUI — блок списка задач над композером с заголовком `Tasks <c>/<n> done · ctrl+t hide`, действие `toggle_tasks` (Ctrl+T) в реестре клавиш и подсказка в строке помощи; доска Ctrl+T не открывает (1.1, CLI; D26).
-- [ ] 1.8 `[desktop]` Чек-лист `codelab_ui`/app: `#<id>`, метка владельца, «blocked by». `integration_test/llm_scripts/with_plan.json` переписать на `task_*`, `plan_progress_checklist_flow_test.dart` — только компиляция в `feature/*` (1.1, app).
+- [ ] 1.6a `[client]` `TaskOpsItem` в транскрипте kit: распознавание по `plan` с `_meta.codelab.task`, пришедшему во время успешного вызова `think`, разница планов, слияние подряд идущих, текст элемента; без разбора заголовков (1.1, kit; D27).
+- [ ] 1.7 `[client]` REPL и `--ui tui`: тихая строка `TaskOpsItem`; формат плана `#<id> [<status>] <subject>` с владельцем и блокерами; в TUI — блок списка задач над композером с заголовком `Tasks <c>/<n> done · ctrl+t hide`, действие `toggle_tasks` (Ctrl+T) в реестре клавиш и подсказка в строке помощи; доска Ctrl+T не открывает (1.1, CLI; D26).
+- [ ] 1.8 `[desktop]` Чек-лист `codelab_ui`/app: `#<id>`, метка владельца, «blocked by»; сводка над композером скрыта при открытой панели Plan; тихая строка `TaskOpsItem` (иконка списка, без рамки и тега), ошибка операции — обычной строкой (D27). `integration_test/llm_scripts/with_plan.json` переписать на `task_*`, `plan_progress_checklist_flow_test.dart` — только компиляция в `feature/*` (1.1, app).
 
 ## 2. Субагенты глубины 1 (итерация 2)
 
@@ -117,7 +119,7 @@
     - `deterministic_journal_test.dart` с `agent`;
   - ACP: фикстура `acp/prompt-subagent-tool-call` (agent-acp-server «Вызов agent»); `initialize` с `subagents` и при `enabled: false` («Субагенты выключены»); `acp_projection_exhaustive_test.dart` со строками `Subagent*`;
   - итог: agent-subagents «Итог с потомками»; agent-acp-server «Итог субагента» (вживую, при отмене и в реплее); `summary` в финальном обновлении фикстуры `acp/prompt-subagent-tool-call`;
-  - kit и клиенты: строка `agent` (acp-client-kit «Запрос одобрения от субагента», часть про строку `agent`; acp-client-kit «Итог в представлении», «Сторонний агент без итога»; agent-workbench-ui «Прогресс и отчёт», «Итог под статусом»; codelab-cli «Отчёт субагента в pipe», «Итог в строке вызова»; codelab-tui «Итог в статусе»).
+  - kit и клиенты: строка `agent` (acp-client-kit «Запрос одобрения от субагента», часть про строку `agent`; acp-client-kit «Итог в представлении», «Сторонний агент без итога»; agent-workbench-ui «Завершённый субагент свёрнут», «Неуспешный субагент сохраняет тег», «Без дерева — строка прогресса»; codelab-cli «Отчёт субагента в pipe», «Итог в строке вызова»; codelab-tui «Итог в статусе»).
 - [ ] 2.2 `[agent]` Ключи схемы `subagents.*` базового этапа с диапазонами (`max_depth` 1–3, `max_concurrent` 1–8, `max_per_turn` 1–50 и др.) и правилом проектного слоя «только ужесточать»; дескрипторы `SettingsRegistry` (`scope: shared`, `min`/`max`, `restartRequired: false`) вместо опакового `subagents`; чтение лимитов при каждом `spawn` (agent-configuration «Ключи subagents в схеме и реестре настроек», D17, D22).
 - [ ] 2.3 `[agent]` Встроенные типы `general`, `explore`, `review`, `plan` (тела — `prompts/subagent/types/*.md`, свои тексты) и снимок типов сессии из определений со `scope` `subagent | both`. `SubagentTool`: схема с `task` только у корня, проверки, описание с `nesting`/`agentList` (agent-subagents «Инструмент task и типы субагентов»).
 - [ ] 2.4 `[agent]` `SubagentManager`, `SubagentHandle`, `SubagentTree` (слоты, FIFO, `max_per_turn`), `createChildSession`/`ChildSessionSpec`, сборка ребёнка (инструменты, режим `narrow`, модель, промпт `subagent/system`), токены, `cancel_grace`, гонка отмены и завершения, отписка поздних событий (agent-subagents «Сборка ребёнка», «Жизненный цикл и отмена»; D3, D5).
@@ -125,8 +127,8 @@
 - [ ] 2.6 `[agent]` События `SubagentStarted`/`Progress`/`Finished`, `SubagentActivity`, строка прогресса и heartbeat через `onUpdate` (agent-subagents «События потомков в потоке родителя»; D6).
 - [ ] 2.7 `[agent]` Журнал: порт `SessionStore` для журнала потомка, `JsonlSessionStore` — каталог `subagents/` корня без попадания в `list` и `index.json`, заголовок `parent`, записи `subagent`, лечение `agent` в `healInterruptedTurn` (agent-subagents «Журнал субагента и прерывание»; D7).
 - [ ] 2.8 `[protocol]` Проекция `agent` (`kind: think`, прогресс, отчёт без обёртки, `_meta.codelab.subagent.summary` в финальном обновлении вживую и в реплее (D24), `_meta.codelab.subagent.failure` у `failed`). `Subagent*`/`SubagentActivity` — «not sent». Ключ `subagents` в блоке `initialize` (2.1, ACP).
-- [ ] 2.9 `[client]` `ToolCallView.subagentSummary` и строка итога в kit (терпимый разбор); `ToolRowView` строки `agent`: прогресс, отчёт, итог; REPL — итог в скобках строки вызова, TUI — `Done (…)`. REPL — прогресс на месте только на `ansi`, отчёт до 20 строк. TUI — строка вызова (2.1, kit и CLI).
-- [ ] 2.10 `[desktop]` Строка вызова `agent` в ленте: прогресс, строка итога под статусом и раскрываемый отчёт (2.1, app; D24).
+- [ ] 2.9 `[client]` `ToolCallView.subagentSummary`, строка итога и её сокращённый вид в kit (терпимый разбор, D27); признаки вызова `agent` (потомки, запрос с этим `parentToolCallId`, `_meta.codelab.subagent`); `ToolRowView` строки `agent`: прогресс, отчёт, итог; REPL — итог в скобках строки вызова, TUI — `Done (…)`. REPL — прогресс на месте только на `ansi`, отчёт до 20 строк. TUI — строка вызова (2.1, kit и CLI).
+- [ ] 2.10 `[desktop]` Компактная строка вызова `agent` (D27): свёрнута по умолчанию, глиф, `Subagent <type>: <description>`, справа «N tool calls · N.Nk · время», шеврон; без тега «Done» и `#id` в свёрнутом виде, «Failed»/«Cancelled» остаются; под работающей — строка прогресса; раскрытие — отчёт (2.1, app; D24, D27).
 
 ## 3. Запрос разрешения потомка (итерация 3)
 
@@ -134,12 +136,13 @@
   - ядро: `subagent_permission_prefix_test.dart` (agent-permissions «Два ребёнка спрашивают одновременно», «Запрет всегда нельзя обойти через ребёнка»); `allow_always_scope_test.dart` («Всегда для типа субагента»); снятие запроса при отмене ребёнка (PERM-7);
   - ACP: фикстура `acp/prompt-subagent-permission` (agent-acp-server «Запрос разрешения ребёнка»; acp-golden-fixtures «Агентский прогон запроса ребёнка»); переподключение с ожидающим запросом ребёнка — тот же `toolCallId`;
   - kit: acp-client-kit «Запрос ребёнка», «Запрос без сведений о субагенте»;
-  - CLI: codelab-cli «Одобрение ребёнка»; codelab-tui «Одобрение ребёнка в TUI»;
-  - app: widget-тест «Ребёнок просит команду» (agent-workbench-ui «Пометка запроса одобрения от субагента»).
+  - kit: acp-client-kit «Путь внука без дерева»;
+  - CLI: codelab-cli «Одобрение ребёнка»; codelab-tui «Одобрение ребёнка в TUI» (строка пути, D27);
+  - app: widget-тесты agent-workbench-ui «Запрос одобрения от субагента под строкой корня»: «Ребёнок просит команду», «Вопрос внука не раскрывает дерево».
 - [ ] 3.2 `[agent]` `SubagentPermissionGate`: цепочка `toolCallId`, префикс `title`, сведения о потомке в запросе, FIFO дерева в `SubagentTree`, `waiting` с `waitingFor: approval`, общее хранилище решений корня, нет gate → отказ (agent-permissions «Разрешения потомка через gate корневой сессии»; D8).
 - [ ] 3.3 `[protocol]` `AcpPermissionGate`: `toolCall._meta.codelab.subagent` вместе с `critical` (3.1, ACP).
-- [ ] 3.4 `[client]` `SubagentRequester` в `PendingApprovalView` и `ToolCallView`; строка «asked by subagent» в REPL и TUI (3.1, kit и CLI).
-- [ ] 3.5 `[desktop]` Пометка `Subagent <agent> · <description>` над панелью решения, сохранение после решения (3.1, app).
+- [ ] 3.4 `[client]` `SubagentRequester` в `PendingApprovalView` и `ToolCallView`, `pathTypes` и строка пути (`…` для неизвестных звеньев); строка `<путь> wants to run` и заголовок задачи в REPL и TUI (3.1, kit и CLI; D27).
+- [ ] 3.5 `[desktop]` Блок одобрения потомка под строкой `agent` корневого уровня: путь «review › explore wants to run» (заголовок задачи — в подсказке и раскрытии), команда, панель решения; деревья предков не раскрываются; после решения — тег исхода под строкой корня (3.1, app; D27).
 
 ## 4. Вложенность до 3 и задачи у субагентов (итерация 4)
 
@@ -167,12 +170,12 @@
   - kit: acp-client-kit «Дерево вызовов потомков» (три сценария); acp-protocol-client «Запрос initialize клиента CodeLab» с `subagentToolCalls`;
   - kit: acp-client-kit «Хвост из пяти вызовов» (D25);
   - CLI: codelab-cli «Шаги ребёнка с отступом»; TUI — хвост свёрнутой строки и вложенные строки раскрытой;
-  - app: widget-тесты agent-workbench-ui «Свёрнутые шаги ребёнка», «Вопрос внука раскрывает путь», «Хвост работающего субагента»;
+  - app: widget-тесты agent-workbench-ui «Свёрнутые шаги ребёнка», «Хвост работающего субагента»; вопрос внука при дереве — вызов виден на своём месте после раскрытия, блок под строкой корня («Вопрос внука не раскрывает дерево»);
   - фикстуры: `summary` в финальных обновлениях `acp/prompt-subagent-tool-tree` и реплея `acp/session-load-subagent-tool-tree`.
 - [ ] 5.2 `[protocol]` Проекция `SubagentActivity` вызовов потомков в `tool_call`/`tool_call_update` с цепочкой `toolCallId` и `_meta.codelab.parentToolCallId` только по согласию `subagentToolCalls`; закрытие висящих вызовов поддерева при терминальном вызове `agent`; реплей вызовов потомков из их журналов; ключ `subagentToolCalls` в блоке `initialize` (5.1, ACP; D21).
 - [ ] 5.3 `[agent]` Порт чтения журналов потомков для реплея (`AgentSession.replay` отдаёт события детей с адресом, как `SubagentActivity`) без записи и без lease ребёнка (5.1, «Реплей дерева»; D21).
 - [ ] 5.4 `[client]` `clientCapabilities._meta.codelab.subagentToolCalls`; `ToolCallView.parentToolCallId`, дерево в `SessionView` без дублей при реплее; строки потомков с отступом в REPL и TUI; хвост в `SessionView` (три последних вызова поддерева и `moreCount`) и в свёрнутой строке TUI (5.1, kit и CLI; D25).
-- [ ] 5.5 `[desktop]` Вложенные строки потомков в строке `agent`: свёрнуты по умолчанию, счётчик шагов, хвост из трёх последних вызовов и `+N more tool calls · Nk tokens` у работающего, раскрытие пути к ожидающему одобрению (5.1, app; D25).
+- [ ] 5.5 `[desktop]` Вложенные строки потомков в строке `agent`: свёрнуты по умолчанию, счётчик шагов, хвост из трёх последних вызовов и `+N more tool calls · Nk tokens` под свёрнутой строкой работающего вместо строки прогресса; тихие строки операций потомков со списком; вопрос потомка дерево не раскрывает (5.1, app; D25, D27).
 
 ## 6. Ручная проверка, документы и Definition of Done (итерация 6)
 
