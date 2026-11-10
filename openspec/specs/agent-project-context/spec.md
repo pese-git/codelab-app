@@ -19,7 +19,7 @@
 
 #### Scenario: Без порта
 - **WHEN** хост собирает ядро без `projectFiles` и создаёт сессию в каталоге с `AGENTS.md`
-- **THEN** системный промпт не содержит секции `project_context`, `available_commands_update` пуст, опции `agent` нет
+- **THEN** системный промпт не содержит секции `project_context`, `available_commands_update` не содержит команд шаблонов (только встроенные команды сессии), опции `agent` нет
 
 #### Scenario: Исключение порта не ломает сессию
 - **WHEN** фейковый `ProjectFilesSource` бросает исключение при `load`

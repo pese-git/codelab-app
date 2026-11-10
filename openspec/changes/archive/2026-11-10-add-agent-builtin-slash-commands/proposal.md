@@ -1,6 +1,6 @@
 ## Why
 
-Три строки Must матрицы целей ([`agent-parity-goals.md`](../../../docs/architecture/proposals/agent-parity-goals.md)) не закрываются без встроенных слэш-команд Dart-агента, а без них не открываются ворота MVP change [`switch-default-agent-to-dart`](../switch-default-agent-to-dart/design.md) (решение пользователя Q9, 2026-11-10):
+Три строки Must матрицы целей ([`agent-parity-goals.md`](../../../../docs/architecture/proposals/agent-parity-goals.md)) не закрываются без встроенных слэш-команд Dart-агента, а без них не открываются ворота MVP change [`switch-default-agent-to-dart`](../../switch-default-agent-to-dart/design.md) (решение пользователя Q9, 2026-11-10):
 
 - **K-02** — `/compact [указание]` объявлен агентом и сразу сжимает историю (`acp/slash-compact`; app-часть — `app:command_palette_flow_test.dart`);
 - **R-08** — `/help`, `/status`, `/mode <id>`, `/compact` обрабатывает агент, неизвестная команда — текстовый ответ, а не ход модели (`acp/slash-help`, `acp/slash-mode-plan`);

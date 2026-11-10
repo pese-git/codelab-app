@@ -1,8 +1,8 @@
 ## Context
 
 Источники:
-- `agent-core-architecture` [§13.4](../../../docs/architecture/proposals/agent-core/13-acp-adapter.md) (элементы и порядок команд), §13.6 (список MVP, правила разбора 1–3, «Этап 8.10»), §13.7 (`/compact` → `Compacted: X → Y tokens.`), [§9.2, §9.5](../../../docs/architecture/proposals/agent-core/09-compaction.md) (`manual`, `SummaryRequest.focus`), [§17.2.6](../../../docs/architecture/proposals/agent-core/17-2-skills-and-templates.md) (алгоритм `expandCommand`, отступления этапа 8.7), §17.5.6 (строки `/status` о конфигурации);
-- матрица целей — строки K-02, R-08, U-03, R-20, E-24; решения пользователя Q9 и Q10 (2026-11-10) в design.md change [`switch-default-agent-to-dart`](../switch-default-agent-to-dart/design.md);
+- `agent-core-architecture` [§13.4](../../../../docs/architecture/proposals/agent-core/13-acp-adapter.md) (элементы и порядок команд), §13.6 (список MVP, правила разбора 1–3, «Этап 8.10»), §13.7 (`/compact` → `Compacted: X → Y tokens.`), [§9.2, §9.5](../../../../docs/architecture/proposals/agent-core/09-compaction.md) (`manual`, `SummaryRequest.focus`), [§17.2.6](../../../../docs/architecture/proposals/agent-core/17-2-skills-and-templates.md) (алгоритм `expandCommand`, отступления этапа 8.7), §17.5.6 (строки `/status` о конфигурации);
+- матрица целей — строки K-02, R-08, U-03, R-20, E-24; решения пользователя Q9 и Q10 (2026-11-10) в design.md change [`switch-default-agent-to-dart`](../../switch-default-agent-to-dart/design.md);
 - спецификации `agent-slash-commands`, `agent-compaction`, `agent-acp-server`, `agent-binary`, `codelab-cli`, `testing-quality`, `acp-golden-fixtures`;
 - ACP — только `docs/protocols/acp/protocol/14-Slash Commands.md` («Commands are run as part of regular prompt requests»), `05-Prompt Turn.md`, `13-Session Config Options.md`, `12-Session Model.md`;
 - `docs/architecture/acp-boundary.md`, `concurrency.md`, `permissions.md`, `observability.md`, `testing.md`; `packages/dart/codelab_agent_core/AGENTS.md`.

@@ -49,13 +49,13 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
    - сбой или пропуск сервера НЕ SHALL быть ошибкой запроса.
 3. Сессия создаётся через `AgentRuntime.createSession` с env и `AcpPermissionGate` соединения, хуком `markInProgress` и серверами шага 2. Создание ждёт подключения серверов (параллельно, каждый — не дольше своего `connectTimeout`).
 4. Ответ `NewSessionResponse(sessionId, modes, configOptions)`.
-5. После ответа — `available_commands_update` с командами `AgentSession.commands` в их порядке: сначала встроенные команды сессии (`config`, `mcp` — capability `agent-slash-commands`, «Встроенные команды config и mcp»), затем шаблоны. Элемент — `AvailableCommand {name, description, input: {hint}?}`, поле `input` — только при `inputHint` (`14-Slash Commands.md`; design.md change `add-agent-project-files`, D9; design.md change `add-config-writer-and-reload`, D12). Без команд список пуст. Инструменты модели в список НЕ SHALL попадать (R-07).
+5. После ответа — `available_commands_update` с командами `AgentSession.commands` в их порядке: сначала встроенные команды сессии в порядке `compact`, `mode`, `model`, `status`, `config`, `mcp`, `help` (capability `agent-slash-commands`, «Встроенные команды MVP», «Встроенные команды config и mcp»; design.md change `add-agent-builtin-slash-commands`, D2), затем шаблоны. Элемент — `AvailableCommand {name, description, input: {hint}?}`, поле `input` — только при `inputHint` (`14-Slash Commands.md`; design.md change `add-agent-project-files`, D9; design.md change `add-config-writer-and-reload`, D12). Без команд список пуст. Инструменты модели в список НЕ SHALL попадать (R-07).
 
 До ответа на `session/new` уведомления этой сессии НЕ SHALL отправляться (ACP-8). Инструменты подключённых серверов SHALL быть доступны модели с первого хода этой сессии (R-24). Это заменяет поведение этапа 4, в котором каждый сервер пропускался (R-02).
 
 #### Scenario: Режимы и опции новой сессии
 - **WHEN** клиент создаёт сессию с абсолютным `cwd`
-- **THEN** ответ содержит `modes` с пятью режимами и `configOptions` `mode` и `model`, а следующий кадр — `available_commands_update`; если у сессии нет ни шаблонов команд, ни встроенных команд (ядро без `ConfigSource` и без capability `mcp`), список пуст
+- **THEN** ответ содержит `modes` с пятью режимами и `configOptions` `mode` и `model`, а следующий кадр — `available_commands_update`; в нём всегда есть встроенные `mode`, `model`, `status` и `help`
 
 #### Scenario: Относительный cwd
 - **WHEN** `session/new` приходит с `cwd: "work/demo"`
@@ -83,7 +83,7 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 
 #### Scenario: Команды шаблонов после session/new
 - **WHEN** у сессии есть встроенные инструменты, fake MCP-сервер с инструментом `echo` и шаблон `.codelab/prompts/review.md` доверенного проекта (`trusted_projects` с `${cwd}`) с `argument-hint: "<path> [focus]"`, а ядро собрано без `ConfigSource`
-- **THEN** кадр после ответа `session/new` — `available_commands_update` ровно с двумя командами: `mcp` (встроенная, capability `mcp` включена) и `{"name":"review","description":…,"input":{"hint":"<path> [focus]"}}`, без имён `read`, `exec` и `mcp__fake__echo` (фикстура `acp/available-commands-no-tools`, R-07)
+- **THEN** кадр после ответа `session/new` — `available_commands_update` ровно с командами `compact`, `mode`, `model`, `status`, `mcp`, `help` (встроенные; capability `compaction` и `mcp` агентского прогона включены, `config` нет — ядро без `ConfigSource`) и `{"name":"review","description":…,"input":{"hint":"<path> [focus]"}}` в этом порядке, без имён `read`, `exec` и `mcp__fake__echo` (фикстура `acp/available-commands-no-tools`, R-07)
 
 Шаблон лежит в проекте, а не в `$CODELAB_HOME/prompts/`: формат фикстур пишет файлы только в `cwd` через `setup.files` (acp-golden-fixtures). Пользовательскую область (`$CODELAB_HOME/prompts/*.md`) покрывает тест хоста `apps/codelab_agent/test/agent_host_project_files_test.dart`.
 
@@ -161,6 +161,14 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 #### Scenario: Отмена посреди команды
 - **WHEN** клиент отменяет ход, пока `exec` ждёт `terminal/wait_for_exit`
 - **THEN** агент отправляет `terminal/kill`, `terminal/output`, `terminal/release`, затем `tool_call_update` `failed` с `outcome: "cancelled"` и ответ `stopReason: cancelled`
+
+#### Scenario: Отмена /mode после применения
+- **WHEN** сессия в режиме `standard`, приходит `session/prompt` с `/mode plan`, и `session/cancel` приходит после того, как запись `mode_change` дописана
+- **THEN** кадры идут в порядке: `current_mode_update` с `plan`, `config_option_update`, `agent_message_chunk` с `Mode: plan.`, затем ответ на `session/prompt` со `stopReason: cancelled` (ACP-5, `05-Prompt Turn.md` «Cancellation»: уведомления — до ответа); после ответа кадров этого хода нет; режим сессии — `plan` (design.md change `add-agent-builtin-slash-commands`, D14)
+
+#### Scenario: Отмена /mode до применения
+- **WHEN** `session/cancel` для хода `/mode plan` приходит до применения смены
+- **THEN** ни `current_mode_update`, ни `config_option_update`, ни `agent_message_chunk` нет, ответ — `stopReason: cancelled`, режим — `standard`
 
 ### Requirement: Режимы и опции сессии
 `configOptions` SHALL идти в порядке `mode`, `model`, `effort`, `agent` (§13.6): `mode` — пять режимов `ModeId`; `model` — модели каталога ядра в формате `provider/model`; `effort` (`low`, `medium`, `high`, категория `thought_level`) — только если у текущей модели `supportsReasoning` (ACP-10); `agent` — только если у сессии есть хотя бы одно определение агента: вариант `default` (имя `Default`), затем `AgentSession.agents` по имени с `description` определения, `currentValue` — `AgentSession.agent`, без поля `category` (зарезервированные категории ACP — только `mode`, `model`, `thought_level`; design.md change `add-agent-project-files`, D12). Устаревшие синонимы режимов (`architect`, `debug`, `acceptEdits`, `code`) SHALL приниматься на входе и не отправляться наружу.
