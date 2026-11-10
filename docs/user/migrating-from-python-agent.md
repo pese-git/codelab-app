@@ -39,7 +39,7 @@ Python-агент и Python TUI (репозиторий `pese-git/codelab-agent`
 
 Решение принимают вместе владелец продукта и ответственный за релиз и записывают его с датой, версией `stable` и результатом запроса по метке. После этого репозиторий Python-агента получает завершающий тег и переводится в архив (только чтение): установленный агент продолжит работать, но исправлений больше не будет.
 
-**Алиас `codelab serve`.** Чтобы скрипты с `codelab serve --stdio` не сломались сразу, `codelab` получит переходный алиас на `codelab-agent serve` с предупреждением в stderr. Он будет в первой `stable`-версии и снимется первой minor-версией после того, как выполнены условия удаления (не patch-версией). Подробности — [ниже](#профили-и-скрипты-с-codelab-serve).
+**Алиас `codelab serve`.** Чтобы скрипты с `codelab serve --stdio` не сломались сразу, у `codelab` есть переходный алиас на `codelab-agent serve` с предупреждением в stderr. Он входит в первую `stable`-версию и снимется первой minor-версией после того, как выполнены условия удаления (не patch-версией). Подробности — [ниже](#профили-и-скрипты-с-codelab-serve).
 
 ## Перенос настроек из `codelab.toml`
 
@@ -69,7 +69,18 @@ warning: /work/demo/codelab.toml: codelab.toml is not used by the Dart agent. Mo
 
 ## Профили и скрипты с `codelab serve`
 
-Профили подключения и скрипты, где агент запускался командой `codelab serve --stdio`, не переписываются автоматически. Теперь у `codelab` такой команды нет: `codelab serve --stdio` завершается с кодом `64` и ошибкой `Unknown flag --stdio`. Профиль со старой командой при подключении покажет ошибку запуска агента.
+Профили подключения и скрипты, где агент запускался командой `codelab serve --stdio`, не переписываются автоматически. Чтобы они не сломались сразу, `codelab serve …` работает как переходный алиас на `codelab-agent serve …`:
+
+- `codelab` печатает в stderr одну строку-предупреждение (`codelab: "codelab serve" is deprecated and will be removed in a future release; use "codelab-agent serve" instead.`) и запускает `codelab-agent` с теми же аргументами, stdin, stdout и stderr. Кадры ACP идут как при прямом запуске, код выхода — код `codelab-agent`.
+- Бинарь ищется сначала рядом с `codelab`, затем в `PATH` (пустые и относительные записи, в том числе `.`, пропускаются).
+- Всё после `serve` принадлежит `codelab-agent`: `codelab serve --help` и `codelab serve` без флагов покажут его справку и код `64`. Флаги `codelab` (`-a`, `-p` и т. д.) к алиасу не применяются. Слово `serve` первым сообщением REPL — `codelab -- serve`.
+- Если `codelab-agent` не найден (например, установлен только `codelab`), будет предупреждение, строка `codelab: codelab-agent was not found next to codelab or in PATH; …` и код `1`.
+- Алиас временный: он входит в первую `stable`-версию и снимается первой minor-версией после выполнения [условий удаления](#поддержка-python-агента), но не patch-версией. Версия снятия заранее не называется.
+- Сигналы `SIGTERM` и `SIGHUP` (закрытие терминала) `codelab` передаёт агенту и выходит с его кодом; Ctrl+C агент получает от терминала сам. `SIGKILL` процессу `codelab` перехватить нельзя: агент `--stdio` завершится, когда клиент закроет канал, а агент `--ws` продолжит работать — останавливайте его `SIGTERM` или `SIGHUP` по его собственному pid. На Windows отслеживается только Ctrl+C.
+- `codelab serve` нельзя вложить в себя. Если `codelab-agent` — обёртка вокруг `codelab serve` или `codelab serve` вызван изнутри сессии агента, запущенного через алиас (из команды или MCP-сервера), он завершится с кодом `1` и сообщением `codelab: "codelab serve" cannot run itself; …`. Запускайте `codelab-agent serve` напрямую.
+- Если в системе есть и Python-агент, и новый `codelab`, команду выполнит тот, что первым в `PATH`; проверьте `which codelab`.
+
+Алиаса `codelab connect` нет: `codelab connect` открывает REPL с первым сообщением `connect`.
 
 Что сделать:
 
@@ -81,7 +92,7 @@ warning: /work/demo/codelab.toml: codelab.toml is not used by the Dart agent. Mo
   ```
 
   Если `codelab-agent` лежит в `PATH`, путь можно не указывать. Но приложение, запущенное не из терминала, `PATH` вашей оболочки не видит — для него задавайте абсолютный путь.
-- **Скрипты и конфигурации редакторов.** Везде, где было `codelab serve --stdio`, пишите `codelab-agent serve --stdio`. Про WebSocket — ниже.
+- **Скрипты и конфигурации редакторов.** Пока алиас работает, `codelab serve --stdio` запускает агента, но лучше сразу писать `codelab-agent serve --stdio`: алиас будет снят. Про WebSocket — ниже.
 - **Или обойдитесь без профиля.** Если вам достаточно агента внутри клиента, используйте профиль по умолчанию: `codelab` без `--agent`, в приложении — профиль «Embedded agent».
 
 Сборка `codelab-agent` из исходников: `fvm dart run melos run build:agent` (результат — `build/bin/codelab-agent`, см. [запуск из исходников](run-from-source.md)).
@@ -99,7 +110,7 @@ warning: /work/demo/codelab.toml: codelab.toml is not used by the Dart agent. Mo
 
 Пример: `codelab-agent serve --ws --host 127.0.0.1 --port 8765`, токен — в `CODELAB_AGENT_TOKEN` окружения.
 
-Переходный алиас `codelab serve` → `codelab-agent serve` появится в следующих версиях `codelab` и будет снят вместе с удалением Python-агента ([условия](#поддержка-python-агента)); пока что команду нужно заменить.
+Переходный алиас `codelab serve` → `codelab-agent serve` действует до удаления Python-агента ([условия](#поддержка-python-агента)); команду стоит заменить заранее.
 
 ## Сессии Python-агента не переносятся
 

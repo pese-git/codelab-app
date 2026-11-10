@@ -54,41 +54,42 @@
 
 Модульные тесты — `apps/codelab_cli/test/` без процессов, e2e — `apps/codelab_cli/test/e2e/serve_alias_test.dart`. Имена e2e — `cli/serve-alias-*`. Это не доказательства строк матрицы: `parity_evidence_test` их не ищет.
 
-- [ ] 1.1 `[client]` Тест: `parseCliArgs` (D8; «Сообщение serve в REPL», «serve без флагов»):
+- [x] 1.1 `[client]` Тест: `parseCliArgs` (D8; «Сообщение serve в REPL», «serve без флагов»):
   - `['serve', '--stdio', '--port', '1']` → `CliCommand.serveAlias`, `positional == ['--stdio', '--port', '1']`;
   - `['serve']` → `serveAlias`, пустой `positional`;
   - `['serve', '--help']` → `serveAlias`, а не справка `codelab`;
   - `['--', 'serve']` и `['-v', 'serve']` → `repl` с первым сообщением `serve`.
-- [ ] 1.2 `[client]` Реализация: `CliCommand.serveAlias` и проверка `args.firstOrNull == 'serve'` до `ArgParser` в `cli_args.dart`.
-- [ ] 1.3 `[client]` Тест: `locateAgentExecutable` (D7; «Бинарь рядом важнее PATH», «codelab-agent не найден», «Алиас не вызывает сам себя»):
+- [x] 1.2 `[client]` Реализация: `CliCommand.serveAlias` и проверка `args.firstOrNull == 'serve'` до `ArgParser` в `cli_args.dart`.
+- [x] 1.3 `[client]` Тест: `locateAgentExecutable` (D7; «Бинарь рядом важнее PATH», «codelab-agent не найден», «Алиас не вызывает сам себя»):
   - бинарь рядом важнее `PATH`;
   - порядок записей `PATH`;
   - пустая запись и `.` пропущены;
   - `codelab-agent.exe` на Windows;
   - кандидат с каноническим путём `codelab` отброшен;
   - ничего нет → `null`.
-- [ ] 1.4 `[client]` Реализация: `locateAgentExecutable` в `lib/src/serve_alias.dart` — чистая функция с подстановкой проверки файла и канонизации.
-- [ ] 1.5 `[client]` Тест: перевод кода выхода (`0`, `64`, `143` — как есть; `-15` → `143`, `-2` → `130`) и тексты предупреждения и «не найден» (D9).
-- [ ] 1.6 `[client]` Реализация: `runServeAlias` в `serve_alias.dart`:
+- [x] 1.4 `[client]` Реализация: `locateAgentExecutable` в `lib/src/serve_alias.dart` — чистая функция с подстановкой проверки файла и канонизации.
+- [x] 1.5 `[client]` Тест: перевод кода выхода (`0`, `64`, `143` — как есть; `-15` → `143`, `-2` → `130`) и тексты предупреждения и «не найден» (D9).
+- [x] 1.6 `[client]` Реализация: `runServeAlias` в `serve_alias.dart`:
   - предупреждение и `flush`, затем `Process.start(…, mode: ProcessStartMode.inheritStdio)`;
   - сигналы через `SignalSeam`: `SIGTERM` пересылается, ранний `SIGTERM` запоминается, `SIGINT` перехватывается без пересылки (D10);
   - `exitCode` → код по 1.5;
   - сбой `Process.start` → `1` и `ProcessException.message` без аргументов.
 
   Ветка `CliCommand.serveAlias` в `run.dart` до открытия домашнего каталога и профилей.
-- [ ] 1.7 `[client]` E2E (красные до 1.6). CLI из kernel, `PATH` — временный каталог с обёрткой `codelab-agent`, которая запускает kernel `apps/codelab_agent/bin/codelab_agent.dart` абсолютным путём `dart`. На Windows пропуск с причиной.
+- [x] 1.7 `[client]` E2E (красные до 1.6). CLI из kernel, `PATH` — временный каталог с обёрткой `codelab-agent`, которая запускает kernel `apps/codelab_agent/bin/codelab_agent.dart` абсолютным путём `dart`. На Windows пропуск с причиной.
   - `cli/serve-alias-stdio` — `serve --stdio --llm-script <hello>`: `initialize` → ответ `protocolVersion: 1` в stdout, предупреждение — первая строка stderr, EOF → `0` («Агент по stdio через алиас»);
   - `cli/serve-alias-args` — `serve --stdio --bogus` → `64`, справка `codelab-agent` в stderr, stdout пуст («Аргументы передаются без изменений»);
   - `cli/serve-alias-no-flags` — `serve` → `64`, REPL не открыт («serve без флагов»);
   - `cli/serve-alias-missing` — `PATH` без `codelab-agent`, но с `.` и исполняемым `codelab-agent` в рабочей папке → `1`, текст «not found», файл-ловушка не запущен («codelab-agent не найден»);
   - `cli/serve-alias-sigterm` — `SIGTERM` процессу `codelab` во время работы агента → `143`, процесс агента завершён до выхода `codelab` («SIGTERM через алиас»).
-- [ ] 1.8 `[client]` Тест: `codelab --help` не содержит строки `codelab serve` (требование, последний абзац; слово `server` в справке `mcp` есть, поэтому проверяется фраза, а не подстрока `serve`).
-- [ ] 1.9 `[client]` Тест `test/e2e/support/e2e_agent_test.dart`, группа `python` (D12): фальшивый `codelab`, который на `serve --help` печатает справку `codelab-agent` в stderr и выходит `64`, — причина пропуска `Python agent (codelab serve) is not installed`. Код помощника не меняется; если тест красный, правило обнаружения сужается в этой задаче.
-- [ ] 1.10 `[client]` Документы CLI:
+- [x] 1.8 `[client]` Тест: `codelab --help` не содержит строки `codelab serve` (требование, последний абзац; слово `server` в справке `mcp` есть, поэтому проверяется фраза, а не подстрока `serve`).
+- [x] 1.9 `[client]` Тест `test/e2e/support/e2e_agent_test.dart`, группа `python` (D12): фальшивый `codelab`, который на `serve --help` печатает справку `codelab-agent` в stderr и выходит `64`, — причина пропуска `Python agent (codelab serve) is not installed`. Код помощника не меняется; если тест красный, правило обнаружения сужается в этой задаче.
+- [x] 1.10 `[client]` Документы CLI:
   - `apps/codelab_cli/AGENTS.md` §2 — алиас: распознавание до разбора, `serve_alias.dart` в списке мест `dart:io`, сигналы (D8, D10);
   - корневой `AGENTS.md` §5, строка `apps/codelab_cli` — «переходный алиас `codelab serve`»;
   - `docs/user/migrating-from-python-agent.md`, раздел «Профили и скрипты с `codelab serve`»: вместо `Unknown flag --stdio` и «алиас появится позже» — алиас, предупреждение, срок (D11), `which codelab` при двух `codelab`, «нет `codelab-agent`» → код `1`.
 - [ ] 1.11 `[client]` Ручная проверка: `build/bin/codelab serve --stdio` как внешний агент Zed по чек-листу Zed, шаги 1 и 3 (`docs/user/zed.md`). Предупреждение видно в «ACP logs» Zed, кадры — как у `codelab-agent serve --stdio`. Итог — в описании pull request.
+- [x] 1.13 `[client]` По двойному ревью (решения пользователя Q9–Q12, 2026-11-10; D7, D9, D10; сценарии «SIGHUP через алиас», «Повторный вход в алиас», «Ранний SIGTERM и сбой запуска»): тест ветки сбоя запуска (без аргументов в stderr), `SIGHUP`, защита от рекурсии, кавычки `PATH` на Windows, швы `isExecutableFile`/`canonicalize`.
 - [ ] 1.12 `[client]` Архивирование change — только по просьбе пользователя, после итерации 1.
 
 ## E. Внешние шаги (пользователь — владелец `pese-git/codelab-agent`; Q8)
