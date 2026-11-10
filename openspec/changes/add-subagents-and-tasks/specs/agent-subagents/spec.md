@@ -97,13 +97,17 @@ Usage потомка SHALL входить в usage прямого родител
 - **THEN** у хэндла ровно одно терминальное состояние, вызов `agent` получает ровно один результат, лишних событий ребёнка после него в потоке родителя нет
 
 ### Requirement: Отчёт ребёнка
-Отчёт SHALL строиться по §17.3.5 без ремонта по схеме: текст последнего ответа ребёнка; статус по `TurnEnded.reason`; усечение до `report_max_bytes` с пометкой.
+Отчёт SHALL строиться по §17.3.5 без ремонта по схеме: текст последнего ответа ребёнка; статус по `TurnEnded.reason`; усечение до `report_max_bytes` с пометкой. `SubagentReport.toolCalls` и `usage` SHALL включать вызовы и usage всех потомков ребёнка (транзитивно), `duration` — время от получения слота до терминального состояния; у ребёнка, отменённого в очереди, — нули (design.md change `add-subagents-and-tasks`, D24).
 
 Модель родителя SHALL получать один блок `<subagent-report id agent status steps tool_calls …>` внутри ограды `untrusted-content source="agent"`. Вхождения `</subagent-report` в тексте отчёта экранируются (SUB-7). Атрибуты и тела исходов — по таблице §17.3.5.
 
 #### Scenario: Обёртка отчёта
 - **WHEN** ребёнок `explore` завершается текстом с подстрокой `</subagent-report>`
 - **THEN** результат `agent` — одна обёртка с `status="completed"` внутри ограды, подстрока экранирована (`subagent_report_wrapper_test.dart`)
+
+#### Scenario: Итог с потомками
+- **WHEN** ребёнок сделал 2 вызова и запустил внука, который сделал 3 вызова
+- **THEN** `SubagentReport.toolCalls` ребёнка равен 6 (2 вызова, 1 вызов `agent` и 3 вызова внука), его `usage` — сумма usage ребёнка и внука
 
 #### Scenario: Бюджет ребёнка
 - **WHEN** `max_steps: 2`, а ребёнку нужно три шага
@@ -114,7 +118,7 @@ Usage потомка SHALL входить в usage прямого родител
 
 В журнал прямого родителя SHALL писаться запись `subagent`:
 - `status: running` — при получении слота;
-- итоговая запись с `status`, `failure`, `report`, `usage` — `durable`, до `ToolCallFinished(agent)` (SUB-9, SUB-10).
+- итоговая запись с `status`, `failure`, `report`, `usage`, `toolCalls`, `durationMs` — `durable`, до `ToolCallFinished(agent)` (SUB-9, SUB-10).
 
 Дочерние журналы НЕ SHALL попадать в `session/list` и `index.json`. Lease корневой сессии SHALL покрывать журналы всего дерева.
 

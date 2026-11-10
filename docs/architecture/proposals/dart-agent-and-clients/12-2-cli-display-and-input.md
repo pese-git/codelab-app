@@ -638,7 +638,7 @@ REPL): конечный автомат над потоком байт stdin.
 | `line_start` / `line_end` / `kill_line` / `kill_word` | Ctrl+A / Ctrl+E / Ctrl+K / Ctrl+W | композер | REPL, TUI |
 | ответы одобрения | `y`, `a`, `n`, `N`, `?` (§9.11) | одобрение | REPL, TUI |
 | `steer` | Ctrl+Enter (после MVP, C-03) | композер, идёт ход | REPL, TUI |
-| `toggle_tasks` | Ctrl+T (после MVP, U-21) | любая; вид `tasks` — доска субагентов и фоновых задач при capability `subagentBoard` или `jobBoard` (§12.3, A15); без неё — подсказка `/tasks` | TUI |
+| `toggle_tasks` | Ctrl+T (C-20, change `add-subagents-and-tasks`, D26) | любая; прячет и показывает блок списка задач над композером (заголовок `Tasks <c>/<n> done · ctrl+t hide`); доска субагентов и фоновых задач (U-21, §12.3, A15) открывается только командой `/tasks`, без сочетания клавиш | TUI |
 | `session_switcher` | Ctrl+G (после MVP, U-37, §12.6.13) | любая | TUI |
 | `session_1` … `session_9` | Alt+1 … Alt+9 (после MVP, U-37) | любая | TUI |
 | `session_next` / `session_prev` | Ctrl+PgDn / Ctrl+PgUp (после MVP, U-37) | любая | TUI |
