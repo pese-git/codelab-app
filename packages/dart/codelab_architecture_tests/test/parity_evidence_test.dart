@@ -31,24 +31,18 @@ import 'support/parity/reports.dart';
 import 'support/parity/verdict.dart';
 import 'support/repo_root.dart';
 
-/// Известные пробелы существования: пары «строка, доказательство» с номером
-/// задачи итерации 2 (D4, «Оценка масштаба 9.2»).
+/// Известные пробелы существования: пары «строка, доказательство» (D4).
 ///
-/// Храповик: список может только уменьшаться. Запись, чьё доказательство уже
-/// существует, роняет группу как устаревшую; новый пробел вне списка роняет
-/// её же. Задача 2.11 удаляет константу вместе с проверкой устаревания.
+/// Остались только фикстуры встроенных slash-команд: их вместе с реализацией
+/// агента вводит отдельный change `add-agent-builtin-slash-commands`
+/// (решение Q9). Храповик: список может только уменьшаться. Запись, чьё
+/// доказательство уже существует, роняет группу как устаревшую; новый пробел
+/// вне списка роняет её же. Запись удаляется в том change, который добавляет
+/// фикстуру; пустой список и проверку устаревания тогда убирает он же.
 const knownGaps = <KnownGap>[
-  KnownGap('K-02', 'acp/slash-compact', '2.1'),
-  KnownGap('R-08', 'acp/slash-help', '2.3'),
-  KnownGap('R-08', 'acp/slash-mode-plan', '2.3'),
-  KnownGap('R-08', 'acp/mcp-prompt-command', '2.3'),
-  KnownGap('R-14', 'core/litellm-proxy-base-url', '2.5'),
-  KnownGap('C-01', 'core/pairing-survives-cancel', '2.7'),
-  KnownGap('P-01', 'core/no-tool-bypasses-gate', '2.7'),
-  KnownGap('P-16', 'core/mcp-tool-cannot-declare-trusted', '2.7'),
-  KnownGap('E-05', 'core/mcp-tool-name-sanitized', '2.7'),
-  KnownGap('R-15', 'core/agent-definition-markdown-frontmatter', '2.7'),
-  KnownGap('R-16', 'core/config-legacy-found-warning', '2.7'),
+  KnownGap('K-02', 'acp/slash-compact', 'add-agent-builtin-slash-commands'),
+  KnownGap('R-08', 'acp/slash-help', 'add-agent-builtin-slash-commands'),
+  KnownGap('R-08', 'acp/slash-mode-plan', 'add-agent-builtin-slash-commands'),
 ];
 
 void main() {

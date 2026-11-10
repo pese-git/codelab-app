@@ -64,7 +64,13 @@ void main() {
       return _verdicts(
         '`app:f_test.dart`',
         appResultsDir: app.path,
-        allowed: const [AllowedSkip('[skipped: the embedded agent', 'spec')],
+        allowed: [
+          AllowedSkip(
+            RegExp(r'.* \[skipped: the embedded agent runs files locally\]'),
+            'spec',
+            onName: true,
+          ),
+        ],
       ).single.status;
     }
 
@@ -361,20 +367,59 @@ void main() {
   });
 
   group('allowedSkips настоящего перечня', () {
-    bool allowed(String text) =>
-        allowedSkips.any((a) => a.reason.allMatches(text).isNotEmpty);
+    // Точные строки причин из кода тестов и драйверов: перечень
+    // сверяется полным совпадением, подстрока чужой причины не проходит.
+    bool allowed(String text, {bool name = false}) =>
+        allowedSkips.any((a) => a.onName == name && a.matches(text));
 
-    test('встроенного агента нельзя хранить в profiles.json', () {
-      expect(
-        allowed(
-          'the embedded agent is built in and cannot be stored in profiles.json',
-        ),
-        isTrue,
-      );
+    test('причины из кода драйверов и тестов совпадают', () {
+      for (final reason in const [
+        // agent_connector.dart: setup.mcp.
+        'setup.mcp cannot be passed to the agent process',
+        // agent_connector.dart: встроенный агент.
+        'embedded: setup.config cannot be played by the embedded agent',
+        'embedded: setup.sessions, setup.web cannot be played by the '
+            'embedded agent',
+        'embedded: setup.profile "x" cannot be played by the embedded agent',
+        // agent_conformance.dart: транспортные фикстуры.
+        'acp/ws-auth-bearer-required has setup.transport: the transport '
+            'driver plays it against the binary process',
+        'acp/stdio-framing-large-line has setup.transport: the transport '
+            'driver of codelab-agent plays it against the binary process',
+        // agent_conformance.dart, client_conformance.dart: роли.
+        'acp/tool-kind-unknown-tolerated has roles [client] without "agent"',
+        'acp/session-list-cwd-filter has roles [agent] without "client"',
+        // cli e2e_agent.dart: встроенный агент в profiles.json.
+        'the embedded agent is built in and cannot be stored in profiles.json',
+      ]) {
+        expect(allowed(reason), isTrue, reason: reason);
+      }
     });
 
-    test('произвольная причина не разрешена', () {
-      expect(allowed('flaky on CI'), isFalse);
+    test('заметки app в имени теста совпадают (пропуск без причины)', () {
+      for (final name in const [
+        'fs flow [skipped: the embedded agent runs files and commands '
+            'locally, not through ACP fs/* and terminal/*]',
+        'stdio flow [skipped: the embedded agent starts no stdio child '
+            'process]',
+      ]) {
+        expect(allowed(name, name: true), isTrue, reason: name);
+        expect(allowed(name), isFalse, reason: 'не как причина: $name');
+      }
+    });
+
+    test('произвольная и чужая причина не разрешены', () {
+      for (final reason in const [
+        'flaky on CI',
+        'TODO setup.mcp cannot be passed to the agent process',
+        'setup.mcp cannot be passed to the agent process, retry later',
+        'x has setup.transport: the transport driver plays it; also broken\n'
+            'acp/y has roles [client] without "agent"',
+        'the embedded agent is built in and cannot be stored in profiles.json'
+            ' (todo)',
+      ]) {
+        expect(allowed(reason), isFalse, reason: reason);
+      }
     });
   });
 

@@ -921,10 +921,9 @@ void main() {
             'app/embedded/fs_flow_test.dart.json',
             jsonReport(const [
               T(
-                'fs',
-                skip:
-                    '[skipped: the embedded agent runs files and '
-                    'commands locally]',
+                'fs flow [skipped: the embedded agent runs files and '
+                'commands locally, not through ACP fs/* and terminal/*]',
+                skip: '',
               ),
             ]),
           )
@@ -977,9 +976,9 @@ void main() {
       final v = _single(
         _verdicts(
           [_row('R-17', '`$path`')],
-          allowed: const [
+          allowed: [
             AllowedSkip(
-              'has roles [client] without "agent"',
+              RegExp(r'acp/.+ has roles \[client\] without "agent"'),
               'acp-golden-fixtures «Агентский драйвер фикстур»',
             ),
           ],
@@ -998,9 +997,9 @@ void main() {
       final v = _single(
         _verdicts(
           [_row('R-17', '`$path`')],
-          allowed: const [
+          allowed: [
             AllowedSkip(
-              'has roles [client] without "agent"',
+              RegExp(r'acp/.+ has roles \[client\] without "agent"'),
               'acp-golden-fixtures «Агентский драйвер фикстур»',
             ),
           ],
@@ -1090,6 +1089,173 @@ void main() {
       expect(
         _single(
           _verdicts([_row('R-17', '`$path`')], allowed: real.allowedSkips),
+        ).status,
+        EvidenceStatus.skipped,
+      );
+    });
+
+    test('все тесты файла пропущены по перечню — not-run: ни одного pass '
+        '(D5, Q8)', () {
+      conformance(const [
+        T('acp/x', skip: roleSkip, suite: suite),
+        T(
+          'acp/y',
+          skip: 'acp/y has roles [client] without "agent"',
+          suite: suite,
+        ),
+      ]);
+
+      expect(
+        _single(
+          _verdicts([_row('R-17', '`$path`')], allowed: real.allowedSkips),
+        ).status,
+        EvidenceStatus.notRun,
+      );
+    });
+
+    test('пропуск по перечню в одном файле не влияет на другой путь той же '
+        'строки', () {
+      const other = 'packages/dart/codelab_agent_acp/test/other_test.dart';
+      _repo.put(other, 'void main() {}');
+      conformance(const [
+        T('acp/x', skip: roleSkip, suite: suite),
+        T('ok', suite: suite),
+        T('o', skip: 'unknown', suite: '/work/$other'),
+      ]);
+
+      final v = _verdicts([
+        _row('R-17', '`$path`, `$other`'),
+      ], allowed: real.allowedSkips);
+
+      expect(
+        {for (final e in v) e.evidence: e.status},
+        {path: EvidenceStatus.pass, other: EvidenceStatus.skipped},
+      );
+    });
+
+    test('чужая причина, содержащая фразу из перечня, — skipped: шаблоны '
+        'якорены по формату причины', () {
+      conformance(const [
+        T('acp/x', skip: 'TODO $roleSkip, fix later', suite: suite),
+      ]);
+
+      expect(
+        _single(
+          _verdicts([_row('R-17', '`$path`')], allowed: real.allowedSkips),
+        ).status,
+        EvidenceStatus.skipped,
+      );
+    });
+
+    test('чужая причина с фразой setup.mcp в дополнительном источнике — '
+        'skipped', () {
+      _fixture('x');
+      _results
+        ..put(
+          'dart/codelab_agent_acp.conformance.json',
+          jsonReport(const [T('acp/x')]),
+        )
+        ..put(
+          'scenario-embedded.xml',
+          junitReport(const [
+            J('acp/x', skipped: 'flaky: $_mcpSkip, retry later'),
+          ]),
+        );
+
+      expect(
+        _single(
+          _verdicts([_row('R-17', '`acp/x`')], allowed: real.allowedSkips),
+        ).status,
+        EvidenceStatus.skipped,
+      );
+    });
+
+    test('пропуск без причины в доказательстве-пути с разрешённой фразой в '
+        'имени — skipped: запасной признак по имени только для app и cli', () {
+      conformance(const [
+        T('ok', suite: suite),
+        T(
+          'flow [skipped: the embedded agent starts no stdio child process]',
+          skip: '',
+          suite: suite,
+        ),
+      ]);
+
+      expect(
+        _single(
+          _verdicts([_row('R-17', '`$path`')], allowed: real.allowedSkips),
+        ).status,
+        EvidenceStatus.skipped,
+      );
+    });
+
+    test('причина, равная заметке onName, не разрешена: заметки сверяются '
+        'только с именем теста без причины', () {
+      const note =
+          'fs flow [skipped: the embedded agent starts no stdio child '
+          'process]';
+      conformance(const [
+        T('ok', suite: suite),
+        T('x', skip: note, suite: suite),
+      ]);
+
+      expect(
+        _single(
+          _verdicts([_row('R-17', '`$path`')], allowed: real.allowedSkips),
+        ).status,
+        EvidenceStatus.skipped,
+      );
+    });
+
+    test('причина-заметка в дополнительном источнике app — skipped', () {
+      _repo.put('apps/codelab_desktop/integration_test/f_test.dart');
+      final app = Tree('parity_app_')
+        ..put('app/dart-agent/f_test.dart.json', jsonReport(const [T('flow')]))
+        ..put(
+          'app/embedded/f_test.dart.json',
+          jsonReport(const [
+            T(
+              'flow',
+              skip:
+                  'flow [skipped: the embedded agent starts no stdio child '
+                  'process]',
+            ),
+          ]),
+        );
+      addTearDown(app.dispose);
+
+      expect(
+        _single(
+          _verdicts(
+            [_row('T-01', '`app:f_test.dart`')],
+            appResultsDir: app.path,
+            allowed: real.allowedSkips,
+          ),
+        ).status,
+        EvidenceStatus.skipped,
+      );
+    });
+
+    test('пропуск без причины: имя, равное обычному (не onName) шаблону, не '
+        'разрешено', () {
+      _repo.put('apps/codelab_desktop/integration_test/f_test.dart');
+      final app = Tree('parity_app_')
+        ..put('app/dart-agent/f_test.dart.json', jsonReport(const [T('flow')]))
+        ..put(
+          'app/embedded/f_test.dart.json',
+          jsonReport(const [
+            T('setup.mcp cannot be passed to the agent process', skip: ''),
+          ]),
+        );
+      addTearDown(app.dispose);
+
+      expect(
+        _single(
+          _verdicts(
+            [_row('T-01', '`app:f_test.dart`')],
+            appResultsDir: app.path,
+            allowed: real.allowedSkips,
+          ),
         ).status,
         EvidenceStatus.skipped,
       );
