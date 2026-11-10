@@ -1,7 +1,7 @@
 # agent-slash-commands Specification
 
 ## Purpose
-Шаблоны промптов и встроенные команды Dart-агента. Шаблоны — `*.md` из `$CODELAB_HOME/prompts/` и, только для доверенного проекта, из `<cwd>/.codelab/prompts/`: они публикуются клиенту через `available_commands_update`, а `/name args` разворачивается одним проходом подстановки `$ARGUMENTS` и `$1..$9`. Встроенные команды `config` (`reload | check`) и `mcp` (`list | reload [<id>] | enable <id> | disable <id>`) идут в списке первыми и исполняются без модели и без записи в журнал; `config` объявляется только при источнике конфигурации и `configCommand: true` (у `serve --ws` его нет), `mcp` — только при capability `mcp`. Список команд сессии строится при открытии и перезагрузкой конфигурации не меняется. Зарезервированные имена не переопределяются, `/x` без шаблона и без встроенной команды уходит модели как есть; журнал сессии хранит исходную команду шаблона (`MessageRecord.command`) для реплея и заголовка. MCP prompts — вне этой спецификации. Решения — `design.md` архивных change `add-agent-project-files` (D7–D9) и `add-config-writer-and-reload` (D9, D12), `agent-core-architecture` §17.2, §17.5.6, §17.5.7.
+Шаблоны промптов и встроенные команды Dart-агента. Шаблоны — `*.md` из `$CODELAB_HOME/prompts/` и, только для доверенного проекта, из `<cwd>/.codelab/prompts/`: они публикуются клиенту через `available_commands_update`, а `/name args` разворачивается одним проходом подстановки `$ARGUMENTS` и `$1..$9`. Встроенные команды MVP идут в списке первыми, в порядке `compact` (только при capability `compaction`), `mode`, `model`, `status`, `config` (только при источнике конфигурации и `configCommand: true`, у `serve --ws` её нет), `mcp` (только при capability `mcp`), `help`, и исполняются без модели: `/compact [focus]` сжимает историю, `/mode` и `/model` меняют режим и модель, `/status` и `/help` показывают состояние и список команд. Команды, меняющие состояние, отвечают по факту применения; при `session/cancel` ответ на проводе — `cancelled`. Список команд сессии строится при открытии и перезагрузкой конфигурации не меняется. Зарезервированные имена не переопределяются. Слово после `/` без встроенной команды и шаблона — неизвестная команда: агент отвечает `Unknown command: /x. Run /help to list commands.`, модель не вызывается; необъявленные `/config` и `/mcp` — тоже неизвестные команды. Журнал сессии хранит исходную команду шаблона (`MessageRecord.command`) для реплея и заголовка. MCP prompts как команды — после MVP (строка E-24 матрицы целей). Решения — `design.md` архивных change `add-agent-project-files` (D7–D9), `add-config-writer-and-reload` (D9, D12) и `2026-11-10-add-agent-builtin-slash-commands` (D1–D14, Q1–Q11), `agent-core-architecture` §13.4, §13.6, §17.2, §17.5.6, §17.5.7.
 ## Requirements
 ### Requirement: Каталоги шаблонов команд и доверие
 Шаблоны команд SHALL читаться из `*.md` первого уровня, без рекурсии:
@@ -39,22 +39,26 @@
 - **THEN** команды `help` из шаблона нет, есть диагностика `reserved_name`, промпт `/help` не разворачивается этим файлом
 
 ### Requirement: Список команд сессии
-`AgentSession.commands` SHALL возвращать сначала встроенные команды сессии (требование «Встроенные команды config и mcp») в порядке §13.4, затем команды шаблонов `SlashCommand {name, description, inputHint, source: template}` в байтовом порядке имён. `inputHint` шаблона SHALL быть `argument-hint`, иначе `"arguments"`, если тело содержит `$ARGUMENTS` или `$1`…`$9`, иначе `null`. Список строится при открытии сессии и НЕ SHALL меняться до её закрытия, в том числе при перезагрузке конфигурации (design.md change `add-config-writer-and-reload`, D9). Инструменты модели в список НЕ SHALL попадать (R-07).
+`AgentSession.commands` SHALL возвращать сначала встроенные команды сессии (требования «Встроенные команды MVP» и «Встроенные команды config и mcp») в порядке §13.4 — `compact`, `mode`, `model`, `status`, `config`, `mcp`, `help`; отсутствующая команда пропускается, порядок остальных не меняется (design.md change `add-agent-builtin-slash-commands`, D2), — затем команды шаблонов `SlashCommand {name, description, inputHint, source: template}` в байтовом порядке имён. `inputHint` шаблона SHALL быть `argument-hint`, иначе `"arguments"`, если тело содержит `$ARGUMENTS` или `$1`…`$9`, иначе `null`. Список строится при открытии сессии и НЕ SHALL меняться до её закрытия, в том числе при перезагрузке конфигурации (design.md change `add-config-writer-and-reload`, D9). Инструменты модели в список НЕ SHALL попадать (R-07).
 
 #### Scenario: Подсказка ввода
 - **WHEN** у `review.md` нет `argument-hint`, а тело содержит `$1`, у `test.md` нет ни подсказки, ни плейсхолдеров
 - **THEN** у `review` `inputHint == "arguments"`, у `test` — `null`
 
 #### Scenario: Встроенные команды идут первыми
-- **WHEN** ядро собрано с `ConfigSource` и capability `mcp`, а у сессии есть шаблон `review`
-- **THEN** список — `config`, `mcp`, `review`
+- **WHEN** ядро собрано с `ConfigSource`, capability `compaction` и capability `mcp`, а у сессии есть шаблон `review`
+- **THEN** список — `compact`, `mode`, `model`, `status`, `config`, `mcp`, `help`, `review`
+
+#### Scenario: Без capability compaction и без конфига
+- **WHEN** ядро собрано без `ConfigSource`, с выключенными capability `compaction` и `mcp`, шаблонов нет
+- **THEN** список — `mode`, `model`, `status`, `help`
 
 #### Scenario: Перезагрузка не меняет список
 - **WHEN** после открытия сессии перезагрузка добавляет проект в `trusted_projects`, и у проекта есть `.codelab/prompts/fix.md`
 - **THEN** список живой сессии не изменился; новая сессия того же `cwd` тоже без `fix` до перезапуска (доверие закреплено, R0-1); `/config reload` отвечает строкой `Restart required: trusted_projects`
 
 ### Requirement: Разворачивание команды
-`AgentSession.prompt` SHALL разбирать только первый текстовый блок промпта. Если блок начинается с `/`, а слово до первого пробельного символа соответствует `^[A-Za-z0-9][A-Za-z0-9:_-]*$` и совпадает с именем шаблона, тело шаблона с подставленными аргументами SHALL заменить этот блок; остальные блоки идут после него в исходном порядке. Иначе промпт SHALL уходить модели без изменений.
+`AgentSession.prompt` SHALL разбирать только первый текстовый блок промпта. Если блок начинается с `/`, а слово до первого пробельного символа соответствует `^[A-Za-z0-9][A-Za-z0-9:_-]*$` и совпадает с именем шаблона, тело шаблона с подставленными аргументами SHALL заменить этот блок; остальные блоки идут после него в исходном порядке. Встроенная команда с тем же именем проверяется раньше шаблона, но шаблон с именем встроенной команды не загружается (требование «Резервные имена команд»). Слово, которое соответствует выражению, но не является ни встроенной командой, ни шаблоном, — неизвестная команда (требование «Неизвестная команда»). Если блок не начинается с `/` или слово не соответствует выражению, промпт SHALL уходить модели без изменений.
 
 Подстановка SHALL выполняться одним проходом слева направо:
 - `$ARGUMENTS` → остаток строки как введён (`raw`: после ведущих пробелов, без завершающего `\r?\n`);
@@ -82,8 +86,12 @@
 - **THEN** модель получает `[lib|lib]`, без `\r` и `\n`
 
 #### Scenario: Не команда
-- **WHEN** промпт — `/usr/bin/foo is broken` или `/nope x`, а шаблонов `usr` и `nope` нет
+- **WHEN** промпт — `/usr/bin/foo is broken`
 - **THEN** модель получает текст без изменений
+
+#### Scenario: Слово команды без шаблона
+- **WHEN** промпт — `/nope x`, а шаблона `nope` нет
+- **THEN** модель не вызвана, ответ — `Unknown command: /nope. Run /help to list commands.` (требование «Неизвестная команда»)
 
 #### Scenario: Наблюдаемость
 - **WHEN** разворачивается `/review secret-token-123`
@@ -108,7 +116,7 @@
 - `config` — `{"name":"config","description":"Reload or check the agent config","input":{"hint":"reload | check"}}`, только если ядру передан `ConfigSource` и `buildAgentCore` вызван с `configCommand: true` (по умолчанию). Хост `serve --ws` SHALL передавать `configCommand: false` (R0-3): ответ раскрывал бы пути и тексты проблем конфига машины агента клиенту по сети;
 - `mcp` — `{"name":"mcp","description":"List, reload, enable or disable MCP servers","input":{"hint":"list | reload [<id>] | enable <id> | disable <id>"}}`, только при включённой capability `mcp`.
 
-Необъявленная команда (`/config` без `ConfigSource` или при `configCommand: false`) и `/x` для любого другого `x` без шаблона SHALL уходить модели без изменений, как прежде.
+Необъявленная команда (`/config` без `ConfigSource` или при `configCommand: false`, `/mcp` без capability `mcp`) SHALL обрабатываться как неизвестная: ответ `Unknown command: /<name>. Run /help to list commands.` без модели (требование «Неизвестная команда»; design.md change `add-agent-builtin-slash-commands`, D4). Ответ не раскрывает ни путей, ни текстов проблем конфига, поэтому правило R0-3 сохраняется.
 
 **`/config`:**
 - `reload` — `reloadConfig()` и строка итога по исходу (design.md, D12, R7-1, R7-2):
@@ -226,9 +234,114 @@
 
 #### Scenario: WebSocket без /config
 - **WHEN** ядро собрано с `ConfigSource` и `configCommand: false`, и приходит `/config check`
-- **THEN** команды `config` в списке нет, промпт уходит модели как текст, перезагрузка по сигналу `changes` работает
+- **THEN** команды `config` в списке нет, ответ — `Unknown command: /config. Run /help to list commands.`, модель не вызвана, перезагрузка по сигналу `changes` работает
 
 #### Scenario: Без источника конфига
 - **WHEN** ядро собрано без `ConfigSource`, и приходит `/config reload`
-- **THEN** команды `config` в списке нет, промпт уходит модели как текст
+- **THEN** команды `config` в списке нет, ответ — `Unknown command: /config. Run /help to list commands.`, модель не вызвана
+
+### Requirement: Встроенные команды MVP
+`AgentSession` SHALL объявлять и исполнять встроенные команды `compact`, `mode`, `model`, `status` и `help` (`agent-core-architecture` §13.4, §13.6; design.md change `add-agent-builtin-slash-commands`, D1–D7). Команда распознаётся по тем же правилам, что `/config` и `/mcp`: первый символ первого текстового блока — `/`, слово до первого пробельного символа или конца блока — имя, остаток после ведущих пробелов без завершающего `\r?\n` — аргумент `raw`. Общие правила требования «Встроенные команды config и mcp» — события хода без шагов модели, отказ команды (`AgentError` класса `hook`), журнал (ни промпт, ни ответ не пишутся), слот хода, отмена, доставка событий до возврата `prompt` и обрезка строк пользователя до 64 символов по рунам — SHALL действовать и для этих команд. Тексты ответов — фиксированные английские строки ниже; строки соединяются `\n`, после последней `\n` нет.
+
+**Объявление** (элементы — `agent-core-architecture` §13.4):
+- `compact` — `{"name":"compact","description":"Compact the session history","input":{"hint":"[focus]"}}`, только при включённой capability `compaction` профиля;
+- `mode` — `{"name":"mode","description":"Switch the session mode","input":{"hint":"plan | ask | standard | accept-edits | bypass"}}`;
+- `model` — `{"name":"model","description":"Switch the model","input":{"hint":"provider/model"}}`;
+- `status` — `{"name":"status","description":"Show the model, mode, working directory and MCP servers"}`;
+- `help` — `{"name":"help","description":"List commands"}`.
+
+**`/compact [focus]`** — ручное сжатие с триггером `manual` (capability `agent-compaction`, «Точки срабатывания сжатия»): непустой `raw` SHALL передаваться как `SummaryRequest.focus`, пустой — без `focus`. Команда SHALL ждать завершения фонового сжатия `afterTurn`, если оно идёт. Ответ:
+- сжатие выполнено — `Compacted: <tokensBefore> → <tokensAfter> tokens.` (`→` — U+2192; `agent-core-architecture` §13.7); запись `compaction` пишется в журнал по правилам `agent-compaction`, сама команда — нет;
+- `NothingToCompact` — `Nothing to compact.`;
+- `CompactionFailed` — событие `AgentError` класса `compaction` без `retrying`, затем `TurnEnded` с `failed`, без сообщения агента; журнал не меняется (CMP-3);
+- отмена во время генерации резюме, пришедшая до применения сжатия, — `TurnEnded` с `cancelled` без сообщения агента, записи `compaction` нет; отмена после применения — правило отмены ниже.
+
+**`/mode [<id>]`**:
+- `<id>` — режим таблицы `agent-core-architecture` §13.6 или его устаревший синоним; синоним нормализуется, `autopilot` режимом сессии не является (§10.5). Команда SHALL вызывать `AgentSession.setMode` — тот же путь, что `session/set_config_option` с `configId: "mode"`: запись `mode_change` и событие `ModeChanged`, — затем отвечать `Mode: <id>.` с основным id;
+- без аргумента — `Mode: <текущий id>. Available: plan, ask, standard, accept-edits, bypass.`;
+- неизвестный `<id>` — `Unknown mode: <id>. Available: plan, ask, standard, accept-edits, bypass.`, режим не меняется.
+
+**`/model [<provider/model>]`**:
+- модель есть в `ModelCatalog` — `AgentSession.setModel` (запись `model_change`, правила `effort` §13.6), затем событие `ModelOptionsChanged` — событие хода команды; мост проецирует его в `config_option_update` с полным снимком опций (capability `agent-runtime`, «Живая перезагрузка конфигурации»), затем ответ `Model: <provider/model>.`;
+- без аргумента — `Model: <текущая модель>. Run /model <provider/model> to switch.`;
+- модели нет в каталоге или аргумент начинается с `--` (форма `--role` — после MVP, §17.10.5) — `Unknown model: <аргумент>. Run /status to see the current model.`, модель не меняется.
+
+**`/status`** — строки по порядку:
+- `Model: <provider/model>`;
+- `Mode: <id>`;
+- `Working directory: <cwd сессии>`;
+- `MCP servers: none` без серверов, иначе `MCP servers: <id> (<state>), …` в порядке `McpSessionTools.servers`;
+- только если в сессии объявлена команда `config`: `Config: ok`, либо при непустом `ConfigStatus.lastIssues` — `Config: reload failed at <lastFailureAt в ISO 8601 UTC> (1 issue). Run /config check.` при одной проблеме и `(<n> issues)` при нескольких; затем при непустом `pendingRestartKeys` — `Restart required: <k1>, <k2>`.
+Аргументы `/status` игнорируются.
+
+**`/help`** — первая строка `Commands:`, затем по строке на каждую команду `AgentSession.commands` в её порядке: `/<name>` и, при `inputHint`, пробел и подсказка, затем ` - ` и описание; у команды шаблона в конце ` (template)` (`agent-core-architecture` §17.2.9). Аргументы `/help` игнорируются.
+
+**Отмена команд, меняющих состояние** (`/compact`, `/mode`, `/model`; design.md change `add-agent-builtin-slash-commands`, D14): команда SHALL дожидаться своей работы и отвечать по факту. Итог «по факту» — уровень ядра (`TurnEnded`, `TurnResult`): смена применена (запись `compaction`, `mode_change` или `model_change` в журнале) — событие смены, если есть, сообщение агента и `TurnEnded` с `endTurn`, даже если отмена пришла после применения; отмена успела до применения — `TurnEnded` с `cancelled`, без записи в журнале, без события смены и без сообщения. Все события хода команды SHALL публиковаться до её `TurnEnded`. На проводе ACP при любом `session/cancel` ответ на `session/prompt` SHALL быть `stopReason: cancelled` (ACP-5; требование «session/cancel» capability `agent-acp-server`), а кадры смены, применённой до отмены, и сообщение агента уходят до этого ответа. Закрытие сессии во время команды SHALL отменять команду и ждать её завершения до закрытия журнала: запись, начатая командой, либо дописана целиком, либо не начата.
+
+Команды `mode` и `model` меняют состояние сессии, поэтому их записи `mode_change` и `model_change` SHALL попадать в журнал и восстанавливаться `session/load`, как после `session/set_config_option`; текст промпта и ответ команды в журнал НЕ SHALL попадать.
+
+#### Scenario: /compact с указанием
+- **WHEN** в сессии достаточно истории для среза, и приходит `/compact API changes`
+- **THEN** запрос к суммаризатору содержит блок `<focus>` с `API changes`, в журнале новая запись `compaction`, ответ — одно сообщение `Compacted: <X> → <Y> tokens.` с `X > Y`, `TurnEnded` с `endTurn`; записи с текстом `/compact` в журнале нет (`acp/slash-compact`, K-02)
+
+#### Scenario: Нечего сжимать
+- **WHEN** в новой сессии без истории приходит `/compact`
+- **THEN** ответ — ровно `Nothing to compact.`, суммаризатор не вызван, журнал без новых записей
+
+#### Scenario: Отмена /compact
+- **WHEN** во время генерации резюме по `/compact` приходит `session/cancel` — до применения сжатия
+- **THEN** `TurnEnded` с `cancelled` без сообщения агента, записи `compaction` нет, слот хода свободен
+
+#### Scenario: Отмена /compact после применения
+- **WHEN** суммаризатор вернул резюме, запись `compaction` дописана, и в этот момент приходит `session/cancel`
+- **THEN** события ядра — сообщение `Compacted: <X> → <Y> tokens.` и `TurnEnded` с `endTurn`; в журнале одна запись `compaction`; после `TurnEnded` событий этого хода нет; по ACP сообщение уходит до ответа, а ответ — `stopReason: cancelled` (ACP-5)
+
+#### Scenario: Отмена /mode
+- **WHEN** приходит `/mode plan`, и `session/cancel` приходит во время его исполнения
+- **THEN** итог — один из двух: смена применена (запись `mode_change`, `ModeChanged(plan)`, сообщение `Mode: plan.`, `TurnEnded` с `endTurn`) либо не применена (режим прежний, ни записи `mode_change`, ни `ModeChanged`, `TurnEnded` с `cancelled`); смешанного итога (событие смены без записи или запись без события) нет
+
+#### Scenario: Закрытие сессии во время /compact
+- **WHEN** во время генерации резюме по `/compact` сессия закрывается
+- **THEN** закрытие ждёт завершения отменённой команды и только затем закрывает журнал; журнал читается без повреждённой записи, запись `compaction` либо целая, либо её нет; ошибок в зоне хоста нет
+
+#### Scenario: /mode plan
+- **WHEN** сессия в режиме `standard`, и приходит `/mode plan`
+- **THEN** события хода — `ModeChanged(plan)`, затем сообщение `Mode: plan.`, затем `TurnEnded` с `endTurn`; в журнале запись `mode_change` и нет записи с текстом `/mode plan`; модель не вызвана (`acp/slash-mode-plan`, R-08)
+
+#### Scenario: Неизвестный режим
+- **WHEN** приходит `/mode autopilot` или `/mode turbo`
+- **THEN** ответ — `Unknown mode: <аргумент>. Available: plan, ask, standard, accept-edits, bypass.`, режим и журнал не изменились
+
+#### Scenario: Неизвестная модель
+- **WHEN** в каталоге нет `x/y`, и приходит `/model x/y`
+- **THEN** ответ — `Unknown model: x/y. Run /status to see the current model.`, `ModelOptionsChanged` нет, записи `model_change` нет
+
+#### Scenario: /help перечисляет команды
+- **WHEN** у сессии объявлены встроенные команды и шаблон `review` с `argument-hint: "<path> [focus]"`, и приходит `/help`
+- **THEN** ответ начинается строкой `Commands:`, строки команд идут в порядке `AgentSession.commands`, строка шаблона — `/review <path> [focus] - <описание> (template)`, модель не вызвана (`acp/slash-help`, R-08)
+
+#### Scenario: /status без конфига
+- **WHEN** ядро собрано без `ConfigSource`, у сессии нет MCP-серверов, и приходит `/status`
+- **THEN** ответ — ровно четыре строки `Model: …`, `Mode: …`, `Working directory: <cwd>`, `MCP servers: none`; строк `Config` и `Restart required` нет
+
+#### Scenario: Состояние mode и model переживает session/load
+- **WHEN** после `/mode plan` и `/model <другая модель>` сессия загружается в новом соединении
+- **THEN** текущий режим — `plan`, текущая модель — выбранная; реплей не содержит `user_message_chunk` с текстами `/mode plan` и `/model …`
+
+### Requirement: Неизвестная команда
+Если первый текстовый блок промпта начинается с `/`, слово до первого пробельного символа соответствует `^[A-Za-z0-9][A-Za-z0-9:_-]*$`, но не является ни объявленной в сессии встроенной командой, ни именем шаблона, `AgentSession.prompt` НЕ SHALL отправлять промпт модели и SHALL отвечать без модели одним сообщением агента `Unknown command: /<name>. Run /help to list commands.` (`agent-core-architecture` §13.6, правило 3; §17.2.6, шаг 7; R-08); `<name>` обрезается до 64 символов по рунам. Ход — по общим правилам встроенных команд: `TurnEnded` с `endTurn`, ни промпт, ни ответ в журнал не пишутся, слот хода занят на время ответа. Лог — `command.unknown {session_id, name_bytes}` (info), без имени и аргументов: имя пришло от пользователя (`AGENTS.md` §16).
+
+Слово, которое не соответствует регулярному выражению (`/usr/bin/foo`), и блок с ведущим пробелом командой не являются и уходят модели без изменений (требование «Разворачивание команды»). Имя MCP prompt (`<server>:<prompt>`) в этой версии неизвестная команда: MCP prompts — вне этой спецификации (строка матрицы E-24).
+
+#### Scenario: Неизвестная команда не уходит модели
+- **WHEN** шаблонов `nope` нет, и приходит `/nope x`
+- **THEN** ответ — ровно `Unknown command: /nope. Run /help to list commands.`, `TurnEnded` с `endTurn`, scripted-модель не получила запросов, журнал без новых записей (R-08)
+
+#### Scenario: Путь — не команда
+- **WHEN** приходит `/usr/bin/foo is broken`
+- **THEN** модель получает текст без изменений
+
+#### Scenario: Длинное имя обрезается
+- **WHEN** приходит `/` и имя из 100 символов `a`
+- **THEN** ответ содержит `/` и ровно 64 символа `a`, лог `command.unknown` не содержит имени
 

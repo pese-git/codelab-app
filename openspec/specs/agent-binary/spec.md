@@ -249,7 +249,7 @@ stdout в режиме `--stdio` SHALL нести только кадры JSON-R
 
 #### Scenario: Сценарий не читает CODELAB_HOME
 - **WHEN** `serve --stdio --llm-script` запускается во временном `cwd` с `AGENTS.md`, а `CODELAB_HOME` содержит `prompts/review.md` и `AGENTS.md`
-- **THEN** лог `project_context.loaded` называет только `AGENTS.md` из `cwd`, а `available_commands_update` после `session/new` пуст
+- **THEN** лог `project_context.loaded` называет только `AGENTS.md` из `cwd`, а `available_commands_update` после `session/new` содержит только встроенные команды сессии, без шаблона `review`
 
 #### Scenario: WebSocket не читает файлы проекта
 - **WHEN** `AgentHost.build` для `--ws` получает временный `CODELAB_HOME` с `AGENTS.md`, а сессия создаётся в `cwd` с `AGENTS.md`
@@ -337,7 +337,7 @@ stdout в режиме `--stdio` SHALL нести только кадры JSON-R
 
 #### Scenario: WebSocket без /config
 - **WHEN** клиент подключается к `serve --ws` и создаёт сессию
-- **THEN** `available_commands_update` не содержит `config` и `mcp`; промпт `/config check` уходит модели как текст (`agent_host_ws_commands_test.dart`)
+- **THEN** `available_commands_update` не содержит `config` и `mcp`; промпт `/config check` получает ответ `Unknown command: /config. Run /help to list commands.` без запроса к модели (`agent_host_ws_commands_test.dart`; capability `agent-slash-commands`, «Неизвестная команда»)
 
 #### Scenario: Сценарий без перезагрузки
 - **WHEN** `serve --stdio --llm-script s.yaml` работает, и меняется `--config` файл

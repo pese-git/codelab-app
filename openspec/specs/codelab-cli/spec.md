@@ -176,6 +176,10 @@ REPL SHALL печатать ответ агента по мере прихода
 - **WHEN** агент объявил команды `compact` и `plan`, и пользователь вводит `/` и Tab
 - **THEN** список содержит команды клиента и `compact`, `plan` с пометкой агента; `/plan` выполняет клиентскую команду, `/agent:plan` отправляет промпт `/plan`
 
+#### Scenario: Одноимённые команды клиента и Dart-агента
+- **WHEN** CLI подключён к Dart-агенту или встроенному агенту, агент объявил встроенные `compact`, `mode`, `model`, `status`, `mcp`, `help`, и пользователь вводит `/` и Tab
+- **THEN** список содержит клиентские `/help`, `/mode`, `/model` и `/config`, команды агента `/compact`, `/status`, `/mcp` с пометкой агента и одноимённые команды агента как `/agent:help`, `/agent:mode`, `/agent:model`; `/help` печатает справку клиента без `session/prompt`, `/agent:help` отправляет промпт `/help` и печатает ответ агента (`cli/slash-menu-merges-agent-commands`, U-03; design.md change `add-agent-builtin-slash-commands`, D10)
+
 #### Scenario: Выбор модели
 - **WHEN** агент предлагает опцию `model` со значениями `a` и `b`, и пользователь вводит `/model b`
 - **THEN** агент получает `session/set_config_option` с `configId: model` и `value: b`
