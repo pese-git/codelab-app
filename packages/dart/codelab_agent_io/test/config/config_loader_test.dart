@@ -587,6 +587,9 @@ mcp:
             'CODELAB_PROVIDER_Y': 'b',
             'CODELAB_REDACTED_Z': 'c',
             'CODELAB_AGENT_TOKEN': 't',
+            // Маркер алиаса `codelab serve` (change `retire-python-agent`, Q10):
+            // агент, запущенный через алиас, видит его всегда.
+            'CODELAB_SERVE_ALIAS_ACTIVE': '1',
             'OTHER': 'd',
           },
         );

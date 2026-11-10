@@ -99,6 +99,13 @@ void main() {
       ], stdin: _initialize);
 
       expect(result.stderr.split('\n').first, _warning, reason: '$result');
+      // Маркер рекурсии (Q10) агенту известен: алиас не добавляет
+      // предупреждение `config.env.unknown` к каждому запуску.
+      expect(
+        result.stderr,
+        isNot(contains('config.env.unknown')),
+        reason: '$result',
+      );
       final frames = const LineSplitter().convert(result.stdout);
       expect(frames, hasLength(1), reason: '$result');
       final reply = jsonDecode(frames.single) as Map<String, Object?>;
