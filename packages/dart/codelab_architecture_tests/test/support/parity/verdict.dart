@@ -52,20 +52,44 @@ enum EvidenceStatus {
   final String label;
 }
 
-/// Разрешённая причина пропуска в дополнительном источнике (D5, Q5).
+/// Разрешённая причина пропуска в перечне `allowedSkips` (D5, Q5, Q8).
 ///
 /// Почему: пропуск по правилу спецификации (например, `setup.mcp` не
 /// передаётся процессу агента) не должен открывать строку, а неизвестный
-/// пропуск — должен. Перечень явный, с требованием-источником.
+/// пропуск — должен. Подстрока была бы дырой: чужая причина вроде
+/// `TODO setup.mcp cannot be passed…` совпала бы с перечнем. Поэтому шаблон
+/// сверяется с причиной ЦЕЛИКОМ (см. [matches]).
+///
+/// Как использовать: [reason] — [String] (точное равенство) или [RegExp]
+/// (полное совпадение; якоря добавлять не нужно). [onName] — только для
+/// заметки `[skipped: …]` в имени теста, у которого причины нет
+/// (`testWidgets(skip: true)`): шаблон с [onName] проверяется по имени и
+/// только когда причина пуста, остальные — только по причине.
 class AllowedSkip {
-  const AllowedSkip(this.reason, this.requirement);
+  const AllowedSkip(this.reason, this.requirement, {this.onName = false});
 
-  /// Шаблон причины пропуска (подстрока или [RegExp]); проверяется по причине
-  /// из отчёта, а если её нет (`skip: true` у `testWidgets`) — по имени теста.
+  /// Формат причины (или имени теста при [onName]), полное совпадение.
   final Pattern reason;
 
   /// Требование спецификации, которое разрешает пропуск.
   final String requirement;
+
+  /// Шаблон относится к имени теста без причины, а не к причине.
+  final bool onName;
+
+  /// Совпадает ли [text] с шаблоном целиком.
+  bool matches(String text) {
+    final pattern = reason;
+    if (pattern is RegExp) {
+      return RegExp(
+        '^(?:${pattern.pattern})\$',
+        caseSensitive: pattern.isCaseSensitive,
+        multiLine: false,
+        dotAll: pattern.isDotAll,
+      ).hasMatch(text);
+    }
+    return text == pattern.toString();
+  }
 }
 
 /// Вердикт по одному доказательству одной строки.
@@ -461,11 +485,19 @@ class _Judge {
       }
     }
 
-    // 2. В обязательном источнике нужен хотя бы один тест id.
+    // 2. В обязательном источнике нужен хотя бы один тест id. Для
+    // доказательства-пути (Q8) пропуск с причиной из `allowedSkips` не
+    // открывает строку, но и не доказывает её: такой тест не учитывается, а
+    // файл, где все тесты пропущены по перечню, — `not-run` (нет ни одного
+    // `pass`, D5).
     final required = [
       for (final source in obligatory)
         for (final test in source.tests)
-          if (s.belongs(test)) (source, test),
+          if (s.belongs(test) &&
+              !(evidence.kind == EvidenceKind.testFile &&
+                  test.outcome == TestOutcome.skipped &&
+                  _isAllowedSkip(test, evidence)))
+            (source, test),
     ];
     if (required.isEmpty) return verdict(EvidenceStatus.notRun);
 
@@ -485,7 +517,7 @@ class _Judge {
       for (final test in source.tests) {
         if (s.belongs(test) &&
             test.outcome == TestOutcome.skipped &&
-            !_isAllowedSkip(test)) {
+            !_isAllowedSkip(test, evidence)) {
           return verdict(
             EvidenceStatus.skipped,
             source: source.name,
@@ -497,11 +529,18 @@ class _Judge {
     return verdict(EvidenceStatus.pass);
   }
 
-  bool _isAllowedSkip(TestRecord test) {
-    final text = (test.skipReason ?? '').isNotEmpty
-        ? test.skipReason!
-        : test.name;
-    return allowedSkips.any((a) => a.reason.allMatches(text).isNotEmpty);
+  /// Пропуск разрешён перечнем: причина совпадает с шаблоном целиком (D5, Q5, Q8).
+  ///
+  /// Запасной признак по имени (заметка `[skipped: …]`) — только когда
+  /// причины нет и только не для доказательства-пути: у файла-доказательства
+  /// пропуск без причины перечнем не оправдывается (Q8).
+  bool _isAllowedSkip(TestRecord test, Evidence evidence) {
+    final reason = test.skipReason ?? '';
+    if (reason.isNotEmpty) {
+      return allowedSkips.any((a) => !a.onName && a.matches(reason));
+    }
+    if (evidence.kind == EvidenceKind.testFile) return false;
+    return allowedSkips.any((a) => a.onName && a.matches(test.name));
   }
 
   /// Сводит вердикты фикстур или файлов шаблона в один: берётся худший.

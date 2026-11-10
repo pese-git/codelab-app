@@ -337,6 +337,62 @@ void main() {
       expect(_check([_row('C-01', '`core/x`')]).failures, isEmpty);
     });
 
+    test('разбалансированные скобки: громкая ошибка разбора с именем файла, '
+        'а не молча неверный результат', () {
+      core('''
+void main() {
+  group('other', () {
+    test('core/x', () {});
+  // не закрыта скобка вызова group
+}
+''');
+
+      expect(
+        () => _check([_row('C-01', '`core/x`')]),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('a_test.dart'), contains('unbalanced')),
+          ),
+        ),
+      );
+    });
+
+    test('лишняя закрывающая скобка тоже ошибка разбора', () {
+      core('''
+void main() {
+  test('core/x', () {}));
+}
+''');
+
+      expect(
+        () => _check([_row('C-01', '`core/x`')]),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('интерполяция с вложенными кавычками не сбивает разбор', () {
+      core(r'''
+void main() {
+  final text = 'data: ${jsonEncode({'k': (1)})}';
+  group('other', () {
+    test('x ${f('(')}', () {});
+  });
+  test('core/x: ${g({'a': 'b'})}', () {});
+}
+''');
+
+      expect(_check([_row('C-01', '`core/x`')]).failures, isEmpty);
+    });
+
+    test('testNameLiterals без имени файла тоже бросает FormatException', () {
+      expect(
+        () => testNameLiterals("void main() { group('a', () {"),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('cli/<id> подчиняется тому же правилу', () {
       _write('apps/codelab_cli/test/e2e/flow_test.dart', '''
 void main() {

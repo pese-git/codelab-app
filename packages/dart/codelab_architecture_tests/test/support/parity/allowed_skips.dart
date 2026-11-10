@@ -21,30 +21,42 @@ final allowedSkips = <AllowedSkip>[
         'не играется процессом агента',
   ),
   AllowedSkip(
-    RegExp(r'embedded: .* cannot be played by the embedded agent'),
+    RegExp(r'embedded: .+ cannot be played by the embedded agent'),
     'cli-scenario-driver «Команда test-scenario»: setup.config, '
     'setup.sessions, setup.web и профиль вне перечня не играются '
     'встроенным агентом',
   ),
   AllowedSkip(
-    RegExp(r'has setup\.transport: the transport driver'),
+    RegExp(
+      r'acp/[a-z0-9]+(?:-[a-z0-9]+)* has setup\.transport: the transport '
+      r'driver (?:of codelab-agent )?plays it against the binary process',
+    ),
     'acp-golden-fixtures «Транспортный драйвер фикстур»: фикстуру с '
     'setup.transport играет драйвер бинаря агента',
   ),
   AllowedSkip(
-    RegExp(r'has roles \[[^\]]*\] without "(agent|client)"'),
+    RegExp(
+      r'acp/[a-z0-9]+(?:-[a-z0-9]+)* has roles \[[^\]]*\] without '
+      r'"(?:agent|client)"',
+    ),
     'acp-golden-fixtures «Агентский драйвер фикстур» и «Клиентский драйвер '
     'фикстур»: фикстура играется только ролями из roles',
   ),
-  const AllowedSkip(
-    '[skipped: the embedded agent runs files and commands locally',
+  // Заметки в имени теста: у testWidgets `skip` — bool, причины в отчёте нет.
+  AllowedSkip(
+    RegExp(
+      r'.* \[skipped: the embedded agent runs files and commands locally, '
+      r'not through ACP fs/\* and terminal/\*\]',
+    ),
     'testing-quality «Встроенный режим в e2e и conformance»: fs/* и '
-        'terminal/* во встроенном режиме',
+    'terminal/* во встроенном режиме',
+    onName: true,
   ),
-  const AllowedSkip(
-    '[skipped: the embedded agent starts no stdio child process',
+  AllowedSkip(
+    RegExp(r'.* \[skipped: the embedded agent starts no stdio child process\]'),
     'testing-quality «Встроенный режим в e2e и conformance»: у встроенного '
-        'агента нет дочернего stdio-процесса',
+    'агента нет дочернего stdio-процесса',
+    onName: true,
   ),
   const AllowedSkip(
     'the embedded agent is built in and cannot be stored in profiles.json',

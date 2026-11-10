@@ -72,7 +72,7 @@ class Evidence {
   String toString() => label;
 }
 
-/// Известный пробел существования с номером задачи 9.2 (D4).
+/// Известный пробел существования с номером задачи или именем change (D4).
 class KnownGap {
   const KnownGap(this.rowId, this.evidence, this.task);
 
@@ -82,7 +82,7 @@ class KnownGap {
   /// Метка доказательства (`Evidence.label`).
   final String evidence;
 
-  /// Номер задачи итерации 2 (`2.3`).
+  /// Номер задачи (`2.3`) или имя change, который закроет пробел.
   final String task;
 }
 
@@ -221,10 +221,28 @@ List<String> appTestFiles(String repoRoot) {
 /// Соседние литералы (`'cli/x: ' 'tail'`) склеиваются. Интерполяция не
 /// вычисляется: имя, собранное из переменной, существование не найдёт — это
 /// сознательное правило «первый литерал — id» (D3, «Risks»).
-List<String> testNameLiterals(String source) {
+///
+/// Вложенные вызовы не возвращаются (D3, уточнение 2026-11-10): полное имя
+/// теста в отчёте начинается с имени внешней группы, поэтому `test('core/x')`
+/// внутри `group('другое')` в отчёте `core/x` не найти. Возвращаются имена
+/// вызовов вне любого `group(`: на верхнем уровне `main`, в цикле `for`, в
+/// локальной функции. Вложенность считается по скобкам вызова `group(`.
+///
+/// Ограничения разбора: это лексер, а не парсер Dart. Интерполяция
+/// `${…}` пропускается по балансу фигурных скобок вместе с вложенными
+/// литералами (`'${f('x')}'`), но экзотика (комментарий с кавычкой внутри
+/// интерполяции, многострочные литералы в ней) может сбить границы литерала
+/// и баланс скобок. Чтобы такая ошибка не давала молча неверный результат,
+/// при ненулевом балансе скобок в конце файла (или лишней `)`) бросается
+/// [FormatException] с именем [file] — файл надо упростить, а не доверять
+/// списку имён.
+List<String> testNameLiterals(String source, {String file = '<source>'}) {
   final names = <String>[];
   final n = source.length;
   var i = 0;
+  // Глубина круглых скобок и глубины, на которых открыты вызовы `group(`.
+  var depth = 0;
+  final groups = <int>[];
 
   bool isIdentChar(int c) =>
       (c >= 0x30 && c <= 0x39) ||
@@ -256,6 +274,31 @@ List<String> testNameLiterals(String source) {
       if (!raw && c == r'\' && j + 1 < n) {
         content.write(source[j + 1]);
         j += 2;
+        continue;
+      }
+      // Интерполяция `${…}` может содержать свои строки с кавычками той же
+      // породы (`'a ${f({'k': 1})}'`): её содержимое пропускается целиком по
+      // балансу фигурных скобок, с рекурсивным чтением вложенных литералов.
+      if (!raw && c == r'$' && j + 1 < n && source[j + 1] == '{') {
+        var braces = 0;
+        final from = j;
+        while (j < n) {
+          final d = source[j];
+          if ('\'"'.contains(d)) {
+            j = readString(j)?.$2 ?? j + 1;
+            continue;
+          }
+          if (d == '{') braces++;
+          if (d == '}') {
+            braces--;
+            if (braces == 0) {
+              j++;
+              break;
+            }
+          }
+          j++;
+        }
+        content.write(source.substring(from, j));
         continue;
       }
       if (triple
@@ -309,10 +352,27 @@ List<String> testNameLiterals(String source) {
       i = readString(i)?.$2 ?? i + 1;
       continue;
     }
+    if (c == '(') {
+      depth++;
+    } else if (c == ')') {
+      depth--;
+      if (depth < 0) {
+        throw FormatException(
+          'unbalanced parentheses in $file: extra ")" at offset $i',
+        );
+      }
+      while (groups.isNotEmpty && groups.last > depth) {
+        groups.removeLast();
+      }
+    }
     final word = RegExp(r'(test|group)\b').matchAsPrefix(source, i);
     if (word != null && (i == 0 || !isIdentChar(source.codeUnitAt(i - 1)))) {
       var j = skipSpace(word.end);
       if (j < n && source[j] == '(') {
+        final nested = groups.isNotEmpty;
+        depth++;
+        if (word[1] == 'group') groups.add(depth);
+        i = j + 1;
         j = skipSpace(j + 1);
         final first = readString(j);
         if (first != null) {
@@ -326,13 +386,21 @@ List<String> testNameLiterals(String source) {
             name.write(next.$1);
             j = next.$2;
           }
-          names.add(name.toString());
+          if (!nested) names.add(name.toString());
           i = j;
-          continue;
         }
+        continue;
       }
     }
     i++;
+  }
+  // Открытый `group(` без `)` оставляет глубину больше нуля, поэтому
+  // отдельной проверки стека групп не нужно.
+  if (depth != 0) {
+    throw FormatException(
+      'unbalanced parentheses in $file: depth $depth at the end of the file; '
+      'the lexer of test names (evidence.dart) cannot read it',
+    );
   }
   return names;
 }
@@ -356,8 +424,10 @@ class TestNameIndex {
     final files = <String, List<String>>{};
     for (final entity in root.listSync(recursive: true, followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('_test.dart')) continue;
-      files[p.relative(entity.path, from: repoRoot)] = testNameLiterals(
+      final relative = p.relative(entity.path, from: repoRoot);
+      files[relative] = testNameLiterals(
         entity.readAsStringSync(),
+        file: relative,
       );
     }
     return files;
