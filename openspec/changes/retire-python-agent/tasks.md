@@ -88,8 +88,9 @@
   - `apps/codelab_cli/AGENTS.md` §2 — алиас: распознавание до разбора, `serve_alias.dart` в списке мест `dart:io`, сигналы (D8, D10);
   - корневой `AGENTS.md` §5, строка `apps/codelab_cli` — «переходный алиас `codelab serve`»;
   - `docs/user/migrating-from-python-agent.md`, раздел «Профили и скрипты с `codelab serve`»: вместо `Unknown flag --stdio` и «алиас появится позже» — алиас, предупреждение, срок (D11), `which codelab` при двух `codelab`, «нет `codelab-agent`» → код `1`.
-- [ ] 1.11 `[client]` Ручная проверка: `build/bin/codelab serve --stdio` как внешний агент Zed по чек-листу Zed, шаги 1 и 3 (`docs/user/zed.md`). Предупреждение видно в «ACP logs» Zed, кадры — как у `codelab-agent serve --stdio`. Итог — в описании pull request.
+- [x] 1.11 `[client]` Ручная проверка: `build/bin/codelab serve --stdio` как внешний агент Zed по чек-листу Zed, шаги 1 и 3 (`docs/user/zed.md`). Предупреждение видно в «ACP logs» Zed, кадры — как у `codelab-agent serve --stdio`. Итог — в описании pull request.
 - [x] 1.13 `[client]` По двойному ревью (решения пользователя Q9–Q12, 2026-11-10; D7, D9, D10; сценарии «SIGHUP через алиас», «Повторный вход в алиас», «Ранний SIGTERM и сбой запуска»): тест ветки сбоя запуска (без аргументов в stderr), `SIGHUP`, защита от рекурсии, кавычки `PATH` на Windows, швы `isExecutableFile`/`canonicalize`.
+- [x] 1.14 `[agent]` По ручной проверке в Zed (1.11, 2026-11-10): агент, запущенный через алиас, писал `warning config.env.unknown {name: CODELAB_SERVE_ALIAS_ACTIVE}` при каждом запуске. Маркер добавлен в известные переменные `ConfigLoader` (`environment_layer.dart`) и в agent-core §15.6; тесты — `config_loader_test.dart` (группа `config.env.unknown`) и e2e `cli/serve-alias-stdio` (stderr без `config.env.unknown`).
 - [ ] 1.12 `[client]` Архивирование change — только по просьбе пользователя, после итерации 1.
 
 ## E. Внешние шаги (пользователь — владелец `pese-git/codelab-agent`; Q8)

@@ -865,7 +865,9 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 передаёт процессу вырезанные секреты (после MVP, §17.12.6). Не дают предупреждения и переменные
 клиентов: `CODELAB_AGENT_TOKEN` (токен WebSocket-подключения CLI,
 [`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §9.11) и `CODELAB_POWER_HELPER`
-(только тестовая сборка, [`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §12.6.6). Переменные
+(только тестовая сборка, [`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §12.6.6), а также
+`CODELAB_SERVE_ALIAS_ACTIVE` — маркер переходного алиаса `codelab serve`, которым CLI отмечает
+запущенного через алиас агента (change `retire-python-agent`, Q10; ядро его не читает, имя — деталь реализации CLI, а не контракт, D7). Переменные
 пула ключей `NAME_2`… для `api_key_env` (после MVP, §17.10.4) — не `CODELAB_*`, правила
 предупреждений не меняются. Тестовая
 переменная `CODELAB_TEST_SECRET_STORE=<каталог>` (файловое хранилище секретов для E2E клиентов,
