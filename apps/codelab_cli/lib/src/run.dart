@@ -150,6 +150,9 @@ Future<int> _run(
       return _runMcp(options, environment, io);
     case CliCommand.secret:
       return _runSecret(options, environment, io);
+    case CliCommand.serveAlias:
+      // ЗАГЛУШКА шага «красные тесты»: ветку пишет задача 1.6.
+      throw UnimplementedError('runServeAlias');
     case CliCommand.headless:
       return _runHeadless(options, environment, io, embeddedOpener, signalSeam);
     case CliCommand.repl when options.ui == UiMode.tui:

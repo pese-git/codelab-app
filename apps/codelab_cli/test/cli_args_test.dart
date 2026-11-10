@@ -199,6 +199,54 @@ void main() {
     expect(parseCliArgs(['-h']).command, CliCommand.help);
   });
 
+  // Алиас `codelab serve` (change `retire-python-agent`, задача 1.1; D8;
+  // spec codelab-cli «Алиас codelab serve»).
+  group('serve alias', () {
+    test('serve as the first word hands every other word to the agent', () {
+      final options = parseCliArgs(['serve', '--stdio', '--port', '1']);
+
+      expect(options.command, CliCommand.serveAlias);
+      expect(options.positional, ['--stdio', '--port', '1']);
+    });
+
+    test('serve without flags is the alias too (Q2)', () {
+      final options = parseCliArgs(['serve']);
+
+      expect(options.command, CliCommand.serveAlias);
+      expect(options.positional, isEmpty);
+    });
+
+    test('--help after serve belongs to codelab-agent, not to codelab', () {
+      final options = parseCliArgs(['serve', '--help']);
+
+      expect(options.command, CliCommand.serveAlias);
+      expect(options.positional, ['--help']);
+    });
+
+    test('codelab flags after serve are not parsed by codelab', () {
+      final options = parseCliArgs(['serve', '-p', 'x', '--agent', 'y']);
+
+      expect(options.command, CliCommand.serveAlias);
+      expect(options.positional, ['-p', 'x', '--agent', 'y']);
+    });
+
+    test('serve not in the first place is the first REPL message', () {
+      for (final args in [
+        ['--', 'serve'],
+        ['-v', 'serve'],
+      ]) {
+        final options = parseCliArgs(args);
+
+        expect(options.command, CliCommand.repl, reason: '$args');
+        expect(options.positional, ['serve'], reason: '$args');
+      }
+    });
+
+    test('the usage text does not mention the alias (task 1.8)', () {
+      expect(cliUsage(), isNot(contains('codelab serve')));
+    });
+  });
+
   test('the usage text lists the MVP flags and no later ones', () {
     final text = cliUsage();
 
