@@ -173,7 +173,7 @@
 | `conformance:embedded` | `--junit $DIR/scenario-embedded.xml` | |
 | `test:e2e:cli:dart-agent` | `--file-reporter json:$DIR/cli-dart.json` | |
 | `test:e2e:cli:embedded` | `--file-reporter json:$DIR/cli-embedded.json` | |
-| `test:e2e:app:dart-agent`, `test:e2e:app:embedded` | `--file-reporter json:$DIR/app/<режим>/<файл>.json` на каждый файл цикла | |
+| `test:e2e:app:dart-agent`, `test:e2e:app:embedded` | `--file-reporter json:$DIR/app/<режим>/<файл>.json` на каждый файл цикла; `<файл>` — имя файла теста целиком, например `fs_flow_test.dart.json` | |
 
 Подробности реализации:
 - `$MELOS_PACKAGE_NAME` в команде `melos exec` экранируется (`\$MELOS_PACKAGE_NAME`), иначе внешняя оболочка подставит пустое значение;
@@ -230,7 +230,7 @@
 
 ### D9. Отчёты Flutter-тестов app
 
-Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §21). Их отчёты появляются только из локального прогона в `release/<version>`: `CODELAB_TEST_REPORT_DIR=<каталог> fvm dart run melos run test:e2e:app:dart-agent` и `…:embedded`. Скрипт `test:e2e:app:*` (прогон по одному файлу) пишет `app/<режим>/<файл>.json` и `app/<режим>/meta.json` с коммитом, версией macOS (`sw_vers -productVersion`) и временем.
+Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §21). Их отчёты появляются только из локального прогона в `release/<version>`: `CODELAB_TEST_REPORT_DIR=<каталог> fvm dart run melos run test:e2e:app:dart-agent` и `…:embedded`. Скрипт `test:e2e:app:*` (прогон по одному файлу) пишет `app/<режим>/<файл>.json` (`<файл>` — имя файла теста целиком, например `fs_flow_test.dart.json`) и `app/<режим>/meta.json` с коммитом, версией macOS (`sw_vers -productVersion`) и временем.
 
 Поэтому статус `app:<файл>` проверяется отдельно:
 - без `CODELAB_PARITY_APP_RESULTS` доказательства `app:` получают статус `deferred`. Он печатается, но тест не роняет: ночной прогон на `develop` проверяет всё, кроме app;
@@ -319,7 +319,7 @@ Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §2
 - Отчёты `package:test` содержат печать тестов (`print`-события) и тексты ошибок. В тестах используются только вымышленные секреты (маркер `sk-test-leak-0123456789`), поэтому публикация артефактов допустима.
 - Утечки ищет `findSecretLeaks` (`test/support/parity/reports.dart`). В файлах отчёта не должно быть: значений длиной от 8 символов из окружения процесса с именем, оканчивающимся (или целиком равным) `TOKEN`, `KEY`, `SECRET`, `PASSWORD`, `PASS`, `PAT`, `CREDENTIAL(S)`, `AUTH` без учёта регистра, в сыром, JSON- и XML-экранированном виде; маркера `sk-test-leak-` — но он блокирует только в отчётах app: в отчётах CI это предупреждение в логе (упавший тест может честно напечатать маркер в тексте ожидания, и снимать публикацию отчёта джоба из-за этого нельзя); любая символическая ссылка в каталоге отчётов — ошибка. Для отчётов app (`CODELAB_PARITY_APP_RESULTS`, они попадают в репозиторий) ещё значения `HOME` и путей `/Users/<имя>/`, `/home/<имя>/`: в CI этот флаг не включается, потому что `flutter test` пишет там абсолютные пути рабочей копии. При совпадении — ошибка с именем файла и причины, значение не печатается.
 - Проверка идёт в окружении того джоба, который породил отчёт, и до `upload-artifact`: каждый джоб `checks` и `parity` запускают `report_leaks_test.dart` (`CODELAB_REPORT_LEAKS_DIR`), а артефакт загружается только при зелёном результате. Тест `parity_evidence_test` проверяет то же ещё раз в группе статуса.
-- Trace Zed (`acp-trace.jsonl` с `trace_payload: true`) содержит тексты промптов и файлов. Проверка Zed проводится на тестовом проекте без секретов. Фрагменты trace в `evidence/zed/` редактируются по правилу `observability.md` до коммита (задача 4.3).
+- Доказательства чек-листа Zed (Q11) — журнал ACP самого Zed («ACP logs», команда `dev: open acp logs`) и лог агента `--log-file` на уровне `debug`. Журнал Zed содержит полные кадры ACP, то есть тексты промптов, файлов и вывода инструментов; редакция секретов в логе агента и журнале сессии до 1.0 не применяется (`redact.*` — `applied: false`). Поэтому проверка Zed проводится на тестовом проекте без секретов, а фрагменты журнала и лога в `evidence/zed/` редактируются по правилу `observability.md` до коммита (задача 4.3). Trace-файл агента `$CODELAB_HOME/logs/acp-trace.jsonl` (agent-core-architecture §12.5) — после MVP: ключи `logging.trace` и `logging.trace_payload` схема читает, но не применяет (`applied: false`, предупреждение `config.key.not_applied`).
 - Итог `parity` печатается строками `<строка> <доказательство> <статус> [<источник>] [<причина>]`, отсортированными по id строки, и в Step Summary. По одному запуску видно, что именно открыто.
 
 ### D17. Итерации
@@ -400,13 +400,13 @@ Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §2
 
 - Версия Zed: —
 - Дата проверки: —
-- Сборка `codelab-agent`: коммит —, `build:agent`, debug-сборка для сверки полей с `logging.trace_payload: true`
+- Сборка `codelab-agent`: коммит —, `build:agent`; в `args` Zed — `--log-file <путь> --log-level debug` (Q11)
 - ОС: —
 - Тестовый проект: — (без секретов, D16)
-- Агент для сверки trace: не выбран / имя и версия —
-- Доказательства: `evidence/zed/<шаг>-*.png`, `evidence/zed/<шаг>-trace.jsonl` (фрагменты `$CODELAB_HOME/logs/acp-trace.jsonl`, отредактированные по `observability.md`)
+- Агент для сверки журналов ACP: не выбран / имя и версия —
+- Доказательства (Q11): `evidence/zed/<шаг>-*.png`, `evidence/zed/<шаг>-acp.log` (фрагмент журнала ACP Zed, `dev: open acp logs`) и `evidence/zed/<шаг>-agent.jsonl` (фрагмент лога агента `--log-file`, уровень `debug`); оба отредактированы по `observability.md` до коммита (D16)
 
-| № | Шаг | Пройдено, если | Итог | Скриншот | Фрагмент trace | Примечание |
+| № | Шаг | Пройдено, если | Итог | Скриншот | Журнал ACP Zed и лог агента | Примечание |
 |---|---|---|---|---|---|---|
 | 1 | подключение | Zed показывает агента готовым; `initialize` с ответом `protocolVersion: 1` | — | — | — | — |
 | 2 | возможности | ответ `initialize` содержит `loadSession`, `promptCapabilities`, `mcpCapabilities`; Zed не сообщает о несовместимости | — | — | — | — |
@@ -420,7 +420,7 @@ Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §2
 | 10 | режим и модель | `session/set_config_option` (или `session/set_mode`); следующий ход в новом режиме | — | — | — | — |
 | 11 | отключение | процесс `codelab-agent` завершается за 5 с, журнал сессии дописан | — | — | — | — |
 
-Сверка с другим ACP-агентом (если выбран): шаги 3–5 и 8 на одном промпте. Trace нормализуются по id, времени и текстам модели и сравниваются по порядку методов и форме сообщений.
+Сверка с другим ACP-агентом (если выбран): шаги 3–5 и 8 на одном промпте. Журналы ACP Zed обоих агентов нормализуются по id, времени и текстам модели и сравниваются по порядку методов и форме сообщений.
 
 | Шаг | Порядок «все `session/update` до ответа» | Отказ не завершает ход | Лишние поля не ломают Zed | Итог |
 |---|---|---|---|---|
@@ -468,6 +468,7 @@ Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §2
 - **Q8** — перечень `allowedSkips` (со ссылками на спецификацию) применяется и к доказательству-пути (Q4): пропуск в файле-доказательстве, причина которого есть в перечне, строку не открывает. Пропуск не из перечня — `skipped`, как и прежде. Уточнены D3, D5 и задача 2.14; закрывает R-17 (`conformance_test.dart` агента пропускает фикстуры с ролью `client`).
 - **Q9** — встроенные слэш-команды Dart-агента (`/compact [focus]`, `/help`, `/mode <id>`, `/model <id>`, `/status` и ответ на неизвестную команду; agent-core-architecture §13.4, §13.6) — **отдельный change** `add-agent-builtin-slash-commands`. Итерация 2 этого change закрывает остальные пробелы. K-02, R-08 (`acp/slash-help`, `acp/slash-mode-plan`) и U-03 остаются открытыми со ссылкой на новый change: для K-02 и R-08 — записи `knownGaps` (D4), U-03 — пробел статуса (`not-run`). Готовые фикстуры `slash-compact`, `slash-help`, `slash-mode-plan` и красный e2e U-03 переходят в новый change как его красные тесты. Задачи 2.1–2.4 и 2.8–2.9 перенесены; пустой `knownGaps` и зелёный ночной `parity` — после merge нового change, это условие ворот (D4, D14, задача 4.0).
 - **Q10** — `acp/mcp-prompt-command` убран из критерия R-08 (Must): сценарий приёмки R-08 MCP prompts не содержит, `agent-slash-commands` выносит их за рамки, fake MCP-сервер `prompts/list` не умеет. В матрицу добавлена строка Should **E-24** «MCP prompts как слэш-команды» (§3.6, этап 9+, будущий change); запись `knownGaps` для `acp/mcp-prompt-command` удалена. Итоги §7 пересчитаны: Must 77 (без изменений), Should 81.
+- **Q11** — доказательства чек-листа Zed (задача 4.3) — журнал ACP самого Zed (просмотр «ACP logs», команда `dev: open acp logs`) и лог агента `--log-file` на уровне `debug`. Trace-файл `$CODELAB_HOME/logs/acp-trace.jsonl` (agent-core-architecture §12.5) — после MVP: `logging.trace` и `logging.trace_payload` в схеме не применяются (`applied: false`). Уточнены D16, шапка «Чек-листа Zed», задача 4.3 и план этапа 9 («Чек-лист Zed»).
 - **Уточнение D3** (решение оркестратора по итогу 2.12) — доказательство `cli/<id>` и `core/<id>` существует, только если id — начало полного имени теста: первый литерал вызова `test(` или `group(`, не вложенного в другой `group(`. Задачи 2.16–2.17.
 
 ## Open Questions

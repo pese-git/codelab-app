@@ -104,7 +104,7 @@
 - `conformance:agent` и `conformance:client` — `dart/<пакет>.conformance.json`;
 - `test:e2e:cli:dart-agent` и `test:e2e:cli:embedded` — `cli-dart.json` и `cli-embedded.json`;
 - `conformance:embedded` — JUnit `scenario-embedded.xml` (`codelab test-scenario --junit`);
-- `test:e2e:app:dart-agent` и `test:e2e:app:embedded` — `app/<режим>/<файл>.json` на каждый файл и `app/<режим>/meta.json` с коммитом, версией macOS и временем.
+- `test:e2e:app:dart-agent` и `test:e2e:app:embedded` — `app/<режим>/<файл>.json` на каждый файл (`<файл>` — имя файла теста целиком, например `fs_flow_test.dart.json`) и `app/<режим>/meta.json` с коммитом, версией macOS и временем.
 
 Скрипт SHALL создавать нужные подкаталоги. Без переменной команды скриптов, их вывод и коды выхода SHALL оставаться прежними. Упавший тест SHALL попадать в отчёт, а код выхода скрипта — оставаться ненулевым.
 

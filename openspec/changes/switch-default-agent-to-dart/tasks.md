@@ -160,17 +160,17 @@
 
 ## 3. Документация (итерация 3, 9.5, 9.7)
 
-- [ ] 3.1 `[client]` `docs/user/README.md` и `docs/user/run-from-source.md` (D12): сборка `codelab` и `codelab-agent`, запуск app, пометка «установщик — с выпуском 1.0»; ссылка из `README.md` («Начало работы»).
-- [ ] 3.2 `[agent]` `docs/user/configuration.md` (D12; R-14): `config.yaml` по слоям, секреты, `codelab config check`, LiteLLM Proxy как `baseUrl` с примером. Ссылка на документ — в критерии R-14 матрицы.
-- [ ] 3.3 `[agent]` `docs/user/migrating-from-python-agent.md` (D12; R-16):
+- [x] 3.1 `[client]` `docs/user/README.md` и `docs/user/run-from-source.md` (D12): сборка `codelab` и `codelab-agent`, запуск app, пометка «установщик — с выпуском 1.0»; ссылка из `README.md` («Начало работы»).
+- [x] 3.2 `[agent]` `docs/user/configuration.md` (D12; R-14): `config.yaml` по слоям, секреты, `codelab config check`, LiteLLM Proxy как `baseUrl` с примером. Ссылка на документ — в критерии R-14 матрицы.
+- [x] 3.3 `[agent]` `docs/user/migrating-from-python-agent.md` (D12; R-16):
   - роли `codelab` и `codelab-agent`;
   - ручной перенос `codelab.toml` → `config.yaml` со ссылкой на таблицу §15.7, без копии таблицы;
   - профили и скрипты с `codelab serve` (D11).
-- [ ] 3.4 `[agent]` Предупреждение о Python-сессиях (9.5): в `migrating-from-python-agent.md` — отдельный раздел «Сессии Python-агента не переносятся» (чистый лист, мигратора нет, agent-core-architecture §16.1); короткая ссылка — в `docs/user/README.md`.
-- [ ] 3.5 `[agent]` `docs/user/zed.md`: подключение `codelab-agent serve --stdio` к Zed (9.8).
-- [ ] 3.6 `[protocol]` Корневой `AGENTS.md` §5 — итоговый состав пакетов, профиль по умолчанию — встроенный агент, роль `codelab` и `codelab-agent`, Python-агент вне monorepo и заморожен (D13).
-- [ ] 3.7 `[protocol]` `docs/architecture/testing.md`: TDD §9.0 п. 3 с исключениями (а)–(д), итерации §9.0 п. 8, `parity_evidence_test`, правило имени теста «первый литерал — id», `CODELAB_TEST_REPORT_DIR`, ночной `parity` (D3–D7).
-- [ ] 3.8 `[agent]` `layers-and-dependencies.md` (агентские пакеты и мосты), `acp-boundary.md` (агентская сторона), `permissions.md` (разрешения агента и клиентский показ), `platform-integration.md` (встроенный агент в процессе app и `codelab-agent` как процесс), `technology-stack.md` (`args`, `yaml`, `yaml_edit`; без `toml`) — по D13.
+- [x] 3.4 `[agent]` Предупреждение о Python-сессиях (9.5): в `migrating-from-python-agent.md` — отдельный раздел «Сессии Python-агента не переносятся» (чистый лист, мигратора нет, agent-core-architecture §16.1); короткая ссылка — в `docs/user/README.md`.
+- [x] 3.5 `[agent]` `docs/user/zed.md`: подключение `codelab-agent serve --stdio` к Zed (9.8).
+- [x] 3.6 `[protocol]` Корневой `AGENTS.md` §5 — итоговый состав пакетов, профиль по умолчанию — встроенный агент, роль `codelab` и `codelab-agent`, Python-агент вне monorepo и заморожен (D13).
+- [x] 3.7 `[protocol]` `docs/architecture/testing.md`: TDD §9.0 п. 3 с исключениями (а)–(д), итерации §9.0 п. 8, `parity_evidence_test`, правило имени теста «первый литерал — id», `CODELAB_TEST_REPORT_DIR`, ночной `parity` (D3–D7).
+- [x] 3.8 `[agent]` `layers-and-dependencies.md` (агентские пакеты и мосты), `acp-boundary.md` (агентская сторона), `permissions.md` (разрешения агента и клиентский показ), `platform-integration.md` (встроенный агент в процессе app и `codelab-agent` как процесс), `technology-stack.md` (`args`, `yaml`, `yaml_edit`; без `toml`) — по D13.
 - [x] 3.9 `[desktop]` `apps/codelab_desktop/AGENTS.md`: описание stdio-агента по D10, если раздел «Профили подключения» его упоминает. Правка не потребовалась: раздел уже описывает stdio-`codelab-agent` (проверено 2026-11-09, итерация 1).
 
 ## 4. Ворота MVP (итерация 4; не блокирует итерации 1–3)
@@ -181,7 +181,7 @@
   - Итог до merge (2026-11-10): `workflow_dispatch` на ветке `feature/add-agent-builtin-slash-commands` (коммит `61edec91`, pull request #271) — https://github.com/pese-git/codelab-app/actions/runs/42774368417: все джобы зелёные, `parity` success; 157 доказательств — `pass` 139, `deferred` 18 (только `app:`), `missing`/`not-run`/`skipped`/`failed` — 0; K-02, R-08, U-03 — `pass`. `knownGaps` пуст, константа и проверка устаревания удалены (задача 4.1 change `add-agent-builtin-slash-commands`). Не отмечено: условие требует слияния в `develop`; задачу закрывает первый зелёный `parity` на `develop` после merge этого change; тогда же условие ворот «пустой `knownGaps`» выполнено.
 - [ ] 4.1 `[protocol]` Три ночи подряд на `develop`: обязательные джобы и `parity` зелёные в трёх последовательных запусках по `schedule` без ручного перезапуска (`run_attempt` 1). Красный или пропущенный запуск обнуляет счёт. Ссылки, коммиты и даты — в `proposal.md`. Отчёт третьей ночи сохранён в `evidence/nightly/` этого change (Q6).
 - [ ] 4.2 `[desktop]` Ветка `release/<version>` от `develop` после 4.1. Три последовательных зелёных прогона на одном коммите на macOS без перезапуска упавших тестов: `test:e2e:app:*`, `test:e2e:app:dart-agent`, `test:e2e:app:embedded` с `CODELAB_TEST_REPORT_DIR`. Отчёты, версия macOS и коммит — в `proposal.md`; сырые JSON — в `evidence/app/run-<n>/` этого change, если суммарно меньше ~5 МБ, иначе сводка (Q6, D9; пути относительные).
-- [ ] 4.3 `[agent]` Чек-лист Zed (9.8): все 11 шагов. Версия Zed, сборка, доказательства в `evidence/zed/` (trace отредактирован по `observability.md`, D16) и подпись ответственного за релиз — в design.md. Сверка с другим агентом — только если он выбран.
+- [ ] 4.3 `[agent]` Чек-лист Zed (9.8): все 11 шагов. Версия Zed, сборка, доказательства в `evidence/zed/` — фрагменты журнала ACP Zed (`dev: open acp logs`) и лога агента `--log-file` на уровне `debug` (Q11), отредактированные по `observability.md` (D16) и подпись ответственного за релиз — в design.md. Сверка с другим агентом — только если он выбран, по журналам ACP Zed. Trace-файл `acp-trace.jsonl` не нужен (после MVP).
 - [ ] 4.4 `[protocol]` Политика заморозки Python-агента опубликована change `retire-python-agent` (D1); ссылка — в `proposal.md`, условие ворот «Python-агент заморожен».
 - [ ] 4.5 `[protocol]` Итоговый прогон: `CODELAB_PARITY_RESULTS=<отчёт третьей ночи> CODELAB_PARITY_APP_RESULTS=<отчёты app> fvm dart test packages/dart/codelab_architecture_tests/test/parity_evidence_test.dart` зелёный. У каждой строки Must `pass`, `deferred` нет. Вывод — в `proposal.md`, условия 1–3 таблицы §6.
 - [ ] 4.6 `[protocol]` Таблица условий §6 в `proposal.md` заполнена (условия 4–6 — ссылки на 4.3, итерацию 3) и подписана владельцем продукта (решение о переключении) и ответственным за релиз (доказательства и сборка).

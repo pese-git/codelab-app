@@ -66,7 +66,7 @@ final class LogRecord {           // то, что получает sink хост
 ```
 
 `Logger` — порт: ядро пишет в него, хост решает, куда (stderr для `codelab-agent serve --stdio`,
-файл `$CODELAB_HOME/logs/agent.log`, лог-панель codelab-app). stdout в режиме stdio занят ACP —
+файл лога, если он задан (§12.3.1), лог-панель codelab-app). stdout в режиме stdio занят ACP —
 писать туда логи запрещено.
 
 `event` — стабильное имя в формате `<область>.<действие>` или `<область>.<объект>.<действие>`
@@ -277,20 +277,24 @@ final class LogRecord {           // то, что получает sink хост
 редакции (§12.4): `Logger` редактирует запись один раз и раздаёт готовый `LogRecord` всем sink.
 
 **Путь** — первое заданное значение: флаг `--log-file <path>` → переменная `CODELAB_LOG_FILE` →
-ключ `logging.file` (по умолчанию `$CODELAB_HOME/logs/agent.log`, §15.4). Флаг и переменная есть у
-`codelab-agent serve` (`--stdio` и `--ws`) и у `codelab` (встроенный агент пишет в этот файл; лог
-клиента — по правилам клиента, [`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §9.11).
+ключ `logging.file` (§15.4). Значения по умолчанию нет: если ни одно не задано, файл не пишется и
+каталог `$CODELAB_HOME/logs` не создаётся (design.md change `add-agent-configuration`, OQ5 (а);
+`openspec/specs/agent-binary`; `HostSettings.logFile` равен `null`, пока ключ не задан). Файл лога
+открывает только `codelab-agent serve` (`--stdio` и `--ws`; `serve_config.dart`, `logSettings`). У
+`codelab` флага `--log-file` нет, а встроенный агент в `codelab` и app `logging.file` пока не
+применяет — после MVP (E-16, [план этапа 6](../dart-agent-and-clients/09-11-stage-6-cli-mvp.md));
+лог клиента — по правилам клиента ([`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §9.11).
 `~` раскрывается, относительный путь — от рабочего каталога процесса.
-До этапа 8 бинарь `codelab-agent` конфиг не читает (§15.6), поэтому значения по умолчанию
-`logging.file` у него нет: файл пишется, только если задан флаг или переменная (OpenSpec change
-`add-codelab-agent-binary`, design.md D5).
+До этапа 8 бинарь `codelab-agent` конфиг не читал (§15.6) и писал файл, только если задан флаг или
+переменная (OpenSpec change `add-codelab-agent-binary`, design.md D5); с чтением конфига добавился
+явно заданный `logging.file`, но не значение по умолчанию.
 
 | Хост | Основной sink | Файл |
 |---|---|---|
 | `codelab-agent serve --stdio` | stderr | путь выше |
 | `codelab-agent serve --ws` | stderr | путь выше |
-| `codelab` (встроенный агент) | нет (терминал занят интерфейсом) | путь выше |
-| codelab-app (встроенный агент) | лог-панель | `logging.file` (флаг и переменная не читаются) |
+| `codelab` (встроенный агент) | нет (терминал занят интерфейсом) | после MVP (E-16, план этапа 6): `--log-file` нет, `logging.file` не применяется |
+| codelab-app (встроенный агент) | лог-панель | после MVP (E-16): `logging.file` не применяется, флаг и переменная не читаются |
 
 **Правила.**
 
@@ -299,9 +303,10 @@ final class LogRecord {           // то, что получает sink хост
    `--log-file cannot point to stdout: stdout carries the ACP protocol`.
 2. Открытие при старте, до создания runtime: каталоги создаются с правами `0700`, новый файл —
    `0600`, режим дописывания (`O_APPEND`); существующий файл дописывается, не обрезается.
-3. Не удалось открыть путь из флага или переменной → ошибка запуска, код `64`, текст
-   `cannot open log file <path>: <причина ОС>`. Не удалось открыть путь из конфига (в том числе
-   по умолчанию) → warning `log.file.open_failed {path, reason}` в основной sink, работа без файла.
+3. Не удалось открыть путь — из флага, переменной или `logging.file` — → ошибка запуска, код `64`,
+   текст `cannot open log file <path>: <причина ОС>` (`openspec/specs/agent-binary`: «неоткрываемый
+   путь — ошибка использования»). Предупреждения `log.file.open_failed` и работы без файла нет:
+   значения по умолчанию, которое могло бы не открыться, тоже нет.
 4. Формат файла — JSON Lines, одна запись — одна строка:
    `{"ts":"<ISO-8601 UTC>","level":"info","event":"turn.end", <поля записи>, "error":…, "stack":…}`;
    ключи `ts`, `level`, `event` первыми, затем поля в порядке вставки, `error` и `stack` — только
@@ -593,6 +598,10 @@ Exempt tools: write, edit, mcp__files__write_file
 первая строка — `Redaction: disabled (only known secrets are replaced)`, у слоёв 2–7 — `off`.
 
 ## 12.5. Protocol trace
+
+**Статус: после MVP.** Ключи `logging.trace` и `logging.trace_payload` схема читает, но не применяет
+(`applied: false`, предупреждение `config.key.not_applied`); trace-файл не пишется. Кадры ACP для
+проверки совместимости берутся из журнала клиента (Q11 change `switch-default-agent-to-dart`).
 
 ACP-адаптер пишет каждый JSON-RPC-кадр в trace-sink хоста (по умолчанию — файл
 `$CODELAB_HOME/logs/acp-trace.jsonl`, ротация по 10 МиБ, 3 файла). Одна строка — один кадр:

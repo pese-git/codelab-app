@@ -117,6 +117,8 @@ codelab_client_acp / application security layer
 * `codelab_acp_transports`;
 * platform plugin.
 
+Для действий, которые выполняет агент CodeLab (встроенный или `codelab-agent`), authoritative owner — политика ядра агента (`PermissionPolicy` в `codelab_agent_core`); см. раздел 58.
+
 ---
 
 ## 4. Presentation responsibility
@@ -1036,3 +1038,38 @@ evaluate policy
 ```
 
 Если безопасность operation зависит от `if` внутри widget или от того, какой dialog сейчас открыт, permission architecture следует пересмотреть.
+
+---
+
+## 58. Разрешения на стороне агента и клиентский показ
+
+Выше описана модель, когда решение принимает клиент. Агент CodeLab (`codelab_agent_core`) принимает его сам и спрашивает пользователя только там, где правила требуют вопроса. Две модели не конфликтуют: они применяются к разным действиям.
+
+### Кто решает
+
+| Действие | Кто решает | Где |
+|---|---|---|
+| Вызов инструмента агента (`read`, `write`, `edit`, `exec`, сетевые инструменты, MCP) | агент: `PermissionPolicy.decide` — единственная точка перед исполнением любого инструмента | `codelab_agent_core`, `agent-core/07-permissions.md` (PERM-1) |
+| Показ вопроса пользователю | клиент: получает `session/request_permission`, показывает диалог, возвращает выбор | `codelab_client_core` / `codelab_desktop` / `codelab_cli` |
+| `fs/*` и `terminal/*` от агента к клиенту | permission остаётся за агентом; клиент только ограничивает пути рабочей папкой (исключение в разделе 2) | `codelab_agent_core` + `codelab_client_acp` |
+
+Агент не показывает диалогов и не знает о UI: `AcpPermissionGate` (в `codelab_agent_acp`) превращает `PermissionRequest` ядра в запрос `session/request_permission` и ждёт ответ. Транспорт и протокольный слой ничего не решают (PERM-005).
+
+### Что гарантирует агент
+
+* Проверка идёт до исполнения любого инструмента и любого побочного эффекта (PERM-1 агента). Явный запрет сильнее любого разрешения; критическая команда сильнее `allow` на инструмент и «разрешить всегда» (PERM-2).
+* Режимы сессии — `plan`, `ask`, `standard`, `accept-edits`, `bypass`; ключ `permissions.mode`, переменная `CODELAB_PERMISSION_MODE`, флаг `--permission-mode`, `session/set_mode` и `session/set_config_option`. Новая сессия стартует в `standard`. Режим `autopilot` включается только флагом запуска `--permission-mode autopilot` (CFG-4): ни слой конфига, ни переменная, ни ACP его не включают. В `autopilot` агент не спрашивает о `read`, `write` и `exec`, а сеть и критические команды запрещает без вопроса (`agent-core/07-permissions.md` §7.3, §7.7).
+* Проектный конфиг (`agent-core/15-configuration.md` §15.3): `permissions.mode` из `<проект>/.codelab/config.yaml` только ужесточает режим нижних слоёв — независимо от доверия к проекту. Пока проект не в `trusted_projects`, то же правило действует для `config.local.yaml`, `permissions.deny` добавляется к спискам нижних слоёв, а `permissions.tools.<t>` применяется, только если он строже нижних слоёв.
+* Нет `PermissionGate` (ядро без ACP-клиента и без UI) — любое «спросить» превращается в отказ `no approval interface is available` (PERM-5, fail closed, §7.7 п. 1). Это не `autopilot`: без gate отклоняется всё, что требует вопроса; общее с `autopilot` только то, что правка конфигурации агента отклоняется без вопроса (`PermissionPolicy`, ветка PERM-11). Headless-запуск `codelab -p` — ACP-клиент, gate у агента есть; CLI отвечает по `--approve`: `reject` по умолчанию, `read-only` и `allow-all` задаёт пользователь явно, критические запросы отклоняются при любой политике.
+* Неизвестная опасная capability запрещена по умолчанию (раздел 12): инструмент без явного уровня получает `exec` (§7.3 `agent-core/07-permissions.md`, «команды и всё неизвестное (MCP)»). Поэтому в `plan` он запрещён, в `ask`, `standard` и `accept-edits` спрашивается; без вопроса он выполняется только в явно выбранных `bypass` и `autopilot`.
+* Правка конфигурационных файлов самого агента спрашивается в любом режиме, не принимает «разрешить всегда» и в `autopilot` отклоняется без вопроса (PERM-11).
+
+### Что показывает и возвращает клиент
+
+* Запрос несёт `toolCallId`, `title`, `kind`, `rawInput`, `locations` и diff правок; клиент показывает их без перевода в собственные правила. Варианты запроса имеют `kind` из `allow_once`, `allow_always`, `reject_once`, `reject_always`; клиент отвечает `RequestPermissionOutcome` ACP — `selected` с `optionId` выбранного варианта или `cancelled` (`docs/protocols/acp/protocol/08-Tool Calls.md`, «Requesting Permission»).
+* Решение относится к одному `toolCallId`; повторный или поздний ответ игнорируется (PERM-4 агента, PERM-003/004 этого документа). `cancelled` — отказ, он не завершает ход (PERM-7).
+* Для критической команды варианта `allow_always` нет; клиент не должен подставлять его сам (PERM-9).
+* «Всегда» живёт до закрытия сессии и в журнал не пишется: после `session/load` агент спросит снова. Хранение стабильных разрешений на стороне клиента этим не отменяется и описано в разделах 23–24.
+* Встроенный агент использует тот же путь: запрос идёт по `InProcessAcpLink`, клиентский слой не знает, встроен агент или внешний, а отдельного обхода одобрения у встроенного режима нет.
+
+Подробности: `docs/architecture/proposals/agent-core/07-permissions.md` (§7.8 `AcpPermissionGate`, §7.9 инварианты PERM-1…PERM-11).
