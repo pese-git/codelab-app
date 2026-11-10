@@ -104,6 +104,8 @@ flowchart TD
 
 ## Начало работы
 
+Пользовательская документация (сборка из исходников, настройка, переход с Python-агента, Zed) — в [`docs/user/README.md`](docs/user/README.md). Ниже — шаги для разработчиков репозитория.
+
 Flutter SDK закреплён в `.fvmrc` и ставится через [FVM](https://fvm.app); monorepo управляется [Melos](https://melos.invertase.dev) из секции `melos:` корневого `pubspec.yaml`.
 
 ```bash
