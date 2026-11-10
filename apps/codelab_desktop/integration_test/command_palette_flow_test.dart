@@ -3,11 +3,13 @@
 // «Интеграционный тест палитры с командами агента»; строка Must R-20
 // матрицы паритета).
 //
-// Только scripted-агент: бинарь `codelab-agent` объявляет пустой
-// `availableCommands` (agent-acp-server), поэтому команд агента в палитре у
-// него нет. Вместо тега `scripted-only` — `skip` в режиме `dart`: тег
-// исключил бы единственный тест файла, и `flutter test` завершился бы
-// ошибкой «No tests ran» (как dart-only тест `session_list_load_flow_test`).
+// Два теста (tasks 1.8 change `add-agent-builtin-slash-commands`, design D9):
+// полный сценарий с тегом `scripted-only` (команда `plan` с `input.hint`
+// есть только у scripted-агента) и тест без тега для встроенной команды
+// `compact`, который идёт во всех режимах (`scripted`, `dart`, `embedded`).
+// Теперь в файле есть тест без тега, поэтому прогон `dart` с
+// `--exclude-tags scripted-only` не падает с «No tests ran», а пропуск
+// `!isScripted` не нужен.
 
 import 'dart:io';
 
@@ -92,14 +94,94 @@ Future<void> _pickInline(WidgetTester tester, String text) async {
   await tester.pumpAndSettle();
 }
 
+/// Режим сценария для теста `compact`: scripted-агент объявляет `compact`
+/// только в `withAvailableCommands`; Dart-агент и встроенный объявляют её
+/// сами (capability `agent-slash-commands`), им нужен обычный сценарий.
+///
+/// ВРЕМЕННО: по tasks 3.2 это и [_compactReply] переезжают в помощник
+/// `support/e2e_agent.dart` (ответ по режиму), здесь они до тех пор, чтобы
+/// файл компилировался.
+CodelabCompatibleStdioAgentMode _compactMode() => E2eAgent.current.isScripted
+    ? CodelabCompatibleStdioAgentMode.withAvailableCommands
+    : CodelabCompatibleStdioAgentMode.normal;
+
+/// Ответ агента на `/compact` в новой сессии (Q10, Q11 (а) design.md): у
+/// scripted-агента отчёт о сжатии, у Dart-агента пустой регион даёт
+/// `Nothing to compact.`.
+String _compactReply() => E2eAgent.current.isScripted
+    ? 'Compacted the conversation.'
+    : 'Nothing to compact.';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+    'built-in compact: the palette shows the agent command instead of the '
+    'client stub, it is inserted without session/prompt and the agent '
+    'answers on send',
+    (tester) async {
+      final project = await Directory.systemTemp.createTemp(
+        'codelab_command_palette_compact_e2e_',
+      );
+      addTearDown(() async {
+        if (await project.exists()) {
+          await project.delete(recursive: true);
+        }
+      });
+      final launch = await E2eAgent.current.launch(
+        project,
+        mode: _compactMode(),
+      );
+
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
+      await tester.pumpAndSettle();
+      await _cubit(tester).selectProject(project.path);
+      await tester.pumpAndSettle();
+      await _connect(tester, launch);
+      await tester.tap(find.byKey(const ValueKey('new-session-button')));
+      await tester.pumpAndSettle();
+      await _waitFor(
+        tester,
+        () => _cubit(
+          tester,
+        ).state.agentCommands.any((c) => c.id == 'agent-compact'),
+      );
+
+      // Палитра: `/compact` агента вместо заглушки клиента.
+      await _openPalette(tester);
+      expect(
+        find.byKey(CodeLabCommandPaletteSurface.agentSectionHeaderKey),
+        findsOneWidget,
+      );
+      expect(_paletteRow('/compact'), findsOneWidget);
+      final ids = [for (final a in _cubit(tester).state.paletteActions) a.id];
+      expect(ids, contains('agent-compact'));
+      expect(ids, isNot(contains('compact')));
+
+      // Выбор вставляет команду и ничего не отправляет.
+      await tester.tap(_paletteRow('/compact'));
+      await tester.pumpAndSettle();
+      expect(_composerText(tester), '/compact ');
+      expect(_transcript(tester), isEmpty);
+
+      // Отправка: реплика `/compact` и ответ агента своего режима.
+      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      await tester.pump();
+      await _waitFor(
+        tester,
+        () =>
+            _transcript(tester).contains(_compactReply()) &&
+            !_cubit(tester).state.isPromptSubmitting,
+      );
+      expect(_transcript(tester), ['/compact', _compactReply()]);
+    },
+  );
 
   testWidgets(
     'agent-declared commands replace the client stubs in the palette, are '
     'inserted into the composer and reach the agent on send, and fuzzy '
     'search finds them inline',
-    skip: !E2eAgent.current.isScripted,
+    tags: scriptedOnly,
     (tester) async {
       final project = await Directory.systemTemp.createTemp(
         'codelab_command_palette_e2e_',

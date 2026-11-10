@@ -5,7 +5,7 @@
     "14-Slash Commands.md#availablecommand",
     "03-Session Setup.md#mcp-servers"
   ],
-  "description": "Встроенные инструменты, fake MCP-сервер с echo и один шаблон проекта: available_commands_update после session/new содержит встроенную mcp и шаблон review, имён инструментов модели в списке нет (R-07, часть шаблонов и встроенных команд; design.md change add-config-writer-and-reload, D12).",
+  "description": "Встроенные инструменты, fake MCP-сервер с echo и один шаблон проекта: available_commands_update после session/new содержит встроенные compact, mode, model, status, mcp, help (в таком порядке, D2) и шаблон review, имён инструментов модели в списке нет (R-07, часть шаблонов и встроенных команд; design.md change add-config-writer-and-reload, D12).",
   "goals": [
     "R-07"
   ],
@@ -130,7 +130,7 @@
     },
     {
       "dir": "a2c",
-      "note": "R-07, D12: встроенная mcp первой, затем шаблон; read, exec и mcp__fake__echo в список не попадают",
+      "note": "R-07; agent-acp-server «session/new», сценарий «Команды шаблонов после session/new»; add-agent-builtin-slash-commands D2: встроенные compact, mode, model, status, mcp, help (config нет — ядро без ConfigSource), затем шаблон; read, exec и mcp__fake__echo в список не попадают",
       "frame": {
         "jsonrpc": "2.0",
         "method": "session/update",
@@ -140,11 +140,40 @@
             "sessionUpdate": "available_commands_update",
             "availableCommands": [
               {
+                "name": "compact",
+                "description": "Compact the session history",
+                "input": {
+                  "hint": "[focus]"
+                }
+              },
+              {
+                "name": "mode",
+                "description": "Switch the session mode",
+                "input": {
+                  "hint": "plan | ask | standard | accept-edits | bypass"
+                }
+              },
+              {
+                "name": "model",
+                "description": "Switch the model",
+                "input": {
+                  "hint": "provider/model"
+                }
+              },
+              {
+                "name": "status",
+                "description": "Show the model, mode, working directory and MCP servers"
+              },
+              {
                 "name": "mcp",
                 "description": "List, reload, enable or disable MCP servers",
                 "input": {
                   "hint": "list | reload [<id>] | enable <id> | disable <id>"
                 }
+              },
+              {
+                "name": "help",
+                "description": "List commands"
               },
               {
                 "name": "review",

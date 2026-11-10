@@ -81,21 +81,32 @@ void main() {
         SessionSpec(cwd: '/work/a'),
       );
 
-      expect([for (final c in session.commands) c.name], ['plain', 'review']);
+      // Встроенные команды идут первыми (D2 change
+      // `add-agent-builtin-slash-commands`), затем шаблоны по имени.
+      expect(
+        [for (final c in session.commands) c.name],
+        ['compact', 'mode', 'model', 'status', 'help', 'plain', 'review'],
+      );
       final review = session.commands.last;
       expect(review.source, SlashCommandSource.template);
       expect(review.inputHint, 'arguments');
-      expect(session.commands.first.inputHint, isNull);
+      expect(session.commands[session.commands.length - 2].inputHint, isNull);
     });
 
-    test('is empty without a port', () async {
+    test('without a port there are only the builtin commands', () async {
       final core = build(withPort: false);
 
       final session = await core.runtime.createSession(
         SessionSpec(cwd: '/work/a'),
       );
 
-      expect(session.commands, isEmpty);
+      expect(
+        [for (final c in session.commands) c.name],
+        ['compact', 'mode', 'model', 'status', 'help'],
+      );
+      expect(session.commands.map((c) => c.source).toSet(), {
+        SlashCommandSource.builtin,
+      });
     });
 
     test('a broken template is a diagnostic and not a failure', () async {
@@ -106,7 +117,13 @@ void main() {
         SessionSpec(cwd: '/work/a'),
       );
 
-      expect([for (final c in session.commands) c.name], ['ok']);
+      expect(
+        [
+          for (final c in session.commands)
+            if (c.source == SlashCommandSource.template) c.name,
+        ],
+        ['ok'],
+      );
       final log = logger.eventsOf('project_files.diagnostic').single;
       expect(log.fields['code'], 'invalid_name');
       expect(log.fields['session_id'], session.id.value);
@@ -180,7 +197,11 @@ void main() {
       expect(sent.content, [const TextContent('Just do it'), image]);
     });
 
-    for (final text in ['/nope x', '/usr/bin/foo is broken', '/help']) {
+    // `/nope x` и `/help` моделью больше не обрабатываются: это неизвестная и
+    // встроенная команды (builtin_commands_test.dart). Моделью остаются
+    // путь и текст с ведущим пробелом (D3 change
+    // `add-agent-builtin-slash-commands`).
+    for (final text in ['/usr/bin/foo is broken', ' /plain x']) {
       test('"$text" goes to the model unchanged and without command', () async {
         final core = build();
         final session = await core.runtime.createSession(

@@ -79,38 +79,63 @@ agent:
   ];
 
   // Контроль теста: без него `--ws` без `config`/`mcp` прошёл бы и в мире, где
-  // команд нет вообще. Встроенные `/config` и `/mcp` объявляет ядро
-  // (`commands/builtin_commands.dart`, задача 7.2).
-  test('--stdio announces config and mcp (the control of the test)', () async {
+  // команд нет вообще. Встроенные команды объявляет ядро
+  // (`commands/builtin_commands.dart`; порядок — D2 change
+  // `add-agent-builtin-slash-commands`, §13.4).
+  test('--stdio announces the builtin commands in the order of §13.4 '
+      '(the control of the test)', () async {
     final (peer, _) = await start('--stdio');
 
     await peer.openSession(temp.path);
     await pumpEventQueue();
 
-    expect(commandNames(peer), containsAll(['config', 'mcp']));
+    expect(commandNames(peer), [
+      'compact',
+      'mode',
+      'model',
+      'status',
+      'config',
+      'mcp',
+      'help',
+    ]);
   });
 
-  test('--ws announces neither config nor mcp', () async {
+  test('--ws announces the builtin commands without config and mcp', () async {
     final (peer, _) = await start('--ws');
 
     await peer.openSession(temp.path);
     await pumpEventQueue();
 
-    expect(commandNames(peer), isNot(contains('config')));
-    expect(commandNames(peer), isNot(contains('mcp')));
+    expect(commandNames(peer), ['compact', 'mode', 'model', 'status', 'help']);
   });
 
-  test('--ws: "/config check" is not executed but goes to the model as '
-      'text (R0-3)', () async {
+  test('--ws: "/config check" is not executed and not sent to the model: '
+      'the answer is Unknown command (R0-3, scenario "WebSocket без '
+      '/config", agent-slash-commands "Неизвестная команда")', () async {
     final (peer, bodies) = await start('--ws');
     final session = await peer.openSession(temp.path);
 
-    await expectLater(
-      peer.prompt(session, '/config check'),
-      throwsA(isA<AcpCallFailed>()),
-    );
+    final stop = await peer.prompt(session, '/config check');
 
-    expect(bodies, isNotEmpty);
-    expect(bodies.join(), contains('/config check'));
+    expect(stop, 'end_turn');
+    expect(
+      peer.agentText(session),
+      'Unknown command: /config. Run /help to list commands.',
+    );
+    expect(bodies, isEmpty, reason: 'the model was not asked');
+  });
+
+  test('--ws: "/status" does not reveal the config lines (D7, R0-3)', () async {
+    final (peer, bodies) = await start('--ws');
+    final session = await peer.openSession(temp.path);
+
+    await peer.prompt(session, '/status');
+
+    final text = peer.agentText(session);
+    expect(text, startsWith('Model: p/m\nMode: '));
+    expect(text, contains('\nMCP servers: none'));
+    expect(text, isNot(contains('Config')));
+    expect(text, isNot(contains('Restart required')));
+    expect(bodies, isEmpty);
   });
 }

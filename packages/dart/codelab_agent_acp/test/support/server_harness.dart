@@ -18,6 +18,40 @@ final scriptedModel = ModelRef(
   maxOutputTokens: 4096,
 );
 
+/// Встроенные команды в кадре `available_commands_update` (agent-slash-commands
+/// «Встроенные команды MVP», «Список команд сессии»; design.md change
+/// `add-agent-builtin-slash-commands`, D2): порядок `compact`, `mode`,
+/// `model`, `status`, `config`, `mcp`, `help`, затем шаблоны. Профиль
+/// `agent-serve` включает capability `compaction`; `config` и `mcp` тест
+/// вставляет сам между [builtinCommandsBeforeConfig] и [builtinHelpCommand].
+const builtinCommandsBeforeConfig = <Map<String, Object?>>[
+  {
+    'name': 'compact',
+    'description': 'Compact the session history',
+    'input': {'hint': '[focus]'},
+  },
+  {
+    'name': 'mode',
+    'description': 'Switch the session mode',
+    'input': {'hint': 'plan | ask | standard | accept-edits | bypass'},
+  },
+  {
+    'name': 'model',
+    'description': 'Switch the model',
+    'input': {'hint': 'provider/model'},
+  },
+  {
+    'name': 'status',
+    'description': 'Show the model, mode, working directory and MCP servers',
+  },
+];
+
+/// Команда `help` — последняя из встроенных (D2).
+const builtinHelpCommand = <String, Object?>{
+  'name': 'help',
+  'description': 'List commands',
+};
+
 /// `agentInfo` сервера в тестах (§13.2).
 const testAgentInfo = Implementation(
   name: 'codelab-agent',

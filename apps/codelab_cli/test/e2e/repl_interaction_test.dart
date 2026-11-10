@@ -83,12 +83,13 @@ Future<void> main() async {
     expect(await pty.exitCode, 0);
   }, skip: skip);
 
-  // U-03. Один тест на все агенты: имя начинается с id матрицы parity, и
-  // режимы `dart` и `embedded` дают ему статус вместо `not-run` из-за тега
-  // `scripted-only` (design.md change `switch-default-agent-to-dart`, D3, D5;
-  // tasks 2.8). Scripted-агент объявляет команды режимом
-  // `with_available_commands`, у Dart-агента и встроенного агента сценария
-  // для этого нет: они объявляют собственные команды в режиме `normal`.
+  // U-03. Один тест на все агенты: имя начинается с id матрицы parity
+  // (D3 change `switch-default-agent-to-dart`). Ожидания — из
+  // `launch` (`support/e2e_agent.dart`); против `dart` и `embedded` меню
+  // содержит клиентские `/help`, `/mode`, `/model`, `/config`, команды агента
+  // с пометкой `(agent)` и одноимённые под префиксом `/agent:`, а
+  // `/agent:help` печатает ответ агента (tasks 1.7 change
+  // `add-agent-builtin-slash-commands`, D10, Q1, Q8).
   test('cli/slash-menu-merges-agent-commands', () async {
     final scripted = E2eCliAgent.current.isScripted;
     final pty = await repl(
@@ -101,13 +102,10 @@ Future<void> main() async {
     // они дойдут, по Tab на их префиксе.
     final from = pty.text.length;
     pty.write('/\t');
-    // Команды агента идут в меню после клиентских: ждём последнюю и её
-    // пометку, чтобы не читать меню на середине вывода.
-    await pty.waitFor(launch.agentCommands.last, from: from);
-    await pty.waitFor(
-      '(agent)',
-      from: pty.text.lastIndexOf(launch.agentCommands.last),
-    );
+    final expected = [...launch.agentCommands, ...launch.prefixedAgentCommands];
+    for (final command in expected) {
+      await pty.waitFor(command, from: from);
+    }
     final menu = pty.text.substring(from);
     // Пометка проверяется на строке самой команды: у клиента есть своя
     // `/config`, и одно имя в меню не доказывает, что есть команда агента.
@@ -118,19 +116,47 @@ Future<void> main() async {
         reason: 'the menu has no agent command $command',
       );
     }
-    expect(menu, contains('/help'));
-    if (scripted) {
-      expect(menu, contains('/agent:plan'));
+    for (final client in const ['/help', '/mode', '/model', '/config']) {
+      expect(menu, contains(client));
     }
 
     pty.write('\x15');
-    if (scripted) {
-      await send(pty, '/agent:plan the release', 'echo: /plan the release');
-      await send(pty, '/plan', 'No plan yet.');
+    if (launch.agentHelpAnswer.isNotEmpty) {
+      final helpFrom = pty.text.length;
+      pty.write('/agent:help\r');
+      for (final fragment in launch.agentHelpAnswer) {
+        await pty.waitFor(fragment, from: helpFrom);
+      }
     }
     pty.write('\x04');
     expect(await pty.exitCode, 0);
   }, skip: skip);
+
+  // Прежняя проверка со scripted-агентом: префикс `/agent:` и разбор команд
+  // агента отвечает сам scripted-агент.
+  test(
+    'cli/slash-menu-scripted-agent-prefix',
+    () async {
+      final pty = await repl(
+        CodelabCompatibleStdioAgentMode.withAvailableCommands,
+      );
+      await pty.waitFor('> ');
+      final from = pty.text.length;
+      pty.write('/\t');
+      await pty.waitFor('/compact', from: from);
+      expect(pty.text.substring(from), contains('(agent)'));
+      expect(pty.text.substring(from), contains('/agent:plan'));
+      expect(pty.text.substring(from), contains('/help'));
+
+      pty.write('\x15');
+      await send(pty, '/agent:plan the release', 'echo: /plan the release');
+      await send(pty, '/plan', 'No plan yet.');
+      pty.write('\x04');
+      expect(await pty.exitCode, 0);
+    },
+    skip: skip,
+    tags: scriptedOnly,
+  );
 
   test('cli/client-commands-smoke', () async {
     final pty = await repl(

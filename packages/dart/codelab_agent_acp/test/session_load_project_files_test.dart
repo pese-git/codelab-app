@@ -98,6 +98,8 @@ void commandsAfterNew() {
     expect(response.error, isNull);
     expect(update['sessionUpdate'], 'available_commands_update');
     expect(update['availableCommands'], [
+      ...builtinCommandsBeforeConfig,
+      builtinHelpCommand,
       {
         'name': 'fix',
         'description': 'Fix \$1.',

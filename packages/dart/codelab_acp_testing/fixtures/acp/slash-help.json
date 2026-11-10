@@ -1,0 +1,244 @@
+{
+  "id": "acp/slash-help",
+  "spec": [
+    "14-Slash Commands.md#advertising-commands",
+    "14-Slash Commands.md#running-commands"
+  ],
+  "description": "Встроенные slash-команды без модели (R-08; agent-core-architecture §13.4, §13.6; design.md change add-agent-builtin-slash-commands, D2, D4, Q1): после session/new список содержит compact, mode, model, status, mcp, help (config нет — у прогона нет источника конфигурации). «/help» отвечает одним agent_message_chunk побайтово: строка «Commands:» и по строке «/<name>[ <hint>] - <description>» на команду в порядке списка; end_turn. Неизвестная «/nope» не уходит модели и не даёт ошибку протокола: agent_message_chunk «Unknown command: /nope. Run /help to list commands.» и end_turn. Scripted-модель не получает запросов.",
+  "goals": [
+    "R-08"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": []
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          },
+          "clientInfo": {
+            "name": "fixture-client",
+            "version": "0.0.0"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ initialize; поля проверяет acp/initialize-capabilities",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент создаёт сессию без MCP-серверов",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/new; команды идут отдельным кадром после него (ACP-8)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "sessionId"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "R-08, agent-core-architecture §13.4: встроенные команды MVP в порядке правила (compact, mode, model, status, mcp, help); config нет — у прогона нет источника конфигурации",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              {
+                "name": "compact",
+                "description": "Compact the session history",
+                "input": {
+                  "hint": "[focus]"
+                }
+              },
+              {
+                "name": "mode",
+                "description": "Switch the session mode",
+                "input": {
+                  "hint": "plan | ask | standard | accept-edits | bypass"
+                }
+              },
+              {
+                "name": "model",
+                "description": "Switch the model",
+                "input": {
+                  "hint": "provider/model"
+                }
+              },
+              {
+                "name": "status",
+                "description": "Show the model, mode, working directory and MCP servers"
+              },
+              {
+                "name": "mcp",
+                "description": "List, reload, enable or disable MCP servers",
+                "input": {
+                  "hint": "list | reload [<id>] | enable <id> | disable <id>"
+                }
+              },
+              {
+                "name": "help",
+                "description": "List commands"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "helpId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/help"
+            }
+          ]
+        }
+      },
+      "note": "список команд"
+    },
+    {
+      "dir": "a2c",
+      "note": "формат /help — Q1 (acp change add-agent-builtin-slash-commands): «Commands:» и по строке на команду списка в порядке объявления; сверяется побайтово",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Commands:\n/compact [focus] - Compact the session history\n/mode plan | ask | standard | accept-edits | bypass - Switch the session mode\n/model provider/model - Switch the model\n/status - Show the model, mode, working directory and MCP servers\n/mcp list | reload [<id>] | enable <id> | disable <id> - List, reload, enable or disable MCP servers\n/help - List commands"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3); запросов к scripted-модели нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${helpId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "nopeId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/nope"
+            }
+          ]
+        }
+      },
+      "note": "неизвестная команда: слово после «/» подходит под разбор команды, но команды и шаблона нет (§13.6, правило 3)"
+    },
+    {
+      "dir": "a2c",
+      "note": "текстовый ответ, а не ошибка протокола",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Unknown command: /nope. Run /help to list commands."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "end_turn; запросов к scripted-модели нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${nopeId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

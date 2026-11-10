@@ -96,7 +96,10 @@ void main() {
       'sessionId': sessionId,
       'update': {
         'sessionUpdate': 'available_commands_update',
-        'availableCommands': <Object?>[],
+        'availableCommands': [
+          ...builtinCommandsBeforeConfig,
+          builtinHelpCommand,
+        ],
       },
     });
     // ACP-8: до ответа на session/new уведомлений сессии нет.
@@ -452,6 +455,19 @@ void main() {
     return update['availableCommands'] as List<Object?>;
   }
 
+  test('without mcp and config the list is compact, mode, model, status, '
+      'help (D2)', () async {
+    h = await ServerHarness.start();
+    await h.initialize();
+
+    await newSession('/work/demo');
+
+    expect(await announcedCommands(), [
+      ...builtinCommandsBeforeConfig,
+      builtinHelpCommand,
+    ]);
+  });
+
   test('with the mcp capability the list holds the builtin mcp '
       '(scenario "Режимы и опции новой сессии")', () async {
     h = await ServerHarness.start(mcp: (_) => SpyMcpConnector());
@@ -459,7 +475,11 @@ void main() {
 
     await newSession('/work/demo');
 
-    expect(await announcedCommands(), [mcpCommand]);
+    expect(await announcedCommands(), [
+      ...builtinCommandsBeforeConfig,
+      mcpCommand,
+      builtinHelpCommand,
+    ]);
   });
 
   test('with a config source and the mcp capability the list is config, '
@@ -472,7 +492,12 @@ void main() {
 
     await newSession('/work/demo');
 
-    expect(await announcedCommands(), [configCommand, mcpCommand]);
+    expect(await announcedCommands(), [
+      ...builtinCommandsBeforeConfig,
+      configCommand,
+      mcpCommand,
+      builtinHelpCommand,
+    ]);
   });
 
   test('a builtin command is answered by agent_message_chunk and end_turn '
