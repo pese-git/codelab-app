@@ -1,6 +1,6 @@
 // E2E `cli/serve-alias-*` (change `retire-python-agent`, задача 1.7; spec
-// codelab-cli «Алиас codelab serve»; design.md D6–D10): собранный `codelab` и
-// собранный `codelab-agent` как отдельные процессы.
+// codelab-cli «Алиас codelab serve»; design.md D6–D10): `codelab` и
+// `codelab-agent` из kernel как отдельные процессы.
 //
 // `PATH` процесса — временный каталог с обёрткой `codelab-agent`, которая
 // запускает kernel агента абсолютным путём `dart`; настоящий `~/.codelab` и
@@ -39,8 +39,9 @@ const _initialize =
 
 void main() {
   final skip = Platform.isWindows
-      ? 'обёртка codelab-agent — shell-скрипт; на Windows алиас проверяется '
-            'модульными тестами'
+      ? 'обёртка codelab-agent и `kill -0` — POSIX shell; поиск `.exe`, '
+            'кавычки PATH и ход запуска на Windows проверяют модульные тесты '
+            'serve_alias_test.dart, настоящий Windows-прогон не выполняется'
       : null;
 
   late DualBinary env;
@@ -204,6 +205,73 @@ void main() {
       // `kill -0` успешен, пока процесс агента жив.
       final alive = await Process.run('/bin/kill', ['-0', '$agentPid']);
       expect(alive.exitCode, isNot(0), reason: 'agent $agentPid is alive');
+    },
+    tags: scriptedOnly,
+    skip: skip,
+  );
+
+  test(
+    'cli/serve-alias-sighup: SIGHUP to codelab reaches the agent, codelab '
+    'exits 129 after the agent is gone',
+    () async {
+      final process = await CliProcess.start(
+        ['serve', '--stdio', ...agentFlags],
+        environment: environment(),
+        workingDirectory: env.project,
+        entry: CliEntry.production,
+      );
+      addTearDown(() => process.kill(ProcessSignal.sigkill));
+      process.writeStdin(_initialize);
+      // Агент ответил — он работает, обработчики сигналов установлены.
+      await process.waitFor(
+        'protocolVersion',
+        timeout: const Duration(seconds: 10),
+      );
+      final agentPid = int.parse(File(pidFile).readAsStringSync().trim());
+
+      process.kill(ProcessSignal.sighup);
+      final result = await process.result(timeout: const Duration(seconds: 30));
+
+      expect(result.exitCode, 129, reason: '$result');
+      // `kill -0` успешен, пока процесс агента жив.
+      final alive = await Process.run('/bin/kill', ['-0', '$agentPid']);
+      expect(alive.exitCode, isNot(0), reason: 'agent $agentPid is alive');
+    },
+    tags: scriptedOnly,
+    skip: skip,
+  );
+
+  test(
+    'cli/serve-alias-recursion: a codelab-agent wrapper around codelab serve '
+    'is 1 without an endless chain',
+    () async {
+      final loopBin = Directory('${env.tmp.path}/loop-bin')..createSync();
+      final codelabDill = await CliProcess.kernelOf(CliEntry.production);
+      final wrapper = File('${loopBin.path}/codelab-agent')
+        ..writeAsStringSync(
+          '#!/bin/sh\n'
+          'exec \'${dartExecutable()}\' \'$codelabDill\' serve "\$@"\n',
+        );
+      Process.runSync('/bin/chmod', ['+x', wrapper.path]);
+
+      final result = await codelab(['serve', '--stdio'], path: loopBin.path);
+
+      expect(result.exitCode, 1, reason: '$result');
+      expect(result.stdout, isEmpty, reason: '$result');
+      expect(
+        _warning.allMatches(result.stderr).length,
+        2,
+        reason: 'outer and inner alias: $result',
+      );
+      expect(
+        result.stderr,
+        contains(
+          'codelab: "codelab serve" cannot run itself; check that '
+          'codelab-agent is not a wrapper around codelab serve, or run '
+          '"codelab-agent serve" directly.',
+        ),
+      );
+      expect(result.stderr, isNot(contains('--stdio')));
     },
     tags: scriptedOnly,
     skip: skip,
