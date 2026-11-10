@@ -106,11 +106,14 @@ List<acp.SessionUpdate> projectEvent(
     ),
     acp.SessionUpdate.configOptionUpdate(configOptions: configOptions()),
   ],
-  // Каталог моделей изменился после применённой перезагрузки конфигурации:
-  // клиент получает полный снимок опций сессии, `model.currentValue` остаётся
-  // моделью сессии (design.md change `add-config-writer-and-reload`, D8).
-  // Ни до ответа на `session/new`/`session/load` (ACP-8), ни при неудачной
-  // перезагрузке событие не публикуется: порядок гарантирует мост и ядро.
+  // Опции сессии изменились без запроса клиента: после применённой
+  // перезагрузки конфигурации (design.md change `add-config-writer-and-reload`,
+  // D8) или после смены модели командой `/model` (design.md change
+  // `add-agent-builtin-slash-commands`, D6). Клиент получает полный снимок
+  // опций сессии, строящийся из текущего состояния. Ни до ответа на
+  // `session/new`/`session/load` (ACP-8), ни при неудачной перезагрузке
+  // событие не публикуется; команда публикует его в ходе, до ответа на
+  // `session/prompt` (ACP-3): порядок гарантирует мост и ядро.
   ModelOptionsChanged() => [
     acp.SessionUpdate.configOptionUpdate(configOptions: configOptions()),
   ],

@@ -69,6 +69,25 @@ final class E2eAgent {
 
   bool get isScripted => kind == E2eAgentKind.scripted;
 
+  /// Режим сценария для теста встроенной команды `compact`.
+  ///
+  /// Почему: scripted-агент объявляет `compact` только в режиме
+  /// `withAvailableCommands`; Dart-агент и встроенный объявляют её сами
+  /// (capability `agent-slash-commands`), им хватает обычного сценария
+  /// (design.md change `add-agent-builtin-slash-commands`, D9, tasks 3.2).
+  CodelabCompatibleStdioAgentMode get compactMode => isScripted
+      ? CodelabCompatibleStdioAgentMode.withAvailableCommands
+      : CodelabCompatibleStdioAgentMode.normal;
+
+  /// Ответ агента на `/compact` в новой сессии.
+  ///
+  /// Почему различается: scripted-агент отвечает отчётом о сжатии, а у
+  /// Dart-агента история новой сессии пуста, и ответ — `Nothing to compact.`
+  /// (Q10, Q11 (а) design.md). Тест `command_palette_flow_test` берёт ожидание
+  /// отсюда.
+  String get compactReply =>
+      isScripted ? 'Compacted the conversation.' : 'Nothing to compact.';
+
   /// Пропустить тесты `fs/*` и `terminal/*` во встроенном режиме.
   ///
   /// Причина: встроенные профили исполняют файлы и команды локально, а не

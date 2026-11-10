@@ -348,8 +348,9 @@ final class _Connection {
     );
     return Reply(
       acp.acpSessionNew.encodeResult(response),
-      // Команды шаблонов сессии (D9 change `add-agent-project-files`);
-      // без шаблонов список пуст, встроенных команд на этом этапе нет.
+      // Команды сессии `AgentSession.commands`: встроенные в порядке D2
+      // (design.md change `add-agent-builtin-slash-commands`), затем шаблоны
+      // (D9 change `add-agent-project-files`); без команд список пуст.
       after: () => _update(sessionId, wiring.bridge.availableCommandsUpdate),
     );
   }
@@ -612,7 +613,7 @@ final class _Connection {
   }
 
   static ModeId _mode(String value) =>
-      parseModeId(value) ??
+      ModeId.tryParse(value) ??
       (throw AcpRequestError.invalidParams('unknown mode: $value'));
 
   /// `session/list` (§13.5): страница хранилища.

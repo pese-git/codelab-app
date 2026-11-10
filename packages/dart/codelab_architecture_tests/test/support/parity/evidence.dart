@@ -11,9 +11,9 @@
 /// `verdict.dart` при расчёте статуса.
 ///
 /// Как использовать: `extractEvidence(ячейка)` даёт список доказательств;
-/// `checkEvidenceExists(...)` сверяет их с деревом репозитория и ведёт
-/// храповик `knownGaps` (D4): известный пробел только печатается, устаревшая
-/// запись и новый пробел роняют проверку.
+/// `checkEvidenceExists(...)` сверяет их с деревом репозитория: любое
+/// отсутствующее доказательство роняет проверку (D4; список известных пробелов
+/// убран, когда change `add-agent-builtin-slash-commands` закрыл K-02 и R-08).
 library;
 
 import 'dart:convert';
@@ -72,30 +72,12 @@ class Evidence {
   String toString() => label;
 }
 
-/// Известный пробел существования с номером задачи или именем change (D4).
-class KnownGap {
-  const KnownGap(this.rowId, this.evidence, this.task);
-
-  /// Идентификатор строки матрицы.
-  final String rowId;
-
-  /// Метка доказательства (`Evidence.label`).
-  final String evidence;
-
-  /// Номер задачи (`2.3`) или имя change, который закроет пробел.
-  final String task;
-}
-
 /// Итог проверки существования.
 class ExistenceReport {
-  const ExistenceReport({required this.failures, required this.knownGapLines});
+  const ExistenceReport({required this.failures});
 
-  /// Строки, роняющие тест: `<строка> <доказательство> missing`,
-  /// `stale known gap: …`.
+  /// Строки, роняющие тест: `<строка> <доказательство> missing`.
   final List<String> failures;
-
-  /// Строки `known gap: …`, которые только печатаются.
-  final List<String> knownGapLines;
 }
 
 /// Каталог золотых фикстур ACP от корня репозитория.
@@ -476,20 +458,16 @@ bool evidenceExists(
 
 /// Проверяет существование доказательств [rows] в дереве [repoRoot] (D3–D4).
 ///
-/// Строка без единого доказательства — `<строка> (no evidence) missing`.
-/// Пробел из [knownGaps] только печатается; запись, чьё доказательство
-/// существует или уже не названо в матрице, — `stale known gap` (храповик:
-/// список может только уменьшаться).
+/// Строка без единого доказательства — `<строка> (no evidence) missing`,
+/// отсутствующее доказательство — `<строка> <доказательство> missing`.
+/// Исключений нет: пробел существования не допускается (храповик `knownGaps`
+/// удалён вместе с последними записями K-02 и R-08).
 ExistenceReport checkEvidenceExists({
   required List<MatrixRow> rows,
   required String repoRoot,
-  List<KnownGap> knownGaps = const [],
 }) {
   final index = TestNameIndex(repoRoot);
   final failures = <String>[];
-  final gapLines = <String>[];
-  final usedGaps = <KnownGap>{};
-  final stale = <String>[];
 
   for (final row in rows) {
     final evidence = extractEvidence(row.criterion);
@@ -498,35 +476,10 @@ ExistenceReport checkEvidenceExists({
       continue;
     }
     for (final item in evidence) {
-      final gap = knownGaps
-          .where((g) => g.rowId == row.id && g.evidence == item.label)
-          .firstOrNull;
-      final exists = evidenceExists(item, repoRoot, index: index);
-      if (gap != null) {
-        usedGaps.add(gap);
-        if (exists) {
-          stale.add(
-            'stale known gap: ${row.id} ${item.label} (task ${gap.task}) '
-            'now exists, remove it from knownGaps',
-          );
-        } else {
-          gapLines.add('known gap: ${row.id} ${item.label} (task ${gap.task})');
-        }
-      } else if (!exists) {
+      if (!evidenceExists(item, repoRoot, index: index)) {
         failures.add('${row.id} ${item.label} missing');
       }
     }
   }
-  for (final gap in knownGaps) {
-    if (!usedGaps.contains(gap)) {
-      stale.add(
-        'stale known gap: ${gap.rowId} ${gap.evidence} (task ${gap.task}) '
-        'is not named in the matrix, remove it from knownGaps',
-      );
-    }
-  }
-  return ExistenceReport(
-    failures: [...failures, ...stale],
-    knownGapLines: gapLines,
-  );
+  return ExistenceReport(failures: failures);
 }

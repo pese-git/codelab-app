@@ -252,5 +252,26 @@
       }
     }
   ],
-  "commands": []
+  "commands": [
+    {
+      "name": "compact",
+      "description": "Compact the session history"
+    },
+    {
+      "name": "mode",
+      "description": "Switch the session mode"
+    },
+    {
+      "name": "model",
+      "description": "Switch the model"
+    },
+    {
+      "name": "status",
+      "description": "Show the model, mode, working directory and MCP servers"
+    },
+    {
+      "name": "help",
+      "description": "List commands"
+    }
+  ]
 }

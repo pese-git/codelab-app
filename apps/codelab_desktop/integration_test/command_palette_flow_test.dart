@@ -94,24 +94,6 @@ Future<void> _pickInline(WidgetTester tester, String text) async {
   await tester.pumpAndSettle();
 }
 
-/// Режим сценария для теста `compact`: scripted-агент объявляет `compact`
-/// только в `withAvailableCommands`; Dart-агент и встроенный объявляют её
-/// сами (capability `agent-slash-commands`), им нужен обычный сценарий.
-///
-/// ВРЕМЕННО: по tasks 3.2 это и [_compactReply] переезжают в помощник
-/// `support/e2e_agent.dart` (ответ по режиму), здесь они до тех пор, чтобы
-/// файл компилировался.
-CodelabCompatibleStdioAgentMode _compactMode() => E2eAgent.current.isScripted
-    ? CodelabCompatibleStdioAgentMode.withAvailableCommands
-    : CodelabCompatibleStdioAgentMode.normal;
-
-/// Ответ агента на `/compact` в новой сессии (Q10, Q11 (а) design.md): у
-/// scripted-агента отчёт о сжатии, у Dart-агента пустой регион даёт
-/// `Nothing to compact.`.
-String _compactReply() => E2eAgent.current.isScripted
-    ? 'Compacted the conversation.'
-    : 'Nothing to compact.';
-
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -130,7 +112,7 @@ void main() {
       });
       final launch = await E2eAgent.current.launch(
         project,
-        mode: _compactMode(),
+        mode: E2eAgent.current.compactMode,
       );
 
       await tester.pumpWidget(E2eAgent.current.bootstrap());
@@ -170,10 +152,10 @@ void main() {
       await _waitFor(
         tester,
         () =>
-            _transcript(tester).contains(_compactReply()) &&
+            _transcript(tester).contains(E2eAgent.current.compactReply) &&
             !_cubit(tester).state.isPromptSubmitting,
       );
-      expect(_transcript(tester), ['/compact', _compactReply()]);
+      expect(_transcript(tester), ['/compact', E2eAgent.current.compactReply]);
     },
   );
 
