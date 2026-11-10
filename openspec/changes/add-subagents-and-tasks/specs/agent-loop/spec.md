@@ -4,7 +4,7 @@
 Цикл, `Agent` и `AgentSession` SHALL сообщать о ходе закрытой иерархией `AgentEvent`:
 - `TurnStarted`, `StepStarted`, `ModelRequested` (с `estimatedTokens` — оценкой payload, 0 без оценщика);
 - `MessageStarted` (с `origin` служебного сообщения), `MessageDelta`, `ThoughtDelta`, `MessageEnded`;
-- `ToolCallStarted`, `ToolCallProgress`, `ToolCallFinished` (с `outcome`, `diffs` и признаком `interrupted` у синтетического результата реплея), `ToolPairingRepaired`;
+- `ToolCallStarted` (с необязательным `subagent` — `SubagentCallRef(id, type)` у вызова `agent`, из `ToolPresentation.subagent`; change `add-subagents-and-tasks`, D28), `ToolCallProgress`, `ToolCallFinished` (с `outcome`, `diffs` и признаком `interrupted` у синтетического результата реплея), `ToolPairingRepaired`;
 - `StepEnded`, `ModeChanged`, `AgentError`, `TurnEnded`;
 - `ContextCompacted(tokensBefore, tokensAfter)` — сжатие уже записано в журнал (§9.8);
 - `SessionTitleChanged(title, updatedAt)` — событие уровня `AgentSession`, заголовок записан в журнал (§8.3);

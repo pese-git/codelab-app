@@ -19,6 +19,7 @@
 - `acp/initialize-capabilities` SHALL остаться вариантом «клиент без `_meta`» с ролью `agent`;
 - клиентские фикстуры, в которых kit отправляет `initialize`, SHALL ожидать `clientCapabilities._meta.codelab` и объявлять `extensions`;
 - фикстуры с ожидаемыми схемами запроса к модели SHALL ожидать `task_*` вместо `update_plan`;
+- первый `tool_call` вызова `agent` в фикстурах субагентов (те же пять, включая реплей) SHALL ожидать `_meta.codelab.subagent` с `type` и `id` через `$capture` (D28);
 - финальный `tool_call_update` вызова `agent` в фикстурах субагентов (`acp/prompt-subagent-tool-call`, `acp/prompt-subagent-permission`, `acp/prompt-subagent-nested-permission`, `acp/prompt-subagent-tool-tree`, реплей `acp/session-load-subagent-tool-tree`) SHALL ожидать `_meta.codelab.subagent.summary` с точными `toolCalls` и токенами scripted-модели; `durationMs` сравнивается через `$any` (время недетерминировано).
 
 Scripted-модель субагента SHALL задаваться тем же блоком `llm.steps`, что и модель корня. Шаги ребёнка различаются проверкой `expect` по системному промпту или первому сообщению ребёнка; нового формата фикстуры не вводится.
