@@ -680,7 +680,7 @@ D1–D13 — `design.md`).
 | `GitIgnoreMatcher`, `IgnoreStack` | `codelab_client_core/lib/src/files/` | чистый Dart | правила `.gitignore`; общие с дополнением путей CLI (§12.2.8, шаг 3) |
 | `IoProjectFiles` | `codelab_client_io/lib/src/files/` | `dart:io` | realpath, граница, перечисление, чтение, `Directory.watch` |
 | `ProjectTreeState`, `ProjectFilesCubit` | `apps/codelab_desktop/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, просмотр, Following |
-| `CodeLabFileTree`, `CodeLabFileTreeRowData`, `CodeLabFilePreview` | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с номерами строк (подсветка — `CodeLabCodeHighlighter` после change `add-desktop-markdown`) |
+| `CodeLabFileTree`, `CodeLabFileTreeRowData`, `CodeLabFilePreview` | `codelab_ui/lib/src/organisms/` | ui_kit | виртуализированное дерево, просмотр с номерами строк (подсветка — `CodeLabCodeHighlighter` после change `add-desktop-markdown`) |
 | `ProjectFilesPane` | `.../project_files/presentation/` | presentation | панель «Files» дока: дерево сверху, просмотр снизу, «Refresh» |
 
 `IoProjectFiles` регистрируется в `app/app_scope.dart` (cherrypick), как
@@ -764,9 +764,17 @@ final class ProjectTreeState {
 **Алгоритм.**
 
 1. **Корень.** `root = canonicalRoot(folder)`, где `folder` — `cwd` сессии в фокусе, а без
-   сессии — папка выбранного проекта. Нет ни того, ни другого — `noFolder`; папки нет на диске —
-   `unavailable`: «The project folder does not exist.». Состояние дерева (раскрытые папки)
-   хранится по корню в памяти Cubit-а. Результат `list` или `read`, пришедший после смены файла
+   сессии и для сессии `detached` (осталась от прежнего соединения, например WebSocket) или
+   `notLoaded` (есть у агента, но не открыта) — папка выбранного проекта (решения пользователя 2026-11-11,
+   Q13, Q17). Нет ни того, ни другого — `noFolder`; папки нет на диске — `unavailable`: «The
+   project folder does not exist.»; прочий отказ — «The project folder cannot be read.». Если
+   `cwd` сессии вне папки проекта, дерево работает от `cwd`, а над ним — абсолютный корень с
+   пометкой «outside the project folder»; «вне» определяется по realpath (корень против
+   кэшированного `canonicalRoot` папки проекта: равен или начинается с него и разделителя;
+   неразрешимая папка проекта — тоже «вне»), абсолютный путь только в UI, в логах выше debug его
+   нет (Q18). Пока панель недоступна (WebSocket-профиль), порт не вызывается; при возврате
+   доступности корень перечитывается. Один `ProjectFilesCubit` на окно: создаётся при первом показе Files, закрывается с
+   окном. Раскрытые папки и выбранный файл хранятся по корню в памяти Cubit-а. Результат `list` или `read`, пришедший после смены файла
    или корня, отбрасывается по номеру запроса.
 2. **Граница рабочей папки** — для каждой операции. Сначала лексически, до обращения к диску:
    путь с `\0`, абсолютный или с `..`, поднимающимся выше корня, → `invalidPath`

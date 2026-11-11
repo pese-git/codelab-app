@@ -66,8 +66,8 @@
 
 ## 2. Итерация 2 — панель Files v1
 
-- [ ] 2.1 `[desktop]` Красный: правило сторожа «`dart:io` запрещён в `apps/codelab_desktop/lib/features/project_files/`» в `codelab_architecture_tests/test/support/rules.dart` и тест правила на примере импорта (D10). Реализация — само правило; `melos run guard` зелёный.
-- [ ] 2.2 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_file_tree_test.dart`. Требования «Ленивое перечисление папок», сценарии «Большая папка», «`.git` скрыт, скрытые файлы видны», и «Граница рабочей папки браузера», сценарий «Ссылка наружу видна, но не открывается». Проверяет:
+- [x] 2.1 `[desktop]` Красный: правило сторожа «`dart:io` запрещён в `apps/codelab_desktop/lib/features/project_files/`» в `codelab_architecture_tests/test/support/rules.dart` и тест правила на примере импорта (D10). Реализация — само правило; `melos run guard` зелёный.
+- [x] 2.2 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_file_tree_test.dart`. Требования «Ленивое перечисление папок», сценарии «Большая папка», «`.git` скрыт, скрытые файлы видны», и «Граница рабочей папки браузера», сценарий «Ссылка наружу видна, но не открывается». Проверяет:
   - отрисовку строк по `CodeLabFileTreeRowData` (отступ по глубине, значки папки, файла и ↗);
   - 10 000 строк — построены только видимые и запас;
   - клавиши ↑/↓/→/←/Enter и колбэки;
@@ -75,36 +75,49 @@
   - строку «… N more»;
   - строку ошибки папки;
   - ключи `file-tree-row-<relativePath>`.
-- [ ] 2.3 `[desktop]` Реализация `CodeLabFileTree` (`ListView.builder`, высота строки 24) и `CodeLabFileTreeRowData` в `organisms/` и `models/`; превью в `codelab_organism_previews.dart`.
-- [ ] 2.4 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_file_preview_test.dart`. Требования «Просмотр файла только для чтения» (сценарии «Текстовый файл», «Двоичный файл», «Слишком большой файл») и «Предупреждение для файлов с секретами». Проверяет:
+- [x] 2.3 `[desktop]` Реализация `CodeLabFileTree` (`ListView.builder`, высота строки 24) и `CodeLabFileTreeRowData` в `organisms/` (каталога `models/` в `codelab_ui` нет); превью в `codelab_organism_previews.dart`.
+- [x] 2.4 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_file_preview_test.dart`. Требования «Просмотр файла только для чтения» (сценарии «Текстовый файл», «Двоичный файл», «Слишком большой файл») и «Предупреждение для файлов с секретами». Проверяет:
   - номера строк;
   - подсветку строки и прокрутку к ней (вход `line`, для итерации 5);
   - отсутствие редактируемого поля;
   - состояния `loading`, `binary`, `tooLarge`, `failed`;
   - `InfoBar` `file-preview-secret-warning` при флаге `maybeSecret`;
   - ключ `file-preview`.
-- [ ] 2.5 `[desktop]` Реализация `CodeLabFilePreview`: моноширинно, без подсветки до `add-desktop-markdown`, D4; превью организма.
-- [ ] 2.5a `[desktop]` Красный: `codelab_file_preview_test.dart` — строка относительного пути `file-preview-path` и кнопка `file-preview-copy-path` вызывает колбэк с `relativePath`; `project_files_pane_test.dart` — сценарий «Copy path копирует относительный путь» (буфер — ровно `lib/src/a.dart`, без корня и содержимого; Q14, D13).
-- [ ] 2.5b `[desktop]` Реализация: строка пути и «Copy path» в `CodeLabFilePreview` (только колбэк), `Clipboard.setData` в `ProjectFilesPane`.
-- [ ] 2.6 `[desktop]` Красный: `apps/codelab_desktop/test/features/project_files/project_files_cubit_test.dart` на фальшивом `ProjectFiles`. Требования «Панель Files в доке инструментов» (сценарии «Корень без сессии», «Смена сессии в фокусе»), «Ленивое перечисление папок» (сценарии «Раскрытие папки читает один уровень», «Refresh показывает новый файл»), «Просмотр файла только для чтения» (сценарий «Поздний результат чтения») и D6. Проверяет:
+- [x] 2.5 `[desktop]` Реализация `CodeLabFilePreview`: моноширинно, без подсветки до `add-desktop-markdown`, D4; превью организма.
+- [x] 2.5a `[desktop]` Красный: `codelab_file_preview_test.dart` — строка относительного пути `file-preview-path` и кнопка `file-preview-copy-path` вызывает колбэк с `relativePath`; `project_files_pane_test.dart` — сценарий «Copy path копирует относительный путь» (буфер — ровно `lib/src/a.dart`, без корня и содержимого; Q14, D13).
+- [x] 2.5b `[desktop]` Реализация: строка пути и «Copy path» в `CodeLabFilePreview` (только колбэк), `Clipboard.setData` в `ProjectFilesPane`.
+- [x] 2.6 `[desktop]` Красный: `apps/codelab_desktop/test/features/project_files/project_files_cubit_test.dart` на фальшивом `ProjectFiles`. Требования «Панель Files в доке инструментов» (сценарии «Корень без сессии», «Смена сессии в фокусе»), «Ленивое перечисление папок» (сценарии «Раскрытие папки читает один уровень», «Refresh показывает новый файл»), «Просмотр файла только для чтения» (сценарий «Поздний результат чтения») и D6. Проверяет:
   - автомат `noFolder → loading → ready`, `unavailable`;
   - раскрытие — ровно один `list`;
   - поздние `list` и `read` после смены файла или корня отбрасываются;
   - Refresh не дублируется;
   - раскрытые папки сохраняются по корню при возврате к сессии.
-- [ ] 2.7 `[desktop]` Реализация `ProjectTreeState` и `ProjectFilesCubit` в `features/project_files/application/`; чистая функция построения строк — отдельно, с тестом.
-- [ ] 2.8 `[desktop]` Красный: `apps/codelab_desktop/test/features/workbench/application/session_folder_is_local_test.dart` — embedded и stdio дают `true`, webSocket — `false` (требование «Панель Files в доке инструментов», сценарий «Нет панели для WebSocket-агента»; D7, D9). Реализация `sessionFolderIsLocal` в `features/workbench/application/`.
-- [ ] 2.9 `[desktop]` Красный: `apps/codelab_desktop/test/features/project_files/project_files_pane_test.dart`. Требования «Панель Files в доке инструментов» (сценарии «Открытие панели для встроенного агента», «Повторное сочетание закрывает панель», «Нет панели для WebSocket-агента»), «Предупреждение для файлов с секретами» (сценарий «Открытие `.env`»: журнал и диагностика без маркера) и `agent-workbench-ui` «Tool dock with closable pane tabs» (сценарий «Unavailable pane is hidden but kept in the layout»). Проверяет:
+- [x] 2.7 `[desktop]` Реализация `ProjectTreeState` и `ProjectFilesCubit` в `features/project_files/application/`; чистая функция построения строк — отдельно, с тестом. Примечание: `preview_view_test.dart` написан вместе с кодом `previewContentOf`, а не красным до него — отступление от TDD, зафиксировано по ревью итерации 2.
+- [x] 2.8 `[desktop]` Красный: `apps/codelab_desktop/test/features/workbench/application/session_folder_is_local_test.dart` — embedded и stdio дают `true`, webSocket — `false` (требование «Панель Files в доке инструментов», сценарий «Нет панели для WebSocket-агента»; D7, D9). Реализация `sessionFolderIsLocal` в `features/workbench/application/`.
+- [x] 2.9 `[desktop]` Красный: `apps/codelab_desktop/test/features/project_files/project_files_pane_test.dart`. Требования «Панель Files в доке инструментов» (сценарии «Открытие панели для встроенного агента», «Повторное сочетание закрывает панель», «Нет панели для WebSocket-агента»), «Предупреждение для файлов с секретами» (сценарий «Открытие `.env`»: журнал и диагностика без маркера) и `agent-workbench-ui` «Tool dock with closable pane tabs» (сценарий «Unavailable pane is hidden but kept in the layout»). Проверяет:
   - переключатель `tool-toggle-files`, Cmd/Ctrl+Shift+E, пункт палитры «Files»;
   - сайдбар на месте;
   - без привязки `ProjectFiles` панели нет.
-- [ ] 2.10 `[desktop]` Реализация:
+- [x] 2.10 `[desktop]` Реализация:
   - `ProjectFilesPane` (дерево сверху, просмотр снизу, «Refresh»);
   - вычисляемые доступные панели в `workbench_shell.dart`;
   - привязка `IoProjectFiles` в `lib/app/app_scope.dart`;
   - сочетание и `HostCommand` палитры;
   - события `project_files.*` без содержимого (D5);
   - раздел о feature в `apps/codelab_desktop/AGENTS.md`.
+- [x] 2.11 `[desktop]` По ревью итерации 2 — каждая правка парой «красный тест → код»:
+  - **Cubit окна:** один `ProjectFilesCubit` на окно, создаётся лениво при первом показе Files, закрывается с окном; закрытие вкладки его не закрывает (D6, «Владелец»);
+  - **выбор по корню:** при возврате к корню восстанавливаются раскрытые папки и выбранный файл (D6);
+  - **Q17:** сессия `detached` или `notLoaded` — корень из папки проекта (сценарий «Сессия из прежнего соединения»);
+  - **Q18:** корень вне папки проекта — подпись `project-files-root-outside`, абсолютный путь не в логах выше debug (сценарий «Корень вне папки проекта»);
+  - **исключения порта:** не `ProjectFilesFailure` → `unreadable`, в диагностике только тип (D6, «Ошибки порта»);
+  - **синтетические ключи строк:** у строк «… N more» и строки ошибки папки — свои ключи, не пересекающиеся с `file-tree-row-<relativePath>`;
+  - **вид отказа корня:** `unavailable` различает `notFound` и прочие отказы (сценарий «Папка проекта не читается»);
+  - **Q19:** пункт «Files» палитры только при доступной панели, без группы «Go to»;
+  - **второй круг ревью:**
+    - доступность: `ProjectFilesCubit` получает `projectFilesAvailable` потоком из `CodeLabShellCubit`; пока панель недоступна, порт не вызывается и событий `root_unavailable` нет, при возврате доступности корень перечитывается (сценарий «WebSocket: никакого обращения к диску»; D6, «Доступность»);
+    - Q18 по realpath: корень против кэшированного `canonicalRoot(projectDirectory)`, пересчёт при смене проекта, неразрешимая папка проекта → подпись (сценарии «Путь проекта с `..` или ссылкой наружу», «Одна папка под двумя путями»);
+    - `error_type` в событии `kind: unexpected` — имя типа исключения без текста (D6, «Ошибки порта»).
 
 ## 3. Итерация 3 — `.gitignore`
 
