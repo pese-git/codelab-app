@@ -18,11 +18,15 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart'
     show StdioAcpAgentProfile;
 import 'package:codelab_ui/codelab_ui.dart';
+import 'package:flutter/painting.dart' show ImageProvider;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/provider_setup_offer.dart';
 import '../../../core/platform/connection_preferences.dart';
 import '../../../core/platform/dock_layout_store.dart';
+import '../../../core/platform/external_link_opener.dart';
+import '../../../core/platform/limited_network_image.dart';
+import '../../../core/platform/link_policy.dart';
 import '../../../core/platform/project_folder_picker.dart';
 import '../../settings/application/default_profile_resolver.dart';
 import 'active_session_cubit.dart';
@@ -210,6 +214,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     DirectoryExists? directoryExists,
     DockLayoutStore? dockLayoutStore,
     Logger? logger,
+    ExternalLinkOpener? externalLinkOpener,
+    ImageProviderFor? imageProviderFor,
+    Logger? eventLogger,
   }) {
     // Без графа токена из окружения нет: ссылки `env:` дают подключение без
     // токена (тесты передают свой источник).
@@ -229,6 +236,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     return CodeLabShellCubit._(
       workspace: clientWorkspace,
       ownsWorkspace: workspace == null,
+      externalLinkOpener:
+          externalLinkOpener ?? const UrlLauncherExternalLinkOpener(),
+      imageProviderFor: imageProviderFor ?? defaultImageProviderFor,
+      eventLogger: eventLogger ?? logger,
       parts:
           parts ??
           CodeLabShellParts.build(
@@ -254,11 +265,17 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required ClientWorkspace workspace,
     required bool ownsWorkspace,
     required CodeLabShellParts parts,
+    required ExternalLinkOpener externalLinkOpener,
+    required ImageProviderFor imageProviderFor,
+    Logger? eventLogger,
   }) : _workspace = workspace,
        _ownsWorkspace = ownsWorkspace,
        _parts = parts,
+       _externalLinkOpener = externalLinkOpener,
+       _imageProviderFor = imageProviderFor,
+       _eventLogger = eventLogger,
        super(_compose(parts)) {
-    _parts.changes.listen(() => emit(_compose(_parts)));
+    _parts.changes.listen(() => emit(_compose(_parts, linkNote: _linkNote)));
     _diagnosticSubscription = _workspace.diagnostics.listen(
       _handleKitDiagnostic,
     );
@@ -270,6 +287,16 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// и закрывает его в [close].
   final bool _ownsWorkspace;
   final CodeLabShellParts _parts;
+  final ExternalLinkOpener _externalLinkOpener;
+  final ImageProviderFor _imageProviderFor;
+
+  /// Канал событий `link.open` и `image.show` (D12): только схема, хост и
+  /// исход, без пути и query.
+  final Logger? _eventLogger;
+
+  /// Заметка о неудачном открытии ссылки; живёт в фасаде, а не в частях, потому
+  /// что принадлежит только ему.
+  String? _linkNote;
   late final StreamSubscription<WorkspaceDiagnostic> _diagnosticSubscription;
 
   ConnectionCubit get _connection => _parts.connection;
@@ -325,6 +352,88 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       sessionId: sessionId,
       rowId: rowId,
       expanded: expanded,
+    );
+  }
+
+  /// Открывает ссылку из ответа агента по клику пользователя (D5, DSK-7).
+  ///
+  /// Политику app проверяет ещё раз: виджет мог ошибиться, а адрес пришёл из
+  /// недоверенного текста. Вне политики порт платформы не вызывается. В журнал
+  /// (`link.open`) идут схема, хост и исход — путь, query и fragment нет
+  /// (`AGENTS.md` §16). Отказ платформы показывает заметку «Couldn't open the
+  /// link.», следующий успех её снимает.
+  Future<void> openExternalLink(Uri uri) async {
+    ExternalLinkOutcome outcome;
+    try {
+      outcome = isOpenableLink(uri)
+          ? await _externalLinkOpener.open(externalLinkTarget(uri))
+          : ExternalLinkOutcome.rejectedScheme;
+    } on Object {
+      // Любой сбой пути (порт, разбор адреса) — «не удалось открыть», а не
+      // исключение из обработчика клика. Текст исключения может нести адрес.
+      outcome = ExternalLinkOutcome.failed;
+    }
+    final scheme = uri.scheme;
+    _eventLogger?.info(
+      'link.open',
+      context: {
+        'scheme': scheme.length > 32 ? scheme.substring(0, 32) : scheme,
+        'host': uri.host.length > 255 ? uri.host.substring(0, 255) : uri.host,
+        'outcome': outcome.name,
+      },
+    );
+    if (outcome == ExternalLinkOutcome.failed) {
+      _setLinkNote("Couldn't open the link.");
+    } else if (outcome == ExternalLinkOutcome.opened) {
+      _setLinkNote(null);
+    }
+  }
+
+  /// Поставщик изображения для «Show image» (D6): загрузка с лимитами через
+  /// порт, привязанный в графе. Метод устойчив как tear-off: смена ссылки
+  /// перестраивала бы картинки в ленте (DSK-3).
+  ImageProvider imageFor(Uri uri) => _imageProviderFor(uri);
+
+  /// Закрывает заметку об открытии ссылки.
+  void dismissLinkNote() => _setLinkNote(null);
+
+  void _setLinkNote(String? note) {
+    if (_linkNote == note) {
+      return;
+    }
+    _linkNote = note;
+    emit(state.copyWith(linkNote: note));
+  }
+
+  /// Пользователь нажал «Show image» у изображения с ключом
+  /// `<rowId>#image:<url>` (D6): запоминается в `TranscriptViewCubit` для
+  /// активной сессии. Ключ проверяется заново — только `https` с хостом;
+  /// без активной сессии — no-op. В журнал (`image.show`) идёт только хост.
+  void showImage(String key) {
+    final sessionId = _parts.activeSession.state.sessionId;
+    final marker = key.indexOf('#image:');
+    if (sessionId == null || marker <= 0) {
+      return;
+    }
+    final rowId = key.substring(0, marker);
+    final url = key.substring(marker + '#image:'.length);
+    final uri = Uri.tryParse(url);
+    if (uri == null || !isLoadableImage(uri)) {
+      return;
+    }
+    if (_parts.transcriptView.state.isImageShown(sessionId, rowId, url)) {
+      return;
+    }
+    _parts.transcriptView.setImageShown(
+      sessionId: sessionId,
+      rowId: rowId,
+      url: url,
+    );
+    _eventLogger?.info(
+      'image.show',
+      context: {
+        'host': uri.host.length > 255 ? uri.host.substring(0, 255) : uri.host,
+      },
     );
   }
 
@@ -490,7 +599,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         source: diagnostic.source,
       );
 
-  static CodeLabShellState _compose(CodeLabShellParts parts) {
+  static CodeLabShellState _compose(
+    CodeLabShellParts parts, {
+    String? linkNote,
+  }) {
     final connection = parts.connection.state;
     final sessions = parts.sessions.state;
     final active = parts.activeSession.state;
@@ -510,6 +622,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       activeSessionId: sessions.activeSessionId,
       transcriptRows: active.transcriptRows,
       transcriptExpansion: transcriptView.overridesFor(active.sessionId),
+      shownImages: transcriptView.shownImagesFor(active.sessionId),
+      linkNote: linkNote,
       turnState: active.turnState,
       inspectorEntries: active.inspectorEntries,
       viewMode: CodeLabViewMode.normal,

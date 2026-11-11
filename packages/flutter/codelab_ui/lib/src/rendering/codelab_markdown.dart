@@ -55,6 +55,7 @@ class _CodeLabMarkdownState extends State<CodeLabMarkdown> {
 
   @override
   void dispose() {
+    _row.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -68,6 +69,15 @@ class _CodeLabMarkdownState extends State<CodeLabMarkdown> {
   }
 
   @override
+  void didUpdateWidget(CodeLabMarkdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _row.hideTooltipIfStale(
+      sameRow: oldWidget.id == widget.id,
+      text: widget.text,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Слишком глубокая вложенность разбор пакета не переживает (D14): ответ
     // показывается исходным текстом без markdown.
@@ -75,7 +85,10 @@ class _CodeLabMarkdownState extends State<CodeLabMarkdown> {
       return _PlainFallback(text: widget.text);
     }
     final config = _configFor(FluentTheme.of(context));
-    _row.update(id: widget.id, blocks: scanFencedBlocks(widget.text));
+    _row
+      ..host = context
+      ..scroll = Scrollable.maybeOf(context)?.position
+      ..update(id: widget.id, blocks: scanFencedBlocks(widget.text));
     // `SelectableRegion` из widgets, а не `SelectionArea`: `SelectionArea` и
     // его контекстное меню принадлежат Material, а кит работает без
     // Material-предка (D4, D10). Меню поэтому своё, на Fluent.

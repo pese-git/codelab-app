@@ -1,4 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/gestures.dart';
+
+import '../atomics/atomics.dart';
+import 'escape_for_display.dart';
 
 /// Огороженный блок кода, найденный в тексте ответа.
 ///
@@ -142,6 +146,120 @@ class CodeLabMarkdownRowModel {
 
   /// Освобождает номер, когда блок размонтирован.
   void release(int index) => _occupied.remove(index);
+
+  /// Контекст хоста (`CodeLabMarkdown`) для оверлея подсказки; `null` после
+  /// размонтирования.
+  BuildContext? host;
+
+  /// Позиция прокрутки ближайшего `Scrollable` хоста: берётся при сборке
+  /// хоста, а не в обработчике наведения, где контекст может быть устаревшим;
+  /// подсказка закрывается при её изменении.
+  ScrollPosition? scroll;
+  String? _tooltipUrl;
+
+  final Map<String, TapGestureRecognizer> _recognizers = {};
+  OverlayEntry? _tooltip;
+  ScrollPosition? _watchedScroll;
+
+  /// Распознаватель клика по ссылке [url]: один на адрес, чтобы пересборка
+  /// хвоста при стриме не копила объекты; обработчик обновляется всегда.
+  TapGestureRecognizer recognizerFor(String url, VoidCallback onTap) {
+    final recognizer = _recognizers.putIfAbsent(url, TapGestureRecognizer.new);
+    recognizer.onTap = onTap;
+    return recognizer;
+  }
+
+  /// Показывает подсказку с полным адресом у курсора (D5): свой оверлей в
+  /// стиле Fluent, а не Material `Tooltip`. Закрывается при уходе курсора,
+  /// прокрутке и [dispose].
+  void showTooltip(String url, Offset pointer) {
+    hideTooltip();
+    final context = host;
+    if (context == null || !context.mounted) return;
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+    final message = displayAddress(url);
+    _tooltip = OverlayEntry(
+      builder: (overlayContext) {
+        final theme = FluentTheme.of(overlayContext);
+        return IgnorePointer(
+          child: CustomSingleChildLayout(
+            delegate: _TooltipLayout(pointer + const Offset(12, 18)),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: theme.menuColor,
+                border: Border.all(
+                  color: theme.resources.cardStrokeColorDefault,
+                ),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: CodeLabText(message, role: CodeLabTextRole.caption),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    overlay.insert(_tooltip!);
+    _tooltipUrl = url;
+    _watchedScroll = scroll?..addListener(hideTooltip);
+  }
+
+  /// Убирает подсказку, если она показана.
+  void hideTooltip() {
+    _tooltipUrl = null;
+    _watchedScroll?.removeListener(hideTooltip);
+    _watchedScroll = null;
+    _tooltip?.remove();
+    _tooltip?.dispose();
+    _tooltip = null;
+  }
+
+  /// Строка обновилась: подсказка адреса, которого в новом тексте нет, или
+  /// подсказка другой строки гаснет сама — `onExit` старого спана не придёт.
+  void hideTooltipIfStale({required bool sameRow, required String text}) {
+    final url = _tooltipUrl;
+    if (url != null && (!sameRow || !text.contains(url))) hideTooltip();
+  }
+
+  /// Освобождает распознаватели и подсказку при размонтировании строки.
+  void dispose() {
+    hideTooltip();
+    host = null;
+    for (final recognizer in _recognizers.values) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+  }
+}
+
+/// Раскладка подсказки: левый верхний угол у курсора, целиком в оверлее.
+class _TooltipLayout extends SingleChildLayoutDelegate {
+  const _TooltipLayout(this.anchor);
+
+  final Offset anchor;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      constraints.loosen();
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+    anchor.dx.clamp(0.0, (size.width - childSize.width).clamp(0.0, size.width)),
+    anchor.dy.clamp(
+      0.0,
+      (size.height - childSize.height).clamp(0.0, size.height),
+    ),
+  );
+
+  @override
+  bool shouldRelayout(_TooltipLayout oldDelegate) =>
+      anchor != oldDelegate.anchor;
 }
 
 /// Передаёт [CodeLabMarkdownRowModel] builder'ам без подписки на изменения.

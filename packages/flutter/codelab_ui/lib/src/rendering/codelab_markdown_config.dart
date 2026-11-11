@@ -1,12 +1,13 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/gestures.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
-import '../atomics/atomics.dart';
 import 'codelab_code_block.dart';
 import 'codelab_code_highlighter.dart';
 import 'codelab_markdown_row.dart';
+import 'codelab_markdown_scope.dart';
 import 'codelab_markdown_stats.dart';
-import 'escape_for_display.dart';
+import 'codelab_markdown_media.dart';
 
 /// Тема и builder'ы отрисовки markdown, созданные один раз на тему Fluent.
 ///
@@ -144,9 +145,9 @@ class CodeLabMarkdownConfig {
     ],
   );
 
-  /// Изображение: заглушка без загрузки. Без этого builder'а пакет сам грузит
-  /// PNG и SVG по сети, а `<img>` из HTML идёт туда же (D6, факт 3). Показ по
-  /// клику добавляет итерация 4.
+  /// Изображение: заглушка, а загрузка — только по клику «Show image» и по
+  /// политике app. Без этого builder'а пакет сам грузит PNG и SVG по сети, а
+  /// `<img>` из HTML идёт туда же (D6, факт 3).
   static Widget _buildImage(
     BuildContext context,
     String imageUrl,
@@ -154,33 +155,97 @@ class CodeLabMarkdownConfig {
     double? height,
   ) => CodeLabImagePlaceholder(url: imageUrl);
 
-  /// Ссылка: пока обычный текст — без recognizer, курсора, акцентного цвета
-  /// и подчёркивания, чтобы неактивная ссылка не выглядела кликабельной.
-  /// Активные ссылки по политике app вводит итерация 4 (D5).
+  /// Ссылка (D5): активна, только если app (через `CodeLabMarkdownScope`)
+  /// разрешил адрес; иначе — обычный текст без recognizer, курсора, акцента и
+  /// подчёркивания, чтобы неактивная ссылка не выглядела кликабельной. Адрес
+  /// берётся из `details.url`, а не из текста ссылки (`onLinkTap` пакета даёт
+  /// только текст — прототип, факт 4).
+  ///
+  /// Политика читается без подписки (`getInheritedWidgetOfExactType`): смена
+  /// scope не должна перестраивать закрытые сегменты пакета (DSK-3, D3).
   static InlineSpan _buildLink(LinkBuildDetails details) {
     final base = details.config.style ?? const TextStyle();
+    final uri = Uri.tryParse(details.url);
+    final scope = details.context
+        .getInheritedWidgetOfExactType<CodeLabMarkdownScope>();
+    if (uri == null || scope == null || !scope.canOpenLink(uri)) {
+      return TextSpan(
+        style: base,
+        children: [
+          for (final span in details.labelSpans)
+            _restyle(span, color: base.color, decoration: TextDecoration.none),
+        ],
+      );
+    }
+    final accent = details.linkStyle.color ?? base.color;
+    final row = CodeLabMarkdownRowScope.of(details.context);
+    final recognizer = row.recognizerFor(
+      details.url,
+      () => scope.onOpenLink(uri),
+    );
+    // Обычные `TextSpan` с recognizer, а не `WidgetSpan`: подпись переносится по
+    // строкам вместе с абзацем и выделяется. Подсказка — оверлей хоста.
     return TextSpan(
-      style: base,
-      children: [for (final span in details.labelSpans) _inert(span, base)],
+      style: base.copyWith(
+        color: accent,
+        decoration: TextDecoration.underline,
+        decorationColor: accent,
+      ),
+      children: [
+        for (final span in details.labelSpans)
+          _restyle(
+            span,
+            color: accent,
+            decoration: TextDecoration.underline,
+            link: (
+              recognizer: recognizer,
+              onEnter: (event) => row.showTooltip(details.url, event.position),
+              onExit: (_) => row.hideTooltip(),
+            ),
+          ),
+      ],
     );
   }
 
-  /// Копия [span] со стилем текста вместо стиля ссылки (цвет и подчёркивание
-  /// берутся из [base]); виджеты внутри ссылки, например изображение, остаются.
-  static InlineSpan _inert(InlineSpan span, TextStyle base) {
+  /// Копия [span] с цветом и оформлением ссылки вместо стиля пакета; виджеты
+  /// внутри ссылки, например изображение, остаются.
+  static InlineSpan _restyle(
+    InlineSpan span, {
+    required Color? color,
+    required TextDecoration decoration,
+    _LinkHandlers? link,
+  }) {
     if (span is! TextSpan) return span;
-    final style = span.style;
+    final hasText = (span.text ?? '').isNotEmpty;
     return TextSpan(
       text: span.text,
-      children: span.children?.map((c) => _inert(c, base)).toList(),
-      style: style?.copyWith(
-        color: base.color,
-        decoration: TextDecoration.none,
-        decorationColor: base.color,
+      // Распознаватель и курсор у каждого листа с текстом: на `children`
+      // родительский `recognizer` не распространяется.
+      recognizer: hasText ? link?.recognizer : null,
+      mouseCursor: hasText && link != null ? SystemMouseCursors.click : null,
+      onEnter: hasText ? link?.onEnter : null,
+      onExit: hasText ? link?.onExit : null,
+      children: span.children
+          ?.map(
+            (c) =>
+                _restyle(c, color: color, decoration: decoration, link: link),
+          )
+          .toList(),
+      style: span.style?.copyWith(
+        color: color,
+        decoration: decoration,
+        decorationColor: color,
       ),
     );
   }
 }
+
+/// Обработчики листа активной ссылки: клик и подсказка по наведению.
+typedef _LinkHandlers = ({
+  TapGestureRecognizer recognizer,
+  void Function(PointerEnterEvent) onEnter,
+  void Function(PointerExitEvent) onExit,
+});
 
 /// Видимый текст заголовка из виджета, который отдаёт пакет.
 String _plainTextOf(Widget content) => switch (content) {
@@ -189,57 +254,3 @@ String _plainTextOf(Widget content) => switch (content) {
   RichText(:final text) => text.toPlainText(),
   _ => '',
 };
-
-/// Заглушка изображения: «Image», хост, имя файла и полный адрес в подсказке.
-///
-/// Почему: изображение не загружается без явного действия пользователя —
-/// иначе враждебный ответ вынесет данные адресом `![](https://…?d=секрет)`
-/// (D6, VIEW-12, DSK-7).
-///
-/// Для чего: единственный вид изображения в ленте до итерации 4; показывает,
-/// что на месте было изображение и откуда, не обращаясь к сети.
-///
-/// Как использовать: строится только `imageBuilder` конфигурации; [url] —
-/// адрес как в ответе, на экран он попадает через `escapeForDisplay`.
-class CodeLabImagePlaceholder extends StatelessWidget {
-  const CodeLabImagePlaceholder({required this.url, super.key});
-
-  final String url;
-
-  @override
-  Widget build(BuildContext context) {
-    final resources = FluentTheme.of(context).resources;
-    final uri = Uri.tryParse(url);
-    // Хост и имя файла приходят из недоверенного адреса: показываются с
-    // видимыми escape-последовательностями (D5, R4).
-    final host = escapeForDisplay(uri?.host ?? '');
-    final name = escapeForDisplay(
-      (uri != null && uri.pathSegments.isNotEmpty) ? uri.pathSegments.last : '',
-    );
-    return Tooltip(
-      message: escapeForDisplay(url),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border.all(color: resources.cardStrokeColorDefault),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(FluentIcons.photo2, size: 14),
-              const SizedBox(width: 8),
-              Flexible(
-                child: CodeLabText(
-                  ['Image', host, name].where((s) => s.isNotEmpty).join(' · '),
-                  role: CodeLabTextRole.caption,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
+import '../../../../core/platform/link_policy.dart';
 import '../../application/shell_cubit.dart';
 import '../workbench_shell.dart'
     show openConnectionSettings, selectPaletteCommand;
@@ -110,15 +111,31 @@ class WorkbenchMainPane extends StatelessWidget {
         },
       );
     } else {
-      content = CodeLabTranscriptPanel(
-        rows: state.transcriptRows,
-        viewMode: state.viewMode,
-        expansionOverrides: state.transcriptExpansion,
-        onExpansionChanged: (change) =>
-            cubit.setTranscriptRowExpanded(change.rowId, change.expanded),
-        emptyLabel: state.activeSessionId == null
-            ? 'Start a new session to talk to the agent.'
-            : 'Send a message to start.',
+      // Политику ссылок и изображений ответа агента принимает app (D2, D5,
+      // D6): кит получает функции-решения и колбэки действий пользователя.
+      content = CodeLabMarkdownScope(
+        canOpenLink: isOpenableLink,
+        // Устойчивые функции (tear-off метода Cubit и функции верхнего уровня):
+        // смена ссылок на них перестраивала бы картинки в ленте (DSK-3).
+        // `Future` от `openExternalLink` намеренно не ждём: клик — событие.
+        onOpenLink: cubit.openExternalLink,
+        canLoadImage: isLoadableImage,
+        // Лимит тела, редиректы только на https и декодирование не больше
+        // 1440×1440 (D6, R4) — за портом в графе; загрузка начинается только
+        // после «Show image».
+        imageFor: cubit.imageFor,
+        shownImages: state.shownImages,
+        onShowImage: cubit.showImage,
+        child: CodeLabTranscriptPanel(
+          rows: state.transcriptRows,
+          viewMode: state.viewMode,
+          expansionOverrides: state.transcriptExpansion,
+          onExpansionChanged: (change) =>
+              cubit.setTranscriptRowExpanded(change.rowId, change.expanded),
+          emptyLabel: state.activeSessionId == null
+              ? 'Start a new session to talk to the agent.'
+              : 'Send a message to start.',
+        ),
       );
     }
 
@@ -143,6 +160,15 @@ class WorkbenchMainPane extends StatelessWidget {
             const SizedBox(height: 12),
           ],
           ?secretMigrationBanner,
+          // Платформа отказала открыть ссылку из ответа (D5).
+          if (state.linkNote case final note?) ...[
+            InfoBar(
+              title: Text(note),
+              severity: InfoBarSeverity.warning,
+              onClose: cubit.dismissLinkNote,
+            ),
+            const SizedBox(height: 12),
+          ],
         ],
         Expanded(
           child: _ContentWithActivityBar(
