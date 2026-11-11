@@ -2,6 +2,7 @@
 // теста в `integration_test/`.
 
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,9 +19,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// пользователя. Хранилище в памяти живёт до следующего `setUp`, поэтому тест
 /// перезапуска, пересобирающий `Scope` внутри одного теста, по-прежнему
 /// проверяет, что данные переживают `Scope`.
+///
+/// Ещё перед каждым тестом задаёт логический размер окна [e2eWindowSize].
+/// Почему: окно app по умолчанию — 800×600 (`MainMenu.xib`), это класс
+/// `narrow`, где сайдбар уходит в выдвижное меню (`CodeLabLayoutClass`,
+/// порог `mediumMinWidth`), и тесты, которые нажимают кнопки сайдбара и
+/// дока, зависели бы от размера окна на машине разработчика. Размер
+/// задаётся у вида теста и после теста сбрасывается.
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    final view =
+        TestWidgetsFlutterBinding.instance.platformDispatcher.implicitView!;
+    view.physicalSize = e2eWindowSize * view.devicePixelRatio;
+    addTearDown(view.resetPhysicalSize);
   });
   await testMain();
 }
+
+/// Логический размер окна e2e-тестов: класс `wide` (от 1280), сайдбар и док
+/// стоят колонками, как на типичном экране ноутбука.
+const e2eWindowSize = Size(1440, 900);
