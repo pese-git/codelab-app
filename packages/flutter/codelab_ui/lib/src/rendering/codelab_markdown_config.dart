@@ -3,6 +3,7 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 
 import '../atomics/atomics.dart';
 import 'codelab_code_block.dart';
+import 'codelab_code_highlighter.dart';
 import 'codelab_markdown_row.dart';
 import 'codelab_markdown_stats.dart';
 import 'escape_for_display.dart';
@@ -25,12 +26,15 @@ import 'escape_for_display.dart';
 /// builder'ы читают из `CodeLabMarkdownScope` через `context` — её смена
 /// конфигурацию не пересоздаёт (D2).
 class CodeLabMarkdownConfig {
-  CodeLabMarkdownConfig(this.theme)
+  CodeLabMarkdownConfig(this.theme, {CodeLabCodeHighlighter? highlighter})
     : style = (theme.typography.body ?? const TextStyle()).copyWith(
         color: theme.resources.textFillColorPrimary,
       ),
       gptTheme = _gptThemeOf(theme),
-      codeBuilder = _buildCode,
+      highlighter = highlighter ?? CodeLabCodeHighlighter.shared,
+      codeBuilder = _codeBuilderOf(
+        highlighter ?? CodeLabCodeHighlighter.shared,
+      ),
       headingBuilder = _buildHeading,
       checkboxBuilder = _buildCheckbox,
       imageBuilder = _buildImage,
@@ -41,6 +45,10 @@ class CodeLabMarkdownConfig {
 
   /// Базовый стиль текста ответа.
   final TextStyle style;
+
+  /// Подсветка блоков кода; по умолчанию общий экземпляр с одним LRU на
+  /// ленту (D4).
+  final CodeLabCodeHighlighter highlighter;
 
   /// Тема пакета из ролей Fluent.
   final GptMarkdownThemeData gptTheme;
@@ -86,21 +94,19 @@ class CodeLabMarkdownConfig {
     );
   }
 
-  /// Блок кода: подпись, «Copy», код (D4).
-  static Widget _buildCode(
-    BuildContext context,
-    String name,
-    String code,
-    bool closed,
-  ) {
-    final row = CodeLabMarkdownRowScope.of(context);
-    return CodeLabCodeBlock(
-      row: row,
-      language: name,
-      code: code,
-      closed: closed,
-    );
-  }
+  /// Блок кода: подпись, «Copy», подсвеченный код (D4). Builder создаётся
+  /// один раз на конфигурацию и замыкает её подсветку (D3).
+  static CodeBlockBuilder _codeBuilderOf(CodeLabCodeHighlighter highlighter) =>
+      (context, name, code, closed) {
+        final row = CodeLabMarkdownRowScope.of(context);
+        return CodeLabCodeBlock(
+          row: row,
+          language: name,
+          code: code,
+          closed: closed,
+          highlighter: highlighter,
+        );
+      };
 
   /// Заголовок: содержимое пакета как есть. Builder нужен ради счётчика
   /// `headingBuilds` (D13: «заголовок строится один раз»), а не ради линии h1 —

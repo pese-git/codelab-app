@@ -61,6 +61,13 @@ abstract final class CodeLabMarkdownStats {
   /// Учитывает построение заголовка; только из `assert`.
   static bool noteHeadingBuild(String text) => _bump(headingBuilds, text);
 
+  /// Учитывает запуск токенизации; только из `assert`. [sync] — в UI isolate.
+  static bool noteHighlightRun({required bool sync}) {
+    highlightRuns++;
+    if (sync) highlightSyncRuns++;
+    return true;
+  }
+
   static bool _bump(Map<String, int> counter, String key) {
     counter.update(key, (value) => value + 1, ifAbsent: () => 1);
     return true;

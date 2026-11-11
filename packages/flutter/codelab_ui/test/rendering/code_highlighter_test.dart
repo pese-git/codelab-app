@@ -6,9 +6,11 @@
 // `CodeLabCodeToken`, `CodeLabTokenClass`, `CodeLabCodeTheme` из
 // `package:codelab_ui/codelab_ui.dart`.
 
-import 'dart:ui' show Color;
+import 'dart:async';
 
 import 'package:codelab_ui/codelab_ui.dart';
+import 'package:codelab_ui/src/rendering/codelab_code_highlighter.dart'
+    show snapToCodePoint, tokenizeWithEngine;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,6 +19,16 @@ final _darkTheme = FluentThemeData(brightness: Brightness.dark);
 
 /// Код из [lines] строк по одному символу.
 String _lines(int lines) => List.filled(lines, 'a').join('\n');
+
+/// Код ровно из [chars] символов со строками по [lineLength] (порог по
+/// длине строки: A4 + ревью итерации 3, квадратичность `RegExp` движка).
+String _chars(int chars, {int lineLength = 100}) {
+  final b = StringBuffer();
+  for (var i = 0; i < chars; i++) {
+    b.write((i + 1) % lineLength == 0 && i != chars - 1 ? '\n' : 'a');
+  }
+  return b.toString();
+}
 
 /// Токенайзер-заглушка со счётчиком вызовов.
 class _CountingTokenizer {
@@ -48,7 +60,7 @@ void main() {
         CodeLabHighlightMode.sync,
       );
       expect(
-        highlighter.modeFor('dart', 'a' * (16 * 1024)),
+        highlighter.modeFor('dart', _chars(16 * 1024)),
         CodeLabHighlightMode.sync,
       );
     });
@@ -59,7 +71,7 @@ void main() {
         CodeLabHighlightMode.background,
       );
       expect(
-        highlighter.modeFor('dart', 'a' * (16 * 1024 + 1)),
+        highlighter.modeFor('dart', _chars(16 * 1024 + 1)),
         CodeLabHighlightMode.background,
       );
     });
@@ -70,7 +82,7 @@ void main() {
         CodeLabHighlightMode.background,
       );
       expect(
-        highlighter.modeFor('dart', 'a' * (256 * 1024)),
+        highlighter.modeFor('dart', _chars(256 * 1024, lineLength: 1000)),
         CodeLabHighlightMode.background,
       );
     });
@@ -81,9 +93,212 @@ void main() {
         CodeLabHighlightMode.none,
       );
       expect(
-        highlighter.modeFor('dart', 'a' * (256 * 1024 + 1)),
+        highlighter.modeFor('dart', _chars(256 * 1024 + 1, lineLength: 1000)),
         CodeLabHighlightMode.none,
       );
+    });
+  });
+
+  group('line length (quadratic regexps of the engine)', () {
+    final highlighter = CodeLabCodeHighlighter();
+
+    test('synchronous only while every line is at most 150 chars', () {
+      expect(highlighter.modeFor('dart', 'a' * 150), CodeLabHighlightMode.sync);
+      expect(
+        highlighter.modeFor('dart', 'a' * 151),
+        CodeLabHighlightMode.background,
+      );
+    });
+
+    test('background only while every line is at most 1000 chars', () {
+      expect(
+        highlighter.modeFor('dart', 'a' * 1000),
+        CodeLabHighlightMode.background,
+      );
+      expect(
+        highlighter.modeFor('dart', 'a' * 1001),
+        CodeLabHighlightMode.none,
+      );
+      // Длинная строка среди коротких тоже отключает подсветку.
+      expect(
+        highlighter.modeFor('dart', 'a\n${'a' * 1001}\nb'),
+        CodeLabHighlightMode.none,
+      );
+    });
+
+    test('a 16000-char swift line is not tokenized at all', () {
+      final tokenizer = _CountingTokenizer();
+      final guarded = CodeLabCodeHighlighter(tokenizer: tokenizer.call);
+      final code = '#' * 16000;
+      final watch = Stopwatch()..start();
+      expect(guarded.modeFor('swift', code), CodeLabHighlightMode.none);
+      expect(watch.elapsedMilliseconds, lessThan(100));
+      expect(tokenizer.calls, isEmpty);
+    });
+  });
+
+  group('background runs', () {
+    test('two requests for the same code share one run', () async {
+      final result = Completer<List<CodeLabCodeToken>>();
+      var calls = 0;
+      final highlighter = CodeLabCodeHighlighter(
+        background: (language, code) {
+          calls++;
+          return result.future;
+        },
+      );
+      final code = _lines(400);
+      final first = highlighter.highlightInBackground('dart', code);
+      final second = highlighter.highlightInBackground('dart', code);
+      expect(calls, 1);
+      expect(CodeLabMarkdownStats.highlightRuns, 1);
+      result.complete([
+        const CodeLabCodeToken(0, 1, CodeLabTokenClass.keyword),
+      ]);
+      expect(await first, hasLength(1));
+      expect(await second, hasLength(1));
+      // После результата — кеш, новый запуск не нужен.
+      await highlighter.highlightInBackground('dart', code);
+      expect(calls, 1);
+    });
+
+    testWidgets('a run that never ends is dropped after the timeout', (
+      tester,
+    ) async {
+      // Время тестовое (`tester.pump`): ждать реальные секунды не нужно.
+      final reports = <FlutterErrorDetails>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = reports.add;
+      addTearDown(() => FlutterError.onError = previous);
+      var calls = 0;
+      final highlighter = CodeLabCodeHighlighter(
+        background: (language, code) {
+          calls++;
+          return Completer<List<CodeLabCodeToken>>().future;
+        },
+      );
+      final code = '${_lines(400)}\nsecret_code_line';
+      List<CodeLabCodeToken>? result;
+      unawaited(
+        highlighter
+            .highlightInBackground('dart', code)
+            .then((tokens) => result = tokens),
+      );
+      await tester.pump(
+        highlighter.backgroundTimeout - const Duration(seconds: 1),
+      );
+      expect(result, isNull, reason: 'still waiting');
+      await tester.pump(const Duration(seconds: 2));
+      expect(result, isEmpty);
+
+      expect(reports, hasLength(1));
+      final text = reports.single.toDiagnosticsNode().toStringDeep();
+      expect(text, contains('dart'));
+      expect(text, contains('Timeout'));
+      expect(text, isNot(contains('secret_code_line')));
+
+      // Решение оркестратора: тот же код даст тот же исход, поэтому таймаут
+      // запоминается как «без подсветки»: повтор не запускает фон и не шлёт
+      // новый отчёт (повторный монтаж и прокрутка не плодят isolate).
+      List<CodeLabCodeToken>? again;
+      unawaited(
+        highlighter
+            .highlightInBackground('dart', code)
+            .then((tokens) => again = tokens),
+      );
+      await tester.pump();
+      expect(again, isEmpty);
+      expect(calls, 1);
+      expect(reports, hasLength(1));
+      expect(highlighter.cached('dart', code), isEmpty);
+    });
+  });
+
+  group('cache budget', () {
+    test('old entries are evicted when the total size exceeds the budget', () {
+      final tokenizer = _CountingTokenizer();
+      final highlighter = CodeLabCodeHighlighter(tokenizer: tokenizer.call);
+      // 40 блоков по 250 000 символов — 10 млн единиц при бюджете 8 Mi.
+      String block(int i) => '${i.toString().padLeft(4, '0')}${'a' * 249996}';
+      for (var i = 0; i < 40; i++) {
+        highlighter.highlightSync('dart', block(i));
+      }
+      expect(tokenizer.calls, hasLength(40));
+      expect(highlighter.cached('dart', block(39)), isNotNull);
+      expect(highlighter.cached('dart', block(0)), isNull);
+    });
+  });
+
+  group('cache budget by tokens', () {
+    test('a token weighs 20 units, so many tokens evict old entries', () {
+      final highlighter = CodeLabCodeHighlighter(
+        tokenizer: (language, code) => [
+          for (var i = 0; i < 10000; i++)
+            CodeLabCodeToken(0, 1, CodeLabTokenClass.keyword),
+        ],
+      );
+      // Код короткий, но по 10 000 токенов (200 000 единиц) на запись: при
+      // бюджете 8 Mi помещается около 40 записей; с весом токена 1 вытеснения
+      // не было бы вовсе.
+      for (var i = 0; i < 60; i++) {
+        highlighter.highlightSync('dart', 'var v$i;');
+      }
+      expect(highlighter.cached('dart', 'var v59;'), isNotNull);
+      expect(highlighter.cached('dart', 'var v0;'), isNull);
+    });
+  });
+
+  group('surrogate pairs', () {
+    void expectWholePairs(String language, String code) {
+      final tokens = CodeLabCodeHighlighter().highlightSync(language, code);
+      expect(tokens, isNotEmpty);
+      bool splits(int pos) =>
+          pos > 0 &&
+          pos < code.length &&
+          code.codeUnitAt(pos - 1) >= 0xD800 &&
+          code.codeUnitAt(pos - 1) <= 0xDBFF &&
+          code.codeUnitAt(pos) >= 0xDC00 &&
+          code.codeUnitAt(pos) <= 0xDFFF;
+      for (final t in tokens) {
+        expect(splits(t.start), isFalse, reason: 'start ${t.start}');
+        expect(splits(t.end), isFalse, reason: 'end ${t.end}');
+      }
+    }
+
+    test('the engine output itself has no bound inside a pair', () {
+      // Прямая проверка `tokenizeWithEngine`, без страховки `_codeSpan`.
+      // Подобрано перебором языков: разрез попадает на НАЧАЛО токена
+      // (c и clojure, строка `"\\😀`) и на КОНЕЦ (batch `^😀`, c `"\\😀`).
+      const emoji = '\u{1F600}';
+      final inputs = <String, List<String>>{
+        'c': ['"\\$emoji', '"\\$emoji x', '"\\$emoji"'],
+        'clojure': ['"\\$emoji', '(str \\$emoji)'],
+        'batch': ['^$emoji', '^$emoji x'],
+        'latex': ['\\$emoji x'],
+      };
+      inputs.forEach((language, codes) {
+        for (final code in codes) {
+          final tokens = tokenizeWithEngine(language, code);
+          expect(tokens, isNotEmpty, reason: '$language $code');
+          for (final t in tokens) {
+            expect(
+              snapToCodePoint(code, t.start),
+              t.start,
+              reason: 'start of $language $code',
+            );
+            expect(
+              snapToCodePoint(code, t.end),
+              t.end,
+              reason: 'end of $language $code',
+            );
+          }
+        }
+      });
+    });
+
+    test('token bounds never fall between the halves of a pair', () {
+      expectWholePairs('latex', '\\\u{1F600} x');
+      expectWholePairs('clojure', '(str \\\u{1F600})');
     });
   });
 
@@ -199,18 +414,37 @@ void main() {
       FlutterError.onError = reports.add;
       addTearDown(() => FlutterError.onError = previous);
 
+      // Движок может положить фрагмент кода в сообщение своего исключения:
+      // в отчёт оно попадать не должно (§12, §16 `AGENTS.md`).
       final highlighter = CodeLabCodeHighlighter(
-        tokenizer: (language, code) => throw StateError('engine failed'),
+        tokenizer: (language, code) =>
+            throw StateError('boom: secret_code_line in $code'),
       );
-      const secret = 'final topSecretValue = 42;';
+      const secret = 'final topSecretValue = 42; // secret_code_line';
       expect(highlighter.highlightSync('dart', secret), isEmpty);
 
       expect(reports, hasLength(1));
-      final text = reports.single.toDiagnosticsNode().toStringDeep();
-      expect(text, isNot(contains('topSecretValue')));
-      expect(reports.single.exceptionAsString(), isNot(contains(secret)));
-      // Сбой не кешируется как успех: повтор снова пробует движок.
-      expect(highlighter.cached('dart', secret), isNull);
+      final details = reports.single;
+      final text = details.toDiagnosticsNode().toStringDeep();
+      for (final fragment in ['topSecretValue', 'secret_code_line', 'boom']) {
+        expect(text, isNot(contains(fragment)), reason: 'report: $fragment');
+        expect(
+          details.exception.toString(),
+          isNot(contains(fragment)),
+          reason: 'exception: $fragment',
+        );
+        expect(
+          details.exceptionAsString(),
+          isNot(contains(fragment)),
+          reason: 'exceptionAsString: $fragment',
+        );
+      }
+      // Решение оркестратора: тот же код даст тот же исход, поэтому сбой
+      // запоминается как «без подсветки» — повтор не вызывает движок и не
+      // шлёт второй отчёт.
+      expect(highlighter.cached('dart', secret), isEmpty);
+      expect(highlighter.highlightSync('dart', secret), isEmpty);
+      expect(reports, hasLength(1));
     });
   });
 
