@@ -41,7 +41,7 @@
 | Разбор аргументов CLI (`codelab_agent`, `codelab_cli`) | `args` |
 | Чтение `config.yaml` и frontmatter агента (`codelab_agent_io`) | `yaml` |
 | Правка `config.yaml` с сохранением комментариев (`codelab_agent_io`) | `yaml_edit` |
-| Markdown ответа агента в ленте (`codelab_ui`, только `lib/src/rendering/`) | `gpt_markdown` (change [`add-desktop-markdown`](../../openspec/changes/add-desktop-markdown/design.md), D1; без Material-предка, свои builder'ы) |
+| Markdown ответа агента в ленте (`codelab_ui`, только `lib/src/rendering/`) | `gpt_markdown` (change [`add-desktop-markdown`](../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1; без Material-предка, свои builder'ы) |
 | Подсветка кода (`codelab_ui`, только `lib/src/rendering/`) | `val_highlight` (change `add-desktop-markdown`, D4) |
 | Открытие внешних ссылок (`codelab_desktop`, только `lib/core/platform/`) | `url_launcher` (change `add-desktop-markdown`, D5) |
 
