@@ -455,6 +455,24 @@ void main() {
       );
     });
 
+    testWidgets('текст терминала не прижат к краям панели: у `TerminalView` '
+        'есть внутренний отступ (ручная проверка итерации 2)', (tester) async {
+      final env = _Env();
+      await env.pumpApp(tester);
+      await env.openSession(tester, 'session-a');
+      _toggle(tester, ToolPane.terminal);
+      await _frames(tester);
+
+      final view = tester.widget<TerminalView>(find.byType(TerminalView));
+
+      final padding = view.padding;
+      expect(padding, isNotNull);
+      expect(padding!.left, greaterThan(0));
+      expect(padding.right, greaterThan(0));
+      expect(padding.top, greaterThan(0));
+      expect(padding.bottom, greaterThan(0));
+    });
+
     testWidgets('закрытие root scope шлёт hangUp живым shell (D4)', (
       tester,
     ) async {
