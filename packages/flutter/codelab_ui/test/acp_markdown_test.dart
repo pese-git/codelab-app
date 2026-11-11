@@ -203,6 +203,7 @@ void main() {
     _networkRequests.clear();
     HttpOverrides.global = _ForbiddenNetwork();
     CodeLabMarkdownStats.reset();
+    CodeLabCodeHighlighter.shared.clear();
   });
 
   tearDown(() {
@@ -1421,8 +1422,163 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
     result.complete(keywordToken(5));
     await tester.pump();
 
-    // `setState` после dispose падал бы исключением; результат отброшен.
+    // `setState` после dispose падал бы исключением; результат отброшен и
+    // блок не строился повторно.
+    await tester.pump();
     expect(tester.takeException(), isNull);
+    expect(CodeLabMarkdownStats.codeBlockBuilds['agent-1-0'], 1);
+  });
+
+  testWidgets('a background result for an old code is not applied to the new '
+      'code', (tester) async {
+    // Стрим дописал блок, пока фон считал прежний код: токены старого кода
+    // нельзя применять к новому тексту.
+    final results = <String, Completer<List<CodeLabCodeToken>>>{};
+    final highlighter = CodeLabCodeHighlighter(
+      background: (language, code) =>
+          (results[code] = Completer<List<CodeLabCodeToken>>()).future,
+    );
+    String big(String prefix) =>
+        [for (var i = 0; i < 1000; i++) '$prefix v$i = $i;'].join('\n');
+    final codeA = big('final');
+    final codeB = big('const');
+    await tester.pumpWidget(mdWith(highlighter, '```dart\n$codeA\n```\n'));
+    await tester.pump();
+    await tester.pumpWidget(mdWith(highlighter, '```dart\n$codeB\n```\n'));
+    await tester.pump();
+    expect(results, hasLength(2));
+    expect(CodeLabMarkdownStats.codeBlockMounts['agent-1-0'], 1);
+
+    // Результат старого кода приходит первым и не окрашивает новый текст.
+    results[codeA]!.complete([
+      const CodeLabCodeToken(0, 5, CodeLabTokenClass.keyword),
+      const CodeLabCodeToken(0, 999999, CodeLabTokenClass.string),
+    ]);
+    await tester.pump();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(codeColors(tester, 'const v0'), hasLength(1));
+
+    // Результат нового кода применяется.
+    results[codeB]!.complete(keywordToken(5));
+    await tester.pump();
+    await tester.pump();
+    expect(codeColors(tester, 'const v0').length, greaterThan(1));
+  });
+
+  testWidgets('two identical large blocks share one background run', (
+    tester,
+  ) async {
+    final result = Completer<List<CodeLabCodeToken>>();
+    var calls = 0;
+    final highlighter = CodeLabCodeHighlighter(
+      background: (language, code) {
+        calls++;
+        return result.future;
+      },
+    );
+    final code = [for (var i = 0; i < 1000; i++) 'final v$i = $i;'].join('\n');
+    await tester.pumpWidget(
+      mdWith(highlighter, '```dart\n$code\n```\n\n```dart\n$code\n```\n'),
+    );
+    await tester.pump();
+    expect(calls, 1);
+    expect(CodeLabMarkdownStats.highlightRuns, 1);
+
+    result.complete(keywordToken(5));
+    await tester.pump();
+    await tester.pump();
+    for (final element
+        in find.textContaining('final v0', findRichText: true).evaluate()) {
+      expect(element, isNotNull);
+    }
+    expect(find.byType(CodeLabCodeBlock), findsNWidgets(2));
+    expect(calls, 1);
+  });
+
+  testWidgets('a background run that never ends leaves the block plain', (
+    tester,
+  ) async {
+    final highlighter = CodeLabCodeHighlighter(
+      background: (language, code) =>
+          Completer<List<CodeLabCodeToken>>().future,
+    );
+    final code = [for (var i = 0; i < 1000; i++) 'final v$i = $i;'].join('\n');
+    await tester.pumpWidget(mdWith(highlighter, '```dart\n$code\n```\n'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pump();
+
+    // Отчёт о таймауте: язык и причина, без текста кода.
+    final reported = tester.takeException();
+    expect(reported.toString(), contains('dart'));
+    expect(reported.toString(), contains('Timeout'));
+    expect(reported.toString(), isNot(contains('final v0')));
+    expect(codeColors(tester, 'final v0'), hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a pair of surrogates is never split by a token', (tester) async {
+    final highlighter = CodeLabCodeHighlighter();
+    for (final entry in {
+      'latex': '\\\u{1F600} x',
+      'clojure': '(str \\\u{1F600})',
+    }.entries) {
+      await tester.pumpWidget(
+        mdWith(highlighter, '```${entry.key}\n${entry.value}\n```\n'),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull, reason: entry.key);
+      expect(
+        find.textContaining('\u{1F600}', findRichText: true),
+        findsOneWidget,
+        reason: entry.key,
+      );
+    }
+  });
+
+  testWidgets('the language label is escaped and shortened', (tester) async {
+    final rlo = String.fromCharCode(0x202E);
+    await tester.pumpWidget(
+      _host(
+        CodeLabMarkdown(
+          id: 'agent-1',
+          text: '```${rlo}gpj\nx\n```\n\n```${'a' * 100}\nx\n```\n',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining(rlo, findRichText: true), findsNothing);
+    expect(find.text('\\u202egpj'), findsOneWidget);
+    final long = tester
+        .widgetList<CodeLabText>(find.byType(CodeLabText))
+        .map((w) => w.data)
+        .where((d) => d.startsWith('aaa'))
+        .single;
+    expect(long.length, 32);
+    expect(long.endsWith('…'), isTrue);
+  });
+
+  testWidgets('the language label is cut only above 32 characters', (
+    tester,
+  ) async {
+    final exact = 'b' * 32;
+    final over = 'c' * 33;
+    await tester.pumpWidget(
+      _host(
+        CodeLabMarkdown(
+          id: 'agent-1',
+          text: '```$exact\nx\n```\n\n```$over\nx\n```\n',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Ровно 32 символа — без обрезки; 33 — 31 символ и многоточие.
+    expect(find.text(exact), findsOneWidget);
+    expect(find.text('${'c' * 31}…'), findsOneWidget);
+    expect(find.text(over), findsNothing);
   });
 
   testWidgets('code over 5000 lines is shown whole and never highlighted', (
