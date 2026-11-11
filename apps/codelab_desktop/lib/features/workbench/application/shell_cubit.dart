@@ -389,6 +389,37 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     }
   }
 
+  /// Сбой загрузки показанного изображения (D6, D12): событие `image.load`
+  /// с `host` и коротким кодом причины. Адрес, путь, query и текст исключения в
+  /// журнал не попадают. Код даёт `ImageRejectedException`, любая другая ошибка
+  /// (декодер, чужой поставщик) — `decode`; код вне белого списка — `network`.
+  void reportImageFailure(String key, Object error) {
+    final marker = key.indexOf('#image:');
+    if (marker <= 0) {
+      return;
+    }
+    final uri = Uri.tryParse(key.substring(marker + '#image:'.length));
+    if (uri == null || !isLoadableImage(uri)) {
+      return;
+    }
+    final reason = error is ImageRejectedException ? error.code : 'decode';
+    const known = {
+      'timeout',
+      'too_large',
+      'dimensions',
+      'redirect',
+      'network',
+      'decode',
+    };
+    _eventLogger?.info(
+      'image.load',
+      context: {
+        'host': uri.host.length > 255 ? uri.host.substring(0, 255) : uri.host,
+        'reason': known.contains(reason) ? reason : 'network',
+      },
+    );
+  }
+
   /// Поставщик изображения для «Show image» (D6): загрузка с лимитами через
   /// порт, привязанный в графе. Метод устойчив как tear-off: смена ссылки
   /// перестраивала бы картинки в ленте (DSK-3).

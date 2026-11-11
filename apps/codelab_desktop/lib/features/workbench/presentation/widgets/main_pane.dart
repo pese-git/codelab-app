@@ -126,6 +126,7 @@ class WorkbenchMainPane extends StatelessWidget {
         imageFor: cubit.imageFor,
         shownImages: state.shownImages,
         onShowImage: cubit.showImage,
+        onImageFailed: cubit.reportImageFailure,
         child: CodeLabTranscriptPanel(
           rows: state.transcriptRows,
           viewMode: state.viewMode,
