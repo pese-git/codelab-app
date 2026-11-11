@@ -1,38 +1,136 @@
 ## ADDED Requirements
 
-### Requirement: Read-only file preview from a tool call
-CodeLab SHALL let the user open a read-only preview of a file referenced by a tool call, showing line numbers and highlighting the range from `ToolCallLocation` when available, and SHALL label the content as sourced from the agent's tool call.
+### Requirement: Панель Files в доке инструментов
+CodeLab SHALL предлагать панель Files в доке инструментов справа (`dart-agent-and-clients` §12.3 A13, шаг 0) только когда папка сессии находится на этой машине: подключение — встроенный агент или stdio-профиль, и хост предоставил порт `ProjectFiles`. Для WebSocket-профилей, в web и на устройствах без локальной папки панель НЕ SHALL предлагаться: у неё нет переключателя в app bar, пункта палитры и сочетания. Корень дерева SHALL быть папкой сессии в фокусе (`cwd` сессии), а без сессии — папкой выбранного проекта. Панель SHALL открываться и закрываться переключателем Files в app bar, сочетанием Cmd/Ctrl+Shift+E и пунктом «Files» группы «Go to» палитры. Внутри панели сверху SHALL быть дерево, снизу — просмотр выбранного файла; сайдбар сессий слева при этом НЕ SHALL меняться (design.md change `add-file-preview-and-tree`, D7, Q8, Q10, Q13).
 
-#### Scenario: Opening preview from a tool call card
-- **WHEN** user selects the preview action on a tool call entry (transcript or inspector) that references a file
-- **THEN** CodeLab opens the file preview panel showing the content already returned by the agent, with the relevant line range highlighted if a `ToolCallLocation` is present
+#### Scenario: Открытие панели для встроенного агента
+- **WHEN** окно подключено к встроенному агенту, в фокусе сессия с `cwd` `/work/app`, и пользователь нажимает Cmd/Ctrl+Shift+E
+- **THEN** в доке открывается и становится активной вкладка Files с деревом `/work/app`, а сайдбар сессий остаётся на месте
 
-#### Scenario: Preview panel does not allow editing
-- **WHEN** the file preview panel is open
-- **THEN** the content is not editable and no write action is offered
+#### Scenario: Повторное сочетание закрывает панель
+- **WHEN** панель Files активна, и пользователь снова нажимает Cmd/Ctrl+Shift+E
+- **THEN** вкладка Files закрывается
 
-### Requirement: Read-only file preview from the directory tree
-CodeLab SHALL let the user browse the working directory as a lazily-expanded tree and open a read-only preview of any file in it, reading the file directly from disk, and SHALL label that content as read directly from disk (not from the agent).
+#### Scenario: Нет панели для WebSocket-агента
+- **WHEN** текущий профиль окна — WebSocket-профиль
+- **THEN** переключателя Files в app bar и пункта «Files» в палитре нет, а Cmd/Ctrl+Shift+E не открывает панель
 
-#### Scenario: Browsing the directory tree
-- **WHEN** user opens the "Files" pane in the tool dock
-- **THEN** CodeLab shows a lazily-expandable tree rooted at the current working directory, excluding common noise directories (`.git`, `.dart_tool`, `build`, `node_modules`, and similar)
+#### Scenario: Корень без сессии
+- **WHEN** выбран проект `/work/app`, но ни одной сессии ещё нет
+- **THEN** панель Files показывает дерево `/work/app`
 
-#### Scenario: Opening a file from the tree
-- **WHEN** user selects a file node in the tree
-- **THEN** CodeLab reads the file from disk and opens the same read-only preview panel used for tool-call previews, labeled as read directly from disk
+#### Scenario: Смена сессии в фокусе
+- **WHEN** панель Files открыта для сессии с `cwd` `/work/a`, и фокус переходит на сессию с `cwd` `/work/b`
+- **THEN** панель показывает дерево `/work/b`, а результаты чтения `/work/a`, пришедшие позже, состояние не меняют
 
-#### Scenario: File too large to preview
-- **WHEN** the selected file exceeds the preview size limit
-- **THEN** CodeLab shows a message that the file is too large to preview instead of its content
+### Requirement: Граница рабочей папки браузера
+Каждая операция браузера SHALL проверять путь до чтения содержимого или перечисления папки: относительный путь с `\0`, абсолютный или с сегментом `..` после нормализации SHALL отклоняться как `invalidPath`; путь, чей realpath не равен realpath корня и не лежит внутри него, SHALL отклоняться как `outsideRoot`. Символическая ссылка с целью вне корня SHALL показываться строкой с пометкой ↗ и НЕ SHALL раскрываться, открываться в просмотре или служить целью «Open file». Чтение браузера — действие клиента, а не агента: оно НЕ SHALL запрашивать одобрение и НЕ SHALL идти через ACP `fs/*` (design.md change `add-file-preview-and-tree`, D3, Q2; UX-15).
 
-### Requirement: Following keeps the preview panel in sync with the active tool call
-CodeLab SHALL offer a "Following" toggle on a tool-call-sourced preview panel that, when enabled, updates the panel to the most recent `ToolCallLocation` reported for the active session.
+#### Scenario: Ссылка наружу видна, но не открывается
+- **WHEN** в корне лежит символическая ссылка `secrets` на `/etc`, и пользователь выбирает её и нажимает Enter или →
+- **THEN** строка `secrets` показана с ↗, папка не раскрывается, просмотр не открывается, а `/etc` не перечисляется и не читается
 
-#### Scenario: Following updates on new tool call activity
-- **WHEN** Following is enabled and a new `ToolCallLocation` arrives for the active session
-- **THEN** CodeLab updates the preview panel to the new location without requiring the user to reopen it
+#### Scenario: Выход через `..` отклоняется до чтения
+- **WHEN** порт `ProjectFiles` получает запрос чтения `../outside.txt`
+- **THEN** результат — `ProjectFilesFailure` вида `invalidPath`, и файл вне корня не открывается
 
-#### Scenario: Following does not apply to disk-sourced previews
-- **WHEN** a preview panel is showing content read directly from disk
-- **THEN** CodeLab does not offer the Following toggle for it
+#### Scenario: Ссылка внутри корня работает
+- **WHEN** в корне лежит ссылка `docs` на папку `doc` того же корня
+- **THEN** `docs` раскрывается как обычная папка
+
+### Requirement: Ленивое перечисление папок
+Браузер SHALL читать только корень и раскрытые папки, по одному уровню, без рекурсии. Записи SHALL идти сначала папками, затем файлами, по имени без учёта регистра. Записей больше 5000 в одной папке НЕ SHALL показываться: вместо них — строка «… N more». Запись `.git` НЕ SHALL показываться никогда, остальные скрытые записи SHALL показываться. Дерево SHALL быть виртуализированным: строятся только видимые строки и запас. Ошибка чтения папки SHALL показываться строкой под этой папкой, не ломая остальное дерево. Кнопка «Refresh» SHALL перечитывать раскрытые папки и выбранный файл (design.md change `add-file-preview-and-tree`, D6, Q4, Q9; UX-16).
+
+#### Scenario: Раскрытие папки читает один уровень
+- **WHEN** пользователь раскрывает папку `lib`
+- **THEN** выполняется ровно одно перечисление `lib`, вложенные папки `lib` не читаются
+
+#### Scenario: `.git` скрыт, скрытые файлы видны
+- **WHEN** в корне лежат `.git`, `.github` и `.env`
+- **THEN** дерево показывает `.github` и `.env`, а `.git` нет
+
+#### Scenario: Большая папка
+- **WHEN** в папке 10 000 файлов
+- **THEN** показано 5000 записей и строка «… 5000 more», а построено не больше видимых строк и запаса
+
+#### Scenario: Refresh показывает новый файл
+- **WHEN** агент создал `lib/b.dart` в раскрытой папке `lib`, и пользователь нажимает «Refresh»
+- **THEN** строка `lib/b.dart` появляется, раскрытые папки остаются раскрытыми
+
+### Requirement: Просмотр файла только для чтения
+Выбор файла в дереве (клик или Enter) SHALL открывать его просмотр внизу панели: текст UTF-8 с номерами строк, неверные байты — символом замены. Файл с байтом NUL в первых 8 КиБ SHALL показываться пометкой «Binary file (N KB)», файл больше 1 МиБ — пометкой «File too large to preview (N MB)» вместо содержимого. Просмотр НЕ SHALL позволять редактировать или сохранять файл. Результат чтения файла, который уже не выбран, SHALL отбрасываться. HTML SHALL показываться исходным текстом. Над просмотром SHALL показываться относительный путь выбранного файла от корня (POSIX-разделители) и действие «Copy path», которое SHALL копировать в буфер обмена этот относительный путь и НЕ SHALL копировать содержимое файла или абсолютный путь (design.md change `add-file-preview-and-tree`, D4, D6, D13, Q5, Q14).
+
+#### Scenario: Текстовый файл
+- **WHEN** пользователь выбирает `lib/a.dart` из трёх строк
+- **THEN** просмотр показывает три строки с номерами 1–3, а поля ввода и действия записи нет
+
+#### Scenario: Двоичный файл
+- **WHEN** пользователь выбирает файл, в первых 8 КиБ которого есть байт NUL
+- **THEN** просмотр показывает «Binary file» с размером и не показывает содержимое
+
+#### Scenario: Слишком большой файл
+- **WHEN** пользователь выбирает текстовый файл размером 3 МиБ
+- **THEN** просмотр показывает «File too large to preview (3 MB)» и не показывает содержимое
+
+#### Scenario: Copy path копирует относительный путь
+- **WHEN** открыт просмотр `lib/src/a.dart` в корне `/work/app`, и пользователь выбирает «Copy path»
+- **THEN** над просмотром показан путь `lib/src/a.dart`, а буфер обмена содержит ровно `lib/src/a.dart` — без `/work/app` и без текста файла
+
+#### Scenario: Поздний результат чтения
+- **WHEN** пользователь выбирает `a.txt`, затем, до окончания чтения, `b.txt`, и чтение `a.txt` завершается последним
+- **THEN** просмотр показывает `b.txt`
+
+### Requirement: Предупреждение для файлов с секретами
+Просмотр файла, имя которого совпадает с шаблонами `.env*`, `*.pem`, `*.key` или `id_*` (правило `isMaybeSecretFileName` kit), SHALL показывать содержимое как есть вместе с предупреждением «This file may contain secrets.». Содержимое любого просматриваемого файла НЕ SHALL попадать в логи, диагностику, события и снимок рабочего места (design.md change `add-file-preview-and-tree`, D5, Q3).
+
+#### Scenario: Открытие `.env`
+- **WHEN** пользователь выбирает `.env` со строкой `API_KEY=test-marker`
+- **THEN** просмотр показывает строку и предупреждение «This file may contain secrets.», а журнал и диагностика окна не содержат `test-marker`
+
+### Requirement: Игнорируемые записи по `.gitignore`
+Браузер SHALL скрывать записи, которые исключают правила `.git/info/exclude` корня и файлов `.gitignore` каждой папки на пути (файл правил до 256 КиБ). Поддерживаются `#`, `!`, `/` в начале и конце, `*`, `?`, `**`, классы `[…]`, `\` перед `#` и `!`; глобальный `core.excludesFile` НЕ SHALL читаться. Переключатель «Show ignored files» SHALL показывать такие записи приглушёнными; его значение SHALL сохраняться в `shared_preferences` под `codelab.file_browser.show_ignored` (по умолчанию выключен) (design.md change `add-file-preview-and-tree`, Q4; `dart-agent-and-clients` §12.6.8, шаг 4).
+
+#### Scenario: `build/` скрыт по `.gitignore`
+- **WHEN** в корне `.gitignore` со строкой `build/` и папка `build`
+- **THEN** дерево не показывает `build`, а после включения «Show ignored files» показывает её приглушённой
+
+#### Scenario: Отрицание правила
+- **WHEN** `.gitignore` содержит `*.log` и `!keep.log`
+- **THEN** `keep.log` показан, а `other.log` скрыт
+
+### Requirement: Наблюдение за раскрытыми папками
+Браузер SHALL наблюдать за каждой раскрытой папкой без рекурсии, склеивать события за 200 мс и перечитывать только изменившуюся папку, не больше 256 наблюдаемых папок одновременно; сверх лимита изменения видны только по «Refresh». Ошибка наблюдения SHALL показываться строкой «Changes are not tracked» рядом с «Refresh». Подписки SHALL отменяться при сворачивании папки, смене корня и закрытии панели (design.md change `add-file-preview-and-tree`, D11, Q9; UX-16).
+
+#### Scenario: Новый файл без Refresh
+- **WHEN** папка `lib` раскрыта, и в ней появляется `lib/c.dart`
+- **THEN** строка `lib/c.dart` появляется без нажатия «Refresh», остальное дерево не перечитывается
+
+#### Scenario: Сворачивание отменяет подписку
+- **WHEN** пользователь сворачивает папку `lib`
+- **THEN** наблюдение за `lib` отменено, и изменения в ней больше не вызывают перечисления
+
+### Requirement: «Open file» из строки вызова инструмента
+Строка вызова инструмента, у которого есть место (`locations`) внутри корня панели Files, SHALL предлагать действие «Open file», когда панель доступна. Действие SHALL открывать и активировать панель Files, раскрывать папки до файла, выбирать его, читать с диска и прокручивать просмотр к строке `line` места с подсветкой этой строки; без `line` — к началу. Место вне корня или ссылка наружу НЕ SHALL давать действия. Просмотр вывода инструмента вместо файла НЕ SHALL предлагаться (design.md change `add-file-preview-and-tree`, D8, Q6).
+
+#### Scenario: Открытие у строки
+- **WHEN** в ленте есть вызов `read` с местом `{path: "/work/app/lib/a.dart", line: 42}` в сессии с `cwd` `/work/app`, и пользователь выбирает «Open file»
+- **THEN** панель Files активна, `lib` раскрыта, `lib/a.dart` выбран, а просмотр прокручен к строке 42 и подсвечивает её
+
+#### Scenario: Место вне корня
+- **WHEN** у вызова место `/etc/hosts`, а корень — `/work/app`
+- **THEN** у строки вызова нет действия «Open file»
+
+### Requirement: Following за местами хода
+Панель Files SHALL иметь переключатель Following, по умолчанию выключенный и не сохраняемый между запусками. Пока он включён и в сессии в фокусе идёт ход, каждое новое или изменившееся место вызова этой сессии внутри корня SHALL открываться так же, как «Open file». Места других сессий и места вне хода НЕ SHALL менять просмотр. Ручной выбор файла в дереве SHALL выключать Following (design.md change `add-file-preview-and-tree`, D8, Q7; ACP `08-Tool Calls.md`, «Following the Agent»).
+
+#### Scenario: Следование во время хода
+- **WHEN** Following включён, в сессии в фокусе идёт ход, и приходит `tool_call` с местом `lib/b.dart:7`
+- **THEN** просмотр показывает `lib/b.dart` у строки 7
+
+#### Scenario: Чужая сессия не уводит просмотр
+- **WHEN** Following включён, и место приходит от фоновой сессии, а не от сессии в фокусе
+- **THEN** просмотр не меняется
+
+#### Scenario: Ручной выбор выключает Following
+- **WHEN** Following включён, и пользователь выбирает файл в дереве
+- **THEN** Following выключен, и следующее место хода просмотр не меняет
