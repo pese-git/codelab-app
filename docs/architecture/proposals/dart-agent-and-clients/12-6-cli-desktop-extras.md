@@ -18,7 +18,7 @@ ACP меняет только D-17 — и то необязательным ра
 | U-22 | колесо мыши в TUI, `/mouse on\|off`, следование за выводом | CLI (TUI) | §12.6.5 |
 | U-25 | запрет сна системы на время хода, `/power off\|turn\|always` | CLI | §12.6.6 |
 | U-26 | `/restart` — перезапуск агента без выхода из клиента | CLI (логика — kit) | §12.6.7 |
-| D-13 | файловый браузер проекта в сайдбаре app | app (логика — kit) | §12.6.8 |
+| D-13 | файловый браузер проекта — панель Files дока app | app (логика — kit) | §12.6.8 |
 | U-27 | модель и `effort` запоминаются по папке проекта | CLI (логика — kit) | §12.6.9 |
 | U-28 | копирование в буфер обмена: `/copy`, OSC 52, системная утилита | CLI | §12.6.10 |
 | H-08 | мысли в stderr headless-вывода (`--stream-thinking`) и признак жизни `… thinking Ns` | CLI (headless) | §12.6.11 |
@@ -657,25 +657,35 @@ SIGKILL; поздние события старого поколения отб�
 
 ## 12.6.8. Файловый браузер проекта в app (D-13)
 
-**Назначение.** Панель «Files» дока инструментов (§12.3, A13, шаг 0) показывает дерево рабочей папки сессии в фокусе с
-учётом `.gitignore`; файл можно открыть для просмотра только на чтение и вставить в композер как
-упоминание. Браузер видит только `cwd` сессии; это чтение клиента, не инструмент агента, поэтому
-одобрений не требует, но подчиняется той же границе рабочей папки, что ACP `fs/*` в app
-(AGENTS.md §10).
+**Назначение.** Панель «Files» дока инструментов (§12.3, A13, шаг 0) показывает дерево рабочей
+папки сессии в фокусе; файл можно открыть для просмотра только на чтение. Браузер видит только
+`cwd` сессии (без сессии — папку выбранного проекта). Это чтение клиента, не инструмент агента и
+не ACP `fs/*`: одобрений не требует, но подчиняется границе рабочей папки (AGENTS.md §10), причём
+более строгой, чем лексическая проверка `fs/*` в app: по realpath и до чтения. Поведение и
+итерации задаёт OpenSpec change
+[`add-file-preview-and-tree`](../../../../openspec/changes/add-file-preview-and-tree/)
+(требования — `specs/workspace-file-browser/spec.md`, решения пользователя 2026-11-11 Q1–Q14 и
+D1–D13 — `design.md`).
+
+**Где панель есть.** Только когда папка сессии на этой машине: встроенный агент и stdio-профиль
+(`sessionFolderIsLocal`, `apps/codelab_desktop/lib/features/workbench/application/`; тот же
+предикат использует панель Terminal, A16). Для WebSocket-профилей, в web и на устройствах без
+локальной папки панель не предлагается (A13, шаг 6); «Import from Files…» — этап 10 (§12.8).
 
 **Размещение.**
 
 | Компонент | Пакет / путь | Слой | Ответственность |
 |---|---|---|---|
+| `ProjectFiles` (порт), `ProjectEntry`, `DirectoryListing`, `FilePreview`, `ProjectFilesFailure`; `normalizeRelativePath`, `classifyPreview`, `isMaybeSecretFileName`, `relativeToRoot` | `codelab_client_core/lib/src/files/` | чистый Dart | контракт чтения папки и файла; правила пути, двоичного и большого файла, имён секретов |
 | `GitIgnoreMatcher`, `IgnoreStack` | `codelab_client_core/lib/src/files/` | чистый Dart | правила `.gitignore`; общие с дополнением путей CLI (§12.2.8, шаг 3) |
-| `ProjectFiles` (порт), `ProjectEntry`, `FilePreview`, `ProjectFilesFailure` | `codelab_client_core/lib/src/files/` | чистый Dart | контракт чтения папки, файла и наблюдения |
-| `IoProjectFiles` | `codelab_client_io/lib/src/files/` | `dart:io` | realpath, перечисление, чтение, `Directory.watch` |
-| `ProjectTreeState`, `ProjectFilesCubit` | `apps/codelab_desktop/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, предпросмотр |
-| `AcpFileTree`, `AcpFileTreeRowData`, `AcpFilePreview` | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с подсветкой (`AcpCodeHighlighter`, §12.3) |
-| `ProjectFilesPane` | `.../project_files/presentation/` | presentation | панель «Files» дока инструментов (дерево сверху, предпросмотр снизу), связь с `ComposerCubit` |
+| `IoProjectFiles` | `codelab_client_io/lib/src/files/` | `dart:io` | realpath, граница, перечисление, чтение, `Directory.watch` |
+| `ProjectTreeState`, `ProjectFilesCubit` | `apps/codelab_desktop/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, просмотр, Following |
+| `CodeLabFileTree`, `CodeLabFileTreeRowData`, `CodeLabFilePreview` | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с номерами строк (подсветка — `CodeLabCodeHighlighter` после change `add-desktop-markdown`) |
+| `ProjectFilesPane` | `.../project_files/presentation/` | presentation | панель «Files» дока: дерево сверху, просмотр снизу, «Refresh» |
 
 `IoProjectFiles` регистрируется в `app/app_scope.dart` (cherrypick), как
-`IoTextFileIo`; виджеты к файловой системе не обращаются (AGENTS.md §6, §11).
+`IoTextFileIo`; виджеты к файловой системе не обращаются (AGENTS.md §6, §11), `dart:io` в
+`features/project_files/` запрещает сторож.
 
 ```mermaid
 flowchart LR
@@ -687,19 +697,19 @@ flowchart LR
         PC["ProjectFilesCubit<br/>expanded, rows, preview"]
     end
     subgraph WB["workbench / application"]
-        CC["ComposerCubit"]
-        AS["ActiveSessionCubit<br/>cwd активной сессии"]
+        AS["ActiveSessionCubit<br/>cwd и места вызовов"]
+        LC["LayoutCubit<br/>док"]
     end
     subgraph UI["codelab_ui + presentation"]
-        FT["AcpFileTree"]
-        FP["AcpFilePreview"]
+        FT["CodeLabFileTree"]
+        FP["CodeLabFilePreview"]
     end
-    AS -- "cwd" --> PC
+    AS -- "cwd, locations" --> PC
     PC -- "list, read, watch" --> PF
     PF --> GI
     PC --> FT
     PC --> FP
-    FT -- "Insert as mention" --> CC
+    PC -- "Open file" --> LC
 ```
 
 **Контракт.**
@@ -710,16 +720,16 @@ final class ProjectEntry {
   final String relativePath;            // POSIX-разделители, от корня
   final String name;
   final ProjectEntryKind kind;          // file | directory | symlinkOutside | other
-  final bool ignored;                   // по IgnoreStack
+  final bool ignored;                   // по IgnoreStack (итерация .gitignore)
   final int? size;
 }
 final class DirectoryListing {
   final String relativeDir;
-  final List<ProjectEntry> entries;     // папки, затем файлы; по имени без учёта регистра
+  final List<ProjectEntry> entries;     // папки, затем файлы; по имени без учёта регистра; без .git
   final int omitted;                    // сверх maxEntries
 }
 sealed class FilePreview {}
-final class TextPreview extends FilePreview { final String text; final bool truncated; }
+final class TextPreview extends FilePreview { final String text; }
 final class BinaryPreview extends FilePreview { final int size; }
 final class TooLargePreview extends FilePreview { final int size; }
 
@@ -728,7 +738,7 @@ final class ProjectFilesFailure implements Exception {
   final ProjectFilesFailureKind kind; final String relativePath; }
 
 abstract interface class ProjectFiles {
-  Future<String> canonicalRoot(String cwd);                         // realpath(cwd)
+  Future<String> canonicalRoot(String folder);                      // realpath(folder)
   Future<DirectoryListing> list(String root, String relativeDir,
       {required IgnoreStack ignore, int maxEntries = 5000});
   Future<FilePreview> read(String root, String relativePath, {int maxBytes = 1 << 20});
@@ -737,70 +747,99 @@ abstract interface class ProjectFiles {
 
 // apps/codelab_desktop/lib/features/project_files/application/project_files_cubit.dart
 final class ProjectTreeState {
-  final ProjectTreeStatus status;       // явный автомат: noSession | unavailable(reason) | loading | ready
+  final ProjectTreeStatus status;       // явный автомат: noFolder | unavailable(reason) | loading | ready
   final String? root;
   final Set<String> expanded;           // relativeDir
-  final List<AcpFileTreeRowData> rows;  // плоский список видимых строк (depth, name, kind, ignored)
+  final List<CodeLabFileTreeRowData> rows; // плоский список видимых строк (depth, name, kind, ignored)
   final String? selected;
-  final FilePreviewState preview;       // none | loading(path) | shown(path, FilePreview) | failed(path, kind)
+  final FilePreviewState preview;       // none | loading(path) | shown(path, FilePreview, line?) | failed(path, kind)
   final bool showIgnored;
+  final bool following;
 }
 ```
 
+Члены порта и состояния появляются в коде вместе со своей итерацией change (`ignore`, `ignored`,
+`showIgnored` — `.gitignore`; `watch` — наблюдение; `following` — Following), без заглушек.
+
 **Алгоритм.**
 
-1. **Корень.** При смене активной сессии `root = canonicalRoot(session.cwd)`. Папки нет на этой
-   машине (WebSocket-агент) → `unavailable`: «The session folder is not on this computer.».
-   Состояние дерева (раскрытые папки) хранится по сессии в памяти Cubit-а.
+1. **Корень.** `root = canonicalRoot(folder)`, где `folder` — `cwd` сессии в фокусе, а без
+   сессии — папка выбранного проекта. Нет ни того, ни другого — `noFolder`; папки нет на диске —
+   `unavailable`: «The project folder does not exist.». Состояние дерева (раскрытые папки)
+   хранится по корню в памяти Cubit-а. Результат `list` или `read`, пришедший после смены файла
+   или корня, отбрасывается по номеру запроса.
 2. **Граница рабочей папки** — в `IoProjectFiles` для каждой операции: путь с `\0`, абсолютный
-   или со сегментом `..` после нормализации → `invalidPath`; `realpath(root/rel)` должен быть
-   равен `root` или начинаться с `root + separator`, иначе `outsideRoot`. Символическая ссылка с
-   целью вне корня перечисляется как `symlinkOutside` (значок ↗), не раскрывается, не
-   открывается и не вставляется. Проверка выполняется до чтения содержимого.
+   или со сегментом `..` после нормализации → `invalidPath` (`normalizeRelativePath` kit);
+   `realpath(root/rel)` должен быть равен `root` или начинаться с `root + separator`, иначе
+   `outsideRoot`. Символическая ссылка с целью вне корня перечисляется как `symlinkOutside`
+   (значок ↗), не раскрывается и не открывается. Проверка выполняется до чтения содержимого.
+   Подмена ссылки между проверкой и открытием (TOCTOU) — принятый остаточный риск (design.md
+   change, Risks).
 3. **Перечисление** — лениво: только корень и раскрытые папки, без рекурсии; не больше 5000
-   записей на папку (строка «… N more»). Скрытые записи показываются; `.git` — никогда.
-4. **`.gitignore`.** `IgnoreStack` = правила `.git/info/exclude` корня + `.gitignore` каждой
-   папки на пути (загружаются при перечислении папки, файл ≤ 256 КиБ). Поддерживаются `#`, `!`,
-   `/` в начале и конце, `*`, `?`, `**`, классы `[…]`, `\` перед `#` и `!`; глобальный
-   `core.excludesFile` не читается. Игнорируемые записи по умолчанию скрыты; переключатель
-   «Show ignored files» показывает их приглушёнными.
+   записей на папку (строка «… N more»). Скрытые записи показываются; `.git` — никогда. Кнопка
+   «Refresh» перечитывает раскрытые папки и выбранный файл.
+4. **`.gitignore`** (итерация после первой версии). `IgnoreStack` = правила `.git/info/exclude`
+   корня + `.gitignore` каждой папки на пути (загружаются при перечислении папки, файл ≤ 256 КиБ).
+   Поддерживаются `#`, `!`, `/` в начале и конце, `*`, `?`, `**`, классы `[…]`, `\` перед `#` и
+   `!`; глобальный `core.excludesFile` не читается. Игнорируемые записи по умолчанию скрыты;
+   переключатель «Show ignored files» показывает их приглушёнными. В первой версии скрыт только
+   `.git`.
 5. **Виртуализация.** `rows` — плоский обход раскрытых папок (пересчитывается только поддерево
-   изменённой папки); `AcpFileTree` — `ListView.builder` с фиксированной высотой строки 24, ключи
+   изменённой папки); `CodeLabFileTree` — `ListView.builder` с фиксированной высотой строки 24, ключи
    `file-tree-row-<relativePath>`. Клавиатура: ↑/↓ — выбор, → / ← — раскрыть или свернуть, Enter —
-   просмотр, `Alt+Enter` (macOS — `Option+Enter`) — вставить упоминание (Cmd/Ctrl+Enter занят
-   одобрением, DSK-18).
-6. **Наблюдение.** На каждую раскрытую папку — `Directory(path).watch()` без рекурсии (работает
-   одинаково на macOS, Linux и Windows); события склеиваются за 200 мс и вызывают повторное
-   `list` этой папки; изменение `.gitignore` пересобирает правила её поддерева. Не больше 256
-   наблюдаемых папок: дальше — кнопка «Refresh». Ошибка наблюдения → строка «Changes are not
-   tracked» и кнопка «Refresh». Подписки отменяются при сворачивании, смене сессии и `close()`
-   Cubit-а (AGENTS.md §9).
-7. **Просмотр** — панель на месте инспектора, только чтение: NUL в первых 8 КиБ → «Binary file
+   просмотр.
+6. **Наблюдение** (итерация после первой версии; до неё — только «Refresh»). На каждую раскрытую
+   папку — `Directory(path).watch()` без рекурсии (работает одинаково на macOS, Linux и Windows);
+   события склеиваются за 200 мс и вызывают повторное `list` этой папки; изменение `.gitignore`
+   пересобирает правила её поддерева. Не больше 256 наблюдаемых папок: дальше — кнопка
+   «Refresh». Ошибка наблюдения → строка «Changes are not tracked» и кнопка «Refresh». Подписки
+   отменяются при сворачивании, смене корня и `close()` Cubit-а (AGENTS.md §9).
+7. **Просмотр** — нижняя часть панели Files, только чтение: NUL в первых 8 КиБ → «Binary file
    (N KB)»; больше 1 МиБ → «File too large to preview (N MB)»; иначе UTF-8 с заменой неверных
-   байт, подсветка по расширению (`AcpCodeHighlighter`, токенизация вне UI-изолята при > 2000
-   строк), виртуализированные строки. Устаревший результат (выбран другой файл) отбрасывается.
-8. **Упоминание.** Действие «Insert as mention» (контекстное меню, `Alt+Enter`, перетаскивание
-   строки в композер) вызывает `ComposerCubit.insertMention(relativePath)`: в позицию курсора
-   вставляется `@<path>` (`@"<path>"` при пробелах, как §12.2.8) и добавляется
-   `FileAttachment(path, origin: AttachmentOrigin.mention)` (§12.1.1), если такого пути ещё нет
-   среди вложений. Дальше — обычный путь D-12: `PromptContentBuilder.build` решает, уйдёт ли
-   файл `resource_link` или встроенным `resource`; предупреждение `maybeSecret` для `.env`
-   работает как есть. Папка вставляется только текстом `@<path>/` без вложения.
+   байт, номера строк, виртуализированные строки (`classifyPreview` kit). Подсветка по
+   расширению и markdown-вид — через `CodeLabCodeHighlighter` и `CodeLabMarkdown` после change
+   `add-desktop-markdown`; картинки — позже; HTML — только исходным текстом. Устаревший результат
+   (выбран другой файл) отбрасывается. Над просмотром — относительный путь файла от корня и
+   действие «Copy path»: в буфер обмена уходит только этот относительный путь, не содержимое и не
+   абсолютный путь (решение пользователя 2026-11-11, Q14).
+8. **Файлы с секретами** (решение пользователя 2026-11-11, Q3). Имя по шаблонам `.env*`,
+   `*.pem`, `*.key`, `id_*` (`isMaybeSecretFileName` kit — то же правило, что `maybeSecret`
+   §12.1.7) → содержимое показывается как есть, над ним предупреждение «This file may contain
+   secrets.». Содержимое любого файла не попадает в логи, диагностику, события и снимок рабочего
+   места.
+9. **«Open file» и Following.** Строка вызова инструмента с местом (`locations`, ACP
+   `ToolCallLocation`: абсолютный `path` и необязательный `line`) внутри корня предлагает «Open
+   file»: панель Files открывается, папки до файла раскрываются, файл читается с диска, просмотр
+   прокручивается к `line` и подсвечивает строку. Диапазона строк ACP не определяет, и клиент его
+   не выводит. Просмотра вывода инструмента нет: правки показывает панель Diff (D-07).
+   Переключатель Following (по умолчанию выключен, не сохраняется) ведёт просмотр к каждому
+   новому месту хода сессии в фокусе, только пока ход идёт; ручной выбор файла выключает его.
+10. **Упоминание** — после D-12 (решение пользователя 2026-11-11, Q12): действие «Insert as
+    mention» (контекстное меню, `Alt+Enter` — Cmd/Ctrl+Enter занят одобрением, DSK-18 —
+    перетаскивание строки в композер) вызовет `ComposerCubit.insertMention(relativePath)`: в
+    позицию курсора вставляется `@<path>` (`@"<path>"` при пробелах, как §12.2.8) и добавляется
+    `FileAttachment(path, origin: AttachmentOrigin.mention)` (§12.1.1), если такого пути ещё нет
+    среди вложений; дальше — обычный путь D-12 (`PromptContentBuilder.build`, предупреждение
+    `maybeSecret`). Папка вставляется только текстом `@<path>/` без вложения.
 
-**Настройки app** (`shared_preferences`, как `codelab.recent_projects`): `codelab.sidebar.tab`
-(`sessions` | `files`, по умолчанию `sessions`), `codelab.file_browser.show_ignored` (`false`).
+**Настройки app** (`shared_preferences`, как `codelab.recent_projects`):
+`codelab.file_browser.show_ignored` (`false`, с итерацией `.gitignore`). Набор открытых панелей
+дока, включая Files, хранит `LayoutCubit` под `codelab.dock.*`; отдельного ключа вкладки
+сайдбара нет — сайдбар остаётся списком сессий.
 
-**Как проверить.** Widget-тест дерева файлов (критерий: «widget-тест дерева файлов»)
-`apps/codelab_desktop/test/features/project_files/project_files_tab_test.dart` на фальшивом
-`ProjectFiles`: дерево без записей из `.gitignore`, «Show ignored» показывает их; раскрытие папки
-вызывает один `list`; 10 000 файлов — построено не больше видимых строк + запаса;
-«Insert as mention» → в композере `@lib/a.dart` и чип `composer-attachment-chip-…`; событие
-`watch` → новая строка без перезагрузки дерева; `symlinkOutside` не раскрывается. Плюс
-`packages/flutter/codelab_ui/test/acp_file_tree_test.dart` (отрисовка, клавиатура),
-`packages/dart/codelab_client_core/test/files/gitignore_matcher_test.dart` (таблица правил
-`.gitignore`, включая `!` и `**`), `packages/dart/codelab_client_io/test/files/io_project_files_test.dart`
-(временная папка: ссылка наружу → `outsideRoot`; `../` → `invalidPath`; бинарный и большой
-файл; событие наблюдения).
+**Как проверить.** Widget-тесты панели (критерий: «widget-тест дерева файлов»)
+`apps/codelab_desktop/test/features/project_files/project_files_pane_test.dart` и
+`project_files_cubit_test.dart` на фальшивом `ProjectFiles`: раскрытие папки вызывает один
+`list`; 10 000 файлов — построено не больше видимых строк + запаса; `symlinkOutside` не
+раскрывается; поздний `read` отброшен; «Copy path» кладёт в буфер относительный путь; нет панели для WebSocket-профиля; `.env` показан с
+предупреждением, журнал без содержимого; затем — дерево без записей из `.gitignore` и «Show
+ignored»; событие `watch` → новая строка без перезагрузки дерева; «Open file» у `line`;
+Following. Плюс `packages/flutter/codelab_ui/test/codelab_file_tree_test.dart` и
+`codelab_file_preview_test.dart` (отрисовка, клавиатура, состояния),
+`packages/dart/codelab_client_core/test/files/` (`project_files_rules_test.dart`;
+`gitignore_matcher_test.dart` — таблица правил `.gitignore`, включая `!` и `**`),
+`packages/dart/codelab_client_io/test/files/io_project_files_test.dart` (временная папка: ссылка
+наружу → `outsideRoot`; `../` → `invalidPath`; бинарный и большой файл; событие наблюдения).
 
 ## 12.6.9. Модель, запомненная по папке проекта (U-27)
 
@@ -1566,8 +1605,9 @@ U-27, U-28, H-08 не добавляют; D-17 добавляет `sessions.sear
 14. **UX-14.** Слой проекта `cli.yaml` не задаёт `shell.command`, `update.channel`,
     `update.base_url`.
 15. **UX-15.** Файловый браузер не читает и не показывает содержимое за пределами
-    `realpath(cwd)` сессии: проверка границы выполняется до чтения, ссылки наружу не
-    раскрываются и не вставляются.
+    realpath корня (папки сессии в фокусе или выбранного проекта): проверка границы выполняется
+    до чтения, ссылки наружу не раскрываются, не открываются и не вставляются; содержимое файлов
+    не попадает в логи и диагностику.
 16. **UX-16.** Файловый браузер не перечисляет папки рекурсивно: читаются только корень и
     раскрытые папки, не больше 5000 записей на папку; все подписки `watch` отменяются при
     сворачивании, смене сессии и закрытии Cubit-а.
@@ -1744,13 +1784,13 @@ U-27, U-28, H-08 не добавляют; D-17 добавляет `sessions.sear
 8. **`09-12-stage-7-embedded.md`**: `EmbeddedTransportResolver` реализует
    `TerminatingTransportResolver` (`terminate` = `_running?.dispose()`).
 9. **`12-3-desktop-display.md` §12.3.2**, таблица компонентов — добавить строки таблицы
-   «Размещение» §12.6.8 (`AcpFileTree`, `AcpFilePreview`, `ProjectFilesCubit`,
-   `ProjectFilesTab`); ключи тестов — `file-tree-row-<relativePath>`, `file-tree-show-ignored`,
+   «Размещение» §12.6.8 (`CodeLabFileTree`, `CodeLabFilePreview`, `ProjectFilesCubit`,
+   `ProjectFilesPane`); ключи тестов — `file-tree-row-<relativePath>`, `file-tree-show-ignored`,
    `file-preview`.
 10. **`12-4-first-run-and-settings.md` §12.4.9**, абзац про экран настроек: «Страница «General» в
-    app дополнительно показывает клиентские настройки `codelab.sidebar.tab` и
-    `codelab.file_browser.show_ignored` (`shared_preferences`, §12.6.8); `SettingsRegistry` их не
-    содержит.»
+    app дополнительно показывает клиентскую настройку `codelab.file_browser.show_ignored`
+    (`shared_preferences`, §12.6.8); `SettingsRegistry` её не содержит.» (Ключ
+    `codelab.sidebar.tab` снят change `add-file-preview-and-tree`: Files — панель дока.)
 11. **Ядро** (`agent-core/15-configuration.md`, `17-5-agent-setup.md` §17.5.6/§17.5.8,
     `10-…`, `05`, `08`, `12`, `13`, `14`): изменений нет — новых ключей `config.yaml`, событий,
     полей журнала, методов ACP и фикстур протокола раздел не вводит; реестр CFG-19 полон без
@@ -1763,7 +1803,7 @@ U-27, U-28, H-08 не добавляют; D-17 добавляет `sessions.sear
     * U-25: дописать `; спецификация — dart-agent-and-clients §12.6.6`;
     * U-26: дописать `; спецификация — dart-agent-and-clients §12.6.7`;
     * D-13: `widget-тест дерева файлов` →
-      `widget-тест дерева файлов (\`project_files_tab_test.dart\`); спецификация — dart-agent-and-clients §12.6.8`.
+      `widget-тест дерева файлов (\`project_files_pane_test.dart\`); спецификация — dart-agent-and-clients §12.6.8`.
 13. **U-27, U-28, H-08, D-17** — правки других разделов: `09-11` (флаги `--stream-thinking`,
     `--no-stream-thinking`; команды `/copy`, `/copy code [n]`, `/model --forget`, `/sessions` с
     фильтром; E2E 6.10), `12-2` (§12.2.7 `CopyCmd`/`CopyResultMsg`, режим выбора; §12.2.9 действия
@@ -1775,7 +1815,7 @@ U-27, U-28, H-08 не добавляют; D-17 добавляет `sessions.sear
     включая `ShellOutputAttachment` в kit), `add-cli-themes` (U-18), `add-cli-self-update`
     (U-20, включая зависимость `package:cryptography` по §7а и формат манифеста),
     `add-tui-mouse` (U-22), `add-cli-power-assertion` (U-25), `add-agent-restart` (U-26, API kit),
-    `add-project-file-browser` (D-13, порт kit, feature `project_files`),
+    `add-file-preview-and-tree` (D-13, порт kit, feature `project_files`),
     `add-folder-model-memory` (U-27), `add-cli-clipboard-copy` (U-28),
     `add-headless-stream-thinking` (H-08), `add-session-search` (D-17: фильтр kit, UI app,
     расширение `_codelab/session/search` с capability `sessionSearch` и ключами

@@ -69,9 +69,9 @@ Cubit-ов (задача 5.9): app получает `SessionView` из `codelab_
 | `ComposerCubit` | `.../workbench/application/` | application | черновик и вложения по сессиям, лимиты, отправка через `SessionHandle.send` |
 | `AttachmentIntake`, `ClipboardAttachmentReader`, `ExternalLinkOpener` | `apps/codelab_desktop/lib/core/platform/` | infrastructure | чтение файлов и буфера, MIME, открытие URL |
 | `ComposerDropZone` | `.../workbench/presentation/widgets/` | presentation | обёртка над плагином drag&drop, передаёт только пути |
-| `ProjectFilesCubit` (после MVP, D-13, §12.6.8) | `apps/codelab_desktop/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, предпросмотр |
-| `AcpFileTree`, `AcpFilePreview` (после MVP, §12.6.8) | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с подсветкой (`CodeLabCodeHighlighter`) |
-| `ProjectFilesTab` (после MVP, §12.6.8) | `.../project_files/presentation/` | presentation | вкладка сайдбара рядом с `CodeLabSessionSidebar`, связь с `ComposerCubit` |
+| `ProjectFilesCubit` (после MVP, D-13, §12.6.8; change `add-file-preview-and-tree`) | `apps/codelab_desktop/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, просмотр, Following |
+| `CodeLabFileTree`, `CodeLabFilePreview` (после MVP, §12.6.8) | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с номерами строк (подсветка — `CodeLabCodeHighlighter` change `add-desktop-markdown`) |
+| `ProjectFilesPane` (после MVP, §12.6.8) | `.../project_files/presentation/` | presentation | панель Files дока инструментов (A13, шаг 0): дерево сверху, просмотр снизу; «Insert as mention» и связь с `ComposerCubit` — после D-12 |
 | `SessionSearchCubit` (после MVP, D-17, A12) | `.../workbench/application/` | application | владеет `SessionSearch` kit (§12.6.12): склейка ввода, фильтр даты, область, строки результатов |
 | `AcpSessionSearchField`, `AcpSessionSearchResults`, `AcpSessionSearchRowData` (после MVP, A12) | `codelab_ui/lib/src/molecules/`, `organisms/`, `models/` | ui_kit | поле поиска с фильтрами даты и области; список результатов с подсветкой и сниппетами |
 | `AppDestination`, `NavigationCubit` (A13) | `apps/codelab_desktop/lib/app/navigation/` | application | закрытый список экранов, текущий экран и вкладка инспектора, последняя страница настроек; переходы — только через Cubit |
@@ -257,8 +257,9 @@ final class AcpAttachmentChipData {
 Ключи для тестов: `transcript-row-<id>`, `thought-toggle-<id>`, `diff-open-full-<id>`,
 `code-copy-<rowId>-<n>` (`n` — номер блока кода в ответе), `status-bar-usage`, `status-bar-cost`, `status-bar-context`,
 `composer-attachment-chip-<id>`, `composer-attachment-remove-<id>`, `composer-attach-button`,
-`composer-drop-zone`; после MVP (§12.6.8) — `file-tree-row-<relativePath>`, `file-tree-show-ignored`,
-`file-preview`.
+`composer-drop-zone`; после MVP (§12.6.8) — `tool-pane-files`, `tool-toggle-files`,
+`file-tree-row-<relativePath>`, `file-tree-show-ignored`, `file-preview`,
+`file-preview-path`, `file-preview-copy-path`, `file-preview-secret-warning`, `file-preview-following`, `tool-row-open-file-<toolCallId>`.
 
 **Порты платформы.**
 
