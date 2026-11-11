@@ -15,14 +15,17 @@ import 'dart:io';
 
 import 'package:codelab_desktop/core/platform/user_shell_launcher.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:pty2/pty2.dart';
 
 const _timeout = Duration(seconds: 10);
 
 /// Накопитель вывода оболочки с ожиданием маркера.
 ///
-/// Маркеры в командах пишутся так, чтобы эхо самой команды (PTY возвращает
-/// набранное) им не соответствовало: `echo RES=$(...)` даёт `RES=tty` только
-/// в результате выполнения.
+/// PTY возвращает эхо набранной команды, поэтому маркер в команде пишут так,
+/// чтобы он совпал только с результатом выполнения: `echo RES=t""ty` в эхо
+/// выглядит как `RES=t""ty`, а выводит `RES=tty` (оболочка склеивает пустые
+/// кавычки). Регулярное выражение ожидания ищет `RES=tty`.
 class _Output {
   _Output(UserShell shell) {
     _sub = shell.output.listen((chunk) {
@@ -101,7 +104,9 @@ void main() {
     final out = _Output(shell);
     addTearDown(out.dispose);
 
-    shell.write('echo RES=\$(test -t 0 && test -t 1 && echo tty)\n');
+    // Не `$(...)`: в подстановке stdout — канал, и `test -t 1` ложно ложен.
+    // Кавычки в `t""ty` не дают эху набранной команды совпасть с маркером.
+    shell.write('test -t 0 && test -t 1 && echo RES=t""ty\n');
 
     await out.expect(RegExp('RES=tty'));
   });
@@ -118,57 +123,22 @@ void main() {
     await out.expect(RegExp('CWD=${RegExp.escape(real)}\\.'));
   });
 
-  test('окружение: окружение app целиком, добавки вызывающего, TERM и '
-      'COLORTERM (Q9, D5)', () async {
-    // Переменная app, которой нет в узком наборе pty2 (D2, «Окружение»).
-    const narrow = {
-      'LOGNAME',
-      'USER',
-      'DISPLAY',
-      'LC_CTYPE',
-      'HOME',
-      'PATH',
-      'TERM',
-      'LANG',
-      'PWD',
-      'OLDPWD',
-      'SHLVL',
-      '_',
-    };
-    final candidates = Platform.environment.entries.where(
-      (e) =>
-          !narrow.contains(e.key) &&
-          RegExp(r'^[A-Z][A-Z0-9_]*$').hasMatch(e.key) &&
-          RegExp(r'^[A-Za-z0-9_./:-]+$').hasMatch(e.value),
-    );
-    if (candidates.isEmpty) {
-      fail(
-        'В окружении тестового процесса нет простой переменной вне узкого '
-        'набора pty2 (LOGNAME, USER, DISPLAY, LC_CTYPE, HOME, PATH, TERM, '
-        'LANG): проверить наследование окружения нечем. Задайте любую '
-        'переменную вида FOO=bar перед запуском.',
-      );
-    }
-    final inherited = candidates.first;
+  test('окружение: добавки вызывающего, TERM и COLORTERM видны в shell '
+      '(Q9, D5)', () async {
+    // Значения чужих переменных окружения тест не читает и не печатает:
+    // там могут быть секреты. Наследование окружения app — детерминированный
+    // тест через fake-стартёр ниже.
     final shell = await start(
       '/bin/sh',
       const [],
-      environment: {'CODELAB_TEST_EXTRA': 'extra-value'},
+      environment: {'CODELAB_TERM_TEST': 'extra-value'},
     );
     final out = _Output(shell);
     addTearDown(out.dispose);
 
-    shell.write(
-      'echo ENV=\$TERM,\$COLORTERM,\$CODELAB_TEST_EXTRA,'
-      '\$${inherited.key}.\n',
-    );
+    shell.write('echo ENV=\$TERM,\$COLORTERM,\$CODELAB_TERM_TEST.\n');
 
-    await out.expect(
-      RegExp(
-        'ENV=xterm-256color,truecolor,extra-value,'
-        '${RegExp.escape(inherited.value)}\\.',
-      ),
-    );
+    await out.expect(RegExp(r'ENV=xterm-256color,truecolor,extra-value\.'));
   });
 
   test('resize(100, 30): tput cols = 100', () async {
@@ -177,6 +147,25 @@ void main() {
     addTearDown(out.dispose);
 
     shell.resize(100, 30);
+    shell.write('echo SZ=\$(tput cols)x\$(tput lines).\n');
+
+    await out.expect(RegExp(r'SZ=100x30\.'));
+  });
+
+  test('начальный размер columns x rows применяется при старте, без '
+      'resize (D2: pty2.start размера не принимает)', () async {
+    final shell = await launcher.start(
+      executable: '/bin/sh',
+      arguments: const [],
+      workingDirectory: tmp.path,
+      environment: const {},
+      columns: 100,
+      rows: 30,
+    );
+    shells.add(shell);
+    final out = _Output(shell);
+    addTearDown(out.dispose);
+
     shell.write('echo SZ=\$(tput cols)x\$(tput lines).\n');
 
     await out.expect(RegExp(r'SZ=100x30\.'));
@@ -194,15 +183,21 @@ void main() {
       '(D15, п. 6)', () async {
     final shell = await start('/bin/sh', const [
       '-c',
-      "trap '' HUP; exec sleep 7201",
+      "trap '' HUP; echo READY; exec sleep 7201",
     ]);
-    var exited = false;
-    unawaited(shell.exitCode.then((_) => exited = true));
-    await Future<void>.delayed(const Duration(seconds: 1));
+    final out = _Output(shell);
+    addTearDown(out.dispose);
+    // Маркер READY печатается после `trap`: сигнал уже будет проигнорирован.
+    await out.expect(RegExp('READY'));
 
     shell.hangUp();
-    await Future<void>.delayed(const Duration(seconds: 1));
-    expect(exited, isFalse, reason: 'SIGHUP проигнорирован процессом');
+    // Отрицательный результат ждать нечем: даём SIGHUP секунду подействовать,
+    // если бы процесс его не игнорировал; выход за это время — провал.
+    await expectLater(
+      shell.exitCode.timeout(const Duration(seconds: 1)),
+      throwsA(isA<TimeoutException>()),
+      reason: 'SIGHUP проигнорирован процессом',
+    );
 
     shell.kill();
 
@@ -286,4 +281,306 @@ void main() {
       );
     });
   });
+
+  group('адаптер на fake-PTY', () {
+    late _FakePty fake;
+    late Map<String, String>? capturedEnvironment;
+    late PtyUserShellLauncher fakeLauncher;
+
+    setUp(() {
+      fake = _FakePty();
+      capturedEnvironment = null;
+      fakeLauncher = PtyUserShellLauncher(
+        startPty: (executable, args, {workingDirectory, environment}) {
+          capturedEnvironment = environment;
+          return fake;
+        },
+      );
+    });
+
+    Future<UserShell> startFake({
+      Map<String, String> environment = const {},
+      String executable = '/bin/sh',
+    }) => fakeLauncher.start(
+      executable: executable,
+      arguments: const [],
+      workingDirectory: tmp.path,
+      environment: environment,
+      columns: 100,
+      rows: 30,
+    );
+
+    test('окружение: Platform.environment целиком, добавки, TERM и COLORTERM '
+        'не переопределяются добавками (Q9, D5)', () async {
+      await startFake(
+        environment: {
+          'CODELAB_TERM_TEST': 'extra',
+          'TERM': 'dumb',
+          'COLORTERM': 'none',
+        },
+      );
+
+      final env = capturedEnvironment!;
+      // В сообщениях только ключи: значения реального окружения не печатаются.
+      final lost = Platform.environment.keys
+          .where(
+            (k) =>
+                k != 'TERM' &&
+                k != 'COLORTERM' &&
+                env[k] != Platform.environment[k],
+          )
+          .toList();
+      expect(lost, isEmpty, reason: 'потеряны переменные app: $lost');
+      expect(env['CODELAB_TERM_TEST'], 'extra');
+      expect(env['TERM'], 'xterm-256color');
+      expect(env['COLORTERM'], 'truecolor');
+    });
+
+    test(
+      'начальный размер выставляется вызовом resize(columns, rows)',
+      () async {
+        await startFake();
+
+        expect(fake.calls, contains('resize:100,30'));
+      },
+    );
+
+    test('после выхода процесса kill, hangUp, write и resize не доходят до '
+        'пакета: pid мог уйти другому процессу', () async {
+      final shell = await startFake();
+      fake.exit.complete(0);
+      await shell.exitCode;
+      fake.calls.clear();
+
+      shell
+        ..hangUp()
+        ..kill()
+        ..write('x')
+        ..resize(10, 10);
+
+      expect(fake.calls, isEmpty);
+    });
+
+    test('до выхода процесса kill и hangUp доходят до пакета', () async {
+      final shell = await startFake();
+      fake.calls.clear();
+
+      shell
+        ..hangUp()
+        ..kill();
+
+      expect(fake.calls, hasLength(2));
+    });
+
+    test('PtyException при старте → ptyUnavailable без путей', () async {
+      final throwing = PtyUserShellLauncher(
+        startPty: (executable, args, {workingDirectory, environment}) =>
+            throw PtyException('openpty failed at /dev/ptmx'),
+      );
+
+      await expectLater(
+        throwing.start(
+          executable: '/bin/sh',
+          arguments: const [],
+          workingDirectory: tmp.path,
+          environment: const {},
+          columns: 80,
+          rows: 24,
+        ),
+        throwsA(UserShellStartFailure.ptyUnavailable),
+      );
+      expect(
+        UserShellStartFailure.ptyUnavailable.toString(),
+        isNot(contains('/')),
+      );
+    });
+
+    test('ошибка ожидания выхода не глушится: exitCode бросает, дальше все '
+        'методы no-op', () async {
+      final shell = await startFake();
+      fake.exit.completeError(StateError('wait failed'));
+      await expectLater(shell.exitCode, throwsA(isA<StateError>()));
+      fake.calls.clear();
+
+      shell
+        ..hangUp()
+        ..kill()
+        ..write('x')
+        ..resize(10, 10);
+
+      expect(fake.calls, isEmpty);
+    });
+
+    test('Exception (не PtyException) при старте → ptyUnavailable', () async {
+      final throwing = PtyUserShellLauncher(
+        startPty: (executable, args, {workingDirectory, environment}) =>
+            throw const FormatException('no native library at /x'),
+      );
+
+      await expectLater(
+        throwing.start(
+          executable: '/bin/sh',
+          arguments: const [],
+          workingDirectory: tmp.path,
+          environment: const {},
+          columns: 80,
+          rows: 24,
+        ),
+        throwsA(UserShellStartFailure.ptyUnavailable),
+      );
+    });
+
+    test('Error при старте (дефект окружения или программы) пробрасывается '
+        'как есть', () async {
+      final throwing = PtyUserShellLauncher(
+        startPty: (executable, args, {workingDirectory, environment}) =>
+            throw StateError('library missing'),
+      );
+
+      await expectLater(
+        throwing.start(
+          executable: '/bin/sh',
+          arguments: const [],
+          workingDirectory: tmp.path,
+          environment: const {},
+          columns: 80,
+          rows: 24,
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('сбой resize после старта → kill(SIGKILL) и ptyUnavailable: процесс '
+        'не остаётся без владельца', () async {
+      fake.resizeError = PtyException('ioctl failed');
+
+      await expectLater(
+        startFake(),
+        throwsA(UserShellStartFailure.ptyUnavailable),
+      );
+
+      expect(fake.calls, contains('kill:${ProcessSignal.sigkill.name}'));
+    });
+
+    test('Error при resize после старта → kill(SIGKILL) и Error пробрасывается '
+        'как есть: дефект не выдаётся за отказ терминала (D2)', () async {
+      fake.resizeError = StateError('defect');
+
+      await expectLater(startFake(), throwsA(isA<StateError>()));
+
+      expect(fake.calls, contains('kill:${ProcessSignal.sigkill.name}'));
+    });
+
+    test('не абсолютный executable → shellNotFound, даже если файл найдётся '
+        'от текущей папки процесса', () async {
+      final script = File('${tmp.path}/relative_shell')
+        ..writeAsStringSync('#!/bin/sh\n');
+      await Process.run('chmod', ['+x', script.path]);
+      final relative = p.relative(script.path, from: Directory.current.path);
+      expect(p.isAbsolute(relative), isFalse);
+
+      await expectLater(
+        startFake(executable: relative),
+        throwsA(UserShellStartFailure.shellNotFound),
+      );
+      expect(fake.calls, isEmpty, reason: 'pty2.start не вызывался');
+    });
+  });
+
+  group('выбор shell (D5, Q9)', () {
+    const posix = false;
+    bool Function(String) existing(Set<String> paths) => paths.contains;
+
+    UserShellCommand? choose(
+      Map<String, String> env,
+      Set<String> paths, {
+      bool windows = posix,
+    }) => chooseUserShell(
+      environment: env,
+      isWindows: windows,
+      isExecutable: existing(paths),
+    );
+
+    test(r'$SHELL имеет приоритет и запускается как login shell (-l)', () {
+      final c = choose(
+        {'SHELL': '/usr/bin/fish'},
+        {'/usr/bin/fish', '/bin/zsh', '/bin/bash', '/bin/sh'},
+      );
+
+      expect(c?.executable, '/usr/bin/fish');
+      expect(c?.arguments, ['-l']);
+    });
+
+    test(r'$SHELL не абсолютный или не исполняемый → запасные пути по '
+        'порядку zsh, bash, sh', () {
+      expect(
+        choose(
+          {'SHELL': 'zsh'},
+          {'/bin/zsh', '/bin/bash', '/bin/sh'},
+        )?.executable,
+        '/bin/zsh',
+      );
+      expect(
+        choose({'SHELL': '/gone/shell'}, {'/bin/zsh', '/bin/bash'})?.executable,
+        '/bin/zsh',
+      );
+      expect(
+        choose(const {}, {'/bin/bash', '/bin/sh'})?.executable,
+        '/bin/bash',
+      );
+      expect(choose(const {}, {'/bin/sh'})?.executable, '/bin/sh');
+      expect(choose({'SHELL': ''}, {'/bin/sh'})?.arguments, ['-l']);
+    });
+
+    test('ни одного shell → null', () {
+      expect(choose({'SHELL': '/gone/shell'}, const {}), isNull);
+    });
+
+    test(r'Windows: %ComSpec% без аргументов, нет файла → null', () {
+      const cmd = r'C:\Windows\System32\cmd.exe';
+
+      final c = choose({'ComSpec': cmd}, {cmd}, windows: true);
+
+      expect(c?.executable, cmd);
+      expect(c?.arguments, isEmpty);
+      expect(choose({'ComSpec': cmd}, const {}, windows: true), isNull);
+      expect(choose(const {}, {'/bin/sh'}, windows: true), isNull);
+    });
+  });
+}
+
+/// Подставной PTY: пишет вызовы в [calls], завершение — [exit].
+class _FakePty implements PseudoTerminal {
+  final exit = Completer<int>();
+  final calls = <String>[];
+
+  /// Что бросить из [resize] (проверка сбоя после старта).
+  Object? resizeError;
+
+  @override
+  void init() {}
+
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    calls.add('kill:${signal.name}');
+    return true;
+  }
+
+  @override
+  Future<int> get exitCode => exit.future;
+
+  @override
+  void write(String input) => calls.add('write');
+
+  @override
+  Stream<String> get out => const Stream.empty();
+
+  @override
+  void ackProcessed() {}
+
+  @override
+  void resize(int width, int height) {
+    calls.add('resize:$width,$height');
+    if (resizeError case final error?) throw error;
+  }
 }
