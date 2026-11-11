@@ -95,6 +95,19 @@ AI-agent НЕ ДОЛЖЕН придумывать новую classification са
 
 Полное обоснование и рассмотренные альтернативы — `openspec/changes/add-acp-fs-client-support/design.md`, `openspec/changes/add-acp-terminal-client-support/design.md`.
 
+### Терминал пользователя — не действие агента
+
+Панель Terminal десктопного клиента (D-28; change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D8) запускает интерактивный shell **пользователя**. Формально это «shell/process execution» из списка выше, но permission policy охраняет действия агента, а не человека: policy не решает, можно ли человеку набрать команду в собственном shell.
+
+Поэтому:
+
+* команды терминала пользователя не проходят через одобрения, режимы разрешений и классификацию риска (`approval-safety`);
+* containment рабочей папки к ним не применяется: компенсирующий контроль из исключения выше — для `fs/*` и `terminal/*` **агента**, а `cd` пользователя за пределы проекта — обычная работа;
+* агент панель не видит и управлять ей не может: вкладки не получают `terminalId` и не уходят в ACP, ввод и вывод терминала агенту не передаются;
+* панель при первом открытии за запуск app предупреждает, что команды идут вне одобрений агента, а вывод не редактируется.
+
+Это явное решение, а не пробел в policy. Любой путь, по которому команда в этот shell попадает **от агента** (вставка текста агента, автозапуск, передача вывода в промпт), — уже действие агента и требует отдельного OpenSpec change с permission flow.
+
 ---
 
 ## 3. Security policy owner
@@ -1052,6 +1065,7 @@ evaluate policy
 | Вызов инструмента агента (`read`, `write`, `edit`, `exec`, сетевые инструменты, MCP) | агент: `PermissionPolicy.decide` — единственная точка перед исполнением любого инструмента | `codelab_agent_core`, `agent-core/07-permissions.md` (PERM-1) |
 | Показ вопроса пользователю | клиент: получает `session/request_permission`, показывает диалог, возвращает выбор | `codelab_client_core` / `codelab_desktop` / `codelab_cli` |
 | `fs/*` и `terminal/*` от агента к клиенту | permission остаётся за агентом; клиент только ограничивает пути рабочей папкой (исключение в разделе 2) | `codelab_agent_core` + `codelab_client_acp` |
+| Команда в панели Terminal десктопа | никто: это действие пользователя, а не агента; одобрения и containment не применяются (раздел 2, «Терминал пользователя — не действие агента») | `codelab_desktop` (`add-integrated-terminal`, D8) |
 
 Агент не показывает диалогов и не знает о UI: `AcpPermissionGate` (в `codelab_agent_acp`) превращает `PermissionRequest` ядра в запрос `session/request_permission` и ждёт ответ. Транспорт и протокольный слой ничего не решают (PERM-005).
 

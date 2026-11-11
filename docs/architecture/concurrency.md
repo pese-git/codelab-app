@@ -787,9 +787,10 @@ State machine должна воспринимать expected exit как intenti
 `terminal/create` управляет отдельным session-scoped реестром процессов
 (`SessionId → Map<TerminalId, TerminalProcessHandle>`), независимым от
 собственного child-процесса ACP transport (§42-43) и от
-`TerminalProcessFactory` локальной интерактивной terminal-панели
-(`add-integrated-terminal`) — два разных owner'а, два разных lifecycle
-(`add-acp-terminal-client-support/design.md`, Decision 6).
+процессов панели Terminal пользователя (порт `UserShellLauncher`, владелец
+`TerminalTabsCubit`; change `add-integrated-terminal`, D10) — разные
+owner'ы, разные lifecycle (`add-acp-terminal-client-support/design.md`,
+Decision 6). Разрыв соединения с агентом процессы панели Terminal не трогает.
 
 Правила:
 
@@ -844,6 +845,23 @@ close transport/process
       ▼
 dispose containers
 ```
+
+Терминал пользователя (панель Terminal, change `add-integrated-terminal`, D4) встроен в этот поток через `AppLifecycleListener.onExitRequested` composition root:
+
+```text
+exit requested
+      │
+      ▼
+TerminalTabsCubit.closeAll()   — новые вкладки больше не создаются
+      │
+      ▼
+SIGHUP всем shell → ожидание до 3 с → принудительное завершение оставшихся
+      │
+      ▼
+AppExitResponse.exit
+```
+
+Shell, вернувшийся из асинхронного старта после начала `closeAll`, сразу завершается и в реестр не попадает (stale result, §10). Повторный `closeAll` из закрытия root scope ничего не делает.
 
 ---
 

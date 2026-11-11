@@ -414,6 +414,8 @@ Application lifecycle должен определять, когда исполь
 
 Shutdown flow должен включать cleanup process resources.
 
+Терминал пользователя (панель Terminal, change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D4) закрывает свои shell при выходе из app явно: `SIGHUP`, затем принудительное завершение по таймауту. Страховка на случай краха app — сам PTY: при закрытии PTY-мастера ядро шлёт `SIGHUP` сеансу shell. Сиротами остаются только задания, которые пользователь намеренно отвязал (`nohup`, `disown`) — это intentional behavior пользователя.
+
 ---
 
 ## 24. Process exit code
@@ -820,6 +822,8 @@ Shell execution — high-risk capability.
 
 Не следует выполнять shell command напрямую из BLoC/Widget.
 
+**Исключение: терминал пользователя.** Интерактивный shell панели Terminal десктопа (D-28; change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D8) — действие пользователя, а не агента. Permission policy к нему не применяется (`permissions.md` §2, «Терминал пользователя — не действие агента»), рабочая папка его не ограничивает. Остальные требования раздела действуют: запуск централизован в одном порту (`UserShellLauncher`, `lib/core/platform/` app), журнал содержит только метаданные (без ввода, вывода, аргументов и окружения), время жизни процессов ограничено вкладкой и запуском app.
+
 ---
 
 ## 53. Environment variables
@@ -829,6 +833,8 @@ Sensitive environment variables не должны попадать в logs.
 При запуске child process следует передавать только необходимые environment values.
 
 Не следует автоматически наследовать весь environment, если это создаёт security risk и продукт этого не требует.
+
+**Исключение: терминал пользователя.** Shell панели Terminal получает окружение процесса app целиком плюс `TERM=xterm-256color` и `COLORTERM=truecolor` и запускается как login shell (`$SHELL -l`) (решение пользователя Q9, change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D5). Продукт этого требует: это собственный shell пользователя, урезанное окружение сломало бы его инструменты, а app из Finder (macOS) получает минимальное окружение, и `PATH` восстанавливает login shell. Окружение по-прежнему не логируется (§65).
 
 ---
 
