@@ -638,7 +638,9 @@ terminal
 * `terminal.tab_opened` — `tab_id`, `shell` (базовое имя исполняемого файла), `columns`, `rows`;
 * `terminal.tab_exited` — `tab_id`, `exit_code` (поля нет, если PTY-бэкенд кода не сообщил);
 * `terminal.tab_closed` — `tab_id`, `forced`;
-* `terminal.start_failed` — `tab_id`, имя типа ошибки;
+* `terminal.start_failed` — `tab_id`, вариант ошибки старта (`shellNotFound`, `folderNotFound`, `ptyUnavailable`); для неожиданной ошибки — `error_type` (`runtimeType`) без текста и стека: текст `Error` может содержать путь;
+* `terminal.exit_wait_failed` — `tab_id`, имя типа ошибки ожидания выхода (`exitCode` порта завершился ошибкой; вкладка становится «exited» без кода);
+* `terminal.link_opened`, `terminal.link_refused` — только схема адреса ссылки OSC 8, без адреса;
 * `terminal.close_all` — `count`, `forced`.
 
 Путей, окружения, аргументов и `toString()` исключений в них нет (§43–§45).

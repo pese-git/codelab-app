@@ -46,7 +46,7 @@ CodeLab SHALL запускать shell новой вкладки в папке �
 - **THEN** процесс не запускается, вкладка показывает «Folder not found», путь в тексте и в журнале не появляется
 
 ### Requirement: Терминал — настоящий псевдотерминал
-CodeLab SHALL запускать shell вкладки в псевдотерминале (PTY): у процесса SHALL быть терминал на stdin и stdout, размер терминала SHALL совпадать с размером области вкладки и меняться вместе с ней. На macOS и Linux CodeLab SHALL запускать `$SHELL` как login shell (`-l`), без `$SHELL` — `/bin/zsh` на macOS, затем `/bin/bash`, затем `/bin/sh`. Shell SHALL получать окружение процесса CodeLab целиком, `TERM=xterm-256color` и `COLORTERM=truecolor`.
+CodeLab SHALL запускать shell вкладки в псевдотерминале (PTY): у процесса SHALL быть терминал на stdin и stdout, размер терминала SHALL совпадать с размером области вкладки и меняться вместе с ней. На любой POSIX-платформе CodeLab SHALL запускать `$SHELL` как login shell (`-l`), если `$SHELL` — абсолютный путь к исполняемому файлу; иначе (переменной нет, путь не абсолютный, файла нет или он не исполняемый) CodeLab SHALL запускать с `-l` первый исполняемый из `/bin/zsh`, `/bin/bash`, `/bin/sh`. Shell SHALL получать окружение процесса CodeLab целиком, `TERM=xterm-256color` и `COLORTERM=truecolor`.
 
 #### Scenario: У shell есть терминал
 - **WHEN** во вкладке выполняется `test -t 0 && test -t 1 && echo tty`
@@ -55,6 +55,10 @@ CodeLab SHALL запускать shell вкладки в псевдотерми�
 #### Scenario: Login shell пользователя
 - **WHEN** `SHELL=/bin/zsh`, и пользователь открывает новую вкладку
 - **THEN** запускается `/bin/zsh -l`, а `echo $TERM $COLORTERM` во вкладке печатает `xterm-256color truecolor`
+
+#### Scenario: Неподходящий $SHELL
+- **WHEN** `SHELL=zsh` (не абсолютный путь), `/bin/zsh` исполняемый, и пользователь открывает новую вкладку
+- **THEN** запускается `/bin/zsh -l`
 
 #### Scenario: Окружение app целиком
 - **WHEN** процесс CodeLab запущен с переменной окружения `CODELAB_TERM_PROBE=1`, и пользователь выполняет `echo $CODELAB_TERM_PROBE` в новой вкладке
@@ -186,6 +190,29 @@ CodeLab SHALL NOT передавать ввод и вывод терминала
 #### Scenario: Вывод не переживает перезапуск
 - **WHEN** пользователь перезапускает CodeLab после работы в терминале
 - **THEN** вкладок, вывода и истории терминала прошлого запуска нет ни в панели, ни в файлах CodeLab
+
+### Requirement: Ссылки в выводе терминала
+CodeLab SHALL по Cmd+клику (macOS) или Ctrl+клику (другие платформы) на гиперссылке OSC 8 в выводе терминала показывать диалог подтверждения с полным адресом ссылки, а не с её текстом. CodeLab SHALL открывать адрес только после подтверждения в диалоге и только для схем `http` и `https`. Адреса других схем (`file:`, `ssh:`, `javascript:` и любые иные) и неразбираемые адреса CodeLab SHALL NOT открывать: диалог SHALL показывать адрес и сообщение «Only http and https links can be opened.» без действия открытия. Обычный клик по ссылке SHALL NOT открывать диалог. Адрес ссылки SHALL NOT попадать в журнал.
+
+#### Scenario: Ссылка https
+- **WHEN** процесс выводит ссылку OSC 8 с адресом `https://example.com/docs?q=1` и текстом `docs`, и пользователь делает Cmd+клик по ней
+- **THEN** CodeLab показывает `terminal-link-dialog` с адресом `https://example.com/docs?q=1` целиком; после «Open» адрес открывается во внешнем браузере, после «Cancel» или Esc — нет
+
+#### Scenario: Ссылка file
+- **WHEN** процесс выводит ссылку OSC 8 с адресом `file:///etc/passwd`, и пользователь делает Cmd+клик по ней
+- **THEN** диалог показывает адрес и «Only http and https links can be opened.», кнопки «Open» нет, ничего не открывается
+
+#### Scenario: Текст ссылки не совпадает с адресом
+- **WHEN** текст ссылки — `https://safe.example`, а адрес — `https://evil.example/login`
+- **THEN** диалог показывает `https://evil.example/login`
+
+#### Scenario: Обычный клик
+- **WHEN** пользователь кликает по ссылке без модификатора
+- **THEN** диалога нет, ничего не открывается
+
+#### Scenario: Адрес не логируется
+- **WHEN** пользователь открывает ссылку `https://example.com/?token=abc`
+- **THEN** журнал и `LogBuffer` не содержат адреса; событие ссылки содержит только схему
 
 ### Requirement: Терминал пользователя независим от ACP terminal/*
 Терминал пользователя SHALL иметь собственный порт запуска процессов (`UserShellLauncher`) и собственного владельца процессов, отдельные от порта `TerminalProcessRunner` и реестра терминалов ACP-сессии (`acp-terminal-client`). Процессы `terminal/create` агента SHALL NOT появляться вкладками панели Terminal, а вкладки пользователя SHALL NOT получать `terminalId` и SHALL NOT быть доступны агенту через ACP.

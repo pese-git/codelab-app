@@ -806,7 +806,7 @@ Architectural dependency rules важнее технической доступ�
    * `codelab_ui` — организм `CodeLabTerminalPane` получает виджет терминала слотом;
    * `codelab_client_*`, пакеты агента, `apps/codelab_cli`;
    * лента: строки инструментов ACP `terminal/*` остаются текстом;
-   * обработчик ZMODEM (`zmodem`, транзитивно от `xterm2`) не подключается.
+   * обработчик ZMODEM (`zmodem`, транзитивно от `xterm2`, реэкспортируется `xterm2`) не подключается: `ZModemMux` — файловый обмен в обход политики (D3 change), импорт `package:zmodem/` запрещён сторожем.
 4. **Какую проблему решает.** Не писать свой парсер ANSI и рендер: escape-последовательности, широкие символы, альтернативный экран, scrollback, выделение, bracketed paste.
 5. **Влияние на architecture boundaries.**
    * Application зависит только от чистого `xterm2_core`, Flutter туда не попадает (`AGENTS.md` §6); `fvm dart run` без Flutter подтверждён спайком.
@@ -818,6 +818,7 @@ Architectural dependency rules важнее технической доступ�
      * `onClipboardQuery` → `null`.
 
      Подробнее — D3 change. Выделение и Cmd+C/Cmd+V пользователя работают.
+   * Ссылки OSC 8 открываются после подтверждения только для `http`/`https` (решение Q14) через `url_launcher` за портом `lib/core/platform/` (решение Q16, D11 change). Раздел о `url_launcher` здесь не дублируется: его вводит тот change, который сливается первым (`add-desktop-markdown` или этот, задача 2.10), второй ссылается на него.
    * Запись в модель — порциями до 4 КБ не чаще кадра: один `write` на ~400 КБ держит UI isolate ~120 мс (D15).
 6. **Заменяет ли существующую технологию.** Нет.
 7. **Требуется ли migration.** Нет.
@@ -911,7 +912,7 @@ Architectural dependency rules важнее технической доступ�
 | `yaml` | 3.1.4 | MIT | `hooks` | 3.1.3 |
 | `characters`, `collection`, `convert`, `crypto`, `ffi`, `file`, `glob`, `logging`, `matcher`, `meta`, `path`, `platform`, `process`, `pub_semver`, `typed_data`, `async`, `boolean_selector`, `source_span`, `stack_trace`, `stream_channel`, `string_scanner`, `term_glyph`, `test_api` | см. D15 | BSD-3-Clause | разные | уже есть |
 
-Кроме замыкания, в lock workspace поднимается `objective_c` 9.5.0 → 9.6.3: он тянется через существующие пакеты. Сборку app и тесты затронутых пакетов с новым lock проверяет задача 1.4 change.
+Кроме замыкания, в lock workspace поднимается `objective_c` 9.5.0 → 9.6.4 (BSD-3-Clause, publisher `dart.dev`; сухой прогон спайка давал 9.6.3, при `melos bootstrap` разрешилась опубликованная 2026-11-11 версия 9.6.4): он тянется через существующие пакеты. Сборку app и тесты затронутых пакетов с новым lock проверяет задача 1.4 change.
 
 ---
 

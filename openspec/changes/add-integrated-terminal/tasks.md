@@ -64,16 +64,16 @@
 
   Итог — раздел «Итог спайка» в design.md (D15): выбранные пакеты рендера и PTY, точные версии, полный список транзитивных зависимостей выбранных пакетов из `pubspec.lock` с лицензиями (несовместимые с MIT — стоп), что не подтвердилось. Каталог спайка удаляется в задаче 3.9.
 
-  Состояние: выполнено 2026-11-11, автоматическая и ручная части (D15). Выбраны `pty2` 0.8.1, `xterm2` 5.4.0, `xterm2_core` 1.0.0. Находки перенесены в D2–D4, D6, D11, D13, Risks и Q14 (условный):
+  Состояние: выполнено 2026-11-11, автоматическая и ручная части (D15). Выбраны `pty2` 0.8.1, `xterm2` 5.4.0, `xterm2_core` 1.0.0. Находки перенесены в D2–D4, D6, D11, D13, Risks и Q15 (условный):
   - русская раскладка — сопоставление по физической клавише;
   - рывки под потоком — бюджет на кадр.
 - [x] 1.2 `[desktop]` `docs/architecture/technology-stack.md` §20г–§20д — финал по итогу 1.1 (D15): выбранный пакет, точная версия, транзитивные зависимости и лицензии, проверка по §24–§25 (D11; Q3 — без ADR). `THIRD_PARTY_NOTICES.md` и `licensing-and-attribution` не меняются (Q12); проверить только, что в коде change нет воспроизведённых фрагментов.
-- [ ] 1.3 `[desktop]` Тест (workspace-architecture «Автоматический сторож границ пакетов»; D11): в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` правила `apps/codelab_desktop` под выбранный пакет. Правила: `package:xterm2_core/` вне `features/terminal/`; `package:xterm2/` вне `features/terminal/presentation/`; `package:flutter/` в `features/terminal/application/`; PTY-пакет вне `core/platform/user_shell_launcher.dart`. Негативные тесты: `package:xterm2/` в `features/terminal/application/`, `package:xterm2_core/` в `features/workbench/`, PTY-пакет в `features/terminal/` → нарушение (красный). Правило `flutter` в `features/terminal/application` — в итерации 2, вместе с каталогом (задача 2.0).
-- [ ] 1.4 `[desktop]` Зависимости и правила (D11, D15): Правило `flutter` в `features/terminal/application` — в итерации 2, вместе с каталогом (задача 2.0).
+- [x] 1.3 `[desktop]` Тест (workspace-architecture «Автоматический сторож границ пакетов»; D11): в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` правила `apps/codelab_desktop` под выбранный пакет. Правила: `package:xterm2_core/` вне `features/terminal/`; `package:xterm2/` вне `features/terminal/presentation/`; `package:flutter/` в `features/terminal/application/`; PTY-пакет вне `core/platform/user_shell_launcher.dart`. Негативные тесты: `package:xterm2/` в `features/terminal/application/`, `package:xterm2_core/` в `features/workbench/`, PTY-пакет в `features/terminal/` → нарушение (красный). Правило `flutter` в `features/terminal/application` — в итерации 2, вместе с каталогом (задача 2.0).
+- [x] 1.4 `[desktop]` Зависимости и правила (D11, D15):
   - добавить `xterm2: 5.4.0`, `xterm2_core: 1.0.0`, `pty2: 0.8.1` точными версиями в `dependencies` `apps/codelab_desktop/pubspec.yaml`;
   - поднять `environment.sdk` `apps/codelab_desktop` до `>=3.11.0` (требование `pty2`); корень workspace и другие пакеты не трогать. Если pub workspace потребует общую границу — остановиться и записать решение в D11 явно;
   - выполнить `fvm dart run melos bootstrap`;
-  - сверить `pubspec.lock` с D15: добавлены ровно 9 пакетов (`equatable`, `ffi_leak_tracker`, `native_toolchain_c`, `pty2`, `quiver`, `win32`, `xterm2`, `xterm2_core`, `zmodem`) и подняты `code_assets` 1.2.1 → 2.2.0, `hooks` → 2.2.0, `record_use` → 1.1.1, `objective_c` → 9.6.3. Расхождение записать в D15;
+  - сверить `pubspec.lock` с D15: добавлены ровно 9 пакетов (`equatable`, `ffi_leak_tracker`, `native_toolchain_c`, `pty2`, `quiver`, `win32`, `xterm2`, `xterm2_core`, `zmodem`) и подняты `code_assets` 1.2.1 → 2.2.0, `hooks` → 2.2.0, `record_use` → 1.1.1, `objective_c` → 9.6.3. Расхождение записать в D15 (итог: `objective_c` разрешился в 9.6.4, BSD-3-Clause — D11, D15);
   - правила в `test/support/rules.dart` с комментариями (почему, ссылка на D11).
 
   Ожидаемый результат: 1.3 зелёный, `fvm dart run melos run guard` зелёный, `fvm flutter build macos` app собирается, в бандле есть `pty2_unix.framework`.
@@ -83,7 +83,7 @@
   - тесты пакетов, которые тянут эти четыре пакета (найти по `fvm dart pub deps`).
 
   Полный `melos run check` — предложить пользователю, самим не запускать.
-- [ ] 1.5 `[desktop]` Контрактный тест адаптера (`integrated-terminal` «Терминал — настоящий псевдотерминал», «Жизненный цикл процессов терминала»; D2, D13): `apps/codelab_desktop/test/core/platform/user_shell_launcher_test.dart` на Dart VM (native assets `pty2` собираются под `flutter test`, D15). На код выхода тест не опирается (D4, «Код выхода»). Проверяет:
+- [x] 1.5 `[desktop]` Контрактный тест адаптера (`integrated-terminal` «Терминал — настоящий псевдотерминал», «Жизненный цикл процессов терминала»; D2, D13): `apps/codelab_desktop/test/core/platform/user_shell_launcher_test.dart` на Dart VM (native assets `pty2` собираются под `flutter test`, D15). На код выхода тест не опирается (D4, «Код выхода»). Проверяет:
   - `test -t 0 && test -t 1 && echo tty` → в выводе `tty`;
   - переменная из `environment`, которой нет в узком наборе `pty2`, видна в shell; `TERM` и `COLORTERM` выставлены;
   - `cwd` соблюдается;
@@ -96,16 +96,45 @@
   - `isSupported` на macOS — `true`.
 
   Тест красный.
-- [ ] 1.6 `[desktop]` Реализовать порт `UserShellLauncher`, `UserShell` (`Stream<String> output`, `write(String)`, `exitCode` как `Future<int?>`), `UserShellStartFailure` с предпроверкой файла и папки и адаптер на `pty2`; окружение — `Platform.environment` целиком плюс `TERM`, `COLORTERM` в `apps/codelab_desktop/lib/core/platform/user_shell_launcher.dart`; `Platform.is*` только здесь (D2, D12). Комментарии по `AGENTS.md` §15 — 1.5 зелёный.
-- [ ] 1.7 `[desktop]` Проверки итерации 1 (шапка) и PR итерации 1.
+- [x] 1.6 `[desktop]` Реализовать порт `UserShellLauncher`, `UserShell` (`Stream<String> output`, `write(String)`, `exitCode` как `Future<int?>`), `UserShellStartFailure` с предпроверкой файла и папки и адаптер на `pty2`; окружение — `Platform.environment` целиком плюс `TERM`, `COLORTERM` в `apps/codelab_desktop/lib/core/platform/user_shell_launcher.dart`; `Platform.is*` только здесь (D2, D12). Комментарии по `AGENTS.md` §15 — 1.5 зелёный.
+- [x] 1.6a `[desktop]` Выбор shell в адаптере (D2, «Выбор shell»; D5) — выполнено: чистая функция `chooseUserShell`, `UserShellCommand`, `UserShellLauncher.resolveShell()`, `ptyUnavailable` из `start` и `resize`; 28 тестов зелёные, мутации пойманы:
+  - **тест** в `apps/codelab_desktop/test/core/platform/user_shell_launcher_test.dart` (красный):
+    - POSIX — порядок `$SHELL` (абсолютный и исполняемый) → `/bin/zsh` → `/bin/bash` → `/bin/sh`;
+    - `$SHELL` относительный, несуществующий или неисполняемый пропускается;
+    - выбранному shell добавляется `-l`;
+    - Windows — `%ComSpec%` без `-l`;
+    - ни одного кандидата → `shellNotFound`;
+    - не абсолютный `executable` → `shellNotFound` без поиска по `PATH`;
+    - `PtyException` и другое `Exception` из `pty2.start` → `UserShellStartFailure.ptyUnavailable`; `Error` (`ArgumentError`, `UnsupportedError`, `StateError`) пробрасывается без обёртки; сбой первого `resize` при старте → `SIGKILL` shell и `ptyUnavailable`;
+    - ошибка `exitCode` пробрасывается, после неё методы `UserShell` — no-op;
+    - после завершения `exitCode` вызовы `write`, `resize`, `hangUp`, `kill` — no-op без исключений.
+
+    Проверка файловой системы и платформы — через внедряемые функции, без `Platform.is*` в тесте;
+  - **реализация** в `user_shell_launcher.dart` — тест зелёный.
+- [ ] 1.7 `[desktop]` Проверки итерации 1 и PR итерации 1. Кроме шапки, проверки шире app: lock общий, в нём подняты `code_assets` (мажор), `hooks`, `record_use`, `objective_c` (D11).
+  - `fvm dart run melos run analyze` по workspace;
+  - тесты пакетов с native assets и хуками сборки — найти по `fvm dart pub deps` потребителей `hooks`/`code_assets`/`objective_c`;
+  - `fvm dart run melos run web-compile`: web-безопасные пакеты делят тот же lock;
+  - `fvm dart run melos run guard`.
+
+  **Linux CI.** Подтвердить прогон контрактного теста на настоящем PTY в GitHub CI на `ubuntu-latest`: там `/bin/sh` — dash, нужны `tput` и terminfo. Итог записать в D15. Если тест там не собирается или падает по причине окружения, а не адаптера, — `skip` вне macOS с причиной в тексте и запись в D13.
+
+  Полный `melos run check` — только предложить пользователю.
+- [ ] 1.8 `[desktop]` Завести issue в репозитории `pty2` (ссылка — в D15, п. 8, и в Risks), по одному на дефект или одним с разделами:
+  - окно pid-reuse между `waitpid` в воркере и доставкой кода в главный isolate — pidfd или сигнал из воркера (Risks, «Окно между `waitpid` и доставкой кода»);
+  - `alloc failed` после `fork`: мастер закрывается без `kill` и `waitpid`, ребёнок без владельца, зомби до выхода app (Risks, «Ребёнок без владельца»);
+  - на macOS закрываются только fd < 4096 при `RLIMIT_NOFILE` > 65536 (Risks, «Утечка дескрипторов»).
+
+  Текст issue — без путей и данных пользователя. Внешнее действие: заводит пользователь или исполнитель по его разрешению.
 
 ## 2. Feature terminal и панель в доке (итерация 2)
 
-- [ ] 2.0 `[desktop]` Правило сторожа «`package:flutter/` запрещён в `apps/codelab_desktop/lib/features/terminal/application`» (D11, правило 3; перенесено из 1.3–1.4, потому что сторож требует существующий каталог). Сначала негативный тест в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` (`flutter` в `application` → нарушение, красный), затем `PackageRule` в `test/support/rules.dart` вместе с появлением каталога в 2.2 — тест зелёный.
+- [ ] 2.0 `[desktop]` Правила сторожа «`package:flutter/` запрещён в `apps/codelab_desktop/lib/features/terminal/application`» (D11, правило 3; перенесено из 1.3–1.4, потому что сторож требует существующий каталог) и «`package:zmodem/` запрещён в `apps/codelab_desktop/lib`» (D11, правило 5; D3, «ZModem выключен»). Сначала негативные тесты в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` (`flutter` в `application`, `zmodem` в `presentation` → нарушение, красный), затем `PackageRule` в `test/support/rules.dart` вместе с появлением каталога в 2.2 — тест зелёный.
 - [ ] 2.1 `[desktop]` Тест `apps/codelab_desktop/test/features/terminal/application/terminal_tabs_cubit_test.dart` с `FakeUserShellLauncher` и fake-временем (`integrated-terminal` «Вкладки терминала принадлежат папке проекта», «Рабочая папка вкладки терминала», «Жизненный цикл процессов терминала», «Содержимое терминала не покидает экран»; D3–D5, D9). Проверяет:
   - вкладки по папке проекта, переключение владельца без остановки процессов;
   - снимок `cwd` на момент создания, без проекта — `WorkingDirectoryProvider`;
   - несуществующая папка → `failed` без вызова `start`;
+  - shell берётся у порта: `FakeUserShellLauncher.resolveShell()` (fake реализует новый метод порта) → его команда уходит в `start`; `resolveShell()` вернул `null` → вкладка `failed(shellNotFound)` без вызова `start`;
   - новая вкладка активна; 12 вкладок подряд создаются без отказа (предела нет, Q8);
   - закрытие вкладки и `closeAll()` во время `start`: поздний `UserShell` сразу получает `kill()` и в реестр не попадает (D4, «Старт в полёте»);
   - закрытие: `hangUp` → если `exitCode` не завершился за 2 с — `kill`, вкладка исчезает сразу, `forced` в событии;
@@ -113,12 +142,18 @@
   - запись в эмулятор порциями: 400 КБ вывода одним чанком fake-shell уходят в `Terminal.write` частями не больше заданного размера (4 КБ по умолчанию), без потери и перестановки данных; закрытие вкладки отбрасывает незаписанный остаток (D3, D4). Бюджет времени на кадр — задачи 2.7–2.8;
   - поздний вывод закрытой вкладки не меняет состояние;
   - `closeAll()`: `hangUp` всем, через 3 с `kill`, затем новые вкладки не создаются, повторный вызов — без действий;
+  - после `exited` Cubit отписан от `output` и не вызывает `hangUp`/`kill` этой вкладки — ни при закрытии, ни в `closeAll()` (D4);
+  - `exitCode` завершился ошибкой (fake пробрасывает исключение, как адаптер) → вкладка `exited(null)`, событие `terminal.exit_wait_failed` с `tab_id` и именем типа ошибки (без `toString()`), без сигналов, отписка от `output` (D4, D9);
+  - `UserShellStartFailure.ptyUnavailable` → `failed`, событие `terminal.start_failed` с вариантом;
+  - fake `start` бросает `ArgumentError('native library not found: /Users/x/lib.dylib')` → вкладка `failed(ptyUnavailable)`, в fake-журнале событие `terminal.start_failed` с `error_type: ArgumentError`; подстроки `/Users` в журнале нет, исключение из Cubit не выходит (D4, «Ошибка старта в Cubit»);
+  - то же, но вкладку закрыли до конца `start` → только событие, состояние не меняется;
+  - поздний `UserShell` закрытой вкладки, чей `exitCode` завершился ошибкой → событие `terminal.exit_wait_failed`, необработанной ошибки в зоне нет (тест под `runZonedGuarded` или с проверкой `FlutterError`), состояние не меняется (D4, «Старт в полёте»);
   - после `close()` Cubit нет событий;
   - флаг предупреждения — один раз за жизнь Cubit;
   - события D9 в fake-логгере без путей, окружения и вывода.
 
   Тест красный.
-- [ ] 2.2 `[desktop]` Реализовать `lib/features/terminal/application/`: `TerminalTabsCubit`, `TerminalTabsState`, закрытую иерархию `TerminalTabStatus`, реестр вкладок с моделью `Terminal` из `package:xterm2_core/xterm2_core.dart` (`maxLines` 10 000; политика буфера обмена Q13: `clipboardDecoder: (_, _) => null`, `allowITerm2ClipboardCapture: false`, `allowKittyClipboard: false`, пустой `onClipboardStore`, `onClipboardQuery` → `null` — в одной фабрике модели, D3), буфер записи порциями — 2.1 зелёный.
+- [ ] 2.2 `[desktop]` Реализовать `lib/features/terminal/application/`: `TerminalTabsCubit`, `TerminalTabsState`, закрытую иерархию `TerminalTabStatus`, реестр вкладок с моделью `Terminal` из `package:xterm2_core/xterm2_core.dart` (`maxLines` 10 000), буфер записи порциями — 2.1 зелёный. Модель вкладки создаёт **одна продакшн-фабрика** `terminalModel()` в application, перенесённая из `lib/terminal_policy.dart` спайка: политика буфера обмена Q13 — `clipboardDecoder: (_, _) => null`, `allowITerm2ClipboardCapture: false`, `allowKittyClipboard: false`, пустой `onClipboardStore`, `onClipboardQuery` → `null`. Модульный тест фабрики — в 2.1: каждое поле политики выставлено, обработчики не `null`. Других мест создания `Terminal` в app нет (D3).
 - [ ] 2.3 `[desktop]` Widget-тест `packages/flutter/codelab_ui/test/organisms/codelab_terminal_pane_test.dart` (D3). Проверяет:
   - ключи `terminal-tab-<id>`, `terminal-tab-close-<id>`, `terminal-new-tab`, `terminal-disclosure`;
   - тег статуса из переданной подписи и тона;
@@ -161,8 +196,24 @@
   - **Цель:** худший кадр меньше 50 мс.
   - Если цель не достигнута, по очереди: часть 1 КБ, меньший бюджет, без отрисовки фоновых вкладок.
 
-  Итог (худший кадр, число кадров > 33 мс и > 100 мс, константы) записывается в D3. Если цель недостижима — Q14 пользователю до PR итерации 2.
-- [ ] 2.9 `[desktop]` Проверки итерации 2 (шапка) и PR итерации 2 — после 2.7–2.8.
+  Итог (худший кадр, число кадров > 33 мс и > 100 мс, константы) записывается в D3. Если цель недостижима — Q15 пользователю до PR итерации 2.
+- [ ] 2.9 `[desktop]` Тест ссылок OSC 8 (`integrated-terminal` «Ссылки в выводе терминала»; D3, «Ссылки OSC 8»; Q14), красный:
+  - `apps/codelab_desktop/test/features/terminal/application/terminal_link_decision_test.dart` — `terminalLinkDecision`: `http`/`https` в любом регистре — «можно открыть»; `file:`, `ssh:`, `javascript:`, `mailto:`, пустой и неразбираемый адрес — «нельзя»;
+  - `test/features/terminal/presentation/terminal_link_test.dart` с настоящим `TerminalView` и fake-портом открытия адреса:
+    - Cmd+клик по ссылке `https` → `terminal-link-dialog` с полным адресом, а не текстом ссылки; «Open» вызывает порт ровно один раз, «Cancel» и Esc — ни разу;
+    - Cmd+клик по `file:///etc/passwd` → диалог с сообщением и без «Open», порт не вызывается;
+    - обычный клик — диалога нет;
+    - адрес не появляется в `LogBuffer`, событие — только со схемой.
+- [ ] 2.10 `[desktop]` Реализовать ссылки OSC 8 — 2.9 зелёный:
+  - `terminalLinkDecision` в application;
+  - обработчик `onHyperlinkTap` и диалог в presentation;
+  - порт открытия адреса в `lib/core/platform/` на `url_launcher` (Q16, D11). Если `add-desktop-markdown` уже влит — переиспользовать его порт и правило сторожа. Иначе:
+    - добавить `url_launcher` точной версией;
+    - ввести порт;
+    - ввести правило «`package:url_launcher/` только в `core/platform`» с негативным тестом в `import_guard_test.dart`;
+    - в `technology-stack.md` — короткий раздел или ссылку на раздел markdown change, если он уже есть, без дублирования;
+  - события `terminal.link_opened` и `terminal.link_refused` со схемой.
+- [ ] 2.11 `[desktop]` Проверки итерации 2 (шапка) и PR итерации 2 — после 2.7–2.8 и 2.9–2.10.
 
 ## 3. Клавиши, палитра, выход из app, приёмка (итерация 3)
 
