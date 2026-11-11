@@ -218,6 +218,31 @@ class _StaticImage extends ImageProvider<_StaticImage> {
   );
 }
 
+/// Ошибка загрузки; её текст несёт адрес, и в отчёты он попадать не должен.
+class _TestImageError implements Exception {
+  const _TestImageError();
+
+  @override
+  String toString() => 'secret https://leak.example/?token=abc';
+}
+
+/// Изображение, загрузка которого падает с [error].
+class _FailingImage extends ImageProvider<_FailingImage> {
+  const _FailingImage(this.error);
+
+  final Object error;
+
+  @override
+  Future<_FailingImage> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+    _FailingImage key,
+    ImageDecoderCallback decode,
+  ) => OneFrameImageStreamCompleter(Future<ImageInfo>.error(error));
+}
+
 /// Изображение, которое «загружается», пока тест не завершит [info].
 class _PendingImage extends ImageProvider<_PendingImage> {
   const _PendingImage(this.info);
@@ -1755,6 +1780,7 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
   final shown = ValueNotifier<Set<String>>({});
   final opened = <Uri>[];
   final imageRequests = <Uri>[];
+  final failures = <(String, Object)>[];
   late ImageProvider image;
 
   // Функции политики устойчивы между сборками, как в app (tear-off метода
@@ -1764,6 +1790,9 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
     imageRequests.add(uri);
     return image;
   }
+
+  void onImageFailedTest(String key, Object error) =>
+      failures.add((key, error));
 
   void onShowImageTest(String key) => shown.value = {...shown.value, key};
 
@@ -1776,6 +1805,7 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
       imageFor: imageForTest,
       shownImages: shownImages,
       onShowImage: onShowImageTest,
+      onImageFailed: onImageFailedTest,
       child: child,
     ),
   );
@@ -1784,6 +1814,7 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
     shown.value = {};
     opened.clear();
     imageRequests.clear();
+    failures.clear();
     image = MemoryImage(pngBytes);
   });
 
@@ -2339,6 +2370,69 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
     await showSizedImage(tester, await makeImage(tester, 300, 3000));
 
     expect(tester.getSize(find.byType(Image)).height, lessThanOrEqualTo(480));
+  });
+
+  testWidgets('a failed image load is reported once with the error as is', (
+    tester,
+  ) async {
+    const error = _TestImageError();
+    image = const _FailingImage(error);
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text: '![](https://x.example/y.png)',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Show image'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+    // Обновления scope и кадры после сбоя не повторяют отчёт.
+    for (var i = 0; i < 3; i++) {
+      shown.value = {...shown.value, 'other-$i'};
+      await tester.pump();
+    }
+
+    expect(tester.takeException(), isNull);
+    // Ключ и сама ошибка, без разбора: код причины — дело приложения.
+    expect(failures, hasLength(1));
+    expect(failures.single.$1, 'agent-1#image:https://x.example/y.png');
+    expect(failures.single.$2, same(error));
+    expect(find.byType(CodeLabImagePlaceholder), findsOneWidget);
+  });
+
+  testWidgets('a foreign image error is passed through untouched', (
+    tester,
+  ) async {
+    final error = StateError('codec exploded');
+    image = _FailingImage(error);
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text: '![](https://x.example/y.png)',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Show image'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+
+    expect(failures, hasLength(1));
+    expect(failures.single.$2, same(error));
   });
 
   testWidgets('a shown image does not open the same url in another answer', (

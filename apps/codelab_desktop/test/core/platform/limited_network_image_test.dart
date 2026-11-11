@@ -174,6 +174,26 @@ void main() {
     );
   });
 
+  test('every rejection has a short log code from the allowed set', () {
+    const allowed = {
+      'timeout',
+      'too_large',
+      'dimensions',
+      'redirect',
+      'network',
+      'decode',
+    };
+    for (final rejection in ImageRejection.values) {
+      expect(allowed, contains(rejection.code), reason: '$rejection');
+      expect(ImageRejectedException(rejection).code, rejection.code);
+      expect(ImageRejectedException(rejection).reason, rejection.reason);
+    }
+    // Тексты причин остались прежними.
+    expect(ImageRejection.tooLarge.reason, 'too large');
+    expect(ImageRejection.redirectNotAllowed.code, 'redirect');
+    expect(ImageRejection.notAnImage.code, 'decode');
+  });
+
   test('the rejection does not carry the address', () async {
     try {
       await fetchLimitedImageBytes(

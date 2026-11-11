@@ -79,6 +79,37 @@ final class E2eAgent {
       ? CodelabCompatibleStdioAgentMode.withAvailableCommands
       : CodelabCompatibleStdioAgentMode.normal;
 
+  /// Режим сценария для теста markdown в ленте (change `add-desktop-markdown`,
+  /// задача 5.1).
+  ///
+  /// Почему один режим для всех агентов: scripted-агент в режиме `withMarkdownReply`
+  /// отвечает `echo: <промпт>`, а Dart-агент и встроенный отвечают одним и тем
+  /// же текстом из `llm_scripts/with_markdown_reply.json` (тот же markdown, что
+  /// [markdownPrompt]); тест не зависит от того, чей это ответ.
+  CodelabCompatibleStdioAgentMode get markdownMode =>
+      CodelabCompatibleStdioAgentMode.withMarkdownReply;
+
+  /// Промпт, который scripted-агент возвращает как ответ; для остальных
+  /// агентов ответ задаёт сценарий модели с тем же текстом.
+  static const markdownPrompt = '''Here is the report:
+
+# Release notes
+
+- first item
+- second item
+
+| Name | Value |
+|---|---|
+| alpha | 1 |
+
+```dart
+void main() {
+  print('hi');
+}
+```
+
+![](https://x.example/y.png)''';
+
   /// Ответ агента на `/compact` в новой сессии.
   ///
   /// Почему различается: scripted-агент отвечает отчётом о сжатии, а у
@@ -451,6 +482,7 @@ final class E2eAgent {
       switch (mode) {
         CodelabCompatibleStdioAgentMode.normal ||
         CodelabCompatibleStdioAgentMode.withPlan ||
+        CodelabCompatibleStdioAgentMode.withMarkdownReply ||
         CodelabCompatibleStdioAgentMode.echoesCwd => const _ModeSettings(),
         CodelabCompatibleStdioAgentMode.withConfigOptions =>
           const _ModeSettings(models: ['gpt-5', 'gpt-4']),

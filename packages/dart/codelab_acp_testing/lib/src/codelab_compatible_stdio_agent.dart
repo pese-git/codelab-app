@@ -32,6 +32,16 @@ enum CodelabCompatibleStdioAgentMode {
   /// `add-command-palette-agent-commands`).
   withAvailableCommands('with_available_commands'),
 
+  /// Агент для проверки markdown в ленте app: на промпт отвечает одним
+  /// `agent_message_chunk` с текстом `echo: <text>`, поэтому markdown из
+  /// промпта возвращается в ответе и попадает в отрисовку ленты.
+  ///
+  /// Почему отдельный режим: интеграционный тест ленты не должен
+  /// переиспользовать `withAvailableCommands`, отвечающий за команды палитры.
+  /// Как использовать: тест отправляет промпт с markdown и проверяет ленту
+  /// (change `add-desktop-markdown`, задача 5.1).
+  withMarkdownReply('with_markdown_reply'),
+
   /// Агент, у которого ход срывается: на `session/prompt` — JSON-RPC ошибка
   /// `-32603` с `data.codelab` класса `provider` (design D10 change
   /// `add-codelab-cli`).
@@ -316,6 +326,21 @@ Future<void> main(List<String> args) async {
                     ? 'Compacted the conversation.'
                     : 'echo: $text',
               },
+            },
+          });
+          _writeResponse(id, {'stopReason': 'end_turn'});
+          break;
+        }
+        if (_mode == 'with_markdown_reply') {
+          // Эхо промпта одним фрагментом: markdown в тексте промпта
+          // возвращается как ответ агента (add-desktop-markdown, 5.1).
+          final text =
+              ((promptParams['prompt'] as List).first as Map)['text'] as String;
+          _writeNotification('session/update', {
+            'sessionId': sessionId,
+            'update': {
+              'sessionUpdate': 'agent_message_chunk',
+              'content': {'type': 'text', 'text': 'echo: $text'},
             },
           });
           _writeResponse(id, {'stopReason': 'end_turn'});
