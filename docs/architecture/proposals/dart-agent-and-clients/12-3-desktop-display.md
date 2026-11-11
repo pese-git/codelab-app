@@ -63,7 +63,7 @@ Cubit-ов (задача 5.9): app получает `SessionView` из `codelab_
 | `AcpAttachmentChip`, композер с вложениями | `codelab_ui/lib/src/molecules/` | ui_kit | чипы, удаление, подсветка зоны сброса |
 | `CodeLabCodeHighlighter`, `CodeLabCodeTheme` | `codelab_ui/lib/src/rendering/` | ui_kit | токенизация кода на `val_highlight` (синхронно или в isolate), кеш, палитры светлой и тёмной темы (`add-desktop-markdown`, D4) |
 | `TranscriptRowMapper` | `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart` | application | `SessionView` → `List<AcpTranscriptRow>` с переиспользованием неизменившихся строк |
-| `isOpenableLink`, `isLoadableImage` | `apps/codelab_desktop/lib/features/workbench/application/link_policy.dart` | application | политика ссылок (`http`, `https`, `mailto`) и изображений (только `https`) для ленты (`add-desktop-markdown`, D2, D5, D6) |
+| `isOpenableLink`, `isLoadableImage` | `apps/codelab_desktop/lib/core/platform/link_policy.dart` | infrastructure | политика ссылок (`http`, `https`, `mailto`) и изображений (только `https`) для ленты (`add-desktop-markdown`, D2, D5, D6) |
 | `ActiveSessionCubit` (из 5.9) | `.../workbench/application/` | application | строки ленты и статус активной сессии |
 | `TranscriptViewCubit` | `.../workbench/application/` | application | только UI-состояние: ручное раскрытие блоков, режим diff |
 | `ComposerCubit` | `.../workbench/application/` | application | черновик и вложения по сессиям, лимиты, отправка через `SessionHandle.send` |
@@ -392,14 +392,19 @@ builder пакета номера не получает (D4). Ответ с вл
 пользователя на границе presentation (`platform-integration.md`, §29). «Копировать ответ» и
 выделение через несколько строк ленты не вводятся (change `add-desktop-markdown`, решение Q5).
 
-Политика ссылок. Решение принимает app (`isOpenableLink` в `link_policy.dart`) и передаёт через
-`CodeLabMarkdownScope`. Активна ссылка `http` или `https` с непустым хостом либо `mailto` с
+Политика ссылок. Решение принимает app (`isOpenableLink` в `core/platform/link_policy.dart`) и
+передаёт через `CodeLabMarkdownScope` стабильными функциями (tear-off Cubit, функции верхнего
+уровня), `shownImages` неизменяемо. Адрес с userinfo (`https://good.com@evil.com`) не активен;
+`mailto` открывается только с адресатами и `subject`, остальные параметры отбрасываются; ссылка —
+`TextSpan`, который переносится с абзацем (`WidgetSpan` отклонён), подсказка — свой оверлей
+Fluent, до 2048 символов. Адреса локальной сети не отличаются от прочих — риск CSRF к локальным
+сервисам принят пользователем 2026-11-11 (решения пользователя, change `add-desktop-markdown`). Активна ссылка `http` или `https` с непустым хостом либо `mailto` с
 адресом: подчёркнутый `accentColor`, полный адрес в подсказке (управляющие, bidi- и невидимые символы
 экранированы `escapeForDisplay`, change `add-desktop-markdown`, D5). Клик сразу вызывает `onOpenLink` → `CodeLabShellCubit.openExternalLink` →
 повторная проверка схемы → `ExternalLinkOpener.open` (`url_launcher`). Окна подтверждения нет —
 решение пользователя 2026-11-11 (прежняя редакция предлагала окно с «Открыть» и «Копировать»).
 Прочие схемы (`file:`, `javascript:`, `data:`, `vscode:`, `xmpp:`), protocol-relative адреса и
-относительные пути — обычный текст. Журнал — схема, хост, исход, без пути и query. Агент не может
+относительные пути — обычный текст. Журнал — компонент `workbench`, схема, хост (до 255 символов), исход, без пути и query. Агент не может
 открыть URL сам: открытие всегда начинается с клика пользователя (`platform-integration.md`,
 §35).
 
@@ -409,7 +414,9 @@ builder пакета номера не получает (D4). Ответ с вл
 хостом и именем файла (пакет не передаёт `alt` в `imageBuilder`; подпись тоже проходит
 `escapeForDisplay`) и полным адресом в подсказке.
 Кнопка «Show image» — только для `https` с хостом (`isLoadableImage`); после клика app
-загружает картинку через `ResizeImage(NetworkImage)`. Выбор хранится в `TranscriptViewCubit` по
+загружает картинку через `ResizeImage` 1440×1440 с `fit` (против декомпрессионной бомбы), тело
+≤ 32 МБ, каждый редирект проверяется `isLoadableImage` (на `http` не принимается); адрес с
+userinfo не загружается. Выбор хранится в `TranscriptViewCubit` по
 строке и адресу на время запуска.
 
 **A4. Подсветка кода.** `CodeLabCodeHighlighter` на движке `val_highlight` (чистый Dart, приходит
