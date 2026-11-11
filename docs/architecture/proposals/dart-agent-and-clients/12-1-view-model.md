@@ -14,7 +14,7 @@ D-07), статус с моделью, режимом, токенами и ст�
 `codelab_ui` (§12.3). Пакет остаётся на чистом Dart: без Flutter и без `dart:io`; всё, что требует
 файловой системы, процессов или часов, приходит через порты, реализованные в `codelab_client_io`.
 
-> **Уточнение 2026-11-11 (решение пользователя, change [`add-desktop-markdown`](../../../../openspec/changes/add-desktop-markdown/design.md), D1).** Markdown — исключение
+> **Уточнение 2026-11-11 (решение пользователя, change [`add-desktop-markdown`](../../../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1).** Markdown — исключение
 > из общего правила. Desktop рисует `AgentTextItem.text` пакетом `gpt_markdown` внутри
 > `codelab_ui` (§12.3.3, A3), без модели kit; в `codelab_client_core` разбора markdown нет, и
 > `AgentTextItem` остаётся текстом. Модель `MarkdownDocument` и алгоритм §12.1.4 остаются
@@ -503,7 +503,7 @@ abstract interface class LocalCalendar { DateTime startOfLocalDay(DateTime insta
 ## 12.1.4. Алгоритм: инкрементальный markdown
 
 > Алгоритм — для CLI (U-10, change `add-cli-markdown`). Desktop разбирает ответ пакетом
-> `gpt_markdown` (§12.3.3, A3; решение пользователя 2026-11-11, change [`add-desktop-markdown`](../../../../openspec/changes/add-desktop-markdown/design.md), D1), поэтому
+> `gpt_markdown` (§12.3.3, A3; решение пользователя 2026-11-11, change [`add-desktop-markdown`](../../../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1), поэтому
 > вид одного ответа в CLI и app может различаться в конструкциях вне подмножества.
 
 Поддерживаемое подмножество: ATX-заголовки `#`…`######`; абзацы; маркированные (`-`, `*`, `+`)

@@ -15,7 +15,7 @@ Cubit-ов (задача 5.9): app получает `SessionView` из `codelab_
 (`SessionStatusBar`, §12.1.5) и выбора `ContentBlock` (`PromptContentBuilder.build`, §12.1.7)
 остаётся в kit.
 
-> **Уточнение 2026-11-11 (решение пользователя, change [`add-desktop-markdown`](../../../../openspec/changes/add-desktop-markdown/design.md), D1).** Markdown
+> **Уточнение 2026-11-11 (решение пользователя, change [`add-desktop-markdown`](../../../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1).** Markdown
 > app разбирает не kit: ответ агента (`AgentTextItem.text`) рисует пакет `gpt_markdown` внутри
 > `codelab_ui` (`lib/src/rendering/`) со своими builder'ами и темой из `FluentTheme`; подсветка —
 > `val_highlight` за `CodeLabCodeHighlighter`. Модель `MarkdownDocument` и `IncrementalMarkdown`
@@ -1006,7 +1006,7 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
   Вариант «`codelab_ui` зависит от kit» отклонён: ui_kit стал бы
   тянуть доменные типы, а изменение view model kit ломало бы ui_kit.
 * **Markdown — пакет `gpt_markdown`, одна строка ленты на ответ** (решение пользователя
-  2026-11-11 после прототипа; change [`add-desktop-markdown`](../../../../openspec/changes/add-desktop-markdown/design.md), D1–D3). Пакет сам
+  2026-11-11 после прототипа; change [`add-desktop-markdown`](../../../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1–D3). Пакет сам
   делит документ на сегменты и перестраивает только хвост, поэтому инкрементальность kit для app
   не нужна; готовы таблицы, задачи, формулы и выделение. Условия: без Material-предка, свои
   `codeBuilder`, `checkboxBuilder`, `imageBuilder`, `inlineLinkBuilder` и тема из `FluentTheme`,
