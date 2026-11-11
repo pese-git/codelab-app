@@ -316,6 +316,33 @@ const rules = [
     exclude: ['app/'],
     sealExclude: false,
   ),
+  // Терминал пользователя (design.md change `add-integrated-terminal`, D11).
+  // Модель эмулятора `xterm2_core` — чистый Dart: её держит feature `terminal`
+  // (Cubit-ы владеют `Terminal`), остальной код app модель не импортирует.
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: ['package:xterm2_core/'],
+    exclude: ['features/terminal/'],
+    sealExclude: false,
+  ),
+  // Виджет `TerminalView` из `xterm2` — только presentation терминала:
+  // application получает модель из `xterm2_core` и физически не тянет Flutter
+  // через рендер (D11, D3).
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: ['package:xterm2/'],
+    exclude: ['features/terminal/presentation/'],
+    sealExclude: false,
+  ),
+  // PTY-пакет — нативный API и инфраструктура (`AGENTS.md` §11,
+  // `platform-integration.md`): только адаптер `UserShellLauncher`; остальной
+  // код видит порт (D2, D11).
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: ['package:pty2/'],
+    exclude: ['core/platform/user_shell_launcher.dart'],
+    sealExclude: false,
+  ),
   // Presentation настроек не знает ни `dart:io`, ни IO-барель моста: файлы,
   // процессы и хранилище секретов — дело infrastructure и composition root
   // (workspace-architecture «dart:io в presentation настроек»; §12.4.2,
