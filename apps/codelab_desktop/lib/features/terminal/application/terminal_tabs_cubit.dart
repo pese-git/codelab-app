@@ -96,6 +96,15 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
 
   late final StreamSubscription<WorkspaceState> _workspaceSub;
 
+  /// Есть ли PTY на этой платформе (D12): без него панели Terminal нет.
+  /// Отдаётся из порта, чтобы виджеты не знали про платформу (`AGENTS.md` §11).
+  bool get isSupported => _launcher.isSupported;
+
+  /// Зовётся, когда в буфере вкладки появился вывод, ещё не записанный в
+  /// модель. Для чего: presentation-объект сброса заказывает кадр, не опрашивая
+  /// Cubit (D3). Cubit ничего не знает о кадрах; `null` — никто не слушает.
+  void Function()? onPendingOutput;
+
   /// Владелец, запомненный при активации сессии (D5): профиль не
   /// пересобирается, пока `activeSessionId` тот же.
   TerminalOwner? _remembered;
@@ -239,7 +248,10 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
 
     entry.shell = shell;
     entry.status = const TerminalTabRunning();
-    entry.outputSub = shell.output.listen((data) => entry.pending.add(data));
+    entry.outputSub = shell.output.listen((data) {
+      entry.pending.add(data);
+      onPendingOutput?.call();
+    });
     unawaited(
       shell.exitCode.then<void>(
         (code) => _onExit(entry, code),
@@ -272,6 +284,13 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
     if (_disclosureShown) return;
     _disclosureShown = true;
     _publish();
+  }
+
+  /// Открытие панели действием пользователя (D1): при активной сессии без
+  /// вкладок создаёт одну. Восстановленный док его не зовёт и shell не
+  /// запускает; без сессии, при наличии вкладок и после `closeAll()` — no-op.
+  Future<void> ensureTab() async {
+    if (state.hasSession && state.tabs.isEmpty) await newTab();
   }
 
   /// Закрывает вкладку: она исчезает сразу, процесс получает `hangUp`, через
@@ -447,6 +466,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
           ? '\r\n[Process exited]\r\n'
           : '\r\n[Process exited with code $code]\r\n',
     );
+    onPendingOutput?.call();
     _logger.info(
       'terminal.tab_exited',
       context: {'tab_id': entry.id, 'exit_code': ?code},
@@ -465,6 +485,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
     // Процесс считается вышедшим, сигналов не шлём (D4).
     entry.status = const TerminalTabExited(null);
     entry.pending.add('\r\n[Process exited]\r\n');
+    onPendingOutput?.call();
     _publish();
   }
 

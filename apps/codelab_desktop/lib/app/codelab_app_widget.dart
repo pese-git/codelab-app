@@ -29,6 +29,8 @@ class CodeLabApp extends StatelessWidget {
         // секретов открывается маршрутом Navigator и видит его (D8).
         BlocProvider.value(value: dependencies.secretMigrationCubit),
         BlocProvider.value(value: dependencies.navigationCubit),
+        // Панель Terminal дока читает вкладки сессии (D3).
+        BlocProvider.value(value: dependencies.terminalTabsCubit),
       ],
       child: const FluentApp(title: 'CodeLab', home: _CodeLabHome()),
     );
