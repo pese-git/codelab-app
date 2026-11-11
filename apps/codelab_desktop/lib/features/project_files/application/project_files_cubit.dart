@@ -15,6 +15,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         isMaybeSecretFileName;
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabFileTreeRowData;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:path/path.dart' as p;
 
 import 'project_tree_rows.dart';
 import 'project_tree_state.dart';
@@ -54,14 +55,11 @@ String? projectFolderOf(WorkspaceState state) {
 /// Почему по realpath, а не по строке: корень сессии объявляет агент, и путь
 /// с `..` или ссылка внутри проекта, ведущая наружу, лексически «внутри», а
 /// на деле вне; `/tmp/w` и `/private/tmp/w` на macOS — одна папка (Q18).
-bool _within(String root, String base) {
-  if (root == base) return true;
-  for (final separator in const ['/', r'\']) {
-    final prefix = base.endsWith(separator) ? base : '$base$separator';
-    if (root.startsWith(prefix)) return true;
-  }
-  return false;
-}
+bool _within(String root, String base) =>
+    // Разделитель — платформы (`package:path`, без `dart:io` в feature):
+    // на POSIX `\` — обычный символ имени, `/work/app\evil` не внутри
+    // `/work/app`.
+    p.equals(root, base) || p.isWithin(base, root);
 
 /// Cubit панели Files: корень, ленивое дерево, выбор файла и просмотр.
 ///
