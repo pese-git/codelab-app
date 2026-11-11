@@ -343,6 +343,24 @@ const rules = [
     exclude: ['core/platform/user_shell_launcher.dart'],
     sealExclude: false,
   ),
+  // Application терминала не знает Flutter (D11, правило 3; задача 2.0): модель
+  // эмулятора — чистый Dart из `xterm2_core`, виджеты — только presentation.
+  PackageRule(
+    'apps/codelab_desktop/lib/features/terminal/application',
+    forbidden: ['package:flutter/'],
+  ),
+  // ZModem выключен (D3, D11 правило 5): `xterm.dart` реэкспортирует
+  // `zmodem.dart`, поэтому запрещены пакет и оба пути; presentation берёт
+  // `TerminalView` из `package:xterm2/ui.dart`.
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: [
+      'package:zmodem/',
+      'package:xterm2/xterm.dart',
+      'package:xterm2/zmodem.dart',
+    ],
+    sealExclude: false,
+  ),
   // Presentation настроек не знает ни `dart:io`, ни IO-барель моста: файлы,
   // процессы и хранилище секретов — дело infrastructure и composition root
   // (workspace-architecture «dart:io в presentation настроек»; §12.4.2,
