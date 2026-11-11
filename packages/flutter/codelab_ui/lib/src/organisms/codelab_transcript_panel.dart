@@ -4,6 +4,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
+import '../rendering/rendering.dart';
 import 'codelab_tool_call_tile.dart';
 import 'codelab_transcript_notice.dart';
 import 'codelab_transcript_row.dart';
@@ -116,6 +117,18 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   /// (D2). Пока выставлен, лента догоняет сдвинувшийся низ так же, как для
   /// approval.
   bool _isFollowingTail = false;
+
+  /// Конфигурация markdown, общая для всех строк ответа (D3). Живёт в
+  /// `State`, а не создаётся в `build`: пакет кеширует закрытые блоки, только
+  /// пока тема и builder'ы — те же объекты (DSK-3).
+  CodeLabMarkdownConfig? _markdownConfig;
+
+  /// Конфигурация для текущей темы Fluent; новая — только при смене темы.
+  CodeLabMarkdownConfig _markdownConfigFor(FluentThemeData theme) {
+    final current = _markdownConfig;
+    if (current != null && current.theme == theme) return current;
+    return _markdownConfig = CodeLabMarkdownConfig(theme);
+  }
 
   @override
   void initState() {
@@ -292,6 +305,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
                   ),
                   child: _TranscriptRowView(
                     row: row,
+                    markdownConfig: _markdownConfigFor(FluentTheme.of(context)),
                     expanded: _isExpanded(row),
                     onToggle: (expanded) => _toggle(row.id, expanded),
                   ),
@@ -316,11 +330,13 @@ Set<String> _pendingApprovalEntryIds(List<CodeLabTranscriptRow> rows) {
 class _TranscriptRowView extends StatelessWidget {
   const _TranscriptRowView({
     required this.row,
+    required this.markdownConfig,
     required this.expanded,
     required this.onToggle,
   });
 
   final CodeLabTranscriptRow row;
+  final CodeLabMarkdownConfig markdownConfig;
   final bool expanded;
   final ValueChanged<bool> onToggle;
 
@@ -328,9 +344,16 @@ class _TranscriptRowView extends StatelessWidget {
   Widget build(BuildContext context) {
     return switch (row) {
       CodeLabUserRow(:final text) => _UserBubble(text: text),
-      CodeLabAgentTextRow(:final text, :final preformatted) => Align(
+      // Ответ агента — markdown (SMK-07, D3); огороженный ответ целиком
+      // становится блоком кода внутри `CodeLabMarkdown` (D11).
+      CodeLabAgentTextRow(:final id, :final text, :final streaming) => Align(
         alignment: Alignment.centerLeft,
-        child: preformatted ? CodeLabMonospaceBlock(text) : CodeLabText(text),
+        child: CodeLabMarkdown(
+          id: id,
+          text: text,
+          streaming: streaming,
+          config: markdownConfig,
+        ),
       ),
       CodeLabThoughtRow(:final text, :final streaming) => CodeLabThoughtBlock(
         text: text,

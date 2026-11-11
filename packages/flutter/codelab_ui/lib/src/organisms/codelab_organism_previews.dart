@@ -116,12 +116,14 @@ Widget codelabTranscriptPanelPreview() {
           ),
           CodeLabAgentTextRow(
             id: 'agent-1',
-            text: 'I will inspect the workspace checks first.',
+            text:
+                'I will inspect the **workspace checks** first, starting with '
+                '`dart analyze`:\n\n```bash\nfvm dart analyze '
+                'packages/flutter/codelab_ui\n```',
           ),
           CodeLabAgentTextRow(
             id: 'agent-block-1',
-            text: 'MCP servers (1)\n  docs  connected  3 tools',
-            preformatted: true,
+            text: '```text\nMCP servers (1)\n  docs  connected  3 tools\n```',
           ),
           CodeLabToolCallRow(
             id: 'tool-1',

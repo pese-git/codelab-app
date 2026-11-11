@@ -11,26 +11,28 @@
 
 ## 1. Назначение и границы
 
-* Fluent UI-кит рабочего места. Зависит только от Flutter, `fluent_ui` и того, что уже в `pubspec.yaml` (`flutter_bloc`, `freezed_annotation`).
+* Fluent UI-кит рабочего места. Зависит только от Flutter, `fluent_ui` и того, что уже в `pubspec.yaml` (`flutter_bloc`, `freezed_annotation`, `gpt_markdown`, `val_highlight`). `gpt_markdown` и `val_highlight` импортируются только из `lib/src/rendering/` (правило сторожа, design.md change `add-desktop-markdown`, D2, D10); `material_ui`, `cupertino_ui`, `flutter_svg` и `val_*_flutter` в код пакета не импортируются — вид остаётся Fluent.
 * НЕ ДОЛЖЕН импортировать `package:codelab_client_*`, `codelab_acp_*`, `codelab_agent_*`, `codelab_setup`, `codelab_embedded` и `dart:io`. У пакета нет зависимостей от внутренних пакетов в `pubspec.yaml`, поэтому такой импорт не соберётся; отдельного правила сторожа на `packages/flutter/codelab_ui/lib` в `codelab_architecture_tests/test/support/rules.dart` нет — сторож запрещает обратное направление (`package:codelab_ui/` в Dart-пакетах и CLI). Не добавлять внутреннюю зависимость в `pubspec.yaml`.
 * Модели ACP и kit-а сюда не приходят: маппер app (`apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart`) переводит их в типы кита (`CodeLabTranscriptRow`, `CodeLabToolCallRow`, `CodeLabNoticeRow`, `CodeLabTranscriptApproval`).
 
 ## 2. Нет логики
 
-* Виджет не решает, опасно ли действие, не выбирает риск, тон по смыслу данных, текст заметки или исход; не форматирует и не разбирает протокольный текст. Всё это приходит готовым полем: например, `preformatted` у `CodeLabAgentTextRow` вычисляет app (Q37), решение «один тег Cancelled» тоже принимает app (Q38).
+* Виджет не решает, опасно ли действие, не выбирает риск, тон по смыслу данных, текст заметки или исход; не форматирует и не разбирает протокольный текст. Всё это приходит готовым полем: например, `streaming` у `CodeLabAgentTextRow` вычисляет app, решение «один тег Cancelled» тоже принимает app (Q38).
+* Политику ссылок и изображений (какую ссылку открыть, какое изображение можно загрузить) принимает app и передаёт через `CodeLabMarkdownScope`; кит только рисует и сообщает о клике (`add-desktop-markdown`, D2).
 * Допустима только вёрстка: раскладка, обрезка вспомогательных меток, раскрытие, фокус, клавиши, временное состояние просмотра в `State` (как «Show full command»).
 
 ## 3. Слои
 
 * `atomics/` — без составных частей кита: `CodeLabText` с ролями, `CodeLabBadge`, `CodeLabMonospaceBlock`.
 * `molecules/` — из атомов: `CodeLabKeyValueList`, `CodeLabStepBreadcrumb`, `CodeLabThoughtBlock`, `CodeLabToolCallSummary`.
+* `rendering/` — отрисовка ответа агента как markdown: `CodeLabMarkdown`, `CodeLabMarkdownConfig`, `CodeLabMarkdownScope`, `CodeLabCodeBlock`, счётчики `CodeLabMarkdownStats`. Импортирует только `atomics/`; его импортируют `organisms/`. Единственный слой, где разрешены `gpt_markdown` и `val_highlight`.
 * `organisms/` — ленты, плитки, таблицы, панели: `CodeLabTranscriptPanel`, `CodeLabToolCallTile`, `CodeLabApprovalPrompt`, `CodeLabStatusTable`.
 * Импорт — только вниз по слоям; экспорт — через барели слоёв (`atomics.dart`, `molecules.dart`, `organisms.dart`) и `lib/codelab_ui.dart`. Новый атом — при втором употреблении (как `CodeLabMonospaceBlock`, D19), не «на вырост» (корневой `AGENTS.md` §13).
 
 ## 4. Отдельные виджеты
 
 * **`CodeLabStatusTable`** — таблица «Agent status» и подобных панелей. Колонки и ячейки — готовые строки от вызывающего, действие строки — колбэк; виджет не знает `McpServerState` и не считает «retry in».
-* **`CodeLabMonospaceBlock`** — текст как есть, моноширинно (`CodeLabTextRole.mono`), с переносом, рамкой и выделением; не меняет и не разбирает текст. Употребления: ответ `/mcp` в панели «Agent status» (SETUP-11, Q34) и ответ агента одним огороженным блоком в ленте (Q37).
+* **`CodeLabMonospaceBlock`** — текст как есть, моноширинно (`CodeLabTextRole.mono`), с переносом, рамкой и выделением; не меняет и не разбирает текст. Употребление: ответ `/mcp` в панели «Agent status» (SETUP-11, Q34). Ответ агента в ленте он больше не рисует: огороженный ответ — блок кода `CodeLabCodeBlock` внутри markdown (D11).
 
 ## 5. Тоны и риски
 

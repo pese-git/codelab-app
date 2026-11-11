@@ -32,24 +32,27 @@ final class CodeLabUserRow extends CodeLabTranscriptRow {
   final String text;
 }
 
-/// Ответ агента простым текстом или, при [preformatted], моноширинным
-/// блоком. Change `add-transcript-markdown` заменит простой текст блоками
-/// markdown, не трогая остальные строки.
+/// Ответ агента: текст markdown, который рисует `CodeLabMarkdown`.
+///
+/// Почему: ответ — один `AgentTextItem`; разбор и кеш блоков внутри
+/// `gpt_markdown` (design.md `add-desktop-markdown`, D1, D3), поэтому строка
+/// одна на ответ, а не по блокам. Прежний `preformatted` убран: огороженный
+/// ответ (`/mcp list`) теперь частный случай markdown (D11).
+///
+/// Для чего: [streaming] — ответ ещё стримится (последний элемент идущего
+/// хода, как у мыслей); флаг вычисляет маппер app, виджет его не выводит.
+/// [id] стабилен между ревизиями и входит в ключи `code-copy-<id>-<n>`.
 final class CodeLabAgentTextRow extends CodeLabTranscriptRow {
   const CodeLabAgentTextRow({
     required this.id,
     required this.text,
-    this.preformatted = false,
+    this.streaming = false,
   });
 
   @override
   final String id;
   final String text;
-
-  /// Текст — содержимое одного огороженного блока (6.1i): рисуется
-  /// моноширинным блоком без разбора (Q37, D27). Флаг вычисляет маппер app
-  /// (`unfenceSingleBlock`), виджет сам ограждения не ищет.
-  final bool preformatted;
+  final bool streaming;
 }
 
 /// Мысли модели: текст как есть, без markdown (§12.1.2, шаг 7).
