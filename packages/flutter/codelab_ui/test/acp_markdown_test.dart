@@ -9,6 +9,7 @@
 // Сеть перехвачена `HttpOverrides` (R3): любой запрос из отрисовки — провал
 // теста. Тесты идут без Material-предка: хостом служит `FluentApp`.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_ui/codelab_ui.dart';
@@ -1304,4 +1305,233 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
     },
     variant: TargetPlatformVariant.only(TargetPlatform.macOS),
   );
+
+  // ---- Подсветка кода (итерация 3, задача 3.1; D4, DSK-5, DSK-6) ----
+
+  /// Цвета листьев текста, в который собран код [needle]; один цвет — код без
+  /// подсветки.
+  Set<Color> codeColors(WidgetTester tester, String needle) {
+    final text = _richTextWith(tester, needle);
+    final colors = <Color>{};
+    text.text.visitChildren((span) {
+      if (span is TextSpan && (span.text ?? '').isNotEmpty) {
+        final color = span.style?.color ?? text.text.style?.color;
+        if (color != null) colors.add(color);
+      }
+      return true;
+    });
+    if (colors.isEmpty && text.text.style?.color != null) {
+      colors.add(text.text.style!.color!);
+    }
+    return colors;
+  }
+
+  Widget mdWith(
+    CodeLabCodeHighlighter highlighter,
+    String text, {
+    FluentThemeData? theme,
+    Brightness brightness = Brightness.light,
+    bool streaming = false,
+  }) => _host(
+    CodeLabMarkdown(
+      id: 'agent-1',
+      text: text,
+      streaming: streaming,
+      config: CodeLabMarkdownConfig(
+        theme ?? (brightness == Brightness.dark ? _darkTheme : _lightTheme),
+        highlighter: highlighter,
+      ),
+    ),
+    brightness: brightness,
+  );
+
+  List<CodeLabCodeToken> keywordToken(int length) => [
+    CodeLabCodeToken(0, length, CodeLabTokenClass.keyword),
+  ];
+
+  testWidgets('small closed block is highlighted in the first build', (
+    tester,
+  ) async {
+    final highlighter = CodeLabCodeHighlighter(
+      tokenizer: (language, code) => keywordToken(5),
+    );
+    await tester.pumpWidget(
+      mdWith(highlighter, '```dart\nfinal a = 1;\n```\n'),
+    );
+    await tester.pump();
+
+    final palette = CodeLabCodeTheme.of(_lightTheme);
+    final colors = codeColors(tester, 'final a');
+    expect(colors, contains(palette.colorOf(CodeLabTokenClass.keyword)));
+    expect(colors.length, greaterThan(1));
+    expect(CodeLabMarkdownStats.highlightRuns, 1);
+    expect(CodeLabMarkdownStats.highlightSyncRuns, 1);
+    // Синхронная подсветка не требует перерисовки блока.
+    expect(CodeLabMarkdownStats.codeBlockBuilds['agent-1-0'], 1);
+  });
+
+  testWidgets('large code block is highlighted off the UI isolate', (
+    tester,
+  ) async {
+    final result = Completer<List<CodeLabCodeToken>>();
+    var backgroundCalls = 0;
+    final highlighter = CodeLabCodeHighlighter(
+      background: (language, code) {
+        backgroundCalls++;
+        return result.future;
+      },
+      tokenizer: (language, code) =>
+          fail('must not tokenize on the UI isolate'),
+    );
+    final code = [for (var i = 0; i < 1000; i++) 'final v$i = $i;'].join('\n');
+    await tester.pumpWidget(mdWith(highlighter, '```dart\n$code\n```\n'));
+    await tester.pump();
+
+    // До результата код показан без цвета.
+    expect(CodeLabMarkdownStats.highlightSyncRuns, 0);
+    expect(backgroundCalls, 1);
+    expect(codeColors(tester, 'final v0'), hasLength(1));
+    expect(CodeLabMarkdownStats.codeBlockBuilds['agent-1-0'], 1);
+
+    result.complete(keywordToken(5));
+    await tester.pump();
+    await tester.pump();
+
+    // После результата блок перерисован один раз и подсвечен.
+    expect(CodeLabMarkdownStats.highlightSyncRuns, 0);
+    expect(CodeLabMarkdownStats.highlightRuns, 1);
+    expect(CodeLabMarkdownStats.codeBlockBuilds['agent-1-0'], 2);
+    expect(codeColors(tester, 'final v0').length, greaterThan(1));
+    expect(backgroundCalls, 1);
+  });
+
+  testWidgets('a background result after unmount is not applied', (
+    tester,
+  ) async {
+    final result = Completer<List<CodeLabCodeToken>>();
+    final highlighter = CodeLabCodeHighlighter(
+      background: (language, code) => result.future,
+    );
+    final code = [for (var i = 0; i < 1000; i++) 'final v$i = $i;'].join('\n');
+    await tester.pumpWidget(mdWith(highlighter, '```dart\n$code\n```\n'));
+    await tester.pump();
+    expect(CodeLabMarkdownStats.codeBlockMounts['agent-1-0'], 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    result.complete(keywordToken(5));
+    await tester.pump();
+
+    // `setState` после dispose падал бы исключением; результат отброшен.
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('code over 5000 lines is shown whole and never highlighted', (
+    tester,
+  ) async {
+    var backgroundCalls = 0;
+    final highlighter = CodeLabCodeHighlighter(
+      background: (language, code) {
+        backgroundCalls++;
+        return Future.value(keywordToken(5));
+      },
+      tokenizer: (language, code) => fail('must not tokenize'),
+    );
+    final code = [for (var i = 0; i < 5001; i++) 'v$i'].join('\n');
+    await tester.pumpWidget(mdWith(highlighter, '```dart\n$code\n```\n'));
+    await tester.pump();
+
+    expect(backgroundCalls, 0);
+    expect(CodeLabMarkdownStats.highlightRuns, 0);
+    expect(codeColors(tester, 'v0'), hasLength(1));
+    expect(find.textContaining('v5000', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('unknown language and no language stay plain', (tester) async {
+    final highlighter = CodeLabCodeHighlighter(
+      tokenizer: (language, code) => fail('must not tokenize'),
+    );
+    await tester.pumpWidget(
+      mdWith(
+        highlighter,
+        '```foolang\nfinal a = 1;\n```\n\n```\nfinal b = 2;\n```\n\n'
+        '```text\nfinal c = 3;\n```\n',
+      ),
+    );
+    await tester.pump();
+
+    expect(CodeLabMarkdownStats.highlightRuns, 0);
+    for (final needle in ['final a', 'final b', 'final c']) {
+      expect(codeColors(tester, needle), hasLength(1), reason: needle);
+    }
+    // Подпись неизвестного языка видна, «Copy» работает (ключ есть).
+    expect(find.text('foolang'), findsOneWidget);
+    expect(find.byKey(const ValueKey('code-copy-agent-1-0')), findsOneWidget);
+  });
+
+  testWidgets('unclosed fence is plain and is highlighted once after close', (
+    tester,
+  ) async {
+    final highlighter = CodeLabCodeHighlighter(
+      tokenizer: (language, code) => keywordToken(5),
+    );
+    const before = 'Before the block.\n\n';
+    await tester.pumpWidget(
+      mdWith(highlighter, '$before```dart\nfinal a = 1;', streaming: true),
+    );
+    await tester.pump();
+    expect(CodeLabMarkdownStats.highlightRuns, 0);
+    expect(codeColors(tester, 'final a'), hasLength(1));
+    final paragraph = tester.element(
+      find.byWidgetPredicate(
+        (w) => w is RichText && w.text.toPlainText().contains('Before the'),
+      ),
+    );
+
+    await tester.pumpWidget(
+      mdWith(
+        highlighter,
+        '$before```dart\nfinal a = 1;\n```\n',
+        streaming: true,
+      ),
+    );
+    await tester.pump();
+
+    expect(CodeLabMarkdownStats.highlightRuns, 1);
+    expect(codeColors(tester, 'final a').length, greaterThan(1));
+    expect(
+      tester.element(
+        find.byWidgetPredicate(
+          (w) => w is RichText && w.text.toPlainText().contains('Before the'),
+        ),
+      ),
+      same(paragraph),
+    );
+  });
+
+  testWidgets('the dark theme uses the dark palette', (tester) async {
+    final highlighter = CodeLabCodeHighlighter(
+      tokenizer: (language, code) => keywordToken(5),
+    );
+    const text = '```dart\nfinal a = 1;\n```\n';
+    await tester.pumpWidget(
+      mdWith(highlighter, text, brightness: Brightness.dark),
+    );
+    await tester.pump();
+
+    final dark = CodeLabCodeTheme.of(_darkTheme);
+    final light = CodeLabCodeTheme.of(_lightTheme);
+    final colors = codeColors(tester, 'final a');
+    expect(colors, contains(dark.colorOf(CodeLabTokenClass.keyword)));
+    expect(colors, isNot(contains(light.colorOf(CodeLabTokenClass.keyword))));
+    // Фон блока — из палитры, а не светлый.
+    final block = tester.widget<DecoratedBox>(
+      find
+          .descendant(
+            of: find.byType(CodeLabCodeBlock),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    expect((block.decoration as BoxDecoration).color, dark.background);
+  });
 }
