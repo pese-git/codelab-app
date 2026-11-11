@@ -68,8 +68,8 @@
   - русская раскладка — сопоставление по физической клавише;
   - рывки под потоком — бюджет на кадр.
 - [x] 1.2 `[desktop]` `docs/architecture/technology-stack.md` §20г–§20д — финал по итогу 1.1 (D15): выбранный пакет, точная версия, транзитивные зависимости и лицензии, проверка по §24–§25 (D11; Q3 — без ADR). `THIRD_PARTY_NOTICES.md` и `licensing-and-attribution` не меняются (Q12); проверить только, что в коде change нет воспроизведённых фрагментов.
-- [ ] 1.3 `[desktop]` Тест (workspace-architecture «Автоматический сторож границ пакетов»; D11): в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` правила `apps/codelab_desktop` под выбранный пакет. Правила: `package:xterm2_core/` вне `features/terminal/`; `package:xterm2/` вне `features/terminal/presentation/`; `package:flutter/` в `features/terminal/application/`; PTY-пакет вне `core/platform/user_shell_launcher.dart`. Негативные тесты: `package:xterm2/` в `features/terminal/application/`, `package:xterm2_core/` в `features/workbench/`, PTY-пакет в `features/terminal/` → нарушение (красный).
-- [ ] 1.4 `[desktop]` Зависимости и правила (D11, D15):
+- [ ] 1.3 `[desktop]` Тест (workspace-architecture «Автоматический сторож границ пакетов»; D11): в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` правила `apps/codelab_desktop` под выбранный пакет. Правила: `package:xterm2_core/` вне `features/terminal/`; `package:xterm2/` вне `features/terminal/presentation/`; `package:flutter/` в `features/terminal/application/`; PTY-пакет вне `core/platform/user_shell_launcher.dart`. Негативные тесты: `package:xterm2/` в `features/terminal/application/`, `package:xterm2_core/` в `features/workbench/`, PTY-пакет в `features/terminal/` → нарушение (красный). Правило `flutter` в `features/terminal/application` — в итерации 2, вместе с каталогом (задача 2.0).
+- [ ] 1.4 `[desktop]` Зависимости и правила (D11, D15): Правило `flutter` в `features/terminal/application` — в итерации 2, вместе с каталогом (задача 2.0).
   - добавить `xterm2: 5.4.0`, `xterm2_core: 1.0.0`, `pty2: 0.8.1` точными версиями в `dependencies` `apps/codelab_desktop/pubspec.yaml`;
   - поднять `environment.sdk` `apps/codelab_desktop` до `>=3.11.0` (требование `pty2`); корень workspace и другие пакеты не трогать. Если pub workspace потребует общую границу — остановиться и записать решение в D11 явно;
   - выполнить `fvm dart run melos bootstrap`;
@@ -101,6 +101,7 @@
 
 ## 2. Feature terminal и панель в доке (итерация 2)
 
+- [ ] 2.0 `[desktop]` Правило сторожа «`package:flutter/` запрещён в `apps/codelab_desktop/lib/features/terminal/application`» (D11, правило 3; перенесено из 1.3–1.4, потому что сторож требует существующий каталог). Сначала негативный тест в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` (`flutter` в `application` → нарушение, красный), затем `PackageRule` в `test/support/rules.dart` вместе с появлением каталога в 2.2 — тест зелёный.
 - [ ] 2.1 `[desktop]` Тест `apps/codelab_desktop/test/features/terminal/application/terminal_tabs_cubit_test.dart` с `FakeUserShellLauncher` и fake-временем (`integrated-terminal` «Вкладки терминала принадлежат папке проекта», «Рабочая папка вкладки терминала», «Жизненный цикл процессов терминала», «Содержимое терминала не покидает экран»; D3–D5, D9). Проверяет:
   - вкладки по папке проекта, переключение владельца без остановки процессов;
   - снимок `cwd` на момент создания, без проекта — `WorkingDirectoryProvider`;
