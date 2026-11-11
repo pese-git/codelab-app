@@ -40,6 +40,7 @@ class CodeLabImagePlaceholder extends StatelessWidget {
         return _LoadedImage(
           provider: scope.imageFor,
           uri: uri,
+          imageKey: key,
           fallback: _Placeholder(url: url),
           loading: _Placeholder(url: url, loading: true),
         );
@@ -64,12 +65,16 @@ class _LoadedImage extends StatefulWidget {
   const _LoadedImage({
     required this.provider,
     required this.uri,
+    required this.imageKey,
     required this.fallback,
     required this.loading,
   });
 
   final ImageProvider Function(Uri uri) provider;
   final Uri uri;
+
+  /// Ключ `<rowId>#image:<url>` для отчёта о сбое.
+  final String imageKey;
 
   /// Заглушка при ошибке загрузки (с кнопкой «Show image» не нужна).
   final Widget fallback;
@@ -83,6 +88,22 @@ class _LoadedImage extends StatefulWidget {
 
 class _LoadedImageState extends State<_LoadedImage> {
   late final ImageProvider _image = widget.provider(widget.uri);
+
+  /// Сбой уже передан приложению: `errorBuilder` вызывается на каждой сборке, а
+  /// событие журнала нужно одно (D12).
+  bool _reported = false;
+
+  void _reportFailure(Object error) {
+    if (_reported) return;
+    _reported = true;
+    // Не во время сборки: колбэк меняет состояние приложения.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final scope = context
+          .getInheritedWidgetOfExactType<CodeLabMarkdownScope>();
+      scope?.onImageFailed(widget.imageKey, error);
+    });
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -104,7 +125,10 @@ class _LoadedImageState extends State<_LoadedImage> {
                 : widget.loading,
             // Сбой загрузки (сеть, не картинка, SVG) — заглушка, без
             // исключения.
-            errorBuilder: (context, error, stack) => widget.fallback,
+            errorBuilder: (context, error, stack) {
+              _reportFailure(error);
+              return widget.fallback;
+            },
           ),
         ),
       ),

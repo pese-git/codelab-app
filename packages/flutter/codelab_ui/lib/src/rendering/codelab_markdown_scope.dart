@@ -27,6 +27,7 @@ class CodeLabMarkdownScope extends InheritedWidget {
     required this.imageFor,
     required this.shownImages,
     required this.onShowImage,
+    required this.onImageFailed,
     required super.child,
     super.key,
   });
@@ -49,6 +50,11 @@ class CodeLabMarkdownScope extends InheritedWidget {
   /// Нажата «Show image»; аргумент — ключ изображения.
   final ValueChanged<String> onShowImage;
 
+  /// Загрузка показанного изображения не удалась: ключ и сама ошибка как есть.
+  /// Кит ошибку не разбирает и журнала не знает: код причины и событие
+  /// определяет app, которому известны свои типы ошибок (D6, D12).
+  final void Function(String key, Object error) onImageFailed;
+
   /// Политика из ближайшего scope или `null`, если app её не передал.
   static CodeLabMarkdownScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<CodeLabMarkdownScope>();
@@ -60,5 +66,6 @@ class CodeLabMarkdownScope extends InheritedWidget {
       canLoadImage != oldWidget.canLoadImage ||
       imageFor != oldWidget.imageFor ||
       !setEquals(shownImages, oldWidget.shownImages) ||
-      onShowImage != oldWidget.onShowImage;
+      onShowImage != oldWidget.onShowImage ||
+      onImageFailed != oldWidget.onImageFailed;
 }

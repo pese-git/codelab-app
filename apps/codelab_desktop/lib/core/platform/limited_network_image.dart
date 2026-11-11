@@ -14,18 +14,50 @@ const int kMaxImageBytes = 32 * 1024 * 1024;
 /// Сторона, больше которой изображение не декодируется (ширина колонки ×2).
 const int kMaxDecodedImageSide = 1440;
 
+/// Причина отказа загрузки изображения: текст для сообщений и короткий код
+/// для журнала (`image.load`, D12).
+///
+/// Почему enum: опечатка в строке причины молча давала бы код `network`.
+/// Коды: `timeout`, `too_large`, `dimensions`, `redirect`, `network`,
+/// `decode` — без адреса и без текста исключения сети.
+enum ImageRejection {
+  timeout('timeout', 'timeout'),
+  tooLarge('too_large', 'too large'),
+  dimensions('dimensions', 'dimensions'),
+  redirectNotAllowed('redirect', 'redirect is not allowed'),
+  tooManyRedirects('redirect', 'too many redirects'),
+  badStatus('network', 'bad status'),
+  loadFailed('network', 'load failed'),
+  notAnImage('decode', 'not an image');
+
+  const ImageRejection(this.code, this.reason);
+
+  /// Короткий код для журнала.
+  final String code;
+
+  /// Текст причины для сообщения исключения и тестов.
+  final String reason;
+}
+
 /// Изображение отклонено: слишком большое, редирект не на `https`, плохой
 /// статус или сбой чтения.
 ///
 /// Сообщение без адреса и без текста исключения сети: адрес приходит из
-/// недоверенного ответа и может нести данные (`AGENTS.md` §16).
+/// недоверенного ответа и может нести данные (`AGENTS.md` §16). О `codelab_ui`
+/// не знает: код причины читает `CodeLabShellCubit` (инфраструктура не зависит
+/// от презентации, §6).
 final class ImageRejectedException implements Exception {
-  const ImageRejectedException(this.reason);
+  const ImageRejectedException(this.rejection);
 
-  final String reason;
+  final ImageRejection rejection;
+
+  String get reason => rejection.reason;
+
+  /// Короткий код для журнала.
+  String get code => rejection.code;
 
   @override
-  String toString() => 'ImageRejectedException: $reason';
+  String toString() => 'ImageRejectedException: ${rejection.reason}';
 }
 
 /// Читает тело изображения [uri] не больше [maxBytes].
@@ -55,12 +87,13 @@ Future<Uint8List> fetchLimitedImageBytes(
     // память бесконечно; клиент закрывается принудительно в `finally`.
     return await _download(client, uri, maxBytes).timeout(
       totalTimeout,
-      onTimeout: () => throw const ImageRejectedException('timeout'),
+      onTimeout: () =>
+          throw const ImageRejectedException(ImageRejection.timeout),
     );
   } on ImageRejectedException {
     rethrow;
   } on Object {
-    throw const ImageRejectedException('load failed');
+    throw const ImageRejectedException(ImageRejection.loadFailed);
   } finally {
     client.close(force: true);
   }
@@ -78,32 +111,32 @@ Future<Uint8List> _download(HttpClient client, Uri uri, int maxBytes) async {
         await response.drain<void>();
         final next = location == null ? null : target.resolve(location);
         if (next == null || !isLoadableImage(next)) {
-          throw const ImageRejectedException('redirect is not allowed');
+          throw const ImageRejectedException(ImageRejection.redirectNotAllowed);
         }
         target = next;
         continue;
       }
       if (response.statusCode != HttpStatus.ok) {
         await response.drain<void>();
-        throw const ImageRejectedException('bad status');
+        throw const ImageRejectedException(ImageRejection.badStatus);
       }
       if (response.contentLength > maxBytes) {
         await response.drain<void>().timeout(
           const Duration(milliseconds: 1),
           onTimeout: () {},
         );
-        throw const ImageRejectedException('too large');
+        throw const ImageRejectedException(ImageRejection.tooLarge);
       }
       final builder = BytesBuilder(copy: false);
       await for (final chunk in response) {
         builder.add(chunk);
         if (builder.length > maxBytes) {
-          throw const ImageRejectedException('too large');
+          throw const ImageRejectedException(ImageRejection.tooLarge);
         }
       }
       return builder.takeBytes();
     }
-    throw const ImageRejectedException('too many redirects');
+    throw const ImageRejectedException(ImageRejection.tooManyRedirects);
   }
 }
 
@@ -175,12 +208,12 @@ Future<void> checkImageDimensions(Uint8List bytes) async {
     if (width > kMaxImageSide ||
         height > kMaxImageSide ||
         width * height > kMaxImagePixels) {
-      throw const ImageRejectedException('dimensions');
+      throw const ImageRejectedException(ImageRejection.dimensions);
     }
   } on ImageRejectedException {
     rethrow;
   } on Object {
-    throw const ImageRejectedException('not an image');
+    throw const ImageRejectedException(ImageRejection.notAnImage);
   } finally {
     descriptor?.dispose();
     buffer?.dispose();
