@@ -43,6 +43,8 @@ final class FakeUserShell implements UserShell {
 
   /// Завершает ожидание выхода ошибкой (сбой isolate или порта `pty2`).
   void failExit(Object error) {
+    // Как адаптер: ошибка не «необработанная», пока Cubit не подписался.
+    _exit.future.ignore();
     if (!_exit.isCompleted) _exit.completeError(error);
   }
 
