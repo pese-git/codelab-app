@@ -1238,6 +1238,58 @@ void main() {
         hasLength(10),
         reason: '$dir:\n${violations.join('\n')}',
       );
+  // Терминал пользователя в десктопном клиенте (design.md change
+  // `add-integrated-terminal`, D11; задача 1.3): модель эмулятора `xterm2_core`
+  // — только feature `terminal`, виджеты `xterm2` — только её presentation,
+  // application без Flutter, PTY-пакет `pty2` — только адаптер процессов.
+  group('terminal of the desktop client (D11)', () {
+    // Правило десктопа из rules.dart, запрещающее [prefix] в [ruleDir];
+    // переносится на временный каталог ([scanDir]). Нет правила — тест красный.
+    PackageRule desktopRuleFor(
+      String prefix, {
+      String ruleDir = 'apps/codelab_desktop/lib',
+      String scanDir = 'lib',
+    }) {
+      final matching = rules.where(
+        (r) => r.dir == ruleDir && r.forbidden.contains(prefix),
+      );
+      expect(
+        matching,
+        hasLength(1),
+        reason: 'в rules.dart нет ровно одного правила $ruleDir для $prefix',
+      );
+      final rule = matching.single;
+      return PackageRule(
+        scanDir,
+        forbidden: rule.forbidden,
+        exclude: rule.exclude,
+        sealExclude: rule.sealExclude,
+      );
+    }
+
+    Directory tmpDesktop(String name, Map<String, String> files) {
+      final tmp = Directory.systemTemp.createTempSync(name);
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      files.forEach((file, content) {
+        File(p.join(tmp.path, 'lib', file))
+          ..createSync(recursive: true)
+          ..writeAsStringSync(content);
+      });
+      return tmp;
+    }
+
+    test('reports xterm2_core outside features/terminal/', () {
+      const import = "import 'package:xterm2_core/xterm2_core.dart';\n";
+      final tmp = tmpDesktop('guard_term_core_', {
+        'features/terminal/application/terminal_tabs_cubit.dart': import,
+        'features/terminal/presentation/terminal_pane.dart': import,
+        'features/workbench/application/workbench_cubit.dart': import,
+        'core/platform/x.dart': import,
+      });
+
+      final violations = scan(tmp.path, desktopRuleFor('package:xterm2_core/'));
+
+      expect(violations, hasLength(2), reason: violations.join('\n'));
       expect(
         violations,
         containsAll([
@@ -1301,5 +1353,70 @@ void main() {
 
     expect(violations, hasLength(1), reason: violations.join('\n'));
     expect(violations.single, endsWith('-> dart:io'));
+  });
+            'lib/features/workbench/application/workbench_cubit.dart:1 -> '
+            'package:xterm2_core/xterm2_core.dart',
+          ),
+          endsWith(
+            'lib/core/platform/x.dart:1 -> package:xterm2_core/xterm2_core.dart',
+          ),
+        ]),
+      );
+    });
+
+    test('reports xterm2 outside features/terminal/presentation/', () {
+      const import = "import 'package:xterm2/xterm2.dart';\n";
+      final tmp = tmpDesktop('guard_term_view_', {
+        'features/terminal/presentation/terminal_pane.dart': import,
+        'features/terminal/application/terminal_tabs_cubit.dart': import,
+        'features/workbench/presentation/workbench_shell.dart': import,
+      });
+
+      final violations = scan(tmp.path, desktopRuleFor('package:xterm2/'));
+
+      expect(violations, hasLength(2), reason: violations.join('\n'));
+      expect(
+        violations,
+        containsAll([
+          endsWith(
+            'lib/features/terminal/application/terminal_tabs_cubit.dart:1 -> '
+            'package:xterm2/xterm2.dart',
+          ),
+          endsWith(
+            'lib/features/workbench/presentation/workbench_shell.dart:1 -> '
+            'package:xterm2/xterm2.dart',
+          ),
+        ]),
+      );
+    });
+
+    test(
+      'reports the PTY package outside core/platform/user_shell_launcher.dart',
+      () {
+        const import = "import 'package:pty2/pty2.dart';\n";
+        final tmp = tmpDesktop('guard_term_pty_', {
+          'core/platform/user_shell_launcher.dart': import,
+          'features/terminal/application/terminal_tabs_cubit.dart': import,
+          'core/platform/working_directory_provider.dart': import,
+        });
+
+        final violations = scan(tmp.path, desktopRuleFor('package:pty2/'));
+
+        expect(violations, hasLength(2), reason: violations.join('\n'));
+        expect(
+          violations,
+          containsAll([
+            endsWith(
+              'lib/features/terminal/application/terminal_tabs_cubit.dart:1 -> '
+              'package:pty2/pty2.dart',
+            ),
+            endsWith(
+              'lib/core/platform/working_directory_provider.dart:1 -> '
+              'package:pty2/pty2.dart',
+            ),
+          ]),
+        );
+      },
+    );
   });
 }
