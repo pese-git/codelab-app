@@ -1280,4 +1280,26 @@ void main() {
       ),
     );
   });
+
+  // Панель Files: чтение файлов — дело `ProjectFiles` kit и `IoProjectFiles`,
+  // а feature в app не знает `dart:io` (design.md change
+  // `add-file-preview-and-tree`, D10).
+  test('reports dart:io imported by the project files feature of the app', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_files_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'application', 'project_files_cubit.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("import 'dart:io';\n");
+    final rule = rules.singleWhere(
+      (r) => r.dir == 'apps/codelab_desktop/lib/features/project_files',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    expect(violations, hasLength(1), reason: violations.join('\n'));
+    expect(violations.single, endsWith('-> dart:io'));
+  });
 }
