@@ -1418,5 +1418,75 @@ void main() {
         );
       },
     );
+
+    // Задача 2.0 (D11, правило 3): application терминала не знает Flutter.
+    // Правила в rules.dart нет, пока нет каталога (задача 2.2) — тест красный
+    // по причине «нет правила».
+    test('reports Flutter in features/terminal/application/', () {
+      const dir = 'apps/codelab_desktop/lib/features/terminal/application';
+      final tmp = tmpDesktop('guard_term_flutter_', {
+        'features/terminal/application/terminal_tabs_cubit.dart':
+            "import 'package:flutter/foundation.dart';\n"
+            "import 'package:flutter/widgets.dart';\n",
+        'features/terminal/application/terminal_tab.dart':
+            "import 'package:xterm2_core/xterm2_core.dart';\n",
+      });
+
+      final violations = scan(
+        tmp.path,
+        desktopRuleFor(
+          'package:flutter/',
+          ruleDir: dir,
+          scanDir: 'lib/features/terminal/application',
+        ),
+      );
+
+      expect(violations, hasLength(2), reason: violations.join('\n'));
+      expect(violations, everyElement(contains('terminal_tabs_cubit.dart')));
+    });
+
+    // Задача 2.0 (D11, правило 5; D3, «ZModem выключен»): `xterm.dart`
+    // реэкспортирует `zmodem.dart`, поэтому запрещены и сам пакет, и оба пути;
+    // presentation берёт виджеты из `package:xterm2/ui.dart`.
+    test('reports zmodem and the xterm2 entry points that re-export it', () {
+      final tmp = tmpDesktop('guard_term_zmodem_', {
+        'features/terminal/presentation/a.dart':
+            "import 'package:zmodem/zmodem.dart';\n",
+        'features/terminal/presentation/b.dart':
+            "import 'package:xterm2/xterm.dart';\n",
+        'features/terminal/presentation/c.dart':
+            "import 'package:xterm2/zmodem.dart';\n",
+        'features/terminal/presentation/ok.dart':
+            "import 'package:xterm2/ui.dart';\n",
+        'core/platform/d.dart': "import 'package:zmodem/zmodem.dart';\n",
+      });
+
+      final violations = scan(tmp.path, desktopRuleFor('package:zmodem/'));
+
+      expect(violations, hasLength(4), reason: violations.join('\n'));
+      expect(
+        violations,
+        containsAll([
+          endsWith('presentation/a.dart:1 -> package:zmodem/zmodem.dart'),
+          endsWith('presentation/b.dart:1 -> package:xterm2/xterm.dart'),
+          endsWith('presentation/c.dart:1 -> package:xterm2/zmodem.dart'),
+          endsWith('core/platform/d.dart:1 -> package:zmodem/zmodem.dart'),
+        ]),
+      );
+      expect(violations, isNot(contains(contains('ok.dart'))));
+    });
+
+    test(
+      'allows package:xterm2/ui.dart in features/terminal/presentation/',
+      () {
+        final tmp = tmpDesktop('guard_term_ui_', {
+          'features/terminal/presentation/terminal_pane.dart':
+              "import 'package:xterm2/ui.dart';\n",
+        });
+
+        expect(scan(tmp.path, desktopRuleFor('package:zmodem/')), isEmpty);
+        expect(scan(tmp.path, desktopRuleFor('package:xterm2/')), isEmpty);
+      },
+    );
   });
 }
