@@ -82,7 +82,7 @@
 
 - `bool Function(Uri) canOpenLink` и `ValueChanged<Uri> onOpenLink`;
 - `bool Function(Uri) canLoadImage` и `ImageProvider Function(Uri) imageFor` (в app — `imageProviderFor`, передаётся в presentation через DI в `app_scope.dart`, как `ExternalLinkOpener`);
-- `Set<String> shownImages` и `ValueChanged<String> onShowImage` (D6).
+- `Set<String> shownImages` и `ValueChanged<String> onShowImage`, `void Function(String key, Object error) onImageFailed` (D6).
 
 Политику в app задают чистые функции `isOpenableLink(Uri)` и `isLoadableImage(Uri)` в `apps/codelab_desktop/lib/core/platform/link_policy.dart` (рядом с портом `ExternalLinkOpener`: это граница платформы, а не правило workbench). Функции в scope стабильны — tear-off Cubit и функции верхнего уровня, `shownImages` — неизменяемое множество, — чтобы новый scope не пересобирал закрытые блоки (D3). Без scope (превью, тесты кита) ссылки и изображения неактивны.
 
@@ -125,6 +125,8 @@
 - Кнопка «Show image» есть, только если `canLoadImage(uri)`: `isLoadableImage` — только `https` с непустым хостом и без userinfo. `http`, `data:`, `file:`, относительные пути — заглушка без кнопки.
 - Клик → `onShowImage(url)` → `TranscriptViewCubit` запоминает адрес в наборе показанных изображений строки (ключ `<rowId>#image:<url>`, существующие `expansionOverrides`; UI-состояние текущего запуска, не сохраняется, DSK-20). Только после этого виджет строит `Image(image: imageFor(uri))`; `imageFor` в app — `ResizeImage` 1440×1440 с `fit` (ширина колонки ×2) против декомпрессионной бомбы: PNG 1400×100000 занял бы ≈ 560 МБ RGBA; до декодирования размеры берутся из заголовка (`ImageDescriptor.encoded`), и картинка отклоняется при `width × height > 40 млн` или стороне больше 16 384 — PNG декодируется в полном размере до масштабирования, поэтому одного `ResizeImage` мало; тело ответа — не больше 32 МБ; таймауты — соединение 10 с, вся загрузка 30 с; каждый редирект проверяется `isLoadableImage`, поэтому редирект на `http` не принимается. SVG не поддерживается (`Image` его не декодирует) — заглушка с ошибкой загрузки.
 - Показ привязан к строке и адресу: одинаковый адрес в другом ответе снова требует клика.
+- **Вид показанной картинки** (ревью итерации 5): пока картинка грузится, на её месте заглушка с `ProgressRing`; картинка стоит отдельной строкой шириной в абзац и прижата влево; `BoxFit.scaleDown` — сверх натурального размера не увеличивается; высота не больше 480, чтобы одна картинка не занимала всю ленту.
+- **Сбой загрузки** (`ImageRejectedException`: таймаут, превышен размер тела, недопустимые размеры из заголовка, запрещённый редирект; а также сетевая ошибка и ошибка декодирования) — на месте картинки заглушка с ошибкой, а `codelab_ui` вызывает колбэк scope `onImageFailed(key, error)` один раз на сбой; код причины и событие журнала строит app (`CodeLabShellCubit`, D12). Кит не знает ни журнала, ни кодов причин, а загрузчик app не зависит от кита (слои, `AGENTS.md` §6).
 
 ### D7. HTML не разбирается
 
@@ -164,7 +166,7 @@
 
 ### D12. Наблюдаемость
 
-Отрисовка не логирует текст ответа. Открытие ссылки — событие `link.open` с полями `scheme`, `host`, `outcome` (`opened` / `failed` / `rejectedScheme`); путь, query и fragment не пишутся (`AGENTS.md` §16). Показ изображения — `image.show` с `host`. Сбой подсветки — `FlutterError.reportError` без кода.
+Отрисовка не логирует текст ответа. Открытие ссылки — событие `link.open` с полями `scheme`, `host`, `outcome` (`opened` / `failed` / `rejectedScheme`); путь, query и fragment не пишутся (`AGENTS.md` §16). Показ изображения — `image.show` с `host`. Сбой загрузки изображения — `image.load` с полями `host` и `reason`; `reason` — короткий код `timeout`, `too_large`, `dimensions`, `redirect`, `network` или `decode`, без адреса и без текста исключения (в тексте исключения бывает адрес с query). Код строит и событие пишет `CodeLabShellCubit` по колбэку `onImageFailed` (D6): `ImageRejectedException` даёт свой код, любая другая ошибка — `decode`, компонент `workbench`, `host` — до 255 символов. Сбой подсветки — `FlutterError.reportError` без кода.
 
 ### D13. Тесты
 
