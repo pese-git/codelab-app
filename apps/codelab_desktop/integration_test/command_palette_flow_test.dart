@@ -80,12 +80,29 @@ Finder _paletteRow(String slash) => find.descendant(
   matching: find.text(slash),
 );
 
+/// Прокручивает список палитры, пока строка [slash] не окажется построена и
+/// видна: список ленивый, и строка ниже видимой части (после пункта «Files» и
+/// команд агента это `/plan`) в дереве ещё не существует, так что
+/// `ensureVisible` её не найдёт.
+Future<void> _scrollToPaletteRow(WidgetTester tester, String slash) async {
+  await tester.scrollUntilVisible(
+    _paletteRow(slash),
+    80,
+    scrollable: find
+        .descendant(
+          of: find.byKey(CodeLabCommandPaletteSurface.listKey),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  await tester.pumpAndSettle();
+}
+
 /// Нажимает строку палитры [slash], предварительно прокрутив к ней список:
 /// у Dart-агента команд больше, чем помещается в 260 px списка, и строка
 /// может лежать за его видимой областью (как у пользователя — прокруткой).
 Future<void> _tapPaletteRow(WidgetTester tester, String slash) async {
-  await tester.ensureVisible(_paletteRow(slash));
-  await tester.pumpAndSettle();
+  await _scrollToPaletteRow(tester, slash);
   await tester.tap(_paletteRow(slash));
   await tester.pumpAndSettle();
 }
@@ -216,7 +233,9 @@ void main() {
         find.byKey(CodeLabCommandPaletteSurface.agentSectionHeaderKey),
         findsOneWidget,
       );
+      await _scrollToPaletteRow(tester, '/compact');
       expect(_paletteRow('/compact'), findsOneWidget);
+      await _scrollToPaletteRow(tester, '/plan');
       expect(_paletteRow('/plan'), findsOneWidget);
       final ids = [for (final a in _cubit(tester).state.paletteActions) a.id];
       expect(ids, containsAll(['agent-compact', 'agent-plan', 'permissions']));
