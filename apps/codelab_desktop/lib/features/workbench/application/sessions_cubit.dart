@@ -8,9 +8,14 @@ import 'package:codelab_ui/codelab_ui.dart';
 
 import 'active_session_cubit.dart';
 import 'connection_cubit.dart';
+import 'project_paths.dart';
 import 'settings_cubit.dart';
 import 'shell_part.dart';
 import 'ui_mappers.dart';
+
+/// Сессия в корне диска, ожидающая подтверждения открытия (D24): её id и
+/// нормализованный `cwd` для текста диалога.
+typedef PendingRootSession = ({String sessionId, String cwd});
 
 /// Список сессий и выбранная сессия.
 final class SessionsState {
@@ -20,7 +25,13 @@ final class SessionsState {
     this.currentSessionLabel = 'No active session',
     this.currentSessionDetail = 'Create a session after connecting.',
     this.hasMoreSessions = false,
+    this.pendingRootSession,
   });
+
+  /// Сессия `notLoaded`, чей `cwd` — корень диска, ждёт подтверждения
+  /// пользователя; `null` — подтверждения нет (D24). Решение «ждать» принимает
+  /// `SessionsCubit`, виджет только показывает диалог и возвращает ответ.
+  final PendingRootSession? pendingRootSession;
 
   /// Строки сайдбара: открытые сессии, последняя изменившаяся первой, затем
   /// неоткрытые сессии агента (`notLoaded`) в порядке агента.
@@ -67,12 +78,14 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
     required ConnectionCubit connection,
     required SettingsCubit settings,
     required ActiveSessionCubit activeSession,
+    Logger? eventLogger,
   }) : _application = application,
        _workspace = workspace,
        _diagnostics = diagnostics,
        _connection = connection,
        _settings = settings,
        _activeSession = activeSession,
+       _eventLogger = eventLogger,
        super(const SessionsState()) {
     _sessionSubscription = _application.sessionChanges.listen(
       _handleSessionChange,
@@ -86,6 +99,11 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
   final ConnectionCubit _connection;
   final SettingsCubit _settings;
   final ActiveSessionCubit _activeSession;
+  final Logger? _eventLogger;
+
+  /// Источник истины для [SessionsState.pendingRootSession]: каждый `emit`
+  /// списка переносит его в новое состояние.
+  PendingRootSession? _pendingRoot;
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
 
@@ -106,7 +124,29 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
   String _workspaceRows = '';
 
   /// Создаёт сессию в папке проекта и сразу показывает её.
+  ///
+  /// Проект проверяется раньше соединения: без проекта нет папки для `cwd`,
+  /// поэтому вместо сессии открывается выбор папки, как «Open folder…», и
+  /// агенту ничего не шлётся (agent-workbench-ui «New session без проекта
+  /// открывает выбор папки», D5). Выбранная папка становится проектом, а
+  /// сессию создаёт повторное «New session». Папка читается один раз и
+  /// уходит в `session/new` (D3).
   Future<void> createSession() async {
+    // Та же функция ожидания, что у Connect (D3): сессия в первые
+    // миллисекунды после старта не должна открывать выбор папки, пока
+    // проект восстанавливается.
+    final project = _settings.projectRestoreFinished
+        ? _settings.projectDirectory
+        : await _settings.awaitProject();
+    if (isClosed) return;
+    if (project == null) {
+      _diagnostics.record(
+        'Open a project to start a session: choose a folder.',
+        source: 'session',
+      );
+      await _settings.browseForProject();
+      return;
+    }
     if (_connection.state.connectionStatus !=
         CodeLabConnectionStatus.connected) {
       _diagnostics.record(
@@ -121,9 +161,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
 
     final AcpSession? session;
     try {
-      final handle = await _workspace.newSession(
-        cwd: _settings.projectDirectory,
-      );
+      final handle = await _workspace.newSession(cwd: project);
       if (isClosed) return;
       session = _application.sessionById(handle.id);
     } on Object catch (error) {
@@ -152,12 +190,23 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
   /// Переключает показываемую сессию и сразу перечитывает всё её состояние
   /// из живого снимка — иначе до её следующего `session/update` была бы
   /// видна лента прежней сессии.
-  void selectSession(String sessionId) {
+  void selectSession(String sessionId) => _select(sessionId, byUser: true);
+
+  /// [byUser] — действие пользователя: только оно снимает открытый вопрос D24
+  /// (D17). Завершение ранее начатой загрузки ([_loadAndSelect]) его не
+  /// снимает: иначе поздний ответ агента отменил бы вопрос ложным `cancel`.
+  void _select(String sessionId, {required bool byUser}) {
     final cwd = _availableCwd[sessionId];
     if (cwd != null && _application.sessionById(SessionId(sessionId)) == null) {
+      if (isFilesystemRoot(cwd)) {
+        _askAboutRootSession(sessionId, cwd);
+        return;
+      }
+      if (byUser) _dropRootQuestion('cancel');
       unawaited(_loadAndSelect(sessionId, cwd));
       return;
     }
+    if (byUser) _dropRootQuestion('cancel');
     _workspace.activate(SessionId(sessionId));
     final session = _application.sessionById(SessionId(sessionId));
     batch(() {
@@ -172,6 +221,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
             currentSessionLabel: selected?.title ?? untitledSessionTitle,
             currentSessionDetail: selected?.subtitle ?? sessionId,
             hasMoreSessions: _hasMore,
+            pendingRootSession: _pendingRoot,
           ),
         );
         _activeSession.showMissing(sessionId);
@@ -182,6 +232,70 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
       _activeSession.show(session);
     });
   }
+
+  /// Подтверждение D24: открыть сессию в корне диска.
+  ///
+  /// Почему здесь: решение «эта сессия опасна» принимает `SessionsCubit`, а
+  /// не виджет (§10). Виджет показывает диалог по
+  /// [SessionsState.pendingRootSession] и только возвращает ответ. Загрузка
+  /// идёт с исходным `cwd` строки, текст диалога — с нормализованным.
+  void confirmRootSession() {
+    final pending = _pendingRoot;
+    if (pending == null) {
+      return;
+    }
+    final cwd = _availableCwd[pending.sessionId];
+    if (cwd == null) {
+      // Строка исчезла между показом и ответом: грузить нечего, а `open`
+      // пишется только при фактической загрузке.
+      _dropRootQuestion('cancel');
+      return;
+    }
+    _dropRootQuestion('open');
+    unawaited(_loadAndSelect(pending.sessionId, cwd));
+  }
+
+  /// Отказ D24: фокус и статус строки не меняются, агенту ничего не шлётся.
+  void cancelRootSession() => _dropRootQuestion('cancel');
+
+  /// Ставит вопрос «Open anyway?» для [sessionId] (D24). Повторный выбор той
+  /// же сессии при открытом вопросе игнорируется, выбор другой корневой
+  /// сессии закрывает прежний вопрос как отказ.
+  void _askAboutRootSession(String sessionId, String cwd) {
+    if (_pendingRoot?.sessionId == sessionId) {
+      return;
+    }
+    _dropRootQuestion('cancel', notify: false);
+    _pendingRoot = (sessionId: sessionId, cwd: normalizedPath(cwd));
+    emit(_withPendingRoot());
+  }
+
+  /// Снимает вопрос D24 с решением [decision] (`open` или `cancel`). Событие
+  /// несёт только решение, без пути (AGENTS.md §16).
+  void _dropRootQuestion(String decision, {bool notify = true}) {
+    if (_pendingRoot == null) {
+      return;
+    }
+    final sessionId = _pendingRoot!.sessionId;
+    _pendingRoot = null;
+    // Без пути (AGENTS.md §16): id сессии связывает решение с сессией.
+    _eventLogger?.info(
+      'session.root_open',
+      context: {'decision': decision, 'session_id': sessionId},
+    );
+    if (notify) {
+      emit(_withPendingRoot());
+    }
+  }
+
+  SessionsState _withPendingRoot() => SessionsState(
+    sessions: state.sessions,
+    activeSessionId: state.activeSessionId,
+    currentSessionLabel: state.currentSessionLabel,
+    currentSessionDetail: state.currentSessionDetail,
+    hasMoreSessions: state.hasMoreSessions,
+    pendingRootSession: _pendingRoot,
+  );
 
   /// Следующая страница сессий агента.
   Future<void> loadMoreSessions() => _workspace.loadMoreSessions();
@@ -203,7 +317,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
       return;
     }
     if (isClosed) return;
-    selectSession(sessionId);
+    _select(sessionId, byUser: false);
   }
 
   void _handleWorkspaceState(WorkspaceState workspace) {
@@ -231,6 +345,13 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
     _availableCwd = {
       for (final summary in available) summary.id.value: summary.cwd,
     };
+    // Строка сессии исчезла (потеря соединения, смена проекта): спрашивать
+    // не о чем, вопрос снимается как отказ; `open` пишется только при
+    // фактической загрузке (D24).
+    if (_pendingRoot case final pending?
+        when !_availableCwd.containsKey(pending.sessionId)) {
+      _dropRootQuestion('cancel', notify: false);
+    }
     final active = state.activeSessionId;
     // Уведомление `detached` меняет `SessionView` показываемой сессии без
     // нового снимка `AcpSession`, поэтому `sessionChanges` его не принесёт.
@@ -247,6 +368,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
           currentSessionLabel: state.currentSessionLabel,
           currentSessionDetail: state.currentSessionDetail,
           hasMoreSessions: _hasMore,
+          pendingRootSession: _pendingRoot,
         ),
       );
       final session = activeDetachChanged
@@ -306,11 +428,12 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
               currentSessionLabel: state.currentSessionLabel,
               currentSessionDetail: state.currentSessionDetail,
               hasMoreSessions: _hasMore,
+              pendingRootSession: _pendingRoot,
             ),
     );
   }
 
-  static SessionsState _activated(
+  SessionsState _activated(
     CodeLabSessionListItem item,
     AcpSession session, {
     required List<CodeLabSessionListItem> sessions,
@@ -321,5 +444,6 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
     currentSessionLabel: item.title,
     currentSessionDetail: item.subtitle ?? session.id.value,
     hasMoreSessions: hasMore,
+    pendingRootSession: _pendingRoot,
   );
 }

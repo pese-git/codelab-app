@@ -115,6 +115,16 @@ final class EmbeddedTransportResolver implements TransportResolver {
     required String projectDirectory,
   }) {
     final hostProfile = (profile as EmbeddedProfile).hostProfile;
+    // Защита в глубину (D9): `ConfigLoader.load(cwd: '')` читал бы
+    // относительные пути. Отказ стоит до очереди и поколения, поэтому не
+    // вытесняет открытие, которое уже идёт.
+    if (projectDirectory.trim().isEmpty) {
+      return Future.error(
+        const ClientWorkspaceException(
+          'Open a project to start the embedded agent.',
+        ),
+      );
+    }
     if (_closing != null) {
       return Future.error(const EmbeddedOpenCancelledException());
     }

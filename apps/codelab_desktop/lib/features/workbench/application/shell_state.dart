@@ -3,6 +3,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_ui/codelab_ui.dart';
 
 import 'connection_cubit.dart' show ProviderSetupNotice;
+import 'sessions_cubit.dart' show PendingRootSession;
 import 'ui_mappers.dart';
 
 /// Состояние рабочего места в прежней форме — то, что читают виджеты,
@@ -58,6 +59,7 @@ final class CodeLabShellState {
     required this.selectedProjectPath,
     required this.recentProjects,
     this.hasMoreSessions = false,
+    this.pendingRootSession,
     required this.currentPlan,
     required this.queuedPrompts,
   });
@@ -155,6 +157,10 @@ final class CodeLabShellState {
   /// `Load more sessions` (design D7 change `add-session-list-and-reload`).
   final bool hasMoreSessions;
 
+  /// Сессия в корне диска ждёт подтверждения (D24): виджет показывает диалог
+  /// `Open anyway?`; `null` — подтверждения нет.
+  final PendingRootSession? pendingRootSession;
+
   /// Отличает «не передан» от «явно `null`» для [currentPlan] в [copyWith].
   static const Object _unset = Object();
 
@@ -200,6 +206,7 @@ final class CodeLabShellState {
     String? selectedProjectPath,
     List<CodeLabRecentProject>? recentProjects,
     bool? hasMoreSessions,
+    Object? pendingRootSession = _unset,
     Object? currentPlan = _unset,
     List<CodeLabQueuedPrompt>? queuedPrompts,
   }) {
@@ -259,6 +266,9 @@ final class CodeLabShellState {
       selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
       recentProjects: recentProjects ?? this.recentProjects,
       hasMoreSessions: hasMoreSessions ?? this.hasMoreSessions,
+      pendingRootSession: identical(pendingRootSession, _unset)
+          ? this.pendingRootSession
+          : pendingRootSession as PendingRootSession?,
       currentPlan: identical(currentPlan, _unset)
           ? this.currentPlan
           : currentPlan as List<CodeLabPlanEntry>?,

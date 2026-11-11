@@ -10,6 +10,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 import '../../../app/app_scope.dart';
 import '../../../app/navigation/navigation_cubit.dart';
 import '../../../app/navigation/settings_page.dart';
+import '../application/sessions_cubit.dart' show PendingRootSession;
 import '../application/shell_cubit.dart';
 import '../application/ui_mappers.dart'
     show connectionTooltipOf, sidebarProjectsOf;
@@ -52,7 +53,9 @@ class CodeLabShell extends StatelessWidget {
 
         return CodeLabWorkbenchShortcuts(
           onOpenCommandPalette: cubit.openCommandPalette,
-          onCancel: state.isCommandPaletteOpen
+          onCancel: state.pendingRootSession != null
+              ? cubit.cancelRootSession
+              : state.isCommandPaletteOpen
               ? cubit.closeCommandPalette
               : (state.canCancel ? cubit.cancelTurn : null),
           onNewSession:
@@ -170,6 +173,8 @@ class CodeLabShell extends StatelessWidget {
                 ),
                 if (state.isCommandPaletteOpen)
                   _CommandPaletteOverlay(state: state, cubit: cubit),
+                if (state.pendingRootSession case final pending?)
+                  _RootSessionDialog(pending: pending, cubit: cubit),
               ],
             ),
           ),
@@ -230,6 +235,51 @@ class _ProtocolPane extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Диалог подтверждения открытия сессии в корне диска (D24).
+///
+/// Почему: сессия в `/` даёт агенту весь диск; решение, что это опасно,
+/// принимает `SessionsCubit` (`pendingRootSession`), а виджет только
+/// показывает вопрос и возвращает ответ (AGENTS.md §10). Диалог рисуется по
+/// состоянию, поэтому вытеснение новым действием фокуса закрывает его без
+/// участия виджета.
+class _RootSessionDialog extends StatelessWidget {
+  const _RootSessionDialog({required this.pending, required this.cubit});
+
+  final PendingRootSession pending;
+  final CodeLabShellCubit cubit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black.withAlpha(60),
+        child: Center(
+          child: ContentDialog(
+            key: const ValueKey('root-session-dialog'),
+            title: const Text('Open session in the disk root?'),
+            content: Text(
+              'This session runs in the disk root (${pending.cwd}). '
+              'The agent gets access to the whole disk. Open anyway?',
+            ),
+            actions: [
+              FilledButton(
+                key: const ValueKey('root-session-open'),
+                onPressed: cubit.confirmRootSession,
+                child: const Text('Open'),
+              ),
+              Button(
+                key: const ValueKey('root-session-cancel'),
+                onPressed: cubit.cancelRootSession,
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -316,12 +316,34 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     // Профиль фиксируется на старте: подписи и диагностика описывают начатое
     // подключение, а не то, что выберут позже.
     final detail = WindowConnectionState._detailOf(target);
+    // Пока проект прошлого запуска восстанавливается, статус `connecting`
+    // ставится до ожидания: повторное нажатие не запустит второе
+    // подключение (D3). Когда восстановление уже завершено, ожидания нет:
+    // статус меняется синхронно с вызовом.
+    final restoreFinished = _settings.projectRestoreFinished;
+    String? project = restoreFinished ? _settings.projectDirectory : null;
     // Пока workspace не принял ни одного подключения, профиль окна — тот,
     // что выбран (на нём работают «Connect» и «Reconnect» экрана
     // подключения); дальше он меняется только после принятой попытки (L5).
     final shown = _accepted == null ? target : null;
     if (!_validate(target, action: 'connecting')) {
       _rejectBeforeConnect(shown: shown);
+      return;
+    }
+    if (!restoreFinished) {
+      emit(
+        state._copyWith(
+          profile: shown,
+          connectionStatus: CodeLabConnectionStatus.connecting,
+        ),
+      );
+      project = await _settings.awaitProject();
+      if (isClosed || intent != _intent) {
+        return;
+      }
+    }
+    if (project == null) {
+      _rejectWithoutProject(target, shown: shown);
       return;
     }
 
@@ -331,7 +353,12 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         connectionStatus: CodeLabConnectionStatus.connecting,
       ),
     );
-    if (await _failIfProjectDirectoryMissing(target, intent, shown: shown)) {
+    if (await _failIfProjectDirectoryMissing(
+      target,
+      intent,
+      project,
+      shown: shown,
+    )) {
       return;
     }
     await _warnIfSecretMissing(target);
@@ -358,10 +385,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     );
 
     try {
-      await _workspace.connect(
-        target,
-        projectDirectory: _settings.projectDirectory,
-      );
+      await _workspace.connect(target, projectDirectory: project);
       // Вытесненная попытка завершается нормально и ничего не публикует
       // (контракт `ClientWorkspace`): итог — у новой попытки, а «started» от
       // старой был бы ложной диагностикой.
@@ -434,15 +458,33 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     final intent = ++_intent;
     _dropSetupNotice();
     _profileChosen = true;
+    // Как в [connect]: при идущем восстановлении проекта статус
+    // `reconnecting` ставится до ожидания. Когда восстановление уже
+    // завершено, ожидания нет и статус меняется синхронно с вызовом (D3).
+    final restoreFinished = _settings.projectRestoreFinished;
+    String? project = restoreFinished ? _settings.projectDirectory : null;
     if (!_validate(profile, action: 'reconnecting')) {
       _rejectBeforeConnect();
+      return;
+    }
+    if (!restoreFinished) {
+      emit(
+        state._copyWith(connectionStatus: CodeLabConnectionStatus.reconnecting),
+      );
+      project = await _settings.awaitProject();
+      if (isClosed || intent != _intent) {
+        return;
+      }
+    }
+    if (project == null) {
+      _rejectWithoutProject(profile);
       return;
     }
 
     emit(
       state._copyWith(connectionStatus: CodeLabConnectionStatus.reconnecting),
     );
-    if (await _failIfProjectDirectoryMissing(profile, intent)) {
+    if (await _failIfProjectDirectoryMissing(profile, intent, project)) {
       return;
     }
     await _warnIfSecretMissing(profile);
@@ -468,10 +510,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     );
 
     try {
-      await _workspace.reconnect(
-        profile: profile,
-        projectDirectory: _settings.projectDirectory,
-      );
+      await _workspace.reconnect(profile: profile, projectDirectory: project);
       if (isClosed || attempt != _attempt) return;
       _accepted = profile;
       _announceTarget();
@@ -584,13 +623,22 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     try {
       await _settings.projectRestored;
     } on Object {
-      // Проект не восстановился: подключаемся к папке по умолчанию.
+      // Проект не восстановился: проекта нет, подключаться некуда.
     }
     await _defaultLoaded;
     if (isClosed || _intent != started) {
       return;
     }
     final profile = state.profile;
+    if (_settings.projectDirectory == null) {
+      // Без проекта нет папки агента (D2). Временно, до итерации B: там
+      // агент стартует сам, выбором проекта, и «Connect on start» уходит.
+      _eventLogger?.info(
+        'connection.connect_on_start_skipped',
+        context: {'profile_id': profile.id, 'reason': 'no_project'},
+      );
+      return;
+    }
     _eventLogger?.info(
       'connection.connect_on_start',
       context: {'profile_id': profile.id, 'type': _typeNameOf(profile)},
@@ -736,13 +784,14 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   /// подключение новой попытки (M1, AGENTS.md §9).
   Future<bool> _failIfProjectDirectoryMissing(
     ConnectionProfile profile,
-    int intent, {
+    int intent,
+    String project, {
     ConnectionProfile? shown,
   }) async {
     if (profile is WebSocketProfile) {
       return false;
     }
-    final missing = await _settings.missingProjectDirectory();
+    final missing = await _settings.missingProjectDirectory(project);
     if (isClosed || intent != _intent) {
       return true;
     }
@@ -759,6 +808,28 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
       source: 'project',
     );
     return true;
+  }
+
+  /// Отказ подключиться без проекта: папки агента нет (D2, D3). Ничего не
+  /// запускается и не открывается, `WorkspaceState.projectDirectory` остаётся
+  /// пустым. Событие журнала несёт только id профиля, без пути.
+  void _rejectWithoutProject(
+    ConnectionProfile profile, {
+    ConnectionProfile? shown,
+  }) {
+    const message =
+        'Open a project before connecting: choose a folder with '
+        'Open folder….';
+    _rejectBeforeConnect(message: message, shown: shown);
+    _diagnostics.record(
+      message,
+      severity: DiagnosticSeverity.warning,
+      source: 'project',
+    );
+    _eventLogger?.info(
+      'connection.connect_rejected',
+      context: {'reason': 'no_project', 'profile_id': profile.id},
+    );
   }
 
   /// Отказ до обращения к `ClientWorkspace` (пустая команда, нет папки).
