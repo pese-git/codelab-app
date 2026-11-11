@@ -435,36 +435,89 @@ void main() {
       );
     });
 
-    group('agent reply fencing (6.1i)', () {
-      List<CodeLabTranscriptRow> rowsOf(String text) => transcriptRowsOf(
-        [TranscriptItem.agentText(id: 'a1', text: text)],
+    // Ответ агента — одна строка с текстом как есть; разбор markdown и
+    // огороженного блока делает `codelab_ui` (change `add-desktop-markdown`,
+    // D3, D11). Маппер `unfenceSingleBlock` не вызывает: функция остаётся
+    // только у панели «Agent status» (SETUP-11).
+    group('agent reply is one row with the text as is (D3, D11)', () {
+      List<CodeLabTranscriptRow> rowsOf(
+        String text, {
+        bool isRunning = false,
+        List<TranscriptItem> before = const [],
+      }) => transcriptRowsOf(
+        [...before, TranscriptItem.agentText(id: 'a1', text: text)],
         cwd: '/work',
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
+        isRunning: isRunning,
       );
 
-      test('a /mcp list reply becomes a preformatted row without fences', () {
-        final row =
-            rowsOf('```text\nMCP servers (1)\n  a  ok\n```').single
-                as CodeLabAgentTextRow;
-
-        expect(row.preformatted, isTrue);
-        expect(row.text, 'MCP servers (1)\n  a  ok');
-      });
-
-      test('prose stays as is and is not preformatted', () {
-        final row = rowsOf('Hello there.').single as CodeLabAgentTextRow;
-
-        expect(row.preformatted, isFalse);
-        expect(row.text, 'Hello there.');
-      });
-
-      test('an unclosed fence of a running turn stays as is', () {
-        const text = '```text\nMCP servers (1)';
+      test('a /mcp list reply keeps its text and fences for the kit '
+          '(scenario «Ответ /mcp list в ленте»)', () {
+        const text = '```text\nMCP servers (1)\n  a  ok\n```';
         final row = rowsOf(text).single as CodeLabAgentTextRow;
 
-        expect(row.preformatted, isFalse);
+        expect(row.id, 'agent-1');
         expect(row.text, text);
+        expect(row.streaming, isFalse);
+      });
+
+      test('prose around a fenced block and two blocks stay one row with '
+          'the original text (scenario «Текст вокруг блока»)', () {
+        const around = 'Here:\n\n```text\nbody\n```\n\nDone.';
+        const two = '```text\na\n```\n\n```text\nb\n```';
+
+        expect((rowsOf(around).single as CodeLabAgentTextRow).text, around);
+        expect((rowsOf(two).single as CodeLabAgentTextRow).text, two);
+      });
+
+      test('an opening fence of a running turn stays in the text and the '
+          'row is streaming (scenario «Открывающая строка во время хода»)', () {
+        const text = '```text\nMCP servers (1)';
+        final row = rowsOf(text, isRunning: true).single as CodeLabAgentTextRow;
+
+        expect(row.text, text);
+        expect(row.streaming, isTrue);
+      });
+
+      test('prose stays as is', () {
+        final row = rowsOf('Hello there.').single as CodeLabAgentTextRow;
+
+        expect(row.text, 'Hello there.');
+        expect(row.streaming, isFalse);
+      });
+
+      test('only the last item of a running turn is streaming', () {
+        final rows = transcriptRowsOf(
+          const [
+            TranscriptItem.user(id: 'u1', text: 'go'),
+            TranscriptItem.agentText(id: 'a1', text: 'first'),
+            TranscriptItem.toolCall(
+              id: 't1/tool-call-1',
+              toolCallId: ToolCallId('call-1'),
+              title: 'Read',
+              details: ToolCallView(
+                kind: ToolKind.read,
+                status: ToolCallStatusView.succeeded,
+              ),
+            ),
+            TranscriptItem.agentText(id: 'a2', text: 'second'),
+          ],
+          cwd: '/work',
+          approvalsEnabled: true,
+          onApprovalSelected: (_, _) {},
+          isRunning: true,
+        );
+
+        final replies = rows.whereType<CodeLabAgentTextRow>().toList();
+        expect(replies.map((row) => row.id), ['agent-2', 'agent-4']);
+        expect(replies.map((row) => row.streaming), [false, true]);
+      });
+
+      test('after the turn ends the last reply stops streaming', () {
+        final row = rowsOf('answer').single as CodeLabAgentTextRow;
+
+        expect(row.streaming, isFalse);
       });
     });
 
