@@ -353,4 +353,12 @@ const rules = [
     exclude: ['core/platform/'],
     sealExclude: false,
   ),
+  // Панель Files: чтение файлов — порт `ProjectFiles` kit и `IoProjectFiles`
+  // из `codelab_client_io`, который собирает только composition root
+  // `lib/app/`; feature не знает `dart:io` во всех слоях (design.md change
+  // `add-file-preview-and-tree`, D10; `AGENTS.md` §6, §11).
+  PackageRule(
+    'apps/codelab_desktop/lib/features/project_files',
+    forbidden: ['dart:io'],
+  ),
 ];

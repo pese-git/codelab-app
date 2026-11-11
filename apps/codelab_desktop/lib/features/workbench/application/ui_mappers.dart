@@ -407,23 +407,51 @@ CodeLabCommandAction _agentCommandAction(AgentCommandView command) =>
       hint: command.hint,
     );
 
+/// Действие палитры «Files»: открывает или закрывает панель Files дока.
+///
+/// Почему отдельно от `CodeLabCommandAction.defaults`: пункт есть только когда
+/// панель доступна (локальная папка сессии и привязка `ProjectFiles`), а
+/// `defaults` — фиксированный набор `codelab_ui` (spec workspace-file-browser
+/// «Панель Files в доке инструментов»; design.md change
+/// `add-file-preview-and-tree`, D7). Отдельной «группы Go to» у палитры нет:
+/// пункт стоит в общем списке после команд app.
+const _filesAction = CodeLabCommandAction(
+  id: 'files',
+  label: 'Files',
+  slashCommand: '/files',
+  description: 'Go to the project files panel.',
+  icon: FluentIcons.folder,
+);
+
+HostCommand _hostCommandOf(CodeLabCommandAction action) => HostCommand(
+  id: action.id,
+  name: action.slashCommand.substring(1),
+  label: action.label,
+  description: action.description,
+  isAvailable: action.isAvailable,
+);
+
 /// Шесть команд app как команды хоста каталога: имя — `slashCommand` без
 /// `/`, связь с иконкой — `id` (D2 change `add-command-palette-agent-commands`).
 final List<HostCommand> _paletteHostCommands = List.unmodifiable([
-  for (final action in CodeLabCommandAction.defaults)
-    HostCommand(
-      id: action.id,
-      name: action.slashCommand.substring(1),
-      label: action.label,
-      description: action.description,
-      isAvailable: action.isAvailable,
-    ),
+  for (final action in CodeLabCommandAction.defaults) _hostCommandOf(action),
+]);
+
+final List<HostCommand> _paletteHostCommandsWithFiles = List.unmodifiable([
+  ..._paletteHostCommands,
+  _hostCommandOf(_filesAction),
 ]);
 
 /// Каталог палитры для команд агента активной сессии: команды app и
 /// [agentCommands] с правилами kit (конфликты имён, поиск — D3, D4).
-CommandCatalog paletteCatalogOf(List<AgentCommandView> agentCommands) =>
-    CommandCatalog(host: _paletteHostCommands, agent: agentCommands);
+/// [filesAvailable] добавляет пункт «Files» (панель доступна, D7).
+CommandCatalog paletteCatalogOf(
+  List<AgentCommandView> agentCommands, {
+  bool filesAvailable = false,
+}) => CommandCatalog(
+  host: filesAvailable ? _paletteHostCommandsWithFiles : _paletteHostCommands,
+  agent: agentCommands,
+);
 
 /// Полный список палитры в порядке каталога.
 List<CodeLabCommandAction> paletteActionsOf(CommandCatalog catalog) => [
@@ -439,9 +467,11 @@ List<CodeLabCommandAction> searchPaletteActions(
 CodeLabCommandAction _paletteActionOf(CatalogCommand command) =>
     switch (command) {
       HostCatalogCommand(:final command) =>
-        CodeLabCommandAction.defaults.firstWhere(
-          (action) => action.id == command.id,
-        ),
+        command.id == _filesAction.id
+            ? _filesAction
+            : CodeLabCommandAction.defaults.firstWhere(
+                (action) => action.id == command.id,
+              ),
       AgentCatalogCommand(:final command) => _agentCommandAction(command),
     };
 
