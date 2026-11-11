@@ -129,12 +129,16 @@
 
 ## 2. Feature terminal и панель в доке (итерация 2)
 
-- [ ] 2.0 `[desktop]` Правила сторожа «`package:flutter/` запрещён в `apps/codelab_desktop/lib/features/terminal/application`» (D11, правило 3; перенесено из 1.3–1.4, потому что сторож требует существующий каталог) и «`package:zmodem/` запрещён в `apps/codelab_desktop/lib`» (D11, правило 5; D3, «ZModem выключен»). Сначала негативные тесты в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` (`flutter` в `application`, `zmodem` в `presentation` → нарушение, красный), затем `PackageRule` в `test/support/rules.dart` вместе с появлением каталога в 2.2 — тест зелёный.
-- [ ] 2.1 `[desktop]` Тест `apps/codelab_desktop/test/features/terminal/application/terminal_tabs_cubit_test.dart` с `FakeUserShellLauncher` и fake-временем (`integrated-terminal` «Вкладки терминала принадлежат папке проекта», «Рабочая папка вкладки терминала», «Жизненный цикл процессов терминала», «Содержимое терминала не покидает экран»; D3–D5, D9). Проверяет:
-  - вкладки по папке проекта, переключение владельца без остановки процессов;
-  - снимок `cwd` на момент создания, без проекта — `WorkingDirectoryProvider`;
-  - несуществующая папка → `failed` без вызова `start`;
-  - shell берётся у порта: `FakeUserShellLauncher.resolveShell()` (fake реализует новый метод порта) → его команда уходит в `start`; `resolveShell()` вернул `null` → вкладка `failed(shellNotFound)` без вызова `start`;
+- [ ] 2.0 `[desktop]` Правила сторожа «`package:flutter/` запрещён в `apps/codelab_desktop/lib/features/terminal/application`» (D11, правило 3; перенесено из 1.3–1.4, потому что сторож требует существующий каталог) и «`package:zmodem/`, `package:xterm2/xterm.dart`, `package:xterm2/zmodem.dart` запрещены в `apps/codelab_desktop/lib`» (D11, правило 5; D3, «ZModem выключен»): presentation берёт `TerminalView` из `package:xterm2/ui.dart`, который `zmodem` не реэкспортирует (в 5.4.0 `xterm.dart` = `core.dart` + `ui.dart` + `zmodem.dart`). Сначала негативные тесты в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` (`flutter` в `application`; `zmodem` и `package:xterm2/xterm.dart` в `presentation` → нарушение; `package:xterm2/ui.dart` в `presentation` — не нарушение; красный), затем `PackageRule` в `test/support/rules.dart` вместе с появлением каталога в 2.2 — тест зелёный.
+- [ ] 2.1 `[desktop]` Тест `apps/codelab_desktop/test/features/terminal/application/terminal_tabs_cubit_test.dart` с `FakeUserShellLauncher` и fake-временем (`integrated-terminal` «Вкладки терминала принадлежат сессии», «Панель Terminal в доке инструментов» (сценарий «Нет активной сессии»), «Рабочая папка вкладки терминала», «Жизненный цикл процессов терминала», «Содержимое терминала не покидает экран»; D3–D5, D9; Q4 пересмотрено, Q17–Q19). `FakeUserShellLauncher` (с `isSupported`, `resolveShell`, `start` и управляемым fake-`UserShell`) — в `apps/codelab_desktop/test/support/fake_user_shell_launcher.dart`: им пользуются и 2.5, 2.9, 3.x. Журнал — `RecordingLogger` (`test/support/recording_logger.dart`). Fake-время — через `testWidgets` и `tester.pump(Duration)` / `tester.binding.delayed`; `fake_async` в `dev_dependencies` не добавляется (техническое решение 2026-11-11). `ClientWorkspace` — fake с управляемыми `current` и `state` (`activeSessionId`, `profile`) и `session(id)` с `SessionHandle.cwd`. Проверяет:
+  - вкладки по сессии: владелец — `TerminalOwner(profileId, sessionId)` из `WorkspaceState.activeSessionId` и `WorkspaceState.profile.id` в момент активации (D5); смена активной сессии показывает её вкладки, процессы сессии A не получают сигналов;
+  - нет активной сессии (`activeSessionId == null` или у `ClientWorkspace.session(id)` нет `SessionHandle`) → состояние «нет сессии», команда новой вкладки не вызывает `start` и вкладку не создаёт (Q17);
+  - вкладки сессии переживают смену `projectDirectory`, смену `profile` и разрыв соединения (`ConnectionView` → disconnected → connected); возврат той же сессии (тот же `profileId` + `sessionId`) показывает прежние вкладки с живым процессом (Q18);
+  - одинаковый `sessionId` у двух профилей — разные владельцы, вкладки не смешиваются (D5);
+  - после подключения к другому профилю без выбора сессии показываются вкладки прежней сессии (владелец запомнен при активации; `ClientWorkspace` не сбрасывает `activeSessionId`, D5);
+  - снимок `cwd`: вкладка стартует в `SessionHandle.cwd` активной сессии на момент создания, `WorkingDirectoryProvider` не вызывается (Q19);
+  - несуществующая папка (`DirectoryExists` из `codelab_client_io` вернул `false`) → `failed(folderNotFound)` без вызова `start`;
+  - shell берётся у порта: `FakeUserShellLauncher.resolveShell()` (метод порта `UserShellLauncher`, итерация 1) → его команда уходит в `start`; `resolveShell()` вернул `null` → вкладка `failed(shellNotFound)` без вызова `start`;
   - новая вкладка активна; 12 вкладок подряд создаются без отказа (предела нет, Q8);
   - закрытие вкладки и `closeAll()` во время `start`: поздний `UserShell` сразу получает `kill()` и в реестр не попадает (D4, «Старт в полёте»);
   - закрытие: `hangUp` → если `exitCode` не завершился за 2 с — `kill`, вкладка исчезает сразу, `forced` в событии;
@@ -143,9 +147,9 @@
   - поздний вывод закрытой вкладки не меняет состояние;
   - `closeAll()`: `hangUp` всем, через 3 с `kill`, затем новые вкладки не создаются, повторный вызов — без действий;
   - после `exited` Cubit отписан от `output` и не вызывает `hangUp`/`kill` этой вкладки — ни при закрытии, ни в `closeAll()` (D4);
-  - `exitCode` завершился ошибкой (fake пробрасывает исключение, как адаптер) → вкладка `exited(null)`, событие `terminal.exit_wait_failed` с `tab_id` и именем типа ошибки (без `toString()`), без сигналов, отписка от `output` (D4, D9);
-  - `UserShellStartFailure.ptyUnavailable` → `failed`, событие `terminal.start_failed` с вариантом;
-  - fake `start` бросает `ArgumentError('native library not found: /Users/x/lib.dylib')` → вкладка `failed(ptyUnavailable)`, в fake-журнале событие `terminal.start_failed` с `error_type: ArgumentError`; подстроки `/Users` в журнале нет, исключение из Cubit не выходит (D4, «Ошибка старта в Cubit»);
+  - `exitCode` завершился ошибкой (fake пробрасывает исключение, как адаптер) → вкладка `exited(null)`, событие `terminal.exit_wait_failed` с `tab_id` и `error_type` (`runtimeType`, без `toString()`), без сигналов, отписка от `output` (D4, D9);
+  - `UserShellStartFailure.ptyUnavailable` → `failed`, событие `terminal.start_failed` с `reason: ptyUnavailable`;
+  - fake `start` бросает `ArgumentError('native library not found: /Users/x/lib.dylib')` → вкладка `failed(ptyUnavailable)`, в fake-журнале событие `terminal.start_failed` с `reason: ptyUnavailable` и `error_type: ArgumentError`; подстроки `/Users` в журнале нет, исключение из Cubit не выходит (D4, «Ошибка старта в Cubit»);
   - то же, но вкладку закрыли до конца `start` → только событие, состояние не меняется;
   - поздний `UserShell` закрытой вкладки, чей `exitCode` завершился ошибкой → событие `terminal.exit_wait_failed`, необработанной ошибки в зоне нет (тест под `runZonedGuarded` или с проверкой `FlutterError`), состояние не меняется (D4, «Старт в полёте»);
   - после `close()` Cubit нет событий;
@@ -153,22 +157,30 @@
   - события D9 в fake-логгере без путей, окружения и вывода.
 
   Тест красный.
-- [ ] 2.2 `[desktop]` Реализовать `lib/features/terminal/application/`: `TerminalTabsCubit`, `TerminalTabsState`, закрытую иерархию `TerminalTabStatus`, реестр вкладок с моделью `Terminal` из `package:xterm2_core/xterm2_core.dart` (`maxLines` 10 000), буфер записи порциями — 2.1 зелёный. Модель вкладки создаёт **одна продакшн-фабрика** `terminalModel()` в application, перенесённая из `lib/terminal_policy.dart` спайка: политика буфера обмена Q13 — `clipboardDecoder: (_, _) => null`, `allowITerm2ClipboardCapture: false`, `allowKittyClipboard: false`, пустой `onClipboardStore`, `onClipboardQuery` → `null`. Модульный тест фабрики — в 2.1: каждое поле политики выставлено, обработчики не `null`. Других мест создания `Terminal` в app нет (D3).
-- [ ] 2.3 `[desktop]` Widget-тест `packages/flutter/codelab_ui/test/organisms/codelab_terminal_pane_test.dart` (D3). Проверяет:
-  - ключи `terminal-tab-<id>`, `terminal-tab-close-<id>`, `terminal-new-tab`, `terminal-disclosure`;
-  - тег статуса из переданной подписи и тона;
+- [ ] 2.2 `[desktop]` Реализовать `lib/features/terminal/application/`: `TerminalTabsCubit`, `TerminalTabsState`, закрытую иерархию `TerminalTabStatus`, реестр вкладок с моделью `Terminal` из `package:xterm2_core/xterm2_core.dart` (`maxLines` 10 000), буфер записи порциями — 2.1 зелёный. Модель вкладки создаёт **одна продакшн-фабрика** `terminalModel({required void Function(String data) onOutput, void Function(int columns, int rows)? onResize})` в application, перенесённая из `buildPolicyTerminal` (`tool/terminal_spike/lib/terminal_policy.dart` спайка; `onOutput` несёт и ввод пользователя, и ответы эмулятора shell-у — DA, DSR, запросы цвета; `Terminal.onResize` в `xterm2_core` — `(width, height, pixelWidth, pixelHeight)`). Политика буфера обмена Q13 (поля `Terminal` в `xterm2_core` 1.0.0):
+  - `clipboardDecoder: (_, _) => null` — тип `String? Function(String selector, String data)?`, `final`;
+  - `allowITerm2ClipboardCapture: false`, `allowKittyClipboard: false` — `final`, по умолчанию `true`;
+  - пустой `onClipboardStore` — `void Function(String selector, String text)?`;
+  - `onClipboardQuery` → `null` — `FutureOr<String?> Function(String selector)?`.
+
+  Последние два — изменяемые поля: `TerminalView.initState` ставит их `??=`, поэтому они не `null`. `onOpenUrl` (OSC 1337 `OpenURL` — открытие адреса по команде процесса, без жеста) фабрика не задаёт, и `TerminalView` его не ставит: адрес открывается только через `onHyperlinkTap` и диалог (2.10). Модульный тест фабрики — в 2.1: каждое поле политики выставлено, обработчики не `null`, `onOpenUrl == null`. Других мест создания `Terminal` в app нет (D3).
+- [ ] 2.3 `[desktop]` Widget-тест `packages/flutter/codelab_ui/test/codelab_terminal_pane_test.dart` (D3; тесты кита лежат плоско в `test/`, подкаталога `organisms/` нет). Проверяет:
+  - ключи `terminal-tab-<id>`, `terminal-tab-close-<id>`, `terminal-new-tab`, `terminal-disclosure` (статические `ValueKey`-фабрики организма, как `CodeLabToolDock.paneKey`);
+  - тег статуса из переданной подписи и тона — `CodeLabBadge(label:, tone: CodeLabTone)`;
   - пустое состояние «New terminal»;
   - закрытие предупреждения вызывает колбэк;
   - содержимое из слота показывается для активной вкладки.
 
   Тест красный.
-- [ ] 2.4 `[desktop]` Реализовать организм `CodeLabTerminalPane` в `codelab_ui/lib/src/organisms/`, экспорт в `organisms.dart`, пример в `codelab_organism_previews.dart`; запись в `packages/flutter/codelab_ui/AGENTS.md` §4 (без пакета рендера терминала, без логики) — 2.3 зелёный.
-- [ ] 2.5 `[desktop]` Widget-тест `apps/codelab_desktop/test/features/terminal/presentation/terminal_pane_test.dart` с `FakeUserShellLauncher` (`integrated-terminal` «Панель Terminal в доке инструментов», «Терминал вне одобрений агента», «Восстановление дока не запускает shell», «Терминал только там, где есть PTY», «Содержимое терминала не покидает экран»; D1, D7, D12). Проверяет:
-  - `tool-toggle-terminal` открывает `tool-pane-terminal` с одной вкладкой;
-  - закрытие панели и повторное открытие сохраняют вкладку;
-  - выбор сессии другого проекта показывает её вкладки;
-  - восстановленный док (`DockLayoutStore` с `terminal`) — пустое состояние без вызова `start`;
-  - `isSupported: false` — переключателя нет;
+- [ ] 2.4 `[desktop]` Реализовать организм `CodeLabTerminalPane` в `packages/flutter/codelab_ui/lib/src/organisms/codelab_terminal_pane.dart`, экспорт в `lib/src/organisms/organisms.dart`, пример в `lib/src/organisms/codelab_organism_previews.dart` (его покрывает `test/codelab_previews_test.dart`); запись в `packages/flutter/codelab_ui/AGENTS.md` §4 (без пакета рендера терминала, без логики) — 2.3 зелёный.
+- [ ] 2.5 `[desktop]` Widget-тест `apps/codelab_desktop/test/features/terminal/presentation/terminal_pane_test.dart` с `FakeUserShellLauncher` (`integrated-terminal` «Панель Terminal в доке инструментов», «Терминал вне одобрений агента», «Восстановление дока не запускает shell», «Терминал только там, где есть PTY», «Содержимое терминала не покидает экран»; D1, D7, D12). Приложение собирается `TestAppScope` (`test/support/test_app_scope.dart`) с fake-портом через шов `createCodeLabRootScope(userShellLauncher:)` (2.6). Проверяет:
+  - `tool-toggle-terminal` (`CodeLabAppBar.toggleKey(ToolPane.terminal)`) открывает `tool-pane-terminal` (`CodeLabToolDock.paneKey`) с одной вкладкой;
+  - закрытие панели крестиком вкладки дока (`tool-tab-close-terminal`, `CodeLabToolDock.closeKey`) и повторное открытие сохраняют вкладку;
+  - выбор сессии B показывает её вкладки, возврат к A — вкладку A с живым процессом;
+  - без активной сессии (`TestAppScope` без открытой сессии) переключатель открывает панель с «Open a session to use the terminal», без `terminal-new-tab`, `start` не вызывается (Q17);
+  - выбор другого проекта и переподключение (`FakeAcpTransport` закрыт и открыт заново, затем `session/load` той же сессии) не закрывают вкладку сессии (Q18);
+  - восстановленный док (`DockLayoutStore`: `TestAppScope(preferences: {'codelab.dock.open_panes': ['terminal'], 'codelab.dock.active_pane': 'terminal'})`) — пустое состояние (подсказка Q17, пока сессии нет) без вызова `start`;
+  - `FakeUserShellLauncher(isSupported: false)` — переключателя нет;
   - предупреждение при первом открытии и его нет после закрытия;
   - маркер вывода fake-shell не появляется в `LogBuffer`;
   - буфер обмена (Q13, D3) — с настоящим `TerminalView` из `xterm2` над моделью вкладки из фабрики 2.2, фокус во вкладке: OSC 52 запись (`c` и `p`), OSC 52 запрос, OSC 1337 `CopyToClipboard`, OSC 5522 `write` в выводе fake-shell не вызывают `Clipboard.setData`/`getData` (mock `SystemChannels.platform`), а fake-shell не получает ответа. Контроль: модель без политики под тем же `TerminalView` вызывает `Clipboard.setData` — тест ловит именно подмену `??=`, а не отсутствие OSC;
@@ -176,21 +188,28 @@
 
   Тест красный.
 - [ ] 2.6 `[desktop]` Реализовать:
-  - `lib/features/terminal/presentation/` — привязку `TerminalView` (`package:xterm2/xterm.dart`) к модели вкладки, тему из `FluentTheme`, сброс буфера записи не чаще кадра частями до 4 КБ (D3); обработчики буфера обмена модели не перезаписываются виджетом;
-  - `CodeLabShell` — `ToolPane.terminal` в доступных панелях при `isSupported`, своя ветка `switch` вместо `_`;
+  - `lib/features/terminal/presentation/` — привязку `TerminalView` (`package:xterm2/ui.dart`; `Terminal` и `CellOffset` — из `package:xterm2_core/xterm2_core.dart`) к модели вкладки, тему `TerminalTheme` из `FluentTheme`, сброс буфера записи не чаще кадра частями до 4 КБ (D3); обработчики буфера обмена модели не перезаписываются виджетом;
+  - `CodeLabShell` (`lib/features/workbench/presentation/workbench_shell.dart`) — `_availablePanes` сейчас `static const [plan, protocol]`: становится списком, куда `ToolPane.terminal` входит при `isSupported`; в `switch (pane)` содержимого дока своя ветка `ToolPane.terminal =>` вместо ветки `_` (она рисует `_ProtocolPane`);
   - маппер статуса вкладки в подпись и тон;
-  - сборку `TerminalTabsCubit` в root scope и `CodeLabDependencies`, закрытие в `dispose` scope.
+  - сборку в root scope (`lib/app/app_scope.dart`) по образцу `SecretMigrationCubit`:
+    - `bind<UserShellLauncher>()` в `CodeLabPlatformModule` (`PtyUserShellLauncher()`) и шов `createCodeLabRootScope(userShellLauncher:)`, его же — в `TestAppScope`;
+    - `TerminalTabsCubit` — `.singleton()` в `CodeLabPresentationModule` с `ClientWorkspace`, `DirectoryExists` и логгером `StructuredLogLogger('codelab_desktop.terminal').bind({logCategoryKey: applicationLogCategory, logComponentKey: 'terminal'})`;
+    - объект сброса буферов на `SchedulerBinding` (D3) — там же, рядом с Cubit, с тем же сроком жизни;
+    - поле в `CodeLabDependencies`, `_CodeLabBootstrapState` и `BlocProvider.value` в `CodeLabApp` (`lib/app/codelab_app_widget.dart`);
+    - закрытие — в `CodeLabRootLifecycle.dispose()` (новый параметр `CodeLabRootLifecycleModuleContract.rootLifecycle`; `app_scope.module.cherrypick.g.dart` перегенерировать `fvm dart run build_runner build` в app, руками не править).
 
   Раздел «Терминал» в `apps/codelab_desktop/AGENTS.md`: где пакеты, владелец процессов, что не логируется, граница с `terminal/*`. 2.5 зелёный.
-- [ ] 2.7 `[desktop]` Тест `apps/codelab_desktop/test/features/terminal/presentation/terminal_write_budget_test.dart` (D3, «Запись в эмулятор порциями»; D15, «Рывки на Flood»). Сброс буфера вкладки с fake-часами и fake-моделью:
+- [ ] 2.7 `[desktop]` Тест `apps/codelab_desktop/test/features/terminal/presentation/terminal_write_budget_test.dart` (D3, «Запись в эмулятор порциями»; D15, «Рывки на Flood»). Объект сброса буферов на `SchedulerBinding` (один на root scope, D3) с fake-часами и fake-моделью; кадр — `tester.pump()`:
   - за один кадр пишется столько частей, сколько укладывается в бюджет (fake-`write` «стоит» заданное время), остаток — на следующий кадр;
   - часть не больше заданного размера;
   - за кадр — не больше одной перерисовки `TerminalView`;
-  - вкладка без отрисовки (панель закрыта или вкладка не активна) пишет в модель без перерисовки;
+  - вкладка без отрисовки (панель закрыта или вкладка не активна) пишет в модель без перерисовки — объект сброса работает и без виджета панели;
+  - при непустом буфере объект сам заказывает кадр (`scheduleFrame()` вместе с `scheduleFrameCallback`), при пустом — нет;
+  - закрытие объекта (`dispose` root scope) отменяет заказанный обратный вызов;
   - порядок и полнота данных сохраняются.
 
   Тест красный.
-- [ ] 2.8 `[desktop]` Реализовать бюджет на кадр в presentation (стартовые значения: часть 4 КБ, бюджет 8 мс; константы рядом с адаптером вида) — 2.7 зелёный.
+- [ ] 2.8 `[desktop]` Реализовать объект сброса буферов в `lib/features/terminal/presentation/` с бюджетом на кадр (стартовые значения: часть 4 КБ, бюджет 8 мс; константы рядом с ним), сборка — в 2.6 — 2.7 зелёный.
 
   Замер вручную: profile-сборка app на macOS (`fvm flutter run -d macos --profile`), «Flood» (`yes | head -n 200000`) во вкладке. Это ручной замер на машине разработчика, а не прогон `test:e2e:app:*`.
   - **Цель:** худший кадр меньше 50 мс.
@@ -199,25 +218,26 @@
   Итог (худший кадр, число кадров > 33 мс и > 100 мс, константы) записывается в D3. Если цель недостижима — Q15 пользователю до PR итерации 2.
 - [ ] 2.9 `[desktop]` Тест ссылок OSC 8 (`integrated-terminal` «Ссылки в выводе терминала»; D3, «Ссылки OSC 8»; Q14), красный:
   - `apps/codelab_desktop/test/features/terminal/application/terminal_link_decision_test.dart` — `terminalLinkDecision`: `http`/`https` в любом регистре — «можно открыть»; `file:`, `ssh:`, `javascript:`, `mailto:`, пустой и неразбираемый адрес — «нельзя»;
-  - `test/features/terminal/presentation/terminal_link_test.dart` с настоящим `TerminalView` и fake-портом открытия адреса:
+  - `test/features/terminal/presentation/terminal_link_test.dart` с настоящим `TerminalView` и fake-портом открытия адреса. Модификатор проверяет сам `TerminalView` (5.4.0): по `defaultTargetPlatform` — Meta на macOS, Control на остальных, и только тогда зовёт `onHyperlinkTap(String uri)` с адресом из `Terminal.hyperlinkAt`. Под `flutter test` платформа по умолчанию не macOS, поэтому тест Cmd+клика идёт с `debugDefaultTargetPlatformOverride = TargetPlatform.macOS` (или `variant: TargetPlatformVariant.only(TargetPlatform.macOS)`) и `tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft)` до клика:
     - Cmd+клик по ссылке `https` → `terminal-link-dialog` с полным адресом, а не текстом ссылки; «Open» вызывает порт ровно один раз, «Cancel» и Esc — ни разу;
     - Cmd+клик по `file:///etc/passwd` → диалог с сообщением и без «Open», порт не вызывается;
     - обычный клик — диалога нет;
+    - OSC 1337 `OpenURL` в выводе — порт не вызывается, диалога нет (`onOpenUrl` не задан, 2.2);
     - адрес не появляется в `LogBuffer`, событие — только со схемой.
 - [ ] 2.10 `[desktop]` Реализовать ссылки OSC 8 — 2.9 зелёный:
   - `terminalLinkDecision` в application;
-  - обработчик `onHyperlinkTap` и диалог в presentation;
-  - порт открытия адреса в `lib/core/platform/` на `url_launcher` (Q16, D11). Если `add-desktop-markdown` уже влит — переиспользовать его порт и правило сторожа. Иначе:
-    - добавить `url_launcher` точной версией;
-    - ввести порт;
-    - ввести правило «`package:url_launcher/` только в `core/platform`» с негативным тестом в `import_guard_test.dart`;
-    - в `technology-stack.md` — короткий раздел или ссылку на раздел markdown change, если он уже есть, без дублирования;
-  - события `terminal.link_opened` и `terminal.link_refused` со схемой.
+  - обработчик `TerminalView.onHyperlinkTap` (`void Function(String uri)?`) и диалог в presentation;
+  - порт открытия адреса в `lib/core/platform/` на `url_launcher` (Q16, D11). Если `add-desktop-markdown` уже влит — переиспользовать его порт и правило сторожа. Иначе (на 2026-11-11 — так: в `develop` 938a5efc `url_launcher` нет):
+    - добавить `url_launcher: 6.3.3` точной версией (последняя стабильная, 2026-10-02, publisher `flutter.dev`, BSD-3-Clause; требует Dart `^3.11.0`, Flutter `>=3.41.0`). Сухой прогон `fvm flutter pub add url_launcher:6.3.3 --dry-run` в app (2026-11-11) добавляет в lock 8 пакетов и ничего не поднимает: `url_launcher` 6.3.3, `url_launcher_android` 6.3.33, `url_launcher_ios` 6.4.2, `url_launcher_linux` 3.2.3, `url_launcher_macos` 3.2.6, `url_launcher_platform_interface` 2.3.2, `url_launcher_web` 2.4.3, `url_launcher_windows` 3.1.6 — все BSD-3-Clause (Flutter Authors). Нижнюю границу `flutter:` app (`>=3.35.0`) поднять до `>=3.41.0` по правилу D11 «Граница SDK» (решение принято 2026-11-11);
+    - ввести порт тем же именем, путём и сигнатурой, что в ветке `feature/add-desktop-markdown` (170de43f): `ExternalLinkOpener` с `Future<ExternalLinkOutcome> open(Uri uri)` (`opened | failed | rejectedScheme`) в `lib/core/platform/external_link_opener.dart`, реализация `UrlLauncherExternalLinkOpener` — `launchUrl(uri, mode: LaunchMode.externalApplication)`, исключение платформы → `failed` без текста. Так второй из двух change при слиянии оставляет один файл, а не два порта;
+    - ввести правило `PackageRule('apps/codelab_desktop/lib', forbidden: ['package:url_launcher/'], exclude: ['core/platform/'], sealExclude: false)` — то же, что у markdown change, — с негативным тестом в `import_guard_test.dart`;
+    - в `technology-stack.md` — короткий раздел или ссылку на раздел markdown change, если он уже есть, без дублирования. Markdown change пинует `^6.3.3`; при слиянии второй change приводит запись к точному пину `6.3.3` (D11);
+  - события `terminal.link_opened` и `terminal.link_refused` с полем `scheme` (D9).
 - [ ] 2.11 `[desktop]` Проверки итерации 2 (шапка) и PR итерации 2 — после 2.7–2.8 и 2.9–2.10.
 
 ## 3. Клавиши, палитра, выход из app, приёмка (итерация 3)
 
-- [ ] 3.1 `[desktop]` Тест `packages/flutter/codelab_ui/test/organisms/codelab_workbench_shortcuts_test.dart` (D6, «Сопоставление по физической клавише»; Q5, Q8). Колбэки `onToggleTerminal` (Ctrl+`) и `onNewTerminalTab` (Ctrl+Shift+`):
+- [ ] 3.1 `[desktop]` Тест `packages/flutter/codelab_ui/test/codelab_workbench_shortcuts_test.dart` (D6, «Сопоставление по физической клавише»; Q5, Q8). Колбэки `onToggleTerminal` (Ctrl+`) и `onNewTerminalTab` (Ctrl+Shift+`):
   - срабатывают с Control на любой платформе, не срабатывают с Meta;
   - срабатывают, когда `physicalKey` — `PhysicalKeyboardKey.backquote`, а `logicalKey` — `LogicalKeyboardKey.bracketRight` с символом `]` (русская раскладка, D15);
   - не срабатывают на логическую `` ` `` с другой физической клавишей;
