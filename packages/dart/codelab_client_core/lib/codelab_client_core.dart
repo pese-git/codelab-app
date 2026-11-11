@@ -27,6 +27,8 @@ export 'src/connection/secret_source.dart';
 export 'src/connection/token_rejection.dart';
 export 'src/connection/transport_resolver.dart';
 export 'src/diagnostics/diagnostics.dart';
+export 'src/files/project_files.dart';
+export 'src/files/project_files_rules.dart';
 export 'src/inspector/inspector_projection.dart';
 export 'src/queue/prompt_queue.dart';
 export 'src/restore/workspace_snapshot.dart';
