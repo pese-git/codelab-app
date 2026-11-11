@@ -1,6 +1,6 @@
 Задачи идут парами «тест → реализация» (TDD, `packages/dart/codelab_agent_core/AGENTS.md` §2): сначала красный тест, потом код. В скобках — требование спецификации этого change и сценарий, либо решение design.md. Красный тест коммитится отдельно до кода, но коммит делается только по просьбе пользователя.
 
-Решения пользователя 2026-11-11 (Q1–Q14) — в design.md.
+Решения пользователя 2026-11-11 (Q1–Q16) — в design.md.
 
 Метки исполнителей:
 - `[client]` — `packages/dart/codelab_client_core`, `packages/dart/codelab_client_io`;
@@ -28,14 +28,14 @@
 
 ## 1. Итерация 1 — контракт kit и адаптер
 
-- [ ] 1.1 `[client]` Красный: `packages/dart/codelab_client_core/test/files/project_files_rules_test.dart`. Покрывает требование `acp-client-kit` «Чтение папки проекта в границах рабочей папки», сценарии «Выход из корня через `..`», «Двоичный файл по содержимому, а не по расширению», «Имя файла с секретами», «Место вызова через другой путь к той же папке». Таблицы для:
+- [x] 1.1 `[client]` Красный: `packages/dart/codelab_client_core/test/files/project_files_rules_test.dart`. Покрывает требование `acp-client-kit` «Чтение папки проекта в границах рабочей папки», сценарии «Выход из корня через `..`», «Двоичный файл по содержимому, а не по расширению», «Имя файла с секретами», «Место вызова через другой путь к той же папке». Таблицы для:
   - `normalizeRelativePath`: `\0`, абсолютный путь, `..`, `./`, `a//b`, пустой путь = корень;
   - `classifyPreview`: граница 8 КиБ, `maxBytes`, неверный UTF-8;
   - `isMaybeSecretFileName`;
   - `relativeToRoot`;
   - сортировки записей.
-- [ ] 1.2 `[client]` Реализация `lib/src/files/` (`project_files.dart`, `project_files_rules.dart`) и экспорт из бареля. Без `dart:io` и новых зависимостей (D1, D2, D4, D5); doc-комментарии по AGENTS.md §15.
-- [ ] 1.3 `[client]` Красный: `packages/dart/codelab_client_io/test/files/io_project_files_test.dart` на временной папке. Покрывает требование `acp-client-kit` «IO-адаптеры клиента», сценарии «Символическая ссылка наружу», «Большой файл читается не целиком», и `workspace-file-browser` «Граница рабочей папки браузера». Проверяет:
+- [x] 1.2 `[client]` Реализация `lib/src/files/` (`project_files.dart`, `project_files_rules.dart`) и экспорт из бареля; строка о `lib/src/files/` (`ProjectFiles` и правила) в `packages/dart/codelab_client_core/AGENTS.md` §1. Без `dart:io` и новых зависимостей (D1, D2, D4, D5); doc-комментарии по AGENTS.md §15.
+- [x] 1.3 `[client]` Красный: `packages/dart/codelab_client_io/test/files/io_project_files_test.dart` на временной папке. Покрывает требование `acp-client-kit` «IO-адаптеры клиента», сценарии «Символическая ссылка наружу», «Большой файл читается не целиком», и `workspace-file-browser` «Граница рабочей папки браузера». Проверяет:
   - `canonicalRoot` через ссылку;
   - ссылку внутри корня (`docs` → `doc`);
   - ссылку наружу (`symlinkOutside`, `read` → `outsideRoot`);
@@ -45,7 +45,24 @@
   - `.git` нет в перечислении;
   - 5001 запись → 5000 и `omitted: 1`;
   - двоичный и большой файл.
-- [ ] 1.4 `[client]` Реализация `lib/src/files/io_project_files.dart` (D3): проверка realpath до открытия, `path` для склейки. Экспорт из бареля `codelab_client_io`; строка `IoProjectFiles` в `packages/dart/codelab_client_io/AGENTS.md` §1.
+- [x] 1.4 `[client]` Реализация `lib/src/files/io_project_files.dart` (D3): проверка realpath до открытия, `path` для склейки. Экспорт из бареля `codelab_client_io`; строка `IoProjectFiles` в `packages/dart/codelab_client_io/AGENTS.md` §1.
+- [x] 1.5 `[client]` По ревью итерации 1 — каждая правка парой «красный тест → код»:
+  - **Q15:** `isMaybeSecretFileName` без учёта регистра (сценарий `acp-client-kit` «Имя секрета без учёта регистра»);
+  - **Q16:** несуществующая цель проверяется по realpath ближайшего существующего предка (сценарий «Несуществующий файл за ссылкой наружу» → `outsideRoot`; внутри корня — `notFound`);
+  - **шов чтения** `IoProjectFiles(openRange:)`: адаптер просит ровно `[0, maxBytes + 1)`, `openFileRange` уважает `end` (сценарий «Большой файл читается не целиком»);
+  - **лексическая проверка** `resolveLexicallyInsideRoot` до обращения к диску за целью; на Windows сегмент с `\` или `:` → `invalidPath` (D3, п. 1; тест через `p.Context(style: windows)`, без приёмки на Windows);
+  - **тесты границы:** цепочка `a -> b -> outside`, ссылка `../outside`, цикл ссылок (`read` → `unreadable`, в списке `other`), `\0` на уровне адаптера, FIFO (`list` → `other`, `read` → `unreadable` без зависания);
+  - **`_kindOf`:** не обычный файл (FIFO, сокет, устройство) → `other` (сценарий «FIFO в перечислении»);
+  - **`relativeToRoot`:** пустая база пропускается, предусловие в doc;
+  - **симметрия ошибок:** `list` файла и `read` папки → `unreadable` (сценарий «Перечисление файла и чтение папки»; D3, п. 4);
+  - **`\0` в корне:** `invalidPath` до обращения к диску (`dart:io` обрезает путь по `\0`; D3, п. 4);
+  - doc-комментарии полей моделей, строка `lib/src/files/` в `packages/dart/codelab_client_core/AGENTS.md` §1.
+  - **второй круг ревью:**
+    - Q16 по любой ошибке разрешения (ENOTDIR, EACCES, ELOOP, нет файла), не только по отсутствию цели;
+    - путь проходится от корня без перехода по ссылкам; битая ссылка наружу и ссылка на существующую цель вне корня дают одинаковый `outsideRoot` (сценарии «Битая и рабочая ссылки наружу неразличимы», «Ошибка разрешения за ссылкой наружу», «Ошибка разрешения внутри корня»);
+    - лексическая проверка и склейка объединены в адаптере (`resolveLexicallyInsideRoot`), Windows-правило — только там, kit платформенно-независим (сценарий «Windows-сегмент отклоняется адаптером»; D3, п. 1);
+    - страховочная ветка `ArgumentError` удалена, `\0` → `invalidPath` до обращения к диску (D3, п. 4).
+  - **третий круг ревью:** Q16 для цепочки ссылок с битым концом (`a -> b -> /outside/missing` и `a -> b -> /outside/existing` → одинаково `outsideRoot`, лимит 40 переходов); восстановление прав в EACCES-тесте.
 
 ## 2. Итерация 2 — панель Files v1
 
