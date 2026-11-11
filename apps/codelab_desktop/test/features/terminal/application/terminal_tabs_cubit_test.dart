@@ -31,8 +31,6 @@
 // Время — fake: `testWidgets` и `tester.pump(Duration)`; `fake_async` не
 // подключается. Процесс и рабочее пространство — двойники
 // (`fake_user_shell_launcher.dart`, `fake_client_workspace.dart`).
-import 'dart:async';
-
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' show SessionId;
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/core/platform/user_shell_launcher.dart';
@@ -40,7 +38,6 @@ import 'package:codelab_desktop/features/terminal/application/terminal_model.dar
 import 'package:codelab_desktop/features/terminal/application/terminal_owner.dart';
 import 'package:codelab_desktop/features/terminal/application/terminal_tab.dart';
 import 'package:codelab_desktop/features/terminal/application/terminal_tabs_cubit.dart';
-import 'package:codelab_desktop/features/terminal/application/terminal_tabs_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2_core/xterm2_core.dart';
 
@@ -659,6 +656,7 @@ void main() {
 
       expect(cubit.state, before);
       expect(cubit.hasPendingOutput, isFalse);
+      await tester.pump(const Duration(seconds: 2));
     });
 
     testWidgets('closeAll(): hangUp всем, через 3 с kill, затем новые '
@@ -745,6 +743,8 @@ void main() {
 
       expect(cubit.hasPendingOutput, isFalse);
       expect(cubit.flushOutput(), 0);
+      // Дать истечь 2 с до kill: иначе в конце теста остаётся Timer.
+      await tester.pump(const Duration(seconds: 2));
       expect(terminals.single.written, hasLength(1));
     });
 

@@ -122,8 +122,11 @@ void main() {
     );
 
     await tester.tap(find.byKey(CodeLabTerminalPane.tabKey('b')));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byKey(CodeLabTerminalPane.closeKey('b')));
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byKey(CodeLabTerminalPane.newTabKey));
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(selected, ['b']);
     expect(closed, ['b']);
@@ -150,6 +153,7 @@ void main() {
     expect(find.text('New terminal'), findsOneWidget);
 
     await tester.tap(find.text('New terminal'));
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(added, 1);
   });
@@ -185,6 +189,7 @@ void main() {
         matching: find.byType(IconButton),
       ),
     );
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(closed, 1);
   });
