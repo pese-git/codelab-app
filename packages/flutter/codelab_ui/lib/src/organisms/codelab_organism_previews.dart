@@ -15,6 +15,7 @@ import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
 import 'codelab_settings_navigation.dart';
 import 'codelab_status_table.dart';
+import 'codelab_terminal_pane.dart';
 import 'codelab_tool_dock.dart';
 import 'codelab_transcript_panel.dart';
 import 'codelab_transcript_row.dart';
@@ -696,6 +697,40 @@ Widget codelabSettingsNavigationPreview() {
       child: const Padding(
         padding: EdgeInsets.all(24),
         child: CodeLabText('Page body', role: CodeLabTextRole.title),
+      ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Terminal pane',
+  group: codelabOrganismPreviewGroup,
+  size: Size(520, 260),
+)
+Widget codelabTerminalPanePreview() {
+  return _AcpOrganismPreviewSurface(
+    child: CodeLabTerminalPane(
+      tabs: const [
+        CodeLabTerminalTab(
+          id: 'a',
+          title: 'zsh',
+          statusLabel: 'Running',
+          statusTone: CodeLabTone.success,
+        ),
+        CodeLabTerminalTab(
+          id: 'b',
+          title: 'build',
+          statusLabel: 'Exited 1',
+          statusTone: CodeLabTone.warning,
+        ),
+      ],
+      activeTabId: 'a',
+      hasSession: true,
+      disclosure: 'Commands run with your permissions.',
+      onDisclosureClosed: codelabPreviewCancel,
+      content: const ColoredBox(
+        color: Color(0xFF1E1E1E),
+        child: SizedBox.expand(),
       ),
     ),
   );
