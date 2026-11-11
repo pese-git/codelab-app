@@ -15,6 +15,7 @@ import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_io/codelab_client_io.dart'
     show IoWorkingDirectoryProvider;
 import 'package:codelab_desktop/core/platform/external_link_opener.dart';
+import 'package:codelab_desktop/core/platform/limited_network_image.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/core/platform/recent_projects_store.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -218,6 +219,70 @@ void main() {
       cubit.dismissLinkNote();
 
       expect(cubit.state.linkNote, isNull);
+    });
+  });
+
+  group('reportImageFailure', () {
+    Map<String, Object?> imageEvent() =>
+        events.entries.singleWhere((e) => e['event'] == 'image.load');
+
+    test('logs host and the rejection code only, without the address', () {
+      cubit.reportImageFailure(
+        'agent-2#image:https://x.example/p/y.png?d=secret',
+        const ImageRejectedException(ImageRejection.tooLarge),
+      );
+
+      final event = imageEvent();
+      expect(event['host'], 'x.example');
+      expect(event['reason'], 'too_large');
+      expect(event.keys.toSet(), {'event', 'level', 'host', 'reason'});
+      expect('$event', isNot(contains('secret')));
+      expect('$event', isNot(contains('y.png')));
+    });
+
+    test('every rejection maps to its code', () {
+      for (final rejection in ImageRejection.values) {
+        events.entries.clear();
+        cubit.reportImageFailure(
+          'agent-2#image:https://x.example/y.png',
+          ImageRejectedException(rejection),
+        );
+        expect(imageEvent()['reason'], rejection.code, reason: '$rejection');
+      }
+    });
+
+    test('a foreign error is "decode" and its text never reaches the log', () {
+      cubit.reportImageFailure(
+        'agent-2#image:https://x.example/y.png',
+        StateError('https://x.example/y.png?d=secret'),
+      );
+
+      final event = imageEvent();
+      expect(event['reason'], 'decode');
+      expect('$event', isNot(contains('secret')));
+    });
+
+    test('a very long host is cut to 255 characters', () {
+      cubit.reportImageFailure(
+        'agent-2#image:https://${'a' * 300}.example/y.png',
+        const ImageRejectedException(ImageRejection.timeout),
+      );
+
+      expect((imageEvent()['host'] as String).length, lessThanOrEqualTo(255));
+    });
+
+    test('a key that is not an https image is ignored', () {
+      cubit
+        ..reportImageFailure(
+          'agent-2#image:http://x.example/y.png',
+          const ImageRejectedException(ImageRejection.timeout),
+        )
+        ..reportImageFailure(
+          'not-an-image-key',
+          const ImageRejectedException(ImageRejection.timeout),
+        );
+
+      expect(events.entries.where((e) => e['event'] == 'image.load'), isEmpty);
     });
   });
 

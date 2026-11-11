@@ -1,0 +1,19 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "reply": [
+          {
+            "text": "Here is the report:\n\n# Release notes\n\n- first item\n- second item\n\n| Name | Value |\n|---|---|\n| alpha | 1 |\n\n```dart\nvoid main() {\n  print('hi');\n}\n```\n\n![](https://x.example/y.png)"
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  }
+}
