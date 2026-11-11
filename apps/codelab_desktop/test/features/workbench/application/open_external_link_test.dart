@@ -9,7 +9,6 @@
 // `ExternalLinkOpener` и параметры `externalLinkOpener`/`eventLogger` фасада
 // ещё не существуют.
 
-import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
@@ -42,13 +41,13 @@ final class _MemoryRecentProjects implements RecentProjectsStore {
 
 /// Порт платформы с записью вызовов и заданным исходом.
 final class _FakeOpener implements ExternalLinkOpener {
-  _FakeOpener([this.outcome = ExternalLinkOutcome.opened]);
-
-  ExternalLinkOutcome outcome;
+  ExternalLinkOutcome outcome = ExternalLinkOutcome.opened;
+  bool throwOnOpen = false;
   final opened = <Uri>[];
 
   @override
   Future<ExternalLinkOutcome> open(Uri uri) async {
+    if (throwOnOpen) throw StateError('platform exploded');
     opened.add(uri);
     return outcome;
   }
@@ -115,6 +114,46 @@ void main() {
         expect(cubit.state.linkNote, isNull);
       },
     );
+
+    test('mailto reaches the port without cc, bcc, body and attach', () async {
+      await cubit.openExternalLink(
+        Uri.parse(
+          'mailto:a@b.com?cc=x&bcc=y&body=z&attach=/etc/passwd&subject=hi',
+        ),
+      );
+
+      expect(opener.opened.single.toString(), 'mailto:a@b.com?subject=hi');
+    });
+
+    test('a very long host is cut to 255 characters in the log', () async {
+      final host = '${'a' * 300}.example';
+      await cubit.openExternalLink(Uri.parse('https://$host/x'));
+
+      expect((linkEvent()['host'] as String).length, lessThanOrEqualTo(255));
+    });
+
+    test('a broken mailto subject still opens, without the subject', () async {
+      await cubit.openExternalLink(Uri.parse('mailto:a@b?subject=%E0%A4'));
+
+      expect(opener.opened.single.toString(), 'mailto:a@b');
+      expect(linkEvent()['outcome'], 'opened');
+    });
+
+    test('a port that throws is "failed": event, note, no exception', () async {
+      opener.throwOnOpen = true;
+
+      await cubit.openExternalLink(Uri.parse('https://example.com/a'));
+
+      expect(linkEvent()['outcome'], 'failed');
+      expect(cubit.state.linkNote, "Couldn't open the link.");
+    });
+
+    test('userinfo links never reach the port', () async {
+      await cubit.openExternalLink(Uri.parse('https://good.com@evil.com'));
+
+      expect(opener.opened, isEmpty);
+      expect(linkEvent()['outcome'], 'rejectedScheme');
+    });
 
     test('mailto is logged without the address', () async {
       await cubit.openExternalLink(
