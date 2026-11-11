@@ -16,6 +16,14 @@ const _disclosureText =
     "Commands here run as you, outside the agent's approval flow. "
     'Output is shown as is and is not redacted for secrets.';
 
+/// Внутренний отступ области терминала.
+///
+/// Почему: без него текст прижат к краям панели (ручная проверка итерации 2).
+/// Для чего: `TerminalView` рисует фон темы и под отступом, поэтому цвет
+/// отступа совпадает с цветом терминала. Как использовать: передаётся в
+/// `TerminalView.padding`.
+const terminalViewPadding = EdgeInsets.symmetric(horizontal: 8, vertical: 4);
+
 /// Содержимое панели Terminal дока: вкладки активной сессии и эмулятор.
 ///
 /// Почему: панель только отображает состояние `TerminalTabsCubit` и отдаёт
@@ -55,6 +63,7 @@ class WorkbenchTerminalPane extends StatelessWidget {
                   key: ValueKey('terminal-view-$activeId'),
                   theme: terminalThemeOf(FluentTheme.of(context)),
                   autofocus: true,
+                  padding: terminalViewPadding,
                 ),
         );
       },
