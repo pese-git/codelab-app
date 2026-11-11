@@ -413,23 +413,19 @@ builder пакета номера не получает (D4). Ответ с вл
 строке и адресу на время запуска.
 
 **A4. Подсветка кода.** `CodeLabCodeHighlighter` на движке `val_highlight` (чистый Dart, приходит
-с `gpt_markdown`; change `add-desktop-markdown`, D4) возвращает токены как `(start, end, CodeLabTokenClass)`
-по строкам. Эти данные состоят из простых чисел и enum и передаются между isolate без
-копирования объектов Flutter.
+с `gpt_markdown`; change `add-desktop-markdown`, D4). Токены — плоский список `(start, end, CodeLabTokenClass)` со смещениями по всему коду, а не по строкам. В фоновый isolate (`Isolate.spawn` с `kill` по таймауту 5 с) уходит только `(язык, код)`, обратно — тот же простой список; объектов Flutter между isolate нет.
 
 | Размер кода | Режим |
 |---|---|
-| ≤ 300 строк и ≤ 16 КиБ | синхронно в кадре построения (типичная стоимость заметно ниже бюджета кадра) |
-| ≤ 5000 строк и ≤ 256 КиБ | `compute`; до результата — моноширинный текст без цвета, затем одна перерисовка |
+| ≤ 300 строк, ≤ 16 Ki code units и каждая строка ≤ 150 code units | синхронно в кадре построения (типичная стоимость заметно ниже бюджета кадра) |
+| ≤ 5000 строк, ≤ 256 Ki code units и каждая строка ≤ 1000 code units | фоновый isolate (`Isolate.spawn` с `kill` по таймауту 5 с); до результата — моноширинный текст без цвета, затем одна перерисовка |
 | больше | без подсветки; для diff (A5) — свёрнуто, полный просмотр в диалоге с виртуализированным списком строк; блок кода в ответе показывается целиком без подсветки (сворачивание и диалог не входят в change `add-desktop-markdown`) |
 
-Результат кешируется в LRU на 256 записей по ключу `(language, hash(code))`. Повторное
-построение строки, например после прокрутки, не запускает токенизацию снова. Язык берётся из
-info-строки блока. Неизвестный язык или его отсутствие → без подсветки, автоопределение не
-выполняется (оно дорогое и часто ошибается; автоопределение `val_highlight` не используется).
-Цвета токенов задаёт `CodeLabCodeTheme` — расширение `FluentThemeData.extensions` со своими
-палитрами светлой и тёмной темы из ролей `FluentTheme`, контраст ≥ 4,5:1 (темы `val_highlight`
-не используются, решение Q4). Палитра выбирается по `FluentTheme.brightness`. Шрифт: системный
+Ограничения после ревью итерации 3 (change `add-desktop-markdown`, D4): (1) порог и по самой длинной строке: синхронно — только если каждая строка ≤ 150 code units, в фоне — ≤ 1000, длиннее — без подсветки; причина — `val_highlight` на `RegExp` с возвратами квадратичен по длине строки (swift `'#' * 16000` — 4,6 с в UI isolate, csharp `'$' * n` так же; обещание линейности в README пакета не подтверждается); пороги сняты по замеру AOT второго круга ревью безопасности: строка 300 символов давала до 73 мс синхронно (swift `#`), 2000 — до 7,8 с в фоне, то есть за таймаутом; пороги 16 и 256 КиБ — это code units (`*MaxChars`); (2) фоновая токенизация идёт в фоновый isolate (`Isolate.spawn` с `kill` по таймауту 5 с), а не в `compute`: `compute` нельзя прервать, и зависший на возвратах `RegExp` изолят жил бы до конца процесса; задачи в полёте дедуплицируются по ключу `(язык, код)`; по таймауту код остаётся без подсветки, отчёт содержит язык и `timeout` (`AGENTS.md` §12: операция, переживающая владельца, ограничена); исходы «таймаут» и «сбой» запоминаются негативной записью кеша по `(язык, код)` как «без подсветки» — повтор не запускает изолят и не шлёт новый отчёт; (3) границы токенов, попавшие внутрь суррогатной пары, сдвигаются на границу пары — грамматики работают без флага unicode, и иначе отрисовка падает с `ArgumentError: string is not well-formed UTF-16`; (4) LRU ограничен и числом записей (256), и суммарным бюджетом около 8 Mi единиц: code unit кода — 1 единица, токен — 20 (оценка памяти ~40 байт на токен против 1–2 байт на code unit); (5) подпись языка проходит `escapeForDisplay` (D5) и обрезается до 32 символов с многоточием.
+
+Кеш — LRU на 256 записей у каждого экземпляра `CodeLabCodeHighlighter` и общий экземпляр `CodeLabCodeHighlighter.shared` для ленты; ключ — `(language, hash(code))`, а запись хранит и сам код и сверяет его при попадании: коллизия хеша не подставит чужие токены. Повторное построение строки, например после прокрутки, не запускает токенизацию снова. Язык берётся из info-строки блока. Языки — 55 грамматик `LanguageRegistry(allLanguages)` `val_highlight` с их псевдонимами, без учёта регистра; `plaintext` и `generic` (а значит и `text`) не подсвечиваются; неизвестный язык или его отсутствие — без подсветки; автоопределения нет (у `val_highlight` оно есть — не используется). Классы — по корню области `val_highlight`: `comment` → comment; `string`, `regexp` → string; `number` → number; `keyword`, `literal` → keyword; `type` → type; `function` → function; `variable`, `property` → variable; `operator` → operator; `attribute`, `tag`, `meta` → attribute; прочее — обычный текст. Сбой движка — пустой список токенов (код без цвета) и `FlutterError.reportError` только с языком и типом исключения, без текста кода (`AGENTS.md` §12, §16).
+
+Палитра: `CodeLabCodeTheme` — `ThemeExtension` в `FluentThemeData.extensions`; палитра, зарегистрированная приложением, побеждает встроенную. Фон блока — `solidBackgroundFillColorBase` с наложенным `cardBackgroundFillColorSecondary`: непрозрачный, потому что полупрозрачный фон scaffold Fluent в тёмной теме давал белый фон под кодом. Цвета классов — из ролей и акцентов Fluent (`lighter` в тёмной теме, `darker` в светлой); если контраст на фоне ниже 4,7, лёгкость цвета сдвигается шагом 0,025 до контраста ≥ 4,7, так что требование 4,5:1 (DSK-19) выполняется по построению (решение Q4). Темы `val_highlight` не используются. Палитра выбирается по `FluentTheme.brightness`. Шрифт: системный
 моноширинный список (`SF Mono`, `Menlo`, `Consolas`, `monospace`); шрифты JetBrains Mono
 (`gpt_markdown`) и Latin Modern (`val_latex_flutter`) попадают в сборку с пакетами и указаны в
 `THIRD_PARTY_NOTICES.md`.
@@ -450,7 +446,7 @@ info-строки блока. Неизвестный язык или его от
    сводка, путь и первые 20 строк с кнопкой «Показать полностью» (`diff-open-full-<id>`).
    Кнопка открывает `AcpDiffViewerDialog` с виртуализированным `ListView.builder` по строкам.
 4. Подсветка внутри diff — по расширению пути (тот же `CodeLabCodeHighlighter`), и только когда весь
-   diff попадает в лимит `compute` из A4. Цвет фона строки — `CodeLabTone.success` и `CodeLabTone.danger`
+   diff попадает в лимит фоновой токенизации из A4. Цвет фона строки — `CodeLabTone.success` и `CodeLabTone.danger`
    с прозрачностью из темы. Знаки `+` и `−` в поле номеров строк показываются всегда, поэтому
    цвет не единственный носитель смысла.
 5. `change == created` показывается как «новый файл, N строк» (`N = added`) и далее теми же
@@ -917,8 +913,10 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
    элемента kit (`identical`). Работа на один chunk ДОЛЖНА быть O(размер хвоста). На 2026-11-11
    не реализовано: маппер строит строки заново, а стоимость ответа держит кеш сегментов
    `gpt_markdown` (DSK-3); change `add-desktop-markdown` DSK-4 не вводит.
-5. **DSK-5.** Токенизация кода больше синхронного лимита (300 строк или 16 КиБ) НЕ ДОЛЖНА
-   выполняться в UI isolate. Код больше 5000 строк или 256 КиБ НЕ ДОЛЖЕН подсвечиваться inline.
+5. **DSK-5.** Токенизация кода больше синхронного лимита (300 строк, 16 Ki code units или строка
+   длиннее 150 code units) НЕ ДОЛЖНА выполняться в UI isolate. Код больше 5000 строк, 256 Ki code
+   units или со строкой длиннее 1000 code units НЕ ДОЛЖЕН подсвечиваться inline. Фоновая
+   токенизация ДОЛЖНА иметь таймаут (5 с, изолят убивается; change `add-desktop-markdown`, D4).
 6. **DSK-6.** Незакрытый блок кода в хвосте ДОЛЖЕН рисоваться моноширинным текстом без
    подсветки. Подсветка запускается только для закрытого блока.
 7. **DSK-7.** Ссылка ДОЛЖНА открываться только по клику пользователя и только для `http`, `https`,
@@ -1033,7 +1031,7 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
 | Пакет | Куда | Зачем | Почему не существующее |
 |---|---|---|---|
 | `gpt_markdown` (≥ 1.4.1 < 1.5.0) | `codelab_ui` (`lib/src/rendering/`) | разбор и отрисовка markdown ответа со стримингом (кеш сегментов), таблицы, задачи, формулы; решение пользователя 2026-11-11, change `add-desktop-markdown` | своего разбора в проекте нет; свой разбор и отрисовка (прежняя редакция) отклонены после прототипа; `flutter_markdown` прекращён |
-| `val_highlight` | `codelab_ui` (`lib/src/rendering/`) | токенизация кода, чистый Dart, работает в `compute` | приходит с `gpt_markdown`; `re_highlight` (прежний выбор) стал бы вторым движком |
+| `val_highlight` | `codelab_ui` (`lib/src/rendering/`) | токенизация кода, чистый Dart, работает в фоновый isolate (`Isolate.spawn` с `kill` по таймауту 5 с) | приходит с `gpt_markdown`; `re_highlight` (прежний выбор) стал бы вторым движком |
 | `desktop_drop` | app (presentation) | приём файлов, перетаскиваемых из ОС, на macOS, Windows, Linux | Flutter не даёт drop внешних файлов на десктопе; `file_selector` покрывает только диалог |
 | `pasteboard` | app (`core/platform`) | изображения и файлы из системного буфера | `Clipboard` Flutter читает только текст |
 | `url_launcher` | app (`core/platform`) | открытие http/https/mailto по клику; принят change `add-desktop-markdown` | вызов `open`/`xdg-open` через процесс разносит проверки платформ по коду (AGENTS.md §11) |
@@ -1055,13 +1053,15 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 | Файл: тест | Цель |
 |---|---|
 | `acp_markdown_test.dart: renders headings lists tables quotes and inline code` | D-06 |
-| `acp_markdown_test.dart: code block shows language and copy puts raw code into clipboard` | D-06 |
-| `acp_markdown_test.dart: streaming 200 chunks builds each closed block once` (`codeBlockBuilds`, `headingBuilds`; ответы с тремя блоками кода и 48 КБ) | D-06, DSK-3 |
-| `acp_markdown_test.dart: unclosed fence in tail renders plain and highlights after close` | DSK-6 |
-| `acp_markdown_test.dart: large code block is highlighted off the UI isolate` (`highlightSyncRuns == 0`) | DSK-5 |
-| `acp_markdown_test.dart: link tap calls onOpenLink and non-http schemes are not tappable` | DSK-7 |
-| `acp_markdown_test.dart: markdown image is not fetched before user action` | DSK-7, VIEW-12 |
-| `codelab_ui/test/rendering/code_highlighter_test.dart`: пороги, LRU, неизвестный язык, контраст палитры | D-06, DSK-5, DSK-19 |
+| `acp_markdown_test.dart: code block shows language and copy puts raw code into clipboard`; `two identical code blocks get different copy keys …`; `a code block inside a quote gets its own unique copy key`; `a rebuilt code block keeps its copy key` | D-06 |
+| `acp_markdown_test.dart: streaming 200 chunks builds each closed block once` (и вариант на 48 КБ; `codeBlockBuilds`, `headingBuilds`); `rebuilding the transcript with the same theme does not …` | D-06, DSK-3 |
+| `acp_markdown_test.dart: unclosed fence in tail renders plain and highlights after close`; `unclosed fence is plain and is highlighted once after close` | DSK-6 |
+| `acp_markdown_test.dart: small closed block is highlighted in the first build`; `large code block is highlighted off the UI isolate` (`highlightSyncRuns == 0`); `a background result after unmount is not applied`; `a background result for an old code is not applied …`; `code over 5000 lines is shown whole and never highlighted`; `unknown language and no language stay plain`; `the dark theme uses the dark palette` | D-06, DSK-5, DSK-19 |
+| `acp_markdown_test.dart: html is shown as text and makes no network requests`; `dollar is not a formula and backslash parentheses are …`; `thoughts are shown without markdown …` | D-06 |
+| `acp_markdown_test.dart: right click offers Copy and Select all in Fluent`; `Cmd or Ctrl+C copies the selection without the language label`; `the context menu stays inside the window near the bottom right corner`; `the answer is not a Tab stop` | D-06 (D8) |
+| `acp_markdown_test.dart: deeply nested quotes and lists fall back to plain text` и остальные тесты предела глубины (`nesting at the threshold …`, `nesting guard …`, `indentation after quote and list markers counts as nesting`, `an ordinary technical answer stays markdown`) | D14 |
+| `acp_markdown_test.dart: links are inert plain text until the app enables them`; `escapeForDisplay shows control and direction characters as escapes`; `image placeholder escapes control and direction characters`; `markdown images are placeholders and make no network …` (итерация 4 добавит `link tap calls onOpenLink and non-http schemes are not tappable` и загрузку по клику) | DSK-7, VIEW-12 |
+| `rendering/code_highlighter_test.dart`: `up to 300 lines and 16 KiB is tokenized synchronously`, `over 300 lines or 16 KiB goes to the background`, `up to 5000 lines and 256 KiB still goes to the background`, `over 5000 lines or 256 KiB is not highlighted at all`, `known languages and aliases are supported, case-insensitively`, `unknown, empty and text languages give no tokens …`, `classifies Dart tokens by offsets into the code`, `the background run returns the same tokens as the sync run`, `a repeated request does not tokenize again`, `the 257th distinct block evicts the least recently used one`, `gives no tokens and reports without the code text`, `every token class has contrast of at least 4.5:1 …`, `the dark palette differs from the light one`, `a palette registered in FluentThemeData.extensions wins` | D-06, DSK-5, DSK-19 |
 | `acp_diff_view_test.dart: unified below 960 px and side-by-side at 960 px or wider` | D-07, DSK-8 |
 | `acp_diff_view_test.dart: diff over 300 lines is collapsed and opens full viewer` | D-07, DSK-8 |
 | `acp_diff_view_test.dart: summary normal verbose view modes show line, preview, full` | D-07 |
