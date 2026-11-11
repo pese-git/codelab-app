@@ -9,6 +9,7 @@
 /// здесь запрещён (реализации на Flutter-плагинах остаются в app).
 library;
 
+export 'src/files/io_project_files.dart' show IoProjectFiles;
 export 'src/platform/codelab_home.dart';
 export 'src/platform/terminal_process_runner.dart';
 export 'src/platform/text_file_io.dart';
