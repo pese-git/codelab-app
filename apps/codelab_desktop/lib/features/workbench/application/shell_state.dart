@@ -31,6 +31,8 @@ final class CodeLabShellState {
     required this.activeSessionId,
     required this.transcriptRows,
     this.transcriptExpansion = const {},
+    this.shownImages = const {},
+    this.linkNote,
     this.turnState,
     required this.inspectorEntries,
     required this.viewMode,
@@ -86,6 +88,15 @@ final class CodeLabShellState {
 
   /// Ручное раскрытие строк ленты активной сессии — `TranscriptViewCubit`.
   final Map<String, bool> transcriptExpansion;
+
+  /// Ключи `<rowId>#image:<url>` изображений, показанных пользователем в
+  /// активной сессии: снимок `TranscriptViewCubit`, не отдельное хранилище
+  /// (change `add-desktop-markdown`, D6).
+  final Set<String> shownImages;
+
+  /// Заметка для InfoBar над лентой после неудачного открытия ссылки (D5);
+  /// `null` — заметки нет.
+  final String? linkNote;
 
   /// Чип состояния хода в шапке; `null` — сессия свободна.
   final CodeLabTurnState? turnState;
@@ -162,6 +173,8 @@ final class CodeLabShellState {
     String? activeSessionId,
     List<CodeLabTranscriptRow>? transcriptRows,
     Map<String, bool>? transcriptExpansion,
+    Set<String>? shownImages,
+    Object? linkNote = _unset,
     Object? turnState = _unset,
     List<CodeLabInspectorEntry>? inspectorEntries,
     CodeLabViewMode? viewMode,
@@ -207,6 +220,10 @@ final class CodeLabShellState {
       activeSessionId: activeSessionId ?? this.activeSessionId,
       transcriptRows: transcriptRows ?? this.transcriptRows,
       transcriptExpansion: transcriptExpansion ?? this.transcriptExpansion,
+      shownImages: shownImages ?? this.shownImages,
+      linkNote: identical(linkNote, _unset)
+          ? this.linkNote
+          : linkNote as String?,
       // `null` здесь — «сессия свободна», а не «не менять».
       turnState: identical(turnState, _unset)
           ? this.turnState

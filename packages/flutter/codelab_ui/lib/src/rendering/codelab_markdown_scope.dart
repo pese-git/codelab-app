@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show setEquals;
 
 /// Политика ссылок и изображений, которую app передаёт ленте.
 ///
@@ -9,6 +10,11 @@ import 'package:fluent_ui/fluent_ui.dart';
 /// Для чего: `InheritedWidget` над лентой; builder'ы конфигурации читают
 /// политику из `context`, поэтому смена политики не создаёт новую
 /// `CodeLabMarkdownConfig` и не перестраивает закрытые блоки (D3).
+///
+/// Устойчивость: app передаёт функции верхнего уровня и tear-off методов
+/// Cubit, а `shownImages` сравнивается по содержимому ([setEquals]): набор
+/// пересоздаётся при каждом обновлении ленты, и сравнение по ссылке
+/// перестраивало бы заглушки зря (DSK-3, D3).
 ///
 /// Как использовать: app оборачивает ленту в `CodeLabMarkdownScope(...)`
 /// (итерация 4). Без scope (превью, тесты кита) ссылки и изображения
@@ -53,6 +59,6 @@ class CodeLabMarkdownScope extends InheritedWidget {
       onOpenLink != oldWidget.onOpenLink ||
       canLoadImage != oldWidget.canLoadImage ||
       imageFor != oldWidget.imageFor ||
-      shownImages != oldWidget.shownImages ||
+      !setEquals(shownImages, oldWidget.shownImages) ||
       onShowImage != oldWidget.onShowImage;
 }

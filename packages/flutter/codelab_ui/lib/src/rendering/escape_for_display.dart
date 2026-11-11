@@ -34,3 +34,19 @@ bool _isInvisibleOrControl(int unit) =>
     (unit >= 0x202A && unit <= 0x202E) ||
     (unit >= 0x2066 && unit <= 0x2069) ||
     unit == 0xFEFF;
+
+/// Наибольшая длина адреса в подсказке и заглушке (ревью итерации 4): адрес из
+/// ответа — недоверенный текст и может быть мегабайтным.
+const int kMaxDisplayedAddress = 2048;
+
+/// [escapeForDisplay] и обрезка до [maxLength] символов с `…` на конце.
+///
+/// Почему: подсказка с мегабайтным адресом перегрузила бы оверлей и скрыла бы
+/// настоящий хост. Обрезка идёт после экранирования, по символам (не по code
+/// units), чтобы не разорвать суррогатную пару.
+String displayAddress(String value, {int maxLength = kMaxDisplayedAddress}) {
+  final escaped = escapeForDisplay(value);
+  final runes = escaped.runes.toList();
+  if (runes.length <= maxLength) return escaped;
+  return '${String.fromCharCodes(runes.take(maxLength))}…';
+}

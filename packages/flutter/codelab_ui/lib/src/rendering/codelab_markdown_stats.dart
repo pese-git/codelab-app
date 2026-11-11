@@ -34,6 +34,11 @@ abstract final class CodeLabMarkdownStats {
   @visibleForTesting
   static final Map<String, int> headingBuilds = {};
 
+  /// Построения заглушек и картинок ответа: смена `shownImages` при равной
+  /// политике не должна их перестраивать (DSK-3, ревью итерации 4).
+  @visibleForTesting
+  static int imagePlaceholderBuilds = 0;
+
   /// Запуски токенизации кода (подсветка появится в итерации 3).
   @visibleForTesting
   static int highlightRuns = 0;
@@ -50,6 +55,7 @@ abstract final class CodeLabMarkdownStats {
     headingBuilds.clear();
     highlightRuns = 0;
     highlightSyncRuns = 0;
+    imagePlaceholderBuilds = 0;
   }
 
   /// Учитывает монтирование блока кода; вызывается только из `assert`.
@@ -65,6 +71,12 @@ abstract final class CodeLabMarkdownStats {
   static bool noteHighlightRun({required bool sync}) {
     highlightRuns++;
     if (sync) highlightSyncRuns++;
+    return true;
+  }
+
+  /// Учитывает построение заглушки изображения; только из `assert`.
+  static bool noteImagePlaceholderBuild() {
+    imagePlaceholderBuilds++;
     return true;
   }
 

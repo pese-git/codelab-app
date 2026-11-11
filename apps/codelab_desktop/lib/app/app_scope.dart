@@ -60,6 +60,8 @@ import 'package:structured_log_remote_sync/structured_log_remote_sync.dart'
 
 import '../core/platform/connection_preferences.dart';
 import '../core/platform/dock_layout_store.dart';
+import '../core/platform/external_link_opener.dart';
+import '../core/platform/limited_network_image.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
@@ -408,6 +410,13 @@ final class CodeLabPlatformModule extends Module {
     const textFileIo = IoTextFileIo();
     bind<TextFileReader>().toInstance(textFileIo);
     bind<TextFileWriter>().toInstance(textFileIo);
+    // Открытие ссылок из ответа агента — порт платформы (change
+    // `add-desktop-markdown`, D5); `url_launcher` только за ним.
+    bind<ExternalLinkOpener>().toInstance(
+      const UrlLauncherExternalLinkOpener(),
+    );
+    // Загрузка изображений ответа: лимиты тела, редиректы, размер (D6, R4).
+    bind<ImageProviderFor>().toInstance(defaultImageProviderFor);
     bind<ProjectFolderPicker>().toInstance(
       const FileSelectorProjectFolderPicker(),
     );
@@ -628,6 +637,11 @@ final class CodeLabPresentationModule extends Module {
                 .resolve<WorkingDirectoryProvider>(),
             projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
             recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
+            externalLinkOpener: currentScope.resolve<ExternalLinkOpener>(),
+            imageProviderFor: currentScope.resolve<ImageProviderFor>(),
+            // События ленты (`link.open`, `image.show`) — компонент workbench,
+            // а не настроек.
+            eventLogger: _workbenchLogger(),
           ),
         )
         .singleton();
@@ -788,6 +802,10 @@ List<TransportResolver> _transportResolvers(Scope scope) => [
 /// Структурный логгер событий настроек (design.md change
 /// `add-app-settings-shell`, D17): категория `application`, компонент
 /// `settings`.
+Logger _workbenchLogger() => StructuredLogLogger(
+  'codelab_desktop.workbench',
+).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'workbench'});
+
 Logger _settingsLogger() => StructuredLogLogger(
   'codelab_desktop.settings',
 ).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'settings'});
