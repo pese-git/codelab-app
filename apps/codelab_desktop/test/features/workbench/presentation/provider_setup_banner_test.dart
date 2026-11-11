@@ -106,6 +106,7 @@ void main() {
 
   Future<void> start(WidgetTester tester) async {
     binding = CodeLabTestBinding(
+      project: '/workspace',
       stdioDefault: false,
       profileStore: InMemoryProfileStore(),
       webSocketTransportFactory: (config) =>

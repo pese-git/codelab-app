@@ -51,6 +51,7 @@ void main() {
   }) async {
     openerCalls = 0;
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       stdioDefault: false,
       profileStore: store ?? InMemoryProfileStore(),
       embeddedOpener: failingOpener,
@@ -104,6 +105,7 @@ void main() {
       'screen connects that profile, not the embedded agent', (tester) async {
     final started = <String>[];
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       stdioDefault: false,
       preferences: const {'codelab.connection.default_profile': 'dev'},
       profileStore: InMemoryProfileStore([

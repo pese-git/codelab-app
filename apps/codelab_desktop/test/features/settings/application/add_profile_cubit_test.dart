@@ -122,6 +122,9 @@ void main() {
   /// Токены, с которыми probe открывал WebSocket (в памяти теста).
   late List<String?> wsTokens;
 
+  /// Папка проекта окна; `null` — проект не выбран (D7).
+  String? projectFolder = '/work';
+
   AddProfileCubit build({
     Map<String, String> environment = const {},
     List<ProfileKind> kinds = const [ProfileKind.stdio, ProfileKind.webSocket],
@@ -154,7 +157,7 @@ void main() {
       probe: probe,
       kinds: kinds,
       environment: environment,
-      projectDirectory: () => '/work',
+      projectDirectory: () => projectFolder,
       logger: logger,
     );
     addTearDown(cubit.close);
@@ -227,6 +230,7 @@ void main() {
     classifier = null;
     wsFactoryFails = false;
     wsOpened = 0;
+    projectFolder = '/work';
     wsTokens = [];
     wsTransport = FakeAcpTransport();
   });
@@ -713,6 +717,32 @@ void main() {
           message.toString(),
       ];
       expect(methods, hasLength(1));
+    });
+
+    test('without a project a stdio probe starts without the project folder '
+        'and still sends only initialize (D7)', () async {
+      projectFolder = null;
+      final cubit = await started();
+      fillStdio(cubit);
+      expect(formOf(cubit).draft.runInProjectDirectory, isTrue);
+
+      await cubit.testConnection();
+
+      expect(stdioConfigs.single.cwd, isNull);
+      expect(stdioTransports.single.sentMessages, hasLength(1));
+      // Флажок профиля формы не меняется: подмена касается только проверки.
+      expect(formOf(cubit).draft.runInProjectDirectory, isTrue);
+    });
+
+    test('without a project a WebSocket probe is not changed (D7)', () async {
+      projectFolder = null;
+      final cubit = await started();
+      fillWebSocket(cubit);
+
+      await cubit.testConnection();
+
+      expect(formOf(cubit).probe, isA<Reachable>());
+      expect(wsOpened, 1);
     });
 
     test('a new edit during a probe discards its outcome with '

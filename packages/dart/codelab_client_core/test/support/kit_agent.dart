@@ -44,8 +44,12 @@ final class KitAgent {
   StreamSubscription<WorkspaceDiagnostic>? _subscription;
 
   /// Подключается к агенту; [sessions] — ответ на `session/list`, который
-  /// kit отправляет сразу после `initialize` агенту со списком сессий.
-  Future<void> start({ListSessionsResponse? sessions}) async {
+  /// kit отправляет сразу после `initialize` агенту со списком сессий;
+  /// [projectDirectory] — папка проекта подключения (по умолчанию `/work`).
+  Future<void> start({
+    ListSessionsResponse? sessions,
+    String projectDirectory = '/work',
+  }) async {
     _subscription = workspace.diagnostics.listen(diagnostics.add);
     if (sessions != null) {
       unawaited(
@@ -56,7 +60,7 @@ final class KitAgent {
     }
     await workspace.connect(
       const StdioProfile(id: 'agent', label: 'Agent', command: 'agent'),
-      projectDirectory: '/work',
+      projectDirectory: projectDirectory,
     );
   }
 

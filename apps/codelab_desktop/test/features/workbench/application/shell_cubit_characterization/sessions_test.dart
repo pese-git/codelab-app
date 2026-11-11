@@ -46,6 +46,7 @@ void main() {
 
   test('createSession() before connecting sends nothing', () async {
     final h = ShellHarness();
+    await h.projectReady();
 
     await h.cubit.createSession();
 

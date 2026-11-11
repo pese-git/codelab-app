@@ -129,6 +129,7 @@ void main() {
       final shellCubit = codeLabDependenciesOf(
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
+      await ensureProject(tester, shellCubit);
       unawaited(shellCubit.connect());
       await _pumpWhile(
         tester,

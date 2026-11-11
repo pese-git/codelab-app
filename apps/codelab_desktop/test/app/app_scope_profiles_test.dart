@@ -7,6 +7,7 @@
 // `createCodeLabRootScope(environment:)`, тесты идут в обычной зоне (`test`),
 // без fake-async — файловый ввод-вывод в ней зависал бы.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cherrypick/cherrypick.dart' show Scope;
@@ -74,6 +75,9 @@ void main() {
       profileSecretsOpener: profileSecretsOpener,
     );
     addTearDown(closeCodeLabRootScopeInTest);
+    // Подключение требует проекта (require-project-folder D1): выбор
+    // меняет состояние синхронно, поэтому ждать его не нужно.
+    unawaited(scope.resolve<CodeLabShellCubit>().selectProject('/workspace'));
     return scope;
   }
 
@@ -367,6 +371,7 @@ void main() {
       'first frame (D8)', (tester) async {
     var starts = 0;
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       preferences: const {'codelab.connection.connect_on_start': true},
       stdioTransportFactory: (_) {
         starts++;

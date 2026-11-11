@@ -119,6 +119,7 @@ void main() {
     FakeProfileSecrets? secrets,
   }) async {
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       profileStore: store ?? InMemoryProfileStore(stored),
       profileSecrets: secrets,
       stdioDefault: false,
@@ -1105,6 +1106,7 @@ void main() {
       tester,
     ) async {
       final binding = CodeLabTestBinding(
+        project: '/workspace',
         profileStore: InMemoryProfileStore([cli]),
         stdioDefault: false,
         preferences: const {'codelab.connection.default_profile': 'py'},

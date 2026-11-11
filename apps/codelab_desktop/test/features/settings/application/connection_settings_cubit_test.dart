@@ -11,6 +11,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart'
+    show StdioAcpTransportConfig;
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_client_io/codelab_client_io.dart'
@@ -197,6 +199,9 @@ void main() {
   late AcpClientApplication application;
   late FakeProfileSecrets secrets;
 
+  /// Папка проекта окна; `null` — проект не выбран (D7).
+  String? projectFolder = '/work';
+
   ConnectionSettingsCubit build({
     Map<String, String> environment = const {},
     ProfileProbe? probe,
@@ -211,7 +216,7 @@ void main() {
       environment: environment,
       profilesPath: profilesFile.path,
       probe: probe ?? ProfileProbe(resolvers: [resolver]),
-      projectDirectory: () => '/work',
+      projectDirectory: () => projectFolder,
       logger: logger,
     );
     addTearDown(cubit.close);
@@ -231,6 +236,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    projectFolder = '/work';
     home = await Directory.systemTemp.createTemp('codelab_settings_cubit_');
     profilesFile = File('${home.path}/profiles.json');
     resolver = _Resolver();
@@ -1499,6 +1505,35 @@ void main() {
       expect(finished['operation_id'], started['operation_id']);
       // Все события проверки несут profile_id (D17).
       expect(finished['profile_id'], 'dev');
+    });
+
+    test('a stdio row starts in the project folder when a project is '
+        'selected, and without the folder when it is not (D7)', () async {
+      await profilesFile.writeAsString(_file);
+      final configs = <StdioAcpTransportConfig>[];
+      final cubit = build(
+        probe: ProfileProbe(
+          resolvers: [
+            ConfigTransportResolver(
+              stdio: (config) {
+                configs.add(config);
+                return FakeAcpTransport();
+              },
+            ),
+          ],
+        ),
+      );
+      await cubit.reload();
+
+      await cubit.testProfile('dev');
+      projectFolder = null;
+      await cubit.testProfile('dev');
+
+      expect(configs.map((config) => config.cwd), ['/work', isNull]);
+      expect(
+        (cubit.state as ConnectionSettingsReady).lastProbes['dev'],
+        isA<Reachable>(),
+      );
     });
 
     test('is refused for the built-in agent and unknown ids', () async {

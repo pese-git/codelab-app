@@ -14,8 +14,7 @@ import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
-import 'package:codelab_client_io/codelab_client_io.dart'
-    show DirectoryExists, WorkingDirectoryProvider;
+import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:codelab_desktop/app/embedded_transport_resolver.dart';
 import 'package:codelab_desktop/app/provider_setup_offer.dart';
 import 'package:codelab_desktop/core/platform/connection_preferences.dart';
@@ -74,11 +73,6 @@ final class _RecordingResolver implements TransportResolver {
     transports.add(transport);
     return transport;
   }
-}
-
-final class _FixedDirectory implements WorkingDirectoryProvider {
-  @override
-  String get currentPath => '/work/app';
 }
 
 final class _NoPicker implements ProjectFolderPicker {
@@ -143,6 +137,7 @@ void main() {
     ProfileSecretSource? tokenSecrets,
     ProviderSetupOffer? providerSetupOffer,
     bool alsoRecording = false,
+    String? project = '/work/app',
   }) {
     resolver = _RecordingResolver();
     shellLog = RecordingLogger();
@@ -157,7 +152,6 @@ void main() {
       initialProfile: embeddedConnectionProfile,
       application: application,
       workspace: workspace,
-      workingDirectoryProvider: _FixedDirectory(),
       projectFolderPicker: _NoPicker(),
       recentProjectsStore: _NoRecentProjects(),
       directoryExists: directoryExists ?? (_) async => true,
@@ -172,6 +166,11 @@ void main() {
       providerSetupOffer: providerSetupOffer,
     );
     addTearDown(parts.close);
+    // Неявной папки нет (require-project-folder D1): проект выбран явно.
+    // Выбор меняет состояние синхронно, до первого `await` внутри.
+    if (project != null) {
+      unawaited(parts.settings.selectProject(project));
+    }
     return parts;
   }
 
@@ -434,6 +433,26 @@ void main() {
       expect(event['profile_id'], 'dev');
       expect(event['type'], 'stdio');
       expect(event.keys.toSet(), {'event', 'level', 'profile_id', 'type'});
+    });
+
+    test('on, without a project: no transport is asked, the status is not '
+        'failed and the skip is logged without a path (A2.2, D2)', () async {
+      SharedPreferences.setMockInitialValues(enabled);
+      build(stored: [_stdio], project: null);
+
+      await parts.connection.connectOnStart();
+
+      expect(resolver.profiles, isEmpty);
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.disconnected,
+      );
+      final event = eventLog.entries.singleWhere(
+        (e) => e['event'] == 'connection.connect_on_start_skipped',
+      );
+      expect(event['profile_id'], 'dev');
+      expect(event['reason'], 'no_project');
+      expect(event.values.join(), isNot(contains('/')));
     });
 
     test('off (the default): no connection at all', () async {

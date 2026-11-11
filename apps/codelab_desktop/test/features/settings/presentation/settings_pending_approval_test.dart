@@ -106,6 +106,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     agent = FakeAcpTransport();
     binding = CodeLabTestBinding(
+      project: '/workspace',
       transport: FakeAcpTransport(),
       stdioTransportFactory: (_) => agent,
       settingsPages: const SettingsPages(available: {SettingsPage.connection}),
@@ -271,6 +272,7 @@ void main() {
     var starts = 0;
     agent = old;
     binding = CodeLabTestBinding(
+      project: '/workspace',
       transport: FakeAcpTransport(),
       stdioTransportFactory: (_) => starts++ == 0 ? old : fresh,
       settingsPages: const SettingsPages(available: {SettingsPage.connection}),

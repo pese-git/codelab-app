@@ -542,6 +542,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final agent = FakeAcpTransport();
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       transport: FakeAcpTransport(),
       stdioTransportFactory: (_) => agent,
     );

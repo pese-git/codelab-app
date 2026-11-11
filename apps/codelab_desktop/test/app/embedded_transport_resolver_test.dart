@@ -56,9 +56,13 @@ void main() {
   var failOpen = true;
   Object? probeError;
 
+  var opened = 0;
+
   EmbeddedTransportResolver make() => EmbeddedTransportResolver(
-    ({required cwd, required hostProfile}) async =>
-        failOpen ? throw _broken() : _FakeAgent(),
+    ({required cwd, required hostProfile}) async {
+      opened++;
+      return failOpen ? throw _broken() : _FakeAgent();
+    },
     setupOffer: offer,
     providerSetupNeeded: (cwd) async {
       probed.add(cwd);
@@ -75,6 +79,33 @@ void main() {
     needed = true;
     failOpen = true;
     probeError = null;
+    opened = 0;
+  });
+
+  // Встроенному агенту папка нужна для слоёв конфигурации и журнала; пустая
+  // строка в `ConfigLoader.load(cwd: '')` читала бы относительные пути
+  // (require-project-folder/design.md, D9).
+  test('an empty or blank folder is refused before the opener; the next open '
+      'with a folder works', () async {
+    failOpen = false;
+    final resolver = make();
+
+    for (final blank in ['', '   ']) {
+      await expectLater(
+        resolver.open(_profile, projectDirectory: blank),
+        throwsA(isA<ClientWorkspaceException>()),
+      );
+    }
+    expect(opened, 0);
+
+    final transport = await resolver.open(
+      _profile,
+      projectDirectory: '/work/app',
+    );
+
+    expect(transport, isA<AcpTransport>());
+    expect(opened, 1);
+    await resolver.close();
   });
 
   test('a true snapshot flag sets the offer with the cwd before the '

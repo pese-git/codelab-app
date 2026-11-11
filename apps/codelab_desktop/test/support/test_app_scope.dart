@@ -1,5 +1,11 @@
+import 'dart:convert';
+
 import 'package:codelab_desktop/app/app_scope.dart';
+import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snapshot_store.dart'
+    show kWorkspaceSnapshotPrefsKey;
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
+import 'package:codelab_desktop/core/platform/project_folder_picker.dart'
+    show ProjectFolderPicker;
 import 'package:codelab_desktop/features/workbench/application/connection_cubit.dart'
     show stdioConnectionProfileOf;
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -45,6 +51,33 @@ Future<EmbeddedAgent> _embeddedAgentNotInThisTest({
   required String hostProfile,
 }) async => throw StateError('the embedded agent is not part of this test');
 
+/// Выбор папки по умолчанию в тестах: пользователь закрыл диалог.
+final class _NoFolderPicker implements ProjectFolderPicker {
+  const _NoFolderPicker();
+
+  @override
+  Future<String?> pickFolder({String? initialDirectory}) async => null;
+}
+
+/// Снимок рабочего пространства с одним выбранным проектом [project] и без
+/// открытых сессий.
+String _snapshotOf(String project) => jsonEncode({
+  'version': 1,
+  'windows': {
+    'main': {'projectDirectory': project, 'openSessions': <Object?>[]},
+  },
+});
+
+/// Тестовая сборка графа app.
+///
+/// Почему: без выбранного проекта у app нет папки агента и сессий
+/// (require-project-folder/design.md, D1, D20), поэтому тесты, которые
+/// подключаются и создают сессии, должны явно начинать с проекта.
+///
+/// Как использовать: [project] — путь стартового проекта; он подкладывается
+/// снимком рабочего пространства и выбирается при создании `SettingsCubit`
+/// (ждать выбора — `SettingsCubit.projectRestored`). Без [project] проект не
+/// выбран.
 final class CodeLabTestBinding {
   CodeLabTestBinding({
     FakeAcpTransport? transport,
@@ -60,6 +93,8 @@ final class CodeLabTestBinding {
     ProviderSettingsOpener? providerSettingsOpener,
     Future<bool> Function(String cwd)? providerSetupProbe,
     bool stdioDefault = true,
+    String? project,
+    ProjectFolderPicker? projectFolderPicker,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
     // а у плагина в тестах нет реализации канала: без моков каждая загрузка
@@ -72,6 +107,11 @@ final class CodeLabTestBinding {
     SharedPreferences.setMockInitialValues({
       if (stdioDefault)
         'codelab.connection.default_profile': testStdioProfile.id,
+      // Стартовый проект — снимок рабочего пространства, который app
+      // восстанавливает обычным `restoreProject`, как после перезапуска
+      // (require-project-folder/design.md, D20). Явный [preferences]
+      // переопределяет его.
+      if (project != null) kWorkspaceSnapshotPrefsKey: _snapshotOf(project),
       ...preferences,
     });
     scope = createCodeLabRootScope(
@@ -112,6 +152,8 @@ final class CodeLabTestBinding {
       // Настоящая функция читала бы `$CODELAB_HOME` разработчика: по
       // умолчанию «провайдер не нужен» (прежнее поведение баннера).
       providerSetupProbe: providerSetupProbe ?? (cwd) async => false,
+      // Без подмены «Open folder…» открыл бы системный диалог.
+      projectFolderPicker: projectFolderPicker ?? const _NoFolderPicker(),
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own

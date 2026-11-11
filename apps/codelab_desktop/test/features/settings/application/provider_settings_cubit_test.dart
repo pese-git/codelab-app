@@ -68,7 +68,7 @@ void main() {
   late ConnectionProfile defaultProfile;
   late List<({EditableSettings access, Map<String, String> env})> opened;
   late List<ProviderSettingsCubit> cubits;
-  var projectDir = '/work/app';
+  String? projectDir = '/work/app';
 
   ProviderSettingsCubit make({
     Map<String, String> environment = const {'HOME': '/home/u'},
@@ -275,6 +275,17 @@ void main() {
       expect(access.paths.codelabHome, _home);
       expect(access.cwd, '/work/app');
       expect(logger.entries.last['event'], 'provider_settings.loaded');
+    });
+
+    test('without a project and an agent there is no folder: the settings are '
+        'editable, with no project layer among the targets (D8)', () async {
+      projectDir = null;
+
+      await make().reload();
+
+      final access = opened.single.access;
+      expect(access.cwd, isNull);
+      expect(access.targets, [const ConfigTarget.user()]);
     });
 
     test(
