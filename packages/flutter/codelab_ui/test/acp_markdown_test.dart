@@ -3,30 +3,20 @@
 // «Блок кода в ответе агента», «Стриминг markdown без перестройки закрытых
 // блоков»; design.md D1–D4, D7–D9, D13; invariant DSK-3, DSK-6).
 //
-// Красная фаза: тесты обращаются к API, которого ещё нет, — `CodeLabMarkdown`,
-// `CodeLabMarkdownStats` и новая форма `CodeLabAgentTextRow(id, text,
-// streaming)` из `package:codelab_ui/codelab_ui.dart`. Имена тестов — ровно
-// как в tasks.md и `12-3-desktop-display.md` §12.3.7: это критерии матрицы
-// D-06.
+// Имена тестов — ровно как в tasks.md и `12-3-desktop-display.md` §12.3.7:
+// это критерии матрицы D-06.
 //
 // Сеть перехвачена `HttpOverrides` (R3): любой запрос из отрисовки — провал
 // теста. Тесты идут без Material-предка: хостом служит `FluentApp`.
-//
-// Ожидаемые сигнатуры (для реализации 2.2/2.3):
-//  * `CodeLabMarkdown({Key? key, required String id, required String text,
-//    bool streaming = false, CodeLabMarkdownConfig? config})` — `id` — id
-//    строки ленты, из него строятся ключи `code-copy-<id>-<n>`;
-//  * `CodeLabMarkdownStats` — debug-счётчики, считаются только в `assert`:
-//    `Map<String, int> codeBlockBuilds` (построения ЗАКРЫТЫХ блоков кода,
-//    ключ `<id>-<n>`), `Map<String, int> codeBlockMounts` (initState блока,
-//    тот же ключ), `Map<String, int> headingBuilds` (ключ — текст заголовка),
-//    `int highlightRuns`, `int highlightSyncRuns`, `void reset()`;
-//  * `CodeLabAgentTextRow({required id, required text, bool streaming = false})`.
 
 import 'dart:io';
 
 import 'package:codelab_ui/codelab_ui.dart';
+import 'package:codelab_ui/src/rendering/codelab_markdown_row.dart';
+import 'package:codelab_ui/src/rendering/escape_for_display.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -73,6 +63,12 @@ class _ForbiddenHttpClient extends Fake implements HttpClient {
   }
 }
 
+/// Темы вынесены в `final` верхнего уровня: `FluentThemeData` сравнивается по
+/// identity, и тема, созданная заново на каждом `pumpWidget`, выглядела бы для
+/// ленты как смена темы (конфигурация markdown пересоздавалась бы).
+final _lightTheme = FluentThemeData(brightness: Brightness.light);
+final _darkTheme = FluentThemeData(brightness: Brightness.dark);
+
 Widget _host(
   Widget child, {
   Brightness brightness = Brightness.light,
@@ -80,8 +76,8 @@ Widget _host(
 }) => FluentApp(
   debugShowCheckedModeBanner: false,
   themeMode: brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
-  theme: FluentThemeData(brightness: Brightness.light),
-  darkTheme: FluentThemeData(brightness: Brightness.dark),
+  theme: _lightTheme,
+  darkTheme: _darkTheme,
   home: ScaffoldPage(
     content: Align(
       alignment: Alignment.topLeft,
@@ -97,7 +93,11 @@ Widget _panelHost(
   List<CodeLabTranscriptRow> rows, {
   double height = 700,
   CodeLabViewMode viewMode = CodeLabViewMode.normal,
+  Brightness brightness = Brightness.light,
 }) => FluentApp(
+  themeMode: brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+  theme: _lightTheme,
+  darkTheme: _darkTheme,
   home: SizedBox(
     width: 700,
     height: height,
@@ -180,7 +180,8 @@ String _longAnswer(int target) {
 
 /// [n] растущих префиксов документа — как приходят дельты стрима.
 List<String> _prefixes(String doc, int n) {
-  final step = (doc.length / n).ceil();
+  // floor: префиксов должно быть не меньше n (ceil давал 149 вместо 200).
+  final step = (doc.length / n).floor().clamp(1, doc.length);
   return [
     for (var end = step; end < doc.length + step; end += step)
       doc.substring(0, end.clamp(0, doc.length)),
@@ -367,7 +368,8 @@ tail paragraph
     final copy = find.byKey(const ValueKey('code-copy-agent-1-0'));
     expect(copy, findsOneWidget);
     await tester.tap(copy);
-    await tester.pump();
+    // Таймер двойного клика `SelectableRegion` должен истечь до конца теста.
+    await tester.pump(const Duration(seconds: 1));
     expect(clipboard, [code]);
 
     // Выделение всего ответа не содержит подписи `dart` (D4, факт 7).
@@ -377,8 +379,9 @@ tail paragraph
     );
     region.selectAll();
     await tester.pump();
-    // ignore: deprecated_member_use — публичного способа получить выделенный
-    // текст без меню нет; метод кладёт в буфер то же, что Cmd/Ctrl+C.
+    // Публичного способа получить выделенный текст без меню нет; метод
+    // кладёт в буфер то же, что Cmd/Ctrl+C.
+    // ignore: deprecated_member_use
     region.copySelection(SelectionChangedCause.toolbar);
     await tester.pump();
     expect(clipboard, isNotEmpty);
@@ -544,7 +547,12 @@ tail paragraph
     );
     expect(_styleValue(code, (s) => s.fontFamily), mono?.fontFamily);
 
-    final paragraphBuilds = Map.of(CodeLabMarkdownStats.headingBuilds);
+    final paragraphElement = tester.element(
+      find.byWidgetPredicate(
+        (w) => w is RichText && w.text.toPlainText().contains('Before the'),
+      ),
+    );
+    expect(CodeLabMarkdownStats.codeBlockMounts['agent-1-0'], 1);
 
     // Ограда закрылась: блок построен как закрытый один раз, ограды в
     // ленте по-прежнему нет.
@@ -560,7 +568,17 @@ tail paragraph
     await tester.pump();
     expect(CodeLabMarkdownStats.codeBlockBuilds['agent-1-0'], 1);
     expect(find.textContaining('```', findRichText: true), findsNothing);
-    expect(CodeLabMarkdownStats.headingBuilds, paragraphBuilds);
+    // Блок не перемонтирован при закрытии, абзац перед ним — тот же Element
+    // (DSK-3: закрытие ограды не перестраивает соседей).
+    expect(CodeLabMarkdownStats.codeBlockMounts['agent-1-0'], 1);
+    expect(
+      tester.element(
+        find.byWidgetPredicate(
+          (w) => w is RichText && w.text.toPlainText().contains('Before the'),
+        ),
+      ),
+      same(paragraphElement),
+    );
   });
 
   testWidgets('html is shown as text and makes no network requests', (
@@ -594,6 +612,47 @@ tail paragraph
     );
     expect(find.byType(Image), findsNothing);
     // Сетевых запросов нет — это проверяет tearDown через HttpOverrides.
+  });
+
+  testWidgets('markdown images are placeholders and make no network '
+      'requests', (tester) async {
+    // `NetworkImage` берёт клиента через свой провайдер, мимо `HttpOverrides`.
+    // Сбрасывается в конце теста: инварианты painting проверяются до tearDown.
+    debugNetworkImageHttpClientProvider = _ForbiddenHttpClient.new;
+    try {
+      // VIEW-12, DSK-7, сценарий «нет запросов до клика»: без `imageBuilder`
+      // пакет сам грузит PNG и SVG (D6, факт 3). Запросы ловит `tearDown`.
+      await tester.pumpWidget(
+        _host(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text:
+                '![диаграмма](https://example.invalid/a.png)\n\n'
+                '![](https://example.invalid/b.svg)',
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(CodeLabImagePlaceholder), findsNWidgets(2));
+      expect(
+        find.textContaining('example.invalid · a.png', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('example.invalid · b.svg', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.byType(Image), findsNothing);
+      expect(
+        find.byWidgetPredicate((w) => w.runtimeType.toString() == 'SvgPicture'),
+        findsNothing,
+      );
+    } finally {
+      debugNetworkImageHttpClientProvider = null;
+    }
   });
 
   testWidgets('dollar is not a formula and backslash parentheses are', (
@@ -650,4 +709,599 @@ tail paragraph
     expect(weight, isNotNull);
     expect(weight!.value, greaterThanOrEqualTo(FontWeight.w600.value));
   });
+
+  // ---- Ревью итерации 2: безопасность, меню, вложенность, ключи блоков ----
+
+  const nestedNote = 'Shown as plain text: nesting is too deep.';
+
+  Future<void> pumpMd(WidgetTester tester, String text) async {
+    await tester.pumpWidget(_host(CodeLabMarkdown(id: 'agent-1', text: text)));
+    await tester.pump();
+  }
+
+  String nestedList(int levels) =>
+      [for (var i = 0; i < levels; i++) '${'  ' * i}- item$i'].join('\n');
+
+  testWidgets('deeply nested quotes and lists fall back to plain text', (
+    tester,
+  ) async {
+    // Решение пользователя 2026-11-11 (A): пакет на вложенности ~1000
+    // уходит в Stack Overflow, а стоимость растёт квадратично (замер: 64 уровня
+    // — 40 мс, 256 — 0,7 с). Кит считает глубину сам и при превышении порога
+    // показывает моноширинный текст с пометкой.
+    for (final text in ['${'> ' * 1000}x', nestedList(1000)]) {
+      await pumpMd(tester, text);
+      expect(tester.takeException(), isNull);
+      expect(find.text(nestedNote), findsOneWidget);
+      // Запасной вид — исходный текст в `CodeLabMonospaceBlock` как есть.
+      final block = tester.widget<CodeLabMonospaceBlock>(
+        find.byType(CodeLabMonospaceBlock),
+      );
+      expect(block.data, text);
+    }
+  });
+
+  testWidgets('nesting at the threshold is markdown, one level more is plain', (
+    tester,
+  ) async {
+    await pumpMd(tester, '${'> ' * kMaxMarkdownNestingDepth}x');
+    expect(tester.takeException(), isNull);
+    expect(find.text(nestedNote), findsNothing);
+    expect(find.byType(CodeLabMonospaceBlock), findsNothing);
+
+    await pumpMd(tester, '${'> ' * (kMaxMarkdownNestingDepth + 1)}x');
+    expect(find.text(nestedNote), findsOneWidget);
+
+    await pumpMd(tester, nestedList(kMaxMarkdownNestingDepth));
+    expect(tester.takeException(), isNull);
+    expect(find.text(nestedNote), findsNothing);
+
+    await pumpMd(tester, nestedList(kMaxMarkdownNestingDepth + 1));
+    expect(find.text(nestedNote), findsOneWidget);
+  });
+
+  testWidgets('quote markers inside a fenced block count as nesting too', (
+    tester,
+  ) async {
+    // Решение оркестратора (ревью, второй круг): ограду пакет понимает иначе,
+    // чем простой подсчёт (обратная кавычка в info-строке, конец контейнера),
+    // поэтому глубину считаем и внутри оград — ошибка в сторону простого
+    // текста безопасна, а 33 уровня `>` в настоящем коде не бывают.
+    await pumpMd(tester, '```text\n${'> ' * 100}x\n```');
+    expect(find.text(nestedNote), findsOneWidget);
+  });
+
+  testWidgets('nesting guard cannot be bypassed on one line or by fences', (
+    tester,
+  ) async {
+    const n = 1000;
+    final inputs = <String, String>{
+      'bullets on one line': '${'- ' * n}x',
+      'numbers on one line': '${'1. ' * n}x',
+      'list and quote on one line': '${'- > ' * (n ~/ 2)}x',
+      'backtick in info string': '```a`b\n\n${'> ' * n}',
+      'fence inside a quote': '> ~~~\n\n${'> ' * n}',
+    };
+    for (final entry in inputs.entries) {
+      await pumpMd(tester, entry.value);
+      expect(tester.takeException(), isNull, reason: entry.key);
+      expect(find.text(nestedNote), findsOneWidget, reason: entry.key);
+    }
+  });
+
+  testWidgets('nesting guard counts line separators and prefixes the package '
+      'tolerates', (tester) async {
+    // Третий круг ревью безопасности: подсчёт намеренно завышен — считаются
+    // все `>` и маркеры списка в строке, а строки делятся по любым
+    // разделителям строк, поэтому BOM, `\f`, `\r`, U+2028 и сноска не прячут
+    // вложенность (D14: ошибка в сторону простого текста безопасна).
+    const n = 1000;
+    final q = '${'> ' * n}x';
+    final inputs = <String, String>{
+      'CR separator': 'x\r$q',
+      'CR separated indented list': [
+        for (var i = 0; i < n; i++) '${'  ' * i}- x',
+      ].join('\r'),
+      'U+2028 separator': 'x $q',
+      'BOM before quotes': '﻿$q',
+      'one leading space': ' $q',
+      'form feed before quotes': '\f$q',
+      'footnote definition': '[^1]: $q\n\n[^1]',
+    };
+    for (final entry in inputs.entries) {
+      await pumpMd(tester, entry.value);
+      expect(tester.takeException(), isNull, reason: entry.key);
+      expect(find.text(nestedNote), findsOneWidget, reason: entry.key);
+    }
+  });
+
+  testWidgets('an ordinary technical answer stays markdown', (tester) async {
+    // Запас порога: стрелки, лямбды, обобщённые типы и пункты в одной строке
+    // — обычный технический текст, а не вложенность.
+    const answer = '''
+# Plan
+
+The call chain is a -> b -> c -> d -> e -> f -> g -> h -> i -> j, and the
+callback is `(x) => x * 2`. Use List<Map<String, List<int>>> for the cache.
+
+- first item - with a dash - and more - dashes - here
+- second item (see 1. above, then 2. below)
+
+1. step one
+2. step two
+
+> quoted note
+
+```dart
+final f = (int a) => a > 1 ? a >> 2 : a << 1;
+```
+''';
+    await pumpMd(tester, answer);
+    expect(tester.takeException(), isNull);
+    expect(find.text(nestedNote), findsNothing);
+    expect(find.byType(CodeLabCodeBlock), findsOneWidget);
+  });
+
+  testWidgets('indentation after quote and list markers counts as nesting', (
+    tester,
+  ) async {
+    // Четвёртый круг ревью безопасности: пакет вкладывает список в цитату
+    // отступом ПОСЛЕ `>`, поэтому отступы считаются во всём ведущем префиксе
+    // контейнеров, а не только в начале строки.
+    const n = 600;
+    final inputs = <String, String>{
+      'tabs after quote': [
+        for (var i = 0; i < n; i++) '>${'\t' * i}- x',
+      ].join('\n'),
+      'spaces after quote': [
+        for (var i = 0; i < n; i++) '>${'  ' * i}- x',
+      ].join('\n'),
+      'spaces after list marker': [
+        for (var i = 0; i < n; i++) '- ${'  ' * i}- x',
+      ].join('\n'),
+    };
+    for (final entry in inputs.entries) {
+      await pumpMd(tester, entry.value);
+      expect(tester.takeException(), isNull, reason: entry.key);
+      expect(find.text(nestedNote), findsOneWidget, reason: entry.key);
+    }
+  });
+
+  testWidgets('an ordinary answer with CR and U+2028 line ends stays '
+      'markdown', (tester) async {
+    // Построчно глубина 3, в сумме по тексту — больше порога: без деления по
+    // `\r` и U+2028 такой ответ ложно ушёл бы в простой текст.
+    final lines = [for (var i = 0; i < 40; i++) '- a$i - b$i - c$i'];
+    for (final separator in ['\r', ' ']) {
+      await pumpMd(tester, lines.join(separator));
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text(nestedNote),
+        findsNothing,
+        reason: 'U+${separator.codeUnitAt(0).toRadixString(16)}',
+      );
+    }
+  });
+
+  testWidgets('one-line markers hit the same threshold as nested lines', (
+    tester,
+  ) async {
+    final limit = kMaxMarkdownNestingDepth;
+    final atLimit = <String, String>{
+      'bullets': '${'- ' * limit}x',
+      'numbers': '${'1. ' * limit}x',
+      'list and quote': '${'- > ' * (limit ~/ 2)}x',
+    };
+    final over = <String, String>{
+      'bullets': '${'- ' * (limit + 1)}x',
+      'numbers': '${'1. ' * (limit + 1)}x',
+      'list and quote': '${'- > ' * (limit ~/ 2 + 1)}x',
+    };
+    for (final entry in atLimit.entries) {
+      await pumpMd(tester, entry.value);
+      expect(tester.takeException(), isNull, reason: entry.key);
+      expect(find.text(nestedNote), findsNothing, reason: entry.key);
+    }
+    for (final entry in over.entries) {
+      await pumpMd(tester, entry.value);
+      expect(find.text(nestedNote), findsOneWidget, reason: entry.key);
+    }
+  });
+
+  testWidgets('deeply nested inline markup renders without errors', (
+    tester,
+  ) async {
+    // Защита от смены версии пакета (R3, R7): вложенная inline-разметка пока
+    // разбирается быстро (замер 2026-11-11: 10–50 мс), порог не нужен.
+    final inputs = <String, String>{
+      'emphasis': '${'*_' * 2000}x${'_*' * 2000}',
+      'links': '${'[' * 3000}x${'](u)' * 3000}',
+      'strike': '${'~~' * 3000}x${'~~' * 3000}',
+    };
+    for (final entry in inputs.entries) {
+      final watch = Stopwatch()..start();
+      await pumpMd(tester, entry.value);
+      expect(tester.takeException(), isNull, reason: entry.key);
+      expect(
+        watch.elapsed,
+        lessThan(const Duration(seconds: 5)),
+        reason: entry.key,
+      );
+    }
+  });
+
+  group('selection context menu', () {
+    testWidgets('right click offers Copy and Select all in Fluent', (
+      tester,
+    ) async {
+      final clipboard = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            clipboard.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await pumpMd(
+        tester,
+        'Intro paragraph.\n\n```dart\nfinal a = 1;\n```\n\nOutro paragraph.',
+      );
+
+      final target = find.textContaining('Intro', findRichText: true);
+      final gesture = await tester.startGesture(
+        tester.getTopLeft(target) + const Offset(4, 6),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture.up();
+      await tester.pump();
+
+      expect(find.byType(FlyoutContent), findsOneWidget);
+      expect(find.text('Copy'), findsWidgets);
+      expect(find.text('Select all'), findsOneWidget);
+
+      // «Select all» выделяет весь ответ; затем копия кладёт его в буфер без
+      // подписи языка.
+      await tester.tap(find.text('Select all'));
+      await tester.pump();
+      final gesture2 = await tester.startGesture(
+        tester.getTopLeft(target) + const Offset(4, 6),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture2.up();
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(FlyoutContent),
+          matching: find.text('Copy'),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(clipboard, isNotEmpty);
+      expect(clipboard.last, contains('Intro paragraph.'));
+      expect(clipboard.last, contains('Outro paragraph.'));
+      expect(clipboard.last, isNot(contains('dart')));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+  });
+
+  testWidgets('two identical code blocks get different copy keys and are '
+      'built once each', (tester) async {
+    const block = '```dart\nfinal same = 1;\n```';
+    await pumpMd(tester, 'First:\n\n$block\n\nSecond:\n\n$block\n');
+
+    expect(find.byKey(const ValueKey('code-copy-agent-1-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('code-copy-agent-1-1')), findsOneWidget);
+    expect(CodeLabMarkdownStats.codeBlockBuilds['agent-1-0'], 1);
+    expect(CodeLabMarkdownStats.codeBlockBuilds['agent-1-1'], 1);
+  });
+
+  testWidgets('a code block inside a quote gets its own unique copy key', (
+    tester,
+  ) async {
+    await pumpMd(
+      tester,
+      '> ```dart\n> final q = 1;\n> ```\n\n```dart\nfinal p = 2;\n```\n',
+    );
+    expect(tester.takeException(), isNull);
+    final keys = {
+      for (final w in tester.widgetList<CodeLabButton>(
+        find.byType(CodeLabButton),
+      ))
+        w.key,
+    };
+    expect(keys, hasLength(2));
+    expect(CodeLabMarkdownStats.codeBlockBuilds.values, everyElement(1));
+  });
+
+  testWidgets('theme change in the transcript restyles the answer', (
+    tester,
+  ) async {
+    final rows = [const CodeLabAgentTextRow(id: 'agent-1', text: 'Plain text')];
+    await tester.pumpWidget(_panelHost(rows));
+    await tester.pump();
+    expect(
+      _styleValue(_richTextWith(tester, 'Plain text'), (s) => s.color),
+      _lightTheme.resources.textFillColorPrimary,
+    );
+
+    await tester.pumpWidget(_panelHost(rows, brightness: Brightness.dark));
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      _styleValue(_richTextWith(tester, 'Plain text'), (s) => s.color),
+      _darkTheme.resources.textFillColorPrimary,
+    );
+  });
+
+  testWidgets('image placeholder escapes control and direction characters', (
+    tester,
+  ) async {
+    // `NetworkImage` берёт клиента через свой провайдер, мимо `HttpOverrides`.
+    // Сбрасывается в конце теста: инварианты painting проверяются до tearDown.
+    debugNetworkImageHttpClientProvider = _ForbiddenHttpClient.new;
+    try {
+      await pumpMd(
+        tester,
+        '![](https://example.invalid/%E2%80%AEgpj.png%0Aname.png)\n\n'
+        '![](https://evil%E2%80%AE.example/x.png)',
+      );
+      expect(tester.takeException(), isNull);
+      for (final placeholder in tester.widgetList<CodeLabText>(
+        find.descendant(
+          of: find.byType(CodeLabImagePlaceholder),
+          matching: find.byType(CodeLabText),
+        ),
+      )) {
+        expect(placeholder.data, isNot(contains(String.fromCharCode(0x202E))));
+        expect(placeholder.data, isNot(contains('\n')));
+      }
+      expect(
+        find.textContaining('\\u202e', findRichText: true),
+        findsAtLeastNWidgets(1),
+      );
+    } finally {
+      debugNetworkImageHttpClientProvider = null;
+    }
+  });
+
+  test(
+    'escapeForDisplay shows control and direction characters as escapes',
+    () {
+      // Ожидание строится из кода символа: сами невидимые символы в исходнике
+      // форматтер превращает в литералы.
+      const units = [
+        0x0000,
+        0x000A,
+        0x001F,
+        0x007F,
+        0x0085,
+        0x009F,
+        0x061C,
+        0x200B,
+        0x200C,
+        0x200D,
+        0x200E,
+        0x200F,
+        0x2028,
+        0x2029,
+        0x202A,
+        0x202E,
+        0x2066,
+        0x2069,
+        0xFEFF,
+      ];
+      for (final unit in units) {
+        final hex = unit.toRadixString(16).padLeft(4, '0');
+        expect(
+          escapeForDisplay('a${String.fromCharCode(unit)}b'),
+          'a\\u${hex}b',
+          reason: 'U+$hex',
+        );
+      }
+      expect(
+        escapeForDisplay('https://x.example/a b?q=1'),
+        'https://x.example/a b?q=1',
+      );
+      expect(escapeForDisplay('Привет ✓ 😀'), 'Привет ✓ 😀');
+    },
+  );
+
+  testWidgets('links are inert plain text until the app enables them', (
+    tester,
+  ) async {
+    // `NetworkImage` берёт клиента через свой провайдер, мимо `HttpOverrides`.
+    // Сбрасывается в конце теста: инварианты painting проверяются до tearDown.
+    debugNetworkImageHttpClientProvider = _ForbiddenHttpClient.new;
+    try {
+      // Итерация 4 вводит активные ссылки по политике app (D5); до этого ссылка
+      // не имеет ни recognizer, ни курсора, ни акцентного цвета и подчёркивания.
+      await pumpMd(
+        tester,
+        'See [docs](https://example.invalid/a?token=abc) and '
+        '[![pic](https://example.invalid/i.png)](https://example.invalid/l) '
+        'and ![d](data:image/svg+xml;base64,PHN2Zy8+).',
+      );
+      expect(tester.takeException(), isNull);
+      final text = _richTextWith(tester, 'docs');
+      final primary = FluentTheme.of(
+        tester.element(find.byType(CodeLabMarkdown)),
+      ).resources.textFillColorPrimary;
+      var spans = 0;
+      text.text.visitChildren((span) {
+        if (span is TextSpan) {
+          spans++;
+          expect(
+            span.recognizer,
+            isNull,
+            reason: 'recognizer on "${span.text}"',
+          );
+          expect(span.mouseCursor, MouseCursor.defer);
+          if (span.text != null && span.text!.contains('docs')) {
+            expect(span.style?.color, primary);
+            expect(span.style?.decoration, anyOf(isNull, TextDecoration.none));
+          }
+        }
+        return true;
+      });
+      expect(spans, greaterThan(0));
+
+      await tester.tap(find.textContaining('docs', findRichText: true));
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.takeException(), isNull);
+      // Картинки (в том числе внутри ссылки и `data:`) — заглушки, сеть
+      // проверяет tearDown.
+      expect(find.byType(Image), findsNothing);
+      expect(find.byType(CodeLabImagePlaceholder), findsAtLeastNWidgets(2));
+    } finally {
+      debugNetworkImageHttpClientProvider = null;
+    }
+  });
+
+  testWidgets('the answer is not a Tab stop', (tester) async {
+    await pumpMd(tester, 'Some answer');
+    final region = tester.widget<SelectableRegion>(
+      find.byType(SelectableRegion),
+    );
+    expect(region.focusNode!.skipTraversal, isTrue);
+  });
+
+  testWidgets('a rebuilt code block keeps its copy key', (tester) async {
+    // Новая конфигурация той же темы заставляет пакет вызвать builder'ы блоков
+    // заново при том же тексте; `State` блока сохраняется, и ключ не должен
+    // уйти на запасной номер.
+    const text =
+        'A\n\n```dart\nfinal same = 1;\n```\n\nB\n\n```dart\nfinal same = 1;\n```\n';
+    for (var round = 0; round < 3; round++) {
+      await tester.pumpWidget(
+        _host(
+          CodeLabMarkdown(
+            id: 'agent-1',
+            text: text,
+            config: CodeLabMarkdownConfig(_lightTheme),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+    expect(find.byKey(const ValueKey('code-copy-agent-1-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('code-copy-agent-1-1')), findsOneWidget);
+    expect(find.byType(CodeLabButton), findsNWidgets(2));
+    expect(CodeLabMarkdownStats.codeBlockMounts.values, everyElement(1));
+  });
+
+  test('the row model claims block numbers in order and frees them', () {
+    const text = '```dart\nx\n```\n\n```dart\nx\n```\n\n```go\ny\n```';
+    final model = CodeLabMarkdownRowModel()
+      ..update(id: 'a', blocks: scanFencedBlocks(text));
+    expect(model.claim('dart', 'x', true), 0);
+    expect(model.claim('dart', 'x', true), 1);
+    expect(model.claim('go', 'y', true), 2);
+    // Блок, которого сканер не нашёл, получает уникальный номер.
+    final unknown1 = model.claim('rust', 'z', true);
+    final unknown2 = model.claim('rust', 'z', true);
+    expect(unknown1, greaterThanOrEqualTo(3));
+    expect(unknown2, isNot(unknown1));
+    // Размонтированный блок освобождает номер.
+    model.release(0);
+    expect(model.claim('dart', 'x', true), 0);
+  });
+
+  testWidgets(
+    'Cmd or Ctrl+C copies the selection without the language label',
+    (tester) async {
+      final clipboard = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            clipboard.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await pumpMd(
+        tester,
+        'Intro paragraph.\n\n```dart\nfinal a = 1;\n```\n\nOutro.',
+      );
+      final region = tester.state<SelectableRegionState>(
+        find.byType(SelectableRegion),
+      );
+      tester
+          .widget<SelectableRegion>(find.byType(SelectableRegion))
+          .focusNode!
+          .requestFocus();
+      await tester.pump();
+      region.selectAll();
+      await tester.pump();
+
+      final modifier = defaultTargetPlatform == TargetPlatform.macOS
+          ? LogicalKeyboardKey.metaLeft
+          : LogicalKeyboardKey.controlLeft;
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(modifier);
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(clipboard, isNotEmpty);
+      expect(clipboard.last, contains('Intro paragraph.'));
+      expect(clipboard.last, contains('final a = 1;'));
+      expect(clipboard.last, isNot(contains('dart')));
+    },
+    variant: const TargetPlatformVariant({
+      TargetPlatform.macOS,
+      TargetPlatform.linux,
+      TargetPlatform.windows,
+    }),
+  );
+
+  testWidgets(
+    'the context menu stays inside the window near the bottom right corner',
+    (tester) async {
+      tester.view.physicalSize = const Size(400, 300);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        FluentApp(
+          home: Align(
+            alignment: Alignment.bottomRight,
+            child: SizedBox(
+              width: 160,
+              child: CodeLabMarkdown(id: 'agent-1', text: 'Corner text here'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final target = find.textContaining('Corner', findRichText: true);
+      final gesture = await tester.startGesture(
+        tester.getBottomRight(target) - const Offset(6, 4),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await gesture.up();
+      await tester.pump();
+
+      final menu = tester.getRect(find.byType(FlyoutContent));
+      expect(menu.right, lessThanOrEqualTo(400));
+      expect(menu.bottom, lessThanOrEqualTo(300));
+      expect(menu.left, greaterThanOrEqualTo(0));
+      expect(menu.top, greaterThanOrEqualTo(0));
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
+  );
 }
