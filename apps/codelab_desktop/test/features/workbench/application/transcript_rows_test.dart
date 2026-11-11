@@ -34,6 +34,43 @@ void main() {
       expect(cubit.state.overridesFor('s3'), isEmpty);
       expect(cubit.state.overridesFor(null), isEmpty);
     });
+
+    // Показанное изображение — выбор пользователя на время запуска (D6,
+    // DSK-20): ключ `<rowId>#image:<url>`, строка и адрес вместе.
+    test('remembers a shown image by row and url, per session', () {
+      final cubit = TranscriptViewCubit(changes: ShellChanges());
+      addTearDown(cubit.close);
+      const url = 'https://x.example/y.png';
+
+      cubit.setImageShown(sessionId: 's1', rowId: 'agent-2', url: url);
+
+      expect(
+        TranscriptViewState.imageKey('agent-2', url),
+        'agent-2#image:$url',
+      );
+      expect(cubit.state.shownImagesFor('s1'), {'agent-2#image:$url'});
+      expect(cubit.state.isImageShown('s1', 'agent-2', url), isTrue);
+      // Тот же адрес в другом ответе и в другой сессии снова требует клика.
+      expect(cubit.state.isImageShown('s1', 'agent-4', url), isFalse);
+      expect(cubit.state.isImageShown('s2', 'agent-2', url), isFalse);
+      expect(cubit.state.shownImagesFor(null), isEmpty);
+    });
+
+    test('shown images do not disturb the expansion of rows', () {
+      final cubit = TranscriptViewCubit(changes: ShellChanges());
+      addTearDown(cubit.close);
+
+      cubit
+        ..setExpanded(sessionId: 's1', rowId: 'thought-2', expanded: true)
+        ..setImageShown(
+          sessionId: 's1',
+          rowId: 'agent-3',
+          url: 'https://x.example/y.png',
+        );
+
+      expect(cubit.state.overridesFor('s1')['thought-2'], isTrue);
+      expect(cubit.state.shownImagesFor('s1'), hasLength(1));
+    });
   });
 
   test('a thought streams until the reply starts, and the choice of the user '
