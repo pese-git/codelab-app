@@ -1,0 +1,94 @@
+## MODIFIED Requirements
+
+### Requirement: Конфигурация сессии вне корня запуска
+Если `CoreConfig.projectRoot` задан и канонический `cwd` новой или загружаемой сессии ему не равен, `AgentRuntime` SHALL строить для сессии конфигурацию **её папки** — полный `CoreConfig` из слоёв папки и свою функцию модели — а не брать снимок корня запуска (design.md change `require-project-folder`, D21; заменяет D9 change `add-agent-configuration`).
+
+**На сессию** SHALL браться всё, что входит в `CoreConfig`:
+- провайдеры (`providers.*`) и каталог моделей (`model_catalog.*`);
+- модель по умолчанию;
+- `effort`;
+- режим и правила разрешений (`permissions.*`);
+- бюджет хода, пороги сжатия;
+- MCP-серверы конфигурации;
+- `redact.*`;
+- `tools.project_context.max_bytes`.
+
+Функция модели (`StreamFunction`) и каталог сессии SHALL строиться функцией хоста `modelsFor` по `CoreConfig` сессии.
+
+**На процесс** SHALL оставаться:
+- `HostSettings` (`secrets.*`, в том числе бэкенд, `sessions.*`, `logging.*`, `exec.*`, `config.*`);
+- `trusted_projects`;
+- capability и сужение профиля;
+- резолвер секретов, HTTP-клиент, журнал сессий и память последней модели.
+
+**Порт.** `AgentCoreServices` SHALL принимать необязательный порт `ProjectConfigLoader { Future<ConfigLoadResult> loadForProject(String canonicalCwd) }`. Порт загружает слои `user`, `<cwd>/.codelab/config.yaml`, `<cwd>/.codelab/config.local.yaml`, `--config`, окружения и флагов тем же загрузчиком и окружением, что при старте, с доверием проектам, закреплённым по `initial.config.trustedProjects`. Если порт передан без `modelsFor`, `buildAgentCore` SHALL бросать `HostWiringException`.
+
+**Порядок.** На каждый `session/new` и `session/load` сессии вне корня, без кэша, `AgentRuntime` SHALL выполнять шаги по порядку:
+1. канонизировать `cwd`;
+2. вызвать `loadForProject`;
+3. проверить снимок (`validateSnapshot`);
+4. вызвать `modelsFor`;
+5. выбрать модель сессии по существующему правилу, с памятью последней модели процесса;
+6. только потом читать файлы проекта и подключать MCP-серверы.
+
+Каталог сессии SHALL быть источником вариантов `configOptions` `model` и проверки `session/set_config_option` этой сессии. Правка проектных файлов SHALL применяться к следующему `session/new` или `session/load` этой папки; живой перезагрузки проектных слоёв других папок у открытых сессий нет. Перезагрузка конфигурации корня (`reloadConfig`) НЕ SHALL менять функцию модели и конфигурацию сессий других папок.
+
+**Ключи процесса из папки сессии.** Ключи процесса, которые слои папки сессии задают иначе, чем применённый снимок, НЕ SHALL применяться. По одному разу на папку SHALL писаться `config.session.process_keys_ignored {session_id, keys}` — только ключи показа, без значений.
+
+**Проблемы (fail closed).** Если загрузка, проверка снимка или `modelsFor` дали проблемы или исключение, сессия НЕ SHALL создаваться или загружаться. Ни снимок корня, ни снимок без проекта НЕ SHALL подставляться. `AgentRuntime` SHALL бросать типизированную ошибку `ProjectConfigException {cwd, issues}`. Её текст — проблемы в форме `config check`, без значений секретов и подставленных переменных.
+
+**Отмена.** Остановка рантайма во время этих шагов SHALL прерывать ожидание. Сессия при этом не создаётся, MCP-процессы не стартуют.
+
+**Канонизация `cwd`.** Перед сравнением (`CoreConfig.forSessionCwd`) `cwd` сессии SHALL канонизироваться портом `PathResolver.realpath` базового окружения; ядро само путь не раскрывает. Если путь не раскрылся, сравнивается нормализованная запись пути, и `loadForProject` получает её же. Сравнивается равенство канонических путей по компонентам, а не вложенность: подкаталог корня — своя папка.
+
+**Лог.** На каждую такую папку SHALL писаться один лог `config.session.project {session_id, cwd, config_root, trusted}` уровня `info`.
+
+**Без порта** поведение прежнее: сессия вне корня получает `CoreConfig.withoutProject`, пишется лог `config.session.outside_root {session_id, cwd, config_root}`. Без `projectRoot` все сессии получают `CoreConfig`.
+
+#### Scenario: Запреты проекта сессии применяются вне корня запуска
+- **WHEN** ядро собрано с `projectRoot: /A` и портом, проект `/B` доверенный, `/B/.codelab/config.yaml` задаёт `permissions.deny: ["exec:rm -rf"]`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** у сессии `/B` действует запрет `exec:rm -rf`, правила `/A` к ней не применяются, лог `config.session.project` с `cwd: /B`
+
+#### Scenario: Недоверенный проект сессии только ужесточает
+- **WHEN** проект `/B` недоверенный, задаёт `permissions.mode: bypass`, `permissions.deny: ["write:.env"]` и `providers.evil`, и сессия создаётся с `cwd: /B`
+- **THEN** режим — из глобального слоя, запрет `write:.env` действует, провайдера `evil` в каталоге сессии нет (`config.project.untrusted_key`)
+
+#### Scenario: Провайдер проекта работает в его сессиях без перезапуска
+- **WHEN** агент запущен с корнем `/A`, доверенный `/B/.codelab/config.local.yaml` задаёт провайдера `local` и `agent.default_model: local/m`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** модель сессии `/B` — `local/m`, `configOptions` `model` содержит `local/m`, а у сессии `/A` в каталоге нет `local`
+
+#### Scenario: Проектные серверы не попадают в чужой проект
+- **WHEN** ядро собрано с `projectRoot: /A`, `CoreConfig.mcpServers` содержит сервер проекта `/A`, проект `/B` своих серверов не задаёт, и клиент создаёт сессию с `cwd: /B`
+- **THEN** сессия `/B` не подключает сервер проекта `/A`
+
+#### Scenario: Ключи процесса из папки сессии игнорируются
+- **WHEN** `/B/.codelab/config.local.yaml` задаёт `sessions.dir` и `logging.level`
+- **THEN** сессия `/B` создаётся, журнал и логи — процесса, лог `config.session.process_keys_ignored` с ключами и без значений
+
+#### Scenario: Битый конфиг проекта сессии
+- **WHEN** `/B/.codelab/config.yaml` не разбирается, и клиент создаёт сессию с `cwd: /B`
+- **THEN** сессия не создаётся, `AgentRuntime` бросает `ProjectConfigException` с проблемой и путём файла; снимок без проекта не подставлен
+
+#### Scenario: Правка проекта применяется к следующей сессии
+- **WHEN** сессия `/B` открыта, затем в `/B/.codelab/config.yaml` добавлен запрет, и клиент создаёт вторую сессию в `/B`
+- **THEN** вторая сессия получает новый запрет без перезагрузки и перезапуска, первая — прежние правила
+
+#### Scenario: Перезагрузка корня не трогает сессии других папок
+- **WHEN** открыта сессия `/B` с моделью `local/m`, и `reloadConfig()` применяет новый снимок корня `/A`, где нет провайдера `local`
+- **THEN** сессия `/B` по-прежнему ходит в `local/m`
+
+#### Scenario: Остановка во время загрузки
+- **WHEN** `loadForProject` для `/B` ещё не завершился, и рантайм останавливается
+- **THEN** `session/new` завершается ошибкой, сессии нет, MCP-серверы `/B` не запускались
+
+#### Scenario: Подкаталог — своя папка
+- **WHEN** доверенный проект `/A` задаёт `permissions.tools.exec: allow` в `config.local.yaml`, у `/A/sub` своего `.codelab/` нет, и сессия создана с `cwd: /A/sub`
+- **THEN** правило `allow` проекта `/A` к сессии не применяется, конфигурация — из глобальных слоёв
+
+#### Scenario: Сессия в корне запуска
+- **WHEN** сессия создана с `cwd`, равным `projectRoot`
+- **THEN** она получает применённый снимок и функцию модели процесса, `loadForProject` не вызывается, лога `config.session.project` нет
+
+#### Scenario: Без порта — прежнее поведение
+- **WHEN** ядро собрано без `ProjectConfigLoader`, с `projectRoot: /A`, и сессия создана с `cwd: /B`
+- **THEN** сессия получает `withoutProject`, лог `config.session.outside_root`
