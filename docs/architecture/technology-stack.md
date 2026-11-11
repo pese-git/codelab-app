@@ -790,11 +790,11 @@ Architectural dependency rules важнее технической доступ�
 
 ---
 
-## 20г. `codelab_desktop`: рендер терминала пользователя — `xterm2` (запасной `xterm`)
+## 20г. `codelab_desktop`: рендер терминала пользователя — `xterm2`
 
-**Статус: направление утверждено, пакет выбирает спайк.** Решение пользователя 2026-11-11 (Q2, Q3) в [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md). Окончательный пакет, точная версия и транзитивные лицензии вписываются сюда задачей 1.2 change после спайка 1.1. До этого пакета нет в `pubspec.yaml`.
+**Статус: утверждено.** Решение пользователя 2026-11-11 (Q2, Q3). Пакет и версия выбраны спайком 1.1 — [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D15; запасной `xterm` не понадобился. В `pubspec.yaml` app пакеты попадают задачей 1.4 change.
 
-Технология: [`xterm2`](https://pub.dev/packages/xterm2) — форк `xterm.dart`, виджет `TerminalView`. Его модель экрана — отдельный пакет [`xterm2_core`](https://pub.dev/packages/xterm2_core) на чистом Dart: автомат, буферы, парсер escape-последовательностей, кодирование ввода. Запасной вариант — [`xterm`](https://pub.dev/packages/xterm) 4.0.0 с тем же API (модель — `package:xterm/core.dart`).
+Технология: [`xterm2`](https://pub.dev/packages/xterm2) **5.4.0** — форк `xterm.dart`, виджет `TerminalView`. Модель экрана — отдельный пакет [`xterm2_core`](https://pub.dev/packages/xterm2_core) **1.0.0** на чистом Dart: автомат, буферы, парсер escape-последовательностей, кодирование ввода. Пин точных версий в `apps/codelab_desktop/pubspec.yaml`.
 
 1. **Назначение.** Эмуляция VT/xterm и отрисовка вкладок панели Terminal десктопа (D-28, `proposals/dart-agent-and-clients/12-3-desktop-display.md`, A16).
 2. **Где используется.** Только `apps/codelab_desktop/lib/features/terminal/`:
@@ -805,44 +805,55 @@ Architectural dependency rules важнее технической доступ�
 3. **Где не используется.**
    * `codelab_ui` — организм `CodeLabTerminalPane` получает виджет терминала слотом;
    * `codelab_client_*`, пакеты агента, `apps/codelab_cli`;
-   * лента: строки инструментов ACP `terminal/*` остаются текстом.
+   * лента: строки инструментов ACP `terminal/*` остаются текстом;
+   * обработчик ZMODEM (`zmodem`, транзитивно от `xterm2`) не подключается.
 4. **Какую проблему решает.** Не писать свой парсер ANSI и рендер: escape-последовательности, широкие символы, альтернативный экран, scrollback, выделение, bracketed paste.
-5. **Влияние на architecture boundaries.** Application зависит только от чистого `xterm2_core`, Flutter туда не попадает (`AGENTS.md` §6). `TerminalView` импортирует `package:flutter/material.dart` — библиотеку SDK, которую уже тянет `fluent_ui`. Второй дизайн-системы нет: тема строится из `FluentTheme` (§7). Буфер обмена через OSC 52, 1337 и 5522 выключен — и чтение, и запись (решение пользователя Q13): `clipboardDecoder` и обработчик чтения не заданы, `allowITerm2ClipboardCapture` и `allowKittyClipboard` — `false` (D3 change).
+5. **Влияние на architecture boundaries.**
+   * Application зависит только от чистого `xterm2_core`, Flutter туда не попадает (`AGENTS.md` §6); `fvm dart run` без Flutter подтверждён спайком.
+   * `TerminalView` работает внутри `FluentApp` без `MaterialApp` и без Material-виджетов; импорт `package:flutter/material.dart` есть только внутри самого `xterm2`, как библиотека SDK. Тема строится из `FluentTheme` (§7).
+   * **Буфер обмена (решение пользователя Q13).** Чтение и запись через OSC 52, 1337 и 5522 запрещены. Обработчики не оставлять `null`: `TerminalView.initState` иначе подставит системный буфер через `??=`. Политика модели вкладки:
+     * `clipboardDecoder: (_, _) => null`;
+     * `allowITerm2ClipboardCapture: false`, `allowKittyClipboard: false`;
+     * пустой `onClipboardStore`;
+     * `onClipboardQuery` → `null`.
+
+     Подробнее — D3 change. Выделение и Cmd+C/Cmd+V пользователя работают.
+   * Запись в модель — порциями до 4 КБ не чаще кадра: один `write` на ~400 КБ держит UI isolate ~120 мс (D15).
 6. **Заменяет ли существующую технологию.** Нет.
 7. **Требуется ли migration.** Нет.
 8. **Требуется ли ADR.** Нет (Q3): технология затрагивает одну feature одного app и не меняет границ пакетов, state management и ACP — прецедент §20а.
 
-Кандидаты (pub.dev, 2026-11-11; сравнение — раздел Context design.md):
+Рассмотренные кандидаты (pub.dev, 2026-11-11; сравнение — раздел Context design.md):
 
 | Пакет | Версия | Лицензия | Итог |
 |---|---|---|---|
-| `xterm2` + `xterm2_core` | 5.4.0 + 1.0.0, 2026-10-21 | MIT | основной |
-| `xterm` | 4.0.0, 2024-02-27 | MIT | запасной: не обновлялся больше 2,5 лет |
+| `xterm2` + `xterm2_core` | 5.4.0 + 1.0.0 | MIT | **выбран** |
+| `xterm` | 4.0.0 | MIT | запасной, не понадобился: не обновлялся с 2024-02 |
 | `xterm3` | 6.4.0 | AGPL-3.0 | исключён: несовместим с MIT |
 | `kterm` | 1.6.0 | MIT | не выбран: kitty-графика, разбор изображений из вывода |
 | `terminal_view` | 0.5.0 | MIT | не выбран: нет отдельного чистого ядра |
 
-Проверка по §25 — предварительная, финал — после спайка:
-* **Desktop platforms.** Заявлены macOS, Linux, Windows (и web, mobile). Сборка app есть только для macOS.
-* **SDK constraints.** `xterm2` требует Flutter `>=3.27`, Dart `>=3.6`. Сборка на Flutter из `.fvmrc` (3.47) — пункт спайка.
+Проверка по §25:
+* **Desktop platforms.** Заявлены macOS, Linux, Windows; проверено на macOS (сборки app есть только для неё).
+* **SDK constraints.** `xterm2` — Flutter `>=3.27`, Dart `>=3.6`; собирается на Flutter 3.47 / Dart 3.13 (`.fvmrc`).
 * **Native configuration.** Нет.
-* **Security.** Вывод процесса — недоверенный поток: буфер обмена через escape-последовательности выключен, вывод и ввод не логируются (`observability.md` §35).
-* **Лицензии транзитивных зависимостей.** Ведутся здесь, а не в `THIRD_PARTY_NOTICES.md` (решение Q12). По метаданным pub.dev: `characters`, `convert`, `meta`, `quiver` (Apache-2.0), `equatable`, `zmodem` (MIT). Полный список по `pubspec.lock` — спайк 1.1.
+* **Testing.** Widget-тесты с настоящим `TerminalView` идут под `fvm flutter test` (спайк: `terminal_view_fluent_test.dart`).
+* **Security.** Вывод процесса — недоверенный поток: буфер обмена закрыт, вывод и ввод не логируются (`observability.md` §35).
 
 ---
 
-## 20д. `codelab_desktop`: PTY для терминала пользователя — `pty2` (запасной `flutter_pty`)
+## 20д. `codelab_desktop`: PTY для терминала пользователя — `pty2`
 
-**Статус: направление утверждено, пакет выбирает спайк.** Решение пользователя 2026-11-11 (Q1, Q3) в [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md). Вариант `Process.start` без PTY отклонён: без TTY не работают:
+**Статус: утверждено.** Решение пользователя 2026-11-11 (Q1, Q3). Пакет и версия выбраны спайком 1.1 — [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D15; запасной `flutter_pty` не понадобился.
+
+Вариант `Process.start` без PTY отклонён: без TTY не работают:
 * редактирование строки, история и Tab-дополнение;
 * сигнал Ctrl+C;
 * `sudo`, `ssh` и запрос пароля `git`;
 * полноэкранные программы;
 * построчный вывод программ на C.
 
-Окончательный пакет и версия вписываются задачей 1.2 change.
-
-Технология: [`pty2`](https://pub.dev/packages/pty2) — PTY на чистом Dart. C-код (`forkpty`, `setsid`) собирается хуком native assets; на Windows — ConPTY. Запасной вариант — [`flutter_pty`](https://pub.dev/packages/flutter_pty), FFI-плагин Flutter.
+Технология: [`pty2`](https://pub.dev/packages/pty2) **0.8.1** — PTY на чистом Dart. C-код (`forkpty`, `setsid`) собирается хуком native assets; на Windows — ConPTY. Пин точной версии в `apps/codelab_desktop/pubspec.yaml`.
 
 1. **Назначение.** Запуск интерактивного shell пользователя (`$SHELL -l`) в псевдотерминале: ввод, вывод, размер окна, сигналы.
 2. **Где используется.** Только адаптер `apps/codelab_desktop/lib/core/platform/user_shell_launcher.dart` за портом `UserShellLauncher` (§24, `platform-integration.md` §8, §73). Правило сторожа — D11 change.
@@ -853,23 +864,54 @@ Architectural dependency rules важнее технической доступ�
    * пакеты `packages/dart/*`.
 4. **Какую проблему решает.** `dart:io` не умеет PTY. Свой FFI-слой к `forkpty` и ConPTY — нативный код без сопровождения.
 5. **Влияние на architecture boundaries.** Нативный API не выходит за адаптер. Feature работает с портом и тестируется с fake. Пакет не попадает в `codelab_client_io`: у порта один потребитель, а native assets собирались бы и для CLI (D2 change).
+
+   Особенности API, которые адаптер скрывает (D2, D15):
+   * нет `pid`;
+   * ввод — `write(String)`, вывод — `Stream<String>`;
+   * `kill(SIGHUP)` и `kill(SIGKILL)` шлются группе процесса, любой сигнал закрывает PTY-мастер;
+   * без `environment` ребёнок получает узкий набор переменных — адаптер передаёт `Platform.environment` целиком (Q9);
+   * ошибок старта нет (процесс выходит с `1`/`-1`) — адаптер проверяет файл и папку до `start`;
+   * код выхода иногда `-1` — адаптер отдаёт `null`, вкладка показывает «exited» без кода.
 6. **Заменяет ли существующую технологию.** Нет.
 7. **Требуется ли migration.** Нет.
 8. **Требуется ли ADR.** Нет (Q3); обоснование — как в §20г.
 
-Проверка по §24–§25 — предварительная, финал — после спайка:
-* **Desktop platforms.** `pty2` — macOS, Linux (`forkpty`), Windows (ConPTY, есть опциональная загрузка ConPTY из NuGet — в app не включается). `flutter_pty` — macOS, Linux, Windows. Сборка app есть только для macOS.
-* **Native dependencies.** `pty2` — C-компилятор при сборке: Xcode CLT на macOS, `cc` или `gcc` на Linux. `flutter_pty` — CMake, на macOS — CocoaPods.
-* **Lifecycle.** Процесс принадлежит вкладке, закрытие — `SIGHUP`, затем принудительное завершение. Выход из app закрывает все вкладки, крах app — `SIGHUP` от закрытия PTY-мастера (`concurrency.md` §45, `platform-integration.md` §23).
-* **Threading.** `pty2` читает в фоновых isolate, `flutter_pty` — в нативном потоке. Разбор вывода эмулятором — на UI isolate, порциями не чаще кадра.
+Проверка по §24–§25:
+* **Desktop platforms.** `pty2` — macOS, Linux (`forkpty`), Windows (ConPTY; опциональная загрузка ConPTY из NuGet в app не включается). Проверено на macOS arm64: `fvm flutter build macos` debug и release, в бандле `pty2_unix.framework`.
+* **SDK constraints.** `pty2` требует Dart `>=3.11.0`. У `apps/codelab_desktop` нижняя граница поднимается с `>=3.8.0` до `>=3.11.0`; корень workspace и другие пакеты не меняются (D11 change, задача 1.4).
+* **Native dependencies.** C-компилятор при сборке: Xcode CLT на macOS, `cc` или `gcc` на Linux. Отдельной настройки Xcode или CocoaPods нет.
+* **Lifecycle.**
+  * Процесс принадлежит вкладке: закрытие — `SIGHUP`, через 2 с `SIGKILL`.
+  * Выход из app закрывает все вкладки.
+  * Крах app — `SIGHUP` от закрытия PTY-мастера, подтверждено спайком (`concurrency.md` §45, `platform-integration.md` §23).
+  * Задание интерактивного shell с игнором `SIGHUP` после `SIGKILL` shell остаётся сиротой — поведение пользователя, как `nohup`.
+* **Threading.** Чтение — в фоновых isolate `pty2` (без модели поток 585 КБ читается за 0,29 с). Разбор эмулятором — на UI isolate, порциями (§20г).
 * **Security.** Shell пользователя вне permission policy и containment (`permissions.md` §2), окружение app целиком (`platform-integration.md` §53, исключение).
-* **Testing.** `pty2` — контрактный тест адаптера на Dart VM, если native assets собираются под `flutter test` (пункт спайка). `flutter_pty` — только `integration_test/` в `release/*`.
-* **Maintenance.**
-  * `pty2` 0.8.1 от 2026-11-10: активное сопровождение, но ломающие версии 0.6–0.8 вышли за две недели;
-  * `flutter_pty` 0.4.2 от 2025-01-06, помечен «experimental».
+* **Testing.** Native assets собираются под `fvm flutter test` и `fvm dart test`; контрактный тест адаптера идёт на Dart VM в `feature/*`. На код выхода тесты не опираются.
+* **Maintenance.** 0.8.1 от 2026-11-10; активное сопровождение, но ломающие версии 0.6–0.8 вышли за две недели. Мера — пин точной версии, обновление — отдельным PR с контрактным тестом.
 
-  Мера — пин точной версии, обновление — отдельным PR с контрактным тестом.
-* **Лицензии.** Оба пакета — MIT. Транзитивные зависимости по `pubspec.lock` — спайк 1.1; список ведётся здесь (Q12).
+### Транзитивные зависимости и лицензии терминала (§20г–§20д)
+
+Список ведётся здесь, а не в `THIRD_PARTY_NOTICES.md` (решение пользователя Q12): реестр — для воспроизведённых фрагментов. Это замыкание `dependencies` пакетов `xterm2`, `xterm2_core`, `pty2` по `pubspec.lock` спайка; лицензии взяты из тегов pub.dev и файлов `LICENSE`. Несовместимых с MIT нет. Источник — D15 change.
+
+| Пакет | Версия | Лицензия | Тянет | В lock workspace до change |
+|---|---|---|---|---|
+| `pty2` | 0.8.1 | MIT | прямая | нет |
+| `xterm2` | 5.4.0 | MIT | прямая | нет |
+| `xterm2_core` | 1.0.0 | MIT | прямая, `xterm2` | нет |
+| `zmodem` | 0.0.6 | MIT | `xterm2` | нет |
+| `quiver` | 3.2.2 | Apache-2.0 | `xterm2` | нет |
+| `equatable` | 2.1.0 | MIT | `xterm2` | нет |
+| `native_toolchain_c` | 0.19.6 | BSD-3-Clause | `pty2` (хук сборки) | нет |
+| `win32` | 6.4.0 | BSD-3-Clause | `pty2` (Windows) | нет |
+| `ffi_leak_tracker` | 0.1.2 | BSD-3-Clause | `win32` | нет |
+| `code_assets` | 2.2.0 | BSD-3-Clause | `pty2`, `native_toolchain_c` | 1.2.1 — поднимается (мажор) |
+| `hooks` | 2.2.0 | BSD-3-Clause | `pty2`, `code_assets` | 2.0.2 — поднимается |
+| `record_use` | 1.1.1 | BSD-3-Clause | `hooks` | 0.6.0 — поднимается |
+| `yaml` | 3.1.4 | MIT | `hooks` | 3.1.3 |
+| `characters`, `collection`, `convert`, `crypto`, `ffi`, `file`, `glob`, `logging`, `matcher`, `meta`, `path`, `platform`, `process`, `pub_semver`, `typed_data`, `async`, `boolean_selector`, `source_span`, `stack_trace`, `stream_channel`, `string_scanner`, `term_glyph`, `test_api` | см. D15 | BSD-3-Clause | разные | уже есть |
+
+Кроме замыкания, в lock workspace поднимается `objective_c` 9.5.0 → 9.6.3: он тянется через существующие пакеты. Сборку app и тесты затронутых пакетов с новым lock проверяет задача 1.4 change.
 
 ---
 

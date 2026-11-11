@@ -49,7 +49,7 @@
 
 ## 1. Спайк, стек, сторож, порт (итерация 1)
 
-- [ ] 1.1 `[desktop]` Спайк — ворота итерации (D14). Каталог `apps/codelab_desktop/tool/terminal_spike/` (вне `lib/`, по образцу `apps/codelab_cli/tool/tui_spike/` change `add-cli-tui`). Проверить на macOS с Flutter из `.fvmrc`:
+- [x] 1.1 `[desktop]` Спайк — ворота итерации (D14). Каталог `apps/codelab_desktop/tool/terminal_spike/` (вне `lib/`, по образцу `apps/codelab_cli/tool/tui_spike/` change `add-cli-tui`). Проверить на macOS с Flutter из `.fvmrc`:
   - сборку `flutter build macos` с `pty2` (при неудаче — с `flutter_pty`) и `xterm2` (при неудаче — с `xterm` 4.0.0);
   - что `xterm2_core` импортируется в чистом Dart без Flutter (`fvm dart run` скрипта вне Flutter);
   - `TerminalView` внутри `FluentApp` без `MaterialApp`, тему из `FluentTheme`;
@@ -63,21 +63,40 @@
   - рывки UI на `yes | head -n 200000`.
 
   Итог — раздел «Итог спайка» в design.md (D15): выбранные пакеты рендера и PTY, точные версии, полный список транзитивных зависимостей выбранных пакетов из `pubspec.lock` с лицензиями (несовместимые с MIT — стоп), что не подтвердилось. Каталог спайка удаляется в задаче 3.9.
-- [ ] 1.2 `[desktop]` `docs/architecture/technology-stack.md` §20г–§20д — финал по итогу 1.1: выбранный пакет, точная версия, транзитивные зависимости и лицензии, проверка по §24–§25 (D11; Q3 — без ADR). `THIRD_PARTY_NOTICES.md` и `licensing-and-attribution` не меняются (Q12); проверить только, что в коде change нет воспроизведённых фрагментов.
-- [ ] 1.3 `[desktop]` Тест (workspace-architecture «Автоматический сторож границ пакетов»; D11): в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` правила `apps/codelab_desktop` под выбранный пакет. Для `xterm2`: `package:xterm2_core/` вне `features/terminal/`; `package:xterm2/` вне `features/terminal/presentation/`; `package:flutter/` в `features/terminal/application/`; PTY-пакет вне `core/platform/user_shell_launcher.dart`. Негативные тесты: `package:xterm2/` в `features/terminal/application/`, `package:xterm2_core/` в `features/workbench/`, PTY-пакет в `features/terminal/` → нарушение (красный). Для запасного `xterm` — вариант правил из D11.
-- [ ] 1.4 `[desktop]` Добавить выбранные пакеты рендера (`xterm2` и `xterm2_core` либо `xterm`) и PTY точными версиями в `dependencies` `apps/codelab_desktop/pubspec.yaml`, выполнить `fvm dart run melos bootstrap`, правила в `test/support/rules.dart` с комментариями (почему, ссылка на D11) — 1.3 зелёный; `melos run guard` зелёный.
-- [ ] 1.5 `[desktop]` Контрактный тест адаптера (`integrated-terminal` «Терминал — настоящий псевдотерминал», «Жизненный цикл процессов терминала»; D2, D13). При `pty2` — `apps/codelab_desktop/test/core/platform/user_shell_launcher_test.dart` на Dart VM, при `flutter_pty` — `integration_test/user_shell_launcher_test.dart` (только `release/*`). Проверяет:
-  - `test -t 0 && test -t 1` → код `0`;
+
+  Состояние: выполнено 2026-11-11, автоматическая и ручная части (D15). Выбраны `pty2` 0.8.1, `xterm2` 5.4.0, `xterm2_core` 1.0.0. Находки перенесены в D2–D4, D6, D11, D13, Risks и Q14 (условный):
+  - русская раскладка — сопоставление по физической клавише;
+  - рывки под потоком — бюджет на кадр.
+- [x] 1.2 `[desktop]` `docs/architecture/technology-stack.md` §20г–§20д — финал по итогу 1.1 (D15): выбранный пакет, точная версия, транзитивные зависимости и лицензии, проверка по §24–§25 (D11; Q3 — без ADR). `THIRD_PARTY_NOTICES.md` и `licensing-and-attribution` не меняются (Q12); проверить только, что в коде change нет воспроизведённых фрагментов.
+- [ ] 1.3 `[desktop]` Тест (workspace-architecture «Автоматический сторож границ пакетов»; D11): в `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` правила `apps/codelab_desktop` под выбранный пакет. Правила: `package:xterm2_core/` вне `features/terminal/`; `package:xterm2/` вне `features/terminal/presentation/`; `package:flutter/` в `features/terminal/application/`; PTY-пакет вне `core/platform/user_shell_launcher.dart`. Негативные тесты: `package:xterm2/` в `features/terminal/application/`, `package:xterm2_core/` в `features/workbench/`, PTY-пакет в `features/terminal/` → нарушение (красный).
+- [ ] 1.4 `[desktop]` Зависимости и правила (D11, D15):
+  - добавить `xterm2: 5.4.0`, `xterm2_core: 1.0.0`, `pty2: 0.8.1` точными версиями в `dependencies` `apps/codelab_desktop/pubspec.yaml`;
+  - поднять `environment.sdk` `apps/codelab_desktop` до `>=3.11.0` (требование `pty2`); корень workspace и другие пакеты не трогать. Если pub workspace потребует общую границу — остановиться и записать решение в D11 явно;
+  - выполнить `fvm dart run melos bootstrap`;
+  - сверить `pubspec.lock` с D15: добавлены ровно 9 пакетов (`equatable`, `ffi_leak_tracker`, `native_toolchain_c`, `pty2`, `quiver`, `win32`, `xterm2`, `xterm2_core`, `zmodem`) и подняты `code_assets` 1.2.1 → 2.2.0, `hooks` → 2.2.0, `record_use` → 1.1.1, `objective_c` → 9.6.3. Расхождение записать в D15;
+  - правила в `test/support/rules.dart` с комментариями (почему, ссылка на D11).
+
+  Ожидаемый результат: 1.3 зелёный, `fvm dart run melos run guard` зелёный, `fvm flutter build macos` app собирается, в бандле есть `pty2_unix.framework`.
+
+  Lock общий, поэтому подъём `code_assets` (мажор), `hooks`, `record_use` и `objective_c` — изменение межпакетных зависимостей (`AGENTS.md` §21, п. 4). Нужны:
+  - `fvm dart run melos run analyze` по workspace;
+  - тесты пакетов, которые тянут эти четыре пакета (найти по `fvm dart pub deps`).
+
+  Полный `melos run check` — предложить пользователю, самим не запускать.
+- [ ] 1.5 `[desktop]` Контрактный тест адаптера (`integrated-terminal` «Терминал — настоящий псевдотерминал», «Жизненный цикл процессов терминала»; D2, D13): `apps/codelab_desktop/test/core/platform/user_shell_launcher_test.dart` на Dart VM (native assets `pty2` собираются под `flutter test`, D15). На код выхода тест не опирается (D4, «Код выхода»). Проверяет:
+  - `test -t 0 && test -t 1 && echo tty` → в выводе `tty`;
+  - переменная из `environment`, которой нет в узком наборе `pty2`, видна в shell; `TERM` и `COLORTERM` выставлены;
   - `cwd` соблюдается;
   - `tput cols` после `resize(100, 30)` → `100`;
-  - `hangUp()` завершает `sh`;
-  - `kill()` завершает `trap '' HUP; sleep 100`;
-  - повторные `kill()` и `hangUp()` после выхода — без ошибок;
-  - несуществующий исполняемый файл → `UserShellStartFailure` без пути в тексте;
+  - `hangUp()` завершает интерактивный `sh` (`exitCode` завершается);
+  - `kill()` завершает `sh -c "trap '' HUP; exec sleep 100"`, на который `hangUp()` не действует (D15, п. 6);
+  - повторные `kill()`, `hangUp()`, `write()` и `resize()` после выхода — без ошибок;
+  - `exitCode` = `-1` от `pty2` адаптер отдаёт как `null` (на fake-ядре или через отдельную функцию перевода);
+  - несуществующий исполняемый файл → `UserShellStartFailure.shellNotFound`, несуществующая папка → `folderNotFound`; `start` пакета не вызывается, пути в тексте нет;
   - `isSupported` на macOS — `true`.
 
   Тест красный.
-- [ ] 1.6 `[desktop]` Реализовать порт `UserShellLauncher`, `UserShell`, `UserShellStartFailure` и адаптер на выбранном пакете в `apps/codelab_desktop/lib/core/platform/user_shell_launcher.dart`; `Platform.is*` только здесь (D2, D12). Комментарии по `AGENTS.md` §15 — 1.5 зелёный.
+- [ ] 1.6 `[desktop]` Реализовать порт `UserShellLauncher`, `UserShell` (`Stream<String> output`, `write(String)`, `exitCode` как `Future<int?>`), `UserShellStartFailure` с предпроверкой файла и папки и адаптер на `pty2`; окружение — `Platform.environment` целиком плюс `TERM`, `COLORTERM` в `apps/codelab_desktop/lib/core/platform/user_shell_launcher.dart`; `Platform.is*` только здесь (D2, D12). Комментарии по `AGENTS.md` §15 — 1.5 зелёный.
 - [ ] 1.7 `[desktop]` Проверки итерации 1 (шапка) и PR итерации 1.
 
 ## 2. Feature terminal и панель в доке (итерация 2)
@@ -88,8 +107,9 @@
   - несуществующая папка → `failed` без вызова `start`;
   - новая вкладка активна; 12 вкладок подряд создаются без отказа (предела нет, Q8);
   - закрытие вкладки и `closeAll()` во время `start`: поздний `UserShell` сразу получает `kill()` и в реестр не попадает (D4, «Старт в полёте»);
-  - закрытие: `hangUp` → через 2 с `kill`, вкладка исчезает сразу;
-  - `exit 3` → `exited(3)`, ввод игнорируется;
+  - закрытие: `hangUp` → если `exitCode` не завершился за 2 с — `kill`, вкладка исчезает сразу, `forced` в событии;
+  - `exit 3` → `exited(3)`; код `null` от порта → `exited(null)`, строка `[Process exited]`, событие без `exit_code`; ввод в вышедшую вкладку игнорируется;
+  - запись в эмулятор порциями: 400 КБ вывода одним чанком fake-shell уходят в `Terminal.write` частями не больше заданного размера (4 КБ по умолчанию), без потери и перестановки данных; закрытие вкладки отбрасывает незаписанный остаток (D3, D4). Бюджет времени на кадр — задачи 2.7–2.8;
   - поздний вывод закрытой вкладки не меняет состояние;
   - `closeAll()`: `hangUp` всем, через 3 с `kill`, затем новые вкладки не создаются, повторный вызов — без действий;
   - после `close()` Cubit нет событий;
@@ -97,7 +117,7 @@
   - события D9 в fake-логгере без путей, окружения и вывода.
 
   Тест красный.
-- [ ] 2.2 `[desktop]` Реализовать `lib/features/terminal/application/`: `TerminalTabsCubit`, `TerminalTabsState`, закрытую иерархию `TerminalTabStatus`, реестр вкладок с моделью `Terminal` из `package:xterm2_core/xterm2_core.dart` (`maxLines` 10 000; буфер обмена выключен, D3) — 2.1 зелёный.
+- [ ] 2.2 `[desktop]` Реализовать `lib/features/terminal/application/`: `TerminalTabsCubit`, `TerminalTabsState`, закрытую иерархию `TerminalTabStatus`, реестр вкладок с моделью `Terminal` из `package:xterm2_core/xterm2_core.dart` (`maxLines` 10 000; политика буфера обмена Q13: `clipboardDecoder: (_, _) => null`, `allowITerm2ClipboardCapture: false`, `allowKittyClipboard: false`, пустой `onClipboardStore`, `onClipboardQuery` → `null` — в одной фабрике модели, D3), буфер записи порциями — 2.1 зелёный.
 - [ ] 2.3 `[desktop]` Widget-тест `packages/flutter/codelab_ui/test/organisms/codelab_terminal_pane_test.dart` (D3). Проверяет:
   - ключи `terminal-tab-<id>`, `terminal-tab-close-<id>`, `terminal-new-tab`, `terminal-disclosure`;
   - тег статуса из переданной подписи и тона;
@@ -115,25 +135,48 @@
   - `isSupported: false` — переключателя нет;
   - предупреждение при первом открытии и его нет после закрытия;
   - маркер вывода fake-shell не появляется в `LogBuffer`;
-  - OSC 52 записи и чтения в выводе fake-shell не меняют `Clipboard` (mock `SystemChannels.platform`) и не дают ответа процессу.
+  - буфер обмена (Q13, D3) — с настоящим `TerminalView` из `xterm2` над моделью вкладки из фабрики 2.2, фокус во вкладке: OSC 52 запись (`c` и `p`), OSC 52 запрос, OSC 1337 `CopyToClipboard`, OSC 5522 `write` в выводе fake-shell не вызывают `Clipboard.setData`/`getData` (mock `SystemChannels.platform`), а fake-shell не получает ответа. Контроль: модель без политики под тем же `TerminalView` вызывает `Clipboard.setData` — тест ловит именно подмену `??=`, а не отсутствие OSC;
+  - выделение и копирование пользователем вызывают `Clipboard.setData` с выделенным текстом.
 
   Тест красный.
 - [ ] 2.6 `[desktop]` Реализовать:
-  - `lib/features/terminal/presentation/` — привязку `TerminalView` (`package:xterm2/xterm.dart`) к модели вкладки, тему из `FluentTheme`, запись в эмулятор порциями не чаще кадра;
+  - `lib/features/terminal/presentation/` — привязку `TerminalView` (`package:xterm2/xterm.dart`) к модели вкладки, тему из `FluentTheme`, сброс буфера записи не чаще кадра частями до 4 КБ (D3); обработчики буфера обмена модели не перезаписываются виджетом;
   - `CodeLabShell` — `ToolPane.terminal` в доступных панелях при `isSupported`, своя ветка `switch` вместо `_`;
   - маппер статуса вкладки в подпись и тон;
   - сборку `TerminalTabsCubit` в root scope и `CodeLabDependencies`, закрытие в `dispose` scope.
 
   Раздел «Терминал» в `apps/codelab_desktop/AGENTS.md`: где пакеты, владелец процессов, что не логируется, граница с `terminal/*`. 2.5 зелёный.
-- [ ] 2.7 `[desktop]` Проверки итерации 2 (шапка) и PR итерации 2.
+- [ ] 2.7 `[desktop]` Тест `apps/codelab_desktop/test/features/terminal/presentation/terminal_write_budget_test.dart` (D3, «Запись в эмулятор порциями»; D15, «Рывки на Flood»). Сброс буфера вкладки с fake-часами и fake-моделью:
+  - за один кадр пишется столько частей, сколько укладывается в бюджет (fake-`write` «стоит» заданное время), остаток — на следующий кадр;
+  - часть не больше заданного размера;
+  - за кадр — не больше одной перерисовки `TerminalView`;
+  - вкладка без отрисовки (панель закрыта или вкладка не активна) пишет в модель без перерисовки;
+  - порядок и полнота данных сохраняются.
+
+  Тест красный.
+- [ ] 2.8 `[desktop]` Реализовать бюджет на кадр в presentation (стартовые значения: часть 4 КБ, бюджет 8 мс; константы рядом с адаптером вида) — 2.7 зелёный.
+
+  Замер вручную: profile-сборка app на macOS (`fvm flutter run -d macos --profile`), «Flood» (`yes | head -n 200000`) во вкладке. Это ручной замер на машине разработчика, а не прогон `test:e2e:app:*`.
+  - **Цель:** худший кадр меньше 50 мс.
+  - Если цель не достигнута, по очереди: часть 1 КБ, меньший бюджет, без отрисовки фоновых вкладок.
+
+  Итог (худший кадр, число кадров > 33 мс и > 100 мс, константы) записывается в D3. Если цель недостижима — Q14 пользователю до PR итерации 2.
+- [ ] 2.9 `[desktop]` Проверки итерации 2 (шапка) и PR итерации 2 — после 2.7–2.8.
 
 ## 3. Клавиши, палитра, выход из app, приёмка (итерация 3)
 
-- [ ] 3.1 `[desktop]` Тест `packages/flutter/codelab_ui/test/organisms/codelab_workbench_shortcuts_test.dart`: колбэки `onToggleTerminal` (Ctrl+`) и `onNewTerminalTab` (Ctrl+Shift+`) срабатывают с Control на любой платформе, не срабатывают с Meta, а `onNewTerminalTab` не срабатывает на `KeyRepeatEvent` (`includeRepeats: false`; D6, Q5, Q8). Тест красный.
-- [ ] 3.2 `[desktop]` Реализовать колбэки в `CodeLabWorkbenchShortcuts` — 3.1 зелёный.
+- [ ] 3.1 `[desktop]` Тест `packages/flutter/codelab_ui/test/organisms/codelab_workbench_shortcuts_test.dart` (D6, «Сопоставление по физической клавише»; Q5, Q8). Колбэки `onToggleTerminal` (Ctrl+`) и `onNewTerminalTab` (Ctrl+Shift+`):
+  - срабатывают с Control на любой платформе, не срабатывают с Meta;
+  - срабатывают, когда `physicalKey` — `PhysicalKeyboardKey.backquote`, а `logicalKey` — `LogicalKeyboardKey.bracketRight` с символом `]` (русская раскладка, D15);
+  - не срабатывают на логическую `` ` `` с другой физической клавишей;
+  - `onNewTerminalTab` не срабатывает на `KeyRepeatEvent` (`includeRepeats: false`).
+
+  События — через `simulateKeyDownEvent(…, physicalKey:)`. Тест красный.
+- [ ] 3.2 `[desktop]` Реализовать в ките `ShortcutActivator` по физической клавише (Control, Shift, `includeRepeats`) и колбэки в `CodeLabWorkbenchShortcuts` — 3.1 зелёный.
 - [ ] 3.3 `[desktop]` Widget-тест `apps/codelab_desktop/test/features/terminal/presentation/terminal_keys_test.dart` (`integrated-terminal` «Клавиатура и палитра терминала»; D6). Проверяет:
   - Ctrl+` из композера открывает панель и фокусирует вкладку, повторное — возвращает фокус композеру;
   - Ctrl+Shift+` — новая вкладка;
+  - с фокусом в терминале Ctrl+` и Ctrl+Shift+` с физическим backquote и логической `]` перехватываются до эмулятора (`TerminalView.onKeyEvent`), а fake-shell не получает байтов;
   - фокус в терминале: Esc при идущем ходе не отправляет `session/cancel`, Ctrl+K при `debugDefaultTargetPlatformOverride = linux` не открывает палитру, а байты уходят fake-shell;
   - `/terminal` в палитре и inline-палитре открывает панель;
   - `/terminal` нет при `isSupported: false`;
@@ -143,12 +186,12 @@
 - [ ] 3.4 `[desktop]` Реализовать:
   - `/terminal` в `CodeLabCommandAction.defaults` (кит) с фильтром по `isSupported` в `ui_mappers.dart`;
   - ветку `terminal` в `CodeLabShellCubit.selectCommand`;
-  - перехват Ctrl+` и Ctrl+Shift+` в `TerminalView.onKeyEvent`;
+  - перехват Ctrl+` и Ctrl+Shift+` в `TerminalView.onKeyEvent` тем же активатором по физической клавише из кита;
   - привязку колбэков в `CodeLabShell`.
 
   Обновить тесты кита, считающие шесть команд палитры. 3.3 зелёный.
 - [ ] 3.5 `[desktop]` Тест `apps/codelab_desktop/test/app/terminal_exit_test.dart` (`integrated-terminal` «Жизненный цикл процессов терминала», сценарий «Выход из приложения»; D4): обработчик выхода composition root вызывает `closeAll()` и возвращает `AppExitResponse.exit` не позже 3 с при зависшем fake-shell; закрытие root scope после этого не вызывает `start` и не бросает. Тест красный.
-- [ ] 3.6 `[desktop]` Реализовать `AppLifecycleListener(onExitRequested:)` в `lib/app/`; правку `macos/Runner/AppDelegate.swift`, если спайк 1.1 показал, что запрос выхода не доходит до Flutter — 3.5 зелёный.
+- [ ] 3.6 `[desktop]` Реализовать `AppLifecycleListener(onExitRequested:)` в `lib/app/` — 3.5 зелёный. Правка `macos/Runner/AppDelegate.swift` не нужна: спайк подтвердил, что запрос выхода доходит при Cmd+Q и закрытии последнего окна (D15, «Ручная проверка»).
 - [ ] 3.7 `[desktop]` `apps/codelab_desktop/integration_test/terminal_flow_test.dart` (приёмка D13): вкладка, `echo`, `tput cols`, закрытие вкладки без живого процесса, выход из app без сирот. В `feature/*` — только `fvm flutter analyze`; запуск на устройстве — в `release/<version>` (`AGENTS.md` §21).
 - [ ] 3.8 `[desktop]` Документы DoD: `agent-parity-goals.md` D-28 — «закрыто change `add-integrated-terminal`» с тестами 2.5, 3.3, 3.7; A16 — ссылки на тесты; `delivery-roadmap.md` — статус строки.
 - [ ] 3.9 `[desktop]` Удалить `apps/codelab_desktop/tool/terminal_spike/`. Проверки итерации 3 (шапка) и PR итерации 3.
