@@ -116,7 +116,9 @@ void main() {
       .widgetList<RichText>(
         find.descendant(
           of: find.byType(CodeLabTranscriptPanel),
-          matching: find.byType(RichText),
+          // Абзацы пакета — подкласс `RichText` (BidiRichText), `byType` его
+          // не находит.
+          matching: find.byWidgetPredicate((w) => w is RichText),
         ),
       )
       .map((w) => w.text.toPlainText())

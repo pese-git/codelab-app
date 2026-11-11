@@ -469,32 +469,37 @@ void main() {
     });
   });
 
-  group('preformatted agent reply (6.1i-1)', () {
-    testWidgets('a preformatted row is a monospace block', (tester) async {
+  // Бывший `preformatted` (6.1i-1): огороженный ответ теперь частный случай
+  // markdown (change `add-desktop-markdown`, D11) — тот же вид без строк
+  // ограды, плюс подпись языка и «Copy».
+  group('single fenced agent reply (6.1i-1, D11)', () {
+    testWidgets('a fenced row is a code block without fence lines', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _panel(const [
           CodeLabAgentTextRow(
             id: 'agent-1',
-            text: 'MCP servers (1)\n  a  ok',
-            preformatted: true,
+            text: '```text\nMCP servers (1)\n  a  ok\n```',
           ),
         ]),
       );
 
-      final block = find.byType(CodeLabMonospaceBlock);
-      expect(block, findsOneWidget);
       expect(
-        tester.widget<CodeLabMonospaceBlock>(block).data,
-        'MCP servers (1)\n  a  ok',
+        find.textContaining('MCP servers (1)', findRichText: true),
+        findsOneWidget,
       );
+      expect(find.textContaining('```', findRichText: true), findsNothing);
+      expect(find.text('text'), findsOneWidget);
+      expect(find.byType(CodeLabCodeBlock), findsOneWidget);
     });
 
-    testWidgets('a plain row is not a monospace block', (tester) async {
+    testWidgets('a plain row is not a code block', (tester) async {
       await tester.pumpWidget(
         _panel(const [CodeLabAgentTextRow(id: 'agent-1', text: 'Hello')]),
       );
 
-      expect(find.byType(CodeLabMonospaceBlock), findsNothing);
+      expect(find.byType(CodeLabCodeBlock), findsNothing);
       expect(find.text('Hello'), findsOneWidget);
     });
   });
