@@ -6,6 +6,8 @@ import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snaps
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart'
     show ProjectFolderPicker;
+import 'package:codelab_desktop/core/platform/user_shell_launcher.dart'
+    show UserShellLauncher;
 import 'package:codelab_desktop/features/workbench/application/connection_cubit.dart'
     show stdioConnectionProfileOf;
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -93,6 +95,7 @@ final class CodeLabTestBinding {
     ProviderSettingsOpener? providerSettingsOpener,
     Future<bool> Function(String cwd)? providerSetupProbe,
     ProjectFiles? projectFiles,
+    UserShellLauncher? userShellLauncher,
     bool stdioDefault = true,
     String? project,
     ProjectFolderPicker? projectFolderPicker,
@@ -160,6 +163,10 @@ final class CodeLabTestBinding {
       // двойник (`FakeProjectFiles`).
       projectFiles: projectFiles,
       projectFilesEnabled: projectFiles != null,
+      // Настоящий `pty2` в тестах не запускается: по умолчанию — порт по
+      // умолчанию app (без вкладок он ничего не делает), тесты терминала
+      // передают `FakeUserShellLauncher`.
+      userShellLauncher: userShellLauncher,
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own

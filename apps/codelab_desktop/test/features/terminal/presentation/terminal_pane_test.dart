@@ -20,22 +20,21 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show ClientWorkspace;
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
-import 'package:codelab_desktop/core/platform/user_shell_launcher.dart';
 import 'package:codelab_desktop/features/terminal/application/terminal_model.dart';
 import 'package:codelab_desktop/features/terminal/application/terminal_tabs_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:codelab_desktop/features/terminal/presentation/terminal_output_flusher.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 import 'package:xterm2/ui.dart' show TerminalController, TerminalView;
 import 'package:xterm2_core/xterm2_core.dart' show Terminal;
 
 import '../../../support/fake_user_shell_launcher.dart';
-import '../../../support/in_memory_profile_store.dart';
 import '../../../support/test_app_scope.dart';
 
 /// Приложение с fake-портом терминала и сценарным агентом.
@@ -52,25 +51,13 @@ final class _Env {
     Map<String, Object> preferences = const {},
   }) : launcher =
            launcher ?? (FakeUserShellLauncher()..shellsExitOnHangUp = true) {
-    SharedPreferences.setMockInitialValues({
-      'codelab.connection.default_profile': testStdioProfile.id,
-      ...preferences,
-    });
     final transports = [agent, second];
-    scope = createCodeLabRootScope(
-      transportFactory: FakeAcpTransport.new,
+    binding = CodeLabTestBinding(
       stdioTransportFactory: (_) => transports.removeAt(0),
-      directoryExists: (_) async => true,
-      embeddedOpener: ({required cwd, required hostProfile}) async =>
-          throw StateError('the embedded agent is not part of this test'),
-      profileStore: InMemoryProfileStore([testStdioProfile]),
-      providerSettingsOpener: (_, _) async =>
-          throw StateError('provider settings are not part of this test'),
-      providerSetupProbe: (_) async => false,
-      // Шов 2.6: подмена порта терминала на двойник.
+      preferences: preferences,
       userShellLauncher: this.launcher,
     );
-    addTearDown(closeCodeLabRootScopeInTest);
+    scope = binding.scope;
     second.initializeAgentCapabilities = const AgentCapabilities(
       loadSession: true,
     );
@@ -79,6 +66,7 @@ final class _Env {
   final FakeUserShellLauncher launcher;
   final FakeAcpTransport agent = FakeAcpTransport();
   final FakeAcpTransport second = FakeAcpTransport();
+  late final CodeLabTestBinding binding;
   late final Scope scope;
 
   CodeLabShellCubit get shell => scope.resolve<CodeLabShellCubit>();
@@ -156,6 +144,28 @@ Future<void> _frames(WidgetTester tester) async {
 void _toggle(WidgetTester tester, ToolPane pane) => tester
     .widget<ToggleButton>(find.byKey(CodeLabAppBar.toggleKey(pane)))
     .onChanged!(true);
+
+/// Двойник планировщика: запоминает заказанные обратные вызовы и кадры.
+final class _CountingScheduler extends Fake implements SchedulerBinding {
+  final List<FrameCallback> callbacks = [];
+  int frameRequests = 0;
+
+  @override
+  int scheduleFrameCallback(
+    FrameCallback callback, {
+    bool rescheduling = false,
+    bool scheduleNewFrame = true,
+  }) {
+    callbacks.add(callback);
+    return callbacks.length;
+  }
+
+  @override
+  void scheduleFrame() => frameRequests++;
+
+  @override
+  void cancelFrameCallbackWithId(int id) {}
+}
 
 final _terminalToggle = find.byKey(CodeLabAppBar.toggleKey(ToolPane.terminal));
 final _terminalPane = find.byKey(CodeLabToolDock.paneKey(ToolPane.terminal));
@@ -360,7 +370,108 @@ void main() {
           jsonEncode(entry, toEncodable: (o) => '$o'),
       ];
       expect(logged.where((line) => line.contains(marker)), isEmpty);
-      expect(logged.where((line) => line.contains('/work/a')), isEmpty);
+      // Путь папки сессии законно попадает в журнал выбора проекта и
+      // `session/new`; D9 требует его отсутствия только в событиях терминала.
+      final terminalEvents = logged.where(
+        (line) => line.contains('"logger":"codelab_desktop.terminal"'),
+      );
+      expect(terminalEvents, isNotEmpty);
+      expect(terminalEvents.where((line) => line.contains('/work/a')), isEmpty);
+    });
+  });
+
+  group('жизненный цикл и вывод в собранном приложении', () {
+    testWidgets('закрытие панели переключателем не запускает shell, даже если '
+        'вкладок нет (D1)', (tester) async {
+      final env = _Env(
+        preferences: {
+          'codelab.dock.open_panes': ['terminal'],
+          'codelab.dock.active_pane': 'terminal',
+        },
+      );
+      await env.pumpApp(tester);
+      await env.openSession(tester, 'session-a');
+      await _frames(tester);
+      expect(_terminalPane, findsOneWidget);
+
+      _toggle(tester, ToolPane.terminal);
+      await _frames(tester);
+
+      expect(_terminalPane, findsNothing);
+      expect(env.launcher.starts, isEmpty);
+      expect(env.terminals.state.tabs, isEmpty);
+    });
+
+    testWidgets('вывод shell доходит до модели вкладки на кадре (D3)', (
+      tester,
+    ) async {
+      final env = _Env();
+      await env.pumpApp(tester);
+      await env.openSession(tester, 'session-a');
+      _toggle(tester, ToolPane.terminal);
+      await _frames(tester);
+
+      env.launcher.shells.single.emit('visible-marker-42\r\n');
+      await _frames(tester);
+
+      final model = env.terminals.terminalOf('t1')!;
+      expect(model.buffer.getText(), contains('visible-marker-42'));
+      expect(env.terminals.hasPendingOutput, isFalse);
+    });
+
+    testWidgets('объект сброса сам заказывает кадр при выводе и записывает его '
+        'в модель на этом кадре (D3)', (tester) async {
+      final env = _Env();
+      await env.pumpApp(tester);
+      await env.openSession(tester, 'session-a');
+      _toggle(tester, ToolPane.terminal);
+      await _frames(tester);
+      // Рабочий кадр пустого окна всегда заказан курсором терминала, поэтому
+      // `hasScheduledFrame` ничего не доказывает: считаем вызовы у двойника.
+      final scheduler = _CountingScheduler();
+      final flusher = TerminalOutputFlusher(
+        cubit: env.terminals,
+        binding: scheduler,
+      );
+      addTearDown(flusher.dispose);
+
+      env.launcher.shells.single.emit('flush-marker-7');
+      await tester.idle();
+
+      expect(env.terminals.hasPendingOutput, isTrue);
+      expect(scheduler.callbacks, hasLength(1));
+      expect(scheduler.frameRequests, 1);
+      // Второй кусок до кадра не заказывает ещё один обратный вызов.
+      env.launcher.shells.single.emit('more');
+      await tester.idle();
+      expect(scheduler.callbacks, hasLength(1));
+
+      scheduler.callbacks.single(Duration.zero);
+
+      expect(env.terminals.hasPendingOutput, isFalse);
+      expect(
+        env.terminals.terminalOf('t1')!.buffer.getText(),
+        contains('flush-marker-7more'),
+      );
+    });
+
+    testWidgets('закрытие root scope шлёт hangUp живым shell (D4)', (
+      tester,
+    ) async {
+      final env = _Env();
+      await env.pumpApp(tester);
+      await env.openSession(tester, 'session-a');
+      _toggle(tester, ToolPane.terminal);
+      await _frames(tester);
+      final process = env.launcher.shells.single;
+      expect(process.hangUps, 0);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      // Процесс запущен в fake-зоне теста: ожидание его выхода идёт
+      // микрозадачами этой зоны, поэтому закрываем с проворачиванием кадров.
+      await closeCodeLabRootScopeInTest();
+
+      expect(process.hangUps, 1);
     });
   });
 
