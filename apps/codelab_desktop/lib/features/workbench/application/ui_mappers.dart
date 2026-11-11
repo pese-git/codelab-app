@@ -19,8 +19,6 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' show FluentIcons, VoidCallback;
 
-import '../../../core/text/fenced_block.dart';
-
 /// Модели инспектора — модели kit (`InspectorProjection`, design D9);
 /// прежние имена остаются для виджетов и тестов.
 typedef CodeLabInspectorCategory = InspectorCategory;
@@ -129,17 +127,18 @@ CodeLabSessionStatus _sessionStatusOf(SessionLifecycleStatus status) =>
 /// kit превращаются в модели `codelab_ui` (DSK-1).
 ///
 /// Для чего: id строк — позиционные (`prompt-N`, `agent-N`, `thought-N`,
-/// `tool-N`, `prompt-error-N`, `session-notice-N`, `notice-N`), как до переноса проекции
-/// в kit: на них опираются тесты, и по ним лента хранит ручное раскрытие.
+/// `tool-N`, `prompt-error-N`, `session-notice-N`, `notice-N`), как до
+/// переноса проекции в kit: на них опираются тесты, и по ним лента хранит
+/// ручное раскрытие.
 /// Строку вызова собирает `ToolRowFormatter` с [cwd] сессии.
 ///
-/// Как использовать: [isRunning] — сессия выполняет ход; последние мысли
-/// идущего хода стримятся (design D4). [approvalsEnabled] гасит кнопки
-/// одобрения, пока ответ на другое одобрение в полёте. [onRetry] — повтор
-/// последнего сорвавшегося хода; хост передаёт его, только когда повтор
-/// возможен (`SessionView.canRetry` и соединение установлено, design D4
-/// change `add-connection-and-error-states`), и кнопка Retry появляется у
-/// последней заметки о сбое.
+/// Как использовать: [isRunning] — сессия выполняет ход; последние мысли и
+/// ответ идущего хода стримятся (design D4; `add-desktop-markdown` D3).
+/// [approvalsEnabled] гасит кнопки одобрения, пока ответ на другое одобрение
+/// в полёте. [onRetry] — повтор последнего сорвавшегося хода; хост передаёт
+/// его, только когда повтор возможен (`SessionView.canRetry` и соединение
+/// установлено, design D4 change `add-connection-and-error-states`), и кнопка
+/// Retry появляется у последней заметки о сбое.
 List<CodeLabTranscriptRow> transcriptRowsOf(
   List<TranscriptItem> transcript, {
   required String cwd,
@@ -158,17 +157,15 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
           id: 'prompt-${index + 1}',
           text: text,
         ),
-        // Ответ одним огороженным блоком (например, `/mcp list` ядра) лента
-        // рисует моноширинно без строк ограждения; решение принимает app, а
-        // не виджет (Q37, D27).
-        AgentTextItem(:final text) => switch (unfenceSingleBlock(text)) {
-          final inner? => CodeLabAgentTextRow(
-            id: 'agent-${index + 1}',
-            text: inner,
-            preformatted: true,
-          ),
-          null => CodeLabAgentTextRow(id: 'agent-${index + 1}', text: text),
-        },
+        // Ответ — одна строка с текстом как есть: markdown, в том числе ответ
+        // одним огороженным блоком (`/mcp list`), разбирает и рисует кит
+        // (change `add-desktop-markdown`, D3, D11); `streaming` — последний
+        // элемент идущего хода, как у мыслей.
+        AgentTextItem(:final text) => CodeLabAgentTextRow(
+          id: 'agent-${index + 1}',
+          text: text,
+          streaming: isRunning && index == transcript.length - 1,
+        ),
         ThoughtItem(:final text) => CodeLabThoughtRow(
           id: 'thought-${index + 1}',
           text: text,
