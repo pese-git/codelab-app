@@ -39,6 +39,16 @@ final class PackageRule {
   final bool sealExclude;
 }
 
+/// Транзитивные пакеты `gpt_markdown`, запрещённые в kit и app
+/// (design.md change `add-desktop-markdown`, D10).
+const _markdownTransitive = [
+  'package:material_ui/',
+  'package:cupertino_ui/',
+  'package:val_highlight_flutter/',
+  'package:val_latex_flutter/',
+  'package:flutter_svg/',
+];
+
 const rules = [
   PackageRule(
     'packages/dart/codelab_agent_core',
@@ -313,5 +323,34 @@ const rules = [
   PackageRule(
     'apps/codelab_desktop/lib/features/settings/presentation',
     forbidden: ['dart:io', 'package:codelab_setup/io.dart'],
+  ),
+  // Markdown в ленте desktop (design.md change `add-desktop-markdown`, D2,
+  // D10). Парсер `gpt_markdown` и движок подсветки `val_highlight` - только
+  // слою `lib/src/rendering/` kit: при замене пакета меняется один каталог, а
+  // остальной kit и app получают готовые виджеты.
+  PackageRule(
+    'packages/flutter/codelab_ui/lib',
+    forbidden: ['package:gpt_markdown/', 'package:val_highlight/'],
+    exclude: ['src/rendering/'],
+    sealExclude: false,
+  ),
+  // Эти пакеты приходят транзитивно с `gpt_markdown`, но тянут Material,
+  // Cupertino, SVG-загрузку и собственные виджеты подсветки: интерфейс -
+  // Fluent, SVG по сети не грузим (D4, D6). Запрещены в kit и app целиком,
+  // `rendering/` не исключён. Префиксы с `/` на конце: `val_highlight/` не
+  // совпадает с `val_highlight_flutter/`.
+  PackageRule(
+    'packages/flutter/codelab_ui/lib',
+    forbidden: _markdownTransitive,
+  ),
+  PackageRule('apps/codelab_desktop/lib', forbidden: _markdownTransitive),
+  // Открытие внешних ссылок - инфраструктура: `url_launcher` только в порту
+  // `core/platform/` app; Cubit-ы и виджеты идут через `ExternalLinkOpener`
+  // (D5; `platform-integration.md`).
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: ['package:url_launcher/'],
+    exclude: ['core/platform/'],
+    sealExclude: false,
   ),
 ];
