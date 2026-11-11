@@ -636,7 +636,7 @@ terminal
 `terminal` — панель Terminal десктопа (терминал пользователя; change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D9), логгер `codelab_desktop.terminal`. Ввод и вывод терминала **не логируются вовсе**: их нет в журнале, `LogBuffer`, debug log, пересылке логов, диагностике рабочего места и инспекторе. Редакция секретов (§13–§14) к ним не применяется, потому что редактировать нечего — содержимое не покидает экран. События — только метаданные:
 
 * `terminal.tab_opened` — `tab_id`, `shell` (базовое имя исполняемого файла), `columns`, `rows`;
-* `terminal.tab_exited` — `tab_id`, `exit_code`;
+* `terminal.tab_exited` — `tab_id`, `exit_code` (поля нет, если PTY-бэкенд кода не сообщил);
 * `terminal.tab_closed` — `tab_id`, `forced`;
 * `terminal.start_failed` — `tab_id`, имя типа ошибки;
 * `terminal.close_all` — `count`, `forced`.
