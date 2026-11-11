@@ -12,13 +12,16 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_ui/src/rendering/codelab_markdown_row.dart';
 import 'package:codelab_ui/src/rendering/escape_for_display.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show SynchronousFuture, defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -195,6 +198,42 @@ Iterable<String> _headingsOf(String doc) => RegExp(
   r'^#{1,3} (.+)$',
   multiLine: true,
 ).allMatches(doc).map((m) => m.group(1)!);
+
+/// Готовое изображение без обращения к сети и декодеру.
+class _StaticImage extends ImageProvider<_StaticImage> {
+  const _StaticImage(this.source);
+
+  final ui.Image source;
+
+  @override
+  Future<_StaticImage> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+    _StaticImage key,
+    ImageDecoderCallback decode,
+  ) => OneFrameImageStreamCompleter(
+    SynchronousFuture(ImageInfo(image: source.clone())),
+  );
+}
+
+/// Изображение, которое «загружается», пока тест не завершит [info].
+class _PendingImage extends ImageProvider<_PendingImage> {
+  const _PendingImage(this.info);
+
+  final Future<ImageInfo> info;
+
+  @override
+  Future<_PendingImage> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+    _PendingImage key,
+    ImageDecoderCallback decode,
+  ) => OneFrameImageStreamCompleter(info);
+}
 
 void main() {
   late HttpOverrides? previousOverrides;
@@ -1716,7 +1755,7 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
   final shown = ValueNotifier<Set<String>>({});
   final opened = <Uri>[];
   final imageRequests = <Uri>[];
-  late MemoryImage image;
+  late ImageProvider image;
 
   // Функции политики устойчивы между сборками, как в app (tear-off метода
   // Cubit и функции верхнего уровня): смена `shownImages` — единственное, что
@@ -2188,6 +2227,118 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
       find.textContaining('x.example', findRichText: true),
       findsOneWidget,
     );
+  });
+
+  // ---- Вид показанной картинки (smoke macOS, итерация 4) ----
+
+  Future<ui.Image> makeImage(WidgetTester tester, int w, int h) async {
+    final image = await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawRect(
+        Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+        Paint()..color = const Color(0xFF3366CC),
+      );
+      return recorder.endRecording().toImage(w, h);
+    });
+    return image!;
+  }
+
+  Future<void> showSizedImage(
+    WidgetTester tester,
+    ui.Image source, {
+    String text = 'Picture: ![](https://x.example/y.png)',
+  }) async {
+    image = _StaticImage(source);
+    await tester.pumpWidget(
+      _host(withPolicy(CodeLabMarkdown(id: 'agent-1', text: text))),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Show image'));
+    await tester.pump(const Duration(seconds: 1));
+  }
+
+  testWidgets('a loading image shows the placeholder and a small spinner', (
+    tester,
+  ) async {
+    final loaded = Completer<ImageInfo>();
+    image = _PendingImage(loaded.future);
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text: '![](https://x.example/y.png)',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Show image'));
+    await tester.pump(const Duration(seconds: 1));
+
+    // До первого кадра: заглушка с хостом и имя файла, индикатор, кнопки нет.
+    expect(find.byType(ProgressRing), findsOneWidget);
+    expect(
+      find.textContaining('x.example · y.png', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.text('Show image'), findsNothing);
+
+    final source = await makeImage(tester, 40, 30);
+    loaded.complete(ImageInfo(image: source));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(ProgressRing), findsNothing);
+    expect(
+      find.textContaining('x.example · y.png', findRichText: true),
+      findsNothing,
+    );
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('a shown image takes its own line below the text', (
+    tester,
+  ) async {
+    await showSizedImage(tester, await makeImage(tester, 200, 300));
+
+    final paragraph = find.byWidgetPredicate(
+      (w) => w is RichText && w.text.toPlainText().contains('Picture:'),
+    );
+    final render = tester.renderObject<RenderParagraph>(paragraph.first);
+    final boxes = render.getBoxesForSelection(
+      const TextSelection(baseOffset: 0, extentOffset: 8),
+    );
+    final textBottom = render.localToGlobal(boxes.last.toRect().bottomLeft).dy;
+    final imageTop = tester.getRect(find.byType(Image)).top;
+
+    // Без своей строки подпись прижималась бы к низу высокой картинки.
+    expect(imageTop, greaterThanOrEqualTo(textBottom - 0.5));
+  });
+
+  testWidgets('a small image is not enlarged', (tester) async {
+    await showSizedImage(tester, await makeImage(tester, 64, 64));
+
+    final size = tester.getSize(find.byType(Image));
+    expect(size.width, lessThanOrEqualTo(64));
+    expect(size.height, lessThanOrEqualTo(64));
+  });
+
+  testWidgets('a large image stays within the paragraph width and 480 px', (
+    tester,
+  ) async {
+    await showSizedImage(tester, await makeImage(tester, 2000, 1000));
+
+    final size = tester.getSize(find.byType(Image));
+    expect(size.width, lessThanOrEqualTo(600));
+    expect(size.height, lessThanOrEqualTo(480));
+    expect(size.width / size.height, closeTo(2, 0.01));
+  });
+
+  testWidgets('a tall image is cut at 480 px', (tester) async {
+    await showSizedImage(tester, await makeImage(tester, 300, 3000));
+
+    expect(tester.getSize(find.byType(Image)).height, lessThanOrEqualTo(480));
   });
 
   testWidgets('a shown image does not open the same url in another answer', (

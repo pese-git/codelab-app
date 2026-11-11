@@ -41,6 +41,7 @@ class CodeLabImagePlaceholder extends StatelessWidget {
           provider: scope.imageFor,
           uri: uri,
           fallback: _Placeholder(url: url),
+          loading: _Placeholder(url: url, loading: true),
         );
       }
       return _Placeholder(url: url, onShow: () => scope.onShowImage(key));
@@ -51,18 +52,30 @@ class CodeLabImagePlaceholder extends StatelessWidget {
 
 /// Картинка после явного действия пользователя.
 ///
-/// Поставщик изображения создаётся один раз в `initState`: перерисовка
-/// заглушки не должна повторно обращаться к `imageFor`.
+/// Почему и для чего: поставщик создаётся один раз в `initState` (перерисовка
+/// не должна повторно обращаться к `imageFor`). Пока картинка грузится, на её
+/// месте — заглушка в том же стиле и маленький `ProgressRing`; после первого
+/// кадра — сама картинка. Картинка занимает свою строку под текстом (ширина
+/// абзаца, выравнивание влево): иначе `WidgetSpan` по базовой линии прижимал бы
+/// подпись к низу высокой картинки. Размер не больше натурального
+/// (`BoxFit.scaleDown`), не шире абзаца и не выше 480 (smoke macOS,
+/// итерация 4).
 class _LoadedImage extends StatefulWidget {
   const _LoadedImage({
     required this.provider,
     required this.uri,
     required this.fallback,
+    required this.loading,
   });
 
   final ImageProvider Function(Uri uri) provider;
   final Uri uri;
+
+  /// Заглушка при ошибке загрузки (с кнопкой «Show image» не нужна).
   final Widget fallback;
+
+  /// Заглушка с индикатором, пока картинка грузится.
+  final Widget loading;
 
   @override
   State<_LoadedImage> createState() => _LoadedImageState();
@@ -72,23 +85,41 @@ class _LoadedImageState extends State<_LoadedImage> {
   late final ImageProvider _image = widget.provider(widget.uri);
 
   @override
-  Widget build(BuildContext context) => ConstrainedBox(
-    constraints: const BoxConstraints(maxHeight: 480),
-    child: Image(
-      image: _image,
-      fit: BoxFit.contain,
-      alignment: Alignment.centerLeft,
-      // Сбой загрузки (сеть, не картинка, SVG) — заглушка, без исключения.
-      errorBuilder: (context, error, stack) => widget.fallback,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => SizedBox(
+      // Во всю ширину абзаца, если она известна: узкий виджет делил бы строку
+      // с текстом.
+      width: constraints.hasBoundedWidth ? constraints.maxWidth : null,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 480),
+          child: Image(
+            image: _image,
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                wasSynchronouslyLoaded || frame != null
+                ? child
+                : widget.loading,
+            // Сбой загрузки (сеть, не картинка, SVG) — заглушка, без
+            // исключения.
+            errorBuilder: (context, error, stack) => widget.fallback,
+          ),
+        ),
+      ),
     ),
   );
 }
 
 class _Placeholder extends StatelessWidget {
-  const _Placeholder({required this.url, this.onShow});
+  const _Placeholder({required this.url, this.onShow, this.loading = false});
 
   final String url;
   final VoidCallback? onShow;
+
+  /// Картинка загружается: вместо значка — маленький индикатор.
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +143,14 @@ class _Placeholder extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(FluentIcons.photo2, size: 14),
+              if (loading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: ProgressRing(strokeWidth: 2),
+                )
+              else
+                const Icon(FluentIcons.photo2, size: 14),
               const SizedBox(width: 8),
               Flexible(
                 child: CodeLabText(
