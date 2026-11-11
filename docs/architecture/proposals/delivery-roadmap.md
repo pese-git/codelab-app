@@ -274,8 +274,10 @@ macOS и Linux, ручная проверка Windows откладывается
 * песочница ОС (P-13): граница папки и одобрения, песочница только на macOS или на трёх ОС —
   задача 9.11 по модели угроз (§6.3), итог — ADR;
 * пути Windows: достаточно ли приведения `C:\proj` к `/c/proj` — до выпуска Windows-целей;
-* новые зависимости десктопа (`re_highlight`, `desktop_drop`, `pasteboard`, `url_launcher`) —
-  архитектурное решение и проверка лицензии до D-06; пороги отображения diff — при D-07.
+* новые зависимости десктопа (`desktop_drop`, `pasteboard`) — архитектурное решение и проверка
+  лицензии до D-12; для D-06 решено 2026-11-11 (change
+  [`add-desktop-markdown`](../../../openspec/changes/add-desktop-markdown/design.md): `gpt_markdown`,
+  `val_highlight`, `url_launcher`); пороги отображения diff — при D-07.
 
 ### 4.6. M5 — 1.x
 
