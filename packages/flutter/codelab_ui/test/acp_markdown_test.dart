@@ -1718,18 +1718,25 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
   final imageRequests = <Uri>[];
   late MemoryImage image;
 
+  // Функции политики устойчивы между сборками, как в app (tear-off метода
+  // Cubit и функции верхнего уровня): смена `shownImages` — единственное, что
+  // меняется у scope (ревью итерации 4, MINOR 8).
+  ImageProvider imageForTest(Uri uri) {
+    imageRequests.add(uri);
+    return image;
+  }
+
+  void onShowImageTest(String key) => shown.value = {...shown.value, key};
+
   Widget withPolicy(Widget child) => ValueListenableBuilder<Set<String>>(
     valueListenable: shown,
     builder: (context, shownImages, _) => CodeLabMarkdownScope(
       canOpenLink: canOpen,
       onOpenLink: opened.add,
       canLoadImage: canLoad,
-      imageFor: (uri) {
-        imageRequests.add(uri);
-        return image;
-      },
+      imageFor: imageForTest,
       shownImages: shownImages,
-      onShowImage: (key) => shown.value = {...shown.value, key},
+      onShowImage: onShowImageTest,
       child: child,
     ),
   );
@@ -1827,8 +1834,19 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
     expect(_styleValue(inactive, (s) => s.color), isNot(accent));
   });
 
-  testWidgets('a link tooltip shows the full address with direction marks '
-      'escaped', (tester) async {
+  /// Ведёт мышь к началу текста [needle] и возвращает жест.
+  Future<TestGesture> hoverText(WidgetTester tester, String needle) async {
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(1, 1));
+    addTearDown(mouse.removePointer);
+    final target = find.textContaining(needle, findRichText: true).first;
+    await mouse.moveTo(tester.getTopLeft(target) + const Offset(4, 6));
+    await tester.pump();
+    return mouse;
+  }
+
+  testWidgets('a link tooltip shows the full address on hover and leaves '
+      'with the pointer (own Fluent overlay)', (tester) async {
     final rlo = String.fromCharCode(0x202E);
     await tester.pumpWidget(
       _host(
@@ -1843,14 +1861,166 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
       ),
     );
     await tester.pump();
+    expect(find.text('https://example.com/a?token=abc'), findsNothing);
 
-    bool tooltip(String message) => find
-        .byWidgetPredicate((w) => w is Tooltip && w.message == message)
-        .evaluate()
-        .isNotEmpty;
-    expect(tooltip('https://example.com/a?token=abc'), isTrue);
-    expect(tooltip('https://example.com/\\u202egpj'), isTrue);
-    expect(tooltip('https://example.com/${rlo}gpj'), isFalse);
+    final mouse = await hoverText(tester, 'docs');
+    expect(find.text('https://example.com/a?token=abc'), findsOneWidget);
+
+    // Уход курсора убирает подсказку.
+    await mouse.moveTo(const Offset(590, 590));
+    await tester.pump();
+    expect(find.text('https://example.com/a?token=abc'), findsNothing);
+
+    // Управляющие и bidi-символы показаны escape-последовательностью.
+    final bidi = find.textContaining('bidi', findRichText: true).first;
+    await mouse.moveTo(tester.getTopLeft(bidi) + const Offset(4, 6));
+    await tester.pump();
+    expect(find.text('https://example.com/\\u202egpj'), findsOneWidget);
+    expect(find.textContaining(rlo), findsNothing);
+  });
+
+  testWidgets('the link tooltip goes away when the row text changes under a '
+      'still pointer', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text: '[docs](https://example.com/a)',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await hoverText(tester, 'docs');
+    expect(find.text('https://example.com/a'), findsOneWidget);
+
+    // Строка перестроилась (другая сессия, правка стрима), курсор не двигался:
+    // `onExit` старого спана не придёт, подсказка должна уйти сама.
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-9',
+            text: 'Another answer entirely.',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('https://example.com/a'), findsNothing);
+  });
+
+  testWidgets('the link tooltip with an old address goes away when the same '
+      'row now links elsewhere', (tester) async {
+    Widget row(String url) =>
+        _host(withPolicy(CodeLabMarkdown(id: 'agent-1', text: '[docs]($url)')));
+    await tester.pumpWidget(row('https://example.com/old'));
+    await tester.pump();
+    await hoverText(tester, 'docs');
+    expect(find.text('https://example.com/old'), findsOneWidget);
+
+    // Тот же абзац и та же позиция под неподвижным курсором, но ссылка уже
+    // ведёт на другой адрес: подсказка со старым адресом ввела бы в
+    // заблуждение (ревью итерации 4).
+    await tester.pumpWidget(row('https://example.com/new'));
+    await tester.pump();
+
+    expect(find.text('https://example.com/old'), findsNothing);
+  });
+
+  testWidgets('the link tooltip is removed with the widget', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text: '[docs](https://example.com/a)',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await hoverText(tester, 'docs');
+    expect(find.text('https://example.com/a'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    expect(find.text('https://example.com/a'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a very long address is cut to 2048 characters in the tooltip', (
+    tester,
+  ) async {
+    final url = 'https://example.com/${'a' * 5000}';
+    await tester.pumpWidget(
+      _host(withPolicy(CodeLabMarkdown(id: 'agent-1', text: '[docs]($url)'))),
+    );
+    await tester.pump();
+    await hoverText(tester, 'docs');
+
+    final shownText = tester
+        .widgetList<CodeLabText>(find.byType(CodeLabText))
+        .map((w) => w.data)
+        .where((d) => d.startsWith('https://example.com/aaa'))
+        .single;
+    expect(shownText.length, lessThanOrEqualTo(2049));
+    expect(shownText.endsWith('…'), isTrue);
+  });
+
+  testWidgets('a long link label wraps with its paragraph', (tester) async {
+    final label = List.generate(60, (i) => 'word$i').join(' ');
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          CodeLabMarkdown(
+            id: 'agent-1',
+            text: 'See [$label](https://example.com/a) for details.',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    // `WidgetSpan` не переносился бы: подпись в несколько строк даёт высоту
+    // абзаца в разы больше одной строки.
+    final paragraph = find.byWidgetPredicate(
+      (w) => w is RichText && w.text.toPlainText().contains('word59'),
+    );
+    expect(tester.getSize(paragraph.first).height, greaterThan(60));
+    await tester.tap(find.textContaining('word59', findRichText: true));
+    await tester.pump(const Duration(seconds: 1));
+    expect(opened, [Uri.parse('https://example.com/a')]);
+  });
+
+  testWidgets('scope updates with an equal policy do not rebuild images', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text: '![](https://x.example/y.png)',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final builds = CodeLabMarkdownStats.imagePlaceholderBuilds;
+    expect(builds, greaterThan(0));
+
+    // Пустой набор пересоздаётся при каждом обновлении ленты (как в app).
+    for (var i = 0; i < 5; i++) {
+      shown.value = <String>{};
+      await tester.pump();
+    }
+
+    expect(CodeLabMarkdownStats.imagePlaceholderBuilds, builds);
   });
 
   testWidgets('markdown image is not fetched before user action', (
@@ -1907,8 +2077,8 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
     expect(find.byType(Image), findsNothing);
 
     await tester.tap(find.text('Show image'));
-    await tester.pump();
-    await tester.pump();
+    // Таймер двойного клика `SelectableRegion` должен истечь до конца теста.
+    await tester.pump(const Duration(seconds: 1));
 
     // Ключ выбора — строка и адрес (D6); картинка запрошена у app один раз и
     // показана вместо заглушки.
@@ -1940,8 +2110,8 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
     await tester.pump();
 
     await tester.tap(find.text('Show image'));
-    await tester.pump();
-    await tester.pump();
+    // Таймер двойного клика `SelectableRegion` должен истечь до конца теста.
+    await tester.pump(const Duration(seconds: 1));
     expect(find.byType(Image), findsOneWidget);
 
     // Строка уходит с экрана и уничтожается лентой.
@@ -1957,6 +2127,67 @@ final f = (int a) => a > 1 ? a >> 2 : a << 1;
     expect(find.byType(Image), findsOneWidget);
     expect(find.text('Show image'), findsNothing);
     expect(shown.value, {'agent-1#image:https://x.example/y.png'});
+  });
+
+  testWidgets('showing an image does not rebuild closed blocks (DSK-3)', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text:
+                '# Title\n\nIntro.\n\n```dart\nfinal a = 1;\n```\n\n'
+                '![](https://x.example/y.png)\n\nOutro.',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final blocks = Map.of(CodeLabMarkdownStats.codeBlockBuilds);
+    final headings = Map.of(CodeLabMarkdownStats.headingBuilds);
+    final mounts = Map.of(CodeLabMarkdownStats.codeBlockMounts);
+    expect(blocks, isNotEmpty);
+
+    await tester.tap(find.text('Show image'));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(CodeLabMarkdownStats.codeBlockBuilds, blocks);
+    expect(CodeLabMarkdownStats.headingBuilds, headings);
+    expect(CodeLabMarkdownStats.codeBlockMounts, mounts);
+  });
+
+  testWidgets('an image that fails to load falls back to the placeholder', (
+    tester,
+  ) async {
+    image = MemoryImage(Uint8List.fromList([1, 2, 3]));
+    await tester.pumpWidget(
+      _host(
+        withPolicy(
+          const CodeLabMarkdown(
+            id: 'agent-1',
+            text: '![](https://x.example/y.png)',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Show image'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabImagePlaceholder), findsOneWidget);
+    expect(
+      find.textContaining('x.example', findRichText: true),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a shown image does not open the same url in another answer', (
