@@ -48,7 +48,7 @@ After "Restart agent" (or "Reconnect" for WebSocket), the workbench SHALL reload
 
 #### Scenario: Active session with root cwd under a real project
 - **WHEN** the workspace snapshot has `projectDirectory` `/work/app` and the active open session `s2` with `cwd` `/`, and the app starts
-- **THEN** `/work/app` is the selected project, the agent starts in `/work/app`, `s2` is not loaded and is listed as "not loaded", the session pane shows the start screen; selecting `s2` loads it with `cwd` `/` without restarting the agent
+- **THEN** `/work/app` is the selected project, the agent starts in `/work/app`, no `session/load` or `session/new` is sent for `s2`, `s2` is listed as "not loaded", and the session pane shows the start screen; selecting `s2` asks for confirmation (requirement «Подтверждение открытия сессии в корне диска») and, after `Open`, loads it with `cwd` `/` without restarting the agent
 
 ### Requirement: Selecting a not-loaded session restores its transcript
 Focusing a session that is not loaded in the current connection — "not loaded" or "detached" — SHALL start the window's agent if it is not running (requirement «Агент стартует сам»), load the session via `session/load` with the session's own `cwd`, and make it the active session with the transcript replayed by the agent. A running agent SHALL NOT be restarted for this, whatever the session's directory. If starting the agent or loading fails, the previously active session SHALL stay active, the sidebar row SHALL keep its status, and the failure SHALL be recorded as a diagnostic.
@@ -91,6 +91,7 @@ Without a session in focus, the session pane SHALL show a start screen instead o
 
 - **«New session» без проекта** НЕ SHALL создавать сессию, НЕ SHALL запускать агента и НЕ SHALL отправлять агенту сообщений. Вместо этого она SHALL открывать системный выбор папки, как «Open folder…». Выбранная папка становится проектом (это триггер старта агента), а сессия автоматически не создаётся.
 - **Папки нет на диске.** Если папка триггера локального профиля (встроенный агент, stdio) исчезла, агент для неё НЕ SHALL запускаться, а сессия НЕ SHALL создаваться или загружаться. Причина `Project folder not found: <path>. Choose an existing folder with Open folder….` SHALL попадать в диагностику уровня `error` с источником `project`.
+- **Ожидание восстановления.** Пока проект прошлого запуска восстанавливается, «Connect», «Reconnect» и «New session» SHALL ждать его не дольше 2 с; статус `connecting` / `reconnecting` ставится до ожидания. Если после ожидания проекта нет, подключение SHALL отклоняться до обращения к workspace с диагностикой `Open a project before connecting: choose a folder with Open folder….` и событием `connection.connect_rejected {reason: no_project, profile_id}` без пути, а «New session» SHALL открывать выбор папки (design.md change `require-project-folder`, D3). В итоговой модели без кнопки Connect правило действует для триггеров старта агента.
 - **Одна папка на намерение.** Намерение (выбор проекта, новая сессия, фокус, перезапуск) SHALL читать папку один раз. Проверка существования, старт агента и `session/new` / `session/load` SHALL получать одно и то же значение.
 - **Встроенный агент** без папки SHALL не открываться: резолвер отказывает `ClientWorkspaceException`, не вызывая открыватель.
 
@@ -105,6 +106,14 @@ Without a session in focus, the session pane SHALL show a start screen instead o
 #### Scenario: Проект сменили во время проверки папки
 - **WHEN** выбран проект `/work/a`, пользователь нажимает «New session», и пока идёт проверка существования `/work/a`, выбирает проект `/work/b`
 - **THEN** сессия этого намерения получает `cwd` `/work/a` — ту же папку, что проверялась; `/work/b` применяется к следующему «New session»
+
+#### Scenario: Действие во время восстановления проекта
+- **WHEN** проект `/work/app` из снимка ещё восстанавливается, и пользователь нажимает «Connect»
+- **THEN** статус сразу `connecting`, подключение ждёт восстановления и идёт с папкой `/work/app`; отказа «нет проекта» нет
+
+#### Scenario: Восстановление не завершилось за таймаут
+- **WHEN** чтение снимка зависло дольше 2 с, проект не выбран, и пользователь нажал «Connect»
+- **THEN** подключение отклонено до обращения к workspace, диагностика содержит `Open a project before connecting: choose a folder with Open folder….`, журнал — `connection.connect_rejected` с `reason: no_project` и `profile_id`, без пути
 
 #### Scenario: Встроенный резолвер без папки
 - **WHEN** `EmbeddedTransportResolver.open` вызван с пустой папкой
@@ -154,3 +163,28 @@ Without a session in focus, the session pane SHALL show a start screen instead o
 #### Scenario: Одинаковый сбой не плодит записи
 - **WHEN** старт три раза подряд падает с одной и той же ошибкой при том же профиле и корне
 - **THEN** в диагностике одна запись уровня `error`, экран сбоя показывает `Failed again (2)`; после исправления и успешного старта следующий сбой — снова новая запись
+
+### Requirement: Подтверждение открытия сессии в корне диска
+Фокус на сессии `notLoaded` или `detached`, чей `cwd` после нормализации (`p.normalize`) — корень файловой системы (`/`, `C:\` и т. п.), SHALL сначала показывать диалог `This session runs in the disk root (<cwd>). The agent gets access to the whole disk. Open anyway?` с кнопками `Open` и `Cancel` (design.md change `require-project-folder`, D24).
+
+- `session/load` и старт агента для этого намерения SHALL идти только после `Open`.
+- `Cancel` или закрытие диалога НЕ SHALL менять фокус, статус строки и отправлять агенту сообщения.
+- Новое действие фокуса во время диалога SHALL закрывать его как `Cancel`; повторный клик по той же сессии при открытом диалоге SHALL игнорироваться.
+- Решение SHALL писаться событием `session.root_open {decision}` без пути.
+- Сессии с `cwd` вне корня диска подтверждения НЕ SHALL требовать.
+
+#### Scenario: Open загружает сессию в корне
+- **WHEN** в списке сессия `s2` со статусом `notLoaded` и `cwd` `/`, и пользователь выбирает её
+- **THEN** показан диалог `This session runs in the disk root (/). The agent gets access to the whole disk. Open anyway?`, агенту ничего не отправлено; после `Open` отправлен `session/load` с `cwd` `/`, и `s2` в фокусе
+
+#### Scenario: Cancel ничего не меняет
+- **WHEN** пользователь выбрал `s2` с `cwd` `/` и в диалоге нажал `Cancel`
+- **THEN** фокус прежний, `s2` по-прежнему `notLoaded`, `session/load` не отправлен, в журнале `session.root_open` с `decision: cancel`
+
+#### Scenario: Ненормализованный корень
+- **WHEN** `cwd` сессии — `/tmp/..` или `//`
+- **THEN** диалог показан, как для `/`
+
+#### Scenario: Другое действие во время диалога
+- **WHEN** диалог для `s2` открыт, и пользователь выбирает сессию `s3` с `cwd` `/work/app`
+- **THEN** диалог закрыт как `Cancel`, `s3` открывается без подтверждения

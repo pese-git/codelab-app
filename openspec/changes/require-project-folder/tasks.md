@@ -1,5 +1,5 @@
 Три итерации:
-- **A** — нет неявной папки. Только `[desktop]`, закрывает дефект, выходит отдельно.
+- **A** — нет неявной папки. `[desktop]` и одно условие kit `[client]` (A1.10, A2.9, HIGH-1); закрывает дефект, выходит отдельно.
 - **C** — конфигурация Dart-агента на сессию: провайдеры, модель, запреты, привязка ключа к адресу. `[agent]` и `[protocol]` для ACP-сервера; выходит отдельно и не зависит от A и B.
 - **B** — агент стартует сам. `[client]`, затем `[desktop]`; выходит после C: иначе сессии других папок в одном агенте остались бы без запретов своего проекта.
 
@@ -9,34 +9,81 @@
 
 ### A0. Обвязка
 
-- [ ] A0.1 `[desktop]` `apps/codelab_desktop/test/support/test_app_scope.dart`: `CodeLabTestBinding` получает необязательный стартовый проект — подложенный снимок `WorkspaceSnapshotStore`, восстанавливается обычным `restoreProject`. Харнесс `test/features/workbench/application/shell_cubit_characterization/harness.dart` стартует с временной папкой-проектом. До правок кода всё зелёное (D20).
+- [x] A0.1 `[desktop]` `apps/codelab_desktop/test/support/test_app_scope.dart`: `CodeLabTestBinding` получает необязательный стартовый проект — подложенный снимок `WorkspaceSnapshotStore`, восстанавливается обычным `restoreProject`. Харнесс `test/features/workbench/application/shell_cubit_characterization/harness.dart` стартует с временной папкой-проектом. До правок кода всё зелёное (D20). Правки характеризационных тестов (D20, `codelab_client_core/AGENTS.md` §5):
+  - `harness.dart`:
+    - новый `projectReady()` — ждёт `SettingsCubit.projectRestored`;
+    - `connect()` вызывает его перед `cubit.connect()`.
+
+    Причина: стартовый проект приходит из подложенного снимка асинхронно, а без проекта подключение отклоняется. Утверждения не меняются.
+  - `sessions_test.dart`, тест `createSession() before connecting sends nothing`: перед `createSession()` добавлено `await h.projectReady()`. Причина: без проекта `createSession` открывает выбор папки (D5), а тест проверяет прежний смысл — без соединения агенту ничего не уходит. Ожидания не меняются.
 
 ### A1. Красные тесты
 
-- [ ] A1.1 `[desktop]` `test/features/workbench/application/missing_project_folder_test.dart` (или новый `project_required_test.dart`), `SettingsCubit`: без проекта и снимка `projectDirectory == null`; `selectProject('/work/app')` — `/work/app`; `selectProject('  ')` — `null` (agent-workbench-ui «No project selected — no implicit directory»; D1). Красный.
-- [ ] A1.2 `[desktop]` Там же, без проекта: `ConnectionCubit.connect` и `reconnect` для встроенного, stdio (переключатель вкл. и выкл.) и WebSocket-профилей не вызывают фабрики транспорта, открыватель и `ClientWorkspace.connect`; `WorkspaceState.projectDirectory` остаётся `null`; диагностика `Open a project before connecting: choose a folder with Open folder….` (D2). Тест итерации A: в B кнопки Connect нет, и он переписывается в B2.6. Красный.
-- [ ] A1.3 `[desktop]` Там же: выбран `/work/a`, проверка `DirectoryExists` висит на `Completer`, за это время выбран `/work/b`; `ClientWorkspace.connect` получил `/work/a` (agent-workbench-ui «Проект сменили во время проверки папки»; D3). Красный.
-- [ ] A1.4 `[desktop]` `createSession` без проекта (рядом с `session_list_test.dart`): вызван `ProjectFolderPicker.pickFolder`, `newSession` не вызван, агенту ничего не отправлено; после выбора проект — `/work/app`, сессий не прибавилось; проверка проекта идёт раньше проверки соединения (agent-workbench-ui «New session без проекта открывает выбор папки»; D5). Красный.
-- [ ] A1.5 `[desktop]` `test/features/workbench/application/workspace_restore_test.dart`: снимок `{projectDirectory: "/", activeSessionId: s1, openSessions: [{s1, "/"}]}` — проект не выбран, предупреждение `project`; после `selectProject('/work/app')` и подключения `session/load` для `s1` нет, следующий снимок без `s1`. Юнит-тест функции «корень ФС»: `/` и `C:\` (через `p.Context(style: windows)`) — корень, `/work` — нет (agent-workbench-ui «Snapshot project at the filesystem root is not restored»; D10). Красный.
-- [ ] A1.6 `[desktop]` `add_profile_cubit_test.dart`, `connection_settings_cubit_test.dart`: без проекта «Test connection» stdio с `runInProjectDirectory: true` отдаёт в `ProfileProbe` профиль с `false`; с проектом — исходный профиль и папку; WebSocket не меняется (agent-workbench-ui «Test connection without a selected project»; D7). Красный.
-- [ ] A1.7 `[desktop]` `provider_settings_cubit_test.dart`, `mcp_settings_cubit_test.dart`: без проекта и агента — `EditableSettings` без папки, `projectLocal` среди целей нет (app-settings «Настройки без выбранного проекта»; D8). Красный, если источник даёт папку процесса; иначе регрессионный.
-- [ ] A1.8 `[desktop]` `test/app/embedded_transport_resolver_test.dart`: `open` с `''` и `'   '` — `ClientWorkspaceException`, открыватель не вызван; следующий `open` с папкой работает (agent-workbench-ui «Встроенный резолвер без папки»; D9). Красный.
-- [ ] A1.9 `[desktop]` `test/widget_test.dart`: ожидание `containsPair('cwd', workingDirectoryProvider.currentPath)` → `cwd` выбранного проекта; добавить проверку, что без проекта `createSession` не шлёт `session/new` (D20). Красный после замены.
+- [x] A1.1 `[desktop]` `test/features/workbench/application/missing_project_folder_test.dart` (или новый `project_required_test.dart`), `SettingsCubit`: без проекта и снимка `projectDirectory == null`; `selectProject('/work/app')` — `/work/app`; `selectProject('  ')` — `null` (agent-workbench-ui «No project selected — no implicit directory»; D1). Красный.
+- [x] A1.2 `[desktop]` Там же, без проекта: `ConnectionCubit.connect` и `reconnect` для встроенного, stdio (переключатель вкл. и выкл.) и WebSocket-профилей не вызывают фабрики транспорта, открыватель и `ClientWorkspace.connect`; `WorkspaceState.projectDirectory` остаётся `null`; диагностика `Open a project before connecting: choose a folder with Open folder….` (D2). Тест итерации A: в B кнопки Connect нет, и он переписывается в B2.6. Красный.
+- [x] A1.3 `[desktop]` Там же: выбран `/work/a`, проверка `DirectoryExists` висит на `Completer`, за это время выбран `/work/b`; `ClientWorkspace.connect` получил `/work/a` (agent-workbench-ui «Проект сменили во время проверки папки»; D3). Красный.
+- [x] A1.4 `[desktop]` `createSession` без проекта (рядом с `session_list_test.dart`): вызван `ProjectFolderPicker.pickFolder`, `newSession` не вызван, агенту ничего не отправлено; после выбора проект — `/work/app`, сессий не прибавилось; проверка проекта идёт раньше проверки соединения (agent-workbench-ui «New session без проекта открывает выбор папки»; D5). Красный.
+- [x] A1.5 `[desktop]` `test/features/workbench/application/workspace_restore_test.dart`: снимок `{projectDirectory: "/", activeSessionId: s1, openSessions: [{s1, "/"}]}` — проект не выбран, предупреждение `project`; после `selectProject('/work/app')` и подключения `session/load` для `s1` нет, следующий снимок без `s1`. Юнит-тест функции «корень ФС»: `/` и `C:\` (через `p.Context(style: windows)`) — корень, `/work` — нет (agent-workbench-ui «Snapshot project at the filesystem root is not restored»; D10). Красный.
+- [x] A1.6 `[desktop]` `add_profile_cubit_test.dart`, `connection_settings_cubit_test.dart`: без проекта «Test connection» stdio с `runInProjectDirectory: true` отдаёт в `ProfileProbe` профиль с `false`; с проектом — исходный профиль и папку; WebSocket не меняется (agent-workbench-ui «Test connection without a selected project»; D7). Красный.
+- [x] A1.7 `[desktop]` `provider_settings_cubit_test.dart`, `mcp_settings_cubit_test.dart`: без проекта и агента — `EditableSettings` без папки, `projectLocal` среди целей нет (app-settings «Настройки без выбранного проекта»; D8). **Регрессионный** (решение ревью): `_accessOf` уже переводил пустую папку в `cwd: null`, поэтому тест зелёный и до кода. Он закрепляет поведение после смены типа источника на `String?`.
+- [x] A1.8 `[desktop]` `test/app/embedded_transport_resolver_test.dart`: `open` с `''` и `'   '` — `ClientWorkspaceException`, открыватель не вызван; следующий `open` с папкой работает (agent-workbench-ui «Встроенный резолвер без папки»; D9). Красный.
+- [x] A1.9 `[desktop]` `test/widget_test.dart`: ожидание `containsPair('cwd', workingDirectoryProvider.currentPath)` → `cwd` выбранного проекта; добавить проверку, что без проекта `createSession` не шлёт `session/new` (D20). Красный после замены.
+
+- [x] A1.10 `[client]` `packages/dart/codelab_client_core/test/restore/` (HIGH-1). Снимок `{projectDirectory: /work/app, activeSessionId: s1, openSessions: [{s1, "/"}]}`, первое подключение к агенту:
+  - с `loadSession` — `session/load` и `session/new` не отправлены, `s1` в списке `notLoaded`, активной сессии нет;
+  - без `loadSession` — новая сессия с уведомлением не создаётся;
+  - снимок с `s1` в `/work/app` грузится как раньше.
+
+  (acp-client-kit «Восстановление после перезапуска»: «Активная сессия снимка в другой папке», «Активная сессия в другой папке у агента без loadSession»; D10.) Красный.
+- [x] A1.11 `[desktop]` `test/features/workbench/application/workspace_restore_test.dart`: тот же снимок через `CodeLabTestBinding` — `/work/app` выбран, после подключения в `transport.sentMessages` нет `session/load` с `cwd` `/`, `s1` — строка `notLoaded` (agent-workbench-ui «Active session with root cwd under a real project», часть итерации A; D10). Красный до A2.9.
+- [x] A1.12 `[desktop]` `SessionsCubit` (рядом с `session_list_test.dart`), D24:
+  - выбор `notLoaded`-сессии с `cwd` `/` — состояние «ждёт подтверждения» с нормализованным `cwd`, `session/load` не отправлен;
+  - `Open` — `session/load` с `cwd` `/` и фокус;
+  - `Cancel` — фокус и статус прежние, ничего не отправлено;
+  - выбор другой сессии во время диалога закрывает его как `Cancel`, и та открывается без подтверждения;
+  - повторный клик по той же сессии игнорируется;
+  - `cwd` `/tmp/..` и `//` — диалог; `/work/app` — без диалога;
+  - событие `session.root_open` с `decision`, без пути.
+
+  Виджет-тест диалога (текст `This session runs in the disk root (/). The agent gets access to the whole disk. Open anyway?`, кнопки `Open` и `Cancel`) — в `workbench_shell_test.dart`. (agent-workbench-ui «Подтверждение открытия сессии в корне диска», все сценарии.) Красный.
+- [x] A1.13 `[desktop]` Юнит-тест `isFilesystemRoot`:
+  - корень: `/`, `//`, `/.`, `/tmp/..`, `C:\` и `C:\.` (через `p.Context(style: windows)`);
+  - не корень: `/work`, `C:\work`, пустая строка.
+
+  Нормализация — через `p.normalize` (D10). Красный.
+- [x] A1.14 `[desktop]` `missing_project_folder_test.dart` (или `project_required_test.dart`), D3:
+  - восстановление проекта висит на `Completer`, пользователь нажимает «Connect»: статус `connecting` ставится сразу, после завершения восстановления подключение идёт с восстановленной папкой;
+  - восстановление висит дольше таймаута (`fakeAsync`): отказ без обращения к workspace, диагностика `Open a project before connecting…`, событие `connection.connect_rejected {reason: no_project, profile_id}` без пути;
+  - повторное нажатие во время ожидания второго подключения не начинает;
+  - `createSession` во время восстановления ждёт ту же функцию и создаёт сессию в восстановленном проекте;
+  - после таймаута без проекта `createSession` открывает выбор папки.
+
+  (agent-workbench-ui «Действие во время восстановления проекта», «Восстановление не завершилось за таймаут».) Красный.
 
 ### A2. Реализация
 
-- [ ] A2.1 `[desktop]` `settings_cubit.dart`: `projectDirectory` → `String?`. `workingDirectoryProvider` удалить по цепочке `CodeLabShellParts.build`, оба конструктора `CodeLabShellCubit`, `app_scope.dart`. Удалить `lib/core/platform/working_directory_provider.dart`. Doc-комментарии на русском со ссылкой на D1 и `platform-integration.md` §54. A1.1 зелёный.
-- [ ] A2.2 `[desktop]` `connection_cubit.dart`: снимок папки в начале `connect`/`reconnect`; без проекта — `_rejectBeforeConnect` (диагностика `warning`, источник `project`); снимок уходит в проверку диска и в `ClientWorkspace` (D2, D3). `connectOnStart` без проекта пропускает подключение с событием `connection.connect_on_start_skipped` (временно, до B). A1.2, A1.3 зелёные.
-- [ ] A2.3 `[desktop]` `sessions_cubit.dart`, `createSession`: проект проверяется раньше соединения; без проекта — `browseForProject()` и диагностика `info` (D5). A1.4 зелёный.
-- [ ] A2.4 `[desktop]` `settings_cubit.dart`, `_restoreProject`: проект-корень не выбирается — чистая функция на `package:path`, предупреждение (D10). A1.5 зелёный.
-- [ ] A2.5 `[desktop]` `add_profile_cubit.dart`, `connection_settings_cubit.dart`, `provider_settings_cubit.dart`, `mcp_settings_cubit.dart`: тип `String? Function()`; правила D7 и D8 (до B источник — выбранный проект); замыкания в `app_scope.dart`. A1.6, A1.7 зелёные.
-- [ ] A2.6 `[desktop]` `app/embedded_transport_resolver.dart`: отказ с пустой папкой до очереди и поколения (D9). A1.8 зелёный.
-- [ ] A2.7 `[desktop]` `test/widget_test.dart`, `connection_cubit_test.dart` (`_FixedDirectory`), `integration_test/*`: проект — через обвязку A0.1. A1.9 зелёный; интеграционные тесты компилируются.
-- [ ] A2.8 `[desktop]` `rg 'currentPath|WorkingDirectoryProvider' apps/codelab_desktop/lib` — пусто; каждый потребитель `projectDirectory` в `lib/` обрабатывает `null` явно.
+- [x] A2.1 `[desktop]` `settings_cubit.dart`: `projectDirectory` → `String?`. `workingDirectoryProvider` удалить по цепочке `CodeLabShellParts.build`, оба конструктора `CodeLabShellCubit`, `app_scope.dart`. Удалить `lib/core/platform/working_directory_provider.dart`. Doc-комментарии на русском со ссылкой на D1 и `platform-integration.md` §54. A1.1 зелёный.
+- [x] A2.2 `[desktop]` `connection_cubit.dart`: снимок папки в начале `connect`/`reconnect`; без проекта — `_rejectBeforeConnect` (диагностика `warning`, источник `project`); снимок уходит в проверку диска и в `ClientWorkspace` (D2, D3). `connectOnStart` без проекта пропускает подключение с событием `connection.connect_on_start_skipped` (временно, до B). A1.2, A1.3 зелёные.
+- [x] A2.3 `[desktop]` `sessions_cubit.dart`, `createSession`: проект проверяется раньше соединения; без проекта — `browseForProject()` и диагностика `info` (D5). A1.4 зелёный.
+- [x] A2.4 `[desktop]` `settings_cubit.dart`, `_restoreProject`: проект-корень не выбирается — чистая функция на `package:path`, предупреждение (D10). A1.5 зелёный.
+- [x] A2.5 `[desktop]` `add_profile_cubit.dart`, `connection_settings_cubit.dart`, `provider_settings_cubit.dart`, `mcp_settings_cubit.dart`: тип `String? Function()`; правила D7 и D8 (до B источник — выбранный проект); замыкания в `app_scope.dart`. A1.6, A1.7 зелёные.
+- [x] A2.6 `[desktop]` `app/embedded_transport_resolver.dart`: отказ с пустой папкой до очереди и поколения (D9). A1.8 зелёный.
+- [x] A2.7 `[desktop]` `test/widget_test.dart`, `connection_cubit_test.dart` (`_FixedDirectory`), `integration_test/*`: проект — через обвязку A0.1. A1.9 зелёный; интеграционные тесты компилируются.
+- [x] A2.8 `[desktop]` `rg 'currentPath|WorkingDirectoryProvider' apps/codelab_desktop/lib` — пусто; каждый потребитель `projectDirectory` в `lib/` обрабатывает `null` явно.
+
+- [x] A2.9 `[client]` `packages/dart/codelab_client_core/lib/src/restore/workspace_restorer.dart`, `restoreAfterConnect`: активная сессия снимка загружается, только если её `cwd` равен проекту снимка; иначе — ни `session/load`, ни `newSessionWithNotice`, ни активации, сессия остаётся в `_pending` строкой `notLoaded`. Doc-комментарий на русском: почему (HIGH-1, Q1 (b), D10). A1.10, A1.11 зелёные. Затем: `fvm dart analyze` и `fvm dart test` в `codelab_client_core`, `melos run web-compile`, `melos run conformance:client`.
+- [x] A2.10 `[desktop]` `isFilesystemRoot` — чистая функция с `p.normalize` (например, `lib/features/workbench/application/project_paths.dart`). `_restoreProject` переходит на неё (D10). A1.13 зелёный.
+- [x] A2.11 `[desktop]` `sessions_cubit.dart`, `_loadAndSelect` / `selectSession`: подтверждение D24 — состояние в `SessionsState`, методы `confirmRootSession` и `cancelRootSession`, вытеснение новым фокусом, событие. Виджет диалога в `workbench_shell.dart` по состоянию, без решения об опасности в виджете. A1.12 зелёный.
+- [x] A2.12 `[desktop]` `settings_cubit.dart`: `awaitProject()` с таймаутом `projectRestoreTimeout` (2 с, параметр конструктора для тестов). В `connection_cubit.dart`:
+  - `connect` и `reconnect` ставят `connecting` / `reconnecting`, затем ждут `awaitProject()` и проверяют номер намерения;
+  - без проекта — `_rejectBeforeConnect` с событием `connection.connect_rejected {reason: no_project, profile_id}`.
+
+  `sessions_cubit.dart`, `createSession`: та же `awaitProject()` (D3). A1.14 зелёный, A1.2 и A1.3 остаются зелёными.
+- [x] A2.13 `[desktop]` Прогон A3.1 после A2.9–A2.12.
 
 ### A3. Проверки
 
-- [ ] A3.1 `[desktop]` `fvm dart format --set-exit-if-changed` изменённых файлов; `fvm flutter analyze` и `fvm flutter test` в `apps/codelab_desktop`.
+- [x] A3.1 `[desktop]` `fvm dart format --set-exit-if-changed` изменённых файлов; `fvm flutter analyze` и `fvm flutter test` в `apps/codelab_desktop`.
 
 ## Итерация C — конфигурация Dart-агента на сессию
 
@@ -140,12 +187,12 @@
   Порядок завершений задаётся явно (`concurrency.md` §69–§70); acp-client-kit «Агент по требованию хоста»; D15. Красный.
 - [ ] B0.2 `[client]` Там же или в тестах списка: `selectProject` при `Connected` — `session/list` нового проекта, поздний ответ прежнего не меняет список; без `sessionCapabilities.list` запроса нет (acp-client-kit «Смена проекта перезапрашивает список»). Красный.
 - [ ] B0.3 `[client]` Тесты переподключения: сессии разных папок загружаются каждая со своим `cwd`; `loadSession` для `detached` — загрузка и слив очереди после неё (acp-client-kit «Сессии после переподключения», новые сценарии; D16). Красный — вторая часть.
-- [ ] B0.4 `[client]` `packages/dart/codelab_client_core/test/restore/`: активная сессия снимка с `cwd` ≠ проекту снимка — без `session/load` и `session/new`, строка `notLoaded` (acp-client-kit «Активная сессия снимка в другой папке»; D16). Красный.
+- [ ] B0.4 `[client]` Перенесено в A1.10 (HIGH-1). В B — только регрессия: тесты A1.10 остаются зелёными после `ensureAgent`.
 
 ### B1. Реализация kit
 
 - [ ] B1.1 `[client]` `workspace_state.dart`: `agentDirectory`; `client_workspace.dart`: `ensureAgent` (D15), `connect`/`reconnect` задают `agentDirectory`, `selectProject` с номером запроса списка, `loadSession` для `detached`. Doc-комментарии на русском (§15); экспорт из бареля. B0.1–B0.3 зелёные.
-- [ ] B1.2 `[client]` `workspace_restorer.dart`: правило активной сессии D16. B0.4 зелёный.
+- [ ] B1.2 `[client]` Перенесено в A2.9. В B `workspace_restorer.dart` правило активной сессии не меняет.
 - [ ] B1.3 `[client]` Проверки kit: `fvm dart format`, `fvm dart analyze`, `fvm dart test` в `codelab_client_core`; `melos run web-compile`; `melos run conformance:client`; `melos run test:e2e:cli:dart-agent`; `fvm dart analyze` в `apps/codelab_cli` и `apps/codelab_desktop` (публичный API kit расширен).
 
 ### B2. Красные тесты desktop
@@ -153,7 +200,7 @@
 - [ ] B2.1 `[desktop]` `test/features/workbench/application/agent_starts_itself_test.dart` (новый; `CodeLabTestBinding` с фейковыми открывателем и stdio-фабрикой):
   - выбор проекта стартует агента без сессии и запрашивает список;
   - восстановленный проект стартует агента при запуске;
-  - «New session» и фокус на `notLoaded` / `detached` стартуют агента, если его нет;
+  - «New session» и фокус на `notLoaded` / `detached` стартуют агента, если его нет; для `detached` с `cwd` в корне диска — подтверждение D24 (та же функция, что в A2.11);
   - сессия другой папки при идущем ходе — без перезапуска, ход завершается своим ответом;
   - WebSocket — одно соединение на две папки;
   - после сбоя любой триггер (выбор проекта, «New session», фокус, «Retry») снова стартует агента; без действия пользователя повторов нет (фейковые часы: время идёт — новых `open` нет); одинаковый сбой три раза подряд — одна запись в диагностике, на экране `Failed again (2)`, в журнале `connection.start_failed` с `repeat`; другой текст ошибки — новая запись;
@@ -176,7 +223,7 @@
   - корень перезапуска — папка сессии в фокусе, иначе проект.
 
   A1.2 переписывается сюда: Connect больше нет. (app-settings «Список профилей…», «Блок «Behavior»…», все сценарии; D18, D19, D22.) Красный.
-- [ ] B2.4 `[desktop]` `workspace_restore_test.dart`: активная сессия в папке проекта загружается при запуске без Connect; активная `s2` с `cwd` `/` под `/work/app` — агент стартует в `/work/app`, `s2` — `notLoaded`, стартовый экран; клик по `s2` грузит её без перезапуска (agent-workbench-ui «Restart restores the previous session», «Active session with root cwd under a real project»; D16, D19). Красный.
+- [ ] B2.4 `[desktop]` `workspace_restore_test.dart`: активная сессия в папке проекта загружается при запуске без Connect; активная `s2` с `cwd` `/` под `/work/app` — агент стартует в `/work/app` без Connect, стартовый экран. Правило «`s2` не грузится» уже проверяет A1.11; здесь — только клик по `s2`: подтверждение D24, после `Open` загрузка без перезапуска (agent-workbench-ui «Restart restores the previous session», «Active session with root cwd under a real project»; D16, D19). Красный.
 - [ ] B2.5 `[desktop]` Виджет-тесты `test/features/workbench/presentation/workbench_shell_test.dart`:
   - стартовый экран без проекта (`start-open-project`) и с проектом (`start-new-session`, `Starting <title>…`);
   - экран сбоя с «Retry»;
@@ -199,6 +246,7 @@
 - [ ] B3.3 `[desktop]` Старт приложения: восстановленный проект — триггер 1 (D19). B2.4 зелёный.
 - [ ] B3.4 `[desktop]` `main_pane.dart`, `workbench_shell.dart`, страница «Connection»: стартовый экран, экран сбоя, диалог подтверждения, «Use» вместо «Connect» (ключ `connection-profile-use-<id>`), без «Connect on start», без «Connect» в app bar. Виджеты только отображают и передают действия (§6). При необходимости — `CodeLabStartScreen` в `codelab_ui` без логики, с превью в `codelab_organism_previews.dart`. Providers/MCP: источник папки — папка сессии в фокусе, иначе выбранный проект (D8). B2.5 зелёный.
 - [ ] B3.5 `[desktop]` Харнесс характеризационных тестов: `connect()` → ожидание старта по проекту (D20). Каждый изменённый характеризационный тест перечислить в описании задачи с причиной (`codelab_client_core/AGENTS.md` §5). Интеграционные тесты: «Connect → New session» → «Open folder → New session» (компилируются; на устройстве — только в `release/*`).
+- [ ] B3.6 `[desktop]` Текст исчезнувшей папки → `Project folder not found: <path>. Choose an existing folder with Open folder….` (без `and connect again`: в рабочем месте нет Connect, D2). Сейчас в коде `connection_cubit.dart` — `… and connect again.`. Сначала тесты (красные): `missing_project_folder_test.dart:74–75`, `connection_cubit_test.dart:653`; затем код.
 
 ### B4. Проверки
 
