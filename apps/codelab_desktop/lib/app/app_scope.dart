@@ -66,6 +66,7 @@ import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
 import '../features/project_files/application/project_files_cubit.dart';
+import '../core/platform/user_shell_launcher.dart';
 import '../features/settings/application/add_profile_cubit.dart';
 import '../features/settings/application/connection_settings_cubit.dart';
 import '../features/settings/application/default_profile_resolver.dart';
@@ -74,6 +75,8 @@ import '../features/settings/application/profiles_unavailable.dart';
 import '../features/settings/application/mcp_settings_cubit.dart';
 import '../features/settings/application/provider_settings_cubit.dart';
 import '../features/settings/application/provider_wizard_cubit.dart';
+import '../features/terminal/application/terminal_tabs_cubit.dart';
+import '../features/terminal/presentation/terminal_output_flusher.dart';
 import '../features/workbench/application/secret_migration_cubit.dart';
 import '../features/workbench/application/secret_migration_runner.dart';
 import '../features/workbench/application/secret_migration_turns.dart';
@@ -117,6 +120,7 @@ Scope createCodeLabRootScope({
   ProjectFolderPicker? projectFolderPicker,
   ProjectFiles? projectFiles,
   bool projectFilesEnabled = true,
+  UserShellLauncher? userShellLauncher,
 }) {
   // Одно окружение на открыватель встроенного агента, профили и токены:
   // `CODELAB_HOME` и переменные читаются из одного места (design.md change
@@ -147,6 +151,7 @@ Scope createCodeLabRootScope({
       CodeLabPlatformModule(
         directoryExists: directoryExists ?? ioDirectoryExists,
         projectFolderPicker: projectFolderPicker,
+        userShellLauncher: userShellLauncher,
       ),
       CodeLabConnectionModule(
         environment: connectionEnvironment,
@@ -167,6 +172,9 @@ Scope createCodeLabRootScope({
     ]);
 
   scope.resolve<CodeLabRootLifecycle>();
+  // Объект сброса вывода терминала создаётся сразу: он вешает крючок на Cubit
+  // (D3); закрывает его `dispose` вместе со scope.
+  scope.resolve<TerminalOutputFlusher>();
   // Resolved once so CherryPick's Scope.dispose() tracks it as a
   // Disposable and awaits its flush on shutdown — see
   // CodeLabLoggingLifecycle's doc comment.
@@ -406,10 +414,16 @@ final class CodeLabPlatformModule extends Module {
   CodeLabPlatformModule({
     required this.directoryExists,
     this.projectFolderPicker,
-  });
+    UserShellLauncher? userShellLauncher,
+  }) : _userShellLauncher = userShellLauncher;
 
   /// Системный выбор папки; тесты подменяют его, чтобы не открывать диалог.
   final ProjectFolderPicker? projectFolderPicker;
+
+  /// Порт запуска shell пользователя; шов тестов
+  /// (`createCodeLabRootScope(userShellLauncher:)`, `add-integrated-terminal`,
+  /// D2): без него — адаптер на `pty2`.
+  final UserShellLauncher? _userShellLauncher;
 
   /// Проверка папки проекта; тесты с вымышленными путями подменяют её.
   final DirectoryExists directoryExists;
@@ -445,6 +459,11 @@ final class CodeLabPlatformModule extends Module {
       const SharedPreferencesWorkspaceSnapshotStore(),
     );
     bind<TerminalProcessRunner>().toInstance(const IoTerminalProcessRunner());
+    // Терминал пользователя (не путать с ACP `terminal/*` агента): процессы
+    // запускает только этот порт (D2).
+    bind<UserShellLauncher>().toInstance(
+      _userShellLauncher ?? PtyUserShellLauncher(),
+    );
   }
 }
 
@@ -645,6 +664,30 @@ final class CodeLabPresentationModule extends Module {
         }),
       );
     }).singleton();
+    // Вкладки терминала пользователя: живут в root scope, а не в виджете,
+    // потому что процессы переживают закрытие панели и смену проекта (Q18,
+    // D4, D5). Журнал — события жизненного цикла без путей и вывода (D9).
+    bind<TerminalTabsCubit>()
+        .toProvide(
+          () => TerminalTabsCubit(
+            workspace: currentScope.resolve<ClientWorkspace>(),
+            launcher: currentScope.resolve<UserShellLauncher>(),
+            directoryExists: currentScope.resolve<DirectoryExists>(),
+            logger: StructuredLogLogger('codelab_desktop.terminal').bind({
+              logCategoryKey: applicationLogCategory,
+              logComponentKey: 'terminal',
+            }),
+          ),
+        )
+        .singleton();
+    // Сброс вывода на кадре: один на scope, срок жизни Cubit (D3).
+    bind<TerminalOutputFlusher>()
+        .toProvide(
+          () => TerminalOutputFlusher(
+            cubit: currentScope.resolve<TerminalTabsCubit>(),
+          ),
+        )
+        .singleton();
     bind<CodeLabShellCubit>()
         .toProvide(
           () => CodeLabShellCubit(
@@ -908,6 +951,7 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     SecretMigrationCubit secretMigrationCubit,
     SecretMigrationOffer secretMigrationOffer,
     NavigationCubit navigationCubit,
+    TerminalTabsCubit terminalTabsCubit,
   ) => CodeLabRootLifecycle(
     application: application,
     transport: transport,
@@ -918,6 +962,7 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     secretMigrationCubit: secretMigrationCubit,
     secretMigrationOffer: secretMigrationOffer,
     navigationCubit: navigationCubit,
+    terminalTabsCubit: terminalTabsCubit,
   );
 }
 
@@ -932,6 +977,7 @@ final class CodeLabRootLifecycle implements Disposable {
     required SecretMigrationCubit secretMigrationCubit,
     required SecretMigrationOffer secretMigrationOffer,
     required NavigationCubit navigationCubit,
+    required TerminalTabsCubit terminalTabsCubit,
   }) : _application = application,
        _transport = transport,
        _workspace = workspace,
@@ -940,7 +986,8 @@ final class CodeLabRootLifecycle implements Disposable {
        _shellCubit = shellCubit,
        _secretMigrationCubit = secretMigrationCubit,
        _secretMigrationOffer = secretMigrationOffer,
-       _navigationCubit = navigationCubit;
+       _navigationCubit = navigationCubit,
+       _terminalTabsCubit = terminalTabsCubit;
 
   final AcpClientApplication _application;
   final AcpTransport _transport;
@@ -964,6 +1011,11 @@ final class CodeLabRootLifecycle implements Disposable {
   /// Закрывается после резолвера: он до конца пишет в источник.
   final SecretMigrationOffer _secretMigrationOffer;
   final NavigationCubit _navigationCubit;
+
+  /// Процессы терминала завершаются первыми: `closeAll()` шлёт `hangUp`,
+  /// через 3 с `kill` и запрещает новые вкладки (D4, «Выход из app»); только
+  /// потом Cubit отписывается от рабочего пространства.
+  final TerminalTabsCubit _terminalTabsCubit;
   var _isDisposed = false;
 
   @override
@@ -973,6 +1025,8 @@ final class CodeLabRootLifecycle implements Disposable {
     }
 
     _isDisposed = true;
+    await _terminalTabsCubit.closeAll();
+    await _terminalTabsCubit.close();
     await _navigationCubit.close();
     await _secretMigrationCubit.close();
     await _shellCubit.close();
@@ -1000,6 +1054,7 @@ final class CodeLabDependencies {
     required this.logBuffer,
     required this.secretMigrationCubit,
     required this.navigationCubit,
+    required this.terminalTabsCubit,
     required this.settingsPages,
     required this.createConnectionSettingsCubit,
     required this.createAddProfileCubit,
@@ -1018,6 +1073,9 @@ final class CodeLabDependencies {
   /// Переходы рабочее место ↔ настройки (design.md change
   /// `add-app-settings-shell`, D2).
   final NavigationCubit navigationCubit;
+
+  /// Вкладки терминала пользователя (`add-integrated-terminal`, D3).
+  final TerminalTabsCubit terminalTabsCubit;
 
   /// Страницы настроек, видимые в этой сборке.
   final SettingsPages settingsPages;
@@ -1122,6 +1180,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     logBuffer: _scope.resolve<LogBuffer>(),
     secretMigrationCubit: _scope.resolve<SecretMigrationCubit>(),
     navigationCubit: _scope.resolve<NavigationCubit>(),
+    terminalTabsCubit: _scope.resolve<TerminalTabsCubit>(),
     settingsPages: _scope.resolve<SettingsPages>(),
     createConnectionSettingsCubit: _scope.resolve<ConnectionSettingsCubit>,
     createAddProfileCubit: _scope.resolve<AddProfileCubit>,

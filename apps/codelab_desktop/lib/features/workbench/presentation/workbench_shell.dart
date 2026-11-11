@@ -12,6 +12,8 @@ import '../../../app/navigation/navigation_cubit.dart';
 import '../../../app/navigation/settings_page.dart';
 import '../application/sessions_cubit.dart' show PendingRootSession;
 import '../../project_files/presentation/project_files_pane.dart';
+import '../../terminal/application/terminal_tabs_cubit.dart';
+import '../../terminal/presentation/terminal_pane.dart';
 import '../application/shell_cubit.dart';
 import '../application/ui_mappers.dart'
     show connectionTooltipOf, sidebarProjectsOf;
@@ -38,11 +40,16 @@ class CodeLabShell extends StatelessWidget {
   /// design.md change `add-file-preview-and-tree`, D7). Недоступная панель
   /// остаётся в сохранённой раскладке и возвращается вместе с локальным
   /// профилем (spec agent-workbench-ui «Unavailable pane is hidden but kept in
-  /// the layout»).
-  static List<ToolPane> _availablePanesOf(CodeLabShellState state) => [
+  /// the layout»). Terminal входит, только если на платформе есть PTY
+  /// (`add-integrated-terminal`, D12): без него переключателя нет.
+  static List<ToolPane> _availablePanesOf(
+    CodeLabShellState state, {
+    required bool terminal,
+  }) => [
     if (state.projectFilesAvailable) ToolPane.files,
     ToolPane.plan,
     ToolPane.protocol,
+    if (terminal) ToolPane.terminal,
   ];
 
   @override
@@ -51,8 +58,12 @@ class CodeLabShell extends StatelessWidget {
       builder: (context, state) {
         final cubit = context.read<CodeLabShellCubit>();
         final logBuffer = codeLabDependenciesOf(context).logBuffer;
+        final terminals = context.read<TerminalTabsCubit>();
         final layoutClass = CodeLabLayoutClass.ofContext(context);
-        final availablePanes = _availablePanesOf(state);
+        final availablePanes = _availablePanesOf(
+          state,
+          terminal: terminals.isSupported,
+        );
         final openPanes = [
           for (final pane in state.openPanes)
             if (availablePanes.contains(pane)) pane,
@@ -114,9 +125,22 @@ class CodeLabShell extends StatelessWidget {
                               openPanes.contains(pane),
                         ),
                     ],
-                    onPaneToggled: (pane) => dockVisible
-                        ? cubit.togglePane(pane)
-                        : cubit.openPane(pane),
+                    onPaneToggled: (pane) {
+                      // Панель закрывается, только если она видна и активна;
+                      // иначе действие её открывает (`togglePane`).
+                      final opens =
+                          !(dockVisible &&
+                              state.activePane == pane &&
+                              openPanes.contains(pane));
+                      dockVisible
+                          ? cubit.togglePane(pane)
+                          : cubit.openPane(pane);
+                      // Открытие действием пользователя создаёт первую
+                      // вкладку; восстановленный док её не создаёт (D1).
+                      if (opens && pane == ToolPane.terminal) {
+                        unawaited(terminals.ensureTab());
+                      }
+                    },
                     connectionTooltip: connectionTooltipOf(
                       profileLabel: state.profileLabel,
                       transportLabel: state.transportLabel,
@@ -179,6 +203,8 @@ class CodeLabShell extends StatelessWidget {
                                     CodeLabProgressChecklist.list(
                                       entries: state.currentPlan ?? const [],
                                     ),
+                                  ToolPane.terminal =>
+                                    const WorkbenchTerminalPane(),
                                   _ => _ProtocolPane(
                                     state: state,
                                     logBuffer: logBuffer,

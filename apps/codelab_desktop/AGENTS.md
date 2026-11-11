@@ -81,6 +81,14 @@
 * Значения секретов живут только в памяти и проходят через `SecretAdmin`; в виджетах, состоянии (Cubit/`SessionView`), логах и диагностике их быть НЕ ДОЛЖНО — только имя секрета и признак «задан».
 * Условие macOS App Sandbox: сейчас `com.apple.security.app-sandbox = false` в `macos/Runner/*.entitlements`. Если песочницу включат, бэкенды файла и ОС потребуют пересмотра — это отдельный change, а не правка на месте.
 
+## Терминал
+
+* Терминал пользователя (`add-integrated-terminal`, D1–D5, D9, D11, D12) — feature `lib/features/terminal/`: `application/` — `TerminalTabsCubit`, `TerminalTabsState`, `TerminalOwner`, фабрика модели `terminalModel()` (без Flutter, правило сторожа); `presentation/` — `WorkbenchTerminalPane` (`TerminalView` из `package:xterm2/ui.dart` над моделью вкладки), `TerminalOutputFlusher` (сброс вывода на кадре), маппер статуса `terminalTabViewOf`. Запуск процессов — порт `UserShellLauncher` в `lib/core/platform/` (`PtyUserShellLauncher` на `pty2`; тесты — `FakeUserShellLauncher` через `createCodeLabRootScope(userShellLauncher:)`). `package:xterm2/xterm.dart`, `package:zmodem/` в `lib/` запрещены.
+* **Владелец процессов** — один `TerminalTabsCubit` в root scope (не виджет): вкладки принадлежат паре `TerminalOwner(profileId, sessionId)` и живут до закрытия пользователем или `closeAll()` при закрытии scope (`CodeLabRootLifecycle.dispose()`: `hangUp` всем, через 3 с `kill`). Смена проекта, профиля и разрыв соединения вкладок не закрывают (Q18). Без активной сессии панель показывает «Open a session to use the terminal» и shell не запускает (Q17). Восстановленный док shell не запускает: первую вкладку создаёт только открытие панели пользователем.
+* **Не логируется:** пути, окружение, аргументы, ввод и вывод терминала, тексты исключений (только имя типа) — события `terminal.*` логгера `codelab_desktop.terminal` (D9). Вывод процесса показывается как есть, без редакции секретов; об этом предупреждение `terminal-disclosure`.
+* **Буфер обмена:** модель создаёт только `terminalModel()` с политикой Q13 (OSC 52, 1337, 5522 не читают и не пишут системный буфер); виджет обработчики модели не перезаписывает.
+* **Граница с ACP `terminal/*`:** это терминал человека. Он не проходит через одобрения и режимы разрешений агента и не ограничен рабочей папкой сессии; процессы агента (`terminal/create` и др.) создаёт `IoTerminalProcessRunner` клиентского слоя, а не `UserShellLauncher`. Пересечения вкладок и процессов агента нет.
+
 ## Тесты
 
 * Widget-тесты работают с `InMemoryProfileStore` (`test/support/`): настоящий файл внутри `testWidgets` зависает в fake-async зоне, а `profiles.json` проверяют обычные `test` (`app_scope_profiles_test.dart`, `connection_settings_cubit_test.dart`). `CodeLabTestBinding` по умолчанию хранит профиль по умолчанию — stdio-агента (`stdioDefault: true`); тесты правила «нет выбора — встроенный агент» передают `stdioDefault: false`.

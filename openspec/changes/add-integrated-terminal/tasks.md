@@ -173,7 +173,7 @@
 
   Тест красный.
 - [x] 2.4 `[desktop]` Реализовать организм `CodeLabTerminalPane` в `packages/flutter/codelab_ui/lib/src/organisms/codelab_terminal_pane.dart`, экспорт в `lib/src/organisms/organisms.dart`, пример в `lib/src/organisms/codelab_organism_previews.dart` (его покрывает `test/codelab_previews_test.dart`); запись в `packages/flutter/codelab_ui/AGENTS.md` §4 (без пакета рендера терминала, без логики) — 2.3 зелёный.
-- [ ] 2.5 `[desktop]` Widget-тест `apps/codelab_desktop/test/features/terminal/presentation/terminal_pane_test.dart` с `FakeUserShellLauncher` (`integrated-terminal` «Панель Terminal в доке инструментов», «Терминал вне одобрений агента», «Восстановление дока не запускает shell», «Терминал только там, где есть PTY», «Содержимое терминала не покидает экран»; D1, D7, D12). Приложение собирается `TestAppScope` (`test/support/test_app_scope.dart`) с fake-портом через шов `createCodeLabRootScope(userShellLauncher:)` (2.6). Проверяет:
+- [x] 2.5 `[desktop]` Widget-тест `apps/codelab_desktop/test/features/terminal/presentation/terminal_pane_test.dart` с `FakeUserShellLauncher` (`integrated-terminal` «Панель Terminal в доке инструментов», «Терминал вне одобрений агента», «Восстановление дока не запускает shell», «Терминал только там, где есть PTY», «Содержимое терминала не покидает экран»; D1, D7, D12). Приложение собирается `TestAppScope` (`test/support/test_app_scope.dart`) с fake-портом через шов `createCodeLabRootScope(userShellLauncher:)` (2.6). Проверяет:
   - `tool-toggle-terminal` (`CodeLabAppBar.toggleKey(ToolPane.terminal)`) открывает `tool-pane-terminal` (`CodeLabToolDock.paneKey`) с одной вкладкой;
   - закрытие панели крестиком вкладки дока (`tool-tab-close-terminal`, `CodeLabToolDock.closeKey`) и повторное открытие сохраняют вкладку;
   - выбор сессии B показывает её вкладки, возврат к A — вкладку A с живым процессом;
@@ -187,7 +187,7 @@
   - выделение и копирование пользователем вызывают `Clipboard.setData` с выделенным текстом.
 
   Тест красный.
-- [ ] 2.6 `[desktop]` Реализовать:
+- [x] 2.6 `[desktop]` Реализовать:
   - `lib/features/terminal/presentation/` — привязку `TerminalView` (`package:xterm2/ui.dart`; `Terminal` и `CellOffset` — из `package:xterm2_core/xterm2_core.dart`) к модели вкладки, тему `TerminalTheme` из `FluentTheme`, сброс буфера записи не чаще кадра частями до 4 КБ (D3); обработчики буфера обмена модели не перезаписываются виджетом;
   - `CodeLabShell` (`lib/features/workbench/presentation/workbench_shell.dart`) — `_availablePanes` сейчас `static const [plan, protocol]`: становится списком, куда `ToolPane.terminal` входит при `isSupported`; в `switch (pane)` содержимого дока своя ветка `ToolPane.terminal =>` вместо ветки `_` (она рисует `_ProtocolPane`);
   - маппер статуса вкладки в подпись и тон;
