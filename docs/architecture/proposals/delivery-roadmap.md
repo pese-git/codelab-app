@@ -562,7 +562,7 @@ Definition of Done и правки ленты по ручной регресси
 | `add-subagent-board` | `_codelab/subagents/*` (§17.3.7), доска app (A15) и вид `tasks` CLI | M5 |
 | `add-background-jobs` (уже назван) | `_codelab/jobs/*` (§17.9.11) на той же доске | M5 |
 | `add-redaction-settings` | страница «Redaction», `RedactionPreview` (§12.4.9) | M5 |
-| `add-integrated-terminal` (уже создан) | панель терминала пользователя (D-28, §12.3 A16); выбор PTY-стратегии — задача 1.1 change | M5 |
+| `add-integrated-terminal` (уже создан) | панель терминала пользователя (D-28, §12.3 A16); PTY-стратегия решена (Q1, настоящий PTY), выбор пакетов — спайк, задача 1.1 change | M5 |
 
 ### 10.4. Backlog: задачи вне changes
 

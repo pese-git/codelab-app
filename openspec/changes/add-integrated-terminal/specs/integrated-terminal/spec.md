@@ -1,49 +1,197 @@
 ## ADDED Requirements
 
-### Requirement: Terminal pane in the tool dock with multiple tabs
-CodeLab SHALL provide a terminal pane in the workbench tool dock on the right side of the workbench, alongside the other tool panes, supporting multiple independent terminal tabs. The pane SHALL be closed by default and opened from the app bar toggle, a keyboard shortcut or the command palette.
+### Requirement: Панель Terminal в доке инструментов
+CodeLab SHALL показывать терминал пользователя панелью Terminal (`ToolPane.terminal`) существующего дока инструментов справа (`dart-agent-and-clients` §12.3 A13, шаг 0; A16). Отдельной зоны раскладки для неё SHALL NOT быть. Внутри панели SHALL быть вкладки терминала, кнопка новой вкладки и закрытие вкладки. Панель SHALL быть закрыта, пока пользователь её не откроет. Открытие действием пользователя (переключатель Terminal в app bar, сочетание, команда палитры) при отсутствии вкладок у владельца SHALL создавать одну вкладку. Если вкладок нет, панель SHALL показывать пустое состояние с действием «New terminal».
 
-#### Scenario: Opening the terminal pane
-- **WHEN** user turns on the Terminal toggle in the app bar
-- **THEN** CodeLab shows the terminal pane in the tool dock with at least one active tab and a way to open additional tabs
+#### Scenario: Открытие переключателем
+- **WHEN** открыт проект, вкладок терминала нет, и пользователь включает переключатель Terminal в app bar
+- **THEN** док показывает активную вкладку `tool-pane-terminal` с одной вкладкой терминала (`terminal-tab-<id>`) и кнопкой `terminal-new-tab`
 
-#### Scenario: Closing a terminal tab
-- **WHEN** user closes a terminal tab
-- **THEN** CodeLab terminates the underlying process for that tab and removes the tab
+#### Scenario: Новая вкладка
+- **WHEN** панель Terminal открыта с одной вкладкой, и пользователь нажимает `terminal-new-tab`
+- **THEN** появляется вторая вкладка, она становится активной, первая продолжает работать
 
-#### Scenario: Terminal tabs belong to the focused session
-- **WHEN** two sessions are shown side by side and the user moves focus from one to the other
-- **THEN** the terminal pane shows the tabs of the focused session, and the processes of the other session's tabs keep running
+#### Scenario: Закрыта по умолчанию
+- **WHEN** CodeLab запускается впервые, сохранённой раскладки дока нет
+- **THEN** панели Terminal в доке нет, процессов терминала нет
 
-#### Scenario: Closing the pane keeps terminal sessions
-- **WHEN** user closes the terminal pane in the tool dock
-- **THEN** the open terminal tabs, their processes and scrollback are kept and shown again when the pane is reopened
+### Requirement: Вкладки терминала принадлежат папке проекта
+CodeLab SHALL связывать каждую вкладку терминала с папкой проекта, выбранной в момент её создания, а без выбранного проекта — с рабочей папкой процесса клиента. Панель SHALL показывать вкладки текущего проекта. Смена проекта или сессии SHALL NOT завершать процессы и терять вывод вкладок других проектов.
 
-#### Scenario: Terminal processes are cleaned up on app close
-- **WHEN** CodeLab is closed while terminal tabs are open
-- **THEN** all terminal child processes are terminated, none are left running
+#### Scenario: Вкладки другого проекта
+- **WHEN** в проекте A открыта вкладка терминала с выводом, и пользователь выбирает сессию проекта B
+- **THEN** панель показывает вкладки проекта B (или пустое состояние), а процесс вкладки проекта A продолжает работать
 
-### Requirement: Terminal starts in the active transport's working directory
-CodeLab SHALL start a new terminal tab in the working directory of the active transport profile at the moment the tab is created, and SHALL NOT propagate directory changes made inside the terminal back to the transport configuration.
+#### Scenario: Возврат к проекту
+- **WHEN** пользователь возвращается к проекту A
+- **THEN** панель снова показывает вкладку проекта A с прежним выводом и выводом, пришедшим за время отсутствия
 
-#### Scenario: New tab uses current profile cwd
-- **WHEN** user opens a new terminal tab
-- **THEN** the shell starts in the working directory currently configured for the active transport profile
+#### Scenario: Сессии одного проекта
+- **WHEN** у проекта две сессии, и пользователь переключается между ними
+- **THEN** панель показывает одни и те же вкладки терминала
 
-#### Scenario: cd inside terminal does not affect transport config
-- **WHEN** user changes directory inside an open terminal tab
-- **THEN** the transport profile's working directory field remains unchanged
+### Requirement: Рабочая папка вкладки терминала
+CodeLab SHALL запускать shell новой вкладки в папке её владельца на момент создания вкладки. Изменение папки внутри shell SHALL NOT менять папку проекта, `cwd` сессий и профили подключения. Если папки нет, CodeLab SHALL NOT запускать процесс и SHALL показывать у вкладки ошибку без пути.
 
-### Requirement: Terminal is outside the approval-safety flow
-CodeLab SHALL clearly indicate that commands run in the terminal panel execute directly as the user and are not subject to the agent's approval-safety permission modes or risk classification.
+#### Scenario: Новая вкладка в папке проекта
+- **WHEN** выбран проект `/work/app`, и пользователь открывает новую вкладку терминала
+- **THEN** shell стартует с рабочей папкой `/work/app`
 
-#### Scenario: First-open disclosure
-- **WHEN** user opens the terminal panel for the first time in a session
-- **THEN** CodeLab shows a visible notice that terminal commands bypass the agent approval flow and are not secret-redacted
+#### Scenario: cd внутри терминала
+- **WHEN** пользователь выполняет `cd /tmp` во вкладке терминала
+- **THEN** папка проекта, `cwd` новых сессий и профиль подключения не меняются, а следующая новая вкладка стартует в папке проекта
 
-### Requirement: Terminal output is not secret-redacted
-CodeLab SHALL NOT apply `SecretRedactor` or any equivalent structured-log redaction to terminal output, and SHALL disclose this to the user rather than implying protection that does not exist.
+#### Scenario: Папки проекта нет
+- **WHEN** папка проекта удалена, и пользователь открывает новую вкладку терминала
+- **THEN** процесс не запускается, вкладка показывает «Folder not found», путь в тексте и в журнале не появляется
 
-#### Scenario: Terminal output shown as-is
-- **WHEN** a command run in the terminal prints a value that would normally be redacted in diagnostics/logs
-- **THEN** CodeLab displays it unmodified in the terminal, consistent with the first-open disclosure
+### Requirement: Терминал — настоящий псевдотерминал
+CodeLab SHALL запускать shell вкладки в псевдотерминале (PTY): у процесса SHALL быть терминал на stdin и stdout, размер терминала SHALL совпадать с размером области вкладки и меняться вместе с ней. На macOS и Linux CodeLab SHALL запускать `$SHELL` как login shell (`-l`), без `$SHELL` — `/bin/zsh` на macOS, затем `/bin/bash`, затем `/bin/sh`. Shell SHALL получать окружение процесса CodeLab целиком, `TERM=xterm-256color` и `COLORTERM=truecolor`.
+
+#### Scenario: У shell есть терминал
+- **WHEN** во вкладке выполняется `test -t 0 && test -t 1 && echo tty`
+- **THEN** вкладка показывает `tty`
+
+#### Scenario: Login shell пользователя
+- **WHEN** `SHELL=/bin/zsh`, и пользователь открывает новую вкладку
+- **THEN** запускается `/bin/zsh -l`, а `echo $TERM $COLORTERM` во вкладке печатает `xterm-256color truecolor`
+
+#### Scenario: Размер меняется с панелью
+- **WHEN** пользователь меняет ширину дока, и во вкладке затем выполняется `tput cols`
+- **THEN** выведенное число равно числу колонок, которое вкладка показывает после изменения ширины
+
+#### Scenario: Ctrl+C прерывает команду
+- **WHEN** во вкладке идёт `sleep 100`, фокус во вкладке, и пользователь нажимает Ctrl+C
+- **THEN** `sleep` прерывается, shell показывает приглашение, вкладка остаётся `running`
+
+### Requirement: Жизненный цикл процессов терминала
+CodeLab SHALL:
+- при закрытии вкладки отправлять процессу shell сигнал разрыва терминала (`SIGHUP` на POSIX), а если он не завершился за 2 с — завершать его принудительно;
+- при выходе из приложения завершать процессы всех вкладок тем же способом, ожидая не дольше 3 с, после чего завершать оставшиеся принудительно и выходить.
+
+Закрытие панели Terminal в доке SHALL NOT завершать процессы и терять вывод. Вкладка, shell которой завершился сам, SHALL оставаться со статусом «exited» и кодом выхода, пока пользователь её не закроет. Повторное закрытие вкладки и закрытие вкладки уже завершившегося процесса SHALL NOT давать ошибок. Вывод процесса закрытой вкладки SHALL NOT менять состояние других вкладок.
+
+#### Scenario: Закрытие вкладки
+- **WHEN** пользователь закрывает вкладку с работающим shell
+- **THEN** вкладка исчезает, shell получает `SIGHUP` и завершается; процесса shell и его заданий переднего плана после этого нет
+
+#### Scenario: Shell не завершается по SIGHUP
+- **WHEN** shell вкладки игнорирует `SIGHUP`, и пользователь закрывает вкладку
+- **THEN** через 2 с процесс завершается принудительно, событие `terminal.tab_closed` содержит `forced: true`
+
+#### Scenario: Закрытие панели сохраняет вкладки
+- **WHEN** во вкладке идёт команда с выводом, и пользователь закрывает панель Terminal крестиком вкладки дока, а затем открывает её снова
+- **THEN** вкладка на месте, процесс работает, вывод за время закрытия виден
+
+#### Scenario: Shell завершился сам
+- **WHEN** пользователь вводит `exit 3` во вкладке
+- **THEN** вкладка остаётся со статусом «exited» и кодом `3`, ввод в неё игнорируется, закрыть её можно крестиком
+
+#### Scenario: Выход из приложения
+- **WHEN** открыты две вкладки терминала, и пользователь завершает CodeLab
+- **THEN** до выхода процесса CodeLab оба shell завершены, ни один процесс терминала не остаётся работать
+
+### Requirement: Клавиатура и палитра терминала
+CodeLab SHALL обрабатывать Ctrl+` на всех платформах так:
+- фокус вне терминала — открыть панель Terminal, сделать её активной (при отсутствии вкладок создать одну) и отдать фокус активной вкладке;
+- фокус в терминале — вернуть фокус композеру, оставив панель открытой.
+
+Ctrl+Shift+` SHALL открывать ровно одну новую вкладку у текущего владельца на каждое нажатие; повтор клавиши при удержании SHALL NOT создавать вкладки. Предела числа вкладок SHALL NOT быть. Пока фокус во вкладке терминала, остальные клавиши SHALL уходить shell и SHALL NOT вызывать сочетания рабочего места с Ctrl и Esc. Палитра команд SHALL содержать команду хоста `/terminal`, которая делает то же, что Ctrl+` при фокусе вне терминала.
+
+#### Scenario: Ctrl+` открывает терминал
+- **WHEN** панель Terminal закрыта, фокус в композере, и пользователь нажимает Ctrl+`
+- **THEN** панель Terminal открыта и активна, фокус во вкладке терминала
+
+#### Scenario: Удержание Ctrl+Shift+`
+- **WHEN** пользователь удерживает Ctrl+Shift+` дольше задержки автоповтора клавиатуры
+- **THEN** появляется ровно одна новая вкладка и запускается ровно один shell
+
+#### Scenario: Много вкладок
+- **WHEN** у проекта 12 вкладок терминала, и пользователь нажимает `terminal-new-tab`
+- **THEN** появляется тринадцатая вкладка, кнопка `terminal-new-tab` остаётся активной
+
+#### Scenario: Ctrl+` возвращает фокус
+- **WHEN** фокус во вкладке терминала, и пользователь нажимает Ctrl+`
+- **THEN** фокус в композере, панель Terminal остаётся открытой
+
+#### Scenario: Esc в терминале не отменяет ход
+- **WHEN** идёт ход агента, фокус во вкладке терминала, и пользователь нажимает Esc
+- **THEN** shell получает `ESC`, ход агента продолжается, `session/cancel` не отправляется
+
+#### Scenario: Ctrl+K в терминале
+- **WHEN** фокус во вкладке терминала на Linux или Windows, и пользователь нажимает Ctrl+K
+- **THEN** shell получает Ctrl+K, палитра команд не открывается
+
+#### Scenario: Команда палитры
+- **WHEN** пользователь выбирает `/terminal` в палитре команд
+- **THEN** палитра закрывается, панель Terminal открыта и активна, фокус во вкладке терминала
+
+### Requirement: Терминал вне одобрений агента
+CodeLab SHALL NOT пропускать команды терминала пользователя через одобрения, режимы разрешений и классификацию риска `approval-safety` и SHALL NOT ограничивать shell рабочей папкой сессии: это действия человека, а не агента. При первом открытии панели Terminal за запуск приложения CodeLab SHALL показывать в панели предупреждение (`terminal-disclosure`): «Commands here run as you, outside the agent's approval flow. Output is shown as is and is not redacted for secrets.» Предупреждение SHALL закрываться пользователем и SHALL NOT показываться снова до следующего запуска.
+
+#### Scenario: Первое открытие
+- **WHEN** пользователь впервые за запуск открывает панель Terminal
+- **THEN** панель показывает `terminal-disclosure` с текстом о том, что команды идут вне одобрений агента, а вывод не редактируется
+
+#### Scenario: Предупреждение закрыто
+- **WHEN** пользователь закрыл предупреждение, закрыл панель и открыл её снова
+- **THEN** предупреждения нет
+
+#### Scenario: Команда без одобрения
+- **WHEN** выбран режим разрешений, требующий одобрения shell-команд агента, и пользователь выполняет `rm -rf build` во вкладке терминала
+- **THEN** команда выполняется сразу, карточки одобрения нет, запрос разрешения агенту не уходит
+
+### Requirement: Содержимое терминала не покидает экран
+CodeLab SHALL NOT передавать ввод и вывод терминала пользователя:
+- в журнал (`Logger`, файл журнала, пересылку логов);
+- в debug log и `LogBuffer`;
+- в диагностику рабочего места и инспектор протокола;
+- в снимок рабочего места и другие файлы;
+- агенту.
+
+Процесс терминала SHALL NOT читать и писать системный буфер обмена через escape-последовательности (OSC 52 и родственные); копирование выделения и вставка действием пользователя SHALL работать. Редакция секретов к содержимому терминала SHALL NOT применяться: вывод SHALL показываться как есть, о чём говорит предупреждение. События жизненного цикла терминала SHALL содержать только идентификатор вкладки, базовое имя shell, размер, код выхода, признак принудительного завершения, число вкладок и имя типа ошибки — без путей, окружения, аргументов, ввода, вывода и текста исключений.
+
+#### Scenario: Вывод не попадает в журнал
+- **WHEN** во вкладке выполняется `echo marker-term-7f3a`
+- **THEN** вкладка показывает `marker-term-7f3a`, а `LogBuffer`, файл журнала и диагностика рабочего места его не содержат
+
+#### Scenario: Вывод не уходит агенту
+- **WHEN** после команды во вкладке пользователь отправляет промпт в сессии того же проекта
+- **THEN** `session/prompt` не содержит ни ввода, ни вывода терминала
+
+#### Scenario: Процесс не пишет в буфер обмена
+- **WHEN** процесс во вкладке выводит последовательность OSC 52 записи в буфер обмена с текстом `osc-clip-marker`
+- **THEN** буфер обмена системы не меняется, вкладка продолжает работать
+
+#### Scenario: Процесс не читает буфер обмена
+- **WHEN** процесс во вкладке выводит запрос OSC 52 чтения буфера обмена
+- **THEN** CodeLab не отправляет процессу содержимое буфера обмена
+
+#### Scenario: Вывод не переживает перезапуск
+- **WHEN** пользователь перезапускает CodeLab после работы в терминале
+- **THEN** вкладок, вывода и истории терминала прошлого запуска нет ни в панели, ни в файлах CodeLab
+
+### Requirement: Терминал пользователя независим от ACP terminal/*
+Терминал пользователя SHALL иметь собственный порт запуска процессов (`UserShellLauncher`) и собственного владельца процессов, отдельные от порта `TerminalProcessRunner` и реестра терминалов ACP-сессии (`acp-terminal-client`). Процессы `terminal/create` агента SHALL NOT появляться вкладками панели Terminal, а вкладки пользователя SHALL NOT получать `terminalId` и SHALL NOT быть доступны агенту через ACP.
+
+#### Scenario: Терминал агента остаётся в ленте
+- **WHEN** агент вызывает `terminal/create` во время хода, а панель Terminal открыта
+- **THEN** процесс агента показывается строкой инструмента в ленте, число вкладок панели Terminal не меняется
+
+#### Scenario: Разрыв соединения не трогает вкладки
+- **WHEN** соединение с агентом рвётся, и CodeLab завершает процессы `terminal/*` сессий
+- **THEN** процессы вкладок панели Terminal продолжают работать
+
+### Requirement: Терминал только там, где есть PTY
+Если платформа не поддерживает запуск PTY, CodeLab SHALL NOT показывать переключатель Terminal, SHALL NOT показывать команду `/terminal` в палитре, а Ctrl+` SHALL ничего не делать.
+
+#### Scenario: PTY недоступен
+- **WHEN** порт запуска shell сообщает, что PTY на платформе не поддерживается
+- **THEN** app bar без переключателя Terminal, палитра без `/terminal`, Ctrl+` не открывает панель
+
+### Requirement: Восстановление дока не запускает shell
+Если при запуске CodeLab сохранённая раскладка дока содержит открытую панель Terminal, CodeLab SHALL показывать панель с пустым состоянием и SHALL NOT запускать shell без действия пользователя.
+
+#### Scenario: Панель восстановлена
+- **WHEN** CodeLab закрыли с открытой панелью Terminal, и пользователь запускает его снова
+- **THEN** док показывает панель Terminal с действием «New terminal», ни одного процесса терминала нет до нажатия
