@@ -1015,6 +1015,11 @@ void main() {
       );
     });
 
+    test('a backslash is an ordinary name character on POSIX, not a '
+        'separator', () async {
+      expect(await outside('/work/app', r'/work/app\evil'), isTrue);
+    });
+
     test('a project that does not resolve shows the mark', () async {
       files.missingFolders.add('/gone');
       expect(await outside('/gone', '/work/b'), isTrue);
