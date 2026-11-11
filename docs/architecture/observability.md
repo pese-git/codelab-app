@@ -635,12 +635,12 @@ terminal
 
 `terminal` — панель Terminal десктопа (терминал пользователя; change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D9), логгер `codelab_desktop.terminal`. Ввод и вывод терминала **не логируются вовсе**: их нет в журнале, `LogBuffer`, debug log, пересылке логов, диагностике рабочего места и инспекторе. Редакция секретов (§13–§14) к ним не применяется, потому что редактировать нечего — содержимое не покидает экран. События — только метаданные:
 
-* `terminal.tab_opened` — `tab_id`, `shell` (базовое имя исполняемого файла), `columns`, `rows`;
+* `terminal.tab_opened` — `tab_id`, `session_id` (сессия-владелец вкладки, корреляционный идентификатор §16 `AGENTS.md`), `shell` (базовое имя исполняемого файла), `columns`, `rows`; остальные события ссылаются на вкладку по `tab_id`;
 * `terminal.tab_exited` — `tab_id`, `exit_code` (поля нет, если PTY-бэкенд кода не сообщил);
 * `terminal.tab_closed` — `tab_id`, `forced`;
-* `terminal.start_failed` — `tab_id`, вариант ошибки старта (`shellNotFound`, `folderNotFound`, `ptyUnavailable`); для неожиданной ошибки — `error_type` (`runtimeType`) без текста и стека: текст `Error` может содержать путь;
-* `terminal.exit_wait_failed` — `tab_id`, имя типа ошибки ожидания выхода (`exitCode` порта завершился ошибкой; вкладка становится «exited» без кода);
-* `terminal.link_opened`, `terminal.link_refused` — только схема адреса ссылки OSC 8, без адреса;
+* `terminal.start_failed` — `tab_id`, `reason` — вариант ошибки старта (`shellNotFound`, `folderNotFound`, `ptyUnavailable`); для неожиданной ошибки — `reason: ptyUnavailable` и `error_type` (`runtimeType`) без текста и стека: текст `Error` может содержать путь;
+* `terminal.exit_wait_failed` — `tab_id`, `error_type` — имя типа ошибки ожидания выхода (`exitCode` порта завершился ошибкой; вкладка становится «exited» без кода);
+* `terminal.link_opened`, `terminal.link_refused` — только `scheme` (схема адреса ссылки OSC 8), без адреса;
 * `terminal.close_all` — `count`, `forced`.
 
 Путей, окружения, аргументов и `toString()` исключений в них нет (§43–§45).
