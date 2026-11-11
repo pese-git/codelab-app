@@ -14,6 +14,8 @@ dependencies:
     sdk: flutter
   flutter_bloc: ^9.1.1
   freezed_annotation: ^3.1.0
+  gpt_markdown: ">=1.4.1 <1.5.0"
+  val_highlight: ^0.1.1
 
 dev_dependencies:
   build_runner: ^2.10.5

@@ -21,7 +21,7 @@
 
 | Область                    | Технология              |
 | -------------------------- | ----------------------- |
-| Язык                       | Dart (минимальный SDK workspace — 3.10: `WebSocketException.httpStatusCode`, change `add-app-settings-shell`, D12; для `codelab_ui` и `codelab_desktop` — Dart 3.12 и Flutter 3.44: этого требует `gpt_markdown`, change `add-desktop-markdown`, D10) |
+| Язык                       | Dart (минимальный SDK workspace — 3.10: `WebSocketException.httpStatusCode`, change `add-app-settings-shell`, D12; для `codelab_ui` и `codelab_desktop` фактически Dart 3.12 и Flutter 3.44: этого требует зависимость `gpt_markdown`, а `environment` пакетов не поднимается, чтобы не менять версию языка; change `add-desktop-markdown`, D10) |
 | UI                         | Flutter Desktop         |
 | Design system              | Fluent UI (`fluent_ui`) |
 | State management           | `flutter_bloc`          |

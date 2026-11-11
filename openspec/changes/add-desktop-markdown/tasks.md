@@ -18,9 +18,9 @@
 
 ## 1. Итерация 1 — зависимости и сторож
 
-- [ ] 1.1 `[desktop]` Проверка зависимостей по `pubspec.lock` после `melos bootstrap` и pub-cache: лицензия каждого из 12 новых пакетов (совместимость с MIT, `07-decision-sources.md` §7а); шрифты JetBrains Mono (`gpt_markdown/lib/fonts/`; лицензия в пакете не найдена — подтвердить по источнику шрифта, ожидается SIL OFL 1.1) и Latin Modern (GUST Font License); записи шрифтов в `THIRD_PARTY_NOTICES.md`; итог — в design.md D10. Неподтверждённая лицензия — стоп и вопрос пользователю.
+- [x] 1.1 `[desktop]` Проверка зависимостей по `pubspec.lock` после `melos bootstrap` и pub-cache: лицензия каждого из 12 новых пакетов (совместимость с MIT, `07-decision-sources.md` §7а); шрифты JetBrains Mono (`gpt_markdown/lib/fonts/`; лицензия в пакете не найдена — подтвердить по источнику шрифта, ожидается SIL OFL 1.1) и Latin Modern (GUST Font License); записи шрифтов в `THIRD_PARTY_NOTICES.md`; итог — в design.md D10. Неподтверждённая лицензия — стоп и вопрос пользователю.
 - [ ] 1.2 `[protocol]` Красный: правила сторожа в `codelab_architecture_tests/test/support/rules.dart` (D10): `package:gpt_markdown/` и `package:val_highlight/` — только в `packages/flutter/codelab_ui/lib/src/rendering/`; `package:material_ui/`, `package:cupertino_ui/`, `package:val_highlight_flutter/`, `package:val_latex_flutter/`, `package:flutter_svg/` — запрещены в `packages/flutter/codelab_ui/lib` и `apps/codelab_desktop/lib`; `package:url_launcher/` — только в `apps/codelab_desktop/lib/core/platform/`. Тесты правил на примерах импорта.
-- [ ] 1.3 `[desktop]` Реализация: `gpt_markdown: ">=1.4.1 <1.5.0"` и `val_highlight` в `codelab_ui/pubspec.yaml`, `environment` — Dart ≥ 3.12, Flutter ≥ 3.44; `url_launcher` в `apps/codelab_desktop/pubspec.yaml`; `melos bootstrap`; `melos run guard` зелёный.
+- [x] 1.3 `[desktop]` Реализация: `gpt_markdown: ">=1.4.1 <1.5.0"` и `val_highlight` в `codelab_ui/pubspec.yaml`, `environment` пакетов не меняется (design.md «Минимальный SDK»: минимум задаёт зависимость, повышение версии языка дало бы 103 info `prefer_initializing_formals` в app); `url_launcher` в `apps/codelab_desktop/pubspec.yaml`; `melos bootstrap`; `melos run guard` зелёный.
 
 ## 2. Итерация 2 — отрисовка в `codelab_ui` (закрывает SMK-07)
 
