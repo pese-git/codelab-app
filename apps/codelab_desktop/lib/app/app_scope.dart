@@ -219,6 +219,15 @@ final class CodeLabTransportRuntimeModule extends Module {
 /// итерации 4).
 const defaultEmbeddedCloseTimeout = Duration(seconds: 10);
 
+/// Предел корректного закрытия транспорта ядра клиента при закрытии root
+/// lifecycle (в том числе при выходе из app): закрыть stdin → ждать этот срок
+/// → `SIGTERM` → ещё 2 с → `SIGKILL` (`StdioAcpTransport.close`).
+///
+/// Почему 2 с: вместе с эскалацией транспорта это ≈ 4 с, а общий предел
+/// выхода — 5 с (`add-client-process-shutdown-on-exit`, D2, D3). Значение
+/// по умолчанию в пакете — 5 с, поэтому CLI и тесты пакета не меняются.
+const transportCloseTimeout = Duration(seconds: 2);
+
 /// Предел ожидания закрытия встроенного агента и логгер события таймаута.
 ///
 /// Почему отдельный тип: `CodeLabRootLifecycle` получает зависимости через
@@ -901,6 +910,13 @@ Logger _workbenchLogger() => StructuredLogLogger(
   'codelab_desktop.workbench',
 ).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'workbench'});
 
+/// Логгер событий жизненного цикла приложения (`app.exit_*`,
+/// `app.shutdown_step_failed`): категория `application`, компонент `app`
+/// (`add-client-process-shutdown-on-exit`, D6).
+Logger _appLogger() => StructuredLogLogger(
+  'codelab_desktop.app',
+).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'app'});
+
 Logger _settingsLogger() => StructuredLogLogger(
   'codelab_desktop.settings',
 ).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'settings'});
@@ -965,6 +981,37 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
   );
 }
 
+/// Закрывает всех владельцев процессов и подписок composition root.
+///
+/// Почему: процессы клиента (вкладки Terminal, `terminal/*` внешнего агента,
+/// stdio-агент, встроенный агент) принадлежат разным владельцам, а связать их
+/// может только composition root. Закрытие должно быть упорядоченным,
+/// изолированным по шагам и идемпотентным: его вызывают и закрытие root scope,
+/// и обработчик выхода `AppExitHandler` (`add-client-process-shutdown-on-exit`,
+/// D1, D5; `concurrency.md` §45–§46).
+///
+/// Для чего: единственный путь «закрыть всё клиентское». Две ветки идут
+/// параллельно (D2): терминал пользователя (`closeAll()` ≤ 3 с, затем
+/// `close()`) и клиентская цепочка — Cubit-ы → рабочее пространство, а затем
+/// две параллельные подветви (D11): агентская (встроенный агент →
+/// предложение миграции) и ACP (начальный транспорт → ядро клиента с
+/// пределом [transportCloseTimeout]). Терминал и ACP-сторона друг о друге не
+/// знают (`add-integrated-terminal`, D10), поэтому порядка между ветками нет.
+///
+/// Почему подветви параллельны: зависшее открытие встроенного агента (до 10 с)
+/// не должно оставить без сигналов `terminal/*` и stdio-агента внешнего
+/// профиля — их посылает только ядро клиента. Встроенный агент при этом
+/// закрывается корректно и без ядра: закрытие клиентского конца пары запускает
+/// тот же идемпотентный `dispose` агента (embedded-agent «Жизненный цикл
+/// встроенного агента», сценарий «Клиент закрыл соединение»; D11 вместо D9
+/// `add-embedded-agent-mode`).
+///
+/// Как использовать: scope вызывает [dispose] при закрытии; обработчик выхода
+/// вызывает его же. Повторный вызов возвращает тот же `Future` (не `void`),
+/// владельцы не получают повторных сигналов. Сбой шага пишется как
+/// `app.shutdown_step_failed {step, error_type}` и не мешает следующим;
+/// пока шаг не завершился, его имя в [pendingSteps] — обработчик выхода кладёт
+/// его в `app.exit_timeout` (D6).
 final class CodeLabRootLifecycle implements Disposable {
   CodeLabRootLifecycle({
     required AcpClientApplication application,
@@ -977,7 +1024,9 @@ final class CodeLabRootLifecycle implements Disposable {
     required SecretMigrationOffer secretMigrationOffer,
     required NavigationCubit navigationCubit,
     required TerminalTabsCubit terminalTabsCubit,
-  }) : _application = application,
+    Logger? logger,
+  }) : _logger = logger ?? _appLogger(),
+       _application = application,
        _transport = transport,
        _workspace = workspace,
        _embedded = embedded,
@@ -991,14 +1040,17 @@ final class CodeLabRootLifecycle implements Disposable {
   final AcpClientApplication _application;
   final AcpTransport _transport;
 
-  /// Закрывается после Cubit (его подписчика) и до ядра клиента: kit не
-  /// закрывает `AcpClientApplication` сам.
+  /// Закрывается после Cubit (его подписчика) и до обеих подветвей — агентской
+  /// и ACP: рабочее пространство отписывается от ядра клиента до его
+  /// `dispose` (D11); kit не закрывает `AcpClientApplication` сам.
   final ClientWorkspace _workspace;
 
-  /// Закрывается после рабочего пространства и до ядра клиента: агент
-  /// отменяет ход и дописывает журнал, пока клиентский конец жив; закрытие
-  /// ждёт `dispose` агента и открытие в полёте (design.md change
-  /// `add-embedded-agent-mode`, D6, D9).
+  /// Закрывается после рабочего пространства, параллельно с закрытием ядра
+  /// клиента (D11): если клиентский конец закроется первым, агент запустит тот
+  /// же `dispose` сам, а закрытие резолвера дождётся его, поэтому журнал
+  /// дописан до конца шага. Закрытие ждёт `dispose` агента и открытие в
+  /// полёте, предел — `embedded.close_timeout` (design.md change
+  /// `add-embedded-agent-mode`, D6; `add-client-process-shutdown-on-exit`, D11).
   final EmbeddedTransportResolver _embedded;
   final EmbeddedCloseSettings _embeddedCloseSettings;
   final CodeLabShellCubit _shellCubit;
@@ -1007,42 +1059,132 @@ final class CodeLabRootLifecycle implements Disposable {
   /// освобождаются до закрытия агента.
   final SecretMigrationCubit _secretMigrationCubit;
 
-  /// Закрывается после резолвера: он до конца пишет в источник.
+  /// Закрывается в агентской подветви строго после резолвера: он до конца
+  /// пишет в источник (D11).
   final SecretMigrationOffer _secretMigrationOffer;
   final NavigationCubit _navigationCubit;
 
-  /// Процессы терминала завершаются первыми: `closeAll()` шлёт `hangUp`,
-  /// через 3 с `kill` и запрещает новые вкладки (D4, «Выход из app»); только
-  /// потом Cubit отписывается от рабочего пространства.
+  /// Процессы терминала завершает отдельная ветка, параллельная клиентской:
+  /// `closeAll()` шлёт `hangUp`, через 3 с `kill` и запрещает новые вкладки
+  /// (D4, «Выход из app»), затем Cubit закрывается. Порядка относительно
+  /// рабочего пространства нет (`add-client-process-shutdown-on-exit`, D2).
   final TerminalTabsCubit _terminalTabsCubit;
-  var _isDisposed = false;
+
+  /// Логгер событий `app.*` (D6); по умолчанию — `codelab_desktop.app`, как у
+  /// обработчика выхода. Шов тестов.
+  final Logger _logger;
+
+  /// Закрытый набор имён шагов в порядке закрытия (D5, D10).
+  static const _shutdownSteps = [
+    'terminal',
+    'cubits',
+    'workspace',
+    'embedded',
+    'migration_offer',
+    'transport',
+    'client',
+  ];
+
+  /// Общий проход закрытия: повторный `dispose()` ждёт его, а не возвращается
+  /// сразу (D5) — иначе второй запрос выхода считал бы закрытие завершённым.
+  Future<void>? _disposing;
+
+  /// Имена ещё не завершённых шагов, включая не начатые, в порядке закрытого
+  /// набора: `terminal`, `cubits`, `workspace`, `embedded`, `migration_offer`,
+  /// `transport`, `client` (D5, D10). Пуст до [dispose] и после прохода.
+  final List<String> _pendingSteps = [];
+
+  /// Шаги, которые не завершились к моменту вызова, в том числе не начатые
+  /// (копия; D10).
+  ///
+  /// Почему и не начатые: именно они посылают сигналы `terminal/*` и
+  /// stdio-агенту, и журнал «не успел только `embedded`» вводил бы в
+  /// заблуждение (`AGENTS.md` §16).
+  List<String> get pendingSteps => List.unmodifiable(_pendingSteps);
 
   @override
-  Future<void> dispose() async {
-    if (_isDisposed) {
-      return;
-    }
+  Future<void> dispose() => _disposing ??= _dispose();
 
-    _isDisposed = true;
+  // `async` + `await`, а не возврат `Future.wait`: иначе рантайм-тип будущего —
+  // `Future<List<void>>`, и `timeout(onTimeout:)` обработчика выхода падает
+  // `TypeError`.
+  Future<void> _dispose() async {
+    // Первым синхронным действием — до любого `await`: не начатые шаги тоже
+    // «не завершены» (D10).
+    _pendingSteps.addAll(_shutdownSteps);
+    await Future.wait([_closeTerminal(), _closeClient()]);
+  }
+
+  /// Ветка терминала: `closeAll()` шлёт `hangUp`, через 3 с `kill` и
+  /// запрещает новые вкладки (D4 «Выход из app»); `close()` Cubit-а может
+  /// прийти после `ClientWorkspace.dispose()` — `closeAll()` уже запретил
+  /// новые вкладки.
+  Future<void> _closeTerminal() => _step('terminal', () async {
     await _terminalTabsCubit.closeAll();
     await _terminalTabsCubit.close();
-    await _navigationCubit.close();
-    await _secretMigrationCubit.close();
-    await _shellCubit.close();
-    await _workspace.dispose();
+  });
+
+  /// Клиентская ветка: Cubit-ы отписываются до закрытия рабочего
+  /// пространства, оно — до ядра клиента; затем агентская и ACP-подветви идут
+  /// параллельно (D2, D5, D11).
+  Future<void> _closeClient() async {
+    await _step('cubits', () async {
+      await _navigationCubit.close();
+      await _secretMigrationCubit.close();
+      await _shellCubit.close();
+    });
+    await _step('workspace', _workspace.dispose);
+    await Future.wait([_closeEmbedded(), _closeAcp()]);
+  }
+
+  /// Агентская подветвь: резолвер, затем источник предложения миграции — он
+  /// до конца пишет в источник (D11).
+  Future<void> _closeEmbedded() async {
     // Зависший `dispose` агента не держит закрытие scope вечно: по таймауту
     // пишется событие без текста ошибки, а транспорт и ядро клиента всё равно
     // освобождаются (design.md change `add-embedded-agent-mode`, D6).
-    await _embedded.close().timeout(
-      _embeddedCloseSettings.timeout,
-      onTimeout: () => _embeddedCloseSettings.logger.log(
-        agent.LogLevel.warning,
-        'embedded.close_timeout',
+    await _step(
+      'embedded',
+      () => _embedded.close().timeout(
+        _embeddedCloseSettings.timeout,
+        onTimeout: () => _embeddedCloseSettings.logger.log(
+          agent.LogLevel.warning,
+          'embedded.close_timeout',
+        ),
       ),
     );
-    await _secretMigrationOffer.close();
-    await _transport.close();
-    await _application.dispose();
+    await _step('migration_offer', _secretMigrationOffer.close);
+  }
+
+  /// ACP-подветвь: начальный транспорт, затем ядро клиента. Не ждёт агентскую:
+  /// сигналы `terminal/*` и stdio-агенту идут без зависимости от резолвера
+  /// (D11).
+  Future<void> _closeAcp() async {
+    await _step('transport', _transport.close);
+    await _step(
+      'client',
+      () => _application.dispose(closeTimeout: transportCloseTimeout),
+    );
+  }
+
+  /// Выполняет шаг с изоляцией: сбой пишется в журнал только с типом ошибки
+  /// (текст может нести пути, D6) и не мешает следующим шагам. Имя убирается
+  /// из [pendingSteps] по завершении шага (имена добавляет [_dispose], D10).
+  Future<void> _step(String name, Future<void> Function() body) async {
+    try {
+      await body();
+    } on Object catch (error) {
+      try {
+        _logger.error(
+          'app.shutdown_step_failed',
+          context: {'step': name, 'error_type': error.runtimeType.toString()},
+        );
+      } on Object {
+        // Журнал не должен мешать закрытию: писать о сбое журнала некуда.
+      }
+    } finally {
+      _pendingSteps.remove(name);
+    }
   }
 }
 
@@ -1190,20 +1332,21 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
   );
 
   /// Слушатель запроса выхода от ОС; владелец — это состояние, `dispose`
-  /// освобождает его (D4 «Выход из app», D15 п. 9). Без него `closeAll()` при
-  /// Cmd+Q не вызывается, и app зависает в ожидании isolate `pty2`.
+  /// освобождает его (D4 «Выход из app», D15 п. 9). Без него при Cmd+Q не
+  /// вызывается `CodeLabRootLifecycle.dispose()` — app зависает в ожидании
+  /// isolate `pty2`, а процессы агента остаются сиротами
+  /// (`add-client-process-shutdown-on-exit`, D1).
   late final AppLifecycleListener _exitListener;
 
   @override
   void initState() {
     super.initState();
+    final rootLifecycle = _scope.resolve<CodeLabRootLifecycle>();
     _exitListener = AppLifecycleListener(
       onExitRequested: AppExitHandler(
-        terminalTabs: _scope.resolve<TerminalTabsCubit>(),
-        logger: StructuredLogLogger('codelab_desktop.app').bind({
-          logCategoryKey: applicationLogCategory,
-          logComponentKey: 'app',
-        }),
+        closeRoot: rootLifecycle.dispose,
+        pendingSteps: () => rootLifecycle.pendingSteps,
+        logger: _appLogger(),
         flushLogs: _scope.resolve<CodeLabLoggingLifecycle>().flushed,
       ).onExitRequested,
     );

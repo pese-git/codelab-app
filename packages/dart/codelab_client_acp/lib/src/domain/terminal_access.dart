@@ -3,17 +3,25 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'terminal_access.freezed.dart';
 
-/// State machine for a terminal process's lifecycle. Deliberately two
-/// states, not independent `killed`/`released` booleans (`AGENTS.md` §8):
-/// `kill()` transitions `running` -> `exited` (with a signal-derived exit
-/// status, same shape as a natural exit); `released` isn't a state at all —
-/// once released, the process's [TerminalId] is dropped from the session
-/// registry entirely, so there is nothing left to hold a "released" flag
-/// (see `add-acp-terminal-client-support/design.md`, Decision 3).
+/// Конечный автомат жизненного цикла terminal-процесса.
+///
+/// Намеренно два состояния, а не независимые булевы `killed`/`released`
+/// (`AGENTS.md` §8): `kill()` переводит `running` в `exited` (с тем же видом
+/// статуса, что и естественный выход); `released` — не состояние: после
+/// release [TerminalId] вообще удаляется из реестра сессии, и держать флаг
+/// «released» не в чем (`add-acp-terminal-client-support/design.md`, Decision 3).
 @freezed
 sealed class TerminalProcessState with _$TerminalProcessState {
   const factory TerminalProcessState.running() = TerminalProcessRunning;
 
+  /// Процесс вышел.
+  ///
+  /// Почему поля такие: в схеме ACP `TerminalExitStatus.exitCode` — `null`
+  /// либо число `>= 0`. При выходе по сигналу [exitCode] — `null` (не
+  /// отрицательный номер сигнала ОС), а [signal] содержит имя (`SIGTERM`) или
+  /// `SIG<n>` для непортируемых номеров; при обычном выходе [signal] — `null`.
+  /// Адаптер обязан выдерживать этот инвариант (D14 change
+  /// `add-client-process-shutdown-on-exit`): ядро клиента поля не правит.
   const factory TerminalProcessState.exited({int? exitCode, String? signal}) =
       TerminalProcessExited;
 }
@@ -51,9 +59,16 @@ abstract interface class TerminalProcessHandle {
   /// Resolves once the process exits — immediately if it already has.
   Future<TerminalProcessState> waitForExit();
 
-  /// Terminates the process. A no-op if it has already exited — this is
-  /// the atomicity `terminal/kill` needs against a naturally-completing
-  /// process (design.md, Risks).
+  /// Завершает процесс: `SIGTERM`, а если он не вышел — принудительно
+  /// (`SIGKILL`); `Future` завершается не позже чем через ~2 с после вызова
+  /// (D4 change `add-client-process-shutdown-on-exit`).
+  ///
+  /// Почему так: процесс, игнорирующий `SIGTERM`, иначе пережил бы и
+  /// `terminal/kill`, и выход из приложения. Для вышедшего процесса — no-op:
+  /// это атомарность, нужная `terminal/kill` при естественном завершении
+  /// (design.md, Risks). Параллельные вызовы делят одно завершение. Ядро
+  /// клиента вызывает `kill` из `terminal/kill`, `terminal/release`, разрыва
+  /// соединения и `dispose`; сбой адаптера изолируется вызывающим.
   Future<void> kill();
 }
 

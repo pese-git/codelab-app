@@ -77,7 +77,12 @@ final class _IoTerminalProcessHandle implements TerminalProcessHandle {
   final _stderrDone = Completer<void>();
 
   var _truncated = false;
-  var _killRequested = false;
+
+  /// Код выхода уже получен (вывод может ещё дочитываться): повторный
+  /// [kill] после этого не шлёт сигналов (D4: no-op для вышедшего).
+  var _exitCodeReceived = false;
+
+  Future<void>? _killing;
   TerminalProcessState _state = const TerminalProcessState.running();
 
   @override
@@ -93,13 +98,37 @@ final class _IoTerminalProcessHandle implements TerminalProcessHandle {
   @override
   Future<TerminalProcessState> waitForExit() => _exitCompleter.future;
 
+  /// Сколько ждать выхода после `SIGTERM`, прежде чем послать `SIGKILL`.
+  ///
+  /// Процесс, игнорирующий `SIGTERM` (`trap '' TERM`), иначе пережил бы и
+  /// `terminal/kill`, и выход из приложения (D4 change
+  /// `add-client-process-shutdown-on-exit`).
+  static const _termGracePeriod = Duration(seconds: 2);
+
+  /// `SIGTERM`, через [_termGracePeriod] — `SIGKILL`.
+  ///
+  /// Future завершается после выхода процесса либо сразу после отправки
+  /// `SIGKILL` (не позже ~2 s): ждать код выхода после `SIGKILL` не нужно,
+  /// сигнал неперехватываем. Сигнал получает только сам процесс команды,
+  /// не его потомки (design.md, Q2). Для вышедшего процесса — no-op;
+  /// параллельные вызовы делят одно завершение.
   @override
-  Future<void> kill() async {
-    if (_state is TerminalProcessExited) {
-      return;
+  Future<void> kill() {
+    if (_exitCodeReceived || _state is TerminalProcessExited) {
+      return Future<void>.value();
     }
-    _killRequested = true;
+    return _killing ??= _terminate();
+  }
+
+  Future<void> _terminate() async {
     _process.kill(ProcessSignal.sigterm);
+    try {
+      await _process.exitCode.timeout(_termGracePeriod);
+    } on TimeoutException {
+      if (!_exitCodeReceived) {
+        _process.kill(ProcessSignal.sigkill);
+      }
+    }
   }
 
   void _appendOutput(List<int> chunk) {
@@ -125,6 +154,7 @@ final class _IoTerminalProcessHandle implements TerminalProcessHandle {
   }
 
   Future<void> _handleExit(int exitCode) async {
+    _exitCodeReceived = true;
     try {
       await Future.wait([
         _stdoutDone.future,
@@ -134,10 +164,10 @@ final class _IoTerminalProcessHandle implements TerminalProcessHandle {
       // Каналы держит фоновый потомок; вывод, пришедший до этого момента,
       // уже сохранён.
     }
-    _state = TerminalProcessState.exited(
-      exitCode: exitCode,
-      signal: _killRequested ? 'SIGTERM' : null,
-    );
+    // Статус выводится из кода выхода ОС, а не из отправленного сигнала:
+    // процесс мог выйти сам или обработать SIGTERM (D14). Выбор платформы
+    // изолирован здесь, в адаптере (`AGENTS.md` §11).
+    _state = terminalStateFromExitCode(exitCode, posix: !Platform.isWindows);
     unawaited(_stdoutSubscription.cancel());
     unawaited(_stderrSubscription.cancel());
     if (!_exitCompleter.isCompleted) {
@@ -145,3 +175,50 @@ final class _IoTerminalProcessHandle implements TerminalProcessHandle {
     }
   }
 }
+
+/// Состояние вышедшего процесса по коду выхода `Process.exitCode`.
+///
+/// Почему: на POSIX отрицательный код означает завершение сигналом (`-15` —
+/// `SIGTERM`), а на Windows это NTSTATUS-код (`0xC0000005` приходит как
+/// `-1073741819`), и называть его сигналом нельзя (D14 change
+/// `add-client-process-shutdown-on-exit`). Инвариант состояния: ровно одно из
+/// `exitCode` и `signal` непусто (`TerminalProcessState.exited`).
+///
+/// Для чего: чистая функция без обращения к платформе — обе ветки проверяются
+/// тестом; платформу выбирает вызывающий адаптер ([posix]).
+///
+/// Как использовать: `terminalStateFromExitCode(code, posix: !Platform.isWindows)`.
+/// На Windows отрицательный код отдаётся беззнаковым 32-битным `exitCode`,
+/// `signal` — `null`.
+TerminalProcessState terminalStateFromExitCode(
+  int exitCode, {
+  required bool posix,
+}) {
+  if (exitCode >= 0) {
+    return TerminalProcessState.exited(exitCode: exitCode);
+  }
+  if (posix) {
+    return TerminalProcessState.exited(signal: _signalName(-exitCode));
+  }
+  return TerminalProcessState.exited(exitCode: exitCode & 0xFFFFFFFF);
+}
+
+/// Имя сигнала по номеру из отрицательного кода выхода `Process.exitCode`.
+///
+/// Почему только часть номеров: имена даны лишь сигналам с одинаковым номером
+/// на Linux и macOS; номера прочих различаются (`SIGUSR1` — 10 на Linux и 30
+/// на macOS), и угадывать имя по номеру нельзя. Остальные номера отдаются как
+/// `SIG<n>` (D14 change `add-client-process-shutdown-on-exit`). Формат строки
+/// ACP не задаёт (`signal: string | null`), таблица — решение CodeLab.
+String _signalName(int number) => switch (number) {
+  1 => 'SIGHUP',
+  2 => 'SIGINT',
+  3 => 'SIGQUIT',
+  6 => 'SIGABRT',
+  9 => 'SIGKILL',
+  11 => 'SIGSEGV',
+  13 => 'SIGPIPE',
+  14 => 'SIGALRM',
+  15 => 'SIGTERM',
+  _ => 'SIG$number',
+};
