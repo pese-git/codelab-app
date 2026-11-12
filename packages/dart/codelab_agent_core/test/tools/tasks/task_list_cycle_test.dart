@@ -124,12 +124,15 @@ void main() {
         reason: 'отклонённый цикл не оставляет записи task (TSK-1)',
       );
       expect(events.whereType<TaskListChanged>(), hasLength(2));
+      // D18: сессия передаёт списку логгер и id; в логе причина, не тексты.
+      final rejected = h.logger.eventsOf('task.rejected').single;
+      expect(rejected.fields['reason'], 'cycle');
+      expect(rejected.fields['session_id'], session.id.value);
+      expect(rejected.fields['tool_call_id'], 'c3');
+      expect(h.logger.eventsOf('task.op'), hasLength(2));
       expect(
-        [for (final i in session.tasks.items) (i.id, i.blockedBy)],
-        [
-          ('1', <String>[]),
-          ('2', ['1']),
-        ],
+        [for (final i in session.tasks.items) '${i.id}:${i.blockedBy}'],
+        ['1:[]', '2:[1]'],
       );
     },
   );

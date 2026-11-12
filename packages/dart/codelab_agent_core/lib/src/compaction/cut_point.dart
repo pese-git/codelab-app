@@ -175,5 +175,6 @@ bool _isService(SessionRecord r) =>
     r is ModeChangeRecord ||
     r is ConfigChangeRecord ||
     r is PlanRecord ||
+    r is TaskRecord ||
     r is SessionInfoRecord ||
     r is LabelRecord;

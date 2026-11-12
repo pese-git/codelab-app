@@ -78,10 +78,9 @@ void main() {
               },
             ],
           },
-          callStep('call_2', 'update_plan', {
-            'entries': [
-              {'content': 'Fix', 'priority': 'high', 'status': 'pending'},
-            ],
+          callStep('call_2', 'task_create', {
+            'subject': 'Fix',
+            'priority': 'high',
           }),
           // Пустой ответ: цикл добавляет служебную подсказку (§5.4.1).
           {'reply': <Object?>[]},
@@ -138,8 +137,21 @@ void main() {
       expect(read['content'], isNotEmpty);
       expect(updates[5]['content'], {'type': 'text', 'text': 'Done.'});
       expect(updates[6]['entries'], [
-        {'content': 'Fix', 'priority': 'high', 'status': 'pending'},
+        {
+          'content': 'Fix',
+          'priority': 'high',
+          'status': 'pending',
+          '_meta': {
+            'codelab': {
+              'task': {'id': '1', 'owner': 'main', 'blockedBy': <String>[]},
+            },
+          },
+        },
       ]);
+      // «Реплей плана без taskChange» (D35): реплей — состояние, а не
+      // операция; матчер фикстур сравнивает `_meta` как $partial и лишний
+      // ключ пропустил бы, поэтому отсутствие проверяется здесь.
+      expect(updates[6], isNot(contains('_meta')));
       expect(updates[7]['currentModeId'], 'standard');
       expect(updates[9]['availableCommands'], [
         ...builtinCommandsBeforeConfig,

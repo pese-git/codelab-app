@@ -251,16 +251,8 @@ void main() {
               {
                 'toolCall': {
                   'id': 'call_1',
-                  'name': 'update_plan',
-                  'arguments': {
-                    'entries': [
-                      {
-                        'content': 'Read',
-                        'priority': 'high',
-                        'status': 'pending',
-                      },
-                    ],
-                  },
+                  'name': 'task_create',
+                  'arguments': {'subject': 'Read', 'priority': 'high'},
                 },
               },
             ],

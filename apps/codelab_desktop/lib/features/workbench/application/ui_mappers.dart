@@ -215,6 +215,11 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
           severity: CodeLabNoticeSeverity.info,
           body: text,
         ),
+        // Тихая строка операций со списком задач (D27): текст даёт kit.
+        final TaskOpsItem ops => CodeLabTaskOpsRow(
+          id: 'task-ops-${index + 1}',
+          text: ops.text,
+        ),
         final ToolCallItem call => _toolCallRowOf(
           call,
           id: 'tool-${index + 1}',
@@ -484,6 +489,9 @@ List<CodeLabPlanEntry>? planEntriesOf(List<PlanEntryView> plan) => plan.isEmpty
     : [
         for (final entry in plan)
           CodeLabPlanEntry(
+            taskId: entry.taskId,
+            ownerLabel: entry.ownerLabel,
+            blockedBy: entry.openBlockers,
             content: entry.content,
             status: switch (entry.status) {
               PlanEntryStatus.pending => CodeLabPlanEntryStatus.pending,

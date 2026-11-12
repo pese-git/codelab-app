@@ -36,7 +36,11 @@ class WorkbenchMainPane extends StatelessWidget {
     // visible would mean it stays until manually dismissed).
     final plan = state.currentPlan;
     final activityBarSections = <CodeLabActivityBarSection>[
+      // Пока в доке открыта панель Plan, сводка её дублирует и скрыта
+      // (agent-workbench-ui «Чек-лист задач…», D27 change
+      // `add-subagents-and-tasks`).
       if (plan != null &&
+          !state.openPanes.contains(ToolPane.plan) &&
           plan.any((entry) => entry.status != CodeLabPlanEntryStatus.completed))
         CodeLabProgressChecklist.section(
           id: 'plan',

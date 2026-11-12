@@ -439,6 +439,12 @@ Future<void> main(List<String> args) async {
           // completed, so the same test can also confirm the section
           // disappears entirely once there is nothing left to show (see
           // add-plan-progress-checklist/design.md, Decisions).
+          //
+          // Сценарий имитирует план стороннего агента: entries без
+          // `_meta.codelab.task` — намеренно. Клиент обязан показывать такой
+          // план обычным чек-листом без id, владельца и блокеров
+          // (change `add-subagents-and-tasks`, acp-golden-fixtures «Клиент
+          // показывает план стороннего агента»).
           _planPromptCount += 1;
           final allCompleted = _planPromptCount >= 3;
           _writeNotification('session/update', {

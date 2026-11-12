@@ -759,6 +759,55 @@ void main() {
     });
   });
 
+  group('task list (add-subagents-and-tasks, 1.8)', () {
+    test('plan entries carry task id, owner label and open blockers', () {
+      final plan = planEntriesOf(const [
+        PlanEntryView(
+          content: 'Check callers',
+          status: PlanEntryStatus.inProgress,
+          priority: PlanEntryPriority.medium,
+          taskId: '2',
+          owner: 'sub_a1',
+          ownerLabel: 'explore',
+          blockedBy: ['1'],
+          openBlockers: ['1'],
+        ),
+        PlanEntryView(
+          content: 'Third party',
+          status: PlanEntryStatus.pending,
+          priority: PlanEntryPriority.low,
+        ),
+      ])!;
+
+      expect(plan[0].taskId, '2');
+      expect(plan[0].ownerLabel, 'explore');
+      expect(plan[0].blockedBy, ['1']);
+      expect(plan[1].taskId, isNull);
+      expect(plan[1].ownerLabel, isNull);
+      expect(plan[1].blockedBy, isEmpty);
+    });
+
+    test('TaskOpsItem becomes a quiet CodeLabTaskOpsRow with the kit text', () {
+      final rows = transcriptRowsOf(
+        const [
+          TranscriptItem.taskOps(
+            id: 't1/task-ops-1',
+            added: ['1', '2', '3', '4'],
+          ),
+        ],
+        cwd: '/workspace',
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+      );
+
+      expect(rows.single, isA<CodeLabTaskOpsRow>());
+      expect(
+        (rows.single as CodeLabTaskOpsRow).text,
+        'Tasks #1–#4 added to the plan',
+      );
+    });
+  });
+
   test('queued prompts keep their ids and texts', () {
     final queued = queuedPromptsOf(const [
       QueuedPrompt(id: 'queued-1', text: 'first'),

@@ -29,8 +29,9 @@ void main() {
         as Map<String, Object?>;
   }
 
-  test('the initialize request declares tasks, subagents and '
-      'subagentToolCalls in clientCapabilities._meta.codelab', () async {
+  test('the initialize request declares only tasks in '
+      'clientCapabilities._meta.codelab (subagents come with iterations 2 '
+      'and 5)', () async {
     transport = FakeAcpTransport();
     client = AcpClientApplication(transport: FakeAcpTransport());
     addTearDown(client.dispose);
@@ -40,8 +41,6 @@ void main() {
     expect(capabilities['_meta'], {
       'codelab': {
         'tasks': {'version': 1},
-        'subagents': {'version': 1},
-        'subagentToolCalls': {'version': 1},
       },
     });
     // Других полей вне `_meta` для этого нет, прежние — как раньше.

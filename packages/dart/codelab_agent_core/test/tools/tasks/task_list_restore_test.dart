@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/session/session_writer.dart';
-import 'package:codelab_agent_core/src/tools/tasks/task_list.dart';
 import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 

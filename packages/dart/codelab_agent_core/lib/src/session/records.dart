@@ -15,6 +15,7 @@ import '../llm/messages.dart';
 import '../llm/model_ref.dart';
 import '../loop/agent_events.dart';
 import '../tools/agent_tool.dart';
+import '../tools/tasks/task_list.dart';
 
 /// Текущая версия формата журнала (SES-2).
 const sessionFormatVersion = 1;
@@ -208,6 +209,22 @@ sealed class SessionRecord {
             _planEntry(entry! as Map<String, Object?>),
         ],
         extra: extra(const {'entries'}),
+      ),
+      'task' => TaskRecord(
+        id: id,
+        parentId: parentId,
+        timestamp: timestamp,
+        op: _string(json, 'op'),
+        actor: TaskActor.fromWire(json['actor']),
+        items: [
+          for (final item in json['items'] as List<Object?>? ?? const [])
+            TaskItem.fromJson(item! as Map<String, Object?>),
+        ],
+        deleted: [
+          for (final id in json['deleted'] as List<Object?>? ?? const [])
+            parseTaskId(id),
+        ],
+        extra: extra(const {'op', 'actor', 'items', 'deleted'}),
       ),
       'compaction' => CompactionRecord(
         id: id,
@@ -464,17 +481,37 @@ final class ConfigChangeRecord extends SessionRecord {
   Map<String, Object?> get _fields => {'optionId': optionId, 'value': value};
 }
 
-/// Полный снимок плана после `update_plan`.
+/// Пункт плана старого формата (запись `plan`).
+///
+/// Почему не [TaskItem]: запись `plan` больше не пишется, но читается всегда
+/// (`agent-core/17-16-task-list.md` §17.16.6, D12), и её JSON должен
+/// сохраняться побайтово; поэтому здесь только три поля старого формата.
+final class PlanRecordEntry {
+  const PlanRecordEntry({
+    required this.content,
+    required this.priority,
+    required this.status,
+  });
+
+  final String content;
+  final TaskPriority priority;
+  final TaskStatus status;
+}
+
+/// Запись `plan` старого формата: полный снимок плана после `update_plan`.
+///
+/// Новые журналы её не пишут (D12); проекция `buildTaskList` превращает
+/// последнюю запись в список задач «1»…«n».
 final class PlanRecord extends SessionRecord {
   PlanRecord({
     required super.id,
     required super.parentId,
     required super.timestamp,
-    required List<PlanEntry> entries,
+    required List<PlanRecordEntry> entries,
     super.extra,
   }) : entries = List.unmodifiable(entries);
 
-  final List<PlanEntry> entries;
+  final List<PlanRecordEntry> entries;
 
   @override
   String get type => 'plan';
@@ -486,9 +523,44 @@ final class PlanRecord extends SessionRecord {
         {
           'content': e.content,
           'priority': e.priority.name,
-          'status': planStatusWire(e.status),
+          'status': e.status.wire,
         },
     ],
+  };
+}
+
+/// Операция над списком задач (`agent-core/17-16-task-list.md` §17.16.6):
+/// одна запись на `TaskListChanged`, кроме `op: restore` (TSK-1).
+///
+/// [items] — полные снимки изменённых пунктов, [deleted] — удалённые id.
+/// Запись служебная: в контекст модели не входит.
+final class TaskRecord extends SessionRecord {
+  TaskRecord({
+    required super.id,
+    required super.parentId,
+    required super.timestamp,
+    required this.op,
+    required this.actor,
+    required List<TaskItem> items,
+    required List<TaskId> deleted,
+    super.extra,
+  }) : items = List.unmodifiable(items),
+       deleted = List.unmodifiable(deleted);
+
+  final String op;
+  final TaskActor actor;
+  final List<TaskItem> items;
+  final List<TaskId> deleted;
+
+  @override
+  String get type => 'task';
+
+  @override
+  Map<String, Object?> get _fields => {
+    'op': op,
+    'actor': actor.wire,
+    'items': [for (final item in items) item.toJson()],
+    'deleted': deleted,
   };
 }
 
@@ -628,22 +700,11 @@ final class CustomRecord extends SessionRecord {
   Map<String, Object?> toJson() => _raw ?? super.toJson();
 }
 
-/// Статус плана на проводе (`in_progress`), как в ACP `plan`.
-String planStatusWire(PlanStatus status) => switch (status) {
-  PlanStatus.pending => 'pending',
-  PlanStatus.inProgress => 'in_progress',
-  PlanStatus.completed => 'completed',
-};
-
-PlanEntry _planEntry(Map<String, Object?> json) => PlanEntry(
+PlanRecordEntry _planEntry(Map<String, Object?> json) => PlanRecordEntry(
   content: _string(json, 'content'),
   priority:
-      PlanPriority.values.asNameMap()[json['priority']] ?? PlanPriority.medium,
-  status: switch (json['status']) {
-    'in_progress' => PlanStatus.inProgress,
-    'completed' => PlanStatus.completed,
-    _ => PlanStatus.pending,
-  },
+      TaskPriority.values.asNameMap()[json['priority']] ?? TaskPriority.medium,
+  status: TaskStatus.fromWire(json['status']) ?? TaskStatus.pending,
 );
 
 FileDiff _diff(Map<String, Object?> json) => FileDiff(

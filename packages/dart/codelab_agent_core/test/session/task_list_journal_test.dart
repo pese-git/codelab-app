@@ -1,6 +1,7 @@
+import 'dart:convert';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/session/projections.dart';
-import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 
 import '../host/core_harness.dart';
@@ -201,6 +202,84 @@ void main() {
 
       expect(idsOf(state.items), ['1']);
       expect(state.nextId, 5);
+    });
+  });
+
+  // Запись с неразумным id не должна переполнять счётчик и ломать список:
+  // она уходит в карантин как нечитаемая (parseSessionLines).
+  group('некорректные id в записи task — карантин', () {
+    String raw(Map<String, Object?> extra) => jsonEncode({
+      'type': 'task',
+      'id': 'bad',
+      'parentId': null,
+      'timestamp': at,
+      'op': 'create',
+      'actor': 'main',
+      'items': <Object?>[],
+      'deleted': <Object?>[],
+      ...extra,
+    });
+
+    for (final (name, extra) in <(String, Map<String, Object?>)>[
+      (
+        'пункт без id',
+        {
+          'items': [
+            {'subject': 'a', 'status': 'pending'},
+          ],
+        },
+      ),
+      (
+        'id не строка',
+        {
+          'items': [
+            {'id': 5, 'subject': 'a'},
+          ],
+        },
+      ),
+      (
+        'id не число',
+        {
+          'items': [
+            {'id': 'x1', 'subject': 'a'},
+          ],
+        },
+      ),
+      (
+        'id больше предела',
+        {
+          'items': [
+            {'id': '9999999999999999999', 'subject': 'a'},
+          ],
+        },
+      ),
+      (
+        'deleted с неразумным id',
+        {
+          'deleted': ['1000001'],
+        },
+      ),
+    ]) {
+      test(name, () {
+        final parsed = parseSessionLines(
+          journal([header(cwd: '/proj'), user('u1', null), raw(extra)]),
+          id: id,
+        );
+
+        expect(parsed.quarantine.single.reason, 'invalid');
+        expect(parsed.snapshot.records.map((r) => r.id), ['u1']);
+        final state = buildTaskList(parsed.snapshot);
+        expect(state.items, isEmpty);
+        expect(state.nextId, 1);
+      });
+    }
+
+    test('id на пределе допустим', () {
+      final s = snapshot([
+        taskRecord('t1', null, items: [taskItem('1000000', 'edge')]),
+      ]);
+
+      expect(buildTaskList(s).nextId, 1000001);
     });
   });
 

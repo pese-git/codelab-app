@@ -4,6 +4,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 
 import '../domain/approval_policy.dart';
+import '../domain/codelab_extensions.dart';
 import '../domain/domain_models.dart';
 import '../domain/fs_access.dart';
 import '../domain/logger.dart';
@@ -692,6 +693,7 @@ final class AcpClientApplication {
               writeTextFile: _textFileWriter != null,
             ),
             terminal: _terminalProcessRunner != null,
+            meta: codelabClientExtensionsMeta,
           ),
         ),
       );

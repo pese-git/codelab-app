@@ -44,12 +44,8 @@ void main() {
       'oldText': 'draft',
       'newText': 'final',
     }),
-    call('c3', 'update_plan', {
-      'entries': [
-        {'content': 'read', 'priority': 'high', 'status': 'completed'},
-        {'content': 'edit', 'priority': 'medium', 'status': 'completed'},
-      ],
-    }),
+    call('c3', 'task_create', {'subject': 'read', 'priority': 'high'}),
+    call('c4', 'task_create', {'subject': 'edit'}),
     {
       'reply': [
         {'text': 'done'},
@@ -64,8 +60,8 @@ void main() {
       'ToolCallStarted $tool ${kind.name} ${jsonEncode(input)}',
     ToolCallFinished(:final toolCallId, :final outcome, :final diffs) =>
       'ToolCallFinished $toolCallId ${outcome.name} diffs=${diffs.length}',
-    PlanUpdated(:final entries) =>
-      'PlanUpdated ${[for (final e in entries) '${e.content}:${e.status.name}']}',
+    TaskListChanged(:final items) =>
+      'TaskListChanged ${[for (final i in items) '${i.subject}:${i.status.name}']}',
     MessageEnded(:final message) =>
       'MessageEnded ${message.runtimeType} ${_text(message)}',
     TurnEnded(:final reason) => 'TurnEnded ${reason.name}',
@@ -126,7 +122,7 @@ void main() {
     expect(reference.asked, ['edit'], reason: 'read is silent, edit asks');
     expect(
       reference.events,
-      contains('PlanUpdated [read:completed, edit:completed]'),
+      contains('TaskListChanged [read:pending, edit:pending]'),
     );
     expect(reference.events, contains(startsWith('TurnEnded')));
     expect(reference.events, isNot(contains(startsWith('AgentError'))));

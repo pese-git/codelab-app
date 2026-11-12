@@ -13,6 +13,7 @@ import '../loop/turn_budget.dart';
 import '../mcp/mcp_server_config.dart';
 import '../permissions/gate.dart';
 import '../permissions/modes.dart';
+import '../tools/tasks/task_list.dart';
 import '../util/logger.dart';
 
 /// Публичный API сессии (`agent-core-architecture` §5.6).
@@ -164,6 +165,12 @@ abstract interface class AgentSession {
   /// подключения не бросается: он пишется в лог, как при `createSession`.
   /// Вызов на закрытой сессии — [StateError].
   Future<void> setMcpServers(List<McpServerConfig> servers);
+
+  /// Список задач дерева сессии (`agent-core/17-16-task-list.md` §17.16).
+  ///
+  /// Для чтения: пункты меняют только инструменты `task_*`, а открытие сессии
+  /// и смена ветки восстанавливают список из журнала.
+  TaskList get tasks;
 
   /// События журнала активной ветки для `session/load` (§8.3, D4).
   Iterable<AgentEvent> replay();

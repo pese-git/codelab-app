@@ -7,7 +7,7 @@ import '../util/canonical_json.dart';
 import '../util/clock.dart';
 import '../util/logger.dart';
 import 'misuse.dart';
-import 'plan_service.dart';
+import 'tasks/task_list.dart';
 
 /// Contract of a tool (`agent-core-architecture` §6.2): an object that
 /// describes itself to the model and runs over [ExecutionEnv]. Built-in,
@@ -162,9 +162,9 @@ final class ToolServices {
     required this.clock,
     required this.logger,
     ApprovalWaitMeter? approvalWait,
-    PlanService? plan,
+    TaskList? tasks,
   }) : approvalWait = approvalWait ?? ApprovalWaitMeter(),
-       plan = plan ?? PlanService();
+       tasks = tasks ?? SessionTaskList();
 
   final Clock clock;
   final Logger logger;
@@ -172,8 +172,10 @@ final class ToolServices {
   /// Время ожидания человека: не входит во время хода (§5.2, design.md D6).
   final ApprovalWaitMeter approvalWait;
 
-  /// План сессии для `update_plan` (design.md, D5).
-  final PlanService plan;
+  /// Список задач дерева для `task_*` (`agent-core/17-16-task-list.md`
+  /// §17.16.2; change `add-subagents-and-tasks`, D13). Сессия кладёт сюда
+  /// `SessionTaskList` с публикацией `TaskListChanged`.
+  final TaskList tasks;
 }
 
 /// Sum of the waits for `PermissionGate` in the current turn.

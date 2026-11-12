@@ -1,7 +1,6 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/tools/executor.dart';
 import 'package:codelab_agent_core/src/tools/misuse.dart';
-import 'package:codelab_agent_core/src/tools/plan_service.dart';
 import 'package:codelab_agent_core/src/tools/registry.dart';
 import 'package:codelab_agent_core/testing.dart';
 
@@ -14,7 +13,7 @@ final class ExecutorHarness {
     this.registry,
     this.executor,
     this.clock,
-    this.plan,
+    this.tasks,
     this.logger,
   );
 
@@ -28,17 +27,17 @@ final class ExecutorHarness {
     final env = await BoundedEnv.wrap(base, base.cwd);
     final registry = ToolRegistry();
     tools.forEach(registry.register);
-    final plan = PlanService();
+    final tasks = SessionTaskList();
     final logger = RecordingLogger();
     final executor = ToolCallExecutor(
       registry: registry,
       env: env,
-      services: ToolServices(clock: clock, logger: logger, plan: plan),
+      services: ToolServices(clock: clock, logger: logger, tasks: tasks),
     );
-    final h = ExecutorHarness._(env, registry, executor, clock, plan, logger);
-    // План публикуется в ту же запись событий, что и события вызова.
-    plan.publish = (entries) =>
-        h.events.add(PlanUpdated(session, entries: entries));
+    final h = ExecutorHarness._(env, registry, executor, clock, tasks, logger);
+    // Список задач публикуется в ту же запись событий, что и события вызова.
+    tasks.publish = (items, change) =>
+        h.events.add(TaskListChanged(session, items: items, change: change));
     return h;
   }
 
@@ -46,7 +45,7 @@ final class ExecutorHarness {
   final ToolRegistry registry;
   final ToolCallExecutor executor;
   final FakeClock clock;
-  final PlanService plan;
+  final SessionTaskList tasks;
   final RecordingLogger logger;
   final events = <AgentEvent>[];
 

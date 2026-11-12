@@ -5,7 +5,8 @@
   ],
   "description": "Бюджет хода — один запрос к модели (budget.max_steps = 1); модель вызывает инструмент и хочет продолжить; агент останавливает ход на границе шага и отвечает max_turn_requests с _meta.codelab.budgetExceeded: \"steps\".",
   "extensions": [
-    "budgetExceeded"
+    "budgetExceeded",
+    "task"
   ],
   "setup": {
     "cwd": "/work/demo",
@@ -35,15 +36,10 @@
           {
             "toolCall": {
               "id": "call_1",
-              "name": "update_plan",
+              "name": "task_create",
               "arguments": {
-                "entries": [
-                  {
-                    "content": "Прочитать тесты",
-                    "priority": "high",
-                    "status": "pending"
-                  }
-                ]
+                "subject": "Прочитать тесты",
+                "priority": "high"
               }
             }
           }
@@ -82,19 +78,12 @@
           "update": {
             "sessionUpdate": "tool_call",
             "toolCallId": "call_1",
-            "title": {
-              "$contains": "plan"
-            },
+            "title": "Create task",
             "kind": "think",
             "status": "pending",
             "rawInput": {
-              "entries": [
-                {
-                  "content": "Прочитать тесты",
-                  "priority": "high",
-                  "status": "pending"
-                }
-              ]
+              "subject": "Прочитать тесты",
+              "priority": "high"
             }
           }
         }
@@ -128,9 +117,31 @@
               {
                 "content": "Прочитать тесты",
                 "priority": "high",
-                "status": "pending"
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "1",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
               }
-            ]
+            ],
+            "_meta": {
+              "codelab": {
+                "taskChange": {
+                  "op": "create",
+                  "actor": "main",
+                  "toolCallId": "call_1",
+                  "changed": [
+                    "1"
+                  ],
+                  "deleted": []
+                }
+              }
+            }
           }
         }
       }
@@ -152,7 +163,7 @@
                 "content": {
                   "type": "text",
                   "text": {
-                    "$contains": "Plan updated"
+                    "$contains": "Created task #1"
                   }
                 }
               }

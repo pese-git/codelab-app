@@ -49,6 +49,21 @@ sealed class TranscriptItem with _$TranscriptItem {
     ApprovalStateView? approval,
   }) = ToolCallItem;
 
+  /// Операция со списком задач: тихая строка вместо вызова `think`
+  /// (design.md change `add-subagents-and-tasks`, D27).
+  ///
+  /// Поля — id пунктов (`_meta.codelab.task.id`): [added] — добавленные,
+  /// [completed] — ставшие `completed`, [removed] — удалённые, [updated] —
+  /// прочие изменённые. Подряд идущие операции сливаются в один элемент
+  /// (поля объединяются); [id] — id первого. Текст — [TaskOpsItemText.text].
+  const factory TranscriptItem.taskOps({
+    required String id,
+    @Default(<String>[]) List<String> added,
+    @Default(<String>[]) List<String> completed,
+    @Default(<String>[]) List<String> removed,
+    @Default(<String>[]) List<String> updated,
+  }) = TaskOpsItem;
+
   /// Итог хода, который не виден из обновлений агента.
   ///
   /// [failure] заполнен только у [NoticeKind.error]: по нему хост строит
@@ -60,6 +75,38 @@ sealed class TranscriptItem with _$TranscriptItem {
     required String text,
     PromptFailure? failure,
   }) = NoticeItem;
+}
+
+/// Текст тихой строки операций со списком задач (D27).
+///
+/// Почему: текст один для app, REPL и TUI, поэтому строится в kit, а не в
+/// хостах. Для чего: «Task #3 added to the plan», «Tasks #1–#4 added to the
+/// plan» (подряд идущие id — диапазоном, иначе списком `#1, #3`), «Task #2
+/// done», «Task #2 removed», «Task #2 updated»; части идут в этом порядке и
+/// объединяются через `; `.
+extension TaskOpsItemText on TaskOpsItem {
+  String get text => [
+    if (added.isNotEmpty) '${_tasks(added)} added to the plan',
+    if (completed.isNotEmpty) '${_tasks(completed)} done',
+    if (removed.isNotEmpty) '${_tasks(removed)} removed',
+    if (updated.isNotEmpty) '${_tasks(updated)} updated',
+  ].join('; ');
+}
+
+String _tasks(List<String> ids) =>
+    '${ids.length == 1 ? 'Task' : 'Tasks'} ${_idList(ids)}';
+
+String _idList(List<String> ids) {
+  final numbers = [for (final id in ids) int.tryParse(id)];
+  final consecutive =
+      ids.length > 1 &&
+      !numbers.contains(null) &&
+      [
+        for (var i = 1; i < numbers.length; i++) numbers[i]! - numbers[i - 1]!,
+      ].every((step) => step == 1);
+  return consecutive
+      ? '#${ids.first}–#${ids.last}'
+      : ids.map((id) => '#$id').join(', ');
 }
 
 /// Состояние вызова инструмента в элементе транскрипта.

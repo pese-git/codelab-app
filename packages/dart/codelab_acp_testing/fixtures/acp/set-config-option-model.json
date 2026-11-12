@@ -33,7 +33,7 @@
   "frames": [
     {
       "dir": "c2a",
-      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1; клиент CodeLab объявляет расширения (D9, в итерации 1 — tasks)",
       "frame": {
         "jsonrpc": "2.0",
         "id": {
@@ -48,7 +48,14 @@
                 "readTextFile": true,
                 "writeTextFile": true
               },
-              "terminal": true
+              "terminal": true,
+              "_meta": {
+                "codelab": {
+                  "tasks": {
+                    "version": 1
+                  }
+                }
+              }
             }
           }
         }
@@ -56,7 +63,7 @@
     },
     {
       "dir": "a2c",
-      "note": "ответ агента — ровно эти поля (agent-core §13.2)",
+      "note": "ответ агента — ровно эти поля (agent-core §13.2). Состав блока меняется по итерациям (2.8a), точный состав проверяет acp/initialize-codelab-extensions.",
       "frame": {
         "jsonrpc": "2.0",
         "id": "${initializeId}",
@@ -75,6 +82,15 @@
             },
             "sessionCapabilities": {
               "list": {}
+            },
+            "_meta": {
+              "$any": {
+                "codelab": {
+                  "tasks": {
+                    "version": 1
+                  }
+                }
+              }
             }
           },
           "agentInfo": {
@@ -315,5 +331,8 @@
         }
       }
     }
+  ],
+  "extensions": [
+    "capabilities"
   ]
 }

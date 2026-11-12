@@ -103,7 +103,7 @@ void main() {
       final sections = systemPromptSections(_inputs(skills: _skills));
 
       expect(sections.last, 'skills.catalog');
-      expect(sections[sections.length - 2], 'tools.plan');
+      expect(sections[sections.length - 2], 'tools.tasks');
     });
   });
 
@@ -148,7 +148,7 @@ void main() {
     test('scenario "База не называет инструментов": skills/invoked.md and '
         'skills/reattached.md name no tool', () {
       final forbidden = RegExp(
-        r'\b(exec|ls|lsp|update_plan|web_fetch|web_search|task_status|task_cancel)\b|mcp__',
+        r'\b(exec|ls|lsp|update_plan|task_create|web_fetch|web_search|task_status|task_cancel)\b|mcp__',
       );
       for (final path in ['skills/invoked.md', 'skills/reattached.md']) {
         expect(

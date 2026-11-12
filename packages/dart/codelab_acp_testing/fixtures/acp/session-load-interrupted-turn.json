@@ -5,7 +5,8 @@
   ],
   "description": "Журнал кончается вызовом без результата (процесс агента остановился посреди хода); при session/load агент дописывает синтетический результат и показывает вызов tool_call со статусом failed и _meta.codelab.outcome interrupted, инструмент повторно не вызывается.",
   "extensions": [
-    "outcome"
+    "outcome",
+    "capabilities"
   ],
   "roles": [
     "agent",
@@ -101,10 +102,18 @@
               "readTextFile": true,
               "writeTextFile": true
             },
-            "terminal": true
+            "terminal": true,
+            "_meta": {
+              "codelab": {
+                "tasks": {
+                  "version": 1
+                }
+              }
+            }
           }
         }
-      }
+      },
+      "note": "клиент CodeLab объявляет расширения (D9, в итерации 1 — tasks)"
     },
     {
       "dir": "a2c",

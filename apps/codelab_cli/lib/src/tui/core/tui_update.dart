@@ -268,6 +268,8 @@ TuiModel _note(TuiModel model, String text) => model.copyWith(
     // Кадр и так перерисовывается целиком.
     case KeyAction.clearScreen:
       return (model, const []);
+    case KeyAction.toggleTasks:
+      return (model.copyWith(tasksHidden: !model.tasksHidden), const []);
   }
 }
 
@@ -307,6 +309,10 @@ TuiModel _note(TuiModel model, String text) => model.copyWith(
         KeyAction.scrollDown => (_scrollDown(model), const []),
         KeyAction.follow => (
           model.copyWith(scroll: const ScrollState()),
+          const [],
+        ),
+        KeyAction.toggleTasks => (
+          model.copyWith(tasksHidden: !model.tasksHidden),
           const [],
         ),
         _ => (model, const []),

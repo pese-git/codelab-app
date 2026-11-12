@@ -137,6 +137,111 @@
       }
     },
     {
+      "name": "task_create",
+      "description": "Add an item to the task list shown to the user. Optional: description, priority, blocked_by (ids\nthat must be completed first). Returns the new id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "blocked_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "owner": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject"
+        ]
+      }
+    },
+    {
+      "name": "task_update",
+      "description": "Change one task list item by id; pass only changed fields. Set status in_progress when you\nstart it, completed when done, deleted to remove it. blocked_by replaces the whole list.\nKeep exactly one item in_progress.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "completed",
+              "deleted"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "owner": {
+            "type": "string"
+          },
+          "blocked_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "task_list",
+      "description": "List all task list items. Call it after the conversation context was compacted to learn the\ncurrent state of the list.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "task_get",
+      "description": "Show one task list item by id with the items it blocks and the ones blocking it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
       "name": "exec",
       "description": "Run a non-interactive shell command in the workspace. The tail of the output and a non-zero exit code are returned.",
       "parameters": {

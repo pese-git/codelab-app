@@ -1,6 +1,7 @@
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
+import 'task_ops.dart';
 import 'transcript_item.dart';
 
 /// Инкрементальная проекция транскрипта одной сессии.
@@ -47,6 +48,10 @@ final class TranscriptProjector {
       _turns.clear();
       changed = true;
     }
+    // План, действовавший к началу хода: разница первой операции со списком
+    // задач хода считается от него (acp-client-kit «Операции со списком
+    // задач в ленте»).
+    List<PlanEntry>? prior;
     for (final (index, turn) in turns.indexed) {
       if (index < _turns.length && _turns[index].turnId != turn.id) {
         _turns.removeRange(index, _turns.length);
@@ -55,7 +60,8 @@ final class TranscriptProjector {
       if (index == _turns.length) {
         _turns.add(_TurnProjection(turn.id));
       }
-      changed = _turns[index].apply(turn) || changed;
+      changed = _turns[index].apply(turn, prior) || changed;
+      prior = _turns[index].lastPlan ?? prior;
     }
     if (!changed) {
       return false;
@@ -86,11 +92,17 @@ List<PendingApprovalView> pendingApprovalViews(AcpSession session) => [
 ///
 /// Для чего: тест свойства «инкрементальная проекция == пересчёт» и разовый
 /// показ сессии без истории изменений.
-List<TranscriptItem> projectTranscript(AcpSession session) => [
-  for (final turn in session.turns) ..._rebuildTurn(turn),
-];
+List<TranscriptItem> projectTranscript(AcpSession session) {
+  final items = <TranscriptItem>[];
+  List<PlanEntry>? prior;
+  for (final turn in session.turns) {
+    items.addAll(_rebuildTurn(turn, prior));
+    prior = lastPlanOf(turn, prior);
+  }
+  return items;
+}
 
-List<TranscriptItem> _rebuildTurn(PromptTurn turn) {
+List<TranscriptItem> _rebuildTurn(PromptTurn turn, List<PlanEntry>? prior) {
   final items = <TranscriptItem>[];
   final user = _userItem(turn);
   if (user != null) {
@@ -140,10 +152,11 @@ List<TranscriptItem> _rebuildTurn(PromptTurn turn) {
     }
   }
   flush();
-  agent.addAll(_unannouncedApprovalItems(turn, seen, focused));
+  final body = withTaskOps(agent, taskOperationsOf(turn, prior));
+  body.addAll(_unannouncedApprovalItems(turn, seen, focused));
 
   items
-    ..addAll(agent)
+    ..addAll(body)
     ..addAll(_notices(turn, hasAgentItems: agent.isNotEmpty));
   return items;
 }
@@ -164,6 +177,11 @@ final class _TurnProjection {
   final _toolPositions = <ToolCallId, int>{};
   var _processed = 0;
 
+  /// Последний `plan` этого хода (`null` — хода без плана) и признак плана
+  /// со списком задач: без него разница операций не считается.
+  List<PlanEntry>? lastPlan;
+  var _taskPlanSeen = false;
+
   /// Открытый отрезок потокового текста: вид, индекс первого обновления,
   /// накопленный текст и позиция элемента (`null`, пока текст пуст).
   _StreamKind? _runKind;
@@ -173,7 +191,7 @@ final class _TurnProjection {
 
   List<TranscriptItem> items = const [];
 
-  bool apply(PromptTurn turn) {
+  bool apply(PromptTurn turn, List<PlanEntry>? prior) {
     if (identical(turn, _turn)) {
       return false;
     }
@@ -204,9 +222,12 @@ final class _TurnProjection {
       ..._toolPositions.keys,
     }, focused);
     final hasAgentItems = _body.isNotEmpty || unannounced.isNotEmpty;
+    final body = _taskPlanSeen
+        ? withTaskOps(_body, taskOperationsOf(turn, prior))
+        : _body;
     items = [
       ?_user,
-      ..._body,
+      ...body,
       ...unannounced,
       ..._notices(turn, hasAgentItems: hasAgentItems),
     ];
@@ -230,6 +251,10 @@ final class _TurnProjection {
         });
       case ToolCallUpdateSessionUpdate():
         _closeRun();
+      case PlanUpdate(:final entries, :final meta):
+        _closeRun();
+        lastPlan = entries;
+        _taskPlanSeen = _taskPlanSeen || hasTaskChangeCall(meta);
       default:
         final kind = _StreamKind.of(update);
         if (kind == null) {
@@ -271,6 +296,8 @@ final class _TurnProjection {
     _body.clear();
     _toolPositions.clear();
     _processed = 0;
+    lastPlan = null;
+    _taskPlanSeen = false;
     _closeRun();
   }
 }

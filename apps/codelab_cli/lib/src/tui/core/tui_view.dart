@@ -61,9 +61,12 @@ Frame render(TuiModel model, TuiChrome chrome) {
     final at = overlayCursorOf(overlay);
     cursor = at == null ? null : (top + at.$1, min(at.$2, width - 1));
   } else if (approvalOf(model) case final prompt?) {
-    lines.addAll(approvalLines(model, prompt));
+    lines
+      ..addAll(taskBlockLines(model))
+      ..addAll(approvalLines(model, prompt));
     cursor = null;
   } else {
+    lines.addAll(taskBlockLines(model));
     cursor = _composer(model, lines);
   }
 

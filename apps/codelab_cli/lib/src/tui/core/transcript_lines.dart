@@ -1,7 +1,7 @@
-import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../../render/ansi.dart';
+import '../../render/plan_format.dart';
 import '../../render/sanitize.dart';
 import '../../render/terminal_renderer.dart';
 import '../../render/tool_row.dart';
@@ -105,8 +105,7 @@ final class TranscriptLayout {
   /// `[~]`, `[ ]`) — для блока в конце транскрипта и для `/plan`.
   static List<String> planLines(List<PlanEntryView> plan) => [
     planHeader,
-    for (final entry in plan)
-      '  ${_planMark(entry.status)} ${sanitizeTerminalText(entry.content)}',
+    for (final entry in plan) '  ${planEntryText(entry)}',
   ];
 
   List<String> _itemLines(
@@ -158,18 +157,16 @@ final class TranscriptLayout {
         ThoughtsMode.hidden => const [],
       },
       ToolCallItem() => [toolRow(item, unicode: unicode)],
+      // Тихая строка операций со списком: без рамки и статуса (D27).
+      TaskOpsItem() => [
+        dim('${unicode ? '☰ ' : '- '}${sanitizeTerminalText(item.text)}'),
+      ],
       NoticeItem(:final kind) => wrapped(
         '${kind == NoticeKind.error ? errorPrefix : notePrefix}'
         '${noticeText(item)}',
       ),
     };
   }
-
-  static String _planMark(PlanEntryStatus status) => switch (status) {
-    PlanEntryStatus.completed => '[x]',
-    PlanEntryStatus.inProgress => '[~]',
-    PlanEntryStatus.pending => '[ ]',
-  };
 }
 
 final class _Entry {

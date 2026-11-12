@@ -5,6 +5,7 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 import '../strings.dart';
 import 'ansi.dart';
 import 'output_surface.dart';
+import 'plan_format.dart';
 import 'sanitize.dart';
 import 'tool_row.dart';
 
@@ -78,6 +79,11 @@ final class TerminalRenderer {
 
   var _plan = const <PlanEntryView>[];
 
+  /// Операция со списком задач, ещё способная расти (последний элемент), и
+  /// уже напечатанные.
+  TaskOpsItem? _pendingOps;
+  final _opsPrinted = <String>{};
+
   /// Элемент, текст которого дописывается сейчас: следующий элемент
   /// начинается с новой строки.
   String? _openId;
@@ -101,6 +107,7 @@ final class TerminalRenderer {
       _seen[item.id] = item;
       switch (item) {
         case UserItem(:final id, :final text):
+          _flushTaskOps();
           if (!_raw && _lines.add(id)) {
             _closeThought();
             _line(
@@ -108,17 +115,40 @@ final class TerminalRenderer {
             );
           }
         case ThoughtItem():
+          _flushTaskOps();
           _thought(item);
         case AgentTextItem():
+          _flushTaskOps();
           _text(item);
         case ToolCallItem():
           _tool(item);
+        case TaskOpsItem():
+          // Подряд идущие операции растут в одном элементе, а напечатанную
+          // строку не переписать: последний элемент придерживается, пока за
+          // ним не пришёл другой или не кончился ход (D27).
+          if (_opsPrinted.contains(item.id)) {
+            continue;
+          }
+          if (_pendingOps?.id != item.id) {
+            _flushTaskOps();
+          }
+          _pendingOps = item;
         case NoticeItem(:final id, :final kind):
+          _flushTaskOps();
           if (_lines.add(id)) {
             _closeThought();
             final prefix = kind == NoticeKind.error ? errorPrefix : notePrefix;
             _line(sanitizeTerminalText('$prefix${noticeText(item)}'), _raw);
           }
+      }
+    }
+    // Придержанная операция закончила расти, если после неё в транскрипте
+    // есть что-то, кроме скрытых бегущих `think`: они ещё могут стать
+    // следующей операцией и влиться в тот же элемент.
+    if (_pendingOps case final pending?) {
+      final at = view.transcript.indexWhere((item) => item.id == pending.id);
+      if (view.transcript.skip(at + 1).any((item) => !_isHiddenCall(item))) {
+        _flushTaskOps();
       }
     }
     if (!_samePlan(view.plan)) {
@@ -129,22 +159,42 @@ final class TerminalRenderer {
     }
   }
 
+  /// Бегущий вызов `think` без ожидающего одобрения: не печатается до
+  /// завершения (spec codelab-cli «Субагенты и список задач в REPL»).
+  bool _isHiddenCall(TranscriptItem item) =>
+      item is ToolCallItem &&
+      !_toolStarted.containsKey(item.id) &&
+      item.details?.kind == ToolKind.think &&
+      !isFinalToolCall(item) &&
+      item.approval is! PendingApprovalView;
+
+  /// Тихая строка операций со списком задач: приглушённая, без значка
+  /// статуса и времени (D27).
+  void _flushTaskOps() {
+    final ops = _pendingOps;
+    if (ops == null) {
+      return;
+    }
+    _pendingOps = null;
+    _opsPrinted.add(ops.id);
+    _closeThought();
+    _line(_styled(sanitizeTerminalText(ops.text), sgrDim), _raw);
+  }
+
   /// План целиком: заголовок и строка на запись (`[x]`, `[~]`, `[ ]`); на
   /// [OutputSurface.raw] — в stderr. Для изменения плана и `/plan`.
   void printPlan(List<PlanEntryView> plan) {
     _closeThought();
     _line(planHeader, _raw);
     for (final entry in plan) {
-      _line(
-        '  ${_planMark(entry.status)} ${sanitizeTerminalText(entry.content)}',
-        _raw,
-      );
+      _line('  ${planEntryText(entry)}', _raw);
     }
   }
 
   /// Ход закончился: свёрнутые мысли получают итоговую строку, открытая
   /// строка закрывается переводом строки.
   void finishTurn() {
+    _flushTaskOps();
     _closeThought();
     if (!_atLineStart) {
       _out.write('\n');
@@ -182,8 +232,11 @@ final class TerminalRenderer {
           }
         case UserItem(:final id) || NoticeItem(:final id):
           _lines.add(id);
+        case TaskOpsItem(:final id):
+          _opsPrinted.add(id);
       }
     }
+    _pendingOps = null;
     _plan = view.plan;
   }
 
@@ -240,11 +293,19 @@ final class TerminalRenderer {
   void _tool(ToolCallItem item) {
     final now = _clock();
     final started = _toolStarted[item.id];
+    // Бегущий `think` не печатается до завершения: операцию со списком задач
+    // kit опознаёт только по завершённому вызову, а напечатанную строку не
+    // стереть (spec codelab-cli «Субагенты и список задач в REPL»). Вызов с
+    // ожидающим одобрением виден всегда.
+    if (started == null && _isHiddenCall(item)) {
+      return;
+    }
     if (started == null) {
       _toolStarted[item.id] = now;
       if (isFinalToolCall(item)) {
         _toolDone.add(item.id);
       }
+      _flushTaskOps();
       _closeThought();
       _line(toolRow(item, unicode: unicode), _raw);
       return;
@@ -253,6 +314,7 @@ final class TerminalRenderer {
       return;
     }
     _toolDone.add(item.id);
+    _flushTaskOps();
     _closeThought();
     _line(
       toolRow(item, unicode: unicode, elapsed: now.difference(started)),
@@ -303,12 +365,6 @@ final class TerminalRenderer {
     }
     return true;
   }
-
-  static String _planMark(PlanEntryStatus status) => switch (status) {
-    PlanEntryStatus.completed => '[x]',
-    PlanEntryStatus.inProgress => '[~]',
-    PlanEntryStatus.pending => '[ ]',
-  };
 }
 
 /// Текст заметки для человека: у сорвавшегося хода — причина агента из

@@ -372,11 +372,8 @@ Task list: 1 items (0 completed, 1 in progress, 0 pending).''');
 
       expect(text, startsWith('Deleted task #1.'));
       expect(
-        [for (final i in h.tasks.items) (i.id, i.blockedBy)],
-        [
-          ('2', <String>[]),
-          ('3', ['2']),
-        ],
+        [for (final i in h.tasks.items) '${i.id}:${i.blockedBy}'],
+        ['2:[]', '3:[2]'],
       );
       final change = h.changes.last.change;
       expect(change.op, 'delete');

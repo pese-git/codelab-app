@@ -37,6 +37,13 @@ typedef _StateCheck =
       ClientFixtureResult<AcpClientApplication> result,
     );
 
+/// `_meta.codelab.task.id` пункта плана.
+String? _taskId(PlanEntry entry) {
+  final codelab = entry.meta?['codelab'];
+  final task = codelab is Map ? codelab['task'] : null;
+  return task is Map ? task['id'] as String? : null;
+}
+
 PromptTurn _lastTurn(ClientFixtureUser user) =>
     user.app.sessions.single.turns.last;
 
@@ -93,12 +100,48 @@ final _stateChecks = <String, _StateCheck>{
     final turn = _lastTurn(user);
     expect(turn.status, PromptTurnStatus.completed);
     final plans = turn.updates.whereType<PlanUpdate>().toList();
+    // План стороннего агента (роль `client`): дважды заменяется целиком
+    // тремя пунктами без `_meta` — id задач нет (acp-client-kit «Метаданные
+    // пунктов плана», «План стороннего агента»).
     expect(plans, hasLength(2));
+    for (final plan in plans) {
+      expect(plan.entries, hasLength(3));
+      expect(plan.entries.every((e) => e.meta == null), isTrue);
+    }
     expect(plans.last.entries.map((e) => e.status), [
       PlanEntryStatus.completed,
       PlanEntryStatus.pending,
       PlanEntryStatus.pending,
     ]);
+  },
+  'acp/prompt-task-plan': (user, _) {
+    final turn = _lastTurn(user);
+    expect(turn.status, PromptTurnStatus.completed);
+    // Четыре `plan` — по числу операций со списком; каждый несёт весь список
+    // и `_meta.codelab.task` у каждого пункта (D15); после `task_list`
+    // нового `plan` нет.
+    final plans = turn.updates.whereType<PlanUpdate>().toList();
+    expect(plans, hasLength(4));
+    expect(
+      [
+        for (final plan in plans) [for (final e in plan.entries) _taskId(e)],
+      ],
+      [
+        ['1'],
+        ['1', '2'],
+        ['1', '2', '3'],
+        ['1', '2', '3'],
+      ],
+    );
+    expect(plans.last.entries.first.status, PlanEntryStatus.completed);
+  },
+  'acp/initialize-codelab-extensions': (user, _) {
+    final ready = user.app.connectionState as ClientConnectionReady;
+    // Согласованные расширения разобраны из `agentCapabilities._meta.codelab`
+    // (spec acp-protocol-client «Объявление расширений CodeLab»). Состав
+    // блока по итерациям ведёт фикстура протокольного исполнителя; `tasks`
+    // есть в любой редакции.
+    expect(ready.codelabExtensions.tasks, isTrue);
   },
   'acp/set-config-option-model': (user, _) {
     final model = user.app.sessions.single.configOptions!.singleWhere(

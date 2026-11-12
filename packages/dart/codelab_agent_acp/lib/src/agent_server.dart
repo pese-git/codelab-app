@@ -319,10 +319,33 @@ final class _Connection {
         sessionCapabilities: acp.SessionCapabilities(
           list: persistent ? const acp.SessionListCapabilities() : null,
         ),
+        meta: _codelabExtensions(request.clientCapabilities.meta),
       ),
       agentInfo: _server.config.agentInfo,
     );
     return Reply(acp.acpInitialize.encodeResult(response));
+  }
+
+  /// Блок объявлений расширений CodeLab `agentCapabilities._meta` (design.md
+  /// change `add-subagents-and-tasks`, D9; §13.2).
+  ///
+  /// Почему по объявлению клиента: сторонний клиент (Zed) получает ответ
+  /// «ровно эти поля», поэтому блок уходит, только если клиент прислал объект
+  /// `clientCapabilities._meta.codelab` (пусть пустой). Неизвестные ключи и
+  /// значения клиента игнорируются. В итерации 1 объявляется только `tasks`;
+  /// `subagents` и `subagentToolCalls` добавит итерация 2 вместе с
+  /// инструментом `agent` (задача 2.8a).
+  static Map<String, Object?>? _codelabExtensions(
+    Map<String, Object?>? clientMeta,
+  ) {
+    if (clientMeta?['codelab'] is! Map) {
+      return null;
+    }
+    return {
+      'codelab': {
+        'tasks': {'version': 1},
+      },
+    };
   }
 
   /// `session/new` (§13.4) в объёме этапа 4.

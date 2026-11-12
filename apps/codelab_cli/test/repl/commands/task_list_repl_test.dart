@@ -75,7 +75,21 @@ void main() {
           'kind': 'think',
           'status': 'in_progress',
         })
-        ..update('s1', {'sessionUpdate': 'plan', 'entries': List.of(entries)})
+        ..update('s1', {
+          'sessionUpdate': 'plan',
+          'entries': List.of(entries),
+          '_meta': {
+            'codelab': {
+              'taskChange': {
+                'op': 'create',
+                'actor': 'main',
+                'toolCallId': 'call-$i',
+                'changed': ['$i'],
+                'deleted': <String>[],
+              },
+            },
+          },
+        })
         ..update('s1', {
           'sessionUpdate': 'tool_call_update',
           'toolCallId': 'call-$i',
@@ -89,6 +103,93 @@ void main() {
         .split('\n')
         .singleWhere((l) => l.contains('Tasks #1–#4 added to the plan'));
     // Без значка статуса и времени выполнения; приглушённая строка (SGR 2).
-    expect(line, '\x1b[2mTasks #1–#4 added to the plan\x1b[0m');
+    // Перед строкой — только перерисовки приглашения редактора (`> `, курсор,
+    // очистка), без значка статуса и времени.
+    expect(
+      line,
+      matches(
+        RegExp(
+          r'^(> \r\x1b\[2C\r\x1b\[J)*'
+          r'\x1b\[2mTasks #1–#4 added to the plan\x1b\[0m$',
+        ),
+      ),
+    );
+  });
+
+  // Spec codelab-cli «Бегущий вызов think не печатается»: до завершения REPL
+  // ничего не печатает о вызове `think`, потому что kit опознаёт операцию со
+  // списком только по завершённому вызову, а напечатанную строку не стереть.
+  group('a running think call is not printed', () {
+    Future<JsonRpcRequest> startTurn() async {
+      repl.line('go');
+      return repl.agent.next(sessionPromptMethod);
+    }
+
+    test('a list operation: nothing until completed, then one quiet '
+        'line', () async {
+      final prompt = await startTurn();
+      repl.agent
+        ..update('s1', {
+          'sessionUpdate': 'tool_call',
+          'toolCallId': 'call-1',
+          'title': 'Create the task',
+          'kind': 'think',
+          'status': 'in_progress',
+        })
+        ..update('s1', {
+          'sessionUpdate': 'plan',
+          'entries': [_entry('1', 'pending')],
+          '_meta': {
+            'codelab': {
+              'taskChange': {
+                'op': 'create',
+                'actor': 'main',
+                'toolCallId': 'call-1',
+                'changed': ['1'],
+                'deleted': <String>[],
+              },
+            },
+          },
+        });
+      await pumpEventQueue();
+      expect(repl.lastOutput, isNot(contains('Create the task')));
+      expect(repl.lastOutput, isNot(contains('Task #1 added')));
+
+      repl.agent
+        ..update('s1', {
+          'sessionUpdate': 'tool_call_update',
+          'toolCallId': 'call-1',
+          'status': 'completed',
+        })
+        ..respond(prompt, {'stopReason': 'end_turn'});
+
+      await repl.waitText('Task #1 added to the plan');
+      expect(repl.lastOutput, isNot(contains('Create the task')));
+    });
+
+    test('a think call that is not a list operation: an ordinary row only '
+        'after completion', () async {
+      final prompt = await startTurn();
+      repl.agent.update('s1', {
+        'sessionUpdate': 'tool_call',
+        'toolCallId': 'call-1',
+        'title': 'Ponder the design',
+        'kind': 'think',
+        'status': 'in_progress',
+      });
+      await pumpEventQueue();
+      expect(repl.lastOutput, isNot(contains('Ponder the design')));
+
+      repl.agent
+        ..update('s1', {
+          'sessionUpdate': 'tool_call_update',
+          'toolCallId': 'call-1',
+          'status': 'completed',
+        })
+        ..respond(prompt, {'stopReason': 'end_turn'});
+
+      await repl.waitText('✓');
+      expect('Ponder the design'.allMatches(repl.lastOutput), hasLength(1));
+    });
   });
 }

@@ -1,7 +1,6 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/tools/executor.dart';
 import 'package:codelab_agent_core/src/tools/registry.dart';
-import 'package:codelab_agent_core/src/tools/tasks/task_list.dart';
 import 'package:codelab_agent_core/src/tools/tasks/task_tools.dart';
 import 'package:codelab_agent_core/testing.dart';
 
@@ -23,7 +22,12 @@ export '../executor_harness.dart' show textOf;
 final class TaskHarness {
   TaskHarness._(this.executor, this.registry, this.tasks, this.events);
 
-  static Future<TaskHarness> create({MemoryExecutionEnv? memory}) async {
+  static Future<TaskHarness> create({
+    MemoryExecutionEnv? memory,
+    RecordingLogger? logger,
+    TaskListPublisher? publish,
+    TaskList? list,
+  }) async {
     final clock = FakeClock();
     final base = memory ?? MemoryExecutionEnv(cwd: '/proj', clock: clock);
     final env = await BoundedEnv.wrap(base, base.cwd);
@@ -39,16 +43,23 @@ final class TaskHarness {
     final events = <AgentEvent>[];
     // Публикация идёт в ту же запись, что и события вызова: порядок
     // `TaskListChanged` относительно `ToolCallFinished` виден в [events].
-    final tasks = SessionTaskList(
-      publish: (items, change) =>
-          events.add(TaskListChanged(session, items: items, change: change)),
-    );
+    final TaskList tasks =
+        list ??
+        SessionTaskList(
+          sessionId: session.value,
+          logger: logger,
+          publish:
+              publish ??
+              (items, change) => events.add(
+                TaskListChanged(session, items: items, change: change),
+              ),
+        );
     final executor = ToolCallExecutor(
       registry: registry,
       env: env,
       services: ToolServices(
         clock: clock,
-        logger: RecordingLogger(),
+        logger: logger ?? RecordingLogger(),
         tasks: tasks,
       ),
     );
@@ -57,12 +68,15 @@ final class TaskHarness {
 
   final ToolCallExecutor executor;
   final ToolRegistry registry;
-  final SessionTaskList tasks;
+  final TaskList tasks;
   final List<AgentEvent> events;
+
+  /// Токен отмены вызовов стенда; по умолчанию отмены нет.
+  CancelToken cancel = CancelToken.none;
 
   ToolInvocation invocation() => ToolInvocation(
     sessionId: session,
-    cancel: CancelToken.none,
+    cancel: cancel,
     stepTools: [for (final t in registry.tools) t.name],
     emit: events.add,
     beforeToolCall: const [],

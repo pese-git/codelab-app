@@ -10,9 +10,9 @@ import '../tools/builtin/exec.dart';
 import '../tools/builtin/ls.dart';
 import '../tools/builtin/read.dart';
 import '../tools/builtin/search.dart';
-import '../tools/builtin/update_plan.dart';
 import '../tools/builtin/write.dart';
 import '../tools/registry.dart';
+import '../tools/tasks/task_tools.dart';
 import '../util/logger.dart';
 import 'host_profile.dart';
 import 'services.dart';
@@ -151,7 +151,12 @@ BuiltAgentCore buildAgentCore({
   register('read', () => registry.register(ReadTool()));
   register('write', () => registry.register(WriteTool()));
   register('edit', () => registry.register(EditTool()));
-  register('update_plan', () => registry.register(UpdatePlanTool()));
+  // Список задач вместо update_plan (change `add-subagents-and-tasks`, D13):
+  // четыре инструмента всегда; секцию промпта включает якорь task_create.
+  register('task_create', () => registry.register(TaskCreateTool()));
+  register('task_update', () => registry.register(TaskUpdateTool()));
+  register('task_list', () => registry.register(TaskListTool()));
+  register('task_get', () => registry.register(TaskGetTool()));
   if (narrowed.isOn(HostCapability.shellExec)) {
     register('exec', () => registry.register(ExecTool()));
   }
