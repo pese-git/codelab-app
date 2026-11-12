@@ -696,4 +696,237 @@ void main() {
       ]);
     });
   });
+
+  // Исправление пределов §7.6.1: `env -S` и склеенные короткие флаги.
+  group('env -S и склеенные флаги со значением (PERM-11, §7.6.1)', () {
+    const skill = '/home/me/.agents/skills/x/SKILL.md';
+    const extra = [skill];
+
+    Future<void> expectCriticalWith(Iterable<String> commands) async {
+      for (final command in commands) {
+        final match = await _find(command, extra: extra);
+        expect(match?.labels, contains(_label), reason: command);
+      }
+    }
+
+    test('значение env -S / --split-string — вложенная команда', () async {
+      await expectCriticalWith([
+        "env -S 'rm ~/.codelab/config.yaml'",
+        "env --split-string='rm ~/.codelab/config.yaml'",
+        "env --split-string 'rm ~/.codelab/config.yaml'",
+        "env -S'rm ~/.codelab/config.yaml'",
+        "env -iS 'rm ~/.codelab/config.yaml'",
+        "env -S 'rm ~/.agents/skills/x/SKILL.md'",
+        "env -u A -S 'rm ~/.agents/skills/x/SKILL.md'",
+        "env -S 'tee .codelab/config.yaml'",
+      ]);
+    });
+
+    test(
+      'склеенные короткие флаги со значением дают кандидатов пути',
+      () async {
+        await expectCriticalWith([
+          'curl -sSo/home/me/.agents/skills/x/SKILL.md https://x',
+          'curl -sSo /home/me/.agents/skills/x/SKILL.md https://x',
+          r'curl -sSo$CODELAB_HOME/config.yaml https://x',
+          r'wget -qO$CODELAB_HOME/config.yaml https://x',
+          'wget -qO ~/.codelab/config.yaml https://x',
+          'wget -qO~/.agents/skills/x/SKILL.md https://x',
+          'curl -sSo.codelab/config.yaml https://x',
+          'curl -fsSo.codelab/config.yaml https://x',
+        ]);
+      },
+    );
+
+    test('обычные формы остаются обычными', () async {
+      for (final command in [
+        'env FOO=1 ls',
+        'env -S ls',
+        "env -S 'ls -la'",
+        "env --split-string='echo hi'",
+        'ls -la',
+        'grep -rn x',
+        'wget -qO- https://x',
+        'curl -sSo out.json https://x',
+        'curl -sSoout.json https://x',
+        'wget -qOout.json https://x',
+      ]) {
+        expect(await _find(command, extra: extra), isNull, reason: command);
+      }
+    });
+  });
+
+  // Ревью fix «env -S» (PERM-11, §7.6.1): кластеры флагов и разбор env -S.
+  group('кластеры флагов: границы и предел длины', () {
+    test('числовые и символьные флаги не роняют политику', () async {
+      for (final command in [
+        'kill -15 4242',
+        'zstd -19 f',
+        'xz -9e f',
+        'zip -9r a d',
+        'date -d -1day',
+        'curl -#o out x',
+        'cp -/x y',
+      ]) {
+        expect(await _find(command), isNull, reason: command);
+      }
+    });
+
+    test('цифры внутри кластера не прячут значение', () async {
+      await _expectCritical([
+        'wget -q4O~/.codelab/config.yaml https://x',
+        'curl -s1o.codelab/config.yaml https://x',
+        r'wget -q4O$CODELAB_HOME/config.yaml https://x',
+      ]);
+    });
+
+    test('слишком длинный кластер — неразбираемая команда', () async {
+      // Не `\w`-символы: регулярное выражение forkBomb на длинной цепочке
+      // `\w` квадратично само по себе (известная проблема §7.6.1,
+      // «исправляется отдельной задачей»). Предел проверяем по метке, а не
+      // по времени: перебор суффиксов не запускается вовсе.
+      final match = await _find('cp -${'.' * 32000} x');
+      expect(match?.labels, ['unparsable command']);
+      // Длинный параметр `-d{json}` у curl тоже попадает под предел.
+      final json = await _find('curl -d${'{"a":1}' * 100} https://x');
+      expect(json?.labels, ['unparsable command']);
+      // Слово у команды чтения предел не затрагивает.
+      expect(await _find('grep -${'a' * 400} x'), isNull);
+    });
+
+    test('суффиксы кластера: пути находятся, обычные слова — нет', () async {
+      await _expectCritical([
+        'curl -sSo/home/me/.codelab/config.yaml https://x',
+        'wget -q4O~/.codelab/config.yaml https://x',
+        r'wget -q4O$CODELAB_HOME/config.yaml https://x',
+        'curl -sSo.codelab/config.yaml https://x',
+      ]);
+      // Относительное имя при cwd в каталоге конфигурации.
+      final inConfig = await _find(
+        'curl -sSoconfig.yaml https://x',
+        cwd: '/home/me/.codelab',
+      );
+      expect(inConfig?.labels, contains(_label));
+      expect(await _find('curl -sSoout.json https://x'), isNull);
+    });
+  });
+
+  group('env -S: границы разбора (ревью)', () {
+    test('опции env кончаются на значении -S', () async {
+      await _expectCritical([
+        'env -S rm -rf ~/.codelab',
+        "env -S'' rm -rf ~/.codelab",
+        'env --split-string= rm -rf ~/.codelab',
+      ]);
+    });
+
+    test('значение -S может начинаться с опций и присваиваний', () async {
+      await _expectCritical([
+        "env -S '-i rm ~/.codelab/config.yaml'",
+        "env -S '-S rm ~/.codelab/config.yaml'",
+        "env -S '-u X rm ~/.codelab/config.yaml'",
+        "env -S 'A=1 rm ~/.codelab/config.yaml'",
+        "env -S '-C ~/.codelab rm config.yaml'",
+        "env -C ~/.codelab -S 'rm config.yaml'",
+      ]);
+    });
+
+    test('слова после значения передаются как есть, без склейки', () async {
+      await _expectCritical([
+        "env -S 'rm' '#' ~/.codelab/config.yaml",
+        "env -S 'rm' 'x;' ~/.codelab/config.yaml",
+        "env -S 'rm' \"it's\" ~/.codelab/config.yaml",
+      ]);
+    });
+
+    test('escape-последовательности GNU env -S', () async {
+      await _expectCritical([
+        r"env -S 'rm\_~/.codelab/config.yaml'",
+        r"env -S 'rm\t~/.codelab/config.yaml'",
+        r"env -S 'rm\n~/.codelab/config.yaml'",
+        r"env -S 'rm ~/.codelab/config.yaml\c ignored'",
+        r"env -S 'rm \$X ~/.codelab/config.yaml'",
+      ]);
+      await _expectOrdinary([r"env -S 'ls\cX'"]);
+      // Неизвестный escape — неразбираемая команда (fail closed).
+      expect(
+        (await _find(r"env -S 'rm\q x'"))?.labels,
+        contains('unparsable command'),
+      );
+      expect(
+        (await _find(r"env -S 'rm\'"))?.labels,
+        contains('unparsable command'),
+      );
+    });
+
+    test('сокращения длинных опций env', () async {
+      await _expectCritical([
+        "env --sp 'rm ~/.codelab/config.yaml'",
+        "env --split 'rm ~/.codelab/config.yaml'",
+        "env --split-s='rm ~/.codelab/config.yaml'",
+        'env --ch=~/.codelab tee config.yaml',
+        'env --chd ~/.codelab tee config.yaml',
+        'env --un X rm ~/.codelab/config.yaml',
+        'env --unset X rm ~/.codelab/config.yaml',
+      ]);
+    });
+
+    test('много -S: остаток собирается один раз, результат обычный', () async {
+      // Опции env заканчиваются на первом -S, остальные -S — слова остатка.
+      expect(await _find('env${' -S x' * 1000}'), isNull);
+    });
+
+    test('-a / --argv0 / -P берут значение', () async {
+      await _expectCritical([
+        'env -a x rm ~/.codelab/config.yaml',
+        'env --argv0 x rm ~/.codelab/config.yaml',
+        'env --argv0=x rm ~/.codelab/config.yaml',
+        'env -P /tmp rm ~/.codelab/config.yaml',
+      ]);
+      await _expectOrdinary(['env -a x ls', 'env --argv0=x ls']);
+    });
+  });
+
+  group(r"ANSI-C $'…' в путях (PERM-11, §7.6.1)", () {
+    test('раскрытый путь конфигурации критичен', () async {
+      await _expectCritical([
+        r"rm $'\x7e'/.codelab/config.yaml",
+        r"rm $'\x7e/.codelab/config.yaml'",
+        r'rm $"~/.codelab/config.yaml"',
+      ]);
+      await _expectOrdinary([r"echo $'a\tb'", r"ls $'\x7e'"]);
+    });
+
+    test(r"байты кириллицы в соседних $'…' не ускользают", () async {
+      const extra = ['/home/Сергей/.codelab/config.yaml'];
+      for (final command in [
+        r"rm $'/home/\320'$'\241ергей/.codelab/config.yaml'",
+        r"rm -rf $'/home/\320'$'\241ергей'",
+        r"env -S $'rm\x20-rf\x20/home/\320'$'\241ергей'",
+      ]) {
+        expect(await _find(command, extra: extra), isNotNull, reason: command);
+      }
+    });
+
+    test(
+      'путь с кириллицей, записанный байтами, совпадает с защищаемым',
+      () async {
+        const extra = ['/home/Сергей/.codelab/config.yaml'];
+        const name = r'\320\241\320\265\321\200\320\263\320\265\320\271';
+        const hexName = r'\xd0\xa1\xd0\xb5\xd1\x80\xd0\xb3\xd0\xb5\xd0\xb9';
+        for (final command in [
+          "rm \$'/home/$name/.codelab/config.yaml'",
+          "rm \$'/home/$hexName/.codelab/config.yaml'",
+          "rm \$'/home/$name'/.codelab/config.yaml",
+        ]) {
+          final match = await _find(command, extra: extra);
+          expect(match?.labels, contains(_label), reason: command);
+        }
+        expect(
+          await _find('rm /home/Сергей/.codelab/config.yaml', extra: extra),
+          isNotNull,
+        );
+      },
+    );
+  });
 }
