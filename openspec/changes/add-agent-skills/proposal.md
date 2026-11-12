@@ -20,7 +20,7 @@
 - **Файлы проекта** (`agent-project-context`, MODIFIED «Порт файлов проекта», «Граница чтения файлов проекта»): корни навыков, лимиты и коды диагностик.
 - **Конфигурация** (`agent-configuration`, MODIFIED «Схема и строгая проверка», «config check показывает диагностику файлов проекта»): раздел `skills` (кроме `skills.operative.*`) применяется; `config check` печатает диагностики навыков.
 - **Журнал** (`agent-sessions`, MODIFIED «Поле записи command»): источник `skill` у вызова `/skill:<name>`, реплей и заголовок по исходной команде.
-- **Профили хостов** (`agent-runtime`, MODIFIED «Профили хостов и сужение»): capability `skills` — `on` в трёх настольных профилях, `skills.enabled: false` сужает её.
+- **Профили хостов** (`agent-runtime`, MODIFIED «Профили хостов и сужение»): capability `skills` — `on` в трёх настольных профилях, сужает её только `profile.<name>.skills: off`; `skills.enabled: false` — ключ сессии, capability не сужает (Q45).
 - **Фикстуры** (`acp-golden-fixtures`, ADDED «Фикстуры навыков»): `acp/skill-command-listed` (критерий E-06), `acp/skill-invoke`, `acp/skill-tool-load`, `acp/skill-script-exec`.
 - **Документы** (итерация 0, внесено): дорожная карта §4.5, §6.1 (строка 11), §6.2, §10.1, §10.2; матрица — этап E-06 `9+` → `9`, пересчёт §7 и формулировка согласия (Q13); `09-14-stage-9-switch-default.md`; `17-0-post-mvp.md`; сверка `agent-core-architecture` §17.2, §7.6.1, §9.8 с кодом и решениями Q4–Q38 (задача 0.3).
 

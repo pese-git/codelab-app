@@ -7,7 +7,7 @@
 - отмена (`close()` сессии, `dispose()` рантайма) — сессия НЕ SHALL создаваться, результат выбрасывается;
 - таймаут или непредвиденное исключение — сессия SHALL создаваться без навыков, с инструкциями проекта и шаблонами, лог `project_files.diagnostic` с `code: timeout` или `unexpected`; поздний результат в сессию НЕ SHALL попадать.
 
-Без порта (`null`) или при выключенной capability `skills` порт НЕ SHALL вызываться, и сессия SHALL быть без навыков.
+Без порта (`null`), при выключенной capability `skills` или при `skills.enabled: false` в `CoreConfig` сессии (решения Q44, Q45) порт НЕ SHALL вызываться, и сессия SHALL быть без навыков.
 
 #### Scenario: Медленный корень не отнимает инструкции проекта
 - **WHEN** фейковый `SkillFilesSource` не отвечает дольше таймаута, а `ProjectFilesSource` отдаёт `AGENTS.md` сразу
@@ -246,7 +246,7 @@
 
 #### Scenario: Навыки выключены
 - **WHEN** конфиг задаёт `skills.enabled: false`, и приходит `/skill:release-notes`
-- **THEN** ответ — `Unknown command: /skill:release-notes. Run /help to list commands.`; команд `skill:*`, секции каталога и инструмента `skill` нет (SKL-5)
+- **THEN** ответ — `Unknown command: /skill:release-notes. Run /help to list commands.`; команд `skill:*`, секции каталога и инструмента `skill` нет (SKL-5: снимок сессии пуст)
 
 ### Requirement: Активные навыки
 Ядро SHALL иметь одну чистую функцию `activeSkills(SessionSnapshot snapshot, SkillCatalog catalog, SkillsConfig settings) → List<ActiveSkill>` — для повторной активации, приложения после сжатия и будущих закреплённых строк (K-06) (design.md change `add-agent-skills`, D15; решения Q6, Q10). Она возвращает список `ActiveSkill {name, full, content}` от новой активации к старой; `content` — SHA-256 содержимого активации: для инструмента `skill` и приложения после сжатия — обрезанного тела навыка, для команды `/skill:` — тела после подстановки её аргументов (`command.args` записи) без хвоста `ARGUMENTS:`:
@@ -321,7 +321,7 @@
 
 ### Requirement: Конфигурация навыков
 Раздел `skills` SHALL иметь ключи с потребителем (design.md change `add-agent-skills`, D11):
-- `enabled` (bool, `true`) — `false` сужает capability `skills` до `off`;
+- `enabled` (bool, `true`) — ключ сессии: `false` в `CoreConfig` сессии даёт ей пустой снимок навыков без вызова порта `skillFiles` — нет секции каталога, инструмента `skill` и команд `skill:*`; capability `skills` он не сужает, её сужает только профиль (решения Q44, Q45; agent-runtime «Профили хостов и сужение», «Конфигурация сессии вне корня запуска»);
 - `extra_roots` (список путей, `[]`) — элемент со схемой `<scheme>://` SHALL быть проблемой `value` (`URI schemes are not supported in skills.extra_roots`); элемент `~user/…` (тильда с именем пользователя) SHALL быть проблемой `value` (`~user is not supported in skills.extra_roots; use an absolute path or ~/`; решение Q41);
 - `disabled` (список имён, `[]`);
 - `max_skills` (int, `200`, 1–1000);

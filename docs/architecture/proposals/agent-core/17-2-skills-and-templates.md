@@ -663,7 +663,7 @@ reattach(lastCompaction, catalog, perSkill = skills.reattach.per_skill_tokens,
 
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
-| `enabled` | bool | `true` | `false` — capability `skills` выключена (сужение, §10.2) |
+| `enabled` | bool | `true` | ключ сессии: `false` — у сессий этой папки (корня запуска или другой) пустой снимок навыков, порт не вызывается; capability `skills` не сужает — её сужает только `profile.<name>.skills: off` (§10.2; change `add-agent-skills`, Q44, Q45) |
 | `extra_roots` | path[] | `[]` | каталоги skills конкретных агентов (`.claude/skills` …); согласие пользователя; схема `<scheme>://` — проблема конфига (зарезервировано для E-18); `~` и `~/…` — от домашнего каталога процесса, `~user/…` — проблема конфига (Q41) |
 | `disabled` | string[] | `[]` | имена skills, которые не загружаются |
 | `max_skills` | int | `200` | 1–1000 |
@@ -697,7 +697,7 @@ reattach(lastCompaction, catalog, perSkill = skills.reattach.per_skill_tokens,
 | `skills.operative.lines`, `skills.operative.max_tokens` | нет | да | проект в `trusted_projects` |
 | корни `.codelab/skills`, `.agents/skills`, каталог `.codelab/prompts` | нет | — | проект в `trusted_projects` |
 
-В реестре настроек (§17.5.8) ключи `skills.*` — `fileOnly`.
+В реестре настроек (§17.5.8) ключи `skills.*` — `fileOnly`. Ключи `skills.*` — ключи сессии (§10.2, «Снимок на корень запуска и конфигурация сессии другой папки»): сессия другой папки берёт их из своего `CoreConfig`, корни навыков проекта и доверие — по своему `cwd`, правила доверия таблицы выше — к слоям своей папки; в `config.session.process_keys_ignored` они не попадают (change `add-agent-skills`, Q44).
 
 
 ## 17.2.9. Примеры

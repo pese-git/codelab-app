@@ -24,8 +24,9 @@ enum HostCapability {
 
   /// Навыки агента: `SKILL.md` из корней проекта и пользователя, секция
   /// каталога, инструмент `skill` и команды `skill:*` (design.md change
-  /// `add-agent-skills`, D11). Во всех профилях `on`; `skills.enabled: false`
-  /// конфигурации сужает её до `off` (HOST-4).
+  /// `add-agent-skills`, D11). Во всех профилях `on`; сужает её только профиль
+  /// (`profile.<name>.skills: off`, HOST-4). `skills.enabled: false` capability
+  /// не трогает: настройка действует на сессии своей папки (Q45).
   skills,
 }
 

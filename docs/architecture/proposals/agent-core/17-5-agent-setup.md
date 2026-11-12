@@ -1288,7 +1288,7 @@ ACP-8. Расхождение списка моделей в этом окне �
 | `loop.*` (после MVP — включая `loop.final_response.*`, §17.12.4) | следующий ход |
 | `redact.*` (после MVP — включая `redact.block` и `redact.command_rewrite`, §17.12.6–§17.12.7) | следующий вызов `redact` (выражения компилируются при применении снимка); `redact.block`, `redact.command_rewrite` — следующий вызов инструмента |
 | `model_catalog.*`, `providers.*.list_models*` | при применении — `ModelCatalog.refresh(force: true)` в фоне; изменение списка → `config_option_update` (§2.12.2) |
-| `budget.*`, `compaction.*` (кроме `engine`), `skills.*` (кроме `enabled`) | следующий ход (системный промпт не меняется посреди хода, PR-3) |
+| `budget.*`, `compaction.*` (кроме `engine`) | следующий ход (системный промпт не меняется посреди хода, PR-3) |
 | `prompts.*`, `tools.project_context.*` | новые сессии: файлы проекта и шаблоны живой сессией не перечитываются (D9) |
 | `tools.output.*`, `tools.untrusted_paths`, `tools.web.*` (кроме `enabled`), `exec.*` (кроме `shell`), `tools.spill.*` (кроме `enabled`), `subagents.*` (лимиты), `jobs.*` (кроме `enabled`; идущие задачи сохраняют свой срок) | следующий вызов инструмента |
 | `mcp.servers` | после текущего хода, без хода — сразу (D10); новые и изменённые stdio-серверы и HTTP-серверы с подстановками `${…}` — после перезапуска (R0-1, R0-4); набор инструментов — на границе шага (§17.5.7) |
@@ -1297,8 +1297,9 @@ ACP-8. Расхождение списка моделей в этом окне �
 | `lsp.idle_timeout`, `lsp.*_timeout`, `lsp.max_*`, `lsp.rename_max_files`, `lsp.diagnostics_after_edit` (после MVP) | следующий вызов `lsp` или инструмента; `max_servers` меньше числа живых — лишние простаивающие останавливаются по старшинству `lastUsed` |
 | `a2a.agents.*`, `a2a.client.*` (после MVP, §17.15.5) | следующий прогон удалённого типа; набор типов в `enum` `agent` — в новых сессиях (схемы стабильны, §17.3.2) |
 | `a2a.server.tokens` (после MVP, §17.15.4) | сразу: новые запросы проверяются по новому списку, потоки отозванных токенов закрываются |
+| `skills.*` (change `add-agent-skills`, решения Q44, Q45) | в сессиях, открытых после перезагрузки: снимок навыков живой сессии не меняется; `skills.enabled` — ключ сессии, capability не сужает, поэтому перезапуск не нужен |
 | `trusted_projects` | только после перезапуска (R0-1) |
-| `logging.level` (OQ5: уровень логгера принадлежит хосту, канала «хост, примени новые настройки хоста» в ядре нет; D14), `logging.file`, `logging.trace`, `logging.trace_payload`, `sessions.*` (кроме `sessions.search.*`), `profile.*`, `secrets.backend`, `config.*`, `exec.shell`, `tools.web.enabled`, `skills.enabled`, `tools.spill.enabled`, `subagents.enabled`, `subagents.background`, `subagents.follow_ups` (§17.3.8.1), `lsp.enabled`, `jobs.enabled`; после MVP — `sessions.window.*`, `sessions.segments.*` (§17.13.2, как `sessions`), `tools.ask.enabled`, `memory.enabled` (capability на соединение, §17.11), `plugins.enabled` (§17.14.3.4), `a2a.server.*` кроме `tokens` (§17.15.4) | только после перезапуска (`restartRequired`): sink, транспорт и набор capability собираются один раз (§10.7) |
+| `logging.level` (OQ5: уровень логгера принадлежит хосту, канала «хост, примени новые настройки хоста» в ядре нет; D14), `logging.file`, `logging.trace`, `logging.trace_payload`, `sessions.*` (кроме `sessions.search.*`), `profile.*`, `secrets.backend`, `config.*`, `exec.shell`, `tools.web.enabled`, `tools.spill.enabled`, `subagents.enabled`, `subagents.background`, `subagents.follow_ups` (§17.3.8.1), `lsp.enabled`, `jobs.enabled`; после MVP — `sessions.window.*`, `sessions.segments.*` (§17.13.2, как `sessions`), `tools.ask.enabled`, `memory.enabled` (capability на соединение, §17.11), `plugins.enabled` (§17.14.3.4), `a2a.server.*` кроме `tokens` (§17.15.4) | только после перезапуска (`restartRequired`): sink, транспорт и набор capability собираются один раз (§10.7) |
 
 «Следующий шаг» означает: шаг читает снимок конфига в начале и пользуется им до конца, идущий
 вызов инструмента доигрывает со старыми значениями. Транспорт ACP (`--stdio`, `--ws`, порт) —
@@ -1640,9 +1641,7 @@ ACP; расширение `_meta.codelab`/`_codelab/*` для агента вн�
 | `lsp` (прочие) | map | fileOnly | нет | лимиты пула и таймауты серверов |
 | `prompts.templates` | bool | shared | нет | — |
 | `prompts` (прочие) | map | fileOnly | нет | длинные тексты и пути промптов, в том числе `append_system`, `append_system_text` (§11.6.1) |
-| `skills.enabled` | bool | shared | да | — |
-| `skills.operative.lines` | stringList | shared | нет | — |
-| `skills` (прочие) | map | fileOnly | нет | согласие на чужие каталоги (`extra_roots`) даётся правкой файла; лимиты каталога |
+| `skills.*` | — | fileOnly | нет | все листья `skills.*` — `fileOnly` (change `add-agent-skills`, D11): согласие на чужие каталоги (`extra_roots`) даётся правкой файла; `skills.operative` — непрозрачный узел после MVP |
 | `subagents.enabled`, `subagents.background`, `subagents.follow_ups` | bool | shared | да | `follow_ups` — после MVP (§17.3.8.1) |
 | `subagents` (прочие) | map | fileOnly | нет | лимиты параллелизма и бюджеты детей |
 | `jobs.enabled` | bool | shared | да | после MVP (§17.9.12) |
@@ -1674,9 +1673,9 @@ ACP; расширение `_meta.codelab`/`_codelab/*` для агента вн�
 - **Типы — как у узлов схемы**: `tools.untrusted_paths` — `stringList` (`ListNode(string)`);
   `tools.project_context.max_bytes` и `loop.empty_response_retries` — листья `int`; `agents` —
   `map`/`fileOnly`.
-- **Разделы после MVP** (`afterMvpSections`: `llm`, `images`, `skills`, `subagents`, `jobs`,
+- **Разделы после MVP** (`afterMvpSections`: `llm`, `images`, `subagents`, `jobs`,
   `hooks`, `plugins`, `a2a`, `memory`, `steering`, `lsp`, а также непрозрачные узлы `tools.web`,
-  `tools.spill` и подобные внутри разделов ядра) — непрозрачные узлы схемы. Каждый получает один
+  `tools.spill`, `skills.operative` и подобные внутри разделов ядра; раздел `skills` применяется — change `add-agent-skills`) — непрозрачные узлы схемы. Каждый получает один
   дескриптор `map`/`fileOnly` с причиной `not supported in this version; edit the file manually`,
   `restartRequired: false`. Их строки таблицы вводят change этих разделов вместе со схемой.
 - **Непрозрачные узлы внутри разделов хоста** наследуют правило D8 своего раздела:

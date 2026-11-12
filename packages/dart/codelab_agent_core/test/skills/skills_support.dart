@@ -71,3 +71,20 @@ List<ExtensionDiagnostic> withCode(SkillCatalog catalog, String code) => [
   for (final d in catalog.diagnostics)
     if (d.code == code) d,
 ];
+
+/// Порт навыков: записывает запросы, отдаёт [files], умеет падать и ждать.
+final class FakeSkillPort implements SkillFilesSource {
+  final queries = <SkillFilesQuery>[];
+  SkillFiles files = const SkillFiles(skills: []);
+  Object? failWith;
+  Future<SkillFiles>? gate;
+
+  @override
+  Future<SkillFiles> loadSkills(SkillFilesQuery query) async {
+    queries.add(query);
+    if (failWith case final error?) {
+      throw error;
+    }
+    return gate ?? files;
+  }
+}
