@@ -41,7 +41,6 @@ void main() {
         log.add(_label(n.update));
       },
       link: channel.link,
-      catalog: () => FixedModelCatalog([scriptedModel]),
       clock: channel.clock,
       logger: channel.logger,
     )..attach(session);
@@ -169,6 +168,11 @@ final class _FakeSession implements AgentSession {
 
   @override
   ModelRef get model => scriptedModel;
+
+  /// Каталог сессии (design.md change `require-project-folder`, D21): мост
+  /// берёт варианты опции `model` из него, а не из каталога рантайма.
+  @override
+  ModelCatalog get models => FixedModelCatalog([scriptedModel]);
 
   @override
   ModeId get mode => ModeId.standard;

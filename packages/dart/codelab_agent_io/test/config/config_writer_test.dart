@@ -1551,27 +1551,40 @@ ${baseConfig}mcp:
       expect(h.read(h.userPath), before);
     });
 
-    test('без pending правка одного слоя даёт конфликт источников ключа; с '
+    // D25 (change `require-project-folder`): пара «литерал в user + ссылка в
+    // project» двух источников больше не даёт (правило группы D23), поэтому
+    // смысл `pending` проверяется на другой межслойной зависимости: правка
+    // `user` удаляет провайдера `p`, а модель по умолчанию `p/m` задаёт
+    // `project`.
+    test('без pending правка одного слоя даёт проблему каталога моделей; с '
         'итогом соседнего слоя — чисто', () async {
-      twoLayers();
+      h.write(
+        h.userPath,
+        trusted.replaceFirst('PROJECT', h.cwd) +
+            baseConfig
+                .replaceFirst('agent:\n  default_model: p/m\n', '')
+                .replaceFirst(
+                  'providers:\n',
+                  'providers:\n  q:\n    kind: openai-compatible\n'
+                      '    base_url: https://q.test/v1\n    models:\n'
+                      '      m: {}\n',
+                ),
+      );
+      h.write(h.projectPath, 'agent:\n  default_model: p/m\n');
       final snapshot = await h.writer.read(user);
-      final edits = [
-        const SetValue('providers.p.api_key_secret', 'codelab/p'),
-        const UnsetValue('providers.p.api_key'),
-      ];
-      final neighbour = await h.writer
-          .preview(await h.writer.read(project(h.cwd)), [
-            const SetValue('providers.p.api_key_secret', 'codelab/p-2'),
-            const UnsetValue('providers.p.api_key'),
-          ]);
+      final edits = [const UnsetValue('providers.p')];
+      final neighbour = await h.writer.preview(
+        await h.writer.read(project(h.cwd)),
+        [const SetValue('agent.default_model', 'q/m')],
+      );
 
       await expectLater(
         h.writer.validate(snapshot, edits),
         throwsA(
           isA<ConfigException>().having(
-            (e) => e.issues.map((i) => i.message),
+            (e) => e.issues.map((i) => i.message).join('\n'),
             'messages',
-            contains(providerKeySourcesConflictMessage),
+            contains('is not in the model catalog'),
           ),
         ),
       );

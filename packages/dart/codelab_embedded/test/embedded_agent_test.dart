@@ -72,6 +72,25 @@ void main() {
     return client!.newSession(project.path);
   }
 
+  // embedded-agent «Проектный конфиг сессий встроенного агента»: сценарный
+  // открыватель порт `ProjectConfigLoader` не передаёт (design.md change
+  // `require-project-folder`, D21, Q18), поэтому конфиг чужой папки не
+  // читается: даже битый `.codelab/config.yaml` сессию не отклоняет.
+  test('the scripted opener passes no ProjectConfigLoader: a broken project '
+      'config of another folder does not refuse the session', () async {
+    final other = Directory('${temp.path}/other')..createSync();
+    File('${other.path}/.codelab/config.yaml')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('budget:\n  max_steps: 0\n');
+    await open([text('ok')]);
+
+    final session = await client!.newSession(other.path);
+
+    expect(session, isNotEmpty);
+    expect(logger.eventsOf('config.session.project_invalid'), isEmpty);
+    expect(logger.eventsOf('config.session.project'), isEmpty);
+  });
+
   // Паритет `initialize` с бинарём: корпус `acp/initialize-capabilities`
   // ждёт `mcpCapabilities.http: true`, потому что хост бинаря всегда передаёт
   // MCP-коннектор (D1: проводка MCP — осознанный дубль). Расхождение нашёл

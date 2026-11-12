@@ -96,6 +96,12 @@ final class ServerHarness {
   /// модели по умолчанию (design.md change `optional-default-model`, D5, D6,
   /// D11): без конфига-источника `CoreConfig` собирается из них.
   ///
+  /// [projectConfig] и [rootConfig] — порт конфигурации папки сессии и
+  /// снимок корня запуска (design.md change `require-project-folder`, D21):
+  /// сессия папки, отличной от `rootConfig.projectRoot`, получает свой
+  /// каталог моделей от порта. Без [configSource] корень берётся из
+  /// [rootConfig].
+  ///
   /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
   /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
   static Future<ServerHarness> start({
@@ -112,6 +118,8 @@ final class ServerHarness {
     McpConnector Function(Clock clock)? mcp,
     ProjectFilesSource? projectFiles,
     ConfigSource? configSource,
+    ProjectConfigLoader? projectConfig,
+    CoreConfig? rootConfig,
     LastModelStore? lastModel,
     DefaultModelSource defaultModelSource = DefaultModelSource.config,
   }) async {
@@ -124,7 +132,7 @@ final class ServerHarness {
     // Имена инструментов каждого запроса к модели: так тесты MCP видят,
     // что получила модель, не зная точного состава встроенных инструментов.
     final toolsSeen = <List<String>>[];
-    final initial = configSource?.initial.config;
+    final initial = configSource?.initial.config ?? rootConfig;
     ModelCatalog catalogOf(CoreConfig config) =>
         StaticModelCatalog(config.providers, logger: logger);
     final core = buildAgentCore(
@@ -144,6 +152,7 @@ final class ServerHarness {
         sessions: store,
         models: initial == null ? models : catalogOf(initial),
         config: configSource,
+        projectConfig: projectConfig,
         mcp: mcp?.call(clock),
         projectFiles: projectFiles,
         lastModel: lastModel,
@@ -155,7 +164,7 @@ final class ServerHarness {
             defaultModelSource: defaultModelSource,
             budget: budget,
           ),
-      modelsFor: configSource == null
+      modelsFor: configSource == null && projectConfig == null
           ? null
           : (config) => (
               stream: (model_, context, {cancel}) =>

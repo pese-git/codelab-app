@@ -77,6 +77,9 @@ void main() {
       // Живая перезагрузка: порт источника и типы отчёта (change
       // `add-config-writer-and-reload`, D7, D8).
       'src/config/config_source.dart',
+      // Порт конфигурации папки сессии и его ошибка (change
+      // `require-project-folder`, D21).
+      'src/config/project_config.dart',
       'src/runtime/config_reload.dart',
       // План перезагрузки: мост настроек определяет по нему, какой сервер MCP
       // ждёт перезапуска (change `add-provider-setup-ui`, D11, Q31).
@@ -94,6 +97,18 @@ void main() {
     ]) {
       expect(barrel, isNot(contains("export '$internal")), reason: internal);
     }
+  });
+
+  // Привязка ссылок к адресу (D23) открыта хосту узко: мигратор (D26, C5.6)
+  // решает по ней, можно ли переносить ссылку; правило группы и разбор слоёв
+  // остаются внутри.
+  test('the barrel exposes only the reference binding of provider_binding', () {
+    expect(
+      barrel,
+      contains("export 'src/config/provider_binding.dart'\n    show"),
+    );
+    expect(barrel, isNot(contains('applyProviderGroupRule')));
+    expect(barrel, isNot(contains('providerEntry')));
   });
 
   test('the barrel exports the runtime and the assembly', () {
