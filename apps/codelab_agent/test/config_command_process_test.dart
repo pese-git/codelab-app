@@ -321,4 +321,51 @@ agent:
     expect(code, 64);
     expect(agent.stderrText, contains('codelab-agent config check'));
   }, timeout: const Timeout(Duration(seconds: 90)));
+
+  // Задача 1.11 change `add-agent-skills` (agent-configuration «Битый навык»):
+  // кода приложения не требует, `ConfigCommands` общий; красный до 1.10.
+  test('config check: a broken skill in CODELAB_HOME/skills is a warning '
+      'line with the path of SKILL.md, Config: valid, code 0', () async {
+    final home = '${temp.path}/home';
+    Directory(home).createSync();
+    File('$home/config.yaml').writeAsStringSync('''
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    models:
+      m: {}
+agent:
+  default_model: p/m
+''');
+    File('$home/skills/notes/SKILL.md')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        '---\nname: Notes\ndescription: D\n---\nbody sk-test-secret\n',
+      );
+    final agent = await AgentProcess.start(
+      ['config', 'check'],
+      environment: {'CODELAB_HOME': home, 'HOME': '${temp.path}/no-home'},
+      workingDirectory: project,
+    );
+    addTearDown(() async {
+      agent.kill(ProcessSignal.sigkill);
+      await agent.exitCode;
+    });
+
+    final code = await agent.exitCode.timeout(const Duration(seconds: 30));
+
+    expect(code, 0, reason: agent.stderrText);
+    final lines = <String>[];
+    String? line;
+    while ((line = await agent.nextStdoutLine()) != null) {
+      lines.add(line!);
+    }
+    expect(
+      lines,
+      contains(startsWith('warning: $home/skills/notes/SKILL.md:2:')),
+    );
+    expect(lines.join('\n'), isNot(contains('sk-test-secret')));
+    expect(lines.last, 'Config: valid');
+  }, timeout: const Timeout(Duration(seconds: 90)));
 }
