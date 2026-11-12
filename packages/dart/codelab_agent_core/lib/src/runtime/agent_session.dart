@@ -1,4 +1,5 @@
 import '../agents/agent_definition.dart';
+import '../skills/skill_catalog.dart';
 import '../cancel/cancel_token.dart';
 import '../commands/slash_command.dart';
 import '../env/execution_env.dart';
@@ -86,6 +87,13 @@ abstract interface class AgentSession {
   /// адаптер строит из него опцию `agent` (D12); пуст — опции нет. Без порта
   /// файлов проекта список пуст.
   List<AgentDefinition> get agents;
+
+  /// Снимок навыков сессии (design.md change `add-agent-skills`, D10, D16):
+  /// строится при открытии и загрузке сессии и не меняется до её закрытия, в
+  /// том числе при перезагрузке конфигурации (SKL-4). Секция промпта,
+  /// инструмент `skill`, команды `skill:*` и приложение после сжатия читают
+  /// только его. [SkillCatalog.empty] — навыков нет.
+  SkillCatalog get skills;
 
   /// Имя текущего агента; [defaultAgentName] (`default`) — профиль не выбран.
   String get agent;

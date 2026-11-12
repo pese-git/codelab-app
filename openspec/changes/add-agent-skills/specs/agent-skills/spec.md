@@ -29,7 +29,7 @@
 
 Порядок приоритета — порядок корней выше; загрузчик SHALL отдавать все найденные навыки в этом порядке и НЕ SHALL сам решать коллизии имён. Коллизию SHALL решать ядро при построении каталога (требование «Каталог навыков сессии»; решение Q39): имя навыка — значение `name`, без него — имя каталога; навык, пропущенный с `error`, ничего не перекрывает; навык с именем, уже принятым из корня выше, SHALL пропускаться с диагностикой `warning` `shadowed`, называющей оба пути, — и между уровнями, и внутри уровня; внутри одного корня побеждает первый каталог в байтовом порядке имён.
 
-Граница чтения SHALL быть двухступенчатой (design.md change `add-agent-project-files`, D2): каталог корня раскрывается `realpath`; каталог навыка, чей `realpath` вне корня, пропускается с `outside_root`; `SKILL.md` и перечисление файлов идут через `BoundedEnv` с корнем в реальном пути каталога навыка. Чтение SHALL идти с файловой системы процесса агента, а не через env сессии ACP.
+Граница чтения SHALL быть двухступенчатой (design.md change `add-agent-project-files`, D2): каталог корня раскрывается `realpath`; корень проекта SHALL оставаться внутри своего уровня проекта, `$CODELAB_HOME/skills` — внутри `$CODELAB_HOME`, иначе корень пропускается целиком с `warning` `outside_root` и навыки из него НЕ SHALL загружаться (решение Q42; общие навыки из другой папки подключаются только элементом `skills.extra_roots`); каталог навыка, чей `realpath` уже найден через другой корень или запись, SHALL пропускаться без диагностики; каталог навыка, чей `realpath` вне корня, пропускается с `outside_root`; `SKILL.md` и перечисление файлов идут через `BoundedEnv` с корнем в реальном пути каталога навыка. Чтение SHALL идти с файловой системы процесса агента, а не через env сессии ACP.
 
 #### Scenario: Недоверенный проект
 - **WHEN** проект не в `trusted_projects`, а `<cwd>/.codelab/skills/review/SKILL.md` и `<cwd>/.agents/skills/pdf/SKILL.md` существуют
@@ -62,6 +62,10 @@
 #### Scenario: Тильда в extra_roots
 - **WHEN** глобальный конфиг задаёт `skills.extra_roots: ["~/.claude/skills"]`, проект недоверенный, а в `~/.claude/skills/lint/SKILL.md` есть навык; во втором варианте агент запущен с `--llm-script`
 - **THEN** в первом варианте `lint` загружен с областью `extra`; во втором навыка нет, есть `warning` `unresolved_root`
+
+#### Scenario: Symlink корня навыков проекта наружу
+- **WHEN** проект доверенный, а `<cwd>/.codelab/skills` — symlink на `/shared/skills` с валидным `release/SKILL.md`
+- **THEN** навыка `release` нет, диагностика `warning` `outside_root` с путём `<cwd>/.codelab/skills`; с `skills.extra_roots: ["/shared/skills"]` в глобальном конфиге `release` загружен с областью `extra`
 
 #### Scenario: Symlink каталога навыка наружу
 - **WHEN** `$CODELAB_HOME/skills/evil` — symlink на `/etc`
@@ -326,7 +330,7 @@
 
 Подраздел `skills.operative` SHALL оставаться без потребителя: каждый явно заданный лист — `config.key.not_applied`.
 
-Доверие проектным слоям: `skills.enabled: false`, `skills.disabled`, уменьшение числовых ключей SHALL применяться из любого слоя; увеличение из проектного слоя недоверенного проекта SHALL отбрасываться с `config.project.untrusted_key` по ключу (сравнение — с итогом нижних слоёв), а у доверенного проекта — применяться (решение Q40; как `budget.*` и `tools.project_context.max_bytes`); `skills.extra_roots` из `<cwd>/.codelab/config.yaml` SHALL отбрасываться всегда, из `<cwd>/.codelab/config.local.yaml` — если проект не доверенный; оба — с `config.project.untrusted_key`. В реестре настроек ключи `skills.*` SHALL быть `fileOnly`. Новые значения после перезагрузки конфигурации SHALL действовать на сессии, открытые после неё.
+Доверие проектным слоям: `skills.enabled: false`, `skills.disabled`, уменьшение числовых ключей SHALL применяться из любого слоя; недоверенный проект НЕ SHALL снимать запреты пользователя (решение Q43, CFG-3): `skills.enabled: true` из его слоя поверх `false` нижних слоёв SHALL отбрасываться с `config.project.untrusted_key`, а его `skills.disabled` SHALL объединяться со списком нижних слоёв; доверенный проект задаёт оба ключа без ограничений; увеличение из проектного слоя недоверенного проекта SHALL отбрасываться с `config.project.untrusted_key` по ключу (сравнение — с итогом нижних слоёв), а у доверенного проекта — применяться (решение Q40; как `budget.*` и `tools.project_context.max_bytes`); `skills.extra_roots` из `<cwd>/.codelab/config.yaml` SHALL отбрасываться всегда, из `<cwd>/.codelab/config.local.yaml` — если проект не доверенный; оба — с `config.project.untrusted_key`. В реестре настроек ключи `skills.*` SHALL быть `fileOnly`. Новые значения после перезагрузки конфигурации SHALL действовать на сессии, открытые после неё.
 
 #### Scenario: Проект не даёт согласия
 - **WHEN** доверенный проект задаёт `skills.extra_roots: ["~/.claude/skills"]` в `.codelab/config.yaml`
@@ -339,6 +343,10 @@
 #### Scenario: Пределы недоверенного и доверенного проекта
 - **WHEN** `.codelab/config.yaml` задаёт `skills.max_skills: 500`; в первом варианте проекта нет в `trusted_projects`, во втором — есть
 - **THEN** в первом варианте `max_skills` равен значению нижних слоёв и есть `config.project.untrusted_key` с ключом `skills.max_skills`; во втором — `500` без предупреждения
+
+#### Scenario: Недоверенный проект не снимает запреты
+- **WHEN** глобальный конфиг задаёт `skills.enabled: false` и `skills.disabled: [pdf]`, а `.codelab/config.yaml` недоверенного проекта — `skills.enabled: true` и `skills.disabled: [notes]`
+- **THEN** `skills.enabled` — `false`, есть `config.project.untrusted_key` с ключом `skills.enabled`; `skills.disabled` — `[pdf, notes]`; для доверенного проекта — `enabled: true`, `disabled: [notes]` без предупреждений
 
 #### Scenario: Тильда с именем пользователя
 - **WHEN** глобальный конфиг задаёт `skills.extra_roots: ["~bob/skills"]`

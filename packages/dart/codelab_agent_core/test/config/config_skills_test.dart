@@ -313,6 +313,114 @@ void main() {
       expect(warningsOf(r, 'config.project.untrusted_key'), isEmpty);
     });
 
+    test('Q43: skills.enabled: true of an untrusted project does not undo '
+        'the user\'s false', () {
+      final r = load([
+        user(skills({'enabled': false})),
+        project(skills({'enabled': true})),
+      ], projectRoot: '/proj');
+
+      expect(r.config!.skills.enabled, isFalse);
+      final w = warningsOf(r, 'config.project.untrusted_key').single;
+      expect(w.key, 'skills.enabled');
+    });
+
+    test(
+      'Q43: the same rules for config.local.yaml of an untrusted project',
+      () {
+        final r = load([
+          user(
+            skills({
+              'enabled': false,
+              'disabled': ['pdf'],
+            }),
+          ),
+          project(
+            skills({
+              'enabled': true,
+              'disabled': ['pdf', 'notes'],
+            }),
+            kind: ConfigLayerKind.projectLocal,
+          ),
+        ], projectRoot: '/proj');
+
+        expect(r.config!.skills.enabled, isFalse);
+        // Нижние слои, затем проектные, без дублей.
+        expect(r.config!.skills.disabled, ['pdf', 'notes']);
+        expect(r.config!.withoutProject!.skills.disabled, ['pdf']);
+      },
+    );
+
+    test('Q43: a trusted project may switch skills back on', () {
+      final r = load([
+        user(skills({'enabled': false}), trusted: ['/proj']),
+        project(skills({'enabled': true})),
+      ], projectRoot: '/proj');
+
+      expect(r.config!.skills.enabled, isTrue);
+      expect(warningsOf(r, 'config.project.untrusted_key'), isEmpty);
+    });
+
+    test('Q43: skills.enabled: true over the default is not a warning', () {
+      final r = load([
+        layer(baseValues()),
+        project(skills({'enabled': true})),
+      ], projectRoot: '/proj');
+
+      expect(r.config!.skills.enabled, isTrue);
+      expect(warningsOf(r, 'config.project.untrusted_key'), isEmpty);
+    });
+
+    test('Q43: skills.disabled of an untrusted project is merged with the '
+        'lower layers, not replacing them', () {
+      final r = load([
+        user(
+          skills({
+            'disabled': ['pdf'],
+          }),
+        ),
+        project(
+          skills({
+            'disabled': ['notes'],
+          }),
+        ),
+      ], projectRoot: '/proj');
+
+      expect(r.config!.skills.disabled, unorderedEquals(['pdf', 'notes']));
+    });
+
+    test('Q43: an empty skills.disabled of an untrusted project does not '
+        'clear the user list', () {
+      final r = load([
+        user(
+          skills({
+            'disabled': ['pdf'],
+          }),
+        ),
+        project(skills({'disabled': <String>[]})),
+      ], projectRoot: '/proj');
+
+      expect(r.config!.skills.disabled, ['pdf']);
+    });
+
+    test('Q43: a trusted project replaces skills.disabled', () {
+      final r = load([
+        user(
+          skills({
+            'disabled': ['pdf'],
+          }),
+          trusted: ['/proj'],
+        ),
+        project(
+          skills({
+            'disabled': ['notes'],
+          }),
+        ),
+      ], projectRoot: '/proj');
+
+      expect(r.config!.skills.disabled, ['notes']);
+    });
+
     test('a decrease of numeric keys applies from the project layer', () {
       final r = load([
         layer(baseValues()),

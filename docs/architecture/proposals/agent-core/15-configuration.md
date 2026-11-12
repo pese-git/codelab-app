@@ -121,6 +121,7 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | `permissions.tools.web_fetch = "allow"` (после MVP) | нет — как любое `allow` | да | проект в `trusted_projects` |
 | `skills.enabled = false`, `skills.disabled`, уменьшение `skills.max_skills`, `skills.catalog_max_chars` и `skills.reattach.*` (change `add-agent-skills`, §17.2.8); `skills.operative.enabled = false` (после 1.0, K-06) | да | да | — |
 | увеличение `skills.max_skills`, `skills.catalog_max_chars`, `skills.reattach.*` (change `add-agent-skills`, Q40) | да — только уменьшение (как `budget.*`) | да | увеличение — проект в `trusted_projects` |
+| `skills.enabled = true` поверх `false` нижних слоёв; `skills.disabled` (change `add-agent-skills`, Q43) | `enabled = true` отбрасывается, `disabled` объединяется с нижними слоями (как `permissions.deny`) | так же | проект в `trusted_projects` |
 | `skills.extra_roots` (change `add-agent-skills`), `prompts.templates_dirs` (после MVP) | нет | да, только для доверенного проекта | — (согласие даёт только пользователь) |
 | `skills.operative.lines`, `skills.operative.max_tokens` (после MVP) | нет | да | проект в `trusted_projects` |
 | корни навыков `.codelab/skills`, `.agents/skills` от `cwd` до корня git (change `add-agent-skills`), каталог `.codelab/prompts` | нет | — | проект в `trusted_projects` |

@@ -231,6 +231,8 @@ final class ConfigCommands {
   ConfigCommands({
     @visibleForTesting ProjectFilesSource? projectFiles,
     @visibleForTesting Duration projectFilesTimeout = _defaultTimeout,
+    @visibleForTesting SkillFilesSource? skillFiles,
+    @visibleForTesting Duration skillFilesTimeout = _defaultTimeout,
     @visibleForTesting String? platform,
     @visibleForTesting SecretStoreOpener? openStore,
     @visibleForTesting SecretProcessRunner? processRunner,
@@ -239,6 +241,8 @@ final class ConfigCommands {
     @visibleForTesting Future<void> Function(ConfigWriteSeam point)? writeSeam,
   }) : _projectFiles = projectFiles,
        _projectFilesTimeout = projectFilesTimeout,
+       _skillFiles = skillFiles,
+       _skillFilesTimeout = skillFilesTimeout,
        _platform = platform ?? Platform.operatingSystem,
        _openStore =
            openStore ??
@@ -264,6 +268,8 @@ final class ConfigCommands {
 
   final ProjectFilesSource? _projectFiles;
   final Duration _projectFilesTimeout;
+  final SkillFilesSource? _skillFiles;
+  final Duration _skillFilesTimeout;
   final String _platform;
   final SecretStoreOpener _openStore;
   final ConfigEditRunner _runner;
@@ -555,7 +561,7 @@ final class ConfigCommands {
     // Невалидный конфиг: каталога моделей и доверия нет, файлы проекта не
     // проверяются (D13).
     final fileLines = issues.isEmpty && config != null
-        ? await _projectFileLines(options, config)
+        ? await _fileLines(options, config)
         : const <String>[];
     // Состояние секретов — только у валидного конфига (D9): у невалидного
     // ссылки не проверены, и хранилище не нужно.
@@ -619,26 +625,25 @@ final class ConfigCommands {
     ];
   }
 
-  /// Строки диагностики файлов проекта (D13): `warning:` для уровней `error`
-  /// и `warning`, `note:` для `untrusted_project`; прочие `info` (`shadowed`)
-  /// не печатаются.
+  /// Строки файлов проекта и навыков: две независимые фазы идут параллельно,
+  /// у каждой свой таймаут (design.md change `add-agent-skills`, D1, D16).
+  /// Сначала строки файлов проекта, затем навыков. Навыки читаются только при
+  /// включённой `skills.enabled` (профили хостов `check` не знает).
   ///
-  /// Доверие считается как в `serve` (D4): канонический `cwd` (форма ядра,
-  /// `LocalExecutionEnv.realpath`, как `AgentRuntime._canonicalCwd`)
-  /// сравнивается с `trusted_projects` конфига; без раскрытого `realpath`
-  /// проект недоверенный (fail-closed). Каталог моделей собирается из
-  /// провайдеров загруженного конфига, как у хоста (`StaticModelCatalog`).
-  ///
-  /// Фаза не должна ронять `check` и держать его вечно (как фаза рантайма,
-  /// D14 change `add-agent-project-files`): исключение даёт одну строку
-  /// `warning:` с типом исключения, отсутствие ответа за [_projectFilesTimeout]
-  /// — строку о таймауте; код выхода от файлов проекта не зависит.
-  Future<List<String>> _projectFileLines(
+  /// Канонический `cwd`, доверие и загрузчик считаются один раз для обеих
+  /// фаз: строки проекта и навыков не могут разойтись. Доверие считается как в
+  /// `serve` (D4): канонический `cwd` (форма ядра, `LocalExecutionEnv.realpath`,
+  /// как `AgentRuntime._canonicalCwd`) сравнивается с `trusted_projects`
+  /// конфига; `trustedProjects` уже канонические (`ConfigLoader`, хостовая
+  /// форма), а `samePath` ядра не экспортируется, поэтому строки сравниваются
+  /// после приведения `\\` к `/` (форма ядра на Windows). Без раскрытого
+  /// `realpath` проект недоверенный (fail-closed). Непредвиденное исключение
+  /// самой подготовки даёт одну строку `warning:` с типом, как сбой фазы.
+  Future<List<String>> _fileLines(
     CheckOptions options,
     CoreConfig config,
   ) async {
-    var shown = Directory(options.cwd).absolute.path;
-    final cancel = CancelTokenSource();
+    final shown = Directory(options.cwd).absolute.path;
     try {
       final local = LocalExecutionEnv(
         cwd: shown,
@@ -649,9 +654,6 @@ final class ConfigCommands {
       switch (await local.realpath(shown)) {
         case Ok(:final value):
           cwd = value;
-          // `trustedProjects` уже канонические (`ConfigLoader`, хостовая
-          // форма); `samePath` ядра не экспортируется, поэтому сравнение
-          // строк после приведения `\\` к `/` (форма ядра на Windows).
           trusted = config.trustedProjects.any(
             (r) => r.replaceAll('\\', '/') == value,
           );
@@ -659,13 +661,101 @@ final class ConfigCommands {
           cwd = local.cwd;
           trusted = false;
       }
-      shown = cwd;
-      final source =
-          _projectFiles ??
-          ProjectFilesLoader(
-            home: codelabHomeOf(options.environment),
-            local: local,
-          );
+      final loader = ProjectFilesLoader(
+        home: codelabHomeOf(options.environment),
+        userHome: userHomeOf(options.environment),
+        local: local,
+      );
+      final results = await Future.wait([
+        _projectFileLines(config, cwd, trusted, _projectFiles ?? loader),
+        if (config.skills.enabled)
+          _skillLines(config, cwd, trusted, _skillFiles ?? loader),
+      ]);
+      return [for (final lines in results) ...lines];
+    } on Object catch (error) {
+      // Только тип исключения: текст может содержать пути и фрагменты (D14).
+      return [
+        'warning: $shown: project files could not be read: '
+            '${error.runtimeType}',
+      ];
+    }
+  }
+
+  /// Строки диагностики навыков: фаза устроена как [_projectFileLines], но со
+  /// своим портом, таймаутом и текстами `skills could not be read` /
+  /// `skills were not read within N s`. Диагностики — порта и `parseSkills`
+  /// (после проверки полей и `shadowed`), по общему правилу вывода.
+  Future<List<String>> _skillLines(
+    CoreConfig config,
+    String cwd,
+    bool trusted,
+    SkillFilesSource source,
+  ) async {
+    final cancel = CancelTokenSource();
+    try {
+      final files = await source
+          .loadSkills(
+            SkillFilesQuery(
+              cwd: cwd,
+              projectTrusted: trusted,
+              extraRoots: config.skills.extraRoots,
+              cancel: cancel.token,
+            ),
+          )
+          .then<SkillFiles?>((value) => value)
+          .timeout(_skillFilesTimeout, onTimeout: () => null);
+      if (files == null) {
+        cancel.cancel();
+        return [
+          'warning: $cwd: skills were not read within '
+              '${_skillFilesTimeout.inSeconds} s',
+        ];
+      }
+      final catalog = parseSkills(
+        files,
+        config.skills,
+        rules: config.permissions.rules,
+      );
+      return _diagnosticLines([...files.diagnostics, ...catalog.diagnostics]);
+    } on Object catch (error) {
+      cancel.cancel();
+      return ['warning: $cwd: skills could not be read: ${error.runtimeType}'];
+    } finally {
+      cancel.dispose();
+    }
+  }
+
+  /// Общее правило вывода диагностик: `warning:` для `error` и `warning`,
+  /// `note:` для `untrusted_project` уровня `info`, прочие `info` молчат.
+  List<String> _diagnosticLines(List<ExtensionDiagnostic> diagnostics) => [
+    for (final item in diagnostics)
+      if (item.level != DiagnosticLevel.info)
+        'warning: ${_where(item)}: ${item.message}'
+      else if (item.code == 'untrusted_project')
+        'note: ${item.path}: the project is not trusted; '
+            'add it to trusted_projects',
+  ];
+
+  /// Строки диагностики файлов проекта (D13): `warning:` для уровней `error`
+  /// и `warning`, `note:` для `untrusted_project`; прочие `info` (`shadowed`)
+  /// не печатаются.
+  ///
+  /// Канонический `cwd` и доверие приходят от [_fileLines] (D4). Каталог
+  /// моделей собирается из
+  /// провайдеров загруженного конфига, как у хоста (`StaticModelCatalog`).
+  ///
+  /// Фаза не должна ронять `check` и держать его вечно (как фаза рантайма,
+  /// D14 change `add-agent-project-files`): исключение даёт одну строку
+  /// `warning:` с типом исключения, отсутствие ответа за [_projectFilesTimeout]
+  /// — строку о таймауте; код выхода от файлов проекта не зависит.
+  Future<List<String>> _projectFileLines(
+    CoreConfig config,
+    String cwd,
+    bool trusted,
+    ProjectFilesSource source,
+  ) async {
+    final cancel = CancelTokenSource();
+    try {
       final files = await source
           .load(
             ProjectFilesQuery(
@@ -694,19 +784,12 @@ final class ConfigCommands {
         ...parseCommandTemplates(files.templates).diagnostics,
         ...parseAgentDefinitions(files.agents, models: models).diagnostics,
       ];
-      return [
-        for (final item in diagnostics)
-          if (item.level != DiagnosticLevel.info)
-            'warning: ${_where(item)}: ${item.message}'
-          else if (item.code == 'untrusted_project')
-            'note: ${item.path}: the project is not trusted; '
-                'add it to trusted_projects',
-      ];
+      return _diagnosticLines(diagnostics);
     } on Object catch (error) {
       // Только тип исключения: текст может содержать пути и фрагменты (D14).
       cancel.cancel();
       return [
-        'warning: $shown: project files could not be read: '
+        'warning: $cwd: project files could not be read: '
             '${error.runtimeType}',
       ];
     } finally {

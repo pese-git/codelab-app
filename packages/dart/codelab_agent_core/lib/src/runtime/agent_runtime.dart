@@ -41,6 +41,8 @@ import '../permissions/modes.dart';
 import '../permissions/policy.dart';
 import '../project/project_context.dart';
 import '../project/project_files.dart';
+import '../skills/skill_catalog.dart';
+import '../skills/skill_files.dart';
 import '../prompts/compose.dart';
 import '../secrets/secret_lookup.dart';
 import '../secrets/secret_resolver.dart';
@@ -1269,15 +1271,30 @@ final class AgentRuntimeImpl implements AgentRuntime {
     );
     // Файлы проекта читаются до подключения MCP: отменённая загрузка не
     // оставляет за собой процессов серверов (D6).
-    final project = await _loadProjectFiles(
-      id: id,
-      canonicalCwd: canonicalCwd,
-      cwdResolved: cwdResolved,
-      settings: settings,
-      logger: logger,
-      cancel: mcp.cancel.token,
-      catalog: catalog,
-    );
+    // Фаза навыков идёт параллельно (design.md change `add-agent-skills`,
+    // D1, D16): у каждой свой таймер и свой дочерний токен, медленный корень
+    // навыков не отнимает у сессии `AGENTS.md`.
+    final loaded = await Future.wait<Object>([
+      _loadProjectFiles(
+        id: id,
+        canonicalCwd: canonicalCwd,
+        cwdResolved: cwdResolved,
+        settings: settings,
+        logger: logger,
+        cancel: mcp.cancel.token,
+        catalog: catalog,
+      ),
+      _loadSkills(
+        id: id,
+        canonicalCwd: canonicalCwd,
+        cwdResolved: cwdResolved,
+        settings: settings,
+        logger: logger,
+        cancel: mcp.cancel.token,
+      ),
+    ]);
+    final project = loaded[0] as _ProjectLoad;
+    final skills = loaded[1] as SkillCatalog;
     final projectContext = project.context;
     await _connectMcp(
       id: id,
@@ -1440,6 +1457,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       compaction: compaction ? settings.compaction : null,
       templates: project.templates,
       agents: project.agents,
+      skills: skills,
       modeFloor: settings.permissions.mode ?? profile.defaultMode,
     );
     _sessions.add(session);
@@ -1509,6 +1527,173 @@ final class AgentRuntimeImpl implements AgentRuntime {
     );
   }
 
+  /// Общая ограниченная фаза открытия сессии (файлы проекта, навыки):
+  /// гонка «ответ порта / отмена сессии / таймаут» на одном `Completer`, чтобы
+  /// исправления гонки не расходились между фазами (design.md change
+  /// `add-agent-skills`, D16).
+  ///
+  /// [run] получает дочерний токен: по таймауту он отменяется, и порт
+  /// перестаёт читать. Возвращает [_PhaseDone], [_PhaseTimeout] или
+  /// [_PhaseFailed] (исключение порта; в лог уходит только его тип). Отмена
+  /// [cancel] (закрытие сессии, `dispose()`) выбрасывает результат и бросает
+  /// `CancelledException`. Таймер и дочерний токен освобождаются всегда.
+  Future<_PhaseResult<T>> _boundedPhase<T>({
+    required CancelToken cancel,
+    required Future<T> Function(CancelToken token) run,
+  }) async {
+    final loadCancel = CancelTokenSource(parent: cancel);
+    final outcome = Completer<T?>();
+    void giveUp() {
+      if (!outcome.isCompleted) {
+        outcome.complete(null);
+      }
+    }
+
+    final timer = services.clock.timer(_projectFilesTimeout, giveUp);
+    unawaited(cancel.onCancel.then((_) => giveUp()));
+    unawaited(
+      Future.sync(() => run(loadCancel.token)).then(
+        (value) {
+          if (!outcome.isCompleted) {
+            outcome.complete(value);
+          }
+        },
+        onError: (Object error, StackTrace stack) {
+          if (!outcome.isCompleted) {
+            outcome.completeError(error, stack);
+          }
+        },
+      ),
+    );
+    try {
+      final result = await outcome.future;
+      cancel.throwIfCancelled();
+      if (result == null) {
+        loadCancel.cancel();
+        return _PhaseTimeout<T>();
+      }
+      return _PhaseDone<T>(result);
+    } on CancelledException {
+      rethrow;
+    } on Object catch (error) {
+      cancel.throwIfCancelled();
+      return _PhaseFailed<T>(error);
+    } finally {
+      timer.cancel();
+      loadCancel.dispose();
+    }
+  }
+
+  /// Читает навыки сессии портом и строит снимок каталога (design.md change
+  /// `add-agent-skills`, D1, D10, D16; capability `agent-skills`, «Порт
+  /// файлов навыков»).
+  ///
+  /// Почему отдельная фаза, а не часть [_loadProjectFiles]: свой таймаут 5 с и
+  /// своя отмена. Порт не вызывается без `services.skillFiles` и при
+  /// выключенной capability. Таймаут и исключение дают пустой снимок и
+  /// `project_files.diagnostic` (`timeout` / `unexpected`, только тип
+  /// исключения); отмена выбрасывает результат и бросает `CancelledException`.
+  /// `skills.loaded` пишется лишь когда порт вернул результат. Тела навыков в
+  /// лог не попадают.
+  Future<SkillCatalog> _loadSkills({
+    required SessionId id,
+    required String canonicalCwd,
+    required bool cwdResolved,
+    required CoreConfig settings,
+    required Logger logger,
+    required CancelToken cancel,
+  }) async {
+    final source = services.skillFiles;
+    if (source == null ||
+        !profile.isOn(HostCapability.skills) ||
+        !settings.skills.enabled) {
+      return SkillCatalog.empty;
+    }
+    void diagnostic(
+      DiagnosticLevel level,
+      String path,
+      String code,
+      String message, {
+      int? line,
+      int? column,
+    }) => logger.log(
+      level == DiagnosticLevel.info ? LogLevel.debug : LogLevel.warning,
+      'project_files.diagnostic',
+      fields: {
+        'session_id': id.value,
+        'path': path,
+        'line': line,
+        'column': column,
+        'code': code,
+        'message': message,
+      },
+    );
+
+    final projectTrusted =
+        cwdResolved &&
+        settings.trustedProjects.any((root) => samePath(root, canonicalCwd));
+    final phase = await _boundedPhase<SkillFiles>(
+      cancel: cancel,
+      run: (token) => source.loadSkills(
+        SkillFilesQuery(
+          cwd: canonicalCwd,
+          projectTrusted: projectTrusted,
+          extraRoots: settings.skills.extraRoots,
+          cancel: token,
+        ),
+      ),
+    );
+    final SkillFiles files;
+    switch (phase) {
+      case _PhaseTimeout<SkillFiles>():
+        diagnostic(
+          DiagnosticLevel.warning,
+          canonicalCwd,
+          'timeout',
+          'skills were not read within '
+              '${_projectFilesTimeout.inSeconds} s; the session has none',
+        );
+        return SkillCatalog.empty;
+      case _PhaseFailed<SkillFiles>(:final error):
+        diagnostic(
+          DiagnosticLevel.error,
+          canonicalCwd,
+          'unexpected',
+          'skills could not be read: ${error.runtimeType}',
+        );
+        return SkillCatalog.empty;
+      case _PhaseDone<SkillFiles>(:final value):
+        files = value;
+    }
+    final catalog = parseSkills(
+      files,
+      settings.skills,
+      rules: settings.permissions.rules,
+    );
+    for (final item in [...files.diagnostics, ...catalog.diagnostics]) {
+      diagnostic(
+        item.level,
+        item.path,
+        item.code,
+        item.message,
+        line: item.line,
+        column: item.column,
+      );
+    }
+    logger.log(
+      LogLevel.info,
+      'skills.loaded',
+      fields: {
+        'session_id': id.value,
+        'count': catalog.skills.length,
+        'names': [for (final skill in catalog.skills) skill.name],
+        // «Читались ли корни проекта» (D13): как `commands.loaded`.
+        'project': projectTrusted,
+      },
+    );
+    return catalog;
+  }
+
   /// Читает файлы проекта сессии портом и собирает контекст инструкций
   /// (design.md change `add-agent-project-files`, D1, D4, D5, D6, D14).
   ///
@@ -1552,53 +1737,24 @@ final class AgentRuntimeImpl implements AgentRuntime {
       },
     );
 
-    // Фаза ограничена: порт, который не отвечает, не должен держать
-    // `session/new` вечно. Первым из трёх: ответ порта, отмена сессии, таймаут
-    // фазы. Порту отдаётся дочерний токен: по таймауту он отменяется, и
-    // загрузчик перестаёт читать.
-    final loadCancel = CancelTokenSource(parent: cancel);
-    final outcome = Completer<ProjectFiles?>();
-    void giveUp() {
-      if (!outcome.isCompleted) {
-        outcome.complete(null);
-      }
-    }
-
     // Без раскрытого `realpath` доверия нет (D4, приоритет 1).
     final projectTrusted =
         cwdResolved &&
         settings.trustedProjects.any((root) => samePath(root, canonicalCwd));
-    final timer = services.clock.timer(_projectFilesTimeout, giveUp);
-    unawaited(cancel.onCancel.then((_) => giveUp()));
-    unawaited(
-      Future.sync(
-        () => source.load(
-          ProjectFilesQuery(
-            cwd: canonicalCwd,
-            projectTrusted: projectTrusted,
-            contextMaxBytes: settings.projectContextMaxBytes,
-            cancel: loadCancel.token,
-          ),
+    final phase = await _boundedPhase<ProjectFiles>(
+      cancel: cancel,
+      run: (token) => source.load(
+        ProjectFilesQuery(
+          cwd: canonicalCwd,
+          projectTrusted: projectTrusted,
+          contextMaxBytes: settings.projectContextMaxBytes,
+          cancel: token,
         ),
-      ).then(
-        (value) {
-          if (!outcome.isCompleted) {
-            outcome.complete(value);
-          }
-        },
-        onError: (Object error, StackTrace stack) {
-          if (!outcome.isCompleted) {
-            outcome.completeError(error, stack);
-          }
-        },
       ),
     );
     final ProjectFiles files;
-    try {
-      final result = await outcome.future;
-      cancel.throwIfCancelled();
-      if (result == null) {
-        loadCancel.cancel();
+    switch (phase) {
+      case _PhaseTimeout<ProjectFiles>():
         diagnostic(
           DiagnosticLevel.warning,
           canonicalCwd,
@@ -1607,24 +1763,17 @@ final class AgentRuntimeImpl implements AgentRuntime {
               '${_projectFilesTimeout.inSeconds} s; the session has none',
         );
         return _ProjectLoad.none;
-      }
-      files = result;
-    } on CancelledException {
-      rethrow;
-    } on Object catch (error) {
-      cancel.throwIfCancelled();
-      diagnostic(
-        DiagnosticLevel.error,
-        canonicalCwd,
-        'unexpected',
-        'project files could not be read: ${error.runtimeType}',
-      );
-      return _ProjectLoad.none;
-    } finally {
-      timer.cancel();
-      loadCancel.dispose();
+      case _PhaseFailed<ProjectFiles>(:final error):
+        diagnostic(
+          DiagnosticLevel.error,
+          canonicalCwd,
+          'unexpected',
+          'project files could not be read: ${error.runtimeType}',
+        );
+        return _ProjectLoad.none;
+      case _PhaseDone<ProjectFiles>(:final value):
+        files = value;
     }
-    cancel.throwIfCancelled();
     for (final item in files.diagnostics) {
       diagnostic(
         item.level,
@@ -2219,6 +2368,7 @@ final class _Session implements AgentSession {
     required CompactionOverrides? compaction,
     required List<CommandTemplate> templates,
     required List<AgentDefinition> agents,
+    required this.skills,
     required ModeId modeFloor,
   }) : _mode = mode,
        _modeFloor = modeFloor,
@@ -2338,6 +2488,11 @@ final class _Session implements AgentSession {
 
   @override
   final List<AgentDefinition> agents;
+
+  /// Снимок навыков, построенный при открытии (D10, SKL-4): единственное
+  /// поле и единственный метод доступа для всех потребителей.
+  @override
+  final SkillCatalog skills;
 
   /// Выбранный агент; `null` — `default`.
   AgentDefinition? _activeAgent;
@@ -3681,4 +3836,29 @@ Future<void> rememberLastModel(
       },
     );
   }
+}
+
+/// Итог ограниченной фазы открытия сессии (`_boundedPhase`): исчерпывающий
+/// `switch` без приведений типа.
+sealed class _PhaseResult<T> {
+  const _PhaseResult();
+}
+
+/// Порт ответил вовремя.
+final class _PhaseDone<T> extends _PhaseResult<T> {
+  const _PhaseDone(this.value);
+
+  final T value;
+}
+
+/// Фаза не уложилась в таймаут.
+final class _PhaseTimeout<T> extends _PhaseResult<T> {
+  const _PhaseTimeout();
+}
+
+/// Порт фазы бросил исключение; в лог идёт только его тип.
+final class _PhaseFailed<T> extends _PhaseResult<T> {
+  const _PhaseFailed(this.error);
+
+  final Object error;
 }

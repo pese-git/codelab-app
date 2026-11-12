@@ -199,6 +199,9 @@ SettingDescriptor _shared(
   layers: layers,
 );
 
+/// Причина `fileOnly` для ключей раздела `skills` (D11).
+const _skillsReason = 'skills are configured in the config file';
+
 SettingDescriptor _fileOnly(
   String key,
   SettingType type,
@@ -731,6 +734,81 @@ final List<SettingDescriptor> _descriptors = List.unmodifiable([
   _opaque('tools.history'),
   _opaque('tools.spill'),
 
+  // ---- Skills (change `add-agent-skills`, D11) ------------------------------
+  _fileOnly(
+    'skills.enabled',
+    SettingType.bool,
+    'Advanced',
+    'Skills',
+    'Switches the agent skills (SKILL.md) off when false.',
+    _skillsReason,
+    defaultValue: true,
+  ),
+  _fileOnly(
+    'skills.extra_roots',
+    SettingType.stringList,
+    'Advanced',
+    'Extra skill roots',
+    'Directories with skills besides the project and user ones; ~ is your '
+        'home directory.',
+    _skillsReason,
+    defaultValue: const <String>[],
+  ),
+  _fileOnly(
+    'skills.disabled',
+    SettingType.stringList,
+    'Advanced',
+    'Disabled skills',
+    'Names of skills that are not loaded.',
+    _skillsReason,
+    defaultValue: const <String>[],
+  ),
+  _fileOnly(
+    'skills.max_skills',
+    SettingType.int,
+    'Advanced',
+    'Skill limit',
+    'Skills loaded into a session; the rest are dropped.',
+    _skillsReason,
+    defaultValue: 200,
+    min: 1,
+    max: 1000,
+  ),
+  _fileOnly(
+    'skills.catalog_max_chars',
+    SettingType.int,
+    'Advanced',
+    'Skill catalog budget',
+    'Characters of the skill catalog in the system prompt.',
+    _skillsReason,
+    defaultValue: 8000,
+    min: 1000,
+    max: 64000,
+  ),
+  _fileOnly(
+    'skills.reattach.per_skill_tokens',
+    SettingType.int,
+    'Advanced',
+    'Skill reattach budget',
+    'Tokens of one skill put back after compaction; 0 switches it off.',
+    _skillsReason,
+    defaultValue: 5000,
+    min: 0,
+    max: 16384,
+  ),
+  _fileOnly(
+    'skills.reattach.total_tokens',
+    SettingType.int,
+    'Advanced',
+    'Skill reattach total',
+    'Tokens of all skills put back after compaction; 0 switches it off.',
+    _skillsReason,
+    defaultValue: 25000,
+    min: 0,
+    max: 200000,
+  ),
+  _opaque('skills.operative'),
+
   // ---- Loop ---------------------------------------------------------------
   _fileOnly(
     'loop.empty_response_retries',
@@ -872,7 +950,6 @@ final List<SettingDescriptor> _descriptors = List.unmodifiable([
   ),
 
   // ---- Sections after the MVP (opaque in this build) -----------------------
-  _opaque('skills'),
   _opaque('subagents'),
   _opaque('jobs'),
   _opaque('hooks'),

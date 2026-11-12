@@ -9,6 +9,7 @@ import '../permissions/agent_config_paths.dart';
 import '../permissions/gate.dart';
 import '../project/project_files.dart';
 import '../secrets/secret_resolver.dart';
+import '../skills/skill_files.dart';
 import '../session/session_store.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
@@ -41,6 +42,7 @@ final class AgentCoreServices {
     this.models,
     this.mcp,
     this.projectFiles,
+    this.skillFiles,
     this.secrets,
     this.config,
     this.projectConfig,
@@ -86,6 +88,12 @@ final class AgentCoreServices {
   /// промпт, позже — шаблоны команд и определения агентов. `null` — файлов
   /// проекта нет (web, мобильные хосты, тесты): поведение прежнее.
   final ProjectFilesSource? projectFiles;
+
+  /// Чтение навыков при создании и загрузке сессии (design.md change
+  /// `add-agent-skills`, D1, D16): отдельная фаза, параллельная файлам
+  /// проекта, со своим таймаутом. `null` — навыков нет (`serve --ws`, web,
+  /// тесты): порт не вызывается, сессия без навыков.
+  final SkillFilesSource? skillFiles;
 
   /// Резолвер секретов хоста (design.md change `add-agent-secret-store`, D3,
   /// D4): ядро берёт через него значения `${secret:…}` в `env` и `headers`

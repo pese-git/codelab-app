@@ -131,6 +131,29 @@ void main() {
     });
   });
 
+  group('values that already parse stay as they are (D4)', () {
+    test('a trailing comment with ": " does not turn a bool into a string', () {
+      final r = read(
+        '---\ndescription: a: b\n'
+        'disable-model-invocation: true  # note: internal\n'
+        'count: 5 # x: y\n---\nBody',
+      );
+
+      expect(r.repaired, isTrue);
+      final values = r.file!.frontmatter!.values;
+      expect(values['disable-model-invocation'], isTrue);
+      expect(values['count'], 5);
+      expect(values['description'], 'a: b');
+    });
+
+    test('a comment after a plain string is not part of the value', () {
+      final r = read('---\ndescription: a: b # note: x\n---\nBody');
+
+      expect(r.repaired, isTrue);
+      expect(r.file!.frontmatter!.values['description'], 'a: b');
+    });
+  });
+
   group('failure', () {
     test('scenario "Совсем нечитаемый YAML": an unclosed flow sequence is an '
         'error with the position in the original file', () {
@@ -152,11 +175,13 @@ void main() {
 
       expect(r.file, isNull);
       expect(r.diagnostics.single.level, DiagnosticLevel.error);
-      expect(r.diagnostics.single.line, 3);
+      // D16: при неудаче — диагностики исходного разбора (первая ошибка
+      // исходного текста — строка 2).
+      expect(r.diagnostics.single.line, 2);
     });
 
     test('the message has no fragment of the file', () {
-      final r = read('---\nname: sk-test-secret-value: [\n---\nBody');
+      final r = read('---\nname: x\ntags: [sk-test-secret-value\n---\nBody');
 
       expect(r.file, isNull);
       expect(

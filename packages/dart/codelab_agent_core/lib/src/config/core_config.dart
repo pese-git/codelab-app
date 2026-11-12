@@ -4,6 +4,7 @@ import '../loop/turn_budget.dart';
 import '../mcp/mcp_server_config.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
+import '../skills/skills_config.dart';
 import '../tools/agent_tool.dart' show ToolTier;
 import 'config_issue.dart';
 import 'config_tree.dart';
@@ -179,6 +180,7 @@ final class CoreConfig {
     this.providerProblems = const {},
     this.redact = const RedactSettings(),
     this.projectContextMaxBytes = defaultProjectContextMaxBytes,
+    this.skills = const SkillsConfig(),
     this.trustedProjects = const [],
     this.projectRoot,
     this.withoutProject,
@@ -363,6 +365,7 @@ final class CoreConfig {
     providerProblems: providerProblems ?? this.providerProblems,
     redact: redact,
     projectContextMaxBytes: projectContextMaxBytes,
+    skills: skills,
     trustedProjects: trustedProjects,
     projectRoot: projectRoot,
     withoutProject: withoutProject,
@@ -444,6 +447,10 @@ final class CoreConfig {
   /// `add-agent-project-files`, D5). Runtime передаёт его порту файлов
   /// проекта и `assembleProjectContext`.
   final int projectContextMaxBytes;
+
+  /// Раздел `skills` (capability `agent-skills`, design.md change
+  /// `add-agent-skills`, D11).
+  final SkillsConfig skills;
 
   /// Канонические корни `trusted_projects` глобального слоя (~ раскрыт,
   /// symlink раскрыт `ConfigLoader`). Runtime сравнивает с ними канонический

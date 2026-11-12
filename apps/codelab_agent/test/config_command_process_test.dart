@@ -326,7 +326,8 @@ agent:
   // кода приложения не требует, `ConfigCommands` общий; красный до 1.10.
   test('config check: a broken skill in CODELAB_HOME/skills is a warning '
       'line with the path of SKILL.md, Config: valid, code 0', () async {
-    final home = '${temp.path}/home';
+    // Путь навыка в выводе канонический (realpath): на macOS `/var` — ссылка.
+    final home = '${temp.resolveSymbolicLinksSync()}/home';
     Directory(home).createSync();
     File('$home/config.yaml').writeAsStringSync('''
 providers:
