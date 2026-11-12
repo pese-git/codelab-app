@@ -65,8 +65,8 @@ import '../core/platform/limited_network_image.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
-import '../features/project_files/application/project_files_cubit.dart';
 import '../core/platform/user_shell_launcher.dart';
+import '../features/project_files/application/project_files_cubit.dart';
 import '../features/settings/application/add_profile_cubit.dart';
 import '../features/settings/application/connection_settings_cubit.dart';
 import '../features/settings/application/default_profile_resolver.dart';
@@ -117,10 +117,11 @@ Scope createCodeLabRootScope({
   Future<ProfileSecrets> Function()? profileSecretsOpener,
   ProviderSettingsOpener? providerSettingsOpener,
   Future<bool> Function(String cwd)? providerSetupProbe,
+  UserShellLauncher? userShellLauncher,
+  ExternalLinkOpener? externalLinkOpener,
   ProjectFolderPicker? projectFolderPicker,
   ProjectFiles? projectFiles,
   bool projectFilesEnabled = true,
-  UserShellLauncher? userShellLauncher,
 }) {
   // Одно окружение на открыватель встроенного агента, профили и токены:
   // `CODELAB_HOME` и переменные читаются из одного места (design.md change
@@ -150,8 +151,9 @@ Scope createCodeLabRootScope({
       ),
       CodeLabPlatformModule(
         directoryExists: directoryExists ?? ioDirectoryExists,
-        projectFolderPicker: projectFolderPicker,
         userShellLauncher: userShellLauncher,
+        externalLinkOpener: externalLinkOpener,
+        projectFolderPicker: projectFolderPicker,
       ),
       CodeLabConnectionModule(
         environment: connectionEnvironment,
@@ -413,17 +415,24 @@ final class CodeLabLoggingLifecycle implements Disposable {
 final class CodeLabPlatformModule extends Module {
   CodeLabPlatformModule({
     required this.directoryExists,
-    this.projectFolderPicker,
     UserShellLauncher? userShellLauncher,
-  }) : _userShellLauncher = userShellLauncher;
-
-  /// Системный выбор папки; тесты подменяют его, чтобы не открывать диалог.
-  final ProjectFolderPicker? projectFolderPicker;
+    ExternalLinkOpener? externalLinkOpener,
+    this.projectFolderPicker,
+  }) : _userShellLauncher = userShellLauncher,
+       _externalLinkOpener = externalLinkOpener;
 
   /// Порт запуска shell пользователя; шов тестов
   /// (`createCodeLabRootScope(userShellLauncher:)`, `add-integrated-terminal`,
   /// D2): без него — адаптер на `pty2`.
   final UserShellLauncher? _userShellLauncher;
+
+  /// Порт открытия адреса во внешнем приложении; шов тестов
+  /// (`createCodeLabRootScope(externalLinkOpener:)`, D11): без него — адаптер
+  /// на `url_launcher`.
+  final ExternalLinkOpener? _externalLinkOpener;
+
+  /// Системный выбор папки; тесты подменяют его, чтобы не открывать диалог.
+  final ProjectFolderPicker? projectFolderPicker;
 
   /// Проверка папки проекта; тесты с вымышленными путями подменяют её.
   final DirectoryExists directoryExists;
@@ -435,10 +444,12 @@ final class CodeLabPlatformModule extends Module {
     const textFileIo = IoTextFileIo();
     bind<TextFileReader>().toInstance(textFileIo);
     bind<TextFileWriter>().toInstance(textFileIo);
-    // Открытие ссылок из ответа агента — порт платформы (change
-    // `add-desktop-markdown`, D5); `url_launcher` только за ним.
+    // Открытие ссылок — один порт платформы на ответ агента (change
+    // `add-desktop-markdown`, D5) и ссылки OSC 8 терминала (change
+    // `add-integrated-terminal`, D3, D11, Q16); `url_launcher` только за ним.
+    // Шов тестов — `createCodeLabRootScope(externalLinkOpener:)`.
     bind<ExternalLinkOpener>().toInstance(
-      const UrlLauncherExternalLinkOpener(),
+      _externalLinkOpener ?? const UrlLauncherExternalLinkOpener(),
     );
     // Загрузка изображений ответа: лимиты тела, редиректы, размер (D6, R4).
     bind<ImageProviderFor>().toInstance(defaultImageProviderFor);
@@ -672,6 +683,7 @@ final class CodeLabPresentationModule extends Module {
           () => TerminalTabsCubit(
             workspace: currentScope.resolve<ClientWorkspace>(),
             launcher: currentScope.resolve<UserShellLauncher>(),
+            externalLinkOpener: currentScope.resolve<ExternalLinkOpener>(),
             directoryExists: currentScope.resolve<DirectoryExists>(),
             logger: StructuredLogLogger('codelab_desktop.terminal').bind({
               logCategoryKey: applicationLogCategory,

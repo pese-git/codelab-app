@@ -7,7 +7,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path/path.dart' as p;
 import 'package:xterm2_core/xterm2_core.dart';
 
+import '../../../core/platform/external_link_opener.dart';
 import '../../../core/platform/user_shell_launcher.dart';
+import 'terminal_link_decision.dart';
 import 'terminal_model.dart';
 import 'terminal_owner.dart';
 import 'terminal_tab.dart';
@@ -64,6 +66,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
     required UserShellLauncher launcher,
     required DirectoryExists directoryExists,
     required Logger logger,
+    required ExternalLinkOpener externalLinkOpener,
     TerminalModelFactory modelFactory = terminalModel,
     Duration hangUpGrace = const Duration(seconds: 2),
     Duration closeAllGrace = const Duration(seconds: 3),
@@ -72,6 +75,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
        _launcher = launcher,
        _directoryExists = directoryExists,
        _logger = logger,
+       _linkOpener = externalLinkOpener,
        _modelFactory = modelFactory,
        _hangUpGrace = hangUpGrace,
        _closeAllGrace = closeAllGrace,
@@ -89,6 +93,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
   final UserShellLauncher _launcher;
   final DirectoryExists _directoryExists;
   final Logger _logger;
+  final ExternalLinkOpener _linkOpener;
   final TerminalModelFactory _modelFactory;
   final Duration _hangUpGrace;
   final Duration _closeAllGrace;
@@ -372,6 +377,48 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
     _logger.info(
       'terminal.close_all',
       context: {'count': live.length, 'forced': forced},
+    );
+  }
+
+  // --- ссылки OSC 8 ---
+
+  /// Решает, можно ли предложить открыть адрес ссылки OSC 8 [uri].
+  ///
+  /// Почему здесь: решение «опасно ли» принадлежит application, виджет только
+  /// показывает диалог (`AGENTS.md` §10; D3 «Ссылки OSC 8»). Отказ пишется в
+  /// журнал событием `terminal.link_refused` только со схемой, без адреса (D9).
+  TerminalLinkDecision decideLink(String uri) {
+    final decision = terminalLinkDecision(uri);
+    if (!decision.canOpen) {
+      _logger.info(
+        'terminal.link_refused',
+        context: {'scheme': decision.scheme},
+      );
+    }
+    return decision;
+  }
+
+  /// Открывает адрес [uri] после подтверждения пользователя в диалоге.
+  ///
+  /// Схему повторно проверяет и порт (вторая линия защиты). Событие
+  /// `terminal.link_opened` — только если адрес передан внешнему приложению;
+  /// иначе `terminal.link_refused`. Адрес в журнал не попадает (D9).
+  Future<void> openLink(String uri) async {
+    final decision = terminalLinkDecision(uri);
+    final parsed = Uri.tryParse(uri);
+    if (!decision.canOpen || parsed == null) {
+      _logger.info(
+        'terminal.link_refused',
+        context: {'scheme': decision.scheme},
+      );
+      return;
+    }
+    final outcome = await _linkOpener.open(parsed);
+    _logger.info(
+      outcome == ExternalLinkOutcome.opened
+          ? 'terminal.link_opened'
+          : 'terminal.link_refused',
+      context: {'scheme': decision.scheme},
     );
   }
 
