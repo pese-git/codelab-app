@@ -171,15 +171,9 @@
 - `IoWorkingDirectoryProvider`;
 - `ioTransportResolver` — `ConfigTransportResolver` kit с настоящими транспортами stdio и WebSocket;
 - `JsonFileProfileStore` (`$CODELAB_HOME/profiles.json`, общий файл CLI и app);
-- `JsonFileRecentProjectsStore`;
-- `classifyProbeFailure` — перевод ошибок IO-транспортов в исход `ProfileProbe` только по типам и кодам ошибок, без разбора текста:
-  - отсутствующая команда (`ProcessException` с errno `ENOENT`) — `CommandNotFound`;
-  - `AcpWebSocketHandshakeRejected` со статусом 401 или 403 — `Unauthorized`, с другим статусом — `Unreachable` с причиной `httpStatus` и этим `statusCode`;
-  - `SocketException`, чей `osError.errorCode` — код «соединение отклонено» текущей платформы, — `Unreachable(connectionRefused)`; код «хост не найден» (ошибка разрешения имени) — `Unreachable(hostNotFound)`; коды берутся из таблицы по платформе;
-  - `HandshakeException` или `TlsException` — `Unreachable(tlsFailed)`;
-  - остальное — `Unreachable(unknown)`.
+- `JsonFileRecentProjectsStore`.
 
-Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app. `ProfileStore.remove(id)` SHALL удалять профиль с этим `id` и возвращать `true`, а без такого профиля — возвращать `false` и не менять файл. `JsonFileProfileStore` SHALL записывать `profiles.json` через уникальный временный файл в том же каталоге, сброшенный на диск (`flush`) до атомарного переименования: прерванная запись НЕ SHALL оставлять под именем `profiles.json` пустой или неполный файл (design.md change `add-app-settings-shell`, D7).
+Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app. `ProfileStore.remove(id)` SHALL удалять профиль с этим `id` и возвращать `true`, а без такого профиля — возвращать `false` и не менять файл. `JsonFileProfileStore` SHALL записывать `profiles.json` через уникальный временный файл в том же каталоге, сброшенный на диск (`flush`) до атомарного переименования: прерванная запись НЕ SHALL оставлять под именем `profiles.json` пустой или неполный файл (design.md change `add-app-settings-shell`, D7). Классификатора ошибок проверки профиля (`classifyProbeFailure`) в пакете НЕ SHALL быть: проверка профиля удалена (design.md change `remove-test-connection`, D2).
 
 #### Scenario: Профили сохраняются в JSON
 - **WHEN** `JsonFileProfileStore` сохраняет профиль `WebSocketProfile` и читает его заново
@@ -189,29 +183,9 @@
 - **WHEN** в `JsonFileProfileStore` сохранены профили `remote` и `local`, и вызывается `remove('remote')`
 - **THEN** результат — `true`, а новое хранилище на том же файле читает только `local`
 
-#### Scenario: Классификация отсутствующей команды
-- **WHEN** `StdioAcpTransport` с командой `/nonexistent/agent` не стартует, и ошибка передана `classifyProbeFailure`
-- **THEN** результат — `CommandNotFound`
-
-#### Scenario: Закрытый порт
-- **WHEN** `WebSocketAcpTransport` подключается к закрытому порту loopback, и ошибка передана `classifyProbeFailure`
-- **THEN** результат — `Unreachable` с причиной `connectionRefused`
-
-#### Scenario: Хост не найден
-- **WHEN** `classifyProbeFailure` получает `SocketException` разрешения имени с кодом «хост не найден» текущей платформы
-- **THEN** результат — `Unreachable` с причиной `hostNotFound`
-
-#### Scenario: Сбой TLS
-- **WHEN** `WebSocketAcpTransport` подключается по `wss://` к серверу на loopback, который не говорит TLS, и ошибка передана `classifyProbeFailure`
-- **THEN** результат — `Unreachable` с причиной `tlsFailed`
-
-#### Scenario: Отказ рукопожатия по статусу
-- **WHEN** WebSocket-сервер на loopback отвечает на рукопожатие статусом 401, затем 403, затем 500
-- **THEN** результаты — `Unauthorized`, `Unauthorized` и `Unreachable` с причиной `httpStatus` и `statusCode` 500
-
-#### Scenario: Нераспознанная ошибка
-- **WHEN** `classifyProbeFailure` получает исключение незнакомого типа, чей текст содержит `connection refused` и `401`
-- **THEN** результат — `Unreachable` с причиной `unknown`: текст ошибки не влияет на классификацию
+#### Scenario: Барель без классификатора проверки
+- **WHEN** код импортирует `package:codelab_client_io/codelab_client_io.dart`
+- **THEN** `classifyProbeFailure` не экспортируется, а `ioTransportResolver`, `JsonFileProfileStore` и `JsonFileRecentProjectsStore` доступны
 
 ### Requirement: Список и загрузка сессий проекта
 `WorkspaceState.sessions` SHALL быть списком сессий проекта: сначала сессии, открытые в этом запуске, затем ещё не открытые сессии агента из `session/list` в порядке агента; сессия SHALL входить в список один раз. После каждого успешного `connect` и `reconnect` kit SHALL запрашивать первую страницу `session/list` с `cwd` проекта, если агент объявил `sessionCapabilities.list`. Неоткрытая сессия SHALL иметь статус `notLoaded`, заголовок и время изменения из ответа агента. `WorkspaceState.hasMoreSessions` SHALL показывать наличие следующей страницы; `ClientWorkspace.loadMoreSessions()` SHALL запрашивать её, а курсор kit НЕ SHALL отдавать хостам. `ClientWorkspace.loadSession(id, cwd)` SHALL открывать сессию через `session/load` и строить её транскрипт из реплея с нуля; повторный вызов для той же сессии во время загрузки SHALL не отправлять второй `session/load`. Без `loadSession` у агента `loadSession` SHALL завершаться ошибкой рабочего пространства без запроса к агенту.
@@ -419,41 +393,6 @@ Kit SHALL сохранять снимок рабочего пространст�
 - **WHEN** `profileKindsFor` получает только `ConfigTransportResolver(webSocket: …)` без фабрики stdio
 - **THEN** результат — только WebSocket
 
-### Requirement: Проверка профиля без сессии
-`ProfileProbe.probe(profile, {timeout})` SHALL:
-1. открывать транспорт тем же набором `TransportResolver`, что `ClientWorkspace`;
-2. отправлять ровно один `initialize` через временный `AcpClientApplication`, не связанный с соединением рабочего пространства;
-3. закрывать транспорт по ответу, ошибке, таймауту (по умолчанию 10 s) и отмене.
-
-`session/new` и другие запросы сессии проверка НЕ SHALL отправлять (SETUP-20).
-
-Исход — `ProfileProbeOutcome`:
-- `Reachable(latency, agentName, agentVersion)`;
-- `Unauthorized`;
-- `Unreachable(message, {reason = UnreachableReason.unknown, statusCode})` — `reason` типа `UnreachableReason` (enum: `connectionRefused`, `hostNotFound`, `tlsFailed`, `httpStatus`, `unknown`); `statusCode` — HTTP-статус отказа рукопожатия WebSocket (не 401/403) — SHALL быть задан только при `httpStatus`;
-- `TimedOut`;
-- `NotAcp`;
-- `CommandNotFound`;
-- `Unsupported`.
-
-`message` SHALL проходить `describeFailure` и предназначен только для журнала и диагностики: хосты НЕ SHALL строить из него текст для пользователя (design.md change `add-app-settings-shell`, D12). Ошибки IO-транспорта SHALL классифицироваться функцией, которую передаёт хост (`classifyProbeFailure` из `codelab_client_io`). Причина SHALL определяться только по типам и кодам ошибок; если её нельзя установить по типу ошибки, исход SHALL быть `Unreachable` с причиной `unknown`; по тексту исход и причина НЕ SHALL угадываться. Ошибка, которую классификатор хоста не распознал или которого нет, SHALL давать `Unreachable` с причиной `unknown`. Отменённая проверка SHALL закрывать транспорт и завершаться без исхода для вызывающего.
-
-#### Scenario: Успешная проверка
-- **WHEN** проверяется stdio-профиль scripted-агента из `codelab_acp_testing`
-- **THEN** исход — `Reachable` с `agentInfo` агента, агент получил только `initialize`, процесс завершён
-
-#### Scenario: Молчание агента
-- **WHEN** агент не отвечает на `initialize` за `timeout`
-- **THEN** исход — `TimedOut`, транспорт закрыт
-
-#### Scenario: Нет команды
-- **WHEN** проверяется stdio-профиль с командой `/nonexistent/agent` и классификатором `codelab_client_io`
-- **THEN** исход — `CommandNotFound`
-
-#### Scenario: Отмена
-- **WHEN** проверка отменяется до ответа на `initialize`
-- **THEN** транспорт закрыт, и вызывающий не получает исход
-
 ### Requirement: Ссылка на токен профиля
 `ProfileTokenRef.parse(ref)` SHALL понимать две формы `WebSocketProfile.tokenRef` (design.md change `add-app-settings-shell`, D15; design.md change `add-provider-setup-ui`, D13):
 - `env:<NAME>` для любой переменной с допустимым именем — ссылка на переменную окружения процесса (`EnvTokenRef`);
@@ -566,19 +505,6 @@ Kit SHALL объявлять порт `ProfileSecrets` (`codelab_client_core/lib
 - **WHEN** профили `a` и `b` (последний отредактирован вручную) оба ссылаются на `secret:codelab/profiles/a/token`, и `a` удаляется с `deleteOwnSecret: true`
 - **THEN** профиль `a` удалён, секрет остаётся
 
-### Requirement: Проверка нового токена до записи
-`ProfileProbe.probe(profile, token: SecretText?)` (профиль, построенный из черновика `toProfile`) SHALL передавать транспорту значение нового токена из памяти через одноразовый источник, не записывая его в хранилище (§12.4.9, шаг 5; design.md, D13). Для «Use stored secret» проверка SHALL читать секрет тем же `ProfileSecretSource`, что подключение. Остальные правила проверки (только `initialize`, закрытие транспорта, отмена) SHALL оставаться прежними (требование «Проверка профиля без сессии»).
-
-Пустое значение нового токена SHALL давать явный отказ проверки без открытия транспорта, а не проверку без токена. Резолвер, который не умеет подставить источник секрета (`SecretRebindableResolver.withSecrets`), SHALL давать исход `Unsupported`.
-
-#### Scenario: Пустой новый токен
-- **WHEN** проверяется WebSocket-черновик с «Store a new token» и пустым значением
-- **THEN** проверка отказывает явно, транспорт не открыт, сервер не получил запроса
-
-#### Scenario: Новый токен проверяется без записи
-- **WHEN** черновик WebSocket-профиля с «Store a new token» `t` проверяется на `FakeAcpTransport`, требующем Bearer `t`
-- **THEN** исход `Reachable`, транспорт получил заголовок с `t`, `ProfileSecrets.store` не вызывался
-
 ### Requirement: Отказ рукопожатия из-за токена
 Kit SHALL определять отказ WebSocket-агента из-за токена одной web-безопасной функцией (`codelab_client_core/lib/src/connection/token_rejection.dart`; design.md, D25):
 - `tokenRejectionStatus(error)` SHALL возвращать 401 или 403, найденные по цепочке `cause` ошибки (`AcpClientApplicationException` → `AcpTransportException` → `AcpWebSocketHandshakeRejected`) на ограниченную глубину, и `null` для любого другого статуса и ошибки. Текст ошибок НЕ SHALL разбираться;
@@ -586,7 +512,7 @@ Kit SHALL определять отказ WebSocket-агента из-за то�
 - `profileTokenSent(profile, SecretSource?)` SHALL отвечать, был ли токен отправлен, не читая значения: для `ProfileSecretSource` с `secret:` — через `isSet` порта, для `env:` — по наличию непустой переменной;
 - `describeConnectFailureByToken(error, profile, SecretSource?)` SHALL сначала вычислять `tokenRejectionStatus(error)` и только при 401 или 403 обращаться к `profileTokenSent`; для прочих ошибок источник секретов НЕ SHALL вызываться, а результат — `null`. Результат — строчный текст `describeTokenRejection` без точки; хосты оформляют его сами.
 
-`classifyProbeFailure` (`codelab_client_io`) SHALL определять `Unauthorized` через `tokenRejectionStatus`: таблица статусов одна для проверки профиля и подключения. Тексты согласованы с исходами проверки D12 change `add-app-settings-shell`.
+`tokenRejectionStatus` SHALL оставаться единственным местом, где цепочка `cause` читается ради 401/403 (design.md change `remove-test-connection`, D2).
 
 #### Scenario: Статус по цепочке причин
 - **WHEN** `tokenRejectionStatus` получает `AcpClientApplicationException`, чья причина — `AcpTransportException` с причиной `AcpWebSocketHandshakeRejected(401)`; затем такую же цепочку с `500`; затем `SocketException`

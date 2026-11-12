@@ -49,4 +49,4 @@
 ## 6. OpenSpec
 
 - [x] 6.1 `openspec validate remove-test-connection --strict`.
-- [ ] 6.2 Перед архивированием: если `add-file-preview-and-tree` архивирован раньше, перенести в дельту `specs/acp-client-kit` («IO-адаптеры клиента») строку `IoProjectFiles` из `openspec/specs`; если позже — сообщить исполнителю того change, что `classifyProbeFailure` удалён из требования (design.md, D10).
+- [x] 6.2 Перед архивированием: если `add-file-preview-and-tree` архивирован раньше, перенести в дельту `specs/acp-client-kit` («IO-адаптеры клиента») строку `IoProjectFiles` из `openspec/specs`; если позже — сообщить исполнителю того change, что `classifyProbeFailure` удалён из требования (design.md, D10). Выполнено: `remove-test-connection` архивирован первым; в дельте `add-file-preview-and-tree` (`specs/acp-client-kit`, «IO-адаптеры клиента») удалены `classifyProbeFailure` и его сценарии, добавлены запрет и сценарий «Барель без классификатора проверки».
