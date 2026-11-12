@@ -128,7 +128,7 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | увеличение ключей `tools.spill.*` (этап 3) | нет | да | глобальный конфиг или проект в `trusted_projects` |
 | `secrets.*` (с этапа 8.9, §17.5.9; change `add-agent-secret-store`, D7) | нет | нет | только пользовательский конфиг и `--config`/`CODELAB_CONFIG`; из обоих проектных слоёв отбрасывается всегда с `config.project.untrusted_key` (`ignored: secrets is read only from the global config`) |
 | `config.*` (после MVP) | нет | да | — |
-| `${secret:<name>}` в `headers`, `env` (с этапа 8.9, §17.5.4) | нет: `providers` и `mcp.servers` недоверенного проекта отбрасываются целиком, ссылка до резолвера не доходит (change `add-agent-secret-store`, D4) | да | проект в `trusted_projects` |
+| `${secret:<name>}` в `headers`, `env` (с этапа 8.9, §17.5.4) | нет: `providers` и `mcp.servers` недоверенного проекта отбрасываются целиком, ссылка до резолвера не доходит (change `add-agent-secret-store`, D4) | да | проект в `trusted_projects`; у провайдеров и HTTP-серверов MCP — ещё привязка к origin (ниже, «Группа провайдера и привязка ключа к адресу»; changes `require-project-folder`, D23, и `bind-mcp-secrets-to-origin`, D1–D4); stdio-серверам MCP достаточно доверия, но `${secret:…}` в `env` stdio-сервера закоммиченного `config.yaml` даёт предупреждение `config.mcp.stdio_secret_reference` (D12) |
 | `steering.enabled = false`; уменьшение `steering.max_steps`, `steering.max_pending`, `steering.max_bytes` (после MVP, §17.7.7) | да (только ужесточение) | да | — |
 | увеличение лимитов `steering.*` (после MVP) | нет | да | проект в `trusted_projects` |
 | `lsp.enabled = false`, `lsp.servers.<id>.enabled = false`; уменьшение `lsp.max_servers`, таймаутов, `max_open_documents`, `rename_max_files`; `diagnostics_after_edit` (после MVP, §17.8.10) | да | да | — |
@@ -168,6 +168,28 @@ Q16, Q17). «Доверенный проект» не означает «отд�
    `base_url` по умолчанию для `kind` учитывается). Иначе ссылка не раскрывается и не читается,
    провайдер остаётся в каталоге с ошибкой правила (`CoreConfig.providerProblems`), ход с его моделью
    завершается без HTTP-запроса, при загрузке пишется `config.provider.key_unbound`.
+3. *HTTP-серверы MCP проектных слоёв* (change `bind-mcp-secrets-to-origin`, D1–D7; Q1–Q5 (a)).
+   Правило группы для `mcp.servers` выполняет слияние по `name`: элемент верхнего слоя заменяет
+   нижний целиком, поэтому заголовки и ссылки нижнего слоя к `url` проекта не наследуются.
+   Ссылки `${secret:…}` и `${ENV}` в `headers.*` и `${ENV}` в `url` сервера `type: http` из
+   проектного слоя разрешаются по тем же условиям (a) и (b), что ключ провайдера; origin — по `url`.
+   Привязку (b) дают ссылки глобальных провайдеров и глобальных HTTP-серверов MCP (одно множество
+   `ProviderKeyBinding`); глобальные stdio-серверы её не дают. Иначе ссылки не раскрываются и не
+   читаются, их значения в сервер не попадают, а сервер остаётся в `CoreConfig.mcpServers` с
+   `McpServerConfig.blockedReason` (`key bound to another address: move the server to
+   config.local.yaml or the user config (<reference>)`): коннектор не открывает транспорт, сервер
+   в `failed` с этим `lastError`; при загрузке пишется `config.mcp.key_unbound {server, source,
+   reference_kind}`. В `url` правило судит только `${ENV}`: `${secret:…}` там по-прежнему проблема
+   загрузки (§15.5, п. 7). Имя ссылки в `lastError` печатается, только если оно проходит правило
+   имени и не похоже на значение секрета, иначе — `a reference`. Stdio-серверы правило не судит
+   (Q1 (a)): команда проекта — произвольный код от имени пользователя, их граница — доверие. Но
+   stdio-сервер слоя `project` (закоммиченный `config.yaml`, не `config.local.yaml`) со ссылкой
+   `${secret:…}` в `env` даёт одно предупреждение на сервер `config.mcp.stdio_secret_reference
+   {server, source}` (ключ `mcp.servers[<server>]`, без имени и значения секрета; текст
+   `a stdio server from the committed project config receives a secret reference; it runs as you,
+   so move it to config.local.yaml if you did not write it`), его показывают журнал загрузки и
+   `config check` (D12). Пересмотр Q1 обязателен при включении хранилищ ОС (change
+   `add-agent-os-secret-backends`).
 
 После MVP новые ключи провайдеров (§17.10.12: `preset`, `auth`, `key_rotation`, `key_cooldown`,
 кварки, `overflow_phrases`, `models.<m>.tools`) — внутри `providers.*`, а `logging.llm_snapshot` —
@@ -836,6 +858,10 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
    подключения, и сервер остаётся в сессии в `failed` с повтором по расписанию (§17.5.4, §17.5.7); заголовки после раскрытия идут в порядке файла. `${secret:…}` в серверах `session/new.mcpServers` от клиента ACP — литерал: иначе клиент
    мог бы вытянуть любой секрет хранилища на свой адрес. Недоверенный проект до резолвера ссылку
    не доводит: его `providers` и `mcp.servers` отбрасываются целиком (§15.3).
+8. Ссылки HTTP-сервера MCP и провайдера из проектного слоя, не привязанные к адресу (§15.3,
+   «Группа провайдера и привязка ключа к адресу»), — в том числе `${ENV}` в `url`, `base_url` и
+   `headers` — не раскрываются: значение переменной не читается и в конфиг не попадает (changes
+   `require-project-folder`, D23, Q16 (a), и `bind-mcp-secrets-to-origin`, D4, Q4 (a)).
 
 ## 15.6. Переменные окружения и флаги
 

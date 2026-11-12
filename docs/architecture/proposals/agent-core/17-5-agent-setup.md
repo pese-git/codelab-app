@@ -510,6 +510,12 @@ agent-configuration «Слои конфигурации и их порядок»
   `dispose()`/`close()` во время раскрытия отбрасывают попытку: транспорт не открывается,
   `mcp.server.failed` нет, сервер — `failed` с `connection cancelled` без таймера. Заголовки после
   раскрытия — в порядке файла конфига.
+- **Заблокированный сервер проектного слоя** (change `bind-mcp-secrets-to-origin`, D4, D5). HTTP-сервер
+  проектного слоя с ссылкой, не привязанной к адресу (§15.3), приходит коннектору без значений этой
+  ссылки и с `McpServerConfig.blockedReason`. Коннектор проверяет причину первой — до функции
+  раскрытия и до фабрики транспорта: попытка — сбой с `lastError` = причине, хранилище не
+  вызывается, транспорт не открывается; повтор по расписанию без ввода-вывода. Свойство безопасности
+  держит загрузка: коннектор, не знающий признака, подключился бы без заголовка, но не с ключом.
 - **Только `env` и `headers`.** `${secret:…}` в `args`, `url` MCP-сервера и `base_url` провайдера —
   проблема конфига `secret references ${secret:…} are allowed only in env and headers values`
   (§15.5, п. 7): argv и URL видны в `ps` и логах.
@@ -1069,7 +1075,14 @@ stdin. Бэкенд только для чтения — код `1` без чт�
      `user`, `local`, `project` (D26 change `require-project-folder`: провайдер закоммиченного
      `config.yaml` доверенного проекта с находкой в поле группы D23 переезжает целиком в
      `config.local.yaml` — иначе ссылка из `config.yaml`, не привязанная к адресу, ломает провайдера;
-     сбой между записями оставляет рабочий конфиг; `config.local.yaml` с иной группой — `not migrated`);
+     сбой между записями оставляет рабочий конфиг; `config.local.yaml` с иной группой — `not migrated`;
+     D7 change `bind-mcp-secrets-to-origin`: HTTP-сервер MCP закоммиченного `config.yaml` с находкой в
+     `headers` копируется целиком в `config.local.yaml`, где у каждой находки `headers` и `env` — ссылка,
+     а из `config.yaml` удаляются только ключи с находками; чужая ссылка элемента без глобальной
+     привязки к origin его `url` или элемент с тем же `name` в `config.local.yaml` — `not migrated`;
+     если хоть одну находку сервера хранилище не примет — `not migrated: mcp.servers[<name>] in <path>:
+     a value of this server cannot be stored; move it by hand`, и все находки сервера остаются на
+     месте (в отличие от общего `cannot be stored`); stdio-серверы — в том же файле);
   4. сбой конфига после секретов — код `1` с именами; повтор переиспользует значения и не
      отказывает сразу на проблеме R8-6: итог с правками выбранных слоёв проверяется до хранилища и должен быть без проблем (R8-11).
 - Имя, на которое тот же владелец (`providers.<id>`, `mcp.servers[<имя>]`) уже ссылается, а хранилище
@@ -1419,7 +1432,9 @@ supervise(server):
 3. сбой → state := failed; lastError := текст кода CodeLab без текстов сервера (≤ 200 символов;
      Redactor — после 1.0, R8-1); неудачное раскрытие ${secret:…} (McpSecretsException) — тоже сбой попытки,
      транспорт не открывается: lastError "secret <name> is not set",
-     "secret <name> cannot be read: <backend> is unavailable" или "no secret store" (D11)
+     "secret <name> cannot be read: <backend> is unavailable" или "no secret store" (D11);
+     сервер с McpServerConfig.blockedReason (ссылка проектного слоя не привязана к адресу, change
+     bind-mcp-secrets-to-origin, D4) — сбой попытки до раскрытия и транспорта, lastError = причине
    отмена токена запроса (закрытие сессии, dispose) во время попытки → state := failed,
      lastError "connection cancelled", без таймера и без mcp.server.failed
    вызовы этого сервера в полёте → результат isError: "MCP server <id> disconnected during the call: <reason>"
