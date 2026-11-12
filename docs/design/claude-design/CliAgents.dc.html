@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — agent rows and task list</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>codelab — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="codelab_cli full-screen TUI: agent tool rows with progress line and nested steps of subagents indented by depth, an approval from a depth-2 subagent naming who asks, and the task list with ids, owners and blockers above the composer">
+    <div class="ln"><span class="ac b">›</span> Find why reconnect drops the open session, fix it and cover it with a test.</div>
+    <div class="ln"> </div>
+    <div class="ln">I'll track this as tasks, let explore map the callers of restore(), then have review check the fix.</div>
+    <div class="ln mu">  ☰ Tasks #1–#4 added to the plan</div>
+    <div class="ln"><span class="ok">✓</span> <span class="b">Subagent</span> explore: Map callers of restore()  <span class="mu">4 tool calls · 18.2k · 48s · ctrl+o</span></div>
+    <div class="ln"> </div>
+    <div class="ln">Both callers skip the session lease. Fixing workspace_restorer.dart.</div>
+    <div class="ln"><span class="ok">✓</span> <span class="b">Edit</span> lib/features/workspace/application/workspace_restorer.dart  <span class="ok">+6</span> <span class="er">-2</span></div>
+    <div class="ln mu">  ☰ Task #2 done</div>
+    <div class="ln sel"><span class="ac">⠹</span> <span class="b">Subagent</span> review: Check the reconnect fix  <span class="mu">5 tool calls · 12.3k</span></div>
+    <div class="ln mu">    ✓ Run git diff --stat</div>
+    <div class="ln mu">    ⠹ Subagent explore: Find flaky reconnect tests</div>
+    <div class="ln"> </div>
+    <div class="ln"> </div>
+    <div class="ln"> </div>
+    <div class="ln"> </div>
+    <div class="grow">
+      <div class="ln ap">┌─ review › explore wants to run ─── Permission: exec · risk: medium ──────────────────────────────────────</div>
+      <div class="ln"><span class="ap">│</span> fvm dart test test/reconnect_test.dart   <span class="mu">cwd ~/…/codelab-app</span></div>
+      <div class="ln"><span class="ap">│</span> [y] allow once  [a] always allow  [n] reject  [N] always reject  [?] details</div>
+      <div class="ln ap">└───────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    </div>
+    <div class="ln rule" aria-hidden="true">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</div>
+    <div class="ln"><span class="b">Tasks</span> <span class="mu">2/4 done · ctrl+t hide</span></div>
+    <div class="ln"><span class="ok">✓</span> <span class="mu">#1 Map callers of restore()  [explore]</span></div>
+    <div class="ln"><span class="ok">✓</span> <span class="mu">#2 Await the session lease in WorkspaceRestorer  high</span></div>
+    <div class="ln"><span class="ac">⠹</span> #3 Check the reconnect fix  <span class="ac">[review]</span></div>
+    <div class="ln"><span class="mu">☐</span> #4 Add a reconnect regression test  <span class="ap">blocked by #3</span></div>
+    <div class="ln"> </div>
+    <div class="ln"><span class="ac b">›</span> <span class="mu">queue a message for after this turn</span></div>
+    <div class="ln mu">y/a/n/N answer · ctrl+o expand subagent steps · ctrl+t task list · esc cancel turn and subagents</div>
+    <div class="ln"><span class="ac">⠹</span> <span class="mu">2m14s</span>  standard · claude-sonnet-5-5 · ctx 44% · ↑58.1k ↓4.0k · $0.11 · subagents: 2 running, depth 2 of 3</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

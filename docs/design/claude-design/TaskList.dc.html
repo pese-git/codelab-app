@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent rows and task list</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:1560px;padding:40px;box-sizing:border-box;display:flex;gap:32px;align-items:flex-start;background:var(--mica);flex-wrap:wrap}
+.col{display:flex;flex-direction:column;gap:28px;min-width:0;flex:1 1 560px;max-width:660px}
+.grp{display:flex;flex-direction:column;gap:14px}
+.spec{display:flex;flex-direction:column;gap:6px}
+.lbl{font-size:12px;line-height:16px;color:var(--text2);font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.lbl b{color:var(--text);font-weight:500}
+.det{font-size:13px;color:var(--text2);font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.pl{padding:0 12px 8px 40px;font:12px/16px 'Cascadia Code','JetBrains Mono',Consolas,monospace;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tail{padding:0 12px 8px 40px;display:flex;flex-direction:column;gap:2px;font:12px/16px 'Cascadia Code','JetBrains Mono',Consolas,monospace;color:var(--text2)}
+.tail span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sum{font-size:12px;color:var(--text2);white-space:nowrap}
+.quiet{display:flex;align-items:center;gap:8px;padding:0 4px;font-size:12px;line-height:18px;color:var(--text2)}
+.path{display:flex;align-items:center;gap:6px;padding:8px 12px 2px;font-size:12px;line-height:16px;color:var(--text2);border-top:1px solid var(--stroke)}
+.path b{color:var(--text);font-weight:600}
+.kids{margin:0 12px 10px 20px;padding-left:12px;border-left:1px solid var(--stroke);display:flex;flex-direction:column;gap:6px}
+.out{border-top:1px solid var(--stroke);background:var(--card2);padding:12px 16px;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:19px}
+.who{display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--stroke);font-size:12px;line-height:16px;color:var(--text2)}
+.who b{color:var(--text);font-weight:600}
+.dbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:4px;border-top:1px solid var(--stroke);background:var(--card2)}
+.dbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border:0;border-radius:4px;background:transparent;color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.dbtn .k{font-size:12px;color:var(--text2)}
+.list{background:var(--card);border:1px solid var(--stroke);border-radius:6px;padding:6px 14px}
+.trow{display:flex;gap:10px;align-items:flex-start;padding:6px 0}
+.tid{font:12px/20px 'Cascadia Code','JetBrains Mono',Consolas,monospace;color:var(--text2);width:22px;flex:none}
+.tbody{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.tmeta{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.blk{font-size:12px;line-height:16px;color:var(--warn)}
+.box{width:16px;height:16px;border-radius:4px;border:1px solid var(--cstroke2);flex:none;margin-top:2px;box-sizing:border-box;display:flex;align-items:center;justify-content:center}
+.box.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+h2{margin:0}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+
+  <div class="col">
+    <section class="grp" aria-label="Agent rows">
+      <h2 class="t-sub">Agent rows</h2>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow · agent</b> · queued: no free slot in the tree</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--text2)"><circle cx="12" cy="12" r="8"/></svg><span style="flex: 1; min-width: 0">Subagent <span class="det">explore: Map dart_tui widgets</span></span><span class="tag">Queued</span></div>
+          <div class="pl">explore · queued · 0 steps · 0 tool calls · 0.0k tokens</div></section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow · agent</b> · running, collapsed: tail of the last 3 child calls + «+N more» (stage 2 stream)</span>
+        <section class="f-exp"><div class="f-exph"><span class="f-pr" style="width: 16px; height: 16px" aria-hidden="true"></span><span style="flex: 1; min-width: 0">Subagent <span class="det">explore: Find REPL command parsers</span></span><span class="tag acc">Running</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div>
+          <div class="tail" role="list" aria-label="Latest steps of explore"><span role="listitem">✓ Read lib/src/repl/repl_loop.dart</span><span role="listitem">✓ Search "SlashCommand" in lib — 9 matches</span><span role="listitem">⠹ Read lib/src/repl/slash_parser.dart</span><span role="listitem">+4 more tool calls · 21.4k tokens</span></div></section>
+      </div>
+      <div class="spec"><span class="lbl"><b>Third-party client / no subagentToolCalls</b> · no child calls arrive: the progress line stands in for the tail</span>
+        <section class="f-exp"><div class="f-exph"><span class="f-pr" style="width: 16px; height: 16px" aria-hidden="true"></span><span style="flex: 1; min-width: 0">Subagent <span class="det">explore: Find REPL command parsers</span></span><span class="tag acc">Running</span></div>
+          <div class="pl">explore · running · 5 steps · 7 tool calls · 21.4k tokens · Search "SlashCommand" in lib</div></section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow · agent</b> · waiting for its own children: slot handed back (SUB-23)</span>
+        <section class="f-exp"><div class="f-exph"><span class="f-pr" style="width: 16px; height: 16px" aria-hidden="true"></span><span style="flex: 1; min-width: 0">Subagent <span class="det">plan: Draft the lease refactor</span></span><span class="tag acc">Running</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div>
+          <div class="pl">plan · waiting · 2 steps · 3 tool calls · 9.8k tokens · 2 subagents</div></section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow · agent</b> · done, collapsed by default: one line, summary on the right, no Done tag (the glyph says it) (D27)</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Subagent <span class="det">review: Check the diff</span></span><span class="sum">9 tool calls · 31.0k · 1m 42s</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div></section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow · agent</b> · done, expanded: nested steps by depth, then the report</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Subagent <span class="det">review: Check the diff</span></span><span class="tag">#3</span><span class="tag ok">Done</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></span></div>
+          <div class="pl">9 tool calls · 31.0k tokens · 1m 42s</div>
+          <div class="kids" role="list" aria-label="Steps of review">
+            <section class="f-exp" role="listitem"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Run <span class="det">git diff --stat</span></span><span class="tag ok">Done</span></div></section>
+            <section class="f-exp" role="listitem"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Subagent <span class="det">explore: Find callers of lease()</span></span><span class="t-cap t2">3 tool calls · 8.4k tokens · 26s</span><span class="tag ok">Done</span></div>
+              <div class="kids" role="list" aria-label="Steps of explore (depth 2)" style="margin-top: 6px">
+                <section class="f-exp" role="listitem"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Search <span class="det">lease\( in lib/</span></span><span class="tag ok">Done</span></div></section>
+              </div>
+            </section>
+          </div>
+          <div class="out"><span>The fix awaits the lease in both paths. One gap: <code class="ic-code">dispose()</code> can run while <code class="ic-code">restore()</code> waits; add a cancelled check after the await.</span></div>
+        </section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow · agent</b> · failed: budget of an ancestor ran out</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/></svg><span style="flex: 1; min-width: 0">Subagent <span class="det">general: Port the reconnect tests</span></span><span class="tag bad">Failed</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></span></div>
+          <div class="out"><span style="color: var(--bad)">Stopped: the turn's token budget is used up.</span><span class="t2">Partial report: 2 of 5 tests ported (reconnect_basic, reconnect_lease).</span></div></section>
+      </div>
+      <div class="spec"><span class="lbl"><b>CodeLabToolCallRow · agent</b> · cancelled with the turn (Esc stops the root and every blocking child)</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn)"><circle cx="12" cy="12" r="8.5"/><path d="m6 18 12-12"/></svg><span style="flex: 1; min-width: 0">Subagent <span class="det">explore: Map the settings registry</span></span><span class="t-cap t2">2 tool calls · 14s</span><span class="tag warn">Cancelled</span></div></section>
+      </div>
+    </section>
+
+    <section class="grp" aria-label="Approvals from subagents">
+      <h2 class="t-sub">Approvals from subagents</h2>
+      <div class="spec"><span class="lbl"><b>CodeLabApprovalPrompt</b> · a descendant asks: the block attaches under the top-level agent row with its path, trees stay collapsed (D27)</span>
+        <section class="f-exp"><div class="f-exph"><span class="f-pr" style="width: 16px; height: 16px" aria-hidden="true"></span><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Subagent <span class="det">plan: Draft the lease refactor</span></span><span class="sum">6 tool calls · 14.0k</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div>
+          <div class="path"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg><span title="review · Check the diff">plan › <b>review</b> wants to run</span><span class="tag bad" style="margin-left: auto">Shell</span></div>
+          <div class="det" style="padding: 2px 12px 8px; color: var(--text)">git diff --stat</div>
+          <div class="dbar" role="group" aria-label="Decision"><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow<span class="k">Ctrl+Enter</span></button><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">Ctrl+Backspace</span></button><span style="flex: 1"></span><button class="f-cbx" aria-label="Scope: Only this time" style="min-width: 0; height: 28px; color: var(--text2)">Only this time<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+        </section>
+      </div>
+      <div class="spec"><span class="lbl"><b>Third-party client</b> · no subagentToolCalls: one flat request, title carries the prefix (D8)</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg><span style="flex: 1; min-width: 0"><span class="det">[review: Check the diff] git diff --stat</span></span><span class="tag">Awaiting approval</span></div></section>
+      </div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="grp" aria-label="Task tool rows">
+      <h2 class="t-sub">task_* rows in the feed</h2>
+      <div class="spec"><span class="lbl"><b>task_* calls</b> · one quiet line per step, no card; several calls of a step merge (D27)</span>
+        <div class="quiet"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg>Task #5 added to the plan · Add a reconnect regression test</div>
+        <div class="quiet"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg>Task #2 done · #3 started</div>
+      </div>
+      <div class="spec"><span class="lbl"><b>task_* error</b> · stays a normal tool row with the reason: errors are never quiet</span>
+        <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/></svg><span style="flex: 1; min-width: 0">Think <span class="det">Task #4 → in_progress</span></span><span class="tag bad">Failed</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></span></div>
+          <div class="out"><span style="color: var(--bad)">Task #4 is blocked by #3, which is not completed.</span></div></section>
+      </div>
+    </section>
+
+    <section class="grp" aria-label="Task checklist">
+      <h2 class="t-sub">Task checklist (Plan pane)</h2>
+      <div class="spec"><span class="lbl"><b>PlanEntryView</b> · every state: #id, priority tag, owner = subagent type, «blocked by» only for unfinished blockers</span>
+        <div class="list" role="list">
+          <div class="trow" role="listitem"><span class="box on" aria-label="completed"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span><span class="tid">#1</span><span class="tbody"><span class="t2" style="text-decoration: line-through">Map callers of restore()</span><span class="tmeta"><span class="tag">explore</span></span></span></div>
+          <div class="trow" role="listitem"><span class="f-pr" style="width: 16px; height: 16px; flex: none; margin-top: 2px" aria-label="in progress"></span><span class="tid">#2</span><span class="tbody"><span>Await the session lease in WorkspaceRestorer</span><span class="tmeta"><span class="tag acc">high</span></span></span></div>
+          <div class="trow" role="listitem"><span class="box" aria-label="pending"></span><span class="tid">#3</span><span class="tbody"><span>Check the reconnect fix</span><span class="tmeta"><span class="tag">review</span><span class="blk">blocked by #2</span></span></span></div>
+          <div class="trow" role="listitem"><span class="box" aria-label="pending"></span><span class="tid">#4</span><span class="tbody"><span>Add a reconnect regression test</span><span class="tmeta"><span class="tag" style="opacity: .8">low</span><span class="blk">blocked by #2, #3</span></span></span></div>
+        </div>
+      </div>
+      <div class="spec"><span class="lbl"><b>PlanEntryView</b> · same list after #2 completed: its blockers disappear from #3 and #4</span>
+        <div class="list" role="list">
+          <div class="trow" role="listitem"><span class="box on" aria-label="completed"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span><span class="tid">#2</span><span class="tbody"><span class="t2" style="text-decoration: line-through">Await the session lease in WorkspaceRestorer</span><span class="tmeta"><span class="tag acc">high</span></span></span></div>
+          <div class="trow" role="listitem"><span class="f-pr" style="width: 16px; height: 16px; flex: none; margin-top: 2px" aria-label="in progress"></span><span class="tid">#3</span><span class="tbody"><span>Check the reconnect fix</span><span class="tmeta"><span class="tag">review</span></span></span></div>
+          <div class="trow" role="listitem"><span class="box" aria-label="pending"></span><span class="tid">#4</span><span class="tbody"><span>Add a reconnect regression test</span><span class="tmeta"><span class="tag" style="opacity: .8">low</span><span class="blk">blocked by #3</span></span></span></div>
+        </div>
+      </div>
+      <div class="spec"><span class="lbl"><b>Old session</b> · recorded with update_plan: the last plan opens as tasks #1…#n, journal untouched (Q4)</span>
+        <div class="list" role="list">
+          <div class="trow" role="listitem"><span class="box on" aria-label="completed"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span><span class="tid">#1</span><span class="tbody"><span class="t2" style="text-decoration: line-through">Run widget tests for the diff view</span></span></div>
+          <div class="trow" role="listitem"><span class="box" aria-label="pending"></span><span class="tid">#2</span><span class="tbody"><span>Cover deleted and binary diff states</span></span></div>
+        </div>
+      </div>
+      <div class="spec"><span class="lbl"><b>Third-party agent</b> · plan without _meta: the checklist as before, no numbers, owners or blockers</span>
+        <div class="list" role="list">
+          <div class="trow" role="listitem"><span class="box on" aria-label="completed"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span><span class="tbody"><span class="t2" style="text-decoration: line-through">Analyze the existing codebase structure</span></span></div>
+          <div class="trow" role="listitem"><span class="f-pr" style="width: 16px; height: 16px; flex: none; margin-top: 2px" aria-label="in progress"></span><span class="tbody"><span>Identify components that need refactoring</span><span class="tmeta"><span class="tag acc">high</span></span></span></div>
+        </div>
+      </div>
+      <div class="spec"><span class="lbl"><b>Collapsed summary above the composer</b> · unchanged by this change</span>
+        <div class="f-card" style="display: flex; align-items: center; gap: 10px; padding: 8px 12px"><span class="f-pr" style="width: 14px; height: 14px" aria-hidden="true"></span><span class="t-strong" style="font-size: 13px">Plan 2 / 4</span><span class="t2" style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px">Check the reconnect fix</span><button class="f-btn subtle" style="height: 26px">Open</button></div>
+      </div>
+    </section>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Subagents — variant: task list under the latest message</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{height:900px;display:flex;flex-direction:column;overflow:hidden}
+.tools{display:flex;align-items:center;gap:2px}
+.tool{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px;border-radius:4px;border:1px solid transparent;background:transparent;color:var(--text2);font-size:12px;cursor:pointer}
+.tool:hover{background:var(--hover)}
+.tool.on{background:var(--accent-weak);color:var(--accent-text);border-color:transparent}
+.side{width:272px}
+.grp{display:flex;align-items:center;gap:8px;min-height:32px;margin:2px 0;padding:0 8px;border:0;background:transparent;color:var(--text);border-radius:4px;width:100%;box-sizing:border-box;text-align:left;font-weight:600;cursor:pointer}
+.sess{padding-left:30px;gap:10px;min-height:32px}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sessarea{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+.det{font-size:13px;color:var(--text2);font-family:'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.pl{padding:0 12px 8px 40px;font:12px/16px 'Cascadia Code','JetBrains Mono',Consolas,monospace;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kids{margin:0 12px 10px 20px;padding-left:12px;border-left:1px solid var(--stroke);display:flex;flex-direction:column;gap:6px}
+.out{border-top:1px solid var(--stroke);background:var(--card2);padding:12px 16px;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:19px}
+.who{display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--stroke);font-size:12px;line-height:16px;color:var(--text2)}
+.who b{color:var(--text);font-weight:600}
+.dbar{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:4px;border-top:1px solid var(--stroke);background:var(--card2)}
+.dbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border:0;border-radius:4px;background:transparent;color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+.dbtn:hover{background:var(--hover)}
+.dbtn .k{font-size:12px;color:var(--text2)}
+.trow{display:flex;gap:10px;align-items:flex-start;padding:3px 0}
+.tid{font:12px/20px 'Cascadia Code','JetBrains Mono',Consolas,monospace;color:var(--text2);width:22px;flex:none}
+.blk{font-size:12px;line-height:16px;color:var(--warn)}
+.box{width:16px;height:16px;border-radius:4px;border:1px solid var(--cstroke2);flex:none;margin-top:2px;box-sizing:border-box;display:flex;align-items:center;justify-content:center}
+.box.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+@media (max-width:760px){.root{height:auto}.f-pane,.side{width:100%}.f-nv{flex-wrap:wrap}}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <span class="f-logo">CL</span>
+  <span class="t-cap">CodeLab</span>
+  <span style="flex: 1"></span>
+  <label class="f-tb" data-fluent="AutoSuggestBox (Ctrl+K)" style="width: 360px">
+    <input type="search" placeholder="Search or run a command" aria-label="Command palette">
+    <span class="t-cap">Ctrl+K</span>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+  </label>
+  <span style="flex: 1"></span>
+  <div class="tools" role="toolbar" aria-label="Tool panes" data-fluent="CommandBar of ToggleButton (tool panes)">
+    <button class="tool" aria-pressed="false" title="Files (Ctrl+Shift+E)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files</button>
+    <button class="tool" aria-pressed="false" title="Diff"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 4v8M8 8h8M8 18h8"/></svg>Diff</button>
+    <a href="Terminal.dc.html" class="tool" aria-pressed="false" title="Terminal (Ctrl+`)" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4 17 6-6-6-6M12 19h8"/></svg>Terminal</a>
+    <button class="tool" aria-pressed="false" title="Plan"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg>Plan<span class="f-badge" data-fluent="InfoBadge">2/4</span></button>
+    <a href="Usage.dc.html" class="tool" aria-pressed="false" title="Usage" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Usage</a>
+  </div>
+  <span class="tag ok"><span class="f-dot"></span>Connected · in-process</span>
+</header>
+
+<div class="f-nv" data-fluent="NavigationView">
+  <nav class="f-pane side" aria-label="Sessions" data-fluent="NavigationPane (open, collapsible)">
+    <div style="display: flex; gap: 4px; align-items: center; padding: 4px 4px 2px">
+      <button class="f-pi" data-fluent="PaneItemAction" style="flex: 1; margin: 0"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session<span class="t-cap t2" style="margin-left: auto">Ctrl+N</span></button>
+    </div>
+    <label class="f-tb" data-fluent="AutoSuggestBox" style="margin: 4px 8px 6px">
+      <input type="search" placeholder="Search sessions" aria-label="Search sessions">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+    </label>
+    <div style="flex: 1; overflow: auto; min-height: 0">
+      <div class="f-ph" data-fluent="PaneItemHeader">Projects</div>
+      <div data-fluent="PaneItemExpander (expanded)">
+        <button class="grp" aria-expanded="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">codelab-app</span><span class="t-cap t2">3</span></button>
+        <a href="SubagentsAlt.dc.html" class="f-pi on sess" data-fluent="PaneItem"><span class="nm">Fix reconnect race in WorkspaceRestorer</span><span class="tag acc" style="height: 18px; padding: 0 6px" role="img" aria-label="Waiting for approval">approval</span></a>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Markdown &amp; diff in transcript</span></a>
+        <a href="Main.dc.html" class="f-pi sess" data-fluent="PaneItem"><span class="nm">Stage 5: split CodeLabShellCubit</span></a>
+      </div>
+    </div>
+    <div class="f-psep" data-fluent="PaneItemSeparator"></div>
+    <a href="Connection.dc.html" class="f-pi" data-fluent="PaneItem (footer)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Settings</a>
+  </nav>
+
+  <section class="f-content" data-fluent="NavigationBody" style="flex-direction: row">
+    <div class="sessarea" data-acp="session pane (root)">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px 8px; border-bottom: 1px solid var(--stroke); flex-wrap: wrap" data-fluent="PageHeader">
+        <h1 class="t-sub" style="margin: 0; font-size: 17px; line-height: 22px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto">Fix reconnect race in WorkspaceRestorer</h1>
+        <span class="tag">codelab-app</span>
+        <span class="tag acc">standard</span>
+        <span class="tag warn">Variant · not approved</span>
+        <span style="flex: 1"></span>
+        <span class="t-cap t2">2 subagents running · depth 2 of 3</span>
+      </div>
+      <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column-reverse; min-height: 0">
+        <div style="padding: 8px 20px 12px; display: flex; flex-direction: column; gap: 10px; max-width: 860px; width: 100%; box-sizing: border-box; margin: 0 auto">
+          <section aria-label="You" style="display: flex; flex-direction: column; align-items: flex-end"><div class="acp-bubble">Find why reconnect drops the open session, fix it and cover it with a test.</div></section>
+          <p style="margin: 0">I'll track this as tasks, let explore map the callers of <code class="ic-code">restore()</code>, then have review check the fix.</p>
+
+          <section class="f-exp"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Think <span class="det">Created tasks #1–#4</span></span><span class="tag ok">Done</span></div></section>
+
+          <section class="f-exp">
+            <div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Subagent <span class="det">explore: Map callers of restore()</span></span><span class="tag">#1</span><span class="tag ok">Done</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></div>
+            <div class="pl">4 tool calls · 18.2k tokens · 48s</div>
+          </section>
+
+          <section class="f-exp">
+            <div class="f-exph"><span class="f-pr" style="width: 16px; height: 16px" aria-hidden="true"></span><span style="flex: 1; min-width: 0">Subagent <span class="det">review: Check the reconnect fix</span></span><span class="tag">#3</span><span class="tag acc">Running</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></span></div>
+            <div class="kids" role="list" aria-label="Steps of review">
+              <section class="f-exp" role="listitem"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg><span style="flex: 1; min-width: 0">Run <span class="det">git diff --stat</span></span><span class="tag ok">Done</span></div></section>
+              <section class="f-exp" role="listitem"><div class="f-exph"><span class="f-pr" style="width: 16px; height: 16px" aria-hidden="true"></span><span style="flex: 1; min-width: 0">Subagent <span class="det">explore: Find flaky reconnect tests</span></span><span class="tag acc">Running</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></span></div>
+                <div class="kids" role="list" aria-label="Steps of explore (depth 2)" style="margin-top: 6px">
+                  <section class="f-exp" role="listitem"><div class="f-exph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--accent-text)"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></svg><span style="flex: 1; min-width: 0">Run <span class="det">fvm dart test test/reconnect_test.dart</span></span><span class="tag bad">Shell</span></div>
+                    <div class="who"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg><span><b>Subagent explore</b> · Find flaky reconnect tests · depth 2</span></div>
+                    <div class="dbar" role="group" aria-label="Decision"><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--ok)"><path d="m5 12 5 5 9-10"/></svg>Allow<span class="k">Ctrl+Enter</span></button><button class="dbtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="color: var(--bad)"><path d="M6 6l12 12M18 6 6 18"/></svg>Reject<span class="k">Ctrl+Backspace</span></button><span style="flex: 1"></span><button class="f-cbx" aria-label="Scope: Only this time" style="min-width: 0; height: 28px; color: var(--text2)">Only this time<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+                  </section>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section class="f-card" aria-label="Task list, pinned under the latest message" data-acp="variant: pinned task list follows the latest agent message" style="padding: 10px 14px; display: flex; flex-direction: column; gap: 2px">
+            <div style="display: flex; align-items: center; gap: 8px; padding-bottom: 4px">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--text2)"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2"/></svg>
+              <span class="t-strong" style="font-size: 13px">Tasks</span>
+              <span class="t-cap t2" style="flex: 1">2 of 4 done</span>
+              <button class="f-btn subtle" style="height: 26px">Open in Plan pane</button>
+              <button class="f-btn subtle icon" aria-label="Collapse task list" aria-expanded="true" style="width: 26px; height: 26px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"/></svg></button>
+            </div>
+            <div role="list" aria-label="Tasks" style="display: flex; flex-direction: column">
+              <div class="trow" role="listitem"><span class="box on" aria-label="completed"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span><span class="tid">#1</span><span class="t2" style="flex: 1; min-width: 0; text-decoration: line-through">Map callers of restore()</span><span class="tag">explore</span></div>
+              <div class="trow" role="listitem"><span class="box on" aria-label="completed"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span><span class="tid">#2</span><span class="t2" style="flex: 1; min-width: 0; text-decoration: line-through">Await the session lease in WorkspaceRestorer</span></div>
+              <div class="trow" role="listitem"><span class="f-pr" style="width: 16px; height: 16px; flex: none; margin-top: 2px" aria-label="in progress"></span><span class="tid">#3</span><span class="t-strong" style="flex: 1; min-width: 0">Check the reconnect fix</span><span class="tag">review</span></div>
+              <div class="trow" role="listitem"><span class="box" aria-label="pending"></span><span class="tid">#4</span><span style="flex: 1; min-width: 0">Add a reconnect regression test</span><span class="blk">blocked by #3</span></div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div style="padding: 0 20px 10px; max-width: 860px; width: 100%; box-sizing: border-box; margin: 0 auto">
+        <div class="f-card" style="padding: 8px; display: flex; flex-direction: column; gap: 8px">
+          <label class="f-tb" data-fluent="TextBox (multiline)" style="align-items: flex-start; padding-top: 2px">
+            <textarea rows="1" aria-label="Prompt" style="font-size: 14px" placeholder="Queue a message for after this turn"></textarea>
+          </label>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+            <button class="f-cbx" data-fluent="DropDownButton" style="min-width: 0">claude-sonnet-5-5<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            <button class="f-cbx" data-fluent="DropDownButton" style="min-width: 0">standard<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+            <span style="flex: 1"></span>
+            <button class="f-btn accent">Queue<span class="t-cap" style="opacity: .8">Enter</span></button>
+            <button class="f-btn icon" aria-label="Cancel turn and its subagents (Esc)" data-fluent="IconButton"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="color: var(--bad)"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+          </div>
+        </div>
+        <div role="status" class="acp-status" style="padding: 8px 4px 0">
+          <span style="color: var(--text)">claude-sonnet-5-5</span>
+          <span class="mono">58.1k → 4.0k</span>
+          <span><span style="color: var(--text)">$0.11</span></span>
+          <span style="flex: 1"></span>
+          <span style="display: flex; align-items: center; gap: 6px; color: var(--accent-text)"><span class="f-pr" style="width: 12px; height: 12px"></span>Waiting for approval · explore</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

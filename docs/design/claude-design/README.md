@@ -2,7 +2,7 @@
 
 Экспорт канваса UI/UX из Claude Design: макеты `codelab_desktop` (десктоп, планшет, смартфон, светлая и тёмная темы), `codelab_cli` (TUI, REPL, headless), графы навигации, покрытие целей паритета и живой прототип.
 
-Экспорт снят 2026-10-29 с опубликованной версии канваса. Ссылка на канвас приватная и в репозиторий намеренно не попадает, как и у [`../ui-canvas`](../ui-canvas/README.md). Если канвас поменялся, файлы здесь надо экспортировать заново: правки в этом каталоге обратно в канвас не уходят.
+Экспорт снят 2026-11-12 с опубликованной версии канваса (первый экспорт — 2026-10-29). Канвас переехал в Claude и теперь опубликован как артефакт типа «Design»; отдельный Claude Design (claude.ai/design) закрывается 14 декабря 2026 года. Ссылка на канвас приватная и в репозиторий намеренно не попадает, как и у [`../ui-canvas`](../ui-canvas/README.md). Если канвас поменялся, файлы здесь надо экспортировать заново: правки в этом каталоге обратно в канвас не уходят.
 
 Канвас — проектный референс. При расхождении источник истины — документы `docs/architecture/proposals/dart-agent-and-clients/` (§12.x) и `openspec/`; номера целей (D-28, U-37, T-22 …) — из `agent-parity-goals.md`.
 
@@ -30,7 +30,7 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 
 ## Артборды
 
-Для каждого светлого артборда приложения (страница «Светлая тема», 32 файла) есть тёмная копия `<Имя>-dark.dc.html` на странице «Тёмная тема», кроме `TranscriptRows`.
+Для каждого светлого артборда приложения (страница «Светлая тема», 35 файлов) есть тёмная копия `<Имя>-dark.dc.html` на странице «Тёмная тема», кроме `TranscriptRows` и неутверждённого варианта `SubagentsAlt`.
 
 ### Приложение — светлая тема
 
@@ -54,7 +54,7 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `Composer.dc.html` | 13 Меню композера — режим, модель, `/`, `@`, очередь |
 | `History.dc.html` | 14 История сессии — панель Branches, откат |
 | `Ask.dc.html` | 15 Диалог ask, одобрение веб-запросов и критичных команд |
-| `Agents.dc.html` | 16 Панель Agents — субагенты и задачи |
+| `Agents.dc.html` | 16 Панель Agents — субагенты и задачи. Лента и одобрение на артборде — до решений D20 и D27 change `add-subagents-and-tasks` (актуальный вид — 30, 31); объём панели v1 в 1.0 — D33, полная доска — после 1.0 |
 | `Usage.dc.html` | 17 Панель Usage |
 | `Inspector.dc.html` | 18 Панель Protocol — кадры и лог |
 | `States.dc.html` | 19 Состояния соединения и ошибок |
@@ -69,6 +69,9 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `Keyboard.dc.html` | 27 Настройки — клавиатура |
 | `Terminal.dc.html` | 28 Панель Terminal (D-28) |
 | `SplitView.dc.html` | 29 Split view — две сессии рядом |
+| `Subagents.dc.html` | 30 Субагенты в ленте — компактный вид: свёрнутые агенты, тихие строки задач, вопрос с путём (change `add-subagents-and-tasks`, D27) |
+| `SubagentsAlt.dc.html` | 30a Вариант, не утверждён — список задач под последним сообщением |
+| `TaskList.dc.html` | 31 Строки агентов и список задач — все состояния |
 
 ### codelab_cli
 
@@ -89,6 +92,7 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `CliSettings.dc.html` | C13 `/settings` |
 | `CliHeadless.dc.html` | C14 Headless: `-p`, stream-json, коды выхода |
 | `CliSwitch.dc.html` | C15 TUI — несколько открытых сессий, переключатель (U-37) |
+| `CliAgents.dc.html` | C16 TUI — строки агентов, вложенные шаги, список задач (change `add-subagents-and-tasks`, Q8) |
 
 ### Смартфон
 
