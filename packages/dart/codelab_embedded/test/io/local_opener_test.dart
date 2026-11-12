@@ -340,6 +340,162 @@ agent:
     });
   });
 
+  // embedded-agent «Проектный конфиг сессий встроенного агента»; design.md
+  // change `require-project-folder`, D21: агент открыт для одной папки, а
+  // сессия другой папки получает конфигурацию своей (запреты и провайдера).
+  group('config of the folder of a session (D21)', () {
+    /// Первый запрос к каждому хосту отвечает вызовом `exec`, следующие —
+    /// текстом: ход заканчивается без зависимости от ответа клиента. Адреса
+    /// запросов запоминаются.
+    (web.Client, List<Uri>) toolThenText() {
+      final urls = <Uri>[];
+      final seen = <String>{};
+      String chunk(Map<String, Object?> delta, String? finish) =>
+          'data: ${jsonEncode({
+            'id': 'c',
+            'object': 'chat.completion.chunk',
+            'created': 1,
+            'model': 'm',
+            'choices': [
+              {'index': 0, 'delta': delta, 'finish_reason': finish},
+            ],
+          })}\n\n';
+      final mock = MockClient.streaming((request, body) async {
+        urls.add(request.url);
+        final first = seen.add(request.url.host);
+        final sse = first
+            ? [
+                chunk({
+                  'role': 'assistant',
+                  'tool_calls': [
+                    {
+                      'index': 0,
+                      'id': 'call_1',
+                      'type': 'function',
+                      'function': {
+                        'name': 'exec',
+                        'arguments': '{"command":"echo hi"}',
+                      },
+                    },
+                  ],
+                }, null),
+                chunk({}, 'tool_calls'),
+                'data: [DONE]\n\n',
+              ].join()
+            : [
+                chunk({'role': 'assistant', 'content': 'done'}, null),
+                chunk({}, 'stop'),
+                'data: [DONE]\n\n',
+              ].join();
+        return web.StreamedResponse(
+          Stream.value(utf8.encode(sse)),
+          200,
+          headers: {'content-type': 'text/event-stream'},
+        );
+      });
+      return (mock, urls);
+    }
+
+    int permissionRequests() => client!.agentRequests
+        .where((method) => method == 'session/request_permission')
+        .length;
+
+    test(
+      'a trusted folder B forbids exec and brings its provider into its '
+      'session; the root session still asks and uses its own provider',
+      () async {
+        final other = Directory('${temp.path}/other')..createSync();
+        final rootPath = project.resolveSymbolicLinksSync();
+        final otherPath = other.resolveSymbolicLinksSync();
+        writeHome(
+          '${providers()}trusted_projects:\n  - $rootPath\n  - $otherPath\n',
+        );
+        File('$otherPath/.codelab/config.local.yaml')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('''
+providers:
+  local:
+    kind: openai-compatible
+    base_url: https://local.test/v1
+    models:
+      m: {}
+agent:
+  default_model: local/m
+permissions:
+  tools:
+    exec: deny
+''');
+        final (mock, urls) = toolThenText();
+        final opened = await opener(
+          environment: {'CODELAB_SECRET_CODELAB_P': value},
+          http: mock,
+        )(cwd: project.path, hostProfile: 'embedded-cli');
+        agent = opened;
+        client = TestAcpClient(opened.clientTransport);
+        await client!.start();
+        await client!.initialize();
+        client!.handlers['session/request_permission'] = (_) => {
+          'outcome': {'outcome': 'cancelled'},
+        };
+
+        final inRoot = await client!.newSession(project.path);
+        await client!.prompt(inRoot, 'run');
+        final askedInRoot = permissionRequests();
+        final inOther = await client!.newSession(other.path);
+        await client!.prompt(inOther, 'run');
+
+        expect(askedInRoot, 1, reason: 'exec asks in the root session');
+        expect(
+          permissionRequests(),
+          askedInRoot,
+          reason: 'exec is denied by the config of the folder B: no question',
+        );
+        expect(urls.map((u) => u.host), containsAll(['p.test', 'local.test']));
+        expect(
+          urls.where((u) => u.host == 'local.test'),
+          isNotEmpty,
+          reason: 'the session of B uses the provider of B',
+        );
+        expect(logger.eventsOf('config.session.project'), hasLength(1));
+        expect(logger.records.join('\n'), isNot(contains(value)));
+      },
+    );
+
+    test('a broken config of the folder B refuses session/new: no session '
+        'is created', () async {
+      final other = Directory('${temp.path}/other')..createSync();
+      writeHome(providers());
+      File('${other.path}/.codelab/config.yaml')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('budget:\n  max_steps: 0\n');
+      final opened = await opener(http: answeringClient('x'))(
+        cwd: project.path,
+        hostProfile: 'embedded-cli',
+      );
+      agent = opened;
+      client = TestAcpClient(opened.clientTransport);
+      await client!.start();
+      await client!.initialize();
+
+      await expectLater(
+        client!.newSession(other.path),
+        // Причина — проблема конфига папки с путём файла (C2.5, `-32603`).
+        throwsA(
+          isA<StateError>().having(
+            (e) => '$e',
+            'message',
+            allOf(
+              contains('${other.path}/.codelab/config.yaml'),
+              contains('budget.max_steps'),
+            ),
+          ),
+        ),
+      );
+
+      expect(logger.eventsOf('config.session.project_invalid'), hasLength(1));
+    });
+  });
+
   group('resources', () {
     test('a turn is journaled in \$CODELAB_HOME/sessions as JSONL', () async {
       writeHome(providers());

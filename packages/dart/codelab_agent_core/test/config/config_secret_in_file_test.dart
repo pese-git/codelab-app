@@ -358,7 +358,11 @@ void main() {
       expect(result.issues.join('\n'), isNot(contains(_skProj)));
     });
 
-    test('api_key in the user layer and api_key_secret in a trusted project '
+    // Проектный слой сюда больше не годится: группа провайдера берётся из
+    // него целиком и `api_key` пользователя к нему не наследуется (D23,
+    // правило 2; config_provider_key_binding_test.dart). Два источника ключа
+    // в слитом дереве остаются у глобальных слоёв.
+    test('api_key in the user layer and api_key_secret in the --config '
         'layer: the merged tree has two sources', () {
       final result = load([
         layer({
@@ -377,7 +381,7 @@ void main() {
           'providers': {
             'openai': {'api_key_secret': 'codelab/openai'},
           },
-        }, kind: ConfigLayerKind.project),
+        }, kind: ConfigLayerKind.extra),
       ], projectRoot: '/proj');
 
       expect(result.config, isNull);
@@ -385,6 +389,40 @@ void main() {
         issuesAt(result, 'providers.openai.api_key').single.message,
         'api_key, api_key_env and api_key_secret are mutually exclusive',
       );
+    });
+
+    // Сценарий agent-configuration «Ключ проектного слоя не образует пары с
+    // ключом пользователя» (D23 правило 2, Q21 (a), D25).
+    test('api_key in the user layer and api_key_secret in config.local.yaml '
+        'of a trusted project: no pair, the project reference is the key', () {
+      final result = load([
+        layer({
+          ...withValues(baseValues(), {
+            'providers': {
+              'openai': {
+                'kind': 'openai-compatible',
+                'base_url': 'https://llm.test/v1',
+                'api_key': _skProj,
+                'models': <String, Object?>{'m': <String, Object?>{}},
+              },
+            },
+          }),
+          'trusted_projects': ['/proj'],
+        }),
+        layer(<String, Object?>{
+          'providers': <String, Object?>{
+            'openai': <String, Object?>{'api_key_secret': 'codelab/openai'},
+          },
+        }, kind: ConfigLayerKind.projectLocal),
+      ], projectRoot: '/proj');
+
+      expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+      final provider = result.config!.providers.singleWhere(
+        (p) => p.config.name == 'openai',
+      );
+      expect((provider.key as SecretKeyRef).name, 'codelab/openai');
+      expect(provider.config.apiKey, isNull);
+      expect(provider.config.baseUrl.host, 'llm.test');
     });
 
     test('api_key_env with api_key_secret keeps its own problem', () {

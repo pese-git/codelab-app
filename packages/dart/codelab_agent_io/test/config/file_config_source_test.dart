@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:codelab_agent_core/codelab_agent_core.dart'
+    show SecretKeyRef, ToolPolicy;
 import 'package:codelab_agent_core/testing.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:test/test.dart';
@@ -256,6 +258,199 @@ mcp:
         );
       },
     );
+  });
+
+  group('loadForProject (ProjectConfigLoader, D21, D23)', () {
+    late String other;
+
+    setUp(() {
+      other = '${root.path}/other';
+      Directory('$other/.codelab').createSync(recursive: true);
+    });
+
+    /// Источник, у которого [trusted] доверены с момента старта (список
+    /// закрепляется в `initial`).
+    FileConfigSource openTrusting({
+      List<String> trusted = const [],
+      String? extraConfig,
+      bool silent = false,
+    }) {
+      final list = trusted.isEmpty
+          ? ''
+          : 'trusted_projects:\n${[for (final t in trusted) '  - $t\n'].join()}';
+      write('$home/config.yaml', '$provider$list');
+      final initial = ConfigLoader().load(
+        cwd: cwd,
+        environment: environment(),
+        extraConfig: extraConfig,
+      );
+      expect(initial.issues, isEmpty, reason: initial.issues.join('\n'));
+      final source = FileConfigSource(
+        initial: initial,
+        cwd: cwd,
+        environment: environment(),
+        clock: clock,
+        logger: logger,
+        extraConfig: extraConfig,
+        // Второй источник теста не должен подписываться на те же
+        // одноразовые потоки событий.
+        directoryEvents: silent
+            ? (_) => const Stream<DirectoryChange>.empty()
+            : fakeEvents,
+      );
+      sources.add(source);
+      return source;
+    }
+
+    test(
+      'reads the layers of the folder; the trust is the pinned one',
+      () async {
+        write(
+          '$other/.codelab/config.local.yaml',
+          'permissions:\n  tools:\n    exec: allow\n',
+        );
+        final trusting = openTrusting(trusted: [other]);
+
+        final trusted = await trusting.loadForProject(other);
+
+        expect(trusted.issues, isEmpty, reason: trusted.issues.join('\n'));
+        expect(
+          trusted.config!.permissions.rules.toolPolicies['exec'],
+          ToolPolicy.allow,
+        );
+        expect(trusted.config!.projectRoot, other);
+
+        // Новый `trusted_projects` в файле до перезапуска не действует.
+        final pinned = openTrusting(silent: true);
+        write(
+          '$home/config.yaml',
+          '${provider}trusted_projects:\n  - $other\n',
+        );
+        final untrusted = await pinned.loadForProject(other);
+
+        expect(
+          untrusted.config!.permissions.rules.toolPolicies,
+          isNot(contains('exec')),
+        );
+        expect(
+          untrusted.warnings.map((w) => w.event),
+          contains('config.project.untrusted_key'),
+        );
+      },
+    );
+
+    test('a relative --config is resolved from the process root, not from '
+        'the folder', () async {
+      write('$cwd/extra.yaml', 'budget:\n  max_steps: 33\n');
+      write('$other/extra.yaml', 'budget:\n  max_steps: 44\n');
+      final source = openTrusting(trusted: [other], extraConfig: 'extra.yaml');
+
+      final loaded = await source.loadForProject(other);
+
+      expect(loaded.issues, isEmpty, reason: loaded.issues.join('\n'));
+      expect(loaded.config!.budget.maxSteps, 33);
+    });
+
+    test('does not move the base of the watcher', () async {
+      final source = openTrusting(trusted: [other]);
+      var signals = 0;
+      source.changes.listen((_) => signals++);
+
+      write(
+        '$home/config.yaml',
+        '${provider}trusted_projects:\n  - $other\nbudget:\n  max_steps: 40\n',
+      );
+      await source.loadForProject(other);
+      emit(home, 'config.yaml');
+      await clock.elapse(const Duration(milliseconds: 300));
+
+      expect(signals, 1, reason: 'the edit is still unapplied for the root');
+    });
+
+    test('a folder that does not exist: no project layers', () async {
+      final source = openTrusting(trusted: [other]);
+
+      final loaded = await source.loadForProject('${root.path}/missing');
+
+      expect(loaded.issues, isEmpty, reason: loaded.issues.join('\n'));
+      expect(loaded.config, isNotNull);
+      expect(loaded.sources.where((s) => s.contains('/missing/')), isEmpty);
+    });
+
+    test(
+      'a link of .codelab to the outside is a problem of the load',
+      () async {
+        write('${root.path}/elsewhere.yaml', 'budget:\n  max_steps: 5\n');
+        Link(
+          '$other/.codelab/config.yaml',
+        ).createSync('${root.path}/elsewhere.yaml');
+        final source = openTrusting(trusted: [other]);
+
+        final loaded = await source.loadForProject(other);
+
+        expect(loaded.issues, hasLength(1), reason: loaded.issues.join('\n'));
+        expect(loaded.issues.single.source, '$other/.codelab/config.yaml');
+        expect(loaded.issues.single.message, contains('resolves outside'));
+      },
+    );
+
+    test('config.local.yaml reaches the core as projectLocal: a key reference '
+        'there works, the same provider in config.yaml is key_unbound '
+        '(D23)', () async {
+      const team = '''
+providers:
+  team:
+    kind: openai-compatible
+    base_url: https://team.test/v1
+    api_key_secret: codelab/team
+    models:
+      m: {}
+''';
+      write('$other/.codelab/config.local.yaml', team);
+      final source = openTrusting(trusted: [other]);
+
+      final viaLocal = await source.loadForProject(other);
+
+      expect(viaLocal.issues, isEmpty, reason: viaLocal.issues.join('\n'));
+      final teamProvider = viaLocal.config!.providers.singleWhere(
+        (p) => p.config.name == 'team',
+      );
+      expect((teamProvider.key as SecretKeyRef).name, 'codelab/team');
+      expect(viaLocal.config!.providerProblems, isEmpty);
+
+      File('$other/.codelab/config.local.yaml').deleteSync();
+      write('$other/.codelab/config.yaml', team);
+      final viaProject = await source.loadForProject(other);
+
+      expect(viaProject.config!.providerProblems, contains('team'));
+      expect(
+        viaProject.warnings.map((w) => w.event),
+        contains('config.provider.key_unbound'),
+      );
+    });
+
+    test('the warnings of the load go to the log of the host', () async {
+      const team = '''
+providers:
+  team:
+    kind: openai-compatible
+    base_url: https://team.test/v1
+    api_key_secret: codelab/team
+    models:
+      m: {}
+''';
+      write('$other/.codelab/config.yaml', team);
+      final trusting = openTrusting(trusted: [other]);
+      await trusting.loadForProject(other);
+      expect(logger.eventsOf('config.provider.key_unbound'), hasLength(1));
+
+      logger = RecordingLogger();
+      final pinned = openTrusting(silent: true);
+      write('$other/.codelab/config.local.yaml', 'sessions:\n  dir: /x\n');
+      await pinned.loadForProject(other);
+
+      expect(logger.eventsOf('config.project.untrusted_key'), isNotEmpty);
+    });
   });
 
   group('secrets.yaml', () {

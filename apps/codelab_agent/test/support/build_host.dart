@@ -12,10 +12,12 @@ Future<AgentHost> buildHost(
   required String cwd,
   required Logger logger,
   http.Client? httpClient,
+  ConfiguredModels Function(CoreConfig config)? modelsFor,
 }) => AgentHost.build(
   options,
   logger: logger,
   loaded: loadServeConfig(options, cwd: cwd),
   cwd: cwd,
   httpClient: httpClient,
+  modelsFor: modelsFor,
 );
