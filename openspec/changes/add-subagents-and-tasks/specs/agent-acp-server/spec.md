@@ -5,19 +5,31 @@
 
 Единственное исключение из «ровно этих полей» — блок объявлений расширений CodeLab `agentCapabilities._meta.codelab` (design.md change `add-subagents-and-tasks`, D9). Правила блока:
 - он SHALL отправляться, только если клиент прислал объект `clientCapabilities._meta.codelab` (в том числе пустой);
-- значение каждого ключа — объект с целым `version`: при `subagents.enabled` — `subagents: {"version": 1, "maxDepth": <subagents.max_depth>}` и `subagentToolCalls: {"version": 1}`; всегда — `tasks: {"version": 1}`;
+- значение каждого ключа — объект с целым `version`: всегда — `tasks: {"version": 1}`; `subagents: {"version": 1, "maxDepth": <subagents.max_depth>}` и `subagentToolCalls: {"version": 1}` — только если базовый реестр ядра содержит инструмент `agent` (при `subagents.enabled`, с итерации 2 change `add-subagents-and-tasks`): агент НЕ SHALL объявлять расширение, которого у него нет. Состав блока не зависит от того, какие ключи и версии объявил клиент;
 - неизвестные ключи и значения в `clientCapabilities._meta.codelab` SHALL игнорироваться без ошибки;
 - стандартные поля и их значения блок не меняет.
 
 `clientCapabilities` SHALL сохраняться на соединение и определять env сессий этого соединения; отсутствие поля SHALL логироваться `acp.client_capabilities.absent`. Повторный `initialize` SHALL давать `-32600` «already initialized», любой метод `session/*` до `initialize` — `-32600` «initialize required». Метод `authenticate` SHALL давать `-32601` (§13.3).
 
 #### Scenario: Ответ codelab-app
-- **WHEN** клиент присылает `initialize` с `protocolVersion: 1` и `fs`/`terminal` capabilities без `_meta`
+- **WHEN** клиент присылает `initialize` с `protocolVersion: 1` и `fs`/`terminal` capabilities без `_meta` (так ведёт себя сторонний клиент; в любой итерации change)
 - **THEN** ответ совпадает с фикстурой `acp/initialize-capabilities`, где `mcpCapabilities` — `{"http": true, "sse": false}`, а `_meta` у `agentCapabilities` нет
 
-#### Scenario: Клиент CodeLab объявил расширения
-- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}, "future": true}`
-- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions`: `agentCapabilities._meta.codelab` — `{"subagents": {"version": 1, "maxDepth": 3}, "subagentToolCalls": {"version": 1}, "tasks": {"version": 1}}`, остальные поля — как в `acp/initialize-capabilities`
+#### Scenario: Клиент CodeLab объявил расширения, субагентов ещё нет (итерация 1)
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}}`, а базовый реестр ядра инструмента `agent` не содержит
+- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 1: `agentCapabilities._meta.codelab` — `{"tasks": {"version": 1}}`, остальные поля — как в `acp/initialize-capabilities`
+
+#### Scenario: Клиент CodeLab объявил расширения, субагенты включены (итерация 2)
+- **WHEN** тот же `initialize`, ядро собрано с `subagents.enabled: true` и `max_depth: 3`
+- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 2: `agentCapabilities._meta.codelab` — `{"subagents": {"version": 1, "maxDepth": 3}, "subagentToolCalls": {"version": 1}, "tasks": {"version": 1}}`
+
+#### Scenario: Неизвестные ключи и версии клиента
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 2, "x": 1}, "future": true, "board": "yes"}`
+- **THEN** ошибки нет, блок ответа — тот же, что при известном объявлении (в итерации 1 — `{"tasks": {"version": 1}}`); проверяет unit-тест `initialize_test.dart` агента, а не фикстура
+
+#### Scenario: Клиентский _meta без codelab
+- **WHEN** клиент присылает `clientCapabilities._meta: {"traceparent": "…"}` без ключа `codelab`
+- **THEN** у `agentCapabilities` нет `_meta` (`initialize_test.dart`)
 
 #### Scenario: Субагенты выключены
 - **WHEN** `subagents.enabled: false`, клиент объявил `clientCapabilities._meta.codelab: {}`

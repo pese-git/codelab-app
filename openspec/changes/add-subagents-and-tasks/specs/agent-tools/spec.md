@@ -55,11 +55,21 @@
 
 Каждая операция, изменившая список, SHALL эмитить ровно один `TaskListChanged` со всем списком до `ToolCallFinished` своего вызова (TSK-1). Операции одного списка SHALL применяться по одной в порядке прихода. Восстановление списка не операцией модели (`TaskList.restore`, `op: restore`) — требование agent-sessions «Список задач следует ветке журнала». Id пункта, выданный на любой ветке журнала, НЕ SHALL выдаваться снова (TSK-3).
 
+Вывод `task_get` SHALL состоять из строк `Task #<id>: <subject>`, `Status: …`, `Priority: …`, `Owner: …`, `Description: …`, `Blocks: #<id> <subject>, …`, `Blocked by: #<id> <subject>, …` в этом порядке; пустое значение — `none`. Ребро зависимости показывается в `Blocks`, `Blocked by` и в суффиксе `(blocked by …)` строки `task_list`, пока блокер не `completed`; суффикс `(owner: …)` в `task_list` — только у владельца не `main` (§17.16.3). Неизвестный id при непустом списке — `Unknown task #<id>. Known: #<id>, ….`, при пустом — `Unknown task #<id>. The task list is empty.`
+
 Детский вариант (потомки, SUB-1, TSK-4): только `task_list`, `task_get` и `task_update`, где допустим лишь `status` и лишь у пунктов с `owner` = id этого потомка. Иначе — ошибка `Subagents may change only the status of their own tasks.`
 
 #### Scenario: Создание, разблокировка и удаление
 - **WHEN** модель создаёт `#1`, `#2` с `blocked_by: ["1"]` и `#3`, отмечает `#1` `completed`, затем удаляет `#3` и создаёт ещё один пункт
 - **THEN** вывод `task_update` содержит `Unblocked: #2 …`; после удаления `task_list` содержит `#1`, `#2` и новый пункт `#4`; эмитировано шесть `TaskListChanged` — по одному на операцию (`core/task-list-create-update`)
+
+#### Scenario: Вывод task_get
+- **WHEN** `#1` `completed`, `#2` (`priority: high`, описание `Rename greet to hello in lib/`) блокирован `#1`, `#3` блокирован `#2`; модель вызывает `task_get` для `#2`, затем для `#9`
+- **THEN** первый вывод — `Task #2: rename greet`, `Status: in_progress`, `Priority: high`, `Owner: main`, `Description: Rename greet to hello in lib/`, `Blocks: #3 run tests`, `Blocked by: none`; второй — ошибка `Unknown task #9. Known: #1, #2, #3.` (golden `tasks.txt`)
+
+#### Scenario: Неизвестный id в пустом списке
+- **WHEN** список пуст, модель вызывает `task_get` с `id: "1"`
+- **THEN** результат — ошибка `Unknown task #1. The task list is empty.`
 
 #### Scenario: Цикл зависимостей
 - **WHEN** `#2` блокирован `#1`, а модель задаёт `#1` `blocked_by: ["2"]`
