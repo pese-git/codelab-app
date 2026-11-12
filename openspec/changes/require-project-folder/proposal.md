@@ -37,10 +37,11 @@
 - `connect`, `reconnect` и `createSession` ждут восстановления проекта с таймаутом; отказ без проекта — событие `connection.connect_rejected` (D3).
 
 **Итерация C — проектный конфиг Dart-агента на сессию (агент, выходит отдельно)**
-- Новый порт ядра `ProjectConfigLoader`. `AgentRuntime` строит для сессии вне корня процесса полный `CoreConfig` её папки: провайдеры, каталог, модель по умолчанию, функцию модели (`modelsFor`), `permissions.*`, `budget.*`, `compaction.*`, `mcp.servers`, `redact.*`. Ключи процесса — `HostSettings` (секреты и их бэкенд, журнал, логи, `exec`, `config.*`), `trusted_projects`, capability и профиль (D21). Провайдер «This project only» работает в сессиях своего проекта без перезапуска.
+- Новый порт ядра `ProjectConfigLoader`. `AgentRuntime` строит для сессии вне корня процесса полный `CoreConfig` её папки: провайдеры, каталог, модель по умолчанию, функцию модели (`modelsFor`), `permissions.*`, `budget.*`, `compaction.*`, `mcp.servers`, `redact.*`. Ключи процесса — `HostSettings` (секреты и их бэкенд, журнал, логи, `config.*`, профиль), `exec.*`, `compaction.enabled`, `trusted_projects`, capability (D21). Провайдер «This project only» работает в сессиях своего проекта без перезапуска.
+- `secret migrate` (и «Move secrets») переносит провайдера закоммиченного `config.yaml` с найденным ключом в `config.local.yaml` доверенного проекта: иначе ссылка в `config.yaml` по D23 не разрешалась бы (D26).
 - Ключ проектного провайдера привязан к адресу: группа адреса и аутентификации берётся целиком из одного слоя, а ссылки на ключ из закоммиченного `config.yaml` разрешаются только для origin, с которым их связывают глобальные слои (D23, Q14).
 - Битый конфиг папки сессии — отказ `session/new` / `session/load` (`-32603`, `data.codelab.reason: "projectConfigInvalid"`), а не тихий снимок без проекта.
-- Порт подключают `localEmbeddedAgentOpener` и `codelab-agent serve`.
+- Порт подключают `localEmbeddedAgentOpener` и `codelab-agent serve --stdio`; `serve --ws` сохраняет снимок без проекта, как файлы проекта (Q18 (a)).
 
 **Итерация B — агент стартует сам (клиент и desktop, после C)**
 - Kit: `ClientWorkspace.ensureAgent` (single-flight, `projectDirectory` не трогает), `WorkspaceState.agentDirectory`, `session/list` при `selectProject`, `loadSession` для `detached`, восстановление активной сессии только в папке проекта снимка (D15, D16).
@@ -71,20 +72,21 @@
   - ADDED: «Без выбранного проекта нет папки агента и сессий», «Агент стартует сам» (повтор старта любым триггером после сбоя, без автоповторов и дублей).
 - `app-settings`, MODIFIED: «Список профилей на странице «Connection»» («Use», «Selected»), «Блок «Behavior» страницы «Connection»» (без «Connect on start», «Restart agent» с подтверждением), «Доступ к настройкам агента на страницах Providers и MCP servers».
 - `acp-client-kit`: MODIFIED «Сессии после переподключения» (`loadSession` для `detached`); ADDED «Агент по требованию хоста».
-- `agent-runtime`, MODIFIED: «Конфигурация сессии вне корня запуска» (ключи сессии из папки сессии).
+- `agent-runtime`, MODIFIED: «Конфигурация сессии вне корня запуска» (ключи сессии из папки сессии); ADDED: «Сессии других папок при перезагрузке корня».
 - `agent-acp-server`, ADDED: «Ошибка проектного конфига сессии», «Модели сессии по её каталогу».
-- `agent-secrets`, ADDED: «Ключ проектного провайдера привязан к адресу».
+- `agent-secrets`, ADDED: «Ключ проектного провайдера привязан к адресу»; MODIFIED: «Подкоманда secret migrate» (R8-10 после правила группы, D25).
+- `agent-configuration`, MODIFIED: «Секреты только ссылками» (R8-6 после правила группы, D25).
 - `embedded-agent`, ADDED: «Проектный конфиг сессий встроенного агента».
 - `agent-binary`, ADDED: «Проектный конфиг сессий в serve».
 
 ## Impact
 
 - Агент:
-  - `codelab_agent_core` — порт, `AgentRuntime._sessionConfig`, сборка ключей;
-  - `codelab_agent_io` — `FileConfigSource`;
-  - `codelab_agent_acp` — код ошибки;
-  - `codelab_embedded` — передача порта;
-  - `apps/codelab_agent` — `serve_config.dart`.
+  - `codelab_agent_core` — порт, `AgentRuntime._sessionConfig`, `AgentSession.models`, правило D23 в `resolve.dart`; узкий экспорт `provider_binding.dart` через `show` (`ProviderKeyBinding`, `ProviderReference`, `ProviderReferenceKind`, `providerOrigin`, `providerReferences`, `referencesIn`) — одна копия правила D23 для мигратора (D26); `applyProviderGroupRule` и `providerEntry` внутренние (`public_api_test.dart`);
+  - `codelab_agent_io` — `FileConfigSource`; мигратор по D26 и новый вариант отчёта `SecretProviderMovedItem` (экспорт также из `codelab_setup/io.dart` и `codelab_embedded/io.dart`); `http` в `dev_dependencies` для `MockClient`;
+  - `codelab_agent_acp` — код ошибки, опции `model` по каталогу сессии;
+  - `codelab_embedded` — `EmbeddedHostServices.projectConfig`, передача порта;
+  - `apps/codelab_agent` — `agent_host.dart`, `serve_config.dart`.
   Allowlist ядра (PKG-2) не меняется.
 - Клиент:
   - `codelab_client_core` — `client_workspace.dart`, `workspace_state.dart`, `workspace_restorer.dart`;
@@ -92,4 +94,4 @@
   - `codelab_ui` — только при нехватке атома для стартового экрана.
 - Тесты: пакеты выше; харнесс характеризационных тестов desktop; интеграционные тесты app (компилируются, на устройстве — в `release/*`).
 - Зависимости, правила сторожа, граф в `README.md`: без изменений.
-- Документация: `docs/architecture/` не меняется (общие правила lifecycle и concurrency соблюдены); заменяемые решения прежних changes — в design.md.
+- Документация: общие правила lifecycle и concurrency в `docs/architecture/` соблюдены и не меняются. Документы ядра `proposals/agent-core/10-core-assembly-and-profiles.md`, `17-5-agent-setup.md` и `15-configuration.md` откладывают чтение конфига чужого `cwd` до отдельного change; итерация C правит их до кода (задача C0.1). Заменяемые решения прежних changes — в design.md.
