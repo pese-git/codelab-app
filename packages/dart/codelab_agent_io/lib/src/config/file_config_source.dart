@@ -40,7 +40,8 @@ import 'provider_preconfig.dart';
 /// разрешается от корня запуска. Базу наблюдателя метод не сдвигает: он
 /// следит только за файлами корня и не должен терять сигнал о неприменённой
 /// правке. Предупреждения загрузки (`config.project.untrusted_key`,
-/// `config.provider.key_unbound`, `config.provider.key_missing`) пишутся
+/// `config.provider.key_unbound`, `config.provider.key_missing`,
+/// `config.mcp.key_unbound`) пишутся
 /// `logConfigWarnings` на каждую загрузку.
 ///
 /// Как использовать: хост (`AgentHost` или открыватель встроенного агента)

@@ -32,6 +32,7 @@ sealed class McpServerConfig {
     this.callTimeout,
     this.secretValues = const {},
     this.enabled = true,
+    this.blockedReason,
   });
 
   final String name;
@@ -48,6 +49,28 @@ sealed class McpServerConfig {
   /// `planConfigReload`): `true → false` закрывает сервер, `false → true` —
   /// новый сервер (для stdio — после перезапуска, R0-1).
   final bool enabled;
+
+  /// Причина, по которой загрузка запретила подключать сервер, или `null`
+  /// (change `bind-mcp-secrets-to-origin`, D4, D5; agent-secrets «Ссылки
+  /// MCP-сервера проектного слоя привязаны к адресу»).
+  ///
+  /// Почему поле, а не отбрасывание сервера: сервер проектного слоя со
+  /// ссылкой `${secret:…}` / `${ENV}`, не привязанной к его адресу, отдал бы
+  /// ключ пользователя чужому хосту. Загрузка не раскрывает такие ссылки (в
+  /// объекте нет ни значения, ни шаблона), но оставляет сервер в списке:
+  /// пользователь видит `failed` и совет в `/mcp list` и панели статуса.
+  ///
+  /// Для чего: коннектор (`codelab_agent_mcp`) проверяет поле первым в
+  /// попытке подключения, до раскрытия секретов и до транспорта, и переводит
+  /// сервер в `failed` с `lastError` = этому тексту. Текст без значений
+  /// секретов и без пути файла; `lastError` обрезается до 200 символов, поэтому
+  /// совет стоит до имени ссылки.
+  ///
+  /// Как использовать: задаёт только загрузка конфигурации. Входит в
+  /// [sameConnection]: правка глобального слоя меняет вердикт для неизменённого
+  /// проектного сервера, и перезагрузка заменяет его в живых сессиях (D6).
+  /// `withEnabled` и `withSecrets` поле сохраняют.
+  final String? blockedReason;
   final Duration connectTimeout;
 
   /// Предел одного `tools/call` этого сервера (ключ конфигурации
@@ -101,6 +124,7 @@ final class McpStdioServerConfig extends McpServerConfig {
     super.callTimeout,
     super.secretValues,
     super.enabled,
+    super.blockedReason,
   });
 
   final String command;
@@ -127,6 +151,7 @@ final class McpStdioServerConfig extends McpServerConfig {
         connectTimeout: connectTimeout,
         callTimeout: callTimeout,
         enabled: enabled,
+        blockedReason: blockedReason,
       );
 
   @override
@@ -140,11 +165,13 @@ final class McpStdioServerConfig extends McpServerConfig {
     callTimeout: callTimeout,
     secretValues: secretValues,
     enabled: enabled,
+    blockedReason: blockedReason,
   );
 
   @override
   bool sameConnection(McpServerConfig other) =>
       other is McpStdioServerConfig &&
+      other.blockedReason == blockedReason &&
       other.name == name &&
       other.command == command &&
       _listEquals(other.args, args) &&
@@ -166,6 +193,7 @@ final class McpHttpServerConfig extends McpServerConfig {
     super.callTimeout,
     super.secretValues,
     super.enabled,
+    super.blockedReason,
     this.secretHeaderPositions = const {},
   });
 
@@ -209,6 +237,7 @@ final class McpHttpServerConfig extends McpServerConfig {
       connectTimeout: connectTimeout,
       callTimeout: callTimeout,
       enabled: enabled,
+      blockedReason: blockedReason,
     );
   }
 
@@ -223,6 +252,7 @@ final class McpHttpServerConfig extends McpServerConfig {
     secretValues: secretValues,
     secretHeaderPositions: secretHeaderPositions,
     enabled: enabled,
+    blockedReason: blockedReason,
   );
 
   int _position(String header) =>
@@ -231,6 +261,7 @@ final class McpHttpServerConfig extends McpServerConfig {
   @override
   bool sameConnection(McpServerConfig other) =>
       other is McpHttpServerConfig &&
+      other.blockedReason == blockedReason &&
       other.name == name &&
       other.url == url &&
       _listEquals(other.headers, headers) &&

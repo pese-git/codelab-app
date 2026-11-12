@@ -202,6 +202,44 @@ final class SecretProviderMovedItem extends SecretMigrationItem {
   String describe() => 'Moved $provider (address and key) from $from to $to';
 }
 
+/// Строка `Moved mcp.servers[name] (with its secrets) to local; removed the
+/// secret values from path`: HTTP-сервер MCP закоммиченного конфига
+/// доверенного проекта переехал в локальный файл (design.md change
+/// `bind-mcp-secrets-to-origin`, D7).
+///
+/// Почему отдельный пункт: ссылка `${secret:…}` в `config.yaml` не привязана
+/// к адресу сервера (agent-secrets «Ссылки MCP-сервера проектного слоя
+/// привязаны к адресу»), и сервер, оставшийся там, был бы заблокирован
+/// загрузкой. Пункт говорит пользователю, что копия сервера вместе со ссылками
+/// лежит в `config.local.yaml`, а из репозитория ушли только значения секретов
+/// (ключи `headers.*` и `env.*` с находками); определение сервера команда сохраняет.
+///
+/// Как использовать: строка идёт после строк находок (`Moved … to secret …`),
+/// `describe()` печатают CLI (`codelab secret migrate`) и «Move secrets»
+/// codelab-app. Значений секретов в пункте нет.
+@immutable
+final class SecretMcpServerMovedItem extends SecretMigrationItem {
+  const SecretMcpServerMovedItem({
+    required this.server,
+    required this.from,
+    required this.to,
+  });
+
+  /// Путь ключа сервера (`mcp.servers[<name>]`).
+  final String server;
+
+  /// Закоммиченный `config.yaml`, откуда ключи `headers.*` и `env.*` с находками удалены.
+  final String from;
+
+  /// `config.local.yaml`, куда записана копия сервера.
+  final String to;
+
+  @override
+  String describe() =>
+      'Moved $server (with its secrets) to $to; removed the secret values '
+      'from $from';
+}
+
 /// Предупреждение `--force`: секрет заменён, прежнее значение не восстановить
 /// (L7).
 @immutable
@@ -564,6 +602,10 @@ final class _File {
   /// Находки, которых команда не переносит (без значений).
   List<String> notes = [];
 
+  /// Пути всех находок слоя, в том числе не ставших единицами правки (значение
+  /// хранилище не примет): сервер MCP с такой находкой не переезжает (D7).
+  final findingKeys = <String>{};
+
   /// Слой проекта вне `trusted_projects` (H4): значения не читаются.
   bool untrusted = false;
 
@@ -584,27 +626,53 @@ const _groupFields = [
   'api_key',
 ];
 
-/// Переезд провайдера закоммиченного `config.yaml` доверенного проекта в
-/// `config.local.yaml` (design.md change `require-project-folder`, D26).
+/// Переезд провайдера или HTTP-сервера MCP закоммиченного `config.yaml`
+/// доверенного проекта в `config.local.yaml` (design.md change
+/// `require-project-folder`, D26; change `bind-mcp-secrets-to-origin`, D7).
 ///
 /// Почему: ссылка на ключ из `config.yaml` не привязана к адресу (D23,
-/// правило 3), поэтому провайдер, у которого мигратор заменил литерал ссылкой
-/// в том же файле, перестал бы работать (`key_unbound`) при коде выхода `0`.
-/// `config.local.yaml` — верхний слой группы (Q17 (a)), его ссылка
-/// разрешается по условию (a). Секрет при этом уходит из репозитория.
+/// правило 3; для MCP — требование «Ссылки MCP-сервера проектного слоя
+/// привязаны к адресу»), поэтому провайдер или сервер, у которого мигратор
+/// заменил литерал ссылкой в том же файле, перестал бы работать
+/// (`key_unbound`) при коде выхода `0`. `config.local.yaml` — верхний слой
+/// (Q17 (a)), его ссылка разрешается по условию (a). Секрет при этом уходит из
+/// репозитория.
 ///
-/// Что переезжает: все поля группы D23, которые задаёт `config.yaml`
-/// (`kind`, `base_url`, `headers`, `api_key*`, `auth_header`), с литералами,
-/// превращёнными в ссылки. Остальное (`models`, сроки) остаётся.
+/// Что переезжает у провайдера: все поля группы D23, которые задаёт
+/// `config.yaml` (`kind`, `base_url`, `headers`, `api_key*`, `auth_header`), с
+/// литералами, превращёнными в ссылки. Остальное (`models`, сроки) остаётся.
+/// У сервера MCP ([server] не `null`): копия элемента целиком (сервер — единица
+/// слияния по `name`, D2) с литералами-ссылками; из `config.yaml` удаляются
+/// только ключи `headers.*` и `env.*` с находками.
 final class _Move {
-  _Move(this.id, this.source, this.target);
+  _Move(this.id, this.source, this.target, {this.server});
 
+  /// Идентификатор провайдера либо имя сервера.
   final String id;
   final _File source;
   final _File target;
 
-  /// Единицы правки `source`, относящиеся к полям группы.
+  /// Элемент `mcp.servers` из `config.yaml` (по снимку файла); `null` у
+  /// провайдера.
+  final Map<String, Object?>? server;
+
+  bool get isServer => server != null;
+
+  /// Путь ключа для строк отчёта: `providers.<id>` или `mcp.servers[<name>]`.
+  String get label => isServer ? 'mcp.servers[$id]' : 'providers.$id';
+
+  /// Единицы правки `source`, относящиеся к полям группы (или к ключам
+  /// `headers.*` и `env.*` сервера).
   final units = <_Unit>[];
+
+  /// Место единицы сервера в элементе: `[headers, Authorization]`,
+  /// `[env, KEY]`.
+  final pathOf = <_Unit, List<String>>{};
+
+  /// Ключи верхнего уровня элемента сервера, которых в копию не попадает:
+  /// ключи секретов вроде `token` убираются из `config.yaml` своей правкой, а
+  /// писатель не принимает их ни в каком файле (D7).
+  final dropped = <String>{};
 
   /// Поля группы без находок: ключ → значение, копируются как есть.
   final copied = <String, Object>{};
@@ -613,8 +681,24 @@ final class _Move {
   /// ничего не пишется, из `config.yaml` поля только удаляются.
   var resume = false;
 
+  /// Копия элемента сервера, где значение каждого ключа `headers.*` и `env.*` единицы задаёт
+  /// [valueOf] (ссылка при записи, заглушка при сравнении).
+  Map<String, Object?> serverCopy(String Function(_Unit unit) valueOf) {
+    final copy = _deepCopy(server!)! as Map<String, Object?>;
+    // Подменяются ВСЕ единицы сервера (заголовки и `env`): литерал, оставшийся
+    // в копии, попал бы в `config.local.yaml` открытым текстом.
+    for (final unit in units) {
+      final path = pathOf[unit]!;
+      (copy[path.first]! as Map<String, Object?>)[path.last] = valueOf(unit);
+    }
+    dropped.forEach(copy.remove);
+    return copy;
+  }
+
   List<ConfigEdit> localEdits() => resume
       ? const []
+      : isServer
+      ? [UpsertMcpServer(serverCopy((unit) => unit.localValue))]
       : [
           for (final MapEntry(:key, :value) in copied.entries)
             SetValue(key, value),
@@ -625,6 +709,36 @@ final class _Move {
     for (final key in copied.keys) UnsetValue(key),
     for (final unit in units) UnsetValue(unit.key),
   ];
+}
+
+Object? _deepCopy(Object? node) => switch (node) {
+  final Map<Object?, Object?> map => <String, Object?>{
+    for (final MapEntry(:key, :value) in map.entries) '$key': _deepCopy(value),
+  },
+  final List<Object?> list => <Object?>[
+    for (final item in list) _deepCopy(item),
+  ],
+  _ => node,
+};
+
+/// Равенство значений конфига по содержимому (порядок ключей не важен).
+bool _sameTree(Object? a, Object? b) {
+  if (a is Map && b is Map) {
+    return a.length == b.length &&
+        a.keys.every((k) => b.containsKey(k) && _sameTree(a[k], b[k]));
+  }
+  if (a is List && b is List) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (!_sameTree(a[i], b[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return a == b;
 }
 
 /// Решение по имени секрета в хранилище.
@@ -984,9 +1098,59 @@ final class _MigrationRun {
     return match?.group(1);
   }
 
+  /// Имя HTTP-сервера MCP, если находка [unit] лежит в его `headers.*`, иначе
+  /// `null` (D7 change `bind-mcp-secrets-to-origin`). Сервер ли это `http`,
+  /// решает [_planMoves] по элементу файла.
+  String? _serverOf(_Unit unit) => RegExp(
+    r'^mcp\.servers\[([^\]]*)\]\.headers[.\[]',
+  ).firstMatch(unit.key)?.group(1);
+
+  /// Элемент `mcp.servers` с именем [name] из значений слоя; `null` — нет.
+  Map<String, Object?>? _serverElement(
+    Map<String, Object?> values,
+    String name,
+  ) {
+    final mcp = values['mcp'];
+    final servers = mcp is Map<String, Object?> ? mcp['servers'] : null;
+    if (servers is! List<Object?>) {
+      return null;
+    }
+    for (final server in servers) {
+      if (server is Map<String, Object?> && server['name'] == name) {
+        return server;
+      }
+    }
+    return null;
+  }
+
+  /// `config.local.yaml` проекта как файл запуска: уже выбранный слой либо
+  /// прочитанный здесь (приёмник переезда провайдера или сервера, D26, D7).
+  Future<_File> _localFile(_File project) async {
+    final existing = _files.where((f) => f.label == 'local').firstOrNull;
+    if (existing != null) {
+      return existing;
+    }
+    final target = ConfigTarget.projectLocal(_cwd);
+    final ConfigSnapshot snapshot;
+    try {
+      snapshot = await _writer.read(target);
+    } on ConfigException catch (error) {
+      _fail(1, [for (final issue in error.issues) '$issue']);
+    }
+    final local = _File(
+      label: 'local',
+      path: snapshot.path,
+      target: target,
+      snapshot: snapshot,
+    );
+    _files.insert(_files.indexOf(project) + 1, local);
+    return local;
+  }
+
   /// D26: провайдеры закоммиченного `config.yaml` доверенного проекта, у
   /// которых есть находка в поле группы, переезжают в `config.local.yaml`.
-  /// Доверие проверено выше (недоверенный проект уже без единиц).
+  /// D7 (`bind-mcp-secrets-to-origin`): так же HTTP-серверы MCP с находкой в
+  /// `headers.*`. Доверие проверено выше (недоверенный проект уже без единиц).
   Future<void> _planMoves() async {
     final project = _files
         .where((f) => f.label == 'project' && !f.untrusted)
@@ -997,26 +1161,13 @@ final class _MigrationRun {
     final ids = <String>{
       for (final unit in project.units) ?_groupProviderOf(unit),
     };
-    if (ids.isEmpty) {
+    final servers = <String>{
+      for (final unit in project.units) ?_serverOf(unit),
+    };
+    if (ids.isEmpty && servers.isEmpty) {
       return;
     }
-    var local = _files.where((f) => f.label == 'local').firstOrNull;
-    if (local == null) {
-      final target = ConfigTarget.projectLocal(_cwd);
-      final ConfigSnapshot snapshot;
-      try {
-        snapshot = await _writer.read(target);
-      } on ConfigException catch (error) {
-        _fail(1, [for (final issue in error.issues) '$issue']);
-      }
-      local = _File(
-        label: 'local',
-        path: snapshot.path,
-        target: target,
-        snapshot: snapshot,
-      );
-      _files.insert(_files.indexOf(project) + 1, local);
-    }
+    final local = await _localFile(project);
     final binding = ProviderKeyBinding.fromLayers(_layers, _env);
     for (final id in ids) {
       // C5.6: в `config.local.yaml` ссылка разрешается без проверки origin
@@ -1062,6 +1213,154 @@ final class _MigrationRun {
       project.moves.add(move);
       local.incoming.add(move);
     }
+    for (final name in servers) {
+      _planServerMove(project, local, name, binding);
+    }
+  }
+
+  /// D7: HTTP-сервер `config.yaml` с находкой в `headers.*` переезжает в
+  /// `config.local.yaml`; stdio-сервер остаётся «как раньше» (ссылка в том же
+  /// файле, правило привязки его не судит, D1 change).
+  void _planServerMove(
+    _File project,
+    _File local,
+    String name,
+    ProviderKeyBinding binding,
+  ) {
+    final element = _serverElement(project.snapshot!.values, name);
+    if (element == null || element['type'] != 'http') {
+      return;
+    }
+    final label = 'mcp.servers[$name]';
+    // Все единицы сервера снимаются при отказе: файлы этого сервера и
+    // хранилище не меняются, литерал остаётся в `config.yaml`.
+    void refuse(String reason) {
+      project.units.removeWhere((u) => _ownerOf(u.key) == label);
+      project.notes.add('$label in ${project.path}: $reason; move it by hand');
+    }
+
+    // Ссылка, которую создаёт не мигратор из литерала, привязана глобальными
+    // слоями к origin `url` (условие (b)); иначе перенос снял бы с неё проверку
+    // origin, и ключ пользователя ушёл бы на адрес из репозитория (C5.6, D7).
+    final foreign = _unboundServerReference(project, element, name, binding);
+    if (foreign != null) {
+      refuse('$foreign is not bound to this address by the user config');
+      return;
+    }
+    final unitKeys = {for (final u in project.units) u.key};
+    final leftover = project.findingKeys.any(
+      (key) => key.startsWith('$label.') && !unitKeys.contains(key),
+    );
+    if (leftover) {
+      // Копия элемента унесла бы в `config.local.yaml` литерал, который
+      // хранилище не примет, а писатель отверг бы такой файл.
+      refuse('a value of this server cannot be stored');
+      return;
+    }
+    final move = _Move(name, project, local, server: element);
+    move.units.addAll(
+      project.units.where(
+        (u) => _ownerOf(u.key) == label && u.kind == _UnitKind.templated,
+      ),
+    );
+    for (final section in const ['headers', 'env']) {
+      final entries = element[section];
+      if (entries is! Map<String, Object?>) {
+        continue;
+      }
+      for (final entry in entries.keys) {
+        final key = KeyPath(
+          'mcp.servers',
+        ).at(name).child(section).child(entry).value;
+        for (final unit in move.units) {
+          if (unit.key == key) {
+            move.pathOf[unit] = [section, entry];
+          }
+        }
+      }
+    }
+    for (final unit in project.units) {
+      if (_ownerOf(unit.key) == label && unit.kind == _UnitKind.otherInline) {
+        move.dropped.add(unit.key.substring(unit.key.lastIndexOf('.') + 1));
+      }
+    }
+    if (move.units.any((u) => !move.pathOf.containsKey(u)) ||
+        _localServerConflicts(move, local)) {
+      _refuse(move);
+      return;
+    }
+    for (final unit in move.units) {
+      unit.move = move;
+    }
+    project.moves.add(move);
+    local.incoming.add(move);
+  }
+
+  /// Ссылка HTTP-сервера [name] в `config.yaml`, которую не создаёт сам
+  /// мигратор из литерала и которую глобальные слои не связывают с origin
+  /// `url` сервера (условие (b)); `null` — все ссылки привязаны. В тексте — вид
+  /// и имя ссылки без значения (D7).
+  String? _unboundServerReference(
+    _File project,
+    Map<String, Object?> element,
+    String name,
+    ProviderKeyBinding binding,
+  ) {
+    final unitKeys = {
+      for (final u in project.units)
+        if (_serverOf(u) == name) u.key: u,
+    };
+    final origin = mcpServerOrigin(element, _env);
+    for (final reference in mcpServerReferences(element)) {
+      final key = reference.field.startsWith('headers.')
+          ? KeyPath('mcp.servers')
+                .at(name)
+                .child('headers')
+                .child(reference.field.substring('headers.'.length))
+                .value
+          : KeyPath('mcp.servers').at(name).child(reference.field).value;
+      final unit = unitKeys[key];
+      // Находку-литерал мигратор заменяет ссылкой сам; чужими остаются
+      // ссылки вне находок и ссылки в нетронутых частях строки находки.
+      if (unit != null && !_isForeignInUnit(unit, reference)) {
+        continue;
+      }
+      if (!binding.isBound(reference, origin)) {
+        return literalSecretTag(reference.name, asName: true) != null
+            ? 'a reference'
+            : switch (reference.kind) {
+                ProviderReferenceKind.secret => 'secret ${reference.name}',
+                ProviderReferenceKind.env => 'variable ${reference.name}',
+              };
+      }
+    }
+    return null;
+  }
+
+  /// `config.local.yaml` уже задаёт элемент с этим `name` (в том числе
+  /// `{name, enabled: false}`): совпадающий с тем, что записал бы перенос, —
+  /// повтор после сбоя (`resume`); иначе элементы не сливаются молча (D7).
+  /// Значения-ссылки сверяются позже, когда известны имена секретов
+  /// ([_verifyResumes]).
+  bool _localServerConflicts(_Move move, _File local) {
+    final existing = _serverElement(local.snapshot!.values, move.id);
+    if (existing == null) {
+      return false;
+    }
+    final actual = _deepCopy(existing)! as Map<String, Object?>;
+    for (final unit in move.units) {
+      final path = move.pathOf[unit]!;
+      final section = actual[path.first];
+      if (section is! Map<String, Object?> || section[path.last] is! String) {
+        return true;
+      }
+      section[path.last] = '';
+    }
+    if (!_sameTree(actual, move.serverCopy((_) => ''))) {
+      return true;
+    }
+    move.resume = true;
+    return false;
   }
 
   /// Ссылка группы провайдера [id] в `config.yaml`, которую не создаёт сам
@@ -1185,15 +1484,22 @@ final class _MigrationRun {
     return false;
   }
 
-  /// Отказ по провайдеру: оба файла не меняются, значение в хранилище не
-  /// попадает; остальные находки переносятся (D26).
+  /// Отказ по провайдеру или серверу: оба файла не меняются, значение в
+  /// хранилище не попадает; остальные находки переносятся (D26, D7).
   void _refuse(_Move move) {
-    move.source.units.removeWhere(move.units.contains);
+    if (move.isServer) {
+      move.source.units.removeWhere((u) => _ownerOf(u.key) == move.label);
+    } else {
+      move.source.units.removeWhere(move.units.contains);
+    }
     move.source.moves.remove(move);
     move.target.incoming.remove(move);
     move.source.notes.add(
-      'providers.${move.id} in ${move.source.path}: config.local.yaml '
-      'already defines its address or key; move it by hand',
+      move.isServer
+          ? '${move.label} in ${move.source.path}: config.local.yaml already '
+                'defines this server; move it by hand'
+          : '${move.label} in ${move.source.path}: config.local.yaml already '
+                'defines its address or key; move it by hand',
     );
   }
 
@@ -1229,6 +1535,7 @@ final class _MigrationRun {
     for (final finding in findInlineSecrets(tree)) {
       byKey.putIfAbsent(finding.keyPath, () => []).add(finding);
     }
+    file.findingKeys.addAll(byKey.keys);
     for (final MapEntry(:key, value: findings) in byKey.entries) {
       final value = file.snapshot!.get(key);
       final unit = _unitFor(key, findings, value, file);
@@ -1917,11 +2224,17 @@ final class _MigrationRun {
       }
       for (final move in file.moves) {
         out.add(
-          SecretProviderMovedItem(
-            provider: 'providers.${move.id}',
-            from: file.path,
-            to: move.target.path,
-          ),
+          move.isServer
+              ? SecretMcpServerMovedItem(
+                  server: move.label,
+                  from: file.path,
+                  to: move.target.path,
+                )
+              : SecretProviderMovedItem(
+                  provider: move.label,
+                  from: file.path,
+                  to: move.target.path,
+                ),
         );
       }
       for (final note in file.notes) {

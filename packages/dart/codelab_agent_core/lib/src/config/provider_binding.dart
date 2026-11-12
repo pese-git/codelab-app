@@ -1,6 +1,8 @@
-/// Привязка ключа проектного провайдера к адресу (приоритет 1; design.md
-/// change `require-project-folder`, D23, Q14, Q16, Q17; spec agent-secrets
-/// «Ключ проектного провайдера привязан к адресу»).
+/// Привязка ключа проектного провайдера и ссылок HTTP-сервера MCP к адресу
+/// (приоритет 1; design.md change `require-project-folder`, D23, Q14, Q16, Q17;
+/// change `bind-mcp-secrets-to-origin`, D3; spec agent-secrets «Ключ проектного
+/// провайдера привязан к адресу», «Ссылки MCP-сервера проектного слоя
+/// привязаны к адресу»).
 ///
 /// Угроза: `config.yaml` проекта лежит в репозитории, и его пишет не
 /// пользователь. Провайдер из него мог бы сослаться на секрет процесса
@@ -151,9 +153,13 @@ enum ProviderReferenceKind { secret, env }
 ///
 /// Для чего: единица, которую проверяет [ProviderKeyBinding.isBound]; её
 /// читают загрузка конфига (`resolve.dart`) и мигратор секретов (D26, C5.6).
+/// Название историческое: ссылки HTTP-сервера MCP ([mcpServerReferences])
+/// того же типа (`bind-mcp-secrets-to-origin`, D3 — тип не переименован ради
+/// публичного API).
 ///
 /// Как использовать: список даёт [providerReferences] по записи
-/// `providers.<id>` слоя. Имя ссылки может быть значением секрета, вписанным
+/// `providers.<id>` слоя или [mcpServerReferences] по элементу
+/// `mcp.servers`. Имя ссылки может быть значением секрета, вписанным
 /// вместо имени, — в логи и тексты его выводят только после проверки
 /// `literalSecretTag`.
 final class ProviderReference {
@@ -249,6 +255,70 @@ List<ProviderReference> providerReferences(Map<String, Object?> provider) {
   return out;
 }
 
+/// Ссылки HTTP-сервера MCP [server] (элемент `mcp.servers`): `${secret:…}` и
+/// `${ENV}` в значениях `headers.*` (`field` — `headers.<Name>`), `${ENV}` в
+/// `url` (`field` — `url`). У stdio-сервера и элемента без `type: http`
+/// список пуст.
+///
+/// Почему: правило привязки к адресу (D23) распространено на `mcp.servers`
+/// проектных слоёв (change `bind-mcp-secrets-to-origin`, D1, D3; agent-secrets
+/// «Ссылки MCP-сервера проектного слоя привязаны к адресу»). Stdio-серверы
+/// не судятся: у них нет адреса, граница — доверие к проекту (D1, Q1 (a)).
+/// `${secret:…}` в `url` здесь тоже возвращается (мигратор не должен
+/// пропустить её молча), но загрузка её не судит: `_interpolate` отвергает
+/// такую ссылку проблемой загрузки (секрет допустим только в `env` и
+/// `headers`).
+///
+/// Для чего: единая реализация для загрузки (`_Builder._buildMcpServer`),
+/// привязок глобальных серверов ([ProviderKeyBinding.fromLayers]) и мигратора
+/// секретов `codelab_agent_io` (D7).
+///
+/// Как использовать: [server] — карта элемента одного слоя. Значения не
+/// читаются, окружение не раскрывается.
+List<ProviderReference> mcpServerReferences(Map<String, Object?> server) {
+  if (server['type'] != 'http') {
+    return const [];
+  }
+  final out = <ProviderReference>[];
+  void scan(String field, Object? value) {
+    if (value is! String) {
+      return;
+    }
+    for (final (kind, name) in referencesIn(value)) {
+      out.add(ProviderReference(kind, name, field));
+    }
+  }
+
+  scan('url', server['url']);
+  if (server['headers'] case final Map<String, Object?> headers) {
+    for (final MapEntry(:key, :value) in headers.entries) {
+      scan('headers.$key', value);
+    }
+  }
+  return out;
+}
+
+/// Origin HTTP-сервера MCP [server] по его `url` (`${ENV}` раскрыт только для
+/// сравнения); `null` — адрес не разобрался, не http(s) или переменная не
+/// задана (D3: тогда ни одна ссылка не привязана по условию (b)).
+///
+/// Почему отдельно от [providerOrigin]: у сервера нет `base_url` по умолчанию
+/// для вида, а `url` обязателен. Сравнение origin — то же ([originOf]).
+///
+/// Как использовать: [environment] — окружение процесса; значение переменной
+/// наружу не уходит.
+String? mcpServerOrigin(
+  Map<String, Object?> server,
+  Map<String, String> environment,
+) {
+  final raw = server['url'];
+  if (raw is! String) {
+    return null;
+  }
+  final expansion = expandEnvironment(raw, environment);
+  return expansion.missing.isEmpty ? originOf(expansion.text) : null;
+}
+
 /// `base_url` по умолчанию для вида провайдера (как в `_Builder._provider`).
 String? _defaultBase(String? kind) => switch (kind) {
   'anthropic' => 'https://api.anthropic.com',
@@ -298,6 +368,12 @@ String? providerOrigin(
 }
 
 /// Привязки ссылок глобальных слоёв к origin (D23, правило 3, условие (b)).
+/// Тип обслуживает и провайдеров, и HTTP-серверы MCP; название историческое
+/// и оставлено ради публичного API (`bind-mcp-secrets-to-origin`, D3).
+///
+/// Источники привязок: провайдеры (origin `base_url`) и HTTP-серверы MCP (origin `url`,
+/// `bind-mcp-secrets-to-origin`, D3). Множество одно: ссылка — пара «вид,
+/// имя», а утечка определяется адресом назначения.
 ///
 /// Почему из деревьев слоёв, а не из собранного снимка: в снимке `${ENV}`
 /// заголовков уже раскрыт, а привязка сравнивает ссылки «как написано».
@@ -337,6 +413,24 @@ final class ProviderKeyBinding {
           continue;
         }
         for (final ref in providerReferences(provider)) {
+          bound.add('${ref.identity}@$origin');
+        }
+      }
+    }
+    // Глобальные HTTP-серверы MCP привязывают свои ссылки к origin `url`
+    // (D3): ссылка — пара «вид, имя», а утечка определяется адресом
+    // назначения, поэтому множество привязок общее с провайдерами. Stdio-
+    // серверы адреса не имеют и привязок не дают ([mcpServerReferences]).
+    if (global['mcp'] case {'servers': final List<Object?> servers}) {
+      for (final server in servers) {
+        if (server is! Map<String, Object?>) {
+          continue;
+        }
+        final origin = mcpServerOrigin(server, environment);
+        if (origin == null) {
+          continue;
+        }
+        for (final ref in mcpServerReferences(server)) {
           bound.add('${ref.identity}@$origin');
         }
       }

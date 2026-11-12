@@ -381,6 +381,16 @@ final class _ConnectedSession implements McpSessionTools {
     _Server server,
     bool Function() stale,
   ) async {
+    // Причина блокировки от загрузки конфигурации проверяется первой: ссылка
+    // сервера проектного слоя не привязана к его адресу, ключ пользователя
+    // чужому хосту не отдаётся (change `bind-mcp-secrets-to-origin`, D4;
+    // agent-secrets «Ссылки MCP-сервера проектного слоя привязаны к адресу»,
+    // п. 4). Ни функция раскрытия (хранилище), ни фабрика транспорта (сеть,
+    // процесс) не вызываются; дальше — как у отказа раскрытия: `failed`,
+    // `lastError` = причина, повтор по расписанию без ввода-вывода.
+    if (server.config.blockedReason case final blocked?) {
+      return (null, blocked);
+    }
     final generation = server.generation;
     var effective = server.config;
     // Только серверы конфига: `${secret:…}` в серверах `session/new` —
