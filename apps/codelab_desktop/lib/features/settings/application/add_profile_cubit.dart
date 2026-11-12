@@ -9,15 +9,12 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         EnvToken,
         NewSecretToken,
         NoToken,
-        ProbeCancellation,
         ProfileCommitter,
         ProfileDraft,
         ProfileDraftField,
         ProfileDraftIssue,
         ProfileDraftIssueCode,
         ProfileKind,
-        ProfileProbe,
-        ProfileProbeOutcome,
         ProfileRejected,
         ProfileSaveFailed,
         ProfileSaveFailedReason,
@@ -25,7 +22,6 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ProfileSecretBackend,
         ProfileSecrets,
         ProfileStore,
-        Reachable,
         SecretText,
         StdioProfile,
         StoredSecretToken,
@@ -39,18 +35,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/platform/connection_preferences.dart';
 import '../../../core/platform/home_path_label.dart';
 import 'add_profile_state.dart';
-import 'probe_outcome_view.dart';
-import 'probe_profile.dart';
-import 'profile_view.dart'
-    show
-        EnvTokenView,
-        NoTokenView,
-        ProfileTokenView,
-        SecretTokenView,
-        profileOrigin;
+import 'profile_view.dart' show profileOrigin;
 
 export 'add_profile_state.dart';
-export 'probe_outcome_view.dart';
 
 /// Имя переменной токена по умолчанию, как у CLI (D13).
 const defaultTokenEnvName = 'CODELAB_AGENT_TOKEN';
@@ -66,14 +53,15 @@ const _saveFailedMessage = 'Could not save the profile. Try again.';
 /// Текст сбоя записи секрета, когда хранилище не назвало причину (D13).
 const _secretFailedMessage = 'Could not store the token. Try again.';
 
-/// Форма «Add connection profile»: черновик, проверка и сохранение.
+/// Форма «Add connection profile»: черновик и сохранение.
 ///
 /// Почему отдельный Cubit: форма сложная (тип, имя и id, поля stdio или
-/// WebSocket, проверка, подтверждение, запись), и её состояние — не состояние
-/// страницы «Connection» и не `WorkspaceState` (`state-management.md` §63,
-/// §64; design.md change `add-app-settings-shell`, D4, D12). Правила черновика
-/// (`ProfileDraft`) и проверка (`ProfileProbe`) живут в kit; здесь только их
-/// оркестровка и тексты для экрана.
+/// WebSocket, подтверждение, запись), и её состояние — не состояние страницы
+/// «Connection» и не `WorkspaceState` (`state-management.md` §63, §64;
+/// design.md change `add-app-settings-shell`, D4, D12). Правила черновика
+/// (`ProfileDraft`) живут в kit; здесь только их оркестровка и тексты для
+/// экрана. Проверки подключения при сохранении нет: профиль проверяет старт
+/// агента по «Use» (change `remove-test-connection`, D1, Q3).
 ///
 /// Для чего: единственный источник того, что показывает диалог — [state] —
 /// и единственное место, где диалог пишет в `profiles.json` и в
@@ -82,10 +70,8 @@ const _secretFailedMessage = 'Could not store the token. Try again.';
 ///
 /// Как использовать: composition root создаёт Cubit на каждое открытие
 /// диалога (`createAddProfileCubit`), диалог зовёт [start], затем методы
-/// правки, [testConnection], [confirmPlaintextProbe], [save] и [confirmPlaintext]. Закрытие диалога
-/// закрывает Cubit: идущая проверка отменяется, её транспорт закрывается, а
-/// поздний исход отбрасывается с событием `connection_profile.probe_discarded`
-/// (AGENTS.md §9, §12). Переменная токена проверяется только на «задана ли» по
+/// правки, [save] и [confirmPlaintext]. Закрытие диалога закрывает Cubit.
+/// Переменная токена проверяется только на «задана ли» по
 /// [environment] — значение не читается, не хранится и не показывается (D13).
 /// Токен хранилища секретов (design.md change `add-provider-setup-ui`, D13,
 /// D14): «Use stored secret» хранит только имя, «Store a new token» держит
@@ -98,19 +84,15 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     required ProfileStore store,
     required Future<ProfileSecrets> Function() openSecrets,
     required ConnectionPreferences preferences,
-    required ProfileProbe probe,
     required List<ProfileKind> kinds,
     required Map<String, String> environment,
-    required String? Function() projectDirectory,
     String? profilesPath,
     Logger? logger,
   }) : _store = store,
        _openSecrets = openSecrets,
        _profilesPath = profilesPath,
        _preferences = preferences,
-       _probe = probe,
        _environment = environment,
-       _projectDirectory = projectDirectory,
        _logger = logger,
        _kind = _initialKind(kinds),
        _kinds = List.unmodifiable(kinds),
@@ -128,14 +110,10 @@ class AddProfileCubit extends Cubit<AddProfileState> {
   late ProfileSecrets _secrets;
   late ProfileCommitter _committer;
   final ConnectionPreferences _preferences;
-  final ProfileProbe _probe;
 
   /// Окружение app: читается только «задана ли переменная» (D13).
   final Map<String, String> _environment;
 
-  /// Выбранный проект; `null` — проект не выбран, и «Test connection» не
-  /// передаёт stdio-процессу папку (`probeProfileFor`, D7).
-  final String? Function() _projectDirectory;
   final Logger? _logger;
   final List<ProfileKind> _kinds;
   final String? _profilesPath;
@@ -168,9 +146,9 @@ class AddProfileCubit extends Cubit<AddProfileState> {
   List<SavedProfile> get savedProfiles => List.unmodifiable(_saved);
 
   /// Комбинация URL и токена, для которой пользователь уже подтвердил
-  /// `ws://` (перед проверкой или перед записью): одно подтверждение на одну
-  /// комбинацию (решение пользователя 2026-11-05). Сравнивается, а не
-  /// сбрасывается: правка URL или токена даёт другой ключ.
+  /// `ws://` перед записью: одно подтверждение на одну комбинацию (решение
+  /// пользователя 2026-11-05; `remove-test-connection`, D5 — подтверждения
+  /// перед проверкой больше нет). Правка URL или токена сбрасывает его.
   String? _plaintextConfirmed;
 
   /// Имена хранилища для «Use stored secret»; читаются при открытии формы,
@@ -184,18 +162,6 @@ class AddProfileCubit extends Cubit<AddProfileState> {
   /// Ошибка у поля токена от отказа записи («секрет уже есть»); живёт до
   /// следующей правки.
   String? _tokenSubmitError;
-
-  /// Был ли выбранный секрет в хранилище в момент проверки: «rejected the
-  /// token» допустим, только если токен действительно ушёл на сервер (D12).
-  /// `null` — проверка не шла; тогда берётся снимок имён при открытии формы.
-  bool? _storedFound;
-
-  /// Номер последней начатой проверки (`operation_id`).
-  var _probeSeq = 0;
-
-  /// Номер проверки, исход которой ещё нужен; `null` — такой нет.
-  int? _activeProbe;
-  ProbeCancellation? _cancellation;
 
   /// Загружает id профилей файла для проверки занятости.
   ///
@@ -374,208 +340,48 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     if (form == null || value == form.useByDefault) {
       return;
     }
-    // Флажок не меняет черновик, поэтому исход проверки остаётся (и идущая
-    // проверка не отменяется).
-    final next = _compose(
-      draft: form.draft,
-      useByDefault: value,
-      idEdited: form.idEdited,
-      tokenEnvName: form.tokenEnvName,
-      touched: form.touched,
-      probe: form.probe,
+    // Флажок не меняет черновик, поэтому подтверждение `ws://` остаётся.
+    emit(
+      Editing(
+        _compose(
+          draft: form.draft,
+          useByDefault: value,
+          idEdited: form.idEdited,
+          tokenEnvName: form.tokenEnvName,
+          touched: form.touched,
+        ),
+      ),
     );
-    emit(switch (state) {
-      Probing(:final probeId) => Probing(next, probeId: probeId),
-      _ => Editing(next),
-    });
   }
 
   /// Пользователь покинул поле [field] (потеря фокуса): его ошибка, если
-  /// есть, становится видна. Черновик, идущая проверка и подтверждение не
-  /// меняются.
+  /// есть, становится видна. Черновик и подтверждение не меняются.
   void touchField(ProfileDraftField field) {
     final current = state;
-    if (current is! Editing && current is! Probing) {
-      return;
-    }
-    final form = (current as AddProfileInProgress).form;
-    if (form.touched.contains(field)) {
-      return;
-    }
-    final next = _compose(
-      draft: form.draft,
-      useByDefault: form.useByDefault,
-      idEdited: form.idEdited,
-      tokenEnvName: form.tokenEnvName,
-      touched: {...form.touched, field},
-      probe: form.probe,
-    );
-    emit(switch (current) {
-      Probing(:final probeId) => Probing(next, probeId: probeId),
-      _ => Editing(next),
-    });
-  }
-
-  /// «Test connection»: один `initialize` без сессии (D12).
-  ///
-  /// Повторный вызов и любая правка отменяют идущую проверку.
-  Future<void> testConnection() async {
-    final form = _editableForm();
-    if (form == null || !form.canTest) {
-      return;
-    }
-    // Проверке не нужны имя и id: подставляем безопасные, чтобы `toProfile`
-    // не отклонил черновик из-за них.
-    final result = form.draft
-        .copyWith(id: 'probe', label: 'probe')
-        .toProfile(const []);
-    if (result is! DraftAccepted) {
-      return;
-    }
-    // Токен уходит в первом же рукопожатии, поэтому `ws://` к другой машине с
-    // токеном проверяется только после «Test anyway». Без токена проверка
-    // ничего секретного не отправляет и идёт сразу.
-    if (_hasToken(form.draft) &&
-        _hasPlaintextWarning(result) &&
-        _plaintextConfirmed != _plaintextKey(form.draft)) {
-      _cancelProbe();
-      emit(
-        ConfirmingPlaintextProbe(form, message: _plaintextMessage(form.draft)),
-      );
-      return;
-    }
-    await _startProbe(form, result.profile);
-  }
-
-  /// «Test anyway» после предупреждения о `ws://` с токеном.
-  Future<void> confirmPlaintextProbe() async {
-    final current = state;
-    if (current is! ConfirmingPlaintextProbe) {
+    if (current is! Editing) {
       return;
     }
     final form = current.form;
-    final result = form.draft
-        .copyWith(id: 'probe', label: 'probe')
-        .toProfile(const []);
-    if (result is! DraftAccepted) {
+    if (form.touched.contains(field)) {
       return;
     }
-    _plaintextConfirmed = _plaintextKey(form.draft);
-    await _startProbe(form, result.profile);
-  }
-
-  /// Значение нового токена для проверки (из памяти формы, до записи в
-  /// хранилище, D13); у других вариантов токен читает сам `ProfileProbe`.
-  static SecretText? _probeToken(ProfileDraft draft) {
-    final token = draft.token;
-    return token is NewSecretToken && !token.value.isEmpty ? token.value : null;
-  }
-
-  Future<void> _startProbe(
-    AddProfileForm form,
-    ConnectionProfile profile,
-  ) async {
-    _cancelProbe();
-    final probeId = ++_probeSeq;
-    final cancellation = ProbeCancellation();
-    _activeProbe = probeId;
-    _cancellation = cancellation;
-    // Id черновика фиксируется на старте: к концу проверки форма могла
-    // смениться (D17, N2). Пустой id в событие не попадает.
-    final draftId = form.draft.id.trim();
-    final idContext = {if (draftId.isNotEmpty) 'profile_id': draftId};
-    _logger?.info(
-      'connection_profile.probe_started',
-      context: {
-        'operation_id': probeId,
-        ...idContext,
-        'type': _typeOf(profile),
-      },
-    );
     emit(
-      Probing(
+      Editing(
         _compose(
           draft: form.draft,
           useByDefault: form.useByDefault,
           idEdited: form.idEdited,
           tokenEnvName: form.tokenEnvName,
-          // «Test connection» касается полей, нужных проверке.
-          touched: {
-            ...form.touched,
-            ProfileDraftField.command,
-            ProfileDraftField.args,
-            ProfileDraftField.env,
-            ProfileDraftField.url,
-            ProfileDraftField.token,
-          },
-          probe: null,
+          touched: {...form.touched, field},
         ),
-        probeId: probeId,
       ),
     );
-
-    final stopwatch = Stopwatch()..start();
-    final project = _projectDirectory();
-    // `''` безопасна: `probeProfileFor` уже сбросил `runInProjectDirectory`,
-    // и kit папку не читает (D7). Временно, до удаления «Test connection».
-    final outcome = await _probe.probe(
-      probeProfileFor(profile, projectDirectory: project),
-      projectDirectory: project ?? '',
-      cancellation: cancellation,
-      token: _probeToken(form.draft),
-    );
-    // Поздний исход старой проверки, проверки после `close()` и отменённой
-    // проверки (`null`) формы не меняет (AGENTS.md §9).
-    if (isClosed || _activeProbe != probeId || outcome == null) {
-      _logger?.debug(
-        'connection_profile.probe_discarded',
-        context: {'operation_id': probeId, ...idContext},
-      );
-      return;
-    }
-    // Нашёлся ли секрет — только для проверки, чей исход ещё нужен: поздний
-    // исход не должен менять `_storedFound` актуальной формы.
-    final draftToken = form.draft.token;
-    final storedFound = draftToken is StoredSecretToken
-        ? await _isSetOrFalse(draftToken.name)
-        : null;
-    if (isClosed || _activeProbe != probeId) {
-      _logger?.debug(
-        'connection_profile.probe_discarded',
-        context: {'operation_id': probeId, ...idContext},
-      );
-      return;
-    }
-    _storedFound = storedFound;
-    _activeProbe = null;
-    _cancellation = null;
-    _logger?.info(
-      'connection_profile.probe_finished',
-      context: {
-        'operation_id': probeId,
-        ...idContext,
-        'outcome': probeOutcomeName(outcome),
-        'duration_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    final current = state;
-    if (current is Probing && current.probeId == probeId) {
-      emit(
-        Editing(
-          _compose(
-            draft: current.form.draft,
-            useByDefault: current.form.useByDefault,
-            idEdited: current.form.idEdited,
-            tokenEnvName: current.form.tokenEnvName,
-            touched: current.form.touched,
-            probe: outcome,
-          ),
-        ),
-      );
-    }
   }
 
-  /// «Save» / «Save without test».
+  /// «Save».
+  ///
+  /// Только локальная валидация черновика: сети и `PATH` не касается, значение
+  /// выбранного секрета не читается (`remove-test-connection`, D4, Q3).
   ///
   /// Правила проверяются заново на свежем списке id: другой процесс (CLI)
   /// мог занять id, пока диалог был открыт (корневой `AGENTS.md` §2, п. 3).
@@ -584,7 +390,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
   /// черновика (`_editableForm` в `Saving` пуст).
   Future<void> save() async {
     final form = _editableForm();
-    if (form == null || state is Probing) {
+    if (form == null) {
       return;
     }
     if (!form.canSave) {
@@ -671,9 +477,6 @@ class AddProfileCubit extends Cubit<AddProfileState> {
 
   @override
   Future<void> close() {
-    // Закрытие диалога отменяет идущую проверку: процесс агента завершается, а
-    // исход отбрасывается (spec «Закрытие во время проверки»).
-    _cancelProbe();
     _forgetNewToken();
     return super.close();
   }
@@ -705,7 +508,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     emit(Editing(cleared));
   }
 
-  /// Правка поля: отменяет проверку, сбрасывает её исход и подтверждение.
+  /// Правка поля: снимает ошибку отказа записи у поля токена.
   void _change(
     ProfileDraft Function(AddProfileForm form) edit, {
     bool Function(AddProfileForm form)? idEdited,
@@ -716,11 +519,8 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     if (form == null) {
       return;
     }
-    _cancelProbe();
-    // Любая правка снимает ошибку отказа записи у поля токена и результат
-    // проверки секрета.
+    // Любая правка снимает ошибку отказа записи у поля токена.
     _tokenSubmitError = null;
-    _storedFound = null;
     emit(
       Editing(
         _compose(
@@ -729,7 +529,6 @@ class AddProfileCubit extends Cubit<AddProfileState> {
           idEdited: idEdited?.call(form) ?? form.idEdited,
           tokenEnvName: tokenEnvName ?? form.tokenEnvName,
           touched: {...form.touched, ...touch},
-          probe: null,
         ),
       ),
     );
@@ -740,12 +539,6 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     OpeningSecrets() || Saving() || Saved() => null,
     AddProfileInProgress(:final form) => form,
   };
-
-  void _cancelProbe() {
-    _activeProbe = null;
-    _cancellation?.cancel();
-    _cancellation = null;
-  }
 
   /// Запись через `ProfileCommitter`: секрет (если «Store a new token»),
   /// затем профиль; отказ профиля откатывает созданный секрет (D13).
@@ -761,7 +554,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
       // Профиль мог записаться уже после закрытия диалога: страница отметит
       // его по `savedProfiles` (M1).
       if (result is ProfileSaved) {
-        _saved.add((profileId: result.profile.id, probe: _probeOf(form)));
+        _saved.add((profileId: result.profile.id));
       }
       return;
     }
@@ -791,11 +584,6 @@ class AddProfileCubit extends Cubit<AddProfileState> {
       case ProfileSaveFailed():
         _failCommit(form, draftId, result, newToken: newToken);
     }
-  }
-
-  Reachable? _probeOf(AddProfileForm form) {
-    final probe = form.probe;
-    return probe is Reachable ? probe : null;
   }
 
   /// Профиль записан: ключ умолчания, журнал и экран «Profile saved».
@@ -839,19 +627,17 @@ class AddProfileCubit extends Cubit<AddProfileState> {
         );
       }
     }
-    final probe = _probeOf(form);
     _logger?.info(
       'connection_profile.saved',
       context: {
         'profile_id': profile.id,
         'type': _typeOf(profile),
         'token': _tokenKindOf(profile),
-        'tested': probe != null,
       },
     );
     // Профиль записан, даже если диалог уже закрыт: страница отметит его по
     // `savedProfiles` (M1).
-    _saved.add((profileId: profile.id, probe: probe));
+    _saved.add((profileId: profile.id));
     if (isClosed) {
       return;
     }
@@ -859,7 +645,6 @@ class AddProfileCubit extends Cubit<AddProfileState> {
       Saved(
         profileId: profile.id,
         label: profile.label,
-        probe: probe,
         useByDefault: defaulted,
       ),
     );
@@ -936,14 +721,6 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     emit(SaveFailed(form, message: _saveFailedMessage));
   }
 
-  Future<bool> _isSetOrFalse(String name) async {
-    try {
-      return await _secrets.isSet(name);
-    } on Object {
-      return false;
-    }
-  }
-
   /// Имена хранилища для «Use stored secret»; нечитаемое хранилище — пусто
   /// (вариант неактивен). Текст ошибки не показывается и не пишется: он мог
   /// бы цитировать значение.
@@ -970,7 +747,6 @@ class AddProfileCubit extends Cubit<AddProfileState> {
         idEdited: form.idEdited,
         tokenEnvName: form.tokenEnvName,
         touched: touchAll ? _allFields : form.touched,
-        probe: form.probe,
       );
 
   /// Собирает форму; имена хранилища, бэкенд и ошибка у поля токена берутся
@@ -981,7 +757,6 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     bool idEdited = false,
     String tokenEnvName = defaultTokenEnvName,
     required Set<ProfileDraftField> touched,
-    ProfileProbeOutcome? probe,
   }) => _composeForm(
     existingIds: _existingIds,
     environment: _environment,
@@ -989,13 +764,11 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     secretNames: _secretNames,
     backend: _secrets.backend,
     tokenSubmitError: _tokenSubmitError,
-    storedFound: _storedFound,
     draft: draft,
     useByDefault: useByDefault,
     idEdited: idEdited,
     tokenEnvName: tokenEnvName,
     touched: touched,
-    probe: probe,
   );
 
   /// Подтверждение `ws://` к нелокальному хосту — всегда, с токеном и без
@@ -1010,12 +783,6 @@ class AddProfileCubit extends Cubit<AddProfileState> {
         : 'Prompts and files sent to $origin will travel in clear text. Use '
               'wss:// if the host supports it.';
   }
-
-  /// Есть ли у разобранного черновика предупреждение о `ws://` к другой
-  /// машине (правило — `ProfileDraft`, не виджет и не Cubit).
-  static bool _hasPlaintextWarning(DraftAccepted result) => result.warnings.any(
-    (issue) => issue.code == ProfileDraftIssueCode.plaintextToRemote,
-  );
 
   /// Ключ комбинации URL и токена. Значение нового токена в него не входит:
   /// его правка сбрасывает подтверждение явно (`setNewToken`), а имя секрета и
@@ -1071,23 +838,17 @@ AddProfileForm _composeForm({
   required List<String> secretNames,
   required ProfileSecretBackend backend,
   String? tokenSubmitError,
-  bool? storedFound,
   required ProfileDraft draft,
   bool useByDefault = false,
   bool idEdited = false,
   String tokenEnvName = defaultTokenEnvName,
   required Set<ProfileDraftField> touched,
-  ProfileProbeOutcome? probe,
 }) {
   final issues = draft.validate(existingIds);
   final blocking = [
     for (final issue in issues)
       if (!issue.isWarning) issue,
   ];
-  // Для проверки нужны только поля агента, а не имя и id.
-  final testIssues = draft
-      .copyWith(id: 'probe', label: 'probe')
-      .validate(const []);
   final token = draft.token;
   final tokenName = token is EnvToken && _isVariableName(token.name)
       ? token.name
@@ -1096,7 +857,7 @@ AddProfileForm _composeForm({
   final errorTexts = {
     for (final entry in _errorTexts(draft, blocking).entries)
       // Ошибка поля видна, только когда пользователь его трогал: ввод,
-      // потеря фокуса, «Save» или «Test» (UX по ручному прогону).
+      // потеря фокуса или «Save» (UX по ручному прогону).
       if (touched.contains(entry.key)) entry.key: entry.value,
   };
   final ownName = isValidProfileId(draft.id.trim())
@@ -1119,29 +880,11 @@ AddProfileForm _composeForm({
         : (backend.unavailableReason ??
               'Secret store ${backend.id} is read-only.'),
     touched: touched,
-    probe: probe,
     errors: {
       ...errorTexts,
       // Отказ записи («секрет уже есть») важнее общей ошибки поля токена.
       ProfileDraftField.token: ?tokenSubmitError,
     },
-    probeText: probe == null
-        ? null
-        : probeOutcomeText(
-            probe,
-            command: draft.command,
-            // Токен «был отправлен», только если переменная выбрана и задана
-            // (D12: иначе агент отказал бы в доступе без токена).
-            token: _probeTokenView(
-              token,
-              envName: tokenName,
-              envUnset: unset,
-              secretNames: secretNames,
-              storedFound: storedFound,
-              backend: backend,
-              ownName: ownName,
-            ),
-          ),
     warning: issues.any((i) => i.isWarning)
         ? (token is EnvToken ||
                   token is StoredSecretToken ||
@@ -1152,7 +895,6 @@ AddProfileForm _composeForm({
     tokenNotice: unset
         ? "$tokenName is not set in CodeLab's environment."
         : null,
-    canTest: !testIssues.any((issue) => !issue.isWarning),
     canSave: blocking.isEmpty,
   );
 }
@@ -1191,28 +933,3 @@ String _textOf(ProfileDraftIssue issue, ProfileDraft draft) =>
 
 bool _isVariableName(String name) =>
     RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(name);
-
-/// Источник токена, который проверка действительно отправила (D12): текст
-/// «rejected the token» допустим только для него.
-ProfileTokenView _probeTokenView(
-  Object? token, {
-  required String? envName,
-  required bool envUnset,
-  required List<String> secretNames,
-  required bool? storedFound,
-  required ProfileSecretBackend backend,
-  required String ownName,
-}) => switch (token) {
-  EnvToken() when envName != null => EnvTokenView(envName, isSet: !envUnset),
-  StoredSecretToken(:final name) => SecretTokenView(
-    name,
-    backend: backend.id,
-    isSet: storedFound ?? secretNames.contains(name),
-  ),
-  NewSecretToken(:final value) => SecretTokenView(
-    ownName,
-    backend: backend.id,
-    isSet: !value.isEmpty,
-  ),
-  _ => const NoTokenView(),
-};

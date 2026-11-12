@@ -65,11 +65,11 @@ List<String> selectableProfileTokenSecrets(Iterable<String> names) {
 /// `SecretValue` моста настроек тип нужен, потому что kit не зависит от
 /// стороны агента (design.md change `add-provider-setup-ui`, D13).
 ///
-/// Для чего: вход [ProfileSecrets.store] и `ProfileProbe.probe(token:)`.
+/// Для чего: вход [ProfileSecrets.store].
 ///
 /// Как использовать: `SecretText(поле.value)`; значение читает только
-/// [reveal] — вызывать его допустимо лишь в адаптере хранилища и при
-/// открытии транспорта проверки. Состояние формы после закрытия обязано
+/// [reveal] — вызывать его допустимо лишь в адаптере хранилища.
+/// Состояние формы после закрытия обязано
 /// забыть экземпляр.
 @immutable
 final class SecretText {

@@ -8,7 +8,6 @@ import 'package:codelab_client_io/codelab_client_io.dart'
     show
         DirectoryExists,
         JsonFileProfileStore,
-        classifyProbeFailure,
         IoTerminalProcessRunner,
         IoProjectFiles,
         IoTextFileIo,
@@ -18,7 +17,6 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         AcpClientBackend,
         ClientWorkspace,
         ConfigTransportResolver,
-        ProfileProbe,
         ProfileSecretSource,
         ProfileSecrets,
         ProfileStore,
@@ -760,17 +758,6 @@ final class CodeLabPresentationModule extends Module {
           )
           .singleton();
     }
-    // Проверка профиля («Test connection»): те же резолверы, что у
-    // `ClientWorkspace`, и классификатор ошибок IO-транспортов (D12). Токен
-    // даёт тот же `ProfileSecretSource` (D15).
-    bind<ProfileProbe>()
-        .toProvide(
-          () => ProfileProbe(
-            resolvers: _transportResolvers(currentScope),
-            classifier: classifyProbeFailure,
-          ),
-        )
-        .singleton();
     // Диалог «Add connection profile»: новый Cubit на каждое открытие;
     // закрывает его страница вместе с диалогом (D12).
     bind<AddProfileCubit>().toProvide(() {
@@ -779,14 +766,11 @@ final class CodeLabPresentationModule extends Module {
         store: currentScope.resolve<ProfileStore>(),
         openSecrets: currentScope.resolve<ReopenableProfileSecrets>().reopen,
         preferences: currentScope.resolve<ConnectionPreferences>(),
-        probe: currentScope.resolve<ProfileProbe>(),
         // Типы профилей определяют резолверы, а не проверка платформы
         // (SETUP-22, AGENTS.md §11).
         kinds: profileKindsFor(_transportResolvers(currentScope)),
         environment: environment.variables,
         profilesPath: environment.profilesPath,
-        projectDirectory: () =>
-            currentScope.resolve<CodeLabShellParts>().settings.projectDirectory,
         logger: _settingsLogger(),
       );
     });
@@ -802,9 +786,6 @@ final class CodeLabPresentationModule extends Module {
         commands: currentScope.resolve<CodeLabShellParts>().connection,
         environment: environment.variables,
         profilesPath: environment.profilesPath,
-        probe: currentScope.resolve<ProfileProbe>(),
-        projectDirectory: () =>
-            currentScope.resolve<CodeLabShellParts>().settings.projectDirectory,
         logger: _settingsLogger(),
       );
     });

@@ -20,7 +20,6 @@ export 'src/connection/profile_draft.dart';
 export 'src/connection/profile_committer.dart';
 export 'src/connection/profile_ids.dart';
 export 'src/connection/profile_parsing.dart';
-export 'src/connection/profile_probe.dart';
 export 'src/connection/profile_secrets.dart';
 export 'src/connection/profile_token_ref.dart';
 export 'src/connection/secret_source.dart';
