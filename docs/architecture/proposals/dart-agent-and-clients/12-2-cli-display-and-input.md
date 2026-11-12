@@ -178,14 +178,18 @@ TTY: вывод headless — данные для скриптов.
 |---|---|---|---|
 | режим | `plan` | `modeLabel` | никогда |
 | модель | `gpt-4.1` | `modelLabel`; при нехватке места — часть после последнего `/` | 5-м (сначала сокращается) |
-| контекст | `ctx 18%` | `usage.contextFraction`; ≥ 80 % — жёлтым, ≥ 95 % — красным | 4-м |
-| токены | `↑12.3k ↓1.1k` | `usage.session`: вход = `input + cacheRead + cacheWrite`, выход = `output`; `~` перед числами при `sessionPartial` | 3-м |
-| стоимость | `$0.04` | `usage.sessionCost`; `~` при `sessionPartial` | 2-м |
+| контекст | `ctx 18%` | `usage.context.fraction`; ≥ 80 % — жёлтым, ≥ 95 % — красным | 4-м |
+| токены | `↑12.3k ↓1.1k` | `usage.session.tokens`: вход = `input + cacheRead + cacheWrite`, выход = `output`; `~` перед числами при причинах `noUsage` или `beforeLoad` | 3-м |
+| стоимость | `$0.04` | `usage.session.cost` (целые микроединицы); `~` перед суммой при любой причине `partial` | 2-м |
 | ветка | `⎇ main` (ASCII: `git:main`) | `gitBranch` | 1-м |
 | очередь | `в очереди: 2`; после MVP при ожидающем steering — `в очереди: 2 · направлено: 1` | `queued > 0`; `steered > 0` (длина `SessionView.pendingSteers`, C-03, §12.1, agent-core-architecture §17.7.6) | никогда |
 | только чтение | `read-only` | после MVP: `readOnly` (`SessionHandle.access` — `ReadOnlyAccess`, S-09, agent-core-architecture §17.6.11) | никогда |
 
-Разделитель ` · `; сегмент без данных не выводится (VIEW-6). Если даже режим и очередь не
+Разделитель ` · `; сегмент без данных не выводится (VIEW-6). Usage приходит уведомлением
+`_codelab/session/usage` (change `add-usage-extension`, D12): TUI показывает ещё профиль
+первым сегментом и отбрасывает его раньше всех (профиль, стоимость, токены, контекст, модель);
+ветка git — вне того change. `~` ставится префиксом, как в desktop (артборд CliStatus ставит его
+после суммы — отступление подтвердил пользователь 2026-11-13, D12 того change). Если даже режим и очередь не
 помещаются — строка обрезается с `…`. Числа токенов: до 1000 — как есть, далее `12.3k`, `1.2M`.
 
 * **Построчный режим:** после каждого хода печатается одна приглушённая строка
@@ -907,7 +911,7 @@ CLI сам пишет только файлы состояния (`~/.codelab/cl
   `test/tui/tui_command_context_test.dart` — вывод команд заметками и смена сессии.
   `test/tui/tui_input_test.dart` — §12.2.9, «Два источника клавиш».
 * **`cli/status-line-usage`** (`test/e2e/status_line_usage_test.dart`, U-13): scripted-агент
-  отвечает с usage в форме, утверждённой OpenSpec; после хода строка содержит модель, режим,
+  отвечает с usage уведомлением `_codelab/session/usage` (change `add-usage-extension`, задача 3.6); после хода строка содержит модель, режим,
   `ctx 9%`, `↑…k ↓…`, `$0.04`, ветку временного git-репозитория; тот же сценарий без usage — нет
   сегментов токенов, стоимости и контекста и нет `0` (VIEW-6). Модульно —
   `test/render/status_line_renderer_test.dart`: ширины 120, 60, 30, 15 — сегменты отбрасываются в
