@@ -171,6 +171,25 @@ void main() {
     expect(button('Close'), findsNothing);
   });
 
+  testWidgets('план: строка переноса MCP-сервера показана как есть '
+      '(bind-mcp-secrets-to-origin, D7)', (tester) async {
+    const moveLine =
+        'Moved mcp.servers[team] (with its secrets) to '
+        '/work/app/.codelab/config.local.yaml; removed the secret values '
+        'from /work/app/.codelab/config.yaml';
+    await openPlan(
+      tester,
+      const SecretMigrationOutcome(
+        items: [_planLine, moveLine],
+        canApply: true,
+      ),
+    );
+
+    expect(find.text(_planLine), findsOneWidget);
+    expect(find.text(moveLine), findsOneWidget);
+    expect(button('Migrate'), findsOneWidget);
+  });
+
   testWidgets('Cancel закрывает диалог, предупреждение остаётся', (
     tester,
   ) async {

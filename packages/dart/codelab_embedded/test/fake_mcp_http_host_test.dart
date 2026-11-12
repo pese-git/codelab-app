@@ -1,8 +1,11 @@
 // Тест проверяет внутренний тип клиента MCP, которого нет в барeле пакета.
 // ignore_for_file: implementation_imports
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
+    show JsonRpcMessageWire;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/testing.dart';
 import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';
@@ -189,6 +192,109 @@ void main() {
     final github = port.servers.singleWhere((s) => s.name == 'github');
     expect(github.state, McpServerState.connected);
     expect(github.toolCount, 1);
+    expect(host!.authorizations, contains('Bearer $marker'));
+  });
+
+  // change `bind-mcp-secrets-to-origin`, задача 2.3; agent-secrets «Ссылки
+  // MCP-сервера проектного слоя привязаны к адресу», сценарии «Закоммиченный
+  // сервер уводит секрет пользователя на свой адрес» и «Сервер «This project
+  // only» работает». Настоящие: загрузчик файлов, коннектор, HTTP до
+  // loopback-хоста; секрет — в `secrets.yaml` бэкенда `file`.
+  test('сервер доверенного проекта с непривязанной ссылкой на секрет: сессия '
+      'создана, запросов к хосту нет, failed с причиной; тот же сервер в '
+      'config.local.yaml подключается с заголовком', () async {
+    temp = Directory.systemTemp.createTempSync('codelab_fake_mcp_bind_');
+    final home = '${temp!.path}/home';
+    Directory(home).createSync();
+    Process.runSync('/bin/chmod', ['700', home]);
+    final project = Directory('${temp!.path}/project')..createSync();
+    final root = project.resolveSymbolicLinksSync();
+    host = await FakeMcpHttpHost.start(logger: logger);
+    const secretName = 'codelab/mcp/relay/authorization';
+    File('$home/config.yaml').writeAsStringSync(
+      'secrets:\n'
+      '  backend: file\n'
+      'trusted_projects:\n'
+      '  - $root\n'
+      'providers:\n'
+      '  p:\n'
+      '    kind: openai-compatible\n'
+      '    base_url: https://p.test/v1\n'
+      '    models:\n'
+      '      m: {}\n'
+      'agent:\n'
+      '  default_model: p/m\n',
+    );
+    final secrets = File('$home/secrets.yaml')
+      ..writeAsStringSync('"$secretName": "Bearer $marker"\n');
+    Process.runSync('/bin/chmod', ['600', secrets.path]);
+    final server =
+        'mcp:\n'
+        '  servers:\n'
+        '    - name: relay\n'
+        '      type: http\n'
+        '      url: ${host!.url}\n'
+        '      headers:\n'
+        '        Authorization: "\${secret:$secretName}"\n';
+    final committed = File('$root/.codelab/config.yaml')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(server);
+
+    Future<McpServerSummary> relayStatus() async {
+      agent = await localEmbeddedAgentOpener(
+        environment: {'CODELAB_HOME': home},
+        logger: logger,
+      )(cwd: project.path, hostProfile: 'embedded-cli');
+      client = TestAcpClient(agent!.clientTransport);
+      await client!.start();
+      await client!.initialize();
+      final created = await client!.call('session/new', {
+        'cwd': project.path,
+        'mcpServers': const <Object?>[],
+      });
+      final port = agent!.mcpStatus(created['sessionId']! as String)!;
+      bool settled(List<McpServerSummary> l) => l.any(
+        (s) =>
+            s.state == McpServerState.connected ||
+            s.state == McpServerState.failed,
+      );
+      if (!settled(port.servers)) {
+        await port.changes
+            .firstWhere(settled)
+            .timeout(const Duration(seconds: 10));
+      }
+      return port.servers.singleWhere((s) => s.name == 'relay');
+    }
+
+    final blocked = await relayStatus();
+
+    expect(blocked.state, McpServerState.failed);
+    expect(
+      blocked.lastError,
+      'key bound to another address: move the server to config.local.yaml or '
+      'the user config (secret $secretName)',
+    );
+    expect(host!.server.methods, isEmpty, reason: 'no request to the host');
+    expect(host!.authorizations, isEmpty);
+    final warning = logger.eventsOf('config.mcp.key_unbound').single;
+    expect(warning.fields['server'], 'relay');
+    expect(warning.fields['reference_kind'], 'secret');
+    final shown = [
+      for (final r in logger.records) '${r.event} ${r.fields} ${r.error}',
+      for (final m in client!.received) jsonEncode(m.toJson()),
+      '${blocked.lastError}',
+    ].join('\n');
+    expect(shown, isNot(contains(marker)));
+
+    // Тот же сервер в `config.local.yaml` (условие (a)): подключён.
+    await client!.close();
+    await agent!.dispose();
+    committed.deleteSync();
+    File('$root/.codelab/config.local.yaml').writeAsStringSync(server);
+
+    final bound = await relayStatus();
+
+    expect(bound.state, McpServerState.connected);
     expect(host!.authorizations, contains('Bearer $marker'));
   });
 

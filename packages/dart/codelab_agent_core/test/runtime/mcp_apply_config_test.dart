@@ -265,6 +265,62 @@ void main() {
     });
   });
 
+  // change `bind-mcp-secrets-to-origin`, D6; agent-secrets «Ссылки MCP-сервера
+  // проектного слоя привязаны к адресу», п. 6, сценарий «Пользователь снимает
+  // привязку перезагрузкой».
+  group('the binding of a project server changes by a global edit', () {
+    const secret = r'Bearer ${secret:codelab/mcp/github/authorization}';
+    Map<String, Object?> github() => _http(
+      'github',
+      url: 'https://api.githubcopilot.com/mcp/',
+      headers: {'Authorization': secret},
+    );
+    Map<String, Object?> team() => _http(
+      'gh-team',
+      url: 'https://api.githubcopilot.com/mcp/x',
+      headers: {'Authorization': secret},
+    );
+
+    test('the user removes the binding: the connector gets the project '
+        'server with the reason, the secret template is gone', () async {
+      final rig = await _Rig.create(servers: [github()], project: [team()]);
+      final session = await rig.session();
+      final first = rig.fake.requests.single.servers;
+      expect(
+        first.singleWhere((s) => s.name == 'gh-team').blockedReason,
+        isNull,
+      );
+      _put(rig.user, 'mcp.servers', <Object?>[]);
+
+      await rig.runtime.reloadConfig();
+
+      final desired = rig.replaced(session).single;
+      expect([for (final s in desired) s.name], ['gh-team']);
+      final blocked = desired.single;
+      expect(blocked.blockedReason, contains('key bound to another address'));
+      expect(blocked.secretValues, isEmpty);
+      expect(
+        blocked.sameConnection(first.singleWhere((s) => s.name == 'gh-team')),
+        isFalse,
+      );
+    });
+
+    test('the user adds the binding: the project server comes without the '
+        'reason', () async {
+      final rig = await _Rig.create(servers: const [], project: [team()]);
+      final session = await rig.session();
+      expect(rig.fake.requests.single.servers.single.blockedReason, isNotNull);
+      _put(rig.user, 'mcp.servers', [github()]);
+
+      await rig.runtime.reloadConfig();
+
+      final desired = rig.replaced(session).single;
+      final team0 = desired.singleWhere((s) => s.name == 'gh-team');
+      expect(team0.blockedReason, isNull);
+      expect(team0.secretValues.keys, ['headers.Authorization']);
+    });
+  });
+
   group('timing and the queue of the session', () {
     test('during a turn the replacement waits for TurnEnded; the last '
         'desired set wins (scenarios "Удаление во время хода", "Последний '
@@ -438,10 +494,17 @@ final class _Rig {
 
   static Future<_Rig> create({
     List<Map<String, Object?>> servers = const [],
+    List<Map<String, Object?>> project = const [],
     bool hold = false,
     bool replaceHangs = false,
   }) async {
     final user = _user(servers);
+    if (project.isNotEmpty) {
+      // Проектные серверы судит правило привязки к адресу (change
+      // `bind-mcp-secrets-to-origin`); слой `project` читается только в
+      // доверенном проекте.
+      user['trusted_projects'] = ['/proj'];
+    }
     final clock = FakeClock();
     final logger = RecordingLogger(clock: clock);
     final manual = hold ? ManualStream(clock) : null;
@@ -451,7 +514,13 @@ final class _Rig {
     StreamFunction stream() => manual != null ? manual.call : scripted.call;
     final source = _Source(
       (pinned) => CoreConfig.fromLayers(
-        [layer(user)],
+        [
+          layer(user),
+          if (project.isNotEmpty)
+            layer({
+              'mcp': {'servers': _deep(project)},
+            }, kind: ConfigLayerKind.project),
+        ],
         environment: const {'GITHUB_TOKEN': 'tok-test'},
         projectRoot: '/proj',
         pinnedTrustedProjects: pinned,

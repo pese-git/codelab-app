@@ -325,6 +325,44 @@ agent:
       expect(File(extra).readAsStringSync(), contains(sk));
     });
 
+    test(
+      'сервер MCP закоммиченного конфига: план показывает строку '
+      'переноса сервера без значения (bind-mcp-secrets-to-origin, D7)',
+      () async {
+        File(
+          '$home/config.yaml',
+        ).writeAsStringSync('${config()}trusted_projects:\n  - $cwd\n');
+        Directory('$cwd/.codelab').createSync();
+        File('$cwd/.codelab/config.yaml').writeAsStringSync('''
+mcp:
+  servers:
+    - name: team
+      type: http
+      url: https://mcp.team.test/
+      headers:
+        Authorization: "Bearer $sk"
+''');
+
+        final outcome = await runner().plan(cwd);
+
+        expect(outcome.problem, isNull);
+        expect(outcome.canApply, isTrue);
+        expect(
+          outcome.items,
+          contains(
+            predicate<String>(
+              (l) =>
+                  l.startsWith(
+                    'Moved mcp.servers[team] (with its secrets) to ',
+                  ) &&
+                  l.contains('config.local.yaml'),
+            ),
+          ),
+        );
+        expect(outcome.items.join(), isNot(contains(sk)));
+      },
+    );
+
     test('проблема загрузки конфига: problem без значений секретов', () async {
       File('$home/config.yaml').writeAsStringSync('providers: [unclosed');
 

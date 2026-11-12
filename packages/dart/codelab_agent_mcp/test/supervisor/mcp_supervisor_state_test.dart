@@ -308,6 +308,129 @@ void main() {
     });
   });
 
+  // change `bind-mcp-secrets-to-origin`, D4; agent-secrets «Ссылки MCP-сервера
+  // проектного слоя привязаны к адресу», п. 4. Загрузка пометила сервер
+  // причиной блокировки; коннектор переводит её в `failed` до функции
+  // раскрытия и до фабрики транспорта.
+  group('blocked', () {
+    const reason =
+        'key bound to another address: move the server to config.local.yaml '
+        'or the user config (secret $secretName)';
+
+    McpHttpServerConfig blocked({bool enabled = true}) => McpHttpServerConfig(
+      name: 'gh',
+      url: Uri.parse('https://evil.example/mcp'),
+      origin: McpServerOrigin.config,
+      enabled: enabled,
+      blockedReason: reason,
+    );
+
+    test('goes to failed with the reason, without the expansion and the '
+        'transport; the failed record has the same reason', () async {
+      final rig = SupervisorRig({
+        'gh': fakeServer(['t']),
+      });
+      var expansions = 0;
+
+      final session = await rig.connect(
+        [blocked()],
+        expandSecrets: (server) async {
+          expansions++;
+          return server;
+        },
+      );
+
+      final failed = summaryOf(session, 'gh');
+      expect(failed.state, McpServerState.failed);
+      expect(failed.lastError, reason);
+      expect(expansions, 0);
+      expect(rig.spy.configs, isEmpty, reason: 'the factory is not called');
+      expect(rig.spy.opened, isEmpty);
+      final records = rig.log.eventsOf('mcp.server.failed');
+      expect(records.single.fields['reason'], reason);
+    });
+
+    test('the retry by the schedule is again without the transport and the '
+        'expansion', () async {
+      final rig = SupervisorRig({
+        'gh': fakeServer(['t']),
+      });
+      var expansions = 0;
+      final session = await rig.connect(
+        [blocked()],
+        expandSecrets: (server) async {
+          expansions++;
+          return server;
+        },
+      );
+
+      await rig.clock.elapse(summaryOf(session, 'gh').retryIn!);
+      await rig.clock.elapse(summaryOf(session, 'gh').retryIn!);
+
+      expect(summaryOf(session, 'gh').state, McpServerState.failed);
+      expect(summaryOf(session, 'gh').lastError, reason);
+      expect(expansions, 0);
+      expect(rig.spy.configs, isEmpty);
+      expect(rig.log.eventsOf('mcp.server.retry'), isNotEmpty);
+    });
+
+    test('setEnabled(true) of a disabled blocked server gives failed with '
+        'the reason (scenario "Выключенный заблокированный сервер '
+        'включается командой")', () async {
+      final rig = SupervisorRig({
+        'gh': fakeServer(['t']),
+      });
+      final session = await rig.connect([blocked(enabled: false)]);
+      expect(summaryOf(session, 'gh').state, McpServerState.disabled);
+
+      await session.setEnabled('gh', true);
+
+      expect(summaryOf(session, 'gh').state, McpServerState.failed);
+      expect(summaryOf(session, 'gh').lastError, reason);
+      expect(rig.spy.configs, isEmpty);
+    });
+
+    test('replaceServers: a connected server that becomes blocked is closed '
+        'and goes to failed; once the binding is back it connects (scenario '
+        '"Пользователь снимает привязку перезагрузкой")', () async {
+      final fake = fakeServer(['t']);
+      final rig = SupervisorRig({'gh': fake});
+      final open = McpHttpServerConfig(
+        name: 'gh',
+        url: Uri.parse('https://gh.example.com/mcp'),
+        origin: McpServerOrigin.config,
+      );
+      final session = await rig.connect([open]);
+      expect(summaryOf(session, 'gh').state, McpServerState.connected);
+
+      await session.replaceServers([blocked()]);
+
+      expect(summaryOf(session, 'gh').state, McpServerState.failed);
+      expect(summaryOf(session, 'gh').lastError, reason);
+      expect(fake.closedTransports, 1);
+      final opened = rig.spy.configs.length;
+
+      await session.replaceServers([open]);
+
+      expect(summaryOf(session, 'gh').state, McpServerState.connected);
+      expect(rig.spy.configs, hasLength(opened + 1));
+    });
+
+    test('close() while waiting for the retry leaves no timers and no '
+        'processes', () async {
+      final rig = SupervisorRig({
+        'gh': fakeServer(['t']),
+      });
+      final session = await rig.connect([blocked()]);
+      expect(rig.clock.pendingTimers, 1, reason: 'the retry is scheduled');
+
+      await session.close();
+
+      expect(rig.clock.pendingTimers, 0);
+      expect(rig.spy.configs, isEmpty);
+    });
+  });
+
   group('enabled', () {
     test('a server with enabled: false is disabled and has no process; '
         'setEnabled(true) connects it in this session (scenario "Выключенный '

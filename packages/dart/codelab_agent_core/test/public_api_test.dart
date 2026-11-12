@@ -111,6 +111,18 @@ void main() {
     expect(barrel, isNot(contains('providerEntry')));
   });
 
+  // change `bind-mcp-secrets-to-origin`, D3, D9: ссылки и origin HTTP-сервера
+  // MCP открыты мигратору тем же узким `show`; причина блокировки сервера —
+  // публичное поле `McpServerConfig`.
+  test('the barrel exposes the MCP reference helpers and blockedReason', () {
+    expect(barrel, contains('mcpServerReferences'));
+    expect(barrel, contains('mcpServerOrigin'));
+    final config = File(
+      corePath('lib/src/mcp/mcp_server_config.dart'),
+    ).readAsStringSync();
+    expect(config, contains('final String? blockedReason;'));
+  });
+
   test('the barrel exports the runtime and the assembly', () {
     expect(barrel, contains("export 'src/runtime/agent_runtime.dart'"));
     expect(barrel, contains("export 'src/runtime/agent_session.dart'"));

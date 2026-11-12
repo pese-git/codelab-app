@@ -26,6 +26,22 @@ void main() {
     expect(types, hasLength(12));
   });
 
+  // change `bind-mcp-secrets-to-origin`, D7, D9: пункт отчёта о переезде
+  // HTTP-сервера MCP доступен клиенту через мост; строка без значений.
+  test('io.dart exposes the moved MCP server item', () {
+    const item = SecretMcpServerMovedItem(
+      server: 'mcp.servers[team]',
+      from: '/p/.codelab/config.yaml',
+      to: '/p/.codelab/config.local.yaml',
+    );
+    expect(
+      item.describe(),
+      'Moved mcp.servers[team] (with its secrets) to '
+      '/p/.codelab/config.local.yaml; removed the secret values from '
+      '/p/.codelab/config.yaml',
+    );
+  });
+
   test('mcp add options carry the stdin flags', () {
     const options = McpAddOptions(
       name: 'gh',
