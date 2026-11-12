@@ -201,18 +201,33 @@ change `add-config-literal-secrets-and-migrate`, D1); до него значен
 числе литеральный `api_key` из файла конфига (§17.5.4), вычищаются из текстов ошибок через
 `ProviderConfig.secrets` (D10).
 
-**Один снимок на корень запуска (change `add-agent-configuration`, D9; с 8.10 так и остаётся —
-design.md change `add-config-writer-and-reload`, D8).** Снимка на каждый `cwd` сессии нет: чтение
-проектного конфига чужого `cwd` — новое поведение с вопросами доверия, его место — отдельный
-change. `buildAgentCore` принимает один `CoreConfig` на процесс. Загрузчик
-читает проектные слои 3–4 для корня запуска хоста и возвращает два снимка: полный в
+**Снимок на корень запуска и конфигурация сессии другой папки (change `add-agent-configuration`, D9;
+8.10 — design.md change `add-config-writer-and-reload`, D8; порт `ProjectConfigLoader` — design.md
+change `require-project-folder`, D21).** `buildAgentCore` принимает один `CoreConfig` на процесс.
+Загрузчик читает проектные слои 3–4 для корня запуска хоста и возвращает два снимка: полный в
 `CoreConfig` и снимок без проектных слоёв в `CoreConfig.withoutProject`; `CoreConfig.projectRoot` —
-канонический корень запуска. `AgentRuntimeImpl` для `createSession` и `loadSession` берёт ключи
-сессии (`defaultModel`, `effort`, `permissions`, `budget`, `compaction`, `mcpServers`, `redact`) из
-`withoutProject`, если канонический `cwd` сессии не равен `projectRoot` (равенство, не
-вложенность), и пишет `config.session.outside_root` один раз на `cwd`. Ключи сборки (провайдеры и
-каталог, capability, сужение профиля, журналы) берутся из полного снимка. Так MCP-серверы и
-разрешения `allow` из `config.local.yaml` проекта `/A` не применяются к сессии в `/B`.
+канонический корень запуска. Сессия в корне (канонический `cwd` равен `projectRoot`: равенство, не
+вложенность) получает применённый снимок и функцию модели процесса. Для сессии другой папки есть два
+пути:
+- **с портом** `AgentCoreServices.projectConfig` (`ProjectConfigLoader.loadForProject(canonicalCwd)`)
+  `AgentRuntimeImpl` на каждый `createSession` и `loadSession`, без кэша, строит *тройку сессии* —
+  полный `CoreConfig` её папки, каталог и функцию модели (`modelsFor(CoreConfig сессии)`) — и держит
+  её до закрытия сессии; `withoutProject` такой сессии не используется. Ошибка загрузки, проверки
+  снимка или `modelsFor` — `ProjectConfigException`, сессия не создаётся (fail closed, §2 приоритет 1
+  корневого `AGENTS.md`; журнал новой сессии создаётся только после успешной конфигурации). Порт
+  требует `modelsFor` (`HostWiringException`);
+- **без порта** прежнее поведение: ключи сессии (`defaultModel`, `effort`, `permissions`, `budget`,
+  `compaction`, `mcpServers`, `redact`) берутся из `withoutProject`, пишется
+  `config.session.outside_root` один раз на `cwd`. Так выглядят сторонние хосты, сценарный
+  открыватель, `serve --llm-script` и `serve --ws` (Q18). Ключи сборки (провайдеры и каталог,
+  capability, сужение профиля, журналы) берутся из полного снимка процесса.
+
+`CoreConfig` строится на сессию, а `HostSettings` — на процесс: секреты и их бэкенд, журналы,
+логирование, профиль, `trusted_projects`, HTTP-клиент и резолвер секретов существуют в одном
+экземпляре, и ключи процесса из слоёв папки сессии игнорируются (`config.session.process_keys_ignored`).
+Так MCP-серверы и разрешения `allow` из `config.local.yaml` проекта `/A` не применяются к сессии в
+`/B`, а провайдер «This project only» проекта `/B` работает в сессиях `/B` без перезапуска. Ключ
+проектного провайдера привязан к адресу (D23, `15-configuration.md` §15.3).
 
 ```dart
 final class CoreConfig {                           // результат загрузки конфига (§15), уже провалидирован
