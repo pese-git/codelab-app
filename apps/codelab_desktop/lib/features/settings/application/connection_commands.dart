@@ -5,35 +5,47 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 
 /// Узкий интерфейс подключения для страницы «Connection».
 ///
-/// Почему: страница настроек должна подключать окно, но не знать ни номера
-/// попытки, ни проверки папки проекта, ни текстов диагностики — они уже есть в
-/// `ConnectionCubit` feature `workbench`, и дублировать их нельзя (design.md
-/// change `add-app-settings-shell`, D4; `layers-and-dependencies.md` §27:
-/// связь между features — через application API, а не через внутренности).
+/// Почему: страница настроек должна выбирать профиль и перезапускать агента,
+/// но не знать ни номера попытки, ни проверки папки проекта, ни текстов
+/// диагностики — они уже есть в `ConnectionCubit` feature `workbench`, и
+/// дублировать их нельзя (design.md change `add-app-settings-shell`, D4;
+/// `layers-and-dependencies.md` §27: связь между features — через application
+/// API, а не через внутренности).
 ///
-/// Для чего: единственная точка входа `ConnectionSettingsCubit` в подключение.
+/// Для чего: единственная точка входа `ConnectionSettingsCubit` в соединение.
 /// Реализует `ConnectionCubit`; в тестах подменяется записывающим фейком.
+/// Ручного подключения и «Disconnect» нет: агент стартует по триггерам, а
+/// «Use» только выбирает профиль для следующего старта (design.md change
+/// `require-project-folder`, D13, D18).
 ///
-/// Цель перезапуска ([restartTarget]) — единственный источник ответа «какой
-/// профиль у окна»: страница берёт из неё «Current», бейдж, подпись
-/// Restart/Reconnect и доступность «Restart agent». `WorkspaceState.profile`
-/// для этого не годится: workspace публикует профиль уже в начале попытки, и
-/// после неудачного Connect он указывал бы на профиль, который не
-/// подключился, а «Restart agent» переподключил бы совсем другой (D6, D9).
+/// Два профиля окна раздельно (D18): [restartTarget] — выбранный («Selected»),
+/// [runningProfile] — профиль работающего агента («Current»).
+/// `WorkspaceState.profile` для этого не годится: workspace публикует профиль
+/// уже в начале попытки, и после неудачной попытки он указывал бы на профиль,
+/// который не подключился.
 ///
-/// Как использовать: [connect] подключает окно к [profile] и не меняет
-/// профиль по умолчанию (D5); [reconnect] — тот же профиль заново, как
-/// «Restart agent» (D9). Исход подключения Cubit страницы читает из
-/// `WorkspaceState`, а не из возвращаемого значения.
+/// Как использовать: [use] выбирает профиль и не трогает агента и профиль по
+/// умолчанию (D5); [restart] — единственный перезапуск «Restart agent» с
+/// подтверждением при работе (D22). Исход читается из `WorkspaceState`, а не
+/// из возвращаемого значения.
 abstract interface class ConnectionCommands {
-  /// Профиль последнего принятого подключения, а до первого принятого —
-  /// последний выбранный; `null` — окно ещё ни к чему не подключалось.
+  /// Выбранный профиль окна («Selected»): профиль следующего старта и
+  /// перезапуска.
   ConnectionProfile? get restartTarget;
 
-  /// Новое значение [restartTarget] при каждой его смене.
+  /// Профиль работающего агента («Current»); `null` — агент ещё не стартовал.
+  ConnectionProfile? get runningProfile;
+
+  /// Корень процесса для «Restart agent» (D18, Q27); `null` — перезапускать
+  /// некуда: нет ни проекта, ни прежнего корня.
+  String? get restartDirectory;
+
+  /// Сигнал смены выбранного или работающего профиля.
   Stream<ConnectionProfile?> get restartTargets;
 
-  Future<void> connect(ConnectionProfile profile);
+  /// «Use»: выбрать [profile] для следующего старта.
+  Future<void> use(ConnectionProfile profile);
 
-  Future<void> reconnect();
+  /// «Restart agent» / «Reconnect» (D22).
+  Future<void> restart();
 }

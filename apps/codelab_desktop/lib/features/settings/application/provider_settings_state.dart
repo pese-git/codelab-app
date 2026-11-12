@@ -67,8 +67,9 @@ enum ProviderBannerKind { saved, conflict, error }
 /// состояние не хранит замыканий; что значит действие, знает только Cubit
 /// (design.md change `add-provider-setup-ui`, D9).
 enum ProviderBannerAction {
-  /// «Connect»: подключить окно к профилю по умолчанию (агент не запущен).
-  connect,
+  /// «Retry» (`providers-banner-retry`): повторить намерение старта агента
+  /// ровно одной попыткой после сбоя старта (D13 п. 4, Q22).
+  retry,
 }
 
 /// Баннер результата записи (ключ `providers-banner`).
@@ -78,7 +79,7 @@ final class ProviderBanner {
   final ProviderBannerKind kind;
   final String text;
 
-  /// Кнопка баннера (`providers-banner-connect`); `null` — без кнопки.
+  /// Кнопка баннера (`providers-banner-retry`); `null` — без кнопки.
   final ProviderBannerAction? action;
 
   @override

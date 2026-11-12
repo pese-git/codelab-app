@@ -221,11 +221,11 @@ class _ProvidersPageState extends State<ProvidersPage> {
             },
             banner.text,
             action: switch (banner.action) {
-              ProviderBannerAction.connect => CodeLabButton(
-                key: const ValueKey('providers-banner-connect'),
-                label: 'Connect',
-                icon: FluentIcons.plug_connected,
-                onPressed: () => unawaited(cubit.connectAgent()),
+              ProviderBannerAction.retry => CodeLabButton(
+                key: const ValueKey('providers-banner-retry'),
+                label: 'Retry',
+                icon: FluentIcons.refresh,
+                onPressed: () => unawaited(cubit.retryAgentStart()),
               ),
               null => null,
             },

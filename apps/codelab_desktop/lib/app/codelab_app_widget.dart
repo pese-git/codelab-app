@@ -5,13 +5,22 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../features/settings/presentation/settings_shell.dart';
 import '../features/workbench/application/shell_cubit.dart';
+import '../features/workbench/presentation/widgets/restart_confirmation_dialog.dart';
 import '../features/workbench/presentation/workbench_shell.dart';
 import 'app_scope.dart';
 import 'navigation/app_destination.dart';
 import 'navigation/navigation_cubit.dart';
 
+/// Корневой виджет приложения.
+///
+/// [startOnLaunch] — вызывать ли триггер запуска агента (D19, change
+/// `require-project-folder`) после первого кадра. В приложении всегда `true`;
+/// виджет-тесты страниц, которым старт агента при восстановленном проекте
+/// мешает, передают `false` и стартуют агента сами (D20).
 class CodeLabApp extends StatelessWidget {
-  const CodeLabApp({super.key});
+  const CodeLabApp({this.startOnLaunch = true, super.key});
+
+  final bool startOnLaunch;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +41,10 @@ class CodeLabApp extends StatelessWidget {
         // Панель Terminal дока читает вкладки сессии (D3).
         BlocProvider.value(value: dependencies.terminalTabsCubit),
       ],
-      child: const FluentApp(title: 'CodeLab', home: _CodeLabHome()),
+      child: FluentApp(
+        title: 'CodeLab',
+        home: _CodeLabHome(startOnLaunch: startOnLaunch),
+      ),
     );
   }
 }
@@ -54,7 +66,9 @@ class CodeLabApp extends StatelessWidget {
 /// возврате восстанавливается в тот же узел, а если его уже нет — в первый
 /// фокусируемый узел рабочего места (композер).
 class _CodeLabHome extends StatefulWidget {
-  const _CodeLabHome();
+  const _CodeLabHome({required this.startOnLaunch});
+
+  final bool startOnLaunch;
 
   @override
   State<_CodeLabHome> createState() => _CodeLabHomeState();
@@ -75,11 +89,12 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
   @override
   void initState() {
     super.initState();
-    // «Connect on start» (D8): после первого кадра, а не в `initState`, чтобы
-    // запуск не блокировал отрисовку окна (D-15). Один раз гарантирует Cubit.
+    // Триггер запуска (D19): после первого кадра, а не в `initState`, чтобы
+    // старт агента не блокировал отрисовку окна (D-15). Восстановленный проект
+    // стартует агента в его папке; без проекта агент не стартует.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        unawaited(context.read<CodeLabShellCubit>().connectOnStart());
+      if (mounted && widget.startOnLaunch) {
+        unawaited(context.read<CodeLabShellCubit>().startOnLaunch());
       }
     });
   }
@@ -135,6 +150,11 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
     final dependencies = codeLabDependenciesOf(context);
     final navigation = context.read<NavigationCubit>();
     final shell = context.read<CodeLabShellCubit>();
+    // Диалог D22 рисуется по состоянию `ConnectionCubit` и над рабочим местом,
+    // и над настройками: «Restart agent» нажимают и там, и там.
+    final pendingRestart = context.select(
+      (CodeLabShellCubit cubit) => cubit.state.pendingRestart,
+    );
 
     return MultiBlocListener(
       listeners: [
@@ -183,6 +203,11 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
                           : () => navigation.back(toSession: target),
                     );
                   },
+                ),
+              if (pendingRestart != null)
+                RestartConfirmationDialog(
+                  pending: pendingRestart,
+                  cubit: shell,
                 ),
             ],
           );

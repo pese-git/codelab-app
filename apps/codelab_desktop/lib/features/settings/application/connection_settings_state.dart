@@ -66,6 +66,7 @@ final class ConnectionProfileRow {
     required this.isCurrent,
     required this.isUnsaved,
     required this.status,
+    this.isSelected = false,
     this.probe,
     this.isProbing = false,
   });
@@ -76,12 +77,14 @@ final class ConnectionProfileRow {
     required bool isDefault,
     required bool isCurrent,
     required ConnectionRowStatus? status,
+    bool isSelected = false,
   }) => ConnectionProfileRow._(
     profile: profile,
     summary: profileSummary(profile),
     token: null,
     isDefault: isDefault,
     isCurrent: isCurrent,
+    isSelected: isSelected,
     isUnsaved: false,
     status: status,
   );
@@ -93,6 +96,7 @@ final class ConnectionProfileRow {
     required bool isDefault,
     required bool isCurrent,
     required ConnectionRowStatus? status,
+    bool isSelected = false,
     ProfileProbeOutcome? probe,
     bool isProbing = false,
   }) => ConnectionProfileRow._(
@@ -101,6 +105,7 @@ final class ConnectionProfileRow {
     token: token,
     isDefault: isDefault,
     isCurrent: isCurrent,
+    isSelected: isSelected,
     isUnsaved: false,
     status: status,
     probe: probe,
@@ -113,12 +118,14 @@ final class ConnectionProfileRow {
     required ConnectionProfile profile,
     required ProfileTokenView? token,
     required ConnectionRowStatus? status,
+    bool isSelected = false,
   }) => ConnectionProfileRow._(
     profile: profile,
     summary: profileSummary(profile),
     token: token,
     isDefault: false,
     isCurrent: true,
+    isSelected: isSelected,
     isUnsaved: true,
     status: status,
   );
@@ -132,7 +139,12 @@ final class ConnectionProfileRow {
   final ProfileTokenView? token;
 
   final bool isDefault;
+
+  /// Профиль работающего агента («Current», D18).
   final bool isCurrent;
+
+  /// Профиль, выбранный для следующего старта («Selected», «Use», D18).
+  final bool isSelected;
 
   /// Имя собственного секрета профиля `codelab/profiles/<id>/token`, если
   /// профиль ссылается именно на него; иначе `null` (design.md change
@@ -199,17 +211,15 @@ final class ConnectionProfileRow {
   /// Метка «Not tested» (D14): пока строку не проверяли.
   bool get showNotTested => hasFileActions && !isTested && !isProbing;
 
-  /// «Remove» возможна для сохранённого профиля, не являющегося текущим:
-  /// встроенный агент не из файла, а текущий связан с живым соединением
-  /// («Disconnect first», spec app-settings).
-  bool get canRemove => hasFileActions && !isCurrent;
+  /// «Remove» возможна для сохранённого профиля, не являющегося текущим и
+  /// выбранным: встроенный агент не из файла, а текущий и выбранный связаны с
+  /// окном (подсказка `Use another profile first.`, D18).
+  bool get canRemove => hasFileActions && !isCurrent && !isSelected;
 
-  /// «Connect» не показывается у строки «Current»: «Current» ставится только
-  /// при живом соединении (`Connected` или `Reconnecting`, решение
-  /// пользователя 2026-11-05), а переподключение — «Restart agent» блока
-  /// Behavior. `Connecting…` и `Failed` «Current» не дают, поэтому там
-  /// «Connect» остаётся.
-  bool get canConnect => !isCurrent;
+  /// «Use» не показывается у выбранного профиля (D18): метка «Selected»
+  /// говорит, что он уже выбран. «Current» — профиль работающего агента, он
+  /// может быть и не выбранным.
+  bool get canUse => !isSelected;
 }
 
 /// Состояние страницы «Connection» — явный автомат (`state-management.md`,
@@ -236,7 +246,7 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
     required this.restartTarget,
     required this.currentProfile,
     required this.connection,
-    required this.connectOnStart,
+    required this.restartAvailable,
     this.lastProbes = const {},
     this.failure,
   });
@@ -258,7 +268,11 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
   /// нет ни у кого (решение пользователя 2026-11-05).
   final ConnectionProfile? currentProfile;
   final ConnectionView connection;
-  final bool connectOnStart;
+
+  /// Есть корень процесса для перезапуска: проект, сессия в фокусе или прежний
+  /// корень (D18). Без него «Restart agent» недоступна: `Starts when you open
+  /// a project.`
+  final bool restartAvailable;
 
   /// Исходы «Test connection» по id профиля за жизнь страницы (D4, D14).
   /// Это UI-состояние: в `profiles.json` оно не пишется.
@@ -269,11 +283,13 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
 
   String? get currentProfileId => currentProfile?.id;
 
-  /// «Restart agent» доступна при цели перезапуска и вне подключения (D9).
-  bool get canRestart =>
-      restartTarget != null &&
-      connection is! Connecting &&
-      connection is! Reconnecting;
+  /// «Restart agent» доступна при корне процесса (D18) и во время старта
+  /// (вытесняет попытку, Q25).
+  bool get canRestart => restartTarget != null && restartAvailable;
+
+  /// Подсказка недоступной «Restart agent» (D18).
+  String? get restartHint =>
+      restartAvailable ? null : 'Starts when you open a project.';
 
   /// Живое соединение — с удалённым агентом (WebSocket).
   bool get isRemote => currentProfile is WebSocketProfile;
@@ -304,6 +320,10 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
     final subject = target == null
         ? 'the profile of this window'
         : profileTitle(target);
+    final running = currentProfile;
+    if (target != null && running != null && running.id != target.id) {
+      return 'Restart $subject to use it.';
+    }
     return 'Reconnects $subject and reloads open sessions. A running turn is '
         'interrupted; queued prompts stay.';
   }
@@ -316,7 +336,7 @@ final class ConnectionSettingsReady extends ConnectionSettingsLoaded {
     required super.restartTarget,
     required super.currentProfile,
     required super.connection,
-    required super.connectOnStart,
+    required super.restartAvailable,
     required this.defaultProfileId,
     required this.ignoredDefaultEntry,
     super.lastProbes,
@@ -343,7 +363,7 @@ final class ConnectionSettingsUnreadable extends ConnectionSettingsLoaded {
     required super.restartTarget,
     required super.currentProfile,
     required super.connection,
-    required super.connectOnStart,
+    required super.restartAvailable,
     required this.path,
     required this.reason,
     super.lastProbes,

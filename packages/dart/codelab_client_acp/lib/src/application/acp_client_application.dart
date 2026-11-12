@@ -698,11 +698,10 @@ final class AcpClientApplication {
     AcpTransport transport, {
     Duration? closeTimeout,
   }) async {
-    // Bump the generation before yielding on any await below so that
-    // operations still in flight on the old transport observe the new
-    // generation as soon as their continuation resumes, even if that
-    // continuation is scheduled while this method is still tearing down
-    // the old transport.
+    // Поколение растёт до первого `await` ниже: операции, ещё идущие на
+    // старом транспорте, увидят новое поколение, как только продолжатся,
+    // даже если их продолжение запланировано, пока этот метод закрывает
+    // старый транспорт (§9, поздние события).
     _generation++;
     // Ход, шедший в момент замены, агент отменил вместе с соединением; ход
     // остаётся `running` до `session/load`, который и покажет его
@@ -712,13 +711,20 @@ final class AcpClientApplication {
         _interruptedTurns.add(session.id);
       }
     }
+    // Одобрения и карты запросов снимаются синхронно, до первого `await`:
+    // иначе ответ пользователя успел бы уйти в старый транспорт, а одобрение
+    // потом стало бы `cancelled` (агент получил бы allow, состояние —
+    // cancelled), а устаревший id попал бы в `_handledPermissionRequests` и
+    // проглотил бы запрос нового соединения с тем же JSON-RPC id (ровно один
+    // ответ, AGENTS.md §10).
+    _dropPendingApprovals('ACP transport was replaced.');
+    _pendingPermissionRequests.clear();
+    _handledPermissionRequests.clear();
     await _inboundSubscription.cancel();
     await _eventSubscription.cancel();
     _failPendingRequests(
       const AcpClientApplicationException('ACP transport was replaced.'),
     );
-    _pendingPermissionRequests.clear();
-    _handledPermissionRequests.clear();
     await _transport.close(timeout: closeTimeout);
 
     _transport = transport;
@@ -934,6 +940,62 @@ final class AcpClientApplication {
           'event_ignored',
           context: {'reason': 'stale_generation', 'kind': kind},
         );
+  }
+
+  /// Снимает ожидающие одобрения: запрос принадлежит оборванному соединению.
+  ///
+  /// Почему: ответ на `session/request_permission` возможен только в том
+  /// соединении, которое его прислало (D22 change `require-project-folder`);
+  /// без снятия сессия, не восстановленная в новом соединении, навсегда
+  /// сохраняла бы одобрение, на которое некуда ответить, а позднее решение
+  /// ушло бы в чужое соединение (AGENTS.md §9, §10).
+  ///
+  /// Для чего: источник истины сессии — одобрение становится `cancelled`
+  /// (ход возвращается из `awaitingApproval`), поэтому проекции хостов,
+  /// `respondToPermission` и `session/load` видят одно состояние. Следующий
+  /// `session/load` пересоберёт ход по реплею агента. Журнал содержит только
+  /// идентификаторы, без аргументов вызова.
+  void _dropPendingApprovals(String reason) {
+    final dropped = <(AcpSession, ApprovalRequest)>[];
+    for (final session in _sessions.values.toList(growable: false)) {
+      var updated = session;
+      for (final turn in session.turns) {
+        for (final approval in turn.approvals.values) {
+          if (approval.status != ApprovalStatus.pending) {
+            continue;
+          }
+          final result = SessionStateMachine.cancelApproval(
+            updated,
+            approvalId: approval.id,
+            resolvedAt: DateTime.now(),
+          );
+          if (result is AppliedStateTransition<AcpSession>) {
+            updated = result.state;
+            dropped.add((session, approval));
+          }
+        }
+      }
+      if (!identical(updated, session)) {
+        _storeSession(updated);
+      }
+    }
+    // Журнал пишется после цикла: `_recordDiagnostic` пересохраняет сессии из
+    // `_sessions`, и запись внутри цикла была бы затёрта последующим
+    // `_storeSession(updated)` копией без неё.
+    for (final (session, approval) in dropped) {
+      _recordDiagnostic(
+        message: 'Pending permission request dropped: $reason',
+        severity: DiagnosticSeverity.warning,
+        source: 'application.permission',
+        sessionId: session.id.value,
+        toolCallId: approval.toolCall.id.value,
+        context: {
+          'sessionId': session.id.value,
+          'approvalId': approval.id.value,
+          'toolCallId': approval.toolCall.id.value,
+        },
+      );
+    }
   }
 
   void _failPendingRequests(Object error) {
@@ -2007,6 +2069,7 @@ final class AcpClientApplication {
           // `sendPrompt` ждал бы вечно, а ход оставался `running` (design D2
           // change `add-connection-and-error-states`).
           _failPendingRequests(AcpConnectionLostException(error.message));
+          _dropPendingApprovals('ACP connection was lost.');
         }
       case AcpTransportStateChanged():
         break;
@@ -2021,6 +2084,7 @@ final class AcpClientApplication {
     if (pending == null) {
       throw const StateTransitionException('permission request is not pending');
     }
+    final generation = _generation;
 
     try {
       await _sendTracedMessage(
@@ -2049,8 +2113,12 @@ final class AcpClientApplication {
       );
     }
 
-    _pendingPermissionRequests.remove(approvalId);
-    _handledPermissionRequests.add(approvalId);
+    // Соединение могло смениться, пока уходил ответ: карты уже очищены для
+    // нового соединения, и устаревший id в них не возвращается.
+    if (generation == _generation) {
+      _pendingPermissionRequests.remove(approvalId);
+      _handledPermissionRequests.add(approvalId);
+    }
   }
 
   void _sendCancelledPermissionResponse(JsonRpcId requestId) {

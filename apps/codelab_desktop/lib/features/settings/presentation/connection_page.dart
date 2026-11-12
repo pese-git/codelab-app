@@ -179,14 +179,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
               padding: EdgeInsets.only(bottom: 4),
               child: CodeLabText(
                 'Shared with codelab_cli through profiles.json in '
-                r'$CODELAB_HOME. The default profile is used when CodeLab '
-                'starts and by Connect before the first connection.',
+                r'$CODELAB_HOME. The default profile is used when the '
+                'agent starts, until you choose another with Use.',
                 role: CodeLabTextRole.caption,
               ),
             ),
             // Радиокнопки строк образуют одну группу: выбранная — профиль по
-            // умолчанию, а не текущий; «Connect» профиль по умолчанию не
-            // меняет (D5).
+            // умолчанию, а не текущий; «Use» профиль по умолчанию не
+            // меняет (D5, D18).
             RadioGroup<String>(
               groupValue: switch (state) {
                 ConnectionSettingsReady(:final defaultProfileId) =>
@@ -206,7 +206,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     _ProfileRowCard(
                       row: row,
                       editable: ready != null,
-                      onConnect: () => unawaited(cubit.connect(row.id)),
+                      onUse: () => unawaited(cubit.use(row.id)),
                       onTest: () => unawaited(cubit.testProfile(row.id)),
                       renaming: _renamingId == row.id,
                       onStartRename: () => setState(() => _renamingId = row.id),
@@ -225,20 +225,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         // (D4).
         CodeLabSettingsSection(
           title: 'Behavior',
-          children: [
-            CodeLabSettingsRow(
-              title: 'Connect on start',
-              description:
-                  'Off: the app opens disconnected and waits for Connect',
-              leading: FluentIcons.power_button,
-              trailing: ToggleSwitch(
-                key: const ValueKey('connection-connect-on-start'),
-                checked: state.connectOnStart,
-                onChanged: (value) => unawaited(cubit.setConnectOnStart(value)),
-              ),
-            ),
-            _restartRow(cubit, state),
-          ],
+          children: [_restartRow(cubit, state)],
         ),
         const SizedBox(height: 12),
         CodeLabExpanderCard(
@@ -274,7 +261,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       title: state.restartTitle,
       // Честный текст о переподключении цели без обещания `session/cancel`
       // (D9).
-      description: state.restartDescription,
+      description: state.restartHint ?? state.restartDescription,
       leading: FluentIcons.refresh,
       trailing: CodeLabButton(
         key: const ValueKey('connection-restart-agent'),
@@ -430,7 +417,7 @@ class _ProfileRowCard extends StatelessWidget {
   const _ProfileRowCard({
     required this.row,
     required this.editable,
-    required this.onConnect,
+    required this.onUse,
     required this.onTest,
     required this.renaming,
     required this.onStartRename,
@@ -443,7 +430,7 @@ class _ProfileRowCard extends StatelessWidget {
 
   /// Файл прочитан: «Rename» и «Remove» доступны (битый файл не трогаем).
   final bool editable;
-  final VoidCallback onConnect;
+  final VoidCallback onUse;
   final VoidCallback onTest;
 
   /// Открыт редактор «Rename» этой строки.
@@ -479,7 +466,7 @@ class _ProfileRowCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Радиокнопка выбирает профиль по умолчанию, а не текущий:
-                // «Connect» профиль по умолчанию не меняет (D5).
+                // «Use» профиль по умолчанию не меняет (D5, D18).
                 RadioButton<String>(
                   key: ValueKey('connection-profile-default-$id'),
                   value: id,
@@ -533,6 +520,11 @@ class _ProfileRowCard extends StatelessWidget {
                               const CodeLabBadge(
                                 label: 'Current',
                                 tone: CodeLabTone.success,
+                              ),
+                            if (row.isSelected)
+                              const CodeLabBadge(
+                                label: 'Selected',
+                                tone: CodeLabTone.accent,
                               ),
                             // Состояние соединения окна — без текста ошибки: её
                             // показывает баннер рабочего места (D4).
@@ -599,14 +591,15 @@ class _ProfileRowCard extends StatelessWidget {
                     isLoading: row.isProbing,
                     onPressed: editable && !row.isProbing ? onTest : null,
                   ),
-                // У текущего профиля с живым соединением «Connect» нет:
-                // переподключение — «Restart agent» блока Behavior.
-                if (row.canConnect)
+                // «Use» выбирает профиль для следующего старта и агента не
+                // трогает (D18); у выбранного профиля вместо него метка
+                // «Selected». Ручного Connect нет.
+                if (row.canUse)
                   CodeLabButton(
-                    key: ValueKey('connection-profile-connect-$id'),
-                    label: 'Connect',
+                    key: ValueKey('connection-profile-use-$id'),
+                    label: 'Use',
                     emphasis: CodeLabButtonEmphasis.primary,
-                    onPressed: onConnect,
+                    onPressed: onUse,
                   ),
                 if (row.hasFileActions)
                   CodeLabButton(
@@ -623,16 +616,17 @@ class _ProfileRowCard extends StatelessWidget {
     );
   }
 
-  /// «Remove»: недоступна у текущего профиля с подсказкой «Disconnect first»
-  /// (spec app-settings); решение о доступности принимает Cubit (`canRemove`).
+  /// «Remove»: недоступна у текущего и выбранного профиля с подсказкой `Use
+  /// another profile first.` (spec app-settings, D18); решение о доступности
+  /// принимает Cubit (`canRemove`).
   Widget _removeButton() {
     final button = CodeLabButton(
       key: ValueKey('connection-profile-remove-${row.id}'),
       label: 'Remove',
       onPressed: editable && row.canRemove ? onRemove : null,
     );
-    return row.isCurrent
-        ? Tooltip(message: 'Disconnect first', child: button)
+    return row.isCurrent || row.isSelected
+        ? Tooltip(message: 'Use another profile first.', child: button)
         : button;
   }
 

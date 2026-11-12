@@ -31,6 +31,7 @@ abstract class WorkspaceState with _$WorkspaceState {
     @Default(ConnectionView.disconnected()) ConnectionView connection,
     ConnectionProfile? profile,
     String? projectDirectory,
+    String? agentDirectory,
     @Default([]) List<SessionSummaryView> sessions,
     SessionId? activeSessionId,
     @Default(false) bool hasMoreSessions,

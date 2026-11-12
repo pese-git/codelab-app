@@ -81,6 +81,7 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
     required EditableSettings access,
     required String backendId,
     required bool Function() isAgentConnected,
+    bool Function()? startFailed,
     this.before,
     this.readSnapshot,
     this.restartHintTimeout = const Duration(seconds: 5),
@@ -91,6 +92,7 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
        _access = access,
        _backendId = backendId,
        _isAgentConnected = isAgentConnected,
+       _startFailed = startFailed ?? (() => false),
        super(_stateOf(flow.current, backendId, access, conflict: false)) {
     _subscription = _flow.states.listen(_onSetup);
   }
@@ -99,6 +101,10 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
   final EditableSettings _access;
   final String _backendId;
   final bool Function() _isAgentConnected;
+
+  /// Последний старт агента закончился сбоем (`ConnectionFailed` /
+  /// `ConnectionLost`): баннер предлагает «Retry» (Q22, D13 п. 4).
+  final bool Function() _startFailed;
 
   /// Снимок конфига страницы, с которой открыт мастер (а не снимок
   /// `ProviderSetupFlow`), и чтение свежего снимка после записи: по ним Cubit
@@ -250,18 +256,19 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
         : null,
   );
 
-  /// Баннер страницы после записи (D9, Q17, Q35): без запущенного агента —
-  /// «Connect»; при замене ключа — напоминание про «Restart agent» (резолвер
+  /// Баннер страницы после записи (D9, Q17, Q35, Q22): без запущенного агента —
+  /// `Saved. The agent uses it the next time it starts.` (агент стартует по
+  /// триггерам, D13), а после сбоя старта — тот же текст с «Retry»; при замене ключа — напоминание про «Restart agent» (резолвер
   /// агента держит старое значение); если мост по снимкам до и после записи
   /// называет провайдера ([needsRestart], правило ядра `planConfigReload`) —
   /// модели появятся после «Restart agent»; иначе — простой итог (правка
   /// моделей и провайдер без ключа применяются сразу).
   ProviderBanner _bannerFor(Done done, {required bool needsRestart}) {
     if (!_isAgentConnected()) {
-      return const ProviderBanner(
+      return ProviderBanner(
         ProviderBannerKind.saved,
-        'Saved. Connect to start the agent with the new provider.',
-        action: ProviderBannerAction.connect,
+        'Saved. The agent uses it the next time it starts.',
+        action: _startFailed() ? ProviderBannerAction.retry : null,
       );
     }
     final id = done.plan.providerId;

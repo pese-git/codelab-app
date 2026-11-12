@@ -65,6 +65,7 @@ class CodeLabSidebarProject {
     required this.path,
     required this.name,
     this.current = false,
+    this.expanded = false,
     this.sessions = const [],
   });
 
@@ -74,6 +75,11 @@ class CodeLabSidebarProject {
   /// Имя папки — заголовок группы.
   final String name;
   final bool current;
+
+  /// Группа раскрыта, хотя она не выбранная (Q23 change
+  /// `require-project-folder`): в ней сессия, которая идёт, ждёт одобрения или
+  /// упала. Параметр без логики — решение принимает хост.
+  final bool expanded;
   final List<CodeLabSessionListItem> sessions;
 }
 
@@ -250,7 +256,8 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
   }
 
   List<Widget> _projectGroup(CodeLabSidebarProject project, String query) {
-    final expanded = project.current && !_currentCollapsed;
+    final expanded =
+        (project.current && !_currentCollapsed) || project.expanded;
     final sessions = [
       for (final session in project.sessions)
         if (query.isEmpty || session.title.toLowerCase().contains(query))
@@ -265,7 +272,9 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
           secondIcon: FluentIcons.folder_horizontal,
           label: project.name,
           strong: project.current,
-          trailing: project.current ? '${project.sessions.length}' : null,
+          trailing: project.current || project.expanded
+              ? '${project.sessions.length}'
+              : null,
           onPressed: project.current
               ? () => setState(() => _currentCollapsed = !_currentCollapsed)
               : widget.onProjectSelected == null

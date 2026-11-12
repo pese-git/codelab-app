@@ -44,7 +44,7 @@ final class ActiveSessionState {
     id: 'inspector-empty',
     category: CodeLabInspectorCategory.protocol,
     title: 'Protocol log',
-    summary: 'Connect and start a session to inspect ACP activity.',
+    summary: 'Start a session to inspect ACP activity.',
   );
 
   /// Сессия, которую сейчас показывает рабочее место; совпадает с

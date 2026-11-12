@@ -44,7 +44,7 @@ final class EmbeddedOpenCancelledException implements Exception {
 ///   затем `await _running.dispose()`, затем открыватель. Два агента одного
 ///   резолвера не пишут один журнал сессий одновременно;
 /// * **устаревший результат**: если, пока открыватель работает, пришёл новый
-///   `open` (повторный Connect или Reconnect) или `close()` (закрытие root
+///   `open` (повторный старт или «Restart agent») или `close()` (закрытие root
 ///   scope), вернувшийся позже агент не становится текущим — ему сразу
 ///   вызывается `dispose()`, а вызывающий получает
 ///   [EmbeddedOpenCancelledException]. Иначе агент держал бы MCP-процессы и

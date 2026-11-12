@@ -49,7 +49,9 @@ abstract interface class ClientWorkspace {
   Stream<WorkspaceState> get state;
 
   /// Подключается к агенту [profile]; [projectDirectory] — папка проекта,
-  /// `cwd` новых сессий и, если профиль просит, процесса агента. Агенту со
+  /// `cwd` новых сессий и, если профиль просит, процесса агента (корень
+  /// процесса [WorkspaceState.agentDirectory] тоже становится ею — путь CLI,
+  /// design D15 change `require-project-folder`). Агенту со
   /// `sessionCapabilities.list` после `initialize` отправляется первый
   /// `session/list` проекта — `Future` завершается после него; сбой списка
   /// — диагностика, а не ошибка подключения (design D3 change
@@ -68,6 +70,35 @@ abstract interface class ClientWorkspace {
     required String projectDirectory,
   });
 
+  /// Агент профиля окна по требованию хоста: триггеры D13 (выбор проекта,
+  /// «New session», фокус на `notLoaded` / `detached`, «Retry») вызывают её
+  /// одинаково (design D15 change `require-project-folder`).
+  ///
+  /// Почему: хост не подключает агента кнопкой, а стартует его сам, и
+  /// параллельные триггеры не должны открывать второй транспорт.
+  ///
+  /// Для чего и как:
+  /// * [profile] — профиль старта, иначе профиль текущего или последнего
+  ///   соединения; без профиля — [ClientWorkspaceException], резолверы не
+  ///   вызываются.
+  /// * `Connected` — no-op для любой [directory], без запросов к агенту.
+  /// * Идёт попытка (`Connecting`, `Reconnecting`) — возвращается её
+  ///   `Future` (single-flight, `concurrency.md` §29–§30); корень процесса
+  ///   задаёт первый триггер, [directory] повторного вызова не важна. Если
+  ///   попытку вытеснил явный [connect] / [reconnect], `Future` завершается
+  ///   без ошибки (Q25).
+  /// * Иначе (`Disconnected`, `ConnectionFailed`, `ConnectionLost`) —
+  ///   новая попытка как у [connect]: [directory] становится
+  ///   [WorkspaceState.agentDirectory] и отдаётся резолверу, а
+  ///   [WorkspaceState.projectDirectory] (выбранный проект, снимок) не
+  ///   меняется. Открытые сессии загружаются заново.
+  /// * Без `projectDirectory` `session/list` не запрашивается: ACP без `cwd`
+  ///   вернул бы сессии всех папок.
+  ///
+  /// Сам kit попытки не повторяет: после сбоя новую попытку начинает только
+  /// действие пользователя (D13).
+  Future<void> ensureAgent(String directory, {ConnectionProfile? profile});
+
   /// Одна попытка переподключения, без повторов (design D4).
   ///
   /// После неё открытые сессии загружаются заново через `session/load`,
@@ -77,22 +108,38 @@ abstract interface class ClientWorkspace {
   /// очередь. Затем список сессий запрашивается заново, как после [connect]
   /// (design D5 change `add-session-list-and-reload`).
   ///
-  /// [profile] и [projectDirectory] заменяют текущие, если переданы: хост
-  /// мог изменить форму подключения после [connect].
+  /// [profile] заменяет текущий, если передан: хост мог изменить форму
+  /// подключения после [connect]. Папки (design D15 change
+  /// `require-project-folder`):
+  /// * [projectDirectory] задаёт обе — проект и корень процесса (путь CLI);
+  /// * [agentDirectory] задаёт только корень процесса и не меняет проект и
+  ///   список («Restart agent» с корнем из папки сессии);
+  /// * без обоих корень — прежний `agentDirectory`, а без него —
+  ///   `projectDirectory`.
   Future<void> reconnect({
     ConnectionProfile? profile,
     String? projectDirectory,
+    String? agentDirectory,
   });
 
-  /// Создаёт сессию в [cwd] (по умолчанию — папка проекта) и делает её
-  /// активной.
-  Future<SessionHandle> newSession({String? cwd});
+  /// Создаёт сессию в [cwd] (по умолчанию — папка проекта).
+  ///
+  /// [activate] ложно — сессия попадает в список и снимок, но
+  /// `WorkspaceState.activeSessionId` не меняется: по нему работают Files и
+  /// терминал, и сессия устаревшего намерения не должна переключать их
+  /// мимо фокуса чата (D15, D17). По умолчанию сессия становится активной.
+  Future<SessionHandle> newSession({String? cwd, bool activate = true});
 
   SessionHandle? session(SessionId id);
 
   /// Открывает сессию агента [id] через `session/load`: транскрипт строится
   /// из реплея с нуля, строка списка из [SessionStatusView.notLoaded]
   /// становится открытой. Сессию не активирует — это решает хост.
+  ///
+  /// Для [SessionStatusView.detached]-сессии успешная загрузка снимает
+  /// `detached`: она снова принимает промпты и сливает очередь (D16 change
+  /// `require-project-folder`); ошибка оставляет её `detached` с прежним
+  /// уведомлением.
   ///
   /// Повторный вызов для той же сессии, пока загрузка в полёте, возвращает
   /// тот же `Future`. Без соединения или без `loadSession` у агента —
@@ -122,7 +169,12 @@ abstract interface class ClientWorkspace {
   Future<String?> restoreProject();
 
   /// Выбирает папку проекта: `WorkspaceState.projectDirectory` и снимок.
-  /// Следующие [connect] и [newSession] хост по-прежнему вызывает с папкой.
+  ///
+  /// При `Connected` и другой папке сбрасывает список и курсор и запрашивает
+  /// первую страницу `session/list` нового проекта (агенту с
+  /// `sessionCapabilities.list`); запрос прежнего проекта, пришедший позже,
+  /// список не меняет (D15). Агента выбор проекта не трогает: стартует его
+  /// хост через [ensureAgent].
   void selectProject(String path);
 
   /// Дожидается записи снимка, начатой до вызова; без хранилища — сразу.
@@ -241,7 +293,24 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   /// `nextCursor` последней страницы; непрозрачен и наружу не отдаётся
   /// (`04-Session List.md`, «Pagination»).
   String? _nextCursor;
+
+  /// Запрос следующей страницы ([loadMoreSessions]) в полёте. Защищает только
+  /// от повторного `loadMoreSessions`: первая страница нового проекта или
+  /// соединения его не ждёт и сбрасывает (D15).
   Future<void>? _listing;
+
+  /// Номер запроса `session/list`: растёт на каждой первой странице
+  /// (подключение, `selectProject`). Ответ с устаревшим номером после `await`
+  /// не трогает [_listed], курсор и `hasMoreSessions` — late events прежнего
+  /// проекта или соединения не меняют актуальный список (AGENTS.md §9; D15,
+  /// D17 change `require-project-folder`).
+  var _listRequest = 0;
+
+  /// `Future` идущей попытки подключения (`connect`, `reconnect` или
+  /// `ensureAgent`): single-flight для [ensureAgent] (D15). Вытесненная
+  /// попытка в поле заменяется следующей; чистит поле завершившаяся попытка,
+  /// если её не заменили.
+  Future<void>? _attemptFuture;
 
   /// Возможности агента из ответа `initialize` текущего соединения.
   AgentCapabilities _capabilities = const AgentCapabilities();
@@ -283,17 +352,77 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   Future<void> connect(
     ConnectionProfile profile, {
     required String projectDirectory,
+  }) => _begin(
+    _connect(
+      profile,
+      agentDirectory: projectDirectory,
+      projectDirectory: projectDirectory,
+    ),
+  );
+
+  @override
+  Future<void> ensureAgent(String directory, {ConnectionProfile? profile}) {
+    final target = profile ?? _current.profile;
+    if (target == null) {
+      return Future.error(
+        const ClientWorkspaceException(
+          'Select a connection profile before starting the agent.',
+        ),
+      );
+    }
+    switch (_current.connection) {
+      case Connected():
+        return Future.value();
+      case Connecting() || Reconnecting():
+        // Параллельные триггеры (D13) ждут одну попытку; корень процесса
+        // задал первый из них (D15, `concurrency.md` §29–§30).
+        return _attemptFuture ?? Future.value();
+      case Disconnected() || ConnectionFailed() || ConnectionLost():
+        // Проект не перезаписывается: `ensureAgent` не выбирает проект, а
+        // только поднимает агента (D15).
+        return _begin(_connect(target, agentDirectory: directory));
+    }
+  }
+
+  /// Запоминает [attempt] как идущую попытку для single-flight.
+  ///
+  /// Почему не `whenComplete`: он создал бы производный `Future` с той же
+  /// ошибкой, которого никто не ждёт (необработанное исключение); ошибку
+  /// получает только вызывающий.
+  Future<void> _begin(Future<void> attempt) {
+    _attemptFuture = attempt;
+    unawaited(
+      attempt
+          .then<void>((_) {}, onError: (Object _) {})
+          .then<void>(
+            (_) => identical(_attemptFuture, attempt)
+                ? _attemptFuture = null
+                : null,
+          ),
+    );
+    return attempt;
+  }
+
+  /// Общее тело [connect] и [ensureAgent].
+  ///
+  /// [agentDirectory] — корень процесса, его получает резолвер;
+  /// [projectDirectory] `null` — проект не меняется (путь `ensureAgent`).
+  Future<void> _connect(
+    ConnectionProfile profile, {
+    required String agentDirectory,
+    String? projectDirectory,
   }) async {
     final resolver = _resolverFor(profile);
     if (resolver == null) {
-      throw _rejectUnsupported(profile, projectDirectory);
+      throw _rejectUnsupported(profile, agentDirectory, projectDirectory);
     }
 
     _publish(
       _current.copyWith(
         connection: const ConnectionView.connecting(),
         profile: profile,
-        projectDirectory: projectDirectory,
+        agentDirectory: agentDirectory,
+        projectDirectory: projectDirectory ?? _current.projectDirectory,
       ),
     );
     _transition = _Transition.connecting;
@@ -310,7 +439,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     try {
       final transport = await resolver.open(
         profile,
-        projectDirectory: projectDirectory,
+        projectDirectory: agentDirectory,
       );
       if (_isStale(attempt)) {
         // Транспорт ещё не передан бэкенду, владельца у него нет (§9).
@@ -353,9 +482,28 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   Future<void> reconnect({
     ConnectionProfile? profile,
     String? projectDirectory,
+    String? agentDirectory,
+  }) => _begin(
+    _reconnect(
+      profile: profile,
+      projectDirectory: projectDirectory,
+      agentDirectory: agentDirectory,
+    ),
+  );
+
+  Future<void> _reconnect({
+    ConnectionProfile? profile,
+    String? projectDirectory,
+    String? agentDirectory,
   }) async {
     final target = profile ?? _current.profile;
-    final directory = projectDirectory ?? _current.projectDirectory;
+    // Корень процесса (D15): явный `agentDirectory`, затем папка проекта из
+    // параметра (путь CLI задаёт обе), затем прежний корень и проект.
+    final directory =
+        agentDirectory ??
+        projectDirectory ??
+        _current.agentDirectory ??
+        _current.projectDirectory;
     if (target == null || directory == null) {
       throw const ClientWorkspaceException(
         'Connect an agent before reconnecting.',
@@ -363,14 +511,15 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     }
     final resolver = _resolverFor(target);
     if (resolver == null) {
-      throw _rejectUnsupported(target, directory);
+      throw _rejectUnsupported(target, directory, projectDirectory);
     }
 
     _publish(
       _current.copyWith(
         connection: const ConnectionView.reconnecting(attempt: 1),
         profile: target,
-        projectDirectory: directory,
+        agentDirectory: directory,
+        projectDirectory: projectDirectory ?? _current.projectDirectory,
       ),
     );
     _transition = _Transition.reconnecting;
@@ -480,20 +629,32 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   }
 
   @override
-  Future<SessionHandle> newSession({String? cwd}) async {
-    final directory = _current.projectDirectory;
-    if (_current.connection is! Connected || directory == null) {
+  Future<SessionHandle> newSession({String? cwd, bool activate = true}) async {
+    if (_current.connection is! Connected) {
       throw const ClientWorkspaceException(
         'Connect an agent before creating a session.',
       );
     }
+    // `cwd` без проекта допустим: сессия `ensureAgent` без выбранного проекта
+    // (D13, триггер 3) живёт в своей папке.
+    final directory = cwd ?? _current.projectDirectory;
+    if (directory == null) {
+      throw const ClientWorkspaceException(
+        'Select a project folder before creating a session.',
+      );
+    }
 
     final session = await _backend.createSession(
-      CreateSessionCommand(cwd: cwd ?? directory),
+      CreateSessionCommand(cwd: directory),
     );
     final handle = _track(session);
     _publish(
-      _current.copyWith(sessions: _summaries(), activeSessionId: session.id),
+      _current.copyWith(
+        sessions: _summaries(),
+        // Сессия устаревшего намерения не забирает фокус Files и терминала
+        // (D17).
+        activeSessionId: activate ? session.id : _current.activeSessionId,
+      ),
     );
     return handle;
   }
@@ -519,9 +680,26 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         const ClientWorkspaceException('The ACP agent cannot load sessions.'),
       );
     }
-    final loading = _load(id, cwd);
+    final loading = _loadAndResume(id, cwd);
     _loading[id] = loading;
     return loading.whenComplete(() => _loading.remove(id));
+  }
+
+  /// Загрузка по запросу хоста. `detached`-сессия после успешного
+  /// `session/load` снова связана с агентом: принимает промпты и сливает
+  /// очередь (D16). Ошибка загрузки идёт вызывающему, сессия остаётся
+  /// `detached` с прежним уведомлением.
+  Future<SessionHandle> _loadAndResume(SessionId id, String cwd) async {
+    final attempt = _attempt;
+    final wasDetached = _handles[id]?.isDetached ?? false;
+    final handle = await _load(id, cwd);
+    // Соединение могло смениться во время загрузки: новая попытка сама
+    // перезагрузит сессию (§9).
+    if (wasDetached && !_isStale(attempt)) {
+      _handles[id]?.resume();
+      _publish(_current.copyWith(sessions: _summaries()));
+    }
+    return handle;
   }
 
   Future<SessionHandle> _load(SessionId id, String cwd) async {
@@ -557,40 +735,55 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     if (cursor == null || _listing != null) {
       return;
     }
-    await _list(cursor: cursor);
+    final listing = _fetchPage(cursor, _listRequest);
+    _listing = listing;
+    try {
+      await listing;
+    } finally {
+      // Первая страница нового проекта могла уже сбросить защиту (D15).
+      if (identical(_listing, listing)) {
+        _listing = null;
+      }
+    }
   }
 
-  /// Первая страница списка после подключения: прежний список и курсор
-  /// принадлежали старому соединению или проекту (design D3).
+  /// Первая страница списка после подключения или смены проекта: прежний
+  /// список и курсор принадлежали старому соединению или проекту (design D3).
+  ///
+  /// Без `projectDirectory` запроса нет: ACP без `cwd` вернул бы сессии всех
+  /// папок, а сайдбар показывает список проекта (D15).
   Future<void> _listFirstPage() async {
+    final request = ++_listRequest;
+    _listing = null;
     _listed.clear();
     _nextCursor = null;
-    if (_capabilities.sessionCapabilities.list == null) {
+    if (_capabilities.sessionCapabilities.list == null ||
+        _current.projectDirectory == null) {
       _publish(
         _current.copyWith(sessions: _summaries(), hasMoreSessions: false),
       );
       return;
     }
-    await _list();
+    await _fetchPage(null, request);
   }
 
-  Future<void> _list({String? cursor}) {
-    final listing = _fetchPage(cursor);
-    _listing = listing;
-    return listing.whenComplete(() => _listing = null);
-  }
-
-  Future<void> _fetchPage(String? cursor) async {
+  Future<void> _fetchPage(String? cursor, int request) async {
     try {
       final page = await _backend.listSessions(
         cwd: _current.projectDirectory,
         cursor: cursor,
       );
+      if (request != _listRequest) {
+        return;
+      }
       for (final info in page.sessions) {
         _listed.putIfAbsent(info.sessionId, () => info);
       }
       _nextCursor = page.nextCursor;
     } on Object catch (error) {
+      if (request != _listRequest) {
+        return;
+      }
       _report(
         WorkspaceDiagnostic(
           severity: DiagnosticSeverity.error,
@@ -619,8 +812,16 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   Future<String?> restoreProject() async => await _restorer?.readProject();
 
   @override
-  void selectProject(String path) =>
-      _publish(_current.copyWith(projectDirectory: path));
+  void selectProject(String path) {
+    final changed = _current.projectDirectory != path;
+    _publish(_current.copyWith(projectDirectory: path));
+    // Агент уже работает: список нового проекта нужен сразу. Без агента его
+    // запросит подключение (`ensureAgent` / `connect`) по `projectDirectory`
+    // на момент запроса, поэтому A -> B -> A во время старта даёт один список.
+    if (changed && !_disposed && _current.connection is Connected) {
+      unawaited(_listFirstPage());
+    }
+  }
 
   @override
   Future<void> flushSnapshot() => _restorer?.flush() ?? Future<void>.value();
@@ -682,7 +883,8 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   /// вызывающего; транспорт не открывается.
   UnsupportedConnectionProfileException _rejectUnsupported(
     ConnectionProfile profile,
-    String projectDirectory,
+    String agentDirectory,
+    String? projectDirectory,
   ) {
     final error = UnsupportedConnectionProfileException(profile);
     _publish(
@@ -692,7 +894,8 @@ final class DefaultClientWorkspace implements ClientWorkspace {
           message: error.message,
         ),
         profile: profile,
-        projectDirectory: projectDirectory,
+        agentDirectory: agentDirectory,
+        projectDirectory: projectDirectory ?? _current.projectDirectory,
       ),
     );
     return error;
@@ -1013,11 +1216,27 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     }
   }
 
+  /// Новое соединение сессию не знает ([_Link.detached]).
+  bool get isDetached => _link == _Link.detached;
+
   /// Сессия снова связана с агентом: очередь сливается, если сессия
   /// свободна.
+  ///
+  /// Из `detached` (загрузка по фокусу, D16) статус в представлении надо
+  /// пересобрать: `reload` публикуется до этого вызова, пока связь ещё
+  /// `detached`.
   void resume() {
+    final wasDetached = _link == _Link.detached;
     _link = _Link.attached;
     _notice = null;
+    if (wasDetached) {
+      _publish(
+        _sessionFields(
+          _current.copyWith(revision: _current.revision + 1),
+          _session,
+        ),
+      );
+    }
     unawaited(_drainIfFree());
   }
 
@@ -1264,7 +1483,12 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   /// Снимок после `session/load`: проекция транскрипта строится заново,
   /// очередь и флаги представления сохраняются (design D4).
   void reload(AcpSession session) {
-    _notice = null;
+    // `detached`-сессия, которую загружают по фокусу (D16), держит
+    // уведомление до успеха: его снимает `resume`; при ошибке загрузки оно
+    // остаётся прежним.
+    if (_link != _Link.detached) {
+      _notice = null;
+    }
     _projector.reset();
     _session = session;
     _projector.apply(session);

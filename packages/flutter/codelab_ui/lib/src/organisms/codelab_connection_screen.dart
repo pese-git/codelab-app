@@ -12,6 +12,7 @@ class CodeLabConnectionScreen extends StatelessWidget {
     this.description,
     this.onConnect,
     this.onReconnect,
+    this.reconnectLabel = 'Reconnect',
     this.onConfigureConnection,
     this.extraAction,
     this.isBusy = false,
@@ -25,6 +26,10 @@ class CodeLabConnectionScreen extends StatelessWidget {
   final String? description;
   final VoidCallback? onConnect;
   final VoidCallback? onReconnect;
+
+  /// Подпись кнопки повтора: хост без ручного Connect называет её `Retry`
+  /// (design.md change `require-project-folder`, D18); по умолчанию прежняя.
+  final String reconnectLabel;
   final VoidCallback? onConfigureConnection;
 
   /// Действие хоста без знания о его смысле (например, «Add provider»,
@@ -98,7 +103,7 @@ class CodeLabConnectionScreen extends StatelessWidget {
                       ),
                     if (onReconnect != null)
                       CodeLabButton(
-                        label: 'Reconnect',
+                        label: reconnectLabel,
                         icon: FluentIcons.refresh,
                         onPressed: isBusy ? null : onReconnect,
                       ),

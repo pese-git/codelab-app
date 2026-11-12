@@ -290,8 +290,7 @@ String? _failureBodyOf(PromptFailure? failure) => switch (failure) {
   AgentPromptFailure(:final message) ||
   RequestPromptFailure(:final message) ||
   UnknownPromptFailure(:final message) => message,
-  ConnectionLostPromptFailure() =>
-    'Reconnect to continue working with the agent.',
+  ConnectionLostPromptFailure() => 'Retry to continue working with the agent.',
   null => null,
 };
 
@@ -530,26 +529,57 @@ String projectNameOf(String path) {
 /// Группы проектов сайдбара: выбранный проект раскрыт с сессиями, остальные
 /// недавние — свёрнутыми группами (change `redesign-workbench-shell`, D4).
 ///
+/// Один агент обслуживает сессии разных папок (`require-project-folder`, D11,
+/// Q23): открытая сессия попадает в группу проекта с тем же путём. Папку
+/// сессии даёт [sessionFolders] (`cwd` из `WorkspaceState`), а не подпись
+/// строки. Группа не выбранного проекта раскрывается, пока в ней сессия идёт,
+/// ждёт одобрения или упала: ход в `/work/a` остаётся виден со статусом после
+/// перехода в `/work/b`. Сессии без своей группы остаются под выбранным
+/// проектом; их `subtitle` — полный путь — показывает, откуда они.
+///
 /// Выбранный проект, которого нет среди недавних, всё равно идёт первой
 /// группой; без выбранного проекта сессии попадают в группу «No project».
 List<CodeLabSidebarProject> sidebarProjectsOf({
   required String? selectedProjectPath,
   required List<CodeLabSessionListItem> sessions,
   required List<CodeLabRecentProject> recentProjects,
+  Map<String, String> sessionFolders = const {},
 }) {
   final selected = selectedProjectPath;
+  final otherPaths = {
+    for (final recent in recentProjects)
+      if (recent.path != selected) recent.path,
+  };
+  final byPath = <String, List<CodeLabSessionListItem>>{};
+  final underSelected = <CodeLabSessionListItem>[];
+  for (final session in sessions) {
+    final folder = sessionFolders[session.id];
+    if (folder != null && otherPaths.contains(folder)) {
+      (byPath[folder] ??= []).add(session);
+    } else {
+      underSelected.add(session);
+    }
+  }
+  bool attention(List<CodeLabSessionListItem> items) => items.any(
+    (s) =>
+        s.status == CodeLabSessionStatus.running ||
+        s.status == CodeLabSessionStatus.awaitingApproval ||
+        s.status == CodeLabSessionStatus.failed,
+  );
   return [
     CodeLabSidebarProject(
       path: selected ?? '',
       name: selected == null ? 'No project' : projectNameOf(selected),
       current: true,
-      sessions: sessions,
+      sessions: underSelected,
     ),
     for (final recent in recentProjects)
       if (recent.path != selected)
         CodeLabSidebarProject(
           path: recent.path,
           name: projectNameOf(recent.path),
+          expanded: attention(byPath[recent.path] ?? const []),
+          sessions: byPath[recent.path] ?? const [],
         ),
   ];
 }

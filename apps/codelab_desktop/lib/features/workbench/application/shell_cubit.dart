@@ -12,6 +12,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         RecentProjectsStore,
         SecretSource,
         SessionStatusView,
+        WebSocketProfile,
         WorkspaceDiagnostic;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart'
@@ -21,7 +22,6 @@ import 'package:flutter/painting.dart' show ImageProvider;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/provider_setup_offer.dart';
-import '../../../core/platform/connection_preferences.dart';
 import '../../../core/platform/dock_layout_store.dart';
 import '../../../core/platform/external_link_opener.dart';
 import '../../../core/platform/limited_network_image.dart';
@@ -69,10 +69,11 @@ export 'ui_mappers.dart'
 ///
 /// Как использовать: [CodeLabShellParts.build]; закрывает части фасад —
 /// на этом change он их единственный потребитель (design D10).
-/// [initialProfile] — профиль окна до первого подключения; с
+/// [initialProfile] — профиль окна до первого старта; с
 /// [defaultProfiles] его заменяет профиль по умолчанию (D5, change
-/// `add-app-settings-shell`), [preferences] включает «Connect on start»,
-/// [eventLogger] получает событие `connection.connect_on_start` (D17).
+/// `add-app-settings-shell`), [eventLogger] получает события старта и
+/// перезапуска агента (D17). Выбор проекта стартует агента: сборка связывает
+/// `SettingsCubit.onProjectSelected` с `ConnectionCubit.startAgent` (D13).
 final class CodeLabShellParts {
   CodeLabShellParts._({
     required this.changes,
@@ -94,7 +95,6 @@ final class CodeLabShellParts {
     DirectoryExists? directoryExists,
     DockLayoutStore? dockLayoutStore,
     DefaultProfileResolver? defaultProfiles,
-    ConnectionPreferences? preferences,
     Logger? logger,
     Logger? eventLogger,
     ProfileSecretSource? tokenSecrets,
@@ -123,11 +123,11 @@ final class CodeLabShellParts {
       settings: settings,
       activeSession: activeSession,
       defaultProfiles: defaultProfiles,
-      preferences: preferences,
       eventLogger: eventLogger,
       tokenSecrets: tokenSecrets,
       providerSetupOffer: providerSetupOffer,
     );
+    settings.bindProjectStart(connection.startAgent);
     return CodeLabShellParts._(
       changes: changes,
       diagnostics: diagnostics,
@@ -275,9 +275,16 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
        _imageProviderFor = imageProviderFor,
        _eventLogger = eventLogger,
        _projectFilesBound = projectFilesBound,
-       super(_compose(parts, projectFilesBound)) {
+       super(_compose(parts, projectFilesBound, workspace: workspace)) {
     _parts.changes.listen(
-      () => emit(_compose(_parts, _projectFilesBound, linkNote: _linkNote)),
+      () => emit(
+        _compose(
+          _parts,
+          _projectFilesBound,
+          workspace: _workspace,
+          linkNote: _linkNote,
+        ),
+      ),
     );
     _diagnosticSubscription = _workspace.diagnostics.listen(
       _handleKitDiagnostic,
@@ -316,24 +323,34 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   Future<void> browseForProject() => _settings.browseForProject();
 
-  /// Подключает окно к [profile], а без него — к профилю окна (до первого
-  /// подключения — к профилю по умолчанию).
-  Future<void> connect([ConnectionProfile? profile]) =>
-      _connection.connect(profile);
+  /// «Use» (D18): выбирает [profile] для следующего старта агента. Работающий
+  /// агент и профиль по умолчанию не меняются.
+  Future<void> useProfile(ConnectionProfile profile) =>
+      _connection.use(profile);
 
-  Future<void> reconnect() => _connection.reconnect();
+  /// «Restart agent» (D22): с подтверждением, если сессии в работе.
+  Future<void> restartAgent() => _connection.restart();
+
+  /// «Retry» экрана и баннера сбоя (D13, п. 4).
+  Future<void> retryStart() => _connection.retryStart();
+
+  /// Ответ на диалог «Restart agent»: перезапустить.
+  Future<void> confirmRestart() => _connection.confirmRestart();
+
+  /// Ответ на диалог «Restart agent»: отказаться.
+  void cancelRestart() => _connection.cancelRestart();
 
   /// Однократный запуск мастера из баннера (D26).
   Future<void> runProviderSetup(Future<void> Function() action) =>
       _connection.runProviderSetup(action);
 
-  /// Переподключает встроенного агента после записи провайдера из баннера,
+  /// Повторяет старт встроенного агента после записи провайдера из баннера,
   /// если новой попытки с момента сбоя не было (D26).
   Future<void> connectAfterProviderSetup(ProviderSetupNotice notice) =>
       _connection.connectAfterProviderSetup(notice);
 
-  /// «Connect on start» (D8): app зовёт его после первого кадра; один раз.
-  Future<void> connectOnStart() => _connection.connectOnStart();
+  /// Триггер запуска (D19): app зовёт его после первого кадра.
+  Future<void> startOnLaunch() => _connection.startOnLaunch();
 
   void resizeSessionsPane(double width) => _layout.resizeSessionsPane(width);
 
@@ -601,7 +618,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       case 'new':
         unawaited(createSession());
       case 'reconnect':
-        unawaited(reconnect());
+        // Тот же единственный перезапуск с подтверждением D22 (Q24).
+        unawaited(restartAgent());
       case 'logs':
         // Протокол и debug log теперь — панель Protocol дока (change
         // `redesign-workbench-shell`, D5).
@@ -652,6 +670,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   static CodeLabShellState _compose(
     CodeLabShellParts parts,
     bool projectFilesBound, {
+    required ClientWorkspace workspace,
     String? linkNote,
   }) {
     final connection = parts.connection.state;
@@ -661,7 +680,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     final layout = parts.layout.state;
     final transcriptView = parts.transcriptView.state;
     final projectFilesAvailable =
-        projectFilesBound && sessionFolderIsLocal(connection.profile);
+        projectFilesBound && sessionFolderIsLocal(connection.shownProfile);
     return CodeLabShellState(
       connectionStatus: connection.connectionStatus,
       transportLabel: connection.transportLabel,
@@ -669,6 +688,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       connectionDetail: connection.selectedConnectionDetail,
       connectionMessage: connection.connectionMessage,
       providerSetupNotice: connection.providerSetupNotice,
+      connectionRepeat: connection.failureRepeat,
+      pendingRestart: connection.pendingRestart,
       currentSessionLabel: sessions.currentSessionLabel,
       currentSessionDetail: sessions.currentSessionDetail,
       sessions: sessions.sessions,
@@ -707,6 +728,11 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       recentProjects: settings.recentProjects,
       hasMoreSessions: sessions.hasMoreSessions,
       pendingRootSession: sessions.pendingRootSession,
+      restartsRemote: connection.profile is WebSocketProfile,
+      sessionFolders: {
+        for (final summary in workspace.current.sessions)
+          summary.id.value: summary.cwd,
+      },
       currentPlan: active.currentPlan,
       queuedPrompts: active.queuedPrompts,
     );

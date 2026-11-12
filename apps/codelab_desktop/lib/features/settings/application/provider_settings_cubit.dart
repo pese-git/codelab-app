@@ -6,6 +6,8 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show
         ClientWorkspace,
         Connected,
+        ConnectionFailed,
+        ConnectionLost,
         ConnectionProfile,
         EmbeddedProfile,
         Reconnecting,
@@ -67,9 +69,9 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     required String? Function() projectDirectory,
     Logger? logger,
     DateTime Function()? now,
-    Future<void> Function()? connect,
+    Future<void> Function()? retryStart,
   }) : _workspace = workspace,
-       _connect = connect,
+       _retryStart = retryStart,
        _defaultProfile = defaultProfile,
        _open = open,
        _environment = environment,
@@ -97,10 +99,9 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
   final Logger? _logger;
   final DateTime Function() _now;
 
-  /// «Connect» баннера после записи без запущенного агента: подключение окна
-  /// к профилю по умолчанию (`ConnectionCommands.connect`, D9); `null` — кнопки
-  /// нет.
-  final Future<void> Function()? _connect;
+  /// «Retry» баннера после записи и сбоя старта агента: повтор намерения
+  /// старта (`ConnectionCubit.retryStart`, D13 п. 4, Q22); `null` — кнопки нет.
+  final Future<void> Function()? _retryStart;
 
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
   StreamSubscription<Object?>? _viewSubscription;
@@ -473,6 +474,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
         backendId: session.backend.id,
         editingId: editId,
         isAgentConnected: _agentConnected,
+        startFailed: _startFailed,
         before: _snapshot,
         logger: _logger,
         readSnapshot: () => session.config.snapshot(
@@ -500,13 +502,18 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     await reload();
   }
 
-  /// «Connect» баннера: подключает окно к профилю по умолчанию.
-  Future<void> connectAgent() async {
-    final connect = _connect;
-    if (connect != null) {
-      await connect();
+  /// «Retry» баннера: повторяет намерение старта агента одной попыткой.
+  Future<void> retryAgentStart() async {
+    final retry = _retryStart;
+    if (retry != null) {
+      await retry();
     }
   }
+
+  /// Последний старт агента закончился сбоем: баннеру нужен «Retry».
+  bool _startFailed() =>
+      _workspace.current.connection is ConnectionFailed ||
+      _workspace.current.connection is ConnectionLost;
 
   /// Агент подключён: `WorkspaceState.connection` — `Connected` или
   /// `Reconnecting` (D9).

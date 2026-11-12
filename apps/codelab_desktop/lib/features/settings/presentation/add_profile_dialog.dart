@@ -305,11 +305,7 @@ class _Fields extends StatelessWidget {
         ),
         CodeLabFormRow(
           label: 'After saving',
-          notes: const [
-            CodeLabFormNote(
-              'Used when CodeLab starts and by Connect on start.',
-            ),
-          ],
+          notes: const [CodeLabFormNote('Used when the agent starts.')],
           child: Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Checkbox(
@@ -731,8 +727,8 @@ class _SavedDialog extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'The current connection is unchanged. Use Connect in the profile '
-            'row to switch now.',
+            'The running agent is unchanged. Select it with Use in the profile '
+            'row; Restart agent applies it.',
             style: caption?.copyWith(color: resources.textFillColorSecondary),
           ),
         ],
