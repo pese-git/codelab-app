@@ -188,9 +188,12 @@ final class AcpClientApplication {
   /// `stopReason`, и прерванный ход выглядел бы «завершённым неизвестно как»
   /// (design D2 change `cancel-turn-on-ws-disconnect`).
   ///
-  /// Для чего: [_replaceTransport] добавляет сессии с активным ходом;
-  /// успешный [loadSession] помечает последний ход реплея отменённым и
-  /// убирает id, [sendPrompt] — тоже убирает. Ошибка `session/load` отметку
+  /// Для чего: метку ставят [reconnect] до фабрики транспорта (с откатом у
+  /// сессий с идущим ходом при сбое фабрики, D22 change
+  /// `require-project-folder`) и [_replaceTransport] для сессий с активным
+  /// ходом. Успешный [loadSession] помечает последний ход реплея отменённым
+  /// и убирает id. [sendPrompt] снимает метку в начале нового хода и при
+  /// ответе с `stopReason` не `cancelled`. Ошибка `session/load` метку
   /// сохраняет до следующей загрузки.
   final _interruptedTurns = <SessionId>{};
 
@@ -473,6 +476,13 @@ final class AcpClientApplication {
         ),
       );
       _requireCurrentGeneration(generation);
+      // Метку снимает лишь ответ с `stopReason` не `cancelled`: честно
+      // законченный в окне `reconnect` ход не прерван, реплей покажет его
+      // ответ. Отменённый агентом (выгрузка) остаётся с меткой; ошибка
+      // запроса (ветка `catch` ниже) тоже считается прерыванием.
+      if (response.stopReason != StopReason.cancelled) {
+        _interruptedTurns.remove(command.sessionId);
+      }
       final completedSession = SessionStateMachine.completeTurn(
         _requireSession(command.sessionId),
         stopReason: response.stopReason,
@@ -561,6 +571,13 @@ final class AcpClientApplication {
     return cancelled.turns.last;
   }
 
+  /// Переподключение на транспорт из фабрики.
+  ///
+  /// Параллельные вызовы не сериализуются здесь: это забота вызывающего.
+  /// Kit вытесняет устаревшую попытку номером `_attempt`
+  /// (`ClientWorkspace._reconnect`, `_isStale`), а `open` встроенного агента
+  /// сериализует `EmbeddedTransportResolver` (`_tail`). Откат метки при сбое
+  /// фабрики закрывает основные случаи наложения.
   Future<ClientConnectionState> reconnect(ReconnectCommand command) async {
     final createTransport = command.transportFactory ?? _reconnectTransport;
     if (createTransport == null) {
@@ -569,10 +586,34 @@ final class AcpClientApplication {
       );
     }
 
-    await _replaceTransport(
-      await createTransport(),
-      closeTimeout: command.closeTimeout,
-    );
+    // Фабрика транспорта может долго открывать нового агента и при этом
+    // освобождать прежнего (встроенный агент, D22 change
+    // `require-project-folder`): выгрузка отменяет ход, и ответ
+    // `session/prompt` приходит до `_replaceTransport`. Метка ставится до
+    // фабрики, иначе ход закончился бы раньше замены и после `session/load`
+    // (реплей без `stopReason`) показался бы «unknown», а не отменённым.
+    final marked = _markActiveTurnsInterrupted();
+    _logInterruptMark('turn_interrupt_marked', marked);
+    final AcpTransport replacement;
+    try {
+      replacement = await createTransport();
+    } on Object {
+      // Откат только у сессий, чей ход ещё идёт: он остался на прежнем
+      // транспорте, и чужая метка перезагрузила бы его отменённым без
+      // причины. Ход, уже закончившийся в окне фабрики (выгрузка старого
+      // агента отменила его, `_openSerialized` встроенного агента падает
+      // позже), сохраняет метку: следующий `reconnect` загрузит его
+      // отменённым, а не «unknown». Так же сохраняется метка, поставленная
+      // обработчиком обрыва в этом окне.
+      final rollback = {
+        for (final id in marked)
+          if (_sessions[id]?.activeTurn != null) id,
+      };
+      _interruptedTurns.removeAll(rollback);
+      _logInterruptMark('turn_interrupt_mark_rolled_back', rollback);
+      rethrow;
+    }
+    await _replaceTransport(replacement, closeTimeout: command.closeTimeout);
 
     return _establishConnection();
   }
@@ -694,6 +735,30 @@ final class AcpClientApplication {
     }
   }
 
+  /// Помечает сессии с идущим ходом прерванными и возвращает те, что
+  /// помечены впервые, чтобы вызывающий мог снять метку при отказе.
+  ///
+  /// Почему общий метод: метка нужна и до открытия нового транспорта
+  /// ([reconnect]), и при самой замене ([_replaceTransport]) (D2 change
+  /// `cancel-turn-on-ws-disconnect`).
+  void _logInterruptMark(String event, Set<SessionId> ids) {
+    for (final id in ids) {
+      _logger
+          .bind({logComponentKey: clientComponent})
+          .withCorrelation(
+            connectionGeneration: _generation,
+            sessionId: id.value,
+          )
+          .debug(event);
+    }
+  }
+
+  Set<SessionId> _markActiveTurnsInterrupted() => {
+    for (final session in _sessions.values)
+      if (session.activeTurn != null && _interruptedTurns.add(session.id))
+        session.id,
+  };
+
   Future<void> _replaceTransport(
     AcpTransport transport, {
     Duration? closeTimeout,
@@ -706,11 +771,7 @@ final class AcpClientApplication {
     // Ход, шедший в момент замены, агент отменил вместе с соединением; ход
     // остаётся `running` до `session/load`, который и покажет его
     // отменённым (D2 change `cancel-turn-on-ws-disconnect`).
-    for (final session in _sessions.values) {
-      if (session.activeTurn != null) {
-        _interruptedTurns.add(session.id);
-      }
-    }
+    _markActiveTurnsInterrupted();
     // Одобрения и карты запросов снимаются синхронно, до первого `await`:
     // иначе ответ пользователя успел бы уйти в старый транспорт, а одобрение
     // потом стало бы `cancelled` (агент получил бы allow, состояние —
