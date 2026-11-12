@@ -31,6 +31,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 
 import '../support/test_app_scope.dart';
 import '../support/transcript_rows.dart';
+import '../support/start_agent.dart';
 
 const _profile = ConnectionProfile.embedded(
   id: 'embedded',
@@ -198,7 +199,7 @@ void main() {
     // Без сохранённого выбора профиль по умолчанию — встроенный агент (D5).
     final shell = scope.resolve<CodeLabShellCubit>();
     await shell.selectProject(project.path);
-    await shell.connect();
+    await shell.startWith();
     expect(shell.state.connectionStatus, CodeLabConnectionStatus.connected);
     return shell;
   }
@@ -373,7 +374,9 @@ void main() {
     );
   });
 
-  test('Connect twice while the first agent is opening: no failed state in '
+  // Ручного Connect нет (D13, D20): первую попытку даёт выбор проекта, вторую —
+  // «Restart agent», вытесняющий её (Q25). Ожидания прежние.
+  test('Restart agent while the first agent is opening: no failed state in '
       'between, connected at the end, one live agent, the stale one gets '
       'dispose() (AGENTS.md §9, §12)', () async {
     final opener = scripted([_text('a')]);
@@ -384,16 +387,15 @@ void main() {
       for (final e in scope.resolve<LogBuffer>().entries.value) '${e['event']}',
     ];
     final shell = scope.resolve<CodeLabShellCubit>();
-    await shell.selectProject(project.path);
     final statuses = <CodeLabConnectionStatus>[];
     final subscription = shell.stream.listen(
       (state) => statuses.add(state.connectionStatus),
     );
     addTearDown(subscription.cancel);
 
-    final first = shell.connect();
+    final first = shell.selectProject(project.path);
     await _until(() => opener.calls.length == 1);
-    final second = shell.connect();
+    final second = shell.restartAgent();
     openGate.complete();
     await first;
     await second;
@@ -402,9 +404,10 @@ void main() {
     expect(shell.state.connectionStatus, CodeLabConnectionStatus.connected);
     expect(statuses, isNot(contains(CodeLabConnectionStatus.failed)));
     expect(shell.state.connectionMessage, isNull);
-    // Диагностика успеха ровно одна — от второй попытки.
+    // Диагностика успеха ровно одна — от второй попытки; вторая попытка —
+    // перезапуск, поэтому текст `reconnected`, а не `started` (D22).
     final started = scopeLogEvents().where(
-      (event) => event.startsWith('Embedded ACP agent started'),
+      (event) => event.startsWith('Embedded ACP agent reconnected'),
     );
     expect(started, hasLength(1));
     expect(opener.agents, hasLength(2));

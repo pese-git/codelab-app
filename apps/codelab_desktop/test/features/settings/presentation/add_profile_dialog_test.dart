@@ -598,8 +598,8 @@ void main() {
       expect(find.textContaining('marked "Not tested"'), findsOneWidget);
       expect(
         find.text(
-          'The current connection is unchanged. Use Connect in the profile '
-          'row to switch now.',
+          'The running agent is unchanged. Select it with Use in the profile '
+          'row; Restart agent applies it.',
         ),
         findsOneWidget,
       );
@@ -1189,7 +1189,9 @@ void main() {
         stdioTransportFactory: (_) => FakeAcpTransport(),
         webSocketTransportFactory: (_) => FakeAcpTransport(),
       );
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
       await tester.pump();
       await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
       await tester.pumpAndSettle();
@@ -1238,7 +1240,9 @@ void main() {
         stdioTransportFactory: (_) => FakeAcpTransport(),
         webSocketTransportFactory: (_) => FakeAcpTransport(),
       );
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
       await tester.pump();
       await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
       await tester.pumpAndSettle();

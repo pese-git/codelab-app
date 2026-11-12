@@ -15,6 +15,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 
 import '../../../support/test_app_scope.dart';
+import '../../../support/start_agent.dart';
 
 String _snapshot(String project) => jsonEncode({
   'version': 1,
@@ -103,7 +104,7 @@ void main() {
     expect(warnings.single['source'], 'project');
 
     await cubit.selectProject('/work/app');
-    await cubit.connect();
+    await cubit.startWith();
     await pumpEventQueue();
 
     final methods = [
@@ -147,7 +148,7 @@ void main() {
     final cubit = binding.scope.resolve<CodeLabShellCubit>();
     await binding.scope.resolve<CodeLabShellParts>().settings.projectRestored;
 
-    await cubit.connect();
+    await cubit.startWith();
     await pumpEventQueue();
 
     expect(cubit.state.selectedProjectPath, '/work/app');
@@ -160,5 +161,102 @@ void main() {
     expect(cubit.state.activeSessionId, isNull);
     expect(cubit.state.sessions.single.id, 's1');
     expect(cubit.state.sessions.single.status, CodeLabSessionStatus.notLoaded);
+  });
+
+  // B2.4 (D16, D19): восстановленный проект — триггер запуска; ручного
+  // Connect нет.
+  String snapshotWith(String active, String cwd) => jsonEncode({
+    'version': 1,
+    'windows': {
+      'main': {
+        'projectDirectory': '/work/app',
+        'activeSessionId': active,
+        'openSessions': [
+          {'id': active, 'cwd': cwd},
+        ],
+      },
+    },
+  });
+
+  test('an active session in the project folder is loaded at launch without '
+      'Connect and gets the focus', () async {
+    final agent = FakeAcpTransport()
+      ..initializeAgentCapabilities = const AgentCapabilities(
+        loadSession: true,
+      );
+    final binding = CodeLabTestBinding(
+      stdioTransportFactory: (_) => agent,
+      preferences: {
+        kWorkspaceSnapshotPrefsKey: snapshotWith('s1', '/work/app'),
+      },
+    );
+    final cubit = binding.scope.resolve<CodeLabShellCubit>();
+    await binding.scope.resolve<CodeLabShellParts>().settings.projectRestored;
+    final load = agent.sent.firstWhere(
+      (m) => m is JsonRpcRequest && m.method == sessionLoadMethod,
+    );
+
+    final launching = cubit.startOnLaunch();
+    final request = await load as JsonRpcRequest;
+    agent.emitInbound(
+      JsonRpcMessage.response(
+        id: request.id,
+        result: const <String, Object?>{},
+      ),
+    );
+    await launching;
+    await pumpEventQueue();
+
+    expect(LoadSessionRequest.fromJson(request.params).cwd, '/work/app');
+    expect(cubit.state.activeSessionId, 's1');
+  });
+
+  test('an active session with cwd "/" under /work/app: the agent starts in '
+      '/work/app without Connect, nothing is loaded; a click asks D24 and '
+      'Open loads it without a restart', () async {
+    final agent = FakeAcpTransport()
+      ..initializeAgentCapabilities = const AgentCapabilities(
+        loadSession: true,
+      );
+    var starts = 0;
+    final binding = CodeLabTestBinding(
+      stdioTransportFactory: (_) {
+        starts++;
+        return agent;
+      },
+      preferences: {kWorkspaceSnapshotPrefsKey: snapshotWith('s2', '/')},
+    );
+    final cubit = binding.scope.resolve<CodeLabShellCubit>();
+    await binding.scope.resolve<CodeLabShellParts>().settings.projectRestored;
+
+    await cubit.startOnLaunch();
+    await pumpEventQueue();
+
+    expect(starts, 1);
+    expect(cubit.state.activeSessionId, isNull);
+    expect(
+      agent.sentMessages.whereType<JsonRpcRequest>().map((r) => r.method),
+      isNot(contains(sessionLoadMethod)),
+    );
+
+    final load = agent.sent.firstWhere(
+      (m) => m is JsonRpcRequest && m.method == sessionLoadMethod,
+    );
+    cubit.selectSession('s2');
+    await pumpEventQueue();
+    expect(cubit.state.pendingRootSession, isNotNull);
+
+    cubit.confirmRootSession();
+    final request = await load as JsonRpcRequest;
+    expect(LoadSessionRequest.fromJson(request.params).cwd, '/');
+    expect(starts, 1, reason: 'the agent is not restarted for the click');
+    agent.emitInbound(
+      JsonRpcMessage.response(
+        id: request.id,
+        result: const <String, Object?>{},
+      ),
+    );
+    await pumpEventQueue();
+    expect(cubit.state.activeSessionId, 's2');
   });
 }

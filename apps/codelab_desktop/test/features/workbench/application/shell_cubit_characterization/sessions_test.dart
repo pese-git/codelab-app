@@ -5,6 +5,7 @@
 // до конца change (design D1).
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
+import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'harness.dart';
@@ -44,18 +45,51 @@ void main() {
     expect(h.cubit.state.activeSessionId, 'session-2');
   });
 
-  test('createSession() before connecting sends nothing', () async {
-    final h = ShellHarness();
+  // D20 change `require-project-folder`: при выбранном проекте «New session»
+  // стартует агента (D13). Прежний смысл — «до готовности соединения агенту
+  // ничего не уходит» — сохранён: `session/new` не уходит до ответа на
+  // `initialize`, после него уходит ровно один.
+  test('createSession() sends session/new only after the agent answered '
+      'initialize, and exactly one', () async {
+    final agent = FakeAcpTransport()..autoRespondToInitialize = false;
+    final h = ShellHarness(agent: agent);
     await h.projectReady();
+    final initialize = h.nextSent(initializeMethod);
 
-    await h.cubit.createSession();
-
-    expect(h.agent.sentMessages, isEmpty);
-    expect(h.cubit.state.sessions, isEmpty);
+    final creating = h.cubit.createSession();
+    final init = await initialize as JsonRpcRequest;
+    await pumpEventQueue();
     expect(
-      h.logEvents,
-      contains('Connect an ACP agent before creating a session.'),
+      agent.sentMessages.whereType<JsonRpcRequest>().where(
+        (r) => r.method == sessionNewMethod,
+      ),
+      isEmpty,
     );
+    expect(h.cubit.state.sessions, isEmpty);
+
+    final sessionNew = h.nextSent(sessionNewMethod);
+    agent.emitInbound(
+      JsonRpcMessage.response(
+        id: init.id,
+        result: InitializeResponse(
+          protocolVersion: const ProtocolVersion(1),
+          agentCapabilities: const AgentCapabilities(),
+        ).toJson(),
+      ),
+    );
+    final request = await sessionNew as JsonRpcRequest;
+    agent.emitInbound(
+      JsonRpcMessage.response(id: request.id, result: {'sessionId': 's1'}),
+    );
+    await creating;
+
+    expect(
+      agent.sentMessages.whereType<JsonRpcRequest>().where(
+        (r) => r.method == sessionNewMethod,
+      ),
+      hasLength(1),
+    );
+    expect(h.cubit.state.activeSessionId, 's1');
   });
 
   test('selectSession() recomputes isPromptSubmitting and canCancel from the '

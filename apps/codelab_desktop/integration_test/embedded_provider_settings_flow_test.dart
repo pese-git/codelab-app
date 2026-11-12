@@ -222,7 +222,7 @@ providers:
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
       await ensureProject(tester, shellCubit);
-      unawaited(shellCubit.connect());
+      unawaited(shellCubit.startOnLaunch());
 
       // Новая установка: понятный текст вместо сырых проблем конфига.
       await _pumpUntil(tester, _key('connection-banner-add-provider'));

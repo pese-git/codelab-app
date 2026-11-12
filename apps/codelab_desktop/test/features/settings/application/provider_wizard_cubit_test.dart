@@ -54,6 +54,7 @@ void main() {
   late RecordingLogger log;
   late List<ProviderWizardCubit> cubits;
   var connected = true;
+  var startFailed = false;
 
   setUp(() {
     store = FakeAgentConfigStore(user: _existing());
@@ -61,6 +62,7 @@ void main() {
     log = RecordingLogger();
     cubits = [];
     connected = true;
+    startFailed = false;
   });
 
   tearDown(() async {
@@ -98,6 +100,7 @@ void main() {
       editingId: editing?.id,
       forceDefault: forceDefault,
       isAgentConnected: () => connected,
+      startFailed: () => startFailed,
     );
     cubits.add(cubit);
     return cubit;
@@ -486,23 +489,34 @@ void main() {
       },
     );
 
-    test(
-      'the saved banner: without a connected agent it offers Connect',
-      () async {
-        connected = false;
-        final cubit = await open();
-        await walkToReview(cubit);
-        cubit.dispatch(const ConfirmSave());
-        await pumpEventQueue(times: 20);
+    test('the saved banner: without a running agent it says the agent uses it '
+        'at the next start, without a button (Q22)', () async {
+      connected = false;
+      final cubit = await open();
+      await walkToReview(cubit);
+      cubit.dispatch(const ConfirmSave());
+      await pumpEventQueue(times: 20);
 
-        final banner = cubit.savedBanner!;
-        expect(
-          banner.text,
-          'Saved. Connect to start the agent with the new provider.',
-        );
-        expect(banner.action, ProviderBannerAction.connect);
-      },
-    );
+      final banner = cubit.savedBanner!;
+      expect(banner.text, 'Saved. The agent uses it the next time it starts.');
+      expect(banner.action, isNull);
+    });
+
+    // B2.8, Q22: после сбоя старта тот же текст, но с «Retry», который
+    // повторяет намерение старта (D13 п. 4).
+    test('the saved banner after a failed start keeps the text and offers '
+        'Retry', () async {
+      connected = false;
+      startFailed = true;
+      final cubit = await open();
+      await walkToReview(cubit);
+      cubit.dispatch(const ConfirmSave());
+      await pumpEventQueue(times: 20);
+
+      final banner = cubit.savedBanner!;
+      expect(banner.text, 'Saved. The agent uses it the next time it starts.');
+      expect(banner.action, ProviderBannerAction.retry);
+    });
 
     test('the saved banner: a plain save with a running agent', () async {
       final cubit = await open();

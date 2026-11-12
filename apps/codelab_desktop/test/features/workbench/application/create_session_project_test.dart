@@ -2,6 +2,7 @@
 // spec agent-workbench-ui «New session без проекта открывает выбор папки»;
 // design.md D5).
 
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
@@ -43,9 +44,16 @@ void main() {
 
     await cubit.createSession();
 
+    await pumpEventQueue();
+
     expect(picker.picks, 1);
-    expect(started, isEmpty);
-    expect(agent.sentMessages, isEmpty);
+    // Выбранная папка — триггер старта агента (D13), но сессии нет: её
+    // создаёт повторное «New session».
+    expect(started.single.cwd, '/work/app');
+    expect(
+      agent.sentMessages.whereType<JsonRpcRequest>().map((r) => r.method),
+      isNot(contains(sessionNewMethod)),
+    );
     expect(cubit.state.selectedProjectPath, '/work/app');
     expect(cubit.state.sessions, isEmpty);
     // Проект проверяется раньше соединения: подсказка «Connect an ACP agent»

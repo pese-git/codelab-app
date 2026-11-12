@@ -421,6 +421,20 @@ final class FakeWorkspace implements ClientWorkspace {
   @override
   SessionHandle? session(SessionId id) => handles[id];
 
+  /// Папки корня процесса, с которыми вызывали `ensureAgent`, по порядку.
+  ///
+  /// Почему: триггеры старта агента (D13, change `require-project-folder`)
+  /// идут через `ensureAgent`; тесты Cubit-ов проверяют, что триггер был.
+  final ensuredAgents = <String>[];
+
+  /// Заглушка `ensureAgent` (D15): только записывает вызов. Состояние
+  /// соединения тест задаёт сам через [emit].
+  @override
+  Future<void> ensureAgent(String directory, {ConnectionProfile? profile}) {
+    ensuredAgents.add(directory);
+    return Future<void>.value();
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName}');

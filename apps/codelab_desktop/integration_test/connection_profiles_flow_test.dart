@@ -16,6 +16,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_client_io/codelab_client_io.dart'
     show JsonFileProfileStore;
 import 'package:codelab_desktop/app/app_scope.dart';
+import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +25,15 @@ import 'package:integration_test/integration_test.dart';
 import 'support/e2e_agent.dart';
 
 Finder _key(String key) => find.byKey(ValueKey(key));
+
+/// Выбор проекта после «Use» (D20 change `require-project-folder`): он и
+/// стартует агента выбранного профиля. Ручного Connect в строке нет.
+Future<void> _startSelectedAgent(WidgetTester tester) async {
+  final shellCubit = codeLabDependenciesOf(
+    tester.element(find.byType(CodeLabApp)),
+  ).shellCubit;
+  await ensureProject(tester, shellCubit);
+}
 
 /// Опрашивает кадрами до появления [finder]: проба и подключение идут через
 /// настоящие процессы и сокеты, которые `pumpAndSettle` не ждёт.
@@ -104,8 +114,10 @@ void main() {
         isNot(contains(E2eWebSocketAgent.token)),
       );
 
-      // «Remove» у профиля текущего подключения недоступна.
-      await tester.tap(_key('connection-profile-connect-devbox'));
+      // «Remove» у выбранного профиля недоступна.
+      await tester.tap(_key('connection-profile-use-devbox'));
+      await tester.pump();
+      await _startSelectedAgent(tester);
       await _pumpUntil(tester, _key('connection-profile-status-devbox'));
       expect(
         tester
@@ -184,8 +196,10 @@ void main() {
         findsOneWidget,
       );
 
-      // «Connect» читает токен из хранилища без переменной окружения.
-      await tester.tap(_key('connection-profile-connect-devbox'));
+      // «Use» и старт читают токен из хранилища без переменной окружения.
+      await tester.tap(_key('connection-profile-use-devbox'));
+      await tester.pump();
+      await _startSelectedAgent(tester);
       // Подключение принято: бейдж `Connected` у строки `devbox`, и она
       // «Current» (а не просто бейдж попытки).
       await _pumpUntil(

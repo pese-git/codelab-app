@@ -40,6 +40,7 @@ import 'package:xterm2/ui.dart' show TerminalView;
 import '../../../support/fake_external_link_opener.dart';
 import '../../../support/fake_user_shell_launcher.dart';
 import '../../../support/test_app_scope.dart';
+import '../../../support/start_agent.dart';
 
 /// Приложение с fake-портами терминала и открытия адреса.
 ///
@@ -73,12 +74,15 @@ final class _Env {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      CodeLabBootstrap(scope: scope, child: const CodeLabApp()),
+      CodeLabBootstrap(
+        scope: scope,
+        child: const CodeLabApp(startOnLaunch: false),
+      ),
     );
     await tester.pump();
     await tester.runAsync(() async {
       await shell.selectProject('/work/a');
-      await shell.connect();
+      await shell.startWith();
       final sent = agent.sent.firstWhere(
         (m) => m is JsonRpcRequest && m.method == sessionNewMethod,
       );

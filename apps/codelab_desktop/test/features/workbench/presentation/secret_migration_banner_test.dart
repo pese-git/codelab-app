@@ -22,6 +22,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/test_app_scope.dart';
+import '../../../support/start_agent.dart';
 
 final class _FakeRunner implements SecretMigrationRunner {
   final planCompleters = <Completer<SecretMigrationOutcome>>[];
@@ -546,10 +547,12 @@ void main() {
       transport: FakeAcpTransport(),
       stdioTransportFactory: (_) => agent,
     );
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     final shell = binding.scope.resolve<CodeLabShellCubit>();
-    await tester.runAsync(() => shell.connect());
+    await tester.runAsync(() => shell.startWith());
     await tester.pump();
     final migration = binding.scope.resolve<SecretMigrationCubit>();
 

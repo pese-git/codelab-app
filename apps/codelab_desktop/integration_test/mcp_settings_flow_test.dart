@@ -130,7 +130,7 @@ void main() {
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
       await ensureProject(tester, shellCubit);
-      unawaited(shellCubit.connect());
+      unawaited(shellCubit.startOnLaunch());
       await _pumpWhile(
         tester,
         () =>

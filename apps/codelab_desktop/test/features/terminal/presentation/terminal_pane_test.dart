@@ -36,6 +36,7 @@ import 'package:xterm2_core/xterm2_core.dart' show Terminal;
 
 import '../../../support/fake_user_shell_launcher.dart';
 import '../../../support/test_app_scope.dart';
+import '../../../support/start_agent.dart';
 
 /// Приложение с fake-портом терминала и сценарным агентом.
 ///
@@ -79,7 +80,10 @@ final class _Env {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      CodeLabBootstrap(scope: scope, child: const CodeLabApp()),
+      CodeLabBootstrap(
+        scope: scope,
+        child: const CodeLabApp(startOnLaunch: false),
+      ),
     );
     await tester.pump();
   }
@@ -93,7 +97,7 @@ final class _Env {
     await tester.runAsync(() async {
       await shell.selectProject(cwd);
       if (shell.state.connectionStatus != CodeLabConnectionStatus.connected) {
-        await shell.connect();
+        await shell.startWith();
       }
       final sent = agent.sent.firstWhere(
         (m) => m is JsonRpcRequest && m.method == sessionNewMethod,
@@ -124,7 +128,7 @@ final class _Env {
           );
         }
       });
-      await shell.reconnect();
+      await shell.restartAgent();
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await sub.cancel();
     });

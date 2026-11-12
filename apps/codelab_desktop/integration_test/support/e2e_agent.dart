@@ -556,15 +556,25 @@ final class E2eLaunch {
   /// Текст, который есть только в сырых аргументах вызова (`rawInput`).
   final String rawInputMarker;
 
-  /// Подключается к агенту теста: открывает «Connection», нажимает «Connect» в
-  /// строке профиля, ждёт исхода и возвращается на рабочее место.
+  /// Подключается к агенту теста: открывает «Connection», нажимает «Use» в
+  /// строке профиля, затем выбирает проект ([project]; он и стартует агента),
+  /// ждёт исхода и возвращается на рабочее место (D20 change
+  /// `require-project-folder`).
   ///
   /// Почему общий шаг: запуск внешнего агента — профиль из `profiles.json`,
   /// встроенного — строка «Embedded agent» (D5, D6). Реальный процесс не
   /// гарантирует кадров для `pumpAndSettle`, поэтому исход читается из
   /// Cubit-а, а не ждётся по кадрам.
-  Future<void> connect(WidgetTester tester, CodeLabShellCubit shellCubit) =>
-      connectProfileViaSettings(tester, shellCubit, profileId);
+  Future<void> connect(
+    WidgetTester tester,
+    CodeLabShellCubit shellCubit, {
+    String? project,
+  }) => connectProfileViaSettings(
+    tester,
+    shellCubit,
+    profileId,
+    project: project,
+  );
 
   /// Текстовые виджеты, совпавшие с [sessionLabel].
   Finder get sessionLabelFinder => find.byWidgetPredicate(
@@ -594,9 +604,18 @@ final class E2eWebSocketAgent {
 
   String get endpoint => 'ws://127.0.0.1:$port/acp';
 
-  /// Подключается к агенту строкой его профиля на странице «Connection».
-  Future<void> connect(WidgetTester tester, CodeLabShellCubit shellCubit) =>
-      connectProfileViaSettings(tester, shellCubit, profileId);
+  /// «Use» строки профиля агента на странице «Connection», затем выбор
+  /// проекта [project] (триггер старта).
+  Future<void> connect(
+    WidgetTester tester,
+    CodeLabShellCubit shellCubit, {
+    String? project,
+  }) => connectProfileViaSettings(
+    tester,
+    shellCubit,
+    profileId,
+    project: project,
+  );
 
   /// SIGTERM и ожидание выхода, чтобы процесс не пережил тест.
   Future<void> stop() async {
@@ -692,43 +711,60 @@ final class _EmbeddedSetup {
   final List<String> models;
 }
 
-/// Выбирает профиль [profileId] на странице «Connection», ждёт исхода
-/// подключения и закрывает настройки.
+/// «Use» профиля [profileId] на странице «Connection», затем выбор проекта
+/// (он и стартует агента) и ожидание исхода старта.
 ///
-/// Почему: профили теперь общий список страницы настроек; единственный способ
-/// подключить окно — «Connect» в строке (D5, D6). Ожидание — опросом Cubit-а
-/// до 10 секунд, а не `pumpAndSettle`: реальный процесс или сокет не держит
-/// кадры.
+/// Почему: ручного Connect нет — агент стартует по триггерам (D13), а «Use»
+/// только выбирает профиль для следующего старта (D18). Порядок важен: выбор
+/// проекта до «Use» стартовал бы профиль по умолчанию (встроенный агент), а не
+/// агента теста (design.md change `require-project-folder`, D20). Ожидание —
+/// опросом Cubit-а до 10 секунд, а не `pumpAndSettle`: реальный процесс или
+/// сокет не держит кадры.
+///
+/// Как использовать: [project] — папка, которую тест выбирает проектом (она
+/// и есть триггер старта); без неё берётся временная папка (`ensureProject`),
+/// а если проект уже выбран — старт делает триггер запуска (`startOnLaunch`).
 Future<void> connectProfileViaSettings(
   WidgetTester tester,
   CodeLabShellCubit shellCubit,
-  String profileId,
-) async {
-  await ensureProject(tester, shellCubit);
+  String profileId, {
+  String? project,
+}) async {
   await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
   await tester.pumpAndSettle();
-  await tester.tap(
-    find.byKey(ValueKey('connection-profile-connect-$profileId')),
-  );
-  await tester.pump();
-  final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while ((shellCubit.state.connectionStatus ==
-              CodeLabConnectionStatus.connecting ||
-          shellCubit.state.connectionStatus ==
-              CodeLabConnectionStatus.reconnecting) &&
-      DateTime.now().isBefore(deadline)) {
-    await tester.pump(const Duration(milliseconds: 100));
+  final use = find.byKey(ValueKey('connection-profile-use-$profileId'));
+  // У уже выбранного профиля (например, профиля по умолчанию) вместо «Use»
+  // метка «Selected».
+  if (use.evaluate().isNotEmpty) {
+    await tester.tap(use);
+    await tester.pump();
   }
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(CodeLabSettingsNavigation.backKey));
+  await tester.pumpAndSettle();
+  if (project != null) {
+    unawaited(shellCubit.selectProject(project));
+  } else if (shellCubit.state.selectedProjectPath == null) {
+    await ensureProject(tester, shellCubit);
+  } else {
+    unawaited(shellCubit.startOnLaunch());
+  }
+  await tester.pump();
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (shellCubit.state.connectionStatus !=
+          CodeLabConnectionStatus.connected &&
+      shellCubit.state.connectionStatus != CodeLabConnectionStatus.failed &&
+      DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
   await tester.pumpAndSettle();
 }
 
 /// Выбирает временную папку проектом, если проект ещё не выбран.
 ///
-/// Почему: без выбранного проекта подключения нет (require-project-folder,
-/// D1, D2), а тесты, которым папка не важна, раньше полагались на папку
-/// процесса.
+/// Почему: без выбранного проекта агент не стартует (require-project-folder,
+/// D1, D13), а тесты, которым папка не важна, раньше полагались на папку
+/// процесса. Выбор проекта и есть триггер старта агента.
 ///
 /// Для чего: тестам подключения нужна лишь существующая папка, а не
 /// конкретный проект; временная папка удаляется по завершении теста.

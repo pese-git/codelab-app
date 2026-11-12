@@ -12,6 +12,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'harness.dart';
+import '../../../../support/start_agent.dart';
 
 const _token = 's3cr3t-token-value';
 
@@ -44,7 +45,7 @@ void main() {
     () async {
       final h = ShellHarness();
 
-      await h.cubit.connect(
+      await h.cubit.startWith(
         const ConnectionProfile.stdio(
           id: 'blank',
           label: 'Blank',
@@ -70,7 +71,7 @@ void main() {
       },
     );
 
-    await h.cubit.connect(
+    await h.cubit.startWith(
       ConnectionProfile.webSocket(id: 'empty', label: 'Empty', uri: Uri()),
     );
 
@@ -96,7 +97,7 @@ void main() {
         },
       );
 
-      await h.cubit.connect(
+      await h.cubit.startWith(
         ConnectionProfile.webSocket(
           id: 'devbox',
           label: 'Devbox',

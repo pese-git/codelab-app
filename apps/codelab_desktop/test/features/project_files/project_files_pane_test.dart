@@ -38,6 +38,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 import '../../support/fake_project_files.dart';
 import '../../support/fake_provider_settings.dart' show FakeWorkspace;
 import '../../support/test_app_scope.dart';
+import '../../support/start_agent.dart';
 
 const _marker = 'test-marker';
 
@@ -82,7 +83,9 @@ void main() {
     CodeLabTestBinding binding,
   ) async {
     setWindow(tester);
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     return binding.scope.resolve<CodeLabShellCubit>();
   }
@@ -204,7 +207,7 @@ void main() {
     await settle(tester);
     expect(filesPane, findsOneWidget);
 
-    unawaited(cubit.connect(_webSocket));
+    unawaited(cubit.startWith(_webSocket));
     await settle(tester);
 
     expect(toggleFiles, findsNothing);
@@ -226,7 +229,7 @@ void main() {
     expect(cubit.state.openPanes, contains(ToolPane.files));
     expect(cubit.state.activePane, ToolPane.files);
 
-    unawaited(cubit.connect(testStdioProfile));
+    unawaited(cubit.startWith(testStdioProfile));
     await settle(tester);
 
     expect(toggleFiles, findsOneWidget);

@@ -39,9 +39,7 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   // Проект выбирается напрямую через Cubit, а не через интерфейс «Open
   // Project»; профиль агента тест подключает на странице «Connection»
   // (`launch.connect`).
-  await shellCubit.selectProject(workingDirectory);
-
-  await launch.connect(tester, shellCubit);
+  await launch.connect(tester, shellCubit, project: workingDirectory);
 
   expect(find.text('Connected'), findsWidgets);
 

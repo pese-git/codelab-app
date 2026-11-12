@@ -21,6 +21,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/test_app_scope.dart';
+import '../../../support/start_agent.dart';
 
 /// Ответ из сценария smoke 2026-10-30: «Готово.» обрамлено `**`, команда в
 /// строке — обратными кавычками, ниже огороженный блок `bash`.
@@ -53,10 +54,12 @@ void main() {
       // change `require-project-folder`).
       project: '/workspace',
     );
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     cubit = binding.scope.resolve<CodeLabShellCubit>();
-    await tester.runAsync(() => cubit.connect());
+    await tester.runAsync(() => cubit.startWith());
     await tester.pump();
 
     agent.drainSentMessages();

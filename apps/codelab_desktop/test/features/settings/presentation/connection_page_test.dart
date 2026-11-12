@@ -7,6 +7,8 @@
 // хранилище), а не пиксели. Хранилище профилей — в памяти (`testWidgets` не
 // дружит с настоящим файлом); сам файл проверяют тесты Cubit-а.
 
+import 'dart:async';
+
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart'
     show AcpWebSocketHandshakeRejected;
@@ -117,9 +119,10 @@ void main() {
     CodeLabStdioTransportFactory? stdioTransportFactory,
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
     FakeProfileSecrets? secrets,
+    String? project = '/workspace',
   }) async {
     final binding = CodeLabTestBinding(
-      project: '/workspace',
+      project: project,
       profileStore: store ?? InMemoryProfileStore(stored),
       profileSecrets: secrets,
       stdioDefault: false,
@@ -131,17 +134,27 @@ void main() {
       webSocketTransportFactory:
           webSocketTransportFactory ?? (_) => FakeAcpTransport(),
     );
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
     await tester.pumpAndSettle();
     return binding;
   }
 
-  /// «Connect» в строке и ожидание исхода: подключение идёт через настоящие
-  /// микрозадачи и таймеры клиента, поэтому одного `pumpAndSettle` мало.
+  /// «Use» в строке и триггер запуска (D18, D20): ручного Connect нет, «Use»
+  /// только выбирает профиль, а агента стартует триггер. Подключение идёт
+  /// через настоящие микрозадачи и таймеры клиента, поэтому одного
+  /// `pumpAndSettle` мало.
   Future<void> connectRow(WidgetTester tester, String id) async {
-    await tester.tap(_key('connection-profile-connect-$id'));
+    await tester.tap(_key('connection-profile-use-$id'));
+    await tester.pump();
+    unawaited(
+      codeLabDependenciesOf(
+        tester.element(find.byType(CodeLabApp)),
+      ).shellCubit.startOnLaunch(),
+    );
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
@@ -171,14 +184,14 @@ void main() {
   }
 
   group('rows and their actions', () {
-    testWidgets('a stored profile has the row, default, connect, test, '
+    testWidgets('a stored profile has the row, default, use, test, '
         'rename and remove controls', (tester) async {
       await openPage(tester, stored: [_dev]);
 
       for (final part in const [
         'row',
         'default',
-        'connect',
+        'use',
         'test',
         'rename',
         'remove',
@@ -199,7 +212,9 @@ void main() {
 
       expect(_key('connection-profile-row-embedded'), findsOneWidget);
       expect(_key('connection-profile-default-embedded'), findsOneWidget);
-      expect(_key('connection-profile-connect-embedded'), findsOneWidget);
+      // Встроенный агент выбран изначально: вместо «Use» метка «Selected».
+      expect(_key('connection-profile-use-embedded'), findsNothing);
+      expect(find.text('Selected'), findsOneWidget);
       expect(_key('connection-profile-test-embedded'), findsNothing);
       expect(_key('connection-profile-rename-embedded'), findsNothing);
       expect(_key('connection-profile-remove-embedded'), findsNothing);
@@ -265,17 +280,18 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets('the Current row that is Connected has no Connect (restart '
-        'is "Restart agent"); other rows keep it', (tester) async {
+    testWidgets('the Selected row has no Use (restart is "Restart agent"); '
+        'other rows keep it', (tester) async {
       await openPage(tester, stored: [_dev, _plain]);
-      expect(_key('connection-profile-connect-dev'), findsOneWidget);
+      expect(_key('connection-profile-use-dev'), findsOneWidget);
 
       await connectRow(tester, 'dev');
 
       expect(find.text('Current'), findsOneWidget);
-      expect(_key('connection-profile-connect-dev'), findsNothing);
-      expect(_key('connection-profile-connect-plain'), findsOneWidget);
-      expect(_key('connection-profile-connect-embedded'), findsOneWidget);
+      expect(find.text('Selected'), findsOneWidget);
+      expect(_key('connection-profile-use-dev'), findsNothing);
+      expect(_key('connection-profile-use-plain'), findsOneWidget);
+      expect(_key('connection-profile-use-embedded'), findsOneWidget);
       await tearDownApp(tester);
     });
 
@@ -293,8 +309,9 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets('Remove is unavailable for the current profile with the '
-        'hint "Disconnect first" and available for others', (tester) async {
+    testWidgets('Remove is unavailable for the current and selected profile '
+        'with the hint "Use another profile first." and available for '
+        'others', (tester) async {
       await openPage(tester, stored: [_dev, _plain]);
 
       await connectRow(tester, 'dev');
@@ -303,7 +320,7 @@ void main() {
           tester.widget<CodeLabButton>(_key('connection-profile-remove-$id'));
       expect(remove('dev').onPressed, isNull);
       expect(remove('plain').onPressed, isNotNull);
-      expect(find.byTooltip('Disconnect first'), findsOneWidget);
+      expect(find.byTooltip('Use another profile first.'), findsOneWidget);
       await tearDownApp(tester);
     });
 
@@ -611,43 +628,53 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets('Connect on start is a toggle in Behavior; switching it '
-        'persists the choice', (tester) async {
-      await openPage(tester);
-      expect(
-        tester
-            .widget<ToggleSwitch>(_key('connection-connect-on-start'))
-            .checked,
-        isFalse,
+    // «Connect on start» удалён (D19): строки в Behavior нет, ключ `true`
+    // ничего не подключает.
+    testWidgets('there is no Connect on start row, and the saved key true '
+        'starts nothing', (tester) async {
+      var starts = 0;
+      await openPage(
+        tester,
+        preferences: {'codelab.connection.connect_on_start': true},
+        stdioTransportFactory: (_) {
+          starts++;
+          return FakeAcpTransport();
+        },
       );
 
-      await tester.tap(_key('connection-connect-on-start'));
-      await tester.pumpAndSettle();
-
-      expect(
-        (await SharedPreferences.getInstance()).getBool(
-          'codelab.connection.connect_on_start',
-        ),
-        isTrue,
-      );
+      expect(_key('connection-connect-on-start'), findsNothing);
+      expect(find.text('Connect on start'), findsNothing);
+      expect(starts, 0);
       await tearDownApp(tester);
     });
 
-    testWidgets('Restart agent is disabled without a current profile and '
-        'enabled after Connect; it never promises session/cancel', (
-      tester,
-    ) async {
+    testWidgets('Restart agent is available with a project and never '
+        'promises session/cancel', (tester) async {
       await openPage(tester, stored: [_dev]);
       CodeLabButton restart() =>
           tester.widget<CodeLabButton>(_key('connection-restart-agent'));
-      expect(restart().onPressed, isNull);
 
+      expect(restart().onPressed, isNotNull);
       await connectRow(tester, 'dev');
 
       expect(restart().onPressed, isNotNull);
       expect(restart().label, 'Restart');
       expect(find.textContaining('session/cancel'), findsNothing);
       expect(find.textContaining('queued prompts stay'), findsOneWidget);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('without a project Restart agent is disabled: Starts when '
+        'you open a project (D18)', (tester) async {
+      await openPage(tester, stored: [_dev], project: null);
+
+      expect(
+        tester
+            .widget<CodeLabButton>(_key('connection-restart-agent'))
+            .onPressed,
+        isNull,
+      );
+      expect(find.text('Starts when you open a project.'), findsOneWidget);
       await tearDownApp(tester);
     });
 
@@ -746,16 +773,7 @@ void main() {
         isNull,
       );
       // «Behavior» не зависит от файла и остаётся рабочим (D4).
-      expect(_key('connection-connect-on-start'), findsOneWidget);
       expect(_key('connection-restart-agent'), findsOneWidget);
-      await tester.tap(_key('connection-connect-on-start'));
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<ToggleSwitch>(_key('connection-connect-on-start'))
-            .checked,
-        isTrue,
-      );
       await tearDownApp(tester);
     });
   });
@@ -829,10 +847,10 @@ void main() {
     });
   });
 
-  group('restart target after a failed Connect (MEDIUM-A)', () {
-    testWidgets('the window on stdio, Connect to a WebSocket profile failed: '
-        'Current and the Restart wording stay on stdio, and Restart '
-        'reconnects stdio', (tester) async {
+  group('selected and running profile (MEDIUM-A, D18)', () {
+    testWidgets('the window runs on stdio, Use of a WebSocket profile leaves '
+        'the agent alone; Restart agent applies it, fails, and then nobody '
+        'is Current', (tester) async {
       var stdioStarts = 0;
       await openPage(
         tester,
@@ -847,42 +865,12 @@ void main() {
       await connectRow(tester, 'dev');
       expect(stdioStarts, 1);
 
-      await connectRow(tester, 'plain');
-
-      // «Current» — только у профиля с живым соединением: после неудачи
-      // его нет ни у кого, а бейдж `Failed` — на строке попытки.
-      expect(find.text('Current'), findsNothing);
-      // Без живого соединения Connect есть у обеих строк, и у неудачной тоже.
-      expect(_key('connection-profile-connect-dev'), findsOneWidget);
-      expect(_key('connection-profile-connect-plain'), findsOneWidget);
-      expect(
-        find.descendant(
-          of: _key('connection-profile-status-plain'),
-          matching: find.text('Failed'),
-        ),
-        findsOneWidget,
-      );
-      expect(_key('connection-profile-status-dev'), findsNothing);
-      expect(
-        tester.widget<CodeLabButton>(_key('connection-restart-agent')).label,
-        'Restart',
-      );
-      // Подпись строки называет цель перезапуска.
-      expect(
-        find.textContaining(
-          'Reconnects Dev and reloads open sessions. A running turn is '
-          'interrupted; queued prompts stay.',
-        ),
-        findsOneWidget,
-      );
-      expect(_key('connection-remote-read-only'), findsNothing);
-
-      await tester.tap(_key('connection-restart-agent'));
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
+      await tester.tap(_key('connection-profile-use-plain'));
       await tester.pumpAndSettle();
-      expect(stdioStarts, 2);
+
+      // «Use» агента не трогает: «Current» остаётся на stdio, «Selected» — на
+      // WebSocket, подпись называет профиль для следующего старта.
+      expect(stdioStarts, 1);
       expect(
         find.descendant(
           of: _key('connection-profile-row-dev'),
@@ -890,6 +878,33 @@ void main() {
         ),
         findsOneWidget,
       );
+      expect(
+        find.descendant(
+          of: _key('connection-profile-row-plain'),
+          matching: find.text('Selected'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Restart Plain to use it.'), findsOneWidget);
+
+      await tester.tap(_key('connection-restart-agent'));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
+
+      // «Current» — только у профиля с живым соединением: после неудачи его
+      // нет ни у кого, а бейдж `Failed` — на строке попытки.
+      expect(find.text('Current'), findsNothing);
+      expect(
+        find.descendant(
+          of: _key('connection-profile-status-plain'),
+          matching: find.text('Failed'),
+        ),
+        findsOneWidget,
+      );
+      expect(_key('connection-profile-use-dev'), findsOneWidget);
+      expect(_key('connection-remote-read-only'), findsNothing);
       await tearDownApp(tester);
     });
   });
@@ -1110,8 +1125,16 @@ void main() {
         profileStore: InMemoryProfileStore([cli]),
         stdioDefault: false,
         preferences: const {'codelab.connection.default_profile': 'py'},
+        // Экран подключения теперь — экран сбоя старта (D18): агент
+        // стартует сам по восстановленному проекту и не запускается.
+        stdioTransportFactory: (_) =>
+            ThrowingStartTransport(StateError('no agent')),
       );
       await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
       await tester.pump();
       await tester.pump();
 

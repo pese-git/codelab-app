@@ -37,6 +37,7 @@ import 'package:codelab_desktop/app/embedded_logger.dart';
 import 'package:codelab_desktop/app/reopenable_profile_secrets.dart';
 import '../support/fake_profile_secrets.dart';
 import '../support/test_app_scope.dart';
+import '../support/start_agent.dart';
 
 const _marker = 'sk-test-leak-0123456789';
 
@@ -77,6 +78,9 @@ void main() {
     addTearDown(closeCodeLabRootScopeInTest);
     // Подключение требует проекта (require-project-folder D1): выбор
     // меняет состояние синхронно, поэтому ждать его не нужно.
+    // Старт агента при выборе проекта (D13) отключён: тесты этого файла
+    // проверяют настройки и стартуют агента явно (D20).
+    scope.resolve<CodeLabShellParts>().settings.bindProjectStart(null);
     unawaited(scope.resolve<CodeLabShellCubit>().selectProject('/workspace'));
     return scope;
   }
@@ -128,13 +132,13 @@ void main() {
         final cubit = scope.resolve<ConnectionSettingsCubit>();
 
         await cubit.reload();
-        await cubit.setConnectOnStart(true);
 
         final state = cubit.state as ConnectionSettingsUnreadable;
         expect([for (final row in state.rows) row.id], ['embedded']);
         expect(state.reason, isNotEmpty);
-        expect(state.connectOnStart, isTrue);
-        expect(state.canRestart, isFalse);
+        // У окна всегда есть выбранный профиль, а проект выбран (D18):
+        // «Restart agent» доступна и при нечитаемом `profiles.json`.
+        expect(state.canRestart, isTrue);
         expect(await cubit.removeIgnoredDefault(), isFalse);
         expect(Directory('${home.path}/cl').existsSync(), isFalse);
         expect(Directory('${home.path}/.codelab').existsSync(), isFalse);
@@ -167,7 +171,7 @@ void main() {
         },
       );
 
-      await scope.resolve<CodeLabShellCubit>().connect(profile);
+      await scope.resolve<CodeLabShellCubit>().startWith(profile);
 
       expect(configs.single.token, _marker);
     });
@@ -184,7 +188,7 @@ void main() {
           },
         );
 
-        await scope.resolve<CodeLabShellCubit>().connect(profile);
+        await scope.resolve<CodeLabShellCubit>().startWith(profile);
 
         expect(configs.single.token, isNull);
       },
@@ -213,12 +217,12 @@ void main() {
       );
       final shell = scope.resolve<CodeLabShellCubit>();
 
-      await shell.connect(profile);
+      await shell.startWith(profile);
       expect(configs.last.token, _marker);
 
       // Замена секрета другим процессом видна при следующем подключении.
       secrets.values['codelab/ws-ci'] = 'replaced';
-      await shell.connect(profile);
+      await shell.restartAgent();
       expect(configs.last.token, 'replaced');
     });
 
@@ -233,7 +237,7 @@ void main() {
         },
       );
 
-      await scope.resolve<CodeLabShellCubit>().connect(profile);
+      await scope.resolve<CodeLabShellCubit>().startWith(profile);
 
       expect(configs.single.token, isNull);
       // D13: предупреждение диагностики и событие, только `profile_id`.
@@ -367,8 +371,11 @@ void main() {
     });
   });
 
-  testWidgets('Connect on start connects the default profile once after the '
-      'first frame (D8)', (tester) async {
+  // «Connect on start» удалён (D19): восстановленный проект — триггер
+  // запуска, ключ `connect_on_start` больше не читается (в настройках он
+  // оставлен `true`, чтобы показать, что значения ничего не меняют).
+  testWidgets('the launch trigger starts the default profile once after the '
+      'first frame (D19)', (tester) async {
     var starts = 0;
     final binding = CodeLabTestBinding(
       project: '/workspace',
