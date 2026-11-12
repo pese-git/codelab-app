@@ -116,8 +116,22 @@ final class TaskListChanged extends AgentEvent {   // заменяет PlanUpdat
 |---|---|---|
 | `task_create` | `subject` (обязательный), `description`, `priority` (`high` / `medium` / `low`, по умолчанию `medium`), `blocked_by` (массив id), `owner` (`main` или id субагента) | `Created task #<id>: <subject>.` + строка сводки |
 | `task_update` | `id` (обязательный); `subject`, `description`, `status` (`pending` / `in_progress` / `completed` / `deleted`), `priority`, `owner`, `blocked_by` (заменяет список целиком) | `Updated task #<id>: <поля через ", ">.` или `Deleted task #<id>.` + `Unblocked: #<id> <subject>` для пунктов, которые эта операция разблокировала + строка сводки |
-| `task_list` | — | строка на пункт `#<id> [<status>] <subject>[ (owner: <owner>)][ (blocked by #<id>, …)]` в порядке создания; пусто — `The task list is empty.` |
-| `task_get` | `id` (обязательный) | все поля пункта, `blocks` и `blocked by` с заголовками |
+| `task_list` | — | строка на пункт `#<id> [<status>] <subject>[ (owner: <owner>)][ (blocked by #<id>, …)]` в порядке создания; `owner` — только у владельца не `main`, `blocked by` — только незавершённые блокеры; пусто — `The task list is empty.` |
+| `task_get` | `id` (обязательный) | строки в фиксированном порядке (ниже, «Формат `task_get`») |
+
+**Формат `task_get`** (golden `codelab_agent_core/test/tools/golden/tasks.txt`):
+
+```text
+Task #<id>: <subject>
+Status: <pending | in_progress | completed>
+Priority: <high | medium | low>
+Owner: <main | id субагента>
+Description: <описание | none>
+Blocks: #<id> <subject>, … | none
+Blocked by: #<id> <subject>, … | none
+```
+
+Ребро «A блокирует B» (A в `blocked_by` пункта B) показывается, пока A не `completed`: `Blocked by` — незавершённые блокеры пункта, `Blocks` — пункты, которые ждут этот пункт, пока он сам не завершён; в порядке создания. Пустой список и пустое описание — `none`. Поле `blocked_by` пункта при завершении блокера не меняется (его видит `_meta.codelab.task.blockedBy`), фильтр — только в выводе, как пометка «blocked by» у клиентов. Заметок и строки сводки у `task_get` нет.
 
 Строка сводки: `Task list: <n> items (<c> completed, <i> in progress, <p> pending).` Заметки:
 `[Note: task #<id> is in_progress, but #<a>, #<b> are not completed yet.]` — статус
@@ -128,7 +142,7 @@ final class TaskListChanged extends AgentEvent {   // заменяет PlanUpdat
 
 | Случай | Текст |
 |---|---|
-| нет пункта | `Unknown task #<id>. Known: #<id>, ….` (пусто — `The task list is empty.`) |
+| нет пункта | `Unknown task #<id>. Known: #<id>, ….` (id живых пунктов в порядке создания); список пуст — `Unknown task #<id>. The task list is empty.` |
 | заголовок | `Invalid task: subject must be 1-200 characters.` |
 | описание | `Invalid task: description must be at most 4000 characters.` |
 | пунктов больше 100 | `Task limit reached: at most 100 items. Delete completed items first.` |

@@ -83,16 +83,16 @@
     - сборка (agent-runtime «Матрица профиля»);
     - промпты (agent-prompts «Golden на профиль и режим», «База не называет инструментов», «Секция списка задач называет только якорь»; D32);
   - ACP:
-    - фикстуры `acp/prompt-task-plan`, `acp/session-load-legacy-plan`, `acp/initialize-codelab-extensions`;
+    - фикстуры `acp/prompt-task-plan`, `acp/session-load-legacy-plan`, `acp/initialize-codelab-extensions` в редакции итерации 1: агент отвечает только `tasks` (agent-acp-server «Клиент CodeLab объявил расширения, субагентов ещё нет (итерация 1)»);
     - `acp_projection_exhaustive_test.dart`: `TaskListChanged` с `op: restore` (agent-acp-server «Список новой ветки»; D29);
     - перевод `acp/prompt-update-plan` на роль `client`;
-    - тест `initialize` без клиентского `_meta` (agent-acp-server «Ответ codelab-app», «Клиент CodeLab объявил расширения»);
+    - `initialize_test.dart` агента: без клиентского `_meta`, пустой `_meta.codelab`, неизвестные ключи и версии клиента, `_meta` без `codelab` (agent-acp-server «Ответ codelab-app», «Неизвестные ключи и версии клиента», «Клиентский _meta без codelab»);
   - kit:
-    - `initialize` с `clientCapabilities._meta.codelab` (acp-protocol-client «Запрос initialize клиента CodeLab», «Агент без блока объявлений», «Будущая версия расширения»);
+    - `initialize` с `clientCapabilities._meta.codelab` (acp-protocol-client «Запрос initialize клиента CodeLab», «Агент без блока объявлений», «Будущая версия расширения» — `tasks: {version: 2}` даёт `tasks: false`);
     - `PlanEntryView` (acp-client-kit «Метаданные пунктов плана»: три сценария);
     - `TaskOpsItem` (acp-client-kit «Операции со списком задач в ленте»: «Слияние созданий», «Отклонённая операция», «Сторонний агент»; D27);
-  - CLI: REPL «План с задачами», «Тихая строка операций со списком» (codelab-cli); TUI «Ctrl+T прячет список задач» и тихая строка операций (codelab-tui, D26, D27);
-  - app: widget-тесты agent-workbench-ui «Чек-лист задач с id, владельцем и блокерами» (включая «Сводка скрыта при открытой панели Plan»), «Тихие строки операций со списком задач» («Четыре создания подряд», «Ошибка операции видна»).
+  - CLI: REPL «План с задачами», «Тихая строка операций со списком», «Бегущий вызов think не печатается» (codelab-cli); TUI «Ctrl+T прячет список задач» (строка помощи `ctrl+t tasks`, план в ленте остаётся) и тихая строка операций (codelab-tui, D26, D27);
+  - app: widget-тесты agent-workbench-ui «Чек-лист задач с id, владельцем и блокерами» (включая «Сводка скрыта при открытой панели Plan» — `ToolPane.plan` среди открытых панелей, не только активная вкладка), «Тихие строки операций со списком задач» («Четыре создания подряд», «Ошибка операции видна»).
 - [ ] 1.2 `[agent]` `TaskList`, `TaskItem`, `TaskOp`, `TaskActor`, `TaskListChanged` и четыре инструмента в `lib/src/tools/tasks/` по §17.16.2–§17.16.3. Сюда входят:
   - замок операций;
   - проверки и тексты ошибок;
@@ -149,6 +149,7 @@
 - [ ] 2.6 `[agent]` События `SubagentStarted`/`Progress`/`Finished`, `SubagentActivity`, строка прогресса и heartbeat через `onUpdate` (agent-subagents «События потомков в потоке родителя»; D6).
 - [ ] 2.7 `[agent]` Журнал: порт `SessionStore` для журнала потомка, `JsonlSessionStore` — каталог `subagents/` корня без попадания в `list` и `index.json`, заголовок `parent`, записи `subagent`, лечение `agent` в `healInterruptedTurn` (agent-subagents «Журнал субагента и прерывание»; D7).
 - [ ] 2.8 `[protocol]` Проекция `agent` (`kind: think`, `_meta.codelab.subagent {id, type}` в первом `tool_call` вживую и при реплее (D28), прогресс, отчёт без обёртки, `_meta.codelab.subagent.summary` в финальном обновлении вживую и в реплее (D24), `_meta.codelab.subagent.failure` у `failed`). `Subagent*`/`SubagentActivity` — «not sent». Ключ `subagents` в блоке `initialize` (2.1, ACP).
+- [ ] 2.8a `[protocol]` Фикстура `acp/initialize-codelab-extensions` в редакции итерации 2: в ответе агента `subagents: {"version": 1, "maxDepth": 3}` и `subagentToolCalls: {"version": 1}` рядом с `tasks`; объявление в адаптере — по наличию `agent` в базовом реестре (agent-acp-server «Клиент CodeLab объявил расширения, субагенты включены (итерация 2)», «Субагенты выключены»; D9). Тест — до кода, в 2.1.
 - [ ] 2.9 `[client]` `ToolCallView.subagentSummary`, строка итога и её сокращённый вид в kit (терпимый разбор, D27); `ToolCallView.subagentCall` из `_meta.codelab.subagent` первого `tool_call` — опознание вызова `agent` с первого кадра, без него — обычный `think` (D28); `ToolRowView` строки `agent`: прогресс, отчёт, итог; REPL — итог в скобках строки вызова без «Done»; TUI — глиф ✓ и сокращённый итог без «Done», `Failed`/`Cancelled` — явно (D27). REPL — прогресс на месте только на `ansi`, отчёт до 20 строк. TUI — строка вызова (2.1, kit и CLI).
 - [ ] 2.10 `[desktop]` Компактная строка вызова `agent` (D27): свёрнута по умолчанию, глиф, `Subagent <type>: <description>`, справа «N tool calls · N.Nk · время», шеврон; без тега «Done» и `#id` в свёрнутом виде, «Failed»/«Cancelled» остаются; под работающей — строка прогресса; раскрытие — отчёт (2.1, app; D24, D27).
 - [ ] 2.11 `[agent]` Реализация тестов 2.1 про навыки и пути: политика ребёнка получает набор защищаемых путей корневой сессии (пути хоста и сессии) вместо нового расчёта; инвариант «нет снимка каталога — нет `skill`» в сборке набора ребёнка (agent-subagents «Сборка ребёнка», «Защищённые пути корня у ребёнка», «Нет снимка каталога — нет skill»; D34, SUB-1).
