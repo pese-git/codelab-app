@@ -1,19 +1,31 @@
 ## ADDED Requirements
 
 ### Requirement: Объявление расширений CodeLab при initialize
-CodeLab SHALL отправлять в `InitializeRequest.clientCapabilities._meta.codelab` объект с расширениями, данные которых клиент понимает (design.md change `add-subagents-and-tasks`, D9, D21): `{"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}}`; `subagentToolCalls` — согласие получать вызовы потомков деревом. Других полей вне `_meta` CodeLab для этого НЕ SHALL добавлять (`15-Extensibility.md`).
+CodeLab SHALL отправлять в `InitializeRequest.clientCapabilities._meta.codelab` объект только с теми расширениями, которые клиент уже поддерживает (design.md change `add-subagents-and-tasks`, D9, D21): `tasks: {"version": 1}` — с итерации 1; `subagents: {"version": 1}` — с итерации 2 (строка `agent`, запрос потомка); `subagentToolCalls: {"version": 1}` — с задачи 5.4 (дерево вызовов потомков), это согласие получать вызовы потомков. Расширение, которого клиент ещё не показывает, НЕ SHALL объявляться: иначе агент слал бы клиенту вызовы потомков, которые тот показал бы плоскими строками. Других полей вне `_meta` CodeLab для этого НЕ SHALL добавлять (`15-Extensibility.md`).
 
 Блок `agentCapabilities._meta.codelab` в ответе SHALL разбираться терпимо:
 - его отсутствие — «агент расширений CodeLab не объявил»;
 - неизвестные ключи, нецелый или больший `version` и неверная форма значения SHALL игнорироваться без отказа `initialize`;
 - известные значения (`subagents.maxDepth`, наличие `tasks`) SHALL быть доступны приложению как согласованные возможности соединения;
-- расширение считается согласованным, только если значение его ключа — объект с целым `version`, равным версии, которую понимает клиент (`1`). Ключ с другой версией или неверной формой SHALL давать «расширение не согласовано» (например `tasks: false`), а не ошибку.
+- расширение считается согласованным, только если значение его ключа — объект, где `version` — целое JSON-число `1` (не `1.0`, не строка `"1"`, не другое число). Ключ с другой версией или неверной формой SHALL давать «расширение не согласовано» (например `tasks: false`), а не ошибку.
 
 Данные `_meta.codelab.task` и `_meta.codelab.subagent` SHALL приниматься и без объявления агента: клиент на объявление не полагается, чтобы показ не зависел от того, кто и как загрузил сессию.
 
-#### Scenario: Запрос initialize клиента CodeLab
-- **WHEN** CodeLab выполняет `initialize`
-- **THEN** `clientCapabilities._meta.codelab` равен `{"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}}`, остальные поля `clientCapabilities` — как прежде (фикстура `acp/initialize-codelab-extensions`, роль `client`)
+#### Scenario: Запрос initialize клиента CodeLab (итерация 1)
+- **WHEN** CodeLab выполняет `initialize` после итерации 1
+- **THEN** `clientCapabilities._meta.codelab` равен `{"tasks": {"version": 1}}`, остальные поля `clientCapabilities` — как прежде (`initialize_codelab_request_test.dart`; фикстура `acp/initialize-codelab-extensions`, роль `client`, в редакции итерации 1)
+
+#### Scenario: Запрос initialize клиента CodeLab (итерация 2)
+- **WHEN** CodeLab выполняет `initialize` после итерации 2
+- **THEN** `clientCapabilities._meta.codelab` равен `{"tasks": {"version": 1}, "subagents": {"version": 1}}`
+
+#### Scenario: Запрос initialize клиента CodeLab (задача 5.4)
+- **WHEN** CodeLab выполняет `initialize` после задачи 5.4
+- **THEN** `clientCapabilities._meta.codelab` равен `{"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}}`
+
+#### Scenario: Версия не целое 1
+- **WHEN** агент отвечает `agentCapabilities._meta.codelab: {"tasks": {"version": 1.0}, "subagents": {"version": "1"}}`
+- **THEN** `initialize` успешен, ни `tasks`, ни `subagents` не согласованы
 
 #### Scenario: Агент без блока объявлений
 - **WHEN** агент отвечает на `initialize` без `agentCapabilities._meta`

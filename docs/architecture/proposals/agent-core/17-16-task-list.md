@@ -68,6 +68,8 @@ final class DeleteTask extends TaskOp { final TaskId id; }
 final class TaskChange {                       // что записать в журнал и показать клиенту
   final String op;                             // create | update | delete | assign | restore
   final TaskActor actor;
+  final String? toolCallId;                    // вызов task_* в пространстве id корня (у потомка — цепочка
+                                               // §17.3.3); null у assign и restore (D35 change add-subagents-and-tasks)
   final List<TaskItem> changed;                // полные снимки изменённых пунктов
   final List<TaskId> deleted;
 }
@@ -78,7 +80,8 @@ abstract interface class TaskList {
   List<TaskId> blocksOf(TaskId id);            // обратные рёбра blockedBy, вычисляются
   /// Проверяет и применяет операцию атомарно; публикует TaskListChanged до возврата.
   /// Ошибка проверки — TaskRejected с текстом для модели, список не меняется.
-  Future<TaskResult> apply(TaskOp op, TaskActor actor);
+  /// Отмену не проверяет: начатая операция применяется и после session/cancel (D35).
+  Future<TaskResult> apply(TaskOp op, TaskActor actor, {String? toolCallId});
   /// Состояние пришло извне, а не операцией модели (§17.16.6): из журнала при open
   /// (announce: false — без публикации) или из новой ветки после BranchChanged
   /// (announce: true — TaskListChanged с op: restore). Записи task не даёт (TSK-1).
@@ -95,6 +98,10 @@ final class TaskListChanged extends AgentEvent {   // заменяет PlanUpdat
 `TaskList` заменяет `PlanService` в `ToolServices` (`ToolServices.tasks`). Операции одного
 списка сериализуются внутренним замком: параллельные вызовы пакета и вызовы потомков
 применяются по одному в порядке прихода, и каждая проверка видит состояние после предыдущей.
+Вызов, который уже начал исполнение и ждёт замка, при отмене хода применяет операцию и получает
+обычный результат: операция короткая и атомарная, а обрыв после ожидания оставил бы модель без
+ответа о применённом изменении (решение пользователя 2026-11-12, D35 change
+`add-subagents-and-tasks`).
 
 **Порт и его реализация (решение пользователя 2026-11-12, design.md change
 `add-subagents-and-tasks`, D29).** `TaskList` — порт, которым пользуются инструменты `task_*`,
@@ -194,8 +201,17 @@ Blocked by: #<id> <subject>, … | none
  {"content":"Read the failing test","priority":"high","status":"completed",
   "_meta":{"codelab":{"task":{"id":"1","owner":"main","blockedBy":[]}}}},
  {"content":"Fix the parser","priority":"medium","status":"in_progress",
-  "_meta":{"codelab":{"task":{"id":"2","owner":"sub_k3f9a1c2","blockedBy":["1"]}}}}]}
+  "_meta":{"codelab":{"task":{"id":"2","owner":"sub_k3f9a1c2","blockedBy":["1"]}}}}],
+ "_meta":{"codelab":{"taskChange":{"op":"update","actor":"main","toolCallId":"call_7",
+  "changed":["2"],"deleted":[]}}}}
 ```
+
+* `_meta.codelab.taskChange` у самого `plan` (решение пользователя 2026-11-12, D35 change
+  `add-subagents-and-tasks`) — проекция `TaskChange`: `op`, `actor` (`"main"` или `"sub_…"`),
+  `toolCallId` (только у операции вызова `task_*`; у `assign`, `restore` нет), `changed`,
+  `deleted`. Клиент по нему привязывает операцию к вызову без эвристики порядка кадров: с
+  итерации 2 потомки правят общий список параллельно с корнем. Реплей шлёт один `plan` после
+  истории без `taskChange`.
 
 * `content` — `subject`; `description` в ACP не уходит (клиенту он не нужен для чек-листа, а
   `rawInput` вызова его уже показывает).

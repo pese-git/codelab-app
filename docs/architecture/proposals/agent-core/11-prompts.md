@@ -23,8 +23,9 @@ packages/dart/codelab_agent_core/
     tools/edit.md                  правила write и edit
     tools/listing.md               правила ls, search
     tools/exec.md                  правила exec
-    tools/tasks.md                 правила списка задач task_* (§17.16.3); до change add-subagents-and-tasks —
-                                   tools/plan.md, правила update_plan
+    tools/tasks.md                 правило ведения списка задач (§17.16.3); называет только task_create,
+                                   правила остальных task_* — в их описаниях (D32); до change
+                                   add-subagents-and-tasks — tools/plan.md, правила update_plan
     mcp.md                         MCP-серверы и их инструменты
     project_context.md             секция инструкций проекта: заголовок и правило (§11.5, этап 8.6)
     project_context_file.md        блок одного файла AGENTS.md/CLAUDE.md (этап 8.6)
