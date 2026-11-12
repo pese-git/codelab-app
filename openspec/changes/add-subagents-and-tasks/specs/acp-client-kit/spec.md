@@ -84,19 +84,43 @@
 - **THEN** хвост — три последних, `moreCount` — 2, токенов у хвоста нет, даже если строка прогресса их содержит
 
 ### Requirement: Операции со списком задач в ленте
-Kit SHALL распознавать вызов операции со списком задач по уже имеющимся данным, без разбора текста и заголовка (D27): вызов `kind: think`, завершившийся `completed`, без `_meta.codelab.subagent` (ни в первом кадре, ни в финальном) и без вызовов-потомков, во время которого (между его `tool_call` и финальным обновлением) пришёл `plan` с `_meta.codelab.task`. Такой вызов SHALL становиться в транскрипте элементом `TaskOpsItem` с изменением списка — разницей планов до и после: добавленные id, id, ставшие `completed`, удалённые id и прочие изменённые id. Подряд идущие `TaskOpsItem` без других элементов транскрипта между ними SHALL сливаться в один (разницы объединяются).
+Kit SHALL распознавать вызов операции со списком задач только по ключу `plan._meta.codelab.taskChange` (design.md, D35), без разбора текста, заголовка и порядка кадров: вызов корневого уровня (без `parentToolCallId`) вида `think`, без `_meta.codelab.subagent`, завершившийся `completed`, на который ссылается `taskChange.toolCallId` хотя бы одного `plan`. Такой вызов SHALL становиться в транскрипте элементом `TaskOpsItem` с изменением из ключей: добавленные id (`op: create`), удалённые (`op: delete` и `deleted`), ставшие `completed` (`op: update`, пункт `completed` в этом `plan` и не `completed` в предыдущем плане сессии) и прочие изменённые id (`changed`). Подряд идущие `TaskOpsItem` без других элементов транскрипта между ними SHALL сливаться в один (изменения объединяются).
+
+`plan` без `taskChange` (сторонний или старый агент, реплей) и `taskChange` без `toolCallId` (`restore`, `assign`) SHALL только обновлять план сессии; вызовы при этом остаются обычными `ToolCallView`. Запасного распознавания по сравнению планов или по статусу вызова в момент прихода `plan` НЕ SHALL быть. Неизвестные ключи и значения `taskChange` SHALL игнорироваться; ключ неверной формы — как отсутствующий.
 
 Kit SHALL давать текст элемента: «Task #3 added to the plan» / «Tasks #1–#4 added to the plan» (подряд идущие id — диапазоном, иначе списком `#1, #3`), «Task #2 done», «Task #2 removed», «Task #2 updated»; части объединяются через `; `.
 
-Вызов `failed` или без пришедшего `plan` (чтение `task_list`, `task_get`; план стороннего агента без `_meta`) SHALL оставаться обычным `ToolCallView`.
+Вызов `failed` и вызов, на который не ссылается ни один `taskChange` (чтение `task_list`, `task_get`; план стороннего агента), SHALL оставаться обычным `ToolCallView`.
+
+После `session/load` прошлые вызовы `task_*` приходят реплеем завершёнными `tool_call`, а план — одним `plan` после истории без `taskChange` (agent-acp-server «Реплей плана без taskChange»). Поэтому в реплее они SHALL показываться обычными строками вызовов, а не `TaskOpsItem`: это ожидаемо, текущий список виден по `plan` в хвосте.
 
 #### Scenario: Слияние созданий
-- **WHEN** четыре вызова `think` подряд, во время каждого приходит `plan` с новым пунктом (`#1`…`#4`), все `completed`
+- **WHEN** четыре вызова `think` подряд, на каждый ссылается `plan` с `taskChange` `{op: create, toolCallId: <id вызова>, changed: [<новый id>]}` (`#1`…`#4`), все `completed`
 - **THEN** транскрипт содержит один `TaskOpsItem` с текстом «Tasks #1–#4 added to the plan»
 
 #### Scenario: Отклонённая операция
-- **WHEN** вызов `think` завершился `failed`, `plan` во время него не приходил
+- **WHEN** вызов `think` завершился `failed`, ни один `plan` на него не ссылается
 - **THEN** вызов — обычный `ToolCallView` со статусом `failed`
+
+#### Scenario: Параллельный пакет с чтением между операциями
+- **WHEN** ответ модели — пакет `[task_create, read, task_create]` с id `c1`, `r1`, `c2`; `plan` с `taskChange {op: create, toolCallId: "c2", changed: ["2"]}` приходит раньше `plan` для `c1` (`changed: ["1"]`); все три вызова `completed`
+- **THEN** транскрипт — `TaskOpsItem` «Task #1 added to the plan», строка `read`, `TaskOpsItem` «Task #2 added to the plan»: каждый `plan` отнесён к своему вызову по ключу независимо от порядка кадров, `read` разделяет элементы, слияния нет
+
+#### Scenario: task_list в пакете не операция
+- **WHEN** пакет `[task_create, task_list]`; `plan` с `taskChange.toolCallId` вызова `task_create` приходит, пока оба вызова `in_progress`
+- **THEN** `task_create` — `TaskOpsItem` «Task #1 added to the plan», `task_list` — обычный `ToolCallView`
+
+#### Scenario: plan без taskChange
+- **WHEN** агент CodeLab старой версии присылает вызов `think` и во время него `plan` с `_meta.codelab.task`, но без `taskChange`
+- **THEN** план сессии обновлён, вызов — обычный `ToolCallView`, `TaskOpsItem` нет
+
+#### Scenario: restore без toolCallId
+- **WHEN** во время хода приходит `plan` с `taskChange {op: restore, actor: main}` без `toolCallId`, пока вызов `think` в `in_progress`
+- **THEN** план сессии заменён, вызов после `completed` — обычный `ToolCallView`
+
+#### Scenario: Реплей прошлых операций
+- **WHEN** `session/load` проигрывает три завершённых вызова `task_create`, затем один `plan` со списком `#1`–`#3` без `taskChange`
+- **THEN** три вызова — обычные строки `ToolCallView`, `TaskOpsItem` нет; план сессии — `#1`–`#3`
 
 #### Scenario: Сторонний агент
 - **WHEN** агент без `_meta.codelab.task` присылает вызов `think` и `plan` во время него

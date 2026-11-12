@@ -39,7 +39,7 @@
 - **ACP (`codelab_agent_acp`, `codelab_acp_protocol`) — только `_meta.codelab.*`, новых методов нет:**
   - схема объявления расширений в `initialize`. Клиент объявляет `clientCapabilities._meta.codelab`, агент в ответ отдаёт `agentCapabilities._meta.codelab` с `subagents: {version, maxDepth}`, `subagentToolCalls: {version}` и `tasks: {version}`. Сторонний клиент получает ответ `initialize` без изменений;
   - запрос разрешения потомка идёт через gate корневой сессии: `toolCallId`-цепочка, префикс `title`, `toolCall._meta.codelab.subagent`, запросы дерева идут пользователю по одному;
-  - `plan` со всем списком после каждой операции, у каждой entry `_meta.codelab.task` `{id, owner, blockedBy}`;
+  - `plan` со всем списком после каждой операции, у каждой entry `_meta.codelab.task` `{id, owner, blockedBy}`; у самого `plan` — `_meta.codelab.taskChange` `{op, actor, toolCallId?, changed, deleted}`: точная привязка операции к вызову `task_*` (D35);
   - вызов `agent` — стандартный `tool_call` с `kind: think`, строкой прогресса и отчётом; финальное обновление всегда несёт `_meta.codelab.subagent.summary` — вызовы, токены и длительность ребёнка вместе с потомками (решение пользователя 2026-11-10, D24);
   - **этап 2:** клиенту, объявившему `subagentToolCalls`, вызовы потомков уходят `tool_call`/`tool_call_update` с `toolCallId`-цепочкой и `_meta.codelab.parentToolCallId`; при завершении вызова `agent` висящие вызовы поддерева закрываются; `session/load` проигрывает их из журналов детей. Остальным клиентам — как в базе (SUB-12).
 - **Клиенты (минимальный UI):**
@@ -106,6 +106,7 @@
 - `agent-workbench-ui`: новые требования для строки `agent`, пометки запроса потомка, чек-листа с id, владельцем и блокерами, вложенных вызовов потомков (этап 2) и панели Agents v1 (D33).
 - `codelab-cli`: новое требование «Субагенты и список задач в REPL».
 - `codelab-tui`: новое требование «Субагенты и список задач в TUI».
+- `cli-headless`: новое требование «Операции со списком задач в headless».
 - `acp-golden-fixtures`: новое требование «Фикстуры субагентов и списка задач»; `acp/prompt-update-plan` становится фикстурой только с ролью `client`.
 
 ## Impact

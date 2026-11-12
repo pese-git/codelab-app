@@ -107,7 +107,7 @@
 
 | Событие ядра | Кадр |
 |---|---|
-| `TaskListChanged` | `session/update` `plan` со всем списком в порядке создания; у entry `content` = `subject`, `priority`, `status` и `_meta: {"codelab": {"task": {"id", "owner", "blockedBy"}}}`; пустой список — `entries: []` (TSK-5); так же — при `change.op == restore` (список новой ветки, D29) |
+| `TaskListChanged` | `session/update` `plan` со всем списком в порядке создания; у entry `content` = `subject`, `priority`, `status` и `_meta: {"codelab": {"task": {"id", "owner", "blockedBy"}}}`; пустой список — `entries: []` (TSK-5); так же — при `change.op == restore` (список новой ветки, D29). У самого `plan` — `_meta: {"codelab": {"taskChange": {"op", "actor", "toolCallId"?, "changed", "deleted"}}}` из `TaskChange` (D35): `toolCallId` — только у операции вызова `task_*` (у потомка — цепочка D8), у `restore` и `assign` его нет; ключ уходит независимо от объявления клиента |
 | `ToolCallStarted(agent)` | `tool_call` с `kind: think`, `title` `Subagent <agent>: <description>` и `_meta.codelab.subagent: {"id", "type"}` (D28); то же — у `tool_call` вызова `agent` при реплее |
 | `ToolCallProgress(agent)` | `tool_call_update` с одним текстовым блоком строки прогресса, заменяющим предыдущий |
 | `ToolCallFinished(agent)` | `tool_call_update` со `status` и телом отчёта без обёртки `<subagent-report>` и без ограды; всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` из `SubagentReport` (с потомками, D24); при `failed` — ещё `failure` |
@@ -120,7 +120,15 @@
 
 #### Scenario: Список задач в ходе
 - **WHEN** модель вызывает `task_create` три раза, затем `task_update` первого пункта в `completed`, затем `task_list`
-- **THEN** клиент получает четыре `plan`, каждый со всем списком на момент операции и `_meta.codelab.task.id` у каждой entry; после `task_list` нового `plan` нет (фикстура `acp/prompt-task-plan`)
+- **THEN** клиент получает четыре `plan`, каждый со всем списком на момент операции и `_meta.codelab.task.id` у каждой entry; у каждого `plan` — `_meta.codelab.taskChange` с `op` (`create` трижды, затем `update`), `actor: "main"`, `toolCallId` своего вызова и `changed`; после `task_list` нового `plan` нет (фикстура `acp/prompt-task-plan`)
+
+#### Scenario: Список новой ветки без toolCallId
+- **WHEN** после смены ветки ядро эмитит `TaskListChanged` с `op: restore`
+- **THEN** `plan` несёт `_meta.codelab.taskChange: {"op": "restore", "actor": "main", "changed": […], "deleted": […]}` без `toolCallId` (`acp_projection_exhaustive_test.dart`)
+
+#### Scenario: Реплей плана без taskChange
+- **WHEN** `session/load` сессии с тремя вызовами `task_create`
+- **THEN** вызовы проигрываются завершёнными `tool_call`, после истории — один `plan` со списком и без `_meta.codelab.taskChange`
 
 #### Scenario: Список новой ветки
 - **WHEN** ядро публикует `TaskListChanged` с `op: restore` и пустым списком, затем — с `op: restore` и пунктами `#1`, `#4`
