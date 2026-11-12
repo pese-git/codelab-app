@@ -15,10 +15,20 @@ import 'package:codelab_desktop/core/platform/user_shell_launcher.dart';
 /// завершает процесс; `shell.failExit(StateError('x'))` завершает ожидание
 /// выхода ошибкой, как адаптер при сбое `pty2` (D4).
 final class FakeUserShell implements UserShell {
-  FakeUserShell({this.exitsOnHangUp = false});
+  FakeUserShell({this.exitsOnHangUp = false, this.exitsOnKill = true});
 
   /// `true` — процесс выходит на `SIGHUP` сам (отзывчивый shell).
   final bool exitsOnHangUp;
+
+  /// `false` — `kill` лишь считается, процесс остаётся «живым» (проверка, что
+  /// событие о принудительном закрытии пишется сразу после `kill`, а не по
+  /// выходу процесса, D4, D9).
+  final bool exitsOnKill;
+
+  /// Если не `null`, `hangUp`/`kill` бросают его (после подсчёта вызова):
+  /// сбой сигнала одной вкладки не должен оставлять живыми другие.
+  Object? hangUpError;
+  Object? killError;
 
   final StreamController<String> _output = StreamController<String>();
   final Completer<int?> _exit = Completer<int?>();
@@ -63,13 +73,17 @@ final class FakeUserShell implements UserShell {
   @override
   void hangUp() {
     hangUps++;
+    final error = hangUpError;
+    if (error != null) throw error;
     if (exitsOnHangUp) exit(0);
   }
 
   @override
   void kill() {
     kills++;
-    exit(null);
+    final error = killError;
+    if (error != null) throw error;
+    if (exitsOnKill) exit(null);
   }
 }
 
