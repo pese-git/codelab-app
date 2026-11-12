@@ -216,7 +216,7 @@
   - Если цель не достигнута, по очереди: часть 1 КБ, меньший бюджет, без отрисовки фоновых вкладок.
 
   Итог (худший кадр, число кадров > 33 мс и > 100 мс, константы) записывается в D3. Если цель недостижима — Q15 пользователю до PR итерации 2.
-- [ ] 2.9 `[desktop]` Тест ссылок OSC 8 (`integrated-terminal` «Ссылки в выводе терминала»; D3, «Ссылки OSC 8»; Q14), красный:
+- [x] 2.9 `[desktop]` Тест ссылок OSC 8 (`integrated-terminal` «Ссылки в выводе терминала»; D3, «Ссылки OSC 8»; Q14), красный:
   - `apps/codelab_desktop/test/features/terminal/application/terminal_link_decision_test.dart` — `terminalLinkDecision`: `http`/`https` в любом регистре — «можно открыть»; `file:`, `ssh:`, `javascript:`, `mailto:`, пустой и неразбираемый адрес — «нельзя»;
   - `test/features/terminal/presentation/terminal_link_test.dart` с настоящим `TerminalView` и fake-портом открытия адреса. Модификатор проверяет сам `TerminalView` (5.4.0): по `defaultTargetPlatform` — Meta на macOS, Control на остальных, и только тогда зовёт `onHyperlinkTap(String uri)` с адресом из `Terminal.hyperlinkAt`. Под `flutter test` платформа по умолчанию не macOS, поэтому тест Cmd+клика идёт с `debugDefaultTargetPlatformOverride = TargetPlatform.macOS` (или `variant: TargetPlatformVariant.only(TargetPlatform.macOS)`) и `tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft)` до клика:
     - Cmd+клик по ссылке `https` → `terminal-link-dialog` с полным адресом, а не текстом ссылки; «Open» вызывает порт ровно один раз, «Cancel» и Esc — ни разу;
@@ -224,7 +224,7 @@
     - обычный клик — диалога нет;
     - OSC 1337 `OpenURL` в выводе — порт не вызывается, диалога нет (`onOpenUrl` не задан, 2.2);
     - адрес не появляется в `LogBuffer`, событие — только со схемой.
-- [ ] 2.10 `[desktop]` Реализовать ссылки OSC 8 — 2.9 зелёный:
+- [x] 2.10 `[desktop]` Реализовать ссылки OSC 8 — 2.9 зелёный:
   - `terminalLinkDecision` в application;
   - обработчик `TerminalView.onHyperlinkTap` (`void Function(String uri)?`) и диалог в presentation;
   - порт открытия адреса в `lib/core/platform/` на `url_launcher` (Q16, D11). Если `add-desktop-markdown` уже влит — переиспользовать его порт и правило сторожа. Иначе (на 2026-11-11 — так: в `develop` 938a5efc `url_launcher` нет):

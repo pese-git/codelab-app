@@ -818,7 +818,7 @@ Architectural dependency rules важнее технической доступ�
      * `onClipboardQuery` → `null`.
 
      Подробнее — D3 change. Выделение и Cmd+C/Cmd+V пользователя работают.
-   * Ссылки OSC 8 открываются после подтверждения только для `http`/`https` (решение Q14) через `url_launcher` за портом `lib/core/platform/` (решение Q16, D11 change). Раздел о `url_launcher` здесь не дублируется: его вводит тот change, который сливается первым (`add-desktop-markdown` или этот, задача 2.10), второй ссылается на него.
+   * Ссылки OSC 8 открываются после подтверждения только для `http`/`https` (решение Q14) через `url_launcher` за портом `lib/core/platform/` (решение Q16, D11 change). Пакет описан в §20е; `add-desktop-markdown`, если сольётся позже, ссылается на него.
    * Запись в модель — порциями до 4 КБ не чаще кадра: один `write` на ~400 КБ держит UI isolate ~120 мс (D15).
 6. **Заменяет ли существующую технологию.** Нет.
 7. **Требуется ли migration.** Нет.
@@ -913,6 +913,18 @@ Architectural dependency rules важнее технической доступ�
 | `characters`, `collection`, `convert`, `crypto`, `ffi`, `file`, `glob`, `logging`, `matcher`, `meta`, `path`, `platform`, `process`, `pub_semver`, `typed_data`, `async`, `boolean_selector`, `source_span`, `stack_trace`, `stream_channel`, `string_scanner`, `term_glyph`, `test_api` | см. D15 | BSD-3-Clause | разные | уже есть |
 
 Кроме замыкания, в lock workspace поднимается `objective_c` 9.5.0 → 9.6.4 (BSD-3-Clause, publisher `dart.dev`; сухой прогон спайка давал 9.6.3, при `melos bootstrap` разрешилась опубликованная 2026-11-11 версия 9.6.4): он тянется через существующие пакеты. Сборку app и тесты затронутых пакетов с новым lock проверяет задача 1.4 change.
+
+## 20е. `codelab_desktop`: открытие ссылок во внешнем приложении — `url_launcher`
+
+**Статус: утверждено.** Решение пользователя 2026-11-11 (Q16) — [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D11; задача 2.10.
+
+Технология: [`url_launcher`](https://pub.dev/packages/url_launcher) **6.3.3** (BSD-3-Clause, publisher `flutter.dev`), пин точной версии в `apps/codelab_desktop/pubspec.yaml`. Требует Flutter `>=3.41.0`, поэтому граница `flutter:` у app поднята до `>=3.41.0`.
+
+1. **Зачем.** Ссылки OSC 8 в выводе терминала открываются в браузере после подтверждения пользователя (Q14).
+2. **Где.** Только порт `ExternalLinkOpener` и адаптер `UrlLauncherExternalLinkOpener` в `apps/codelab_desktop/lib/core/platform/external_link_opener.dart`; импорт `package:url_launcher/` в остальном `lib` app запрещён сторожем.
+3. **Безопасность.** Решение «можно ли открыть» принимает application (`terminalLinkDecision`: только `http`/`https`); адаптер повторно отказывает остальным схемам (`rejectedScheme`), открывает в `LaunchMode.externalApplication`; адрес в журнал не пишется — только схема (`observability.md` §35). OSC 1337 `OpenURL` (`Terminal.onOpenUrl`) не подключается.
+4. **Зависимости.** Новые в lock: `url_launcher_android` 6.3.33, `url_launcher_ios` 6.4.2, `url_launcher_linux` 3.2.3, `url_launcher_macos` 3.2.6, `url_launcher_platform_interface` 2.3.2, `url_launcher_web` 2.4.3, `url_launcher_windows` 3.1.6 (все BSD-3-Clause, `flutter.dev`); существующие пакеты не поднимаются. `GeneratedPluginRegistrant.swift` macOS регистрирует `url_launcher_macos`.
+5. **Заменяет ли существующую технологию.** Нет. **Migration** — нет. **ADR** — нет (Q3, прецедент §20а).
 
 ---
 
