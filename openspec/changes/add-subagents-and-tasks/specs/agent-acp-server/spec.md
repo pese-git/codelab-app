@@ -143,7 +143,7 @@
 
 #### Scenario: Вызовы ребёнка и внука
 - **WHEN** клиент объявил `subagentToolCalls`, ребёнок `general` вызывает `read`, затем запускает внука, внук вызывает `ls`
-- **THEN** клиент получает `tool_call` `call_1/call_1` (`read`) с `parentToolCallId: "call_1"`, `tool_call` `call_1/call_2` (`agent`) с `parentToolCallId: "call_1"` и `tool_call` `call_1/call_2/call_1` (`ls`) с `parentToolCallId: "call_1/call_2"`; текстов потомков нет (фикстура `acp/prompt-subagent-tool-tree`)
+- **THEN** клиент получает `tool_call` `call_1/call_1` (`read`) с `parentToolCallId: "call_1"`, `tool_call` `call_1/call_2` (`agent`) с `parentToolCallId: "call_1"` и `_meta.codelab.subagent` `{id, type}` внука (как у вызова `agent` корня, D28; Q16) и `tool_call` `call_1/call_2/call_1` (`ls`) с `parentToolCallId: "call_1/call_2"`; текстов потомков нет (фикстура `acp/prompt-subagent-tool-tree`)
 
 #### Scenario: Запрос разрешения в строке своего вызова
 - **WHEN** клиент объявил `subagentToolCalls`, ребёнок вызывает `exec`, требующий вопроса

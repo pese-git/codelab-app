@@ -7,15 +7,16 @@
 - `[desktop]` — `apps/codelab_desktop`, `packages/flutter/codelab_ui`.
 
 Итерации — каждая отдельным PR в `develop` (design.md, D19):
-- 0 — документы; решения пользователя 2026-11-10 (Q1–Q6), 2026-11-12 (Q9–Q12, design.md D29–D32) и переименование `task` → `agent` (design.md, D20) внесены;
+- 0 — документы; решения пользователя 2026-11-10 (Q1–Q6), 2026-11-12 (Q9–Q13, design.md D29–D33) и переименование `task` → `agent` (design.md, D20) внесены;
 - 1 — список задач вместо `update_plan`, схема объявления `initialize`;
 - 2 — субагенты глубины 1;
 - 3 — запрос разрешения потомка;
 - 4 — вложенность до 3 и задачи у субагентов;
 - 5 — шаги потомков деревом (этап 2, design.md D21);
+- 5b — панель Agents v1 (решение пользователя 2026-11-12, Q13, design.md D33);
 - 6 — ручная проверка, документы, Definition of Done.
 
-Зависимости: 1 ← 0; 2 ← 1; 3 ← 2; 4 ← 3; 5 ← 4; 6 ← все.
+Зависимости: 1 ← 0; 2 ← 1; 3 ← 2; 4 ← 3; 5 ← 4; 5b ← 5; 6 ← 5b и все остальные.
 
 Проверки каждой задачи — только для затронутого (AGENTS.md §21; полный `melos run check` — по просьбе пользователя и на `release/*`):
 - `fvm dart format` изменённых файлов;
@@ -59,6 +60,8 @@
   - Q12 (D32): §17.16.3, §17.16.6, §11.2, §11.5 — секция `tools/tasks` называет только `task_create`, правило о `task_list` — в его описании; явный `on` зависимого при выключенном якоре — ошибка «якорь выключен» (§6.3.8, D30).
 
   Q10 и Q11 в спецификации этого change не входят: переключателей инструментов и режима `essential` нет ни в коде (`tools.disabled` — `applied: false`), ни в утверждённых спецификациях; правила D30 и D31 переносятся в дельты спецификаций change, вводящих §6.3.8 и §17.11.9 (задача 6.2).
+
+- [x] 0.8 Решения пользователя 2026-11-12 по Q13–Q16 (панель Agents v1 в 1.0) внесено: design.md (D19, D33, «Решённые вопросы», Q1), proposal, спецификации acp-client-kit «Список субагентов сессии» и agent-workbench-ui «Панель Agents v1», задачи итерации 5b; `delivery-roadmap.md` §6.1 (строка 9), §6.2 (пункт 9), §6.4 (этап 5 делится), §10.1 (строка 16), §10.3; `dart-agent-and-clients/12-3-desktop-display.md` A13 (шаги 2 и 6), A15 («Панель Agents v1»), DSK-26, «Как проверить»; `agent-core/17-3-subagents.md` §17.3.1 (таблица этапов). Q14 (чип и счётчик переключателя — с доской), Q15 (хвост без токенов: D25, сценарии agent-workbench-ui, acp-client-kit, codelab-tui, задачи 5.1, 5.5), Q16 (`_meta.codelab.subagent` у вложенного `agent` в сценарии «Вызовы ребёнка и внука» и фикстуре) внесены; строка D-25 `agent-parity-goals.md` помечена.
 
 ## 1. Список задач вместо `update_plan` (итерация 1)
 
@@ -179,16 +182,29 @@
 ## 5. Шаги потомков деревом (итерация 5, этап 2)
 
 - [ ] 5.1 `[protocol]` `[client]` `[desktop]` Красные тесты итерации:
-  - ACP: фикстуры `acp/prompt-subagent-tool-tree` и `acp/session-load-subagent-tool-tree` (agent-acp-server «Шаги потомков деревом»: «Вызовы ребёнка и внука», «Запрос разрешения в строке своего вызова», «Клиент без согласия», «Висящие вызовы при отмене», «Реплей дерева»); `initialize` с `subagentToolCalls` (agent-acp-server «Клиент CodeLab объявил расширения»); загрузчик фикстур кладёт журналы детей из `setup.sessions` в `subagents/` по заголовку `parent`;
+  - ACP: фикстуры `acp/prompt-subagent-tool-tree` (кадр `tool_call` `call_1/call_2` несёт `_meta.codelab.subagent` `{id, type}` внука — Q16, D28) и `acp/session-load-subagent-tool-tree` (agent-acp-server «Шаги потомков деревом»: «Вызовы ребёнка и внука», «Запрос разрешения в строке своего вызова», «Клиент без согласия», «Висящие вызовы при отмене», «Реплей дерева»); `initialize` с `subagentToolCalls` (agent-acp-server «Клиент CodeLab объявил расширения»); загрузчик фикстур кладёт журналы детей из `setup.sessions` в `subagents/` по заголовку `parent`;
   - kit: acp-client-kit «Дерево вызовов потомков» (три сценария); acp-protocol-client «Запрос initialize клиента CodeLab» с `subagentToolCalls`;
-  - kit: acp-client-kit «Хвост из пяти вызовов» (D25);
+  - kit: acp-client-kit «Хвост из пяти вызовов» — без токенов (D25, Q15);
   - CLI: codelab-cli «Шаги ребёнка с отступом»; TUI — хвост свёрнутой строки и вложенные строки раскрытой;
   - app: widget-тесты agent-workbench-ui «Свёрнутые шаги ребёнка», «Хвост работающего субагента»; вопрос внука при дереве — вызов виден на своём месте после раскрытия, блок под строкой корня («Вопрос внука не раскрывает дерево»);
   - фикстуры: `summary` в финальных обновлениях `acp/prompt-subagent-tool-tree` и реплея `acp/session-load-subagent-tool-tree`.
 - [ ] 5.2 `[protocol]` Проекция `SubagentActivity` вызовов потомков в `tool_call`/`tool_call_update` с цепочкой `toolCallId` и `_meta.codelab.parentToolCallId` только по согласию `subagentToolCalls`; закрытие висящих вызовов поддерева при терминальном вызове `agent`; реплей вызовов потомков из их журналов; ключ `subagentToolCalls` в блоке `initialize` (5.1, ACP; D21).
 - [ ] 5.3 `[agent]` Порт чтения журналов потомков для реплея (`AgentSession.replay` отдаёт события детей с адресом, как `SubagentActivity`) без записи и без lease ребёнка (5.1, «Реплей дерева»; D21).
 - [ ] 5.4 `[client]` `clientCapabilities._meta.codelab.subagentToolCalls`; `ToolCallView.parentToolCallId`, дерево в `SessionView` без дублей при реплее; строки потомков с отступом в REPL и TUI; хвост в `SessionView` (три последних вызова поддерева и `moreCount`) и в свёрнутой строке TUI (5.1, kit и CLI; D25).
-- [ ] 5.5 `[desktop]` Вложенные строки потомков в строке `agent`: свёрнуты по умолчанию, счётчик шагов, хвост из трёх последних вызовов и `+N more tool calls · Nk tokens` под свёрнутой строкой работающего вместо строки прогресса; тихие строки операций потомков со списком; вопрос потомка дерево не раскрывает (5.1, app; D25, D27).
+- [ ] 5.5 `[desktop]` Вложенные строки потомков в строке `agent`: свёрнуты по умолчанию, счётчик шагов, хвост из трёх последних вызовов и `+N more tool calls` без токенов под свёрнутой строкой работающего вместо строки прогресса, справа — `N tool calls` (Q15); тихие строки операций потомков со списком; вопрос потомка дерево не раскрывает (5.1, app; D25, D27).
+
+## 5b. Панель Agents v1 (итерация 5b, решение пользователя 2026-11-12, Q13)
+
+Только клиент: kit и app; протокол, ядро и CLI не меняются (design.md, D33). Integration-тест app в `feature/*` только компилируется (AGENTS.md §21).
+
+- [ ] 5b.1 `[client]` `[desktop]` Красные тесты итерации:
+  - kit — `session_subagents_test.dart` (acp-client-kit «Список субагентов сессии»: «Строки ребёнка и внука», «Итог завершённого субагента», «Отмена и отказ», «Ожидание одобрения потомка», «Одобрение без дерева», «Пункты списка у субагента», «Реплей без дублей в списке», «Поздний кадр после завершения», «Время работающего субагента», «Сторонний агент без признака»); источник кадров — фикстуры `acp/prompt-subagent-tool-tree`, `acp/session-load-subagent-tool-tree`, `acp/prompt-subagent-nested-permission` в роли `client` и сценарные `session/update` теста; часы `ClientWorkspace` — поддельные;
+  - app — widget-тесты панели (agent-workbench-ui «Панель Agents v1»: «Панель появляется с первым субагентом», «Сторонний агент», «Ребёнок, внук и итог», «Ожидание одобрения и переход к нему», «Дерево шагов выбранного потомка», «Переход к строке в ленте», «Пункты списка у субагента», «Загрузка сессии с субагентами», «Только данные v1»); предикат доступности — в тесте раскладки дока (сохранённая открытая панель Agents без строк не даёт вкладки и остаётся в раскладке);
+  - `codelab_ui` — widget-тест организма панели: строки с отступом по глубине, счётчики без нулей, поля без данных не рисуются, ключи `agents-row-<toolCallId>`, `agents-go-to-approval-<toolCallId>`, `agents-show-in-transcript-<toolCallId>`.
+- [ ] 5b.2 `[client]` `codelab_client_core`: `SubagentRowView`, состояния строки и счётчики, `SessionView.subagents` как функция транскрипта, ожидающих одобрений и плана; `startedAt` по часам, внедрённым в `ClientWorkspace` (по умолчанию системные), формат длительности общий с итогом D24; терминальное состояние окончательно; без разбора `title` и строки прогресса (5b.1, kit; D33, AGENTS.md §9). `fvm dart run build_runner build` после изменения freezed-моделей; `melos run web-compile`.
+- [ ] 5b.3 `[desktop]` `codelab_ui`: организм панели Agents — заголовок со счётчиками, строки с отступом, метки `#N`, отметка и действие «Go to approval», «Show in transcript», дерево шагов выбранной строки на компактных строках ленты (D27); `CodeLabOrganismPreviews` — пример панели (5b.1, `codelab_ui`).
+- [ ] 5b.4 `[desktop]` `apps/codelab_desktop`: `ToolPane.agents` с предикатом «у сессии в фокусе есть строка `SessionView.subagents`», пункт палитры; UI-часть выбора строки по сессиям по образцу `TranscriptViewCubit`; прокрутка ленты к строке `agent` и к блоку одобрения, раскрытие пути через `TranscriptViewCubit`, короткая подсветка; тик времени работающих строк раз в секунду, пока панель видна и сессия занята (5b.1, app; D33).
+- [ ] 5b.5 `[desktop]` `integration_test/agents_pane_flow_test.dart` со сценарием LLM: ребёнок с внуком и запрос разрешения внука — панель, «Go to approval», ответ в ленте, дерево шагов; в `feature/*` — только компиляция, прогон на устройстве — в `release/*` (AGENTS.md §21).
 
 ## 6. Ручная проверка, документы и Definition of Done (итерация 6)
 
@@ -196,6 +212,7 @@
   - список задач из 5+ пунктов с зависимостями;
   - `agent` `explore` и `review` параллельно;
   - ребёнок запускает внука; дерево шагов потомков в app и REPL;
+  - панель Agents v1: строки ребёнка и внука, «Go to approval», «Show in transcript», дерево шагов выбранного потомка, загрузка сессии с субагентами;
   - запрос разрешения ребёнка и внука в app и в REPL;
   - отмена хода во время работы внука;
   - загрузка сессии старого формата с `update_plan`.
@@ -205,12 +222,12 @@
   - `codelab_agent_core` — `lib/src/subagents/`, `lib/src/tools/tasks/`, запрет копирования текстов Claude Code;
   - `codelab_agent_acp` — новые расширения;
   - `codelab_client_core` — разбор `_meta.codelab.*`.
-- [ ] 6.3 `[agent]` `agent-parity-goals.md`: статусы и доказательства C-05, C-06 (этапы 1 и 2), C-20 по зелёным тестам и фикстурам. `delivery-roadmap.md` §6.4 — отметка «этапы 1 и 2 выполнены».
+- [ ] 6.3 `[agent]` `agent-parity-goals.md`: статусы и доказательства C-05, C-06 (этапы 1 и 2), C-20 по зелёным тестам и фикстурам. `delivery-roadmap.md` §6.4 — отметка «этапы 1 и 2 и панель Agents v1 выполнены»; §10.1 строка 16 — часть M4.
 - [ ] 6.4 Definition of Done (ниже) выполнен; change готов к архивации по просьбе пользователя.
 
 ## Definition of Done
 
-- Все задачи итераций 0–6 отмечены. Красные тесты каждой итерации были в истории до кода.
+- Все задачи итераций 0–6 и 5b отмечены. Красные тесты каждой итерации были в истории до кода.
 - Зелёные проверки:
   - сценарии спецификаций change: `agent-subagents`, `agent-tools`, `agent-loop`, `agent-sessions`, `agent-permissions`, `agent-runtime`, `agent-prompts`, `agent-configuration`, `agent-acp-server`, `acp-protocol-client`, `acp-client-kit`, `agent-workbench-ui`, `codelab-cli`, `codelab-tui`, `acp-golden-fixtures`;
   - критерии матрицы: C-05 (`acp/prompt-task-plan`, `acp/session-load-legacy-plan`, `acp/prompt-update-plan` с ролью `client`), C-06 (`core/agent-two-children-parallel`, `core/subagent-nested-no-deadlock`, `acp/prompt-subagent-tool-call`, `acp/prompt-subagent-permission`, `acp/prompt-subagent-nested-permission`, `acp/prompt-subagent-tool-tree`, `acp/session-load-subagent-tool-tree`), C-20 (`core/task-list-create-update`, `core/task-list-cycle-rejected`).
@@ -219,14 +236,15 @@
   - висящие вызовы поддерева закрываются при завершении вызова `agent`;
   - финальное обновление каждого вызова `agent` несёт `_meta.codelab.subagent.summary`; клиенты без `summary` показывают строку как прежде;
   - поздние события отменённого ребёнка не доходят до клиента;
-  - гонка «отмена ↔ завершение» даёт один результат.
+  - гонка «отмена ↔ завершение» даёт один результат;
+  - панель Agents v1: список субагентов без дублей при реплее и повторной загрузке, поздний кадр не возвращает завершённого субагента в `running`, решение по одобрению принимается только в ленте (D33).
 - ACP:
   - сервер отправляет только расширения из требования «Расширения протокола этапа 4»;
   - сторонний клиент без `clientCapabilities._meta.codelab` получает прежний ответ `initialize` и не получает вызовов потомков;
   - новых методов и корневых полей нет.
 - Allowlist ядра (PKG-2) и правила сторожа не изменились, `melos run guard` зелёный. `melos run web-compile` зелёный для ядра и kit.
 - Тексты промптов и описаний инструментов написаны для CodeLab. Источник поведения указан в §17.3.13 и §17.16.8; записи в `THIRD_PARTY_NOTICES.md` не потребовалось — или она добавлена, если ревью нашло воспроизведённый фрагмент.
-- В коде нет заготовок этапов 3–6: полей `background`, методов `followUp`, ключей конфига других этапов, `_codelab/subagents/*`.
+- В коде нет заготовок этапов 3–6: полей `background`, методов `followUp`, ключей конфига других этапов, `_codelab/subagents/*`; в панели Agents v1 нет кнопок и разделов этапов 3–6 («Stop», «Open transcript», «Background jobs»).
 - CI pull request каждой итерации зелёный (затронутое), полный `melos run check` зелёный на `develop` после merge (AGENTS.md §21).
 - Слово task в именах инструментов, событий и записей означает только пункт списка задач (D20); единственное сознательное исключение — slash-команда `/tasks` для человека (D23).
 - Документы и код не расходятся (6.2), матрица и дорожная карта обновлены (6.3).
