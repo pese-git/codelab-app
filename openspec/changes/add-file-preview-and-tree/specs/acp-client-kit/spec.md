@@ -54,15 +54,9 @@
 - `IoProjectFiles` — порт `ProjectFiles`: лексическая проверка вместе со склейкой пути в стиле текущей ОС до обращения к диску (на Windows сегмент с `\` или `:` даёт `invalidPath`); realpath корня; проверка границы по realpath до перечисления и чтения; если цель не разрешается (любая ошибка разрешения), путь проходится от корня без перехода по ссылкам: ссылка, чей realpath не разрешается или разрешается вне корня, либо ближайший разрешимый предок вне корня дают `outsideRoot`, иначе — исходная ошибка (`notFound`, `unreadable`); перечисление одного уровня с лимитом записей, чтение не больше `maxBytes + 1` байт с классификацией `classifyPreview` kit; символическая ссылка с целью вне корня перечисляется как `symlinkOutside` и не раскрывается; битая ссылка, FIFO и сокет перечисляются как `other`; `list` файла и `read` папки дают `unreadable` (design.md change `add-file-preview-and-tree`, D3, Q16);
 - `ioTransportResolver` — `ConfigTransportResolver` kit с настоящими транспортами stdio и WebSocket;
 - `JsonFileProfileStore` (`$CODELAB_HOME/profiles.json`, общий файл CLI и app);
-- `JsonFileRecentProjectsStore`;
-- `classifyProbeFailure` — перевод ошибок IO-транспортов в исход `ProfileProbe` только по типам и кодам ошибок, без разбора текста:
-  - отсутствующая команда (`ProcessException` с errno `ENOENT`) — `CommandNotFound`;
-  - `AcpWebSocketHandshakeRejected` со статусом 401 или 403 — `Unauthorized`, с другим статусом — `Unreachable` с причиной `httpStatus` и этим `statusCode`;
-  - `SocketException`, чей `osError.errorCode` — код «соединение отклонено» текущей платформы, — `Unreachable(connectionRefused)`; код «хост не найден» (ошибка разрешения имени) — `Unreachable(hostNotFound)`; коды берутся из таблицы по платформе;
-  - `HandshakeException` или `TlsException` — `Unreachable(tlsFailed)`;
-  - остальное — `Unreachable(unknown)`.
+- `JsonFileRecentProjectsStore`.
 
-Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app. `ProfileStore.remove(id)` SHALL удалять профиль с этим `id` и возвращать `true`, а без такого профиля — возвращать `false` и не менять файл. `JsonFileProfileStore` SHALL записывать `profiles.json` через уникальный временный файл в том же каталоге, сброшенный на диск (`flush`) до атомарного переименования: прерванная запись НЕ SHALL оставлять под именем `profiles.json` пустой или неполный файл (design.md change `add-app-settings-shell`, D7).
+Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app. `ProfileStore.remove(id)` SHALL удалять профиль с этим `id` и возвращать `true`, а без такого профиля — возвращать `false` и не менять файл. `JsonFileProfileStore` SHALL записывать `profiles.json` через уникальный временный файл в том же каталоге, сброшенный на диск (`flush`) до атомарного переименования: прерванная запись НЕ SHALL оставлять под именем `profiles.json` пустой или неполный файл (design.md change `add-app-settings-shell`, D7). Классификатора ошибок проверки профиля (`classifyProbeFailure`) в пакете НЕ SHALL быть: проверка профиля удалена (design.md change `remove-test-connection`, D2).
 
 #### Scenario: Профили сохраняются в JSON
 - **WHEN** `JsonFileProfileStore` сохраняет профиль `WebSocketProfile` и читает его заново
@@ -72,29 +66,9 @@
 - **WHEN** в `JsonFileProfileStore` сохранены профили `remote` и `local`, и вызывается `remove('remote')`
 - **THEN** результат — `true`, а новое хранилище на том же файле читает только `local`
 
-#### Scenario: Классификация отсутствующей команды
-- **WHEN** `StdioAcpTransport` с командой `/nonexistent/agent` не стартует, и ошибка передана `classifyProbeFailure`
-- **THEN** результат — `CommandNotFound`
-
-#### Scenario: Закрытый порт
-- **WHEN** `WebSocketAcpTransport` подключается к закрытому порту loopback, и ошибка передана `classifyProbeFailure`
-- **THEN** результат — `Unreachable` с причиной `connectionRefused`
-
-#### Scenario: Хост не найден
-- **WHEN** `classifyProbeFailure` получает `SocketException` разрешения имени с кодом «хост не найден» текущей платформы
-- **THEN** результат — `Unreachable` с причиной `hostNotFound`
-
-#### Scenario: Сбой TLS
-- **WHEN** `WebSocketAcpTransport` подключается по `wss://` к серверу на loopback, который не говорит TLS, и ошибка передана `classifyProbeFailure`
-- **THEN** результат — `Unreachable` с причиной `tlsFailed`
-
-#### Scenario: Отказ рукопожатия по статусу
-- **WHEN** WebSocket-сервер на loopback отвечает на рукопожатие статусом 401, затем 403, затем 500
-- **THEN** результаты — `Unauthorized`, `Unauthorized` и `Unreachable` с причиной `httpStatus` и `statusCode` 500
-
-#### Scenario: Нераспознанная ошибка
-- **WHEN** `classifyProbeFailure` получает исключение незнакомого типа, чей текст содержит `connection refused` и `401`
-- **THEN** результат — `Unreachable` с причиной `unknown`: текст ошибки не влияет на классификацию
+#### Scenario: Барель без классификатора проверки
+- **WHEN** код импортирует `package:codelab_client_io/codelab_client_io.dart`
+- **THEN** `classifyProbeFailure` не экспортируется, а `ioTransportResolver`, `JsonFileProfileStore` и `JsonFileRecentProjectsStore` доступны
 
 #### Scenario: Символическая ссылка наружу
 - **WHEN** `IoProjectFiles.list` перечисляет корень временной папки со ссылкой `out` на папку вне корня, а затем вызывается `read(root, 'out/x.txt')`
