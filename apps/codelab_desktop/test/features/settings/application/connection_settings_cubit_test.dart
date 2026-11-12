@@ -11,8 +11,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
-import 'package:codelab_acp_transports/codelab_acp_transports.dart'
-    show StdioAcpTransportConfig;
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_client_io/codelab_client_io.dart'
@@ -205,12 +203,8 @@ void main() {
   late AcpClientApplication application;
   late FakeProfileSecrets secrets;
 
-  /// Папка проекта окна; `null` — проект не выбран (D7).
-  String? projectFolder = '/work';
-
   ConnectionSettingsCubit build({
     Map<String, String> environment = const {},
-    ProfileProbe? probe,
     ProfileStore? store,
   }) {
     final cubit = ConnectionSettingsCubit(
@@ -221,8 +215,6 @@ void main() {
       commands: commands,
       environment: environment,
       profilesPath: profilesFile.path,
-      probe: probe ?? ProfileProbe(resolvers: [resolver]),
-      projectDirectory: () => projectFolder,
       logger: logger,
     );
     addTearDown(cubit.close);
@@ -242,7 +234,6 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    projectFolder = '/work';
     home = await Directory.systemTemp.createTemp('codelab_settings_cubit_');
     profilesFile = File('${home.path}/profiles.json');
     resolver = _Resolver();
@@ -730,8 +721,6 @@ void main() {
         commands: commands,
         environment: const {},
         profilesPath: profilesFile.path,
-        probe: ProfileProbe(resolvers: [resolver]),
-        projectDirectory: () => '/work',
         logger: logger,
       );
       final loading = cubit.reload();
@@ -760,8 +749,6 @@ void main() {
           commands: commands,
           environment: const {},
           profilesPath: profilesFile.path,
-          probe: ProfileProbe(resolvers: [resolver]),
-          projectDirectory: () => '/work',
           logger: logger,
         );
         addTearDown(cubit.close);
@@ -1149,8 +1136,7 @@ void main() {
       },
     );
 
-    test('the file actions and the "Not tested" badge belong to saved rows '
-        'only', () async {
+    test('the file actions belong to saved rows only', () async {
       await profilesFile.writeAsString(_file);
 
       final state = await ready(build());
@@ -1158,9 +1144,7 @@ void main() {
       final embedded = state.rows.first;
       final dev = state.rows.firstWhere((r) => r.id == 'dev');
       expect(embedded.hasFileActions, isFalse);
-      expect(embedded.showNotTested, isFalse);
       expect(dev.hasFileActions, isTrue);
-      expect(dev.showNotTested, isTrue);
     });
   });
 
@@ -1179,8 +1163,6 @@ void main() {
         commands: commands,
         environment: const {},
         profilesPath: profilesFile.path,
-        probe: ProfileProbe(resolvers: [resolver]),
-        projectDirectory: () => '/work',
         logger: logger,
       );
       addTearDown(cubit.close);
@@ -1498,233 +1480,33 @@ void main() {
     });
   });
 
-  group('Test connection of a row (iteration 3, D14)', () {
-    ProfileProbe probeOver(AcpTransport Function() next) => ProfileProbe(
-      resolvers: [
-        ConfigTransportResolver(stdio: (_) => next(), webSocket: (_) => next()),
-      ],
-    );
-
-    test('records the outcome by id for the life of the page and the row '
-        'stops being "Not tested"', () async {
+  group('profilesChanged (remove-test-connection, D1)', () {
+    test('rereads the file: the profile written by the dialog gets its row, '
+        'with no probe state on the page', () async {
       await profilesFile.writeAsString(_file);
-      final cubit = build(probe: probeOver(FakeAcpTransport.new));
-      var state = await ready(cubit);
-      expect(state.lastProbes, isEmpty);
-      expect(state.rows.firstWhere((r) => r.id == 'dev').showNotTested, isTrue);
-
-      await cubit.testProfile('dev');
-
-      state = cubit.state as ConnectionSettingsReady;
-      expect(state.lastProbes['dev'], isA<Reachable>());
-      final dev = state.rows.firstWhere((r) => r.id == 'dev');
-      expect(dev.probe, isA<Reachable>());
-      expect(dev.showNotTested, isFalse);
-      expect(dev.isProbing, isFalse);
-      final started = logger.entries.singleWhere(
-        (e) => e['event'] == 'connection_profile.probe_started',
-      );
-      expect(started['profile_id'], 'dev');
-      expect(started['type'], 'stdio');
-      final finished = logger.entries.singleWhere(
-        (e) => e['event'] == 'connection_profile.probe_finished',
-      );
-      expect(finished['operation_id'], started['operation_id']);
-      // Все события проверки несут profile_id (D17).
-      expect(finished['profile_id'], 'dev');
-    });
-
-    test('a stdio row starts in the project folder when a project is '
-        'selected, and without the folder when it is not (D7)', () async {
-      await profilesFile.writeAsString(_file);
-      final configs = <StdioAcpTransportConfig>[];
-      final cubit = build(
-        probe: ProfileProbe(
-          resolvers: [
-            ConfigTransportResolver(
-              stdio: (config) {
-                configs.add(config);
-                return FakeAcpTransport();
-              },
-            ),
-          ],
+      final cubit = build();
+      await cubit.reload();
+      final before = (cubit.state as ConnectionSettingsReady).rows.length;
+      await JsonFileProfileStore(profilesFile.path).save(
+        const ConnectionProfile.stdio(
+          id: 'added',
+          label: 'Added',
+          command: 'codelab-agent',
         ),
       );
-      await cubit.reload();
 
-      await cubit.testProfile('dev');
-      projectFolder = null;
-      await cubit.testProfile('dev');
+      await cubit.profilesChanged();
 
-      expect(configs.map((config) => config.cwd), ['/work', isNull]);
-      expect(
-        (cubit.state as ConnectionSettingsReady).lastProbes['dev'],
-        isA<Reachable>(),
-      );
-    });
-
-    test('is refused for the built-in agent and unknown ids', () async {
-      await profilesFile.writeAsString(_file);
-      final cubit = build(probe: probeOver(FakeAcpTransport.new));
-      await cubit.reload();
-
-      await cubit.testProfile('embedded');
-      await cubit.testProfile('nope');
-
-      expect((cubit.state as ConnectionSettingsReady).lastProbes, isEmpty);
+      final state = cubit.state as ConnectionSettingsReady;
+      expect(state.rows, hasLength(before + 1));
+      expect(state.rows.map((r) => r.id), contains('added'));
       expect(
         logger.entries.where(
-          (e) => e['event'] == 'connection_profile.probe_started',
+          (e) =>
+              (e['event']! as String).startsWith('connection_profile.probe_'),
         ),
         isEmpty,
       );
     });
-
-    test('closing the page cancels the probe: the transport is closed and '
-        'the outcome is discarded', () async {
-      await profilesFile.writeAsString(_file);
-      final transports = <FakeAcpTransport>[];
-      final cubit = build(
-        probe: probeOver(() {
-          final transport = FakeAcpTransport()..autoRespondToInitialize = false;
-          transports.add(transport);
-          return transport;
-        }),
-      );
-      await cubit.reload();
-      unawaited(cubit.testProfile('dev'));
-      await pumpEventQueue();
-      expect(
-        (cubit.state as ConnectionSettingsReady).rows
-            .firstWhere((r) => r.id == 'dev')
-            .isProbing,
-        isTrue,
-      );
-
-      await cubit.close();
-      await pumpEventQueue();
-
-      expect(transports.single.state, AcpTransportState.closed);
-      expect(
-        logger.entries.where(
-          (e) => e['event'] == 'connection_profile.probe_discarded',
-        ),
-        hasLength(1),
-      );
-      expect(
-        logger.entries.singleWhere(
-          (e) => e['event'] == 'connection_profile.probe_discarded',
-        )['profile_id'],
-        'dev',
-      );
-    });
-
-    test('the outcome is dropped when a reload finds the profile changed '
-        '(another URL, command or token); an unchanged one keeps it', () async {
-      await profilesFile.writeAsString(_file);
-      final cubit = build(probe: probeOver(FakeAcpTransport.new));
-      await cubit.reload();
-      await cubit.testProfile('dev');
-      await cubit.testProfile('plain');
-      expect(
-        (cubit.state as ConnectionSettingsReady).lastProbes.keys,
-        containsAll(['dev', 'plain']),
-      );
-
-      // CLI переписал команду dev и адрес plain; остальное осталось.
-      await profilesFile.writeAsString(
-        _file
-            .replaceFirst('"command":"codelab-agent"', '"command":"other"')
-            .replaceFirst('ws://plain:1/acp', 'ws://plain:9/acp'),
-      );
-      final state = await ready(cubit);
-
-      expect(state.lastProbes, isEmpty);
-      expect(state.rows.firstWhere((r) => r.id == 'dev').showNotTested, isTrue);
-
-      // Профиль без правок исход сохраняет.
-      await cubit.testProfile('devbox');
-      await cubit.reload();
-      expect((cubit.state as ConnectionSettingsReady).lastProbes.keys, [
-        'devbox',
-      ]);
-    });
-
-    test('Rename keeps the outcome; a changed URL drops it (N1)', () async {
-      await profilesFile.writeAsString(_file);
-      final cubit = build(probe: probeOver(FakeAcpTransport.new));
-      await cubit.reload();
-      await cubit.testProfile('plain');
-
-      expect(await cubit.renameProfile('plain', 'Renamed'), isTrue);
-      expect(
-        (cubit.state as ConnectionSettingsReady).lastProbes['plain'],
-        isA<Reachable>(),
-      );
-
-      await profilesFile.writeAsString(
-        (await profilesFile.readAsString()).replaceFirst(
-          'ws://plain:1/acp',
-          'ws://plain:9/acp',
-        ),
-      );
-      await cubit.reload();
-      expect(
-        (cubit.state as ConnectionSettingsReady).lastProbes,
-        isNot(contains('plain')),
-      );
-    });
-
-    test('an outcome of a profile changed during the probe is discarded '
-        '(safety)', () async {
-      await profilesFile.writeAsString(_file);
-      final cubit = build();
-      await cubit.reload();
-      final gate = Completer<void>();
-      resolver.gate = gate.future;
-      final pending = cubit.testProfile('plain');
-      await pumpEventQueue();
-
-      // За время проверки CLI сменил адрес, страница перечитала файл.
-      await profilesFile.writeAsString(
-        (await profilesFile.readAsString()).replaceFirst(
-          'ws://plain:1/acp',
-          'ws://plain:9/acp',
-        ),
-      );
-      await cubit.reload();
-      gate.complete();
-      await pending;
-
-      expect(
-        (cubit.state as ConnectionSettingsReady).lastProbes,
-        isNot(contains('plain')),
-      );
-      expect(
-        logger.entries.where(
-          (e) =>
-              e['event'] == 'connection_profile.probe_discarded' &&
-              e['profile_id'] == 'plain',
-        ),
-        hasLength(1),
-      );
-    });
-
-    test(
-      'profileAdded stores the outcome of the dialog under the new id',
-      () async {
-        await profilesFile.writeAsString(_file);
-        final cubit = build();
-        await cubit.reload();
-
-        await cubit.profileAdded(
-          'dev',
-          const Reachable(latency: Duration(milliseconds: 5)),
-        );
-
-        final state = cubit.state as ConnectionSettingsReady;
-        expect(state.lastProbes['dev'], isA<Reachable>());
-      },
-    );
   });
 }

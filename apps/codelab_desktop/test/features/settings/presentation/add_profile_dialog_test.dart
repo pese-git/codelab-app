@@ -39,6 +39,18 @@ Finder _key(String key) => find.byKey(ValueKey(key));
 String _text(WidgetTester tester, String key) =>
     tester.widget<TextBox>(_key(key)).controller!.text;
 
+/// Весь текст InfoBar «Profile saved» одной строкой (заголовок, сообщение,
+/// id и пометка «used by default»).
+String _savedBarText(WidgetTester tester) => tester
+    .widget<Text>(
+      find.descendant(
+        of: _key('add-profile-saved-bar'),
+        matching: find.byType(Text),
+      ),
+    )
+    .textSpan!
+    .toPlainText();
+
 bool _enabled(WidgetTester tester, String key) =>
     tester.widget<CodeLabButton>(_key(key)).onPressed != null;
 
@@ -56,10 +68,6 @@ void main() {
   });
 
   late InMemoryProfileStore store;
-  AddProfileCubit? openedCubit;
-
-  /// Сколько раз проба открыла WebSocket: до подтверждения токен не уходит.
-  var wsOpened = 0;
 
   /// Открывает диалог поверх пустого экрана и возвращает его Cubit.
   Future<AddProfileCubit> openDialog(
@@ -75,24 +83,10 @@ void main() {
       store: profileStore ?? store,
       openSecrets: () async => secrets,
       preferences: const SharedPreferencesConnectionPreferences(),
-      probe: ProfileProbe(
-        resolvers: [
-          ConfigTransportResolver(
-            stdio: (_) => FakeAcpTransport(),
-            webSocket: (_) {
-              wsOpened++;
-              return FakeAcpTransport();
-            },
-            secrets: ProfileSecretSource(environment, stored: secrets),
-          ),
-        ],
-      ),
       kinds: kinds,
       environment: environment,
-      projectDirectory: () => '/work',
       profilesPath: profilesPath,
     );
-    openedCubit = cubit;
     addTearDown(cubit.close);
     // Диалог открывает страница; она же загружает id профилей.
     await cubit.start();
@@ -114,22 +108,8 @@ void main() {
     return cubit;
   }
 
-  /// Ждёт конца проверки. Проба опирается на настоящие события (процессы,
-  /// сокеты), которые fake-async зона сама не продвигает, поэтому реальное
-  /// время и кадры чередуются, пока Cubit не выйдет из `Probing`.
-  Future<void> settleProbe(WidgetTester tester) async {
-    for (var i = 0; i < 100 && openedCubit!.state is Probing; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 10)),
-      );
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    await tester.pumpAndSettle();
-  }
-
   setUp(() {
     store = InMemoryProfileStore();
-    wsOpened = 0;
   });
 
   group('typography and layout of the mockup (fluent.css)', () {
@@ -286,7 +266,6 @@ void main() {
         'Arguments',
         'Folder',
         'Environment',
-        'Check',
         'After saving',
       ]) {
         expect(find.text(label), findsOneWidget, reason: label);
@@ -303,16 +282,8 @@ void main() {
         find.text('Parsed like a shell: quotes and escapes work.'),
         findsOneWidget,
       );
-      expect(
-        find.text(
-          'Sends initialize only: no session is created, the process or '
-          'socket closes right after.',
-        ),
-        findsOneWidget,
-      );
-      expect(find.text('Test connection'), findsOneWidget);
       expect(find.text('Use by default'), findsOneWidget);
-      expect(find.text('Save without test'), findsOneWidget);
+      expect(find.text('Save'), findsOneWidget);
       expect(find.text('Cancel'), findsOneWidget);
     });
 
@@ -475,10 +446,8 @@ void main() {
   });
 
   group('one "not set" warning', () {
-    testWidgets('an unset variable gives exactly one "is not set" even after '
-        'Test connection: under the token field, not in the Check block', (
-      tester,
-    ) async {
+    testWidgets('an unset variable gives exactly one "is not set", under the '
+        'token field', (tester) async {
       await openDialog(tester, kinds: const [ProfileKind.webSocket]);
       await tester.enterText(_key('add-profile-name'), 'Box');
       await tester.enterText(_key('add-profile-url'), 'wss://box:1');
@@ -491,64 +460,98 @@ void main() {
       await tester.pump();
 
       const notice = "MISSING_TOKEN is not set in CodeLab's environment.";
-      // Сначала до проверки: одно сообщение, под полем имени переменной.
+      // Одно сообщение, под полем имени переменной.
       expect(find.textContaining('is not set'), findsOneWidget);
       expect(find.text(notice), findsOneWidget);
 
-      await tester.tap(_key('add-profile-test'));
-      await tester.pump();
-      await settleProbe(tester);
-
-      // После «Test connection» — по-прежнему одно, и под полем токена.
-      expect(find.textContaining('is not set'), findsOneWidget);
+      // Под полем токена, над строкой «After saving» (проверки в диалоге нет).
       final fieldBottom = tester
           .getBottomLeft(_key('add-profile-token-env-name'))
           .dy;
       expect(tester.getTopLeft(find.text(notice)).dy, greaterThan(fieldBottom));
       expect(
         tester.getTopLeft(find.text(notice)).dy,
-        lessThan(tester.getTopLeft(_key('add-profile-test')).dy),
-        reason: 'the notice is above the Check block, not inside it',
+        lessThan(tester.getTopLeft(_key('add-profile-use-by-default')).dy),
       );
       expect(find.textContaining('may reject'), findsNothing);
     });
   });
 
-  group('check', () {
-    testWidgets('Test connection shows the outcome and renames Save', (
+  group('no profile check (remove-test-connection)', () {
+    void expectNoCheck(WidgetTester tester) {
+      expect(find.text('Check'), findsNothing);
+      expect(find.textContaining('Sends initialize only'), findsNothing);
+      expect(_key('add-profile-test'), findsNothing);
+      expect(_key('add-profile-test-anyway'), findsNothing);
+      expect(_key('add-profile-probe-result'), findsNothing);
+      expect(find.text('Test connection'), findsNothing);
+      expect(find.text('Test anyway'), findsNothing);
+    }
+
+    testWidgets('the stdio form has no Check row; Save is called "Save"', (
       tester,
     ) async {
       await openDialog(tester);
       await tester.enterText(_key('add-profile-name'), 'Box');
-      expect(_key('add-profile-probe-result'), findsNothing);
-
-      await tester.tap(_key('add-profile-test'));
       await tester.pump();
-      expect(find.text('initialize…'), findsOneWidget);
-      await settleProbe(tester);
 
-      expect(_key('add-profile-probe-result'), findsOneWidget);
+      expectNoCheck(tester);
+      expect(_enabled(tester, 'add-profile-save'), isTrue);
       expect(
         find.descendant(
-          of: _key('add-profile-probe-result'),
-          matching: find.textContaining('Reachable · '),
+          of: _key('add-profile-save'),
+          matching: find.text('Save'),
         ),
         findsOneWidget,
       );
-      expect(find.text('Save'), findsOneWidget);
       expect(find.text('Save without test'), findsNothing);
     });
 
-    testWidgets('Test connection is unavailable for an invalid address', (
-      tester,
-    ) async {
+    testWidgets('the WebSocket form has no Check row, even with a token '
+        'over ws:// to another machine', (tester) async {
       await openDialog(tester, kinds: const [ProfileKind.webSocket]);
-
-      await tester.enterText(_key('add-profile-url'), 'nope');
+      await tester.enterText(_key('add-profile-name'), 'Box');
+      await tester.enterText(_key('add-profile-url'), 'ws://box:7420');
+      await tester.tap(_key('add-profile-token-env'));
       await tester.pump();
 
-      expect(_enabled(tester, 'add-profile-test'), isFalse);
-      expect(find.text('Use ws:// or wss:// with a host.'), findsOneWidget);
+      expectNoCheck(tester);
+      expect(
+        find.descendant(
+          of: _key('add-profile-save'),
+          matching: find.text('Save'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('"Profile saved" has no mark about a check', (tester) async {
+      await openDialog(tester);
+      await tester.enterText(_key('add-profile-name'), 'Dev');
+      await tester.pump();
+      await tester.tap(_key('add-profile-save'));
+      await tester.pumpAndSettle();
+
+      expect(_savedBarText(tester), endsWith('Added to profiles.json as dev'));
+      expect(find.textContaining('Not tested'), findsNothing);
+      expect(find.textContaining('marked'), findsNothing);
+    });
+
+    testWidgets('"Profile saved" with "Use by default" names it after the id', (
+      tester,
+    ) async {
+      await openDialog(tester);
+      await tester.enterText(_key('add-profile-name'), 'Dev2');
+      await tester.tap(_key('add-profile-use-by-default'));
+      await tester.pump();
+      await tester.tap(_key('add-profile-save'));
+      await tester.pumpAndSettle();
+
+      expect(
+        _savedBarText(tester),
+        endsWith('Added to profiles.json as dev2 · used by default'),
+      );
+      expect(find.textContaining('Not tested'), findsNothing);
     });
   });
 
@@ -578,8 +581,8 @@ void main() {
   });
 
   group('save', () {
-    testWidgets('Save without test writes the profile and shows "Profile '
-        'saved" with "Not tested"; Done closes', (tester) async {
+    testWidgets('Save writes the profile and shows "Profile saved"; Done '
+        'closes', (tester) async {
       await openDialog(tester);
       await tester.enterText(_key('add-profile-name'), 'Build box');
       await tester.pump();
@@ -595,7 +598,7 @@ void main() {
         find.textContaining('Added to profiles.json as build-box'),
         findsOneWidget,
       );
-      expect(find.textContaining('marked "Not tested"'), findsOneWidget);
+      expect(find.textContaining('Not tested'), findsNothing);
       expect(
         find.text(
           'The running agent is unchanged. Select it with Use in the profile '
@@ -615,12 +618,11 @@ void main() {
       expect(_key('add-profile-saved'), findsNothing);
     });
 
-    testWidgets('after a successful test the screen has no "Not tested"; '
-        '"Use by default" is written and named', (tester) async {
+    testWidgets('"Use by default" is written and named on the saved screen', (
+      tester,
+    ) async {
       await openDialog(tester);
       await tester.enterText(_key('add-profile-name'), 'Build box');
-      await tester.tap(_key('add-profile-test'));
-      await settleProbe(tester);
       await tester.tap(_key('add-profile-use-by-default'));
       await tester.pump();
 
@@ -754,56 +756,6 @@ void main() {
 
       expect(_key('add-profile-saved'), findsNothing);
       expect(_text(tester, 'add-profile-name'), '');
-    });
-  });
-
-  group('plaintext confirmation before Test connection (2026-11-05)', () {
-    testWidgets('ws:// to another machine with a token: "Test connection" '
-        'shows the same bar with "Test anyway"; nothing is sent before it', (
-      tester,
-    ) async {
-      await openDialog(
-        tester,
-        kinds: const [ProfileKind.webSocket],
-        environment: const {'CODELAB_AGENT_TOKEN': 'sk-test-leak'},
-      );
-      await tester.enterText(_key('add-profile-url'), 'ws://box:7420/acp');
-      await tester.tap(_key('add-profile-token-env'));
-      await tester.pump();
-
-      await tester.tap(_key('add-profile-test'));
-      await tester.pumpAndSettle();
-
-      expect(_key('add-profile-unencrypted'), findsOneWidget);
-      expect(
-        find.textContaining(
-          'The token for ws://box:7420 will travel in clear text. Use wss:// '
-          'if the host supports it.',
-        ),
-        findsOneWidget,
-      );
-      expect(_key('add-profile-save-anyway'), findsNothing);
-      expect(wsOpened, 0);
-      expect(_key('add-profile-probe-result'), findsNothing);
-
-      await tester.tap(_key('add-profile-test-anyway'));
-      await settleProbe(tester);
-
-      expect(wsOpened, 1);
-      expect(_key('add-profile-unencrypted'), findsNothing);
-      expect(_key('add-profile-probe-result'), findsOneWidget);
-    });
-
-    testWidgets('without a token the probe starts at once', (tester) async {
-      await openDialog(tester, kinds: const [ProfileKind.webSocket]);
-      await tester.enterText(_key('add-profile-url'), 'ws://box:7420');
-      await tester.pump();
-
-      await tester.tap(_key('add-profile-test'));
-      await settleProbe(tester);
-
-      expect(_key('add-profile-unencrypted'), findsNothing);
-      expect(wsOpened, 1);
     });
   });
 
@@ -1060,8 +1012,8 @@ void main() {
       expect(_key('add-profile-saved'), findsOneWidget);
     });
 
-    testWidgets('ws:// to another machine asks before the probe and before '
-        'the save for a new token too', (tester) async {
+    testWidgets('ws:// to another machine asks before the save for a new '
+        'token too', (tester) async {
       await openWebSocket(tester, url: 'ws://10.0.0.5:8765/acp?t=x');
       await chooseNewToken(tester, _leak);
       expect(
@@ -1069,25 +1021,15 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(_key('add-profile-test'));
-      await tester.pump();
-      expect(_key('add-profile-test-anyway'), findsOneWidget);
-      expect(wsOpened, 0);
+      await tester.tap(_key('add-profile-save'));
+      await tester.pumpAndSettle();
+      expect(_key('add-profile-save-anyway'), findsOneWidget);
       expect(
         find.textContaining(
           'The token for ws://10.0.0.5:8765 will travel in clear text.',
         ),
         findsOneWidget,
       );
-
-      // Правка значения токена снимает вопрос.
-      await tester.enterText(_key('add-profile-token-new-value'), 'other');
-      await tester.pump();
-      expect(_key('add-profile-test-anyway'), findsNothing);
-
-      await tester.tap(_key('add-profile-save'));
-      await tester.pumpAndSettle();
-      expect(_key('add-profile-save-anyway'), findsOneWidget);
       expect(store.profiles, isEmpty);
     });
 
@@ -1175,10 +1117,8 @@ void main() {
   });
 
   group('in the app', () {
-    testWidgets('"Add profile" opens the dialog; saving adds the row with '
-        '"Not tested" and does not connect; Esc leaves the file alone', (
-      tester,
-    ) async {
+    testWidgets('"Add profile" opens the dialog; saving adds the row '
+        'and does not connect; Esc leaves the file alone', (tester) async {
       final binding = CodeLabTestBinding(
         profileStore: store,
         stdioDefault: false,
@@ -1215,74 +1155,8 @@ void main() {
 
       expect(store.profiles.single.id, 'build-box');
       expect(_key('connection-profile-row-build-box'), findsOneWidget);
-      expect(
-        find.descendant(
-          of: _key('connection-profile-row-build-box'),
-          matching: find.text('Not tested'),
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Not tested'), findsNothing);
       expect(find.text('Current'), findsNothing);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
-    });
-
-    testWidgets('Add another then Cancel: every profile saved in the dialog '
-        'gets its own mark, tested or "Not tested" (M1)', (tester) async {
-      final binding = CodeLabTestBinding(
-        profileStore: store,
-        stdioDefault: false,
-        environment: const {'HOME': '/home/u'},
-        settingsPages: const SettingsPages(
-          available: {SettingsPage.connection},
-        ),
-        stdioTransportFactory: (_) => FakeAcpTransport(),
-        webSocketTransportFactory: (_) => FakeAcpTransport(),
-      );
-      await tester.pumpWidget(
-        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
-      );
-      await tester.pump();
-      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-      await tester.pumpAndSettle();
-
-      await tester.tap(_key('connection-add-profile'));
-      await tester.pumpAndSettle();
-      await tester.enterText(_key('add-profile-name'), 'First');
-      await tester.pump();
-      await tester.tap(_key('add-profile-test'));
-      for (
-        var i = 0;
-        i < 100 && _key('add-profile-probe-result').evaluate().isEmpty;
-        i++
-      ) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 10)),
-        );
-        await tester.pump(const Duration(milliseconds: 50));
-      }
-      await tester.pumpAndSettle();
-      await tester.tap(_key('add-profile-save'));
-      await tester.pumpAndSettle();
-      await tester.tap(_key('add-profile-add-another'));
-      await tester.pumpAndSettle();
-      await tester.enterText(_key('add-profile-name'), 'Second');
-      await tester.pump();
-      await tester.tap(_key('add-profile-save'));
-      await tester.pumpAndSettle();
-      await tester.tap(_key('add-profile-add-another'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-
-      expect(store.profiles.map((p) => p.id), ['first', 'second']);
-      Finder notTested(String id) => find.descendant(
-        of: _key('connection-profile-row-$id'),
-        matching: find.text('Not tested'),
-      );
-      expect(notTested('first'), findsNothing);
-      expect(notTested('second'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await closeCodeLabRootScope();

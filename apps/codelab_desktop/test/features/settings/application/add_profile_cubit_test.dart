@@ -5,15 +5,11 @@
 //
 // Проверяется то, что видит пользователь и что остаётся на диске: состояния
 // формы, записанный профиль, ключ `shared_preferences`, события журнала.
-// Проверка подключения идёт через настоящий `ProfileProbe` на
-// `FakeAcpTransport`: порядок событий задаётся явно, без таймеров.
+// Проверки подключения у Cubit-а нет (change `remove-test-connection`, D1):
+// «Save» только валидирует черновик локально и пишет профиль.
 
 import 'dart:async';
 
-import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
-    show Implementation;
-import 'package:codelab_acp_testing/codelab_acp_testing.dart';
-import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/core/platform/connection_preferences.dart';
 import 'package:codelab_desktop/features/settings/application/add_profile_cubit.dart';
@@ -101,56 +97,18 @@ void main() {
   late _Store store;
   late FakeProfileSecrets secrets;
   late RecordingLogger logger;
-  late List<FakeAcpTransport> stdioTransports;
-  late List<StdioAcpTransportConfig> stdioConfigs;
-  late FakeAcpTransport Function() nextStdio;
-  late FakeAcpTransport wsTransport;
-  ProbeFailureClassifier? classifier;
-  var wsFactoryFails = false;
-
-  /// Сколько раз probe открыл WebSocket-транспорт: до подтверждения токен не
-  /// должен уйти, то есть транспорт не открывается.
-  var wsOpened = 0;
-
-  /// Токены, с которыми probe открывал WebSocket (в памяти теста).
-  late List<String?> wsTokens;
-
-  /// Папка проекта окна; `null` — проект не выбран (D7).
-  String? projectFolder = '/work';
-
   AddProfileCubit build({
     Map<String, String> environment = const {},
     List<ProfileKind> kinds = const [ProfileKind.stdio, ProfileKind.webSocket],
     ConnectionPreferences preferences =
         const SharedPreferencesConnectionPreferences(),
   }) {
-    final probe = ProfileProbe(
-      resolvers: [
-        ConfigTransportResolver(
-          stdio: (config) {
-            stdioConfigs.add(config);
-            final transport = nextStdio();
-            stdioTransports.add(transport);
-            return transport;
-          },
-          webSocket: (config) {
-            wsOpened++;
-            wsTokens.add(config.token);
-            return wsFactoryFails ? throw StateError('ws failed') : wsTransport;
-          },
-          secrets: ProfileSecretSource(environment, stored: secrets),
-        ),
-      ],
-      classifier: classifier,
-    );
     final cubit = AddProfileCubit(
       store: store,
       openSecrets: () async => secrets,
       preferences: preferences,
-      probe: probe,
       kinds: kinds,
       environment: environment,
-      projectDirectory: () => projectFolder,
       logger: logger,
     );
     addTearDown(cubit.close);
@@ -217,135 +175,6 @@ void main() {
     store = _Store([_dev]);
     secrets = FakeProfileSecrets();
     logger = RecordingLogger();
-    stdioTransports = [];
-    stdioConfigs = [];
-    nextStdio = FakeAcpTransport.new;
-    classifier = null;
-    wsFactoryFails = false;
-    wsOpened = 0;
-    projectFolder = '/work';
-    wsTokens = [];
-    wsTransport = FakeAcpTransport();
-  });
-
-  group('probe text (3.8b, D12)', () {
-    test('Command not found names the Command field, never the arguments '
-        'or env', () async {
-      classifier = (_) => const CommandNotFound();
-      nextStdio = () => throw StateError('no such file $_leak');
-      final cubit = await started();
-      fillStdio(cubit);
-      cubit
-        ..setCommand('missing-agent')
-        ..setArgs('--token $_leak')
-        ..setEnv('API_URL=$_leak');
-
-      await cubit.testConnection();
-
-      expect(formOf(cubit).probeText, 'Command not found: missing-agent');
-      expect(logger.entries.toString(), isNot(contains(_leak)));
-    });
-
-    test('Unreachable shows the text of its reason; the transport message '
-        'with the marker stays out of the form and the log', () async {
-      classifier = (_) => Unreachable(
-        'refused wss://u:p@devbox:7420/acp?t=$_leak',
-        reason: UnreachableReason.connectionRefused,
-      );
-      wsFactoryFails = true;
-      final cubit = await started();
-      fillWebSocket(cubit);
-
-      await cubit.testConnection();
-
-      expect(formOf(cubit).probeText, 'Unreachable: connection refused');
-      expect(logger.entries.toString(), isNot(contains(_leak)));
-    });
-
-    test('HTTP status reaches the text', () async {
-      classifier = (_) => const Unreachable(
-        'x',
-        reason: UnreachableReason.httpStatus,
-        statusCode: 503,
-      );
-      wsFactoryFails = true;
-      final cubit = await started();
-      fillWebSocket(cubit);
-
-      await cubit.testConnection();
-
-      expect(formOf(cubit).probeText, 'Unreachable: HTTP 503');
-    });
-
-    test('Unauthorized with a token from a set variable says the token was '
-        'rejected', () async {
-      classifier = (_) => const Unauthorized();
-      wsFactoryFails = true;
-      final cubit = await started(
-        environment: const {'CODELAB_AGENT_TOKEN': _leak},
-      );
-      fillWebSocket(cubit);
-      cubit.selectTokenEnv();
-
-      await cubit.testConnection();
-
-      expect(
-        formOf(cubit).probeText,
-        'Unauthorized: the agent rejected the token',
-      );
-      expect(formOf(cubit).probeText, isNot(contains(_leak)));
-    });
-
-    test('Unauthorized with "No token" says the agent requires one', () async {
-      classifier = (_) => const Unauthorized();
-      wsFactoryFails = true;
-      final cubit = await started();
-      fillWebSocket(cubit);
-
-      await cubit.testConnection();
-
-      expect(
-        formOf(cubit).probeText,
-        'Unauthorized: the agent requires a token',
-      );
-    });
-
-    test('Unauthorized with a variable that is not set was sent without a '
-        'token: the agent requires one', () async {
-      classifier = (_) => const Unauthorized();
-      wsFactoryFails = true;
-      final cubit = await started();
-      fillWebSocket(cubit);
-      cubit.selectTokenEnv();
-
-      await cubit.testConnection();
-
-      expect(
-        formOf(cubit).probeText,
-        'Unauthorized: the agent requires a token',
-      );
-    });
-
-    test('Reachable shows latency and the agent', () async {
-      final cubit = await started();
-      fillStdio(cubit);
-
-      await cubit.testConnection();
-
-      expect(formOf(cubit).probeText, startsWith('Reachable · '));
-      expect(formOf(cubit).probeText, contains(' ms'));
-    });
-
-    test('any edit clears the text with the outcome', () async {
-      final cubit = await started();
-      fillStdio(cubit);
-      await cubit.testConnection();
-      expect(formOf(cubit).probeText, isNotNull);
-
-      cubit.setCommand('other');
-
-      expect(formOf(cubit).probeText, isNull);
-    });
   });
 
   group('profiles file in the subtitle (D20)', () {
@@ -354,10 +183,8 @@ void main() {
         store: store,
         openSecrets: () async => secrets,
         preferences: const SharedPreferencesConnectionPreferences(),
-        probe: ProfileProbe(resolvers: const []),
         kinds: const [ProfileKind.stdio],
         environment: env,
-        projectDirectory: () => '/work',
         profilesPath: path,
       );
       addTearDown(cubit.close);
@@ -454,15 +281,14 @@ void main() {
     });
 
     group('errors appear only for fields the user touched', () {
-      test('switching to WebSocket shows no error, yet Save and Test stay '
-          'blocked by validation', () async {
+      test('switching to WebSocket shows no error, yet Save stays blocked '
+          'by validation', () async {
         final cubit = await started();
 
         cubit.selectKind(ProfileKind.webSocket);
 
         expect(formOf(cubit).errors, isEmpty);
         expect(formOf(cubit).canSave, isFalse);
-        expect(formOf(cubit).canTest, isFalse);
       });
 
       test('typing in one field shows only its own error', () async {
@@ -500,20 +326,6 @@ void main() {
         );
         expect(store.saves, 0);
       });
-
-      test(
-        'touching a field keeps a running probe and a confirmation',
-        () async {
-          final cubit = await started();
-          fillStdio(cubit);
-          await cubit.testConnection();
-          final probe = formOf(cubit).probe;
-
-          cubit.touchField(ProfileDraftField.command);
-
-          expect(formOf(cubit).probe, probe);
-        },
-      );
     });
 
     test('a secret-like env key blocks saving; the value is never shown or '
@@ -556,7 +368,6 @@ void main() {
         formOf(cubit).errors[ProfileDraftField.url],
         'Use ws:// or wss:// with a host.',
       );
-      expect(formOf(cubit).canTest, isFalse);
     });
 
     test('ws:// to another machine gives the warning but does not block '
@@ -631,333 +442,110 @@ void main() {
     });
   });
 
-  group('test connection', () {
-    test('Editing → Probing → Editing with the outcome; the label of the '
-        'save button follows the result', () async {
-      wsTransport = FakeAcpTransport()
-        ..initializeAgentInfo = const Implementation(
-          name: 'scripted',
-          version: '1.2.3',
-        );
+  group('save without a probe (remove-test-connection, D1, D4, D6)', () {
+    List<String> probeEvents() => [
+      for (final entry in logger.entries)
+        if ((entry['event']! as String).startsWith('connection_profile.probe_'))
+          entry['event']! as String,
+    ];
+
+    test('a WebSocket profile with a stored secret is written without any '
+        'secret read (the cubit has no transport at all)', () async {
+      secrets = FakeProfileSecrets(values: {'codelab/ws-ci': _leak});
       final cubit = await started();
-      fillWebSocket(cubit);
-      expect(formOf(cubit).saveLabel, 'Save without test');
-      final seen = record(cubit);
-
-      await cubit.testConnection();
-      // Подписчик потока получает состояния асинхронно.
-      await pumpEventQueue();
-
-      expect(seen.map((s) => s.runtimeType), [Probing, Editing]);
-      expect((seen.first as Probing).probeId, 1);
-      expect(formOf(cubit).probe, isA<Reachable>());
-      expect(formOf(cubit).saveLabel, 'Save');
-      expect(events('connection_profile.probe_started'), ['info']);
-      expect(events('connection_profile.probe_finished'), ['info']);
-      expect(eventOf('connection_profile.probe_started')['type'], 'websocket');
-      expect(
-        eventOf('connection_profile.probe_finished')['outcome'],
-        isNotNull,
-      );
-    });
-
-    test('editing a field drops the previous result: Save becomes '
-        '"Save without test" again', () async {
-      final cubit = await started();
-      fillWebSocket(cubit);
-      await cubit.testConnection();
-      expect(formOf(cubit).saveLabel, 'Save');
-
-      cubit.setUrl('wss://other:1');
-
-      expect(formOf(cubit).probe, isNull);
-      expect(formOf(cubit).saveLabel, 'Save without test');
-    });
-
-    test('is not started for an invalid address or command', () async {
-      final cubit = await started();
-      fillWebSocket(cubit, url: 'nope');
-
-      await cubit.testConnection();
-
-      expect(cubit.state, isA<Editing>());
-      expect(events('connection_profile.probe_started'), isEmpty);
-    });
-
-    test('works while the name is still empty: only the fields the agent '
-        'needs are checked', () async {
-      final cubit = await started();
-      cubit.setUrl('wss://devbox:7420');
-      cubit.selectKind(ProfileKind.webSocket);
-      expect(formOf(cubit).canTest, isTrue);
-
-      await cubit.testConnection();
-
-      expect(formOf(cubit).probe, isA<Reachable>());
-    });
-
-    test('a stdio probe starts in the project folder and sends only '
-        'initialize', () async {
-      final cubit = await started();
-      fillStdio(cubit);
-
-      await cubit.testConnection();
-
-      expect(stdioConfigs.single.cwd, '/work');
-      expect(stdioConfigs.single.command, 'codelab-agent');
-      final methods = [
-        for (final message in stdioTransports.single.sentMessages)
-          message.toString(),
-      ];
-      expect(methods, hasLength(1));
-    });
-
-    test('without a project a stdio probe starts without the project folder '
-        'and still sends only initialize (D7)', () async {
-      projectFolder = null;
-      final cubit = await started();
-      fillStdio(cubit);
-      expect(formOf(cubit).draft.runInProjectDirectory, isTrue);
-
-      await cubit.testConnection();
-
-      expect(stdioConfigs.single.cwd, isNull);
-      expect(stdioTransports.single.sentMessages, hasLength(1));
-      // Флажок профиля формы не меняется: подмена касается только проверки.
-      expect(formOf(cubit).draft.runInProjectDirectory, isTrue);
-    });
-
-    test('without a project a WebSocket probe is not changed (D7)', () async {
-      projectFolder = null;
-      final cubit = await started();
-      fillWebSocket(cubit);
-
-      await cubit.testConnection();
-
-      expect(formOf(cubit).probe, isA<Reachable>());
-      expect(wsOpened, 1);
-    });
-
-    test('a new edit during a probe discards its outcome with '
-        'probe_discarded and closes the transport', () async {
-      nextStdio = () => FakeAcpTransport()..autoRespondToInitialize = false;
-      final cubit = await started();
-      fillStdio(cubit);
-      unawaited(cubit.testConnection());
-      await pumpEventQueue();
-      expect(cubit.state, isA<Probing>());
-
-      cubit.setCommand('other-agent');
-      await pumpEventQueue();
-
-      expect(cubit.state, isA<Editing>());
-      expect(formOf(cubit).probe, isNull);
-      expect(stdioTransports.single.state, AcpTransportState.closed);
-      expect(events('connection_profile.probe_discarded'), ['debug']);
-      expect(eventOf('connection_profile.probe_discarded')['operation_id'], 1);
-      expect(events('connection_profile.probe_finished'), isEmpty);
-    });
-
-    test('a repeated probe gets the next number; the outcome of the first '
-        'does not change the form', () async {
-      var attempt = 0;
-      nextStdio = () => attempt++ == 0
-          ? (FakeAcpTransport()..autoRespondToInitialize = false)
-          : FakeAcpTransport();
-      final cubit = await started();
-      fillStdio(cubit);
-      unawaited(cubit.testConnection());
-      await pumpEventQueue();
-      final first = (cubit.state as Probing).probeId;
-
-      await cubit.testConnection();
-      await pumpEventQueue();
-
-      expect(first, 1);
-      expect(cubit.state, isA<Editing>());
-      expect(formOf(cubit).probe, isA<Reachable>());
-      expect(events('connection_profile.probe_discarded'), ['debug']);
-      expect(eventOf('connection_profile.probe_discarded')['operation_id'], 1);
-      expect(
-        logger.entries
-            .where((e) => e['event'] == 'connection_profile.probe_finished')
-            .map((e) => e['operation_id']),
-        [2],
-      );
-    });
-
-    test('closing the dialog cancels the probe: the transport is closed and '
-        'the outcome is discarded', () async {
-      nextStdio = () => FakeAcpTransport()..autoRespondToInitialize = false;
-      final cubit = await started();
-      fillStdio(cubit);
-      unawaited(cubit.testConnection());
-      await pumpEventQueue();
-      expect(cubit.state, isA<Probing>());
-
-      await cubit.close();
-      await pumpEventQueue();
-
-      expect(stdioTransports.single.state, AcpTransportState.closed);
-      expect(events('connection_profile.probe_discarded'), ['debug']);
-      expect(events('connection_profile.probe_finished'), isEmpty);
-    });
-  });
-
-  group('plaintext confirmation before Test connection (user decision '
-      '2026-11-05)', () {
-    const env = {'CODELAB_AGENT_TOKEN': _leak};
-
-    test('ws:// to another machine with a token asks first; the token does '
-        'not leave until "Test anyway"', () async {
-      final cubit = await started(environment: env);
-      fillWebSocket(cubit, url: 'ws://devbox:7420/acp?t=1');
-      cubit.selectTokenEnv();
-
-      await cubit.testConnection();
-
-      expect(cubit.state, isA<ConfirmingPlaintextProbe>());
-      expect(wsOpened, 0);
-      final message = (cubit.state as ConfirmingPlaintextProbe).message;
-      expect(
-        message,
-        'The token for ws://devbox:7420 will travel in clear text. Use '
-        'wss:// if the host supports it.',
-      );
-      for (final secret in const ['u:p', '/acp', 't=', _leak]) {
-        expect(message, isNot(contains(secret)), reason: secret);
-      }
-
-      await cubit.confirmPlaintextProbe();
-
-      expect(wsOpened, 1);
-      expect(cubit.state, isA<Editing>());
-      expect(formOf(cubit).probe, isA<Reachable>());
-    });
-
-    test(
-      'without a token or to a local host the probe starts at once',
-      () async {
-        final cubit = await started(environment: env);
-        fillWebSocket(cubit, url: 'ws://devbox:7420');
-        await cubit.testConnection();
-        expect(wsOpened, 1);
-        expect(cubit.state, isA<Editing>());
-
-        cubit
-          ..setUrl('ws://localhost:7420')
-          ..selectTokenEnv();
-        await cubit.testConnection();
-        expect(wsOpened, 2);
-      },
-    );
-
-    test(
-      'a new URL or token asks again; an edit cancels the question',
-      () async {
-        final cubit = await started(environment: env);
-        fillWebSocket(cubit, url: 'ws://devbox:7420');
-        cubit.selectTokenEnv();
-        await cubit.testConnection();
-        await cubit.confirmPlaintextProbe();
-        expect(wsOpened, 1);
-
-        // Те же URL и токен: повторная проверка не спрашивает.
-        await cubit.testConnection();
-        expect(wsOpened, 2);
-
-        cubit.setUrl('ws://other:7420');
-        await cubit.testConnection();
-        expect(cubit.state, isA<ConfirmingPlaintextProbe>());
-        cubit.setTokenEnvName('OTHER_TOKEN');
-        expect(cubit.state, isA<Editing>());
-        await cubit.confirmPlaintextProbe();
-        expect(wsOpened, 2);
-
-        await cubit.testConnection();
-        expect(cubit.state, isA<ConfirmingPlaintextProbe>());
-      },
-    );
-
-    test('a confirmed Test also covers Save of the same URL and token, and '
-        'the other way round', () async {
-      final cubit = await started(environment: env);
-      fillWebSocket(cubit, url: 'ws://devbox:7420');
-      cubit.selectTokenEnv();
-      await cubit.testConnection();
-      await cubit.confirmPlaintextProbe();
+      fillWebSocket(cubit, label: 'Local', url: 'ws://localhost:8765');
+      cubit
+        ..selectTokenStored()
+        ..setStoredSecret('codelab/ws-ci');
 
       await cubit.save();
 
       expect(cubit.state, isA<Saved>());
-      expect(store.saves, 1);
-
-      final other = await started(environment: env);
-      fillWebSocket(other, label: 'Other', url: 'ws://devbox:7420');
-      other.selectTokenEnv();
-      await other.save();
-      expect(other.state, isA<ConfirmingPlaintext>());
-      await other.confirmPlaintext();
-      expect(other.state, isA<Saved>());
-
-      // «Add another» начинает новый профиль: прежнее подтверждение не
-      // переносится, даже при том же URL и токене.
-      other
-        ..addAnother()
-        ..setLabel('Third')
-        ..setUrl('ws://devbox:7420')
-        ..selectTokenEnv();
-      await other.testConnection();
-      expect(other.state, isA<ConfirmingPlaintextProbe>());
-      expect(wsOpened, 1);
+      expect(secrets.calls.where((c) => c.startsWith('read:')), isEmpty);
+      expect(probeEvents(), isEmpty);
+      final event = eventOf('connection_profile.saved');
+      expect(event['type'], 'websocket');
+      expect(event.containsKey('tested'), isFalse);
+      expect(logger.entries.toString(), isNot(contains(_leak)));
     });
 
-    test('A -> B -> A asks again: any edit of the URL or the token drops the '
-        'confirmation', () async {
-      final cubit = await started(environment: env);
-      fillWebSocket(cubit, url: 'ws://devbox:7420');
-      cubit.selectTokenEnv();
-      await cubit.testConnection();
-      await cubit.confirmPlaintextProbe();
+    test('a stdio profile with a missing command is written: only the '
+        'local draft rules apply', () async {
+      final cubit = await started();
+      fillStdio(cubit, label: 'Ghost');
+      cubit.setCommand('/nonexistent/agent');
 
-      cubit
-        ..setUrl('ws://other:7420')
-        ..setUrl('ws://devbox:7420');
-      await cubit.testConnection();
-      expect(cubit.state, isA<ConfirmingPlaintextProbe>());
-      await cubit.confirmPlaintextProbe();
-
-      cubit
-        ..selectTokenNone()
-        ..selectTokenEnv();
       await cubit.save();
-      expect(cubit.state, isA<ConfirmingPlaintext>());
+
+      expect(cubit.state, isA<Saved>());
+      expect(probeEvents(), isEmpty);
+      final event = eventOf('connection_profile.saved');
+      expect(event['type'], 'stdio');
+      expect(event.containsKey('tested'), isFalse);
+      expect(
+        (store.profiles.last as StdioProfile).command,
+        '/nonexistent/agent',
+      );
     });
 
-    test(
-      'a Save confirmed without a token does not cover a probe with one',
-      () async {
-        final cubit = await started(environment: env);
-        fillWebSocket(cubit, url: 'ws://devbox:7420');
+    group('ws:// is confirmed only on save (D5)', () {
+      const remote = 'ws://devbox:7420';
+
+      test('after "Save anyway" and a write failure a second Save writes '
+          'without the panel', () async {
+        final cubit = await started();
+        fillWebSocket(cubit, url: remote);
         await cubit.save();
+        expect(cubit.state, isA<ConfirmingPlaintext>());
+        store.failSave = StateError('disk');
         await cubit.confirmPlaintext();
+        expect(cubit.state, isA<SaveFailed>());
+
+        store.failSave = null;
+        await cubit.save();
+
+        expect(cubit.state, isA<Saved>());
+        expect(store.profiles.map((p) => p.id), contains('devbox-2'));
+      });
+
+      test('a URL edited and restored after a failure asks again', () async {
+        final cubit = await started();
+        fillWebSocket(cubit, url: remote);
+        await cubit.save();
+        store.failSave = StateError('disk');
+        await cubit.confirmPlaintext();
+        expect(cubit.state, isA<SaveFailed>());
+        store.failSave = null;
+
         cubit
-          ..addAnother()
-          ..setLabel('Again')
-          ..setUrl('ws://devbox:7420')
-          ..selectTokenEnv();
+          ..setUrl('ws://devbox:7421')
+          ..setUrl(remote);
+        await cubit.save();
 
-        await cubit.testConnection();
+        expect(cubit.state, isA<ConfirmingPlaintext>());
+      });
 
-        expect(cubit.state, isA<ConfirmingPlaintextProbe>());
-        expect(wsOpened, 0);
-      },
-    );
+      test('a token variable renamed after a failure asks again', () async {
+        final cubit = await started(environment: const {'A': 'x', 'B': 'y'});
+        fillWebSocket(cubit, url: remote);
+        cubit
+          ..selectTokenEnv()
+          ..setTokenEnvName('A');
+        await cubit.save();
+        store.failSave = StateError('disk');
+        await cubit.confirmPlaintext();
+        store.failSave = null;
+
+        cubit.setTokenEnvName('B');
+        await cubit.save();
+
+        expect(cubit.state, isA<ConfirmingPlaintext>());
+      });
+    });
   });
 
   group('save', () {
-    test('Save without test writes the profile; the row will say "Not '
-        'tested"; the default stays untouched', () async {
+    test('Save writes the profile; the default stays untouched', () async {
       final cubit = await started();
       fillStdio(cubit);
       final seen = record(cubit);
@@ -970,8 +558,6 @@ void main() {
       final saved = cubit.state as Saved;
       expect(saved.profileId, 'build-box');
       expect(saved.label, 'Build box');
-      expect(saved.tested, isFalse);
-      expect(saved.probe, isNull);
       expect(saved.useByDefault, isFalse);
       expect(store.profiles.map((p) => p.id), ['dev', 'build-box']);
       final profile = store.profiles.last as StdioProfile;
@@ -985,26 +571,22 @@ void main() {
       expect(event['profile_id'], 'build-box');
       expect(event['type'], 'stdio');
       expect(event['token'], 'none');
-      expect(event['tested'], false);
     });
 
-    test('Save after a successful test marks the profile as tested', () async {
+    test('a WebSocket profile with a variable token is written as a '
+        'reference to it', () async {
       final cubit = await started();
       fillWebSocket(cubit);
       cubit.selectTokenEnv();
-      await cubit.testConnection();
 
       await cubit.save();
 
-      final saved = cubit.state as Saved;
-      expect(saved.tested, isTrue);
-      expect(saved.probe, isA<Reachable>());
+      expect(cubit.state, isA<Saved>());
       final profile = store.profiles.last as WebSocketProfile;
       expect(profile.tokenRef, 'env:CODELAB_AGENT_TOKEN');
       final event = eventOf('connection_profile.saved');
       expect(event['type'], 'websocket');
       expect(event['token'], 'env');
-      expect(event['tested'], true);
     });
 
     test('"Use by default" writes codelab.connection.default_profile; '
@@ -1024,9 +606,6 @@ void main() {
         eventOf('connection_profile.default_changed')['profile_id'],
         'build-box',
       );
-      // Подключение окна — дело страницы: у Cubit-а диалога нет ни
-      // workspace, ни команд подключения.
-      expect(stdioTransports, isEmpty);
     });
 
     test('ws:// to another machine asks for confirmation first; nothing '
@@ -1227,44 +806,22 @@ void main() {
       );
     });
 
-    test('probe events carry the draft id, fixed at the start (N2)', () async {
-      final cubit = await started();
-      fillStdio(cubit, label: 'First');
-      await cubit.testConnection();
-      for (final name in const ['started', 'finished']) {
-        expect(
-          eventOf('connection_profile.probe_$name')['profile_id'],
+    test(
+      'every profile saved over the life of the dialog is kept (M1)',
+      () async {
+        final cubit = await started();
+        fillStdio(cubit, label: 'First');
+        await cubit.save();
+        cubit.addAnother();
+        cubit.setLabel('Second');
+        await cubit.save();
+
+        expect(cubit.savedProfiles.map((s) => s.profileId), [
           'first',
-        );
-      }
-
-      // Проверка с отброшенным исходом тоже называет id, взятый на старте.
-      nextStdio = () => FakeAcpTransport()..autoRespondToInitialize = false;
-      final pending = cubit.testConnection();
-      await pumpEventQueue();
-      cubit.setLabel('Renamed');
-      await pending;
-      expect(
-        eventOf('connection_profile.probe_discarded')['profile_id'],
-        'first',
-      );
-    });
-
-    test('every profile saved over the life of the dialog is kept with its '
-        'own probe outcome (M1)', () async {
-      final cubit = await started();
-      fillStdio(cubit, label: 'First');
-      await cubit.testConnection();
-      await cubit.save();
-      cubit.addAnother();
-      cubit.setLabel('Second');
-      await cubit.save();
-
-      final saved = cubit.savedProfiles;
-      expect(saved.map((s) => s.profileId), ['first', 'second']);
-      expect(saved[0].probe, isA<Reachable>());
-      expect(saved[1].probe, isNull);
-    });
+          'second',
+        ]);
+      },
+    );
 
     test('Add another returns to an empty form of the same type', () async {
       final cubit = await started();
@@ -1281,7 +838,6 @@ void main() {
       expect(formOf(cubit).draft.label, '');
       expect(formOf(cubit).draft.url, '');
       expect(formOf(cubit).useByDefault, isFalse);
-      expect(formOf(cubit).probe, isNull);
 
       // Новый id уже видит только что сохранённый профиль.
       fillWebSocket(cubit, label: 'Devbox 2');
@@ -1385,11 +941,9 @@ void main() {
     test('"Store a new token" is written before the profile; the profile '
         'holds only the reference', () async {
       final cubit = await newTokenForm();
-      await cubit.testConnection();
-      // Проверка не пишет в хранилище: токен идёт транспорту из памяти.
+      // До «Save» ничего не записано: токен лежит только в памяти формы.
       expect(secrets.values, isEmpty);
       expect(store.saves, 0);
-      expect(wsTokens, [_leak]);
 
       await cubit.save();
 
@@ -1424,24 +978,16 @@ void main() {
       expect(formOf(cubit).tokenKind, AddProfileTokenKind.newToken);
     });
 
-    test('"Use stored secret" writes only the profile; the probe reads the '
-        'secret the same way a connection does', () async {
+    test('"Use stored secret" writes only the profile and never reads the '
+        'secret value', () async {
       secrets = FakeProfileSecrets(
         values: {'codelab/profiles/ci/token': _leak},
       );
-      classifier = (_) => const Unauthorized();
-      wsFactoryFails = true;
       final cubit = await started();
       fillWebSocket(cubit, label: 'ci');
       cubit
         ..selectTokenStored()
         ..setStoredSecret('codelab/profiles/ci/token');
-
-      await cubit.testConnection();
-      expect(
-        formOf(cubit).probeText,
-        'Unauthorized: the agent rejected the token',
-      );
       secrets.calls.clear();
 
       await cubit.save();
@@ -1452,6 +998,7 @@ void main() {
             .tokenRef,
         'secret:codelab/profiles/ci/token',
       );
+      expect(secrets.calls.where((c) => c.startsWith('read:')), isEmpty);
       expect(secrets.calls.where((c) => c.startsWith('store:')), isEmpty);
       expect(secrets.calls.where((c) => c.startsWith('delete:')), isEmpty);
       expect(secrets.values, {'codelab/profiles/ci/token': _leak});
@@ -1461,29 +1008,6 @@ void main() {
       );
       expect(events('connection_profile.token_stored'), isEmpty);
       expect(logger.entries.toString(), isNot(contains(_leak)));
-    });
-
-    test('a secret that vanished from the store sends no token: the agent '
-        'requires one', () async {
-      secrets = FakeProfileSecrets(
-        values: {'codelab/profiles/ci/token': _leak},
-      );
-      classifier = (_) => const Unauthorized();
-      wsFactoryFails = true;
-      final cubit = await started();
-      fillWebSocket(cubit, label: 'ci');
-      cubit
-        ..selectTokenStored()
-        ..setStoredSecret('codelab/profiles/ci/token');
-      // Другой процесс удалил секрет, пока диалог был открыт.
-      secrets.values.remove('codelab/profiles/ci/token');
-
-      await cubit.testConnection();
-
-      expect(
-        formOf(cubit).probeText,
-        'Unauthorized: the agent requires a token',
-      );
     });
 
     test('an empty new token blocks saving; a name that cannot name a secret '
@@ -1612,8 +1136,8 @@ void main() {
     group('ws:// to another machine', () {
       const remote = 'ws://10.0.0.5:8765/acp?t=x';
 
-      test('a new token and a stored secret are confirmed before the probe '
-          'and before the save, like a variable', () async {
+      test('a new token and a stored secret are confirmed before the save, '
+          'like a variable', () async {
         secrets = FakeProfileSecrets(
           values: {'codelab/profiles/ci/token': 'x'},
         );
@@ -1623,29 +1147,19 @@ void main() {
           'ws:// to another machine: the token is sent unencrypted.',
         );
 
-        await cubit.testConnection();
-        expect(cubit.state, isA<ConfirmingPlaintextProbe>());
-        expect(wsOpened, 0);
-        expect(
-          (cubit.state as ConfirmingPlaintextProbe).message,
-          'The token for ws://10.0.0.5:8765 will travel in clear text. Use '
-          'wss:// if the host supports it.',
-        );
-        await cubit.confirmPlaintextProbe();
-        expect(wsOpened, 1);
-
-        // Одно подтверждение на пару «URL, токен»: «Save» не спрашивает.
         await cubit.save();
+        expect(cubit.state, isA<ConfirmingPlaintext>());
+        await cubit.confirmPlaintext();
         expect(cubit.state, isA<Saved>());
 
+        // Одно подтверждение на пару «URL, токен»: другой секрет — снова.
         cubit.addAnother();
         fillWebSocket(cubit, label: 'ci', url: remote);
         cubit
           ..selectTokenStored()
           ..setStoredSecret('codelab/profiles/ci/token');
-        await cubit.testConnection();
-        expect(cubit.state, isA<ConfirmingPlaintextProbe>());
-        expect(wsOpened, 1);
+        await cubit.save();
+        expect(cubit.state, isA<ConfirmingPlaintext>());
       });
 
       test(
@@ -1662,30 +1176,41 @@ void main() {
           cubit
             ..selectTokenStored()
             ..setStoredSecret('codelab/profiles/ci/token');
-          await cubit.testConnection();
-          await cubit.confirmPlaintextProbe();
-          expect(wsOpened, 1);
+          await cubit.save();
+          store.failSave = StateError('disk');
+          await cubit.confirmPlaintext();
+          expect(cubit.state, isA<SaveFailed>());
+          store.failSave = null;
 
-          cubit.setStoredSecret('codelab/profiles/dev/token');
-          await cubit.testConnection();
-          expect(cubit.state, isA<ConfirmingPlaintextProbe>());
-          await cubit.confirmPlaintextProbe();
-          expect(wsOpened, 2);
+          // Тот же секрет: подтверждение действует.
+          await cubit.save();
+          expect(cubit.state, isA<Saved>());
+          cubit.addAnother();
+          fillWebSocket(cubit, label: 'ci2', url: remote);
+          cubit
+            ..selectTokenStored()
+            ..setStoredSecret('codelab/profiles/dev/token');
+          await cubit.save();
+          expect(cubit.state, isA<ConfirmingPlaintext>());
+          store.failSave = StateError('disk');
+          await cubit.confirmPlaintext();
+          store.failSave = null;
 
           cubit
             ..selectTokenNew()
             ..setNewToken('first');
-          await cubit.testConnection();
-          expect(cubit.state, isA<ConfirmingPlaintextProbe>());
-          await cubit.confirmPlaintextProbe();
-          expect(wsOpened, 3);
+          await cubit.save();
+          expect(cubit.state, isA<ConfirmingPlaintext>());
+          store.failSave = StateError('disk');
+          await cubit.confirmPlaintext();
+          store.failSave = null;
 
           cubit
             ..setNewToken('second')
             ..setNewToken('first');
-          await cubit.testConnection();
+          await cubit.save();
           // Возврат к прежнему значению подтверждение не восстанавливает.
-          expect(cubit.state, isA<ConfirmingPlaintextProbe>());
+          expect(cubit.state, isA<ConfirmingPlaintext>());
         },
       );
 
@@ -1721,10 +1246,8 @@ void main() {
           return secrets;
         },
         preferences: const SharedPreferencesConnectionPreferences(),
-        probe: ProfileProbe(resolvers: const []),
         kinds: const [ProfileKind.webSocket],
         environment: const {},
-        projectDirectory: () => '/work',
       );
       expect(cubit.state, isA<OpeningSecrets>());
 
@@ -1755,10 +1278,8 @@ void main() {
           store: store,
           openSecrets: reopen,
           preferences: const SharedPreferencesConnectionPreferences(),
-          probe: ProfileProbe(resolvers: const []),
           kinds: const [ProfileKind.webSocket],
           environment: const {},
-          projectDirectory: () => '/work',
         );
         addTearDown(cubit.close);
         return cubit;
@@ -1850,8 +1371,7 @@ void main() {
           texts
             ..addAll(form.errors.values)
             ..add(form.warning ?? '')
-            ..add(form.newTokenHint)
-            ..add(form.probeText ?? '');
+            ..add(form.newTokenHint);
         }
         if (state case SaveFailed(:final message)) {
           texts.add(message);
@@ -1862,7 +1382,6 @@ void main() {
       cubit
         ..selectTokenNew()
         ..setNewToken(_leak);
-      await cubit.testConnection();
       await cubit.save();
       await pumpEventQueue();
 
@@ -1884,16 +1403,12 @@ void main() {
           texts
             ..addAll(form.errors.values)
             ..add(form.warning ?? '')
-            ..add(form.tokenNotice ?? '')
-            ..add(form.saveLabel);
-          texts.add(form.probeText ?? '');
+            ..add(form.tokenNotice ?? '');
         case Saved() || OpeningSecrets():
           break;
       }
       switch (state) {
-        case SaveFailed(:final message) ||
-            ConfirmingPlaintext(:final message) ||
-            ConfirmingPlaintextProbe(:final message):
+        case SaveFailed(:final message) || ConfirmingPlaintext(:final message):
           texts.add(message);
         default:
           break;
@@ -1909,7 +1424,6 @@ void main() {
       ..setUrl(url)
       ..selectTokenEnv()
       ..setTokenEnvName('DEVBOX_TOKEN');
-    await cubit.testConnection();
     await cubit.save();
     await pumpEventQueue();
 

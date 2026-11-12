@@ -2,7 +2,8 @@
 // `add-app-settings-shell`; spec app-settings «Диалог «Add connection
 // profile»», «Rename» и «Remove» профиля»; design.md D12–D14, D19) и токен в
 // хранилище секретов (задача 1.15 change `add-provider-setup-ui`; D13, D14,
-// §12.4.13).
+// §12.4.13). Проверки подключения в диалоге и в строке нет (задача 1.6 change
+// `remove-test-connection`): профиль проверяет «Use» и старт агента.
 //
 // В `feature/*` файл только компилируется (`fvm flutter analyze`); на
 // устройстве или симуляторе его запускает `release/<version>` (AGENTS.md
@@ -35,7 +36,7 @@ Future<void> _startSelectedAgent(WidgetTester tester) async {
   await ensureProject(tester, shellCubit);
 }
 
-/// Опрашивает кадрами до появления [finder]: проба и подключение идут через
+/// Опрашивает кадрами до появления [finder]: подключение идёт через
 /// настоящие процессы и сокеты, которые `pumpAndSettle` не ждёт.
 Future<void> _pumpUntil(
   WidgetTester tester,
@@ -63,8 +64,9 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'WebSocket agent with a token from env: Reachable, Save, the file keeps '
-    'only the reference, Remove of the active profile is unavailable',
+    'WebSocket agent with a token from env: Save, the file keeps only the '
+    'reference, Use and start give Connected, Remove of the active profile '
+    'is unavailable',
     (tester) async {
       await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
@@ -91,13 +93,12 @@ void main() {
         E2eAgent.webSocketTokenVariable,
       );
 
-      await tester.tap(_key('add-profile-test'));
-      await _pumpUntil(tester, _key('add-profile-probe-result'));
-      expect(find.textContaining('Reachable'), findsWidgets);
-
+      // «Save» без «Test connection»: кнопка называется «Save», проверки нет.
+      expect(_key('add-profile-test'), findsNothing);
       await tester.tap(_key('add-profile-save'));
       await tester.pumpAndSettle();
       expect(_key('add-profile-saved'), findsOneWidget);
+      expect(find.textContaining('Not tested'), findsNothing);
       await tester.tap(_key('add-profile-done'));
       await tester.pumpAndSettle();
 
@@ -114,11 +115,18 @@ void main() {
         isNot(contains(E2eWebSocketAgent.token)),
       );
 
-      // «Remove» у выбранного профиля недоступна.
+      // «Use» и выбор проекта стартуют агента с токеном из переменной
+      // окружения; «Remove» у выбранного профиля недоступна.
       await tester.tap(_key('connection-profile-use-devbox'));
       await tester.pump();
       await _startSelectedAgent(tester);
-      await _pumpUntil(tester, _key('connection-profile-status-devbox'));
+      await _pumpUntil(
+        tester,
+        find.descendant(
+          of: _key('connection-profile-status-devbox'),
+          matching: find.text('Connected'),
+        ),
+      );
       expect(
         tester
             .widget<CodeLabButton>(_key('connection-profile-remove-devbox'))
@@ -135,7 +143,7 @@ void main() {
 
   testWidgets(
     'WebSocket agent with "Store a new token": the token lies in the test '
-    'store, profiles.json keeps secret: and no value, Connect uses it',
+    'store, profiles.json keeps secret: and no value, Use and start read it',
     (tester) async {
       final secrets = await E2eAgent.current.openFileSecrets();
       await tester.pumpWidget(
@@ -165,11 +173,8 @@ void main() {
         E2eWebSocketAgent.token,
       );
 
-      // Проверка идёт с токеном из памяти формы, до записи в хранилище.
-      await tester.tap(_key('add-profile-test'));
-      await _pumpUntil(tester, _key('add-profile-probe-result'));
-      expect(find.textContaining('Reachable'), findsWidgets);
-
+      // Значение токена пишется в хранилище только при «Save».
+      expect(await secrets.read('codelab/profiles/devbox/token'), isNull);
       await tester.tap(_key('add-profile-save'));
       await tester.pumpAndSettle();
       expect(_key('add-profile-saved'), findsOneWidget);
@@ -224,8 +229,8 @@ void main() {
     skip: E2eAgent.current.skipWebSocketAgent,
   );
 
-  testWidgets('stdio with a missing command: "Command not found", saved as '
-      '"Not tested"', (tester) async {
+  testWidgets('stdio with a missing command: Save, Use and start give the '
+      '"Failed" badge, no "Not tested"', (tester) async {
     await tester.pumpWidget(E2eAgent.current.bootstrap());
     await tester.pumpAndSettle();
 
@@ -237,21 +242,24 @@ void main() {
     await _enter(tester, 'add-profile-name', 'Missing');
     await _enter(tester, 'add-profile-command', '/nonexistent/agent');
 
-    await tester.tap(_key('add-profile-test'));
-    await _pumpUntil(tester, _key('add-profile-probe-result'));
-    expect(find.text('Command not found: /nonexistent/agent'), findsOneWidget);
-
     await tester.tap(_key('add-profile-save'));
     await tester.pumpAndSettle();
     await tester.tap(_key('add-profile-done'));
     await tester.pumpAndSettle();
 
-    expect(
+    expect(_key('connection-profile-row-missing'), findsOneWidget);
+    expect(find.text('Not tested'), findsNothing);
+    expect(_key('connection-profile-test-missing'), findsNothing);
+
+    await tester.tap(_key('connection-profile-use-missing'));
+    await tester.pump();
+    await _startSelectedAgent(tester);
+    await _pumpUntil(
+      tester,
       find.descendant(
-        of: _key('connection-profile-row-missing'),
-        matching: find.text('Not tested'),
+        of: _key('connection-profile-status-missing'),
+        matching: find.text('Failed'),
       ),
-      findsOneWidget,
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
