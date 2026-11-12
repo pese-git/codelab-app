@@ -1419,6 +1419,37 @@ void main() {
       },
     );
 
+    // Задача 2.10 (D11, «`url_launcher` (Q16)»): открытие адреса — нативный
+    // API, зависимость разрешена только в `lib/core/platform/`.
+    test('reports url_launcher outside core/platform/', () {
+      const import = "import 'package:url_launcher/url_launcher.dart';\n";
+      final tmp = tmpDesktop('guard_term_url_', {
+        'core/platform/external_link_opener.dart': import,
+        'features/terminal/presentation/terminal_pane.dart': import,
+        'features/terminal/application/terminal_tabs_cubit.dart': import,
+      });
+
+      final violations = scan(
+        tmp.path,
+        desktopRuleFor('package:url_launcher/'),
+      );
+
+      expect(violations, hasLength(2), reason: violations.join('\n'));
+      expect(
+        violations,
+        containsAll([
+          endsWith(
+            'lib/features/terminal/presentation/terminal_pane.dart:1 -> '
+            'package:url_launcher/url_launcher.dart',
+          ),
+          endsWith(
+            'lib/features/terminal/application/terminal_tabs_cubit.dart:1 -> '
+            'package:url_launcher/url_launcher.dart',
+          ),
+        ]),
+      );
+    });
+
     // Задача 2.0 (D11, правило 3): application терминала не знает Flutter.
     // Правила в rules.dart нет, пока нет каталога (задача 2.2) — тест красный
     // по причине «нет правила».

@@ -40,6 +40,7 @@ void main() {
   test('rejects other schemes before the platform is called', () async {
     for (final value in [
       'file:///etc/passwd',
+      'ssh://host/path',
       'javascript:alert(1)',
       'data:text/html,hi',
       'vscode://open',
