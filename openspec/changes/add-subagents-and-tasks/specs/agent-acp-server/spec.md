@@ -95,7 +95,7 @@
 
 | Событие ядра | Кадр |
 |---|---|
-| `TaskListChanged` | `session/update` `plan` со всем списком в порядке создания; у entry `content` = `subject`, `priority`, `status` и `_meta: {"codelab": {"agent": {"id", "owner", "blockedBy"}}}`; пустой список — `entries: []` (TSK-5) |
+| `TaskListChanged` | `session/update` `plan` со всем списком в порядке создания; у entry `content` = `subject`, `priority`, `status` и `_meta: {"codelab": {"task": {"id", "owner", "blockedBy"}}}`; пустой список — `entries: []` (TSK-5); так же — при `change.op == restore` (список новой ветки, D29) |
 | `ToolCallStarted(agent)` | `tool_call` с `kind: think`, `title` `Subagent <agent>: <description>` и `_meta.codelab.subagent: {"id", "type"}` (D28); то же — у `tool_call` вызова `agent` при реплее |
 | `ToolCallProgress(agent)` | `tool_call_update` с одним текстовым блоком строки прогресса, заменяющим предыдущий |
 | `ToolCallFinished(agent)` | `tool_call_update` со `status` и телом отчёта без обёртки `<subagent-report>` и без ограды; всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` из `SubagentReport` (с потомками, D24); при `failed` — ещё `failure` |
@@ -109,6 +109,10 @@
 #### Scenario: Список задач в ходе
 - **WHEN** модель вызывает `task_create` три раза, затем `task_update` первого пункта в `completed`, затем `task_list`
 - **THEN** клиент получает четыре `plan`, каждый со всем списком на момент операции и `_meta.codelab.task.id` у каждой entry; после `task_list` нового `plan` нет (фикстура `acp/prompt-task-plan`)
+
+#### Scenario: Список новой ветки
+- **WHEN** ядро публикует `TaskListChanged` с `op: restore` и пустым списком, затем — с `op: restore` и пунктами `#1`, `#4`
+- **THEN** клиент получает `plan` с `entries: []`, затем `plan` с двумя entries и `_meta.codelab.task.id` `"1"`, `"4"` (`acp_projection_exhaustive_test.dart`)
 
 #### Scenario: Вызов agent
 - **WHEN** модель вызывает `agent` с типом `explore`, ребёнок делает три вызова и сдаёт отчёт

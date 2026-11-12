@@ -272,7 +272,7 @@ final class SlashCommand {
 | `ToolCallFinished` | вызов завершён | `toolCallId`, `outcome`, `content`, `diffs` (по одному на файл), `spill?` (§17.4: `content` — фрагмент вынесенного результата) |
 | `ToolPairingRepaired` | payload запроса потребовал ремонта пар | отчёт о ремонте |
 | `StepEnded` | шаг завершён | ответ модели, результаты в порядке вызовов |
-| `TaskListChanged` | после change `add-subagents-and-tasks`: операция `task_*` или назначение пункта субагенту (`assign`) изменила список задач, до `ToolCallFinished` вызова (§17.16.5); до change — `PlanUpdated` от `update_plan` | `items` (весь список), `change` |
+| `TaskListChanged` | после change `add-subagents-and-tasks`: операция `task_*` или назначение пункта субагенту (`assign`) изменила список задач, до `ToolCallFinished` вызова (§17.16.5), или список восстановлен из новой ветки после `BranchChanged` (`op: restore`, без записи `task`, §17.16.6); до change — `PlanUpdated` от `update_plan` | `items` (весь список), `change` |
 | `ModeChanged`, `CommandsChanged` | смена режима, списка slash-команд | новое значение |
 | `ContextCompacted` | сжатие записано в журнал (§9) | `tokensBefore`, `tokensAfter` |
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | после MVP: эмитит `SubagentManager` сессии родителя, не цикл (§17.3.2) | идентификаторы ребёнка, снимок прогресса, итог |

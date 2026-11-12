@@ -285,16 +285,22 @@ switchBranch(targetId, summarize, cancel):
    если p.modeId ≠ текущий режим → append(mode_change текущего)
    для каждой опции, отличной от текущей → append(config_change)
 6. транскрипт Agent := buildLlmContext(...).messages        // как после сжатия, §9.8 шаг 11
-7. emit BranchChanged(leafId: rec.id, fromLeafId, reason); затем PlanUpdated с последним plan
-   новой ветки (или пустым списком) — до change add-subagents-and-tasks; после него список
-   задач ветки — свёртка buildTaskList (§17.16.6), а как TaskList и клиент получают его при
-   смене ветки, change пока не определяет
+7. emit BranchChanged(leafId: rec.id, fromLeafId, reason); затем список задач новой ветки
+   (только корневая сессия; §17.16.6 «Смена ветки», TSK-7):
+     (items, nextId) := buildTaskList(snapshot)           // nextId — по всему журналу (TSK-3)
+     await TaskList.restore(items, nextId, announce: до или после непуст
+                                              или в новой ветке есть task/plan)
+     announce → TaskListChanged(op: restore) → клиенту plan со всем списком
+   запись task не пишется (исключение TSK-1). До change add-subagents-and-tasks —
+   PlanUpdated с последним plan новой ветки (или пустым списком)
 8. вернуть BranchResult(rec.id, fromLeafId, status, modifiedFiles, otherEffects, written: true)
 ```
 
 Настройки сессии (модель, режим, опции) — свойство сессии, а не ветки: пользователь, сменивший
-модель, не ожидает, что перемотка вернёт старую. План, наоборот, — свойство ветки: он описывает
-работу, сделанную на этой ветке.
+модель, не ожидает, что перемотка вернёт старую. Список задач, наоборот, — свойство ветки: он
+описывает работу, сделанную на этой ветке (решение пользователя 2026-11-12, design.md change
+`add-subagents-and-tasks`, D29). Следование ветке — свойство журнальной реализации `TaskList`;
+будущая общая доска команды ветке не следует (§17.16.9).
 
 **Генерация сводки.** Используется суммаризатор сжатия (§9.7): тот же `StreamFunction` хоста,
 без инструментов, системный промпт `compaction/system.md`, сериализация региона и обрезка по
@@ -560,9 +566,12 @@ app, подключившийся к сессии, которую сейчас �
 * **слежение за файлом**: `JournalTail` раз в `sessions.read_only.tail_interval` (1 с) сравнивает
   длину файла; новые целые строки разбираются и проецируются как живые события (`MessageEnded`
   user и assistant, `ToolCallStarted` по вызовам ответа, `ToolCallFinished` по результату,
-  `SessionTitleChanged`, `PlanUpdated` — до change `add-subagents-and-tasks`; проекция записей `task`
-  читателем change пока не определяет); запись `branch` или уменьшение файла → снимок
-  перечитывается целиком и эмитится `BranchChanged`, клиент перезагружает сессию;
+  `SessionTitleChanged`; новая запись `task` владельца → `TaskList.restore(announce: true)` со
+  списком `buildTaskList` обновлённого снимка и `TaskListChanged(op: restore)`: для читателя
+  состояние пришло извне, записей он не пишет (§17.16.6); до change `add-subagents-and-tasks` —
+  `PlanUpdated` по записи `plan`); запись `branch` или уменьшение файла → снимок перечитывается
+  целиком, эмитится `BranchChanged`, затем список задач новой ветки — как шаг 7 §17.6.5
+  (`TaskList.restore`, `TaskListChanged(op: restore)`, §17.16.6); клиент перезагружает сессию;
 * при каждой проверке длины — `inspect` lease: файл исчез или протух → `SessionAccessChanged(
   readOnly, reason: leaseAvailable)`. Сессия сама на запись не переходит: клиент делает
   повторный `session/load` с `openMode: "write"` (захват — по общим правилам).
@@ -813,7 +822,7 @@ Switch with /branch <n>, rewind with /rewind <n>, copy with /fork <n>.
 
 1. **SESM-1.** Переименование, метки, переключение ветки и перемотка только дописывают записи в журнал сессии; fork создаёт новый файл и не изменяет исходный (SES-1).
 2. **SESM-2.** Смена листа — одна запись `branch` с `parentId == targetId`; после сбоя в любой момент лист указывает либо на старый лист, либо на эту запись со сводкой целиком.
-3. **SESM-3.** После `branch` модель, режим и опции конфигурации сессии равны значениям до переключения; план — последний план новой ветки.
+3. **SESM-3.** После `branch` модель, режим и опции конфигурации сессии равны значениям до переключения; список задач не переносится, а следует ветке — равен `buildTaskList` новой ветки (TSK-7, §17.16.6).
 4. **SESM-4.** Файлы и прочие эффекты покинутой ветки не откатываются; если они есть, контекст модели новой ветки содержит сообщение об этом (сводка с заметкой или одна заметка), а ответ пользователю перечисляет файлы.
 5. **SESM-5.** Сводка покинутой ветки генерируется фиксированным английским промптом `session/branch_summary.md`; неудача или таймаут не отменяют переключение (`summaryStatus: failed`), отмена — не пишет ничего.
 6. **SESM-6.** Заголовок с `source: "user"` не перезаписывается автоматическим заголовком; новый заголовок уходит `session_info_update` всем подключённым к сессии соединениям.
@@ -875,7 +884,7 @@ Switch with /branch <n>, rewind with /rewind <n>, copy with /fork <n>.
 * Golden ACP-фикстура **`acp/session-rename`** (после OpenSpec): `_codelab/session/rename` → ответ `{title, updatedAt}`, `session_info_update` всем соединениям, `session/list` возвращает новый `title`.
 * `session_branches_test.dart`: дерево схемы §17.6.3 → две ветки, `divergesAt == k3f9a1c2`, метка `retry-point` во второй; пустая ветка (перемотка без нового сообщения) не показана; `leaf`-записи не создают кончиков.
 * `session_switch_branch_test.dart`: переключение → одна запись `branch` с `parentId == targetId`; scripted-суммаризатор получает регион покинутой ветки и промпт `session/branch_summary.md`; контекст новой ветки содержит обёртку со сводкой; ошибка суммаризатора → `summaryStatus: failed` и заметка; отмена → журнал побайтово не изменён; цель внутри пакета инструментов → `InvalidTarget` (SESM-2, SESM-5, SESM-16).
-* `session_branch_carry_settings_test.dart`: режим `plan` выбран после ветвления, переключение на ветку с `bypass` → дописан `mode_change` `plan`, проекция даёт `plan`; план — последний план новой ветки (SESM-3; после change `add-subagents-and-tasks` — список задач новой ветки, §17.16.6).
+* `session_branch_carry_settings_test.dart`: режим `plan` выбран после ветвления, переключение на ветку с `bypass` → дописан `mode_change` `plan`, проекция даёт `plan`; список задач — `buildTaskList` новой ветки, клиенту ушёл `plan` с ним, записи `task` нет (SESM-3, TSK-7, §17.16.6).
 * `session_branch_crash_test.dart`: процесс убит до и после записи `branch` → после `open` лист старый либо `branch` со сводкой; промежуточного состояния нет (SESM-2).
 * `session_rewind_test.dart` (**`core/session-rewind-new-leaf`**): перемотка к `p7d2` → новый лист — запись `branch`, ребёнок `k3f9`; следующий `prompt` — сиблинг `p7d2`; исходные записи на месте; `RewindResult.prompt` равен исходному контенту, для сообщения-команды возвращён `command`; `dryRun` перечисляет `lib/a.dart` и ничего не пишет; модель видит заметку `Changes made on the abandoned branch were not reverted …`; файлы в `MemoryExecutionEnv` не изменены (SESM-4).
 * `session_rewind_interrupted_test.dart`: перемотка после восстановленного хода (запись `interrupted`, SES-10) → покинутая ветка содержит синтетический результат, новый ход не повторяет вызов.
@@ -886,7 +895,7 @@ Switch with /branch <n>, rewind with /rewind <n>, copy with /fork <n>.
 * `session_lease_test.dart` (**`core/session-lease-second-writer-rejected`**): два `AgentRuntime` в разных изолятах над одним каталогом; второй `loadSession(write)` → `SessionLockedException` с владельцем; `readOnlyIfLocked` → `access == readOnly`, `prompt` → `ReadOnlySession`, файлы каталога не изменились (SESM-9, SESM-12, SESM-13).
 * `file_lease_store_test.dart` (`codelab_agent_io`): параллельный захват протухшего lease из 8 изолятов → ровно один `LeaseAcquired`; живой lease с mtime 14 с не захватывается, 16 с — захватывается; тот же `bootId` и мёртвый pid → захват сразу; пустой файл моложе `stale_after` — занят (SESM-10).
 * `session_lease_lost_test.dart`: lease подменён во время хода → ход `TurnEnded(failed)` с `AgentError(storage)`, новых строк нет, `SessionAccessChanged(readOnly, leaseLost)`; чужая строка, дописанная в файл, → `foreignWrite` до следующего `append` (SESM-11).
-* `session_read_only_tail_test.dart`: читатель видит новые записи владельца как события за `tail_interval`; запись `branch` владельца → `BranchChanged`; владелец закрыл сессию → `leaseAvailable`.
+* `session_read_only_tail_test.dart`: читатель видит новые записи владельца как события за `tail_interval`; запись `task` владельца → `TaskListChanged(restore)` со списком после неё, в каталоге сессии ничего не записано; запись `branch` владельца → `BranchChanged`, затем `TaskListChanged(restore)` со списком новой ветки (TSK-7); владелец закрыл сессию → `leaseAvailable`.
 * Golden ACP-фикстура `acp/session-load-locked`: `-32602` с `reason: "sessionLocked"`; с `openMode: "readOnlyIfLocked"` — реплей и `_meta.codelab.readOnly` (SESM-13).
 * `acp_multi_client_test.dart`: два соединения `InProcessAcpLink` к одной сессии; промпт первого → оба получают `session/update`, второй — ещё `user_message_chunk`; разрешение и ответ — только первому; отсоединение первого не отменяет ход, пока подключён второй (SESM-15).
 * `config_sessions_test.dart`: `stale_after < 3 × heartbeat` → `ConfigException`; `sessions.lease` в проектном конфиге игнорируется с предупреждением (§15.3).

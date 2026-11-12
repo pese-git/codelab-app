@@ -7,7 +7,7 @@
 - `[desktop]` — `apps/codelab_desktop`, `packages/flutter/codelab_ui`.
 
 Итерации — каждая отдельным PR в `develop` (design.md, D19):
-- 0 — документы; решения пользователя 2026-11-10 (Q1–Q6) и переименование `task` → `agent` (design.md, D20) внесены;
+- 0 — документы; решения пользователя 2026-11-10 (Q1–Q6), 2026-11-12 (Q9–Q12, design.md D29–D32) и переименование `task` → `agent` (design.md, D20) внесены;
 - 1 — список задач вместо `update_plan`, схема объявления `initialize`;
 - 2 — субагенты глубины 1;
 - 3 — запрос разрешения потомка;
@@ -52,6 +52,13 @@
   - §1 (дерево файлов), §16.2 (имена инструментов), §17.4 и §17.11 (перечни), §15 (пример `update_plan: allow`).
 
   Исторические документы этапов (`09-07-stage-2…`, `09-09-stage-4…`) не переписываются.
+- [x] 0.7 Решения пользователя 2026-11-12 по Q9–Q12 внесены в design.md («Решённые вопросы», D29–D32), спецификации agent-sessions, agent-tools, agent-acp-server, agent-prompts и задачи; в документах ядра пометки «change пока не определяет» заменены правилами:
+  - Q9 (D29): §17.16.2 (порт `TaskList`, `restore(announce)`, `TaskChange.op = restore`), §17.16.6 («Смена ветки», `nextId` по всему журналу), TSK-1, TSK-3, TSK-7, §17.16.8, §17.16.9 (задел общей доски), §17.6.5 шаг 7, SESM-3, §17.6.8 (`JournalTail`), §17.11.6 шаг 3, §8.3 и §8.2.4 (`SessionWriter`, запись `task`), §5.3, §13.7;
+  - Q10 (D30): §6.3.8 (шаг 1 алгоритма, тест `tool_switches_test.dart`), §11.5 (комментарий шага 8 сборки промпта), §17.11.9;
+  - Q11 (D31): §17.11.9 (11 схем, без пометки неопределённости);
+  - Q12 (D32): §17.16.3, §17.16.6, §11.2, §11.5 — секция `tools/tasks` называет только `task_create`, правило о `task_list` — в его описании; явный `on` зависимого при выключенном якоре — ошибка «якорь выключен» (§6.3.8, D30).
+
+  Q10 и Q11 в спецификации этого change не входят: переключателей инструментов и режима `essential` нет ни в коде (`tools.disabled` — `applied: false`), ни в утверждённых спецификациях; правила D30 и D31 переносятся в дельты спецификаций change, вводящих §6.3.8 и §17.11.9 (задача 6.2).
 
 ## 1. Список задач вместо `update_plan` (итерация 1)
 
@@ -62,13 +69,15 @@
     - `task_list_tools_test.dart` (agent-tools «Инструменты списка задач»: «Создание, разблокировка и удаление»);
     - `task_list_cycle_test.dart` («Цикл зависимостей», TSK-2);
     - golden `builtin_tools_golden_test.dart` с `task_*` (agent-tools «Golden-вывод инструментов»);
-    - `task_list_journal_test.dart` (agent-sessions «Список после загрузки»);
+    - `task_list_journal_test.dart` (agent-sessions «Список после загрузки», «Счётчик id по всем веткам», «Восстановление при открытии»; TSK-3, D29);
+    - `task_list_restore_test.dart` (agent-sessions «Восстановление с публикацией», «Восстановление списка не пишется»; TSK-1, TSK-3, D29);
     - `core/task-list-legacy-session-continues` (agent-sessions «Старая сессия с update_plan»);
     - golden-разбор `all_records.jsonl` с `task` и `plan` (agent-sessions «Golden-разбор»);
     - сборка (agent-runtime «Матрица профиля»);
-    - промпты (agent-prompts «Golden на профиль и режим», «База не называет инструментов»);
+    - промпты (agent-prompts «Golden на профиль и режим», «База не называет инструментов», «Секция списка задач называет только якорь»; D32);
   - ACP:
     - фикстуры `acp/prompt-task-plan`, `acp/session-load-legacy-plan`, `acp/initialize-codelab-extensions`;
+    - `acp_projection_exhaustive_test.dart`: `TaskListChanged` с `op: restore` (agent-acp-server «Список новой ветки»; D29);
     - перевод `acp/prompt-update-plan` на роль `client`;
     - тест `initialize` без клиентского `_meta` (agent-acp-server «Ответ codelab-app», «Клиент CodeLab объявил расширения»);
   - kit:
@@ -84,9 +93,11 @@
   - заметки о блокерах.
 
   `ToolServices.tasks` вместо `ToolServices.plan` (1.1, ядро; TSK-1…TSK-4).
+- [ ] 1.2a `[agent]` `TaskList.restore(items, nextId:, announce:)` под замком `apply`: счётчик не убывает, при `announce: true` — один `TaskListChanged` с `TaskChange(op: restore, actor: main, changed, deleted)`; `TaskChange.op` дополняется значением `restore` (1.1, `task_list_restore_test.dart`; agent-sessions «Список задач следует ветке журнала»; TSK-1, TSK-3, D29). Вызовов из смены ветки и `JournalTail` здесь нет — их операций в коде пока нет (D29, «Что входит в этот change»).
 - [ ] 1.3 `[agent]` Запись журнала `task`, разбор записей `plan` старого формата, проекция `buildTaskList`, восстановление `TaskList` при `open` без публикации. `SessionWriter`: `TaskListChanged → task` (1.1, журнал; TSK-6).
+- [ ] 1.3a `[agent]` `buildTaskList`: `items` — по активной ветке, `nextId` — по всему журналу (все ветки, `items` и `deleted` записей `task`, число entries записей `plan`); `SessionWriter` на `TaskListChanged` с `op: restore` ничего не пишет (1.1, `task_list_journal_test.dart`, `task_list_restore_test.dart`; agent-sessions «Счётчик id по всем веткам», «Восстановление списка не пишется»; TSK-1, TSK-3, D29).
 - [ ] 1.4 `[agent]` Удаление `UpdatePlanTool`, `PlanService`, `PlanUpdated` и типов плана ядра. Реестр `buildAgentCore`: `task_*` вместо `update_plan`. Промпты:
-  - `tools/tasks.md` и `tool_descriptions/task_*.md` — свои тексты (§7а), без копирования Claude Code;
+  - `tools/tasks.md` и `tool_descriptions/task_*.md` — свои тексты (§7а), без копирования Claude Code; `tools/tasks.md` (`tools: [task_create]`) называет только `task_create`, правило «после сжатия вызови `task_list`» — в `tool_descriptions/task_list.md` (agent-prompts «Секция списка задач называет только якорь»; D32);
   - удалить `tools/plan.md` и `tool_descriptions/update_plan.md`;
   - `gen_prompts`.
 
@@ -95,6 +106,7 @@
   - фикстуры с ожидаемыми схемами `update_plan`: `prompt-turn-budget-exceeded`, `prompt-max-turn-requests`, `session-new-with-mcp`;
   - клиентские фикстуры с кадром `initialize`;
   - перечень расширений §13.12 и проверка ACP-2 (1.1, ACP).
+- [ ] 1.5a `[protocol]` Проекция `TaskListChanged` с `op: restore` — тот же `plan` со всем списком, пустой список — `entries: []`; строка в исчерпывающем `switch` (1.1, `acp_projection_exhaustive_test.dart`; agent-acp-server «Список новой ветки»; D29).
 - [ ] 1.6 `[client]` `codelab_client_acp`: `clientCapabilities._meta.codelab` в `initialize` и терпимый разбор `agentCapabilities._meta.codelab`. `codelab_client_core`: поля `PlanEntryView`, незавершённые блокеры, метка владельца (1.1, kit). `fvm dart run build_runner build` после изменения freezed-моделей.
 - [ ] 1.6a `[client]` `TaskOpsItem` в транскрипте kit: распознавание по `plan` с `_meta.codelab.task`, пришедшему во время успешного вызова `think`, разница планов, слияние подряд идущих, текст элемента; без разбора заголовков (1.1, kit; D27).
 - [ ] 1.7 `[client]` REPL и `--ui tui`: тихая строка `TaskOpsItem`; формат плана `#<id> [<status>] <subject>` с владельцем и блокерами; в TUI — блок списка задач над композером с заголовком `Tasks <c>/<n> done · ctrl+t hide`, действие `toggle_tasks` (Ctrl+T) в реестре клавиш и подсказка в строке помощи; доска Ctrl+T не открывает (1.1, CLI; D26).
@@ -189,7 +201,7 @@
   - загрузка сессии старого формата с `update_plan`.
 
   Найденные дефекты — подзадачами 6.1x с красным тестом и исправлением.
-- [ ] 6.2 `[agent]` Документы и код не расходятся: §17.3, §17.16, §13 — по фактическим именам и текстам. Вложенные `AGENTS.md`:
+- [ ] 6.2 `[agent]` Документы и код не расходятся: §17.3, §17.16, §13 — по фактическим именам и текстам. Правила D29–D31 для ещё не реализованных операций (смена ветки §17.6.5, откат к метке §17.11.6, `JournalTail` §17.6.8, переключатели §6.3.8 вместе с ошибкой «якорь выключен», режим `essential` §17.11.9) остаются в документах ядра с тестами `session_branch_task_list_test.dart`, `session_read_only_tail_test.dart`, `tool_switches_test.dart`, `core/discover-tools-mount` — для change, вводящих эти операции. Вложенные `AGENTS.md`:
   - `codelab_agent_core` — `lib/src/subagents/`, `lib/src/tools/tasks/`, запрет копирования текстов Claude Code;
   - `codelab_agent_acp` — новые расширения;
   - `codelab_client_core` — разбор `_meta.codelab.*`.
@@ -203,7 +215,7 @@
   - сценарии спецификаций change: `agent-subagents`, `agent-tools`, `agent-loop`, `agent-sessions`, `agent-permissions`, `agent-runtime`, `agent-prompts`, `agent-configuration`, `agent-acp-server`, `acp-protocol-client`, `acp-client-kit`, `agent-workbench-ui`, `codelab-cli`, `codelab-tui`, `acp-golden-fixtures`;
   - критерии матрицы: C-05 (`acp/prompt-task-plan`, `acp/session-load-legacy-plan`, `acp/prompt-update-plan` с ролью `client`), C-06 (`core/agent-two-children-parallel`, `core/subagent-nested-no-deadlock`, `acp/prompt-subagent-tool-call`, `acp/prompt-subagent-permission`, `acp/prompt-subagent-nested-permission`, `acp/prompt-subagent-tool-tree`, `acp/session-load-subagent-tool-tree`), C-20 (`core/task-list-create-update`, `core/task-list-cycle-rejected`).
 - Инварианты:
-  - SUB-1…SUB-12 (SUB-12 — в редакции этапа 2: без согласия `subagentToolCalls` вызовы потомков не отправляются), SUB-23, SUB-24 и TSK-1…TSK-6 покрыты тестами;
+  - SUB-1…SUB-12 (SUB-12 — в редакции этапа 2: без согласия `subagentToolCalls` вызовы потомков не отправляются), SUB-23, SUB-24 и TSK-1…TSK-6 покрыты тестами; TSK-7 — механизмом `restore` (`task_list_restore_test.dart`), вызовы из смены ветки — в change, вводящем её (D29);
   - висящие вызовы поддерева закрываются при завершении вызова `agent`;
   - финальное обновление каждого вызова `agent` несёт `_meta.codelab.subagent.summary`; клиенты без `summary` показывают строку как прежде;
   - поздние события отменённого ребёнка не доходят до клиента;

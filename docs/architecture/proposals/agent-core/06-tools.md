@@ -482,6 +482,7 @@ bool toolEnabled(String name, List<ToolSwitch> switches);   // последни�
 | неверный формат элемента | `--tools: ожидалось <tool>=on или <tool>=off, получено "exec:off"` |
 | `*` не в конце MCP-шаблона или у встроенного имени | `--tools: шаблон * допустим только в форме mcp__<server>__* или mcp__*: "ex*"` |
 | `on` для встроенного инструмента, чья capability выключена профилем, сервисом или конфигом | `--tools exec=on: инструмент недоступен: capability shellExec выключена (на платформе нет shell)` |
+| явный `on` для зависимого инструмента, чей якорь в итоге выключен (`agent` → `agent_*`, `exec` → `job_*`, `task_create` → `task_update`, `task_list`, `task_get`; шаг 1 ниже) | `--tools task_get=on: инструмент недоступен: выключен инструмент task_create, от которого он зависит (включите task_create или уберите task_get=on)` |
 
 MCP-селектор, которому при создании сессии не соответствует ни один инструмент подключённых
 серверов, — не ошибка (серверы клиента приходят в `session/new`), а предупреждение
@@ -492,8 +493,19 @@ MCP-селектор, которому при создании сессии не
 1. `buildAgentCore` (§10.7, шаг 5f): после сборки реестра встроенных инструментов удалить из него
    каждый инструмент с `toolEnabled(name, switches) == false`. Выключение `agent` удаляет и
    `agent_status`, `agent_cancel`, `agent_send`, `agent_resume`, `agent_observe` (без `agent` им нечем управлять); выключение `exec` удаляет и
-   `job_output`, `job_kill` (после MVP, §17.9). `on` для инструмента, которого нет
-   в реестре из-за capability, — ошибка из таблицы выше.
+   `job_output`, `job_kill` (после MVP, §17.9); выключение `task_create` удаляет и `task_update`,
+   `task_list`, `task_get` (без `task_create` список корня всегда пуст; секция `tools/tasks` уходит
+   по шагу 4; решение пользователя 2026-11-12, design.md change `add-subagents-and-tasks`, D30).
+   Обратного правила нет: `task_update`, `task_list`, `task_get` выключаются и по одному, остальные
+   остаются. Правило — только для переключателей этого раздела; тип субагента со списком `tools`,
+   где есть `task_update` без `task_create`, допустим (потомок меняет статусы своих пунктов,
+   §17.16.4, TSK-4). `on` для инструмента, которого нет в реестре из-за capability, — ошибка из
+   таблицы выше. Явный `on` зависимого инструмента при выключенном якоре — тоже ошибка таблицы
+   («якорь выключен»), одно правило для `agent_*`, `job_*` и `task_*`: проверяется после слияния
+   всех источников, когда известно итоговое состояние якоря (`task_create=off,task_get=on` — ошибка;
+   `task_get=on` без выключенного `task_create` — не ошибка). Молча игнорировать `on` нельзя:
+   пользователь, включивший инструмент явно, должен узнать, почему его нет (решение пользователя
+   2026-11-12, design.md change `add-subagents-and-tasks`, D30).
 2. MCP-инструменты (на сессию, в том числе после переподключения и `tools/list_changed`,
    §17.5.7): выключенный инструмент не регистрируется.
 3. Определение агента (§15.8, шаг 5) и тип субагента (§17.3.3, шаг 3) **пересекаются** с уже
@@ -868,7 +880,7 @@ essential`, §17.11.9). Схемы, тексты и алгоритмы — §17.
 * `mcp_tool_adapter_test.dart`: имя `mcp__<server>__<tool>` из 80 символов → ровно 64 символа: первые 56, `_`, 7 hex-символов SHA-256 полного имени; два имени с общими первыми 56 символами дают разные имена; сокращение детерминировано между запусками; `readOnlyHint: true` → `kind: read`, `destructiveHint: true` → `edit` или `execute` по `openWorldHint`, без аннотаций → `other`; `tier` всегда `exec`, `readOnlyHint: true` не снимает вопрос одобрения в режиме `standard`.
 * `fence_test.dart`: MCP-результат с `ignore previous instructions` и поддельным закрывающим маркером попадает в запрос к модели целиком внутри ограды (TOOL-10).
 * `misuse_breaker_test.dart` — критерий матрицы **`core/misuse-breaker-blocks-repeat`** (C-08), scripted LLM с `warnAfter = 3`, `blockAfter = 6`: семь шагов подряд с вызовом `read {"limit":"ten"}` → ответы 1–2 без предупреждения, 3–5 с `[Warning: this exact call has failed <n> times …]`, 6 — с `… is now blocked until the turn ends.]`, 7 — `Blocked: this exact call to read has already failed 6 times …`, outcome `failed`, `validate` и gate на седьмом не вызывались; `{"path":"a","limit":"ten"}` и `{"limit":"ten","path":"a"}` — один ключ, `{"limit":10}` — другой и исполняется; шесть отказов разрешения подряд и шесть `exec` с ненулевым кодом не блокируются; `loop.misuse.enabled: false` → блокировки нет; ACP-проекция — `tool_call_update` `failed` с текстом блокировки (TOOL-11).
-* `tool_switches_test.dart` (ядро): `tools.disabled: [exec, mcp__github__*]` в глобальном конфиге + `CODELAB_TOOLS=exec=on` → `exec` есть; флаг `--tools exec=off` поверх → нет; `mcp__github__create_issue=on` после шаблона `mcp__github__*=off` возвращает один инструмент; проектный `tools.disabled: []` не возвращает глобально выключенный `exec` (объединение); схемы запроса, `Available tools` и системный промпт не содержат `exec` и секции `tools/exec`; определение агента с `tools: [read, exec]` даёт только `read`; субагент не получает `exec`; режим `standard` спрашивает одобрение на `write` как без выключения; `exec=on` в профиле `mobile` → `ConfigException` про `shellExec`; `exce=off` → ошибка со списком и подсказкой `exec`; выключение `agent` убирает `agent_status` и `agent_cancel` (TOOL-12, TOOL-13).
+* `tool_switches_test.dart` (ядро): `tools.disabled: [exec, mcp__github__*]` в глобальном конфиге + `CODELAB_TOOLS=exec=on` → `exec` есть; флаг `--tools exec=off` поверх → нет; `mcp__github__create_issue=on` после шаблона `mcp__github__*=off` возвращает один инструмент; проектный `tools.disabled: []` не возвращает глобально выключенный `exec` (объединение); схемы запроса, `Available tools` и системный промпт не содержат `exec` и секции `tools/exec`; определение агента с `tools: [read, exec]` даёт только `read`; субагент не получает `exec`; режим `standard` спрашивает одобрение на `write` как без выключения; `exec=on` в профиле `mobile` → `ConfigException` про `shellExec`; `exce=off` → ошибка со списком и подсказкой `exec`; выключение `agent` убирает `agent_status` и `agent_cancel`; `task_create=off` убирает `task_update`, `task_list`, `task_get` и секцию `tools/tasks`, а `task_get=off` — только `task_get`; `task_create=off,task_get=on`, `agent=off,agent_status=on` и `exec=off,job_output=on` → `ConfigException` «якорь выключен»; тип субагента с `tools: [read, task_update]` при включённом `task_create` получает `task_update` (TOOL-12, TOOL-13; D30 change `add-subagents-and-tasks`).
 * `cli/tools-flag-disables-exec` (критерий матрицы T-26, сценарий CLI на scripted провайдере): `codelab -p "list files" --tools exec=off` со встроенным агентом → первый запрос к модели не содержит схемы `exec` и секции `tools/exec`; модель зовёт `exec` → результат `Tool "exec" is not available. Available tools: …` без вопроса одобрения; код выхода 0; `--tools exce=off` → ошибка со списком инструментов, код выхода 64.
 * `builtin_tools_golden_test.dart`: каждый инструмент на `MemoryExecutionEnv` — вывод совпадает с golden; `search` с glob `**/*.dart`; `exec` на `MemoryExecutionEnv` → текст `Shell commands are not available...`.
 

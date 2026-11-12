@@ -592,7 +592,7 @@ change `switch-default-agent-to-dart`); до него `/<server>:<prompt>` — �
 | `SubagentStarted`, `SubagentFinished` (после MVP) | — | лог `subagent.start` / `subagent.end`; при согласованной доске — `_codelab/subagents/update` (§17.3.7); у прогона `run ≥ 2` — те же кадры; title вызова `agent_send`/`agent_resume` — `… (follow-up <run>)` / `… (resume <run>)` (§17.3.8.1) |
 | `SubagentProgress` (после MVP) | — | только доска `_codelab/subagents/update`; строку прогресса уже несёт `ToolCallProgress(agent)` (§17.3.7) |
 | `SubagentActivity` (change `add-subagents-and-tasks`) | — или `tool_call`/`tool_call_update` | клиенту с `subagentToolCalls` — вызовы потомков с `_meta.codelab.parentToolCallId` (§17.3.7, «Шаги потомков деревом»); остальным — не отправляется (SUB-12) |
-| `TaskListChanged` (change `add-subagents-and-tasks`) | `plan` | весь список, у entry `_meta.codelab.task` (§17.16.5) |
+| `TaskListChanged` (change `add-subagents-and-tasks`) | `plan` | весь список, у entry `_meta.codelab.task` (§17.16.5); при `op: restore` (смена ветки, §17.16.6) — так же, пустой список — `entries: []` |
 | `ToolCallStarted(exec)` с `run_in_background` (после MVP, §17.9) | `tool_call` | `title: "Run in background: <command>"`, `kind: "execute"`; `ToolCallFinished` — сразу `completed` с текстом запуска (и терминалом во внешнем режиме) |
 | `JobStarted`, `JobSettled` (после MVP) | — | лог `job.start`/`job.end`; при согласованном `jobBoard` — `_codelab/jobs/update` и поздний `tool_call_update` с `_meta.codelab.job` (§17.9.11) |
 | `AgentError` | — | лог и trace; итог хода — через ответ (§13.8) |
