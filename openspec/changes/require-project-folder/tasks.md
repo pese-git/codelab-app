@@ -294,7 +294,7 @@
 Сверено с кодом `develop` `b06a4192` после итераций A и C и PR #283, #287 (2026-11-12; design.md, «Код перед итерацией B»). Порядок и зависимости:
 
 - B0.0 — выполнена (Q22–Q27 решены, все (a); дельты внесены).
-- Kit: B0.1–B0.3 `[client]` → B1.1 `[client]` → сразу B1.2 `[desktop]` (компиляция тестов desktop) → B1.3 `[client]` → B1.4 `[client]` (найдено в итерации B, выполнена) → B1.5 `[client]`.
+- Kit: B0.1–B0.3 `[client]` → B1.1 `[client]` → сразу B1.2 `[desktop]` (компиляция тестов desktop) → B1.3 `[client]` → B1.4 `[client]` (найдено в итерации B, выполнена) → B1.5 `[client]` → B1.6 `[client]` (найдено при ручной проверке B4.2).
 - Desktop — после B1.3 (B1.5 desktop не блокирует: публичный API kit не меняется): B2.1–B2.8 `[desktop]` → B3.1 → B3.2 вместе с B3.5 (удаление `connect` ломает компиляцию тестов, поэтому миграция — в той же правке) → B3.3 → B3.4 → B3.6 → B4.
 - B4.2 — вручную, не условие merge.
 
@@ -321,7 +321,7 @@
   Порядок завершений задаётся явно (`concurrency.md` §69–§70); acp-client-kit «Агент по требованию хоста», все сценарии; D15. Красный.
 - [x] B0.2 `[client]` `packages/dart/codelab_client_core/test/sessions/session_list_test.dart`: `selectProject` при `Connected` — `session/list` нового проекта; поздний ответ прежнего (и поздняя первая страница после подключения) не меняет список, курсор и `hasMoreSessions`; `loadMoreSessions` в полёте не блокирует запрос нового проекта; без `sessionCapabilities.list` запроса нет; переход `A → B → A` во время старта — список `A`, один `open` (acp-client-kit «Смена проекта перезапрашивает список»). Красный.
 - [x] B0.3 `[client]` `packages/dart/codelab_client_core/test/sessions/reconnect_reload_test.dart` и `load_session_test.dart`: сессии разных папок загружаются каждая со своим `cwd` (регрессия); `loadSession` для `detached` — статус не `detached`, очередь сливается после загрузки, `send` снова доходит до агента; ошибка загрузки — `detached` и прежнее уведомление (acp-client-kit «Сессии после переподключения», новые сценарии; D16). Красный — вторая часть.
-- [ ] B0.4 `[client]` Перенесено в A1.10 (HIGH-1). В B — только регрессия: `test/restore/active_session_outside_project_test.dart` остаётся зелёным после `ensureAgent`.
+- [x] B0.4 `[client]` Перенесено в A1.10 (HIGH-1). В B — только регрессия: `test/restore/active_session_outside_project_test.dart` остаётся зелёным после `ensureAgent`.
 
 ### B1. Реализация kit
 
@@ -344,6 +344,10 @@
   - Красный тест (в `approvals_dropped_on_connection_change_test.dart` или тесте `codelab_client_acp`): `respond` вызван, пока `reconnect` ждёт отмены подписок старого транспорта, — одобрение `cancelled`, ответ не отправлен ни в старое, ни в новое соединение; после замены агент шлёт `session/request_permission` с тем же JSON-RPC id, что у снятого, — запрос виден в `pendingApprovals`, ответ уходит в новое соединение ровно один раз.
   - Реализация: в `_replaceTransport` одобрения и карты запросов (`_pendingPermissionRequests`, `_handledPermissionRequests`) снимаются синхронно сразу после `_generation++`, до первого `await`; `_sendPermissionResponse` добавляет id в `_handledPermissionRequests` только при неизменном поколении.
   - Проверки: как в B1.4.
+- [x] B1.6 `[client]` Прерванный «Restart agent» ход показывается отменённым (D22; D2 change `cancel-turn-on-ws-disconnect`). Найдено при ручной проверке B4.2: встроенный агент выгружается внутри фабрики транспорта и сам завершает ход `cancelled` до `_replaceTransport`, метка прерванного хода не ставилась, а реплей `session/load` без `stopReason` давал «Completed with stopReason unknown.».
+  - Красный тест: `packages/dart/codelab_client_acp/test/application/interrupted_turn_test.dart`, группа «the old agent ends the turn while the new transport is opening» (ход, отменённый старым агентом, после `session/load` — `cancelled`; ход, законченный `end_turn`, не помечается).
+  - Реализация: `AcpClientApplication.reconnect` помечает идущие ходы до `createTransport()` (`_markActiveTurnsInterrupted`), при сбое фабрики снимает свои метки; `sendPrompt` снимает метку, если ход закончился не `cancelled`.
+  - Проверки: как в B1.4; повторная ручная проверка на собранном desktop — «Completed with stopReason cancelled.».
 
 ### B2. Красные тесты desktop
 
@@ -439,7 +443,7 @@
 ### B4. Проверки
 
 - [x] B4.1 `[desktop]` `fvm dart format --set-exit-if-changed` изменённых файлов; `fvm flutter analyze` и `fvm flutter test` в `apps/codelab_desktop` и `packages/flutter/codelab_ui`.
-- [ ] B4.2 `[desktop]` Ручная проверка на macOS (не условие merge):
+- [x] B4.2 `[desktop]` Ручная проверка на macOS (не условие merge; выполнена 2026-11-13 в изолированных `HOME`/`CODELAB_HOME` с LLM-заглушкой; запрет проекта второй папки отдельно не проверялся — покрыт тестами итерации C):
   - `.app` через `open` без снимка;
   - со снимком из отчёта пользователя;
   - две папки со встроенным агентом: ход в одной не прерывается переходом в другую, запрет проекта второй папки действует;
