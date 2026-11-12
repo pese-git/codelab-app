@@ -8,7 +8,8 @@ environment:
   # >=3.11.0 — требование pty2 (D11 change add-integrated-terminal); корень и
   # остальные пакеты workspace не меняются.
   sdk: ">=3.11.0 <4.0.0"
-  flutter: ">=3.35.0"
+  # >=3.41.0 — требование url_launcher 6.3.3 (D11 «Граница SDK»).
+  flutter: ">=3.41.0"
 
 dependencies:
   codelab_client_acp:
@@ -43,7 +44,7 @@ dependencies:
   structured_log_flutter: 0.1.3
   structured_log_fluent: 0.1.2+2
   structured_log_remote_sync: 0.2.1
-  url_launcher: ^6.3.3
+  url_launcher: 6.3.3
   xterm2: 5.4.0
   xterm2_core: 1.0.0
 

@@ -7,6 +7,7 @@ import 'package:xterm2/ui.dart' show TerminalView;
 
 import '../application/terminal_tabs_cubit.dart';
 import '../application/terminal_tabs_state.dart';
+import 'terminal_link_dialog.dart';
 import 'terminal_tab_view.dart';
 import 'terminal_theme.dart';
 
@@ -64,9 +65,31 @@ class WorkbenchTerminalPane extends StatelessWidget {
                   theme: terminalThemeOf(FluentTheme.of(context)),
                   autofocus: true,
                   padding: terminalViewPadding,
+                  // Только жест Cmd/Ctrl+клик (проверяет сам `TerminalView`);
+                  // `Terminal.onOpenUrl` (OSC 1337) намеренно не задан (D3).
+                  onHyperlinkTap: (uri) =>
+                      unawaited(_confirmLink(context, cubit, uri)),
                 ),
         );
       },
     );
   }
+}
+
+/// Спрашивает пользователя про ссылку OSC 8 и открывает её только после «Open».
+///
+/// Решение «можно ли» принимает Cubit (`decideLink`), диалог лишь показывает
+/// адрес целиком; открытие — через порт внутри Cubit (D3, D11).
+Future<void> _confirmLink(
+  BuildContext context,
+  TerminalTabsCubit cubit,
+  String uri,
+) async {
+  final decision = cubit.decideLink(uri);
+  final confirmed = await showTerminalLinkDialog(
+    context,
+    uri: uri,
+    canOpen: decision.canOpen,
+  );
+  if (confirmed && decision.canOpen) await cubit.openLink(uri);
 }
