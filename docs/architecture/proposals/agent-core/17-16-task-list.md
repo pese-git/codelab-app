@@ -160,9 +160,9 @@ final class TaskListChanged extends AgentEvent {   // заменяет PlanUpdat
 ```json
 {"sessionUpdate":"plan","entries":[
  {"content":"Read the failing test","priority":"high","status":"completed",
-  "_meta":{"codelab":{"agent":{"id":"1","owner":"main","blockedBy":[]}}}},
+  "_meta":{"codelab":{"task":{"id":"1","owner":"main","blockedBy":[]}}}},
  {"content":"Fix the parser","priority":"medium","status":"in_progress",
-  "_meta":{"codelab":{"agent":{"id":"2","owner":"sub_k3f9a1c2","blockedBy":["1"]}}}}]}
+  "_meta":{"codelab":{"task":{"id":"2","owner":"sub_k3f9a1c2","blockedBy":["1"]}}}}]}
 ```
 
 * `content` — `subject`; `description` в ACP не уходит (клиенту он не нужен для чек-листа, а
@@ -203,7 +203,7 @@ final class TaskListChanged extends AgentEvent {   // заменяет PlanUpdat
 продолжает с этого состояния; переписывать старый журнал не нужно. Вызовы `update_plan` в
 истории остаются как есть: инструмента в схемах нет, и модель видит их так же, как вызовы
 отключённого MCP-сервера (§6.3.8). Решение пользователя 2026-11-10 (design.md change
-`add-subagents-and-tasks`, D20).
+`add-subagents-and-tasks`, D12).
 
 **Реплей (§13.5).** После истории уходит `plan` из `buildTaskList` активной ветки, если список
 непуст или в ветке была хоть одна запись `task`/`plan`.

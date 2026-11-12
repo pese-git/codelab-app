@@ -86,7 +86,8 @@ final class ToolContext {
   final CancelToken cancel, yieldToken;
   final void Function(ToolExecutionResult partial) onUpdate;
   final String toolCallId;
-  final ToolServices services;                  // сервис плана, Clock, Logger; с этапа 3 — SpillService? spill (§17.4.2),
+  final ToolServices services;                  // список задач TaskList (§17.16.2; до change add-subagents-and-tasks —
+                                                // сервис плана), Clock, Logger; с этапа 3 — SpillService? spill (§17.4.2),
                                                 // JobManager? jobs (§17.9.2.2; null — capability backgroundJobs off);
                                                 // после MVP (§17.11): ReadLedger? readLedger, MemoryService? memory,
                                                 // CheckpointService? checkpoints, SessionHistory? history,
@@ -345,7 +346,7 @@ Future<T> runAll<T>(Iterable<String> keys, Future<T> Function() body) {
 | `read`, `search` | `untrusted` для файлов вне `cwd` (в MVP недостижимо из-за `BoundedEnv`; после MVP — сопутствующие файлы skills из `readOnlyRoots`, §17.2.3) и для каталогов из `tools.untrusted_paths` конфига (по умолчанию `node_modules`, `.dart_tool`, `vendor`); иначе `trusted` |
 | `exec` | `untrusted`, если команда — сетевая по списку §10.6; иначе `trusted` |
 | `read`, `search` вынесенного файла (`spills/<n>.txt`, с этапа 3) | доверие и `source` исходного результата из записи журнала (`SpillRef`); файл каталога выноса без записи — `untrusted`; профиль и `untrusted_paths` не повышают (SPL-4, §17.4.4) |
-| `ls`, `write`, `edit`, `update_plan` | `trusted` (вывод формирует сам инструмент) |
+| `ls`, `write`, `edit`, `task_create`, `task_update`, `task_list`, `task_get` (§17.16.3; до change `add-subagents-and-tasks` — `update_plan`) | `trusted` (вывод формирует сам инструмент) |
 | `read` архива (список и `member`, после MVP) | всегда `untrusted`, `source="read"` (§17.11.2) |
 | `inspect_image` (после MVP) | всегда `untrusted` (§17.11.5) |
 | `memory`, `ask`, `checkpoint`, `discover_tools` (после MVP) | `trusted` (§17.11) |
@@ -465,7 +466,8 @@ bool toolEnabled(String name, List<ToolSwitch> switches);   // последни�
 `on`/`off` — без учёта регистра. Пустое значение (`--tools ""`) — ничего не меняет.
 
 **Селекторы.** Имя встроенного инструмента из фиксированного списка `read`, `write`, `edit`,
-`ls`, `search`, `exec`, `update_plan`, `web_fetch`, `web_search`, `skill`, `agent`, `agent_status`,
+`ls`, `search`, `exec`, `task_create`, `task_update`, `task_list`, `task_get` (§17.16.3; до change
+`add-subagents-and-tasks` — `update_plan`), `web_fetch`, `web_search`, `skill`, `agent`, `agent_status`,
 `agent_cancel`, `agent_send`, `agent_resume`, `agent_observe`, `lsp`, `job_output`, `job_kill`, `memory`, `inspect_image`, `checkpoint`, `ask`,
 `session_history`, `discover_tools`, `context_expand` (последние — после MVP, §17.11, §17.13.4;
 имя известно всегда, даже если capability выключена),
@@ -476,7 +478,7 @@ bool toolEnabled(String name, List<ToolSwitch> switches);   // последни�
 
 | Случай | Сообщение |
 |---|---|
-| неизвестное имя встроенного инструмента | `tools.disabled[1]: неизвестный инструмент exce (может быть, exec?). Известные инструменты: ask, checkpoint, context_expand, discover_tools, edit, exec, inspect_image, job_kill, job_output, ls, lsp, memory, read, search, session_history, skill, task, agent_cancel, agent_observe, agent_resume, agent_send, agent_status, update_plan, web_fetch, web_search, write` (для флага и переменной — префикс `--tools` или `CODELAB_TOOLS`) |
+| неизвестное имя встроенного инструмента | `tools.disabled[1]: неизвестный инструмент exce (может быть, exec?). Известные инструменты: agent, agent_cancel, agent_observe, agent_resume, agent_send, agent_status, ask, checkpoint, context_expand, discover_tools, edit, exec, inspect_image, job_kill, job_output, ls, lsp, memory, read, search, session_history, skill, task_create, task_get, task_list, task_update, web_fetch, web_search, write` (до change `add-subagents-and-tasks` в списке `update_plan` вместо `task_*`) (для флага и переменной — префикс `--tools` или `CODELAB_TOOLS`) |
 | неверный формат элемента | `--tools: ожидалось <tool>=on или <tool>=off, получено "exec:off"` |
 | `*` не в конце MCP-шаблона или у встроенного имени | `--tools: шаблон * допустим только в форме mcp__<server>__* или mcp__*: "ex*"` |
 | `on` для встроенного инструмента, чья capability выключена профилем, сервисом или конфигом | `--tools exec=on: инструмент недоступен: capability shellExec выключена (на платформе нет shell)` |
@@ -514,7 +516,8 @@ MCP-селектор, которому при создании сессии не
 видимостью: deny оставляет схему и отказывает при вызове, выключение убирает схему.
 
 Пример: `codelab -p "fix the failing test" --tools exec=off,mcp__github__*=off` → схемы `read`,
-`write`, `edit`, `ls`, `search`, `update_plan`; секций `tools/exec` и строки сервера `github` в
+`write`, `edit`, `ls`, `search`, `task_create`, `task_update`, `task_list`, `task_get` (до change
+`add-subagents-and-tasks` — `update_plan`); секций `tools/exec` и строки сервера `github` в
 секции `mcp` нет; `codelab -p … --tools exec=on` при `tools.disabled: [exec]` в глобальном
 конфиге возвращает `exec`, и он по-прежнему спрашивает одобрение в режиме `standard`.
 
@@ -649,23 +652,20 @@ MCP-селектор, которому при создании сессии не
    `backgroundJobs` (§17.9). Перезапись секретов в команде и заметка — §17.12.6; запрет
    команд-читателей файлов учётных данных — §17.12.7.
 
-### update_plan — tier `read`, kind `think`
+### Инструменты списка задач — tier `read`, kind `think`
 
-```json
-{"type":"object","properties":{
-  "entries":{"type":"array","items":{"type":"object","properties":{
-    "content":{"type":"string"},
-    "priority":{"type":"string","enum":["high","medium","low"]},
-    "status":{"type":"string","enum":["pending","in_progress","completed"]}},
-   "required":["content","priority","status"]}}},
- "required":["entries"]}
-```
+После change `add-subagents-and-tasks` план ведут четыре инструмента списка задач: `task_create`,
+`task_update`, `task_list`, `task_get` — tier `read`, kind `think`, `outputTrust` `trusted`,
+`permissionPattern` `*` (§7.5). Схемы, тексты вывода и ошибок, детский вариант для субагентов и
+проекция в ACP `plan` с `_meta.codelab.task` — [§17.16.3–§17.16.5](17-16-task-list.md#17163-инструменты).
+Список — `TaskList` в `ToolServices.tasks`; каждая операция, изменившая список, эмитит
+`TaskListChanged` до своего `ToolCallFinished`, журнал получает запись `task` (§8.2.4, §17.16.6).
 
-Заменяет план целиком (так требует ACP `plan`: клиент заменяет весь список). Сервис плана
-сессии (`PlanService` в `ToolServices.plan`; сессия задаёт ему `publish` — эмит в очередь `Agent`,
-§5.6) эмитит `PlanUpdated(entries)`, и `update_plan` ждёт доставки до своего `ToolCallFinished` → ACP `session/update` `plan`; журнал получает запись `plan`
-(§8). Больше одного `in_progress` допускается, но дописывается `[Note: more than one entry is in_progress.]`.
-Вывод: `Plan updated: 3 entries (1 completed, 1 in progress, 1 pending).`
+До change `add-subagents-and-tasks` здесь был `update_plan`: модель присылала план целиком
+(`entries` с `content`, `priority`, `status`), сервис плана (`PlanService` в `ToolServices.plan`)
+эмитил `PlanUpdated(entries)` → ACP `plan`, журнал получал запись `plan`. Инструмента в схемах
+больше нет; его вызовы в истории старых сессий остаются как есть, а последняя запись `plan`
+становится начальным списком задач (§17.16.6).
 
 ### MCP-инструменты
 

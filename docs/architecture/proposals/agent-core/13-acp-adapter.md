@@ -295,7 +295,9 @@ design.md change `add-embedded-agent-mode`, D4.
    * после MVP при объявленном `sessionTree` у `user_message_chunk` и `agent_message_chunk`
      реплея — `_meta.codelab.recordId` (id записи, для «перемотать сюда», §17.6.10); в режиме только
      чтения вызов без результата уходит со статусом `in_progress` (§17.6.8).
-6. После истории: последняя запись `plan` → `plan` (если план был); затем `current_mode_update`,
+6. После истории: `plan` со списком задач из `buildTaskList` активной ветки, если в ветке была
+   запись `task` или `plan` (change `add-subagents-and-tasks`, §17.16.6; до change — последняя
+   запись `plan` → `plan`, если план был); затем `current_mode_update`,
    `config_option_update` (полный снимок; с этапа 8.8 — с опцией `agent` и восстановленным
    агентом, если она есть), `available_commands_update` (команды `AgentSession.commands`),
    `session_info_update` (`title`, `updatedAt`) — если у сессии есть заголовок. Повторный

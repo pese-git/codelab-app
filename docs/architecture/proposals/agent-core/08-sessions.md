@@ -130,14 +130,15 @@ final class SessionHeader {
 | `model_change` | `provider`, `modelId`, `baseUrl?` | нет | модель для следующих шагов; последняя на ветке выигрывает |
 | `mode_change` | `modeId` | нет | режим сессии (§13.6); последняя на ветке выигрывает |
 | `config_change` | `optionId`, `value` | нет | смена опции конфигурации, кроме `mode` и `model` (у них свои записи); после MVP `optionId` `model_role.<role>` со значением `provider/model` или `null` — переопределение роли на сессию (§17.10.5) |
-| `plan` | `entries[]`: `content`, `priority`, `status` | нет | полный снимок плана после `update_plan` |
+| `plan` | `entries[]`: `content`, `priority`, `status` | нет | старый формат, только чтение: до change `add-subagents-and-tasks` — полный снимок плана после `update_plan`; после change не пишется, но читается всегда — в свёртке `buildTaskList` заменяет весь список пунктами `"1"…"n"` (§17.16.6) |
+| `task` | `op` (`create` \| `update` \| `delete` \| `assign`), `actor` (`main` или id субагента), `items` (полные снимки изменённых пунктов), `deleted` (удалённые id) | нет | change `add-subagents-and-tasks`: одна запись на `TaskListChanged`, только в журнале корневой сессии; список восстанавливается свёрткой `buildTaskList` активной ветки (§17.16.6) |
 | `compaction` | `summary`, `firstKeptId`, `tokensBefore`, `tokensAfter`, `details?` (после MVP — также `details.usage`: usage суммаризатора в форме `usage` §8.2.3, читается журналом usage §12.6.1) | user-сообщение с резюме вместо записей до `firstKeptId` (§8.7) | сжатие (§9) |
 | `label` | `targetId`, `label?` | нет | закладка на запись; `null` или пустая строка снимает метку |
 | `leaf` | `targetId` | нет | перемещение активного листа (MVP); после §17.6 ядро её не пишет, но читает по правилу §8.4 |
 | `branch` | `targetId`, `fromLeafId`, `reason` (`"switch"` \| `"rewind"` \| `"checkpoint"`; `checkpoint` — после MVP, откат к метке, §17.11.6), `summaryStatus` (`"generated"` \| `"skipped"` \| `"failed"`), `summary?`, `details` (с `details.usage` при сгенерированной сводке, §12.6.1; при `reason: "checkpoint"` — `details.checkpoint: {label, rewindToolCallId}`) | user-сообщение со сводкой покинутой ветки и/или заметкой о неоткатанных эффектах либо ничего (§8.7, шаг 6) | после MVP: переключение ветки или перемотка (§17.6.2); `parentId` равен `targetId`, лист после записи — её `id` |
 | `session_info` | `title?`, `source?` | нет | заголовок сессии; последняя запись с непустым `title` выигрывает. После MVP `source`: `"auto"` (по умолчанию, поле отсутствует) \| `"user"`; заголовок с `source: "user"` автоматика не перезаписывает (§17.6.4, SESM-6) |
 | `custom` | `customType`, `data` | нет | данные хоста; неизвестный `customType` сохраняется и игнорируется |
-| `subagent` | `subagentId`, `toolCallId`, `agent`, `description`, `childSessionId?`, `journal?`, `status`, `failure?`, `report?`, `usage?`, `background?`, `remote?` (`{agent, contextId, taskId, state}`) | нет | после MVP: связь с журналом субагента и его итоговый отчёт; последняя запись с данным `subagentId` выигрывает (§17.3.6); `remote` — у удалённого A2A-агента (§17.15.3) |
+| `subagent` | `subagentId`, `toolCallId`, `agent`, `description`, `childSessionId?`, `journal?`, `status`, `failure?`, `report?`, `usage?`, `toolCalls?`, `durationMs?`, `background?`, `remote?` (`{agent, contextId, taskId, state}`) | нет | после MVP (база — change `add-subagents-and-tasks`): связь с журналом субагента и его итоговый отчёт, в журнале **прямого** родителя (запись о внуке — в журнале ребёнка); последняя запись с данным `subagentId` выигрывает (§17.3.6); `remote` — у удалённого A2A-агента (§17.15.3) |
 | `job` | `jobId`, `toolCallId`, `command`, `cwd`, `kind` (`"local"` \| `"terminal"`), `status` (`"running"` \| `"exited"` \| `"killed"` \| `"timed_out"` \| `"lost"` \| `"interrupted"`), `exitCode?`, `signal?`, `killedBy?`, `notice?`, `pid?`, `procStart?`, `host?`, `terminalId?`, `log?` (`{path, bytes?, lines?, trust, source}`), `startedAt`, `endedAt?`, `maxDurationMs`, `yielded?` | нет | после MVP: состояние фоновой команды; последняя запись с данным `jobId` выигрывает; задачи принадлежат процессу, а не ветке — восстановление читает записи `job` по всем веткам (§17.9.10) |
 | `memory_recall` | `noteIds`, `text` | user-сообщение с `text` | после MVP: заметки памяти перед сообщением пользователя (§17.11.4); реплей пропускает |
 | `tools_mount` | `names` | нет | после MVP: подключённые инструменты режима `essential`; объединение по всему файлу (§17.11.9) |
@@ -288,6 +289,7 @@ isUserWordsEvent(m, origin): m.role != user → false; origin == null → true;
 {"type":"custom","id":"u1i2o3p4","parentId":"a9s8d7f6","timestamp":"2026-10-21T09:32:02.000Z","customType":"codelab.app.draft","data":{"text":"draft"}}
 {"type":"branch","id":"w8e7r6t5","parentId":"p7d2e8b4","timestamp":"2026-10-21T09:40:00.000Z","targetId":"p7d2e8b4","fromLeafId":"u1i2o3p4","reason":"switch","summaryStatus":"generated","summary":"- Tried to fix the expectation in test/a_test.dart; dart test still failed.","details":{"abandonedMessages":4,"modifiedFiles":["/work/demo/test/a_test.dart"],"otherEffects":true}}
 {"type":"job","id":"j4k5l6m7","parentId":"w8e7r6t5","timestamp":"2026-10-21T09:41:00.000Z","jobId":"job_k3f9a1c2","toolCallId":"call_5","command":"npm run dev","cwd":"/work/demo","kind":"local","status":"running","pid":48213,"procStart":"2026-10-21T09:41:00Z","host":"mbp.local","log":{"path":"work-demo-9c3e51a7/2026-10-21T08-00-00-000Z_01JB8Q2W6R9T3M5K7N1P4X8Z0C/spills/job_k3f9a1c2.log","trust":"trusted","source":"exec"},"startedAt":"2026-10-21T09:41:00.000Z","maxDurationMs":28800000}
+{"type":"task","id":"k2j3h4g5","parentId":"j4k5l6m7","timestamp":"2026-10-21T09:42:00.000Z","op":"update","actor":"main","items":[{"id":"2","subject":"Fix the expectation","status":"in_progress","priority":"high","owner":"main","blockedBy":["1"]}],"deleted":[]}
 ```
 
 ## 8.3. Контракт: SessionStore и проекции
@@ -338,6 +340,8 @@ final class RepairReport {
 // Чистые функции ядра:
 List<SessionRecord> pathToLeaf(SessionSnapshot s, [String? leafId]);    // root-first
 LlmContextProjection buildLlmContext(SessionSnapshot s);                 // §8.7
+({List<TaskItem> items, int nextId}) buildTaskList(SessionSnapshot s);  // change add-subagents-and-tasks, §17.16.6:
+                                                                         // вход TaskList.restore; форма результата — по коду
 Iterable<AgentEvent> buildReplay(SessionSnapshot s);                     // §13.5
 SessionSummary summarize(SessionSnapshot s);                             // §8.10; экспортируется: её зовут хранилища
 List<ToolCall> findInterruptedCalls(SessionSnapshot s);                  // §8.8, шаг 1
@@ -356,7 +360,7 @@ List<MessageRecord> healInterruptedTurn(SessionSnapshot s, IdGenerator ids, Cloc
 | `ModeChanged` | `mode_change` | нет |
 | смена модели (`setConfigOption("model")`, fallback не пишет) | `model_change` | нет |
 | `ConfigOptionChanged` (событие уровня `AgentSession`, дополняет §5.3) | `config_change` | нет |
-| `PlanUpdated` | `plan` | нет |
+| `TaskListChanged` (change `add-subagents-and-tasks`, §17.16.6; до него — `PlanUpdated` → `plan`) | `task` | нет |
 | `ContextCompacted` | `compaction` (пишется **до** события, событие подтверждает запись) | **да** |
 | `SessionTitleChanged` (событие уровня `AgentSession`, дополняет §5.3) | `session_info` | нет |
 | `SubagentStarted` (после MVP, уровень `AgentSession`, §17.3.2) | `subagent` со `status: "running"` | **да** |

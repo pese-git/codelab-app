@@ -286,7 +286,9 @@ switchBranch(targetId, summarize, cancel):
    для каждой опции, отличной от текущей → append(config_change)
 6. транскрипт Agent := buildLlmContext(...).messages        // как после сжатия, §9.8 шаг 11
 7. emit BranchChanged(leafId: rec.id, fromLeafId, reason); затем PlanUpdated с последним plan
-   новой ветки (или пустым списком)
+   новой ветки (или пустым списком) — до change add-subagents-and-tasks; после него список
+   задач ветки — свёртка buildTaskList (§17.16.6), а как TaskList и клиент получают его при
+   смене ветки, change пока не определяет
 8. вернуть BranchResult(rec.id, fromLeafId, status, modifiedFiles, otherEffects, written: true)
 ```
 
@@ -558,7 +560,8 @@ app, подключившийся к сессии, которую сейчас �
 * **слежение за файлом**: `JournalTail` раз в `sessions.read_only.tail_interval` (1 с) сравнивает
   длину файла; новые целые строки разбираются и проецируются как живые события (`MessageEnded`
   user и assistant, `ToolCallStarted` по вызовам ответа, `ToolCallFinished` по результату,
-  `SessionTitleChanged`, `PlanUpdated`); запись `branch` или уменьшение файла → снимок
+  `SessionTitleChanged`, `PlanUpdated` — до change `add-subagents-and-tasks`; проекция записей `task`
+  читателем change пока не определяет); запись `branch` или уменьшение файла → снимок
   перечитывается целиком и эмитится `BranchChanged`, клиент перезагружает сессию;
 * при каждой проверке длины — `inspect` lease: файл исчез или протух → `SessionAccessChanged(
   readOnly, reason: leaseAvailable)`. Сессия сама на запись не переходит: клиент делает
@@ -872,7 +875,7 @@ Switch with /branch <n>, rewind with /rewind <n>, copy with /fork <n>.
 * Golden ACP-фикстура **`acp/session-rename`** (после OpenSpec): `_codelab/session/rename` → ответ `{title, updatedAt}`, `session_info_update` всем соединениям, `session/list` возвращает новый `title`.
 * `session_branches_test.dart`: дерево схемы §17.6.3 → две ветки, `divergesAt == k3f9a1c2`, метка `retry-point` во второй; пустая ветка (перемотка без нового сообщения) не показана; `leaf`-записи не создают кончиков.
 * `session_switch_branch_test.dart`: переключение → одна запись `branch` с `parentId == targetId`; scripted-суммаризатор получает регион покинутой ветки и промпт `session/branch_summary.md`; контекст новой ветки содержит обёртку со сводкой; ошибка суммаризатора → `summaryStatus: failed` и заметка; отмена → журнал побайтово не изменён; цель внутри пакета инструментов → `InvalidTarget` (SESM-2, SESM-5, SESM-16).
-* `session_branch_carry_settings_test.dart`: режим `plan` выбран после ветвления, переключение на ветку с `bypass` → дописан `mode_change` `plan`, проекция даёт `plan`; план — последний план новой ветки (SESM-3).
+* `session_branch_carry_settings_test.dart`: режим `plan` выбран после ветвления, переключение на ветку с `bypass` → дописан `mode_change` `plan`, проекция даёт `plan`; план — последний план новой ветки (SESM-3; после change `add-subagents-and-tasks` — список задач новой ветки, §17.16.6).
 * `session_branch_crash_test.dart`: процесс убит до и после записи `branch` → после `open` лист старый либо `branch` со сводкой; промежуточного состояния нет (SESM-2).
 * `session_rewind_test.dart` (**`core/session-rewind-new-leaf`**): перемотка к `p7d2` → новый лист — запись `branch`, ребёнок `k3f9`; следующий `prompt` — сиблинг `p7d2`; исходные записи на месте; `RewindResult.prompt` равен исходному контенту, для сообщения-команды возвращён `command`; `dryRun` перечисляет `lib/a.dart` и ничего не пишет; модель видит заметку `Changes made on the abandoned branch were not reverted …`; файлы в `MemoryExecutionEnv` не изменены (SESM-4).
 * `session_rewind_interrupted_test.dart`: перемотка после восстановленного хода (запись `interrupted`, SES-10) → покинутая ветка содержит синтетический результат, новый ход не повторяет вызов.
