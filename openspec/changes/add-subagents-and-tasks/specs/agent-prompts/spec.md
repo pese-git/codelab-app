@@ -48,13 +48,14 @@
 7. `tools/exec` при `shellExec`.
 8. `tools/tasks` — если в наборе есть `task_create` (у потомков её нет: детский вариант без `task_create`).
 9. `mcp` — по требованию «Секция mcp».
+9a. `skills/catalog` — если capability `skills` включена и в снимке каталога сессии есть навыки, видимые модели (change `add-agent-skills`, D6); у потомка — тот же снимок, что у родителя, и только если `skill` в наборе потомка (PR-6; design.md change `add-subagents-and-tasks`, D34).
 10. `project_context` — если `PromptInputs.projectContext` содержит хотя бы один файл (design.md change `add-agent-project-files`, D5).
 11. `agent_profile` — если у сессии выбран агент (D11).
 12. `subagent/system` — только у потомка (design.md change `add-subagents-and-tasks`, D16).
 13. профиль типа субагента `## Agent profile: <name>` — только у потомка, тело — `subagent/types/<name>.md` или тело пользовательского определения.
 14. `subagent/task` — только у потомка с назначенным пунктом списка задач.
 
-`PromptInputs` SHALL получить поля `projectContext` (`ProjectContext?`, результат `assembleProjectContext`), `agentProfile` (имя и тело выбранного определения или `null`) и `subagent` (тип, тело и назначенный пункт потомка или `null`). Тексты `project_context.md`, `project_context_file.md`, `agent_profile.md` и файлы `subagent/` SHALL лежать в `prompts/` и генерироваться в `prompts.g.dart` (PR-1, PR-2).
+`PromptInputs` SHALL получить поля `projectContext` (`ProjectContext?`, результат `assembleProjectContext`), `agentProfile` (имя и тело выбранного определения или `null`) и `subagent` (тип, тело и назначенный пункт потомка или `null`); поле `skills` (навыки `modelVisible` снимка каталога, change `add-agent-skills`) у потомка берётся из снимка родителя (D34). Тексты `project_context.md`, `project_context_file.md`, `agent_profile.md` и файлы `subagent/` SHALL лежать в `prompts/` и генерироваться в `prompts.g.dart` (PR-1, PR-2).
 
 Одинаковые входы SHALL давать побайтово одинаковый результат; секций выключенных capability в нём нет (PR-3, HOST-4).
 
@@ -87,3 +88,7 @@
 #### Scenario: Промпт ребёнка
 - **WHEN** промпт собирается для ребёнка `explore` с назначенным пунктом `#2` в режиме `plan`
 - **THEN** после секций базы идут `subagent/system`, `## Agent profile: explore` и строка `Your task: #2 …`; секции `tools/tasks` нет; результат совпадает с `test/prompts/golden/subagent-explore-plan.txt`
+
+#### Scenario: Промпт ребёнка с навыками
+- **WHEN** промпт собирается для ребёнка `general` в режиме `standard`, а у родителя навыки `flutter-golden` и `release-notes`
+- **THEN** секция `## Skills` стоит после `mcp` и до `project_context`, её текст побайтово равен секции родителя, за ней идут `subagent/system` и `## Agent profile: general`; результат совпадает с `test/prompts/golden/subagent-general-skills.txt` (итерация 2s)

@@ -535,6 +535,11 @@ final class ChildSessionSpec {                        // после MVP, §17.3.
   final ModelRef model; final TurnBudget budget;
   final PermissionMode Function() mode;               // narrow(parentMode(), type.mode) на каждое решение (SUB-2)
   final PermissionGate? gate;                         // SubagentPermissionGate над gate родителя
+  // Навыки (D34 change add-subagents-and-tasks, итерация 2s): тот же неизменяемый снимок каталога
+  // родителя, без повторной загрузки; null — у ребёнка нет skill и секции skills/catalog.
+  // readOnlyRoots env ребёнка — каталоги навыков этого снимка и его каталог выноса (§17.3.6).
+  final SkillCatalog? skills;
+  // Защищаемые пути конфигурации агента (PERM-11) — набор корневой сессии, не новый расчёт (SUB-1).
 }
 final class SessionSpec {
   final String cwd; final ModeId mode; final ModelRef model;

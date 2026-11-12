@@ -10,13 +10,15 @@
 - 0 — документы; решения пользователя 2026-11-10 (Q1–Q6), 2026-11-12 (Q9–Q13, design.md D29–D33) и переименование `task` → `agent` (design.md, D20) внесены;
 - 1 — список задач вместо `update_plan`, схема объявления `initialize`;
 - 2 — субагенты глубины 1;
+- 2s — стыковка с навыками после слияния кода change `add-agent-skills` (решение пользователя 2026-11-12, Q17, design.md D34);
 - 3 — запрос разрешения потомка;
 - 4 — вложенность до 3 и задачи у субагентов;
 - 5 — шаги потомков деревом (этап 2, design.md D21);
 - 5b — панель Agents v1 (решение пользователя 2026-11-12, Q13, design.md D33);
 - 6 — ручная проверка, документы, Definition of Done.
 
-Зависимости: 1 ← 0; 2 ← 1; 3 ← 2; 4 ← 3; 5 ← 4; 5b ← 5; 6 ← 5b и все остальные.
+Зависимости: 1 ← 0; 2 ← 1; 2s ← 2 и код `add-agent-skills` (его итерация 2) в `develop` — если он там уже к началу итерации 2, задачи 2s выполняются внутри неё; 3 ← 2; 4 ← 3; 5 ← 4; 5b ← 5; 6 ← 5b и все остальные, включая 2s.
+
 
 Проверки каждой задачи — только для затронутого (AGENTS.md §21; полный `melos run check` — по просьбе пользователя и на `release/*`):
 - `fvm dart format` изменённых файлов;
@@ -62,6 +64,8 @@
   Q10 и Q11 в спецификации этого change не входят: переключателей инструментов и режима `essential` нет ни в коде (`tools.disabled` — `applied: false`), ни в утверждённых спецификациях; правила D30 и D31 переносятся в дельты спецификаций change, вводящих §6.3.8 и §17.11.9 (задача 6.2).
 
 - [x] 0.8 Решения пользователя 2026-11-12 по Q13–Q16 (панель Agents v1 в 1.0) внесено: design.md (D19, D33, «Решённые вопросы», Q1), proposal, спецификации acp-client-kit «Список субагентов сессии» и agent-workbench-ui «Панель Agents v1», задачи итерации 5b; `delivery-roadmap.md` §6.1 (строка 9), §6.2 (пункт 9), §6.4 (этап 5 делится), §10.1 (строка 16), §10.3; `dart-agent-and-clients/12-3-desktop-display.md` A13 (шаги 2 и 6), A15 («Панель Agents v1»), DSK-26, «Как проверить»; `agent-core/17-3-subagents.md` §17.3.1 (таблица этапов). Q14 (чип и счётчик переключателя — с доской), Q15 (хвост без токенов: D25, сценарии agent-workbench-ui, acp-client-kit, codelab-tui, задачи 5.1, 5.5), Q16 (`_meta.codelab.subagent` у вложенного `agent` в сценарии «Вызовы ребёнка и внука» и фикстуре) внесены; строка D-25 `agent-parity-goals.md` помечена.
+
+- [x] 0.9 Решение пользователя 2026-11-12 по Q17 (навыки в субагенте) внесено: design.md (D34, D19, «Решённые вопросы», Context, Risks), proposal, спецификации agent-subagents («Сборка ребёнка», «Вложенность и слоты дерева») и agent-prompts (шаг 9a, «Промпт ребёнка с навыками»), задачи итераций 2 и 2s; `agent-core/17-3-subagents.md` §17.3.3 (шаги 3, 5, 8), `agent-core/05-agent-loop.md` §5.6 (`ChildSessionSpec`). Change `add-agent-skills` не менялся.
 
 ## 1. Список задач вместо `update_plan` (итерация 1)
 
@@ -132,6 +136,8 @@
     - конфиг (agent-configuration «Умолчания», «Диапазон глубины», «Проект не повышает глубину», «Дескрипторы в реестре», «Запись через config set», «Глубина 1»);
     - сборка (agent-runtime «Субагенты включены»);
     - `deterministic_journal_test.dart` с `agent`;
+    - `subagent_protected_paths_test.dart` (agent-subagents «Защищённые пути корня у ребёнка»; D34);
+    - `subagent_tools_intersection_test.dart` — вариант «Нет снимка каталога — нет skill» (поддельный инструмент `skill` в реестре родителя, без кода `add-agent-skills`; D34);
   - ACP: фикстура `acp/prompt-subagent-tool-call` (agent-acp-server «Вызов agent»); `initialize` с `subagents` и при `enabled: false` («Субагенты выключены»); `acp_projection_exhaustive_test.dart` со строками `Subagent*`;
   - признак первого кадра: agent-acp-server «Вызов agent» с `_meta.codelab.subagent {id, type}`; acp-client-kit «Вызов agent с первого кадра»; резерв `SubagentId` в `present` — id отклонённого вызова не создаёт ребёнка (D28);
   - итог: agent-subagents «Итог с потомками»; agent-acp-server «Итог субагента» (вживую, при отмене и в реплее); `summary` в финальном обновлении фикстуры `acp/prompt-subagent-tool-call`;
@@ -145,6 +151,14 @@
 - [ ] 2.8 `[protocol]` Проекция `agent` (`kind: think`, `_meta.codelab.subagent {id, type}` в первом `tool_call` вживую и при реплее (D28), прогресс, отчёт без обёртки, `_meta.codelab.subagent.summary` в финальном обновлении вживую и в реплее (D24), `_meta.codelab.subagent.failure` у `failed`). `Subagent*`/`SubagentActivity` — «not sent». Ключ `subagents` в блоке `initialize` (2.1, ACP).
 - [ ] 2.9 `[client]` `ToolCallView.subagentSummary`, строка итога и её сокращённый вид в kit (терпимый разбор, D27); `ToolCallView.subagentCall` из `_meta.codelab.subagent` первого `tool_call` — опознание вызова `agent` с первого кадра, без него — обычный `think` (D28); `ToolRowView` строки `agent`: прогресс, отчёт, итог; REPL — итог в скобках строки вызова без «Done»; TUI — глиф ✓ и сокращённый итог без «Done», `Failed`/`Cancelled` — явно (D27). REPL — прогресс на месте только на `ansi`, отчёт до 20 строк. TUI — строка вызова (2.1, kit и CLI).
 - [ ] 2.10 `[desktop]` Компактная строка вызова `agent` (D27): свёрнута по умолчанию, глиф, `Subagent <type>: <description>`, справа «N tool calls · N.Nk · время», шеврон; без тега «Done» и `#id` в свёрнутом виде, «Failed»/«Cancelled» остаются; под работающей — строка прогресса; раскрытие — отчёт (2.1, app; D24, D27).
+- [ ] 2.11 `[agent]` Реализация тестов 2.1 про навыки и пути: политика ребёнка получает набор защищаемых путей корневой сессии (пути хоста и сессии) вместо нового расчёта; инвариант «нет снимка каталога — нет `skill`» в сборке набора ребёнка (agent-subagents «Сборка ребёнка», «Защищённые пути корня у ребёнка», «Нет снимка каталога — нет skill»; D34, SUB-1).
+
+## 2s. Стыковка с навыками (итерация 2s, решение пользователя 2026-11-12, Q17)
+
+Начинается после слияния кода change `add-agent-skills` (его итерация 2: `skill`, `SkillCatalog`, `BoundedEnv.readOnlyRoots`) в `develop`; если он там уже к началу итерации 2 — задачи идут внутри итерации 2 (design.md, D34). Change `add-agent-skills` при этом не меняется.
+
+- [ ] 2s.1 `[agent]` Красные тесты: `subagent_skills_test.dart` (agent-subagents «Каталог ребёнка — снимок родителя», «Тип без skill», «Файлы навыка пользователя у ребёнка», «Активные навыки родителя не наследуются», «Корень навыков выше cwd у ребёнка»); golden `test/prompts/golden/subagent-general-skills.txt` (agent-prompts «Промпт ребёнка с навыками»).
+- [ ] 2s.2 `[agent]` Реализация 2s.1: поле снимка каталога в `ChildSessionSpec` — тот же `SkillCatalog` родителя без вызова `SkillFilesSource`; `PromptInputs.skills` ребёнка из снимка; `readOnlyRoots` и `execInReadOnlyRoots` env ребёнка — каталоги навыков снимка и каталог выноса; доверие Q30 и исключения E1–E3 по тем же каталогам; корни навыков сессии попадают к ребёнку через набор путей корня из 2.11 (D34). Проверки: `prompts:check`, `web-compile`.
 
 ## 3. Запрос разрешения потомка (итерация 3)
 
@@ -168,6 +182,7 @@
     - `subagent_tree_budget_test.dart` («Бюджет корня останавливает внука»);
     - `subagent_tools_intersection_test.dart` при `max_depth: 3` (SUB-24);
     - `subagent_activity_test.dart` («Адрес события внука»);
+    - `subagent_nested_skills_test.dart` («Внук получает пути и снимок корня»; часть про навыки — если итерация 2s уже выполнена, иначе добавляется в 2s.1; D34);
     - `subagent_journal_test.dart` («Раскладка внука») и рекурсивное лечение;
     - agent-permissions «Вопрос внука»;
     - `task_list_owner_test.dart` (agent-tools «Потомок меняет чужой пункт», «Назначение пункта ребёнку»);
