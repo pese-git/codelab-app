@@ -83,6 +83,7 @@ import '../features/workbench/application/secret_migration_cubit.dart';
 import '../features/workbench/application/secret_migration_runner.dart';
 import '../features/workbench/application/secret_migration_turns.dart';
 import '../features/workbench/application/shell_cubit.dart';
+import 'app_exit_handler.dart';
 import 'client_profile_secrets.dart'
     show DescribedProfileSecrets, UnavailableProfileSecrets;
 import 'reopenable_profile_secrets.dart';
@@ -406,12 +407,17 @@ final class CodeLabLoggingLifecycle implements Disposable {
   final structured_log_io.AsyncRotatingFileOutput protocolTraceOutput;
   final RemoteSyncLogOutput? httpOutput;
 
-  @override
-  Future<void> dispose() => Future.wait([
+  /// Ждёт запись очередей файловых журналов, ничего не закрывая (HTTP-выход
+  /// остаётся открытым). Для выхода из app: `dispose` при terminate не
+  /// вызывается (`AppExitHandler`, D4 «Выход из app»).
+  Future<void> flushed() => Future.wait([
     if (applicationOutput != null) applicationOutput!.flushed,
     protocolTraceOutput.flushed,
-    if (httpOutput != null) httpOutput!.close(),
   ]);
+
+  @override
+  Future<void> dispose() =>
+      Future.wait([flushed(), if (httpOutput != null) httpOutput!.close()]);
 }
 
 final class CodeLabPlatformModule extends Module {
@@ -1202,8 +1208,29 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     projectFilesCubit: _projectFilesCubitOf(_scope),
   );
 
+  /// Слушатель запроса выхода от ОС; владелец — это состояние, `dispose`
+  /// освобождает его (D4 «Выход из app», D15 п. 9). Без него `closeAll()` при
+  /// Cmd+Q не вызывается, и app зависает в ожидании isolate `pty2`.
+  late final AppLifecycleListener _exitListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _exitListener = AppLifecycleListener(
+      onExitRequested: AppExitHandler(
+        terminalTabs: _scope.resolve<TerminalTabsCubit>(),
+        logger: StructuredLogLogger('codelab_desktop.app').bind({
+          logCategoryKey: applicationLogCategory,
+          logComponentKey: 'app',
+        }),
+        flushLogs: _scope.resolve<CodeLabLoggingLifecycle>().flushed,
+      ).onExitRequested,
+    );
+  }
+
   @override
   void dispose() {
+    _exitListener.dispose();
     final providedScope = widget.scope;
     if (providedScope == null) {
       unawaited(closeCodeLabRootScope());

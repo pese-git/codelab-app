@@ -384,7 +384,9 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
       final shell = entry.shell;
       if (shell == null || entry.exited) continue;
       entry.killTimer?.cancel();
-      if (!already) shell.hangUp();
+      // Сбой сигнала одной вкладки не должен оставить живыми остальные:
+      // иначе app при выходе снова зависнет на их `waitpid` (D4, D15 п. 9).
+      if (!already) _signal(entry, 'hangup', shell.hangUp);
       live.add(entry);
     }
     _entries.clear();
@@ -409,7 +411,12 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
           // выходу процесса и должно сказать, что его убили (D4, D9). Это и
           // вкладки из `closeTab`, у которых `closeAll` отменил `killTimer`.
           entry.forced = true;
-          entry.shell!.kill();
+          // Событие сразу после `kill`, а не по `exitCode`: выход app идёт
+          // сразу за `closeAll()`, и запись по выходу процесса не успела бы
+          // (как в `closeTab`; `closeLogged` защищает от дубля). Если `kill`
+          // бросил, процесс мог остаться жив: тогда в журнале только
+          // `terminal.signal_failed`, а не ложное «закрыта».
+          if (_signal(entry, 'kill', entry.shell!.kill)) _logClosed(entry);
         }
         return <void>[];
       },
@@ -659,6 +666,27 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
     if (entry.closed || _shuttingDown) return;
     entry.status = TerminalTabFailed(reason);
     _publish();
+  }
+
+  /// Посылает сигнал процессу вкладки; сбой пишется в журнал (только тип
+  /// ошибки, D9) и не прерывает обход остальных вкладок. Возвращает, ушёл
+  /// ли сигнал без исключения.
+  bool _signal(_Entry entry, String signal, void Function() send) {
+    try {
+      send();
+      return true;
+    } on Object catch (error) {
+      if (isClosed) return false;
+      _logger.warning(
+        'terminal.signal_failed',
+        context: {
+          'tab_id': entry.id,
+          'signal': signal,
+          'error_type': error.runtimeType.toString(),
+        },
+      );
+      return false;
+    }
   }
 
   void _logExitWaitFailed(String tabId, Object error) {
