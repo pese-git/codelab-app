@@ -1161,83 +1161,6 @@ void main() {
     expect(violations, everyElement(endsWith('(excluded file)')));
   });
 
-  // Markdown в ленте desktop (design.md change `add-desktop-markdown`, D2,
-  // D10): парсер и подсветка живут только в `codelab_ui/lib/src/rendering/`,
-  // Material/Cupertino и их производные запрещены в kit и app, а открытие
-  // внешних ссылок - только в `lib/core/platform/` app.
-  //
-  // Прогоняет все правила, чей `dir` - [ruleDir], на временном дереве
-  // [files] (путь относительно `lib/` -> содержимое) и возвращает нарушения.
-  List<String> scanMarkdownRules(String ruleDir, Map<String, String> files) {
-    final tmp = Directory.systemTemp.createTempSync('guard_markdown_');
-    addTearDown(() => tmp.deleteSync(recursive: true));
-    files.forEach((path, content) {
-      File(p.join(tmp.path, 'lib', path))
-        ..createSync(recursive: true)
-        ..writeAsStringSync(content);
-    });
-    final matched = rules.where((r) => r.dir == ruleDir).toList();
-    expect(matched, isNotEmpty, reason: 'нет правил для $ruleDir');
-    return [
-      for (final rule in matched)
-        ...scan(
-          tmp.path,
-          PackageRule(
-            'lib',
-            forbidden: rule.forbidden,
-            exclude: rule.exclude,
-            sealExclude: rule.sealExclude,
-          ),
-        ),
-    ];
-  }
-
-  test('allows the markdown parser and highlighter only in the rendering '
-      'layer of codelab_ui', () {
-    final violations = scanMarkdownRules('packages/flutter/codelab_ui/lib', {
-      'src/rendering/markdown.dart':
-          "import 'package:gpt_markdown/gpt_markdown.dart';\n"
-          "import 'package:val_highlight/val_highlight.dart';\n",
-      'src/feed/row.dart':
-          "import 'package:gpt_markdown/gpt_markdown.dart';\n"
-          "import 'package:val_highlight/val_highlight.dart';\n",
-    });
-
-    expect(
-      violations,
-      unorderedEquals([
-        endsWith(
-          'lib/src/feed/row.dart:1 -> package:gpt_markdown/gpt_markdown.dart',
-        ),
-        endsWith(
-          'lib/src/feed/row.dart:2 -> package:val_highlight/val_highlight.dart',
-        ),
-      ]),
-    );
-  });
-
-  test('forbids Material, Cupertino, highlight/latex widgets and SVG in '
-      'codelab_ui and the desktop app, even in the rendering layer', () {
-    const import =
-        "import 'package:material_ui/material_ui.dart';\n"
-        "import 'package:cupertino_ui/cupertino_ui.dart';\n"
-        "import 'package:val_highlight_flutter/val_highlight_flutter.dart';\n"
-        "import 'package:val_latex_flutter/val_latex_flutter.dart';\n"
-        "import 'package:flutter_svg/flutter_svg.dart';\n";
-    for (final dir in [
-      'packages/flutter/codelab_ui/lib',
-      'apps/codelab_desktop/lib',
-    ]) {
-      final violations = scanMarkdownRules(dir, {
-        'src/rendering/code_block.dart': import,
-        'features/x.dart': import,
-      });
-
-      expect(
-        violations,
-        hasLength(10),
-        reason: '$dir:\n${violations.join('\n')}',
-      );
   // Терминал пользователя в десктопном клиенте (design.md change
   // `add-integrated-terminal`, D11; задача 1.3): модель эмулятора `xterm2_core`
   // — только feature `terminal`, виджеты `xterm2` — только её presentation,
@@ -1294,66 +1217,6 @@ void main() {
         violations,
         containsAll([
           endsWith(
-            'rendering/code_block.dart:1 -> package:material_ui/material_ui.dart',
-          ),
-          endsWith(
-            'rendering/code_block.dart:5 -> package:flutter_svg/flutter_svg.dart',
-          ),
-        ]),
-        reason: dir,
-      );
-    }
-  });
-
-  test('does not mistake val_highlight_flutter for the allowed '
-      'val_highlight in the rendering layer', () {
-    final violations = scanMarkdownRules('packages/flutter/codelab_ui/lib', {
-      'src/rendering/a.dart':
-          "import 'package:val_highlight/val_highlight.dart';\n"
-          "import 'package:val_highlight_flutter/val_highlight_flutter.dart';\n",
-    });
-
-    expect(violations.single, contains('package:val_highlight_flutter/'));
-  });
-
-  test('allows url_launcher only in the platform layer of the desktop app', () {
-    final violations = scanMarkdownRules('apps/codelab_desktop/lib', {
-      'core/platform/external_link_opener.dart':
-          "import 'package:url_launcher/url_launcher.dart';\n",
-      'features/workbench/link.dart':
-          "import 'package:url_launcher/url_launcher.dart';\n",
-    });
-
-    expect(
-      violations.single,
-      endsWith(
-        'features/workbench/link.dart:1 -> '
-        'package:url_launcher/url_launcher.dart',
-      ),
-    );
-  });
-
-  // Панель Files: чтение файлов — дело `ProjectFiles` kit и `IoProjectFiles`,
-  // а feature в app не знает `dart:io` (design.md change
-  // `add-file-preview-and-tree`, D10).
-  test('reports dart:io imported by the project files feature of the app', () {
-    final tmp = Directory.systemTemp.createTempSync('guard_files_');
-    addTearDown(() => tmp.deleteSync(recursive: true));
-    File(p.join(tmp.path, 'lib', 'application', 'project_files_cubit.dart'))
-      ..createSync(recursive: true)
-      ..writeAsStringSync("import 'dart:io';\n");
-    final rule = rules.singleWhere(
-      (r) => r.dir == 'apps/codelab_desktop/lib/features/project_files',
-    );
-
-    final violations = scan(
-      tmp.path,
-      PackageRule('.', forbidden: rule.forbidden),
-    );
-
-    expect(violations, hasLength(1), reason: violations.join('\n'));
-    expect(violations.single, endsWith('-> dart:io'));
-  });
             'lib/features/workbench/application/workbench_cubit.dart:1 -> '
             'package:xterm2_core/xterm2_core.dart',
           ),
@@ -1519,5 +1382,147 @@ void main() {
         expect(scan(tmp.path, desktopRuleFor('package:xterm2/')), isEmpty);
       },
     );
+  });
+
+  // Markdown в ленте desktop (design.md change `add-desktop-markdown`, D2,
+  // D10): парсер и подсветка живут только в `codelab_ui/lib/src/rendering/`,
+  // Material/Cupertino и их производные запрещены в kit и app, а открытие
+  // внешних ссылок - только в `lib/core/platform/` app.
+  //
+  // Прогоняет все правила, чей `dir` - [ruleDir], на временном дереве
+  // [files] (путь относительно `lib/` -> содержимое) и возвращает нарушения.
+  List<String> scanMarkdownRules(String ruleDir, Map<String, String> files) {
+    final tmp = Directory.systemTemp.createTempSync('guard_markdown_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    files.forEach((path, content) {
+      File(p.join(tmp.path, 'lib', path))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(content);
+    });
+    final matched = rules.where((r) => r.dir == ruleDir).toList();
+    expect(matched, isNotEmpty, reason: 'нет правил для $ruleDir');
+    return [
+      for (final rule in matched)
+        ...scan(
+          tmp.path,
+          PackageRule(
+            'lib',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+  }
+
+  test('allows the markdown parser and highlighter only in the rendering '
+      'layer of codelab_ui', () {
+    final violations = scanMarkdownRules('packages/flutter/codelab_ui/lib', {
+      'src/rendering/markdown.dart':
+          "import 'package:gpt_markdown/gpt_markdown.dart';\n"
+          "import 'package:val_highlight/val_highlight.dart';\n",
+      'src/feed/row.dart':
+          "import 'package:gpt_markdown/gpt_markdown.dart';\n"
+          "import 'package:val_highlight/val_highlight.dart';\n",
+    });
+
+    expect(
+      violations,
+      unorderedEquals([
+        endsWith(
+          'lib/src/feed/row.dart:1 -> package:gpt_markdown/gpt_markdown.dart',
+        ),
+        endsWith(
+          'lib/src/feed/row.dart:2 -> package:val_highlight/val_highlight.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('forbids Material, Cupertino, highlight/latex widgets and SVG in '
+      'codelab_ui and the desktop app, even in the rendering layer', () {
+    const import =
+        "import 'package:material_ui/material_ui.dart';\n"
+        "import 'package:cupertino_ui/cupertino_ui.dart';\n"
+        "import 'package:val_highlight_flutter/val_highlight_flutter.dart';\n"
+        "import 'package:val_latex_flutter/val_latex_flutter.dart';\n"
+        "import 'package:flutter_svg/flutter_svg.dart';\n";
+    for (final dir in [
+      'packages/flutter/codelab_ui/lib',
+      'apps/codelab_desktop/lib',
+    ]) {
+      final violations = scanMarkdownRules(dir, {
+        'src/rendering/code_block.dart': import,
+        'features/x.dart': import,
+      });
+
+      expect(
+        violations,
+        hasLength(10),
+        reason: '$dir:\n${violations.join('\n')}',
+      );
+      expect(
+        violations,
+        containsAll([
+          endsWith(
+            'rendering/code_block.dart:1 -> package:material_ui/material_ui.dart',
+          ),
+          endsWith(
+            'rendering/code_block.dart:5 -> package:flutter_svg/flutter_svg.dart',
+          ),
+        ]),
+        reason: dir,
+      );
+    }
+  });
+
+  test('does not mistake val_highlight_flutter for the allowed '
+      'val_highlight in the rendering layer', () {
+    final violations = scanMarkdownRules('packages/flutter/codelab_ui/lib', {
+      'src/rendering/a.dart':
+          "import 'package:val_highlight/val_highlight.dart';\n"
+          "import 'package:val_highlight_flutter/val_highlight_flutter.dart';\n",
+    });
+
+    expect(violations.single, contains('package:val_highlight_flutter/'));
+  });
+
+  test('allows url_launcher only in the platform layer of the desktop app', () {
+    final violations = scanMarkdownRules('apps/codelab_desktop/lib', {
+      'core/platform/external_link_opener.dart':
+          "import 'package:url_launcher/url_launcher.dart';\n",
+      'features/workbench/link.dart':
+          "import 'package:url_launcher/url_launcher.dart';\n",
+    });
+
+    expect(
+      violations.single,
+      endsWith(
+        'features/workbench/link.dart:1 -> '
+        'package:url_launcher/url_launcher.dart',
+      ),
+    );
+  });
+
+  // Панель Files: чтение файлов — дело `ProjectFiles` kit и `IoProjectFiles`,
+  // а feature в app не знает `dart:io` (design.md change
+  // `add-file-preview-and-tree`, D10).
+  test('reports dart:io imported by the project files feature of the app', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_files_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'application', 'project_files_cubit.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("import 'dart:io';\n");
+    final rule = rules.singleWhere(
+      (r) => r.dir == 'apps/codelab_desktop/lib/features/project_files',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    expect(violations, hasLength(1), reason: violations.join('\n'));
+    expect(violations.single, endsWith('-> dart:io'));
   });
 }
