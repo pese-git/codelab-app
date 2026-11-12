@@ -54,6 +54,33 @@ Kit SHALL сохранять снимок рабочего пространст�
 - **WHEN** снимок содержит проект `/work/app` и активную сессию `s1` с `cwd` `/`, и агент не объявил `loadSession`
 - **THEN** новая сессия с уведомлением не создаётся
 
+### Requirement: Одобрения привязаны к вызову
+`SessionView.pendingApprovals` SHALL содержать запросы `session/request_permission` с `toolCallId`, заголовком, видом, сырыми аргументами и вариантами ответа по `kind`. `PendingApprovalView.critical` SHALL быть `true` только тогда, когда `_meta.codelab.critical` запроса или его `toolCall` равно `true` (Dart-агент помечает так опасные команды в `toolCall`); другое значение или его отсутствие SHALL давать `false`. `SessionHandle.respond` SHALL отправлять выбранный `optionId` только в запрос этой сессии; ответ в одной сессии НЕ SHALL менять одобрения другой. Одобрение привязано и к соединению, в котором пришёл запрос: при замене транспорта (`reconnect`) и при неожиданной потере соединения kit SHALL снимать каждое ждущее одобрение каждой сессии — оно получает статус `cancelled`, уходит из `pendingApprovals` и карточки вызова, ход больше не ждёт одобрения, а в диагностику пишется предупреждение с id сессии, одобрения и вызова без сырых аргументов. Поздний `respond` по снятому одобрению SHALL завершаться ошибкой и НЕ SHALL отправлять ответ ни в одно соединение. Очередь промптов сессии при этом SHALL сохраняться. Запрос нового соединения SHALL обрабатываться как новый, даже если его JSON-RPC id совпал с id снятого (design.md change `require-project-folder`, «Затронутые пакеты», `codelab_client_acp`; D22).
+
+#### Scenario: Ответ в фоновой сессии
+- **WHEN** у сессий A и B ожидают одобрения, и пользователь отвечает в B
+- **THEN** одобрение A остаётся ожидающим
+
+#### Scenario: Критичный запрос
+- **WHEN** агент присылает `session/request_permission` с `toolCall._meta: {"codelab": {"critical": true}}` или с `_meta: {"codelab": {"critical": true}}` у запроса
+- **THEN** у соответствующего `PendingApprovalView` `critical == true`, у запроса без этого поля или со значением, отличным от `true`, — `false`
+
+#### Scenario: Перезапуск снимает одобрение detached-сессии
+- **WHEN** ход сессии `a1` с одним промптом в очереди ждёт одобрения, и `reconnect()` подключается к агенту без `loadSession`
+- **THEN** `a1` — `detached`, её `pendingApprovals` пуст и карточки одобрения в транскрипте нет, промпт остаётся в очереди, а `respond` по прежнему id завершается ошибкой без ответа агенту
+
+#### Scenario: Потеря соединения снимает одобрение
+- **WHEN** ход ждёт одобрения, и транспорт установленного соединения неожиданно падает
+- **THEN** `pendingApprovals` сессии пуст, а `respond` по прежнему id завершается ошибкой без отправки ответа
+
+#### Scenario: Ответ во время замены транспорта
+- **WHEN** ход ждёт одобрения, хост вызывает `reconnect()`, и до завершения замены транспорта пользователь отвечает на одобрение
+- **THEN** одобрение снято, ответ не отправлен ни в старое, ни в новое соединение
+
+#### Scenario: Запрос нового соединения с прежним id
+- **WHEN** одобрение с JSON-RPC id `7` снято при `reconnect()`, и агент нового соединения присылает `session/request_permission` с id `7`
+- **THEN** запрос виден в `pendingApprovals`, и ответ пользователя уходит в новое соединение ровно один раз
+
 ## ADDED Requirements
 
 ### Requirement: Агент по требованию хоста
@@ -61,10 +88,11 @@ Kit SHALL предоставлять операцию `ClientWorkspace.ensureAge
 
 - **Профиль.** Берётся `profile`, иначе профиль текущего или последнего соединения. Без профиля — `ClientWorkspaceException`, без обращения к резолверам.
 - **Работающий агент.** При `Connected` операция SHALL завершаться без запросов к агенту и резолверам, какую бы папку ни передали.
-- **Single-flight.** Если идёт попытка (`Connecting`, `Reconnecting`), операция SHALL возвращать её результат и НЕ SHALL открывать второй транспорт.
+- **Single-flight.** Если идёт попытка (`Connecting`, `Reconnecting`), операция SHALL возвращать её результат и НЕ SHALL открывать второй транспорт. Явный `connect` или `reconnect` во время попытки `ensureAgent` SHALL вытеснять её по общим правилам вытеснения: `Future` `ensureAgent` завершается без ошибки, итог читается из состояния (design.md change `require-project-folder`, Q25 (a)).
 - **Новая попытка.** Иначе kit SHALL открывать соединение с корнем процесса `directory` по правилам `connect` (вытеснение, `Connecting`, `ConnectionFailed`). `agentDirectory` SHALL становиться `directory`. `projectDirectory` (выбранный проект и снимок) НЕ SHALL меняться.
-- **Совместимость.** `connect(profile, projectDirectory:)` SHALL по-прежнему задавать и `projectDirectory`, и `agentDirectory`. `reconnect(projectDirectory:)` SHALL задавать `agentDirectory`. Поведение хостов, которые вызывают только `connect` (CLI), не меняется.
-- **Список при смене проекта.** `selectProject(path)` при `Connected` SHALL сбрасывать список и курсор и запрашивать первую страницу `session/list` для `path`, если агент объявил `sessionCapabilities.list`. Ответ, пришедший после следующей смены проекта или подключения, НЕ SHALL менять список.
+- **Совместимость.** `connect(profile, projectDirectory:)` SHALL по-прежнему задавать и `projectDirectory`, и `agentDirectory`. `reconnect(projectDirectory:)` SHALL задавать обе папки. `reconnect(agentDirectory:)` SHALL задавать только `agentDirectory` и НЕ SHALL менять `projectDirectory`; без обоих параметров корнем SHALL оставаться прежний `agentDirectory`, а без него — `projectDirectory`. Резолвер SHALL получать `agentDirectory` в параметре `projectDirectory` метода `TransportResolver.open`. Поведение хостов, которые вызывают только `connect` и `reconnect()` (CLI), не меняется.
+- **Список при смене проекта.** `selectProject(path)` при `Connected` SHALL сбрасывать список и курсор и запрашивать первую страницу `session/list` для `path`, если агент объявил `sessionCapabilities.list`. Ответ, пришедший после следующей смены проекта или подключения, НЕ SHALL менять список и курсор. Без `projectDirectory` kit НЕ SHALL запрашивать `session/list` после подключения: запрос без `cwd` вернул бы сессии всех папок.
+- **Новая сессия без активации.** `newSession(cwd:, activate: false)` SHALL создавать сессию, добавлять её в список и снимок и НЕ SHALL менять `activeSessionId`. По умолчанию `activate` истинно, как сейчас.
 
 #### Scenario: Работающий агент не трогается
 - **WHEN** агент подключён с корнем процесса `/work/a`, и вызывается `ensureAgent('/work/b')`
@@ -81,6 +109,22 @@ Kit SHALL предоставлять операцию `ClientWorkspace.ensureAge
 #### Scenario: Смена проекта перезапрашивает список
 - **WHEN** агент подключён, `session/list` для `/work/a` ещё не ответил, и хост вызывает `selectProject('/work/b')`
 - **THEN** отправлен `session/list` с `cwd` `/work/b`; поздний ответ для `/work/a` список не меняет
+
+#### Scenario: Перезапуск вытесняет зависший старт
+- **WHEN** `ensureAgent('/work/a')` ждёт открытия транспорта, и хост вызывает `reconnect(agentDirectory: '/work/a')`
+- **THEN** транспорт первой попытки закрыт, `Future` `ensureAgent` завершается без ошибки, промежуточного `ConnectionFailed` нет, а состояние соединения задаёт попытка `reconnect`
+
+#### Scenario: Перезапуск с корнем сессии не меняет проект
+- **WHEN** выбран проект `/work/a`, агент подключён, и хост вызывает `reconnect(agentDirectory: '/work/b')`
+- **THEN** резолвер открывает транспорт с папкой `/work/b`, `agentDirectory` — `/work/b`, `projectDirectory` — `/work/a`, а `session/list` после подключения отправлен с `cwd` `/work/a`
+
+#### Scenario: Старт без проекта не запрашивает список
+- **WHEN** проект не выбран, открыта `detached`-сессия с `cwd` `/work/b`, и хост вызывает `ensureAgent('/work/b')`
+- **THEN** после подключения `session/list` не отправлен
+
+#### Scenario: Сессия без активации
+- **WHEN** активна сессия `s1`, и хост вызывает `newSession(cwd: '/work/a', activate: false)`
+- **THEN** `session/new` отправлен, новая сессия есть в `WorkspaceState.sessions`, а `activeSessionId` — `s1`
 
 #### Scenario: CLI-путь не меняется
 - **WHEN** хост вызывает `connect(profile, projectDirectory: '/work/app')` и создаёт сессии без `cwd`
