@@ -47,12 +47,15 @@
 | 2 — шаги ребёнка деревом | `tool_call` потомков на проводе с `_meta.codelab.parentToolCallId` для клиентов с `subagentToolCalls`; меняет SUB-12 | §17.3.7, «Шаги потомков деревом» | `add-subagents-and-tasks`, итерация 5 |
 | 3 — фон и пробуждение | `run_in_background`, `agent_status`, `agent_cancel`, `wake` | §17.3.8, §17.3.9 | отдельный change, 1.x (первый) |
 | 4 — продолжение ребёнка (C-17) | `agent_send`, `agent_resume`, `agent_observe`; `output_schema` и ремонт отчёта | §17.3.8.1, §17.3.5 | отдельный change, 1.x (третий) |
-| 5 — доска (U-21, D-25) и `/tasks` | `_codelab/subagents/*`, доска app и CLI | §17.3.7, §17.3.8 | `add-subagent-board`, 1.x (второй) |
+| 5a — панель Agents v1 (клиент) | список субагентов сессии в доке app из данных этапов 1 и 2 (`_meta.codelab.subagent`, итог, дерево `parentToolCallId`, запросы потомков); ядро и протокол не меняются | dart-agent-and-clients §12.3, A15 | `add-subagents-and-tasks`, итерация 5b |
+| 5 — доска (U-21, D-25) и `/tasks` | `_codelab/subagents/*` в той же панели Agents, вид CLI `tasks` | §17.3.7, §17.3.8 | `add-subagent-board`, 1.x (второй) |
 | 6 — фоновые команды (T-10) | `_codelab/jobs/*` на той же доске | §17.9 | `add-background-jobs`, 1.x (четвёртый) |
 | позже | общий список задач между сессиями; изоляция ребёнка в git worktree | — | — |
 
 Решение пользователя 2026-11-10: 1.0 = этапы 1 и 2 (change `add-subagents-and-tasks`); этапы 3 → 5 →
-4 → 6 — начало пула 1.x в этом порядке (дорожная карта §6.2, §6.4).
+4 → 6 — начало пула 1.x в этом порядке (дорожная карта §6.2, §6.4). Решение 2026-11-12 (Q13,
+design.md change, D33): клиентская панель Agents v1 (строка «5a») входит в 1.0; ядру и адаптеру она
+ничего не добавляет, доска этапа 5 встаёт в ту же панель.
 
 ## 17.3.2. Контракт
 
@@ -695,7 +698,8 @@ OpenSpec (change `add-subagents-and-tasks`).
 `acp/session-load-subagent-tool-tree`.
 
 Пока вызов `agent` идёт, клиент с деревом может показывать в свёрнутой строке «хвост» — три
-последних вызова потомков и строку `+N more tool calls · Nk tokens`; это проекция клиента над
+последних вызова потомков и строку `+N more tool calls` (без токенов: они только в итоге завершённого,
+Q15); это проекция клиента над
 вызовами с `parentToolCallId`, агент для неё ничего сверх таблицы не шлёт (design.md change
 `add-subagents-and-tasks`, D25). Без дерева клиент показывает строку прогресса `ToolCallProgress`.
 
