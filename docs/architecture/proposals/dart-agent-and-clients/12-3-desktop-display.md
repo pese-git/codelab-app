@@ -500,8 +500,13 @@ userinfo не загружается. Выбор хранится в `Transcript
 `gitBranch` и `queued` статус-бар десктопа не показывает: очередь видна в своей панели (R-18),
 ветка — вне объёма D-09.
 
-Данные usage приходят от агента через расширение ACP для usage (L-11, OpenSpec change
-`add-usage-extension`, §12.1.5). Без расширения kit отдаёт `UsageView.unknown`, поля остаются в
+Данные usage приходят от агента уведомлением расширения `_codelab/session/usage` (L-11, change
+`add-usage-extension`, D11; §12.1.5). Виджет — `CodeLabSessionStatusBar` в `codelab_ui`; состояния
+`unknown` («usage: —»), `awaiting` (агент объявил usage, снимков нет — сегментов нет, во время хода
+индикатор) и `reported`; стоимость без цены при известных токенах — «—» с подсказкой
+`price unknown`; подпись `compaction soon` — только при известном `compactAt` (порог
+автосжатия) и `used ≥ 0.9 × compactAt`; в этом change строка некликабельна (переход в панель Usage —
+`add-desktop-usage-pane`). Без расширения kit отдаёт `UsageView.unknown`, поля остаются в
 состоянии «неизвестно» и никогда не превращаются в нули (VIEW-6). Подпись:
 `12,3k → 1,2k · $0,042 · сессия $1,20`; вход — `input + cacheRead + cacheWrite`, выход —
 `output`, как в CLI (§12.2.6). Подсказка показывает `input`, `output`, `cacheRead`,
@@ -1017,7 +1022,8 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
     с экрана. Мысли НЕ ДОЛЖНЫ попадать в «Копировать ответ».
 11. **DSK-11.** При отсутствии данных usage, стоимости или заполнения контекста статус-бар ДОЛЖЕН
     показывать состояние «неизвестно» (скрытое поле или «—») и НЕ ДОЛЖЕН показывать нули.
-    Расширение ACP для usage вводится только через OpenSpec.
+    Расширение ACP для usage вводится только через OpenSpec — change `add-usage-extension`
+    (`_codelab/session/usage`).
 12. **DSK-12.** Вид доставки на чипе ДОЛЖЕН совпадать с тем, что уйдёт в `session/prompt`:
     оба вычисляет `PromptContentBuilder.build` kit по актуальным `promptCapabilities` (VIEW-13);
     app НЕ ДОЛЖЕН выбирать вид доставки сам.
@@ -1270,9 +1276,9 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 * запись полученных `ContentBlock` каждого `session/prompt`, чтобы тест проверял точный состав
   блоков (сценарии `prompt_attachments_flow_test.dart`);
 * отказ `-32602` на промпт с `resource_link` (проверка повтора с путями текстом, §12.1.7, шаг 5);
-* usage в форме, утверждённой OpenSpec change `add-usage-extension` — добавляется только после
-  принятия расширения; до этого сценарий 2 `usage_display_flow_test.dart` помечен `skip` со
-  ссылкой на change;
+* usage уведомлением `_codelab/session/usage` (change `add-usage-extension`, задача 3.5) — режим
+  scripted-агента появляется в итерации 3 того change; до неё сценарий 2
+  `usage_display_flow_test.dart` помечен `skip` со ссылкой на change;
 * стрим мыслей, markdown с оградой и правки с `content` типа `diff` по сценарию из фикстуры
   (`transcript_rendering_flow_test.dart`).
 

@@ -31,7 +31,7 @@ flowchart LR
     subgraph Agent["Агент"]
         SU["session/update<br/>tool_call, chunks, plan"]
         PR["ответ session/prompt<br/>stopReason, _meta"]
-        UX["расширение usage<br/>(через OpenSpec)"]
+        UX["_codelab/session/usage<br/>(change add-usage-extension)"]
     end
     subgraph Kit["codelab_client_core, чистый Dart"]
         TP["TranscriptProjector"]
@@ -52,7 +52,7 @@ flowchart LR
         APP["codelab_desktop<br/>Cubit + codelab_ui"]
     end
     SU --> TP
-    PR --> UD
+    PR --> TP
     UX --> UD
     TP --> MD
     TP --> DF
@@ -292,29 +292,29 @@ final class SessionStatusBar {
   final bool readOnly;                              // после MVP: access == ReadOnlyAccess (S-09)
 }
 
+// Change add-usage-extension (design.md D8): SessionStatusBar и StatusBarProjector выше — эскиз,
+// этот change их не вводит; новое поле — только SessionView.usage.
 final class UsageView {
-  final TokenCounts? lastTurn;
-  final TokenCounts? session;
-  final bool sessionPartial;                        // сумма только по ходам, увиденным этим клиентом
-  final Money? lastTurnCost, sessionCost;
-  final int? contextUsed, contextWindow;
-  final UsageSource source;
-  double? get contextFraction;                      // null, если нет contextUsed или contextWindow
-  static const UsageView unknown = UsageView(source: UsageSource.none);
+  final UsageSupport support;                       // unknown | awaiting | reported
+  final UsageTotals? lastTurn;                      // ход последнего снимка с turnId
+  final UsageTotals? session;                       // сумму считает агент, клиент не суммирует
+  final ContextFillView? context;
+  final int lastSeq;                                // свёртка по seq снимков
 }
-final class TokenCounts { final int input, output, cacheRead, cacheWrite, reasoning; }
+enum UsageSupport { unknown, awaiting, reported }   // unknown — агент не объявил usage (VIEW-6)
+final class UsageTotals { final TokenCounts tokens; final Money? cost; final int steps;
+  final Set<UsagePartial> partial; }               // «~»: noUsage, beforeLoad — у токенов; любая — у стоимости
+final class TokenCounts { final int input, output, cacheRead, cacheWrite; final int? reasoning; }
 final class Money { final int micros; final String currency; }        // целые микроединицы
-enum UsageSource { none, extension }
+enum UsagePartial { noUsage, noPrice, beforeLoad }
+final class ContextFillView { final int used; final int? size, compactAt;
+  double? get fraction;                             // null без size или при size == 0
+  bool get compactionSoon; }                        // compactAt != null && used >= 0.9 × compactAt
 
-/// Единственное место, знающее форму расширения usage (решается OpenSpec, §12.1.5).
-abstract interface class UsageDecoder {
-  UsageSample? fromPromptResponse(PromptResponse response);
-  UsageSample? fromNotification(String method, Map<String, Object?> params);
-}
-final class UsageSample {
-  final TokenCounts? turn; final TokenCounts? sessionTotal;
-  final Money? turnCost, sessionCost;
-  final int? contextUsed, contextWindow;
+/// Единственное место, знающее форму `_codelab/session/usage` (§12.1.5); одна форма —
+/// одна реализация, без интерфейса (`AGENTS.md` §13).
+final class UsageDecoder {
+  UsageSnapshot? decode(Map<String, Object?> params);   // null и диагностика вместо исключения
 }
 
 // ---------- Вложения ----------
@@ -563,23 +563,25 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    `model` (если категорий нет — опции с id `model`); подпись — `name` выбранного значения.
    Режим — то же для категории `mode`, иначе `currentModeId` из `current_mode_update` с именем из
    списка режимов сессии. Ничего нет — поле `null`.
-2. **Usage.** Источники — только расширение агента. Форма расширения — открытый вопрос матрицы
-   целей (§8 матрицы, L-11): поле `_meta.codelab.usage` в ответе `session/prompt`, отдельное
-   уведомление `_codelab/usage` или совместимое с другими агентами обновление usage. Выбор
-   делается OpenSpec change `add-usage-extension` (`AGENTS.md` §3.4); kit реализует выбранную
-   форму в одной реализации `UsageDecoder`, остальная модель от формы не зависит. Предлагаемое
-   содержимое любой формы — поля `UsageSample`:
-   `{"turn":{"input":1200,"output":310,"cacheRead":9800,"cacheWrite":0,"reasoning":0},
-   "session":{…},"cost":{"turn":"0.0041","session":"0.0372","currency":"USD"},
-   "context":{"used":11000,"size":128000}}`.
-3. **Свёртка.** Каждый `UsageSample` обновляет `UsageView`: `lastTurn` — из `turn`; `session` —
-   из `sessionTotal` (поле `UsageSample`, в JSON — `session`), если агент его прислал (тогда `sessionPartial = false`); иначе клиент
-   суммирует `turn` по ходам, увиденным в этой сессии, и ставит `sessionPartial = true` (после
-   `session/load` ранние ходы неизвестны). Стоимость — так же. `contextUsed/contextWindow` — только
-   из `context`; клиент не оценивает окно модели сам. Деньги хранятся в целых микроединицах:
-   сумма дробных долларов в `double` накапливает ошибку.
-4. **Без расширения** `UsageView.unknown`: сегменты токенов, стоимости и контекста отсутствуют
-   (не «0»). Это обычный режим со сторонним агентом.
+2. **Usage.** Источник — только расширение агента: уведомление `_codelab/session/usage` с
+   объявлением `usage: {"version": 1}` в `_meta.codelab` при `initialize` (change
+   `add-usage-extension`, D1–D3, D17; `AGENTS.md` §3.4). Kit разбирает форму в одной реализации
+   `UsageDecoder`, остальная модель от неё не зависит. Пример параметров (форма — D2):
+   `{"sessionId":"…","seq":4,"trigger":"step","turnId":"…","step":{…},
+   "turn":{"steps":2,"tokens":{"input":2400,"output":520,"cacheRead":19600,"cacheWrite":1200},"cost":"0.0183"},
+   "session":{"turns":3,"steps":7,"tokens":{…},"cost":"0.0372","partial":["beforeLoad"]},
+   "currency":"USD","context":{"used":22900,"size":200000,"compactAt":183616}}`.
+3. **Свёртка.** Снимок применяется, только если его `seq` больше последнего применённого для
+   сессии в текущем поколении соединения; дубли и опоздания отбрасываются. `lastTurn` заменяется
+   снимком с другим `turnId`, `session` и `context` — каждым снимком. Клиент ничего не суммирует и
+   окно модели не оценивает: сумму сессии считает агент (после `session/load` она неполная — причина
+   `beforeLoad`, полная — change `add-usage-ledger`). Деньги приходят десятичной строкой и хранятся в
+   целых микроединицах: сумма дробных долларов в `double` накапливает ошибку. Переподключение и
+   `session/load` сбрасывают `usage` сессии в `awaiting` или `unknown`.
+4. **Без расширения** `UsageSupport.unknown`: сегменты токенов, стоимости и контекста отсутствуют
+   (не «0»). Это обычный режим со сторонним агентом. `awaiting` — агент объявил `usage`, снимков ещё
+   нет. `compaction soon` — только при известном `compactAt` (порог автосжатия) и
+   `used ≥ 0.9 × compactAt`.
 5. **Ветка git.** `GitBranchProbe.branchOf(cwd)` вызывается при открытии сессии, после каждого
    хода и не чаще раза в 5 с; результат кэшируется. Реализация в `codelab_client_io` читает
    `.git/HEAD` (с переходом по файлу `.git` с `gitdir:` для worktree и подмодулей), без запуска
@@ -772,10 +774,11 @@ Setext-заголовки, HTML, сноски и ссылки-определен
 * `transcript/tool_call_display_projection_test.dart`: `outcome` → статус; `startedAt` по
   фальшивым часам; строка прогресса субагента заменяется; spill-пометка распознана; реплей без
   времени (VIEW-10).
-* `view/status_bar_projector_test.dart`: модель и режим из опций категорий и из
+* `view/status_bar_projector_test.dart` (эскиз; change `add-usage-extension` проектор не вводит, usage
+  проверяет `usage/session_usage_test.dart`): модель и режим из опций категорий и из
   `current_mode_update`; без usage — `UsageView.unknown`; частичная сумма после `session/load`;
   деньги без накопления ошибки на 1000 ходах (VIEW-6).
-* `usage/usage_decoder_test.dart`: форма, утверждённая OpenSpec; неизвестные поля игнорируются,
+* `usage/usage_decoder_test.dart` и `usage/session_usage_test.dart` (change `add-usage-extension`, задачи 2.4, 2.5): форма D2 `_codelab/session/usage`; свёртка по `seq`; `compactionSoon`; неизвестные поля игнорируются,
   неверный тип поля — `null` и диагностика, не исключение.
 * `attachments/prompt_content_builder_test.dart`: PNG с расширением `.jpg` → `image/png`; без
   `image` в возможностях → `resource_link` и пометка; `embeddedContext` → `resource`; путь вне
