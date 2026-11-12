@@ -28,6 +28,7 @@ import 'package:xterm2/ui.dart' show TerminalView;
 import 'package:xterm2_core/xterm2_core.dart' show Terminal;
 
 import '../../../support/fake_client_workspace.dart';
+import '../../../support/fake_external_link_opener.dart';
 import '../../../support/fake_user_shell_launcher.dart';
 import '../../../support/recording_logger.dart';
 
@@ -95,6 +96,7 @@ void main() {
       launcher: launcher,
       directoryExists: (_) async => true,
       logger: RecordingLogger(),
+      externalLinkOpener: FakeExternalLinkOpener(),
       modelFactory: ({required onOutput, onResize}) {
         final list = <String>[];
         parts.add(list);

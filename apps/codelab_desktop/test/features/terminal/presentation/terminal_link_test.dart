@@ -119,6 +119,9 @@ Future<void> _frames(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 50));
   await tester.pump(const Duration(milliseconds: 50));
+  // Анимация закрытия диалога Fluent длится дольше двух кадров, а
+  // `pumpAndSettle` не годится: курсор терминала мигает вечно (2.10).
+  await tester.pump(const Duration(milliseconds: 500));
 }
 
 /// Точка внутри первой клетки области терминала (отступ `TerminalView` —
@@ -313,6 +316,9 @@ void main() {
       await tester.tap(_open);
       await _frames(tester);
 
+      // Очистка экрана и курсор в начало: иначе первая клетка остаётся за
+      // первой (https) ссылкой, а не за новой.
+      env.launcher.shells.single.emit('\x1b[2J\x1b[H');
       await env.printLink(tester, uri: 'file:///etc/passwd', text: 'passwd');
       await _cmdClick(tester);
 

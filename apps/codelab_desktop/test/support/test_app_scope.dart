@@ -4,10 +4,11 @@ import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snapshot_store.dart'
     show kWorkspaceSnapshotPrefsKey;
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
-import 'package:codelab_desktop/core/platform/project_folder_picker.dart'
-    show ProjectFolderPicker;
+import 'package:codelab_desktop/core/platform/external_link_opener.dart';
 import 'package:codelab_desktop/core/platform/user_shell_launcher.dart'
     show UserShellLauncher;
+import 'package:codelab_desktop/core/platform/project_folder_picker.dart'
+    show ProjectFolderPicker;
 import 'package:codelab_desktop/features/workbench/application/connection_cubit.dart'
     show stdioConnectionProfileOf;
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -94,8 +95,9 @@ final class CodeLabTestBinding {
     ProfileSecrets? profileSecrets,
     ProviderSettingsOpener? providerSettingsOpener,
     Future<bool> Function(String cwd)? providerSetupProbe,
-    ProjectFiles? projectFiles,
     UserShellLauncher? userShellLauncher,
+    ExternalLinkOpener? externalLinkOpener,
+    ProjectFiles? projectFiles,
     bool stdioDefault = true,
     String? project,
     ProjectFolderPicker? projectFolderPicker,
@@ -156,6 +158,13 @@ final class CodeLabTestBinding {
       // Настоящая функция читала бы `$CODELAB_HOME` разработчика: по
       // умолчанию «провайдер не нужен» (прежнее поведение баннера).
       providerSetupProbe: providerSetupProbe ?? (cwd) async => false,
+      // Настоящий `pty2` в тестах не запускается: по умолчанию — порт по
+      // умолчанию app (без вкладок он ничего не делает), тесты терминала
+      // передают `FakeUserShellLauncher`.
+      userShellLauncher: userShellLauncher,
+      // Настоящий `url_launcher` открывал бы браузер: тесты ссылок терминала
+      // передают `FakeExternalLinkOpener`.
+      externalLinkOpener: externalLinkOpener,
       // Без подмены «Open folder…» открыл бы системный диалог.
       projectFolderPicker: projectFolderPicker ?? const _NoFolderPicker(),
       // Настоящий `IoProjectFiles` читал бы диск разработчика и зависал бы в
@@ -163,10 +172,6 @@ final class CodeLabTestBinding {
       // двойник (`FakeProjectFiles`).
       projectFiles: projectFiles,
       projectFilesEnabled: projectFiles != null,
-      // Настоящий `pty2` в тестах не запускается: по умолчанию — порт по
-      // умолчанию app (без вкладок он ничего не делает), тесты терминала
-      // передают `FakeUserShellLauncher`.
-      userShellLauncher: userShellLauncher,
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own

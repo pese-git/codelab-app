@@ -42,6 +42,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2_core/xterm2_core.dart';
 
 import '../../../support/fake_client_workspace.dart';
+import '../../../support/fake_external_link_opener.dart';
 import '../../../support/fake_user_shell_launcher.dart';
 import '../../../support/recording_logger.dart';
 
@@ -71,12 +72,14 @@ void main() {
   late Set<String> existingDirectories;
   late List<_RecordingTerminal> terminals;
   late TerminalTabsCubit cubit;
+  late FakeExternalLinkOpener linkOpener;
 
   TerminalTabsCubit build({int writeChunkSize = 4096}) => TerminalTabsCubit(
     workspace: workspace,
     launcher: launcher,
     directoryExists: (path) async => existingDirectories.contains(path),
     logger: logger,
+    externalLinkOpener: linkOpener,
     modelFactory: ({required onOutput, onResize}) {
       final terminal = _RecordingTerminal(
         onOutput: onOutput,
@@ -92,6 +95,7 @@ void main() {
     workspace = FakeClientWorkspace();
     launcher = FakeUserShellLauncher();
     logger = RecordingLogger();
+    linkOpener = FakeExternalLinkOpener();
     existingDirectories = {'/work/a', '/work/b'};
     terminals = [];
     cubit = build();
@@ -758,6 +762,41 @@ void main() {
 
       expect(shell.written.join(), 'ls\n');
     });
+  });
+
+  // Вторая линия защиты ссылок OSC 8 (D3, D11): даже если виджет по ошибке
+  // вызвал `openLink` для запрещённой схемы, порт не получает адрес.
+  group('ссылки OSC 8: openLink (D3, D9)', () {
+    for (final (uri, scheme) in [
+      ('file:///etc/passwd', 'file'),
+      ('javascript:alert(1)', 'javascript'),
+    ]) {
+      test('$scheme: порт не вызывается, событие только со схемой', () async {
+        await cubit.openLink(uri);
+
+        expect(linkOpener.opened, isEmpty);
+        final refused = logger.entries.where(
+          (e) => e['event'] == 'terminal.link_refused',
+        );
+        expect(refused, hasLength(1));
+        expect(refused.single['scheme'], scheme);
+        expect(logger.entries.toString(), isNot(contains(uri)));
+      });
+    }
+
+    test(
+      'https: порт получает адрес, событие link_opened только со схемой',
+      () async {
+        await cubit.openLink('https://example.com/a?token=x');
+
+        expect(linkOpener.opened, [Uri.parse('https://example.com/a?token=x')]);
+        final opened = logger.entries.where(
+          (e) => e['event'] == 'terminal.link_opened',
+        );
+        expect(opened.single['scheme'], 'https');
+        expect(logger.entries.toString(), isNot(contains('token=x')));
+      },
+    );
   });
 
   group('жизненный цикл Cubit и журнал (D9)', () {
