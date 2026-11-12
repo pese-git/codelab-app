@@ -745,7 +745,8 @@ rewind: cp := find(label); нет → "No checkpoint <label> on the current bran
 2. append branch{parentId: cp.targetId, targetId, fromLeafId: leaf, reason: "checkpoint",
      summaryStatus: "generated", summary: report, details: {abandonedMessages, modifiedFiles,
      otherEffects, checkpoint: {label, rewindToolCallId}}} durable
-3. перенос настроек — §17.6.5 шаг 5; план — последний plan новой ветки (PlanUpdated)
+3. перенос настроек — §17.6.5 шаг 5; план — последний plan новой ветки (PlanUpdated) — до change
+   add-subagents-and-tasks; после него список задач новой ветки — §17.6.5 шаг 7
 4. StepUpdate(context: messages из buildLlmContext): ход продолжается следующим шагом
 ```
 
@@ -1004,7 +1005,8 @@ guessing.»
 
 **Контракт.** Конфиг `tools.load: all | essential` (по умолчанию `all` — поведение MVP) и
 `tools.mounted: [<селектор>…]` (селекторы §6.3.8). Основной набор фиксирован:
-`read`, `write`, `edit`, `exec`, `ls`, `search`, `update_plan` (те, что есть после выключений) и
+`read`, `write`, `edit`, `exec`, `ls`, `search`, `task_create`, `task_update`, `task_list`, `task_get`
+(§17.16.3; до change `add-subagents-and-tasks` — `update_plan`) (те, что есть после выключений) и
 `discover_tools`.
 
 ```json
@@ -1067,11 +1069,12 @@ discover_tools mount: [..]:
 
 * `core/discover-tools-mount` (`discover_tools_test.dart`) — критерий матрицы: «режим загрузки
   `all` (по умолчанию) — модель видит все включённые инструменты; режим `essential` — модель видит
-  основной набор (`read`, `write`, `edit`, `exec`, `ls`, `search`, `update_plan`) и инструмент
+  основной набор (`read`, `write`, `edit`, `exec`, `ls`, `search`, `task_*`; до change
+  `add-subagents-and-tasks` — `update_plan`) и инструмент
   `discover_tools`: без аргументов — список остальных с однострочным описанием, `mount: [имена]` —
   подключает их до конца сессии; явно включённый в конфигурации инструмент подключён всегда;
   подключение не меняет политику разрешений»: два MCP-сервера, `essential` → первый запрос с
-  восемью схемами; список; `mount` → схемы со следующего шага; `session/load` восстанавливает
+  одиннадцатью схемами (до change `add-subagents-and-tasks` — с восемью); список; `mount` → схемы со следующего шага; `session/load` восстанавливает
   набор; `tools.mounted: [mcp__github__*]` виден сразу; смонтированный MCP-инструмент в
   `standard` спрашивает разрешение.
 * `discover_tools_disabled_test.dart`: `tools.disabled: [web_fetch]` → нет в списке, `mount` →

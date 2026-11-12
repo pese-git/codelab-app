@@ -1188,7 +1188,7 @@ permissions:
     - "exec:git push --force"
     - "write:.env"
   tools:
-    update_plan: allow
+    task_update: allow         # до change add-subagents-and-tasks — update_plan (§17.16.3)
     mcp__github__create_issue: ask
 
 budget:

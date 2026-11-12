@@ -39,8 +39,9 @@ Capability — крупная возможность хоста, которая 
 | `userQuestions` (после MVP) | инструмент `ask` через `QuestionGate` (§17.11.7) | схема `ask` |
 | `userHooks` (после MVP) | запуск команд хуков `hooks.before_tool` и `hooks.after_tool` на машине агента (§17.14.2) | ничего; только тексты отказа и заметки хуков в результатах |
 
-Базовые инструменты `read`, `write`, `edit`, `update_plan` есть всегда: они работают поверх
-любого `ExecutionEnv`, включая `MemoryExecutionEnv`.
+Базовые инструменты `read`, `write`, `edit` и инструменты списка задач `task_create`,
+`task_update`, `task_list`, `task_get` (§17.16.3; до change `add-subagents-and-tasks` — `update_plan`)
+есть всегда: они работают поверх любого `ExecutionEnv`, включая `MemoryExecutionEnv`.
 
 ```dart
 enum HostCapability { shellExec, fileListing, mcp, compaction, sessionPersistence, interactiveApproval, projectContext,
@@ -362,7 +363,7 @@ web-инструменты всегда `untrusted`, профиль это не 
 | `search` | как `read` по пути каждого совпадения; если хоть одно совпадение `untrusted` — весь результат `untrusted` | `trusted` |
 | `exec` с сетевой командой (список ниже) | `untrusted` | — |
 | прочий `exec` | `trusted` | — |
-| `update_plan` | `trusted` | `trusted` |
+| `task_create`, `task_update`, `task_list`, `task_get` (§17.16.3; до change `add-subagents-and-tasks` — `update_plan`) | `trusted` | `trusted` |
 | `lsp` `diagnostics`, `symbols`, `rename` (после MVP, §17.8.7) | как `read`: `untrusted` для путей из `tools.untrusted_paths` | — |
 | `lsp` `definition`, `references` (после MVP) | как `search`: хоть одна позиция вне `cwd` или в `tools.untrusted_paths` — весь результат `untrusted` | — |
 | `lsp` `hover` (после MVP) | всегда `untrusted`: документация может прийти из чужого пакета | — |
@@ -413,7 +414,8 @@ buildAgentCore(profile, services, config, streamFunction):
      outputSpill фабрика создаёт SpillService на сессию и кладёт его в ToolServices.spill;
      при включённой backgroundJobs — JobManager на сессию в ToolServices.jobs (§17.9.2.2)
 5. реестр инструментов:
-     a. базовые: read, write, edit, update_plan
+     a. базовые: read, write, edit, task_create, task_update, task_list, task_get — над TaskList сессии
+        в ToolServices.tasks (§17.16.2; до change add-subagents-and-tasks — update_plan)
      b. shellExec → exec;  fileListing → ls, search
      c. mcp → McpConnector: инструменты серверов подключаются на сессию (session/new, §13) и кладутся
         в реестр сессии поверх базового (§6.4)

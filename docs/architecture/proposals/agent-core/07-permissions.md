@@ -229,7 +229,7 @@ flowchart TD
 | `write`, `edit` | путь относительно корня после нормализации (§4.4) | `{"path":"./lib//a.dart"}` → `lib/a.dart` |
 | `read`, `ls`, `search` | нормализованный путь (по умолчанию `.`) | `{"pattern":"TODO","path":"lib"}` → `lib` |
 | `exec` | точная строка команды после обрезки пробелов по краям | `{"command":"  dart test "}` → `dart test` |
-| `update_plan` | `*` | любой → `*` |
+| `task_create`, `task_update`, `task_list`, `task_get` (§17.16.3; до change `add-subagents-and-tasks` — `update_plan`) | `*` | любой → `*` |
 | MCP и прочие | канонический JSON аргументов (ключи по алфавиту, без пробелов) | `{"b":1,"a":"x"}` → `{"a":"x","b":1}` |
 
 «Разрешить всегда» на `write lib/a.dart` не разрешает `write lib/b.dart` и тем более `exec`

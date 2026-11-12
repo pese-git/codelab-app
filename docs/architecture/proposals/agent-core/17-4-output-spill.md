@@ -106,7 +106,7 @@ final class ToolExecutionOutcome { /* ... §6.2 */ final SpillRef? spill; }
 | `exec` | да | `tail` | повтор команды дорог или неидемпотентен; ошибки — в конце |
 | `web_fetch` | да | `head` | страница могла измениться; тело до 2 МиБ (§17.1.3) |
 | MCP-инструменты | да | `head` | повторный вызов внешнего сервера может иметь побочные эффекты |
-| `read`, `ls`, `search`, `write`, `edit`, `update_plan`, `web_search`, `skill`, `agent` | нет | — | вывод воспроизводим (`offset`, узкий шаблон) или уже ограничен самим инструментом (`report_max_bytes`) |
+| `read`, `ls`, `search`, `write`, `edit`, `task_*` (§17.16.3; до change `add-subagents-and-tasks` — `update_plan`), `web_search`, `skill`, `agent` | нет | — | вывод воспроизводим (`offset`, узкий шаблон) или уже ограничен самим инструментом (`report_max_bytes`) |
 
 **Место в конвейере.** Шаг 8 единой точки исполнения (§6.3.1) раскрывается в четыре подшага
 в фиксированном порядке:

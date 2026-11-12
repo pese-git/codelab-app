@@ -199,7 +199,8 @@ final class ToolCallFinished extends AgentEvent {
   final SpillRef? spill; }                  // с этапа 3 (§17.4.2): результат вынесен в файл
 final class ToolPairingRepaired extends AgentEvent { final PairingReport report; }
 final class StepEnded extends AgentEvent { final StepResult result; }
-final class PlanUpdated extends AgentEvent { final List<PlanEntry> entries; }
+// Change add-subagents-and-tasks (§17.16.2): заменяет PlanUpdated(List<PlanEntry> entries) инструмента update_plan
+final class TaskListChanged extends AgentEvent { final List<TaskItem> items; final TaskChange change; }
 final class ModeChanged extends AgentEvent { final ModeId mode; }
 final class CommandsChanged extends AgentEvent { final List<SlashCommand> commands; }
 final class ConfigOptionChanged extends AgentEvent { final String optionId, value; }   // уровень AgentSession (§8.3)
@@ -271,7 +272,7 @@ final class SlashCommand {
 | `ToolCallFinished` | вызов завершён | `toolCallId`, `outcome`, `content`, `diffs` (по одному на файл), `spill?` (§17.4: `content` — фрагмент вынесенного результата) |
 | `ToolPairingRepaired` | payload запроса потребовал ремонта пар | отчёт о ремонте |
 | `StepEnded` | шаг завершён | ответ модели, результаты в порядке вызовов |
-| `PlanUpdated` | инструмент `update_plan` обновил план | `entries` |
+| `TaskListChanged` | после change `add-subagents-and-tasks`: операция `task_*` или назначение пункта субагенту (`assign`) изменила список задач, до `ToolCallFinished` вызова (§17.16.5); до change — `PlanUpdated` от `update_plan` | `items` (весь список), `change` |
 | `ModeChanged`, `CommandsChanged` | смена режима, списка slash-команд | новое значение |
 | `ContextCompacted` | сжатие записано в журнал (§9) | `tokensBefore`, `tokensAfter` |
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | после MVP: эмитит `SubagentManager` сессии родителя, не цикл (§17.3.2) | идентификаторы ребёнка, снимок прогресса, итог |
@@ -493,7 +494,8 @@ final class Agent {
   List<Message> get messages;                      // неизменяемая копия транскрипта
   bool get isRunning;
   void replaceTranscript(List<Message> messages);  // только вне хода: после сжатия (§9)
-  /// Общая очередь событий (LOOP-2): через неё эмитят цикл и сервисы сессии (PlanService → PlanUpdated).
+  /// Общая очередь событий (LOOP-2): через неё эмитят цикл и сервисы сессии (TaskList → TaskListChanged, §17.16.2;
+  /// до change add-subagents-and-tasks — PlanService → PlanUpdated).
   Future<void> emit(AgentEvent event);
   AgentLoopConfig config;                          // меняется между ходами (модель, режим)
 }
@@ -529,7 +531,7 @@ abstract interface class AgentRuntime {
 }
 final class ChildSessionSpec {                        // после MVP, §17.3.3
   final AgentSession parent; final SubagentId subagentId; final SubagentSpec subagent;
-  final List<AgentTool> tools;                        // пересечение с родителем без agent выше max_depth; задачи — детский набор (SUB-1)
+  final List<AgentTool> tools;                        // пересечение с родителем без agent выше max_depth; задачи — детский набор (SUB-1, §17.16.4)
   final ModelRef model; final TurnBudget budget;
   final PermissionMode Function() mode;               // narrow(parentMode(), type.mode) на каждое решение (SUB-2)
   final PermissionGate? gate;                         // SubagentPermissionGate над gate родителя
