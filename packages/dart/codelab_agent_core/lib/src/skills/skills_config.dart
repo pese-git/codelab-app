@@ -23,7 +23,8 @@ final class SkillsConfig {
     this.reattachTotalTokens = 25000,
   });
 
-  /// `skills.enabled`; `false` сужает capability `skills` до `off`.
+  /// `skills.enabled`; `false` выключает навыки сессий своей папки (каталог
+  /// пуст, порт не вызывается); capability `skills` не сужает (Q45).
   final bool enabled;
 
   /// `skills.extra_roots` как записаны в конфиге (`~` раскрывает загрузчик,

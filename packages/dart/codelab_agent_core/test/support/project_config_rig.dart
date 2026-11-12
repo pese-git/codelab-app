@@ -226,6 +226,7 @@ final class ProjectConfigRig {
     ExecutionEnv? env,
     List<Map<String, Object?>>? steps,
     bool Function(CoreConfig config)? failModelsFor,
+    SkillFilesSource? skillFiles,
   }) {
     final clock = FakeClock();
     final logger = RecordingLogger(clock: clock);
@@ -280,6 +281,7 @@ final class ProjectConfigRig {
         mcp: mcp,
         config: source,
         projectConfig: withPort ? loader : null,
+        skillFiles: skillFiles,
       ),
       config: initial,
       streamFunction: models.stream,

@@ -102,12 +102,14 @@ BuiltAgentCore buildAgentCore({
       HostCapability.compaction: const CapabilityOff('выключено конфигом'),
     if (services.mcp == null)
       HostCapability.mcp: const CapabilityOff('сервис MCP не передан'),
-    // Навыки (design.md change `add-agent-skills`, D16):
-    // `skills.enabled: false` выключает capability как `compaction`. Без порта
-    // (`AgentCoreServices.skillFiles == null`) capability остаётся `on`, но
-    // рантайм порт не вызывает: сессия без навыков.
-    if (!config.skills.enabled)
-      HostCapability.skills: const CapabilityOff('выключено конфигом'),
+    // Навыки (design.md change `add-agent-skills`, D11, D16, Q44, Q45):
+    // `skills.enabled` capability НЕ сужает. Настройка принадлежит папке
+    // сессии: рантайм читает её из конфигурации сессии и для сессий с
+    // `enabled: false` отдаёт `SkillCatalog.empty`, не вызывая порт. Если
+    // сузить capability по конфигу корня запуска, сессии доверенной папки
+    // `/B` с `enabled: true` навыков не получили бы. Сужает только профиль
+    // (`profile.<name>.skills: off`); без порта (`skillFiles == null`)
+    // capability остаётся `on`, сессия без навыков.
   });
   // §10.8: журнал на постоянном носителе требует хранилища, которое не
   // теряет записи при выходе процесса.

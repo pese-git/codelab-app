@@ -288,8 +288,9 @@ void main() {
       expect(logger.eventsOf('skills.loaded'), isEmpty);
     });
 
-    test('scenario "Навыки выключены конфигом": skills.enabled: false -> '
-        'offReasons has skills, the port is silent', () async {
+    test('scenario "Навыки выключены конфигом" (Q45): skills.enabled: false '
+        '-> the port is silent, the snapshot is empty, the capability stays '
+        'on', () async {
       skillPort.files = SkillFiles(skills: [validSkill('notes')]);
       final core = build(
         config: CoreConfig(
@@ -302,7 +303,10 @@ void main() {
         SessionSpec(cwd: '/work/a'),
       );
 
-      expect(core.plan.offReasons[HostCapability.skills], isNotEmpty);
+      // Q45: capability сужает только профиль; `skills.enabled` действует на
+      // сессии своей папки, поэтому `offReasons` не содержит `skills`.
+      expect(core.plan.offReasons, isNot(contains(HostCapability.skills)));
+      expect(core.plan.profile.isOn(HostCapability.skills), isTrue);
       expect(session.skills, same(SkillCatalog.empty));
       expect(skillPort.queries, isEmpty);
       expect(logger.eventsOf('skills.loaded'), isEmpty);
@@ -311,8 +315,9 @@ void main() {
       ], isNot(contains(startsWith('skill:'))));
     });
 
-    test('a profile with skills: off (HOST-4): no port call, no catalog '
-        'section, no skill tool, no skill:* commands', () async {
+    test('scenario "Навыки выключены профилем" (HOST-4): offReasons has a '
+        'reason for skills, no port call, no catalog section, no skill tool, '
+        'no skill:* commands', () async {
       skillPort.files = SkillFiles(skills: [validSkill('notes')]);
       final core = build(
         narrow: const {HostCapability.skills: CapabilityOff('test')},
@@ -322,6 +327,7 @@ void main() {
         SessionSpec(cwd: '/work/a'),
       );
 
+      expect(core.plan.offReasons[HostCapability.skills], isNotEmpty);
       expect(skillPort.queries, isEmpty);
       expect(session.skills, same(SkillCatalog.empty));
       expect(core.plan.toolNames, isNot(contains('skill')));
@@ -508,23 +514,6 @@ void main() {
       expect(first.id, isNot(second.id));
     });
   });
-}
-
-/// Порт навыков: записывает запросы, отдаёт [files], умеет падать и ждать.
-final class FakeSkillPort implements SkillFilesSource {
-  final queries = <SkillFilesQuery>[];
-  SkillFiles files = const SkillFiles(skills: []);
-  Object? failWith;
-  Future<SkillFiles>? gate;
-
-  @override
-  Future<SkillFiles> loadSkills(SkillFilesQuery query) async {
-    queries.add(query);
-    if (failWith case final error?) {
-      throw error;
-    }
-    return gate ?? files;
-  }
 }
 
 /// Порт файлов проекта: тот же приём, что в `project_files_runtime_test`.

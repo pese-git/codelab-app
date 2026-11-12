@@ -218,7 +218,7 @@ change `require-project-folder`, D21).** `buildAgentCore` принимает о�
   корневого `AGENTS.md`; журнал новой сессии создаётся только после успешной конфигурации). Порт
   требует `modelsFor` (`HostWiringException`);
 - **без порта** прежнее поведение: ключи сессии (`defaultModel`, `effort`, `permissions`, `budget`,
-  `compaction`, `mcpServers`, `redact`) берутся из `withoutProject`, пишется
+  `compaction`, `mcpServers`, `redact`, `skills` — change `add-agent-skills`, Q44) берутся из `withoutProject`, пишется
   `config.session.outside_root` один раз на `cwd`. Так выглядят сторонние хосты, сценарный
   открыватель, `serve --llm-script` и `serve --ws` (Q18). Ключи сборки (провайдеры и каталог,
   capability, сужение профиля, журналы) берутся из полного снимка процесса.
@@ -390,7 +390,8 @@ buildAgentCore(profile, services, config, streamFunction):
      services.projectContext == null → projectContext := off("загрузчик контекста проекта не передан")
      baseEnv не реализует DirectoryListing → fileListing := off("env без листинга каталога")
      после MVP: tools.web.enabled = false → network := off("выключено конфигом") (§17.1.5);
-       skills.enabled = false → skills := off("выключено конфигом") (§17.2.8);
+       skills.enabled capability не сужает: это ключ сессии, false даёт сессии пустой снимок навыков
+         (§17.2.8; Q44, Q45 change `add-agent-skills`); skills сужает только profile.<name>.skills;
        services.spills == null → outputSpill := off("хранилище выноса не передано");
        tools.spill.enabled = false → outputSpill := off("выключено конфигом") (§17.4.6);
        services.languageServers == null → languageServers := off("фабрика языковых серверов не передана");
