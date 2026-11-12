@@ -12,9 +12,7 @@ import 'package:codelab_client_io/codelab_client_io.dart'
         IoTerminalProcessRunner,
         IoProjectFiles,
         IoTextFileIo,
-        IoWorkingDirectoryProvider,
-        ioDirectoryExists,
-        WorkingDirectoryProvider;
+        ioDirectoryExists;
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
         AcpClientBackend,
@@ -116,6 +114,7 @@ Scope createCodeLabRootScope({
   Future<ProfileSecrets> Function()? profileSecretsOpener,
   ProviderSettingsOpener? providerSettingsOpener,
   Future<bool> Function(String cwd)? providerSetupProbe,
+  ProjectFolderPicker? projectFolderPicker,
   ProjectFiles? projectFiles,
   bool projectFilesEnabled = true,
 }) {
@@ -147,6 +146,7 @@ Scope createCodeLabRootScope({
       ),
       CodeLabPlatformModule(
         directoryExists: directoryExists ?? ioDirectoryExists,
+        projectFolderPicker: projectFolderPicker,
       ),
       CodeLabConnectionModule(
         environment: connectionEnvironment,
@@ -403,16 +403,19 @@ final class CodeLabLoggingLifecycle implements Disposable {
 }
 
 final class CodeLabPlatformModule extends Module {
-  CodeLabPlatformModule({required this.directoryExists});
+  CodeLabPlatformModule({
+    required this.directoryExists,
+    this.projectFolderPicker,
+  });
+
+  /// Системный выбор папки; тесты подменяют его, чтобы не открывать диалог.
+  final ProjectFolderPicker? projectFolderPicker;
 
   /// Проверка папки проекта; тесты с вымышленными путями подменяют её.
   final DirectoryExists directoryExists;
 
   @override
   void builder(Scope currentScope) {
-    bind<WorkingDirectoryProvider>().toInstance(
-      const IoWorkingDirectoryProvider(),
-    );
     // Проверка папки проекта до восстановления и подключения.
     bind<DirectoryExists>().toInstance(directoryExists);
     const textFileIo = IoTextFileIo();
@@ -426,7 +429,7 @@ final class CodeLabPlatformModule extends Module {
     // Загрузка изображений ответа: лимиты тела, редиректы, размер (D6, R4).
     bind<ImageProviderFor>().toInstance(defaultImageProviderFor);
     bind<ProjectFolderPicker>().toInstance(
-      const FileSelectorProjectFolderPicker(),
+      projectFolderPicker ?? const FileSelectorProjectFolderPicker(),
     );
     bind<RecentProjectsStore>().toInstance(
       const SharedPreferencesRecentProjectsStore(),
@@ -613,8 +616,6 @@ final class CodeLabPresentationModule extends Module {
             initialProfile: embeddedConnectionProfile,
             application: currentScope.resolve<AcpClientApplication>(),
             workspace: currentScope.resolve<ClientWorkspace>(),
-            workingDirectoryProvider: currentScope
-                .resolve<WorkingDirectoryProvider>(),
             projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
             recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
             directoryExists: currentScope.resolve<DirectoryExists>(),
@@ -650,8 +651,6 @@ final class CodeLabPresentationModule extends Module {
             application: currentScope.resolve<AcpClientApplication>(),
             workspace: currentScope.resolve<ClientWorkspace>(),
             parts: currentScope.resolve<CodeLabShellParts>(),
-            workingDirectoryProvider: currentScope
-                .resolve<WorkingDirectoryProvider>(),
             projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
             recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
             externalLinkOpener: currentScope.resolve<ExternalLinkOpener>(),

@@ -30,6 +30,7 @@ import '../../../core/platform/connection_preferences.dart';
 import 'connection_commands.dart';
 import 'connection_settings_state.dart';
 import 'embedded_profile.dart';
+import 'probe_profile.dart';
 import 'probe_outcome_view.dart';
 import 'profiles_unavailable.dart';
 import 'profile_view.dart';
@@ -79,7 +80,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     required Map<String, String> environment,
     required String? profilesPath,
     required ProfileProbe probe,
-    required String Function() projectDirectory,
+    required String? Function() projectDirectory,
     Logger? logger,
   }) : _store = store,
        _openSecrets = openSecrets,
@@ -125,8 +126,9 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   /// Проверка профиля строки «Test connection» (D12); та же, что у диалога.
   final ProfileProbe _probe;
 
-  /// Папка проекта для stdio-профилей с «Run in the project folder».
-  final String Function() _projectDirectory;
+  /// Папка проекта для stdio-профилей с «Run in the project folder»; `null` —
+  /// проект не выбран, и проверка стартует без папки (`probeProfileFor`, D7).
+  final String? Function() _projectDirectory;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
   late final StreamSubscription<ConnectionProfile?> _targetSubscription;
 
@@ -492,9 +494,12 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     );
     _publish();
     final stopwatch = Stopwatch()..start();
+    final project = _projectDirectory();
+    // `''` безопасна: `probeProfileFor` уже сбросил `runInProjectDirectory`,
+    // и kit папку не читает (D7). Временно, до удаления «Test connection».
     final outcome = await _probe.probe(
-      row.profile,
-      projectDirectory: _projectDirectory(),
+      probeProfileFor(row.profile, projectDirectory: project),
+      projectDirectory: project ?? '',
       cancellation: cancellation,
     );
     // Файл могли перечитать за время проверки: исход профиля, который

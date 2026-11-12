@@ -104,6 +104,16 @@ final class WorkspaceRestorer {
   /// активная загружается; агент без `loadSession` или ошибка загрузки —
   /// новая сессия с уведомлением. Промпты и ответы на одобрения не
   /// отправляются. Повторный вызов — no-op.
+  ///
+  /// Исключение (design D10, HIGH-1 change `require-project-folder`): активная
+  /// сессия, чей `cwd` не равен проекту снимка (точное равенство строк),
+  /// не загружается. Почему: иначе снимок `{project: /work/app, s1: "/"}`
+  /// давал бы `session/load(s1, cwd: "/")` без действия пользователя, и
+  /// агент получал бы весь диск (Q1 (b)). Ни `session/load`, ни
+  /// `session/new` с уведомлением, ни активации: сессия остаётся строкой
+  /// `notLoaded` и открывается только явным выбором хоста (в desktop — с
+  /// подтверждением D24). Правило не зависит от `loadSession` агента: без
+  /// него новая сессия тоже не создаётся.
   Future<void> restoreAfterConnect() async {
     final snapshot = _restoring;
     _restoring = null;
@@ -126,6 +136,11 @@ final class WorkspaceRestorer {
     final cwd =
         snapshot.openSessions.where((s) => s.id == active).firstOrNull?.cwd ??
         project;
+    if (cwd != project) {
+      // D10: при несовпадении выбирается отказ, а не загрузка.
+      _observeCurrent();
+      return;
+    }
     try {
       if (!canLoad) {
         await _host.newSessionWithNotice(

@@ -221,6 +221,7 @@ providers:
       final shellCubit = codeLabDependenciesOf(
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
+      await ensureProject(tester, shellCubit);
       unawaited(shellCubit.connect());
 
       // Новая установка: понятный текст вместо сырых проблем конфига.

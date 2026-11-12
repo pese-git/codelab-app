@@ -151,7 +151,7 @@ void main() {
   late List<({EditableSettings access, Map<String, String> env})> opened;
   FutureOr<void> Function()? onOpen;
   Object? defaultProfileError;
-  var projectDir = '/work/app';
+  String? projectDir = '/work/app';
   var clock = DateTime(2026, 11, 8, 14, 2);
 
   McpSettingsCubit make({String? home = _home}) {
@@ -295,6 +295,17 @@ void main() {
         'event': 'mcp_settings.loaded',
         'level': 'debug',
       });
+    });
+
+    test('without a project and an agent there is no folder: the settings are '
+        'editable, with no project layer among the targets (D8)', () async {
+      projectDir = null;
+
+      await make().reload();
+
+      final access = opened.single.access;
+      expect(access.cwd, isNull);
+      expect(access.targets, [const ConfigTarget.user()]);
     });
 
     test('an empty config is Ready with no rows and no card', () async {

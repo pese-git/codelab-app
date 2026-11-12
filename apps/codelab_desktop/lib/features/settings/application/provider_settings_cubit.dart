@@ -64,7 +64,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     required ProviderSettingsOpener open,
     required Map<String, String> environment,
     required String? codelabHome,
-    required String Function() projectDirectory,
+    required String? Function() projectDirectory,
     Logger? logger,
     DateTime Function()? now,
     Future<void> Function()? connect,
@@ -88,7 +88,12 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
   final ProviderSettingsOpener _open;
   final Map<String, String> _environment;
   final String? _codelabHome;
-  final String Function() _projectDirectory;
+
+  /// Папка для слоя `projectLocal`; `null` — проектных слоёв нет и
+  /// `projectLocal` не предлагается (require-project-folder/design.md, D8).
+  /// До итерации B источник — выбранный проект (tasks A2.5); папка сессии в
+  /// фокусе (D8) подключается в итерации B.
+  final String? Function() _projectDirectory;
   final Logger? _logger;
   final DateTime Function() _now;
 
@@ -157,7 +162,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
 
   SettingsAccess _accessOf(ConnectionProfile profile) {
     final dir = _projectDirectory();
-    final cwd = dir.isEmpty ? null : dir;
+    final cwd = dir == null || dir.isEmpty ? null : dir;
     final home = _codelabHome ?? '';
     return switch (profile) {
       EmbeddedProfile() => resolveSettingsAccess(

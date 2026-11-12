@@ -53,7 +53,14 @@ final class ShellHarness {
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
     Map<String, String>? environment,
   }) : agent = agent ?? FakeAcpTransport() {
+    // Проект выбран с самого начала: без него агент не стартует и сессию
+    // создать нельзя (require-project-folder/design.md, D1, D20). Тесты,
+    // которые проверяют именно «без проекта», собирают `CodeLabTestBinding`
+    // сами. Папка вымышленная: проверка существования в тестах всегда
+    // отвечает «есть», настоящая папка не нужна.
+    project = '/work/harness-project';
     binding = CodeLabTestBinding(
+      project: project,
       stdioTransportFactory:
           stdioTransportFactory ??
           (_) {
@@ -69,6 +76,9 @@ final class ShellHarness {
   final FakeAcpTransport agent;
 
   late final CodeLabTestBinding binding;
+
+  /// Папка стартового проекта (D20): `cwd` сессий, созданных харнессом.
+  late final String project;
 
   /// Сколько раз Cubit запросил stdio-транспорт у фабрики по умолчанию.
   var stdioStarts = 0;
@@ -109,7 +119,15 @@ final class ShellHarness {
         message,
   ];
 
+  /// Ждёт, пока стартовый проект выбран из снимка. Нужен тестам, которые
+  /// вызывают синхронно читающие проект действия (`createSession`) раньше
+  /// `connect`; сам `connect` восстановление ждёт.
+  Future<void> projectReady() =>
+      binding.scope.resolve<CodeLabShellParts>().settings.projectRestored;
+
   Future<void> connect() async {
+    // Стартовый проект выбирается асинхронно при создании графа.
+    await projectReady();
     await cubit.connect();
     expect(cubit.state.connectionStatus, CodeLabConnectionStatus.connected);
   }

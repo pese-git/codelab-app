@@ -40,6 +40,7 @@ import '../../../core/platform/connection_preferences.dart';
 import '../../../core/platform/home_path_label.dart';
 import 'add_profile_state.dart';
 import 'probe_outcome_view.dart';
+import 'probe_profile.dart';
 import 'profile_view.dart'
     show
         EnvTokenView,
@@ -100,7 +101,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     required ProfileProbe probe,
     required List<ProfileKind> kinds,
     required Map<String, String> environment,
-    required String Function() projectDirectory,
+    required String? Function() projectDirectory,
     String? profilesPath,
     Logger? logger,
   }) : _store = store,
@@ -131,7 +132,10 @@ class AddProfileCubit extends Cubit<AddProfileState> {
 
   /// Окружение app: читается только «задана ли переменная» (D13).
   final Map<String, String> _environment;
-  final String Function() _projectDirectory;
+
+  /// Выбранный проект; `null` — проект не выбран, и «Test connection» не
+  /// передаёт stdio-процессу папку (`probeProfileFor`, D7).
+  final String? Function() _projectDirectory;
   final Logger? _logger;
   final List<ProfileKind> _kinds;
   final String? _profilesPath;
@@ -511,9 +515,12 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     );
 
     final stopwatch = Stopwatch()..start();
+    final project = _projectDirectory();
+    // `''` безопасна: `probeProfileFor` уже сбросил `runInProjectDirectory`,
+    // и kit папку не читает (D7). Временно, до удаления «Test connection».
     final outcome = await _probe.probe(
-      profile,
-      projectDirectory: _projectDirectory(),
+      probeProfileFor(profile, projectDirectory: project),
+      projectDirectory: project ?? '',
       cancellation: cancellation,
       token: _probeToken(form.draft),
     );

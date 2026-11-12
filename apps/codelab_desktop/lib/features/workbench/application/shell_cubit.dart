@@ -1,8 +1,7 @@
 import 'dart:async';
 
 import 'package:codelab_client_acp/codelab_client_acp.dart';
-import 'package:codelab_client_io/codelab_client_io.dart'
-    show DirectoryExists, WorkingDirectoryProvider;
+import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
         AcpClientBackend,
@@ -90,7 +89,6 @@ final class CodeLabShellParts {
     required ConnectionProfile initialProfile,
     required AcpClientApplication application,
     required ClientWorkspace workspace,
-    required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
     DirectoryExists? directoryExists,
@@ -108,7 +106,6 @@ final class CodeLabShellParts {
       changes: changes,
       workspace: workspace,
       diagnostics: diagnostics,
-      workingDirectoryProvider: workingDirectoryProvider,
       projectFolderPicker: projectFolderPicker,
       recentProjectsStore: recentProjectsStore,
       directoryExists: directoryExists,
@@ -143,6 +140,7 @@ final class CodeLabShellParts {
         connection: connection,
         settings: settings,
         activeSession: activeSession,
+        eventLogger: eventLogger,
       ),
       activeSession: activeSession,
       settings: settings,
@@ -209,7 +207,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     ClientWorkspace? workspace,
     SecretSource? secrets,
     CodeLabShellParts? parts,
-    required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
     DirectoryExists? directoryExists,
@@ -254,7 +251,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             ),
             application: application,
             workspace: clientWorkspace,
-            workingDirectoryProvider: workingDirectoryProvider,
             projectFolderPicker: projectFolderPicker,
             recentProjectsStore: recentProjectsStore,
             directoryExists: directoryExists,
@@ -493,6 +489,12 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   void selectSession(String sessionId) => _sessions.selectSession(sessionId);
 
+  /// Пользователь подтвердил открытие сессии в корне диска (D24).
+  void confirmRootSession() => _sessions.confirmRootSession();
+
+  /// Пользователь отказался открывать сессию в корне диска (D24).
+  void cancelRootSession() => _sessions.cancelRootSession();
+
   /// Активирует сессию, только если она открыта в этом запуске (есть
   /// `SessionHandle`); `false` — сессии нет, активная не меняется.
   ///
@@ -704,6 +706,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       selectedProjectPath: settings.selectedProjectPath,
       recentProjects: settings.recentProjects,
       hasMoreSessions: sessions.hasMoreSessions,
+      pendingRootSession: sessions.pendingRootSession,
       currentPlan: active.currentPlan,
       queuedPrompts: active.queuedPrompts,
     );

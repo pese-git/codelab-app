@@ -704,6 +704,7 @@ Future<void> connectProfileViaSettings(
   CodeLabShellCubit shellCubit,
   String profileId,
 ) async {
+  await ensureProject(tester, shellCubit);
   await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
   await tester.pumpAndSettle();
   await tester.tap(
@@ -721,4 +722,30 @@ Future<void> connectProfileViaSettings(
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(CodeLabSettingsNavigation.backKey));
   await tester.pumpAndSettle();
+}
+
+/// Выбирает временную папку проектом, если проект ещё не выбран.
+///
+/// Почему: без выбранного проекта подключения нет (require-project-folder,
+/// D1, D2), а тесты, которым папка не важна, раньше полагались на папку
+/// процесса.
+///
+/// Для чего: тестам подключения нужна лишь существующая папка, а не
+/// конкретный проект; временная папка удаляется по завершении теста.
+///
+/// Как использовать: вызывается перед подключением; тесты, которым нужен
+/// конкретный проект, выбирают его сами раньше.
+Future<void> ensureProject(
+  WidgetTester tester,
+  CodeLabShellCubit shellCubit,
+) async {
+  if (shellCubit.state.selectedProjectPath != null) {
+    return;
+  }
+  final dir = await tester.runAsync(
+    () => Directory.systemTemp.createTemp('codelab_e2e_project_'),
+  );
+  final created = dir!;
+  addTearDown(() => created.delete(recursive: true));
+  await shellCubit.selectProject(created.path);
 }

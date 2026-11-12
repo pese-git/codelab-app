@@ -49,6 +49,9 @@ void main() {
     final binding = CodeLabTestBinding(
       transport: FakeAcpTransport(),
       stdioTransportFactory: (_) => agent,
+      // Без проекта нет папки: ни подключения, ни `session/new` (D1, D2
+      // change `require-project-folder`).
+      project: '/workspace',
     );
     await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
     await tester.pump();

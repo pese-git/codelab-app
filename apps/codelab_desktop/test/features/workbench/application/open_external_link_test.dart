@@ -12,8 +12,6 @@
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
-import 'package:codelab_client_io/codelab_client_io.dart'
-    show IoWorkingDirectoryProvider;
 import 'package:codelab_desktop/core/platform/external_link_opener.dart';
 import 'package:codelab_desktop/core/platform/limited_network_image.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
@@ -71,7 +69,6 @@ void main() {
       application: application,
       stdioTransportFactory: (_) => agent,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _NoFolderPicker(),
       recentProjectsStore: _MemoryRecentProjects(),
       externalLinkOpener: opener,
