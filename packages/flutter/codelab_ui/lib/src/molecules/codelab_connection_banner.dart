@@ -39,6 +39,7 @@ class CodeLabConnectionBanner extends StatelessWidget {
     required this.status,
     this.message,
     this.onReconnect,
+    this.reconnectLabel = 'Reconnect',
     this.onConfigureConnection,
     this.extraAction,
     super.key,
@@ -47,6 +48,10 @@ class CodeLabConnectionBanner extends StatelessWidget {
   final CodeLabConnectionBannerStatus status;
   final String? message;
   final VoidCallback? onReconnect;
+
+  /// Подпись кнопки повтора; хост без ручного Connect передаёт `Retry`
+  /// (design.md change `require-project-folder`, D18).
+  final String reconnectLabel;
   final VoidCallback? onConfigureConnection;
   final Widget? extraAction;
 
@@ -82,7 +87,7 @@ class CodeLabConnectionBanner extends StatelessWidget {
                 ?extraAction,
                 if (onReconnect != null)
                   CodeLabButton(
-                    label: 'Reconnect',
+                    label: reconnectLabel,
                     icon: FluentIcons.refresh,
                     // Основная кнопка одна: с действием хоста оно и есть
                     // основное, «Reconnect» — обычная.

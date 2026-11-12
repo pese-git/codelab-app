@@ -2,7 +2,12 @@ import 'dart:async';
 
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show ClientWorkspace, SessionStatusView, WorkspaceState, describeFailure;
+    show
+        ClientWorkspace,
+        SessionStatusView,
+        WebSocketProfile,
+        WorkspaceState,
+        describeFailure;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 
@@ -23,7 +28,7 @@ final class SessionsState {
     this.sessions = const [],
     this.activeSessionId,
     this.currentSessionLabel = 'No active session',
-    this.currentSessionDetail = 'Create a session after connecting.',
+    this.currentSessionDetail = 'Open a project to start a session.',
     this.hasMoreSessions = false,
     this.pendingRootSession,
   });
@@ -123,17 +128,50 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
   /// состояния после `sessionChanges` не будет.
   String _workspaceRows = '';
 
+  /// Номер последнего намерения фокуса («новая сессия», «открыть `S`», выбор
+  /// открытой сессии). Устаревшее намерение после любого `await` фокус не
+  /// меняет (D17).
+  var _focusIntent = 0;
+
+  /// Сколько намерений фокуса сейчас в полёте: пока они есть, сессия, у
+  /// которой ещё нет показываемой, не становится показываемой сама по
+  /// `sessionChanges` — выбор делает последнее намерение (D17).
+  var _focusInFlight = 0;
+
+  /// Событие `session.focus_superseded` (D17): без пути, только id сессии.
+  void _recordSuperseded(String kind, [String? sessionId]) =>
+      _eventLogger?.info(
+        'session.focus_superseded',
+        context: {'intent': kind, 'session_id': ?sessionId},
+      );
+
   /// Создаёт сессию в папке проекта и сразу показывает её.
   ///
   /// Проект проверяется раньше соединения: без проекта нет папки для `cwd`,
   /// поэтому вместо сессии открывается выбор папки, как «Open folder…», и
   /// агенту ничего не шлётся (agent-workbench-ui «New session без проекта
-  /// открывает выбор папки», D5). Выбранная папка становится проектом, а
-  /// сессию создаёт повторное «New session». Папка читается один раз и
-  /// уходит в `session/new` (D3).
+  /// открывает выбор папки», D5). Выбранная папка становится проектом и
+  /// стартует агента (D13), а сессию создаёт повторное «New session». Папка
+  /// читается один раз и уходит в `session/new` (D3).
+  ///
+  /// Триггер старта D13 п. 2: агента нет — `startAgent(project)`, затем
+  /// `session/new`. Гонки D17: устаревшее намерение (его обогнал более новый
+  /// «New session», выбор сессии или перезапуск агента) фокус не забирает;
+  /// созданная им сессия остаётся в списке без фокуса, и в kit она не
+  /// активна (`newSession(activate: false)`).
   Future<void> createSession() async {
-    // Та же функция ожидания, что у Connect (D3): сессия в первые
-    // миллисекунды после старта не должна открывать выбор папки, пока
+    final intent = ++_focusIntent;
+    _focusInFlight++;
+    try {
+      await _createSession(intent);
+    } finally {
+      _focusInFlight--;
+    }
+  }
+
+  Future<void> _createSession(int intent) async {
+    // Та же функция ожидания, что у старта (D3): сессия в первые
+    // миллисекунды после запуска не должна открывать выбор папки, пока
     // проект восстанавливается.
     final project = _settings.projectRestoreFinished
         ? _settings.projectDirectory
@@ -147,22 +185,30 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
       await _settings.browseForProject();
       return;
     }
+    await _connection.startAgent(project, retry: createSession);
+    if (isClosed) return;
     if (_connection.state.connectionStatus !=
         CodeLabConnectionStatus.connected) {
-      _diagnostics.record(
-        'Connect an ACP agent before creating a session.',
-        severity: DiagnosticSeverity.warning,
-        source: 'session',
-      );
+      // Причина сбоя уже на экране и в диагностике старта (D18).
       return;
+    }
+    final generation = _connection.generation;
+    if (intent != _focusIntent) {
+      _recordSuperseded('new_session');
     }
 
     _diagnostics.record('Creating ACP session.', source: 'session');
 
+    final before = _workspace.current.activeSessionId;
     final AcpSession? session;
+    final SessionId createdId;
     try {
-      final handle = await _workspace.newSession(cwd: project);
+      final handle = await _workspace.newSession(
+        cwd: project,
+        activate: intent == _focusIntent,
+      );
       if (isClosed) return;
+      createdId = handle.id;
       session = _application.sessionById(handle.id);
     } on Object catch (error) {
       if (isClosed) return;
@@ -174,6 +220,17 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
       return;
     }
     if (session == null) {
+      return;
+    }
+    if (intent != _focusIntent || generation != _connection.generation) {
+      // Сессия создана агентом, терять её нельзя: она в списке, но фокус
+      // остаётся у последнего намерения (D17). Если kit успел её активировать,
+      // возвращаем прежнюю активную.
+      _recordSuperseded('new_session', createdId.value);
+      if (_workspace.current.activeSessionId == createdId && before != null) {
+        _workspace.activate(before);
+      }
+      batch(() => _showFirst(session!, activate: false));
       return;
     }
 
@@ -193,11 +250,13 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
   void selectSession(String sessionId) => _select(sessionId, byUser: true);
 
   /// [byUser] — действие пользователя: только оно снимает открытый вопрос D24
-  /// (D17). Завершение ранее начатой загрузки ([_loadAndSelect]) его не
-  /// снимает: иначе поздний ответ агента отменил бы вопрос ложным `cancel`.
+  /// (D17) и становится новым намерением фокуса. Завершение ранее начатой
+  /// загрузки ([_loadAndSelect]) вопрос не снимает: иначе поздний ответ агента
+  /// отменил бы его ложным `cancel`.
   void _select(String sessionId, {required bool byUser}) {
-    final cwd = _availableCwd[sessionId];
-    if (cwd != null && _application.sessionById(SessionId(sessionId)) == null) {
+    if (byUser) _focusIntent++;
+    final cwd = _loadTargetCwd(sessionId);
+    if (cwd != null) {
       if (isFilesystemRoot(cwd)) {
         _askAboutRootSession(sessionId, cwd);
         return;
@@ -233,6 +292,39 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
     });
   }
 
+  /// Папка для `session/load` или `null`, если загружать нечего.
+  ///
+  /// Загружаются сессия `notLoaded` и `detached` (триггер D13 п. 3). Для
+  /// `detached` у работающего агента без `loadSession` загрузки нет: сессия
+  /// показывается для чтения, `session/load` не отправляется, диагностики нет
+  /// (Q26).
+  String? _loadTargetCwd(String sessionId) {
+    final id = SessionId(sessionId);
+    if (_availableCwd[sessionId] case final cwd?
+        when _application.sessionById(id) == null) {
+      return cwd;
+    }
+    if (!_detached.contains(sessionId)) {
+      return null;
+    }
+    if (_agentCannotLoad()) {
+      return null;
+    }
+    for (final summary in _workspace.current.sessions) {
+      if (summary.id == id && summary.cwd.trim().isNotEmpty) {
+        return summary.cwd;
+      }
+    }
+    return null;
+  }
+
+  /// Агент работает и не умеет `session/load` (Q26).
+  bool _agentCannotLoad() {
+    final connection = _application.connectionState;
+    return connection is ClientConnectionReady &&
+        !connection.capabilities.loadSession;
+  }
+
   /// Подтверждение D24: открыть сессию в корне диска.
   ///
   /// Почему здесь: решение «эта сессия опасна» принимает `SessionsCubit`, а
@@ -244,7 +336,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
     if (pending == null) {
       return;
     }
-    final cwd = _availableCwd[pending.sessionId];
+    final cwd = _loadTargetCwd(pending.sessionId);
     if (cwd == null) {
       // Строка исчезла между показом и ответом: грузить нечего, а `open`
       // пишется только при фактической загрузке.
@@ -307,9 +399,71 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
     return super.close();
   }
 
-  /// Загружает сессию агента и показывает её; ошибку загрузки kit уже
-  /// записал в журнал, выбранная сессия тогда не меняется.
+  /// Загружает сессию агента и показывает её.
+  ///
+  /// Триггер D13 п. 3: агента нет — он стартует в папке сессии (для корня
+  /// диска — в выбранном проекте, Q27), затем `session/load` со своим `cwd`.
+  /// Исчезнувшая папка: `session/load` не отправляется, причина в
+  /// диагностике. Ошибку загрузки kit уже записал в журнал, выбранная сессия
+  /// тогда не меняется. Устаревшее намерение (D17) фокус не меняет.
   Future<void> _loadAndSelect(String sessionId, String cwd) async {
+    final intent = _focusIntent;
+    _focusInFlight++;
+    try {
+      await _loadAndSelectNow(sessionId, cwd, intent);
+    } finally {
+      _focusInFlight--;
+    }
+  }
+
+  Future<void> _loadAndSelectNow(
+    String sessionId,
+    String cwd,
+    int intent,
+  ) async {
+    // Папка WebSocket-агента — путь на его стороне, локально её не проверить
+    // (как в `ConnectionCubit._failIfProjectDirectoryMissing`).
+    final remote = _connection.state.shownProfile is WebSocketProfile;
+    final missing = remote
+        ? null
+        : await _settings.missingProjectDirectory(cwd);
+    if (isClosed) return;
+    if (missing != null) {
+      _diagnostics.record(
+        projectFolderMissingMessage(missing),
+        severity: DiagnosticSeverity.error,
+        source: 'project',
+      );
+      return;
+    }
+    final root = isFilesystemRoot(cwd)
+        ? (_settings.projectDirectory ?? cwd)
+        : cwd;
+    await _connection.startAgent(
+      root,
+      retry: () => _loadAndSelect(sessionId, cwd),
+    );
+    if (isClosed) return;
+    if (_connection.state.connectionStatus !=
+        CodeLabConnectionStatus.connected) {
+      return;
+    }
+    final generation = _connection.generation;
+    if (_agentCannotLoad() && _detached.contains(sessionId)) {
+      // Только последнее намерение показывает сессию для чтения (D17).
+      if (intent == _focusIntent) {
+        _select(sessionId, byUser: false);
+      } else {
+        _recordSuperseded('open_session', sessionId);
+      }
+      return;
+    }
+    if (_application.sessionById(SessionId(sessionId)) != null &&
+        !_detached.contains(sessionId)) {
+      // Старт агента уже перезагрузил открытую сессию (D16).
+      if (intent == _focusIntent) _select(sessionId, byUser: false);
+      return;
+    }
     _diagnostics.record('Loading ACP session $sessionId.', source: 'session');
     try {
       await _workspace.loadSession(SessionId(sessionId), cwd: cwd);
@@ -317,6 +471,10 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
       return;
     }
     if (isClosed) return;
+    if (intent != _focusIntent || generation != _connection.generation) {
+      _recordSuperseded('open_session', sessionId);
+      return;
+    }
     _select(sessionId, byUser: false);
   }
 
@@ -402,8 +560,11 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
   /// Изменение любой сессии: строка сайдбара — всегда; показываемая
   /// сессия — только если изменилась она (или ни одна ещё не показана).
   void _handleSessionChange(AcpSession session) {
+    // Пока идёт намерение фокуса, сессия без показываемой сама показываемой
+    // не становится: выбор делает последнее намерение (D17), иначе сессия
+    // устаревшего `session/new` забрала бы фокус.
     final isActive =
-        state.activeSessionId == null ||
+        (state.activeSessionId == null && _focusInFlight == 0) ||
         state.activeSessionId == session.id.value;
     batch(() {
       _showFirst(session, activate: isActive);

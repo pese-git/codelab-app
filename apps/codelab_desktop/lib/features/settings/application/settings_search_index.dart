@@ -22,7 +22,6 @@ final class SettingsSearchIndex {
       'stdio',
       'websocket',
       'token',
-      'connect on start',
       'restart',
     ],
     SettingsPage.providers: [

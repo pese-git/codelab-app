@@ -40,7 +40,7 @@ Widget providerSetupAction(
 /// `ConnectionCubit` переподключить его (D26).
 ///
 /// Почему переподключение через метку: пока мастер открыт, окно могло
-/// начать другую попытку (Connect on start, переподключение kit); тогда
+/// начать другую попытку (триггер старта, «Restart agent», переподключение kit); тогда
 /// `connectAfterProviderSetup` ничего не делает и пишет
 /// `provider_wizard.reconnect_skipped` (D21). Отмена мастера оставляет баннер
 /// как есть.

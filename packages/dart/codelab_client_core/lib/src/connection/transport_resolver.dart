@@ -17,6 +17,12 @@ import 'secret_source.dart';
 /// Как использовать: composition root регистрирует резолверы в
 /// `ClientWorkspace(resolvers: ...)`. [open] может бросить исключение — оно
 /// становится `ConnectionFailed` и уходит вызывающему `connect`.
+///
+/// Параметр `projectDirectory` метода [open] — **корень процесса агента**
+/// (`WorkspaceState.agentDirectory`, D11/D15 change `require-project-folder`):
+/// папка триггера, которым агент стартовал, а не обязательно выбранный проект.
+/// Имя параметра сохранено ради совместимости публичного API kit и CLI; у
+/// `connect` корень процесса совпадает с папкой проекта.
 abstract interface class TransportResolver {
   bool supports(ConnectionProfile profile);
 

@@ -13,6 +13,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ProfileSecretSource,
         ProfileTokenRef,
         Reconnecting,
+        SessionStatusView,
         StdioProfile,
         UnsupportedTokenRef,
         WebSocketProfile,
@@ -24,13 +25,13 @@ import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabConnectionStatus;
 
 import '../../../app/provider_setup_offer.dart';
-import '../../../core/platform/connection_preferences.dart';
 import '../../settings/application/connection_commands.dart';
 import '../../settings/application/default_profile_resolver.dart';
 import '../../settings/application/embedded_profile.dart';
 import '../../settings/application/profile_view.dart'
     show profileOrigin, profileTitle;
 import 'active_session_cubit.dart';
+import 'project_paths.dart';
 import 'settings_cubit.dart';
 import 'shell_part.dart';
 import 'ui_mappers.dart';
@@ -83,6 +84,58 @@ final class ProviderSetupNotice {
   String toString() => 'ProviderSetupNotice';
 }
 
+/// Диалог подтверждения «Restart agent» (D22): что будет прервано.
+///
+/// Почему: перезапуск обрывает ходы, и решение «прерывать ли» принадлежит
+/// пользователю, а какие сессии в работе — знает `ConnectionCubit`, а не
+/// виджет (корневой `AGENTS.md` §10).
+///
+/// Как использовать: виджет показывает [message] и возвращает ответ
+/// `ConnectionCubit.confirmRestart` / `cancelRestart`.
+final class RestartConfirmation {
+  const RestartConfirmation({required this.title, required this.sessions});
+
+  /// Название профиля, который будет перезапущен.
+  final String title;
+
+  /// Названия сессий в ходе, ждущих одобрения или отменяемых.
+  final List<String> sessions;
+
+  /// Текст диалога из спецификации app-settings (D22).
+  String get message {
+    final n = sessions.length;
+    return 'Restart $title? This interrupts $n running '
+        '${n == 1 ? 'session' : 'sessions'}: ${sessions.join(', ')}. '
+        'Queued prompts stay.';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is RestartConfirmation &&
+      other.title == title &&
+      _sameList(other.sessions, sessions);
+
+  @override
+  int get hashCode => Object.hash(title, Object.hashAll(sessions));
+
+  static bool _sameList(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+}
+
+/// Текст отказа: папки сессии или проекта нет на диске (D2).
+///
+/// Почему отдельная функция: тот же текст нужен `SessionsCubit` для сессии
+/// исчезнувшей папки (spec agent-workbench-ui «Исчезнувшая папка сессии»);
+/// ручного Connect больше нет, поэтому «connect again» из текста убран.
+String projectFolderMissingMessage(String path) =>
+    'Project folder not found: $path. '
+    'Choose an existing folder with Open folder….';
+
 /// Профиль текущего окна и статус соединения.
 ///
 /// Почему: раньше состояние держало черновик формы (тип, команда, адрес,
@@ -90,20 +143,34 @@ final class ProviderSetupNotice {
 /// «Add connection profile» (design.md change `add-app-settings-shell`, D6).
 /// Состояния — статус и профиль, а не набор независимых флагов (AGENTS.md §8).
 ///
-/// Для чего: [profile] — профиль окна: тот, который workspace принял при
-/// последнем успешном подключении, а до первого подключения — профиль по
-/// умолчанию (D5) или выбранный, но ещё не подключённый (D6); подписи и
-/// деталь для экрана подключения и баннера выводятся из него.
+/// Для чего: два профиля окна раздельно (design.md change
+/// `require-project-folder`, D18): [profile] — выбранный («Selected», для
+/// следующего старта агента; «Use»), [runningProfile] — профиль работающего
+/// агента («Current»), `null` до первого принятого старта. Подписи бейджа и
+/// доступность Files берутся по [shownProfile]: работающий агент, а до
+/// первого старта — выбранный.
 final class WindowConnectionState {
   const WindowConnectionState({
     required this.connectionStatus,
     required this.profile,
+    this.runningProfile,
     this.connectionMessage,
     this.providerSetupNotice,
+    this.failureRepeat = 0,
+    this.pendingRestart,
   });
 
   final CodeLabConnectionStatus connectionStatus;
+
+  /// Выбранный профиль окна (D18).
   final ConnectionProfile profile;
+
+  /// Профиль последнего принятого старта; `null` — агент ещё не стартовал.
+  final ConnectionProfile? runningProfile;
+
+  /// Профиль для подписей и Files: работающий агент или, пока его не было,
+  /// выбранный профиль.
+  ConnectionProfile get shownProfile => runningProfile ?? profile;
 
   /// Метка последнего сбоя встроенного агента «не настроен провайдер»;
   /// `null` — сбой другой или попытки были позже (D26).
@@ -114,19 +181,26 @@ final class WindowConnectionState {
   /// `null` в остальных состояниях.
   final String? connectionMessage;
 
+  /// Сколько раз подряд повторился тот же сбой старта (`Failed again (n)`,
+  /// D13); `0` — сбой первый или его нет.
+  final int failureRepeat;
+
+  /// Диалог «Restart agent» ждёт ответа пользователя (D22); `null` — нет.
+  final RestartConfirmation? pendingRestart;
+
   /// Тип подключения для подписи («stdio», «WebSocket», «Embedded agent»).
-  String get transportLabel => switch (profile) {
+  String get transportLabel => switch (shownProfile) {
     StdioProfile() => 'stdio',
     WebSocketProfile() => 'WebSocket',
     EmbeddedProfile() => 'Embedded agent',
   };
 
-  String get selectedProfileLabel => profileTitle(profile);
+  String get selectedProfileLabel => profileTitle(shownProfile);
 
   /// Деталь для подписи и диагностики: команда stdio без аргументов или
   /// `scheme://host:port` WebSocket без userinfo, пути и query — аргументы и
   /// адрес могут нести токен (D17, находка L1 ревью итерации 2).
-  String get selectedConnectionDetail => _detailOf(profile);
+  String get selectedConnectionDetail => _detailOf(shownProfile);
 
   static String _detailOf(ConnectionProfile profile) => switch (profile) {
     StdioProfile(:final command) => command,
@@ -141,11 +215,15 @@ final class WindowConnectionState {
   WindowConnectionState _copyWith({
     CodeLabConnectionStatus? connectionStatus,
     ConnectionProfile? profile,
+    ConnectionProfile? runningProfile,
     Object? connectionMessage = _unset,
     Object? providerSetupNotice = _unset,
+    int? failureRepeat,
+    Object? pendingRestart = _unset,
   }) => WindowConnectionState(
     connectionStatus: connectionStatus ?? this.connectionStatus,
     profile: profile ?? this.profile,
+    runningProfile: runningProfile ?? this.runningProfile,
     // `null` здесь — «причины нет», а не «не менять».
     connectionMessage: identical(connectionMessage, _unset)
         ? this.connectionMessage
@@ -153,6 +231,10 @@ final class WindowConnectionState {
     providerSetupNotice: identical(providerSetupNotice, _unset)
         ? this.providerSetupNotice
         : providerSetupNotice as ProviderSetupNotice?,
+    failureRepeat: failureRepeat ?? this.failureRepeat,
+    pendingRestart: identical(pendingRestart, _unset)
+        ? this.pendingRestart
+        : pendingRestart as RestartConfirmation?,
   );
 
   static const Object _unset = Object();
@@ -160,24 +242,27 @@ final class WindowConnectionState {
 
 /// Подключение окна к агенту по профилю.
 ///
-/// Почему: подключение, переподключение, выбор транспорта по профилю —
-/// в `codelab_client_core` (`ClientWorkspace`, `ConfigTransportResolver`); в
-/// app остаётся профиль окна и статус в модели `codelab_ui` (таблица переноса
+/// Почему: старт, перезапуск, выбор транспорта по профилю — в
+/// `codelab_client_core` (`ClientWorkspace`, `ConfigTransportResolver`); в app
+/// остаются профили окна и статус в модели `codelab_ui` (таблица переноса
 /// `09-10`; design D10 change `extract-acp-client-kit`; design.md change
-/// `add-app-settings-shell`, D6).
+/// `add-app-settings-shell`, D6). Ручного Connect нет: агент стартует по
+/// триггерам D13 (design.md change `require-project-folder`, D11–D13, D18).
 ///
-/// Для чего: владелец профиля окна и статуса соединения; единственная
-/// реализация [ConnectionCommands] — через неё страница «Connection»
-/// подключает окно, не дублируя номер попытки и диагностику. Сообщает о
-/// неожиданной потере соединения части показываемой сессии.
+/// Для чего: владелец профилей окна, статуса соединения, намерения старта
+/// (функция-повтор для «Retry»), счётчика повторов сбоя и диалога перезапуска
+/// D22; единственная реализация [ConnectionCommands] — через неё страница
+/// «Connection» выбирает профиль и перезапускает агента, не дублируя номер
+/// попытки и диагностику. Сообщает о неожиданной потере соединения части
+/// показываемой сессии.
 ///
 /// Как использовать: создаётся после [ActiveSessionCubit] и [SettingsCubit]
-/// (`CodeLabShellParts`). [connect] без профиля подключает профиль окна, а до
-/// первого подключения — профиль по умолчанию ([defaultProfiles]; без выбора —
-/// встроенный агент, D5); [connect] с профилем делает его профилем окна;
-/// [reconnect] — тот же профиль. [connectOnStart] зовёт app после первого
-/// кадра (D8). Токен профиля — только ссылка: значение читает резолвер
-/// транспорта в момент открытия (D13, D15).
+/// (`CodeLabShellParts`). [startAgent] зовут триггеры (выбор проекта, «New
+/// session», фокус на сессии, «Retry»); [startOnLaunch] зовёт app после
+/// первого кадра (D19). [use] выбирает профиль для следующего старта и агента
+/// не трогает; [restart] — единственный перезапуск (D22). Токен профиля —
+/// только ссылка: значение читает резолвер транспорта в момент открытия (D13,
+/// D15).
 final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     implements ConnectionCommands {
   ConnectionCubit({
@@ -188,7 +273,6 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     required SettingsCubit settings,
     required ActiveSessionCubit activeSession,
     DefaultProfileResolver? defaultProfiles,
-    ConnectionPreferences? preferences,
     Logger? eventLogger,
     ProfileSecretSource? tokenSecrets,
     ProviderSetupOffer? providerSetupOffer,
@@ -198,7 +282,6 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
        _diagnostics = diagnostics,
        _settings = settings,
        _activeSession = activeSession,
-       _preferences = preferences,
        _eventLogger = eventLogger,
        super(
          WindowConnectionState(
@@ -220,7 +303,6 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   final ShellDiagnostics _diagnostics;
   final SettingsCubit _settings;
   final ActiveSessionCubit _activeSession;
-  final ConnectionPreferences? _preferences;
   final Logger? _eventLogger;
 
   /// Источник токенов профилей: только чтобы предупредить о пустом секрете
@@ -236,8 +318,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   /// `state.providerSetupNotice` её отражает. Любая новая попытка сбрасывает.
   ProviderSetupNotice? _notice;
 
-  /// Профиль по умолчанию уже подставлен (или не нужен): `connect()` без
-  /// профиля не ждёт.
+  /// Профиль по умолчанию уже подставлен (или не нужен): старт не ждёт.
   late final Future<void> _defaultLoaded;
   var _defaultResolved = false;
 
@@ -245,120 +326,322 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   /// умолчанию его не заменяет (AGENTS.md §9, поздний результат).
   var _profileChosen = false;
 
-  var _connectOnStartDone = false;
-
-  /// Профиль последней попытки, которую workspace принял (`connect` или
-  /// `reconnect` завершились без ошибки). До неё `null`. «Restart agent»
-  /// переподключает именно его (L5).
+  /// Профиль последней попытки, которую workspace принял. До неё `null`.
   ConnectionProfile? _accepted;
-
-  /// Профиль последнего начатого подключения, даже если оно не удалось:
-  /// до первого принятого подключения «Restart agent» повторяет его.
-  ConnectionProfile? _selected;
   final _restartTargets = StreamController<ConnectionProfile?>.broadcast();
-  ConnectionProfile? _announcedTarget;
+  (ConnectionProfile?, ConnectionProfile?)? _announced;
 
+  /// Выбранный профиль («Selected», D18): им стартует агент и перезапускается.
   @override
-  ConnectionProfile? get restartTarget => _accepted ?? _selected;
+  ConnectionProfile? get restartTarget => state.profile;
+
+  /// Профиль работающего агента («Current»); `null` — агента не было.
+  @override
+  ConnectionProfile? get runningProfile => _accepted;
 
   @override
   Stream<ConnectionProfile?> get restartTargets => _restartTargets.stream;
 
   void _announceTarget() {
-    final target = restartTarget;
-    if (target != _announcedTarget && !_restartTargets.isClosed) {
-      _announcedTarget = target;
-      _restartTargets.add(target);
+    final pair = (state.profile, _accepted);
+    if (pair != _announced && !_restartTargets.isClosed) {
+      _announced = pair;
+      _restartTargets.add(state.profile);
     }
   }
 
-  /// Номер последней начатой попытки [connect]/[reconnect]. Попытка, которую
-  /// вытеснила более новая (повторный Connect, пока встроенный агент
-  /// открывается), не вправе менять статус: иначе её отмена мелькнула бы
-  /// `failed` посреди успешного подключения (`AGENTS.md` §9; design.md change
-  /// `add-embedded-agent-mode`, D6, «Отмена подключения в app»). Он же
-  /// отличает «Connect on start» от ручного Connect (D8).
+  /// Номер последней начатой попытки старта или перезапуска. Попытка, которую
+  /// вытеснила более новая («Restart agent» во время старта, Q25), не вправе
+  /// менять статус: иначе её отмена мелькнула бы `failed` посреди успешного
+  /// подключения (`AGENTS.md` §9; design.md change `add-embedded-agent-mode`,
+  /// D6). Он же — поколение соединения для намерений `SessionsCubit` (D17):
+  /// ответы старого поколения фокус не меняют.
   var _attempt = 0;
+
+  /// Поколение соединения: растёт с каждой начатой попыткой (D17).
+  int get generation => _attempt;
 
   /// Причина отказа по токену текущей попытки (`the agent rejected the token
   /// (HTTP 401)`) вместо текста kit «Failed to start ACP transport.»; `null` —
-  /// отказа по токену нет. Одно поле вместо флага: текст и есть признак, а
-  /// невозможной пары «отказ без текста» не бывает. Живёт, пока workspace
-  /// остаётся в `ConnectionFailed` этой попытки; новая попытка его сбрасывает.
+  /// отказа по токену нет. Одно поле вместо флага: текст и есть признак.
+  /// Живёт, пока workspace остаётся в `ConnectionFailed` этой попытки; новая
+  /// попытка его сбрасывает.
   String? _tokenRejection;
 
-  /// Номер последнего вызова [connect]/[reconnect] до обращения к kit: им
-  /// отбрасываются устаревшие ожидания (профиль по умолчанию, проверка
-  /// папки). Отказ намерения [_attempt] не меняет.
+  /// Номер последнего вызова старта/перезапуска до обращения к kit: им
+  /// отбрасываются устаревшие ожидания (проверка папки). Отказ намерения
+  /// [_attempt] не меняет.
   var _intent = 0;
 
-  /// Подключает окно к [profile], а без него — к профилю окна (до первого
-  /// подключения — к профилю по умолчанию).
+  /// Идущая попытка старта или перезапуска (single-flight на стороне app:
+  /// параллельные триггеры ждут её, D13, D17). Kit держит такой же `Future`
+  /// (`ensureAgent`, D15), но app проверяет папку и секрет до обращения к
+  /// kit, и без своего `Future` два триггера успели бы пройти эти проверки.
+  Future<void>? _inFlight;
+
+  /// Функция-повтор намерения, вызвавшего неудавшийся старт (D13, п. 4);
+  /// `null` — после успеха и до первого старта.
+  Future<void> Function()? _retry;
+
+  /// Ключ последнего сбоя старта «профиль|корень|текст»: одинаковый сбой не
+  /// плодит записи в диагностике (D13).
+  String? _lastFailureKey;
+
+  /// Выбирает [profile] профилем окна для следующего старта (D18 «Use»).
+  ///
+  /// Агента не трогает и профиль по умолчанию не меняет: работающий агент
+  /// остаётся прежним до «Restart agent» (D22).
   @override
-  Future<void> connect([ConnectionProfile? profile]) async {
-    // Намерение, а не попытка: номер попытки `_attempt` растёт только когда
-    // проверки до `ClientWorkspace` пройдены. Отказ B (пустая команда, нет
-    // папки) тогда не вытесняет попытку A, которая уже в kit (safety MEDIUM,
-    // AGENTS.md §9).
-    final intent = ++_intent;
-    _dropSetupNotice();
-    var target = profile;
-    if (target == null) {
-      if (!_defaultResolved) {
-        await _defaultLoaded;
-        if (isClosed || intent != _intent) {
-          return;
+  Future<void> use(ConnectionProfile profile) async {
+    _profileChosen = true;
+    emit(state._copyWith(profile: profile));
+    _announceTarget();
+  }
+
+  /// Корень процесса для «Restart agent» (D18, Q27): папка сессии в фокусе,
+  /// иначе выбранный проект, иначе прежний корень. Корень диска берётся только
+  /// без других кандидатов. `null` — перезапускать некуда.
+  @override
+  String? get restartDirectory {
+    final workspace = _workspace.current;
+    final focus =
+        _activeSession.state.sessionId ?? workspace.activeSessionId?.value;
+    String? sessionCwd;
+    if (focus != null) {
+      for (final summary in workspace.sessions) {
+        if (summary.id.value == focus && summary.cwd.trim().isNotEmpty) {
+          sessionCwd = summary.cwd;
         }
       }
-      target = state.profile;
     }
-    _profileChosen = true;
-    // Профиль фиксируется на старте: подписи и диагностика описывают начатое
-    // подключение, а не то, что выберут позже.
-    final detail = WindowConnectionState._detailOf(target);
-    // Пока проект прошлого запуска восстанавливается, статус `connecting`
-    // ставится до ожидания: повторное нажатие не запустит второе
-    // подключение (D3). Когда восстановление уже завершено, ожидания нет:
-    // статус меняется синхронно с вызовом.
-    final restoreFinished = _settings.projectRestoreFinished;
-    String? project = restoreFinished ? _settings.projectDirectory : null;
-    // Пока workspace не принял ни одного подключения, профиль окна — тот,
-    // что выбран (на нём работают «Connect» и «Reconnect» экрана
-    // подключения); дальше он меняется только после принятой попытки (L5).
-    final shown = _accepted == null ? target : null;
-    if (!_validate(target, action: 'connecting')) {
-      _rejectBeforeConnect(shown: shown);
-      return;
-    }
-    if (!restoreFinished) {
-      emit(
-        state._copyWith(
-          profile: shown,
-          connectionStatus: CodeLabConnectionStatus.connecting,
-        ),
-      );
-      project = await _settings.awaitProject();
-      if (isClosed || intent != _intent) {
-        return;
+    final project = _settings.projectDirectory;
+    for (final candidate in [
+      if (sessionCwd != null && !isFilesystemRoot(sessionCwd)) sessionCwd,
+      project,
+      workspace.agentDirectory,
+      sessionCwd,
+    ]) {
+      if (candidate != null && candidate.trim().isNotEmpty) {
+        return candidate;
       }
     }
-    if (project == null) {
-      _rejectWithoutProject(target, shown: shown);
+    return null;
+  }
+
+  /// Запускает агента выбранным профилем в [directory], если он не работает
+  /// (триггеры D13). Работающий агент — no-op; идущая попытка — ожидание её
+  /// (single-flight, D17).
+  ///
+  /// [retry] — намерение для «Retry» после сбоя; по умолчанию — повтор этого
+  /// же старта. Ошибки наружу не бросаются: итог — `connectionStatus`.
+  Future<void> startAgent(String directory, {Future<void> Function()? retry}) {
+    final connection = _workspace.current.connection;
+    if (connection is Connected) {
+      return Future<void>.value();
+    }
+    final inFlight = _inFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+    _retry = retry ?? () => startAgent(directory);
+    return _track(_run(directory, restart: false));
+  }
+
+  /// «Retry» экрана и баннера (D13, п. 4): повторяет намерение, вызвавшее
+  /// старт; без него (баннер `lost`) — новый старт с прежним корнем процесса.
+  Future<void> retryStart() {
+    final retry = _retry;
+    if (retry != null) {
+      return retry();
+    }
+    final directory =
+        _workspace.current.agentDirectory ?? _settings.projectDirectory;
+    if (directory == null) {
+      return Future<void>.value();
+    }
+    return startAgent(directory);
+  }
+
+  /// Триггер запуска (D19): после восстановления проекта стартует агента в его
+  /// папке; без проекта агент не стартует. App зовёт его один раз после
+  /// первого кадра; тесты без виджета приложения — явно.
+  Future<void> startOnLaunch() async {
+    // Та же функция ожидания, что у «New session» (D3): не дольше
+    // `projectRestoreTimeout`, зависшее чтение снимка не держит триггер вечно.
+    final restored = await _settings.awaitProject();
+    if (!_defaultResolved) {
+      // Чтение профиля по умолчанию тоже ограничено тем же сроком.
+      await _defaultLoaded.timeout(
+        _settings.projectRestoreTimeout,
+        onTimeout: () {},
+      );
+    }
+    // Пока ждали профиль, пользователь мог выбрать другой проект и его старт
+    // мог не удаться: стартовать в восстановленной папке уже нельзя.
+    if (isClosed ||
+        restored == null ||
+        _settings.projectDirectory != restored) {
       return;
     }
+    if (_workspace.current.connection is! Connected) {
+      _eventLogger?.info(
+        'connection.start_on_launch',
+        context: {'profile_id': state.profile.id},
+      );
+    }
+    await startAgent(restored);
+  }
 
+  /// «Restart agent» (D22): единственный перезапуск. При ходе, ждущем
+  /// одобрения или отмене, сначала [WindowConnectionState.pendingRestart] и
+  /// ответ пользователя; во время старта (Q25) и в покое — сразу.
+  @override
+  Future<void> restart() async {
+    if (state.pendingRestart != null) {
+      // Пока диалог открыт, другие перезапуски игнорируются (droppable,
+      // `concurrency.md` §62).
+      return;
+    }
+    // Как «New session» и триггер запуска (D3): пока проект восстанавливается,
+    // ждём его не дольше `projectRestoreTimeout` (spec «Ожидание
+    // восстановления»).
+    if (restartDirectory == null && !_settings.projectRestoreFinished) {
+      await _settings.awaitProject();
+      if (isClosed) return;
+    }
+    if (restartDirectory == null) {
+      // Корня нет: ни проекта, ни прежнего корня. Событие без пути.
+      _eventLogger?.info(
+        'connection.connect_rejected',
+        context: {'reason': 'no_project', 'profile_id': state.profile.id},
+      );
+      _diagnostics.record(
+        'Open a project before restarting the agent: choose a folder with '
+        'Open folder….',
+        severity: DiagnosticSeverity.warning,
+        source: 'project',
+      );
+      return;
+    }
+    final working = _runningSessionTitles();
+    final connection = _workspace.current.connection;
+    if (working.isNotEmpty &&
+        connection is! Connecting &&
+        connection is! Reconnecting) {
+      emit(
+        state._copyWith(
+          pendingRestart: RestartConfirmation(
+            title: profileTitle(state.profile),
+            sessions: working,
+          ),
+        ),
+      );
+      return;
+    }
+    await _restartNow(interrupted: 0);
+  }
+
+  /// Пользователь подтвердил диалог D22: перезапуск без `session/cancel`,
+  /// очередь сохранена.
+  Future<void> confirmRestart() async {
+    final pending = state.pendingRestart;
+    if (pending == null) {
+      return;
+    }
+    emit(state._copyWith(pendingRestart: null));
+    await _restartNow(interrupted: pending.sessions.length);
+  }
+
+  /// «Cancel» диалога D22: ничего не меняется.
+  void cancelRestart() {
+    if (state.pendingRestart != null) {
+      emit(state._copyWith(pendingRestart: null));
+    }
+  }
+
+  /// Названия сессий окна в ходе, ждущих одобрения или отмены.
+  List<String> _runningSessionTitles() => [
+    for (final summary in _workspace.current.sessions)
+      if (summary.status == SessionStatusView.running ||
+          summary.status == SessionStatusView.cancelling)
+        summary.title?.trim().isNotEmpty ?? false
+            ? summary.title!.trim()
+            : summary.id.value,
+  ];
+
+  Future<void> _restartNow({required int interrupted}) {
+    final directory = restartDirectory;
+    if (directory == null) {
+      return Future<void>.value();
+    }
+    final reason = switch (state.connectionStatus) {
+      CodeLabConnectionStatus.failed ||
+      CodeLabConnectionStatus.lost => 'failure',
+      _ when _accepted != null && _accepted != state.profile =>
+        'profile_changed',
+      _ => 'manual',
+    };
+    // Без пути (AGENTS.md §16): причина и число прерванных сессий.
+    _eventLogger?.info(
+      'connection.restart',
+      context: {'reason': reason, 'interrupted': interrupted},
+    );
+    _retry = () => startAgent(directory);
+    return _track(_run(directory, restart: true));
+  }
+
+  /// Запоминает идущую попытку и снимает её по завершению.
+  ///
+  /// Почему не `whenComplete`: он создал бы производный `Future`, ошибка
+  /// которого осталась бы необработанной; `_run` ошибок не бросает, но
+  /// паттерн kit (`_begin`) надёжнее при будущих правках.
+  Future<void> _track(Future<void> attempt) {
+    _inFlight = attempt;
+    unawaited(
+      attempt
+          .then<void>((_) {}, onError: (Object _) {})
+          .then<void>(
+            (_) => identical(_inFlight, attempt) ? _inFlight = null : null,
+          ),
+    );
+    return attempt;
+  }
+
+  /// Тело старта и перезапуска: проверки до kit, затем `ensureAgent` или
+  /// `reconnect(agentDirectory:)`. Исход читается из состояния, ошибок нет.
+  Future<void> _run(String directory, {required bool restart}) async {
+    // Намерение, а не попытка: номер попытки `_attempt` растёт только когда
+    // проверки до `ClientWorkspace` пройдены. Отказ B (пустая команда, нет
+    // папки) тогда не вытесняет попытку A, которая уже в kit.
+    final intent = ++_intent;
+    _dropSetupNotice();
+    if (!_defaultResolved) {
+      // Профиль по умолчанию ещё читается: стартуем уже им, а не начальным.
+      // Ожидание ограничено тем же сроком, что у `startOnLaunch`: зависшее
+      // чтение не должно навсегда занять `_inFlight` (все следующие старты
+      // вернули бы эту же попытку).
+      await _defaultLoaded.timeout(
+        _settings.projectRestoreTimeout,
+        onTimeout: () {},
+      );
+      if (isClosed || intent != _intent) return;
+    }
+    final target = state.profile;
+    _profileChosen = true;
+    final detail = WindowConnectionState._detailOf(target);
+    final action = restart ? 'reconnecting' : 'connecting';
+    if (!_validate(target, action: action)) {
+      _rejectBeforeConnect();
+      return;
+    }
     emit(
       state._copyWith(
-        profile: shown,
-        connectionStatus: CodeLabConnectionStatus.connecting,
+        connectionStatus: restart
+            ? CodeLabConnectionStatus.reconnecting
+            : CodeLabConnectionStatus.connecting,
       ),
     );
-    if (await _failIfProjectDirectoryMissing(
-      target,
-      intent,
-      project,
-      shown: shown,
-    )) {
+    if (await _failIfProjectDirectoryMissing(target, intent, directory)) {
       return;
     }
     await _warnIfSecretMissing(target);
@@ -368,44 +651,62 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     // Все проверки пройдены: с этого места попытка принадлежит kit.
     final attempt = ++_attempt;
     // Текст отказа прошлой попытки к новой не относится: kit может отклонить
-    // её до `connecting` (`_rejectUnsupported`), и тогда сброс из
-    // `_handleWorkspaceChange` не сработает.
+    // её до `connecting` (`_rejectUnsupported`).
     _tokenRejection = null;
-    _selected = target;
     _announceTarget();
     _warnIfTokenUnsupported(target);
     _diagnostics.record(
       _byType(
         target,
-        stdio: 'Starting stdio ACP agent: $detail.',
-        webSocket: 'Connecting WebSocket ACP agent: $detail.',
-        embedded: 'Starting embedded ACP agent: $detail.',
+        stdio: restart
+            ? 'Reconnecting stdio ACP agent: $detail.'
+            : 'Starting stdio ACP agent: $detail.',
+        webSocket: restart
+            ? 'Reconnecting WebSocket ACP agent: $detail.'
+            : 'Connecting WebSocket ACP agent: $detail.',
+        embedded: restart
+            ? 'Reconnecting embedded ACP agent: $detail.'
+            : 'Starting embedded ACP agent: $detail.',
       ),
       source: 'transport',
     );
 
     try {
-      await _workspace.connect(target, projectDirectory: project);
+      if (restart) {
+        await _workspace.reconnect(profile: target, agentDirectory: directory);
+      } else {
+        await _workspace.ensureAgent(directory, profile: target);
+      }
       // Вытесненная попытка завершается нормально и ничего не публикует
-      // (контракт `ClientWorkspace`): итог — у новой попытки, а «started» от
-      // старой был бы ложной диагностикой.
+      // (контракт `ClientWorkspace`): итог — у новой попытки.
       if (isClosed || attempt != _attempt) {
         return;
       }
       _accepted = target;
+      _lastFailureKey = null;
       _announceTarget();
       emit(
         state._copyWith(
-          profile: target,
+          runningProfile: target,
+          failureRepeat: 0,
           connectionStatus: connectionStatusOf(_workspace.current.connection),
         ),
       );
+      if (_workspace.current.connection is Connected) {
+        _retry = null;
+      }
       _diagnostics.record(
         _byType(
           target,
-          stdio: 'Stdio ACP agent started: $detail.',
-          webSocket: 'WebSocket ACP agent connected: $detail.',
-          embedded: 'Embedded ACP agent started: $detail.',
+          stdio: restart
+              ? 'Stdio ACP agent reconnected: $detail.'
+              : 'Stdio ACP agent started: $detail.',
+          webSocket: restart
+              ? 'WebSocket ACP agent reconnected: $detail.'
+              : 'WebSocket ACP agent connected: $detail.',
+          embedded: restart
+              ? 'Embedded ACP agent reconnected: $detail.'
+              : 'Embedded ACP agent started: $detail.',
         ),
         source: 'transport',
       );
@@ -423,153 +724,73 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
       );
     } on Object catch (error) {
       if (isClosed) return;
-      // Текст отказа по токену строится до проверки номера попытки: чтение
-      // источника токена асинхронно, а после `await` вытесненная попытка
-      // уже не вправе менять состояние (§9).
+      // Текст отказа по токену строится до проверки номера попытки:
+      // чтение источника токена асинхронно, а после `await` вытесненная
+      // попытка уже не вправе менять состояние (§9).
       final rejection = await _tokenRejectionText(error, target);
       if (isClosed) return;
       if (attempt != _attempt) {
         _recordStaleAttempt(error);
         return;
       }
-      _publishFailure(rejection, profile: target, intent: intent);
-      _diagnostics.record(
-        rejection ??
-            _byType(
-              target,
-              stdio: 'Failed to start stdio ACP agent: $error',
-              webSocket: 'Failed to connect WebSocket ACP agent: $error',
-              embedded: 'Failed to start embedded ACP agent: $error',
-            ),
-        severity: DiagnosticSeverity.error,
-        source: 'transport',
+      final message =
+          rejection ??
+          _byType(
+            target,
+            stdio: restart
+                ? 'Failed to reconnect stdio ACP agent: ${describeFailure(error)}'
+                : 'Failed to start stdio ACP agent: $error',
+            webSocket: restart
+                ? 'Failed to reconnect WebSocket ACP agent: ${describeFailure(error)}'
+                : 'Failed to connect WebSocket ACP agent: $error',
+            embedded: restart
+                ? 'Failed to reconnect embedded ACP agent: ${describeFailure(error)}'
+                : 'Failed to start embedded ACP agent: $error',
+          );
+      // Одинаковый сбой старта не плодит записи (D13): счётчик растёт в
+      // состоянии экрана, в журнал уходит debug-событие. Перезапуск пишет
+      // каждый сбой, как прежний reconnect.
+      final key = '${target.id}|$directory|$message';
+      final repeat = !restart && key == _lastFailureKey
+          ? state.failureRepeat + 1
+          : 0;
+      _lastFailureKey = restart ? null : key;
+      _publishFailure(
+        rejection,
+        profile: target,
+        intent: intent,
+        repeat: repeat,
       );
+      if (!restart) {
+        _eventLogger?.debug(
+          'connection.start_failed',
+          context: {'profile_id': target.id, 'repeat': repeat},
+        );
+      }
+      if (repeat == 0) {
+        _diagnostics.record(
+          message,
+          severity: DiagnosticSeverity.error,
+          source: 'transport',
+        );
+      }
     }
   }
 
-  /// Одна попытка переподключения через kit с профилем окна; проект мог
-  /// измениться после [connect] (design D4).
-  @override
-  Future<void> reconnect() async {
-    // Переподключается профиль, который держал workspace, а не тот, к
-    // которому только что неудачно пытались подключиться (L5, D9).
-    final profile = _accepted ?? state.profile;
-    final detail = WindowConnectionState._detailOf(profile);
-    final intent = ++_intent;
-    _dropSetupNotice();
-    _profileChosen = true;
-    // Как в [connect]: при идущем восстановлении проекта статус
-    // `reconnecting` ставится до ожидания. Когда восстановление уже
-    // завершено, ожидания нет и статус меняется синхронно с вызовом (D3).
-    final restoreFinished = _settings.projectRestoreFinished;
-    String? project = restoreFinished ? _settings.projectDirectory : null;
-    if (!_validate(profile, action: 'reconnecting')) {
-      _rejectBeforeConnect();
-      return;
-    }
-    if (!restoreFinished) {
-      emit(
-        state._copyWith(connectionStatus: CodeLabConnectionStatus.reconnecting),
-      );
-      project = await _settings.awaitProject();
-      if (isClosed || intent != _intent) {
-        return;
-      }
-    }
-    if (project == null) {
-      _rejectWithoutProject(profile);
-      return;
-    }
-
-    emit(
-      state._copyWith(connectionStatus: CodeLabConnectionStatus.reconnecting),
-    );
-    if (await _failIfProjectDirectoryMissing(profile, intent, project)) {
-      return;
-    }
-    await _warnIfSecretMissing(profile);
-    if (isClosed || intent != _intent) {
-      return;
-    }
-    final attempt = ++_attempt;
-    // Текст отказа прошлой попытки к новой не относится: kit может отклонить
-    // её до `connecting` (`_rejectUnsupported`), и тогда сброс из
-    // `_handleWorkspaceChange` не сработает.
-    _tokenRejection = null;
-    _selected = profile;
-    _announceTarget();
-    _warnIfTokenUnsupported(profile);
-    _diagnostics.record(
-      _byType(
-        profile,
-        stdio: 'Reconnecting stdio ACP agent: $detail.',
-        webSocket: 'Reconnecting WebSocket ACP agent: $detail.',
-        embedded: 'Reconnecting embedded ACP agent: $detail.',
-      ),
-      source: 'transport',
-    );
-
-    try {
-      await _workspace.reconnect(profile: profile, projectDirectory: project);
-      if (isClosed || attempt != _attempt) return;
-      _accepted = profile;
-      _announceTarget();
-      emit(
-        state._copyWith(
-          profile: profile,
-          connectionStatus: connectionStatusOf(_workspace.current.connection),
-        ),
-      );
-      _diagnostics.record(
-        _byType(
-          profile,
-          stdio: 'Stdio ACP agent reconnected: $detail.',
-          webSocket: 'WebSocket ACP agent reconnected: $detail.',
-          embedded: 'Embedded ACP agent reconnected: $detail.',
-        ),
-        source: 'transport',
-      );
-    } on Object catch (error) {
-      if (isClosed) return;
-      final rejection = await _tokenRejectionText(error, profile);
-      if (isClosed) return;
-      if (attempt != _attempt) {
-        _recordStaleAttempt(error);
-        return;
-      }
-      _publishFailure(rejection, profile: profile, intent: intent);
-      _diagnostics.record(
-        rejection ??
-            _byType(
-              profile,
-              stdio:
-                  'Failed to reconnect stdio ACP agent: ${describeFailure(error)}',
-              webSocket:
-                  'Failed to reconnect WebSocket ACP agent: ${describeFailure(error)}',
-              embedded:
-                  'Failed to reconnect embedded ACP agent: ${describeFailure(error)}',
-            ),
-        severity: DiagnosticSeverity.error,
-        source: 'transport',
-      );
-    }
-  }
-
-  /// Переподключает встроенного агента после записи провайдера из баннера,
-  /// если с момента сбоя [notice] не началась другая попытка (D21, D26).
+  /// Повтор после записи провайдера из баннера встроенного агента, если с
+  /// момента сбоя [notice] не началась другая попытка (D21, D26, D13 п. 4).
   ///
   /// Почему сравнение по тождеству: диалог мастера модальный, но попытку могут
-  /// начать без пользователя («Connect on start», переподключение kit), а
-  /// подключение к чужому профилю нельзя перебивать встроенным агентом
-  /// (AGENTS.md §9). Новая попытка метку сбрасывает; тогда пишется
-  /// `provider_wizard.reconnect_skipped` и ничего не делается.
+  /// начать без пользователя, а подключение к чужому профилю нельзя перебивать
+  /// встроенным агентом (AGENTS.md §9). Новая попытка метку сбрасывает; тогда
+  /// пишется `provider_wizard.reconnect_skipped` и ничего не делается.
   Future<void> connectAfterProviderSetup(ProviderSetupNotice notice) async {
     if (isClosed || !identical(_notice, notice)) {
       _eventLogger?.debug('provider_wizard.reconnect_skipped');
       return;
     }
     _eventLogger?.info('provider_wizard.reconnect');
-    await connect(embeddedConnectionProfile);
+    await retryStart();
   }
 
   var _setupActionOpen = false;
@@ -596,54 +817,6 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     }
     _notice = null;
     emit(state._copyWith(providerSetupNotice: null));
-  }
-
-  /// «Connect on start» (D8): один раз после первого кадра и восстановления
-  /// проекта подключает профиль по умолчанию. Обычный [connect]: сбой —
-  /// `ConnectionFailed` и баннер, повторов нет.
-  ///
-  /// Ручное подключение, начатое раньше, имеет приоритет: номер попытки
-  /// сравнивается после каждого ожидания, чтобы запуск не гонялся с ним.
-  Future<void> connectOnStart() async {
-    final preferences = _preferences;
-    if (_connectOnStartDone || preferences == null) {
-      return;
-    }
-    _connectOnStartDone = true;
-    final started = _intent;
-    final bool enabled;
-    try {
-      enabled = await preferences.loadConnectOnStart();
-    } on Object {
-      return;
-    }
-    if (!enabled) {
-      return;
-    }
-    try {
-      await _settings.projectRestored;
-    } on Object {
-      // Проект не восстановился: проекта нет, подключаться некуда.
-    }
-    await _defaultLoaded;
-    if (isClosed || _intent != started) {
-      return;
-    }
-    final profile = state.profile;
-    if (_settings.projectDirectory == null) {
-      // Без проекта нет папки агента (D2). Временно, до итерации B: там
-      // агент стартует сам, выбором проекта, и «Connect on start» уходит.
-      _eventLogger?.info(
-        'connection.connect_on_start_skipped',
-        context: {'profile_id': profile.id, 'reason': 'no_project'},
-      );
-      return;
-    }
-    _eventLogger?.info(
-      'connection.connect_on_start',
-      context: {'profile_id': profile.id, 'type': _typeNameOf(profile)},
-    );
-    await connect(profile);
   }
 
   @override
@@ -739,6 +912,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     String? rejection, {
     required ConnectionProfile profile,
     required int intent,
+    int repeat = 0,
   }) {
     _tokenRejection = rejection;
     // Метка принадлежит этой попытке встроенного агента: порт читается
@@ -753,6 +927,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     emit(
       state._copyWith(
         providerSetupNotice: _notice,
+        failureRepeat: repeat,
         connectionStatus: CodeLabConnectionStatus.failed,
         // Без отказа по токену — текст kit текущего состояния, а не прежний
         // `connectionMessage`: он мог остаться от прошлой попытки.
@@ -785,9 +960,8 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   Future<bool> _failIfProjectDirectoryMissing(
     ConnectionProfile profile,
     int intent,
-    String project, {
-    ConnectionProfile? shown,
-  }) async {
+    String project,
+  ) async {
     if (profile is WebSocketProfile) {
       return false;
     }
@@ -798,38 +972,14 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     if (missing == null) {
       return false;
     }
-    final message =
-        'Project folder not found: $missing. '
-        'Choose an existing folder with Open folder… and connect again.';
-    _rejectBeforeConnect(message: message, shown: shown);
+    final message = projectFolderMissingMessage(missing);
+    _rejectBeforeConnect(message: message);
     _diagnostics.record(
       message,
       severity: DiagnosticSeverity.error,
       source: 'project',
     );
     return true;
-  }
-
-  /// Отказ подключиться без проекта: папки агента нет (D2, D3). Ничего не
-  /// запускается и не открывается, `WorkspaceState.projectDirectory` остаётся
-  /// пустым. Событие журнала несёт только id профиля, без пути.
-  void _rejectWithoutProject(
-    ConnectionProfile profile, {
-    ConnectionProfile? shown,
-  }) {
-    const message =
-        'Open a project before connecting: choose a folder with '
-        'Open folder….';
-    _rejectBeforeConnect(message: message, shown: shown);
-    _diagnostics.record(
-      message,
-      severity: DiagnosticSeverity.warning,
-      source: 'project',
-    );
-    _eventLogger?.info(
-      'connection.connect_rejected',
-      context: {'reason': 'no_project', 'profile_id': profile.id},
-    );
   }
 
   /// Отказ до обращения к `ClientWorkspace` (пустая команда, нет папки).
@@ -842,7 +992,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   /// `connectionMessage` только когда статус действительно `failed`: баннер
   /// ошибки не ложится поверх рабочего или идущего соединения, причина тогда
   /// только в диагностике.
-  void _rejectBeforeConnect({String? message, ConnectionProfile? shown}) {
+  void _rejectBeforeConnect({String? message}) {
     final connection = _workspace.current.connection;
     final busy =
         connection is Connected ||
@@ -850,7 +1000,6 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         connection is Reconnecting;
     emit(
       state._copyWith(
-        profile: shown,
         connectionStatus: busy
             ? connectionStatusOf(connection)
             : CodeLabConnectionStatus.failed,
@@ -928,13 +1077,6 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     StdioProfile() => stdio,
     WebSocketProfile() => webSocket,
     EmbeddedProfile() => embedded,
-  };
-
-  /// Тип профиля для событий журнала (D17).
-  static String _typeNameOf(ConnectionProfile profile) => switch (profile) {
-    StdioProfile() => 'stdio',
-    WebSocketProfile() => 'webSocket',
-    EmbeddedProfile() => 'embedded',
   };
 
   void _recordFormError(String message) => _diagnostics.record(

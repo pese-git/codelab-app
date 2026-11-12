@@ -2,7 +2,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show CommandCatalog;
 import 'package:codelab_ui/codelab_ui.dart';
 
-import 'connection_cubit.dart' show ProviderSetupNotice;
+import 'connection_cubit.dart' show ProviderSetupNotice, RestartConfirmation;
 import 'sessions_cubit.dart' show PendingRootSession;
 import 'ui_mappers.dart';
 
@@ -26,6 +26,8 @@ final class CodeLabShellState {
     required this.connectionDetail,
     this.connectionMessage,
     this.providerSetupNotice,
+    this.connectionRepeat = 0,
+    this.pendingRestart,
     required this.currentSessionLabel,
     required this.currentSessionDetail,
     required this.sessions,
@@ -61,6 +63,8 @@ final class CodeLabShellState {
     required this.recentProjects,
     this.hasMoreSessions = false,
     this.pendingRootSession,
+    this.sessionFolders = const {},
+    this.restartsRemote = false,
     required this.currentPlan,
     required this.queuedPrompts,
   });
@@ -79,6 +83,13 @@ final class CodeLabShellState {
   /// provider» вместо сырого текста проблем (change `add-provider-setup-ui`,
   /// D26); `null` — сбой другой.
   final ProviderSetupNotice? providerSetupNotice;
+
+  /// Сколько раз подряд повторился тот же сбой старта (`Failed again (n)`,
+  /// D13); `0` — сбой первый.
+  final int connectionRepeat;
+
+  /// Диалог «Restart agent» ждёт ответа (D22); `null` — не ждёт.
+  final RestartConfirmation? pendingRestart;
 
   // Список и выбор сессий — `SessionsCubit`.
   final String currentSessionLabel;
@@ -168,6 +179,15 @@ final class CodeLabShellState {
   /// `Open anyway?`; `null` — подтверждения нет.
   final PendingRootSession? pendingRootSession;
 
+  /// Папка (`cwd`) каждой сессии по id — из `WorkspaceState`, не из подписи
+  /// строки (Q23): сайдбар раскладывает по ним сессии разных папок.
+  final Map<String, String> sessionFolders;
+
+  /// Перезапускается удалённый агент (WebSocket): пункт палитры `/reconnect`
+  /// называется «Reconnect», для локального — «Restart agent» (Q24), как
+  /// `ConnectionSettingsState.restartTitle`.
+  final bool restartsRemote;
+
   /// Отличает «не передан» от «явно `null`» для [currentPlan] в [copyWith].
   static const Object _unset = Object();
 
@@ -180,6 +200,8 @@ final class CodeLabShellState {
     String? connectionDetail,
     Object? connectionMessage = _unset,
     Object? providerSetupNotice = _unset,
+    int? connectionRepeat,
+    Object? pendingRestart = _unset,
     String? currentSessionLabel,
     String? currentSessionDetail,
     List<CodeLabSessionListItem>? sessions,
@@ -215,6 +237,8 @@ final class CodeLabShellState {
     List<CodeLabRecentProject>? recentProjects,
     bool? hasMoreSessions,
     Object? pendingRootSession = _unset,
+    Map<String, String>? sessionFolders,
+    bool? restartsRemote,
     Object? currentPlan = _unset,
     List<CodeLabQueuedPrompt>? queuedPrompts,
   }) {
@@ -229,6 +253,10 @@ final class CodeLabShellState {
       providerSetupNotice: identical(providerSetupNotice, _unset)
           ? this.providerSetupNotice
           : providerSetupNotice as ProviderSetupNotice?,
+      connectionRepeat: connectionRepeat ?? this.connectionRepeat,
+      pendingRestart: identical(pendingRestart, _unset)
+          ? this.pendingRestart
+          : pendingRestart as RestartConfirmation?,
       currentSessionLabel: currentSessionLabel ?? this.currentSessionLabel,
       currentSessionDetail: currentSessionDetail ?? this.currentSessionDetail,
       sessions: sessions ?? this.sessions,
@@ -276,6 +304,8 @@ final class CodeLabShellState {
       selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
       recentProjects: recentProjects ?? this.recentProjects,
       hasMoreSessions: hasMoreSessions ?? this.hasMoreSessions,
+      sessionFolders: sessionFolders ?? this.sessionFolders,
+      restartsRemote: restartsRemote ?? this.restartsRemote,
       pendingRootSession: identical(pendingRootSession, _unset)
           ? this.pendingRootSession
           : pendingRootSession as PendingRootSession?,
@@ -289,12 +319,30 @@ final class CodeLabShellState {
   /// Полный список палитры: команды клиента, затем команды агента; команда
   /// агента вытесняет одноимённую недоступную команду клиента (D3).
   List<CodeLabCommandAction> get paletteActions =>
-      paletteActionsOf(commandCatalog);
+      _restartLabelled(paletteActionsOf(commandCatalog));
 
   /// Команды палитры под запрос пользователя, лучшие — первыми (D4); её
   /// получают палитра `Ctrl/Cmd+K` и inline-триггер композера.
   List<CodeLabCommandAction> searchPalette(String query) =>
-      searchPaletteActions(commandCatalog, query);
+      _restartLabelled(searchPaletteActions(commandCatalog, query));
+
+  /// Подпись пункта `reconnect` по типу профиля (Q24): для локального агента
+  /// это единственный перезапуск «Restart agent» (D22).
+  List<CodeLabCommandAction> _restartLabelled(
+    List<CodeLabCommandAction> actions,
+  ) => restartsRemote
+      ? actions
+      : [
+          for (final action in actions)
+            action.id == 'reconnect'
+                ? action.copyWith(
+                    label: 'Restart agent',
+                    description:
+                        'Restart the agent with the selected profile and '
+                        'reload open sessions.',
+                  )
+                : action,
+        ];
 
   String get selectedProfileLabel => profileLabel;
 

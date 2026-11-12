@@ -80,8 +80,8 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   }
 
   /// Завершается, когда проект прошлого запуска восстановлен или решено его
-  /// не восстанавливать. «Connect on start» ждёт его, чтобы подключиться уже
-  /// с папкой проекта (spec app-settings «Блок «Behavior»», D8).
+  /// не восстанавливать. Триггер запуска (`startOnLaunch`, D19) ждёт его, чтобы
+  /// стартовать агента уже с папкой проекта.
   late final Future<void> projectRestored;
 
   var _projectRestoreFinished = false;
@@ -95,7 +95,7 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   /// Параметр конструктора нужен тестам.
   final Duration projectRestoreTimeout;
 
-  /// Проект для действия пользователя (Connect, Reconnect, New session):
+  /// Проект для действия пользователя (New session, «Restart agent»):
   /// выбранный проект, а пока проект прошлого запуска восстанавливается —
   /// после ожидания не дольше [projectRestoreTimeout].
   ///
@@ -115,6 +115,22 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     }
     return projectDirectory;
   }
+
+  Future<void> Function(String project)? _onProjectSelected;
+
+  /// Связывает выбор проекта со стартом агента (D13 п. 1).
+  ///
+  /// Почему метод, а не публичное поле: `ConnectionCubit` создаётся после
+  /// этого Cubit, поэтому связь ставится сборкой частей один раз
+  /// (`CodeLabShellParts.build`); свободно перезаписываемое поле позволяло бы
+  /// любому коду подменить триггер. Восстановление проекта прошлого запуска
+  /// ([_restoreProject]) триггер не вызывает — его вызывает `startOnLaunch`
+  /// (D19), иначе каждая сборка графа в тестах запускала бы агента.
+  ///
+  /// Как использовать: сборка зовёт `bindProjectStart(connection.startAgent)`;
+  /// тест, который стартует агента явно (D20), зовёт `bindProjectStart(null)`.
+  void bindProjectStart(Future<void> Function(String project)? start) =>
+      _onProjectSelected = start;
 
   final ClientWorkspace _workspace;
   final ShellDiagnostics _diagnostics;
@@ -170,6 +186,9 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     emit(state._copyWith(selectedProjectPath: trimmed));
     _workspace.selectProject(trimmed);
     _diagnostics.record('Selected project: $trimmed.', source: 'project');
+    // Ошибки старта не теряются: `ConnectionCubit` публикует их состоянием
+    // соединения и диагностикой, наружу старт не бросает.
+    unawaited(_onProjectSelected?.call(trimmed) ?? Future<void>.value());
 
     try {
       await _recentProjectsStore.record(trimmed);

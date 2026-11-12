@@ -78,7 +78,7 @@ const _secretFailedMessage = 'Could not store the token. Try again.';
 /// Для чего: единственный источник того, что показывает диалог — [state] —
 /// и единственное место, где диалог пишет в `profiles.json` и в
 /// `codelab.connection.default_profile`. Текущее подключение окна он не
-/// меняет: «Connect» — действие строки страницы (D5).
+/// меняет: «Use» — действие строки страницы (D5, D18).
 ///
 /// Как использовать: composition root создаёт Cubit на каждое открытие
 /// диалога (`createAddProfileCubit`), диалог зовёт [start], затем методы

@@ -77,6 +77,8 @@ import '../features/settings/application/provider_settings_cubit.dart';
 import '../features/settings/application/provider_wizard_cubit.dart';
 import '../features/terminal/application/terminal_tabs_cubit.dart';
 import '../features/terminal/presentation/terminal_output_flusher.dart';
+import '../features/workbench/application/project_paths.dart'
+    show isFilesystemRoot;
 import '../features/workbench/application/secret_migration_cubit.dart';
 import '../features/workbench/application/secret_migration_runner.dart';
 import '../features/workbench/application/secret_migration_turns.dart';
@@ -651,7 +653,6 @@ final class CodeLabPresentationModule extends Module {
             directoryExists: currentScope.resolve<DirectoryExists>(),
             dockLayoutStore: currentScope.resolve<DockLayoutStore>(),
             defaultProfiles: currentScope.resolve<DefaultProfileResolver>(),
-            preferences: currentScope.resolve<ConnectionPreferences>(),
             tokenSecrets: currentScope.resolve<ProfileSecretSource>(),
             eventLogger: _settingsLogger(),
             providerSetupOffer: currentScope.resolve<ProviderSetupOffer>(),
@@ -822,10 +823,10 @@ final class CodeLabPresentationModule extends Module {
         open: openSettings,
         environment: environment.variables,
         codelabHome: environment.codelabHome,
-        projectDirectory: () =>
-            currentScope.resolve<CodeLabShellParts>().settings.projectDirectory,
+        projectDirectory: () => _focusFolder(currentScope),
         logger: _settingsLogger(),
-        connect: () => currentScope.resolve<CodeLabShellCubit>().connect(),
+        retryStart: () =>
+            currentScope.resolve<CodeLabShellCubit>().retryStart(),
       );
     });
     // Страница «MCP servers»: новый Cubit на каждое открытие (D11); сессия
@@ -839,8 +840,7 @@ final class CodeLabPresentationModule extends Module {
         open: openSettings,
         environment: environment.variables,
         codelabHome: environment.codelabHome,
-        projectDirectory: () =>
-            currentScope.resolve<CodeLabShellParts>().settings.projectDirectory,
+        projectDirectory: () => _focusFolder(currentScope),
         statusSource: ResolverMcpStatusSource(
           currentScope.resolve<EmbeddedTransportResolver>(),
         ),
@@ -1262,3 +1262,26 @@ AcpTransport _createStdioTransport(StdioAcpTransportConfig config) =>
 
 AcpTransport _createWebSocketTransport(WebSocketAcpTransportConfig config) =>
     WebSocketAcpTransport(config);
+
+/// Папка для страниц «Providers» и «MCP servers» (D8 change
+/// `require-project-folder`): папка сессии в фокусе, а без неё — выбранный
+/// проект.
+///
+/// Почему не только проект: агент обслуживает сессии разных папок (D11), и
+/// слои конфигурации проекта относятся к папке той сессии, которую пользователь
+/// сейчас видит. Корень диска как папка слоёв не берётся: проектного слоя там
+/// нет, поэтому выбирается проект.
+String? _focusFolder(Scope scope) {
+  final workspace = scope.resolve<ClientWorkspace>().current;
+  final active = workspace.activeSessionId;
+  if (active != null) {
+    for (final summary in workspace.sessions) {
+      if (summary.id == active &&
+          summary.cwd.trim().isNotEmpty &&
+          !isFilesystemRoot(summary.cwd)) {
+        return summary.cwd;
+      }
+    }
+  }
+  return scope.resolve<CodeLabShellParts>().settings.projectDirectory;
+}

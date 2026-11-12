@@ -48,7 +48,7 @@ export 'profile_view.dart'
 /// Страница «Connection»: список профилей, профиль по умолчанию, «Behavior».
 ///
 /// Почему: один владелец данных страницы — файл профилей, выбор по умолчанию
-/// и «Connect on start» читаются и пишутся здесь, а не в виджете
+/// читается и пишется здесь, а не в виджете
 /// (`state-management.md` §13, §22; design.md change `add-app-settings-shell`,
 /// D4, D5, D8–D10).
 ///
@@ -156,7 +156,6 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   // Загруженные данные; состояние собирается из них и из `WorkspaceState`.
   List<ConnectionProfile> _stored = const [];
   var _defaultId = embeddedProfileId;
-  var _connectOnStart = false;
   var _ignoredDefault = false;
   String? _failure;
   var _readable = false;
@@ -172,9 +171,10 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   // Последние учтённые цель перезапуска, профиль попытки и соединение
   // workspace: `_publish` нужен только при их смене, а не при каждом
   // изменении списка сессий.
-  ConnectionProfile? _seenTarget;
   ConnectionProfile? _seenAttempt;
   ConnectionView? _seenConnection;
+  String? _seenProject;
+  String? _seenAgentDirectory;
 
   /// Профили, о ссылке которых уже писали в журнал: событие один раз за жизнь
   /// Cubit, а не на каждое перечитывание.
@@ -201,8 +201,6 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
       loadError = error;
     }
     var savedDefault = await _readOrNull(_preferences.loadDefaultProfileId);
-    final connectOnStart =
-        await _readOrNull(_preferences.loadConnectOnStart) ?? false;
     if (isClosed || attempt != _loadAttempt) {
       return;
     }
@@ -211,7 +209,6 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
       _readable = false;
       _stored = const [];
       _ignoredDefault = false;
-      _connectOnStart = connectOnStart;
       _defaultId = embeddedProfileId;
       _unreadableReason = _reasonOf(loadError!);
       // Один раз за жизнь страницы: после каждой собственной записи файл
@@ -264,7 +261,6 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     }
     _pendingTested.clear();
     _defaultId = savedDefault ?? embeddedProfileId;
-    _connectOnStart = connectOnStart;
     _ignoredDefault = ignoredDefault;
     _failure = null;
     if (ignoredDefault && !_ignoredReported) {
@@ -316,8 +312,9 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     await reload();
   }
 
-  /// Подключает окно к профилю [id]; профиль по умолчанию не меняется (D5).
-  Future<void> connect(String id) async {
+  /// «Use» (D18): делает профиль [id] профилем следующего старта агента.
+  /// Работающий агент и профиль по умолчанию не меняются (D5).
+  Future<void> use(String id) async {
     final rows = switch (state) {
       ConnectionSettingsReady(:final rows) ||
       ConnectionSettingsUnreadable(:final rows) => rows,
@@ -325,38 +322,21 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     };
     for (final row in rows) {
       if (row.id == id) {
-        await _commands.connect(row.profile);
+        await _commands.use(row.profile);
         return;
       }
     }
   }
 
-  /// «Connect on start» (D8): сохраняется сразу, действует со следующего
-  /// запуска.
-  Future<void> setConnectOnStart(bool value) async {
-    try {
-      await _preferences.saveConnectOnStart(value);
-    } on Object catch (error) {
-      _fail('', error.runtimeType.toString());
-      return;
-    }
-    if (isClosed) {
-      return;
-    }
-    _connectOnStart = value;
-    _failure = null;
-    _publish();
-    await reload();
-  }
-
-  /// «Restart agent» (D9): переподключение текущим профилем. Недоступна без
-  /// профиля и во время подключения — и при прямом вызове.
+  /// «Restart agent» (D9, D22): перезапуск выбранным профилем. Недоступна без
+  /// корня процесса — и при прямом вызове. Подтверждение при работе — у
+  /// `ConnectionCubit`.
   Future<void> restartAgent() async {
     final current = state;
     if (current is! ConnectionSettingsLoaded || !current.canRestart) {
       return;
     }
-    await _commands.reconnect();
+    await _commands.restart();
   }
 
   /// Удаляет профиль [id] из файла; `true` — запись удалена.
@@ -584,15 +564,19 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   void _onWorkspace(WorkspaceState workspace) {
     if (state is! ConnectionSettingsLoaded ||
         (workspace.connection == _seenConnection &&
-            workspace.profile == _seenAttempt)) {
+            workspace.profile == _seenAttempt &&
+            workspace.projectDirectory == _seenProject &&
+            workspace.agentDirectory == _seenAgentDirectory)) {
       return;
     }
     _publish();
   }
 
-  /// Цель перезапуска сменилась: «Current» и подпись Restart/Reconnect.
+  /// Выбранный или работающий профиль сменился: «Selected», «Current» и
+  /// подпись Restart/Reconnect. Сигнал приходит и при смене только работающего
+  /// профиля (выбранный тот же), поэтому публикуем всегда.
   void _onTarget(ConnectionProfile? target) {
-    if (state is ConnectionSettingsLoaded && target != _seenTarget) {
+    if (state is ConnectionSettingsLoaded) {
       _publish();
     }
   }
@@ -610,18 +594,22 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     // профиль в начале попытки, и после неудачи он указывал бы на профиль,
     // который не подключился (MEDIUM-A).
     final target = _commands.restartTarget;
-    // «Current» — только цель с живым соединением: workspace подключён или
-    // переподключается именно к ней (решение пользователя 2026-11-05).
+    // «Current» — профиль работающего агента при живом соединении (решение
+    // пользователя 2026-11-05); «Selected» — выбранный для следующего старта
+    // (D18). Это разные профили, пока пользователь не нажал «Restart agent».
+    final running = _commands.runningProfile;
     final attempt = workspace.profile;
     final live =
         workspace.connection is Connected ||
         workspace.connection is Reconnecting;
-    final current = live && target != null && attempt?.id == target.id
-        ? target
+    final current = live && running != null && attempt?.id == running.id
+        ? running
         : null;
-    _seenTarget = target;
+    bool selected(String id) => target?.id == id;
     _seenAttempt = attempt;
     _seenConnection = workspace.connection;
+    _seenProject = workspace.projectDirectory;
+    _seenAgentDirectory = workspace.agentDirectory;
     // Бейдж — у строки профиля последней попытки (`WorkspaceState.profile`):
     // он показывает исход попытки, в том числе неудачной, где «Current» нет.
     final connectionStatus = ConnectionRowStatus.of(workspace.connection);
@@ -631,6 +619,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
       profile: embeddedConnectionProfile,
       isDefault: _defaultId == embeddedProfileId,
       isCurrent: current?.id == embeddedProfileId,
+      isSelected: selected(embeddedProfileId),
       status: statusOf(embeddedProfileId),
     );
     if (!_readable) {
@@ -640,7 +629,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
           restartTarget: target,
           currentProfile: current,
           connection: workspace.connection,
-          connectOnStart: _connectOnStart,
+          restartAvailable: _commands.restartDirectory != null,
           path: _profilesPath,
           reason: _unreadableReason,
           lastProbes: Map.unmodifiable(_probes),
@@ -657,6 +646,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
           token: profile is WebSocketProfile ? _tokenView(profile) : null,
           isDefault: _defaultId == profile.id,
           isCurrent: current?.id == profile.id,
+          isSelected: selected(profile.id),
           status: statusOf(profile.id),
           probe: _probes[profile.id],
           isProbing: _probing.containsKey(profile.id),
@@ -669,6 +659,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
         ConnectionProfileRow.unsaved(
           profile: current,
           token: current is WebSocketProfile ? _tokenView(current) : null,
+          isSelected: selected(current.id),
           status: statusOf(current.id),
         ),
       );
@@ -680,7 +671,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
         restartTarget: target,
         currentProfile: current,
         connection: workspace.connection,
-        connectOnStart: _connectOnStart,
+        restartAvailable: _commands.restartDirectory != null,
         ignoredDefaultEntry: _ignoredDefault,
         lastProbes: Map.unmodifiable(_probes),
         failure: _failure,

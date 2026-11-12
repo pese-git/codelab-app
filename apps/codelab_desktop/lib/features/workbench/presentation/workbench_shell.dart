@@ -82,8 +82,9 @@ class CodeLabShell extends StatelessWidget {
               : state.isCommandPaletteOpen
               ? cubit.closeCommandPalette
               : (state.canCancel ? cubit.cancelTurn : null),
-          onNewSession:
-              state.connectionStatus == CodeLabConnectionStatus.connected
+          // Агент стартует сам (D13): «New session» доступна при выбранном
+          // проекте и без соединения.
+          onNewSession: state.selectedProjectPath != null
               ? () => unawaited(cubit.createSession())
               : null,
           onOpenSettings: () =>
@@ -146,8 +147,9 @@ class CodeLabShell extends StatelessWidget {
                       transportLabel: state.transportLabel,
                       connectionDetail: state.connectionDetail,
                     ),
-                    onRetry: () => unawaited(cubit.reconnect()),
-                    onConnect: () => unawaited(cubit.connect()),
+                    // Бейдж без «Connect» (D18): агент стартует сам; в
+                    // `lost`/`failed` «Retry» делает то же, что кнопка баннера.
+                    onRetry: () => unawaited(cubit.retryStart()),
                     onMenu: layoutClass.sidebarAsColumn
                         ? null
                         : cubit.toggleSidebarOverlay,
@@ -157,6 +159,7 @@ class CodeLabShell extends StatelessWidget {
                       selectedProjectPath: state.selectedProjectPath,
                       sessions: state.sessions,
                       recentProjects: state.recentProjects,
+                      sessionFolders: state.sessionFolders,
                     ),
                     activeSessionId: state.activeSessionId,
                     onSessionSelected: (id) {
@@ -180,11 +183,11 @@ class CodeLabShell extends StatelessWidget {
                   sessionPane: WorkbenchMainPane(
                     state: state,
                     cubit: cubit,
-                    // «Restart agent» — повторное подключение тем же
-                    // профилем; прежний агент закрывает резолвер (D6 change
-                    // `add-embedded-agent-mode`).
+                    // «Restart agent» — тот же единственный перезапуск с
+                    // подтверждением при работе (D22); прежний агент
+                    // закрывает резолвер (D6 change `add-embedded-agent-mode`).
                     secretMigrationBanner: SecretMigrationBanner(
-                      onRestart: () => unawaited(cubit.reconnect()),
+                      onRestart: () => unawaited(cubit.restartAgent()),
                     ),
                   ),
                   dock: openPanes.isEmpty

@@ -14,6 +14,7 @@ import 'codelab_progress_checklist.dart';
 import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
 import 'codelab_settings_navigation.dart';
+import 'codelab_start_screen.dart';
 import 'codelab_status_table.dart';
 import 'codelab_terminal_pane.dart';
 import 'codelab_tool_dock.dart';
@@ -438,6 +439,27 @@ Widget codelabConnectionScreenPreview() {
         onConnect: codelabPreviewConnect,
         onReconnect: codelabPreviewReconnect,
         onConfigureConnection: codelabPreviewEditProfile,
+      ),
+    ),
+  );
+}
+
+/// Стартовый экран панели сессии с проектом (change `require-project-folder`,
+/// D18): подсказка и «New session». Путь вымышленный.
+@Preview(
+  name: 'Start screen',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 240),
+)
+Widget codelabStartScreenPreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      height: 240,
+      child: CodeLabStartScreen(
+        message: 'Start a new session in app.',
+        actionLabel: 'New session',
+        onAction: codelabPreviewConnect,
       ),
     ),
   );
