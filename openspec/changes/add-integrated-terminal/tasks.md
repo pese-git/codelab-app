@@ -199,7 +199,7 @@
     - закрытие — в `CodeLabRootLifecycle.dispose()` (новый параметр `CodeLabRootLifecycleModuleContract.rootLifecycle`; `app_scope.module.cherrypick.g.dart` перегенерировать `fvm dart run build_runner build` в app, руками не править).
 
   Раздел «Терминал» в `apps/codelab_desktop/AGENTS.md`: где пакеты, владелец процессов, что не логируется, граница с `terminal/*`. 2.5 зелёный.
-- [ ] 2.7 `[desktop]` Тест `apps/codelab_desktop/test/features/terminal/presentation/terminal_write_budget_test.dart` (D3, «Запись в эмулятор порциями»; D15, «Рывки на Flood»). Объект сброса буферов на `SchedulerBinding` (один на root scope, D3) с fake-часами и fake-моделью; кадр — `tester.pump()`:
+- [x] 2.7 `[desktop]` Тест `apps/codelab_desktop/test/features/terminal/presentation/terminal_write_budget_test.dart` (D3, «Запись в эмулятор порциями»; D15, «Рывки на Flood»). Объект сброса буферов на `SchedulerBinding` (один на root scope, D3) с fake-часами и fake-моделью; кадр — `tester.pump()`:
   - за один кадр пишется столько частей, сколько укладывается в бюджет (fake-`write` «стоит» заданное время), остаток — на следующий кадр;
   - часть не больше заданного размера;
   - за кадр — не больше одной перерисовки `TerminalView`;
@@ -209,7 +209,7 @@
   - порядок и полнота данных сохраняются.
 
   Тест красный.
-- [ ] 2.8 `[desktop]` Реализовать объект сброса буферов в `lib/features/terminal/presentation/` с бюджетом на кадр (стартовые значения: часть 4 КБ, бюджет 8 мс; константы рядом с ним), сборка — в 2.6 — 2.7 зелёный.
+- [x] 2.8 `[desktop]` Реализовать объект сброса буферов в `lib/features/terminal/presentation/` с бюджетом на кадр (стартовые значения: часть 4 КБ, бюджет 8 мс; константы рядом с ним), сборка — в 2.6 — 2.7 зелёный.
 
   Замер вручную: profile-сборка app на macOS (`fvm flutter run -d macos --profile`), «Flood» (`yes | head -n 200000`) во вкладке. Это ручной замер на машине разработчика, а не прогон `test:e2e:app:*`.
   - **Цель:** худший кадр меньше 50 мс.
