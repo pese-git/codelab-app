@@ -697,7 +697,7 @@ codelab_cli колонка не ведётся: клиент новый (change 
 | E-03 | MCP streamable HTTP (legacy SSE не поддерживается) | серверы типа `http` (streamable HTTP обеих эпох MCP: modern `2026-07-28` без HTTP-сессии, legacy — с заголовком `Mcp-Session-Id`) из `session/new` и конфигурации (`mcp.servers`, с change `add-agent-configuration`) подключаются так же, как stdio; агент объявляет в `initialize` `mcpCapabilities.http: true` и `mcpCapabilities.sse: false` (в `codelab-agent serve --ws` MCP выключен целиком и `http: false`, D3 change `add-agent-mcp-client`); сервер неподдерживаемого типа (`sse`, неизвестный `type`, а в `mobile` и `stdio`) из `session/new` не ошибка запроса: он пропускается, причина пишется в лог `mcp.server.skipped` (agent-core-architecture §13.4); в конфиге допустимы только `stdio` и `http` (agent-core-architecture §15.4) | Must | 8 | `session/new.mcpServers` типа `http` / `sse` | `acp/mcp-http-tool-call` (`packages/dart/codelab_acp_testing/fixtures/acp/mcp-http-tool-call.json`: `http`-сервер вызван через настоящий `StreamableHttpTransport`, серверы `sse` и неизвестного типа `websocket` пропущены, сессия создана); транспорт обеих эпох на `MockClient` — `packages/dart/codelab_agent_mcp/test/streamable_http_test.dart`; пропуск — `packages/dart/codelab_agent_acp/test/session_new_test.dart` («an sse server is skipped with mcp.server.skipped», «an unknown transport is skipped and the session is created»); `mcpCapabilities` — `packages/dart/codelab_agent_acp/test/initialize_test.dart` и `apps/codelab_agent/test/agent_host_test.dart` («initialize: mcpCapabilities.http is true over stdio, false over ws»), закрыто change `add-agent-mcp-client`; серверы конфигурации — `apps/codelab_agent/test/agent_host_config_test.dart` (группа «MCP servers of the config»: HTTP-сервер из `mcp.servers` на `MockClient` над `FakeMcpServer` доступен модели с первого хода), `type: sse` в конфиге — проблема с путём ключа (`packages/dart/codelab_agent_core/test/config/config_mcp_servers_test.dart`, «type: sse is a problem with the key path (E-03)»), закрыто change `add-agent-configuration`; спецификация — agent-core-architecture §13.2, §13.4, dart-agent-and-clients §9.13 | частично (HTTP-серверы из `session/new` молча отбрасываются) / нет |
 | E-04 | Переподключение MCP и перечитывание конфига | упавший сервер переподключается с задержкой от 1 до 30 с; смена конфигурации применяется без перезапуска агента; уведомление сервера о смене списка инструментов обновляет реестр. Сужено решениями R0-1 и R0-4 change `add-config-writer-and-reload`: `permissions.*`, `trusted_projects`, новые и изменённые stdio-серверы, HTTP-серверы с подстановкой `${…}` и поля адреса и ключа провайдера с ключом применяются только после перезапуска (`Restart required: …`); файлы проекта перечитывают только новые сессии (D9) | Should | 8 | `config_option_update` при смене списка моделей; список команд сессии перезагрузкой не меняется (D9) | `core/mcp-reconnect-after-crash` (`packages/dart/codelab_agent_mcp/test/supervisor/mcp_reconnect_test.dart`: задержки 1, 2, 4, 8, 16, 30, 30 с, сброс после 10 с, вызов в полёте и во время простоя, новый набор на границе шага; состояние и секреты при повторе — `mcp_supervisor_state_test.dart`); процесс stdio-сервера, упавшего после первого вызова, — `apps/codelab_agent/test/mcp_reconnect_process_test.dart`; перечитывание конфига — `packages/dart/codelab_agent_core/test/runtime/config_reload_test.dart` (ключи перезапуска, R0-1, R0-4, коалесценция, `dispose`), серверы конфига при перезагрузке — `packages/dart/codelab_agent_core/test/runtime/mcp_apply_config_test.dart`; наблюдатель — `packages/dart/codelab_agent_io/test/config/config_watcher_test.dart`, `file_config_source_test.dart`; `config_option_update` — `packages/dart/codelab_agent_acp/test/config_reload_notifications_test.dart`; бинарь и встроенный агент — `apps/codelab_agent/test/config_reload_process_test.dart`, `packages/dart/codelab_embedded/test/embedded_config_reload_test.dart`; уведомление о смене списка инструментов — `packages/dart/codelab_agent_mcp/test/mcp_list_changed_boundary_test.dart` (change `add-agent-mcp-client`); закрыто change `add-config-writer-and-reload` (итерации 5, 6); спецификация — agent-core-architecture §17.5.6, §17.5.7 | нет / — |
 | E-05 | Имена MCP-инструментов `mcp__<server>__<tool>` | символы вне `[A-Za-z0-9_-]` заменяются `_`; длина не больше 64 (при превышении — сокращение с коротким хэшем); коллизия имени MCP-инструмента с уже зарегистрированным — конфликтующий MCP-сервер отключается с причиной, называющей оба источника, сессия создаётся (agent-core-architecture §10, HOST-5) | Must | 8 | `tool_call.title` | `core/mcp-tool-name-sanitized` (`packages/dart/codelab_agent_core/test/mcp/mcp_tool_name_test.dart`); коллизии — `packages/dart/codelab_agent_mcp/test/connector_test.dart` (группа «name collisions disable the later server (E-05, HOST-5)»), закрыто change `add-agent-mcp-client`; спецификация — agent-core-architecture §6.4 | частично (имена вида `mcp_<srv>_<tool>`) / — |
-| E-06 | Skills | каталоги навыков с `SKILL.md` (frontmatter `name`, `description`) в корнях проекта и пользователя; список навыков — в промпте, тело загружается по запросу; вызов `/skill:<name>`; чтение навыков из каталогов других агентов — только с согласия | Should | 9+ | `available_commands_update` | `acp/skill-command-listed`; спецификация — agent-core-architecture §17.2 | нет / — |
+| E-06 | Skills | каталоги навыков с `SKILL.md` (frontmatter `name`, `description`) в корнях проекта и пользователя, включая общий каталог `.agents/skills` (в проекте — только доверенном); список навыков — в промпте, тело загружается по запросу; вызов `/skill:<name>`; чтение навыков из каталогов конкретных других агентов (`.claude/skills` и подобных) — только с согласия (решение пользователя Q13 change `add-agent-skills`) | Should | 9 | `available_commands_update` | `acp/skill-command-listed`; спецификация — agent-core-architecture §17.2; change `add-agent-skills` (перенесено из пула 1.x в 1.0 решением пользователя 2026-11-12, Q1: первая задача после ворот MVP, до 9.4) | нет / — |
 | E-07 | Шаблоны промптов | Markdown-файлы в каталоге шаблонов проекта и пользователя становятся командами `/name args` с подстановкой аргументов; на этапе 8 — каталоги `.codelab/prompts` (только доверенный проект) и `$CODELAB_HOME/prompts`, без `prompts.templates_dirs` | Should | 8 | `available_commands_update` | `acp/prompt-template-command` (`packages/dart/codelab_acp_testing/fixtures/acp/prompt-template-command.json`; разворачивание — `packages/dart/codelab_agent_core/test/runtime/command_expansion_test.dart`, «E-07: the model gets the body with substituted arguments»; загрузка и доверие — `packages/dart/codelab_agent_io/test/project/prompt_templates_load_test.dart`); спецификация — agent-core-architecture §17.2.6; закрыто change `add-agent-project-files` | нет / — |
 | E-08 | Переопределение системного промпта | флаг `--system-prompt` или `--system-prompt-file` и ключ конфигурации заменяют или дополняют базовый промпт | Should | 8 | не видно; CLI-флаг | `core/system-prompt-override`; спецификация — agent-core-architecture §11.6.1 | нет / — |
 | E-09 | Пользовательские хуки | команды из конфигурации до и после инструмента; ненулевой код хука «до» отклоняет вызов с его выводом | Could | 9+ | не видно | `core/user-hook-blocks-tool`; спецификация — agent-core-architecture §17.14.2 | нет / — |
@@ -1072,6 +1072,9 @@ Python TUI замораживаются (этап 9), когда выполне�
 §3 и §4.1. Строка P-10 с этапом «после 1.0» учтена в «9+». Пересчёт 2026-11-10 (строка E-24, решение
 Q10 change `switch-default-agent-to-dart`) заодно исправил расхождение колонки Should с таблицами §3:
 этап 8 — 9, а не 10; «9+» — 44 и P-10, а не 42.
+Пересчёт 2026-11-12: строка E-06 перенесена с этапа «9+» на этап 9 (решение пользователя Q1 change
+`add-agent-skills`: навыки входят в 1.0 и делаются сразу после ворот MVP), поэтому Should этапа 9 — 2,
+«9+» — 45; итоговые числа не меняются.
 
 | Этап | Must | Should | Must-строки |
 |---|---|---|---|
@@ -1084,8 +1087,8 @@ Q10 change `switch-default-agent-to-dart`) заодно исправил рас�
 | 6. codelab_cli MVP | 12 | 8 | P-09, S-04, H-01, H-02, H-04, U-01 … U-05, U-07, U-15 |
 | 7. Встроенный режим | 2 | 2 | U-06, D-04 |
 | 8. MCP, конфигурация, `AGENTS.md` | 13 | 9 | P-01, P-16, K-02, E-01, E-02, E-03, E-05, R-07, R-08, R-14, R-15, R-16, R-24 |
-| 9. Паритет и переключение | 0 | 1 | — |
-| 9+ | 0 | 46 | — |
+| 9. Паритет и переключение | 0 | 2 | — |
+| 9+ | 0 | 45 | — |
 | 10. Мобильные платформы и web | 0 | 0 | — |
 | **Итого** | **77** | **81** | Could — 77, Won't — 25; всего 260 строк |
 
@@ -1095,8 +1098,8 @@ Q10 change `switch-default-agent-to-dart`) заодно исправил рас�
   принимать по частям — по группам фикстур `acp/session-*`, `acp/prompt-*`, `acp/tool-*`,
   `acp/permission-*`;
 * на этапе 9 Must не добавляются: он только проверяет критерий §6;
-* очередь «9+» (46 Should) — кандидаты в план сразу после переключения: steering, субагенты,
-  web-инструменты, LSP, ветки сессий, skills, полноэкранный TUI, мастер провайдера, управление
+* очередь «9+» (45 Should) — кандидаты в план сразу после переключения: steering, субагенты,
+  web-инструменты, LSP, ветки сессий, полноэкранный TUI, мастер провайдера, управление
   MCP-серверами и MCP prompts как команды, вложения в app, понятные лимиты провайдера и подготовка картинок, установщик и
   подписанные дистрибутивы с политикой конфиденциальности, удалённые A2A-агенты как субагенты;
 * на этапе 10 — одна строка Could (узкий макет app, D-21); публикация мобильных сборок в
@@ -1125,8 +1128,8 @@ flowchart LR
     S8 --> S7["7. Встроенный режим<br/>Must 2, Should 2"]
     S6 --> S7
     S4 --> S8["8. MCP, конфиг, AGENTS.md<br/>Must 13, Should 9"]
-    S7 --> S9["9. Переключение<br/>Should 1, критерий раздела 6"]
-    S9 --> SN["9+. Should 46, Could 75"]
+    S7 --> S9["9. Переключение<br/>Should 2, критерий раздела 6"]
+    S9 --> SN["9+. Should 45, Could 75"]
     S9 --> S10["10. Мобильные и web<br/>Could 1"]
 ```
 

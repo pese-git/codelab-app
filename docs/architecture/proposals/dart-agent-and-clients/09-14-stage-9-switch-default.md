@@ -214,6 +214,10 @@ Python-агента; `docs/architecture/adr/README.md`.
 Если сделано (Should — не блокирует MVP):
 
 * 9.4 — выпуск по §12.7 (веха «продукт 1.0»); 9.6 — онбординг U-17 и D-05 с тестами §12.4.13 (change `add-provider-setup-ui`).
+* Навыки E-06 (Should 1.0, [дорожная карта §6.1](../delivery-roadmap.md#61-should-в-10), строка 9) — первая задача
+  после ворот MVP и до 9.4: change [`add-agent-skills`](../../../../openspec/changes/add-agent-skills/proposal.md)
+  (решение пользователя 2026-11-12, Q1–Q3 его design.md). Change готовится во время ночей ворот,
+  реализуется по TDD после их закрытия.
 * Удаление Python-агента (9.9) — после одной `stable`-версии, вне ворот MVP; change `remove-python-agent`.
 
 **Зависимости.** Этапы 7 и 8.
