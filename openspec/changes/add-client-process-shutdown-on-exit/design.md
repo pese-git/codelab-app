@@ -235,6 +235,27 @@
   - проводка: `onExitRequested` вызывает `CodeLabRootLifecycle.dispose` (расширение `app_exit_wiring_test.dart`).
 - Ручная проверка на macOS (сборка `--profile`). Встроенный агент с MCP stdio-сервером и `exec` `sleep 600` посреди хода, внешний stdio-агент с `terminal/create` `sleep 600`, вкладка Terminal. Cmd+Q, затем `ps -o pid,ppid,command -A` — сирот нет, app вышел ≤ 6 с. Это не `test:e2e:app:*`: прогона на устройстве в CI нет.
 
+#### Итог ручной проверки (2026-11-13, macOS, сборка `--profile`)
+
+Условия:
+- Копия `codelab_app.app` с отдельным bundle id. Она не делит окно и хранилище с запущенной debug-сборкой.
+- `CODELAB_HOME` — отдельный каталог: локальная модель `qwen3.5-9b`, MCP stdio-сервер-заглушка на Python (`initialize`, `tools/list`), профиль `serve --stdio` со свежесобранным `codelab-agent`.
+- Время выхода — от запроса до исчезновения процесса app.
+
+Cmd+Q средство автоматизации в окно не доставляет. Выход запрашивался пунктом меню Quit или Apple Event `quit`: это тот же `terminate:` и `onExitRequested`, что у Cmd+Q. Закрытие последнего окна — кнопкой окна.
+
+| Сценарий | Процессы до выхода | Выход | Журнал | Сироты |
+|---|---|---|---|---|
+| Пустой workbench, Quit | — | 0,4 с | `app.exit_closed {duration_ms: 0}` | нет |
+| Встроенный агент, MCP stdio, ход `exec` `sleep 600`, Quit | заглушка MCP и `sleep 600` — потомки app | 0,5 с | `app.exit_closed {duration_ms: 113}` | нет |
+| Вкладка Terminal с `sleep 600`, Quit | `zsh -l` → `sleep 600` | 1,1 с | `terminal.tab_closed`, `terminal.close_all {count: 1}`, `app.exit_closed {duration_ms: 104}` | нет |
+| Внешний `codelab-agent serve --stdio` (две заглушки MCP), `terminal/create` `sleep 600`, закрытие последнего окна | агент → 2 заглушки MCP; `sleep 600` — потомок app | 0,9 с | `terminal_processes_killed {count: 1, reason: dispose}`, `app.exit_closed {duration_ms: 142}` | нет |
+| Случай 6.1: stdio-профиль с `terminal/create` `sleep 600` → Restart на встроенный агент → Apple Event `quit` по событию `connection.restart` | агент → 2 заглушки MCP; `sleep 600` — потомок app | 0,3 с | `terminal_processes_killed {reason: connection_closed}`, `event_ignored {reason: stale_generation, method: terminal/wait_for_exit}`, `app.exit_closed {duration_ms: 71}` | нет |
+
+`app.exit_timeout` не встретился ни разу.
+
+Ограничение случая 6.1: встроенный агент открывается примерно за 1 мс (`Connecting` → `Ready`), а `quit` по событию журнала дошёл через ~100 мс. Выход пришёлся на уже открытое соединение, а не на открытие. Окно «открытие ещё идёт» вручную недостижимо. Его покрывают тесты `dispose_shutdown_test.dart` (dispose во время подключения) и `root_lifecycle_shutdown_test.dart`.
+
 ## Решения по ревью реализации (2026-11-13)
 
 Двойное ревью реализации нашло проблемы. Каждая находка проверена по коду ветки. Решения D10–D15 уточняют D2–D6 и имеют приоритет над ними там, где расходятся. Отклонённые находки — в конце раздела.
