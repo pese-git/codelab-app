@@ -961,7 +961,7 @@ sequenceDiagram
 
 | Группа | Страница | Цели | Что на ней | Куда пишет |
 |---|---|---|---|---|
-| Agent | Connection (20) | U-06, D-04, D-10, R-12, U-26 | профили `ProfileStore` (`~/.codelab/profiles.json`, общий с CLI): встроенный, stdio (команда и аргументы), WebSocket (URL, имя секрета токена); «Add profile» (ниже), «Test connection», «Connect on start», «Restart agent» | `ProfileStore`, `SecretStore` |
+| Agent | Connection (20) | U-06, D-04, D-10, R-12, U-26 | профили `ProfileStore` (`~/.codelab/profiles.json`, общий с CLI): встроенный, stdio (команда и аргументы), WebSocket (URL, имя секрета токена); «Add profile» (ниже), «Use», «Restart agent» («Test connection» удалена change `remove-test-connection`) | `ProfileStore`, `SecretStore` |
 | Agent | Providers (05) | D-05, L-17, L-24 | §12.4.5 | `ConfigWriter` |
 | Agent | MCP servers (05b) | E-02…E-05, E-13 | §12.4.6 | `ConfigWriter` |
 | Agent | Agents & modes (21) | P-05, P-06, C-04, R-15, U-31, L-10, L-16, U-27, U-30, E-22 | режим новой сессии `permissions.mode` (без `autopilot`: только флаг); определения агентов из `.codelab/agents/*.md` и `~/.codelab/agents/` с ошибками загрузки; роли моделей, переопределение окна и лимита ответа, удалённые A2A-агенты — по ключам ядра этих целей | `ConfigWriter` |
@@ -1022,7 +1022,7 @@ sequenceDiagram
 **Страница «Connection»: добавление профиля (U-06, R-12).** Кнопка «Add profile» в шапке
 страницы открывает `ContentDialog` «Add connection profile». Профиль создаётся в общем
 `ProfileStore` (`~/.codelab/profiles.json`) и сразу доступен CLI как `codelab -a <id>` (§9.11).
-Логика — `ProfileDraft` и `ProfileProbe` в `codelab_client_core` (`lib/src/connection/`), одна
+Логика — `ProfileDraft` и `ProfileCommitter` в `codelab_client_core` (`lib/src/connection/`), одна
 для app и `codelab profiles add`; app рисует диалог через `AddProfileCubit`, а строки страницы —
 через `ConnectionSettingsCubit` (оба в `features/settings/application`), CLI — вопросами в
 терминале.
@@ -1056,50 +1056,23 @@ sequenceDiagram
    это правка черновика или «Cancel». Текст: с токеном — «The token for <scheme://host:port> will
    travel in clear text. Use wss:// if the host supports it.», без токена — «Prompts and files
    sent to <scheme://host:port> will travel in clear text. Use wss:// if the host supports it.»;
-   в адресе только `scheme://host:port`. Одно подтверждение действует для пары «URL, выбор токена»
-   и для «Save», и для «Test connection» (шаг 5); правка URL или токена его сбрасывает. «Token»: «No token», «Use stored secret» (выбор имени из хранилища) или «Store a new
+   в адресе только `scheme://host:port`. Одно подтверждение действует для пары «URL, выбор токена»:
+   повторное «Save» после «Save anyway» (ошибка записи, правка id) его не спрашивает; правка URL или токена его сбрасывает. «Token»: «No token», «Use stored secret» (выбор имени из хранилища) или «Store a new
    token» (поле со скрытым вводом; имя секрета `codelab/profiles/<id>/token`). Под полем — имя
    бэкенда хранилища из `SecretBackendInfo`; значение токена после ввода не показывается.
-5. **«Test connection».** При `ws://` к нелокальному хосту и токене из переменной окружения
-   проверка сначала показывает ту же панель «Unencrypted connection» с текстом про токен и
-   кнопкой «Test anyway»; без неё транспорт не открывается и токен не отправляется (решение
-   пользователя 2026-11-05). Без токена или к локальному хосту проверка начинается сразу. Затем
-   `ProfileProbe.probe(profile, token: SecretText?, timeout: 10 s)` (профиль из черновика
-   `toProfile`; change `add-provider-setup-ui`, D13): открыть транспорт через тот
-   же `TransportResolver`, отправить `initialize`, закрыть транспорт; `session/new` не
-   отправляется, stdio-процесс завершается после ответа или таймаута. Результат в диалоге
-   (решение пользователя 2026-11-05, change `add-app-settings-shell`, D12):
-   * «Reachable · <N> ms · <name> <version>» — имя и версия из `agentInfo`;
-   * «Command not found: <command>» — значение поля «Command» профиля, без аргументов и `env`;
-   * «Unreachable: connection refused», «Unreachable: host not found», «Unreachable: TLS
-     handshake failed» или «Unreachable: HTTP <status>» (отказ рукопожатия не 401/403, статус из
-     `AcpWebSocketHandshakeRejected.statusCode`, который транспорт берёт из типизированного
-     `WebSocketException.httpStatusCode` штатного `WebSocket.connect`, без собственного
-     рукопожатия); просто «Unreachable», если причина не
-     распознана. Причину даёт типизированное поле `UnreachableReason` исхода (`connectionRefused`,
-     `hostNotFound`, `tlsFailed`, `httpStatus` со `statusCode`, `unknown`); её определяет
-     классификатор `classifyProbeFailure` в `codelab_client_io` по типам и кодам ошибок
-     (`SocketException.osError.errorCode` по платформе, `HandshakeException`/`TlsException`,
-     `AcpWebSocketHandshakeRejected`), а не по тексту;
-   * «Unauthorized: the agent rejected the token», если токен действительно отправлен (у профиля
-     `tokenRef: env:<NAME>`, и переменная задана в окружении app); во всех остальных случаях
-     («No token», переменная не задана, неподдерживаемая ссылка) — «Unauthorized: the agent
-     requires a token»: текст описывает то, что реально ушло на сервер;
-   * «Timed out», «Not an ACP agent» (ответ не разобран) или «Not supported here» (нет резолвера).
-
-   Если у «From environment variable» переменная не задана в окружении app, проверка всё равно
-   выполняется. Предупреждение об этом в диалоге одно — подсказка под полем токена «<NAME> is not
-   set in CodeLab's environment.»; в блоке проверки второй заметки нет (решение пользователя
-   2026-11-05, change `add-app-settings-shell`, D12, D13).
-
-   Детали берутся только из типизированных данных исхода и полей профиля, никогда из текста
-   исключения: поле `message` у `Unreachable` (после `describeFailure`) идёт только в журнал и
-   диагностику и в UI не показывается. Новый токен из шага 4 проверяется до записи в хранилище —
-   `ProfileProbe` получает его как `SecretText` в памяти и подставляет одноразовым источником
-   через `SecretRebindableResolver.withSecrets`; резолвер без этой возможности даёт `Unsupported`,
-   а пустое значение — явный отказ без открытия транспорта (change `add-provider-setup-ui`, D13).
-6. **«Save».** Доступна при валидном черновике; проверка не обязательна, но без успешной
-   проверки строка профиля получает пометку «Not tested». Порядок записи — «секрет → профиль»:
+5. **Проверки подключения нет** (решение пользователя «Убрать совсем»; change `remove-test-connection`, D1, D4). Диалог
+   не открывает транспорт, не запускает процесс агента и не шлёт ACP-запросов: строки «Check»,
+   кнопок «Test connection» и «Test anyway» и исхода проверки в нём нет. Профиль проверяется
+   стартом агента: «Use» в строке и триггер старта (выбор проекта, «New session») или «Restart
+   agent»; результат — бейдж строки (`Connecting…`, `Connected`, `Failed`) и экран или баннер
+   сбоя рабочего места с причиной и «Retry». Отказ по токену описывает
+   `describeConnectFailureByToken`. Значение выбранного «Use stored secret» диалог не читает;
+   новый токен держится в памяти до записи через `ProfileCommitter`. При «Save» — только
+   локальная валидация черновика (Q3 (а) того change). До этого change шаг 5 описывал
+   `ProfileProbe` (`initialize` без сессии, исходы `Reachable`, `Unreachable: …`, `Unauthorized`,
+   `Timed out`, `Not an ACP agent`; change `add-app-settings-shell`, D12, и `add-provider-setup-ui`,
+   D13); история — в архиве этих changes.
+6. **«Save».** Доступна при валидном черновике; кнопка всегда называется «Save». Порядок записи — «секрет → профиль»:
    новый токен пишется в `SecretStore`, затем профиль — в `ProfileStore`; если профиль не
    записан, созданный этим диалогом секрет удаляется (как SETUP-5). Флажок «Use for new
    windows» (по умолчанию выключен) делает профиль активным для новых окон; текущее подключение
@@ -1107,9 +1080,9 @@ sequenceDiagram
 7. **Отмена.** «Cancel» и Esc закрывают диалог без записи; черновик не сохраняется. Пока идёт
    запись, «Cancel», Esc и закрытие диалога заблокированы, а повторное «Save» второй записи не
    даёт; «Save anyway» перед записью заново проверяет, что id свободен. После закрытия страница
-   показывает все профили, сохранённые за жизнь диалога (в том числе до «Add another»), каждый
-   со своим исходом проверки (change `add-app-settings-shell`, D12, D14).
-8. **Строка профиля после сохранения:** «Test connection», «Connect», «Rename» (меняет `label`,
+   показывает все профили, сохранённые за жизнь диалога (в том числе до «Add another»; change
+   `add-app-settings-shell`, D14). Экран «Profile saved» пометки о проверке не содержит (change `remove-test-connection`, D4).
+8. **Строка профиля после сохранения:** «Use» (заменил «Connect», change `require-project-folder`, D18), «Rename» (меняет `label`,
    не `id`), «Remove». «Remove» недоступна у встроенного профиля и у профиля текущего
    подключения (подсказка «Disconnect first»); удаление спрашивает, удалить ли и секрет
    `codelab/profiles/<id>/token`, по умолчанию — да. Для этого `ProfileStore` получает метод
@@ -1130,9 +1103,8 @@ sequenceDiagram
   SETUP-19 в части `SecretStore`), удаление `codelab/profiles/<id>/token` при «Remove» (шаг 8),
   форма ссылки «имя секрета», порт `ProfileSecrets` поверх `ClientSecretAccess`
   (`codelab_setup/io.dart`) и зависимость app от `codelab_setup`;
-* «Test connection» у встроенного агента не предлагается: проверка открыла бы второй экземпляр
-  ядра в процессе app (D12);
-* пометка «Not tested» — состояние страницы, в `profiles.json` не пишется (D14);
+* «Test connection» и пометка «Not tested» (состояние страницы, в `profiles.json` не писалась, D14)
+  удалены change `remove-test-connection`; формат `profiles.json` от этого не менялся;
 * флажок шага 6 называется «Use by default»: окно в 1.0 одно (D5);
 * «Rename» шага 8 — встроенный редактор `label` в строке профиля, без отдельного диалога (D14);
 * у строки «Current» (`Connected` или `Reconnecting`) кнопки «Connect» нет — переподключение
@@ -1146,20 +1118,20 @@ sequenceDiagram
     `connection-profiles-unreadable`, `connection-profiles-ignored-default`, `connection-failure`;
     подтверждение «Remove» — `connection-remove-confirm`, `connection-remove-cancel`;
   * строка профиля — `connection-profile-<part>-<id>`, где `<part>`: `row`, `title`, `default`
-    (радиокнопка), `status` (бейдж попытки), `probe` (исход проверки), `token`, `connect`, `test`,
-    `rename`, `remove`; редактор «Rename» — `connection-profile-rename-editor-<id>`,
+    (радиокнопка), `status` (бейдж попытки), `token`, `use`, `rename`, `remove` (части `probe` и
+    `test` удалены change `remove-test-connection`); редактор «Rename» — `connection-profile-rename-editor-<id>`,
     `-rename-field-<id>`, `-rename-save-<id>`, `-rename-cancel-<id>`;
   * InfoBar ожидающего одобрения на экране настроек — `settings-pending-approval`;
 * ключи диалога «Add connection profile» (`add_profile_dialog.dart`): `add-profile-type-stdio`,
   `add-profile-type-websocket`, `add-profile-name`, `add-profile-id`, `add-profile-command`,
   `add-profile-args`, `add-profile-run-in-project`, `add-profile-env`, `add-profile-url`,
   `add-profile-token-none`, `add-profile-token-env`, `add-profile-token-env-name`,
-  `add-profile-test`, `add-profile-probe-result`, `add-profile-unencrypted` (панель «Unencrypted
-  connection»), `add-profile-test-anyway`, `add-profile-save`, `add-profile-save-anyway`,
+  `add-profile-unencrypted` (панель «Unencrypted connection»), `add-profile-save`
+  (`add-profile-test`, `add-profile-probe-result`, `add-profile-test-anyway` удалены change `remove-test-connection`), `add-profile-save-anyway`,
   `add-profile-use-by-default`, `add-profile-cancel`; экран «Profile saved» — `add-profile-saved`,
   `add-profile-saved-bar`, `add-profile-done`, `add-profile-add-another`;
-* отступления от артбордов `AddProfile` и `Connection` (тексты проверки, подтверждение `ws://`
-  при сохранении и перед проверкой — кнопки «Test anyway» в артборде нет, — запрет userinfo в URL,
+* отступления от артбордов `AddProfile` и `Connection` (подтверждение `ws://` при сохранении,
+  запрет userinfo в URL; строка «Check» и метка «Not tested» артбордов не реализуются после change `remove-test-connection`, D5,
   тип по умолчанию, правка id, вид «Rename») перечислены в design.md change, D20.
 
 **Уточнения change `add-provider-setup-ui`** (design.md change, D13, D14, D17, D24):
@@ -1375,8 +1347,8 @@ mcp:
     WebSocket хранит только `tokenRef`, `env` stdio-профиля не принимает значения ключей,
     похожих на секрет. Новый токен ДОЛЖЕН записываться в `SecretStore` до профиля и удаляться,
     если профиль не записан.
-20. **SETUP-20.** «Test connection» НЕ ДОЛЖНА создавать сессию и оставлять процесс или сокет
-    открытым: только `initialize` и закрытие транспорта по ответу, ошибке или таймауту.
+20. **SETUP-20.** Снято change `remove-test-connection`: проверки профиля «Test connection» в app больше нет. Прежняя
+    формулировка: проверка НЕ ДОЛЖНА создавать сессию и оставлять процесс или сокет открытым.
 21. **SETUP-21.** `id` профиля ДОЛЖЕН быть уникальным, НЕ ДОЛЖЕН равняться `embedded` и
     содержать `:` и НЕ ДОЛЖЕН меняться после сохранения. Встроенный профиль и профиль текущего
     подключения НЕ ДОЛЖНЫ удаляться.
@@ -1440,12 +1412,11 @@ allowlist ядра). Своей зависимости `http` у app нет: ф�
 переменные `CODELAB_SECRET_<…>` и открытый файл только явным выбором, связка ключей ОС — после 1.0;
 change `add-agent-secret-store`, D7, D13), реализация — в `codelab_agent_io`; вопрос §11 «Где хранить ключ API встроенного агента в app» этим закрыт.
 
-* **«Add profile» — в kit, проверка — `initialize` без сессии.** Профили общие с CLI, поэтому
+* **«Add profile» — в kit, без отдельной проверки.** Профили общие с CLI, поэтому
   разбор аргументов, правила id и порядок записи секрета живут в `codelab_client_core`, а не в
-  виджете. `initialize` — самый лёгкий стандартный запрос ACP, который подтверждает и адрес, и
-  токен, и то, что на том конце агент ACP; `session/new` создал бы лишнюю сессию в журнале агента.
-  Проверка не обязательна, потому что профиль можно готовить заранее, до запуска агента на
-  удалённой машине; пометка «Not tested» честно показывает это.
+  виджете. Отдельная проба `initialize` («Test connection») была нужна, пока агент запускался
+  шагом «Connect»; после change `require-project-folder` агент стартует сам по «Use» и
+  триггерам рабочего места, и старт показывает то же. Проба удалена change `remove-test-connection`.
 
 ## 12.4.13. Как проверить
 
@@ -1572,12 +1543,12 @@ scripted-провайдера (§9.12, задача 7.7); в обычной сб
 **Unit-тесты `codelab_client_core`** (`test/connection/`): `profile_draft_test.dart` (id из
 имени, занятый и зарезервированный id, `:` в id, разбор аргументов с кавычками, `ws://` к
 нелокальному хосту требует подтверждения, userinfo в URL отклонён, секретоподобный ключ в `env`
-отклонён — SETUP-19, SETUP-21); `profile_probe_test.dart` (на `FakeAcpTransport`
+отклонён — SETUP-19, SETUP-21); `profile_probe_test.dart` (удалён change `remove-test-connection`; на `FakeAcpTransport`
 `codelab_acp_testing`: успешный `initialize` → `Reachable` с `agentInfo`, отправлен только
 `initialize`; молчание → `TimedOut` и транспорт закрыт; отмена закрывает транспорт без исхода;
 несовместимая версия → `NotAcp`; нет резолвера → `Unsupported`; без классификатора →
 `Unreachable(unknown)` — SETUP-20). `401` рукопожатия WebSocket → `Unauthorized` проверяет
-`codelab_client_io/test/probe_failure_test.dart` на настоящем сервере loopback (вместе с
+`codelab_client_io/test/probe_failure_test.dart` (удалён change `remove-test-connection`) на настоящем сервере loopback (вместе с
 `CommandNotFound`, `connectionRefused`, `tlsFailed`, `httpStatus`), а статус рукопожатия —
 `codelab_acp_transports/test/websocket_handshake_rejection_test.dart`. `profile_commit_test.dart`
 (секрет до профиля, откат секрета при ошибке `ProfileStore`, `remove` с секретом и без) — change
@@ -1590,14 +1561,15 @@ variable» с переменной теста → «Test connection» показ
 `JsonFileProfileStore`, что `codelab profiles list`; «Remove» у активного профиля недоступна;
 профиль stdio с несуществующей командой → «Command not found: <command>», «Save» с пометкой «Not
 tested». Change `add-provider-setup-ui` добавляет вариант «Store a new token» и проверку, что
-токен лежит в тестовом хранилище. Widget-тест `add_profile_dialog_test.dart`: без
+токен лежит в тестовом хранилище. change `remove-test-connection` переписывает тест без пробы: «Save» → «Use» → выбор
+проекта → `Connected`; stdio с несуществующей командой → «Use» → бейдж `Failed` в строке профиля (экран сбоя с причиной — `agent_start_screens_test.dart`). Widget-тест `add_profile_dialog_test.dart`: без
 stdio-резолвера переключателя типа нет (SETUP-22).
 
 Полный список тестов оболочки и «Connection» задаёт `tasks.md` change `add-app-settings-shell`:
 * app (`apps/codelab_desktop/test/`):
   * `app/navigation/navigation_cubit_test.dart`, `app/app_scope_profiles_test.dart`;
   * `features/settings/application/` — `connection_settings_cubit_test.dart`,
-    `add_profile_cubit_test.dart`, `probe_outcome_view_test.dart`, `default_profile_resolver_test.dart`;
+    `add_profile_cubit_test.dart`, `probe_outcome_view_test.dart` (удалён change `remove-test-connection`), `default_profile_resolver_test.dart`;
   * `features/settings/presentation/` — `settings_shell_test.dart`,
     `settings_pending_approval_test.dart`, `connection_page_test.dart`,
     `connection_page_embedded_test.dart`, `add_profile_dialog_test.dart`;
@@ -1607,8 +1579,8 @@ stdio-резолвера переключателя типа нет (SETUP-22).
   `codelab_settings_section_test.dart`, `codelab_form_test.dart`, `codelab_atomics_test.dart`
   (`CodeLabDialogTitle`);
 * kit — `profile_token_ref_test.dart`, `profile_ids_test.dart`, `profile_draft_test.dart`,
-  `profile_probe_test.dart` (`profile_commit_test.dart` — в change `add-provider-setup-ui`);
-* `codelab_client_io` — `probe_failure_test.dart`, `platform/codelab_home_test.dart`
+  `profile_probe_test.dart` (удалён change `remove-test-connection`; `profile_commit_test.dart` — в change `add-provider-setup-ui`);
+* `codelab_client_io` — `probe_failure_test.dart` (удалён change `remove-test-connection`), `platform/codelab_home_test.dart`
   (`resolveCodelabHome`), `stores/json_file_stores_test.dart`;
 * `codelab_acp_transports` — `websocket_handshake_rejection_test.dart`;
 * CLI — `profiles/profile_token_test.dart`, `profiles/profiles_command_test.dart`,
@@ -1628,7 +1600,7 @@ stdio-резолвера переключателя типа нет (SETUP-22).
 * `codelab_setup` — тесты таблицы выше, а также `http_provider_check_test.dart: redirect is not followed`
   (SETUP-23) и `client_secret_access_exports_test.dart`;
 * kit — `profile_token_ref_test.dart` (форма `secret:`), `profile_secrets_test.dart`,
-  `profile_commit_test.dart`, `profile_probe_test.dart` (новый токен из памяти);
+  `profile_commit_test.dart`, `profile_probe_test.dart` (новый токен из памяти; удалён change `remove-test-connection`);
 * app — `provider_settings_cubit_test.dart`, `provider_wizard_cubit_test.dart`,
   `mcp_settings_cubit_test.dart`, `providers_page_test.dart`, `provider_wizard_dialog_test.dart`,
   `mcp_page_test.dart`; правки `add_profile_*_test.dart`, `connection_page_test.dart`; лента —

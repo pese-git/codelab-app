@@ -10,7 +10,6 @@
 * `WorkingDirectoryProvider` / `IoWorkingDirectoryProvider` — рабочая папка процесса клиента;
 * `ioTransportResolver` — `ConfigTransportResolver` kit с фабриками `StdioAcpTransport` и `WebSocketAcpTransport`;
 * `resolveCodelabHome` (`platform/codelab_home.dart`) — единственное правило `$CODELAB_HOME` для CLI и app (`~`, `~/…`, ошибка `CodelabHomeException`; design.md change `add-app-settings-shell`, D7);
-* `classifyProbeFailure` — классификатор для `ProfileProbe`: исход и `UnreachableReason` по типам и errno (`SocketException`, TLS, статус рукопожатия), а не по тексту исключения (D12);
 * `IoProjectFiles` — порт `ProjectFiles` kit для панели Files: граница рабочей папки по realpath до перечисления и чтения, перечисление одного уровня (лимит 5000, `.git` скрыт), чтение не больше `maxBytes + 1` байт; правила (нормализация пути, двоичный/большой файл, сортировка) — чистые функции kit (change `add-file-preview-and-tree`, D3, D4);
 * `JsonFileProfileStore` (`$CODELAB_HOME/profiles.json`, общий у CLI и app) и `JsonFileRecentProjectsStore` — порты хранилищ kit.
 

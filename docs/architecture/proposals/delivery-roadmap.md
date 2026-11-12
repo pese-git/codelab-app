@@ -546,7 +546,8 @@ MCP servers встраиваются в ту же оболочку change `add-p
 connection profile» хранение токена в хранилище секретов агента: «Use stored secret», «Store a new
 token», порядок «секрет → профиль» с откатом и удаление `codelab/profiles/<id>/token` при «Remove».
 В `add-app-settings-shell` токен профиля — только ссылка `env:<NAME>` (решение 2026-11-04). Строка 20 в
-части M3 закрыта этим change: профили `profiles.json`, «Add connection profile», «Test connection»,
+части M3 закрыта этим change: профили `profiles.json`, «Add connection profile», «Test connection» (удалена
+change `remove-test-connection`: профиль проверяется стартом агента после «Use»),
 «Rename», «Remove», «Connect on start» и «Restart agent» (переподключение до `ClientWorkspace.restart`);
 статусы U-06, D-04 и R-12 — в `agent-parity-goals.md`. Хранилище секретов для токена остаётся за
 `add-provider-setup-ui`, D-10 и U-26 (M5) — справка и переподключение без lease и `restart()`.
