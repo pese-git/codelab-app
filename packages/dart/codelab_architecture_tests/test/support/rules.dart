@@ -345,14 +345,6 @@ const rules = [
     exclude: ['core/platform/user_shell_launcher.dart'],
     sealExclude: false,
   ),
-  // Открытие адреса во внешнем приложении — нативный API: `url_launcher` только
-  // за портом `ExternalLinkOpener` в `core/platform/` (D11, Q16).
-  PackageRule(
-    'apps/codelab_desktop/lib',
-    forbidden: ['package:url_launcher/'],
-    exclude: ['core/platform/'],
-    sealExclude: false,
-  ),
   // Application терминала не знает Flutter (D11, правило 3; задача 2.0): модель
   // эмулятора — чистый Dart из `xterm2_core`, виджеты — только presentation.
   PackageRule(
@@ -401,7 +393,8 @@ const rules = [
   PackageRule('apps/codelab_desktop/lib', forbidden: _markdownTransitive),
   // Открытие внешних ссылок - инфраструктура: `url_launcher` только в порту
   // `core/platform/` app; Cubit-ы и виджеты идут через `ExternalLinkOpener`
-  // (D5; `platform-integration.md`).
+  // (D5; `platform-integration.md`). Тот же порт открывает ссылки OSC 8
+  // терминала (change `add-integrated-terminal`, D11, Q16) — второго правила нет.
   PackageRule(
     'apps/codelab_desktop/lib',
     forbidden: ['package:url_launcher/'],

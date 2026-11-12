@@ -918,15 +918,14 @@ Architectural dependency rules важнее технической доступ�
 
 ## 20е. `codelab_desktop`: открытие ссылок во внешнем приложении — `url_launcher`
 
-**Статус: утверждено.** Решение пользователя 2026-11-11 (Q16) — [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D11; задача 2.10.
+**Статус: утверждено.** Пакет введён change `add-desktop-markdown` (архив 2026-11-11, D5/D10; строка таблицы §1); терминал переиспользует его порт, правило сторожа и зависимость — решение пользователя 2026-11-11 (Q16), [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D11; задача 2.10.
 
-Технология: [`url_launcher`](https://pub.dev/packages/url_launcher) **6.3.3** (BSD-3-Clause, publisher `flutter.dev`), пин точной версии в `apps/codelab_desktop/pubspec.yaml`. Требует Flutter `>=3.41.0`, поэтому граница `flutter:` у app поднята до `>=3.41.0`.
+Технология: [`url_launcher`](https://pub.dev/packages/url_launcher) **6.3.3** (BSD-3-Clause, publisher `flutter.dev`). При слиянии терминала запись приведена к точному пину `6.3.3` (было `^6.3.3`; D11) и граница `flutter:` у app поднята до `>=3.41.0` — требование пакета.
 
-1. **Зачем.** Ссылки OSC 8 в выводе терминала открываются в браузере после подтверждения пользователя (Q14).
-2. **Где.** Только порт `ExternalLinkOpener` и адаптер `UrlLauncherExternalLinkOpener` в `apps/codelab_desktop/lib/core/platform/external_link_opener.dart`; импорт `package:url_launcher/` в остальном `lib` app запрещён сторожем.
-3. **Безопасность.** Решение «можно ли открыть» принимает application (`terminalLinkDecision`: только `http`/`https`; адрес с bidi, нулевой шириной или управляющими C0/C1 — «нельзя» при любой схеме, решение Q21); диалог показывает нормализованный адрес — ровно тот, что уходит в `launchUrl`; адаптер повторно отказывает остальным схемам (`rejectedScheme`), открывает в `LaunchMode.externalApplication`; адрес в журнал не пишется — только схема (`observability.md` §35). OSC 1337 `OpenURL` (`Terminal.onOpenUrl`) не подключается.
-4. **Зависимости.** Новые в lock: `url_launcher_android` 6.3.33, `url_launcher_ios` 6.4.2, `url_launcher_linux` 3.2.3, `url_launcher_macos` 3.2.6, `url_launcher_platform_interface` 2.3.2, `url_launcher_web` 2.4.3, `url_launcher_windows` 3.1.6 (все BSD-3-Clause, `flutter.dev`); существующие пакеты не поднимаются. `GeneratedPluginRegistrant.swift` macOS регистрирует `url_launcher_macos`.
-5. **Заменяет ли существующую технологию.** Нет. **Migration** — нет. **ADR** — нет (Q3, прецедент §20а).
+1. **Где.** Только порт `ExternalLinkOpener` и адаптер `UrlLauncherExternalLinkOpener` в `apps/codelab_desktop/lib/core/platform/external_link_opener.dart` (политика схем — `link_policy.dart`); импорт `package:url_launcher/` в остальном `lib` app запрещён сторожем (одно правило на оба потребителя).
+2. **Потребители.** Ссылки в ответе агента (markdown, политика `isOpenableLink`) и ссылки OSC 8 в терминале (Q14).
+3. **Безопасность терминала.** Первая линия — application (`terminalLinkDecision`: только `http`/`https`; адрес с bidi, нулевой шириной или управляющими C0/C1 — «нельзя» при любой схеме, Q21); диалог показывает нормализованный адрес — ровно тот, что уходит в порт; вторая линия — политика адаптера (`isOpenableLink`); адрес в журнал не пишется — только схема (`observability.md` §35). OSC 1337 `OpenURL` (`Terminal.onOpenUrl`) не подключается.
+4. **Заменяет ли существующую технологию.** Нет. **Migration** — нет. **ADR** — нет (Q3, прецедент §20а).
 
 ---
 
