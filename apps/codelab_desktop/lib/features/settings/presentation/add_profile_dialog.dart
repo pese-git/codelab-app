@@ -14,7 +14,7 @@ import '../application/add_profile_cubit.dart';
 /// Почему функция, а не страница: диалог — модальное окно над страницей
 /// «Connection» (макет `AddProfile`, `ContentDialog`; spec app-settings).
 /// Cubit [cubit] создаёт и закрывает владелец диалога (страница), чтобы
-/// закрытие диалога любым способом отменяло идущую проверку.
+/// закрытие диалога любым способом закрывало Cubit.
 ///
 /// Для чего: Esc и «Cancel» закрывают диалог без записи — в файл и в
 /// `shared_preferences` пишет только `AddProfileCubit.save`. Фон не закрывает
@@ -48,9 +48,10 @@ Future<void> showAddProfileDialog(BuildContext context, AddProfileCubit cubit) {
 /// Почему: форма добавления профиля — отдельный модальный сценарий, а не
 /// часть страницы (spec app-settings «Диалог «Add connection profile»»).
 ///
-/// Для чего: только отображение `AddProfileState`. Что доступно («Save»,
-/// «Test connection»), что показывать (ошибки, подсказки, подтверждение) и
-/// чем заканчивается проверка, решает `AddProfileCubit`; виджет передаёт
+/// Для чего: только отображение `AddProfileState`. Что доступно («Save»),
+/// что показывать (ошибки, подсказки, подтверждение `ws://`) и чем
+/// заканчивается сохранение, решает `AddProfileCubit`; проверки подключения в
+/// диалоге нет (change `remove-test-connection`, D1, D4); виджет передаёт
 /// ввод и нажатия и не знает ни файлов, ни окружения, ни ACP (AGENTS.md §6,
 /// §7, §10). Значение нового токена вводится в скрытое поле и сразу уходит в
 /// Cubit (`SecretText`); виджет его не хранит и не показывает (D13, D14).
@@ -111,12 +112,11 @@ class _FormDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final cubit = context.read<AddProfileCubit>();
     final form = state.form;
-    final busy = state is Probing || state is Saving;
     final saving = state is Saving;
 
     // Пока профиль пишется, диалог не закрывается (Esc, «Cancel»): иначе
     // страница не узнала бы о записи, а пользователь решил бы, что отменил
-    // её. Закрытие остаётся доступным при проверке: Cubit отменяет её сам.
+    // её.
     return PopScope(
       canPop: !saving,
       child: ContentDialog(
@@ -145,21 +145,6 @@ class _FormDialog extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (state case ConfirmingPlaintextProbe(:final message))
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: _CaptionInfoBar(
-                    key: const ValueKey('add-profile-unencrypted'),
-                    severity: InfoBarSeverity.warning,
-                    title: 'Unencrypted connection',
-                    message: message,
-                    action: CodeLabButton(
-                      key: const ValueKey('add-profile-test-anyway'),
-                      label: 'Test anyway',
-                      onPressed: () => unawaited(cubit.confirmPlaintextProbe()),
-                    ),
-                  ),
-                ),
               if (state case SaveFailed(:final message))
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
@@ -175,9 +160,9 @@ class _FormDialog extends StatelessWidget {
         actions: [
           CodeLabButton(
             key: const ValueKey('add-profile-save'),
-            label: form.saveLabel,
+            label: 'Save',
             emphasis: CodeLabButtonEmphasis.primary,
-            onPressed: form.canSave && !busy
+            onPressed: form.canSave && !saving
                 ? () => unawaited(cubit.save())
                 : null,
           ),
@@ -221,7 +206,7 @@ class _Subtitle extends StatelessWidget {
   }
 }
 
-/// Поля формы в порядке макета: Type, Name, поля типа, Check, After saving.
+/// Поля формы в порядке макета: Type, Name, поля типа, After saving.
 class _Fields extends StatelessWidget {
   const _Fields({required this.state});
 
@@ -293,16 +278,6 @@ class _Fields extends StatelessWidget {
         ),
         if (isStdio) ..._stdioRows(cubit, form, error),
         if (!isStdio) ..._webSocketRows(cubit, form, error),
-        CodeLabFormRow(
-          label: 'Check',
-          notes: [
-            const CodeLabFormNote(
-              'Sends initialize only: no session is created, the process or '
-              'socket closes right after.',
-            ),
-          ],
-          child: _CheckRow(state: state),
-        ),
         CodeLabFormRow(
           label: 'After saving',
           notes: const [CodeLabFormNote('Used when the agent starts.')],
@@ -631,65 +606,6 @@ class _IdLine extends StatelessWidget {
   }
 }
 
-/// Строка «Check»: кнопка проверки и её ход или исход.
-class _CheckRow extends StatelessWidget {
-  const _CheckRow({required this.state});
-
-  final AddProfileInProgress state;
-
-  @override
-  Widget build(BuildContext context) {
-    final cubit = context.read<AddProfileCubit>();
-    final form = state.form;
-    final probing = state is Probing;
-    final probe = form.probe;
-    final resources = FluentTheme.of(context).resources;
-
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 28),
-      child: Row(
-        children: [
-          CodeLabButton(
-            key: const ValueKey('add-profile-test'),
-            label: 'Test connection',
-            onPressed: form.canTest && !probing
-                ? () => unawaited(cubit.testConnection())
-                : null,
-          ),
-          const SizedBox(width: 8),
-          if (probing) ...[
-            const SizedBox.square(
-              dimension: 16,
-              child: ProgressRing(strokeWidth: 2),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: CodeLabText(
-                'initialize…',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                color: resources.textFillColorSecondary,
-              ),
-            ),
-          ],
-          if (probe != null)
-            Flexible(
-              child: KeyedSubtree(
-                key: const ValueKey('add-profile-probe-result'),
-                child: CodeLabBadge(
-                  label: form.probeText ?? '',
-                  tone: probeOutcomeIsOk(probe)
-                      ? CodeLabTone.success
-                      : CodeLabTone.danger,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Экран «Profile saved».
 class _SavedDialog extends StatelessWidget {
   const _SavedDialog({required this.saved});
@@ -718,9 +634,6 @@ class _SavedDialog extends StatelessWidget {
             message: 'Added to profiles.json as ',
             tail: [
               TextSpan(text: saved.profileId, style: mono),
-              // Метка «Not tested» хранится только за жизнь страницы
-              // (D14), но экран честно говорит о ней сразу.
-              if (!saved.tested) const TextSpan(text: ' · marked "Not tested"'),
               if (saved.useByDefault)
                 const TextSpan(text: ' · used by default'),
             ],

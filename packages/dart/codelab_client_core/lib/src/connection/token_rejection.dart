@@ -15,8 +15,7 @@ import 'secret_source.dart';
 /// классифицировать ЗАПРЕЩЕНО: он зависит от ОС и SDK и может нести секрет.
 ///
 /// Для чего: единственное место, где цепочка `cause` читается ради 401/403;
-/// им пользуются [describeTokenRejection] и `classifyProbeFailure`
-/// (`codelab_client_io`), второй таблицы нет.
+/// им пользуется [describeTokenRejection], второй таблицы нет.
 ///
 /// Как использовать: `tokenRejectionStatus(error)` на ошибке, которую
 /// бросили `ClientWorkspace.connect` или `AcpClientApplication.connect`.
@@ -41,12 +40,12 @@ int? tokenRejectionStatus(Object error) {
 /// об отказе по токену, хост печатает `describeFailure`.
 ///
 /// Почему [tokenSent] обязателен: «отверг токен» верно, только если токен
-/// ушёл серверу; без токена честный текст — «требует токен» (те же слова, что
-/// у `Unauthorized` проверки профиля, D12). Значение токена в текст не
+/// ушёл серверу; без токена честный текст — «требует токен» (acp-client-kit,
+/// «Отказ рукопожатия из-за токена»). Значение токена в текст не
 /// попадает.
 ///
-/// Как использовать: [tokenSent] даёт [profileTokenSent] (CLI) или признак
-/// «задан» источника токена формы (app).
+/// Как использовать: [tokenSent] даёт [profileTokenSent]; хосты обычно зовут
+/// [describeConnectFailureByToken], который сам определяет, ушёл ли токен.
 String? describeTokenRejection(Object error, {required bool tokenSent}) {
   final status = tokenRejectionStatus(error);
   if (status == null) {

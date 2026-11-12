@@ -5,7 +5,6 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/app_scope.dart';
-import '../application/add_profile_cubit.dart' show probeOutcomeIsOk;
 import '../application/connection_settings_cubit.dart';
 import 'add_profile_dialog.dart';
 
@@ -71,8 +70,9 @@ class _ConnectionPageHostState extends State<ConnectionPageHost> {
 ///
 /// Как использовать: `Cubit` берётся из `BlocProvider` выше по дереву.
 /// «Add profile» открывает диалог (`showAddProfileDialog`) с Cubit-ом из
-/// composition root; «Test connection» и «Rename» строки вызывают
-/// `ConnectionSettingsCubit`. Правка имени идёт в самой строке: открытый
+/// composition root; «Rename» строки вызывает `ConnectionSettingsCubit`.
+/// Проверки профиля на странице нет: профиль проверяет «Use» и старт агента
+/// (change `remove-test-connection`, D1, D4). Правка имени идёт в самой строке: открытый
 /// редактор — эфемерное состояние страницы.
 class ConnectionPage extends StatefulWidget {
   const ConnectionPage({super.key});
@@ -207,7 +207,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       row: row,
                       editable: ready != null,
                       onUse: () => unawaited(cubit.use(row.id)),
-                      onTest: () => unawaited(cubit.testProfile(row.id)),
                       renaming: _renamingId == row.id,
                       onStartRename: () => setState(() => _renamingId = row.id),
                       onCancelRename: () => setState(() => _renamingId = null),
@@ -294,22 +293,22 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// «Add profile»: диалог с собственным Cubit-ом (D12).
   ///
   /// Cubit живёт ровно столько, сколько диалог: закрытие диалога любым
-  /// способом (Done, Cancel, Esc) отменяет идущую проверку. Если профиль
-  /// записан, страница перечитывает файл и запоминает успешную проверку.
+  /// способом (Done, Cancel, Esc) закрывает Cubit. Если профиль записан,
+  /// страница перечитывает файл.
   Future<void> _addProfile(ConnectionSettingsCubit settings) async {
     final add = codeLabDependenciesOf(context).createAddProfileCubit();
     unawaited(add.start());
     await showAddProfileDialog(context, add);
     // Профилей за жизнь диалога может быть несколько («Add another»), и
-    // закрыт он мог быть любым способом: метки берутся из всех записанных, а не
-    // из последнего состояния (M1).
+    // закрыт он мог быть любым способом: перечитываются все записанные, а не
+    // только последний из состояния (M1).
     final saved = add.savedProfiles;
     await add.close();
     if (!mounted) {
       return;
     }
-    for (final (:profileId, :probe) in saved) {
-      await settings.profileAdded(profileId, probe);
+    if (saved.isNotEmpty) {
+      await settings.profilesChanged();
     }
   }
 
@@ -418,7 +417,6 @@ class _ProfileRowCard extends StatelessWidget {
     required this.row,
     required this.editable,
     required this.onUse,
-    required this.onTest,
     required this.renaming,
     required this.onStartRename,
     required this.onCancelRename,
@@ -431,7 +429,6 @@ class _ProfileRowCard extends StatelessWidget {
   /// Файл прочитан: «Rename» и «Remove» доступны (битый файл не трогаем).
   final bool editable;
   final VoidCallback onUse;
-  final VoidCallback onTest;
 
   /// Открыт редактор «Rename» этой строки.
   final bool renaming;
@@ -543,21 +540,6 @@ class _ProfileRowCard extends StatelessWidget {
                                   },
                                 ),
                               ),
-                            // Исход «Test connection» хранится только за жизнь
-                            // страницы (D14); тексты без аргументов, `env` и сообщения транспорта
-                            // (команда в `Command not found` — по D12).
-                            if (row.probe case final probe?)
-                              KeyedSubtree(
-                                key: ValueKey('connection-profile-probe-$id'),
-                                child: CodeLabBadge(
-                                  label: row.probeText ?? '',
-                                  tone: probeOutcomeIsOk(probe)
-                                      ? CodeLabTone.success
-                                      : CodeLabTone.danger,
-                                ),
-                              ),
-                            if (row.showNotTested)
-                              const CodeLabBadge(label: 'Not tested'),
                           ],
                         ),
                       const SizedBox(height: 2),
@@ -583,14 +565,6 @@ class _ProfileRowCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                if (row.hasFileActions)
-                  CodeLabButton(
-                    key: ValueKey('connection-profile-test-$id'),
-                    label: 'Test connection',
-                    icon: FluentIcons.plug_connected,
-                    isLoading: row.isProbing,
-                    onPressed: editable && !row.isProbing ? onTest : null,
-                  ),
                 // «Use» выбирает профиль для следующего старта и агента не
                 // трогает (D18); у выбранного профиля вместо него метка
                 // «Selected». Ручного Connect нет.

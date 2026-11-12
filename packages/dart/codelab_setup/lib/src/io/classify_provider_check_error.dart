@@ -9,8 +9,8 @@ import '../provider/provider_check.dart';
 /// Классифицирует ошибку клиента по ТИПУ, не по тексту.
 ///
 /// Почему здесь: `TlsException` и `SocketException` — типы `dart:io`, а
-/// основной барель web-безопасен и их не видит. Разбор текста запрещён (как в
-/// `classifyProbeFailure`, change `add-app-settings-shell`): текст зависит от
+/// основной барель web-безопасен и их не видит. Разбор текста запрещён (правило D12
+/// change `add-app-settings-shell`): текст зависит от
 /// ОС и SDK и может нести адрес.
 ///
 /// Для чего: `ioProviderCheck` передаёт её в `HttpProviderCheck`. В `http` 1.x

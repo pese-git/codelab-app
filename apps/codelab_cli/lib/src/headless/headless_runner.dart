@@ -1,9 +1,7 @@
 import 'dart:async';
 
 import 'package:codelab_client_acp/codelab_client_acp.dart';
-// `TimedOut` kit — исход проверки профиля (`ProfileProbeOutcome`); здесь
-// нужен одноимённый исход хода headless из `outcome.dart`.
-import 'package:codelab_client_core/codelab_client_core.dart' hide TimedOut;
+import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgentConfigException;
 

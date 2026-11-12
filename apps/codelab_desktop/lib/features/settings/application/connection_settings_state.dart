@@ -7,13 +7,10 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ConnectionProfile,
         ConnectionView,
         EmbeddedProfile,
-        ProfileProbeOutcome,
         Reconnecting,
-        StdioProfile,
         WebSocketProfile,
         ownTokenSecretName;
 
-import 'probe_outcome_view.dart';
 import 'profile_view.dart';
 
 /// Состояние подключения окна для бейджа строки текущего профиля.
@@ -56,7 +53,7 @@ enum ConnectionRowStatus {
 /// Как использовать: создаёт только `ConnectionSettingsCubit` через
 /// [ConnectionProfileRow.embedded], [ConnectionProfileRow.stored] и
 /// [ConnectionProfileRow.unsaved]; виджет показывает поля и включает
-/// действия по [canRemove], [hasFileActions] и [showNotTested].
+/// действия по [canRemove] и [hasFileActions].
 final class ConnectionProfileRow {
   const ConnectionProfileRow._({
     required this.profile,
@@ -67,8 +64,6 @@ final class ConnectionProfileRow {
     required this.isUnsaved,
     required this.status,
     this.isSelected = false,
-    this.probe,
-    this.isProbing = false,
   });
 
   /// Встроенный агент: не из файла, всегда первый.
@@ -97,8 +92,6 @@ final class ConnectionProfileRow {
     required bool isCurrent,
     required ConnectionRowStatus? status,
     bool isSelected = false,
-    ProfileProbeOutcome? probe,
-    bool isProbing = false,
   }) => ConnectionProfileRow._(
     profile: profile,
     summary: profileSummary(profile),
@@ -108,8 +101,6 @@ final class ConnectionProfileRow {
     isSelected: isSelected,
     isUnsaved: false,
     status: status,
-    probe: probe,
-    isProbing: isProbing,
   );
 
   /// Профиль текущего окна, которого нет в файле: «Current connection (not
@@ -168,33 +159,6 @@ final class ConnectionProfileRow {
   /// у неудачной попытки — `Failed`, пока идёт попытка — `Connecting…`.
   final ConnectionRowStatus? status;
 
-  /// Последний исход «Test connection» за жизнь страницы (D14); `null` — в
-  /// этом запуске строку не проверяли. В `profiles.json` исход не пишется.
-  final ProfileProbeOutcome? probe;
-
-  /// «Test connection» этой строки идёт сейчас.
-  final bool isProbing;
-
-  /// Текст [probe] для бейджа `connection-profile-probe-<id>` (D12): тот же,
-  /// что в диалоге; из профиля берутся только команда и источник токена.
-  String? get probeText {
-    final outcome = probe;
-    if (outcome == null) {
-      return null;
-    }
-    return probeOutcomeText(
-      outcome,
-      command: switch (profile) {
-        StdioProfile(:final command) => command,
-        _ => null,
-      },
-      token: token ?? const NoTokenView(),
-    );
-  }
-
-  /// Строку проверяли на этой странице (любым исходом).
-  bool get isTested => probe != null;
-
   String get id => profile.id;
   String get label => profile.label;
   bool get isBuiltIn => profile is EmbeddedProfile;
@@ -205,11 +169,8 @@ final class ConnectionProfileRow {
   /// повторялась бы в заголовке (D4).
   String get title => profileTitle(profile);
 
-  /// У строки из файла есть «Test connection», «Rename» и «Remove».
+  /// У строки из файла есть «Rename» и «Remove».
   bool get hasFileActions => !isBuiltIn && !isUnsaved;
-
-  /// Метка «Not tested» (D14): пока строку не проверяли.
-  bool get showNotTested => hasFileActions && !isTested && !isProbing;
 
   /// «Remove» возможна для сохранённого профиля, не являющегося текущим и
   /// выбранным: встроенный агент не из файла, а текущий и выбранный связаны с
@@ -247,7 +208,6 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
     required this.currentProfile,
     required this.connection,
     required this.restartAvailable,
-    this.lastProbes = const {},
     this.failure,
   });
 
@@ -273,10 +233,6 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
   /// корень (D18). Без него «Restart agent» недоступна: `Starts when you open
   /// a project.`
   final bool restartAvailable;
-
-  /// Исходы «Test connection» по id профиля за жизнь страницы (D4, D14).
-  /// Это UI-состояние: в `profiles.json` оно не пишется.
-  final Map<String, ProfileProbeOutcome> lastProbes;
 
   /// Текст последнего сбоя действия страницы; `null` — сбоя нет.
   final String? failure;
@@ -339,7 +295,6 @@ final class ConnectionSettingsReady extends ConnectionSettingsLoaded {
     required super.restartAvailable,
     required this.defaultProfileId,
     required this.ignoredDefaultEntry,
-    super.lastProbes,
     super.failure,
   });
 
@@ -366,7 +321,6 @@ final class ConnectionSettingsUnreadable extends ConnectionSettingsLoaded {
     required super.restartAvailable,
     required this.path,
     required this.reason,
-    super.lastProbes,
     super.failure,
   });
 
