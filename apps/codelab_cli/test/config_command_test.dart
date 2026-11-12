@@ -287,6 +287,126 @@ void main() {
     );
   });
 
+  // Задача 4.1 change `bind-mcp-secrets-to-origin` (agent-secrets
+  // «Ссылки MCP-сервера проектного слоя привязаны к адресу»; design.md, D5): код CLI
+  // не меняется, строку предупреждения печатает общая `ConfigCommands`.
+  test('check: a project HTTP server with an unbound secret reference gives '
+      'the warning, Config: valid, code 0, no value in the output', () async {
+    const leak = 'sk-test-leak-0123456789';
+    // Слой проекта читается только у доверенного проекта (CFG-3).
+    File(
+      '$home/config.yaml',
+    ).writeAsStringSync('$_globalConfig\ntrusted_projects:\n  - $project\n');
+    File('$project/.codelab/config.yaml').writeAsStringSync(r'''
+mcp:
+  servers:
+    - name: relay
+      type: http
+      url: https://relay.test/mcp
+      headers:
+        Authorization: "Bearer ${secret:codelab/mcp/relay/authorization}"
+''');
+    final io = FakeCliIo();
+
+    final code = await runCodelab(
+      ['config', 'check', '--cwd', project],
+      environment: {
+        'CODELAB_HOME': home,
+        'HOME': '${temp.path}/no-home',
+        // Переопределение секрета из ссылки: значение есть, но сервер
+        // заблокирован и до него дело не доходит.
+        'CODELAB_SECRET_CODELAB_MCP_RELAY_AUTHORIZATION': leak,
+      },
+      io: io,
+    );
+
+    expect(code, 0, reason: io.stderrText);
+    final lines = io.stdoutText.trimRight().split('\n');
+    expect(lines.where((l) => l.startsWith('warning: ')), [
+      'warning: $project/.codelab/config.yaml:7:9: '
+          'mcp.servers[relay].headers.Authorization: the reference is bound '
+          'to another address and is not used',
+    ]);
+    expect(lines.last, 'Config: valid');
+    expect(io.stdoutText + io.stderrText, isNot(contains(leak)));
+  });
+
+  // Задача 4.3 change `bind-mcp-secrets-to-origin` (D12; agent-secrets
+  // «Stdio-сервер закоммиченного конфига со ссылкой на секрет»).
+  group('check: a stdio server with a secret reference (D12)', () {
+    const leak = 'sk-test-leak-0123456789';
+    const stdioServer = r'''
+mcp:
+  servers:
+    - name: docs
+      type: stdio
+      command: docs-server
+      env:
+        TOKEN: "${secret:codelab/mcp/docs/token}"
+''';
+
+    Future<(int, FakeCliIo)> check(String layerFile) async {
+      File(
+        '$home/config.yaml',
+      ).writeAsStringSync('$_globalConfig\ntrusted_projects:\n  - $project\n');
+      File('$project/.codelab/$layerFile').writeAsStringSync(stdioServer);
+      final io = FakeCliIo();
+      final code = await runCodelab(
+        ['config', 'check', '--cwd', project],
+        environment: {
+          'CODELAB_HOME': home,
+          'HOME': '${temp.path}/no-home',
+          'CODELAB_SECRET_CODELAB_MCP_DOCS_TOKEN': leak,
+        },
+        io: io,
+      );
+      return (code, io);
+    }
+
+    test(
+      'the committed config.yaml: exactly one warning, valid, no value',
+      () async {
+        final (code, io) = await check('config.yaml');
+
+        expect(code, 0, reason: io.stderrText);
+        final lines = io.stdoutText.trimRight().split('\n');
+        final warnings = lines.where((l) => l.startsWith('warning: ')).toList();
+        expect(warnings, hasLength(1));
+        expect(
+          warnings.single,
+          matches(
+            RegExp(
+              '^warning: ${RegExp.escape(project)}/\\.codelab/config\\.yaml'
+              r'(:\d+:\d+)?: mcp\.servers\[docs\]: a stdio server from the '
+              r'committed project config receives a secret reference; it runs '
+              r'as you, so move it to config\.local\.yaml if you did not write '
+              r'it$',
+            ),
+          ),
+        );
+        expect(lines.last, 'Config: valid');
+        expect(io.stdoutText + io.stderrText, isNot(contains(leak)));
+        expect(
+          io.stdoutText + io.stderrText,
+          isNot(contains('codelab/mcp/docs/token')),
+        );
+      },
+    );
+
+    test('the same server in config.local.yaml: no warning', () async {
+      final (code, io) = await check('config.local.yaml');
+
+      expect(code, 0, reason: io.stderrText);
+      expect(io.stdoutText, isNot(contains('warning:')));
+      expect(io.stdoutText.trimRight().split('\n').last, 'Config: valid');
+      expect(io.stdoutText + io.stderrText, isNot(contains(leak)));
+      expect(
+        io.stdoutText + io.stderrText,
+        isNot(contains('codelab/mcp/docs/token')),
+      );
+    });
+  });
+
   test('no secret value reaches stdout or stderr', () async {
     File('$home/config.yaml').writeAsStringSync('''
 providers:

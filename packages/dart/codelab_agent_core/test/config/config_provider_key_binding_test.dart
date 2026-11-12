@@ -11,6 +11,7 @@ import 'config_support.dart';
 /// `api_key`, значение переменной), и ни в одном поле результата загрузки,
 /// предназначенном для показа, его быть не должно.
 void main() {
+  _mcpBindingTests();
   const leak = _leak;
 
   Map<String, Object?> globals({Map<String, Object?> extra = const {}}) =>
@@ -627,6 +628,173 @@ void main() {
 
       expect(result.config!.providerProblems, contains('relay'));
       expect(result.config!.defaultModel.provider, 'ok');
+    });
+  });
+}
+
+/// Ссылки и origin HTTP-сервера MCP (change `bind-mcp-secrets-to-origin`, D3;
+/// agent-secrets «Ссылки MCP-сервера проектного слоя привязаны к адресу», п. 3).
+void _mcpBindingTests() {
+  group('mcpServerReferences', () {
+    test('finds secret and env references in headers and env in url', () {
+      final refs = mcpServerReferences({
+        'name': 'relay',
+        'type': 'http',
+        'url': r'https://x.example/${PATH_VAR}/mcp',
+        'headers': {
+          'Authorization': r'Bearer ${secret:codelab/mcp/relay/authorization}',
+          'X-Token': r'${GITHUB_TOKEN}',
+          'X-Plain': 'literal',
+        },
+      });
+
+      expect(
+        [for (final r in refs) (r.kind, r.name, r.field)],
+        unorderedEquals([
+          (
+            ProviderReferenceKind.secret,
+            'codelab/mcp/relay/authorization',
+            'headers.Authorization',
+          ),
+          (ProviderReferenceKind.env, 'GITHUB_TOKEN', 'headers.X-Token'),
+          (ProviderReferenceKind.env, 'PATH_VAR', 'url'),
+        ]),
+      );
+    });
+
+    test(r'$${ is a literal, not a reference', () {
+      final refs = mcpServerReferences({
+        'name': 'relay',
+        'type': 'http',
+        'url': 'https://x.example/mcp',
+        'headers': {'X': r'$${NOT_A_REF}'},
+      });
+
+      expect(refs, isEmpty);
+    });
+
+    test('env of a stdio server is not judged', () {
+      final refs = mcpServerReferences({
+        'name': 'gh',
+        'type': 'stdio',
+        'command': 'c',
+        'env': {'T': r'${GITHUB_TOKEN}'},
+      });
+
+      expect(refs, isEmpty);
+    });
+  });
+
+  group('mcpServerOrigin', () {
+    test('lower-cases the host and fills the default port', () {
+      expect(
+        mcpServerOrigin({'url': 'https://API.Example.com/mcp'}, const {}),
+        'https://api.example.com:443',
+      );
+      expect(
+        mcpServerOrigin({'url': 'http://h.example/x'}, const {}),
+        'http://h.example:80',
+      );
+    });
+
+    test('an unset variable in the url or a non-http url is null', () {
+      expect(
+        mcpServerOrigin({'url': r'https://${HOST}/mcp'}, const {}),
+        isNull,
+      );
+      expect(mcpServerOrigin({'url': 'ftp://h.example'}, const {}), isNull);
+      expect(mcpServerOrigin({}, const {}), isNull);
+    });
+
+    test('expands a variable only for comparison', () {
+      expect(
+        mcpServerOrigin(
+          {'url': r'https://${HOST}/mcp'},
+          const {'HOST': 'h.example'},
+        ),
+        'https://h.example:443',
+      );
+    });
+  });
+
+  group('ProviderKeyBinding.fromLayers with MCP servers', () {
+    ConfigTree userLayer(List<Map<String, Object?>> servers) => layer({
+      'mcp': {'servers': servers},
+    });
+
+    const ref = ProviderReference(
+      ProviderReferenceKind.secret,
+      'codelab/mcp/github/authorization',
+      'headers.Authorization',
+    );
+
+    test('global http servers bind their references to the url origin', () {
+      final binding = ProviderKeyBinding.fromLayers([
+        userLayer([
+          {
+            'name': 'github',
+            'type': 'http',
+            'url': 'https://api.githubcopilot.com/mcp/',
+            'headers': {
+              'Authorization': r'${secret:codelab/mcp/github/authorization}',
+            },
+          },
+        ]),
+      ], const {});
+
+      expect(binding.isBound(ref, 'https://api.githubcopilot.com:443'), isTrue);
+      expect(binding.isBound(ref, 'https://evil.example:443'), isFalse);
+    });
+
+    test('global stdio servers and project layers give no binding', () {
+      final binding = ProviderKeyBinding.fromLayers([
+        userLayer([
+          {
+            'name': 'gh',
+            'type': 'stdio',
+            'command': 'c',
+            'env': {'T': r'${secret:codelab/mcp/github/authorization}'},
+          },
+        ]),
+        layer({
+          'mcp': {
+            'servers': [
+              {
+                'name': 'p',
+                'type': 'http',
+                'url': 'https://proj.example/mcp',
+                'headers': {
+                  'Authorization':
+                      r'${secret:codelab/mcp/github/authorization}',
+                },
+              },
+            ],
+          },
+        }, kind: ConfigLayerKind.project),
+      ], const {});
+
+      expect(binding.isBound(ref, 'https://proj.example:443'), isFalse);
+    });
+
+    test('a provider reference binds the same origin for MCP', () {
+      final binding = ProviderKeyBinding.fromLayers([
+        layer({
+          'providers': {
+            'gw': {
+              'kind': 'openai-compatible',
+              'base_url': 'https://gw.example/v1',
+              'api_key_secret': 'codelab/gw',
+            },
+          },
+        }),
+      ], const {});
+
+      const gw = ProviderReference(
+        ProviderReferenceKind.secret,
+        'codelab/gw',
+        'headers.X-Key',
+      );
+      expect(binding.isBound(gw, 'https://gw.example:443'), isTrue);
     });
   });
 }

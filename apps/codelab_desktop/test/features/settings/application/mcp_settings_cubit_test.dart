@@ -2143,6 +2143,87 @@ mcp:
     });
   });
 
+  group('a server bound to another address (bind-mcp-secrets-to-origin, '
+      'D1, Q5)', () {
+    const reason =
+        'key bound to another address: move the server to config.local.yaml '
+        'or the user config (secret codelab/mcp/postgres/database_url)';
+
+    test('scenario "a blocked server in the Agent status panel": a failed '
+        'row carries the core reason as is; there is no mcp-rejected '
+        'content and no log event carries the marker', () async {
+      final port = FakeMcpStatusPort(
+        'p1',
+        servers: [
+          mcpSummary('github', tools: 3),
+          mcpSummary(
+            'postgres',
+            state: McpServerState.failed,
+            lastError: reason,
+          ),
+        ],
+      );
+      source.ports[_s1] = port;
+      connect(embeddedConnectionProfile, active: _s1);
+      // Маркер лежит в «хранилище» двойника: страница читает конфиг и секреты,
+      // и проверка «нет маркера» ниже не пустая.
+      expect(session.secrets[_authorization], leakMarker);
+      final cubit = make();
+      await cubit.reload();
+
+      final live = status(cubit) as McpAgentStatusLive;
+      final blocked = live.rows.firstWhere((r) => r.name == 'postgres');
+      expect(blocked.state, McpServerState.failed);
+      expect(blocked.stateLabel, 'failed');
+      expect(blocked.lastError, reason);
+      expect(blocked.canReconnect, isTrue);
+      expect(current(cubit).rejected, isNull);
+      expect(events(), isNot(contains('mcp_settings.rejected_after_save')));
+      expect(
+        [...logger.entries.map((e) => '$e'), '${cubit.state}'].join('\n'),
+        isNot(contains(leakMarker)),
+      );
+    });
+
+    test('scenario "a server of This project only is not blocked": the '
+        'write goes to the local file and the result has no rejection, '
+        'banner warning or leak', () async {
+      store.projectLocal = {};
+      final cubit = make();
+      await cubit.reload();
+
+      // Секретный заголовок со значением-маркером: в файл уходит ссылка.
+      final saved = await cubit.save(
+        _newGithub(name: 'fresh'),
+        target: ConfigLayer.projectLocal,
+      );
+
+      expect(saved, isTrue);
+      expect(
+        store.applied.single.base.path,
+        FakeAgentConfigStore.projectLocalPath,
+      );
+      const freshSecret = 'codelab/mcp/fresh/authorization';
+      expect(session.secrets[freshSecret], 'Bearer $leakMarker');
+      final upsert = store.applied.single.edits.single as UpsertMcpServer;
+      expect(upsert.server['headers'], {
+        'Authorization': '\${secret:$freshSecret}',
+      });
+      expect(upsert.toString(), isNot(contains(leakMarker)));
+      expect(current(cubit).toString(), isNot(contains(leakMarker)));
+      expect(current(cubit).rejected, isNull);
+      expect(current(cubit).banner!.kind, McpBannerKind.saved);
+      expect(
+        current(cubit).banner!.lines.join('\n'),
+        isNot(contains('bound to another address')),
+      );
+      expect(
+        logger.entries.map((e) => '$e').join('\n'),
+        isNot(contains(leakMarker)),
+      );
+    });
+  });
+
   group('secretNameFor', () {
     test('is the bridge rule: lower case, one name for GitHub and github', () {
       expect(

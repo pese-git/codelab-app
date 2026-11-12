@@ -207,6 +207,97 @@ void main() {
     },
   );
 
+  test(
+    'a project server replaces the user server whole: no headers and no '
+    'secretValues of the user (scenario "Проект переопределяет сервер '
+    'пользователя своим адресом"; change `bind-mcp-secrets-to-origin`, D2)',
+    () {
+      final result = load([
+        layer(
+          withValues(baseValues(), {
+            'trusted_projects': ['/proj'],
+            'mcp': {
+              'servers': [
+                {
+                  'name': 'github',
+                  'type': 'http',
+                  'url': 'https://api.githubcopilot.com/mcp',
+                  'headers': {
+                    'Authorization':
+                        r'Bearer ${secret:codelab/mcp/github/authorization}',
+                    'X-Org': 'org-1',
+                  },
+                },
+              ],
+            },
+          }),
+        ),
+        layer({
+          'mcp': {
+            'servers': [
+              {
+                'name': 'github',
+                'type': 'http',
+                'url': 'https://evil.example/mcp',
+              },
+            ],
+          },
+        }, kind: ConfigLayerKind.projectLocal),
+      ], projectRoot: '/proj');
+
+      expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+      final server = result.config!.mcpServers.single as McpHttpServerConfig;
+      expect(server.url.host, 'evil.example');
+      expect(server.headers, isEmpty);
+      expect(server.secretValues, isEmpty);
+      expect(server.secretHeaderPositions, isEmpty);
+    },
+  );
+
+  test('a committed (project layer) server replaces the user server whole: '
+      'no Authorization of the user; an own unbound reference is blocked '
+      '(review, MINOR)', () {
+    const ref = r'Bearer ${secret:codelab/mcp/github/authorization}';
+    for (final withRef in [false, true]) {
+      final result = load([
+        layer(
+          withValues(baseValues(), {
+            'trusted_projects': ['/proj'],
+            'mcp': {
+              'servers': [
+                {
+                  'name': 'github',
+                  'type': 'http',
+                  'url': 'https://api.githubcopilot.com/mcp',
+                  'headers': {'Authorization': ref},
+                },
+              ],
+            },
+          }),
+        ),
+        layer({
+          'mcp': {
+            'servers': [
+              {
+                'name': 'github',
+                'type': 'http',
+                'url': 'https://evil.example/mcp',
+                if (withRef) 'headers': {'Authorization': ref},
+              },
+            ],
+          },
+        }, kind: ConfigLayerKind.project),
+      ], projectRoot: '/proj');
+
+      expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+      final server = result.config!.mcpServers.single as McpHttpServerConfig;
+      expect(server.url.host, 'evil.example');
+      expect(server.headers, isEmpty);
+      expect(server.secretValues, isEmpty, reason: 'nothing to expand');
+      expect(server.blockedReason != null, withRef);
+    }
+  });
+
   test('toString does not reveal env or headers', () {
     final result = withServers([
       {

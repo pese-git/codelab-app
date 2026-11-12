@@ -1334,6 +1334,33 @@ void main() {
       expect(port.reconnected, ['postgres', 'github', 'postgres']);
     });
 
+    testWidgets('scenario "a blocked server": the row shows failed and the '
+        'core reason, never mcp-rejected', (tester) async {
+      const reason =
+          'key bound to another address: move the server to '
+          'config.local.yaml or the user config '
+          '(secret codelab/mcp/postgres/database_url)';
+      source.ports[_s1] = FakeMcpStatusPort(
+        'p1',
+        servers: [
+          mcpSummary(
+            'postgres',
+            state: McpServerState.failed,
+            lastError: reason,
+          ),
+        ],
+      );
+      connect(embeddedConnectionProfile, active: _s1);
+      await openPage(tester);
+
+      expect(_key('mcp-status-row-postgres'), findsOneWidget);
+      expect(find.text('failed'), findsOneWidget);
+      expect(find.text(reason), findsOneWidget);
+      expect(_key('mcp-rejected'), findsNothing);
+      expect(find.textContaining('rejected'), findsNothing);
+      expect(find.textContaining(leakMarker), findsNothing);
+    });
+
     testWidgets('a change of the port updates the table', (tester) async {
       final port = FakeMcpStatusPort(
         'p1',

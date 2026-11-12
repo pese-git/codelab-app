@@ -447,4 +447,109 @@ void main() {
       },
     );
   });
+
+  // Задача 4.2 change `bind-mcp-secrets-to-origin` (agent-secrets «Подкоманда
+  // secret migrate», сценарии «HTTP-сервер закоммиченного конфига переносится в
+  // config.local.yaml» и «Чужая ссылка в сервере не переносится»; design.md,
+  // D7). Движок общий с `codelab-agent`; здесь проверяется, что CLI печатает
+  // строки пунктов моста `codelab_setup/io.dart` и не выдаёт значение.
+  group('secret migrate: HTTP server of the committed project config (D7)', () {
+    const marker = 'sk-test-leak-0123456789';
+    late String project;
+    late String projectConfig;
+    late String localConfig;
+
+    setUp(() {
+      // Путь канонический: писатель раскрывает ссылки (macOS: /var -> /private/var).
+      project = '${temp.resolveSymbolicLinksSync()}/project';
+      Directory('$project/.codelab').createSync(recursive: true);
+      projectConfig = '$project/.codelab/config.yaml';
+      localConfig = '$project/.codelab/config.local.yaml';
+      // Проект доверенный (недоверенный слой не переносится), хранилище —
+      // файл в изолированном CODELAB_HOME.
+      File('$home/config.yaml').writeAsStringSync('''
+secrets:
+  backend: file
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    models:
+      m: {}
+agent:
+  default_model: p/m
+trusted_projects:
+  - $project
+mcp:
+  servers:
+    - name: github
+      type: http
+      url: https://api.github.test/mcp
+      headers:
+        Authorization: "Bearer \${secret:codelab/mcp/github/authorization}"
+''');
+    });
+
+    Future<(int, FakeCliIo)> migrate() =>
+        run(['secret', 'migrate', '--project', '--cwd', project]);
+
+    test('the literal header moves the server to config.local.yaml: the '
+        'server line is printed, no value in the output', () async {
+      File(projectConfig).writeAsStringSync('''
+mcp:
+  servers:
+    - name: team
+      type: http
+      url: https://mcp.team.test/
+      headers:
+        Authorization: "Bearer $marker"
+''');
+
+      final (code, io) = await migrate();
+
+      expect(code, 0, reason: io.stderrText);
+      expect(
+        io.stdoutText.split('\n'),
+        contains(
+          'Moved mcp.servers[team] (with its secrets) to $localConfig; '
+          'removed the secret values from $projectConfig',
+        ),
+      );
+      expect(File(localConfig).existsSync(), isTrue);
+      expect(File(projectConfig).readAsStringSync(), isNot(contains(marker)));
+      expect(File(localConfig).readAsStringSync(), isNot(contains(marker)));
+      expect(io.stdoutText + io.stderrText, isNot(contains(marker)));
+    });
+
+    test('a foreign reference is not moved: the not migrated line, files '
+        'untouched', () async {
+      final original =
+          '''
+mcp:
+  servers:
+    - name: relay
+      type: http
+      url: https://relay.test/mcp
+      headers:
+        X-Bait: $marker
+        Authorization: "Bearer \${secret:codelab/mcp/github/authorization}"
+''';
+      File(projectConfig).writeAsStringSync(original);
+
+      final (code, io) = await migrate();
+
+      expect(code, 0, reason: io.stderrText);
+      expect(
+        io.stdoutText.split('\n'),
+        contains(
+          'not migrated: mcp.servers[relay] in $projectConfig: secret '
+          'codelab/mcp/github/authorization is not bound to this address by '
+          'the user config; move it by hand',
+        ),
+      );
+      expect(File(projectConfig).readAsStringSync(), original);
+      expect(File(localConfig).existsSync(), isFalse);
+      expect(io.stdoutText + io.stderrText, isNot(contains(marker)));
+    });
+  });
 }

@@ -108,4 +108,98 @@ void main() {
     expect(after.config!.defaultModelSource, DefaultModelSource.firstProvider);
     expect(after.config!.defaultModel.provider, 'b');
   });
+
+  // change `bind-mcp-secrets-to-origin`, D6; agent-secrets «Ссылки MCP-сервера
+  // проектного слоя привязаны к адресу», п. 6. Проектный сервер не меняется в
+  // файле, но правка глобального слоя меняет его вердикт: план не откладывает
+  // его, а итоговый снимок несёт новый `blockedReason`, и шаг 7а заменяет
+  // сервер в живых сессиях через `sameConnection`.
+  group('a global edit that changes the binding of a project MCP server', () {
+    const secretRef = r'Bearer ${secret:codelab/mcp/github/authorization}';
+
+    Map<String, Object?> github() => {
+      'name': 'github',
+      'type': 'http',
+      'url': 'https://api.githubcopilot.com/mcp/',
+      'headers': <String, Object?>{'Authorization': secretRef},
+    };
+
+    ConfigLoadResult withProject({required bool bound}) {
+      final user = <String, Object?>{
+        'trusted_projects': ['/proj'],
+        'providers': {'a': provider('x')},
+        'mcp': {
+          'servers': [if (bound) github()],
+        },
+      };
+      final result = CoreConfig.fromLayers(
+        [
+          layer(user),
+          layer({
+            'mcp': {
+              'servers': [
+                {
+                  'name': 'gh-team',
+                  'type': 'http',
+                  'url': 'https://api.githubcopilot.com/mcp/x',
+                  'headers': <String, Object?>{'Authorization': secretRef},
+                },
+              ],
+            },
+          }, kind: ConfigLayerKind.project),
+        ],
+        environment: const {},
+        projectRoot: '/proj',
+      );
+      expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+      return result;
+    }
+
+    ConfigReloadPlan plan(ConfigLoadResult before, ConfigLoadResult after) =>
+        planConfigReload(
+          previousValues: before.values,
+          previous: before.config!,
+          nextValues: after.values,
+          next: after.config!,
+        );
+
+    McpServerConfig team(CoreConfig config) =>
+        config.mcpServers.singleWhere((s) => s.name == 'gh-team');
+
+    test('removing the binding blocks the project server at once', () {
+      final before = withProject(bound: true);
+      final after = withProject(bound: false);
+      expect(team(before.config!).blockedReason, isNull);
+
+      final result = plan(before, after);
+      final merged = CoreConfig.withDeferred(
+        before.config!,
+        after.config!,
+        result.deferred,
+      );
+
+      expect(result.restartRequiredKeys, isEmpty);
+      expect(result.deferred.servers, isEmpty);
+      expect(team(merged).blockedReason, isNotNull);
+      expect(team(merged).sameConnection(team(before.config!)), isFalse);
+    });
+
+    test('adding the binding unblocks the project server at once', () {
+      final before = withProject(bound: false);
+      final after = withProject(bound: true);
+
+      final result = plan(before, after);
+      final merged = CoreConfig.withDeferred(
+        before.config!,
+        after.config!,
+        result.deferred,
+      );
+
+      expect(team(merged).blockedReason, isNull);
+      expect(team(merged).secretValues.keys, ['headers.Authorization']);
+      // Сам новый глобальный сервер `github` с подстановкой ждёт перезапуска
+      // (R0-4); привязку проектному серверу он даёт сразу (D6).
+      expect(result.restartRequiredKeys, ['mcp.servers[github]']);
+    });
+  });
 }
