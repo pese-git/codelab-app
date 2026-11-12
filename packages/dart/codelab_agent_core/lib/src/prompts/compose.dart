@@ -127,8 +127,8 @@ List<(String, String)> _sections(PromptInputs inputs) {
           'defaultTimeout': '$_defaultExecTimeout',
         }),
       ),
-    if (on(Prompts.toolsPlan))
-      (Prompts.toolsPlan.id, Prompts.toolsPlan.render({})),
+    if (on(Prompts.toolsTasks))
+      (Prompts.toolsTasks.id, Prompts.toolsTasks.render({})),
     // Шаг 9 §11.5: секция `mcp` только при включённой capability и хотя бы
     // одном сервере с инструментами, строки — в порядке регистрации.
     if (inputs.profile.isOn(HostCapability.mcp) && servers.isNotEmpty)

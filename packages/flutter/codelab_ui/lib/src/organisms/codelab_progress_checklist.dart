@@ -17,11 +17,23 @@ class CodeLabPlanEntry {
     required this.content,
     required this.status,
     required this.priority,
+    this.taskId,
+    this.ownerLabel,
+    this.blockedBy = const [],
   });
 
   final String content;
   final CodeLabPlanEntryStatus status;
   final CodeLabPlanEntryPriority priority;
+
+  /// Номер пункта списка задач (`#<id>`); `null` у плана стороннего агента.
+  final String? taskId;
+
+  /// Метка владельца-субагента (тип или id); `null` — владельца нет или main.
+  final String? ownerLabel;
+
+  /// Только незавершённые блокеры — отбор делает kit (D15), виджет рисует.
+  final List<String> blockedBy;
 }
 
 /// The agent's plan, rendered as an [CodeLabActivityBarSection] — a collapsed
@@ -169,17 +181,35 @@ class _EntryRow extends StatelessWidget {
       children: [
         CodeLabIcon(_statusIcon, tone: _statusTone, size: 16),
         const SizedBox(width: 8),
+        if (entry.taskId != null) ...[
+          CodeLabText('#${entry.taskId}', role: CodeLabTextRole.mono),
+          const SizedBox(width: 6),
+        ],
         Expanded(
-          child: Text(
-            entry.content,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: baseStyle?.copyWith(
-              color: completed ? Colors.grey : null,
-              decoration: completed ? TextDecoration.lineThrough : null,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                entry.content,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: baseStyle?.copyWith(
+                  color: completed ? Colors.grey : null,
+                  decoration: completed ? TextDecoration.lineThrough : null,
+                ),
+              ),
+              if (entry.blockedBy.isNotEmpty)
+                CodeLabText(
+                  'blocked by ${entry.blockedBy.map((id) => '#$id').join(', ')}',
+                  role: CodeLabTextRole.caption,
+                ),
+            ],
           ),
         ),
+        if (entry.ownerLabel != null) ...[
+          const SizedBox(width: 8),
+          CodeLabBadge(label: entry.ownerLabel!),
+        ],
         const SizedBox(width: 8),
         CodeLabBadge(label: _priorityLabel, tone: _priorityTone),
       ],

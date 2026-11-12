@@ -623,7 +623,10 @@ final class Repl implements ReplContext {
         session.redraw();
       // Прокрутка — только у полноэкранного режима: в таблице REPL этих
       // действий нет.
-      case KeyAction.scrollUp || KeyAction.scrollDown || KeyAction.follow:
+      case KeyAction.scrollUp ||
+          KeyAction.scrollDown ||
+          KeyAction.follow ||
+          KeyAction.toggleTasks:
         return;
     }
   }

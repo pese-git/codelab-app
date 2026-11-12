@@ -88,11 +88,11 @@ responses of MCP servers and web pages.
   end: read the error and fix the cause.
 - Do not use commands to read or search files when a dedicated tool exists.
 
-# Plan
+# Task list
 
-For a task with three or more steps, keep a plan with the update_plan tool: create it at the
-start, mark an item in_progress when you start it and completed when it is done. Simple
-questions need no plan.
+For work with three or more steps, keep a task list with the task_create tool: create an item
+for each step at the start, mark an item in_progress when you start it and completed when it
+is done. Simple questions need no list.
 
 ## Skills
 

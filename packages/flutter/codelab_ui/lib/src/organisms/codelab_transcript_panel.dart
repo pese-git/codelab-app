@@ -367,6 +367,7 @@ class _TranscriptRowView extends StatelessWidget {
         onToggle: onToggle,
       ),
       final CodeLabNoticeRow notice => CodeLabTranscriptNotice(row: notice),
+      CodeLabTaskOpsRow(:final text) => _TaskOpsLine(text: text),
     };
   }
 }
@@ -414,6 +415,28 @@ class _UserBubble extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Тихая строка операций со списком задач (D27): иконка списка и приглушённый
+/// текст, без рамки, тега статуса и панели вывода.
+class _TaskOpsLine extends StatelessWidget {
+  const _TaskOpsLine({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          const CodeLabIcon(FluentIcons.bulleted_list, size: 14),
+          const SizedBox(width: 8),
+          Expanded(child: CodeLabText(text, role: CodeLabTextRole.caption)),
+        ],
+      ),
     );
   }
 }

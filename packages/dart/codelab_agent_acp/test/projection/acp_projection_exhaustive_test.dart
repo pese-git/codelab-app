@@ -65,7 +65,21 @@ void main() {
     // entries и `_meta.codelab.task.id` "1", "4".
     test('op restore with an empty list is a plan with no entries', () {
       expect(project(restore(const [], deleted: const ['1', '2'])), [
-        {'sessionUpdate': 'plan', 'entries': <Object?>[]},
+        {
+          'sessionUpdate': 'plan',
+          'entries': <Object?>[],
+          // «Список новой ветки без toolCallId» (D35): ключа toolCallId нет.
+          '_meta': {
+            'codelab': {
+              'taskChange': {
+                'op': 'restore',
+                'actor': 'main',
+                'changed': <String>[],
+                'deleted': ['1', '2'],
+              },
+            },
+          },
+        },
       ]);
     });
 
@@ -117,13 +131,23 @@ void main() {
               },
             },
           ],
+          '_meta': {
+            'codelab': {
+              'taskChange': {
+                'op': 'restore',
+                'actor': 'main',
+                'changed': ['1', '4'],
+                'deleted': <String>[],
+              },
+            },
+          },
         },
       ]);
     });
 
     // §17.16.5: `restore` — не особый кадр, а тот же `plan`, что у `create`
     // и `update` (D29: «клиенту — обычный plan со всем списком»).
-    test('op restore and op create produce the same frame', () {
+    test('op restore and op create produce the same entries', () {
       final items = [
         item('1', 'A'),
         item('2', 'B', blockedBy: const ['1']),
@@ -139,7 +163,63 @@ void main() {
         ),
       );
 
-      expect(project(restore(items)), project(created));
+      expect(
+        project(restore(items)).single['entries'],
+        project(created).single['entries'],
+      );
+    });
+
+    // agent-acp-server «Список задач в ходе», D35: операция вызова `task_*`
+    // несёт `toolCallId`, `changed` и `deleted` — id пунктов, а не снимки.
+    test('a task_* operation carries taskChange with toolCallId', () {
+      final items = [item('1', 'A'), item('2', 'B')];
+      final event = TaskListChanged(
+        s,
+        items: [items.first],
+        change: TaskChange(
+          op: 'delete',
+          actor: const MainActor(),
+          toolCallId: 'call_7',
+          changed: [items.first],
+          deleted: const ['2'],
+        ),
+      );
+
+      final meta = project(event).single['_meta'];
+      expect(meta, {
+        'codelab': {
+          'taskChange': {
+            'op': 'delete',
+            'actor': 'main',
+            'toolCallId': 'call_7',
+            'changed': ['1'],
+            'deleted': ['2'],
+          },
+        },
+      });
+    });
+
+    // `assign` и операция потомка: `actor` — id субагента, `toolCallId`
+    // опускается, пока ядро его не передало (§17.16.5).
+    test('a subagent operation without a call has no toolCallId key', () {
+      final items = [item('1', 'A', owner: const TaskOwner('sub_k3f9a1c2'))];
+      final event = TaskListChanged(
+        s,
+        items: items,
+        change: TaskChange(
+          op: 'assign',
+          actor: const SubagentActor('sub_k3f9a1c2'),
+          changed: items,
+          deleted: const [],
+        ),
+      );
+
+      final change =
+          ((project(event).single['_meta']! as Map)['codelab']!
+                  as Map)['taskChange']!
+              as Map;
+      expect(change['actor'], 'sub_k3f9a1c2');
+      expect(change, isNot(contains('toolCallId')));
     });
 
     // §17.16.5: `description` в ACP не уходит; порядок entries — порядок
@@ -159,6 +239,32 @@ void main() {
       ]);
       expect(entries.every((e) => !e.containsKey('description')), isTrue);
       expect(frames.toString(), isNot(contains('long text')));
+    });
+
+    // «Реплей плана без taskChange» (D35): с `replay: true` у `plan` нет
+    // `_meta` вовсе, entries с `_meta.codelab.task` остаются.
+    test('a replayed plan has no taskChange', () {
+      final event = TaskListChanged(
+        s,
+        items: [item('1', 'A')],
+        change: TaskChange(
+          op: 'update',
+          actor: const MainActor(),
+          toolCallId: 'call_7',
+          changed: [item('1', 'A')],
+          deleted: const [],
+        ),
+      );
+
+      final frame = projectEvent(
+        event,
+        configOptions: () => const [],
+        replay: true,
+      ).single.toJson();
+
+      expect(frame, isNot(contains('_meta')));
+      final entry = (frame['entries']! as List).single as Map;
+      expect(entry['_meta'], isNotNull);
     });
 
     // ACP-6: строка таблицы §13.7 существует и называет `plan`.

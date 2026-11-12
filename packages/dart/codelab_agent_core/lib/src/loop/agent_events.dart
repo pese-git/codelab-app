@@ -5,6 +5,7 @@ import '../llm/usage.dart';
 import '../permissions/modes.dart';
 import '../tools/agent_tool.dart';
 import '../tools/pairing.dart';
+import '../tools/tasks/task_list.dart';
 import 'loop_config.dart';
 import 'turn_budget.dart';
 
@@ -175,28 +176,22 @@ final class StepEnded extends AgentEvent {
   final StepResult result;
 }
 
-enum PlanPriority { high, medium, low }
+/// Список задач изменился (`agent-core/17-16-task-list.md` §17.16.2; change
+/// `add-subagents-and-tasks`, D13): заменяет `PlanUpdated`.
+///
+/// Почему весь список: ACP `plan` клиент только заменяет, поэтому [items] —
+/// список целиком после операции, а [change] — что именно изменилось (запись
+/// журнала `task`, TSK-1). Приходит до `ToolCallFinished` вызова, который его
+/// вызвал.
+final class TaskListChanged extends AgentEvent {
+  TaskListChanged(
+    super.sessionId, {
+    required List<TaskItem> items,
+    required this.change,
+  }) : items = List.unmodifiable(items);
 
-enum PlanStatus { pending, inProgress, completed }
-
-final class PlanEntry {
-  const PlanEntry({
-    required this.content,
-    required this.priority,
-    required this.status,
-  });
-
-  final String content;
-  final PlanPriority priority;
-  final PlanStatus status;
-}
-
-/// `update_plan` replaced the plan.
-final class PlanUpdated extends AgentEvent {
-  PlanUpdated(super.sessionId, {required List<PlanEntry> entries})
-    : entries = List.unmodifiable(entries);
-
-  final List<PlanEntry> entries;
+  final List<TaskItem> items;
+  final TaskChange change;
 }
 
 /// The mode of the session changed (level of `AgentSession`); it applies

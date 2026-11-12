@@ -134,6 +134,7 @@ export 'src/session/session_store.dart';
 export 'src/session/slug.dart';
 export 'src/session/summary.dart';
 export 'src/tools/agent_tool.dart';
+export 'src/tools/tasks/task_list.dart';
 export 'src/tools/schema_shape.dart' show schemaKeywordViolations;
 export 'src/util/canonical_json.dart' show canonicalJson;
 export 'src/util/clock.dart' show Clock, ClockTimer, SystemClock;

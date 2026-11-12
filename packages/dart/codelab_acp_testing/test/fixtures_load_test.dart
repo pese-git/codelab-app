@@ -157,6 +157,15 @@ void main() {
     expect(roles['acp/session-load-legacy-plan'], {FixtureRole.agent});
   });
 
+  // «acp/initialize-capabilities SHALL остаться вариантом "клиент без _meta"
+  // с ролью agent»: блок объявлений ответа зависит от клиента (D9).
+  test('initialize-capabilities is the agent-only no-_meta variant', () {
+    final fixture = corpus.singleWhere(
+      (f) => f.id == 'acp/initialize-capabilities',
+    );
+    expect(fixture.roles, {FixtureRole.agent});
+  });
+
   // «acp/prompt-update-plan SHALL остаться в корпусе только с ролью client»:
   // у Dart-агента инструмента update_plan больше нет.
   test('prompt-update-plan is played by the client role only', () {

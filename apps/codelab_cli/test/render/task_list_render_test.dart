@@ -146,6 +146,9 @@ void main() {
     test('on ansi it is one dim line without a status icon and a time', () {
       final r = renderer();
       r.render(_view(const [ops]));
+      // Последнюю операцию может дополнить следующая, поэтому строка
+      // печатается, когда за ней пришло другое или кончился ход.
+      r.finishTurn();
 
       expect(out.toString(), '${_dim}Tasks #1–#4 added to the plan$_reset\n');
     });
@@ -153,6 +156,7 @@ void main() {
     test('on plain it is the text without escape sequences', () {
       final r = renderer(surface: OutputSurface.plain);
       r.render(_view(const [ops]));
+      r.finishTurn();
 
       expect(out.toString(), 'Tasks #1–#4 added to the plan\n');
     });
@@ -161,6 +165,7 @@ void main() {
       final r = renderer();
       r.render(_view(const [ops]));
       r.render(_view(const [ops]));
+      r.finishTurn();
 
       expect('Tasks #1–#4'.allMatches(out.toString()), hasLength(1));
     });

@@ -107,6 +107,24 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
       approval != null || secondary != null || output.isNotEmpty;
 }
 
+/// Тихая строка операций со списком задач: иконка списка и короткий текст.
+///
+/// Почему: создание и закрытие задач — служебные шаги, а не работа, которую
+/// стоит показывать рамкой с тегом «Done» (D27 change
+/// `add-subagents-and-tasks`, артборд 30; spec agent-workbench-ui «Тихие
+/// строки операций со списком задач»).
+///
+/// Для чего: [text] целиком собирает kit (`TaskOpsItem`, «Tasks #1–#4 added to
+/// the plan»); виджет его не разбирает. Неуспешный вызов сюда не попадает —
+/// он остаётся обычным [CodeLabToolCallRow].
+final class CodeLabTaskOpsRow extends CodeLabTranscriptRow {
+  const CodeLabTaskOpsRow({required this.id, required this.text});
+
+  @override
+  final String id;
+  final String text;
+}
+
 /// Тяжесть заметки в ленте (design D6).
 enum CodeLabNoticeSeverity { error, warning, info }
 

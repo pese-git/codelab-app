@@ -6,7 +6,7 @@
     "11-Agent Plan.md#updating-plans",
     "15-Extensibility.md#the-_meta-field"
   ],
-  "description": "Модель три раза вызывает task_create, затем task_update первого пункта в completed и task_list; агент присылает четыре plan, каждый со всем списком на момент операции и _meta.codelab.task (id, owner, blockedBy) у каждой entry; после task_list нового plan нет; ход завершается end_turn.",
+  "description": "Модель три раза вызывает task_create, затем task_update первого пункта в completed и task_list; агент присылает четыре plan, каждый со всем списком на момент операции и _meta.codelab.task (id, owner, blockedBy) у каждой entry и _meta.codelab.taskChange (op, actor, toolCallId своего вызова, changed, deleted) у самого plan; после task_list нового plan нет; ход завершается end_turn.",
   "goals": [
     "C-20",
     "C-05"
@@ -175,9 +175,7 @@
           "update": {
             "sessionUpdate": "tool_call",
             "toolCallId": "call_1",
-            "title": {
-              "$any": "Create task"
-            },
+            "title": "Create task",
             "kind": "think",
             "status": "pending",
             "rawInput": {
@@ -227,7 +225,20 @@
                   }
                 }
               }
-            ]
+            ],
+            "_meta": {
+              "codelab": {
+                "taskChange": {
+                  "op": "create",
+                  "actor": "main",
+                  "toolCallId": "call_1",
+                  "changed": [
+                    "1"
+                  ],
+                  "deleted": []
+                }
+              }
+            }
           }
         }
       },
@@ -269,9 +280,7 @@
           "update": {
             "sessionUpdate": "tool_call",
             "toolCallId": "call_2",
-            "title": {
-              "$any": "Create task"
-            },
+            "title": "Create task",
             "kind": "think",
             "status": "pending",
             "rawInput": {
@@ -335,7 +344,20 @@
                   }
                 }
               }
-            ]
+            ],
+            "_meta": {
+              "codelab": {
+                "taskChange": {
+                  "op": "create",
+                  "actor": "main",
+                  "toolCallId": "call_2",
+                  "changed": [
+                    "2"
+                  ],
+                  "deleted": []
+                }
+              }
+            }
           }
         }
       },
@@ -377,9 +399,7 @@
           "update": {
             "sessionUpdate": "tool_call",
             "toolCallId": "call_3",
-            "title": {
-              "$any": "Create task"
-            },
+            "title": "Create task",
             "kind": "think",
             "status": "pending",
             "rawInput": {
@@ -457,7 +477,20 @@
                   }
                 }
               }
-            ]
+            ],
+            "_meta": {
+              "codelab": {
+                "taskChange": {
+                  "op": "create",
+                  "actor": "main",
+                  "toolCallId": "call_3",
+                  "changed": [
+                    "3"
+                  ],
+                  "deleted": []
+                }
+              }
+            }
           }
         }
       },
@@ -499,9 +532,7 @@
           "update": {
             "sessionUpdate": "tool_call",
             "toolCallId": "call_4",
-            "title": {
-              "$any": "Update task"
-            },
+            "title": "Update task #1",
             "kind": "think",
             "status": "pending",
             "rawInput": {
@@ -579,7 +610,20 @@
                   }
                 }
               }
-            ]
+            ],
+            "_meta": {
+              "codelab": {
+                "taskChange": {
+                  "op": "update",
+                  "actor": "main",
+                  "toolCallId": "call_4",
+                  "changed": [
+                    "1"
+                  ],
+                  "deleted": []
+                }
+              }
+            }
           }
         }
       },
@@ -621,9 +665,7 @@
           "update": {
             "sessionUpdate": "tool_call",
             "toolCallId": "call_5",
-            "title": {
-              "$any": "List tasks"
-            },
+            "title": "List tasks",
             "kind": "think",
             "status": "pending",
             "rawInput": {}

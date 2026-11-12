@@ -74,6 +74,11 @@ final class HeadlessRunner {
   /// Вызовы инструментов и заметки, уже выведенные в stderr.
   final _reported = <String>{};
 
+  /// Операция со списком задач, ещё способная расти (последняя): строка
+  /// печатается, когда за ней пришёл другой видимый элемент или кончился ход,
+  /// как придержка в REPL (D27).
+  TaskOpsItem? _pendingOps;
+
   /// Одобрения, на которые политика уже ответила.
   final _decided = <ApprovalRequestId>{};
 
@@ -193,6 +198,7 @@ final class HeadlessRunner {
       // Последняя ревизия могла прийти синхронно с ответом: выводим её до
       // итога, чтобы ответ не потерял хвост.
       _onView(session.current);
+      _flushTaskOps();
       if (!_endsWithNewline) {
         _stdout.writeln();
       }
@@ -244,6 +250,17 @@ final class HeadlessRunner {
     }
   }
 
+  /// Строка операций со списком задач в stderr, один раз на элемент.
+  void _flushTaskOps() {
+    final ops = _pendingOps;
+    if (ops == null) {
+      return;
+    }
+    _pendingOps = null;
+    _reported.add(ops.id);
+    _stderr.writeln(sanitizeTerminalText(ops.text));
+  }
+
   void _onView(SessionView view) {
     _decideApprovals(view);
     for (final item in view.transcript) {
@@ -254,6 +271,7 @@ final class HeadlessRunner {
         case AgentTextItem(:final id, :final text):
           final printed = _printed[id] ?? 0;
           if (text.length > printed) {
+            _flushTaskOps();
             final delta = text.substring(printed);
             _stdout.write(delta);
             _printed[id] = text.length;
@@ -265,6 +283,7 @@ final class HeadlessRunner {
           if (status == null || !_isFinal(status) || !_reported.add(id)) {
             continue;
           }
+          _flushTaskOps();
           final command = details?.command;
           _stderr.writeln(
             sanitizeTerminalText(
@@ -273,6 +292,7 @@ final class HeadlessRunner {
           );
         case NoticeItem(:final id):
           if (_reported.add(id)) {
+            _flushTaskOps();
             _noticePrinted = true;
             _stderr.writeln(
               sanitizeTerminalText('codelab: ${noticeText(item)}'),
@@ -281,6 +301,13 @@ final class HeadlessRunner {
         case UserItem() || ThoughtItem():
           // Мысли модели в headless не выводятся (`09-11`, H-01).
           continue;
+        case TaskOpsItem(:final id):
+          if (_pendingOps != null && _pendingOps!.id != id) {
+            _flushTaskOps();
+          }
+          if (!_reported.contains(id)) {
+            _pendingOps = item;
+          }
       }
     }
   }

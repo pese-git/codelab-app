@@ -89,4 +89,18 @@ void main() {
     expect(ready.codelabExtensions.tasks, isFalse);
     expect(ready.codelabExtensions.subagentsMaxDepth, isNull);
   });
+
+  test('a non-integer version (1.0) is not accepted', () async {
+    final ready = await connect(
+      const AgentCapabilities(
+        meta: {
+          'codelab': {
+            'tasks': {'version': 1.0},
+          },
+        },
+      ),
+    );
+
+    expect(ready.codelabExtensions.tasks, isFalse);
+  });
 }

@@ -67,6 +67,7 @@ import '../tools/builtin/read.dart';
 import '../tools/builtin/skill.dart';
 import '../tools/executor.dart';
 import '../tools/registry.dart';
+import '../tools/tasks/task_list.dart';
 import '../util/logger.dart';
 import '../util/result.dart';
 import '../host/host_profile.dart';
@@ -511,7 +512,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
           id,
         );
       }
-      session._restoreHistory();
+      await session._restoreHistory();
       final base = _agentBaseOf(snapshot, scope.applied.catalog);
       await session._restoreAgent(
         restored.config['agent'],
@@ -1369,7 +1370,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
       mcp.cancel.token.throwIfCancelled();
       throw const CancelledException(ShutdownCancel());
     }
-    final tools = ToolServices(clock: services.clock, logger: logger);
+    // Список задач дерева; публикация задаётся ниже, когда есть `Agent`.
+    final taskList = SessionTaskList(logger: logger, sessionId: id.value);
+    final tools = ToolServices(
+      clock: services.clock,
+      logger: logger,
+      tasks: taskList,
+    );
     final gate = profile.isOn(HostCapability.interactiveApproval)
         ? ports.gate ?? services.gate
         : null;
@@ -1446,11 +1453,11 @@ final class AgentRuntimeImpl implements AgentRuntime {
       ),
       tools: sessionRegistry.tools,
     );
-    // План эмитится через очередь агента: PlanUpdated приходит подписчикам
-    // между ToolCallStarted и ToolCallFinished своего вызова (design.md
-    // этапа 2, D5).
-    tools.plan.publish = (entries) =>
-        agent.emit(PlanUpdated(id, entries: entries));
+    // Список эмитится через очередь агента: TaskListChanged приходит
+    // подписчикам между ToolCallStarted и ToolCallFinished своего вызова
+    // (TSK-1; design.md этапа 2, D5; change `add-subagents-and-tasks`, D13).
+    taskList.publish = (items, change) =>
+        agent.emit(TaskListChanged(id, items: items, change: change));
     session = _Session(
       id: id,
       cwd: cwd,
@@ -3743,16 +3750,25 @@ final class _Session implements AgentSession {
   }
 
   /// Транскрипт и план из журнала после ремонта (§8.7).
-  void _restoreHistory() {
+  ///
+  /// Список задач восстанавливается из ветки журнала без публикации и без
+  /// записи (`agent-core/17-16-task-list.md` §17.16.6, TSK-6, D29): клиент
+  /// получит его реплеем.
+  Future<void> _restoreHistory() async {
     final snapshot = _writer.snapshot;
     _agent.replaceTranscript(
       _withModel(buildLlmContext(snapshot, logger: _logger).messages),
     );
-    final plan = pathToLeaf(snapshot).whereType<PlanRecord>().lastOrNull;
-    if (plan != null) {
-      _tools.plan.restore(plan.entries);
-    }
+    final state = buildTaskList(snapshot, logger: _logger);
+    await _tools.tasks.restore(
+      state.items,
+      nextId: state.nextId,
+      announce: false,
+    );
   }
+
+  @override
+  TaskList get tasks => _tools.tasks;
 
   /// Ответы своей модели получают полную ссылку: журнал хранит только
   /// провайдера и id (§2.2).

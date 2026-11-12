@@ -30,7 +30,10 @@ const projectionTable = <Type, String>{
   ToolCallFinished: 'tool_call_update, completed or failed with outcome',
   ToolPairingRepaired: 'not sent',
   StepEnded: 'not sent',
-  PlanUpdated: 'plan',
+  // Список задач целиком, у entry `_meta.codelab.task`; `op: restore` (список
+  // новой ветки, D29) проецируется так же (agent-acp-server «Проекция
+  // субагентов и списка задач»).
+  TaskListChanged: 'plan',
   ModeChanged: 'current_mode_update and config_option_update',
   AgentError: 'not sent: the turn result carries the failure',
   ContextCompacted: 'not sent',
@@ -42,11 +45,15 @@ const projectionTable = <Type, String>{
 /// Кадры события [event]; пустой список — событие не передаётся.
 ///
 /// [configOptions] — текущий снимок опций сессии для
-/// `config_option_update`. `switch` исчерпывающий без `default`: новый
-/// подтип `AgentEvent` не компилируется без своей строки (ACP-6).
+/// `config_option_update`. [replay] — кадр уходит при `session/load`: у `plan`
+/// тогда нет `_meta.codelab.taskChange`, потому что реплей показывает
+/// состояние, а не операцию (design.md change `add-subagents-and-tasks`,
+/// D35). `switch` исчерпывающий без `default`: новый подтип `AgentEvent` не
+/// компилируется без своей строки (ACP-6).
 List<acp.SessionUpdate> projectEvent(
   AgentEvent event, {
   required List<acp.SessionConfigOption> Function() configOptions,
+  bool replay = false,
 }) => switch (event) {
   TurnStarted() ||
   StepStarted() ||
@@ -88,14 +95,42 @@ List<acp.SessionUpdate> projectEvent(
     ),
   ],
   ToolCallFinished() => [_finished(event)],
-  PlanUpdated(:final entries) => [
+  TaskListChanged(:final items, :final change) => [
     acp.SessionUpdate.plan(
+      // Привязка операции к вызову `task_*` без эвристики порядка кадров
+      // (D35, §17.16.5): уходит всегда, как `_meta.codelab.task`; `toolCallId`
+      // опускается у `restore`, `assign` и изменений не от вызова.
+      meta: replay
+          ? null
+          : {
+              'codelab': {
+                'taskChange': {
+                  'op': change.op,
+                  'actor': change.actor.wire,
+                  'toolCallId': ?change.toolCallId,
+                  'changed': [for (final item in change.changed) item.id],
+                  'deleted': change.deleted,
+                },
+              },
+            },
       entries: [
-        for (final entry in entries)
+        for (final item in items)
           acp.PlanEntry(
-            content: entry.content,
-            priority: acp.PlanEntryPriority.values.byName(entry.priority.name),
-            status: acp.PlanEntryStatus.values.byName(entry.status.name),
+            // `description` в ACP не уходит (§17.16.5).
+            content: item.subject,
+            priority: acp.PlanEntryPriority.values.byName(item.priority.name),
+            status: acp.PlanEntryStatus.fromJson(item.status.wire),
+            // Расширение `task` (§13.12, change `add-subagents-and-tasks`):
+            // уходит всегда, независимо от объявления клиента (D9).
+            meta: {
+              'codelab': {
+                'task': {
+                  'id': item.id,
+                  'owner': item.owner.value,
+                  'blockedBy': item.blockedBy,
+                },
+              },
+            },
           ),
       ],
     ),

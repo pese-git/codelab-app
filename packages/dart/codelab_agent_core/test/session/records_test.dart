@@ -94,11 +94,11 @@ void main() {
 
     expect(
       [for (final e in plan.entries) e.status],
-      [PlanStatus.completed, PlanStatus.inProgress, PlanStatus.pending],
+      [TaskStatus.completed, TaskStatus.inProgress, TaskStatus.pending],
     );
     expect(
       [for (final e in plan.entries) e.priority],
-      [PlanPriority.high, PlanPriority.medium, PlanPriority.low],
+      [TaskPriority.high, TaskPriority.medium, TaskPriority.low],
     );
   });
 

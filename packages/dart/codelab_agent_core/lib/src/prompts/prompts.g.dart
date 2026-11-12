@@ -142,11 +142,29 @@ abstract final class Prompts {
     text:
         'Load a skill by name and receive its instructions. Use it when the task matches a skill listed in the Skills section of the system prompt. The result also lists the files that belong to the skill; read them with the file tools only when the instructions refer to them.',
   );
-  static const toolDescriptionsUpdatePlan = PromptTemplate(
-    id: 'tool_descriptions.update_plan',
+  static const toolDescriptionsTaskCreate = PromptTemplate(
+    id: 'tool_descriptions.task_create',
     vars: {},
     text:
-        'Replace the whole work plan shown to the user. Send every entry each time; keep one entry in_progress.',
+        'Add an item to the task list shown to the user. Optional: description, priority, blocked_by (ids\nthat must be completed first). Returns the new id.',
+  );
+  static const toolDescriptionsTaskGet = PromptTemplate(
+    id: 'tool_descriptions.task_get',
+    vars: {},
+    text:
+        'Show one task list item by id with the items it blocks and the ones blocking it.',
+  );
+  static const toolDescriptionsTaskList = PromptTemplate(
+    id: 'tool_descriptions.task_list',
+    vars: {},
+    text:
+        'List all task list items. Call it after the conversation context was compacted to learn the\ncurrent state of the list.',
+  );
+  static const toolDescriptionsTaskUpdate = PromptTemplate(
+    id: 'tool_descriptions.task_update',
+    vars: {},
+    text:
+        'Change one task list item by id; pass only changed fields. Set status in_progress when you\nstart it, completed when done, deleted to remove it. blocked_by replaces the whole list.\nKeep exactly one item in_progress.',
   );
   static const toolDescriptionsWrite = PromptTemplate(
     id: 'tool_descriptions.write',
@@ -175,19 +193,19 @@ abstract final class Prompts {
     text:
         '# Finding files\n\n- Use ls to see a directory and search to find text in files; do not run shell commands for\n  this.\n- ls shows at most {{limit}} entries; narrow the path when the list is cut.\n- search skips version control, build and hidden directories. Narrow a broad search with the\n  path or glob arguments instead of reading many files.',
   );
-  static const toolsPlan = PromptTemplate(
-    id: 'tools.plan',
-    vars: {},
-    tools: {'update_plan'},
-    text:
-        '# Plan\n\nFor a task with three or more steps, keep a plan with the update_plan tool: create it at the\nstart, mark an item in_progress when you start it and completed when it is done. Simple\nquestions need no plan.',
-  );
   static const toolsRead = PromptTemplate(
     id: 'tools.read',
     vars: {'maxLines', 'maxKb'},
     tools: {'read'},
     text:
         '# Reading files\n\n- Read a file before you change it or make claims about it.\n- read returns at most {{maxLines}} lines or {{maxKb}} KB. When the output says how to\n  continue, call read again with that offset instead of guessing the rest.\n- Line numbers in the output ("12| text") are not part of the file: do not copy them into\n  edits.',
+  );
+  static const toolsTasks = PromptTemplate(
+    id: 'tools.tasks',
+    vars: {},
+    tools: {'task_create'},
+    text:
+        '# Task list\n\nFor work with three or more steps, keep a task list with the task_create tool: create an item\nfor each step at the start, mark an item in_progress when you start it and completed when it\nis done. Simple questions need no list.',
   );
   static const all = <String, PromptTemplate>{
     'agent_profile': agentProfile,
@@ -212,12 +230,15 @@ abstract final class Prompts {
     'tool_descriptions.read': toolDescriptionsRead,
     'tool_descriptions.search': toolDescriptionsSearch,
     'tool_descriptions.skill': toolDescriptionsSkill,
-    'tool_descriptions.update_plan': toolDescriptionsUpdatePlan,
+    'tool_descriptions.task_create': toolDescriptionsTaskCreate,
+    'tool_descriptions.task_get': toolDescriptionsTaskGet,
+    'tool_descriptions.task_list': toolDescriptionsTaskList,
+    'tool_descriptions.task_update': toolDescriptionsTaskUpdate,
     'tool_descriptions.write': toolDescriptionsWrite,
     'tools.edit': toolsEdit,
     'tools.exec': toolsExec,
     'tools.listing': toolsListing,
-    'tools.plan': toolsPlan,
     'tools.read': toolsRead,
+    'tools.tasks': toolsTasks,
   };
 }

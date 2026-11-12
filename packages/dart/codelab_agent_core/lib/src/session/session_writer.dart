@@ -2,6 +2,7 @@ import '../commands/expand_command.dart' show CommandRef;
 import '../llm/messages.dart';
 import '../loop/agent_events.dart';
 import '../tools/agent_tool.dart';
+import '../tools/tasks/task_list.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
 import '../util/logger.dart';
@@ -140,15 +141,22 @@ final class SessionWriter {
             modeId: mode.value,
           ),
         );
-      case PlanUpdated(:final entries):
-        await _write(
-          (id, parent, at) => PlanRecord(
-            id: id,
-            parentId: parent,
-            timestamp: at,
-            entries: entries,
-          ),
-        );
+      case TaskListChanged(:final change):
+        // Восстановление списка не операция: состояние выводится из ветки
+        // журнала, запись продублировала бы её (TSK-1, D29).
+        if (change.op != TaskChange.restoreOp) {
+          await _write(
+            (id, parent, at) => TaskRecord(
+              id: id,
+              parentId: parent,
+              timestamp: at,
+              op: change.op,
+              actor: change.actor,
+              items: change.changed,
+              deleted: change.deleted,
+            ),
+          );
+        }
       case SessionTitleChanged(:final title):
         await _write(
           (id, parent, at) => SessionInfoRecord(

@@ -110,13 +110,15 @@ void main() {
       var frame = _frame(model);
       expect(frame, contains(_show));
       expect(frame, isNot(contains(_hide)));
-      expect(frame.where((l) => l.contains('#1 [completed]')), isEmpty);
+      // План остаётся и в транскрипте, поэтому строка пункта одна — не в
+      // блоке (spec codelab-tui: блок добавляется, а не заменяет план).
+      expect(frame.where((l) => l.contains('#1 [completed]')), hasLength(1));
       expect(frame.where((l) => l.contains('> draft')), hasLength(1));
 
       model = _press(model, const SpecialKey(Key.ctrlT));
       frame = _frame(model);
       expect(frame, contains(_hide));
-      expect(frame.where((l) => l.contains('#4 [pending]')), hasLength(1));
+      expect(frame.where((l) => l.contains('#4 [pending]')), hasLength(2));
       expect(frame.where((l) => l.contains('> draft')), hasLength(1));
     });
 
@@ -157,9 +159,35 @@ void main() {
         styles: const tea.HelpStyles(),
       );
 
-      // Подпись клавиши берётся из `Key.label` (`Ctrl+T`); сравнение без
-      // учёта регистра, чтобы тест не диктовал написание метки.
-      expect(hintLine(help).toLowerCase(), contains('ctrl+t tasks'));
+      // В нижнем регистре, как в заголовке блока (spec codelab-tui, D26).
+      final line = hintLine(help);
+      expect(line, contains('ctrl+t tasks'));
+      // Подсказка стоит сразу после `PgUp scroll`, через разделитель ` · `.
+      expect(line, contains('PgUp scroll · ctrl+t tasks'));
+    });
+
+    test('at 80 columns the real hint line keeps PgUp scroll', () {
+      final help = tea.HelpModel.fromKeyMap(
+        RegistryKeyMap(),
+        title: '',
+        styles: const tea.HelpStyles(),
+      );
+      final (model, _) = reduce(
+        TuiModel.initial(
+          profile: 'default',
+          size: const TerminalSize(columns: 80, rows: 30),
+        ),
+        SessionViewMsg(
+          SessionView(revision: 1, status: SessionStatusView.idle),
+          at: _t0,
+        ),
+      );
+
+      // `_fitHints` отбрасывает пункты с конца: `PgUp scroll` не должен
+      // выпасть на 80 колонках раньше `ctrl+t tasks`.
+      final frame = render(model, TuiChrome(hints: hintLine(help), now: _t0));
+      final hints = frame.lines.map(_plain).toList()[frame.lines.length - 2];
+      expect(hints, contains('PgUp scroll'));
     });
   });
 

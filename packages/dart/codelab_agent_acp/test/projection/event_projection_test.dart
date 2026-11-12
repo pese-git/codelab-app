@@ -205,30 +205,73 @@ void main() {
       });
     });
 
-    test('PlanUpdated → plan with every entry', () {
-      final event = PlanUpdated(
+    test('TaskListChanged → plan with every item and its task meta', () {
+      final items = [
+        TaskItem(
+          id: '1',
+          subject: 'Read',
+          priority: TaskPriority.high,
+          status: TaskStatus.completed,
+        ),
+        TaskItem(
+          id: '2',
+          subject: 'Edit',
+          description: 'not for the wire',
+          status: TaskStatus.inProgress,
+          owner: const TaskOwner('sub_k3f9a1c2'),
+          blockedBy: const ['1'],
+        ),
+      ];
+      final event = TaskListChanged(
         s,
-        entries: const [
-          PlanEntry(
-            content: 'Read',
-            priority: PlanPriority.high,
-            status: PlanStatus.completed,
-          ),
-          PlanEntry(
-            content: 'Edit',
-            priority: PlanPriority.medium,
-            status: PlanStatus.inProgress,
-          ),
-        ],
+        items: items,
+        change: TaskChange(
+          op: 'update',
+          actor: const MainActor(),
+          changed: [items.last],
+          deleted: const [],
+        ),
       );
 
       expect(project(event), [
         {
           'sessionUpdate': 'plan',
           'entries': [
-            {'content': 'Read', 'priority': 'high', 'status': 'completed'},
-            {'content': 'Edit', 'priority': 'medium', 'status': 'in_progress'},
+            {
+              'content': 'Read',
+              'priority': 'high',
+              'status': 'completed',
+              '_meta': {
+                'codelab': {
+                  'task': {'id': '1', 'owner': 'main', 'blockedBy': <String>[]},
+                },
+              },
+            },
+            {
+              'content': 'Edit',
+              'priority': 'medium',
+              'status': 'in_progress',
+              '_meta': {
+                'codelab': {
+                  'task': {
+                    'id': '2',
+                    'owner': 'sub_k3f9a1c2',
+                    'blockedBy': ['1'],
+                  },
+                },
+              },
+            },
           ],
+          '_meta': {
+            'codelab': {
+              'taskChange': {
+                'op': 'update',
+                'actor': 'main',
+                'changed': ['2'],
+                'deleted': <String>[],
+              },
+            },
+          },
         },
       ]);
     });

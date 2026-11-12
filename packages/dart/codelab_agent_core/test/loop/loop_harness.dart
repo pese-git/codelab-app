@@ -3,7 +3,6 @@ import 'package:codelab_agent_core/src/loop/agent_loop.dart';
 import 'package:codelab_agent_core/src/loop/loop_config.dart';
 import 'package:codelab_agent_core/src/tools/executor.dart';
 import 'package:codelab_agent_core/src/tools/misuse.dart';
-import 'package:codelab_agent_core/src/tools/plan_service.dart';
 import 'package:codelab_agent_core/src/tools/registry.dart';
 import 'package:codelab_agent_core/testing.dart';
 
@@ -60,7 +59,7 @@ final class LoopHarness {
     final registry = ToolRegistry();
     tools.forEach(registry.register);
     final logger = RecordingLogger();
-    final plan = PlanService();
+    final tasks = SessionTaskList();
     final approvalWait = ApprovalWaitMeter();
     final executor = ToolCallExecutor(
       registry: registry,
@@ -68,7 +67,7 @@ final class LoopHarness {
       services: ToolServices(
         clock: clock,
         logger: logger,
-        plan: plan,
+        tasks: tasks,
         approvalWait: approvalWait,
       ),
     );
@@ -85,8 +84,8 @@ final class LoopHarness {
       approvalWait,
     );
     h.scripted = scripted;
-    plan.publish = (entries) =>
-        h.events.add(PlanUpdated(session, entries: entries));
+    tasks.publish = (items, change) =>
+        h.events.add(TaskListChanged(session, items: items, change: change));
     return h;
   }
 
@@ -207,7 +206,7 @@ String describe(AgentEvent e) => switch (e) {
     'ToolCallFinished($toolCallId ${outcome.name})',
   ToolPairingRepaired() => 'ToolPairingRepaired',
   StepEnded(:final result) => 'StepEnded(${result.stepIndex})',
-  PlanUpdated() => 'PlanUpdated',
+  TaskListChanged() => 'TaskListChanged',
   ModeChanged(:final mode) => 'ModeChanged(${mode.value})',
   AgentError(:final cls, :final errorClass) =>
     'AgentError(${cls.name}${errorClass == null ? '' : ' ${errorClass.name}'})',

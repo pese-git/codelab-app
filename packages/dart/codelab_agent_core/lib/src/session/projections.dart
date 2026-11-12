@@ -18,6 +18,7 @@ import '../loop/agent_events.dart';
 import '../permissions/modes.dart';
 import '../prompts/prompts.g.dart';
 import '../tools/agent_tool.dart';
+import '../tools/tasks/task_list.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
 import '../util/logger.dart';
@@ -225,8 +226,6 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
         events
           ..add(MessageStarted(session, message: shown))
           ..add(MessageEnded(session, message: shown));
-      case PlanRecord(:final entries):
-        events.add(PlanUpdated(session, entries: entries));
       case ModeChangeRecord(:final modeId):
         if (ModeId.values.where((m) => m.value == modeId).firstOrNull
             case final mode?) {
@@ -249,7 +248,93 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
         break;
     }
   }
+  // Реплей плана (`agent-core/17-16-task-list.md` §17.16.6): после истории
+  // уходит один снимок списка активной ветки, если список непуст или в ветке
+  // была хоть одна запись task/plan — иначе клиент, продолжающий показывать
+  // прежний список, не узнал бы, что он опустел. Это не операция модели:
+  // `op: restore`, журнал его не пишет.
+  final path = pathToLeaf(snapshot, logger: logger);
+  final state = buildTaskList(snapshot, logger: logger);
+  if (state.items.isNotEmpty ||
+      path.any((r) => r is TaskRecord || r is PlanRecord)) {
+    events.add(
+      TaskListChanged(
+        session,
+        items: state.items,
+        change: TaskChange(
+          op: TaskChange.restoreOp,
+          actor: const MainActor(),
+          changed: state.items,
+          deleted: const [],
+        ),
+      ),
+    );
+  }
   return events;
+}
+
+/// Список задач и счётчик id из журнала (`agent-core/17-16-task-list.md`
+/// §17.16.6; change `add-subagents-and-tasks`, D12, D29).
+///
+/// Почему чистая функция над снимком: список выводится из журнала
+/// детерминированно, поэтому после `session/load` и смены ветки он равен
+/// списку до закрытия (TSK-6, TSK-7), а восстановление ничего не пишет.
+///
+/// Что считается: `items` — свёртка записей **активной ветки** по порядку
+/// (`task` вставляет или заменяет пункты и убирает `deleted`; запись `plan`
+/// старого формата заменяет весь список пунктами «1»…«n» с `owner: main`);
+/// `nextId` — максимум id, выданных во **всём журнале** (все ветки: `items` и
+/// `deleted` записей `task`, число entries записей `plan`), плюс 1. Счётчик
+/// по одной ветке выдал бы снова id, занятый на покинутой ветке (TSK-3).
+({List<TaskItem> items, int nextId}) buildTaskList(
+  SessionSnapshot snapshot, {
+  Logger? logger,
+}) {
+  // Dart-словарь хранит порядок вставки: замена пункта оставляет его место.
+  final items = <TaskId, TaskItem>{};
+  for (final record in pathToLeaf(snapshot, logger: logger)) {
+    switch (record) {
+      case TaskRecord(items: final changed, :final deleted):
+        for (final item in changed) {
+          items[item.id] = item;
+        }
+        deleted.forEach(items.remove);
+      case PlanRecord(:final entries):
+        items.clear();
+        for (final (i, entry) in entries.indexed) {
+          items['${i + 1}'] = TaskItem(
+            id: '${i + 1}',
+            subject: entry.content,
+            status: entry.status,
+            priority: entry.priority,
+          );
+        }
+      default:
+        break;
+    }
+  }
+  var issued = 0;
+  void note(TaskId id) {
+    final n = int.tryParse(id);
+    if (n != null && n > issued) {
+      issued = n;
+    }
+  }
+
+  for (final record in snapshot.records) {
+    switch (record) {
+      case TaskRecord(items: final changed, :final deleted):
+        changed.map((i) => i.id).forEach(note);
+        deleted.forEach(note);
+      case PlanRecord(:final entries):
+        if (entries.length > issued) {
+          issued = entries.length;
+        }
+      default:
+        break;
+    }
+  }
+  return (items: List.unmodifiable(items.values), nextId: issued + 1);
 }
 
 ToolOutcome _outcome(String? outcome, ToolResultMessage result) =>

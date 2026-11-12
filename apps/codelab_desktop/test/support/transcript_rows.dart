@@ -16,7 +16,8 @@ extension TranscriptRowForTests on CodeLabTranscriptRow {
   String get text => switch (this) {
     CodeLabUserRow(:final text) ||
     CodeLabAgentTextRow(:final text) ||
-    CodeLabThoughtRow(:final text) => text,
+    CodeLabThoughtRow(:final text) ||
+    CodeLabTaskOpsRow(:final text) => text,
     CodeLabToolCallRow(:final label, :final detail) => [
       label,
       detail,
@@ -30,6 +31,7 @@ extension TranscriptRowForTests on CodeLabTranscriptRow {
     CodeLabThoughtRow() => 'thought',
     CodeLabToolCallRow() => 'tool',
     CodeLabNoticeRow() => 'notice',
+    CodeLabTaskOpsRow() => 'task-ops',
   };
 
   CodeLabTranscriptApproval? get approval => switch (this) {
