@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Порт файлов навыков
-Ядро SHALL объявлять порт `SkillFilesSource` с методом `loadSkills(SkillFilesQuery)` и необязательное поле `AgentCoreServices.skillFiles` (design.md change `add-agent-skills`, D1). Запрос: канонический `cwd` сессии, `projectTrusted` (тот же расчёт, что у файлов проекта: без раскрытого `realpath` проект недоверенный), элементы `skills.extra_roots` в порядке конфига, токен отмены. Результат `SkillFiles` содержит для каждого найденного `SKILL.md` сырой frontmatter, результат его разбора с позициями (`ConfigTree`) или ошибку разбора, признак `repaired` (разбор удался после починки; диагностику `yaml_repaired` по нему даёт ядро), тело, канонический каталог навыка, область (`ExtensionScope`), номер корня в порядке приоритета, относительные пути сопутствующих файлов с признаком неполного списка, и список `ExtensionDiagnostic`.
+Ядро SHALL объявлять порт `SkillFilesSource` с методом `loadSkills(SkillFilesQuery)` и необязательное поле `AgentCoreServices.skillFiles` (design.md change `add-agent-skills`, D1). Запрос: канонический `cwd` сессии, `projectTrusted` (тот же расчёт, что у файлов проекта: без раскрытого `realpath` проект недоверенный), элементы `skills.extra_roots` в порядке конфига, токен отмены. Результат `SkillFiles` содержит для каждого найденного `SKILL.md` frontmatter, разобранный хостом, с позициями (`ConfigTree`) или ошибки разбора с позициями файла, признак `repaired` (разбор удался после починки; диагностику `yaml_repaired` по нему даёт ядро), тело, канонический каталог навыка, область (`ExtensionScope`), номер корня в порядке приоритета, относительные пути сопутствующих файлов с признаком неполного списка, и список `ExtensionDiagnostic`.
 
 Реализация SHALL жить в `codelab_agent_io` (`ProjectFilesLoader` реализует оба порта). Порт НЕ SHALL бросать исключений для ошибок файлов. Рантайм SHALL вызывать порт при открытии и загрузке сессии отдельной фазой, параллельно с фазой файлов проекта, со своим таймаутом 5 с и общей отменой:
 - отмена (`close()` сессии, `dispose()` рантайма) — сессия НЕ SHALL создаваться, результат выбрасывается;
@@ -21,13 +21,13 @@
 Загрузчик SHALL искать навыки — подкаталоги первого уровня с файлом `SKILL.md` — в корнях трёх уровней (design.md change `add-agent-skills`, D3; решения пользователя Q13, Q21, Q22):
 1. **`project`** — только если проект доверенный. Уровни каталогов от канонического `cwd` вверх до корня git-репозитория (поиск корня — как у инструкций проекта, capability `agent-project-context`, «Поиск инструкций проекта»; без репозитория — только `cwd`); на каждом уровне — `<уровень>/.codelab/skills`, затем `<уровень>/.agents/skills`. Ближний к `cwd` уровень SHALL перекрывать дальний. У недоверенного проекта каждый существующий корень даёт одну диагностику `info` `untrusted_project` и не читается.
 2. **`user`** — `$CODELAB_HOME/skills`, затем `~/.agents/skills` (домашний каталог пользователя процесса агента).
-3. **`extra`** — элементы `skills.extra_roots` по порядку; абсолютный путь — как есть, относительный — от `cwd` и только для доверенного проекта, иначе `warning` `untrusted_project`.
+3. **`extra`** — элементы `skills.extra_roots` по порядку; абсолютный путь — как есть; `~` и `~/…` SHALL раскрываться в домашний каталог пользователя процесса агента и считаться абсолютными, а без домашнего каталога (`--llm-script`) такой элемент НЕ SHALL читаться и SHALL давать `warning` `unresolved_root` (решение Q41); относительный — от `cwd` и только для доверенного проекта, иначе `warning` `untrusted_project`.
 
 Диагностика `untrusted_project` SHALL иметь два уровня, и это осознанно: у корней проекта — `info` (ожидаемое состояние недоверенного репозитория; `config check` печатает его строкой `note:`), у относительного элемента `skills.extra_roots` — `warning` (пользователь явно задал корень, который в этом проекте не действует, — это ошибка настройки).
 
 Каталоги конкретных агентов (`.claude/skills`, `~/.codex/skills` и подобные) загрузчик НЕ SHALL обходить, если пути нет в `skills.extra_roots`. Каталоги на `.`, файл `SKILL.md` прямо в корне и записи корня, не являющиеся каталогами, SHALL пропускаться без диагностики. Подкаталогов в одном корне читается не больше 1000 (лишние — `warning` `limit_exceeded`).
 
-Порядок приоритета — порядок корней выше. Навык с именем, уже загруженным из корня выше, SHALL пропускаться с диагностикой `warning` `shadowed`, называющей оба пути, — и между уровнями, и внутри уровня; внутри одного корня побеждает первый каталог в байтовом порядке имён.
+Порядок приоритета — порядок корней выше; загрузчик SHALL отдавать все найденные навыки в этом порядке и НЕ SHALL сам решать коллизии имён. Коллизию SHALL решать ядро при построении каталога (требование «Каталог навыков сессии»; решение Q39): имя навыка — значение `name`, без него — имя каталога; навык, пропущенный с `error`, ничего не перекрывает; навык с именем, уже принятым из корня выше, SHALL пропускаться с диагностикой `warning` `shadowed`, называющей оба пути, — и между уровнями, и внутри уровня; внутри одного корня побеждает первый каталог в байтовом порядке имён.
 
 Граница чтения SHALL быть двухступенчатой (design.md change `add-agent-project-files`, D2): каталог корня раскрывается `realpath`; каталог навыка, чей `realpath` вне корня, пропускается с `outside_root`; `SKILL.md` и перечисление файлов идут через `BoundedEnv` с корнем в реальном пути каталога навыка. Чтение SHALL идти с файловой системы процесса агента, а не через env сессии ACP.
 
@@ -50,6 +50,18 @@
 #### Scenario: Проект перекрывает пользователя с предупреждением
 - **WHEN** навык `release-notes` есть в `<cwd>/.codelab/skills` доверенного проекта и в `$CODELAB_HOME/skills`
 - **THEN** загружен проектный, у пользовательского — `warning` `shadowed`, строка видна в `config check`
+
+#### Scenario: Битый навык выше ничего не перекрывает
+- **WHEN** доверенный проект содержит `<cwd>/.codelab/skills/release/SKILL.md` без `description`, а `$CODELAB_HOME/skills/release/SKILL.md` валиден
+- **THEN** загружен пользовательский `release`; у проектного — `error` `missing_description`, диагностики `shadowed` нет
+
+#### Scenario: Коллизия по полю name
+- **WHEN** в `$CODELAB_HOME/skills` каталоги `a` и `b` оба задают `name: notes`
+- **THEN** загружен навык из `a`; у `b` — `warning` `name_mismatch` и `warning` `shadowed` с обоими путями
+
+#### Scenario: Тильда в extra_roots
+- **WHEN** глобальный конфиг задаёт `skills.extra_roots: ["~/.claude/skills"]`, проект недоверенный, а в `~/.claude/skills/lint/SKILL.md` есть навык; во втором варианте агент запущен с `--llm-script`
+- **THEN** в первом варианте `lint` загружен с областью `extra`; во втором навыка нет, есть `warning` `unresolved_root`
 
 #### Scenario: Symlink каталога навыка наружу
 - **WHEN** `$CODELAB_HOME/skills/evil` — symlink на `/etc`
@@ -306,7 +318,7 @@
 ### Requirement: Конфигурация навыков
 Раздел `skills` SHALL иметь ключи с потребителем (design.md change `add-agent-skills`, D11):
 - `enabled` (bool, `true`) — `false` сужает capability `skills` до `off`;
-- `extra_roots` (список путей, `[]`) — элемент со схемой `<scheme>://` SHALL быть проблемой `value` (`URI schemes are not supported in skills.extra_roots`);
+- `extra_roots` (список путей, `[]`) — элемент со схемой `<scheme>://` SHALL быть проблемой `value` (`URI schemes are not supported in skills.extra_roots`); элемент `~user/…` (тильда с именем пользователя) SHALL быть проблемой `value` (`~user is not supported in skills.extra_roots; use an absolute path or ~/`; решение Q41);
 - `disabled` (список имён, `[]`);
 - `max_skills` (int, `200`, 1–1000);
 - `catalog_max_chars` (int, `8000`, 1000–64000);
@@ -314,7 +326,7 @@
 
 Подраздел `skills.operative` SHALL оставаться без потребителя: каждый явно заданный лист — `config.key.not_applied`.
 
-Доверие проектным слоям: `skills.enabled: false`, `skills.disabled`, уменьшение числовых ключей SHALL применяться из любого слоя; увеличение из проектного слоя — отброшено с `config.project.untrusted_key`; `skills.extra_roots` из `<cwd>/.codelab/config.yaml` SHALL отбрасываться всегда, из `<cwd>/.codelab/config.local.yaml` — если проект не доверенный; оба — с `config.project.untrusted_key`. В реестре настроек ключи `skills.*` SHALL быть `fileOnly`. Новые значения после перезагрузки конфигурации SHALL действовать на сессии, открытые после неё.
+Доверие проектным слоям: `skills.enabled: false`, `skills.disabled`, уменьшение числовых ключей SHALL применяться из любого слоя; увеличение из проектного слоя недоверенного проекта SHALL отбрасываться с `config.project.untrusted_key` по ключу (сравнение — с итогом нижних слоёв), а у доверенного проекта — применяться (решение Q40; как `budget.*` и `tools.project_context.max_bytes`); `skills.extra_roots` из `<cwd>/.codelab/config.yaml` SHALL отбрасываться всегда, из `<cwd>/.codelab/config.local.yaml` — если проект не доверенный; оба — с `config.project.untrusted_key`. В реестре настроек ключи `skills.*` SHALL быть `fileOnly`. Новые значения после перезагрузки конфигурации SHALL действовать на сессии, открытые после неё.
 
 #### Scenario: Проект не даёт согласия
 - **WHEN** доверенный проект задаёт `skills.extra_roots: ["~/.claude/skills"]` в `.codelab/config.yaml`
@@ -322,6 +334,14 @@
 
 #### Scenario: Схема зарезервирована
 - **WHEN** глобальный конфиг задаёт `skills.extra_roots: ["builtin://pdf"]`
+- **THEN** проблема `value` с ключом `skills.extra_roots[0]`, `CoreConfig` не построен
+
+#### Scenario: Пределы недоверенного и доверенного проекта
+- **WHEN** `.codelab/config.yaml` задаёт `skills.max_skills: 500`; в первом варианте проекта нет в `trusted_projects`, во втором — есть
+- **THEN** в первом варианте `max_skills` равен значению нижних слоёв и есть `config.project.untrusted_key` с ключом `skills.max_skills`; во втором — `500` без предупреждения
+
+#### Scenario: Тильда с именем пользователя
+- **WHEN** глобальный конфиг задаёт `skills.extra_roots: ["~bob/skills"]`
 - **THEN** проблема `value` с ключом `skills.extra_roots[0]`, `CoreConfig` не построен
 
 #### Scenario: operative без потребителя

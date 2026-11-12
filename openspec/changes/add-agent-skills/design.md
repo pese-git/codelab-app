@@ -39,7 +39,7 @@
 
 ### D1. Порт: отдельный `SkillFilesSource`, реализация в `ProjectFilesLoader`
 
-Ядро объявляет порт `SkillFilesSource.loadSkills(SkillFilesQuery)` и необязательное поле `AgentCoreServices.skillFiles`. Запрос: канонический `cwd`, `projectTrusted` (fail-closed, тот же расчёт, что у файлов проекта), элементы `skills.extra_roots`, токен отмены. Результат `SkillFiles {skills: List<SkillFile>, diagnostics}`; `SkillFile` — текст `SKILL.md` (frontmatter и тело), канонический каталог, область, номер корня в порядке приоритета, относительные пути сопутствующих файлов.
+Ядро объявляет порт `SkillFilesSource.loadSkills(SkillFilesQuery)` и необязательное поле `AgentCoreServices.skillFiles`. Запрос: канонический `cwd`, `projectTrusted` (fail-closed, тот же расчёт, что у файлов проекта), элементы `skills.extra_roots`, токен отмены. Результат `SkillFiles {skills: List<SkillFile>, diagnostics}`; `SkillFile` — разобранный хостом frontmatter (или ошибки разбора) и тело `SKILL.md`, канонический каталог, область, номер корня в порядке приоритета, относительные пути сопутствующих файлов.
 
 Реализует порт тот же класс `ProjectFilesLoader`: общие граница, лимиты, чтение UTF-8. Хост кладёт один объект в оба поля; `serve --ws` — ни в одно (D3). Рантайм запускает две фазы открытия сессии **параллельно**, каждую со своим таймаутом 5 с и общей отменой: медленный корень навыков не отнимает у сессии `AGENTS.md`. Таймаут фазы навыков — сессия без навыков, диагностика `timeout`; поздний результат выбрасывается. Порт не вызывается при выключенной capability `skills`.
 
@@ -47,7 +47,7 @@
 
 ### D2. Разделение хост / ядро
 
-Хост читает: перечисляет корни и подкаталоги, читает `SKILL.md` через `BoundedEnv` каталога навыка, отделяет frontmatter, перечисляет сопутствующие файлы. Разбор frontmatter для навыков — мягкий (D4), поэтому хост отдаёт и сырой текст frontmatter, и результат разбора с позициями, а одна попытка починки выполняется в хосте (YAML — не дело ядра, CFG-5). Ядро проверяет поля, применяет `skills.disabled`, `max_skills`, приоритет и строит неизменяемый снимок `SkillCatalog {skills, diagnostics}` чистой функцией `parseSkills(files, settings)`. `SkillCatalog` содержит только навыки: шаблоны в коде живут отдельно (`List<CommandTemplate>`), сведение их в один тип — переписывание рабочего кода (`AGENTS.md` §19).
+Хост читает: перечисляет корни и подкаталоги, читает `SKILL.md` через `BoundedEnv` каталога навыка, отделяет frontmatter, перечисляет сопутствующие файлы. Разбор frontmatter для навыков — мягкий (D4): хост отдаёт результат разбора с позициями (`ConfigTree`) или ошибки разбора с позициями файла, а одна попытка починки выполняется в хосте (YAML — не дело ядра, CFG-5); сырой текст frontmatter ядру не передаётся — ядро YAML не разбирает, а лишнее поле с текстом файла только повышает риск попадания фрагментов в логи. Ядро проверяет поля, применяет `skills.disabled`, `max_skills`, приоритет и строит неизменяемый снимок `SkillCatalog {skills, modelVisible, diagnostics}` чистой функцией `parseSkills(files, settings, rules: …)`: правила разрешений конфигурации (`PolicyRules`) нужны для `modelVisible` (D7, agent-skills «Каталог навыков сессии»). `SkillCatalog` содержит только навыки: шаблоны в коде живут отдельно (`List<CommandTemplate>`), сведение их в один тип — переписывание рабочего кода (`AGENTS.md` §19). Точные типы и сигнатуры — D16.
 
 ### D3. Корни, приоритет, доверие и хосты (решения Q13, Q21, Q22)
 
@@ -57,11 +57,11 @@
 |---|---|---|---|
 | 1…2k | на каждом уровне каталогов от `cwd` вверх до корня git-репозитория (без репозитория — только `cwd`), ближний первым: `<уровень>/.codelab/skills`, затем `<уровень>/.agents/skills` | `project` | только доверенный проект |
 | далее | `$CODELAB_HOME/skills`, затем `~/.agents/skills` (домашний каталог процесса, а не `$CODELAB_HOME`) | `user` | всегда, кроме `--llm-script` |
-| далее | элементы `skills.extra_roots` по порядку | `extra` | согласие пользователя; относительный путь — от `cwd` и только для доверенного проекта |
+| далее | элементы `skills.extra_roots` по порядку | `extra` | согласие пользователя; `~` и `~/…` — от домашнего каталога процесса, как абсолютный (Q41); относительный путь — от `cwd` и только для доверенного проекта |
 
 Источники: руководство (§«Where to scan») советует сканировать собственный каталог клиента и общий `.agents/skills` в проекте и у пользователя, допускает подъём к корню git для монорепозиториев и предлагает пускать проектные навыки только для доверенной папки (§«Trust considerations»); CC и OC читают свои и общие каталоги без отдельного вопроса (Q13). Подъём до корня git и «ближний перекрывает дальний» — как у `AGENTS.md` (Q22; поиск корня — общий с `agent-project-context` «Поиск инструкций проекта», не больше 64 уровней). Доверие — по правилу файлов проекта: признак `projectTrusted` канонического `cwd` (fail-closed) открывает или закрывает весь уровень `project`. `.claude/skills`, `~/.codex/skills` и прочие каталоги конкретных агентов — только через `skills.extra_roots` (строка E-06 матрицы уточнена).
 
-Конфликт имён: побеждает корень с меньшим номером в таблице, внутри корня — первый каталог в байтовом порядке. Проигравший — **`warning` `shadowed`** с обоими путями и между уровнями, и внутри уровня (Q21: перекрытие должно быть видно в `config check`; руководство §«Handling name collisions» — предупреждать при коллизии).
+Конфликт имён решает ядро (`parseSkills`) по имени навыка (`name`, без него — имя каталога) после мягкой проверки; навык, пропущенный с `error`, ничего не перекрывает (решение Q39): побеждает корень с меньшим номером в таблице, внутри корня — первый каталог в байтовом порядке. Проигравший — **`warning` `shadowed`** с обоими путями и между уровнями, и внутри уровня (Q21: перекрытие должно быть видно в `config check`; руководство §«Handling name collisions» — предупреждать при коллизии).
 
 **Приоритет `skills.extra_roots`** (решение Q31): и абсолютные, и относительные (`.claude/skills`) элементы стоят ниже своих корней — проекта, затем пользователя. `extra_roots` в первую очередь подключают каталоги других агентов, и свой каталог должен быть выше чужого. Сравнение (пересказ первоисточников пользователя): OpenCode тоже ставит каталоги совместимости (`.claude`, `.agents`) ниже своих (`packages/core/src/skill.ts`, `plugin/internal.ts`, `config/plugin/compatibility.ts`); Codex победителя не выбирает и оставляет обе копии (`codex-rs/ext/skills/src/loader/host_merge.rs`, `skills/src/selection.rs`); у Claude Code порядок «enterprise > personal > project» — пользователь выше проекта (документация skills, «Resolve skills that share a name»). CodeLab следует руководству agentskills.io и OpenCode: проект выше пользователя, ближний уровень выше дальнего, свой каталог выше чужого — и, в отличие от всех трёх, предупреждает о перекрытии (Q21).
 
@@ -143,7 +143,7 @@
 | Строка | Что требуется позже | Что делает этот change | Чего не делает |
 |---|---|---|---|
 | E-18 встроенные навыки, указатели | навыки из бинаря (`builtin://<name>`), ниже проекта и пользователя; файл-указатель | приоритет — номер корня в списке загрузчика, а не значение `enum`; `dir` в результате — непрозрачная строка; записи-не-каталоги в корне пропускаются молча; схема `<scheme>://` в `extra_roots` — проблема конфига; `readOnlyFs` внедряется и может стать составным | `ExtensionScope.builtin`, формат указателя, читатель `builtin://` — их добавит E-18; `switch` по `ExtensionScope` исчерпывающий |
-| E-19 без перезапуска | отпечаток каталога на границе шага, перечитывание, обновление промпта и `available_commands_update`, тело загруженного в ход навыка неизменно до конца хода | отдельный порт (D1); `SkillCatalog` — неизменяемый снимок в одном поле сессии, потребители читают его одним методом; секция промпта пересобирается на границе шага, как `mcp`; повторное приложение после сжатия (D15) берёт тело по имени и отпечатку | метод отпечатка, `CommandsChanged`, повторный `available_commands_update`; требование «Список команд … НЕ SHALL меняться до закрытия» остаётся — его изменит E-19 |
+| E-19 без перезапуска | отпечаток каталога на границе шага, перечитывание, обновление промпта и `available_commands_update`, тело загруженного в ход навыка неизменно до конца хода | отдельный порт (D1); `SkillCatalog` — неизменяемый снимок в одном поле сессии, потребители читают его одним методом `AgentSession.skills` (D16) и не кэшируют; секция промпта пересобирается на границе шага, как `mcp`; повторное приложение после сжатия (D15) берёт тело по имени и отпечатку | метод отпечатка, `CommandsChanged`, повторный `available_commands_update`; требование «Список команд … НЕ SHALL меняться до закрытия» остаётся — его изменит E-19 |
 | K-06 закреплённые строки | секция `Pinned directives` из правил `metadata.codelab-operative` активных навыков и `skills.operative.lines` | правила `metadata.codelab-operative` проверяются и хранятся в `SkillDefinition.operative` (Q32); список активных навыков — общая функция D15, по которой K-06 узнает, чьи строки закреплять | секция, бюджет, `skills.operative.*` (остаются `config.key.not_applied`) |
 
 **Принятая цена `enum` (Q12).** С E-19 смена набора `modelVisible` меняет схему `skill`, а значит определения инструментов: кэш промпта провайдера (L-13; у Anthropic метка стоит на последнем определении инструмента) сбрасывается один раз на изменение набора — так же, как при смене секции каталога. Смена описаний без смены имён схему не трогает. Это принято ради защиты от выдуманных имён.
@@ -152,7 +152,7 @@
 
 Ключи раздела `skills` с потребителем: `enabled` (`true`), `extra_roots` (`[]`; схема `<scheme>://` — проблема `value`), `disabled` (`[]`), `max_skills` (200, 1–1000), `catalog_max_chars` (8000, 1000–64000), `reattach.per_skill_tokens` (5000, 0–16384; `0` — без повторного приложения), `reattach.total_tokens` (25000, 0–200000; `0` — без повторного приложения). Значения по умолчанию повторного приложения — как у CC (Q6). `skills.operative.*` — без потребителя (`config.key.not_applied`); capability `skills` в `profile.<name>` — известная.
 
-Доверие проектным слоям: `enabled: false`, `disabled`, уменьшение числовых ключей — из любого слоя; увеличение из проектного слоя — `config.project.untrusted_key`; `extra_roots` в `config.yaml` проекта — всегда отброшен, в `config.local.yaml` — только для недоверенного проекта. Реестр настроек: все ключи `skills.*` — `fileOnly`. Новые значения действуют на сессии, открытые после перезагрузки.
+Доверие проектным слоям: `enabled: false`, `disabled`, уменьшение числовых ключей — из любого слоя; увеличение из проектного слоя недоверенного проекта — `config.project.untrusted_key` по ключу, сравнение — с итогом нижних слоёв, а не с умолчанием; доверенный проект увеличивать может (решение Q40; как `budget.*` и `tools.project_context.max_bytes`, `trust.dart`); элемент `extra_roots` на `~user` — проблема `value` (решение Q41); `extra_roots` в `config.yaml` проекта — всегда отброшен, в `config.local.yaml` — только для недоверенного проекта. Реестр настроек: все ключи `skills.*` — `fileOnly`. Новые значения действуют на сессии, открытые после перезагрузки.
 
 ### D12. Пакеты, зависимости, сторож, граф
 
@@ -163,7 +163,7 @@
 ### D13. Наблюдаемость
 
 - Диагностики навыков — событием `project_files.diagnostic` (путь, строка, столбец, код, фиксированный текст).
-- `skills.loaded {session_id, count, names, project}` (info).
+- `skills.loaded {session_id, count, names, project}` (info): `names` — имена каталога сессии в байтовом порядке (`SkillCatalog.skills`), `count` — их число, `project` — признак `projectTrusted` запроса, то есть «читались ли корни проекта» (то же поле и тот же смысл, что у `commands.loaded`). Пишется, когда фаза навыков завершилась результатом, в том числе с `count: 0`; при выключенной capability, без порта, при таймауте, исключении и отмене не пишется (D16).
 - `skill.activated {session_id, name, via: tool | command, repeated}` (info).
 - `skills.catalog.truncated {session_id, shortened, omitted}` (warning) — число укороченных описаний и опущенных строк.
 - `skills.reattached {session_id, names, dropped, truncated}` (info) после сжатия; `skills.reattach.changed {session_id, name}` (warning), если отпечаток не совпал (D15).
@@ -171,7 +171,7 @@
 
 ### D14. Итерации
 
-Один pull request из `feature/add-agent-skills` после закрытия ворот MVP; внутри — порядок `tasks.md`: документы (0), загрузка и конфигурация (1), модель (2), команды, повторная активация, журнал и фикстуры (3), сжатие (4), хосты и клиенты (5), закрытие (6). Если PR больше недели работы — итерации 1–2 и 3–6 двумя PR: после итерации 2 навыки видны модели — поведение целостное.
+Один pull request из `feature/add-agent-skills`; работа идёт параллельно с ночами ворот MVP, слияние в `develop` — не раньше трёх зелёных ночей подряд (Q3); внутри — порядок `tasks.md`: документы (0), загрузка и конфигурация (1), модель (2), команды, повторная активация, журнал и фикстуры (3), сжатие (4), хосты и клиенты (5), закрытие (6). Если PR больше недели работы — итерации 1–2 и 3–6 двумя PR: после итерации 2 навыки видны модели — поведение целостное.
 
 ### D15. Активные навыки и повторное приложение после сжатия (решения Q6, Q10)
 
@@ -196,6 +196,169 @@
 **Общий механизм с K-06.** K-06 берёт правила `metadata.codelab-operative` всех элементов `activeSkills` (и `full: true`, и `false`) — той же функцией; закреплённые строки K-06 живут в **последней секции системного промпта** (§17.2.7, SKL-10), а не в сообщении после резюме: общей у K-06 и приложения навыков остаётся только функция `activeSkills`, место у них разное. Новых записей журнала не нужно.
 
 *Альтернативы:* (а) не защищать (прежняя рекомендация Q6) — модель молча теряет инструкции; (б) исключить сообщения навыков из сжатия — хвост раздувается и ломает CMP-5; (в) писать тела в запись сжатия — дублирование в журнале и устаревание при правке файла.
+
+### D16. Контракт итерации 1: типы, порт, сигнатуры, тексты диагностик
+
+Закреплено 2026-11-12 по красным тестам итерации 1 (задачи 1.1, 1.3, 1.5, 1.6, 1.8, 1.10). Где предположение тестов согласуется с кодом и §17.2, оно принято; отличия перечислены в конце раздела. Тот же контракт — в `agent-core-architecture` §17.2.3.
+
+**Конфигурация** (`codelab_agent_core/lib/src/skills/skills_config.dart`, экспорт в барель; `config/` импортирует тип, как `loop/turn_budget.dart`):
+
+```dart
+final class SkillsConfig {
+  const SkillsConfig({this.enabled = true, this.extraRoots = const [], this.disabled = const [],
+      this.maxSkills = 200, this.catalogMaxChars = 8000,
+      this.reattachPerSkillTokens = 5000, this.reattachTotalTokens = 25000});
+  final bool enabled; final List<String> extraRoots, disabled;
+  final int maxSkills, catalogMaxChars, reattachPerSkillTokens, reattachTotalTokens;
+}
+// CoreConfig: final SkillsConfig skills; параметр конструктора skills = const SkillsConfig()
+// HostCapability.skills — после mcp; ключ профиля `skills`; on во всех трёх профилях
+```
+
+`skills.enabled: false` выключает capability в `buildAgentCore` так же, как `compaction.enabled: false`: `CapabilityOff('выключено конфигом')`, причина видна в `CorePlan.offReasons`. `skills.operative` остаётся непрозрачным узлом (`config.key.not_applied` на каждый лист), в реестре настроек — один `fileOnly`-дескриптор с текстом разделов после MVP; листья `skills.*` — `fileOnly` с причиной «skills are configured in the config file». `CoreConfig.withoutProject.skills` — значения без проектных слоёв, как у остальных разделов.
+
+**Порт** (`codelab_agent_core/lib/src/skills/skill_files.dart`, экспорт в барель):
+
+```dart
+final class SkillFilesQuery {
+  const SkillFilesQuery({required this.cwd, required this.projectTrusted,
+      this.extraRoots = const [], required this.cancel});
+  final String cwd;                 // канонический корень сессии
+  final bool projectTrusted;        // тот же расчёт, что у ProjectFilesQuery (fail-closed)
+  final List<String> extraRoots;    // skills.extra_roots в порядке конфига, как записаны
+  final CancelToken cancel;
+}
+final class SkillFile {
+  const SkillFile({required this.dir, required this.scope, required this.rootIndex,
+      this.frontmatter, this.parseErrors = const [], this.repaired = false,
+      required this.body, required this.bodyLine,
+      this.companions = const [], this.companionsTruncated = false});
+  final String dir;                 // realpath каталога навыка; «имя каталога» — его последний сегмент
+  String get path => '$dir/SKILL.md';
+  final ExtensionScope scope;
+  final int rootIndex;              // номер корня, см. ниже; ядро сравнивает только порядок
+  final ConfigTree? frontmatter;    // null — frontmatter нет или он не разобран и после починки
+  final List<ExtensionDiagnostic> parseErrors;   // error syntax/profile с позициями файла; непуст ⇒ frontmatter == null
+  final bool repaired;              // разбор удался после починки; yaml_repaired выдаёт ядро
+  final String body; final int bodyLine;          // тело как в файле (LF), обрезку делает ядро
+  final List<String> companions;    // пути от dir через '/', байтовый порядок, ≤ 50
+  final bool companionsTruncated;
+}
+final class SkillFiles {
+  const SkillFiles({this.skills = const [], this.diagnostics = const []});
+  static const empty = SkillFiles();
+  final List<SkillFile> skills;     // по возрастанию rootIndex, внутри корня — байтовый порядок имён записей
+  final List<ExtensionDiagnostic> diagnostics;   // диагностики корней и файлов, не ставших SkillFile
+}
+abstract interface class SkillFilesSource { Future<SkillFiles> loadSkills(SkillFilesQuery query); }
+// AgentCoreServices.skillFiles: SkillFilesSource? (null — навыков нет)
+```
+
+- **`rootIndex`** — позиция корня (с нуля) в списке, который строит шаг 1 алгоритма §17.2.4: уровни проекта (только для доверенного проекта), `$CODELAB_HOME/skills`, `~/.agents/skills`, затем элементы `extra_roots`. Номер получает каждый корень списка, существует ли каталог или нет: так номер одного корня не зависит от того, есть ли соседние, а та же функция списка корней даёт и защищаемые пути PERM-11 (D9). Корень, пропущенный по доверию (относительный `extra_roots` недоверенного проекта, уровни проекта без доверия), номера не получает. Ядро использует номер только для порядка (стабильная сортировка по `rootIndex`, внутри — порядок списка); значения в журнал и логи не пишутся (D10: место для корня `builtin` в конце).
+- **Что в `parseErrors`, а что в `diagnostics`.** Ошибка разбора frontmatter — в `SkillFile.parseErrors`: ядро переносит её в диагностики каталога и пропускает навык, зная, какой навык не загрузился. Файл, который не стал `SkillFile` (`too_large` > 128 КиБ, `not_utf8`, `outside_root`), и диагностики корней (`untrusted_project`, `limit_exceeded`) — в `SkillFiles.diagnostics`.
+- **Перекрытие имён** — в ядре по имени навыка (поле `name`, без него — имя каталога) после мягкой проверки, как в §17.2.4 и в `parseCommandTemplates`: загрузчик отдаёт все найденные навыки и `shadowed` не выдаёт. Решение Q39 (а).
+
+**Реализация в `codelab_agent_io`:**
+
+```dart
+ProjectFilesLoader({required String? home, String? userHome, required LocalExecutionEnv local})
+    implements ProjectFilesSource, SkillFilesSource;   // .testing(...) получает тот же userHome
+MarkdownRead readMarkdownFile(String text, {required String path, required ExtensionScope scope,
+    bool repairYaml = false});                         // MarkdownRead.repaired: bool, по умолчанию false
+ConfigCommands({…, @visibleForTesting SkillFilesSource? skillFiles,
+    @visibleForTesting Duration skillFilesTimeout = const Duration(seconds: 5)});
+```
+
+- Элементы `extraRoots` (решение Q41): `~` и `~/…` раскрываются в `userHome` и считаются абсолютными; без `userHome` такой элемент не читается — `warning` `unresolved_root`; `~user/…` до загрузчика не доходит — его отвергает проверка конфига (`value`).
+- `home` — `$CODELAB_HOME` (`null` — `$CODELAB_HOME/skills` и шаблоны пользователя не читаются); `userHome` — домашний каталог пользователя процесса для `~/.agents/skills` (`null` — не читается). Хосты передают `userHomeOf(environment)` из `config_loader.dart` (`HOME`, затем `USERPROFILE`) — ту же функцию, которой загрузчик конфига раскрывает `~`; `--llm-script` передаёт `null` в оба поля. `config check` берёт `userHomeOf(options.environment)`: это тот же процесс и то же окружение, что у хоста, поэтому вывод совпадает с тем, что увидит сессия (agent-skills «Навыки в хостах»: «домашний каталог процесса»).
+- `repairYaml: true` передаёт только загрузчик навыков; шаблоны и определения агентов остаются строгими (`false` по умолчанию). При неудаче после починки — диагностики исходного разбора (позиции исходного файла).
+- `ConfigCommands.check` запускает фазы файлов проекта и навыков параллельно, у каждой свой таймаут; навыки — только при `config.skills.enabled` (профили хостов `check` не знает). Источник по умолчанию — тот же объект `ProjectFilesLoader`, что для файлов проекта. Строки: сначала строки файлов проекта, затем строки `[...SkillFiles.diagnostics, ...parseSkills(files, config.skills, rules: config.permissions.rules).diagnostics]` по общему правилу (`warning:` для `error`/`warning`, `note:` для `untrusted_project` уровня `info`, прочие `info` молчат). Таймаут — `warning: <cwd>: skills were not read within <N> s` (`N` — `skillFilesTimeout.inSeconds`, как у файлов проекта), исключение — `warning: <cwd>: skills could not be read: <runtimeType>`.
+
+**Ядро: проверка и каталог** (`codelab_agent_core/lib/src/skills/skill_catalog.dart`, экспорт в барель):
+
+```dart
+final class SkillDefinition {
+  const SkillDefinition({...});
+  final String name;                 // из name или имя каталога (missing_name)
+  final String description;          // схлопнутые пробельные последовательности, без краевых; полная длина
+  final String? argumentHint, compatibility;     // compatibility ≤ 500, пустое → null
+  final bool userInvocable, disableModelInvocation;
+  final List<String> operative;      // metadata.codelab-operative; до K-06 не применяется
+  final String body;                 // обрезанная форма D4
+  final String dir; final ExtensionScope scope;
+  String get path => '$dir/SKILL.md';
+  final List<String> companions; final bool companionsTruncated;
+  // String get fingerprint — SHA-256 body, добавит задача 4.2
+}
+final class SkillCatalog {
+  SkillCatalog({List<SkillDefinition> skills = const [], List<SkillDefinition> modelVisible = const [],
+      List<ExtensionDiagnostic> diagnostics = const []});   // копии List.unmodifiable
+  static final empty = SkillCatalog();
+  final List<SkillDefinition> skills;          // байтовый порядок name
+  final List<SkillDefinition> modelVisible;    // подпоследовательность skills
+  final List<ExtensionDiagnostic> diagnostics;
+  SkillDefinition? skill(String name);
+  List<SkillDefinition> get commands;          // userInvocable, порядок skills
+  // List<String> readOnlyRoots(String sessionRoot) — добавит задача 2.6
+}
+SkillCatalog parseSkills(SkillFiles files, SkillsConfig settings, {PolicyRules rules = const PolicyRules()});
+```
+
+Конструктор `SkillCatalog` открыт для тестов и хостов без файлов (как у `CommandTemplate`); в рабочем коде снимок строит только `parseSkills`. Имена после проверки ASCII (D4), поэтому `String.compareTo` совпадает с байтовым порядком.
+
+`modelVisible` — навыки без `disable-model-invocation`, для которых `rules.toolPolicies['skill'] != ToolPolicy.deny` и `!rules.denyPatterns.contains(PermissionKey('skill', name))` — та же проверка и тот же ключ, что в `PermissionPolicy._decide` (`permissionPattern` инструмента `skill` — имя, D7). Решения «всегда запрещать» сессии на `modelVisible` не влияют: снимок неизменяем (SKL-4), а такой вызов отклонит сама политика.
+
+`parseSkills` по шагам (§17.2.4):
+1. Стабильная сортировка файлов по `rootIndex`.
+2. Для файла: `parseErrors` не пуст — они переносятся в диагностики, навык пропущен; `frontmatter == null` — `error` `missing_frontmatter`, пропуск; имя не по грамматике команды — `error` `invalid_name`, пропуск; нет описания — `error` `missing_description`, пропуск; тело > 64 КиБ в UTF-8 — `error` `too_large`, пропуск. На первой причине пропуска проверка навыка останавливается: одна `error`, без предупреждений. Иначе — предупреждения D4 в порядке: `yaml_repaired`, поля frontmatter в порядке ключей файла, `empty_body`.
+3. Имя в `settings.disabled` — `info` `disabled`, пропуск.
+4. Имя уже принято — `warning` `shadowed`, пропуск (решение Q39).
+5. Принятых больше `maxSkills` — первые `maxSkills` в порядке приоритета остаются, на остальные — одна `warning` `limit_exceeded` с путём первого отброшенного.
+6. Сортировка по имени, `modelVisible`.
+
+Позиции: диагностика поля — позиция ключа (`frontmatter.positions` по `KeyPath`, для `metadata.codelab-operative` — вложенный путь); `empty_body` и `too_large` — строка `bodyLine`; `missing_*`, `yaml_repaired`, `disabled`, `shadowed`, `limit_exceeded` — без строки.
+
+Тексты (фиксированные, английские; имя ключа допускается только из известного набора полей, значение и неизвестный ключ — никогда):
+
+| Код | Уровень | Текст |
+|---|---|---|
+| `missing_frontmatter` | error | `SKILL.md has no YAML frontmatter; the skill is skipped` |
+| `invalid_name` (пропуск) | error | `the skill name must start with a Latin letter or a digit and contain only Latin letters, digits, "-" and "_", at most 128 characters; the skill is skipped` |
+| `invalid_name` (правило спецификации) | warning | `the skill name should be lowercase Latin letters, digits and single hyphens, at most 64 characters (Agent Skills)` |
+| `name_mismatch` | warning | `the skill name differs from its directory name; the name from the frontmatter is used` |
+| `missing_name` | warning | `the frontmatter has no name; the directory name is used` |
+| `missing_description` | error | `the skill has no description; the skill is skipped` |
+| `invalid_value` | warning | `"<key>" must be <правило>; <the default is used \| it is cut to <N> characters \| it is ignored>` — для `description` длиннее 1024: `"description" is longer than 1024 characters; the catalog shows the first 1024`; для `argument-hint`, `user-invocable`, `disable-model-invocation`, `compatibility`, `metadata.codelab-operative` — свои правила (код `invalid_value` — как у шаблонов, `parseCommandTemplates`) |
+| `unknown_key` | warning | `unknown frontmatter key; the skill is loaded` |
+| `empty_body` | warning | `the skill body is empty` |
+| `too_large` (ядро) | error | `the skill body is larger than 64 KiB; the skill is skipped` |
+| `yaml_repaired` | warning | `the frontmatter was parsed after quoting values that contain ": "; check the values` |
+| `not_applied` | info | `metadata.codelab-operative is recognized but not applied in this version` |
+| `disabled` | info | `the skill is disabled by skills.disabled` |
+| `shadowed` | warning | `the skill is shadowed by <путь SKILL.md победителя> with the same name` (путь — не фрагмент файла) |
+| `limit_exceeded` (ядро) | warning | `more skills than skills.max_skills; this and later skills are not loaded` |
+| `too_large` (хост) | error | `SKILL.md is larger than 128 KiB; the skill is skipped` |
+| `not_utf8` | warning (как у файлов проекта) | `SKILL.md is not valid UTF-8; the skill is skipped` |
+| `outside_root` | warning | `the skill directory resolves outside its root; the skill is skipped` |
+| `limit_exceeded` (хост, 1000 записей) | warning | `more than 1000 entries in the skills root; the rest are not read` |
+| `limit_exceeded` (хост, 64 уровня) | info (agent-project-context «Порт файлов проекта») | `more than 64 levels above the working directory; the search for the git root stops` |
+| `unresolved_root` | warning | `the skills root starts with ~ but the home directory is unknown; it is not read`; путь — элемент как записан |
+| `untrusted_project` (корень проекта) | info | `the project is not in trusted_projects; its skills are not read` (в `config check` — строка `note:` с общим текстом) |
+| `untrusted_project` (относительный `extra_roots`) | warning | `the project is not trusted; a relative skills.extra_roots entry is not read`; путь — корень, разрешённый от `cwd` |
+
+У недоверенного проекта `untrusted_project` получает каждый существующий корень проекта на всех уровнях от `cwd` до корня git.
+
+**Рантайм** (`runtime/agent_runtime.dart`):
+- Фаза `_loadSkills` — по образцу `_loadProjectFiles`, запускается одновременно с ней (`Future.wait` над двумя фазами) до подключения MCP; у каждой свой таймер 5 с на часах `services.clock` и свой дочерний `CancelTokenSource` от токена сессии. Отмена сессии или рантайма — `CancelledException` из `createSession`/`loadSession`, оба таймера сняты, поздние результаты выброшены. Таймаут — `project_files.diagnostic {code: timeout}` уровня warning с текстом `skills were not read within 5 s; the session has none`, токен порта отменён; исключение порта — `{code: unexpected}`, текст `skills could not be read: <runtimeType>`; в обоих случаях снимок пуст, фаза файлов проекта не затронута.
+- Порт не вызывается без `services.skillFiles` или при выключенной capability `skills` (профиль или `skills.enabled: false`).
+- Запрос: `cwd` — канонический корень сессии, `projectTrusted` — тот же расчёт, что у файлов проекта, `extraRoots` — `settings.skills.extraRoots` конфигурации сессии на момент открытия.
+- Снимок: `parseSkills(files, settings.skills, rules: settings.permissions.rules)`; диагностики порта и каталога — в `project_files.diagnostic` с уровнем по существующему правилу (`info` → debug); затем `skills.loaded` (D13).
+- **Метод доступа (D10):** `AgentSession.skills` → `SkillCatalog` — по образцу `AgentSession.agents`; `SkillCatalog.empty`, если навыков нет. Значение хранится в одном поле сессии; секция промпта, инструмент `skill`, команды `skill:*` и приложение после сжатия читают его только через этот геттер и не держат копий. В этом change поле не меняется до закрытия; E-19 заменит его на границе шага.
+- `loadSession` выполняет фазу заново для переданного `cwd`; перезагрузка конфигурации каталог живых сессий не меняет.
+
+**Отличия от предположений красных тестов** (правки тестов — в отчёте задачи и в `tasks.md`, 1.6):
+- `shadowed` выдаёт ядро, а не загрузчик (решение Q39): тесты загрузчика проверяют порядок `rootIndex` и наличие обоих навыков, а сценарии перекрытия — через `parseSkills` над результатом загрузчика или в `skill_catalog_test.dart`.
+- Остальные имена и сигнатуры тестов приняты без изменений.
 
 ## Risks / Trade-offs
 
@@ -245,12 +408,13 @@
 11. §7.6.1: пути хоста без корней навыков → Q9, Q16 (каталоги `prompts` и `agents` в коде и спецификации уже защищены — в первой версии design.md это было ошибочно названо пробелом); исключение для запуска скрипта навыка — Q24.
 12. §9.8: запись `compaction` без поля `skills` → ссылка на §17.2.7а.
 13. Спецификация `agent-configuration`, сценарий «Ключ без потребителя», — пример `skills.max_skills` заменён на `skills.operative.max_tokens` (дельта этого change).
+14. §17.2.3 (сверка с красными тестами итерации 1, 2026-11-12; D16): `SkillFile.frontmatterText`, `frontmatterError`/`errorLine`/`errorColumn`, `files`/`filesTruncated` → без сырого текста, `parseErrors: List<ExtensionDiagnostic>`, `companions`/`companionsTruncated`, `path` — геттер; `SkillDefinition.source`, `modelInvocable`, `files` → геттер `path`, `disableModelInvocation`, `companions`; `SkillCatalog.modelVisible(PermissionPolicy)` → поле, вычисленное `parseSkills(files, settings, rules:)` из `PolicyRules`; `ProjectFilesLoader` получает `userHome`, `readMarkdownFile` — `repairYaml`; метод доступа к снимку — `AgentSession.skills`. §15.3 и §15.4 — раздел `skills` применяется, ключи `reattach.*`, корни `.agents/skills`.
 
 ## Решения пользователя 2026-11-12
 
 - **Q1.** Навыки (E-06, Should) переносятся из пула 1.x (`delivery-roadmap.md` §6.2, пункт 9) в объём 1.0 (M4, §6.1) и делаются первой задачей сразу после ворот MVP M3 (итерация 4 change `switch-default-agent-to-dart`), до выпуска 9.4. Внесено (задача 0.1).
 - **Q2.** Архитектура всей группы навыков с самого начала, реализация — базовый E-06; E-18, E-19, K-06 — точки расширения без мёртвого кода (D10).
-- **Q3.** Change готовится сейчас, пока идут ночи ворот M3; реализация по TDD — после их закрытия.
+- **Q3** (пересмотрен пользователем 2026-11-12). Change готовится, пока идут ночи ворот M3. Реализация по TDD начинается сразу в ветке `feature/add-agent-skills`; pull request вливается в `develop` только после трёх зелёных ночей подряд (задачи 4.0–4.1 change `switch-default-agent-to-dart`), чтобы новый код не сорвал серию.
 - **Q4** (а). Результат активации содержит каталог и ограниченный список сопутствующих файлов без чтения; каталоги загруженных навыков — `readOnlyRoots`; запись в них отклоняется, а фраза «`cwd` команды в них отклоняется» заменена решениями Q17 (`cwd` разрешён при локальном исполнении) и Q26 (не советуется); скрипты — через `exec` с обычными разрешениями. Источник: руководство (разрешить чтение каталогов навыков), так же OC (D5).
 - **Q5** (а). Модельная активация — результат `skill`; `/skill:<name>` — сообщение пользователя; в обоих случаях тело без frontmatter, в теге навыка, теги в теле экранированы; тело — инструкция после гейтов доверия; правило «не отменяет безопасность и не даёт прав» (D7–D9).
 - **Q6.** После сжатия последние активации активных навыков прикладываются заново; лимит на навык и общий лимит — ключи конфига, по умолчанию как у CC (5000 и 25000 токенов); раньше выпадают старые активации; запись сжатия хранит только список активных навыков (имя, отпечаток); тело — из неизменного снимка; механизм общий с K-06. Источник: руководство (защищать содержимое навыков от сжатия) (D15, дельта `agent-compaction`).
@@ -287,9 +451,12 @@
 - **Q36** (уточняет Q25, Q34). E1 — только для обычного файла под `<dir>/scripts/` (имя каталога — по `specification.md`) без сегментов на `.`, `node_modules`, `site-packages`, `vendor`; исполняемый файл навыка, названный как известный интерпретатор (`<dir>/scripts/…/tsx`), подчиняется тем же опциям Q34; всё вне `scripts/` — обычный критический вопрос. Найденный обход: `<dir>/node_modules/.bin/shx cp /tmp/evil <dir>/references/a.md`, `prettier --write`, `.venv/bin/pip`, вложенный `tsx -e` — такие каталоги появляются после `setup.sh` навыка или `uv run` (D9).
 - **Q37** (уточняет Q34). E1 не действует, fail closed, при префиксном присваивании (`NAME=… python3 …`), `env NAME=…`, `env` с `-S`, `-i`, `-u` и при `export`, `declare`, `typeset`, `readonly`, `local NAME=…` раньше в той же строке; перечень переменных не ведётся. Найденный обход: `NODE_OPTIONS=… node <dir>/x.js`, `BASH_ENV`, `PERL5OPT`, `RUBYOPT`, `PYTHONPATH`, `ZDOTDIR`, `export …;` (D9).
 - **Q38** (уточняет Q29, Q35). E3 — только для файла под `<dir>/assets/` того же навыка без расширения `.md`; `references/`, `scripts/` и `SKILL.md` исключения E3 не получают никогда — по Q30 это доверенные инструкции, а `scripts/` — исполняемый код. Список опций вывода остаётся дополнительной эвристикой и расширен. Найденный обход: скрипт навыка, который правит файл на месте или пишет в позиционный выход, переписывал `references/*.md` без вопроса (D9).
+- **Q39** (а) (2026-11-12, после сверки красных тестов итерации 1). Перекрытие навыков (`shadowed`) выдаёт ядро в `parseSkills` по имени навыка — поле `name`, без него имя каталога, — после мягкой проверки; навык, пропущенный с `error`, ничего не перекрывает. Загрузчик отдаёт все найденные навыки и `shadowed` для навыков не выдаёт. Источники: §17.2.4, `parseCommandTemplates`, руководство Agent Skills §«Handling name collisions» («two skills share the same `name`»). Отвергнут вариант «в загрузчике по имени каталога»: битый навык выше скрывал бы рабочий ниже, а коллизии по `name` (`name_mismatch`) ядру всё равно пришлось бы решать (D3, D16).
+- **Q40** (а). Числовые ключи `skills.*` (`max_skills`, `catalog_max_chars`, `reattach.*`) из проектных слоёв ограничены только у недоверенного проекта: увеличение отбрасывается с `config.project.untrusted_key` по ключу, сравнение — с итогом нижних слоёв; доверенный проект может их увеличивать, в том числе из `.codelab/config.yaml`, — как `budget.*` и `tools.project_context.max_bytes` (§15.3). Пределы схемы действуют всегда (D11).
+- **Q41** (а). В `skills.extra_roots` `~` и `~/…` раскрываются загрузчиком в `userHome` и считаются абсолютными — как `CODELAB_HOME` и `trusted_projects` (D17 change `add-agent-project-files`); `~user/…` — проблема `value` конфигурации (`~user is not supported in skills.extra_roots; use an absolute path or ~/`); без `userHome` (`--llm-script`) элемент на `~` не читается и даёт `warning` `unresolved_root` с путём элемента (D3, D16).
 
 Технические решения по «мелочам» (2026-11-12): пометка `[more files not listed]` при неполном списке файлов (D5, D7); навык, запрещённый правилом разрешений `skill:<name>`, скрыт из каталога и `enum` (D7); нелатинское имя пропускается с диагностикой, называющей допустимые символы, — разбор команды ASCII (D4); выполнение навыка в субагенте — Non-Goals. Технические решения финальной сверки (2026-11-12): описание длиннее 1024 обрезается в каталоге (D4); тело обрезается по краям, от этой формы — `empty_body`, отпечаток и повтор (D4); чтение `SKILL.md` через `read` — не активация (D7); `activeSkills` — одна функция без замкнутого определения, перенос усечённых при следующем сжатии (D15); `untrusted_project` двух уровней — `info` для корней проекта (ожидаемое состояние недоверенного репозитория, в `config check` — строка `note:`), `warning` для относительного `extra_roots` (пользователь явно задал корень, который не может действовать); подсказку Q23 даёт инструмент `exec` до вызова env (D5); допущение «клиент stdio на той же машине» — в Risks.
 
 ## Open Questions
 
-Открытых вопросов нет: все вопросы решены пользователем 2026-11-12 (раздел выше).
+Открытых вопросов нет: Q1–Q41 решены пользователем 2026-11-12 (раздел выше).

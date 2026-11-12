@@ -56,7 +56,7 @@
 
 ## Impact
 
-- **Код (после ворот MVP, по `tasks.md`):**
+- **Код (по `tasks.md`; слияние в `develop` — после трёх зелёных ночей ворот MVP, Q3):**
   - `packages/dart/codelab_agent_core/lib/src/skills/` (новый каталог: типы, разбор, каталог, секция промпта), `tools/builtin/skill.dart`, `tools/builtin/exec.dart` (подсказка Q23 до вызова env), `tools/builtin/read.dart` (доверие файлов навыка, Q30), `commands/` (`SlashCommandSource.skill`, разворачивание `skill:`), `prompts/skills/*.md` и `prompts.g.dart`, `env/bounded_env.dart` (`readOnlyRoots`), `host/host_profile.dart` (capability `skills`), `host/services.dart` (порт `SkillFilesSource`, файловая система процесса агента), `config/` (раздел `skills`), `runtime/` (фаза загрузки, сборка инструментов и промпта), `session/` и `compaction/` (поле `compaction.skills`, приложение после резюме в `buildLlmContext`), `permissions/` (исключение для скрипта навыка), `commands/arguments.dart` (литерал `\$`);
   - `packages/dart/codelab_agent_io/lib/src/project/project_files_loader.dart` (реализация `SkillFilesSource`), `config/agent_config_paths.dart` (защищаемые корни навыков, Q9, Q16), `project/frontmatter.dart` (починка YAML), `cli/config_commands.dart` (`config check`);
   - `apps/codelab_agent/lib/src/host/agent_host.dart`, `packages/dart/codelab_embedded/lib/src/io/local_opener.dart` — передача порта и файловой системы процесса;
