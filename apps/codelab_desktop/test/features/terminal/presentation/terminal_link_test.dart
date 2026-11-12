@@ -217,6 +217,59 @@ void main() {
       );
     }, variant: _macOS);
 
+    testWidgets('диалог показывает нормализованный адрес, и порт получает '
+        'тот же Uri (Q21)', (tester) async {
+      final env = _Env();
+      await env.open(tester);
+      await env.printLink(
+        tester,
+        uri: 'https://example.com/a b/é',
+        text: 'docs',
+      );
+
+      await _cmdClick(tester);
+
+      final shown = tester
+          .widget<SelectableText>(
+            find.byKey(const ValueKey('terminal-link-address')),
+          )
+          .data;
+      expect(shown, 'https://example.com/a%20b/%C3%A9');
+
+      await tester.tap(_open);
+      await _frames(tester);
+
+      expect(env.opener.opened.map((u) => u.toString()), [shown]);
+    }, variant: _macOS);
+
+    testWidgets('адрес со скрытым символом bidi: в диалоге он закодирован, '
+        '«Open» нет, порт не вызывается (Q21)', (tester) async {
+      final env = _Env();
+      await env.open(tester);
+      await env.printLink(
+        tester,
+        uri: 'https://example.com/\u202Epath',
+        text: 'docs',
+      );
+
+      await _cmdClick(tester);
+
+      expect(_dialog, findsOneWidget);
+      expect(
+        find.descendant(
+          of: _dialog,
+          matching: find.text('https://example.com/%E2%80%AEpath'),
+        ),
+        findsOneWidget,
+      );
+      expect(_open, findsNothing);
+      expect(env.opener.opened, isEmpty);
+      expect(
+        _logged(env).where((l) => l.contains('terminal.link_refused')),
+        hasLength(1),
+      );
+    }, variant: _macOS);
+
     testWidgets('«Cancel» закрывает диалог и не вызывает порт', (tester) async {
       final env = _Env();
       await env.open(tester);

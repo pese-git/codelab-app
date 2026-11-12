@@ -473,6 +473,26 @@ void main() {
       expect(padding.bottom, greaterThan(0));
     });
 
+    testWidgets('TerminalView использует моноширинный шрифт кита codelab_ui '
+        '(ручная проверка итерации 2)', (tester) async {
+      final env = _Env();
+      await env.pumpApp(tester);
+      await env.openSession(tester, 'session-a');
+      _toggle(tester, ToolPane.terminal);
+      await _frames(tester);
+
+      final finder = find.byType(TerminalView);
+      final view = tester.widget<TerminalView>(finder);
+      final kit = CodeLabText.styleOf(
+        tester.element(finder),
+        CodeLabTextRole.mono,
+      )!;
+
+      expect(view.textStyle.fontFamily, kit.fontFamily);
+      expect(view.textStyle.fontFamilyFallback, kit.fontFamilyFallback);
+      expect(view.textStyle.fontSize, kit.fontSize);
+    });
+
     testWidgets('закрытие root scope шлёт hangUp живым shell (D4)', (
       tester,
     ) async {
@@ -490,6 +510,23 @@ void main() {
       await closeCodeLabRootScopeInTest();
 
       expect(process.hangUps, 1);
+    });
+
+    testWidgets('закрытие root scope снимает крючок сброса вывода и не '
+        'оставляет заказанного кадра (cherrypick зовёт dispose только у '
+        'Disposable)', (tester) async {
+      final env = _Env();
+      await env.pumpApp(tester);
+      await env.openSession(tester, 'session-a');
+      _toggle(tester, ToolPane.terminal);
+      await _frames(tester);
+      final cubit = env.terminals;
+      expect(cubit.onPendingOutput, isNotNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScopeInTest();
+
+      expect(cubit.onPendingOutput, isNull);
     });
   });
 
