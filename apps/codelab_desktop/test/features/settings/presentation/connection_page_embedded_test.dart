@@ -10,7 +10,6 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
-import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -67,7 +66,7 @@ void main() {
 
   Future<void> tearDownApp(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   }
 
   // Ручного Connect нет (D18): встроенный агент — профиль окна по умолчанию

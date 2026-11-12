@@ -122,6 +122,7 @@ void main() {
       final exited = await handle.waitForExit() as TerminalProcessExited;
 
       expect(exited.signal, 'SIGTERM');
+      expect(exited.exitCode, isNull);
     });
 
     test('a missing command is TerminalStartFailure', () async {

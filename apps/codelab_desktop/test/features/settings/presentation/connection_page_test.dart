@@ -154,7 +154,7 @@ void main() {
 
   Future<void> tearDownApp(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   }
 
   group('rows and their actions', () {

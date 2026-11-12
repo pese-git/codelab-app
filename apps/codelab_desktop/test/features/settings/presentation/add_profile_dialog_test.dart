@@ -11,7 +11,6 @@ import 'dart:async';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
-import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/core/platform/connection_preferences.dart';
@@ -1159,7 +1158,7 @@ void main() {
       expect(find.text('Current'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
   });
 }

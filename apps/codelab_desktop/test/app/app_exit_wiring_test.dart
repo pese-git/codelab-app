@@ -1,7 +1,9 @@
 // Проводка обработчика выхода в `CodeLabBootstrap`: запрос выхода от ОС
-// доходит до `TerminalTabsCubit.closeAll()` (`add-integrated-terminal`,
-// задача 2.15; design.md D4 «Выход из app», D15 п. 9). Проверяется поведение:
-// ответ `exit` и `hangUp` живой вкладке; после снятия дерева слушателя нет.
+// доходит до `CodeLabRootLifecycle.dispose()` — закрываются вкладки Terminal
+// (`add-integrated-terminal`, 2.15; D4 «Выход из app», D15 п. 9) и ядро
+// клиента (`add-client-process-shutdown-on-exit`, задача 3.3; D1).
+// Проверяется поведение: ответ `exit`, `hangUp` живой вкладке, закрытый
+// транспорт, `app.exit_closed`; после снятия дерева слушателя нет.
 import 'dart:ui' show AppExitResponse;
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
@@ -56,18 +58,41 @@ void main() {
     return (shell: launcher.shells.single, binding: binding, tabs: tabs);
   }
 
-  testWidgets('запрос выхода от ОС: exit и hangUp вкладке', (tester) async {
+  /// Запрос выхода от ОС с докруткой fake-async зоны.
+  ///
+  /// Почему: scope собран в fake-async зоне, а закрытие Cubit-ов и
+  /// рабочего пространства возобновляет настоящий ввод-вывод; `await` без
+  /// чередования `runAsync` и `idle` в `testWidgets` не завершился бы (так же
+  /// устроен `closeCodeLabRootScopeInTest`). Предел 5 с здесь не срабатывает:
+  /// закрытие укладывается в доли секунды.
+  Future<AppExitResponse> requestExit(WidgetTester tester) async {
+    var done = false;
+    final exiting = tester.binding.handleRequestAppExit().whenComplete(
+      () => done = true,
+    );
+    while (!done) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+      await tester.idle();
+    }
+    return exiting;
+  }
+
+  testWidgets('запрос выхода от ОС: CodeLabRootLifecycle.dispose — hangUp '
+      'вкладке, закрытый транспорт, app.exit_closed', (tester) async {
     final env = await pumpWithTab(tester);
 
-    final response = await tester.binding.handleRequestAppExit();
+    final response = await requestExit(tester);
 
     expect(response, AppExitResponse.exit);
     expect(env.shell.hangUps, 1);
+    expect(env.binding.transport.state, AcpTransportState.closed);
     expect(
       env.binding.scope.resolve<LogBuffer>().entries.value.map(
         (e) => e['event'],
       ),
-      contains('app.exit_requested'),
+      containsAllInOrder(['app.exit_requested', 'app.exit_closed']),
     );
   });
 
@@ -86,7 +111,7 @@ void main() {
     // `CodeLabBootstrap.dispose` сам закрывает scope (`closeAll()` из root
     // lifecycle) — это один `hangUp`; запрос выхода после него нового не даёт.
     final afterDispose = env.shell.hangUps;
-    final response = await tester.binding.handleRequestAppExit();
+    final response = await requestExit(tester);
 
     expect(response, AppExitResponse.exit);
     expect(env.shell.hangUps, afterDispose);

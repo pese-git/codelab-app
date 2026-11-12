@@ -9,7 +9,6 @@
 import 'dart:async';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
-import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/features/workbench/application/secret_migration_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/secret_migration_runner.dart';
@@ -564,6 +563,6 @@ void main() {
     expect(find.text('Migrate secrets'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 }

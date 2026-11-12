@@ -1,7 +1,10 @@
-// Обработчик выхода из app: `closeAll()` терминала до завершения процесса
-// (`add-integrated-terminal`, задача 2.14; спецификация `integrated-terminal`
-// «Жизненный цикл процессов терминала», сценарий «Выход из приложения»;
-// design.md D4 «Выход из app», D15 п. 9).
+// Обработчик выхода из app (`add-client-process-shutdown-on-exit`, задача 3.3;
+// спецификация `agent-workbench-ui` «Выход из приложения завершает процессы
+// клиента», сценарии «Закрытие не уложилось в предел», «Повторный запрос
+// выхода»; design.md D2, D5, D6). Бывший `terminal_exit_test.dart`
+// (`add-integrated-terminal`, 2.14): сценарии терминала сохранены. Здесь
+// `closeRoot` — двойник, вызывающий `closeAll()` вкладок; проводку `closeRoot`
+// к `CodeLabRootLifecycle.dispose` проверяет `app_exit_wiring_test.dart`.
 //
 // Время — fake: `testWidgets` и `tester.pump(Duration)`, как в
 // `terminal_tabs_cubit_test.dart`. Настоящего PTY нет: процессы — двойники.
@@ -55,6 +58,7 @@ void main() {
   // Двойник сброса журнала: тест решает, когда он завершится.
   late Future<void> Function() flushLogs;
   var flushCalls = 0;
+  var pending = <String>[];
 
   setUp(() {
     workspace = FakeClientWorkspace()..openSession(_p1, _s1);
@@ -68,9 +72,11 @@ void main() {
       externalLinkOpener: FakeExternalLinkOpener(),
     );
     flushCalls = 0;
+    pending = <String>[];
     flushLogs = () async => flushCalls++;
     handler = AppExitHandler(
-      terminalTabs: cubit,
+      closeRoot: cubit.closeAll,
+      pendingSteps: () => pending,
       logger: logger,
       flushLogs: () => flushLogs(),
     );
@@ -175,7 +181,8 @@ void main() {
     addTearDown(failing.close);
 
     final response = await AppExitHandler(
-      terminalTabs: failing,
+      closeRoot: failing.closeAll,
+      pendingSteps: () => const [],
       logger: logger,
       flushLogs: () async {},
     ).onExitRequested();
@@ -263,7 +270,8 @@ void main() {
     tester,
   ) async {
     final throwing = AppExitHandler(
-      terminalTabs: cubit,
+      closeRoot: cubit.closeAll,
+      pendingSteps: () => const [],
       logger: _ThrowingLogger(),
       flushLogs: () => flushLogs(),
     );
@@ -311,5 +319,126 @@ void main() {
     flushLogs = () => Future<void>.error(StateError('disk'));
 
     expect(await handler.onExitRequested(), AppExitResponse.exit);
+  });
+
+  group('closeRoot целиком (D2, D5, D6)', () {
+    Future<AppExitResponse> exit(
+      WidgetTester tester,
+      Future<void> Function() closeRoot, {
+      Duration after = Duration.zero,
+    }) async {
+      final exiting = AppExitHandler(
+        closeRoot: closeRoot,
+        pendingSteps: () => pending,
+        logger: logger,
+        flushLogs: () => flushLogs(),
+      ).onExitRequested();
+      await tester.pump(after);
+      return exiting;
+    }
+
+    testWidgets('closeRoot завершился: app.exit_closed с duration_ms и exit', (
+      tester,
+    ) async {
+      expect(await exit(tester, () async {}), AppExitResponse.exit);
+
+      final event = logger.entries.singleWhere(
+        (e) => e['event'] == 'app.exit_closed',
+      );
+      expect(event['level'], 'info');
+      expect(event['duration_ms'], isA<int>());
+      expect(event.keys.toSet(), {'event', 'level', 'duration_ms'});
+      expect(
+        logger.entries.where((e) => e['event'] == 'app.exit_timeout'),
+        isEmpty,
+      );
+    });
+
+    testWidgets('closeRoot висит: через 5 с app.exit_timeout с pending, '
+        'затем сброс журнала и exit', (tester) async {
+      pending = ['embedded', 'client'];
+      AppExitResponse? response;
+      final exiting = AppExitHandler(
+        closeRoot: () => Completer<void>().future,
+        pendingSteps: () => pending,
+        logger: logger,
+        flushLogs: () => flushLogs(),
+      ).onExitRequested().then((r) => response = r);
+
+      await tester.pump(const Duration(seconds: 4, milliseconds: 999));
+      expect(response, isNull);
+      expect(flushCalls, 0);
+      expect(
+        logger.entries.where((e) => e['event'] == 'app.exit_timeout'),
+        isEmpty,
+      );
+
+      await tester.pump(const Duration(milliseconds: 1));
+      await exiting;
+
+      expect(response, AppExitResponse.exit);
+      expect(flushCalls, 1);
+      final event = logger.entries.singleWhere(
+        (e) => e['event'] == 'app.exit_timeout',
+      );
+      expect(event['level'], 'warning');
+      expect(event['timeout_ms'], 5000);
+      expect(event['pending'], ['embedded', 'client']);
+      expect(event.keys.toSet(), {'event', 'level', 'timeout_ms', 'pending'});
+      expect(
+        logger.entries.where((e) => e['event'] == 'app.exit_closed'),
+        isEmpty,
+      );
+    });
+
+    testWidgets('closeRoot бросил: app.exit_close_failed только с error_type '
+        'и exit', (tester) async {
+      final response = await exit(
+        tester,
+        () => Future<void>.error(StateError('secret /home/user/path')),
+      );
+
+      expect(response, AppExitResponse.exit);
+      final event = logger.entries.singleWhere(
+        (e) => e['event'] == 'app.exit_close_failed',
+      );
+      expect(event['error_type'], 'StateError');
+      expect(event.toString(), isNot(contains('secret')));
+      expect(event.toString(), isNot(contains('/home')));
+    });
+
+    testWidgets('второй запрос во время первого: тот же Future, closeRoot '
+        'один раз, предел от первого запроса', (tester) async {
+      var calls = 0;
+      final gate = Completer<void>();
+      final handler = AppExitHandler(
+        closeRoot: () {
+          calls++;
+          return gate.future;
+        },
+        pendingSteps: () => const [],
+        logger: logger,
+        flushLogs: () => flushLogs(),
+      );
+
+      final first = handler.onExitRequested();
+      await tester.pump(const Duration(seconds: 3));
+      final second = handler.onExitRequested();
+      expect(identical(first, second), isTrue);
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(await first, AppExitResponse.exit);
+      expect(await second, AppExitResponse.exit);
+      expect(calls, 1);
+      expect(
+        logger.entries.where((e) => e['event'] == 'app.exit_requested'),
+        hasLength(1),
+      );
+      expect(
+        logger.entries.where((e) => e['event'] == 'app.exit_timeout'),
+        hasLength(1),
+      );
+      gate.complete();
+    });
   });
 }

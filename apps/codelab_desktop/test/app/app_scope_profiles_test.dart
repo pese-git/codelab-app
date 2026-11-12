@@ -400,6 +400,11 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(starts, 1);
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    // Явного `await closeCodeLabRootScope()` нет: снятие дерева уже запустило
+    // закрытие scope, а повторный `dispose()` `CodeLabRootLifecycle` теперь
+    // ждёт тот же проход (D5 `add-client-process-shutdown-on-exit`). Файловые
+    // журналы в fake-async зоне возобновляет только настоящий ввод-вывод, и
+    // такое ожидание внутри теста зависало бы; закрытие докручивает
+    // `closeCodeLabRootScopeInTest` из `addTearDown`.
   });
 }
