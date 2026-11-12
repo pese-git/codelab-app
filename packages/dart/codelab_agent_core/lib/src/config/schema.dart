@@ -142,7 +142,6 @@ const _strListU = ListNode(ScalarType.string, applied: false);
 const afterMvpSections = [
   'llm',
   'images',
-  'skills',
   'subagents',
   'jobs',
   'hooks',
@@ -248,6 +247,17 @@ final SectionNode rootSchema = SectionNode({
     'ask': _opaque,
     'history': _opaque,
     'spill': _opaque,
+  }),
+  // Навыки (change `add-agent-skills`, D11): ключи с потребителем;
+  // `operative` остаётся без потребителя до K-06.
+  'skills': SectionNode({
+    'enabled': _bool,
+    'extra_roots': ListNode(ScalarType.string),
+    'disabled': ListNode(ScalarType.string),
+    'max_skills': _int,
+    'catalog_max_chars': _int,
+    'reattach': SectionNode({'per_skill_tokens': _int, 'total_tokens': _int}),
+    'operative': _opaque,
   }),
   'loop': SectionNode({
     'empty_response_retries': _intU,

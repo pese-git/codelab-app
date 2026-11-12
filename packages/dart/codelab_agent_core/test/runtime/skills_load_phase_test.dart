@@ -60,6 +60,13 @@ void main() {
         prompts.add(context.systemPrompt);
         return scripted.call(ref, context, cancel: cancel);
       },
+      modelsFor: source == null
+          ? null
+          : (config) => (
+              stream: (ref, context, {cancel}) =>
+                  scripted.call(ref, context, cancel: cancel),
+              catalog: StaticModelCatalog(config.providers, logger: logger),
+            ),
     );
   }
 
@@ -265,8 +272,18 @@ void main() {
       skillPort.files = SkillFiles(skills: [validSkill('notes')]);
       final core = build(withSkillPort: false);
 
-      await core.runtime.createSession(SessionSpec(cwd: '/work/a'));
+      final session = await core.runtime.createSession(
+        SessionSpec(cwd: '/work/a'),
+      );
 
+      // Инвариант D16: без порта capability остаётся `on`, каталог пуст.
+      expect(core.plan.profile.isOn(HostCapability.skills), isTrue);
+      expect(core.plan.offReasons, isNot(contains(HostCapability.skills)));
+      expect(session.skills, same(SkillCatalog.empty));
+      expect(core.plan.toolNames, isNot(contains('skill')));
+      expect(core.plan.promptSections, isNot(contains('skills/catalog')));
+      expect(session.skills.commands, isEmpty);
+      expect(session.skills.modelVisible, isEmpty);
       expect(skillPort.queries, isEmpty);
       expect(logger.eventsOf('skills.loaded'), isEmpty);
     });

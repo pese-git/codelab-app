@@ -179,6 +179,23 @@ void main() {
   });
 
   group('immutability', () {
+    test('the lists inside a definition cannot be modified either', () {
+      final catalog = parse([
+        skillFile(
+          'deep',
+          frontmatter: {
+            'name': 'deep',
+            'description': 'D',
+            'metadata': {'codelab-operative': 'Rule one.'},
+          },
+          companions: ['a.md'],
+        ),
+      ]);
+
+      final s = catalog.skills.single;
+      expect(() => s.companions.add('x'), throwsUnsupportedError);
+      expect(() => s.operative.add('x'), throwsUnsupportedError);
+    });
     test('the snapshot lists cannot be modified', () {
       final catalog = parse([validSkill('a')]);
 

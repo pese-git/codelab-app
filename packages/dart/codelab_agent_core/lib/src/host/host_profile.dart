@@ -21,6 +21,12 @@ enum HostCapability {
   /// `add-agent-mcp-client`, D3). Транспорты — `stdio` (процесс) и `http`
   /// (streamable HTTP); профиль без процессов сужается до `{http}`.
   mcp,
+
+  /// Навыки агента: `SKILL.md` из корней проекта и пользователя, секция
+  /// каталога, инструмент `skill` и команды `skill:*` (design.md change
+  /// `add-agent-skills`, D11). Во всех профилях `on`; `skills.enabled: false`
+  /// конфигурации сужает её до `off` (HOST-4).
+  skills,
 }
 
 sealed class CapabilityState {
@@ -85,6 +91,7 @@ final class HostProfile {
         'stdio',
         'http',
       }, 'серверы MCP: процесс клиента и streamable HTTP'),
+      HostCapability.skills: CapabilityOn(),
     }, ModeId.standard),
     // Профили встроенного агента различаются только хостом, а не
     // возможностями: те же состояния и режим, что у `embedded-cli` (§10.4;
@@ -115,6 +122,7 @@ final class HostProfile {
       'stdio',
       'http',
     }, 'серверы MCP: процессы хоста и streamable HTTP'),
+    HostCapability.skills: CapabilityOn(),
   };
 
   final String name;

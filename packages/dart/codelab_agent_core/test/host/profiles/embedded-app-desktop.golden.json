@@ -39,6 +39,9 @@
         "stdio"
       ],
       "reason": "серверы MCP: процессы хоста и streamable HTTP"
+    },
+    "skills": {
+      "state": "on"
     }
   },
   "toolNames": [

@@ -31,20 +31,37 @@ import 'frontmatter.dart';
 /// `$CODELAB_HOME`, D16). Метод [load] не бросает для ошибок файлов: каждая
 /// ошибка — диагностика. Содержимое файлов в диагностики не попадает (D14).
 ///
-/// Безопасность (приоритет 1): каждое чтение идёт через
+/// Навыки (design.md change `add-agent-skills`, D1, D3, D5, D16): тот же класс
+/// реализует порт [SkillFilesSource] (`loadSkills`) теми же границей и лимитами.
+/// Корни — уровни проекта от `cwd` до корня git (`.codelab/skills`, затем
+/// `.agents/skills`; только доверенный проект), `$CODELAB_HOME/skills`,
+/// `~/.agents/skills` и `skills.extra_roots`. [userHome] — домашний каталог
+/// процесса: корень `~/.agents/skills` и раскрытие `~` в `extra_roots`
+/// (`null` — не читается, `--llm-script`). Починку YAML делает
+/// `readMarkdownFile(repairYaml: true)` только для навыков.
+///
+/// Безопасность (приоритет 1): каждое чтение содержимого идёт через
 /// `BoundedEnv.wrap(local, корень области)`; путь, чей `realpath` вне корня
 /// (symlink наружу), отклоняется до чтения с диагностикой `outside_root`.
-/// Единственная операция вне границы — проверка существования `<каталог>/.git`
-/// у предков `cwd` при поиске корня репозитория; содержимое `.git` не
-/// читается.
-final class ProjectFilesLoader implements ProjectFilesSource {
+/// Корни навыков проекта и `$CODELAB_HOME/skills` раскрываются через
+/// `BoundedEnv` своего уровня (Q42); `~/.agents/skills` и элементы
+/// `extra_roots` названы пользователем явно и не ограничиваются. Вне границы
+/// выполняются только операции над метаданными, содержимое не читается:
+/// проверка существования `<каталог>/.git` у предков `cwd` при поиске корня
+/// репозитория, `stat` корней навыков недоверенного проекта (для диагностики
+/// `untrusted_project`), `realpath` и `stat` корней `~/.agents/skills` и
+/// `extra_roots`.
+final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
   /// [local] — именно [LocalExecutionEnv]: граница чтения опирается на его
   /// `realpath` (`PathResolver`), а окружение без резолвера оставило бы
   /// границу лексической, и symlink наружу прошёл бы незамеченным
   /// (приоритет 1). Поэтому тип сужен до реализации, которая резолвер имеет.
-  ProjectFilesLoader({required this.home, required LocalExecutionEnv local})
-    : _local = local,
-      _beforeOpen = null;
+  ProjectFilesLoader({
+    required this.home,
+    this.userHome,
+    required LocalExecutionEnv local,
+  }) : _local = local,
+       _beforeOpen = null;
 
   /// Точка внедрения для тестов fail-closed веток, недостижимых через
   /// [ProjectFilesLoader.new] (agent-project-context «Окружение без
@@ -61,6 +78,7 @@ final class ProjectFilesLoader implements ProjectFilesSource {
   @visibleForTesting
   ProjectFilesLoader.testing({
     required this.home,
+    this.userHome,
     required ExecutionEnv local,
     Future<void> Function(String path)? beforeOpen,
   }) : _local = local,
@@ -68,6 +86,12 @@ final class ProjectFilesLoader implements ProjectFilesSource {
 
   /// `$CODELAB_HOME`; `null` — пользовательская область не читается.
   final String? home;
+
+  /// Домашний каталог пользователя процесса (`userHomeOf(environment)`):
+  /// корень `~/.agents/skills` и раскрытие `~` в `skills.extra_roots`
+  /// (design.md change `add-agent-skills`, D3, D16, Q41). `null` — не
+  /// читается (`--llm-script`).
+  final String? userHome;
   final ExecutionEnv _local;
 
   /// Тестовый хук между проверкой и открытием файла; `null` в продакшене.
@@ -299,6 +323,406 @@ final class ProjectFilesLoader implements ProjectFilesSource {
         out.add(file);
       }
     }
+  }
+
+  // ---- навыки (design.md change `add-agent-skills`, D1, D3, D5, D16) -------
+
+  /// Предел подкаталогов одного корня навыков (D3).
+  static const maxSkillEntries = 1000;
+
+  /// Предел размера `SKILL.md`, байты (D4): больший файл не читается.
+  static const maxSkillFileBytes = 128 * 1024;
+
+  /// Предел перечисляемых сопутствующих файлов навыка и глубина (D5).
+  static const maxCompanions = 50;
+  static const maxCompanionDepth = 3;
+
+  @override
+  Future<SkillFiles> loadSkills(SkillFilesQuery query) async {
+    final diagnostics = <ExtensionDiagnostic>[];
+    final skills = <SkillFile>[];
+    final roots = await _skillRoots(query, diagnostics);
+    final seen = <String>{};
+    for (final (index, root) in roots.indexed) {
+      if (query.cancel.isCancelled) {
+        break;
+      }
+      await _readSkillRoot(
+        root,
+        index,
+        query.cancel,
+        skills,
+        diagnostics,
+        seen,
+      );
+    }
+    return SkillFiles(skills: skills, diagnostics: diagnostics);
+  }
+
+  /// Список корней в порядке приоритета (D3, D16): уровни проекта от `cwd`
+  /// вверх (только для доверенного проекта), `$CODELAB_HOME/skills`,
+  /// `~/.agents/skills`, затем `skills.extra_roots`. Номер корня — его
+  /// позиция в этом списке; корень, пропущенный по доверию или без домашнего
+  /// каталога, номера не получает и в список не попадает.
+  Future<List<_SkillRoot>> _skillRoots(
+    SkillFilesQuery query,
+    List<ExtensionDiagnostic> diagnostics,
+  ) async {
+    final roots = <_SkillRoot>[];
+    // Уровни проекта нужны и недоверенному проекту: `untrusted_project`
+    // называет каждый существующий корень (D16).
+    final scan = <ExtensionDiagnostic>[];
+    final (:levels, found: _) = await _findRoot(query.cwd, scan);
+    for (final item in scan) {
+      diagnostics.add(
+        ExtensionDiagnostic(
+          path: item.path,
+          level: item.level,
+          code: item.code,
+          message:
+              'more than $maxLevels levels above the working directory; the '
+              'search for the git root stops',
+        ),
+      );
+    }
+    for (final level in levels.reversed) {
+      for (final sub in const ['.codelab/skills', '.agents/skills']) {
+        final path = '${level == '/' ? '' : level}/$sub';
+        if (query.projectTrusted) {
+          roots.add(_SkillRoot(path, ExtensionScope.project, area: level));
+        } else if (await _isDirectory(path)) {
+          diagnostics.add(
+            ExtensionDiagnostic(
+              path: path,
+              level: DiagnosticLevel.info,
+              code: 'untrusted_project',
+              message:
+                  'the project is not in trusted_projects; its skills are not '
+                  'read',
+            ),
+          );
+        }
+      }
+    }
+    if (home case final homeDir?) {
+      roots.add(
+        _SkillRoot('$homeDir/skills', ExtensionScope.user, area: homeDir),
+      );
+    }
+    if (userHome case final dir?) {
+      roots.add(_SkillRoot('$dir/.agents/skills', ExtensionScope.user));
+    }
+    for (final raw in query.extraRoots) {
+      if (raw == '~' || raw.startsWith('~/')) {
+        final dir = userHome;
+        if (dir == null) {
+          diagnostics.add(
+            ExtensionDiagnostic(
+              path: raw,
+              level: DiagnosticLevel.warning,
+              code: 'unresolved_root',
+              message:
+                  'the skills root starts with ~ but the home directory is '
+                  'unknown; it is not read',
+            ),
+          );
+          continue;
+        }
+        roots.add(_SkillRoot('$dir${raw.substring(1)}', ExtensionScope.extra));
+      } else if (_isAbsolute(raw)) {
+        roots.add(_SkillRoot(raw, ExtensionScope.extra));
+      } else {
+        final path = '${query.cwd == '/' ? '' : query.cwd}/$raw';
+        if (query.projectTrusted) {
+          roots.add(_SkillRoot(path, ExtensionScope.extra));
+        } else {
+          diagnostics.add(
+            ExtensionDiagnostic(
+              path: path,
+              level: DiagnosticLevel.warning,
+              code: 'untrusted_project',
+              message:
+                  'the project is not trusted; a relative skills.extra_roots '
+                  'entry is not read',
+            ),
+          );
+        }
+      }
+    }
+    return roots;
+  }
+
+  static bool _isAbsolute(String path) =>
+      path.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
+
+  Future<bool> _isDirectory(String path) async =>
+      switch (await _local.stat(path)) {
+        Ok(:final value) => value.type == FileType.directory,
+        Err() => false,
+      };
+
+  /// Читает подкаталоги первого уровня корня [root]: каждый с `SKILL.md`
+  /// становится [SkillFile]. Корень раскрывается `realpath`; каталог навыка,
+  /// чей `realpath` вне корня, — `outside_root`; сам `SKILL.md` и список
+  /// файлов идут через `BoundedEnv` с корнем в реальном каталоге навыка (D3).
+  Future<void> _readSkillRoot(
+    _SkillRoot root,
+    int index,
+    CancelToken cancel,
+    List<SkillFile> skills,
+    List<ExtensionDiagnostic> diagnostics,
+    Set<String> seen,
+  ) async {
+    // Корень проекта и `$CODELAB_HOME/skills` раскрываются через
+    // `BoundedEnv`, привязанный к своему уровню (Q42, как `_readMarkdownDir`):
+    // symlink корня наружу — `outside_root`. `~/.agents/skills` и элементы
+    // `extra_roots` названы пользователем явно и раскрываются без границы.
+    final ExecutionEnv resolver = root.area == null
+        ? _local
+        : await BoundedEnv.wrap(_local, root.area!);
+    if (resolver is! PathResolver) {
+      diagnostics.add(
+        ExtensionDiagnostic(
+          path: root.path,
+          level: DiagnosticLevel.warning,
+          code: 'unreadable',
+          message:
+              'the environment cannot resolve real paths; the directory is '
+              'not read',
+        ),
+      );
+      return;
+    }
+    // Записи-не-каталоги и отсутствующий корень пропускаются молча (D10).
+    final String realRoot;
+    switch (await (resolver as PathResolver).realpath(root.path)) {
+      case Ok(:final value):
+        realRoot = value;
+      case Err(:final error):
+        if (error.code == FileErrorCode.outsideWorkspace) {
+          diagnostics.add(
+            ExtensionDiagnostic(
+              path: root.path,
+              level: DiagnosticLevel.warning,
+              code: 'outside_root',
+              message:
+                  'the skills root resolves outside its area; its skills are '
+                  'not read',
+            ),
+          );
+        }
+        return;
+    }
+    if (!await _isDirectory(realRoot)) {
+      return;
+    }
+    final bounded = await BoundedEnv.wrap(_local, realRoot);
+    if (bounded is! DirectoryListing) {
+      return;
+    }
+    final listing = await (bounded as DirectoryListing).listDir(realRoot);
+    if (listing is! Ok<List<FileStat>, FileError>) {
+      return;
+    }
+    // Каталоги на `.` и файлы не читаются; ссылки проверяет `realpath`.
+    final names = [
+      for (final entry in listing.value)
+        if (entry.type == FileType.directory || entry.type == FileType.link)
+          if (entry.path.split('/').last case final name
+              when !name.startsWith('.'))
+            name,
+    ]..sort();
+    final kept = names.take(maxSkillEntries);
+    if (names.length > maxSkillEntries) {
+      diagnostics.add(
+        ExtensionDiagnostic(
+          path: root.path,
+          level: DiagnosticLevel.warning,
+          code: 'limit_exceeded',
+          message:
+              'more than $maxSkillEntries entries in the skills root; the '
+              'rest are not read',
+        ),
+      );
+    }
+    for (final name in kept) {
+      if (cancel.isCancelled) {
+        return;
+      }
+      final shown = '${root.path}/$name';
+      final String realDir;
+      switch (await (bounded as PathResolver).realpath('$realRoot/$name')) {
+        case Ok(:final value):
+          realDir = value;
+        case Err(:final error):
+          if (error.code == FileErrorCode.outsideWorkspace) {
+            diagnostics.add(
+              ExtensionDiagnostic(
+                path: shown,
+                level: DiagnosticLevel.warning,
+                code: 'outside_root',
+                message:
+                    'the skill directory resolves outside its root; the '
+                    'skill is skipped',
+              ),
+            );
+          }
+          continue;
+      }
+      if (!await _isDirectory(realDir) || !seen.add(realDir)) {
+        continue;
+      }
+      final file = await _readSkill(
+        realDir,
+        root.scope,
+        index,
+        cancel,
+        diagnostics,
+      );
+      if (file != null) {
+        skills.add(file);
+      }
+    }
+  }
+
+  /// Читает `SKILL.md` каталога [realDir] и перечисляет сопутствующие файлы.
+  Future<SkillFile?> _readSkill(
+    String realDir,
+    ExtensionScope scope,
+    int index,
+    CancelToken cancel,
+    List<ExtensionDiagnostic> diagnostics,
+  ) async {
+    final env = await BoundedEnv.wrap(_local, realDir);
+    final path = '$realDir/SKILL.md';
+    final local = <ExtensionDiagnostic>[];
+    final read = await _readText(
+      env,
+      path,
+      maxSkillFileBytes,
+      local,
+      wholeFile: true,
+    );
+    for (final item in local) {
+      // Тексты скилл-файла фиксированы D16 и не называют лимит в байтах.
+      final message = switch (item.code) {
+        'too_large' => 'SKILL.md is larger than 128 KiB; the skill is skipped',
+        'not_utf8' => 'SKILL.md is not valid UTF-8; the skill is skipped',
+        _ => item.message,
+      };
+      diagnostics.add(
+        ExtensionDiagnostic(
+          path: item.path,
+          level: item.level,
+          code: item.code,
+          message: message,
+        ),
+      );
+    }
+    if (read == null || cancel.isCancelled) {
+      return null;
+    }
+    final markdown = readMarkdownFile(
+      read.text.startsWith('\u{FEFF}') ? read.text.substring(1) : read.text,
+      path: path,
+      scope: scope,
+      repairYaml: true,
+    );
+    final (:files, :truncated) = await _companions(env, realDir, cancel);
+    final parsed = markdown.file;
+    return SkillFile(
+      dir: realDir,
+      scope: scope,
+      rootIndex: index,
+      frontmatter: parsed?.frontmatter,
+      parseErrors: markdown.diagnostics,
+      repaired: markdown.repaired,
+      body: parsed?.body ?? '',
+      bodyLine: parsed?.bodyLine ?? 1,
+      companions: files,
+      companionsTruncated: truncated,
+    );
+  }
+
+  /// Сопутствующие файлы каталога навыка (D5): обычные файлы на глубине до
+  /// [maxCompanionDepth], не больше [maxCompanions] путей в байтовом порядке,
+  /// без каталогов на `.`, `evals/` верхнего уровня, `SKILL.md` и записей,
+  /// чей `realpath` вне каталога навыка. Содержимое не читается.
+  Future<({List<String> files, bool truncated})> _companions(
+    ExecutionEnv env,
+    String realDir,
+    CancelToken cancel,
+  ) async {
+    if (env is! DirectoryListing || env is! PathResolver) {
+      return (files: const <String>[], truncated: false);
+    }
+    final listing = env as DirectoryListing;
+    final resolver = env as PathResolver;
+    // Предел обхода — защита ресурсов (D5), а не часть контракта: огромный
+    // каталог не должен держать чтение. Считаются ВСЕ просмотренные записи
+    // (файлы и каталоги, в том числе пропущенные), на 5000-й обход
+    // останавливается и ставит `truncated`. Пока записей меньше предела,
+    // список точен (первые 50 в байтовом порядке); записи каждого каталога
+    // сортируются перед обходом, чтобы результат не зависел от `listDir`.
+    const walkLimit = 5000;
+    final found = <String>[];
+    var looked = 0;
+    var capped = false;
+
+    Future<void> walk(String dir, String prefix, int depth) async {
+      if (cancel.isCancelled || capped) {
+        return;
+      }
+      final entries = await listing.listDir(dir);
+      if (entries is! Ok<List<FileStat>, FileError>) {
+        return;
+      }
+      final sorted = [...entries.value]
+        ..sort((a, b) => a.path.compareTo(b.path));
+      for (final entry in sorted) {
+        if (cancel.isCancelled || capped) {
+          return;
+        }
+        if (++looked >= walkLimit) {
+          capped = true;
+        }
+        final name = entry.path.split('/').last;
+        final relative = prefix.isEmpty ? name : '$prefix/$name';
+        var type = entry.type;
+        if (type == FileType.link) {
+          // Ссылка наружу не перечисляется; внутри — как её цель.
+          switch (await resolver.realpath(entry.path)) {
+            case Ok(:final value):
+              type = switch (await env.stat(value)) {
+                Ok(value: final target) => target.type,
+                Err() => FileType.other,
+              };
+            case Err():
+              continue;
+          }
+        }
+        if (type == FileType.directory) {
+          if (name.startsWith('.') ||
+              (prefix.isEmpty && name == 'evals') ||
+              depth >= maxCompanionDepth) {
+            continue;
+          }
+          await walk(entry.path, relative, depth + 1);
+        } else if (type == FileType.file) {
+          if (prefix.isEmpty && name == 'SKILL.md') {
+            continue;
+          }
+          found.add(relative);
+        }
+      }
+    }
+
+    await walk(realDir, '', 1);
+    found.sort();
+    return (
+      files: found.take(maxCompanions).toList(),
+      truncated: capped || found.length > maxCompanions,
+    );
   }
 
   /// Файлы контекста в порядке «пользовательский, затем от корня к `cwd`»
@@ -608,4 +1032,15 @@ final class ProjectFilesLoader implements ProjectFilesSource {
     }
     return null;
   }
+}
+
+/// Корень навыков списка загрузчика (D16): [path] как его видит
+/// пользователь, [scope] и [area] — каталог, которым ограничено раскрытие
+/// корня (`null` — явный корень `extra_roots`, граница не применяется).
+final class _SkillRoot {
+  const _SkillRoot(this.path, this.scope, {this.area});
+
+  final String path;
+  final ExtensionScope scope;
+  final String? area;
 }

@@ -315,6 +315,111 @@ void main() {
     });
   });
 
+  group('the root is bounded by its level (Q42)', () {
+    test('.agents/skills as a symlink out of the project: outside_root, '
+        'nothing is loaded', () async {
+      skill('$base/outside', 'evil');
+      Link('$repo/.agents/skills').createSync('$base/outside', recursive: true);
+
+      final files = await load();
+
+      expect(files.skills, isEmpty);
+      final d = files.diagnostics.single;
+      expect(d.code, 'outside_root');
+      expect(d.level, DiagnosticLevel.warning);
+      expect(d.path, '$repo/.agents/skills');
+      expect(
+        d.message,
+        'the skills root resolves outside its area; its skills are not read',
+      );
+    }, skip: Platform.isWindows ? 'symlink needs privileges' : false);
+
+    test(
+      '.codelab/skills as a symlink out of the project: outside_root',
+      () async {
+        skill('$base/outside', 'evil');
+        Link(
+          '$repo/.codelab/skills',
+        ).createSync('$base/outside', recursive: true);
+
+        final files = await load();
+
+        expect(files.skills, isEmpty);
+        expect(codes(files), ['outside_root']);
+      },
+      skip: Platform.isWindows ? 'symlink needs privileges' : false,
+    );
+
+    test(
+      '\$CODELAB_HOME/skills as a symlink out of home: outside_root',
+      () async {
+        skill('$base/outside', 'evil');
+        Link('$home/skills').createSync('$base/outside');
+
+        final files = await load();
+
+        expect(files.skills, isEmpty);
+        expect(codes(files), ['outside_root']);
+      },
+      skip: Platform.isWindows ? 'symlink needs privileges' : false,
+    );
+
+    test('the same directory through extra_roots is loaded (consent); '
+        '~/.agents/skills is not bounded either', () async {
+      skill('$base/outside', 'evil');
+      Link('$repo/.agents/skills').createSync('$base/outside', recursive: true);
+      Link('$userHome/.agents').createSync('$base/outside-agents');
+      skill('$base/outside-agents/skills', 'viaUser');
+
+      final files = await load(extra: ['$base/outside']);
+
+      expect(names(files)..sort(), ['evil', 'viaUser']);
+      expect(codes(files), ['outside_root']);
+    }, skip: Platform.isWindows ? 'symlink needs privileges' : false);
+
+    test('a symlinked root that stays inside its level is read', () async {
+      skill('$repo/shared', 'ok');
+      Link('$repo/.agents/skills').createSync('$repo/shared', recursive: true);
+
+      final files = await load();
+
+      expect(names(files), ['ok']);
+      expect(files.diagnostics, isEmpty);
+    }, skip: Platform.isWindows ? 'symlink needs privileges' : false);
+
+    test(
+      'an extra root is the user\'s consent: a symlink out is followed',
+      () async {
+        skill('$base/outside', 'ext');
+        Link('$base/link').createSync('$base/outside');
+
+        final files = await load(extra: ['$base/link']);
+
+        expect(names(files), ['ext']);
+      },
+      skip: Platform.isWindows ? 'symlink needs privileges' : false,
+    );
+  });
+
+  group('one directory reached through two roots', () {
+    test('cwd = ~: ~/.codelab/skills equals \$CODELAB_HOME/skills, the '
+        'directory is loaded once, without shadowed', () async {
+      final h = '$userHome/.codelab';
+      skill('$h/skills', 'same');
+
+      final files = await load(
+        cwd: userHome,
+        withHome: h,
+        withUserHome: userHome,
+      );
+
+      expect(files.skills, hasLength(1));
+      expect(files.diagnostics, isEmpty);
+      final catalog = parseSkills(files, const SkillsConfig());
+      expect(catalog.diagnostics, isEmpty);
+    });
+  });
+
   group('levels from cwd to the git root', () {
     late String pkg;
     setUp(() {
@@ -667,6 +772,52 @@ void main() {
         expect(files.diagnostics, isEmpty);
       },
     );
+
+    test('the walk stops at the 5000th entry: companionsTruncated, 50 '
+        'paths in byte order of what was found (D5)', () async {
+      for (var i = 0; i < 5001; i++) {
+        File('$dir/f${i.toString().padLeft(4, '0')}.txt').writeAsStringSync('');
+      }
+
+      final files = await load();
+
+      final s = files.skills.single;
+      expect(s.companions, hasLength(50));
+      expect(s.companions.first, 'f0000.txt');
+      expect(s.companionsTruncated, isTrue);
+    });
+
+    test('the limit counts every entry looked at, directories included '
+        '(D5): 5100 empty directories and 3 files', () async {
+      for (var i = 0; i < 5100; i++) {
+        Directory(
+          '$dir/e${i.toString().padLeft(4, '0')}',
+        ).createSync(recursive: true);
+      }
+      for (final name in ['a.txt', 'b.txt', 'c.txt']) {
+        File('$dir/$name').writeAsStringSync('');
+      }
+
+      final files = await load();
+
+      final s = files.skills.single;
+      expect(s.companions, ['a.txt', 'b.txt', 'c.txt']);
+      expect(s.companionsTruncated, isTrue);
+    });
+
+    test('fewer entries than the limit: complete, not truncated', () async {
+      for (var i = 0; i < 100; i++) {
+        Directory(
+          '$dir/e${i.toString().padLeft(3, '0')}',
+        ).createSync(recursive: true);
+      }
+      File('$dir/a.txt').writeAsStringSync('');
+
+      final files = await load();
+
+      expect(files.skills.single.companions, ['a.txt']);
+      expect(files.skills.single.companionsTruncated, isFalse);
+    });
 
     test('exactly 50 files: the list is complete', () async {
       for (var i = 0; i < 50; i++) {

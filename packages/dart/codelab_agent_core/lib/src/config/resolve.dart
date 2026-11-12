@@ -10,6 +10,7 @@ import '../loop/turn_budget.dart';
 import '../permissions/modes.dart';
 import '../permissions/pattern.dart';
 import '../permissions/policy.dart';
+import '../skills/skills_config.dart';
 import '../secrets/secret_names.dart';
 import '../secrets/secret_template.dart';
 import '../tools/agent_tool.dart' show ToolTier;
@@ -381,6 +382,7 @@ ConfigLoadResult _resolve(
             providerProblems: full.providerProblems,
             redact: full.redact,
             projectContextMaxBytes: full.projectContextMaxBytes,
+            skills: full.skills,
             trustedProjects: full.trustedProjects,
             projectRoot: projectRoot,
             withoutProject: bare,
@@ -573,6 +575,7 @@ final class _Builder {
     final redact = _redact();
     final profiles = _profiles();
     final projectContextMaxBytes = _projectContextMaxBytes();
+    final skills = _skills();
     final secretsBackend = _secretsBackend();
     final configWatch = _bool(['config', 'watch']);
     final configPollInterval = _configPollInterval();
@@ -592,6 +595,7 @@ final class _Builder {
       providerProblems: problems,
       redact: redact,
       projectContextMaxBytes: projectContextMaxBytes,
+      skills: skills,
       trustedProjects:
           pinnedTrustedProjects ?? _trustedRoots(layers, environment),
     );
@@ -1959,6 +1963,92 @@ final class _Builder {
     return value;
   }
 
+  /// Раздел `skills` (design.md change `add-agent-skills`, D11, D16, Q41):
+  /// границы значений и проверка элементов `extra_roots`.
+  ///
+  /// Элемент со схемой `<scheme>://` зарезервирован под встроенные навыки
+  /// (E-18) и сейчас — проблема `value`; `~user/…` не поддерживается, потому
+  /// что домашний каталог другого пользователя ядро не знает. Значения
+  /// `extra_roots` хранятся как записаны: `~` раскрывает загрузчик.
+  SkillsConfig _skills() {
+    const defaults = SkillsConfig();
+    int bounded(List<String> path, int lower, int upper, int fallback) {
+      final value = _int(['skills', ...path]);
+      if (value == null) {
+        return fallback;
+      }
+      if (value < lower || value > upper) {
+        _bad(
+          ['skills', ...path],
+          'must be between $lower and $upper',
+          kind: ConfigIssueKind.value,
+        );
+        return fallback;
+      }
+      return value;
+    }
+
+    final roots = <String>[];
+    final raw = _raw(['skills', 'extra_roots']);
+    if (raw is List<Object?>) {
+      final scheme = RegExp(r'^[A-Za-z][A-Za-z0-9+.\-]*://');
+      for (var i = 0; i < raw.length; i++) {
+        final item = raw[i];
+        if (item is! String) {
+          continue;
+        }
+        final path = _kp(['skills', 'extra_roots']).at(i);
+        if (scheme.hasMatch(item)) {
+          _issue(
+            ConfigIssueKind.value,
+            path,
+            'URI schemes are not supported in skills.extra_roots',
+            segments: const ['skills', 'extra_roots'],
+          );
+        } else if (item.startsWith('~') &&
+            item != '~' &&
+            !item.startsWith('~/')) {
+          _issue(
+            ConfigIssueKind.value,
+            path,
+            '~user is not supported in skills.extra_roots; use an absolute '
+            'path or ~/',
+            segments: const ['skills', 'extra_roots'],
+          );
+        } else {
+          roots.add(item);
+        }
+      }
+    }
+    final disabled = _raw(['skills', 'disabled']);
+    return SkillsConfig(
+      enabled: _bool(['skills', 'enabled']) ?? defaults.enabled,
+      extraRoots: roots,
+      disabled: disabled is List<Object?>
+          ? [for (final name in disabled) name! as String]
+          : const [],
+      maxSkills: bounded(['max_skills'], 1, 1000, defaults.maxSkills),
+      catalogMaxChars: bounded(
+        ['catalog_max_chars'],
+        1000,
+        64000,
+        defaults.catalogMaxChars,
+      ),
+      reattachPerSkillTokens: bounded(
+        ['reattach', 'per_skill_tokens'],
+        0,
+        16384,
+        defaults.reattachPerSkillTokens,
+      ),
+      reattachTotalTokens: bounded(
+        ['reattach', 'total_tokens'],
+        0,
+        200000,
+        defaults.reattachTotalTokens,
+      ),
+    );
+  }
+
   CompactionOverrides _compaction() {
     final reserve = _int(['compaction', 'reserve_tokens']);
     final keep = _int(['compaction', 'keep_recent_tokens']);
@@ -1996,7 +2086,6 @@ final class _Builder {
   /// Возможности «после MVP» (§15.4): имена известны, потребителя нет.
   static const _afterMvpCapabilities = {
     'network',
-    'skills',
     'language_servers',
     'background_jobs',
     'memory',

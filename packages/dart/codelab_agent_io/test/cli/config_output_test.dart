@@ -163,7 +163,7 @@ void main() {
       expect(
         mask({
           'enabled': {'x': 'v'},
-        }, 'skills'),
+        }, 'subagents'),
         opaque,
       );
     });

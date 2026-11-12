@@ -362,12 +362,13 @@ loadSkills(q) [хост]:
    для p в q.extraRoots: ~ или ~/… → от userHome (нет userHome → warning unresolved_root, пропустить);
      относительный и не projectTrusted → warning untrusted_project, пропустить
      roots.add((абсолютный p, extra))          // ~user/… отвергнут проверкой конфига (value), Q41
-2. для корня по порядку: realpath корня; подкаталоги в байтовом порядке (≤ 1000):
+2. для корня по порядку: realpath корня; корень проекта вне своего уровня или $CODELAB_HOME/skills вне
+   $CODELAB_HOME → warning outside_root, корень пропущен (Q42); подкаталоги в байтовом порядке (≤ 1000):
    a. имя на "." или нет SKILL.md → пропустить молча; не каталог → пропустить молча
-   b. realpath каталога вне корня → outside_root
+   b. realpath каталога вне корня → outside_root; realpath уже найден другим корнем или записью → пропустить молча
    c. прочитать SKILL.md через BoundedEnv каталога (≤ 128 КиБ, UTF-8), отделить frontmatter
    d. разобрать; ошибка → одна попытка починки двоеточий → repaired или parseErrors (позиции файла)
-   e. перечислить сопутствующие файлы (глубина 3, ≤ 50, признак неполноты)
+   e. перечислить сопутствующие файлы (глубина 3, ≤ 50, обход ≤ 5000 записей в байтовом порядке, признак неполноты)
 
 parseSkills(files, settings, rules) [ядро, чисто]:
 1. для файла в порядке (rootIndex, имя каталога):
@@ -691,6 +692,7 @@ reattach(lastCompaction, catalog, perSkill = skills.reattach.per_skill_tokens,
 |---|---|---|---|
 | `skills.enabled = false`, `skills.disabled`, уменьшение `skills.max_skills`, `skills.catalog_max_chars`, `skills.reattach.*`; `skills.operative.enabled = false` | да | да | — |
 | увеличение `skills.max_skills`, `skills.catalog_max_chars`, `skills.reattach.*` | да — только уменьшение | да | увеличение — проект в `trusted_projects` (решение Q40 change `add-agent-skills`) |
+| `skills.enabled = true` поверх `false` нижних слоёв; `skills.disabled` | `enabled = true` отбрасывается, `disabled` объединяется с нижними слоями | так же | проект в `trusted_projects` (решение Q43, CFG-3) |
 | `skills.extra_roots`, `prompts.templates_dirs` | нет | да, только для доверенного проекта (недоверенный слой 4 — как слой 3) | согласие даёт только пользователь |
 | `skills.operative.lines`, `skills.operative.max_tokens` | нет | да | проект в `trusted_projects` |
 | корни `.codelab/skills`, `.agents/skills`, каталог `.codelab/prompts` | нет | — | проект в `trusted_projects` |

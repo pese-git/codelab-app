@@ -161,6 +161,13 @@ Map<String, Object?> resolvedDefaults() {
     'compaction.enabled': config.compaction.enabled,
     'agent.effort': config.effort.name,
     'tools.project_context.max_bytes': config.projectContextMaxBytes,
+    'skills.enabled': config.skills.enabled,
+    'skills.extra_roots': config.skills.extraRoots,
+    'skills.disabled': config.skills.disabled,
+    'skills.max_skills': config.skills.maxSkills,
+    'skills.catalog_max_chars': config.skills.catalogMaxChars,
+    'skills.reattach.per_skill_tokens': config.skills.reattachPerSkillTokens,
+    'skills.reattach.total_tokens': config.skills.reattachTotalTokens,
     'trusted_projects': config.trustedProjects,
     'permissions.deny': [
       for (final key in config.permissions.rules.denyPatterns) '$key',
