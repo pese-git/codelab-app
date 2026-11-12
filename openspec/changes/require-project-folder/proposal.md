@@ -49,7 +49,7 @@
 
 ## Не входит
 
-- `apps/codelab_cli`: вызывает `connect` один раз на папку запуска, его поведение kit сохраняет. Изменения ядра (итерация C) CLI получает автоматически: его сессии и так в корне запуска.
+- `apps/codelab_cli`: вызывает `connect` один раз на папку запуска, его поведение kit сохраняет; код CLI не меняется. Единственное наблюдаемое изменение — общий kit снимает ждущие одобрения при `/reconnect` и потере соединения (design.md, `codelab_client_acp`). Изменения ядра (итерация C) CLI получает автоматически: его сессии и так в корне запуска.
 - Процесс агента на папку или сессию (модель Claude Code) — после 1.0 (D12).
 - Живая перезагрузка проектного конфига других папок у открытых сессий — после 1.0 (Q12); правка применяется к следующей сессии папки.
 - Правило D23 для MCP-серверов проектных слоёв (Q15).
@@ -71,7 +71,7 @@
   - MODIFIED: «Project selection is independent of the connection type», «Workbench restores sessions after reconnect and restart», «Selecting a not-loaded session restores its transcript», «Empty session after connecting»;
   - ADDED: «Без выбранного проекта нет папки агента и сессий», «Агент стартует сам» (повтор старта любым триггером после сбоя, без автоповторов и дублей).
 - `app-settings`, MODIFIED: «Список профилей на странице «Connection»» («Use», «Selected»), «Блок «Behavior» страницы «Connection»» (без «Connect on start», «Restart agent» с подтверждением), «Доступ к настройкам агента на страницах Providers и MCP servers».
-- `acp-client-kit`: MODIFIED «Сессии после переподключения» (`loadSession` для `detached`); ADDED «Агент по требованию хоста».
+- `acp-client-kit`: MODIFIED «Сессии после переподключения» (`loadSession` для `detached`), «Одобрения привязаны к вызову» (замена и потеря транспорта снимают ждущие одобрения, найдено в итерации B); ADDED «Агент по требованию хоста».
 - `agent-runtime`, MODIFIED: «Конфигурация сессии вне корня запуска» (ключи сессии из папки сессии); ADDED: «Сессии других папок при перезагрузке корня».
 - `agent-acp-server`, ADDED: «Ошибка проектного конфига сессии», «Модели сессии по её каталогу».
 - `agent-secrets`, ADDED: «Ключ проектного провайдера привязан к адресу»; MODIFIED: «Подкоманда secret migrate» (R8-10 после правила группы, D25).
@@ -90,6 +90,7 @@
   Allowlist ядра (PKG-2) не меняется.
 - Клиент:
   - `codelab_client_core` — `client_workspace.dart`, `workspace_state.dart`, `workspace_restorer.dart`;
+  - `codelab_client_acp` — `acp_client_application.dart`: снятие ждущих одобрений при замене и потере транспорта;
   - `apps/codelab_desktop` — `features/workbench`, `features/settings`, `app/`;
   - `codelab_ui` — только при нехватке атома для стартового экрана.
 - Тесты: пакеты выше; харнесс характеризационных тестов desktop; интеграционные тесты app (компилируются, на устройстве — в `release/*`).

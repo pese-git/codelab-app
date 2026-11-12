@@ -3,7 +3,7 @@
 - **C** — конфигурация Dart-агента на сессию: провайдеры, модель, запреты, привязка ключа к адресу. `[agent]` и `[protocol]` для ACP-сервера; выходит отдельно и не зависит от A и B.
 - **B** — агент стартует сам. `[client]`, затем `[desktop]`; выходит после C: иначе сессии других папок в одном агенте остались бы без запретов своего проекта.
 
-Красные тесты коммитятся отдельно до кода — только по явной просьбе пользователя (TDD, вложенные `AGENTS.md`). Q14–Q20 решены, все (a) (design.md, «Открытые вопросы»).
+Красные тесты коммитятся отдельно до кода — только по явной просьбе пользователя (TDD, вложенные `AGENTS.md`). Q14–Q21 решены, все (a). Q22–Q27 (сверка итерации B) решены, все (a); дельты внесены задачей B0.0 (design.md, «Открытые вопросы»).
 
 ## Итерация A — нет неявной папки
 
@@ -291,86 +291,157 @@
 
 ## Итерация B — агент стартует сам
 
-### B0. Красные тесты kit
+Сверено с кодом `develop` `b06a4192` после итераций A и C и PR #283, #287 (2026-11-12; design.md, «Код перед итерацией B»). Порядок и зависимости:
 
-- [ ] B0.1 `[client]` `packages/dart/codelab_client_core/test/workspace/ensure_agent_test.dart` (новый; `FakeAcpTransport`, фейковый резолвер с `Completer` и записью папки):
-  - `Connected` — no-op для любой папки;
-  - первый старт задаёт `agentDirectory`, не трогает `projectDirectory`, запрашивает `session/list`;
-  - повтор во время попытки — один `open` с папкой первого вызова;
-  - без профиля — `ClientWorkspaceException`;
-  - после `ConnectionFailed` — новая попытка;
-  - путь CLI (`connect`) задаёт обе папки, `reconnect` загружает все сессии.
+- B0.0 — выполнена (Q22–Q27 решены, все (a); дельты внесены).
+- Kit: B0.1–B0.3 `[client]` → B1.1 `[client]` → сразу B1.2 `[desktop]` (компиляция тестов desktop) → B1.3 `[client]` → B1.4 `[client]` (найдено в итерации B, выполнена) → B1.5 `[client]`.
+- Desktop — после B1.3 (B1.5 desktop не блокирует: публичный API kit не меняется): B2.1–B2.8 `[desktop]` → B3.1 → B3.2 вместе с B3.5 (удаление `connect` ломает компиляцию тестов, поэтому миграция — в той же правке) → B3.3 → B3.4 → B3.6 → B4.
+- B4.2 — вручную, не условие merge.
 
-  Порядок завершений задаётся явно (`concurrency.md` §69–§70); acp-client-kit «Агент по требованию хоста»; D15. Красный.
-- [ ] B0.2 `[client]` Там же или в тестах списка: `selectProject` при `Connected` — `session/list` нового проекта, поздний ответ прежнего не меняет список; без `sessionCapabilities.list` запроса нет (acp-client-kit «Смена проекта перезапрашивает список»). Красный.
-- [ ] B0.3 `[client]` Тесты переподключения: сессии разных папок загружаются каждая со своим `cwd`; `loadSession` для `detached` — загрузка и слив очереди после неё (acp-client-kit «Сессии после переподключения», новые сценарии; D16). Красный — вторая часть.
-- [ ] B0.4 `[client]` Перенесено в A1.10 (HIGH-1). В B — только регрессия: тесты A1.10 остаются зелёными после `ensureAgent`.
+### B0. Документы и красные тесты kit
+
+- [x] B0.0 Архитектор, до кода, по ответам на Q22–Q27 (все (a); design.md, «Открытые вопросы»). Дельты требований, которые называли ручной Connect, внесены:
+  - agent-workbench-ui: «Командная палитра открывается и выполняет доступные действия» (`/reconnect`, Q24); «Тип подключения «Встроенный агент»» (сценарии «Выбор встроенного агента», «Встроенный агент по умолчанию», «Повторный Connect во время подключения» → «Restart agent во время старта» — Q25); «Встроенный агент без провайдера» (повтор после мастера — «Retry» D13; сценарий «Другой профиль за время мастера» через `ConnectionCommands.connect`); «Sessions sidebar grouped by project» (Q23); «Sessions sidebar lists the project's sessions from the agent» (список после смены проекта); «Selecting a not-loaded session restores its transcript» (Q26); «Агент стартует сам» (корень процесса для сессии в корне диска — Q27, палитра и перезапуск во время старта — Q24, Q25);
+  - app-settings: «Блок «Behavior»…» (доступность во время старта и сценарий «Поздняя попытка» — Q25; корень перезапуска — Q27); «Диалог «Add connection profile»» (тексты «Profile saved» и профиля по умолчанию, `ws://` без подтверждения у «Use» — Q22); «Мастер провайдера в app» (баннер без агента — Q22, кнопка «Retry» `providers-banner-retry` после сбоя старта); ««Rename» и «Remove» профиля» (запрет удаления выбранного профиля);
+  - acp-client-kit: вытеснение `ensureAgent` явным `reconnect` (Q25), сценарий «Перезапуск вытесняет зависший старт».
+
+  Уже исправлено при сверке (без вопросов, следствие D13/D18): «App bar…», «Connection banner…», «Workbench честно отражает спонтанную потерю соединения», «Ожидание восстановления» и его сценарии; в kit — `reconnect(agentDirectory:)`, `newSession(activate:)`, список без проекта. `openspec validate require-project-folder --strict`.
+- [x] B0.1 `[client]` `packages/dart/codelab_client_core/test/workspace/ensure_agent_test.dart` (новый; `FakeAcpTransport`, фейковый резолвер с `Completer` и записью папки):
+  - `Connected` — no-op для любой папки, резолвер не вызван;
+  - первый старт задаёт `agentDirectory`, не трогает `projectDirectory`, запрашивает `session/list` проекта;
+  - без `projectDirectory` — `session/list` не отправлен;
+  - повтор во время попытки — один `open` с папкой первого вызова, оба `Future` завершаются после одного подключения;
+  - без профиля — `ClientWorkspaceException`, резолвер не вызван;
+  - после `ConnectionFailed` и после `ConnectionLost` — новая попытка; после `ConnectionLost` открытые сессии загружаются заново;
+  - `reconnect(agentDirectory: '/work/b')` при проекте `/work/a` — резолвер получил `/work/b`, `projectDirectory` — `/work/a`, список — по `/work/a`;
+  - путь CLI: `connect` задаёт обе папки, `reconnect()` без параметров — прежний корень, загружает все сессии;
+  - `newSession(activate: false)` — сессия в списке, `activeSessionId` прежний.
+  - `reconnect(agentDirectory:)` во время попытки `ensureAgent` — транспорт первой попытки закрыт, `Future` `ensureAgent` без ошибки, промежуточного `ConnectionFailed` нет (Q25 (a)).
+
+  Порядок завершений задаётся явно (`concurrency.md` §69–§70); acp-client-kit «Агент по требованию хоста», все сценарии; D15. Красный.
+- [x] B0.2 `[client]` `packages/dart/codelab_client_core/test/sessions/session_list_test.dart`: `selectProject` при `Connected` — `session/list` нового проекта; поздний ответ прежнего (и поздняя первая страница после подключения) не меняет список, курсор и `hasMoreSessions`; `loadMoreSessions` в полёте не блокирует запрос нового проекта; без `sessionCapabilities.list` запроса нет; переход `A → B → A` во время старта — список `A`, один `open` (acp-client-kit «Смена проекта перезапрашивает список»). Красный.
+- [x] B0.3 `[client]` `packages/dart/codelab_client_core/test/sessions/reconnect_reload_test.dart` и `load_session_test.dart`: сессии разных папок загружаются каждая со своим `cwd` (регрессия); `loadSession` для `detached` — статус не `detached`, очередь сливается после загрузки, `send` снова доходит до агента; ошибка загрузки — `detached` и прежнее уведомление (acp-client-kit «Сессии после переподключения», новые сценарии; D16). Красный — вторая часть.
+- [ ] B0.4 `[client]` Перенесено в A1.10 (HIGH-1). В B — только регрессия: `test/restore/active_session_outside_project_test.dart` остаётся зелёным после `ensureAgent`.
 
 ### B1. Реализация kit
 
-- [ ] B1.1 `[client]` `workspace_state.dart`: `agentDirectory`; `client_workspace.dart`: `ensureAgent` (D15), `connect`/`reconnect` задают `agentDirectory`, `selectProject` с номером запроса списка, `loadSession` для `detached`. Doc-комментарии на русском (§15); экспорт из бареля. B0.1–B0.3 зелёные.
-- [ ] B1.2 `[client]` Перенесено в A2.9. В B `workspace_restorer.dart` правило активной сессии не меняет.
-- [ ] B1.3 `[client]` Проверки kit: `fvm dart format`, `fvm dart analyze`, `fvm dart test` в `codelab_client_core`; `melos run web-compile`; `melos run conformance:client`; `melos run test:e2e:cli:dart-agent`; `fvm dart analyze` в `apps/codelab_cli` и `apps/codelab_desktop` (публичный API kit расширен).
+- [x] B1.1 `[client]` `lib/src/workspace/workspace_state.dart`: `agentDirectory`; `lib/src/workspace/client_workspace.dart`:
+  - `ensureAgent` (D15): хранимый `Future` идущей попытки, вытеснение по `_attempt` как у `connect`;
+  - `connect`/`reconnect` задают `agentDirectory`; `reconnect(agentDirectory:)`;
+  - номер запроса `session/list` для первой страницы, `selectProject` и `loadMoreSessions`; без `projectDirectory` списка нет;
+  - `selectProject` при `Connected` — первая страница нового проекта;
+  - `newSession({cwd, activate = true})`;
+  - `loadSession` для `detached` — `resume()` после успешного `_load`.
+
+  Doc-комментарии на русском (§15) со ссылками на D15–D17; doc `TransportResolver.open`: параметр получает корень процесса. Экспорт из бареля (`WorkspaceState` уже экспортирован). B0.1–B0.3 зелёные.
+- [x] B1.2 `[desktop]` Сразу после B1.1: `apps/codelab_desktop/test/support/fake_provider_settings.dart` — `FakeWorkspace implements ClientWorkspace` получает `ensureAgent` и новые параметры (иначе тесты desktop не компилируются). `fvm flutter analyze` в `apps/codelab_desktop`.
+- [x] B1.3 `[client]` Проверки kit: `fvm dart format`, `fvm dart analyze`, `fvm dart test` в `codelab_client_core`; `melos run web-compile`; `melos run conformance:client`; `melos run test:e2e:cli:dart-agent`; `fvm dart analyze` в `apps/codelab_cli` (публичный API kit расширен; код CLI не меняется, а наблюдаемое поведение CLI меняется только снятием ждущих одобрений — B1.4, design.md «Затронутые пакеты», `codelab_client_acp`).
+- [x] B1.4 `[client]` Ждущие одобрения снимаются при замене и потере транспорта (найдено в итерации B; acp-client-kit «Одобрения привязаны к вызову», сценарии «Перезапуск снимает одобрение detached-сессии» и «Потеря соединения снимает одобрение»; D22; agent-workbench-ui «Workbench честно отражает спонтанную потерю соединения»).
+  - Тест: `packages/dart/codelab_client_core/test/approvals/approvals_dropped_on_connection_change_test.dart` — `reconnect` к агенту без `loadSession` снимает одобрение `detached`-сессии, поздний `respond` бросает ошибку и не шлёт `JsonRpcResponse`; потеря транспорта снимает одобрение.
+  - Реализация: `packages/dart/codelab_client_acp/lib/src/application/acp_client_application.dart`, `_dropPendingApprovals` — из `replaceTransport` и из обработки `AcpTransportFailure` при `wasReady` или `wasInitializing`; каждое ждущее одобрение каждой сессии — `SessionStateMachine.cancelApproval`, ход выходит из `awaitingApproval`; предупреждение в диагностику с id сессии, одобрения и tool call, без `rawInput`; очередь промптов не трогается.
+  - Проверки: `fvm dart format`, `fvm dart analyze`, `fvm dart test` в `codelab_client_acp` и `codelab_client_core`; `melos run conformance:client`; `melos run test:e2e:cli:dart-agent` (пакет общий, поведение CLI меняется).
+- [x] B1.5 `[client]` Порядок снятия при замене транспорта (acp-client-kit «Одобрения привязаны к вызову», сценарии «Ответ во время замены транспорта» и «Запрос нового соединения с прежним id»; design.md «Затронутые пакеты», `codelab_client_acp`, «Порядок при замене»).
+  - Красный тест (в `approvals_dropped_on_connection_change_test.dart` или тесте `codelab_client_acp`): `respond` вызван, пока `reconnect` ждёт отмены подписок старого транспорта, — одобрение `cancelled`, ответ не отправлен ни в старое, ни в новое соединение; после замены агент шлёт `session/request_permission` с тем же JSON-RPC id, что у снятого, — запрос виден в `pendingApprovals`, ответ уходит в новое соединение ровно один раз.
+  - Реализация: в `_replaceTransport` одобрения и карты запросов (`_pendingPermissionRequests`, `_handledPermissionRequests`) снимаются синхронно сразу после `_generation++`, до первого `await`; `_sendPermissionResponse` добавляет id в `_handledPermissionRequests` только при неизменном поколении.
+  - Проверки: как в B1.4.
 
 ### B2. Красные тесты desktop
 
-- [ ] B2.1 `[desktop]` `test/features/workbench/application/agent_starts_itself_test.dart` (новый; `CodeLabTestBinding` с фейковыми открывателем и stdio-фабрикой):
+- [x] B2.1 `[desktop]` `test/features/workbench/application/agent_starts_itself_test.dart` (новый; `CodeLabTestBinding` с фейковыми открывателем и stdio-фабрикой):
   - выбор проекта стартует агента без сессии и запрашивает список;
-  - восстановленный проект стартует агента при запуске;
+  - восстановленный проект стартует агента триггером запуска (`startOnLaunch`, D19); без виджета приложения и без вызова триггера агент не стартует;
   - «New session» и фокус на `notLoaded` / `detached` стартуют агента, если его нет; для `detached` с `cwd` в корне диска — подтверждение D24 (та же функция, что в A2.11);
   - сессия другой папки при идущем ходе — без перезапуска, ход завершается своим ответом;
   - WebSocket — одно соединение на две папки;
   - после сбоя любой триггер (выбор проекта, «New session», фокус, «Retry») снова стартует агента; без действия пользователя повторов нет (фейковые часы: время идёт — новых `open` нет); одинаковый сбой три раза подряд — одна запись в диагностике, на экране `Failed again (2)`, в журнале `connection.start_failed` с `repeat`; другой текст ошибки — новая запись;
-  - исчезнувшая папка сессии — `session/load` не отправлен.
+  - «Retry» баннера `lost` — новый старт с прежним корнем, открытые сессии загружены заново;
+  - исчезнувшая папка сессии — `session/load` не отправлен, текст `Project folder not found: <path>. Choose an existing folder with Open folder….`.
+  - агент без `loadSession`: фокус на `detached`-сессии показывает её для чтения, `session/load` не отправлен, диагностики нет (Q26 (a));
+  - агент не запущен, выбран `/work/app`, фокус на `notLoaded`-сессии с `cwd` `/` и `Open` — корень процесса `/work/app`, `session/load` с `cwd` `/` (Q27 (a)).
 
-  (agent-workbench-ui «Агент стартует сам», «Selecting a not-loaded session restores its transcript», «Switching project keeps the agent and other sessions running», «Исчезнувшая папка сессии»; D13.) Красный.
-- [ ] B2.2 `[desktop]` Там же, гонки D17 (принудительный порядок через `Completer`):
-  - выбор проекта и два «New session» во время старта — один `open`, фокус у последнего намерения, сессия первого в списке;
-  - `s1` → `s2` во время `session/load` `s1` — фокус у `s2`, ошибок `error` нет;
-  - быстрая смена проекта — список последнего.
+  (agent-workbench-ui «Агент стартует сам», «Selecting a not-loaded session restores its transcript», «Switching project keeps the agent and other sessions running», «Исчезнувшая папка сессии», «Connection banner above a non-empty transcript»; D13.) Красный.
+- [x] B2.2 `[desktop]` Там же, гонки D17 (принудительный порядок через `Completer`):
+  - выбор проекта и два «New session» во время старта — один `open`, фокус у последнего намерения, сессия первого в списке без фокуса и в kit не активна (`activeSessionId`; Files и терминал за ней не переключились);
+  - `s1` → `s2` во время `session/load` `s1` — фокус у `s2`, ошибок `error` нет, событие `session.focus_superseded`;
+  - быстрая смена проекта — список последнего;
+  - «Restart agent» во время `session/new` — поздний ответ старого соединения фокус не меняет.
 
   Красный.
-- [ ] B2.3 `[desktop]` `test/features/settings/application/connection_settings_cubit_test.dart` и тест `ConnectionCubit`:
-  - «Use» — метка «Selected», агент не тронут;
+- [x] B2.3 `[desktop]` `test/features/settings/application/connection_settings_cubit_test.dart` и `test/features/workbench/application/connection_cubit_test.dart`:
+  - «Use» — метка «Selected», агент не тронут, профиль по умолчанию не изменён;
   - подпись `Restart <title> to use it.`;
-  - «Restart agent» без работы — без диалога, с новым профилем;
-  - при ходе, ждущем одобрении или отмене — состояние «ждёт подтверждения» с названиями; «Cancel» ничего не меняет; «Restart agent» перезапускает без `session/cancel`, очередь сохранена;
+  - «Remove» недоступна у «Current» и у «Selected» с подсказкой `Use another profile first.`;
+  - «Restart agent» без работы — без диалога, с новым профилем; корень — папка сессии в фокусе, иначе проект, иначе прежний корень; `projectDirectory` не меняется;
+  - без проекта и без прежнего корня — недоступна, `Starts when you open a project.`;
+  - при ходе, ждущем одобрении или отмене — состояние «ждёт подтверждения» с названиями; «Cancel» ничего не меняет; «Restart agent» перезапускает без `session/cancel`, очередь сохранена; событие `connection.restart` с `reason` и `interrupted`, без пути;
   - повторный перезапуск при открытом диалоге игнорируется;
+  - «Restart agent» баннера переноса секретов — тот же путь с подтверждением;
   - строки «Connect on start» нет, ключ `true` не подключает;
-  - корень перезапуска — папка сессии в фокусе, иначе проект.
+  - повтор после мастера «Add provider» (`connectAfterProviderSetup`) — повтор намерения старта, а не `connect(embedded)`; началась другая попытка — `provider_wizard.reconnect_skipped`.
 
-  A1.2 переписывается сюда: Connect больше нет. (app-settings «Список профилей…», «Блок «Behavior»…», все сценарии; D18, D19, D22.) Красный.
-- [ ] B2.4 `[desktop]` `workspace_restore_test.dart`: активная сессия в папке проекта загружается при запуске без Connect; активная `s2` с `cwd` `/` под `/work/app` — агент стартует в `/work/app` без Connect, стартовый экран. Правило «`s2` не грузится» уже проверяет A1.11; здесь — только клик по `s2`: подтверждение D24, после `Open` загрузка без перезапуска (agent-workbench-ui «Restart restores the previous session», «Active session with root cwd under a real project»; D16, D19). Красный.
-- [ ] B2.5 `[desktop]` Виджет-тесты `test/features/workbench/presentation/workbench_shell_test.dart`:
+  (app-settings «Список профилей…», «Блок «Behavior»…», все сценарии; D18, D19, D22.) Плюс: «Restart agent» во время старта доступна, вытесняет попытку без диалога и без промежуточного `failed` (Q25); корень перезапуска при сессии `/` в фокусе — выбранный проект (Q27); «Remove» недоступна и у «Selected» (проверка до `ProfileStore.remove`). Красный.
+- [x] B2.4 `[desktop]` `test/features/workbench/application/workspace_restore_test.dart`: активная сессия в папке проекта загружается при запуске без Connect; активная `s2` с `cwd` `/` под `/work/app` — агент стартует в `/work/app` без Connect, стартовый экран. Правило «`s2` не грузится» уже проверяет A1.11; здесь — только клик по `s2`: подтверждение D24, после `Open` загрузка без перезапуска (agent-workbench-ui «Restart restores the previous session», «Active session with root cwd under a real project»; D16, D19). Красный.
+- [x] B2.5 `[desktop]` Виджет-тесты `test/features/workbench/presentation/workbench_shell_test.dart`:
   - стартовый экран без проекта (`start-open-project`) и с проектом (`start-new-session`, `Starting <title>…`);
-  - экран сбоя с «Retry»;
-  - диалог подтверждения D22 по состоянию Cubit-а;
-  - в app bar нет «Connect»;
-  - Cmd/Ctrl+N доступно при выбранном проекте без соединения.
+  - экран сбоя с «Retry» и `Failed again (n)`;
+  - диалог подтверждения D22 по состоянию Cubit-а — и над рабочим местом, и над страницей «Connection»;
+  - в app bar нет «Connect» ни в одном состоянии (`CodeLabAppBar.connectionConnectKey` не найден);
+  - баннер `lost`/`failed` — «Retry»;
+  - Cmd/Ctrl+N и пункт палитры `new` доступны при выбранном проекте без соединения.
+  - `/reconnect` в палитре — тот же перезапуск с диалогом D22 при идущем ходе (Q24 (a));
+  - сайдбар: после перехода из `/work/a` (идёт ход) в `/work/b` сессия `/work/a` — в группе `a` со статусом, не под `b`; сессия без своей группы — под выбранным проектом с подписью папки (Q23 (a); юнит-тест `sidebarProjectsOf` в `ui_mappers_test.dart`).
 
-  (agent-workbench-ui «Empty session after connecting», «Агент стартует сам» — сочетания; D18.) Красный.
+  `test/features/settings/presentation/connection_page_test.dart`: «Use» (`connection-profile-use-<id>`) вместо «Connect», без «Connect on start». (agent-workbench-ui «Empty session after connecting», «App bar…», «Агент стартует сам» — сочетания; app-settings; D18.) Красный.
+- [x] B2.6 `[desktop]` Тесты итерации A на ручной Connect переписываются на триггеры с теми же ожиданиями: `project_required_test.dart` и `missing_project_folder_test.dart` (A1.2 — триггеры без проекта не стартуют агента ни для одного типа профиля; A1.3 — «New session» и смена проекта во время проверки папки; A1.14 — «New session» и триггер запуска во время восстановления, таймаут). Текст исчезнувшей папки в `missing_project_folder_test.dart:74–75` — без `and connect again` (D2). (agent-workbench-ui «Без выбранного проекта нет папки агента и сессий», все сценарии.) Красный после правки текста.
+- [x] B2.8 `[desktop]` `test/features/settings/application/provider_wizard_cubit_test.dart` и `provider_settings_cubit_test.dart`: запись без работающего агента — баннер `Saved. The agent uses it the next time it starts.` без кнопки; после сбоя старта — тот же текст и «Retry» (`providers-banner-retry`), которая повторяет намерение старта ровно одной попыткой; `connectAgent` и `ProviderBannerAction.connect` удалены. Тексты Q22 пп. 2–5 — в тестах диалога «Add connection profile», `ui_mappers_test.dart` и `SessionsCubit`. (app-settings «Мастер провайдера в app», сценарии «Провайдер сохранён без работающего агента», «…после сбоя старта»; «Диалог «Add connection profile»»; Q22 (a).) Красный.
+- [x] B2.7 `[desktop]` Files и терминал при «Use»: работает встроенный агент, сессия в фокусе, пользователь выбирает «Use» WebSocket-профиля без перезапуска — панель Files остаётся доступной (`projectFilesAvailable` по профилю работающего агента), вкладки терминала сессии на месте (`test/features/project_files/`, `test/features/terminal/`; D18). До старта агента с выбранным проектом Files показывает проект (регрессия spec workspace-file-browser «Корень без сессии»). Красный — первая часть.
 
 ### B3. Реализация desktop
 
-- [ ] B3.1 `[desktop]` `settings_cubit.dart`, `sessions_cubit.dart`: триггеры D13 через `ensureAgent`; номер намерения фокуса и проверка после каждого `await`; событие `session.focus_superseded` (D17); после сбоя триггер стартует заново (D13); схлопывание одинаковых сбоев в диагностике и счётчик повторов в состоянии экрана сбоя. B2.1, B2.2 зелёные.
-- [ ] B3.2 `[desktop]` `connection_cubit.dart`:
-  - удалить `connect` как ручной старт, `connectOnStart` и чтение ключа (у `ConnectionPreferences` удалить методы `connect_on_start`, если других читателей нет);
-  - профиль окна по «Use» и метка «Selected»;
-  - `restart()` с корнем по D18 и подтверждением D22 (состояние, droppable, событие `connection.restart`);
-  - «Retry» повторяет намерение, вызвавшее старт.
+- [x] B3.1 `[desktop]` `settings_cubit.dart`, `sessions_cubit.dart`, `connection_cubit.dart`:
+  - триггеры D13 через `ensureAgent`: выбор проекта в `SettingsCubit.selectProject` (не в `_restoreProject`), «New session», фокус на `notLoaded`/`detached` (D24 для `detached` той же функцией);
+  - номер намерения фокуса и проверка после каждого `await`; устаревший `session/new` — `newSession(activate: false)` или возврат `activate`; `_handleSessionChange` не делает показываемой сессию устаревшего намерения; событие `session.focus_superseded` (D17);
+  - поколение для намерений — номер попытки `ConnectionCubit` через геттер;
+  - функция-повтор намерения старта для «Retry»; «Retry» `lost` — `ensureAgent(agentDirectory)`;
+  - схлопывание одинаковых сбоев и счётчик повторов в состоянии экрана сбоя, `connection.start_failed`.
 
-  B2.3 зелёный.
-- [ ] B3.3 `[desktop]` Старт приложения: восстановленный проект — триггер 1 (D19). B2.4 зелёный.
-- [ ] B3.4 `[desktop]` `main_pane.dart`, `workbench_shell.dart`, страница «Connection»: стартовый экран, экран сбоя, диалог подтверждения, «Use» вместо «Connect» (ключ `connection-profile-use-<id>`), без «Connect on start», без «Connect» в app bar. Виджеты только отображают и передают действия (§6). При необходимости — `CodeLabStartScreen` в `codelab_ui` без логики, с превью в `codelab_organism_previews.dart`. Providers/MCP: источник папки — папка сессии в фокусе, иначе выбранный проект (D8). B2.5 зелёный.
-- [ ] B3.5 `[desktop]` Харнесс характеризационных тестов: `connect()` → ожидание старта по проекту (D20). Каждый изменённый характеризационный тест перечислить в описании задачи с причиной (`codelab_client_core/AGENTS.md` §5). Интеграционные тесты: «Connect → New session» → «Open folder → New session» (компилируются; на устройстве — только в `release/*`).
-- [ ] B3.6 `[desktop]` Текст исчезнувшей папки → `Project folder not found: <path>. Choose an existing folder with Open folder….` (без `and connect again`: в рабочем месте нет Connect, D2). Сейчас в коде `connection_cubit.dart` — `… and connect again.`. Сначала тесты (красные): `missing_project_folder_test.dart:74–75`, `connection_cubit_test.dart:653`; затем код.
+  B2.1, B2.2 зелёные.
+- [x] B3.2 `[desktop]` `connection_cubit.dart` и `features/settings/application/connection_commands.dart`, `connection_settings_cubit.dart`:
+  - удалить ручной `connect`, `connectOnStart` и чтение ключа; у `ConnectionPreferences` удалить `loadConnectOnStart`/`saveConnectOnStart`, у `ConnectionSettingsState` — `connectOnStart`; профиль по умолчанию остаётся;
+  - `ConnectionCommands`: `use(profile)` и `restart()` вместо `connect`/`reconnect`;
+  - выбранный профиль («Use», «Selected») и профиль работающего агента («Current») раздельно (D18);
+  - `restart()` с корнем по D18 через `reconnect(profile:, agentDirectory:)`, подтверждение D22 (состояние, droppable, событие `connection.restart`);
+  - `connectAfterProviderSetup` — повтор намерения старта;
+  - текст исчезнувшей папки без `and connect again` (D2).
+
+  Вместе с B3.5. B2.3, B2.6 зелёные.
+- [x] B3.3 `[desktop]` Старт приложения: `lib/app/codelab_app_widget.dart` вместо `connectOnStart()` вызывает `startOnLaunch()` фасада после первого кадра (D19). B2.4 зелёный.
+- [x] B3.4 `[desktop]` Presentation:
+  - `main_pane.dart`: стартовый экран, экран сбоя (`CodeLabConnectionScreen` без `onConnect`, «Retry», `Failed again (n)`), баннер с «Retry»;
+  - `workbench_shell.dart`: без `onConnect` у `CodeLabAppBar`, `onNewSession` при выбранном проекте; `onRetry` и `SecretMigrationBanner(onRestart:)` — через `restart()`/«Retry»;
+  - диалог D22 — в `lib/app/codelab_app_widget.dart` поверх рабочего места и настроек;
+  - страница «Connection»: «Use» (ключ `connection-profile-use-<id>`), «Selected», без «Connect on start», подсказка `Use another profile first.`, подпись и доступность «Restart agent»;
+  - `codelab_ui`: `CodeLabStartScreen` без логики с превью в `codelab_organism_previews.dart`; параметр подписи кнопки повтора у `CodeLabConnectionBanner` и `CodeLabConnectionScreen`;
+  - Providers/MCP: источник папки — папка сессии в фокусе, иначе выбранный проект (D8, замыкания в `app_scope.dart`);
+  - тексты Q22 (a): «Providers» — `Saved. The agent uses it the next time it starts.` без кнопки, после сбоя старта — «Retry» (`providers-banner-retry`, `provider_wizard_cubit.dart`, `ProviderBannerAction`); «Profile saved» — `The running agent is unchanged. Select it with Use in the profile row; Restart agent applies it.`; подсказка «Use by default» — `Used when the agent starts.`; заметка ленты (`ui_mappers.dart`) — `Retry to continue working with the agent.`; `SessionsState.currentSessionDetail` по умолчанию — `Open a project to start a session.`;
+  - пункт палитры `reconnect` (`shell_cubit.dart`, `selectCommand`) — `restart()` с подтверждением D22, подпись по типу профиля (Q24 (a));
+  - сайдбар (Q23 (a)): `sidebarProjectsOf` раскладывает открытые сессии по группам проектов с тем же путём, остальные — под выбранным с подписью папки;
+  - фокус на `detached` у агента без `loadSession` — показ для чтения без `session/load` (Q26 (a)).
+
+  Виджеты только отображают и передают действия (§6). B2.5, B2.7, B2.8 зелёные.
+- [x] B3.5 `[desktop]` Миграция существующих тестов (D20, «Объём миграции тестов»), в той же правке, что B3.2:
+  - харнесс `shell_cubit_characterization/harness.dart`: `connect()` → `startOnLaunch()` и ожидание `connected`;
+  - характеризационные тесты — ровно те, что перечислены в D20, с причиной в описании задачи (`codelab_client_core/AGENTS.md` §5);
+  - остальные тесты desktop (около 30 файлов, крупнейшие — `connection_cubit_test.dart`, `widget_test.dart`, `connection_settings_cubit_test.dart`, `app_scope_profiles_test.dart`): `connect(profile)` → «Use» и триггер, `reconnect()` → `restart()`, `connectOnStart()` → `startOnLaunch()`, ключи `connection-profile-connect-*` → `connection-profile-use-*`; ожидания исхода не меняются, кроме перечисленных в B2;
+  - интеграционные тесты: `integration_test/support/e2e_agent.dart` — `connectProfileViaSettings` → «Use» профиля теста, затем выбор проекта (`ensureProject` после «Use»), ожидание старта; тесты, выбирающие проект до подключения (`fs_flow_test.dart`, `open_project_flow_test.dart`, `command_palette_flow_test.dart` и другие из 14 файлов), меняют порядок; `connection_profiles_flow_test.dart`, `stdio_connect_flow_test.dart`, `embedded_provider_settings_flow_test.dart` — «Use» и выбор проекта вместо Connect. Компилируются (`fvm flutter analyze`); на устройстве — только в `release/*` (§21).
+- [x] B3.6 `[desktop]` Сверка: `rg "connect_on_start|connectOnStart|connection-profile-connect|connection-badge-connect|and connect again" apps/codelab_desktop` — пусто, кроме константы ключа, если она нужна для теста «ключ `true` не подключает».
 
 ### B4. Проверки
 
-- [ ] B4.1 `[desktop]` `fvm dart format --set-exit-if-changed` изменённых файлов; `fvm flutter analyze` и `fvm flutter test` в `apps/codelab_desktop` и, если тронут, в `packages/flutter/codelab_ui`.
+- [x] B4.1 `[desktop]` `fvm dart format --set-exit-if-changed` изменённых файлов; `fvm flutter analyze` и `fvm flutter test` в `apps/codelab_desktop` и `packages/flutter/codelab_ui`.
 - [ ] B4.2 `[desktop]` Ручная проверка на macOS (не условие merge):
   - `.app` через `open` без снимка;
   - со снимком из отчёта пользователя;
   - две папки со встроенным агентом: ход в одной не прерывается переходом в другую, запрет проекта второй папки действует;
   - «Use» другого профиля и «Restart agent» во время хода — диалог.
-- [ ] B4.3 `openspec validate require-project-folder --strict`.
+- [x] B4.3 `openspec validate require-project-folder --strict`.
