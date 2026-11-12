@@ -1,4 +1,5 @@
 import '../config/config_source.dart';
+import '../config/project_config.dart';
 import '../env/execution_env.dart';
 import '../llm/model_catalog.dart';
 import '../llm/stream_function.dart';
@@ -42,6 +43,7 @@ final class AgentCoreServices {
     this.projectFiles,
     this.secrets,
     this.config,
+    this.projectConfig,
     this.agentConfigPaths,
     this.lastModel,
   });
@@ -105,6 +107,18 @@ final class AgentCoreServices {
   /// `buildAgentCore` требует `modelsFor` (`HostWiringException`). Владелец —
   /// хост: он закрывает источник после `runtime.dispose()`.
   final ConfigSource? config;
+
+  /// Порт загрузки конфигурации папки сессии (design.md change
+  /// `require-project-folder`, D21).
+  ///
+  /// Почему отдельное поле, а не часть [config]: у хоста бывает одно без
+  /// другого. Источник перезагружает корень запуска, а порт даёт сессии
+  /// другой папки её собственный `CoreConfig` и функцию модели. `null` —
+  /// сессия вне корня получает `CoreConfig.withoutProject` (`serve --ws`,
+  /// `--llm-script`, сценарный открыватель, сторонние хосты, Q18).
+  /// С портом `buildAgentCore` требует `modelsFor` (`HostWiringException`)
+  /// и передаёт его рантайму, даже если [config] не задан.
+  final ProjectConfigLoader? projectConfig;
 
   /// Пути конфигурации агента для PERM-11 (design.md change
   /// `add-config-writer-and-reload`, D8; `agent-core-architecture` §7.6.1):

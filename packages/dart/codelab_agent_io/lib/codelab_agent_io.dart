@@ -86,6 +86,7 @@ export 'src/secrets/secret_migrator.dart'
         SecretMigrator,
         SecretMovedItem,
         SecretNotMigratedItem,
+        SecretProviderMovedItem,
         SecretPlanItem,
         SecretReplacedItem,
         SecretReusedItem;

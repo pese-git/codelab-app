@@ -39,8 +39,13 @@ import '../embedded_agent_config.dart';
 /// `HostWiringException`. `EmbeddedAgent.secretsInConfig` — `true`, если среди
 /// предупреждений загрузки есть `config.secret.in_file` (D8 change
 /// `add-config-literal-secrets-and-migrate`); старт такие предупреждения не
-/// блокируют. Нет ключа провайдера — не ошибка открытия: первый ход
-/// завершается ошибкой провайдера с именем секрета (D13, п. 2).
+/// блокируют. Папка запуска ([cwd] открывателя) задаёт процесс: секреты,
+/// журнал, HTTP, наблюдатель за конфигом и снимок корня. Сессия другой папки
+/// получает конфигурацию своей папки через `FileConfigSource` как
+/// `ProjectConfigLoader` (провайдеры, разрешения, бюджет, MCP-серверы
+/// конфигурации; design.md change `require-project-folder`, D21). Нет ключа
+/// провайдера — не ошибка открытия: первый ход завершается ошибкой
+/// провайдера с именем секрета (D13, п. 2).
 EmbeddedAgentOpener localEmbeddedAgentOpener({
   required Map<String, String> environment,
   required Logger logger,
@@ -161,6 +166,9 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
           environment: environment,
         ),
         configSource: source,
+        // Тот же объект даёт конфигурацию папок других сессий (D21, Q18):
+        // слои, окружение, флаги и доверие те же, что у стартовой загрузки.
+        projectConfig: source,
         closeConfigSource: watching.close,
       ),
     );

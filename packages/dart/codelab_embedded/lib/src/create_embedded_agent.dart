@@ -67,6 +67,10 @@ Future<EmbeddedAgent> createEmbeddedAgent({
     secretsInConfig: secretsInConfig,
     models: initial.catalog,
     streamFunction: initial.stream,
-    modelsFor: services.configSource == null ? null : modelsFor,
+    // Нужна перезагрузке корня и сессиям других папок (D21): порт бывает без
+    // источника.
+    modelsFor: services.configSource == null && services.projectConfig == null
+        ? null
+        : modelsFor,
   );
 }

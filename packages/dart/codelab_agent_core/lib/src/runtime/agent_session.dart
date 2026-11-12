@@ -37,6 +37,17 @@ abstract interface class AgentSession {
   /// `model` (§13.6; design.md change `add-dart-agent-acp-server`, D3).
   ModelRef get model;
 
+  /// Каталог моделей этой сессии (design.md change `require-project-folder`,
+  /// D21).
+  ///
+  /// Почему на сессии, а не на рантайме: у сессии папки, отличной от корня
+  /// запуска, свой каталог (провайдер «This project only» проекта `B` есть в
+  /// сессиях `B` и не виден сессиям `A`). ACP-адаптер берёт из него варианты
+  /// опции `model` и проверку `session/set_config_option`; у сессии в корне
+  /// это каталог применённого снимка, и он меняется перезагрузкой (после неё
+  /// сессия получает `ModelOptionsChanged`).
+  ModelCatalog get models;
+
   /// Уровень рассуждения сессии; хранится и у модели без рассуждения, но в
   /// запрос уходит только у модели с `supportsReasoning` (§2.12.3).
   ReasoningEffort get effort;

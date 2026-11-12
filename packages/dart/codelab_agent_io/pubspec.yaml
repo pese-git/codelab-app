@@ -23,5 +23,8 @@ dependencies: # allowlist §1.2; расширение — только чере�
   yaml_edit: ^2.2.4
 
 dev_dependencies:
+  # `MockClient` в тесте мигратора: ход с непривязанным провайдером не должен
+  # слать HTTP (C5.6, D26). В `dependencies` не входит.
+  http: ^1.5.0
   lints: ^6.0.0
   test: ^1.26.3

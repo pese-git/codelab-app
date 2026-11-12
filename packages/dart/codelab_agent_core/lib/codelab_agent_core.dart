@@ -24,6 +24,19 @@ export 'src/config/config_source.dart';
 export 'src/config/config_tree.dart';
 export 'src/config/core_config.dart';
 export 'src/config/host_settings.dart';
+export 'src/config/project_config.dart';
+// Привязка ссылок проектного провайдера к адресу (D23): мигратор
+// `codelab_agent_io` проверяет по ней, можно ли перенести ссылку из
+// закоммиченного `config.yaml` в `config.local.yaml` (D26, C5.6). Остальное
+// в файле — внутренности загрузки.
+export 'src/config/provider_binding.dart'
+    show
+        ProviderKeyBinding,
+        ProviderReference,
+        ProviderReferenceKind,
+        providerOrigin,
+        providerReferences,
+        referencesIn;
 export 'src/config/secret_references.dart';
 export 'src/config/inline_secrets.dart'
     show
