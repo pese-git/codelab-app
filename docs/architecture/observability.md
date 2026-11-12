@@ -644,7 +644,12 @@ terminal
 * `terminal.close_all` — `count`, `forced`;
 * `terminal.signal_failed` — `tab_id`, `signal` (`hangup` или `kill`), `error_type`: сигнал вкладке бросил исключение, закрытие остальных продолжается;
 * `app.exit_requested` (компонент `app`) — ОС запросила выход, без полей;
-* `app.exit_close_failed` (компонент `app`) — `error_type`: закрытие терминала при выходе бросило, выход не отменяется.
+* `app.exit_close_failed` (компонент `app`) — `error_type`: закрытие при выходе бросило целиком, выход не отменяется;
+* `app.exit_closed` (компонент `app`) — `duration_ms`: закрытие root scope при выходе уложилось в предел;
+* `app.exit_timeout` (компонент `app`, `warning`) — `timeout_ms`, `pending` (имена всех незавершённых шагов, в том числе не начатых, из закрытого набора `terminal`, `cubits`, `workspace`, `embedded`, `migration_offer`, `transport`, `client`): предел выхода истёк, app всё равно выходит;
+* `app.shutdown_step_failed` (компонент `app`, `error`) — `step`, `error_type`: шаг закрытия root scope бросил, следующие шаги выполняются.
+
+События `app.exit_*` и `app.shutdown_step_failed` — change [`add-client-process-shutdown-on-exit`](../../openspec/changes/add-client-process-shutdown-on-exit/design.md), D6. Ядро клиента пишет `terminal_processes_killed` — `count`, `reason` (`connection_closed` | `dispose`), без команд, путей и идентификаторов терминалов; событие пишется после отправки сигналов, сбой журнала не мешает завершению процессов. Ответ на `terminal/*`, не отправленный из-за смены соединения или закрытия ядра, виден как `event_ignored {reason: stale_generation, kind}` (`kind`: `terminal_create_result` или `terminal_response`; §20, D15 change).
 
 Путей, окружения, аргументов и `toString()` исключений в них нет (§43–§45).
 
@@ -729,6 +734,8 @@ shutdown_completed
 ```
 
 Это помогает находить orphan resources.
+
+В CodeLab desktop эту роль играют `app.exit_requested` (shutdown_started), `terminal.close_all` и `terminal_processes_killed` (процессы закрыты), `embedded.close_timeout` и `app.exit_closed` / `app.exit_timeout {pending}` (shutdown_completed или что не успело); см. события компонента `app` выше.
 
 ---
 
