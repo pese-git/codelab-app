@@ -19,6 +19,8 @@
 /// `findCritical` превращает в шаблон `unparsable command` (правило 8).
 library;
 
+import 'dart:convert';
+
 /// Наибольшая допустимая глубина вложенных команд (§7.6, правило 8).
 ///
 /// Почему: без предела вложенность из подстановок, `sh -c` и `eval` можно
@@ -33,7 +35,7 @@ const maxShellNesting = 4;
 /// не угадывает смысл сломанной команды, а считает её критической.
 ///
 /// Как использовать: ловить вокруг [parseShell]; [message] — для отладки,
-/// пользователю показывается только метка `unparsable command`.
+/// пользователю показывается метка `unparsable command`, а не [message].
 final class ShellParseException implements Exception {
   /// Создаётся лексером; снаружи не нужна.
   const ShellParseException(this.message);
@@ -437,6 +439,13 @@ final class _Lexer {
       } else if (c == '"') {
         _readDoubleQuoted(buffer, nested, depth);
         quoted = true;
+      } else if (c == r'$' && pos + 1 < src.length && src[pos + 1] == "'") {
+        _readAnsiC(buffer);
+        quoted = true;
+      } else if (c == r'$' && pos + 1 < src.length && src[pos + 1] == '"') {
+        // `$"…"` — локализуемая строка bash: без каталога перевода она
+        // равна `"…"`, поэтому `$` перед кавычкой пропускается.
+        pos++;
       } else if (c == r'$') {
         _readDollar(buffer, nested, depth);
       } else if (c == '`') {
@@ -453,6 +462,149 @@ final class _Lexer {
       }
     }
     return _Word(buffer.toString(), quoted: quoted, nested: nested);
+  }
+
+  /// ANSI-C строка `$'…'`: escape-последовательности (`\n`, `\t`, `\xHH`,
+  /// `\NNN`, `\uHHHH`, `\cX`, …) раскрываются, остальное — данные.
+  ///
+  /// Почему: иначе `rm -rf $'\x2f'` скрывает цель от критических шаблонов
+  /// (слово читалось бы как `$\x2f`), а `$'rm\n-rf'` разваливало бы аргументы
+  /// (`env -S $'rm\n-rf …'`; PERM-11, §7.6.1). Подстановки внутри не
+  /// выполняются.
+  ///
+  /// Для чего: возвращает в [buffer] то, что увидит программа. Байтовые
+  /// escape (`\xHH`, `\NNN`, код `& 0xFF`) собираются в байты и декодируются
+  /// как UTF-8, невалидная последовательность — [ShellParseException].
+  /// Как и bash,
+  /// символ с кодом 0 (`\0`, `\x00`, `\u0000`, `\c@`) обрывает остаток
+  /// строки до закрывающей `'`, а слово после кавычки склеивается с тем, что
+  /// было до обрыва (`$'r\0zz'm` — это `rm`). Код выше 0x10FFFF и `\c` перед
+  /// кавычкой или обратной чертой неоднозначны — [ShellParseException]
+  /// (fail closed, правило 8 §7.6).
+  ///
+  /// Расхождение с bash 3.2 (`/bin/sh` на macOS): он не знает `\u` и `\U` и
+  /// оставляет их буквально, а мы раскрываем. Это расхождение в сторону
+  /// ложных срабатываний, поэтому допустимо.
+  void _readAnsiC(StringBuffer buffer) {
+    pos += 2;
+    const simple = {
+      'n': '\n', 't': '\t', 'r': '\r', 'v': '\v', 'f': '\f', 'a': '\x07', //
+      'b': '\b', 'e': '\x1b', 'E': '\x1b', '\\': '\\', "'": "'", '"': '"',
+      '?': '?',
+    };
+    // После NUL символы разбираются (чтобы найти закрывающую `'`), но
+    // в слово не попадают.
+    var discard = false;
+    // Подряд идущие байтовые escape (`\xHH`, `\NNN`) копятся как байты и
+    // декодируются как UTF-8 на границе: bash отдаёт программе сырые байты,
+    // и путь с кириллицей, записанный `\320\241…`, должен совпасть с
+    // защищаемым, а не превратиться в символы Latin-1.
+    final pending = <int>[];
+    void flush() {
+      if (pending.isNotEmpty) {
+        // Невалидный UTF-8 — fail closed: bash склеивает байты соседних
+        // `$'…'` (`$'\320'$'\241'` — одна `С`), а мы декодируем каждую часть
+        // отдельно, и половинки защищаемого пути с кириллицей стали бы
+        // U+FFFD и ускользнули бы от правил. Цена: `echo $'\xff'` требует
+        // подтверждения (правило 8 §7.6, PERM-11, §7.6.1).
+        try {
+          buffer.write(utf8.decode(pending));
+        } on FormatException {
+          throw const ShellParseException('invalid UTF-8 in ANSI-C quote');
+        }
+        pending.clear();
+      }
+    }
+
+    void emitByte(int byte) {
+      if (byte == 0) {
+        flush();
+        discard = true;
+      } else if (!discard) {
+        pending.add(byte);
+      }
+    }
+
+    void emitChar(int code) {
+      if (code == 0) {
+        flush();
+        discard = true;
+      } else if (!discard) {
+        if (code > 0x10FFFF) {
+          throw const ShellParseException('code point is out of range');
+        }
+        flush();
+        buffer.writeCharCode(code);
+      }
+    }
+
+    while (true) {
+      if (pos >= src.length) {
+        throw const ShellParseException('unclosed ANSI-C quote');
+      }
+      final c = src[pos++];
+      if (c == "'") {
+        flush();
+        return;
+      }
+      if (c != '\\') {
+        if (!discard) {
+          flush();
+          buffer.write(c);
+        }
+        continue;
+      }
+      if (pos >= src.length) {
+        throw const ShellParseException('unclosed ANSI-C quote');
+      }
+      final n = src[pos++];
+      final plain = simple[n];
+      if (plain != null) {
+        emitChar(plain.codeUnitAt(0));
+        continue;
+      }
+      if (n == 'c') {
+        // `\cX` — управляющий символ `X & 0x1f` (`\c@` — NUL).
+        if (pos >= src.length || src[pos] == "'" || src[pos] == '\\') {
+          throw const ShellParseException('ambiguous \\c in ANSI-C quote');
+        }
+        emitChar(src.codeUnitAt(pos++) & 0x1f);
+        continue;
+      }
+      final digits = switch (n) {
+        'x' => 2,
+        'u' => 4,
+        'U' => 8,
+        _ => n.codeUnitAt(0) >= 0x30 && n.codeUnitAt(0) <= 0x37 ? 2 : 0,
+      };
+      final radix = n == 'x' || n == 'u' || n == 'U' ? 16 : 8;
+      var j = pos;
+      while (j < src.length &&
+          j - pos < digits &&
+          int.tryParse(src[j], radix: radix) != null) {
+        j++;
+      }
+      final text = (radix == 8 ? n : '') + src.substring(pos, j);
+      final code = int.tryParse(text, radix: radix);
+      if (code == null) {
+        // Неизвестный escape остаётся как есть, как в bash.
+        if (!discard) {
+          flush();
+          buffer
+            ..write('\\')
+            ..write(n);
+        }
+      } else {
+        pos = j;
+        if (n == 'u' || n == 'U') {
+          emitChar(code);
+        } else {
+          // `\xHH` и `\NNN` — байт; восьмеричный код усекается `& 0xFF`
+          // (`\400` — NUL, `\562` — `r`), как в bash.
+          emitByte(code & 0xFF);
+        }
+      }
+    }
   }
 
   /// Двойные кавычки: `\` экранирует только `$`, `` ` ``, `"`, `\` и
@@ -612,22 +764,27 @@ final class _ScriptBuilder {
 
   ShellSegment _segment() {
     final all = [for (final word in _words) word.value];
-    final (:privileged, :start) = _stripLaunchers(all);
+    final (:privileged, :start, :split) = _stripLaunchers(all);
     final words = all.sublist(start);
-    final (dir: launcherDir, outputs: launcherOutputs) = _launcherPaths(
-      all.sublist(0, start),
-    );
+    // При `env -S` слова от опции `-S` и дальше — вложенная команда, а не
+    // префикс лаунчеров: пути и присваивания считаются по словам до неё.
+    final prefix = all.sublist(0, split?.splitAt ?? start);
+    final (dir: launcherDir, outputs: launcherOutputs) = _launcherPaths(prefix);
     final nested = [..._nested];
     var risky = false;
     // Присваивания: в префиксе (`NAME=… cmd`, `env NAME=…`) и аргументы
     // `export`/`declare`. Значение переменной-команды — вложенный текст.
     final assigned = [
-      for (final w in all.sublist(0, start))
+      for (final w in prefix)
         if (_assignment.hasMatch(w)) w,
       if (words.isNotEmpty && _declarations.contains(baseName(words.first)))
         for (final w in words.skip(1))
           if (_assignment.hasMatch(w)) w,
     ];
+    // `env -S 'cmd'` — значение исполняется как строка команды (§7.6.1).
+    if (split != null) {
+      nested.add(_Lexer(_envSplitText(all, split)).parse(depth + 1));
+    }
     for (final w in assigned) {
       final eq = w.indexOf('=');
       final key = w.substring(0, eq);
@@ -693,7 +850,7 @@ final class _ScriptBuilder {
       continue;
     }
     final chdir = switch (launcher) {
-      'env' => long == '-C' || long == '--chdir',
+      'env' => long == '-C' || _envLongName(long) == 'chdir',
       'sudo' || 'doas' => long == '-D' || long == '--chdir',
       _ => false,
     };
@@ -726,7 +883,9 @@ int? _shellCommandIndex(List<String> words) {
 
 /// Снимает присваивания и лаунчеры с опциями из начала сегмента (§7.6,
 /// правило 5) и возвращает индекс настоящей команды.
-({bool privileged, int start}) _stripLaunchers(List<String> words) {
+({bool privileged, int start, _EnvScan? split}) _stripLaunchers(
+  List<String> words,
+) {
   var privileged = false;
   var i = 0;
   while (i < words.length) {
@@ -752,14 +911,14 @@ int? _shellCommandIndex(List<String> words) {
         i = _skipOptions(words, i + 1, const {'--user'});
       case 'su':
         // `su` — сама команда: её аргументы — опции, а не другая команда.
-        return (privileged: true, start: i);
+        return (privileged: true, start: i, split: null);
       case 'env':
-        i = _skipOptions(
-          words,
-          i + 1,
-          const {'-u', '-C', '-S'},
-          const {'--unset', '--chdir', '--split-string'},
-        );
+        final scan = _scanEnv(words, i + 1);
+        if (scan.splitAt != null) {
+          // После значения `-S` команда внутри него (см. [_envSplitText]).
+          return (privileged: privileged, start: words.length, split: scan);
+        }
+        i = scan.next;
       case 'nohup' || 'builtin':
         i++;
       case 'nice':
@@ -810,10 +969,305 @@ int? _shellCommandIndex(List<String> words) {
           },
         );
       default:
-        return (privileged: privileged, start: i);
+        return (privileged: privileged, start: i, split: null);
     }
   }
-  return (privileged: privileged, start: i);
+  return (privileged: privileged, start: i, split: null);
+}
+
+/// Длинные опции `env` (GNU coreutils): общий список для разбора опций и
+/// путей лаунчера, чтобы два прохода не разошлись (PERM-11, §7.6.1).
+const _envLongOptions = [
+  'ignore-environment',
+  'chdir',
+  'null',
+  'unset',
+  'split-string',
+  'debug',
+  'argv0',
+  'block-signal',
+  'default-signal',
+  'ignore-signal',
+  'list-signal-handling',
+  'version',
+  'help',
+];
+
+/// Длинные опции `env`, у которых значение обязательно.
+const _envLongWithValue = {'chdir', 'unset', 'argv0'};
+
+/// Короткие опции `env`, берущие значение (остаток слова или следующее
+/// слово): GNU `-u -C -S -a` и BSD/macOS `-P altpath`, `-L`, `-U`.
+const _envShortWithValue = 'uCSaPLU';
+
+/// Короткие опции `env` без значения: `-i`, `-0`, `-v`. Любая другая
+/// короткая опция неизвестна — `env` её отвергает, а команда считается
+/// неразбираемой (fail closed, правило 8 §7.6).
+const _envShortFlags = 'i0v';
+
+/// Полное имя длинной опции `env` по слову [word] (`--sp`, `--split-s`) или
+/// `null`. `getopt_long` принимает любой однозначный префикс, поэтому
+/// сокращения тоже опции; неоднозначный префикс `env` отвергает, и команда
+/// не запускается.
+String? _envLongName(String word) {
+  if (!word.startsWith('--') || word.length < 3) {
+    return null;
+  }
+  final prefix = word.substring(2);
+  if (_envLongOptions.contains(prefix)) {
+    return prefix;
+  }
+  final found = _envLongOptions.where((n) => n.startsWith(prefix)).toList();
+  return found.length == 1 ? found.single : null;
+}
+
+/// Итог разбора опций `env`: [next] — индекс первого слова после опций;
+/// при `-S` — [splitAt] (индекс опции), [splitValue] и [valueEnd] (индекс
+/// после слова-значения): после значения опций больше нет.
+typedef _EnvScan = ({int next, int? splitAt, String splitValue, int valueEnd});
+
+/// Единственный проход по опциям `env` с позиции [i].
+///
+/// Почему: `env -S 'cmd'` исполняет значение как командную строку, а слова
+/// после него `env` дописывает в argv, и разбор опций (`getopt`, optstring
+/// с `+`) на этом заканчивается. Значение `-S` нельзя пропускать как
+/// аргумент обычной опции: иначе у сегмента не остаётся команды, и он
+/// считается «только чтением» (PERM-11, `07-permissions` §7.6.1).
+///
+/// Как использовать: [_stripLaunchers] берёт [_EnvScan.next] или, если
+/// есть [_EnvScan.splitAt], пересобирает команду через [_envSplitText].
+/// Поддержаны `-S`, `-S<текст>`, кластеры (`-iS`), `--split-string[=]` и
+/// однозначные сокращения длинных опций.
+_EnvScan _scanEnv(List<String> words, int i) {
+  _EnvScan stop(int next) =>
+      (next: next, splitAt: null, splitValue: '', valueEnd: next);
+  while (i < words.length) {
+    final w = words[i];
+    if (w == '--') {
+      return stop(i + 1);
+    }
+    if (!w.startsWith('-')) {
+      return stop(i);
+    }
+    if (w.startsWith('--')) {
+      final eq = w.indexOf('=');
+      final name = _envLongName(eq > 0 ? w.substring(0, eq) : w);
+      if (name == 'split-string') {
+        if (eq > 0) {
+          return (
+            next: words.length,
+            splitAt: i,
+            splitValue: w.substring(eq + 1),
+            valueEnd: i + 1,
+          );
+        }
+        return (
+          next: words.length,
+          splitAt: i,
+          splitValue: i + 1 < words.length ? words[i + 1] : '',
+          valueEnd: i + 1 < words.length ? i + 2 : i + 1,
+        );
+      }
+      i += eq < 0 && _envLongWithValue.contains(name) ? 2 : 1;
+      continue;
+    }
+    var consumed = 1;
+    for (var c = 1; c < w.length; c++) {
+      if (!_envShortWithValue.contains(w[c])) {
+        if (!_envShortFlags.contains(w[c])) {
+          throw ShellParseException('unknown env option -${w[c]}');
+        }
+        continue;
+      }
+      final glued = w.substring(c + 1);
+      if (w[c] == 'S') {
+        final hasNext = glued.isEmpty && i + 1 < words.length;
+        return (
+          next: words.length,
+          splitAt: i,
+          splitValue: glued.isNotEmpty ? glued : (hasNext ? words[i + 1] : ''),
+          valueEnd: hasNext ? i + 2 : i + 1,
+        );
+      }
+      if (glued.isEmpty) {
+        consumed = 2;
+      }
+      break;
+    }
+    i += consumed;
+  }
+  return stop(i);
+}
+
+/// Разбирает значение `env -S` по правилам самого `env`, а не shell.
+///
+/// Почему: `env` метасимволы shell не знает — `;`, `&`, `|`, `<<` и перевод
+/// строки там обычные символы аргументов (первое слово — программа, остальные
+/// — её аргументы). Отдать значение shell-лексеру значит потерять аргументы
+/// (`-S 'rm ; -rf ${HOME}'` выглядело бы как две команды без `-rf`).
+///
+/// Для чего: возвращает текст для [_Lexer], где каждое слово значения —
+/// в одинарных кавычках ([_shQuote]), а `${VAR}` — вне них, чтобы правила
+/// видели раскрытие `${HOME}`/`${CODELAB_HOME}`.
+///
+/// Правила: разделители — пробел и `\t \n \v \f \r`; кавычки `'…'` (внутри
+/// только `\\` и `\'`) и `"…"`; `\_`, `\t`, `\n`, `\v`, `\f`, `\r` вне кавычек —
+/// разделитель, в двойных — пробельный символ; `\\ \" \' \$ \#` — сам
+/// символ; `\c` обрывает значение; `#` в начале слова — комментарий до
+/// конца; `${NAME}` — подстановка. Всё прочее — [ShellParseException]
+/// (голый `$`, незакрытые кавычки и скобка, другие `\x`): fail closed,
+/// правило 8 §7.6 (PERM-11, §7.6.1).
+String _envSplitWords(String value) {
+  const blanks = ' \t\n\v\f\r';
+  final words = <String>[];
+  final word = StringBuffer();
+  final literal = StringBuffer();
+  var inWord = false;
+
+  void flushLiteral() {
+    if (literal.isNotEmpty) {
+      word.write(_shQuote(literal.toString()));
+      literal.clear();
+    }
+  }
+
+  void endWord() {
+    flushLiteral();
+    if (inWord) {
+      words.add(word.isEmpty ? "''" : word.toString());
+    }
+    word.clear();
+    inWord = false;
+  }
+
+  // Подстановка `${NAME}`: возвращает индекс после `}`.
+  int substitution(int i) {
+    final close = value.indexOf('}', i);
+    final braced = i + 1 < value.length && value[i + 1] == '{';
+    final name = close < 0 || !braced ? '' : value.substring(i + 2, close);
+    if (!RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(name)) {
+      throw const ShellParseException('bad substitution in env -S');
+    }
+    flushLiteral();
+    word.write('\${$name}');
+    inWord = true;
+    return close;
+  }
+
+  // Escape вне одинарных кавычек: `true` — разобран, `false` — `\c`.
+  bool escape(int i, {required bool quoted}) {
+    if (i + 1 >= value.length) {
+      throw const ShellParseException('dangling backslash in env -S');
+    }
+    final n = value[i + 1];
+    if (n == 'c') {
+      return false;
+    }
+    if ('_tnvfr'.contains(n)) {
+      if (quoted) {
+        literal.write(n == '_' ? ' ' : blanks['_tnvfr'.indexOf(n)]);
+        inWord = true;
+      } else {
+        endWord();
+      }
+    } else if ('\\"\'\$#'.contains(n)) {
+      literal.write(n);
+      inWord = true;
+    } else {
+      throw ShellParseException('unsupported escape \\$n in env -S');
+    }
+    return true;
+  }
+
+  var i = 0;
+  scan:
+  while (i < value.length) {
+    final c = value[i];
+    if (blanks.contains(c)) {
+      endWord();
+      i++;
+    } else if (c == '#' && !inWord) {
+      break;
+    } else if (c == "'") {
+      inWord = true;
+      i++;
+      while (true) {
+        if (i >= value.length) {
+          throw const ShellParseException('unclosed quote in env -S');
+        }
+        if (value[i] == "'") {
+          break;
+        }
+        if (value[i] == r'\') {
+          final n = i + 1 < value.length ? value[i + 1] : '';
+          if (n != r'\' && n != "'") {
+            throw ShellParseException('unsupported escape \\$n in env -S');
+          }
+          literal.write(n);
+          i += 2;
+        } else {
+          literal.write(value[i++]);
+        }
+      }
+      i++;
+    } else if (c == '"') {
+      inWord = true;
+      i++;
+      while (true) {
+        if (i >= value.length) {
+          throw const ShellParseException('unclosed quote in env -S');
+        }
+        final d = value[i];
+        if (d == '"') {
+          break;
+        }
+        if (d == r'\') {
+          if (!escape(i, quoted: true)) {
+            break scan;
+          }
+          i += 2;
+        } else if (d == r'$') {
+          i = substitution(i) + 1;
+        } else {
+          literal.write(d);
+          i++;
+        }
+      }
+      i++;
+    } else if (c == r'\') {
+      if (!escape(i, quoted: false)) {
+        break;
+      }
+      i += 2;
+    } else if (c == r'$') {
+      i = substitution(i) + 1;
+    } else {
+      literal.write(c);
+      inWord = true;
+      i++;
+    }
+  }
+  endWord();
+  return words.join(' ');
+}
+
+/// Слово в одинарных кавычках: `'` заменяется на `'\''`.
+String _shQuote(String word) => "'${word.replaceAll("'", r"'\''")}'";
+
+/// Текст, который исполнил бы `env`: слова до `-S` (лаунчеры и опции),
+/// обработанное значение и остаток в кавычках.
+///
+/// Почему: значение `-S` само может начинаться с опций и присваиваний
+/// `env` (`-S '-i rm …'`, `-S '-C dir rm …'`), поэтому разбирается как
+/// `env <значение> <остаток>`, а не как `sh -c`. Остаток экранируется
+/// (`'#'`, `'x;'` остаются данными). Глубину ограничивает
+/// [maxShellNesting] (PERM-11, §7.6.1).
+String _envSplitText(List<String> words, _EnvScan scan) {
+  return [
+    for (final w in words.sublist(0, scan.splitAt!)) _shQuote(w),
+    _envSplitWords(scan.splitValue),
+    for (final w in words.sublist(scan.valueEnd)) _shQuote(w),
+  ].join(' ');
 }
 
 /// Пропускает опции лаунчера с позиции [i]; опции из [withValue] и

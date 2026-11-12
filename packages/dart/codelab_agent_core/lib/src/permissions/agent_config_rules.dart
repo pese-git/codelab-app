@@ -412,19 +412,48 @@ bool _isReadOnly(ShellSegment segment) {
   return _readOnlyCommands.contains(name);
 }
 
+/// Предел длины слова-кластера коротких флагов (`-sSo…`): перебор суффиксов
+/// квадратичен по длине, а настоящие кластеры короче. Более длинное слово
+/// у команды вне белого списка чтения даёт `unparsable command`
+/// ([touchesConfig]): метка «write to agent configuration» вводила бы в
+/// заблуждение на длинных `-I<путь>` и `-d{json}`, а неразбираемая команда
+/// и так требует решения человека (правило 8 §7.6, fail closed).
+const _maxClusterLength = 256;
+
 /// Значения слова-аргумента, которые могут быть путём: само слово, значение
 /// после `=` (`--output=FILE`, `of=FILE`) и приклеенное к короткой опции
 /// (`-oFILE`).
+///
+/// Кластер коротких флагов со значением у последнего (`curl -sSo/path`,
+/// `wget -q4O$VAR/f`): значение начинается после любого символа кластера
+/// (флаги бывают и цифрами: `-1`, `-4`), а какая опция его берёт, неизвестно,
+/// поэтому перебираются суффиксы, похожие на путь: начинаются с `/`, `~`, `.`
+/// или `$` либо содержат `/`. Относительное имя без этих признаков
+/// (`-sSoconfig.yaml`) ловится правилом «команда в каталоге конфигурации».
+/// Лишние кандидаты дают ложные срабатывания, но не пропуски (PERM-11,
+/// `07-permissions` §7.6.1). Слово длиннее [_maxClusterLength] сюда не
+/// попадает — [touchesConfig] считает его неразбираемым.
 Iterable<String> _pathCandidates(String word) sync* {
   yield word;
   final eq = word.indexOf('=');
   if (eq > 0) {
     yield word.substring(eq + 1);
   }
-  if (word.startsWith('-') && !word.startsWith('--') && word.length > 2) {
+  if (_isShortCluster(word) && word.length <= _maxClusterLength) {
     yield word.substring(2);
+    final lastSlash = word.lastIndexOf('/');
+    for (var i = 3; i < word.length; i++) {
+      if ('/~.\$'.contains(word[i]) || lastSlash >= i) {
+        yield word.substring(i);
+      }
+    }
   }
 }
+
+/// Слово — кластер коротких флагов (`-sSo…`): один дефис и не менее двух
+/// символов после него; длинные опции (`--…`) и одиночный `-` не в счёт.
+bool _isShortCluster(String word) =>
+    word.startsWith('-') && !word.startsWith('--') && word.length > 2;
 
 /// Правило R5-4: команда вне белого списка чтения, у которой слово-аргумент
 /// или значение опции — защищаемый путь либо каталог конфигурации, либо
@@ -445,6 +474,9 @@ bool touchesConfig(ShellSegment segment, ConfigCheck config, String dir) {
     return true;
   }
   for (final word in segment.arguments) {
+    if (_isShortCluster(word) && word.length > _maxClusterLength) {
+      throw const ShellParseException('option cluster is too long');
+    }
     for (final candidate in _pathCandidates(word)) {
       if (config.isConfig(candidate, dir) ||
           config.isConfigDirectory(candidate, dir)) {
