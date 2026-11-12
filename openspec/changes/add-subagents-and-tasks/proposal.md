@@ -22,6 +22,9 @@
   - состояния хэндла `queued`, `running`, `waiting`, `completed`, `failed`, `cancelled` — сразу полные, под будущие фон и продолжение;
   - отмена через дочерние `CancelToken`;
   - события потомков в потоке корневой сессии обёрткой `SubagentActivity` с `parentToolCallId`, `path` и id субагента.
+- **Ядро, навыки у субагента** (решение пользователя 2026-11-12, Q17, design.md D34; стык с change `add-agent-skills`):
+  - с итерации 2 политика ребёнка использует набор защищаемых путей конфигурации агента корневой сессии, а не новый (SUB-1); `skill` у ребёнка — только при переданном снимке каталога;
+  - итерация 2s, после слияния кода `add-agent-skills`: `skill` по общему правилу набора, тот же снимок каталога и та же секция `skills/catalog`, `readOnlyRoots` каталогов навыков как у родителя; активные навыки родителя не наследуются.
 - **Ядро, список задач (новый §17.16):**
   - инструменты `task_create`, `task_update`, `task_list`, `task_get` заменяют `update_plan`;
   - у пункта есть id, заголовок, описание, статус `pending | in_progress | completed`, удаление, приоритет (по умолчанию `medium`), владелец (`main` или id субагента) и `blocked_by` с проверкой циклов;
@@ -69,6 +72,7 @@
 - Роли моделей (L-10): модель ребёнка — `type.model`, иначе текущая модель родителя.
 - Удалённые A2A-типы субагентов (E-22, §17.15.3).
 - Этапы 3–6 — пул 1.x в порядке 3 → 5 → 4 → 6 (решение пользователя 2026-11-10); этот change их не реализует.
+- Поле `skills` в определении типа субагента (предзагрузка навыков) и исполнение навыка в субагенте (Agent Skills, «Subagent delegation») — после 1.0, отдельным change после архивации этого change и `add-agent-skills` (Q17.3, D34).
 - Право потомков создавать свои пункты списка задач — позже; формат записи `task` (`actor`) это допускает.
 - Тексты, промпты и описания инструментов Claude Code не копируются (`AGENTS.md` §5, §7а `07-decision-sources.md`). Все тексты пишутся заново, источник поведения указан в §17.3.13 и §17.16.8.
 
@@ -116,7 +120,7 @@
   - `codelab_client_core` — модели представлений, список субагентов сессии (D33);
   - `apps/codelab_cli`, `apps/codelab_desktop` (панель Agents v1 в доке), `packages/flutter/codelab_ui`.
 - **Новых пакетов и зависимостей нет.** Allowlist ядра (PKG-2) и правила сторожа не меняются (design.md, D14).
-- **Документы** (итерация 0): `agent-core/17-3-subagents.md` (глубина до 3, этапы), новый `agent-core/17-16-task-list.md`, `agent-core/13-acp-adapter.md` (§13.2, §13.12), `delivery-roadmap.md` (§4.5, §6.1, §6.2, §6.4, §10), `agent-parity-goals.md` (C-05, C-06, C-20, §7); переименование инструментов `task` → `agent` во всех документах ядра и клиентов (D20); команда `/tasks` не переименовывается (D23). Остальные упоминания `update_plan` в документах ядра (§5.3, §6.4, §7.5, §8.2.4, §10, §11) правятся задачей 0.3. Панель Agents v1 (Q13, задача 0.8): `delivery-roadmap.md` (§6.1, §6.2, §6.4, §10.1 строка 16, §10.3), `dart-agent-and-clients/12-3-desktop-display.md` (A13, A15, DSK-26), таблица этапов §17.3.1.
+- **Документы** (итерация 0): `agent-core/17-3-subagents.md` (глубина до 3, этапы), новый `agent-core/17-16-task-list.md`, `agent-core/13-acp-adapter.md` (§13.2, §13.12), `delivery-roadmap.md` (§4.5, §6.1, §6.2, §6.4, §10), `agent-parity-goals.md` (C-05, C-06, C-20, §7); переименование инструментов `task` → `agent` во всех документах ядра и клиентов (D20); команда `/tasks` не переименовывается (D23). Остальные упоминания `update_plan` в документах ядра (§5.3, §6.4, §7.5, §8.2.4, §10, §11) правятся задачей 0.3. Навыки у субагента (Q17, задача 0.9): `agent-core/17-3-subagents.md` §17.3.3, `agent-core/05-agent-loop.md` §5.6. Панель Agents v1 (Q13, задача 0.8): `delivery-roadmap.md` (§6.1, §6.2, §6.4, §10.1 строка 16, §10.3), `dart-agent-and-clients/12-3-desktop-display.md` (A13, A15, DSK-26), таблица этапов §17.3.1.
 - **Фикстуры:**
   - новые фикстуры `acp/initialize-codelab-extensions`, `acp/prompt-task-plan`, `acp/session-load-legacy-plan`, `acp/prompt-subagent-tool-call`, `acp/prompt-subagent-permission`, `acp/prompt-subagent-nested-permission`, `acp/prompt-subagent-tool-tree`, `acp/session-load-subagent-tool-tree`;
   - правка фикстур со схемой `update_plan` в ожидаемых запросах к модели;
