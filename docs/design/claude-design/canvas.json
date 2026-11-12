@@ -2,6 +2,56 @@
   "v": 3,
   "attachments": {},
   "boards": {
+    "Subagents.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "30 Subagents in the feed — compact: collapsed agents, quiet task lines, question with its path",
+      "w": 1440,
+      "x": 0,
+      "y": 13200
+    },
+    "SubagentsAlt.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "30a Variant, not approved — task list pinned under the latest message",
+      "w": 1440,
+      "x": 0,
+      "y": 14220
+    },
+    "TaskList.dc.html": {
+      "expand": "fill",
+      "h": 1560,
+      "title": "31 Agent rows and task list — every state",
+      "w": 1440,
+      "x": 1520,
+      "y": 13200
+    },
+    "Subagents-dark.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "dark",
+      "title": "30 Subagents in the feed — dark",
+      "w": 1440,
+      "x": 0,
+      "y": 13200
+    },
+    "TaskList-dark.dc.html": {
+      "expand": "fill",
+      "h": 1560,
+      "page": "dark",
+      "title": "31 Agent rows and task list — dark",
+      "w": 1440,
+      "x": 1520,
+      "y": 13200
+    },
+    "CliAgents.dc.html": {
+      "h": 720,
+      "page": "cli",
+      "title": "C16 TUI — agent rows, nested steps, task list",
+      "w": 1000,
+      "x": 0,
+      "y": 7980
+    },
     "Agents-dark.dc.html": {
       "expand": "fill",
       "h": 900,
@@ -1296,6 +1346,46 @@
       "size": 24,
       "text": "C15 — §12.6.13, U-37: в TUI открыто несколько сессий. Полоса сессий над транскриптом (с двух сессий): номер, маркер ⟳ ход · ! ждёт одобрения · ✗ ошибка · • закончилась в фоне. Ctrl+G — переключатель с фильтром, Alt+1…9, Ctrl+PgUp/PgDn, /switch, /close. Фоновый ход идёт дальше; одобрение фоновой сессии — только строкой статуса, зона появляется после перехода в неё (UX-28). Черновик и прокрутка у каждой сессии свои (UX-30).\n\nКликабельно: полоса, ctrl+g, [y]/[n]."
     },
+    "row9": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Субагенты и список задач — 1.0 (add-subagents-and-tasks)",
+      "x": 0,
+      "y": 12900
+    },
+    "row9s": {
+      "fill": "teal",
+      "size": 24,
+      "text": "30 — C-06 этапы 1–2: строка вызова agent с прогрессом и отчётом, шаги потомков вложенным деревом (до глубины 3), вопрос потомка с пометкой «Subagent … · depth n», чек-лист задач с #id, владельцем и blocked by\n31 — все состояния строк agent, строк task_* и пунктов чек-листа; старая сессия с update_plan; сторонний агент без _meta\nДоска субагентов (16) и /tasks — этапы 3–5, 1.x\nИзоляция через git worktree — отложена",
+      "w": 520,
+      "x": 3040,
+      "y": 13200
+    },
+    "d-row9": {
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "dark",
+      "text": "Тёмная тема — субагенты и список задач",
+      "x": 0,
+      "y": 12900
+    },
+    "c-row8": {
+      "kind": "title1",
+      "maxW": 2160,
+      "page": "cli",
+      "text": "Субагенты и список задач (1.0)",
+      "x": 0,
+      "y": 7680
+    },
+    "c-row8s": {
+      "fill": "teal",
+      "page": "cli",
+      "size": 24,
+      "text": "C16 — строка agent с прогрессом, шаги потомков с отступом по глубине (ctrl+o раскрывает), вопрос внука с путём, список задач над композером: #id, владелец, blocked by",
+      "w": 440,
+      "x": 1080,
+      "y": 7980
+    },
     "rowT": {
       "kind": "title1",
       "maxW": 1440,
@@ -1408,7 +1498,13 @@
     "AddProfile.dc.html",
     "AddProfile-dark.dc.html",
     "PhoneAddProfile.dc.html",
-    "TranscriptRows.dc.html"
+    "TranscriptRows.dc.html",
+    "Subagents.dc.html",
+    "TaskList.dc.html",
+    "Subagents-dark.dc.html",
+    "TaskList-dark.dc.html",
+    "CliAgents.dc.html",
+    "SubagentsAlt.dc.html"
   ],
   "pages": [
     {
