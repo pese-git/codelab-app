@@ -149,27 +149,32 @@ final class ExtensionDiagnostic {
 }
 
 final class SkillDefinition {
-  final String name, description, body;        // description схлопнут, body без frontmatter
+  final String name, description, body;        // description схлопнут (полная длина), body — обрезанная форма
   final String dir;                             // канонический каталог skill; для модели — непрозрачная строка
-  final String source;                          // путь SKILL.md
+  String get path;                              // <dir>/SKILL.md
   final ExtensionScope scope;
   final String? argumentHint, compatibility;
-  final bool userInvocable, modelInvocable;
+  final bool userInvocable, disableModelInvocation;
   final List<String> operative;                 // правила metadata.codelab-operative; до K-06 не применяются
-  final List<String> files;                     // относительные пути, байтовый порядок
-  final bool filesTruncated;                    // список неполон
+  final List<String> companions;                // относительные пути, байтовый порядок
+  final bool companionsTruncated;               // список неполон
   String get fingerprint;                       // SHA-256 тела (§17.2.7а)
 }
 
-final class SkillCatalog {                      // неизменяемый снимок сессии
+final class SkillCatalog {                      // неизменяемый снимок сессии: AgentSession.skills
   final List<SkillDefinition> skills;           // отсортированы по name
+  final List<SkillDefinition> modelVisible;     // !disableModelInvocation и не запрещённые правилами skill / skill:<name>
   final List<ExtensionDiagnostic> diagnostics;
+  static final SkillCatalog empty;
   SkillDefinition? skill(String name);
   List<SkillDefinition> get commands;           // userInvocable
-  List<SkillDefinition> modelVisible(PermissionPolicy policy);   // modelInvocable и не запрещённые skill:<name>
   List<String> readOnlyRoots(String sessionRoot);                // dir загруженных skills вне корня сессии
 }
-SkillCatalog parseSkills(SkillFiles files, SkillsConfig settings);
+final class SkillsConfig {                      // CoreConfig.skills, §17.2.8
+  final bool enabled; final List<String> extraRoots, disabled;
+  final int maxSkills, catalogMaxChars, reattachPerSkillTokens, reattachTotalTokens;
+}
+SkillCatalog parseSkills(SkillFiles files, SkillsConfig settings, {PolicyRules rules = const PolicyRules()});
 ```
 
 Шаблоны команд живут отдельно: `CommandTemplate {name, description, argumentHint, body, scope, path,
@@ -185,18 +190,26 @@ final class SkillFilesQuery {
   final List<String> extraRoots;                // skills.extra_roots в порядке конфига
   final CancelToken cancel;
 }
-final class SkillFile {                         // сырые данные одного SKILL.md
-  final String dir, path; final ExtensionScope scope; final int rootIndex;
-  final String? frontmatterText;               // сырой текст frontmatter (для починки и диагностик)
-  final ConfigTree? frontmatter;                // разобранный, с позициями
-  final String? frontmatterError; final int? errorLine, errorColumn;   // ошибка разбора и её позиция
+final class SkillFile {                         // данные одного SKILL.md, прочитанные хостом
+  final String dir; String get path;            // dir — realpath каталога; path — <dir>/SKILL.md
+  final ExtensionScope scope;
+  final int rootIndex;                          // позиция корня в списке шага 1 §17.2.4; важен только порядок
+  final ConfigTree? frontmatter;                // разобранный, с позициями; null — нет или не разобран
+  final List<ExtensionDiagnostic> parseErrors;  // ошибки разбора с позициями файла; непуст ⇒ frontmatter == null
   final bool repaired;                          // разбор удался после починки; yaml_repaired даёт ядро
-  final String body; final int bodyLine;
-  final List<String> files; final bool filesTruncated;
+  final String body; final int bodyLine;        // тело как в файле; обрезку делает ядро
+  final List<String> companions; final bool companionsTruncated;
 }
 final class SkillFiles { final List<SkillFile> skills; final List<ExtensionDiagnostic> diagnostics; }
 abstract interface class SkillFilesSource { Future<SkillFiles> loadSkills(SkillFilesQuery query); }
 ```
+
+Реализация: `ProjectFilesLoader({required String? home, String? userHome, required LocalExecutionEnv local})`
+— `home` даёт `$CODELAB_HOME/skills`, `userHome` (`HOME`/`USERPROFILE` процесса, `userHomeOf`) —
+`~/.agents/skills`; `null` выключает корень (`--llm-script`). Frontmatter навыка разбирается
+`readMarkdownFile(…, repairYaml: true)` с признаком `MarkdownRead.repaired`; шаблоны и определения
+агентов — строго. Точные типы, тексты диагностик и порядок шагов — design.md change
+`add-agent-skills`, D16.
 
 Чтение идёт с файловой системы процесса агента, а не через env сессии: в ACP-режиме файлы
 рабочей папки читает клиент (§4.7), но `$CODELAB_HOME` лежит на машине агента. Порт не бросает
@@ -346,25 +359,30 @@ loadSkills(q) [хост]:
        roots.add((уровень/.codelab/skills, project)); roots.add((уровень/.agents/skills, project))
    иначе для каждого существующего такого корня → info untrusted_project
    если не --llm-script: roots.add(($CODELAB_HOME/skills, user)); roots.add((~/.agents/skills, user))
-   для p в q.extraRoots: относительный и не projectTrusted → warning untrusted_project, пропустить
-     roots.add((абсолютный p, extra))
+   для p в q.extraRoots: ~ или ~/… → от userHome (нет userHome → warning unresolved_root, пропустить);
+     относительный и не projectTrusted → warning untrusted_project, пропустить
+     roots.add((абсолютный p, extra))          // ~user/… отвергнут проверкой конфига (value), Q41
 2. для корня по порядку: realpath корня; подкаталоги в байтовом порядке (≤ 1000):
    a. имя на "." или нет SKILL.md → пропустить молча; не каталог → пропустить молча
    b. realpath каталога вне корня → outside_root
    c. прочитать SKILL.md через BoundedEnv каталога (≤ 128 КиБ, UTF-8), отделить frontmatter
-   d. разобрать; ошибка → одна попытка починки двоеточий → yaml_repaired или frontmatterError
+   d. разобрать; ошибка → одна попытка починки двоеточий → repaired или parseErrors (позиции файла)
    e. перечислить сопутствующие файлы (глубина 3, ≤ 50, признак неполноты)
 
-parseSkills(files, settings) [ядро, чисто]:
+parseSkills(files, settings, rules) [ядро, чисто]:
 1. для файла в порядке (rootIndex, имя каталога):
-   a. frontmatterError → error, пропустить
+   a. parseErrors или нет frontmatter → error, пропустить
    b. проверить поля мягко (§17.2.2); missing_description или имя, негодное для команды → пропустить
    c. name ∈ settings.disabled → info, пропустить
    d. name уже загружен → warning shadowed (оба пути), пропустить     // и между уровнями (Q21)
    e. добавить SkillDefinition
 2. больше settings.maxSkills → лишние отброшены, warning limit_exceeded
-3. отсортировать по name (байтово), вернуть SkillCatalog
+3. отсортировать по name (байтово); modelVisible — без disable-model-invocation и не запрещённые rules
+   (permissions.tools.skill: deny, permissions.deny skill:<name>); вернуть SkillCatalog
 ```
+
+Загрузчик `shadowed` не выдаёт: коллизию имён решает ядро после проверки (шаг 1d), поэтому навык,
+пропущенный с `error`, ничего не перекрывает (как у шаблонов, `parseCommandTemplates`).
 
 Пространства имён команд не пересекаются: skills вызываются как `skill:<name>`, MCP prompts
 (после MVP) — как `<server>:<prompt>` (E-24), встроенные команды — без двоеточия и имеют высший
@@ -645,7 +663,7 @@ reattach(lastCompaction, catalog, perSkill = skills.reattach.per_skill_tokens,
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
 | `enabled` | bool | `true` | `false` — capability `skills` выключена (сужение, §10.2) |
-| `extra_roots` | path[] | `[]` | каталоги skills конкретных агентов (`.claude/skills` …); согласие пользователя; схема `<scheme>://` — проблема конфига (зарезервировано для E-18) |
+| `extra_roots` | path[] | `[]` | каталоги skills конкретных агентов (`.claude/skills` …); согласие пользователя; схема `<scheme>://` — проблема конфига (зарезервировано для E-18); `~` и `~/…` — от домашнего каталога процесса, `~user/…` — проблема конфига (Q41) |
 | `disabled` | string[] | `[]` | имена skills, которые не загружаются |
 | `max_skills` | int | `200` | 1–1000 |
 | `catalog_max_chars` | int | `8000` | бюджет секции каталога, 1000–64000 |
@@ -672,6 +690,7 @@ reattach(lastCompaction, catalog, perSkill = skills.reattach.per_skill_tokens,
 | Ключи | Слой 3 (проект) | Слой 4 (локальный) | Условие снятия ограничения |
 |---|---|---|---|
 | `skills.enabled = false`, `skills.disabled`, уменьшение `skills.max_skills`, `skills.catalog_max_chars`, `skills.reattach.*`; `skills.operative.enabled = false` | да | да | — |
+| увеличение `skills.max_skills`, `skills.catalog_max_chars`, `skills.reattach.*` | да — только уменьшение | да | увеличение — проект в `trusted_projects` (решение Q40 change `add-agent-skills`) |
 | `skills.extra_roots`, `prompts.templates_dirs` | нет | да, только для доверенного проекта (недоверенный слой 4 — как слой 3) | согласие даёт только пользователь |
 | `skills.operative.lines`, `skills.operative.max_tokens` | нет | да | проект в `trusted_projects` |
 | корни `.codelab/skills`, `.agents/skills`, каталог `.codelab/prompts` | нет | — | проект в `trusted_projects` |
@@ -819,7 +838,7 @@ the whole session, including after the conversation history is compacted.
 
 * `test/skills/skill_parse_test.dart`: мягкая проверка во всех корнях (`unknown_key`, `invalid_name`, `name_mismatch`, `missing_name`, `empty_body` — предупреждения), пропуск без `description` и с именем, негодным для команды (нелатинские буквы), тело 50 КиБ загружается, 70 КиБ — `too_large`, `compatibility`, `operative` — `not_applied`; известные поля без диагностики (SKL-14).
 * `codelab_agent_io/test/project/frontmatter_repair_test.dart`: двоеточие без кавычек — `yaml_repaired`; нечитаемый YAML — `error` с позицией.
-* `codelab_agent_io/test/project/skill_files_load_test.dart`: проект без доверия — skills проекта нет, `untrusted_project` (SKL-1); `.agents/skills` проекта и `~/.agents/skills` без `extra_roots` читаются, `.claude/skills` — нет (SKL-2); подъём к корню git, ближний уровень побеждает; `extra_roots` из проектного конфига игнорируется; `shadowed` — `warning` (SKL-7); шаблон `help.md` — `reserved_name`.
+* `codelab_agent_io/test/project/skill_files_load_test.dart`: проект без доверия — skills проекта нет, `untrusted_project` (SKL-1); `.agents/skills` проекта и `~/.agents/skills` без `extra_roots` читаются, `.claude/skills` — нет (SKL-2); подъём к корню git, ближний уровень получает меньший `rootIndex`, и после `parseSkills` побеждает он, а у проигравшего — `warning` `shadowed` (SKL-7; сама коллизия — `test/skills/skill_catalog_test.dart`); `extra_roots` из проектного конфига игнорируется; шаблон `help.md` — `reserved_name`.
 * `test/skills/catalog_section_golden_test.dart`: `test/prompts/golden/agent-serve-standard-skills.txt`; описания целиком; переполнение — описания укорочены поровну, затем строка `[N more skills not listed]`; две загрузки одного набора дают одинаковые байты (SKL-4).
 * `test/skills/skill_tool_test.dart` (`core/skill-tool-load-body`): `enum` имён; блок навыка с атрибутом `compatibility`, списком файлов и `[more files not listed]`; экранирование тегов; повтор — строка повтора (SKL-12); `disable-model-invocation` и запрет `skill:<name>` — вне `enum`; без model-visible skills схемы и секции нет (SKL-3, SKL-5).
 * `test/env/bounded_env_read_only_roots_test.dart`: `read` файла skill вне `cwd` принят и идёт в `readOnlyFs`; `write` туда — `outsideWorkspace`; `exec` с `cwd` в каталоге skill — принят при `execInReadOnlyRoots`, иначе отклонён; `$CODELAB_HOME/config.yaml` — `outsideWorkspace`; ссылка наружу отклонена (SKL-9).

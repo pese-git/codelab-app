@@ -119,10 +119,11 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | `tools.web.enabled = false`; уменьшение `tools.web.fetch_max_bytes`, `fetch_timeout`, `max_redirects` (после MVP, §17.1.6) | да | да | — |
 | `tools.web.allow_private_network`, `tools.web.user_agent`, `tools.web.search.*` (после MVP) | нет | да | проект в `trusted_projects` |
 | `permissions.tools.web_fetch = "allow"` (после MVP) | нет — как любое `allow` | да | проект в `trusted_projects` |
-| `skills.enabled = false`, `skills.disabled`, уменьшение `skills.max_skills` и `skills.catalog_max_chars`, `skills.operative.enabled = false` (после MVP, §17.2.8) | да | да | — |
-| `skills.extra_roots`, `prompts.templates_dirs` (после MVP) | нет | да | — (согласие даёт только пользователь) |
+| `skills.enabled = false`, `skills.disabled`, уменьшение `skills.max_skills`, `skills.catalog_max_chars` и `skills.reattach.*` (change `add-agent-skills`, §17.2.8); `skills.operative.enabled = false` (после 1.0, K-06) | да | да | — |
+| увеличение `skills.max_skills`, `skills.catalog_max_chars`, `skills.reattach.*` (change `add-agent-skills`, Q40) | да — только уменьшение (как `budget.*`) | да | увеличение — проект в `trusted_projects` |
+| `skills.extra_roots` (change `add-agent-skills`), `prompts.templates_dirs` (после MVP) | нет | да, только для доверенного проекта | — (согласие даёт только пользователь) |
 | `skills.operative.lines`, `skills.operative.max_tokens` (после MVP) | нет | да | проект в `trusted_projects` |
-| каталоги `.codelab/skills`, `.codelab/prompts` (после MVP) | нет | — | проект в `trusted_projects` |
+| корни навыков `.codelab/skills`, `.agents/skills` от `cwd` до корня git (change `add-agent-skills`), каталог `.codelab/prompts` | нет | — | проект в `trusted_projects` |
 | `subagents.*` (после MVP, §17.3.10) | только ужесточение (меньшие лимиты, `enabled = false`; `follow_ups = false`, уменьшение `max_follow_ups`, `max_resumes`, но не включение и не увеличение, §17.3.8.1) | да | — |
 | `tools.spill.enabled = false`; уменьшение любых ключей `tools.spill.*` (этап 3, §17.4.8) | да | да | — |
 | увеличение ключей `tools.spill.*` (этап 3) | нет | да | глобальный конфиг или проект в `trusted_projects` |
@@ -558,9 +559,10 @@ web-инструменты: `enabled` (`false` — capability `network` off), `f
 (`brave` \| `tavily`), `url`, `method`, `api_key_secret` или `api_key_env` (значение ключа в конфиге —
 `ConfigException`, как CFG-2) и поля разбора. Подробно — §17.1.6.
 
-**`skills`**, **`skills.operative`** (после MVP) — `enabled`, `extra_roots` (только слои 2 и 4),
-`disabled`, `max_skills` (`200`), `catalog_max_chars` (`8000`); пины — `enabled`, `max_tokens`
-(`2048`), `lines`. Подробно — §17.2.8.
+**`skills`** (change `add-agent-skills`) — `enabled`, `extra_roots` (только слои 2 и 4),
+`disabled`, `max_skills` (`200`), `catalog_max_chars` (`8000`), `reattach.per_skill_tokens` (`5000`),
+`reattach.total_tokens` (`25000`); **`skills.operative`** (после 1.0, K-06; до него —
+`config.key.not_applied`) — пины `enabled`, `max_tokens` (`2048`), `lines`. Подробно — §17.2.8.
 
 **`subagents`** (после MVP) — `enabled` (`true`), `max_concurrent` (`3`), `max_per_turn` (`10`),
 бюджет ребёнка `max_steps` (`30`), `max_tokens`, `max_cost`, `max_duration` (`"10m"`),
@@ -669,8 +671,9 @@ capability `memory` off), `max_notes` (`500`, `10..10000`, на scope), `note_ma
 **`profile.<name>`** — сужение встроенного профиля (§10.2): ключи — имена capability в
 snake_case, значения — `"off"` или список транспортов. Пример:
 `profile.agent-serve.mcp = ["http"]`, `shell_exec = "off"` (в файле `off` пишется в кавычках, чтобы
-читатель YAML 1.1 не принял его за логическое значение). После MVP — также `network = "off"`
-(§17.1.5), `skills = "off"` (§17.2), `language_servers = "off"` (§17.8.10), `background_jobs = "off"`
+читатель YAML 1.1 не принял его за логическое значение); `skills = "off"` — известная capability
+(change `add-agent-skills`, §17.2). После MVP — также `network = "off"`
+(§17.1.5), `language_servers = "off"` (§17.8.10), `background_jobs = "off"`
 (§17.9.12), `memory = "off"`, `user_questions = "off"` (§17.11) и `user_hooks = "off"` (§17.14.2).
 `<name>` — только встроенные профили (§10.4), другое имя — `unknownKey`; неизвестная capability —
 `unknownKey`, capability после MVP — `config.key.not_applied`. Расширение — `HostWiringException`,
@@ -782,8 +785,8 @@ loadConfig(cwd, env, flags):
 `agent.summary_model`, `permissions.timeout`, `model_catalog.*`, `providers.*.list_models*`,
 `logging.trace*`, `redact.*` и др.), проверяется по схеме, а явно заданный даёт одно предупреждение
 `config.key.not_applied {key, source}` на каждый явно заданный лист за загрузку; значение по умолчанию предупреждения не
-даёт. Раздел верхнего уровня «после MVP» (`llm`, `images`, `skills`, `subagents`, `jobs`, `hooks`,
-`plugins`, `a2a`, `memory`, `steering`, `lsp` и др.; `secrets` получил схему в 8.9, `config` — в 8.10, D7 change `add-config-writer-and-reload`) распознаётся по имени и
+даёт. Раздел верхнего уровня «после MVP» (`llm`, `images`, `subagents`, `jobs`, `hooks`,
+`plugins`, `a2a`, `memory`, `steering`, `lsp` и др.; `secrets` получил схему в 8.9, `config` — в 8.10, D7 change `add-config-writer-and-reload`, `skills` — в change `add-agent-skills`, кроме подраздела `skills.operative`) распознаётся по имени и
 даёт то же предупреждение без проверки типов: его схему введёт change, который добавит потребителя.
 Ключ, которого нет ни в схеме, ни в списке разделов после MVP, — `unknownKey` (CFG-1). Ошибка на
 документированном ключе сломала бы старт пользователю, который следует документу, а тихий приём
