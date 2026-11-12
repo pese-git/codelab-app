@@ -129,13 +129,16 @@ void main() {
     return tester.idle();
   }
 
-  /// Слой последней перерисовки вида: у `RenderTerminal` свой repaint
-  /// boundary, и при каждой перерисовке он пересоздаёт дочерний слой, поэтому
-  /// смена объекта = вид перерисован.
-  Object? paintToken(WidgetTester tester) {
-    // ignore: invalid_use_of_protected_member
-    final layer = tester.renderObject(find.byType(TerminalView)).layer;
-    return layer?.firstChild;
+  /// Ждёт ли вид перерисовки: `RenderTerminal` на запись в модель помечает
+  /// себя на раскладку (число строк изменилось) или на отрисовку. Проверять надо вне кадра (после колбэка сброса, до `pump`):
+  /// внутри `pump` перерисовка сразу выполняется.
+  bool viewNeedsPaint(WidgetTester tester) {
+    // `renderObject` элемента `TerminalView` — внешняя обёртка; нужен сам
+    // `RenderTerminal` (класс не экспортируется, ищем по имени).
+    final view = tester.allRenderObjects.singleWhere(
+      (r) => r.runtimeType.toString() == 'RenderTerminal',
+    );
+    return view.debugNeedsLayout || view.debugNeedsPaint;
   }
 
   test('значения по умолчанию: бюджет 8 мс, часть 4 КБ (D3)', () {
@@ -227,10 +230,15 @@ void main() {
       );
     }
 
-    testWidgets('несколько частей за кадр дают одну перерисовку вида, а '
-        'вкладка без отрисовки пишет в модель без перерисовки', (tester) async {
+    testWidgets('несколько частей за кадр дают одну перерисовку вида и один '
+        'заказ кадра, а вкладка без отрисовки пишет в модель без '
+        'перерисовки', (tester) async {
+      // Колбэки кадра вызываем сами (двойник планировщика), чтобы смотреть на
+      // вид между записью и перерисовкой.
+      final scheduler = _CountingScheduler();
       final flusher = TerminalOutputFlusher(
         cubit: cubit,
+        binding: scheduler,
         clock: clock,
         frameBudget: const Duration(milliseconds: 8),
       );
@@ -238,27 +246,36 @@ void main() {
       final shell = await openTab(tester);
       await tester.runAsync(cubit.newTab);
       final background = launcher.shells.last;
-      // Активна вторая вкладка (последняя созданная); выбираем первую для вида.
+      // Вид у первой вкладки; вторая — фоновая, без `TerminalView`.
       cubit.selectTab(cubit.state.tabs.first.id);
       await pumpView(tester);
       await tester.pump();
-      final settled = paintToken(tester);
+      expect(find.byType(TerminalView), findsOneWidget);
+      expect(viewNeedsPaint(tester), isFalse);
 
-      // Вывод фоновой вкладки: данные в модели есть, вид не перерисован.
+      // Вывод фоновой вкладки: данные в модели есть, вид не помечен.
       await emit(tester, background, 'b' * (2 * _chunk));
-      await tester.pump();
+      scheduler.callbacks.last(Duration.zero);
       expect(written(1), 2);
-      expect(paintToken(tester), same(settled));
+      expect(parts[1].join(), 'b' * (2 * _chunk));
+      expect(viewNeedsPaint(tester), isFalse);
+      await tester.pump();
 
-      // Три части активной вкладки за один кадр — одна перерисовка вида.
+      // Три части активной вкладки (3 x 3 мс < 8 мс) за один кадр: вид ждёт
+      // перерисовки, а кадр заказан ровно один раз.
+      final callbacksBefore = scheduler.callbacks.length;
+      final requestsBefore = scheduler.frameRequests;
       await emit(tester, shell, 'a' * (3 * _chunk));
-      await tester.pump();
+      expect(scheduler.callbacks.length, callbacksBefore + 1);
+      expect(scheduler.frameRequests, requestsBefore + 1);
+      scheduler.callbacks.last(Duration.zero);
       expect(written(0), 3);
-      final repainted = paintToken(tester);
-      expect(repainted, isNot(same(settled)));
-      // Следующий кадр без вывода ничего не перерисовывает.
+      expect(viewNeedsPaint(tester), isTrue);
+      expect(scheduler.callbacks.length, callbacksBefore + 1);
+      expect(scheduler.frameRequests, requestsBefore + 1);
+
       await tester.pump();
-      expect(paintToken(tester), same(repainted));
+      expect(viewNeedsPaint(tester), isFalse);
     });
   });
 
