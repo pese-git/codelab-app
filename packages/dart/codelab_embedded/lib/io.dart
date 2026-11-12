@@ -36,6 +36,7 @@ export 'package:codelab_agent_io/codelab_agent_io.dart'
         SecretMigrator,
         SecretMovedItem,
         SecretNotMigratedItem,
+        SecretMcpServerMovedItem,
         SecretProviderMovedItem,
         SecretPlanItem,
         SecretReplacedItem,

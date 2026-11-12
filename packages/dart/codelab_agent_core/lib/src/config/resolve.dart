@@ -1460,6 +1460,16 @@ final class _Builder {
       return null;
     }
 
+    // Привязка ссылок HTTP-сервера проектного слоя к адресу (change
+    // `bind-mcp-secrets-to-origin`, D1, D4, D8): вердикт выносится до
+    // `_interpolate` и `expand`, поэтому значение непривязанной ссылки не
+    // читается ни из окружения, ни из хранилища и в объект не попадает.
+    final unbound = type == 'http'
+        ? _unboundMcpReferences(raw, origin)
+        : const <ProviderReference>[];
+    final unboundFields = {for (final ref in unbound) ref.field};
+    final blockedReason = unbound.isEmpty ? null : _mcpBlockedReason(unbound);
+
     final connect = raw['connect_timeout'] is String
         ? parseConfigDuration(raw['connect_timeout']! as String)
         : null;
@@ -1542,13 +1552,56 @@ final class _Builder {
         secretValues: secretValues,
         enabled: enabled,
       );
+      // D12: stdio-сервер закоммиченного `config.yaml` получает ссылку на
+      // секрет. Поведение не меняется (stdio правило привязки не судит, D1),
+      // но процесс работает от имени пользователя и видит его файлы, поэтому
+      // пользователь должен знать, что его хранилище доступно чужой команде.
+      // `${NAME}` не предупреждает (шум для `npx … ${TOKEN}`), `${secret:}` в
+      // `args` — проблема загрузки до этого места. Одно событие на сервер.
+      if (!failed &&
+          origin.kind == ConfigLayerKind.project &&
+          secretValues.entries.any(
+            (e) =>
+                e.key.startsWith('env.') &&
+                e.value.parts.any((p) => p is SecretReference),
+          )) {
+        _warn(
+          'config.mcp.stdio_secret_reference',
+          at.value,
+          origin,
+          'a stdio server from the committed project config receives a '
+              'secret reference; it runs as you, so move it to config.local.yaml '
+              'if you did not write it',
+          fields: {'server': name, 'source': origin.source},
+        );
+      }
     } else {
       final rawUrl = raw['url'];
       if (rawUrl is! String || rawUrl.isEmpty) {
         bad('url', 'required for http servers');
         return null;
       }
-      final text = expand(rawUrl, at.child('url'));
+      // Адрес с непривязанной `${ENV}` нигде не используется (транспорт не
+      // открывается), но `McpHttpServerConfig` требует разобранный `Uri`:
+      // ссылки вырезаются, значение переменной в строку не попадает.
+      // `${secret:}` в `url` — проблема загрузки при любых других ссылках:
+      // проверка раньше ветки вырезания, иначе сервер лишь блокировался бы.
+      final secretInUrl = referencesIn(
+        rawUrl,
+      ).any((r) => r.$1 == ProviderReferenceKind.secret);
+      if (secretInUrl) {
+        bad(
+          'url',
+          r'secret references ${secret:…} are allowed only in env and '
+              'headers values',
+        );
+        failed = true;
+      }
+      final text = secretInUrl
+          ? null
+          : unboundFields.contains('url')
+          ? rawUrl.replaceAll(RegExp(r'\$\{[^}]*\}'), '')
+          : expand(rawUrl, at.child('url'));
       final headers = <(String, String)>[];
       // Индекс заголовка-шаблона среди всех заголовков файла: раскрытие
       // вернёт его на место, а не в конец (D4).
@@ -1556,6 +1609,10 @@ final class _Builder {
       var index = 0;
       for (final MapEntry(:key, :value)
           in (raw['headers'] as Map<String, Object?>? ?? const {}).entries) {
+        if (unboundFields.contains('headers.$key')) {
+          // Ни в `headers`, ни шаблоном в `secretValues` (D4).
+          continue;
+        }
         final expanded = expandValue(
           value! as String,
           at.child('headers').child(key),
@@ -1568,7 +1625,13 @@ final class _Builder {
         }
         index++;
       }
-      final url = text == null ? null : Uri.tryParse(text);
+      var url = text == null ? null : Uri.tryParse(text);
+      if (unboundFields.contains('url') &&
+          (url == null ||
+              !(url.isScheme('http') || url.isScheme('https')) ||
+              url.host.isEmpty)) {
+        url = Uri.parse('https://unbound.invalid');
+      }
       if (!failed &&
           (url == null ||
               !(url.isScheme('http') || url.isScheme('https')) ||
@@ -1588,9 +1651,89 @@ final class _Builder {
               secretValues: secretValues,
               secretHeaderPositions: positions,
               enabled: enabled,
+              blockedReason: blockedReason,
             );
+      if (unbound.isNotEmpty && !failed) {
+        _reportMcpUnbound(name, at, origin, unbound);
+      }
     }
     return failed ? null : server;
+  }
+
+  /// Ссылки HTTP-сервера [raw] слоя `project`, не привязанные к его адресу
+  /// (D1, D3). Слой `projectLocal` доверенного проекта — условие (a), глобальные
+  /// слои не судятся, поэтому пусто. Условие (b): глобальные слои связывают ту
+  /// же ссылку с тем же origin ([ProviderKeyBinding]); origin — по `url`
+  /// сервера, `null` (переменная не задана, не http) не привязывает ничего.
+  List<ProviderReference> _unboundMcpReferences(
+    Map<String, Object?> raw,
+    ConfigTree origin,
+  ) {
+    if (origin.kind != ConfigLayerKind.project) {
+      return const [];
+    }
+    final serverOrigin = mcpServerOrigin(raw, environment);
+    return [
+      for (final ref in mcpServerReferences(raw))
+        // `${secret:}` в `url` правило не судит: она остаётся проблемой
+        // загрузки (`expand` с `allowSecrets: false`), как до change.
+        if (!(ref.field == 'url' && ref.kind == ProviderReferenceKind.secret) &&
+            !_keyBinding.isBound(ref, serverOrigin))
+          ref,
+    ];
+  }
+
+  /// Текст `blockedReason` (D5): совет стоит до имени ссылки, потому что
+  /// `lastError` обрезается до 200 символов, а имя секрета бывает до 128. Имя,
+  /// похожее на значение секрета, не печатается (как в `_reportUnbound`).
+  String _mcpBlockedReason(List<ProviderReference> unbound) {
+    final first = unbound.first;
+    // Имя пришло из репозитория: в `lastError` и лог оно попадает, только если
+    // это допустимое имя секрета (не значение, без управляющих символов и не
+    // длиннее предела); имя переменной уже ограничено разбором `${NAME}`.
+    final printable = switch (first.kind) {
+      ProviderReferenceKind.secret =>
+        literalSecretTag(first.name, asName: true) == null &&
+            SecretNames.problem(first.name) == null,
+      ProviderReferenceKind.env =>
+        literalSecretTag(first.name, asName: true) == null,
+    };
+    final shown = !printable
+        ? 'a reference'
+        : switch (first.kind) {
+            ProviderReferenceKind.secret => 'secret ${first.name}',
+            ProviderReferenceKind.env => 'variable ${first.name}',
+          };
+    return 'key bound to another address: move the server to '
+        'config.local.yaml or the user config ($shown)';
+  }
+
+  /// Предупреждение `config.mcp.key_unbound` на каждую непривязанную ссылку
+  /// (D5, по образцу `_reportUnbound`). Ни имя, ни значение ссылки, ни адрес в
+  /// поля не входят: имя — в `lastError`, у выключенного сервера запись
+  /// откатывается вместе с остальными («тихая» сборка в `_mcpServer`).
+  void _reportMcpUnbound(
+    String name,
+    KeyPath at,
+    ConfigTree origin,
+    List<ProviderReference> unbound,
+  ) {
+    for (final ref in unbound) {
+      final path = ref.field.startsWith('headers.')
+          ? at.child('headers').child(ref.field.substring('headers.'.length))
+          : at.child(ref.field);
+      _warn(
+        'config.mcp.key_unbound',
+        path.value,
+        origin,
+        'the reference is bound to another address and is not used',
+        fields: {
+          'server': name,
+          'source': origin.source,
+          'reference_kind': ref.kind.name,
+        },
+      );
+    }
   }
 
   // ---- редакция секретов (§12.4.3) ----------------------------------------
