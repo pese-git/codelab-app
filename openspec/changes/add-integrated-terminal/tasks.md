@@ -5,7 +5,7 @@
 - `[client]` — задач нет: `codelab_client_core`, `codelab_client_io`, `codelab_client_acp` и `apps/codelab_cli` не меняются (D2, D10);
 - `[protocol]`, `[agent]` — задач нет: ACP и агент не меняются.
 
-Итерации — каждая отдельным pull request в `develop` (design.md, D14):
+Итерации — каждая отдельным pull request в `develop` (design.md, D14); исключение — итерации 1 и 2 идут одним PR (решение Q23, D14, «Отступление»):
 - 0 — решения пользователя по Q1–Q13 и документы;
 - 1 — спайк зависимостей (ворота), технологический стек, сторож, порт и адаптер;
 - 2 — feature `terminal`: Cubit, организм кита, панель в доке;
@@ -111,7 +111,7 @@
 
     Проверка файловой системы и платформы — через внедряемые функции, без `Platform.is*` в тесте;
   - **реализация** в `user_shell_launcher.dart` — тест зелёный.
-- [ ] 1.7 `[desktop]` Проверки итерации 1 и PR итерации 1. Кроме шапки, проверки шире app: lock общий, в нём подняты `code_assets` (мажор), `hooks`, `record_use`, `objective_c` (D11).
+- [x] 1.7 `[desktop]` **Перенесено в 2.11** (решение Q23, 2026-11-12): отдельного PR итерации 1 нет, итерации 1–2 идут одним PR; проверки ниже выполняются в 2.11. Исходный текст задачи — для справки. Проверки итерации 1 и PR итерации 1. Кроме шапки, проверки шире app: lock общий, в нём подняты `code_assets` (мажор), `hooks`, `record_use`, `objective_c` (D11).
   - `fvm dart run melos run analyze` по workspace;
   - тесты пакетов с native assets и хуками сборки — найти по `fvm dart pub deps` потребителей `hooks`/`code_assets`/`objective_c`;
   - `fvm dart run melos run web-compile`: web-безопасные пакеты делят тот же lock;
@@ -124,6 +124,8 @@
   - окно pid-reuse между `waitpid` в воркере и доставкой кода в главный isolate — pidfd или сигнал из воркера (Risks, «Окно между `waitpid` и доставкой кода»);
   - `alloc failed` после `fork`: мастер закрывается без `kill` и `waitpid`, ребёнок без владельца, зомби до выхода app (Risks, «Ребёнок без владельца»);
   - на macOS закрываются только fd < 4096 при `RLIMIT_NOFILE` > 65536 (Risks, «Утечка дескрипторов»).
+
+  Отдельно — issue в `xterm2_core`: флаг, выключающий ответ на CSI 21 t (отчёт заголовка окна), иначе текст OSC 2 из чужого вывода попадает во ввод shell (Risks, «Отчёт заголовка CSI 21 t в ввод shell»).
 
   Текст issue — без путей и данных пользователя. Внешнее действие: заводит пользователь или исполнитель по его разрешению.
 
@@ -233,7 +235,21 @@
     - ввести правило `PackageRule('apps/codelab_desktop/lib', forbidden: ['package:url_launcher/'], exclude: ['core/platform/'], sealExclude: false)` — то же, что у markdown change, — с негативным тестом в `import_guard_test.dart`;
     - в `technology-stack.md` — короткий раздел или ссылку на раздел markdown change, если он уже есть, без дублирования. Markdown change пинует `^6.3.3`; при слиянии второй change приводит запись к точному пину `6.3.3` (D11);
   - события `terminal.link_opened` и `terminal.link_refused` с полем `scheme` (D9).
-- [ ] 2.11 `[desktop]` Проверки итерации 2 (шапка) и PR итерации 2 — после 2.7–2.8 и 2.9–2.10.
+- [ ] 2.11 `[desktop]` Проверки итераций 1–2 и один PR итераций 1–2 (решение Q23; задача 1.7 перенесена сюда) — после 2.7–2.10 и 2.12:
+  - проверки шапки для итераций 1–2;
+  - проверки шире app из 1.7 (общий lock: подняты `code_assets` (мажор), `hooks`, `record_use`, `objective_c`; D11): `fvm dart run melos run analyze` по workspace, тесты пакетов-потребителей `hooks`/`code_assets`/`objective_c` (по `fvm dart pub deps`), `fvm dart run melos run web-compile`, `fvm dart run melos run guard`. Выполнены локально до 2.12; после 2.12 повторить `guard` и проверки app (2.12 меняет только app);
+  - **Linux CI** — прогон контрактного теста адаптера на настоящем PTY в GitHub CI на `ubuntu-latest` (там `/bin/sh` — dash, нужны `tput` и terminfo) показывает этот PR. Итог записать в D15. Если тест там не собирается или падает по причине окружения, а не адаптера, — `skip` вне macOS с причиной в тексте и запись в D13;
+  - в описании PR — какие проверки запускались локально, что полный `melos run check` не запускался (`AGENTS.md` §21). Полный `check` — только предложить пользователю.
+
+- [ ] 2.12 `[desktop]` Исправления по двойному ревью итераций 1–2 (до 2.11). Каждая пара — сначала красный тест, затем код:
+  - **`Disposable` у объекта сброса** (D3): тест — закрытие root scope вызывает `dispose` `TerminalOutputFlusher` без отдельного кода composition root, заказанный обратный вызов кадра и таймер отменены; реализация — `TerminalOutputFlusher` реализует `Disposable` cherrypick;
+  - **владелец по `SessionHandle`** (D5; `integrated-terminal` «Вкладки терминала принадлежат сессии», сценарий «Совпадение идентификаторов сессий у разных агентов»): тест в `terminal_tabs_cubit_test.dart` — при том же `activeSessionId` другой объект `SessionHandle` (сессия другого профиля) даёт нового владельца без вкладок прежнего; reconnect и `session/load` с тем же `SessionHandle` сохраняют вкладки; реализация — Cubit запоминает `SessionHandle` вместе с владельцем;
+  - **`forced` в `closeAll`** (D4, D9): тест — вкладка, которой в `closeAll()` понадобился `kill`, пишет `terminal.tab_closed` с `forced: true`, вышедшая по `hangUp` — с `forced: false`; реализация — в `closeAll`;
+  - **шрифт** (D3): widget-тест — `TerminalView` получает `TerminalStyle` с моноширинным шрифтом кита; реализация — в presentation;
+  - **буфер Q20** (D3, «Окно без кадров и предел буфера»; `integrated-terminal` «Вывод вкладки под большим потоком»): тест в `terminal_write_budget_test.dart` — при lifecycle `hidden`/`paused` сброс идёт по таймеру теми же частями и с тем же бюджетом, при возврате кадров таймер останавливается; буфер сверх предела (в тесте — уменьшенная константа) отбрасывает самый старый неразобранный вывод, в модель пишется `[output truncated]`, остаток идёт в исходном порядке; реализация — в `TerminalOutputFlusher` и буфере реестра;
+  - **ссылки Q21** (D3, «Ссылки OSC 8»; `integrated-terminal` «Ссылки в выводе терминала», сценарии «Диалог показывает нормализованный адрес», «Адрес с символами подмены»): тест в `terminal_link_decision_test.dart` — нормализованный адрес `Uri.parse(...).toString()`; каждый символ из диапазонов bidi, нулевой ширины, C0, DEL и C1 → «нельзя открыть» при схеме `https`; в `terminal_link_test.dart` — диалог показывает нормализованный адрес, «Open» передаёт порту ровно его, для адреса с U+202E кнопки «Open» нет, событие `terminal.link_refused` только со схемой; реализация — `terminalLinkDecision` и диалог;
+  - **заголовок Q22** (D3, D9; `integrated-terminal` «Панель Terminal в доке инструментов», сценарий «Вывод не меняет подпись вкладки»): тест — OSC 2 в выводе не меняет подпись «Terminal N»; реализация — подпись не читает заголовок модели (если тест сразу зелёный — оставить его как регрессионный);
+  - **комментарии** (`AGENTS.md` §15): комментарий правила `flutter` в `features/terminal/application` в `rules.dart` — «прямые импорты запрещены; транзитивно через порты `core/platform` application зависит от Flutter-пакета app, образец `dock_layout_store.dart`» (D3); комментарии изменённых сущностей — по решениям Q20–Q22.
 
 ## 3. Клавиши, палитра, выход из app, приёмка (итерация 3)
 

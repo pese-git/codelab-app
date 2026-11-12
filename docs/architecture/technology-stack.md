@@ -809,7 +809,7 @@ Architectural dependency rules важнее технической доступ�
    * обработчик ZMODEM (`zmodem`, транзитивно от `xterm2`, реэкспортируется `xterm2`) не подключается: `ZModemMux` — файловый обмен в обход политики (D3 change), импорт `package:zmodem/` запрещён сторожем.
 4. **Какую проблему решает.** Не писать свой парсер ANSI и рендер: escape-последовательности, широкие символы, альтернативный экран, scrollback, выделение, bracketed paste.
 5. **Влияние на architecture boundaries.**
-   * Application зависит только от чистого `xterm2_core`, Flutter туда не попадает (`AGENTS.md` §6); `fvm dart run` без Flutter подтверждён спайком.
+   * Application импортирует из пакетов терминала только чистый `xterm2_core` (`AGENTS.md` §6); `fvm dart run` без Flutter подтверждён спайком. Прямые импорты `package:xterm2/` и `package:flutter/` в application запрещены сторожем; транзитивно, через порты `lib/core/platform/`, application зависит от Flutter-пакета app — как принятый образец `dock_layout_store.dart` (D3 change).
    * `TerminalView` работает внутри `FluentApp` без `MaterialApp` и без Material-виджетов; импорт `package:flutter/material.dart` есть только внутри самого `xterm2`, как библиотека SDK. Тема строится из `FluentTheme` (§7).
    * **Буфер обмена (решение пользователя Q13).** Чтение и запись через OSC 52, 1337 и 5522 запрещены. Обработчики не оставлять `null`: `TerminalView.initState` иначе подставит системный буфер через `??=`. Политика модели вкладки:
      * `clipboardDecoder: (_, _) => null`;
@@ -819,7 +819,8 @@ Architectural dependency rules важнее технической доступ�
 
      Подробнее — D3 change. Выделение и Cmd+C/Cmd+V пользователя работают.
    * Ссылки OSC 8 открываются после подтверждения только для `http`/`https` (решение Q14) через `url_launcher` за портом `lib/core/platform/` (решение Q16, D11 change). Пакет описан в §20е; `add-desktop-markdown`, если сольётся позже, ссылается на него.
-   * Запись в модель — порциями до 4 КБ не чаще кадра: один `write` на ~400 КБ держит UI isolate ~120 мс (D15).
+   * Запись в модель — порциями до 4 КБ не чаще кадра с бюджетом на кадр: один `write` на ~400 КБ держит UI isolate ~120 мс (D15). Без кадров (окно скрыто или свёрнуто) сброс идёт по таймеру с тем же бюджетом; неразобранный буфер вкладки ограничен ~8 МБ, переполнение отбрасывает самый старый вывод с пометкой `[output truncated]` (решение Q20, D3 change).
+   * Ответ эмулятора на CSI 21 t (отчёт заголовка окна) в `xterm2_core` 1.0.0 не выключается: текст OSC 2 из вывода может попасть во ввод shell (без Enter). Риск принят до флага в пакете (Risks change). Заголовок OSC 0/2 в подписи вкладки не используется (решение Q22).
 6. **Заменяет ли существующую технологию.** Нет.
 7. **Требуется ли migration.** Нет.
 8. **Требуется ли ADR.** Нет (Q3): технология затрагивает одну feature одного app и не меняет границ пакетов, state management и ACP — прецедент §20а.
@@ -922,7 +923,7 @@ Architectural dependency rules важнее технической доступ�
 
 1. **Зачем.** Ссылки OSC 8 в выводе терминала открываются в браузере после подтверждения пользователя (Q14).
 2. **Где.** Только порт `ExternalLinkOpener` и адаптер `UrlLauncherExternalLinkOpener` в `apps/codelab_desktop/lib/core/platform/external_link_opener.dart`; импорт `package:url_launcher/` в остальном `lib` app запрещён сторожем.
-3. **Безопасность.** Решение «можно ли открыть» принимает application (`terminalLinkDecision`: только `http`/`https`); адаптер повторно отказывает остальным схемам (`rejectedScheme`), открывает в `LaunchMode.externalApplication`; адрес в журнал не пишется — только схема (`observability.md` §35). OSC 1337 `OpenURL` (`Terminal.onOpenUrl`) не подключается.
+3. **Безопасность.** Решение «можно ли открыть» принимает application (`terminalLinkDecision`: только `http`/`https`; адрес с bidi, нулевой шириной или управляющими C0/C1 — «нельзя» при любой схеме, решение Q21); диалог показывает нормализованный адрес — ровно тот, что уходит в `launchUrl`; адаптер повторно отказывает остальным схемам (`rejectedScheme`), открывает в `LaunchMode.externalApplication`; адрес в журнал не пишется — только схема (`observability.md` §35). OSC 1337 `OpenURL` (`Terminal.onOpenUrl`) не подключается.
 4. **Зависимости.** Новые в lock: `url_launcher_android` 6.3.33, `url_launcher_ios` 6.4.2, `url_launcher_linux` 3.2.3, `url_launcher_macos` 3.2.6, `url_launcher_platform_interface` 2.3.2, `url_launcher_web` 2.4.3, `url_launcher_windows` 3.1.6 (все BSD-3-Clause, `flutter.dev`); существующие пакеты не поднимаются. `GeneratedPluginRegistrant.swift` macOS регистрирует `url_launcher_macos`.
 5. **Заменяет ли существующую технологию.** Нет. **Migration** — нет. **ADR** — нет (Q3, прецедент §20а).
 
