@@ -1,7 +1,7 @@
 # app-settings Specification
 
 ## Purpose
-Экран настроек codelab-app (`apps/codelab_desktop`) по reference Claude Design (`docs/design/claude-design/`): переход из рабочего места и обратно через `NavigationCubit` без потери сессии, навигация по страницам с поиском, недоступность рабочего места с клавиатуры и заметное ожидающее одобрение. Страница «Connection» управляет профилями из общего с CLI `$CODELAB_HOME/profiles.json`: встроенный агент, профиль по умолчанию, Connect, «Add connection profile» с проверкой только `initialize`, «Rename» и «Remove», «Restart agent». Токен профиля — только ссылка `env:<NAME>`; значения секретов, URL с путём и тексты исключений не попадают в UI и журнал. Устройство — `docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md` §12.4.9; история решений — архив change `2026-11-05-add-app-settings-shell`.
+Экран настроек codelab-app (`apps/codelab_desktop`) по reference Claude Design (`docs/design/claude-design/`): переход из рабочего места и обратно через `NavigationCubit` без потери сессии, навигация по страницам с поиском, недоступность рабочего места с клавиатуры и заметное ожидающее одобрение. Страница «Connection» управляет профилями из общего с CLI `$CODELAB_HOME/profiles.json`: встроенный агент, профиль по умолчанию, «Use» (выбор профиля окна для следующего старта; агент стартует сам по триггерам рабочего места), «Add connection profile» с проверкой только `initialize`, «Rename» и «Remove», «Restart agent» (единственный перезапуск, во время хода — с подтверждением). Токен профиля — только ссылка `env:<NAME>`; значения секретов, URL с путём и тексты исключений не попадают в UI и журнал. Устройство — `docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md` §12.4.9; история решений — архивы changes `2026-11-05-add-app-settings-shell` и `2026-11-12-require-project-folder`.
 ## Requirements
 ### Requirement: Переход в настройки и обратно
 Переход между рабочим местом и настройками codelab-app SHALL идти только через `NavigationCubit` (`apps/codelab_desktop/lib/app/navigation/`, `dart-agent-and-clients` §12.3 A13, DSK-24). `AppDestination` SHALL быть закрытой иерархией; в этом change в ней две ветки — `WorkbenchDestination` и `SettingsDestination(page)` (design.md, D1).
@@ -133,16 +133,16 @@ InfoBar SHALL исчезать, когда ожидающих запросов �
 Строка профиля SHALL показывать:
 - заголовок (`title`) — `label` в одну строку с многоточием и полным текстом в подсказке. Если `label` пуст или совпадает со значением `--agent`, из которого профиль создан (начинается с `stdio:`, `ws://` или `wss://`), заголовком SHALL быть `id`. Тем же правилом `title` SHALL пользоваться подтверждение «Remove» и подпись профиля на экране подключения и в баннере соединения рабочего места; сырой `label` там НЕ SHALL показываться;
 - вторую строку — команду stdio без аргументов или origin WebSocket-адреса (`scheme://host:port`), без `env` и значения токена;
-- метку «Current» — только у профиля, к которому workspace сейчас подключён (принятый профиль в `Connected` или `Reconnecting`). После сбоя и во время новой попытки «Current» НЕ SHALL быть ни у одной строки, кроме случая отказа до обращения к workspace при живом соединении;
+- метку «Current» — только у профиля работающего агента окна (принятый профиль в `Connected` или `Reconnecting`). После сбоя и во время новой попытки «Current» НЕ SHALL быть ни у одной строки, кроме случая отказа до обращения к workspace при живом соединении;
 - бейдж попытки (ключ `connection-profile-status-<id>`): `Connecting…`, `Connected` или `Failed` — у строки профиля последней попытки (`ConnectionCommands.attemptProfile`), без текста ошибки;
-- метки «Default», «Current» и «Not tested»;
+- метки «Default», «Current», «Selected» (профиль окна для следующего старта агента, если он не «Current») и «Not tested»;
 - результат последней проверки в этом открытии страницы (ключ `connection-profile-probe-<id>`, текст — по требованию «Диалог «Add connection profile»», раздел «Проверка»).
 
-Строка SHALL предлагать действия «Test connection», «Connect», «Rename» и «Remove». У встроенного агента НЕ SHALL быть «Test connection», «Rename» и «Remove». «Remove» SHALL быть недоступна у профиля текущего подключения, с подсказкой «Disconnect first».
+Строка SHALL предлагать действия «Test connection», «Use», «Rename» и «Remove». У встроенного агента НЕ SHALL быть «Test connection», «Rename» и «Remove». «Remove» SHALL быть недоступна у профиля работающего агента и у выбранного профиля окна, с подсказкой `Use another profile first.`.
 
-У строки с меткой «Current» (принятое соединение в `Connected` или `Reconnecting`) кнопки «Connect» НЕ SHALL быть: переподключение вручную — «Restart agent» блока «Behavior» (решение пользователя 2026-11-05; design.md, D5, D9). Это касается и встроенного агента. У остальных строк «Connect» SHALL оставаться; во время попытки (`Connecting…`) и после сбоя (`Failed`) «Current» нет, и «Connect» SHALL быть во всех строках.
+У выбранного профиля окна кнопки «Use» НЕ SHALL быть; у остальных строк она SHALL быть. Ручного подключения и «Disconnect» на странице НЕ SHALL быть: агент стартует сам по триггерам рабочего места (spec agent-workbench-ui «Агент стартует сам»), перезапуск — «Restart agent» блока «Behavior» (design.md change `require-project-folder`, D18).
 
-Радиокнопка строки SHALL выбирать профиль по умолчанию (`shared_preferences` `codelab.connection.default_profile`). Профиль по умолчанию используется при старте и кнопкой «Connect» до первого подключения окна. «Connect» SHALL подключать текущее окно к профилю строки и НЕ SHALL менять профиль по умолчанию.
+Радиокнопка строки SHALL выбирать профиль по умолчанию (`shared_preferences` `codelab.connection.default_profile`). Профиль по умолчанию SHALL быть начальным профилем окна. «Use» SHALL делать профиль строки профилем окна для следующего старта агента и НЕ SHALL менять профиль по умолчанию. «Use» НЕ SHALL запускать, останавливать или перезапускать агента: если агент работает с другим профилем, новый профиль применяется «Restart agent» (требование «Блок «Behavior» страницы «Connection»»).
 
 Без сохранённого выбора профилем по умолчанию SHALL быть встроенный агент. `default` — второе имя встроенного агента (design.md, D21): запись с id `default` в `profiles.json` SHALL игнорироваться и НЕ SHALL показываться строкой профиля.
 
@@ -151,15 +151,15 @@ InfoBar SHALL исчезать, когда ожидающих запросов �
 Если `profiles.json` не разбирается или имеет неизвестную версию, страница SHALL показывать строку встроенного агента и ошибку `Cannot read <path>: <причина>. Fix or remove the file; CodeLab will not overwrite it.`. Если `CODELAB_HOME` недопустим, страница SHALL показывать строку встроенного агента и причину ошибки `CODELAB_HOME`. В обоих случаях:
 - «Add profile», «Rename» и «Remove» SHALL быть недоступны;
 - файл НЕ SHALL перезаписываться;
-- блок «Behavior» («Connect on start», «Restart agent») SHALL оставаться видимым и рабочим: он не зависит от `profiles.json`.
+- блок «Behavior» («Restart agent») SHALL оставаться видимым и рабочим: он не зависит от `profiles.json`.
 
 Предупреждение о проигнорированной записи `default` SHALL писаться в журнал один раз за жизнь страницы, а не при каждом перечитывании файла.
 
 Строка WebSocket-профиля SHALL показывать источник токена:
 - `No token`;
 - `From $<NAME>`, с пометкой `<NAME> is not set in CodeLab's environment.`, если переменной нет в окружении app;
-- `Token secret <имя>` с тегом `<backend> · set` или `<backend> · missing` для ссылки `secret:<имя>` (design.md change `add-provider-setup-ui`, D14). Наличие секрета SHALL определяться без чтения значения (`ProfileSecrets.isSet`); имя показывается текстом, а не редактируемым полем; «Connect» профиля, чей секрет не задан, SHALL подключаться без токена и писать в диагностику `Profile <id> has no stored secret value; connecting without a token.`, а в журнал — событие `connection_profile.token_secret_missing` с единственным полем `profile_id` (имя секрета и значение там НЕ SHALL встречаться; design.md change `add-provider-setup-ui`, D13).
-- `unrecognized token reference (not supported in this version)` для ссылки не вида `env:` и `secret:`. Значение ссылки НЕ SHALL выводиться ни в UI, ни в журнал, ни в диагностику: вместо имени секрета там может стоять сам токен. «Connect» с таким профилем SHALL подключаться без токена и писать в диагностику `The token-reference format of profile <id> is not supported in this version; connecting without a token.`.
+- `Token secret <имя>` с тегом `<backend> · set` или `<backend> · missing` для ссылки `secret:<имя>` (design.md change `add-provider-setup-ui`, D14). Наличие секрета SHALL определяться без чтения значения (`ProfileSecrets.isSet`); имя показывается текстом, а не редактируемым полем; старт агента с профилем, чей секрет не задан, SHALL подключаться без токена и писать в диагностику `Profile <id> has no stored secret value; connecting without a token.`, а в журнал — событие `connection_profile.token_secret_missing` с единственным полем `profile_id` (имя секрета и значение там НЕ SHALL встречаться; design.md change `add-provider-setup-ui`, D13).
+- `unrecognized token reference (not supported in this version)` для ссылки не вида `env:` и `secret:`. Значение ссылки НЕ SHALL выводиться ни в UI, ни в журнал, ни в диагностику: вместо имени секрета там может стоять сам токен. старт агента с таким профилем SHALL подключаться без токена и писать в диагностику `The token-reference format of profile <id> is not supported in this version; connecting without a token.`.
 
 Страница «Connection», диалог «Add connection profile» и (с итерации 2) страница «Providers» SHALL при каждом открытии заново открывать `ClientSecretAccess` и перечитывать `secrets.backend`, чтобы правка `config.yaml` применялась без перезапуска app (design.md change `add-provider-setup-ui`, D3, D4).
 
@@ -179,20 +179,20 @@ InfoBar SHALL исчезать, когда ожидающих запросов �
 - **WHEN** пользователь нажимает «Remove» в InfoBar старой записи `default` и подтверждает
 - **THEN** `profiles.json` больше не содержит `default`, запись `dev` на месте, InfoBar скрыт
 
-#### Scenario: Connect не меняет профиль по умолчанию
-- **WHEN** профиль по умолчанию — встроенный агент, и пользователь нажимает «Connect» в строке `dev`
-- **THEN** окно подключается к `dev`, строка `dev` получает метку «Current», метка «Default» остаётся у встроенного агента
+#### Scenario: Use не меняет профиль по умолчанию и не запускает агента
+- **WHEN** профиль по умолчанию — встроенный агент, агент не запущен, и пользователь нажимает «Use» в строке `dev`
+- **THEN** процесс `dev` не запускается, строка `dev` получает метку «Selected», метка «Default» остаётся у встроенного агента, а следующий триггер старта (выбор проекта, «New session») запускает `dev`
 
 #### Scenario: Неподдерживаемая ссылка на токен
 - **WHEN** `profiles.json` содержит WebSocket-профиль `devbox` с `tokenRef: sk-test-leak-0123456789`
-- **THEN** строка показывает `unrecognized token reference (not supported in this version)`; «Connect» подключается без токена, а диагностика содержит предупреждение с `devbox`. Ни страница, ни журнал, ни диагностика (в том числе после `SecretRedactor`) не содержат `sk-test-leak-0123456789`
+- **THEN** строка показывает `unrecognized token reference (not supported in this version)`; старт агента с `devbox` идёт без токена, а диагностика содержит предупреждение с `devbox`. Ни страница, ни журнал, ни диагностика (в том числе после `SecretRedactor`) не содержат `sk-test-leak-0123456789`
 
 #### Scenario: Секрет токена в строке
 - **WHEN** `secrets.backend: file`, `profiles.json` содержит WebSocket-профили `devbox` с `tokenRef: secret:codelab/profiles/devbox/token` (секрет сохранён) и `ci` с `tokenRef: secret:codelab/ws-ci` (секрета нет)
 - **THEN** строка `devbox` показывает `Token secret codelab/profiles/devbox/token` и `file · set`, строка `ci` — `Token secret codelab/ws-ci` и `file · missing`; значение секрета не читалось
 
 #### Scenario: Подключение с незаданным секретом
-- **WHEN** профиль `ci` ссылается на `secret:codelab/profiles/ci/token`, которого нет в хранилище, и пользователь нажимает «Connect»
+- **WHEN** профиль `ci` ссылается на `secret:codelab/profiles/ci/token`, которого нет в хранилище, и агент окна стартует с профилем `ci`
 - **THEN** подключение идёт без токена, диагностика содержит `Profile ci has no stored secret value; connecting without a token.`, журнал — `connection_profile.token_secret_missing` с `profile_id: ci` и без имени секрета
 
 #### Scenario: Правка secrets.backend без перезапуска
@@ -203,94 +203,86 @@ InfoBar SHALL исчезать, когда ожидающих запросов �
 - **WHEN** `profiles.json` содержит профиль `py` с `label` `stdio:python -m "codelab agent" --stdio`, профиль `ws` с пустым `label` и профиль `dev` с `label` длиннее строки
 - **THEN** заголовки — `py`, `ws` и `label` профиля `dev` с многоточием и полным текстом в подсказке; вторая строка `py` — `python`, без аргументов
 
-#### Scenario: Connect скрыт у текущего профиля
-- **WHEN** `profiles.json` содержит профили `dev` и `plain`, пользователь нажимает «Connect» в строке `dev`, и подключение принято
-- **THEN** у `dev` «Current» и `Connected`, кнопки `connection-profile-connect-dev` нет, а у `plain` и встроенного агента «Connect» есть
+#### Scenario: Use скрыт у выбранного профиля
+- **WHEN** `profiles.json` содержит профили `dev` и `plain`, пользователь нажимает «Use» в строке `dev`, и агент окна стартует с `dev`
+- **THEN** у `dev` «Current» и `Connected`, кнопки `connection-profile-use-dev` нет, а у `plain` и встроенного агента «Use» есть
 
-#### Scenario: Connect при переподключении и после сбоя
+#### Scenario: Строка при переподключении и после сбоя
 - **WHEN** окно подключено к `dev`, соединение переходит в `Reconnecting`, затем переподключение не удаётся
-- **THEN** в `Reconnecting` у `dev` «Current» и бейдж `Connecting…`, кнопки `connection-profile-connect-dev` нет, а у других строк «Connect» есть; после сбоя «Current» нет ни у кого, у `dev` бейдж `Failed`, а «Connect» есть во всех строках
+- **THEN** в `Reconnecting` у `dev` «Current» и бейдж `Connecting…`; после сбоя «Current» нет ни у кого, у `dev` бейдж `Failed` и метка «Selected», кнопки `connection-profile-use-dev` нет, а у других строк «Use» есть
 
 #### Scenario: Бейдж состояния текущего профиля
-- **WHEN** окно ещё ни к чему не подключалось, пользователь нажимает «Connect» в строке `dev`, и подключение сначала идёт, потом завершается ошибкой
+- **WHEN** агент ещё не запускался, профиль окна — `dev`, пользователь выбирает проект, и старт `dev` сначала идёт, потом завершается ошибкой
 - **THEN** бейдж `connection-profile-status-dev` показывает `Connecting…`, затем `Failed`, без текста ошибки; у других строк бейджа нет, «Current» нет ни у кого
 
 #### Scenario: Бейдж после принятого подключения
-- **WHEN** окно подключено к `a` («Current» и `Connected` у `a`), и пользователь нажимает «Connect» в строке `b`, которая подключается успешно
+- **WHEN** агент работает с `a` («Current» и `Connected` у `a`), ходов нет, пользователь нажимает «Use» в строке `b`, затем «Restart agent», и `b` подключается успешно
 - **THEN** пока идёт попытка, бейдж `Connecting…` стоит у `b`, а «Current» нет ни у кого; после успеха «Current» и `Connected` у `b`, у `a` ни метки, ни бейджа
 
 #### Scenario: Недопустимый CODELAB_HOME
 - **WHEN** app запущено с `CODELAB_HOME=~bob/cl`
-- **THEN** страница показывает встроенного агента и причину ошибки `CODELAB_HOME`, «Add profile» недоступна, ни один файл не создан, а «Connect on start» и «Restart agent» видны
+- **THEN** страница показывает встроенного агента и причину ошибки `CODELAB_HOME`, «Add profile» недоступна, ни один файл не создан, а «Restart agent» виден
 
 #### Scenario: Битый profiles.json
 - **WHEN** `profiles.json` содержит `{"version": 2, "profiles": []}`
 - **THEN** страница показывает встроенного агента и ошибку чтения, «Add profile» недоступна, а содержимое файла после закрытия страницы прежнее
 
 #### Scenario: Текущий профиль не удаляется
-- **WHEN** окно подключено к профилю `dev`
-- **THEN** «Remove» в строке `dev` недоступна с подсказкой «Disconnect first»
+- **WHEN** агент окна работает с профилем `dev`
+- **THEN** «Remove» в строке `dev` недоступна с подсказкой `Use another profile first.`
 
 ### Requirement: Блок «Behavior» страницы «Connection»
-Блок «Behavior» SHALL содержать две строки.
+Блок «Behavior» SHALL содержать одну строку — «Restart agent». Строки «Connect on start» НЕ SHALL быть: ключ `codelab.connection.connect_on_start` app не читает и не пишет, а агент стартует сам по триггерам рабочего места (spec agent-workbench-ui «Агент стартует сам»; design.md change `require-project-folder`, D19).
 
-**«Connect on start».** Переключатель хранится в `shared_preferences` `codelab.connection.connect_on_start`, по умолчанию выключен. При включённом переключателе app SHALL после первого кадра и после восстановления проекта один раз подключаться к профилю по умолчанию. Сбой такого подключения SHALL отображаться как сбой обычного подключения (`ConnectionFailed` и баннер) без повторов. При выключенном переключателе app SHALL открываться без подключения.
+**«Restart agent».** Строка SHALL перезапускать агента окна с выбранным профилем окна (метка «Selected» или «Current»). Корень процесса SHALL выбираться так: папка сессии в фокусе, если она не корень диска; иначе выбранный проект; иначе прежний корень; папка сессии в корне диска (открытой после подтверждения, spec agent-workbench-ui «Подтверждение открытия сессии в корне диска») — только если других кандидатов нет (design.md change `require-project-folder`, D18, Q27 (a)). Перезапуск НЕ SHALL менять выбранный проект. Это то же действие, что «Restart agent» диалога переноса секретов (design.md change `add-app-settings-shell`, D9) и пункт палитры `/reconnect` (spec agent-workbench-ui «Командная палитра открывается и выполняет доступные действия»). Перезапуск — единственный способ сменить профиль работающего агента и восстановиться после сбоя (design.md change `require-project-folder`, D22).
 
-**«Restart agent».** Строка SHALL вызывать переподключение (`ClientWorkspace.reconnect`) профиля последнего принятого подключения — цели `ConnectionCommands.restartTarget`; до первого принятого подключения целью SHALL быть последний выбранный профиль. Это то же действие, что «Restart agent» диалога переноса секретов (design.md, D9). Описание строки SHALL называть цель: `Reconnects <title> and reloads open sessions. A running turn is interrupted; queued prompts stay.` Для профиля WebSocket строка SHALL называться «Reconnect». Её описание НЕ SHALL обещать отмену хода (`session/cancel`); оно SHALL сообщать, что идущий ход прерывается, открытые сессии загружаются заново, а очередь промптов сохраняется. Подпись («Restart agent» или «Reconnect») и доступность строки SHALL считаться по цели. Строка SHALL быть недоступна без цели и во время подключения или переподключения.
+Если хотя бы одна сессия окна в ходе, ждёт одобрения или отменяется, перезапуск SHALL сначала показывать диалог `Restart <title>? This interrupts <n> running session(s): <titles>. Queued prompts stay.` с «Restart agent» и «Cancel». «Cancel» НЕ SHALL ничего менять. Без работы в сессиях диалога НЕ SHALL быть. Пока диалог открыт, повторные перезапуски SHALL игнорироваться. Перезапуск НЕ SHALL отправлять `session/cancel`: ходы обрываются заменой транспорта, ждущие одобрения снимаются, очередь сохраняется, открытые сессии загружаются заново.
 
-До первого принятого подключения профиль окна SHALL быть последним выбранным профилем: экран подключения показывает его, а Reconnect работает с ним. После первого принятого подключения профиль окна SHALL меняться только после того, как workspace принял новую попытку (`Connected` этой попытки).
+Подпись строки:
+- если выбранный профиль совпадает с профилем работающего агента — `Reconnects <title> and reloads open sessions. A running turn is interrupted; queued prompts stay.`;
+- если выбран другой профиль — `Restart <title> to use it.`, где `<title>` — выбранный профиль;
+- для профиля WebSocket строка SHALL называться «Reconnect»; её описание НЕ SHALL обещать отмену хода.
 
-Connect к другому профилю SHALL разрывать текущее соединение до проверки нового (поведение kit `ClientWorkspace.connect`). Единственное исключение — попытка, отклонённая до обращения к workspace (пустая команда stdio, нет папки проекта). Если в этот момент workspace подключён:
-- статус окна SHALL оставаться `connected`, «Current» — у живого профиля;
-- причина SHALL идти только в диагностику, `connectionMessage` НЕ SHALL меняться, а баннер ошибки НЕ SHALL появляться;
-- последующая потеря соединения SHALL давать `lost`.
+Строка SHALL быть доступна и во время старта агента: перезапуск вытесняет идущую попытку старта (зависший старт иначе не прервать), диалога подтверждения при этом нет — ходов ещё нет; вытесненная попытка освобождается резолвером и не меняет статус (design.md change `require-project-folder`, Q25 (a)). Пока открыт диалог подтверждения, строка не начинает второй перезапуск. Без проекта и без прежнего корня процесса строка SHALL быть недоступна с подсказкой `Starts when you open a project.`.
 
-Отказ до обращения к workspace НЕ SHALL вытеснять попытку, уже переданную в kit: её исход SHALL применяться как обычно. Вытесненная попытка «Connect» НЕ SHALL менять ни профиль окна, ни статус, ни соединение, даже если завершилась позже более новой (номер попытки проверяется после каждого ожидания). Диагностика подключения stdio SHALL называть только команду, без аргументов.
+Попытка, вытесненная более новой, НЕ SHALL менять ни профиль окна, ни статус, ни соединение, даже если завершилась позже (номер попытки проверяется после каждого ожидания). Диагностика старта stdio SHALL называть только команду, без аргументов. Отказ до обращения к workspace (пустая команда stdio, нет папки) при работающем агенте НЕ SHALL трогать живое соединение: статус остаётся `connected`, причина идёт только в диагностику.
 
 В CommandBar страницы SHALL быть только «Add profile»; второй кнопки «Restart agent» там НЕ SHALL быть.
 
-#### Scenario: Подключение при старте
-- **WHEN** `codelab.connection.connect_on_start` — `true`, профиль по умолчанию — scripted stdio-агент, и app запускается
-- **THEN** после первого кадра app подключается к этому агенту ровно один раз
-
-#### Scenario: Без подключения при старте
-- **WHEN** ключа `codelab.connection.connect_on_start` нет, и app запускается
-- **THEN** рабочее место показывает экран подключения, процесс агента не запущен
+#### Scenario: Старт без строки Connect on start
+- **WHEN** в `shared_preferences` `codelab.connection.connect_on_start` — `true`, снимка нет, и app запускается
+- **THEN** блок «Behavior» не содержит «Connect on start», агент не запущен, а «Restart agent» недоступна с подсказкой `Starts when you open a project.`
 
 #### Scenario: Restart agent переподключает тем же профилем
-- **WHEN** окно подключено к встроенному агенту с открытой сессией, и пользователь нажимает «Restart agent»
-- **THEN** прежний встроенный агент освобождён, новый подключён тем же профилем, а сессия загружена через `session/load`
+- **WHEN** агент окна — встроенный, открыта сессия с завершённым ходом, и пользователь нажимает «Restart agent»
+- **THEN** диалога нет, прежний встроенный агент освобождён, новый подключён тем же профилем, сессия загружена через `session/load`
 
-#### Scenario: Restart agent после неудачного Connect
-- **WHEN** workspace подключён к встроенному агенту, пользователь нажимает «Connect» в строке `dev`, подключение к `dev` завершается `ConnectionFailed`, и пользователь нажимает «Restart agent»
-- **THEN** переподключается встроенный агент — профиль последнего принятого подключения, — а не `dev`
+#### Scenario: Смена профиля применяется перезапуском
+- **WHEN** агент работает со встроенным профилем, пользователь нажимает «Use» в строке stdio-профиля `dev`
+- **THEN** агент не перезапущен, строка «Restart agent» показывает `Restart dev to use it.`; после нажатия и без идущих ходов агент — `dev`, «Current» у `dev`
 
-#### Scenario: Connect к B отклонён до обращения к workspace при живом A
-- **WHEN** окно подключено к профилю `a`, пользователь нажимает «Connect» в строке stdio-профиля `b` с пустой командой, и попытка отклонена до обращения к workspace
-- **THEN** соединение с `a` живо, «Current» и бейдж `Connected` остаются у `a`, подпись и цель «Restart agent» — по `a`; причина отказа `b` есть только в диагностике, сообщение рабочего места не изменилось, баннера ошибки нет
+#### Scenario: Подтверждение при идущем ходе
+- **WHEN** в сессии окна идёт ход, и пользователь нажимает «Restart agent»
+- **THEN** показан диалог с названием сессии; после «Cancel» агент и ход прежние; после «Restart agent» агент перезапущен, ход оборван без `session/cancel`, очередь сохранена
 
-#### Scenario: Connect к несуществующему бинарю разрывает встроенного агента
-- **WHEN** окно подключено к встроенному агенту, пользователь нажимает «Connect» в строке stdio-профиля `dart` с несуществующим бинарём, затем — «Restart agent»
-- **THEN** после неудачи у встроенного агента нет ни «Current», ни бейджа, у `dart` — бейдж `Failed`; «Restart agent» переподключает встроенного агента, после чего «Current» и `Connected` — у встроенного агента
+#### Scenario: Сбой и восстановление
+- **WHEN** выбранный профиль `dart` указывает на несуществующий бинарь, старт завершился `Failed`, пользователь нажимает «Use» во встроенном агенте, затем «Restart agent»
+- **THEN** встроенный агент запущен, «Current» и `Connected` у встроенного агента, у `dart` ни метки, ни бейджа
 
-#### Scenario: Отказ до kit не вытесняет попытку в kit
-- **WHEN** пользователь нажимает «Connect» в строке WebSocket-профиля `a` и рукопожатие ещё висит, затем нажимает «Connect» в строке stdio-профиля `b`, чья папка проекта исчезла, после чего `a` подключается
-- **THEN** статус окна — `connected`, «Current» у `a`, а отказ `b` записан только в диагностику
+#### Scenario: Поздняя попытка
+- **WHEN** пользователь нажимает «Restart agent» с профилем `slow`, затем, пока `slow` подключается, выбирает «Use» для `dev` и снова «Restart agent», и `dev` подключается раньше, чем завершается `slow`
+- **THEN** агент — `dev`, метка «Current» у `dev`, поздний исход `slow` не меняет ни соединение, ни статус
 
-#### Scenario: Первый Connect не удался
-- **WHEN** окно ещё ни к чему не подключалось, пользователь нажимает «Connect» в строке `dev`, и попытка не удаётся
-- **THEN** экран подключения показывает профиль `dev`, а Reconnect повторяет подключение к `dev`
+#### Scenario: Зависший старт прерывается перезапуском
+- **WHEN** выбор проекта `/work/app` стартовал встроенного агента, открытие не завершается, и пользователь нажимает «Restart agent»
+- **THEN** диалога нет, прежняя попытка вытеснена без промежуточного `failed`, её агент освобождён, стартует новая попытка с корнем `/work/app`
 
-#### Scenario: Отказ до подключения при живом соединении
-- **WHEN** окно подключено к `a`, и пользователь нажимает «Connect» в строке stdio-профиля, чья папка проекта исчезла
-- **THEN** статус окна остаётся `connected`, причина видна только в диагностике, сообщение рабочего места не изменилось, а после потери соединения с `a` статус — `lost`
-
-#### Scenario: Поздняя попытка Connect
-- **WHEN** пользователь нажимает «Connect» в строке `slow`, затем, пока `slow` подключается, — «Connect» в строке `dev`, и `dev` подключается раньше, чем завершается `slow`
-- **THEN** окно остаётся подключённым к `dev`, метка «Current» у `dev`, а поздний исход `slow` не меняет ни соединение, ни статус
+#### Scenario: Корень перезапуска при сессии в корне диска
+- **WHEN** выбран проект `/work/app`, в фокусе сессия `s2` с `cwd` `/`, открытая после подтверждения, и пользователь нажимает «Restart agent»
+- **THEN** агент перезапущен с корнем процесса `/work/app`, `s2` загружена заново с `cwd` `/`, выбранный проект не изменился
 
 #### Scenario: Подпись для WebSocket
-- **WHEN** текущий профиль — WebSocket
+- **WHEN** выбранный профиль — WebSocket и он же работает
 - **THEN** строка называется «Reconnect», а её описание не содержит слов о перезапуске процесса агента
 
 ### Requirement: Предупреждение и справка для удалённого агента
@@ -355,9 +347,9 @@ Connect к другому профилю SHALL разрывать текущее
 
 Подтверждение SHALL действовать для пары «URL, выбор токена» черновика: после «Test anyway» перед «Save» и после «Save anyway» перед «Test connection» повторного подтверждения НЕ SHALL быть. Изменение URL, варианта токена, имени переменной, выбранного секрета или значения нового токена SHALL сбрасывать подтверждение, даже если значение затем возвращено к прежнему; «Add another» SHALL начинать черновик без подтверждения.
 
-«Test connection» и «Connect» в строке сохранённого профиля на странице «Connection» подтверждения `ws://` НЕ SHALL спрашивать (решение пользователя 2026-11-05).
+«Test connection» в строке сохранённого профиля и старт агента с профилем, выбранным «Use», подтверждения `ws://` НЕ SHALL спрашивать (решение пользователя 2026-11-05; «Use» заменил «Connect», design.md change `require-project-folder`, D18).
 
-После сохранения диалог SHALL показывать экран «Profile saved» с id, текстом `The current connection is unchanged. Use Connect in the profile row to switch now.` и кнопками «Done» и «Add another». «Cancel» и Esc без сохранения SHALL закрывать диалог без записи в `profiles.json` и `shared_preferences`.
+После сохранения диалог SHALL показывать экран «Profile saved» с id, текстом `The running agent is unchanged. Select it with Use in the profile row; Restart agent applies it.` (design.md change `require-project-folder`, Q22 (a)) и кнопками «Done» и «Add another». «Cancel» и Esc без сохранения SHALL закрывать диалог без записи в `profiles.json` и `shared_preferences`.
 
 После закрытия диалога страница «Connection» SHALL показывать все профили, сохранённые за жизнь диалога (в том числе сохранённые до «Add another»), каждый со своим исходом проверки из диалога или меткой «Not tested». Исход проверки в строке профиля SHALL сбрасываться, если при перечитывании `profiles.json` профиль с тем же id изменился в полях, значимых для подключения (тип, команда, аргументы, `env`, папка запуска, URL, ссылка на токен); изменение `label` («Rename») исход НЕ SHALL сбрасывать. Исход, пришедший для профиля, который за время проверки изменился в этих полях, SHALL отбрасываться.
 
@@ -470,8 +462,8 @@ Connect к другому профилю SHALL разрывать текущее
 - **THEN** снова показана панель «Unencrypted connection»
 
 #### Scenario: Строка сохранённого профиля не спрашивает подтверждения
-- **WHEN** `profiles.json` содержит профиль `remote` с `ws://10.0.0.5:8765` и `tokenRef: env:DEVBOX_TOKEN`, и пользователь нажимает «Test connection», затем «Connect» в строке `remote`
-- **THEN** проверка и подключение начинаются без панели «Unencrypted connection»
+- **WHEN** `profiles.json` содержит профиль `remote` с `ws://10.0.0.5:8765` и `tokenRef: env:DEVBOX_TOKEN`, и пользователь нажимает «Test connection», затем «Use» в строке `remote` и выбирает проект
+- **THEN** проверка и старт агента начинаются без панели «Unencrypted connection»
 
 #### Scenario: Смена токена или URL сбрасывает подтверждение
 - **WHEN** пользователь подтвердил «Test anyway» для `ws://10.0.0.5:8765` с `DEVBOX_TOKEN`, меняет имя переменной на `OTHER_TOKEN` и нажимает «Save», затем отказывается правкой URL на `ws://10.0.0.6:8765` и нажимает «Test connection»
@@ -508,7 +500,7 @@ Connect к другому профилю SHALL разрывать текущее
 ### Requirement: «Rename» и «Remove» профиля
 «Rename» SHALL менять только `label` профиля; id SHALL оставаться прежним. «Rename» SHALL открывать встроенный редактор `label` прямо в строке профиля (design.md, D14): контейнер редактора `connection-profile-rename-editor-<id>`, поле `connection-profile-rename-field-<id>`, кнопки `connection-profile-rename-save-<id>` и `connection-profile-rename-cancel-<id>`. Отмена SHALL закрывать редактор без записи в `profiles.json`.
 
-«Remove» SHALL спрашивать подтверждение «Remove profile <title>?» (`title` — по правилу заголовка строки; заголовок диалога — 20 px semibold, как у «Add connection profile», design.md D14, D16) и удалять запись из `profiles.json`; переменные окружения и другие хранилища app НЕ SHALL трогать. Если профиль ссылается на собственный секрет `secret:codelab/profiles/<id>/token`, подтверждение SHALL содержать флажок «Also delete the stored token codelab/profiles/<id>/token» (ключ `connection-remove-delete-token`, по умолчанию включён; §12.4.9, шаг 8). Секрет SHALL удаляться только после успешного удаления профиля и только если ни один другой профиль на него не ссылается (spec acp-client-kit «Запись профиля с новым токеном»); секрет, выбранный «Use stored secret», флажка не получает и не удаляется. Ошибка удаления секрета SHALL показываться подсказкой `codelab secret delete <имя>`, профиль при этом остаётся удалённым. Удаление профиля по умолчанию SHALL сбрасывать `codelab.connection.default_profile`. Запрет удаления встроенного профиля и профиля текущего подключения SHALL проверяться перед вызовом `ProfileStore.remove`, а не только недоступностью кнопки.
+«Remove» SHALL спрашивать подтверждение «Remove profile <title>?» (`title` — по правилу заголовка строки; заголовок диалога — 20 px semibold, как у «Add connection profile», design.md D14, D16) и удалять запись из `profiles.json`; переменные окружения и другие хранилища app НЕ SHALL трогать. Если профиль ссылается на собственный секрет `secret:codelab/profiles/<id>/token`, подтверждение SHALL содержать флажок «Also delete the stored token codelab/profiles/<id>/token» (ключ `connection-remove-delete-token`, по умолчанию включён; §12.4.9, шаг 8). Секрет SHALL удаляться только после успешного удаления профиля и только если ни один другой профиль на него не ссылается (spec acp-client-kit «Запись профиля с новым токеном»); секрет, выбранный «Use stored secret», флажка не получает и не удаляется. Ошибка удаления секрета SHALL показываться подсказкой `codelab secret delete <имя>`, профиль при этом остаётся удалённым. Удаление профиля по умолчанию SHALL сбрасывать `codelab.connection.default_profile`. Запрет удаления встроенного профиля, профиля работающего агента и выбранного профиля окна (spec app-settings «Список профилей на странице «Connection»», подсказка `Use another profile first.`) SHALL проверяться перед вызовом `ProfileStore.remove`, а не только недоступностью кнопки.
 
 #### Scenario: Переименование
 - **WHEN** пользователь переименовывает `devbox` в «Build box»
@@ -562,6 +554,8 @@ Composition root SHALL делать видимыми страницы «Connecti
 ### Requirement: Доступ к настройкам агента на страницах Providers и MCP servers
 Страницы «Providers» и «MCP servers» SHALL показывать настройки агента профиля текущего подключения, а без подключения — профиля по умолчанию; доступ SHALL вычислять `resolveSettingsAccess` (spec client-agent-setup «Доступ к настройкам агента»; design.md, D5). Смена подключения SHALL перечитывать доступ.
 
+Папкой для `resolveSettingsAccess` SHALL быть папка сессии в фокусе, а без неё — выбранный проект: провайдеры, модель и запреты — ключи сессии её папки (spec agent-runtime «Конфигурация сессии вне корня запуска»). Без того и другого доступ SHALL вычисляться без папки (`cwd: null`): проектные слои `projectLocal` и `project` не читаются, цель записи `projectLocal` не предлагается, а текущая папка процесса CodeLab папкой не считается (spec client-agent-setup «Доступ к настройкам агента»; design.md change `require-project-folder`, D8).
+
 Для `RemoteReadOnly` и `NotManaged` страницы НЕ SHALL читать локальный конфиг и НЕ SHALL показывать кнопок записи (SETUP-2). Они SHALL показывать InfoBar уровня `warning`: `Read-only: this agent runs on <scheme://host:port>. Change providers and MCP on that host: codelab provider add, codelab mcp add, codelab config set.` или `Provider settings are managed by <agentName>.` (ключи `providers-read-only`, `mcp-read-only`). «Providers» в этом состоянии SHALL показывать текущую модель активной сессии из `configOptions`, а «MCP servers» — только панель «Agent status».
 
 Если `config.yaml` не разбирается или нарушает схему, страница SHALL показывать проблемы загрузчика с путём ключа (ключи `providers-unreadable`, `mcp-unreadable`) и НЕ SHALL предлагать запись: битый файл пользователя не перезаписывается. Для страницы «MCP servers» «не разбирается или нарушает схему» — это нечитаемый слой или проблемы видов `syntax`, `profile`, `unknownKey`, `type`; проблемы видов `value`, `semantic`, `inlineSecret` (например, незаданная переменная подстановки), кроме отсутствия обязательного ключа (`agent.default_model` без провайдеров), НЕ SHALL блокировать запись и показываются InfoBar `mcp-rejected` (требование «Страница «MCP servers»»; решение Q26 design.md).
@@ -573,6 +567,10 @@ Composition root SHALL делать видимыми страницы «Connecti
 #### Scenario: Сторонний stdio-агент (согласовано пользователем 2026-11-06)
 - **WHEN** окно подключено к stdio-профилю с командой `python` и аргументами `-m other_agent`
 - **THEN** обе страницы показывают `Provider settings are managed by python.` (решение по базовому имени команды: самоназвания агента из `initialize` клиенту в этой версии не доступно; design.md change `add-provider-setup-ui`, D5) и не пишут файлы
+
+#### Scenario: Настройки без выбранного проекта
+- **WHEN** проект не выбран, агент не запущен, текущая папка процесса — `/`, профиль окна — встроенный агент, и пользователь открывает «Providers»
+- **THEN** страница показывает провайдеров из `$CODELAB_HOME/config.yaml`, файлы в `/.codelab/` не читаются, а цели «This project only» среди целей записи нет
 
 ### Requirement: Страница «Providers»
 Страница «Providers» для `EditableSettings` SHALL показывать по артборду `Providers` (design.md, D10):
@@ -652,7 +650,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 Пока идёт запись, «Cancel», Esc и закрытие диалога SHALL быть заблокированы, а повторное «Save» НЕ SHALL давать второй записи. Закрытие диалога SHALL отменять идущую проверку и сбрасывать введённый ключ.
 
-После `ConfigSaved` страница SHALL перечитывать снимок и показывать баннер `saved`. Если ключ заменён под тем же именем, баннер SHALL добавлять `The new key is used after Restart agent (Settings › Connection).`; если агент подключён, а правило перечитывания конфига ядра откладывает записанного провайдера до перезапуска (новый провайдер с ключом или изменённая группа адреса и аутентификации, R0-4; сравнение снимков до и после записи), баннер SHALL быть `Provider <id> saved. Its models are available after Restart agent (Settings › Connection).` (решения Q17, Q35 design.md); иначе — `Provider <id> saved.`; если агент не подключён — `Saved. Connect to start the agent with the new provider.` с кнопкой «Connect» (design.md, D9). После `ConfigConflict` мастер SHALL возвращаться в «Review» с тем же черновиком (включая введённый ключ) и баннером `Config changed on disk — review and save again`; план SHALL пересобираться по перечитанному снимку (design.md, D9 «Конфликт и `reload`»), чтобы повторный «Save» не конфликтовал вечно.
+После `ConfigSaved` страница SHALL перечитывать снимок и показывать баннер `saved`. Если ключ заменён под тем же именем, баннер SHALL добавлять `The new key is used after Restart agent (Settings › Connection).`; если агент подключён, а правило перечитывания конфига ядра откладывает записанного провайдера до перезапуска (новый провайдер с ключом или изменённая группа адреса и аутентификации, R0-4; сравнение снимков до и после записи), баннер SHALL быть `Provider <id> saved. Its models are available after Restart agent (Settings › Connection).` (решения Q17, Q35 design.md); иначе — `Provider <id> saved.`; если агент не работает — `Saved. The agent uses it the next time it starts.` без кнопки: агент стартует сам по триггерам рабочего места (spec agent-workbench-ui «Агент стартует сам»); если последний старт агента окна завершился сбоем — тот же текст и кнопка «Retry» (ключ `providers-banner-retry`), которая повторяет намерение, вызвавшее старт (design.md change `require-project-folder`, D13, Q22 (a); ранее — кнопка «Connect», design.md, D9). После `ConfigConflict` мастер SHALL возвращаться в «Review» с тем же черновиком (включая введённый ключ) и баннером `Config changed on disk — review and save again`; план SHALL пересобираться по перечитанному снимку (design.md, D9 «Конфликт и `reload`»), чтобы повторный «Save» не конфликтовал вечно.
 
 #### Scenario: Правка моделей провайдера с прежним ключом
 - **WHEN** встроенный агент подключён, и пользователь в мастере правит существующего провайдера с `api_key_secret`, меняя только список моделей
@@ -673,6 +671,14 @@ Composition root SHALL делать видимыми страницы «Connecti
 #### Scenario: Esc во время проверки
 - **WHEN** мастер на шаге проверки ждёт ответа, и пользователь нажимает Esc
 - **THEN** диалог закрыт, запрос закрыт, файлы не изменены, журнал содержит `provider_wizard.check_discarded`
+
+#### Scenario: Провайдер сохранён без работающего агента
+- **WHEN** агент окна ещё не стартовал (проект не выбран), и пользователь сохраняет провайдера в мастере
+- **THEN** баннер — `Saved. The agent uses it the next time it starts.` без кнопки; агент не стартует, пока не сработает триггер рабочего места
+
+#### Scenario: Провайдер сохранён после сбоя старта
+- **WHEN** старт встроенного агента в проекте `/work/app` завершился сбоем, и пользователь сохраняет провайдера в мастере страницы «Providers»
+- **THEN** баннер — `Saved. The agent uses it the next time it starts.` с кнопкой «Retry» (`providers-banner-retry`); нажатие повторяет намерение, вызвавшее старт, ровно одной попыткой
 
 ### Requirement: Страница «MCP servers»
 Страница «MCP servers» для `EditableSettings` SHALL показывать по артборду `Mcp` (design.md, D11) серверы эффективного конфига: имя, тип, источник (`user`, `this project`, `defined in <file>`), цель (команда или URL; `args`, `env` и `headers` — по правилу безопасного показа значений конфига ядра, как `codelab provider list` и `codelab config get`), переключатель `enabled`. Раскрытая строка SHALL содержать редактор `McpServerDraft` (имя, тип, поля типа, строки `headers`/`env` с флажком «Secret», «Save to User config» / «This project only», «Save», «Reconnect», «Remove»).
