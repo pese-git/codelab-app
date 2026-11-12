@@ -12,9 +12,16 @@ on:
 permissions:
   contents: read
 
+# Push and pull request runs of one ref replace each other. The nightly run
+# and workflow_dispatch get their own groups and are never cancelled: a merge
+# into develop while the nightly run is going used to cancel it and reset the
+# three-nights count of the MVP gate (switch-default-agent-to-dart, task 4.1).
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: >-
+    ci-${{ github.ref }}-${{ github.event_name == 'schedule' && 'nightly'
+    || github.event_name == 'workflow_dispatch' && format('dispatch-{0}', github.run_id)
+    || 'changes' }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
 # Integration tests run on the Dart VM only: real processes and sockets in the
 # package tests, the ACP fixture corpus, and the CLI PTY e2e. The Flutter macOS
