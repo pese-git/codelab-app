@@ -3794,6 +3794,71 @@ void main() {
       },
     );
 
+    // Требование «Чек-лист задач с id, владельцем и блокерами», сценарий
+    // «Сводка скрыта при открытой панели Plan» (agent-workbench-ui, change
+    // `add-subagents-and-tasks`, D27, решение пользователя 2026-11-10):
+    // сводка над композером дублирует открытую панель Plan, поэтому пока
+    // панель в доке, сводки нет; после закрытия — снова по прежним правилам.
+    // Красный тест: сейчас `WorkbenchMainPane` не смотрит на `openPanes`.
+    testWidgets('the docked plan summary is hidden while the Plan pane is '
+        'open and returns once it is closed', (tester) async {
+      final harness = await createSessionCubit(tester: tester);
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      const plan = [
+        CodeLabPlanEntry(
+          content: 'Reproduce the token refresh race condition',
+          status: CodeLabPlanEntryStatus.inProgress,
+          priority: CodeLabPlanEntryPriority.high,
+        ),
+      ];
+      CodeLabShellState stateWith() => harness.shellCubit.state.copyWith(
+        transcriptRows: const [
+          CodeLabUserRow(id: 'user-1', text: 'Fix the token refresh race.'),
+        ],
+        currentPlan: plan,
+      );
+      Future<void> pumpMainPane() => tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(
+            state: stateWith(),
+            cubit: harness.shellCubit,
+          ),
+        ),
+      );
+
+      await pumpMainPane();
+      expect(find.byType(CodeLabActivityBar), findsOneWidget);
+      expect(
+        find.text('Reproduce the token refresh race condition'),
+        findsOneWidget,
+      );
+
+      harness.shellCubit.togglePane(ToolPane.plan);
+      expect(harness.shellCubit.state.openPanes, contains(ToolPane.plan));
+      await pumpMainPane();
+      expect(find.byType(CodeLabActivityBar), findsNothing);
+      expect(
+        find.text('Reproduce the token refresh race condition'),
+        findsNothing,
+      );
+
+      harness.shellCubit.togglePane(ToolPane.plan);
+      expect(
+        harness.shellCubit.state.openPanes,
+        isNot(contains(ToolPane.plan)),
+      );
+      await pumpMainPane();
+      expect(find.byType(CodeLabActivityBar), findsOneWidget);
+      expect(
+        find.text('Reproduce the token refresh race condition'),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('dismissing the plan from the activity bar clears it on the '
         'real cubit', (tester) async {
       final harness = await createSessionCubit(tester: tester);

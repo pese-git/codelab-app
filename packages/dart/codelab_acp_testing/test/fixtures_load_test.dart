@@ -113,6 +113,16 @@ const _skillFixtures = {
   'acp/skill-script-exec',
 };
 
+/// Фикстуры change `add-subagents-and-tasks` итерации 1 (acp-golden-fixtures
+/// «Фикстуры субагентов и списка задач»). Остальные фикстуры change
+/// (`acp/prompt-subagent-*`, `acp/session-load-subagent-tool-tree`) приходят
+/// с итерациями 2–5 и добавляются сюда вместе с ними.
+const _tasksFixtures = {
+  'acp/initialize-codelab-extensions',
+  'acp/prompt-task-plan',
+  'acp/session-load-legacy-plan',
+};
+
 void main() {
   final corpus = loadFixtureCorpus();
   final protocolDirectory = protocolSpecDirectory();
@@ -128,7 +138,42 @@ void main() {
       ..._slashCommandFixtures,
       ..._skillFixtures,
       ..._toolKindFixtures,
+      ..._tasksFixtures,
     });
+  });
+
+  // acp-golden-fixtures «Фикстуры субагентов и списка задач»: роли заданы
+  // таблицей спецификации, а не умолчанием.
+  test('the tasks fixtures have the roles of the specification table', () {
+    final roles = {for (final f in corpus) f.id: f.roles};
+    expect(roles['acp/initialize-codelab-extensions'], {
+      FixtureRole.agent,
+      FixtureRole.client,
+    });
+    expect(roles['acp/prompt-task-plan'], {
+      FixtureRole.agent,
+      FixtureRole.client,
+    });
+    expect(roles['acp/session-load-legacy-plan'], {FixtureRole.agent});
+  });
+
+  // «acp/prompt-update-plan SHALL остаться в корпусе только с ролью client»:
+  // у Dart-агента инструмента update_plan больше нет.
+  test('prompt-update-plan is played by the client role only', () {
+    final fixture = corpus.singleWhere((f) => f.id == 'acp/prompt-update-plan');
+    expect(fixture.roles, {FixtureRole.client});
+  });
+
+  // FIX-4: расширения объявлены по используемым данным — `task`,
+  // `capabilities` (acp-golden-fixtures, вводная таблица).
+  test('the tasks fixtures declare the extensions they use', () {
+    final byId = {for (final f in corpus) f.id: f};
+    expect(byId['acp/prompt-task-plan']!.extensions, contains('task'));
+    expect(byId['acp/session-load-legacy-plan']!.extensions, contains('task'));
+    expect(
+      byId['acp/initialize-codelab-extensions']!.extensions,
+      contains('capabilities'),
+    );
   });
 
   test('the unknown tool kind fixture is played by the client role only', () {

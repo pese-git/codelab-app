@@ -10,6 +10,10 @@ import '../tools/fake_shell.dart';
 import 'core_harness.dart';
 
 void main() {
+  // agent-runtime «Матрица профиля»: схемы запроса — read, write, edit,
+  // task_create, task_update, task_list, task_get, ls, search в этом порядке;
+  // в промпте нет tools/exec, зато есть tools/tasks (якорь task_create, D13,
+  // D32). Сужение subagents.enabled: false появится с итерацией 2.
   test('agent-serve over the memory env without shell', () async {
     final h = CoreHarness.build(
       baseEnv: MemoryExecutionEnv(cwd: '/proj'),
@@ -19,7 +23,17 @@ void main() {
         {
           ...textStep('ok'),
           'expect': {
-            'tools': ['read', 'write', 'edit', 'update_plan', 'ls', 'search'],
+            'tools': [
+              'read',
+              'write',
+              'edit',
+              'task_create',
+              'task_update',
+              'task_list',
+              'task_get',
+              'ls',
+              'search',
+            ],
           },
         },
       ],
@@ -36,15 +50,22 @@ void main() {
       'read',
       'write',
       'edit',
-      'update_plan',
+      'task_create',
+      'task_update',
+      'task_list',
+      'task_get',
       'ls',
       'search',
     ]);
+    expect(h.core.plan.toolNames, isNot(contains('update_plan')));
     expect(h.core.plan.offReasons.keys, [
       HostCapability.shellExec,
       HostCapability.sessionPersistence,
       HostCapability.mcp,
     ]);
+    expect(h.core.plan.promptSections, isNot(contains('tools.exec')));
+    expect(h.core.plan.promptSections, contains('tools.tasks'));
+    expect(h.core.plan.promptSections, isNot(contains('tools.plan')));
     expect(h.logger.eventsOf('host.plan'), hasLength(1));
   });
 
@@ -59,7 +80,10 @@ void main() {
       'read',
       'write',
       'edit',
-      'update_plan',
+      'task_create',
+      'task_update',
+      'task_list',
+      'task_get',
       'exec',
       'ls',
       'search',
@@ -200,21 +224,27 @@ void main() {
       steps: const [],
     );
 
-    expect(h.core.plan.toolNames, ['read', 'write', 'edit', 'update_plan']);
+    expect(h.core.plan.toolNames, [
+      'read',
+      'write',
+      'edit',
+      'task_create',
+      'task_update',
+      'task_list',
+      'task_get',
+    ]);
     expect(h.core.plan.offReasons.keys, contains(HostCapability.fileListing));
   });
 
-  test('update_plan of a session reaches its event stream', () async {
+  // TSK-1: событие списка приходит между ToolCallStarted и ToolCallFinished
+  // своего вызова (agent-tools «Инструменты списка задач»).
+  test('task_create of a session reaches its event stream', () async {
     final h = CoreHarness.build(
       baseEnv: MemoryExecutionEnv(cwd: '/proj'),
       narrow: noExec,
       gate: FakeGate(),
       steps: [
-        callStep('c1', 'update_plan', {
-          'entries': [
-            {'content': 'step', 'priority': 'high', 'status': 'pending'},
-          ],
-        }),
+        callStep('c1', 'task_create', {'subject': 'step'}),
         textStep('ok'),
       ],
     );
@@ -227,9 +257,9 @@ void main() {
     await session.prompt([const TextContent('plan')]);
     await pumpEventQueue();
 
-    final plan = seen.indexOf(PlanUpdated);
-    expect(plan, greaterThan(seen.indexOf(ToolCallStarted)));
-    expect(plan, lessThan(seen.indexOf(ToolCallFinished)));
+    final changed = seen.indexOf(TaskListChanged);
+    expect(changed, greaterThan(seen.indexOf(ToolCallStarted)));
+    expect(changed, lessThan(seen.indexOf(ToolCallFinished)));
   });
 
   group('sessionPersistence (§10.8, design.md D12)', () {

@@ -45,6 +45,7 @@ void main() {
         ModeChangeRecord,
         ConfigChangeRecord,
         PlanRecord,
+        TaskRecord,
         CompactionRecord,
         LabelRecord,
         SessionInfoRecord,
@@ -101,8 +102,27 @@ void main() {
     );
   });
 
+  // Сценарий «Golden-разбор» (agent-sessions «Формат журнала JSONL»): запись
+  // `task` читается в свой тип с полными снимками пунктов; `plan` старого
+  // формата читается рядом (D12).
+  test('a task record keeps full snapshots, actor and deleted ids', () {
+    final task = SessionRecord.fromJson(json(lines[12])) as TaskRecord;
+
+    expect(task.op, 'update');
+    expect(task.actor, isA<MainActor>());
+    expect(task.deleted, isEmpty);
+    final item = task.items.single;
+    expect(item.id, '2');
+    expect(item.subject, 'Fix the expectation');
+    expect(item.description, 'Change expect(1, 2) to expect(1, 1)');
+    expect(item.status, TaskStatus.completed);
+    expect(item.priority, TaskPriority.medium);
+    expect(item.owner, TaskOwner.main);
+    expect(item.blockedBy, ['1']);
+  });
+
   test('an unknown type is kept as unknown custom record', () {
-    final branch = SessionRecord.fromJson(json(lines[17])) as CustomRecord;
+    final branch = SessionRecord.fromJson(json(lines[18])) as CustomRecord;
 
     expect(branch.customType, 'unknown:branch');
     expect(branch.type, 'branch');

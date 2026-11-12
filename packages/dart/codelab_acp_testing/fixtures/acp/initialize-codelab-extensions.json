@@ -1,0 +1,110 @@
+{
+  "id": "acp/initialize-codelab-extensions",
+  "spec": [
+    "02-Initialization.md#client-capabilities",
+    "02-Initialization.md#agent-capabilities",
+    "15-Extensibility.md#advertising-custom-capabilities",
+    "15-Extensibility.md#the-_meta-field"
+  ],
+  "description": "Клиент CodeLab объявляет в clientCapabilities._meta.codelab расширения tasks, subagents и subagentToolCalls; агент отвечает теми же полями, что в acp/initialize-capabilities, и блоком agentCapabilities._meta.codelab с subagents (version, maxDepth), subagentToolCalls и tasks.",
+  "goals": [
+    "C-20",
+    "C-05",
+    "C-06"
+  ],
+  "extensions": [
+    "capabilities"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs, terminal и расширения CodeLab (D9)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "initializeId"
+        },
+        "method": "initialize",
+        "params": {
+          "$partial": {
+            "protocolVersion": 1,
+            "clientCapabilities": {
+              "fs": {
+                "readTextFile": true,
+                "writeTextFile": true
+              },
+              "terminal": true,
+              "_meta": {
+                "codelab": {
+                  "tasks": {
+                    "version": 1
+                  },
+                  "subagents": {
+                    "version": 1
+                  },
+                  "subagentToolCalls": {
+                    "version": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ — как в acp/initialize-capabilities плюс блок объявлений агента (D9)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${initializeId}",
+        "result": {
+          "protocolVersion": 1,
+          "agentCapabilities": {
+            "loadSession": true,
+            "promptCapabilities": {
+              "image": true,
+              "audio": false,
+              "embeddedContext": true
+            },
+            "mcpCapabilities": {
+              "http": true,
+              "sse": false
+            },
+            "sessionCapabilities": {
+              "list": {}
+            },
+            "_meta": {
+              "codelab": {
+                "subagents": {
+                  "version": 1,
+                  "maxDepth": 3
+                },
+                "subagentToolCalls": {
+                  "version": 1
+                },
+                "tasks": {
+                  "version": 1
+                }
+              }
+            }
+          },
+          "agentInfo": {
+            "name": "codelab-agent",
+            "title": "CodeLab Agent",
+            "version": {
+              "$any": "0.1.0"
+            }
+          },
+          "authMethods": []
+        }
+      }
+    }
+  ]
+}

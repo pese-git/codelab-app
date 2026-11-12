@@ -17,6 +17,7 @@ String kindOf(AgentEvent event) => switch (event) {
   ToolPairingRepaired() => 'pairing',
   StepEnded() => 'step.end',
   PlanUpdated() => 'plan',
+  TaskListChanged() => 'task_list',
   ModeChanged() => 'mode',
   AgentError() => 'error',
   TurnEnded() => 'turn.end',

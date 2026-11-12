@@ -140,7 +140,7 @@ void main() {
 
   test('project_context texts name no tool (PR-6)', () {
     final forbidden = RegExp(
-      r'\b(exec|ls|lsp|update_plan|web_fetch|web_search|task_status|task_cancel)\b|mcp__',
+      r'\b(exec|ls|lsp|update_plan|task_create|web_fetch|web_search|task_status|task_cancel)\b|mcp__',
     );
     for (final path in ['project_context.md', 'project_context_file.md']) {
       final body = File(corePath('prompts/$path')).readAsStringSync();

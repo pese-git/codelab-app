@@ -11,7 +11,10 @@ const allTools = {
   'read',
   'write',
   'edit',
-  'update_plan',
+  'task_create',
+  'task_update',
+  'task_list',
+  'task_get',
   'exec',
   'ls',
   'search',
@@ -70,7 +73,7 @@ void main() {
       'tools.edit',
       'tools.listing',
       'tools.exec',
-      'tools.plan',
+      'tools.tasks',
     ]);
   });
 
