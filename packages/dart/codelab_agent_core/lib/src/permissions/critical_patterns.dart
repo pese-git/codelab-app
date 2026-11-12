@@ -33,8 +33,10 @@ export 'agent_config_rules.dart' show isAgentConfigPath;
 /// Почему: в одной команде может совпасть несколько строк таблицы, а
 /// `reason` перечисляет все метки через `; ` (§7.6).
 ///
-/// Для чего: [labels] — метки в порядке строк таблицы §7.6 без повторов,
-/// либо единственная `unparsable command`; [label] — готовый текст причины.
+/// Для чего: [labels] — метки в порядке строк таблицы §7.6 без повторов;
+/// одна метка `unparsable command`, если команду не разобрал лексер, и в
+/// конце списка, если её не разобрали правила обхода; [label] — готовый
+/// текст причины.
 ///
 /// Как использовать: возвращается из [findCritical]; `null` там — «не
 /// критическая».
@@ -137,13 +139,22 @@ CriticalMatch? findCritical(
   for (final pipeline in script.allPipelines) {
     _checkPipeline(pipeline, found);
   }
-  _walk(script, root, config, start, found);
-  if (found.isEmpty) {
+  var unparsable = false;
+  try {
+    _walk(script, root, config, start, found);
+  } on ShellParseException {
+    // Правила обхода тоже могут счесть команду неразбираемой (слишком
+    // длинный кластер флагов, `touchesConfig`): fail closed, правило 8.
+    // Уже найденные метки сохраняются, `unparsable command` идёт последней.
+    unparsable = true;
+  }
+  if (found.isEmpty && !unparsable) {
     return null;
   }
   return CriticalMatch([
     for (final label in _tableOrder)
       if (found.contains(label)) label,
+    if (unparsable) unparsableCommandLabel,
   ]);
 }
 
