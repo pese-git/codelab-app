@@ -54,14 +54,19 @@ final _s2 = SessionId('s2');
 
 /// Модель, записывающая каждый `write` (проверка порций, D3).
 final class _RecordingTerminal extends Terminal {
-  _RecordingTerminal({super.onOutput, super.onResize}) : super(maxLines: 10000);
+  _RecordingTerminal({super.onOutput, super.onResize, this.parse = true})
+    : super(maxLines: 10000);
 
   final List<String> written = [];
+
+  /// `false` — только запись в журнал, без разбора эмулятором (мегабайты
+  /// вывода в тесте предела буфера).
+  final bool parse;
 
   @override
   void write(String data) {
     written.add(data);
-    super.write(data);
+    if (parse) super.write(data);
   }
 }
 
@@ -74,7 +79,11 @@ void main() {
   late TerminalTabsCubit cubit;
   late FakeExternalLinkOpener linkOpener;
 
-  TerminalTabsCubit build({int writeChunkSize = 4096}) => TerminalTabsCubit(
+  TerminalTabsCubit build({
+    int writeChunkSize = 4096,
+    int maxPendingOutput = terminalMaxPendingOutput,
+    bool parse = true,
+  }) => TerminalTabsCubit(
     workspace: workspace,
     launcher: launcher,
     directoryExists: (path) async => existingDirectories.contains(path),
@@ -84,11 +93,13 @@ void main() {
       final terminal = _RecordingTerminal(
         onOutput: onOutput,
         onResize: onResize == null ? null : (w, h, _, _) => onResize(w, h),
+        parse: parse,
       );
       terminals.add(terminal);
       return terminal;
     },
     writeChunkSize: writeChunkSize,
+    maxPendingOutput: maxPendingOutput,
   );
 
   setUp(() {
@@ -171,6 +182,49 @@ void main() {
       workspace.openSession(_p1, _s1);
       expect(cubit.state.owner, TerminalOwner('p1', _s1));
       expect(cubit.state.tabs, hasLength(1));
+    });
+
+    testWidgets('тот же sessionId у другого профиля без промежуточной '
+        'сессии: новый handle — новый владелец (D5)', (tester) async {
+      workspace.openSession(_p1, _s1);
+      await openTab();
+      final tabX = cubit.state.tabs.single.id;
+
+      // `newSession` агента Y вернул тот же id: `activeSessionId` не
+      // менялся, зато `SessionHandle` другой.
+      workspace.openSession(_p2, _s1);
+
+      expect(cubit.state.owner, TerminalOwner('p2', _s1));
+      expect(cubit.state.tabs, isEmpty);
+
+      workspace.openSession(_p1, _s2, cwd: '/work/b');
+      workspace.openSession(_p1, _s1);
+      expect(cubit.state.owner, TerminalOwner('p1', _s1));
+      expect(cubit.state.tabs.single.id, tabX);
+    });
+
+    testWidgets('reconnect с тем же handle не меняет владельца (D5)', (
+      tester,
+    ) async {
+      workspace.openSession(_p1, _s1);
+      final shell = await openTab();
+      final tab = cubit.state.tabs.single.id;
+
+      workspace.emit(
+        workspace.current.copyWith(
+          connection: const ConnectionView.disconnected(),
+        ),
+      );
+      workspace.emit(
+        workspace.current.copyWith(
+          profile: _p2,
+          connection: const ConnectionView.connected(),
+        ),
+      );
+
+      expect(cubit.state.owner, TerminalOwner('p1', _s1));
+      expect(cubit.state.tabs.single.id, tab);
+      expect(shell.hangUps + shell.kills, 0);
     });
 
     testWidgets('вкладки переживают смену проекта, профиля и разрыв '
@@ -588,6 +642,92 @@ void main() {
     });
   });
 
+  group('предел непрочитанного буфера вывода (Q20, D3)', () {
+    const marker = '\r\n[output truncated]\r\n';
+
+    String text() => terminals.last.written.join();
+
+    testWidgets('20 МБ в фоновую вкладку без сброса: буфер не больше предела, '
+        'пометка одна, хвост и порядок сохранены', (tester) async {
+      await cubit.close();
+      cubit = build(writeChunkSize: 1 << 20, parse: false);
+      workspace.openSession(_p1, _s1);
+      final shell = await openTab();
+
+      final sent = StringBuffer();
+      for (var i = 0; i < 20; i++) {
+        final chunk = String.fromCharCode(0x41 + i) * (1 << 20);
+        sent.write(chunk);
+        shell.emit(chunk);
+        await tester.idle();
+      }
+      flushAll();
+
+      final written = text();
+      expect(marker.allMatches(written), hasLength(1));
+      expect(written, startsWith(marker));
+      final kept = written.substring(marker.length);
+      expect(kept.length, terminalMaxPendingOutput);
+      // Хвост вывода и порядок: оставшееся — суффикс всего отправленного.
+      expect(sent.toString().endsWith(kept), isTrue);
+    });
+
+    testWidgets('пометка раз на эпизод: до сброса — одна, после сброса новое '
+        'переполнение даёт новую', (tester) async {
+      await cubit.close();
+      cubit = build(maxPendingOutput: 100);
+      workspace.openSession(_p1, _s1);
+      final shell = await openTab();
+
+      for (final c in ['a' * 60, 'b' * 60, 'c' * 60]) {
+        shell.emit(c);
+        await tester.idle();
+      }
+      flushAll();
+      expect(marker.allMatches(text()), hasLength(1));
+      expect(text(), '$marker${'b' * 40}${'c' * 60}');
+
+      shell.emit('d' * 150);
+      await tester.idle();
+      flushAll();
+      expect(marker.allMatches(text()), hasLength(2));
+      expect(text().endsWith('d' * 100), isTrue);
+    });
+
+    testWidgets('граница обрезки внутри суррогатной пары: после пометки нет '
+        'одиночных суррогатов', (tester) async {
+      await cubit.close();
+      // Нечётный предел: обрезка 200 единиц (100 эмодзи) попадает внутрь пары.
+      cubit = build(maxPendingOutput: 101);
+      workspace.openSession(_p1, _s1);
+      final shell = await openTab();
+
+      shell.emit('\u{1F600}' * 100);
+      await tester.idle();
+      flushAll();
+
+      final kept = text().substring(marker.length);
+      expect(text(), startsWith(marker));
+      expect(kept, isNotEmpty);
+      // Строка корректна: `runes` даёт ровно столько точек, сколько пар.
+      expect(kept.runes.every((r) => r == 0x1F600), isTrue);
+      expect(kept.length, 100);
+    });
+
+    testWidgets('вывод в пределах не трогается, пометки нет', (tester) async {
+      await cubit.close();
+      cubit = build(maxPendingOutput: 100);
+      workspace.openSession(_p1, _s1);
+      final shell = await openTab();
+
+      shell.emit('a' * 100);
+      await tester.idle();
+      flushAll();
+
+      expect(text(), 'a' * 100);
+    });
+  });
+
   group('закрытие (D4)', () {
     testWidgets('hangUp, через 2 с kill; вкладка исчезает сразу, forced в '
         'событии', (tester) async {
@@ -688,6 +828,47 @@ void main() {
       await cubit.closeAll();
       expect(a.hangUps + b.hangUps, 2);
       expect(events('terminal.close_all'), hasLength(1));
+    });
+  });
+
+  group('closeAll(): forced в tab_closed (D4, D9)', () {
+    testWidgets('убитая по таймауту вкладка пишет tab_closed с forced: true, '
+        'вышедшая сама — с forced: false', (tester) async {
+      workspace.openSession(_p1, _s1);
+      final stubborn = await openTab();
+      final stubbornId = cubit.state.tabs.single.id;
+      final polite = await openTab();
+      final politeId = cubit.state.tabs.last.id;
+
+      final closing = cubit.closeAll();
+      polite.exit(0);
+      await tester.pump(const Duration(seconds: 3));
+      await closing;
+
+      expect(stubborn.kills, 1);
+      expect(polite.kills, 0);
+      final closed = {
+        for (final e in events('terminal.tab_closed')) e['tab_id']: e['forced'],
+      };
+      expect(closed, {stubbornId: true, politeId: false});
+    });
+
+    testWidgets('вкладка из closeTab, у которой closeAll отменил killTimer, '
+        'тоже помечается forced', (tester) async {
+      workspace.openSession(_p1, _s1);
+      final shell = await openTab();
+      final tabId = cubit.state.tabs.single.id;
+      cubit.closeTab(tabId);
+
+      final closing = cubit.closeAll();
+      await tester.pump(const Duration(seconds: 3));
+      await closing;
+
+      expect(shell.kills, 1);
+      expect(
+        events('terminal.tab_closed').single,
+        containsPair('forced', true),
+      );
     });
   });
 

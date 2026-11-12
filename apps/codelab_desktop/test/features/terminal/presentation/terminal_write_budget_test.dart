@@ -330,4 +330,98 @@ void main() {
       expect(scheduler.callbacks, hasLength(1));
     });
   });
+
+  group('страховка таймером, когда кадров нет (Q20, D3)', () {
+    const fallback = Duration(milliseconds: 100);
+
+    // Подписка на вывод создаётся в зоне вызова `newTab`; под `runAsync` это
+    // настоящая зона, а таймер-страховка должен идти на fake-часах теста.
+    Future<FakeUserShell> openTabInFakeZone() async {
+      await cubit.newTab();
+      return launcher.shells.last;
+    }
+
+    testWidgets('кадр не приходит (окно скрыто): через таймер вывод попадает в '
+        'модель порциями с бюджетом, устаревший кадр отменяется', (
+      tester,
+    ) async {
+      final scheduler = _CountingScheduler();
+      final flusher = TerminalOutputFlusher(
+        cubit: cubit,
+        binding: scheduler,
+        clock: clock,
+        frameBudget: const Duration(milliseconds: 8),
+        frameFallback: fallback,
+      );
+      final shell = await openTabInFakeZone();
+
+      await emit(tester, shell, 'x' * (10 * _chunk));
+      expect(scheduler.callbacks, hasLength(1));
+
+      await tester.pump(const Duration(milliseconds: 99));
+      expect(written(0), 0);
+      // Таймер: бюджет 8 мс при 3 мс на часть — три части за срабатывание.
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(written(0), 3);
+      expect(scheduler.cancelled, [1]);
+      await tester.pump(fallback);
+      expect(written(0), 6);
+      await tester.pump(fallback);
+      expect(written(0), 9);
+      await tester.pump(fallback);
+      expect(written(0), 10);
+      expect(parts[0].join(), 'x' * (10 * _chunk));
+      expect(cubit.hasPendingOutput, isFalse);
+
+      // Буфер пуст: ни таймера, ни нового заказа кадра (иначе тест упал бы
+      // на «Timer is still pending»).
+      final orders = scheduler.callbacks.length;
+      await tester.pump(fallback * 3);
+      expect(scheduler.callbacks, hasLength(orders));
+      flusher.dispose();
+    });
+
+    testWidgets('кадр пришёл вовремя: таймер отменён и ничего не пишет '
+        'сверх бюджета', (tester) async {
+      final scheduler = _CountingScheduler();
+      final flusher = TerminalOutputFlusher(
+        cubit: cubit,
+        binding: scheduler,
+        clock: clock,
+        frameBudget: const Duration(milliseconds: 8),
+        frameFallback: fallback,
+      );
+      final shell = await openTabInFakeZone();
+      await emit(tester, shell, 'x' * (10 * _chunk));
+
+      scheduler.callbacks.first(Duration.zero);
+      expect(written(0), 3);
+      // Таймер первого заказа отменён кадром: за его срок ничего лишнего.
+      await tester.pump(const Duration(milliseconds: 99));
+      expect(written(0), 3);
+      await tester.pump(const Duration(milliseconds: 1));
+      // Сработал только таймер нового заказа (после кадра): ещё одна порция.
+      expect(written(0), 6);
+      flusher.dispose();
+    });
+
+    testWidgets('dispose отменяет таймер: после него вывод не пишется', (
+      tester,
+    ) async {
+      final scheduler = _CountingScheduler();
+      final flusher = TerminalOutputFlusher(
+        cubit: cubit,
+        binding: scheduler,
+        clock: clock,
+        frameFallback: fallback,
+      );
+      final shell = await openTabInFakeZone();
+      await emit(tester, shell, 'x' * (3 * _chunk));
+
+      flusher.dispose();
+      await tester.pump(fallback * 2);
+
+      expect(written(0), 0);
+    });
+  });
 }
