@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:xterm2/ui.dart' show TerminalView;
+import 'package:xterm2/ui.dart' show TerminalStyle, TerminalView;
 
 import '../application/terminal_tabs_cubit.dart';
 import '../application/terminal_tabs_state.dart';
@@ -29,7 +29,7 @@ const terminalViewPadding = EdgeInsets.symmetric(horizontal: 8, vertical: 4);
 ///
 /// Почему: панель только отображает состояние `TerminalTabsCubit` и отдаёт
 /// ему решения пользователя (новая вкладка, выбор, закрытие); опасно ли
-/// действие, виджет не решает — терминал пользователя вне одобрений (D7).
+/// действие, виджет не решает — терминал пользователя вне одобрений (D8).
 ///
 /// Для чего: собирает `CodeLabTerminalPane` из кита, подставляя `TerminalView`
 /// над моделью активной вкладки. Модель создаёт фабрика `terminalModel()` в
@@ -65,6 +65,12 @@ class WorkbenchTerminalPane extends StatelessWidget {
                   theme: terminalThemeOf(FluentTheme.of(context)),
                   autofocus: true,
                   padding: terminalViewPadding,
+                  // Моноширинный шрифт кита (`CodeLabTextRole.mono`): свой
+                  // шрифт не добавляем, терминал выглядит как остальной
+                  // моно-текст рабочего места (ручная проверка итерации 2).
+                  textStyle: TerminalStyle.fromTextStyle(
+                    CodeLabText.styleOf(context, CodeLabTextRole.mono)!,
+                  ),
                   // Только жест Cmd/Ctrl+клик (проверяет сам `TerminalView`);
                   // `Terminal.onOpenUrl` (OSC 1337) намеренно не задан (D3).
                   onHyperlinkTap: (uri) =>
@@ -79,7 +85,8 @@ class WorkbenchTerminalPane extends StatelessWidget {
 /// Спрашивает пользователя про ссылку OSC 8 и открывает её только после «Open».
 ///
 /// Решение «можно ли» принимает Cubit (`decideLink`), диалог лишь показывает
-/// адрес целиком; открытие — через порт внутри Cubit (D3, D11).
+/// нормализованный адрес целиком (`decision.address` — ровно то, что уйдёт в
+/// порт, Q21); открытие — через порт внутри Cubit (D3, D11).
 Future<void> _confirmLink(
   BuildContext context,
   TerminalTabsCubit cubit,
@@ -88,7 +95,7 @@ Future<void> _confirmLink(
   final decision = cubit.decideLink(uri);
   final confirmed = await showTerminalLinkDialog(
     context,
-    uri: uri,
+    uri: decision.address,
     canOpen: decision.canOpen,
   );
   if (confirmed && decision.canOpen) await cubit.openLink(uri);

@@ -326,8 +326,10 @@ const rules = [
     sealExclude: false,
   ),
   // Виджет `TerminalView` из `xterm2` — только presentation терминала:
-  // application получает модель из `xterm2_core` и физически не тянет Flutter
-  // через рендер (D11, D3).
+  // application получает модель из `xterm2_core` и не импортирует пакет
+  // рендера напрямую. Это запрет ПРЯМЫХ импортов: транзитивно application
+  // через порты `core/platform` всё равно зависит от Flutter-пакета app, а
+  // чистоту application от `package:flutter/` держит правило ниже (D11, D3).
   PackageRule(
     'apps/codelab_desktop/lib',
     forbidden: ['package:xterm2/'],

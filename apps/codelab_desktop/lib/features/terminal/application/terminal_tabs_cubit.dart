@@ -18,6 +18,21 @@ import 'terminal_tabs_state.dart';
 /// Размер части записи в эмулятор по умолчанию (D3, «Запись порциями»).
 const terminalWriteChunkSize = 4096;
 
+/// Предел непрочитанного (ещё не записанного в модель) вывода одной вкладки,
+/// в кодовых единицах UTF-16 (≈ 8 МБ текста ASCII) — Q20, D3.
+///
+/// Почему: сброс буфера идёт на кадрах и по таймеру-страховке, но фоновая
+/// вкладка (или скрытое окно) под потоком вроде `yes` копит вывод быстрее,
+/// чем он записывается; без предела память растёт без границы. Для чего:
+/// при переполнении Cubit отбрасывает САМЫЙ СТАРЫЙ неразобранный вывод и один
+/// раз на эпизод вставляет пометку [terminalTruncationMark] — пользователь
+/// видит, что вывод потерян, а хвост (последние данные) цел. Размер
+/// выбран кратным частям записи: 2048 частей по 4 КБ.
+const terminalMaxPendingOutput = 8 * 1024 * 1024;
+
+/// Пометка, которую Cubit пишет в модель на месте отброшенного вывода (Q20).
+const terminalTruncationMark = '\r\n[output truncated]\r\n';
+
 /// Внутренняя запись реестра: процесс, модель и буфер вкладки (не состояние).
 final class _Entry {
   _Entry(this.id, this.owner, this.terminal);
@@ -41,6 +56,12 @@ final class _Entry {
   /// первой строке (нарезка без копирования остатка).
   final List<String> pending = [];
   int offset = 0;
+
+  /// Длина непрочитанного вывода в [pending] без учёта [offset].
+  int pendingLength = 0;
+
+  /// Старый вывод отброшен, пометка в модель ещё не записана (эпизод Q20).
+  bool truncated = false;
 }
 
 /// Единственный владелец вкладок терминала и их процессов (D3, D4, D5).
@@ -71,6 +92,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
     Duration hangUpGrace = const Duration(seconds: 2),
     Duration closeAllGrace = const Duration(seconds: 3),
     int writeChunkSize = terminalWriteChunkSize,
+    int maxPendingOutput = terminalMaxPendingOutput,
   }) : _workspace = workspace,
        _launcher = launcher,
        _directoryExists = directoryExists,
@@ -80,6 +102,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
        _hangUpGrace = hangUpGrace,
        _closeAllGrace = closeAllGrace,
        _chunk = writeChunkSize,
+       _maxPending = maxPendingOutput,
        super(const TerminalTabsState()) {
     _resolveOwner(workspace.current);
     _publish();
@@ -98,6 +121,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
   final Duration _hangUpGrace;
   final Duration _closeAllGrace;
   final int _chunk;
+  final int _maxPending;
 
   late final StreamSubscription<WorkspaceState> _workspaceSub;
 
@@ -111,8 +135,15 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
   void Function()? onPendingOutput;
 
   /// Владелец, запомненный при активации сессии (D5): профиль не
-  /// пересобирается, пока `activeSessionId` тот же.
+  /// пересобирается, пока `activeSessionId` и `SessionHandle` те же.
   TerminalOwner? _remembered;
+
+  /// Handle, с которым запомнен владелец. Почему: два агента могут выдать один
+  /// и тот же id сессии, и `activeSessionId` при этом не меняется; а вот
+  /// `newSession` кладёт в рабочее пространство НОВЫЙ handle, тогда как
+  /// reconnect и `session/load` переиспользуют прежний. Различие handle —
+  /// единственный сигнал «это другая сессия» без чтения политики (D5).
+  SessionHandle? _rememberedHandle;
   TerminalOwner? _shown;
 
   final Map<TerminalOwner, List<_Entry>> _entries = {};
@@ -128,23 +159,27 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
   void _resolveOwner(WorkspaceState ws) {
     final id = ws.activeSessionId;
     // Сессия без `SessionHandle` — «нет сессии» (Q17).
-    if (id == null || _workspace.session(id) == null) {
-      _remembered = null;
+    final handle = id == null ? null : _workspace.session(id);
+    if (id == null || handle == null) {
+      _remembered = _rememberedHandle = null;
       _shown = null;
       return;
     }
     final remembered = _remembered;
-    if (remembered != null && remembered.sessionId == id) {
+    if (remembered != null &&
+        remembered.sessionId == id &&
+        identical(_rememberedHandle, handle)) {
       _shown = remembered;
       return;
     }
     final profile = ws.profile;
     if (profile == null) {
-      _remembered = null;
+      _remembered = _rememberedHandle = null;
       _shown = null;
       return;
     }
     _remembered = _shown = TerminalOwner(profile.id, id);
+    _rememberedHandle = handle;
   }
 
   void _publish() {
@@ -254,7 +289,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
     entry.shell = shell;
     entry.status = const TerminalTabRunning();
     entry.outputSub = shell.output.listen((data) {
-      entry.pending.add(data);
+      _enqueue(entry, data);
       onPendingOutput?.call();
     });
     unawaited(
@@ -369,7 +404,12 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
       onTimeout: () {
         forced = true;
         for (final entry in live) {
-          if (!entry.exited) entry.shell!.kill();
+          if (entry.exited) continue;
+          // Помечаем до `kill`: событие `terminal.tab_closed` пишется по
+          // выходу процесса и должно сказать, что его убили (D4, D9). Это и
+          // вкладки из `closeTab`, у которых `closeAll` отменил `killTimer`.
+          entry.forced = true;
+          entry.shell!.kill();
         }
         return <void>[];
       },
@@ -424,7 +464,8 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
 
   // --- вывод ---
 
-  /// Есть ли вывод, ещё не записанный в модели видимых вкладок.
+  /// Есть ли вывод, ещё не записанный в модели вкладок — всех, включая
+  /// фоновые (запись идёт в каждую модель, перерисовывается только видимая).
   bool get hasPendingOutput =>
       _entries.values.any((list) => list.any((e) => e.pending.isNotEmpty));
 
@@ -446,7 +487,44 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
     return written;
   }
 
+  /// Кладёт [data] в буфер вкладки и держит его в пределах [_maxPending]:
+  /// сверх предела отбрасывается самое старое (Q20, [terminalMaxPendingOutput]).
+  void _enqueue(_Entry entry, String data) {
+    if (data.isEmpty) return;
+    entry.pending.add(data);
+    entry.pendingLength += data.length;
+    var excess = entry.pendingLength - _maxPending;
+    if (excess <= 0) return;
+    entry.truncated = true;
+    while (excess > 0 && entry.pending.isNotEmpty) {
+      final head = entry.pending.first;
+      final available = head.length - entry.offset;
+      if (available <= excess) {
+        entry.pending.removeAt(0);
+        entry.offset = 0;
+        entry.pendingLength -= available;
+        excess -= available;
+      } else {
+        entry.offset += excess;
+        entry.pendingLength -= excess;
+        excess = 0;
+        // Не оставляем начало вывода посреди суррогатной пары.
+        final unit = head.codeUnitAt(entry.offset);
+        if (unit >= 0xDC00 && unit <= 0xDFFF) {
+          entry.offset++;
+          entry.pendingLength--;
+        }
+      }
+    }
+  }
+
   String _takeChunk(_Entry entry) {
+    if (entry.truncated) {
+      // Пометка идёт отдельной частью перед оставшимся выводом: размер части
+      // данных остаётся прежним, а следующее переполнение — новый эпизод.
+      entry.truncated = false;
+      return terminalTruncationMark;
+    }
     final buffer = StringBuffer();
     var size = 0;
     while (entry.pending.isNotEmpty && size < _chunk) {
@@ -454,6 +532,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
       final take = (head.length - entry.offset).clamp(0, _chunk - size);
       buffer.write(head.substring(entry.offset, entry.offset + take));
       size += take;
+      entry.pendingLength -= take;
       entry.offset += take;
       if (entry.offset >= head.length) {
         entry.pending.removeAt(0);
@@ -508,7 +587,8 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
       return;
     }
     entry.status = TerminalTabExited(code);
-    entry.pending.add(
+    _enqueue(
+      entry,
       code == null
           ? '\r\n[Process exited]\r\n'
           : '\r\n[Process exited with code $code]\r\n',
@@ -531,7 +611,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
     }
     // Процесс считается вышедшим, сигналов не шлём (D4).
     entry.status = const TerminalTabExited(null);
-    entry.pending.add('\r\n[Process exited]\r\n');
+    _enqueue(entry, '\r\n[Process exited]\r\n');
     onPendingOutput?.call();
     _publish();
   }
@@ -550,6 +630,8 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
     entry.closed = true;
     entry.pending.clear();
     entry.offset = 0;
+    entry.pendingLength = 0;
+    entry.truncated = false;
     unawaited(entry.outputSub?.cancel());
     entry.outputSub = null;
   }
