@@ -65,7 +65,7 @@
 
 `ToolCallView` вызова `agent` SHALL получать `subagentSummary` (`toolCalls`, `inputTokens`, `outputTokens`, `duration`) из `_meta.codelab.subagent.summary` финального обновления (design.md change `add-subagents-and-tasks`, D24). Отсутствие, неверная форма или неизвестные ключи SHALL давать `null` или игнорироваться без отказа обработки. Kit SHALL давать готовую строку итога `N tool calls · N.Nk tokens · <время>` и её сокращённый вид для свёрнутой строки `N tool calls · N.Nk · <время>` (D27) (токены — `input + output`, `k` с одним знаком; время — `48s`, `2m 05s`, `1h 02m`).
 
-Для работающего вызова `agent` с потомками в дереве (acp-client-kit «Дерево вызовов потомков») `SessionView` SHALL давать «хвост» (D25): три последних по времени вызова его поддерева в порядке прихода и `moreCount` — число остальных вызовов поддерева. Без вызовов потомков хвост пуст, и представление показывает строку прогресса.
+Для работающего вызова `agent` с потомками в дереве (acp-client-kit «Дерево вызовов потомков») `SessionView` SHALL давать «хвост» (D25): три последних по времени вызова его поддерева в порядке прихода и `moreCount` — число остальных вызовов поддерева. Токенов в хвосте нет: kit НЕ SHALL разбирать строку прогресса; токены даёт только `subagentSummary` завершённого вызова (D24, D25, Q15). Без вызовов потомков хвост пуст, и представление показывает строку прогресса.
 
 #### Scenario: Вызов agent с первого кадра
 - **WHEN** приходит `tool_call` с `kind: think` и `_meta.codelab.subagent: {"id": "sub_a1", "type": "explore", "x": 1}`, потомков и запросов ещё нет
@@ -81,7 +81,7 @@
 
 #### Scenario: Хвост из пяти вызовов
 - **WHEN** у работающего вызова `agent` пять вызовов потомков
-- **THEN** хвост — три последних, `moreCount` — 2
+- **THEN** хвост — три последних, `moreCount` — 2, токенов у хвоста нет, даже если строка прогресса их содержит
 
 ### Requirement: Операции со списком задач в ленте
 Kit SHALL распознавать вызов операции со списком задач по уже имеющимся данным, без разбора текста и заголовка (D27): вызов `kind: think`, завершившийся `completed`, без `_meta.codelab.subagent` (ни в первом кадре, ни в финальном) и без вызовов-потомков, во время которого (между его `tool_call` и финальным обновлением) пришёл `plan` с `_meta.codelab.task`. Такой вызов SHALL становиться в транскрипте элементом `TaskOpsItem` с изменением списка — разницей планов до и после: добавленные id, id, ставшие `completed`, удалённые id и прочие изменённые id. Подряд идущие `TaskOpsItem` без других элементов транскрипта между ними SHALL сливаться в один (разницы объединяются).
@@ -102,3 +102,62 @@ Kit SHALL давать текст элемента: «Task #3 added to the plan�
 - **WHEN** агент без `_meta.codelab.task` присылает вызов `think` и `plan` во время него
 - **THEN** вызов — обычный `ToolCallView`, план показывается как прежде
 
+
+### Requirement: Список субагентов сессии
+`SessionView.subagents` SHALL давать список субагентов сессии для панели Agents v1 (решение пользователя 2026-11-12, Q13; design.md change `add-subagents-and-tasks`, D33): по одной строке `SubagentRowView` на каждый вызов сессии с `ToolCallView.subagentCall` (требование «Итог и хвост субагента»), за все ходы, включая вызовы потомков из дерева (требование «Дерево вызовов потомков») и вызовы, проигранные `session/load`. Порядок — обход в глубину в порядке прихода: строки потомков стоят под строкой своего родительского вызова `agent`. Вызов без `subagentCall` (сторонний агент) строки НЕ SHALL давать.
+
+Строка SHALL содержать:
+- `toolCallId` вызова на проводе (ключ строки), id и `type` субагента, заголовок — `rawInput.description`, а без него — `title` вызова как есть;
+- состояние `running`, `awaitingApproval`, `completed`, `failed` или `cancelled`: терминальные — по статусу вызова `agent`, как у его строки в ленте; `awaitingApproval` — если есть ожидающее одобрение этой строки (ниже); иначе `running`;
+- время: у терминальной строки — `duration` из `subagentSummary`; у работающей — `startedAt`, момент, когда kit впервые увидел `tool_call` вызова, по часам, внедрённым в `ClientWorkspace` (повтор кадра его не сдвигает); у терминальной строки без `subagentSummary` времени нет. Kit SHALL давать формат длительности тот же, что у строки итога (`48s`, `2m 05s`, `1h 02m`);
+- число вызовов инструментов: у терминальной строки — `subagentSummary.toolCalls`, у работающей — число вызовов её поддерева в дереве; токены `input + output` — только из `subagentSummary`;
+- последнее действие: у работающей строки — `title` последнего пришедшего вызова её поддерева, у `failed` — `_meta.codelab.subagent.failure`; иначе нет;
+- глубину: 1 для вызова без `parentToolCallId` или с неизвестным родителем, иначе глубина строки-родителя плюс 1;
+- id пунктов плана, у которых `PlanEntryView.owner` — id этого субагента, и id из `rawInput.task`;
+- `approvalId` ожидающего одобрения, у которого `PendingApprovalView.subagent.id` — id этого субагента; если строки с таким id нет, одобрение SHALL относиться к строке корневого уровня с `toolCallId`, равным `subagent.parentToolCallId`.
+
+`SessionView` SHALL давать счётчики строк по состояниям.
+
+Kit НЕ SHALL разбирать `title`, строку прогресса и текст отчёта: состояния `queued` и `waiting`, шаги и токены работающего субагента в строке НЕ SHALL появляться (D33). Отсутствие или неверная форма любого источника SHALL давать пустое поле, а не отказ обработки обновления.
+
+Список SHALL быть функцией транскрипта, ожидающих одобрений и плана сессии: повтор кадров, реплей и повторная загрузка сессии SHALL давать тот же список без дублей (идемпотентность по `toolCallId`, `AGENTS.md` §9). Кадр вызова `agent`, пришедший после его терминального статуса, НЕ SHALL возвращать строку в `running` (поздние события).
+
+#### Scenario: Строки ребёнка и внука
+- **WHEN** клиент с `subagentToolCalls` получает `tool_call` `call_1` (`agent`, `_meta.codelab.subagent: {"id": "sub_a1", "type": "review"}`, `rawInput.description: "Check the diff"`), затем `call_1/call_1` (`read`) и `call_1/call_2` (`agent`, `sub_b2`, `explore`) с `parentToolCallId: "call_1"`, затем `call_1/call_2/call_1` (`ls`) с `parentToolCallId: "call_1/call_2"`
+- **THEN** `SessionView.subagents` — две строки: `sub_a1` `review` «Check the diff» глубины 1, `running`, 3 вызова поддерева, последнее действие — `title` вызова `ls`; под ней `sub_b2` `explore` глубины 2, `running`, 1 вызов
+
+#### Scenario: Итог завершённого субагента
+- **WHEN** вызов `agent` `sub_a1` завершается `completed` с `summary` `{"toolCalls": 4, "tokens": {"input": 15200, "output": 3000}, "durationMs": 48000}`
+- **THEN** строка — `completed`, 4 вызова, 18.2k токенов, 48s, последнего действия нет; счётчик `completed` равен 1
+
+#### Scenario: Отмена и отказ
+- **WHEN** один вызов `agent` завершается `failed` с `_meta.codelab.subagent.failure: "budget_exceeded:max_steps"`, другой — `failed` с `_meta.codelab.outcome: "cancelled"`
+- **THEN** первая строка — `failed` с последним действием `budget_exceeded:max_steps`, вторая — `cancelled`
+
+#### Scenario: Ожидание одобрения потомка
+- **WHEN** у работающего `sub_b2` (внук) ожидает ответа `session/request_permission` с `_meta.codelab.subagent.id: "sub_b2"`
+- **THEN** строка `sub_b2` — `awaitingApproval` с `approvalId` этого запроса, строка `sub_a1` остаётся `running`; после ответа пользователя строка `sub_b2` снова `running`
+
+#### Scenario: Одобрение без дерева
+- **WHEN** клиент без вызовов потомков получает запрос внука `sub_b2` с `parentToolCallId: "call_1"`, а строки `sub_b2` нет
+- **THEN** `awaitingApproval` с `approvalId` этого запроса получает строка `call_1`
+
+#### Scenario: Пункты списка у субагента
+- **WHEN** план содержит `#2` с `_meta.codelab.task.owner: "sub_a1"`, а `rawInput.task` вызова `sub_a1` — `"2"`
+- **THEN** строка `sub_a1` несёт один пункт `2`
+
+#### Scenario: Реплей без дублей в списке
+- **WHEN** сессия с двумя вызовами `agent`, у одного из которых вызов `agent` потомка, загружается дважды подряд в один `ClientWorkspace`
+- **THEN** `SessionView.subagents` — ровно три строки, все терминальные, со временем и вызовами из `summary`
+
+#### Scenario: Поздний кадр после завершения
+- **WHEN** после `tool_call_update` `completed` вызова `agent` приходит ещё один `tool_call_update` того же `toolCallId` со `status: in_progress`
+- **THEN** строка остаётся `completed`
+
+#### Scenario: Время работающего субагента
+- **WHEN** часы `ClientWorkspace` показывают `10:00:00`, когда приходит `tool_call` вызова `agent`, и `10:00:30`, когда тот же `tool_call` приходит повторно
+- **THEN** `startedAt` строки — `10:00:00`, формат длительности для 41 с — `41s`; после завершения с `summary.durationMs: 48000` время строки — 48s из `summary`
+
+#### Scenario: Сторонний агент без признака
+- **WHEN** агент присылает вызов `think` с заголовком «Subagent explore: …» без `_meta.codelab.subagent`
+- **THEN** `SessionView.subagents` пуст
