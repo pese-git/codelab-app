@@ -169,6 +169,191 @@ void main() {
       );
     });
 
+    test('env -S разбирается как вложенная команда (§7.6.1)', () {
+      for (final command in [
+        "env -S 'rm -rf ~'",
+        "env --split-string='rm -rf /'",
+        "env -S'rm -rf /'",
+      ]) {
+        expect(
+          findCritical(command)?.label,
+          'recursive delete of a protected path',
+          reason: command,
+        );
+      }
+      expect(findCritical("env -S 'ls -la'"), isNull);
+    });
+
+    test('env -S: границы разбора, кавычки и escape (ревью)', () {
+      const label = 'recursive delete of a protected path';
+      for (final command in [
+        'env -S rm -rf /',
+        "env -S'' rm -rf /",
+        'env --split-string= rm -rf /',
+        'env --sp "rm -rf /"',
+        "env -S '-i rm -rf /'",
+        "env -S '-S rm -rf /'",
+        "env -S '-u X rm -rf /'",
+        "env -S 'rm -rf' '#' /",
+        "env -S 'rm -rf' 'x;' /",
+        r"env -S 'rm\_-rf\_/'",
+        r"env -S 'rm\t-rf\t/'",
+        r"env -S 'rm -rf /\c tail'",
+      ]) {
+        expect(findCritical(command)?.label, label, reason: command);
+      }
+      expect(findCritical(r"env -S 'rm\q -rf /'")?.label, 'unparsable command');
+    });
+
+    test('env -S: токенизатор значения по правилам env, не shell', () {
+      const label = 'recursive delete of a protected path';
+      for (final command in [
+        r"env -S 'rm ; -rf ${HOME}'",
+        r"env -S 'rm & -rf ${HOME}'",
+        r"env -S 'rm | -rf ${HOME}'",
+        r"env -S $'rm\n-rf ${HOME}'",
+        r"env -S $'rm <<x\n-rf ${HOME}\nx'",
+        r"env -S 'rm -rf ${HOME}'",
+        r'''env -S "rm -rf '${HOME}'"''',
+        r"env -S '# c' rm -rf /",
+        r"env -S 'rm -rf / #tail'",
+      ]) {
+        expect(findCritical(command)?.label, label, reason: command);
+      }
+      // Неразбираемое значение — fail closed.
+      for (final command in [
+        r"env -S 'rm -rf $HOME'",
+        r"env -S 'rm -rf ${HOME'",
+        r"env -S 'rm -rf ${1X}'",
+        "env -S 'rm \"-rf /'",
+        r'''env -S "rm 'a\'"''',
+        r"env -S 'rm \q'",
+      ]) {
+        expect(
+          findCritical(command)?.label,
+          'unparsable command',
+          reason: command,
+        );
+      }
+      // Контроли: обычные команды остаются обычными.
+      for (final command in [
+        "env -S 'ls -la'",
+        r'''env -S "echo 'it\'s'"''',
+        r'''env -S "echo \'a b\'"''',
+        r"env -S 'echo a\_b'",
+        "env -S 'echo \"a b\"'",
+      ]) {
+        expect(findCritical(command), isNull, reason: command);
+      }
+    });
+
+    test('env: BSD-опции со значением и неизвестные опции', () {
+      const label = 'recursive delete of a protected path';
+      expect(findCritical('env -P /tmp rm -rf ~')?.label, label);
+      expect(findCritical('env -L x rm -rf ~')?.label, label);
+      expect(findCritical('env -U x rm -rf ~')?.label, label);
+      expect(findCritical('env -Z rm -rf /')?.label, 'unparsable command');
+      expect(findCritical('env -iZ ls')?.label, 'unparsable command');
+      for (final command in [
+        'env -i -0 -v ls',
+        'env -iv0 ls',
+        'env -u X ls',
+        'env -a x ls',
+        'env -C /tmp ls',
+        'env --debug ls',
+        'env --block-signal=INT ls',
+        'env -P /tmp ls',
+        'env - ls',
+      ]) {
+        expect(findCritical(command), isNull, reason: command);
+      }
+    });
+
+    test('ANSI-C и локализуемые строки: цель не прячется от таблицы', () {
+      const label = 'recursive delete of a protected path';
+      for (final command in [
+        r"rm -rf $'\x2f'",
+        r"rm -rf $'\057'",
+        r'rm -rf $"/"',
+        r'$"rm" -rf ~',
+        // NUL обрывает остаток $'…' до закрывающей кавычки (как в bash).
+        r"$'r\0zz'm -rf ~",
+        r"$'r\x00q'm -rf ~",
+        r"$'r\u0000q'm -rf ~",
+        r"$'r\c@q'm -rf ~",
+        r"$'r\0q\'z'm -rf ~",
+      ]) {
+        expect(findCritical(command)?.label, label, reason: command);
+      }
+      // Неоднозначное или невозможное — неразбираемая команда.
+      for (final command in [
+        r"rm -rf $'\UFFFFFFFF'",
+        r"rm -rf $'\U00110000'",
+        r"rm -rf $'\c'",
+        r"rm -rf $'abc",
+      ]) {
+        expect(
+          findCritical(command)?.label,
+          'unparsable command',
+          reason: command,
+        );
+      }
+      expect(findCritical(r"echo $'a\tb'"), isNull);
+    });
+
+    test(r"восьмеричные коды усекаются до байта, как в bash", () {
+      const label = 'recursive delete of a protected path';
+      for (final command in [
+        r"$'\562m' -rf ~", // 0x172 & 0xFF = 'r'
+        r"$'r\400zz'm -rf ~", // 0x100 & 0xFF = NUL: обрыв остатка
+        r"$'r\600'm -rf ~", // 0x180 & 0xFF = 0x80 — не NUL, но не 'rm'
+        r"rm -rf $'\457'", // 0x12f & 0xFF = '/'
+        r"rm -rf $'\x2f'",
+      ]) {
+        final match = findCritical(command);
+        if (command.contains(r'\600')) {
+          // 0x80 — не `rm` и одинокий байт: невалидный UTF-8, fail closed.
+          expect(match?.label, 'unparsable command', reason: command);
+        } else {
+          expect(match?.label, label, reason: command);
+        }
+      }
+    });
+
+    test(
+      'байтовые escape ≥ 0x80: валидный UTF-8 или неразбираемая команда',
+      () {
+        // Невалидный UTF-8 — fail closed: bash склеивает байты соседних
+        // `$'…'`, а мы декодируем каждую часть отдельно, и половинки
+        // кириллического пути стали бы U+FFFD. Цена: `echo $'\xff'` требует
+        // подтверждения.
+        for (final command in [
+          r"echo $'\xff'",
+          r"echo $'\xc3\xa9\xe0'",
+          r"rm -rf $'/Users/\320'$'\241ергей'",
+          r"env -S $'rm\x20-rf\x20/Users/\320'$'\241ергей'",
+        ]) {
+          expect(
+            findCritical(command)?.label,
+            'unparsable command',
+            reason: command,
+          );
+        }
+        expect(findCritical(r"rm -rf $'\xd0\xa1'"), isNull);
+        expect(findCritical(r"echo $'\xc3\xa9'"), isNull);
+      },
+    );
+
+    test('неразбираемая часть не стирает уже найденные метки', () {
+      // Слишком длинный кластер флагов обнаруживается при обходе, а не при
+      // разборе, поэтому метки, найденные до него, сохраняются.
+      final match = findCritical('rm -rf / ; cp -${'.' * 300} x');
+      expect(match?.labels, [
+        'recursive delete of a protected path',
+        'unparsable command',
+      ]);
+    });
+
     test('несколько меток — через "; " в порядке таблицы, без повторов', () {
       expect(
         findCritical('sudo reboot')?.label,
