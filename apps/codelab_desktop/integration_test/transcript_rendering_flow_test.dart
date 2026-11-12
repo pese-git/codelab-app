@@ -68,9 +68,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       // Пузырь пользователя показывает промпт как есть, со всеми сырыми
-      // маркерами (разметка — только у ответа агента).
+      // маркерами (разметка — только у ответа агента). Поиск — только в ленте:
+      // в широкой раскладке начало промпта ещё и в заголовке сессии сайдбара
+      // и шапки (однострочные подписи), это не пузырь.
       expect(
-        find.textContaining('# Release notes', findRichText: true),
+        find.descendant(
+          of: find.byType(CodeLabTranscriptPanel),
+          matching: find.textContaining('# Release notes', findRichText: true),
+        ),
         findsOneWidget,
         reason: 'the prompt bubble shows the raw prompt',
       );
