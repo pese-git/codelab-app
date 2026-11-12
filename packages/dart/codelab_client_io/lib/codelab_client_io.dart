@@ -11,7 +11,9 @@ library;
 
 export 'src/files/io_project_files.dart' show IoProjectFiles;
 export 'src/platform/codelab_home.dart';
-export 'src/platform/terminal_process_runner.dart';
+// `show`: чистая функция преобразования кода выхода — деталь адаптера (D14),
+// в публичный API она не входит.
+export 'src/platform/terminal_process_runner.dart' show IoTerminalProcessRunner;
 export 'src/platform/text_file_io.dart';
 export 'src/platform/working_directory_provider.dart';
 export 'src/stores/json_file_profile_store.dart';
