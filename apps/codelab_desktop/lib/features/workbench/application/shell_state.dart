@@ -47,6 +47,7 @@ final class CodeLabShellState {
     this.openPanes = const [],
     this.activePane,
     this.dockOverlayOpen = false,
+    this.projectFilesAvailable = false,
     this.sessionMode,
     required this.agentCommands,
     required this.commandCatalog,
@@ -144,6 +145,12 @@ final class CodeLabShellState {
   final ToolPane? activePane;
   final bool dockOverlayOpen;
 
+  /// Панель Files предлагается: папка сессии на этой машине
+  /// (`sessionFolderIsLocal` профиля окна) и хост привязал `ProjectFiles`.
+  /// Решает application, а не виджет (design.md change
+  /// `add-file-preview-and-tree`, D7).
+  final bool projectFilesAvailable;
+
   /// Режим активной сессии для чипа шапки; `null` — чипа нет.
   final String? sessionMode;
   final double sessionsPaneWidth;
@@ -194,6 +201,7 @@ final class CodeLabShellState {
     List<ToolPane>? openPanes,
     Object? activePane = _unset,
     bool? dockOverlayOpen,
+    bool? projectFilesAvailable,
     Object? sessionMode = _unset,
     List<CodeLabCommandAction>? agentCommands,
     CommandCatalog? commandCatalog,
@@ -250,6 +258,8 @@ final class CodeLabShellState {
           ? this.activePane
           : activePane as ToolPane?,
       dockOverlayOpen: dockOverlayOpen ?? this.dockOverlayOpen,
+      projectFilesAvailable:
+          projectFilesAvailable ?? this.projectFilesAvailable,
       sessionMode: identical(sessionMode, _unset)
           ? this.sessionMode
           : sessionMode as String?,

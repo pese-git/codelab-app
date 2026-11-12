@@ -10,6 +10,7 @@ import 'package:codelab_client_io/codelab_client_io.dart'
         JsonFileProfileStore,
         classifyProbeFailure,
         IoTerminalProcessRunner,
+        IoProjectFiles,
         IoTextFileIo,
         ioDirectoryExists;
 import 'package:codelab_client_core/codelab_client_core.dart'
@@ -21,6 +22,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ProfileSecretSource,
         ProfileSecrets,
         ProfileStore,
+        ProjectFiles,
         RecentProjectsStore,
         SecretSource,
         TransportResolver,
@@ -63,6 +65,7 @@ import '../core/platform/limited_network_image.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
+import '../features/project_files/application/project_files_cubit.dart';
 import '../features/settings/application/add_profile_cubit.dart';
 import '../features/settings/application/connection_settings_cubit.dart';
 import '../features/settings/application/default_profile_resolver.dart';
@@ -112,6 +115,8 @@ Scope createCodeLabRootScope({
   ProviderSettingsOpener? providerSettingsOpener,
   Future<bool> Function(String cwd)? providerSetupProbe,
   ProjectFolderPicker? projectFolderPicker,
+  ProjectFiles? projectFiles,
+  bool projectFilesEnabled = true,
 }) {
   // Одно окружение на открыватель встроенного агента, профили и токены:
   // `CODELAB_HOME` и переменные читаются из одного места (design.md change
@@ -152,6 +157,9 @@ Scope createCodeLabRootScope({
       CodeLabPresentationModule(
         settingsPages: settingsPages ?? defaultSettingsPages,
         providerSettingsOpener: providerSettingsOpener,
+        projectFiles: projectFilesEnabled
+            ? (projectFiles ?? const IoProjectFiles())
+            : null,
       ),
       $CodeLabTransportsModuleContract(),
       $CodeLabProtocolApplicationModuleContract(),
@@ -538,8 +546,17 @@ final class CodeLabPresentationModule extends Module {
   CodeLabPresentationModule({
     required SettingsPages settingsPages,
     ProviderSettingsOpener? providerSettingsOpener,
+    ProjectFiles? projectFiles,
   }) : _settingsPages = settingsPages,
-       _providerSettingsOpener = providerSettingsOpener;
+       _providerSettingsOpener = providerSettingsOpener,
+       _projectFiles = projectFiles;
+
+  /// Чтение папки проекта для панели Files. `null` — панель не предлагается
+  /// (web, устройства без локальной папки, тесты без двойника); иначе
+  /// `IoProjectFiles` из `codelab_client_io` или двойник теста
+  /// (`createCodeLabRootScope(projectFiles:)`; design.md change
+  /// `add-file-preview-and-tree`, D1, D7).
+  final ProjectFiles? _projectFiles;
 
   /// Открывает доступ к настройкам агента страницы «Providers»; шов тестов
   /// (`createCodeLabRootScope(providerSettingsOpener:)`): без него — IO-сессия
@@ -641,9 +658,46 @@ final class CodeLabPresentationModule extends Module {
             // События ленты (`link.open`, `image.show`) — компонент workbench,
             // а не настроек.
             eventLogger: _workbenchLogger(),
+            projectFilesBound: _projectFiles != null,
           ),
         )
         .singleton();
+    // Панель Files: один Cubit на окно (держатель ниже). Привязки нет — нет
+    // и панели (D7).
+    final projectFiles = _projectFiles;
+    if (projectFiles != null) {
+      bind<ProjectFiles>().toInstance(projectFiles);
+      // Владелец дерева — окно, а не вкладка: док монтирует только активную
+      // вкладку, и Cubit вкладки терял бы раскрытые папки при каждом
+      // переключении (design.md, D6). Cubit создаётся лениво при первом показе
+      // Files и закрывается вместе со scope.
+      bind<ProjectFilesHolder>()
+          .toProvide(
+            () => ProjectFilesHolder(
+              () => ProjectFilesCubit(
+                files: projectFiles,
+                workspace: currentScope.resolve<ClientWorkspace>(),
+                // Доступность решает application рабочего места (профиль
+                // окна): пока Files недоступна, Cubit не трогает диск (Q8).
+                available: currentScope
+                    .resolve<CodeLabShellCubit>()
+                    .state
+                    .projectFilesAvailable,
+                availability: currentScope
+                    .resolve<CodeLabShellCubit>()
+                    .stream
+                    .map((state) => state.projectFilesAvailable)
+                    .distinct(),
+                logger: StructuredLogLogger('codelab_desktop.project_files')
+                    .bind({
+                      logCategoryKey: applicationLogCategory,
+                      logComponentKey: 'project_files',
+                    }),
+              ),
+            ),
+          )
+          .singleton();
+    }
     // Проверка профиля («Test connection»): те же резолверы, что у
     // `ClientWorkspace`, и классификатор ошибок IO-транспортов (D12). Токен
     // даёт тот же `ProfileSecretSource` (D15).
@@ -952,6 +1006,7 @@ final class CodeLabDependencies {
     required this.createProviderSettingsCubit,
     required this.createMcpSettingsCubit,
     required this.openEmbeddedWizard,
+    this.projectFilesCubit,
   });
 
   final AcpClientApplication application;
@@ -987,6 +1042,12 @@ final class CodeLabDependencies {
   /// закрывает Cubit после диалога (design.md change `add-provider-setup-ui`,
   /// D26).
   final EmbeddedWizardOpener openEmbeddedWizard;
+
+  /// Отдаёт Cubit панели Files — один на окно, создаётся лениво при первом
+  /// вызове; панель его только читает и не закрывает. `null` — хост не
+  /// привязал `ProjectFiles`, панель не предлагается (design.md change
+  /// `add-file-preview-and-tree`, D6, D7).
+  final ProjectFilesCubit Function()? projectFilesCubit;
 
   /// Backs the in-app log viewer (docked panel and full-screen master-detail
   /// — `replace-debug-log-panel-with-fluent/design.md`, Decision 3/4).
@@ -1067,6 +1128,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     createProviderSettingsCubit: _scope.resolve<ProviderSettingsCubit>,
     createMcpSettingsCubit: _scope.resolve<McpSettingsCubit>,
     openEmbeddedWizard: _scope.resolve<EmbeddedWizardOpener>(),
+    projectFilesCubit: _projectFilesCubitOf(_scope),
   );
 
   @override
@@ -1087,6 +1149,38 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
       child: widget.child,
     );
   }
+}
+
+/// Лениво создаваемый Cubit панели Files окна.
+///
+/// Почему: `Scope.dispose()` закрывает только `Disposable`, а Cubit создаётся
+/// по требованию; держатель закрывает его, если он был создан.
+final class ProjectFilesHolder implements Disposable {
+  ProjectFilesHolder(this._create);
+
+  final ProjectFilesCubit Function() _create;
+  ProjectFilesCubit? _cubit;
+
+  ProjectFilesCubit get cubit => _cubit ??= _create();
+
+  @override
+  Future<void> dispose() async {
+    // Закрытие Cubit чисто локальное и сбоем не кончается; не ждём его: в
+    // тестах scope закрывается внутри fake-async зоны, где ожидание потока
+    // без кадра не завершилось бы (см. `closeCodeLabRootScopeInTest`).
+    final cubit = _cubit;
+    if (cubit != null) {
+      unawaited(cubit.close());
+    }
+  }
+}
+
+/// Фабрика Cubit панели Files окна; `null`, если `ProjectFiles` не привязан.
+/// Держатель резолвится сразу, чтобы scope закрыл его при `dispose`.
+ProjectFilesCubit Function()? _projectFilesCubitOf(Scope scope) {
+  if (scope.tryResolve<ProjectFiles>() == null) return null;
+  final holder = scope.resolve<ProjectFilesHolder>();
+  return () => holder.cubit;
 }
 
 AcpTransport _createDefaultTransport() =>

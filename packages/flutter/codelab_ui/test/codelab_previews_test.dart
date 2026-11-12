@@ -127,6 +127,19 @@ void main() {
     await tester.pumpWidget(codelabConnectionScreenPreview());
     expect(tester.takeException(), isNull);
 
+    await tester.pumpWidget(codelabFileTreePreview());
+    expect(tester.takeException(), isNull);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(codelabFilePreviewPreview());
+    expect(tester.takeException(), isNull);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(codelabFilePreviewBinaryPreview());
+    expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(codelabSessionSidebarPreview());
     expect(tester.takeException(), isNull);
 

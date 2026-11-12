@@ -940,9 +940,9 @@ sequenceDiagram
 `enumValues`, число — с `min`/`max`, bool — переключатель). Ключи с `secret: true` редактируются
 только через `codelab secret set`. Для `restartRequired` добавляется пометка
 `(applies after restart)`. Запись — `ConfigWriter`, как у `config set`. Страница «General» в app
-рисует тот же список виджетами. Страница «General» в app дополнительно показывает клиентские
-настройки `codelab.sidebar.tab` и `codelab.file_browser.show_ignored` (`shared_preferences`,
-§12.6.8); `SettingsRegistry` их не содержит.
+рисует тот же список виджетами. Страница «General» в app дополнительно показывает клиентскую
+настройку `codelab.file_browser.show_ignored` (`shared_preferences`, §12.6.8); `SettingsRegistry`
+её не содержит.
 
 Решения change `add-provider-setup-ui` (D17; решения пользователя Q6, Q8):
 * **в построчном REPL** `/settings` — `PickerSpec` со строками `key value source`; `/settings <key>` —
@@ -969,7 +969,7 @@ sequenceDiagram
 | Agent | Redaction (23) | D-24, P-10, P-14, P-18, P-19 | ниже | `ConfigWriter` |
 | Agent | Skills & extensions (24) | E-01, E-06…E-10, E-17…E-19 | откуда загружены файлы контекста, skills, шаблоны, хуки, плагины и переопределение системного промпта; «Open» открывает файл; включение — ключами ядра этих целей | `ConfigWriter` |
 | Agent | Code & web (25) | T-13, T-14, T-15, T-17, T-31, E-12 | языковые серверы, память, web-инструменты | `ConfigWriter` |
-| App | General (26) | E-15, D-18, D-19 | `SettingsRegistry` `scope: shared` (как `/settings`), `codelab.sidebar.tab`, `codelab.file_browser.show_ignored`, `codelab.input.enter_while_running` (§12.3, A11); язык — после слоя локализации (D-19); «About»: версия, канал, лицензия, сторонние уведомления, политика конфиденциальности (§12.7.7). App не обновляет себя сам: строка «Updates come from the installer or your package manager» | `ConfigWriter` (shared), `shared_preferences` |
+| App | General (26) | E-15, D-18, D-19 | `SettingsRegistry` `scope: shared` (как `/settings`), `codelab.file_browser.show_ignored`, `codelab.input.enter_while_running` (§12.3, A11); язык — после слоя локализации (D-19); «About»: версия, канал, лицензия, сторонние уведомления, политика конфиденциальности (§12.7.7). App не обновляет себя сам: строка «Updates come from the installer or your package manager» | `ConfigWriter` (shared), `shared_preferences` |
 | App | Appearance (10) | D-20 | §12.6.3 | `shared_preferences`, файлы тем |
 | App | Keyboard (27) | — | сочетания app по группам, только для чтения, с поиском; переназначение в app не вводится | — |
 

@@ -468,7 +468,7 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 |---|---|---|---|---|---|
 | 01 | рабочее место | D-01, D-02, D-03, D-08, R-18…R-21 (этапы 4–5, задача 5.9) | D-04 (встроенный агент) | D-06, D-07, T-28 | D-09, D-12, D-22, D-23, C-03 |
 | 02 | идущий ход | D-08, R-18, L-05 | — | — | C-03, D-23, D-25 |
-| 03 | файлы проекта | — | — | — | D-13 |
+| 03 | файлы проекта (панель Files дока) | — | — | — | D-13 (change `add-file-preview-and-tree`; делается в фоне, не блокирует 1.0 — решение пользователя 2026-11-11) |
 | 04 | сессии | D-03, R-03, R-04 | — | D-17, S-09 | S-18, D-10 |
 | 05 | Providers | — | — | D-05 (часть 7.5, 8.10) — реализовано change `add-provider-setup-ui` (итерации 2, 3, 6a) | L-24 — реализовано тем же change (мастер); L-17 — позже |
 | 05b | MCP servers | — | — | — | E-13 — реализовано change `add-provider-setup-ui` (итерации 5, 6a: состав из конфига, редактор, «Agent status») |
@@ -495,7 +495,7 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 | 26 | Settings › General | — | — | E-15 (8.10), D-16, D-18 («About») | D-19 |
 | 27 | Settings › Keyboard | список сочетаний A13 | — | — | — |
 | 28 | панель Terminal в доке (A16) | — | — | — | D-28 (change `add-integrated-terminal`) |
-| 29 | split view сессий, сайдбар по проектам, док панелей инструментов (A13, шаг 0) | — | — | — | R-21, S-18 (раскладка; док вводится вместе с первой панелью — Files, D-13) |
+| 29 | split view сессий, сайдбар по проектам, док панелей инструментов (A13, шаг 0) | — | — | — | R-21, S-18 (раскладка; док с панелями Plan и Protocol введён change `redesign-workbench-shell`, Files добавляет D-13, Terminal — D-28) |
 
 Навигация настроек (§12.4.9) появляется на M3 вместе с первой страницей группы Agent — «Connection»
 (change `add-app-settings-shell`); этот change удаляет `ConnectionSetupDialog`. Страницы Providers и

@@ -11,6 +11,7 @@ import '../../../app/app_scope.dart';
 import '../../../app/navigation/navigation_cubit.dart';
 import '../../../app/navigation/settings_page.dart';
 import '../application/sessions_cubit.dart' show PendingRootSession;
+import '../../project_files/presentation/project_files_pane.dart';
 import '../application/shell_cubit.dart';
 import '../application/ui_mappers.dart'
     show connectionTooltipOf, sidebarProjectsOf;
@@ -31,7 +32,18 @@ class CodeLabShell extends StatelessWidget {
   const CodeLabShell({super.key});
 
   /// Панели дока, для которых есть данные (D5); остальные ждут своих change.
-  static const _availablePanes = [ToolPane.plan, ToolPane.protocol];
+  ///
+  /// Files вычисляется: он есть, только когда папка сессии на этой машине и
+  /// хост привязал `ProjectFiles` (`CodeLabShellState.projectFilesAvailable`,
+  /// design.md change `add-file-preview-and-tree`, D7). Недоступная панель
+  /// остаётся в сохранённой раскладке и возвращается вместе с локальным
+  /// профилем (spec agent-workbench-ui «Unavailable pane is hidden but kept in
+  /// the layout»).
+  static List<ToolPane> _availablePanesOf(CodeLabShellState state) => [
+    if (state.projectFilesAvailable) ToolPane.files,
+    ToolPane.plan,
+    ToolPane.protocol,
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -40,9 +52,10 @@ class CodeLabShell extends StatelessWidget {
         final cubit = context.read<CodeLabShellCubit>();
         final logBuffer = codeLabDependenciesOf(context).logBuffer;
         final layoutClass = CodeLabLayoutClass.ofContext(context);
+        final availablePanes = _availablePanesOf(state);
         final openPanes = [
           for (final pane in state.openPanes)
-            if (_availablePanes.contains(pane)) pane,
+            if (availablePanes.contains(pane)) pane,
         ];
         // В узких классах док выдвигается поверх ленты; скрытый док не значит
         // закрытые панели, поэтому переключатель сначала снова выдвигает
@@ -64,6 +77,9 @@ class CodeLabShell extends StatelessWidget {
               : null,
           onOpenSettings: () =>
               _openSettings(context, SettingsOpenSource.shortcut),
+          onToggleFiles: state.projectFilesAvailable
+              ? () => cubit.togglePane(ToolPane.files)
+              : null,
           onToggleSidebar: layoutClass.sidebarAsColumn
               ? cubit.toggleSidebarCollapsed
               : cubit.toggleSidebarOverlay,
@@ -89,7 +105,7 @@ class CodeLabShell extends StatelessWidget {
                         : 'Ctrl+K',
                     onSearch: cubit.openCommandPalette,
                     paneToggles: [
-                      for (final pane in _availablePanes)
+                      for (final pane in availablePanes)
                         CodeLabPaneToggle(
                           pane: pane,
                           selected:
@@ -158,6 +174,7 @@ class CodeLabShell extends StatelessWidget {
                               CodeLabDockTab(
                                 pane: pane,
                                 content: switch (pane) {
+                                  ToolPane.files => const ProjectFilesPane(),
                                   ToolPane.plan =>
                                     CodeLabProgressChecklist.list(
                                       entries: state.currentPlan ?? const [],

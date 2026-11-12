@@ -13,7 +13,7 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart'
     show codelabAgentStdioProfile;
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show ProfileSecrets, ProfileStore;
+    show ProfileSecrets, ProfileStore, ProjectFiles;
 import 'package:codelab_desktop/features/settings/application/provider_settings_session.dart'
     show ProviderSettingsOpener;
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
@@ -92,6 +92,7 @@ final class CodeLabTestBinding {
     ProfileSecrets? profileSecrets,
     ProviderSettingsOpener? providerSettingsOpener,
     Future<bool> Function(String cwd)? providerSetupProbe,
+    ProjectFiles? projectFiles,
     bool stdioDefault = true,
     String? project,
     ProjectFolderPicker? projectFolderPicker,
@@ -154,6 +155,11 @@ final class CodeLabTestBinding {
       providerSetupProbe: providerSetupProbe ?? (cwd) async => false,
       // Без подмены «Open folder…» открыл бы системный диалог.
       projectFolderPicker: projectFolderPicker ?? const _NoFolderPicker(),
+      // Настоящий `IoProjectFiles` читал бы диск разработчика и зависал бы в
+      // fake-async зоне: панель Files в тестах есть, только если тест передал
+      // двойник (`FakeProjectFiles`).
+      projectFiles: projectFiles,
+      projectFilesEnabled: projectFiles != null,
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own

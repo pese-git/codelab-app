@@ -8,6 +8,8 @@ import 'codelab_app_bar.dart';
 import 'codelab_approval_prompt.dart';
 import 'codelab_command_palette_surface.dart';
 import 'codelab_connection_screen.dart';
+import 'codelab_file_preview.dart';
+import 'codelab_file_tree.dart';
 import 'codelab_progress_checklist.dart';
 import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
@@ -439,6 +441,112 @@ Widget codelabConnectionScreenPreview() {
     ),
   );
 }
+
+/// Дерево файлов (артборд `Files`): раскрытая папка, ссылка наружу и строка
+/// «… N more». Пути вымышленные, без данных пользователя.
+@Preview(
+  name: 'File tree',
+  group: codelabOrganismPreviewGroup,
+  size: Size(320, 260),
+)
+Widget codelabFileTreePreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 320,
+      height: 260,
+      child: CodeLabFileTree(
+        selectedPath: 'lib/main.dart',
+        rows: const [
+          CodeLabFileTreeRowData(
+            relativePath: 'lib',
+            name: 'lib',
+            kind: CodeLabFileTreeRowKind.directory,
+            expanded: true,
+          ),
+          CodeLabFileTreeRowData(
+            relativePath: 'lib/main.dart',
+            name: 'main.dart',
+            kind: CodeLabFileTreeRowKind.file,
+            depth: 1,
+          ),
+          CodeLabFileTreeRowData(
+            relativePath: 'lib/#more',
+            name: '… 4980 more',
+            kind: CodeLabFileTreeRowKind.more,
+            depth: 1,
+          ),
+          CodeLabFileTreeRowData(
+            relativePath: 'docs',
+            name: 'docs',
+            kind: CodeLabFileTreeRowKind.directory,
+            loading: true,
+          ),
+          CodeLabFileTreeRowData(
+            relativePath: 'shared',
+            name: 'shared',
+            kind: CodeLabFileTreeRowKind.outsideLink,
+          ),
+          CodeLabFileTreeRowData(
+            relativePath: 'README.md',
+            name: 'README.md',
+            kind: CodeLabFileTreeRowKind.file,
+          ),
+        ],
+        onToggleDirectory: codelabPreviewFileTreeRow,
+        onOpenFile: codelabPreviewFileTreeRow,
+      ),
+    ),
+  );
+}
+
+/// Колбэк строк превью дерева: превью ничего не открывает.
+void codelabPreviewFileTreeRow(CodeLabFileTreeRowData row) {}
+
+/// Просмотр файла: текст с подсвеченной строкой и предупреждением о секретах.
+@Preview(
+  name: 'File preview',
+  group: codelabOrganismPreviewGroup,
+  size: Size(420, 260),
+)
+Widget codelabFilePreviewPreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 420,
+      height: 260,
+      child: CodeLabFilePreview(
+        relativePath: 'config/.env',
+        maybeSecret: true,
+        highlightLine: 2,
+        onCopyPath: codelabPreviewCopyPath,
+        content: const CodeLabFilePreviewContent.text(
+          'EXAMPLE_NAME=demo\nEXAMPLE_FLAG=true\n',
+        ),
+      ),
+    ),
+  );
+}
+
+/// Просмотр двоичного файла: только пометка с размером.
+@Preview(
+  name: 'File preview binary',
+  group: codelabOrganismPreviewGroup,
+  size: Size(420, 160),
+)
+Widget codelabFilePreviewBinaryPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 420,
+      height: 160,
+      child: CodeLabFilePreview(
+        relativePath: 'assets/logo.bin',
+        content: CodeLabFilePreviewContent.binary('24 KB'),
+      ),
+    ),
+  );
+}
+
+/// Колбэк «Copy path» превью: ничего не копирует.
+void codelabPreviewCopyPath(String relativePath) {}
 
 @Preview(
   name: 'Session sidebar',

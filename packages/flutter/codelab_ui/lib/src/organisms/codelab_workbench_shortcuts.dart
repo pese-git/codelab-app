@@ -13,6 +13,7 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
     this.onNewSession,
     this.onToggleSidebar,
     this.onOpenSettings,
+    this.onToggleFiles,
     this.enabled = true,
     super.key,
   });
@@ -37,6 +38,12 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
   /// и обратно», DSK-24; change `add-app-settings-shell`). Что именно
   /// открывается, решает хост; на экране настроек сочетание не привязывают.
   final VoidCallback? onOpenSettings;
+
+  /// Cmd/Ctrl+Shift+E — открыть или закрыть панель Files (A13, шаг 3; spec
+  /// workspace-file-browser «Панель Files в доке инструментов»). Хост
+  /// передаёт колбэк, только когда панель доступна; без колбэка сочетание не
+  /// привязано (Cmd/Ctrl+` терминала — другое сочетание).
+  final VoidCallback? onToggleFiles;
   final bool enabled;
 
   @override
@@ -72,6 +79,20 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
           onOpenSettings!;
       bindings[const SingleActivator(LogicalKeyboardKey.comma, meta: true)] =
           onOpenSettings!;
+    }
+    if (onToggleFiles != null) {
+      bindings[const SingleActivator(
+            LogicalKeyboardKey.keyE,
+            control: true,
+            shift: true,
+          )] =
+          onToggleFiles!;
+      bindings[const SingleActivator(
+            LogicalKeyboardKey.keyE,
+            meta: true,
+            shift: true,
+          )] =
+          onToggleFiles!;
     }
     if (onApprove != null) {
       bindings[const SingleActivator(LogicalKeyboardKey.enter, control: true)] =

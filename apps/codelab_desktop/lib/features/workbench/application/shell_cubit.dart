@@ -34,6 +34,7 @@ import 'layout_cubit.dart';
 import 'sessions_cubit.dart';
 import 'settings_cubit.dart';
 import 'shell_part.dart';
+import 'session_folder_is_local.dart';
 import 'shell_state.dart';
 import 'transcript_view_cubit.dart';
 import 'ui_mappers.dart' show paletteCatalogOf;
@@ -214,6 +215,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     ExternalLinkOpener? externalLinkOpener,
     ImageProviderFor? imageProviderFor,
     Logger? eventLogger,
+    bool projectFilesBound = false,
   }) {
     // Без графа токена из окружения нет: ссылки `env:` дают подключение без
     // токена (тесты передают свой источник).
@@ -237,6 +239,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           externalLinkOpener ?? const UrlLauncherExternalLinkOpener(),
       imageProviderFor: imageProviderFor ?? defaultImageProviderFor,
       eventLogger: eventLogger ?? logger,
+      projectFilesBound: projectFilesBound,
       parts:
           parts ??
           CodeLabShellParts.build(
@@ -264,14 +267,18 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required ExternalLinkOpener externalLinkOpener,
     required ImageProviderFor imageProviderFor,
     Logger? eventLogger,
+    required bool projectFilesBound,
   }) : _workspace = workspace,
        _ownsWorkspace = ownsWorkspace,
        _parts = parts,
        _externalLinkOpener = externalLinkOpener,
        _imageProviderFor = imageProviderFor,
        _eventLogger = eventLogger,
-       super(_compose(parts)) {
-    _parts.changes.listen(() => emit(_compose(_parts, linkNote: _linkNote)));
+       _projectFilesBound = projectFilesBound,
+       super(_compose(parts, projectFilesBound)) {
+    _parts.changes.listen(
+      () => emit(_compose(_parts, _projectFilesBound, linkNote: _linkNote)),
+    );
     _diagnosticSubscription = _workspace.diagnostics.listen(
       _handleKitDiagnostic,
     );
@@ -293,6 +300,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// Заметка о неудачном открытии ссылки; живёт в фасаде, а не в частях, потому
   /// что принадлежит только ему.
   String? _linkNote;
+
+  /// Хост привязал порт `ProjectFiles`: без него панель Files не предлагается
+  /// ни при каком профиле (design.md change `add-file-preview-and-tree`, D7).
+  final bool _projectFilesBound;
   late final StreamSubscription<WorkspaceDiagnostic> _diagnosticSubscription;
 
   ConnectionCubit get _connection => _parts.connection;
@@ -595,6 +606,12 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         // Протокол и debug log теперь — панель Protocol дока (change
         // `redesign-workbench-shell`, D5).
         _layout.openPane(ToolPane.protocol);
+      case 'files':
+        // Пункт «Files» палитры: тот же переключатель, что у app bar и
+        // Cmd/Ctrl+Shift+E (design.md change `add-file-preview-and-tree`, D7).
+        if (state.projectFilesAvailable) {
+          _layout.togglePane(ToolPane.files);
+        }
       default:
         break;
     }
@@ -633,7 +650,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       );
 
   static CodeLabShellState _compose(
-    CodeLabShellParts parts, {
+    CodeLabShellParts parts,
+    bool projectFilesBound, {
     String? linkNote,
   }) {
     final connection = parts.connection.state;
@@ -642,6 +660,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     final settings = parts.settings.state;
     final layout = parts.layout.state;
     final transcriptView = parts.transcriptView.state;
+    final projectFilesAvailable =
+        projectFilesBound && sessionFolderIsLocal(connection.profile);
     return CodeLabShellState(
       connectionStatus: connection.connectionStatus,
       transportLabel: connection.transportLabel,
@@ -670,9 +690,13 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       openPanes: layout.openPanes,
       activePane: layout.activePane,
       dockOverlayOpen: layout.dockOverlayOpen,
+      projectFilesAvailable: projectFilesAvailable,
       sessionMode: active.sessionMode,
       agentCommands: active.agentCommands,
-      commandCatalog: paletteCatalogOf(active.agentCommandViews),
+      commandCatalog: paletteCatalogOf(
+        active.agentCommandViews,
+        filesAvailable: projectFilesAvailable,
+      ),
       composerDraft: active.composerDraft,
       composerDraftRevision: active.composerDraftRevision,
       configOptions: active.configOptions,
