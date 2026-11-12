@@ -858,7 +858,7 @@ Architectural dependency rules важнее технической доступ�
 Технология: [`pty2`](https://pub.dev/packages/pty2) **0.8.1** — PTY на чистом Dart. C-код (`forkpty`, `setsid`) собирается хуком native assets; на Windows — ConPTY. Пин точной версии в `apps/codelab_desktop/pubspec.yaml`.
 
 1. **Назначение.** Запуск интерактивного shell пользователя (`$SHELL -l`) в псевдотерминале: ввод, вывод, размер окна, сигналы.
-2. **Где используется.** Только адаптер `apps/codelab_desktop/lib/core/platform/user_shell_launcher.dart` за портом `UserShellLauncher` (§24, `platform-integration.md` §8, §73). Правило сторожа — D11 change.
+2. **Где используется.** Только адаптер `apps/codelab_desktop/lib/core/platform/user_shell_launcher.dart` за портом `UserShellLauncher` (§24, `platform-integration.md` §8, §73). Правило сторожа — D11 change. **Сейчас** адаптер вызывает `pty2` на UI isolate, запись в PTY синхронная. **План после 1.0** (решение Q24 принято 2026-11-12, реализация отложена; терминал выпускается в 1.0 с известными ограничениями): адаптер держит `pty2` целиком в фоновом isolate — по одному на shell вкладки: старт, чтение, запись, `resize`, сигналы и ожидание выхода идут там, UI isolate обменивается с ним сообщениями (D2 change, «Фоновый isolate вкладки»; задача 2.13).
 3. **Где не используется.**
    * ACP `terminal/*`: `IoTerminalProcessRunner` в `codelab_client_io` остаётся на `Process.start`;
    * процесс агента (`StdioAcpTransport`);
@@ -868,7 +868,8 @@ Architectural dependency rules важнее технической доступ�
 5. **Влияние на architecture boundaries.** Нативный API не выходит за адаптер. Feature работает с портом и тестируется с fake. Пакет не попадает в `codelab_client_io`: у порта один потребитель, а native assets собирались бы и для CLI (D2 change).
 
    Особенности API, которые адаптер скрывает (D2, D15):
-   * нет `pid`;
+   * нет `pid`; по плану после 1.0 адаптер получает его обёрткой старта `/bin/sh -c '…; exec "$0" "$@"'` и шлёт `hangUp`/`kill` по нему из UI isolate (`Process.killPid`) в обход isolate вкладки (Q24, Q25);
+   * `write` синхронный: при полном буфере PTY (на macOS ~1 КБ ввода) он крутит `poll` на вызывающем isolate, пока программа не прочитает ввод. Сейчас это UI isolate — открытый риск, принятый для 1.0 как известная проблема (Risks change, «Синхронная запись в PTY»); по плану Q24 `pty2` уходит в isolate вкладки;
    * ввод — `write(String)`, вывод — `Stream<String>`;
    * `kill(SIGHUP)` и `kill(SIGKILL)` шлются группе процесса, любой сигнал закрывает PTY-мастер;
    * без `environment` ребёнок получает узкий набор переменных — адаптер передаёт `Platform.environment` целиком (Q9);
@@ -887,7 +888,7 @@ Architectural dependency rules важнее технической доступ�
   * Выход из app закрывает все вкладки.
   * Крах app — `SIGHUP` от закрытия PTY-мастера, подтверждено спайком (`concurrency.md` §45, `platform-integration.md` §23).
   * Задание интерактивного shell с игнором `SIGHUP` после `SIGKILL` shell остаётся сиротой — поведение пользователя, как `nohup`.
-* **Threading.** Чтение — в фоновых isolate `pty2` (без модели поток 585 КБ читается за 0,29 с). Разбор эмулятором — на UI isolate, порциями (§20г).
+* **Threading.** Сейчас: чтение — в фоновых isolate `pty2` (без модели поток 585 КБ читается за 0,29 с), запись, `resize` и сигналы — на UI isolate; запись при полном буфере PTY блокирует UI isolate (открытый риск, принят для 1.0 как известная проблема). Разбор эмулятором — на UI isolate, порциями (§20г). План после 1.0 (Q24): весь `pty2` — в isolate вкладки, `UserShell.write` ставит строку в очередь и сразу возвращается; вывод проходит лишний переход между isolate, его стоимость под «Flood» меряет задача 2.13 change.
 * **Security.** Shell пользователя вне permission policy и containment (`permissions.md` §2), окружение app целиком (`platform-integration.md` §53, исключение).
 * **Testing.** Native assets собираются под `fvm flutter test` и `fvm dart test`; контрактный тест адаптера идёт на Dart VM в `feature/*`. На код выхода тесты не опираются.
 * **Maintenance.** 0.8.1 от 2026-11-10; активное сопровождение, но ломающие версии 0.6–0.8 вышли за две недели. Мера — пин точной версии, обновление — отдельным PR с контрактным тестом.
