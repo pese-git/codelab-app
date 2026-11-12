@@ -6,8 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:test/test.dart';
 
-/// Вид отказа проверки по ТИПУ ошибки `dart:io`, не по тексту (как
-/// `classifyProbeFailure` change `add-app-settings-shell`; design.md change
+/// Вид отказа проверки по ТИПУ ошибки `dart:io`, не по тексту (правило D12
+/// change `add-app-settings-shell`; design.md change
 /// `add-provider-setup-ui`, D8). Исключения построены вручную, сети нет.
 void main() {
   group('classifyProviderCheckError', () {
