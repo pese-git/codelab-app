@@ -131,7 +131,7 @@ final class SessionHeader {
 | `mode_change` | `modeId` | нет | режим сессии (§13.6); последняя на ветке выигрывает |
 | `config_change` | `optionId`, `value` | нет | смена опции конфигурации, кроме `mode` и `model` (у них свои записи); после MVP `optionId` `model_role.<role>` со значением `provider/model` или `null` — переопределение роли на сессию (§17.10.5) |
 | `plan` | `entries[]`: `content`, `priority`, `status` | нет | старый формат, только чтение: до change `add-subagents-and-tasks` — полный снимок плана после `update_plan`; после change не пишется, но читается всегда — в свёртке `buildTaskList` заменяет весь список пунктами `"1"…"n"` (§17.16.6) |
-| `task` | `op` (`create` \| `update` \| `delete` \| `assign`), `actor` (`main` или id субагента), `items` (полные снимки изменённых пунктов), `deleted` (удалённые id) | нет | change `add-subagents-and-tasks`: одна запись на `TaskListChanged`, только в журнале корневой сессии; список восстанавливается свёрткой `buildTaskList` активной ветки (§17.16.6) |
+| `task` | `op` (`create` \| `update` \| `delete` \| `assign`), `actor` (`main` или id субагента), `items` (полные снимки изменённых пунктов), `deleted` (удалённые id) | нет | change `add-subagents-and-tasks`: одна запись на `TaskListChanged`, кроме `op: restore` (восстановление из ветки не пишется, TSK-1), только в журнале корневой сессии; список восстанавливается свёрткой `buildTaskList` активной ветки, счётчик id — по всему журналу (§17.16.6) |
 | `compaction` | `summary`, `firstKeptId`, `tokensBefore`, `tokensAfter`, `details?` (после MVP — также `details.usage`: usage суммаризатора в форме `usage` §8.2.3, читается журналом usage §12.6.1) | user-сообщение с резюме вместо записей до `firstKeptId` (§8.7) | сжатие (§9) |
 | `label` | `targetId`, `label?` | нет | закладка на запись; `null` или пустая строка снимает метку |
 | `leaf` | `targetId` | нет | перемещение активного листа (MVP); после §17.6 ядро её не пишет, но читает по правилу §8.4 |
@@ -341,7 +341,8 @@ final class RepairReport {
 List<SessionRecord> pathToLeaf(SessionSnapshot s, [String? leafId]);    // root-first
 LlmContextProjection buildLlmContext(SessionSnapshot s);                 // §8.7
 ({List<TaskItem> items, int nextId}) buildTaskList(SessionSnapshot s);  // change add-subagents-and-tasks, §17.16.6:
-                                                                         // вход TaskList.restore; форма результата — по коду
+                                                                         // items — активная ветка, nextId — весь журнал (TSK-3);
+                                                                         // вход TaskList.restore при open и смене ветки; форма — по коду
 Iterable<AgentEvent> buildReplay(SessionSnapshot s);                     // §13.5
 SessionSummary summarize(SessionSnapshot s);                             // §8.10; экспортируется: её зовут хранилища
 List<ToolCall> findInterruptedCalls(SessionSnapshot s);                  // §8.8, шаг 1
@@ -360,7 +361,7 @@ List<MessageRecord> healInterruptedTurn(SessionSnapshot s, IdGenerator ids, Cloc
 | `ModeChanged` | `mode_change` | нет |
 | смена модели (`setConfigOption("model")`, fallback не пишет) | `model_change` | нет |
 | `ConfigOptionChanged` (событие уровня `AgentSession`, дополняет §5.3) | `config_change` | нет |
-| `TaskListChanged` (change `add-subagents-and-tasks`, §17.16.6; до него — `PlanUpdated` → `plan`) | `task` | нет |
+| `TaskListChanged` (change `add-subagents-and-tasks`, §17.16.6; до него — `PlanUpdated` → `plan`) | `task`; при `change.op == restore` (список восстановлен из новой ветки или, у читателя, из журнала владельца) — ничего: состояние выводится из ветки (TSK-1) | нет |
 | `ContextCompacted` | `compaction` (пишется **до** события, событие подтверждает запись) | **да** |
 | `SessionTitleChanged` (событие уровня `AgentSession`, дополняет §5.3) | `session_info` | нет |
 | `SubagentStarted` (после MVP, уровень `AgentSession`, §17.3.2) | `subagent` со `status: "running"` | **да** |

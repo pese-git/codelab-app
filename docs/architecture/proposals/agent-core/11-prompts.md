@@ -228,7 +228,8 @@ composeSystemPrompt(in):
 7. если shellExec в плане и on(toolsExec) → sections.add(Prompts.toolsExec.render(maxLines, defaultTimeout))
    после MVP: если backgroundJobs в плане — к секции дописывается Prompts.toolsExecBackground (§17.9.2.3)
 8. если on(toolsTasks) → sections.add(Prompts.toolsTasks.render({}))   // tools/tasks, tools: [task_create], §17.16.3;
-   у потомка task_create нет — секции нет (§17.16.4); до change add-subagents-and-tasks — toolsPlan
+   у потомка task_create нет — секции нет (§17.16.4); task_create=off убирает и остальные task_*
+   (§6.3.8, D30 change add-subagents-and-tasks); до change add-subagents-and-tasks — toolsPlan
 8a. если network в плане и on(toolsWeb) → sections.add(Prompts.toolsWeb.render({}))          // после MVP, §17.1.5
 8b. если languageServers в плане и on(toolsLsp) → sections.add(Prompts.toolsLsp.render({}))  // после MVP, §17.8.9
 8c. если memory в плане и on(toolsMemory) → sections.add(Prompts.toolsMemory.render(...))   // после MVP, §17.11.4
@@ -270,7 +271,10 @@ skill, другое окно модели), `AgentSession` пересчитыв�
 `tools` не ссылаются ни на один инструмент по имени (тест-сторож §11.10 проверяет имена, не
 совпадающие с обычными английскими словами); правило списка задач поэтому живёт в `tools/tasks` (`tools: [task_create]`, §17.16.3; до change
 `add-subagents-and-tasks` — правило плана в `tools/plan`, `tools: [update_plan]`), а не в
-`system/base`.
+`system/base`. Секция `tools/tasks` называет только свой якорь `task_create`; правила
+`task_update`, `task_list`, `task_get` (в том числе «после сжатия вызови `task_list`») — в их
+`description`: описание есть ровно тогда, когда инструмент подключён, и выключенный по одному
+инструмент нигде не упоминается (D32 change `add-subagents-and-tasks`).
 
 Контекст проекта читает хост — `ProjectFilesLoader` (`codelab_agent_io`) за портом ядра
 `ProjectFilesSource` (`AgentCoreServices.projectFiles`) — при создании и загрузке сессии
@@ -422,7 +426,7 @@ final class PromptOverrides {                    // часть CoreConfig (§10.
 | `tools/edit.md` (`tools: [write, edit]`) | точечная правка и запись: перечитать файл перед правкой, точное совпадение | — |
 | `tools/listing.md` (`tools: [ls, search]`) | `ls` и `search` вместо `exec ls/grep` | `limit` |
 | `tools/exec.md` (`tools: [exec]`) | команды: таймаут, неинтерактивность, вывод | `maxLines`, `defaultTimeout` |
-| `tools/tasks.md` (`tools: [task_create]`) | когда и как вести список задач (§17.16.3); до change `add-subagents-and-tasks` — `tools/plan.md` (`tools: [update_plan]`, текст ниже) | — |
+| `tools/tasks.md` (`tools: [task_create]`) | когда и как вести список задач (§17.16.3); называет только `task_create`, правила остальных `task_*` — в их описаниях (D32); до change `add-subagents-and-tasks` — `tools/plan.md` (`tools: [update_plan]`, текст ниже) | — |
 | `mcp.md` | список MCP-серверов, их вывод недоверенный | `servers` |
 | `project_context.md` | секция инструкций проекта | `files` |
 | `project_context_file.md` | блок одного файла | `path`, `content` |
@@ -499,7 +503,8 @@ blocks with a language tag. When referring to code, give the path and line: lib/
 базы, чтобы выключение `update_plan` не оставляло в промпте упоминания инструмента, §11.5).
 Change удаляет этот файл; его место занимает `tools/tasks.md` (`tools: [task_create]`) со своим
 текстом, написанным для CodeLab без заимствований (§17.16.3, §17.16.8), — правило вести список
-задач и узнавать его состояние вызовом `task_list` после сжатия (§17.16.6):
+задач; правило узнавать его состояние вызовом `task_list` после сжатия (§17.16.6) — в описании
+`task_list`, а не в секции (D32):
 
 ```markdown
 ---
@@ -614,7 +619,7 @@ vars: [name, body]
 * Тесты генератора: неизвестная подстановка, необъявленная переменная, неизвестный ключ frontmatter, дубликат `id` — ошибки с путём файла (PR-4).
 * Тест `render`: `\{{` даёт литерал, значение с `{{x}}` не раскрывается, неполный набор — `ArgumentError`.
 * Тест конфига: переопределение `system` с подстановкой `{{secret}}` → `ConfigException` при старте (PR-5).
-* `prompt_sections_tools_test.dart`: генератор отвергает `tools/*.md` без `tools`; с `tools.disabled: [write, edit]` промпт содержит `tools/read` и не содержит `tools/edit`; с `[ls]` нет `tools/listing`; с `[task_create]` нет секции `tools/tasks` (до change `add-subagents-and-tasks` — с `[update_plan]` в промпте нет подстроки `update_plan`); MCP-сервер, все инструменты которого выключены, не упомянут в секции `mcp`; тест-сторож: `system/base.md`, `system/untrusted.md`, `project_context.md`, `project_context_file.md` и `agent_profile.md` (для трёх последних — `prompt_project_context_test.dart`, «project_context texts name no tool (PR-6)», и `prompt_agent_profile_test.dart`, «agent_profile.md names no tool (PR-6)») не содержат слов `exec`, `ls`, `lsp` и имён с `_` из списка §6.3.8 (`task_create` и прочие `task_*`; до change `add-subagents-and-tasks` — `update_plan`; `web_fetch`, `web_search`, `agent_status`, `agent_cancel`) и подстроки `mcp__`; обычные слова (`read`, `write`, `edit`, `search`, `agent`, `skill`) как ссылки на инструменты проверяются ревью (PR-6).
+* `prompt_sections_tools_test.dart`: генератор отвергает `tools/*.md` без `tools`; с `tools.disabled: [write, edit]` промпт содержит `tools/read` и не содержит `tools/edit`; с `[ls]` нет `tools/listing`; с `[task_create]` нет секции `tools/tasks`; текст `tools/tasks` не содержит `task_update`, `task_list`, `task_get` (D32) (до change `add-subagents-and-tasks` — с `[update_plan]` в промпте нет подстроки `update_plan`); MCP-сервер, все инструменты которого выключены, не упомянут в секции `mcp`; тест-сторож: `system/base.md`, `system/untrusted.md`, `project_context.md`, `project_context_file.md` и `agent_profile.md` (для трёх последних — `prompt_project_context_test.dart`, «project_context texts name no tool (PR-6)», и `prompt_agent_profile_test.dart`, «agent_profile.md names no tool (PR-6)») не содержат слов `exec`, `ls`, `lsp` и имён с `_` из списка §6.3.8 (`task_create` и прочие `task_*`; до change `add-subagents-and-tasks` — `update_plan`; `web_fetch`, `web_search`, `agent_status`, `agent_cancel`) и подстроки `mcp__`; обычные слова (`read`, `write`, `edit`, `search`, `agent`, `skill`) как ссылки на инструменты проверяются ревью (PR-6).
 * Golden `test/prompts/golden/agent-serve-standard-project.txt`: два файла контекста без агента — последняя секция `# Project instructions` (блоки от общего к частному); golden `agent-serve-standard-project-agent.txt`: те же файлы и выбранный агент — последние секции `# Project instructions` и `# Agent profile: <name>`; без контекста и агента существующие golden не меняются. Экранирование тегов блока (`</project-instructions`, `</PROJECT-INSTRUCTIONS`, `< / project-instructions`, `<project-instructions`) и атрибута `path` (`"<>\r\n` → `_`) проверяет `prompt_project_context_test.dart`: экранирует сборка промпта, а `assemble_project_context_test.dart` проверяет только порядок, бюджет и усечение (change `add-agent-project-files`, D5, D15).
 * `system_prompt_override_test.dart` — критерий матрицы **`core/system-prompt-override`** (E-08): (а) `--system-prompt "You are a test agent in {{cwd}}."` → первая секция запроса — этот текст с подставленным `cwd`, вторая — `system/untrusted` без изменений, секции инструментов на месте; (б) `--system-prompt-file` поверх `prompts.system_text` глобального конфига → база из файла, лог `prompts.override` с `source: flag:--system-prompt-file`; (в) `--append-system-prompt "Use {{x}} literally."` → секция с литералом `{{x}}` сразу после `system/untrusted` и до `tools/read`; (г) оба флага замены → ошибка использования; файл 65 КиБ → ошибка с путём; подстановка `{{secret}}` в замене → ошибка при старте; (д) `prompts.append_system_text` в проектном конфиге без доверия → предупреждение `config.project.untrusted_key`, дополнения нет; с доверием — есть; (е) пять шагов хода с переопределением → системный промпт побайтово одинаков во всех пяти запросах; (ж) субагент и выбранное определение агента получают заменённую базу (PR-7).
 

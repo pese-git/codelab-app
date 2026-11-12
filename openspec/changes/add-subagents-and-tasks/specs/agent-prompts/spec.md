@@ -58,7 +58,7 @@
 
 Одинаковые входы SHALL давать побайтово одинаковый результат; секций выключенных capability в нём нет (PR-3, HOST-4).
 
-Секция с непустым `tools` SHALL входить в промпт, только если включены все её инструменты (PR-6). База и секции без `tools` НЕ SHALL называть ни одного инструмента по имени, которое не совпадает с обычным английским словом.
+Секция с непустым `tools` SHALL входить в промпт, только если включены все её инструменты (PR-6). База и секции без `tools` НЕ SHALL называть ни одного инструмента по имени, которое не совпадает с обычным английским словом. Секция `tools/tasks` SHALL называть только `task_create`; правила `task_update`, `task_list`, `task_get` — в их описаниях, правило «после сжатия узнай состояние списка вызовом `task_list`» — в `tool_descriptions/task_list.md` (design.md change `add-subagents-and-tasks`, D32).
 
 #### Scenario: Golden на профиль и режим
 - **WHEN** промпт собирается для профилей `agent-serve` и `embedded-cli` в режимах `standard` и `plan` с фиксированной датой
@@ -67,6 +67,10 @@
 #### Scenario: Секция выключенного инструмента
 - **WHEN** набор инструментов сессии не содержит `ls`, а затем не содержит `write` и `edit`
 - **THEN** в первом промпте нет `tools/listing`, во втором есть `tools/read` и нет `tools/edit`
+
+#### Scenario: Секция списка задач называет только якорь
+- **WHEN** тест-сторож проверяет `tools/tasks.md` и `tool_descriptions/task_list.md`
+- **THEN** в `tools/tasks.md` нет `task_update`, `task_list`, `task_get`; описание `task_list` содержит правило о вызове после сжатия контекста (`prompt_sections_tools_test.dart`)
 
 #### Scenario: База не называет инструментов
 - **WHEN** тест-сторож проверяет `system/base.md`, `system/untrusted.md`, `project_context.md`, `project_context_file.md`, `agent_profile.md` и `subagent/system.md`
