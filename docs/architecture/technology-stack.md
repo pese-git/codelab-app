@@ -871,6 +871,7 @@ Architectural dependency rules важнее технической доступ�
    * нет `pid`; по плану после 1.0 адаптер получает его обёрткой старта `/bin/sh -c '…; exec "$0" "$@"'` и шлёт `hangUp`/`kill` по нему из UI isolate (`Process.killPid`) в обход isolate вкладки (Q24, Q25);
    * `write` синхронный: при полном буфере PTY (на macOS ~1 КБ ввода) он крутит `poll` на вызывающем isolate, пока программа не прочитает ввод. Сейчас это UI isolate — открытый риск, принятый для 1.0 как известная проблема (Risks change, «Синхронная запись в PTY»); по плану Q24 `pty2` уходит в isolate вкладки;
    * ввод — `write(String)`, вывод — `Stream<String>`;
+   * код выхода ждёт isolate на каждый shell блокирующим FFI `waitpid`; Dart VM при остановке движка ждёт этот isolate, поэтому, пока shell жив, процесс app не завершается, а `Isolate.kill` ожидание не прерывает — штатный выход обязан сам завершить shell (D4, D15 п. 9 change);
    * `kill(SIGHUP)` и `kill(SIGKILL)` шлются группе процесса, любой сигнал закрывает PTY-мастер;
    * без `environment` ребёнок получает узкий набор переменных — адаптер передаёт `Platform.environment` целиком (Q9);
    * ошибок старта нет (процесс выходит с `1`/`-1`) — адаптер проверяет файл и папку до `start`;
@@ -885,8 +886,8 @@ Architectural dependency rules важнее технической доступ�
 * **Native dependencies.** C-компилятор при сборке: Xcode CLT на macOS, `cc` или `gcc` на Linux. Отдельной настройки Xcode или CocoaPods нет.
 * **Lifecycle.**
   * Процесс принадлежит вкладке: закрытие — `SIGHUP`, через 2 с `SIGKILL`.
-  * Выход из app закрывает все вкладки.
-  * Крах app — `SIGHUP` от закрытия PTY-мастера, подтверждено спайком (`concurrency.md` §45, `platform-integration.md` §23).
+  * Выход из app закрывает все вкладки: обработчик `AppLifecycleListener.onExitRequested` → `closeAll()`. Он обязателен — без него штатный выход зависает на `waitpid` `pty2` (решение пользователя 2026-11-12; D14, D15 п. 9 change).
+  * Крах или убийство app — `SIGHUP` от закрытия PTY-мастера, подтверждено спайком; при штатном выходе эта страховка не срабатывает (`concurrency.md` §45, `platform-integration.md` §23).
   * Задание интерактивного shell с игнором `SIGHUP` после `SIGKILL` shell остаётся сиротой — поведение пользователя, как `nohup`.
 * **Threading.** Сейчас: чтение — в фоновых isolate `pty2` (без модели поток 585 КБ читается за 0,29 с), запись, `resize` и сигналы — на UI isolate; запись при полном буфере PTY блокирует UI isolate (открытый риск, принят для 1.0 как известная проблема). Разбор эмулятором — на UI isolate, порциями (§20г). План после 1.0 (Q24): весь `pty2` — в isolate вкладки, `UserShell.write` ставит строку в очередь и сразу возвращается; вывод проходит лишний переход между isolate, его стоимость под «Flood» меряет задача 2.13 change.
 * **Security.** Shell пользователя вне permission policy и containment (`permissions.md` §2), окружение app целиком (`platform-integration.md` §53, исключение).
