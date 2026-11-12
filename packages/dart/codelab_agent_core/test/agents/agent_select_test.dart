@@ -9,7 +9,17 @@ import '../permissions/fake_gate.dart';
 import '../support/models.dart';
 import '../tools/fake_tools.dart';
 
-const _base = ['read', 'write', 'edit', 'update_plan', 'ls', 'search'];
+const _base = [
+  'read',
+  'write',
+  'edit',
+  'task_create',
+  'task_update',
+  'task_list',
+  'task_get',
+  'ls',
+  'search',
+];
 
 final _other = ModelRef(
   provider: 'test',
@@ -365,7 +375,7 @@ void main() {
         await session.prompt([const TextContent('go')]);
 
         final prompt = h.requestedContexts.single.systemPrompt;
-        expect(prompt, isNot(contains('update_plan')));
+        expect(prompt, isNot(contains('task_create')));
         expect(prompt, isNot(contains('mcp__other__')));
       },
     );

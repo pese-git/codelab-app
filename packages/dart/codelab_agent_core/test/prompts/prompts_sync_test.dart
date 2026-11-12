@@ -31,7 +31,7 @@ void main() {
         'tools/edit.md',
         'tools/listing.md',
         'tools/exec.md',
-        'tools/plan.md',
+        'tools/tasks.md',
         for (final tool in [
           'read',
           'write',
@@ -39,10 +39,16 @@ void main() {
           'ls',
           'search',
           'exec',
-          'update_plan',
+          'task_create',
+          'task_update',
+          'task_list',
+          'task_get',
         ])
           'tool_descriptions/$tool.md',
       ]),
     );
+    // D13: update_plan и его секция удалены.
+    expect(files, isNot(contains('tools/plan.md')));
+    expect(files, isNot(contains('tool_descriptions/update_plan.md')));
   });
 }

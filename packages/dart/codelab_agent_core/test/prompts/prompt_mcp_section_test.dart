@@ -80,7 +80,7 @@ void main() {
     );
 
     expect(sections.last, 'mcp');
-    expect(sections[sections.length - 2], 'tools.plan');
+    expect(sections[sections.length - 2], 'tools.tasks');
   });
 
   test('a capability that is off leaves no section even with servers', () {

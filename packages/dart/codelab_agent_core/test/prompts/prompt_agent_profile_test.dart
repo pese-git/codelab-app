@@ -74,7 +74,7 @@ void main() {
 
   test('agent_profile.md names no tool (PR-6)', () {
     final forbidden = RegExp(
-      r'\b(exec|ls|lsp|update_plan|web_fetch|web_search|task_status|task_cancel)\b|mcp__',
+      r'\b(exec|ls|lsp|update_plan|task_create|web_fetch|web_search|task_status|task_cancel)\b|mcp__',
     );
     final body = File(corePath('prompts/agent_profile.md')).readAsStringSync();
 

@@ -1,0 +1,323 @@
+{
+  "id": "acp/session-load-legacy-plan",
+  "spec": [
+    "03-Session Setup.md#loading-a-session",
+    "11-Agent Plan.md#plan-entries",
+    "15-Extensibility.md#the-_meta-field"
+  ],
+  "description": "Журнал старого формата с записью plan из трёх пунктов и без записей task загружается заново: после истории агент присылает plan с тремя entries в порядке записи и _meta.codelab.task.id \"1\", \"2\", \"3\" (owner main, без блокеров), затем режим, опции, команды; ответ session/load последним.",
+  "goals": [
+    "C-05"
+  ],
+  "extensions": [
+    "task"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "sessions": {
+      "01JB8Q2W6R9T3M5K7N1P4X8Z0D": [
+        {
+          "type": "session",
+          "version": 1,
+          "id": "01JB8Q2W6R9T3M5K7N1P4X8Z0D",
+          "cwd": "${cwd}",
+          "created": "2026-10-25T10:00:00.000Z",
+          "agent": {
+            "name": "codelab-agent",
+            "version": "0.1.0"
+          }
+        },
+        {
+          "type": "model_change",
+          "id": "r0",
+          "parentId": null,
+          "timestamp": "2026-10-25T10:00:00.000Z",
+          "provider": "scripted",
+          "modelId": "scripted-1"
+        },
+        {
+          "type": "message",
+          "id": "r1",
+          "parentId": "r0",
+          "timestamp": "2026-10-25T10:00:01.000Z",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Составь план исправления теста"
+              }
+            ],
+            "timestamp": "2026-10-25T10:00:01.000Z"
+          }
+        },
+        {
+          "type": "plan",
+          "id": "r2",
+          "parentId": "r1",
+          "timestamp": "2026-10-25T10:00:02.000Z",
+          "entries": [
+            {
+              "content": "Прочитать тесты",
+              "priority": "high",
+              "status": "completed"
+            },
+            {
+              "content": "Исправить ошибку",
+              "priority": "high",
+              "status": "in_progress"
+            },
+            {
+              "content": "Запустить тесты",
+              "priority": "medium",
+              "status": "pending"
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "id": "r3",
+          "parentId": "r2",
+          "timestamp": "2026-10-25T10:00:03.000Z",
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "План составлен."
+              }
+            ],
+            "model": {
+              "provider": "scripted",
+              "id": "scripted-1"
+            },
+            "usage": {
+              "input": 10,
+              "output": 5
+            },
+            "stopReason": "stop",
+            "timestamp": "2026-10-25T10:00:03.000Z"
+          }
+        }
+      ]
+    }
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "initializeId"
+        },
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${initializeId}",
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "loadId"
+        },
+        "method": "session/load",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0D",
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0D",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Составь план исправления теста"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0D",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "План составлен."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0D",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              {
+                "content": "Прочитать тесты",
+                "priority": "high",
+                "status": "completed",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "1",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              },
+              {
+                "content": "Исправить ошибку",
+                "priority": "high",
+                "status": "in_progress",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "2",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              },
+              {
+                "content": "Запустить тесты",
+                "priority": "medium",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "3",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "note": "реплей: plan из buildTaskList после истории, id \"1\"…\"n\" по порядку записи (TSK-6, D12)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0D",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "standard"
+          }
+        }
+      },
+      "note": "после плана — режим, опции, команды (agent-core §13.5)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0D",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0D",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/load — после реплея (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${loadId}",
+        "result": {
+          "modes": {
+            "$any": {
+              "availableModes": [
+                {
+                  "id": "standard",
+                  "name": "Standard"
+                }
+              ],
+              "currentModeId": "standard"
+            }
+          },
+          "configOptions": {
+            "$any": []
+          }
+        }
+      }
+    }
+  ]
+}

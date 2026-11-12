@@ -137,6 +137,95 @@ void main() {
     expect((await h.initialize()).error, isNull);
   });
 
+  // agent-acp-server «initialize», «Ответ codelab-app» (design.md change
+  // `add-subagents-and-tasks`, D9): клиент без `_meta` получает прежний ответ
+  // «ровно эти поля» — блока объявлений нет ни у `agentCapabilities`, ни
+  // у корня ответа. Тест охраняет сторонних клиентов (Zed) от регрессии.
+  test('without a client _meta there is no codelab block', () async {
+    h = await ServerHarness.start();
+
+    final result = (await h.initialize()).resultMap;
+
+    final caps = result['agentCapabilities']! as Map<String, Object?>;
+    expect(caps, isNot(contains('_meta')));
+    expect(result, isNot(contains('_meta')));
+  });
+
+  // «Клиент CodeLab объявил расширения»: блок идёт только по объявлению
+  // клиента. Субагентов в базовой сборке ядра ещё нет (итерация 2), поэтому
+  // здесь — только `tasks`; ключи `subagents`/`subagentToolCalls` и
+  // `maxDepth` проверяет фикстура `acp/initialize-codelab-extensions`.
+  test('an empty client _meta.codelab gets the tasks declaration', () async {
+    h = await ServerHarness.start();
+
+    final response = await h.initialize(
+      clientCapabilities: {
+        'fs': {'readTextFile': true, 'writeTextFile': true},
+        'terminal': true,
+        '_meta': {'codelab': <String, Object?>{}},
+      },
+    );
+
+    final caps =
+        response.resultMap['agentCapabilities']! as Map<String, Object?>;
+    expect(caps['_meta'], {
+      'codelab': {
+        'tasks': {'version': 1},
+      },
+    });
+    // Стандартные поля блок не меняет (D9).
+    expect(caps['loadSession'], isTrue);
+    expect(caps['mcpCapabilities'], {'http': false, 'sse': false});
+  });
+
+  // «неизвестные ключи и значения в clientCapabilities._meta.codelab SHALL
+  // игнорироваться без ошибки» (forward compatibility, 15-Extensibility.md).
+  test(
+    'unknown keys and values of the client _meta.codelab are ignored',
+    () async {
+      h = await ServerHarness.start();
+
+      final response = await h.initialize(
+        clientCapabilities: {
+          'terminal': true,
+          '_meta': {
+            'codelab': {
+              'tasks': {'version': 2, 'x': 1},
+              'future': true,
+              'board': 'yes',
+            },
+          },
+        },
+      );
+
+      expect(response.error, isNull);
+      final caps =
+          response.resultMap['agentCapabilities']! as Map<String, Object?>;
+      expect(caps['_meta'], {
+        'codelab': {
+          'tasks': {'version': 1},
+        },
+      });
+    },
+  );
+
+  // `_meta` клиента без ключа `codelab` — не объявление CodeLab: блок
+  // отправляется, только если клиент прислал именно объект `codelab`.
+  test('a client _meta without codelab gets no block', () async {
+    h = await ServerHarness.start();
+
+    final response = await h.initialize(
+      clientCapabilities: {
+        'terminal': true,
+        '_meta': {'traceparent': '00-abc-def-01'},
+      },
+    );
+
+    final caps =
+        response.resultMap['agentCapabilities']! as Map<String, Object?>;
+    expect(caps, isNot(contains('_meta')));
+  });
+
   test('missing clientCapabilities is logged', () async {
     h = await ServerHarness.start();
 

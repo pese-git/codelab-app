@@ -48,7 +48,10 @@
     "read",
     "write",
     "edit",
-    "update_plan",
+    "task_create",
+    "task_update",
+    "task_list",
+    "task_get",
     "exec",
     "ls",
     "search"
@@ -60,7 +63,7 @@
     "tools.edit",
     "tools.listing",
     "tools.exec",
-    "tools.plan"
+    "tools.tasks"
   ],
   "tools": [
     {
@@ -130,50 +133,6 @@
           "path",
           "oldText",
           "newText"
-        ]
-      }
-    },
-    {
-      "name": "update_plan",
-      "description": "Replace the whole work plan shown to the user. Send every entry each time; keep one entry in_progress.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "entries": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "content": {
-                  "type": "string"
-                },
-                "priority": {
-                  "type": "string",
-                  "enum": [
-                    "high",
-                    "medium",
-                    "low"
-                  ]
-                },
-                "status": {
-                  "type": "string",
-                  "enum": [
-                    "pending",
-                    "in_progress",
-                    "completed"
-                  ]
-                }
-              },
-              "required": [
-                "content",
-                "priority",
-                "status"
-              ]
-            }
-          }
-        },
-        "required": [
-          "entries"
         ]
       }
     },

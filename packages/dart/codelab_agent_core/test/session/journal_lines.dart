@@ -132,6 +132,43 @@ String plan(String id, String? parent, List<String> contents) => jsonEncode({
   ],
 });
 
+/// Полный снимок пункта списка задач в записи `task` (`17-16-task-list.md`
+/// §17.16.6): порядок ключей совпадает с `TaskItem.toJson`.
+Map<String, Object?> taskItem(
+  String id,
+  String subject, {
+  String? description,
+  String status = 'pending',
+  String priority = 'medium',
+  String owner = 'main',
+  List<String> blockedBy = const [],
+}) => {
+  'id': id,
+  'subject': subject,
+  'description': ?description,
+  'status': status,
+  'priority': priority,
+  'owner': owner,
+  'blockedBy': blockedBy,
+};
+
+/// Запись журнала `task`: операция над списком задач с полными снимками
+/// изменённых пунктов и удалёнными id.
+String taskRecord(
+  String id,
+  String? parent, {
+  String op = 'create',
+  String actor = 'main',
+  List<Map<String, Object?>> items = const [],
+  List<String> deleted = const [],
+}) => jsonEncode({
+  ..._common('task', id, parent),
+  'op': op,
+  'actor': actor,
+  'items': items,
+  'deleted': deleted,
+});
+
 String compaction(
   String id,
   String? parent, {

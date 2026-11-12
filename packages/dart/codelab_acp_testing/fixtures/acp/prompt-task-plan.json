@@ -1,0 +1,730 @@
+{
+  "id": "acp/prompt-task-plan",
+  "spec": [
+    "11-Agent Plan.md#creating-plans",
+    "11-Agent Plan.md#plan-entries",
+    "11-Agent Plan.md#updating-plans",
+    "15-Extensibility.md#the-_meta-field"
+  ],
+  "description": "Модель три раза вызывает task_create, затем task_update первого пункта в completed и task_list; агент присылает четыре plan, каждый со всем списком на момент операции и _meta.codelab.task (id, owner, blockedBy) у каждой entry; после task_list нового plan нет; ход завершается end_turn.",
+  "goals": [
+    "C-20",
+    "C-05"
+  ],
+  "extensions": [
+    "task"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard"
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "список задач"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "task_create",
+              "arguments": {
+                "subject": "Прочитать тесты",
+                "priority": "high"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_2",
+              "name": "task_create",
+              "arguments": {
+                "subject": "Исправить ошибку",
+                "priority": "high"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_2",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_3",
+              "name": "task_create",
+              "arguments": {
+                "subject": "Запустить тесты",
+                "priority": "medium"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_3",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_4",
+              "name": "task_update",
+              "arguments": {
+                "id": "1",
+                "status": "completed"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_4",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_5",
+              "name": "task_list",
+              "arguments": {}
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_5",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Список готов."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "пользователь просит составить список задач",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Составь список задач для исправления теста"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$any": "Create task"
+            },
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "subject": "Прочитать тесты",
+              "priority": "high"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              {
+                "content": "Прочитать тесты",
+                "priority": "high",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "1",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "note": "план целиком; TaskListChanged приходит до завершения вызова (TSK-1)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "Created task #1"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_2",
+            "title": {
+              "$any": "Create task"
+            },
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "subject": "Исправить ошибку",
+              "priority": "high"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_2",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              {
+                "content": "Прочитать тесты",
+                "priority": "high",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "1",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              },
+              {
+                "content": "Исправить ошибку",
+                "priority": "high",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "2",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "note": "план целиком; TaskListChanged приходит до завершения вызова (TSK-1)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_2",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "Created task #2"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_3",
+            "title": {
+              "$any": "Create task"
+            },
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "subject": "Запустить тесты",
+              "priority": "medium"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_3",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              {
+                "content": "Прочитать тесты",
+                "priority": "high",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "1",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              },
+              {
+                "content": "Исправить ошибку",
+                "priority": "high",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "2",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              },
+              {
+                "content": "Запустить тесты",
+                "priority": "medium",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "3",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "note": "план целиком; TaskListChanged приходит до завершения вызова (TSK-1)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_3",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "Created task #3"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_4",
+            "title": {
+              "$any": "Update task"
+            },
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "id": "1",
+              "status": "completed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_4",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              {
+                "content": "Прочитать тесты",
+                "priority": "high",
+                "status": "completed",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "1",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              },
+              {
+                "content": "Исправить ошибку",
+                "priority": "high",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "2",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              },
+              {
+                "content": "Запустить тесты",
+                "priority": "medium",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "3",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "note": "план целиком; TaskListChanged приходит до завершения вызова (TSK-1)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_4",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "Updated task #1"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_5",
+            "title": {
+              "$any": "List tasks"
+            },
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {}
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_5",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_5",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "#1 [completed] Прочитать тесты"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "note": "task_list список не меняет: кадра plan между in_progress и completed нет (TSK-5)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Список готов."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "note": "агент может назвать сессию после первого хода",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

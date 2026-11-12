@@ -38,14 +38,7 @@ void main() {
               ('exec', {'command': 'echo hi'}),
               ('ls', {'path': '.'}),
               ('search', {'pattern': 'x'}),
-              (
-                'update_plan',
-                {
-                  'entries': [
-                    {'content': 'c', 'priority': 'low', 'status': 'pending'},
-                  ],
-                },
-              ),
+              ('task_create', {'subject': 'c', 'priority': 'low'}),
               ('mcp__fake__read_only', <String, Object?>{}),
               ('mcp__fake__delete', <String, Object?>{}),
               ('mcp__fake__fetch', <String, Object?>{}),
