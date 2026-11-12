@@ -816,4 +816,27 @@ agent:
       );
     },
   );
+
+  // Задача 1.12 change `add-agent-skills`: тот же сценарий «Битый навык», что
+  // у `codelab-agent config check` (1.11), — строка и код выхода совпадают.
+  test('check --cwd: a broken skill in CODELAB_HOME/skills is the same '
+      'warning line as in codelab-agent, code 0', () async {
+    File('$home/skills/notes/SKILL.md')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        '---\nname: Notes\ndescription: D\n---\nbody sk-test-secret\n',
+      );
+
+    final (code, io) = await run(['config', 'check', '--cwd', project]);
+
+    expect(code, 0, reason: io.stderrText);
+    final lines = io.stdoutText.trimRight().split('\n');
+    expect(
+      lines,
+      contains(startsWith('warning: $home/skills/notes/SKILL.md:2:')),
+    );
+    expect(io.stdoutText, isNot(contains('sk-test-secret')));
+    expect(lines.last, 'Config: valid');
+    expect(io.stderrText, isEmpty);
+  });
 }
