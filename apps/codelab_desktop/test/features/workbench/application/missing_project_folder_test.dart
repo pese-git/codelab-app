@@ -69,10 +69,13 @@ void main() {
     });
   });
 
-  group('connect', () {
+  // Ручного Connect нет (B2.6, D13): старт агента — триггер выбора проекта.
+  // Текст — без «and connect again» (D2): повторять нечего, пользователь
+  // выбирает папку заново.
+  group('start of the agent', () {
     const message =
         'Project folder not found: /work/gone. '
-        'Choose an existing folder with Open folder… and connect again.';
+        'Choose an existing folder with Open folder….';
 
     late List<StdioAcpTransportConfig> started;
     late CodeLabTestBinding binding;
@@ -90,14 +93,14 @@ void main() {
       );
       cubit = binding.scope.resolve<CodeLabShellCubit>();
       await pumpEventQueue();
+      // Выбор проекта — триггер старта: папки нет, агент не стартует.
       await cubit.selectProject('/work/gone');
+      await pumpEventQueue();
     });
 
     test(
-      'stdio Connect stops before starting the agent and explains why',
+      'selecting the project stops before starting the agent and explains why',
       () async {
-        await cubit.connect();
-
         expect(started, isEmpty);
         expect(cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
         expect(cubit.state.connectionMessage, message);
@@ -105,18 +108,17 @@ void main() {
       },
     );
 
-    test('stdio Reconnect stops the same way', () async {
-      await cubit.reconnect();
+    test('Restart agent stops the same way', () async {
+      await cubit.restartAgent();
 
       expect(started, isEmpty);
       expect(cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
       expect(cubit.state.connectionMessage, message);
     });
 
-    test('choosing an existing folder lets Connect start the agent', () async {
-      await cubit.connect();
+    test('choosing an existing folder starts the agent', () async {
       await cubit.selectProject('/work/app');
-      await cubit.connect();
+      await pumpEventQueue();
 
       expect(started.single.cwd, '/work/app');
       expect(cubit.state.connectionMessage, isNull);
@@ -125,16 +127,19 @@ void main() {
     test(
       'WebSocket is not checked: the folder belongs to the remote agent',
       () async {
-        await cubit.connect(
+        await cubit.useProfile(
           ConnectionProfile.webSocket(
             id: 'remote',
             label: 'Remote',
             uri: Uri.parse('wss://agent.example.test/acp'),
           ),
         );
+        await cubit.retryStart();
 
         expect(cubit.state.connectionMessage, isNot(message));
-        expect(_events(binding), isNot(contains(message)));
+        // Единственная запись — от первой попытки stdio при выборе проекта;
+        // WebSocket-старт новой не добавил.
+        expect(_events(binding).where((e) => e == message), hasLength(1));
       },
     );
   });

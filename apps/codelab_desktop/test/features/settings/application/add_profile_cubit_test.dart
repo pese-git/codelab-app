@@ -95,13 +95,6 @@ final class _FailingDefaultPreferences implements ConnectionPreferences {
   @override
   Future<void> saveDefaultProfileId(String? id) async =>
       throw _LeakyException();
-
-  @override
-  Future<bool> loadConnectOnStart() => _real.loadConnectOnStart();
-
-  @override
-  Future<void> saveConnectOnStart(bool value) =>
-      _real.saveConnectOnStart(value);
 }
 
 void main() {

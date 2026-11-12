@@ -219,7 +219,7 @@ void main() {
     final list = second.sent.firstWhere(
       (m) => m is JsonRpcRequest && m.method == sessionListMethod,
     );
-    final reconnecting = h.cubit.reconnect();
+    final reconnecting = h.cubit.restartAgent();
     final request = await list as JsonRpcRequest;
     second.emitInbound(
       JsonRpcMessage.response(

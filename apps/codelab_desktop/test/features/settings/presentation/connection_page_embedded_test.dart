@@ -7,6 +7,7 @@
 // agent» подключает встроенного агента, а на новой установке «Connect» экрана
 // подключения выбирает встроенного без визита в настройки.
 
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
@@ -57,7 +58,9 @@ void main() {
       embeddedOpener: failingOpener,
       settingsPages: const SettingsPages(available: {SettingsPage.connection}),
     );
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     return binding;
   }
@@ -67,15 +70,19 @@ void main() {
     await closeCodeLabRootScope();
   }
 
-  testWidgets('Connect in the "Embedded agent" row connects the embedded '
-      'agent', (tester) async {
+  // Ручного Connect нет (D18): встроенный агент — профиль окна по умолчанию
+  // («Selected»), «Restart agent» страницы «Connection» стартует его.
+  testWidgets('Restart agent of the Connection page starts the selected '
+      'embedded agent', (tester) async {
     final binding = await pump(tester);
     await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.byKey(const ValueKey('connection-profile-connect-embedded')),
+    expect(
+      find.byKey(const ValueKey('connection-profile-use-embedded')),
+      findsNothing,
     );
+    await tester.tap(find.byKey(const ValueKey('connection-restart-agent')));
     await tester.pumpAndSettle();
 
     final shell = binding.scope.resolve<CodeLabShellCubit>();
@@ -88,22 +95,23 @@ void main() {
     await tearDownApp(tester);
   });
 
-  testWidgets('on a new install Connect of the connection screen connects '
-      'the embedded agent', (tester) async {
+  testWidgets('on a new install New session of the start screen starts the '
+      'embedded agent', (tester) async {
     final binding = await pump(tester);
     final shell = binding.scope.resolve<CodeLabShellCubit>();
     expect(shell.state.profileLabel, 'Embedded agent');
 
-    await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
+    await tester.tap(find.byKey(const ValueKey('start-new-session')));
     await tester.pumpAndSettle();
 
     expect(openerCalls, 1);
     await tearDownApp(tester);
   });
 
-  testWidgets('with a saved default profile Connect of the connection '
-      'screen connects that profile, not the embedded agent', (tester) async {
+  testWidgets('with a saved default profile New session of the start screen '
+      'starts that profile, not the embedded agent', (tester) async {
     final started = <String>[];
+    final agent = FakeAcpTransport();
     final binding = CodeLabTestBinding(
       project: '/workspace',
       stdioDefault: false,
@@ -118,26 +126,44 @@ void main() {
       ]),
       stdioTransportFactory: (config) {
         started.add(config.command);
-        return FakeAcpTransport();
+        return agent;
       },
     );
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
-    expect(find.text('Dev'), findsWidgets);
+    // Профиль виден в состоянии фасада; стартовый экран его не называет (D18).
+    expect(
+      binding.scope.resolve<CodeLabShellCubit>().state.profileLabel,
+      'Dev',
+    );
 
-    await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
+    await tester.tap(find.byKey(const ValueKey('start-new-session')));
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
     await tester.pumpAndSettle();
 
     expect(started, ['codelab-agent']);
+    // «New session» после старта шлёт `session/new`; ответ снимает таймер
+    // запроса kit, иначе он остался бы после теста.
+    final request = agent.sentMessages.whereType<JsonRpcRequest>().firstWhere(
+      (r) => r.method == sessionNewMethod,
+    );
+    agent.emitInbound(
+      JsonRpcMessage.response(id: request.id, result: {'sessionId': 's1'}),
+    );
+    await tester.pump(const Duration(seconds: 3));
     await tearDownApp(tester);
   });
 
-  testWidgets('"Configure connection" on the connection screen opens the '
+  testWidgets('"Configure connection" on the failure screen opens the '
       'Connection settings page', (tester) async {
     await pump(tester);
+    // Экран подключения теперь — экран сбоя старта (D18): старт упал.
+    await tester.tap(find.byKey(const ValueKey('start-new-session')));
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.descendant(

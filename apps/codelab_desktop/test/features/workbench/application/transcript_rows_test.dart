@@ -134,9 +134,10 @@ void main() {
     expect(find.text('Send a message to start.'), findsOneWidget);
   });
 
-  testWidgets('while disconnected the empty session pane offers Connect', (
-    tester,
-  ) async {
+  // Ручного Connect нет (D18): отключённая пустая панель сессии показывает
+  // стартовый экран, а экран подключения остаётся только для сбоя старта.
+  testWidgets('while disconnected the empty session pane shows the start '
+      'screen', (tester) async {
     final h = ShellHarness();
 
     await tester.pumpWidget(
@@ -145,7 +146,8 @@ void main() {
       ),
     );
 
-    expect(find.byType(CodeLabConnectionScreen), findsOneWidget);
+    expect(find.byType(CodeLabStartScreen), findsOneWidget);
+    expect(find.byType(CodeLabConnectionScreen), findsNothing);
   });
 
   testWidgets('the header shows the turn state chip', (tester) async {

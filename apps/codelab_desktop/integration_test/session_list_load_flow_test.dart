@@ -25,8 +25,12 @@ CodeLabShellCubit _cubit(WidgetTester tester) =>
 
 /// Выбирает профиль агента на странице «Connection» и ждёт подключения
 /// (как в stdio_connect_flow_test.dart).
-Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
-  await launch.connect(tester, _cubit(tester));
+Future<void> _connect(
+  WidgetTester tester,
+  E2eLaunch launch, {
+  String? project,
+}) async {
+  await launch.connect(tester, _cubit(tester), project: project);
   await _waitFor(
     tester,
     () =>
@@ -38,9 +42,10 @@ Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
 /// Подключается по WebSocket к уже запущенному [agent] строкой его профиля.
 Future<void> _connectWebSocket(
   WidgetTester tester,
-  E2eWebSocketAgent agent,
-) async {
-  await agent.connect(tester, _cubit(tester));
+  E2eWebSocketAgent agent, {
+  String? project,
+}) async {
+  await agent.connect(tester, _cubit(tester), project: project);
   await _waitFor(
     tester,
     () =>
@@ -109,16 +114,14 @@ void main() {
 
       await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
-      await _cubit(tester).selectProject(project.path);
-      await tester.pumpAndSettle();
-      await _connect(tester, launch);
+      await _connect(tester, launch, project: project.path);
 
       final first = await _sessionWithTurn(tester, 'first task');
       final second = await _sessionWithTurn(tester, 'second task');
       expect(_cubit(tester).state.activeSessionId, second);
 
       // Reconnect: новый процесс агента, активная сессия загружается заново.
-      await _cubit(tester).reconnect();
+      await _cubit(tester).restartAgent();
       await _waitFor(
         tester,
         () =>
@@ -201,9 +204,7 @@ void main() {
 
       await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
-      await _cubit(tester).selectProject(project.path);
-      await tester.pumpAndSettle();
-      await _connectWebSocket(tester, agent);
+      await _connectWebSocket(tester, agent, project: project.path);
 
       await tester.tap(find.byKey(const ValueKey('new-session-button')));
       await tester.pumpAndSettle();
@@ -221,7 +222,7 @@ void main() {
       await _waitFor(tester, () => _cubit(tester).state.isPromptSubmitting);
       expect(_transcript(tester), isNot(contains('echo: long task')));
 
-      await _cubit(tester).reconnect();
+      await _cubit(tester).restartAgent();
       await _waitFor(
         tester,
         () =>

@@ -62,19 +62,27 @@ final class _Resolver implements TransportResolver {
 
 /// Команды подключения, которые запоминают вызовы.
 final class _Commands implements ConnectionCommands {
+  /// Профили, выбранные через «Use».
   final connected = <ConnectionProfile>[];
   var reconnects = 0;
+
+  /// Корень процесса для «Restart agent» (D18); `null` — перезапускать некуда.
+  String? restartDir = '/work';
+
+  /// Профиль работающего агента («Current»).
+  ConnectionProfile? running;
 
   /// Что делает «Restart agent» в workspace (по умолчанию ничего).
   Future<void> Function()? reconnectHook;
 
-  /// Цель перезапуска: профиль последнего принятого подключения (MEDIUM-A).
+  /// Выбранный профиль («Selected», D18).
   ConnectionProfile? target;
   final _targets = StreamController<ConnectionProfile?>.broadcast();
 
   /// Окно приняло подключение к [profile].
   void accept(ConnectionProfile profile) {
     target = profile;
+    running = profile;
     _targets.add(profile);
   }
 
@@ -82,14 +90,19 @@ final class _Commands implements ConnectionCommands {
   ConnectionProfile? get restartTarget => target;
 
   @override
+  ConnectionProfile? get runningProfile => running;
+
+  @override
+  String? get restartDirectory => restartDir;
+
+  @override
   Stream<ConnectionProfile?> get restartTargets => _targets.stream;
 
   @override
-  Future<void> connect(ConnectionProfile profile) async =>
-      connected.add(profile);
+  Future<void> use(ConnectionProfile profile) async => connected.add(profile);
 
   @override
-  Future<void> reconnect() async {
+  Future<void> restart() async {
     reconnects++;
     await reconnectHook?.call();
   }
@@ -118,13 +131,6 @@ final class _GatedPreferences implements ConnectionPreferences {
   @override
   Future<void> saveDefaultProfileId(String? id) =>
       _inner.saveDefaultProfileId(id);
-
-  @override
-  Future<bool> loadConnectOnStart() => _inner.loadConnectOnStart();
-
-  @override
-  Future<void> saveConnectOnStart(bool value) =>
-      _inner.saveConnectOnStart(value);
 }
 
 const _titles = '''
@@ -367,13 +373,13 @@ void main() {
       expect(prefs.containsKey(_defaultKey), isFalse);
     });
 
-    test('Connect passes the profile to the connection and does not touch '
+    test('Use passes the profile to the connection and does not touch '
         'the default (D5)', () async {
       await profilesFile.writeAsString(_file);
       final cubit = build();
       await cubit.reload();
 
-      await cubit.connect('dev');
+      await cubit.use('dev');
 
       expect(commands.connected.single.id, 'dev');
       expect(
@@ -939,17 +945,22 @@ void main() {
   });
 
   group('Behavior', () {
-    test('Connect on start is off by default and persists a change', () async {
+    // «Connect on start» удалён (D19): сохранённый ключ `true` больше ничего
+    // не значит ни для страницы, ни для запуска.
+    test('a saved connect_on_start=true changes nothing on the page', () async {
+      SharedPreferences.setMockInitialValues({_connectOnStartKey: true});
       await profilesFile.writeAsString(_file);
       final cubit = build();
 
-      expect((await ready(cubit)).connectOnStart, isFalse);
-      await cubit.setConnectOnStart(true);
+      final state = await ready(cubit);
 
-      expect((cubit.state as ConnectionSettingsReady).connectOnStart, isTrue);
+      expect(state.rows, isNotEmpty);
+      expect(commands.connected, isEmpty);
+      expect(commands.reconnects, 0);
       expect(
         (await SharedPreferences.getInstance()).getBool(_connectOnStartKey),
         isTrue,
+        reason: 'the key is neither read nor rewritten',
       );
     });
 
@@ -980,7 +991,9 @@ void main() {
       expect(commands.reconnects, 0);
     });
 
-    test('Restart agent is unavailable while connecting', () async {
+    // Q25: «Restart agent» доступна и во время старта — она вытесняет
+    // попытку; прежний тест «недоступна во время подключения» заменён.
+    test('Restart agent stays available while connecting (Q25)', () async {
       await profilesFile.writeAsString(_file);
       final cubit = build();
       await cubit.reload();
@@ -995,12 +1008,50 @@ void main() {
 
       final state = cubit.state as ConnectionSettingsReady;
       expect(state.restartTarget?.id, 'dev');
-      expect(state.canRestart, isFalse);
+      expect(state.canRestart, isTrue);
       await cubit.restartAgent();
-      expect(commands.reconnects, 0);
+      expect(commands.reconnects, 1);
 
       open.complete();
       await connecting;
+    });
+
+    test('Restart agent is unavailable without a root: Starts when you open '
+        'a project (D18)', () async {
+      await profilesFile.writeAsString(_file);
+      commands.restartDir = null;
+      commands.accept(embeddedConnectionProfile);
+      final cubit = build();
+      await cubit.reload();
+
+      final state = cubit.state as ConnectionSettingsReady;
+      expect(state.canRestart, isFalse);
+      expect(state.restartHint, 'Starts when you open a project.');
+      await cubit.restartAgent();
+      expect(commands.reconnects, 0);
+    });
+
+    test('Restart <title> to use it when the selected profile is not the '
+        'running one (D18)', () async {
+      await profilesFile.writeAsString(_file);
+      final cubit = build();
+      await cubit.reload();
+      await connectedTo(embeddedConnectionProfile);
+      final dev = (await JsonFileProfileStore(profilesFile.path).load()).first;
+      commands.target = dev;
+      commands._targets.add(dev);
+      await pumpEventQueue();
+
+      final state = cubit.state as ConnectionSettingsReady;
+      expect(state.restartDescription, startsWith('Restart '));
+      expect(state.restartDescription, endsWith(' to use it.'));
+      expect(state.rows.firstWhere((r) => r.id == 'dev').isSelected, isTrue);
+      expect(
+        state.rows.firstWhere((r) => r.id == 'embedded').isCurrent,
+        isTrue,
+      );
+      // «Remove» недоступна и у «Selected»: проверка до `ProfileStore.remove`.
+      expect(state.rows.firstWhere((r) => r.id == 'dev').canRemove, isFalse);
     });
   });
 
@@ -1057,23 +1108,6 @@ void main() {
 
   group('Behavior in Unreadable (D4)', () {
     const broken = '{"version": 2, "profiles": []}';
-
-    test('Connect on start is shown and persists while the file is '
-        'unreadable', () async {
-      await profilesFile.writeAsString(broken);
-      final cubit = build();
-      await cubit.reload();
-
-      await cubit.setConnectOnStart(true);
-
-      final state = cubit.state as ConnectionSettingsUnreadable;
-      expect(state.connectOnStart, isTrue);
-      expect(
-        (await SharedPreferences.getInstance()).getBool(_connectOnStartKey),
-        isTrue,
-      );
-      expect(await profilesFile.readAsString(), broken);
-    });
 
     test('Restart agent works for the current profile of the window', () async {
       await profilesFile.writeAsString(broken);
@@ -1195,11 +1229,8 @@ void main() {
         // Встроенный агент «Current» в `Connected` — без «Connect» (spec
         // app-settings: правило касается и его), у остальных он есть.
         final live = cubit.state as ConnectionSettingsReady;
-        expect(
-          live.rows.firstWhere((r) => r.id == 'embedded').canConnect,
-          isFalse,
-        );
-        expect(live.rows.firstWhere((r) => r.id == 'dev').canConnect, isTrue);
+        expect(live.rows.firstWhere((r) => r.id == 'embedded').canUse, isFalse);
+        expect(live.rows.firstWhere((r) => r.id == 'dev').canUse, isTrue);
         resolver.failIds.add('dev');
         final dev = (await JsonFileProfileStore(
           profilesFile.path,
@@ -1213,8 +1244,13 @@ void main() {
         ConnectionProfileRow row(String id) =>
             state.rows.firstWhere((r) => r.id == id);
         expect(state.rows.where((r) => r.isCurrent), isEmpty);
-        // Current нет ни у кого: «Connect» есть во всех строках.
-        expect(state.rows.every((r) => r.canConnect), isTrue);
+        // Current нет ни у кого; «Use» есть во всех строках, кроме выбранной
+        // встроенной (у «Selected» вместо «Use» метка, D18).
+        expect(
+          state.rows.where((r) => r.id != 'embedded').every((r) => r.canUse),
+          isTrue,
+        );
+        expect(row('embedded').canUse, isFalse);
         expect(row('embedded').status, isNull);
         expect(row('dev').status, ConnectionRowStatus.failed);
         expect(state.currentProfileId, isNull);
@@ -1265,8 +1301,11 @@ void main() {
         ConnectionRowStatus.connecting,
       );
       expect(state.rows.where((r) => r.isCurrent), isEmpty);
-      // `Connecting…`: «Connect» во всех строках, и у строки попытки тоже.
-      expect(state.rows.every((r) => r.canConnect), isTrue);
+      // `Connecting…`: «Use» во всех строках, кроме выбранной (dev, D18).
+      expect(
+        state.rows.where((r) => r.id != 'dev').every((r) => r.canUse),
+        isTrue,
+      );
 
       open.complete();
       await connecting;
@@ -1292,7 +1331,7 @@ void main() {
 
       // `_Commands.connect` не трогает workspace — как отказ `ConnectionCubit`
       // до обращения к нему (D5): состояние окна не меняется.
-      await cubit.connect('devbox');
+      await cubit.use('devbox');
       await pumpEventQueue();
 
       final state = cubit.state as ConnectionSettingsReady;
@@ -1300,8 +1339,8 @@ void main() {
           state.rows.firstWhere((r) => r.id == id);
       expect(commands.connected.map((p) => p.id), ['devbox']);
       expect(row('dev').isCurrent, isTrue);
-      expect(row('dev').canConnect, isFalse);
-      expect(row('devbox').canConnect, isTrue);
+      expect(row('dev').canUse, isFalse);
+      expect(row('devbox').canUse, isTrue);
     });
 
     test('Connect is hidden while Reconnecting (the connection is accepted) '
@@ -1317,7 +1356,7 @@ void main() {
       ConnectionProfileRow row(String id) =>
           state.rows.firstWhere((r) => r.id == id);
       expect(row('dev').isCurrent, isTrue);
-      expect(row('dev').canConnect, isFalse);
+      expect(row('dev').canUse, isFalse);
 
       // Переподключение держим на открытии транспорта: `Reconnecting`.
       final open = Completer<void>();
@@ -1331,10 +1370,11 @@ void main() {
       state = cubit.state as ConnectionSettingsReady;
       expect(workspace.current.connection, isA<Reconnecting>());
       expect(row('dev').isCurrent, isTrue);
-      expect(row('dev').canConnect, isFalse);
-      expect(row('plain').canConnect, isTrue);
+      expect(row('dev').canUse, isFalse);
+      expect(row('plain').canUse, isTrue);
 
-      // Неудачное переподключение: «Current» нет, «Connect» возвращается.
+      // Неудачное переподключение: «Current» нет; профиль остаётся
+      // «Selected», поэтому «Use» не возвращается (D18).
       resolver.failIds.add('dev');
       open.complete();
       await reconnecting;
@@ -1343,7 +1383,8 @@ void main() {
       state = cubit.state as ConnectionSettingsReady;
       expect(row('dev').isCurrent, isFalse);
       expect(row('dev').status, ConnectionRowStatus.failed);
-      expect(row('dev').canConnect, isTrue);
+      expect(row('dev').isSelected, isTrue);
+      expect(row('dev').canUse, isFalse);
     });
 
     test('a new accepted connection moves Current', () async {
@@ -1359,20 +1400,6 @@ void main() {
       await pumpEventQueue();
 
       expect((cubit.state as ConnectionSettingsReady).currentProfileId, 'dev');
-    });
-  });
-
-  group('re-reading after a write (nit)', () {
-    test('setConnectOnStart re-reads, so a late reload cannot bring the old '
-        'value back', () async {
-      await profilesFile.writeAsString(_file);
-      final cubit = build();
-      await cubit.reload();
-
-      await cubit.setConnectOnStart(true);
-      await cubit.reload();
-
-      expect((cubit.state as ConnectionSettingsReady).connectOnStart, isTrue);
     });
   });
 

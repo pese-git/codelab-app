@@ -21,6 +21,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 
 import '../../../support/test_app_scope.dart';
+import '../../../support/start_agent.dart';
 
 void main() {
   final pendingBar = find.byKey(const ValueKey('settings-pending-approval'));
@@ -111,10 +112,12 @@ void main() {
       stdioTransportFactory: (_) => agent,
       settingsPages: const SettingsPages(available: {SettingsPage.connection}),
     );
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     cubit = binding.scope.resolve<CodeLabShellCubit>();
-    await tester.runAsync(() => cubit.connect());
+    await tester.runAsync(() => cubit.startWith());
     await tester.pump();
   }
 
@@ -277,10 +280,12 @@ void main() {
       stdioTransportFactory: (_) => starts++ == 0 ? old : fresh,
       settingsPages: const SettingsPages(available: {SettingsPage.connection}),
     );
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     cubit = binding.scope.resolve<CodeLabShellCubit>();
-    await tester.runAsync(() => cubit.connect());
+    await tester.runAsync(() => cubit.startWith());
     await tester.pump();
     await createSession(tester, 'session-1');
     await startTurn(tester);
@@ -288,7 +293,10 @@ void main() {
     await settle(tester);
     expect(cubit.sessionIdsWithPendingApproval, ['session-1']);
 
-    await tester.runAsync(() => cubit.reconnect());
+    // Ход идёт и ждёт одобрения: перезапуск спрашивает подтверждение (D22).
+    await tester.runAsync(() => cubit.restartAgent());
+    expect(cubit.state.pendingRestart, isNotNull);
+    await tester.runAsync(() => cubit.confirmRestart());
     await settle(tester);
     await openSettings(tester);
 

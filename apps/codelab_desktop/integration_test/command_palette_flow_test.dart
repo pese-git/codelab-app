@@ -31,8 +31,12 @@ CodeLabShellCubit _cubit(WidgetTester tester) =>
 
 /// Выбирает профиль агента на странице «Connection» и ждёт подключения
 /// (как в stdio_connect_flow_test.dart).
-Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
-  await launch.connect(tester, _cubit(tester));
+Future<void> _connect(
+  WidgetTester tester,
+  E2eLaunch launch, {
+  String? project,
+}) async {
+  await launch.connect(tester, _cubit(tester), project: project);
   await _waitFor(
     tester,
     () =>
@@ -153,9 +157,7 @@ void main() {
 
       await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
-      await _cubit(tester).selectProject(project.path);
-      await tester.pumpAndSettle();
-      await _connect(tester, launch);
+      await _connect(tester, launch, project: project.path);
       await tester.tap(find.byKey(const ValueKey('new-session-button')));
       await tester.pumpAndSettle();
       await _waitFor(
@@ -216,9 +218,7 @@ void main() {
 
       await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
-      await _cubit(tester).selectProject(project.path);
-      await tester.pumpAndSettle();
-      await _connect(tester, launch);
+      await _connect(tester, launch, project: project.path);
       await tester.tap(find.byKey(const ValueKey('new-session-button')));
       await tester.pumpAndSettle();
       await _waitFor(

@@ -19,6 +19,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 
 import '../../../support/test_app_scope.dart';
+import '../../../support/start_agent.dart';
 
 void main() {
   void setWindow(WidgetTester tester, Size size) {
@@ -32,7 +33,9 @@ void main() {
     WidgetTester tester,
     CodeLabTestBinding binding,
   ) async {
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     return binding.scope.resolve<CodeLabShellCubit>();
   }
@@ -171,7 +174,7 @@ void main() {
       stdioTransportFactory: (_) => agent,
     );
     final cubit = await pumpApp(tester, binding);
-    await tester.runAsync(() => cubit.connect());
+    await tester.runAsync(() => cubit.startWith());
     await tester.pump();
     agent.drainSentMessages();
 
@@ -330,7 +333,7 @@ void main() {
         settingsPages: withConnection,
       );
       final cubit = await pumpApp(tester, binding);
-      await tester.runAsync(() => cubit.connect());
+      await tester.runAsync(() => cubit.startWith());
       await tester.pump();
       agent.drainSentMessages();
       await createSession(tester, cubit, agent, 'session-B');
@@ -463,7 +466,7 @@ void main() {
         settingsPages: withConnection,
       );
       final cubit = await pumpApp(tester, binding);
-      await tester.runAsync(() => cubit.connect());
+      await tester.runAsync(() => cubit.startWith());
       await tester.pump();
       agent.drainSentMessages();
       await createSession(tester, cubit, agent, 'session-1');
@@ -596,7 +599,7 @@ void main() {
         settingsPages: withConnection,
       );
       final cubit = await pumpApp(tester, binding);
-      await tester.runAsync(() => cubit.connect());
+      await tester.runAsync(() => cubit.startWith());
       await tester.pump();
       return (cubit, agent);
     }
@@ -699,7 +702,8 @@ void main() {
       expect(settingsNav, findsOneWidget);
       // Число Tab не подгоняется под раскладку страницы: Tab нажимается с
       // верхней границей, пока фокус не окажется на переключателе
-      // «Connect on start» (Space и Enter на нём безвредны). На каждом шаге
+      // профиля по умолчанию (Space и Enter на нём безвредны;
+      // «Connect on start» удалён, D19). На каждом шаге
       // проверяется, что фокус не ушёл в скрытое рабочее место (H1
       // итерации 1).
       var onTarget = false;
@@ -715,7 +719,9 @@ void main() {
         );
         context.visitAncestorElements((element) {
           if (element.widget.key ==
-              const ValueKey('connection-connect-on-start')) {
+              const ValueKey(
+                'connection-profile-default-codelab_desktop.stdio',
+              )) {
             onTarget = true;
           }
           return !onTarget;
@@ -724,7 +730,7 @@ void main() {
       expect(
         onTarget,
         isTrue,
-        reason: 'Tab never reached the Connect on start toggle',
+        reason: 'Tab never reached the default profile radio',
       );
       await tester.sendKeyEvent(LogicalKeyboardKey.space);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -734,6 +740,101 @@ void main() {
       expect(settingsNav, findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await frames(tester);
+      await tearDownApp(tester);
+    });
+
+    // Q23 (B2.5): ход в папке `/workspace` остаётся виден в своей раскрытой
+    // группе со статусом после перехода в другой проект.
+    testWidgets('a running session of the previous folder stays visible in '
+        'its expanded group after the move to another project', (tester) async {
+      final (cubit, agent) = await connected(tester);
+      await createSession(tester, cubit, agent, 'session-1');
+      await startTurn(tester, cubit);
+      await tester.runAsync(() => cubit.selectProject('/workspace'));
+      final title = cubit.state.sessions.single.title;
+
+      await tester.runAsync(() => cubit.selectProject('/other'));
+      await settle(tester);
+      await tester.pump();
+
+      expect(
+        find.descendant(
+          of: find.byType(CodeLabSessionSidebar),
+          matching: find.text(title),
+        ),
+        findsWidgets,
+      );
+      expect(cubit.state.sessionFolders['session-1'], '/workspace');
+    });
+
+    // Q24: пункт палитры /reconnect для локального профиля называется
+    // «Restart agent» и во время хода открывает диалог D22.
+    testWidgets('/reconnect in the palette is Restart agent for a local '
+        'profile and shows the D22 dialog during a turn', (tester) async {
+      final (cubit, agent) = await connected(tester);
+      await createSession(tester, cubit, agent, 'session-1');
+      await startTurn(tester, cubit);
+
+      cubit.openCommandPalette();
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Restart agent'), findsWidgets);
+      expect(find.text('Reconnect'), findsNothing);
+
+      cubit.selectCommand(
+        cubit.state.paletteActions.firstWhere((a) => a.id == 'reconnect'),
+      );
+      await settle(tester);
+      await tester.pump();
+
+      expect(cubit.state.pendingRestart, isNotNull);
+      expect(
+        find.byKey(const ValueKey('restart-agent-dialog')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('restart-agent-cancel')));
+      await tester.pump(const Duration(seconds: 1));
+      await tearDownApp(tester);
+    });
+
+    // B2.5, D22: диалог «Restart agent» рисуется по состоянию Cubit-а и над
+    // рабочим местом, и над страницей настроек; «Cancel» ничего не меняет.
+    testWidgets('the Restart agent dialog is drawn by the Cubit state over '
+        'the workbench and over settings; Cancel changes nothing', (
+      tester,
+    ) async {
+      final (cubit, agent) = await connected(tester);
+      await createSession(tester, cubit, agent, 'session-1');
+      await startTurn(tester, cubit);
+
+      await tester.runAsync(() => cubit.restartAgent());
+      await settle(tester);
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('restart-agent-dialog')),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('This interrupts 1 running session'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('restart-agent-cancel')));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const ValueKey('restart-agent-dialog')), findsNothing);
+      expect(cubit.state.connectionStatus, CodeLabConnectionStatus.connected);
+
+      await pressCtrl(tester, LogicalKeyboardKey.comma);
+      expect(settingsNav, findsOneWidget);
+      await tester.runAsync(() => cubit.restartAgent());
+      await settle(tester);
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('restart-agent-dialog')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('restart-agent-cancel')));
+      await tester.pump(const Duration(seconds: 1));
       await tearDownApp(tester);
     });
 
@@ -871,7 +972,7 @@ void main() {
             .resolve<CodeLabShellParts>()
             .settings
             .projectRestored;
-        final connecting = cubit.connect();
+        final connecting = cubit.startWith();
         final request = await listed as JsonRpcRequest;
         agent.emitInbound(
           JsonRpcMessage.response(

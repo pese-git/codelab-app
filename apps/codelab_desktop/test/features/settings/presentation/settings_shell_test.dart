@@ -398,7 +398,6 @@ void main() {
         'stdio',
         'websocket',
         'token',
-        'connect on start',
         'restart',
       ]) {
         expect(SettingsSearchIndex.search(visible, word), [

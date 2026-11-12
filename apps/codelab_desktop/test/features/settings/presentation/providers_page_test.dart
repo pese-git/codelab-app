@@ -85,7 +85,9 @@ void main() {
         return session;
       },
     );
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
     await tester.pumpAndSettle();
@@ -425,12 +427,15 @@ void main() {
       expect(_key('provider-wizard'), findsNothing);
       expect(store.snapshots, greaterThan(before));
       expect(_key('providers-banner'), findsOneWidget);
-      // Агент в этом тесте не подключён: баннер предлагает «Connect» (D9).
+      // Агент в этом тесте не запущен и сбоя старта не было: баннер говорит,
+      // что агент возьмёт провайдера при следующем старте, и без кнопки
+      // (Q22, B2.8). «Retry» появляется только после сбоя старта.
       expect(
-        find.text('Saved. Connect to start the agent with the new provider.'),
+        find.text('Saved. The agent uses it the next time it starts.'),
         findsOneWidget,
       );
-      expect(_key('providers-banner-connect'), findsOneWidget);
+      expect(_key('providers-banner-connect'), findsNothing);
+      expect(_key('providers-banner-retry'), findsNothing);
       expect(_key('providers-row-llm-example'), findsOneWidget);
       await tearDownApp(tester);
     });

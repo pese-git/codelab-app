@@ -877,4 +877,45 @@ void main() {
       expect(turnStateOf(null), isNull);
     });
   });
+
+  // Q23 (require-project-folder): один агент обслуживает сессии разных
+  // папок, поэтому открытые сессии раскладываются по группам с тем же путём.
+  group('sidebarProjectsOf (Q23)', () {
+    CodeLabSessionListItem item(String id, String cwd) =>
+        CodeLabSessionListItem(
+          id: id,
+          title: id,
+          status: CodeLabSessionStatus.running,
+          subtitle: cwd,
+        );
+
+    test('a session of /work/a stays in the group a after the move to '
+        '/work/b; a session without a group is under the selected project', () {
+      final groups = sidebarProjectsOf(
+        selectedProjectPath: '/work/b',
+        sessionFolders: const {
+          'sa': '/work/a',
+          'sb': '/work/b',
+          'sx': '/elsewhere',
+        },
+        sessions: [
+          item('sa', '/work/a'),
+          item('sb', '/work/b'),
+          item('sx', '/elsewhere'),
+        ],
+        recentProjects: const [
+          CodeLabRecentProject(path: '/work/b'),
+          CodeLabRecentProject(path: '/work/a'),
+        ],
+      );
+
+      final selected = groups.first;
+      expect(selected.path, '/work/b');
+      expect([for (final s in selected.sessions) s.id], ['sb', 'sx']);
+      final other = groups.singleWhere((g) => g.path == '/work/a');
+      expect([for (final s in other.sessions) s.id], ['sa']);
+      // Идущая сессия раскрывает свою группу (Q23).
+      expect(other.expanded, isTrue);
+    });
+  });
 }

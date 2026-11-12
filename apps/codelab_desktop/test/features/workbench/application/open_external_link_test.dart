@@ -20,6 +20,7 @@ import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart'
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/recording_logger.dart';
+import '../../../support/start_agent.dart';
 
 final class _NoFolderPicker implements ProjectFolderPicker {
   @override
@@ -286,7 +287,7 @@ void main() {
   group('showImage', () {
     Future<void> sessionReady() async {
       await cubit.selectProject('/workspace');
-      await cubit.connect();
+      await cubit.startWith();
       final sent = agent.sent.first;
       final create = cubit.createSession();
       final request = await sent as dynamic;

@@ -14,6 +14,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'shell_cubit_characterization/harness.dart';
+import '../../../support/start_agent.dart';
 
 void main() {
   setUp(setUpCharacterization);
@@ -29,7 +30,7 @@ void main() {
         },
       );
 
-      await h.cubit.connect(
+      await h.cubit.startWith(
         const ConnectionProfile.stdio(
           id: 'quoted',
           label: 'Quoted',

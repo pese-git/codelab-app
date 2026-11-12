@@ -4,9 +4,11 @@
 // D1, D2, D3).
 //
 // Тесты идут через настоящий граф cherrypick (`CodeLabTestBinding`), поэтому
-// не зависят от конструкторов Cubit-ов. Подключение по кнопке Connect —
-// предмет итерации A: в итерации B кнопки нет, и тест подключения без
-// проекта переписывается (tasks B2.6).
+// не зависят от конструкторов Cubit-ов. Ручного Connect больше нет (задача
+// B2.6, D13): прежние проверки кнопки переписаны на триггеры старта агента с
+// теми же ожиданиями — без проекта агент не стартует ни для одного типа
+// профиля, папка читается один раз на намерение, действия во время
+// восстановления проекта ждут его.
 
 import 'dart:async';
 import 'dart:convert';
@@ -85,7 +87,7 @@ void main() {
     });
   });
 
-  group('connect without a project (A1.2, D2)', () {
+  group('triggers without a project (A1.2, D2, D13)', () {
     late List<StdioAcpTransportConfig> stdioStarted;
     var webSocketOpened = 0;
     var embeddedOpened = 0;
@@ -122,8 +124,10 @@ void main() {
         binding.scope.resolve<ClientWorkspace>().current.projectDirectory,
         isNull,
       );
-      expect(cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
-      expect(_events(binding), contains(_noProject));
+      expect(
+        cubit.state.connectionStatus,
+        CodeLabConnectionStatus.disconnected,
+      );
     }
 
     for (final (name, profile) in [
@@ -132,19 +136,43 @@ void main() {
       ('stdio without the project folder', _stdioAnywhere),
       ('WebSocket', _webSocket),
     ]) {
-      test('$name: connect() starts nothing and explains why', () async {
-        await cubit.connect(profile);
+      test('$name: the launch trigger and Retry start nothing', () async {
+        await cubit.useProfile(profile);
+
+        await cubit.startOnLaunch();
+        await cubit.retryStart();
 
         expectNothingStarted();
       });
 
-      test('$name: reconnect() starts nothing and explains why', () async {
-        // Отказанный `connect` делает профиль профилем окна, на нём и
-        // работает `reconnect`.
-        await cubit.connect(profile);
-        await cubit.reconnect();
+      test('$name: New session asks for a folder and starts nothing', () async {
+        await cubit.useProfile(profile);
+
+        await cubit.createSession();
 
         expectNothingStarted();
+        expect(
+          _events(binding),
+          contains('Open a project to start a session: choose a folder.'),
+        );
+      });
+
+      test('$name: Restart agent has no root and starts nothing', () async {
+        await cubit.useProfile(profile);
+
+        await cubit.restartAgent();
+
+        expectNothingStarted();
+        // Отказ виден в журнале событием без пути (spec «Ожидание
+        // восстановления», D20: прежнее утверждение возвращено).
+        final rejected = binding.scope
+            .resolve<LogBuffer>()
+            .entries
+            .value
+            .singleWhere((e) => e['event'] == 'connection.connect_rejected');
+        expect(rejected['reason'], 'no_project');
+        expect(rejected['profile_id'], profile.id);
+        expect(rejected.values.join(), isNot(contains('/work')));
       });
     }
   });
@@ -167,15 +195,16 @@ void main() {
       );
       final cubit = binding.scope.resolve<CodeLabShellCubit>();
       await binding.scope.resolve<CodeLabShellParts>().settings.projectRestored;
+      await cubit.useProfile(_stdioInProject);
+      // Выбор проекта — триггер старта (D13): проверка папки `/work/a` висит.
       await cubit.selectProject('/work/a');
-
-      final connecting = cubit.connect(_stdioInProject);
       await pumpEventQueue();
       expect(checks, 1, reason: 'the disk check of /work/a is in flight');
 
+      // Второй выбор проекта присоединяется к идущей попытке (single-flight).
       await cubit.selectProject('/work/b');
       check.complete(true);
-      await connecting;
+      await pumpEventQueue();
 
       expect(started.single.cwd, '/work/a');
     });
@@ -227,35 +256,35 @@ void main() {
       );
     }
 
-    test('Connect during the restore is connecting at once, then goes on '
-        'with the restored folder', () async {
+    test('the launch trigger during the restore waits for it, then starts in '
+        'the restored folder', () async {
       final r = restoring();
+      await r.cubit.useProfile(_stdioInProject);
+
+      final launching = r.cubit.startOnLaunch();
       await pumpEventQueue();
 
-      final connecting = r.cubit.connect(_stdioInProject);
-      await pumpEventQueue();
-
+      expect(r.started, isEmpty);
       expect(
         r.cubit.state.connectionStatus,
-        CodeLabConnectionStatus.connecting,
+        CodeLabConnectionStatus.disconnected,
       );
-      expect(r.started, isEmpty);
 
       r.gate.complete(true);
-      await connecting;
+      await launching;
 
       expect(r.started.single.cwd, '/work/app');
       expect(_events(r.binding), isNot(contains(_noProject)));
     });
 
     test(
-      'a second press during the wait starts no second connection',
+      'a second trigger during the wait starts no second connection',
       () async {
         final r = restoring();
-        await pumpEventQueue();
+        await r.cubit.useProfile(_stdioInProject);
 
-        final first = r.cubit.connect(_stdioInProject);
-        final second = r.cubit.connect(_stdioInProject);
+        final first = r.cubit.startOnLaunch();
+        final second = r.cubit.startOnLaunch();
         await pumpEventQueue();
         r.gate.complete(true);
         await Future.wait([first, second]);
@@ -264,32 +293,28 @@ void main() {
       },
     );
 
-    testWidgets('a restore that hangs past the timeout rejects Connect '
-        'before the workspace, with an event without a path', (tester) async {
+    testWidgets('a restore that hangs past the timeout: the launch trigger '
+        'starts nothing and the status is not failed', (tester) async {
       final r = restoring();
+      await r.cubit.useProfile(_stdioInProject);
       await tester.pump();
 
-      final connecting = r.cubit.connect(_stdioInProject);
+      final launching = r.cubit.startOnLaunch();
       await tester.pump(const Duration(seconds: 3));
 
-      expect(r.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
       expect(r.started, isEmpty);
+      expect(
+        r.cubit.state.connectionStatus,
+        CodeLabConnectionStatus.disconnected,
+      );
       expect(
         r.binding.scope.resolve<ClientWorkspace>().current.projectDirectory,
         isNull,
       );
-      expect(_events(r.binding), contains(_noProject));
-      final rejected = r.binding.scope
-          .resolve<LogBuffer>()
-          .entries
-          .value
-          .singleWhere((e) => e['event'] == 'connection.connect_rejected');
-      expect(rejected['reason'], 'no_project');
-      expect(rejected['profile_id'], 'dev');
-      expect(rejected.values.join(), isNot(contains('/work')));
 
       r.gate.complete(true);
-      await connecting;
+      await tester.pump();
+      unawaited(launching);
     });
 
     test('New session during the restore waits for it instead of opening '
@@ -302,12 +327,15 @@ void main() {
       expect(r.picked, isEmpty);
 
       r.gate.complete(true);
-      await creating;
+      await pumpEventQueue();
 
-      // Проект восстановлен, поэтому выбор папки не нужен; соединения ещё
-      // нет, и сессию создаёт повторное действие (D5).
+      // Проект восстановлен, поэтому выбор папки не нужен; «New session»
+      // стартует агента в восстановленной папке (D13). Ответа на
+      // `session/new` фейковый агент не даёт, поэтому ход не ждём.
       expect(r.picked, isEmpty);
       expect(r.cubit.state.selectedProjectPath, '/work/app');
+      expect(r.started.single.cwd, '/work/app');
+      unawaited(creating.then<void>((_) {}, onError: (Object _) {}));
     });
 
     testWidgets('New session after the timeout without a project opens the '

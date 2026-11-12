@@ -31,6 +31,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/fake_provider_settings.dart';
 import '../../../support/in_memory_profile_store.dart';
 import '../../../support/test_app_scope.dart';
+import '../../../support/start_agent.dart';
 
 const _noProvider = 'No model provider is configured for the embedded agent.';
 
@@ -133,10 +134,12 @@ void main() {
         return session;
       },
     );
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     shell = binding.scope.resolve<CodeLabShellCubit>();
-    unawaited(shell.connect());
+    unawaited(shell.startWith());
     await frames(tester);
   }
 
@@ -223,8 +226,17 @@ void main() {
   ) async {
     await start(tester);
 
+    // Ручного Connect нет (D18); «Retry» с «Add provider» не нужен — повтор
+    // даёт сама запись провайдера (D13 п. 4).
     expect(find.text('Reconnect'), findsNothing);
-    expect(find.text('Connect'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(CodeLabConnectionScreen),
+        matching: find.text('Retry'),
+      ),
+      findsNothing,
+    );
+    expect(find.text('Connect'), findsNothing);
     expect(find.text('Configure connection'), findsOneWidget);
     final primaries = tester
         .widgetList<CodeLabButton>(
@@ -261,7 +273,7 @@ void main() {
 
     // Диалог модальный, поэтому попытку начинает тест программно.
     unawaited(
-      shell.connect(
+      shell.startWith(
         ConnectionProfile.webSocket(
           id: 'other',
           label: 'Other',

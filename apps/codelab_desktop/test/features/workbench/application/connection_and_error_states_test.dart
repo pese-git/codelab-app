@@ -243,7 +243,7 @@ void main() {
     expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.lost);
     final (states, _) = h.recordStates();
 
-    await h.cubit.reconnect();
+    await h.cubit.restartAgent();
     await h.settle();
 
     expect(
