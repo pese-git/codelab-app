@@ -641,7 +641,10 @@ terminal
 * `terminal.start_failed` — `tab_id`, `reason` — вариант ошибки старта (`shellNotFound`, `folderNotFound`, `ptyUnavailable`); для неожиданной ошибки — `reason: ptyUnavailable` и `error_type` (`runtimeType`) без текста и стека: текст `Error` может содержать путь;
 * `terminal.exit_wait_failed` — `tab_id`, `error_type` — имя типа ошибки ожидания выхода (`exitCode` порта завершился ошибкой; вкладка становится «exited» без кода);
 * `terminal.link_opened`, `terminal.link_refused` — только `scheme` (схема адреса ссылки OSC 8), без адреса; `link_refused` — и для запрещённой схемы, и для адреса с bidi, нулевой шириной или управляющими символами;
-* `terminal.close_all` — `count`, `forced`.
+* `terminal.close_all` — `count`, `forced`;
+* `terminal.signal_failed` — `tab_id`, `signal` (`hangup` или `kill`), `error_type`: сигнал вкладке бросил исключение, закрытие остальных продолжается;
+* `app.exit_requested` (компонент `app`) — ОС запросила выход, без полей;
+* `app.exit_close_failed` (компонент `app`) — `error_type`: закрытие терминала при выходе бросило, выход не отменяется.
 
 Путей, окружения, аргументов и `toString()` исключений в них нет (§43–§45).
 

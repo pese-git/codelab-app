@@ -876,6 +876,8 @@ AppExitResponse.exit
 
 Shell, вернувшийся из асинхронного старта после начала `closeAll`, сразу завершается и в реестр не попадает (stale result, §10). Повторный `closeAll` из закрытия root scope ничего не делает.
 
+Опираться только на `dispose containers` терминал не может: при штатном завершении app (macOS `terminate:`) дерево виджетов не размонтируется, и `AppScope.dispose` не выполняется. Dart VM при остановке движка ждёт все isolate, а isolate `pty2` каждого живого shell стоит в блокирующем FFI `waitpid` — без `closeAll()` в `onExitRequested` выход зависает (решение пользователя 2026-11-12; change, D4, D15 п. 9). Тот же вывод для любого будущего isolate с блокирующим FFI-вызовом: его владелец обязан снять блокировку до `AppExitResponse.exit`, `Isolate.kill` её не прерывает.
+
 ---
 
 ## 46. Shutdown timeout

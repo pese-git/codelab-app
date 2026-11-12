@@ -414,7 +414,7 @@ Application lifecycle должен определять, когда исполь
 
 Shutdown flow должен включать cleanup process resources.
 
-Терминал пользователя (панель Terminal, change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D4) закрывает свои shell при выходе из app явно: `SIGHUP`, затем принудительное завершение по таймауту. Страховка на случай краха app — сам PTY: при закрытии PTY-мастера ядро шлёт `SIGHUP` сеансу shell. Сиротами остаются только задания, которые пользователь намеренно отвязал (`nohup`, `disown`) — это intentional behavior пользователя.
+Терминал пользователя (панель Terminal, change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D4) закрывает свои shell при выходе из app явно: `SIGHUP`, затем принудительное завершение по таймауту. Страховка на случай краха или убийства app — сам PTY: при закрытии PTY-мастера ядро шлёт `SIGHUP` сеансу shell. При штатном выходе страховка не срабатывает: `pty2` ждёт код выхода каждого shell блокирующим `waitpid` в отдельном isolate, Dart VM при остановке ждёт этот isolate, а shell ждёт закрытия мастера, который живёт вместе с процессом app. Поэтому явное закрытие при выходе обязательно, без него app зависает (решение пользователя 2026-11-12; D4, D15 п. 9 change). Сиротами остаются только задания, которые пользователь намеренно отвязал (`nohup`, `disown`) — это intentional behavior пользователя.
 
 ---
 
