@@ -878,6 +878,31 @@ Shell, вернувшийся из асинхронного старта пос�
 
 Опираться только на `dispose containers` терминал не может: при штатном завершении app (macOS `terminate:`) дерево виджетов не размонтируется, и `AppScope.dispose` не выполняется. Dart VM при остановке движка ждёт все isolate, а isolate `pty2` каждого живого shell стоит в блокирующем FFI `waitpid` — без `closeAll()` в `onExitRequested` выход зависает (решение пользователя 2026-11-12; change, D4, D15 п. 9). Тот же вывод для любого будущего isolate с блокирующим FFI-вызовом: его владелец обязан снять блокировку до `AppExitResponse.exit`, `Isolate.kill` её не прерывает.
 
+По той же причине (`dispose containers` при штатном выходе не выполняется) обработчик выхода закрывает не только терминал, а весь `CodeLabRootLifecycle.dispose()` — иначе процессы ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента остаются сиротами (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/add-client-process-shutdown-on-exit/design.md), D1, D2):
+
+```text
+exit requested ─────────────────────────────── app.exit_requested
+      │
+      ├──► ветка терминала: TerminalTabsCubit.closeAll() (hangUp → 3 с → kill)
+      │
+      └──► клиентская ветка: Cubit-ы → ClientWorkspace.dispose()
+                ├──► EmbeddedTransportResolver.close()   (отмена ходов, exec, MCP)
+                │      → SecretMigrationOffer.close()
+                └──► начальный транспорт → AcpClientApplication.dispose(closeTimeout: 2 с)
+                       ├─ terminal/*: SIGTERM → 2 с → SIGKILL
+                       └─ stdio-агент: EOF → 2 с → SIGTERM → 2 с → SIGKILL
+      │
+      ▼  все ветки, не дольше 5 с от запроса  ── app.exit_closed | app.exit_timeout {pending}
+сброс журнала ≤ 500 мс
+      │
+      ▼
+AppExitResponse.exit
+```
+
+Ветки параллельны: терминал пользователя и ACP-сторона независимы (§44). Внутри клиентской ветки Cubit-ы и рабочее пространство закрываются первыми (§42 `session-lifecycle.md`). Дальше встроенный агент и ядро клиента закрываются параллельно: закрытие клиентского конца само запускает тот же `dispose` встроенного агента, а ожидание встроенного агента (до 10 с) не должно задерживать сигналы `terminal/*` и stdio-агенту (D11 change). Повторный запрос выхода и последующее закрытие root scope ждут тот же проход: `dispose()` мемоизирован, сигналы повторно не шлются.
+
+Закрытие владельца во время идущего подключения — отдельная гонка (§9 `AGENTS.md`). Операция подключения после каждого `await` проверяет, не закрыт ли владелец. Если закрыт, полученный ресурс закрывается, не привязывается и не запускается, а операция завершается ошибкой. Иначе процесс, запущенный после `dispose`, остаётся без владельца. В CodeLab это `AcpClientApplication` (флаг `_disposed`, проверки в `reconnect`, `_replaceTransport`, `_establishConnection`, `terminal/create`) и `StdioAcpTransport` (`close` во время `start` дожидается запуска и закрывает процесс), D12, D13 change.
+
 ---
 
 ## 46. Shutdown timeout
@@ -887,6 +912,14 @@ Shell, вернувшийся из асинхронного старта пос�
 После timeout возможен force termination, если это соответствует policy.
 
 Такой behavior должен быть централизован.
+
+Политика CodeLab desktop (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/add-client-process-shutdown-on-exit/design.md), D2–D4):
+
+* общий предел выхода — 5 с от запроса ОС, держит его один владелец — `AppExitHandler`; по истечении ответ всё равно `exit`, отмены выхода нет;
+* второго реестра процессов для «добить оставшихся» нет: каждый владелец сам эскалирует до принудительного завершения в пределах своего бюджета, а бюджеты подобраны так, чтобы уложиться в общий предел. Это работает, только если шаг, посылающий сигналы, начинается рано: шаг, не начатый к пределу, не послал ничего. Поэтому шаги с сигналами не ставятся в очередь за долгими шагами без сигналов (встроенный агент), а `pending` в `app.exit_timeout` перечисляет и не начатые шаги (D10, D11 change) (`StdioAcpTransport.close`: `timeout` → `SIGTERM` → 2 с → `SIGKILL`; `IoTerminalProcessRunner.kill()`: `SIGTERM` → 2 с → `SIGKILL`; терминал пользователя: `hangUp` → 3 с → `kill`; `exec` агента: `terminateTree`, 2 с);
+* ожидание выхода процесса без предела запрещено ни на одном шаге закрытия;
+* повторное закрытие владельца ждёт идущее (мемоизированный `Future`), а не возвращается сразу: иначе вызывающий с более коротким пределом считает ресурс закрытым, пока тот ещё ждёт. У `StdioAcpTransport.close` более ранний предел повторного вызова сокращает ожидание EOF (D13 change);
+* шаги закрытия изолированы: сбой одного (`app.shutdown_step_failed`) не отменяет следующие.
 
 ---
 
