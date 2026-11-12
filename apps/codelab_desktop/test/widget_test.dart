@@ -148,7 +148,7 @@ void main() {
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('requires a session before sending a prompt', (tester) async {
@@ -171,7 +171,7 @@ void main() {
     expect(binding.transport.sentMessages, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('a WebSocket profile of the window keeps its endpoint in the '
@@ -204,7 +204,7 @@ void main() {
     expect(binding.transport.sentMessages, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('does not open the settings screen on first run', (tester) async {
@@ -217,7 +217,7 @@ void main() {
     expect(find.byKey(const ValueKey('settings-nav-connection')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('Settings in the sidebar opens the Connection page regardless of '
@@ -237,7 +237,7 @@ void main() {
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('Configure connection on the empty connection screen opens the '
@@ -278,7 +278,7 @@ void main() {
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('Esc closes the settings screen and keeps the connection state', (
@@ -304,7 +304,7 @@ void main() {
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   test('creates a session and tracks it as active', () async {
@@ -1307,7 +1307,7 @@ void main() {
       );
       await submitFuture.timeout(const Duration(seconds: 2));
 
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -1433,7 +1433,7 @@ void main() {
     );
     await submitFuture.timeout(const Duration(seconds: 2));
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   test('two parallel pending approvals are both embedded independently, and '
@@ -1567,7 +1567,7 @@ void main() {
     );
     await submitFuture.timeout(const Duration(seconds: 2));
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   test('cancelTurn sends session cancel and stays busy until the agent '
@@ -2329,7 +2329,7 @@ void main() {
     expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('Cmd+K opens the palette from the focused composer, moves typing '
@@ -2375,7 +2375,7 @@ void main() {
     expect(shellCubit.state.isCommandPaletteOpen, isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
   testWidgets('selecting /new from the palette creates a session and closes '
@@ -2419,7 +2419,7 @@ void main() {
     expect(shellCubit.state.isCommandPaletteOpen, isFalse);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets(
@@ -2472,7 +2472,7 @@ void main() {
       expect(shellCubit.state.isCommandPaletteOpen, isFalse);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -2506,7 +2506,7 @@ void main() {
     expect(shellCubit.state.activeSessionId, isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('the docked Debug log panel\'s Expand button opens the same '
@@ -2539,7 +2539,7 @@ void main() {
     expect(shellCubit.state.activeSessionId, isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets(
@@ -2600,7 +2600,7 @@ void main() {
       expect(find.byType(ComboBox<String?>), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -2633,7 +2633,7 @@ void main() {
       expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -2651,7 +2651,7 @@ void main() {
     expect(find.text('/new'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets(
@@ -2776,7 +2776,7 @@ void main() {
       );
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -2857,7 +2857,7 @@ void main() {
       expect(agentTransport.sentMessages.length, sentBefore);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -2940,7 +2940,7 @@ void main() {
       expect(shellCubit.state.agentCommands, isEmpty);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -3077,7 +3077,7 @@ void main() {
     );
     await submitFuture1.timeout(const Duration(seconds: 2));
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets(
@@ -3131,7 +3131,7 @@ void main() {
       expect(find.text('GPT-5'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -3209,7 +3209,7 @@ void main() {
     expect(shellCubit.state.configOptions.single.currentValue, 'gpt-4');
     expect(shellCubit.state.isRespondingToConfigOption, isFalse);
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   test('a config_option_update without an active turn updates the config '
@@ -3269,7 +3269,7 @@ void main() {
     expect(shellCubit.state.configOptions.single.id, 'mode');
     expect(shellCubit.state.configOptions.single.currentValue, 'ask');
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   test("switching sessions shows the newly active session's own config "
@@ -3333,7 +3333,7 @@ void main() {
 
     expect(shellCubit.state.configOptions, isEmpty);
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   group('resizable workbench panels', () {
@@ -3374,7 +3374,7 @@ void main() {
         expect(shellCubit.state.sessionsPaneWidth, closeTo(320, 1));
 
         await tester.pumpWidget(const SizedBox.shrink());
-        await closeCodeLabRootScope();
+        await closeCodeLabRootScopeInTest();
       },
     );
 
@@ -3399,7 +3399,7 @@ void main() {
       );
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
 
     testWidgets('dragging the sessions divider past the minimum stops at the '
@@ -3416,7 +3416,7 @@ void main() {
       expect(shellCubit.state.sessionsPaneWidth, kSessionsPaneMinWidth);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
 
     testWidgets('dragging the sessions divider past the maximum stops at the '
@@ -3433,7 +3433,7 @@ void main() {
       expect(shellCubit.state.sessionsPaneWidth, kSessionsPaneMaxWidth);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
 
     testWidgets('dragging the dock divider past the minimum stops at '
@@ -3454,7 +3454,7 @@ void main() {
       expect(shellCubit.state.dockWidth, kDockMinWidth);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
 
     testWidgets('dragging the dock divider past the maximum stops at '
@@ -3473,7 +3473,7 @@ void main() {
       expect(shellCubit.state.dockWidth, kDockMaxWidth);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
 
     testWidgets(
@@ -3502,7 +3502,7 @@ void main() {
         );
 
         await tester.pumpWidget(const SizedBox.shrink());
-        await closeCodeLabRootScope();
+        await closeCodeLabRootScopeInTest();
       },
     );
   });

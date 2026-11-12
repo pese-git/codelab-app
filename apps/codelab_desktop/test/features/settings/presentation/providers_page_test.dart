@@ -7,7 +7,6 @@
 // свои тесты.
 
 import 'package:codelab_client_core/codelab_client_core.dart';
-import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_setup/codelab_setup.dart';
@@ -97,7 +96,7 @@ void main() {
 
   Future<void> tearDownApp(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   }
 
   setUp(() {

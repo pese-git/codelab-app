@@ -9,7 +9,6 @@ import 'dart:async';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
-import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -125,7 +124,7 @@ void main() {
     // В полёте остаются таймеры запросов; без паузы они переживают дерево.
     await tester.pump(const Duration(seconds: 10));
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   }
 
   List<Map<String, Object?>> settingsEvents(String event) => [

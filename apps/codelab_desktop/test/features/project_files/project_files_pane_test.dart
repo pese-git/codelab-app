@@ -25,7 +25,6 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_desktop/features/project_files/application/project_files_cubit.dart';
 import 'package:codelab_desktop/features/project_files/presentation/project_files_pane.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_ui/codelab_ui.dart';
@@ -92,7 +91,7 @@ void main() {
 
   Future<void> tearDownApp(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   }
 
   Future<void> settle(WidgetTester tester) async {

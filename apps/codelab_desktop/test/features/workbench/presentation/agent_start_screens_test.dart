@@ -8,7 +8,6 @@
 import 'dart:async';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
-import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -56,7 +55,7 @@ void main() {
 
   Future<void> tearDownApp(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   }
 
   final connectKey = CodeLabAppBar.connectionConnectKey;
