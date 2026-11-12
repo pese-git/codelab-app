@@ -44,7 +44,13 @@ const agentVersion = '0.1.0';
 /// D13; agent-binary «Перезагрузка конфига в serve»): без `--llm-script` хост
 /// создаёт `FileConfigSource` корня запуска, передаёт его ядру вместе с
 /// `modelsFor` и владеет им — [shutdown] закрывает источник после
-/// `runtime.dispose()`. `--ws` собирает ядро с `configCommand: false`: ответ
+/// `runtime.dispose()`. От папки запуска хост берёт процесс (секреты, журнал,
+/// HTTP-клиент, профиль, наблюдатель) и снимок корня; от папки сессии при
+/// `--stdio` без `--llm-script` — всё, что входит в `CoreConfig` (провайдеры,
+/// разрешения, бюджет, MCP-серверы конфигурации): тот же источник служит
+/// портом `ProjectConfigLoader` (design.md change `require-project-folder`,
+/// D21, Q18); `--ws` и `--llm-script` порт не получают. `--ws` собирает ядро с
+/// `configCommand: false`: ответ
 /// `/config check` содержит пути и тексты проблем машины агента, а клиент
 /// WebSocket может быть на другой (R0-3).
 final class AgentHost {
@@ -308,6 +314,13 @@ final class AgentHost {
           secrets: secrets,
           // Источник перезагрузки (D8, D13); `null` — сценарий.
           config: source,
+          // Конфигурация папки сессии (change `require-project-folder`, D21,
+          // Q18): тот же источник читает слои другой папки тем же загрузчиком,
+          // окружением и флагами. Только `--stdio` — клиент локален и сам
+          // выбирает `cwd`, как у `ProjectFilesLoader`; `--ws` порт не
+          // передаёт: `cwd` приходит из сети, и сессия вне корня остаётся на
+          // `withoutProject`. Со сценарием источника нет, значит нет и порта.
+          projectConfig: stdio ? source : null,
           // Пути PERM-11 (D8): те же входы, что у загрузки конфига. Сценарий
           // `--llm-script` `$CODELAB_HOME` не читает, поэтому защищает только
           // список §7.6.1.

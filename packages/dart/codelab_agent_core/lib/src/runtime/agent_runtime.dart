@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:collection/collection.dart' show ListEquality;
+import 'package:collection/collection.dart'
+    show DeepCollectionEquality, ListEquality;
 import 'package:meta/meta.dart' show visibleForTesting;
 
 import '../agents/agent_definition.dart';
@@ -19,6 +20,7 @@ import '../config/config_reload_plan.dart';
 import '../config/config_source.dart';
 import '../config/core_config.dart';
 import '../config/host_settings.dart';
+import '../config/project_config.dart';
 import '../config/key_path.dart' show pathComponents, samePath;
 import '../env/bounded_env.dart';
 import '../env/execution_env.dart';
@@ -241,6 +243,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
   /// запись на `cwd` за жизнь рантайма (D9).
   final _outsideRootLogged = <String>{};
 
+  /// Папки, для которых `config.session.project` уже записан: одна запись на
+  /// папку за жизнь рантайма, как у [_outsideRootLogged] (D21).
+  final _projectLogged = <String>{};
+
+  /// Папки, для которых `config.session.process_keys_ignored` уже записан.
+  final _processKeysLogged = <String>{};
+
   /// Отменяется в [dispose]: подключение MCP-серверов не должно пережить
   /// рантайм (`McpConnectRequest.cancel`).
   final _shutdown = CancelTokenSource();
@@ -252,27 +261,33 @@ final class AgentRuntimeImpl implements AgentRuntime {
     // Снимок начала: сессия, создаваемая во время замены, получает его
     // целиком (D8, «Создание сессии»).
     final start = _applied;
+    // Id и время фиксируются до конфигурации папки: журнал создаётся только
+    // после неё (D21, «Журнал — после конфигурации»), а id нужен логам шагов.
+    final sessionId = newSessionId(services.clock, services.ids);
+    final createdAt = services.clock.now();
+    final resolved = await _canonicalCwd(spec.cwd);
+    final canonicalCwd = resolved.path;
+    final sessionLogger = spec.ports.logger ?? services.logger;
+    final scope = await _sessionConfig(
+      start,
+      sessionId,
+      spec.cwd,
+      canonicalCwd,
+      resolved.resolved,
+      sessionLogger,
+    );
+    final settings = scope.settings;
     final header = SessionHeader(
-      id: newSessionId(services.clock, services.ids),
+      id: sessionId,
       cwd: spec.cwd,
-      created: services.clock.now(),
+      created: createdAt,
       agent: coreAgentInfo,
       metadata: {'profile': profile.name},
     );
     await _store.create(header);
-    final resolved = await _canonicalCwd(spec.cwd);
-    final canonicalCwd = resolved.path;
-    final settings = await _sessionConfig(
-      start,
-      header.id,
-      spec.cwd,
-      canonicalCwd,
-      spec.ports.logger ?? services.logger,
-    );
-    final sessionLogger = spec.ports.logger ?? services.logger;
     final model = spec.model != null
-        ? _resolve(start, spec.model!, settings.effort)
-        : await _selectModel(start, settings, header.id, sessionLogger);
+        ? _resolve(scope.applied, spec.model!, settings.effort)
+        : await _selectModel(scope.applied, settings, header.id, sessionLogger);
     final session = await _open(
       snapshot: SessionSnapshot.empty(header),
       cwd: spec.cwd,
@@ -292,7 +307,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         ...spec.ports.extraAfterToolCall,
       ],
       mcpServers: spec.mcpServers,
-      catalog: start.catalog,
+      scope: scope,
     );
     try {
       await session._writer.append(
@@ -409,13 +424,15 @@ final class AgentRuntimeImpl implements AgentRuntime {
     final restored = buildLlmContext(snapshot);
     final resolved = await _canonicalCwd(cwd ?? snapshot.header.cwd);
     final canonicalCwd = resolved.path;
-    final settings = await _sessionConfig(
+    final scope = await _sessionConfig(
       start,
       id,
       cwd ?? snapshot.header.cwd,
       canonicalCwd,
+      resolved.resolved,
       ports.logger ?? services.logger,
     );
+    final settings = scope.settings;
     final effort =
         ReasoningEffort.values
             .where((e) => e.name == restored.config['effort'])
@@ -424,15 +441,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
     // Модель журнала выигрывает, если её знает каталог (D3); иначе —
     // поведение этапа 3: модель конфигурации и новая model_change.
     final journalModel = switch (restored.model) {
-      final ModelChangeRecord record => start.catalog.resolve(
+      final ModelChangeRecord record => scope.applied.catalog.resolve(
         ModelId('${record.provider}/${record.modelId}'),
         effort: effort,
       ),
       null => null,
     };
     final chosen = model != null
-        ? _resolve(start, model, effort)
-        : journalModel ?? _resolve(start, settings.defaultModel, effort);
+        ? _resolve(scope.applied, model, effort)
+        : journalModel ??
+              _resolve(scope.applied, settings.defaultModel, effort);
     final header = snapshot.header.cwd;
     final session = await _open(
       snapshot: snapshot,
@@ -450,7 +468,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       extraBeforeToolCall: ports.extraBeforeToolCall,
       extraAfterToolCall: ports.extraAfterToolCall,
       mcpServers: mcpServers,
-      catalog: start.catalog,
+      scope: scope,
     );
     try {
       await session._heal();
@@ -482,11 +500,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
         );
       }
       session._restoreHistory();
-      final base = _agentBaseOf(snapshot, start.catalog);
+      final base = _agentBaseOf(snapshot, scope.applied.catalog);
       await session._restoreAgent(
         restored.config['agent'],
         baseMode: base.mode ?? settings.permissions.mode ?? profile.defaultMode,
-        baseModel: base.model ?? _resolve(start, settings.defaultModel, effort),
+        baseModel:
+            base.model ??
+            _resolve(scope.applied, settings.defaultModel, effort),
       );
       if (cwd != null && cwd != header) {
         await session._writer.append(
@@ -536,29 +556,46 @@ final class AgentRuntimeImpl implements AgentRuntime {
     return base;
   }
 
-  /// Ключи сессии из нужного снимка конфигурации (design.md change
-  /// `add-agent-configuration`, D9; agent-runtime «Конфигурация сессии вне
-  /// корня запуска»).
+  /// Конфигурация сессии: снимок корня, снимок без проекта или конфигурация
+  /// её папки (design.md change `add-agent-configuration`, D9; `require-
+  /// project-folder`, D21; agent-runtime «Конфигурация сессии вне корня
+  /// запуска»).
   ///
   /// Почему: проектные слои 3–4 прочитаны для корня запуска хоста. Сессия в
   /// другом каталоге (`session/new` с иным `cwd`, подкаталог со своим
   /// `.codelab/`) не должна получать MCP-серверы и правила `allow` чужого
-  /// проекта (приоритет 1 — безопасность), поэтому берёт снимок без
-  /// проектных слоёв. Ключи сборки (каталог, capability, профиль) остаются
-  /// общими: они уже вошли в [services] и [profile].
+  /// проекта (приоритет 1 — безопасность). Без порта [ProjectConfigLoader]
+  /// она берёт снимок без проектных слоёв; с портом — полный `CoreConfig`
+  /// своей папки, каталог и функцию модели (тройка сессии), которые держит до
+  /// закрытия. Ключи сборки (capability, профиль) остаются общими: они уже
+  /// вошли в [services] и [profile].
   ///
   /// `cwd` перед сравнением канонизируется ([_canonicalCwd]): корень проекта в
   /// конфигурации уже канонический, и сессия, открытая по symlink на проект,
   /// иначе получила бы снимок без проекта и потеряла бы его `permissions.deny`
   /// (приоритет 1).
-  Future<CoreConfig> _sessionConfig(
+  Future<_SessionScope> _sessionConfig(
     _Applied start,
     SessionId id,
     String cwd,
     String canonical,
+    bool canonicalResolved,
     Logger logger,
   ) async {
     final config = start.config;
+    final port = services.projectConfig;
+    final root = config.projectRoot;
+    if (port != null && root != null && !samePath(canonical, root)) {
+      return _projectScope(
+        start,
+        port,
+        id,
+        cwd,
+        canonical,
+        canonicalResolved,
+        logger,
+      );
+    }
     final settings = config.forSessionCwd(canonical);
     if (!identical(settings, config) &&
         _outsideRootLogged.add(pathComponents(cwd).join('/'))) {
@@ -572,7 +609,208 @@ final class AgentRuntimeImpl implements AgentRuntime {
         },
       );
     }
-    return settings;
+    return _SessionScope(settings: settings, applied: start);
+  }
+
+  /// Тройка сессии папки, отличной от корня запуска (D21): `loadForProject`,
+  /// `validateSnapshot`, `modelsFor` — по порядку, без кэша.
+  ///
+  /// Любая проблема — [ProjectConfigException] (fail closed): ни снимок корня,
+  /// ни снимок без проекта не подставляются, потому что сессия без запретов
+  /// своего проекта слабее, чем ждёт пользователь (приоритет 1). Остановка
+  /// рантайма прерывает ожидание загрузки: сессия не создаётся, MCP не
+  /// стартует.
+  Future<_SessionScope> _projectScope(
+    _Applied start,
+    ProjectConfigLoader port,
+    SessionId id,
+    String cwd,
+    String canonical,
+    bool canonicalResolved,
+    Logger logger,
+  ) async {
+    final ConfigLoadResult result;
+    try {
+      final load = port.loadForProject(canonical);
+      // Порядок завершений задаёт хост: остановка не ждёт зависшую загрузку.
+      final raced = await Future.any<ConfigLoadResult?>([
+        load,
+        _shutdown.token.onCancel.then((_) => null),
+      ]);
+      if (raced == null) {
+        // Загрузка, завершившаяся после остановки, не теряется молча (§12):
+        // класс ошибки — в `debug`, без текста (в нём могут быть пути).
+        unawaited(
+          load.then<void>(
+            (_) {},
+            onError: (Object error) {
+              logger.log(
+                LogLevel.debug,
+                'config.session.project_load_after_shutdown',
+                fields: {'error_class': error.runtimeType.toString()},
+              );
+            },
+          ),
+        );
+        throw const CancelledException(ShutdownCancel());
+      }
+      result = raced;
+    } on CancelledException {
+      rethrow;
+    } on Object catch (error) {
+      // Текст исключения мог бы нести пути или значения: наружу — только класс.
+      throw _refuseProject(canonical, logger, [
+        ConfigIssue(
+          kind: ConfigIssueKind.semantic,
+          key: '',
+          source: 'project config',
+          message:
+              'the project config could not be loaded (${error.runtimeType})',
+        ),
+      ]);
+    }
+    if (_disposed) {
+      throw const CancelledException(ShutdownCancel());
+    }
+    final config = result.config;
+    if (config == null || result.issues.isNotEmpty) {
+      throw _refuseProject(
+        canonical,
+        logger,
+        result.issues.isNotEmpty
+            ? result.issues
+            : [
+                ConfigIssue(
+                  kind: ConfigIssueKind.semantic,
+                  key: '',
+                  source: 'project config',
+                  message: 'the config source returned no config',
+                ),
+              ],
+      );
+    }
+    final recheck = config.validateSnapshot();
+    if (recheck.isNotEmpty) {
+      throw _refuseProject(canonical, logger, recheck);
+    }
+    final build = modelsFor;
+    if (build == null) {
+      throw StateError(
+        'the runtime has a ProjectConfigLoader but no modelsFor',
+      );
+    }
+    final ConfiguredModels models;
+    try {
+      models = build(config);
+    } on Object catch (error) {
+      throw _refuseProject(canonical, logger, [
+        ConfigIssue(
+          kind: ConfigIssueKind.semantic,
+          key: '',
+          source: 'project config',
+          message:
+              'the model catalog could not be built (${error.runtimeType})',
+        ),
+      ]);
+    }
+    final folder = pathComponents(canonical).join('/');
+    if (_projectLogged.add(folder)) {
+      logger.log(
+        LogLevel.info,
+        'config.session.project',
+        fields: {
+          'session_id': id.value,
+          'cwd': cwd,
+          'config_root': start.config.projectRoot,
+          'trusted':
+              canonicalResolved &&
+              config.trustedProjects.any((r) => samePath(r, canonical)),
+        },
+      );
+    }
+    // Ключи процесса из слоёв папки не применяются (таблица D21): сравниваются
+    // только ключи, которые папка задаёт иначе, чем применённый снимок.
+    final ignored = _ignoredProcessKeys(start.values, result.values);
+    if (ignored.isNotEmpty && _processKeysLogged.add(folder)) {
+      logger.log(
+        LogLevel.warning,
+        'config.session.process_keys_ignored',
+        fields: {'session_id': id.value, 'keys': ignored},
+      );
+    }
+    return _SessionScope(
+      settings: config,
+      applied: _Applied(
+        config: config,
+        stream: models.stream,
+        catalog: models.catalog,
+        values: result.values,
+        host: start.host,
+        loadedAt: services.clock.now(),
+        sources: result.sources,
+      ),
+      isolated: true,
+    );
+  }
+
+  /// Ключи процесса (`HostSettings`, `exec.*`, `compaction.enabled`,
+  /// `trusted_projects`), которые [folder] задаёт иначе, чем [applied]; только
+  /// имена, без значений (§16).
+  static List<String> _ignoredProcessKeys(
+    Map<String, Object?> applied,
+    Map<String, Object?> folder,
+  ) {
+    const sections = [
+      'secrets',
+      'sessions',
+      'logging',
+      'config',
+      'profile',
+      'exec',
+      'trusted_projects',
+      'compaction.enabled',
+    ];
+    bool isProcessKey(String key) => sections.any(
+      (s) => key == s || key.startsWith('$s.') || key.startsWith('$s['),
+    );
+    const equality = DeepCollectionEquality();
+    return [
+      for (final entry in folder.entries)
+        if (isProcessKey(entry.key) &&
+            !equality.equals(applied[entry.key], entry.value))
+          entry.key,
+    ]..sort();
+  }
+
+  /// Отказ по конфигурации папки: лог `config.session.project_invalid` (только
+  /// источник, позиция, ключ и класс проблемы, без текстов и значений, §16) и
+  /// исключение для вызывающего.
+  ProjectConfigException _refuseProject(
+    String canonical,
+    Logger logger,
+    List<ConfigIssue> issues,
+  ) {
+    logger.log(
+      LogLevel.error,
+      'config.session.project_invalid',
+      fields: {
+        'cwd': canonical,
+        'issues': [
+          for (final issue in issues)
+            {
+              'source': issue.source,
+              'line': issue.line,
+              'column': issue.column,
+              'key': issue.key,
+              'kind': issue.kind.name,
+            },
+        ],
+      },
+    );
+    return ProjectConfigException(
+      cwd: canonical,
+      issues: List.unmodifiable(issues),
+    );
   }
 
   /// Канонический `cwd` сессии: `realpath` необязательного `PathResolver`
@@ -795,7 +1033,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
     if (!plan.isEmpty) {
       applies.addAll([
         for (final session in [..._sessions])
-          if (session._handedOut && !session._closed) session._applyConfigMcp(),
+          if (session._handedOut && !session._closed && !session._isolated)
+            session._applyConfigMcp(),
       ]);
     }
     if (plan.restartRequiredKeys.isNotEmpty) {
@@ -833,7 +1072,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
       [for (final m in after.catalog.models) m.id.value],
     );
     for (final session in [..._sessions]) {
-      if (!session._handedOut || session._closed) {
+      // Сессия папки с портом держит снимок открытия до закрытия (D21, Q19).
+      if (!session._handedOut || session._closed || session._isolated) {
         continue;
       }
       session._afterCatalogReplaced(before, after);
@@ -1004,11 +1244,17 @@ final class AgentRuntimeImpl implements AgentRuntime {
     List<BeforeToolCallHook> extraBeforeToolCall = const [],
     List<AfterToolCallHook> extraAfterToolCall = const [],
     List<McpServerConfig> mcpServers = const [],
-    required ModelCatalog catalog,
+    required _SessionScope scope,
   }) async {
     final id = snapshot.header.id;
+    final catalog = scope.applied.catalog;
     final env = await BoundedEnv.wrap(ports.env ?? services.baseEnv, cwd);
     final logger = ports.logger ?? services.logger;
+    // Конфигурация сессии на момент обращения: у сессии папки — её собственная,
+    // у остальных — по применённому снимку корня (после перезагрузки новая).
+    CoreConfig settingsOf() => scope.isolated
+        ? scope.applied.config
+        : _applied.config.forSessionCwd(canonicalCwd);
     // Реестр сессии: копия базового плюс MCP-инструменты её серверов, чужие
     // сессии их не видят (design.md change `add-agent-mcp-client`, D6).
     final sessionRegistry = ToolRegistry();
@@ -1139,9 +1385,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
       model: model,
       effort: effort,
       canonicalCwd: canonicalCwd,
-      catalogOf: () => _applied.catalog,
-      streamOf: () => _applied.stream,
-      settingsOf: () => _applied.config.forSessionCwd(canonicalCwd),
+      // Сессия папки с портом держит собственную тройку, остальные читают
+      // применённый снимок при каждом обращении (D8; D21).
+      isolated: scope.isolated,
+      catalogOf: scope.isolated
+          ? () => scope.applied.catalog
+          : () => _applied.catalog,
+      streamOf: scope.isolated
+          ? () => scope.applied.stream
+          : () => _applied.stream,
+      settingsOf: settingsOf,
       agent: agent,
       policy: policy,
       tools: tools,
@@ -1166,7 +1419,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       replaceMcp: (servers) => _replaceMcp(
         id: id,
         cwd: cwd,
-        settings: _applied.config.forSessionCwd(canonicalCwd),
+        settings: settingsOf(),
         servers: servers,
         logger: logger,
         registry: sessionRegistry,
@@ -1757,6 +2010,24 @@ final class _Applied {
   final List<String> sources;
 }
 
+/// Конфигурация, с которой открывается сессия (D21).
+///
+/// [settings] — `CoreConfig` сессии. [applied] — тройка «конфигурация,
+/// каталог, функция модели»: для сессии папки с портом это её собственная
+/// запись ([isolated]), для остальных — применённый снимок на момент
+/// открытия, из которого берутся каталог и выбор модели.
+final class _SessionScope {
+  const _SessionScope({
+    required this.settings,
+    required this.applied,
+    this.isolated = false,
+  });
+
+  final CoreConfig settings;
+  final _Applied applied;
+  final bool isolated;
+}
+
 final class _ProjectLoad {
   const _ProjectLoad(this.context, this.templates, this.agents);
 
@@ -1923,6 +2194,7 @@ final class _Session implements AgentSession {
     required ModelRef model,
     required ReasoningEffort effort,
     required this.canonicalCwd,
+    required bool isolated,
     required ModelCatalog Function() catalogOf,
     required StreamFunction Function() streamOf,
     required CoreConfig Function() settingsOf,
@@ -1952,6 +2224,7 @@ final class _Session implements AgentSession {
        _modeFloor = modeFloor,
        agents = List.unmodifiable(agents),
        _effort = effort,
+       _isolated = isolated,
        _catalogOf = catalogOf,
        _streamOf = streamOf,
        _settingsOf = settingsOf,
@@ -2091,14 +2364,29 @@ final class _Session implements AgentSession {
   /// Канонический `cwd`: по нему выбирается снимок конфигурации сессии.
   final String canonicalCwd;
 
-  /// Каталог моделей применённого снимка: сессия читает его при каждой смене
-  /// модели, поэтому `setModel` видит модели после перезагрузки (D8).
+  /// Конфигурацию сессии построил `ProjectConfigLoader` (D21): перезагрузка
+  /// корня её не меняет (Q19 (a)), события `ModelOptionsChanged` и замена
+  /// серверов конфигурации (шаг 7а) её пропускают.
+  final bool _isolated;
+
+  /// Каталог моделей сессии. У сессии в корне — каталог применённого
+  /// снимка, который читается при каждой смене модели, поэтому `setModel`
+  /// видит модели после перезагрузки (D8). У сессии папки с портом — каталог
+  /// её собственной тройки, построенный при открытии и неизменный до закрытия
+  /// (D21).
   final ModelCatalog Function() _catalogOf;
   ModelCatalog get _catalog => _catalogOf();
 
+  @override
+  ModelCatalog get models => _catalog;
+
+  /// Функция модели сессии: у сессии в корне — применённого снимка, у сессии
+  /// папки с портом — её тройки (D21).
   final StreamFunction Function() _streamOf;
 
-  /// Конфигурация этой сессии по применённому снимку (`forSessionCwd`).
+  /// Конфигурация этой сессии: у сессии в корне — по применённому снимку
+  /// (`forSessionCwd`), у сессии папки с портом — её собственный `CoreConfig`
+  /// из тройки (D21), он не меняется до закрытия.
   final CoreConfig Function() _settingsOf;
 
   /// Функция модели прежнего снимка, закреплённая за сессией, чья модель

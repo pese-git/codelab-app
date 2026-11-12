@@ -35,12 +35,10 @@ final class SessionBridge {
     required this.owner,
     required this.sink,
     required ClientLink link,
-    required ModelCatalog Function() catalog,
     required Clock clock,
     required Logger logger,
     AcpClientExecutionEnv? clientEnv,
   }) : _link = link,
-       _catalog = catalog,
        _clock = clock,
        _logger = logger,
        _clientEnv = clientEnv;
@@ -52,11 +50,6 @@ final class SessionBridge {
   SessionUpdateSink sink;
   final ClientLink _link;
 
-  /// Живой каталог моделей: после перезагрузки конфигурации рантайм заменяет
-  /// каталог целиком, поэтому мост читает его заново при каждой сборке опций,
-  /// а не хранит снимок на момент `session/new` (design.md change
-  /// `add-config-writer-and-reload`, D8, ACP-8).
-  final ModelCatalog Function() _catalog;
   final Clock _clock;
   final Logger _logger;
 
@@ -152,8 +145,15 @@ final class SessionBridge {
   }
 
   /// Текущий снимок `configOptions` (§13.6).
+  ///
+  /// Каталог — `AgentSession.models`, читается при каждой сборке: у сессии
+  /// папки вне корня запуска он свой (design.md change
+  /// `require-project-folder`, D21), а у сессии корня заменяется целиком
+  /// перезагрузкой конфигурации (design.md change
+  /// `add-config-writer-and-reload`, D8, ACP-8), поэтому снимок на момент
+  /// `session/new` устарел бы.
   List<acp.SessionConfigOption> get configOptions =>
-      sessionConfigOptions(session, _catalog());
+      sessionConfigOptions(session, session.models);
 
   /// Команды сессии для `available_commands_update` (`14-Slash Commands.md`;
   /// design.md change `add-agent-project-files`, D9).

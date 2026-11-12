@@ -23,6 +23,7 @@ import 'inline_secrets.dart';
 import 'interpolate.dart';
 import 'key_path.dart';
 import 'merge.dart';
+import 'provider_binding.dart';
 import 'redact_settings.dart';
 import 'schema.dart';
 import 'secret_name_rule.dart' show isSecretLikeName;
@@ -506,15 +507,31 @@ final class _SilentLogger implements Logger {
 /// Сборка значений из слитого дерева; копит проблемы и предупреждения.
 final class _Builder {
   _Builder(
-    this.layers, {
+    this.sourceLayers, {
     required this.environment,
     required this.fallbackModel,
     required this.fallbackSource,
     List<ConfigIssue> warnings = const [],
     this.pinnedTrustedProjects,
-  }) : warnings = [...warnings];
+  }) : layers = applyProviderGroupRule(sourceLayers),
+       warnings = [...warnings];
 
+  /// Слои после доверия, как их разобрал хост: по ним идут предупреждения о
+  /// ключах без потребителя и о секретах в файлах, чтобы вытесненные правилом
+  /// группы поля не скрыли находку.
+  final List<ConfigTree> sourceLayers;
+
+  /// Слои после правила группы провайдера (D23, правило 2): по ним строятся
+  /// слияние и происхождение полей.
   final List<ConfigTree> layers;
+
+  /// Привязки ссылок глобальных слоёв к origin (условие (b) D23). Строится по
+  /// [sourceLayers]: после правила группы группа пользователя с тем же id уже
+  /// вытеснена, и связка «ссылка — адрес» потерялась бы (C5.1).
+  late final ProviderKeyBinding _keyBinding = ProviderKeyBinding.fromLayers(
+    sourceLayers,
+    environment,
+  );
   final Map<String, String> environment;
   final ModelRef? fallbackModel;
 
@@ -536,7 +553,7 @@ final class _Builder {
   Map<String, Object?> values = const {};
 
   void build() {
-    for (final layer in layers) {
+    for (final layer in sourceLayers) {
       for (final path in collectNotApplied(layer)) {
         _notApplied(path, layer);
       }
@@ -741,7 +758,7 @@ final class _Builder {
   /// туда сам: писатель и клиенты секрет значением не пишут (CFG-2, D5), а
   /// переносить в хранилище секретов там нечего.
   void _warnSecretsInFiles() {
-    for (final layer in layers) {
+    for (final layer in sourceLayers) {
       final String Function(InlineSecretFinding) command;
       switch (layer.kind) {
         case ConfigLayerKind.user:
@@ -869,9 +886,18 @@ final class _Builder {
       'gemini' => ProviderApi.gemini,
       _ => ProviderApi.openaiChat,
     };
+    // D23: ссылки проектного слоя, не привязанные к адресу, не раскрываются и
+    // не читаются; провайдер остаётся в каталоге, ход с ним отвечает ошибкой.
+    final unbound = _unboundReferences(id, at, kind);
+    final unboundFields = {for (final ref in unbound.references) ref.field};
     final rawBase = _str([...at, 'base_url']);
     final String? base;
-    if (rawBase != null) {
+    if (rawBase != null && unboundFields.contains('base_url')) {
+      // Адрес с непривязанной `${ENV}` нигде не используется (запрос не
+      // уходит), но `ProviderConfig` требует разобранный `Uri`: ссылки
+      // убираются, значение переменной в строку не попадает.
+      base = rawBase.replaceAll(RegExp(r'\$\{[^}]*\}'), '');
+    } else if (rawBase != null) {
       base = _interpolate(
         rawBase,
         _kp([...at, 'base_url']),
@@ -892,7 +918,13 @@ final class _Builder {
       _bad([...at, 'base_url'], 'required for openai-compatible providers');
       return null;
     }
-    final baseUrl = Uri.tryParse(base);
+    var baseUrl = Uri.tryParse(base);
+    if (unboundFields.contains('base_url') &&
+        (baseUrl == null ||
+            !(baseUrl.isScheme('http') || baseUrl.isScheme('https')) ||
+            baseUrl.host.isEmpty)) {
+      baseUrl = Uri.parse('https://unbound.invalid');
+    }
     if (baseUrl == null ||
         !(baseUrl.isScheme('http') || baseUrl.isScheme('https')) ||
         baseUrl.host.isEmpty) {
@@ -935,6 +967,9 @@ final class _Builder {
     final headerTemplates = <String, SecretTemplate>{};
     final rawHeaders = _map([...at, 'headers']) ?? const {};
     for (final MapEntry(key: name, value: value) in rawHeaders.entries) {
+      if (unboundFields.contains('headers.$name')) {
+        continue;
+      }
       final path = _kp([...at, 'headers', name]);
       final expanded = _interpolate(
         value! as String,
@@ -965,9 +1000,14 @@ final class _Builder {
       }
     }
 
-    final keyEnv = _str([...at, 'api_key_env']);
-    final keySecret = _str([...at, 'api_key_secret']);
+    final keyEnv = unboundFields.contains('api_key_env')
+        ? null
+        : _str([...at, 'api_key_env']);
+    final keySecret = unboundFields.contains('api_key_secret')
+        ? null
+        : _str([...at, 'api_key_secret']);
     final rawApiKey = switch (_str([...at, 'api_key'])) {
+      _ when unboundFields.contains('api_key') => null,
       final String text when text.isNotEmpty => text,
       _ => null,
     };
@@ -1117,6 +1157,10 @@ final class _Builder {
       ),
     );
 
+    if (unbound.references.isNotEmpty) {
+      _reportUnbound(id, at, unbound, problems);
+    }
+
     final models = <String, ModelInfo>{};
     final declared = _map([...at, 'models']) ?? const {};
     for (final model in declared.keys) {
@@ -1131,6 +1175,86 @@ final class _Builder {
       key: key,
       headerTemplates: headerTemplates,
     );
+  }
+
+  /// Ссылки группы провайдера [id] из проектного слоя `config.yaml`, которые
+  /// нельзя раскрывать (D23, правило 3).
+  ///
+  /// Группа к этому моменту целиком из одного слоя (правило 2). Слой
+  /// `projectLocal` доверенного проекта — условие (a): ссылки разрешены.
+  /// Слой `project` — только условие (b): глобальные слои связывают ту же
+  /// ссылку с тем же origin. Глобальный слой не проверяется.
+  ({ConfigTree? layer, List<ProviderReference> references}) _unboundReferences(
+    String id,
+    List<String> at,
+    String kind,
+  ) {
+    for (final layer in layers.reversed) {
+      final entry = providerEntry(layer, id);
+      if (entry == null || !providerGroupKeys.any(entry.containsKey)) {
+        continue;
+      }
+      if (layer.kind != ConfigLayerKind.project) {
+        break;
+      }
+      // Адрес — итоговый: поля адреса, которых слой не задал, пришли из
+      // непроектных слоёв ниже (Q21 (a)), поэтому берутся из слитого дерева.
+      final origin = providerOrigin(
+        {
+          'base_url': _str([...at, 'base_url']),
+        },
+        kind,
+        environment,
+      );
+      return (
+        layer: layer,
+        references: [
+          for (final ref in providerReferences(entry))
+            if (!_keyBinding.isBound(ref, origin)) ref,
+        ],
+      );
+    }
+    return (layer: null, references: const []);
+  }
+
+  /// Запись в `providerProblems` и предупреждения `config.provider.key_unbound`
+  /// для непривязанных ссылок. Ни имя значения, ни само значение, ни адрес
+  /// проекта в текст не входят: только слой, id провайдера и имя ссылки
+  /// (design.md `require-project-folder`, D23, правило 4).
+  void _reportUnbound(
+    String id,
+    List<String> at,
+    ({ConfigTree? layer, List<ProviderReference> references}) unbound,
+    Map<String, String> problems,
+  ) {
+    final layer = unbound.layer!;
+    final first = unbound.references.first;
+    final shown = literalSecretTag(first.name, asName: true) != null
+        ? 'a reference'
+        : switch (first.kind) {
+            ProviderReferenceKind.secret => 'secret ${first.name}',
+            ProviderReferenceKind.env => 'variable ${first.name}',
+          };
+    problems[id] =
+        'Provider $id from ${layer.source} cannot use $shown: the key is '
+        'bound to another address. Move the provider to config.local.yaml or '
+        'to the user config.';
+    for (final ref in unbound.references) {
+      final segments = ref.field.startsWith('headers.')
+          ? [...at, 'headers', ref.field.substring('headers.'.length)]
+          : [...at, ref.field];
+      _warn(
+        'config.provider.key_unbound',
+        _kp(segments).value,
+        layer,
+        'the key reference is bound to another address and is not used',
+        fields: {
+          'provider': id,
+          'source': layer.source,
+          'reference_kind': ref.kind.name,
+        },
+      );
+    }
   }
 
   ModelInfo? _modelInfo(List<String> at) {

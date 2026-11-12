@@ -45,9 +45,10 @@ const embeddedAgentVersion = '0.1.0';
 /// его не задают.
 ///
 /// [modelsFor] — перезагрузка конфига (change `add-config-writer-and-reload`,
-/// D13): нужна ровно тогда, когда `services.configSource` задан, иначе
-/// `buildAgentCore` бросает `HostWiringException`; начальные [streamFunction]
-/// и [models] вызывающий строит из той же функции.
+/// D13) и конфигурация сессий других папок (change `require-project-folder`,
+/// D21): нужна, когда задан `services.configSource` или `services.projectConfig`,
+/// иначе `buildAgentCore` бросает `HostWiringException`; начальные
+/// [streamFunction] и [models] вызывающий строит из той же функции.
 Future<EmbeddedAgent> assembleEmbeddedAgent({
   required EmbeddedAgentConfig config,
   required EmbeddedHostServices services,
@@ -82,6 +83,7 @@ Future<EmbeddedAgent> assembleEmbeddedAgent({
       agentConfigPaths: services.agentConfigPaths,
       lastModel: services.lastModel,
       config: services.configSource,
+      projectConfig: services.projectConfig,
     ),
     config: config.core,
     streamFunction: streamFunction,

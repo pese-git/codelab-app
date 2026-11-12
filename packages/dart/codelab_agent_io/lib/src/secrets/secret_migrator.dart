@@ -174,6 +174,34 @@ final class SecretMovedItem extends SecretMigrationItem {
   String describe() => 'Moved $key in $path to secret $name';
 }
 
+/// `Moved providers.<id> (address and key) from <path> to <local path>`:
+/// провайдер закоммиченного конфига доверенного проекта
+/// переехал в локальный файл (design.md change `require-project-folder`, D26).
+///
+/// Почему отдельный пункт: ссылка на ключ из `config.yaml` не привязана к
+/// адресу (D23, правило 3), и провайдер, оставшийся там, перестаёт работать.
+/// Пункт говорит пользователю, что вместе с ключом переехал и адрес.
+@immutable
+final class SecretProviderMovedItem extends SecretMigrationItem {
+  const SecretProviderMovedItem({
+    required this.provider,
+    required this.from,
+    required this.to,
+  });
+
+  /// Путь ключа провайдера (`providers.<id>`).
+  final String provider;
+
+  /// Закоммиченный `config.yaml`, откуда поля группы удалены.
+  final String from;
+
+  /// `config.local.yaml`, куда они записаны.
+  final String to;
+
+  @override
+  String describe() => 'Moved $provider (address and key) from $from to $to';
+}
+
 /// Предупреждение `--force`: секрет заменён, прежнее значение не восстановить
 /// (L7).
 @immutable
@@ -355,6 +383,16 @@ final class SecretMigrationReport {
 /// трогаются. Значения живут только в памяти этого вызова: в отчёт, текст
 /// исключения и лог они не попадают (CFG-2; писатель получает тихий логгер).
 ///
+/// Провайдер закоммиченного `config.yaml` (D26, change `require-project-folder`):
+/// ссылка из этого файла не привязана к адресу (D23, правило 3), поэтому
+/// провайдер доверенного проекта с находкой в поле группы (`api_key`,
+/// `api_key_env`, `api_key_secret`, `headers`) переезжает целиком — все поля
+/// группы, которые задаёт `config.yaml`, — в `config.local.yaml` того же
+/// проекта; литерал становится ссылкой, секрет уходит из репозитория. Файлы
+/// пишутся в порядке `user`, `local`, `project`: сбой между записями оставляет
+/// рабочий конфиг. `config.local.yaml` с иной группой этого провайдера —
+/// `not migrated`, оба файла не меняются.
+///
 /// Как использовать: `await SecretMigrator().run(SecretMigrationOptions(…))`;
 /// напечатать отчёт. Исключений для штатных отказов нет — они в
 /// `exitCode`/`problems`. [processRunner], [clock], [random] и [platform] —
@@ -448,6 +486,36 @@ final class _Unit {
   /// Исходная строка (`templated`).
   final String? original;
 
+  /// Единица принадлежит переезжающему провайдеру (D26): в `config.yaml` она
+  /// только удаляется, а ссылка пишется в `config.local.yaml`.
+  _Move? move;
+
+  /// Ключ ссылки в `config.local.yaml` при переезде провайдера.
+  String get localKey => switch (kind) {
+    _UnitKind.providerKey => '${_parent(key)}.api_key_secret',
+    _UnitKind.nameLiteral =>
+      key.endsWith('.api_key_env') ? '${_parent(key)}.api_key_secret' : key,
+    _UnitKind.templated || _UnitKind.otherInline => key,
+  };
+
+  /// Значение ссылки в `config.local.yaml` при переезде (имя секрета либо
+  /// строка со ссылками).
+  String get localValue =>
+      kind == _UnitKind.templated ? _templatedText() : slots.first.name;
+
+  String _templatedText() {
+    var text = original!;
+    for (final slot in slots.reversed) {
+      final replacement = slot.secretReference
+          ? slot.name
+          : slot.variableReference
+          ? 'secret:${slot.name}'
+          : '\${secret:${slot.name}}';
+      text = text.replaceRange(slot.start!, slot.end!, replacement);
+    }
+    return text;
+  }
+
   List<ConfigEdit> edits() {
     final name = slots.first.name;
     switch (kind) {
@@ -466,16 +534,7 @@ final class _Unit {
       case _UnitKind.otherInline:
         return [UnsetValue(key)];
       case _UnitKind.templated:
-        var text = original!;
-        for (final slot in slots.reversed) {
-          final replacement = slot.secretReference
-              ? slot.name
-              : slot.variableReference
-              ? 'secret:${slot.name}'
-              : '\${secret:${slot.name}}';
-          text = text.replaceRange(slot.start!, slot.end!, replacement);
-        }
-        return [SetValue(key, text)];
+        return [SetValue(key, _templatedText())];
     }
   }
 
@@ -507,6 +566,65 @@ final class _File {
 
   /// Слой проекта вне `trusted_projects` (H4): значения не читаются.
   bool untrusted = false;
+
+  /// Провайдеры, уезжающие из этого файла (`config.yaml`) в `config.local.yaml`
+  /// (D26).
+  final moves = <_Move>[];
+
+  /// Провайдеры, приезжающие в этот файл (`config.local.yaml`, D26).
+  final incoming = <_Move>[];
+}
+
+const _groupFields = [
+  'kind',
+  'base_url',
+  'auth_header',
+  'api_key_env',
+  'api_key_secret',
+  'api_key',
+];
+
+/// Переезд провайдера закоммиченного `config.yaml` доверенного проекта в
+/// `config.local.yaml` (design.md change `require-project-folder`, D26).
+///
+/// Почему: ссылка на ключ из `config.yaml` не привязана к адресу (D23,
+/// правило 3), поэтому провайдер, у которого мигратор заменил литерал ссылкой
+/// в том же файле, перестал бы работать (`key_unbound`) при коде выхода `0`.
+/// `config.local.yaml` — верхний слой группы (Q17 (a)), его ссылка
+/// разрешается по условию (a). Секрет при этом уходит из репозитория.
+///
+/// Что переезжает: все поля группы D23, которые задаёт `config.yaml`
+/// (`kind`, `base_url`, `headers`, `api_key*`, `auth_header`), с литералами,
+/// превращёнными в ссылки. Остальное (`models`, сроки) остаётся.
+final class _Move {
+  _Move(this.id, this.source, this.target);
+
+  final String id;
+  final _File source;
+  final _File target;
+
+  /// Единицы правки `source`, относящиеся к полям группы.
+  final units = <_Unit>[];
+
+  /// Поля группы без находок: ключ → значение, копируются как есть.
+  final copied = <String, Object>{};
+
+  /// `config.local.yaml` уже задаёт ту же группу (повтор после сбоя): в него
+  /// ничего не пишется, из `config.yaml` поля только удаляются.
+  var resume = false;
+
+  List<ConfigEdit> localEdits() => resume
+      ? const []
+      : [
+          for (final MapEntry(:key, :value) in copied.entries)
+            SetValue(key, value),
+          for (final unit in units) SetValue(unit.localKey, unit.localValue),
+        ];
+
+  List<ConfigEdit> sourceEdits() => [
+    for (final key in copied.keys) UnsetValue(key),
+    for (final unit in units) UnsetValue(unit.key),
+  ];
 }
 
 /// Решение по имени секрета в хранилище.
@@ -578,6 +696,11 @@ final class _MigrationRun {
         if (code == 1 && _stored.isNotEmpty)
           'secrets already stored (rerun the command to reuse them): '
               '${_stored.join(', ')}',
+        // D26: сбой между двумя записями — назван файл, который остался
+        // прежним.
+        if (code == 1 && _done.isNotEmpty && _remainingPaths().isNotEmpty)
+          'config not rewritten (rerun the command): '
+              '${_remainingPaths().join(', ')}',
       ],
       warnings: _warnings,
       dryRun: _o.dryRun,
@@ -593,6 +716,11 @@ final class _MigrationRun {
   /// Файлы, конфиг которых уже переписан этим запуском.
   final _done = <_File>[];
 
+  List<String> _remainingPaths() => [
+    for (final f in _active)
+      if (!_done.contains(f)) f.path,
+  ];
+
   /// Проблемы загрузки, которые могут снять правки выбранных слоёв (R8-6).
   var _deferred = const <ConfigIssue>[];
 
@@ -604,10 +732,7 @@ final class _MigrationRun {
     _openStore();
     await _collect();
 
-    final active = [
-      for (final f in _files)
-        if (f.units.isNotEmpty) f,
-    ];
+    var active = _activeFiles();
     _active = active;
     if (active.isEmpty && _deferred.isNotEmpty) {
       _fail(1, [for (final issue in _deferred) '$issue']);
@@ -620,10 +745,30 @@ final class _MigrationRun {
       await _checkCandidates(active);
       // Окончательные имена учитывают ссылки владельцев (читает хранилище).
       await _assignNames(active);
-      await _refreshPreviews(active);
-      await _checkStore();
-      await _resolveNames(_assigned.keys);
-      _failOnConflicts();
+      // D26: переезд, чьи ссылки в `config.local.yaml` не совпали с тем, что
+      // записал бы перенос, отменяется; имена и итог считаются заново.
+      var refused = false;
+      while (_verifyResumes()) {
+        refused = true;
+        active = _activeFiles();
+        _active = active;
+        if (active.isEmpty) {
+          break;
+        }
+        await _assignNames(active);
+      }
+      if (active.isEmpty && _deferred.isNotEmpty) {
+        _fail(1, [for (final issue in _deferred) '$issue']);
+      }
+      if (active.isNotEmpty) {
+        if (refused) {
+          await _checkCandidates(active);
+        }
+        await _refreshPreviews(active);
+        await _checkStore();
+        await _resolveNames(_assigned.keys);
+        _failOnConflicts();
+      }
     }
     if (_o.dryRun) {
       return _report(planned: true);
@@ -633,12 +778,27 @@ final class _MigrationRun {
     for (final file in active) {
       await _storeSecrets(file);
     }
-    for (final file in active) {
+    // Порядок записи (D26): `user`, `local`, `project`. `config.local.yaml` с
+    // группой и ссылкой пишется раньше, чем группа удаляется из
+    // `config.yaml`: сбой между записями оставляет рабочий конфиг (группу
+    // берёт верхний слой — `config.local.yaml`), обратный порядок оставил бы
+    // провайдера без адреса и ключа.
+    const order = {'user': 0, 'local': 1, 'project': 2};
+    final writeOrder = [...active]
+      ..sort((a, b) => (order[a.label] ?? 3).compareTo(order[b.label] ?? 3));
+    for (final file in writeOrder) {
       await _writeFile(file);
       _done.add(file);
     }
     return _report(planned: false);
   }
+
+  /// Файлы с правками: свои единицы либо провайдеры, приезжающие в
+  /// `config.local.yaml` (D26).
+  List<_File> _activeFiles() => [
+    for (final f in _files)
+      if (f.units.isNotEmpty || f.incoming.any((m) => !m.resume)) f,
+  ];
 
   // ---- подготовка -----------------------------------------------------------
 
@@ -809,6 +969,252 @@ final class _MigrationRun {
         await _checkTrust(file);
       }
     }
+    await _planMoves();
+  }
+
+  /// Идентификатор провайдера, если находка [unit] лежит в поле группы D23
+  /// (`api_key`, `api_key_env`, `api_key_secret`, `headers`), иначе `null`
+  /// (D26). `apiKey` в шаблоне — не опечатка: `findInlineSecrets` сообщает
+  /// camelCase-вариант как тот же литеральный ключ, и он переносится как
+  /// `api_key`.
+  String? _groupProviderOf(_Unit unit) {
+    final match = RegExp(
+      r'^providers\.([^.\[]+)\.(api_key|apiKey|api_key_env|api_key_secret|headers[.\[])',
+    ).firstMatch(unit.key);
+    return match?.group(1);
+  }
+
+  /// D26: провайдеры закоммиченного `config.yaml` доверенного проекта, у
+  /// которых есть находка в поле группы, переезжают в `config.local.yaml`.
+  /// Доверие проверено выше (недоверенный проект уже без единиц).
+  Future<void> _planMoves() async {
+    final project = _files
+        .where((f) => f.label == 'project' && !f.untrusted)
+        .firstOrNull;
+    if (project == null || project.units.isEmpty) {
+      return;
+    }
+    final ids = <String>{
+      for (final unit in project.units) ?_groupProviderOf(unit),
+    };
+    if (ids.isEmpty) {
+      return;
+    }
+    var local = _files.where((f) => f.label == 'local').firstOrNull;
+    if (local == null) {
+      final target = ConfigTarget.projectLocal(_cwd);
+      final ConfigSnapshot snapshot;
+      try {
+        snapshot = await _writer.read(target);
+      } on ConfigException catch (error) {
+        _fail(1, [for (final issue in error.issues) '$issue']);
+      }
+      local = _File(
+        label: 'local',
+        path: snapshot.path,
+        target: target,
+        snapshot: snapshot,
+      );
+      _files.insert(_files.indexOf(project) + 1, local);
+    }
+    final binding = ProviderKeyBinding.fromLayers(_layers, _env);
+    for (final id in ids) {
+      // C5.6: в `config.local.yaml` ссылка разрешается без проверки origin
+      // (условие (a) D23), а ссылку, которую написал репозиторий, переносить
+      // нельзя: ключ пользователя ушёл бы на адрес из репозитория.
+      final foreign = _unboundReference(project, id, binding);
+      if (foreign != null) {
+        project.units.removeWhere((u) => _groupProviderOf(u) == id);
+        project.notes.add(
+          'providers.$id in ${project.path}: $foreign is not bound to this '
+          'address by the user config; move it by hand',
+        );
+        continue;
+      }
+      final move = _Move(id, project, local);
+      move.units.addAll(project.units.where((u) => _groupProviderOf(u) == id));
+      final entry = _providerEntry(project.snapshot!.values, id);
+      final unitKeys = {for (final u in move.units) u.key};
+      final prefix = 'providers.$id';
+      for (final field in _groupFields) {
+        final key = '$prefix.$field';
+        if (entry[field] != null && !unitKeys.contains(key)) {
+          move.copied[key] = entry[field]!;
+        }
+      }
+      if (entry['headers'] case final Map<String, Object?> headers) {
+        for (final MapEntry(:key, :value) in headers.entries) {
+          final path = KeyPath('$prefix.headers').child(key).value;
+          if (!unitKeys.contains(path)) {
+            if (value != null) {
+              move.copied[path] = value;
+            }
+          }
+        }
+      }
+      if (_localConflicts(move, local)) {
+        _refuse(move);
+        continue;
+      }
+      for (final unit in move.units) {
+        unit.move = move;
+      }
+      project.moves.add(move);
+      local.incoming.add(move);
+    }
+  }
+
+  /// Ссылка группы провайдера [id] в `config.yaml`, которую не создаёт сам
+  /// мигратор из литерала и которую глобальные слои не связывают с итоговым
+  /// адресом (условие (b) D23); `null` — все ссылки привязаны (D26, C5.6).
+  /// В тексте — вид и имя ссылки без значения.
+  String? _unboundReference(
+    _File project,
+    String id,
+    ProviderKeyBinding binding,
+  ) {
+    final entry = _providerEntry(project.snapshot!.values, id);
+    final unitKeys = {
+      for (final u in project.units)
+        if (_groupProviderOf(u) == id) u.key: u,
+    };
+    final prefix = 'providers.$id';
+    // Итоговый адрес: свой `base_url`/`kind` проекта, иначе — из непроектных
+    // слоёв (Q21 (a)).
+    // Берётся верхний непроектный слой, задающий поле: так же группу соберёт
+    // загрузка по Q21 (a) и правилу верхнего слоя `T`.
+    Object? inherited(String field) {
+      for (final layer in _layers.reversed) {
+        if (layer.kind == ConfigLayerKind.project ||
+            layer.kind == ConfigLayerKind.projectLocal) {
+          continue;
+        }
+        final providers = layer.values['providers'];
+        final body = providers is Map<String, Object?> ? providers[id] : null;
+        if (body is Map<String, Object?> && body[field] != null) {
+          return body[field];
+        }
+      }
+      return null;
+    }
+
+    final kind = entry['kind'] ?? inherited('kind');
+    final origin = providerOrigin(
+      {'base_url': entry['base_url'] ?? inherited('base_url')},
+      kind is String ? kind : null,
+      _env,
+    );
+    for (final reference in providerReferences(entry)) {
+      final key = reference.field.startsWith('headers.')
+          ? KeyPath(
+              '$prefix.headers',
+            ).child(reference.field.substring('headers.'.length)).value
+          : '$prefix.${reference.field}';
+      final unit = unitKeys[key];
+      // Находку-литерал мигратор заменяет ссылкой сам; чужими остаются
+      // ссылки вне находок и ссылки в нетронутых частях строки находки.
+      if (unit != null && !_isForeignInUnit(unit, reference)) {
+        continue;
+      }
+      if (!binding.isBound(reference, origin)) {
+        final shown = literalSecretTag(reference.name, asName: true) != null
+            ? 'a reference'
+            : switch (reference.kind) {
+                ProviderReferenceKind.secret => 'secret ${reference.name}',
+                ProviderReferenceKind.env => 'variable ${reference.name}',
+              };
+        return shown;
+      }
+    }
+    return null;
+  }
+
+  /// Ссылка внутри строки находки (`headers.X: "Bearer <литерал> ${X}"`):
+  /// чужая, если её имя лежит вне участков литералов, которые мигратор
+  /// заменяет сам.
+  bool _isForeignInUnit(_Unit unit, ProviderReference reference) {
+    if (unit.kind != _UnitKind.templated) {
+      return false;
+    }
+    var rest = unit.original!;
+    for (final slot in unit.slots.reversed) {
+      rest = rest.replaceRange(slot.start!, slot.end!, '');
+    }
+    return referencesIn(
+      rest,
+    ).any((r) => r.$1 == reference.kind && r.$2 == reference.name);
+  }
+
+  Map<String, Object?> _providerEntry(Map<String, Object?> values, String id) {
+    final providers = values['providers'];
+    final entry = providers is Map<String, Object?> ? providers[id] : null;
+    return entry is Map<String, Object?> ? entry : const {};
+  }
+
+  /// `config.local.yaml` уже задаёт поля группы провайдера: совпадающие с тем,
+  /// что записал бы перенос, — повтор после сбоя (`resume`); иначе группы не
+  /// сливаются молча (D26). Значения-ссылки из секретов сверяются позже, когда
+  /// известны имена ([_verifyResumes]).
+  bool _localConflicts(_Move move, _File local) {
+    final entry = _providerEntry(local.snapshot!.values, move.id);
+    final prefix = 'providers.${move.id}';
+    final present = <String, Object?>{
+      for (final field in _groupFields)
+        if (entry[field] != null) '$prefix.$field': entry[field],
+      if (entry['headers'] case final Map<String, Object?> headers)
+        for (final MapEntry(:key, :value) in headers.entries)
+          KeyPath('$prefix.headers').child(key).value: value,
+    };
+    if (present.isEmpty) {
+      return false;
+    }
+    final expected = {
+      ...move.copied.keys,
+      for (final unit in move.units) unit.localKey,
+    };
+    if (present.length != expected.length ||
+        !present.keys.every(expected.contains)) {
+      return true;
+    }
+    for (final MapEntry(:key, :value) in move.copied.entries) {
+      if (present[key] != value) {
+        return true;
+      }
+    }
+    move.resume = true;
+    return false;
+  }
+
+  /// Отказ по провайдеру: оба файла не меняются, значение в хранилище не
+  /// попадает; остальные находки переносятся (D26).
+  void _refuse(_Move move) {
+    move.source.units.removeWhere(move.units.contains);
+    move.source.moves.remove(move);
+    move.target.incoming.remove(move);
+    move.source.notes.add(
+      'providers.${move.id} in ${move.source.path}: config.local.yaml '
+      'already defines its address or key; move it by hand',
+    );
+  }
+
+  /// После выдачи имён: ссылки повтора в `config.local.yaml` обязаны совпасть
+  /// с теми, что записал бы перенос (то же имя, у которого то же значение).
+  /// Несовпавший переезд отменяется; `true` — что-то отменено.
+  bool _verifyResumes() {
+    var changed = false;
+    for (final file in [..._files]) {
+      for (final move in [...file.moves]) {
+        if (!move.resume) {
+          continue;
+        }
+        final local = move.target.snapshot!;
+        if (move.units.any((u) => local.get(u.localKey) != u.localValue)) {
+          _refuse(move);
+          changed = true;
+        }
+      }
+    }
+    return changed;
   }
 
   /// Находки слоя: единицы правки и строки `not migrated`.
@@ -1282,7 +1688,9 @@ final class _MigrationRun {
     );
     final rewritten = {
       for (final f in _active)
-        if (f.units.any((u) => u.key.startsWith('$provider.'))) f.label,
+        if (f.units.any((u) => u.key.startsWith('$provider.')) ||
+            f.incoming.any((m) => 'providers.${m.id}' == provider))
+          f.label,
     };
     for (final layer in _layers) {
       final label = switch (layer.kind) {
@@ -1317,7 +1725,10 @@ final class _MigrationRun {
   }
 
   List<ConfigEdit> _editsOf(_File file) => [
-    for (final unit in file.units) ...unit.edits(),
+    for (final unit in file.units)
+      if (unit.move == null) ...unit.edits(),
+    for (final move in file.moves) ...move.sourceEdits(),
+    for (final move in file.incoming) ...move.localEdits(),
   ];
 
   // ---- запись ---------------------------------------------------------------
@@ -1331,7 +1742,9 @@ final class _MigrationRun {
         if (!await _tryApply(file)) {
           return;
         }
-        if (attempt >= 1) {
+        // Переезд провайдера (D26) связывает два файла: перепланировать один
+        // из них нельзя, команду запускают заново.
+        if (attempt >= 1 || file.moves.isNotEmpty || file.incoming.isNotEmpty) {
           _fail(1, [
             'config file changed during the edit; run the command again',
           ]);
@@ -1501,6 +1914,15 @@ final class _MigrationRun {
             ),
           );
         }
+      }
+      for (final move in file.moves) {
+        out.add(
+          SecretProviderMovedItem(
+            provider: 'providers.${move.id}',
+            from: file.path,
+            to: move.target.path,
+          ),
+        );
       }
       for (final note in file.notes) {
         out.add(SecretNotMigratedItem(note));

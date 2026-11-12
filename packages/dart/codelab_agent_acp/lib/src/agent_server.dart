@@ -332,9 +332,14 @@ final class _Connection {
     await _checkCwd(cwd);
     final mapped = _mapMcpServers(request.mcpServers);
     final wiring = _wire(cwd);
-    final session = await _server._runtime.createSession(
-      SessionSpec(cwd: cwd, ports: wiring.ports, mcpServers: mapped.servers),
-    );
+    final AgentSession session;
+    try {
+      session = await _server._runtime.createSession(
+        SessionSpec(cwd: cwd, ports: wiring.ports, mcpServers: mapped.servers),
+      );
+    } on ProjectConfigException catch (error) {
+      throw _projectConfigInvalid(error, cwd: cwd);
+    }
     // Пропуски пишутся после создания: id сессии известен только теперь.
     _logMcpSkips(session.id.value, mapped.skips);
     wiring.link.sessionId = session.id.value;
@@ -352,6 +357,45 @@ final class _Connection {
       // (design.md change `add-agent-builtin-slash-commands`), затем шаблоны
       // (D9 change `add-agent-project-files`); без команд список пуст.
       after: () => _update(sessionId, wiring.bridge.availableCommandsUpdate),
+    );
+  }
+
+  /// Ошибка `session/new` / `session/load` для [ProjectConfigException]:
+  /// `-32603` с `data.codelab.reason: "projectConfigInvalid"` (design.md
+  /// change `require-project-folder`, D21, Q20 (a)).
+  ///
+  /// Почему явный `catch` у вызывающих: общий обработчик маршрутизатора
+  /// отвечает на любое постороннее исключение `Internal error` без `data`, и
+  /// клиент не отличил бы сбой конфигурации папки от ошибки агента. Почему
+  /// такой `message`: это одна строка из всех проблем через `; ` без значений
+  /// секретов (`ProjectConfigException.message`); других полей в `data`, кроме
+  /// `codelab.reason`, нет, кодов ACP не добавляется — соглашение
+  /// `acp_error.dart`.
+  ///
+  /// Лог несёт идентификаторы корреляции (`AGENTS.md` §16, C5.5): [cwd]
+  /// запроса и, у `session/load`, [sessionId]. Значений конфига и текста
+  /// проблем в нём нет — они могут содержать пути и секреты (CFG-2), в лог
+  /// идёт только число проблем.
+  AcpRequestError _projectConfigInvalid(
+    ProjectConfigException error, {
+    required String cwd,
+    String? sessionId,
+  }) {
+    _logger.log(
+      LogLevel.warning,
+      'acp.session.project_config_invalid',
+      fields: {
+        'cwd': cwd,
+        'session_id': ?sessionId,
+        'issues': error.issues.length,
+      },
+    );
+    return AcpRequestError(
+      acp.jsonRpcInternalErrorCode,
+      error.message,
+      data: const {
+        'codelab': {'reason': 'projectConfigInvalid'},
+      },
     );
   }
 
@@ -443,7 +487,6 @@ final class _Connection {
         owner: this,
         sink: _notify,
         link: link,
-        catalog: () => _server._runtime.models,
         clock: _server.clock,
         logger: _logger,
       );
@@ -471,7 +514,6 @@ final class _Connection {
       owner: this,
       sink: _notify,
       link: link,
-      catalog: () => _server._runtime.models,
       clock: _server.clock,
       logger: _logger,
       clientEnv: clientEnv,
@@ -549,6 +591,8 @@ final class _Connection {
         );
       } on SessionNotFound {
         throw AcpRequestError.notFound('Session not found: $id');
+      } on ProjectConfigException catch (error) {
+        throw _projectConfigInvalid(error, cwd: cwd, sessionId: id);
       }
       bridge = wiring.bridge..attach(session);
       _server._sessions[id] = bridge;
@@ -576,7 +620,7 @@ final class _Connection {
       case 'mode':
         await bridge.setMode(_mode(value));
       case 'model'
-          when _server._runtime.models.models.any((m) => m.id.value == value):
+          when bridge.session.models.models.any((m) => m.id.value == value):
         await bridge.setModel(ModelId(value));
       case 'effort' when bridge.session.model.supportsReasoning:
         await bridge.setEffort(

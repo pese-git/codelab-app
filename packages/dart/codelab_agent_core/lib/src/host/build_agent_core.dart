@@ -82,6 +82,13 @@ BuiltAgentCore buildAgentCore({
       'функцию модели и каталог по новому снимку',
     );
   }
+  // D21: без `modelsFor` функцию модели и каталог сессии папки не построить.
+  if (services.projectConfig != null && modelsFor == null) {
+    throw const HostWiringException(
+      'AgentCoreServices.projectConfig требует modelsFor: сессия другой '
+      'папки получает функцию модели и каталог по своей конфигурации',
+    );
+  }
   final narrowed = profile.narrowed({
     if (services.gate == null)
       HostCapability.interactiveApproval: const CapabilityOff(
@@ -181,7 +188,11 @@ BuiltAgentCore buildAgentCore({
       config: config,
       registry: registry,
       stream: streamFunction,
-      modelsFor: services.config == null ? null : modelsFor,
+      // Нужен и перезагрузке корня (`config`), и сессиям других папок
+      // (`projectConfig`, D21): порт может быть без источника.
+      modelsFor: services.config == null && services.projectConfig == null
+          ? null
+          : modelsFor,
       configCommand: configCommand,
     ),
   );

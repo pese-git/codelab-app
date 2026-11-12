@@ -57,6 +57,7 @@ final class EmbeddedHostServices {
     this.agentConfigPaths,
     this.lastModel,
     this.configSource,
+    this.projectConfig,
     this.closeConfigSource,
   });
 
@@ -110,6 +111,19 @@ final class EmbeddedHostServices {
   /// над конфигом, а ядро получает источник в `AgentCoreServices.config`.
   /// `null` — у сценарных открывателей перезагрузки нет.
   final ConfigSource? configSource;
+
+  /// Порт конфигурации папки сессии (change `require-project-folder`, D21,
+  /// Q18): настольный открыватель передаёт тот же `FileConfigSource`.
+  ///
+  /// Что берётся от папки запуска, а что от сессии: от папки запуска — процесс
+  /// (секреты и их бэкенд, журналы, HTTP-клиент, профиль, `trusted_projects`,
+  /// наблюдатель за конфигом и перезагрузка); от папки сессии — всё, что входит
+  /// в `CoreConfig`: провайдеры и каталог моделей, разрешения, бюджет,
+  /// MCP-серверы конфигурации. Модель сессии строится `modelsFor` на общих
+  /// HTTP-клиенте и резолвере секретов. `null` — у сценарного открывателя:
+  /// сессия вне корня получает `withoutProject`. Если задан,
+  /// `createEmbeddedAgent` строит `modelsFor` даже без [configSource].
+  final ProjectConfigLoader? projectConfig;
 
   /// Закрытие [configSource] (наблюдатели, таймеры). Источник — класс
   /// `dart:io`, поэтому web-безопасный пакет знает только эту функцию; её

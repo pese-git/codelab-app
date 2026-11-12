@@ -10,6 +10,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'agent_config_paths.dart';
 import 'config_link_containment.dart';
 import 'config_loader.dart';
+import 'config_warnings.dart';
 import 'config_watcher.dart';
 import 'provider_preconfig.dart';
 
@@ -33,6 +34,15 @@ import 'provider_preconfig.dart';
 /// `/config reload` работает. Период опроса — `config.poll_interval`
 /// (умолчания `true` и `2s`, когда ключей нет).
 ///
+/// Порт `ProjectConfigLoader` (D21, D23): [loadForProject] читает слои
+/// другой папки тем же загрузчиком, окружением, флагами, предконфигурацией и
+/// закреплённым доверием, меняется только `cwd`. Относительный `--config`
+/// разрешается от корня запуска. Базу наблюдателя метод не сдвигает: он
+/// следит только за файлами корня и не должен терять сигнал о неприменённой
+/// правке. Предупреждения загрузки (`config.project.untrusted_key`,
+/// `config.provider.key_unbound`, `config.provider.key_missing`) пишутся
+/// `logConfigWarnings` на каждую загрузку.
+///
 /// Как использовать: хост (`AgentHost` или открыватель встроенного агента)
 /// после стартовой загрузки создаёт
 /// `FileConfigSource(initial: result, cwd: …, environment: …, flags: …,
@@ -40,7 +50,7 @@ import 'provider_preconfig.dart';
 /// logger: …)`, кладёт его в `AgentCoreServices.config` и владеет им: после
 /// `runtime.dispose()` вызывает [close]. Сценарий `--llm-script` источника не
 /// создаёт.
-final class FileConfigSource implements ConfigSource {
+final class FileConfigSource implements ConfigSource, ProjectConfigLoader {
   FileConfigSource({
     required this.initial,
     required String cwd,
@@ -59,7 +69,13 @@ final class FileConfigSource implements ConfigSource {
        _environment = Map.unmodifiable(environment),
        _flags = flags,
        _preconfigFlags = preconfigFlags,
-       _extraConfig = extraConfig,
+       // Относительный `--config` загрузчик разрешает от `cwd`, а у сессии
+       // другой папки `cwd` иной: путь фиксируется от корня запуска один раз,
+       // иначе сессия `/B` читала бы другой файл (D21).
+       _extraConfig = extraConfig == null || isAbsoluteConfigPath(extraConfig)
+           ? extraConfig
+           : '$cwd/$extraConfig',
+       _logger = logger,
        _knownVariables = knownVariables,
        _platform = platform,
        _loader = loader ?? ConfigLoader() {
@@ -104,6 +120,7 @@ final class FileConfigSource implements ConfigSource {
   final ConfigLoadResult initial;
 
   final String _cwd;
+  final Logger _logger;
   late final Set<String> _projectFiles = projectLayerFiles(_cwd).toSet();
   final Map<String, String> _environment;
   final ConfigTree? _flags;
@@ -141,6 +158,22 @@ final class FileConfigSource implements ConfigSource {
       platform: _platform,
       pinnedTrustedProjects: initial.config?.trustedProjects,
     );
+  }
+
+  @override
+  Future<ConfigLoadResult> loadForProject(String canonicalCwd) async {
+    final result = _loader.load(
+      cwd: canonicalCwd,
+      environment: _environment,
+      flags: _flags,
+      preconfigFlags: _preconfigFlags,
+      extraConfig: _extraConfig,
+      knownVariables: _knownVariables,
+      platform: _platform,
+      pinnedTrustedProjects: initial.config?.trustedProjects,
+    );
+    logConfigWarnings(_logger, result);
+    return result;
   }
 
   /// Останавливает наблюдение и таймеры; после вызова сигналов нет.
