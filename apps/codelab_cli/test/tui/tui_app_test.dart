@@ -224,6 +224,35 @@ void main() {
     expect(await exit, 0);
   });
 
+  // Дефект ручной проверки итерации 1 (задача 1.7, D26): `TuiInput` не
+  // переводил Ctrl+T, и байт 0x14 терялся до карты клавиш. Тест идёт путём
+  // «байт -> Program -> действие -> кадр».
+  test('Ctrl+T (byte 0x14) hides and shows the task list (D26)', () async {
+    final exit = await started();
+    // План живёт в обновлениях хода (`planOf`), поэтому сначала ход.
+    type('go\r');
+    final prompt = await agent.next(sessionPromptMethod);
+    agent.update('s1', {
+      'sessionUpdate': 'plan',
+      'entries': [
+        {'content': 'First', 'priority': 'medium', 'status': 'completed'},
+        {'content': 'Second', 'priority': 'medium', 'status': 'pending'},
+      ],
+    });
+    await eventually(() => output.text.contains('ctrl+t hide'));
+
+    type('\x14');
+    await eventually(() => output.text.contains('ctrl+t show'));
+
+    type('\x14');
+    final mark = output.text.length;
+    await eventually(() => output.text.substring(mark).contains('ctrl+t hide'));
+
+    agent.respond(prompt, {'stopReason': 'end_turn'});
+    type('\x04');
+    expect(await exit, 0);
+  });
+
   test('a bracketed paste with new lines is not sent (TUI-3)', () async {
     final exit = await started();
 
