@@ -242,8 +242,8 @@ void main() {
 
   group('PERM-11: absolute skills.extra_roots of the launch root', () {
     test(
-      'write into the extra root is a critical question (no '
-      'allow_always) and does not change the file (D19, skillExtraRoots)',
+      'write into the extra root is a PERM-11 question (agent '
+      'configuration, no allow_always) and does not change the file (D19, skillExtraRoots)',
       () async {
         final extraTemp = Directory.systemTemp.createTempSync('codelab_extra_');
         addTearDown(() => extraTemp.deleteSync(recursive: true));
@@ -272,13 +272,60 @@ void main() {
         final asked = questionsOf('c1');
         expect(asked, hasLength(1));
         expect(kindsOf(asked.single), isNot(contains('allow_always')));
-        final meta = (asked.single['toolCall']! as Map)['_meta'] as Map?;
-        expect((meta?['codelab'] as Map?)?['critical'], isTrue);
+        // Правка файла из путей PERM-11 спрашивается с причиной `agent
+        // configuration: <путь>` (`_meta.critical` ставится только для
+        // критических шаблонов команд).
+        expect(
+          jsonEncode(asked.single['toolCall']),
+          contains('agent configuration: $dir/SKILL.md'),
+        );
         expect(
           File('$dir/SKILL.md').readAsStringSync(),
           contains('name: shared'),
         );
       },
     );
+
+    test('the launch root protects the extra root in a session without skills '
+        '(skills.enabled: false of the folder): the path of the host, not of '
+        'the session (D19, skillExtraRoots)', () async {
+      final extraTemp = Directory.systemTemp.createTempSync('codelab_extra_');
+      addTearDown(() => extraTemp.deleteSync(recursive: true));
+      final extra = extraTemp.resolveSymbolicLinksSync();
+      rig = await SkillsRig.create(
+        trusted: true,
+        extraConfig: 'skills:\n  extra_roots: [${jsonEncode(extra)}]\n',
+      );
+      File('${rig.project}/.codelab/config.yaml')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('skills:\n  enabled: false\n');
+      final dir = rig.writeSkill(extra, 'shared');
+      await start([
+        callJson('c1', 'write', {
+          'path': '$dir/SKILL.md',
+          'content': 'overwritten',
+        }),
+        textJson('ok'),
+      ]);
+      peer.handlers['session/request_permission'] = (request) {
+        permissions.add(request.params! as Map<String, Object?>);
+        return {
+          'outcome': {'outcome': 'selected', 'optionId': 'reject_once'},
+        };
+      };
+
+      await run();
+
+      // Навыков в сессии нет: пути сессии (`SkillFiles.sessionRoots`) не
+      // читались, защищает только путь хоста.
+      expect(rig.logger.eventsOf('skills.loaded'), isEmpty);
+      final asked = questionsOf('c1');
+      expect(asked, hasLength(1));
+      expect(kindsOf(asked.single), isNot(contains('allow_always')));
+      expect(
+        jsonEncode(asked.single['toolCall']),
+        contains('agent configuration: $dir/SKILL.md'),
+      );
+    });
   });
 }

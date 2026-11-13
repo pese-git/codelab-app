@@ -54,7 +54,8 @@ export 'src/config/config_loader.dart'
         ConfigUsageException,
         checkConfigFileName,
         codelabHomeOf,
-        maxConfigBytes;
+        maxConfigBytes,
+        userHomeOf;
 export 'src/config/config_watcher.dart'
     show
         ConfigFileProbe,

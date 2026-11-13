@@ -60,10 +60,12 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
   /// границу лексической, и symlink наружу прошёл бы незамеченным
   /// (приоритет 1). Поэтому тип сужен до реализации, которая резолвер имеет.
   ProjectFilesLoader({
-    required this.home,
-    this.userHome,
+    required String? home,
+    String? userHome,
     required LocalExecutionEnv local,
-  }) : _local = local,
+  }) : home = _absentIfEmpty(home),
+       userHome = _absentIfEmpty(userHome),
+       _local = local,
        _beforeOpen = null;
 
   /// Точка внедрения для тестов fail-closed веток, недостижимых через
@@ -80,14 +82,23 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
   /// `realpath` и `stat`, но до `open`, и может подменить файл на диске.
   @visibleForTesting
   ProjectFilesLoader.testing({
-    required this.home,
-    this.userHome,
+    required String? home,
+    String? userHome,
     required ExecutionEnv local,
     Future<void> Function(String path)? beforeOpen,
-  }) : _local = local,
+  }) : home = _absentIfEmpty(home),
+       userHome = _absentIfEmpty(userHome),
+       _local = local,
        _beforeOpen = beforeOpen;
 
-  /// `$CODELAB_HOME`; `null` — пользовательская область не читается.
+  /// Пустая строка — «области нет», а не корень диска: `'$home/skills'` при
+  /// `home == ''` указывал бы на `/skills` (приоритет 1). `parseServeArgs`
+  /// под `--llm-script` отдаёт `codelabHome == ''` (D16, D19).
+  static String? _absentIfEmpty(String? value) =>
+      value == null || value.isEmpty ? null : value;
+
+  /// `$CODELAB_HOME`; `null` или пустая строка — пользовательская область не
+  /// читается.
   final String? home;
 
   /// Домашний каталог пользователя процесса (`userHomeOf(environment)`):

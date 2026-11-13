@@ -98,6 +98,11 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
   final owned = httpClient == null;
   final http = httpClient ?? web.Client();
   final env = LocalExecutionEnv(cwd: cwd, hostEnvironment: environment);
+  final loader = ProjectFilesLoader(
+    home: home,
+    userHome: userHomeOf(environment),
+    local: env,
+  );
   // Источник перезагрузки (D7, D13): параметры загрузки те же, что у
   // `ConfigLoader().load` выше, а наблюдатель стартует в конструкторе, поэтому
   // создаётся сразу после стартовой загрузки и внутри `try`: любой срыв
@@ -153,7 +158,13 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
           // Джиттер задержек повтора MCP-серверов (D11, PKG-6).
           random: Random.secure(),
         ),
-        projectFiles: ProjectFilesLoader(home: home, local: env),
+        // Один загрузчик на два порта: файлы проекта и навыки; пользовательский
+        // уровень — `$CODELAB_HOME` и `userHomeOf(environment)` (change
+        // `add-agent-skills`, D3, D19).
+        projectFiles: loader,
+        skillFiles: loader,
+        // Корни навыков вне рабочей папки читает ФС процесса клиента (D5, D19).
+        hostFiles: env,
         // Память последней явно выбранной модели над тем же `$CODELAB_HOME`,
         // что у бинаря `codelab-agent`: один пользователь и один конфиг, выбор
         // модели в CLI виден app со следующей сессии (design.md change
@@ -164,6 +175,9 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
         agentConfigPaths: agentConfigPathsFor(
           cwd: cwd,
           environment: environment,
+          // Абсолютные `skills.extra_roots` корня запуска — пути хоста
+          // PERM-11 (D19).
+          skillExtraRoots: config.skills.extraRoots,
         ),
         configSource: source,
         // Тот же объект даёт конфигурацию папок других сессий (D21, Q18):

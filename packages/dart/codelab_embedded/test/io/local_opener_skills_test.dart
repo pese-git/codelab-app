@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_agent_core/testing.dart';
@@ -31,7 +32,7 @@ import '../support/openai_script.dart';
 /// `$CODELAB_HOME` защищён PERM-11, а исключения E1–E3 действуют только для
 /// загруженного навыка). Стражи (зелёные сразу): запись в каталог навыка —
 /// `outsideWorkspace`; перенаправление в каталог навыка в `bypass` —
-/// критический вопрос без `allow_always`.
+/// вопрос PERM-11 (agent configuration, без `allow_always`).
 void main() {
   late Directory temp;
   late String home;
@@ -263,12 +264,12 @@ $extra''');
   });
 
   test('PERM-11, D19 (skillExtraRoots): write into an absolute '
-      'skills.extra_roots of the launch root is a critical question (no '
-      'allow_always) and does not change the file', () async {
+      'skills.extra_roots of the launch root is a PERM-11 question (agent '
+      'configuration, no allow_always) and does not change the file', () async {
     final extraTemp = Directory.systemTemp.createTempSync('codelab_extra_');
     addTearDown(() => extraTemp.deleteSync(recursive: true));
     final extra = extraTemp.resolveSymbolicLinksSync();
-    writeConfig(extra: 'skills:\n  extra_roots: ["$extra"]\n');
+    writeConfig(extra: 'skills:\n  extra_roots: [${jsonEncode(extra)}]\n');
     final dir = writeSkill(extra, 'shared');
     permissionAnswer = 'reject_once';
     final (session, _) = await open([
@@ -282,8 +283,44 @@ $extra''');
 
     expect(permissions, hasLength(1));
     expect(kindsOf(permissions.single), isNot(contains('allow_always')));
-    final meta = (permissions.single['toolCall']! as Map)['_meta'] as Map?;
-    expect((meta?['codelab'] as Map?)?['critical'], isTrue);
+    // Правка файла из путей PERM-11 спрашивается с причиной `agent
+    // configuration: <путь>` (`_meta.critical` — только у критических
+    // шаблонов команд).
+    expect(
+      jsonEncode(permissions.single['toolCall']),
+      contains('agent configuration: $dir/SKILL.md'),
+    );
     expect(File('$dir/SKILL.md').readAsStringSync(), contains('name: shared'));
+  });
+
+  test('PERM-11, D19 (skillExtraRoots): the extra root of the launch root is '
+      'protected in a session without skills (skills.enabled: false of the '
+      'folder): the path of the host, not of the session', () async {
+    final extraTemp = Directory.systemTemp.createTempSync('codelab_extra_');
+    addTearDown(() => extraTemp.deleteSync(recursive: true));
+    final extra = extraTemp.resolveSymbolicLinksSync();
+    writeConfig(extra: 'skills:\n  extra_roots: [${jsonEncode(extra)}]\n');
+    File('$project/.codelab/config.yaml')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('skills:\n  enabled: false\n');
+    final dir = writeSkill(extra, 'shared');
+    permissionAnswer = 'reject_once';
+    final (session, _) = await open([
+      OpenAiStep.tool('c1', 'write', {
+        'path': '$dir/SKILL.md',
+        'content': 'overwritten',
+      }),
+    ]);
+
+    await client!.prompt(session, 'go');
+
+    // Навыков в сессии нет: защищает только путь хоста.
+    expect(logger.eventsOf('skills.loaded'), isEmpty);
+    expect(permissions, hasLength(1));
+    expect(kindsOf(permissions.single), isNot(contains('allow_always')));
+    expect(
+      jsonEncode(permissions.single['toolCall']),
+      contains('agent configuration: $dir/SKILL.md'),
+    );
   });
 }
