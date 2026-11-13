@@ -1,6 +1,7 @@
 import 'dart:io';
 
-import 'package:codelab_agent_core/codelab_agent_core.dart' show ModelId;
+import 'package:codelab_agent_core/codelab_agent_core.dart'
+    show AgentConfigPaths, CancelToken, ModelId, SkillFilesQuery;
 import 'package:codelab_agent_io/codelab_agent_io.dart';
 import 'package:test/test.dart';
 
@@ -275,5 +276,170 @@ void main() {
       ).caseInsensitive,
       Platform.isMacOS || Platform.isWindows,
     );
+  });
+
+  group('skill roots (PERM-11; design.md change add-agent-skills, D9, Q9, '
+      'Q16, Q27)', () {
+    // Фиксируемый API: `agentConfigPathsFor(skillExtraRoots: …)` — корни
+    // навыков от хоста; `sessionSkillRootsFor(cwd:, extraRoots:)` — корни,
+    // зависящие от `cwd` сессии (уровни выше `cwd` и относительные элементы
+    // `skills.extra_roots`), канонические пути, существующие или нет.
+    // Оба списка строятся тем же кодом, что и список корней загрузчика.
+    late String repo;
+    late String work;
+
+    setUp(() {
+      repo = '$base/repo';
+      work = '$repo/apps/demo';
+      Directory('$repo/.git').createSync(recursive: true);
+      Directory(work).createSync(recursive: true);
+      Directory('$base/home').createSync();
+    });
+
+    AgentConfigPaths host({List<String> extra = const []}) =>
+        agentConfigPathsFor(
+          cwd: work,
+          environment: env(codelabHome: '$base/state'),
+          skillExtraRoots: extra,
+        );
+
+    test(r'$CODELAB_HOME/skills and ~/.agents/skills are protected even '
+        'when they do not exist', () {
+      final paths = host().paths;
+
+      expect(
+        paths,
+        containsAll(['$base/state/skills', '$base/home/.agents/skills']),
+      );
+    });
+
+    test('absolute extra_roots and ~/… elements are host paths', () {
+      Directory('$base/team').createSync();
+
+      final paths = host(extra: ['$base/team/skills', '~/shared/skills']).paths;
+
+      expect(
+        paths,
+        containsAll(['$base/team/skills', '$base/home/shared/skills']),
+      );
+    });
+
+    test('a symlinked absolute extra root is protected by its real path', () {
+      Directory('$base/real/skills').createSync(recursive: true);
+      Link('$base/linked').createSync('$base/real');
+
+      final paths = host(extra: ['$base/linked/skills']).paths;
+
+      expect(paths, contains('$base/real/skills'));
+    });
+
+    test('relative extra_roots and project levels are not host paths', () {
+      final paths = host(extra: ['.claude/skills']).paths;
+
+      expect(paths.where((p) => p.contains('.claude')), isEmpty);
+      expect(paths.where((p) => p.startsWith(repo)), isEmpty);
+    });
+
+    test('session roots: levels above cwd up to the git root and relative '
+        'extra_roots', () async {
+      final roots = await sessionSkillRootsFor(
+        cwd: work,
+        extraRoots: ['.claude/skills', '../shared/skills', '$base/abs/skills'],
+      );
+
+      expect(
+        roots,
+        containsAll([
+          '$repo/apps/.codelab/skills',
+          '$repo/apps/.agents/skills',
+          '$repo/.codelab/skills',
+          '$repo/.agents/skills',
+          '$work/.claude/skills',
+          '$repo/apps/shared/skills',
+        ]),
+      );
+      // Выше корня репозитория уровни не ищутся; абсолютные — путь хоста.
+      expect(roots.where((p) => p.startsWith('$base/.')), isEmpty);
+      expect(roots, isNot(contains('$base/abs/skills')));
+    });
+
+    test(
+      'without a git repository only cwd is a level: nothing above it',
+      () async {
+        final plain = '$base/plain/deep';
+        Directory(plain).createSync(recursive: true);
+
+        final roots = await sessionSkillRootsFor(
+          cwd: plain,
+          extraRoots: ['.claude/skills'],
+        );
+
+        expect(roots.where((p) => p.startsWith('$base/plain/.')), isEmpty);
+        expect(roots, contains('$plain/.claude/skills'));
+      },
+    );
+
+    test('a symlinked relative extra root is given by its real path', () async {
+      Directory('$base/elsewhere').createSync();
+      Directory('$work/.claude').createSync();
+      Link('$work/.claude/skills').createSync('$base/elsewhere');
+
+      final roots = await sessionSkillRootsFor(
+        cwd: work,
+        extraRoots: ['.claude/skills'],
+      );
+
+      expect(roots, contains('$base/elsewhere'));
+    });
+
+    test('the lists cover every root the skills loader reads (one root list '
+        'for the loader and PERM-11)', () async {
+      // Навыки во всех видах корней; корень на уровне `cwd` защищает
+      // проектное правило `.codelab/skills/**`/`.agents/skills/**` ядра.
+      final team = '$base/team/skills';
+      final roots = <String>[
+        '$repo/.codelab/skills',
+        '$repo/apps/.agents/skills',
+        '$base/state/skills',
+        '$base/home/.agents/skills',
+        team,
+        '$work/.claude/skills',
+      ];
+      for (final root in roots) {
+        File('$root/s/SKILL.md')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('---\nname: s\ndescription: d\n---\nbody\n');
+      }
+      final loaded =
+          await ProjectFilesLoader(
+            home: '$base/state',
+            userHome: '$base/home',
+            local: LocalExecutionEnv(cwd: base),
+          ).loadSkills(
+            SkillFilesQuery(
+              cwd: work,
+              projectTrusted: true,
+              extraRoots: [team, '.claude/skills'],
+              cancel: CancelToken.none,
+            ),
+          );
+      final protected = [
+        ...host(extra: [team]).paths,
+        ...await sessionSkillRootsFor(
+          cwd: work,
+          extraRoots: ['.claude/skills'],
+        ),
+      ];
+
+      expect(loaded.skills, hasLength(roots.length));
+      for (final skill in loaded.skills) {
+        final root = skill.dir.substring(0, skill.dir.lastIndexOf('/'));
+        expect(
+          protected.any((p) => root == p || root.startsWith('$p/')),
+          isTrue,
+          reason: root,
+        );
+      }
+    });
   });
 }
