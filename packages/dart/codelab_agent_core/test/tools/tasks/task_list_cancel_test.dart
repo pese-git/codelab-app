@@ -44,9 +44,12 @@ void main() {
   });
 
   // `apply` отмену не проверяет: начатая операция применяется, иначе модель
-  // получила бы «cancelled» для пункта, который уже есть в списке.
-  test('cancel while the second call waits for the lock: both items are '
-      'created with the ordinary result', () async {
+  // получила бы «cancelled» для пункта, который уже есть в списке. Второй
+  // вызов ещё не начат: он ждёт очередь ключа `tasks` (D39-alt) и после
+  // ожидания повторно проверяет отмену — получает `cancelled`, список не
+  // меняется.
+  test('cancel while the second call waits for the key: the first is applied, '
+      'the second is cancelled', () async {
     final release = Completer<void>();
     final firstPublishing = Completer<void>();
     late TaskHarness h;
@@ -72,10 +75,12 @@ void main() {
     release.complete();
     final outcomes = [await first, await second];
 
-    expect(outcomes.map((o) => o.outcome), everyElement(ToolOutcome.completed));
+    expect(outcomes.map((o) => o.outcome), [
+      ToolOutcome.completed,
+      ToolOutcome.cancelled,
+    ]);
     expect(textOf(outcomes[0]), startsWith('Created task #1: a.'));
-    expect(textOf(outcomes[1]), startsWith('Created task #2: b.'));
-    expect([for (final c in changes) c.toolCallId], ['call_1', 'call_2']);
-    expect(h.tasks.items.map((i) => i.id), ['1', '2']);
+    expect([for (final c in changes) c.toolCallId], ['call_1']);
+    expect(h.tasks.items.map((i) => i.id), ['1']);
   });
 }

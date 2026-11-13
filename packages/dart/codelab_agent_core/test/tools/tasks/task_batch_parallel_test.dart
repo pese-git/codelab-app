@@ -15,8 +15,10 @@ import '../fake_tools.dart';
 /// `execute`, то есть раньше `ToolCallFinished` своего вызова — TSK-1) и
 /// привязка `plan` по `change.toolCallId` (D35).
 ///
-/// Теряется: глобальный порядок вызовов и порядок выдачи id — он зависит от
-/// того, кто первым возьмёт замок, и тестами НЕ закрепляется.
+/// Порядок выдачи id и применения операций между `task_*` детерминирован
+/// очередью ключа `lockKey == 'tasks'` (D39-alt) и закреплён тестами
+/// `task_batch_deterministic_test.dart`; параллельно исполняются `task_*` и
+/// остальные инструменты пакета.
 void main() {
   test('executionMode of every task tool is not sequential', () {
     for (final tool in <AgentTool>[
@@ -94,14 +96,14 @@ void main() {
 
     final changes = h.events.whereType<TaskListChanged>().toList();
     expect(changes, hasLength(2));
-    expect({for (final c in changes) c.change.toolCallId}, {'c2', 'c3'});
-    // Порядок выдачи id НЕДЕТЕРМИНИРОВАН (зависит от порядка захвата замка),
-    // поэтому сравниваем множества.
-    expect({for (final c in changes) c.change.changed.single.id}, {'1', '2'});
+    // Очередь ключа: порядок вызовов равен порядку id и событий.
+    expect([for (final c in changes) c.change.toolCallId], ['c2', 'c3']);
+    expect([for (final c in changes) c.change.changed.single.id], ['1', '2']);
     final last = changes.last.items;
-    expect(last, hasLength(2));
-    expect({for (final i in last) i.id}, {'1', '2'});
-    expect({for (final i in last) i.subject}, {'first', 'second'});
+    expect(
+      [for (final i in last) (i.id, i.subject)],
+      [('1', 'first'), ('2', 'second')],
+    );
   });
 
   test(

@@ -8,8 +8,9 @@ import 'support/server_harness.dart';
 ///
 /// Почему: `_TaskTool.executionMode == null`, поэтому пакет с `task_*`
 /// исполняется параллельно (announce всех вызовов, затем `Future.wait`);
-/// порядок записей сериализует замок `SessionTaskList`, а `TaskListChanged`
-/// каждого вызова публикуется до его `ToolCallFinished` (TSK-1 на вызов).
+/// между собой `task_*` идут в порядке ответа модели по очереди ключа
+/// `tasks` (`AgentTool.lockKey`, §17.16a.4), а `TaskListChanged` каждого
+/// вызова публикуется до его `ToolCallFinished` (TSK-1 на вызов).
 ///
 /// Для чего: убедиться, что проекция не теряет и не путает `plan` разных
 /// вызовов — клиент привязывает их по `_meta.codelab.taskChange.toolCallId`
@@ -90,18 +91,24 @@ void main() {
         if (u['sessionUpdate'] == 'plan') u,
     ];
     expect(plans, hasLength(2));
-    expect({for (final p in plans) change(p)['toolCallId']}, {'c1', 'c3'});
-    final changed = [for (final p in plans) change(p)['changed']! as List];
-    expect(changed[0], isNot(changed[1]));
-    // Порядок выдачи id зависит от того, какой вызов первым захватил замок,
-    // поэтому проверяется только множество.
+    // `task_*` пакета стоят в очереди ключа `tasks` в порядке ответа модели
+    // (`AgentTool.lockKey`, §17.16a.4), поэтому порядок plan и выдачи id
+    // детерминирован: c1 получает #1, c3 — #2.
+    expect([for (final p in plans) change(p)['toolCallId']], ['c1', 'c3']);
+    expect(
+      [for (final p in plans) change(p)['changed']],
+      [
+        ['1'],
+        ['2'],
+      ],
+    );
     List<String> taskIds(Map<String, Object?> plan) => [
       for (final e in plan['entries']! as List)
         ((((e as Map)['_meta']! as Map)['codelab']! as Map)['task']!
                 as Map)['id']
             as String,
     ];
-    expect(taskIds(plans.last).toSet(), {'1', '2'});
+    expect(taskIds(plans.last), ['1', '2']);
 
     // 3. TSK-1 на вызов: plan вызова раньше его completed.
     for (final id in ['c1', 'c3']) {

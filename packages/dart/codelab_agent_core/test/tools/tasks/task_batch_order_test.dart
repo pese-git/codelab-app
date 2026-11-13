@@ -7,7 +7,7 @@ import '../../loop/loop_harness.dart';
 
 /// Пакет вызовов со списком задач исполняется параллельно с остальным
 /// пакетом (стратегия «parallel», LOOP-4): порядок `TaskListChanged` и id
-/// недетерминирован, но TSK-1 держится per-call — `TaskListChanged` вызова
+/// равен порядку вызовов (очередь ключа `lockKey`, D39-alt), а TSK-1 держится per-call — `TaskListChanged` вызова
 /// стоит раньше его `ToolCallFinished`, а клиент привязывает `plan` по
 /// `change.toolCallId` (D35). Хук `beforeToolCall` в параллельном пакете
 /// срабатывает уже после announce всех вызовов (`ToolCallStarted` всех трёх
