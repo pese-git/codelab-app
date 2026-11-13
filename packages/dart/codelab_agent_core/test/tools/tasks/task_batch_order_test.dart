@@ -5,34 +5,16 @@ import 'package:test/test.dart';
 
 import '../../loop/loop_harness.dart';
 
-/// Пакет вызовов со списком задач идёт строго по одному (`17-16-task-list.md`
-/// §17.16.5, TSK-1): клиент привязывает `plan` по
-/// `_meta.codelab.taskChange.toolCallId` (D35); последовательный режим
-/// сериализует проверки и держит `TaskListChanged` между началом вызова и его
-/// `ToolCallFinished`. Хук `beforeToolCall` (как `markInProgress` ACP) при
-/// этом срабатывает сразу после `ToolCallStarted` своего вызова.
-///
-/// Механизм — `AgentTool.executionMode` = `sequential`: один такой вызов
-/// переводит весь пакет в последовательный режим цикла (`agent_loop.dart`,
-/// `_runBatch`).
+/// Пакет вызовов со списком задач исполняется параллельно с остальным
+/// пакетом (стратегия «parallel», LOOP-4): порядок `TaskListChanged` и id
+/// недетерминирован, но TSK-1 держится per-call — `TaskListChanged` вызова
+/// стоит раньше его `ToolCallFinished`, а клиент привязывает `plan` по
+/// `change.toolCallId` (D35). Хук `beforeToolCall` в параллельном пакете
+/// срабатывает уже после announce всех вызовов (`ToolCallStarted` всех трёх
+/// идут первыми).
 void main() {
-  test('executionMode of every task tool is sequential', () {
-    for (final tool in <AgentTool>[
-      TaskCreateTool(),
-      TaskUpdateTool(),
-      TaskListTool(),
-      TaskGetTool(),
-    ]) {
-      expect(
-        tool.executionModeOf(const {}),
-        ToolExecutionMode.sequential,
-        reason: tool.name,
-      );
-    }
-  });
-
-  test('[task_create, read, task_create]: one call at a time, plan between '
-      'in_progress and completed of its own call', () async {
+  test('[task_create, read, task_create]: all Started first, plan of each '
+      'call before its own Finished', () async {
     final h = await LoopHarness.create(
       tools: [TaskCreateTool(), ReadTool()],
       llm: script([
@@ -45,8 +27,8 @@ void main() {
       ]),
     );
     await h.env.writeText('/proj/a.txt', 'A\n');
-    // Хук хоста (как `markInProgress` ACP-адаптера) стоит последним в
-    // цепочке: запоминаем, что событие ему предшествовало.
+    // Хук хоста (как `markInProgress` ACP-адаптера): фиксируем, какое
+    // событие ему предшествовало.
     final beforeExecute = <String, String>{};
     final config = h.config(
       beforeToolCall: [
@@ -59,29 +41,28 @@ void main() {
 
     await h.run([user('go')], config: config);
 
-    final calls = h.trace
-        .where(
-          (t) =>
-              t.startsWith('ToolCallStarted') ||
-              t.startsWith('ToolCallFinished') ||
-              t.startsWith('TaskListChanged'),
-        )
-        .toList();
-    expect(calls, [
-      'ToolCallStarted(c1)',
-      'TaskListChanged',
-      'ToolCallFinished(c1 completed)',
-      'ToolCallStarted(c2)',
-      'ToolCallFinished(c2 completed)',
-      'ToolCallStarted(c3)',
-      'TaskListChanged',
-      'ToolCallFinished(c3 completed)',
-    ]);
-    // `in_progress` вызова приходит сразу после его ToolCallStarted, до
-    // любого события следующего вызова.
+    final firstFinished = h.events.indexWhere((e) => e is ToolCallFinished);
+    for (final id in ['c1', 'c2', 'c3']) {
+      expect(
+        h.events.indexWhere((e) => e is ToolCallStarted && e.toolCallId == id),
+        lessThan(firstFinished),
+        reason: id,
+      );
+    }
+    for (final id in ['c1', 'c3']) {
+      final changed = h.events.indexWhere(
+        (e) => e is TaskListChanged && e.change.toolCallId == id,
+      );
+      final finished = h.events.indexWhere(
+        (e) => e is ToolCallFinished && e.toolCallId == id,
+      );
+      expect(changed, lessThan(finished), reason: id);
+    }
+    // Фактическое поведение: хук каждого вызова видит последним событием
+    // Started последнего вызова пакета (announce всех — до исполнения).
     expect(beforeExecute, {
-      'c1': 'ToolCallStarted(c1)',
-      'c2': 'ToolCallStarted(c2)',
+      'c1': 'ToolCallStarted(c3)',
+      'c2': 'ToolCallStarted(c3)',
       'c3': 'ToolCallStarted(c3)',
     });
   });
