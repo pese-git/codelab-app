@@ -17,6 +17,9 @@ import '../llm/usage.dart';
 import '../loop/agent_events.dart';
 import '../permissions/modes.dart';
 import '../prompts/prompts.g.dart';
+import '../skills/reattach.dart';
+import '../skills/skill_catalog.dart';
+import '../skills/skills_config.dart';
 import '../tools/agent_tool.dart';
 import '../tools/tasks/task_list.dart';
 import '../util/clock.dart';
@@ -107,9 +110,18 @@ int lastCompactionIndex(List<SessionRecord> path) =>
 /// несжатого контекста — без обнуления сжатие запускалось бы снова и снова.
 /// Ремонт парности здесь не делается: он применяется только к payload
 /// запроса (§6.3).
+///
+/// [skillCatalog] и [skillsConfig] включают приложение навыков после резюме
+/// (design.md change `add-agent-skills`, D15, D20): одно сообщение
+/// пользователя с блоками навыков из `compaction.skills`, производное и в
+/// журнал не пишется. `skillCatalog == null` — приложения нет, проекция
+/// побайтово прежняя. Расхождение отпечатка пишет предупреждение
+/// `skills.reattach.changed` в [logger].
 LlmContextProjection buildLlmContext(
   SessionSnapshot snapshot, {
   Logger? logger,
+  SkillCatalog? skillCatalog,
+  SkillsConfig skillsConfig = const SkillsConfig(),
 }) {
   final path = pathToLeaf(snapshot, logger: logger);
   ModelChangeRecord? model;
@@ -145,7 +157,11 @@ LlmContextProjection buildLlmContext(
               ? message.copyWith(usage: Usage.zero)
               : message,
         );
-      case CompactionRecord(:final summary, :final timestamp):
+      case CompactionRecord(
+        :final summary,
+        :final timestamp,
+        skills: final recorded,
+      ):
         messages.add(
           UserMessage([
             TextContent(
@@ -153,6 +169,28 @@ LlmContextProjection buildLlmContext(
             ),
           ], timestamp: timestamp),
         );
+        if (skillCatalog != null && recorded != null) {
+          final result = reattachSkills(recorded, skillCatalog, skillsConfig);
+          for (final skill in result.attached) {
+            if (skill.fingerprintChanged) {
+              logger?.log(
+                LogLevel.warning,
+                'skills.reattach.changed',
+                fields: {
+                  'session_id': snapshot.header.id.value,
+                  'name': skill.skill.name,
+                },
+              );
+            }
+          }
+          if (result.attached.isNotEmpty) {
+            messages.add(
+              UserMessage([
+                TextContent(renderReattachedMessage(result)),
+              ], timestamp: timestamp),
+            );
+          }
+        }
       default:
         break;
     }

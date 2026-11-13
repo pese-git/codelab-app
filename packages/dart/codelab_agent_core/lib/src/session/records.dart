@@ -150,6 +150,7 @@ sealed class SessionRecord {
         _rest(json, {'type', 'id', 'parentId', 'timestamp', ...known});
     // Поле, которое не разобралось, остаётся в `extra` и пишется обратно.
     final command = CommandRef.tryParse(json['command']);
+    final skills = CompactionSkill.tryParseList(json['skills']);
     return switch (json['type']) {
       'message' => MessageRecord(
         id: id,
@@ -235,12 +236,14 @@ sealed class SessionRecord {
         tokensBefore: _int(json, 'tokensBefore'),
         tokensAfter: _int(json, 'tokensAfter'),
         details: json['details'] as Map<String, Object?>?,
-        extra: extra(const {
+        skills: skills,
+        extra: extra({
           'summary',
           'firstKeptId',
           'tokensBefore',
           'tokensAfter',
           'details',
+          if (skills != null) 'skills',
         }),
       ),
       'label' => LabelRecord(
@@ -575,6 +578,7 @@ final class CompactionRecord extends SessionRecord {
     required this.tokensBefore,
     required this.tokensAfter,
     this.details,
+    this.skills,
     super.extra,
   });
 
@@ -583,6 +587,11 @@ final class CompactionRecord extends SessionRecord {
 
   /// Прочитанные и изменённые файлы, `splitTurn`, модель резюме.
   final Map<String, Object?>? details;
+
+  /// Активные навыки на момент сжатия: имя и отпечаток без тела, от новой
+  /// активации к старой (design.md change `add-agent-skills`, D15, D20).
+  /// `null` — поля нет (сессия без активаций, старая запись).
+  final List<CompactionSkill>? skills;
 
   @override
   String get type => 'compaction';
@@ -594,7 +603,82 @@ final class CompactionRecord extends SessionRecord {
     'tokensBefore': tokensBefore,
     'tokensAfter': tokensAfter,
     'details': ?details,
+    'skills': ?skills == null
+        ? null
+        : [for (final skill in skills!) skill.toJson()],
   };
+}
+
+/// Элемент `compaction.skills`: имя навыка и SHA-256 hex его тела в снимке
+/// каталога. Тела и аргументов команды в записи нет (CMP-2, D15).
+///
+/// Почему такой тип: журнал можно подложить или испортить, а запись должна
+/// переживать чтение и запись без потерь (§8.2.2, как `CommandRef`). Поэтому
+/// неизвестные ключи элемента лежат в [extra], а элемент, который не
+/// разобрался (не объект, нет строкового `name` или `fingerprint`), хранит
+/// исходное значение и пишется обратно как есть (design.md change
+/// `add-agent-skills`, D20, LOW (б)).
+///
+/// Как использовать: `compact` создаёт полные элементы; приложение и
+/// `activeSkills` берут только [isValid]. Парсер даёт [tryParseList].
+final class CompactionSkill {
+  const CompactionSkill({
+    required String this.name,
+    required String this.fingerprint,
+    this.extra = const {},
+  }) : _raw = null,
+       _isRaw = false;
+
+  const CompactionSkill._raw(Object? raw)
+    : name = null,
+      fingerprint = null,
+      extra = const {},
+      _raw = raw,
+      _isRaw = true;
+
+  /// Читает один элемент: объект с двумя строковыми полями даёт полный
+  /// элемент, всё остальное — «сырой» (пропускается при приложении).
+  factory CompactionSkill.fromJson(Object? json) {
+    if (json is Map<String, Object?> &&
+        json['name'] is String &&
+        json['fingerprint'] is String) {
+      return CompactionSkill(
+        name: json['name']! as String,
+        fingerprint: json['fingerprint']! as String,
+        extra: Map.unmodifiable({
+          for (final e in json.entries)
+            if (e.key != 'name' && e.key != 'fingerprint') e.key: e.value,
+        }),
+      );
+    }
+    return CompactionSkill._raw(json);
+  }
+
+  /// `null`, если [json] — не список: поле тогда остаётся в `extra` записи и
+  /// пишется обратно как есть (§8.2.2).
+  static List<CompactionSkill>? tryParseList(Object? json) =>
+      json is List<Object?>
+      ? [for (final item in json) CompactionSkill.fromJson(item)]
+      : null;
+
+  /// Имя навыка; `null` у неразобранного элемента.
+  final String? name;
+
+  /// SHA-256 hex тела снимка; `null` у неразобранного элемента.
+  final String? fingerprint;
+
+  /// Неизвестные ключи элемента.
+  final Map<String, Object?> extra;
+
+  final Object? _raw;
+  final bool _isRaw;
+
+  /// Можно ли приложить навык: есть и имя, и отпечаток.
+  bool get isValid => !_isRaw;
+
+  Object? toJson() => _isRaw
+      ? _raw
+      : <String, Object?>{'name': name, 'fingerprint': fingerprint, ...extra};
 }
 
 /// Закладка на запись; пустая метка снимает её.

@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
 import '../host/core_harness.dart' show textStep;
@@ -394,8 +397,9 @@ void main() {
   });
 
   // D15, шаги 1 и 3: активация до `firstKeptId` последнего сжатия ушла в
-  // резюме и в контексте модели не лежит. Перенос навыков после сжатия —
-  // итерация 4, поэтому сейчас повтор невозможен и вставляется полный блок.
+  // резюме и в контексте модели не лежит. Запись сжатия без поля `skills`
+  // (сессия старого ядра) ничего не переносит, поэтому повтор невозможен и
+  // вставляется полный блок; перенос по полю `skills` — группа ниже (D20).
   group('after a compaction the activation does not count (D15)', () {
     /// Сессия, где навык загружен, а в журнал дописано сжатие: `firstKeptId` —
     /// последняя запись, то есть активация осталась в резюме.
@@ -451,6 +455,77 @@ void main() {
       final text = resultText(toolResults(rig).last);
       expect(text, contains('Body of notes.'));
       expect(text, isNot(contains('already loaded')));
+    });
+  });
+
+  // D15, D20: запись `compaction.skills` и `session/load` — сквозная проверка
+  // того, что рантайм передаёт каталог сессии в проекцию контекста
+  // (`_restoreHistory`) и в `activeSkills` (повтор).
+  group('after a compaction with skills (D15, D20)', () {
+    Future<SkillCommandRig> reloaded({
+      required List<Map<String, Object?>> steps,
+    }) async {
+      final rig = SkillCommandRig(skills: [plain('notes')], steps: steps);
+      await rig.open();
+      await rig.ask('go');
+      final created = rig.session;
+      await created.close();
+      final lastId = rig.journal().last['id']! as String;
+      final line =
+          jsonDecode(compaction('k1', lastId, firstKept: lastId))
+              as Map<String, Object?>;
+      line['skills'] = [
+        {
+          'name': 'notes',
+          'fingerprint': sha256
+              .convert(utf8.encode('Body of notes.'))
+              .toString(),
+        },
+      ];
+      rig.store.putText(
+        created.id,
+        '${rig.store.textOf(created.id)}${jsonEncode(line)}\n',
+      );
+      rig.session = await rig.core.runtime.loadSession(
+        created.id,
+        const SessionHostPorts(),
+        cwd: '/work/a',
+      );
+      return rig;
+    }
+
+    test('session/load restores the transcript with the reattached block '
+        'right after the summary', () async {
+      final rig = await reloaded(
+        steps: [loadSkillStep('c1', 'notes'), textStep('done'), textStep('ok')],
+      );
+
+      await rig.ask('again');
+
+      final texts = [
+        for (final m in rig.contexts.last.messages)
+          if (m is UserMessage)
+            m.content.whereType<TextContent>().map((b) => b.text).join(),
+      ];
+      expect(texts[0], contains('<summary>'));
+      expect(texts[1], contains('<skill name="notes" '));
+      expect(texts[1], contains('Body of notes.'));
+      expect(texts[2], 'again');
+    });
+
+    test('the carried skill is active: /skill:notes is the repeat line, '
+        'not a second copy of the body', () async {
+      final rig = await reloaded(
+        steps: [loadSkillStep('c1', 'notes'), textStep('done'), textStep('ok')],
+      );
+
+      await rig.ask('/skill:notes');
+
+      expect(rig.lastUserText, commandRepeat('notes'));
+      expect(
+        rig.logger.eventsOf('skill.activated').last.fields['repeated'],
+        true,
+      );
     });
   });
 }

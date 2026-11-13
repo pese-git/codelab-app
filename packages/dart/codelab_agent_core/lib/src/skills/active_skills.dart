@@ -3,10 +3,10 @@
 /// решения Q10, Q48 (б); K-06).
 ///
 /// Почему отдельный файл: повтор активации в инструменте `skill` и команде
-/// `/skill:`, приложение навыков после сжатия (итерация 4) и закреплённые
-/// строки K-06 должны отвечать на вопрос «какие навыки сейчас в контексте
-/// модели» одинаково. Новых записей журнала для этого нет: ответ выводится из
-/// сообщений активной ветки.
+/// `/skill:`, приложение навыков после сжатия (D20, `reattachSkills`) и
+/// закреплённые строки K-06 должны отвечать на вопрос «какие навыки сейчас в
+/// контексте модели» одинаково. Новых записей журнала для этого нет: ответ
+/// выводится из сообщений активной ветки.
 ///
 /// Как использовать: `activeSkills(snapshot, catalog, settings)`; навык
 /// **активен**, если входит в результат с `full: true`. Функция не меняет
@@ -19,6 +19,7 @@ import '../session/projections.dart' show keptPath, lastCompactionIndex;
 import '../session/records.dart';
 import '../session/session_store.dart';
 import '../session/tree.dart';
+import 'reattach.dart';
 import 'skill_block.dart';
 import 'skill_catalog.dart';
 import 'skill_invocation.dart';
@@ -26,7 +27,7 @@ import 'skills_config.dart';
 
 /// Навык, тело которого есть в контексте модели.
 ///
-/// [full] — тело приложено целиком; усечённое после сжатия (итерация 4) даёт
+/// [full] — тело приложено целиком; усечённое после сжатия (D20) даёт
 /// `false` и активным для повтора не считается. [content] — SHA-256 UTF-8
 /// текста активации (hex, нижний регистр): для инструмента — тело снимка
 /// (`SkillDefinition.body`), для команды — тело после подстановки её
@@ -56,15 +57,19 @@ final class ActiveSkill {
 ///   бы навык.
 ///
 /// Учитываются только записи, которые видит модель: `keptPath` от
-/// `firstKeptId` последнего сжатия (D15, шаги 1 и 3); перенос навыков,
-/// приложенных после сжатия (`carried`), появится в итерации 4.
+/// `firstKeptId` последнего сжатия (D15, шаги 1 и 3), плюс `carried` —
+/// навыки записи `last.skills`, которые приложение после резюме приложило
+/// (шаг 2, D20): целиком — `full: true`, усечённым — `full: false`; выпавшие
+/// по общему бюджету и отсутствующие в каталоге не входят, а `content` —
+/// SHA-256 текущего тела снимка. Расчёт общий с `buildLlmContext`
+/// (`reattachSkills`).
 ///
 /// Запись, не совпавшая с текущим снимком (правили `SKILL.md` между сессиями
 /// или сменился `dir`), активацией не считается: следующий вызов вставит
 /// новое тело целиком — безопасная сторона. Имя вне [catalog] и нестроковое
 /// имя вызова пропускаются. Более новая запись о навыке заменяет более
-/// старую. Параметр [settings] зарезервирован под бюджеты приложения после
-/// сжатия (итерация 4).
+/// старую. Параметр [settings] — бюджеты приложения после сжатия
+/// (`reattachPerSkillTokens`, `reattachTotalTokens`).
 List<ActiveSkill> activeSkills(
   SessionSnapshot snapshot,
   SkillCatalog catalog,
@@ -80,10 +85,24 @@ List<ActiveSkill> activeSkills(
   }
 
   // Только то, что модель ещё видит: от `firstKeptId` последнего сжатия
-  // (D15, шаги 1 и 3). Тот же срез, что у `buildLlmContext`. Перенос навыков,
-  // приложенных после сжатия, — итерация 4: пока он пуст.
+  // (D15, шаги 1 и 3). Тот же срез, что у `buildLlmContext`.
   final path = pathToLeaf(snapshot);
   final visible = keptPath(path, compactionIndex: lastCompactionIndex(path));
+  // Шаг 2 D15: приложенные после сжатия навыки идут первыми в порядке записи;
+  // более новая активация в хвосте заменит элемент через `activate`.
+  final recorded = visible.compaction?.skills;
+  if (recorded != null) {
+    final carried = reattachSkills(recorded, catalog, settings);
+    for (final s in carried.attached) {
+      result.add(
+        ActiveSkill(
+          name: s.skill.name,
+          full: s.full,
+          content: sha256Hex(s.skill.body),
+        ),
+      );
+    }
+  }
   for (final record in visible.kept) {
     if (record is! MessageRecord) {
       continue;

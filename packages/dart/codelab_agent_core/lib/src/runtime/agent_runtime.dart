@@ -49,7 +49,8 @@ import '../skills/skill_commands.dart';
 import '../skills/skill_invocation.dart';
 import '../skills/skill_catalog.dart';
 import '../skills/skill_files.dart';
-import '../skills/skills_config.dart' show defaultSkillsCatalogMaxChars;
+import '../skills/skills_config.dart'
+    show SkillsConfig, defaultSkillsCatalogMaxChars;
 import '../prompts/compose.dart';
 import '../secrets/secret_lookup.dart';
 import '../secrets/secret_resolver.dart';
@@ -1523,6 +1524,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
       templates: project.templates,
       agents: project.agents,
       skills: skills,
+      skillsConfig: settings.skills,
       modeFloor: settings.permissions.mode ?? profile.defaultMode,
     );
     _sessions.add(session);
@@ -2477,6 +2479,7 @@ final class _Session implements AgentSession {
     required List<CommandTemplate> templates,
     required List<AgentDefinition> agents,
     required this.skills,
+    required this.skillsConfig,
     required ModeId modeFloor,
   }) : _mode = mode,
        _modeFloor = modeFloor,
@@ -2604,6 +2607,16 @@ final class _Session implements AgentSession {
   /// поле и единственный метод доступа для всех потребителей.
   @override
   final SkillCatalog skills;
+
+  /// Бюджеты приложения навыков после сжатия, снятые при открытии сессии
+  /// вместе с каталогом (design.md change `add-agent-skills`, D11, D20 «M1»).
+  ///
+  /// Почему снимок: ключи `skills.reattach.*` не `restartRequired`, и
+  /// `reloadConfig` меняет настройки, а транскрипт живой сессии собран со
+  /// старыми бюджетами. `activeSkills`, проекция контекста и `compact` читают
+  /// только это поле, поэтому усечённый навык не станет «активным» после
+  /// перезагрузки. Новые значения действуют на сессии, открытые после неё.
+  final SkillsConfig skillsConfig;
 
   /// Выбранный агент; `null` — `default`.
   AgentDefinition? _activeAgent;
@@ -3236,7 +3249,7 @@ final class _Session implements AgentSession {
   /// Активные навыки по журналу сессии на этот момент (D15, D18): ими
   /// пользуются инструмент `skill` и команда `/skill:` для повтора.
   List<active.ActiveSkill> _activeSkills() =>
-      active.activeSkills(_writer.snapshot, skills, _settingsOf().skills);
+      active.activeSkills(_writer.snapshot, skills, skillsConfig);
 
   /// Разворачивает `/skill:<name> <args>` (design.md change
   /// `add-agent-skills`, D8, D18; agent-skills «Команды навыков»,
@@ -3757,7 +3770,14 @@ final class _Session implements AgentSession {
   Future<void> _restoreHistory() async {
     final snapshot = _writer.snapshot;
     _agent.replaceTranscript(
-      _withModel(buildLlmContext(snapshot, logger: _logger).messages),
+      _withModel(
+        buildLlmContext(
+          snapshot,
+          logger: _logger,
+          skillCatalog: skills,
+          skillsConfig: skillsConfig,
+        ).messages,
+      ),
     );
     final state = buildTaskList(snapshot, logger: _logger);
     await _tools.tasks.restore(
@@ -3826,6 +3846,8 @@ final class _Session implements AgentSession {
       focus: focus,
       summaryModel: '${model.provider}/${model.id}',
       logger: _logger,
+      skillCatalog: skills,
+      skillsConfig: skillsConfig,
     );
   }
 
