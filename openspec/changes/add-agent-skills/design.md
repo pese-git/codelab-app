@@ -110,7 +110,7 @@
 - **Свойства.** Уровень `read`, вид `read`, исполнение `parallel`, `permissionPattern` — имя, `present` — `Load skill <name>`, `locations: [<dir>/SKILL.md]`.
 - **Блок навыка** (Q4, Q5, Q19, Q26) — общий для результата `skill`, сообщения `/skill:` и приложения после сжатия: `<skill name="…" dir="…"[ compatibility="…"]>`, тело без frontmatter (руководство §«What the model receives»: большинство реализаций с отдельным инструментом снимают frontmatter), `</skill>`, затем **всегда** строка о путях — одна для обоих режимов исполнения: `This skill's own files (scripts, references, assets and files named in its instructions) are relative to its directory; task data is relative to the project. In tool calls, refer to the skill's files by absolute path, and run its scripts with the project as the working directory.` (аналог `${CLAUDE_SKILL_DIR}` в CC); совет об абсолютных путях распространён на все вызовы инструментов, а не только на запуск скриптов, — руководство советует абсолютные пути для файлов навыка в любых вызовах; строка не ссылается на список «ниже», поэтому верна и без сопутствующих файлов — и, если есть, список сопутствующих файлов абсолютными путями, при неполном списке — `[more files not listed]`. Экранирование: в теле любой открывающий или закрывающий тег `skill` (без учёта регистра, с пробелами) получает `\` после `<`; в атрибутах `"`, `<`, `>`, `\r`, `\n` → `_`. `outputTrust: trusted` (D9).
 - **Повторная активация** (Q10; руководство §«Deduplicate activations», так же CC). Если навык активен (D15), результат — одна строка `Skill "<name>" is already loaded in this conversation; follow the instructions above.`, `isError: false`, лог `skill.activated {via: tool, repeated: true}`. Чтение `SKILL.md` инструментом `read` активацией **не считается** (осознанное решение): сырой файл с frontmatter — данные, модель получает тело навыка через `skill`; учёт `read` потребовал бы разбора путей вывода и сделал бы `activeSkills` зависимой от файловой системы.
-- **Ошибка** (`isError: true`) — имени нет среди `modelVisible` (провайдер может не соблюсти `enum`): `Unknown skill: <name>. Available skills: <a>, <b>.`.
+- **Ошибка** (`isError: true`). Имя вне `enum` отклоняет проверка аргументов исполнителя до `execute` (§6.3.2): `Invalid arguments for tool "skill"` с перечнем допустимых имён, без тела. Сам инструмент на имя вне `modelVisible` отвечает `Unknown skill: <name>. Available skills: <a>, <b>.` — защита в глубину для прямого вызова (D17).
 
 ### D8. Команды `/skill:<name>` (решения Q5, Q7, Q10)
 
@@ -363,6 +363,156 @@ SkillCatalog parseSkills(SkillFiles files, SkillsConfig settings, {PolicyRules r
 - `shadowed` выдаёт ядро, а не загрузчик (решение Q39): тесты загрузчика проверяют порядок `rootIndex` и наличие обоих навыков, а сценарии перекрытия — через `parseSkills` над результатом загрузчика или в `skill_catalog_test.dart`.
 - Остальные имена и сигнатуры тестов приняты без изменений.
 
+### D17. Контракт итерации 2: секция каталога, блок, инструмент `skill`, граница только для чтения, PERM-11
+
+Закреплено 2026-11-13 по красным тестам итерации 2 (задачи 2.1, 2.3, 2.5, 2.7, 2.9, 2.10). Где предположение тестов согласуется с кодом, D5–D9 и §17.2, оно принято; отличия и правки тестов — в конце раздела. Длины в символах везде — число рун (`String.runes`), как у `description` и `compatibility` в `parseSkills` (D16); `…` — одна руна.
+
+**Ресурсы промпта** (`prompts/`, генерация `tool/gen_prompts.dart`, PR-1, PR-2; id — по правилу пути, как `system/base.md` → `system.base`):
+
+| Файл | `Prompts.` | id | `vars` | `tools` |
+|---|---|---|---|---|
+| `skills/catalog.md` | `skillsCatalog` | `skills.catalog` | `[entries]` | `[skill]` |
+| `skills/invoked.md` | `skillsInvoked` | `skills.invoked` | `[name, block]` | — |
+| `skills/reattached.md` | `skillsReattached` | `skills.reattached` | `[blocks]` | — |
+| `tool_descriptions/skill.md` | `toolDescriptionsSkill` | `tool_descriptions.skill` | — | — |
+
+Секция начинается заголовком `## Skills`, затем проза (D6), затем `{{entries}}` без обёртки: блок `<available_skills>` не вводится (описания однострочные, экранировать в каталоге нечего). Проза `skills/catalog.md` НЕ ДОЛЖНА содержать строк вида `- <слово>: …` или `- <слово>` — по этой форме тесты отличают строки каталога. `invoked.md` и `reattached.md` создаются в задаче 2.2, применяются в итерациях 3 и 4; инструментов они не называют (agent-prompts, «База не называет инструментов»).
+
+**Сборка промпта** (`prompts/compose.dart`):
+
+```dart
+PromptInputs({..., List<SkillDefinition> skills = const [],   // modelVisible снимка; порядок входа не важен
+    int skillsCatalogMaxChars = 8000});                         // skills.catalog_max_chars сессии
+// шаг 9a: после mcp, до project_context, если
+//   profile.isOn(HostCapability.skills) && skills.isNotEmpty && toolNames.contains('skill')   // последнее — PR-6
+```
+
+Строки каталога строит одна чистая функция, общая для `composeSystemPrompt` и для лога рантайма (`lib/src/skills/catalog_entries.dart`, внутренняя, в барель не экспортируется):
+
+```dart
+({String entries, int shortened, int omitted}) skillsCatalogEntries(
+    List<SkillDefinition> skills, int maxChars);
+```
+
+Алгоритм (D6, решение Q18; детерминированный, SKL-4):
+1. Навыки сортируются по `name` (байтово). Описание длиннее 1024 рун — первые 1024 и `…` (не считается укорочением: предупреждение уже выдано при загрузке, D4).
+2. Стоимость строки — её длина плюс 1 (перевод строки); бюджет — `maxChars`, в него входит и строка `[<N> more skills not listed]` с её переводом (вопрос A3 исполнителя: да, входит). Если сумма стоимостей не больше бюджета — строки `- <name>: <description>`, `shortened = omitted = 0`.
+3. Иначе ищется наибольшая общая доля `s ≥ 0` (целое число рун), при которой сумма стоимостей не больше бюджета: описание длиной `≤ s` остаётся целым; длиннее — первые `s − 1` рун и `…`; при `s = 0` строка — `- <name>` без двоеточия. `shortened` — число описаний, укороченных этим шагом (в том числе до нуля).
+4. Если даже при `s = 0` строки не помещаются, строки удаляются с конца: берётся наибольшее `k`, при котором `k` строк вида `- <name>` и строка `[<n − k> more skills not listed]` помещаются в бюджет, затем для этих `k` строк заново считается доля шага 3 с бюджетом за вычетом строки об опущенных. `omitted = n − k`.
+5. `entries` — строки через `\n`, без завершающего перевода.
+
+Лог `skills.catalog.truncated {session_id, shortened, omitted}` (warning, D13) пишет рантайм **один раз на сессию** при её открытии (создание и `session/load`), если `modelVisible` не пуст и `shortened + omitted > 0`; при сборке промпта (смена режима, агента) лог не пишется — секция одинакова на каждом шаге (вопрос A4 исполнителя).
+
+**Блок навыка** (`lib/src/skills/skill_block.dart`, внутренний):
+
+```dart
+String renderSkillBlock(SkillDefinition skill, {String? body});   // body — тело после подстановки (/skill:, итерация 3); null — skill.body
+String escapeSkillTags(String text);                              // общая для тела, строк файлов и вывода read (Q30)
+```
+
+Вывод без завершающего перевода строки:
+
+```text
+<skill name="<name>" dir="<dir>"[ compatibility="<compatibility>"]>
+<escapeSkillTags(body)>
+</skill>
+This skill's own files (scripts, references, assets and files named in its instructions) are relative to its directory; task data is relative to the project. In tool calls, refer to the skill's files by absolute path, and run its scripts with the project as the working directory.
+[- <dir>/<file>            — по строке на элемент companions, в их порядке]
+[[more files not listed]   — только при companionsTruncated]
+```
+
+- `escapeSkillTags`: каждое совпадение `<\s*/?\s*skill` (без учёта регистра ASCII; `\s` включает перевод строки) получает `\` сразу после `<` — так же, как `_escapeClosingTag` для `project-instructions` в `compose.dart`.
+- Атрибуты `name`, `dir`, `compatibility`: `"`, `<`, `>`, `\r`, `\n` → `_`.
+- Строки файлов: путь `<dir>/<file>` проходит `escapeSkillTags`, а `\r` и `\n` в нём заменяются на `_` — имя файла приходит из файловой системы и не должно открывать новую строку или тег (техническое решение, приоритет 1).
+- Тело снимка уже в обрезанной форме D4 (`parseSkills`); `body:` вставляется как передано. Пустое тело даёт пустую строку между тегами.
+
+**Инструмент `skill`** (`lib/src/tools/builtin/skill.dart`, внутренний):
+
+```dart
+final class SkillTool extends AgentTool {
+  SkillTool(SkillCatalog catalog, {SessionId? sessionId});
+}
+```
+
+- `name` `skill`; `description` — `Prompts.toolDescriptionsSkill.render(const {})`; `tier` и `kind` — `read`; `executionMode` — `parallel`; `outputTrust` — `trusted`; `permissionPattern` — `'${args['name']}'`.
+- `parameters`: `{"type":"object","properties":{"name":{"type":"string","enum":[<имена modelVisible в порядке снимка>],"description":"Skill name exactly as listed in the Skills section."}},"required":["name"]}` — без `additionalProperties` (agent-skills «Инструмент skill»; `enum` пуст, если `modelVisible` пуст, но такой инструмент не регистрируется).
+- `present`: заголовок `Load skill <name>`; `locations` — `[Location('<dir>/SKILL.md')]`, если имя есть в `modelVisible`, иначе пусто.
+- `execute`: навык ищется только среди `modelVisible`. Найден — `ToolExecutionResult([TextContent(renderSkillBlock(skill))])` и лог `skill.activated {session_id, name, via: 'tool', repeated: false}` (info; `session_id` — `sessionId?.value`, у голого инструмента в тестах — `null`); тело, описание и файлы в лог не идут. Не найден — `isError: true`, текст `Unknown skill: <name>. Available skills: <a>, <b>.` (`<name>` — первые 64 руны без пометки; список — имена `modelVisible` через `, `), лога нет.
+- Имя вне `enum` до `execute` не доходит: исполнитель проверяет аргументы по схеме (§6.3.2, шаг 2) и возвращает `Invalid arguments for tool "skill": … must be one of [...]` — в нём тоже перечень допустимых имён, тела нет. `Unknown skill` — защита в глубину для прямого вызова и для схем без проверки `enum` (вопрос A1 исполнителя; сценарий «Имя вне каталога» agent-skills исправлен под это, требование не меняется по смыслу: ошибка без тела с перечнем имён).
+- Повтор активного навыка (D7, D15) добавит задача 3.6: конструктор получит функцию активных навыков сессии; в итерации 2 `repeated` всегда `false`.
+
+**Регистрация в сессии и замена `read`/`exec`.** Базовый реестр ядра инструмента `skill` не содержит. Рантайм в `_open` после фаз загрузки (D16) работает с реестром сессии (`ToolRegistry.register` заменяет одноимённый инструмент на месте, порядок схем не меняется — кэш промпта стабилен):
+1. `catalog.modelVisible` не пуст — `register(SkillTool(catalog, sessionId: id))`.
+2. `catalog.skills` не пуст и в реестре `read` — экземпляр `ReadTool` — `register(ReadTool(skills: catalog, root: canonicalCwd))`. Инструмент хоста с тем же именем другого типа не заменяется.
+3. `readOnlyRoots` (ниже) не пуст и в реестре `exec` — экземпляр `ExecTool` — `register(ExecTool(readOnlyRoots: roots, execInReadOnlyRoots: flag))`. Без `exec` в профиле инструмент не добавляется.
+Набор агента (`AgentDefinition.allowsTool`, CFG-7) действует и на `skill`: агент без него не видит ни схемы, ни секции (PR-6).
+
+**`ReadTool`** (`tools/builtin/read.dart`; вопрос A2 исполнителя):
+
+```dart
+ReadTool({SkillCatalog skills = SkillCatalog.empty, String? root});   // root — канонический корень сессии
+```
+
+`outputTrust(args)` контекста не получает, поэтому корень для относительного пути — параметр конструктора (рантайм создаёт экземпляр на сессию); сигнатура `AgentTool.outputTrust` не меняется. Один предикат «путь в каталоге навыка» для `outputTrust` и для `execute`: `abs = normalizePath(root ?? '/', path)` (без `root` относительный путь в каталоги навыков не попадает); путь принадлежит навыку, если `isInside(dir, abs)` по правилу сегментов для какого-либо `dir` из `skills.skills` и первый сегмент после `dir` — не `evals`. Такой путь — `ContentTrust.trusted` при любых сегментах (`vendor`, `node_modules`, `.dart_tool`), а текст файла проходит `escapeSkillTags` до нумерации строк. Остальные пути — прежняя политика `isUntrustedPath`, без экранирования. Сравнение лексическое: путь через другую форму корня (`/var` и `/private/var`) получает прежнюю политику (безопасная сторона: огораживание по сегментам остаётся).
+
+**`ExecTool`** (`tools/builtin/exec.dart`; задача 2.9):
+
+```dart
+ExecTool({List<String> readOnlyRoots = const [], bool execInReadOnlyRoots = false});
+```
+
+В `execute` до вызова env: если `execInReadOnlyRoots == false`, `abs = normalizePath(ctx.env.cwd, cwd)` и `abs` лежит в одном из `readOnlyRoots` по правилу сегментов — `isError: true` с текстом `The working directory <cwd> is outside the client workspace; run the skill script by its absolute path from the skill block, with the workspace as the working directory.`, где `<cwd>` — значение аргумента как передано моделью; env вызова не получает. Иначе — прежний путь (`BoundedEnv` — последний рубеж, `Path is outside the workspace: <cwd>`). *Альтернатива* — проверка в `preflight` до политики разрешений (без лишнего вопроса пользователю перед заведомой ошибкой); отклонена: `preflight` не видит корня сессии, относительный `cwd` потребовал бы корень в конструкторе, а случай редкий — блок навыка заранее советует абсолютный путь (Q26).
+
+**Граница только для чтения** (`env/bounded_env.dart`; agent-execution-env «Корни только для чтения»):
+
+```dart
+static Future<ExecutionEnv> wrap(ExecutionEnv inner, String root, {
+    List<String> readOnlyRoots = const [], ExecutionEnv? readOnlyFs, bool execInReadOnlyRoots = false});
+// SkillCatalog: List<String> readOnlyRoots(String sessionRoot)
+// AgentCoreServices: final ExecutionEnv? hostFiles;   // файловая система процесса агента; null — корней нет
+// SessionHostPorts: final bool execOnHost;           // env сессии исполняет команды на машине агента; по умолчанию false
+```
+
+- `SkillCatalog.readOnlyRoots(sessionRoot)` — `dir` навыков `skills` (в их порядке), которые не лежат в `sessionRoot` и **не содержат** его по правилу сегментов: каталог навыка, внутри которого открыта сессия (правка своего навыка), — часть рабочей папки, а не корень только для чтения, иначе запись в рабочей папке стала бы `outsideWorkspace`.
+- `readOnlyFs == null` или `readOnlyRoots` пуст — поведение и набор опциональных возможностей прежние, проверки только по `root`.
+- Каждый корень нормализуется; если `readOnlyFs` — `PathResolver`, раскрывается `realpath` **один раз** при создании (ошибка — остаётся нормализованная форма, как у `root`).
+- Классификация пути `abs = normalizePath(root, path)`: (1) лексически в `root` или в его реальной форме — прежняя проверка рабочей папки; (2) иначе лексически в корне только для чтения (нормализованной или реальной форме) — ветка корня; (3) иначе — прежняя проверка (ссылка извне в рабочую папку принимается, всё остальное — `outsideWorkspace`). Внутренний env пути ветки (2) не видит — ни `stat`, ни `realpath`.
+- Ветка корня, чтение (`readText`, `readBytes`, `stat`, `listDir`, `realpath`): раскрытие ссылок — через `readOnlyFs` тем же алгоритмом «глубочайший существующий предок», что у `_Guard`; реальный путь должен остаться в **том же** корне, иначе `outsideWorkspace`; вызов идёт в `readOnlyFs` с `abs`. Возможности нет у `readOnlyFs` (ENV-4) — `Err(FileError(unsupported, path))` без вызова env; сама обёртка реализует возможность, только если её реализует `inner` (матрица классов не меняется).
+- Ветка корня, запись (`writeText` и будущие правка и удаление): `outsideWorkspace` сразу, без обращения к любому env (ENV-3).
+- `exec` с `ExecOptions.cwd` в ветке корня: при `execInReadOnlyRoots == false` — `ExecError(outsideWorkspace)` с прежним текстом без вызова env; при `true` — раскрытие через `readOnlyFs` и проверка «в том же корне», затем `inner.exec(command, options.copyWith(cwd: abs))`.
+- Рантайм: `env = BoundedEnv.wrap(ports.env ?? services.baseEnv, cwd, readOnlyRoots: hostFiles == null ? const [] : catalog.readOnlyRoots(canonicalCwd), readOnlyFs: services.hostFiles, execInReadOnlyRoots: services.hostFiles != null && (ports.env == null || ports.execOnHost))`. Обёртка создаётся **после** фаз загрузки (сейчас — до них; фазы env сессии не используют). `ports.env == null` — сессия исполняет на `baseEnv` хоста, это машина агента. `AcpAgentServer` ставит `execOnHost: true` только в ветке `localEnv` (встроенный агент); у `AcpClientExecutionEnv` и `ListingOverlayEnv` — `false` (вопрос A7 исполнителя: признак явный, по виду env, а не по типу объекта — обёртки env скрыли бы тип).
+
+**PERM-11 для навыков** (`permissions/`, `codelab_agent_io/lib/src/config/agent_config_paths.dart`; задачи 2.7, 2.8):
+
+```dart
+// ядро
+AgentConfigPaths({required Iterable<String> paths, Iterable<String> skillDirs = const [],
+    Map<String, String> expansions = const {}, bool caseInsensitive = false});
+final List<String> skillDirs;   // канонические каталоги загруженных навыков сессии: только для E1–E3, сами по себе не защищают
+AgentConfigPaths withSession({Iterable<String> paths = const [], Iterable<String> skillDirs = const []});
+//   новая копия: свои элементы, затем новые без повторов; expansions и caseInsensitive — свои; исходное значение не меняется
+// SkillFiles: final List<String> sessionRoots;   // const [] по умолчанию; см. ниже
+// codelab_agent_io (экспорт из codelab_agent_io.dart)
+AgentConfigPaths agentConfigPathsFor({required String cwd, required Map<String, String> environment,
+    String? extraConfig, bool? caseInsensitive, List<String> skillExtraRoots = const []});
+Future<List<String>> sessionSkillRootsFor({required String cwd, List<String> extraRoots = const []});
+```
+
+- `agentConfigPathsFor` добавляет к путям хоста `$CODELAB_HOME/skills`, `<userHomeOf(environment)>/.agents/skills` и элементы `skillExtraRoots`: абсолютные и `~`/`~/…` (раскрыты в `userHomeOf(environment)`); относительные, `~user/…` и `<scheme>://` пропускаются. Канонизация — прежняя (символические ссылки раскрыты по самому глубокому существующему предку). Передачу `skillExtraRoots` хостами (`agent_host.dart`, `local_opener.dart`) делает задача 5.2; первые два корня защищены у всех хостов с задачи 2.8.
+- `sessionSkillRootsFor` — корни, зависящие от `cwd`: `<уровень>/.codelab/skills` и `<уровень>/.agents/skills` для уровней от `cwd` до корня git (без git — только `cwd`; не выше 64 уровней, как у загрузчика), затем относительные элементы `extraRoots`, разрешённые от `cwd`; канонические, существующие или нет, **без учёта доверия** (Q27); абсолютные и `~`-элементы не входят (вопрос B3: функции `environment` не нужен). Строится тем же внутренним списком корней, что и шаг 1 загрузчика (D16, `rootIndex`).
+- `ProjectFilesLoader.loadSkills` заполняет `SkillFiles.sessionRoots` = `sessionSkillRootsFor(cwd, extraRoots)` плюс канонические абсолютные и `~`-элементы `query.extraRoots`: у сессии другой папки (Q44) свои `extra_roots`, а путей хоста из конфига корня запуска для неё мало.
+- Рантайм при открытии сессии: `agentConfigPaths` политики сессии = `(services.agentConfigPaths ?? AgentConfigPaths(paths: const [])).withSession(paths: files.sessionRoots, skillDirs: [for (s in catalog.skills) s.dir])`; если поле хоста `null` и оба списка пусты — `null`, как прежде. Фаза навыков не завершилась результатом (нет порта, `skills.enabled: false`, таймаут, исключение, отмена) — путей сессии нет (известный предел, решение Q46 (а)).
+- `isAgentConfigPath` получает `.agents/skills` и `.agents/skills/**` (Q16); похожие пути (`.agents/notes.md`, `agents/skills/…`, `lib/.agents/skills/…`) не защищены.
+- Исключения E1–E3 — одна функция проверки простой команды в `permissions/agent_config_rules.dart`, встроенная в двухфазную проверку `findCritical`: первый проход собирает кандидатов (исполняемый файл, аргументы, рабочий каталог), `AgentConfigScope.canonicalizeSeen` раскрывает их `realpath` и, если резолвер политики — `FileSystem`, кэширует признак «обычный файл» (`stat` → `FileType.file`); второй проход решает по кэшу. Резолвер не `FileSystem` или `stat` неудачен — исключение не действует (fail closed; вопрос B2 исполнителя: новый порт не вводится — в рантайме резолвер всегда `ExecutionEnv` сессии или хоста, проверка `is` — образец опциональных возможностей ENV-4). Каталоги навыка — `skillDirs` по каноническому пути с учётом `caseInsensitive`; имя `SKILL.md` — по базовому имени без учёта регистра всегда.
+- Тексты не меняются: `write`/`edit` — вопрос с `reason: 'agent configuration: <path>'`, в `autopilot` и без gate — `Editing agent configuration requires a human: <path>`; `exec` — `reason: 'critical command: write to agent configuration'`, в `autopilot` — `critical command blocked in autopilot: write to agent configuration` (PERM-9 основной спецификации `agent-permissions`). Сценарий «Навыки в autopilot» дельты называл для `exec` текст `write`/`edit` — исправлен (вопрос B1 исполнителя).
+
+**Отличия от предположений красных тестов итерации 2 и правки тестов** (делаются в задаче 2.15 до реализации, тест меняется вместе с причиной):
+- `read_skill_trust_test.dart`: в `setUp` — `ReadTool(skills: catalog, root: '/proj')`; без корня тест «a relative path to a skill directory inside the workspace» не может пройти (вопрос A2).
+- `runtime/skills_load_phase_test.dart`, строки с `isNot(contains('skills/catalog'))`: id секции — `skills.catalog` (вопрос A6); сейчас проверка пустая — проходит при любом id.
+- `env/bounded_env_read_only_roots_test.dart`, группа `SkillCatalog.readOnlyRoots`: добавить случай «каталог навыка, содержащий корень сессии, — не корень только для чтения» (новое уточнение этого раздела).
+- `skill_tool_test.dart`: тест «execute() answers Unknown skill» вызывает `execute` напрямую — так и остаётся; ожидание `session_id` у голого инструмента не проверяется (может быть `null`).
+- Остальные имена, сигнатуры и тексты тестов наборов A и B приняты без изменений: `PromptInputs.skills`/`skillsCatalogMaxChars`, ресурсы `Prompts.*`, `renderSkillBlock`, `SkillTool(catalog)`, `ExecTool(readOnlyRoots:, execInReadOnlyRoots:)`, `BoundedEnv.wrap(…, readOnlyRoots:, readOnlyFs:, execInReadOnlyRoots:)`, `SkillCatalog.readOnlyRoots`, `AgentConfigPaths.skillDirs`/`withSession`, `agentConfigPathsFor(skillExtraRoots:)`, `sessionSkillRootsFor`; `/opt/team/skills` как абсолютный корень хоста в оснастке (вопрос B4) — допустимо. Отрицательные сценарии PERM-11 зеленеют сразу после компиляции — это страховка от расширения исключений; красными по сути остаются положительные (вопрос B5).
+
 ## Risks / Trade-offs
 
 - **Новый канал инструкций** (приоритет 1): вредный навык в доверенном проекте, в `~/.agents/skills` или в разрешённом `extra_roots` управляет моделью в пределах её прав. *Смягчение:* гейты, политика §7, экранирование, PERM-11 на корнях (Q9, Q16), тело не в логах. `~/.agents/skills` читается без отдельного согласия (Q13): туда может положить навык другой агент пользователя — принято как соглашение формата.
@@ -380,6 +530,7 @@ SkillCatalog parseSkills(SkillFiles files, SkillsConfig settings, {PolicyRules r
 - **Один текст — разный результат по способу активации** (Q15): `$$` и `\$` в примерах кода тела при `/skill:` превращаются в `$`, а в результате инструмента `skill` и в приложении после сжатия остаются как есть. *Смягчение:* правило задокументировано (D8); подстановка затрагивает только путь команды.
 - **Скрипты пользовательских навыков через клиента ACP** (Q23 (а)): с внешним клиентом по stdio скрипт, рассчитанный на запуск из каталога навыка, модель должна запускать по абсолютному пути из рабочей папки; часть навыков с относительными путями внутри скрипта может не сработать. Во встроенном агенте app и CLI ограничения нет.
 - **Подъём к корню git** (Q22): навык из родительского каталога монорепозитория действует во всех подпроектах доверенного проекта; перекрытие ближним видно как `shadowed`.
+- **Пути сессии PERM-11 без фазы навыков** (известный предел, решение Q46 (а)): корни навыков, зависящие от `cwd` (уровни выше `cwd` до корня git, относительные и собственные абсолютные `extra_roots` папки), защищены только в сессиях, где фаза навыков завершилась результатом. Не защищены: при `skills.enabled: false` в конфигурации папки, у хоста без порта (`serve --ws`, web), при таймауте, исключении или отмене фазы. Пример: в сессии `/repo/apps/demo` с выключенными навыками запись `../../.agents/skills/x/SKILL.md` не критична, а навык загрузит сессия `/repo`, если там навыки включены и проект доверенный. Корни хоста и проектное правило у `cwd` защищены всегда (D17).
 - **Гонки** (§9, §12): две фазы открытия, общая отмена, поздние результаты выбрасываются; каталог неизменен до закрытия; приложение после сжатия — чистая проекция.
 - **Подстановка `$1`** в чужих навыках (Q7): примеры кода с `$1` при `/skill:` превратятся в аргумент; модельный путь тело не меняет; `\$` даёт литерал. Решение дорого менять потом (D8).
 - **Окно после сжатия** (Q6): до 25 000 токенов приложенных навыков уменьшают выигрыш сжатия; на малом окне приложение может не дать опуститься ниже порога. *Смягчение:* ключи `reattach.*`, `0` выключает; CMP-5 — не больше трёх проходов.
@@ -461,9 +612,10 @@ SkillCatalog parseSkills(SkillFiles files, SkillsConfig settings, {PolicyRules r
 - **Q43** (2026-11-12, ревью итерации 1). Недоверенный проект не снимает запреты пользователя (CFG-3): `skills.enabled: true` из недоверенного проектного слоя поверх `false` нижних слоёв отбрасывается с `config.project.untrusted_key`; `skills.disabled` недоверенного проекта объединяется со списком нижних слоёв (как `permissions.deny`), а не заменяет его. Доверенный проект может задавать оба ключа как угодно (D11).
 - **Q44** (2026-11-13, после переноса ветки на `develop` с архивом `require-project-folder`). Ключи `skills.*`, включая `skills.enabled`, берутся из конфигурации сессии — как в коде итерации 1 (`_loadSkills` читает `settings.skills` той же `CoreConfig`, что `_loadProjectFiles`). В требовании agent-runtime «Конфигурация сессии вне корня запуска» `skills.*` добавлены в список «на сессию»: `skills.enabled: false` сессии выключает навыки только этой сессии; capability профиля `skills` остаётся на процесс (D11, D16); уточнено решением Q45. Корни навыков и доверие — по папке сессии, правила доверия Q40, Q43 — к слоям её папки. Тест — задача 1.18.
 - **Q45** (2026-11-13). Симметрично: `skills.enabled` действует только на сессии своей папки, в том числе для корня запуска; `skills.enabled: false` больше не сужает capability в `buildAgentCore` и не попадает в `CorePlan.offReasons` — сессия с `false` получает пустой снимок, порт не вызывается. Capability `skills` сужает только `profile.<name>.skills: off`; отсутствие порта её не сужает (D16). Причина: иначе `false` проектного слоя корня запуска, в том числе недоверенного, выключал навыки у сессий других доверенных папок, а та же папка вне корня — только у своих. Правка `build_agent_core.dart` и тесты — задача 1.18.
+- **Q46** (а) (2026-11-13, сверка красных тестов итерации 2, D17). Пути сессии PERM-11 — корни навыков, зависящие от `cwd` (уровни выше `cwd` до корня git, относительные и собственные абсолютные `skills.extra_roots` папки сессии; Q27, Q44), — политика сессии получает из результата фазы навыков (`SkillFiles.sessionRoots`). Если результата нет — `skills.enabled: false` в конфигурации папки, хост без порта (`serve --ws`, web), таймаут, исключение или отмена фазы, — эти корни в сессии не защищены; это принятый известный предел. Корни хоста (`$CODELAB_HOME/skills`, `~/.agents/skills`, абсолютные `extra_roots` корня запуска) и проектное правило у `cwd` (`.codelab/skills/**`, `.agents/skills/**`) защищены всегда. Отклонён вариант (б) — отдельный метод порта, вызываемый при каждом открытии сессии: он не закрывает хосты без порта и таймаут, а меняет сценарий agent-runtime «Навыки выключены конфигом».
 
 Технические решения по «мелочам» (2026-11-12): пометка `[more files not listed]` при неполном списке файлов (D5, D7); навык, запрещённый правилом разрешений `skill:<name>`, скрыт из каталога и `enum` (D7); нелатинское имя пропускается с диагностикой, называющей допустимые символы, — разбор команды ASCII (D4); выполнение навыка в субагенте — Non-Goals. Технические решения финальной сверки (2026-11-12): описание длиннее 1024 обрезается в каталоге (D4); тело обрезается по краям, от этой формы — `empty_body`, отпечаток и повтор (D4); чтение `SKILL.md` через `read` — не активация (D7); `activeSkills` — одна функция без замкнутого определения, перенос усечённых при следующем сжатии (D15); `untrusted_project` двух уровней — `info` для корней проекта (ожидаемое состояние недоверенного репозитория, в `config check` — строка `note:`), `warning` для относительного `extra_roots` (пользователь явно задал корень, который не может действовать); подсказку Q23 даёт инструмент `exec` до вызова env (D5); допущение «клиент stdio на той же машине» — в Risks.
 
 ## Open Questions
 
-Открытых вопросов нет: Q1–Q43 решены пользователем 2026-11-12, Q44 и Q45 — 2026-11-13 (раздел выше).
+Открытых вопросов нет: Q1–Q43 решены пользователем 2026-11-12, Q44–Q46 — 2026-11-13 (раздел выше).
