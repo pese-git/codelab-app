@@ -83,6 +83,7 @@ final class ToolCallHandle {
     this.context,
     this._progress,
     this._lock,
+    this._keyLock,
   );
 
   final ToolCall call;
@@ -98,6 +99,15 @@ final class ToolCallHandle {
   /// Место в очереди `PathLock`, занятое при объявлении; `null` — вызов
   /// путь не блокирует.
   final PathLockTicket? _lock;
+
+  /// Место в очереди ключа `AgentTool.lockKey`; `null` — ключа нет.
+  final PathLockTicket? _keyLock;
+
+  /// Освобождает оба места; повторный вызов безопасен.
+  void _release() {
+    _lock?.release();
+    _keyLock?.release();
+  }
 }
 
 const cancelledText = 'Tool call was cancelled';
@@ -131,6 +141,10 @@ final class ToolCallExecutor implements ToolExecutor {
   final ExecutionEnv env;
   final ToolServices services;
   final _locks = PathLock();
+
+  /// Очередь ключей `AgentTool.lockKey`; отдельная от путей, чтобы ключ
+  /// `tasks` не пересекался с файлом с таким же именем.
+  final _keyLocks = PathLock();
 
   @override
   Future<ToolCallHandle> announce(
@@ -180,6 +194,11 @@ final class ToolCallExecutor implements ToolExecutor {
       },
       null => null,
     };
+    // Ключ — по тому же принципу и в том же месте: порядок ответа модели.
+    final keyLock = switch (tool?.lockKey(call.arguments)) {
+      final String key => _keyLocks.reserve(key),
+      null => null,
+    };
     var presentation = ToolPresentation(title: call.name);
     if (tool != null) {
       try {
@@ -206,12 +225,20 @@ final class ToolCallExecutor implements ToolExecutor {
         locations: presentation.locations,
       ),
     );
-    return ToolCallHandle._(call, invocation, tool, context, progress, lock);
+    return ToolCallHandle._(
+      call,
+      invocation,
+      tool,
+      context,
+      progress,
+      lock,
+      keyLock,
+    );
   }
 
   @override
   Future<ToolExecutionOutcome> abandon(ToolCallHandle handle) {
-    handle._lock?.release();
+    handle._release();
     return _finish(
       handle,
       const ToolExecutionResult([
@@ -228,7 +255,7 @@ final class ToolCallExecutor implements ToolExecutor {
     try {
       (result, outcome) = await _run(handle);
     } finally {
-      handle._lock?.release();
+      handle._release();
     }
     return _finish(handle, result, outcome);
   }
@@ -313,6 +340,14 @@ final class ToolCallExecutor implements ToolExecutor {
     // Шаг 6: блокировка пути и повторная проверка отмены после захвата.
     if (handle._lock case final lock?) {
       await lock.acquired;
+      if (invocation.cancel.isCancelled) {
+        return _valid(_error(cancelledText, ToolOutcome.cancelled));
+      }
+    }
+    // Очередь ключа: после пути, затем снова проверка отмены — ожидание
+    // предыдущего вызова ключа могло затянуться (TOOL-7).
+    if (handle._keyLock case final keyLock?) {
+      await keyLock.acquired;
       if (invocation.cancel.isCancelled) {
         return _valid(_error(cancelledText, ToolOutcome.cancelled));
       }

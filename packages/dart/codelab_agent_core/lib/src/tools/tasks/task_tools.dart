@@ -28,19 +28,27 @@ abstract base class _TaskTool extends AgentTool {
   /// Режим исполнения не переопределяется: вызовы `task_*` идут параллельно
   /// с остальным пакетом (LOOP-4, `agent_loop.dart`, `_runBatch`).
   ///
-  /// Почему parallel безопасен: операции сериализует замок
-  /// `SessionTaskList._locked` (проверки цикла и лимита видят состояние после
-  /// предыдущей операции), `TaskListChanged` публикуется под замком и
-  /// ждётся внутри `execute`, то есть раньше `ToolCallFinished` своего вызова
-  /// (TSK-1), а клиент привязывает `plan` к вызову по
-  /// `plan._meta.codelab.taskChange.toolCallId` (D35), не по порядку событий.
+  /// Почему parallel безопасен: между собой `task_*` упорядочивает очередь
+  /// ключа [lockKey] в порядке ответа модели, а операции дополнительно
+  /// сериализует замок `SessionTaskList._locked`; `TaskListChanged`
+  /// публикуется под замком и ждётся внутри `execute`, то есть раньше
+  /// `ToolCallFinished` своего вызова (TSK-1), а клиент привязывает `plan` к
+  /// вызову по `plan._meta.codelab.taskChange.toolCallId` (D35).
   ///
-  /// Что теряется: глобальный порядок вызовов и порядок выдачи id внутри
-  /// пакета — он зависит от порядка захвата замка и недетерминирован; хук
-  /// `beforeToolCall` срабатывает не сразу после `ToolCallStarted` своего
-  /// вызова, а после announce всего пакета.
+  /// Что детерминировано: порядок выдачи id и применения операций внутри
+  /// пакета равен порядку вызовов, `task_update` пункта из того же пакета не
+  /// получает `unknown_id` из-за медленного хука.
+  ///
+  /// Что остаётся: все `ToolCallStarted` идут первыми, а хук
+  /// `beforeToolCall` срабатывает пачкой после announce всего пакета, не
+  /// сразу после `Started` своего вызова.
   @override
   ToolExecutionMode? get executionMode => null;
+
+  /// Общий ключ очереди всех четырёх инструментов: единственный список на
+  /// сессию (D39-alt, `AgentTool.lockKey`).
+  @override
+  String? lockKey(Map<String, Object?> args) => 'tasks';
 
   @override
   ContentTrust outputTrust(Map<String, Object?> args) => ContentTrust.trusted;
