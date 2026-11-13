@@ -337,7 +337,8 @@ SubagentTool.execute(args, ctx):
    (`ChildSessionSpec.skills`); без снимка инструмент `skill` убирается. Ребёнок получает **тот же**
    неизменяемый снимок, без второй загрузки (§17.2.1); `readOnlyRoots` его `BoundedEnv` — каталоги
    навыков этого снимка вне рабочей папки и его каталог выноса (§17.3.6), `execInReadOnlyRoots` —
-   как у env родителя. Активные навыки родителя ребёнку не передаются: он получает только задачу и
+   как у env родителя. Пока выноса вывода (§17.4) нет, ребёнок получает env родителя как есть
+   (D36 change `add-subagents-and-tasks`, Т9). Активные навыки родителя ребёнку не передаются: он получает только задачу и
    сам загружает нужный навык. Поле `skills` определения типа и исполнение навыка в субагенте —
    после 1.0, отдельным change.
 4. **Режим разрешений.** Эффективный режим ребёнка вычисляется **при каждом решении**, а не один
@@ -390,8 +391,9 @@ SubagentTool.execute(args, ctx):
    `session/cancel` корневой сессии каскадом отменяет всё дерево синхронно. Steering родителя детям не доставляется.
 11. **Очередь.** Хэндл в состоянии `queued` встаёт в очередь слотов дерева (§17.3.4).
 
-При получении слота: создать дочернюю сессию через `AgentRuntime.createChildSession` (§5.6,
-`ChildSessionSpec`; журнал по §17.3.6), эмитить `SubagentStarted`, вызвать `child.prompt([TextContent(prompt)], cancel:
+При получении слота: создать дочернюю сессию внутренней фабрикой рантайма `createChildSession`
+(§5.6, `ChildSessionSpec`; журнал по §17.3.6 через `SessionStore.createChild`; не метод публичного
+`AgentRuntime` — D36 change `add-subagents-and-tasks`, Т2, Т4), эмитить `SubagentStarted`, вызвать `child.prompt([TextContent(prompt)], cancel:
 childSource.token)`. По `TurnEnded` ребёнка — построить отчёт (§17.3.5), эмитить
 `SubagentFinished`, освободить слот, `childSource.dispose()`, закрыть дочернюю сессию (при
 `subagents.follow_ups` — по истечении `idle_keep`, если за это время не начат новый прогон, §17.3.8.1).
@@ -432,8 +434,10 @@ Your final message must be only a JSON value that matches this JSON Schema. Do n
 ## 17.3.4. Алгоритм: параллелизм и ожидание
 
 1. **Параллельность задаёт пакет.** `agent` не объявляет `executionMode`, поэтому несколько вызовов
-   `agent` в одном ответе модели исполняются параллельно (§5.5). Если в пакете есть
-   `sequential`-инструмент, весь пакет, включая `agent`, идёт последовательно (LOOP-4).
+   `agent` в одном ответе модели исполняются параллельно (§5.5). `sequential`-вызов в
+   пакете (например, `task_*`) — барьер (LOOP-4, D39 change `add-subagents-and-tasks`): ответ
+   `task_update` + три `agent` исполняет сначала `task_update`, затем три `agent` одновременно;
+   `agent` до и после барьера попадают в разные группы.
 2. **Слоты дерева.** У `SubagentTree` `max_concurrent` слотов (по умолчанию 3) на всё дерево
    корневой сессии; корневая сессия слота не занимает. Слот держит ребёнок, который **сам
    работает**: ждёт модель, исполняет инструмент или ждёт решения пользователя. `spawn` сверх
@@ -692,7 +696,7 @@ OpenSpec (change `add-subagents-and-tasks`).
 **Шаги потомков деревом (этап 2; решение пользователя 2026-11-10, design.md change
 `add-subagents-and-tasks`, D21).** Клиент, понимающий вложенность, объявляет
 `clientCapabilities._meta.codelab.subagentToolCalls: {"version": 1}`; агент при `subagents.enabled`
-объявляет тот же ключ. Только такому клиенту адаптер проецирует `SubagentActivity`:
+объявляет тот же ключ — вместе с этой проекцией (итерация 5 change `add-subagents-and-tasks`, D36, Т12). Только такому клиенту адаптер проецирует `SubagentActivity`:
 
 | Событие потомка | Кадр | Поля |
 |---|---|---|
@@ -995,7 +999,7 @@ agent_observe: Show the last messages of a subagent (running or finished) withou
      режим, правила, gate, модель, бюджет (свежий TurnBudget на прогон) — заново по §17.3.3, шаги 4–9
      слот семафора max_concurrent — как у agent (§17.3.4)
 6  при получении слота: дочерняя сессия открыта (держится idle_keep после отчёта) или
-   открывается заново из журнала ребёнка (AgentRuntime.openChildSession, §5.6; heal §8.8 уже
+   открывается заново из журнала ребёнка (внутренняя фабрика рантайма openChildSession, §5.6; heal §8.8 уже
    выполнен при open родителя); запись subagent{status: running, run, followUp: send | resume,
    toolCallId} в журнал родителя (durable); SubagentStarted с run
 7  сообщение прогона (user-сообщение ребёнка, durable):

@@ -17,7 +17,7 @@
    - `read`, `write`, `edit`, `task_create`, `task_update`, `task_list`, `task_get` — всегда;
    - `exec` — при `shellExec`;
    - `ls`, `search` — при `fileListing`;
-   - `agent` — на сессию при `subagents.enabled`; `enum` типов — из встроенных типов и определений агентов сессии (agent-subagents «Инструмент task и типы субагентов»);
+   - `agent` — на сессию при `subagents.enabled` конфига этой сессии на момент её создания (живая перезагрузка действует на новые сессии, design.md change `add-subagents-and-tasks`, D37); `enum` типов — из встроенных типов и определений агентов сессии (agent-subagents «Инструмент task и типы субагентов»);
    - дубликат имени встроенного инструмента → `HostWiringException` (HOST-5).
 
    Это базовый реестр. Каждая сессия получает свою копию с MCP-инструментами своих серверов («MCP-серверы сессии») и с `agent`.
@@ -39,6 +39,10 @@
 #### Scenario: Субагенты включены
 - **WHEN** та же сборка с `subagents.enabled: true`
 - **THEN** схемы запроса сессии дополнительно содержат `agent` последним встроенным инструментом, а в промпте есть описание `agent` со списком типов
+
+#### Scenario: Субагенты выключены перезагрузкой
+- **WHEN** ядро собрано с `subagents.enabled: true`, открыта сессия A, затем перезагрузка конфига ставит `subagents.enabled: false` и открывается сессия B
+- **THEN** схемы сессии A по-прежнему содержат `agent`, у сессии B `agent` нет, а `AgentRuntime.subagents` возвращает `null` (D37)
 
 #### Scenario: Включено без сервиса
 - **WHEN** профиль с включённым `shellExec` собирается над `MemoryExecutionEnv`

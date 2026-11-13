@@ -91,4 +91,4 @@
 
 #### Scenario: Промпт ребёнка с навыками
 - **WHEN** промпт собирается для ребёнка `general` в режиме `standard`, а у родителя навыки `flutter-golden` и `release-notes`
-- **THEN** секция `## Skills` стоит после `mcp` и до `project_context`, её текст побайтово равен секции родителя, за ней идут `subagent/system` и `## Agent profile: general`; результат совпадает с `test/prompts/golden/subagent-general-skills.txt` (итерация 2s)
+- **THEN** секция `## Skills` стоит после `mcp` и до `project_context`, её текст побайтово равен секции родителя, за ней идут `subagent/system` и `## Agent profile: general`; результат совпадает с `test/prompts/golden/subagent-general-skills.txt` (задача 2s.1)
