@@ -183,6 +183,10 @@ Future<AgentUnderTest> startAgent(
   // читают, а настоящий `~/.codelab` разработчика не должен влиять на кадры
   // (design.md change `add-agent-project-files`, D15, D16).
   final home = Directory.systemTemp.createTempSync('agent_fixture_home_');
+  final projectFiles = ProjectFilesLoader(
+    home: home.path,
+    local: LocalExecutionEnv(cwd: setup.cwd),
+  );
   final core = buildAgentCore(
     profile: HostProfile.of(setup.profile),
     services: AgentCoreServices(
@@ -193,10 +197,11 @@ Future<AgentUnderTest> startAgent(
       clock: clock,
       ids: SequentialIdGenerator(),
       sessions: store,
-      projectFiles: ProjectFilesLoader(
-        home: home.path,
-        local: LocalExecutionEnv(cwd: setup.cwd),
-      ),
+      // Один загрузчик отдаёт и файлы проекта, и навыки (design.md change
+      // `add-agent-skills`, D3, D16): фикстуры `acp/skill-*` кладут навыки в
+      // `setup.files` под `.codelab/skills/`.
+      projectFiles: projectFiles,
+      skillFiles: projectFiles,
       models: FixedModelCatalog(config.models),
       // Коннектор есть всегда: `mcpCapabilities.http` в `initialize` зависит
       // от него (design.md change `add-agent-mcp-client`, D11), а серверы
@@ -224,6 +229,7 @@ Future<AgentUnderTest> startAgent(
       compaction: config.compaction,
       trustedProjects: config.trustedProjects,
       mcpServers: config.mcpServers,
+      skills: config.skills,
       permissions: PermissionsConfig(
         mode: setup.mode == null ? null : ModeId.parse(setup.mode!),
       ),
@@ -284,6 +290,7 @@ final class _HostGate implements PermissionGate {
 /// этапов 0 и 4: `agent.default_model`, `agent.effort`, `budget.max_steps`,
 /// `budget.max_tokens`, `compaction.keep_recent_tokens`,
 /// `providers.<id>.models.<model>` (`context_window`, `reasoning`),
+/// `skills` (`enabled`, `disabled`, `max_skills`, `catalog_max_chars`),
 /// `trusted_projects` (список путей, `${cwd}` — временный `cwd` прогона:
 /// доверие проекту, файлы которого лежат в `setup.files`; фикстуры этапа 8,
 /// design.md change `add-agent-project-files`, D15).
@@ -298,6 +305,7 @@ final class _FixtureConfig {
     required this.compaction,
     required this.trustedProjects,
     required this.mcpServers,
+    required this.skills,
   });
 
   factory _FixtureConfig.parse(AgentFixtureSetup setup) {
@@ -308,6 +316,7 @@ final class _FixtureConfig {
       'compaction',
       'mcp',
       'providers',
+      'skills',
       'trusted_projects',
     }, 'config');
     final agent = _object(config['agent'], 'config.agent');
@@ -380,6 +389,7 @@ final class _FixtureConfig {
     return _FixtureConfig(
       trustedProjects: trusted,
       mcpServers: _mcpServers(config['mcp'], setup),
+      skills: _skills(config['skills']),
       defaultModel: defaultModel,
       models: models,
       effort: switch (agent['effort']) {
@@ -406,6 +416,34 @@ final class _FixtureConfig {
 
   /// Серверы `mcp.servers` (`origin: config`) для `CoreConfig.mcpServers`.
   final List<McpServerConfig> mcpServers;
+
+  /// Раздел `skills` для `CoreConfig.skills`.
+  final SkillsConfig skills;
+
+  /// Ключ `skills` (acp-golden-fixtures «Фикстуры навыков»; design.md change
+  /// `add-agent-skills`, D11): `enabled`, `disabled`, `max_skills`,
+  /// `catalog_max_chars`.
+  ///
+  /// `extra_roots` драйвер не принимает: корень вне временного `cwd` сделал
+  /// бы прогон зависимым от файлов разработчика — громкий провал, как у
+  /// прочих неподдержанных ключей.
+  static SkillsConfig _skills(Object? raw) {
+    final skills = _object(raw, 'config.skills');
+    _keys(skills, const {
+      'enabled',
+      'disabled',
+      'max_skills',
+      'catalog_max_chars',
+    }, 'config.skills');
+    const defaults = SkillsConfig();
+    return SkillsConfig(
+      enabled: skills['enabled'] as bool? ?? defaults.enabled,
+      disabled: [...?(skills['disabled'] as List<Object?>?)?.cast<String>()],
+      maxSkills: skills['max_skills'] as int? ?? defaults.maxSkills,
+      catalogMaxChars:
+          skills['catalog_max_chars'] as int? ?? defaults.catalogMaxChars,
+    );
+  }
 
   /// Ключ `mcp.servers` (design.md change `add-config-writer-and-reload`,
   /// D12; acp-golden-fixtures «Фикстуры файлов проекта этапа 8»).

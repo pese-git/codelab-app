@@ -1,0 +1,163 @@
+{
+  "id": "acp/skill-command-listed",
+  "spec": [
+    "14-Slash Commands.md#advertising-commands",
+    "14-Slash Commands.md#availablecommand"
+  ],
+  "description": "Два навыка проекта .codelab/skills: release-notes с argument-hint и internal-checks с user-invocable: false. После session/new available_commands_update содержит встроенные compact, mode, model, status, mcp, help и затем ровно одну команду skill:release-notes с input.hint из argument-hint; команды для internal-checks нет, а имени инструмента skill и других инструментов модели в списке нет (E-06, R-07; design.md change add-agent-skills, D8; SKL-6).",
+  "goals": [
+    "E-06",
+    "R-07"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "files": {
+      ".codelab/skills/release-notes/SKILL.md": "---\nname: release-notes\ndescription: Draft release notes from two git tags\nargument-hint: \"<from> <to>\"\n---\nSummarize the changes from $1 to $2.\n",
+      ".codelab/skills/internal-checks/SKILL.md": "---\nname: internal-checks\ndescription: Run internal consistency checks\nuser-invocable: false\n---\nRun the checks listed in docs/checks.md.\n"
+    },
+    "config": {
+      "trusted_projects": [
+        "${cwd}"
+      ]
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": []
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          },
+          "clientInfo": {
+            "name": "fixture-client",
+            "version": "0.0.0"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ initialize; поля проверяет acp/initialize-capabilities",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент создаёт сессию в доверенном проекте с навыками из .codelab/skills",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/new; команды идут отдельным кадром после него (ACP-8)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "sessionId"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D8, SKL-6: после встроенных команд — skill:<name> только вызываемого навыка; hint — argument-hint; internal-checks (user-invocable: false) и инструментов модели в списке нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              {
+                "name": "compact",
+                "description": "Compact the session history",
+                "input": {
+                  "hint": "[focus]"
+                }
+              },
+              {
+                "name": "mode",
+                "description": "Switch the session mode",
+                "input": {
+                  "hint": "plan | ask | standard | accept-edits | bypass"
+                }
+              },
+              {
+                "name": "model",
+                "description": "Switch the model",
+                "input": {
+                  "hint": "provider/model"
+                }
+              },
+              {
+                "name": "status",
+                "description": "Show the model, mode, working directory and MCP servers"
+              },
+              {
+                "name": "mcp",
+                "description": "List, reload, enable or disable MCP servers",
+                "input": {
+                  "hint": "list | reload [<id>] | enable <id> | disable <id>"
+                }
+              },
+              {
+                "name": "help",
+                "description": "List commands"
+              },
+              {
+                "name": "skill:release-notes",
+                "description": "Draft release notes from two git tags",
+                "input": {
+                  "hint": "<from> <to>"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

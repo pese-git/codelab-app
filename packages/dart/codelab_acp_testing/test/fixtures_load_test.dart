@@ -103,6 +103,15 @@ const _slashCommandFixtures = {
   'acp/slash-mode-plan',
 };
 
+/// Фикстуры навыков (design.md change `add-agent-skills`, D7, D8; задача 3.1;
+/// acp-golden-fixtures «Фикстуры навыков»): роль только `agent`, команды и
+/// инструмент `skill` публикует агент.
+const _skillFixtures = {
+  'acp/skill-command-listed',
+  'acp/skill-invoke',
+  'acp/skill-tool-load',
+};
+
 void main() {
   final corpus = loadFixtureCorpus();
   final protocolDirectory = protocolSpecDirectory();
@@ -116,6 +125,7 @@ void main() {
       ..._stage8McpFixtures,
       ..._stage8ProjectFilesFixtures,
       ..._slashCommandFixtures,
+      ..._skillFixtures,
       ..._toolKindFixtures,
     });
   });
@@ -130,7 +140,8 @@ void main() {
       (f) =>
           _stage8McpFixtures.contains(f.id) ||
           _stage8ProjectFilesFixtures.contains(f.id) ||
-          _slashCommandFixtures.contains(f.id),
+          _slashCommandFixtures.contains(f.id) ||
+          _skillFixtures.contains(f.id),
     )) {
       expect(fixture.roles, {FixtureRole.agent}, reason: fixture.id);
     }
