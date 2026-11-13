@@ -869,4 +869,74 @@ void main() {
       expect(files.skills.single.companions, ['own.md']);
     }, skip: Platform.isWindows ? 'symlink needs privileges' : false);
   });
+
+  /// `SkillFiles.sessionRoots` (design.md change `add-agent-skills`, D17;
+  /// agent-permissions «Относительный корень extra_roots защищён в сессии»;
+  /// решения Q27, Q44, Q46).
+  ///
+  /// Фиксируемый API: поле `SkillFiles.sessionRoots` (`List<String>`, в ядре
+  /// по умолчанию пустое) — корни, которые защищает политика сессии:
+  /// `sessionSkillRootsFor(cwd:, extraRoots:)` плюс канонические абсолютные и
+  /// `~`-элементы `query.extraRoots`; не зависит от доверия проекта.
+  group('sessionRoots', () {
+    test('the default in the core is an empty list', () {
+      expect(const SkillFiles().sessionRoots, isEmpty);
+      expect(SkillFiles.empty.sessionRoots, isEmpty);
+    });
+
+    test('levels up to the git root and relative extra_roots, as '
+        'sessionSkillRootsFor gives them', () async {
+      final work = '$repo/apps/demo';
+      Directory(work).createSync(recursive: true);
+
+      final files = await load(cwd: work, extra: ['.claude/skills']);
+
+      expect(
+        files.sessionRoots,
+        containsAll(
+          await sessionSkillRootsFor(cwd: work, extraRoots: ['.claude/skills']),
+        ),
+      );
+      expect(files.sessionRoots, contains('$work/.claude/skills'));
+      expect(files.sessionRoots, contains('$repo/.agents/skills'));
+    });
+
+    test('absolute and ~ elements of extra_roots are added in canonical '
+        'form, an unknown scheme and ~user are not', () async {
+      Directory('$base/abs/skills').createSync(recursive: true);
+
+      final files = await load(
+        extra: [
+          '$base/abs/skills',
+          '~/mine/skills',
+          '~other/skills',
+          'builtin://x',
+        ],
+      );
+
+      expect(files.sessionRoots, contains('$base/abs/skills'));
+      expect(files.sessionRoots, contains('$userHome/mine/skills'));
+      expect(
+        files.sessionRoots.where(
+          (r) => r.contains('other') || r.contains('builtin'),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('an untrusted project still has its session roots (Q27)', () async {
+      final files = await load(trusted: false, extra: ['.claude/skills']);
+
+      expect(files.skills, isEmpty);
+      expect(files.sessionRoots, contains('$repo/.claude/skills'));
+      expect(files.sessionRoots, contains('$repo/.agents/skills'));
+    });
+
+    test('roots are listed whether they exist or not', () async {
+      final files = await load();
+
+      expect(files.sessionRoots, contains('$repo/.codelab/skills'));
+      expect(Directory('$repo/.codelab/skills').existsSync(), isFalse);
+    });
+  });
 }

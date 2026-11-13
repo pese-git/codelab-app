@@ -281,7 +281,7 @@ void main() {
       expect(core.plan.offReasons, isNot(contains(HostCapability.skills)));
       expect(session.skills, same(SkillCatalog.empty));
       expect(core.plan.toolNames, isNot(contains('skill')));
-      expect(core.plan.promptSections, isNot(contains('skills/catalog')));
+      expect(core.plan.promptSections, isNot(contains('skills.catalog')));
       expect(session.skills.commands, isEmpty);
       expect(session.skills.modelVisible, isEmpty);
       expect(skillPort.queries, isEmpty);
@@ -331,7 +331,7 @@ void main() {
       expect(skillPort.queries, isEmpty);
       expect(session.skills, same(SkillCatalog.empty));
       expect(core.plan.toolNames, isNot(contains('skill')));
-      expect(core.plan.promptSections, isNot(contains('skills/catalog')));
+      expect(core.plan.promptSections, isNot(contains('skills.catalog')));
       expect([
         for (final c in session.commands) c.name,
       ], isNot(contains(startsWith('skill:'))));
