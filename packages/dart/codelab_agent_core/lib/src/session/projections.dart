@@ -12,7 +12,6 @@
 /// [summarize] для списка.
 library;
 
-import '../commands/slash_command.dart';
 import '../llm/messages.dart';
 import '../llm/usage.dart';
 import '../loop/agent_events.dart';
@@ -22,6 +21,7 @@ import '../tools/agent_tool.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
 import '../util/logger.dart';
+import 'command_display.dart';
 import 'ids.dart';
 import 'records.dart';
 import 'session_store.dart';
@@ -52,6 +52,51 @@ final class LlmContextProjection {
   final Map<String, String> config;
   final CompactionRecord? lastCompaction;
 }
+
+/// Записи активной ветки [path], которые видит модель: последнее сжатие,
+/// сохранённая часть до него и всё после (§8.7, CMP-9).
+///
+/// Почему отдельная функция: контекст модели и `activeSkills` (какие навыки
+/// ещё в контексте, design.md change `add-agent-skills`, D15) обязаны резать
+/// путь одинаково, иначе повтор активации опирался бы на записи, которых
+/// модель уже не видит. [compactionIndex] — индекс последней записи
+/// `compaction` в [path] (`-1` — сжатий нет, путь возвращается как есть).
+/// Потерянный якорь `firstKeptId` пишет предупреждение и оставляет только
+/// записи после сжатия.
+({CompactionRecord? compaction, List<SessionRecord> kept}) keptPath(
+  List<SessionRecord> path, {
+  required int compactionIndex,
+  Logger? logger,
+}) {
+  if (compactionIndex < 0) {
+    return (compaction: null, kept: path);
+  }
+  final compaction = path[compactionIndex] as CompactionRecord;
+  final firstKept = path.indexWhere((r) => r.id == compaction.firstKeptId);
+  // Прошлые записи compaction внутри сохранённой части заменены последним
+  // резюме: оно обновляет их (CMP-9), повторять их не нужно.
+  final before = firstKept >= 0 && firstKept < compactionIndex
+      ? [
+          for (final r in path.sublist(firstKept, compactionIndex))
+            if (r is! CompactionRecord) r,
+        ]
+      : const <SessionRecord>[];
+  if (firstKept < 0) {
+    logger?.log(
+      LogLevel.warning,
+      'session.compaction.lost_anchor',
+      fields: {'first_kept_id': compaction.firstKeptId},
+    );
+  }
+  return (
+    compaction: compaction,
+    kept: [compaction, ...before, ...path.sublist(compactionIndex + 1)],
+  );
+}
+
+/// Индекс последней записи `compaction` в [path] или `-1`.
+int lastCompactionIndex(List<SessionRecord> path) =>
+    path.lastIndexWhere((r) => r is CompactionRecord);
 
 /// Сообщения активной ветки для модели (§8.7).
 ///
@@ -84,28 +129,11 @@ LlmContextProjection buildLlmContext(
         break;
     }
   }
-  var kept = path;
-  CompactionRecord? compaction;
-  if (compactionIndex >= 0) {
-    compaction = path[compactionIndex] as CompactionRecord;
-    final firstKept = path.indexWhere((r) => r.id == compaction!.firstKeptId);
-    // Прошлые записи compaction внутри сохранённой части заменены
-    // последним резюме: оно обновляет их (CMP-9), повторять их не нужно.
-    final before = firstKept >= 0 && firstKept < compactionIndex
-        ? [
-            for (final r in path.sublist(firstKept, compactionIndex))
-              if (r is! CompactionRecord) r,
-          ]
-        : const <SessionRecord>[];
-    if (firstKept < 0) {
-      logger?.log(
-        LogLevel.warning,
-        'session.compaction.lost_anchor',
-        fields: {'first_kept_id': compaction.firstKeptId},
-      );
-    }
-    kept = [compaction, ...before, ...path.sublist(compactionIndex + 1)];
-  }
+  final (:compaction, :kept) = keptPath(
+    path,
+    compactionIndex: compactionIndex,
+    logger: logger,
+  );
   final position = {for (final (i, r) in path.indexed) r.id: i};
   final messages = <Message>[];
   for (final record in kept) {
@@ -187,9 +215,7 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
         // трогаем, его развёртку знает только его автор (agent-sessions «Поле
         // записи command»).
         final shown = switch (record.command) {
-          final command?
-              when command.source == SlashCommandSource.template.wire &&
-                  message is UserMessage =>
+          final command? when command.showsTyped && message is UserMessage =>
             UserMessage([
               TextContent(command.displayText),
               ...message.content.skip(1),

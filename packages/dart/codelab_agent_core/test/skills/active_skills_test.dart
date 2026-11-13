@@ -398,6 +398,41 @@ void main() {
       },
     );
 
+    test('the same body but fewer companion files: the command record is '
+        'not an activation (the whole message is compared)', () {
+      final wide = parse([
+        skillFile(
+          'notes',
+          frontmatter: {'name': 'notes', 'description': 'About notes.'},
+          body: 'Plain notes.',
+          companions: ['a.md', 'b.md'],
+        ),
+      ]);
+      final narrow = parse([
+        skillFile(
+          'notes',
+          frontmatter: {'name': 'notes', 'description': 'About notes.'},
+          body: 'Plain notes.',
+          companions: ['a.md'],
+        ),
+      ]);
+
+      final list = activeSkills(
+        snapshot([
+          user(
+            'u1',
+            null,
+            text: invokedText('notes', '', from: wide),
+            command: {'source': 'skill', 'name': 'notes', 'args': ''},
+          ),
+        ]),
+        narrow,
+        const SkillsConfig(),
+      );
+
+      expect(list, isEmpty);
+    });
+
     test('an outdated record does not hide an older matching one', () {
       final list = active([
         commandLoad('1', null, 'review', 'v1'),
@@ -466,6 +501,88 @@ void main() {
       ]);
 
       expect(list, isEmpty);
+    });
+  });
+
+  group('the compaction cuts the activations (D15, steps 1 and 3)', () {
+    test('an activation before firstKeptId is not counted', () {
+      final list = active([
+        user('u1', null),
+        ...toolLoad('1', 'u1', 'notes'),
+        user('u2', 'r1', text: 'kept'),
+        compaction('k1', 'u2', firstKept: 'u2'),
+      ]);
+
+      expect(list, isEmpty);
+    });
+
+    test('a command activation before firstKeptId is not counted either', () {
+      final list = active([
+        commandLoad('1', null, 'review', 'v1'),
+        user('u2', 'u1', text: 'kept'),
+        compaction('k1', 'u2', firstKept: 'u2'),
+      ]);
+
+      expect(list, isEmpty);
+    });
+
+    test('an activation at or after firstKeptId is counted', () {
+      final list = active([
+        user('u1', null),
+        ...toolLoad('1', 'u1', 'notes'),
+        compaction('k1', 'r1', firstKept: 'a1'),
+        commandLoad('2', 'k1', 'review', 'v1'),
+      ]);
+
+      expect(names(list), ['review', 'notes']);
+    });
+
+    test('an activation after the compaction record is counted', () {
+      final list = active([
+        user('u1', null),
+        ...toolLoad('1', 'u1', 'notes'),
+        user('u2', 'r1', text: 'kept'),
+        compaction('k1', 'u2', firstKept: 'u2'),
+        commandLoad('3', 'k1', 'other', ''),
+      ]);
+
+      expect(names(list), ['other']);
+    });
+
+    test('firstKeptId on a skill result whose call was cut off: no name, '
+        'no activation (toolCallId → name only from the kept records)', () {
+      final list = active([
+        user('u1', null),
+        ...toolLoad('1', 'u1', 'notes'),
+        // Вызов `a1` ушёл в резюме, результат `r1` сохранён.
+        compaction('k1', 'r1', firstKept: 'r1'),
+      ]);
+
+      expect(list, isEmpty);
+    });
+
+    test('a lost anchor keeps only the records after the compaction '
+        '(as buildLlmContext does)', () {
+      final list = active([
+        user('u1', null),
+        ...toolLoad('1', 'u1', 'notes'),
+        compaction('k1', 'r1', firstKept: 'missing'),
+        commandLoad('2', 'k1', 'other', ''),
+      ]);
+
+      expect(names(list), ['other']);
+    });
+
+    test('only the last compaction counts', () {
+      final list = active([
+        user('u1', null),
+        ...toolLoad('1', 'u1', 'notes'),
+        compaction('k1', 'r1', firstKept: 'a1'),
+        commandLoad('2', 'k1', 'other', ''),
+        compaction('k2', 'u2', firstKept: 'u2'),
+      ]);
+
+      expect(names(list), ['other']);
     });
   });
 

@@ -123,7 +123,11 @@ void main() {
       });
 
       test(r'\$ARGUMENTS and \$1 stay the literals $ARGUMENTS and $1', () {
-        expect(sub(r'\$ARGUMENTS \$1', 'a b'), r'$ARGUMENTS $1');
+        // Тело только с `\$…` — «без плейсхолдеров»: хвост дописывается (D18).
+        expect(
+          sub(r'\$ARGUMENTS \$1', 'a b'),
+          '\$ARGUMENTS \$1\n\nARGUMENTS: a b',
+        );
         expect(
           sub(r'\$ARGUMENTS and $ARGUMENTS', 'a b'),
           r'$ARGUMENTS and a b',
@@ -149,7 +153,8 @@ void main() {
       });
 
       test(r'a substituted value with \$ is not scanned again', () {
-        expect(sub(r'X $1', r'\$ARGUMENTS'), r'X \$ARGUMENTS');
+        // Разбор аргументов снимает `\` вне кавычек: `$1` — это `$ARGUMENTS`.
+        expect(sub(r'X $1', r'\$ARGUMENTS'), r'X $ARGUMENTS');
         expect(sub(r'X $ARGUMENTS', r'\$1'), r'X \$1');
       });
 

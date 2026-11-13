@@ -83,6 +83,14 @@ final class ServerHarness {
   /// [projectFiles] — порт файлов проекта для `AgentCoreServices` (design.md
   /// change `add-agent-project-files`, D1); без него сессии без файлов.
   ///
+  /// [skillFiles] и [trustedProjects] — порт файлов навыков и доверенные
+  /// проекты (design.md change `add-agent-skills`, D1, D16): навыки проекта
+  /// читаются только из доверенного.
+  ///
+  /// [baseEnv] — env хоста вместо памяти: резолвер политики разрешений берёт
+  /// из него признак «обычный файл» (`FileSystem.stat`), без которого
+  /// исключения E1–E3 для скриптов навыков не действуют (fail closed, D17).
+  ///
   /// [localEnv] — `AcpServerConfig.localEnv`: env сессии от хоста вместо
   /// `fs/*` и `terminal/*` клиента (design.md change
   /// `add-embedded-agent-mode`, D4).
@@ -120,6 +128,9 @@ final class ServerHarness {
     Duration detachGrace = const Duration(seconds: 30),
     McpConnector Function(Clock clock)? mcp,
     ProjectFilesSource? projectFiles,
+    SkillFilesSource? skillFiles,
+    ExecutionEnv? baseEnv,
+    List<String> trustedProjects = const [],
     ConfigSource? configSource,
     ProjectConfigLoader? projectConfig,
     CoreConfig? rootConfig,
@@ -148,7 +159,7 @@ final class ServerHarness {
         ...narrow,
       }),
       services: AgentCoreServices(
-        baseEnv: HostEnv(MemoryExecutionEnv(cwd: '/', clock: clock)),
+        baseEnv: baseEnv ?? HostEnv(MemoryExecutionEnv(cwd: '/', clock: clock)),
         gate: const UnusedGate(),
         logger: logger,
         clock: clock,
@@ -159,6 +170,7 @@ final class ServerHarness {
         projectConfig: projectConfig,
         mcp: mcp?.call(clock),
         projectFiles: projectFiles,
+        skillFiles: skillFiles,
         lastModel: lastModel,
       ),
       config:
@@ -167,6 +179,7 @@ final class ServerHarness {
             defaultModel: scriptedModel,
             defaultModelSource: defaultModelSource,
             budget: budget,
+            trustedProjects: trustedProjects,
           ),
       modelsFor: configSource == null && projectConfig == null
           ? null

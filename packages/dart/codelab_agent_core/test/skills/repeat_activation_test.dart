@@ -2,6 +2,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
 import '../host/core_harness.dart' show textStep;
+import '../session/journal_lines.dart' show compaction;
 import 'skill_command_rig.dart';
 import 'skills_support.dart';
 
@@ -390,5 +391,66 @@ void main() {
     final records = rig.journal().where((r) => r.containsKey('command'));
     expect(records, hasLength(2));
     expect(rig.lastUserText, '${commandRepeat('notes')}\n\nARGUMENTS: again');
+  });
+
+  // D15, шаги 1 и 3: активация до `firstKeptId` последнего сжатия ушла в
+  // резюме и в контексте модели не лежит. Перенос навыков после сжатия —
+  // итерация 4, поэтому сейчас повтор невозможен и вставляется полный блок.
+  group('after a compaction the activation does not count (D15)', () {
+    /// Сессия, где навык загружен, а в журнал дописано сжатие: `firstKeptId` —
+    /// последняя запись, то есть активация осталась в резюме.
+    Future<SkillCommandRig> compacted({
+      required List<Map<String, Object?>> steps,
+    }) async {
+      final rig = SkillCommandRig(skills: [plain('notes')], steps: steps);
+      await rig.open();
+      await rig.ask('go');
+      final created = rig.session;
+      await created.close();
+      final records = rig.journal();
+      final lastId = records.last['id']! as String;
+      rig.store.putText(
+        created.id,
+        '${rig.store.textOf(created.id)}'
+        '${compaction('k1', lastId, firstKept: lastId)}\n',
+      );
+      rig.session = await rig.core.runtime.loadSession(
+        created.id,
+        const SessionHostPorts(),
+        cwd: '/work/a',
+      );
+      return rig;
+    }
+
+    test('the command gives a full block, not the repeat line', () async {
+      final rig = await compacted(
+        steps: [loadSkillStep('c1', 'notes'), textStep('done'), textStep('ok')],
+      );
+
+      await rig.ask('/skill:notes');
+
+      expect(rig.lastUserText, rig.invoked('notes'));
+      expect(
+        rig.logger.eventsOf('skill.activated').last.fields['repeated'],
+        false,
+      );
+    });
+
+    test('the tool gives a full block, not the repeat line', () async {
+      final rig = await compacted(
+        steps: [
+          loadSkillStep('c1', 'notes'),
+          textStep('done'),
+          loadSkillStep('c2', 'notes'),
+          textStep('ok'),
+        ],
+      );
+
+      await rig.ask('again');
+
+      final text = resultText(toolResults(rig).last);
+      expect(text, contains('Body of notes.'));
+      expect(text, isNot(contains('already loaded')));
+    });
   });
 }
