@@ -100,5 +100,90 @@ void main() {
     test('with a placeholder raw is not appended', () {
       expect(sub(r'only $1', 'x y'), 'only x');
     });
+
+    // Литерал доллара обратной косой (agent-slash-commands «Разворачивание
+    // команды», сценарии «Литерал доллара…»; design.md change
+    // `add-agent-skills`, D8; решения Q7, Q15 (а), Q28). Функция одна для
+    // шаблонов и навыков.
+    group(r'literal dollar: \$ and $$ (Q15 (а))', () {
+      test(r'scenario "Литерал доллара через обратную косую": \$1 is the '
+          r'text $1, $1 still substitutes', () {
+        expect(sub(r'cost \$1, arg $1', 'x'), r'cost $1, arg x');
+      });
+
+      test(r'scenario "Литерал доллара удвоением": $$1 is the text $1', () {
+        expect(sub(r'cost $$1, arg $1', 'x'), r'cost $1, arg x');
+      });
+
+      test(r'scenario "Литерал доллара в навыке": \$HOME and $$PATH', () {
+        expect(
+          sub(r'Use \$HOME and $$PATH; topic: $1', 'cache'),
+          r'Use $HOME and $PATH; topic: cache',
+        );
+      });
+
+      test(r'\$ARGUMENTS and \$1 stay the literals $ARGUMENTS and $1', () {
+        expect(sub(r'\$ARGUMENTS \$1', 'a b'), r'$ARGUMENTS $1');
+        expect(
+          sub(r'\$ARGUMENTS and $ARGUMENTS', 'a b'),
+          r'$ARGUMENTS and a b',
+        );
+      });
+
+      test(r'a lone \$ gives $ and is not a placeholder', () {
+        expect(sub(r'price: \$', ''), r'price: $');
+        expect(sub(r'\$ then $1', 'q'), r'$ then q');
+      });
+
+      test(r'a backslash before any other character stays literal', () {
+        expect(sub(r'a\nb \x $1', 'q'), r'a\nb \x q');
+        expect(sub(r'tail\', ''), r'tail\');
+      });
+
+      test(r'a double backslash is copied as is and the next $ is parsed '
+          r'by the ordinary rule (D18): \\$1 gives \\x', () {
+        expect(sub(r'\\$1', 'x'), r'\\x');
+        expect(sub(r'a\\$1', 'x'), r'a\\x');
+        expect(sub(r'\\$$', ''), r'\\$');
+        expect(sub(r'C:\\dir\\$1', 'f'), r'C:\\dir\\f');
+      });
+
+      test(r'a substituted value with \$ is not scanned again', () {
+        expect(sub(r'X $1', r'\$ARGUMENTS'), r'X \$ARGUMENTS');
+        expect(sub(r'X $ARGUMENTS', r'\$1'), r'X \$1');
+      });
+
+      test(r'\$ does not make a body "with placeholders": the tail stays '
+          '(scenario "Хвост ARGUMENTS без плейсхолдеров")', () {
+        expect(sub(r'cost \$1', 'x'), 'cost \$1\n\nARGUMENTS: x');
+        expect(
+          sub(r'cost \$ARGUMENTS', 'x y'),
+          'cost \$ARGUMENTS\n\nARGUMENTS: x y',
+        );
+        expect(sub(r'cost \$1', ''), r'cost $1');
+      });
+
+      test(r'a real placeholder next to \$ cancels the tail', () {
+        expect(sub(r'\$1 is $1', 'x'), r'$1 is x');
+      });
+    });
+
+    test('scenario "Отсутствующий аргумент": a missing positional argument '
+        'is an empty string (Q28)', () {
+      expect(sub(r'[$1|$2]', 'a'), '[a|]');
+      expect(sub(r'[$1|$2|$3]', ''), '[||]');
+    });
+
+    test('templates stay as before: bodies without backslash behave as '
+        'in the pre-skills tests', () {
+      expect(
+        sub(
+          r'Review $1 focusing on $2. All: $ARGUMENTS',
+          'lib "error handling"',
+        ),
+        'Review lib focusing on error handling. All: lib "error handling"',
+      );
+      expect(sub('Do it', 'lib/x'), 'Do it\n\nARGUMENTS: lib/x');
+    });
   });
 }

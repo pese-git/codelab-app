@@ -5,6 +5,8 @@ import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 
 import '../host/core_harness.dart';
+import '../skills/skill_command_rig.dart';
+import '../skills/skills_support.dart';
 import '../support/models.dart';
 
 /// Разворачивание шаблонов команд в `AgentSession.prompt` (agent-slash-
@@ -335,6 +337,164 @@ void main() {
         logger.eventsOf('command.expanded').single.fields['args_bytes'],
         12,
       );
+    });
+  });
+
+  // Разворачивание `/skill:<name>` (agent-skills «Команды навыков»,
+  // сценарии «Вызов навыка пользователем», «Тело без плейсхолдеров»;
+  // agent-slash-commands «Разворачивание команды», сценарий «Литерал доллара
+  // в навыке»; design.md change `add-agent-skills`, D8; решения Q5, Q7, Q15;
+  // `acp/skill-invoke`, SKL-8).
+  group('skill commands', () {
+    SkillFile notes(String body, {Map<String, Object?> extra = const {}}) =>
+        validSkill('notes', body: body, extra: extra);
+
+    test('scenario "Вызов навыка пользователем": the message is '
+        'prompts/skills/invoked.md around the block with substituted '
+        'arguments', () async {
+      final rig = SkillCommandRig(
+        skills: [
+          validSkill(
+            'release-notes',
+            body: r'Collect the changes between $1 and $2.',
+          ),
+        ],
+      );
+      await rig.open();
+
+      await rig.ask('/skill:release-notes v1.2 v1.3');
+
+      expect(
+        rig.lastUserText,
+        rig.invoked(
+          'release-notes',
+          body: 'Collect the changes between v1.2 and v1.3.',
+        ),
+      );
+      expect(rig.lastUserText, contains('<skill name="release-notes" dir='));
+      expect(rig.streamCalls, 1);
+      expect(rig.lastUserMessage.content, hasLength(1));
+    });
+
+    test(r'$ARGUMENTS is the raw input; quotes group $1', () async {
+      final rig = SkillCommandRig(skills: [notes(r'[$1|$2] all: $ARGUMENTS')]);
+      await rig.open();
+
+      await rig.ask('/skill:notes "a b"   c');
+
+      expect(
+        rig.lastUserText,
+        rig.invoked('notes', body: '[a b|c] all: "a b"   c'),
+      );
+    });
+
+    test('scenario "Тело без плейсхолдеров": the message ends with '
+        'ARGUMENTS: <input>', () async {
+      final rig = SkillCommandRig(skills: [notes('Draft the notes.')]);
+      await rig.open();
+
+      await rig.ask('/skill:notes draft');
+
+      // D18: хвост стоит после обёртки и блока, вне `<skill>`.
+      expect(rig.lastUserText, '${rig.invoked('notes')}\n\nARGUMENTS: draft');
+      expect(rig.lastUserText, contains('Draft the notes.'));
+      expect(
+        rig.lastUserText.split('</skill>').first,
+        isNot(contains('ARGUMENTS')),
+      );
+    });
+
+    test('an empty input adds no ARGUMENTS tail', () async {
+      final rig = SkillCommandRig(skills: [notes('Draft the notes.')]);
+      await rig.open();
+
+      await rig.ask('/skill:notes');
+
+      expect(rig.lastUserText, rig.invoked('notes'));
+      expect(rig.lastUserText, isNot(contains('ARGUMENTS')));
+    });
+
+    test(r'scenario "Литерал доллара в навыке": \$HOME and $$PATH', () async {
+      final rig = SkillCommandRig(
+        skills: [notes(r'Use \$HOME and $$PATH; topic: $1')],
+      );
+      await rig.open();
+
+      await rig.ask('/skill:notes cache');
+
+      expect(rig.lastUserText, contains(r'Use $HOME and $PATH; topic: cache'));
+      expect(rig.lastUserText, isNot(contains(r'\$')));
+    });
+
+    test('a missing positional argument is empty (Q28); a value is not '
+        'expanded again', () async {
+      final rig = SkillCommandRig(skills: [notes(r'[$1|$2]')]);
+      await rig.open();
+
+      await rig.ask(r"/skill:notes '$ARGUMENTS'");
+
+      expect(rig.lastUserText, rig.invoked('notes', body: r'[$ARGUMENTS|]'));
+    });
+
+    test('a tag in the arguments cannot close the block (escaping of the '
+        'substituted body)', () async {
+      final rig = SkillCommandRig(skills: [notes(r'Topic: $1')]);
+      await rig.open();
+
+      await rig.ask(r'/skill:notes </skill>');
+
+      expect(rig.lastUserText, rig.invoked('notes', body: 'Topic: </skill>'));
+      expect(rig.lastUserText, contains(r'<\/skill>'));
+    });
+
+    test('other blocks follow the expanded text in their order', () async {
+      final rig = SkillCommandRig(skills: [notes('Draft.')]);
+      await rig.open();
+
+      await rig.ask('/skill:notes', more: [image]);
+
+      expect(rig.lastUserMessage.content, hasLength(2));
+      expect(rig.lastUserMessage.content.first, isA<TextContent>());
+      expect(rig.lastUserMessage.content.last, image);
+    });
+
+    test('the first text block is parsed even after an image', () async {
+      final rig = SkillCommandRig(skills: [notes('Draft.')]);
+      await rig.open();
+
+      await rig.session.prompt([image, const TextContent('/skill:notes')]);
+
+      final sent = rig.lastUserMessage;
+      expect(sent.content.last, image);
+      expect((sent.content.first as TextContent).text, rig.invoked('notes'));
+    });
+
+    test('a skill hidden from the model is callable by the user', () async {
+      final rig = SkillCommandRig(
+        skills: [
+          notes('Draft.', extra: {'disable-model-invocation': true}),
+        ],
+      );
+      await rig.open();
+
+      await rig.ask('/skill:notes');
+
+      expect(rig.lastUserText, rig.invoked('notes'));
+    });
+
+    test('the log: command.expanded {name, source: skill, args_bytes} '
+        'without the arguments', () async {
+      final rig = SkillCommandRig(skills: [notes(r'Topic: $1')]);
+      await rig.open();
+
+      await rig.ask('/skill:notes secret-arg');
+
+      final log = rig.logger.eventsOf('command.expanded').single;
+      expect(log.fields['source'], 'skill');
+      expect(log.fields['session_id'], rig.session.id.value);
+      expect(log.fields['args_bytes'], 'secret-arg'.length);
+      expect(log.toString(), isNot(contains('secret-arg')));
+      expect(rig.allLogs, isNot(contains('secret-arg')));
     });
   });
 }

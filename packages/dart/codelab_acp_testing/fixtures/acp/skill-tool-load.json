@@ -1,0 +1,424 @@
+{
+  "id": "acp/skill-tool-load",
+  "spec": [
+    "08-Tool Calls.md#creating",
+    "08-Tool Calls.md#updating",
+    "08-Tool Calls.md#requesting-permission"
+  ],
+  "description": "Модель вызывает инструмент skill с {\"name\":\"release-notes\"}: tool_call с kind read, заголовком «Load skill release-notes» и locations с путём SKILL.md; в режиме standard вызов уровня read идёт без session/request_permission; tool_call_update completed содержит тело в блоке <skill …>. Второй вызов skill с тем же именем завершается строкой повтора «Skill \"release-notes\" is already loaded in this conversation; follow the instructions above.» (E-06; design.md change add-agent-skills, D7, решение Q10).",
+  "goals": [
+    "E-06"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "files": {
+      ".codelab/skills/release-notes/SKILL.md": "---\nname: release-notes\ndescription: Draft release notes from two git tags\nargument-hint: \"<from> <to>\"\n---\nSummarize the changes from $1 to $2.\n"
+    },
+    "config": {
+      "trusted_projects": [
+        "${cwd}"
+      ]
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "release notes"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "skill",
+              "arguments": {
+                "name": "release-notes"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_2",
+              "name": "skill",
+              "arguments": {
+                "name": "release-notes"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_2",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Готово."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          },
+          "clientInfo": {
+            "name": "fixture-client",
+            "version": "0.0.0"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ initialize; поля проверяет acp/initialize-capabilities",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент создаёт сессию в доверенном проекте с навыками из .codelab/skills",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/new; команды идут отдельным кадром после него (ACP-8)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "sessionId"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "список команд (подробно — acp/skill-command-listed)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              {
+                "name": "compact",
+                "description": "Compact the session history",
+                "input": {
+                  "hint": "[focus]"
+                }
+              },
+              {
+                "name": "mode",
+                "description": "Switch the session mode",
+                "input": {
+                  "hint": "plan | ask | standard | accept-edits | bypass"
+                }
+              },
+              {
+                "name": "model",
+                "description": "Switch the model",
+                "input": {
+                  "hint": "provider/model"
+                }
+              },
+              {
+                "name": "status",
+                "description": "Show the model, mode, working directory and MCP servers"
+              },
+              {
+                "name": "mcp",
+                "description": "List, reload, enable or disable MCP servers",
+                "input": {
+                  "hint": "list | reload [<id>] | enable <id> | disable <id>"
+                }
+              },
+              {
+                "name": "help",
+                "description": "List commands"
+              },
+              {
+                "name": "skill:release-notes",
+                "description": "Draft release notes from two git tags",
+                "input": {
+                  "hint": "<from> <to>"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "пользователь просит заметки о релизе",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Prepare release notes"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D7: kind read, заголовок Load skill <name>, locations — SKILL.md навыка; уровень read в standard выполняется без session/request_permission",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": "Load skill release-notes",
+            "kind": "read",
+            "status": "pending",
+            "rawInput": {
+              "name": "release-notes"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/.codelab/skills/release-notes/SKILL.md"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "результат — блок навыка с телом без frontmatter; тело, а не вызов, попадает в следующий запрос модели (шаг 2 ждёт toolResult call_1)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "<skill name=\"release-notes\" dir=\""
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D7: kind read, заголовок Load skill <name>, locations — SKILL.md навыка; уровень read в standard выполняется без session/request_permission",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_2",
+            "title": "Load skill release-notes",
+            "kind": "read",
+            "status": "pending",
+            "rawInput": {
+              "name": "release-notes"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/.codelab/skills/release-notes/SKILL.md"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_2",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "Q10: повторная активация — одна строка вместо второго тела, isError: false",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_2",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "Skill \"release-notes\" is already loaded in this conversation; follow the instructions above."
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Готово."
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}
