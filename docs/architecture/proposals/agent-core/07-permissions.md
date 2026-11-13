@@ -36,9 +36,10 @@ final class PermissionRequest {
   final List<FileDiff> diffs;                      // по одному на файл; из ToolPrepared.presentation или present(args, ctx)
   final String? reason;                            // например, 'critical command: recursive delete of /'
   final bool allowAlwaysOffered;                   // false для критических шаблонов
-  final String? criticalLabel;                     // после MVP: метка критического шаблона §7.6 или
-                                                   // 'agent configuration' (§7.6.1); из неё AcpPermissionGate
-                                                   // берёт _meta.codelab.label, A2aPermissionGate отклоняет (§17.15.4)
+  final String? criticalLabel;                     // метка критического шаблона §7.6 или 'write to agent
+                                                   // configuration' у правки конфигурации агента (§7.6.1, PERM-11;
+                                                   // change mark-agent-config-edits-critical, D1); из неё AcpPermissionGate
+                                                   // ставит _meta.codelab.critical, A2aPermissionGate отклоняет (§17.15.4)
 }
 
 enum PermissionDecision { allowOnce, allowAlways, rejectOnce, rejectAlways, cancelled }
@@ -159,16 +160,18 @@ decide(tool, args, id):
   2  if tool.name in turnDeny: return Denied('not allowed in this turn')
   3  if configPath(tool, args) != null:                                    # §7.6.1: цель lockPath(args) в списке путей
          if mode == autopilot or gate == null: return Denied('Editing agent configuration requires a human: ' + path)
-         return ask(reason: 'agent configuration: ' + path, allowAlwaysOffered: false)
+         return ask(reason: 'agent configuration: ' + path,
+                    criticalLabel: 'write to agent configuration', allowAlwaysOffered: false)
      if critical != null:
          if mode == autopilot: return Denied('critical command blocked in autopilot: ' + critical.label)
-         return ask(reason: 'critical command: ' + critical.label, allowAlwaysOffered: false)
+         return ask(reason: 'critical command: ' + critical.label, criticalLabel: critical.label,
+                    allowAlwaysOffered: false)
   4  switch rules.toolPolicies[tool]: allow → Allowed('tool policy'); ask → return ask()
   5  if tool.name in turnAllow: return Allowed('turn grant')
   6  if key in allowAlways: return Allowed('always allowed')
   7  switch table[mode][tool.tierOf(args)]: allow → Allowed('mode'); ask → return ask()
 
-ask(reason, allowAlwaysOffered = true):
+ask(reason, criticalLabel = null, allowAlwaysOffered = true):   # criticalLabel → _meta.codelab.critical (§7.8)
   allowAlwaysOffered &= tool.offersAllowAlways(args)                     # после MVP: lsp rename (§17.8.9)
   if gate == null: return Denied('no approval interface is available')
   t0 = clock.now()
@@ -307,8 +310,11 @@ final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
   `.codelab/agents/**`, `.codelab/skills/**`, `.codelab/prompts/**`, `.codelab/hooks/**`,
   `.agents/skills/**` (корень навыков проекта, change `add-agent-skills`, Q16) (путь нормализуется по §4.4 до сравнения), считаются **критическими**: вопрос задаётся в любом
   режиме, включая `bypass` и `accept-edits`; `allow_always` не предлагается и ранее выданные
-  «разрешить всегда» на них не действуют; в `autopilot` и без интерфейса одобрения — отказ с
-  текстом `Editing agent configuration requires a human: <path>`;
+  «разрешить всегда» на них не действуют; вопрос критический — `criticalLabel` с той же меткой
+  `write to agent configuration`, что у `exec` ниже, `reason` — `agent configuration: <path>`
+  (ACP-клиент видит `_meta.codelab.critical`, §7.8; change `mark-agent-config-edits-critical`);
+  в `autopilot` и без интерфейса одобрения — отказ с текстом
+  `Editing agent configuration requires a human: <path>`;
 * `exec`, у которого путь из того же списка — аргумент команды не из белого списка чтения или цель
   перенаправления, — критический шаблон с меткой `write to agent configuration` (строка таблицы
   выше; правило — ниже, «Белый список чтения»).
@@ -532,7 +538,7 @@ change `add-agent-skills`).
 ## 7.7. Режим без интерфейса одобрения (headless)
 
 1. `PermissionGate` не передан (ядро запущено без ACP-клиента и без UI — фоновые прогоны, тесты) → любое «спросить» превращается в отказ `no approval interface is available` (PERM-5).
-2. Headless `codelab -p` — это ACP-клиент, поэтому gate у агента **есть**: `AcpPermissionGate` (§7.8). На запросы отвечает сам CLI по политике `--approve` (`reject` по умолчанию, `read-only`, `allow-all`; см. proposal, спецификация `codelab`). Запрос для критической команды несёт `_meta.codelab.critical: true` и не предлагает `allow_always`; политика `allow-all` такие запросы **отклоняет**, `read-only` и `reject` — тоже.
+2. Headless `codelab -p` — это ACP-клиент, поэтому gate у агента **есть**: `AcpPermissionGate` (§7.8). На запросы отвечает сам CLI по политике `--approve` (`reject` по умолчанию, `read-only`, `allow-all`; см. proposal, спецификация `codelab`). Запрос для критической команды (§7.6) и для правки конфигурации агента (§7.6.1) несёт `_meta.codelab.critical: true` и не предлагает `allow_always`; политика `allow-all` такие запросы **отклоняет**, `read-only` и `reject` — тоже.
 3. Режим агента (`--permission-mode` у `codelab-agent serve` и у встроенного агента в `codelab -p`) меняет, о чём агент спрашивает, а `--approve` — как CLI отвечает. `autopilot` включается только флагом: в нём агент не спрашивает о `read`/`write`/`exec`, а критические команды отклоняет сам (PERM-9).
 4. Отказы headless-прогона логируются (`permission.denied`, `reason`) и видны в выводе `codelab -p`.
 
@@ -541,7 +547,7 @@ change `add-agent-skills`).
 `AcpPermissionGate` (`codelab_agent_acp`) реализует порт через `session/request_permission`
 (`docs/protocols/acp/protocol/08-Tool Calls.md`):
 
-1. `toolCall` — `ToolCallUpdate` с `toolCallId`, `title`, `kind`, `status: "pending"`, `rawInput`, `locations`; `content` — необязательный текстовый блок первым элементом (`reason`; у `lsp rename` — сводка `Rename "<old>" to "<new>": <n> edits in <f> files.`, §17.8.9), затем по одному `{"type":"diff","path","oldText","newText"}` на каждый элемент `diffs` (`write`/`edit` — один). Это стандартный `ToolCallContent`, расширений не требуется. Для критической команды — `_meta: {"codelab": {"critical": true, "label": "<метка правила>"}}` (расширение вводится через OpenSpec, `AGENTS.md` §3.4).
+1. `toolCall` — `ToolCallUpdate` с `toolCallId`, `title`, `kind`, `status: "pending"`, `rawInput`, `locations`; `content` — необязательный текстовый блок первым элементом (`reason`; у `lsp rename` — сводка `Rename "<old>" to "<new>": <n> edits in <f> files.`, §17.8.9), затем по одному `{"type":"diff","path","oldText","newText"}` на каждый элемент `diffs` (`write`/`edit` — один). Это стандартный `ToolCallContent`, расширений не требуется. Для запроса с `criticalLabel` — критической команды (§7.6) и правки конфигурации агента (§7.6.1) — `_meta: {"codelab": {"critical": true, "label": "<criticalLabel>"}}` (расширение вводится через OpenSpec, `AGENTS.md` §3.4: change `add-dart-agent-acp-server`, для §7.6.1 — `mark-agent-config-edits-critical`); без метки `_meta.codelab.critical` нет.
 2. `options`: `allow_once`, `allow_always` (только если `allowAlwaysOffered`), `reject_once`, `reject_always`; `optionId` совпадает с `kind`. Варианты «всегда» называют шаблон `PermissionRequest.pattern` (`Always allow <pattern>`, `Always reject <pattern>`, §13.9); метка `_meta.codelab.critical.label` — `PermissionRequest.criticalLabel`.
 3. Ответ `{"outcome":{"outcome":"selected","optionId":X}}` → решение по `kind` выбранного варианта; неизвестный `optionId` → `rejectOnce` + warning-лог. `{"outcome":{"outcome":"cancelled"}}` → `cancelled`.
 4. Ошибка JSON-RPC или разрыв соединения → `rejectOnce` с причиной в логе.
@@ -596,7 +602,7 @@ sequenceDiagram
 8. **PERM-8.** Grants на ход очищаются в начале каждого `prompt()`.
 9. **PERM-9.** В `autopilot` критический шаблон отклоняется без вопроса; для критического шаблона вариант `allow_always` не предлагается.
 10. **PERM-10.** В `acceptEdits` вызовы уровней `read` и `write` разрешаются режимом без вопроса, а `network`, `exec` и критические шаблоны спрашиваются; `narrow` и ужесточение конфигом используют один порядок `alwaysAsk < write < acceptEdits < yolo < autopilot`.
-11. **PERM-11.** Правка конфигурационных файлов агента в проекте и путей конфигурации агента, переданных хостом (§7.6.1), спрашивается в любом режиме, не принимает `allow_always` и отклоняется без человека.
+11. **PERM-11.** Правка конфигурационных файлов агента в проекте и путей конфигурации агента, переданных хостом (§7.6.1), спрашивается в любом режиме критическим вопросом (метка `write to agent configuration`), не принимает `allow_always` и отклоняется без человека.
 
 ## 7.10. Обоснование решения
 
