@@ -89,7 +89,7 @@
 
 - [x] 4.1 `docs/architecture/concurrency.md` §45–§46, `platform-integration.md` §22–§23, `observability.md` (события `app.*`, §40), `session-lifecycle.md` §42 — внесено вместе с change (правило «сначала документ, потом код»).
 - [x] 4.2 `[desktop]` В `openspec/changes/add-integrated-terminal/design.md`, D4 «Выход из app», — строка-ссылка: с change `add-client-process-shutdown-on-exit` обработчик выхода вызывает весь `CodeLabRootLifecycle.dispose()`, а не только `closeAll()`. Если `add-integrated-terminal` к этому моменту архивирован — ничего не делать: требование `integrated-terminal` о 3 s не меняется.
-- [ ] 4.3 Проверки затронутого (шапка) и PR в `develop`. В описании PR:
+- [x] 4.3 Проверки затронутого (шапка) и PR в `develop`. В описании PR:
   - какие проверки запускались локально;
   - что полный `melos run check` не запускался;
   - итог ручной проверки 3.6.
