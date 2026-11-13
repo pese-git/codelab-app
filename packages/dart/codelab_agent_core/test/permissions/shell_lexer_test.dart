@@ -15,6 +15,36 @@ List<String?> _allNames(String command) => [
   for (final segment in parseShell(command).allSegments) segment.commandName,
 ];
 
+/// Дерево команд одной строкой для проверки структуры: связки между
+/// командами (`&&`, `||`, `;`, `&`), `!` перед отрицаемым конвейером, `|` между
+/// стадиями, блоки `вид{…}`. Слова стадии — через пробел.
+String _render(String command) => _renderCommands(parseShell(command).commands);
+
+String _renderCommands(List<ShellCommand> commands) {
+  final out = StringBuffer();
+  for (var i = 0; i < commands.length; i++) {
+    final c = commands[i];
+    out
+      ..write(c.negated ? '!' : '')
+      ..write(c.stages.map(_renderStage).join('|'));
+    if (i < commands.length - 1) {
+      out.write(switch (c.next) {
+        ShellConnector.sequence => ' ; ',
+        ShellConnector.and => ' && ',
+        ShellConnector.or => ' || ',
+        ShellConnector.background => ' & ',
+      });
+    }
+  }
+  return out.toString();
+}
+
+String _renderStage(ShellStage stage) => switch (stage) {
+  ShellSimple(:final segment) => segment.words.join(' '),
+  ShellBlock(:final kind, :final body) =>
+    '${kind.name}{${_renderCommands(body)}}',
+};
+
 void main() {
   group('сегменты и операторы (правило 1)', () {
     test('&&, ||, ;, перевод строки и & разделяют конвейеры, | — стадии', () {
@@ -295,6 +325,291 @@ void main() {
       ]) {
         expect(_allNames(command).whereType<String>(), ['rm'], reason: command);
       }
+    });
+  });
+
+  // Дерево команд для модели рабочего каталога (change
+  // `harden-exec-cwd-tracking`, D2, D6–D8, D10): связки, блоки, снятые
+  // лаунчеры, происхождение вложенного текста.
+  group('связки, отрицание и блоки (D2, D6, D10)', () {
+    test('связка конвейера со следующим: &&, ||, ;, &, перевод строки', () {
+      expect(_render('a && b || c; d | e & f\ng'), 'a && b || c ; d|e & f ; g');
+    });
+
+    test('! — отрицание конвейера, а не команда', () {
+      expect(_render('! a && b'), '!a && b');
+      expect(_allNames('! rm x'), ['rm']);
+    });
+
+    test('зарезервированные слова сняты: у сегментов команды a, b, c, d', () {
+      expect(_allNames('if a; then b; elif c; else d; fi'), [
+        'a',
+        'b',
+        'c',
+        'd',
+      ]);
+      expect(_allNames('while a; do b; done'), ['a', 'b']);
+      expect(_allNames('until a; do b; done'), ['a', 'b']);
+      expect(_allNames('if ! a; then b; fi'), ['a', 'b']);
+    });
+
+    test('плоский вид конвейеров не меняется', () {
+      expect(_shape('if a; then b; fi'), [
+        [
+          ['a'],
+        ],
+        [
+          ['b'],
+        ],
+      ]);
+    });
+
+    test('заголовок for/select — не команда; подстановка в нём остаётся', () {
+      expect(_allNames('for f in x y; do cat "\$f"; done'), ['cat']);
+      expect(_allNames('select f in x y; do cat "\$f"; done'), ['cat']);
+      expect(_allNames('for f; do cat "\$f"; done'), ['cat']);
+      expect(
+        _allNames(r'for f in $(ls d); do cat "$f"; done').whereType<String>(),
+        ['ls', 'cat'],
+      );
+    });
+
+    test('блоки: подоболочка, группа, if, цикл', () {
+      expect(_render('(a; b) && { c; }'), 'subshell{a ; b} && group{c}');
+      expect(
+        _render('if a; then b; elif c; else d; fi'),
+        'conditional{a ; b ; c ; d}',
+      );
+      expect(_render('while a; do b; done'), 'loop{a ; b}');
+      expect(_render('for f in x; do a; done'), 'loop{a}');
+      expect(_render('a; (b; (c))'), 'a ; subshell{b ; subshell{c}}');
+    });
+
+    test('связка после блока принадлежит блоку', () {
+      expect(_render('if a; then b; fi && c'), 'conditional{a ; b} && c');
+      expect(_render('(a) || b'), 'subshell{a} || b');
+      expect(_render('{ a; } & b'), 'group{a} & b');
+    });
+
+    test('тело функции: name() { … } и function name { … }', () {
+      expect(_render('f(){ a; }; b'), 'function{a} ; b');
+      expect(_render('function f { a; }; b'), 'function{a} ; b');
+      expect(_render('function f() { a; }'), 'function{a}');
+      expect(_render('f() ( a )'), 'function{a}');
+    });
+
+    test('блок стадией конвейера', () {
+      expect(_render('{ a; } | c'), 'group{a}|c');
+      expect(_render('( a ) | c'), 'subshell{a}|c');
+      expect(_render('if a; then b; fi | c'), 'conditional{a ; b}|c');
+      expect(_render('a | { b; }'), 'a|group{b}');
+    });
+
+    test('перенаправление после done и } принадлежит блоку', () {
+      final loop =
+          parseShell(
+                'while read l; do echo "\$l"; done < in.txt',
+              ).commands.single.stages.single
+              as ShellBlock;
+      expect(loop.kind, ShellBlockKind.loop);
+      expect(
+        [
+          for (final r in loop.redirections!.redirections)
+            '${r.operator}${r.target}',
+        ],
+        ['<in.txt'],
+      );
+      final group =
+          parseShell('{ a; } > out').commands.single.stages.single
+              as ShellBlock;
+      expect(group.redirections!.redirections.single.target, 'out');
+      expect(group.redirections!.redirections.single.writes, isTrue);
+      expect(group.redirections!.words, isEmpty);
+    });
+
+    test('case по-прежнему неразбираем; лишние и незакрытые блоки — тоже', () {
+      for (final command in [
+        'case x in a) b;; esac',
+        'for ((i=0; i<3; i++)); do a; done',
+        'if a; then b',
+        'fi',
+        'then a',
+        'do a',
+        '{ a',
+        'if a; then b; done',
+      ]) {
+        expect(
+          () => parseShell(command),
+          throwsA(isA<ShellParseException>()),
+          reason: command,
+        );
+      }
+    });
+
+    test('for/select без in: do закрывает заголовок; in даёт список', () {
+      expect(_allNames('for x do a; done'), ['a']);
+      expect(_allNames('select x do a; done'), ['a']);
+      expect(_render('for x do a; done'), 'loop{a}');
+      expect(_render('for x in p q; do a; done'), 'loop{a}');
+      expect(_render('for x; do a; done'), 'loop{a}');
+      expect(_render('for x\ndo a; done'), 'loop{a}');
+      expect(_render('for x in p q\ndo a; done'), 'loop{a}');
+      for (final command in ['for x y; do a; done', 'for; do a; done']) {
+        expect(
+          () => parseShell(command),
+          throwsA(isA<ShellParseException>()),
+          reason: command,
+        );
+      }
+    });
+
+    test(
+      '! и другие зарезервированные слова после перенаправления — слова',
+      () {
+        expect(_allNames('>/dev/null ! cd /tmp'), ['!']);
+        expect(_allNames('>/dev/null if x'), ['if']);
+      },
+    );
+
+    test('двойное отрицание — ошибка разбора', () {
+      expect(() => parseShell('! ! a'), throwsA(isA<ShellParseException>()));
+      expect(_allNames('! a && ! b'), ['a', 'b']);
+    });
+
+    test('переменная заголовка цикла хранится у блока', () {
+      final loop =
+          parseShell('for x in a; do b; done').commands.single.stages.single
+              as ShellBlock;
+      expect(loop.variable, 'x');
+    });
+
+    test('command -v/-V: только поиск; лаунчер с путём — внешний (A3)', () {
+      ShellSegment seg(String c) => parseShell(c).segments.single;
+      expect(seg('command -v cd x').lookupOnly, isTrue);
+      expect(seg('command -pV cd').lookupOnly, isTrue);
+      expect(seg('command command -v cd').lookupOnly, isTrue);
+      expect(seg('command cd x').lookupOnly, isFalse);
+      expect(seg('/usr/bin/command cd x').launchers, ['external command']);
+    });
+
+    test('маска и скобки в первом слове команды (A2)', () {
+      ShellSegment seg(String c) => parseShell(c).segments.single;
+      expect(seg('[c]d x').commandWordGlob, isTrue);
+      expect(seg('{cd,x}').commandWordGlob, isTrue);
+      expect(seg('c? x').commandWordGlob, isTrue);
+      expect(seg('"[c]d" x').commandWordGlob, isFalse);
+      expect(seg('[ -f x ]').commandWordGlob, isFalse);
+      expect(seg('[[ -f x ]]').commandWordGlob, isFalse);
+      expect(seg('cd x').commandWordGlob, isFalse);
+    });
+
+    test('раскрытие до первой / без кавычек может разбиться на слова (A2)', () {
+      bool split(String c) => parseShell(c).segments.single.commandWordSplit;
+      expect(split(r'$d/run'), isTrue);
+      expect(split(r'${d}/run'), isTrue);
+      expect(split(r'$(x)/run'), isTrue);
+      expect(split(r'$d x'), isTrue);
+      expect(split(r'"$d"/run'), isFalse);
+      expect(split(r'"${d}"/run'), isFalse);
+      expect(split(r'$HOME/bin/tool'), isFalse);
+      expect(split(r'${HOME}/bin/tool'), isFalse);
+      expect(split(r'${CODELAB_HOME}/x'), isFalse);
+      expect(split(r'./$x'), isFalse);
+      expect(split(r'$HOMEX/run'), isTrue);
+      expect(split('cd x'), isFalse);
+    });
+
+    test('+= и NAME[i]= — присваивания, а не имя команды (A5)', () {
+      expect(parseShell('a+=1 rm x').segments.single.words, ['rm', 'x']);
+      expect(parseShell('a[0]=1 rm x').segments.single.words, ['rm', 'x']);
+      expect(parseShell('a[0]+=1 rm x').segments.single.words, ['rm', 'x']);
+    });
+
+    test('предел вложенности блоков', () {
+      expect(_allNames('${'{ ' * 64}a;${' }' * 64}'), ['a']);
+      expect(
+        () => parseShell('${'{ ' * 65}a;${' }' * 65}'),
+        throwsA(isA<ShellParseException>()),
+      );
+      expect(() => parseShell('{ ' * 100), throwsA(isA<ShellParseException>()));
+      expect(_allNames('${'{ ' * 10}a;${' }' * 10}'), ['a']);
+    });
+
+    test('слово в кавычках и аргумент не считаются зарезервированными', () {
+      expect(_allNames('"if" x'), ['if']);
+      expect(_allNames('echo if then fi'), ['echo']);
+      expect(_allNames(r'\! x'), ['!']);
+    });
+  });
+
+  group('снятые лаунчеры (D7)', () {
+    List<String> launchers(String command) =>
+        parseShell(command).segments.single.launchers;
+
+    test('имена снятых лаунчеров по порядку', () {
+      expect(launchers('env cd x'), ['env']);
+      expect(launchers('command cd x'), ['command']);
+      expect(launchers('builtin cd x'), ['builtin']);
+      expect(launchers('time cd x'), ['time']);
+      expect(launchers('sudo -D d cd x'), ['sudo']);
+      expect(launchers('A=1 nohup time rm x'), ['nohup', 'time']);
+      expect(launchers('cd x'), isEmpty);
+      expect(launchers('A=1 cd x'), isEmpty);
+    });
+  });
+
+  group('происхождение вложенного текста (D8)', () {
+    ShellOrigin originOf(String command, {int index = 0}) =>
+        parseShell(command).segments.first.nested[index].origin;
+
+    test('подстановки', () {
+      expect(originOf(r'echo $(a)'), ShellOrigin.substitution);
+      expect(originOf('echo `a`'), ShellOrigin.substitution);
+      expect(originOf('cat <(a)'), ShellOrigin.substitution);
+      expect(originOf('tee >(a)'), ShellOrigin.substitution);
+      expect(originOf('echo x > \$(a)'), ShellOrigin.substitution);
+    });
+
+    test('новый процесс: sh -c, env -S, watch, script -c, find -exec, rg', () {
+      expect(originOf("sh -c 'a'"), ShellOrigin.command);
+      expect(originOf("bash -lc 'a'"), ShellOrigin.command);
+      expect(originOf("env -S 'a'"), ShellOrigin.command);
+      expect(originOf("watch -n 1 'a'"), ShellOrigin.command);
+      expect(originOf("script -c 'a' /dev/null"), ShellOrigin.command);
+      expect(originOf(r'find . -exec a {} \;'), ShellOrigin.command);
+      expect(originOf(r'find . -ok a {} \;'), ShellOrigin.command);
+      expect(originOf("rg --pre a x"), ShellOrigin.command);
+    });
+
+    test('eval — текущая оболочка; подстановка в его словах — своя', () {
+      expect(originOf('eval a'), ShellOrigin.eval);
+      final nested = parseShell(r'eval $(x) a').segments.single.nested;
+      expect(nested.map((s) => s.origin), [
+        ShellOrigin.substitution,
+        ShellOrigin.eval,
+      ]);
+    });
+
+    test('чужой каталог: git, переменные-команды, execdir, trap', () {
+      expect(originOf("git -c core.pager=a log"), ShellOrigin.foreign);
+      expect(originOf("git -c 'alias.x=!a' x"), ShellOrigin.foreign);
+      expect(originOf('GIT_PAGER=a git log'), ShellOrigin.foreign);
+      expect(originOf('EDITOR=a git commit'), ShellOrigin.foreign);
+      expect(originOf(r'find . -execdir a {} \;'), ShellOrigin.foreign);
+      expect(originOf(r'find . -okdir a {} \;'), ShellOrigin.foreign);
+      expect(originOf("trap 'a' EXIT"), ShellOrigin.foreign);
+    });
+
+    test('trap: первый аргумент — команда; сброс и опции — нет', () {
+      expect(_allNames("trap 'rm -rf /' EXIT"), ['trap', 'rm']);
+      expect(_allNames("trap -- 'rm x' INT TERM"), ['trap', 'rm']);
+      expect(_allNames('trap - EXIT'), ['trap']);
+      expect(_allNames('trap -p'), ['trap']);
+      expect(_allNames("trap '' INT"), ['trap']);
+    });
+
+    test('верхний уровень — root', () {
+      expect(parseShell('a').origin, ShellOrigin.root);
     });
   });
 
