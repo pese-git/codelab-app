@@ -287,9 +287,11 @@ void main() {
 
       expect(rig.firstToolNames, isNot(contains('skill')));
       expect(rig.contexts.first.systemPrompt, isNot(contains('## Skills')));
-      expect([
-        for (final c in rig.session.commands) c.name,
-      ], contains('skill:only-command'));
+      // Команда остаётся в снимке (команды `skill:<name>` — итерация 3).
+      expect(
+        [for (final s in rig.session.skills.commands) s.name],
+        ['only-command'],
+      );
     });
 
     test(

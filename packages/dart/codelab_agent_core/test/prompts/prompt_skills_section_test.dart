@@ -33,8 +33,8 @@ final _skills = parse([
 ]).modelVisible;
 
 final _context = assembleProjectContext([
-  ContextFile(path: 'AGENTS.md', content: 'Rule A.\n'),
-  ContextFile(path: 'pkg/AGENTS.md', content: 'Rule B.\n'),
+  ContextFile(path: 'AGENTS.md', content: 'Rule A: use tabs.\n'),
+  ContextFile(path: 'pkg/AGENTS.md', content: 'Rule B: no tabs.\n'),
 ], 1 << 16)!;
 
 /// Секция `skills/catalog` и тексты навыков в `prompts/` (agent-prompts

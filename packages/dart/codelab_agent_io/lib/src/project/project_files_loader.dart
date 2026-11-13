@@ -5,9 +5,12 @@ import 'dart:typed_data';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:meta/meta.dart';
 
+import '../config/agent_config_paths.dart'
+    show projectSkillSubdirs, sessionSkillRootsFor;
 import '../env/host_path.dart';
 import '../env/local_execution_env.dart';
 import 'frontmatter.dart';
+import 'skill_roots.dart';
 
 /// Читает файлы проекта и пользователя с локальной файловой системы процесса
 /// агента (design.md change `add-agent-project-files`, D1, D2, D4–D6;
@@ -98,7 +101,7 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
   final Future<void> Function(String path)? _beforeOpen;
 
   /// Предел обхода вверх к корню репозитория (D5, пункт 1; D6).
-  static const maxLevels = 64;
+  static const maxLevels = maxProjectLevels;
 
   /// Предел числа `*.md` в каталоге шаблонов или агентов (D6).
   static const maxTemplateFiles = 100;
@@ -356,7 +359,33 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
         seen,
       );
     }
-    return SkillFiles(skills: skills, diagnostics: diagnostics);
+    return SkillFiles(
+      skills: skills,
+      diagnostics: diagnostics,
+      sessionRoots: await _sessionRoots(query),
+    );
+  }
+
+  /// Корни, которые защищает политика этой сессии (D9, D17; Q27, Q44):
+  /// зависящие от `cwd` — той же функцией, что и PERM-11 хоста, — плюс
+  /// абсолютные и `~`-элементы `extra_roots` этой папки: у сессии другой
+  /// папки свои `extra_roots`, а путей хоста из конфига корня запуска для неё
+  /// мало. Не зависит от доверия проекта и от существования каталогов.
+  Future<List<String>> _sessionRoots(SkillFilesQuery query) async {
+    final roots = <String>{
+      ...await sessionSkillRootsFor(
+        cwd: query.cwd,
+        extraRoots: query.extraRoots,
+      ),
+    };
+    for (final raw in query.extraRoots) {
+      if (hostSkillRoot(raw, userHome) case final path?) {
+        roots.add(
+          toCorePath(canonicalPath(path), windows: io.Platform.isWindows),
+        );
+      }
+    }
+    return roots.toList();
   }
 
   /// Список корней в порядке приоритета (D3, D16): уровни проекта от `cwd`
@@ -386,7 +415,7 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
       );
     }
     for (final level in levels.reversed) {
-      for (final sub in const ['.codelab/skills', '.agents/skills']) {
+      for (final sub in projectSkillSubdirs) {
         final path = '${level == '/' ? '' : level}/$sub';
         if (query.projectTrusted) {
           roots.add(_SkillRoot(path, ExtensionScope.project, area: level));
@@ -413,7 +442,7 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
       roots.add(_SkillRoot('$dir/.agents/skills', ExtensionScope.user));
     }
     for (final raw in query.extraRoots) {
-      if (raw == '~' || raw.startsWith('~/')) {
+      if (isHomeSkillRoot(raw)) {
         final dir = userHome;
         if (dir == null) {
           diagnostics.add(
@@ -429,9 +458,9 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
           continue;
         }
         roots.add(_SkillRoot('$dir${raw.substring(1)}', ExtensionScope.extra));
-      } else if (_isAbsolute(raw)) {
-        roots.add(_SkillRoot(raw, ExtensionScope.extra));
-      } else {
+      } else if (hostSkillRoot(raw, userHome) case final path?) {
+        roots.add(_SkillRoot(path, ExtensionScope.extra));
+      } else if (isRelativeSkillRoot(raw)) {
         final path = '${query.cwd == '/' ? '' : query.cwd}/$raw';
         if (query.projectTrusted) {
           roots.add(_SkillRoot(path, ExtensionScope.extra));
@@ -448,12 +477,11 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
           );
         }
       }
+      // `~user/…` и `<scheme>://…` не корни: их отвергает проверка конфига, а
+      // PERM-11 их не защищает — загрузчик их тоже не читает (Q41).
     }
     return roots;
   }
-
-  static bool _isAbsolute(String path) =>
-      path.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
 
   Future<bool> _isDirectory(String path) async =>
       switch (await _local.stat(path)) {
@@ -797,39 +825,21 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
     String cwd,
     List<ExtensionDiagnostic> diagnostics,
   ) async {
-    final up = <String>[];
-    var dir = cwd.length > 1 && cwd.endsWith('/')
-        ? cwd.substring(0, cwd.length - 1)
-        : cwd;
-    while (up.length < maxLevels) {
-      up.add(dir);
-      // `.git` — каталог или файл (worktree, submodule): важна только запись.
-      // Symlink маркером не считается: `stat` его не раскрывает, а цель
-      // лежит вне проверяемой границы; чужой репозиторий мог бы подложить
-      // `.git` -> куда угодно и сдвинуть корень поиска.
-      if (await _local.stat('$dir/.git') case Ok(
-        :final value,
-      ) when value.type == FileType.directory || value.type == FileType.file) {
-        return (levels: up.reversed.toList(), found: true);
-      }
-      final slash = dir.lastIndexOf('/');
-      if (slash <= 0) {
-        // Дошли до корня файловой системы без репозитория.
-        return (levels: [cwd], found: false);
-      }
-      dir = dir.substring(0, slash);
+    // Подъём общий с PERM-11 (`projectLevels`): списки корней не расходятся.
+    final result = projectLevels(cwd);
+    if (result.limitHit) {
+      diagnostics.add(
+        ExtensionDiagnostic(
+          path: cwd,
+          level: DiagnosticLevel.info,
+          code: 'limit_exceeded',
+          message:
+              'no git repository within $maxLevels levels above the working '
+              'directory; only the working directory is searched',
+        ),
+      );
     }
-    diagnostics.add(
-      ExtensionDiagnostic(
-        path: cwd,
-        level: DiagnosticLevel.info,
-        code: 'limit_exceeded',
-        message:
-            'no git repository within $maxLevels levels above the working '
-            'directory; only the working directory is searched',
-      ),
-    );
-    return (levels: [cwd], found: false);
+    return (levels: result.levels, found: result.found);
   }
 
   /// Есть ли запись по [path] внутри границы [env]. Symlink наружу тоже

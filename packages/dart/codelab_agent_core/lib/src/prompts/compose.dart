@@ -3,6 +3,9 @@ import '../mcp/mcp_connector.dart';
 import '../mcp/mcp_tool_name.dart';
 import '../permissions/modes.dart';
 import '../project/project_context.dart';
+import '../skills/catalog_entries.dart';
+import '../skills/skill_catalog.dart';
+import '../skills/skills_config.dart' show defaultSkillsCatalogMaxChars;
 import '../tools/truncate.dart';
 import 'prompts.g.dart';
 import 'template.dart';
@@ -31,8 +34,11 @@ final class PromptInputs {
     List<McpServerSummary> mcpServers = const [],
     this.projectContext,
     this.agentProfile,
+    List<SkillDefinition> skills = const [],
+    this.skillsCatalogMaxChars = defaultSkillsCatalogMaxChars,
   }) : toolNames = Set.unmodifiable(toolNames),
-       mcpServers = List.unmodifiable(mcpServers);
+       mcpServers = List.unmodifiable(mcpServers),
+       skills = List.unmodifiable(skills);
 
   final String cwd;
 
@@ -61,6 +67,14 @@ final class PromptInputs {
   /// промпт побайтово прежний (PR-3). Тело вставляется как значение и шаблоном
   /// не обрабатывается (§11.4).
   final ({String name, String body})? agentProfile;
+
+  /// Навыки `modelVisible` снимка каталога сессии (design.md change
+  /// `add-agent-skills`, D6, D17); порядок входа не важен — строки идут по
+  /// имени. Пусто — секции `skills.catalog` нет и промпт побайтово прежний.
+  final List<SkillDefinition> skills;
+
+  /// `skills.catalog_max_chars` сессии: бюджет строк каталога.
+  final int skillsCatalogMaxChars;
 }
 
 /// Лимит записей `ls` для секции `tools/listing`.
@@ -126,6 +140,21 @@ List<(String, String)> _sections(PromptInputs inputs) {
               '- ${server.name}: ${server.toolCount} tools, '
                   'prefix ${mcpServerPrefix(server.name)}',
           ].join('\n'),
+        }),
+      ),
+    // Шаг 9a §11.5: каталог навыков после `mcp` и до инструкций проекта.
+    // Секция называет инструмент `skill`, поэтому входит, только если он среди
+    // инструментов сессии (PR-6), и только при включённой capability (HOST-4).
+    if (inputs.profile.isOn(HostCapability.skills) &&
+        inputs.skills.isNotEmpty &&
+        on(Prompts.skillsCatalog))
+      (
+        Prompts.skillsCatalog.id,
+        Prompts.skillsCatalog.render({
+          'entries': skillsCatalogEntries(
+            inputs.skills,
+            inputs.skillsCatalogMaxChars,
+          ).entries,
         }),
       ),
     // Шаг 10 §11.5: инструкции проекта идут последними среди секций этапа:

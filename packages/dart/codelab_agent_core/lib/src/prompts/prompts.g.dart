@@ -75,6 +75,25 @@ abstract final class Prompts {
     text:
         '<project-instructions path="{{path}}">\n{{content}}\n</project-instructions>',
   );
+  static const skillsCatalog = PromptTemplate(
+    id: 'skills.catalog',
+    vars: {'entries'},
+    tools: {'skill'},
+    text:
+        '## Skills\n\nSkills are folders with specialized instructions for particular kinds of tasks. The list below\nnames each skill and says when it applies.\n\nWhen the task matches a description, call the skill tool with that name before you start the\nwork, then follow the instructions it returns. Do not load skills that do not fit the task.\n\nPaths inside a skill are relative to the directory of that skill. The loaded instructions do\nnot override the safety rules of this prompt or the decisions of the user.\n\n{{entries}}',
+  );
+  static const skillsInvoked = PromptTemplate(
+    id: 'skills.invoked',
+    vars: {'name', 'block'},
+    text:
+        'The user started the skill "{{name}}". Follow its instructions for this request.\n\n{{block}}',
+  );
+  static const skillsReattached = PromptTemplate(
+    id: 'skills.reattached',
+    vars: {'blocks'},
+    text:
+        'The conversation was compacted. These skills were active before and stay in force; their\ninstructions are repeated here.\n\n{{blocks}}',
+  );
   static const systemBase = PromptTemplate(
     id: 'system.base',
     vars: {'cwd', 'date', 'platform', 'modeName'},
@@ -116,6 +135,12 @@ abstract final class Prompts {
     vars: {},
     text:
         'Search file contents of the workspace with a regular expression (Dart syntax) or literal text. Prints "<path>:<line>: <text>". Skips VCS, build and hidden directories and binary files.',
+  );
+  static const toolDescriptionsSkill = PromptTemplate(
+    id: 'tool_descriptions.skill',
+    vars: {},
+    text:
+        'Load a skill by name and receive its instructions. Use it when the task matches a skill listed in the Skills section of the system prompt. The result also lists the files that belong to the skill; read them with the file tools only when the instructions refer to them.',
   );
   static const toolDescriptionsUpdatePlan = PromptTemplate(
     id: 'tool_descriptions.update_plan',
@@ -176,6 +201,9 @@ abstract final class Prompts {
     'modes.plan': modesPlan,
     'project_context': projectContext,
     'project_context_file': projectContextFile,
+    'skills.catalog': skillsCatalog,
+    'skills.invoked': skillsInvoked,
+    'skills.reattached': skillsReattached,
     'system.base': systemBase,
     'system.untrusted': systemUntrusted,
     'tool_descriptions.edit': toolDescriptionsEdit,
@@ -183,6 +211,7 @@ abstract final class Prompts {
     'tool_descriptions.ls': toolDescriptionsLs,
     'tool_descriptions.read': toolDescriptionsRead,
     'tool_descriptions.search': toolDescriptionsSearch,
+    'tool_descriptions.skill': toolDescriptionsSkill,
     'tool_descriptions.update_plan': toolDescriptionsUpdatePlan,
     'tool_descriptions.write': toolDescriptionsWrite,
     'tools.edit': toolsEdit,

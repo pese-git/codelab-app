@@ -103,12 +103,17 @@ void main() {
       () async {
         final env = await wrap();
         hostFs.calls.clear();
+        hostFs.resolves.clear();
+        inner.resolves.clear();
 
         final result = await env.writeText('$skill/ref.md', 'changed');
 
         expect(fileErrorOf(result), FileErrorCode.outsideWorkspace);
         expect(inner.calls, isEmpty);
         expect(hostFs.calls, isEmpty);
+        // ENV-3, D17: отказ — до `stat`/`realpath` любого env.
+        expect(hostFs.resolves, isEmpty);
+        expect(inner.resolves, isEmpty);
         expect(
           (await hostFs.inner.readText('$skill/ref.md')
                   as Ok<String, FileError>)
@@ -122,6 +127,8 @@ void main() {
       'a new file in the root and the root itself cannot be written either',
       () async {
         final env = await wrap();
+        hostFs.resolves.clear();
+        inner.resolves.clear();
 
         expect(
           fileErrorOf(await env.writeText('$skill/new.md', 'x')),
@@ -133,6 +140,8 @@ void main() {
         );
         expect(inner.calls, isEmpty);
         expect(hostFs.calls, isEmpty);
+        expect(hostFs.resolves, isEmpty);
+        expect(inner.resolves, isEmpty);
       },
     );
 

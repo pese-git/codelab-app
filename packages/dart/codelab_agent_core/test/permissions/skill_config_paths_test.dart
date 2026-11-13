@@ -187,11 +187,7 @@ void main() {
           'path': '/opt/team/other/x.md',
           'content': 'x',
         }, id: 'w');
-        expect(
-          h.gate.requests,
-          hasLength(1),
-          reason: 'only the write is asked',
-        );
+        expect(h.gate.requests, isEmpty);
       },
     );
 

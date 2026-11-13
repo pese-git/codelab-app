@@ -201,6 +201,7 @@ final class SessionHostPorts {
     this.logger,
     this.extraBeforeToolCall = const [],
     this.extraAfterToolCall = const [],
+    this.execOnHost = false,
   });
 
   final ExecutionEnv? env;
@@ -212,6 +213,16 @@ final class SessionHostPorts {
 
   /// Первыми в `afterToolCall`.
   final List<AfterToolCallHook> extraAfterToolCall;
+
+  /// [env] исполняет команды на машине агента (design.md change
+  /// `add-agent-skills`, D5, D17).
+  ///
+  /// Почему явный признак: окружение клиента ACP команды запускает у клиента
+  /// и отклоняет `cwd` в каталоге навыка агента, а обёртки env скрывают тип
+  /// объекта. Хост ставит `true` только для локального окружения (встроенный
+  /// агент, `localEnv`); при `env == null` сессия и так исполняет на
+  /// `baseEnv` хоста, признак не нужен.
+  final bool execOnHost;
 }
 
 final class SessionSpec {

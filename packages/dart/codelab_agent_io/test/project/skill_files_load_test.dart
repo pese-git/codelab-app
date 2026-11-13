@@ -932,6 +932,32 @@ void main() {
       expect(files.sessionRoots, contains('$repo/.agents/skills'));
     });
 
+    test('one root list for the loader and PERM-11: a relative-looking '
+        'element with a scheme is neither read nor protected', () async {
+      write(
+        '$repo/skills/x:/y/s/SKILL.md',
+        '---\nname: s\ndescription: d\n---\nbody\n',
+      );
+
+      final files = await load(extra: ['skills/x://y']);
+
+      expect(files.skills, isEmpty);
+      expect(files.sessionRoots.where((r) => r.contains('x:')), isEmpty);
+      expect(
+        await sessionSkillRootsFor(cwd: repo, extraRoots: ['skills/x://y']),
+        isNot(contains(contains('x:'))),
+      );
+    });
+
+    test('the filesystem root is a level for both lists, like the walk of '
+        'the loader', () async {
+      final session = await sessionSkillRootsFor(cwd: '/');
+      final files = await load(cwd: '/');
+
+      expect(session, ['/.codelab/skills', '/.agents/skills']);
+      expect(files.sessionRoots, session);
+    });
+
     test('roots are listed whether they exist or not', () async {
       final files = await load();
 

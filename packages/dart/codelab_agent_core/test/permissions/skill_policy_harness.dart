@@ -38,6 +38,10 @@ const codelabPdf = '$codelabRoot/pdf';
 /// Навык проекта у `cwd` (сценарий «Скрипт навыка не критичен»).
 const projectPdf = '$workDir/.codelab/skills/pdf';
 
+/// Метка шаблона `write to agent configuration` (§7.6): у `find . -delete`
+/// рядом стоит и метка удаления, поэтому причина проверяется по вхождению.
+const criticalLabel = 'write to agent configuration';
+
 /// Причина вопроса для критической команды `exec` (§7.6).
 const criticalReason = 'critical command: write to agent configuration';
 
@@ -55,6 +59,12 @@ const skillFiles = [
   'scripts/x.pl',
   'scripts/x.ts',
   'scripts/fill.ps1',
+  'scripts/bin/tsx',
+  'scripts/bin/python3',
+  'scripts/bin/deno',
+  'scripts/bin/bun',
+  'scripts/bin/uv',
+  'scripts/bin/pipx',
   'scripts/run.sh',
   'scripts/lib/tool.py',
   'scripts/sub/inner.py',
@@ -66,6 +76,7 @@ const skillFiles = [
   'scripts/node_modules/.bin/prettier',
   'assets/schema.json',
   'assets/a.json',
+  'assets/a.png',
   'assets/b.md',
   'assets/sub/c.json',
   'references/a.md',
@@ -142,13 +153,23 @@ final class SkillHarness {
   Future<ToolExecutionOutcome> exec(String command, {String? cwd}) =>
       p.run('exec', {'command': command, 'cwd': ?cwd}, id: 'x${_n++}');
 
-  /// Команда — критический шаблон: gate спросил с причиной
-  /// [criticalReason] и без `allow_always`.
+  /// Команда — критический шаблон: gate спросил один раз, причина содержит
+  /// [criticalLabel] (рядом могут стоять другие метки), без `allow_always`.
   Future<bool> critical(String command, {String? cwd}) async {
     gate.requests.clear();
     await exec(command, cwd: cwd);
     return gate.requests.length == 1 &&
-        gate.requests.single.reason == criticalReason &&
+        (gate.requests.single.reason?.contains(criticalLabel) ?? false) &&
+        !gate.requests.single.allowAlwaysOffered;
+  }
+
+  /// Команда критична по любому шаблону §7.6 (не только PERM-11).
+  Future<bool> criticalAny(String command, {String? cwd}) async {
+    gate.requests.clear();
+    await exec(command, cwd: cwd);
+    return gate.requests.length == 1 &&
+        (gate.requests.single.reason?.startsWith('critical command') ??
+            false) &&
         !gate.requests.single.allowAlwaysOffered;
   }
 

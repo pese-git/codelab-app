@@ -136,7 +136,7 @@ void main() {
       );
 
       expect(entryLines(text), ['- one: $description']);
-      expect(text, isNot(contains('…')));
+      expect(entryLines(text).any((l) => l.contains('…')), isFalse);
       expect(markerLine.hasMatch(text), isFalse);
     });
 
@@ -253,7 +253,7 @@ void main() {
       );
 
       expect(entryLines(text), ['- a: one.', '- b: two.']);
-      expect(text, isNot(contains('…')));
+      expect(entryLines(text).any((l) => l.contains('…')), isFalse);
       expect(markerLine.hasMatch(text), isFalse);
     });
   });
