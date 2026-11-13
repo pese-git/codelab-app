@@ -161,7 +161,9 @@
 Если capability `skills` включена и `modelVisible` не пуст, системный промпт SHALL содержать секцию `skills/catalog` (`prompts/skills/catalog.md`, `vars: [entries]`, `tools: [skill]`) на шаге 9a — после `mcp`, до `project_context` (design.md change `add-agent-skills`, D6; решение Q18). Текст секции — английский, написан для CodeLab: что такое навыки, когда вызывать инструмент `skill`, что пути внутри навыка относительны его каталога, и что инструкции навыка не отменяют правил безопасности и решений пользователя. Строки `entries`:
 1. для каждого навыка по имени — `- <name>: <description>`, описание целиком; описание длиннее 1024 символов SHALL обрезаться до 1024 символов с `…` (предупреждение — при загрузке);
 2. если сумма длин строк с переводами больше `skills.catalog_max_chars`, описания SHALL укорачиваться поровну: короткие описания остаются целыми, а одинаковая доля остатка бюджета делится между длинными, каждое режется по границе символа с `…`; лог `skills.catalog.truncated` (warning);
-3. если не помещаются и строки без описаний — с конца удаляются строки, последняя строка — `[<N> more skills not listed]`.
+3. если не помещаются и строки без описаний — с конца удаляются строки, последняя строка — `[<N> more skills not listed]`; эта строка входит в бюджет `skills.catalog_max_chars`.
+
+Длины считаются в символах Unicode (рунах); алгоритм деления и лог один раз на сессию — design.md change `add-agent-skills`, D17.
 
 В секции НЕ SHALL быть путей, дат и счётчиков, кроме строки об опущенных навыках; одинаковый снимок SHALL давать побайтово одинаковую секцию (SKL-4, PR-3). Без навыков `modelVisible` секции и инструмента нет (SKL-5).
 
@@ -205,7 +207,7 @@
 ### Requirement: Инструмент skill
 Инструмент `skill` SHALL регистрироваться, только если capability `skills` включена и `modelVisible` не пуст (design.md change `add-agent-skills`, D7; решение Q12): уровень `read`, вид `read`, исполнение `parallel`, `permissionPattern` — имя навыка, `present` — заголовок `Load skill <name>` и `locations` `[<dir>/SKILL.md]`. Схема — объект с единственным обязательным полем `name` типа `string` с `enum` из имён `modelVisible` в байтовом порядке, без `additionalProperties`. Описание — `prompts/tool_descriptions/skill.md`.
 
-Успех — блок навыка (требование «Блок навыка») из снимка: файл НЕ SHALL перечитываться. `outputTrust` — `trusted`. Повторная активация активного навыка — требование «Повторная активация». Ошибка (`isError: true`) — имени нет среди `modelVisible` (провайдер мог не соблюсти `enum`): `Unknown skill: <name>. Available skills: <a>, <b>.` (`<name>` обрезан до 64 символов по рунам).
+Успех — блок навыка (требование «Блок навыка») из снимка: файл НЕ SHALL перечитываться. `outputTrust` — `trusted`. Повторная активация активного навыка — требование «Повторная активация». Имя вне `enum` (провайдер мог не соблюсти схему) SHALL отклоняться проверкой аргументов исполнителя до исполнения инструмента — ошибкой `Invalid arguments for tool "skill"` с перечнем допустимых имён, без тела (§6.3.2). Сам инструмент на имя вне `modelVisible` SHALL отвечать ошибкой (`isError: true`) `Unknown skill: <name>. Available skills: <a>, <b>.` (`<name>` обрезан до 64 символов по рунам) — защита в глубину для вызова мимо проверки схемы (design.md change `add-agent-skills`, D17).
 
 #### Scenario: Загрузка тела моделью
 - **WHEN** модель вызывает `skill` с `{"name":"release-notes"}`, у навыка есть `template.md`
@@ -216,8 +218,8 @@
 - **THEN** `enum` схемы — `["a-skill", "b-skill"]`
 
 #### Scenario: Имя вне каталога
-- **WHEN** модель вызывает `skill` с именем `hidden`
-- **THEN** результат — ошибка `Unknown skill: hidden. Available skills: a-skill, b-skill.` без тела
+- **WHEN** модель вызывает `skill` с именем `hidden`, а затем тот же инструмент вызывается с `hidden` напрямую, мимо исполнителя
+- **THEN** в первом случае результат — ошибка `Invalid arguments for tool "skill"` с допустимыми именами `a-skill` и `b-skill`, без тела и без лога `skill.activated`; во втором — ошибка `Unknown skill: hidden. Available skills: a-skill, b-skill.` без тела
 
 ### Requirement: Команды навыков
 Для каждого навыка с `user-invocable` `AgentSession.commands` SHALL содержать команду `skill:<name>` с `description` навыка и `inputHint` — `argument-hint`, иначе `"arguments"`; источник — `SlashCommandSource.skill` (порядок — требование «Список команд сессии» capability `agent-slash-commands`).

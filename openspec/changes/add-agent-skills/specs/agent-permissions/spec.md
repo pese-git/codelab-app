@@ -239,7 +239,7 @@
 
 #### Scenario: Навыки в autopilot
 - **WHEN** хост включил `autopilot`, и модель вызывает `exec` с `cd /home/u/.agents/skills/pdf && tar -xf /work/e.tar`; во втором варианте — `python3 /home/u/.agents/skills/pdf/scripts/fill.py /home/u/.agents/skills/pdf/assets/a.json`
-- **THEN** первый вызов отклонён без вопроса с текстом `Editing agent configuration requires a human: <path>` (PERM-11), второй выполнен по политике режима (E1, E3)
+- **THEN** первый вызов отклонён без вопроса с текстом `critical command blocked in autopilot: write to agent configuration` (критический шаблон `exec`, PERM-9; текст `Editing agent configuration requires a human` — у `write` и `edit`), второй выполнен по политике режима (E1, E3)
 
 #### Scenario: Относительный корень extra_roots защищён в сессии
 - **WHEN** глобальный конфиг задаёт `skills.extra_roots: [".claude/skills"]`, сессия открыта в `/work/demo`, а модель в режиме `accept-edits` вызывает `write` с целью `.claude/skills/lint/SKILL.md`

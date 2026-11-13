@@ -11,7 +11,7 @@
 
 Обёртка SHALL реализовывать опциональную возможность, только если её реализует внутренний env (ENV-4); для путей в `readOnlyRoots` — только если её реализует и `readOnlyFs`.
 
-В `readOnlyRoots` рантайм SHALL класть только канонические каталоги загруженных навыков, лежащие вне `root`: каталог навыка внутри рабочей папки остаётся обычной частью `root`, и правку в нём решает PERM-11. Рантайм SHALL ставить `execInReadOnlyRoots: true`, только если env сессии исполняет команды на машине агента (локальное окружение встроенного агента, `AcpServerConfig.localEnv`); у env клиента ACP (`AcpClientExecutionEnv`) — `false`: клиент ограничивает `cwd` `terminal/create` рабочей папкой сессии (`AGENTS.md` §10), и запрос с `cwd` в каталоге агента он отклонит. Подсказку SHALL давать инструмент `exec` до вызова env: он сравнивает `cwd` с `readOnlyRoots` сессии и при `execInReadOnlyRoots == false` возвращает модели ошибку инструмента с подсказкой запустить скрипт по абсолютному пути с `cwd` рабочей папки (capability `agent-skills`, «Сопутствующие файлы и скрипты навыка»; решение Q23 (а)); `BoundedEnv` при этом остаётся последним рубежом и различать причины `outsideWorkspace` не обязан. Клиенту запрос не отправляется, containment клиента не меняется.
+В `readOnlyRoots` рантайм SHALL класть только канонические каталоги загруженных навыков, лежащие вне `root` и не содержащие его: каталог навыка внутри рабочей папки остаётся обычной частью `root`, и правку в нём решает PERM-11, а сессия, открытая внутри каталога навыка, правит его как рабочую папку (design.md change `add-agent-skills`, D17). Рантайм SHALL ставить `execInReadOnlyRoots: true`, только если env сессии исполняет команды на машине агента (локальное окружение встроенного агента, `AcpServerConfig.localEnv`); у env клиента ACP (`AcpClientExecutionEnv`) — `false`: клиент ограничивает `cwd` `terminal/create` рабочей папкой сессии (`AGENTS.md` §10), и запрос с `cwd` в каталоге агента он отклонит. Подсказку SHALL давать инструмент `exec` до вызова env: он сравнивает `cwd` с `readOnlyRoots` сессии и при `execInReadOnlyRoots == false` возвращает модели ошибку инструмента с подсказкой запустить скрипт по абсолютному пути с `cwd` рабочей папки (capability `agent-skills`, «Сопутствующие файлы и скрипты навыка»; решение Q23 (а)); `BoundedEnv` при этом остаётся последним рубежом и различать причины `outsideWorkspace` не обязан. Клиенту запрос не отправляется, containment клиента не меняется.
 
 #### Scenario: Чтение и запись в корне только для чтения
 - **WHEN** при корне `/proj` и `readOnlyRoots: [/home/u/.codelab/skills/notes]` выполняются `readText` и `writeText` по пути `/home/u/.codelab/skills/notes/ref.md`
@@ -28,3 +28,7 @@
 #### Scenario: Ссылка наружу из корня только для чтения
 - **WHEN** `/home/u/.codelab/skills/notes/link` ведёт на `/etc`, и читается `link/passwd`
 - **THEN** результат — `outsideWorkspace`
+
+#### Scenario: Сессия внутри каталога навыка
+- **WHEN** сессия открыта в `/home/u/.codelab/skills/notes/scripts`, а навык `notes` загружен из `/home/u/.codelab/skills/notes`
+- **THEN** этот каталог не входит в `readOnlyRoots`, и `writeText('/home/u/.codelab/skills/notes/scripts/a.py', …)` уходит во внутренний env как запись в рабочей папке (критичность правки решает PERM-11)

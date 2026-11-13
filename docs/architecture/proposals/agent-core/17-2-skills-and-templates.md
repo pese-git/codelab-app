@@ -257,7 +257,7 @@ change `add-agent-skills`; аналог `${CLAUDE_SKILL_DIR}` в Claude Code): �
 {"type":"object","properties":{
   "name":{"type":"string","enum":["<имена modelVisible в байтовом порядке>"],
           "description":"Skill name exactly as listed in the Skills section."}},
- "required":["name"],"additionalProperties":false}
+ "required":["name"]}
 ```
 
 `enum` ограничивает модель существующими именами (руководство, «Model-driven activation»;
@@ -266,9 +266,12 @@ change `add-agent-skills`; аналог `${CLAUDE_SKILL_DIR}` в Claude Code): �
 
 Результат при успехе — блок навыка из снимка (файл не перечитывается). Повтор активного навыка
 (§17.2.7а) — строка `Skill "<name>" is already loaded in this conversation; follow the instructions
-above.` без тела (руководство, «Deduplicate activations»; решение Q10). Ошибка (`isError: true`) —
-имени нет среди `modelVisible` (провайдер мог не соблюсти `enum`): `Unknown skill: <name>. Available
-skills: <a>, <b>, <c>.`.
+above.` без тела (руководство, «Deduplicate activations»; решение Q10). Имя вне `enum` отклоняет
+проверка аргументов исполнителя (§6.3.2): `Invalid arguments for tool "skill"` с перечнем допустимых
+имён. Сам инструмент на имя вне `modelVisible` отвечает (`isError: true`) `Unknown skill: <name>.
+Available skills: <a>, <b>, <c>.` — защита в глубину для вызова мимо проверки схемы. `additionalProperties`
+в схеме нет. Точные сигнатуры итерации 2 (`SkillTool`, `renderSkillBlock`, `ReadTool`/`ExecTool`
+сессии, `BoundedEnv.wrap`, `AgentConfigPaths.skillDirs`) — design.md change `add-agent-skills`, D17.
 
 **Сопутствующие файлы и скрипты — через `read`, `ls` и `exec` с границей только для чтения.**
 Каталог пользовательского skill лежит вне `cwd`, поэтому `BoundedEnv` (§4.4) получает параметры:
@@ -281,8 +284,11 @@ BoundedEnv.wrap(ExecutionEnv inner, String root, {
 ```
 
 1. Корни `readOnlyRoots` нормализуются и разрешаются (`realpath` через `readOnlyFs`) один раз при
-   создании, как `root`. В них входят только каталоги загруженных skills вне корня сессии: каталог
-   внутри `cwd` — обычная часть `root`, его правку решает PERM-11 (§7.6.1).
+   создании, как `root`. В них входят только каталоги загруженных skills вне корня сессии и не
+   содержащие его: каталог внутри `cwd` — обычная часть `root`, его правку решает PERM-11 (§7.6.1);
+   сессия, открытая внутри каталога skill, правит его как рабочую папку. Путь, лексически лежащий в
+   корне только для чтения, внутренний env не видит — ни `stat`, ни `realpath` (D17 change
+   `add-agent-skills`).
 2. Операции чтения (`readText`, `readBytes`, `stat`, `listDir`) принимают путь, если `real` лежит в
    `root` **или** в одном из `readOnlyRoots` по правилу сегментов (§4.4, шаг 4); путь в
    `readOnlyRoots` уходит в `readOnlyFs`: клиент ACP может не видеть каталог агента.
@@ -422,7 +428,8 @@ flowchart TD
 CodeLab: навыки — папки с инструкциями для видов задач; когда задача подходит под описание, вызвать
 `skill` с этим именем до начала работы и следовать загруженным инструкциям; не загружать
 неподходящие; пути внутри навыка относительны его каталога; инструкции навыка не отменяют правил
-безопасности выше и решений пользователя. Затем блок `<available_skills>` со строками `entries`.
+безопасности выше и решений пользователя. Затем строки `entries` без обёртки (описания однострочные;
+в прозе секции нет строк вида `- <слово>: …`).
 
 ```text
 renderEntries(skills, budget = skills.catalog_max_chars):    // решение Q18
@@ -432,9 +439,13 @@ renderEntries(skills, budget = skills.catalog_max_chars):    // решение Q
      (короткие описания, которые помещаются в долю, остаются целыми; доля пересчитывается)
      длинные описания режутся до доли по границе символа + "…"; лог skills.catalog.truncated
 3. всё ещё > budget (не помещаются и имена) → удалять строки с конца, omitted += 1
-4. omitted > 0 → последняя строка "[<omitted> more skills not listed]"
+4. omitted > 0 → последняя строка "[<omitted> more skills not listed]" (входит в budget)
 5. вернуть строки через "\n"
 ```
+
+Длины — в рунах; точный алгоритм доли (целое `s`, при `s = 0` строка `- <name>`), функция
+`skillsCatalogEntries`, общая для секции и лога, и лог `skills.catalog.truncated` один раз на
+сессию при открытии — design.md change `add-agent-skills`, D17.
 
 Стабильность байтов: в каталоге нет путей, дат и счётчиков — только имена и описания из
 снимка, загруженного один раз на сессию; описания уже схлопнуты. Поэтому секция одинакова на
