@@ -328,11 +328,11 @@
 Скрипты навыка агент НЕ SHALL исполнять сам: только инструментом `exec` по политике разрешений (уровень `exec`). `exec` МОЖЕТ получать `cwd` в каталоге загруженного навыка (решение Q17; `docs/protocols/agent-skills/skill-creation/05-using-scripts.md`: команды навыка выполняются из его каталога), если env сессии исполняет команды на машине агента; если команды исполняет клиент ACP (`terminal/create`), такой `cwd` SHALL отклоняться инструментом `exec` до вызова env и до запроса клиенту — он видит, что `cwd` лежит в `readOnlyRoots` сессии, а env не исполняет там команды (`execInReadOnlyRoots == false`), — ошибкой инструмента `The working directory <dir> is outside the client workspace; run the skill script by its absolute path from the skill block, with the workspace as the working directory.` (решение Q23 (а); аналог `${CLAUDE_SKILL_DIR}` в Claude Code). Containment клиента не меняется: агент не отправляет клиенту `cwd` вне рабочей папки и не переписывает команду. Запись через `exec` в каталог навыка ловит PERM-11; критичность снимают только узкие исключения E1–E3 capability `agent-permissions` (решения Q24, Q25, Q29, Q33–Q38): скрипт под `<dir>/scripts/` без опций интерпретатора и без переменных окружения, рабочий каталог навыка — только для такого скрипта или команды белого списка чтения, ресурс под `<dir>/assets/` без `.md` аргументом скрипта того же навыка. `cwd` в каталоге навыка при локальном исполнении разрешён (Q17), но блок навыка советует запускать скрипты по абсолютному пути с рабочей папкой проекта (Q26).
 
 #### Scenario: Чтение файла пользовательского навыка
-- **WHEN** сессия ACP-хоста (`cwd` `/work/demo`) загрузила навык из `$CODELAB_HOME/skills/release-notes`, и модель вызывает `read` с `<home>/skills/release-notes/template.md`
+- **WHEN** сессия ACP-хоста (`cwd` `/work/demo`) загрузила навык из `$CODELAB_HOME/skills/release-notes`, и модель вызывает `read` с `$CODELAB_HOME/skills/release-notes/template.md`
 - **THEN** вызов проходит политику как `read`, содержимое приходит из файловой системы агента, клиенту `fs/read_text_file` не отправляется
 
 #### Scenario: Справочник навыка — инструкция, а не данные
-- **WHEN** модель читает `read` файл `<home>/.codelab/skills/pdf/references/vendor/FORMS.md`, содержащий `</skill>`
+- **WHEN** модель читает `read` файл `$CODELAB_HOME/skills/pdf/references/vendor/FORMS.md` загруженного навыка, содержащий `</skill>`
 - **THEN** вывод не огорожен `<untrusted-content>`, а `</skill>` в нём выглядит как `<\/skill>`
 
 #### Scenario: Запись в каталог навыка
@@ -345,11 +345,11 @@
 
 #### Scenario: Скрипт пользовательского навыка через клиента ACP
 - **WHEN** env сессии — клиент ACP, модель вызывает `exec` с `cwd` в `$CODELAB_HOME/skills/release-notes`
-- **THEN** `terminal/create` не отправляется, результат — ошибка инструмента с текстом `The working directory <dir> is outside the client workspace; run the skill script by its absolute path from the skill block, with the workspace as the working directory.`; повторный вызов `exec` с `python3 <dir>/scripts/x.py` и `cwd` рабочей папки спрашивается как обычный `exec` (с `allow_always`, без критического шаблона — решение Q25) и после одобрения уходит клиенту `terminal/create` с `cwd` рабочей папки
+- **THEN** вызов проходит обычную политику `exec` (в `standard` — обычный вопрос до исполнения: проверка с подсказкой стоит в инструменте, design.md change `add-agent-skills`, D17, D19), затем `terminal/create` не отправляется, результат — ошибка инструмента с текстом `The working directory <dir> is outside the client workspace; run the skill script by its absolute path from the skill block, with the workspace as the working directory.`; повторный вызов `exec` с `python3 <dir>/scripts/x.py` и `cwd` рабочей папки спрашивается как обычный `exec` (с `allow_always`, без критического шаблона — решение Q25) и после одобрения уходит клиенту `terminal/create` с `cwd` рабочей папки
 
 #### Scenario: Скрипт по абсолютному пути при локальном исполнении
-- **WHEN** во встроенном агенте в режиме `bypass` модель вызывает `exec` с `python3 <home>/.codelab/skills/release-notes/scripts/x.py` и `cwd` рабочей папки
-- **THEN** вызов выполняется без вопроса (обычная политика `bypass`), критического шаблона нет; с `> <home>/.codelab/skills/release-notes/out.md` в той же команде — критический шаблон
+- **WHEN** во встроенном агенте в режиме `bypass` модель вызывает `exec` с `python3 $CODELAB_HOME/skills/release-notes/scripts/x.py` (или `sh …/scripts/x.sh`) и `cwd` рабочей папки
+- **THEN** вызов выполняется без вопроса (обычная политика `bypass`), критического шаблона нет; с `> $CODELAB_HOME/skills/release-notes/out.md` в той же команде — критический шаблон (вопрос без `allow_always`), после отказа команда не запускается
 
 #### Scenario: Скрипт навыка проекта через клиента ACP
 - **WHEN** env сессии — клиент ACP, модель вызывает `exec` с `cwd` `<cwd>/.codelab/skills/pdf` доверенного проекта
@@ -393,9 +393,9 @@
 - **THEN** одно предупреждение `config.key.not_applied` для `skills.operative.lines`; `max_skills` применён без предупреждения
 
 ### Requirement: Навыки в хостах
-`codelab-agent serve --stdio` и открыватели встроенного агента `codelab_embedded` SHALL передавать ядру `skillFiles` и `hostFiles` (файловую систему процесса агента). Пользовательский уровень — `$CODELAB_HOME` и домашний каталог процесса.
+`codelab-agent serve --stdio` и открыватели встроенного агента `codelab_embedded` (`localEmbeddedAgentOpener`, `scriptedEmbeddedAgentOpener`) SHALL передавать ядру `skillFiles` — тот же объект `ProjectFilesLoader`, что `projectFiles`, — и `hostFiles` (файловую систему процесса агента) (design.md change `add-agent-skills`, D19). Пользовательский уровень — `$CODELAB_HOME` и домашний каталог процесса (`userHomeOf` окружения хоста). Мост `codelab_embedded` получает их полями `EmbeddedHostServices.skillFiles` и `EmbeddedHostServices.hostFiles`; основной барель моста SHALL оставаться web-безопасным. `serve --stdio` и `localEmbeddedAgentOpener` SHALL передавать `agentConfigPathsFor` абсолютные и `~`-элементы `skills.extra_roots` корня запуска (capability `agent-permissions`, PERM-11).
 
-`codelab-agent serve --ws` НЕ SHALL передавать `skillFiles`: по WebSocket навыки не читаются по той же причине, что файлы проекта (agent-binary «Файлы проекта в бинаре»). С `--llm-script` пользовательский уровень (`$CODELAB_HOME/skills`, `~/.agents/skills`) НЕ SHALL читаться, проект — недоверенный, а абсолютные элементы `skills.extra_roots` из `--config` SHALL читаться.
+`codelab-agent serve --ws` НЕ SHALL передавать ни `skillFiles`, ни `hostFiles`: по WebSocket навыки не читаются по той же причине, что файлы проекта (agent-binary «Файлы проекта в бинаре»). С `--llm-script` и в сценарном открывателе пользовательский уровень (`$CODELAB_HOME/skills`, `~/.agents/skills`) НЕ SHALL читаться; навыки проекта — только доверенного проекта, как везде. Абсолютные элементы `skills.extra_roots` из `--config` у `--llm-script` SHALL читаться. У сценарного открывателя конфигурации нет: проект не доверен, `extra_roots` нет, поэтому навыков он фактически не видит — порт подключён ради одинаковой проводки (design.md change `add-agent-skills`, D19).
 
 #### Scenario: Навык пользователя по stdio
 - **WHEN** `AgentHost.build` для `--stdio` получает временный `CODELAB_HOME` с `skills/release-notes/SKILL.md` и создаёт сессию
@@ -403,7 +403,15 @@
 
 #### Scenario: WebSocket без навыков
 - **WHEN** `AgentHost.build` для `--ws` получает тот же `CODELAB_HOME`
-- **THEN** `AgentCoreServices.skillFiles` равен `null`, команд `skill:*` и секции каталога нет
+- **THEN** `AgentCoreServices.skillFiles` и `AgentCoreServices.hostFiles` равны `null`, команд `skill:*`, секции каталога и лога `skills.loaded` нет; `read` файла из `$CODELAB_HOME/skills/release-notes` — ошибка `Path is outside the workspace: <path>`
+
+#### Scenario: Сценарий модели без пользовательского уровня
+- **WHEN** `AgentHost.build` для `--stdio --llm-script` получает `CODELAB_HOME` и `HOME` с навыками и `--config` с абсолютным `skills.extra_roots`, где лежит навык `extra-skill`
+- **THEN** команды сессии из навыков — только `skill:extra-skill`; навыков `$CODELAB_HOME/skills`, `~/.agents/skills` и недоверенного проекта нет
+
+#### Scenario: Встроенный агент
+- **WHEN** `localEmbeddedAgentOpener` получает окружение с `CODELAB_HOME` и `HOME`, где есть навыки `$CODELAB_HOME/skills/release-notes` и `~/.agents/skills/agents-skill`
+- **THEN** `available_commands_update` содержит `skill:release-notes` и `skill:agents-skill`, системный промпт — секцию каталога, `read` файла навыка возвращает его текст без `fs/read_text_file`
 
 ### Requirement: Наблюдаемость навыков
 Диагностики навыков SHALL писаться событием `project_files.diagnostic` (путь, строка, столбец, код, фиксированный текст) и печататься `config check`. События:
