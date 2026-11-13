@@ -82,6 +82,10 @@ final class TuiInput {
         'e' => Key.ctrlE,
         'l' => Key.ctrlL,
         'r' => Key.ctrlR,
+        // Ctrl+T (0x14) — переключатель списка задач (D26, задача 1.7):
+        // без этой строки клавиша терялась до карты клавиш, хотя ядро
+        // экрана и `KeyBindings.tui` её знают.
+        't' => Key.ctrlT,
         'u' => Key.ctrlU,
         _ => null,
       };
