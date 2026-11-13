@@ -2,6 +2,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 
+import '../env/machine_env.dart';
 import '../host/core_harness.dart' show callStep, inMemoryJournal, textStep;
 import '../permissions/fake_gate.dart';
 import '../skills/skills_support.dart';
@@ -68,6 +69,8 @@ void main() {
     Map<HostCapability, CapabilityState> narrow = const {},
     SkillsConfig skills = const SkillsConfig(),
     AgentConfigPaths? configPaths,
+    ExecutionEnv? baseEnv,
+    String platform = 'unknown',
   }) {
     final scripted = ScriptedStreamFunction.fromJson({
       'steps': steps,
@@ -77,13 +80,14 @@ void main() {
         'agent-serve',
       ).narrowed({...inMemoryJournal, ...narrow}),
       services: AgentCoreServices(
-        baseEnv: base,
+        baseEnv: baseEnv ?? base,
         gate: gate,
         logger: logger,
         clock: clock,
         ids: SequentialIdGenerator(),
         sessions: MemorySessionStore(),
         skillFiles: port,
+        platform: platform,
         hostFiles: withHostFiles ? hostFs : null,
         agentConfigPaths: configPaths,
       ),
@@ -355,6 +359,25 @@ void main() {
       expect(gate.requests, isEmpty);
     });
 
+    test('without a host value the case of the file system follows the '
+        'platform: macOS protects .CLAUDE too', () async {
+      port.files = const SkillFiles(sessionRoots: ['/work/a/.claude/skills']);
+
+      await run(
+        build(write('/work/a/.CLAUDE/skills/lint/SKILL.md'), platform: 'macos'),
+        '/work/a',
+      );
+      expect(gate.requests, hasLength(1));
+
+      gate.requests.clear();
+      contexts.clear();
+      await run(
+        build(write('/work/a/.CLAUDE/skills/lint/SKILL.md'), platform: 'linux'),
+        '/work/a',
+      );
+      expect(gate.requests, isEmpty);
+    });
+
     test('skills.enabled: false: the port is silent, no session paths '
         '(Q46 (а))', () async {
       port.files = const SkillFiles(sessionRoots: ['/work/a/.claude/skills']);
@@ -373,8 +396,10 @@ void main() {
 
     test('E1 for a directory of the snapshot: a script by absolute path is '
         'not critical, another file of the skill is', () async {
-      await base.writeText('$notes/scripts/x.py', 'print(1)\n');
-      await base.writeText('$notes/data.json', '{}\n');
+      // Политика проверяет «обычный файл» через PathResolver хоста.
+      final machine = MachineEnv(cwd: '/work/a');
+      await machine.writeText('$notes/scripts/x.py', 'print(1)\n');
+      await machine.writeText('$notes/data.json', '{}\n');
       port.files = SkillFiles(
         skills: port.files.skills,
         sessionRoots: const [],
@@ -382,20 +407,28 @@ void main() {
       final paths = AgentConfigPaths(paths: [userHome]);
 
       await run(
-        build([
-          callStep('c1', 'exec', {'command': 'python3 $notes/scripts/x.py'}),
-          textStep('ok'),
-        ], configPaths: paths),
+        build(
+          [
+            callStep('c1', 'exec', {'command': 'python3 $notes/scripts/x.py'}),
+            textStep('ok'),
+          ],
+          configPaths: paths,
+          baseEnv: machine,
+        ),
         '/work/a',
       );
       expect(gate.requests, isEmpty);
 
       contexts.clear();
       await run(
-        build([
-          callStep('c1', 'exec', {'command': 'python3 $notes/data.json'}),
-          textStep('ok'),
-        ], configPaths: paths),
+        build(
+          [
+            callStep('c1', 'exec', {'command': 'python3 $notes/data.json'}),
+            textStep('ok'),
+          ],
+          configPaths: paths,
+          baseEnv: machine,
+        ),
         '/work/a',
       );
       expect(gate.requests, hasLength(1));

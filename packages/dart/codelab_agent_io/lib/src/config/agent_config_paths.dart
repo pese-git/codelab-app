@@ -20,7 +20,10 @@ import 'dart:io';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import '../env/host_path.dart';
+import '../project/skill_roots.dart';
 import 'config_link_containment.dart' show projectLayerFiles;
+
+export '../project/skill_roots.dart' show hostSkillRoot;
 import 'config_loader.dart';
 import 'config_paths.dart' show canonicalDirectory;
 
@@ -74,11 +77,19 @@ List<String> watchedConfigFiles({
 /// учёта регистра; без него — по платформе (macOS и Windows). Ссылка, цель
 /// которой ещё не существует, не раскрывается (`realpath` её не видит):
 /// остаток пути берётся как есть.
+///
+/// Корни навыков (design.md change `add-agent-skills`, D9, D17; Q9, Q16,
+/// Q27): `$CODELAB_HOME/skills`, `<userHome>/.agents/skills` и элементы
+/// [skillExtraRoots] — абсолютные и `~`/`~/…` (раскрыты в домашний каталог
+/// процесса); относительные, `~user/…` и `<scheme>://` пропускаются. Корни
+/// защищены с поддеревом, существуют они или нет, независимо от доверия
+/// проекту. Корни, зависящие от `cwd` сессии, даёт [sessionSkillRootsFor].
 AgentConfigPaths agentConfigPathsFor({
   required String cwd,
   required Map<String, String> environment,
   String? extraConfig,
   bool? caseInsensitive,
+  List<String> skillExtraRoots = const [],
 }) {
   final home = codelabHomeOf(environment);
   final files = [
@@ -104,13 +115,18 @@ AgentConfigPaths agentConfigPathsFor({
   ];
   final windows = Platform.isWindows;
   final userHome = userHomeOf(environment);
+  files.addAll([
+    '$home/skills',
+    ?(userHome == null ? null : '$userHome/.agents/skills'),
+    for (final raw in skillExtraRoots) ?hostSkillRoot(raw, userHome),
+  ]);
   // Для файлов состояния кладутся и лексический, и канонический путь:
   // `FileLastModelStore.write` заменяет ссылку обычным файлом (`rename`), и
   // защита только по канонической цели перестала бы действовать (PERM-11).
   final lexical = {'$home/state/last-model.json', '$home/state'};
   final paths = <String>{
     for (final file in files) ...[
-      toCorePath(_canonicalPath(file), windows: windows),
+      toCorePath(canonicalPath(file), windows: windows),
       if (lexical.contains(file))
         toCorePath(File(file).absolute.path, windows: windows),
     ],
@@ -125,36 +141,49 @@ AgentConfigPaths agentConfigPathsFor({
   );
 }
 
-/// Путь с раскрытыми ссылками по самому глубокому существующему предку;
-/// остаток (ещё не созданные звенья) добавляется как есть.
-String _canonicalPath(String path) {
-  var prefix = File(path).absolute.path;
-  final rest = <String>[];
-  while (true) {
-    try {
-      final resolved =
-          FileSystemEntity.typeSync(prefix, followLinks: false) ==
-              FileSystemEntityType.notFound
-          ? null
-          : File(prefix).resolveSymbolicLinksSync();
-      if (resolved != null) {
-        return rest.isEmpty
-            ? resolved
-            : [resolved, ...rest.reversed].join(Platform.pathSeparator);
-      }
-    } on FileSystemException {
-      // Ссылка в никуда или нет доступа: поднимаемся к предку.
-    }
-    final parent = File(prefix).parent.path;
-    if (parent == prefix) {
-      return File(path).absolute.path;
-    }
-    rest.add(
-      prefix.substring(parent.length).replaceAll(RegExp(r'^[\\/]+'), ''),
-    );
-    prefix = parent;
-  }
-}
-
 String? _nonEmpty(String? value) =>
     value == null || value.isEmpty ? null : value;
+
+/// Подкаталоги навыков каждого уровня проекта в порядке приоритета (D3).
+const projectSkillSubdirs = ['.codelab/skills', '.agents/skills'];
+
+/// Корни навыков, зависящие от `cwd` сессии (PERM-11, D9, D17, Q27):
+/// `<уровень>/.codelab/skills` и `<уровень>/.agents/skills` для уровней от
+/// [cwd] до корня git (без репозитория — только [cwd]; не выше 64 уровней),
+/// затем относительные элементы [extraRoots], разрешённые от [cwd].
+///
+/// Почему: эти корни зависят от папки сессии, поэтому их нельзя положить в
+/// поле хоста `agentConfigPaths`; рантайм добавляет их к политике сессии
+/// (`AgentConfigPaths.withSession`). Защита не зависит от доверия проекту и
+/// от существования каталога.
+///
+/// Как использовать: пути канонические (ссылки раскрыты по самому глубокому
+/// существующему предку), в POSIX-виде ядра. Абсолютные и `~`-элементы
+/// не входят — их даёт [agentConfigPathsFor] (вопрос B3: `environment` не
+/// нужен). Подъём к корню git — тот же `projectLevels`, что у загрузчика (`.git` —
+/// каталог или файл, ссылка маркером не считается); [cwd] — в форме ядра.
+Future<List<String>> sessionSkillRootsFor({
+  required String cwd,
+  List<String> extraRoots = const [],
+}) async {
+  final windows = Platform.isWindows;
+  // Подъём — тот же, что у загрузчика (`projectLevels`): списки не расходятся.
+  final (:levels, found: _, limitHit: _) = projectLevels(cwd);
+  final start = levels.last;
+  final roots = <String>[
+    // Порядок приоритета: от `cwd` вверх.
+    for (final level in levels.reversed)
+      for (final sub in projectSkillSubdirs)
+        '${level == '/' ? '' : level}/$sub',
+    for (final raw in extraRoots)
+      if (isRelativeSkillRoot(raw)) '${start == '/' ? '' : start}/$raw',
+  ];
+  return [
+    // Корни в форме ядра: в `dart:io` — через форму хоста и обратно.
+    for (final root in roots)
+      toCorePath(
+        canonicalPath(toHostPath(root, windows: windows)),
+        windows: windows,
+      ),
+  ];
+}

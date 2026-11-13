@@ -65,6 +65,9 @@ void main() {
       '$base/state/state',
       '$base/state/agents',
       '$base/state/prompts',
+      // Корни навыков хоста (add-agent-skills, D9): после каталогов агента.
+      '$base/state/skills',
+      '$base/home/.agents/skills',
     ]);
   });
 
@@ -337,7 +340,10 @@ void main() {
       final paths = host(extra: ['.claude/skills']).paths;
 
       expect(paths.where((p) => p.contains('.claude')), isEmpty);
-      expect(paths.where((p) => p.startsWith(repo)), isEmpty);
+      expect(
+        paths.where((p) => p.startsWith(repo) && p.contains('skills')),
+        isEmpty,
+      );
     });
 
     test('session roots: levels above cwd up to the git root and relative '

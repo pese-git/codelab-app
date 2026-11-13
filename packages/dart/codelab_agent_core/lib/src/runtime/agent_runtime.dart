@@ -37,12 +37,15 @@ import '../mcp/mcp_connector.dart';
 import '../mcp/mcp_server_config.dart';
 import '../mcp/mcp_status_port.dart';
 import '../mcp/mcp_tool_name.dart';
+import '../permissions/agent_config_paths.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
 import '../project/project_context.dart';
 import '../project/project_files.dart';
+import '../skills/catalog_entries.dart';
 import '../skills/skill_catalog.dart';
 import '../skills/skill_files.dart';
+import '../skills/skills_config.dart' show defaultSkillsCatalogMaxChars;
 import '../prompts/compose.dart';
 import '../secrets/secret_lookup.dart';
 import '../secrets/secret_resolver.dart';
@@ -55,6 +58,9 @@ import '../session/session_writer.dart';
 import '../session/summary.dart';
 import '../session/tree.dart';
 import '../tools/agent_tool.dart';
+import '../tools/builtin/exec.dart';
+import '../tools/builtin/read.dart';
+import '../tools/builtin/skill.dart';
 import '../tools/executor.dart';
 import '../tools/registry.dart';
 import '../util/logger.dart';
@@ -1250,7 +1256,6 @@ final class AgentRuntimeImpl implements AgentRuntime {
   }) async {
     final id = snapshot.header.id;
     final catalog = scope.applied.catalog;
-    final env = await BoundedEnv.wrap(ports.env ?? services.baseEnv, cwd);
     final logger = ports.logger ?? services.logger;
     // Конфигурация сессии на момент обращения: у сессии папки — её собственная,
     // у остальных — по применённому снимку корня (после перезагрузки новая).
@@ -1294,8 +1299,43 @@ final class AgentRuntimeImpl implements AgentRuntime {
       ),
     ]);
     final project = loaded[0] as _ProjectLoad;
-    final skills = loaded[1] as SkillCatalog;
+    final skillsLoad = loaded[1] as _SkillsLoad;
+    final skills = skillsLoad.catalog;
     final projectContext = project.context;
+    // Граница env строится после фаз загрузки: корни только для чтения —
+    // каталоги загруженных навыков вне рабочей папки (D5, D17). Фазы env
+    // сессии не используют. `execInReadOnlyRoots`: `ports.env == null` —
+    // сессия исполняет на `baseEnv` хоста, то есть на машине агента; клиентский
+    // env — только если хост явно сказал `execOnHost`.
+    final hostFiles = services.hostFiles;
+    final readOnlyRoots = hostFiles == null
+        ? const <String>[]
+        : skills.readOnlyRoots(canonicalCwd);
+    final execOnHost =
+        hostFiles != null && (ports.env == null || ports.execOnHost);
+    final env = await BoundedEnv.wrap(
+      ports.env ?? services.baseEnv,
+      cwd,
+      readOnlyRoots: readOnlyRoots,
+      readOnlyFs: hostFiles,
+      execInReadOnlyRoots: execOnHost,
+    );
+    // Инструменты сессии, зависящие от снимка (D17). `register` заменяет
+    // одноимённый инструмент на месте, порядок схем (кэш промпта) прежний;
+    // инструмент хоста другого типа с тем же именем не заменяется.
+    if (skills.modelVisible.isNotEmpty) {
+      sessionRegistry.register(SkillTool(skills, sessionId: id));
+    }
+    if (skills.skills.isNotEmpty &&
+        sessionRegistry.lookup('read') is ReadTool) {
+      sessionRegistry.register(ReadTool(skills: skills, root: canonicalCwd));
+    }
+    if (readOnlyRoots.isNotEmpty &&
+        sessionRegistry.lookup('exec') is ExecTool) {
+      sessionRegistry.register(
+        ExecTool(readOnlyRoots: readOnlyRoots, execInReadOnlyRoots: execOnHost),
+      );
+    }
     await _connectMcp(
       id: id,
       cwd: cwd,
@@ -1328,7 +1368,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
       logger: logger,
       // Пути PERM-11 от хоста пересчитываются через резолвер хоста (D8):
       // через `BoundedEnv` сессии защищаемые пути вне корня не раскрыть.
-      agentConfigPaths: services.agentConfigPaths,
+      // Пути сессии (PERM-11, Q27): корни навыков, зависящие от `cwd`, и
+      // каталоги снимка для E1–E3; поле хоста при этом не меняется.
+      agentConfigPaths: _sessionConfigPaths(skillsLoad),
       // Резолвер — окружение сессии, если оно само `PathResolver`, иначе
       // `baseEnv` хоста. Окружение сессии `serve` клиентское
       // (`AcpClientExecutionEnv`, `ListingOverlayEnv`) и `PathResolver` не
@@ -1387,6 +1429,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
         sessionRegistry,
         mcp,
         projectContext,
+        skills: skills,
+        skillsCatalogMaxChars: settings.skills.catalogMaxChars,
       ),
       tools: sessionRegistry.tools,
     );
@@ -1451,6 +1495,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
         mcp,
         projectContext,
         agent: agent,
+        skills: skills,
+        skillsCatalogMaxChars: settings.skills.catalogMaxChars,
       ),
       snapshot: snapshot,
       compactionOn: compaction,
@@ -1490,6 +1536,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
     _McpState mcp,
     ProjectContext? projectContext, {
     AgentDefinition? agent,
+    SkillCatalog? skills,
+    int skillsCatalogMaxChars = defaultSkillsCatalogMaxChars,
   }) {
     // Инструменты вне набора агента не входят в промпт: секции инструментов
     // и строки MCP-серверов описывают то, что модель реально видит (PR-6,
@@ -1523,6 +1571,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
         agentProfile: agent == null
             ? null
             : (name: agent.name, body: agent.prompt),
+        skills: skills?.modelVisible ?? const [],
+        skillsCatalogMaxChars: skillsCatalogMaxChars,
       ),
     );
   }
@@ -1595,7 +1645,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
   /// исключения); отмена выбрасывает результат и бросает `CancelledException`.
   /// `skills.loaded` пишется лишь когда порт вернул результат. Тела навыков в
   /// лог не попадают.
-  Future<SkillCatalog> _loadSkills({
+  Future<_SkillsLoad> _loadSkills({
     required SessionId id,
     required String canonicalCwd,
     required bool cwdResolved,
@@ -1607,7 +1657,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     if (source == null ||
         !profile.isOn(HostCapability.skills) ||
         !settings.skills.enabled) {
-      return SkillCatalog.empty;
+      return _SkillsLoad.none;
     }
     void diagnostic(
       DiagnosticLevel level,
@@ -1653,7 +1703,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
           'skills were not read within '
               '${_projectFilesTimeout.inSeconds} s; the session has none',
         );
-        return SkillCatalog.empty;
+        return _SkillsLoad.none;
       case _PhaseFailed<SkillFiles>(:final error):
         diagnostic(
           DiagnosticLevel.error,
@@ -1661,7 +1711,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
           'unexpected',
           'skills could not be read: ${error.runtimeType}',
         );
-        return SkillCatalog.empty;
+        return _SkillsLoad.none;
       case _PhaseDone<SkillFiles>(:final value):
         files = value;
     }
@@ -1691,7 +1741,46 @@ final class AgentRuntimeImpl implements AgentRuntime {
         'project': projectTrusted,
       },
     );
-    return catalog;
+    // Лог усечения каталога — один раз на сессию при открытии (создание и
+    // `session/load`): секция одинакова на каждом шаге, повтор был бы шумом
+    // (D6, D17). Считает та же функция, что строит секцию промпта.
+    if (catalog.modelVisible.isNotEmpty) {
+      final entries = skillsCatalogEntries(
+        catalog.modelVisible,
+        settings.skills.catalogMaxChars,
+      );
+      if (entries.shortened + entries.omitted > 0) {
+        logger.log(
+          LogLevel.warning,
+          'skills.catalog.truncated',
+          fields: {
+            'session_id': id.value,
+            'shortened': entries.shortened,
+            'omitted': entries.omitted,
+          },
+        );
+      }
+    }
+    return _SkillsLoad(catalog, files.sessionRoots);
+  }
+
+  /// Политика сессии: значение хоста плюс корни навыков сессии и каталоги
+  /// снимка (D9, D17). Без того и другого — поле хоста как есть.
+  AgentConfigPaths? _sessionConfigPaths(_SkillsLoad load) {
+    final dirs = [for (final s in load.catalog.skills) s.dir];
+    if (load.sessionRoots.isEmpty && dirs.isEmpty) {
+      return services.agentConfigPaths;
+    }
+    return (services.agentConfigPaths ??
+            // Поля хоста нет: регистр файловой системы — по платформе хоста
+            // (macOS и Windows его не различают), как у `agentConfigPathsFor`.
+            AgentConfigPaths(
+              paths: const [],
+              caseInsensitive:
+                  services.platform == 'macos' ||
+                  services.platform == 'windows',
+            ))
+        .withSession(paths: load.sessionRoots, skillDirs: dirs);
   }
 
   /// Читает файлы проекта сессии портом и собирает контекст инструкций
@@ -3861,4 +3950,17 @@ final class _PhaseFailed<T> extends _PhaseResult<T> {
   const _PhaseFailed(this.error);
 
   final Object error;
+}
+
+/// Результат фазы навыков: снимок каталога и корни сессии для PERM-11
+/// (design.md change `add-agent-skills`, D17).
+final class _SkillsLoad {
+  const _SkillsLoad(this.catalog, this.sessionRoots);
+
+  /// Фаза не дала результата (нет порта, `skills.enabled: false`, таймаут,
+  /// исключение): каталог пуст, путей сессии нет (известный предел, Q46 (а)).
+  static final none = _SkillsLoad(SkillCatalog.empty, const []);
+
+  final SkillCatalog catalog;
+  final List<String> sessionRoots;
 }

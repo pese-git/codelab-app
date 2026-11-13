@@ -499,6 +499,10 @@ final class _Connection {
           announced: bridge.announced,
         ),
         extraBeforeToolCall: [bridge.markInProgress],
+        // Команды `localEnv` идут на машине агента, а не у клиента через
+        // `terminal/*`: рантайму можно разрешить `exec` с `cwd` в корне
+        // навыка (design.md `add-agent-skills`, D5, D17, Q23).
+        execOnHost: true,
       );
       return (link: link, bridge: bridge, ports: ports);
     }
@@ -529,6 +533,8 @@ final class _Connection {
         announced: bridge.announced,
       ),
       extraBeforeToolCall: [bridge.markInProgress],
+      // `execOnHost` остаётся `false`: `terminal/*` исполняет клиент и не
+      // видит каталог навыка агента (D17).
     );
     clientEnv.terminalShown = bridge.terminalShown;
     return (link: link, bridge: bridge, ports: ports);

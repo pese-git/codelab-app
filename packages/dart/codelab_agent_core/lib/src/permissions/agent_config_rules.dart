@@ -25,6 +25,50 @@ import 'command_args.dart';
 import 'shell_glob.dart';
 import 'shell_lexer.dart';
 
+/// Интерпретаторы, чей первый позиционный аргумент — скрипт (E1, D9, Q34).
+///
+/// Источник списка — решение Q34 change `add-agent-skills` (перечень задан
+/// спецификацией `agent-permissions`, документация самих интерпретаторов не
+/// копируется): узнаются только по голому базовому имени из `PATH`, с путём
+/// (`/tmp/python3`) — нет.
+const _skillInterpreters = {
+  'python',
+  'python3',
+  'node',
+  'tsx',
+  'bash',
+  'sh',
+  'zsh',
+  'pwsh',
+  'ruby',
+  'perl',
+};
+
+/// Программы, у которых скрипт идёт после подкоманды `run` (E1, Q34).
+const _skillRunners = {'deno', 'bun', 'uv', 'pipx'};
+
+/// Опции вывода: значение следующим словом исключения E3 не получает
+/// (D9, Q35, Q38). Формы `--output=…`, `-o<path>`, `of=…` не являются
+/// «простым словом» и тоже исключения не получают.
+const _outputOptions = {
+  '-o',
+  '-O',
+  '-w',
+  '--output',
+  '--out',
+  '--outfile',
+  '--output-file',
+  '--out-file',
+  '--outdir',
+  '--dest',
+  '--target',
+  '--write',
+};
+
+/// Сегменты пути скрипта, под которыми E1 не действует (Q36): зависимости и
+/// окружения не принадлежат автору навыка.
+const _foreignSegments = {'node_modules', 'site-packages', 'vendor'};
+
 /// Является ли путь путём конфигурации агента в проекте (§7.6.1).
 ///
 /// Почему: конфигурацию агента правят только человек и клиенты, модель — нет
@@ -35,6 +79,9 @@ import 'shell_lexer.dart';
 /// `.codelab/config*.yaml` (в том числе `config.yaml` и `config.local.yaml`),
 /// `.codelab/cli.yaml` и всё внутри `.codelab/agents`, `skills`, `prompts`,
 /// `hooks` — включая сами каталоги, ведь копирование в каталог пишет в него.
+/// Корень навыков проекта `.agents/skills` и всё внутри него защищены так же
+/// (design.md change `add-agent-skills`, D9, Q16); `.agents/notes.md` и
+/// `agents/skills` — нет.
 /// Сравнение без учёта регистра: на macOS файловая система обычно к нему
 /// нечувствительна, и `.CodeLab/Config.yaml` — тот же файл.
 ///
@@ -49,6 +96,14 @@ bool isAgentConfigPath(String relativePath) {
     for (final s in path.split('/'))
       if (s.isNotEmpty && s != '.') s,
   ];
+  // Корень навыков проекта (design.md change `add-agent-skills`, D9, Q16):
+  // навык — инструкция для модели, поэтому его правит человек. Совпадает
+  // сам каталог и всё внутри; `.agents/notes.md` и `agents/skills` — нет.
+  if (segments.length >= 2 &&
+      segments.first == '.agents' &&
+      segments[1] == 'skills') {
+    return true;
+  }
   if (segments.length < 2 || segments.first != '.codelab') {
     return false;
   }
@@ -82,6 +137,84 @@ final class ConfigCheck {
 
   /// [_absolute] для проверок вне класса.
   String? absoluteOf(String target, String dir) => _absolute(target, dir);
+
+  /// Раньше в строке (или на охватывающем уровне) исполнялось то, чего нет в
+  /// узком списке [noteEnvironment]: исключение E1 навыков тогда не действует
+  /// (D9, Q37, Q47, fail closed). Выставляет обход команды, не вызывающий код.
+  bool environmentAssigned = false;
+
+  /// Разрешённый список (Q47): E1 сохраняют только `cd`, `pushd`, `popd`, `:`,
+  /// пустые сегменты (одни перенаправления) и команды белого списка чтения
+  /// без лаунчеров, присваиваний и `printf -v`. Любая другая команда —
+  /// зарезервированное слово (`if`, `for`, `do`, `!`), `eval`, `source`,
+  /// `read`, `export`, `set`, `trap`, `alias`, shell с вложенным текстом,
+  /// определение функции и всё остальное — отключает E1 для следующих
+  /// сегментов: перечень запретов неполон по построению (переменные, функции,
+  /// startup-файлы, `trap DEBUG`), список разрешённого — нет.
+  ///
+  /// Вызывается обходом команды после проверки сегмента.
+  void noteEnvironment(ShellSegment segment) {
+    if (!_keepsSkillExceptions(segment)) {
+      environmentAssigned = true;
+    }
+  }
+
+  static bool _keepsSkillExceptions(ShellSegment segment) {
+    if (segment.launcherWords.isNotEmpty || segment.riskyEnvironment) {
+      return false;
+    }
+    final name = segment.commandName;
+    if (name == null) {
+      return true;
+    }
+    if (const {'cd', 'pushd', 'popd', ':'}.contains(name)) {
+      return true;
+    }
+    if (const {'eval', 'source', '.'}.contains(name) ||
+        shellNames.contains(name) ||
+        name == 'printf' && segment.arguments.any((a) => a.startsWith('-v'))) {
+      return false;
+    }
+    // `[[ … ]]` — зарезервированное слово bash: `[[ 1 -eq X=1 ]]` присваивает,
+    // `a[$(cmd)]` исполняет подстановку (E1(4)). `[` и `test` — обычные команды.
+    if (name == '[[' || name == ']]') {
+      return false;
+    }
+    return _isReadOnly(segment);
+  }
+
+  /// Вложенный текст сегмента наследует E1, только если это `sh`, `bash` или
+  /// `dash`, вызванный ровно с `-c` (допустимы `-e`, `-u`, `-x`, кластеры из
+  /// них и `-o pipefail`): `-l`, `--login`, `-i`, `--rcfile`, `--init-file` и
+  /// другие оболочки читают startup-файлы (Q47). Остальной вложенный текст
+  /// (подстановки, `eval`, `env -S`, значения опций) E1 не получает.
+  static bool nestedKeepsSkillExceptions(ShellSegment segment) {
+    final at = segment.commandTextIndex;
+    final name = segment.commandName;
+    if (at == null ||
+        segment.nested.length != 1 ||
+        segment.launcherWords.isNotEmpty ||
+        !const {'sh', 'bash', 'dash'}.contains(name)) {
+      return false;
+    }
+    final options = segment.words.sublist(1, at);
+    var hasC = false;
+    for (var i = 0; i < options.length; i++) {
+      final o = options[i];
+      if (o == '--' && i == options.length - 1) {
+        // Конец опций: безопасен, дальше только текст команды.
+        continue;
+      }
+      if (o == '-o' && i + 1 < options.length && options[i + 1] == 'pipefail') {
+        i++;
+      } else if (RegExp(r'^-[ceux]+$').hasMatch(o)) {
+        hasC = hasC || o.contains('c');
+      } else {
+        return false;
+      }
+    }
+    return hasC;
+  }
 
   String? _absolute(String target, String dir) {
     final expanded = scope?.expand(target) ?? target;
@@ -241,6 +374,204 @@ final class ConfigCheck {
       isInside(root, abs) &&
       abs != root &&
       relativeTo(root, abs).toLowerCase() == '.codelab';
+}
+
+/// Скрипт навыка, найденный в простой команде (E1).
+typedef SkillScript = ({int index, String skillDir});
+
+/// Исключения PERM-11 для скриптов навыка (E1–E3, design.md change
+/// `add-agent-skills`, D9, D17; решения Q24, Q25, Q29, Q33–Q38).
+///
+/// Почему отдельное расширение: по правилу белого списка чтения команда не из
+/// списка с аргументом в защищаемом каталоге критична, и запуск скрипта
+/// навыка (`python3 <dir>/scripts/x.py`, `cwd` в каталоге навыка) спрашивал бы
+/// человека даже в `bypass`. Исключения узкие и проверяются по каноническому
+/// пути, а не по тексту команды.
+///
+/// Для чего: [skillScript] — E1 (исполняемый файл — скрипт загруженного
+/// навыка); [isSkillAsset] — E3 (существующий не-`.md` файл `assets/` того же
+/// навыка); E2 (рабочий каталог навыка) — решение `touchesConfig`: каталог
+/// запуска не критичен, если [skillScript] нашёл скрипт; команды белого
+/// списка чтения не критичны и так.
+///
+/// Как использовать: вызывается из `touchesConfig` на каждый сегмент. Данные
+/// о канонических путях приходят из двухфазной проверки (`canonicalizeSeen`):
+/// в первой фазе все функции возвращают «исключения нет» и лишь собирают
+/// кандидатов (fail closed).
+extension SkillExceptions on ConfigCheck {
+  /// E1: скрипт навыка или `null`.
+  SkillScript? skillScript(ShellSegment segment, String dir) {
+    final scope = this.scope;
+    final words = segment.words;
+    if (scope == null ||
+        words.isEmpty ||
+        segment.launcherWords.isNotEmpty ||
+        segment.riskyEnvironment ||
+        environmentAssigned) {
+      return null;
+    }
+    final first = words.first;
+    // Разбор «интерпретатор или раннер → `run` → `pwsh -File` → запрет
+    // опций» общий для голого имени из `PATH` и для файла навыка, названного
+    // как интерпретатор (`scripts/bin/deno`): Q34, Q36. Любая опция до
+    // скрипта, включая `-` (stdin), отключает E1: список безопасных опций не
+    // ведётся. `at` — индекс слова-скрипта (может выйти за конец слов).
+    ({bool ok, int at}) parse(String name) {
+      var i = 1;
+      if (_skillRunners.contains(name)) {
+        if (words.length < 2 || words[1] != 'run') {
+          return (ok: false, at: i);
+        }
+        i = 2;
+      } else if (!_skillInterpreters.contains(name)) {
+        return (ok: false, at: i);
+      }
+      if (name == 'pwsh' &&
+          i < words.length &&
+          const {'-file', '-f'}.contains(words[i].toLowerCase())) {
+        i++;
+      }
+      return (ok: i >= words.length || !words[i].startsWith('-'), at: i);
+    }
+
+    var at = 0;
+    if (first.contains('/')) {
+      final base = baseName(first);
+      if ((_skillInterpreters.contains(base) || _skillRunners.contains(base)) &&
+          !parse(base).ok) {
+        return null;
+      }
+    } else {
+      // Слово без `/` оболочка ищет в `PATH`, а не в рабочем каталоге.
+      final parsed = parse(first);
+      if (!parsed.ok || parsed.at >= words.length) {
+        return null;
+      }
+      at = parsed.at;
+    }
+    // Кандидатов E3 собираем до решения: вторая фаза сравнивает по кэшу.
+    for (final word in segment.arguments) {
+      _note(word, dir);
+    }
+    final word = words[at];
+    if (_isMasked(word)) {
+      return null;
+    }
+    final abs = absoluteOf(word, dir);
+    final canonical = abs == null ? null : scope.canonicalOf(abs);
+    if (abs == null || canonical == null || !scope.isRegularFile(abs)) {
+      return null;
+    }
+    final skillDir = scope.skillDirOf(canonical);
+    if (skillDir == null) {
+      return null;
+    }
+    final rel = _relative(scope, skillDir, canonical);
+    final parts = rel.split('/');
+    if (_lower(scope, parts.first) != 'scripts' || parts.length < 2) {
+      return null;
+    }
+    final inner = parts.skip(1);
+    if (inner.any(
+          (p) =>
+              p.startsWith('.') || _foreignSegments.contains(_lower(scope, p)),
+        ) ||
+        parts.last.toLowerCase() == 'skill.md') {
+      return null;
+    }
+    return (index: at - 1, skillDir: skillDir);
+  }
+
+  /// E3: [word] — существующий не-`.md` файл `assets/` навыка [skillDir].
+  bool isSkillAsset(String word, String dir, String skillDir) {
+    final scope = this.scope;
+    if (scope == null || _isMasked(word)) {
+      return false;
+    }
+    final abs = absoluteOf(word, dir);
+    final canonical = abs == null ? null : scope.canonicalOf(abs);
+    if (abs == null || canonical == null || !scope.isRegularFile(abs)) {
+      return false;
+    }
+    final owner = scope.skillDirOf(canonical);
+    if (owner == null || !_sameDir(scope, owner, skillDir)) {
+      return false;
+    }
+    final parts = _relative(scope, owner, canonical).split('/');
+    // `SKILL.md` отсекает расширение `.md`.
+    return parts.length >= 2 &&
+        _lower(scope, parts.first) == 'assets' &&
+        !parts.last.toLowerCase().endsWith('.md');
+  }
+
+  /// Индексы аргументов [segment], которые E3 освобождает от проверки пути.
+  Set<int> skillAssetArguments(
+    ShellSegment segment,
+    String dir,
+    String skillDir,
+  ) {
+    final args = segment.arguments;
+    final result = <int>{};
+    for (var i = 0; i < args.length; i++) {
+      final word = args[i];
+      if (i > 0 && _isOutputOption(args[i - 1])) {
+        continue;
+      }
+      var value = word;
+      if (word.startsWith('--') && word.contains('=')) {
+        final eq = word.indexOf('=');
+        if (_isOutputOption(word.substring(0, eq))) {
+          continue;
+        }
+        value = word.substring(eq + 1);
+      } else if (word.startsWith('-')) {
+        continue;
+      }
+      if (isSkillAsset(value, dir, skillDir)) {
+        result.add(i);
+      }
+    }
+    return result;
+  }
+
+  /// Слово — опция вывода: точное имя из [_outputOptions], кластер
+  /// коротких флагов, кончающийся на `o`/`O`/`w` (`-vo`), или префикс длинной
+  /// опции (`--outp`), который GNU-разбор принимает за неё (Q35, ревью).
+  bool _isOutputOption(String word) {
+    if (_outputOptions.contains(word)) {
+      return true;
+    }
+    if (word.startsWith('--')) {
+      return word.length > 2 &&
+          _outputOptions.any((o) => o.startsWith('--') && o.startsWith(word));
+    }
+    return RegExp(r'^-[A-Za-z]+[oOw]$').hasMatch(word);
+  }
+
+  void _note(String word, String dir) {
+    final value = word.startsWith('--') && word.contains('=')
+        ? word.substring(word.indexOf('=') + 1)
+        : word;
+    if (!_isMasked(value) && !value.startsWith('-')) {
+      final abs = absoluteOf(value, dir);
+      if (abs != null) {
+        scope?.canonicalOf(abs);
+      }
+    }
+  }
+
+  bool _isMasked(String word) => hasMask(word) || word.contains('{');
+
+  String _lower(AgentConfigScope scope, String text) =>
+      scope.caseInsensitive ? text.toLowerCase() : text;
+
+  bool _sameDir(AgentConfigScope scope, String a, String b) =>
+      _lower(scope, a) == _lower(scope, b);
+
+  String _relative(AgentConfigScope scope, String skillDir, String canonical) =>
+      canonical.length > skillDir.length
+      ? canonical.substring(skillDir.length + 1)
+      : '';
 }
 
 /// `ln`, `mv`, `rm`, `rmdir`, `mkdir`, `rename` с каталогом-предком
@@ -467,13 +798,47 @@ bool touchesConfig(ShellSegment segment, ConfigCheck config, String dir) {
   if (segment.launcherOutputs.any((t) => config.isConfig(t, dir))) {
     return true;
   }
-  if (_isReadOnly(segment)) {
-    return false;
-  }
-  if (config.isConfigWorkingDir(dir)) {
+  // Исключения навыков (D9): E1 — скрипт навыка, E2 — его рабочий каталог,
+  // E3 — ресурсы `assets/` того же навыка в аргументах.
+  final script = config.skillScript(segment, dir);
+  final first = segment.words.firstOrNull;
+  // Исполняемый файл внутри защищаемого каталога (`<dir>/.venv/bin/pip`,
+  // `<dir>/node_modules/.bin/shx`) — не «слово-аргумент», но тоже запись
+  // кода в корень навыков; без E1 он критичен (Q36), даже под именем из
+  // белого списка.
+  if (script == null &&
+      first != null &&
+      first.contains('/') &&
+      config.isConfig(first, dir)) {
     return true;
   }
-  for (final word in segment.arguments) {
+  if (_isReadOnly(segment)) {
+    // `bash -c 'cmd' <path>`: сам текст `cmd` проверяется как вложенные
+    // сегменты, а слова после него (`$0`, аргументы) — нет; путь в
+    // защищаемом каталоге там — аргумент программы (E1: `-c` отключает
+    // исключение, Q34). Исключается ровно одно слово — текст команды.
+    final textAt = segment.commandTextIndex;
+    if (textAt == null || segment.nested.isEmpty) {
+      return false;
+    }
+    final args = segment.arguments;
+    return [
+      for (var i = 0; i < args.length; i++)
+        if (i != textAt - 1) args[i],
+    ].any((w) => config.isConfig(w, dir));
+  }
+  if (script == null && config.isConfigWorkingDir(dir)) {
+    return true;
+  }
+  final exempt = script == null
+      ? const <int>{}
+      : config.skillAssetArguments(segment, dir, script.skillDir);
+  final args = segment.arguments;
+  for (var i = 0; i < args.length; i++) {
+    final word = args[i];
+    if (script != null && (i == script.index || exempt.contains(i))) {
+      continue;
+    }
     if (_isShortCluster(word) && word.length > _maxClusterLength) {
       throw const ShellParseException('option cluster is too long');
     }

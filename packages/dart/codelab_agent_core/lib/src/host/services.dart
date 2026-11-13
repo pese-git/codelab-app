@@ -43,6 +43,7 @@ final class AgentCoreServices {
     this.mcp,
     this.projectFiles,
     this.skillFiles,
+    this.hostFiles,
     this.secrets,
     this.config,
     this.projectConfig,
@@ -70,6 +71,13 @@ final class AgentCoreServices {
   /// пути её ждут (§11.5). Хост на `dart:io` передаёт
   /// `Platform.operatingSystem`.
   final String platform;
+
+  /// Файловая система процесса агента для корней только для чтения (design.md
+  /// change `add-agent-skills`, D5, D17): из неё `read`/`ls` берут файлы
+  /// каталогов навыков вне рабочей папки. `null` — корней нет, навыки вне
+  /// рабочей папки читаются только как `outsideWorkspace`. Хост передаёт
+  /// локальное окружение процесса, не клиентское.
+  final ExecutionEnv? hostFiles;
 
   /// Каталог моделей для опции `model` и смены модели сессии (§2.12.2,
   /// §13.6). `null` — каталог из одной `CoreConfig.defaultModel`: тесты и

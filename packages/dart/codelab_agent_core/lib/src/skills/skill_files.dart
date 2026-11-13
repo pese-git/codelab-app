@@ -98,7 +98,11 @@ final class SkillFile {
 
 /// Результат чтения навыков.
 final class SkillFiles {
-  const SkillFiles({this.skills = const [], this.diagnostics = const []});
+  const SkillFiles({
+    this.skills = const [],
+    this.diagnostics = const [],
+    this.sessionRoots = const [],
+  });
 
   static const empty = SkillFiles();
 
@@ -108,6 +112,17 @@ final class SkillFiles {
   /// Диагностики корней и файлов, не ставших [SkillFile] (`too_large`,
   /// `not_utf8`, `outside_root`, `untrusted_project`, `limit_exceeded`).
   final List<ExtensionDiagnostic> diagnostics;
+
+  /// Корни навыков, зависящие от сессии (уровни проекта выше `cwd`,
+  /// относительные `skills.extra_roots`) и абсолютные корни `extra_roots`
+  /// этой папки: канонические, существующие или нет, независимо от доверия
+  /// проекта (design.md change `add-agent-skills`, D9, D17; Q27).
+  ///
+  /// Почему поле порта: список корней знает только загрузчик, который строит
+  /// его той же функцией, что и обход; рантайм добавляет их к защищаемым
+  /// путям PERM-11 политики этой сессии (`AgentConfigPaths.withSession`).
+  /// По умолчанию пусто — хост без файлов ничего не защищает.
+  final List<String> sessionRoots;
 }
 
 /// Порт чтения навыков.

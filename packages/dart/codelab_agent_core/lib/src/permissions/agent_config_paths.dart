@@ -45,10 +45,40 @@ final class AgentConfigPaths {
   /// Создаётся хостом; в тестах политики — напрямую.
   AgentConfigPaths({
     required Iterable<String> paths,
+    Iterable<String> skillDirs = const [],
     Map<String, String> expansions = const {},
     this.caseInsensitive = false,
   }) : paths = List.unmodifiable(paths),
+       skillDirs = List.unmodifiable(skillDirs),
        expansions = Map.unmodifiable(expansions);
+
+  /// Копия с путями и каталогами навыков сессии (design.md change
+  /// `add-agent-skills`, D9, D17, решение Q27).
+  ///
+  /// Почему: корни навыков, зависящие от `cwd` (уровни выше `cwd`,
+  /// относительные `skills.extra_roots`), и каталоги загруженных навыков
+  /// известны только при открытии сессии, а поле хоста действует на весь
+  /// процесс и их не содержит.
+  ///
+  /// Как использовать: рантайм вызывает при открытии сессии на значении
+  /// хоста; элементы исходного значения идут первыми, новые добавляются без
+  /// повторов; [expansions] и [caseInsensitive] остаются своими; исходное
+  /// значение не меняется.
+  AgentConfigPaths withSession({
+    Iterable<String> paths = const [],
+    Iterable<String> skillDirs = const [],
+  }) => AgentConfigPaths(
+    paths: {...this.paths, ...paths},
+    skillDirs: {...this.skillDirs, ...skillDirs},
+    expansions: expansions,
+    caseInsensitive: caseInsensitive,
+  );
+
+  /// Канонические каталоги загруженных навыков сессии.
+  ///
+  /// Только для исключений E1–E3 (запуск скрипта навыка, D9): сами по себе
+  /// каталоги ничего не защищают — защиту даёт [paths].
+  final List<String> skillDirs;
 
   /// Абсолютные канонические пути (POSIX-вид ядра).
   final List<String> paths;
@@ -88,7 +118,11 @@ final _variable = RegExp(
 /// целей: ссылка на защищаемый файл из другого места не выводит цель из-под
 /// защиты. Объект не потокобезопасен и живёт в одном `decide`.
 final class AgentConfigScope {
-  AgentConfigScope._(this._config, this._forms, this._ancestors, this._parents);
+  AgentConfigScope._(this._config, this._forms, this._ancestors, this._parents)
+    : _skillDirs = [
+        for (final dir in _config.skillDirs)
+          if (dir.startsWith('/')) ?normalizePath('/', dir),
+      ];
 
   /// Пересчитывает каноническую форму защищаемых путей [config].
   ///
@@ -174,6 +208,13 @@ final class AgentConfigScope {
   /// Проверенные пути, которые существуют (известно после [canonicalizeSeen]).
   final _existing = <String>{};
 
+  /// Проверенные пути, чья каноническая форма — обычный файл (`stat` резолвера,
+  /// если он `FileSystem`); без этого исключения E1/E3 не действуют (D17).
+  final _regular = <String>{};
+
+  /// Нормализованные каталоги загруженных навыков (E1–E3, D9).
+  final List<String> _skillDirs;
+
   /// Значения `HOME` и `CODELAB_HOME` хоста.
   Map<String, String> get expansions => _config.expansions;
 
@@ -194,6 +235,45 @@ final class AgentConfigScope {
       (m) => expansions[m[1] ?? m[2]] ?? m[0]!,
     );
   }
+
+  /// Запоминает [abs] для второй фазы и возвращает его каноническую форму,
+  /// если она уже посчитана ([canonicalizeSeen]); в первой фазе — `null`.
+  ///
+  /// Для чего: исключения E1–E3 решаются по каноническому пути (ссылка наружу
+  /// исключения не получает), а канонизация асинхронна, поэтому первый проход
+  /// только собирает кандидатов, второй решает по кэшу (D17).
+  String? canonicalOf(String abs) {
+    _seen.add(abs);
+    return _canonical[abs];
+  }
+
+  /// Каноническая форма [abs] — существующий обычный файл. До [canonicalizeSeen]
+  /// и без `FileSystem` у резолвера — `false` (fail closed, D17).
+  bool isRegularFile(String abs) => _regular.contains(abs);
+
+  /// Каталог загруженного навыка, внутри которого лежит каноническая форма
+  /// [canonical] (самый глубокий), или `null`. Сравнение — по сегментам и без
+  /// учёта регистра при [caseInsensitive].
+  String? skillDirOf(String canonical) {
+    String? best;
+    for (final dir in _skillDirs) {
+      if (_inside(dir, canonical) &&
+          (best == null || dir.length > best.length)) {
+        best = dir;
+      }
+    }
+    return best;
+  }
+
+  /// [path] лежит внутри [dir] (или совпадает) по правилам регистра хоста.
+  bool _inside(String dir, String path) {
+    final d = _key(dir);
+    final p = _key(path);
+    return d == '/' || p == d || p.startsWith('$d/');
+  }
+
+  /// [_inside] для вызывающих правил E1–E3.
+  bool isInsideDir(String dir, String path) => _inside(dir, path);
 
   /// Цель [abs] — защищаемый путь или лежит внутри него.
   bool covers(String abs) {
@@ -282,6 +362,14 @@ final class AgentConfigScope {
       }
       if (resolver != null && await resolver.realpath(path) is Ok) {
         _existing.add(path);
+        // Признак «обычный файл» — по канонической форме, не по ссылке.
+        final Object fs = resolver;
+        if (fs is FileSystem) {
+          final stat = await fs.stat(_canonical[path]!);
+          if (stat case Ok(:final value) when value.type == FileType.file) {
+            _regular.add(path);
+          }
+        }
       }
     }
   }

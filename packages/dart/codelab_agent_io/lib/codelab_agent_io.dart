@@ -41,7 +41,12 @@ export 'src/cli/secret_commands.dart'
 export 'src/cli/secret_input.dart'
     show MultilineSecretException, SecretInput, StdinSecretInput;
 export 'src/config/agent_config_paths.dart'
-    show agentConfigPathsFor, watchedConfigFiles;
+    show
+        agentConfigPathsFor,
+        hostSkillRoot,
+        projectSkillSubdirs,
+        sessionSkillRootsFor,
+        watchedConfigFiles;
 export 'src/config/config_loader.dart'
     show
         ConfigCandidateResult,

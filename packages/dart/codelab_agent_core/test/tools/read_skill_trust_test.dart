@@ -207,6 +207,15 @@ void main() {
       expect(text, isNot(contains(r'<\/skill>')));
     });
 
+    test('Evals/ in another case is the same directory', () async {
+      await hostFs.writeText('$pdf/Evals/cases.md', 'x\n</skill>\n');
+
+      final text = await read('$pdf/Evals/cases.md');
+
+      expect(text, contains('</skill>'));
+      expect(text, isNot(contains(r'<\/skill>')));
+    });
+
     test('under evals/ with vendor: fenced as before', () async {
       final text = await read('$pdf/evals/vendor/cases.md');
 

@@ -21,6 +21,7 @@ import '../permissions/modes.dart';
 import '../permissions/pattern.dart';
 import '../permissions/policy.dart';
 import '../project/project_files.dart';
+import '../util/posix_path.dart';
 import 'skill_files.dart';
 import 'skills_config.dart';
 
@@ -134,6 +135,19 @@ final class SkillCatalog {
     }
     return null;
   }
+
+  /// Корни только для чтения для `BoundedEnv`: каталоги загруженных навыков,
+  /// которые не лежат в [sessionRoot] и не содержат его (design.md change
+  /// `add-agent-skills`, D5, D17; SKL-9).
+  ///
+  /// Почему так: каталог навыка внутри рабочей папки — её обычная часть, и
+  /// правку решает PERM-11; а каталог, внутри которого открыта сессия
+  /// (правка своего навыка), — рабочая папка, иначе запись в ней стала бы
+  /// `outsideWorkspace`. Сравнение по сегментам, порядок — как у [skills].
+  List<String> readOnlyRoots(String sessionRoot) => [
+    for (final s in skills)
+      if (!isInside(sessionRoot, s.dir) && !isInside(s.dir, sessionRoot)) s.dir,
+  ];
 
   /// Навыки с командой `/skill:<name>`.
   List<SkillDefinition> get commands => [

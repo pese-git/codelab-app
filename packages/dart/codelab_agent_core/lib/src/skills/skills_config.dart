@@ -1,4 +1,9 @@
-/// Настройки навыков агента: раздел `skills` конфигурации (design.md change
+//// Бюджет строк каталога навыков по умолчанию, символы
+/// (`skills.catalog_max_chars`): одно значение для конфигурации и сборки
+/// промпта.
+const defaultSkillsCatalogMaxChars = 8000;
+
+// Настройки навыков агента: раздел `skills` конфигурации (design.md change
 /// `add-agent-skills`, D11, D16; `agent-core-architecture` §15.4).
 ///
 /// Почему отдельный тип: навыки читают сразу несколько потребителей —
@@ -18,7 +23,7 @@ final class SkillsConfig {
     this.extraRoots = const [],
     this.disabled = const [],
     this.maxSkills = 200,
-    this.catalogMaxChars = 8000,
+    this.catalogMaxChars = defaultSkillsCatalogMaxChars,
     this.reattachPerSkillTokens = 5000,
     this.reattachTotalTokens = 25000,
   });

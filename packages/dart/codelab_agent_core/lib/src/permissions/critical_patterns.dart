@@ -132,6 +132,12 @@ CriticalMatch? findCritical(
       ? root
       : normalizePath(root, commandCwd) ?? root;
   final config = ConfigCheck(root, agentConfig);
+  // `python3() { … }`: лексер скобок не сохраняет, определение функции видно
+  // только в тексте. Подмена программы функцией отключает E1 навыков
+  // (Q37, fail closed).
+  if (_functionDefinition.hasMatch(command)) {
+    config.environmentAssigned = true;
+  }
   final found = <String>{};
   if (forkBomb.hasMatch(command)) {
     found.add(_forkBombLabel);
@@ -158,6 +164,8 @@ CriticalMatch? findCritical(
   ]);
 }
 
+final _functionDefinition = RegExp(r'(^|[\s;&|{(])[A-Za-z_][\w.:-]*\s*\(\s*\)');
+
 /// Обходит сегменты по порядку записи и ведёт текущий каталог: `cd` сдвигает
 /// его для следующих сегментов, поэтому `cd ~/.codelab && echo x > config.yaml`
 /// пишет в защищаемый файл (§7.6.1). Подоболочка и подстановка получают копию
@@ -179,9 +187,25 @@ void _walk(
           ? current
           : config.cdTarget([launcherDir], current) ?? current;
       _checkSegment(segment, root, config, here, found);
+      // Вложенный текст исполняется после присваиваний и лаунчеров внешнего
+      // сегмента и после всего, что выполнено раньше. E1 навыков он получает
+      // только как `sh|bash|dash -c` без startup-файлов (Q47). Изменения
+      // окружения во вложенном тексте (`eval "export X=1"`) остаются и для
+      // следующих сегментов: fail closed.
+      final outerEnvironment = config.environmentAssigned;
+      if (segment.nested.isNotEmpty &&
+          (segment.launcherWords.isNotEmpty ||
+              !ConfigCheck.nestedKeepsSkillExceptions(segment))) {
+        config.environmentAssigned = true;
+      }
       for (final nested in segment.nested) {
         _walk(nested, root, config, here, found);
       }
+      config.environmentAssigned =
+          outerEnvironment || config.environmentAssigned;
+      // Сам сегмент учитывается после вложенного текста: он влияет на
+      // следующие сегменты, а не на собственный вложенный.
+      config.noteEnvironment(segment);
       if (const {'cd', 'pushd'}.contains(segment.commandName)) {
         current = config.cdTarget(segment.arguments, current) ?? current;
       }

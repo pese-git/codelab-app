@@ -102,6 +102,9 @@ final class ServerHarness {
   /// каталог моделей от порта. Без [configSource] корень берётся из
   /// [rootConfig].
   ///
+  /// [wrapRuntime] — обёртка над рантаймом ядра: тест видит `SessionSpec`,
+  /// который сервер передал в `createSession` (проверка `SessionHostPorts`).
+  ///
   /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
   /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
   static Future<ServerHarness> start({
@@ -122,6 +125,7 @@ final class ServerHarness {
     CoreConfig? rootConfig,
     LastModelStore? lastModel,
     DefaultModelSource defaultModelSource = DefaultModelSource.config,
+    AgentRuntime Function(AgentRuntime inner)? wrapRuntime,
   }) async {
     final clock = FakeClock();
     final logger = RecordingLogger();
@@ -177,7 +181,9 @@ final class ServerHarness {
       },
     );
     final server = AcpAgentServer(
-      core: core,
+      core: wrapRuntime == null
+          ? core
+          : BuiltAgentCore(plan: core.plan, runtime: wrapRuntime(core.runtime)),
       config: AcpServerConfig(
         agentInfo: testAgentInfo,
         localListing: localListing,

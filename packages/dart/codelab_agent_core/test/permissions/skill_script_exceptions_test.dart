@@ -23,11 +23,15 @@ void main() {
     bool caseInsensitive = false,
     Map<String, String> links = const {},
     PermissionMode? modeOverride,
+    List<String> extraPaths = const [],
   }) async {
     h = await SkillHarness.create(
       mode: mode,
       modeOverride: modeOverride,
-      config: skillConfig(caseInsensitive: caseInsensitive),
+      config: skillConfig(
+        caseInsensitive: caseInsensitive,
+        extraPaths: extraPaths,
+      ),
       links: links,
     );
   }
@@ -429,6 +433,235 @@ void main() {
 
       await h.expectCritical([
         'python3 $pdf/scripts/fill.py $pdf/assets/out.json',
+      ]);
+    });
+  });
+
+  group('review fixes of iteration 2', () {
+    test('bash -c: only the command text is skipped, a path with spaces is '
+        'checked (extra root with spaces)', () async {
+      await create(
+        extraPaths: [
+          '/Users/John Doe/.agents/skills',
+          '/Volumes/Team Share/skills',
+        ],
+      );
+
+      await h.expectCritical([
+        'bash -c \'rm "\$0"\' "/Users/John Doe/.agents/skills/pdf/SKILL.md"',
+        'sh -c \'rm "\$0"\' "/Volumes/Team Share/skills/x/SKILL.md"',
+      ]);
+      await h.expectOrdinary(["bash -c 'echo hi a b' x"]);
+    });
+
+    test('a skill file named like an interpreter obeys the option rule '
+        '(Q34, Q36)', () async {
+      await h.expectOrdinary([
+        '$pdf/scripts/bin/tsx $pdf/assets/a.json',
+        '$pdf/scripts/bin/python3 --version-less $pdf/assets/a.json'
+            .replaceFirst('--version-less ', ''),
+      ]);
+      await h.expectCritical([
+        '$pdf/scripts/bin/tsx -e "x" $pdf/scripts/x.ts',
+        '$pdf/scripts/bin/python3 -c x $pdf/scripts/x.py',
+        '$pdf/scripts/bin/python3 -m zipfile $pdf/scripts/x.py',
+      ]);
+    });
+
+    test(
+      'a skill file named like a runner obeys the run rule (Q34, Q36)',
+      () async {
+        await h.expectCritical([
+          '$pdf/scripts/bin/deno eval "x" $pdf/assets/a.json',
+          '$pdf/scripts/bin/deno run -A $pdf/assets/a.json',
+          '$pdf/scripts/bin/bun x $pdf/assets/a.json',
+          '$pdf/scripts/bin/bun $pdf/assets/a.json',
+          '$pdf/scripts/bin/uv pip install x',
+          '$pdf/scripts/bin/pipx install x',
+          '$pdf/scripts/bin/pipx run --spec x $pdf/assets/a.json',
+        ]);
+        await h.expectOrdinary([
+          '$pdf/scripts/bin/deno run $pdf/assets/a.json',
+          '$pdf/scripts/bin/pipx run $pdf/assets/a.json',
+        ]);
+      },
+    );
+
+    test('environment tricks before the script fail closed (Q37)', () async {
+      const js = '$pdf/scripts/x.js';
+      const py = '$pdf/scripts/x.py';
+      await h.expectCritical([
+        'NODE_OPTIONS=--require=/tmp/e.js bash -c "node $js"',
+        'NODE_OPTIONS=x eval "node $js"',
+        'NODE_OPTIONS=--require=/tmp/e.js; export NODE_OPTIONS; node $js',
+        'NODE_OPTIONS=--require=/tmp/e.js; node $js',
+        r'PATH=/tmp/evil:$PATH; python3 ' + py,
+        'set -a; PYTHONPATH=/tmp; python3 $py',
+        'set -o allexport; PYTHONPATH=/tmp; python3 $py',
+        'source /tmp/env.sh; python3 $py',
+        '. /tmp/env.sh; python3 $py',
+        'hash -p /tmp/evil python3; python3 $py',
+        'python3() { /tmp/evil "\$@"; }; python3 $py',
+        'alias python3=/tmp/evil; python3 $py',
+        'enable -f /tmp/x.so y; python3 $py',
+        'export FOO; python3 $py',
+      ]);
+    });
+
+    test('Q47: only an allowlist of earlier segments keeps E1 '
+        '(compound commands, eval, variable readers, trap)', () async {
+      const js = '$pdf/scripts/x.js';
+      const py = '$pdf/scripts/x.py';
+      await h.expectCritical([
+        // 1. Составные команды и зарезервированные слова.
+        'for i in 1; do export X=1; done; node $js',
+        'if true; then export X=1; fi; node $js',
+        '! export X=1; node $js',
+        'while false; do :; done; python3 $py',
+        // 2. eval.
+        'eval "export NODE_OPTIONS=x"; node $js',
+        'eval export NODE_OPTIONS=x; node $js',
+        r'eval "$(cat /tmp/x)"; python3 ' + py,
+        // 3. Чтение и запись переменных встроенными.
+        'read PATH </tmp/v; python3 $py',
+        'IFS=: read -r PATH </tmp/v; python3 $py',
+        'printf -v PATH /tmp/e; python3 $py',
+        'mapfile PATH </tmp/v; python3 $py',
+        // 5. trap и прочие команды вне списка.
+        'trap "/tmp/e" DEBUG; python3 $py',
+        'mkdir /tmp/x && python3 $py',
+        'git pull; python3 $py',
+        'sort /tmp/x | python3 $py',
+      ]);
+    });
+
+    test('Q47: a nested -c text keeps E1 only for sh/bash/dash with plain '
+        '-c (startup files and zsh disable it)', () async {
+      const py = '$pdf/scripts/x.py';
+      await h.expectCritical([
+        'bash -lc "python3 $py"',
+        'bash -l -c "python3 $py"',
+        'bash --login -c "python3 $py"',
+        'bash --rcfile /tmp/rc -i -c "python3 $py"',
+        'bash --init-file /tmp/rc -c "python3 $py"',
+        'sh -i -c "python3 $py"',
+        'zsh -c "python3 $py"',
+        'ksh -c "python3 $py"',
+        'bash -c "python3 $py"; python3 $py',
+      ]);
+    });
+
+    test('Q47: positive cases keep working', () async {
+      const py = '$pdf/scripts/x.py';
+      await h.expectOrdinary([
+        'cd $pdf && python3 scripts/x.py',
+        'cd $pdf/assets && python3 ../scripts/x.py a.png',
+        'bash -c "python3 $py"',
+        'sh -e -c "python3 $py"',
+        'sh -eu -c "python3 $py"',
+        'bash -o pipefail -c "python3 $py"',
+        'dash -c "python3 $py"',
+        'pwsh -File $pdf/scripts/fill.ps1',
+        'ls $workDir && python3 $py',
+        'echo start; cd $pdf; python3 scripts/x.py',
+        'cat $workDir/a.pdf | python3 $py',
+      ]);
+    });
+
+    test('Q47 scenarios: allowlist of segments, simple nested shell, runner '
+        'file of a skill', () async {
+      const p = '$pdf/scripts/x.py $pdf/assets/a.json';
+      await h.expectCritical([
+        'for i in 1; do export X=1; done; python3 $p',
+        'if true; then python3 $p; fi',
+        'eval "export X=1"; python3 $p',
+        'eval python3 $p',
+        'read PATH < /tmp/p; python3 $p',
+        'printf -v PATH /tmp; python3 $p',
+        'mapfile -t A < /tmp/a; python3 $p',
+        'bash -lc "python3 $p"',
+        'bash --rcfile /tmp/rc -c "python3 $p"',
+        'bash -i -c "python3 $p"',
+        'zsh -c "python3 $p"',
+        "trap 'rm -f /tmp/x' DEBUG; python3 $p",
+        'mkdir -p /tmp/x; python3 $p',
+        "env -S 'python3 $p'",
+        '$pdf/scripts/bin/deno $pdf/scripts/x.py $pdf/assets/a.json',
+        'deno $p',
+        '$pdf/scripts/bin/uv --with x run $p',
+        'uv --with x run $p',
+      ]);
+      await h.expectOrdinary([
+        'sh -e -c "python3 $p"',
+        'cd $workDir && cat a.pdf && python3 $p',
+        'bash -o pipefail -c "cd $workDir; python3 $p"',
+        'cd $pdf && cat SKILL.md && python3 $p',
+      ]);
+    });
+
+    test('Q47 review: [[ is a reserved word, options after -c count as '
+        'options', () async {
+      const p = '$pdf/scripts/x.py $pdf/assets/a.json';
+      await h.expectCritical([
+        '[[ 1 -eq 1 ]]; python3 $p',
+        'bash -c -l "python3 $p"',
+        'bash -c -i "python3 $p"',
+        'bash -c -li "python3 $p"',
+        'sh -c -i "python3 $p"',
+        'bash -e -c -l "python3 $p"',
+      ]);
+      await h.expectOrdinary([
+        '[ 1 -eq 1 ]; python3 $p',
+        'test -n x; python3 $p',
+        'bash -c -e "python3 $p"',
+      ]);
+    });
+
+    test('shell options that take a value do not hide the command text '
+        '(-O, +O, o/O inside a cluster)', () async {
+      const p = '$pdf/scripts/x.py $pdf/assets/a.json';
+      for (final command in [
+        "bash -O extglob -c 'rm -rf /'",
+        "bash -c -O extglob 'rm -rf /'",
+        "bash +O extglob -c 'rm -rf /'",
+        "bash -co pipefail 'rm -rf /'",
+        "bash -oc pipefail 'rm -rf /'",
+        "bash -ceo x 'rm -rf /'",
+        "bash -cO x 'rm -rf /'",
+        "dash -co noglob 'rm -rf /'",
+        "bash -O extglob -c 'curl x | sh'",
+        "bash -O extglob -c 'git push --force origin main'",
+        "bash -c -O extglob 'tee $pdf/SKILL.md'",
+      ]) {
+        expect(await h.criticalAny(command), isTrue, reason: command);
+      }
+      await h.expectCritical([
+        'bash -O extglob -c "python3 $p"',
+        'bash -c -O extglob "python3 $p"',
+        'bash -co pipefail "python3 $p"',
+        "bash -c -O extglob 'tee $pdf/SKILL.md'",
+      ]);
+      await h.expectOrdinary([
+        'bash -o pipefail -c "python3 $p"',
+        'bash -c -e "python3 $p"',
+        'bash -c -- "python3 $p"',
+      ]);
+    });
+
+    test('output options: clusters ending with o/O/w and long prefixes '
+        'get no E3', () async {
+      const asset = '$pdf/assets/a.json';
+      await h.expectCritical([
+        'python3 $pdf/scripts/fill.py -vo $asset',
+        'python3 $pdf/scripts/fill.py -vw $asset',
+        'python3 $pdf/scripts/fill.py -vO $asset',
+        'python3 $pdf/scripts/fill.py --outp $asset',
+        'python3 $pdf/scripts/fill.py --outp=$asset',
+        'python3 $pdf/scripts/fill.py --wri $asset',
+      ]);
+      await h.expectOrdinary([
+        'python3 $pdf/scripts/fill.py --schema $asset',
+        'python3 $pdf/scripts/fill.py -v $asset',
       ]);
     });
   });

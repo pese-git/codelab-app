@@ -107,6 +107,8 @@ final class ShellSegment {
     this.launcherDir,
     this.launcherOutputs = const [],
     this.riskyEnvironment = false,
+    this.launcherWords = const [],
+    this.commandTextIndex,
   });
 
   /// Слова без кавычек, начиная с имени команды; пустой список у сегмента
@@ -137,6 +139,18 @@ final class ShellSegment {
   /// неизвестен: `GIT_CONFIG_*`, `GIT_EXEC_PATH`, `GIT_DIR`, `GIT_WORK_TREE`.
   /// Правила PERM-11 считают такой сегмент критичным всегда (fail closed).
   final bool riskyEnvironment;
+
+  /// Слова, снятые с начала сегмента: присваивания (`NAME=… cmd`), `env` с
+  /// его опциями и присваиваниями, `sudo`, `time` и прочие лаунчеры (§7.6,
+  /// правило 5). Непусто ⇒ команда запущена не напрямую; исключения E1
+  /// навыков (D9, Q37) в этом случае не действуют (fail closed).
+  final List<String> launcherWords;
+
+  /// Индекс слова в [words], которое `sh -c CMD` исполняет как текст команды
+  /// (`null` — не shell или первым идёт файл скрипта). Остальные слова после
+  /// него — обычные аргументы (`$0`, `$1`), и путь среди них проверяется как
+  /// путь (PERM-11: `bash -c 'rm "$0"' <путь с пробелом>`).
+  final int? commandTextIndex;
 
   /// Базовое имя команды (`/bin/rm` → `rm`) или `null` без слов.
   String? get commandName => words.isEmpty ? null : baseName(words.first);
@@ -219,7 +233,6 @@ const shellNames = {'sh', 'bash', 'zsh', 'dash', 'ksh'};
 
 final _assignment = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*=');
 final _redirect = RegExp(r'(\d*)(&>>|&>|>>|>\||>&|>|<<<|<<-|<<|<>|<&|<)');
-final _shellCommandFlag = RegExp(r'^-[A-Za-z]*c[A-Za-z]*$');
 
 /// Слово до снятия кавычек вместе с вложенными командами из него.
 final class _Word {
@@ -820,6 +833,11 @@ final class _ScriptBuilder {
       launcherDir: launcherDir,
       launcherOutputs: List.unmodifiable(launcherOutputs),
       riskyEnvironment: risky,
+      launcherWords: List.unmodifiable(prefix),
+      commandTextIndex:
+          words.isNotEmpty && shellNames.contains(baseName(words.first))
+          ? _shellCommandIndex(words)
+          : null,
     );
   }
 }
@@ -863,19 +881,66 @@ final class _ScriptBuilder {
   return (dir: dir, outputs: outputs);
 }
 
+/// Длинные опции bash без значения (разбор `_shellCommandIndex`). Список —
+/// по bash(1), раздел INVOCATION, описан своими словами, текст не копируется;
+/// с
+/// значением — [_shellLongWithValue]. Остальные длинные опции неоднозначны:
+/// команда неразбираема (fail closed).
+const _shellLongPlain = {
+  '--login',
+  '--noprofile',
+  '--norc',
+  '--posix',
+  '--restricted',
+  '--verbose',
+  '--debugger',
+  '--noediting',
+  '--version',
+  '--help',
+  '--dump-strings',
+  '--dump-po-strings',
+  '--pretty-print',
+};
+const _shellLongWithValue = {'--rcfile', '--init-file'};
+
 /// Индекс строки команды у `sh -c CMD` (в том числе `-lc`, `-ec`): `null`,
 /// если первым позиционным словом идёт файл скрипта.
+///
+/// Источник правил разбора — bash(1), раздел INVOCATION, и dash(1); описано
+/// своими словами. Разбор повторяет порядок bash/dash: однобуквенные опции допустимы и после
+/// `-c` (`bash -c -l CMD`); текст команды — первое слово, не являющееся
+/// опцией или её значением, если `-c` был. Значение забирают `-o`/`+o`,
+/// `-O`/`+O` и каждая буква `o`/`O` в кластере по одному слову по порядку
+/// (`-co pipefail CMD`, `-ceo x CMD`), `--rcfile` и `--init-file`. Неизвестная
+/// длинная опция — [ShellParseException] (fail closed): иначе значение опции
+/// принималось бы за текст и вложенная команда не проверялась бы (PERM-11).
 int? _shellCommandIndex(List<String> words) {
+  var hasC = false;
   for (var i = 1; i < words.length; i++) {
     final w = words[i];
-    if (w == '--' || !(w.startsWith('-') || w.startsWith('+'))) {
-      return null;
+    if (w == '--' || w == '-') {
+      return hasC && i + 1 < words.length ? i + 1 : null;
     }
-    if (_shellCommandFlag.hasMatch(w)) {
-      return i + 1 < words.length ? i + 1 : null;
+    if (!(w.startsWith('-') || w.startsWith('+'))) {
+      return hasC ? i : null;
     }
-    if (w == '-o' || w == '+o' || w == '--rcfile' || w == '--init-file') {
-      i++;
+    if (w.startsWith('--')) {
+      if (_shellLongWithValue.contains(w)) {
+        i++;
+      } else if (!_shellLongPlain.contains(w)) {
+        throw const ShellParseException('unknown shell long option');
+      }
+      continue;
+    }
+    if (!RegExp(r'^[-+][A-Za-z]+$').hasMatch(w)) {
+      throw const ShellParseException('unknown shell option');
+    }
+    for (final letter in w.substring(1).split('')) {
+      if (letter == 'c' && w.startsWith('-')) {
+        hasC = true;
+      } else if (letter == 'o' || letter == 'O') {
+        i++;
+      }
     }
   }
   return null;
