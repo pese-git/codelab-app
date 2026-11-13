@@ -25,16 +25,22 @@ abstract base class _TaskTool extends AgentTool {
   @override
   ToolKind get kind => ToolKind.think;
 
-  /// Вызовы списка идут строго по одному, в порядке ответа модели.
+  /// Режим исполнения не переопределяется: вызовы `task_*` идут параллельно
+  /// с остальным пакетом (LOOP-4, `agent_loop.dart`, `_runBatch`).
   ///
-  /// Почему: клиент привязывает `plan` к вызову по
-  /// `plan._meta.codelab.taskChange.toolCallId` (D35), а не по статусу.
-  /// Последовательный режим сериализует проверки операций (цикл, лимит видят
-  /// состояние после предыдущей) и держит `TaskListChanged` между началом
-  /// вызова и его `ToolCallFinished` (TSK-1). Один такой вызов переводит весь
-  /// пакет в последовательный режим цикла (`agent_loop.dart`, `_runBatch`).
+  /// Почему parallel безопасен: операции сериализует замок
+  /// `SessionTaskList._locked` (проверки цикла и лимита видят состояние после
+  /// предыдущей операции), `TaskListChanged` публикуется под замком и
+  /// ждётся внутри `execute`, то есть раньше `ToolCallFinished` своего вызова
+  /// (TSK-1), а клиент привязывает `plan` к вызову по
+  /// `plan._meta.codelab.taskChange.toolCallId` (D35), не по порядку событий.
+  ///
+  /// Что теряется: глобальный порядок вызовов и порядок выдачи id внутри
+  /// пакета — он зависит от порядка захвата замка и недетерминирован; хук
+  /// `beforeToolCall` срабатывает не сразу после `ToolCallStarted` своего
+  /// вызова, а после announce всего пакета.
   @override
-  ToolExecutionMode? get executionMode => ToolExecutionMode.sequential;
+  ToolExecutionMode? get executionMode => null;
 
   @override
   ContentTrust outputTrust(Map<String, Object?> args) => ContentTrust.trusted;
