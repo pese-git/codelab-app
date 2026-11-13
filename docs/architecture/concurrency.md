@@ -878,7 +878,7 @@ Shell, вернувшийся из асинхронного старта пос�
 
 Опираться только на `dispose containers` терминал не может: при штатном завершении app (macOS `terminate:`) дерево виджетов не размонтируется, и `AppScope.dispose` не выполняется. Dart VM при остановке движка ждёт все isolate, а isolate `pty2` каждого живого shell стоит в блокирующем FFI `waitpid` — без `closeAll()` в `onExitRequested` выход зависает (решение пользователя 2026-11-12; change, D4, D15 п. 9). Тот же вывод для любого будущего isolate с блокирующим FFI-вызовом: его владелец обязан снять блокировку до `AppExitResponse.exit`, `Isolate.kill` её не прерывает.
 
-По той же причине (`dispose containers` при штатном выходе не выполняется) обработчик выхода закрывает не только терминал, а весь `CodeLabRootLifecycle.dispose()` — иначе процессы ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента остаются сиротами (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/add-client-process-shutdown-on-exit/design.md), D1, D2):
+По той же причине (`dispose containers` при штатном выходе не выполняется) обработчик выхода закрывает не только терминал, а весь `CodeLabRootLifecycle.dispose()` — иначе процессы ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента остаются сиротами (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D1, D2):
 
 ```text
 exit requested ─────────────────────────────── app.exit_requested
@@ -913,7 +913,7 @@ AppExitResponse.exit
 
 Такой behavior должен быть централизован.
 
-Политика CodeLab desktop (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/add-client-process-shutdown-on-exit/design.md), D2–D4):
+Политика CodeLab desktop (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D2–D4):
 
 * общий предел выхода — 5 с от запроса ОС, держит его один владелец — `AppExitHandler`; по истечении ответ всё равно `exit`, отмены выхода нет;
 * второго реестра процессов для «добить оставшихся» нет: каждый владелец сам эскалирует до принудительного завершения в пределах своего бюджета, а бюджеты подобраны так, чтобы уложиться в общий предел. Это работает, только если шаг, посылающий сигналы, начинается рано: шаг, не начатый к пределу, не послал ничего. Поэтому шаги с сигналами не ставятся в очередь за долгими шагами без сигналов (встроенный агент), а `pending` в `app.exit_timeout` перечисляет и не начатые шаги (D10, D11 change) (`StdioAcpTransport.close`: `timeout` → `SIGTERM` → 2 с → `SIGKILL`; `IoTerminalProcessRunner.kill()`: `SIGTERM` → 2 с → `SIGKILL`; терминал пользователя: `hangUp` → 3 с → `kill`; `exec` агента: `terminateTree`, 2 с);

@@ -406,7 +406,7 @@ force kill
 
 Application lifecycle должен определять, когда используется каждый вариант.
 
-В CodeLab: graceful shutdown — закрытие stdin (stdio-агент, MCP stdio) или `hangUp` (терминал пользователя); terminate — `SIGTERM`; force kill — `SIGKILL` по истечении grace владельца (2 с у `terminal/*`, stdio-агента после `SIGTERM` и `exec` агента; 3 с у терминала пользователя). Ожидание выхода процесса без предела запрещено (`concurrency.md` §46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/add-client-process-shutdown-on-exit/design.md), D3, D4).
+В CodeLab: graceful shutdown — закрытие stdin (stdio-агент, MCP stdio) или `hangUp` (терминал пользователя); terminate — `SIGTERM`; force kill — `SIGKILL` по истечении grace владельца (2 с у `terminal/*`, stdio-агента после `SIGTERM` и `exec` агента; 3 с у терминала пользователя). Ожидание выхода процесса без предела запрещено (`concurrency.md` §46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D3, D4).
 
 ---
 
@@ -418,7 +418,7 @@ Shutdown flow должен включать cleanup process resources.
 
 Терминал пользователя (панель Terminal, change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D4) закрывает свои shell при выходе из app явно: `SIGHUP`, затем принудительное завершение по таймауту. Страховка на случай краха или убийства app — сам PTY: при закрытии PTY-мастера ядро шлёт `SIGHUP` сеансу shell. При штатном выходе страховка не срабатывает: `pty2` ждёт код выхода каждого shell блокирующим `waitpid` в отдельном isolate, Dart VM при остановке ждёт этот isolate, а shell ждёт закрытия мастера, который живёт вместе с процессом app. Поэтому явное закрытие при выходе обязательно, без него app зависает (решение пользователя 2026-11-12; D4, D15 п. 9 change). Сиротами остаются только задания, которые пользователь намеренно отвязал (`nohup`, `disown`) — это intentional behavior пользователя.
 
-Остальные дочерние процессы клиента — ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента — закрываются тем же обработчиком выхода через `CodeLabRootLifecycle.dispose()`, параллельно с терминалом, с общим пределом 5 с (`concurrency.md` §45–§46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/add-client-process-shutdown-on-exit/design.md)). На EOF stdin при смерти app опираться нельзя: `terminal/*` stdin не читает, команды `exec` и внуки обёрток (`npx`) его не видят. Остаточный риск — потомки `terminal/*` и stdio-агента: сигнал получает только корень (design.md change, Q2), и аварийное завершение app, при котором обработчик не вызывается.
+Остальные дочерние процессы клиента — ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента — закрываются тем же обработчиком выхода через `CodeLabRootLifecycle.dispose()`, параллельно с терминалом, с общим пределом 5 с (`concurrency.md` §45–§46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md)). На EOF stdin при смерти app опираться нельзя: `terminal/*` stdin не читает, команды `exec` и внуки обёрток (`npx`) его не видят. Остаточный риск — потомки `terminal/*` и stdio-агента: сигнал получает только корень (design.md change, Q2), и аварийное завершение app, при котором обработчик не вызывается.
 
 ---
 
@@ -434,7 +434,7 @@ agent process exited unexpectedly
 
 UI не должен анализировать numeric exit codes напрямую.
 
-Код выхода `dart:io` на POSIX для процесса, завершённого сигналом, отрицателен (`-15`, `-9`). Адаптер, который отдаёт статус выхода наружу, переводит его сам. Для ACP `terminal/*` это `exitCode: null` и имя сигнала: схема `TerminalExitStatus` требует `exitCode` ≥ 0. Признак «какой сигнал посылали» статусом выхода не считается: процесс мог выйти сам или обработать `SIGTERM` (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/add-client-process-shutdown-on-exit/design.md), D14).
+Код выхода `dart:io` на POSIX для процесса, завершённого сигналом, отрицателен (`-15`, `-9`). Адаптер, который отдаёт статус выхода наружу, переводит его сам. Для ACP `terminal/*` это `exitCode: null` и имя сигнала: схема `TerminalExitStatus` требует `exitCode` ≥ 0. Признак «какой сигнал посылали» статусом выхода не считается: процесс мог выйти сам или обработать `SIGTERM` (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D14).
 
 ---
 

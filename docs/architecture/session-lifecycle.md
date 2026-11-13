@@ -792,7 +792,7 @@ dispose DI/application resources
 
 Не следует просто уничтожать Flutter tree и надеяться, что process/streams завершатся сами.
 
-В CodeLab desktop дерево при штатном выходе (macOS `terminate:`) вообще не размонтируется, поэтому эту последовательность запускает обработчик `AppLifecycleListener.onExitRequested` — `CodeLabRootLifecycle.dispose()` с общим пределом 5 с; терминал пользователя закрывается параллельно (`concurrency.md` §45–§46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/add-client-process-shutdown-on-exit/design.md)). `session/cancel` перед закрытием не отправляется: агент отменяет ход по закрытию соединения сам (D7 change).
+В CodeLab desktop дерево при штатном выходе (macOS `terminate:`) вообще не размонтируется, поэтому эту последовательность запускает обработчик `AppLifecycleListener.onExitRequested` — `CodeLabRootLifecycle.dispose()` с общим пределом 5 с; терминал пользователя закрывается параллельно (`concurrency.md` §45–§46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md)). `session/cancel` перед закрытием не отправляется: агент отменяет ход по закрытию соединения сам (D7 change).
 
 ---
 
