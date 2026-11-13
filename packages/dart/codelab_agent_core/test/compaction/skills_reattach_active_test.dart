@@ -9,16 +9,15 @@ import 'package:test/test.dart';
 import '../session/journal_lines.dart' as j;
 import '../skills/skills_support.dart';
 
-/// `activeSkills` после сжатия — шаг 2 D15 (`carried`), задача 4.1 change
-/// `add-agent-skills` (agent-skills «Активные навыки», сценарии «Активация
-/// ушла в резюме и приложена», «Приложен усечённым»; D15, D18 «Сжатие в
-/// итерации 3»; решение Q6).
+/// `activeSkills` после сжатия — шаг 2 D15 (`carried`): задачи 4.1 и 4.2
+/// change `add-agent-skills` (agent-skills «Активные навыки», сценарии
+/// «Активация ушла в резюме и приложена», «Приложен усечённым»; D15, D18,
+/// D20; решение Q6).
 ///
-/// Тесты используют только существующую сигнатуру
-/// `activeSkills(snapshot, catalog, settings)` и поле `skills` записи
-/// `compaction`, записанное вручную: файл компилируется, красные тесты
-/// падают по существу — функция пока не читает `last.skills` и не применяет
-/// бюджеты (`settings` в итерации 3 не используется).
+/// Тесты используют сигнатуру `activeSkills(snapshot, catalog, settings)` и
+/// поле `skills` записи `compaction`, записанное вручную, то есть проверяют
+/// функцию отдельно от `compact`: перенос читает `last.skills` и применяет
+/// бюджеты `settings` тем же расчётом, что и проекция (`reattachSkills`).
 ///
 /// Правила: `carried` = записи `last.skills`, приложенные целиком
 /// (`full: true`, `content` — SHA-256 текущего тела снимка) или усечённые
@@ -196,7 +195,7 @@ void main() {
         [('notes', sha(def('notes').body))],
         tail: (parent) => [
           j.user('u3', parent),
-          ...toolLoad('1', 'u3', 'other'),
+          ...toolLoad('9', 'u3', 'other'),
         ],
       );
 
@@ -209,7 +208,7 @@ void main() {
         [('other', sha(def('other').body)), ('notes', sha(def('notes').body))],
         tail: (parent) => [
           j.user('u3', parent),
-          ...toolLoad('1', 'u3', 'notes'),
+          ...toolLoad('9', 'u3', 'notes'),
         ],
       );
 
@@ -221,7 +220,7 @@ void main() {
       final list = active(
         [('big', sha(def('big').body))],
         config: const SkillsConfig(reattachPerSkillTokens: 100),
-        tail: (parent) => [j.user('u3', parent), ...toolLoad('1', 'u3', 'big')],
+        tail: (parent) => [j.user('u3', parent), ...toolLoad('9', 'u3', 'big')],
       );
 
       expect(names(list), ['big']);
