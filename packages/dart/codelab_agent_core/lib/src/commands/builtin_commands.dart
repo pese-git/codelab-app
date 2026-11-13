@@ -25,6 +25,7 @@ import '../config/config_issue.dart';
 import '../mcp/mcp_connector.dart';
 import '../permissions/modes.dart';
 import '../runtime/config_reload.dart';
+import '../skills/skill_commands.dart' show skillCommandPrefix;
 import 'command_line.dart';
 import 'slash_command.dart';
 
@@ -89,10 +90,15 @@ final class BuiltinCall extends BuiltinInvocation {
 
 /// Слово, не являющееся ни командой сессии, ни шаблоном (D4).
 final class UnknownCall extends BuiltinInvocation {
-  const UnknownCall._(this.word);
+  const UnknownCall._(this.word, {this.skillName});
 
   /// Набранное имя без `/`, до обрезки.
   final String word;
+
+  /// Имя после `skill:`, если слово — команда навыка, которой нет или которая
+  /// недоступна пользователю (`Unknown skill`, D18); иначе `null`. Пустое имя
+  /// (`/skill:`) — обычная неизвестная команда.
+  final String? skillName;
 
   /// Размер имени в байтах UTF-8 для лога `command.unknown`: показывает
   /// масштаб ввода, не раскрывая его (D4).
@@ -143,6 +149,8 @@ final class BuiltinCommands {
     required this.workingDirectory,
     required this.commands,
     this.templateNames = const {},
+    this.skillCommandNames = const {},
+    this.skillBranch = false,
   });
 
   /// `AgentRuntime.reloadConfig`; `null` — команда `config` не объявлена.
@@ -208,6 +216,16 @@ final class BuiltinCommands {
   /// Имена шаблонов сессии: слово, совпавшее с шаблоном, не неизвестная
   /// команда, его разворачивает `expandCommand` (D3, шаг 3).
   final Set<String> templateNames;
+
+  /// Имена навыков с командой `skill:<name>`: слово с таким именем не
+  /// неизвестное, его разворачивает сессия (D8, D18).
+  final Set<String> skillCommandNames;
+
+  /// Ветка `skill:` действует: capability `skills` включена и снимок навыков
+  /// не пуст. Иначе `skill:<x>` — обычная неизвестная команда; по снимку, а не
+  /// по списку команд, чтобы сессия только с `user-invocable: false` отвечала
+  /// `Unknown skill` (D18).
+  final bool skillBranch;
 
   /// Объявления для `AgentSession.commands` в порядке §13.4 (D2): `compact`,
   /// `mode`, `model`, `status`, `config`, `mcp`, `help`; отсутствующая
@@ -292,7 +310,20 @@ final class BuiltinCommands {
       _ => null,
     };
     if (name == null) {
-      return templateNames.contains(word) ? null : UnknownCall._(word);
+      if (templateNames.contains(word)) {
+        return null;
+      }
+      // Порядок D8: встроенная → шаблон → `skill:` → неизвестная.
+      if (skillBranch && word.startsWith(skillCommandPrefix)) {
+        final skill = word.substring(skillCommandPrefix.length);
+        if (skillCommandNames.contains(skill)) {
+          return null;
+        }
+        if (skill.isNotEmpty) {
+          return UnknownCall._(word, skillName: skill);
+        }
+      }
+      return UnknownCall._(word);
     }
     // Слова делятся только у объявленной команды: чужой текст не
     // разбирается.
@@ -355,6 +386,9 @@ final class BuiltinCommands {
     required bool Function() cancelled,
     required CancelToken cancel,
   }) async => switch (call) {
+    UnknownCall(:final skillName?) => BuiltinText(
+      'Unknown skill: ${_truncate(skillName)}. Run /help to list commands.',
+    ),
     UnknownCall(:final word) => BuiltinText(
       'Unknown command: /${_truncate(word)}. Run /help to list commands.',
     ),
@@ -454,7 +488,11 @@ final class BuiltinCommands {
       '/${c.name}'
           '${c.inputHint == null ? '' : ' ${c.inputHint}'}'
           ' - ${c.description}'
-          '${c.source == SlashCommandSource.template ? ' (template)' : ''}',
+          '${switch (c.source) {
+            SlashCommandSource.template => ' (template)',
+            SlashCommandSource.skill => ' (skill)',
+            SlashCommandSource.builtin => '',
+          }}',
   ].join('\n');
 
   Future<String> _config(BuiltinCall call) async {

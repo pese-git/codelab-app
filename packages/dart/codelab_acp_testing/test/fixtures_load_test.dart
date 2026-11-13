@@ -110,6 +110,7 @@ const _skillFixtures = {
   'acp/skill-command-listed',
   'acp/skill-invoke',
   'acp/skill-tool-load',
+  'acp/skill-script-exec',
 };
 
 void main() {

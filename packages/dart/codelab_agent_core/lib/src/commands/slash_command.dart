@@ -17,7 +17,12 @@ enum SlashCommandSource {
   /// Встроенная команда сессии (`compact`, `mode`, `model`, `status`,
   /// `config`, `mcp`, `help`; design.md changes `add-config-writer-and-reload`,
   /// D12, и `add-agent-builtin-slash-commands`, D2). Исполняется без модели.
-  builtin('builtin');
+  builtin('builtin'),
+
+  /// Команда навыка `skill:<name>` (design.md change `add-agent-skills`, D8,
+  /// D18; capability `agent-skills`, «Команды навыков»). Тело навыка
+  /// разворачивает рантайм, потому что ему нужен журнал сессии (повтор).
+  skill('skill');
 
   const SlashCommandSource(this.wire);
 

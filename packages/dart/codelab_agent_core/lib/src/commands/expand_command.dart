@@ -1,6 +1,7 @@
 import 'arguments.dart';
 import 'command_line.dart';
 import 'command_template.dart';
+import '../skills/skill_commands.dart' show skillCommandPrefix;
 import 'slash_command.dart';
 
 /// Исходная команда сообщения: что пользователь набрал до разворачивания
@@ -56,8 +57,14 @@ final class CommandRef {
   /// Неизвестные поля объекта `command` журнала: пишутся обратно.
   final Map<String, Object?> extra;
 
-  /// Текст реплея: `/<name>` или `/<name> <args>`.
-  String get displayText => args.isEmpty ? '/$name' : '/$name $args';
+  /// Текст реплея: `/<name>` или `/<name> <args>`; у навыка — с префиксом
+  /// `skill:` (`name` в журнале хранится без него, D18).
+  String get displayText {
+    final word = source == SlashCommandSource.skill.wire
+        ? '$skillCommandPrefix$name'
+        : name;
+    return args.isEmpty ? '/$word' : '/$word $args';
+  }
 
   Map<String, Object?> toJson() => {
     'source': source,

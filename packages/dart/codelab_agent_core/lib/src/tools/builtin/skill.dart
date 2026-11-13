@@ -1,7 +1,9 @@
 import '../../llm/messages.dart';
 import '../../loop/agent_events.dart';
 import '../../prompts/prompts.g.dart';
+import '../../skills/active_skills.dart' show ActiveSkill;
 import '../../skills/skill_block.dart';
+import '../../skills/skill_invocation.dart';
 import '../../skills/skill_catalog.dart';
 import '../../util/logger.dart';
 import '../agent_tool.dart';
@@ -21,7 +23,13 @@ import 'common.dart';
 /// `enum` схемы — имена `modelVisible`; имя вне `enum` обычно отсекает
 /// исполнитель по схеме, а `Unknown skill` — защита для прямого вызова.
 final class SkillTool extends AgentTool {
-  SkillTool(this.catalog, {this.sessionId});
+  SkillTool(this.catalog, {this.sessionId, this.activeSkills});
+
+  /// Активные навыки на момент вызова (D18): рантайм передаёт
+  /// `() => activeSkills(<снимок журнала сессии>, catalog, settings)`.
+  /// Навык с `full: true` не вставляется второй раз — модель получает строку
+  /// повтора (D7, Q10). Без функции (голый инструмент в тестах) повтора нет.
+  final List<ActiveSkill> Function()? activeSkills;
 
   /// Неизменяемый снимок каталога сессии (SKL-4).
   final SkillCatalog catalog;
@@ -98,6 +106,9 @@ final class SkillTool extends AgentTool {
       final names = [for (final s in catalog.modelVisible) s.name].join(', ');
       return errorResult('Unknown skill: $shown. Available skills: $names.');
     }
+    final repeated =
+        activeSkills?.call().any((a) => a.name == skill.name && a.full) ??
+        false;
     // В лог идут имя и способ активации; тело, описание и файлы — нет (D9).
     ctx.services.logger.log(
       LogLevel.info,
@@ -106,9 +117,13 @@ final class SkillTool extends AgentTool {
         'session_id': sessionId?.value,
         'name': skill.name,
         'via': 'tool',
-        'repeated': false,
+        'repeated': repeated,
       },
     );
-    return ToolExecutionResult([TextContent(renderSkillBlock(skill))]);
+    return ToolExecutionResult([
+      TextContent(
+        repeated ? skillToolRepeatText(skill.name) : renderSkillBlock(skill),
+      ),
+    ]);
   }
 }

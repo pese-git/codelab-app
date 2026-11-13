@@ -9,6 +9,7 @@ import '../agents/agent_definition.dart';
 import '../cancel/cancel_token.dart';
 import '../commands/builtin_commands.dart';
 import '../commands/command_template.dart';
+import '../commands/command_line.dart';
 import '../commands/expand_command.dart';
 import '../commands/slash_command.dart';
 import '../compaction/compactor.dart';
@@ -42,7 +43,10 @@ import '../permissions/modes.dart';
 import '../permissions/policy.dart';
 import '../project/project_context.dart';
 import '../project/project_files.dart';
+import '../skills/active_skills.dart' as active;
 import '../skills/catalog_entries.dart';
+import '../skills/skill_commands.dart';
+import '../skills/skill_invocation.dart';
 import '../skills/skill_catalog.dart';
 import '../skills/skill_files.dart';
 import '../skills/skills_config.dart' show defaultSkillsCatalogMaxChars;
@@ -1320,11 +1324,21 @@ final class AgentRuntimeImpl implements AgentRuntime {
       readOnlyFs: hostFiles,
       execInReadOnlyRoots: execOnHost,
     );
+    // Сессия создаётся после агента, а аварийное сжатие — её метод; инструмент
+    // `skill` тоже читает журнал сессии лениво, при вызове (D18).
+    late final _Session session;
     // Инструменты сессии, зависящие от снимка (D17). `register` заменяет
     // одноимённый инструмент на месте, порядок схем (кэш промпта) прежний;
     // инструмент хоста другого типа с тем же именем не заменяется.
     if (skills.modelVisible.isNotEmpty) {
-      sessionRegistry.register(SkillTool(skills, sessionId: id));
+      // Повтор активации: функция читает журнал сессии на момент вызова (D18).
+      sessionRegistry.register(
+        SkillTool(
+          skills,
+          sessionId: id,
+          activeSkills: () => session._activeSkills(),
+        ),
+      );
     }
     if (skills.skills.isNotEmpty &&
         sessionRegistry.lookup('read') is ReadTool) {
@@ -1383,8 +1397,6 @@ final class AgentRuntimeImpl implements AgentRuntime {
       },
     );
     final compaction = profile.isOn(HostCapability.compaction);
-    // Сессия создаётся после агента, а аварийное сжатие — её метод.
-    late final _Session session;
     final agent = Agent(
       config: AgentLoopConfig(
         sessionId: id,
@@ -2489,6 +2501,7 @@ final class _Session implements AgentSession {
            mcp: mcpCommand,
          ),
          ...availableCommands(templates),
+         ...skillSlashCommands(skills),
        ]),
        _titled = _hasTitle(snapshot) {
     _writer = SessionWriter(
@@ -2524,6 +2537,8 @@ final class _Session implements AgentSession {
       configStatus: configStatus,
       compactNow: _compactionOn ? _compactNow : null,
       templateNames: {for (final t in _templates) t.name},
+      skillCommandNames: {for (final s in skills.commands) s.name},
+      skillBranch: skills.skills.isNotEmpty,
       mcpDeclared: mcpCommand,
       currentMode: () => _mode,
       setMode: setMode,
@@ -3041,11 +3056,16 @@ final class _Session implements AgentSession {
         ),
       );
       switch (call) {
-        case UnknownCall(:final nameBytes):
+        case UnknownCall(:final nameBytes, :final skillName):
           _logger.log(
             LogLevel.info,
             'command.unknown',
-            fields: {'session_id': id.value, 'name_bytes': nameBytes},
+            fields: {
+              'session_id': id.value,
+              'name_bytes': nameBytes,
+              // Слово неизвестного навыка в лог не идёт, только размер (D18).
+              if (skillName != null) 'source': 'skill',
+            },
           );
         case BuiltinCall():
           _logger.log(
@@ -3166,6 +3186,18 @@ final class _Session implements AgentSession {
   /// аргументы: пользователь мог вставить туда секрет (D14, §16).
   UserMessage _expandCommand(List<ContentBlock> content) {
     final index = content.indexWhere((block) => block is TextContent);
+    if (index >= 0) {
+      final typed = (content[index] as TextContent).text;
+      if (_expandSkill(typed) case final expanded?) {
+        final message = UserMessage([
+          TextContent(expanded.text),
+          for (final (i, block) in content.indexed)
+            if (i != index) block,
+        ], timestamp: _services.clock.now());
+        _writer.noteCommand(message, expanded.command);
+        return message;
+      }
+    }
     if (index >= 0 && _templates.isNotEmpty) {
       final typed = (content[index] as TextContent).text;
       if (expandCommand(typed, _templates) case Expanded(
@@ -3192,6 +3224,64 @@ final class _Session implements AgentSession {
       }
     }
     return UserMessage(content, timestamp: _services.clock.now());
+  }
+
+  /// Активные навыки по журналу сессии на этот момент (D15, D18): ими
+  /// пользуются инструмент `skill` и команда `/skill:` для повтора.
+  List<active.ActiveSkill> _activeSkills() =>
+      active.activeSkills(_writer.snapshot, skills, _settingsOf().skills);
+
+  /// Разворачивает `/skill:<name> <args>` (design.md change
+  /// `add-agent-skills`, D8, D18; agent-skills «Команды навыков»,
+  /// «Повторная активация»).
+  ///
+  /// Порядок разбора: встроенная и шаблон проверены раньше (`match`,
+  /// `expandCommand`), здесь остаётся слово `skill:<name>` существующего
+  /// навыка с `user-invocable`; остальное `match` уже ответил как неизвестное.
+  /// Если навык активен и содержимое совпало — вместо блока короткая строка
+  /// повтора. В лог идут имя, способ и размер ввода; тело и аргументы — нет
+  /// (D13, §16).
+  ({String text, CommandRef command})? _expandSkill(String typed) {
+    final line = parseCommandLine(typed);
+    if (line == null || !line.word.startsWith(skillCommandPrefix)) {
+      return null;
+    }
+    final skill = skills.skill(line.word.substring(skillCommandPrefix.length));
+    if (skill == null || !skill.userInvocable) {
+      return null;
+    }
+    final invocation = invokeSkill(skill, line.raw);
+    final repeated = _activeSkills().any(
+      (a) => a.name == skill.name && a.full && a.content == invocation.content,
+    );
+    _logger.log(
+      LogLevel.info,
+      'skill.activated',
+      fields: {
+        'session_id': id.value,
+        'name': skill.name,
+        'via': 'command',
+        'repeated': repeated,
+      },
+    );
+    _logger.log(
+      LogLevel.info,
+      'command.expanded',
+      fields: {
+        'session_id': id.value,
+        'name': skill.name,
+        'source': SlashCommandSource.skill.wire,
+        'args_bytes': utf8.encode(line.raw).length,
+      },
+    );
+    return (
+      text: repeated ? invocation.repeat : invocation.full,
+      command: CommandRef(
+        source: SlashCommandSource.skill.wire,
+        name: skill.name,
+        args: line.raw,
+      ),
+    );
   }
 
   @override
