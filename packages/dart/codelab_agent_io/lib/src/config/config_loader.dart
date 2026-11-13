@@ -129,6 +129,14 @@ bool _isUnsetVariable(ConfigIssue issue) => issue.event == unsetVariableEvent;
 ///
 /// Пустое значение считается отсутствующим: тильда с пустым `HOME` не должна
 /// превращаться в корень (`/x`), поэтому без домашнего каталога раскрытия нет.
+///
+/// Для чего: единственный источник домашнего каталога процесса для корней
+/// навыков и PERM-11. Как использовать: хост берёт результат из того же
+/// словаря окружения, что передаёт в `agentConfigPathsFor`, и отдаёт его в
+/// `ProjectFilesLoader(userHome:)` — тогда корни загрузки навыков и пути
+/// защиты PERM-11 не расходятся (design.md change `add-agent-skills`, D9,
+/// D19). `Platform.environment` напрямую хосты не читают: тест подставляет
+/// временный каталог словарём.
 String? userHomeOf(Map<String, String> environment) {
   for (final name in const ['HOME', 'USERPROFILE']) {
     final value = environment[name];

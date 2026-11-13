@@ -298,6 +298,15 @@ final class AgentHost {
             clock: clock,
             logger: logger,
           );
+    final ProjectFilesLoader? projectLoader = stdio
+        ? ProjectFilesLoader(
+            home: options.llmScript == null ? options.codelabHome : null,
+            userHome: options.llmScript == null
+                ? userHomeOf(options.environment)
+                : null,
+            local: localEnv,
+          )
+        : null;
     final BuiltAgentCore core;
     try {
       core = buildAgentCore(
@@ -330,6 +339,9 @@ final class AgentHost {
                   cwd: root,
                   environment: options.environment,
                   extraConfig: options.configPath,
+                  // Абсолютные и `~`-элементы `skills.extra_roots` корня
+                  // запуска — пути хоста PERM-11 (D19, `skillExtraRoots`).
+                  skillExtraRoots: config.skills.extraRoots,
                 ),
           // Память последней явно выбранной модели (design.md change
           // `optional-default-model`, D8): файл под `$CODELAB_HOME`. Сценарий
@@ -341,17 +353,22 @@ final class AgentHost {
                   codelabHome: options.codelabHome,
                   logger: logger,
                 ),
-          // Файлы проекта сессии: `AGENTS.md`/`CLAUDE.md` в системный промпт.
+          // Файлы проекта и навыки сессии: один загрузчик на два порта
+          // (agent-project-context «Один загрузчик для двух портов»).
           // Читаются с локальной ФС процесса только по stdio: по WebSocket
-          // загрузчик не передаётся (D2). Сценарий `--llm-script` не трогает `$CODELAB_HOME`
-          // (`home: null`) и читает только контекст проекта: так прогон
-          // детерминирован и не зависит от файлов разработчика (D16).
-          projectFiles: stdio
-              ? ProjectFilesLoader(
-                  home: options.llmScript == null ? options.codelabHome : null,
-                  local: localEnv,
-                )
-              : null,
+          // ни загрузчика, ни `hostFiles` нет (D2; design.md change
+          // `add-agent-skills`, D3, D19 — у хоста по сети нет доступа к своей
+          // ФС в обход `BoundedEnv`). Сценарий `--llm-script` не трогает
+          // `$CODELAB_HOME` и `~/.agents` (`home` и `userHome` — `null`) и
+          // читает контекст и навыки проекта (навыки — только доверенного
+          // проекта, как везде) и абсолютные `skills.extra_roots` из
+          // `--config`: так прогон детерминирован и не зависит от файлов
+          // разработчика (D16).
+          projectFiles: projectLoader,
+          skillFiles: projectLoader,
+          // Корни только для чтения навыков вне рабочей папки читает ФС
+          // процесса агента (D5, D17, D19).
+          hostFiles: stdio ? localEnv : null,
           // MCP-серверы сессии: процессы stdio запускает `codelab_agent_io`,
           // streamable HTTP — `codelab_agent_mcp` на HTTP-клиенте хоста;
           // закрываются они вместе с сессией (design.md change

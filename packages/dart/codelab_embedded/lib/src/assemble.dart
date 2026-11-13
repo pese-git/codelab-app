@@ -80,6 +80,8 @@ Future<EmbeddedAgent> assembleEmbeddedAgent({
       secrets: services.secrets,
       mcp: services.mcp,
       projectFiles: services.projectFiles,
+      skillFiles: services.skillFiles,
+      hostFiles: services.hostFiles,
       agentConfigPaths: services.agentConfigPaths,
       lastModel: services.lastModel,
       config: services.configSource,

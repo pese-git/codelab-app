@@ -54,6 +54,8 @@ final class EmbeddedHostServices {
     this.closeHttpOnDispose = false,
     this.mcp,
     this.projectFiles,
+    this.skillFiles,
+    this.hostFiles,
     this.agentConfigPaths,
     this.lastModel,
     this.configSource,
@@ -90,6 +92,17 @@ final class EmbeddedHostServices {
 
   final McpConnector? mcp;
   final ProjectFilesSource? projectFiles;
+
+  /// Порт файлов навыков (design.md change `add-agent-skills`, D1, D19).
+  /// Открыватели кладут тот же `ProjectFilesLoader`, что в [projectFiles];
+  /// `null` — навыков нет (web, тесты). Тип из ядра: основной барель остаётся
+  /// web-безопасным.
+  final SkillFilesSource? skillFiles;
+
+  /// Файловая система процесса агента для корней только для чтения (каталоги
+  /// навыков вне рабочей папки; D5, D17, D19). `null` — корней нет.
+  /// `execOnHost` не нужен: `AcpAgentServer` ставит его сам при `localEnv`.
+  final ExecutionEnv? hostFiles;
 
   /// Пути конфигурации агента для PERM-11 (design.md change
   /// `add-config-writer-and-reload`, D8): открыватель настольных хостов

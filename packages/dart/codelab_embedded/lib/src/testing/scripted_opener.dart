@@ -85,6 +85,7 @@ EmbeddedAgentOpener scriptedEmbeddedAgentOpener({
       throw EmbeddedAgentConfigException(loaded.issues, home: codelabHome);
     }
     final env = LocalExecutionEnv(cwd: cwd);
+    final loader = ProjectFilesLoader(home: null, userHome: null, local: env);
     // Сети у сценария нет: запрос к провайдеру — ошибка теста. Тот же клиент
     // стоит под HTTP-транспортом MCP.
     final http = MockClient(
@@ -130,7 +131,12 @@ EmbeddedAgentOpener scriptedEmbeddedAgentOpener({
         platform: Platform.operatingSystem,
         // Как у бинаря со сценарием: контекст проекта читается, а
         // `$CODELAB_HOME` — нет, прогон не зависит от файлов разработчика.
-        projectFiles: ProjectFilesLoader(home: null, local: env),
+        projectFiles: loader,
+        // Навыки подключены как у `--llm-script` (D19): без пользовательского
+        // уровня. Конфигурацию с `extra_roots` и `trusted_projects` этому
+        // открывателю не задать, поэтому навыков он фактически не видит.
+        skillFiles: loader,
+        hostFiles: env,
       ),
       models: FixedModelCatalog(script.models),
       streamFunction: script.function.call,
