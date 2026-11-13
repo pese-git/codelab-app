@@ -151,11 +151,12 @@ void main() {
     expect(result, isNot(contains('_meta')));
   });
 
-  // «Клиент CodeLab объявил расширения»: блок идёт только по объявлению
-  // клиента. Субагентов в базовой сборке ядра ещё нет (итерация 2), поэтому
-  // здесь — только `tasks`; ключи `subagents`/`subagentToolCalls` и
-  // `maxDepth` проверяет фикстура `acp/initialize-codelab-extensions`.
-  test('an empty client _meta.codelab gets the tasks declaration', () async {
+  // «Клиент CodeLab объявил расширения, субагенты включены (итерация 2)»:
+  // блок идёт только по объявлению клиента; субагенты включены по умолчанию
+  // (`subagents.enabled: true`, `max_depth: 3`), поэтому рядом с `tasks`
+  // объявлен `subagents` с `maxDepth` (D9, D37). `subagentToolCalls` в
+  // итерации 2 нет — вызовы потомков адаптер ещё не проецирует (D36, Т12).
+  test('an empty client _meta.codelab gets tasks and subagents', () async {
     h = await ServerHarness.start();
 
     final response = await h.initialize(
@@ -170,12 +171,42 @@ void main() {
         response.resultMap['agentCapabilities']! as Map<String, Object?>;
     expect(caps['_meta'], {
       'codelab': {
+        'subagents': {'version': 1, 'maxDepth': 3},
         'tasks': {'version': 1},
       },
     });
     // Стандартные поля блок не меняет (D9).
     expect(caps['loadSession'], isTrue);
     expect(caps['mcpCapabilities'], {'http': false, 'sse': false});
+  });
+
+  // Состав блока не зависит от того, что объявил клиент (D9): ни объявленный
+  // `subagentToolCalls`, ни версия `subagents` его не расширяют и не
+  // сужают.
+  test('subagentToolCalls is not declared in iteration 2', () async {
+    h = await ServerHarness.start();
+
+    final response = await h.initialize(
+      clientCapabilities: {
+        'terminal': true,
+        '_meta': {
+          'codelab': {
+            'tasks': {'version': 1},
+            'subagents': {'version': 1},
+            'subagentToolCalls': {'version': 1},
+          },
+        },
+      },
+    );
+
+    final caps =
+        response.resultMap['agentCapabilities']! as Map<String, Object?>;
+    expect(caps['_meta'], {
+      'codelab': {
+        'subagents': {'version': 1, 'maxDepth': 3},
+        'tasks': {'version': 1},
+      },
+    });
   });
 
   // «неизвестные ключи и значения в clientCapabilities._meta.codelab SHALL
@@ -201,8 +232,10 @@ void main() {
       expect(response.error, isNull);
       final caps =
           response.resultMap['agentCapabilities']! as Map<String, Object?>;
+      // Блок тот же, что при известном объявлении (итерация 2, D9).
       expect(caps['_meta'], {
         'codelab': {
+          'subagents': {'version': 1, 'maxDepth': 3},
           'tasks': {'version': 1},
         },
       });

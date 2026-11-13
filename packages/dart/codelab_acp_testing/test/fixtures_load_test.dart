@@ -113,15 +113,29 @@ const _skillFixtures = {
   'acp/skill-script-exec',
 };
 
-/// Фикстуры change `add-subagents-and-tasks` итерации 1 (acp-golden-fixtures
+/// Фикстуры change `add-subagents-and-tasks` итераций 1–2 (acp-golden-fixtures
 /// «Фикстуры субагентов и списка задач»). Остальные фикстуры change
-/// (`acp/prompt-subagent-*`, `acp/session-load-subagent-tool-tree`) приходят
-/// с итерациями 2–5 и добавляются сюда вместе с ними.
+/// (`acp/prompt-subagent-permission`, `-nested-permission`, `-tool-tree`,
+/// `acp/session-load-subagent-tool-tree`) приходят с итерациями 3–5 и
+/// добавляются сюда вместе с ними.
 const _tasksFixtures = {
   'acp/initialize-codelab-extensions',
   'acp/prompt-task-plan',
+  'acp/prompt-subagent-tool-call',
   'acp/session-load-legacy-plan',
 };
+
+/// Блок `agentCapabilities._meta.codelab` ответа `initialize` фикстуры.
+Map<Object?, Object?> _agentCodelabBlock(AcpFixture fixture) {
+  final response = fixture.frames
+      .where((f) => f.direction == FrameDirection.a2c)
+      .map((f) => f.frame!)
+      .singleWhere((f) => f['result'] != null);
+  final capabilities =
+      ((response['result'] as Map)['agentCapabilities'] as Map);
+  return ((capabilities['_meta'] as Map)['codelab'] as Map)
+      .cast<Object?, Object?>();
+}
 
 void main() {
   final corpus = loadFixtureCorpus();
@@ -155,6 +169,12 @@ void main() {
       FixtureRole.client,
     });
     expect(roles['acp/session-load-legacy-plan'], {FixtureRole.agent});
+    // Итерация 2 (задача 2.1): вызов `agent` проигрывают обе роли — агент
+    // проецирует его, kit разбирает `_meta.codelab.subagent`.
+    expect(roles['acp/prompt-subagent-tool-call'], {
+      FixtureRole.agent,
+      FixtureRole.client,
+    });
   });
 
   // «acp/initialize-capabilities SHALL остаться вариантом "клиент без _meta"
@@ -183,6 +203,52 @@ void main() {
       byId['acp/initialize-codelab-extensions']!.extensions,
       contains('capabilities'),
     );
+    expect(
+      byId['acp/prompt-subagent-tool-call']!.extensions,
+      contains('subagent'),
+    );
+  });
+
+  // D36 Т12: редакция итерации 2 не объявляет `subagentToolCalls` — агент ещё
+  // не проецирует вызовы потомков; ключ придёт с задачей 5.2.
+  test('initialize-codelab-extensions is the iteration 2 edition', () {
+    final fixture = corpus.singleWhere(
+      (f) => f.id == 'acp/initialize-codelab-extensions',
+    );
+    final block = _agentCodelabBlock(fixture);
+    expect(block, {
+      'subagents': {'version': 1, 'maxDepth': 3},
+      'tasks': {'version': 1},
+    });
+    expect(block, isNot(contains('subagentToolCalls')));
+  });
+
+  // D28, D24: первый `tool_call` вызова `agent` несёт `{id, type}`, финальное
+  // обновление — `summary`; вызовов ребёнка среди кадров нет.
+  test('prompt-subagent-tool-call fixes the subagent _meta and no child '
+      'tool calls', () {
+    final fixture = corpus.singleWhere(
+      (f) => f.id == 'acp/prompt-subagent-tool-call',
+    );
+    final updates = [
+      for (final frame in fixture.frames)
+        if (frame.direction == FrameDirection.a2c && frame.frame != null)
+          if (((frame.frame!['params'] as Map?)?['update']) case final Map u) u,
+    ];
+    final calls = updates.where((u) => u['sessionUpdate'] == 'tool_call');
+    expect(calls.map((u) => u['toolCallId']), ['call_1']);
+    final subagent = ((calls.single['_meta'] as Map)['codelab'] as Map);
+    expect((subagent['subagent'] as Map)['type'], 'explore');
+    final last = updates.lastWhere(
+      (u) => u['sessionUpdate'] == 'tool_call_update' && u['status'] != null,
+    );
+    expect(last['status'], 'completed');
+    final summary =
+        ((((last['_meta'] as Map)['codelab'] as Map)['subagent']
+                as Map)['summary']
+            as Map);
+    expect(summary['toolCalls'], 3);
+    expect(summary['tokens'], {'input': 6000, 'output': 400});
   });
 
   test('the unknown tool kind fixture is played by the client role only', () {
