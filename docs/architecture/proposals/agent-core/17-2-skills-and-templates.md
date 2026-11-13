@@ -472,12 +472,15 @@ expandCommand(text, templates) + ветка skill: (обозначения ал�
                                     // change `add-agent-builtin-slash-commands`), ошибки разбора нет
    body := substituteArguments(t.body, raw, args)
    вернуть Expanded(body, CommandRef(template, t.name, raw))
-5. cmd начинается с "skill:" и skills в плане (change `add-agent-skills`, D8):
+5. cmd начинается с "skill:", имя после префикса не пусто, skills в плане и снимок навыков
+   сессии не пуст (change `add-agent-skills`, D8, D18; иначе — шаг 7):
    s := catalog.skill(cmd без "skill:"); нет или !s.userInvocable →
-        ответ без модели "Unknown skill: <name>. Run /help to list commands."
-   args, body := как в шаге 4 для s.body (та же substituteArguments)
-   s активен и тело совпадает с активным (§17.2.7а) → короткая строка повтора [+ "ARGUMENTS: <raw>"]
-   иначе text := Prompts.skillsInvoked.render(name, block: блок навыка (§17.2.3) с этим телом)
+        ответ без модели "Unknown skill: <name>. Run /help to list commands." (в журнал не пишется)
+   args := как в шаге 4; (body, used) := substitutePlaceholders(s.body, raw, args)   // тот же сканер
+   tail := argumentsTail(raw)        // "" или "\n\nARGUMENTS: " + raw
+   s активен и sha256(body) == content (§17.2.7а) → строка повтора + tail (при непустом raw)
+   иначе text := Prompts.skillsInvoked.render(name, block: блок навыка (§17.2.3) с body)
+               + (used ? "" : tail)                       // хвост — после блока, не внутри <skill>
    вернуть Expanded(text, CommandRef(skill, s.name, raw))
 6. после MVP (E-24): cmd — имя MCP prompt (`<server>:<prompt>`) → NotACommand: его разворачивает
    `AgentSession` через MCP-клиент (§13.6)
@@ -518,6 +521,7 @@ expandCommand(text, templates) + ветка skill: (обозначения ал�
 | `$1` … `$9` | `args[n-1]`; аргумента нет → пустая строка |
 | `$$` | литерал `$` |
 | `\$` | литерал `$` (change `add-agent-skills`, Q7, Q15 (а): оба способа — `\$` и `$$` — в шаблонах и навыках); `\$1` — литерал `$1` |
+| `\\` | оба символа как есть; следующий `$…` разбирается обычным правилом (D18) |
 | `$10` | `$1`, затем литерал `0` (номер — одна цифра) |
 | `$` перед любым другим символом | литерал `$` |
 
@@ -617,9 +621,13 @@ the whole session, including after the conversation history is compacted.
 лимиты и порядок выпадения выбраны по образцу Claude Code (решения пользователя Q6, Q10; design.md
 change `add-agent-skills`, D15).
 
-**Активация** — сообщение пользователя с `command.source == "skill"` или успешный результат `skill`
-с блоком навыка (не строка повтора) на активной ветке. Чтение `SKILL.md` инструментом `read`
-активацией не считается (осознанное решение: сырой файл — данные).
+**Активация** — сообщение пользователя с `command.source == "skill"` (кроме сообщения повтора
+команды) или успешный результат `skill` с блоком навыка (не строка повтора) на активной ветке.
+Имя у результата — аргумент `name` вызова с тем же `toolCallId`; навык, которого нет в каталоге,
+пропускается; запись засчитывается, только если её текст совпадает с тем, что дал бы текущий снимок
+каталога (решение Q48 (б): после правки `SKILL.md` и `session/load` тело вставляется заново);
+`content` — SHA-256 hex (design.md change `add-agent-skills`, D18). Чтение `SKILL.md`
+инструментом `read` активацией не считается (осознанное решение: сырой файл — данные).
 
 ```text
 List<ActiveSkill> activeSkills(SessionSnapshot snapshot, SkillCatalog catalog, SkillsConfig settings)   // от новой к старой
