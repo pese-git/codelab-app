@@ -149,7 +149,7 @@ Usage потомка SHALL входить в usage прямого родител
 
 Ответ, оборванный лимитом ответа модели (`TurnEnded.reason: maxTokens`), SHALL различаться по тексту последнего ответа (решение пользователя 2026-11-15; design.md change `add-subagents-and-tasks`, D41 п. 6):
 - текст пуст после обрезки пробелов → `failed`, `failure: max_tokens`; модель родителя получает `reason="max_tokens"`, тело `Subagent stopped: it hit the output token limit before writing a report.` и `isError: true`;
-- текст не пуст → `completed`; к тексту SHALL дописываться строка `[report truncated: the subagent hit the output token limit]`, обёртка получает `truncated="true"`; последующее усечение до `report_max_bytes` добавляет свою пометку, атрибут остаётся один.
+- текст не пуст → `completed`; строка `[report truncated: the subagent hit the output token limit]` SHALL дописываться к тексту **после** усечения до `report_max_bytes` (§17.3.5, шаг 5), чтобы усечение её не отрезало; обёртка получает `truncated="true"`. Если сработали оба обрыва, отчёт несёт две пометки — сначала пометку усечения, затем пометку лимита, — а атрибут `truncated` один. Итоговый отчёт МОЖЕТ превысить `report_max_bytes` на длину пометки лимита — это сознательно.
 
 Значение `max_tokens` SHALL записываться в `failure` итоговой записи `subagent` и уходить в `_meta.codelab.subagent.failure` (agent-acp-server «Проекция субагентов и списка задач»). `SubagentReport.toolCalls` и `usage` SHALL включать вызовы и usage всех потомков ребёнка (транзитивно), `duration` — время от получения слота до терминального состояния; у ребёнка, отменённого в очереди, — нули (design.md change `add-subagents-and-tasks`, D24).
 
@@ -170,6 +170,10 @@ Usage потомка SHALL входить в usage прямого родител
 #### Scenario: Оборванный отчёт по лимиту ответа
 - **WHEN** последний ответ ребёнка `explore` — текст `Found three callers: a.dart, b.dart` и `stopReason: length`
 - **THEN** результат `agent` — `isError: false`, обёртка со `status="completed"` и `truncated="true"`, тело — текст и строка `[report truncated: the subagent hit the output token limit]` (`subagent_report_wrapper_test.dart`)
+
+#### Scenario: Оборванный и длинный отчёт
+- **WHEN** последний ответ ребёнка длиннее `report_max_bytes` и завершается `stopReason: length`
+- **THEN** тело — начало текста, затем пометка `[report truncated: <N> of <M> bytes shown; …]`, затем строка `[report truncated: the subagent hit the output token limit]`, каждая по одному разу; атрибут `truncated="true"` в обёртке один (`subagent_report_wrapper_test.dart`)
 
 #### Scenario: Бюджет ребёнка
 - **WHEN** `max_steps: 2`, а ребёнку нужно три шага

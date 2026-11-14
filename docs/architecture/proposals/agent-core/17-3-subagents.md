@@ -512,8 +512,7 @@ buildReport(child, turnEnded, spec):
        (может быть пустым: тогда text := "")
      maxTokens и text.trim() пуст → status failed, failure maxTokens (D41 change
        add-subagents-and-tasks: весь лимит ответа ушёл в рассуждение или вызовы)
-     maxTokens и text не пуст → text += "\n[report truncated: the subagent hit the output token limit]",
-       truncated := true; шаг 3
+     maxTokens и text не пуст → cutByLimit := true (пометка дописывается после шага 4); шаг 3
      completed → шаг 3
 3  spec.outputSchema == null → status completed
    иначе json := extractJson(text); errors := validate(json, schema) (подмножество §6.3.2)
@@ -524,6 +523,9 @@ buildReport(child, turnEnded, spec):
 4  усечение: text длиннее report_max_bytes (UTF-8) → оставить начало по границе строки,
    дописать "\n[report truncated: <N> of <M> bytes shown; the full report is in the subagent journal]",
    truncated := true
+5  cutByLimit → text += "\n[report truncated: the subagent hit the output token limit]",
+   truncated := true (пометка лимита идёт после усечения, чтобы шаг 4 её не отрезал; при обеих
+   пометках атрибут один; итог может превысить report_max_bytes на длину пометки — сознательно)
 ```
 
 `extractJson(text)`: (а) `text.trim()` целиком разбирается как JSON → он; (б) иначе последний
@@ -551,7 +553,7 @@ Reply with only a JSON value that matches the schema. Do not add any other text.
 
 | Исход | Атрибуты сверх базовых | Тело | `isError` |
 |---|---|---|---|
-| `completed` | `truncated="true"`, если усечено по `report_max_bytes` или оборвано лимитом ответа (шаг 2) | отчёт | `false` |
+| `completed` | `truncated="true"`, если усечено по `report_max_bytes` (шаг 4) или оборвано лимитом ответа (шаг 5) | отчёт | `false` |
 | `failed`, `budgetExceeded` | `reason="budget_exceeded:<steps|tokens|cost|duration>"` | последний текст или `Subagent stopped: its budget was exhausted before it finished.` | `true` |
 | `failed`, `maxTokens` | `reason="max_tokens"` | `Subagent stopped: it hit the output token limit before writing a report.` | `true` |
 | `failed`, `invalidOutput` | `reason="invalid_output"` | `Subagent report does not match output_schema: <errors>` + `\n\nRaw report:\n` + текст | `true` |
@@ -670,6 +672,13 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 после перезапуска даёт модели отчёт первого и `interrupted` для второго; ни один ребёнок не
 запускается снова. Реплей (§13.5) показывает первый вызов `completed`, второй — `failed` с
 `_meta.codelab.outcome: "interrupted"`.
+
+**Известное ограничение — атрибут `truncated` при лечении.** Запись `subagent` не хранит признак
+усечения, поэтому отчёт, восстановленный из итоговой записи (`_reportOf` в
+`session/projections.dart`), получает обёртку без `truncated="true"`, даже если отчёт был усечён
+по `report_max_bytes` или оборван лимитом ответа (§17.3.5, шаги 4 и 5). Пометка в тексте отчёта
+сохраняется, теряется только атрибут; недочёт есть и для `report_max_bytes` с итерации 1.
+Исправление — follow-up задача change `add-subagents-and-tasks` (итерация 3, `[agent]`).
 
 ## 17.3.7. Проекция в ACP
 
