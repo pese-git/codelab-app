@@ -804,6 +804,92 @@ stateDiagram-v2
    (change `add-provider-setup-ui`, D11). Предупреждения `ConfigSaved.warnings` показываются в баннере `saved` до этой
    проверки.
 
+## 12.4.6а. Алгоритм: страница навыков и расширений app (экран 24)
+
+Цели — E-01 (цепочка `AGENTS.md`), E-06 (навыки), E-07 (шаблоны команд). Решения и сценарии —
+change [`add-app-skills-page`](../../../../openspec/changes/add-app-skills-page/design.md) (D1–D16,
+решения пользователя Q1–Q6 от 2026-11-15); правила навыков агента — change
+[`add-agent-skills`](../../../../openspec/changes/add-agent-skills/design.md) и
+[`agent-core-architecture` §17.2](../agent-core/17-2-skills-and-templates.md). Hooks (E-09),
+Plugins (E-10), переопределение системного промпта (E-08) и context-файлы других агентов (E-17) на
+странице не показываются: в агенте их нет, строки появятся с их changes.
+
+1. **Источник данных — файлы на машине клиента через мост, а не агент** (D1). Страница читает файлы
+   функцией `readAgentExtensions` из `codelab_setup/io.dart` тем же загрузчиком
+   `ProjectFilesLoader` и теми же чистыми функциями ядра (`parseSkills`, `parseCommandTemplates`,
+   `assembleProjectContext`), что сессия агента и `codelab config check`. ACP не меняется: метода
+   «перечислить навыки» в ACP нет, источник команды `available_commands_update` не передаёт, а
+   выключенный навык агент не объявляет вовсе.
+2. **Чьи данные и какая папка** (D2). Профиль и доступ — как у Providers и MCP servers
+   (`resolveSettingsAccess`, §12.4.5): профиль текущего подключения, без подключения — профиль по
+   умолчанию. Папка — папка сессии в фокусе, без неё — выбранный проект; смена подключения или
+   папки перечитывает страницу. Окружение — окружение агента (app плюс `env` stdio-профиля),
+   `CODELAB_HOME` — из `EditableSettings`, домашний каталог — `userHomeOf(environment)`.
+   * `RemoteReadOnly`, `NotManaged` — только InfoBar `skills-read-only` (§12.4.8), локальные файлы
+     не читаются (SETUP-2; решение Q1);
+   * без папки — подсказка открыть проект, файлы не читаются;
+   * битый конфиг — проблемы загрузчика, без чтения файлов и без записи;
+   * проект вне `trusted_projects` (доверие fail-closed, тем же расчётом, что у агента) — InfoBar
+     `skills-untrusted`; навыки и шаблоны проекта не читаются, цепочка `AGENTS.md` показывается
+     (E-01 читает её и для недоверенного проекта).
+3. **Один расчёт с `config check`** (D3). Каноническая папка, доверие и две параллельные фазы
+   загрузки (файлы проекта и навыки, у каждой таймаут 5 с и своя отмена) — публичная функция
+   `loadProjectExtensions` в `codelab_agent_io`. На неё переходит и `ConfigCommands.check` без
+   изменения вывода. Исход фазы (таймаут, исключение — имя типа) — значение, а не исключение.
+4. **Вид страницы строит мост** (D4; основной барель, web-безопасно): `agentExtensionsOf` даёт
+   `AgentExtensionsView`.
+   * **Context files** — цепочка в порядке агента (`$CODELAB_HOME/AGENTS.md`, затем от корня
+     репозитория к папке), размер, итог `<n> files · <size>`. Усечение и пропуск по бюджету
+     `tools.project_context.max_bytes` считает `assembleProjectContext`. `CLAUDE.md` на уровне без
+     `AGENTS.md` — с пометкой `used because this folder has no AGENTS.md`; переключателя E-17 нет
+     (решение Q6).
+   * **Skills** — включённые строки — каталог `parseSkills` сессии; выключенные `skills.disabled` —
+     победители по имени второго вызова без `disabled`. Колонки: имя и описание, «Invoke as»
+     `/skill:<name> <argument-hint>` (без `user-invocable` — `Model only`), источник (корень по
+     номеру `rootIndex` из того же списка корней, что у загрузчика), «Enabled». Теги:
+     `Overrides <уровень> skill` — по диагностикам `shadowed` ядра без разбора текста;
+     `Command only` — вне `modelVisible`; `<n> warning(s)` — диагностики строки. Остальные `error`
+     и `warning` — InfoBar `skills-warnings`, `info` не показываются (как в `config check`).
+     Подпись — порядок поиска по фактическим корням и `The list is fixed when a session opens: new
+     and changed skills apply to new sessions.`
+   * **Prompt templates** — `/<name> <argument-hint>`, описание, файл-источник; только чтение.
+   * Тексты `AGENTS.md`, тела навыков и шаблонов в вид не попадают (SETUP-25). Имена, описания и
+     подсказки из файлов — недоверенный текст: простой текст с видимыми управляющими и
+     bidi-символами, без markdown и ссылок.
+5. **Запись** (D5) — только `skills.disabled` (выключатель «Enabled») и `skills.extra_roots`
+   (согласие на каталоги другого агента) правилом моста `skillsListEdit` и
+   `AgentConfigStore.apply`. Списки при слиянии слоёв заменяются целиком, поэтому пишется слой,
+   чьё значение сейчас действует, если это `user` или `projectLocal`; ключа нет нигде — `user`
+   (решения Q2, Q3). Отказы делают элемент неактивным с причиной: ключ действует из `project`,
+   `--config` или окружения (`Set in <файл>; edit that file.`); имя выключено недоверенным проектом
+   (`Disabled by the project config (<файл>).`, Q43 change `add-agent-skills`); относительный корень
+   в недоверенном проекте (`Trust this project to read .claude/skills.`). `extra_roots` никогда не
+   пишется в слой `project` (SKL-2). Кандидаты согласия — `.claude/skills` в папке проекта и
+   `~/.claude/skills`, только существующие, с числом каталогов навыков; подпись говорит, что
+   согласие на относительный каталог действует во всех доверенных проектах, а `.agents/skills`
+   доверенного проекта читается без согласия (решение Q3). Конфликт — баннер и перечитывание без
+   автоповтора (SETUP-6). `fileOnly` этих ключей в реестре остаётся: страница — действие предметной
+   области, а не общий редактор ключа, и `/settings` CLI не меняется.
+6. **Состояние** (D6) — `SkillsSettingsCubit` (`Loading | ReadOnly | NoFolder | Unreadable |
+   Ready`, запись — флаг `saving`), создаётся на каждое открытие страницы. Данные — метод
+   `extensions` существующего порта `ProviderSettingsSession`; реализация — в `lib/app/`. Номер
+   загрузки отбрасывает поздний результат; одна подписка на `ClientWorkspace.state`. Чтение идёт в
+   изоляте UI асинхронно в пределах и таймаутах загрузчика — тот же объём, что открытие сессии
+   встроенного агента (D7).
+7. **Reload и открытие папок** (D8). «Reload» перечитывает конфиг и файлы; агенту команд не
+   отправляет. Порт `LocalFolderOpener` (`core/platform/`, `url_launcher`) открывает в файловом
+   менеджере ОС только абсолютный путь существующего каталога; файлы не открываются и не
+   запускаются. «Open .codelab folder» — `<проект>/.codelab`, если он есть, иначе `$CODELAB_HOME`
+   (решение Q4); «Open» строки — каталог файла (решение Q5). Отказ — баннер `Could not open
+   <путь>.`
+8. **Применение** (D9). Список навыков сессии — неизменный снимок открытия (SKL-4), перечитывания
+   без перезапуска нет (E-19). Агент сам перечитывает конфиг, а `skills.*` — ключи сессии, поэтому
+   запись действует на новые сессии без «Restart agent»: баннер `Saved. New sessions use it; open
+   sessions keep their skills.`
+9. **Журнал** (D10) — события `skills_settings.*` логгера `codelab_desktop.settings`: виды, числа,
+   имя навыка, слой записи; без путей, описаний, тел, текстов диагностик и `toString()`
+   исключений.
+
 ## 12.4.7. Алгоритм: сторож запуска (D-15)
 
 Запуск сегодня (`lib/main.dart`, `lib/app/app_scope.dart`):
@@ -967,7 +1053,7 @@ sequenceDiagram
 | Agent | Agents & modes (21) | P-05, P-06, C-04, R-15, U-31, L-10, L-16, U-27, U-30, E-22 | режим новой сессии `permissions.mode` (без `autopilot`: только флаг); определения агентов из `.codelab/agents/*.md` и `~/.codelab/agents/` с ошибками загрузки; роли моделей, переопределение окна и лимита ответа, удалённые A2A-агенты — по ключам ядра этих целей | `ConfigWriter` |
 | Agent | Permissions & tools (22) | P-03, P-07, P-08, T-26, T-35 | `permissions.tools` (allow, ask, deny по инструменту, включая `mcp__<server>__<tool>`), `permissions.deny`, `tools.disabled` (agent-core-architecture §6.3.8); критические шаблоны §7.6 — только для чтения; граница рабочей папки — справка; «Always allow» не показывается: решение живёт до закрытия сессии (P-03), в конфиг не пишется; запрет чтения файлов учётных данных (P-18) — строка-ссылка на «Redaction» | `ConfigWriter` |
 | Agent | Redaction (23) | D-24, P-10, P-14, P-18, P-19 | ниже | `ConfigWriter` |
-| Agent | Skills & extensions (24) | E-01, E-06…E-10, E-17…E-19 | откуда загружены файлы контекста, skills, шаблоны, хуки, плагины и переопределение системного промпта; «Open» открывает файл; включение — ключами ядра этих целей | `ConfigWriter` |
+| Agent | Skills & extensions (24) | E-01, E-06, E-07 | §12.4.6а (change [`add-app-skills-page`](../../../../openspec/changes/add-app-skills-page/proposal.md)): цепочка `AGENTS.md` и шаблоны — только чтение; навыки с выключателями (`skills.disabled`) и согласием на каталоги другого агента (`skills.extra_roots`); «Open» открывает каталог. Будущие: E-08, E-09, E-10, E-17…E-19 — строки появятся с их changes | `ConfigWriter` |
 | Agent | Code & web (25) | T-13, T-14, T-15, T-17, T-31, E-12 | языковые серверы, память, web-инструменты | `ConfigWriter` |
 | App | General (26) | E-15, D-18, D-19 | `SettingsRegistry` `scope: shared` (как `/settings`), `codelab.file_browser.show_ignored`, `codelab.input.enter_while_running` (§12.3, A11); язык — после слоя локализации (D-19); «About»: версия, канал, лицензия, сторонние уведомления, политика конфиденциальности (§12.7.7). App не обновляет себя сам: строка «Updates come from the installer or your package manager» | `ConfigWriter` (shared), `shared_preferences` |
 | App | Appearance (10) | D-20 | §12.6.3 | `shared_preferences`, файлы тем |
@@ -1362,6 +1448,11 @@ mcp:
     после успешного удаления записи, которая на него ссылается (`ConfigSaved`, удалённый профиль), и
     только если на него не ссылается другая запись. Секрет, выбранный пользователем из хранилища
     («Use stored secret»), клиент НЕ ДОЛЖЕН удалять (change `add-provider-setup-ui`, D10, D11, D13).
+25. **SETUP-25.** Вид расширений агента (`AgentExtensionsView`), состояние страницы «Skills &
+    extensions» и её журнал НЕ ДОЛЖНЫ содержать текстов `AGENTS.md`, тел навыков и шаблонов — ни в
+    полях, ни в `toString()`; страница НЕ ДОЛЖНА читать навыки и шаблоны проекта вне
+    `trusted_projects` и локальные файлы для `RemoteReadOnly` и `NotManaged` (change
+    `add-app-skills-page`, D2, D4).
 
 ## 12.4.12. Обоснование
 
