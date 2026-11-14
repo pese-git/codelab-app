@@ -1377,8 +1377,9 @@ final class _Builder {
           ? expansion.template
           : SecretTemplate([
               for (final part in expansion.template.parts)
-                if (part case SecretReference(:final name)
-                    when unusable.contains(name))
+                if (part case SecretReference(
+                  :final name,
+                ) when unusable.contains(name))
                   const UnusableSecretReference()
                 else
                   part,
@@ -1593,8 +1594,9 @@ final class _Builder {
       // ссылки вырезаются, значение переменной в строку не попадает.
       // `${secret:}` в `url` — проблема загрузки при любых других ссылках:
       // проверка раньше ветки вырезания, иначе сервер лишь блокировался бы.
-      final secretInUrl = referencesIn(rawUrl)
-          .any((r) => r.$1 == ProviderReferenceKind.secret);
+      final secretInUrl = referencesIn(
+        rawUrl,
+      ).any((r) => r.$1 == ProviderReferenceKind.secret);
       if (secretInUrl) {
         bad(
           'url',

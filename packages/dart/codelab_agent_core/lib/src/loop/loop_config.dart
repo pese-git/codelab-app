@@ -21,26 +21,26 @@ import 'turn_budget.dart';
 typedef AgentEventSink = FutureOr<void> Function(AgentEvent event);
 
 /// Перед каждым запросом к модели; меняет только payload (LOOP-7).
-typedef TransformContextHook = Future<List<Message>> Function(
-  List<Message> messages,
-  CancelToken cancel,
-);
+typedef TransformContextHook =
+    Future<List<Message>> Function(List<Message> messages, CancelToken cancel);
 
 /// После валидации, до исполнения; первый [Block] останавливает цепочку.
 /// Первым звеном всегда стоит проверка разрешений (PERM-1).
-typedef BeforeToolCallHook = Future<Block?> Function(
-  ToolCall call,
-  Map<String, Object?> args,
-  ToolContext ctx,
-);
+typedef BeforeToolCallHook =
+    Future<Block?> Function(
+      ToolCall call,
+      Map<String, Object?> args,
+      ToolContext ctx,
+    );
 
 /// После исполнения, до `ToolCallFinished`; переопределяет результат по
 /// полям.
-typedef AfterToolCallHook = Future<ResultOverride?> Function(
-  ToolCall call,
-  ToolExecutionResult result,
-  bool isError,
-);
+typedef AfterToolCallHook =
+    Future<ResultOverride?> Function(
+      ToolCall call,
+      ToolExecutionResult result,
+      bool isError,
+    );
 
 /// После `StepEnded`: заменить контекст или модель следующего шага.
 typedef PrepareNextStepHook = Future<StepUpdate?> Function(StepResult step);
@@ -48,10 +48,8 @@ typedef PrepareNextStepHook = Future<StepUpdate?> Function(StepResult step);
 /// Финальный гейт ответа (LOOP-13): шаг закончился без вызовов, ход готов
 /// остановиться. В MVP хук не регистрируется — поведение совпадает с
 /// [Accept]; после MVP его собирает сессия из проверок (§17.12.4).
-typedef BeforeFinalResponseHook = Future<ResponseVerdict> Function(
-  AssistantMessage message,
-  TurnInfo turn,
-);
+typedef BeforeFinalResponseHook =
+    Future<ResponseVerdict> Function(AssistantMessage message, TurnInfo turn);
 
 /// Оценка размера payload запроса в токенах (§9.3); цикл кладёт её в
 /// `ModelRequested.estimatedTokens` и сравнивает с окном перед запросом.
@@ -71,10 +69,8 @@ enum EmergencyCause {
 /// Возвращает новый контекст шага — сообщения проекции журнала после
 /// сжатия — или `null`, если сжать нечего или сжатие не удалось. Цикл
 /// вызывает его не больше одного раза за ход (CMP-8).
-typedef EmergencyCompact = Future<LoopContext?> Function(
-  EmergencyCause cause,
-  CancelToken cancel,
-);
+typedef EmergencyCompact =
+    Future<LoopContext?> Function(EmergencyCause cause, CancelToken cancel);
 
 final class Block {
   const Block(this.reason, {this.outcome = ToolOutcome.rejected});

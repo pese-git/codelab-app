@@ -255,9 +255,9 @@ String _encodeCursor(SessionSummary last) => base64Url
 
 (DateTime, String) _decodeCursor(String cursor) {
   try {
-    final json = jsonDecode(
-      utf8.decode(base64Url.decode(base64Url.normalize(cursor))),
-    ) as Map<String, Object?>;
+    final json =
+        jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(cursor))))
+            as Map<String, Object?>;
     final after = json['after']! as String;
     final bar = after.indexOf('|');
     if (json['v'] != 1 || bar < 0) {

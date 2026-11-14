@@ -121,8 +121,9 @@ BuiltAgentCore buildAgentCore({
     );
   }
   // HOST-3: коннектор обязан уметь каждый транспорт включённой capability.
-  if (narrowed.states[HostCapability.mcp]
-      case CapabilityTransport(:final transports) when services.mcp != null) {
+  if (narrowed.states[HostCapability.mcp] case CapabilityTransport(
+    :final transports,
+  ) when services.mcp != null) {
     final missing = transports.difference(services.mcp!.transports);
     if (missing.isNotEmpty) {
       throw HostWiringException(

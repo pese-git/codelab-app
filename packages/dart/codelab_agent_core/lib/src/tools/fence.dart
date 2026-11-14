@@ -58,8 +58,9 @@ bool isNetworkCommand(String command) {
     for (final prefix in _networkPrefixes) {
       final parts = prefix.split(' ');
       if (words.length >= parts.length &&
-          [for (var i = 0; i < parts.length; i++) words[i] == parts[i]]
-              .every((e) => e)) {
+          [
+            for (var i = 0; i < parts.length; i++) words[i] == parts[i],
+          ].every((e) => e)) {
         return true;
       }
     }

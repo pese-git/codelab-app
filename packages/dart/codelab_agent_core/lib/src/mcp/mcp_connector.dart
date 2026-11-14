@@ -76,9 +76,8 @@ final class McpConnectRequest {
 /// Как использовать: коннектор зовёт его перед каждой попыткой и использует
 /// возвращённую копию только для этой попытки. Неудача — [McpSecretsException]
 /// с текстом без значения секрета; коннектор делает её сбоем попытки.
-typedef McpSecretExpander = Future<McpServerConfig> Function(
-  McpServerConfig server,
-);
+typedef McpSecretExpander =
+    Future<McpServerConfig> Function(McpServerConfig server);
 
 /// Секрет сервера не раскрыт: не задан или хранилище недоступно.
 ///

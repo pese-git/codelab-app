@@ -48,12 +48,13 @@ final class Denied extends PolicyOutcome {
 /// проверять порядок правил без разбора команд. [cwd] — корень сессии:
 /// цели команды (`.codelab/config.yaml`) сравниваются относительно него.
 /// [agentConfig] — пути конфигурации агента от хоста (PERM-11, D8) или `null`.
-typedef CriticalFinder = String? Function(
-  AgentTool tool,
-  Map<String, Object?> args,
-  String cwd,
-  AgentConfigScope? agentConfig,
-);
+typedef CriticalFinder =
+    String? Function(
+      AgentTool tool,
+      Map<String, Object?> args,
+      String cwd,
+      AgentConfigScope? agentConfig,
+    );
 
 /// Критические шаблоны команды `exec` по таблице §7.6 (шаг 3 `decide`).
 String? defaultCriticalFinder(
