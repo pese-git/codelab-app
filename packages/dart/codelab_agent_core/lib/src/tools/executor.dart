@@ -58,6 +58,13 @@ final class ToolInvocation {
        afterToolCall = List.unmodifiable(afterToolCall);
 
   final SessionId sessionId;
+
+  /// Токен отмены хода.
+  ///
+  /// Инвариант: токен живёт не дольше хода — цикл создаёт его заново на
+  /// каждый ход. Шаг 6 ждёт пути через `Future.any` с [CancelToken.onCancel],
+  /// и этот слушатель не снимается; на долгоживущем токене (сессии или
+  /// [CancelToken.none]) слушатели копились бы по одному на каждую правку.
   final CancelToken cancel;
 
   /// Имена схем текущего шага.
@@ -311,9 +318,17 @@ final class ToolCallExecutor implements ToolExecutor {
       return _valid(_error(cancelledText, ToolOutcome.cancelled));
     }
     // Шаг 6: блокировка пути и повторная проверка отмены после захвата.
+    // Ожидание прерывается отменой хода: иначе вызов за держателем, который
+    // уже захватил путь и не реагирует на отмену, получил бы `cancelled`
+    // только после того, как держатель отпустит путь. Тикет отпускает
+    // `complete` в `finally`, и место в очереди освобождается лишь после
+    // предыдущего держателя, поэтому прерванное ожидание не впускает
+    // следующего вызова раньше времени (TOOL-7).
     if (handle._lock case final lock?) {
-      await lock.acquired;
+      _logLock('tool.lock.wait', call);
+      await Future.any([lock.acquired, invocation.cancel.onCancel]);
       if (invocation.cancel.isCancelled) {
+        _logLock('tool.lock.cancelled', call);
         return _valid(_error(cancelledText, ToolOutcome.cancelled));
       }
     }
@@ -401,6 +416,20 @@ final class ToolCallExecutor implements ToolExecutor {
       diffs: result.diffs,
     );
   }
+
+  /// Debug-логи очереди пути (TOOL-7): `tool.lock.wait` — вызов дошёл до
+  /// захвата пути (пишется и тогда, когда путь свободен: синхронно узнать,
+  /// придётся ли ждать, нельзя), `tool.lock.cancelled` — ожидание прервано
+  /// отменой хода.
+  ///
+  /// Путь в поля не пишется: он может быть чувствительным, а вызов и так
+  /// связан с путём через `tool_call_id` и событие `ToolCallStarted`
+  /// (минимально достаточный вариант, `observability.md` §43).
+  void _logLock(String event, ToolCall call) => services.logger.log(
+    LogLevel.debug,
+    event,
+    fields: {'tool': call.name, 'tool_call_id': call.id},
+  );
 
   /// Логи §6.3.7: `tool.misuse.blocked` при первой блокировке ключа,
   /// `tool.misuse.warned` на каждое предупреждение.
