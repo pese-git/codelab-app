@@ -168,6 +168,18 @@ Map<String, Object?> resolvedDefaults() {
     'skills.catalog_max_chars': config.skills.catalogMaxChars,
     'skills.reattach.per_skill_tokens': config.skills.reattachPerSkillTokens,
     'skills.reattach.total_tokens': config.skills.reattachTotalTokens,
+    'subagents.enabled': config.subagents.enabled,
+    'subagents.max_depth': config.subagents.maxDepth,
+    'subagents.max_concurrent': config.subagents.maxConcurrent,
+    'subagents.max_per_turn': config.subagents.maxPerTurn,
+    'subagents.max_steps': config.subagents.maxSteps,
+    'subagents.max_duration': _seconds(config.subagents.maxDuration),
+    'subagents.report_max_bytes': config.subagents.reportMaxBytes,
+    'subagents.progress_interval': _seconds(config.subagents.progressInterval),
+    'subagents.heartbeat_interval': _seconds(
+      config.subagents.heartbeatInterval,
+    ),
+    'subagents.cancel_grace': _seconds(config.subagents.cancelGrace),
     'trusted_projects': config.trustedProjects,
     'permissions.deny': [
       for (final key in config.permissions.rules.denyPatterns) '$key',

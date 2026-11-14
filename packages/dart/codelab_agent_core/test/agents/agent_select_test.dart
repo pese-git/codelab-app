@@ -19,6 +19,7 @@ const _base = [
   'task_get',
   'ls',
   'search',
+  'agent',
 ];
 
 final _other = ModelRef(
@@ -26,7 +27,7 @@ final _other = ModelRef(
   id: 'other',
   api: ProviderApi.openaiChat,
   baseUrl: Uri.parse('http://localhost:8080/v1'),
-  contextWindow: 32000,
+  contextWindow: 32768,
   maxOutputTokens: 4096,
 );
 
@@ -88,7 +89,7 @@ void main() {
       sessions: store,
       steps: steps,
       mcp: mcp,
-      models: FixedModelCatalog([testModel, _other]),
+      models: FixedModelCatalog([subagentTestModel, _other]),
       permissions: permissions,
       projectFiles: _Port(agents ?? [reviewer]),
     );

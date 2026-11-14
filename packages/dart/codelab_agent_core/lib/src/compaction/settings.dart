@@ -20,6 +20,13 @@ final class CompactionSettings {
     required this.keepRecentUserTurns,
   });
 
+  /// Наименьшее эффективное окно модели, при котором сессия видит `agent`
+  /// (решение пользователя D40, change `add-subagents-and-tasks`): схема,
+  /// описание и отчёты детей не должны занимать окно целиком. Окно —
+  /// `effectiveContextWindow` с учётом `compaction.context_window_cap`;
+  /// ключа конфигурации нет.
+  static const minSubagentContextWindow = 32768;
+
   /// Шаги §9.4; заданные [overrides] заменяют вычисленные значения и
   /// проходят те же ограничения сверху `w/4` и `w/2`.
   factory CompactionSettings.forWindow(

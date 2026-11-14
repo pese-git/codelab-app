@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:collection/collection.dart'
     show DeepCollectionEquality, ListEquality;
@@ -51,6 +52,10 @@ import '../skills/skill_catalog.dart';
 import '../skills/skill_files.dart';
 import '../skills/skills_config.dart'
     show SkillsConfig, defaultSkillsCatalogMaxChars;
+import '../subagents/subagent_manager.dart';
+import '../subagents/subagent_model.dart';
+import '../subagents/subagent_tool.dart';
+import '../subagents/subagent_types.dart';
 import '../prompts/compose.dart';
 import '../secrets/secret_lookup.dart';
 import '../secrets/secret_resolver.dart';
@@ -67,6 +72,7 @@ import '../tools/builtin/exec.dart';
 import '../tools/builtin/read.dart';
 import '../tools/builtin/skill.dart';
 import '../tools/executor.dart';
+import '../tools/path_lock.dart';
 import '../tools/registry.dart';
 import '../tools/tasks/task_list.dart';
 import '../util/logger.dart';
@@ -83,6 +89,17 @@ import 'select_session_model.dart';
 const _projectFilesTimeout = Duration(seconds: 5);
 
 const coreAgentVersion = '0.1.0';
+
+/// Наибольшая глубина потомка, которую рантайм запускает до итерации 4
+/// (`add-subagents-and-tasks`, задачи 4.x): ребёнку `agent` не даётся, поэтому
+/// описание `agent` не обещает вложенность глубже.
+const _maxChildDepth = 1;
+
+/// Окно модели позволяет показать `agent` (D40): эффективное окно с учётом
+/// `compaction.context_window_cap` не меньше порога.
+bool subagentWindowOk(ModelRef model, int? cap) =>
+    effectiveContextWindow(model, cap: cap) >=
+    CompactionSettings.minSubagentContextWindow;
 const coreAgentInfo = AgentInfo(
   name: 'codelab-agent',
   version: coreAgentVersion,
@@ -170,6 +187,15 @@ abstract interface class AgentRuntime {
   /// `null` — сессия неизвестна или закрыта. Поток закрывается вместе с
   /// сессией и с `dispose()`.
   McpStatusPort? mcpStatus(SessionId id);
+
+  /// Возможность субагентов по применённому конфигу: `null` — в нём
+  /// `subagents.enabled: false`, иначе значение с `maxDepth`
+  /// (`subagents.max_depth`). Читается из применённого снимка при каждом
+  /// обращении, поэтому живая перезагрузка действует без перезапуска;
+  /// адаптер строит по нему объявление в `initialize` (design.md change
+  /// `add-subagents-and-tasks`, D37). Сессия получает `agent` по конфигу
+  /// на момент своего создания.
+  SubagentsInfo? get subagents;
 
   /// Отменяет идущие ходы, дожидается записи журналов и закрывает потоки
   /// событий.
@@ -403,6 +429,167 @@ final class AgentRuntimeImpl implements AgentRuntime {
       },
     );
     return model;
+  }
+
+  /// Фабрика дочерней сессии субагента (`agent-core/17-3-subagents.md`
+  /// §17.3.3; design.md change `add-subagents-and-tasks`, D36 Т2, Т3, Т9,
+  /// Т10, Т11).
+  ///
+  /// Почему приватный метод рантайма: её вызывает только `SubagentManager`;
+  /// публичный интерфейс не получает метод без потребителя (`AGENTS.md`
+  /// §19). Часть `_open` переиспользуется (агент, писатель журнала, политика),
+  /// но без фаз загрузки файлов проекта, навыков и MCP: ребёнок получает
+  /// снимок каталога навыков и подключения родителя как есть.
+  ///
+  /// Для чего: набор инструментов — `selectChildTools` из схем текущего шага
+  /// родителя; политика — свои режим (`narrow` при каждом решении), общие
+  /// хранилище решений, правила и защищаемые пути корня, **без gate**
+  /// (вопрос — отказ `no approval interface is available`, D38, до
+  /// итерации 3); `ToolServices.tasks` — `SubagentTaskList` над списком
+  /// корня; журнал — `SessionStore.createChild`.
+  ///
+  /// Вложенность глубже 1 пока не запускается (набор ребёнка строится при
+  /// `maxDepth = 1`, задачи итерации 4).
+  Future<ChildSession> _createChildSession(
+    ChildSessionSpec spec, {
+    required SessionId rootId,
+    required String cwd,
+    required StreamFunction stream,
+    required CoreConfig settings,
+    required ModeId parentMode,
+    required PathResolver? pathResolver,
+    required _McpState mcp,
+    required ProjectContext? projectContext,
+  }) async {
+    final sub = spec.subagent;
+    final childId = newSessionId(services.clock, services.ids);
+    final logger = BoundLogger(spec.logger, {'session_id': childId.value});
+    final header = SessionHeader(
+      id: childId,
+      cwd: cwd,
+      created: services.clock.now(),
+      agent: coreAgentInfo,
+      metadata: {'profile': profile.name},
+      parent: SessionParent(
+        sessionId: sub.parentSessionId,
+        rootSessionId: rootId,
+        toolCallId: sub.parentToolCallId,
+        subagentId: sub.id,
+        agent: sub.type.name,
+        depth: sub.depth,
+      ),
+    );
+    final journalPath = await _store.createChild(header);
+    late final SessionWriter writer;
+    late final Agent agent;
+    final skills = spec.skills;
+    final registry = ToolRegistry();
+    for (final tool in spec.tools) {
+      registry.register(
+        tool is SkillTool && skills != null
+            // Свой `SkillTool`: повтор активации считается по журналу ребёнка
+            // (D34, «Только задача»); каталог — тот же снимок родителя.
+            ? SkillTool(
+                skills,
+                sessionId: childId,
+                activeSkills: () => active.activeSkills(
+                  writer.snapshot,
+                  skills,
+                  settings.skills,
+                ),
+              )
+            : tool,
+      );
+    }
+    // Режим промпта — более строгий из режима родителя и типа на момент
+    // запуска: промпт стабилен ради кэша, а смена режима родителя посреди
+    // работы действует через политику (D36 Т3).
+    final typeMode = sub.type.mode;
+    final mode =
+        typeMode != null &&
+            (typeMode.softness ?? 99) < (parentMode.softness ?? 99)
+        ? typeMode
+        : parentMode;
+    final childPolicy = PermissionPolicy(
+      mode: mode,
+      gate: spec.gate,
+      rules: spec.rules,
+      extraDeniedTiers: spec.extraDeniedTiers,
+      decisions: spec.decisions,
+      logger: logger,
+      agentConfigPaths: spec.agentConfigPaths,
+      pathResolver: pathResolver,
+      modeOf: spec.mode,
+    );
+    final toolServices = ToolServices(
+      clock: services.clock,
+      logger: logger,
+      tasks: spec.tasks,
+    );
+    agent = Agent(
+      config: AgentLoopConfig(
+        sessionId: childId,
+        model: spec.model,
+        stream: stream,
+        executor: ToolCallExecutor(
+          registry: registry,
+          env: spec.env,
+          services: toolServices,
+          // Очередь путей корня: правки одного файла родителем и детьми
+          // упорядочены (TOOL-7).
+          locks: spec.locks,
+        ),
+        clock: services.clock,
+        ids: services.ids,
+        budget: spec.budget,
+        beforeToolCall: [childPolicy.asHook(registry.lookup)],
+        approvalWait: toolServices.approvalWait,
+        logger: logger,
+        onOwnUsage: spec.onOwnUsage,
+        ancestorBudget: spec.ancestorBudget,
+      ),
+      systemPrompt: _systemPrompt(
+        cwd,
+        mode,
+        registry,
+        mcp,
+        projectContext,
+        skills: skills,
+        skillsCatalogMaxChars: settings.skills.catalogMaxChars,
+        subagent: (name: sub.type.name, body: sub.type.prompt, task: null),
+      ),
+      tools: registry.tools,
+    );
+    writer = SessionWriter(
+      store: _store,
+      snapshot: SessionSnapshot.empty(header),
+      ids: services.ids,
+      clock: services.clock,
+      logger: logger,
+      onFailure: (error) => agent.abort(StorageFailure(error)),
+    );
+    // Писатель ребёнка — первый подписчик его агента (SES-8).
+    agent.subscribe(writer.handle);
+    await writer.append(
+      (id, parent, at) => _modelChange(id, parent, at, spec.model),
+    );
+    await writer.append(
+      (id, parent, at) => ModeChangeRecord(
+        id: id,
+        parentId: parent,
+        timestamp: at,
+        modeId: mode.value,
+      ),
+    );
+    return ChildSession(
+      id: childId,
+      journalPath: journalPath,
+      agent: agent,
+      close: () async {
+        await agent.waitForIdle();
+        await _store.close(childId);
+      },
+    );
   }
 
   /// Сессия не вернулась вызывающему: серверы MCP, подключённые в `_open`,
@@ -1091,6 +1278,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         continue;
       }
       session._afterCatalogReplaced(before, after);
+      session._afterSettingsReloaded();
       if (listChanged) {
         session._publishFromRuntime(ModelOptionsChanged(session.id));
       }
@@ -1208,6 +1396,15 @@ final class AgentRuntimeImpl implements AgentRuntime {
       sources: result.sources,
       values: result.values,
     );
+  }
+
+  @override
+  SubagentsInfo? get subagents {
+    final config = _applied.config.subagents;
+    // Эффективная глубина: до итерации 4 ребёнку `agent` не даётся (D37, Т16).
+    return config.enabled
+        ? SubagentsInfo(maxDepth: math.min(config.maxDepth, _maxChildDepth))
+        : null;
   }
 
   @override
@@ -1352,6 +1549,74 @@ final class AgentRuntimeImpl implements AgentRuntime {
         ExecTool(readOnlyRoots: readOnlyRoots, execInReadOnlyRoots: execOnHost),
       );
     }
+    // Субагенты (change `add-subagents-and-tasks`, D37, D36 Т5): `agent`
+    // регистрируется в копии реестра сессии после `skill` и до MCP, только если
+    // `subagents.enabled` конфигурации этой сессии на момент создания; схема
+    // дальше не меняется (кэш промпта). Дерево, менеджер и фабрика дочерней
+    // сессии замыкаются на сессию, которая появится ниже.
+    SubagentManager? subagentManager;
+    ChildSessionFactory? childFactory;
+    SubagentParent? parentParts;
+    // Блокировки путей — одни на дерево: родитель и дети ждут в одной очереди
+    // (TOOL-7, D36 Т2).
+    final pathLocks = PathLock();
+    final knownChildren = <String>{
+      for (final record in snapshot.records)
+        if (record is SubagentRecord) record.subagentId,
+    };
+    final subagentTypes = buildSubagentTypes(
+      project.subagentAgents,
+      logger: logger,
+    );
+    // D40: `agent` виден, пока эффективное окно модели не меньше порога;
+    // регистрация от окна не зависит, видимость пересчитывается на шаге.
+    final windowOk = subagentWindowOk(
+      model,
+      settings.compaction.contextWindowCap,
+    );
+    final subagentsOn = settingsOf().subagents.enabled;
+    if (subagentsOn && !windowOk) {
+      logger.log(
+        LogLevel.info,
+        'subagent.unavailable',
+        fields: {
+          'session_id': id.value,
+          'reason': 'context_window',
+          'window': effectiveContextWindow(
+            model,
+            cap: settings.compaction.contextWindowCap,
+          ),
+          'min_window': CompactionSettings.minSubagentContextWindow,
+        },
+      );
+    }
+    if (subagentsOn) {
+      final limits = settingsOf().subagents;
+      subagentManager = SubagentManager(
+        tree: SubagentTree(limits: () => settingsOf().subagents),
+        limits: () => settingsOf().subagents,
+        emit: (event) => session._agent.emit(event),
+        create: (spec) => childFactory!(spec),
+        clock: services.clock,
+        logger: logger,
+        sessionId: id,
+        rootBudget: () => session._agent.config.budget,
+        parent: () => parentParts!,
+      );
+      sessionRegistry.register(
+        SubagentTool(
+          manager: subagentManager,
+          types: subagentTypes,
+          ids: services.ids,
+          limits: () => settingsOf().subagents,
+          clock: services.clock,
+          logger: logger,
+          parentSessionId: id,
+          maxDepth: math.min(limits.maxDepth, _maxChildDepth),
+          maxConcurrent: limits.maxConcurrent,
+        ),
+      );
+    }
     await _connectMcp(
       id: id,
       cwd: cwd,
@@ -1372,7 +1637,18 @@ final class AgentRuntimeImpl implements AgentRuntime {
       throw const CancelledException(ShutdownCancel());
     }
     // Список задач дерева; публикация задаётся ниже, когда есть `Agent`.
-    final taskList = SessionTaskList(logger: logger, sessionId: id.value);
+    // Владелец пункта — `main` или id субагента, когда-либо запущенного в
+    // дереве: из записей `subagent` журнала (переживает перезагрузку сессии)
+    // или хэндлов менеджера. Id отклонённого вызова владельцем не делает
+    // (D28, D36 Т7).
+    final taskList = SessionTaskList(
+      logger: logger,
+      sessionId: id.value,
+      isKnownOwner: (owner) =>
+          owner == TaskOwner.main ||
+          knownChildren.contains(owner.value) ||
+          (subagentManager?.knows(owner.value) ?? false),
+    );
     final tools = ToolServices(
       clock: services.clock,
       logger: logger,
@@ -1381,6 +1657,14 @@ final class AgentRuntimeImpl implements AgentRuntime {
     final gate = profile.isOn(HostCapability.interactiveApproval)
         ? ports.gate ?? services.gate
         : null;
+    // Один набор защищаемых путей на дерево: политика ребёнка получает его же,
+    // а не новый расчёт (SUB-1, D34, D36 Т9).
+    final configPaths = _sessionConfigPaths(skillsLoad);
+    final pathResolver = switch ((ports.env, services.baseEnv)) {
+      (final PathResolver resolver, _) => resolver,
+      (_, final PathResolver resolver) => resolver,
+      _ => null,
+    };
     final policy = PermissionPolicy(
       mode: mode,
       modeOverride: settings.permissions.modeOverride,
@@ -1392,17 +1676,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
       // через `BoundedEnv` сессии защищаемые пути вне корня не раскрыть.
       // Пути сессии (PERM-11, Q27): корни навыков, зависящие от `cwd`, и
       // каталоги снимка для E1–E3; поле хоста при этом не меняется.
-      agentConfigPaths: _sessionConfigPaths(skillsLoad),
+      agentConfigPaths: configPaths,
       // Резолвер — окружение сессии, если оно само `PathResolver`, иначе
       // `baseEnv` хоста. Окружение сессии `serve` клиентское
       // (`AcpClientExecutionEnv`, `ListingOverlayEnv`) и `PathResolver` не
       // реализует; без второй ветки PERM-11 терял канонизацию и второй проход
       // exec (ревью итерации 5).
-      pathResolver: switch ((ports.env, services.baseEnv)) {
-        (final PathResolver resolver, _) => resolver,
-        (_, final PathResolver resolver) => resolver,
-        _ => null,
-      },
+      pathResolver: pathResolver,
     );
     final compaction = profile.isOn(HostCapability.compaction);
     final agent = Agent(
@@ -1415,6 +1695,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         stream: (ref, context, {cancel}) =>
             session._streamNow(ref, context, cancel: cancel),
         executor: ToolCallExecutor(
+          locks: pathLocks,
           registry: sessionRegistry,
           env: env,
           services: tools,
@@ -1442,6 +1723,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
             ? (cause, cancel) => session._emergency(cause, cancel)
             : null,
         contextWindowCap: settings.compaction.contextWindowCap,
+        // Usage детей входит в бюджет хода корня (SUB-11, D36 Т8).
+        subagentUsage: subagentManager == null
+            ? null
+            : () => subagentManager!.childrenUsage,
+        onOwnUsage: subagentManager == null
+            ? null
+            : (own) => subagentManager!.rootOwnUsage = own,
       ),
       systemPrompt: _systemPrompt(
         cwd,
@@ -1452,7 +1740,10 @@ final class AgentRuntimeImpl implements AgentRuntime {
         skills: skills,
         skillsCatalogMaxChars: settings.skills.catalogMaxChars,
       ),
-      tools: sessionRegistry.tools,
+      tools: [
+        for (final tool in sessionRegistry.tools)
+          if (tool.name != 'agent' || windowOk) tool,
+      ],
     );
     // Список эмитится через очередь агента: TaskListChanged приходит
     // подписчикам между ToolCallStarted и ToolCallFinished своего вызова
@@ -1526,7 +1817,42 @@ final class AgentRuntimeImpl implements AgentRuntime {
       skills: skills,
       skillsConfig: settings.skills,
       modeFloor: settings.permissions.mode ?? profile.defaultMode,
+      subagents: subagentManager,
     );
+    session._subagentsShown = windowOk;
+    if (subagentManager != null) {
+      parentParts = SubagentParent(
+        tools: () => session._agent.tools,
+        model: () => session._model,
+        mode: () => (
+          mode: policy.effectiveMode,
+          deniedTiers: policy.modeOverride == null
+              ? policy.mode.deniedTiers
+              : const {},
+        ),
+        skills: skills,
+        agentConfigPaths: configPaths,
+        decisions: policy.decisions,
+        rules: policy.rules,
+        extraDeniedTiers: policy.extraDeniedTiers,
+        env: env,
+        tasks: taskList,
+        locks: pathLocks,
+        maxChildDepth: _maxChildDepth,
+      );
+      childFactory = (spec) => _createChildSession(
+        spec,
+        rootId: id,
+        cwd: cwd,
+        stream: (ref, context, {cancel}) =>
+            session._streamNow(ref, context, cancel: cancel),
+        settings: settingsOf(),
+        parentMode: session._mode,
+        pathResolver: pathResolver,
+        mcp: mcp,
+        projectContext: projectContext,
+      );
+    }
     _sessions.add(session);
     return session;
   }
@@ -1559,6 +1885,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     AgentDefinition? agent,
     SkillCatalog? skills,
     int skillsCatalogMaxChars = defaultSkillsCatalogMaxChars,
+    ({String name, String body, TaskItem? task})? subagent,
   }) {
     // Инструменты вне набора агента не входят в промпт: секции инструментов
     // и строки MCP-серверов описывают то, что модель реально видит (PR-6,
@@ -1575,7 +1902,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         mode: mode,
         profile: profile,
         toolNames: visible.toSet(),
-        mcpServers: agent?.tools == null
+        mcpServers: agent?.tools == null && subagent == null
             ? mcp.summaries
             : [
                 for (final server in mcp.summaries)
@@ -1592,6 +1919,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         agentProfile: agent == null
             ? null
             : (name: agent.name, body: agent.prompt),
+        subagent: subagent,
         skills: skills?.modelVisible ?? const [],
         skillsCatalogMaxChars: skillsCatalogMaxChars,
       ),
@@ -1958,7 +2286,12 @@ final class AgentRuntimeImpl implements AgentRuntime {
         'names': [for (final agent in agents.agents) agent.name],
       },
     );
-    return _ProjectLoad(context, parsed.templates, agents.sessionAgents);
+    return _ProjectLoad(
+      context,
+      parsed.templates,
+      agents.sessionAgents,
+      agents.subagentAgents,
+    );
   }
 
   /// Подключает MCP-серверы сессии до возврата сессии (D6): слияние
@@ -2288,10 +2621,18 @@ final class _SessionScope {
 }
 
 final class _ProjectLoad {
-  const _ProjectLoad(this.context, this.templates, this.agents);
+  const _ProjectLoad(
+    this.context,
+    this.templates,
+    this.agents, [
+    this.subagentAgents = const [],
+  ]);
 
   /// Порта нет, он упал или не уложился в таймаут: сессия без файлов проекта.
   static const none = _ProjectLoad(null, [], []);
+
+  /// Определения для типов субагентов (`scope` `subagent` и `both`).
+  final List<AgentDefinition> subagentAgents;
 
   final ProjectContext? context;
   final List<CommandTemplate> templates;
@@ -2481,7 +2822,9 @@ final class _Session implements AgentSession {
     required this.skills,
     required this.skillsConfig,
     required ModeId modeFloor,
-  }) : _mode = mode,
+    SubagentManager? subagents,
+  }) : _subagents = subagents,
+       _mode = mode,
        _modeFloor = modeFloor,
        agents = List.unmodifiable(agents),
        _effort = effort,
@@ -2617,6 +2960,10 @@ final class _Session implements AgentSession {
   /// только это поле, поэтому усечённый навык не станет «активным» после
   /// перезагрузки. Новые значения действуют на сессии, открытые после неё.
   final SkillsConfig skillsConfig;
+
+  /// Менеджер потомков сессии; `null` — субагенты выключены в её конфигурации
+  /// на момент создания (D37).
+  final SubagentManager? _subagents;
 
   /// Выбранный агент; `null` — `default`.
   AgentDefinition? _activeAgent;
@@ -2868,6 +3215,9 @@ final class _Session implements AgentSession {
     _agent.config = _agent.config.copyWith(model: model);
     if (_agent.isRunning) {
       _pendingModel = model;
+    } else if (_recheckSubagents(model)) {
+      // Между ходами набор схем меняется сразу (D40).
+      _agent.tools = _visibleTools();
     }
   }
 
@@ -2880,12 +3230,15 @@ final class _Session implements AgentSession {
     _agentPending = false;
     _flushPendingPolicyMode();
     final mcpChanged = _applyMcpUpdate();
-    if (model == null && !mcpChanged && !agentChanged) {
+    // Окно зависит и от модели, и от `compaction.context_window_cap`, поэтому
+    // пересчёт — на каждой границе шага (D40).
+    final subagentsChanged = _recheckSubagents(model ?? _model);
+    if (model == null && !mcpChanged && !agentChanged && !subagentsChanged) {
       return null;
     }
     // Схемы и промпт встают вместе: после выбора агента или обновления MCP-
     // инструментов модель видит согласованный набор (D11, D6).
-    final toolsChanged = mcpChanged || agentChanged;
+    final toolsChanged = mcpChanged || agentChanged || subagentsChanged;
     return StepUpdate(
       model: model,
       tools: toolsChanged ? _visibleTools() : null,
@@ -2946,6 +3299,7 @@ final class _Session implements AgentSession {
       return _runBuiltin(call, content, cancel);
     }
     _policy.clearTurnGrants();
+    _subagents?.beginTurn();
     _tools.approvalWait.reset();
     _refreshSettings();
     _ended = null;
@@ -2974,6 +3328,7 @@ final class _Session implements AgentSession {
       usage: ended.usage,
       budgetExceeded: ended.budgetExceeded,
       held: ended.held,
+      subagentUsage: ended.subagentUsage,
     );
   }
 
@@ -3499,8 +3854,54 @@ final class _Session implements AgentSession {
   /// Схемы сессии за вычетом инструментов вне набора агента (CFG-7, D11).
   List<AgentTool> _visibleTools() => [
     for (final tool in _registry.tools)
-      if (_activeAgent?.allowsTool(tool.name) ?? true) tool,
+      if ((_activeAgent?.allowsTool(tool.name) ?? true) &&
+          (tool.name != 'agent' || _subagentsShown))
+        tool,
   ];
+
+  /// `agent` показан модели: окно текущей модели не меньше порога (D40).
+  /// Пересчитывается на границе шага при смене модели; работающие дети не
+  /// прерываются.
+  var _subagentsShown = true;
+
+  /// Перезагрузка конфигурации могла изменить `compaction.context_window_cap`
+  /// и с ним окно (D40): между ходами набор схем меняется сразу, во время
+  /// хода — на границе шага (`_takeStepUpdate` пересчитывает каждый шаг).
+  void _afterSettingsReloaded() {
+    if (!_agent.isRunning && _recheckSubagents(_model)) {
+      _agent.tools = _visibleTools();
+    }
+  }
+
+  /// Новое значение видимости `agent` для модели [model] с логом перехода;
+  /// `true` — набор схем изменился.
+  bool _recheckSubagents(ModelRef model) {
+    if (_registry.lookup('agent') == null) {
+      return false;
+    }
+    final ok = subagentWindowOk(
+      model,
+      _settingsOf().compaction.contextWindowCap,
+    );
+    if (ok == _subagentsShown) {
+      return false;
+    }
+    _subagentsShown = ok;
+    _logger.log(
+      LogLevel.info,
+      ok ? 'subagent.available' : 'subagent.unavailable',
+      fields: {
+        'session_id': id.value,
+        if (!ok) 'reason': 'context_window',
+        'window': effectiveContextWindow(
+          model,
+          cap: _settingsOf().compaction.contextWindowCap,
+        ),
+        'min_window': CompactionSettings.minSubagentContextWindow,
+      },
+    );
+    return true;
+  }
 
   /// Текст отказа для инструмента реестра, которого нет в наборе агента;
   /// `null` — инструмент не отфильтрован агентом (его просто нет).
@@ -3682,6 +4083,7 @@ final class _Session implements AgentSession {
     _mcp.cancel.cancel(const ShutdownCancel());
     _agent.abort(const ShutdownCancel());
     _backgroundCancel?.cancel(const ShutdownCancel());
+    await _subagents?.closeAll(const ShutdownCancel());
     await _agent.waitForIdle();
     await _background;
     // Сжатие или смена по команде не должны писать в журнал после его
@@ -3723,6 +4125,7 @@ final class _Session implements AgentSession {
       for (final call in findInterruptedCalls(snapshot))
         call.id: await _describe(call),
     };
+    final interruptedChildren = interruptedSubagentRecords(snapshot);
     final healed = healInterruptedTurn(
       snapshot,
       _services.ids,
@@ -3732,6 +4135,11 @@ final class _Session implements AgentSession {
     for (final record in healed) {
       await _writer.appendBuilt(record, durable: true);
     }
+    // Прерванные дети не перезапускаются: журнал фиксирует `failed` с
+    // `interrupted` (S-13, SUB-9).
+    for (final template in interruptedChildren) {
+      await _writer.append(template.placed, durable: true);
+    }
   }
 
   /// Заголовок прерванного вызова — тот же `present()`, что дал бы
@@ -3740,6 +4148,10 @@ final class _Session implements AgentSession {
     final tool = _registry.lookup(call.name);
     if (tool == null) {
       return ToolMeta(title: call.name, kind: ToolKind.other);
+    }
+    if (tool is SubagentTool) {
+      // Заголовок без резерва id: лечение не должно расходовать id (D36 Т6).
+      return ToolMeta(title: tool.titleOf(call.arguments), kind: tool.kind);
     }
     try {
       final presented = await tool.present(

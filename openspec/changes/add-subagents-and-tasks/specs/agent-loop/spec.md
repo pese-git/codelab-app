@@ -31,3 +31,32 @@
 #### Scenario: Список задач до результата вызова
 - **WHEN** модель вызывает `task_create`
 - **THEN** `TaskListChanged` приходит между `ToolCallStarted` и `ToolCallFinished` этого вызова
+
+### Requirement: Пакет инструментов
+Пакет вызовов одного ответа SHALL исполняться по §5.5 (решение пользователя 2026-11-14; design.md change `add-subagents-and-tasks`, D39):
+- **Группы.** Пакет SHALL делиться по порядку ответа модели на группы: подряд идущие вызовы, у которых `executionModeOf(args) == parallel`, — одна параллельная группа; каждый вызов с `executionModeOf(args) == sequential` — барьер, группа из одного вызова (LOOP-4). Группы SHALL исполняться строго по порядку: барьер начинается после завершения всех вызовов перед ним, следующая группа — после завершения барьера. Один `sequential`-вызов НЕ SHALL делать последовательным весь пакет.
+- **Параллельная группа.** `ToolCallStarted` вызовов группы эмитятся по порядку ответа в начале группы, затем вызовы группы исполняются одновременно; `ToolCallFinished` — в порядке завершения (LOOP-3).
+- **Барьер.** `ToolCallStarted` → исполнение → `ToolCallFinished`.
+- **Отмена.** Перед каждой группой SHALL проверяться отмена. Вызовы не начатых групп не исполняются и получают `ToolCallStarted` и `ToolCallFinished(cancelled)` с текстом `Tool call was cancelled before it started`; идущие вызовы группы отменяются токеном хода.
+- **Результаты.** Сообщения-результаты SHALL добавляться после всего пакета в порядке вызовов ответа, независимо от групп (LOOP-3); у каждого вызова ответа есть результат (TOOL-6).
+- **Предохранитель.** В начале хода создаётся один `MisuseBreaker`, общий для всех вызовов хода (LOOP-16).
+
+#### Scenario: Барьер делит пакет на группы
+- **WHEN** ответ содержит `[read, task_update, agent, agent]`, где `task_update` — `sequential`, остальные — `parallel`
+- **THEN** события идут как `ToolCallStarted(read)`, `ToolCallFinished(read)`, `ToolCallStarted(task_update)`, `ToolCallFinished(task_update)`, `ToolCallStarted(agent1)`, `ToolCallStarted(agent2)`, затем два `ToolCallFinished(agent)` в порядке завершения; оба `agent` исполняются одновременно, `task_update` начинается после завершения `read`; результаты в транскрипте — `read`, `task_update`, `agent1`, `agent2` (`sequential_mode_test.dart`)
+
+#### Scenario: Два барьера подряд
+- **WHEN** ответ содержит `[task_create, task_create, read, ls]`
+- **THEN** `task_create` исполняются по одному в порядке ответа и получают id по порядку, затем `read` и `ls` — одновременно
+
+#### Scenario: Отмена посреди группы
+- **WHEN** ход отменяется, пока исполняется группа `{agent, agent}` пакета `[agent, agent, task_update, read]`
+- **THEN** оба `agent` завершаются по отмене через токен хода, `task_update` и `read` не исполняются и получают `ToolCallFinished(cancelled)` с текстом `Tool call was cancelled before it started`, у каждого вызова ответа есть результат
+
+#### Scenario: Режим по аргументам
+- **WHEN** в пакете два вызова, и `executionModeOf` одного из них возвращает `sequential` только при заданном аргументе
+- **THEN** с этим аргументом он — барьер между группами, без него оба вызова исполняются одной параллельной группой
+
+#### Scenario: Пакет без барьеров
+- **WHEN** все вызовы ответа — `parallel`
+- **THEN** все `ToolCallStarted` эмитятся по порядку ответа, затем вызовы исполняются одновременно — как одна группа

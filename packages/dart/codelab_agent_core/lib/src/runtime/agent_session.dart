@@ -187,12 +187,16 @@ final class TurnResult {
     required this.usage,
     this.budgetExceeded,
     this.held,
+    this.subagentUsage,
   });
 
   final TurnEndReason reason;
   final Usage usage;
   final BudgetLimit? budgetExceeded;
   final String? held;
+
+  /// Usage детей хода, уже включённый в [usage]; `null` — детей не было.
+  final Usage? subagentUsage;
 }
 
 /// Ports of one session; each falls back to `AgentCoreServices`.

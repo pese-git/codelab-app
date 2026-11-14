@@ -12,6 +12,8 @@ library;
 
 import '../commands/expand_command.dart' show CommandRef;
 import '../llm/messages.dart';
+import '../llm/usage.dart';
+import '../subagents/subagent_model.dart';
 import '../llm/model_ref.dart';
 import '../loop/agent_events.dart';
 import '../tools/agent_tool.dart';
@@ -63,6 +65,7 @@ final class SessionHeader {
     required this.created,
     required this.agent,
     this.version = sessionFormatVersion,
+    this.parent,
     Map<String, Object?> metadata = const {},
     Map<String, Object?> extra = const {},
   }) : metadata = Map.unmodifiable(metadata),
@@ -84,6 +87,9 @@ final class SessionHeader {
       created: DateTime.parse(_string(json, 'created')),
       agent: AgentInfo.fromJson(_object(json, 'agent')),
       version: version,
+      parent: json['parent'] is Map<String, Object?>
+          ? SessionParent.fromJson(json['parent']! as Map<String, Object?>)
+          : null,
       metadata: json['metadata'] is Map<String, Object?>
           ? json['metadata']! as Map<String, Object?>
           : const {},
@@ -95,6 +101,7 @@ final class SessionHeader {
         'created',
         'agent',
         'metadata',
+        'parent',
       }),
     );
   }
@@ -110,6 +117,11 @@ final class SessionHeader {
   /// Свободные данные хоста; ядро их не интерпретирует.
   final Map<String, Object?> metadata;
 
+  /// Связь журнала потомка с деревом; `null` у журнала сессии пользователя
+  /// (`agent-core/17-3-subagents.md` §17.3.6; change `add-subagents-and-tasks`,
+  /// D7, D36 Т4). Обязателен для `SessionStore.createChild`.
+  final SessionParent? parent;
+
   /// Неизвестные поля заголовка известной версии.
   final Map<String, Object?> extra;
 
@@ -121,7 +133,47 @@ final class SessionHeader {
     'created': formatJournalTime(created),
     'agent': agent.toJson(),
     if (metadata.isNotEmpty) 'metadata': metadata,
+    if (parent != null) 'parent': parent!.toJson(),
     ...extra,
+  };
+}
+
+/// Поле `parent` заголовка журнала потомка: прямой родитель, корень дерева,
+/// вызов `agent`, id, тип и глубина потомка.
+///
+/// Почему в заголовке: дерево восстанавливается по заголовкам и записям
+/// `subagent` (журналы лежат плоско в `subagents/` корня, D7). `agent` —
+/// имя типа: в журнале поле называется так, потому что `type` — вид записи.
+final class SessionParent {
+  const SessionParent({
+    required this.sessionId,
+    required this.rootSessionId,
+    required this.toolCallId,
+    required this.subagentId,
+    required this.agent,
+    required this.depth,
+  });
+
+  factory SessionParent.fromJson(Map<String, Object?> json) => SessionParent(
+    sessionId: SessionId(_string(json, 'sessionId')),
+    rootSessionId: SessionId(_string(json, 'rootSessionId')),
+    toolCallId: _string(json, 'toolCallId'),
+    subagentId: _string(json, 'subagentId'),
+    agent: _string(json, 'agent'),
+    depth: _int(json, 'depth'),
+  );
+
+  final SessionId sessionId, rootSessionId;
+  final String toolCallId, subagentId, agent;
+  final int depth;
+
+  Map<String, Object?> toJson() => {
+    'sessionId': sessionId.value,
+    'rootSessionId': rootSessionId.value,
+    'toolCallId': toolCallId,
+    'subagentId': subagentId,
+    'agent': agent,
+    'depth': depth,
   };
 }
 
@@ -226,6 +278,39 @@ sealed class SessionRecord {
             parseTaskId(id),
         ],
         extra: extra(const {'op', 'actor', 'items', 'deleted'}),
+      ),
+      'subagent' => SubagentRecord(
+        id: id,
+        parentId: parentId,
+        timestamp: timestamp,
+        subagentId: _string(json, 'subagentId'),
+        toolCallId: _string(json, 'toolCallId'),
+        agent: _string(json, 'agent'),
+        description: json['description'] as String? ?? '',
+        childSessionId: json['childSessionId'] as String?,
+        journal: json['journal'] as String?,
+        status: _string(json, 'status'),
+        failure: json['failure'] as String?,
+        report: json['report'] as String?,
+        usage: json['usage'] is Map<String, Object?>
+            ? Usage.fromJson(json['usage']! as Map<String, Object?>)
+            : null,
+        toolCalls: json['toolCalls'] as int?,
+        durationMs: json['durationMs'] as int?,
+        extra: extra(const {
+          'subagentId',
+          'toolCallId',
+          'agent',
+          'description',
+          'childSessionId',
+          'journal',
+          'status',
+          'failure',
+          'report',
+          'usage',
+          'toolCalls',
+          'durationMs',
+        }),
       ),
       'compaction' => CompactionRecord(
         id: id,
@@ -564,6 +649,92 @@ final class TaskRecord extends SessionRecord {
     'actor': actor.wire,
     'items': [for (final item in items) item.toJson()],
     'deleted': deleted,
+  };
+}
+
+/// Связь вызова `agent` с журналом потомка (`agent-core/17-3-subagents.md`
+/// §17.3.6): `running` при получении слота и итоговая запись с отчётом.
+///
+/// Последняя запись с данным [subagentId] выигрывает. Запись служебная, в
+/// контекст модели не входит; итоговая пишется `durable` до
+/// `ToolCallFinished(agent)` (SUB-10) — это точка восстановления отчёта после
+/// сбоя. [agent] — имя типа (в журнале поле называется так, D28).
+final class SubagentRecord extends SessionRecord {
+  SubagentRecord({
+    required super.id,
+    required super.parentId,
+    required super.timestamp,
+    required this.subagentId,
+    required this.toolCallId,
+    required this.agent,
+    required this.description,
+    this.childSessionId,
+    this.journal,
+    required this.status,
+    this.failure,
+    this.report,
+    this.usage,
+    this.toolCalls,
+    this.durationMs,
+    super.extra,
+  });
+
+  final SubagentId subagentId;
+  final String toolCallId, agent, description;
+
+  /// `null` у ребёнка, отменённого в очереди.
+  final String? childSessionId, journal;
+
+  /// `running | completed | failed | cancelled`.
+  final String status;
+
+  /// `budget_exceeded:` и лимит, `invalid_output`, `error`, `refused`,
+  /// `interrupted`.
+  final String? failure;
+
+  /// У итоговой записи — тело отчёта после усечения, без обёртки.
+  final String? report;
+  final Usage? usage;
+  final int? toolCalls, durationMs;
+
+  /// Копия записи-шаблона с настоящими `id`, родителем и временем.
+  SubagentRecord placed(String id, String? parentId, DateTime timestamp) =>
+      SubagentRecord(
+        id: id,
+        parentId: parentId,
+        timestamp: timestamp,
+        subagentId: subagentId,
+        toolCallId: toolCallId,
+        agent: agent,
+        description: description,
+        childSessionId: childSessionId,
+        journal: journal,
+        status: status,
+        failure: failure,
+        report: report,
+        usage: usage,
+        toolCalls: toolCalls,
+        durationMs: durationMs,
+        extra: extra,
+      );
+
+  @override
+  String get type => 'subagent';
+
+  @override
+  Map<String, Object?> get _fields => {
+    'subagentId': subagentId,
+    'toolCallId': toolCallId,
+    'agent': agent,
+    'description': description,
+    'childSessionId': ?childSessionId,
+    'journal': ?journal,
+    'status': status,
+    'failure': ?failure,
+    'report': ?report,
+    'usage': ?usage?.toJson(),
+    'toolCalls': ?toolCalls,
+    'durationMs': ?durationMs,
   };
 }
 

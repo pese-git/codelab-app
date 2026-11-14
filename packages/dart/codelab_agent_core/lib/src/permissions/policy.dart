@@ -94,6 +94,7 @@ final class PermissionPolicy {
     this.findCritical = defaultCriticalFinder,
     this.agentConfigPaths,
     this.pathResolver,
+    this.modeOf,
   }) : decisions = decisions ?? PermissionDecisionStore();
 
   /// Режим сессии; смена действует со следующего вызова.
@@ -127,7 +128,13 @@ final class PermissionPolicy {
   final _turnAllow = <String>{};
   final _turnDeny = <String>{};
 
-  PermissionMode get effectiveMode => modeOverride ?? mode.permissionMode;
+  /// Режим потомка, вычисляемый при каждом решении (`narrow(родитель, тип)`,
+  /// SUB-2). Задан — [mode] и [modeOverride] не читаются: пара уже учла
+  /// режим предков. `null` у корневой сессии.
+  final ModeResolution Function()? modeOf;
+
+  PermissionMode get effectiveMode =>
+      modeOf?.call().mode ?? modeOverride ?? mode.permissionMode;
 
   /// Разрешения и запреты по имени инструмента только на текущий ход.
   void grantForTurn({
@@ -208,8 +215,9 @@ final class PermissionPolicy {
     if (_turnDeny.contains(tool.name)) {
       return const Denied('not allowed in this turn');
     }
+    final denied = modeOf?.call().deniedTiers ?? mode.deniedTiers;
     if (modeOverride == null &&
-        (mode.deniedTiers.contains(tier) || extraDeniedTiers.contains(tier))) {
+        (denied.contains(tier) || extraDeniedTiers.contains(tier))) {
       return const Denied('plan mode: changes are not allowed');
     }
     final effective = effectiveMode;

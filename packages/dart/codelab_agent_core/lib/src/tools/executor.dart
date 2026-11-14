@@ -128,7 +128,8 @@ final class ToolCallExecutor implements ToolExecutor {
     required this.env,
     required this.services,
     this.unavailableText,
-  });
+    PathLock? locks,
+  }) : _locks = locks ?? PathLock();
 
   final ToolRegistry registry;
 
@@ -145,7 +146,10 @@ final class ToolCallExecutor implements ToolExecutor {
   /// Ограниченный env сессии (ENV-2).
   final ExecutionEnv env;
   final ToolServices services;
-  final _locks = PathLock();
+
+  /// Очередь путей: ребёнок получает очередь корня, поэтому параллельные
+  /// правки одного файла во всём дереве упорядочены (TOOL-7).
+  final PathLock _locks;
 
   @override
   Future<ToolCallHandle> announce(
@@ -220,6 +224,7 @@ final class ToolCallExecutor implements ToolExecutor {
           title: presentation.title,
           input: call.arguments,
           locations: presentation.locations,
+          subagent: presentation.subagent,
         ),
       );
     } on Object {

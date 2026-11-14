@@ -79,6 +79,7 @@ final class _StubList implements TaskList {
     TaskOp op,
     TaskActor actor, {
     String? toolCallId,
+    TaskRejected? Function(List<TaskItem> items)? precheck,
   }) async => TaskApplied(
     change: TaskChange(
       op: 'update',

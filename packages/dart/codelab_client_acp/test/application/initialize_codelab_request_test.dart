@@ -1,10 +1,14 @@
-// Исходящий `initialize` клиента CodeLab объявляет расширения (задача 1.1,
-// «kit» change `add-subagents-and-tasks`; spec acp-protocol-client «Объявление
-// расширений CodeLab при initialize», сценарий «Запрос initialize клиента
-// CodeLab»; design.md, D9, D21).
+// Исходящий `initialize` клиента CodeLab объявляет расширения (задачи 1.1 и
+// 2.1 «kit» change `add-subagents-and-tasks`; spec acp-protocol-client
+// «Объявление расширений CodeLab при initialize», сценарии «Запрос
+// initialize клиента CodeLab (итерация 1)» и «(итерация 2)»; design.md, D9,
+// D21; задача 2.9a).
 //
-// Красный тест: клиент пока шлёт `clientCapabilities` без `_meta` (задача
-// 1.6) — падает на сравнении тела запроса. Фикстуру корпуса
+// Редакция итерации 2: к `tasks` добавляется `subagents: {version: 1}`
+// (строка `agent` и запрос потомка клиент уже показывает); `subagentToolCalls`
+// по-прежнему нет — клиент не умеет показывать дерево вызовов потомков
+// (задача 5.4). Красный тест: клиент пока объявляет только `tasks` —
+// падает на сравнении тела запроса. Фикстуру корпуса
 // `acp/initialize-codelab-extensions` ведёт протокольный исполнитель; здесь
 // кадр собран в самом тесте.
 
@@ -29,9 +33,8 @@ void main() {
         as Map<String, Object?>;
   }
 
-  test('the initialize request declares only tasks in '
-      'clientCapabilities._meta.codelab (subagents come with iterations 2 '
-      'and 5)', () async {
+  test('the initialize request declares tasks and subagents, but not '
+      'subagentToolCalls, in clientCapabilities._meta.codelab', () async {
     transport = FakeAcpTransport();
     client = AcpClientApplication(transport: FakeAcpTransport());
     addTearDown(client.dispose);
@@ -41,8 +44,14 @@ void main() {
     expect(capabilities['_meta'], {
       'codelab': {
         'tasks': {'version': 1},
+        'subagents': {'version': 1},
       },
     });
+    // Дерево вызовов потомков клиент объявит только в задаче 5.4: иначе агент
+    // слал бы кадры, которых клиент не умеет показывать (D9, D21).
+    final codelab =
+        (capabilities['_meta']! as Map)['codelab']! as Map<String, Object?>;
+    expect(codelab, isNot(contains('subagentToolCalls')));
     // Других полей вне `_meta` для этого нет, прежние — как раньше.
     expect(capabilities.keys.toSet(), {'fs', 'terminal', '_meta'});
   });

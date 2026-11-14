@@ -3,6 +3,7 @@ import '../env/execution_env.dart';
 import '../llm/messages.dart';
 import '../llm/stream_function.dart';
 import '../loop/agent_events.dart';
+import '../subagents/subagent_model.dart';
 import '../util/canonical_json.dart';
 import '../util/clock.dart';
 import '../util/logger.dart';
@@ -212,7 +213,12 @@ final class ToolPresentation {
     required this.title,
     this.locations = const [],
     this.diffs = const [],
+    this.subagent,
   });
+
+  /// Признак вызова `agent`: id и тип, зарезервированные до
+  /// `ToolCallStarted` (design.md change `add-subagents-and-tasks`, D28).
+  final SubagentCallRef? subagent;
 
   final String title;
   final List<Location> locations;

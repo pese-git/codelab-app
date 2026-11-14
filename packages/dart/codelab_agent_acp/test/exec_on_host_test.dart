@@ -58,6 +58,9 @@ final class _SpyRuntime implements AgentRuntime {
   }
 
   @override
+  SubagentsInfo? get subagents => inner.subagents;
+
+  @override
   Future<void> dispose() => inner.dispose();
 
   // Остальные методы тесту не нужны: вызов упадёт явно.
