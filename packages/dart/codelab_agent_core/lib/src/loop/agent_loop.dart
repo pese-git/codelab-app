@@ -636,8 +636,37 @@ final class _Turn {
     });
     if (!sequential) {
       final handles = <ToolCallHandle>[];
-      for (final call in calls) {
-        handles.add(await executor.announce(call, invocation));
+      try {
+        for (final call in calls) {
+          handles.add(await executor.announce(call, invocation));
+        }
+      } on Object {
+        // Уже объявленные вызовы держат места в очереди `PathLock` сессии;
+        // без `abandon` их пути остались бы заняты и в следующих ходах.
+        // `abandon` отпускает тикет до эмита `ToolCallFinished`, поэтому его
+        // собственный сбой путь уже не держит; ход заканчивается исходной
+        // ошибкой (LOOP-1).
+        for (final handle in handles) {
+          try {
+            await executor.abandon(handle);
+          } on Object catch (error, stack) {
+            // Исходная ошибка важнее: она уйдёт в `AgentError` хода. Сбой
+            // отката только логируется, чтобы его причина не потерялась,
+            // если сломан сам приёмник событий (§16).
+            _config.logger?.log(
+              LogLevel.warning,
+              'tool.abandon.error',
+              fields: {
+                'session_id': _session.value,
+                'tool': handle.call.name,
+                'tool_call_id': handle.call.id,
+              },
+              error: error,
+              stack: stack,
+            );
+          }
+        }
+        rethrow;
       }
       final outcomes = await Future.wait(handles.map(executor.complete));
       return [for (final outcome in outcomes) outcome.message];
