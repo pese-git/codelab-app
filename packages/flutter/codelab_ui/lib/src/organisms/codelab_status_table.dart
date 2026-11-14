@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../rendering/escape_for_display.dart';
 
 /// Ячейка строки [CodeLabStatusTable].
 ///
@@ -16,6 +17,9 @@ class CodeLabStatusTableCell {
     this.tone,
     this.mono = false,
     this.muted = false,
+    this.secondary,
+    this.tags = const [],
+    this.untrusted = false,
   });
 
   /// Текст ячейки (при [tone] — подпись индикатора).
@@ -29,6 +33,75 @@ class CodeLabStatusTableCell {
 
   /// Вторичный цвет (прочерк «нет значения»).
   final bool muted;
+
+  /// Вторая строка приглушённым цветом (описание навыка под именем).
+  ///
+  /// Почему: страница «Skills & extensions» (change `add-app-skills-page`,
+  /// D12) показывает имя и описание в одной колонке. Строка ограничена двумя
+  /// строками, полный текст — в подсказке; `null` — второй строки нет.
+  final String? secondary;
+
+  /// Теги после основного текста («Overrides user skill», «1 warning»).
+  final List<CodeLabStatusTableTag> tags;
+
+  /// Текст ячейки пришёл из файла и недоверен (D12, `AGENTS.md` §10).
+  ///
+  /// Для чего: управляющие, невидимые и bidi-символы ([text], [secondary] и
+  /// подсказка) становятся видимыми `\uXXXX`; текст — только простой, без
+  /// markdown и ссылок. По умолчанию `false`: ячейки MCP servers прежние.
+  final bool untrusted;
+}
+
+/// Тег ячейки [CodeLabStatusTable]: подпись и тон `CodeLabBadge`.
+///
+/// Почему модель: тон выбирает вызывающий (виджет смысла данных не знает).
+class CodeLabStatusTableTag {
+  const CodeLabStatusTableTag(
+    this.label, {
+    this.tone = CodeLabTone.neutral,
+    this.tooltip,
+  });
+
+  /// Подсказка тега (например, текст предупреждения со ссылкой на файл).
+  ///
+  /// При `untrusted` ячейки показывается через `escapeForDisplay`.
+  final String? tooltip;
+
+  /// Подпись тега.
+  final String label;
+
+  /// Тон тега.
+  final CodeLabTone tone;
+}
+
+/// Переключатель строки [CodeLabStatusTable] вместо кнопки действия.
+///
+/// Как использовать: [onChanged] получает новое значение; `null` — переключатель
+/// неактивен, а [tooltip] объясняет причину (D12). [label] — подпись для
+/// чтения с экрана. Решение о записи принимает владелец, не виджет.
+class CodeLabStatusTableToggle {
+  const CodeLabStatusTableToggle({
+    required this.value,
+    required this.onChanged,
+    required this.label,
+    this.tooltip,
+    this.key,
+  });
+
+  /// Текущее значение.
+  final bool value;
+
+  /// Смена значения; `null` — переключатель неактивен.
+  final ValueChanged<bool>? onChanged;
+
+  /// Подпись для чтения с экрана.
+  final String label;
+
+  /// Подсказка (причина неактивности).
+  final String? tooltip;
+
+  /// Ключ переключателя (для тестов владельца).
+  final Key? key;
 }
 
 /// Действие строки [CodeLabStatusTable] (кнопка «Reconnect» артборда).
@@ -54,7 +127,15 @@ class CodeLabStatusTableAction {
 /// Строка [CodeLabStatusTable]: [cells] по числу колонок и необязательное
 /// [action]; у строки без действия колонка действий остаётся пустой.
 class CodeLabStatusTableRow {
-  const CodeLabStatusTableRow({required this.cells, this.action, this.key});
+  const CodeLabStatusTableRow({
+    required this.cells,
+    this.action,
+    this.toggle,
+    this.key,
+  }) : assert(
+         toggle == null || action == null,
+         'У строки либо действие, либо переключатель',
+       );
 
   /// Ячейки по порядку колонок.
   final List<CodeLabStatusTableCell> cells;
@@ -62,24 +143,34 @@ class CodeLabStatusTableRow {
   /// Действие строки; `null` — колонка действий пуста.
   final CodeLabStatusTableAction? action;
 
+  /// Переключатель строки; занимает колонку действий вместо [action].
+  final CodeLabStatusTableToggle? toggle;
+
   /// Ключ виджета строки (для тестов владельца).
   final Key? key;
 }
 
-/// Таблица состояния с колонками и действием строки.
+/// Таблица состояния с колонками и действием или переключателем строки.
 ///
 /// Почему: панель «Agent status» страницы «MCP servers» (артборд `Mcp`,
 /// `ListView (table)`) показывает `SERVER · STATE · TOOLS · LAST ERROR` и
 /// «Reconnect» в строке; таблиц в `codelab_ui` не было (design.md change
 /// `add-provider-setup-ui`, D19).
 ///
-/// Для чего: только вёрстка. Колонки одинаковой ширины выравнивают ячейки
-/// всех строк под заголовками; последняя колонка действий без видимого
-/// заголовка (подпись [actionsLabel] — для чтения с экрана). Бизнес-логики и
-/// знания о MCP нет.
+/// Второе употребление — таблица навыков страницы «Skills & extensions»
+/// (change `add-app-skills-page`, D12): вторая строка и теги ячейки,
+/// переключатель вместо действия, веса колонок, экранирование недоверенного
+/// текста; без новых параметров вёрстка прежняя.
+///
+/// Для чего: только вёрстка. По умолчанию колонки равны, [columnFlex] задаёт
+/// веса; ячейки всех строк стоят под заголовками. Последняя колонка — действие
+/// строки или переключатель (не оба сразу) без видимого заголовка (подпись
+/// [actionsLabel] — для чтения с экрана). Бизнес-логики и знания о MCP или
+/// навыках нет.
 ///
 /// Как использовать: `CodeLabStatusTable(columns: [...], rows: [...])`;
-/// число ячеек строки равно числу колонок.
+/// число ячеек строки равно числу колонок, длина [columnFlex] — тоже
+/// (`assert` конструктора), веса положительны (`assert` в `build`).
 class CodeLabStatusTable extends StatelessWidget {
   const CodeLabStatusTable({
     required this.columns,
@@ -106,7 +197,9 @@ class CodeLabStatusTable extends StatelessWidget {
   /// Почему: при равных колонках на узкой странице (~400 pt) заголовок
   /// «LAST ERROR» обрезался, хотя «TOOLS» оставлял пустое место. Широкой
   /// колонке — самой длинной по значениям — владелец даёт больший вес, как
-  /// авто-ширина колонок в артборде `Mcp`. Длина равна числу [columns].
+  /// авто-ширина колонок в артборде `Mcp`. Длина равна числу [columns],
+  /// веса положительны. Страница «Skills & extensions» задаёт веса так же
+  /// (change `add-app-skills-page`, D12).
   final List<int>? columnFlex;
 
   static const _actionWidth = 120.0;
@@ -114,21 +207,87 @@ class CodeLabStatusTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Длину проверяет конструктор; положительность — здесь: `every` нельзя
+    // вычислить в `assert` константного конструктора.
+    assert(
+      columnFlex == null || columnFlex!.every((f) => f > 0),
+      'columnFlex: веса положительны',
+    );
     final theme = FluentTheme.of(context);
     final secondary = theme.resources.textFillColorSecondary;
     final stroke = theme.resources.cardStrokeColorDefault;
     final mono = CodeLabText.styleOf(context, CodeLabTextRole.mono)!;
     final body = CodeLabText.styleOf(context, CodeLabTextRole.body)!;
 
+    Widget tagWidget(CodeLabStatusTableTag tag, bool untrusted) {
+      Widget badge = CodeLabBadge(
+        label: untrusted ? escapeForDisplay(tag.label) : tag.label,
+        tone: tag.tone,
+      );
+      if (tag.tooltip case final message?) {
+        badge = Tooltip(
+          message: untrusted ? escapeForDisplay(message) : message,
+          child: badge,
+        );
+      }
+      return badge;
+    }
+
     Widget cell(CodeLabStatusTableCell cell) {
+      String shown(String value) =>
+          cell.untrusted ? escapeForDisplay(value) : value;
       if (cell.tone case final tone?) {
-        return CodeLabStatusIndicator(label: cell.text, tone: tone);
+        return CodeLabStatusIndicator(label: shown(cell.text), tone: tone);
       }
       var style = cell.mono ? mono : body;
       if (cell.muted) {
         style = style.copyWith(color: secondary);
       }
-      return Text(cell.text, style: style);
+      final text = Text(shown(cell.text), style: style);
+      final second = cell.secondary;
+      if (second == null && cell.tags.isEmpty) return text;
+      final head = cell.tags.isEmpty
+          ? text
+          : Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                text,
+                for (final tag in cell.tags) tagWidget(tag, cell.untrusted),
+              ],
+            );
+      if (second == null) return head;
+      final shownSecond = shown(second);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          head,
+          Tooltip(
+            message: shownSecond,
+            child: Text(
+              shownSecond,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: body.copyWith(color: secondary),
+            ),
+          ),
+        ],
+      );
+    }
+
+    Widget toggle(CodeLabStatusTableToggle toggle) {
+      Widget control = ToggleSwitch(
+        key: toggle.key,
+        checked: toggle.value,
+        onChanged: toggle.onChanged,
+        semanticLabel: escapeForDisplay(toggle.label),
+      );
+      if (toggle.tooltip case final message?) {
+        control = Tooltip(message: escapeForDisplay(message), child: control);
+      }
+      return Align(alignment: Alignment.centerRight, child: control);
     }
 
     Widget line(List<Widget> cells, Widget actions, {Border? border}) =>
@@ -183,7 +342,9 @@ class CodeLabStatusTable extends StatelessWidget {
               key: row.key,
               child: line(
                 [for (final item in row.cells) cell(item)],
-                row.action == null
+                row.toggle != null
+                    ? toggle(row.toggle!)
+                    : row.action == null
                     ? const SizedBox.shrink()
                     : Align(
                         alignment: Alignment.centerRight,

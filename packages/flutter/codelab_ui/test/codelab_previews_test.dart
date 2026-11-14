@@ -1,7 +1,7 @@
 import 'package:codelab_ui/src/molecules/codelab_molecule_previews.dart';
 import 'package:codelab_ui/src/organisms/codelab_organism_previews.dart';
 import 'package:codelab_ui/codelab_ui.dart';
-import 'package:fluent_ui/fluent_ui.dart' show FluentTheme;
+import 'package:fluent_ui/fluent_ui.dart' show FluentTheme, ToggleSwitch;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -101,6 +101,21 @@ void main() {
       ).brightness,
       Brightness.dark,
     );
+  });
+
+  // Задача 3.2 change `add-app-skills-page` (D12): превью таблицы навыков.
+  testWidgets('skills table preview shows tags, toggles and escaped text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(codelabSkillsTablePreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabBadge), findsWidgets);
+    final toggles = tester
+        .widgetList<ToggleSwitch>(find.byType(ToggleSwitch))
+        .toList();
+    expect(toggles.map((t) => t.checked), [true, false]);
+    expect(toggles.last.onChanged, isNull);
+    expect(find.text('deploy\\u202egpj'), findsOneWidget);
   });
 
   testWidgets('organism previews render in bounded preview surfaces', (

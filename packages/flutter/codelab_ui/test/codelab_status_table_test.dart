@@ -416,7 +416,9 @@ void _skillsTableTests() {
     testWidgets('без secondary второй строки и подсказки нет', (tester) async {
       await _pump(tester, [_skillRow('review')]);
 
-      expect(find.byType(Tooltip), findsNothing);
+      // Подсказки есть только у заголовков колонок (полный текст заголовка
+      // при многоточии), у ячейки без secondary её нет.
+      expect(_tooltipMessages(tester), _skillColumns);
       expect(find.byType(Text), findsNWidgets(_skillColumns.length + 2));
     });
   });
@@ -495,6 +497,14 @@ void _skillsTableTests() {
         greaterThan(tester.getTopLeft(find.text('SOURCE')).dx),
       );
 
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('skills-toggle-review')),
+          matching: find.byType(ToggleSwitch),
+          matchRoot: true,
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.byType(ToggleSwitch));
       await tester.pumpAndSettle();
       expect(received, isFalse);
@@ -557,6 +567,9 @@ void _skillsTableTests() {
 
   group('columnFlex — доли колонок', () {
     testWidgets('ширина колонок пропорциональна долям', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       await _pump(
         tester,
         [_skillRow('review')],
@@ -570,7 +583,28 @@ void _skillsTableTests() {
       expect(secondX - firstX, closeTo(776 * 0.75, 1));
     });
 
+    testWidgets('веса задают отношение, а не абсолютную ширину: [1, 3]', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pump(
+        tester,
+        [_skillRow('review')],
+        columnFlex: const [1, 3],
+        width: 920,
+      );
+
+      final firstX = tester.getTopLeft(find.text('SKILL')).dx;
+      final secondX = tester.getTopLeft(find.text('SOURCE')).dx;
+      expect(secondX - firstX, closeTo(776 * 0.25, 1));
+    });
+
     testWidgets('по умолчанию колонки равны', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       await _pump(tester, [_skillRow('review')], width: 920);
 
       final firstX = tester.getTopLeft(find.text('SKILL')).dx;
@@ -597,6 +631,86 @@ void _skillsTableTests() {
         expect(_tooltipWith(hostile), findsNothing);
       },
     );
+
+    testWidgets('подпись индикатора состояния тоже экранируется', (
+      tester,
+    ) async {
+      await _pump(tester, [
+        const CodeLabStatusTableRow(
+          cells: [
+            CodeLabStatusTableCell(
+              'na\u202Eme',
+              tone: CodeLabStatusTone.active,
+              untrusted: true,
+            ),
+            CodeLabStatusTableCell('user'),
+          ],
+        ),
+      ]);
+
+      expect(find.text('na\\u202eme'), findsOneWidget);
+      expect(find.text('na\u202Eme'), findsNothing);
+    });
+
+    testWidgets('подсказка и подпись тега экранируются', (tester) async {
+      await _pump(tester, [
+        _skillRow(
+          'a',
+          untrusted: true,
+          tags: const [
+            CodeLabStatusTableTag(
+              '1 warn\u202Eing',
+              tone: CodeLabTone.warning,
+              tooltip: 'bad \u202Epath/SKILL.md',
+            ),
+          ],
+        ),
+      ]);
+
+      expect(find.byType(CodeLabBadge), findsOneWidget);
+      expect(_tooltipWith('bad \\u202epath/SKILL.md'), findsOneWidget);
+      expect(_tooltipWith('bad \u202Epath/SKILL.md'), findsNothing);
+      expect(
+        tester.widget<CodeLabBadge>(find.byType(CodeLabBadge)).label,
+        '1 warn\\u202eing',
+      );
+    });
+
+    testWidgets('тег без недоверенного текста: подсказка как есть', (
+      tester,
+    ) async {
+      await _pump(tester, [
+        _skillRow(
+          'a',
+          tags: const [
+            CodeLabStatusTableTag('1 warning', tooltip: 'x/SKILL.md'),
+          ],
+        ),
+      ]);
+
+      expect(_tooltipWith('x/SKILL.md'), findsOneWidget);
+    });
+
+    testWidgets('подпись и подсказка переключателя экранируются всегда', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pump(tester, [
+        _skillRow(
+          'a',
+          toggle: const CodeLabStatusTableToggle(
+            value: true,
+            label: 'Enable \u202Ea',
+            onChanged: null,
+            tooltip: 'why \u202Eb',
+          ),
+        ),
+      ]);
+
+      expect(find.bySemanticsLabel('Enable \\u202ea'), findsOneWidget);
+      expect(_tooltipWith('why \\u202eb'), findsOneWidget);
+      handle.dispose();
+    });
 
     testWidgets('markdown не разбирается: звёздочки и ссылки — простой текст', (
       tester,
@@ -625,7 +739,8 @@ void _skillsTableTests() {
       'переключателей, колонки равны', (tester) async {
     await pumpDefaultTable(tester);
 
-    expect(find.byType(Tooltip), findsNothing);
+    // Подсказки заголовков — прежний вид таблицы, других нет.
+    expect(_tooltipMessages(tester), _columns);
     expect(find.byType(CodeLabBadge), findsNothing);
     expect(find.byType(ToggleSwitch), findsNothing);
     final xs = [for (final t in _columns) tester.getTopLeft(find.text(t)).dx];
@@ -636,6 +751,11 @@ void _skillsTableTests() {
     expect(tester.widget<Text>(find.text('github')).maxLines, isNull);
   });
 }
+
+/// Тексты всех подсказок таблицы в порядке дерева.
+List<String?> _tooltipMessages(WidgetTester tester) => [
+  for (final t in tester.widgetList<Tooltip>(find.byType(Tooltip))) t.message,
+];
 
 Future<void> pumpDefaultTable(WidgetTester tester) => tester.pumpWidget(
   FluentApp(
