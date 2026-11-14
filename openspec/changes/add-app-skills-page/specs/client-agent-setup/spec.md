@@ -45,7 +45,7 @@
 - диагностики уровня `error`/`warning` SHALL относиться к строке навыка по пути его `SKILL.md`, остальные — к разделу; `info` SHALL отбрасываться, кроме признака `untrusted_project`;
 - исход фазы (таймаут, исключение — имя типа) SHALL быть значением вида, а не исключением.
 
-Вид НЕ SHALL содержать текстов `AGENTS.md`, тел навыков и шаблонов ни в полях, ни в `toString()` (SETUP-25). `ConfigCommands.check` SHALL использовать ту же функцию `codelab_agent_io`, вывод `config check` НЕ SHALL меняться.
+Вид НЕ SHALL содержать текстов `AGENTS.md`, тел навыков и шаблонов ни в полях, ни в `toString()` (SETUP-25); исключение — описание шаблона без `description` во frontmatter, которым служит первая строка тела, как в `available_commands_update` агента. Сбой подготовки чтения SHALL давать исход «сбой» с именем типа у обеих фаз. `ConfigCommands.check` SHALL использовать ту же функцию `codelab_agent_io`, вывод `config check` НЕ SHALL меняться.
 
 #### Scenario: Вид совпадает с каталогом сессии
 - **WHEN** доверенный проект содержит навыки в `.codelab/skills` и `.agents/skills`, у пользователя есть `~/.agents/skills`, а `skills.disabled: [b]`
