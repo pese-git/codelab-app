@@ -23,7 +23,7 @@ import '../env/host_path.dart';
 import '../project/skill_roots.dart';
 import 'config_link_containment.dart' show projectLayerFiles;
 
-export '../project/skill_roots.dart' show hostSkillRoot;
+export '../project/skill_roots.dart' show hostSkillRoot, projectSkillSubdirs;
 import 'config_loader.dart';
 import 'config_paths.dart' show canonicalDirectory;
 
@@ -143,9 +143,6 @@ AgentConfigPaths agentConfigPathsFor({
 
 String? _nonEmpty(String? value) =>
     value == null || value.isEmpty ? null : value;
-
-/// Подкаталоги навыков каждого уровня проекта в порядке приоритета (D3).
-const projectSkillSubdirs = ['.codelab/skills', '.agents/skills'];
 
 /// Корни навыков, зависящие от `cwd` сессии (PERM-11, D9, D17, Q27):
 /// `<уровень>/.codelab/skills` и `<уровень>/.agents/skills` для уровней от

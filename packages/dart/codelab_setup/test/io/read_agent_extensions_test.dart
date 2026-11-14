@@ -170,7 +170,12 @@ void main() {
         final view = await read();
 
         final off = view.skills.outcome as SectionOff;
-        expect(off.source, '${home.home}/config.yaml');
+        // Загрузчик конфигурации отдаёт канонический путь: на macOS
+        // временный каталог лежит за симлинком `/var` → `/private/var`.
+        expect(
+          off.source,
+          File('${home.home}/config.yaml').resolveSymbolicLinksSync(),
+        );
         expect(view.skills.entries, isEmpty);
       },
     );

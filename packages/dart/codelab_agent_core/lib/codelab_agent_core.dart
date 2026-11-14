@@ -112,6 +112,7 @@ export 'src/permissions/modes.dart';
 export 'src/permissions/pattern.dart';
 export 'src/permissions/policy.dart' show PolicyRules;
 export 'src/project/project_context.dart';
+export 'src/project/project_extensions.dart';
 export 'src/project/project_files.dart';
 export 'src/skills/skill_catalog.dart';
 export 'src/skills/skill_files.dart';

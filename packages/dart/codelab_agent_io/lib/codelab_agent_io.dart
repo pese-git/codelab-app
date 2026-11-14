@@ -75,6 +75,19 @@ export 'src/env/host_path.dart';
 export 'src/env/local_execution_env.dart';
 export 'src/mcp/stdio_process_transport.dart'
     show StdioMcpTransportFactory, StdioProcessTransport;
+// Типы результата `loadProjectExtensions` живут в ядре (чистые данные, чтобы
+// основной барель `codelab_setup` строил по ним вид без `dart:io`); реэкспорт
+// сохраняет потребителям один импорт (design.md change `add-app-skills-page`, D3).
+export 'package:codelab_agent_core/codelab_agent_core.dart'
+    show
+        PhaseFailed,
+        PhaseLoaded,
+        PhaseOutcome,
+        PhaseTimedOut,
+        ProjectExtensions,
+        SkillRootInfo;
+export 'src/project/project_extensions.dart'
+    show ProjectExtensionsLoader, loadProjectExtensions;
 export 'src/project/project_files_loader.dart';
 export 'src/secrets/client_secret_access.dart';
 export 'src/secrets/env_secret_store.dart';

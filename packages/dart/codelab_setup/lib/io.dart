@@ -44,6 +44,8 @@
 /// потребителями.
 library;
 
+export 'src/io/agent_extensions_reader.dart'
+    show ConsentDirScanner, readAgentExtensions;
 export 'src/io/file_agent_config_store.dart' show FileAgentConfigStore;
 export 'src/io/io_provider_check.dart' show ioProviderCheck;
 export 'src/io/provider_keys.dart' show providerKeysOf;

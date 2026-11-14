@@ -33,5 +33,10 @@ void main() {
       'entry:docs:user:true',
       'valid:true',
     ]);
+    expect(report.extensions, [
+      'context:AGENTS.md',
+      'skill:smoke:.codelab/skills',
+      'trusted:true',
+    ]);
   });
 }

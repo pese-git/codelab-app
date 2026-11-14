@@ -5,8 +5,7 @@ import 'dart:typed_data';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:meta/meta.dart';
 
-import '../config/agent_config_paths.dart'
-    show projectSkillSubdirs, sessionSkillRootsFor;
+import '../config/agent_config_paths.dart' show sessionSkillRootsFor;
 import '../env/host_path.dart';
 import '../env/local_execution_env.dart';
 import 'frontmatter.dart';
@@ -408,7 +407,6 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
     SkillFilesQuery query,
     List<ExtensionDiagnostic> diagnostics,
   ) async {
-    final roots = <_SkillRoot>[];
     // Уровни проекта нужны и недоверенному проекту: `untrusted_project`
     // называет каждый существующий корень (D16).
     final scan = <ExtensionDiagnostic>[];
@@ -425,40 +423,35 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
         ),
       );
     }
-    for (final level in levels.reversed) {
-      for (final sub in projectSkillSubdirs) {
-        final path = '${level == '/' ? '' : level}/$sub';
-        if (query.projectTrusted) {
-          roots.add(_SkillRoot(path, ExtensionScope.project, area: level));
-        } else if (await _isDirectory(path)) {
+    // Список и порядок корней — общий план `skillRootPlan`: тот же, что
+    // `loadProjectExtensions` показывает странице навыков.
+    final plan = skillRootPlan(
+      levels: levels,
+      cwd: query.cwd,
+      trusted: query.projectTrusted,
+      home: home,
+      userHome: userHome,
+      extraRoots: query.extraRoots,
+    );
+    for (final skipped in plan.skipped) {
+      switch (skipped.reason) {
+        case SkippedSkillRootReason.untrustedProject:
+          if (await _isDirectory(skipped.path)) {
+            diagnostics.add(
+              ExtensionDiagnostic(
+                path: skipped.path,
+                level: DiagnosticLevel.info,
+                code: 'untrusted_project',
+                message:
+                    'the project is not in trusted_projects; its skills are '
+                    'not read',
+              ),
+            );
+          }
+        case SkippedSkillRootReason.unresolvedHome:
           diagnostics.add(
             ExtensionDiagnostic(
-              path: path,
-              level: DiagnosticLevel.info,
-              code: 'untrusted_project',
-              message:
-                  'the project is not in trusted_projects; its skills are not '
-                  'read',
-            ),
-          );
-        }
-      }
-    }
-    if (home case final homeDir?) {
-      roots.add(
-        _SkillRoot('$homeDir/skills', ExtensionScope.user, area: homeDir),
-      );
-    }
-    if (userHome case final dir?) {
-      roots.add(_SkillRoot('$dir/.agents/skills', ExtensionScope.user));
-    }
-    for (final raw in query.extraRoots) {
-      if (isHomeSkillRoot(raw)) {
-        final dir = userHome;
-        if (dir == null) {
-          diagnostics.add(
-            ExtensionDiagnostic(
-              path: raw,
+              path: skipped.path,
               level: DiagnosticLevel.warning,
               code: 'unresolved_root',
               message:
@@ -466,19 +459,10 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
                   'unknown; it is not read',
             ),
           );
-          continue;
-        }
-        roots.add(_SkillRoot('$dir${raw.substring(1)}', ExtensionScope.extra));
-      } else if (hostSkillRoot(raw, userHome) case final path?) {
-        roots.add(_SkillRoot(path, ExtensionScope.extra));
-      } else if (isRelativeSkillRoot(raw)) {
-        final path = '${query.cwd == '/' ? '' : query.cwd}/$raw';
-        if (query.projectTrusted) {
-          roots.add(_SkillRoot(path, ExtensionScope.extra));
-        } else {
+        case SkippedSkillRootReason.untrustedRelativeExtra:
           diagnostics.add(
             ExtensionDiagnostic(
-              path: path,
+              path: skipped.path,
               level: DiagnosticLevel.warning,
               code: 'untrusted_project',
               message:
@@ -486,11 +470,11 @@ final class ProjectFilesLoader implements ProjectFilesSource, SkillFilesSource {
                   'entry is not read',
             ),
           );
-        }
       }
-      // `~user/…` и `<scheme>://…` не корни: их отвергает проверка конфига, а
-      // PERM-11 их не защищает — загрузчик их тоже не читает (Q41).
     }
+    final roots = [
+      for (final r in plan.roots) _SkillRoot(r.path, r.scope, area: r.area),
+    ];
     return roots;
   }
 
