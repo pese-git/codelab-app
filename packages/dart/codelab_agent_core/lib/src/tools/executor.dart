@@ -344,13 +344,14 @@ final class ToolCallExecutor implements ToolExecutor {
         return _valid(_error(cancelledText, ToolOutcome.cancelled));
       }
     }
-    // Очередь ключа: после пути, затем снова проверка отмены — ожидание
-    // предыдущего вызова ключа могло затянуться (TOOL-7).
+    // Очередь ключа: после пути. Отмена после захвата НЕ проверяется: вызов,
+    // прошедший хук и проверку выше, «начал исполнение» (D35 «Отмена»).
+    // Операции под ключом короткие и атомарные, клиент уже видел
+    // `in_progress` (хук `markInProgress`), а прерывание после ожидания
+    // оставило бы модель без ясного ответа. Путь (`lockPath`, TOOL-7) —
+    // иначе: там ожидание может быть долгим, и отмена после него честна.
     if (handle._keyLock case final keyLock?) {
       await keyLock.acquired;
-      if (invocation.cancel.isCancelled) {
-        return _valid(_error(cancelledText, ToolOutcome.cancelled));
-      }
     }
     return _valid(await _execute(handle, tool, args));
   }
