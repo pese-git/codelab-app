@@ -6,7 +6,7 @@
     "15-Extensibility.md#advertising-custom-capabilities",
     "15-Extensibility.md#the-_meta-field"
   ],
-  "description": "Редакция итерации 2 (change add-subagents-and-tasks, задача 2.8a): клиент CodeLab объявляет в clientCapabilities._meta.codelab расширения tasks и subagents (subagentToolCalls клиент добавит с итерации 5); агент с включёнными субагентами (subagents.enabled, max_depth 3 по умолчанию) отвечает теми же полями, что в acp/initialize-capabilities, и блоком agentCapabilities._meta.codelab {subagents: {version: 1, maxDepth: 3}, tasks: {version: 1}} без subagentToolCalls: вызовы потомков адаптер ещё не проецирует (D9, D36 Т12, D37).",
+  "description": "Редакция итерации 2 (change add-subagents-and-tasks, задача 2.8a): клиент CodeLab объявляет в clientCapabilities._meta.codelab расширения tasks и subagents (subagentToolCalls клиент добавит с итерации 5); агент с включёнными субагентами (subagents.enabled, max_depth 3 по умолчанию, но эффективная глубина итерации 2 — 1) отвечает теми же полями, что в acp/initialize-capabilities, и блоком agentCapabilities._meta.codelab {subagents: {version: 1, maxDepth: 1}, tasks: {version: 1}} без subagentToolCalls: вызовы потомков адаптер ещё не проецирует (D9, D36 Т12, D37).",
   "goals": [
     "C-20",
     "C-05"
@@ -56,7 +56,7 @@
     },
     {
       "dir": "a2c",
-      "note": "ответ — как в acp/initialize-capabilities плюс блок объявлений агента: subagents с maxDepth из применённого конфига (D37), без subagentToolCalls (Т12)",
+      "note": "ответ — как в acp/initialize-capabilities плюс блок объявлений агента: subagents с maxDepth — эффективной глубиной итерации 2, то есть 1: ребёнку agent не даётся до итерации 4 (D37, Т16), без subagentToolCalls (Т12)",
       "frame": {
         "jsonrpc": "2.0",
         "id": "${initializeId}",
@@ -80,7 +80,7 @@
               "codelab": {
                 "subagents": {
                   "version": 1,
-                  "maxDepth": 3
+                  "maxDepth": 1
                 },
                 "tasks": {
                   "version": 1

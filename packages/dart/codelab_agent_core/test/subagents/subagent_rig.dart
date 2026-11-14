@@ -43,6 +43,7 @@ final class SubagentRig {
     String profile = 'agent-serve',
     LayeredConfigSource? source,
     ExecutionEnv? hostFiles,
+    ModelCatalog? models,
   }) : clock = clock ?? FakeClock(),
        store = store ?? MemorySessionStore() {
     for (final MapEntry(:key, :value) in scripts.entries) {
@@ -66,17 +67,19 @@ final class SubagentRig {
         agentConfigPaths: agentConfigPaths,
         config: source,
         hostFiles: hostFiles,
-        models: source == null
-            ? null
-            : StaticModelCatalog(
-                source.initial.config!.providers,
-                logger: logger,
-              ),
+        models:
+            models ??
+            (source == null
+                ? null
+                : StaticModelCatalog(
+                    source.initial.config!.providers,
+                    logger: logger,
+                  )),
       ),
       config:
           source?.initial.config ??
           config ??
-          CoreConfig(defaultModel: testModel),
+          CoreConfig(defaultModel: subagentTestModel),
       streamFunction: _route,
       modelsFor: source == null
           ? null
@@ -289,14 +292,14 @@ final class AgentsPort implements ProjectFilesSource {
 
 /// Конфигурация корня с режимом [mode] и бюджетом хода [budget].
 ///
-/// Разделы `subagents` тест задаёт сам: `CoreConfig(defaultModel: testModel,
+/// Разделы `subagents` тест задаёт сам: `CoreConfig(defaultModel: subagentTestModel,
 /// subagents: SubagentsConfig(...))`.
 CoreConfig rigConfig({
   ModeId? mode,
   PermissionsConfig? permissions,
   TurnBudget budget = const TurnBudget(),
 }) => CoreConfig(
-  defaultModel: testModel,
+  defaultModel: subagentTestModel,
   permissions: permissions ?? PermissionsConfig(mode: mode),
   budget: budget,
 );
@@ -330,7 +333,7 @@ Future<void> pumpUntil(
 /// (agent-runtime «Живая перезагрузка конфигурации»; CFG-15).
 final class LayeredConfigSource implements ConfigSource {
   LayeredConfigSource([Map<String, Object?>? user])
-    : user = user ?? baseValues() {
+    : user = user ?? windowedValues(baseValues()) {
     _initial = _load();
   }
 
@@ -353,3 +356,17 @@ final class LayeredConfigSource implements ConfigSource {
   @override
   Stream<void> get changes => const Stream.empty();
 }
+
+/// `baseValues` с моделью, чьё окно проходит порог `agent` (D40).
+Map<String, Object?> windowedValues(Map<String, Object?> values) => {
+  ...values,
+  'providers': {
+    'p': {
+      'kind': 'openai-compatible',
+      'base_url': 'https://llm.test/v1',
+      'models': {
+        'm': {'context_window': 65536},
+      },
+    },
+  },
+};

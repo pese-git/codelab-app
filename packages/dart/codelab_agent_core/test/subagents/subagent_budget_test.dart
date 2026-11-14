@@ -22,7 +22,7 @@ void main() {
       'isError и reason="budget_exceeded:steps"', () async {
     final rig = SubagentRig(
       config: CoreConfig(
-        defaultModel: testModel,
+        defaultModel: subagentTestModel,
         subagents: const SubagentsConfig(maxSteps: 2),
       ),
       scripts: {
@@ -140,7 +140,7 @@ void main() {
       'независимо от бюджета корня', () async {
     final rig = SubagentRig(
       config: CoreConfig(
-        defaultModel: testModel,
+        defaultModel: subagentTestModel,
         subagents: const SubagentsConfig(maxTokens: 50),
       ),
       scripts: {

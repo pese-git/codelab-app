@@ -217,7 +217,7 @@ void main() {
     );
     final block = _agentCodelabBlock(fixture);
     expect(block, {
-      'subagents': {'version': 1, 'maxDepth': 3},
+      'subagents': {'version': 1, 'maxDepth': 1},
       'tasks': {'version': 1},
     });
     expect(block, isNot(contains('subagentToolCalls')));

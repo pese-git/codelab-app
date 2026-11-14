@@ -1,6 +1,7 @@
 import '../commands/expand_command.dart' show CommandRef;
 import '../llm/messages.dart';
 import '../loop/agent_events.dart';
+import '../subagents/subagent_report.dart' show failureWire;
 import '../tools/agent_tool.dart';
 import '../tools/tasks/task_list.dart';
 import '../util/clock.dart';
@@ -13,8 +14,11 @@ import 'tree.dart';
 import 'user_words.dart';
 
 /// Собирает запись по выданным писателем id, родителю и времени.
-typedef RecordBuilder<R extends SessionRecord> =
-    R Function(String id, String? parentId, DateTime timestamp);
+typedef RecordBuilder<R extends SessionRecord> = R Function(
+  String id,
+  String? parentId,
+  DateTime timestamp,
+);
 
 /// Писатель журнала одной сессии (`agent-core-architecture` §8.3).
 ///
@@ -157,6 +161,47 @@ final class SessionWriter {
             ),
           );
         }
+      case SubagentStarted():
+        // Связь с журналом ребёнка, `durable`: после сбоя по ней видно, что
+        // ребёнок был запущен (SUB-9; agent-sessions, таблица событий).
+        await _write(
+          (id, parent, at) => SubagentRecord(
+            id: id,
+            parentId: parent,
+            timestamp: at,
+            subagentId: event.subagentId,
+            toolCallId: event.parentToolCallId,
+            agent: event.agent,
+            description: event.description,
+            childSessionId: event.childSessionId.value,
+            journal: event.journalPath,
+            status: 'running',
+          ),
+          durable: true,
+        );
+      case SubagentFinished():
+        // Итоговая запись — точка восстановления отчёта; пишется до
+        // `ToolCallFinished(agent)` (SUB-10).
+        await _write(
+          (id, parent, at) => SubagentRecord(
+            id: id,
+            parentId: parent,
+            timestamp: at,
+            subagentId: event.subagentId,
+            toolCallId: event.parentToolCallId,
+            agent: event.agent,
+            description: event.description,
+            childSessionId: event.childSessionId?.value,
+            journal: event.journalPath,
+            status: event.status.name,
+            failure: failureWire(event.failure, event.budgetExceeded),
+            report: event.report,
+            usage: event.usage,
+            toolCalls: event.toolCalls,
+            durationMs: event.duration.inMilliseconds,
+          ),
+          durable: true,
+        );
       case SessionTitleChanged(:final title):
         await _write(
           (id, parent, at) => SessionInfoRecord(

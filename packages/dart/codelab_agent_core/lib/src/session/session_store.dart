@@ -30,6 +30,18 @@ abstract interface class SessionStore {
     bool durable = false,
   });
 
+  /// Создаёт журнал потомка в каталоге `subagents/` корневой сессии и
+  /// возвращает непрозрачный адрес для поля `journal` записи `subagent` и
+  /// `SubagentStarted.journalPath` (`agent-core/17-3-subagents.md` §17.3.6;
+  /// design.md change `add-subagents-and-tasks`, D7, D36 Т4).
+  ///
+  /// Почему на порту: раскладка файлов — дело хранилища, ядро знает только
+  /// корень дерева из `header.parent`. `header.parent` обязателен
+  /// (`ArgumentError` без него); повторный id — `StateError`. Дальше
+  /// `append`, `flush` и `close` работают по `header.id`; `open` с этим id,
+  /// `list` и `index.json` дочерних журналов не видят.
+  Future<String> createChild(SessionHeader header);
+
   /// Сброс записанного на носитель (`TurnEnded`, §8.3).
   Future<void> flush(SessionId id);
 
@@ -243,9 +255,9 @@ String _encodeCursor(SessionSummary last) => base64Url
 
 (DateTime, String) _decodeCursor(String cursor) {
   try {
-    final json =
-        jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(cursor))))
-            as Map<String, Object?>;
+    final json = jsonDecode(
+      utf8.decode(base64Url.decode(base64Url.normalize(cursor))),
+    ) as Map<String, Object?>;
     final after = json['after']! as String;
     final bar = after.indexOf('|');
     if (json['v'] != 1 || bar < 0) {

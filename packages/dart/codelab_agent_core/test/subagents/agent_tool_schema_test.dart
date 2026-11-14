@@ -190,7 +190,7 @@ void main() {
         'потомков', () async {
       final rig = await runOnce(
         config: CoreConfig(
-          defaultModel: testModel,
+          defaultModel: subagentTestModel,
           subagents: const SubagentsConfig(maxDepth: 1),
         ),
       );
@@ -198,24 +198,6 @@ void main() {
       expect(
         schemaOf(rig.contexts.first, 'agent').description,
         contains('Subagents you start cannot start other subagents.'),
-      );
-    });
-
-    test('при max_depth 3 описание корня разрешает ещё два уровня '
-        '(agent-prompts «Описание agent по глубине»)', () async {
-      final rig = await runOnce(
-        config: CoreConfig(
-          defaultModel: testModel,
-          subagents: const SubagentsConfig(maxDepth: 3),
-        ),
-      );
-
-      expect(
-        schemaOf(rig.contexts.first, 'agent').description,
-        contains(
-          'A subagent may start its own subagents, up to 2 more level(s) '
-          'below it.',
-        ),
       );
     });
 
@@ -238,7 +220,7 @@ void main() {
         'промпте', () async {
       final rig = await runOnce(
         config: CoreConfig(
-          defaultModel: testModel,
+          defaultModel: subagentTestModel,
           subagents: const SubagentsConfig(enabled: false),
         ),
       );
@@ -288,6 +270,64 @@ void main() {
           if (r.tool == 'agent') r.pattern,
       ];
       expect(asked, ['explore', 'general']);
+    });
+  });
+
+  group('малое окно модели (D40)', () {
+    test('окно меньше порога — agent не регистрируется, лог-диагностика с '
+        'полями', () async {
+      final rig = SubagentRig(
+        config: CoreConfig(defaultModel: modelWithWindow(32767)),
+        scripts: {
+          'go': [replyStep('ok')],
+        },
+      );
+      await rig.open();
+      await rig.run('go');
+
+      expect(toolNamesOf(rig.contexts.first), isNot(contains('agent')));
+      final log = rig.logger.eventsOf('subagent.unavailable').single;
+      expect(log.fields['session_id'], rig.session.id.value);
+      expect(log.fields['reason'], 'context_window');
+      expect(log.fields['window'], 32767);
+      expect(log.fields['min_window'], 32768);
+    });
+
+    test(
+      'окно ограничено compaction.context_window_cap: 8192 — agent нет',
+      () async {
+        final rig = SubagentRig(
+          config: CoreConfig(
+            defaultModel: subagentTestModel,
+            compaction: const CompactionOverrides(contextWindowCap: 8192),
+          ),
+          scripts: {
+            'go': [replyStep('ok')],
+          },
+        );
+        await rig.open();
+        await rig.run('go');
+
+        expect(toolNamesOf(rig.contexts.first), isNot(contains('agent')));
+        final log = rig.logger.eventsOf('subagent.unavailable').single;
+        expect(log.fields['session_id'], rig.session.id.value);
+        expect(log.fields['reason'], 'context_window');
+        expect(log.fields['window'], 8192);
+        expect(log.fields['min_window'], 32768);
+      },
+    );
+
+    test('окно не меньше порога — agent есть', () async {
+      final rig = SubagentRig(
+        config: CoreConfig(defaultModel: modelWithWindow(32768)),
+        scripts: {
+          'go': [replyStep('ok')],
+        },
+      );
+      await rig.open();
+      await rig.run('go');
+
+      expect(toolNamesOf(rig.contexts.first), contains('agent'));
     });
   });
 }

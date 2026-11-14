@@ -64,27 +64,28 @@ agent:
   String allOutput(ConfigCommandResult r) =>
       [...r.stdout, ...r.stderr].join('\n');
 
-  test(
-    'сценарий «Запись через config set»: 9 отклоняется проверкой '
-    'ConfigWriter (код 1, байты файла не меняются), 2 записывается',
-    () async {
-      final bad = await setKey('subagents.max_concurrent', '9');
+  test('сценарий «Запись через config set»: 9 отклоняется проверкой '
+      'ConfigWriter (код 1, байты файла не меняются), 2 записывается', () async {
+    final bad = await setKey('subagents.max_concurrent', '9');
 
-      expect(bad.exitCode, 1, reason: allOutput(bad));
-      expect(allOutput(bad), contains('subagents.max_concurrent'));
-      expect(File(userPath).readAsStringSync(), providers);
+    // Диапазон реестра отклоняет разбор значения CLI (как у `budget.max_steps`):
+    // код использования 64.
+    expect(bad.exitCode, 64, reason: allOutput(bad));
+    expect(allOutput(bad), contains('subagents.max_concurrent'));
+    expect(File(userPath).readAsStringSync(), providers);
 
-      final ok = await setKey('subagents.max_concurrent', '2');
+    final ok = await setKey('subagents.max_concurrent', '2');
 
-      expect(ok.exitCode, 0, reason: allOutput(ok));
-      expect(File(userPath).readAsStringSync(), contains('max_concurrent: 2'));
-    },
-  );
+    expect(ok.exitCode, 0, reason: allOutput(ok));
+    expect(File(userPath).readAsStringSync(), contains('max_concurrent: 2'));
+  });
 
   test('глубина вне 1..3 отклоняется так же, 1 записывается', () async {
     final bad = await setKey('subagents.max_depth', '4');
 
-    expect(bad.exitCode, 1, reason: allOutput(bad));
+    // Диапазон реестра отклоняет разбор значения CLI (как у `budget.max_steps`):
+    // код использования 64.
+    expect(bad.exitCode, 64, reason: allOutput(bad));
     expect(File(userPath).readAsStringSync(), providers);
 
     final ok = await setKey('subagents.max_depth', '1');

@@ -48,13 +48,12 @@ final class Denied extends PolicyOutcome {
 /// проверять порядок правил без разбора команд. [cwd] — корень сессии:
 /// цели команды (`.codelab/config.yaml`) сравниваются относительно него.
 /// [agentConfig] — пути конфигурации агента от хоста (PERM-11, D8) или `null`.
-typedef CriticalFinder =
-    String? Function(
-      AgentTool tool,
-      Map<String, Object?> args,
-      String cwd,
-      AgentConfigScope? agentConfig,
-    );
+typedef CriticalFinder = String? Function(
+  AgentTool tool,
+  Map<String, Object?> args,
+  String cwd,
+  AgentConfigScope? agentConfig,
+);
 
 /// Критические шаблоны команды `exec` по таблице §7.6 (шаг 3 `decide`).
 String? defaultCriticalFinder(
@@ -94,6 +93,7 @@ final class PermissionPolicy {
     this.findCritical = defaultCriticalFinder,
     this.agentConfigPaths,
     this.pathResolver,
+    this.modeOf,
   }) : decisions = decisions ?? PermissionDecisionStore();
 
   /// Режим сессии; смена действует со следующего вызова.
@@ -127,7 +127,13 @@ final class PermissionPolicy {
   final _turnAllow = <String>{};
   final _turnDeny = <String>{};
 
-  PermissionMode get effectiveMode => modeOverride ?? mode.permissionMode;
+  /// Режим потомка, вычисляемый при каждом решении (`narrow(родитель, тип)`,
+  /// SUB-2). Задан — [mode] и [modeOverride] не читаются: пара уже учла
+  /// режим предков. `null` у корневой сессии.
+  final ModeResolution Function()? modeOf;
+
+  PermissionMode get effectiveMode =>
+      modeOf?.call().mode ?? modeOverride ?? mode.permissionMode;
 
   /// Разрешения и запреты по имени инструмента только на текущий ход.
   void grantForTurn({
@@ -208,8 +214,9 @@ final class PermissionPolicy {
     if (_turnDeny.contains(tool.name)) {
       return const Denied('not allowed in this turn');
     }
+    final denied = modeOf?.call().deniedTiers ?? mode.deniedTiers;
     if (modeOverride == null &&
-        (mode.deniedTiers.contains(tier) || extraDeniedTiers.contains(tier))) {
+        (denied.contains(tier) || extraDeniedTiers.contains(tier))) {
       return const Denied('plan mode: changes are not allowed');
     }
     final effective = effectiveMode;

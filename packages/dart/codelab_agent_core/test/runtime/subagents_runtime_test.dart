@@ -48,7 +48,7 @@ void main() {
         'его секции в промпте', () async {
       final request = await firstRequest(
         CoreConfig(
-          defaultModel: testModel,
+          defaultModel: subagentTestModel,
           subagents: const SubagentsConfig(enabled: false),
         ),
       );
@@ -61,7 +61,7 @@ void main() {
         'инструментом сессии', () async {
       final request = await firstRequest(
         CoreConfig(
-          defaultModel: testModel,
+          defaultModel: subagentTestModel,
           subagents: const SubagentsConfig(enabled: true),
         ),
       );
@@ -79,18 +79,18 @@ void main() {
   });
 
   group('геттер AgentRuntime.subagents (D37)', () {
-    test('по умолчанию — включено, maxDepth 3', () {
+    test('по умолчанию — включено, эффективная глубина 1 (до итерации 4)', () {
       final rig = SubagentRig(scripts: const {});
 
       expect(rig.core.runtime.subagents, isNotNull);
-      expect(rig.core.runtime.subagents!.maxDepth, 3);
+      expect(rig.core.runtime.subagents!.maxDepth, 1);
     });
 
     test('при subagents.enabled: false — null', () {
       final rig = SubagentRig(
         scripts: const {},
         config: CoreConfig(
-          defaultModel: testModel,
+          defaultModel: subagentTestModel,
           subagents: const SubagentsConfig(enabled: false),
         ),
       );
@@ -98,23 +98,23 @@ void main() {
       expect(rig.core.runtime.subagents, isNull);
     });
 
-    test('maxDepth берётся из subagents.max_depth', () {
+    test('maxDepth — min(subagents.max_depth, 1) до итерации 4', () {
       final rig = SubagentRig(
         scripts: const {},
         config: CoreConfig(
-          defaultModel: testModel,
+          defaultModel: subagentTestModel,
           subagents: const SubagentsConfig(maxDepth: 2),
         ),
       );
 
-      expect(rig.core.runtime.subagents!.maxDepth, 2);
+      expect(rig.core.runtime.subagents!.maxDepth, 1);
     });
 
     test('значение живое: перезагрузка конфига меняет его без '
         'перезапуска', () async {
       final source = LayeredConfigSource();
       final rig = SubagentRig(scripts: const {}, source: source);
-      expect(rig.core.runtime.subagents!.maxDepth, 3);
+      expect(rig.core.runtime.subagents!.maxDepth, 1);
 
       source.user['subagents'] = {'max_depth': 1};
       await rig.core.runtime.reloadConfig();
@@ -126,7 +126,7 @@ void main() {
 
       source.user['subagents'] = {'enabled': true, 'max_depth': 2};
       await rig.core.runtime.reloadConfig();
-      expect(rig.core.runtime.subagents!.maxDepth, 2);
+      expect(rig.core.runtime.subagents!.maxDepth, 1);
     });
   });
 
@@ -156,8 +156,8 @@ void main() {
     expect(rig.core.runtime.subagents, isNull);
   });
 
-  test('max_depth и enabled меняют схему agent только в новых сессиях: '
-      'сессия A хранит прежнее описание (D22, кэш промпта)', () async {
+  test('описание agent фиксируется при создании сессии: сессия A хранит '
+      'прежнее описание после перезагрузки (D22, кэш промпта)', () async {
     final source = LayeredConfigSource();
     final rig = SubagentRig(
       source: source,
@@ -169,7 +169,7 @@ void main() {
     await a.prompt([const TextContent('go')]);
     final before = schemaOf(rig.contexts.last, 'agent').description;
 
-    source.user['subagents'] = {'max_depth': 1};
+    source.user['subagents'] = {'max_concurrent': 5};
     await rig.core.runtime.reloadConfig();
     final b = await rig.core.runtime.createSession(SessionSpec(cwd: '/proj'));
     await b.prompt([const TextContent('go')]);
@@ -177,19 +177,16 @@ void main() {
     await a.prompt([const TextContent('go')]);
     final again = schemaOf(rig.contexts.last, 'agent').description;
 
-    expect(
-      fresh,
-      contains('Subagents you start cannot start other subagents.'),
-    );
+    expect(fresh, contains('at most 5 at a time'));
+    expect(before, contains('at most 3 at a time'));
     expect(again, before);
-    expect(before, isNot(contains('Subagents you start cannot start')));
   });
 
   test('лимиты читаются при каждом spawn: после перезагрузки '
       'max_concurrent 1 следующий ход идёт одним слотом без перезапуска '
       '(agent-configuration «Запись через config set»)', () async {
     final source = LayeredConfigSource(
-      withValues(baseValues(), {
+      withValues(windowedValues(baseValues()), {
         'subagents': {'max_concurrent': 3},
       }),
     );

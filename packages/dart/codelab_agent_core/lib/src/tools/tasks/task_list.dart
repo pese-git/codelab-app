@@ -187,8 +187,7 @@ bool _sameIds(List<TaskId> a, List<TaskId> b) {
 
 /// Кто выполняет операцию: корневая сессия или субагент (§17.16.4).
 ///
-/// [SubagentActor] хранит id строкой до итерации 2 change
-/// `add-subagents-and-tasks`: тип `SubagentId` появится там и заменит строку.
+/// [SubagentActor] хранит id субагента (`SubagentId` — `String`, §17.3.2).
 sealed class TaskActor {
   const TaskActor();
 
@@ -393,8 +392,10 @@ final class TaskRejected extends TaskResult {
 }
 
 /// Доставка изменения подписчикам сессии; ждётся до `ToolCallFinished`.
-typedef TaskListPublisher =
-    FutureOr<void> Function(List<TaskItem> items, TaskChange change);
+typedef TaskListPublisher = FutureOr<void> Function(
+  List<TaskItem> items,
+  TaskChange change,
+);
 
 /// Порт списка задач дерева (§17.16.2, D29).
 ///
@@ -414,7 +415,17 @@ abstract interface class TaskList {
   /// [toolCallId] — вызов инструмента, применивший операцию: уходит в
   /// `TaskChange.toolCallId` и далее в `plan._meta.codelab.taskChange` (D35);
   /// также попадает в логи (`task.op`, `task.rejected`).
-  Future<TaskResult> apply(TaskOp op, TaskActor actor, {String? toolCallId});
+  ///
+  /// [precheck] — проверка по живым пунктам, которая выполняется под тем же
+  /// замком непосредственно перед операцией: ответ [TaskRejected] отклоняет
+  /// её без изменения списка. Так проверка владельца у ребёнка (TSK-4) не
+  /// расходится с состоянием, в котором операция применится.
+  Future<TaskResult> apply(
+    TaskOp op,
+    TaskActor actor, {
+    String? toolCallId,
+    TaskRejected? Function(List<TaskItem> items)? precheck,
+  });
 
   /// Состояние пришло извне (§17.16.6): при [announce] — один
   /// `TaskListChanged` с `op: restore`. Счётчик id не убывает (TSK-3).
@@ -479,37 +490,42 @@ final class SessionTaskList implements TaskList {
   }
 
   @override
-  Future<TaskResult> apply(TaskOp op, TaskActor actor, {String? toolCallId}) =>
-      _locked(() async {
-        final result = await _apply(op, actor, toolCallId);
-        switch (result) {
-          case TaskApplied(:final change, :final snapshot):
-            // Ошибка подписчика не отменяет уже принятую операцию и не рвёт
-            // замок: результат модели должен соответствовать состоянию списка.
-            await _publish(snapshot, change, toolCallId: toolCallId);
-            _log('task.op', actor, toolCallId, {
-              'op': change.op,
-              'ids': [
-                for (final item in change.changed) item.id,
-                ...change.deleted,
-              ],
-            });
-          case TaskRejected(:final reason):
-            _log('task.rejected', actor, toolCallId, {
-              'op': switch (op) {
-                CreateTask() => 'create',
-                UpdateTask() => 'update',
-                DeleteTask() => 'delete',
-              },
-              'reason': reason.wire,
-              // id приходит от модели: в лог он попадает, только если пригоден
-              // как id журнала, иначе отмечается флагом.
-              if (op case UpdateTask(:final id) || DeleteTask(:final id))
-                ..._loggableId(id),
-            });
-        }
-        return result;
-      });
+  Future<TaskResult> apply(
+    TaskOp op,
+    TaskActor actor, {
+    String? toolCallId,
+    TaskRejected? Function(List<TaskItem> items)? precheck,
+  }) => _locked(() async {
+    final result =
+        precheck?.call(_items) ?? await _apply(op, actor, toolCallId);
+    switch (result) {
+      case TaskApplied(:final change, :final snapshot):
+        // Ошибка подписчика не отменяет уже принятую операцию и не рвёт
+        // замок: результат модели должен соответствовать состоянию списка.
+        await _publish(snapshot, change, toolCallId: toolCallId);
+        _log('task.op', actor, toolCallId, {
+          'op': change.op,
+          'ids': [
+            for (final item in change.changed) item.id,
+            ...change.deleted,
+          ],
+        });
+      case TaskRejected(:final reason):
+        _log('task.rejected', actor, toolCallId, {
+          'op': switch (op) {
+            CreateTask() => 'create',
+            UpdateTask() => 'update',
+            DeleteTask() => 'delete',
+          },
+          'reason': reason.wire,
+          // id приходит от модели: в лог он попадает, только если пригоден
+          // как id журнала, иначе отмечается флагом.
+          if (op case UpdateTask(:final id) || DeleteTask(:final id))
+            ..._loggableId(id),
+        });
+    }
+    return result;
+  });
 
   static Map<String, Object?> _loggableId(String id) {
     try {

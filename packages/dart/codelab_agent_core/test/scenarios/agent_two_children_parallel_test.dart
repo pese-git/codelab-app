@@ -121,7 +121,7 @@ void main() {
       'и стартует после освобождения слота', () async {
     final rig = SubagentRig(
       config: CoreConfig(
-        defaultModel: testModel,
+        defaultModel: subagentTestModel,
         subagents: const SubagentsConfig(maxConcurrent: 2, maxDepth: 1),
       ),
       scripts: {
@@ -193,7 +193,7 @@ void main() {
 
   group('сценарий «Лимит запусков» (глубина 1)', () {
     CoreConfig limited() => CoreConfig(
-      defaultModel: testModel,
+      defaultModel: subagentTestModel,
       subagents: const SubagentsConfig(maxPerTurn: 2, maxDepth: 1),
     );
 

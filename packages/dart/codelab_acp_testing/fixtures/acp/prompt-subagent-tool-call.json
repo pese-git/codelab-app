@@ -251,6 +251,7 @@
           "update": {
             "sessionUpdate": "tool_call_update",
             "toolCallId": "call_1",
+            "status": "in_progress",
             "content": [
               {
                 "type": "content",

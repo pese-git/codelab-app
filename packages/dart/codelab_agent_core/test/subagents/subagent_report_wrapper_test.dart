@@ -68,7 +68,7 @@ void main() {
     final (_, text) = await reportOf(
       replyStep(body),
       config: CoreConfig(
-        defaultModel: testModel,
+        defaultModel: subagentTestModel,
         subagents: const SubagentsConfig(reportMaxBytes: 1024),
       ),
     );

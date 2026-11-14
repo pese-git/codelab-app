@@ -85,7 +85,9 @@ void main() {
         title: 'Find auth code',
       );
 
-      expect(row.label, 'Subagent explore: Find auth code');
+      // Без description заголовок — title агента как есть, без разбора и без
+      // добавленного типа (D27, D33).
+      expect(row.label, 'Find auth code');
       expect(row.subagent?.stats, isNull);
     });
 

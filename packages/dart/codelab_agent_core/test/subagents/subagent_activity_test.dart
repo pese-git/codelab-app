@@ -113,10 +113,42 @@ void main() {
 
     test('формат: <agent> · <state> · N steps · N tool calls · tokens, '
         'lastActivity — title последнего вызова ребёнка', () async {
-      final (rig, _) = await readingChild();
+      final env = MemoryExecutionEnv(cwd: '/proj');
+      await env.writeText('/proj/a.txt', 'alpha\n');
+      final rig = SubagentRig(
+        baseEnv: env,
+        scripts: {
+          'go': [
+            oneCallStep(
+              'c1',
+              'agent',
+              agentArgs('read later', type: 'explore'),
+            ),
+            replyStep('thanks'),
+          ],
+          // Вызов — в тот же момент часов, что и старт: его строка подавлена
+          // троттлингом и уходит отложенным обновлением через
+          // progress_interval; затем ребёнок ждёт часы.
+          'read later': [
+            oneCallStep('child_read_1', 'read', {'path': 'a.txt'}),
+            replyStep('alpha it is', delayMs: 5000),
+          ],
+        },
+      );
+      await rig.open();
+
+      final turn = rig.run('go');
+      await pumpUntil(
+        () => rig.eventsOf<SubagentActivity>().any(
+          (a) => a.event is ToolCallStarted,
+        ),
+      );
+      expect(progressLines(rig), hasLength(1), reason: 'всплеск подавлен');
+      await rig.clock.elapse(const Duration(milliseconds: 2000));
+      await rig.clock.elapse(const Duration(seconds: 4));
+      await turn;
 
       final lines = progressLines(rig);
-
       expect(lines, isNotEmpty);
       expect(lines, everyElement(matches(shape)));
       final title = rig

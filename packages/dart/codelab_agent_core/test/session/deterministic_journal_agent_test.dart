@@ -28,7 +28,7 @@ void main() {
       clock: clock,
       baseEnv: env,
       scripts: {
-        'go': [
+        'Rename the greeting': [
           oneCallStep('c1', 'read', {'path': 'a.txt'}),
           oneCallStep('c2', 'edit', {
             'path': 'a.txt',

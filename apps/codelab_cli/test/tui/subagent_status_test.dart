@@ -41,11 +41,16 @@ void main() {
     final item = TranscriptItem.toolCall(
       id: 't1',
       toolCallId: const ToolCallId('call_1'),
-      title: 'Subagent explore: Map callers of restore()',
+      // Заголовок строки собирается из kit (`Subagent <type>: <description>`),
+      // `title` агента не используется.
+      title: 'whatever the agent wrote',
       details: ToolCallView(
         kind: ToolKind.think,
         status: status,
-        rawInput: const {'type': 'explore'},
+        rawInput: const {
+          'type': 'explore',
+          'description': 'Map callers of restore()',
+        },
         subagentCall: subagent
             ? const SubagentCallView(id: 'sub_a1', type: 'explore')
             : null,
@@ -81,7 +86,8 @@ void main() {
     );
     expect(out.single, isNot(contains('Done')));
     expect(out.single, isNot(contains('tokens')));
-    expect(out.single, isNot(contains('(')));
+    // Заголовок сам содержит скобки (`restore()`), поэтому ищем скобку итога.
+    expect(out.single, isNot(contains('(4')));
   });
 
   test('failed: the word Failed and the same summary', () {

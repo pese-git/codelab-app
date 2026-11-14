@@ -68,7 +68,22 @@ void main() {
       lessThan(indexOf(events, (e) => e is TurnEnded)),
       reason: 'CAN-5: TurnEnded(cancelled) после ToolCallFinished(agent)',
     );
-    expect(rig.trace.last, 'TurnEnded(cancelled)');
+    expect(rig.eventsOf<TurnEnded>().single.reason, TurnEndReason.cancelled);
+    // После TurnEnded корня нет ни Subagent*, ни SubagentActivity.
+    await pumpEventQueue(times: 50);
+    final ended = rig.events.indexWhere((e) => e is TurnEnded);
+    expect(
+      rig.events
+          .skip(ended + 1)
+          .where(
+            (e) =>
+                e is SubagentStarted ||
+                e is SubagentProgress ||
+                e is SubagentFinished ||
+                e is SubagentActivity,
+          ),
+      isEmpty,
+    );
   });
 
   test('после отмены ребёнок не переизлучается: ни одного '
@@ -136,14 +151,14 @@ void main() {
     final events = rig.events;
     final index = indexOf(events, (e) => e is SubagentFinished);
     expect(events.skip(index + 1).whereType<SubagentActivity>(), isEmpty);
-    expect(rig.trace.last, startsWith('TurnEnded('));
+    expect(rig.eventsOf<TurnEnded>(), hasLength(1));
   });
 
   test('ребёнок, отменённый в очереди: SubagentFinished(cancelled) без '
       'SubagentStarted, без запроса к модели и без журнала', () async {
     final rig = SubagentRig(
       config: CoreConfig(
-        defaultModel: testModel,
+        defaultModel: subagentTestModel,
         subagents: const SubagentsConfig(maxConcurrent: 1),
       ),
       scripts: {

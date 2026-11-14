@@ -47,6 +47,21 @@ Widget _panel(
 );
 
 void main() {
+  test('CodeLabSubagentCall compares by value', () {
+    expect(
+      const CodeLabSubagentCall(stats: _stats, progress: 'p'),
+      const CodeLabSubagentCall(stats: _stats, progress: 'p'),
+    );
+    expect(
+      const CodeLabSubagentCall(stats: _stats).hashCode,
+      const CodeLabSubagentCall(stats: _stats).hashCode,
+    );
+    expect(
+      const CodeLabSubagentCall(stats: _stats),
+      isNot(const CodeLabSubagentCall(stats: '1 tool call · 1k · 1s')),
+    );
+  });
+
   group('completed subagent is one collapsed line (D27)', () {
     testWidgets('title, trailing summary and success glyph, no Done tag', (
       tester,

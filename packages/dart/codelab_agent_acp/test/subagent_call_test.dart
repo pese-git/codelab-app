@@ -2,6 +2,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show JsonRpcNotification, JsonRpcResponse;
 import 'package:test/test.dart';
 
+import 'support/layered_config_source.dart';
 import 'support/server_harness.dart';
 
 /// Проекция вызова `agent` живьём через `AcpAgentServer` (agent-acp-server
@@ -33,7 +34,24 @@ void main() {
   };
 
   Future<String> ready(List<Map<String, Object?>> steps) async {
-    h = await ServerHarness.start(steps: steps);
+    // D40: `agent` виден модели с окном не меньше порога (32768), а модель
+    // harness по умолчанию — 32000: окно задаёт конфиг теста.
+    h = await ServerHarness.start(
+      steps: steps,
+      configSource: LayeredConfigSource(
+        extra: {
+          'providers': {
+            'a': {
+              'kind': 'openai-compatible',
+              'base_url': 'https://a.test/v1',
+              'models': {
+                'm1': {'context_window': 65536},
+              },
+            },
+          },
+        },
+      ),
+    );
     await h.initialize();
     return h.newSession();
   }
@@ -137,7 +155,7 @@ void main() {
     expect(forCall.first['status'], 'in_progress');
     expect(forCall.last['status'], 'completed');
     final progress = forCall.where(
-      (u) => u['status'] == null && u['content'] != null,
+      (u) => u['status'] == 'in_progress' && u['content'] != null,
     );
     expect(progress, isNotEmpty);
     for (final update in progress) {

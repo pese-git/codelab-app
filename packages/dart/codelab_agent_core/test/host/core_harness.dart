@@ -64,7 +64,7 @@ final class CoreHarness {
         lastModel: lastModel,
       ),
       config: CoreConfig(
-        defaultModel: defaultModel ?? testModel,
+        defaultModel: defaultModel ?? subagentTestModel,
         defaultModelSource: defaultModelSource,
         permissions:
             permissions ?? PermissionsConfig(modeOverride: modeOverride),

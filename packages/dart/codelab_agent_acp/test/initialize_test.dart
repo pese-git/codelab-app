@@ -154,7 +154,8 @@ void main() {
   // «Клиент CodeLab объявил расширения, субагенты включены (итерация 2)»:
   // блок идёт только по объявлению клиента; субагенты включены по умолчанию
   // (`subagents.enabled: true`, `max_depth: 3`), поэтому рядом с `tasks`
-  // объявлен `subagents` с `maxDepth` (D9, D37). `subagentToolCalls` в
+  // объявлен `subagents` с `maxDepth` — эффективной глубиной итерации 2, то
+  // есть 1: ребёнку `agent` не даётся до итерации 4 (D9, D37; Т16). `subagentToolCalls` в
   // итерации 2 нет — вызовы потомков адаптер ещё не проецирует (D36, Т12).
   test('an empty client _meta.codelab gets tasks and subagents', () async {
     h = await ServerHarness.start();
@@ -171,7 +172,7 @@ void main() {
         response.resultMap['agentCapabilities']! as Map<String, Object?>;
     expect(caps['_meta'], {
       'codelab': {
-        'subagents': {'version': 1, 'maxDepth': 3},
+        'subagents': {'version': 1, 'maxDepth': 1},
         'tasks': {'version': 1},
       },
     });
@@ -203,7 +204,7 @@ void main() {
         response.resultMap['agentCapabilities']! as Map<String, Object?>;
     expect(caps['_meta'], {
       'codelab': {
-        'subagents': {'version': 1, 'maxDepth': 3},
+        'subagents': {'version': 1, 'maxDepth': 1},
         'tasks': {'version': 1},
       },
     });
@@ -235,7 +236,7 @@ void main() {
       // Блок тот же, что при известном объявлении (итерация 2, D9).
       expect(caps['_meta'], {
         'codelab': {
-          'subagents': {'version': 1, 'maxDepth': 3},
+          'subagents': {'version': 1, 'maxDepth': 1},
           'tasks': {'version': 1},
         },
       });

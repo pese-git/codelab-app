@@ -116,7 +116,7 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
       onToggle: canToggle ? widget.onToggle : null,
       leading: _StatusGlyph(row: row),
       title: pending == null
-          ? _title(context, row.detail, maxLines: 1)
+          ? _withProgress(context, _title(context, row.detail, maxLines: 1))
           : _pendingTitle(context, pending.command ?? row.detail),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -128,11 +128,16 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
             ),
             const SizedBox(width: 6),
           ],
-          CodeLabBadge(
-            key: CodeLabToolCallTile.statusTagKey,
-            label: statusLabel,
-            tone: statusTone,
-          ),
+          if (row.subagent?.stats case final stats?) ...[
+            CodeLabText(stats, role: CodeLabTextRole.mono),
+            const SizedBox(width: 12),
+          ],
+          if (!_hidesStatusTag(pending != null))
+            CodeLabBadge(
+              key: CodeLabToolCallTile.statusTagKey,
+              label: statusLabel,
+              tone: statusTone,
+            ),
         ],
       ),
       // Полоса решения — узкая полоса внизу строки под тонкой линией тела
@@ -141,6 +146,33 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
           ? const EdgeInsets.all(4)
           : const EdgeInsets.all(16),
       body: body,
+    );
+  }
+
+  /// Свёрнутый успешный `agent` не несёт тега «Done»: статус передаёт глиф
+  /// (D27, spec agent-workbench-ui «Завершённый субагент свёрнут»).
+  /// «Failed», «Cancelled» и «Running» остаются; ждущий одобрения — тоже.
+  bool _hidesStatusTag(bool pending) =>
+      row.subagent != null &&
+      !pending &&
+      !widget.expanded &&
+      row.status == CodeLabToolCallStatus.succeeded;
+
+  /// Последняя строка прогресса под свёрнутой строкой работающего `agent`
+  /// (клиент без дерева вызовов потомков, D27 п. 3).
+  Widget _withProgress(BuildContext context, Widget title) {
+    final progress = row.subagent?.progress;
+    if (progress == null ||
+        progress.isEmpty ||
+        row.status != CodeLabToolCallStatus.running) {
+      return title;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        title,
+        CodeLabText(progress, role: CodeLabTextRole.mono, maxLines: 1),
+      ],
     );
   }
 

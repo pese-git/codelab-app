@@ -45,7 +45,7 @@ void main() {
     test('родитель без exec, тип review: read, ls, search и детский вариант '
         'задач, без exec', () async {
       final config = CoreConfig(
-        defaultModel: testModel,
+        defaultModel: subagentTestModel,
         subagents: const SubagentsConfig(maxDepth: 1),
       );
       final rig = SubagentRig(
@@ -90,7 +90,7 @@ void main() {
           'do it': [replyStep('ok')],
         },
         config: CoreConfig(
-          defaultModel: testModel,
+          defaultModel: subagentTestModel,
           subagents: const SubagentsConfig(maxDepth: 1),
         ),
       );
@@ -125,7 +125,7 @@ void main() {
           'look around': [replyStep('seen')],
         },
         config: CoreConfig(
-          defaultModel: testModel,
+          defaultModel: subagentTestModel,
           subagents: const SubagentsConfig(maxDepth: 1),
         ),
       );

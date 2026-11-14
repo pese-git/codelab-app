@@ -45,6 +45,11 @@ void main() {
   Future<void> journal(
     List<Map<String, Object?>> records, {
     required ({String outcome, String text, bool isError})? result,
+    Map<String, Object?> arguments = const {
+      'type': 'explore',
+      'description': 'Find auth code',
+      'prompt': 'Find where authentication is implemented.',
+    },
   }) async {
     await h.store.create(
       SessionHeader(
@@ -73,15 +78,7 @@ void main() {
         timestamp: at,
         message: AssistantMessage(
           content: [
-            ToolCall(
-              id: 'call_1',
-              name: 'agent',
-              arguments: const {
-                'type': 'explore',
-                'description': 'Find auth code',
-                'prompt': 'Find where authentication is implemented.',
-              },
-            ),
+            ToolCall(id: 'call_1', name: 'agent', arguments: arguments),
           ],
           model: scriptedModel,
           usage: Usage.zero,
@@ -195,7 +192,7 @@ void main() {
         {'status': 'running'},
         {
           'status': 'failed',
-          'failure': 'budget_exceeded:max_steps',
+          'failure': 'budget_exceeded:steps',
           'report': 'Partial findings.',
           'usage': {
             'input': 9000,
@@ -222,7 +219,7 @@ void main() {
     final call = replayedCall(response, 'call_1');
     expect(call['status'], 'failed');
     final subagent = codelab(call)['subagent']! as Map;
-    expect(subagent['failure'], 'budget_exceeded:max_steps');
+    expect(subagent['failure'], 'budget_exceeded:steps');
     expect(subagent['summary'], {
       'toolCalls': 30,
       'tokens': {'input': 9000, 'output': 800},
@@ -250,6 +247,74 @@ void main() {
       expect(meta['outcome'], 'interrupted');
       expect(meta['subagent'], containsPair('id', 'sub_k3f9a1c2'));
       expect(meta['subagent'], containsPair('type', 'explore'));
+    },
+  );
+
+  // Т15, «Реплей отклонённого вызова agent»: проверка отклонила вызов,
+  // ребёнка и записи `subagent` нет. Живой первый кадр нёс `{id, type}`, но id
+  // при реплее придумывать нельзя (он ни на что не ссылается), поэтому `type`
+  // берётся из аргументов вызова, `id` нет.
+  Future<Map<String, Object?>> rejectedReplay(
+    Map<String, Object?> arguments,
+  ) async {
+    h = await ServerHarness.start();
+    await h.initialize();
+    await journal(
+      const [],
+      arguments: arguments,
+      result: (
+        outcome: 'failed',
+        text: 'Invalid agent call: description must be 3-60 characters.',
+        isError: true,
+      ),
+    );
+    return replayedCall(await load(), 'call_1');
+  }
+
+  test(
+    'a rejected agent call replays {type} from the arguments, no id',
+    () async {
+      final call = await rejectedReplay(const {
+        'type': 'review',
+        'description': 'x',
+        'prompt': 'Check the diff.',
+      });
+
+      expect(call['status'], 'failed');
+      expect(codelab(call), {
+        'subagent': {'type': 'review'},
+      });
+      final text =
+          (((call['content']! as List).single as Map)['content']
+              as Map)['text'];
+      expect(text, contains('Invalid agent call'));
+    },
+  );
+
+  test('a rejected agent call without type replays general', () async {
+    final call = await rejectedReplay(const {
+      'description': 'x',
+      'prompt': 'Check the diff.',
+    });
+
+    expect(codelab(call), {
+      'subagent': {'type': 'general'},
+    });
+  });
+
+  // Как `SubagentTool._typeOf`: не строка вместо `type` — `general`.
+  test(
+    'a rejected agent call with a non-string type replays general',
+    () async {
+      final call = await rejectedReplay(const {
+        'type': 7,
+        'description': 'x',
+        'prompt': 'Check the diff.',
+      });
+
+      expect(codelab(call), {
+        'subagent': {'type': 'general'},
+      });
     },
   );
 }

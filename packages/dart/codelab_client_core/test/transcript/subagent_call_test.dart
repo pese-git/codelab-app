@@ -128,14 +128,49 @@ void main() {
       expect(call('call_1').details?.subagentSummary, isNull);
     });
 
+    test('a replayed rejected call carries {type} without id: still an agent '
+        'call, not think (T15)', () async {
+      await emit(_agentCall('call_1', subagent: {'type': 'explore'}));
+
+      final details = call('call_1').details!;
+      expect(details.subagentCall, const SubagentCallView(type: 'explore'));
+      expect(details.subagentCall?.id, isNull);
+      final view = row('call_1');
+      expect(view.label, 'Subagent');
+      expect(view.detail, startsWith('explore: '));
+    });
+
+    test('a call without id is not a source of owner types', () async {
+      await emit(_agentCall('call_1', subagent: {'type': 'explore'}));
+      await emit({
+        'sessionUpdate': 'plan',
+        'entries': [
+          {
+            'content': 'X',
+            'status': 'pending',
+            'priority': 'medium',
+            '_meta': {
+              'codelab': {
+                'task': {'id': '1', 'owner': 'sub_a1'},
+              },
+            },
+          },
+        ],
+      });
+
+      expect(session.current.plan.single.ownerLabel, 'sub_a1');
+    });
+
     test('a wrong shape gives null without failing the update', () async {
       await emit(_agentCall('call_1', subagent: 'sub_a1'));
       await emit(_agentCall('call_2', subagent: {'id': 5, 'type': 'explore'}));
       await emit(_agentCall('call_3', subagent: {'id': 'sub_a3'}));
+      await emit(_agentCall('call_4', subagent: {'type': 5}));
 
       expect(call('call_1').details?.subagentCall, isNull);
       expect(call('call_2').details?.subagentCall, isNull);
       expect(call('call_3').details?.subagentCall, isNull);
+      expect(call('call_4').details?.subagentCall, isNull);
       expect(agent.diagnostics, isEmpty);
     });
 
@@ -332,6 +367,37 @@ void main() {
       final view = row('call_1');
       expect(view.secondary, 'Budget exceeded');
       expect(view.summaryShort, '4 tool calls · 18.2k · 48s');
+    });
+
+    test('without rawInput.description the title is shown as is: it is the '
+        'label, the detail is empty', () async {
+      await emit({
+        ..._agentCall('call_1', title: 'Subagent explore: Find auth code'),
+        'rawInput': {'type': 'explore'},
+      });
+      await emit({
+        ..._agentCall('call_2', title: 'Find auth code'),
+        'rawInput': {'type': 'explore'},
+      });
+
+      expect(row('call_1').label, 'Subagent explore: Find auth code');
+      expect(row('call_1').detail, isEmpty);
+      expect(row('call_2').label, 'Find auth code');
+      expect(row('call_2').detail, isEmpty);
+    });
+
+    test('with description: label Subagent, detail <type>: <description>; an '
+        'empty title without description gives just the type', () async {
+      await emit(_agentCall('call_1', title: 'ignored'));
+      await emit({
+        ..._agentCall('call_2', title: ' '),
+        'rawInput': {'type': 'explore'},
+      });
+
+      expect(row('call_1').label, 'Subagent');
+      expect(row('call_1').detail, 'explore: Find auth code');
+      expect(row('call_2').label, 'Subagent');
+      expect(row('call_2').detail, 'explore');
     });
 
     test(

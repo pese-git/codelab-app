@@ -317,6 +317,42 @@
           "pattern"
         ]
       }
+    },
+    {
+      "name": "agent",
+      "description": "Launch a subagent: a separate agent with its own context that does one self-contained assignment and returns a single final report.\nUse it to explore a large codebase, review changes or draft a plan without filling your own context.\nThe subagent does not see this conversation: put everything it needs into `prompt`.\nSeveral agent calls in one response run in parallel, at most 3 at a time.\nYou receive only the final report, not the subagent's intermediate steps.\nSubagents cannot ask the user questions. Subagents you start cannot start other subagents.\n\nAgent types:\n- explore: Read-only search of the codebase. Returns findings with file paths and line numbers.\n- general: General-purpose agent for multi-step tasks that may read, edit files and run commands.\n- plan: Investigates the code and returns an implementation plan without changing files.\n- review: Reviews changes for defects. Reads files and may run read-only commands such as git diff.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Short title of the work, 3-60 characters. Shown to the user."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Complete instructions for the subagent: the goal, relevant paths, constraints and the expected shape of the report. The subagent does not see this conversation."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "explore",
+              "general",
+              "plan",
+              "review"
+            ],
+            "default": "general",
+            "description": "Subagent type. See the tool description for the list."
+          },
+          "task": {
+            "type": "string",
+            "description": "Optional id of a task list item that the subagent works on."
+          }
+        },
+        "required": [
+          "description",
+          "prompt"
+        ]
+      }
     }
   ],
   "commands": [

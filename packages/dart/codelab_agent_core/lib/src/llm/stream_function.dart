@@ -13,12 +13,11 @@ import 'model_ref.dart';
 /// 3. the stream has exactly one terminal event, and it is the last
 ///    (LLM-2);
 /// 4. [cancel] yields `ErrorEvent` with `stopReason: aborted` (LLM-7).
-typedef StreamFunction =
-    AssistantMessageEventStream Function(
-      ModelRef model,
-      LlmContext context, {
-      CancelToken? cancel,
-    });
+typedef StreamFunction = AssistantMessageEventStream Function(
+  ModelRef model,
+  LlmContext context, {
+  CancelToken? cancel,
+});
 
 final class ToolSchema {
   ToolSchema({

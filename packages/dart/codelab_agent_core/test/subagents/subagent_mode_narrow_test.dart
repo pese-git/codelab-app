@@ -1,6 +1,4 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
-// `narrow` — чистая функция режима дочерней политики (D36 Т3).
-import 'package:codelab_agent_core/src/permissions/modes.dart';
 import 'package:test/test.dart';
 
 import '../permissions/fake_gate.dart';
