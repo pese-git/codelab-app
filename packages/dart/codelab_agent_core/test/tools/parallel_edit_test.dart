@@ -343,6 +343,120 @@ void main() {
     );
   });
 
+  group('cancelling the turn interrupts the wait for the path (TOOL-7)', () {
+    test('c3 waiting behind c1 finishes cancelled at once; c4 still waits '
+        'for c1', () async {
+      final release = Completer<void>();
+      final log = <String>[];
+      final tool = FakeTool(
+        'touch',
+        lockArg: 'path',
+        onExecute: (args, ctx) async {
+          log.add('start ${args['id']}');
+          // c1 держит путь и не реагирует на отмену: ждёт только ворот.
+          if (args['id'] == 'c1') {
+            await release.future;
+          }
+          log.add('end ${args['id']}');
+          return const ToolExecutionResult([TextContent('ok')]);
+        },
+      );
+      final h = await ex.ExecutorHarness.create([tool]);
+      final cancel = CancelTokenSource();
+      final turn = h.invocation(cancel: cancel.token);
+      // c4 — вызов следующего хода: его отмена текущего хода не касается.
+      final next = h.invocation();
+      Future<ToolCallHandle> announce(String id, ToolInvocation invocation) =>
+          h.executor.announce(
+            ToolCall(
+              id: id,
+              name: 'touch',
+              arguments: {'id': id, 'path': 'a.txt'},
+            ),
+            invocation,
+          );
+      final h1 = await announce('c1', turn);
+      final h3 = await announce('c3', turn);
+      final h4 = await announce('c4', next);
+
+      final first = h.executor.complete(h1);
+      var thirdDone = false;
+      final third = h.executor.complete(h3)..then((_) => thirdDone = true);
+      final fourth = h.executor.complete(h4);
+      await _waitFor(() => log.contains('start c1'));
+      expect(
+        h.logger
+            .eventsOf('tool.lock.wait')
+            .map((r) => r.fields['tool_call_id']),
+        containsAll(['c3', 'c4']),
+      );
+
+      cancel.cancel();
+      await _waitFor(() => thirdDone);
+      final outcome = await third;
+      expect(outcome.outcome, ToolOutcome.cancelled);
+      expect(log, ['start c1'], reason: 'c3 body must not run');
+      final cancelled = h.logger.eventsOf('tool.lock.cancelled');
+      expect(cancelled.map((r) => r.fields['tool_call_id']), ['c3']);
+      expect(cancelled.single.fields['tool'], 'touch');
+      expect(_finished(h.events, 'c3')?.outcome, ToolOutcome.cancelled);
+      // Путь в логи очереди не попадает (observability.md §43).
+      for (final r in [...h.logger.eventsOf('tool.lock.wait'), ...cancelled]) {
+        expect(r.fields.keys.toSet(), {'tool', 'tool_call_id'});
+      }
+
+      // Тикет c3 отпущен, но c4 всё равно ждёт c1.
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(log, ['start c1'], reason: 'c4 must wait for c1');
+      release.complete();
+      await Future.wait([first, fourth]);
+
+      expect(log, ['start c1', 'end c1', 'start c4', 'end c4']);
+    });
+
+    test('path freed and turn cancelled in the same turn of the event loop: '
+        'c3 finishes cancelled without running', () async {
+      final release = Completer<void>();
+      final log = <String>[];
+      final tool = FakeTool(
+        'touch',
+        lockArg: 'path',
+        onExecute: (args, ctx) async {
+          log.add('start ${args['id']}');
+          if (args['id'] == 'c1') {
+            await release.future;
+          }
+          log.add('end ${args['id']}');
+          return const ToolExecutionResult([TextContent('ok')]);
+        },
+      );
+      final h = await ex.ExecutorHarness.create([tool]);
+      final cancel = CancelTokenSource();
+      final turn = h.invocation(cancel: cancel.token);
+      Future<ToolCallHandle> announce(String id) => h.executor.announce(
+        ToolCall(id: id, name: 'touch', arguments: {'id': id, 'path': 'a.txt'}),
+        turn,
+      );
+      final h1 = await announce('c1');
+      final h3 = await announce('c3');
+
+      final first = h.executor.complete(h1);
+      final third = h.executor.complete(h3);
+      await _waitFor(() => log.contains('start c1'));
+      // Держатель отпускает путь, и в тот же оборот приходит отмена хода:
+      // какая бы сторона `Future.any` ни победила, тело c3 не исполняется.
+      release.complete();
+      cancel.cancel();
+      final outcomes = await Future.wait([first, third]);
+
+      expect(outcomes.last.outcome, ToolOutcome.cancelled);
+      expect(log, ['start c1', 'end c1']);
+      expect(_finished(h.events, 'c3')?.outcome, ToolOutcome.cancelled);
+    });
+  });
+
   group('PathLock', () {
     test('bodies of one key run one by one in the order of run', () async {
       final lock = PathLock();
