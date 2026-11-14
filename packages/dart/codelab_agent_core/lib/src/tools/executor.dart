@@ -26,9 +26,18 @@ import 'validator.dart';
 /// `ToolCallStarted` пришли бы не по порядку (design.md, D14).
 ///
 /// Как использовать: цикл вызывает [announce] (шаг 1, `ToolCallStarted`),
-/// затем [complete] (шаги 1a–10, `ToolCallFinished`) или, для вызова
-/// последовательного пакета, оставшегося после отмены, [abandon].
+/// затем [complete] (шаги 1a–10, `ToolCallFinished`) или [abandon] — для
+/// вызова последовательного пакета, оставшегося после отмены, и для уже
+/// объявленных вызовов параллельного пакета, если [announce] очередного
+/// вызова упал (§17.16a.4 «Сбой `announce`»).
 abstract interface class ToolExecutor {
+  /// Шаг 1: занимает места в очередях пути и ключа и эмитит
+  /// `ToolCallStarted`.
+  ///
+  /// При сбое (например, бросил подписчик `emit`) места освобождаются,
+  /// для вызова best-effort эмитится `ToolCallFinished cancelled`, исходная
+  /// ошибка пробрасывается; хэндл не возвращается, поэтому [complete] и
+  /// [abandon] для этого вызова не нужны (§17.16a.4 «Сбой `announce`»).
   Future<ToolCallHandle> announce(ToolCall call, ToolInvocation invocation);
 
   Future<ToolExecutionOutcome> complete(ToolCallHandle handle);
@@ -84,6 +93,8 @@ final class ToolCallHandle {
     this._progress,
     this._lock,
     this._keyLock,
+    this._lockPath,
+    this._lockKeyName,
   );
 
   final ToolCall call;
@@ -102,6 +113,12 @@ final class ToolCallHandle {
 
   /// Место в очереди ключа `AgentTool.lockKey`; `null` — ключа нет.
   final PathLockTicket? _keyLock;
+
+  /// Путь очереди в виде для логов (относительно cwd); `null` — пути нет.
+  final String? _lockPath;
+
+  /// Ключ очереди `lockKey` для логов; `null` — ключа нет.
+  final String? _lockKeyName;
 
   /// Освобождает оба места; повторный вызов безопасен.
   void _release() {
@@ -185,20 +202,60 @@ final class ToolCallExecutor implements ToolExecutor {
         ),
       ),
     );
+    // Путь и ключ вычисляются ДО любого `reserve`: `lockPath`/`lockKey`
+    // работают на сырых аргументах модели и могут бросить; тогда ни одно
+    // место не занято и течь нечему (ошибка уходит из `announce` как есть —
+    // так же, как и раньше для `lockPath`).
+    final rawPath = tool?.lockPath(call.arguments);
+    final lockKeyName = tool?.lockKey(call.arguments);
     // Место в очереди пути занимается здесь, в порядке ответа: хуки
     // разрешений разных вызовов могут ответить в любом порядке (TOOL-7).
-    final lock = switch (tool?.lockPath(call.arguments)) {
-      final String raw => switch (normalizePath(env.cwd, raw)) {
-        final String abs => _locks.reserve(abs),
-        null => null,
-      },
-      null => null,
-    };
-    // Ключ — по тому же принципу и в том же месте: порядок ответа модели.
-    final keyLock = switch (tool?.lockKey(call.arguments)) {
-      final String key => _keyLocks.reserve(key),
-      null => null,
-    };
+    String? lockPath;
+    final abs = rawPath == null ? null : normalizePath(env.cwd, rawPath);
+    final lock = abs == null ? null : _locks.reserve(abs);
+    if (abs != null) {
+      // Абсолютный путь вне cwd в лог не пишем (AGENTS.md §16).
+      lockPath = isInside(env.cwd, abs)
+          ? relativeTo(env.cwd, abs)
+          : '<outside cwd>';
+    }
+    // Ключ — по тому же принципу и в том же месте: порядок ответа модели
+    // (обобщение TOOL-7 на ключи — исследование D39-alt, §17.16a.4).
+    final keyLock = lockKeyName == null ? null : _keyLocks.reserve(lockKeyName);
+    // После резервирования любой сбой `announce` (в том числе `emit`) обязан
+    // освободить оба места: хэндл не вернётся, `complete`/`abandon` уже
+    // никто не вызовет, и очередь пути/ключа осталась бы занятой до конца
+    // сессии.
+    try {
+      return await _announceReserved(
+        call,
+        invocation,
+        tool,
+        context,
+        progress,
+        lock,
+        keyLock,
+        lockPath,
+        lockKeyName,
+      );
+    } on Object {
+      lock?.release();
+      keyLock?.release();
+      rethrow;
+    }
+  }
+
+  Future<ToolCallHandle> _announceReserved(
+    ToolCall call,
+    ToolInvocation invocation,
+    AgentTool? tool,
+    ToolContext context,
+    List<Future<void>> progress,
+    PathLockTicket? lock,
+    PathLockTicket? keyLock,
+    String? lockPath,
+    String? lockKeyName,
+  ) async {
     var presentation = ToolPresentation(title: call.name);
     if (tool != null) {
       try {
@@ -214,17 +271,39 @@ final class ToolCallExecutor implements ToolExecutor {
         );
       }
     }
-    await invocation.emit(
-      ToolCallStarted(
-        invocation.sessionId,
-        toolCallId: call.id,
-        tool: call.name,
-        kind: tool?.kindOf(call.arguments) ?? ToolKind.other,
-        title: presentation.title,
-        input: call.arguments,
-        locations: presentation.locations,
-      ),
-    );
+    try {
+      await invocation.emit(
+        ToolCallStarted(
+          invocation.sessionId,
+          toolCallId: call.id,
+          tool: call.name,
+          kind: tool?.kindOf(call.arguments) ?? ToolKind.other,
+          title: presentation.title,
+          input: call.arguments,
+          locations: presentation.locations,
+        ),
+      );
+    } on Object {
+      // Хэндл не вернётся и `abandon` по нему не вызовут, а клиент мог уже
+      // принять `Started`: best effort закрываем вызов `cancelled`, чтобы он
+      // не висел в `in_progress`. В историю результат не попадает (как и у
+      // `abandon` при сбое пакета); сбой этого эмита глотаем, исходную
+      // ошибку пробрасываем.
+      try {
+        await invocation.emit(
+          ToolCallFinished(
+            invocation.sessionId,
+            toolCallId: call.id,
+            outcome: ToolOutcome.cancelled,
+            content: const [TextContent(cancelledBeforeStartText)],
+            diffs: const [],
+          ),
+        );
+      } on Object {
+        // исходная ошибка важнее
+      }
+      rethrow;
+    }
     return ToolCallHandle._(
       call,
       invocation,
@@ -233,6 +312,8 @@ final class ToolCallExecutor implements ToolExecutor {
       progress,
       lock,
       keyLock,
+      lockPath,
+      lockKeyName,
     );
   }
 
@@ -339,21 +420,65 @@ final class ToolCallExecutor implements ToolExecutor {
     }
     // Шаг 6: блокировка пути и повторная проверка отмены после захвата.
     if (handle._lock case final lock?) {
-      await lock.acquired;
+      await _acquire(handle, lock, {'path': handle._lockPath});
       if (invocation.cancel.isCancelled) {
+        services.logger.log(
+          LogLevel.debug,
+          'tool.lock.cancelled',
+          fields: {
+            'tool': call.name,
+            'tool_call_id': call.id,
+            'session_id': invocation.sessionId.value,
+            'path': handle._lockPath,
+          },
+        );
         return _valid(_error(cancelledText, ToolOutcome.cancelled));
       }
     }
-    // Очередь ключа: после пути. Отмена после захвата НЕ проверяется: вызов,
-    // прошедший хук и проверку выше, «начал исполнение» (D35 «Отмена»).
+    // Очередь ключа (обобщение TOOL-7 — исследование D39-alt, §17.16a.4;
+    // принятый TOOL-7 — только пути): после пути. Отмена после захвата НЕ
+    // проверяется: вызов, прошедший хук и проверку выше, «начал исполнение»
+    // (D35 «Отмена»).
     // Операции под ключом короткие и атомарные, клиент уже видел
     // `in_progress` (хук `markInProgress`), а прерывание после ожидания
     // оставило бы модель без ясного ответа. Путь (`lockPath`, TOOL-7) —
     // иначе: там ожидание может быть долгим, и отмена после него честна.
     if (handle._keyLock case final keyLock?) {
-      await keyLock.acquired;
+      await _acquire(handle, keyLock, {'key': handle._lockKeyName});
     }
     return _valid(await _execute(handle, tool, args));
+  }
+
+  /// Ждёт захвата [ticket]; если очередь занята, пишет `tool.lock.wait` до
+  /// ожидания и `tool.lock.acquired` с `waited_ms` после (AGENTS.md §16:
+  /// зависший вызов виден по логу). В [where] — `path` или `key`; содержимое
+  /// аргументов не логируется.
+  Future<void> _acquire(
+    ToolCallHandle handle,
+    PathLockTicket ticket,
+    Map<String, Object?> where,
+  ) async {
+    if (!ticket.queued) {
+      await ticket.acquired;
+      return;
+    }
+    final fields = {
+      'tool': handle.call.name,
+      'tool_call_id': handle.call.id,
+      'session_id': handle.invocation.sessionId.value,
+      ...where,
+    };
+    final since = services.clock.now();
+    services.logger.log(LogLevel.debug, 'tool.lock.wait', fields: fields);
+    await ticket.acquired;
+    services.logger.log(
+      LogLevel.debug,
+      'tool.lock.acquired',
+      fields: {
+        ...fields,
+        'waited_ms': services.clock.now().difference(since).inMilliseconds,
+      },
+    );
   }
 
   /// Шаги 7–9: исполнение, обработка результата и `afterToolCall`.

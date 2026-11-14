@@ -636,8 +636,24 @@ final class _Turn {
     });
     if (!sequential) {
       final handles = <ToolCallHandle>[];
-      for (final call in calls) {
-        handles.add(await executor.announce(call, invocation));
+      try {
+        for (final call in calls) {
+          handles.add(await executor.announce(call, invocation));
+        }
+      } on Object {
+        // Объявленным вызовам `ToolCallStarted` уже ушёл, а `complete` не
+        // будет: закрываем их `cancelled` (`abandon` освобождает места пути и
+        // ключа), чтобы не висели в `in_progress` и не держали очередь. Сбой
+        // самого закрытия (тот же сломанный `emit`) не должен заслонить
+        // исходную ошибку.
+        for (final handle in handles) {
+          try {
+            await executor.abandon(handle);
+          } on Object {
+            // best effort: места уже освобождены внутри `abandon`.
+          }
+        }
+        rethrow;
       }
       final outcomes = await Future.wait(handles.map(executor.complete));
       return [for (final outcome in outcomes) outcome.message];

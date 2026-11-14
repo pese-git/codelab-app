@@ -1,7 +1,12 @@
 import 'dart:async';
 
-/// Асинхронный mutex по ключу «нормализованный абсолютный путь»
-/// (`agent-core-architecture` §6.3.4, TOOL-7).
+/// Асинхронный mutex по строковому ключу: «нормализованный абсолютный
+/// путь» (`agent-core-architecture` §6.3.4, принятый TOOL-7) или ключ
+/// `AgentTool.lockKey` (обобщение TOOL-7 на ключи — исследование D39-alt,
+/// §17.16a.4).
+///
+/// Точка исполнения держит два независимых экземпляра: очередь путей и
+/// очередь ключей, — поэтому ключ `tasks` не пересекается с файлом `tasks`.
 ///
 /// Почему: `write` и `edit` читают файл, проверяют и записывают его с
 /// `await` между шагами. Две параллельные правки одного файла без
@@ -30,11 +35,12 @@ final class PathLock {
   /// впустило бы следующего, пока предыдущий ещё держит путь, и две правки
   /// одного файла пошли бы параллельно (TOOL-7).
   PathLockTicket reserve(String key) {
+    final queued = _tails.containsKey(key);
     final previous = _tails[key] ?? Future<void>.value();
     final done = Completer<void>();
     _tails[key] = done.future;
     var released = false;
-    return PathLockTicket._(previous, () {
+    return PathLockTicket._(previous, queued, () {
       if (released) {
         return;
       }
@@ -67,7 +73,15 @@ final class PathLock {
 
 /// Место в очереди [PathLock].
 final class PathLockTicket {
-  PathLockTicket._(this.acquired, this._release);
+  PathLockTicket._(this.acquired, this.queued, this._release);
+
+  /// На момент [PathLock.reserve] очередь ключа была непуста: его уже держал
+  /// или ждал другой тикет. К моменту ожидания тот мог освободиться, поэтому
+  /// возможен ложный `tool.lock.wait` с нулевым `waited_ms`.
+  ///
+  /// Для чего: диагностика ожидания очереди (`tool.lock.wait`) логируется
+  /// только когда очередь реально занята, а не на каждый вызов.
+  final bool queued;
 
   /// Завершается, когда путь отпустили все предыдущие держатели.
   final Future<void> acquired;
