@@ -22,18 +22,33 @@ final class PathLock {
 
   /// Занимает место в очереди [key]; держатель ждёт `acquired` и обязан
   /// вызвать `release`, иначе следующие держатели не дождутся.
+  ///
+  /// Тикет можно отпустить, не дождавшись `acquired`: так исполнитель
+  /// отпускает вызов, отказавший до захвата (валидация, preflight, блок или
+  /// ошибка хука, отмена). Поэтому место тикета освобождается только после
+  /// предыдущего держателя: иначе раннее освобождение среднего тикета
+  /// впустило бы следующего, пока предыдущий ещё держит путь, и две правки
+  /// одного файла пошли бы параллельно (TOOL-7).
   PathLockTicket reserve(String key) {
     final previous = _tails[key] ?? Future<void>.value();
     final done = Completer<void>();
     _tails[key] = done.future;
+    var released = false;
     return PathLockTicket._(previous, () {
-      if (done.isCompleted) {
+      if (released) {
         return;
       }
-      done.complete();
-      if (identical(_tails[key], done.future)) {
-        _tails.remove(key);
-      }
+      released = true;
+      unawaited(
+        previous.then((_) {
+          done.complete();
+          // Хвост убирается, только если после этого тикета никто не встал
+          // в очередь; иначе хвостом остаётся будущее последнего тикета.
+          if (identical(_tails[key], done.future)) {
+            _tails.remove(key);
+          }
+        }),
+      );
     });
   }
 
@@ -54,10 +69,11 @@ final class PathLock {
 final class PathLockTicket {
   PathLockTicket._(this.acquired, this._release);
 
-  /// Завершается, когда предыдущий держатель отпустил путь.
+  /// Завершается, когда путь отпустили все предыдущие держатели.
   final Future<void> acquired;
   final void Function() _release;
 
-  /// Отпускает путь; повторный вызов ничего не делает.
+  /// Отпускает путь; повторный вызов ничего не делает. Следующий держатель
+  /// получает путь не раньше, чем его отпустят все предыдущие.
   void release() => _release();
 }
