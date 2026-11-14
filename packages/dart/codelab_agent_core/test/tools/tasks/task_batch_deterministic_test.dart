@@ -124,7 +124,8 @@ void main() {
     expect(changes.single.change.changed.single.id, '1');
   });
 
-  test('cancel while c2 waits for the key releases both tickets', () async {
+  test('cancel while c2 waits for the key: c2 already started and is '
+      'applied (D35), tickets are released', () async {
     final h = await TaskHarness.create();
     final source = CancelTokenSource();
     ToolInvocation inv(CancelToken t) => ToolInvocation(
@@ -145,17 +146,40 @@ void main() {
     final secondDone = h.executor.complete(second);
     await Future<void>.delayed(Duration.zero);
     source.cancel();
+    // c1 не начал исполнение (отмена до шага 6) — отменён, операция не
+    // применена; c2 начал и ждёт ключ — исполняется несмотря на отмену.
     final firstOutcome = await h.executor.complete(first);
     final secondOutcome = await secondDone;
 
     expect(firstOutcome.outcome, ToolOutcome.cancelled);
-    expect(secondOutcome.outcome, ToolOutcome.cancelled);
-    expect(h.changes, isEmpty);
+    expect(secondOutcome.outcome, ToolOutcome.completed);
+    expect(h.changes.map((c) => c.change.toolCallId), ['c2']);
 
     // Тикеты освобождены: вызов под новым токеном не зависает.
     final next = await h
         .run('task_create', {'subject': 'C'})
         .timeout(const Duration(seconds: 2));
     expect(next.outcome, ToolOutcome.completed);
+  });
+
+  test('cancel before step 6 gives cancelled and the operation is not '
+      'applied', () async {
+    final h = await TaskHarness.create();
+    final source = CancelTokenSource()..cancel();
+    final handle = await h.executor.announce(
+      ToolCall(id: 'c1', name: 'task_create', arguments: {'subject': 'A'}),
+      ToolInvocation(
+        sessionId: h.invocation().sessionId,
+        cancel: source.token,
+        stepTools: [for (final t in h.registry.tools) t.name],
+        emit: h.events.add,
+      ),
+    );
+
+    final outcome = await h.executor.complete(handle);
+
+    expect(outcome.outcome, ToolOutcome.cancelled);
+    expect(h.changes, isEmpty);
+    expect(h.tasks.items, isEmpty);
   });
 }

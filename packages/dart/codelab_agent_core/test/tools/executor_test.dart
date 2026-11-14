@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
@@ -308,4 +310,49 @@ void main() {
     expect(textOf(outcome), 'Tool call was cancelled before it started');
     expect(h.events.last, isA<ToolCallFinished>());
   });
+
+  // Сторож TOOL-7: в отличие от ключа (`lockKey`, D35), вызов, ждущий ПУТЬ,
+  // после захвата отмену проверяет и получает `cancelled`.
+  test(
+    'a call waiting for a path lock is cancelled and not executed',
+    () async {
+      final release = Completer<void>();
+      final started = Completer<void>();
+      final tool = FakeTool(
+        'w',
+        lockArg: 'path',
+        onExecute: (args, ctx) async {
+          if (args['n'] == 1) {
+            started.complete();
+            await release.future;
+          }
+          return const ToolExecutionResult([TextContent('ok')]);
+        },
+      );
+      final h = await ExecutorHarness.create([tool]);
+      final source = CancelTokenSource();
+      final inv = h.invocation(cancel: source.token);
+
+      final first = h.run(
+        'w',
+        const {'path': 'a', 'n': 1},
+        id: 'c1',
+        invocation: inv,
+      );
+      await started.future;
+      final second = h.run(
+        'w',
+        const {'path': 'a', 'n': 2},
+        id: 'c2',
+        invocation: inv,
+      );
+      await pumpEventQueue();
+      source.cancel();
+      release.complete();
+
+      expect((await first).outcome, ToolOutcome.completed);
+      expect((await second).outcome, ToolOutcome.cancelled);
+      expect(tool.executed.map((a) => a['n']), [1]);
+    },
+  );
 }
