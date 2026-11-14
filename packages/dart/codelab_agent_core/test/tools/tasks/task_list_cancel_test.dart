@@ -10,7 +10,9 @@ import 'task_harness.dart';
 /// design.md change `add-subagents-and-tasks`, D35;
 /// `agent-core/17-16-task-list.md` §17.16.2).
 ///
-/// Красные до задачи 1.2c: у `TaskChange` нет поля `toolCallId`.
+/// Сценарий «Отмена во время ожидания замка»: вызов, начавший исполнение и
+/// ждущий ключ `tasks`, после отмены хода всё равно исполняется (D35
+/// «Отмена»; операции под ключом короткие и атомарные).
 void main() {
   test('create, update and delete carry the id of their tool call', () async {
     final h = await TaskHarness.create();
@@ -43,10 +45,13 @@ void main() {
     expect(published.single.toolCallId, isNull);
   });
 
-  // `apply` отмену не проверяет: начатая операция применяется, иначе модель
-  // получила бы «cancelled» для пункта, который уже есть в списке.
-  test('cancel while the second call waits for the lock: both items are '
-      'created with the ordinary result', () async {
+  // Сценарий spec «Отмена во время ожидания замка» (D35 «Отмена»): второй
+  // вызов уже начал исполнение (прошёл хук и проверку отмены) и ждёт ключ
+  // `tasks`; после захвата ключа отмену он не проверяет, поэтому оба пункта
+  // созданы с обычным результатом, а `TaskListChanged` несут `toolCallId`
+  // своих вызовов.
+  test('cancel while the second call waits for the key: both are applied '
+      '(scenario "cancel while waiting for the lock")', () async {
     final release = Completer<void>();
     final firstPublishing = Completer<void>();
     late TaskHarness h;
@@ -72,7 +77,10 @@ void main() {
     release.complete();
     final outcomes = [await first, await second];
 
-    expect(outcomes.map((o) => o.outcome), everyElement(ToolOutcome.completed));
+    expect(outcomes.map((o) => o.outcome), [
+      ToolOutcome.completed,
+      ToolOutcome.completed,
+    ]);
     expect(textOf(outcomes[0]), startsWith('Created task #1: a.'));
     expect(textOf(outcomes[1]), startsWith('Created task #2: b.'));
     expect([for (final c in changes) c.toolCallId], ['call_1', 'call_2']);

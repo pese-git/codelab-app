@@ -72,6 +72,10 @@ final class JsonlSessionStore implements SessionStore {
   /// нужен.
   final _paths = <SessionId, String>{};
 
+  /// Пути журналов потомков: отдельно от [_paths], чтобы `open` и `list` их
+  /// не находили (D7).
+  final _childPaths = <SessionId, String>{};
+
   /// Открытые дескрипторы; живут до [close] или до ошибки операции.
   final _handles = <String, RandomAccessFile>{};
 
@@ -100,6 +104,43 @@ final class JsonlSessionStore implements SessionStore {
   }
 
   @override
+  Future<String> createChild(SessionHeader header) async {
+    final parent =
+        header.parent ??
+        (throw ArgumentError.value(
+          header.parent,
+          'header.parent',
+          'a child journal needs the parent link',
+        ));
+    if (_childPaths.containsKey(header.id) || await _find(header.id) != null) {
+      throw StateError('session ${header.id.value} already exists');
+    }
+    final rootPath =
+        _paths[parent.rootSessionId] ??
+        await _find(parent.rootSessionId) ??
+        (throw SessionNotFound(parent.rootSessionId));
+    final stamp = formatJournalTime(
+      header.created,
+    ).replaceAll(':', '-').replaceAll('.', '-');
+    // Журналы потомков любой глубины лежат плоско в `subagents/` корня:
+    // вложенные каталоги дали бы путь длиннее 260 символов Windows (D7).
+    final path =
+        '${rootPath.substring(0, rootPath.length - '.jsonl'.length)}'
+        '/subagents/${stamp}_${header.id.value}.jsonl';
+    final line = _encode(header.toJson());
+    await writeQueue.run(path, () async {
+      final file = File(path);
+      await file.parent.create(recursive: true);
+      if (await file.exists()) {
+        throw StateError('session ${header.id.value} already exists');
+      }
+      await _write(path, line, durable: true);
+    });
+    _childPaths[header.id] = path;
+    return _keyOf(path);
+  }
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {
@@ -107,13 +148,13 @@ final class JsonlSessionStore implements SessionStore {
   }) async {
     // Строка кодируется один раз и до очереди (§8.5, шаг 1).
     final line = _encode(record.toJson());
-    final path = await _pathOf(id);
+    final path = _childPaths[id] ?? await _pathOf(id);
     await writeQueue.run(path, () => _write(path, line, durable: durable));
   }
 
   @override
   Future<void> flush(SessionId id) async {
-    final path = await _pathOf(id);
+    final path = _childPaths[id] ?? await _pathOf(id);
     await writeQueue.run(path, () async {
       final handle = _handles[path];
       if (handle == null || fsync == FsyncPolicy.never) {
@@ -180,7 +221,7 @@ final class JsonlSessionStore implements SessionStore {
 
   @override
   Future<void> close(SessionId id) async {
-    final path = _paths[id] ?? await _find(id);
+    final path = _childPaths[id] ?? _paths[id] ?? await _find(id);
     if (path == null) {
       return;
     }

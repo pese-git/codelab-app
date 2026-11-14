@@ -1243,14 +1243,17 @@ PromptTurn _applyUpdateToTurn(
     ToolCallSessionUpdate(:final toolCall) => _applyToolCallUpdate(
       turn,
       update,
-      ToolCallRecord.fromToolCall(
-        toolCall,
-        // Повторный `tool_call` с тем же id обновляет данные записи, но не
-        // снижает уже показанный риск (review 6b, L-2; D27).
-        riskLevel: ApprovalPolicy.max(
-          turn.toolCalls[toolCall.toolCallId]?.riskLevel ??
-              ApprovalRiskLevel.readOnly,
-          ApprovalPolicy.classifyToolCall(toolCall),
+      _withKnownSubagentMeta(
+        turn.toolCalls[toolCall.toolCallId],
+        ToolCallRecord.fromToolCall(
+          toolCall,
+          // Повторный `tool_call` с тем же id обновляет данные записи, но не
+          // снижает уже показанный риск (review 6b, L-2; D27).
+          riskLevel: ApprovalPolicy.max(
+            turn.toolCalls[toolCall.toolCallId]?.riskLevel ??
+                ApprovalRiskLevel.readOnly,
+            ApprovalPolicy.classifyToolCall(toolCall),
+          ),
         ),
       ),
     ),
@@ -1301,6 +1304,20 @@ SessionUpdate? _latestOfKind(
   }
   return null;
 }
+
+/// Повторный `tool_call` (реплей) не стирает признак субагента, уже
+/// накопленный записью: итог финального обновления переживает повтор кадра.
+ToolCallRecord _withKnownSubagentMeta(
+  ToolCallRecord? known,
+  ToolCallRecord fresh,
+) => known?.subagentMeta == null
+    ? fresh
+    : fresh.copyWith(
+        subagentMeta: mergeSubagentMeta(
+          known!.subagentMeta,
+          fresh.subagentMeta,
+        ),
+      );
 
 PromptTurn _applyToolCallUpdate(
   PromptTurn turn,
@@ -1353,6 +1370,10 @@ ToolCallRecord _mergeToolCallUpdate(
     rawOutput: update.rawOutput ?? current?.rawOutput,
     startedAt: current?.startedAt,
     completedAt: current?.completedAt,
+    subagentMeta: mergeSubagentMeta(
+      current?.subagentMeta,
+      subagentMetaOf(update.meta),
+    ),
   );
 }
 

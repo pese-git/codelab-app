@@ -312,6 +312,13 @@ abstract interface class SessionStore {
   Future<SessionSnapshot> openReadOnly(SessionId id);
   /// После MVP: новый файл целиком (заголовок и записи) через <file>.tmp и rename — fork (§17.6.7).
   Future<void> createFrom(SessionHeader header, List<SessionRecord> records);
+  /// Change add-subagents-and-tasks (§17.3.6; D36, Т4): журнал потомка в subagents/ корневой сессии;
+  /// header.parent обязателен. Возвращает непрозрачный адрес журнала (поле journal записи subagent).
+  /// Дальше append/flush/close — по id ребёнка; open, list и index.json дочерних журналов не видят.
+  Future<String> createChild(SessionHeader header);
+  /// Там же, с итерации 4 change: чтение и ремонт журнала потомка по адресу из записи subagent —
+  /// рекурсивное лечение (§8.8) и реплей дерева.
+  Future<SessionSnapshot> openChild(String journal);
   /// После MVP (§17.6.17, D-17): поиск по тексту сообщений; только чтение, без lease и ремонта на диске.
   Future<SessionSearchPage> search(SessionSearchQuery query, {required Redactor redactor});
   /// После MVP: текущая длина файла в байтах — сравнение ревизии перед append (§17.6.8).

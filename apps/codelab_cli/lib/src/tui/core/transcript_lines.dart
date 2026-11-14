@@ -156,7 +156,12 @@ final class TranscriptLayout {
         ThoughtsMode.collapsed => [dim(unicode ? 'thinking…' : 'thinking...')],
         ThoughtsMode.hidden => const [],
       },
-      ToolCallItem() => [toolRow(item, unicode: unicode)],
+      ToolCallItem() => [
+        // Вызов `agent`: итог в самой строке статуса (D24, D27).
+        item.details?.subagentCall == null
+            ? toolRow(item, unicode: unicode)
+            : subagentStatusRow(item, unicode: unicode),
+      ],
       // Тихая строка операций со списком: без рамки и статуса (D27).
       TaskOpsItem() => [
         dim('${unicode ? '☰ ' : '- '}${sanitizeTerminalText(item.text)}'),

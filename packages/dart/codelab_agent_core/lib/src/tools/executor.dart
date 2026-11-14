@@ -31,11 +31,12 @@ import 'validator.dart';
 /// пакета, оставшийся после отмены, и уже объявленные вызовы параллельного
 /// пакета, когда объявление следующего упало.
 abstract interface class ToolExecutor {
-  /// Объявляет вызов и занимает его место в очереди пути (TOOL-7).
+  /// Объявляет вызов и занимает его место в очередях пути (TOOL-7) и ключа
+  /// `AgentTool.lockKey` (§17.16a.4).
   ///
   /// Если [announce] завершился исключением, handle вызывающему не
   /// достаётся, поэтому реализация сама освобождает всё, что успела занять:
-  /// упавшее объявление не оставляет путь занятым.
+  /// упавшее объявление не оставляет путь и ключ занятыми.
   Future<ToolCallHandle> announce(ToolCall call, ToolInvocation invocation);
 
   Future<ToolExecutionOutcome> complete(ToolCallHandle handle);
@@ -98,6 +99,8 @@ final class ToolCallHandle {
     this.context,
     this._progress,
     this._lock,
+    this._keyLock,
+    this._lockKeyName,
   );
 
   final ToolCall call;
@@ -113,6 +116,18 @@ final class ToolCallHandle {
   /// Место в очереди `PathLock`, занятое при объявлении; `null` — вызов
   /// путь не блокирует.
   final PathLockTicket? _lock;
+
+  /// Место в очереди ключа `AgentTool.lockKey`; `null` — ключа нет.
+  final PathLockTicket? _keyLock;
+
+  /// Ключ очереди `lockKey` для логов; `null` — ключа нет.
+  final String? _lockKeyName;
+
+  /// Освобождает оба места; повторный вызов безопасен.
+  void _release() {
+    _lock?.release();
+    _keyLock?.release();
+  }
 }
 
 const cancelledText = 'Tool call was cancelled';
@@ -128,7 +143,8 @@ final class ToolCallExecutor implements ToolExecutor {
     required this.env,
     required this.services,
     this.unavailableText,
-  });
+    PathLock? locks,
+  }) : _locks = locks ?? PathLock();
 
   final ToolRegistry registry;
 
@@ -145,7 +161,14 @@ final class ToolCallExecutor implements ToolExecutor {
   /// Ограниченный env сессии (ENV-2).
   final ExecutionEnv env;
   final ToolServices services;
-  final _locks = PathLock();
+
+  /// Очередь путей: ребёнок получает очередь корня, поэтому параллельные
+  /// правки одного файла во всём дереве упорядочены (TOOL-7).
+  final PathLock _locks;
+
+  /// Очередь ключей `AgentTool.lockKey`; отдельная от путей, чтобы ключ
+  /// `tasks` не пересекался с файлом с таким же именем.
+  final _keyLocks = PathLock();
 
   @override
   Future<ToolCallHandle> announce(
@@ -155,47 +178,61 @@ final class ToolCallExecutor implements ToolExecutor {
     final available = invocation.stepTools.contains(call.name);
     final tool = available ? registry.lookup(call.name) : null;
     final progress = <Future<void>>[];
-    final context = ToolContext(
-      env: env,
-      cancel: invocation.cancel,
-      toolCallId: call.id,
-      services: services,
-      stepTools: invocation.stepTools,
-      misuse: invocation.misuse,
-      supportsImages: invocation.supportsImages,
-      onUpdate: (partial) => progress.add(
-        Future.sync(
-          () => invocation.emit(
-            ToolCallProgress(
-              invocation.sessionId,
-              toolCallId: call.id,
-              content: [for (final b in partial.content) ToolCallBlock(b)],
-            ),
-          ),
-        ),
-      ),
-      onTerminal: (terminalId) => progress.add(
-        Future.sync(
-          () => invocation.emit(
-            ToolCallProgress(
-              invocation.sessionId,
-              toolCallId: call.id,
-              content: [ToolCallTerminal(terminalId)],
-            ),
-          ),
-        ),
-      ),
-    );
+    // Путь и ключ вычисляются ДО любого `reserve`: `lockPath`/`lockKey`
+    // работают на сырых аргументах модели и могут бросить; тогда ни одно
+    // место не занято и течь нечему (ошибка уходит из `announce` как есть —
+    // так же, как и раньше для `lockPath`).
+    final rawPath = tool?.lockPath(call.arguments);
+    final lockKeyName = tool?.lockKey(call.arguments);
     // Место в очереди пути занимается здесь, в порядке ответа: хуки
     // разрешений разных вызовов могут ответить в любом порядке (TOOL-7).
-    final lock = switch (tool?.lockPath(call.arguments)) {
+    final lock = switch (rawPath) {
       final String raw => switch (normalizePath(env.cwd, raw)) {
         final String abs => _locks.reserve(abs),
         null => null,
       },
       null => null,
     };
+    // Ключ — по тому же принципу и в том же месте: порядок ответа модели
+    // (обобщение TOOL-7 на ключи — исследование D39-alt, §17.16a.4).
+    final keyLock = lockKeyName == null ? null : _keyLocks.reserve(lockKeyName);
+    final ToolContext context;
     try {
+      context = ToolContext(
+        env: env,
+        cancel: invocation.cancel,
+        toolCallId: call.id,
+        // Инструмент отпускает ключ досрочно (`ToolContext.releaseLockKey`) тем
+        // же тикетом, что и `_release`: повторное отпускание безопасно. Тикет
+        // известен до контекста, поэтому поле приватное и не перезаписывается.
+        lockKeyRelease: keyLock?.release,
+        services: services,
+        stepTools: invocation.stepTools,
+        misuse: invocation.misuse,
+        supportsImages: invocation.supportsImages,
+        onUpdate: (partial) => progress.add(
+          Future.sync(
+            () => invocation.emit(
+              ToolCallProgress(
+                invocation.sessionId,
+                toolCallId: call.id,
+                content: [for (final b in partial.content) ToolCallBlock(b)],
+              ),
+            ),
+          ),
+        ),
+        onTerminal: (terminalId) => progress.add(
+          Future.sync(
+            () => invocation.emit(
+              ToolCallProgress(
+                invocation.sessionId,
+                toolCallId: call.id,
+                content: [ToolCallTerminal(terminalId)],
+              ),
+            ),
+          ),
+        ),
+      );
       var presentation = ToolPresentation(title: call.name);
       if (tool != null) {
         try {
@@ -220,23 +257,35 @@ final class ToolCallExecutor implements ToolExecutor {
           title: presentation.title,
           input: call.arguments,
           locations: presentation.locations,
+          subagent: presentation.subagent,
         ),
       );
     } on Object {
-      // Без handle тикет некому отпустить, а `PathLock` живёт всю сессию:
-      // путь остался бы занят для всех следующих вызовов. Отпускание не рвёт
+      // В `try` и создание контекста, и эмит: сбой любого оставил бы тикеты
+      // без хозяина. Без handle тикет некому отпустить, а `PathLock` живёт
+      // всю сессию: путь остался бы занят для всех следующих вызовов. Отпускание не рвёт
       // очередь — место освободится только после предыдущего держателя
       // (TOOL-7). `emit` может бросить: `AgentEventSink` этого не запрещает,
       // а `Agent.emit` пробрасывает ошибку подписчика.
       lock?.release();
+      keyLock?.release();
       rethrow;
     }
-    return ToolCallHandle._(call, invocation, tool, context, progress, lock);
+    return ToolCallHandle._(
+      call,
+      invocation,
+      tool,
+      context,
+      progress,
+      lock,
+      keyLock,
+      lockKeyName,
+    );
   }
 
   @override
   Future<ToolExecutionOutcome> abandon(ToolCallHandle handle) {
-    handle._lock?.release();
+    handle._release();
     return _finish(
       handle,
       const ToolExecutionResult([
@@ -253,7 +302,7 @@ final class ToolCallExecutor implements ToolExecutor {
     try {
       (result, outcome) = await _run(handle);
     } finally {
-      handle._lock?.release();
+      handle._release();
     }
     return _finish(handle, result, outcome);
   }
@@ -354,6 +403,18 @@ final class ToolCallExecutor implements ToolExecutor {
         return _valid(_error(cancelledText, ToolOutcome.cancelled));
       }
     }
+    // Очередь ключа (обобщение TOOL-7 — исследование D39-alt, §17.16a.4;
+    // принятый TOOL-7 — только пути): после пути. Отмена после захвата НЕ
+    // проверяется: вызов, прошедший хук и проверку выше, «начал исполнение»
+    // (D35 «Отмена»).
+    // Операции под ключом короткие и атомарные, клиент уже видел
+    // `in_progress` (хук `markInProgress`), а прерывание после ожидания
+    // оставило бы модель без ясного ответа. Путь (`lockPath`, TOOL-7) —
+    // иначе: там ожидание может быть долгим, и отмена после него честна.
+    if (handle._keyLock case final keyLock?) {
+      _logLock('tool.lock.wait', call, key: handle._lockKeyName);
+      await keyLock.acquired;
+    }
     return _valid(await _execute(handle, tool, args));
   }
 
@@ -376,6 +437,13 @@ final class ToolCallExecutor implements ToolExecutor {
       return _error(cancelledText, ToolOutcome.cancelled);
     } on Object catch (error) {
       return _error(errorText(error), ToolOutcome.failed);
+    } finally {
+      // Ключ нужен только на время `execute`: обработка результата и
+      // `afterToolCall` (хуки хоста) его не держат, иначе медленный хук
+      // задерживал бы следующий `task_*` сессии. Публикация `TaskListChanged`
+      // идёт внутри `execute`, поэтому TSK-1 не страдает. Путь (`lockPath`)
+      // отпускает `complete` (TOOL-7).
+      handle._keyLock?.release();
     }
     if (!tool.truncatesOutput) {
       result = _limit(result);
@@ -447,11 +515,19 @@ final class ToolCallExecutor implements ToolExecutor {
   /// Путь в поля не пишется: он может быть чувствительным, а вызов и так
   /// связан с путём через `tool_call_id` и событие `ToolCallStarted`
   /// (минимально достаточный вариант, `observability.md` §43).
-  void _logLock(String event, ToolCall call, {String? reason}) =>
+  ///
+  /// Для очереди ключа [key] (`AgentTool.lockKey`, §17.16a.4) добавляется
+  /// в поля: ключ задаёт сам инструмент, это не путь и не аргументы модели.
+  void _logLock(String event, ToolCall call, {String? key, String? reason}) =>
       services.logger.log(
         LogLevel.debug,
         event,
-        fields: {'tool': call.name, 'tool_call_id': call.id, 'reason': ?reason},
+        fields: {
+          'tool': call.name,
+          'tool_call_id': call.id,
+          'key': ?key,
+          'reason': ?reason,
+        },
       );
 
   /// Вид причины отмены для логов: `user`, `shutdown`, `storage_failure`,

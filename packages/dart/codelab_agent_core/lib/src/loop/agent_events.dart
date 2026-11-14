@@ -4,6 +4,7 @@ import '../llm/model_ref.dart';
 import '../llm/usage.dart';
 import '../permissions/modes.dart';
 import '../tools/agent_tool.dart';
+import '../subagents/subagent_model.dart';
 import '../tools/pairing.dart';
 import '../tools/tasks/task_list.dart';
 import 'loop_config.dart';
@@ -115,6 +116,7 @@ final class ToolCallStarted extends AgentEvent {
     required this.title,
     required Map<String, Object?> input,
     List<Location> locations = const [],
+    this.subagent,
   }) : input = Map.unmodifiable(input),
        locations = List.unmodifiable(locations);
 
@@ -124,6 +126,10 @@ final class ToolCallStarted extends AgentEvent {
   /// Arguments as the model sent them.
   final Map<String, Object?> input;
   final List<Location> locations;
+
+  /// Признак вызова `agent` с первого кадра: id и тип субагента из
+  /// `ToolPresentation.subagent` (change `add-subagents-and-tasks`, D28).
+  final SubagentCallRef? subagent;
 }
 
 /// A partial result through `onUpdate` or `onTerminal`.
@@ -192,6 +198,114 @@ final class TaskListChanged extends AgentEvent {
 
   final List<TaskItem> items;
   final TaskChange change;
+}
+
+/// Ребёнок получил слот, журнал создан, запрос к модели ещё не сделан
+/// (`agent-core/17-3-subagents.md` §17.3.2). Событие уровня сессии родителя:
+/// `sessionId` — родительский; писатель журнала пишет запись `subagent`
+/// со `status: running` (`durable`).
+final class SubagentStarted extends AgentEvent {
+  const SubagentStarted(
+    super.sessionId, {
+    required this.subagentId,
+    required this.parentToolCallId,
+    required this.agent,
+    required this.description,
+    required this.childSessionId,
+    required this.journalPath,
+  });
+
+  final SubagentId subagentId;
+
+  /// Вызов `agent` в сессии родителя.
+  final String parentToolCallId;
+
+  /// Имя типа (в журнале поле называется `agent`, D28).
+  final String agent, description;
+  final SessionId childSessionId;
+
+  /// Непрозрачный адрес журнала от `SessionStore.createChild`.
+  final String journalPath;
+}
+
+/// Смена состояния, шаг или вызов потомка — не чаще `progress_interval`
+/// (смена состояния — всегда). В журнал не пишется.
+final class SubagentProgress extends AgentEvent {
+  const SubagentProgress(super.sessionId, {required this.snapshot});
+
+  final SubagentSnapshot snapshot;
+}
+
+/// Итог потомка: отчёт готов, до `ToolCallFinished(agent)` (SUB-10).
+///
+/// Писатель журнала пишет итоговую запись `subagent` (`durable`). Поля
+/// [toolCalls] и [duration] вместе с [usage] — источник
+/// `_meta.codelab.subagent.summary` ACP (D24).
+final class SubagentFinished extends AgentEvent {
+  const SubagentFinished(
+    super.sessionId, {
+    required this.subagentId,
+    required this.parentToolCallId,
+    this.agent = '',
+    this.description = '',
+    required this.status,
+    this.failure,
+    this.childSessionId,
+    this.journalPath,
+    this.usage = Usage.zero,
+    this.toolCalls = 0,
+    this.duration = Duration.zero,
+    this.report = '',
+    this.reportPreview = '',
+    this.budgetExceeded,
+  });
+
+  final SubagentId subagentId;
+  final String parentToolCallId, agent, description;
+  final SubagentState status;
+  final SubagentFailure? failure;
+
+  /// `null` у ребёнка, отменённого в очереди.
+  final SessionId? childSessionId;
+  final String? journalPath;
+
+  /// Usage и число вызовов вместе с потомками; нули у отменённого в очереди.
+  final Usage usage;
+  final int toolCalls;
+  final Duration duration;
+
+  /// Тело отчёта после усечения, без обёртки (поле `report` записи).
+  final String report;
+
+  /// Первые 200 символов отчёта.
+  final String reportPreview;
+
+  /// Лимит при `failure == budgetExceeded`.
+  final BudgetLimit? budgetExceeded;
+}
+
+/// Событие потомка, переизлучённое в поток родителя (SUB-24). Обёртка
+/// плоская: [event] никогда не `SubagentActivity`. `SessionWriter` и
+/// ACP-проекция базового этапа её не пишут и не отправляют.
+final class SubagentActivity extends AgentEvent {
+  const SubagentActivity(
+    super.sessionId, {
+    required this.subagentId,
+    required this.parentToolCallId,
+    required this.path,
+    required this.depth,
+    required this.event,
+  });
+
+  final SubagentId subagentId;
+
+  /// Вызов `agent` в сессии родителя, запустившего потомка.
+  final String parentToolCallId;
+
+  /// Предки потомка от глубины 1, без него самого.
+  final List<SubagentId> path;
+  final int depth;
+  final AgentEvent event;
 }
 
 /// The mode of the session changed (level of `AgentSession`); it applies
@@ -286,6 +400,7 @@ final class TurnEnded extends AgentEvent {
     required this.usage,
     this.budgetExceeded,
     this.held,
+    this.subagentUsage,
   });
 
   final TurnEndReason reason;
@@ -296,6 +411,10 @@ final class TurnEnded extends AgentEvent {
 
   /// The final-response hook held the answer (after MVP, §17.12.4).
   final String? held;
+
+  /// Usage детей хода (транзитивно), уже включённый в [usage]; `null` — детей
+  /// не было (change `add-subagents-and-tasks`, D36 Т8, SUB-11).
+  final Usage? subagentUsage;
 }
 
 /// Domain outcome of a call; ACP has no `cancelled` and `rejected` — the

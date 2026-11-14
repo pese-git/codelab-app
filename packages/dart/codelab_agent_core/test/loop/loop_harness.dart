@@ -222,4 +222,10 @@ String describe(AgentEvent e) => switch (e) {
     'ContextCompacted($tokensBefore -> $tokensAfter)',
   SessionTitleChanged(:final title) => 'SessionTitleChanged($title)',
   ModelOptionsChanged() => 'ModelOptionsChanged',
+  SubagentStarted(:final subagentId) => 'SubagentStarted($subagentId)',
+  SubagentProgress() => 'SubagentProgress',
+  SubagentFinished(:final subagentId, :final status) =>
+    'SubagentFinished($subagentId ${status.name})',
+  SubagentActivity(:final subagentId, :final event) =>
+    'SubagentActivity($subagentId ${describe(event)})',
 };

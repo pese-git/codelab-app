@@ -125,6 +125,7 @@ final class _Turn {
     AssistantMessage? last;
     try {
       _turnId = TurnId(_config.ids.nextId());
+      _config.onOwnUsage?.call(Usage.zero);
       await _emit(TurnStarted(_session, turnId: _turnId, input: prompts));
       for (final prompt in prompts) {
         await _append(prompt);
@@ -166,6 +167,7 @@ final class _Turn {
         final response = await _request(reviseNote);
         reviseNote = null;
         _usage += response.usage;
+        _config.onOwnUsage?.call(_usage);
         last = response;
         if (response.stopReason case StopReason.error || StopReason.aborted) {
           if (response.stopReason == StopReason.error) {
@@ -293,9 +295,12 @@ final class _Turn {
       TurnEnded(
         _session,
         reason: reason,
-        usage: _usage,
+        // Usage потомков уже в сумме хода (SUB-11), отдельной строкой — в
+        // `subagentUsage`; без потомков поле `null`.
+        usage: _usage + _childUsage,
         budgetExceeded: exceeded,
         held: held,
+        subagentUsage: _childUsage == Usage.zero ? null : _childUsage,
       ),
     );
     return TurnOutput(added: _added.sublist(_historyFrom), history: _history);
@@ -308,12 +313,14 @@ final class _Turn {
     if (_step >= budget.maxSteps) {
       return BudgetLimit.steps;
     }
+    // Usage потомков входит в бюджет хода (SUB-11, D36 Т8).
+    final total = _usage + _childUsage;
     if (budget.maxTokens case final max?
-        when _usage.input + _usage.output >= max) {
+        when total.input + total.output >= max) {
       return BudgetLimit.tokens;
     }
     if (budget.maxCost case final max?
-        when _config.model.cost != null && _usage.cost.total >= max) {
+        when _config.model.cost != null && total.cost.total >= max) {
       return BudgetLimit.cost;
     }
     if (budget.maxDuration case final max?) {
@@ -324,8 +331,12 @@ final class _Turn {
         return BudgetLimit.duration;
       }
     }
-    return null;
+    // Бюджет предков проверяет потомок на своей границе шага (D4).
+    return _config.ancestorBudget?.call();
   }
+
+  /// Usage потомков хода на сейчас; нулевой, если потомков нет.
+  Usage get _childUsage => _config.subagentUsage?.call() ?? Usage.zero;
 
   /// Забирает всю очередь steering одним опросом, если следующий шаг
   /// начнётся: ход не отменён, бюджет не исчерпан, лимит шагов steering не
@@ -629,57 +640,124 @@ final class _Turn {
       misuse: _misuse,
       supportsImages: _config.model.supportsImages,
     );
-    final sequential = calls.any((call) {
+    // Барьер (LOOP-4, design.md change `add-subagents-and-tasks`, D39): пакет
+    // делится по порядку ответа на группы — подряд идущие `parallel`-вызовы
+    // образуют одну параллельную группу, каждый `sequential`-вызов — группу
+    // из одного вызова. Группы идут строго друг за другом, поэтому
+    // `sequential`-вызов рядом с тремя `agent` не делает детей
+    // последовательными. `task_*` не `sequential` (очередь ключа `tasks`,
+    // §17.16a.4) и барьера не образуют.
+    final groups = <List<ToolCall>>[];
+    // Последняя группа — барьер: к ней вызовы не добавляются.
+    var lastIsBarrier = false;
+    for (final call in calls) {
       final tool = _context.tools.where((t) => t.name == call.name).firstOrNull;
-      return tool?.executionModeOf(call.arguments) ==
-          ToolExecutionMode.sequential;
-    });
-    if (!sequential) {
+      final barrier =
+          tool?.executionModeOf(call.arguments) == ToolExecutionMode.sequential;
+      if (barrier || groups.isEmpty || lastIsBarrier) {
+        groups.add([call]);
+      } else {
+        groups.last.add(call);
+      }
+      lastIsBarrier = barrier;
+    }
+    final results = <String, ToolResultMessage>{};
+    for (final group in groups) {
+      // Отмена проверяется перед каждой группой: не начатые вызовы получают
+      // `cancelled` до старта, идущие группы отменяет токен хода.
       final handles = <ToolCallHandle>[];
       try {
-        for (final call in calls) {
+        for (final call in group) {
           handles.add(await executor.announce(call, invocation));
         }
       } on Object {
-        // Уже объявленные вызовы держат места в очереди `PathLock` сессии;
-        // без `abandon` их пути остались бы заняты и в следующих ходах.
-        // `abandon` отпускает тикет до эмита `ToolCallFinished`, поэтому его
-        // собственный сбой путь уже не держит; ход заканчивается исходной
-        // ошибкой (LOOP-1).
-        for (final handle in handles) {
-          try {
-            await executor.abandon(handle);
-          } on Object catch (error, stack) {
-            // Исходная ошибка важнее: она уйдёт в `AgentError` хода. Сбой
-            // отката только логируется, чтобы его причина не потерялась,
-            // если сломан сам приёмник событий (§16).
-            _config.logger?.log(
-              LogLevel.warning,
-              'tool.abandon.error',
-              fields: {
-                'session_id': _session.value,
-                'tool': handle.call.name,
-                'tool_call_id': handle.call.id,
-              },
-              error: error,
-              stack: stack,
-            );
-          }
-        }
+        // Уже объявленные вызовы группы держат места в очереди `PathLock`
+        // сессии; без `abandon` их пути остались бы заняты и в следующих
+        // ходах (TOOL-7). Ход заканчивается этой ошибкой (LOOP-1); сбой
+        // самого отката только логируется.
+        await _abandonAll(executor, handles);
         rethrow;
       }
-      final outcomes = await Future.wait(handles.map(executor.complete));
-      return [for (final outcome in outcomes) outcome.message];
+      final outcomes = _cancel.isCancelled
+          ? await _abandonCancelled(executor, handles)
+          : await Future.wait(handles.map(executor.complete));
+      for (final outcome in outcomes) {
+        results[outcome.message.toolCallId] = outcome.message;
+      }
     }
-    final results = <ToolResultMessage>[];
-    for (final call in calls) {
-      final handle = await executor.announce(call, invocation);
-      final outcome = _cancel.isCancelled
-          ? await executor.abandon(handle)
-          : await executor.complete(handle);
-      results.add(outcome.message);
+    return [for (final call in calls) results[call.id]!];
+  }
+
+  /// Откатывает [handles] до исполнения: места в очереди ключа отпускаются у
+  /// всех хэндлов до первого ожидания, а сбой или зависание
+  /// `emit(ToolCallFinished)` одного хэндла не держит остальных (TOOL-7,
+  /// §17.16a.4: ожидание ключа отменой не прерывается, и следующий `task_*`
+  /// сессии иначе висел бы вечно).
+  ///
+  /// `abandon` отпускает тикет синхронно, до эмита, поэтому сначала запускаются
+  /// все `abandon`, и только потом результаты ждутся по очереди. Каждый сбой
+  /// пишется в лог `tool.abandon.error` (§16); возвращается первый, а решает
+  /// вызывающий, пробрасывать ли его.
+  Future<(Object, StackTrace)?> _abandonAll(
+    ToolExecutor executor,
+    List<ToolCallHandle> handles, [
+    List<ToolExecutionOutcome>? outcomes,
+  ]) async {
+    // Результат оборачивается сразу, чтобы ошибка ещё не ожидаемого хэндла не
+    // стала необработанной.
+    final pending = [
+      for (final handle in handles)
+        (handle, _settle(() => executor.abandon(handle))),
+    ];
+    (Object, StackTrace)? first;
+    for (final (handle, settled) in pending) {
+      final (outcome, failure) = await settled;
+      if (outcome != null) {
+        outcomes?.add(outcome);
+        continue;
+      }
+      final (error, stack) = failure!;
+      first ??= (error, stack);
+      _config.logger?.log(
+        LogLevel.warning,
+        'tool.abandon.error',
+        fields: {
+          'session_id': _session.value,
+          'tool': handle.call.name,
+          'tool_call_id': handle.call.id,
+        },
+        error: error,
+        stack: stack,
+      );
     }
-    return results;
+    return first;
+  }
+
+  Future<(ToolExecutionOutcome?, (Object, StackTrace)?)> _settle(
+    Future<ToolExecutionOutcome> Function() start,
+  ) async {
+    try {
+      return (await start(), null);
+    } on Object catch (error, stack) {
+      return (null, (error, stack));
+    }
+  }
+
+  /// Ветка отмены группы: откат всех хэндлов, затем первая ошибка отката (если
+  /// была) уходит из хода как есть (LOOP-1, ход `failed`). Все тикеты к этому
+  /// моменту освобождены: `abandon` отпускает их до эмита.
+  Future<List<ToolExecutionOutcome>> _abandonCancelled(
+    ToolExecutor executor,
+    List<ToolCallHandle> handles,
+  ) async {
+    final outcomes = <ToolExecutionOutcome>[];
+    if (await _abandonAll(executor, handles, outcomes) case (
+      final error,
+      final stack,
+    )) {
+      Error.throwWithStackTrace(error, stack);
+    }
+    return outcomes;
   }
 
   ToolResultMessage _truncatedArguments(ToolCall call) => ToolResultMessage(

@@ -14,6 +14,8 @@ final class FakeTool extends AgentTool {
     this.preflightText,
     this.sequentialWhen,
     this.lockArg,
+    this.lockKeyValue,
+    this.lockKeyOf,
   });
 
   @override
@@ -47,11 +49,22 @@ final class FakeTool extends AgentTool {
   /// Аргумент с путём, который точка исполнения держит под `PathLock`.
   final String? lockArg;
 
+  /// Постоянный ключ очереди `AgentTool.lockKey`; `null` — ключа нет.
+  final String? lockKeyValue;
+
+  /// Ключ по аргументам (приоритетнее [lockKeyValue]); может бросить — так
+  /// тест проверяет сбой вычисления ключа до резервирования.
+  final String? Function(Map<String, Object?> args)? lockKeyOf;
+
   final executed = <Map<String, Object?>>[];
 
   @override
   String? lockPath(Map<String, Object?> args) =>
       lockArg == null ? null : args[lockArg] as String?;
+
+  @override
+  String? lockKey(Map<String, Object?> args) =>
+      lockKeyOf != null ? lockKeyOf!(args) : lockKeyValue;
 
   @override
   ContentTrust outputTrust(Map<String, Object?> args) => ContentTrust.trusted;

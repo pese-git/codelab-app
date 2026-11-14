@@ -5,6 +5,7 @@ import '../mcp/mcp_server_config.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
 import '../skills/skills_config.dart';
+import '../subagents/subagents_config.dart';
 import '../tools/agent_tool.dart' show ToolTier;
 import 'config_issue.dart';
 import 'config_tree.dart';
@@ -181,6 +182,7 @@ final class CoreConfig {
     this.redact = const RedactSettings(),
     this.projectContextMaxBytes = defaultProjectContextMaxBytes,
     this.skills = const SkillsConfig(),
+    this.subagents = const SubagentsConfig(),
     this.trustedProjects = const [],
     this.projectRoot,
     this.withoutProject,
@@ -366,6 +368,7 @@ final class CoreConfig {
     redact: redact,
     projectContextMaxBytes: projectContextMaxBytes,
     skills: skills,
+    subagents: subagents,
     trustedProjects: trustedProjects,
     projectRoot: projectRoot,
     withoutProject: withoutProject,
@@ -451,6 +454,11 @@ final class CoreConfig {
   /// Раздел `skills` (capability `agent-skills`, design.md change
   /// `add-agent-skills`, D11).
   final SkillsConfig skills;
+
+  /// Раздел `subagents` (change `add-subagents-and-tasks`, D17): лимиты
+  /// читаются при каждом `spawn`, `enabled` и `max_depth` — при создании
+  /// сессии (D22, D37).
+  final SubagentsConfig subagents;
 
   /// Канонические корни `trusted_projects` глобального слоя (~ раскрыт,
   /// symlink раскрыт `ConfigLoader`). Runtime сравнивает с ними канонический

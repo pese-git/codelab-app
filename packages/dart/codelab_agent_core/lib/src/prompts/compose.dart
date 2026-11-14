@@ -6,6 +6,7 @@ import '../project/project_context.dart';
 import '../skills/catalog_entries.dart';
 import '../skills/skill_catalog.dart';
 import '../skills/skills_config.dart' show defaultSkillsCatalogMaxChars;
+import '../tools/tasks/task_list.dart' show TaskItem;
 import '../tools/truncate.dart';
 import 'prompts.g.dart';
 import 'template.dart';
@@ -34,6 +35,7 @@ final class PromptInputs {
     List<McpServerSummary> mcpServers = const [],
     this.projectContext,
     this.agentProfile,
+    this.subagent,
     List<SkillDefinition> skills = const [],
     this.skillsCatalogMaxChars = defaultSkillsCatalogMaxChars,
   }) : toolNames = Set.unmodifiable(toolNames),
@@ -67,6 +69,12 @@ final class PromptInputs {
   /// промпт побайтово прежний (PR-3). Тело вставляется как значение и шаблоном
   /// не обрабатывается (§11.4).
   final ({String name, String body})? agentProfile;
+
+  /// Тип, тело определения и назначенный пункт списка у потомка; `null` — у
+  /// корневой сессии. Даёт секции 12–14 §11.5 (change
+  /// `add-subagents-and-tasks`, D36 Т11); профиль агента сессии родителя
+  /// ребёнку не передаётся.
+  final ({String name, String body, TaskItem? task})? subagent;
 
   /// Навыки `modelVisible` снимка каталога сессии (design.md change
   /// `add-agent-skills`, D6, D17); порядок входа не важен — строки идут по
@@ -183,6 +191,23 @@ List<(String, String)> _sections(PromptInputs inputs) {
           'body': profile.body.trim(),
         }),
       ),
+    // Шаги 12–14 §11.5: только у потомка — база ребёнка, профиль типа и
+    // строка назначенного пункта (D16, D36 Т11).
+    if (inputs.subagent case final child?) ...[
+      (Prompts.subagentSystem.id, Prompts.subagentSystem.render({})),
+      (
+        Prompts.subagentProfile.id,
+        Prompts.subagentProfile.render({
+          'name': child.name,
+          'body': child.body.trim(),
+        }),
+      ),
+      if (child.task case final task?)
+        (
+          Prompts.subagentTask.id,
+          Prompts.subagentTask.render({'id': task.id, 'subject': task.subject}),
+        ),
+    ],
   ];
 }
 

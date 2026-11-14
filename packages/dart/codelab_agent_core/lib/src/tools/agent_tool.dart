@@ -3,6 +3,7 @@ import '../env/execution_env.dart';
 import '../llm/messages.dart';
 import '../llm/stream_function.dart';
 import '../loop/agent_events.dart';
+import '../subagents/subagent_model.dart';
 import '../util/canonical_json.dart';
 import '../util/clock.dart';
 import '../util/logger.dart';
@@ -76,6 +77,46 @@ abstract base class AgentTool {
   /// Переопределяют `write` и `edit`.
   String? lockPath(Map<String, Object?> args) => null;
 
+  /// Ключ очереди без пути: вызовы с одним ключом исполняются по одному, в
+  /// порядке ответа модели (§6.3.4). Обобщение TOOL-7 на ключи — исследование
+  /// D39-alt, §17.16a.4; принятый TOOL-7 относится только к путям
+  /// ([lockPath]).
+  ///
+  /// Почему член контракта: у инструментов с общим состоянием не файлового
+  /// рода (список задач сессии) нет пути для [lockPath], а исполнение внутри
+  /// параллельного пакета иначе зависело бы от того, чей хук разрешений
+  /// ответил раньше. Знает ключ только инструмент; [args] — сырые аргументы.
+  ///
+  /// Для чего: порядок ответа модели между вызовами одного ключа в
+  /// параллельном пакете (id и операции применяются как в последовательном
+  /// исполнении), при этом вызовы с другими ключами и без ключа идут
+  /// одновременно.
+  ///
+  /// Как работает: место в очереди занимается в `announce`, захват — на
+  /// шаге 6 после `beforeToolCall` (и после [lockPath]). Освобождение —
+  /// сразу после шага 7 (`execute` вернул или бросил), ДО обработки
+  /// результата и `afterToolCall`: медленный after-хук держателя не
+  /// задерживает следующий вызов ключа. Досрочно ключ отпускает сам
+  /// инструмент через `ToolContext.releaseLockKey`. Вызов, не дошедший до
+  /// `execute` (отказ валидации, блок хука, отмена, `abandon`), отпускает
+  /// место на своём пути завершения. Ключи не пересекаются с путями: у них
+  /// отдельная очередь (путь отпускается в `complete`, TOOL-7). Переопределяют
+  /// `task_*` и `agent` с пунктом списка.
+  ///
+  /// Хуки: `beforeToolCall` (и ACP `in_progress` из него) срабатывает до
+  /// ожидания ключа, поэтому клиент видит `in_progress` у вызова, который
+  /// ещё стоит в очереди; ожидание ключа диагностируется логом
+  /// `tool.lock.wait` (с полем `key`).
+  ///
+  /// Отмена (D35 «Отмена»): вызов, прошедший `beforeToolCall` и проверку
+  /// отмены, после захвата ключа отмену не проверяет — он исполняется даже
+  /// при отмене хода; отмена до шага 6 по-прежнему даёт `cancelled`. Поэтому
+  /// ключ — только для коротких атомарных операций над общим состоянием:
+  /// под ним нельзя выполнять долгие операции и ждать субагента или другого
+  /// держателя того же ключа (взаимная блокировка). Для путей действует
+  /// [lockPath] с повторной проверкой отмены после захвата.
+  String? lockKey(Map<String, Object?> args) => null;
+
   /// Инструмент усекает вывод сам, со своим уведомлением (§6.3.5); иначе
   /// точка исполнения усекает голову с общим уведомлением (TOOL-9).
   bool get truncatesOutput => false;
@@ -115,7 +156,9 @@ final class ToolContext {
     this.misuse,
     this.supportsImages = false,
     this.onTerminal,
-  }) : stepTools = List.unmodifiable(stepTools);
+    void Function()? lockKeyRelease,
+  }) : _lockKeyRelease = lockKeyRelease,
+       stepTools = List.unmodifiable(stepTools);
 
   /// Всегда ограниченный env сессии (ENV-2).
   final ExecutionEnv env;
@@ -138,6 +181,23 @@ final class ToolContext {
   ToolPresentation? presentation;
   final String toolCallId;
   final ToolServices services;
+
+  /// Освобождает место вызова в очереди `AgentTool.lockKey`; передаёт точка
+  /// исполнения при создании контекста. `null` — ключа нет. Поле приватное:
+  /// инструмент не может его подменить, ему доступен только
+  /// [releaseLockKey].
+  final void Function()? _lockKeyRelease;
+
+  /// Досрочно отпускает место в очереди ключа `AgentTool.lockKey`.
+  ///
+  /// Почему: под ключом нельзя ждать субагента (взаимная блокировка), а
+  /// проверка и привязка к общему состоянию должны пройти под ним. Инструмент
+  /// делает короткую часть под ключом, зовёт `releaseLockKey()` и только
+  /// потом ждёт долгую (`agent{task}`, D39-alt, §17.16a.4).
+  ///
+  /// Идемпотентно; без ключа — no-op. Точка исполнения всё равно отпускает
+  /// место сразу после `execute`. Путь `lockPath` этим НЕ отпускается.
+  void releaseLockKey() => _lockKeyRelease?.call();
 
   /// Имена схем текущего шага: текст для модели упоминает только те
   /// инструменты, которые она может вызвать (§6.4).
@@ -212,7 +272,12 @@ final class ToolPresentation {
     required this.title,
     this.locations = const [],
     this.diffs = const [],
+    this.subagent,
   });
+
+  /// Признак вызова `agent`: id и тип, зарезервированные до
+  /// `ToolCallStarted` (design.md change `add-subagents-and-tasks`, D28).
+  final SubagentCallRef? subagent;
 
   final String title;
   final List<Location> locations;

@@ -35,7 +35,11 @@
 
 #### Scenario: Описание agent по глубине
 - **WHEN** описание `agent` рендерится для корневой сессии при `max_depth: 3` и для ребёнка глубины 2 при том же `max_depth`
-- **THEN** первое содержит `A subagent may start its own subagents, up to 2 more level(s) below it.`, второе — `Subagents you start cannot start other subagents.`; оба рендеринга детерминированы
+- **THEN** первое содержит `A subagent may start its own subagents, up to 2 more level(s) below it.`, второе — `Subagents you start cannot start other subagents.`; оба рендеринга детерминированы (итерация 4)
+
+#### Scenario: Описание agent до вложенности
+- **WHEN** до итерации 4 change (ребёнку `agent` не даётся) описание `agent` рендерится для корневой сессии при `max_depth: 3`
+- **THEN** `nesting` строится от эффективной глубины 1 и даёт `Subagents you start cannot start other subagents.`: описание не обещает модели вложенности, которой нет (design.md, D36, Т16)
 
 ### Requirement: Детерминированная сборка системного промпта
 `composeSystemPrompt(PromptInputs)` SHALL собирать секции в фиксированном порядке §11.5 документа ядра и соединять их через пустую строку:
@@ -91,4 +95,4 @@
 
 #### Scenario: Промпт ребёнка с навыками
 - **WHEN** промпт собирается для ребёнка `general` в режиме `standard`, а у родителя навыки `flutter-golden` и `release-notes`
-- **THEN** секция `## Skills` стоит после `mcp` и до `project_context`, её текст побайтово равен секции родителя, за ней идут `subagent/system` и `## Agent profile: general`; результат совпадает с `test/prompts/golden/subagent-general-skills.txt` (итерация 2s)
+- **THEN** секция `## Skills` стоит после `mcp` и до `project_context`, её текст побайтово равен секции родителя, за ней идут `subagent/system` и `## Agent profile: general`; результат совпадает с `test/prompts/golden/subagent-general-skills.txt` (задача 2s.1)

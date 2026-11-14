@@ -25,16 +25,36 @@ abstract base class _TaskTool extends AgentTool {
   @override
   ToolKind get kind => ToolKind.think;
 
-  /// Вызовы списка идут строго по одному, в порядке ответа модели.
+  /// Общий ключ очереди всех четырёх инструментов: единственный список на
+  /// сессию (D39-alt, `AgentTool.lockKey`).
   ///
-  /// Почему: клиент привязывает `plan` к вызову по
-  /// `plan._meta.codelab.taskChange.toolCallId` (D35), а не по статусу.
-  /// Последовательный режим сериализует проверки операций (цикл, лимит видят
-  /// состояние после предыдущей) и держит `TaskListChanged` между началом
-  /// вызова и его `ToolCallFinished` (TSK-1). Один такой вызов переводит весь
-  /// пакет в последовательный режим цикла (`agent_loop.dart`, `_runBatch`).
+  /// Режим исполнения `task_*` не переопределяется: они не `sequential` и
+  /// идут параллельно с остальным пакетом, барьера не образуют (LOOP-4,
+  /// `agent_loop.dart`, `_runBatch`).
+  ///
+  /// Почему parallel безопасен: между собой `task_*` упорядочивает очередь
+  /// ключа [lockKey] в порядке ответа модели, а операции дополнительно
+  /// сериализует замок `SessionTaskList._locked`; `TaskListChanged`
+  /// публикуется под замком и ждётся внутри `execute`, то есть раньше
+  /// `ToolCallFinished` своего вызова (TSK-1), а клиент привязывает `plan` к
+  /// вызову по `plan._meta.codelab.taskChange.toolCallId` (D35).
+  ///
+  /// Что детерминировано: порядок выдачи id и применения операций внутри
+  /// пакета равен порядку вызовов, `task_update` пункта из того же пакета не
+  /// получает `unknown_id` из-за медленного хука.
+  ///
+  /// Отмена (D35 «Отмена», сценарий spec agent-tools «Отмена во время
+  /// ожидания замка»): вызов, который прошёл проверку отмены перед шагом 6 и
+  /// ждёт ключ `tasks`, после захвата применяет операцию и получает обычный
+  /// результат даже при отмене хода. Отмена до шага 6 (до или во время
+  /// `beforeToolCall`, на проверке перед ожиданием ключа) даёт `cancelled`.
+  /// Под ключом нельзя ждать субагента (`AgentTool.lockKey`).
+  ///
+  /// Что остаётся: все `ToolCallStarted` идут первыми, а хук
+  /// `beforeToolCall` срабатывает пачкой после announce всего пакета, не
+  /// сразу после `Started` своего вызова.
   @override
-  ToolExecutionMode? get executionMode => ToolExecutionMode.sequential;
+  String? lockKey(Map<String, Object?> args) => 'tasks';
 
   @override
   ContentTrust outputTrust(Map<String, Object?> args) => ContentTrust.trusted;
