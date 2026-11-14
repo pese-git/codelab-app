@@ -13,8 +13,10 @@
 /// `replacesConfigAncestor`, `hardLinksConfig` — отдельные способы записи, все
 /// дают метку `write to agent configuration`.
 ///
-/// Как использовать: `findCritical` создаёт [ConfigCheck] на команду и
-/// вызывает функции для каждого сегмента с текущим каталогом `dir`.
+/// Как использовать: `findCritical` создаёт [ConfigCheck] на команду; обход
+/// `exec_dir_walk.dart` вызывает функции для каждого сегмента и каждого
+/// известного каталога `dir`, а при неизвестном каталоге —
+/// [writesInUnknownDirectory] (§7.6.2).
 /// Неизвестная переменная в пути не защищена (§7.6); маска и скобки —
 /// fail closed (`shell_glob.dart`).
 library;
@@ -120,7 +122,8 @@ bool isAgentConfigPath(String relativePath) {
 ///
 /// Почему отдельный объект: проектные пути (`.codelab/**` относительно
 /// корня сессии) и пути хоста сравниваются по одним правилам и от одного
-/// каталога команды, а `cd` сдвигает этот каталог внутри команды.
+/// каталога команды, а `cd`, `pushd`, `popd` меняют этот каталог внутри
+/// команды; его множество вариантов ведёт `exec_dir_walk.dart` (§7.6.2).
 ///
 /// Для чего: превращает слово команды в абсолютный путь (раскрыв `~`,
 /// `$HOME`, `${HOME}`, `$CODELAB_HOME`, `${CODELAB_HOME}` значениями хоста) и
@@ -216,22 +219,46 @@ final class ConfigCheck {
     return hasC;
   }
 
-  String? _absolute(String target, String dir) {
+  /// `OLDPWD` проверяемого варианта состояния для `~-` (D17, N9): выставляет
+  /// обход перед проверкой сегмента; `null` — неизвестен.
+  String? oldPwd;
+
+  /// Слово после раскрытия `~`, `$HOME` значениями хоста и `~+`, `~-`
+  /// значениями варианта состояния ([dir], [oldPwd]).
+  String _expandWord(String target, String dir) {
     final expanded = scope?.expand(target) ?? target;
+    final tilde = _tildeForm.firstMatch(expanded);
+    if (tilde == null) {
+      return expanded;
+    }
+    final rest = expanded.substring(tilde[0]!.length);
+    if (tilde[1] == '+') {
+      return '$dir$rest';
+    }
+    final old = oldPwd;
+    return old == null ? expanded : '$old$rest';
+  }
+
+  /// После раскрытия остался `~user` или `~-` без известного `OLDPWD`: путь
+  /// сравнить с защищаемыми нельзя. `~user` бывает и текущим пользователем
+  /// (его `~/.codelab` защищён), `~-` — любым каталогом. Критично при записи и
+  /// в аргументах команд вне белого списка чтения: метка
+  /// `write to agent configuration`, потому что путь может быть защищаемым
+  /// (D17, N9). Одиночная `~` и `~/…` без значения `HOME` сюда не входят: так
+  /// было и раньше, у них нет имени, которое нельзя раскрыть.
+  bool isOpaqueTilde(String word) {
+    final expanded = _expandWord(word, root);
+    return expanded.startsWith('~') &&
+        expanded != '~' &&
+        !expanded.startsWith('~/');
+  }
+
+  String? _absolute(String target, String dir) {
+    final expanded = _expandWord(target, dir);
     if (expanded.contains(r'$') || expanded.startsWith('~')) {
       return null;
     }
     return normalizePath(dir, expanded);
-  }
-
-  /// Новый текущий каталог после `cd`/`pushd`; `null`, если путь неизвестен
-  /// (`cd -`, `cd $X`) или это не путь.
-  String? cdTarget(List<String> args, String dir) {
-    final target = args.where((a) => !a.startsWith('-')).firstOrNull;
-    if (target == null) {
-      return scope?.expansions['HOME'];
-    }
-    return _absolute(target, dir);
   }
 
   /// Правка этого пути меняет конфигурацию агента: проектный путь §7.6.1 или
@@ -240,7 +267,10 @@ final class ConfigCheck {
   /// указать на защищаемый путь (R5-4).
   bool isConfig(String target, String dir) {
     for (final variant in braceExpand(target)) {
-      final expanded = scope?.expand(variant) ?? variant;
+      if (isOpaqueTilde(variant)) {
+        return true;
+      }
+      final expanded = _expandWord(variant, dir);
       if (hasMask(expanded)) {
         if (_maskHits(expanded, dir)) {
           return true;
@@ -265,7 +295,10 @@ final class ConfigCheck {
   /// пишет в него (R5-4).
   bool isConfigDirectory(String target, String dir) {
     for (final variant in braceExpand(target)) {
-      final expanded = scope?.expand(variant) ?? variant;
+      if (isOpaqueTilde(variant)) {
+        return true;
+      }
+      final expanded = _expandWord(variant, dir);
       if (hasMask(expanded)) {
         if (_maskHits(expanded, dir)) {
           return true;
@@ -655,10 +688,13 @@ const _readOnlyCommands = {
   'ls', 'stat', 'file', 'wc', 'diff', 'cmp', 'sha256sum', 'shasum', 'md5sum',
   'realpath', 'readlink', 'dirname', 'basename', 'echo', 'printf', 'test', //
   '[', '[[',
+  // Ничего не пишут: значение переменной-команды `GIT_EDITOR=true` не критично
+  // (change `harden-exec-cwd-tracking`, D8, D9).
+  'true', 'false',
 };
 
 /// Встроенные команды, которые сами ничего не пишут: `cd` сдвигает каталог
-/// (его ведёт `_walk`), `eval`/`source`/`.` и `sh -c` исполняют вложенный
+/// (его ведёт `ExecDirWalk`), `eval`/`source`/`.` и `sh -c` исполняют вложенный
 /// текст, который проверяется как отдельные сегменты.
 const _noWriteBuiltins = {'cd', 'pushd', 'popd', 'eval', 'source', '.', ':'};
 
@@ -850,6 +886,42 @@ bool touchesConfig(ShellSegment segment, ConfigCheck config, String dir) {
     }
   }
   return false;
+}
+
+/// Критична ли простая команда, если рабочий каталог неизвестен (⊤, §7.6.2,
+/// change `harden-exec-cwd-tracking`, D9).
+///
+/// Почему отдельное правило: при ⊤ нельзя сравнивать относительные пути с
+/// защищаемыми, а неизвестный каталог может оказаться `~/.codelab` или
+/// каталогом навыка. Прогонять каждый предикат «с любым каталогом» не нужно:
+/// все они срабатывают только у команды вне белого списка чтения, поэтому
+/// достаточно трёх условий.
+///
+/// Для чего: `true`, если команда не из белого списка чтения (с учётом
+/// опций записи и исполнения), у неё есть перенаправление записи с
+/// относительной целью или относительный вывод лаунчера (`time -o out`).
+/// Абсолютные цели, `~`, `$HOME`, `$CODELAB_HOME` от каталога не зависят и
+/// проверяются обычными правилами. Исключения навыков E1–E3 здесь не
+/// действуют: E2 требует известного каталога навыка, а E1 не снимает ⊤ (D11).
+///
+/// Как использовать: обход `exec_dir_walk.dart` вызывает для сегмента, у
+/// которого в множестве вариантов есть ⊤, и ставит метку `write in unknown
+/// working directory`, если известные варианты метку конфигурации не дали.
+bool writesInUnknownDirectory(ShellSegment segment, ConfigCheck config) {
+  if (!_isReadOnly(segment)) {
+    return true;
+  }
+  bool relative(String target) {
+    final expanded = config.scope?.expand(target) ?? target;
+    // `~+` и `~-` при неизвестном каталоге — относительные цели (D18, W6).
+    return !expanded.startsWith('/') &&
+            !expanded.startsWith(r'$') &&
+            !expanded.startsWith('~') ||
+        _tildeForm.hasMatch(expanded);
+  }
+
+  return segment.redirections.any((r) => r.writes && relative(r.target)) ||
+      segment.launcherOutputs.any(relative);
 }
 
 /// Подкоманды `git`, которые массово стирают или откатывают рабочее дерево
@@ -1076,3 +1148,6 @@ bool _gitRiskyConfig(List<String> args) {
   }
   return false;
 }
+
+/// `~+` (каталог варианта) и `~-` (`OLDPWD` варианта) в начале слова.
+final _tildeForm = RegExp(r'^~([+-])(?=/|$)');
