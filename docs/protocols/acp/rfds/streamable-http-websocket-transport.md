@@ -52,12 +52,12 @@ Clients MUST accept, store, and return cookies set by the server on all HTTP-bas
 
 ### 6. Defines a unified routing model
 
-| Method   | Upgrade Header?      | Behavior                                                                                                                               |
-| -------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST`   | —                    | Send JSON-RPC message. `initialize` returns 200 with JSON body. All others return 202 Accepted immediately.                            |
-| `GET`    | No                   | Open SSE stream. `Acp-Connection-Id` alone → connection-scoped stream. `Acp-Connection-Id` + `Acp-Session-Id` → session-scoped stream. |
-| `GET`    | `Upgrade: websocket` | Upgrade to WebSocket for full-duplex messaging                                                                                         |
-| `DELETE` | —                    | Terminate the connection                                                                                                               |
+| Method | Upgrade Header? | Behavior |
+| - | - | - |
+| `POST` | — | Send JSON-RPC message. `initialize` returns 200 with JSON body. All others return 202 Accepted immediately. |
+| `GET` | No | Open SSE stream. `Acp-Connection-Id` alone → connection-scoped stream. `Acp-Connection-Id` + `Acp-Session-Id` → session-scoped stream. |
+| `GET` | `Upgrade: websocket` | Upgrade to WebSocket for full-duplex messaging |
+| `DELETE` | — | Terminate the connection |
 
 ### 7. Preserves the full ACP lifecycle
 
@@ -340,20 +340,20 @@ The agent task is spawned once per connection. Server→client messages are rout
 
 ### Comparing to MCP Streamable HTTP
 
-| MCP Requirement                            | ACP Implementation                         | Status               |
-| ------------------------------------------ | ------------------------------------------ | -------------------- |
-| POST for all client→server messages        | ✅                                          | Compliant            |
-| Accept header validation (406)             | ✅                                          | Compliant            |
-| Notifications/responses return 202         | ✅ (except `initialize` returns 200)        | Mostly compliant     |
-| Requests return SSE stream                 | ❌ (long-lived GET streams instead)         | Documented deviation |
-| Session ID on initialize response          | ✅ (`Acp-Connection-Id`)                    | Compliant (renamed)  |
+| MCP Requirement | ACP Implementation | Status |
+| - | - | - |
+| POST for all client→server messages | ✅ | Compliant |
+| Accept header validation (406) | ✅ | Compliant |
+| Notifications/responses return 202 | ✅ (except `initialize` returns 200) | Mostly compliant |
+| Requests return SSE stream | ❌ (long-lived GET streams instead) | Documented deviation |
+| Session ID on initialize response | ✅ (`Acp-Connection-Id`) | Compliant (renamed) |
 | Session ID required on subsequent requests | ✅ (`Acp-Connection-Id` + `Acp-Session-Id`) | Compliant (extended) |
-| GET opens SSE stream                       | ✅ (connection-scoped + session-scoped)     | Compliant (extended) |
-| DELETE terminates session                  | ✅ (terminates connection)                  | Compliant            |
-| 404 for unknown sessions                   | ✅ (unknown connection IDs)                 | Compliant            |
-| Batch requests                             | ❌ (returns 501)                            | Documented deviation |
-| Resumability (Last-Event-ID)               | ❌                                          | Deferred to v2       |
-| Protocol version header                    | ❌                                          | Future work          |
+| GET opens SSE stream | ✅ (connection-scoped + session-scoped) | Compliant (extended) |
+| DELETE terminates session | ✅ (terminates connection) | Compliant |
+| 404 for unknown sessions | ✅ (unknown connection IDs) | Compliant |
+| Batch requests | ❌ (returns 501) | Documented deviation |
+| Resumability (Last-Event-ID) | ❌ | Deferred to v2 |
+| Protocol version header | ❌ | Future work |
 
 ### Deviations from MCP Streamable HTTP
 
@@ -406,7 +406,10 @@ Yes. A client may call `session/new` multiple times within a single `Acp-Connect
 
 ### How does this interact with authentication?
 
-Authentication (see auth-methods RFD) is orthogonal and layered on top via HTTP headers, query parameters, or WebSocket subprotocols. `Acp-Connection-Id` and `Acp-Session-Id` are transport-level identifiers, not auth tokens.
+[ACP authentication](https://agentclientprotocol.com/protocol/v2/authentication.md) is orthogonal and layered on
+top via HTTP headers, query parameters, or WebSocket subprotocols.
+`Acp-Connection-Id` and `Acp-Session-Id` are transport-level identifiers, not
+auth tokens.
 
 ### What about the `Acp-Protocol-Version` header?
 
@@ -418,9 +421,13 @@ HTTP/2 provides multiplexing, allowing many concurrent POST requests alongside t
 
 ## Revision history
 
-* **2025-03-10**: Initial draft based on the RFC template and goose reference implementation.
-* **2026-04-01**: Introduced a two-header identity model: `Acp-Connection-Id` (returned at `initialize`, binds to the connection) and `Acp-Session-Id` (returned at `session/new`, scopes to a session). This addresses feedback that the original single `Acp-Session-Id` conflated transport binding with ACP session identity, and enables session-scoped GET listener streams for targeted server-to-client event delivery. Removed connection-scoped GET streams — all GET SSE listeners now require both `Acp-Connection-Id` and `Acp-Session-Id`.
-* **2026-04-15**: Minor edits
-* **2026-04-23**: Major revision to single long-lived GET stream model. Changed from per-request SSE streams to a single connection-scoped GET stream for all server→client messages. POST requests (except `initialize`) now return 202 Accepted immediately. `initialize` returns 200 OK with JSON response body. Required HTTP/2 for multiplexing. This change makes the HTTP usage more similar to WebSocket and supports better the bidirectional nature of ACP.
+* **2026-07-02**: Moved to Active to reflect current Transports Working Group focus.
 * **2026-06-05**: Added a "Durability and reliability expectations" section splitting out what implementers can expect in v1 (sessions survive disconnects, session affinity is preserved across reconnects, and reconnect/retry/liveness are the implementer's responsibility with no in-flight message replay) versus v2 (message IDs, stream resumability, defined reconnection semantics, more reliable notification cycles, and standardized keepalive). Marked Last-Event-ID resumability as deferred to v2.
 * **2026-05-04**: Split the single GET stream into two: a connection-scoped stream (GET with `Acp-Connection-Id`) for connection-level messages such as responses to `session/new` and `session/load`, and session-scoped streams (GET with `Acp-Connection-Id` + `Acp-Session-Id`) for session updates, server-to-client requests like `request_permission`, and responses to session-scoped POSTs. Routing happens on HTTP headers rather than JSON-RPC body inspection; per-session streams have independent lifetimes.
+* **2026-04-23**: Major revision to single long-lived GET stream model. Changed from per-request SSE streams to a single connection-scoped GET stream for all server→client messages. POST requests (except `initialize`) now return 202 Accepted immediately. `initialize` returns 200 OK with JSON response body. Required HTTP/2 for multiplexing. This change makes the HTTP usage more similar to WebSocket and supports better the bidirectional nature of ACP.
+* **2026-04-15**: Minor edits
+* **2026-04-01**: Introduced a two-header identity model: `Acp-Connection-Id` (returned at `initialize`, binds to the connection) and `Acp-Session-Id` (returned at `session/new`, scopes to a session). This addresses feedback that the original single `Acp-Session-Id` conflated transport binding with ACP session identity, and enables session-scoped GET listener streams for targeted server-to-client event delivery. Removed connection-scoped GET streams — all GET SSE listeners now require both `Acp-Connection-Id` and `Acp-Session-Id`.
+* **2025-03-10**: Initial draft based on the RFC template and goose reference implementation.
+
+
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.

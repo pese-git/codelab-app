@@ -10,13 +10,14 @@ The filesystem methods allow Agents to read and write text files within the Clie
 
 ## Checking Support
 
-Before attempting to use filesystem methods, Agents **MUST** verify that the Client supports these capabilities by checking the [Client Capabilities](./initialization#client-capabilities) field in the `initialize` response:
+Before attempting to use filesystem methods, Agents **MUST** verify that the Client supports these capabilities by checking the [Client Capabilities](https://agentclientprotocol.com/protocol/v1/initialization.md#client-capabilities) field in the Client's `initialize` request:
 
-```json highlight={8,9} theme={null}
+```json highlight={9,10} theme={null}
 {
   "jsonrpc": "2.0",
   "id": 0,
-  "result": {
+  "method": "initialize",
+  "params": {
     "protocolVersion": 1,
     "clientCapabilities": {
       "fs": {
@@ -34,7 +35,7 @@ If `readTextFile` or `writeTextFile` is `false` or not present, the Agent **MUST
 
 The `fs/read_text_file` method allows Agents to read text file contents from the Client's filesystem, including unsaved changes in the editor.
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 3,
@@ -48,25 +49,26 @@ The `fs/read_text_file` method allows Agents to read text file contents from the
 }
 ```
 
-<ParamField path="sessionId" type="SessionId" required>
-  The [Session ID](./session-setup#session-id) for this request
-</ParamField>
+**sessionId** `SessionId` *required*
 
-<ParamField path="path" type="string" required>
-  Absolute path to the file to read
-</ParamField>
+The [Session ID](https://agentclientprotocol.com/protocol/v1/session-setup.md#session-id) for this request. The
+session determines which filesystem roots are in scope for the path.
 
-<ParamField path="line" type="number">
-  Optional line number to start reading from (1-based)
-</ParamField>
+**path** `string` *required*
 
-<ParamField path="limit" type="number">
-  Optional maximum number of lines to read
-</ParamField>
+Absolute path to the file to read
+
+**line** `number`
+
+Optional line number to start reading from (1-based)
+
+**limit** `number`
+
+Optional maximum number of lines to read
 
 The Client responds with the file contents:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 3,
@@ -80,7 +82,7 @@ The Client responds with the file contents:
 
 The `fs/write_text_file` method allows Agents to write or update text files in the Client's filesystem.
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 4,
@@ -93,29 +95,37 @@ The `fs/write_text_file` method allows Agents to write or update text files in t
 }
 ```
 
-<ParamField path="sessionId" type="SessionId" required>
-  The [Session ID](./session-setup#session-id) for this request
-</ParamField>
+**sessionId** `SessionId` *required*
 
-<ParamField path="path" type="string" required>
-  Absolute path to the file to write.
+The [Session ID](https://agentclientprotocol.com/protocol/v1/session-setup.md#session-id) for this request. The
+session determines which filesystem roots are in scope for the path.
 
-  The Client **MUST** create the file if it doesn't exist.
-</ParamField>
+**path** `string` *required*
 
-<ParamField path="content" type="string" required>
-  The text content to write to the file
-</ParamField>
+Absolute path to the file to write.
+
+The Client **MUST** create the file if it doesn't exist.
+
+**content** `string` *required*
+
+The text content to write to the file
 
 The Client responds with an empty result on success:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 4,
-  "result": null
+  "result": {}
 }
 ```
 
+## Security
 
-Built with [Mintlify](https://mintlify.com).
+The Client performs these operations itself, so it is responsible for checking them. A permission request from the Agent does not replace the Client's own checks.
+
+* Clients **SHOULD** check requested paths against the session's [root set](https://agentclientprotocol.com/protocol/v1/session-setup.md#workspace-root-security) at the time of use, and deny the request or ask the user outside them.
+* Clients **SHOULD** ask the user before `fs/write_text_file` changes files that control execution or approval, such as version-control hooks, editor or Agent settings, and MCP configuration.
+
+
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.
