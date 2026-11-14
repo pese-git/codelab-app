@@ -14,11 +14,8 @@ import 'tree.dart';
 import 'user_words.dart';
 
 /// Собирает запись по выданным писателем id, родителю и времени.
-typedef RecordBuilder<R extends SessionRecord> = R Function(
-  String id,
-  String? parentId,
-  DateTime timestamp,
-);
+typedef RecordBuilder<R extends SessionRecord> =
+    R Function(String id, String? parentId, DateTime timestamp);
 
 /// Писатель журнала одной сессии (`agent-core-architecture` §8.3).
 ///

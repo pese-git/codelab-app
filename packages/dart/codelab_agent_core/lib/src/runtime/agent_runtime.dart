@@ -4427,9 +4427,9 @@ final class _Session implements AgentSession {
     }
   }
 
-  static bool _hasTitle(SessionSnapshot snapshot) =>
-      pathToLeaf(snapshot)
-          .any((r) => r is SessionInfoRecord && (r.title?.isNotEmpty ?? false));
+  static bool _hasTitle(SessionSnapshot snapshot) => pathToLeaf(
+    snapshot,
+  ).any((r) => r is SessionInfoRecord && (r.title?.isNotEmpty ?? false));
 }
 
 /// Запись явного выбора в порт последней модели (design.md change

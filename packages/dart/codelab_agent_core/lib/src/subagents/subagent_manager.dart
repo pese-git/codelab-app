@@ -206,9 +206,8 @@ final class ChildSession {
 }
 
 /// Фабрика дочерней сессии: приватный метод рантайма (D36 Т2).
-typedef ChildSessionFactory = Future<ChildSession> Function(
-  ChildSessionSpec spec,
-);
+typedef ChildSessionFactory =
+    Future<ChildSession> Function(ChildSessionSpec spec);
 
 /// Слоты дерева и счётчик запусков (`agent-core/17-3-subagents.md` §17.3.4;
 /// SUB-5, SUB-23; design.md change `add-subagents-and-tasks`, D3).

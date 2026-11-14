@@ -392,10 +392,8 @@ final class TaskRejected extends TaskResult {
 }
 
 /// Доставка изменения подписчикам сессии; ждётся до `ToolCallFinished`.
-typedef TaskListPublisher = FutureOr<void> Function(
-  List<TaskItem> items,
-  TaskChange change,
-);
+typedef TaskListPublisher =
+    FutureOr<void> Function(List<TaskItem> items, TaskChange change);
 
 /// Порт списка задач дерева (§17.16.2, D29).
 ///
