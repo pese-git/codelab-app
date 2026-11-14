@@ -93,6 +93,12 @@ void main() {
             .map((r) => r.fields['tool_call_id']),
         ['c1', 'c2'],
       );
+      // D41 п. 5: у каждой записи есть `error_class` — `runtimeType`
+      // брошенного приёмником исключения; текст остаётся в `error`.
+      for (final record in h.logger.eventsOf('tool.abandon.error')) {
+        expect(record.fields['error_class'], 'StateError');
+        expect(record.error, contains('emit failed'));
+      }
       await expectPathFree(h);
     });
 

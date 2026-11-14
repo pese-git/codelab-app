@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
@@ -106,5 +108,119 @@ void main() {
 
     expect(text, contains('{"not":"validated"}'));
     expect(text, isNot(contains('invalid_output')));
+  });
+
+  // Отчёт, оборванный лимитом ответа (agent-subagents «Отчёт ребёнка»,
+  // сценарии «Пустой отчёт по лимиту ответа» и «Оборванный отчёт по лимиту
+  // ответа»; design.md D41 п. 6; §17.3.5, шаг 2). Красные до задачи 2.20:
+  // `maxTokens` вёл путём `completed` без признака обрыва, и пустой отчёт
+  // выглядел успехом. Здесь значение `failure` проверяется строкой записи
+  // журнала, а не членом enum, поэтому файл компилируется и до кода.
+  group('лимит ответа ребёнка (D41, п. 6)', () {
+    const noReport =
+        'Subagent stopped: it hit the output token limit before writing a '
+        'report.';
+    const cutNote =
+        '[report truncated: the subagent hit the output token limit]';
+
+    /// Ответ из одного блока рассуждения, без текста: весь лимит ушёл в него.
+    const thinkingOnly = <String, Object?>{
+      'reply': [
+        {'thinking': 'Let me think about the whole thing first...'},
+      ],
+      'stopReason': 'length',
+    };
+
+    List<Map<String, Object?>> subagentRecords(SubagentRig rig) => [
+      for (final line in const LineSplitter().convert(rig.rootJournal))
+        if ((jsonDecode(line) as Map<String, Object?>)['type'] == 'subagent')
+          jsonDecode(line) as Map<String, Object?>,
+    ];
+
+    test('пустой текст: failed, reason="max_tokens", тело «Subagent '
+        'stopped…», isError, failure в записи журнала', () async {
+      final (rig, text) = await reportOf(thinkingOnly, type: 'review');
+
+      expect(text, contains('status="failed"'));
+      expect(text, contains('reason="max_tokens"'));
+      expect(text, isNot(contains('truncated=')));
+      expect(text, contains('\n$noReport\n</subagent-report>'));
+      expect(resultIsError(rig.requestsOf('go').last, 'c1'), isTrue);
+      final done = subagentRecords(rig).last;
+      expect(done['status'], 'failed');
+      expect(done['failure'], 'max_tokens');
+    });
+
+    test('текст из пробелов считается пустым', () async {
+      final (_, text) = await reportOf({
+        'reply': [
+          {'text': '  \n '},
+        ],
+        'stopReason': 'length',
+      });
+
+      expect(text, contains('reason="max_tokens"'));
+      expect(text, contains(noReport));
+    });
+
+    test('непустой текст: completed, truncated="true", строка пометки, не '
+        'ошибка', () async {
+      final (rig, text) = await reportOf({
+        'reply': [
+          {'text': 'Found three callers: a.dart, b.dart'},
+        ],
+        'stopReason': 'length',
+      });
+
+      expect(text, contains('status="completed"'));
+      expect(text, contains('truncated="true"'));
+      expect(text, isNot(contains('reason=')));
+      expect(
+        text,
+        contains('\nFound three callers: a.dart, b.dart\n$cutNote\n'),
+      );
+      expect(resultIsError(rig.requestsOf('go').last, 'c1'), isFalse);
+      final done = subagentRecords(rig).last;
+      expect(done['status'], 'completed');
+      expect(done['failure'], isNull);
+    });
+
+    test(
+      'оборван и длиннее report_max_bytes: обе пометки, атрибут один',
+      () async {
+        final body = [
+          for (var i = 0; i < 400; i++) 'line $i of the report',
+        ].join('\n');
+        final (_, text) = await reportOf(
+          {
+            'reply': [
+              {'text': body},
+            ],
+            'stopReason': 'length',
+          },
+          config: CoreConfig(
+            defaultModel: subagentTestModel,
+            subagents: const SubagentsConfig(reportMaxBytes: 1024),
+          ),
+        );
+
+        expect('truncated="'.allMatches(text), hasLength(1));
+        expect(text, contains('truncated="true"'));
+        expect(cutNote.allMatches(text), hasLength(1));
+        expect(
+          RegExp(
+            r'\[report truncated: \d+ of \d+ bytes shown',
+          ).allMatches(text),
+          hasLength(1),
+        );
+      },
+    );
+
+    test('обычное завершение stop без пометок обрыва', () async {
+      final (_, text) = await reportOf(replyStep('All good.'));
+
+      expect(text, isNot(contains('truncated=')));
+      expect(text, isNot(contains(cutNote)));
+    });
   });
 }

@@ -484,6 +484,10 @@ void main() {
       final abandonErrors = h.logger.eventsOf('tool.abandon.error');
       expect(abandonErrors, hasLength(1));
       expect(abandonErrors.single.fields['tool_call_id'], 'c1');
+      // D41 п. 5: тип исключения — отдельное поле для фильтрации записей;
+      // сам текст остаётся в `error`.
+      expect(abandonErrors.single.fields['error_class'], 'StateError');
+      expect(abandonErrors.single.error, isNotNull);
       // Откат отпустил путь c1 до эмита финиша, сбой которого путь не
       // держит.
       await expectPathFree(h.executor, h.events);

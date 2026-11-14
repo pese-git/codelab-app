@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
+import '../session/journal_lines.dart';
 import 'subagent_rig.dart';
 
 /// Журнал субагента глубины 1 (agent-subagents «Журнал субагента и
@@ -178,5 +179,67 @@ void main() {
           r,
     ];
     expect(assistants, hasLength(2), reason: 'вызов agent и ответ "thanks"');
+  });
+
+  // Лечение журнала с итогом `max_tokens` (D41 п. 6; S-13; §17.3.6,
+  // «Прерывание»). Красный до задачи 2.20: `parseFailure` не знает
+  // `max_tokens` и читает его как `error`, поэтому вылеченный результат
+  // получил бы тело «Subagent failed: …» и `reason="error"`, а не то, что
+  // увидела бы модель в живом ходе. Журнал собран построчно: сбой процесса
+  // между итоговой записью и результатом вызова в тесте невоспроизводим.
+  test('итоговая запись failure: max_tokens после open даёт тот же результат, '
+      'что и живой ход', () async {
+    const rootId = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C');
+    final crashed = journal([
+      header(cwd: '/proj', id: rootId.value),
+      modelChange('m1', null),
+      user('u1', 'm1', text: 'run it'),
+      answer(
+        'a1',
+        'u1',
+        calls: [
+          ('c1', 'agent', {'description': 'Review it', 'prompt': 'task a'}),
+        ],
+      ),
+      jsonEncode({
+        'type': 'subagent',
+        'id': 's1',
+        'parentId': 'a1',
+        'timestamp': at,
+        'subagentId': 'sub_aaaaaaaa',
+        'toolCallId': 'c1',
+        'agent': 'review',
+        'description': 'Review it',
+        'status': 'failed',
+        'failure': 'max_tokens',
+        'report': '',
+        'toolCalls': 2,
+        'durationMs': 1500,
+      }),
+    ]);
+    final store = MemorySessionStore()..putText(rootId, crashed);
+    final rig = SubagentRig(
+      store: store,
+      scripts: {
+        'run it': [replyStep('Continuing.')],
+      },
+    );
+
+    await rig.load(rootId);
+    await rig.run('continue');
+
+    final request = rig.requestsOf('run it').single;
+    final text = resultText(request, 'c1');
+    expect(text, contains('status="failed"'));
+    expect(text, contains('reason="max_tokens"'));
+    expect(
+      text,
+      contains(
+        'Subagent stopped: it hit the output token limit before writing a '
+        'report.',
+      ),
+    );
+    expect(resultIsError(request, 'c1'), isTrue);
+    expect(rig.requests.keys, ['run it'], reason: 'ребёнок не перезапущен');
   });
 }

@@ -185,6 +185,107 @@ void main() {
     });
   });
 
+  group('сценарий «Вызов без описания» (D41, п. 3)', () {
+    // Красные до задачи 2.17: `SubagentTool.titleOf` всегда дописывает
+    // `: ` и описание, поэтому у вызова без описания заголовок кончается
+    // двоеточием с пустым хвостом (ручной прогон 2026-11-15). Клиент
+    // заголовок не разбирает (D27), чинится источник — ядро.
+    test(
+      '{} и пустое после обрезки description: заголовки Subagent general '
+      'и Subagent explore без двоеточия, результат-ошибка, ребёнка нет',
+      () async {
+        final rig = SubagentRig(
+          scripts: {
+            'go': [
+              multiCallStep([
+                ('c1', 'agent', <String, Object?>{}),
+                ('c2', 'agent', {'type': 'explore', 'description': '   '}),
+              ]),
+              replyStep('ok'),
+            ],
+          },
+        );
+        await rig.open();
+        await rig.run('go');
+
+        final titles = {
+          for (final e in rig.eventsOf<ToolCallStarted>())
+            e.toolCallId: e.title,
+        };
+        expect(titles['c1'], 'Subagent general');
+        expect(titles['c2'], 'Subagent explore');
+        expect(resultIsError(rig.contexts.last, 'c1'), isTrue);
+        expect(resultIsError(rig.contexts.last, 'c2'), isTrue);
+        expect(rig.eventsOf<SubagentStarted>(), isEmpty);
+      },
+    );
+
+    test('description не строка: заголовок без двоеточия', () async {
+      final rig = SubagentRig(
+        scripts: {
+          'go': [
+            oneCallStep('c1', 'agent', {'description': 42, 'prompt': 'p'}),
+            replyStep('ok'),
+          ],
+        },
+      );
+      await rig.open();
+      await rig.run('go');
+
+      expect(rig.eventsOf<ToolCallStarted>().single.title, 'Subagent general');
+    });
+
+    test(
+      'непустое описание: заголовок прежний «Subagent <type>: <описание>»',
+      () async {
+        final rig = SubagentRig(
+          scripts: {
+            'go': [
+              oneCallStep(
+                'c1',
+                'agent',
+                agentArgs('look around', description: ' Look around '),
+              ),
+              replyStep('ok'),
+            ],
+            'look around': [replyStep('done')],
+          },
+        );
+        await rig.open();
+        await rig.run('go');
+
+        expect(
+          rig.eventsOf<ToolCallStarted>().single.title,
+          'Subagent general: Look around',
+        );
+      },
+    );
+  });
+
+  group('сценарий «Описание agent: порядок со списком задач» (D41, п. 4)', () {
+    // Красные до задачи 2.19: строки подсказки в `agent.md` нет.
+    const hint =
+        'Put task list calls before the first agent call of a response: an '
+        'agent call placed after a task list call waits until every call '
+        'before it has finished.';
+
+    test('строка идёт сразу после строки о параллельности', () async {
+      final rig = await runOnce();
+
+      final description = schemaOf(rig.contexts.first, 'agent').description;
+      final parallel = RegExp(
+        r'Several agent calls in one response run in parallel, at most '
+        r'\d+ at a time\.\n',
+      ).firstMatch(description);
+      expect(parallel, isNotNull);
+      expect(description.substring(parallel!.end), startsWith('$hint\n'));
+    });
+
+    test('подсказка не называет инструменты списка задач', () {
+      expect(hint, isNot(contains('task_')));
+    });
+  });
+
   group('сценарий «Глубина 1» (agent-configuration)', () {
     test('при max_depth 1 описание agent корня: потомки не запускают '
         'потомков', () async {

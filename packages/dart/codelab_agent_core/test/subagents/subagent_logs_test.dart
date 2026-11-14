@@ -46,9 +46,31 @@ void main() {
     expect(end.fields['status'], 'completed');
     expect(
       end.fields.keys,
-      containsAll(['failure', 'steps', 'tool_calls', 'tokens', 'duration_ms']),
+      containsAll([
+        'failure',
+        'steps',
+        'tool_calls',
+        'tokens_in',
+        'tokens_out',
+        'duration_ms',
+      ]),
     );
   });
+
+  // D18, D41 п. 2: счётчики названы как в §12.3 (`llm.request.end`,
+  // `turn.end`) и пишутся целыми числами. Красный до задачи 2.18: ядро пишет
+  // одно поле `tokens`.
+  test(
+    'subagent.end: tokens_in и tokens_out — целые числа, поля tokens нет',
+    () async {
+      final rig = await run();
+
+      final end = rig.logger.eventsOf('subagent.end').single;
+      expect(end.fields['tokens_in'], isA<int>());
+      expect(end.fields['tokens_out'], isA<int>());
+      expect(end.fields.containsKey('tokens'), isFalse);
+    },
+  );
 
   test('в логах нет текстов промпта и отчёта', () async {
     final rig = await run();
