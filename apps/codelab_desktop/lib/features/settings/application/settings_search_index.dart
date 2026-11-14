@@ -32,6 +32,14 @@ final class SettingsSearchIndex {
       'base url',
     ],
     SettingsPage.mcpServers: ['mcp', 'server', 'tools', 'headers'],
+    SettingsPage.skillsAndExtensions: [
+      'skill',
+      'agents.md',
+      'context',
+      'template',
+      'prompt',
+      'extension',
+    ],
   };
 
   static List<SettingsPage> search(

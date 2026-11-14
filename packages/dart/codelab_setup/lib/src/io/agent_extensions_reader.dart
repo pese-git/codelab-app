@@ -13,6 +13,7 @@ import '../config/agent_config_store.dart';
 import '../extensions/agent_extensions_of.dart';
 import '../extensions/agent_extensions_view.dart';
 import '../extensions/skills_list_edit.dart';
+import 'extensions_host_paths.dart';
 
 /// Предел просмотра записей каталога-кандидата по умолчанию: каталог другого
 /// агента не должен вешать страницу (как предел записей корня загрузчика
@@ -70,7 +71,7 @@ Future<AgentExtensionsView> readAgentExtensions(
     environment: env,
   );
   final userHome = userHomeOf(env);
-  return agentExtensionsOf(
+  final view = agentExtensionsOf(
     snapshot,
     extensions,
     userHome: userHome,
@@ -85,6 +86,9 @@ Future<AgentExtensionsView> readAgentExtensions(
       scan: scanConsentDir ?? _scanDir,
     ),
   );
+  // Один проход перевода путей вида в форму хоста (D8): построитель отдаёт
+  // форму ядра, клиент открывает каталоги платформой.
+  return extensionsInHostForm(view, windows: Platform.isWindows);
 }
 
 /// Каталоги навыков других агентов, на чтение которых можно согласиться

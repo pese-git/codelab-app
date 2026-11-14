@@ -306,9 +306,8 @@ final class FakeProviderSettingsSession implements ProviderSettingsSession {
   Future<AgentExtensionsView> Function(AgentConfigSnapshot snapshot)?
   onExtensions;
 
-  /// Метод порта `ProviderSettingsSession.extensions` (D6). Аннотации
-  /// `@override` нет, пока метода нет в интерфейсе (красная фаза 4.3); при
-  /// реализации задачи 4.4 её надо добавить.
+  /// Метод порта `ProviderSettingsSession.extensions` (D6).
+  @override
   Future<AgentExtensionsView> extensions(AgentConfigSnapshot snapshot) {
     extensionsCalls.add(snapshot);
     final handler = onExtensions;

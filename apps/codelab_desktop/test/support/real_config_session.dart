@@ -136,6 +136,11 @@ final class RealConfigSession implements ProviderSettingsSession {
     );
   }
 
+  /// Страница «Skills & extensions» этой сессией не открывается.
+  @override
+  Future<AgentExtensionsView> extensions(AgentConfigSnapshot snapshot) =>
+      throw UnimplementedError('extensions');
+
   @override
   Future<ProviderCheckResult> checkProvider({
     required String kind,

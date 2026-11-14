@@ -124,18 +124,18 @@ class CodeLabStatusTableAction {
   final Key? key;
 }
 
-/// Строка [CodeLabStatusTable]: [cells] по числу колонок и необязательное
-/// [action]; у строки без действия колонка действий остаётся пустой.
+/// Строка [CodeLabStatusTable]: [cells] по числу колонок, необязательные
+/// [action] и [toggle]; у строки без них колонка действий остаётся пустой.
+/// Оба сразу допустимы: переключатель стоит левее кнопки, колонка действий
+/// таблицы тогда шире (строка навыка: «Enabled» и «Open», change
+/// `add-app-skills-page`, итерация 4).
 class CodeLabStatusTableRow {
   const CodeLabStatusTableRow({
     required this.cells,
     this.action,
     this.toggle,
     this.key,
-  }) : assert(
-         toggle == null || action == null,
-         'У строки либо действие, либо переключатель',
-       );
+  });
 
   /// Ячейки по порядку колонок.
   final List<CodeLabStatusTableCell> cells;
@@ -143,7 +143,8 @@ class CodeLabStatusTableRow {
   /// Действие строки; `null` — колонка действий пуста.
   final CodeLabStatusTableAction? action;
 
-  /// Переключатель строки; занимает колонку действий вместо [action].
+  /// Переключатель строки; стоит в колонке действий (левее [action], если он
+  /// задан).
   final CodeLabStatusTableToggle? toggle;
 
   /// Ключ виджета строки (для тестов владельца).
@@ -203,6 +204,7 @@ class CodeLabStatusTable extends StatelessWidget {
   final List<int>? columnFlex;
 
   static const _actionWidth = 120.0;
+  static const _actionWidthWithToggle = 190.0;
   static const _padding = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
 
   @override
@@ -287,7 +289,46 @@ class CodeLabStatusTable extends StatelessWidget {
       if (toggle.tooltip case final message?) {
         control = Tooltip(message: escapeForDisplay(message), child: control);
       }
-      return Align(alignment: Alignment.centerRight, child: control);
+      return control;
+    }
+
+    final actionWidth = rows.any((r) => r.toggle != null && r.action != null)
+        ? _actionWidthWithToggle
+        : _actionWidth;
+
+    Widget actionButton(CodeLabStatusTableAction action) => CodeLabButton(
+      key: action.key,
+      label: action.label,
+      onPressed: action.onPressed,
+      emphasis: CodeLabButtonEmphasis.subtle,
+    );
+
+    Widget actionsOf(CodeLabStatusTableRow row) {
+      final toggleRow = row.toggle;
+      final action = row.action;
+      if (toggleRow != null && action != null) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            toggle(toggleRow),
+            const SizedBox(width: 12),
+            actionButton(action),
+          ],
+        );
+      }
+      if (toggleRow != null) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: toggle(toggleRow),
+        );
+      }
+      if (action != null) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: actionButton(action),
+        );
+      }
+      return const SizedBox.shrink();
     }
 
     Widget line(List<Widget> cells, Widget actions, {Border? border}) =>
@@ -300,7 +341,7 @@ class CodeLabStatusTable extends StatelessWidget {
               children: [
                 for (var i = 0; i < cells.length; i++)
                   Expanded(flex: columnFlex?[i] ?? 1, child: cells[i]),
-                SizedBox(width: _actionWidth, child: actions),
+                SizedBox(width: actionWidth, child: actions),
               ],
             ),
           ),
@@ -342,19 +383,7 @@ class CodeLabStatusTable extends StatelessWidget {
               key: row.key,
               child: line(
                 [for (final item in row.cells) cell(item)],
-                row.toggle != null
-                    ? toggle(row.toggle!)
-                    : row.action == null
-                    ? const SizedBox.shrink()
-                    : Align(
-                        alignment: Alignment.centerRight,
-                        child: CodeLabButton(
-                          key: row.action!.key,
-                          label: row.action!.label,
-                          onPressed: row.action!.onPressed,
-                          emphasis: CodeLabButtonEmphasis.subtle,
-                        ),
-                      ),
+                actionsOf(row),
                 border: Border(top: BorderSide(color: stroke)),
               ),
             ),
