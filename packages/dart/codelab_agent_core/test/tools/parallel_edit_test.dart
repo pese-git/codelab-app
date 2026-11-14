@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/tools/builtin/edit.dart';
+import 'package:codelab_agent_core/src/tools/executor.dart';
+import 'package:codelab_agent_core/src/tools/misuse.dart';
 import 'package:codelab_agent_core/src/tools/path_lock.dart';
 import 'package:test/test.dart';
 
 import '../loop/loop_harness.dart';
+import 'executor_harness.dart' as ex;
 import 'fake_tools.dart';
 
 void main() {
@@ -108,6 +111,238 @@ void main() {
     },
   );
 
+  group('a refused middle call keeps the path queue (TOOL-7)', () {
+    const params = {
+      'type': 'object',
+      'required': ['id', 'path'],
+      'properties': {
+        'id': {'type': 'string'},
+        'path': {'type': 'string'},
+      },
+    };
+
+    // Тело инструмента пишет в журнал начало и конец исполнения; по журналу
+    // видно, вошёл ли вызов под блокировку пути.
+    FakeTool touch(String name, List<String> log, {String? preflight}) =>
+        FakeTool(
+          name,
+          parameters: params,
+          lockArg: 'path',
+          preflightText: preflight,
+          onExecute: (args, ctx) async {
+            log.add('start ${args['id']}');
+            await Future<void>.delayed(Duration.zero);
+            log.add('end ${args['id']}');
+            return const ToolExecutionResult([TextContent('ok')]);
+          },
+        );
+
+    // Сценарий цикла: c1 ждёт одобрения в хуке, c2 отказывает до захвата
+    // пути, c3 пишет тот же путь. c3 не должен начаться, пока c1 не закончил.
+    Future<void> expectOrder({
+      required String middleTool,
+      required Map<String, Object?> middleArgs,
+      Block? Function(ToolCall call)? block,
+      bool throwInHook = false,
+    }) async {
+      final approval = Completer<void>();
+      final log = <String>[];
+      final hooked = <String>{};
+      final h = await LoopHarness.create(
+        tools: [
+          touch('touch', log),
+          touch('refuse', log, preflight: 'refused by preflight'),
+        ],
+        llm: script([
+          callStep([
+            ('c1', 'touch', {'id': 'c1', 'path': 'a.txt'}),
+            ('c2', middleTool, middleArgs),
+            ('c3', 'touch', {'id': 'c3', 'path': 'a.txt'}),
+          ]),
+          textStep('done'),
+        ]),
+      );
+      final config = h.config(
+        beforeToolCall: [
+          (call, args, ctx) async {
+            if (call.id == 'c1') {
+              await approval.future;
+            }
+            if (call.id == 'c2') {
+              if (throwInHook) {
+                throw StateError('hook failed');
+              }
+              return block?.call(call);
+            }
+            hooked.add(call.id);
+            return null;
+          },
+        ],
+      );
+
+      final turn = h.run([user('go')], config: config);
+      await _waitFor(
+        () => hooked.contains('c3') && _finished(h.events, 'c2') != null,
+      );
+      // После хука c3 синхронно доходит до ожидания пути; при сломанной
+      // очереди тело c3 начало бы исполняться за этот оборот.
+      await Future<void>.delayed(Duration.zero);
+      expect(log, isEmpty, reason: 'c3 must wait for c1');
+      approval.complete();
+      await turn;
+
+      expect(log, ['start c1', 'end c1', 'start c3', 'end c3']);
+    }
+
+    test('validation error', () async {
+      await expectOrder(middleTool: 'touch', middleArgs: {'path': 'a.txt'});
+    });
+
+    test('preflight refusal', () async {
+      await expectOrder(
+        middleTool: 'refuse',
+        middleArgs: {'id': 'c2', 'path': 'a.txt'},
+      );
+    });
+
+    test('hook block', () async {
+      await expectOrder(
+        middleTool: 'touch',
+        middleArgs: {'id': 'c2', 'path': 'a.txt'},
+        block: (_) => const Block('no'),
+      );
+    });
+
+    test('hook block with cancelled outcome', () async {
+      await expectOrder(
+        middleTool: 'touch',
+        middleArgs: {'id': 'c2', 'path': 'a.txt'},
+        block: (_) => const Block('stop', outcome: ToolOutcome.cancelled),
+      );
+    });
+
+    test('hook throws', () async {
+      await expectOrder(
+        middleTool: 'touch',
+        middleArgs: {'id': 'c2', 'path': 'a.txt'},
+        throwInHook: true,
+      );
+    });
+
+    // Сценарий исполнителя напрямую: средний вызов завершается путём,
+    // которого нет в цикле параллельного пакета (abandon, блок MisuseBreaker).
+    Future<void> expectExecutorOrder({
+      required Map<String, Object?> middleArgs,
+      required Future<ToolExecutionOutcome> Function(
+        ToolCallExecutor executor,
+        ToolCallHandle handle,
+      )
+      finishMiddle,
+      MisuseBreaker? misuse,
+    }) async {
+      final approval = Completer<void>();
+      final log = <String>[];
+      final hooked = <String>{};
+      final h = await ex.ExecutorHarness.create([touch('touch', log)]);
+      final invocation = h.invocation(
+        misuse: misuse,
+        before: [
+          (call, args, ctx) async {
+            if (call.id == 'c1') {
+              await approval.future;
+            }
+            hooked.add(call.id);
+            return null;
+          },
+        ],
+      );
+      Future<ToolCallHandle> announce(String id, Map<String, Object?> args) =>
+          h.executor.announce(
+            ToolCall(id: id, name: 'touch', arguments: args),
+            invocation,
+          );
+      final h1 = await announce('c1', {'id': 'c1', 'path': 'a.txt'});
+      final h2 = await announce('c2', middleArgs);
+      final h3 = await announce('c3', {'id': 'c3', 'path': 'a.txt'});
+
+      final first = h.executor.complete(h1);
+      final middle = await finishMiddle(h.executor, h2);
+      final third = h.executor.complete(h3);
+      await _waitFor(() => hooked.contains('c3'));
+      await Future<void>.delayed(Duration.zero);
+      expect(log, isEmpty, reason: 'c3 must wait for c1');
+      approval.complete();
+      await Future.wait([first, third]);
+
+      expect(middle.outcome, isNot(ToolOutcome.completed));
+      expect(log, ['start c1', 'end c1', 'start c3', 'end c3']);
+    }
+
+    test('abandon before start', () async {
+      await expectExecutorOrder(
+        middleArgs: {'id': 'c2', 'path': 'a.txt'},
+        finishMiddle: (executor, handle) => executor.abandon(handle),
+      );
+    });
+
+    test('MisuseBreaker block', () async {
+      const invalid = {'path': 'a.txt'};
+      final breaker = MisuseBreaker(const MisuseLimits());
+      final key = MisuseBreaker.keyOf('touch', invalid);
+      while (!breaker.isBlocked(key)) {
+        breaker.recordInvalid(key);
+      }
+      await expectExecutorOrder(
+        middleArgs: invalid,
+        misuse: breaker,
+        finishMiddle: (executor, handle) => executor.complete(handle),
+      );
+    });
+
+    test(
+      'turn cancelled while c1 waits for approval: c3 does not write',
+      () async {
+        final approval = Completer<void>();
+        final cancel = CancelTokenSource();
+        final log = <String>[];
+        final hooked = <String>{};
+        final h = await LoopHarness.create(
+          tools: [touch('touch', log)],
+          llm: script([
+            callStep([
+              ('c1', 'touch', {'id': 'c1', 'path': 'a.txt'}),
+              ('c2', 'touch', {'path': 'a.txt'}),
+              ('c3', 'touch', {'id': 'c3', 'path': 'a.txt'}),
+            ]),
+            textStep('done'),
+          ]),
+        );
+        final config = h.config(
+          beforeToolCall: [
+            (call, args, ctx) async {
+              if (call.id == 'c1') {
+                await approval.future;
+              }
+              hooked.add(call.id);
+              return null;
+            },
+          ],
+        );
+
+        final turn = h.run([user('go')], config: config, cancel: cancel.token);
+        await _waitFor(() => hooked.contains('c3'));
+        await Future<void>.delayed(Duration.zero);
+        expect(log, isEmpty, reason: 'c3 must wait for c1');
+        cancel.cancel();
+        approval.complete();
+        await turn;
+
+        expect(log, isEmpty);
+        expect(_finished(h.events, 'c3')?.outcome, ToolOutcome.cancelled);
+      },
+    );
+  });
+
   group('PathLock', () {
     test('bodies of one key run one by one in the order of run', () async {
       final lock = PathLock();
@@ -167,5 +402,62 @@ void main() {
       await ticket.acquired;
       expect(await lock.run('/a', () async => 2), 2);
     });
+    test('a ticket released early does not let the next one in before the '
+        'previous holder releases', () async {
+      // Отпущенный без захвата тикет (отказ валидации, блок хука) не
+      // должен открывать путь следующему, пока предыдущий держатель
+      // ещё не отпустил его (TOOL-7).
+      final lock = PathLock();
+      final first = lock.reserve('/a');
+      final middle = lock.reserve('/a');
+      final third = lock.reserve('/a');
+      var thirdAcquired = false;
+      unawaited(third.acquired.then((_) => thirdAcquired = true));
+
+      middle.release();
+      await first.acquired;
+      // Старая очередь отдавала путь за одну-две микрозадачи; оборот цикла
+      // событий (таймер) выполняется после всех микрозадач, его хватает.
+      await Future<void>.delayed(Duration.zero);
+      expect(thirdAcquired, isFalse);
+
+      first.release();
+      await third.acquired;
+      third.release();
+      expect(await lock.run('/a', () async => 3), 3);
+    });
+
+    test('a repeated early release does not shorten the queue', () async {
+      final lock = PathLock();
+      final first = lock.reserve('/a');
+      lock.reserve('/a')
+        ..release()
+        ..release();
+      final third = lock.reserve('/a');
+      var thirdAcquired = false;
+      unawaited(third.acquired.then((_) => thirdAcquired = true));
+
+      // Старая очередь отдавала путь за одну-две микрозадачи; оборот цикла
+      // событий (таймер) выполняется после всех микрозадач, его хватает.
+      await Future<void>.delayed(Duration.zero);
+      expect(thirdAcquired, isFalse);
+      first.release();
+      await third.acquired;
+      third.release();
+    });
   });
 }
+
+/// Ждёт условия по оборотам цикла событий, а не фиксированное число тиков:
+/// ожидание привязано к событию сценария и не зависит от длины пути вызова.
+Future<void> _waitFor(bool Function() condition) async {
+  for (var i = 0; i < 1000 && !condition(); i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+  expect(condition(), isTrue, reason: 'condition was not reached');
+}
+
+ToolCallFinished? _finished(List<AgentEvent> events, String id) => events
+    .whereType<ToolCallFinished>()
+    .where((e) => e.toolCallId == id)
+    .firstOrNull;
