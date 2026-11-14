@@ -11,9 +11,10 @@ import 'loop_harness.dart';
 /// ход заканчивается `failed` с исходной ошибкой, а места очередей пути и
 /// ключа освобождаются — следующий вызов не зависает.
 void main() {
+  // Для пути то же самое проверяет `parallel_edit_test.dart` (TOOL-7);
+  // здесь — очередь ключа `lockKey`.
   for (final (label, makeTool) in <(String, FakeTool Function())>[
     ('key', () => FakeTool('w', lockKeyValue: 'k')),
-    ('path', () => FakeTool('w', lockArg: 'path')),
   ]) {
     group('$label queue', () {
       /// Ход из двух вызовов `w`; [failing] решает, на каком событии `emit`
@@ -80,16 +81,13 @@ void main() {
         final error = seen.whereType<AgentError>().single;
         expect(error.message, 'emit failed');
         expect(seen.whereType<TurnEnded>().single.reason, TurnEndReason.failed);
-        // c1 закрыт `abandon` цикла, c2 — best effort самого `announce`.
+        // c1 закрыт `abandon` цикла; у c2 хэндла нет, закрывать нечем.
         expect(
           [
             for (final e in seen.whereType<ToolCallFinished>())
               (e.toolCallId, e.outcome),
           ],
-          unorderedEquals([
-            ('c1', ToolOutcome.cancelled),
-            ('c2', ToolOutcome.cancelled),
-          ]),
+          [('c1', ToolOutcome.cancelled)],
         );
         await expectQueueFree(h);
       });

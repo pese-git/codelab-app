@@ -31,29 +31,24 @@ void main() {
         emit: emit,
       );
 
-  group('announce failure releases tickets', () {
-    for (final (label, tool) in [
-      ('path', FakeTool('w', lockArg: 'path')),
-      ('key', FakeTool('w', lockKeyValue: 'k')),
-    ]) {
-      test('$label: next call with the same $label does not hang', () async {
-        final h = await ExecutorHarness.create([tool]);
-        final inv = invocationWith(h, throwingOn(1, h.events));
+  // Для пути то же самое проверяет `parallel_edit_test.dart` (TOOL-7).
+  test('key: next call with the same key does not hang after a failed '
+      'announce', () async {
+    final h = await ExecutorHarness.create([FakeTool('w', lockKeyValue: 'k')]);
+    final inv = invocationWith(h, throwingOn(1, h.events));
 
-        await expectLater(
-          h.executor.announce(
-            ToolCall(id: 'c1', name: 'w', arguments: const {'path': 'a'}),
-            inv,
-          ),
-          throwsStateError,
-        );
+    await expectLater(
+      h.executor.announce(
+        ToolCall(id: 'c1', name: 'w', arguments: const {}),
+        inv,
+      ),
+      throwsStateError,
+    );
 
-        final outcome = await h
-            .run('w', const {'path': 'a'}, id: 'c2')
-            .timeout(const Duration(seconds: 2));
-        expect(outcome.outcome, ToolOutcome.completed);
-      });
-    }
+    final outcome = await h
+        .run('w', const {}, id: 'c2')
+        .timeout(const Duration(seconds: 2));
+    expect(outcome.outcome, ToolOutcome.completed);
   });
 
   test(
@@ -110,129 +105,35 @@ void main() {
     expect(outcome.outcome, ToolOutcome.completed);
   });
 
-  group('lock diagnostics', () {
-    test(
-      'key: wait and acquired with waited_ms; no log without queue',
-      () async {
-        final release = Completer<void>();
-        final tool = FakeTool(
-          'w',
-          lockKeyValue: 'tasks',
-          onExecute: (args, ctx) async {
-            if (args['n'] == 1) {
-              await release.future;
-            }
-            return const ToolExecutionResult([TextContent('ok')]);
-          },
-        );
-        final h = await ExecutorHarness.create([tool]);
-        final first = h.run('w', const {'n': 1}, id: 'c1');
-        await pumpEventQueue();
-        expect(h.logger.eventsOf('tool.lock.wait'), isEmpty);
-
-        final second = h.run('w', const {'n': 2}, id: 'c2');
-        await pumpEventQueue();
-        final waits = h.logger.eventsOf('tool.lock.wait');
-        expect(waits, hasLength(1));
-        expect(waits.single.level, LogLevel.debug);
-        expect(waits.single.fields, {
-          'tool': 'w',
-          'tool_call_id': 'c2',
-          'session_id': 'sess-1',
-          'key': 'tasks',
-        });
-        expect(h.logger.eventsOf('tool.lock.acquired'), isEmpty);
-
-        await h.clock.elapse(const Duration(milliseconds: 30));
-        release.complete();
-        await Future.wait([first, second]);
-
-        final acquired = h.logger.eventsOf('tool.lock.acquired');
-        expect(acquired, hasLength(1));
-        expect(acquired.single.fields, {
-          'tool': 'w',
-          'tool_call_id': 'c2',
-          'session_id': 'sess-1',
-          'key': 'tasks',
-          'waited_ms': 30,
-        });
+  // Формат логов — как у пути (`tool.lock.wait`, без `session_id`), плюс
+  // `key`; отдельного `tool.lock.acquired` и прерывания ожидания ключа нет:
+  // после захвата ключа отмена не проверяется (D35 «Отмена»).
+  test('key: tool.lock.wait carries the key, not arguments', () async {
+    final release = Completer<void>();
+    final tool = FakeTool(
+      'w',
+      lockKeyValue: 'tasks',
+      onExecute: (args, ctx) async {
+        if (args['n'] == 1) {
+          await release.future;
+        }
+        return const ToolExecutionResult([TextContent('ok')]);
       },
     );
+    final h = await ExecutorHarness.create([tool]);
+    final first = h.run('w', const {'n': 1}, id: 'c1');
+    final second = h.run('w', const {'n': 2}, id: 'c2');
+    await pumpEventQueue();
+    release.complete();
+    await Future.wait([first, second]);
 
-    test('path: wait, acquired and cancelled after the wait', () async {
-      final release = Completer<void>();
-      final tool = FakeTool(
-        'w',
-        lockArg: 'path',
-        onExecute: (args, ctx) async {
-          if (args['n'] == 1) {
-            await release.future;
-          }
-          return const ToolExecutionResult([TextContent('ok')]);
-        },
-      );
-      final h = await ExecutorHarness.create([tool]);
-      final source = CancelTokenSource();
-      final inv = h.invocation(cancel: source.token);
-      final first = h.run(
-        'w',
-        const {'path': 'a.txt', 'n': 1},
-        id: 'c1',
-        invocation: inv,
-      );
-      await pumpEventQueue();
-      final second = h.run(
-        'w',
-        const {'path': 'a.txt', 'n': 2},
-        id: 'c2',
-        invocation: inv,
-      );
-      await pumpEventQueue();
-      source.cancel();
-      release.complete();
-      await Future.wait([first, second]);
-
-      final waits = h.logger.eventsOf('tool.lock.wait');
-      expect(waits, hasLength(1));
-      expect(waits.single.fields, {
-        'tool': 'w',
-        'tool_call_id': 'c2',
-        'session_id': 'sess-1',
-        'path': 'a.txt',
-      });
-      expect(h.logger.eventsOf('tool.lock.acquired'), hasLength(1));
-      final cancelled = h.logger.eventsOf('tool.lock.cancelled');
-      expect(cancelled, hasLength(1));
-      expect(cancelled.single.fields['tool_call_id'], 'c2');
-      expect(cancelled.single.fields['path'], 'a.txt');
-      expect(cancelled.single.fields['session_id'], 'sess-1');
+    final waits = h.logger.eventsOf('tool.lock.wait');
+    expect(waits, hasLength(2));
+    expect(waits.every((w) => w.level == LogLevel.debug), isTrue);
+    expect(waits.last.fields, {
+      'tool': 'w',
+      'tool_call_id': 'c2',
+      'key': 'tasks',
     });
-
-    test(
-      'path outside cwd is logged as a marker, not as absolute path',
-      () async {
-        final release = Completer<void>();
-        final tool = FakeTool(
-          'w',
-          lockArg: 'path',
-          onExecute: (args, ctx) async {
-            if (args['n'] == 1) {
-              await release.future;
-            }
-            return const ToolExecutionResult([TextContent('ok')]);
-          },
-        );
-        final h = await ExecutorHarness.create([tool]);
-        final first = h.run('w', const {'path': '/etc/x', 'n': 1}, id: 'c1');
-        await pumpEventQueue();
-        final second = h.run('w', const {'path': '/etc/x', 'n': 2}, id: 'c2');
-        await pumpEventQueue();
-        release.complete();
-        await Future.wait([first, second]);
-
-        final waits = h.logger.eventsOf('tool.lock.wait');
-        expect(waits.single.fields['path'], '<outside cwd>');
-      },
-    );
   });
 }

@@ -641,16 +641,29 @@ final class _Turn {
           handles.add(await executor.announce(call, invocation));
         }
       } on Object {
-        // Объявленным вызовам `ToolCallStarted` уже ушёл, а `complete` не
-        // будет: закрываем их `cancelled` (`abandon` освобождает места пути и
-        // ключа), чтобы не висели в `in_progress` и не держали очередь. Сбой
-        // самого закрытия (тот же сломанный `emit`) не должен заслонить
-        // исходную ошибку.
+        // Уже объявленные вызовы держат места в очереди `PathLock` сессии;
+        // без `abandon` их пути остались бы заняты и в следующих ходах.
+        // `abandon` отпускает тикет до эмита `ToolCallFinished`, поэтому его
+        // собственный сбой путь уже не держит; ход заканчивается исходной
+        // ошибкой (LOOP-1).
         for (final handle in handles) {
           try {
             await executor.abandon(handle);
-          } on Object {
-            // best effort: места уже освобождены внутри `abandon`.
+          } on Object catch (error, stack) {
+            // Исходная ошибка важнее: она уйдёт в `AgentError` хода. Сбой
+            // отката только логируется, чтобы его причина не потерялась,
+            // если сломан сам приёмник событий (§16).
+            _config.logger?.log(
+              LogLevel.warning,
+              'tool.abandon.error',
+              fields: {
+                'session_id': _session.value,
+                'tool': handle.call.name,
+                'tool_call_id': handle.call.id,
+              },
+              error: error,
+              stack: stack,
+            );
           }
         }
         rethrow;

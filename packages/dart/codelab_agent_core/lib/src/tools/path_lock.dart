@@ -35,12 +35,11 @@ final class PathLock {
   /// впустило бы следующего, пока предыдущий ещё держит путь, и две правки
   /// одного файла пошли бы параллельно (TOOL-7).
   PathLockTicket reserve(String key) {
-    final queued = _tails.containsKey(key);
     final previous = _tails[key] ?? Future<void>.value();
     final done = Completer<void>();
     _tails[key] = done.future;
     var released = false;
-    return PathLockTicket._(previous, queued, () {
+    return PathLockTicket._(previous, () {
       if (released) {
         return;
       }
@@ -73,15 +72,7 @@ final class PathLock {
 
 /// Место в очереди [PathLock].
 final class PathLockTicket {
-  PathLockTicket._(this.acquired, this.queued, this._release);
-
-  /// На момент [PathLock.reserve] очередь ключа была непуста: его уже держал
-  /// или ждал другой тикет. К моменту ожидания тот мог освободиться, поэтому
-  /// возможен ложный `tool.lock.wait` с нулевым `waited_ms`.
-  ///
-  /// Для чего: диагностика ожидания очереди (`tool.lock.wait`) логируется
-  /// только когда очередь реально занята, а не на каждый вызов.
-  final bool queued;
+  PathLockTicket._(this.acquired, this._release);
 
   /// Завершается, когда путь отпустили все предыдущие держатели.
   final Future<void> acquired;
