@@ -346,7 +346,11 @@ final class ToolCallExecutor implements ToolExecutor {
       _logLock('tool.lock.wait', call);
       await Future.any([lock.acquired, invocation.cancel.onCancel]);
       if (invocation.cancel.isCancelled) {
-        _logLock('tool.lock.cancelled', call);
+        _logLock(
+          'tool.lock.cancelled',
+          call,
+          reason: _cancelReasonKind(invocation.cancel.reason),
+        );
         return _valid(_error(cancelledText, ToolOutcome.cancelled));
       }
     }
@@ -438,16 +442,35 @@ final class ToolCallExecutor implements ToolExecutor {
   /// Debug-логи очереди пути (TOOL-7): `tool.lock.wait` — вызов дошёл до
   /// захвата пути (пишется и тогда, когда путь свободен: синхронно узнать,
   /// придётся ли ждать, нельзя), `tool.lock.cancelled` — ожидание прервано
-  /// отменой хода.
+  /// отменой хода; у него есть поле `reason` — вид причины отмены.
   ///
   /// Путь в поля не пишется: он может быть чувствительным, а вызов и так
   /// связан с путём через `tool_call_id` и событие `ToolCallStarted`
   /// (минимально достаточный вариант, `observability.md` §43).
-  void _logLock(String event, ToolCall call) => services.logger.log(
-    LogLevel.debug,
-    event,
-    fields: {'tool': call.name, 'tool_call_id': call.id},
-  );
+  void _logLock(String event, ToolCall call, {String? reason}) =>
+      services.logger.log(
+        LogLevel.debug,
+        event,
+        fields: {'tool': call.name, 'tool_call_id': call.id, 'reason': ?reason},
+      );
+
+  /// Вид причины отмены для логов: `user`, `shutdown`, `storage_failure`,
+  /// `watchdog` или `other`.
+  ///
+  /// Ветка `watchdog` защитная: сторож (`withWatchdogs`) отменяет только
+  /// дочерний токен попытки запроса к модели, а отмена не поднимается от
+  /// ребёнка к родителю, поэтому до токена хода она сейчас не доходит.
+  ///
+  /// Почему вид, а не `toString()`: текст `StorageFailure` несёт ошибку
+  /// записи журнала, а в ней может оказаться путь (`observability.md` §43);
+  /// для разбора достаточно знать, кто отменил ход.
+  static String _cancelReasonKind(Object? reason) => switch (reason) {
+    UserCancel() => 'user',
+    ShutdownCancel() => 'shutdown',
+    StorageFailure() => 'storage_failure',
+    WatchdogFired() => 'watchdog',
+    _ => 'other',
+  };
 
   /// Логи §6.3.7: `tool.misuse.blocked` при первой блокировке ключа,
   /// `tool.misuse.warned` на каждое предупреждение.
