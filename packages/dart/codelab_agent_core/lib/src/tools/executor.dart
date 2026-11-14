@@ -120,8 +120,10 @@ const cancelledBeforeStartText = 'Tool call was cancelled before it started';
 
 /// Реализация [ToolExecutor] над реестром и ограниченным env сессии.
 ///
-/// Как использовать: сессия создаёт один экземпляр; в нём живёт `PathLock`
-/// сессии, поэтому правки одного файла упорядочены во всех ходах.
+/// Как использовать: сессия создаёт один экземпляр. Очередь `PathLock` общая
+/// для дерева сессии: корень создаёт её, потомки получают ту же через
+/// [locks] (`ChildSessionSpec.locks`), поэтому правки одного файла
+/// упорядочены во всех ходах корня и его субагентов (§6.3.4).
 final class ToolCallExecutor implements ToolExecutor {
   ToolCallExecutor({
     required this.registry,

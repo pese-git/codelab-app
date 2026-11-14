@@ -17,7 +17,7 @@
    - `read`, `write`, `edit`, `task_create`, `task_update`, `task_list`, `task_get` — всегда;
    - `exec` — при `shellExec`;
    - `ls`, `search` — при `fileListing`;
-   - `agent` — на сессию при `subagents.enabled` конфига этой сессии на момент её создания и эффективном окне контекста модели сессии не меньше порога субагентов 32 768 токенов (design.md change `add-subagents-and-tasks`, D40; иначе `agent` не регистрируется, лог `subagent.unavailable`, ошибки нет) (живая перезагрузка действует на новые сессии, design.md change `add-subagents-and-tasks`, D37); `enum` типов — из встроенных типов и определений агентов сессии (agent-subagents «Инструмент task и типы субагентов»);
+   - `agent` — на сессию при `subagents.enabled` конфига этой сессии на момент её создания и эффективном окне контекста модели сессии не меньше порога субагентов 32 768 токенов (design.md change `add-subagents-and-tasks`, D40; иначе `agent` зарегистрирован, но скрыт из схем шага, лог `subagent.unavailable`, ошибки нет) (живая перезагрузка действует на новые сессии, design.md change `add-subagents-and-tasks`, D37); `enum` типов — из встроенных типов и определений агентов сессии (agent-subagents «Инструмент task и типы субагентов»);
    - дубликат имени встроенного инструмента → `HostWiringException` (HOST-5).
 
    Это базовый реестр. Каждая сессия получает свою копию с MCP-инструментами своих серверов («MCP-серверы сессии») и с `agent`.
