@@ -210,6 +210,28 @@ void main() {
       expect(loaded.value.context.single.path, 'AGENTS.md');
     });
 
+    test('skillsTimeout bounds only the skills phase: a short skills limit '
+        'wins over a long common one', () async {
+      Directory('$base/proj').createSync();
+      final skills = _FakeSkills(onLoad: () => Completer<SkillFiles>().future);
+
+      // Общий предел 30 с, у навыков 20 мс: без отдельного предела тест
+      // упёрся бы во внешние 2 с.
+      final result = await loadProjectExtensions(
+        cwd: '$base/proj',
+        config: config(),
+        environment: env(),
+        projectFiles: _FakeProject(),
+        skillFiles: skills,
+        timeout: const Duration(seconds: 30),
+        skillsTimeout: const Duration(milliseconds: 20),
+      ).timeout(const Duration(seconds: 2));
+
+      expect(result.skills, isA<PhaseTimedOut>());
+      expect(skills.query?.cancel.isCancelled, isTrue);
+      expect(result.projectFiles, isA<PhaseLoaded<ProjectFiles>>());
+    });
+
     test('a project-files phase that never answers: PhaseTimedOut, the '
         'skills phase is untouched', () async {
       Directory('$base/proj').createSync();

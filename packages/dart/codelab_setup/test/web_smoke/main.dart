@@ -6,7 +6,21 @@
 import 'dart:convert';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart'
-    show LogLevel, Logger;
+    show
+        ConfigLayerKind,
+        ConfigTree,
+        ContextFile,
+        CoreConfig,
+        LogLevel,
+        Logger,
+        ModelRef,
+        PhaseLoaded,
+        ProjectExtensions,
+        ProjectFiles,
+        ProviderApi,
+        SkillFile,
+        SkillFiles,
+        SkillRootInfo;
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:http/http.dart' as http;
 
@@ -20,6 +34,7 @@ final class SetupWebSmokeReport {
     required this.wizard,
     required this.settings,
     required this.mcp,
+    required this.extensions,
   });
 
   final String access;
@@ -38,6 +53,11 @@ final class SetupWebSmokeReport {
   /// что `McpServerDraft`, `McpServerEntryView` и реэкспорт `UpsertMcpServer`
   /// в основном бареле собираются без `dart:io` (D11, D20).
   final List<String> mcp;
+
+  /// Вид страницы навыков на фейковых данных: проверяет, что `AgentExtensionsView`
+  /// и `agentExtensionsOf` собираются без `dart:io` (`add-app-skills-page`,
+  /// D4, задача 1.4).
+  final List<String> extensions;
 }
 
 /// Клиент, который отвечает списком моделей без сети.
@@ -167,6 +187,77 @@ List<String> _settingRows(AgentConfigSnapshot snapshot) {
   ];
 }
 
+/// Вид расширений агента на фейковых данных: цепочка, навык и шаблон.
+List<String> _extensionsSmoke() {
+  final config = CoreConfig(
+    defaultModel: ModelRef(
+      provider: 'smoke',
+      id: 'm',
+      api: ProviderApi.openaiChat,
+      baseUrl: Uri.parse('https://smoke.invalid/v1'),
+      contextWindow: 8000,
+      maxOutputTokens: 1000,
+    ),
+  );
+  final snapshot = AgentConfigSnapshot.fromLayers(
+    cwd: '/web',
+    layers: {
+      ConfigLayer.user: ConfigSnapshot(
+        target: const ConfigTarget.user(),
+        path: '/home/config.yaml',
+        fingerprint: 'f',
+        values: const {},
+      ),
+    },
+    loaded: ConfigLoadResult(config: config),
+    secrets: const SecretBackendInfo(id: 'env', writable: false),
+  );
+  final view = agentExtensionsOf(
+    snapshot,
+    ProjectExtensions(
+      cwd: '/web',
+      trusted: true,
+      contextRoot: '/web',
+      codelabHome: '/home',
+      projectFiles: PhaseLoaded(
+        ProjectFiles(
+          context: [ContextFile(path: 'AGENTS.md', content: 'rules')],
+        ),
+      ),
+      skills: PhaseLoaded(
+        SkillFiles(
+          skills: [
+            SkillFile(
+              dir: '/web/.codelab/skills/smoke',
+              scope: ExtensionScope.project,
+              rootIndex: 0,
+              frontmatter: const ConfigTree(
+                kind: ConfigLayerKind.user,
+                source: '/web/.codelab/skills/smoke/SKILL.md',
+                values: {'name': 'smoke', 'description': 'Smoke skill'},
+              ),
+              body: 'Body',
+              bodyLine: 4,
+            ),
+          ],
+        ),
+      ),
+      skillRoots: const [
+        SkillRootInfo(
+          scope: ExtensionScope.project,
+          path: '/web/.codelab/skills',
+        ),
+      ],
+    ),
+    userHome: '/home',
+  );
+  return [
+    'context:${view.context.files.map((f) => f.path).join(',')}',
+    'skill:${view.skills.entries.map((e) => '${e.name}:${e.root.label}').join(',')}',
+    'trusted:${view.trusted}',
+  ];
+}
+
 /// Черновик MCP-сервера с секретным заголовком и строка страницы по снимку.
 List<String> _mcpSmoke() {
   final draft = McpServerDraft(
@@ -260,6 +351,7 @@ Future<SetupWebSmokeReport> runSetupWebSmoke() async {
     wizard: await _runWizard(snapshot),
     settings: _settingRows(snapshot),
     mcp: _mcpSmoke(),
+    extensions: _extensionsSmoke(),
   );
 }
 

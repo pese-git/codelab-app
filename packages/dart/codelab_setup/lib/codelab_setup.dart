@@ -45,7 +45,11 @@
 ///   конфиг (Q30);
 /// - `restartRequiredServers(before, after)` и `restartRequiredProviders` —
 ///   что агент отложит до перезапуска (Q31, Q35); правило одно, в
-///   `planConfigReload` ядра, мост лишь называет имена.
+///   `planConfigReload` ядра, мост лишь называет имена;
+/// - страница навыков (`add-app-skills-page`, D4): `agentExtensionsOf(snapshot,
+///   extensions, userHome:)` строит `AgentExtensionsView` — цепочку
+///   `AGENTS.md`, навыки и шаблоны без текстов файлов (SETUP-25); файлы читает
+///   `readAgentExtensions` в `io.dart`.
 ///
 library;
 
@@ -62,6 +66,9 @@ export 'package:codelab_agent_core/codelab_agent_core.dart'
         ConfigSnapshot,
         ConfigTarget,
         ConfigValueException,
+        DiagnosticLevel,
+        ExtensionDiagnostic,
+        ExtensionScope,
         RemoveMcpServer,
         RemoveTable,
         SecretBackendInfo,
@@ -79,6 +86,8 @@ export 'src/access/settings_access.dart';
 export 'src/config/agent_config_store.dart';
 export 'src/config/config_source_view.dart';
 export 'src/config/display_base_url.dart';
+export 'src/extensions/agent_extensions_of.dart';
+export 'src/extensions/agent_extensions_view.dart';
 export 'src/mcp/mcp_restart.dart';
 export 'src/mcp/mcp_server_committer.dart';
 export 'src/mcp/mcp_server_draft.dart';

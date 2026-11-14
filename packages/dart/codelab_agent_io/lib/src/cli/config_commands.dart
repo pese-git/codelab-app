@@ -7,8 +7,7 @@ import 'package:meta/meta.dart';
 import '../config/config_loader.dart';
 import '../config/config_paths.dart';
 import '../config/config_writer.dart' show ConfigWriteSeam;
-import '../env/local_execution_env.dart';
-import '../project/project_files_loader.dart';
+import '../project/project_extensions.dart';
 import '../secrets/open_secret_store.dart';
 import '../secrets/secret_process_runner.dart';
 import '../state/last_model_file.dart';
@@ -233,6 +232,7 @@ final class ConfigCommands {
     @visibleForTesting Duration projectFilesTimeout = _defaultTimeout,
     @visibleForTesting SkillFilesSource? skillFiles,
     @visibleForTesting Duration skillFilesTimeout = _defaultTimeout,
+    @visibleForTesting ProjectExtensionsLoader? extensionsLoader,
     @visibleForTesting String? platform,
     @visibleForTesting SecretStoreOpener? openStore,
     @visibleForTesting SecretProcessRunner? processRunner,
@@ -243,6 +243,7 @@ final class ConfigCommands {
        _projectFilesTimeout = projectFilesTimeout,
        _skillFiles = skillFiles,
        _skillFilesTimeout = skillFilesTimeout,
+       _extensionsLoader = extensionsLoader ?? loadProjectExtensions,
        _platform = platform ?? Platform.operatingSystem,
        _openStore =
            openStore ??
@@ -270,6 +271,7 @@ final class ConfigCommands {
   final Duration _projectFilesTimeout;
   final SkillFilesSource? _skillFiles;
   final Duration _skillFilesTimeout;
+  final ProjectExtensionsLoader _extensionsLoader;
   final String _platform;
   final SecretStoreOpener _openStore;
   final ConfigEditRunner _runner;
@@ -625,104 +627,103 @@ final class ConfigCommands {
     ];
   }
 
-  /// Строки файлов проекта и навыков: две независимые фазы идут параллельно,
-  /// у каждой свой таймаут (design.md change `add-agent-skills`, D1, D16).
-  /// Сначала строки файлов проекта, затем навыков. Навыки читаются только при
-  /// включённой `skills.enabled` (профили хостов `check` не знает).
+  /// Строки файлов проекта и навыков: расчёт — функция
+  /// [loadProjectExtensions] (design.md change `add-app-skills-page`, D3), та
+  /// же, что строит страницу навыков app; здесь только перевод исходов фаз и
+  /// диагностик в строки `check`. Сначала строки файлов проекта, затем
+  /// навыков; навыки читаются только при включённой `skills.enabled` (профили
+  /// хостов `check` не знает).
   ///
-  /// Канонический `cwd`, доверие и загрузчик считаются один раз для обеих
-  /// фаз: строки проекта и навыков не могут разойтись. Доверие считается как в
-  /// `serve` (D4): канонический `cwd` (форма ядра, `LocalExecutionEnv.realpath`,
-  /// как `AgentRuntime._canonicalCwd`) сравнивается с `trusted_projects`
-  /// конфига; `trustedProjects` уже канонические (`ConfigLoader`, хостовая
-  /// форма), а `samePath` ядра не экспортируется, поэтому строки сравниваются
-  /// после приведения `\\` к `/` (форма ядра на Windows). Без раскрытого
-  /// `realpath` проект недоверенный (fail-closed). Непредвиденное исключение
-  /// самой подготовки даёт одну строку `warning:` с типом, как сбой фазы.
+  /// Канонический `cwd`, доверие (fail-closed без `realpath`) и один загрузчик
+  /// для обеих фаз считает функция, поэтому строки проекта и навыков не могут
+  /// разойтись. Исключение порта и таймаут фазы — одна строка `warning:` на
+  /// фазу; сбой подготовки (`ProjectExtensions.preparationError`) — одна
+  /// строка `project files could not be read`, как до выделения расчёта.
+  /// Исключение разбора (`parseSkills`, `parseCommandTemplates`,
+  /// `parseAgentDefinitions`) тоже даёт строку с типом, а не падение `check`.
   Future<List<String>> _fileLines(
     CheckOptions options,
     CoreConfig config,
   ) async {
-    final shown = Directory(options.cwd).absolute.path;
-    try {
-      final local = LocalExecutionEnv(
-        cwd: shown,
-        hostEnvironment: options.environment,
-      );
-      final String cwd;
-      final bool trusted;
-      switch (await local.realpath(shown)) {
-        case Ok(:final value):
-          cwd = value;
-          trusted = config.trustedProjects.any(
-            (r) => r.replaceAll('\\', '/') == value,
-          );
-        case Err():
-          cwd = local.cwd;
-          trusted = false;
-      }
-      final loader = ProjectFilesLoader(
-        home: codelabHomeOf(options.environment),
-        userHome: userHomeOf(options.environment),
-        local: local,
-      );
-      final results = await Future.wait([
-        _projectFileLines(config, cwd, trusted, _projectFiles ?? loader),
-        if (config.skills.enabled)
-          _skillLines(config, cwd, trusted, _skillFiles ?? loader),
-      ]);
-      return [for (final lines in results) ...lines];
-    } on Object catch (error) {
-      // Только тип исключения: текст может содержать пути и фрагменты (D14).
+    final extensions = await _extensionsLoader(
+      cwd: options.cwd,
+      config: config,
+      environment: options.environment,
+      projectFiles: _projectFiles,
+      skillFiles: _skillFiles,
+      timeout: _projectFilesTimeout,
+      skillsTimeout: _skillFilesTimeout,
+    );
+    final cwd = extensions.cwd;
+    final failedPreparation = extensions.preparationError;
+    if (failedPreparation != null) {
       return [
-        'warning: $shown: project files could not be read: '
-            '${error.runtimeType}',
+        'warning: $cwd: project files could not be read: $failedPreparation',
       ];
     }
-  }
-
-  /// Строки диагностики навыков: фаза устроена как [_projectFileLines], но со
-  /// своим портом, таймаутом и текстами `skills could not be read` /
-  /// `skills were not read within N s`. Диагностики — порта и `parseSkills`
-  /// (после проверки полей и `shadowed`), по общему правилу вывода.
-  Future<List<String>> _skillLines(
-    CoreConfig config,
-    String cwd,
-    bool trusted,
-    SkillFilesSource source,
-  ) async {
-    final cancel = CancelTokenSource();
-    try {
-      final files = await source
-          .loadSkills(
-            SkillFilesQuery(
-              cwd: cwd,
-              projectTrusted: trusted,
-              extraRoots: config.skills.extraRoots,
-              cancel: cancel.token,
-            ),
-          )
-          .then<SkillFiles?>((value) => value)
-          .timeout(_skillFilesTimeout, onTimeout: () => null);
-      if (files == null) {
-        cancel.cancel();
-        return [
-          'warning: $cwd: skills were not read within '
-              '${_skillFilesTimeout.inSeconds} s',
-        ];
-      }
-      final catalog = parseSkills(
-        files,
-        config.skills,
-        rules: config.permissions.rules,
-      );
-      return _diagnosticLines([...files.diagnostics, ...catalog.diagnostics]);
-    } on Object catch (error) {
-      cancel.cancel();
-      return ['warning: $cwd: skills could not be read: ${error.runtimeType}'];
-    } finally {
-      cancel.dispose();
+    final lines = <String>[];
+    switch (extensions.projectFiles) {
+      case PhaseLoaded<ProjectFiles>(:final value):
+        try {
+          final models = StaticModelCatalog(
+            config.providers,
+            logger: const SilentLogger(),
+          );
+          // Диагностики файлов проекта (D13): `warning:` для `error` и
+          // `warning`, `note:` для `untrusted_project`; прочие `info`
+          // (`shadowed`) не печатаются.
+          lines.addAll(
+            _diagnosticLines([
+              ...value.diagnostics,
+              ...parseCommandTemplates(value.templates).diagnostics,
+              ...parseAgentDefinitions(
+                value.agents,
+                models: models,
+              ).diagnostics,
+            ]),
+          );
+        } on Object catch (error) {
+          // Только тип исключения: текст может содержать фрагменты файлов.
+          lines.add(
+            'warning: $cwd: project files could not be read: '
+            '${error.runtimeType}',
+          );
+        }
+      case PhaseTimedOut():
+        lines.add(
+          'warning: $cwd: project files were not read within '
+          '${_projectFilesTimeout.inSeconds} s',
+        );
+      case PhaseFailed(:final errorType):
+        lines.add('warning: $cwd: project files could not be read: $errorType');
     }
+    switch (extensions.skills) {
+      case null:
+        break;
+      case PhaseLoaded<SkillFiles>(:final value):
+        try {
+          final catalog = parseSkills(
+            value,
+            config.skills,
+            rules: config.permissions.rules,
+          );
+          lines.addAll(
+            _diagnosticLines([...value.diagnostics, ...catalog.diagnostics]),
+          );
+        } on Object catch (error) {
+          lines.add(
+            'warning: $cwd: skills could not be read: ${error.runtimeType}',
+          );
+        }
+      case PhaseTimedOut():
+        lines.add(
+          'warning: $cwd: skills were not read within '
+          '${_skillFilesTimeout.inSeconds} s',
+        );
+      case PhaseFailed(:final errorType):
+        lines.add('warning: $cwd: skills could not be read: $errorType');
+    }
+    return lines;
   }
 
   /// Общее правило вывода диагностик: `warning:` для `error` и `warning`,
@@ -735,67 +736,6 @@ final class ConfigCommands {
         'note: ${item.path}: the project is not trusted; '
             'add it to trusted_projects',
   ];
-
-  /// Строки диагностики файлов проекта (D13): `warning:` для уровней `error`
-  /// и `warning`, `note:` для `untrusted_project`; прочие `info` (`shadowed`)
-  /// не печатаются.
-  ///
-  /// Канонический `cwd` и доверие приходят от [_fileLines] (D4). Каталог
-  /// моделей собирается из
-  /// провайдеров загруженного конфига, как у хоста (`StaticModelCatalog`).
-  ///
-  /// Фаза не должна ронять `check` и держать его вечно (как фаза рантайма,
-  /// D14 change `add-agent-project-files`): исключение даёт одну строку
-  /// `warning:` с типом исключения, отсутствие ответа за [_projectFilesTimeout]
-  /// — строку о таймауте; код выхода от файлов проекта не зависит.
-  Future<List<String>> _projectFileLines(
-    CoreConfig config,
-    String cwd,
-    bool trusted,
-    ProjectFilesSource source,
-  ) async {
-    final cancel = CancelTokenSource();
-    try {
-      final files = await source
-          .load(
-            ProjectFilesQuery(
-              cwd: cwd,
-              projectTrusted: trusted,
-              contextMaxBytes: config.projectContextMaxBytes,
-              cancel: cancel.token,
-            ),
-          )
-          .then<ProjectFiles?>((value) => value)
-          .timeout(_projectFilesTimeout, onTimeout: () => null);
-      if (files == null) {
-        // Загрузчик перестаёт читать (D6), результат выбрасывается.
-        cancel.cancel();
-        return [
-          'warning: $cwd: project files were not read within '
-              '${_projectFilesTimeout.inSeconds} s',
-        ];
-      }
-      final models = StaticModelCatalog(
-        config.providers,
-        logger: const SilentLogger(),
-      );
-      final diagnostics = [
-        ...files.diagnostics,
-        ...parseCommandTemplates(files.templates).diagnostics,
-        ...parseAgentDefinitions(files.agents, models: models).diagnostics,
-      ];
-      return _diagnosticLines(diagnostics);
-    } on Object catch (error) {
-      // Только тип исключения: текст может содержать пути и фрагменты (D14).
-      cancel.cancel();
-      return [
-        'warning: $cwd: project files could not be read: '
-            '${error.runtimeType}',
-      ];
-    } finally {
-      cancel.dispose();
-    }
-  }
 
   /// Строки состояния секретов (agent-configuration «config check показывает
   /// состояние секретов»; design.md change `add-agent-secret-store`, D9).
