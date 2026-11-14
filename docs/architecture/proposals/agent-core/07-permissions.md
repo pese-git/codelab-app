@@ -71,7 +71,7 @@ final class PermissionPolicy {
   /// разрешений и запрещённые без вопроса уровни»: сужение `ask` + `plan` даёт `alwaysAsk` с
   /// запретом write/exec, одного `PermissionMode` для этого мало (сверка с кодом, design.md
   /// change add-subagents-and-tasks, D36, Т3).
-  final ({PermissionMode mode, Set<ToolTier> deniedTiers}) Function()? modeOf;
+  final ModeResolution Function()? modeOf;   // typedef ModeResolution = ({PermissionMode mode, Set<ToolTier> deniedTiers})
   final PermissionGate? gate;
   final PolicyRules rules;
   final PermissionDecisionStore decisions;          // allowAlways и rejectAlways

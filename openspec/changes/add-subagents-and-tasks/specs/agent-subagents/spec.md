@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Инструмент agent и типы субагентов
-Ядро SHALL регистрировать инструмент `agent` на сессию при `subagents.enabled` (по умолчанию `true`; `false` — ни схемы, ни секции промпта). `agent` — tier `read`, kind `think`, `outputTrust` `untrusted`, `permissionPattern` — имя типа (agent-core-architecture §17.3.2).
+Ядро SHALL регистрировать инструмент `agent` на сессию при `subagents.enabled` (по умолчанию `true`; `false` — ни схемы, ни секции промпта) и только если эффективное окно контекста текущей модели сессии (`effectiveContextWindow` с `compaction.context_window_cap`) не меньше 32 768 токенов (design.md change `add-subagents-and-tasks`, D40). При меньшем окне `agent` в схемах нет, ошибки нет, сессия пишет лог `subagent.unavailable` (`session_id`, `reason: context_window`, `window`, `min_window`). Смена модели сессии и применённая перезагрузка настроек, меняющая эффективное окно (`compaction.context_window_cap`), пересчитывают правило со следующего шага: модель с малым окном убирает `agent` из схем, с достаточным — возвращает (лог `subagent.available`); идущие дети не прерываются. `agent` — tier `read`, kind `think`, `outputTrust` `untrusted`, `permissionPattern` — имя типа (agent-core-architecture §17.3.2).
 
 Схема базового этапа:
 - `description` — обязательное, 3–60 символов после обрезки пробелов;
@@ -13,7 +13,7 @@
 
 Типы SHALL браться из встроенных определений `general`, `explore`, `review`, `plan` (`source: builtin:<name>`) и из определений агентов со `scope` `subagent` или `both`. Пользовательское определение с тем же именем заменяет встроенное с логом `subagent.type_overridden`. Определение со `scope: session` в `enum` не входит. Снимок типов и `enum` SHALL фиксироваться при создании сессии.
 
-Ошибки проверки SHALL давать результат-ошибку без создания ребёнка. Тексты:
+Ошибки проверки SHALL давать результат-ошибку без создания ребёнка тем же механизмом, что отказ точки исполнения: это текст ядра, а не вывод ребёнка, поэтому в ограду `untrusted-content` он не попадает (огораживается только отчёт, требование «Отчёт ребёнка»). Тексты:
 - `Invalid agent call: description must be 3-60 characters.`;
 - `Invalid agent call: prompt must be 1-32768 characters.`;
 - `Unknown agent type "<x>". Available: <имена через ", ">.`;
@@ -22,6 +22,14 @@
 #### Scenario: Enum типов
 - **WHEN** у доверенного проекта есть определения `reviewer` (`scope: both`) и `notes` (`scope: session`)
 - **THEN** `enum` поля `type` — `explore`, `general`, `plan`, `review`, `reviewer` по алфавиту, без `notes` (`agent_tool_schema_test.dart`)
+
+#### Scenario: Смена модели на малое окно
+- **WHEN** в сессии с моделью окна 128 000 пользователь выбирает модель с окном 8 192, затем возвращает прежнюю
+- **THEN** первый запрос с малой моделью не содержит схемы `agent` (лог `subagent.unavailable`), первый запрос после возврата снова её содержит (лог `subagent.available`); вызовы `agent` в истории остаются (`subagent_window_test.dart`; D40)
+
+#### Scenario: Перезагрузка ограничения окна
+- **WHEN** в сессии с моделью окна 128 000 перезагрузка конфига ставит `compaction.context_window_cap: 16384`, затем убирает ограничение
+- **THEN** первый запрос после первой перезагрузки не содержит схемы `agent` (лог `subagent.unavailable` с `window: 16384`), первый запрос после второй — содержит (лог `subagent.available`); ход, шедший во время перезагрузки, свой текущий запрос не меняет (`subagent_window_test.dart`; D40)
 
 #### Scenario: Неверный заголовок
 - **WHEN** модель вызывает `agent` с `description` из двух символов

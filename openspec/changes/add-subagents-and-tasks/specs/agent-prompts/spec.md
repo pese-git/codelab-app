@@ -35,7 +35,11 @@
 
 #### Scenario: Описание agent по глубине
 - **WHEN** описание `agent` рендерится для корневой сессии при `max_depth: 3` и для ребёнка глубины 2 при том же `max_depth`
-- **THEN** первое содержит `A subagent may start its own subagents, up to 2 more level(s) below it.`, второе — `Subagents you start cannot start other subagents.`; оба рендеринга детерминированы
+- **THEN** первое содержит `A subagent may start its own subagents, up to 2 more level(s) below it.`, второе — `Subagents you start cannot start other subagents.`; оба рендеринга детерминированы (итерация 4)
+
+#### Scenario: Описание agent до вложенности
+- **WHEN** до итерации 4 change (ребёнку `agent` не даётся) описание `agent` рендерится для корневой сессии при `max_depth: 3`
+- **THEN** `nesting` строится от эффективной глубины 1 и даёт `Subagents you start cannot start other subagents.`: описание не обещает модели вложенности, которой нет (design.md, D36, Т16)
 
 ### Requirement: Детерминированная сборка системного промпта
 `composeSystemPrompt(PromptInputs)` SHALL собирать секции в фиксированном порядке §11.5 документа ядра и соединять их через пустую строку:

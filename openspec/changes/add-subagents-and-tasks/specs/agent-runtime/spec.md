@@ -17,7 +17,7 @@
    - `read`, `write`, `edit`, `task_create`, `task_update`, `task_list`, `task_get` — всегда;
    - `exec` — при `shellExec`;
    - `ls`, `search` — при `fileListing`;
-   - `agent` — на сессию при `subagents.enabled` конфига этой сессии на момент её создания (живая перезагрузка действует на новые сессии, design.md change `add-subagents-and-tasks`, D37); `enum` типов — из встроенных типов и определений агентов сессии (agent-subagents «Инструмент task и типы субагентов»);
+   - `agent` — на сессию при `subagents.enabled` конфига этой сессии на момент её создания и эффективном окне контекста модели сессии не меньше порога субагентов 32 768 токенов (design.md change `add-subagents-and-tasks`, D40; иначе `agent` не регистрируется, лог `subagent.unavailable`, ошибки нет) (живая перезагрузка действует на новые сессии, design.md change `add-subagents-and-tasks`, D37); `enum` типов — из встроенных типов и определений агентов сессии (agent-subagents «Инструмент task и типы субагентов»);
    - дубликат имени встроенного инструмента → `HostWiringException` (HOST-5).
 
    Это базовый реестр. Каждая сессия получает свою копию с MCP-инструментами своих серверов («MCP-серверы сессии») и с `agent`.
@@ -43,6 +43,10 @@
 #### Scenario: Субагенты выключены перезагрузкой
 - **WHEN** ядро собрано с `subagents.enabled: true`, открыта сессия A, затем перезагрузка конфига ставит `subagents.enabled: false` и открывается сессия B
 - **THEN** схемы сессии A по-прежнему содержат `agent`, у сессии B `agent` нет, а `AgentRuntime.subagents` возвращает `null` (D37)
+
+#### Scenario: Малое окно — нет agent
+- **WHEN** ядро собрано с `subagents.enabled: true`, а сессия создаётся с моделью, у которой `effectiveContextWindow` — 8 192 (или окно ограничено `compaction.context_window_cap: 8192`)
+- **THEN** схемы сессии не содержат `agent`, сессия создаётся без ошибки, в логе — `subagent.unavailable` с `session_id`, `reason: context_window`, `window: 8192`, `min_window: 32768`; с моделью окна 32 768 `agent` в схемах есть (D40)
 
 #### Scenario: Включено без сервиса
 - **WHEN** профиль с включённым `shellExec` собирается над `MemoryExecutionEnv`
