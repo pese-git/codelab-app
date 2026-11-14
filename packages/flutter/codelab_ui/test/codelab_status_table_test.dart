@@ -311,4 +311,343 @@ void main() {
     ];
     expect(widths.toSet(), hasLength(1));
   });
+
+  _skillsTableTests();
 }
+
+// Красные тесты 3.1 change `add-app-skills-page` (D12, D13): аддитивное
+// расширение таблицы для страницы «Skills & extensions». Ожидаемый API:
+//  * `CodeLabStatusTableCell(text, {secondary, tags, untrusted})`;
+//    `tags` — `List<CodeLabStatusTableTag>` (`CodeLabStatusTableTag(label,
+//    {tone = CodeLabTone.neutral})`), рисуются `CodeLabBadge` после текста;
+//  * `CodeLabStatusTableRow(toggle: CodeLabStatusTableToggle(value:,
+//    onChanged:, tooltip:, label:, key:))` — `ToggleSwitch` вместо кнопки
+//    действия; `onChanged: null` — неактивен, `tooltip` — причина;
+//  * `CodeLabStatusTable(columnFlex: [..])` — доли ширины (`List<int>`, веса как у `Expanded.flex`).
+// Без новых параметров вёрстка и поведение прежние (страж MCP servers).
+
+const _skillColumns = ['SKILL', 'SOURCE'];
+const _longDescription =
+    'Reviews a pull request for correctness, style and missing tests, then '
+    'writes a summary with a list of concrete follow-up actions per file.';
+
+Future<void> _pump(
+  WidgetTester tester,
+  List<CodeLabStatusTableRow> rows, {
+  List<String> columns = _skillColumns,
+  List<int>? columnFlex,
+  double width = 900,
+}) => tester.pumpWidget(
+  FluentApp(
+    home: Align(
+      alignment: Alignment.topLeft,
+      child: SizedBox(
+        width: width,
+        child: columnFlex == null
+            ? CodeLabStatusTable(columns: columns, rows: rows)
+            : CodeLabStatusTable(
+                columns: columns,
+                rows: rows,
+                columnFlex: columnFlex,
+              ),
+      ),
+    ),
+  ),
+);
+
+CodeLabStatusTableRow _skillRow(
+  String name, {
+  String? secondary,
+  List<CodeLabStatusTableTag> tags = const [],
+  bool untrusted = false,
+  CodeLabStatusTableToggle? toggle,
+}) => CodeLabStatusTableRow(
+  key: ValueKey('skill-$name'),
+  cells: [
+    CodeLabStatusTableCell(
+      name,
+      mono: true,
+      secondary: secondary,
+      tags: tags,
+      untrusted: untrusted,
+    ),
+    const CodeLabStatusTableCell('user'),
+  ],
+  toggle: toggle,
+);
+
+Finder _tooltipWith(String message) => find.byWidgetPredicate(
+  (w) => w is Tooltip && w.message == message,
+  description: 'Tooltip "$message"',
+);
+
+void _skillsTableTests() {
+  group('secondary — вторая строка ячейки', () {
+    testWidgets('рисуется под основным текстом приглушённым цветом', (
+      tester,
+    ) async {
+      await _pump(tester, [_skillRow('review', secondary: 'Review a PR')]);
+
+      final main = tester.getTopLeft(find.text('review'));
+      final second = tester.getTopLeft(find.text('Review a PR'));
+      expect(second.dy, greaterThan(main.dy));
+      expect(second.dx, main.dx);
+      final context = tester.element(find.byType(CodeLabStatusTable));
+      expect(
+        tester.widget<Text>(find.text('Review a PR')).style!.color,
+        FluentTheme.of(context).resources.textFillColorSecondary,
+      );
+    });
+
+    testWidgets('ограничена двумя строками, полный текст — в подсказке', (
+      tester,
+    ) async {
+      await _pump(tester, [
+        _skillRow('review', secondary: _longDescription),
+      ], width: 360);
+
+      final text = tester.widget<Text>(find.text(_longDescription));
+      expect(text.maxLines, 2);
+      expect(text.overflow, TextOverflow.ellipsis);
+      expect(_tooltipWith(_longDescription), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('без secondary второй строки и подсказки нет', (tester) async {
+      await _pump(tester, [_skillRow('review')]);
+
+      expect(find.byType(Tooltip), findsNothing);
+      expect(find.byType(Text), findsNWidgets(_skillColumns.length + 2));
+    });
+  });
+
+  group('tags — теги после текста', () {
+    testWidgets('каждый тег — CodeLabBadge с подписью и тоном', (tester) async {
+      await _pump(tester, [
+        _skillRow(
+          'review',
+          tags: const [
+            CodeLabStatusTableTag('Overrides user skill'),
+            CodeLabStatusTableTag('1 warning', tone: CodeLabTone.warning),
+          ],
+        ),
+      ]);
+
+      final badges = tester
+          .widgetList<CodeLabBadge>(find.byType(CodeLabBadge))
+          .toList();
+      expect(badges.map((b) => b.label), ['Overrides user skill', '1 warning']);
+      expect(badges.map((b) => b.tone), [
+        CodeLabTone.neutral,
+        CodeLabTone.warning,
+      ]);
+    });
+
+    testWidgets('теги стоят после основного текста в той же колонке', (
+      tester,
+    ) async {
+      await _pump(tester, [
+        _skillRow(
+          'review',
+          tags: const [CodeLabStatusTableTag('Command only')],
+        ),
+      ]);
+
+      expect(
+        tester.getTopLeft(find.byType(CodeLabBadge)).dx,
+        greaterThan(tester.getTopRight(find.text('review')).dx - 1),
+      );
+      expect(
+        tester.getTopLeft(find.byType(CodeLabBadge)).dx,
+        lessThan(tester.getTopLeft(find.text('user')).dx),
+      );
+    });
+
+    testWidgets('без тегов бейджей нет', (tester) async {
+      await _pump(tester, [_skillRow('review')]);
+
+      expect(find.byType(CodeLabBadge), findsNothing);
+    });
+  });
+
+  group('toggle — переключатель строки', () {
+    testWidgets('вместо кнопки действия; нажатие передаёт новое значение', (
+      tester,
+    ) async {
+      bool? received;
+      await _pump(tester, [
+        _skillRow(
+          'review',
+          toggle: CodeLabStatusTableToggle(
+            key: const ValueKey('skills-toggle-review'),
+            value: true,
+            label: 'Enable review',
+            onChanged: (v) => received = v,
+          ),
+        ),
+      ]);
+
+      expect(find.byType(CodeLabButton), findsNothing);
+      final toggle = tester.widget<ToggleSwitch>(find.byType(ToggleSwitch));
+      expect(toggle.checked, isTrue);
+      expect(
+        tester.getTopLeft(find.byType(ToggleSwitch)).dx,
+        greaterThan(tester.getTopLeft(find.text('SOURCE')).dx),
+      );
+
+      await tester.tap(find.byType(ToggleSwitch));
+      await tester.pumpAndSettle();
+      expect(received, isFalse);
+    });
+
+    testWidgets('onChanged: null — неактивен, подсказка с причиной', (
+      tester,
+    ) async {
+      await _pump(tester, [
+        _skillRow(
+          'review',
+          toggle: const CodeLabStatusTableToggle(
+            value: true,
+            label: 'Enable review',
+            onChanged: null,
+            tooltip: 'Set in project config; edit .codelab/config.yaml',
+          ),
+        ),
+      ]);
+
+      expect(
+        tester.widget<ToggleSwitch>(find.byType(ToggleSwitch)).onChanged,
+        isNull,
+      );
+      expect(
+        _tooltipWith('Set in project config; edit .codelab/config.yaml'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('для чтения с экрана у переключателя есть подпись', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pump(tester, [
+        _skillRow(
+          'review',
+          toggle: const CodeLabStatusTableToggle(
+            value: false,
+            label: 'Enable review',
+            onChanged: null,
+            tooltip: 'Read-only',
+          ),
+        ),
+      ]);
+
+      expect(find.bySemanticsLabel('Enable review'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('строка без переключателя и без действия — колонка пуста', (
+      tester,
+    ) async {
+      await _pump(tester, [_skillRow('review')]);
+
+      expect(find.byType(ToggleSwitch), findsNothing);
+      expect(find.byType(CodeLabButton), findsNothing);
+    });
+  });
+
+  group('columnFlex — доли колонок', () {
+    testWidgets('ширина колонок пропорциональна долям', (tester) async {
+      await _pump(
+        tester,
+        [_skillRow('review')],
+        columnFlex: const [3, 1],
+        width: 920,
+      );
+
+      // Свободная ширина: 920 − действия (120) − поля (24) = 776; 3:1.
+      final firstX = tester.getTopLeft(find.text('SKILL')).dx;
+      final secondX = tester.getTopLeft(find.text('SOURCE')).dx;
+      expect(secondX - firstX, closeTo(776 * 0.75, 1));
+    });
+
+    testWidgets('по умолчанию колонки равны', (tester) async {
+      await _pump(tester, [_skillRow('review')], width: 920);
+
+      final firstX = tester.getTopLeft(find.text('SKILL')).dx;
+      final secondX = tester.getTopLeft(find.text('SOURCE')).dx;
+      expect(secondX - firstX, closeTo(776 / 2, 1));
+    });
+  });
+
+  group('untrusted — недоверенный текст', () {
+    const hostile = 'safe\u202Egpj.exe';
+
+    testWidgets(
+      'U+202E в имени и secondary показан escape-последовательностью',
+      (tester) async {
+        await _pump(tester, [
+          _skillRow('na\u202Eme', secondary: hostile, untrusted: true),
+        ]);
+
+        expect(find.text('na\\u202eme'), findsOneWidget);
+        expect(find.text('safe\\u202egpj.exe'), findsOneWidget);
+        expect(find.text('na\u202Eme'), findsNothing);
+        // Подсказка с полным текстом тоже экранирована.
+        expect(_tooltipWith('safe\\u202egpj.exe'), findsOneWidget);
+        expect(_tooltipWith(hostile), findsNothing);
+      },
+    );
+
+    testWidgets('markdown не разбирается: звёздочки и ссылки — простой текст', (
+      tester,
+    ) async {
+      await _pump(tester, [
+        _skillRow(
+          'a',
+          secondary: '**bold** [x](http://evil.test)',
+          untrusted: true,
+        ),
+      ]);
+
+      expect(find.text('**bold** [x](http://evil.test)'), findsOneWidget);
+    });
+
+    testWidgets('без признака текст выводится как есть (страж MCP servers)', (
+      tester,
+    ) async {
+      await _pump(tester, [_skillRow('na\u202Eme')]);
+
+      expect(find.text('na\u202Eme'), findsOneWidget);
+    });
+  });
+
+  testWidgets('страж: без новых параметров нет подсказок, бейджей и '
+      'переключателей, колонки равны', (tester) async {
+    await pumpDefaultTable(tester);
+
+    expect(find.byType(Tooltip), findsNothing);
+    expect(find.byType(CodeLabBadge), findsNothing);
+    expect(find.byType(ToggleSwitch), findsNothing);
+    final xs = [for (final t in _columns) tester.getTopLeft(find.text(t)).dx];
+    final steps = [for (var i = 1; i < xs.length; i++) xs[i] - xs[i - 1]];
+    for (final step in steps) {
+      expect(step, closeTo(steps.first, 1));
+    }
+    expect(tester.widget<Text>(find.text('github')).maxLines, isNull);
+  });
+}
+
+Future<void> pumpDefaultTable(WidgetTester tester) => tester.pumpWidget(
+  FluentApp(
+    home: Align(
+      alignment: Alignment.topLeft,
+      child: SizedBox(
+        width: 900,
+        child: CodeLabStatusTable(
+          columns: _columns,
+          rows: [_row('github', onReconnect: () {})],
+        ),
+      ),
+    ),
+  ),
+);
