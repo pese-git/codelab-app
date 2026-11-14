@@ -85,7 +85,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 Раздел «Skills» SHALL показывать навыки, которые агент загрузит в сессию этой папки, по правилам агента (корни, доверие, перекрытие, мягкая проверка, `skills.disabled`, `skills.max_skills`; spec agent-skills change `add-agent-skills`), и навыки, выключенные `skills.disabled`. Таблица (ключ строки `skills-row-<name>`) SHALL содержать:
 - имя и описание;
 - «Invoke as» — `/skill:<name>` и `argument-hint`, если есть; для навыка с `user-invocable: false` — `Model only`;
-- «Source» — корень навыка: путь от папки проекта для корней проекта, `$CODELAB_HOME/skills`, `~/.agents/skills`, элемент `skills.extra_roots` как записан с пометкой `(extra root)`;
+- «Source» — корень навыка: путь от папки проекта для корней проекта; для корней пользователя — путь с `~` вместо домашнего каталога (`~/.codelab/skills` при `CODELAB_HOME` по умолчанию, `~/.agents/skills`), вне домашнего каталога — абсолютный; элемент `skills.extra_roots` как записан с пометкой `(extra root)`;
 - выключатель «Enabled» (ключ `skills-toggle-<name>`);
 - тег `Overrides <user|project|extra> skill` (или `Overrides another skill` для того же уровня), если навык перекрыл одноимённый навык другого корня;
 - тег `Command only` — навык вызывается командой, но модели недоступен (`disable-model-invocation: true` или запрет `skill:<name>` правилами разрешений);

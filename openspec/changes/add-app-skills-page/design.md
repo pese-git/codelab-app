@@ -31,7 +31,7 @@
 
 **Non-Goals:**
 - Hooks (E-09), Plugins (E-10), System prompt override (E-08), context-файлы других агентов (E-17), обновление списка навыков в идущих сессиях (E-19), встроенные навыки (E-18).
-- Изменения ACP и агента, кроме вынесения уже существующего расчёта `config check` в публичную функцию (D3).
+- Изменения ACP и поведения агента. В агентской стороне — только вынесение уже существующего расчёта `config check` в публичную функцию и аддитивные типы данных ядра для её результата (D3).
 - Правка файлов навыков и шаблонов, создание навыков, правка `trusted_projects` из app.
 - CLI-экран навыков.
 
@@ -61,11 +61,12 @@
 - **Конфигурация** — снимок `AgentConfigStore.snapshot(cwd)` страницы. Это та же загрузка слоёв, что у агента для сессии этой папки (Q44: `skills.*` — ключи сессии). Нечитаемый или нарушающий схему конфиг — состояние `unreadable`, файлы не читаются и не пишутся. Так же поступает `config check`: у невалидного конфига файлы проекта не проверяются.
 - **Доверие** считает функция D3: канонический `cwd` (`realpath`) сравнивается с `trusted_projects` загруженного конфига, без `realpath` проект недоверенный (fail-closed). Это тот же расчёт, что у `config check` и рантайма. Для недоверенного проекта загрузчик сам не читает корни навыков и шаблоны проекта и отдаёт диагностику `untrusted_project`. Страница показывает InfoBar `skills-untrusted`: `This project is not in trusted_projects, so the agent does not read its skills and prompt templates. Your own skills and AGENTS.md files are shown.` Подсказка о доверии называет файл: `Trust is set in trusted_projects of <$CODELAB_HOME>/config.yaml.` Кнопки «доверять» нет (Non-Goals). Цепочка `AGENTS.md` читается и для недоверенного проекта (E-01, OQ2 change `add-agent-project-files`), и страница её показывает.
 
-### D3. Один расчёт для `config check` и моста (`codelab_agent_io`)
+### D3. Один расчёт для `config check` и моста (`codelab_agent_io`; типы — в ядре)
 
 Тело `ConfigCommands._fileLines` (канонический `cwd`, доверие, один `ProjectFilesLoader` на обе фазы, параллельные фазы со своими таймаутами и отменой) выносится в публичную функцию `codelab_agent_io`:
 
 ```dart
+// codelab_agent_io: функция
 /// Файлы проекта и навыки папки так, как их прочитает сессия агента.
 Future<ProjectExtensions> loadProjectExtensions({
   required String cwd,                       // как задал пользователь; канонизирует функция
@@ -73,9 +74,10 @@ Future<ProjectExtensions> loadProjectExtensions({
   required Map<String, String> environment,  // окружение агента
   @visibleForTesting ProjectFilesSource? projectFiles,
   @visibleForTesting SkillFilesSource? skillFiles,
-  Duration timeout = const Duration(seconds: 5),
+  Duration timeout = const Duration(seconds: 5),   // один таймаут на каждую фазу
 });
 
+// codelab_agent_core (lib/src/project/, рядом с портами ProjectFiles/SkillFiles); codelab_agent_io реэкспортирует
 final class ProjectExtensions {
   final String cwd;                 // канонический корень (или исходный при Err realpath)
   final bool trusted;               // fail-closed
@@ -83,12 +85,19 @@ final class ProjectExtensions {
   final String? codelabHome;        // для пути $CODELAB_HOME/AGENTS.md на диске
   final PhaseOutcome<ProjectFiles> projectFiles;
   final PhaseOutcome<SkillFiles>? skills;      // null — skills.enabled: false, фаза не запускалась
-  final List<SkillRootInfo> skillRoots;        // корни по rootIndex: вид, путь, элемент extra_roots как записан
+  final List<SkillRootInfo> skillRoots;        // корни по rootIndex
 }
-sealed class PhaseOutcome<T> { }   // PhaseLoaded(T) | PhaseTimedOut | PhaseFailed(String errorType)
+sealed class PhaseOutcome<T> {}   // PhaseLoaded(T value) | PhaseTimedOut() | PhaseFailed(String errorType)
+final class SkillRootInfo {        // const-конструктор, именованные параметры
+  const SkillRootInfo({required this.scope, required this.path, this.extraRoot});
+  final ExtensionScope scope;      // project | user | extra
+  final String path;               // корень на диске (форма ядра)
+  final String? extraRoot;         // элемент skills.extra_roots как записан; null — не extra
+}
 ```
 
 - `contextRoot` и `skillRoots` строит тот же код, что у загрузчика (`projectLevels`, список корней `skill_roots.dart`). Поэтому путь на диске для «Open» и подпись источника навыка не расходятся с тем, что прочитано (D10 change `add-agent-skills`: номер корня — порядок, значение не уходит в журнал).
+- **Типы — в ядре, функция — в `codelab_agent_io`** (решение координатора по красным тестам итерации 1). Построитель вида `agentExtensionsOf` живёт в web-безопасном основном бареле `codelab_setup` (D4), а основной барель НЕ ДОЛЖЕН импортировать `codelab_agent_io` (`codelab_setup/AGENTS.md` §2). Поэтому `ProjectExtensions`, `PhaseOutcome` и `SkillRootInfo` — чистые данные рядом с портами `ProjectFiles` и `SkillFiles` в `codelab_agent_core` (PKG-1 соблюдён, `dart:io` не нужен), барель ядра их экспортирует, `codelab_agent_io` реэкспортирует для своих потребителей. Ядро меняется аддитивно: новых зависимостей и поведения нет. Отклонено: зеркальный тип в мосте с переводом из типа `codelab_agent_io` — дублирование модели и перевод в `io.dart` без пользы.
 - `ConfigCommands.check` переходит на функцию без изменения вывода. Существующие тесты `config check` (`config_check_skills_test.dart` и тесты файлов проекта) — страж этой правки, новые строки вывода не появляются.
 - Функция не пишет журнал и не бросает исключений файлов: исход фазы — значение. Непредвиденное исключение подготовки — `PhaseFailed` обеих фаз, как одна строка `warning:` у `check`.
 
@@ -106,19 +115,37 @@ final class AgentExtensionsView {
   final SkillsSectionView skills;             // строки, диагностики, кандидаты согласия, состояние фазы
   final TemplatesSectionView templates;
 }
-final class ContextFileView { String path; String? openDir; int bytes; ExtensionScope scope;
-  bool isClaudeAlias; int shownBytes; bool omitted; }       // shownBytes < bytes — усечён по бюджету
+sealed class SectionOutcome {}    // SectionRead() | SectionTimedOut() | SectionFailed(String errorType)
+                                  // | SectionOff(String source) — skills.enabled: false, source — файл из snapshot.origins
+final class ContextChainView { SectionOutcome outcome; List<ContextFileView> files;
+  int shownBytes; int omittedCount; int truncatedCount; }
+final class ContextFileView { String path; String? openDir; int bytes; int shownBytes;
+  ExtensionScope scope; bool isClaudeAlias; bool omitted; }  // shownBytes < bytes — усечён по бюджету
+final class SkillsSectionView { SectionOutcome outcome; List<SkillEntryView> entries;
+  List<ExtensionDiagnostic> warnings; List<SkillConsentView> consents; }
+final class TemplatesSectionView { SectionOutcome outcome; List<TemplateEntryView> entries;
+  List<ExtensionDiagnostic> warnings; }
+enum SkillAvailability { enabled, disabled }
+final class SkillRootView { ExtensionScope scope; String label; String path; }
+final class SkillConsentView { String entry;   // элемент extra_roots как запишется: `.claude/skills`, `~/.claude/skills`
+  String path; int skillDirs; bool granted; }
 final class SkillEntryView { String name; String description; String? argumentHint;
   String? invokeAs;            // `/skill:<name>[ <hint>]`; null — userInvocable == false
-  SkillAvailability availability;   // enabled | disabled | (enabled + modelHidden → "Command only")
+  SkillAvailability availability;   // «Command only» = enabled && userInvocable && !modelVisible
   bool modelVisible; bool userInvocable; SkillRootView root;
   List<SkillRootView> overrides;    // корни навыков, перекрытых этим (shadowed)
-  List<ExtensionDiagnostic> warnings;   // диагностики уровня warning с путём этого SKILL.md
-  SkillToggle toggle; }              // доступен ли выключатель и почему нет (D5)
-final class TemplateEntryView { String command; String? argumentHint; String description;
-  String sourcePath; ExtensionScope scope; }
-AgentExtensionsView agentExtensionsOf(AgentConfigSnapshot snapshot, ProjectExtensions files,
-    {required String? userHome});
+  String? overridesLabel;           // `Overrides <user|project|extra> skill` | `Overrides another skill`
+  List<ExtensionDiagnostic> warnings;   // error/warning с путём этого SKILL.md
+  SkillToggle toggle; }              // доступен ли выключатель и почему нет (D5; поле — с итерации 2, задача 2.2)
+final class TemplateEntryView { String command;   // со слэшем: `/review-pr`
+  String? argumentHint; String description; String sourcePath; ExtensionScope scope; }
+
+// основной барель — чистая функция
+AgentExtensionsView agentExtensionsOf(AgentConfigSnapshot snapshot, ProjectExtensions extensions,
+    {required String? userHome, List<SkillConsentView> consents = const []});
+// io.dart
+Future<AgentExtensionsView> readAgentExtensions(AgentConfigSnapshot snapshot,
+    {required String? codelabHome, required Map<String, String> environment});
 ```
 
 `ProjectExtensions` и `ProjectFiles` содержат тела файлов, поэтому `agentExtensionsOf` вызывается внутри функции `io.dart` (D7), а наружу уходит только вид. Тексты `AGENTS.md`, тела навыков и шаблонов в вид не попадают: ни в поля, ни в `toString()` (SETUP-25).
@@ -128,11 +155,11 @@ AgentExtensionsView agentExtensionsOf(AgentConfigSnapshot snapshot, ProjectExten
 - **Навыки** — каталог `parseSkills(files, config.skills, rules: config.permissions.rules)` — то же, что получит сессия. Для строк выключенных навыков — второй вызов `parseSkills` с `disabled: []`. Выключение действует по имени на все файлы с этим именем (шаг 3 `parseSkills`), поэтому победитель по имени во втором вызове — та строка, которую включит выключатель. Строки: `catalog.skills` (включённые) плюс победители второго вызова, чьё имя в `skills.disabled` (`availability: disabled`). Порядок — по имени, как в каталоге.
 - **«Command only»** — навык с `userInvocable` вне `modelVisible` (`disable-model-invocation: true` или запрет `skill:<name>` правилами разрешений). Навык без `userInvocable` — `invokeAs: null`, ячейка `Model only`.
 - **Перекрытие** — по диагностикам `shadowed` ядра: путь диагностики — `SKILL.md` проигравшего. Его `SkillFile` разбирается одиночным `parseSkills`, чтобы получить имя по тому же правилу ядра. Победитель — `catalog.skill(name)`. Текст сообщения не разбирается. Подпись: `Overrides <user|project|extra> skill`; если уровень тот же — `Overrides another skill`.
-- **Источник** — `SkillRootView` по `SkillFile.rootIndex` → `skillRoots[rootIndex]`: проект — путь от папки проекта (`.codelab/skills`, `../.agents/skills`); пользователь — `$CODELAB_HOME/skills` и `~/.agents/skills`; extra — элемент как записан в конфиге с пометкой `(extra root)`. Сокращение домашнего каталога до `~` делает presentation app (`home_path_label.dart`).
-- **Предупреждения** — `[...SkillFiles.diagnostics, ...catalog.diagnostics]`. Уровни `error`/`warning` с путём загруженного навыка идут в его строку (`1 warning`). Остальные `error`/`warning` (пропущенные навыки, корни, перекрытые) — в InfoBar `skills-warnings`, `info` не показываются: то же правило, что у `config check`. Дополнительно `untrusted_project` превращается в признак D2. Текст — фиксированное сообщение ядра (D16 change `add-agent-skills`) и путь.
+- **Источник** — `SkillRootView` по `SkillFile.rootIndex` → `skillRoots[rootIndex]`. Подпись `label` строит мост: проект — путь от папки проекта (`.codelab/skills`, `../.agents/skills`); пользователь — путь корня с `~` вместо `userHome` (`~/.codelab/skills` при `CODELAB_HOME` по умолчанию, `~/.agents/skills`; вне домашнего каталога — абсолютный путь); extra — `SkillRootInfo.extraRoot` как записан, с пометкой `(extra root)`. Подпись строит мост, а не presentation app: это чистая функция над данными загрузчика, и CLI возьмёт её без второй реализации (SETUP-8); `path` остаётся абсолютным для «Open».
+- **Предупреждения** — `[...SkillFiles.diagnostics, ...catalog.diagnostics]`. Уровни `error`/`warning` с путём показанного навыка идут в его строку (`1 warning`). Остальные `error`/`warning` (пропущенные навыки, корни) — в `SkillsSectionView.warnings` (InfoBar `skills-warnings`). `shadowed` проигравшего — тоже в предупреждения раздела (путь проигравшего — не строка таблицы), а у победителя — `overrides` и `overridesLabel`; `info` не показываются: `info` не показываются: то же правило, что у `config check`. Дополнительно `untrusted_project` превращается в признак D2. Текст — фиксированное сообщение ядра (D16 change `add-agent-skills`) и путь.
 - **Шаблоны** — `parseCommandTemplates(files.templates).templates`: команда `/<name>`, подсказка, описание, путь файла; диагностики шаблонов — в тот же InfoBar.
-- **Фазы** — `PhaseTimedOut`/`PhaseFailed` раздела показываются строкой раздела: `Skills were not read within 5 s.` / `Skills could not be read (<тип>).` Раздел пуст, остальные разделы не затронуты. `skills: null` (`skills.enabled: false`) — InfoBar `Skills are switched off: skills.enabled is false in <файл>.` (файл — источник ключа из `snapshot.origins`).
-- **Кандидаты согласия** (D5) — каталоги из фиксированного списка моста (решение Q3: `.claude/skills` проекта и `~/.claude/skills`), существующие на диске, с числом подкаталогов с `SKILL.md`. Состояние — «включено», если элемент как записан уже есть в действующем `skills.extra_roots`.
+- **Фазы** — `PhaseOutcome` переводится в `SectionOutcome` раздела: `PhaseLoaded` → `SectionRead`, `PhaseTimedOut` → `SectionTimedOut` (`Skills were not read within 5 s.`), `PhaseFailed` → `SectionFailed(errorType)` (`Skills could not be read (<тип>).`). Фаза файлов проекта даёт исход и цепочке, и шаблонам. Раздел без данных пуст, остальные разделы не затронуты. `skills: null` (`skills.enabled: false`) — `SectionOff(source)` с файлом источника ключа из `snapshot.origins`: `Skills are switched off: skills.enabled is false in <файл>.`
+- **Кандидаты согласия** (D5) — каталоги из фиксированного списка моста (решение Q3: `.claude/skills` проекта и `~/.claude/skills`), существующие на диске, с числом подкаталогов с `SKILL.md` (`skillDirs`). Их нужен диск, поэтому собирает `readAgentExtensions` (`lib/src/io/`) и передаёт построителю параметром `consents:`; `agentExtensionsOf` остаётся чистой функцией и кладёт список в `SkillsSectionView.consents` как есть, без `copyWith` готового вида. `granted` — элемент как записан (`entry`) уже есть в действующем `skills.extra_roots`; его считает `readAgentExtensions` по снимку. Без параметра (тесты построителя, хост без диска) список пуст.
 
 Почему построитель в мосте, а не в app: знание формата навыков, корней и правил ядра — агентская сторона. Клиенты получают его только через `codelab_setup` (`AGENTS.md` §5; SETUP-8), и CLI сможет взять те же виды без второй реализации.
 
@@ -196,13 +223,14 @@ Cubit создаётся на каждое открытие страницы (`C
 
 | Пакет | Что меняется | Слой | Метка |
 |---|---|---|---|
-| `codelab_agent_io` | `loadProjectExtensions`, `ProjectExtensions`, `PhaseOutcome`, `SkillRootInfo` (экспорт бареля); `ConfigCommands.check` — на них | io | `[agent]` |
+| `codelab_agent_core` | аддитивно: типы данных `ProjectExtensions`, `PhaseOutcome` (`PhaseLoaded`, `PhaseTimedOut`, `PhaseFailed`), `SkillRootInfo` в `lib/src/project/`, экспорт бареля (D3) | core | `[agent]` |
+| `codelab_agent_io` | `loadProjectExtensions` (экспорт бареля), реэкспорт типов D3 ядра; `ConfigCommands.check` — на функции | io | `[agent]` |
 | `codelab_setup` | основной барель: виды D4, `agentExtensionsOf`, `skillsListEdit` (D5); `io.dart`: `readAgentExtensions` | мост | `[agent]` |
 | `codelab_ui` | аддитивно: `CodeLabStatusTable` — вторая строка и теги ячейки, переключатель строки, доли колонок (D12) | ui | `[desktop]` |
 | `apps/codelab_desktop` | Cubit, состояние, страница, метод сессии, `LocalFolderOpener`, сборка, `defaultSettingsPages`, ключевые слова поиска | app | `[desktop]` |
 
 - Направление зависимостей не меняется: `codelab_desktop → codelab_setup → codelab_agent_core`, `codelab_setup (io.dart) → codelab_agent_io`. Новых рёбер нет, граф `README.md` не меняется.
-- Новых зависимостей нет: `setupAllowlist`, `desktopAllowlist`, allowlist ядра (PKG-2) не меняются. Ядро не меняется.
+- Новых зависимостей нет: `setupAllowlist`, `desktopAllowlist`, allowlist ядра (PKG-2) не меняются. Ядро меняется только аддитивно — три типа данных D3 без новых импортов (PKG-1), правило сторожа ядра не нужно; проверка — `web-compile` ядра.
 - **Новое правило сторожа не нужно.** `codelab_setup/io.dart` вне `lib/app/` и `dart:io` в `features/settings/presentation` уже запрещены (D20 change `add-provider-setup-ui`), `url_launcher` вне `core/platform/` — тоже. Основной барель моста остаётся web-безопасным, проверка — `web-compile`.
 - `codelab_client_core` и `codelab_client_io` не меняются: данные агентской стороны приходят мостом, клиентского состояния ACP страница не добавляет.
 - `[protocol]` и `[client]` задач нет.

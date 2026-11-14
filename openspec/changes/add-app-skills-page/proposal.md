@@ -15,7 +15,7 @@
 - **Доверие проекта.** Для проекта вне `trusted_projects` навыки и шаблоны проекта не читаются, страница говорит об этом. Цепочка `AGENTS.md` читается и для недоверенного проекта (E-01).
 - **Запись** — только мостом через `AgentConfigStore.apply` (`ConfigWriter`: блокировка, отпечаток базы, конфликт без автоповтора — SETUP-6). Цели — `user` и `projectLocal`, `project` никогда (SETUP-3, SKL-2). Изменения действуют на новые сессии.
 - **Мост `codelab_setup`** (ADDED): вид страницы `AgentExtensionsView` и чистые правила записи `skills.disabled` и `skills.extra_roots` (основной барель); чтение файлов `readAgentExtensions` (`io.dart`).
-- **`codelab_agent_io`**: расчёт канонической папки, доверия и двух фаз загрузки (файлы проекта и навыки) выносится из `ConfigCommands.check` в одну публичную функцию. Её используют `config check` и мост, вывод `config check` не меняется.
+- **`codelab_agent_core`** (аддитивно) и **`codelab_agent_io`**: типы результата — в ядре; расчёт канонической папки, доверия и двух фаз загрузки (файлы проекта и навыки) выносится из `ConfigCommands.check` в одну публичную функцию. Её используют `config check` и мост, вывод `config check` не меняется.
 - **Платформа app**: порт `LocalFolderOpener` (`core/platform/`, `url_launcher`) открывает каталог в файловом менеджере ОС. Файлы не запускаются.
 - **`codelab_ui`**: аддитивное расширение `CodeLabStatusTable` (вторая строка ячейки, теги, переключатель строки, доли ширины колонок). Поведение страницы MCP servers не меняется.
 
@@ -45,6 +45,7 @@
 ## Impact
 
 - **Код:**
+  - `packages/dart/codelab_agent_core` — аддитивно: типы данных `ProjectExtensions`, `PhaseOutcome`, `SkillRootInfo` рядом с портами файлов проекта (design.md, D3) (`[agent]`);
   - `packages/dart/codelab_agent_io` — публичная функция инвентаризации файлов проекта и навыков (из `ConfigCommands._fileLines`), `config check` переходит на неё без изменения вывода (`[agent]`);
   - `packages/dart/codelab_setup` — `lib/src/extensions/` (виды, построитель, правила записи), `lib/src/io/agent_extensions_reader.dart`, реэкспорты (`[agent]`);
   - `packages/flutter/codelab_ui` — расширение `CodeLabStatusTable`, превью (`[desktop]`);
