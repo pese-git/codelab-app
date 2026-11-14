@@ -195,6 +195,34 @@ Future<AgentExtensionsView> readAgentExtensions(AgentConfigSnapshot snapshot,
 5. **`skills.extra_roots`** НИКОГДА не пишется в `project` (SKL-2), а в `projectLocal` — только для доверенного проекта. Иначе загрузчик его отбросит, и правило 2 даёт неактивный переключатель. Относительный элемент (`.claude/skills`) у недоверенного проекта не читается (`untrusted_project`), переключатель неактивен с подсказкой `Trust this project to read .claude/skills.`.
 6. Запись — `AgentConfigStore.apply(base, edits)` с базой снимка страницы. `ConfigConflict` — баннер `skills-banner` и перечитывание без автоповтора (SETUP-6). `ConfigRejected` — баннер с проблемами загрузчика, файл не изменён. Пока идёт запись, повторные действия игнорируются (`saving`).
 
+**API (контракт итерации 2, по красным тестам 2.1):**
+
+```dart
+SkillsListEditResult skillsListEdit(AgentConfigSnapshot snapshot, String key, String element,
+    {required bool present});   // present: true — элемент должен оказаться в списке
+                                //   (выключить навык, дать согласие); false — выйти из него
+sealed class SkillsListEditResult {}
+final class SkillsListPlan extends SkillsListEditResult {
+  final ConfigLayer layer;          // user | projectLocal
+  final ConfigSnapshot base;        // снимок целевого слоя из snapshot.layers
+  final List<ConfigEdit> edits;     // пусто — уже так (идемпотентно)
+}
+final class SkillsListRefused extends SkillsListEditResult { final SkillsListRefusal refusal; }
+sealed class SkillsListRefusal {}
+final class SkillsListNotEditable extends SkillsListRefusal { final String source; }        // ConfigSourceView.label
+final class SkillsListDisabledByProject extends SkillsListRefusal { final String source; }  // ConfigSourceView.label
+final class SkillsListUntrustedProject extends SkillsListRefusal {}
+final class SkillToggle { final bool isAvailable; final SkillsListRefusal? refusal; }
+// SkillEntryView.toggle, SkillConsentView.toggle (обязательное)
+```
+
+- Вызывающий записывает план сам: `store.apply(plan.base, plan.edits)`. `base` — снимок **целевого** слоя, поэтому отпечаток и конфликт (SETUP-6) проверяются по файлу, который меняется. Пустой `edits` — запись не нужна.
+- Ключ, кроме `skills.disabled` и `skills.extra_roots`, — `ArgumentError`: это ошибка программиста, а не отказ для пользователя.
+- **Идемпотентность.** Добавить имеющийся элемент или убрать отсутствующий — `SkillsListPlan` с пустым `edits`; повторное нажатие и гонка двух вкладок не пишут файл.
+- **Правило 4 опирается на Q43:** список `skills.disabled` недоверенного проекта объединяется с нижними слоями, и `origins` итога загрузки его источником не называет. Поэтому цель (правило 1) выбирается без него, а `SkillsListDisabledByProject` определяется по сырому значению проектных слоёв недоверенного проекта из `snapshot.layers` (только при `present: false`).
+- **Правило 5 только для выдачи:** `SkillsListUntrustedProject` — отказ только при `present: true` для относительного элемента недоверенного проекта. Отзыв согласия (`present: false`) разрешён: он только сужает доступ (приоритет 1).
+- **Одна реализация для вида и записи.** `SkillToggle` вычисляется той же `skillsListEdit`: для навыка — `present: availability == enabled` (переключение выключит его), для согласия — `present: !granted`. `isAvailable` — результат `SkillsListPlan`, иначе `refusal` даёт подсказку D5. `toggle` навыков строит `agentExtensionsOf`, `toggle` согласия — `readAgentExtensions` по снимку вместе с кандидатом.
+
 `fileOnly` в реестре остаётся. Страница — не общий редактор ключа, а действие предметной области: выключить навык по имени или дать согласие на каталог. Так же MCP servers пишет элементы `mcp.servers` своими правками. `/settings` CLI эти ключи по-прежнему не показывает, причина реестра остаётся верной для общих редакторов. Отклонено: сделать ключи `shared` — это добавило бы строки в `/settings` CLI без редактора списков (`SettingType.stringList` клиенты не поддерживают), вне объёма (§19).
 
 PERM-11 (запись конфигурации агента критична для инструментов агента) к app не относится: пишет пользователь своей кнопкой, а не модель. Правило не ослабляется: страница не даёт агенту нового пути записи, а app не принимает решений от имени агента.
