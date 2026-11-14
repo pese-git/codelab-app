@@ -115,7 +115,8 @@ final class SubagentTool extends AgentTool {
   @override ToolKind get kind => ToolKind.think;
   @override ContentTrust outputTrust(Map<String, Object?> args) => ContentTrust.untrusted;
   @override String permissionPattern(Map<String, Object?> args) => args['type'] as String;
-  @override ToolPresentation present(Map<String, Object?> args);   // title: 'Subagent <agent>: <description>'
+  @override ToolPresentation present(Map<String, Object?> args);   // title: 'Subagent <agent>: <description>';
+                                                                   // без непустого description — 'Subagent <agent>' (D41)
   @override Future<ToolExecutionResult> execute(Map<String, Object?> args, ToolContext ctx);
 }
 ```
@@ -145,12 +146,15 @@ Launch a subagent: a separate agent with its own context that does one self-cont
 Use it to explore a large codebase, review changes or draft a plan without filling your own context.
 The subagent does not see this conversation: put everything it needs into `prompt`.
 Several agent calls in one response run in parallel, at most {{maxConcurrent}} at a time.
+Put task list calls before the first agent call of a response: an agent call placed after a task list call waits until every call before it has finished.
 You receive only the final report, not the subagent's intermediate steps.{{background}}
 Subagents cannot ask the user questions. {{nesting}}
 
 Agent types:
 {{agentList}}
 ```
+
+Строка про вызовы списка задач описывает барьер §5.5.1: вызовы `task_*` — `sequential`, и `agent` после такого вызова ждёт все вызовы перед ним (change `add-subagents-and-tasks`, D39, D41 п. 4). Имён инструментов строка не называет: описание `agent` не зависит от набора `task_*`.
 
 `agentList` — строки `- <name>: <description>` в порядке `name`. `nesting` зависит от глубины
 вызывающего: `depth + 1 < max_depth` → `A subagent may start its own subagents, up to <max_depth - depth - 1> more level(s) below it.`;
@@ -170,7 +174,7 @@ typedef SubagentId = String;                  // 'sub_' + 8 символов [0-
 /// waiting — ребёнок ждёт решения пользователя или своих детей (поле waitingFor снимка).
 enum SubagentState { queued, running, waiting, completed, failed, cancelled }
 enum SubagentWait { approval, subagents }
-enum SubagentFailure { error, budgetExceeded, invalidOutput, interrupted, refused }
+enum SubagentFailure { error, budgetExceeded, invalidOutput, interrupted, refused, maxTokens }   // maxTokens — D41
 
 final class SubagentSpec {
   final SessionId parentSessionId; final String parentToolCallId;
@@ -506,7 +510,11 @@ buildReport(child, turnEnded, spec):
      refused   → status failed, failure refused
      completed с budgetExceeded → status failed, failure budgetExceeded; text — последний ответ
        (может быть пустым: тогда text := "")
-     completed или maxTokens → шаг 3
+     maxTokens и text.trim() пуст → status failed, failure maxTokens (D41 change
+       add-subagents-and-tasks: весь лимит ответа ушёл в рассуждение или вызовы)
+     maxTokens и text не пуст → text += "\n[report truncated: the subagent hit the output token limit]",
+       truncated := true; шаг 3
+     completed → шаг 3
 3  spec.outputSchema == null → status completed
    иначе json := extractJson(text); errors := validate(json, schema) (подмножество §6.3.2)
      ok → status completed, json
@@ -543,8 +551,9 @@ Reply with only a JSON value that matches the schema. Do not add any other text.
 
 | Исход | Атрибуты сверх базовых | Тело | `isError` |
 |---|---|---|---|
-| `completed` | `truncated="true"`, если усечено | отчёт | `false` |
+| `completed` | `truncated="true"`, если усечено по `report_max_bytes` или оборвано лимитом ответа (шаг 2) | отчёт | `false` |
 | `failed`, `budgetExceeded` | `reason="budget_exceeded:<steps|tokens|cost|duration>"` | последний текст или `Subagent stopped: its budget was exhausted before it finished.` | `true` |
+| `failed`, `maxTokens` | `reason="max_tokens"` | `Subagent stopped: it hit the output token limit before writing a report.` | `true` |
 | `failed`, `invalidOutput` | `reason="invalid_output"` | `Subagent report does not match output_schema: <errors>` + `\n\nRaw report:\n` + текст | `true` |
 | `failed`, `error` / `refused` | `reason="error"` / `reason="refused"` | `Subagent failed: <сообщение>` | `true` |
 | `cancelled` | — | `Tool call was cancelled` (стандартный текст §6.3.1) | `true` |
@@ -614,7 +623,7 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 | `childSessionId` | string? | `null`, если ребёнок отменён в очереди |
 | `journal` | string? | путь журнала ребёнка относительно `sessions/` |
 | `status` | string | `running`, `completed`, `failed`, `cancelled` |
-| `failure` | string? | `budget_exceeded:<limit>`, `invalid_output`, `error`, `refused`, `interrupted` |
+| `failure` | string? | `budget_exceeded:<limit>`, `invalid_output`, `error`, `refused`, `interrupted`, `max_tokens` (D41 change `add-subagents-and-tasks`) |
 | `report` | string? | у итоговой записи: тело `<subagent-report>` после усечения (без обёртки) |
 | `usage` | object? | у итоговой записи: usage ребёнка вместе с потомками (формат §8.2.3) |
 | `toolCalls`, `durationMs` | int? | у итоговой записи: вызовы ребёнка вместе с потомками и длительность; вместе с `usage` дают `_meta.codelab.subagent.summary` при реплее (D24 change `add-subagents-and-tasks`) |

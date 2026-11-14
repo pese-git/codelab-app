@@ -41,6 +41,10 @@
 - **WHEN** до итерации 4 change (ребёнку `agent` не даётся) описание `agent` рендерится для корневой сессии при `max_depth: 3`
 - **THEN** `nesting` строится от эффективной глубины 1 и даёт `Subagents you start cannot start other subagents.`: описание не обещает модели вложенности, которой нет (design.md, D36, Т16)
 
+#### Scenario: Описание agent: порядок со списком задач
+- **WHEN** описание `agent` рендерится для корневой сессии
+- **THEN** сразу после строки `Several agent calls in one response run in parallel, at most <N> at a time.` идёт строка `Put task list calls before the first agent call of a response: an agent call placed after a task list call waits until every call before it has finished.`; имён инструментов списка задач в ней нет (design.md, D39 «Известное ограничение — волны», D41, п. 4)
+
 ### Requirement: Детерминированная сборка системного промпта
 `composeSystemPrompt(PromptInputs)` SHALL собирать секции в фиксированном порядке §11.5 документа ядра и соединять их через пустую строку:
 1. `system/base` с `cwd`, датой `yyyy-MM-dd`, платформой и именем режима.

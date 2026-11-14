@@ -185,3 +185,18 @@ Kit НЕ SHALL разбирать `title`, строку прогресса и т
 #### Scenario: Сторонний агент без признака
 - **WHEN** агент присылает вызов `think` с заголовком «Subagent explore: …» без `_meta.codelab.subagent`
 - **THEN** `SessionView.subagents` пуст
+
+### Requirement: Отмена по признаку агента
+`ToolCallView.status` SHALL быть `cancelled`, если последний кадр вызова с итоговым статусом (`tool_call` или `tool_call_update`) несёт `status: failed` и `_meta.codelab.outcome: "cancelled"` — у вызова любого инструмента, вживую и в реплее `session/load` (design.md change `add-subagents-and-tasks`, D41, п. 1). Так вызов, отменённый в прошлом ходе, после загрузки сессии показывается так же, как вживую (agent-workbench-ui «Отменяемый ход в workbench»). Другие значения `outcome` (`rejected`, `interrupted`, неизвестные), его отсутствие и неверная форма SHALL оставлять `failed`. Кадр с итоговым статусом `completed` SHALL снимать признак; поздний неитоговый кадр (`pending`, `in_progress`) после итогового статуса его не меняет. Пометка вызова, отменённого самим клиентом (`cancelTurn`), SHALL работать как прежде: признак агента её дополняет, а не заменяет.
+
+#### Scenario: Отменённый субагент после загрузки
+- **WHEN** `session/load` проигрывает `tool_call` вызова `agent` со `status: failed` и `_meta.codelab: {"outcome": "cancelled", "subagent": {"id": "sub_a1", "type": "explore", "summary": {"toolCalls": 2, "tokens": {"input": 900, "output": 100}, "durationMs": 4000}}}`
+- **THEN** `ToolCallView.status` — `cancelled`, `subagentSummary` разобран; строка панели Agents этого вызова — `cancelled`
+
+#### Scenario: Отмена не клиентом вживую
+- **WHEN** во время хода, который клиент не отменял, приходит `tool_call_update` вызова `exec` со `status: failed` и `_meta.codelab.outcome: "cancelled"`
+- **THEN** `ToolCallView.status` — `cancelled`
+
+#### Scenario: Другие исходы остаются Failed
+- **WHEN** реплей отдаёт два вызова `failed`: один с `_meta.codelab.outcome: "interrupted"`, другой с `"rejected"`, и третий — с `outcome: 5`
+- **THEN** у всех трёх `ToolCallView.status` — `failed`, ошибки обработки нет

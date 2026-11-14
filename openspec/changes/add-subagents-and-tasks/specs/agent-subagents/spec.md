@@ -13,6 +13,8 @@
 
 Типы SHALL браться из встроенных определений `general`, `explore`, `review`, `plan` (`source: builtin:<name>`) и из определений агентов со `scope` `subagent` или `both`. Пользовательское определение с тем же именем заменяет встроенное с логом `subagent.type_overridden`. Определение со `scope: session` в `enum` не входит. Снимок типов и `enum` SHALL фиксироваться при создании сессии.
 
+Заголовок вызова (`ToolPresentation.title`) SHALL быть `Subagent <type>: <description>` с `description` после обрезки пробелов; если `description` нет, оно не строка или пусто после обрезки, — `Subagent <type>` без двоеточия (`type` — из аргументов, иначе `general`). Заголовок строится и для вызова, который затем отклонит проверка (design.md, D41, п. 3).
+
 Ошибки проверки SHALL давать результат-ошибку без создания ребёнка тем же механизмом, что отказ точки исполнения: это текст ядра, а не вывод ребёнка, поэтому в ограду `untrusted-content` он не попадает (огораживается только отчёт, требование «Отчёт ребёнка»). Тексты:
 - `Invalid agent call: description must be 3-60 characters.`;
 - `Invalid agent call: prompt must be 1-32768 characters.`;
@@ -34,6 +36,10 @@
 #### Scenario: Неверный заголовок
 - **WHEN** модель вызывает `agent` с `description` из двух символов
 - **THEN** результат — ошибка `Invalid agent call: description must be 3-60 characters.`, ни дочерней сессии, ни журнала не создано
+
+#### Scenario: Вызов без описания
+- **WHEN** модель вызывает `agent` с пустыми аргументами `{}`, затем с `{"type": "explore", "description": "   "}`
+- **THEN** `ToolCallStarted` первого вызова несёт заголовок `Subagent general`, второго — `Subagent explore`, оба без двоеточия; оба вызова получают результат-ошибку проверки, ребёнок не создаётся (`agent_tool_schema_test.dart`; D41, п. 3)
 
 ### Requirement: Сборка ребёнка
 `SubagentManager.spawn` SHALL строить ребёнка из текущего состояния родителя по §17.3.3:
@@ -139,7 +145,13 @@ Usage потомка SHALL входить в usage прямого родител
 - **THEN** у хэндла ровно одно терминальное состояние, вызов `agent` получает ровно один результат, лишних событий ребёнка после него в потоке родителя нет
 
 ### Requirement: Отчёт ребёнка
-Отчёт SHALL строиться по §17.3.5 без ремонта по схеме: текст последнего ответа ребёнка; статус по `TurnEnded.reason`; усечение до `report_max_bytes` с пометкой. `SubagentReport.toolCalls` и `usage` SHALL включать вызовы и usage всех потомков ребёнка (транзитивно), `duration` — время от получения слота до терминального состояния; у ребёнка, отменённого в очереди, — нули (design.md change `add-subagents-and-tasks`, D24).
+Отчёт SHALL строиться по §17.3.5 без ремонта по схеме: текст последнего ответа ребёнка; статус по `TurnEnded.reason`; усечение до `report_max_bytes` с пометкой.
+
+Ответ, оборванный лимитом ответа модели (`TurnEnded.reason: maxTokens`), SHALL различаться по тексту последнего ответа (решение пользователя 2026-11-15; design.md change `add-subagents-and-tasks`, D41 п. 6):
+- текст пуст после обрезки пробелов → `failed`, `failure: max_tokens`; модель родителя получает `reason="max_tokens"`, тело `Subagent stopped: it hit the output token limit before writing a report.` и `isError: true`;
+- текст не пуст → `completed`; к тексту SHALL дописываться строка `[report truncated: the subagent hit the output token limit]`, обёртка получает `truncated="true"`; последующее усечение до `report_max_bytes` добавляет свою пометку, атрибут остаётся один.
+
+Значение `max_tokens` SHALL записываться в `failure` итоговой записи `subagent` и уходить в `_meta.codelab.subagent.failure` (agent-acp-server «Проекция субагентов и списка задач»). `SubagentReport.toolCalls` и `usage` SHALL включать вызовы и usage всех потомков ребёнка (транзитивно), `duration` — время от получения слота до терминального состояния; у ребёнка, отменённого в очереди, — нули (design.md change `add-subagents-and-tasks`, D24).
 
 Модель родителя SHALL получать один блок `<subagent-report id agent status steps tool_calls …>` внутри ограды `untrusted-content source="agent"`. Вхождения `</subagent-report` в тексте отчёта экранируются (SUB-7). Атрибуты и тела исходов — по таблице §17.3.5.
 
@@ -150,6 +162,14 @@ Usage потомка SHALL входить в usage прямого родител
 #### Scenario: Итог с потомками
 - **WHEN** ребёнок сделал 2 вызова и запустил внука, который сделал 3 вызова
 - **THEN** `SubagentReport.toolCalls` ребёнка равен 6 (2 вызова, 1 вызов `agent` и 3 вызова внука), его `usage` — сумма usage ребёнка и внука
+
+#### Scenario: Пустой отчёт по лимиту ответа
+- **WHEN** последний ответ ребёнка `review` завершается `stopReason: length`, и весь ответ — рассуждение без текста
+- **THEN** результат `agent` — `isError: true`, обёртка со `status="failed"` и `reason="max_tokens"`, тело `Subagent stopped: it hit the output token limit before writing a report.`; итоговая запись `subagent` — `failed` с `failure: max_tokens` (`subagent_report_wrapper_test.dart`; D41 п. 6)
+
+#### Scenario: Оборванный отчёт по лимиту ответа
+- **WHEN** последний ответ ребёнка `explore` — текст `Found three callers: a.dart, b.dart` и `stopReason: length`
+- **THEN** результат `agent` — `isError: false`, обёртка со `status="completed"` и `truncated="true"`, тело — текст и строка `[report truncated: the subagent hit the output token limit]` (`subagent_report_wrapper_test.dart`)
 
 #### Scenario: Бюджет ребёнка
 - **WHEN** `max_steps: 2`, а ребёнку нужно три шага
