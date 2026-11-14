@@ -178,37 +178,6 @@ final class ToolCallExecutor implements ToolExecutor {
     final available = invocation.stepTools.contains(call.name);
     final tool = available ? registry.lookup(call.name) : null;
     final progress = <Future<void>>[];
-    final context = ToolContext(
-      env: env,
-      cancel: invocation.cancel,
-      toolCallId: call.id,
-      services: services,
-      stepTools: invocation.stepTools,
-      misuse: invocation.misuse,
-      supportsImages: invocation.supportsImages,
-      onUpdate: (partial) => progress.add(
-        Future.sync(
-          () => invocation.emit(
-            ToolCallProgress(
-              invocation.sessionId,
-              toolCallId: call.id,
-              content: [for (final b in partial.content) ToolCallBlock(b)],
-            ),
-          ),
-        ),
-      ),
-      onTerminal: (terminalId) => progress.add(
-        Future.sync(
-          () => invocation.emit(
-            ToolCallProgress(
-              invocation.sessionId,
-              toolCallId: call.id,
-              content: [ToolCallTerminal(terminalId)],
-            ),
-          ),
-        ),
-      ),
-    );
     // Путь и ключ вычисляются ДО любого `reserve`: `lockPath`/`lockKey`
     // работают на сырых аргументах модели и могут бросить; тогда ни одно
     // место не занято и течь нечему (ошибка уходит из `announce` как есть —
@@ -227,10 +196,43 @@ final class ToolCallExecutor implements ToolExecutor {
     // Ключ — по тому же принципу и в том же месте: порядок ответа модели
     // (обобщение TOOL-7 на ключи — исследование D39-alt, §17.16a.4).
     final keyLock = lockKeyName == null ? null : _keyLocks.reserve(lockKeyName);
-    // Инструмент отпускает ключ досрочно (`ToolContext.releaseLockKey`) тем же
-    // тикетом, что и `_release`: повторное отпускание безопасно.
-    context.lockKeyRelease = keyLock?.release;
+    final ToolContext context;
     try {
+      context = ToolContext(
+        env: env,
+        cancel: invocation.cancel,
+        toolCallId: call.id,
+        // Инструмент отпускает ключ досрочно (`ToolContext.releaseLockKey`) тем
+        // же тикетом, что и `_release`: повторное отпускание безопасно. Тикет
+        // известен до контекста, поэтому поле приватное и не перезаписывается.
+        lockKeyRelease: keyLock?.release,
+        services: services,
+        stepTools: invocation.stepTools,
+        misuse: invocation.misuse,
+        supportsImages: invocation.supportsImages,
+        onUpdate: (partial) => progress.add(
+          Future.sync(
+            () => invocation.emit(
+              ToolCallProgress(
+                invocation.sessionId,
+                toolCallId: call.id,
+                content: [for (final b in partial.content) ToolCallBlock(b)],
+              ),
+            ),
+          ),
+        ),
+        onTerminal: (terminalId) => progress.add(
+          Future.sync(
+            () => invocation.emit(
+              ToolCallProgress(
+                invocation.sessionId,
+                toolCallId: call.id,
+                content: [ToolCallTerminal(terminalId)],
+              ),
+            ),
+          ),
+        ),
+      );
       var presentation = ToolPresentation(title: call.name);
       if (tool != null) {
         try {
@@ -259,8 +261,9 @@ final class ToolCallExecutor implements ToolExecutor {
         ),
       );
     } on Object {
-      // Без handle тикет некому отпустить, а `PathLock` живёт всю сессию:
-      // путь остался бы занят для всех следующих вызовов. Отпускание не рвёт
+      // В `try` и создание контекста, и эмит: сбой любого оставил бы тикеты
+      // без хозяина. Без handle тикет некому отпустить, а `PathLock` живёт
+      // всю сессию: путь остался бы занят для всех следующих вызовов. Отпускание не рвёт
       // очередь — место освободится только после предыдущего держателя
       // (TOOL-7). `emit` может бросить: `AgentEventSink` этого не запрещает,
       // а `Agent.emit` пробрасывает ошибку подписчика.
@@ -434,6 +437,13 @@ final class ToolCallExecutor implements ToolExecutor {
       return _error(cancelledText, ToolOutcome.cancelled);
     } on Object catch (error) {
       return _error(errorText(error), ToolOutcome.failed);
+    } finally {
+      // Ключ нужен только на время `execute`: обработка результата и
+      // `afterToolCall` (хуки хоста) его не держат, иначе медленный хук
+      // задерживал бы следующий `task_*` сессии. Публикация `TaskListChanged`
+      // идёт внутри `execute`, поэтому TSK-1 не страдает. Путь (`lockPath`)
+      // отпускает `complete` (TOOL-7).
+      handle._keyLock?.release();
     }
     if (!tool.truncatesOutput) {
       result = _limit(result);

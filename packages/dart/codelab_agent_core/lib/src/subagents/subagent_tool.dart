@@ -144,11 +144,23 @@ final class SubagentTool extends AgentTool {
   /// обгонял бы `task_create` того же ответа и видел пустой список.
   /// Без `task` и у детей ключа нет: такие вызовы список не читают.
   ///
+  /// Ключ берётся при любом скалярном `task` (строка, число, bool): валидатор
+  /// приводит число и bool к строке (`validator.dart`, `_coerce('string')`),
+  /// а [lockKey] видит сырые аргументы модели, поэтому `agent{task: 1}` иначе
+  /// обошёл бы очередь. `null`, объект и массив валидатор отклонит — ключ им
+  /// не нужен.
+  ///
   /// Под ключом идёт только проверка пункта; `execute` отпускает его через
   /// `ToolContext.releaseLockKey` до ожидания ребёнка (контракт `lockKey`).
   @override
   String? lockKey(Map<String, Object?> args) =>
-      depth == 0 && args['task'] is String ? 'tasks' : null;
+      depth == 0 &&
+          switch (args['task']) {
+            String() || num() || bool() => true,
+            _ => false,
+          }
+      ? 'tasks'
+      : null;
 
   /// Заголовок вызова без резерва id: им пользуется лечение журнала, чтобы
   /// последовательность id не зависела от него (D36 Т6).
@@ -206,9 +218,17 @@ final class SubagentTool extends AgentTool {
     final SubagentHandle handle;
     try {
       if (taskId != null) {
-        // Мы под ключом `tasks` (`lockKey`). Привязки пункта к ребёнку здесь
-        // нет: `taskId` лишь едет в `SubagentSpec`, владельца назначает
-        // `task_update`; поэтому под ключом только проверка существования.
+        // Мы под ключом `tasks` (`lockKey`). Executor не проверяет отмену
+        // после захвата ключа (D35): ребёнка отменённого хода не порождаем,
+        // вызов получает `cancelled`. Проверка идёт ДО проверки пункта: на
+        // отменённом ходе список мог не дождаться своих `task_*`, и
+        // `Unknown task` сбил бы модель ложной причиной.
+        if (ctx.cancel.isCancelled) {
+          throw CancelledException(ctx.cancel.reason);
+        }
+        // Привязки пункта к ребёнку здесь нет: `taskId` лишь едет в
+        // `SubagentSpec`, владельца назначает `task_update`; поэтому под
+        // ключом только проверка существования.
         final items = ctx.services.tasks.items;
         if (!items.any((item) => item.id == taskId)) {
           throw SubagentCallError(
@@ -217,11 +237,6 @@ final class SubagentTool extends AgentTool {
                 : 'Unknown task #$taskId. Known: '
                       '${items.map((i) => '#${i.id}').join(', ')}.',
           );
-        }
-        // Executor не проверяет отмену после захвата ключа (D35): ребёнка
-        // отменённого хода не порождаем, вызов получает `cancelled`.
-        if (ctx.cancel.isCancelled) {
-          throw CancelledException(ctx.cancel.reason);
         }
       }
       final id =

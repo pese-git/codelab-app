@@ -25,11 +25,12 @@ abstract base class _TaskTool extends AgentTool {
   @override
   ToolKind get kind => ToolKind.think;
 
-  /// Режим исполнения не переопределяется: вызовы `task_*` идут параллельно
-  /// с остальным пакетом (LOOP-4, `agent_loop.dart`, `_runBatch`). Геттер
-  /// возвращает `null`, то есть дублирует значение по умолчанию
-  /// `AgentTool.executionMode`; он оставлен только как место для этой
-  /// документации режима и поведения не задаёт.
+  /// Общий ключ очереди всех четырёх инструментов: единственный список на
+  /// сессию (D39-alt, `AgentTool.lockKey`).
+  ///
+  /// Режим исполнения `task_*` не переопределяется: они не `sequential` и
+  /// идут параллельно с остальным пакетом, барьера не образуют (LOOP-4,
+  /// `agent_loop.dart`, `_runBatch`).
   ///
   /// Почему parallel безопасен: между собой `task_*` упорядочивает очередь
   /// ключа [lockKey] в порядке ответа модели, а операции дополнительно
@@ -52,11 +53,6 @@ abstract base class _TaskTool extends AgentTool {
   /// Что остаётся: все `ToolCallStarted` идут первыми, а хук
   /// `beforeToolCall` срабатывает пачкой после announce всего пакета, не
   /// сразу после `Started` своего вызова.
-  @override
-  ToolExecutionMode? get executionMode => null;
-
-  /// Общий ключ очереди всех четырёх инструментов: единственный список на
-  /// сессию (D39-alt, `AgentTool.lockKey`).
   @override
   String? lockKey(Map<String, Object?> args) => 'tasks';
 

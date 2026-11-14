@@ -93,15 +93,20 @@ abstract base class AgentTool {
   /// одновременно.
   ///
   /// Как работает: место в очереди занимается в `announce`, захват — на
-  /// шаге 6 после `beforeToolCall` (и после [lockPath]), освобождение — в
-  /// `complete`/`abandon` на любом пути завершения, в том числе при отказе
-  /// валидации, блоке хука и отмене. Ключи не пересекаются с путями: у них
-  /// отдельная очередь. Переопределяют `task_*`.
+  /// шаге 6 после `beforeToolCall` (и после [lockPath]). Освобождение —
+  /// сразу после шага 7 (`execute` вернул или бросил), ДО обработки
+  /// результата и `afterToolCall`: медленный after-хук держателя не
+  /// задерживает следующий вызов ключа. Досрочно ключ отпускает сам
+  /// инструмент через `ToolContext.releaseLockKey`. Вызов, не дошедший до
+  /// `execute` (отказ валидации, блок хука, отмена, `abandon`), отпускает
+  /// место на своём пути завершения. Ключи не пересекаются с путями: у них
+  /// отдельная очередь (путь отпускается в `complete`, TOOL-7). Переопределяют
+  /// `task_*` и `agent` с пунктом списка.
   ///
   /// Хуки: `beforeToolCall` (и ACP `in_progress` из него) срабатывает до
   /// ожидания ключа, поэтому клиент видит `in_progress` у вызова, который
-  /// ещё стоит в очереди; ожидание ключа диагностируется логами
-  /// `tool.lock.wait` / `tool.lock.acquired`.
+  /// ещё стоит в очереди; ожидание ключа диагностируется логом
+  /// `tool.lock.wait` (с полем `key`).
   ///
   /// Отмена (D35 «Отмена»): вызов, прошедший `beforeToolCall` и проверку
   /// отмены, после захвата ключа отмену не проверяет — он исполняется даже
@@ -151,7 +156,9 @@ final class ToolContext {
     this.misuse,
     this.supportsImages = false,
     this.onTerminal,
-  }) : stepTools = List.unmodifiable(stepTools);
+    void Function()? lockKeyRelease,
+  }) : _lockKeyRelease = lockKeyRelease,
+       stepTools = List.unmodifiable(stepTools);
 
   /// Всегда ограниченный env сессии (ENV-2).
   final ExecutionEnv env;
@@ -175,9 +182,11 @@ final class ToolContext {
   final String toolCallId;
   final ToolServices services;
 
-  /// Освобождает место вызова в очереди `AgentTool.lockKey`; ставит точка
-  /// исполнения при объявлении вызова с ключом. `null` — ключа нет.
-  void Function()? lockKeyRelease;
+  /// Освобождает место вызова в очереди `AgentTool.lockKey`; передаёт точка
+  /// исполнения при создании контекста. `null` — ключа нет. Поле приватное:
+  /// инструмент не может его подменить, ему доступен только
+  /// [releaseLockKey].
+  final void Function()? _lockKeyRelease;
 
   /// Досрочно отпускает место в очереди ключа `AgentTool.lockKey`.
   ///
@@ -187,8 +196,8 @@ final class ToolContext {
   /// потом ждёт долгую (`agent{task}`, D39-alt, §17.16a.4).
   ///
   /// Идемпотентно; без ключа — no-op. Точка исполнения всё равно отпускает
-  /// место в `finally`. Путь `lockPath` этим НЕ отпускается.
-  void releaseLockKey() => lockKeyRelease?.call();
+  /// место сразу после `execute`. Путь `lockPath` этим НЕ отпускается.
+  void releaseLockKey() => _lockKeyRelease?.call();
 
   /// Имена схем текущего шага: текст для модели упоминает только те
   /// инструменты, которые она может вызвать (§6.4).
