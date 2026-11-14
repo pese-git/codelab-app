@@ -198,7 +198,8 @@ final class ToolCallFinished extends AgentEvent {
   final List<FileDiff> diffs;               // по одному на изменённый файл; пусто — правок нет (§6.2)
   final SpillRef? spill; }                  // с этапа 3 (§17.4.2): результат вынесен в файл
 final class ToolPairingRepaired extends AgentEvent { final PairingReport report; }
-final class StepEnded extends AgentEvent { final StepResult result; }
+final class StepEnded extends AgentEvent { final StepResult result;
+  final ContextFill? context; }            // change add-usage-extension (D5): used, window, compactAt?
 // Change add-subagents-and-tasks (§17.16.2): заменяет PlanUpdated(List<PlanEntry> entries) инструмента update_plan
 final class TaskListChanged extends AgentEvent { final List<TaskItem> items; final TaskChange change; }
 final class ModeChanged extends AgentEvent { final ModeId mode; }
@@ -271,7 +272,7 @@ final class SlashCommand {
 | `ToolCallHeartbeat`, `ToolCallStuck` | после MVP: вызов исполняется дольше порога / молчит дольше порога (§17.12.3) | `toolCallId`, `elapsed`, `sinceOutput` |
 | `ToolCallFinished` | вызов завершён | `toolCallId`, `outcome`, `content`, `diffs` (по одному на файл), `spill?` (§17.4: `content` — фрагмент вынесенного результата) |
 | `ToolPairingRepaired` | payload запроса потребовал ремонта пар | отчёт о ремонте |
-| `StepEnded` | шаг завершён | ответ модели, результаты в порядке вызовов |
+| `StepEnded` | шаг завершён | ответ модели, результаты в порядке вызовов; заполнение контекста после шага (`used`, `window`, `compactAt` — порог автосжатия или `null`; change `add-usage-extension`, D5) |
 | `TaskListChanged` | после change `add-subagents-and-tasks`: операция `task_*` или назначение пункта субагенту (`assign`) изменила список задач, до `ToolCallFinished` вызова (§17.16.5), или список восстановлен из новой ветки после `BranchChanged` (`op: restore`, без записи `task`, §17.16.6); до change — `PlanUpdated` от `update_plan` | `items` (весь список), `change` |
 | `ModeChanged`, `CommandsChanged` | смена режима, списка slash-команд | новое значение |
 | `ContextCompacted` | сжатие записано в журнал (§9) | `tokensBefore`, `tokensAfter` |

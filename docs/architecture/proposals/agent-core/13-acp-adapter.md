@@ -89,7 +89,9 @@ design.md change `add-embedded-agent-mode`, D4.
 ключа — объект с целым `version`; нет ключа — нет расширения; неизвестные ключи игнорируются.
 Этапы 1 и 2 субагентов объявляют `subagents: {"version": 1, "maxDepth": <n>}` и
 `subagentToolCalls: {"version": 1}` (оба при `subagents.enabled`) и `tasks: {"version": 1}`
-(§17.16.5). Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
+(§17.16.5). Change `add-usage-extension` добавляет `usage: {"version": 1}` — всегда, когда агент
+отвечает блоком; уведомление `_codelab/session/usage` получает только соединение, объявившее
+`clientCapabilities._meta.codelab.usage` (§13.12). Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
 (§17.3.8), `sessionTree: {"version": 1}` — методы `_codelab/session/*`
 (§17.6.10), `steering: {"maxBytes", "maxPending"}` — метод `_codelab/session/steer`, только при
 `steering.enabled` (§17.7.2.2), `jobs: {"version": 1}` — методы `_codelab/jobs/*` (§17.9.11), `sessionSearch: {"version": 1, "maxLimit": 50, "scopes": ["cwd", "all"]}` — метод `_codelab/session/search`, только при `sessions.search.enabled` и `sessionPersistence`; `"all"` — только при `sessions.search.allow_all` (§17.6.17). Это единственное исключение из правила «ровно эти поля»:
@@ -580,7 +582,7 @@ change `switch-default-agent-to-dart`); до него `/<server>:<prompt>` — �
 | результат `interrupted` (реплей, §8.8) | `tool_call` | `status: "failed"`, `_meta: {"codelab": {"outcome": "interrupted"}}` |
 | `ToolCallFinished` со `spill` (с этапа 3, §17.4) | `tool_call_update` | статус по `outcome`, как в строках выше; `content` — фрагмент вынесенного результата (начало, маркер `[output spilled: …]` с абсолютным путём на машине агента, конец), побайтово равный тексту для модели; `locations` путь выноса не получает; `_meta.codelab.spill` — только после OpenSpec (§13.12) |
 | `ToolPairingRepaired` | — | лог `tool.pairing_repaired` |
-| `StepEnded` | — | лог |
+| `StepEnded` | — | лог; соединениям, объявившим `usage`, — `_codelab/session/usage` с `trigger: "step"` (change `add-usage-extension`, §13.12) |
 | `PlanUpdated` (до change `add-subagents-and-tasks`) | `plan` | `entries` целиком (`content`, `priority`, `status`); заменяется `TaskListChanged` (ниже) |
 | `ModeChanged` | `current_mode_update` | `currentModeId`; плюс `config_option_update`, если изменение не было ответом на запрос клиента |
 | `CommandsChanged` | `available_commands_update` | `availableCommands` |
@@ -588,7 +590,7 @@ change `switch-default-agent-to-dart`); до него `/<server>:<prompt>` — �
 | `SessionTitleChanged` | `session_info_update` | `title`, `updatedAt`; после MVP — всем подключённым соединениям (§17.6.4) |
 | `BranchChanged` (после MVP) | `session_info_update` | при объявленном `sessionTree` — `_meta.codelab.branchChanged: {leafId, fromLeafId, reason}`, всем подключённым; без расширения не передаётся (ответ команды предлагает перезагрузить сессию, §17.6.10) |
 | `SessionAccessChanged` (после MVP) | `session_info_update` | при объявленном `sessionTree` — `_meta.codelab.readOnly: {owner}` или `null` (`leaseAvailable`); лог `session.lease.lost` при `leaseLost`/`foreignWrite` (§17.6.8) |
-| `ContextCompacted` | — | лог; при `/compact` — `agent_message_chunk` с итогом `Compacted: 118400 → 21950 tokens.` |
+| `ContextCompacted` | — | лог; при `/compact` — `agent_message_chunk` с итогом `Compacted: 118400 → 21950 tokens.`; соединениям, объявившим `usage`, — `_codelab/session/usage` с `trigger: "compaction"` (change `add-usage-extension`) |
 | `SubagentStarted`, `SubagentFinished` (после MVP) | — | лог `subagent.start` / `subagent.end`; при согласованной доске — `_codelab/subagents/update` (§17.3.7); у прогона `run ≥ 2` — те же кадры; title вызова `agent_send`/`agent_resume` — `… (follow-up <run>)` / `… (resume <run>)` (§17.3.8.1) |
 | `SubagentProgress` (после MVP) | — | только доска `_codelab/subagents/update`; строку прогресса уже несёт `ToolCallProgress(agent)` (§17.3.7) |
 | `SubagentActivity` (change `add-subagents-and-tasks`) | — или `tool_call`/`tool_call_update` | клиенту с `subagentToolCalls` — вызовы потомков с `_meta.codelab.parentToolCallId` (§17.3.7, «Шаги потомков деревом»); остальным — не отправляется (SUB-12) |
@@ -596,7 +598,7 @@ change `switch-default-agent-to-dart`); до него `/<server>:<prompt>` — �
 | `ToolCallStarted(exec)` с `run_in_background` (после MVP, §17.9) | `tool_call` | `title: "Run in background: <command>"`, `kind: "execute"`; `ToolCallFinished` — сразу `completed` с текстом запуска (и терминалом во внешнем режиме) |
 | `JobStarted`, `JobSettled` (после MVP) | — | лог `job.start`/`job.end`; при согласованном `jobBoard` — `_codelab/jobs/update` и поздний `tool_call_update` с `_meta.codelab.job` (§17.9.11) |
 | `AgentError` | — | лог и trace; итог хода — через ответ (§13.8) |
-| `TurnEnded` | ответ `session/prompt` | §13.8; после MVP непустой `returnedSteers` → `steerReturned` (§17.7.2.2) |
+| `TurnEnded` | ответ `session/prompt` | §13.8; после MVP непустой `returnedSteers` → `steerReturned` (§17.7.2.2); если в ходе были шаги модели — перед ответом (и перед `-32603`) соединениям, объявившим `usage`, `_codelab/session/usage` с `trigger: "turn"` (change `add-usage-extension`, ACP-3) |
 
 Ответ `session/prompt` ставится в очередь, когда `AgentSession.prompt` вернулся: после
 `TurnEnded` сессия ещё пишет автоматический заголовок (§8.10), и его `session_info_update` идёт
@@ -866,7 +868,8 @@ OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, 
 | capability `ask: {"version": 1}` (после MVP) | `clientCapabilities._meta.codelab` в `initialize` | клиент показывает вопросы `ask` (T-22) |
 | `_codelab/ask` (после MVP) | запрос агент → клиент; ответ `{outcome, answers}` | структурные вопросы, правило ответа `cancelled` после `session/cancel` (§17.11.7) |
 | `_meta.codelab.replayWindow: {"omittedRecords", "firstRecordId"}` (после 9, §17.13.2) | первое `agent_message_chunk` реплея окна | клиент показывает «загрузить раньше» без разбора текста; без расширения виден текст маркера |
-| `_meta.codelab.usage` или `_codelab/usage` — форма выбирается OpenSpec `add-usage-extension`, после этапа 9 | ответ `session/prompt` или уведомление агент → клиент | usage и стоимость хода и сессии для статус-строки клиента (L-11, §12.6, §16.3) |
+| capability `usage: {"version": 1}` (change `add-usage-extension`, D3) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize` | клиент понимает `_codelab/session/usage`; агент объявляет ключ всегда, когда отвечает блоком D9 |
+| `_codelab/session/usage` (change `add-usage-extension`, D1, D2; соответствие `15-Extensibility.md` — D17) | уведомление агент → клиент, только соединениям, объявившим `usage`; поводы `step`, `turn` (до ответа `session/prompt`), `compaction` | снимок usage шага, хода и сессии (`tokens`, `cost` десятичной строкой с `currency`, `steps`, `turns`, `partial`), заполнение контекста (`used`, `size`, `compactAt`) и `seq` сессии для идемпотентности; для строки статуса клиента (L-11, U-13, D-09, §12.6); новых корневых полей и видов `sessionUpdate` нет |
 
 Вход по подписке (`authMethods` и `authenticate`, §13.3, §17.10.6) — стандартные поля ACP, не
 расширение. Хуки и плагины (§17.14) новых расширений протокола не вводят.
@@ -900,6 +903,7 @@ sequenceDiagram
     M-->>S: финальный текст
     A-->>C: session/update agent_message_chunk
     S-->>A: TurnEnded completed
+    A-->>C: _codelab/session/usage trigger turn, если клиент объявил usage
     A-->>C: ответ id 7 stopReason end_turn
 ```
 
@@ -1016,6 +1020,7 @@ sequenceDiagram
 * `acp/config-model-options-from-endpoint` (golden, fake `/models`): `session/new` до ответа endpoint — опция `model` из конфига и кэша; после фонового обновления — один `config_option_update` с моделями endpoint в порядке §2.12.2; повторное обновление без изменений — уведомлений нет; модель текущей сессии, исчезнувшая из ответа, остаётся `currentValue` и в `options` (ACP-11, LLM-13).
 * `acp/config-effort-option` (golden): модель с рассуждением — опция `effort` третьей, `category: "thought_level"`, `currentValue` из `agent.effort`; `set_config_option effort=high` → ответ с полным снимком, запись `config_change`, следующий запрос несёт параметр рассуждения; смена на модель без рассуждения → опции `effort` нет, первый `agent_message_chunk` следующего хода — заметка §2.12.3 ровно один раз, в запросе параметра нет; `set_config_option effort` в этом состоянии → `-32602`; смена обратно → опция с `high`; `session/load` восстанавливает значение (ACP-10).
 * `acp/usage-and-redact-commands` (golden): `available_commands_update` содержит `usage` и `redact` сразу после `status`; `/usage` и `/redact layers` отвечают текстом §12.6.1 и §12.4.3 с `end_turn`; число записей журнала до и после не меняется, scripted LLM не вызвана (ACP-12).
+* Usage (change `add-usage-extension`, D13): фикстуры `acp/prompt-usage-steps`, `acp/prompt-usage-unpriced`, `acp/prompt-usage-cancelled`, `acp/compact-usage-context`, `acp/prompt-usage-compaction-off`, `acp/session-load-usage-partial` с `"extensions": ["usage"]`; ключ `usage` в `acp/initialize-codelab-extensions`; фикстуры без объявления `usage` кадров `_codelab/session/usage` не содержат.
 
 ---
 
