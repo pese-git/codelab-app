@@ -548,10 +548,17 @@ void main() {
       expect(cancelled.map((r) => r.fields['tool_call_id']), ['c3']);
       expect(cancelled.single.fields['tool'], 'touch');
       expect(_finished(h.events, 'c3')?.outcome, ToolOutcome.cancelled);
-      // Путь в логи очереди не попадает (observability.md §43).
-      for (final r in [...h.logger.eventsOf('tool.lock.wait'), ...cancelled]) {
+      // Путь в логи очереди не попадает (observability.md §43); у отмены
+      // есть только вид причины.
+      for (final r in h.logger.eventsOf('tool.lock.wait')) {
         expect(r.fields.keys.toSet(), {'tool', 'tool_call_id'});
       }
+      expect(cancelled.single.fields.keys.toSet(), {
+        'tool',
+        'tool_call_id',
+        'reason',
+      });
+      expect(cancelled.single.fields['reason'], 'user');
 
       // Тикет c3 отпущен, но c4 всё равно ждёт c1.
       for (var i = 0; i < 20; i++) {
@@ -563,6 +570,57 @@ void main() {
 
       expect(log, ['start c1', 'end c1', 'start c4', 'end c4']);
     });
+
+    // Причина отмены пишется видом, а не текстом: текст `StorageFailure`
+    // несёт ошибку записи журнала, а в ней может быть путь (§43).
+    for (final (reason, kind) in [
+      (const UserCancel(), 'user'),
+      (const ShutdownCancel(), 'shutdown'),
+      (
+        StorageFailure(Exception('write /secret/journal.jsonl')),
+        'storage_failure',
+      ),
+      (const WatchdogFired('idle'), 'watchdog'),
+      ('custom', 'other'),
+    ]) {
+      test('tool.lock.cancelled carries the reason kind $kind', () async {
+        final release = Completer<void>();
+        final log = <String>[];
+        final tool = FakeTool(
+          'touch',
+          lockArg: 'path',
+          onExecute: (args, ctx) async {
+            log.add('start ${args['id']}');
+            await release.future;
+            return const ToolExecutionResult([TextContent('ok')]);
+          },
+        );
+        final h = await ex.ExecutorHarness.create([tool]);
+        final cancel = CancelTokenSource();
+        final turn = h.invocation(cancel: cancel.token);
+        Future<ToolCallHandle> announce(String id) => h.executor.announce(
+          ToolCall(
+            id: id,
+            name: 'touch',
+            arguments: {'id': id, 'path': 'a.txt'},
+          ),
+          turn,
+        );
+        final h1 = await announce('c1');
+        final h3 = await announce('c3');
+        final first = h.executor.complete(h1);
+        final third = h.executor.complete(h3);
+        await _waitFor(() => log.contains('start c1'));
+
+        cancel.cancel(reason);
+        expect((await third).outcome, ToolOutcome.cancelled);
+        final record = h.logger.eventsOf('tool.lock.cancelled').single;
+        expect(record.fields['reason'], kind);
+        expect(record.fields.values.join(' '), isNot(contains('/secret')));
+        release.complete();
+        await first;
+      });
+    }
 
     test('path freed and turn cancelled in the same turn of the event loop: '
         'c3 finishes cancelled without running', () async {
