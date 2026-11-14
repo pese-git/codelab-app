@@ -546,6 +546,80 @@ void main() {
     });
   });
 
+  group('SkillEntryView.toggle: одно правило с записью (D4, D5; задача '
+      '2.2)', () {
+    SkillFiles twoSkills() => SkillFiles(
+      skills: [_skill('alpha', root: 0), _skill('kappa', root: 0)],
+    );
+
+    AgentExtensionsView build({
+      Map<String, Object?>? projectValues,
+      Map<String, Object?> userValues = const {
+        'skills': {
+          'disabled': ['kappa'],
+        },
+      },
+    }) {
+      final config = _config(skills: const SkillsConfig(disabled: ['kappa']));
+      final snapshot = AgentConfigSnapshot.fromLayers(
+        cwd: _cwd,
+        layers: {
+          ConfigLayer.user: ConfigSnapshot(
+            target: const ConfigTarget.user(),
+            path: _configPath,
+            fingerprint: 'fp',
+            values: userValues,
+          ),
+          if (projectValues != null)
+            ConfigLayer.project: ConfigSnapshot(
+              target: const ConfigTarget.project(_cwd),
+              path: '$_cwd/.codelab/config.yaml',
+              fingerprint: 'fp-p',
+              values: projectValues,
+            ),
+        },
+        loaded: ConfigLoadResult(config: config),
+        secrets: const SecretBackendInfo(id: 'file', writable: true),
+      );
+      return agentExtensionsOf(
+        snapshot,
+        _extensions(skills: PhaseLoaded(twoSkills())),
+        userHome: _userHome,
+      );
+    }
+
+    test('список действует из слоя user: переключатель доступен у '
+        'включённого и у выключенного навыка', () {
+      final view = build();
+
+      expect(_row(view, 'alpha').toggle.isAvailable, isTrue);
+      expect(_row(view, 'alpha').toggle.refusal, isNull);
+      expect(_row(view, 'kappa').availability, SkillAvailability.disabled);
+      expect(_row(view, 'kappa').toggle.isAvailable, isTrue);
+    });
+
+    test('список действует из слоя project: у всех строк отказ '
+        'notEditable с файлом (подсказка «Set in <файл>»)', () {
+      final view = build(
+        projectValues: const {
+          'skills': {
+            'disabled': ['kappa'],
+          },
+        },
+      );
+
+      for (final name in ['alpha', 'kappa']) {
+        final refusal = _row(view, name).toggle.refusal;
+        expect(refusal, isA<SkillsListNotEditable>(), reason: name);
+        expect(
+          (refusal as SkillsListNotEditable).source,
+          '$_cwd/.codelab/config.yaml',
+        );
+        expect(_row(view, name).toggle.isAvailable, isFalse);
+      }
+    });
+  });
+
   group('SETUP-25: тела не попадают в вид', () {
     test('маркер в телах AGENTS.md, SKILL.md и шаблона не виден в '
         'toString() вида и всех строк', () {

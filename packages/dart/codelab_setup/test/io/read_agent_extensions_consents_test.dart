@@ -181,4 +181,75 @@ void main() {
       );
     },
   );
+
+  group('toggle: строки и согласия строятся правилом skillsListEdit '
+      '(D5; задача 2.2)', () {
+    test('недоверенный проект: согласие на относительный каталог — отказ '
+        'untrustedProject, на домашний — доступно', () async {
+      config(trusted: false);
+      skill('$project/.claude/skills', 'one');
+      skill('$userHome/.claude/skills', 'home-one');
+
+      final view = await read();
+
+      final byEntry = {for (final c in view.skills.consents) c.entry: c};
+      expect(
+        byEntry['.claude/skills']!.toggle.refusal,
+        isA<SkillsListUntrustedProject>(),
+      );
+      expect(byEntry['~/.claude/skills']!.toggle.isAvailable, isTrue);
+    });
+
+    test('доверенный проект: оба согласия доступны; слой действующего '
+        'extra_roots не редактируемый — отказ с файлом', () async {
+      config();
+      skill('$project/.claude/skills', 'one');
+      final extra = '${home.root.path}/team.yaml';
+      write(extra, 'skills:\n  extra_roots: [/team/skills]\n');
+
+      final plain = await read();
+      expect(plain.skills.consents.single.toggle.isAvailable, isTrue);
+
+      // Тот же снимок, но с --config: слой не редактируется.
+      final environment = {'HOME': userHome, 'CODELAB_HOME': home.home};
+      final store = FileAgentConfigStore(
+        paths: ConfigPaths(
+          codelabHome: home.home,
+          projectDir: home.project,
+          extraConfig: extra,
+        ),
+        environment: environment,
+        secrets: await ClientSecretAccess.open(
+          codelabHome: home.home,
+          environment: environment,
+          logger: home.logger,
+        ),
+        logger: home.logger,
+      );
+      final view = await readAgentExtensions(
+        await store.snapshot(cwd: home.project),
+        codelabHome: home.home,
+        environment: environment,
+      );
+      final refusal = view.skills.consents.single.toggle.refusal;
+      expect(refusal, isA<SkillsListNotEditable>());
+      expect((refusal as SkillsListNotEditable).source, extra);
+    });
+
+    test('навык, выключенный недоверенным проектом: строка disabled с '
+        'отказом disabledByProject, прочие строки доступны', () async {
+      config(trusted: false, extra: 'skills:\n  disabled: [u]\n');
+      write('$project/.codelab/config.yaml', 'skills:\n  disabled: [p]\n');
+      skill('$userHome/.agents/skills', 'p');
+      skill('$userHome/.agents/skills', 'q');
+
+      final view = await read();
+
+      final p = view.skills.entries.singleWhere((e) => e.name == 'p');
+      final q = view.skills.entries.singleWhere((e) => e.name == 'q');
+      expect(p.availability, SkillAvailability.disabled);
+      expect(p.toggle.refusal, isA<SkillsListDisabledByProject>());
+      expect(q.toggle.isAvailable, isTrue);
+    });
+  });
 }
