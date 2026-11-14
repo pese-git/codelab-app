@@ -13,7 +13,8 @@ void main() {
   // agent-runtime «Матрица профиля»: схемы запроса — read, write, edit,
   // task_create, task_update, task_list, task_get, ls, search в этом порядке;
   // в промпте нет tools/exec, зато есть tools/tasks (якорь task_create, D13,
-  // D32). Сужение subagents.enabled: false появится с итерацией 2.
+  // D32). `agent` — последний встроенный инструмент сессии (субагенты включены
+  // по умолчанию); сужение `subagents.enabled: false` — `subagents_runtime_test`.
   test('agent-serve over the memory env without shell', () async {
     final h = CoreHarness.build(
       baseEnv: MemoryExecutionEnv(cwd: '/proj'),
@@ -33,6 +34,7 @@ void main() {
               'task_get',
               'ls',
               'search',
+              'agent',
             ],
           },
         },

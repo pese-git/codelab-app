@@ -518,6 +518,9 @@ final class SessionBridge {
     cancel();
   }
 
+  /// Итоги детей по `toolCallId` вызова `agent` до его `ToolCallFinished`.
+  final _subagentDone = <String, SubagentFinished>{};
+
   void _onEvent(AgentEvent event) {
     switch (event) {
       case AgentError(retrying: false):
@@ -530,9 +533,17 @@ final class SessionBridge {
     // принимает `_clientChange` по результату вызова ядра.
     final maybeEcho =
         event is ModeChanged && event.changeId != null && _clientChangeActive;
+    // Итог ребёнка приходит до `ToolCallFinished(agent)` (SUB-10): запомнить
+    // по вызову и выложить в финальном обновлении (D24).
+    if (event is SubagentFinished) {
+      _subagentDone[event.parentToolCallId] = event;
+    }
     for (final update in projectEvent(
       event,
       configOptions: () => configOptions,
+      subagentResult: event is ToolCallFinished
+          ? _subagentDone.remove(event.toolCallId)
+          : null,
     )) {
       if (maybeEcho && update is acp.ConfigOptionUpdate) {
         _heldConfigUpdates[event.changeId!] = update;

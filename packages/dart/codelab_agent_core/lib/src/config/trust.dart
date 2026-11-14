@@ -1,5 +1,6 @@
 import '../loop/turn_budget.dart';
 import '../skills/skills_config.dart';
+import '../subagents/subagents_config.dart';
 import 'config_issue.dart';
 import 'config_tree.dart';
 import 'key_path.dart';
@@ -107,6 +108,7 @@ import 'validate.dart' show configModeId;
     _lowerBudget(values, lower, warn);
     _lowerProjectContext(values, lower, warn);
     _lowerSkills(values, lower, warn);
+    _lowerSubagents(values, lower, warn);
   }
   if (isProject || !trusted) {
     _dropSkillRoots(values, warn);
@@ -390,6 +392,64 @@ void _lowerSkills(
         'skills.${path.join('.')}',
         'a project config can only lower the skills limits; the limit of the '
             'global config is kept',
+      );
+    }
+  }
+}
+
+/// Ключи `subagents.*` недоверенного проекта: проект только ужесточает
+/// (design.md change `add-subagents-and-tasks`, D17; как `permissions`).
+///
+/// Меньшие числа и `enabled: false` применяются; бо́льшие числа и
+/// `enabled: true` поверх `false` нижних слоёв отбрасываются с событием
+/// `config.project.untrusted_key`. Сравнение — с итогом слоёв ниже, а без
+/// значения там — с умолчанием `SubagentsConfig`.
+void _lowerSubagents(
+  Map<String, Object?> values,
+  Map<String, Object?> lower,
+  void Function(String key, String reason) warn,
+) {
+  final section = values['subagents'];
+  if (section is! Map<String, Object?>) {
+    return;
+  }
+  final below = lower['subagents'] is Map<String, Object?>
+      ? lower['subagents'] as Map<String, Object?>
+      : const <String, Object?>{};
+  if (section['enabled'] == true && below['enabled'] == false) {
+    section.remove('enabled');
+    warn(
+      'subagents.enabled',
+      'a project config cannot switch subagents back on; the setting of the '
+          'global config is kept',
+    );
+  }
+  const defaults = SubagentsConfig();
+  final fallbacks = <String, Object?>{
+    'max_depth': defaults.maxDepth,
+    'max_concurrent': defaults.maxConcurrent,
+    'max_per_turn': defaults.maxPerTurn,
+    'max_steps': defaults.maxSteps,
+    'max_tokens': null,
+    'max_cost': null,
+    'max_duration': '10m',
+    'report_max_bytes': defaults.reportMaxBytes,
+    'progress_interval': '2s',
+    'heartbeat_interval': '15s',
+    'cancel_grace': '10s',
+  };
+  for (final MapEntry(:key, value: fallback) in fallbacks.entries) {
+    final own = section[key];
+    if (own == null) {
+      continue;
+    }
+    final limit = below[key] ?? fallback;
+    if (limit != null && _greater(own, limit)) {
+      section.remove(key);
+      warn(
+        'subagents.$key',
+        'a project config can only lower the subagent limits; the limit of '
+            'the global config is kept',
       );
     }
   }

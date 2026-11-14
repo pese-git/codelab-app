@@ -87,9 +87,11 @@ design.md change `add-embedded-agent-mode`, D4.
 (§13.12). Схема объявления (change `add-subagents-and-tasks`, §17.3.7): блок отправляется, только
 если клиент объявил `clientCapabilities._meta.codelab` (объект, возможно пустой); значение каждого
 ключа — объект с целым `version`; нет ключа — нет расширения; неизвестные ключи игнорируются.
-Этапы 1 и 2 субагентов объявляют `subagents: {"version": 1, "maxDepth": <n>}` и
-`subagentToolCalls: {"version": 1}` (оба при `subagents.enabled`) и `tasks: {"version": 1}`
-(§17.16.5). Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
+Этапы 1 и 2 субагентов объявляют `subagents: {"version": 1, "maxDepth": <n>}` (при
+`subagents.enabled`, с итерации 2 change; `enabled` и `max_depth` — из применённого конфига в момент
+`initialize` через геттер `AgentRuntime.subagents`, D37 change), `subagentToolCalls: {"version": 1}` (при том же условии и
+только вместе с проекцией вызовов потомков — итерация 5, задача 5.2; design.md change, D36, Т12) и
+`tasks: {"version": 1}` (§17.16.5). Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
 (§17.3.8), `sessionTree: {"version": 1}` — методы `_codelab/session/*`
 (§17.6.10), `steering: {"maxBytes", "maxPending"}` — метод `_codelab/session/steer`, только при
 `steering.enabled` (§17.7.2.2), `jobs: {"version": 1}` — методы `_codelab/jobs/*` (§17.9.11), `sessionSearch: {"version": 1, "maxLimit": 50, "scopes": ["cwd", "all"]}` — метод `_codelab/session/search`, только при `sessions.search.enabled` и `sessionPersistence`; `"all"` — только при `sessions.search.allow_all` (§17.6.17). Это единственное исключение из правила «ровно эти поля»:
@@ -833,7 +835,7 @@ OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, 
 | `_meta.codelab.critical` (`critical`, `label`) | `toolCall` в `session/request_permission` критической команды (§7.8) | клиент выделяет опасный вызов; `allow_always` не предлагается |
 | `SetSessionModeRequest` в `codelab_acp_protocol` | кодек | метод уже есть в спецификации, нет в модели |
 | `clientCapabilities._meta.codelab` (change `add-subagents-and-tasks`) | `initialize`, запрос клиента | клиент CodeLab просит блок объявлений агента; без него ответ `initialize` не меняется |
-| capability `subagents: {"version", "maxDepth"}`, `subagentToolCalls: {"version"}`, `tasks: {"version"}` (change `add-subagents-and-tasks`) | `agentCapabilities._meta.codelab` в `initialize` | агент поддерживает `agent` с вложенностью до `maxDepth` и `_meta.codelab.task` у plan entries; в итерации 1 объявляется только `tasks`, а `subagents` и `subagentToolCalls` — вместе с инструментом `agent` (итерация 2, задача 2.8a) |
+| capability `subagents: {"version", "maxDepth"}`, `subagentToolCalls: {"version"}`, `tasks: {"version"}` (change `add-subagents-and-tasks`) | `agentCapabilities._meta.codelab` в `initialize` | агент поддерживает `agent` с вложенностью до `maxDepth` и `_meta.codelab.task` у plan entries; в итерации 1 объявляется только `tasks`, `subagents` — вместе с инструментом `agent` (итерация 2, задача 2.8a), `subagentToolCalls` — вместе с проекцией вызовов потомков (итерация 5, задача 5.2) |
 | `_meta.codelab.subagent` `{id, type, description, depth, path, parentToolCallId}` (тип субагента везде — `type`, решение пользователя 2026-11-10) (change `add-subagents-and-tasks`, §17.3.7) | `toolCall` в `session/request_permission` от потомка; первый `tool_call` вызова `agent` вживую и при реплее — всегда `{id, type}` (D28); финальный `tool_call_update` вызова `agent` — всегда `{id, summary: {toolCalls, tokens: {input, output}, durationMs}}`, при `failed` ещё `failure` | связь запроса с вызовом `agent` корневой сессии и с потомком любой глубины; итог ребёнка с потомками для строки «N tool calls · N.Nk tokens · время» (D24) |
 | `_meta.codelab.parentToolCallId` (change `add-subagents-and-tasks`, этап 2, §17.3.7) | `tool_call`, `tool_call_update` вызовов потомков — только клиенту с `clientCapabilities._meta.codelab.subagentToolCalls`, вживую и при реплее | шаги потомков деревом: клиент вкладывает вызов в строку вызова `agent` с этим id |
 | `_meta.codelab.task` `{id, owner, blockedBy}` (change `add-subagents-and-tasks`, §17.16.5) | entries `plan` вживую и при реплее | id, владелец и зависимости пункта списка задач; без расширения — обычный план |

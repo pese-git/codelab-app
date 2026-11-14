@@ -1,6 +1,7 @@
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
+import 'subagent_views.dart';
 import 'task_ops.dart';
 import 'transcript_item.dart';
 
@@ -492,6 +493,10 @@ ToolCallView _callView(ToolCallRecord record) => ToolCallView(
   kind: record.kind,
   status: switch (record.status) {
     _ when record.cancelledByClient => ToolCallStatusView.cancelled,
+    // Агент сообщил исход: `failed` + `outcome: cancelled` — отмена для
+    // любого вызова; прочие значения остаются `failed` (D41 п. 1).
+    ToolCallStatus.failed when record.outcome == 'cancelled' =>
+      ToolCallStatusView.cancelled,
     ToolCallStatus.pending => ToolCallStatusView.queued,
     ToolCallStatus.inProgress => ToolCallStatusView.running,
     ToolCallStatus.completed => ToolCallStatusView.succeeded,
@@ -505,6 +510,8 @@ ToolCallView _callView(ToolCallRecord record) => ToolCallView(
       if (item case ToolCallContentBlock(content: TextContent(:final text)))
         text,
   ],
+  subagentCall: parseSubagentCall(record.subagentMeta),
+  subagentSummary: parseSubagentSummary(record.subagentMeta),
 );
 
 String? _command(ToolCallRecord record) {

@@ -2,6 +2,8 @@ import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'subagent_views.dart';
+
 part 'transcript_item.freezed.dart';
 
 /// Элемент транскрипта сессии для отображения.
@@ -130,14 +132,23 @@ abstract class ToolCallView with _$ToolCallView {
     /// Тексты элементов `content` с текстовым блоком в порядке прихода:
     /// вывод вызова, причина отказа или ошибки.
     @Default(<String>[]) List<String> textOutput,
+
+    /// Признак вызова `agent` из `_meta.codelab.subagent` первого кадра
+    /// (D28); `null` — обычный вызов (сторонний агент).
+    SubagentCallView? subagentCall,
+
+    /// Итог субагента из финального обновления (D24); `null` без итога.
+    SubagentSummaryView? subagentSummary,
   }) = _ToolCallView;
 }
 
 /// Статус вызова для отображения.
 ///
-/// [cancelled] — вызов не закончился к `session/cancel` клиента: в ACP такого
-/// статуса нет, ядро хранит его как `failed` с флагом `cancelledByClient`
-/// (fix-prompt-cancel-tool-calls/design.md, D3).
+/// [cancelled] — вызов не закончился: в ACP такого статуса нет. Два источника:
+/// `session/cancel` клиента (ядро хранит `failed` с флагом
+/// `cancelledByClient`, fix-prompt-cancel-tool-calls/design.md, D3) и признак
+/// агента `_meta.codelab.outcome: "cancelled"` у `failed`-кадра, в том числе
+/// при реплее `session/load` (add-subagents-and-tasks, D41 п. 1).
 enum ToolCallStatusView { queued, running, succeeded, failed, cancelled }
 
 /// Одобрение вызова инструмента, встроенное в его элемент.

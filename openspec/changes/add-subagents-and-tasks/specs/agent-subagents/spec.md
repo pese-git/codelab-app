@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Инструмент agent и типы субагентов
-Ядро SHALL регистрировать инструмент `agent` на сессию при `subagents.enabled` (по умолчанию `true`; `false` — ни схемы, ни секции промпта). `agent` — tier `read`, kind `think`, `outputTrust` `untrusted`, `permissionPattern` — имя типа (agent-core-architecture §17.3.2).
+Ядро SHALL регистрировать инструмент `agent` на сессию при `subagents.enabled` (по умолчанию `true`; `false` — ни схемы, ни секции промпта) и только если эффективное окно контекста текущей модели сессии (`effectiveContextWindow` с `compaction.context_window_cap`) не меньше 32 768 токенов (design.md change `add-subagents-and-tasks`, D40). При меньшем окне `agent` в схемах нет, ошибки нет, сессия пишет лог `subagent.unavailable` (`session_id`, `reason: context_window`, `window`, `min_window`). Смена модели сессии и применённая перезагрузка настроек, меняющая эффективное окно (`compaction.context_window_cap`), пересчитывают правило со следующего шага: модель с малым окном убирает `agent` из схем, с достаточным — возвращает (лог `subagent.available`); идущие дети не прерываются. `agent` — tier `read`, kind `think`, `outputTrust` `untrusted`, `permissionPattern` — имя типа (agent-core-architecture §17.3.2).
 
 Схема базового этапа:
 - `description` — обязательное, 3–60 символов после обрезки пробелов;
@@ -13,7 +13,9 @@
 
 Типы SHALL браться из встроенных определений `general`, `explore`, `review`, `plan` (`source: builtin:<name>`) и из определений агентов со `scope` `subagent` или `both`. Пользовательское определение с тем же именем заменяет встроенное с логом `subagent.type_overridden`. Определение со `scope: session` в `enum` не входит. Снимок типов и `enum` SHALL фиксироваться при создании сессии.
 
-Ошибки проверки SHALL давать результат-ошибку без создания ребёнка. Тексты:
+Заголовок вызова (`ToolPresentation.title`) SHALL быть `Subagent <type>: <description>` с `description` после обрезки пробелов; если `description` нет, оно не строка или пусто после обрезки, — `Subagent <type>` без двоеточия (`type` — из аргументов, иначе `general`). Заголовок строится и для вызова, который затем отклонит проверка (design.md, D41, п. 3).
+
+Ошибки проверки SHALL давать результат-ошибку без создания ребёнка тем же механизмом, что отказ точки исполнения: это текст ядра, а не вывод ребёнка, поэтому в ограду `untrusted-content` он не попадает (огораживается только отчёт, требование «Отчёт ребёнка»). Тексты:
 - `Invalid agent call: description must be 3-60 characters.`;
 - `Invalid agent call: prompt must be 1-32768 characters.`;
 - `Unknown agent type "<x>". Available: <имена через ", ">.`;
@@ -23,9 +25,21 @@
 - **WHEN** у доверенного проекта есть определения `reviewer` (`scope: both`) и `notes` (`scope: session`)
 - **THEN** `enum` поля `type` — `explore`, `general`, `plan`, `review`, `reviewer` по алфавиту, без `notes` (`agent_tool_schema_test.dart`)
 
+#### Scenario: Смена модели на малое окно
+- **WHEN** в сессии с моделью окна 128 000 пользователь выбирает модель с окном 8 192, затем возвращает прежнюю
+- **THEN** первый запрос с малой моделью не содержит схемы `agent` (лог `subagent.unavailable`), первый запрос после возврата снова её содержит (лог `subagent.available`); вызовы `agent` в истории остаются (`subagent_window_test.dart`; D40)
+
+#### Scenario: Перезагрузка ограничения окна
+- **WHEN** в сессии с моделью окна 128 000 перезагрузка конфига ставит `compaction.context_window_cap: 16384`, затем убирает ограничение
+- **THEN** первый запрос после первой перезагрузки не содержит схемы `agent` (лог `subagent.unavailable` с `window: 16384`), первый запрос после второй — содержит (лог `subagent.available`); ход, шедший во время перезагрузки, свой текущий запрос не меняет (`subagent_window_test.dart`; D40)
+
 #### Scenario: Неверный заголовок
 - **WHEN** модель вызывает `agent` с `description` из двух символов
 - **THEN** результат — ошибка `Invalid agent call: description must be 3-60 characters.`, ни дочерней сессии, ни журнала не создано
+
+#### Scenario: Вызов без описания
+- **WHEN** модель вызывает `agent` с пустыми аргументами `{}`, затем с `{"type": "explore", "description": "   "}`
+- **THEN** `ToolCallStarted` первого вызова несёт заголовок `Subagent general`, второго — `Subagent explore`, оба без двоеточия; оба вызова получают результат-ошибку проверки, ребёнок не создаётся (`agent_tool_schema_test.dart`; D41, п. 3)
 
 ### Requirement: Сборка ребёнка
 `SubagentManager.spawn` SHALL строить ребёнка из текущего состояния родителя по §17.3.3:
@@ -35,7 +49,7 @@
 - **Промпт.** `composeSystemPrompt` для набора и режима ребёнка, затем `subagent/system`, затем профиль типа, затем строка назначенного пункта, если он есть.
 - **Задача.** Ребёнок получает одно user-сообщение с текстом `prompt`; истории родителя он не видит. Активные навыки родителя (capability `agent-skills`, «Активные навыки») ребёнку НЕ SHALL передаваться (design.md, D34; решение Q17.2 (а)).
 - **Защищённые пути.** Политика ребёнка SHALL использовать тот же набор защищаемых путей конфигурации агента (PERM-11), что и корневая сессия, — пути хоста и пути сессии, — а не вычислять его заново при создании дочерней сессии (SUB-1; design.md, D34).
-- **Навыки.** Ребёнку SHALL передаваться тот же неизменяемый снимок каталога навыков, что у родителя; повторной загрузки файлов навыков для ребёнка НЕ SHALL быть. Инструмент `skill` SHALL входить в набор ребёнка по общему правилу набора и только если ребёнку передан снимок каталога; без снимка инструмент с именем `skill` из набора убирается. При переданном снимке секция `skills/catalog` промпта ребёнка строится из того же снимка, а `readOnlyRoots` его `BoundedEnv` — каталоги навыков этого снимка вне рабочей папки и каталог выноса ребёнка; `execInReadOnlyRoots` — как у env родителя (design.md, D34; решения Q17.1 (а), Q17.4 (а)).
+- **Навыки.** Ребёнку SHALL передаваться тот же неизменяемый снимок каталога навыков, что у родителя; повторной загрузки файлов навыков для ребёнка НЕ SHALL быть. Инструмент `skill` SHALL входить в набор ребёнка по общему правилу набора и только если ребёнку передан снимок каталога; без снимка инструмент с именем `skill` из набора убирается. При переданном снимке секция `skills/catalog` промпта ребёнка строится из того же снимка, а `readOnlyRoots` его `BoundedEnv` — каталоги навыков этого снимка вне рабочей папки, те же, что у env родителя (каталог выноса ребёнка добавится к ним вместе с выносом вывода, §17.4, §17.3.6); `execInReadOnlyRoots` — как у env родителя (design.md, D34; решения Q17.1 (а), Q17.4 (а)).
 
 #### Scenario: Пересечение инструментов
 - **WHEN** родитель без `exec` вызывает `agent` с типом `review`
@@ -51,7 +65,7 @@
 
 #### Scenario: Каталог ребёнка — снимок родителя
 - **WHEN** у сессии навыки `a-skill` и `b-skill`, корень вызывает `agent` с типом `general`
-- **THEN** схема `skill` ребёнка имеет `enum` `["a-skill", "b-skill"]`, секция `skills/catalog` его промпта побайтово равна секции родителя, порт файлов навыков за время запуска ребёнка не вызывается (`subagent_skills_test.dart`, итерация 2s)
+- **THEN** схема `skill` ребёнка имеет `enum` `["a-skill", "b-skill"]`, секция `skills/catalog` его промпта побайтово равна секции родителя, порт файлов навыков за время запуска ребёнка не вызывается (`subagent_skills_test.dart`, задача 2s.1)
 
 #### Scenario: Тип без skill
 - **WHEN** в той же сессии корень вызывает `agent` с типом `explore`
@@ -59,7 +73,7 @@
 
 #### Scenario: Файлы навыка пользователя у ребёнка
 - **WHEN** ребёнок `general` загрузил навык `notes` из `$CODELAB_HOME/skills`, затем вызывает `read` и `write` по пути `<$CODELAB_HOME>/skills/notes/ref.md`
-- **THEN** `read` возвращает содержимое, `write` — `outsideWorkspace` без обращения к env (`subagent_skills_test.dart`, итерация 2s)
+- **THEN** `read` возвращает содержимое, `write` — `outsideWorkspace` без обращения к env (`subagent_skills_test.dart`, задача 2s.1)
 
 #### Scenario: Активные навыки родителя не наследуются
 - **WHEN** родитель загрузил навык `notes` инструментом `skill`, затем вызывает `agent`
@@ -67,7 +81,7 @@
 
 #### Scenario: Корень навыков выше cwd у ребёнка
 - **WHEN** доверенный проект с корнем git `/repo`, рабочая папка `/repo/app`, навык в `/repo/.agents/skills/x`; ребёнок `general` в режиме `bypass` вызывает `exec` с `cp /tmp/e /repo/.agents/skills/x/SKILL.md`
-- **THEN** вызов критический, как у корня, и без решения пользователя не исполняется (`subagent_skills_test.dart`, итерация 2s; SKL-9)
+- **THEN** вызов критический, как у корня, и без решения пользователя не исполняется (`subagent_skills_test.dart`, задача 2s.1; SKL-9)
 
 #### Scenario: Смена режима родителя посреди работы ребёнка
 - **WHEN** ребёнок `general` работает, а пользователь переключает корневую сессию в `plan`
@@ -100,7 +114,7 @@
 
 #### Scenario: Внук получает пути и снимок корня
 - **WHEN** при `max_depth: 3` ребёнок `general` запускает внука `general`
-- **THEN** набор защищаемых путей политики внука — набор корневой сессии; при переданном снимке каталога навыков схема `skill` внука и его `readOnlyRoots` навыков совпадают с корневыми (`subagent_nested_skills_test.dart`, итерация 4; часть про навыки — после итерации 2s)
+- **THEN** набор защищаемых путей политики внука — набор корневой сессии; при переданном снимке каталога навыков схема `skill` внука и его `readOnlyRoots` навыков совпадают с корневыми (`subagent_nested_skills_test.dart`, итерация 4)
 
 #### Scenario: Лимит запусков считает внуков
 - **WHEN** `max_per_turn: 3`, корень запускает двух детей, первый из них — двух внуков
@@ -131,7 +145,13 @@ Usage потомка SHALL входить в usage прямого родител
 - **THEN** у хэндла ровно одно терминальное состояние, вызов `agent` получает ровно один результат, лишних событий ребёнка после него в потоке родителя нет
 
 ### Requirement: Отчёт ребёнка
-Отчёт SHALL строиться по §17.3.5 без ремонта по схеме: текст последнего ответа ребёнка; статус по `TurnEnded.reason`; усечение до `report_max_bytes` с пометкой. `SubagentReport.toolCalls` и `usage` SHALL включать вызовы и usage всех потомков ребёнка (транзитивно), `duration` — время от получения слота до терминального состояния; у ребёнка, отменённого в очереди, — нули (design.md change `add-subagents-and-tasks`, D24).
+Отчёт SHALL строиться по §17.3.5 без ремонта по схеме: текст последнего ответа ребёнка; статус по `TurnEnded.reason`; усечение до `report_max_bytes` с пометкой.
+
+Ответ, оборванный лимитом ответа модели (`TurnEnded.reason: maxTokens`), SHALL различаться по тексту последнего ответа (решение пользователя 2026-11-15; design.md change `add-subagents-and-tasks`, D41 п. 6):
+- текст пуст после обрезки пробелов → `failed`, `failure: max_tokens`; модель родителя получает `reason="max_tokens"`, тело `Subagent stopped: it hit the output token limit before writing a report.` и `isError: true`;
+- текст не пуст → `completed`; строка `[report truncated: the subagent hit the output token limit]` SHALL дописываться к тексту **после** усечения до `report_max_bytes` (§17.3.5, шаг 5), чтобы усечение её не отрезало; обёртка получает `truncated="true"`. Если сработали оба обрыва, отчёт несёт две пометки — сначала пометку усечения, затем пометку лимита, — а атрибут `truncated` один. Итоговый отчёт МОЖЕТ превысить `report_max_bytes` на длину пометки лимита — это сознательно.
+
+Значение `max_tokens` SHALL записываться в `failure` итоговой записи `subagent` и уходить в `_meta.codelab.subagent.failure` (agent-acp-server «Проекция субагентов и списка задач»). `SubagentReport.toolCalls` и `usage` SHALL включать вызовы и usage всех потомков ребёнка (транзитивно), `duration` — время от получения слота до терминального состояния; у ребёнка, отменённого в очереди, — нули (design.md change `add-subagents-and-tasks`, D24).
 
 Модель родителя SHALL получать один блок `<subagent-report id agent status steps tool_calls …>` внутри ограды `untrusted-content source="agent"`. Вхождения `</subagent-report` в тексте отчёта экранируются (SUB-7). Атрибуты и тела исходов — по таблице §17.3.5.
 
@@ -142,6 +162,18 @@ Usage потомка SHALL входить в usage прямого родител
 #### Scenario: Итог с потомками
 - **WHEN** ребёнок сделал 2 вызова и запустил внука, который сделал 3 вызова
 - **THEN** `SubagentReport.toolCalls` ребёнка равен 6 (2 вызова, 1 вызов `agent` и 3 вызова внука), его `usage` — сумма usage ребёнка и внука
+
+#### Scenario: Пустой отчёт по лимиту ответа
+- **WHEN** последний ответ ребёнка `review` завершается `stopReason: length`, и весь ответ — рассуждение без текста
+- **THEN** результат `agent` — `isError: true`, обёртка со `status="failed"` и `reason="max_tokens"`, тело `Subagent stopped: it hit the output token limit before writing a report.`; итоговая запись `subagent` — `failed` с `failure: max_tokens` (`subagent_report_wrapper_test.dart`; D41 п. 6)
+
+#### Scenario: Оборванный отчёт по лимиту ответа
+- **WHEN** последний ответ ребёнка `explore` — текст `Found three callers: a.dart, b.dart` и `stopReason: length`
+- **THEN** результат `agent` — `isError: false`, обёртка со `status="completed"` и `truncated="true"`, тело — текст и строка `[report truncated: the subagent hit the output token limit]` (`subagent_report_wrapper_test.dart`)
+
+#### Scenario: Оборванный и длинный отчёт
+- **WHEN** последний ответ ребёнка длиннее `report_max_bytes` и завершается `stopReason: length`
+- **THEN** тело — начало текста, затем пометка `[report truncated: <N> of <M> bytes shown; …]`, затем строка `[report truncated: the subagent hit the output token limit]`, каждая по одному разу; атрибут `truncated="true"` в обёртке один (`subagent_report_wrapper_test.dart`)
 
 #### Scenario: Бюджет ребёнка
 - **WHEN** `max_steps: 2`, а ребёнку нужно три шага

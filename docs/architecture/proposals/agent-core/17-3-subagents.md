@@ -115,7 +115,8 @@ final class SubagentTool extends AgentTool {
   @override ToolKind get kind => ToolKind.think;
   @override ContentTrust outputTrust(Map<String, Object?> args) => ContentTrust.untrusted;
   @override String permissionPattern(Map<String, Object?> args) => args['type'] as String;
-  @override ToolPresentation present(Map<String, Object?> args);   // title: 'Subagent <agent>: <description>'
+  @override ToolPresentation present(Map<String, Object?> args);   // title: 'Subagent <agent>: <description>';
+                                                                   // без непустого description — 'Subagent <agent>' (D41)
   @override Future<ToolExecutionResult> execute(Map<String, Object?> args, ToolContext ctx);
 }
 ```
@@ -145,6 +146,7 @@ Launch a subagent: a separate agent with its own context that does one self-cont
 Use it to explore a large codebase, review changes or draft a plan without filling your own context.
 The subagent does not see this conversation: put everything it needs into `prompt`.
 Several agent calls in one response run in parallel, at most {{maxConcurrent}} at a time.
+Put task list calls before the first agent call of a response: an agent call placed after a task list call waits until every call before it has finished.
 You receive only the final report, not the subagent's intermediate steps.{{background}}
 Subagents cannot ask the user questions. {{nesting}}
 
@@ -152,11 +154,13 @@ Agent types:
 {{agentList}}
 ```
 
+Строка про вызовы списка задач описывает барьер §5.5.1: вызовы `task_*` — `sequential`, и `agent` после такого вызова ждёт все вызовы перед ним (change `add-subagents-and-tasks`, D39, D41 п. 4). Имён инструментов строка не называет: описание `agent` не зависит от набора `task_*`.
+
 `agentList` — строки `- <name>: <description>` в порядке `name`. `nesting` зависит от глубины
 вызывающего: `depth + 1 < max_depth` → `A subagent may start its own subagents, up to <max_depth - depth - 1> more level(s) below it.`;
 иначе → `Subagents you start cannot start other subagents.` `background` — пустая строка в
 базовом этапе; с этапом 3 (§17.3.8) — `\nSet run_in_background to keep working while the subagent runs: its report arrives later as a notice.`
-Текст описания для одной глубины детерминирован, поэтому схема и описание стабильны для prompt
+До итерации 4 change `add-subagents-and-tasks` ребёнку `agent` не даётся, поэтому `nesting` строится от эффективной глубины 1 (`Subagents you start cannot start other subagents.`) — D36, Т16. `agent` скрыт из схем шага (инструмент зарегистрирован в сессии), если эффективное окно контекста её модели меньше 32 768 токенов (D40 того же change; лог `subagent.unavailable`); правило пересчитывается со следующего шага при смене модели и при перезагрузке `compaction.context_window_cap`. Текст описания для одной глубины детерминирован, поэтому схема и описание стабильны для prompt
 cache (§11). Схема `agent` базового этапа — без `output_schema` и `run_in_background`; оба поля
 добавляются своими этапами (таблица этапов выше) без смены остальных полей. Поле `task`
 (необязательное, id пункта списка задач §17.16) есть только в схеме корневой сессии: ребёнок,
@@ -170,7 +174,7 @@ typedef SubagentId = String;                  // 'sub_' + 8 символов [0-
 /// waiting — ребёнок ждёт решения пользователя или своих детей (поле waitingFor снимка).
 enum SubagentState { queued, running, waiting, completed, failed, cancelled }
 enum SubagentWait { approval, subagents }
-enum SubagentFailure { error, budgetExceeded, invalidOutput, interrupted, refused }
+enum SubagentFailure { error, budgetExceeded, invalidOutput, interrupted, refused, maxTokens }   // maxTokens — D41
 
 final class SubagentSpec {
   final SessionId parentSessionId; final String parentToolCallId;
@@ -327,8 +331,10 @@ SubagentTool.execute(args, ctx):
    создаёт (§17.16.4). Список один на дерево и принадлежит корневой сессии и её UI; ребёнок, ведущий
    свой отдельный план, сбил бы клиента. Инструмент типа, которого нет у родителя, молча не добавляется (CFG-7 сохраняется:
    список только сужает). MCP-инструменты ребёнок использует через **те же** подключения
-   родителя; блокировки путей (§6.3.4) — общие для процесса, поэтому параллельные дети, пишущие
-   один файл, сериализуются. После MVP `memory`, `ask`, `checkpoint`, `discover_tools` в набор
+   родителя; блокировки путей (§6.3.4) — одна очередь путей (`PathLock` корня) на всё дерево корневой
+   сессии: корень и все потомки, поэтому корень и параллельные дети, пишущие один файл,
+   сериализуются. Разные корневые сессии процесса друг друга не блокируют (D36 change
+   `add-subagents-and-tasks`, Т2). После MVP `memory`, `ask`, `checkpoint`, `discover_tools` в набор
    ребёнка не входят (XT-12); видимые схемы родителя в режиме `essential` — текущий
    `ToolLoadPlan` (§17.11.9).
    **Навыки** (решение пользователя 2026-11-12, Q17, D34 change `add-subagents-and-tasks`): `skill`
@@ -337,7 +343,8 @@ SubagentTool.execute(args, ctx):
    (`ChildSessionSpec.skills`); без снимка инструмент `skill` убирается. Ребёнок получает **тот же**
    неизменяемый снимок, без второй загрузки (§17.2.1); `readOnlyRoots` его `BoundedEnv` — каталоги
    навыков этого снимка вне рабочей папки и его каталог выноса (§17.3.6), `execInReadOnlyRoots` —
-   как у env родителя. Активные навыки родителя ребёнку не передаются: он получает только задачу и
+   как у env родителя. Пока выноса вывода (§17.4) нет, ребёнок получает env родителя как есть
+   (D36 change `add-subagents-and-tasks`, Т9). Активные навыки родителя ребёнку не передаются: он получает только задачу и
    сам загружает нужный навык. Поле `skills` определения типа и исполнение навыка в субагенте —
    после 1.0, отдельным change.
 4. **Режим разрешений.** Эффективный режим ребёнка вычисляется **при каждом решении**, а не один
@@ -390,8 +397,9 @@ SubagentTool.execute(args, ctx):
    `session/cancel` корневой сессии каскадом отменяет всё дерево синхронно. Steering родителя детям не доставляется.
 11. **Очередь.** Хэндл в состоянии `queued` встаёт в очередь слотов дерева (§17.3.4).
 
-При получении слота: создать дочернюю сессию через `AgentRuntime.createChildSession` (§5.6,
-`ChildSessionSpec`; журнал по §17.3.6), эмитить `SubagentStarted`, вызвать `child.prompt([TextContent(prompt)], cancel:
+При получении слота: создать дочернюю сессию внутренней фабрикой рантайма `createChildSession`
+(§5.6, `ChildSessionSpec`; журнал по §17.3.6 через `SessionStore.createChild`; не метод публичного
+`AgentRuntime` — D36 change `add-subagents-and-tasks`, Т2, Т4), эмитить `SubagentStarted`, вызвать `child.prompt([TextContent(prompt)], cancel:
 childSource.token)`. По `TurnEnded` ребёнка — построить отчёт (§17.3.5), эмитить
 `SubagentFinished`, освободить слот, `childSource.dispose()`, закрыть дочернюю сессию (при
 `subagents.follow_ups` — по истечении `idle_keep`, если за это время не начат новый прогон, §17.3.8.1).
@@ -432,8 +440,13 @@ Your final message must be only a JSON value that matches this JSON Schema. Do n
 ## 17.3.4. Алгоритм: параллелизм и ожидание
 
 1. **Параллельность задаёт пакет.** `agent` не объявляет `executionMode`, поэтому несколько вызовов
-   `agent` в одном ответе модели исполняются параллельно (§5.5). Если в пакете есть
-   `sequential`-инструмент, весь пакет, включая `agent`, идёт последовательно (LOOP-4).
+   `agent` в одном ответе модели исполняются параллельно (§5.5). `sequential`-вызов в
+   пакете (например, `task_*`) — барьер (LOOP-4, D39 change `add-subagents-and-tasks`): ответ
+   `task_update` + три `agent` исполняет сначала `task_update`, затем три `agent` одновременно;
+   `agent` до и после барьера попадают в разные группы, и барьер ждёт всех детей группы перед ним:
+   `[agent, task_update, agent]` исполняет детей не одновременно. Пакеты ребёнка исполняются тем же
+   алгоритмом, а очередь путей у корня и всех потомков одна (§17.3.3, шаг 3). Алгоритм барьера по
+   шагам, случаи отмены и сбоев — [§5.5.1](05-agent-loop.md#551-алгоритм-барьера-d39-подробно).
 2. **Слоты дерева.** У `SubagentTree` `max_concurrent` слотов (по умолчанию 3) на всё дерево
    корневой сессии; корневая сессия слота не занимает. Слот держит ребёнок, который **сам
    работает**: ждёт модель, исполняет инструмент или ждёт решения пользователя. `spawn` сверх
@@ -497,7 +510,10 @@ buildReport(child, turnEnded, spec):
      refused   → status failed, failure refused
      completed с budgetExceeded → status failed, failure budgetExceeded; text — последний ответ
        (может быть пустым: тогда text := "")
-     completed или maxTokens → шаг 3
+     maxTokens и text.trim() пуст → status failed, failure maxTokens (D41 change
+       add-subagents-and-tasks: весь лимит ответа ушёл в рассуждение или вызовы)
+     maxTokens и text не пуст → cutByLimit := true (пометка дописывается после шага 4); шаг 3
+     completed → шаг 3
 3  spec.outputSchema == null → status completed
    иначе json := extractJson(text); errors := validate(json, schema) (подмножество §6.3.2)
      ok → status completed, json
@@ -507,6 +523,9 @@ buildReport(child, turnEnded, spec):
 4  усечение: text длиннее report_max_bytes (UTF-8) → оставить начало по границе строки,
    дописать "\n[report truncated: <N> of <M> bytes shown; the full report is in the subagent journal]",
    truncated := true
+5  cutByLimit → text += "\n[report truncated: the subagent hit the output token limit]",
+   truncated := true (пометка лимита идёт после усечения, чтобы шаг 4 её не отрезал; при обеих
+   пометках атрибут один; итог может превысить report_max_bytes на длину пометки — сознательно)
 ```
 
 `extractJson(text)`: (а) `text.trim()` целиком разбирается как JSON → он; (б) иначе последний
@@ -534,8 +553,9 @@ Reply with only a JSON value that matches the schema. Do not add any other text.
 
 | Исход | Атрибуты сверх базовых | Тело | `isError` |
 |---|---|---|---|
-| `completed` | `truncated="true"`, если усечено | отчёт | `false` |
+| `completed` | `truncated="true"`, если усечено по `report_max_bytes` (шаг 4) или оборвано лимитом ответа (шаг 5) | отчёт | `false` |
 | `failed`, `budgetExceeded` | `reason="budget_exceeded:<steps|tokens|cost|duration>"` | последний текст или `Subagent stopped: its budget was exhausted before it finished.` | `true` |
+| `failed`, `maxTokens` | `reason="max_tokens"` | `Subagent stopped: it hit the output token limit before writing a report.` | `true` |
 | `failed`, `invalidOutput` | `reason="invalid_output"` | `Subagent report does not match output_schema: <errors>` + `\n\nRaw report:\n` + текст | `true` |
 | `failed`, `error` / `refused` | `reason="error"` / `reason="refused"` | `Subagent failed: <сообщение>` | `true` |
 | `cancelled` | — | `Tool call was cancelled` (стандартный текст §6.3.1) | `true` |
@@ -605,7 +625,7 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 | `childSessionId` | string? | `null`, если ребёнок отменён в очереди |
 | `journal` | string? | путь журнала ребёнка относительно `sessions/` |
 | `status` | string | `running`, `completed`, `failed`, `cancelled` |
-| `failure` | string? | `budget_exceeded:<limit>`, `invalid_output`, `error`, `refused`, `interrupted` |
+| `failure` | string? | `budget_exceeded:<limit>`, `invalid_output`, `error`, `refused`, `interrupted`, `max_tokens` (D41 change `add-subagents-and-tasks`) |
 | `report` | string? | у итоговой записи: тело `<subagent-report>` после усечения (без обёртки) |
 | `usage` | object? | у итоговой записи: usage ребёнка вместе с потомками (формат §8.2.3) |
 | `toolCalls`, `durationMs` | int? | у итоговой записи: вызовы ребёнка вместе с потомками и длительность; вместе с `usage` дают `_meta.codelab.subagent.summary` при реплее (D24 change `add-subagents-and-tasks`) |
@@ -653,6 +673,13 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 запускается снова. Реплей (§13.5) показывает первый вызов `completed`, второй — `failed` с
 `_meta.codelab.outcome: "interrupted"`.
 
+**Известное ограничение — атрибут `truncated` при лечении.** Запись `subagent` не хранит признак
+усечения, поэтому отчёт, восстановленный из итоговой записи (`_reportOf` в
+`session/projections.dart`), получает обёртку без `truncated="true"`, даже если отчёт был усечён
+по `report_max_bytes` или оборван лимитом ответа (§17.3.5, шаги 4 и 5). Пометка в тексте отчёта
+сохраняется, теряется только атрибут; недочёт есть и для `report_max_bytes` с итерации 1.
+Исправление — follow-up задача change `add-subagents-and-tasks` (итерация 3, `[agent]`).
+
 ## 17.3.7. Проекция в ACP
 
 **Стандартная проекция.** Вызов `agent` — обычный вызов инструмента (§13.7):
@@ -692,7 +719,7 @@ OpenSpec (change `add-subagents-and-tasks`).
 **Шаги потомков деревом (этап 2; решение пользователя 2026-11-10, design.md change
 `add-subagents-and-tasks`, D21).** Клиент, понимающий вложенность, объявляет
 `clientCapabilities._meta.codelab.subagentToolCalls: {"version": 1}`; агент при `subagents.enabled`
-объявляет тот же ключ. Только такому клиенту адаптер проецирует `SubagentActivity`:
+объявляет тот же ключ — вместе с этой проекцией (итерация 5 change `add-subagents-and-tasks`, D36, Т12). Только такому клиенту адаптер проецирует `SubagentActivity`:
 
 | Событие потомка | Кадр | Поля |
 |---|---|---|
@@ -995,7 +1022,7 @@ agent_observe: Show the last messages of a subagent (running or finished) withou
      режим, правила, gate, модель, бюджет (свежий TurnBudget на прогон) — заново по §17.3.3, шаги 4–9
      слот семафора max_concurrent — как у agent (§17.3.4)
 6  при получении слота: дочерняя сессия открыта (держится idle_keep после отчёта) или
-   открывается заново из журнала ребёнка (AgentRuntime.openChildSession, §5.6; heal §8.8 уже
+   открывается заново из журнала ребёнка (внутренняя фабрика рантайма openChildSession, §5.6; heal §8.8 уже
    выполнен при open родителя); запись subagent{status: running, run, followUp: send | resume,
    toolCallId} в журнал родителя (durable); SubagentStarted с run
 7  сообщение прогона (user-сообщение ребёнка, durable):

@@ -67,8 +67,11 @@ final class PermissionPolicy {
       : decisions = decisions ?? PermissionDecisionStore();
   PermissionMode mode;
   /// Если задан, читается при каждом решении вместо `mode` (после MVP: эффективный режим
-  /// субагента `narrow(parentMode(), type.mode)`, SUB-2, §17.3.3).
-  final PermissionMode Function()? modeOf;
+  /// субагента `narrow(parentMode(), type.mode)`, SUB-2, §17.3.3). Значение — пара «режим
+  /// разрешений и запрещённые без вопроса уровни»: сужение `ask` + `plan` даёт `alwaysAsk` с
+  /// запретом write/exec, одного `PermissionMode` для этого мало (сверка с кодом, design.md
+  /// change add-subagents-and-tasks, D36, Т3).
+  final ModeResolution Function()? modeOf;   // typedef ModeResolution = ({PermissionMode mode, Set<ToolTier> deniedTiers})
   final PermissionGate? gate;
   final PolicyRules rules;
   final PermissionDecisionStore decisions;          // allowAlways и rejectAlways

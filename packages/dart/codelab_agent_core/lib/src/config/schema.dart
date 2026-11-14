@@ -142,7 +142,6 @@ const _strListU = ListNode(ScalarType.string, applied: false);
 const afterMvpSections = [
   'llm',
   'images',
-  'subagents',
   'jobs',
   'hooks',
   'plugins',
@@ -258,6 +257,22 @@ final SectionNode rootSchema = SectionNode({
     'catalog_max_chars': _int,
     'reattach': SectionNode({'per_skill_tokens': _int, 'total_tokens': _int}),
     'operative': _opaque,
+  }),
+  // Субагенты (change `add-subagents-and-tasks`, D17): базовый этап; ключи
+  // следующих этапов в схему не входят (CFG-5).
+  'subagents': SectionNode({
+    'enabled': _bool,
+    'max_depth': _int,
+    'max_concurrent': _int,
+    'max_per_turn': _int,
+    'max_steps': _int,
+    'max_tokens': _int,
+    'max_cost': ScalarNode(ScalarType.float),
+    'max_duration': _dur,
+    'report_max_bytes': _int,
+    'progress_interval': _dur,
+    'heartbeat_interval': _dur,
+    'cancel_grace': _dur,
   }),
   'loop': SectionNode({
     'empty_response_retries': _intU,

@@ -319,7 +319,10 @@ final class _Connection {
         sessionCapabilities: acp.SessionCapabilities(
           list: persistent ? const acp.SessionListCapabilities() : null,
         ),
-        meta: _codelabExtensions(request.clientCapabilities.meta),
+        meta: _codelabExtensions(
+          request.clientCapabilities.meta,
+          _server._runtime.subagents,
+        ),
       ),
       agentInfo: _server.config.agentInfo,
     );
@@ -332,17 +335,24 @@ final class _Connection {
   /// Почему по объявлению клиента: сторонний клиент (Zed) получает ответ
   /// «ровно эти поля», поэтому блок уходит, только если клиент прислал объект
   /// `clientCapabilities._meta.codelab` (пусть пустой). Неизвестные ключи и
-  /// значения клиента игнорируются. В итерации 1 объявляется только `tasks`;
-  /// `subagents` и `subagentToolCalls` добавит итерация 2 вместе с
-  /// инструментом `agent` (задача 2.8a).
+  /// значения клиента игнорируются. `tasks` — всегда; `subagents` с
+  /// `maxDepth` — только если ядро включило субагентов: [subagents] читается
+  /// живым геттером `AgentRuntime.subagents` в момент `initialize` (D37), так
+  /// что перезагрузка конфига меняет блок для следующих соединений.
+  /// `subagentToolCalls` не объявляется до проекции вызовов потомков
+  /// (задача 5.2; D36, Т12): агент не заявляет расширение, которого нет.
   static Map<String, Object?>? _codelabExtensions(
     Map<String, Object?>? clientMeta,
+    SubagentsInfo? subagents,
   ) {
     if (clientMeta?['codelab'] is! Map) {
       return null;
     }
     return {
       'codelab': {
+        'subagents': ?(subagents == null
+            ? null
+            : {'version': 1, 'maxDepth': subagents.maxDepth}),
         'tasks': {'version': 1},
       },
     };

@@ -125,6 +125,13 @@ final class AgentParseResult {
     for (final agent in agents)
       if (agent.forSession) agent,
   ];
+
+  /// Определения, доступные как тип субагента (`scope` `subagent` и `both`;
+  /// change `add-subagents-and-tasks`, D36 Т1).
+  List<AgentDefinition> get subagentAgents => [
+    for (final agent in agents)
+      if (agent.scope != AgentScope.session) agent,
+  ];
 }
 
 final _nameRule = RegExp(r'^[a-z][a-z0-9-]{0,47}$');

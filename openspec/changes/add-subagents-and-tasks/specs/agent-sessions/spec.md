@@ -22,8 +22,8 @@
 Решения «разрешить всегда», частичные снимки ответа, дельты, `ToolCallProgress`, `SubagentProgress` и `SubagentActivity` НЕ SHALL попадать в журнал.
 
 #### Scenario: Golden-разбор
-- **WHEN** `parseSessionLines` разбирает фикстуру `test/fixtures/sessions/all_records.jsonl`, где есть каждая запись, включая `task`, `subagent`, `plan` и заголовок с `parent`
-- **THEN** каждая запись разобрана в свой тип, `toJson` каждой записи побайтово равен исходной строке
+- **WHEN** `parseSessionLines` разбирает фикстуры `test/fixtures/sessions/all_records.jsonl` (журнал корневой сессии: каждая запись, включая `task`, `subagent` и `plan`) и `test/fixtures/sessions/child_journal_header.jsonl` (журнал ребёнка: заголовок с `parent`)
+- **THEN** заголовок и каждая запись обеих фикстур разобраны в свой тип, `toJson` каждой побайтово равен исходной строке
 
 #### Scenario: Неизвестный тип записи
 - **WHEN** в журнале встречается строка с `"type":"branch"`

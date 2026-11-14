@@ -176,5 +176,6 @@ bool _isService(SessionRecord r) =>
     r is ConfigChangeRecord ||
     r is PlanRecord ||
     r is TaskRecord ||
+    r is SubagentRecord ||
     r is SessionInfoRecord ||
     r is LabelRecord;

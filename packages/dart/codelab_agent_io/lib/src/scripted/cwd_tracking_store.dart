@@ -28,6 +28,13 @@ final class CwdTrackingStore implements SessionStore {
   }
 
   @override
+  Future<String> createChild(SessionHeader header) {
+    // Ключ кэша запроса ребёнка — его id: скрипт ищет рабочую папку по нему.
+    _cwd[header.id.value] = header.cwd;
+    return _inner.createChild(header);
+  }
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {

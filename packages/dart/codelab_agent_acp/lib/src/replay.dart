@@ -20,6 +20,8 @@ import 'event_projection.dart';
 /// значения идут хвостом (§13.5, шаг 6).
 List<acp.SessionUpdate> replayUpdates(Iterable<AgentEvent> events) {
   final started = <String, ToolCallStarted>{};
+  // Итог ребёнка приходит до `ToolCallFinished(agent)` (SUB-10, D24).
+  final subagentDone = <String, SubagentFinished>{};
   final updates = <acp.SessionUpdate>[];
   for (final event in events) {
     switch (event) {
@@ -49,8 +51,28 @@ List<acp.SessionUpdate> replayUpdates(Iterable<AgentEvent> events) {
         }
       case ToolCallStarted(:final toolCallId):
         started[toolCallId] = event;
+      case SubagentFinished(:final parentToolCallId):
+        subagentDone[parentToolCallId] = event;
       case ToolCallFinished(:final toolCallId):
         final call = started.remove(toolCallId);
+        final done = subagentDone.remove(toolCallId);
+        // Отклонённый проверкой вызов `agent`: записи `subagent` нет, а живой
+        // кадр нёс резерв id. Id при реплее не выдумывается (он ни на что не
+        // ссылается), `type` — из аргументов вызова (D28, Т15).
+        final callMeta =
+            call != null && call.tool == 'agent' && call.subagent == null
+            ? {
+                'codelab': {
+                  'subagent': {
+                    'type': switch (call.input['type']) {
+                      final String type => type,
+                      _ => 'general',
+                    },
+                  },
+                },
+              }
+            : subagentCallMeta(call?.subagent);
+        final finishMeta = finishedMeta(event, subagentResult: done);
         updates.add(
           acp.SessionUpdate.toolCall(
             toolCall: acp.ToolCall(
@@ -62,8 +84,8 @@ List<acp.SessionUpdate> replayUpdates(Iterable<AgentEvent> events) {
               status: finishedStatus(event),
               rawInput: call?.input,
               locations: acpLocations(call?.locations ?? const []),
-              content: finishedContent(event),
-              meta: finishedMeta(event),
+              content: finishedContent(event, subagentResult: done),
+              meta: _mergeMeta(callMeta, finishMeta),
             ),
           ),
         );
@@ -72,4 +94,28 @@ List<acp.SessionUpdate> replayUpdates(Iterable<AgentEvent> events) {
     }
   }
   return updates;
+}
+
+/// Сливает `_meta.codelab` первого кадра (`{id, type}`, D28) и итога
+/// (`outcome`, `summary`, `failure`, D24): реплей отдаёт вызов одним
+/// `tool_call`, поэтому `subagent` получает поля обоих.
+Map<String, Object?>? _mergeMeta(
+  Map<String, Object?>? call,
+  Map<String, Object?>? finished,
+) {
+  if (call == null || finished == null) {
+    return call ?? finished;
+  }
+  final callCodelab = call['codelab']! as Map<String, Object?>;
+  final finishedCodelab = finished['codelab']! as Map<String, Object?>;
+  final callSub = callCodelab['subagent'] as Map<String, Object?>?;
+  final finishedSub = finishedCodelab['subagent'] as Map<String, Object?>?;
+  return {
+    'codelab': {
+      ...callCodelab,
+      ...finishedCodelab,
+      if (callSub != null || finishedSub != null)
+        'subagent': {...?callSub, ...?finishedSub},
+    },
+  };
 }

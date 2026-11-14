@@ -61,7 +61,7 @@
 - **THEN** у каждого вызова `agent` ровно столько детей, сколько в журнале
 
 ### Requirement: Итог и хвост субагента
-Вызов SHALL считаться вызовом `agent` с первого кадра, если его `tool_call` несёт `_meta.codelab.subagent` (`ToolCallView.subagentCall`: `id`, `type`; D28). Отсутствие поля, неверная форма или неизвестные ключи SHALL давать `null` без отказа; такой вызов (сторонний агент) — обычный вызов `think`.
+Вызов SHALL считаться вызовом `agent` с первого кадра, если его `tool_call` несёт `_meta.codelab.subagent` (`ToolCallView.subagentCall`: `type` и необязательный `id`; D28). Без `id` приходит реплей отклонённого вызова: у него нет записи `subagent` (design.md, D36, Т15). Отсутствие поля, `type` не строкой, неверная форма или неизвестные ключи SHALL давать `null` без отказа; такой вызов (сторонний агент) — обычный вызов `think`.
 
 `ToolCallView` вызова `agent` SHALL получать `subagentSummary` (`toolCalls`, `inputTokens`, `outputTokens`, `duration`) из `_meta.codelab.subagent.summary` финального обновления (design.md change `add-subagents-and-tasks`, D24). Отсутствие, неверная форма или неизвестные ключи SHALL давать `null` или игнорироваться без отказа обработки. Kit SHALL давать готовую строку итога `N tool calls · N.Nk tokens · <время>` и её сокращённый вид для свёрнутой строки `N tool calls · N.Nk · <время>` (D27) (токены — `input + output`, `k` с одним знаком; время — `48s`, `2m 05s`, `1h 02m`).
 
@@ -155,8 +155,8 @@ Kit НЕ SHALL разбирать `title`, строку прогресса и т
 - **THEN** строка — `completed`, 4 вызова, 18.2k токенов, 48s, последнего действия нет; счётчик `completed` равен 1
 
 #### Scenario: Отмена и отказ
-- **WHEN** один вызов `agent` завершается `failed` с `_meta.codelab.subagent.failure: "budget_exceeded:max_steps"`, другой — `failed` с `_meta.codelab.outcome: "cancelled"`
-- **THEN** первая строка — `failed` с последним действием `budget_exceeded:max_steps`, вторая — `cancelled`
+- **WHEN** один вызов `agent` завершается `failed` с `_meta.codelab.subagent.failure: "budget_exceeded:steps"`, другой — `failed` с `_meta.codelab.outcome: "cancelled"`
+- **THEN** первая строка — `failed` с последним действием `budget_exceeded:steps`, вторая — `cancelled`
 
 #### Scenario: Ожидание одобрения потомка
 - **WHEN** у работающего `sub_b2` (внук) ожидает ответа `session/request_permission` с `_meta.codelab.subagent.id: "sub_b2"`
@@ -185,3 +185,26 @@ Kit НЕ SHALL разбирать `title`, строку прогресса и т
 #### Scenario: Сторонний агент без признака
 - **WHEN** агент присылает вызов `think` с заголовком «Subagent explore: …» без `_meta.codelab.subagent`
 - **THEN** `SessionView.subagents` пуст
+
+### Requirement: Отмена по признаку агента
+Запись вызова SHALL хранить признак агента `_meta.codelab.outcome` из последнего кадра вызова (`tool_call` или `tool_call_update`), где признак был: кадр с признаком заменяет прежнее значение, кадр без признака (в том числе повтор `tool_call` в реплее и поздний неитоговый `pending`/`in_progress`) его не снимает, снимает только кадр с итоговым статусом `completed` (design.md change `add-subagents-and-tasks`, D41, п. 1). `ToolCallView.status` SHALL быть `cancelled`, если статус вызова — `failed`, а сохранённый признак — `"cancelled"`, у вызова любого инструмента, вживую и в реплее `session/load`. Так вызов, отменённый в прошлом ходе, после загрузки сессии показывается так же, как вживую (agent-workbench-ui «Отменяемый ход в workbench»). Другие значения `outcome` (`rejected`, `interrupted`, неизвестные), его отсутствие и неверная форма (не строка) SHALL оставлять `failed`. Статус вызова признак не меняет: он сливается из кадров по общим правилам. Пометка вызова, отменённого самим клиентом (`cancelTurn`), SHALL работать как прежде: признак агента её дополняет, а не заменяет.
+
+#### Scenario: Отменённый субагент после загрузки
+- **WHEN** `session/load` проигрывает `tool_call` вызова `agent` со `status: failed` и `_meta.codelab: {"outcome": "cancelled", "subagent": {"id": "sub_a1", "type": "explore", "summary": {"toolCalls": 2, "tokens": {"input": 900, "output": 100}, "durationMs": 4000}}}`
+- **THEN** `ToolCallView.status` — `cancelled`, `subagentSummary` разобран; строка панели Agents этого вызова — `cancelled`
+
+#### Scenario: Отмена не клиентом вживую
+- **WHEN** во время хода, который клиент не отменял, приходит `tool_call_update` вызова `exec` со `status: failed` и `_meta.codelab.outcome: "cancelled"`
+- **THEN** `ToolCallView.status` — `cancelled`
+
+#### Scenario: Кадр без признака не снимает отмену
+- **WHEN** приходит `tool_call_update` вызова `agent` со `status: failed` и `_meta.codelab.outcome: "cancelled"`, затем `tool_call_update` того же вызова со `status: failed` без `_meta.codelab.outcome`
+- **THEN** `ToolCallView.status` — `cancelled`
+
+#### Scenario: Итоговый completed снимает признак
+- **WHEN** после кадра со `status: failed` и `_meta.codelab.outcome: "cancelled"` приходит кадр того же вызова со `status: completed`
+- **THEN** `ToolCallView.status` — `succeeded`, признак `outcome` записи снят
+
+#### Scenario: Другие исходы остаются Failed
+- **WHEN** реплей отдаёт два вызова `failed`: один с `_meta.codelab.outcome: "interrupted"`, другой с `"rejected"`, и третий — с `outcome: 5`
+- **THEN** у всех трёх `ToolCallView.status` — `failed`, ошибки обработки нет

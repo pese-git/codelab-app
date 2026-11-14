@@ -20,6 +20,9 @@ import '../prompts/prompts.g.dart';
 import '../skills/reattach.dart';
 import '../skills/skill_catalog.dart';
 import '../skills/skills_config.dart';
+import '../subagents/subagent_model.dart';
+import '../subagents/subagent_report.dart';
+import '../tools/fence.dart';
 import '../tools/agent_tool.dart';
 import '../tools/tasks/task_list.dart';
 import '../util/clock.dart';
@@ -213,33 +216,68 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
   final session = snapshot.header.id;
   final calls = <String, ToolCall>{};
   final events = <AgentEvent>[];
-  for (final record in pathToLeaf(snapshot, logger: logger)) {
+  final path = pathToLeaf(snapshot, logger: logger);
+  // Последняя запись `subagent` по вызову `agent`: из неё реплей берёт id и
+  // тип (первый кадр, D28) и итог (D24).
+  final children = <String, SubagentRecord>{
+    for (final record in path)
+      if (record is SubagentRecord) record.toolCallId: record,
+  };
+  for (final record in path) {
     switch (record) {
       case MessageRecord(message: final ToolResultMessage result):
         final call = calls[result.toolCallId];
         final meta = record.toolMeta;
-        events
-          ..add(
-            ToolCallStarted(
+        final child = result.toolName == 'agent'
+            ? children[result.toolCallId]
+            : null;
+        events.add(
+          ToolCallStarted(
+            session,
+            toolCallId: result.toolCallId,
+            tool: result.toolName,
+            kind: meta?.kind ?? ToolKind.other,
+            title: meta?.title ?? result.toolName,
+            input: call?.arguments ?? const {},
+            locations: meta?.locations ?? const [],
+            subagent: child == null
+                ? null
+                : SubagentCallRef(id: child.subagentId, type: child.agent),
+          ),
+        );
+        if (child != null && child.status != 'running') {
+          final failure = parseFailure(child.failure);
+          events.add(
+            SubagentFinished(
               session,
-              toolCallId: result.toolCallId,
-              tool: result.toolName,
-              kind: meta?.kind ?? ToolKind.other,
-              title: meta?.title ?? result.toolName,
-              input: call?.arguments ?? const {},
-              locations: meta?.locations ?? const [],
-            ),
-          )
-          ..add(
-            ToolCallFinished(
-              session,
-              toolCallId: result.toolCallId,
-              outcome: _outcome(record.outcome, result),
-              content: result.content,
-              diffs: [?record.diff],
-              interrupted: record.outcome == 'interrupted',
+              subagentId: child.subagentId,
+              parentToolCallId: child.toolCallId,
+              agent: child.agent,
+              description: child.description,
+              status: switch (child.status) {
+                'completed' => SubagentState.completed,
+                'cancelled' => SubagentState.cancelled,
+                _ => SubagentState.failed,
+              },
+              failure: failure.failure,
+              budgetExceeded: failure.limit,
+              usage: child.usage ?? Usage.zero,
+              toolCalls: child.toolCalls ?? 0,
+              duration: Duration(milliseconds: child.durationMs ?? 0),
+              report: child.report ?? '',
             ),
           );
+        }
+        events.add(
+          ToolCallFinished(
+            session,
+            toolCallId: result.toolCallId,
+            outcome: _outcome(record.outcome, result),
+            content: result.content,
+            diffs: [?record.diff],
+            interrupted: record.outcome == 'interrupted',
+          ),
+        );
       case MessageRecord(:final message):
         if (message is UserMessage && !isUserWords(record, logger: logger)) {
           continue;
@@ -291,7 +329,6 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
   // была хоть одна запись task/plan — иначе клиент, продолжающий показывать
   // прежний список, не узнал бы, что он опустел. Это не операция модели:
   // `op: restore`, журнал его не пишет.
-  final path = pathToLeaf(snapshot, logger: logger);
   final state = buildTaskList(snapshot, logger: logger);
   if (state.items.isNotEmpty ||
       path.any((r) => r is TaskRecord || r is PlanRecord)) {
@@ -433,19 +470,42 @@ List<MessageRecord> healInterruptedTurn(
   for (final call in findInterruptedCalls(snapshot)) {
     final id = newRecordId(ids, taken.contains);
     taken.add(id);
+    // Вызов `agent` с итоговой записью `subagent`: сбой случился между
+    // записью итога и записью результата — отчёт не теряется, вызов не
+    // повторяется (S-13; `17-3-subagents.md` §17.3.6, «Прерывание»).
+    final done = call.name == 'agent'
+        ? _lastSubagentRecord(snapshot, call.id)
+        : null;
+    final finished = done != null && done.status != 'running';
+    final isFailure = finished && done.status != 'completed';
     healed.add(
       MessageRecord(
         id: id,
         parentId: parent,
         timestamp: now,
-        outcome: 'interrupted',
+        outcome: finished
+            ? switch (done.status) {
+                'completed' => 'completed',
+                'cancelled' => 'cancelled',
+                _ => 'failed',
+              }
+            : 'interrupted',
         toolMeta:
             meta[call.id] ?? ToolMeta(title: call.name, kind: ToolKind.other),
         message: ToolResultMessage(
           toolCallId: call.id,
           toolName: call.name,
-          content: const [TextContent(interruptedResultText)],
-          isError: true,
+          content: [
+            TextContent(
+              finished
+                  ? fenceUntrusted(
+                      wrapSubagentReport(_reportOf(done), withSteps: false),
+                      source: 'agent',
+                    )
+                  : interruptedResultText,
+            ),
+          ],
+          isError: finished ? isFailure : true,
           timestamp: now,
         ),
       ),
@@ -453,4 +513,74 @@ List<MessageRecord> healInterruptedTurn(
     parent = id;
   }
   return healed;
+}
+
+/// Последняя запись `subagent` активной ветки для вызова [toolCallId].
+SubagentRecord? _lastSubagentRecord(
+  SessionSnapshot snapshot,
+  String toolCallId,
+) {
+  SubagentRecord? last;
+  for (final record in pathToLeaf(snapshot)) {
+    if (record is SubagentRecord && record.toolCallId == toolCallId) {
+      last = record;
+    }
+  }
+  return last;
+}
+
+/// Отчёт, восстановленный из итоговой записи `subagent`.
+SubagentReport _reportOf(SubagentRecord record) {
+  final failure = parseFailure(record.failure);
+  return SubagentReport(
+    id: record.subagentId,
+    agent: record.agent,
+    status: switch (record.status) {
+      'completed' => SubagentState.completed,
+      'cancelled' => SubagentState.cancelled,
+      _ => SubagentState.failed,
+    },
+    failure: failure.failure,
+    budgetExceeded: failure.limit,
+    text: record.report ?? '',
+    toolCalls: record.toolCalls ?? 0,
+    usage: record.usage ?? Usage.zero,
+    duration: Duration(milliseconds: record.durationMs ?? 0),
+  );
+}
+
+/// Записи `subagent{status: failed, failure: interrupted}` для вызовов
+/// `agent` без результата, чья последняя запись — `running` (S-13).
+///
+/// Ребёнок после сбоя не перезапускается: журнал честно фиксирует, что он
+/// прерван. Записи — шаблоны без `id`, родителя и времени: вызывающий вызывает
+/// функцию до [healInterruptedTurn] и дописывает их после синтетических
+/// результатов через `SessionWriter.append`; рекурсивное лечение журнала самого ребёнка —
+/// задача 4.4.
+List<SubagentRecord> interruptedSubagentRecords(SessionSnapshot snapshot) {
+  final out = <SubagentRecord>[];
+  for (final call in findInterruptedCalls(snapshot)) {
+    final last = call.name == 'agent'
+        ? _lastSubagentRecord(snapshot, call.id)
+        : null;
+    if (last == null || last.status != 'running') {
+      continue;
+    }
+    out.add(
+      SubagentRecord(
+        id: '',
+        parentId: null,
+        timestamp: DateTime.fromMillisecondsSinceEpoch(0),
+        subagentId: last.subagentId,
+        toolCallId: last.toolCallId,
+        agent: last.agent,
+        description: last.description,
+        childSessionId: last.childSessionId,
+        journal: last.journal,
+        status: 'failed',
+        failure: 'interrupted',
+      ),
+    );
+  }
+  return out;
 }

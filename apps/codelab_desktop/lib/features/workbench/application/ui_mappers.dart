@@ -240,13 +240,22 @@ CodeLabToolCallRow _toolCallRowOf(
 }) {
   final view = ToolRowFormatter.format(call, cwd: cwd);
   final details = call.details;
+  // Вызов `agent` опознан kit с первого кадра (D28): компактная строка D27.
+  // Заголовок «Subagent <type>: <description>» и итог готовит kit
+  // (`ToolRowFormatter`), маппер только переносит их; отчёт — в раскрытие.
+  final isSubagent = details?.subagentCall != null;
   return CodeLabToolCallRow(
     id: id,
     status: _toolCallStatusOf(details?.status ?? ToolCallStatusView.queued),
-    label: view.label,
-    detail: view.detail,
+    label: isSubagent ? '${view.label} ${view.detail}'.trim() : view.label,
+    detail: isSubagent ? '' : view.detail,
     secondary: view.secondary,
-    output: details?.textOutput ?? const [],
+    output: isSubagent
+        ? [if (view.report case final report?) ...report.split('\n')]
+        : details?.textOutput ?? const [],
+    subagent: isSubagent
+        ? CodeLabSubagentCall(stats: view.summaryShort, progress: view.progress)
+        : null,
     approval: _transcriptApprovalOf(
       call.approval,
       callStatus: details?.status,

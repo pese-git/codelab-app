@@ -1243,14 +1243,17 @@ PromptTurn _applyUpdateToTurn(
     ToolCallSessionUpdate(:final toolCall) => _applyToolCallUpdate(
       turn,
       update,
-      ToolCallRecord.fromToolCall(
-        toolCall,
-        // Повторный `tool_call` с тем же id обновляет данные записи, но не
-        // снижает уже показанный риск (review 6b, L-2; D27).
-        riskLevel: ApprovalPolicy.max(
-          turn.toolCalls[toolCall.toolCallId]?.riskLevel ??
-              ApprovalRiskLevel.readOnly,
-          ApprovalPolicy.classifyToolCall(toolCall),
+      _withKnownCodelabMeta(
+        turn.toolCalls[toolCall.toolCallId],
+        ToolCallRecord.fromToolCall(
+          toolCall,
+          // Повторный `tool_call` с тем же id обновляет данные записи, но не
+          // снижает уже показанный риск (review 6b, L-2; D27).
+          riskLevel: ApprovalPolicy.max(
+            turn.toolCalls[toolCall.toolCallId]?.riskLevel ??
+                ApprovalRiskLevel.readOnly,
+            ApprovalPolicy.classifyToolCall(toolCall),
+          ),
         ),
       ),
     ),
@@ -1301,6 +1304,26 @@ SessionUpdate? _latestOfKind(
   }
   return null;
 }
+
+/// Повторный `tool_call` (реплей) не стирает `_meta.codelab`, уже накопленное
+/// записью: итог субагента (`subagentMeta`) и признак исхода (`outcome`,
+/// D41 п. 1) переживают повтор кадра без них; итоговый `completed` снимает
+/// `outcome`.
+ToolCallRecord _withKnownCodelabMeta(
+  ToolCallRecord? known,
+  ToolCallRecord fresh,
+) => known == null
+    ? fresh
+    : fresh.copyWith(
+        subagentMeta: known.subagentMeta == null
+            ? fresh.subagentMeta
+            : mergeSubagentMeta(known.subagentMeta, fresh.subagentMeta),
+        // Признак исхода переживает повтор кадра без него; итоговый
+        // `completed` его снимает (D41 п. 1).
+        outcome: fresh.status == ToolCallStatus.completed
+            ? null
+            : fresh.outcome ?? known.outcome,
+      );
 
 PromptTurn _applyToolCallUpdate(
   PromptTurn turn,
@@ -1353,6 +1376,14 @@ ToolCallRecord _mergeToolCallUpdate(
     rawOutput: update.rawOutput ?? current?.rawOutput,
     startedAt: current?.startedAt,
     completedAt: current?.completedAt,
+    subagentMeta: mergeSubagentMeta(
+      current?.subagentMeta,
+      subagentMetaOf(update.meta),
+    ),
+    // Поздний кадр без признака не снимает исход; снимает только completed.
+    outcome: status == ToolCallStatus.completed
+        ? null
+        : outcomeOf(update.meta) ?? current?.outcome,
   );
 }
 

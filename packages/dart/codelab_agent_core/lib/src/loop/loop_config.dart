@@ -267,6 +267,9 @@ final class AgentLoopConfig {
     this.estimateTokens,
     this.emergencyCompact,
     this.contextWindowCap,
+    this.subagentUsage,
+    this.onOwnUsage,
+    this.ancestorBudget,
   }) : beforeToolCall = List.unmodifiable(beforeToolCall),
        afterToolCall = List.unmodifiable(afterToolCall);
 
@@ -322,6 +325,21 @@ final class AgentLoopConfig {
   /// `effectiveContextWindow(model, cap)` (CMP-6).
   final int? contextWindowCap;
 
+  /// Usage потомков хода на сейчас, транзитивно (SUB-11; change
+  /// `add-subagents-and-tasks`, D4, D36 Т8). Входит в `TurnEnded.usage`,
+  /// `TurnEnded.subagentUsage` и в проверку `maxTokens`/`maxCost` на границе
+  /// шага: родитель не обходит бюджет, раздав работу детям. `null` — потомков
+  /// нет.
+  final Usage Function()? subagentUsage;
+
+  /// Собственный usage хода (без потомков) после каждого шага и нулевой в
+  /// начале хода: по нему дерево считает остаток бюджета корня для потомков.
+  final void Function(Usage own)? onOwnUsage;
+
+  /// Проверка бюджета предков на границе шага потомка: лимит, исчерпанный у
+  /// любого из них, или `null` (D4). У корня — `null`.
+  final BudgetLimit? Function()? ancestorBudget;
+
   /// Копия с другой моделью, очередями, бюджетом хода или ограничением окна.
   ///
   /// [budget] и [contextWindowCap] нужны живой перезагрузке конфигурации
@@ -334,6 +352,9 @@ final class AgentLoopConfig {
     MessageQueue<Message>? followUp,
     TurnBudget? budget,
     ({int? value})? contextWindowCap,
+    Usage Function()? subagentUsage,
+    void Function(Usage own)? onOwnUsage,
+    BudgetLimit? Function()? ancestorBudget,
   }) => AgentLoopConfig(
     sessionId: sessionId,
     model: model ?? this.model,
@@ -360,5 +381,8 @@ final class AgentLoopConfig {
     contextWindowCap: contextWindowCap == null
         ? this.contextWindowCap
         : contextWindowCap.value,
+    subagentUsage: subagentUsage ?? this.subagentUsage,
+    onOwnUsage: onOwnUsage ?? this.onOwnUsage,
+    ancestorBudget: ancestorBudget ?? this.ancestorBudget,
   );
 }

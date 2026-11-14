@@ -44,6 +44,13 @@ String? _taskId(PlanEntry entry) {
   return task is Map ? task['id'] as String? : null;
 }
 
+/// `_meta.codelab.subagent` кадра вызова (D24, D28).
+Map<Object?, Object?>? _subagentMeta(Map<String, Object?>? meta) {
+  final codelab = meta?['codelab'];
+  final subagent = codelab is Map ? codelab['subagent'] : null;
+  return subagent is Map ? subagent : null;
+}
+
 PromptTurn _lastTurn(ClientFixtureUser user) =>
     user.app.sessions.single.turns.last;
 
@@ -142,6 +149,32 @@ final _stateChecks = <String, _StateCheck>{
     // блока по итерациям ведёт фикстура протокольного исполнителя; `tasks`
     // есть в любой редакции.
     expect(ready.codelabExtensions.tasks, isTrue);
+  },
+  // Вызов `agent` (change `add-subagents-and-tasks`, задача 2.1; spec
+  // acp-golden-fixtures, acp-client-kit «Итог и хвост субагента»): клиент
+  // видит ровно один вызов `think`, опознанный с первого кадра по
+  // `_meta.codelab.subagent {id, type}` (D28); финальное обновление несёт
+  // `summary` (D24). Вызовов ребёнка (`call_1/…`) у клиента без
+  // `subagentToolCalls` нет.
+  'acp/prompt-subagent-tool-call': (user, _) {
+    final turn = _lastTurn(user);
+    expect(turn.status, PromptTurnStatus.completed);
+
+    final call = _toolCall(user, 'call_1');
+    expect(call.kind, ToolKind.think);
+    expect(call.status, ToolCallStatus.completed);
+    expect(call.title, 'Subagent explore: Find auth code');
+    expect(turn.toolCalls, hasLength(1));
+
+    final first = turn.updates.whereType<ToolCallSessionUpdate>().first;
+    expect(_subagentMeta(first.toolCall.meta), {
+      'id': isA<String>(),
+      'type': 'explore',
+    });
+    final last = turn.updates.whereType<ToolCallUpdateSessionUpdate>().last;
+    final summary = _subagentMeta(last.toolCallUpdate.meta)?['summary'] as Map?;
+    expect(summary?['toolCalls'], 3);
+    expect(summary?['tokens'], {'input': 6000, 'output': 400});
   },
   'acp/set-config-option-model': (user, _) {
     final model = user.app.sessions.single.configOptions!.singleWhere(

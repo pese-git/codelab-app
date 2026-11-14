@@ -9,6 +9,7 @@ import '../permissions/fake_gate.dart';
 import '../session/recording_store.dart';
 import '../tools/fake_tools.dart';
 
+/// Схемы запроса: базовые, `agent` (последний встроенный) и затем MCP.
 const _base = [
   'read',
   'write',
@@ -19,7 +20,12 @@ const _base = [
   'task_get',
   'ls',
   'search',
+  'agent',
 ];
+
+/// Базовый реестр сборки: `agent` в него не входит, он регистрируется в
+/// копии реестра сессии (D36 Т5).
+final _baseNames = _base.where((n) => n != 'agent').toList();
 
 FakeTool _mcpTool(
   String name, {
@@ -139,7 +145,7 @@ void main() {
 
         final request = mcp.requests.single;
         expect(request.cwd, '/proj');
-        expect(request.reservedNames, _base.toSet());
+        expect(request.reservedNames, _baseNames.toSet());
         expect(request.sessionId.value, isNotEmpty);
       },
     );
@@ -226,7 +232,7 @@ void main() {
       h.model.verify();
       expect(
         h.core.plan.toolNames,
-        _base,
+        _baseNames,
         reason: 'CorePlan keeps only the base registry (D6)',
       );
     });

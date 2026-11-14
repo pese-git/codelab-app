@@ -183,6 +183,21 @@ sealed class ToolCallRecord with _$ToolCallRecord {
     @Default(false) bool cancelledByClient,
     DateTime? startedAt,
     DateTime? completedAt,
+
+    /// `_meta.codelab.subagent` вызова `agent`, накопленный по кадрам: первый
+    /// `tool_call` даёт `{id, type}`, финальное обновление — `summary` или
+    /// `failure` (design.md change `add-subagents-and-tasks`, D24, D28).
+    /// Значения не проверяются: терпимый разбор — у kit
+    /// (`codelab_client_core`); `null` — вызов без признака (сторонний агент).
+    Map<String, Object?>? subagentMeta,
+
+    /// `_meta.codelab.outcome` последнего кадра, где он был: признак агента,
+    /// как закончился неуспешный вызов (`cancelled`, `rejected`,
+    /// `interrupted`, неизвестное). Снимается итоговым `completed`; поздний
+    /// кадр без признака его не стирает (spec acp-client-kit «Отмена по
+    /// признаку агента», design.md D41 п. 1). Значение не проверяется:
+    /// терпимый разбор — у kit.
+    String? outcome,
   }) = _ToolCallRecord;
 
   factory ToolCallRecord.fromToolCall(
@@ -199,9 +214,36 @@ sealed class ToolCallRecord with _$ToolCallRecord {
       locations: toolCall.locations ?? const [],
       rawInput: toolCall.rawInput,
       rawOutput: toolCall.rawOutput,
+      subagentMeta: subagentMetaOf(toolCall.meta),
+      outcome: toolCall.status == ToolCallStatus.completed
+          ? null
+          : outcomeOf(toolCall.meta),
     );
   }
 }
+
+/// `_meta.codelab.subagent` кадра вызова как есть; `null` при любой неверной
+/// форме (терпимый разбор, D28: отказа обработки обновления нет).
+Map<String, Object?>? subagentMetaOf(Map<String, Object?>? meta) {
+  final codelab = meta?['codelab'];
+  final subagent = codelab is Map ? codelab['subagent'] : null;
+  return subagent is Map ? subagent.cast<String, Object?>() : null;
+}
+
+/// `_meta.codelab.outcome` кадра; `null` при отсутствии или неверной форме
+/// (терпимый разбор, как у [subagentMetaOf]).
+String? outcomeOf(Map<String, Object?>? meta) {
+  final codelab = meta?['codelab'];
+  final outcome = codelab is Map ? codelab['outcome'] : null;
+  return outcome is String ? outcome : null;
+}
+
+/// Накладывает [update] на [current]: ключи новых кадров дополняют прежние,
+/// а не стирают (признак первого кадра переживает финальное обновление).
+Map<String, Object?>? mergeSubagentMeta(
+  Map<String, Object?>? current,
+  Map<String, Object?>? update,
+) => update == null ? current : {...?current, ...update};
 
 enum SessionLifecycleStatus {
   idle,

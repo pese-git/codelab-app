@@ -52,6 +52,9 @@ void main() {
         CustomRecord,
         LeafRecord,
         CustomRecord,
+        SubagentRecord,
+        SubagentRecord,
+        SubagentRecord,
         MessageRecord,
       ],
     );
@@ -170,5 +173,53 @@ void main() {
       '{"type":"mode_change","id":"abcdefgh","parentId":null,'
       '"timestamp":"2026-10-21T08:00:00.005Z","modeId":"plan"}',
     );
+  });
+
+  // Журнал потомка: заголовок с `parent` отдельной фикстурой (agent-sessions
+  // «Формат журнала JSONL», сценарий «Golden-разбор»; change
+  // `add-subagents-and-tasks`, D7, D36 Т4); записи `subagent` — в журнале
+  // корня `all_records.jsonl`.
+  test('the child journal header with parent round-trips byte for byte', () {
+    final child = const LineSplitter().convert(
+      sessionFixture('child_journal_header.jsonl'),
+    );
+
+    final header = SessionHeader.fromJson(json(child.single));
+
+    expect(
+      header.parent?.sessionId,
+      const SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C'),
+    );
+    expect(
+      header.parent?.rootSessionId,
+      const SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C'),
+    );
+    expect(header.parent?.toolCallId, 'call_3');
+    expect(header.parent?.subagentId, 'sub_k3f9a1c2');
+    expect(header.parent?.agent, 'explore');
+    expect(header.parent?.depth, 1);
+    expect(jsonEncode(header.toJson()), child.single);
+  });
+
+  test('the subagent records of the root journal parse and round-trip', () {
+    final records = [
+      for (final line in lines.skip(1))
+        if (json(line)['type'] == 'subagent')
+          SessionRecord.fromJson(json(line)),
+    ].cast<SubagentRecord>();
+
+    expect(
+      [for (final r in records) r.status],
+      ['running', 'completed', 'cancelled'],
+    );
+    expect(records[1].toolCalls, 4);
+    expect(records[1].durationMs, 36770);
+    expect(records[2].childSessionId, isNull);
+    for (final r in records) {
+      expect(
+        jsonEncode(r.toJson()),
+        lines.firstWhere((l) => json(l)['id'] == r.id),
+      );
+    }
   });
 }

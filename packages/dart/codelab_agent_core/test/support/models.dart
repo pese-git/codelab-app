@@ -32,3 +32,7 @@ ModelRef modelWithWindow(int window) => ModelRef(
   contextWindow: window,
   maxOutputTokens: testModel.maxOutputTokens,
 );
+
+/// Модель с окном, достаточным для `agent` (порог D40 — 32 768 токенов):
+/// тесты, которые ждут схему `agent`, берут её, а не [testModel] с окном 32000.
+final subagentTestModel = modelWithWindow(32768);

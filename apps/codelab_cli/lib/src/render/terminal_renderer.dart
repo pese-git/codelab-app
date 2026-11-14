@@ -79,6 +79,12 @@ final class TerminalRenderer {
 
   var _plan = const <PlanEntryView>[];
 
+  /// Строка прогресса `agent` на экране без перевода строки (только `ansi`,
+  /// D27): следующий вывод сначала стирает её, а обновление пишет поверх.
+  /// [_progressText] — что на ней сейчас.
+  var _progressOpen = false;
+  String? _progressText;
+
   /// Операция со списком задач, ещё способная расти (последний элемент), и
   /// уже напечатанные.
   TaskOpsItem? _pendingOps;
@@ -165,6 +171,9 @@ final class TerminalRenderer {
       item is ToolCallItem &&
       !_toolStarted.containsKey(item.id) &&
       item.details?.kind == ToolKind.think &&
+      // Вызов `agent`, опознанный с первого кадра (D28), печатается сразу:
+      // у него своё правило прогресса и итога.
+      item.details?.subagentCall == null &&
       !isFinalToolCall(item) &&
       item.approval is! PendingApprovalView;
 
@@ -194,6 +203,7 @@ final class TerminalRenderer {
   /// Ход закончился: свёрнутые мысли получают итоговую строку, открытая
   /// строка закрывается переводом строки.
   void finishTurn() {
+    _clearProgress();
     _flushTaskOps();
     _closeThought();
     if (!_atLineStart) {
@@ -241,6 +251,7 @@ final class TerminalRenderer {
   }
 
   void _text(AgentTextItem item) {
+    _clearProgress();
     final printed = _printed[item.id] ?? 0;
     if (item.text.length <= printed) {
       return;
@@ -263,6 +274,7 @@ final class TerminalRenderer {
   }
 
   void _thought(ThoughtItem item) {
+    _clearProgress();
     if (_raw || thoughts == ThoughtsMode.hidden) {
       _printed[item.id] = item.text.length;
       return;
@@ -308,9 +320,18 @@ final class TerminalRenderer {
       _flushTaskOps();
       _closeThought();
       _line(toolRow(item, unicode: unicode), _raw);
+      if (isFinalToolCall(item)) {
+        _agentReport(item);
+      } else {
+        _agentProgress(item);
+      }
       return;
     }
-    if (_toolDone.contains(item.id) || !isFinalToolCall(item)) {
+    if (_toolDone.contains(item.id)) {
+      return;
+    }
+    if (!isFinalToolCall(item)) {
+      _agentProgress(item);
       return;
     }
     _toolDone.add(item.id);
@@ -320,7 +341,64 @@ final class TerminalRenderer {
       toolRow(item, unicode: unicode, elapsed: now.difference(started)),
       _raw,
     );
+    _agentReport(item);
   }
+
+  /// Строка прогресса вызова `agent` на месте — только на `ansi` (D27): на
+  /// `plain` и `raw` вывод строится построчно и прогресс не печатается.
+  void _agentProgress(ToolCallItem item) {
+    if (_surface != OutputSurface.ansi || item.details?.subagentCall == null) {
+      return;
+    }
+    final progress = ToolRowFormatter.format(item, cwd: '').progress;
+    if (progress == null || progress == _progressText) {
+      return;
+    }
+    _progressText = progress;
+    if (_progressOpen) {
+      _out.write(clearCurrentLine);
+    } else if (!_atLineStart) {
+      _out.write('\n');
+    }
+    _out.write('  ${sanitizeTerminalText(progress)}');
+    _progressOpen = true;
+    _atLineStart = false;
+    _openId = null;
+  }
+
+  /// Стирает открытую строку прогресса: курсор — в начале пустой строки.
+  void _clearProgress() {
+    if (!_progressOpen) {
+      return;
+    }
+    _out.write(clearCurrentLine);
+    _progressOpen = false;
+    _progressText = null;
+    _atLineStart = true;
+  }
+
+  /// Отчёт субагента под итоговой строкой вызова: до [_maxReportLines] строк
+  /// с отступом и, если их больше, `… (<n> more lines)` (D27). Сторонний
+  /// вызов без признака отчёта не получает.
+  void _agentReport(ToolCallItem item) {
+    if (item.details?.subagentCall == null) {
+      return;
+    }
+    final report = ToolRowFormatter.format(item, cwd: '').report;
+    if (report == null) {
+      return;
+    }
+    final lines = report.split('\n');
+    for (final line in lines.take(_maxReportLines)) {
+      _line('  ${sanitizeTerminalText(line)}', _raw);
+    }
+    if (lines.length > _maxReportLines) {
+      _line('  … (${lines.length - _maxReportLines} more lines)', _raw);
+    }
+  }
+
+  /// Предел строк отчёта субагента в построчном выводе (D27).
+  static const _maxReportLines = 20;
 
   /// Итоговая строка свёрнутых мыслей, если они ещё открыты.
   void _closeThought() {
@@ -335,6 +413,7 @@ final class TerminalRenderer {
 
   /// Целая строка [text]: в stdout с новой строки или в stderr ([toErr]).
   void _line(String text, [bool toErr = false]) {
+    _clearProgress();
     if (toErr) {
       _err.writeln(text);
       return;

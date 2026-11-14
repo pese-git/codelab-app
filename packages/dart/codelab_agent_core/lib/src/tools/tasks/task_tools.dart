@@ -31,8 +31,10 @@ abstract base class _TaskTool extends AgentTool {
   /// `plan._meta.codelab.taskChange.toolCallId` (D35), а не по статусу.
   /// Последовательный режим сериализует проверки операций (цикл, лимит видят
   /// состояние после предыдущей) и держит `TaskListChanged` между началом
-  /// вызова и его `ToolCallFinished` (TSK-1). Один такой вызов переводит весь
-  /// пакет в последовательный режим цикла (`agent_loop.dart`, `_runBatch`).
+  /// вызова и его `ToolCallFinished` (TSK-1). Такой вызов — барьер внутри
+  /// пакета: он начинается после всех вызовов ответа перед ним, следующие —
+  /// после него, а соседние `parallel`-вызовы остаются параллельными
+  /// (LOOP-4, D39; `agent_loop.dart`, `_runBatch`).
   @override
   ToolExecutionMode? get executionMode => ToolExecutionMode.sequential;
 

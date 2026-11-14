@@ -1368,6 +1368,96 @@ void main() {
       expect(recordOf(second.stateOrThrow)?.kind, ToolKind.read);
     });
   });
+
+  // Слияние кадров и `ToolCallRecord.outcome` (D41 п. 1; spec acp-client-kit
+  // «Отмена по признаку агента»): признак ставится кадром, не стирается
+  // кадром без него и снимается итоговым `completed`.
+  group('outcome of a tool call record (D41)', () {
+    const callId = ToolCallId('call-1');
+    Map<String, Object?> meta(String outcome) => {
+      'codelab': {'outcome': outcome},
+    };
+    SessionUpdate call({ToolCallStatus? status, Map<String, Object?>? m}) =>
+        SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: callId,
+            title: 'Run',
+            status: status ?? ToolCallStatus.inProgress,
+            meta: m,
+          ),
+        );
+    SessionUpdate upd({ToolCallStatus? status, Map<String, Object?>? m}) =>
+        SessionUpdate.toolCallUpdate(
+          toolCallUpdate: ToolCallUpdate(
+            toolCallId: callId,
+            status: status,
+            meta: m,
+          ),
+        );
+
+    AcpSession apply(List<SessionUpdate> updates) {
+      var session = SessionStateMachine.startTurn(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        _pendingTurn,
+      ).stateOrThrow;
+      for (final u in updates) {
+        session = SessionStateMachine.applyUpdate(session, u).stateOrThrow;
+      }
+      return session;
+    }
+
+    ToolCallRecord? recordOf(AcpSession s) => s.turns.last.toolCalls[callId];
+
+    test('tool_call_update sets the outcome', () {
+      final s = apply([
+        call(),
+        upd(status: ToolCallStatus.failed, m: meta('cancelled')),
+      ]);
+      expect(recordOf(s)?.outcome, 'cancelled');
+    });
+
+    test('a later frame without the sign keeps the outcome', () {
+      final s = apply([
+        call(),
+        upd(status: ToolCallStatus.failed, m: meta('cancelled')),
+        upd(status: ToolCallStatus.failed),
+      ]);
+      expect(recordOf(s)?.outcome, 'cancelled');
+    });
+
+    test('completed clears the outcome', () {
+      final s = apply([
+        call(),
+        upd(status: ToolCallStatus.failed, m: meta('cancelled')),
+        upd(status: ToolCallStatus.completed),
+      ]);
+      expect(recordOf(s)?.outcome, isNull);
+    });
+
+    test('a repeated tool_call keeps the outcome and completed clears it', () {
+      final kept = apply([
+        call(),
+        upd(status: ToolCallStatus.failed, m: meta('rejected')),
+        call(status: ToolCallStatus.failed),
+      ]);
+      expect(recordOf(kept)?.outcome, 'rejected');
+
+      final cleared = apply([
+        call(),
+        upd(status: ToolCallStatus.failed, m: meta('rejected')),
+        call(status: ToolCallStatus.completed),
+      ]);
+      expect(recordOf(cleared)?.outcome, isNull);
+    });
+
+    test('a repeated tool_call with the sign sets the outcome', () {
+      final s = apply([
+        call(),
+        call(status: ToolCallStatus.failed, m: meta('interrupted')),
+      ]);
+      expect(recordOf(s)?.outcome, 'interrupted');
+    });
+  });
 }
 
 const _sessionId = SessionId('session-1');

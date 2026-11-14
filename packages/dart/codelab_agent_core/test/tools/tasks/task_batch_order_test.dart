@@ -5,16 +5,17 @@ import 'package:test/test.dart';
 
 import '../../loop/loop_harness.dart';
 
-/// Пакет вызовов со списком задач идёт строго по одному (`17-16-task-list.md`
+/// Операции списка задач одного пакета идут строго по одному (`17-16-task-list.md`
 /// §17.16.5, TSK-1): клиент привязывает `plan` по
 /// `_meta.codelab.taskChange.toolCallId` (D35); последовательный режим
 /// сериализует проверки и держит `TaskListChanged` между началом вызова и его
 /// `ToolCallFinished`. Хук `beforeToolCall` (как `markInProgress` ACP) при
 /// этом срабатывает сразу после `ToolCallStarted` своего вызова.
 ///
-/// Механизм — `AgentTool.executionMode` = `sequential`: один такой вызов
-/// переводит весь пакет в последовательный режим цикла (`agent_loop.dart`,
-/// `_runBatch`).
+/// Механизм — `AgentTool.executionMode` = `sequential`: такой вызов — барьер
+/// пакета (`agent_loop.dart`, `_runBatch`; LOOP-4, design.md change
+/// `add-subagents-and-tasks`, D39): вызовы до него завершаются, он идёт один,
+/// затем начинается следующая параллельная группа.
 void main() {
   test('executionMode of every task tool is sequential', () {
     for (final tool in <AgentTool>[

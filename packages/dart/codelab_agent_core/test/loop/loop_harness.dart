@@ -118,6 +118,7 @@ final class LoopHarness {
     EstimateTokens? estimateTokens,
     EmergencyCompact? emergencyCompact,
     int? contextWindowCap,
+    Logger? logger,
   }) => AgentLoopConfig(
     sessionId: session,
     model: testModel,
@@ -138,7 +139,7 @@ final class LoopHarness {
     steering: steering,
     followUp: followUp,
     approvalWait: approvalWait,
-    logger: logger,
+    logger: logger ?? this.logger,
     estimateTokens: estimateTokens,
     emergencyCompact: emergencyCompact,
     contextWindowCap: contextWindowCap,
@@ -222,4 +223,10 @@ String describe(AgentEvent e) => switch (e) {
     'ContextCompacted($tokensBefore -> $tokensAfter)',
   SessionTitleChanged(:final title) => 'SessionTitleChanged($title)',
   ModelOptionsChanged() => 'ModelOptionsChanged',
+  SubagentStarted(:final subagentId) => 'SubagentStarted($subagentId)',
+  SubagentProgress() => 'SubagentProgress',
+  SubagentFinished(:final subagentId, :final status) =>
+    'SubagentFinished($subagentId ${status.name})',
+  SubagentActivity(:final subagentId, :final event) =>
+    'SubagentActivity($subagentId ${describe(event)})',
 };

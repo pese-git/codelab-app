@@ -3,20 +3,16 @@ import 'package:codelab_agent_acp/src/event_projection.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
-/// Проекция `TaskListChanged` в `plan` (ACP-6): исчерпывающая строка таблицы
-/// §13.7 для списка задач, включая восстановление из новой ветки.
+/// Проекция списка задач и событий субагентов в кадры ACP (ACP-6).
 ///
 /// Почему отдельный файл: `every_agent_event_is_projected_test.dart` сверяет
 /// таблицу `projectionTable` с иерархией `AgentEvent`, а здесь проверяется
-/// содержимое кадра. Источники: agent-acp-server «Проекция субагентов и списка
-/// задач» («Список новой ветки»), design.md change `add-subagents-and-tasks`
-/// D29, §17.16.5–§17.16.6 документа ядра; задача 1.1 (красный тест) и 1.5a.
+/// содержимое кадра: `TaskListChanged` → `plan` (включая восстановление из
+/// новой ветки), строки `Subagent*` и вызов `agent` (D24, D28). Источники:
+/// agent-acp-server «Проекция субагентов и списка задач», design.md change
+/// `add-subagents-and-tasks` D24, D28, D29, §17.16.5–§17.16.6 и §17.3.7
+/// документов ядра; задачи 1.1, 1.5a, 2.1, 2.8.
 ///
-/// Красный до задач 1.2 и 1.5a: `TaskListChanged`, `TaskItem` и `TaskChange`
-/// вводит ядро (1.2, 1.2a), проекцию — адаптер (1.5, 1.5a). Формы
-/// конструкторов взяты из §17.16.2; при расхождении с реализацией ядра
-/// поправляются здесь, смысл проверок (кадр `plan`, `_meta.codelab.task`,
-/// пустой список) остаётся.
 void main() {
   const s = SessionId('sess_1');
 
@@ -282,6 +278,206 @@ void main() {
 
       expect(updates.single, isA<acp.SessionUpdate>());
       expect(updates.single.toJson()['sessionUpdate'], 'plan');
+    });
+  });
+
+  // Строки `Subagent*` и первый кадр вызова `agent` (agent-acp-server
+  // «Проекция субагентов и списка задач»; D24, D28; задачи 2.1, 2.8).
+  SubagentSnapshot snapshot() => SubagentSnapshot(
+    id: 'sub_k3f9a1c2',
+    parentToolCallId: 'call_1',
+    agent: 'explore',
+    description: 'Find auth code',
+    depth: 1,
+    state: SubagentState.running,
+    steps: 1,
+    toolCalls: 2,
+    usage: Usage.zero,
+    activeChildren: 0,
+    startedAt: DateTime.utc(2026, 11, 14),
+  );
+
+  group('Subagent* → not sent', () {
+    test('SubagentStarted gives no frame', () {
+      final event = SubagentStarted(
+        s,
+        subagentId: 'sub_k3f9a1c2',
+        parentToolCallId: 'call_1',
+        agent: 'explore',
+        description: 'Find auth code',
+        childSessionId: const SessionId('child_1'),
+        journalPath: 'subagents/child_1.jsonl',
+      );
+
+      expect(project(event), isEmpty);
+    });
+
+    // Строку прогресса клиент получает через `ToolCallProgress(agent)`, а не
+    // из `SubagentProgress` (§17.3.7): иначе строка пришла бы дважды.
+    test('SubagentProgress gives no frame', () {
+      expect(project(SubagentProgress(s, snapshot: snapshot())), isEmpty);
+    });
+
+    test('SubagentFinished gives no frame', () {
+      final event = SubagentFinished(
+        s,
+        subagentId: 'sub_k3f9a1c2',
+        parentToolCallId: 'call_1',
+        status: SubagentState.completed,
+        usage: Usage.zero,
+        duration: const Duration(seconds: 48),
+        reportPreview: 'Auth is in lib/auth/session.dart',
+      );
+
+      expect(project(event), isEmpty);
+    });
+
+    // SUB-12: клиенту без `subagentToolCalls` — не отправляется; в итерации 2
+    // агент это расширение не объявляет (D36, Т12), поэтому не отправляется
+    // никому.
+    test('SubagentActivity gives no frame in iteration 2', () {
+      final event = SubagentActivity(
+        s,
+        subagentId: 'sub_k3f9a1c2',
+        parentToolCallId: 'call_1',
+        path: const [],
+        depth: 1,
+        event: ToolCallStarted(
+          const SessionId('child_1'),
+          toolCallId: 'call_1',
+          tool: 'read',
+          kind: ToolKind.read,
+          title: 'Read a.dart',
+          input: const {'path': 'a.dart'},
+        ),
+      );
+
+      expect(project(event), isEmpty);
+    });
+
+    test('the projection table has a "not sent" row for each of them', () {
+      for (final type in [
+        SubagentStarted,
+        SubagentProgress,
+        SubagentFinished,
+        SubagentActivity,
+      ]) {
+        expect(
+          projectionTable[type],
+          allOf(isNotNull, startsWith('not sent')),
+          reason: '$type',
+        );
+      }
+    });
+  });
+
+  group('ToolCallStarted(agent) → tool_call with _meta.codelab.subagent', () {
+    ToolCallStarted agentCall({SubagentCallRef? subagent}) => ToolCallStarted(
+      s,
+      toolCallId: 'call_1',
+      tool: 'agent',
+      kind: ToolKind.think,
+      title: 'Subagent explore: Find auth code',
+      input: const {
+        'type': 'explore',
+        'description': 'Find auth code',
+        'prompt': 'Find where authentication is implemented.',
+      },
+      subagent: subagent,
+    );
+
+    // D28: признак вызова `agent` с первого кадра — только данные `_meta`.
+    test('the first frame carries {id, type}', () {
+      final frames = project(
+        agentCall(
+          subagent: SubagentCallRef(id: 'sub_k3f9a1c2', type: 'explore'),
+        ),
+      );
+
+      expect(frames, [
+        {
+          'sessionUpdate': 'tool_call',
+          'toolCallId': 'call_1',
+          'title': 'Subagent explore: Find auth code',
+          'kind': 'think',
+          'status': 'pending',
+          'rawInput': {
+            'type': 'explore',
+            'description': 'Find auth code',
+            'prompt': 'Find where authentication is implemented.',
+          },
+          '_meta': {
+            'codelab': {
+              'subagent': {'id': 'sub_k3f9a1c2', 'type': 'explore'},
+            },
+          },
+        },
+      ]);
+    });
+
+    // Вызов без `SubagentCallRef` (любой другой инструмент) `_meta` не
+    // получает: расширение не должно протекать в чужие вызовы.
+    test('a call without SubagentCallRef has no _meta', () {
+      final frame = project(agentCall()).single;
+
+      expect(frame, isNot(contains('_meta')));
+    });
+  });
+
+  group('ToolCallFinished(agent) content', () {
+    ToolCallFinished finished(ToolOutcome outcome) => ToolCallFinished(
+      s,
+      toolCallId: 'call_1',
+      outcome: outcome,
+      content: const [
+        TextContent(
+          '<untrusted-content source="agent">\n'
+          '<subagent-report id="sub_a" agent="explore" status="failed">\n'
+          'Subagent failed: boom\n'
+          '</subagent-report>\n'
+          '</untrusted-content>',
+        ),
+      ],
+    );
+
+    SubagentFinished done(String report) => SubagentFinished(
+      s,
+      subagentId: 'sub_a',
+      parentToolCallId: 'call_1',
+      status: SubagentState.failed,
+      failure: SubagentFailure.error,
+      report: report,
+    );
+
+    List<Map<String, Object?>> frames(SubagentFinished result) => [
+      for (final u in projectEvent(
+        finished(ToolOutcome.failed),
+        configOptions: () => const [],
+        subagentResult: result,
+      ))
+        u.toJson(),
+    ];
+
+    // Дельта agent-acp-server: клиенту — тело отчёта без обёртки и ограды.
+    test('a failed child with a report gets the bare body', () {
+      final update = frames(done('Partial findings.')).single;
+
+      expect(update['content'], [
+        {
+          'type': 'content',
+          'content': {'type': 'text', 'text': 'Partial findings.'},
+        },
+      ]);
+    });
+
+    // Пустой отчёт: обёртка из результата для модели клиенту не уходит.
+    test('a failed child without a report gets no wrapped text', () {
+      final update = frames(done('')).single;
+
+      expect(update['status'], 'failed');
+      expect(update.toString(), isNot(contains('subagent-report')));
+      expect(update.toString(), isNot(contains('untrusted-content')));
+      expect((update['_meta']! as Map)['codelab'], contains('subagent'));
     });
   });
 }

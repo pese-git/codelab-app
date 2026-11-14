@@ -53,6 +53,9 @@
                 "codelab": {
                   "tasks": {
                     "version": 1
+                  },
+                  "subagents": {
+                    "version": 1
                   }
                 }
               }
