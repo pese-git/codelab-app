@@ -26,15 +26,23 @@ import 'validator.dart';
 /// `ToolCallStarted` пришли бы не по порядку (design.md, D14).
 ///
 /// Как использовать: цикл вызывает [announce] (шаг 1, `ToolCallStarted`),
-/// затем [complete] (шаги 1a–10, `ToolCallFinished`) или, для вызова
-/// последовательного пакета, оставшегося после отмены, [abandon].
+/// затем для каждого полученного handle ровно одно из двух: [complete]
+/// (шаги 1a–10, `ToolCallFinished`) или [abandon] — вызов последовательного
+/// пакета, оставшийся после отмены, и уже объявленные вызовы параллельного
+/// пакета, когда объявление следующего упало.
 abstract interface class ToolExecutor {
+  /// Объявляет вызов и занимает его место в очереди пути (TOOL-7).
+  ///
+  /// Если [announce] завершился исключением, handle вызывающему не
+  /// достаётся, поэтому реализация сама освобождает всё, что успела занять:
+  /// упавшее объявление не оставляет путь занятым.
   Future<ToolCallHandle> announce(ToolCall call, ToolInvocation invocation);
 
   Future<ToolExecutionOutcome> complete(ToolCallHandle handle);
 
   /// `cancelled` с текстом `Tool call was cancelled before it started`, без
-  /// исполнения.
+  /// исполнения. Место в очереди пути освобождается до эмита
+  /// `ToolCallFinished`, так что сбой эмита путь уже не держит.
   Future<ToolExecutionOutcome> abandon(ToolCallHandle handle);
 }
 
@@ -180,32 +188,42 @@ final class ToolCallExecutor implements ToolExecutor {
       },
       null => null,
     };
-    var presentation = ToolPresentation(title: call.name);
-    if (tool != null) {
-      try {
-        presentation = await tool.present(call.arguments, context);
-        context.presentation = presentation;
-      } on Object catch (error, stack) {
-        services.logger.log(
-          LogLevel.debug,
-          'tool.present.error',
-          fields: {'tool': call.name, 'tool_call_id': call.id},
-          error: error,
-          stack: stack,
-        );
+    try {
+      var presentation = ToolPresentation(title: call.name);
+      if (tool != null) {
+        try {
+          presentation = await tool.present(call.arguments, context);
+          context.presentation = presentation;
+        } on Object catch (error, stack) {
+          services.logger.log(
+            LogLevel.debug,
+            'tool.present.error',
+            fields: {'tool': call.name, 'tool_call_id': call.id},
+            error: error,
+            stack: stack,
+          );
+        }
       }
+      await invocation.emit(
+        ToolCallStarted(
+          invocation.sessionId,
+          toolCallId: call.id,
+          tool: call.name,
+          kind: tool?.kindOf(call.arguments) ?? ToolKind.other,
+          title: presentation.title,
+          input: call.arguments,
+          locations: presentation.locations,
+        ),
+      );
+    } on Object {
+      // Без handle тикет некому отпустить, а `PathLock` живёт всю сессию:
+      // путь остался бы занят для всех следующих вызовов. Отпускание не рвёт
+      // очередь — место освободится только после предыдущего держателя
+      // (TOOL-7). `emit` может бросить: `AgentEventSink` этого не запрещает,
+      // а `Agent.emit` пробрасывает ошибку подписчика.
+      lock?.release();
+      rethrow;
     }
-    await invocation.emit(
-      ToolCallStarted(
-        invocation.sessionId,
-        toolCallId: call.id,
-        tool: call.name,
-        kind: tool?.kindOf(call.arguments) ?? ToolKind.other,
-        title: presentation.title,
-        input: call.arguments,
-        locations: presentation.locations,
-      ),
-    );
     return ToolCallHandle._(call, invocation, tool, context, progress, lock);
   }
 
