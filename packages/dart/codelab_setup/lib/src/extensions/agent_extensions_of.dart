@@ -235,6 +235,7 @@ SkillsSectionView _skills(
         modelVisible: from.modelVisible.any((v) => v.name == s.name),
         userInvocable: s.userInvocable,
         root: root,
+        directory: file.dir,
         overrides: overrides,
         overridesLabel: _overridesLabel(root, overrides),
         warnings: [

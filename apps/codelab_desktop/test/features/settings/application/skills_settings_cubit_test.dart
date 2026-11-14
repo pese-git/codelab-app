@@ -282,6 +282,11 @@ void main() {
 
     test('a config that violates the schema is Unreadable with the '
         'loader problems and the files are not read', () async {
+      // Проблема значения относится к ключу, заданному в слое: без него
+      // снимок переносит её в проблемы запуска, а не в проблемы файла.
+      store.user = {
+        'skills': {'max_skills': 0},
+      };
       store.issues = [
         const ConfigIssue(
           kind: ConfigIssueKind.value,
@@ -618,6 +623,211 @@ void main() {
 
       expect(opener.opened, [_home]);
     });
+  });
+
+  group('mutation hardening (iteration 4)', () {
+    AgentExtensionsView shownView() => extensionsView(
+      files: [contextFile('AGENTS.md', openDir: '/work/app')],
+      skills: [skillEntry('pdf-tools')],
+    );
+
+    for (final entry in {
+      'a WebSocket agent': _remote,
+      'a foreign stdio agent': _foreign,
+    }.entries) {
+      test('after Ready -> ReadOnly (${entry.key}) no folder is opened: '
+          'neither .codelab nor a directory of the former view', () async {
+        session.onExtensions = (_) async => shownView();
+        final cubit = make();
+        await cubit.reload();
+        expect(cubit.state, isA<SkillsSettingsReady>());
+
+        connect(entry.value);
+        await pumpEventQueue();
+        expect(cubit.state, isA<SkillsSettingsReadOnly>());
+
+        await cubit.openCodelabFolder();
+        await cubit.openFolder('/work/app');
+        await cubit.openFolder('/home/u/.agents/skills/pdf-tools');
+
+        expect(opener.opened, isEmpty);
+        expect(cubit.state, isA<SkillsSettingsReadOnly>());
+      });
+
+      test(
+        'a cubit that starts ReadOnly (${entry.key}) opens nothing',
+        () async {
+          connect(entry.value);
+          final cubit = make();
+          await cubit.reload();
+
+          await cubit.openCodelabFolder();
+          await cubit.openFolder('/work/app');
+
+          expect(opener.opened, isEmpty);
+          expect(cubit.state, isA<SkillsSettingsReadOnly>());
+        },
+      );
+    }
+
+    test('a profile without CODELAB_HOME is Unreadable and the port is '
+        'not called', () async {
+      final cubit = make(home: '');
+
+      await cubit.reload();
+
+      final state = cubit.state as SkillsSettingsUnreadable;
+      expect(state.problems, ['The CodeLab home folder is not available.']);
+      expect(session.extensionsCalls, isEmpty);
+      expect(store.snapshots, 0);
+    });
+
+    test('a change of the folder alone, with the same profile, re-reads '
+        'the page', () async {
+      connect(embeddedConnectionProfile);
+      final cubit = make();
+      await cubit.reload();
+      expect(session.extensionsCalls.single.cwd, '/work/app');
+
+      projectDir = '/work/other';
+      connect(embeddedConnectionProfile);
+      await pumpEventQueue();
+
+      expect(session.extensionsCalls, hasLength(2));
+      expect(session.extensionsCalls.last.cwd, '/work/other');
+    });
+
+    test('a failed .codelab folder does not fall back to CODELAB_HOME: '
+        'only <folder>/.codelab is tried', () async {
+      opener.outcome = FolderOpenOutcome.failed;
+      final cubit = make();
+      await cubit.reload();
+
+      await cubit.openCodelabFolder();
+
+      expect(opener.opened, ['/work/app/.codelab']);
+    });
+
+    test('the unreadable event has the number of problems, not their '
+        'text', () async {
+      store.user = {
+        'skills': {'max_skills': 0},
+      };
+      store.issues = [
+        const ConfigIssue(
+          kind: ConfigIssueKind.value,
+          key: 'skills.max_skills',
+          source: FakeAgentConfigStore.userPath,
+          message: 'must be a positive number',
+        ),
+      ];
+      final cubit = make();
+
+      await cubit.reload();
+
+      expect(cubit.state, isA<SkillsSettingsUnreadable>());
+      expect(event('skills_settings.unreadable')['issues'], 1);
+      final text = logger.entries.toString();
+      expect(text, isNot(contains('must be a positive number')));
+      expect(text, isNot(contains('skills.max_skills')));
+      expect(text, isNot(contains(FakeAgentConfigStore.userPath)));
+    });
+  });
+
+  group('review of iteration 4', () {
+    test(
+      'a failure of defaultProfile is Unreadable with the type only',
+      () async {
+        final cubit = SkillsSettingsCubit(
+          workspace: workspace,
+          defaultProfile: () async =>
+              throw FormatException('profiles.json: $leakMarker /home/u/x'),
+          open: (access, env) async => session,
+          environment: const {},
+          codelabHome: _home,
+          projectDirectory: () => projectDir,
+          folderOpener: opener,
+          logger: logger,
+        );
+        cubits.add(cubit);
+
+        await cubit.reload();
+
+        final state = cubit.state as SkillsSettingsUnreadable;
+        expect(state.problems, ['Cannot read the agent settings.']);
+        expect(
+          event('skills_settings.unreadable')['error_type'],
+          'FormatException',
+        );
+        expect(logger.entries.toString(), isNot(contains(leakMarker)));
+        expect(logger.entries.toString(), isNot(contains('/home/u/x')));
+      },
+    );
+
+    test('Ready keeps the folder and CODELAB_HOME of the shown view', () async {
+      final cubit = make();
+
+      await cubit.reload();
+
+      expect(ready(cubit).folder, '/work/app');
+      expect(ready(cubit).codelabHome, _home);
+    });
+
+    test('NoFolder keeps CODELAB_HOME for the tooltip', () async {
+      projectDir = null;
+      final cubit = make();
+
+      await cubit.reload();
+
+      expect((cubit.state as SkillsSettingsNoFolder).codelabHome, _home);
+    });
+
+    test('while a reload for another folder is pending, "Open .codelab '
+        'folder" opens the .codelab of the folder that is shown', () async {
+      final cubit = make();
+      await cubit.reload();
+      expect(ready(cubit).folder, '/work/app');
+      final gate = Completer<AgentExtensionsView>();
+      session.onExtensions = (_) => gate.future;
+      projectDir = '/work/other';
+
+      final reloading = cubit.reload();
+      await pumpEventQueue();
+      await cubit.openCodelabFolder();
+
+      expect(opener.opened, ['/work/app/.codelab']);
+      gate.complete(extensionsView());
+      await reloading;
+    });
+
+    test('openTemplateFolder opens the directory of the template file '
+        'once, computed by the cubit', () async {
+      final template = templateEntry(
+        '/review-pr',
+        sourcePath: '/work/app/.codelab/prompts/review-pr.md',
+      );
+      session.onExtensions = (_) async => extensionsView(templates: [template]);
+      final cubit = make();
+      await cubit.reload();
+
+      await cubit.openTemplateFolder(template);
+
+      expect(opener.opened, ['/work/app/.codelab/prompts']);
+    });
+
+    test(
+      'openTemplateFolder refuses a template the page did not show',
+      () async {
+        final cubit = make();
+        await cubit.reload();
+
+        await cubit.openTemplateFolder(
+          templateEntry('/other', sourcePath: '/etc/evil/other.md'),
+        );
+
+        expect(opener.opened, isEmpty);
+      },
+    );
   });
 
   test('close() makes later actions harmless', () async {

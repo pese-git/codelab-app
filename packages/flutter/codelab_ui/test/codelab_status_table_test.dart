@@ -555,6 +555,68 @@ void _skillsTableTests() {
       handle.dispose();
     });
 
+    testWidgets('переключатель и действие сразу: переключатель левее кнопки, '
+        'оба нажимаются', (tester) async {
+      var pressed = 0;
+      bool? changed;
+      await _pump(tester, [
+        CodeLabStatusTableRow(
+          cells: const [
+            CodeLabStatusTableCell('review'),
+            CodeLabStatusTableCell('user'),
+          ],
+          toggle: CodeLabStatusTableToggle(
+            value: true,
+            label: 'Enable review',
+            onChanged: (v) => changed = v,
+          ),
+          action: CodeLabStatusTableAction(
+            label: 'Open',
+            onPressed: () => pressed++,
+          ),
+        ),
+      ]);
+
+      expect(
+        tester.getTopLeft(find.byType(ToggleSwitch)).dx,
+        lessThan(tester.getTopLeft(find.byType(CodeLabButton)).dx),
+      );
+      await tester.tap(find.byType(ToggleSwitch));
+      await tester.tap(find.byType(CodeLabButton));
+      await tester.pumpAndSettle();
+      expect(changed, isFalse);
+      expect(pressed, 1);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('переключатель и действие только в одной строке: колонка '
+        'действий шире для всей таблицы (190)', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pump(tester, [
+        _skillRow('plain'),
+        CodeLabStatusTableRow(
+          cells: const [
+            CodeLabStatusTableCell('review'),
+            CodeLabStatusTableCell('user'),
+          ],
+          toggle: CodeLabStatusTableToggle(
+            value: true,
+            label: 'Enable review',
+            onChanged: (_) {},
+          ),
+          action: CodeLabStatusTableAction(label: 'Open', onPressed: () {}),
+        ),
+        _skillRow('other'),
+      ], width: 920);
+
+      final firstX = tester.getTopLeft(find.text('SKILL')).dx;
+      final secondX = tester.getTopLeft(find.text('SOURCE')).dx;
+      // 920 − рамка (2) − поля (24) − колонка действий (190), поровну на две.
+      expect(secondX - firstX, closeTo((920 - 2 - 24 - 190) / 2, 1));
+    });
+
     testWidgets('строка без переключателя и без действия — колонка пуста', (
       tester,
     ) async {

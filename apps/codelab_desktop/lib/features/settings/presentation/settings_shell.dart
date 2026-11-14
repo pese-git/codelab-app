@@ -7,6 +7,7 @@ import '../application/settings_search_index.dart';
 import 'connection_page.dart';
 import 'mcp_page.dart';
 import 'providers_page.dart';
+import 'skills_page.dart';
 
 /// Тела страниц настроек.
 ///
@@ -17,12 +18,13 @@ import 'providers_page.dart';
 /// Как использовать: каждая страница из `SettingsPages.available` ДОЛЖНА
 /// иметь запись (проверяет тест). Итерация 2 change `add-app-settings-shell`
 /// добавила «Connection», итерация 2 change `add-provider-setup-ui` —
-/// «Providers».
+/// «Providers», change `add-app-skills-page` — «Skills & extensions».
 final Map<SettingsPage, WidgetBuilder> settingsPageBuilders =
     Map.unmodifiable(<SettingsPage, WidgetBuilder>{
       SettingsPage.connection: buildConnectionPage,
       SettingsPage.providers: buildProvidersPage,
       SettingsPage.mcpServers: buildMcpPage,
+      SettingsPage.skillsAndExtensions: buildSkillsPage,
     });
 
 /// Ширина окна, меньше которой навигация настроек уходит наверх.

@@ -60,6 +60,16 @@ abstract interface class ProviderSettingsSession {
   /// `ConfigSaved` и без оставшихся ссылок (`McpServerRemover`, SETUP-24).
   McpServerRemover mcpRemover();
 
+  /// Что агент загрузит из папки снимка: цепочка `AGENTS.md`, навыки и шаблоны
+  /// (страница «Skills & extensions», change `add-app-skills-page`, D6, D7).
+  ///
+  /// Почему в сессии: чтение файлов — `readAgentExtensions` из IO-бареля
+  /// моста, а он пускается только в `lib/app/` (D20 change
+  /// `add-provider-setup-ui`); второго порта и открывателя нет. Возвращается
+  /// только вид без текстов файлов (SETUP-25). Исключение уходит вызывающему:
+  /// Cubit пишет в журнал лишь `runtimeType`.
+  Future<AgentExtensionsView> extensions(AgentConfigSnapshot snapshot);
+
   /// Запрашивает список моделей провайдера. Ключ по ссылке [key] читает сам
   /// адаптер и сразу передаёт проверке; в Cubit значение не попадает.
   ///

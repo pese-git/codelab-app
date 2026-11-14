@@ -215,6 +215,7 @@ final class SkillEntryView {
     required this.modelVisible,
     required this.userInvocable,
     required this.root,
+    required this.directory,
     required this.overrides,
     required this.overridesLabel,
     required this.warnings,
@@ -234,6 +235,17 @@ final class SkillEntryView {
   final bool modelVisible;
   final bool userInvocable;
   final SkillRootView root;
+
+  /// Каталог, где лежит `SKILL.md` навыка (для «Open»).
+  ///
+  /// Почему поле, а не `<root.path>/<name>`: имя во frontmatter может не
+  /// совпадать с именем каталога (предупреждение `name_mismatch`, навык
+  /// загружается под именем из frontmatter) (D8 «API итерации 4»).
+  ///
+  /// Как использовать: `agentExtensionsOf` отдаёт путь в форме ядра (как
+  /// `root.path`), `readAgentExtensions` — в форме хоста; выключенный
+  /// `skills.disabled` навык тоже знает свой каталог.
+  final String directory;
 
   /// Корни навыков, перекрытых этим (по диагностикам `shadowed` ядра).
   final List<SkillRootView> overrides;

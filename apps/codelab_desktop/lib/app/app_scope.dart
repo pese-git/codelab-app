@@ -59,6 +59,7 @@ import 'package:structured_log_remote_sync/structured_log_remote_sync.dart'
 import '../core/platform/connection_preferences.dart';
 import '../core/platform/dock_layout_store.dart';
 import '../core/platform/external_link_opener.dart';
+import '../core/platform/local_folder_opener.dart';
 import '../core/platform/limited_network_image.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
@@ -71,6 +72,7 @@ import '../features/settings/application/default_profile_resolver.dart';
 import '../features/settings/application/embedded_profile.dart';
 import '../features/settings/application/profiles_unavailable.dart';
 import '../features/settings/application/mcp_settings_cubit.dart';
+import '../features/settings/application/skills_settings_cubit.dart';
 import '../features/settings/application/provider_settings_cubit.dart';
 import '../features/settings/application/provider_wizard_cubit.dart';
 import '../features/terminal/application/terminal_tabs_cubit.dart';
@@ -120,6 +122,7 @@ Scope createCodeLabRootScope({
   Future<bool> Function(String cwd)? providerSetupProbe,
   UserShellLauncher? userShellLauncher,
   ExternalLinkOpener? externalLinkOpener,
+  LocalFolderOpener? localFolderOpener,
   ProjectFolderPicker? projectFolderPicker,
   ProjectFiles? projectFiles,
   bool projectFilesEnabled = true,
@@ -154,6 +157,7 @@ Scope createCodeLabRootScope({
         directoryExists: directoryExists ?? ioDirectoryExists,
         userShellLauncher: userShellLauncher,
         externalLinkOpener: externalLinkOpener,
+        localFolderOpener: localFolderOpener,
         projectFolderPicker: projectFolderPicker,
       ),
       CodeLabConnectionModule(
@@ -432,9 +436,11 @@ final class CodeLabPlatformModule extends Module {
     required this.directoryExists,
     UserShellLauncher? userShellLauncher,
     ExternalLinkOpener? externalLinkOpener,
+    LocalFolderOpener? localFolderOpener,
     this.projectFolderPicker,
   }) : _userShellLauncher = userShellLauncher,
-       _externalLinkOpener = externalLinkOpener;
+       _externalLinkOpener = externalLinkOpener,
+       _localFolderOpener = localFolderOpener;
 
   /// Порт запуска shell пользователя; шов тестов
   /// (`createCodeLabRootScope(userShellLauncher:)`, `add-integrated-terminal`,
@@ -445,6 +451,11 @@ final class CodeLabPlatformModule extends Module {
   /// (`createCodeLabRootScope(externalLinkOpener:)`, D11): без него — адаптер
   /// на `url_launcher`.
   final ExternalLinkOpener? _externalLinkOpener;
+
+  /// Порт открытия каталога в файловом менеджере; шов тестов
+  /// (`createCodeLabRootScope(localFolderOpener:)`, change `add-app-skills-page`,
+  /// D8): без него — адаптер на `url_launcher`.
+  final LocalFolderOpener? _localFolderOpener;
 
   /// Системный выбор папки; тесты подменяют его, чтобы не открывать диалог.
   final ProjectFolderPicker? projectFolderPicker;
@@ -465,6 +476,12 @@ final class CodeLabPlatformModule extends Module {
     // Шов тестов — `createCodeLabRootScope(externalLinkOpener:)`.
     bind<ExternalLinkOpener>().toInstance(
       _externalLinkOpener ?? const UrlLauncherExternalLinkOpener(),
+    );
+    // Открытие каталогов страницы «Skills & extensions» (D8): отдельный порт,
+    // потому что `ExternalLinkOpener` по политике открывает только
+    // `http`/`https`/`mailto`.
+    bind<LocalFolderOpener>().toInstance(
+      _localFolderOpener ?? const UrlLauncherLocalFolderOpener(),
     );
     // Загрузка изображений ответа: лимиты тела, редиректы, размер (D6, R4).
     bind<ImageProviderFor>().toInstance(defaultImageProviderFor);
@@ -843,6 +860,22 @@ final class CodeLabPresentationModule extends Module {
         logger: _settingsLogger(),
       );
     });
+    // Страница «Skills & extensions» (change `add-app-skills-page`, D6): новый
+    // Cubit на каждое открытие; сессия настроек и доступ — те же, что у
+    // «Providers», открытие каталогов — порт платформы.
+    bind<SkillsSettingsCubit>().toProvide(() {
+      final environment = currentScope.resolve<ConnectionEnvironment>();
+      return SkillsSettingsCubit(
+        workspace: currentScope.resolve<ClientWorkspace>(),
+        defaultProfile: currentScope.resolve<DefaultProfileResolver>().resolve,
+        open: openSettings,
+        environment: environment.variables,
+        codelabHome: environment.codelabHome,
+        projectDirectory: () => _focusFolder(currentScope),
+        folderOpener: currentScope.resolve<LocalFolderOpener>(),
+        logger: _settingsLogger(),
+      );
+    });
     // Мастер из баннера «Встроенный агент без провайдера» (D26): сессия
     // настроек встроенного профиля — той же фабрикой, что у страницы
     // «Providers»; цель по умолчанию `user`, «Make default» не снимается.
@@ -1201,6 +1234,7 @@ final class CodeLabDependencies {
     required this.createAddProfileCubit,
     required this.createProviderSettingsCubit,
     required this.createMcpSettingsCubit,
+    required this.createSkillsSettingsCubit,
     required this.openEmbeddedWizard,
     this.projectFilesCubit,
   });
@@ -1236,6 +1270,10 @@ final class CodeLabDependencies {
   /// Создаёт Cubit страницы «MCP servers»; страница владеет им и закрывает
   /// (design.md change `add-provider-setup-ui`, D11).
   final McpSettingsCubit Function() createMcpSettingsCubit;
+
+  /// Создаёт Cubit страницы «Skills & extensions»; страница владеет им и
+  /// закрывает (change `add-app-skills-page`, D6).
+  final SkillsSettingsCubit Function() createSkillsSettingsCubit;
 
   /// Открывает мастер встроенного агента из баннера соединения; владелец
   /// закрывает Cubit после диалога (design.md change `add-provider-setup-ui`,
@@ -1327,6 +1365,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     createAddProfileCubit: _scope.resolve<AddProfileCubit>,
     createProviderSettingsCubit: _scope.resolve<ProviderSettingsCubit>,
     createMcpSettingsCubit: _scope.resolve<McpSettingsCubit>,
+    createSkillsSettingsCubit: _scope.resolve<SkillsSettingsCubit>,
     openEmbeddedWizard: _scope.resolve<EmbeddedWizardOpener>(),
     projectFilesCubit: _projectFilesCubitOf(_scope),
   );

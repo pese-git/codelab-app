@@ -129,6 +129,16 @@ final class _IoProviderSettingsSession implements ProviderSettingsSession {
   McpServerRemover mcpRemover() =>
       McpServerRemover(config: config, keys: _mcpKeys());
 
+  /// Читает файлы папки снимка мостом `readAgentExtensions` (D7): конфиг,
+  /// `CODELAB_HOME` и окружение — этого же агента, как у остальных методов.
+  @override
+  Future<AgentExtensionsView> extensions(AgentConfigSnapshot snapshot) =>
+      setup.readAgentExtensions(
+        snapshot,
+        codelabHome: _access.paths.codelabHome,
+        environment: _environment,
+      );
+
   @override
   Future<ProviderCheckResult> checkProvider({
     required String kind,

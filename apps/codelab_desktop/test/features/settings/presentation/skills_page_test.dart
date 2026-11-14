@@ -24,8 +24,6 @@
 //
 // Размер файла — 1024-ичный, одна цифра после точки (`4.8 KB`, `6.1 KB`).
 
-import 'dart:async';
-
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/core/platform/local_folder_opener.dart';
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
@@ -786,6 +784,11 @@ void main() {
 
     testWidgets('a broken config: skills-unreadable with the problem, no '
         'tables and no toggles', (tester) async {
+      // Проблема значения относится к ключу, заданному в слое: без него
+      // снимок переносит её в проблемы запуска, а не в проблемы файла.
+      store.user = {
+        'skills': {'max_skills': 0},
+      };
       store.issues = [
         const ConfigIssue(
           kind: ConfigIssueKind.value,
@@ -807,6 +810,171 @@ void main() {
       expect(find.byType(CodeLabStatusTable), findsNothing);
       expect(find.byType(ToggleSwitch), findsNothing);
       expect(session.extensionsCalls, isEmpty);
+    });
+  });
+
+  group('untrusted text from files is escaped everywhere (D12)', () {
+    // Управляющий символ в тексте, пришедшем из файла, должен быть виден
+    // escape-последовательностью, а не применён.
+    const raw = 'x\u202Ey';
+    const shown = 'x\\u202ey';
+
+    testWidgets('the path of a context file', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(files: [contextFile('dir/$raw/AGENTS.md')]),
+      );
+
+      expect(_in('skills-context-0', 'dir/$shown/AGENTS.md'), findsOneWidget);
+      expect(find.text('dir/$raw/AGENTS.md'), findsNothing);
+    });
+
+    testWidgets('the source file of a template', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          templates: [
+            templateEntry(
+              '/explain',
+              sourcePath: '/work/app/.codelab/prompts/$raw.md',
+            ),
+          ],
+        ),
+      );
+
+      expect(
+        _in('skills-template-explain', '.codelab/prompts/$shown.md'),
+        findsOneWidget,
+      );
+      expect(find.textContaining(raw), findsNothing);
+    });
+
+    testWidgets('"Invoke as" of a skill', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [skillEntry('pdf-tools', invokeAs: '/skill:$raw')],
+        ),
+      );
+
+      expect(_in('skills-row-pdf-tools', '/skill:$shown'), findsOneWidget);
+      expect(find.textContaining(raw), findsNothing);
+    });
+
+    testWidgets('the source label of a skill', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [
+            skillEntry(
+              'pdf-tools',
+              root: userSkillRoot(label: '~/$raw/skills'),
+            ),
+          ],
+        ),
+      );
+
+      expect(_in('skills-row-pdf-tools', '~/$shown/skills'), findsOneWidget);
+      expect(find.textContaining(raw), findsNothing);
+    });
+
+    testWidgets('the message of a diagnostic in skills-warnings', (
+      tester,
+    ) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [skillEntry('a')],
+          skillWarnings: [diagnostic('the skill was skipped $raw')],
+        ),
+      );
+
+      expect(
+        _containing('skills-warnings', 'the skill was skipped $shown'),
+        findsOneWidget,
+      );
+      expect(find.textContaining(raw), findsNothing);
+    });
+  });
+
+  testWidgets('the Enabled switch of a skill is inactive in this iteration '
+      '(no write): onChanged is null and a tap changes nothing', (
+    tester,
+  ) async {
+    await openPage(
+      tester,
+      view: extensionsView(skills: [skillEntry('code-review')]),
+    );
+
+    expect(
+      tester.widget<ToggleSwitch>(_key('skills-toggle-code-review')).onChanged,
+      isNull,
+    );
+    await tester.tap(_key('skills-toggle-code-review'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<ToggleSwitch>(_key('skills-toggle-code-review')).checked,
+      isTrue,
+    );
+    expect(store.applied, isEmpty);
+  });
+
+  group('review of iteration 4', () {
+    String? tooltipOfOpenCodelab(WidgetTester tester) {
+      final tooltip = tester.widget<Tooltip>(
+        find.ancestor(
+          of: _key('skills-open-codelab'),
+          matching: find.byType(Tooltip),
+        ),
+      );
+      return tooltip.message;
+    }
+
+    testWidgets('the tooltip of "Open .codelab folder" names the project '
+        '.codelab and the CODELAB_HOME fallback', (tester) async {
+      await openPage(tester, view: extensionsView());
+
+      final message = tooltipOfOpenCodelab(tester)!;
+      expect(message, contains('/work/app/.codelab'));
+      expect(message, contains(_home));
+    });
+
+    testWidgets('without a folder the tooltip names CODELAB_HOME', (
+      tester,
+    ) async {
+      projectDir = null;
+      await openPage(tester);
+
+      expect(tooltipOfOpenCodelab(tester), contains(_home));
+    });
+
+    testWidgets('the banner shows the path with visible control '
+        'characters', (tester) async {
+      opener.outcome = FolderOpenOutcome.failed;
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [
+            skillEntry(
+              'pdf-tools',
+              directory: '/home/u/.agents/skills/x\u202Ey',
+            ),
+          ],
+        ),
+      );
+
+      await tester.tap(_key('skills-open-skill-pdf-tools'));
+      await tester.pumpAndSettle();
+
+      expect(
+        _containing(
+          'skills-banner',
+          'Could not open /home/u/.agents/skills/x\\u202ey.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('x\u202Ey'), findsNothing);
     });
   });
 
