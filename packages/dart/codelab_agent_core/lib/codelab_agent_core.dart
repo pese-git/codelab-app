@@ -116,6 +116,7 @@ export 'src/project/project_extensions.dart';
 export 'src/project/project_files.dart';
 export 'src/skills/skill_catalog.dart';
 export 'src/skills/skill_files.dart';
+export 'src/skills/skill_root_entry.dart';
 export 'src/subagents/subagent_model.dart'
     show
         SubagentCallRef,

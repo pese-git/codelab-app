@@ -42,6 +42,10 @@ void main() {
 
   String userFile() => '$home/config.yaml';
   String projectFile() => '$project/.codelab/config.yaml';
+
+  // Снимок слоя несёт канонический путь: на macOS временный каталог лежит
+  // за симлинком `/var` → `/private/var`.
+  String canonicalProjectFile() => '$canonicalProject/.codelab/config.yaml';
   String localFile() => '$project/.codelab/config.local.yaml';
 
   const provider = '''
@@ -264,8 +268,8 @@ providers:
       );
 
       expect(off, isA<SkillsListNotEditable>());
-      expect((off as SkillsListNotEditable).source, projectFile());
-      expect((on as SkillsListNotEditable).source, projectFile());
+      expect((off as SkillsListNotEditable).source, canonicalProjectFile());
+      expect((on as SkillsListNotEditable).source, canonicalProjectFile());
     });
 
     test('значение из переменной окружения: отказ с именем источника', () {
@@ -317,7 +321,10 @@ providers:
       );
 
       expect(refused, isA<SkillsListDisabledByProject>());
-      expect((refused as SkillsListDisabledByProject).source, projectFile());
+      expect(
+        (refused as SkillsListDisabledByProject).source,
+        canonicalProjectFile(),
+      );
     });
 
     test('выключить можно всегда: слой проекта при выборе цели не '
@@ -401,6 +408,42 @@ providers:
       );
 
       expect(refused, isA<SkillsListUntrustedProject>());
+    });
+
+    test('сценарий «Отзыв согласия в недоверенном проекте»: present: false '
+        'для относительного элемента — план UnsetValue в user, не отказ; '
+        'выдача без согласия — untrustedProject', () async {
+      user(trusted: false, extra: 'skills:\n  extra_roots: [.claude/skills]\n');
+      final granted = await load();
+
+      final revoke = plan(
+        skillsListEdit(granted, rootsKey, '.claude/skills', present: false),
+      );
+
+      expect(revoke.layer, ConfigLayer.user);
+      expect(revoke.edits, [const UnsetValue(rootsKey)]);
+
+      user(trusted: false);
+      final plain = await load();
+      expect(
+        refusal(
+          skillsListEdit(plain, rootsKey, '.claude/skills', present: true),
+        ),
+        isA<SkillsListUntrustedProject>(),
+      );
+    });
+
+    test('сценарий «Повторное выключение»: disabled [a] в user, выключается '
+        'a снова — план user с пустым edits', () async {
+      user(extra: 'skills:\n  disabled: [a]\n');
+      final snapshot = await load();
+
+      final result = plan(
+        skillsListEdit(snapshot, disabledKey, 'a', present: true),
+      );
+
+      expect(result.layer, ConfigLayer.user);
+      expect(result.edits, isEmpty);
     });
 
     test('недоверенный проект: домашний и абсолютный элементы — как обычно '

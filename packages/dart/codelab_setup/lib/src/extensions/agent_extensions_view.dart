@@ -20,6 +20,8 @@ library;
 import 'package:codelab_agent_core/codelab_agent_core.dart'
     show ExtensionDiagnostic, ExtensionScope;
 
+import 'skills_list_edit.dart' show SkillToggle;
+
 /// Исход чтения раздела (D4 «Фазы»).
 ///
 /// Почему sealed: страница обязана показать причину пустого раздела, а не
@@ -104,6 +106,7 @@ final class SkillConsentView {
     required this.path,
     required this.skillDirs,
     required this.granted,
+    required this.toggle,
   });
 
   /// Элемент, как он запишется в `extra_roots`: `.claude/skills` или
@@ -126,6 +129,11 @@ final class SkillConsentView {
   /// элемент записан (например, в слое `user`): согласие записано, но не
   /// действует. Для `~/…` доверие не нужно.
   final bool granted;
+
+  /// Переключатель согласия: правило `skillsListEdit` с `present: !granted`
+  /// (одна реализация для вида и записи, D5); неактивен с причиной, если
+  /// запись не подействует.
+  final SkillToggle toggle;
 
   @override
   String toString() => 'SkillConsentView($entry, $skillDirs, $granted)';
@@ -210,6 +218,7 @@ final class SkillEntryView {
     required this.overrides,
     required this.overridesLabel,
     required this.warnings,
+    required this.toggle,
   });
 
   final String name;
@@ -234,6 +243,11 @@ final class SkillEntryView {
 
   /// `error`/`warning` с путём `SKILL.md` этого навыка.
   final List<ExtensionDiagnostic> warnings;
+
+  /// Выключатель «Enabled»: правило `skillsListEdit` с `present:
+  /// availability == enabled` (одна реализация для вида и записи, D5);
+  /// неактивен с причиной, если запись не подействует.
+  final SkillToggle toggle;
 
   @override
   String toString() => 'SkillEntryView($name, ${availability.name})';

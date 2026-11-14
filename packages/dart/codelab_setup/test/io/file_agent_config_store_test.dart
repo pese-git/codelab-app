@@ -554,4 +554,32 @@ mcp:
       expect(File(localFile()).readAsStringSync(), contains('local.test'));
     });
   });
+
+  group('источник skills.disabled недоверенного проекта и --config '
+      '(add-app-skills-page, D5, Q43)', () {
+    test('--config сам задаёт skills.disabled, проект выключает другое: '
+        'источник extraFile с путём файла, запись — NotEditable', () async {
+      write(userFile(), provider);
+      write('$project/.codelab/config.yaml', 'skills:\n  disabled: [p]\n');
+      final extra = '${root.path}/team.yaml';
+      write(extra, 'skills:\n  disabled: [a]\n');
+      final store = await open(extraConfig: extra);
+
+      final snapshot = await store.snapshot(cwd: project);
+
+      final origin = snapshot.origins['skills.disabled']!;
+      expect(origin.kind, ConfigSourceKind.extraFile);
+      expect(origin.label, extra);
+      final result = skillsListEdit(
+        snapshot,
+        'skills.disabled',
+        'x',
+        present: true,
+      );
+      expect(
+        ((result as SkillsListRefused).refusal as SkillsListNotEditable).source,
+        extra,
+      );
+    });
+  });
 }
