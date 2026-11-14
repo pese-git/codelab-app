@@ -150,19 +150,24 @@ final class LoopHarness {
     List<Message> history = const [],
     AgentLoopConfig? config,
     CancelToken? cancel,
+    AgentEventSink? emit,
   }) async => (await runTurn(
     prompts,
     history: history,
     config: config,
     cancel: cancel,
+    emit: emit,
   )).added;
 
   /// Итог хода целиком: с историей, заменённой аварийным сжатием.
+  ///
+  /// [emit] заменяет запись в [events] — для тестов сбойного приёмника.
   Future<TurnOutput> runTurn(
     List<Message> prompts, {
     List<Message> history = const [],
     AgentLoopConfig? config,
     CancelToken? cancel,
+    AgentEventSink? emit,
   }) => runAgentLoop(
     prompts: prompts,
     context: LoopContext(
@@ -171,7 +176,7 @@ final class LoopHarness {
       tools: tools,
     ),
     config: config ?? this.config(),
-    emit: events.add,
+    emit: emit ?? events.add,
     cancel: cancel ?? CancelToken.none,
   );
 

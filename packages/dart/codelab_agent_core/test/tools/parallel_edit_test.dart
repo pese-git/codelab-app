@@ -343,6 +343,154 @@ void main() {
     );
   });
 
+  group('a failed announce does not leave the path taken (TOOL-7)', () {
+    // Приёмник событий, который бросает на `ToolCallStarted` вызова [id]:
+    // контракт `AgentEventSink` этого не запрещает, а `Agent.emit`
+    // пробрасывает ошибку подписчика.
+    AgentEventSink failingOn(String id, List<AgentEvent> events) => (event) {
+      if (event is ToolCallStarted && event.toolCallId == id) {
+        throw StateError('subscriber failed');
+      }
+      events.add(event);
+    };
+
+    FakeTool touch(List<String> log) => FakeTool(
+      'touch',
+      lockArg: 'path',
+      onExecute: (args, ctx) {
+        log.add('run ${args['id']}');
+        return const ToolExecutionResult([TextContent('ok')]);
+      },
+    );
+
+    ToolCall touchCall(String id) =>
+        ToolCall(id: id, name: 'touch', arguments: {'id': id, 'path': 'a.txt'});
+
+    // Следующий вызов того же пути после сбоя: путь свободен — вызов
+    // исполняется, а не ждёт тикет, который никто не отпустит.
+    Future<void> expectPathFree(
+      ToolExecutor executor,
+      List<AgentEvent> events,
+    ) async {
+      final handle = await executor.announce(
+        touchCall('c3'),
+        ToolInvocation(
+          sessionId: ex.session,
+          cancel: CancelToken.none,
+          stepTools: const ['touch'],
+          emit: events.add,
+        ),
+      );
+      var done = false;
+      unawaited(executor.complete(handle).then((_) => done = true));
+      await _waitFor(() => done);
+    }
+
+    test('executor: c1 holds the path, emit of ToolCallStarted throws for '
+        'c2, c3 waits for c1 and then runs', () async {
+      final log = <String>[];
+      final h = await ex.ExecutorHarness.create([touch(log)]);
+      final invocation = ToolInvocation(
+        sessionId: ex.session,
+        cancel: CancelToken.none,
+        stepTools: const ['touch'],
+        emit: failingOn('c2', h.events),
+      );
+
+      final h1 = await h.executor.announce(touchCall('c1'), invocation);
+      await expectLater(
+        h.executor.announce(touchCall('c2'), invocation),
+        throwsStateError,
+      );
+      final h3 = await h.executor.announce(touchCall('c3'), invocation);
+      var thirdDone = false;
+      unawaited(h.executor.complete(h3).then((_) => thirdDone = true));
+      // Отпущенный при сбое тикет c2 не впускает c3, пока путь держит c1.
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(log, isEmpty, reason: 'c3 must wait for c1');
+
+      await h.executor.complete(h1);
+      // Тикет c2, не отпущенный при сбое, держал бы путь до конца сессии.
+      await _waitFor(() => thirdDone);
+
+      expect(log, ['run c1', 'run c3']);
+    });
+
+    test('loop: announce of c2 fails in a parallel batch', () async {
+      final log = <String>[];
+      final h = await LoopHarness.create(
+        tools: [touch(log)],
+        llm: script([
+          callStep([
+            ('c1', 'touch', {'id': 'c1', 'path': 'a.txt'}),
+            ('c2', 'touch', {'id': 'c2', 'path': 'a.txt'}),
+          ]),
+          textStep('done'),
+        ]),
+      );
+
+      await h.run([user('go')], emit: failingOn('c2', h.events));
+
+      expect(
+        h.events.whereType<TurnEnded>().single.reason,
+        TurnEndReason.failed,
+      );
+      // c1 был объявлен до сбоя: его вызов закрыт как отменённый ровно
+      // одним финишем, а не брошен с занятым местом в очереди пути. У c2
+      // финиша нет — нет «Finished без Started».
+      List<String> idsOf<T extends AgentEvent>(String Function(T) id) => [
+        for (final e in h.events.whereType<T>()) id(e),
+      ];
+      expect(idsOf<ToolCallStarted>((e) => e.toolCallId), ['c1']);
+      expect(idsOf<ToolCallFinished>((e) => e.toolCallId), ['c1']);
+      expect(_finished(h.events, 'c1')?.outcome, ToolOutcome.cancelled);
+      expect(log, isEmpty);
+
+      // Следующий ход той же сессии правит тот же путь.
+      await expectPathFree(h.executor, h.events);
+      expect(log, ['run c3']);
+    });
+
+    test('loop: abandon itself fails when the sink breaks for good', () async {
+      final log = <String>[];
+      final h = await LoopHarness.create(
+        tools: [touch(log)],
+        llm: script([
+          callStep([
+            ('c1', 'touch', {'id': 'c1', 'path': 'a.txt'}),
+            ('c2', 'touch', {'id': 'c2', 'path': 'a.txt'}),
+          ]),
+          textStep('done'),
+        ]),
+      );
+      // После `ToolCallStarted(c1)` приёмник бросает на всём: падают
+      // объявление c2, финиш отката c1, `AgentError` и `TurnEnded`.
+      var broken = false;
+      Future<void> sink(AgentEvent event) async {
+        if (broken) {
+          throw StateError('subscriber is broken');
+        }
+        h.events.add(event);
+        if (event is ToolCallStarted && event.toolCallId == 'c1') {
+          broken = true;
+        }
+      }
+
+      await expectLater(h.run([user('go')], emit: sink), throwsStateError);
+
+      expect(log, isEmpty);
+      final abandonErrors = h.logger.eventsOf('tool.abandon.error');
+      expect(abandonErrors, hasLength(1));
+      expect(abandonErrors.single.fields['tool_call_id'], 'c1');
+      // Откат отпустил путь c1 до эмита финиша, сбой которого путь не
+      // держит.
+      await expectPathFree(h.executor, h.events);
+      expect(log, ['run c3']);
+    });
+  });
+
   group('PathLock', () {
     test('bodies of one key run one by one in the order of run', () async {
       final lock = PathLock();
