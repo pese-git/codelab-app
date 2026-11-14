@@ -188,10 +188,10 @@ Future<AgentExtensionsView> readAgentExtensions(AgentConfigSnapshot snapshot,
 
 Оба ключа — списки, а списки при слиянии заменяются целиком. Поэтому запись меняет список **того слоя, который сейчас действует**, а не дописывает слой ниже, — иначе правка молча не подействует. Правило одно для двух ключей (`skillsListEdit` моста), по образцу «Default model» страницы Providers:
 
-1. Цель — самый верхний слой, чьё значение ключа действует (`snapshot.origins` итога загрузки), если он редактируемый (`user` или `projectLocal`, SETUP-3). Значение, отброшенное правилами доверия (`extra_roots` из `config.yaml` проекта), источником не считается. Список `skills.disabled` недоверенного проекта объединяется с нижними слоями, а не заменяет их, поэтому такой слой при выборе цели не учитывается. Если ключ не задан нигде — `user` (решение Q2).
-2. Верхний слой не редактируемый (`project` — только для `disabled` доверенного проекта; `--config`; переменная окружения) — выключатель неактивен с подсказкой `Set in <файл>; edit that file.`. Запись в нижний слой не подействовала бы.
+1. Цель — самый верхний слой, чьё значение ключа действует (`snapshot.origins` итога загрузки), если он редактируемый (`user` или `projectLocal`, SETUP-3). Значение, отброшенное правилами доверия (`extra_roots` из `config.yaml` проекта), источником не считается. Для ключей, которые недоверенный проект объединяет с нижними слоями (сейчас только `skills.disabled`; набор `mergedByUntrustedProject` во внутреннем `codelab_setup/lib/src/config/project_trust.dart`), источник в `origins` определяется по `CoreConfig.withoutProjectValues`: слои `project` и `projectLocal` недоверенного проекта при выборе источника пропускаются, а `--config` — источник, только если сам задаёт ключ. Если ключ не задан нигде — `user` (решение Q2).
+2. Верхний слой не редактируемый (`project` — только для `disabled` доверенного проекта; `--config`) — выключатель неактивен с подсказкой `Set in <файл>; edit that file.`. Запись в нижний слой не подействовала бы.
 3. Новое значение — сырой список целевого слоя (`ConfigWriter.read`), плюс или минус элемент, с сохранением порядка и без дублей. Это одна правка `SetValue('skills.<key>', list)`. Пустой список пишется `UnsetValue` в этом слое: файл не копит пустых ключей.
-4. **`skills.disabled` недоверенного проекта** объединяется с нижними слоями (Q43). Имя, выключенное проектным слоем, страница включить не может: выключатель неактивен с подсказкой `Disabled by the project config (<файл>).`. Выключить навык можно всегда — по правилу 1.
+4. **`skills.disabled` недоверенного проекта** — и `config.yaml`, и `config.local.yaml` — объединяется с нижними слоями (Q43). Имя, выключенное любым из этих слоёв (безопасная сторона), страница включить не может: выключатель неактивен с подсказкой `Disabled by the project config (<файл>).`. Выключить навык можно всегда — по правилу 1.
 5. **`skills.extra_roots`** НИКОГДА не пишется в `project` (SKL-2), а в `projectLocal` — только для доверенного проекта. Иначе загрузчик его отбросит, и правило 2 даёт неактивный переключатель. Относительный элемент (`.claude/skills`) у недоверенного проекта не читается (`untrusted_project`), переключатель неактивен с подсказкой `Trust this project to read .claude/skills.`.
 6. Запись — `AgentConfigStore.apply(base, edits)` с базой снимка страницы. `ConfigConflict` — баннер `skills-banner` и перечитывание без автоповтора (SETUP-6). `ConfigRejected` — баннер с проблемами загрузчика, файл не изменён. Пока идёт запись, повторные действия игнорируются (`saving`).
 
@@ -212,6 +212,7 @@ sealed class SkillsListRefusal {}
 final class SkillsListNotEditable extends SkillsListRefusal { final String source; }        // ConfigSourceView.label
 final class SkillsListDisabledByProject extends SkillsListRefusal { final String source; }  // ConfigSourceView.label
 final class SkillsListUntrustedProject extends SkillsListRefusal {}
+final class SkillsListLayerUnreadable extends SkillsListRefusal { final ConfigLayer layer; }  // файл слоя вне снимка (AgentConfigSnapshot.issues)
 final class SkillToggle { final bool isAvailable; final SkillsListRefusal? refusal; }
 // SkillEntryView.toggle, SkillConsentView.toggle (обязательное)
 ```
@@ -219,7 +220,11 @@ final class SkillToggle { final bool isAvailable; final SkillsListRefusal? refus
 - Вызывающий записывает план сам: `store.apply(plan.base, plan.edits)`. `base` — снимок **целевого** слоя, поэтому отпечаток и конфликт (SETUP-6) проверяются по файлу, который меняется. Пустой `edits` — запись не нужна.
 - Ключ, кроме `skills.disabled` и `skills.extra_roots`, — `ArgumentError`: это ошибка программиста, а не отказ для пользователя.
 - **Идемпотентность.** Добавить имеющийся элемент или убрать отсутствующий — `SkillsListPlan` с пустым `edits`; повторное нажатие и гонка двух вкладок не пишут файл.
-- **Правило 4 опирается на Q43:** список `skills.disabled` недоверенного проекта объединяется с нижними слоями, и `origins` итога загрузки его источником не называет. Поэтому цель (правило 1) выбирается без него, а `SkillsListDisabledByProject` определяется по сырому значению проектных слоёв недоверенного проекта из `snapshot.layers` (только при `present: false`).
+- **Правило 4 опирается на Q43.** Список `skills.disabled` недоверенного проекта (`project` и `projectLocal`) объединяется с нижними слоями. Источник такого ключа в `origins` считается по `CoreConfig.withoutProjectValues` (правило 1), поэтому цель выбирается без проектных слоёв. `SkillsListDisabledByProject` определяется по сырому значению этих слоёв из `snapshot.layers` (только при `present: false`). *Исправлено ревью итерации 2:* прежнее допущение «`origins` его источником не называет» и эвристика «источник — окружение» были ошибкой: при совпадении объединения со списком проекта источником назывался `project`, и любое выключение отказывалось.
+- **`SkillsListLayerUnreadable(layer)`** — файл целевого или действующего слоя не прочитан в снимке (есть проблема в `AgentConfigSnapshot.issues`): писать поверх нечитаемого файла нельзя (SETUP-6, целостность данных).
+- **Порядок причин отказа** (закреплён тестом `skills_list_edit_guards_test.dart`): `SkillsListNotEditable` → `SkillsListDisabledByProject` → `SkillsListUntrustedProject` → `SkillsListLayerUnreadable`. Отказ по политике (источник, Q43, SKL-2) сообщается раньше технической причины, чтобы подсказка на странице называла то, что пользователь может изменить.
+- **Доверие без IO.** Мост решает доверие сам, без файловой системы: `projectTrustedIn` сравнивает `projectRoot` снимка с `trustedProjects` итога загрузки; без итога загрузки проект недоверенный (fail-closed).
+- **Предикаты элементов `extra_roots`** (`isAbsoluteSkillRoot`, `isHomeSkillRoot`, `isRelativeSkillRoot`) — в `codelab_agent_core/lib/src/skills/skill_root_entry.dart`, общие для загрузчика `codelab_agent_io` и моста: одно правило «относительный ли элемент» для чтения и для отказа `SkillsListUntrustedProject`.
 - **Правило 5 только для выдачи:** `SkillsListUntrustedProject` — отказ только при `present: true` для относительного элемента недоверенного проекта. Отзыв согласия (`present: false`) разрешён: он только сужает доступ (приоритет 1).
 - **Одна реализация для вида и записи.** `SkillToggle` вычисляется той же `skillsListEdit`: для навыка — `present: availability == enabled` (переключение выключит его), для согласия — `present: !granted`. `isAvailable` — результат `SkillsListPlan`, иначе `refusal` даёт подсказку D5. `toggle` навыков строит `agentExtensionsOf`, `toggle` согласия — `readAgentExtensions` по снимку вместе с кандидатом.
 
@@ -272,14 +277,14 @@ Cubit создаётся на каждое открытие страницы (`C
 
 | Пакет | Что меняется | Слой | Метка |
 |---|---|---|---|
-| `codelab_agent_core` | аддитивно: типы данных `ProjectExtensions`, `PhaseOutcome` (`PhaseLoaded`, `PhaseTimedOut`, `PhaseFailed`), `SkillRootInfo` в `lib/src/project/`, экспорт бареля (D3) | core | `[agent]` |
+| `codelab_agent_core` | аддитивно: типы данных `ProjectExtensions`, `PhaseOutcome` (`PhaseLoaded`, `PhaseTimedOut`, `PhaseFailed`), `SkillRootInfo` в `lib/src/project/` (D3); предикаты элементов `extra_roots` `isAbsoluteSkillRoot`, `isHomeSkillRoot`, `isRelativeSkillRoot` в `lib/src/skills/skill_root_entry.dart` (D5); экспорт бареля | core | `[agent]` |
 | `codelab_agent_io` | `loadProjectExtensions` (экспорт бареля), реэкспорт типов D3 ядра; `ConfigCommands.check` — на функции | io | `[agent]` |
 | `codelab_setup` | основной барель: виды D4, `agentExtensionsOf`, `skillsListEdit` (D5); `io.dart`: `readAgentExtensions` | мост | `[agent]` |
 | `codelab_ui` | аддитивно: `CodeLabStatusTable` — вторая строка и теги ячейки, переключатель строки, доли колонок (D12) | ui | `[desktop]` |
 | `apps/codelab_desktop` | Cubit, состояние, страница, метод сессии, `LocalFolderOpener`, сборка, `defaultSettingsPages`, ключевые слова поиска | app | `[desktop]` |
 
 - Направление зависимостей не меняется: `codelab_desktop → codelab_setup → codelab_agent_core`, `codelab_setup (io.dart) → codelab_agent_io`. Новых рёбер нет, граф `README.md` не меняется.
-- Новых зависимостей нет: `setupAllowlist`, `desktopAllowlist`, allowlist ядра (PKG-2) не меняются. Ядро меняется только аддитивно — три типа данных D3 без новых импортов (PKG-1), правило сторожа ядра не нужно; проверка — `web-compile` ядра.
+- Новых зависимостей нет: `setupAllowlist`, `desktopAllowlist`, allowlist ядра (PKG-2) не меняются. Ядро меняется только аддитивно — типы данных D3 и предикаты элементов `extra_roots` D5, без новых импортов (PKG-1), правило сторожа ядра не нужно; проверка — `web-compile` ядра.
 - **Новое правило сторожа не нужно.** `codelab_setup/io.dart` вне `lib/app/` и `dart:io` в `features/settings/presentation` уже запрещены (D20 change `add-provider-setup-ui`), `url_launcher` вне `core/platform/` — тоже. Основной барель моста остаётся web-безопасным, проверка — `web-compile`.
 - `codelab_client_core` и `codelab_client_io` не меняются: данные агентской стороны приходят мостом, клиентского состояния ACP страница не добавляет.
 - `[protocol]` и `[client]` задач нет.
@@ -351,6 +356,7 @@ Cubit создаётся на каждое открытие страницы (`C
 - **Недоверенный текст на экране:** описания и имена навыков из `~/.agents/skills` пишут и другие агенты пользователя. *Смягчение:* ячейки `untrusted` с `escapeForDisplay` (D12), без markdown и ссылок; тела не показываются.
 - **Чтение файлов в процессе app** — та же нагрузка, что открытие сессии встроенного агента (D7). *Смягчение:* пределы и таймауты загрузчика, поздний результат отбрасывается.
 - **Открытие каталога** через `url_launcher` зависит от файлового менеджера ОС (Linux — `xdg-open`). *Смягчение:* исход `failed` даёт баннер, путь остаётся в подсказке.
+- **Источник ключа зависит от `CoreConfig.withoutProjectValues`** (D5): `fromLayers` и внешние источники снимка (`_ExternalOrigins`) берут источник объединяемого ключа из этого поля ядра. Если ядро перестанет его заполнять, источник не определится, и цель — `user` по умолчанию: безопасно, `user` всегда редактируем, а объединение недоверенного проекта и отказ правила 4 от этого не зависят. Страж — тесты `skills_list_edit_test.dart`.
 - **Гонки** (§9, §12): номер загрузки, одна подписка, `saving`, конфликт без автоповтора (D14).
 
 ## Migration Plan

@@ -26,7 +26,7 @@
 ## 2. Мост: правила записи (итерация 2)
 
 - [x] 2.1 `[agent]` Красные тесты `codelab_setup/test/extensions/skills_list_edit_test.dart` (client-agent-setup «Правила записи skills.disabled и skills.extra_roots», все сценарии; D5) на снимках настоящего `FileAgentConfigStore`: цель по действующему слою, `user` по умолчанию, отказ `notEditable` для `project`/`--config`/окружения, `disabledByProject` у недоверенного проекта (объединение Q43), `UnsetValue` для пустого списка, порядок без дублей, `extra_roots` никогда в `project` и в `projectLocal` недоверенного проекта, `untrustedProject` для относительного элемента; применение правок `apply` даёт ожидаемый файл и `ConfigSaved`.
-- [ ] 2.2 `[agent]` Реализация 2.1: `lib/src/extensions/skills_list_edit.dart` (`skillsListEdit`, исходы, причины отказа), экспорт; поле `SkillEntryView.toggle` и состояние переключателей согласия строятся этим же правилом (одна реализация для вида и записи).
+- [x] 2.2 `[agent]` Реализация 2.1: `lib/src/extensions/skills_list_edit.dart` (`skillsListEdit`, исходы, причины отказа), экспорт; поле `SkillEntryView.toggle` и состояние переключателей согласия строятся этим же правилом (одна реализация для вида и записи).
 
 ## 3. `codelab_ui`: таблица (итерация 3)
 
