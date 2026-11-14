@@ -671,40 +671,110 @@ final class _Turn {
       } on Object {
         // Уже объявленные вызовы группы держат места в очереди `PathLock`
         // сессии; без `abandon` их пути остались бы заняты и в следующих
-        // ходах (TOOL-7). `abandon` отпускает тикет до эмита
-        // `ToolCallFinished`, поэтому его собственный сбой путь уже не держит;
-        // ход заканчивается исходной ошибкой (LOOP-1). Предыдущие группы к
-        // этому моменту завершены.
-        for (final handle in handles) {
-          try {
-            await executor.abandon(handle);
-          } on Object catch (error, stack) {
-            // Исходная ошибка важнее: она уйдёт в `AgentError` хода. Сбой
-            // отката только логируется, чтобы его причина не потерялась,
-            // если сломан сам приёмник событий (§16).
-            _config.logger?.log(
-              LogLevel.warning,
-              'tool.abandon.error',
-              fields: {
-                'session_id': _session.value,
-                'tool': handle.call.name,
-                'tool_call_id': handle.call.id,
-              },
-              error: error,
-              stack: stack,
-            );
-          }
-        }
+        // ходах (TOOL-7). Ход заканчивается этой ошибкой (LOOP-1): она
+        // важнее сбоя самого отката, который только логируется. Предыдущие
+        // группы к этому моменту завершены.
+        await _abandonAll(executor, handles);
         rethrow;
       }
       final outcomes = _cancel.isCancelled
-          ? [for (final handle in handles) await executor.abandon(handle)]
+          ? await _abandonCancelled(executor, handles)
           : await Future.wait(handles.map(executor.complete));
       for (final outcome in outcomes) {
         results[outcome.message.toolCallId] = outcome.message;
       }
     }
     return [for (final call in calls) results[call.id]!];
+  }
+
+  /// Откатывает [handles] до исполнения, не давая сбою одного хэндла удержать
+  /// пути остальных.
+  ///
+  /// Почему: `abandon` отпускает тикет `PathLock` синхронно, до эмита
+  /// `ToolCallFinished`, но откат по одному с `await` прерывался на первом
+  /// сбое или зависании эмита — тикеты остальных хэндлов оставались занятыми,
+  /// и следующий `write`/`edit` того же пути в сессии ждал вечно (TOOL-7).
+  ///
+  /// Для чего: общий откат обеих веток `_runBatch` — сбоя `announce` и отмены
+  /// группы. Сначала запускаются все `abandon` (тикеты свободны до первого
+  /// ожидания), потом результаты ждутся по очереди.
+  ///
+  /// Как использовать: каждый сбой пишется в лог `tool.abandon.error`
+  /// (§16), сбой самого журнала глотается. Возвращается первый сбой или
+  /// `null`, а пробрасывать ли его — решает вызывающий. Успешные исходы в
+  /// порядке [handles] добавляются в [outcomes], если он передан.
+  Future<(Object, StackTrace)?> _abandonAll(
+    ToolExecutor executor,
+    List<ToolCallHandle> handles, [
+    List<ToolExecutionOutcome>? outcomes,
+  ]) async {
+    // Результат оборачивается сразу, чтобы ошибка ещё не ожидаемого хэндла не
+    // стала необработанной.
+    final pending = [
+      for (final handle in handles)
+        (handle, _settle(() => executor.abandon(handle))),
+    ];
+    (Object, StackTrace)? first;
+    for (final (handle, settled) in pending) {
+      final (outcome, failure) = await settled;
+      if (outcome != null) {
+        outcomes?.add(outcome);
+        continue;
+      }
+      final (error, stack) = failure!;
+      first ??= (error, stack);
+      try {
+        _config.logger?.log(
+          LogLevel.warning,
+          'tool.abandon.error',
+          fields: {
+            'session_id': _session.value,
+            'tool': handle.call.name,
+            'tool_call_id': handle.call.id,
+          },
+          error: error,
+          stack: stack,
+        );
+      } on Object {
+        // Сломанный журнал не должен подменить исходную ошибку хода и
+        // оборвать запись сбоев остальных хэндлов (LOOP-1); сообщить о его
+        // сбое уже некуда.
+      }
+    }
+    return first;
+  }
+
+  /// Превращает исход [start] в значение: синхронный и асинхронный сбой
+  /// одинаково становятся парой «ошибка, стек», а не исключением.
+  ///
+  /// Почему: `_abandonAll` запускает все `abandon` до первого ожидания;
+  /// синхронный `throw` прервал бы запуск остальных, а отказ ещё не
+  /// дождавшегося future стал бы необработанной ошибкой.
+  Future<(ToolExecutionOutcome?, (Object, StackTrace)?)> _settle(
+    Future<ToolExecutionOutcome> Function() start,
+  ) async {
+    try {
+      return (await start(), null);
+    } on Object catch (error, stack) {
+      return (null, (error, stack));
+    }
+  }
+
+  /// Ветка отмены группы: откат всех хэндлов, затем первая ошибка отката
+  /// (если была) уходит из хода как есть — ход `failed` (LOOP-1). Все тикеты к
+  /// этому моменту уже освобождены: `abandon` отпускает их до эмита.
+  Future<List<ToolExecutionOutcome>> _abandonCancelled(
+    ToolExecutor executor,
+    List<ToolCallHandle> handles,
+  ) async {
+    final outcomes = <ToolExecutionOutcome>[];
+    if (await _abandonAll(executor, handles, outcomes) case (
+      final error,
+      final stack,
+    )) {
+      Error.throwWithStackTrace(error, stack);
+    }
+    return outcomes;
   }
 
   ToolResultMessage _truncatedArguments(ToolCall call) => ToolResultMessage(
