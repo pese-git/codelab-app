@@ -36,14 +36,15 @@ void main() {
   });
 
   /// Прогон [slow c1, task_create c2, task_create c3], где `slow` ждёт, пока
-  /// оба `task_create` не завершатся.
+  /// оба `task_create` (c2 и c3) не завершатся.
   Future<LoopHarness> runBatch() async {
     final bothFinished = Completer<void>();
     final slow = FakeTool(
       'slow',
       onExecute: (args, ctx) async {
-        // Последовательный пакет зависнет здесь: c1/c2 не стартуют, пока
-        // slow (c3) не вернётся, а он ждёт их. Таймаут вместо замера времени.
+        // Последовательный пакет зависнет здесь: c2/c3 (task_create) не
+        // стартуют, пока slow (c1) не вернётся, а он ждёт их. Таймаут вместо
+        // замера времени.
         await bothFinished.future.timeout(const Duration(seconds: 2));
         return ToolExecutionResult([TextContent('slow done')]);
       },

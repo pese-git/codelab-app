@@ -7,9 +7,10 @@ import '../../loop/loop_harness.dart';
 
 /// Пакет вызовов со списком задач исполняется параллельно с остальным
 /// пакетом (стратегия «parallel», LOOP-4): порядок `TaskListChanged` и id
-/// равен порядку вызовов (очередь ключа `lockKey`, D39-alt), а TSK-1 держится per-call — `TaskListChanged` вызова
-/// стоит раньше его `ToolCallFinished`, а клиент привязывает `plan` по
-/// `change.toolCallId` (D35). Хук `beforeToolCall` в параллельном пакете
+/// равен порядку вызовов (очередь ключа `lockKey`, D39-alt), а TSK-1
+/// держится на каждый вызов: `TaskListChanged` вызова стоит раньше его
+/// `ToolCallFinished`, а клиент привязывает `plan` по `change.toolCallId`
+/// (D35). Хук `beforeToolCall` в параллельном пакете
 /// срабатывает уже после announce всех вызовов (`ToolCallStarted` всех трёх
 /// идут первыми).
 void main() {
@@ -27,13 +28,13 @@ void main() {
       ]),
     );
     await h.env.writeText('/proj/a.txt', 'A\n');
-    // Хук хоста (как `markInProgress` ACP-адаптера): фиксируем, какое
-    // событие ему предшествовало.
-    final beforeExecute = <String, String>{};
+    // Хук хоста (как `markInProgress` ACP-адаптера): фиксируем, сколько
+    // событий было эмитировано к его срабатыванию.
+    final hookAt = <String, int>{};
     final config = h.config(
       beforeToolCall: [
         (call, args, ctx) async {
-          beforeExecute[call.id] = h.trace.last;
+          hookAt[call.id] = h.events.length;
           return null;
         },
       ],
@@ -58,12 +59,19 @@ void main() {
       );
       expect(changed, lessThan(finished), reason: id);
     }
-    // Фактическое поведение: хук каждого вызова видит последним событием
-    // Started последнего вызова пакета (announce всех — до исполнения).
-    expect(beforeExecute, {
-      'c1': 'ToolCallStarted(c3)',
-      'c2': 'ToolCallStarted(c3)',
-      'c3': 'ToolCallStarted(c3)',
-    });
+    // Закрепляется §17.16b: `beforeToolCall` параллельного пакета срабатывает
+    // пачкой после announce всего пакета, а не сразу после `Started` своего
+    // вызова. Поэтому хук каждого вызова (индекс в `h.events` на момент хука)
+    // стоит позже `ToolCallStarted` всех трёх вызовов.
+    final lastStarted = [
+      for (final id in ['c1', 'c2', 'c3'])
+        h.events.indexWhere((e) => e is ToolCallStarted && e.toolCallId == id),
+    ].reduce((a, b) => a > b ? a : b);
+    expect(hookAt.keys, unorderedEquals(['c1', 'c2', 'c3']));
+    for (final entry in hookAt.entries) {
+      // `events.length` на момент хука — индекс следующего события, поэтому
+      // строго больше индекса последнего `Started`.
+      expect(entry.value, greaterThan(lastStarted), reason: entry.key);
+    }
   });
 }

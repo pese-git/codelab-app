@@ -34,7 +34,10 @@ void main() {
     });
   });
 
-  /// Прогон пакета; хук [first] для c1 ждёт [gate], остальные отвечают сразу.
+  /// Прогон пакета; хук c1 ждёт [gate], остальные отвечают сразу. Gate
+  /// открывается из хука последнего вызова пакета (на следующем витке
+  /// очереди событий): к этому моменту все остальные вызовы уже дошли до
+  /// ожидания ключа — без реального времени (PKG-6).
   Future<LoopHarness> run(
     List<(String, String, Map<String, Object?>)> calls, {
     required Completer<void> gate,
@@ -44,9 +47,17 @@ void main() {
       tools: [TaskCreateTool(), TaskUpdateTool()],
       llm: script([callStep(calls), textStep('done')]),
     );
+    final lastId = calls.last.$1;
     final config = h.config(
       beforeToolCall: [
         (call, args, ctx) async {
+          if (call.id == lastId) {
+            unawaited(
+              Future(() {
+                if (!gate.isCompleted) gate.complete();
+              }),
+            );
+          }
           if (call.id == 'c1') {
             // Хук первого вызова отвечает позже хука второго: без очереди по
             // ключу c2 взял бы замок списка первым.
@@ -55,12 +66,6 @@ void main() {
           return blockOf?.call(call);
         },
       ],
-    );
-    // Освобождаем c1 после того, как c2 успел дойти до своего шага 6.
-    unawaited(
-      Future<void>.delayed(const Duration(milliseconds: 50), () {
-        if (!gate.isCompleted) gate.complete();
-      }),
     );
     await h.run([user('go')], config: config);
     return h;
@@ -108,6 +113,47 @@ void main() {
     expect(changes.single.change.changed.single.id, '1');
   });
 
+  // Связано с `PathLock` (#322): отказ среднего тикета до захвата не должен
+  // впустить c3 раньше c1. Без этого c3 видел пустой список (`unknown_id`).
+  test('middle call failing validation does not let c3 overtake c1', () async {
+    final h = await run([
+      ('c1', 'task_create', {'subject': 'A'}),
+      ('c2', 'task_create', <String, Object?>{}),
+      ('c3', 'task_update', {'id': '1', 'status': 'in_progress'}),
+    ], gate: Completer<void>());
+
+    final finished = {
+      for (final e in h.events.whereType<ToolCallFinished>())
+        e.toolCallId: e.outcome,
+    };
+    expect(finished['c2'], ToolOutcome.failed);
+    expect(finished['c3'], ToolOutcome.completed);
+    final changes = h.events.whereType<TaskListChanged>().toList();
+    expect([for (final c in changes) c.change.toolCallId], ['c1', 'c3']);
+    expect(changes.last.items.single.status, TaskStatus.inProgress);
+  });
+
+  test('middle call blocked by a hook does not let c3 overtake c1', () async {
+    final h = await run(
+      [
+        ('c1', 'task_create', {'subject': 'A'}),
+        ('c2', 'task_create', {'subject': 'B'}),
+        ('c3', 'task_update', {'id': '1', 'status': 'in_progress'}),
+      ],
+      gate: Completer<void>(),
+      blockOf: (call) => call.id == 'c2' ? const Block('denied') : null,
+    );
+
+    final finished = {
+      for (final e in h.events.whereType<ToolCallFinished>())
+        e.toolCallId: e.outcome,
+    };
+    expect(finished['c3'], ToolOutcome.completed);
+    final changes = h.events.whereType<TaskListChanged>().toList();
+    expect([for (final c in changes) c.change.toolCallId], ['c1', 'c3']);
+    expect(changes.last.items.single.status, TaskStatus.inProgress);
+  });
+
   test('first call blocked by a hook does not hold the queue', () async {
     final h = await run(
       [
@@ -144,7 +190,7 @@ void main() {
     );
     // c2 доходит до ожидания ключа, пока c1 ещё не завершён.
     final secondDone = h.executor.complete(second);
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue();
     source.cancel();
     // c1 не начал исполнение (отмена до шага 6) — отменён, операция не
     // применена; c2 начал и ждёт ключ — исполняется несмотря на отмену.
