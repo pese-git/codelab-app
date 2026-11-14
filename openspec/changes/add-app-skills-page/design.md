@@ -257,6 +257,17 @@ Cubit создаётся на каждое открытие страницы (`C
 - **«Open .codelab folder»** — `<папка проекта>/.codelab`, если каталог есть, иначе `$CODELAB_HOME` профиля (решение Q4). Подсказка кнопки называет путь.
 - Отказ (`failed`, `missing`) — баннер `skills-banner` `Could not open <путь>.` и событие `skills_settings.open_failed` без пути.
 
+API итерации 4 (по красным тестам 4.1, 4.3, 4.5):
+
+- `FolderOpenOutcome { opened, failed, missing }`: относительный или пустой путь, `~` — `failed` без вызова платформы; нет каталога или это файл — `missing`; шов `UrlLauncherLocalFolderOpener(launch:)`.
+- `SkillsSettingsCubit` — конструктор по образцу `McpSettingsCubit` (без `statusSource`, с `folderOpener`); методы `reload()`, `openCodelabFolder()`, `openFolder(String directory)`. `openCodelabFolder` диск не проверяет: просит порт открыть `<папка>/.codelab`, при `missing` — `$CODELAB_HOME`; без папки — сразу `$CODELAB_HOME`. `openFolder` принимает только каталог из текущего вида (`openDir` контекста, каталог навыка, каталог файла шаблона), остальное отвергается без вызова порта и без события.
+- Состояния: `SkillsSettingsLoading`, `SkillsSettingsReadOnly(notice, hint?)`, `SkillsSettingsNoFolder`, `SkillsSettingsUnreadable(problems)`, `SkillsSettingsReady(view, userConfigPath, {banner, saving})`, `SkillsBanner(kind, text)` с `SkillsBannerKind.openFailed`. `userConfigPath` — файл слоя `user` снимка (подсказка InfoBar `skills-untrusted`).
+- Перечитывание по событию рабочего пространства — только при смене профиля или папки сессии в фокусе.
+- Каталог навыка — поле моста `SkillEntryView.directory` (каталог, где лежит `SKILL.md`), а не `<корень>/<имя>`: имя во frontmatter может не совпадать с каталогом. Аддитивная правка `codelab_setup` в итерации 4; построитель берёт его из `SkillFile.dir`.
+- Форма путей вида. Построитель `agentExtensionsOf` (основной барель, web-безопасный) отдаёт пути в форме ядра (`/c/p` на Windows). `readAgentExtensions` (`io.dart`) переводит **все** пути вида в форму хоста одним проходом через `toHostPath`: корни навыков, `openDir` и `path` цепочки, `directory` навыка, файл шаблона, пути предупреждений. На POSIX перевод тождественен. Без него «Open» на Windows получал бы путь, которого нет (`AGENTS.md` §11).
+- В итерации 4 в состоянии «только для чтения» нет Reload и «Open .codelab folder»; переключатели навыков показывают состояние, записи нет (итерация 5).
+- Ключи: `skills-open-context-<n>`, `skills-open-skill-<name>`, `skills-open-template-<name>`, `skills-search-order`, `skills-template-<команда без />`. Размер файла — 1024-ичный, одна цифра после точки (`4.8 KB`).
+
 ### D9. Когда изменения действуют
 
 Список навыков сессии — неизменный снимок открытия (SKL-4). Перечитывания без перезапуска нет (E-19). Агент перечитывает конфиг сам при изменении файла (§17.5.6), а ключи `skills.*` — ключи сессии (Q44). Поэтому запись действует **на сессии, открытые после неё**, без «Restart agent». Баннер после `ConfigSaved`: `Saved. New sessions use it; open sessions keep their skills.` Подпись раздела под таблицей — по артборду, с этой же оговоркой (D13). Подсказки «Restart agent» нет. Это не тот класс, что `restartRequiredServers`: `planConfigReload` не откладывает `skills.*`. Если реестр однажды пометит ключ `restartRequired`, баннер возьмёт признак из `ConfigSaved.restartRequiredKeys`. Правило одно — в ядре.
@@ -265,7 +276,7 @@ Cubit создаётся на каждое открытие страницы (`C
 
 Логгер `codelab_desktop.settings`, компонент `settings` (D17 change `add-app-settings-shell`). События:
 - `skills_settings.loaded {access, trusted, context_files, skills, disabled, templates, warnings}` — виды и числа;
-- `skills_settings.unreadable {issues}` и `skills_settings.read_only {access}`;
+- `skills_settings.unreadable {issues}` (при исключении порта или хранилища — ещё `error_type`, имя типа) и `skills_settings.read_only {access: remote|not_managed}`;
 - `skills_settings.phase_failed {phase: project_files|skills, reason: timeout|<имя типа>}`;
 - `skills_settings.skill_toggled {name, enabled, layer}`, `skills_settings.root_consent {root_kind: project_relative|home, enabled, layer}`;
 - `skills_settings.save_failed {outcome: conflict|rejected|<имя типа>}`, `skills_settings.load_discarded` (поздний результат);
