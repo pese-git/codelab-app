@@ -76,7 +76,7 @@ final class LogRecord {           // то, что получает sink хост
 |---|---|
 | `llm` | `llm.request.start`, `llm.request.end`, `llm.retry`, `llm.fallback`, `llm.finish_reason.unknown` (§2.7) |
 | `turn` | `turn.start`, `turn.end`, `turn.budget_exceeded` |
-| `tool` | `tool.start`, `tool.end`, `tool.validation_failed`, `tool.validate.error` (`debug`; `tool`, `tool_call_id` — исключение при валидации, §6.3.1 шаг 3), `tool.pairing_repaired`, `tool.misuse.warned`, `tool.misuse.blocked` (§6.3.7), `tool.lock.wait`, `tool.lock.cancelled` (`debug`; `tool`, `tool_call_id`, без пути — подход к захвату пути и прерывание ожидания отменой хода, §6.3.1 шаг 6, TOOL-7) |
+| `tool` | `tool.start`, `tool.end`, `tool.validation_failed`, `tool.validate.error` (`debug`; `tool`, `tool_call_id` — исключение при валидации, §6.3.1 шаг 3), `tool.pairing_repaired`, `tool.misuse.warned`, `tool.misuse.blocked` (§6.3.7), `tool.lock.wait`, `tool.lock.cancelled` (`debug`; `tool`, `tool_call_id`, без пути — подход к захвату пути и прерывание ожидания отменой хода, §6.3.1 шаг 6, TOOL-7), `tool.abandon.error` (`warning`; `session_id`, `tool`, `tool_call_id`, исключение — в `error` и `stack` записи — по записи на каждый упавший `abandon` при откате объявленных вызовов группы: после упавшего объявления или при отмене хода до исполнения группы; места в очереди пути к этому моменту уже отпущены; ход завершается `failed` — с исходной ошибкой объявления или с первой ошибкой отката при отмене; сбой самого логгера глотается, §5.5 шаги 3a и 3c, §5.5.1, §6.3.1 «Фазы и откат») |
 | `tools` | `tools.switch.no_match` (§6.3.8) |
 | `loop` | `loop.empty_response`, `loop.empty_response.stopped` (§5.4.1) |
 | `prompts` | `prompts.override` (§11.6.1) |
@@ -800,6 +800,8 @@ Ledger: rebuilt from journal (214 records)
 * После 1.0 (§12.4, R8-1): тест с секретом в env, в аргументах команды и в выводе `exec`: лог, JSONL, trace, `AgentError` и запрос к модели (scripted LLM записывает payload) не содержат значения (OBS-2).
 * Табличный тест `redact` на каждый шаблон: позитивные и негативные примеры (`sk-` в слове `task-list` не трогается), идемпотентность (OBS-5).
 * Тест-перехватчик `Logger` в сценариях с инструментами: у каждой записи `tool.*` есть корреляционные поля (OBS-3).
+* `parallel_edit_test.dart`, приёмник событий ломается после `ToolCallStarted` первого вызова параллельной группы: ровно одна запись `tool.abandon.error` с `tool_call_id` этого вызова, исключение — в поле `error` записи, путь свободен для следующего хода (§5.5.1, TOOL-7).
+* `batch_cancel_abandon_failure_test.dart`: при отмене эмит `ToolCallFinished` бросает на обоих вызовах группы — записи `tool.abandon.error` для `c1` и `c2` по порядку; при сбое объявления — запись только для упавшего отката `c1`; логгер, бросающий на `tool.abandon.error`, не меняет исход хода (§5.5.1, LOOP-1, TOOL-7).
 * Тест «сбой записи журнала»: fake `SessionStore` бросает на `append` → запись `session.append.failed` в лог, `AgentError(storage)`, `TurnEnded(failed)` (OBS-4, SES-8).
 * Тест «провайдер отвечает 500 на все 4 попытки» (`transient_retries: 3`): `prompt()` не бросает, `TurnResult.reason == failed` (OBS-1).
 * Тест release-конфигурации trace: `trace_payload = true` в release → payload отсутствует, предупреждение в логе (OBS-6).
