@@ -141,10 +141,16 @@ final class SubagentTool extends AgentTool {
 
   /// Заголовок вызова без резерва id: им пользуется лечение журнала, чтобы
   /// последовательность id не зависела от него (D36 Т6).
+  ///
+  /// Без непустого (после `trim`) строкового `description` заголовок —
+  /// `Subagent <type>` без хвоста `: ` (D41, п. 3): пустое описание не должно
+  /// давать в клиенте заголовок с висящим двоеточием.
   String titleOf(Map<String, Object?> args) {
     final description = args['description'];
-    return 'Subagent ${_typeOf(args)}: '
-        '${description is String ? description.trim() : ''}';
+    final text = description is String ? description.trim() : '';
+    return text.isEmpty
+        ? 'Subagent ${_typeOf(args)}'
+        : 'Subagent ${_typeOf(args)}: $text';
   }
 
   String _typeOf(Map<String, Object?> args) =>

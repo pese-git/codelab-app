@@ -144,9 +144,11 @@ abstract class ToolCallView with _$ToolCallView {
 
 /// Статус вызова для отображения.
 ///
-/// [cancelled] — вызов не закончился к `session/cancel` клиента: в ACP такого
-/// статуса нет, ядро хранит его как `failed` с флагом `cancelledByClient`
-/// (fix-prompt-cancel-tool-calls/design.md, D3).
+/// [cancelled] — вызов не закончился: в ACP такого статуса нет. Два источника:
+/// `session/cancel` клиента (ядро хранит `failed` с флагом
+/// `cancelledByClient`, fix-prompt-cancel-tool-calls/design.md, D3) и признак
+/// агента `_meta.codelab.outcome: "cancelled"` у `failed`-кадра, в том числе
+/// при реплее `session/load` (add-subagents-and-tasks, D41 п. 1).
 enum ToolCallStatusView { queued, running, succeeded, failed, cancelled }
 
 /// Одобрение вызова инструмента, встроенное в его элемент.

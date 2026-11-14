@@ -213,6 +213,18 @@ void main() {
           ).allMatches(text),
           hasLength(1),
         );
+
+        // Порядок: пометка report_max_bytes раньше пометки лимита ответа,
+        // а пометка лимита — последняя строка текста отчёта (D41, п. 6).
+        final byteNote = text.indexOf('[report truncated: ');
+        final limitNote = text.indexOf(cutNote);
+        expect(byteNote, isNonNegative);
+        expect(byteNote, lessThan(limitNote));
+        final reportText = text.substring(
+          text.indexOf('>') + 1,
+          text.lastIndexOf('</subagent-report>'),
+        );
+        expect(reportText.trimRight().split('\n').last, cutNote);
       },
     );
 

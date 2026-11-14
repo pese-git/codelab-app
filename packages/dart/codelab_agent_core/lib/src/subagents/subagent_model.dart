@@ -19,6 +19,9 @@ enum SubagentFailure {
   invalidOutput,
   interrupted,
   refused,
+
+  /// Ответ ребёнка оборван лимитом выходных токенов без текста (D41, п. 6).
+  maxTokens,
 }
 
 /// Признак вызова `agent` с первого кадра: id и тип, зарезервированные

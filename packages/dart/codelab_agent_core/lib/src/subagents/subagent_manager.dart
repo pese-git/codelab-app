@@ -695,6 +695,11 @@ final class SubagentManager {
     }
   }
 
+  /// Строка о том, что ответ ребёнка оборван лимитом выходных токенов
+  /// (D41, п. 6; `17-3-subagents.md` §17.3.5).
+  static const _outputLimitNote =
+      '[report truncated: the subagent hit the output token limit]';
+
   SubagentReport _buildReport(_Handle handle) {
     final ended = handle.ended;
     if (ended != null) {
@@ -706,6 +711,8 @@ final class SubagentManager {
     SubagentFailure? failure;
     BudgetLimit? limit;
     String? message;
+    var cutByLimit = false;
+    String? noReportBody;
     if (ended == null) {
       status = handle.source.isCancelled
           ? SubagentState.cancelled
@@ -729,8 +736,17 @@ final class SubagentManager {
             status = SubagentState.failed;
             failure = SubagentFailure.budgetExceeded;
             limit = exceeded;
+          } else if (ended.reason == TurnEndReason.maxTokens &&
+              text.trim().isEmpty) {
+            // Лимит ушёл в рассуждения: отчёта нет (D41, п. 6).
+            status = SubagentState.failed;
+            failure = SubagentFailure.maxTokens;
+            // Текст нужен клиенту: SubagentFinished.report — единственное
+            // тело, которое ACP покажет у failed-вызова.
+            noReportBody = subagentNoReportAtOutputLimit;
           } else {
             status = SubagentState.completed;
+            cutByLimit = ended.reason == TurnEndReason.maxTokens;
           }
       }
     }
@@ -739,8 +755,12 @@ final class SubagentManager {
       status,
       failure: failure,
       limit: limit,
-      text: cut.text,
-      truncated: cut.truncated,
+      // Пометка лимита — после усечения по report_max_bytes, чтобы оно её не
+      // отрезало; пометки разных видов независимы, атрибут один (D41, п. 6).
+      text:
+          noReportBody ??
+          (cutByLimit ? '${cut.text}\n$_outputLimitNote' : cut.text),
+      truncated: cut.truncated || cutByLimit,
       message: message,
     );
   }
@@ -783,7 +803,10 @@ final class SubagentManager {
         'failure': failureWire(report.failure, report.budgetExceeded),
         'steps': report.steps,
         'tool_calls': report.toolCalls,
-        'tokens': report.usage.input + report.usage.output,
+        // Раздельные счётчики (D18; D41, п. 2 и 7): сумма скрывала перекос входа и
+        // выхода, а числовые поля не маскируются SecretRedactor.
+        'tokens_in': report.usage.input,
+        'tokens_out': report.usage.output,
         'duration_ms': report.duration.inMilliseconds,
       },
     );

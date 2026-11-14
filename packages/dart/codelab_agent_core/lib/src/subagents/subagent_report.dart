@@ -7,6 +7,13 @@ import 'subagent_model.dart';
 /// 17-3-subagents.md` §17.3.5; design.md change `add-subagents-and-tasks`,
 /// D24).
 
+/// Тело отчёта ребёнка, у которого лимит выходных токенов ушёл целиком в
+/// рассуждения (D41, п. 6). Одна константа для обёртки модели и для
+/// `SubagentFinished.report`, который ACP показывает человеку.
+const subagentNoReportAtOutputLimit =
+    'Subagent stopped: it hit the output token limit before writing a '
+    'report.';
+
 /// Текст, который видит модель родителя: один блок `<subagent-report …>`.
 ///
 /// Почему такая обёртка: отчёт — пересказ того, что ребёнок прочёл в файлах и
@@ -27,6 +34,7 @@ String wrapSubagentReport(SubagentReport report, {bool withSteps = true}) {
     ),
     SubagentFailure.invalidOutput => 'invalid_output',
     SubagentFailure.refused => 'refused',
+    SubagentFailure.maxTokens => 'max_tokens',
     SubagentFailure.error || SubagentFailure.interrupted => 'error',
   };
   final body = switch ((report.status, report.failure)) {
@@ -35,6 +43,7 @@ String wrapSubagentReport(SubagentReport report, {bool withSteps = true}) {
       report.text.isEmpty
           ? 'Subagent stopped: its budget was exhausted before it finished.'
           : report.text,
+    (_, SubagentFailure.maxTokens) => subagentNoReportAtOutputLimit,
     (SubagentState.failed, _) =>
       'Subagent failed: ${report.failureMessage ?? report.text}',
     _ => 'Tool call was cancelled',
@@ -115,6 +124,7 @@ String _attribute(String value) => value
     failure: switch (wire) {
       'invalid_output' => SubagentFailure.invalidOutput,
       'refused' => SubagentFailure.refused,
+      'max_tokens' => SubagentFailure.maxTokens,
       'interrupted' => SubagentFailure.interrupted,
       _ => SubagentFailure.error,
     },
@@ -124,7 +134,7 @@ String _attribute(String value) => value
 
 /// Значение `failure` записи `subagent` и `_meta` ACP (`17-3-subagents.md`
 /// §17.3.6): `budget_exceeded:<limit>`, `invalid_output`, `error`,
-/// `refused`, `interrupted`; `null` — сбоя нет.
+/// `refused`, `interrupted`, `max_tokens`; `null` — сбоя нет.
 String? failureWire(SubagentFailure? failure, BudgetLimit? limit) =>
     switch (failure) {
       null => null,
@@ -134,4 +144,5 @@ String? failureWire(SubagentFailure? failure, BudgetLimit? limit) =>
       SubagentFailure.error => 'error',
       SubagentFailure.refused => 'refused',
       SubagentFailure.interrupted => 'interrupted',
+      SubagentFailure.maxTokens => 'max_tokens',
     };

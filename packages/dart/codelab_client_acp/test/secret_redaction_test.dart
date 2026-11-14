@@ -22,6 +22,10 @@ void main() {
       'input_tokens': 55,
       'max_output_tokens': 4096,
       'Tokens-In': 7,
+      // Стоп-слово сравнивается с целым сегментом, а не с подстрокой:
+      // `hidden` содержит `id`, `spinning` — `pin`, но это не учётные данные.
+      'hidden_tokens': 12,
+      'tokens_spinning': 3,
     };
     for (final entry in visible.entries) {
       test('${entry.key}: ${entry.value}', () {
@@ -50,6 +54,22 @@ void main() {
       'access_token': 5,
       'session_token': 's',
       'api_key': 42,
+      // Число под именем с секретным словом и частью `tokens` — не счётчик.
+      'secret_tokens': 1,
+      'tokens_api_key': 1,
+      'auth_tokens': 1,
+      'password_tokens': 1,
+      'session_tokens': 1,
+      // Стоп-слова учётных данных как отдельный сегмент (D41 п. 7).
+      'access_tokens': 1,
+      'refresh_tokens': 1,
+      'id_tokens': 1,
+      'csrf_tokens': 1,
+      'otp_tokens': 1,
+      'pin_tokens': 1,
+      'tokens_session': 1,
+      'session__tokens': 1,
+      'Access-Tokens': 1,
     };
     for (final entry in hidden.entries) {
       test('${entry.key}: ${entry.value}', () {

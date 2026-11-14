@@ -1243,7 +1243,7 @@ PromptTurn _applyUpdateToTurn(
     ToolCallSessionUpdate(:final toolCall) => _applyToolCallUpdate(
       turn,
       update,
-      _withKnownSubagentMeta(
+      _withKnownCodelabMeta(
         turn.toolCalls[toolCall.toolCallId],
         ToolCallRecord.fromToolCall(
           toolCall,
@@ -1305,18 +1305,24 @@ SessionUpdate? _latestOfKind(
   return null;
 }
 
-/// Повторный `tool_call` (реплей) не стирает признак субагента, уже
-/// накопленный записью: итог финального обновления переживает повтор кадра.
-ToolCallRecord _withKnownSubagentMeta(
+/// Повторный `tool_call` (реплей) не стирает `_meta.codelab`, уже накопленное
+/// записью: итог субагента (`subagentMeta`) и признак исхода (`outcome`,
+/// D41 п. 1) переживают повтор кадра без них; итоговый `completed` снимает
+/// `outcome`.
+ToolCallRecord _withKnownCodelabMeta(
   ToolCallRecord? known,
   ToolCallRecord fresh,
-) => known?.subagentMeta == null
+) => known == null
     ? fresh
     : fresh.copyWith(
-        subagentMeta: mergeSubagentMeta(
-          known!.subagentMeta,
-          fresh.subagentMeta,
-        ),
+        subagentMeta: known.subagentMeta == null
+            ? fresh.subagentMeta
+            : mergeSubagentMeta(known.subagentMeta, fresh.subagentMeta),
+        // Признак исхода переживает повтор кадра без него; итоговый
+        // `completed` его снимает (D41 п. 1).
+        outcome: fresh.status == ToolCallStatus.completed
+            ? null
+            : fresh.outcome ?? known.outcome,
       );
 
 PromptTurn _applyToolCallUpdate(
@@ -1374,6 +1380,10 @@ ToolCallRecord _mergeToolCallUpdate(
       current?.subagentMeta,
       subagentMetaOf(update.meta),
     ),
+    // Поздний кадр без признака не снимает исход; снимает только completed.
+    outcome: status == ToolCallStatus.completed
+        ? null
+        : outcomeOf(update.meta) ?? current?.outcome,
   );
 }
 

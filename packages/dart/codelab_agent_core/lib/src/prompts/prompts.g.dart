@@ -150,7 +150,7 @@ abstract final class Prompts {
     id: 'tool_descriptions.agent',
     vars: {'maxConcurrent', 'nesting', 'background', 'agentList'},
     text:
-        'Launch a subagent: a separate agent with its own context that does one self-contained assignment and returns a single final report.\nUse it to explore a large codebase, review changes or draft a plan without filling your own context.\nThe subagent does not see this conversation: put everything it needs into `prompt`.\nSeveral agent calls in one response run in parallel, at most {{maxConcurrent}} at a time.\nYou receive only the final report, not the subagent\'s intermediate steps.{{background}}\nSubagents cannot ask the user questions. {{nesting}}\n\nAgent types:\n{{agentList}}',
+        'Launch a subagent: a separate agent with its own context that does one self-contained assignment and returns a single final report.\nUse it to explore a large codebase, review changes or draft a plan without filling your own context.\nThe subagent does not see this conversation: put everything it needs into `prompt`.\nSeveral agent calls in one response run in parallel, at most {{maxConcurrent}} at a time.\nPut task list calls before the first agent call of a response: an agent call placed after a task list call waits until every call before it has finished.\nYou receive only the final report, not the subagent\'s intermediate steps.{{background}}\nSubagents cannot ask the user questions. {{nesting}}\n\nAgent types:\n{{agentList}}',
   );
   static const toolDescriptionsEdit = PromptTemplate(
     id: 'tool_descriptions.edit',

@@ -732,6 +732,9 @@ final class _Turn {
             'session_id': _session.value,
             'tool': handle.call.name,
             'tool_call_id': handle.call.id,
+            // Тип исключения отдельным полем (D41, п. 5): сообщение
+            // маскируется и не годится для группировки сбоев.
+            'error_class': error.runtimeType.toString(),
           },
           error: error,
           stack: stack,

@@ -2,14 +2,16 @@
 // `add-subagents-and-tasks`; spec acp-client-kit «Отмена по признаку агента»;
 // design.md, D41 п. 1).
 //
-// Красные тесты: kit не читает `_meta.codelab.outcome`, поэтому вызов,
-// пришедший как `failed` с `outcome: "cancelled"` (реплей `session/load`
-// одним кадром или живой `tool_call_update`), остаётся `failed`, а должен
-// стать `ToolCallStatusView.cancelled` — для любого вида вызова (agent, exec).
-// Признак снимается только итоговым `completed`; другие значения
-// (`rejected`, `interrupted`, неизвестное) оставляют `failed`.
+// Проверяет, что kit читает `_meta.codelab.outcome`: вызов, пришедший как
+// `failed` с `outcome: "cancelled"` (реплей `session/load` одним кадром или
+// живой `tool_call_update`), показывается как `ToolCallStatusView.cancelled`
+// — для любого вида вызова (agent, exec). Признак снимается только итоговым
+// `completed`; другие значения (`rejected`, `interrupted`, неизвестное)
+// оставляют `failed`.
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
+import 'package:codelab_client_acp/codelab_client_acp.dart'
+    show CancelTurnCommand;
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:test/test.dart';
 
@@ -107,10 +109,50 @@ void main() {
       expect(status('c5'), ToolCallStatusView.succeeded);
     });
 
-    test('a later non-final frame does not change the sign', () async {
+    test('a later failed without the sign does not drop it', () async {
       await emit(_callFrame('c6', outcome: 'cancelled'));
       await emit(_update('c6', 'failed'));
       expect(status('c6'), ToolCallStatusView.cancelled);
+    });
+
+    // Требование «Отмена по признаку агента»: статус сливается из кадров по
+    // общим правилам (поздний `in_progress`/`pending` показывается как
+    // running/queued), а признак сохраняется — его снимает только `completed`.
+    // Последующий `failed` без признака снова даёт `cancelled`.
+    const lateExpected = {
+      'in_progress': ToolCallStatusView.running,
+      'pending': ToolCallStatusView.queued,
+    };
+    for (final late in lateExpected.entries) {
+      test(
+        'a later ${late.key} frame after failed+cancelled keeps the sign',
+        () async {
+          await emit(_callFrame('c6_${late.key}', outcome: 'cancelled'));
+          await emit(_update('c6_${late.key}', late.key));
+          expect(status('c6_${late.key}'), late.value);
+          await emit(_update('c6_${late.key}', 'failed'));
+          expect(status('c6_${late.key}'), ToolCallStatusView.cancelled);
+        },
+      );
+    }
+  });
+
+  group('the sign is dropped only by a final completed', () {
+    test(
+      'failed+cancelled, completed, then late failed gives failed',
+      () async {
+        await emit(_callFrame('d1', outcome: 'cancelled'));
+        await emit(_update('d1', 'completed'));
+        await emit(_update('d1', 'failed'));
+        expect(status('d1'), ToolCallStatusView.failed);
+      },
+    );
+
+    test('a repeated tool_call completed drops the sign too', () async {
+      await emit(_callFrame('d2', outcome: 'cancelled'));
+      await emit(_callFrame('d2', status: 'completed'));
+      await emit(_update('d2', 'failed'));
+      expect(status('d2'), ToolCallStatusView.failed);
     });
   });
 
@@ -128,15 +170,78 @@ void main() {
     });
   });
 
-  // Регрессия (зелёная сразу): прежняя пометка клиента не меняется (D27).
+  // Пометка клиента (D27) и признак агента сочетаются: живой
+  // `failed`+`cancelled` после `cancelTurn` даёт cancelled без дублей строк.
   test(
-    'a failed call without outcome after cancelTurn keeps its status',
+    'a live failed + cancelled after cancelTurn is cancelled once',
     () async {
       await emit(_callFrame('c7', status: 'in_progress'));
-      await emit(_update('c7', 'failed'));
-      expect(status('c7'), ToolCallStatusView.failed);
+      await agent.application.cancelTurn(
+        CancelTurnCommand(sessionId: const SessionId('s1')),
+      );
+      expect(status('c7'), ToolCallStatusView.cancelled);
+
+      await emit(_update('c7', 'failed', outcome: 'cancelled'));
+
+      expect(status('c7'), ToolCallStatusView.cancelled);
+      expect(
+        session.current.transcript.whereType<ToolCallItem>().where(
+          (item) => item.toolCallId == const ToolCallId('c7'),
+        ),
+        hasLength(1),
+      );
     },
   );
+
+  test('a failed call without outcome stays failed', () async {
+    await emit(_callFrame('c8', status: 'in_progress'));
+    await emit(_update('c8', 'failed'));
+    expect(status('c8'), ToolCallStatusView.failed);
+  });
+
+  test('a malformed outcome (not a string) leaves the call failed', () async {
+    await emit({
+      ..._callFrame('c9'),
+      '_meta': {
+        'codelab': {'outcome': 5},
+      },
+    });
+    expect(status('c9'), ToolCallStatusView.failed);
+  });
+
+  test('a cancelled subagent after load keeps the parsed summary', () async {
+    await emit({
+      ..._callFrame('c10', outcome: 'cancelled'),
+      '_meta': {
+        'codelab': {
+          'outcome': 'cancelled',
+          'subagent': {
+            'id': 'sub_a1',
+            'type': 'explore',
+            'summary': {
+              'toolCalls': 2,
+              'tokens': {'input': 900, 'output': 100},
+              'durationMs': 4000,
+            },
+          },
+        },
+      },
+    });
+    final details = session.current.transcript
+        .whereType<ToolCallItem>()
+        .singleWhere((item) => item.toolCallId == const ToolCallId('c10'))
+        .details;
+    expect(details?.status, ToolCallStatusView.cancelled);
+    expect(
+      details?.subagentSummary,
+      const SubagentSummaryView(
+        toolCalls: 2,
+        inputTokens: 900,
+        outputTokens: 100,
+        duration: Duration(seconds: 4),
+      ),
+    );
+  });
 
   // Регрессия kit (D41 п. 3, 2.15): kit не разбирает заголовок, поэтому
   // `Subagent general` без описания показывается как есть. Ожидается зелёным.

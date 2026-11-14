@@ -493,6 +493,10 @@ ToolCallView _callView(ToolCallRecord record) => ToolCallView(
   kind: record.kind,
   status: switch (record.status) {
     _ when record.cancelledByClient => ToolCallStatusView.cancelled,
+    // Агент сообщил исход: `failed` + `outcome: cancelled` — отмена для
+    // любого вызова; прочие значения остаются `failed` (D41 п. 1).
+    ToolCallStatus.failed when record.outcome == 'cancelled' =>
+      ToolCallStatusView.cancelled,
     ToolCallStatus.pending => ToolCallStatusView.queued,
     ToolCallStatus.inProgress => ToolCallStatusView.running,
     ToolCallStatus.completed => ToolCallStatusView.succeeded,
