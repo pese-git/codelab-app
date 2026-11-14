@@ -1450,7 +1450,8 @@ mcp:
     («Use stored secret»), клиент НЕ ДОЛЖЕН удалять (change `add-provider-setup-ui`, D10, D11, D13).
 25. **SETUP-25.** Вид расширений агента (`AgentExtensionsView`), состояние страницы «Skills &
     extensions» и её журнал НЕ ДОЛЖНЫ содержать текстов `AGENTS.md`, тел навыков и шаблонов — ни в
-    полях, ни в `toString()`; страница НЕ ДОЛЖНА читать навыки и шаблоны проекта вне
+    полях, ни в `toString()` (кроме описания шаблона из первой строки тела, которое агент и так
+    отдаёт в `available_commands_update`); страница НЕ ДОЛЖНА читать навыки и шаблоны проекта вне
     `trusted_projects` и локальные файлы для `RemoteReadOnly` и `NotManaged` (change
     `add-app-skills-page`, D2, D4).
 

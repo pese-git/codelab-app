@@ -59,7 +59,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 Раздел «Prompt templates» SHALL показывать шаблоны команд, которые агент объявит сессии этой папки: команду `/<name>` с подсказкой аргументов, описание и файл-источник. Шаблон проекта, заменивший шаблон пользователя с тем же именем, SHALL показываться один раз, как у агента. Без шаблонов раздел SHALL показывать `No prompt templates.`
 
-Оба раздела SHALL быть только для чтения. Тексты файлов НЕ SHALL показываться на странице и попадать в состояние Cubit и журнал. Разделы Hooks, Plugins, System prompt override и Read context files of other agents артборда НЕ SHALL показываться (design.md, D13).
+Оба раздела SHALL быть только для чтения. Тексты файлов НЕ SHALL показываться на странице и попадать в состояние Cubit и журнал. Исключение — описание шаблона без `description` во frontmatter: им SHALL служить первая строка тела, как в `available_commands_update` агента; она показывается как недоверенный текст и НЕ SHALL попадать в журнал. Разделы Hooks, Plugins, System prompt override и Read context files of other agents артборда НЕ SHALL показываться (design.md, D13).
 
 #### Scenario: Цепочка от внешнего к ближнему
 - **WHEN** `/repo` — корень git, есть `/repo/AGENTS.md` (4,8 КБ) и `/repo/packages/ui/AGENTS.md` (1,3 КБ), папка — `/repo/packages/ui`
