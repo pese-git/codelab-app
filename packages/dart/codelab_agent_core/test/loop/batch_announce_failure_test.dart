@@ -13,97 +13,90 @@ import 'loop_harness.dart';
 void main() {
   // Для пути то же самое проверяет `parallel_edit_test.dart` (TOOL-7);
   // здесь — очередь ключа `lockKey`.
-  for (final (label, makeTool) in <(String, FakeTool Function())>[
-    ('key', () => FakeTool('w', lockKeyValue: 'k')),
-  ]) {
-    group('$label queue', () {
-      /// Ход из двух вызовов `w`; [failing] решает, на каком событии `emit`
-      /// бросает. Сбой не должен задеть `AgentError` и `TurnEnded`.
-      Future<(LoopHarness, List<AgentEvent>)> runTurn(
-        bool Function(AgentEvent event, int startedSoFar) failing,
-      ) async {
-        final h = await LoopHarness.create(
-          tools: [makeTool()],
-          llm: script([
-            callStep([
-              ('c1', 'w', {'path': 'a'}),
-              ('c2', 'w', {'path': 'a'}),
-            ]),
-            textStep('done'),
-          ]),
-        );
-        final seen = <AgentEvent>[];
-        var started = 0;
-        await runAgentLoop(
-          prompts: [user('go')],
-          context: LoopContext(
-            systemPrompt: 'You are CodeLab.',
-            messages: const [],
-            tools: h.tools,
-          ),
-          config: h.config(),
-          emit: (event) {
-            if (event is ToolCallStarted) {
-              started++;
-            }
-            if (failing(event, started)) {
-              throw StateError('emit failed');
-            }
-            seen.add(event);
-          },
+  group('key queue', () {
+    /// Ход из двух вызовов `w`; [failing] решает, на каком событии `emit`
+    /// бросает. Сбой не должен задеть `AgentError` и `TurnEnded`.
+    Future<(LoopHarness, List<AgentEvent>)> runTurn(
+      bool Function(AgentEvent event, int startedSoFar) failing,
+    ) async {
+      final h = await LoopHarness.create(
+        tools: [FakeTool('w', lockKeyValue: 'k')],
+        llm: script([
+          callStep([('c1', 'w', const {}), ('c2', 'w', const {})]),
+          textStep('done'),
+        ]),
+      );
+      final seen = <AgentEvent>[];
+      var started = 0;
+      await runAgentLoop(
+        prompts: [user('go')],
+        context: LoopContext(
+          systemPrompt: 'You are CodeLab.',
+          messages: const [],
+          tools: h.tools,
+        ),
+        config: h.config(),
+        emit: (event) {
+          if (event is ToolCallStarted) {
+            started++;
+          }
+          if (failing(event, started)) {
+            throw StateError('emit failed');
+          }
+          seen.add(event);
+        },
+        cancel: CancelToken.none,
+      );
+      return (h, seen);
+    }
+
+    Future<void> expectQueueFree(LoopHarness h) async {
+      final handle = await h.executor.announce(
+        ToolCall(id: 'c3', name: 'w', arguments: const {}),
+        ToolInvocation(
+          sessionId: session,
           cancel: CancelToken.none,
-        );
-        return (h, seen);
-      }
+          stepTools: ['w'],
+          emit: (_) {},
+        ),
+      );
+      final outcome = await h.executor
+          .complete(handle)
+          .timeout(const Duration(seconds: 2));
+      expect(outcome.outcome, ToolOutcome.completed);
+    }
 
-      Future<void> expectQueueFree(LoopHarness h) async {
-        final handle = await h.executor.announce(
-          ToolCall(id: 'c3', name: 'w', arguments: const {'path': 'a'}),
-          ToolInvocation(
-            sessionId: session,
-            cancel: CancelToken.none,
-            stepTools: ['w'],
-            emit: (_) {},
-          ),
-        );
-        final outcome = await h.executor
-            .complete(handle)
-            .timeout(const Duration(seconds: 2));
-        expect(outcome.outcome, ToolOutcome.completed);
-      }
+    test('announce failing on c2: failed turn with the original error, '
+        'queue is free', () async {
+      final (h, seen) = await runTurn(
+        (e, started) => e is ToolCallStarted && started == 2,
+      );
 
-      test('announce failing on c2: failed turn with the original error, '
-          'queue is free', () async {
-        final (h, seen) = await runTurn(
-          (e, started) => e is ToolCallStarted && started == 2,
-        );
-
-        final error = seen.whereType<AgentError>().single;
-        expect(error.message, 'emit failed');
-        expect(seen.whereType<TurnEnded>().single.reason, TurnEndReason.failed);
-        // c1 закрыт `abandon` цикла; у c2 хэндла нет, закрывать нечем.
-        expect(
-          [
-            for (final e in seen.whereType<ToolCallFinished>())
-              (e.toolCallId, e.outcome),
-          ],
-          [('c1', ToolOutcome.cancelled)],
-        );
-        await expectQueueFree(h);
-      });
-
-      test('emit fails on c2 Started and on every Finished: still failed '
-          'with the original error, queue is free', () async {
-        final (h, seen) = await runTurn(
-          (e, started) =>
-              (e is ToolCallStarted && started == 2) || e is ToolCallFinished,
-        );
-
-        expect(seen.whereType<AgentError>().single.message, 'emit failed');
-        expect(seen.whereType<TurnEnded>().single.reason, TurnEndReason.failed);
-        expect(seen.whereType<ToolCallFinished>(), isEmpty);
-        await expectQueueFree(h);
-      });
+      final error = seen.whereType<AgentError>().single;
+      expect(error.message, 'emit failed');
+      expect(seen.whereType<TurnEnded>().single.reason, TurnEndReason.failed);
+      // c1 закрыт `abandon` цикла; у c2 хэндла нет, закрывать нечем.
+      expect(
+        [
+          for (final e in seen.whereType<ToolCallFinished>())
+            (e.toolCallId, e.outcome),
+        ],
+        [('c1', ToolOutcome.cancelled)],
+      );
+      await expectQueueFree(h);
     });
-  }
+
+    test('emit fails on c2 Started and on every Finished: still failed '
+        'with the original error, queue is free', () async {
+      final (h, seen) = await runTurn(
+        (e, started) =>
+            (e is ToolCallStarted && started == 2) || e is ToolCallFinished,
+      );
+
+      expect(seen.whereType<AgentError>().single.message, 'emit failed');
+      expect(seen.whereType<TurnEnded>().single.reason, TurnEndReason.failed);
+      expect(seen.whereType<ToolCallFinished>(), isEmpty);
+      await expectQueueFree(h);
+    });
+  });
 }

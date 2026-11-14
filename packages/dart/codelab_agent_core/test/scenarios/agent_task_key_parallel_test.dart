@@ -136,8 +136,9 @@ void main() {
 
   test('отмена хода при двух работающих субагентах и task_* в очереди '
       'ключа: дети cancelled, ход cancelled, ключ освобождён', () async {
-    // t1 держит ключ `tasks` в afterToolCall (ключ отпускается после
-    // хуков), t2 уже прошёл beforeToolCall и ждёт ключ.
+    // t1 держит место в очереди ключа `tasks` медленным beforeToolCall (ключ
+    // отпускается сразу после `execute`, поэтому в after-хуке его не
+    // удержать), t2 уже прошёл свой хук и ждёт ключ.
     final holdKey = Completer<void>();
     var holding = false;
     final rig = SubagentRig(
@@ -173,8 +174,8 @@ void main() {
     );
     await rig.open(
       ports: SessionHostPorts(
-        extraAfterToolCall: [
-          (call, result, isError) async {
+        extraBeforeToolCall: [
+          (call, args, ctx) async {
             if (call.id == 't1') {
               holding = true;
               await holdKey.future;
@@ -219,5 +220,51 @@ void main() {
     final next = await rig.run('again').timeout(const Duration(seconds: 5));
     expect(next.reason, TurnEndReason.completed);
     expect(resultIsError(rig.requestsOf('go').last, 't3'), isFalse);
+  });
+
+  test('медленный afterToolCall держателя не задерживает следующий task_* по '
+      'ключу: ключ отпускается после execute, до after-хуков', () async {
+    final slowAfter = Completer<void>();
+    final rig = SubagentRig(
+      scripts: {
+        'go': [
+          multiCallStep([
+            ('c1', 'task_create', {'subject': 'First'}),
+            ('l1', 'task_list', const {}),
+          ]),
+          replyStep('done'),
+        ],
+      },
+    );
+    await rig.open(
+      ports: SessionHostPorts(
+        extraAfterToolCall: [
+          (call, result, isError) async {
+            if (call.id == 'c1') {
+              await slowAfter.future;
+            }
+            return null;
+          },
+        ],
+      ),
+    );
+
+    final turn = rig.run('go');
+    // l1 закончился, хотя after-хук c1 ещё не вернулся: иначе ключ держал
+    // бы его до конца хуков.
+    await pumpUntil(
+      () => rig.eventsOf<ToolCallFinished>().any((e) => e.toolCallId == 'l1'),
+      reason: 'l1 must not wait for the after-hook of c1',
+    );
+    expect(
+      rig.eventsOf<ToolCallFinished>().where((e) => e.toolCallId == 'c1'),
+      isEmpty,
+    );
+    slowAfter.complete();
+    final result = await turn.timeout(const Duration(seconds: 5));
+
+    expect(result.reason, TurnEndReason.completed);
+    // Порядок ответа сохранён: l1 видит пункт, созданный c1 (TSK-1).
+    expect(resultText(rig.requestsOf('go').last, 'l1'), contains('First'));
   });
 }

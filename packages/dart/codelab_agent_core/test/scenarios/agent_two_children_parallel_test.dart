@@ -6,14 +6,12 @@ import '../support/models.dart';
 
 /// `core/agent-two-children-parallel` (agent-subagents «Вложенность и слоты
 /// дерева», сценарии «Предел слотов дерева» в варианте глубины 1 и «Лимит
-/// запусков»; agent-loop «Пакет инструментов», сценарий «Барьер делит пакет
-/// на группы»; SUB-4, SUB-5, SUB-23, LOOP-3, LOOP-4; design.md change
-/// `add-subagents-and-tasks`, D3, D39, D39-alt, D36 Т14;
+/// запусков»; agent-loop «Пакет инструментов»; SUB-4, SUB-5, SUB-23, LOOP-3;
+/// design.md change `add-subagents-and-tasks`, D3, D39-alt, D36 Т14;
 /// `agent-core/17-3-subagents.md` §17.3.4, шаги 1–2, 5–6).
 ///
-/// Красный до задач 2.4 и 2.4b: нет `SubagentManager` и событий
-/// `Subagent*`, а `task_*` сегодня делают последовательным весь пакет, в
-/// том числе вызовы `agent` после них.
+/// Сценарий барьера («Барьер делит пакет на группы», LOOP-4) здесь не
+/// проверяется: он в `sequential_mode_test.dart` на двойниках.
 ///
 /// Сценарный тест ядра, а не фикстура `codelab_acp_testing` (D36 Т14):
 /// модель — скрипты по участникам дерева (`SubagentRig`), время — `FakeClock`.

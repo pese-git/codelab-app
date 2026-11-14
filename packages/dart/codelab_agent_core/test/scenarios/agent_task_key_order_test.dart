@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/subagents/subagent_manager.dart';
 import 'package:codelab_agent_core/src/subagents/subagent_tool.dart';
@@ -149,6 +151,185 @@ void main() {
     expect(toolAt(0).lockKey(base), isNull);
     expect(toolAt(0).lockKey({...base, 'task': '1'}), 'tasks');
     expect(toolAt(1).lockKey({...base, 'task': '1'}), isNull);
-    expect(toolAt(0).lockKey({...base, 'task': 1}), isNull);
+    // Валидатор приводит число и bool к строке (`_coerce('string')`): ключ
+    // берётся и для них, иначе `agent{task: 1}` обходил бы очередь.
+    expect(toolAt(0).lockKey({...base, 'task': 1}), 'tasks');
+    expect(toolAt(0).lockKey({...base, 'task': true}), 'tasks');
+    expect(toolAt(0).lockKey({...base, 'task': null}), isNull);
+    expect(toolAt(0).lockKey({...base, 'task': <Object?>[]}), isNull);
+    expect(toolAt(0).lockKey({...base, 'task': <String, Object?>{}}), isNull);
+  });
+
+  test('[task_create (медленный хук), agent{task: 1}] с числом: валидатор '
+      'приводит 1 к "1", agent ждёт ключ и видит пункт', () async {
+    final gate = Completer<void>();
+    final rig = SubagentRig(
+      scripts: {
+        'go': [
+          multiCallStep([
+            ('c1', 'task_create', {'subject': 'Read a'}),
+            (
+              'a1',
+              'agent',
+              // Число вместо строки: сырые аргументы модели.
+              {...agentArgs('child one', description: 'One'), 'task': 1},
+            ),
+          ]),
+          replyStep('done'),
+        ],
+        'child one': [replyStep('one')],
+      },
+    );
+    await rig.open(
+      ports: SessionHostPorts(
+        extraBeforeToolCall: [
+          (call, args, ctx) async {
+            if (call.id == 'c1') {
+              await gate.future;
+            }
+            return null;
+          },
+        ],
+      ),
+    );
+
+    final turn = rig.run('go');
+    // a1 прошёл свой хук и стоит в очереди ключа за медленным c1.
+    await pumpUntil(
+      () => rig.eventsOf<ToolCallStarted>().length == 2,
+      reason: 'both calls announced',
+    );
+    expect(rig.eventsOf<ToolCallFinished>(), isEmpty);
+    gate.complete();
+    final result = await turn.timeout(const Duration(seconds: 5));
+
+    expect(result.reason, TurnEndReason.completed);
+    final last = rig.requestsOf('go').last;
+    expect(resultIsError(last, 'a1'), isFalse, reason: resultText(last, 'a1'));
+    expect(rig.eventsOf<SubagentStarted>(), hasLength(1));
+  });
+
+  test('agent{task} ждёт ключ, ход отменён: после захвата ключа ребёнок не '
+      'порождён, agent cancelled, ключ свободен', () async {
+    // t1 держит ключ: его медленный beforeToolCall не даёт вызову дойти до
+    // исполнения, а место в очереди уже занято (announce). a1 прошёл свой
+    // хук и ждёт ключ за t1; пункт #1 создан предыдущим шагом.
+    final gate = Completer<void>();
+    var t1Waiting = false;
+    final rig = SubagentRig(
+      scripts: {
+        'go': [
+          oneCallStep('c0', 'task_create', {'subject': 'Work'}),
+          multiCallStep([
+            ('t1', 'task_update', {'id': '1', 'status': 'in_progress'}),
+            (
+              'a1',
+              'agent',
+              agentArgs('never run', description: 'One', task: '1'),
+            ),
+          ]),
+          oneCallStep('t3', 'task_list', const {}),
+          replyStep('after cancel'),
+        ],
+      },
+    );
+    await rig.open(
+      ports: SessionHostPorts(
+        extraBeforeToolCall: [
+          (call, args, ctx) async {
+            if (call.id == 't1') {
+              t1Waiting = true;
+              await gate.future;
+            }
+            return null;
+          },
+        ],
+      ),
+    );
+
+    final turn = rig.run('go');
+    await pumpUntil(
+      () => t1Waiting && rig.eventsOf<ToolCallStarted>().length == 3,
+      reason: 'a1 announced and t1 holds the key',
+    );
+    await rig.session.cancel();
+    // a1 стоит на ключе: отмена его не прерывает (D35), он ждёт t1.
+    await pumpEventQueue(times: 20);
+    expect(
+      rig.eventsOf<ToolCallFinished>().where((e) => e.toolCallId == 'a1'),
+      isEmpty,
+    );
+    gate.complete();
+    final result = await turn.timeout(const Duration(seconds: 5));
+
+    expect(result.reason, TurnEndReason.cancelled);
+    final finished = {
+      for (final e in rig.eventsOf<ToolCallFinished>()) e.toolCallId: e.outcome,
+    };
+    expect(finished['a1'], ToolOutcome.cancelled);
+    expect(rig.eventsOf<SubagentStarted>(), isEmpty);
+    expect(rig.requestsOf('never run'), isEmpty);
+    // `spawn` не вызывался: ребёнок отменённого хода не порождается даже
+    // «мёртворождённым» (иначе он занял бы слот и записал бы `Finished`).
+    expect(rig.logger.eventsOf('subagent.spawn'), isEmpty);
+
+    // Ключ свободен: task_list следующего хода не зависает на очереди.
+    final next = await rig.run('again').timeout(const Duration(seconds: 5));
+    expect(next.reason, TurnEndReason.completed);
+    expect(resultIsError(rig.requestsOf('go').last, 't3'), isFalse);
+  });
+
+  test('agent{task} с неизвестным пунктом на отменённом ходе: cancelled, а не '
+      'Unknown task', () async {
+    final gate = Completer<void>();
+    var t1Waiting = false;
+    final rig = SubagentRig(
+      scripts: {
+        'go': [
+          multiCallStep([
+            ('t1', 'task_list', const {}),
+            (
+              'a1',
+              'agent',
+              agentArgs('never run', description: 'One', task: '9'),
+            ),
+          ]),
+          replyStep('after cancel'),
+        ],
+      },
+    );
+    await rig.open(
+      ports: SessionHostPorts(
+        extraBeforeToolCall: [
+          (call, args, ctx) async {
+            if (call.id == 't1') {
+              t1Waiting = true;
+              await gate.future;
+            }
+            return null;
+          },
+        ],
+      ),
+    );
+
+    final turn = rig.run('go');
+    await pumpUntil(
+      () => t1Waiting && rig.eventsOf<ToolCallStarted>().length == 2,
+      reason: 'a1 announced and t1 holds the key',
+    );
+    await rig.session.cancel();
+    // a1 стоял на ключе за t1: пока t1 держит место, a1 не завершён. Без этого
+    // тест прошёл бы и при проверке пункта до очереди ключа.
+    expect(
+      rig.eventsOf<ToolCallFinished>().where((e) => e.toolCallId == 'a1'),
+      isEmpty,
+    );
+    gate.complete();
+    await turn.timeout(const Duration(seconds: 5));
+
+    final finished = {
+      for (final e in rig.eventsOf<ToolCallFinished>()) e.toolCallId: e.outcome,
+    };
+    expect(finished['a1'], ToolOutcome.cancelled);
   });
 }
