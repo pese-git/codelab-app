@@ -76,7 +76,7 @@ final class LogRecord {           // то, что получает sink хост
 |---|---|
 | `llm` | `llm.request.start`, `llm.request.end`, `llm.retry`, `llm.fallback`, `llm.finish_reason.unknown` (§2.7) |
 | `turn` | `turn.start`, `turn.end`, `turn.budget_exceeded` |
-| `tool` | `tool.start`, `tool.end`, `tool.validation_failed`, `tool.validate.error` (`debug`; `tool`, `tool_call_id` — исключение при валидации, §6.3.1 шаг 3), `tool.pairing_repaired`, `tool.misuse.warned`, `tool.misuse.blocked` (§6.3.7) |
+| `tool` | `tool.start`, `tool.end`, `tool.validation_failed`, `tool.validate.error` (`debug`; `tool`, `tool_call_id` — исключение при валидации, §6.3.1 шаг 3), `tool.pairing_repaired`, `tool.misuse.warned`, `tool.misuse.blocked` (§6.3.7), `tool.lock.wait`, `tool.lock.cancelled` (`debug`; `tool`, `tool_call_id`, без пути — подход к захвату пути и прерывание ожидания отменой хода, §6.3.1 шаг 6, TOOL-7) |
 | `tools` | `tools.switch.no_match` (§6.3.8) |
 | `loop` | `loop.empty_response`, `loop.empty_response.stopped` (§5.4.1) |
 | `prompts` | `prompts.override` (§11.6.1) |
