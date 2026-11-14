@@ -30,8 +30,8 @@
 
 ## 3. `codelab_ui`: таблица (итерация 3)
 
-- [ ] 3.1 `[desktop]` Красные тесты `codelab_ui/test/codelab_status_table_test.dart` (D12): `secondary` (две строки, полный текст в подсказке), `tags`, `toggle` строки (`onChanged: null` — неактивен с подсказкой), `columnFlex`, `untrusted` (символ `U+202E` показан escape-последовательностью); без новых параметров вёрстка и поведение таблицы прежние (страж страницы MCP servers).
-- [ ] 3.2 `[desktop]` Реализация 3.1: аддитивные поля `CodeLabStatusTableCell`, `CodeLabStatusTableRow`, `CodeLabStatusTable`; превью в `codelab_organism_previews.dart` и `codelab_previews_test.dart`.
+- [x] 3.1 `[desktop]` Красные тесты `codelab_ui/test/codelab_status_table_test.dart` (D12): `secondary` (две строки, полный текст в подсказке), `tags`, `toggle` строки (`onChanged: null` — неактивен с подсказкой), `columnFlex`, `untrusted` (символ `U+202E` показан escape-последовательностью); без новых параметров вёрстка и поведение таблицы прежние (страж страницы MCP servers).
+- [x] 3.2 `[desktop]` Реализация 3.1: аддитивные поля `CodeLabStatusTableCell`, `CodeLabStatusTableRow`, `CodeLabStatusTable`; превью в `codelab_organism_previews.dart` и `codelab_previews_test.dart`.
 
 ## 4. App: страница только для чтения (итерация 4)
 

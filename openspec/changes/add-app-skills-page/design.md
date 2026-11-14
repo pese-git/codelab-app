@@ -302,6 +302,22 @@ Cubit создаётся на каждое открытие страницы (`C
 
 Текст из файлов (имена, описания, подсказки аргументов, пути) — недоверенный. Ячейка получает признак `CodeLabStatusTableCell.untrusted`: таблица рисует такой текст через внутреннюю `escapeForDisplay` пакета (управляющие, невидимые и bidi-символы становятся видимыми; функция не экспортируется, поэтому экранирует сам виджет), только как простой текст, без markdown и ссылок. По умолчанию признак выключен — ячейки MCP servers не меняются.
 
+API (итерация 3, по красным тестам и двойному ревью):
+
+```dart
+CodeLabStatusTableCell(text, {tone, secondary, tags = const [], untrusted = false});
+CodeLabStatusTableTag(label, {tone = CodeLabTone.neutral, tooltip});
+CodeLabStatusTableToggle({required value, required onChanged, required label, tooltip, key});
+CodeLabStatusTableRow(cells, {action, toggle});           // toggle и action вместе нельзя (assert)
+CodeLabStatusTable(columns, rows, {columnFlex});          // List<double>?, null — колонки равны
+```
+
+- `secondary` — не больше двух строк с многоточием, полный текст в `Tooltip`; `tags` — бейджи в `Wrap` после основного текста, у тега необязательная подсказка (тег «`<n>` warning(s)» несёт тексты предупреждений с путём `SKILL.md`).
+- `untrusted` экранирует все пути вывода ячейки: `text`, `secondary` и его подсказку, подпись индикатора при `tone`, подпись и подсказку тега. Подпись и подсказка переключателя экранируются всегда (на доверенном тексте без изменений): подпись содержит имя навыка.
+- `onChanged: null` — переключатель неактивен, `tooltip` объясняет причину; `label` уходит в `semanticLabel`; `key` вешается на `ToggleSwitch` (`skills-toggle-<name>`).
+- `columnFlex` — положительные доли, длина равна числу колонок (проверка в `build`: конструктор `const`); колонка действий остаётся фиксированной.
+- `escapeForDisplay` дополнительно делает видимыми теги Unicode U+E0000–E007F (по символам, не по code unit), U+2060–U+2064, U+00AD, U+180E, U+034F и заполнители Hangul U+115F, U+1160, U+3164: через теги Unicode в описание навыка можно спрятать текст для модели.
+
 ### D13. Отступления от артборда `Extensions`
 
 - Разделы **Hooks** и **Plugins (Dart)**, строка **System prompt override** и переключатель **Read context files of other agents** не показываются (Non-Goals, решение пользователя по объёму; Q6).
