@@ -725,9 +725,10 @@ final class _Turn {
           'session_id': _session.value,
           'tool': handle.call.name,
           'tool_call_id': handle.call.id,
+          // Только тип: текст ошибки и стек могут нести пути и данные, а
+          // `Logger` их не маскирует (§12.3).
+          'error_type': '${error.runtimeType}',
         },
-        error: error,
-        stack: stack,
       );
     }
     return first;

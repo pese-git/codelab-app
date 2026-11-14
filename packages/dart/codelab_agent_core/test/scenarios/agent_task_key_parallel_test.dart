@@ -214,7 +214,8 @@ void main() {
     };
     expect(finished['a1'], ToolOutcome.cancelled);
     expect(finished['a2'], ToolOutcome.cancelled);
-    expect(finished.keys, containsAll(['t1', 't2']));
+    expect(finished['t1'], ToolOutcome.cancelled);
+    expect(finished['t2'], ToolOutcome.completed);
 
     // Ключ свободен: task_list следующего хода не зависает на очереди.
     final next = await rig.run('again').timeout(const Duration(seconds: 5));

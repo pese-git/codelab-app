@@ -261,9 +261,10 @@ final class SubagentTool extends AgentTool {
         'Combine the remaining work into fewer tasks or do it yourself.',
       );
     } finally {
-      // Ключ нужен только до запуска; на ожидании отчёта он держал бы
-      // `task_*` соседних вызовов (взаимная блокировка не нужна, но и
-      // ожидание лишнее). Идемпотентно: executor отпустит ещё раз.
+      // Ключ отпускается после порождения, до ожидания отчёта: иначе
+      // `task_*` соседних вызовов ждали бы ребёнка целиком, а отмена после
+      // захвата ключа не проверяется. Идемпотентно: executor отпустит ещё
+      // раз.
       ctx.releaseLockKey();
     }
     final report = await _await(handle, ctx);

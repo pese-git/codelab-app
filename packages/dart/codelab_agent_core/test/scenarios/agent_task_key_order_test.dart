@@ -211,7 +211,7 @@ void main() {
 
   test('agent{task} ждёт ключ, ход отменён: после захвата ключа ребёнок не '
       'порождён, agent cancelled, ключ свободен', () async {
-    // t1 держит ключ: его медленный beforeToolCall не даёт вызову дойти до
+    // t1 держит место в очереди ключа: его медленный beforeToolCall не даёт вызову дойти до
     // исполнения, а место в очереди уже занято (announce). a1 прошёл свой
     // хук и ждёт ключ за t1; пункт #1 создан предыдущим шагом.
     final gate = Completer<void>();
@@ -250,7 +250,7 @@ void main() {
     final turn = rig.run('go');
     await pumpUntil(
       () => t1Waiting && rig.eventsOf<ToolCallStarted>().length == 3,
-      reason: 'a1 announced and t1 holds the key',
+      reason: 'a1 announced and t1 holds its place in the key queue',
     );
     await rig.session.cancel();
     // a1 стоит на ключе: отмена его не прерывает (D35), он ждёт t1.
@@ -315,7 +315,7 @@ void main() {
     final turn = rig.run('go');
     await pumpUntil(
       () => t1Waiting && rig.eventsOf<ToolCallStarted>().length == 2,
-      reason: 'a1 announced and t1 holds the key',
+      reason: 'a1 announced and t1 holds its place in the key queue',
     );
     await rig.session.cancel();
     // a1 стоял на ключе за t1: пока t1 держит место, a1 не завершён. Без этого
