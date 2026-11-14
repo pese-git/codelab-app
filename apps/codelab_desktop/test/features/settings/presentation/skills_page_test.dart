@@ -1,0 +1,877 @@
+// Страница «Skills & extensions», показ и «только чтение» (задача 4.5 change
+// `add-app-skills-page`; spec app-settings «Страница «Skills & extensions»:
+// доступ и папка», «…контекстные файлы и шаблоны», «…навыки», «…открытие
+// папок»; design.md D8, D12, D13; артборд `Extensions`).
+//
+// Проверяется поведение (что показано, что вызвано), а не пиксели. Страница
+// строится на настоящем `SkillsSettingsCubit` с двойниками сессии настроек и
+// порта `LocalFolderOpener`: что читает мост, проверяют его тесты, а как Cubit
+// переводит доступ и папку в состояние — `skills_settings_cubit_test.dart`.
+//
+// Красный тест: страницы нет (задача 4.6). Ожидаемый API (выбран здесь):
+//
+// * `SkillsPage` (читает `SkillsSettingsCubit` из `BlocProvider`),
+//   `SkillsPageHost`; тело — ключ `settings-skills`;
+// * ключи (D13): InfoBar `skills-read-only`, `skills-untrusted`,
+//   `skills-unreadable`, `skills-banner`, `skills-warnings`; текст
+//   `skills-no-folder`; кнопки `skills-reload`, `skills-open-codelab`,
+//   `skills-open-context-<n>`, `skills-open-skill-<name>`,
+//   `skills-open-template-<name>`; строки `skills-context-<n>`,
+//   `skills-row-<name>`, `skills-template-<name>` (команда без `/`),
+//   переключатель `skills-toggle-<name>` (`ToggleSwitch`, в итерации 4 —
+//   только показ состояния «Enabled»), подпись порядка `skills-search-order`;
+// * таблицы — `CodeLabStatusTable` (итерация 3, D12).
+//
+// Размер файла — 1024-ичный, одна цифра после точки (`4.8 KB`, `6.1 KB`).
+
+import 'dart:async';
+
+import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_desktop/core/platform/local_folder_opener.dart';
+import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
+import 'package:codelab_desktop/features/settings/application/skills_settings_cubit.dart';
+import 'package:codelab_desktop/features/settings/presentation/skills_page.dart';
+import 'package:codelab_setup/codelab_setup.dart';
+import 'package:codelab_ui/codelab_ui.dart';
+import 'package:fluent_ui/fluent_ui.dart' hide DiagnosticLevel;
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../../support/fake_agent_extensions.dart';
+import '../../../support/fake_local_folder_opener.dart';
+import '../../../support/fake_provider_settings.dart';
+import '../../../support/recording_logger.dart';
+
+const _home = '/home/u/.codelab';
+
+Finder _key(String key) => find.byKey(ValueKey(key));
+
+/// Текст [text] внутри элемента с ключом [owner].
+Finder _in(String owner, String text) =>
+    find.descendant(of: _key(owner), matching: find.text(text));
+
+Finder _containing(String owner, String text) =>
+    find.descendant(of: _key(owner), matching: find.textContaining(text));
+
+void main() {
+  setUp(() {
+    final view = TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .views
+        .single;
+    view.physicalSize = const Size(1440, 3200);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+  });
+
+  late FakeAgentConfigStore store;
+  late FakeProviderSettingsSession session;
+  late FakeWorkspace workspace;
+  late FakeLocalFolderOpener opener;
+  late RecordingLogger logger;
+  String? projectDir = '/work/app';
+
+  setUp(() {
+    store = FakeAgentConfigStore();
+    session = FakeProviderSettingsSession(store);
+    workspace = FakeWorkspace();
+    opener = FakeLocalFolderOpener();
+    logger = RecordingLogger();
+    projectDir = '/work/app';
+  });
+
+  Future<SkillsSettingsCubit> openPage(
+    WidgetTester tester, {
+    AgentExtensionsView? view,
+    ConnectionProfile? profile,
+  }) async {
+    if (view != null) {
+      session.onExtensions = (_) async => view;
+    }
+    if (profile != null) {
+      workspace.emit(
+        WorkspaceState(
+          connection: const ConnectionView.connected(),
+          profile: profile,
+        ),
+      );
+    }
+    final cubit = SkillsSettingsCubit(
+      workspace: workspace,
+      defaultProfile: () async => embeddedConnectionProfile,
+      open: (access, env) async => session,
+      environment: const {'HOME': '/home/u'},
+      codelabHome: _home,
+      projectDirectory: () => projectDir,
+      folderOpener: opener,
+      logger: logger,
+    );
+    addTearDown(cubit.close);
+    await cubit.reload();
+    await tester.pumpWidget(
+      FluentApp(
+        home: ScaffoldPage(
+          content: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(40, 28, 40, 40),
+            child: BlocProvider<SkillsSettingsCubit>.value(
+              value: cubit,
+              child: const SkillsPage(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return cubit;
+  }
+
+  group('layout (artboard Extensions, D13)', () {
+    testWidgets('has the body key, the three sections and none of the '
+        'sections that are out of scope', (tester) async {
+      await openPage(tester, view: extensionsView());
+
+      expect(_key('settings-skills'), findsOneWidget);
+      expect(find.text('Skills & extensions'), findsWidgets);
+      expect(find.text('Context files'), findsOneWidget);
+      expect(find.text('Skills'), findsOneWidget);
+      expect(find.text('Prompt templates'), findsOneWidget);
+      expect(_key('skills-reload'), findsOneWidget);
+      expect(_key('skills-open-codelab'), findsOneWidget);
+      for (final absent in const [
+        'Hooks',
+        'Plugins',
+        'Plugins (Dart)',
+        'System prompt override',
+        'Read context files of other agents',
+      ]) {
+        expect(find.text(absent), findsNothing, reason: absent);
+      }
+    });
+
+    testWidgets('empty sections say so', (tester) async {
+      await openPage(tester, view: extensionsView());
+
+      expect(find.text('No AGENTS.md files for this folder.'), findsOneWidget);
+      expect(find.text('No prompt templates.'), findsOneWidget);
+    });
+  });
+
+  group('context files', () {
+    testWidgets('a chain from the outer to the nearest file with sizes '
+        'and the total', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          files: [
+            contextFile('AGENTS.md', bytes: 4915),
+            contextFile('packages/ui/AGENTS.md', bytes: 1331),
+          ],
+        ),
+      );
+
+      expect(_in('skills-context-0', 'AGENTS.md'), findsOneWidget);
+      expect(_in('skills-context-0', '4.8 KB'), findsOneWidget);
+      expect(_in('skills-context-1', 'packages/ui/AGENTS.md'), findsOneWidget);
+      expect(_in('skills-context-1', '1.3 KB'), findsOneWidget);
+      expect(find.text('2 files · 6.1 KB'), findsOneWidget);
+      expect(find.textContaining('truncated'), findsNothing);
+      expect(find.textContaining('not included'), findsNothing);
+      expect(
+        tester.getTopLeft(_key('skills-context-0')).dy,
+        lessThan(tester.getTopLeft(_key('skills-context-1')).dy),
+      );
+    });
+
+    testWidgets('CLAUDE.md used instead of AGENTS.md has the note', (
+      tester,
+    ) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          files: [contextFile('packages/ui/CLAUDE.md', isClaudeAlias: true)],
+        ),
+      );
+
+      expect(_in('skills-context-0', 'packages/ui/CLAUDE.md'), findsOneWidget);
+      expect(
+        _in('skills-context-0', 'used because this folder has no AGENTS.md'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the budget marks a truncated file and an omitted one, '
+        'as the core decided', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          files: [
+            contextFile('AGENTS.md', bytes: 4096),
+            contextFile('a/AGENTS.md', bytes: 3000, shownBytes: 2048),
+            contextFile('a/b/AGENTS.md', bytes: 2000, omitted: true),
+          ],
+          truncatedCount: 1,
+          omittedCount: 1,
+        ),
+      );
+
+      expect(_in('skills-context-0', 'truncated to 4.0 KB'), findsNothing);
+      expect(_in('skills-context-1', 'truncated to 2.0 KB'), findsOneWidget);
+      expect(_in('skills-context-2', 'not included (budget)'), findsOneWidget);
+    });
+
+    testWidgets('"Open" of a row passes the directory of the file to the '
+        'port (Q5)', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          files: [
+            contextFile(
+              'packages/ui/AGENTS.md',
+              openDir: '/work/app/packages/ui',
+            ),
+          ],
+        ),
+      );
+
+      await tester.tap(_key('skills-open-context-0'));
+      await tester.pumpAndSettle();
+
+      expect(opener.opened, ['/work/app/packages/ui']);
+    });
+  });
+
+  group('prompt templates', () {
+    testWidgets('the command with the argument hint, the description and '
+        'the source; a replaced user template is not listed twice', (
+      tester,
+    ) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          templates: [
+            templateEntry(
+              '/review-pr',
+              argumentHint: '<number>',
+              description: 'Review a pull request',
+              sourcePath: '/work/app/.codelab/prompts/review-pr.md',
+            ),
+            templateEntry(
+              '/explain',
+              description: 'Explain a file',
+              scope: ExtensionScope.user,
+              sourcePath: '/home/u/.codelab/prompts/explain.md',
+            ),
+          ],
+        ),
+      );
+
+      expect(
+        _in('skills-template-review-pr', '/review-pr <number>'),
+        findsOneWidget,
+      );
+      expect(
+        _in('skills-template-review-pr', 'Review a pull request'),
+        findsOneWidget,
+      );
+      expect(
+        _containing('skills-template-review-pr', 'review-pr.md'),
+        findsOneWidget,
+      );
+      expect(_in('skills-template-explain', '/explain'), findsOneWidget);
+      expect(
+        _containing('skills-template-explain', 'explain.md'),
+        findsOneWidget,
+      );
+      expect(find.text('/review-pr <number>'), findsOneWidget);
+      expect(find.text('No prompt templates.'), findsNothing);
+    });
+
+    testWidgets('"Open" of a template passes the directory of the '
+        'file', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          templates: [
+            templateEntry(
+              '/explain',
+              sourcePath: '/home/u/.codelab/prompts/explain.md',
+            ),
+          ],
+        ),
+      );
+
+      await tester.tap(_key('skills-open-template-explain'));
+      await tester.pumpAndSettle();
+
+      expect(opener.opened, ['/home/u/.codelab/prompts']);
+    });
+
+    testWidgets('a template description is plain text with visible '
+        'control characters', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          templates: [
+            templateEntry('/x', description: '**bold** \u202Egpj.exe'),
+          ],
+        ),
+      );
+
+      expect(find.text('**bold** \\u202egpj.exe'), findsOneWidget);
+    });
+  });
+
+  group('skills table', () {
+    testWidgets('a row has the name, the description, "Invoke as" and the '
+        'source; a model-only skill says so', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [
+            skillEntry(
+              'pdf-tools',
+              description: 'Work with PDF files',
+              argumentHint: '<file>',
+              root: userSkillRoot(),
+            ),
+            skillEntry(
+              'background',
+              description: 'Used by the model',
+              userInvocable: false,
+              root: projectSkillRoot(),
+            ),
+          ],
+        ),
+      );
+
+      expect(find.byType(CodeLabStatusTable), findsWidgets);
+      expect(_in('skills-row-pdf-tools', 'pdf-tools'), findsOneWidget);
+      expect(
+        _in('skills-row-pdf-tools', 'Work with PDF files'),
+        findsOneWidget,
+      );
+      expect(
+        _in('skills-row-pdf-tools', '/skill:pdf-tools <file>'),
+        findsOneWidget,
+      );
+      expect(_in('skills-row-pdf-tools', '~/.agents/skills'), findsOneWidget);
+      expect(_in('skills-row-background', 'Model only'), findsOneWidget);
+      expect(_in('skills-row-background', '.codelab/skills'), findsOneWidget);
+      expect(find.text('Skills are switched off'), findsNothing);
+    });
+
+    testWidgets('the extra root is shown as written with the note', (
+      tester,
+    ) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [
+            skillEntry(
+              'imported',
+              root: const SkillRootView(
+                scope: ExtensionScope.extra,
+                label: '.claude/skills (extra root)',
+                path: '/work/app/.claude/skills',
+              ),
+            ),
+          ],
+        ),
+      );
+
+      expect(
+        _in('skills-row-imported', '.claude/skills (extra root)'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('tags: "Overrides user skill", "Command only" and '
+        '"1 warning" with the text in the tooltip', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [
+            skillEntry(
+              'release-notes',
+              root: projectSkillRoot(),
+              overrides: [userSkillRoot()],
+              overridesLabel: 'Overrides user skill',
+            ),
+            skillEntry('deploy-check', modelVisible: false),
+            skillEntry(
+              'pdf_tools',
+              warnings: [
+                diagnostic(
+                  'the skill name differs from its directory name; '
+                  'the name from the frontmatter is used',
+                  path: '/home/u/.agents/skills/pdf-tools/SKILL.md',
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      expect(
+        _in('skills-row-release-notes', 'Overrides user skill'),
+        findsOneWidget,
+      );
+      expect(_in('skills-row-deploy-check', 'Command only'), findsOneWidget);
+      expect(
+        _in('skills-row-deploy-check', '/skill:deploy-check'),
+        findsOneWidget,
+      );
+      expect(_in('skills-row-pdf_tools', '1 warning'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Tooltip &&
+              (w.message ?? '').contains(
+                'the skill name differs from its directory name; the name '
+                'from the frontmatter is used',
+              ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Command only'), findsOneWidget);
+    });
+
+    testWidgets('a skill switched off by skills.disabled is listed with '
+        'Enabled off and without "Command only"', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [
+            skillEntry('code-review'),
+            skillEntry(
+              'flutter-golden',
+              availability: SkillAvailability.disabled,
+              modelVisible: false,
+            ),
+          ],
+        ),
+      );
+
+      expect(_key('skills-row-flutter-golden'), findsOneWidget);
+      expect(
+        tester
+            .widget<ToggleSwitch>(_key('skills-toggle-flutter-golden'))
+            .checked,
+        isFalse,
+      );
+      expect(
+        tester.widget<ToggleSwitch>(_key('skills-toggle-code-review')).checked,
+        isTrue,
+      );
+      expect(_in('skills-row-flutter-golden', 'Command only'), findsNothing);
+    });
+
+    testWidgets('names and descriptions from files are plain text with '
+        'visible control characters, no markdown (D12)', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [
+            skillEntry(
+              'na\u202Eme',
+              description: '**bold** [x](http://evil.test) \u202Egpj.exe',
+            ),
+          ],
+        ),
+      );
+
+      expect(find.text('na\\u202eme'), findsOneWidget);
+      expect(
+        find.text('**bold** [x](http://evil.test) \\u202egpj.exe'),
+        findsOneWidget,
+      );
+      expect(find.text('na\u202Eme'), findsNothing);
+    });
+
+    testWidgets('"Open" of a skill passes SkillEntryView.directory, not '
+        'SKILL.md and not <root>/<name>', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [
+            skillEntry('pdf-tools', root: userSkillRoot()),
+            skillEntry(
+              'pdf_tools',
+              root: userSkillRoot(),
+              directory: '/home/u/.agents/skills/pdf-tools',
+            ),
+          ],
+        ),
+      );
+
+      await tester.tap(_key('skills-open-skill-pdf-tools'));
+      await tester.pumpAndSettle();
+      await tester.tap(_key('skills-open-skill-pdf_tools'));
+      await tester.pumpAndSettle();
+
+      expect(opener.opened, [
+        '/home/u/.agents/skills/pdf-tools',
+        '/home/u/.agents/skills/pdf-tools',
+      ]);
+    });
+
+    testWidgets('the caption under the table: the search order and the '
+        'fixed-list note', (tester) async {
+      await openPage(tester, view: extensionsView(skills: [skillEntry('a')]));
+
+      for (final part in const [
+        '.codelab/skills',
+        '.agents/skills',
+        r'$CODELAB_HOME/skills',
+        '~/.agents/skills',
+        'extra roots',
+      ]) {
+        expect(
+          _containing('skills-search-order', part),
+          findsOneWidget,
+          reason: part,
+        );
+      }
+      expect(
+        find.text(
+          'The list is fixed when a session opens: new and changed skills '
+          'apply to new sessions.',
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('warnings and states of the sections', () {
+    testWidgets('InfoBar skills-warnings: the count, the fixed texts and '
+        'the paths; info is not shown', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [skillEntry('a')],
+          skillWarnings: [
+            diagnostic(
+              'the skill was skipped: the description is missing',
+              path: '/home/u/.agents/skills/broken/SKILL.md',
+            ),
+            diagnostic(
+              'the skill is overridden by another root',
+              path: '/home/u/.agents/skills/release-notes/SKILL.md',
+              code: 'shadowed',
+            ),
+            diagnostic(
+              'a note',
+              path: '/home/u/.agents/skills/x/SKILL.md',
+              level: DiagnosticLevel.info,
+            ),
+          ],
+        ),
+      );
+
+      expect(_key('skills-warnings'), findsOneWidget);
+      expect(
+        tester.widget<InfoBar>(_key('skills-warnings')).severity,
+        InfoBarSeverity.warning,
+      );
+      expect(_containing('skills-warnings', '2 warnings'), findsOneWidget);
+      expect(
+        _containing(
+          'skills-warnings',
+          'the skill was skipped: the description is missing',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        _containing(
+          'skills-warnings',
+          '/home/u/.agents/skills/release-notes/SKILL.md',
+        ),
+        findsOneWidget,
+      );
+      expect(_containing('skills-warnings', 'a note'), findsNothing);
+    });
+
+    testWidgets('no warnings: no InfoBar', (tester) async {
+      await openPage(tester, view: extensionsView(skills: [skillEntry('a')]));
+
+      expect(_key('skills-warnings'), findsNothing);
+    });
+
+    testWidgets('skills.enabled: false: the note names the file, there is '
+        'no table, the other sections stay', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skillsOutcome: const SectionOff('.codelab/config.local.yaml'),
+          files: [contextFile('AGENTS.md')],
+          templates: [templateEntry('/explain')],
+        ),
+      );
+
+      expect(
+        find.text(
+          'Skills are switched off: skills.enabled is false in '
+          '.codelab/config.local.yaml.',
+        ),
+        findsOneWidget,
+      );
+      expect(_key('skills-search-order'), findsNothing);
+      expect(_key('skills-context-0'), findsOneWidget);
+      expect(_key('skills-template-explain'), findsOneWidget);
+    });
+
+    testWidgets('a skills phase that timed out or failed: its text, the '
+        'other sections stay', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skillsOutcome: const SectionTimedOut(),
+          files: [contextFile('AGENTS.md')],
+        ),
+      );
+      expect(find.text('Skills were not read within 5 s.'), findsOneWidget);
+      expect(_key('skills-context-0'), findsOneWidget);
+    });
+
+    testWidgets('a skills phase that failed names the exception type '
+        'only', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skillsOutcome: const SectionFailed('PathAccessException'),
+        ),
+      );
+
+      expect(
+        find.text('Skills could not be read (PathAccessException).'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the project files phase that failed marks the context '
+        'chain and the templates, skills stay', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          contextOutcome: const SectionFailed('FileSystemException'),
+          templatesOutcome: const SectionFailed('FileSystemException'),
+          skills: [skillEntry('a')],
+        ),
+      );
+
+      expect(
+        find.text('Context files could not be read (FileSystemException).'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Prompt templates could not be read (FileSystemException).'),
+        findsOneWidget,
+      );
+      expect(_key('skills-row-a'), findsOneWidget);
+    });
+  });
+
+  group('access and folder (D2)', () {
+    testWidgets('an untrusted project: InfoBar with the exact text and the '
+        'file of the user config', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          trusted: false,
+          files: [contextFile('AGENTS.md')],
+          skills: [skillEntry('notes')],
+        ),
+      );
+
+      expect(_key('skills-untrusted'), findsOneWidget);
+      expect(
+        _containing(
+          'skills-untrusted',
+          'This project is not in trusted_projects, so the agent does not '
+              'read its skills and prompt templates. Your own skills and '
+              'AGENTS.md files are shown.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        _containing(
+          'skills-untrusted',
+          'Trust is set in trusted_projects of '
+              '${FakeAgentConfigStore.userPath}.',
+        ),
+        findsOneWidget,
+      );
+      expect(_key('skills-context-0'), findsOneWidget);
+      expect(_key('skills-row-notes'), findsOneWidget);
+    });
+
+    testWidgets('a trusted project has no skills-untrusted', (tester) async {
+      await openPage(tester, view: extensionsView());
+
+      expect(_key('skills-untrusted'), findsNothing);
+    });
+
+    testWidgets('a WebSocket agent: skills-read-only with the origin, no '
+        'tables, no reload, no open, no file read', (tester) async {
+      await openPage(
+        tester,
+        profile: ConnectionProfile.webSocket(
+          id: 'devbox',
+          label: 'Devbox',
+          uri: Uri.parse('wss://devbox:7420/acp'),
+        ),
+      );
+
+      expect(
+        tester.widget<InfoBar>(_key('skills-read-only')).severity,
+        InfoBarSeverity.warning,
+      );
+      expect(
+        _containing('skills-read-only', 'wss://devbox:7420'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('/acp'), findsNothing);
+      expect(
+        _containing('skills-read-only', 'codelab-agent config check'),
+        findsOneWidget,
+      );
+      expect(find.byType(CodeLabStatusTable), findsNothing);
+      expect(find.byType(ToggleSwitch), findsNothing);
+      expect(_key('skills-reload'), findsNothing);
+      expect(_key('skills-open-codelab'), findsNothing);
+      expect(session.extensionsCalls, isEmpty);
+    });
+
+    testWidgets('a foreign stdio agent: "Skills are managed by python."', (
+      tester,
+    ) async {
+      await openPage(
+        tester,
+        profile: const ConnectionProfile.stdio(
+          id: 'other',
+          label: 'Other',
+          command: 'python',
+          args: ['-m', 'other_agent'],
+        ),
+      );
+
+      expect(
+        _containing('skills-read-only', 'Skills are managed by python.'),
+        findsOneWidget,
+      );
+      expect(find.byType(CodeLabStatusTable), findsNothing);
+    });
+
+    testWidgets('no folder: the text, no sections; "Open .codelab folder" '
+        'stays and opens CODELAB_HOME', (tester) async {
+      projectDir = null;
+      await openPage(tester);
+
+      expect(
+        find.text(
+          'Open a project folder to see the context files, skills and prompt '
+          'templates the agent uses there.',
+        ),
+        findsOneWidget,
+      );
+      expect(_key('skills-no-folder'), findsOneWidget);
+      expect(find.byType(CodeLabStatusTable), findsNothing);
+      expect(find.text('Context files'), findsNothing);
+
+      await tester.tap(_key('skills-open-codelab'));
+      await tester.pumpAndSettle();
+      expect(opener.opened, [_home]);
+    });
+
+    testWidgets('a broken config: skills-unreadable with the problem, no '
+        'tables and no toggles', (tester) async {
+      store.issues = [
+        const ConfigIssue(
+          kind: ConfigIssueKind.value,
+          key: 'skills.max_skills',
+          source: FakeAgentConfigStore.userPath,
+          message: 'must be a positive number',
+        ),
+      ];
+      await openPage(tester);
+
+      expect(
+        tester.widget<InfoBar>(_key('skills-unreadable')).severity,
+        InfoBarSeverity.error,
+      );
+      expect(
+        _containing('skills-unreadable', 'skills.max_skills'),
+        findsOneWidget,
+      );
+      expect(find.byType(CodeLabStatusTable), findsNothing);
+      expect(find.byType(ToggleSwitch), findsNothing);
+      expect(session.extensionsCalls, isEmpty);
+    });
+  });
+
+  group('actions', () {
+    testWidgets('"Reload" re-reads the config and the files and sends '
+        'nothing to the agent', (tester) async {
+      await openPage(tester, view: extensionsView());
+      expect(session.extensionsCalls, hasLength(1));
+      final snapshots = store.snapshots;
+
+      await tester.tap(_key('skills-reload'));
+      await tester.pumpAndSettle();
+
+      expect(session.extensionsCalls, hasLength(2));
+      expect(store.snapshots, snapshots + 1);
+    });
+
+    testWidgets('"Open .codelab folder" passes <folder>/.codelab and its '
+        'tooltip names the path', (tester) async {
+      await openPage(tester, view: extensionsView());
+
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Tooltip && (w.message ?? '').contains('/work/app/.codelab'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(_key('skills-open-codelab'));
+      await tester.pumpAndSettle();
+
+      expect(opener.opened, ['/work/app/.codelab']);
+      expect(_key('skills-banner'), findsNothing);
+    });
+
+    testWidgets('a refusal of the platform is the banner with the '
+        'path', (tester) async {
+      opener.outcome = FolderOpenOutcome.failed;
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [skillEntry('pdf-tools', root: userSkillRoot())],
+        ),
+      );
+
+      await tester.tap(_key('skills-open-skill-pdf-tools'));
+      await tester.pumpAndSettle();
+
+      expect(
+        _containing(
+          'skills-banner',
+          'Could not open /home/u/.agents/skills/pdf-tools.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the page never offers to write: no save, no consent '
+        'switches in this iteration', (tester) async {
+      await openPage(tester, view: extensionsView(skills: [skillEntry('a')]));
+
+      expect(find.text('Save'), findsNothing);
+      expect(store.applied, isEmpty);
+      expect(_key('skills-consent-project'), findsNothing);
+    });
+  });
+}

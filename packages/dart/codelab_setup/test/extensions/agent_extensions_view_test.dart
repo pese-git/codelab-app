@@ -363,6 +363,25 @@ void main() {
       expect(user.root.scope, ExtensionScope.user);
     });
 
+    test(
+      'SkillEntryView.directory: каталог SKILL.md навыка, а не '
+      '<root.path>/<name> (имя из frontmatter ≠ каталог; D8 «API итерации 4»)',
+      () {
+        final view = build();
+
+        final notes = _row(view, 'Notes');
+        expect(notes.directory, '/uh/.agents/skills/notes');
+        expect(notes.directory, isNot('${notes.root.path}/Notes'));
+        expect(_row(view, 'delta').directory, '/uh/.claude/skills/delta');
+        expect(
+          _row(view, 'alpha').directory,
+          '/repo/pkg/.codelab/skills/alpha',
+        );
+        // Выключенный skills.disabled навык тоже знает свой каталог.
+        expect(_row(view, 'kappa').directory, isNotEmpty);
+      },
+    );
+
     test(r'Overrides user/project/extra skill: по диагностике shadowed, без '
         'разбора её текста', () {
       final view = build();

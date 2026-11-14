@@ -127,6 +127,33 @@ void main() {
       expect(view.skills.outcome, isA<SectionRead>());
     });
 
+    test('SkillEntryView.directory — канонический каталог SKILL.md, в том '
+        'числе когда имя во frontmatter не совпадает с каталогом '
+        '(D8 «API итерации 4»)', () async {
+      config();
+      skill('$project/.codelab/skills', 'plain');
+      write(
+        '$project/.codelab/skills/folder-x/SKILL.md',
+        '---\nname: other-name\ndescription: Renamed\n---\nDo it.\n',
+      );
+
+      final view = await read();
+
+      String dirOf(String name) => Directory(
+        view.skills.entries.singleWhere((e) => e.name == name).directory,
+      ).resolveSymbolicLinksSync();
+      final canonical = Directory(
+        '$project/.codelab/skills',
+      ).resolveSymbolicLinksSync();
+      expect(dirOf('plain'), '$canonical/plain');
+      expect(dirOf('other-name'), '$canonical/folder-x');
+      expect(File('${dirOf('other-name')}/SKILL.md').existsSync(), isTrue);
+      expect(
+        view.skills.entries.every((e) => e.directory.startsWith('/')),
+        isTrue,
+      );
+    });
+
     test('корень extra_roots даёт строки со scope extra и подписью '
         '«(extra root)»', () async {
       config(extra: 'skills:\n  extra_roots:\n    - ~/other\n');

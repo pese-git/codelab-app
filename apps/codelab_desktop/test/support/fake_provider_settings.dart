@@ -296,6 +296,49 @@ final class FakeProviderSettingsSession implements ProviderSettingsSession {
   SecretDeletion deletion = SecretDeletion.deleted;
   FutureOr<void> Function(String name)? onDelete;
 
+  /// Вызовы порта `extensions` страницы «Skills & extensions» (change
+  /// `add-app-skills-page`, D6): снимок, с которым вызвали, по порядку.
+  final extensionsCalls = <AgentConfigSnapshot>[];
+
+  /// Исход порта `extensions`; по умолчанию — пустой вид доверенного проекта
+  /// папки снимка. Тест подменяет, чтобы вернуть свой вид, подвесить вызов на
+  /// `Completer` или бросить исключение.
+  Future<AgentExtensionsView> Function(AgentConfigSnapshot snapshot)?
+  onExtensions;
+
+  /// Метод порта `ProviderSettingsSession.extensions` (D6). Аннотации
+  /// `@override` нет, пока метода нет в интерфейсе (красная фаза 4.3); при
+  /// реализации задачи 4.4 её надо добавить.
+  Future<AgentExtensionsView> extensions(AgentConfigSnapshot snapshot) {
+    extensionsCalls.add(snapshot);
+    final handler = onExtensions;
+    return handler != null
+        ? handler(snapshot)
+        : Future.value(
+            const AgentExtensionsView(
+              folder: '',
+              trusted: true,
+              context: ContextChainView(
+                outcome: SectionRead(),
+                files: [],
+                shownBytes: 0,
+                omittedCount: 0,
+                truncatedCount: 0,
+              ),
+              skills: SkillsSectionView(
+                outcome: SectionRead(),
+                entries: [],
+                warnings: [],
+              ),
+              templates: TemplatesSectionView(
+                outcome: SectionRead(),
+                entries: [],
+                warnings: [],
+              ),
+            ),
+          );
+  }
+
   /// Порт ключей страницы «MCP servers» (задача 5.4): те же секреты, что у
   /// [isSecretSet], но через `ProviderKeys`, как собирает composition root
   /// (`providerKeysOf` того же хранилища, задача 5.10). `journal` показывает
