@@ -672,7 +672,7 @@ Slash-команда фоновой работы для человека — `/t
 - привязка по вызову `think` в статусе `in_progress` в момент прихода `plan` — ломается при параллельных операциях потомков (итерация 2) и при `assign`;
 - разница планов «до и после» вызова (прежний D27) — то же, плюс пустые и чужие изменения;
 - отдельное уведомление `_codelab/tasks/changed` — второй канал, который сторонний клиент не видит, при том что `plan` уже идёт;
-- `task_*` без `sequential`, сериализация только на замке списка (D39-alt, исследование, не принято) — [§17.16a](../../../docs/architecture/proposals/agent-core/17-16a-task-batch-parallel-alt.md).
+- `task_*` без `sequential`, сериализация только на замке списка (D39-alt, исследование, не принято) — [§17.16a](../../../docs/architecture/proposals/agent-core/17-16a-task-batch-parallel-alt.md); вариант 2 — очередь по ключу `AgentTool.lockKey` ([§17.16a.4](../../../docs/architecture/proposals/agent-core/17-16a-task-batch-parallel-alt.md#1716a4-вариант-2-очередь-по-ключу-lockkey)).
 
 ## Risks / Trade-offs
 
