@@ -143,7 +143,8 @@ final class ToolCallExecutor implements ToolExecutor {
     required this.env,
     required this.services,
     this.unavailableText,
-  });
+    PathLock? locks,
+  }) : _locks = locks ?? PathLock();
 
   final ToolRegistry registry;
 
@@ -160,7 +161,10 @@ final class ToolCallExecutor implements ToolExecutor {
   /// Ограниченный env сессии (ENV-2).
   final ExecutionEnv env;
   final ToolServices services;
-  final _locks = PathLock();
+
+  /// Очередь путей: ребёнок получает очередь корня, поэтому параллельные
+  /// правки одного файла во всём дереве упорядочены (TOOL-7).
+  final PathLock _locks;
 
   /// Очередь ключей `AgentTool.lockKey`; отдельная от путей, чтобы ключ
   /// `tasks` не пересекался с файлом с таким же именем.
@@ -223,6 +227,9 @@ final class ToolCallExecutor implements ToolExecutor {
     // Ключ — по тому же принципу и в том же месте: порядок ответа модели
     // (обобщение TOOL-7 на ключи — исследование D39-alt, §17.16a.4).
     final keyLock = lockKeyName == null ? null : _keyLocks.reserve(lockKeyName);
+    // Инструмент отпускает ключ досрочно (`ToolContext.releaseLockKey`) тем же
+    // тикетом, что и `_release`: повторное отпускание безопасно.
+    context.lockKeyRelease = keyLock?.release;
     try {
       var presentation = ToolPresentation(title: call.name);
       if (tool != null) {
@@ -248,6 +255,7 @@ final class ToolCallExecutor implements ToolExecutor {
           title: presentation.title,
           input: call.arguments,
           locations: presentation.locations,
+          subagent: presentation.subagent,
         ),
       );
     } on Object {

@@ -3,6 +3,7 @@ import '../env/execution_env.dart';
 import '../llm/messages.dart';
 import '../llm/stream_function.dart';
 import '../loop/agent_events.dart';
+import '../subagents/subagent_model.dart';
 import '../util/canonical_json.dart';
 import '../util/clock.dart';
 import '../util/logger.dart';
@@ -174,6 +175,21 @@ final class ToolContext {
   final String toolCallId;
   final ToolServices services;
 
+  /// Освобождает место вызова в очереди `AgentTool.lockKey`; ставит точка
+  /// исполнения при объявлении вызова с ключом. `null` — ключа нет.
+  void Function()? lockKeyRelease;
+
+  /// Досрочно отпускает место в очереди ключа `AgentTool.lockKey`.
+  ///
+  /// Почему: под ключом нельзя ждать субагента (взаимная блокировка), а
+  /// проверка и привязка к общему состоянию должны пройти под ним. Инструмент
+  /// делает короткую часть под ключом, зовёт `releaseLockKey()` и только
+  /// потом ждёт долгую (`agent{task}`, D39-alt, §17.16a.4).
+  ///
+  /// Идемпотентно; без ключа — no-op. Точка исполнения всё равно отпускает
+  /// место в `finally`. Путь `lockPath` этим НЕ отпускается.
+  void releaseLockKey() => lockKeyRelease?.call();
+
   /// Имена схем текущего шага: текст для модели упоминает только те
   /// инструменты, которые она может вызвать (§6.4).
   final List<String> stepTools;
@@ -247,7 +263,12 @@ final class ToolPresentation {
     required this.title,
     this.locations = const [],
     this.diffs = const [],
+    this.subagent,
   });
+
+  /// Признак вызова `agent`: id и тип, зарезервированные до
+  /// `ToolCallStarted` (design.md change `add-subagents-and-tasks`, D28).
+  final SubagentCallRef? subagent;
 
   final String title;
   final List<Location> locations;

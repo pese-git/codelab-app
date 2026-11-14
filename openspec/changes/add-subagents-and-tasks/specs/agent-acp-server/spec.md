@@ -5,7 +5,7 @@
 
 Единственное исключение из «ровно этих полей» — блок объявлений расширений CodeLab `agentCapabilities._meta.codelab` (design.md change `add-subagents-and-tasks`, D9). Правила блока:
 - он SHALL отправляться, только если клиент прислал объект `clientCapabilities._meta.codelab` (в том числе пустой);
-- значение каждого ключа — объект с целым `version`: всегда — `tasks: {"version": 1}`; `subagents: {"version": 1, "maxDepth": <subagents.max_depth>}` и `subagentToolCalls: {"version": 1}` — только если базовый реестр ядра содержит инструмент `agent` (при `subagents.enabled`, с итерации 2 change `add-subagents-and-tasks`): агент НЕ SHALL объявлять расширение, которого у него нет. Состав блока не зависит от того, какие ключи и версии объявил клиент;
+- значение каждого ключа — объект с целым `version`: всегда — `tasks: {"version": 1}`; `subagents: {"version": 1, "maxDepth": <subagents.max_depth>}` — только если у ядра включены субагенты (инструмент `agent` при `subagents.enabled`, с итерации 2 change `add-subagents-and-tasks`); `enabled` и эффективная глубина SHALL браться из применённого конфига в момент `initialize` (геттер `AgentRuntime.subagents`; design.md, D37): `maxDepth` — это `subagents.max_depth`, ограниченная глубиной, которую реализует агент (до итерации 4 change — 1); порог окна контекста D40 объявления не меняет, поэтому перезагрузка конфига меняет блок для следующих `initialize` без перезапуска; `subagentToolCalls: {"version": 1}` — при том же условии и только когда адаптер умеет проецировать вызовы потомков (требование «Шаги потомков деревом», с итерации 5 change `add-subagents-and-tasks`, задача 5.2). Агент НЕ SHALL объявлять расширение, которого у него нет. Состав блока не зависит от того, какие ключи и версии объявил клиент;
 - неизвестные ключи и значения в `clientCapabilities._meta.codelab` SHALL игнорироваться без ошибки;
 - стандартные поля и их значения блок не меняет.
 
@@ -16,12 +16,20 @@
 - **THEN** ответ совпадает с фикстурой `acp/initialize-capabilities`, где `mcpCapabilities` — `{"http": true, "sse": false}`, а `_meta` у `agentCapabilities` нет
 
 #### Scenario: Клиент CodeLab объявил расширения, субагентов ещё нет (итерация 1)
-- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}}`, а базовый реестр ядра инструмента `agent` не содержит
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}}`, а ядро собрано без инструмента `agent`
 - **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 1: `agentCapabilities._meta.codelab` — `{"tasks": {"version": 1}}`, остальные поля — как в `acp/initialize-capabilities`
 
 #### Scenario: Клиент CodeLab объявил расширения, субагенты включены (итерация 2)
-- **WHEN** тот же `initialize`, ядро собрано с `subagents.enabled: true` и `max_depth: 3`
-- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 2: `agentCapabilities._meta.codelab` — `{"subagents": {"version": 1, "maxDepth": 3}, "subagentToolCalls": {"version": 1}, "tasks": {"version": 1}}`
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}}`, ядро собрано с `subagents.enabled: true` и `max_depth: 3`
+- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 2: `agentCapabilities._meta.codelab` — `{"subagents": {"version": 1, "maxDepth": 1}, "tasks": {"version": 1}}`: вложенности до итерации 4 нет, поэтому объявляется эффективная глубина 1, а не `max_depth: 3`; ключа `subagentToolCalls` нет: вызовы потомков адаптер ещё не проецирует
+
+#### Scenario: Клиент CodeLab объявил расширения, дерево вызовов (итерация 5)
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}}`, ядро собрано с `subagents.enabled: true` и `max_depth: 3`
+- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 5: `agentCapabilities._meta.codelab` — `{"subagents": {"version": 1, "maxDepth": 3}, "subagentToolCalls": {"version": 1}, "tasks": {"version": 1}}`
+
+#### Scenario: Субагенты выключены перезагрузкой конфига
+- **WHEN** агент запущен с `subagents.enabled: true`, затем перезагрузка конфига ставит `subagents.enabled: false`, и новое соединение присылает `initialize` с `clientCapabilities._meta.codelab: {}`
+- **THEN** `agentCapabilities._meta.codelab` — `{"tasks": {"version": 1}}`; ответ `initialize`, полученный соединением до перезагрузки, не меняется (`initialize_test.dart`; D37)
 
 #### Scenario: Неизвестные ключи и версии клиента
 - **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 2, "x": 1}, "future": true, "board": "yes"}`
@@ -108,7 +116,7 @@
 | Событие ядра | Кадр |
 |---|---|
 | `TaskListChanged` | `session/update` `plan` со всем списком в порядке создания; у entry `content` = `subject`, `priority`, `status` и `_meta: {"codelab": {"task": {"id", "owner", "blockedBy"}}}`; пустой список — `entries: []` (TSK-5); так же — при `change.op == restore` (список новой ветки, D29). У самого `plan` — `_meta: {"codelab": {"taskChange": {"op", "actor", "toolCallId"?, "changed", "deleted"}}}` из `TaskChange` (D35): `toolCallId` — только у операции вызова `task_*` (у потомка — цепочка D8), у `restore` и `assign` его нет; ключ уходит независимо от объявления клиента |
-| `ToolCallStarted(agent)` | `tool_call` с `kind: think`, `title` `Subagent <agent>: <description>` и `_meta.codelab.subagent: {"id", "type"}` (D28); то же — у `tool_call` вызова `agent` при реплее |
+| `ToolCallStarted(agent)` | `tool_call` с `kind: think`, `title` `Subagent <agent>: <description>` и `_meta.codelab.subagent: {"id", "type"}` (D28); то же — у `tool_call` вызова `agent` при реплее, где `id` и `type` берутся из записи `subagent` с тем же `toolCallId`; у отклонённого вызова записи нет — при реплее `_meta.codelab.subagent: {"type"}` с `type` из аргументов вызова (`general` по умолчанию) и без `id` (D28; design.md, D36, Т15) |
 | `ToolCallProgress(agent)` | `tool_call_update` с одним текстовым блоком строки прогресса, заменяющим предыдущий |
 | `ToolCallFinished(agent)` | `tool_call_update` со `status` и телом отчёта без обёртки `<subagent-report>` и без ограды; всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` из `SubagentReport` (с потомками, D24); при `failed` — ещё `failure` |
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | не отправляются; логи `subagent.start`, `subagent.end` |
@@ -133,6 +141,10 @@
 #### Scenario: Список новой ветки
 - **WHEN** ядро публикует `TaskListChanged` с `op: restore` и пустым списком, затем — с `op: restore` и пунктами `#1`, `#4`
 - **THEN** клиент получает `plan` с `entries: []`, затем `plan` с двумя entries и `_meta.codelab.task.id` `"1"`, `"4"` (`acp_projection_exhaustive_test.dart`)
+
+#### Scenario: Реплей отклонённого вызова agent
+- **WHEN** загружается сессия, где вызов `agent` с `type: "review"` был отклонён проверкой (`description` из двух символов) и записи `subagent` нет
+- **THEN** `tool_call` этого вызова при реплее несёт `_meta.codelab.subagent: {"type": "review"}` без `id`, статус — `failed` с текстом ошибки (`acp_projection_exhaustive_test.dart`)
 
 #### Scenario: Вызов agent
 - **WHEN** модель вызывает `agent` с типом `explore`, ребёнок делает три вызова и сдаёт отчёт

@@ -61,7 +61,7 @@
 - **THEN** у каждого вызова `agent` ровно столько детей, сколько в журнале
 
 ### Requirement: Итог и хвост субагента
-Вызов SHALL считаться вызовом `agent` с первого кадра, если его `tool_call` несёт `_meta.codelab.subagent` (`ToolCallView.subagentCall`: `id`, `type`; D28). Отсутствие поля, неверная форма или неизвестные ключи SHALL давать `null` без отказа; такой вызов (сторонний агент) — обычный вызов `think`.
+Вызов SHALL считаться вызовом `agent` с первого кадра, если его `tool_call` несёт `_meta.codelab.subagent` (`ToolCallView.subagentCall`: `type` и необязательный `id`; D28). Без `id` приходит реплей отклонённого вызова: у него нет записи `subagent` (design.md, D36, Т15). Отсутствие поля, `type` не строкой, неверная форма или неизвестные ключи SHALL давать `null` без отказа; такой вызов (сторонний агент) — обычный вызов `think`.
 
 `ToolCallView` вызова `agent` SHALL получать `subagentSummary` (`toolCalls`, `inputTokens`, `outputTokens`, `duration`) из `_meta.codelab.subagent.summary` финального обновления (design.md change `add-subagents-and-tasks`, D24). Отсутствие, неверная форма или неизвестные ключи SHALL давать `null` или игнорироваться без отказа обработки. Kit SHALL давать готовую строку итога `N tool calls · N.Nk tokens · <время>` и её сокращённый вид для свёрнутой строки `N tool calls · N.Nk · <время>` (D27) (токены — `input + output`, `k` с одним знаком; время — `48s`, `2m 05s`, `1h 02m`).
 
@@ -155,8 +155,8 @@ Kit НЕ SHALL разбирать `title`, строку прогресса и т
 - **THEN** строка — `completed`, 4 вызова, 18.2k токенов, 48s, последнего действия нет; счётчик `completed` равен 1
 
 #### Scenario: Отмена и отказ
-- **WHEN** один вызов `agent` завершается `failed` с `_meta.codelab.subagent.failure: "budget_exceeded:max_steps"`, другой — `failed` с `_meta.codelab.outcome: "cancelled"`
-- **THEN** первая строка — `failed` с последним действием `budget_exceeded:max_steps`, вторая — `cancelled`
+- **WHEN** один вызов `agent` завершается `failed` с `_meta.codelab.subagent.failure: "budget_exceeded:steps"`, другой — `failed` с `_meta.codelab.outcome: "cancelled"`
+- **THEN** первая строка — `failed` с последним действием `budget_exceeded:steps`, вторая — `cancelled`
 
 #### Scenario: Ожидание одобрения потомка
 - **WHEN** у работающего `sub_b2` (внук) ожидает ответа `session/request_permission` с `_meta.codelab.subagent.id: "sub_b2"`

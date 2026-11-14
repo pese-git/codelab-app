@@ -65,8 +65,10 @@ final class SummaryRequest {
 }
 
 /// Генератор резюме; бросает [CompactionFailure] или `CancelledException`.
-typedef Summarizer =
-    Future<String> Function(SummaryRequest request, CancelToken cancel);
+typedef Summarizer = Future<String> Function(
+  SummaryRequest request,
+  CancelToken cancel,
+);
 
 /// Резюме не получено: ошибка модели или пустой ответ (§9.7, шаги 5, 7).
 final class CompactionFailure implements Exception {

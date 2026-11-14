@@ -65,15 +65,13 @@ abstract final class SecretNames {
     if (provider != null) {
       return _join('codelab/${_part(provider.group(1)!, 100)}');
     }
-    final mcp = RegExp(
-      r'^mcp\.servers\[(.*?)\]\.(?:(?:env|headers)\.)?(.+)$',
-    ).firstMatch(configPath);
+    final mcp = RegExp(r'^mcp\.servers\[(.*?)\]\.(?:(?:env|headers)\.)?(.+)$')
+        .firstMatch(configPath);
     if (mcp != null) {
       return forMcp(mcp.group(1)!, mcp.group(2)!);
     }
-    final search = RegExp(
-      r'^tools\.web\.search\.backends\.([^.]+)\.',
-    ).firstMatch(configPath);
+    final search = RegExp(r'^tools\.web\.search\.backends\.([^.]+)\.')
+        .firstMatch(configPath);
     if (search != null) {
       return _join('codelab/search-${_part(search.group(1)!, 100)}');
     }

@@ -21,26 +21,26 @@ import 'turn_budget.dart';
 typedef AgentEventSink = FutureOr<void> Function(AgentEvent event);
 
 /// Перед каждым запросом к модели; меняет только payload (LOOP-7).
-typedef TransformContextHook =
-    Future<List<Message>> Function(List<Message> messages, CancelToken cancel);
+typedef TransformContextHook = Future<List<Message>> Function(
+  List<Message> messages,
+  CancelToken cancel,
+);
 
 /// После валидации, до исполнения; первый [Block] останавливает цепочку.
 /// Первым звеном всегда стоит проверка разрешений (PERM-1).
-typedef BeforeToolCallHook =
-    Future<Block?> Function(
-      ToolCall call,
-      Map<String, Object?> args,
-      ToolContext ctx,
-    );
+typedef BeforeToolCallHook = Future<Block?> Function(
+  ToolCall call,
+  Map<String, Object?> args,
+  ToolContext ctx,
+);
 
 /// После исполнения, до `ToolCallFinished`; переопределяет результат по
 /// полям.
-typedef AfterToolCallHook =
-    Future<ResultOverride?> Function(
-      ToolCall call,
-      ToolExecutionResult result,
-      bool isError,
-    );
+typedef AfterToolCallHook = Future<ResultOverride?> Function(
+  ToolCall call,
+  ToolExecutionResult result,
+  bool isError,
+);
 
 /// После `StepEnded`: заменить контекст или модель следующего шага.
 typedef PrepareNextStepHook = Future<StepUpdate?> Function(StepResult step);
@@ -48,8 +48,10 @@ typedef PrepareNextStepHook = Future<StepUpdate?> Function(StepResult step);
 /// Финальный гейт ответа (LOOP-13): шаг закончился без вызовов, ход готов
 /// остановиться. В MVP хук не регистрируется — поведение совпадает с
 /// [Accept]; после MVP его собирает сессия из проверок (§17.12.4).
-typedef BeforeFinalResponseHook =
-    Future<ResponseVerdict> Function(AssistantMessage message, TurnInfo turn);
+typedef BeforeFinalResponseHook = Future<ResponseVerdict> Function(
+  AssistantMessage message,
+  TurnInfo turn,
+);
 
 /// Оценка размера payload запроса в токенах (§9.3); цикл кладёт её в
 /// `ModelRequested.estimatedTokens` и сравнивает с окном перед запросом.
@@ -69,8 +71,10 @@ enum EmergencyCause {
 /// Возвращает новый контекст шага — сообщения проекции журнала после
 /// сжатия — или `null`, если сжать нечего или сжатие не удалось. Цикл
 /// вызывает его не больше одного раза за ход (CMP-8).
-typedef EmergencyCompact =
-    Future<LoopContext?> Function(EmergencyCause cause, CancelToken cancel);
+typedef EmergencyCompact = Future<LoopContext?> Function(
+  EmergencyCause cause,
+  CancelToken cancel,
+);
 
 final class Block {
   const Block(this.reason, {this.outcome = ToolOutcome.rejected});
@@ -267,6 +271,9 @@ final class AgentLoopConfig {
     this.estimateTokens,
     this.emergencyCompact,
     this.contextWindowCap,
+    this.subagentUsage,
+    this.onOwnUsage,
+    this.ancestorBudget,
   }) : beforeToolCall = List.unmodifiable(beforeToolCall),
        afterToolCall = List.unmodifiable(afterToolCall);
 
@@ -322,6 +329,21 @@ final class AgentLoopConfig {
   /// `effectiveContextWindow(model, cap)` (CMP-6).
   final int? contextWindowCap;
 
+  /// Usage потомков хода на сейчас, транзитивно (SUB-11; change
+  /// `add-subagents-and-tasks`, D4, D36 Т8). Входит в `TurnEnded.usage`,
+  /// `TurnEnded.subagentUsage` и в проверку `maxTokens`/`maxCost` на границе
+  /// шага: родитель не обходит бюджет, раздав работу детям. `null` — потомков
+  /// нет.
+  final Usage Function()? subagentUsage;
+
+  /// Собственный usage хода (без потомков) после каждого шага и нулевой в
+  /// начале хода: по нему дерево считает остаток бюджета корня для потомков.
+  final void Function(Usage own)? onOwnUsage;
+
+  /// Проверка бюджета предков на границе шага потомка: лимит, исчерпанный у
+  /// любого из них, или `null` (D4). У корня — `null`.
+  final BudgetLimit? Function()? ancestorBudget;
+
   /// Копия с другой моделью, очередями, бюджетом хода или ограничением окна.
   ///
   /// [budget] и [contextWindowCap] нужны живой перезагрузке конфигурации
@@ -334,6 +356,9 @@ final class AgentLoopConfig {
     MessageQueue<Message>? followUp,
     TurnBudget? budget,
     ({int? value})? contextWindowCap,
+    Usage Function()? subagentUsage,
+    void Function(Usage own)? onOwnUsage,
+    BudgetLimit? Function()? ancestorBudget,
   }) => AgentLoopConfig(
     sessionId: sessionId,
     model: model ?? this.model,
@@ -360,5 +385,8 @@ final class AgentLoopConfig {
     contextWindowCap: contextWindowCap == null
         ? this.contextWindowCap
         : contextWindowCap.value,
+    subagentUsage: subagentUsage ?? this.subagentUsage,
+    onOwnUsage: onOwnUsage ?? this.onOwnUsage,
+    ancestorBudget: ancestorBudget ?? this.ancestorBudget,
   );
 }

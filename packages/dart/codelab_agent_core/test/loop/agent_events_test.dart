@@ -23,6 +23,10 @@ String kindOf(AgentEvent event) => switch (event) {
   ContextCompacted() => 'compacted',
   SessionTitleChanged() => 'title',
   ModelOptionsChanged() => 'model.options',
+  SubagentStarted() => 'subagent.start',
+  SubagentProgress() => 'subagent.progress',
+  SubagentFinished() => 'subagent.finish',
+  SubagentActivity() => 'subagent.activity',
 };
 
 void main() {

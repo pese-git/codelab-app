@@ -88,6 +88,7 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
     this.secondary,
     this.output = const [],
     this.approval,
+    this.subagent,
   });
 
   @override
@@ -99,12 +100,46 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
   final List<String> output;
   final CodeLabTranscriptApproval? approval;
 
+  /// Вызов `agent` в компактном виде (D27); `null` у остальных вызовов и у
+  /// стороннего агента без признака субагента (D28).
+  final CodeLabSubagentCall? subagent;
+
   /// Вызов ждёт решения пользователя.
   bool get awaitsApproval => approval is CodeLabTranscriptApprovalPending;
 
   /// Есть что показать под заголовком строки.
   bool get isExpandable =>
       approval != null || secondary != null || output.isNotEmpty;
+}
+
+/// Данные компактной строки вызова `agent`: итог справа и строка прогресса.
+///
+/// Почему: завершённый субагент в ленте — одна строка, где статус передаёт
+/// глиф, а не тег «Done», и справа короткий итог (D24, D27, артборд 30;
+/// spec agent-workbench-ui «Завершённый субагент свёрнут»).
+///
+/// Для чего: готовые строки от kit; виджет их не считает и не разбирает.
+/// [stats] — сокращённый итог («4 tool calls · 18.2k · 48s») или счётчик
+/// работающего; [progress] — последняя строка прогресса, пока вызов идёт и
+/// дерева вызовов потомков нет (D27 п. 3).
+///
+/// Как использовать: передать в [CodeLabToolCallRow.subagent]; заголовок
+/// «Subagent `type`: `description`» — в [CodeLabToolCallRow.label], отчёт — в
+/// [CodeLabToolCallRow.output].
+final class CodeLabSubagentCall {
+  const CodeLabSubagentCall({this.stats, this.progress});
+
+  final String? stats;
+  final String? progress;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CodeLabSubagentCall &&
+      other.stats == stats &&
+      other.progress == progress;
+
+  @override
+  int get hashCode => Object.hash(stats, progress);
 }
 
 /// Тихая строка операций со списком задач: иконка списка и короткий текст.

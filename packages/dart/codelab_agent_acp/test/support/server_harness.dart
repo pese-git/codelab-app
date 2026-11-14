@@ -474,6 +474,9 @@ final class JournalStore implements SessionStore {
   Future<void> create(SessionHeader header) => inner.create(header);
 
   @override
+  Future<String> createChild(SessionHeader header) => inner.createChild(header);
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {

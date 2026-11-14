@@ -115,6 +115,17 @@ export 'src/project/project_context.dart';
 export 'src/project/project_files.dart';
 export 'src/skills/skill_catalog.dart';
 export 'src/skills/skill_files.dart';
+export 'src/subagents/subagent_model.dart'
+    show
+        SubagentCallRef,
+        SubagentFailure,
+        SubagentId,
+        SubagentReport,
+        SubagentSnapshot,
+        SubagentState,
+        SubagentWait,
+        SubagentsInfo;
+export 'src/subagents/subagents_config.dart' show SubagentsConfig;
 export 'src/skills/skills_config.dart';
 export 'src/runtime/agent_runtime.dart' show AgentRuntime, coreAgentVersion;
 export 'src/runtime/agent_session.dart';
@@ -130,6 +141,7 @@ export 'src/secrets/secret_template.dart';
 export 'src/session/memory_session_store.dart';
 export 'src/session/parse.dart';
 export 'src/session/records.dart';
+export 'src/subagents/subagent_report.dart' show failureWire;
 export 'src/session/session_store.dart';
 export 'src/session/slug.dart';
 export 'src/session/summary.dart';

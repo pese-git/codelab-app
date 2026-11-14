@@ -1979,7 +1979,12 @@ mixin _$ToolCallRecord {
  ApprovalRiskLevel get riskLevel; List<ToolCallContent> get content; List<ToolCallLocation> get locations; Map<String, Object?>? get rawInput; Map<String, Object?>? get rawOutput;/// The call was unfinished when the client sent `session/cancel`. ACP
 /// has no `cancelled` tool call status, so such a call is kept as
 /// [ToolCallStatus.failed] with this flag set.
- bool get cancelledByClient; DateTime? get startedAt; DateTime? get completedAt;
+ bool get cancelledByClient; DateTime? get startedAt; DateTime? get completedAt;/// `_meta.codelab.subagent` вызова `agent`, накопленный по кадрам: первый
+/// `tool_call` даёт `{id, type}`, финальное обновление — `summary` или
+/// `failure` (design.md change `add-subagents-and-tasks`, D24, D28).
+/// Значения не проверяются: терпимый разбор — у kit
+/// (`codelab_client_core`); `null` — вызов без признака (сторонний агент).
+ Map<String, Object?>? get subagentMeta;
 /// Create a copy of ToolCallRecord
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1990,16 +1995,16 @@ $ToolCallRecordCopyWith<ToolCallRecord> get copyWith => _$ToolCallRecordCopyWith
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ToolCallRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.status, status) || other.status == status)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&const DeepCollectionEquality().equals(other.content, content)&&const DeepCollectionEquality().equals(other.locations, locations)&&const DeepCollectionEquality().equals(other.rawInput, rawInput)&&const DeepCollectionEquality().equals(other.rawOutput, rawOutput)&&(identical(other.cancelledByClient, cancelledByClient) || other.cancelledByClient == cancelledByClient)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ToolCallRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.status, status) || other.status == status)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&const DeepCollectionEquality().equals(other.content, content)&&const DeepCollectionEquality().equals(other.locations, locations)&&const DeepCollectionEquality().equals(other.rawInput, rawInput)&&const DeepCollectionEquality().equals(other.rawOutput, rawOutput)&&(identical(other.cancelledByClient, cancelledByClient) || other.cancelledByClient == cancelledByClient)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt)&&const DeepCollectionEquality().equals(other.subagentMeta, subagentMeta));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,title,kind,status,riskLevel,const DeepCollectionEquality().hash(content),const DeepCollectionEquality().hash(locations),const DeepCollectionEquality().hash(rawInput),const DeepCollectionEquality().hash(rawOutput),cancelledByClient,startedAt,completedAt);
+int get hashCode => Object.hash(runtimeType,id,title,kind,status,riskLevel,const DeepCollectionEquality().hash(content),const DeepCollectionEquality().hash(locations),const DeepCollectionEquality().hash(rawInput),const DeepCollectionEquality().hash(rawOutput),cancelledByClient,startedAt,completedAt,const DeepCollectionEquality().hash(subagentMeta));
 
 @override
 String toString() {
-  return 'ToolCallRecord(id: $id, title: $title, kind: $kind, status: $status, riskLevel: $riskLevel, content: $content, locations: $locations, rawInput: $rawInput, rawOutput: $rawOutput, cancelledByClient: $cancelledByClient, startedAt: $startedAt, completedAt: $completedAt)';
+  return 'ToolCallRecord(id: $id, title: $title, kind: $kind, status: $status, riskLevel: $riskLevel, content: $content, locations: $locations, rawInput: $rawInput, rawOutput: $rawOutput, cancelledByClient: $cancelledByClient, startedAt: $startedAt, completedAt: $completedAt, subagentMeta: $subagentMeta)';
 }
 
 
@@ -2010,7 +2015,7 @@ abstract mixin class $ToolCallRecordCopyWith<$Res>  {
   factory $ToolCallRecordCopyWith(ToolCallRecord value, $Res Function(ToolCallRecord) _then) = _$ToolCallRecordCopyWithImpl;
 @useResult
 $Res call({
- ToolCallId id, String title, ToolKind kind, ToolCallStatus status, ApprovalRiskLevel riskLevel, List<ToolCallContent> content, List<ToolCallLocation> locations, Map<String, Object?>? rawInput, Map<String, Object?>? rawOutput, bool cancelledByClient, DateTime? startedAt, DateTime? completedAt
+ ToolCallId id, String title, ToolKind kind, ToolCallStatus status, ApprovalRiskLevel riskLevel, List<ToolCallContent> content, List<ToolCallLocation> locations, Map<String, Object?>? rawInput, Map<String, Object?>? rawOutput, bool cancelledByClient, DateTime? startedAt, DateTime? completedAt, Map<String, Object?>? subagentMeta
 });
 
 
@@ -2027,7 +2032,7 @@ class _$ToolCallRecordCopyWithImpl<$Res>
 
 /// Create a copy of ToolCallRecord
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? kind = null,Object? status = null,Object? riskLevel = null,Object? content = null,Object? locations = null,Object? rawInput = freezed,Object? rawOutput = freezed,Object? cancelledByClient = null,Object? startedAt = freezed,Object? completedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? kind = null,Object? status = null,Object? riskLevel = null,Object? content = null,Object? locations = null,Object? rawInput = freezed,Object? rawOutput = freezed,Object? cancelledByClient = null,Object? startedAt = freezed,Object? completedAt = freezed,Object? subagentMeta = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as ToolCallId,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
@@ -2041,7 +2046,8 @@ as Map<String, Object?>?,rawOutput: freezed == rawOutput ? _self.rawOutput : raw
 as Map<String, Object?>?,cancelledByClient: null == cancelledByClient ? _self.cancelledByClient : cancelledByClient // ignore: cast_nullable_to_non_nullable
 as bool,startedAt: freezed == startedAt ? _self.startedAt : startedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,completedAt: freezed == completedAt ? _self.completedAt : completedAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,
+as DateTime?,subagentMeta: freezed == subagentMeta ? _self.subagentMeta : subagentMeta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
   ));
 }
 /// Create a copy of ToolCallRecord
@@ -2132,10 +2138,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt,  Map<String, Object?>? subagentMeta)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ToolCallRecord() when $default != null:
-return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt);case _:
+return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt,_that.subagentMeta);case _:
   return orElse();
 
 }
@@ -2153,10 +2159,10 @@ return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_th
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt,  Map<String, Object?>? subagentMeta)  $default,) {final _that = this;
 switch (_that) {
 case _ToolCallRecord():
-return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt);}
+return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt,_that.subagentMeta);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -2170,10 +2176,10 @@ return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_th
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt,  Map<String, Object?>? subagentMeta)?  $default,) {final _that = this;
 switch (_that) {
 case _ToolCallRecord() when $default != null:
-return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt);case _:
+return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt,_that.subagentMeta);case _:
   return null;
 
 }
@@ -2185,7 +2191,7 @@ return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_th
 
 
 class _ToolCallRecord extends ToolCallRecord {
-  const _ToolCallRecord({required this.id, required this.title, this.kind = ToolKind.other, this.status = ToolCallStatus.pending, this.riskLevel = ApprovalRiskLevel.unknown, final  List<ToolCallContent> content = const [], final  List<ToolCallLocation> locations = const [], final  Map<String, Object?>? rawInput, final  Map<String, Object?>? rawOutput, this.cancelledByClient = false, this.startedAt, this.completedAt}): _content = content,_locations = locations,_rawInput = rawInput,_rawOutput = rawOutput,super._();
+  const _ToolCallRecord({required this.id, required this.title, this.kind = ToolKind.other, this.status = ToolCallStatus.pending, this.riskLevel = ApprovalRiskLevel.unknown, final  List<ToolCallContent> content = const [], final  List<ToolCallLocation> locations = const [], final  Map<String, Object?>? rawInput, final  Map<String, Object?>? rawOutput, this.cancelledByClient = false, this.startedAt, this.completedAt, final  Map<String, Object?>? subagentMeta}): _content = content,_locations = locations,_rawInput = rawInput,_rawOutput = rawOutput,_subagentMeta = subagentMeta,super._();
   
 
 @override final  ToolCallId id;
@@ -2232,6 +2238,25 @@ class _ToolCallRecord extends ToolCallRecord {
 @override@JsonKey() final  bool cancelledByClient;
 @override final  DateTime? startedAt;
 @override final  DateTime? completedAt;
+/// `_meta.codelab.subagent` вызова `agent`, накопленный по кадрам: первый
+/// `tool_call` даёт `{id, type}`, финальное обновление — `summary` или
+/// `failure` (design.md change `add-subagents-and-tasks`, D24, D28).
+/// Значения не проверяются: терпимый разбор — у kit
+/// (`codelab_client_core`); `null` — вызов без признака (сторонний агент).
+ final  Map<String, Object?>? _subagentMeta;
+/// `_meta.codelab.subagent` вызова `agent`, накопленный по кадрам: первый
+/// `tool_call` даёт `{id, type}`, финальное обновление — `summary` или
+/// `failure` (design.md change `add-subagents-and-tasks`, D24, D28).
+/// Значения не проверяются: терпимый разбор — у kit
+/// (`codelab_client_core`); `null` — вызов без признака (сторонний агент).
+@override Map<String, Object?>? get subagentMeta {
+  final value = _subagentMeta;
+  if (value == null) return null;
+  if (_subagentMeta is EqualUnmodifiableMapView) return _subagentMeta;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(value);
+}
+
 
 /// Create a copy of ToolCallRecord
 /// with the given fields replaced by the non-null parameter values.
@@ -2243,16 +2268,16 @@ _$ToolCallRecordCopyWith<_ToolCallRecord> get copyWith => __$ToolCallRecordCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ToolCallRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.status, status) || other.status == status)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&const DeepCollectionEquality().equals(other._content, _content)&&const DeepCollectionEquality().equals(other._locations, _locations)&&const DeepCollectionEquality().equals(other._rawInput, _rawInput)&&const DeepCollectionEquality().equals(other._rawOutput, _rawOutput)&&(identical(other.cancelledByClient, cancelledByClient) || other.cancelledByClient == cancelledByClient)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ToolCallRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.status, status) || other.status == status)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&const DeepCollectionEquality().equals(other._content, _content)&&const DeepCollectionEquality().equals(other._locations, _locations)&&const DeepCollectionEquality().equals(other._rawInput, _rawInput)&&const DeepCollectionEquality().equals(other._rawOutput, _rawOutput)&&(identical(other.cancelledByClient, cancelledByClient) || other.cancelledByClient == cancelledByClient)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt)&&const DeepCollectionEquality().equals(other._subagentMeta, _subagentMeta));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,title,kind,status,riskLevel,const DeepCollectionEquality().hash(_content),const DeepCollectionEquality().hash(_locations),const DeepCollectionEquality().hash(_rawInput),const DeepCollectionEquality().hash(_rawOutput),cancelledByClient,startedAt,completedAt);
+int get hashCode => Object.hash(runtimeType,id,title,kind,status,riskLevel,const DeepCollectionEquality().hash(_content),const DeepCollectionEquality().hash(_locations),const DeepCollectionEquality().hash(_rawInput),const DeepCollectionEquality().hash(_rawOutput),cancelledByClient,startedAt,completedAt,const DeepCollectionEquality().hash(_subagentMeta));
 
 @override
 String toString() {
-  return 'ToolCallRecord(id: $id, title: $title, kind: $kind, status: $status, riskLevel: $riskLevel, content: $content, locations: $locations, rawInput: $rawInput, rawOutput: $rawOutput, cancelledByClient: $cancelledByClient, startedAt: $startedAt, completedAt: $completedAt)';
+  return 'ToolCallRecord(id: $id, title: $title, kind: $kind, status: $status, riskLevel: $riskLevel, content: $content, locations: $locations, rawInput: $rawInput, rawOutput: $rawOutput, cancelledByClient: $cancelledByClient, startedAt: $startedAt, completedAt: $completedAt, subagentMeta: $subagentMeta)';
 }
 
 
@@ -2263,7 +2288,7 @@ abstract mixin class _$ToolCallRecordCopyWith<$Res> implements $ToolCallRecordCo
   factory _$ToolCallRecordCopyWith(_ToolCallRecord value, $Res Function(_ToolCallRecord) _then) = __$ToolCallRecordCopyWithImpl;
 @override @useResult
 $Res call({
- ToolCallId id, String title, ToolKind kind, ToolCallStatus status, ApprovalRiskLevel riskLevel, List<ToolCallContent> content, List<ToolCallLocation> locations, Map<String, Object?>? rawInput, Map<String, Object?>? rawOutput, bool cancelledByClient, DateTime? startedAt, DateTime? completedAt
+ ToolCallId id, String title, ToolKind kind, ToolCallStatus status, ApprovalRiskLevel riskLevel, List<ToolCallContent> content, List<ToolCallLocation> locations, Map<String, Object?>? rawInput, Map<String, Object?>? rawOutput, bool cancelledByClient, DateTime? startedAt, DateTime? completedAt, Map<String, Object?>? subagentMeta
 });
 
 
@@ -2280,7 +2305,7 @@ class __$ToolCallRecordCopyWithImpl<$Res>
 
 /// Create a copy of ToolCallRecord
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? kind = null,Object? status = null,Object? riskLevel = null,Object? content = null,Object? locations = null,Object? rawInput = freezed,Object? rawOutput = freezed,Object? cancelledByClient = null,Object? startedAt = freezed,Object? completedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? kind = null,Object? status = null,Object? riskLevel = null,Object? content = null,Object? locations = null,Object? rawInput = freezed,Object? rawOutput = freezed,Object? cancelledByClient = null,Object? startedAt = freezed,Object? completedAt = freezed,Object? subagentMeta = freezed,}) {
   return _then(_ToolCallRecord(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as ToolCallId,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
@@ -2294,7 +2319,8 @@ as Map<String, Object?>?,rawOutput: freezed == rawOutput ? _self._rawOutput : ra
 as Map<String, Object?>?,cancelledByClient: null == cancelledByClient ? _self.cancelledByClient : cancelledByClient // ignore: cast_nullable_to_non_nullable
 as bool,startedAt: freezed == startedAt ? _self.startedAt : startedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,completedAt: freezed == completedAt ? _self.completedAt : completedAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,
+as DateTime?,subagentMeta: freezed == subagentMeta ? _self._subagentMeta : subagentMeta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,
   ));
 }
 

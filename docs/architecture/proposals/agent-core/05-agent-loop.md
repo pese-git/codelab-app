@@ -20,8 +20,8 @@
 ```dart
 typedef AgentEventSink = FutureOr<void> Function(AgentEvent event);   // цикл ждёт каждый emit
 
-/// Единая точка исполнения (§6.3.1) в две фазы: параллельный пакет сначала объявляет все вызовы
-/// в порядке ответа (ToolCallStarted), потом исполняет их одновременно (§5.5).
+/// Единая точка исполнения (§6.3.1) в две фазы: параллельная группа пакета сначала объявляет все
+/// свои вызовы в порядке ответа (ToolCallStarted), потом исполняет их одновременно (§5.5).
 abstract interface class ToolExecutor {
   Future<ToolCallHandle> announce(ToolCall call, ToolInvocation invocation);   // шаг 1: present, ToolCallStarted
   Future<ToolExecutionOutcome> complete(ToolCallHandle handle);                // шаги 1a–10
@@ -469,9 +469,11 @@ payload шага 2 — `[user, user(nudge 1), user(nudge 2)]`. Если и ша�
 
 0. В начале хода цикл создаёт один `MisuseBreaker(config.misuse)` (§6.3.7); каждый `ToolContext`
    этого хода получает его в поле `misuse`. Следующий ход начинает с пустого счётчика.
-1. Режим пакета: `sequential`, если хотя бы для одного вызова пакета `tool.executionModeOf(args) == sequential` (по умолчанию — объявленный инструментом `executionMode`, §6.2; после MVP режим может зависеть от аргументов, например `lsp rename`, §17.8.9); иначе `parallel`.
-2. **Parallel.** Для каждого вызова в порядке ответа: `emit ToolCallStarted`. Затем все вызовы исполняются через `executor` одновременно (`Future.wait`); каждый `ToolCallFinished` эмитится в момент завершения своего вызова (под общей очередью emit, LOOP-2). Результаты-сообщения добавляются после всего пакета в порядке вызовов (LOOP-3).
-3. **Sequential.** Для каждого вызова: `ToolCallStarted` → исполнение → `ToolCallFinished`; перед следующим вызовом — проверка отмены. При отмене оставшиеся вызовы не исполняются и получают `ToolCallStarted` + `ToolCallFinished(cancelled)` с текстом `Tool call was cancelled before it started` — у каждого вызова ответа есть результат (парность, TOOL-6).
+1. **Группы.** Режим вызова — `tool.executionModeOf(args)` (по умолчанию — объявленный инструментом `executionMode`, §6.2; после MVP режим может зависеть от аргументов, например `lsp rename`, §17.8.9). Пакет делится по порядку ответа модели на группы: подряд идущие `parallel`-вызовы — одна параллельная группа, каждый `sequential`-вызов — барьер, отдельная группа из одного вызова. Группы исполняются строго друг за другом: барьер начинается после завершения всех вызовов группы перед ним, следующая группа — после барьера. Пример: `[read, task_update, agent, agent]` → `{read}`, `{task_update}`, `{agent, agent}` (решение пользователя 2026-11-14, design.md change `add-subagents-and-tasks`, D39; прежде один `sequential`-вызов делал последовательным весь пакет).
+2. **Параллельная группа.** Для каждого вызова группы в порядке ответа: `emit ToolCallStarted`. Затем вызовы группы исполняются через `executor` одновременно (`Future.wait`); каждый `ToolCallFinished` эмитится в момент завершения своего вызова (под общей очередью emit, LOOP-2).
+3. **Барьер.** `ToolCallStarted` → исполнение → `ToolCallFinished`.
+3a. **Отмена.** Перед каждой группой — проверка отмены. При отмене вызовы ещё не начатых групп не исполняются и получают `ToolCallStarted` + `ToolCallFinished(cancelled)` с текстом `Tool call was cancelled before it started` — у каждого вызова ответа есть результат (парность, TOOL-6). Уже идущие вызовы группы получают отмену через токен хода, как прежде.
+3b. **Результаты.** Сообщения-результаты добавляются после всего пакета в порядке вызовов ответа (LOOP-3), независимо от групп.
 4. Steering во время пакета не прерывает его (CAN-6): сообщение ждёт в очереди до шага 25 алгоритма хода — после всего пакета любого режима; между вызовом и его результатом сообщение не вставляется (TOOL-6, STEER-2).
 5. Частичные результаты (`onUpdate`) после завершения вызова игнорируются; цикл дожидается доставки уже отправленных `ToolCallProgress`, прежде чем эмитить `ToolCallFinished`.
 
@@ -521,25 +523,51 @@ abstract interface class AgentRuntime {
   Future<String> renameSession(SessionId id, String title);   // §17.6.4
   Future<ForkResult> forkSession(ForkSpec spec);              // §17.6.7; lease источника не нужен
   Future<SessionTree> sessionTree(SessionId id);              // §17.6.3
-  /// После MVP (§17.3.3): дочерняя сессия субагента. Журнал — в каталоге журнала родителя
-  /// (§17.3.6), заголовок с полем parent; в listSessions не попадает.
-  Future<AgentSession> createChildSession(ChildSessionSpec spec);
-  /// После MVP (§17.3.8.1): открыть существующую дочернюю сессию из её журнала для нового прогона
-  /// (agent_send, agent_resume). Под lease родителя; heal (§8.8) уже выполнен при open родителя.
-  Future<AgentSession> openChildSession(ChildSessionSpec spec, SessionId childSessionId);
   Future<void> dispose();
 }
-final class ChildSessionSpec {                        // после MVP, §17.3.3
-  final AgentSession parent; final SubagentId subagentId; final SubagentSpec subagent;
+// Внутренняя фабрика рантайма, не часть публичного AgentRuntime: её вызывает только
+// SubagentManager ядра (сверка с кодом, D36 change add-subagents-and-tasks, Т2).
+//   createChildSession(ChildSessionSpec) — дочерняя сессия субагента (§17.3.3); журнал — через
+//     SessionStore.createChild в каталоге subagents/ корня (§17.3.6), заголовок с полем parent;
+//     в listSessions не попадает.
+//   openChildSession(ChildSessionSpec, SessionId) — после MVP (§17.3.8.1): существующая дочерняя
+//     сессия из её журнала (SessionStore.openChild) для agent_send, agent_resume; под lease родителя.
+// Части родителя, из которых SubagentManager собирает ребёнка (внутренний тип ядра; D36, Т2, Т9, Т10):
+// функции читаются при каждом spawn («текущее состояние родителя»), остальное постоянно для сессии.
+final class SubagentParent {
+  final List<AgentTool> Function() tools;             // схемы текущего шага родителя (base набора ребёнка)
+  final ModelRef Function() model;
+  final ModeResolution Function() mode;               // эффективный режим родителя для narrow (SUB-2)
+  final PermissionGate? gate;                         // до итерации 3 change — null (D38)
+  final SkillCatalog skills;                          // снимок каталога навыков (D34)
+  final AgentConfigPaths? agentConfigPaths;           // набор PERM-11 корня (SUB-1)
+  final PermissionDecisionStore decisions; final PolicyRules rules; final Set<ToolTier> extraDeniedTiers;   // корня, общие на дерево
+  final ExecutionEnv env;                             // env родителя как есть (Т9)
+  final TaskList tasks;                               // список задач дерева (Т7)
+  final PathLock locks;                               // блокировки путей корня: одна очередь на дерево (TOOL-7, §6.3.4)
+  final int maxChildDepth;                            // глубина, которую рантайм умеет запускать; до итерации 4 — 1 (Т16)
+}
+final class ChildSessionSpec {                        // после MVP, §17.3.3; внутренний тип ядра
+  // Вместо ссылки на AgentSession родителя — его части (SubagentParent): env, хранилище решений и
+  // PolicyRules корня, список задач дерева, блокировки путей, логгер (D36, Т2).
+  final SubagentSpec subagent;                        // id ребёнка — subagent.id
   final List<AgentTool> tools;                        // пересечение с родителем без agent выше max_depth; задачи — детский набор (SUB-1, §17.16.4)
   final ModelRef model; final TurnBudget budget;
-  final PermissionMode Function() mode;               // narrow(parentMode(), type.mode) на каждое решение (SUB-2)
-  final PermissionGate? gate;                         // SubagentPermissionGate над gate родителя
+  final ModeResolution Function() mode;               // пара «режим разрешений и запрещённые уровни»: narrow(parentMode(), type.mode) на каждое решение (SUB-2; §7.2)
+  final PermissionGate? gate;                         // SubagentPermissionGate над gate корня; до итерации 3 change — null (D36, Т10)
   // Навыки (D34 change add-subagents-and-tasks, итерация 2s): тот же неизменяемый снимок каталога
   // родителя, без повторной загрузки; null — у ребёнка нет skill и секции skills/catalog.
-  // readOnlyRoots env ребёнка — каталоги навыков этого снимка и его каталог выноса (§17.3.6).
+  // readOnlyRoots env ребёнка — каталоги навыков этого снимка и его каталог выноса (§17.3.6);
+  // пока выноса (§17.4) нет, env ребёнка — env родителя как есть (D36, Т9).
   final SkillCatalog? skills;
   // Защищаемые пути конфигурации агента (PERM-11) — набор корневой сессии, не новый расчёт (SUB-1).
+  final AgentConfigPaths? agentConfigPaths;
+  final PermissionDecisionStore decisions; final PolicyRules rules; final Set<ToolTier> extraDeniedTiers;
+  final ExecutionEnv env; final TaskList tasks;
+  final PathLock locks;                               // PathLock корня: правки одного файла корнем и потомками — одна очередь (TOOL-7)
+  final Logger logger;                                // с root_session_id, subagent_id, parent_tool_call_id (D18)
+  final void Function(Usage own) onOwnUsage;          // usage ребёнка в usage хода родителя (D4, Т8)
+  final BudgetLimit? Function() ancestorBudget;       // бюджет предков на границе шага ребёнка (D4, Т8)
 }
 final class SessionSpec {
   final String cwd; final ModeId mode; final ModelRef model;
@@ -600,7 +628,7 @@ final class TurnResult { final TurnEndReason reason; final Usage usage; final Bu
 1. **LOOP-1.** `TurnEnded` — всегда последнее событие хода и эмитится ровно один раз, в том числе при исключении в хуке (оно превращается в `TurnEnded(failed)` с `AgentError`).
 2. **LOOP-2.** Цикл ждёт завершения каждого `emit`; следующее событие не эмитится, пока подписчики не обработали предыдущее.
 3. **LOOP-3.** `ToolCallFinished` в параллельном пакете приходят в порядке завершения; сообщения-результаты в транскрипте — в порядке вызовов в ответе модели.
-4. **LOOP-4.** Пакет исполняется последовательно, если хотя бы для одного вызова пакета `executionModeOf(args)` — `sequential`.
+4. **LOOP-4.** Вызов, для которого `executionModeOf(args)` — `sequential`, — барьер внутри пакета: он начинается после завершения всех вызовов ответа перед ним, а вызовы после него — после его завершения; подряд идущие `parallel`-вызовы между барьерами исполняются одновременно (D39 change `add-subagents-and-tasks`).
 5. **LOOP-5.** При `stopReason: length` ни один вызов из обрезанного ответа не исполняется; каждый получает результат-ошибку `Tool call arguments were truncated because the response hit the output token limit. Retry with smaller arguments.`
 6. **LOOP-6.** Цикл не обращается к хранилищу и не знает о протоколе; всё сохранение делает подписчик.
 7. **LOOP-7.** `transformContext`, ремонт парности, заметки `Revise` и (после MVP) ссылки на картинки `[Image N]` меняют только payload; транскрипт `Agent` после запроса равен транскрипту до запроса плюс новые сообщения.
@@ -655,7 +683,7 @@ final class TurnResult { final TurnEndReason reason; final Usage usage; final Bu
 * `loop_sequences_test.dart` на scripted `StreamFunction` и fake `ToolExecutor`: эталонные последовательности событий для текста, одного вызова, двух параллельных, `length`, ошибки провайдера, отмены (LOOP-1, LOOP-3, LOOP-5, LOOP-9).
 * `slow_subscriber_test.dart`: подписчик с `await Future.delayed` — события не обгоняют `await` (LOOP-2).
 * `hook_throws_test.dart`: исключение в `transformContext` и в `prepareNextStep` → `AgentError(hook)` + `TurnEnded(failed)` ровно один раз (LOOP-1).
-* `sequential_mode_test.dart`: пакет с одним `sequential`-инструментом исполняется по порядку; инструмент, у которого `executionModeOf(args)` зависит от аргументов, переводит пакет в `sequential` только при нужных аргументах (LOOP-4).
+* `sequential_mode_test.dart`: барьер делит пакет на группы — `[read, task_update, agent, agent]` даёт `{read}` → `{task_update}` → два `agent` одновременно; два `sequential` подряд — по одному; отмена во время группы — вызовы следующих групп `cancelled` до старта; порядок `ToolCallStarted`/`ToolCallFinished` по группам и результатов в порядке ответа; инструмент, у которого `executionModeOf(args)` зависит от аргументов, становится барьером только при нужных аргументах (LOOP-4, D39 change `add-subagents-and-tasks`).
 * `steering_test.dart`: `steer` во время инструмента доставляется после пакета; все сообщения очереди забираются одним опросом в порядке FIFO; 25 при лимите 20 → один шаг на опрос, не больше 20 шагов (LOOP-8, CAN-6, STEER-6).
 * `payload_immutability_test.dart`: транскрипт до и после запроса с ремонтом пар и `transformContext` отличается только новыми сообщениями (LOOP-7).
 * `duplicate_tool_ids_test.dart`: провайдер дважды присылает `call_1` в разных шагах → второй получает `call_1_2` уже в первом `MessageStarted` (LOOP-11).

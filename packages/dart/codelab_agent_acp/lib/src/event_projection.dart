@@ -40,6 +40,15 @@ const projectionTable = <Type, String>{
   SessionTitleChanged: 'session_info_update',
   TurnEnded: 'the answer to session/prompt',
   ModelOptionsChanged: 'config_option_update',
+  // События субагентов (change `add-subagents-and-tasks`, D24): клиент видит
+  // один вызов `agent`; строку прогресса несёт `ToolCallProgress(agent)`, итог
+  // уходит в `ToolCallFinished(agent)` из `SubagentFinished`, а вызовы
+  // потомков (`SubagentActivity`) без расширения `subagentToolCalls` не
+  // отправляются (SUB-12; агент его в итерации 2 не объявляет, D36 Т12).
+  SubagentStarted: 'not sent: log subagent.start',
+  SubagentProgress: 'not sent: the progress line is ToolCallProgress(agent)',
+  SubagentFinished: 'not sent: its data go into ToolCallFinished(agent)',
+  SubagentActivity: 'not sent: no subagentToolCalls in iteration 2',
 };
 
 /// Кадры события [event]; пустой список — событие не передаётся.
@@ -50,10 +59,17 @@ const projectionTable = <Type, String>{
 /// состояние, а не операцию (design.md change `add-subagents-and-tasks`,
 /// D35). `switch` исчерпывающий без `default`: новый подтип `AgentEvent` не
 /// компилируется без своей строки (ACP-6).
+///
+/// [subagentResult] — `SubagentFinished` вызова `agent`, которое ядро
+/// эмитит до его `ToolCallFinished` (SUB-10): проекция событий без
+/// состояния, поэтому мост запоминает итог по `parentToolCallId` и передаёт
+/// сюда вместе с финальным событием, а `_meta.codelab.subagent.summary`
+/// (D24) строится из него.
 List<acp.SessionUpdate> projectEvent(
   AgentEvent event, {
   required List<acp.SessionConfigOption> Function() configOptions,
   bool replay = false,
+  SubagentFinished? subagentResult,
 }) => switch (event) {
   TurnStarted() ||
   StepStarted() ||
@@ -64,7 +80,11 @@ List<acp.SessionUpdate> projectEvent(
   StepEnded() ||
   AgentError() ||
   ContextCompacted() ||
-  TurnEnded() => const [],
+  TurnEnded() ||
+  SubagentStarted() ||
+  SubagentProgress() ||
+  SubagentFinished() ||
+  SubagentActivity() => const [],
   MessageDelta(:final delta) => [
     acp.SessionUpdate.agentMessageChunk(content: _text(delta)),
   ],
@@ -80,6 +100,7 @@ List<acp.SessionUpdate> projectEvent(
         status: acp.ToolCallStatus.pending,
         rawInput: event.input,
         locations: acpLocations(event.locations),
+        meta: subagentCallMeta(event.subagent),
       ),
     ),
   ],
@@ -94,7 +115,7 @@ List<acp.SessionUpdate> projectEvent(
       ),
     ),
   ],
-  ToolCallFinished() => [_finished(event)],
+  ToolCallFinished() => [_finished(event, subagentResult)],
   TaskListChanged(:final items, :final change) => [
     acp.SessionUpdate.plan(
       // Привязка операции к вызову `task_*` без эвристики порядка кадров
@@ -236,19 +257,21 @@ const _retryable = {
   LlmErrorClass.server,
 };
 
-acp.SessionUpdate _finished(ToolCallFinished event) =>
-    acp.SessionUpdate.toolCallUpdate(
-      toolCallUpdate: acp.ToolCallUpdate(
-        toolCallId: acp.ToolCallId(event.toolCallId),
-        status: finishedStatus(event),
-        // §13.7: у отменённого вызова — только статус и outcome; текст об
-        // отмене — для модели, клиент уже видит вывод в терминале.
-        content: event.outcome == ToolOutcome.cancelled
-            ? null
-            : finishedContent(event),
-        meta: finishedMeta(event),
-      ),
-    );
+acp.SessionUpdate _finished(
+  ToolCallFinished event,
+  SubagentFinished? subagentResult,
+) => acp.SessionUpdate.toolCallUpdate(
+  toolCallUpdate: acp.ToolCallUpdate(
+    toolCallId: acp.ToolCallId(event.toolCallId),
+    status: finishedStatus(event),
+    // §13.7: у отменённого вызова — только статус и outcome; текст об
+    // отмене — для модели, клиент уже видит вывод в терминале.
+    content: event.outcome == ToolOutcome.cancelled
+        ? null
+        : finishedContent(event, subagentResult: subagentResult),
+    meta: finishedMeta(event, subagentResult: subagentResult),
+  ),
+);
 
 /// Итоговый статус вызова: в ACP нет `cancelled` и `rejected`, поэтому
 /// всё, кроме исполненного вызова, — `failed` (§13.7).
@@ -258,15 +281,38 @@ acp.ToolCallStatus finishedStatus(ToolCallFinished event) =>
     : acp.ToolCallStatus.failed;
 
 /// Контент результата и по одному `diff` на каждый изменённый файл.
-List<acp.ToolCallContent> finishedContent(ToolCallFinished event) => [
-  for (final block in event.content)
-    acp.ToolCallContent.content(content: acpContent(block)),
+///
+/// [subagentResult] — итог ребёнка вызова `agent`: клиент показывает человеку
+/// тело отчёта без обёртки `<subagent-report>` и ограды `untrusted-content`,
+/// которые нужны только модели (§17.3.7, D24). Ребёнок без отчёта
+/// (`failed`, отмена в очереди) даёт пустой контент: текст результата в
+/// журнале — это та же обёртка, а `SubagentFinished` текста сбоя не несёт.
+/// Вызов `agent` без итога (отклонён проверкой) — как любой вызов.
+List<acp.ToolCallContent> finishedContent(
+  ToolCallFinished event, {
+  SubagentFinished? subagentResult,
+}) => [
+  // Вызов `agent` с итогом: тело отчёта, а при пустом отчёте — ничего.
+  if (subagentResult != null && subagentResult.report.isNotEmpty)
+    acp.ToolCallContent.content(
+      content: acp.ContentBlock.text(text: subagentResult.report),
+    ),
+  // Любой другой вызов, в том числе отклонённый `agent` без итога.
+  if (subagentResult == null)
+    for (final block in event.content)
+      acp.ToolCallContent.content(content: acpContent(block)),
   for (final diff in event.diffs) acpDiff(diff),
 ];
 
 /// `_meta.codelab.outcome` — исход, которого нет в статусах ACP (D10);
 /// `null` — исход передаёт сам статус.
-Map<String, Object?>? finishedMeta(ToolCallFinished event) {
+///
+/// [subagentResult] — итог ребёнка вызова `agent`: добавляет
+/// `_meta.codelab.subagent {id, summary, failure?}` (D24).
+Map<String, Object?>? finishedMeta(
+  ToolCallFinished event, {
+  SubagentFinished? subagentResult,
+}) {
   final outcome = event.interrupted
       ? 'interrupted'
       : switch (event.outcome) {
@@ -274,12 +320,41 @@ Map<String, Object?>? finishedMeta(ToolCallFinished event) {
           ToolOutcome.cancelled => 'cancelled',
           ToolOutcome.rejected => 'rejected',
         };
-  return outcome == null
-      ? null
-      : {
-          'codelab': {'outcome': outcome},
-        };
+  if (outcome == null && subagentResult == null) {
+    return null;
+  }
+  return {
+    'codelab': {
+      'outcome': ?outcome,
+      if (subagentResult != null)
+        'subagent': subagentSummaryMeta(subagentResult),
+    },
+  };
 }
+
+/// `_meta.codelab.subagent` первого кадра вызова `agent` (D28): `{id, type}`;
+/// `null` у любого другого вызова — расширение не протекает в чужие кадры.
+Map<String, Object?>? subagentCallMeta(SubagentCallRef? ref) => ref == null
+    ? null
+    : {
+        'codelab': {
+          'subagent': {'id': ref.id, 'type': ref.type},
+        },
+      };
+
+/// `_meta.codelab.subagent` финального обновления (D24): `id`, `summary` с
+/// транзитивными `toolCalls`, токенами и `durationMs` из [done] и, у
+/// `failed`, `failure` (формат записи `subagent`, §17.3.6).
+Map<String, Object?> subagentSummaryMeta(SubagentFinished done) => {
+  'id': done.subagentId,
+  'summary': {
+    'toolCalls': done.toolCalls,
+    'tokens': {'input': done.usage.input, 'output': done.usage.output},
+    'durationMs': done.duration.inMilliseconds,
+  },
+  if (done.status == SubagentState.failed && done.failure != null)
+    'failure': ?failureWire(done.failure, done.budgetExceeded),
+};
 
 acp.ToolCallContent _toolContent(ToolCallContent item) => switch (item) {
   ToolCallBlock(:final block) => acp.ToolCallContent.content(

@@ -18,6 +18,7 @@ const _base = [
   'task_get',
   'ls',
   'search',
+  'agent',
 ];
 
 FakeTool _mcpTool(
@@ -177,7 +178,11 @@ void main() {
 
       expect(names(mcp.requests.single.servers), ['a']);
       expect(mcp.requests.single.cwd, '/proj');
-      expect(mcp.requests.single.reservedNames, _base.toSet());
+      // В зарезервированных именах — базовый реестр без `agent` (D36 Т5).
+      expect(
+        mcp.requests.single.reservedNames,
+        _base.where((n) => n != 'agent').toSet(),
+      );
       h.model.verify();
     });
 

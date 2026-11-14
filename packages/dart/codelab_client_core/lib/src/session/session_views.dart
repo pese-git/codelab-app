@@ -2,6 +2,8 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../transcript/subagent_views.dart';
+
 part 'session_views.freezed.dart';
 
 /// Опция конфигурации сессии (`session/new`, `config_option_update`,
@@ -101,8 +103,9 @@ abstract class AgentCommandView with _$AgentCommandView {
 /// Как использовать: хост печатает `#<taskId> [<status>] <content>`, а
 /// [ownerLabel] и [openBlockers] — суффиксами; [blockedBy] — сырой список
 /// из `_meta`, [openBlockers] — его часть, чьи пункты в текущем плане не
-/// `completed`. Метка владельца пока — id субагента (тип по `SubagentRequester`
-/// добавит итерация 2); для `owner: main` и без `owner` метки нет.
+/// `completed`. Метка владельца — `type` субагента из вызова `agent` сессии
+/// (`ToolCallView.subagentCall`, 2.9b), а без известного вызова — его id;
+/// для `owner: main` и без `owner` метки нет.
 @freezed
 abstract class PlanEntryView with _$PlanEntryView {
   const factory PlanEntryView({
@@ -162,14 +165,48 @@ List<String> _stringsOf(Object? value) =>
 
 /// Представления пунктов плана [entries] с вычисленными незавершёнными
 /// блокерами (по статусам пунктов этого же плана).
-List<PlanEntryView> planViewsOf(List<PlanEntry> entries) {
+///
+/// [subagentTypes] — `id` субагента → `type` (см. [subagentTypesOf]): по ним
+/// метка владельца становится типом; без записи остаётся id.
+List<PlanEntryView> planViewsOf(
+  List<PlanEntry> entries, {
+  Map<String, String> subagentTypes = const {},
+}) {
   final status = <String, PlanEntryStatus>{
     for (final entry in entries)
       ?_stringOf(taskMetaOf(entry)?['id']): entry.status,
   };
   return List.unmodifiable([
-    for (final entry in entries) _withBlockers(PlanEntryView.of(entry), status),
+    for (final entry in entries)
+      _withOwnerType(
+        _withBlockers(PlanEntryView.of(entry), status),
+        subagentTypes,
+      ),
   ]);
+}
+
+PlanEntryView _withOwnerType(PlanEntryView view, Map<String, String> types) {
+  final owner = view.owner;
+  final type = owner == null ? null : types[owner];
+  return type == null || view.ownerLabel == null
+      ? view
+      : view.copyWith(ownerLabel: type);
+}
+
+/// Типы субагентов сессии: `id` → `type` по вызовам `agent` всех её ходов
+/// (`_meta.codelab.subagent` первого кадра, D28). Сторонний `think` без
+/// признака источником типов не служит.
+Map<String, String> subagentTypesOf(AcpSession session) {
+  final types = <String, String>{};
+  for (final turn in session.turns) {
+    for (final record in turn.toolCalls.values) {
+      if (parseSubagentCall(record.subagentMeta) case final call?
+          when call.id != null) {
+        types[call.id!] = call.type;
+      }
+    }
+  }
+  return types;
 }
 
 PlanEntryView _withBlockers(
@@ -196,5 +233,8 @@ List<PlanEntryView> planOf(AcpSession session) {
       }
     }
   }
-  return planViewsOf(latest ?? const <PlanEntry>[]);
+  return planViewsOf(
+    latest ?? const <PlanEntry>[],
+    subagentTypes: subagentTypesOf(session),
+  );
 }

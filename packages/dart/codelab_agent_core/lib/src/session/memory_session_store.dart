@@ -24,8 +24,12 @@ final class MemorySessionStore implements SessionStore {
   final _texts = <SessionId, String>{};
   final _corrupt = <SessionId, String>{};
 
+  /// Журналы потомков: отдельно от [_texts], чтобы `open` и `list` их не
+  /// видели (D7).
+  final _children = <SessionId, String>{};
+
   /// Текст журнала, как был бы в файле; `null` — журнала нет.
-  String? textOf(SessionId id) => _texts[id];
+  String? textOf(SessionId id) => _texts[id] ?? _children[id];
 
   /// Строки карантина (`.corrupt`); `null` — карантина не было.
   String? corruptOf(SessionId id) => _corrupt[id];
@@ -42,6 +46,22 @@ final class MemorySessionStore implements SessionStore {
   }
 
   @override
+  Future<String> createChild(SessionHeader header) async {
+    final parent =
+        header.parent ??
+        (throw ArgumentError.value(
+          header.parent,
+          'header.parent',
+          'a child journal needs the parent link',
+        ));
+    if (_texts.containsKey(header.id) || _children.containsKey(header.id)) {
+      throw StateError('session ${header.id.value} already exists');
+    }
+    _children[header.id] = '${jsonEncode(header.toJson())}\n';
+    return 'subagents/${parent.rootSessionId.value}/${header.id.value}.jsonl';
+  }
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {
@@ -50,6 +70,10 @@ final class MemorySessionStore implements SessionStore {
     final line = jsonEncode(record.toJson());
     if (line.contains('\n') || line.contains('\r')) {
       throw StateError('a journal line must not contain line breaks');
+    }
+    if (_children[id] case final child?) {
+      _children[id] = '$child$line\n';
+      return;
     }
     final text = _texts[id] ?? (throw SessionNotFound(id));
     _texts[id] = '$text$line\n';

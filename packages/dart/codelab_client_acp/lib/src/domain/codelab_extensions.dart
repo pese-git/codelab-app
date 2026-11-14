@@ -10,10 +10,10 @@ const _supportedExtensionVersion = 1;
 /// такое расширение только в `_meta` capability-объектов (`15-Extensibility.md`;
 /// design.md change `add-subagents-and-tasks`, D9, D21).
 ///
-/// Состав растёт вместе с поддержкой: сейчас клиент объявляет только `tasks`;
-/// `subagents` добавит итерация 2, `subagentToolCalls` — итерация 5 (когда
-/// клиент научится показывать вызовы потомков), иначе агент слал бы данные,
-/// которых клиент не понимает.
+/// Состав растёт вместе с поддержкой: сейчас клиент объявляет `tasks` и
+/// `subagents` (строка `agent`, итог, запрос потомка; итерация 2, задача 2.9a);
+/// `subagentToolCalls` добавит итерация 5 (когда клиент научится показывать
+/// вызовы потомков), иначе агент слал бы данные, которых клиент не понимает.
 ///
 /// Для чего: `initialize` кладёт его в `ClientCapabilities.meta`; агент
 /// отвечает блоком объявлений, только если этот объект пришёл. Других
@@ -21,6 +21,7 @@ const _supportedExtensionVersion = 1;
 const Map<String, Object?> codelabClientExtensionsMeta = {
   'codelab': {
     'tasks': {'version': _supportedExtensionVersion},
+    'subagents': {'version': _supportedExtensionVersion},
   },
 };
 

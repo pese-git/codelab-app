@@ -11,6 +11,7 @@ import '../permissions/modes.dart';
 import '../permissions/pattern.dart';
 import '../permissions/policy.dart';
 import '../skills/skills_config.dart';
+import '../subagents/subagents_config.dart';
 import '../secrets/secret_names.dart';
 import '../secrets/secret_template.dart';
 import '../tools/agent_tool.dart' show ToolTier;
@@ -383,6 +384,7 @@ ConfigLoadResult _resolve(
             redact: full.redact,
             projectContextMaxBytes: full.projectContextMaxBytes,
             skills: full.skills,
+            subagents: full.subagents,
             trustedProjects: full.trustedProjects,
             projectRoot: projectRoot,
             withoutProject: bare,
@@ -576,6 +578,7 @@ final class _Builder {
     final profiles = _profiles();
     final projectContextMaxBytes = _projectContextMaxBytes();
     final skills = _skills();
+    final subagents = _subagents();
     final secretsBackend = _secretsBackend();
     final configWatch = _bool(['config', 'watch']);
     final configPollInterval = _configPollInterval();
@@ -596,6 +599,7 @@ final class _Builder {
       redact: redact,
       projectContextMaxBytes: projectContextMaxBytes,
       skills: skills,
+      subagents: subagents,
       trustedProjects:
           pinnedTrustedProjects ?? _trustedRoots(layers, environment),
     );
@@ -1373,9 +1377,8 @@ final class _Builder {
           ? expansion.template
           : SecretTemplate([
               for (final part in expansion.template.parts)
-                if (part case SecretReference(
-                  :final name,
-                ) when unusable.contains(name))
+                if (part case SecretReference(:final name)
+                    when unusable.contains(name))
                   const UnusableSecretReference()
                 else
                   part,
@@ -1590,9 +1593,8 @@ final class _Builder {
       // ссылки вырезаются, значение переменной в строку не попадает.
       // `${secret:}` в `url` — проблема загрузки при любых других ссылках:
       // проверка раньше ветки вырезания, иначе сервер лишь блокировался бы.
-      final secretInUrl = referencesIn(
-        rawUrl,
-      ).any((r) => r.$1 == ProviderReferenceKind.secret);
+      final secretInUrl = referencesIn(rawUrl)
+          .any((r) => r.$1 == ProviderReferenceKind.secret);
       if (secretInUrl) {
         bad(
           'url',
@@ -1945,6 +1947,77 @@ final class _Builder {
       maxTokens: tokens,
       maxCost: cost,
       maxDuration: duration,
+    );
+  }
+
+  /// Раздел `subagents` (change `add-subagents-and-tasks`, D17): диапазоны
+  /// ключей; значение вне диапазона — проблема конфига, ключ остаётся со
+  /// значением по умолчанию.
+  SubagentsConfig _subagents() {
+    const defaults = SubagentsConfig();
+    int bounded(String key, int lower, int upper, int fallback) {
+      final value = _int(['subagents', key]);
+      if (value == null) {
+        return fallback;
+      }
+      if (value < lower || value > upper) {
+        _bad(
+          ['subagents', key],
+          'must be between $lower and $upper',
+          kind: ConfigIssueKind.value,
+        );
+        return fallback;
+      }
+      return value;
+    }
+
+    Duration positive(String key, Duration fallback) {
+      final value = _dur(['subagents', key]);
+      if (value == null) {
+        return fallback;
+      }
+      if (value <= Duration.zero) {
+        _bad(['subagents', key], 'must be greater than 0');
+        return fallback;
+      }
+      return value;
+    }
+
+    // Неверное значение — проблема конфига, ключ остаётся без значения.
+    var tokens = _int(['subagents', 'max_tokens']);
+    if (tokens != null && tokens < 1) {
+      _bad(['subagents', 'max_tokens'], 'must be 1 or greater');
+      tokens = null;
+    }
+    var cost = _num(['subagents', 'max_cost']);
+    if (cost != null && cost <= 0) {
+      _bad(['subagents', 'max_cost'], 'must be greater than 0');
+      cost = null;
+    }
+    return SubagentsConfig(
+      enabled: _bool(['subagents', 'enabled']) ?? defaults.enabled,
+      maxDepth: bounded('max_depth', 1, 3, defaults.maxDepth),
+      maxConcurrent: bounded('max_concurrent', 1, 8, defaults.maxConcurrent),
+      maxPerTurn: bounded('max_per_turn', 1, 50, defaults.maxPerTurn),
+      maxSteps: bounded('max_steps', 1, 500, defaults.maxSteps),
+      maxTokens: tokens,
+      maxCost: cost,
+      maxDuration: positive('max_duration', defaults.maxDuration),
+      reportMaxBytes: bounded(
+        'report_max_bytes',
+        1024,
+        1048576,
+        defaults.reportMaxBytes,
+      ),
+      progressInterval: positive(
+        'progress_interval',
+        defaults.progressInterval,
+      ),
+      heartbeatInterval: positive(
+        'heartbeat_interval',
+        defaults.heartbeatInterval,
+      ),
+      cancelGrace: positive('cancel_grace', defaults.cancelGrace),
     );
   }
 
