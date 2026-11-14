@@ -35,6 +35,7 @@ import '../access/settings_access.dart';
 import '../config/agent_config_store.dart';
 import '../config/config_source_view.dart';
 import '../config/config_values.dart';
+import '../config/project_trust.dart';
 
 /// Читает и пишет конфиг агента в файлах через `ConfigWriter` и
 /// `ConfigLoader` `codelab_agent_io`.
@@ -222,21 +223,30 @@ final class _ExternalOrigins {
   final FileAgentConfigStore _store;
   final String _cwd;
   final ConfigLoadResult _loaded;
-  Map<String, Object?>? _withoutEnv;
+  ConfigLoadResult? _withoutEnv;
 
   ConfigSourceView? of(String key) {
     final extra =
         _store._paths.extraConfig ?? _store._environment['CODELAB_CONFIG'];
     if (extra != null && extra.isNotEmpty) {
-      final files = _withoutEnv ??= _store._load(_cwd, {
+      final fileLoad = _withoutEnv ??= _store._load(_cwd, {
         for (final entry in _store._environment.entries)
           if (!entry.key.startsWith('CODELAB_') ||
               entry.key == 'CODELAB_HOME' ||
               entry.key == 'CODELAB_CONFIG')
             entry.key: entry.value,
-      }).values;
-      if (files.containsKey(key) &&
-          sameConfigValue(files[key], _loaded.values[key])) {
+      });
+      // Q43: ключ, который недоверенный проект объединяет с нижними слоями,
+      // сравнивается по значениям без проектных слоёв: объединение не должно
+      // приписываться файлу `--config`, если он сам ключ не задаёт.
+      final belowLoaded = valuesBelowUntrustedProject(_loaded.config);
+      final merged =
+          belowLoaded != null && mergedByUntrustedProject.contains(key);
+      final files = merged
+          ? (valuesBelowUntrustedProject(fileLoad.config) ?? const {})
+          : fileLoad.values;
+      final expected = merged ? belowLoaded[key] : _loaded.values[key];
+      if (files.containsKey(key) && sameConfigValue(files[key], expected)) {
         return ConfigSourceView(kind: ConfigSourceKind.extraFile, label: extra);
       }
     }

@@ -236,6 +236,23 @@ void main() {
       expect((refusal as SkillsListNotEditable).source, extra);
     });
 
+    test('недоверенный проект, extra_roots [.claude/skills] записан в user: '
+        'согласие не действует (granted false), переключатель — отказ '
+        'untrustedProject (выдача), а не отзыв', () async {
+      config(
+        trusted: false,
+        extra: 'skills:\n  extra_roots: [.claude/skills]\n',
+      );
+      skill('$project/.claude/skills', 'one');
+
+      final view = await read();
+
+      final consent = view.skills.consents.single;
+      expect(consent.entry, '.claude/skills');
+      expect(consent.granted, isFalse);
+      expect(consent.toggle.refusal, isA<SkillsListUntrustedProject>());
+    });
+
     test('навык, выключенный недоверенным проектом: строка disabled с '
         'отказом disabledByProject, прочие строки доступны', () async {
       config(trusted: false, extra: 'skills:\n  disabled: [u]\n');

@@ -12,9 +12,19 @@ library;
 
 import 'dart:io';
 
-import 'package:codelab_agent_core/codelab_agent_core.dart' show ExtensionScope;
+import 'package:codelab_agent_core/codelab_agent_core.dart'
+    show
+        ExtensionScope,
+        isAbsoluteSkillRoot,
+        isHomeSkillRoot,
+        isRelativeSkillRoot;
 
 import '../env/host_path.dart';
+
+// Признаки элемента `extra_roots` живут в ядре (один предикат для загрузчика и
+// моста настроек); реэкспорт сохраняет прежний импорт этого файла.
+export 'package:codelab_agent_core/codelab_agent_core.dart'
+    show isHomeSkillRoot, isRelativeSkillRoot;
 
 /// Подкаталоги навыков каждого уровня проекта в порядке приоритета (D3).
 const projectSkillSubdirs = ['.codelab/skills', '.agents/skills'];
@@ -114,9 +124,6 @@ String canonicalPath(String path) {
   }
 }
 
-bool _isAbsolute(String raw) =>
-    raw.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(raw);
-
 /// Корень навыков из `skills.extra_roots`, известный без `cwd` (путь хоста):
 /// абсолютный либо `~`/`~/…`; иначе `null` (относительный — путь сессии,
 /// `~user` и `<scheme>://` не раскрываются, Q41). Без [userHome] `~`-элемент
@@ -131,16 +138,8 @@ String? hostSkillRoot(String raw, String? userHome) {
   if (raw.startsWith('~') || raw.contains('://')) {
     return null;
   }
-  return _isAbsolute(raw) ? raw : null;
+  return isAbsoluteSkillRoot(raw) ? raw : null;
 }
-
-/// Элемент `extra_roots` — `~`/`~/…` (раскрывается в домашний каталог).
-bool isHomeSkillRoot(String raw) => raw == '~' || raw.startsWith('~/');
-
-/// Элемент `extra_roots` — относительный путь от `cwd` сессии: не абсолютный,
-/// не `~…` и не `<scheme>://…`. Остальное — путь хоста либо не корень.
-bool isRelativeSkillRoot(String raw) =>
-    !_isAbsolute(raw) && !raw.startsWith('~') && !raw.contains('://');
 
 /// Корень навыков плана: порядок в [SkillRootPlan.roots] — номер
 /// `SkillFile.rootIndex`.

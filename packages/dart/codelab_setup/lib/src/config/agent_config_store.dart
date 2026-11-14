@@ -16,6 +16,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart'
 
 import 'config_source_view.dart';
 import 'config_values.dart';
+import 'project_trust.dart';
 
 /// Снимок конфига агента для страниц настроек и мастера.
 ///
@@ -67,8 +68,24 @@ final class AgentConfigSnapshot {
           layer: flattenConfigValues(snapshot.values),
     };
     final origins = <String, ConfigSourceView>{};
-    effective.forEach((key, value) {
+    // Q43: у ключей, которые недоверенный проект объединяет с нижними слоями,
+    // источник ищется по значениям без проектных слоёв, а сами проектные слои
+    // пропускаются (иначе объединение, совпавшее со списком проекта, дало бы
+    // источником проект).
+    final below = valuesBelowUntrustedProject(loaded.config);
+    effective.forEach((key, merged) {
+      final belowProject =
+          below != null && mergedByUntrustedProject.contains(key);
+      if (belowProject && !below.containsKey(key)) {
+        return;
+      }
+      final value = belowProject ? below[key] : merged;
       for (final layer in configLayersByPriority.reversed) {
+        if (belowProject &&
+            (layer == ConfigLayer.project ||
+                layer == ConfigLayer.projectLocal)) {
+          continue;
+        }
         final leaves = flat[layer];
         if (leaves != null &&
             !ignored(layer, key) &&

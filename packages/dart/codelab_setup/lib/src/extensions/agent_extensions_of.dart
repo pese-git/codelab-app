@@ -6,6 +6,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import '../config/agent_config_store.dart';
 import 'agent_extensions_view.dart';
+import 'skills_list_edit.dart';
 
 /// Префикс пути пользовательского `AGENTS.md` в промпте (D5 change
 /// `add-agent-project-files`): на диске это `codelabHome` плюс остаток пути.
@@ -240,6 +241,14 @@ SkillsSectionView _skills(
           for (final d in all)
             if (d.path == s.path) d,
         ],
+        toggle: SkillToggle.of(
+          skillsListEdit(
+            snapshot,
+            'skills.disabled',
+            s.name,
+            present: how == SkillAvailability.enabled,
+          ),
+        ),
       ),
     );
   }

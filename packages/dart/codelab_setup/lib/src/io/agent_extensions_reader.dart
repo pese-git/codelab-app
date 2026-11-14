@@ -12,6 +12,7 @@ import 'package:meta/meta.dart';
 import '../config/agent_config_store.dart';
 import '../extensions/agent_extensions_of.dart';
 import '../extensions/agent_extensions_view.dart';
+import '../extensions/skills_list_edit.dart';
 
 /// Предел просмотра записей каталога-кандидата по умолчанию: каталог другого
 /// агента не должен вешать страницу (как предел записей корня загрузчика
@@ -74,6 +75,7 @@ Future<AgentExtensionsView> readAgentExtensions(
     extensions,
     userHome: userHome,
     consents: await _consentCandidates(
+      snapshot: snapshot,
       cwd: extensions.cwd,
       trusted: extensions.trusted,
       userHome: userHome,
@@ -89,6 +91,7 @@ Future<AgentExtensionsView> readAgentExtensions(
 /// (решение Q3): `.claude/skills` в папке и `~/.claude/skills`; только
 /// существующие. Порядок: проект, затем домашний.
 Future<List<SkillConsentView>> _consentCandidates({
+  required AgentConfigSnapshot snapshot,
   required String cwd,
   required bool trusted,
   required String? userHome,
@@ -120,6 +123,17 @@ Future<List<SkillConsentView>> _consentCandidates({
         skillDirs: result.count,
         // Относительный элемент недоверенного проекта загрузчик не читает.
         granted: granted.contains(entry) && readable,
+        // Одно правило с записью (D5): переключатель согласия — результат
+        // `skillsListEdit` для «выдать», если согласия нет, и «отозвать», если
+        // оно действует. Запись в `extra_roots` — только по этому правилу.
+        toggle: SkillToggle.of(
+          skillsListEdit(
+            snapshot,
+            'skills.extra_roots',
+            entry,
+            present: !(granted.contains(entry) && readable),
+          ),
+        ),
       ),
     );
   }

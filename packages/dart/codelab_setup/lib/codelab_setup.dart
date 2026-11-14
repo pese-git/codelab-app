@@ -88,6 +88,7 @@ export 'src/config/config_source_view.dart';
 export 'src/config/display_base_url.dart';
 export 'src/extensions/agent_extensions_of.dart';
 export 'src/extensions/agent_extensions_view.dart';
+export 'src/extensions/skills_list_edit.dart';
 export 'src/mcp/mcp_restart.dart';
 export 'src/mcp/mcp_server_committer.dart';
 export 'src/mcp/mcp_server_draft.dart';
