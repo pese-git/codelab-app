@@ -8,7 +8,11 @@
 ///
 /// Для чего: подсказки и подписи заглушек изображений (D6), а в итерации 4 —
 /// подсказка ссылки. Заменяются C0 и C1, `U+061C`, `U+200B–U+200F`,
-/// `U+2028/2029`, `U+202A–U+202E`, `U+2066–U+2069`, `U+FEFF` на `\uXXXX`.
+/// `U+2028/2029`, `U+202A–U+202E`, `U+2066–U+2069`, `U+FEFF`, а также
+/// невидимые `U+00AD`, `U+034F`, `U+115F`, `U+1160`, `U+180E`,
+/// `U+2060–U+2064`, `U+3164` и теги Unicode `U+E0000–U+E007F` (ревью
+/// итерации 3 change `add-app-skills-page`) на `\uXXXX`. Обход идёт по code
+/// point (`runes`), поэтому символы вне BMP не рвутся на суррогаты.
 ///
 /// Как использовать: `escapeForDisplay(url)` перед выводом в `Text` или
 /// `Tooltip`; остальные символы, включая кириллицу и эмодзи, остаются.
@@ -26,6 +30,14 @@ String escapeForDisplay(String value) {
 
 bool _isInvisibleOrControl(int unit) =>
     unit < 0x20 ||
+    unit == 0x00AD ||
+    unit == 0x034F ||
+    unit == 0x115F ||
+    unit == 0x1160 ||
+    unit == 0x180E ||
+    (unit >= 0x2060 && unit <= 0x2064) ||
+    unit == 0x3164 ||
+    (unit >= 0xE0000 && unit <= 0xE007F) ||
     (unit >= 0x7F && unit <= 0x9F) ||
     unit == 0x061C ||
     (unit >= 0x200B && unit <= 0x200F) ||

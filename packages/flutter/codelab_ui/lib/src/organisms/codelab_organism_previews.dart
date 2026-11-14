@@ -98,6 +98,74 @@ class _StatusTableSample extends StatelessWidget {
 }
 
 @Preview(
+  name: 'Skills table',
+  group: codelabOrganismPreviewGroup,
+  size: Size(820, 300),
+)
+Widget codelabSkillsTablePreview() {
+  return const _AcpOrganismPreviewSurface(child: _SkillsTableSample());
+}
+
+/// Пример таблицы навыков (артборд `Extensions`, change `add-app-skills-page`,
+/// D12): описание второй строкой, теги, включённый и неактивный переключатели,
+/// недоверенный текст с видимым `U+202E`.
+class _SkillsTableSample extends StatelessWidget {
+  const _SkillsTableSample();
+
+  @override
+  Widget build(BuildContext context) {
+    return CodeLabStatusTable(
+      columns: const ['SKILL', 'SOURCE'],
+      columnFlex: const [3, 1],
+      rows: [
+        CodeLabStatusTableRow(
+          cells: const [
+            CodeLabStatusTableCell(
+              'review',
+              mono: true,
+              secondary: 'Review a pull request and summarize follow-ups.',
+              tags: [
+                CodeLabStatusTableTag('Overrides user skill'),
+                CodeLabStatusTableTag(
+                  '1 warning',
+                  tone: CodeLabTone.warning,
+                  tooltip: 'SKILL.md: unknown frontmatter key',
+                ),
+              ],
+              untrusted: true,
+            ),
+            CodeLabStatusTableCell('project'),
+          ],
+          toggle: CodeLabStatusTableToggle(
+            value: true,
+            label: 'Enable review',
+            onChanged: (_) {},
+          ),
+        ),
+        const CodeLabStatusTableRow(
+          cells: [
+            CodeLabStatusTableCell(
+              'deploy\u202Egpj',
+              mono: true,
+              secondary: 'Deploy from a file written by another agent.',
+              tags: [CodeLabStatusTableTag('Command only')],
+              untrusted: true,
+            ),
+            CodeLabStatusTableCell('~/.agents/skills'),
+          ],
+          toggle: CodeLabStatusTableToggle(
+            value: false,
+            label: 'Enable deploy',
+            onChanged: null,
+            tooltip: 'Set in project config; edit it there.',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+@Preview(
   name: 'Transcript panel conversation',
   group: codelabOrganismPreviewGroup,
   size: Size(820, 460),
