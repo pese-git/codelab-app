@@ -69,10 +69,10 @@
 
 ### Requirement: Правила записи skills.disabled и skills.extra_roots
 `skillsListEdit(snapshot, key, element, {required bool present})` SHALL давать план записи `SkillsListPlan(layer, base, edits)` или отказ `SkillsListRefused(refusal)` для ключей `skills.disabled` и `skills.extra_roots`; `present: true` — элемент должен оказаться в списке, `false` — выйти из него (design.md change `add-app-skills-page`, D5). Другой ключ SHALL давать `ArgumentError`. `base` SHALL быть снимком целевого слоя из `snapshot.layers`, вызывающий записывает `apply(base, edits)`. Правила:
-1. цель — самый верхний слой, чьё значение ключа действует (`origins` итога загрузки: значение, отброшенное правилами доверия, источником не считается; список `skills.disabled` недоверенного проекта объединяется с нижними слоями и их не заменяет, поэтому такой слой при выборе цели не учитывается), если он `user` или `projectLocal`; если ключ не задан нигде — `user` (решения Q2 (а), Q3 (а) design.md);
-2. если верхний слой — `project`, файл `--config` или окружение, результат SHALL быть отказом `SkillsListNotEditable(<источник>)`;
+1. цель — самый верхний слой, чьё значение ключа действует (`origins` итога загрузки: значение, отброшенное правилами доверия, источником не считается; для ключа, который недоверенный проект объединяет с нижними слоями (`skills.disabled`), источник определяется по значениям без проектных слоёв — слои `project` и `projectLocal` недоверенного проекта при выборе пропускаются, а `--config` — источник, только если сам задаёт ключ), если он `user` или `projectLocal`; если ключ не задан нигде — `user` (решения Q2 (а), Q3 (а) design.md);
+2. если верхний слой — `project` или файл `--config`, результат SHALL быть отказом `SkillsListNotEditable(<источник>)`; если файл целевого или действующего слоя не прочитан в снимке — отказом `SkillsListLayerUnreadable(<слой>)`;
 3. новое значение — сырой список целевого слоя плюс или минус элемент, порядок сохраняется, дублей нет; одна правка `SetValue`, пустой список — `UnsetValue`; если элемент уже в нужном состоянии, план SHALL иметь пустой `edits`;
-4. включить имя, выключенное `skills.disabled` недоверенного проекта (по сырому значению его слоёв), SHALL нельзя: отказ `SkillsListDisabledByProject(<источник>)`;
+4. включить имя, выключенное `skills.disabled` недоверенного проекта — в `config.yaml` или `config.local.yaml` (по сырому значению этих слоёв), — SHALL нельзя: отказ `SkillsListDisabledByProject(<источник>)`;
 5. `skills.extra_roots` НЕ SHALL писаться в слой `project`, а в `projectLocal` — только для доверенного проекта; выдача согласия (`present: true`) на относительный элемент недоверенного проекта SHALL давать отказ `SkillsListUntrustedProject`, а отзыв (`present: false`) SHALL быть разрешён.
 
 Состояние выключателей вида (`SkillToggle` у `SkillEntryView` и `SkillConsentView`) SHALL вычисляться этой же функцией.
@@ -110,3 +110,11 @@
 #### Scenario: Неизвестный ключ
 - **WHEN** `skillsListEdit` вызывается с ключом `skills.max_skills`
 - **THEN** вызов бросает `ArgumentError`
+
+#### Scenario: Список недоверенного проекта совпадает с объединением
+- **WHEN** проект недоверенный, `skills.disabled: [a]` в `user` и `[a]` в `.codelab/config.yaml` проекта, и выключается `b`
+- **THEN** результат — `SkillsListPlan` с целью `user` и `SetValue('skills.disabled', ['a', 'b'])`, а не отказ `SkillsListNotEditable`
+
+#### Scenario: Нечитаемый целевой слой
+- **WHEN** `$CODELAB_HOME/config.yaml` не разбирается, и выключается навык
+- **THEN** результат — `SkillsListRefused(SkillsListLayerUnreadable(user))`, правок нет
