@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:codelab_agent_acp/src/event_projection.dart';
+import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
 import '../../../codelab_agent_core/test/support/package_dir.dart';
@@ -34,4 +35,15 @@ void main() {
       expect(row, isNotEmpty, reason: '$type');
     }
   });
+
+  // change `add-usage-extension`, задача 1.4 (D18 Т5): usage уходит не в
+  // `session/update`, а уведомлением `_codelab/session/usage`; поэтому строки
+  // `StepEnded`, `TurnEnded` и `ContextCompacted` называют его, а не
+  // «not sent» (ACP-6: таблица — единственное место, где видно, во что
+  // проецируется событие). Остальные строки не меняются.
+  for (final type in [StepEnded, TurnEnded, ContextCompacted]) {
+    test('the $type row names _codelab/session/usage', () {
+      expect(projectionTable[type], contains('_codelab/session/usage'));
+    });
+  }
 }

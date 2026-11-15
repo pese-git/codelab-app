@@ -176,6 +176,7 @@ void main() {
         'subagents': {'version': 1, 'maxDepth': 3},
         'subagentToolCalls': {'version': 1},
         'tasks': {'version': 1},
+        'usage': {'version': 1},
       },
     });
     // Стандартные поля блок не меняет (D9).
@@ -211,6 +212,7 @@ void main() {
         'subagents': {'version': 1, 'maxDepth': 3},
         'subagentToolCalls': {'version': 1},
         'tasks': {'version': 1},
+        'usage': {'version': 1},
       },
     };
     expect(caps['_meta'], withToolCalls);
@@ -241,6 +243,7 @@ void main() {
         'subagents': {'version': 1, 'maxDepth': 3},
         'subagentToolCalls': {'version': 1},
         'tasks': {'version': 1},
+        'usage': {'version': 1},
       },
     });
   });
@@ -274,6 +277,7 @@ void main() {
           'subagents': {'version': 1, 'maxDepth': 3},
           'subagentToolCalls': {'version': 1},
           'tasks': {'version': 1},
+          'usage': {'version': 1},
         },
       });
     },
@@ -295,6 +299,176 @@ void main() {
         response.resultMap['agentCapabilities']! as Map<String, Object?>;
     expect(caps, isNot(contains('_meta')));
   });
+
+  // change `add-usage-extension`, задача 1.2 (D3, D18 Т4). Ключ `usage`
+  // агент объявляет всегда, когда отвечает блоком, — «Клиент CodeLab объявил
+  // расширения (usage)»: от ключей и версий клиента состав блока не зависит.
+  test('usage is declared whatever the client declared (usage)', () async {
+    h = await ServerHarness.start();
+
+    final response = await h.initialize(
+      clientCapabilities: {
+        'terminal': true,
+        '_meta': {
+          'codelab': {
+            'tasks': {'version': 1},
+            'usage': {'version': 1},
+            'future': true,
+          },
+        },
+      },
+    );
+
+    final caps =
+        response.resultMap['agentCapabilities']! as Map<String, Object?>;
+    expect(
+      (caps['_meta']! as Map)['codelab'],
+      containsPair('usage', {'version': 1}),
+    );
+    expect(response.error, isNull);
+  });
+
+  test('a client _meta.codelab with no keys still gets the usage key '
+      '(usage)', () async {
+    h = await ServerHarness.start();
+
+    final response = await h.initialize(
+      clientCapabilities: {
+        'terminal': true,
+        '_meta': {'codelab': <String, Object?>{}},
+      },
+    );
+
+    final caps =
+        response.resultMap['agentCapabilities']! as Map<String, Object?>;
+    expect(((caps['_meta']! as Map)['codelab'] as Map)['usage'], {
+      'version': 1,
+    });
+  });
+
+  // «Объявление usage не той версии (usage)» и правило D3: согласие на
+  // `_codelab/session/usage` — только объект с `version`, равным целому
+  // JSON-числу `1`. Иное — «не объявлено» без ошибки `initialize`, а блок
+  // ответа остаётся прежним (с `usage`). Согласие читается из
+  // `ClientLink.capabilities` в момент события, поэтому проверяется по
+  // кадрам хода.
+  Future<List<JsonRpcNotification>> usageFramesAfterPrompt(
+    Object? usageDeclaration,
+  ) async {
+    h = await ServerHarness.start(
+      steps: [
+        {
+          'reply': [
+            {'text': 'ok'},
+          ],
+          'usage': {'input': 10, 'output': 5},
+        },
+      ],
+    );
+    final initialize = await h.initialize(
+      clientCapabilities: {
+        'terminal': true,
+        '_meta': {
+          'codelab': {'usage': ?usageDeclaration},
+        },
+      },
+    );
+    expect(initialize.error, isNull);
+    final caps =
+        initialize.resultMap['agentCapabilities']! as Map<String, Object?>;
+    expect(((caps['_meta']! as Map)['codelab'] as Map)['usage'], {
+      'version': 1,
+    });
+    final sessionId = await h.newSession();
+    final response = await h.prompt(sessionId, 'Hi');
+    expect(response.resultMap, {'stopReason': 'end_turn'});
+    return [
+      for (final frame in h.client.received)
+        if (frame case JsonRpcNotification(method: '_codelab/session/usage'))
+          frame,
+    ];
+  }
+
+  test('usage consent: version 1 receives _codelab/session/usage '
+      '(usage)', () async {
+    final frames = await usageFramesAfterPrompt({'version': 1});
+
+    // Шаг и итог хода: `step` и `turn` (D1).
+    expect(frames, hasLength(2));
+  });
+
+  for (final (name, declaration) in <(String, Object?)>[
+    ('version 2', {'version': 2}),
+    ('version 1.0', {'version': 1.0}),
+    ('version "1"', {'version': '1'}),
+    ('usage true', true),
+    ('usage without version', <String, Object?>{}),
+    ('no usage key', null),
+  ]) {
+    test('usage consent: $name is not a declaration, no usage frames '
+        '(usage)', () async {
+      final frames = await usageFramesAfterPrompt(declaration);
+
+      expect(frames, isEmpty);
+    });
+  }
+
+  // D14, D18 Т9: при `initialize` — debug `acp.extensions.negotiated {keys}`,
+  // где `keys` — ключи `_meta.codelab` клиента, признанные согласованными
+  // (известный ключ и версия); неизвестные ключи и `usage` другой версии в
+  // перечень не входят.
+  test(
+    'acp.extensions.negotiated lists the agreed keys only (usage)',
+    () async {
+      h = await ServerHarness.start();
+
+      await h.initialize(
+        clientCapabilities: {
+          'terminal': true,
+          '_meta': {
+            'codelab': {
+              'tasks': {'version': 1},
+              'usage': {'version': 1},
+              'future': true,
+            },
+          },
+        },
+      );
+
+      final records = h.logger.eventsOf('acp.extensions.negotiated');
+      expect(records, hasLength(1));
+      expect(records.single.level, LogLevel.debug);
+      final keys = (records.single.fields['keys']! as List).cast<String>();
+      expect(keys, containsAll(['tasks', 'usage']));
+      expect(keys, isNot(contains('future')));
+    },
+  );
+
+  test(
+    'acp.extensions.negotiated omits usage of another version (usage)',
+    () async {
+      h = await ServerHarness.start();
+
+      await h.initialize(
+        clientCapabilities: {
+          'terminal': true,
+          '_meta': {
+            'codelab': {
+              'tasks': {'version': 1},
+              'usage': {'version': 2},
+            },
+          },
+        },
+      );
+
+      final keys =
+          (h.logger.eventsOf('acp.extensions.negotiated').single.fields['keys']!
+                  as List)
+              .cast<String>();
+      expect(keys, contains('tasks'));
+      expect(keys, isNot(contains('usage')));
+    },
+  );
 
   test('missing clientCapabilities is logged', () async {
     h = await ServerHarness.start();

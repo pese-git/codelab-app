@@ -1,0 +1,429 @@
+{
+  "id": "acp/session-load-usage-partial",
+  "spec": [
+    "15-Extensibility.md#custom-notifications",
+    "15-Extensibility.md#advertising-custom-capabilities",
+    "05-Prompt Turn.md#4-check-for-completion",
+    "03-Session Setup.md#loading-a-session"
+  ],
+  "description": "Сессия с ответом модели в журнале (setup.sessions) загружается в новом сервере (change add-usage-extension, D6, Q7): до хода снимков usage нет, затем ход даёт снимки, где session.turns считает только ходы после загрузки, а session.partial содержит beforeLoad — usage ранних ходов в сумму не вошёл. Handshake фикстуры создаёт отдельную сессию; загружается сессия из журнала.",
+  "goals": [
+    "L-11"
+  ],
+  "extensions": [
+    "usage"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "clientCapabilities": {
+      "fs": {
+        "readTextFile": true,
+        "writeTextFile": true
+      },
+      "terminal": true,
+      "_meta": {
+        "codelab": {
+          "usage": {
+            "version": 1
+          }
+        }
+      }
+    },
+    "sessions": {
+      "01JB8Q2W6R9T3M5K7N1P4X8Z0C": [
+        {
+          "type": "session",
+          "version": 1,
+          "id": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "cwd": "${cwd}",
+          "created": "2026-10-25T10:00:00.000Z",
+          "agent": {
+            "name": "codelab-agent",
+            "version": "0.1.0"
+          }
+        },
+        {
+          "type": "model_change",
+          "id": "r0",
+          "parentId": null,
+          "timestamp": "2026-10-25T10:00:00.000Z",
+          "provider": "scripted",
+          "modelId": "scripted-1"
+        },
+        {
+          "type": "message",
+          "id": "r1",
+          "parentId": "r0",
+          "timestamp": "2026-10-25T10:00:01.000Z",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Привет"
+              }
+            ],
+            "timestamp": "2026-10-25T10:00:01.000Z"
+          }
+        },
+        {
+          "type": "message",
+          "id": "r2",
+          "parentId": "r1",
+          "timestamp": "2026-10-25T10:00:02.000Z",
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Здравствуйте."
+              }
+            ],
+            "model": {
+              "provider": "scripted",
+              "id": "scripted-1"
+            },
+            "usage": {
+              "input": 10,
+              "output": 5
+            },
+            "stopReason": "stop",
+            "timestamp": "2026-10-25T10:00:02.000Z"
+          }
+        }
+      ]
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768,
+      "cost": {
+        "input": 3,
+        "output": 15,
+        "cacheRead": 0.3,
+        "cacheWrite": 3.75
+      }
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "Ещё"
+          }
+        },
+        "reply": [
+          {
+            "text": "Вот ответ."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 100,
+          "output": 50
+        }
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "loadId"
+        },
+        "method": "session/load",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      },
+      "note": "сессия из журнала с ответом модели загружается через session/load"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Привет"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Здравствуйте."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "standard"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/load — после реплея (ACP-3); снимков usage до хода нет: реплей идёт мимо учёта (D18 Т1)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${loadId}",
+        "result": {
+          "modes": {
+            "$any": {
+              "availableModes": [
+                {
+                  "id": "standard",
+                  "name": "Standard"
+                }
+              ],
+              "currentModeId": "standard"
+            }
+          },
+          "configOptions": {
+            "$any": []
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Ещё раз"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Вот ответ."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "seq": 1,
+          "trigger": "step",
+          "turnId": {
+            "$capture": "turnId"
+          },
+          "step": {
+            "index": 0,
+            "model": "scripted/scripted-1",
+            "tokens": {
+              "input": 100,
+              "output": 50,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.00105"
+          },
+          "turn": {
+            "steps": 1,
+            "tokens": {
+              "input": 100,
+              "output": 50,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.00105"
+          },
+          "session": {
+            "turns": 1,
+            "steps": 1,
+            "tokens": {
+              "input": 100,
+              "output": 50,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.00105",
+            "partial": [
+              "beforeLoad"
+            ]
+          },
+          "currency": "USD",
+          "context": {
+            "used": 150,
+            "size": 32768,
+            "compactAt": 24576
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "seq": 2,
+          "trigger": "turn",
+          "turnId": "${turnId}",
+          "turn": {
+            "steps": 1,
+            "tokens": {
+              "input": 100,
+              "output": 50,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.00105"
+          },
+          "session": {
+            "turns": 1,
+            "steps": 1,
+            "tokens": {
+              "input": 100,
+              "output": 50,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.00105",
+            "partial": [
+              "beforeLoad"
+            ]
+          },
+          "currency": "USD",
+          "context": {
+            "used": 150,
+            "size": 32768,
+            "compactAt": 24576
+          }
+        }
+      },
+      "note": "session.turns — только ходы после загрузки, beforeLoad — ранние ходы не учтены (Q7)"
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}
