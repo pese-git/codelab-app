@@ -55,6 +55,9 @@ final class SubagentTool extends AgentTool {
     required this.logger,
     required this.parentSessionId,
     this.depth = 0,
+    this.path = const [],
+    this.chainPrefix = '',
+    this.rootToolCallId,
     required int maxDepth,
     required int maxConcurrent,
   }) : types = List.unmodifiable(types),
@@ -73,7 +76,46 @@ final class SubagentTool extends AgentTool {
   final Logger logger;
   final SessionId parentSessionId;
   final int depth;
+
+  /// Id предков-субагентов от глубины 1 до вызывающего включительно: `path`
+  /// потомков, которых он запускает (у корня пусто; D45 Т6).
+  final List<SubagentId> path;
+
+  /// Цепочка id вызовов `agent` от корня до сессии вызывающего и вызов
+  /// `agent` корня отдельным значением (D45 Т3); у корня оба пусты.
+  final String chainPrefix;
+  final String? rootToolCallId;
   final int _maxDepth, _maxConcurrent;
+
+  /// Снимок `max_depth` корневой сессии, по которому построено описание
+  /// (D46, п. 2); потомки получают тот же.
+  int get maxDepth => _maxDepth;
+
+  /// `agent` для сессии потомка [owner] (D45 Т2): снимок типов, лимиты и
+  /// `max_depth` корня, но свои менеджер, глубина, путь и цепочка вызовов.
+  ///
+  /// Почему копия, а не новый набор аргументов: описание `agent` у потомка не
+  /// должно расходиться с описанием корня после перезагрузки конфига.
+  SubagentTool nested({
+    required SubagentManager manager,
+    required SessionId parentSessionId,
+    required Logger logger,
+    required SubagentSpec owner,
+  }) => SubagentTool(
+    manager: manager,
+    types: types,
+    ids: ids,
+    limits: limits,
+    clock: clock,
+    logger: logger,
+    parentSessionId: parentSessionId,
+    depth: owner.depth,
+    path: [...owner.path, owner.id],
+    chainPrefix: owner.sessionChain,
+    rootToolCallId: owner.rootCall,
+    maxDepth: _maxDepth,
+    maxConcurrent: _maxConcurrent,
+  );
 
   static const _alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
 
@@ -219,6 +261,9 @@ final class SubagentTool extends AgentTool {
           parentSessionId: parentSessionId,
           parentToolCallId: ctx.toolCallId,
           depth: depth + 1,
+          path: path,
+          chainPrefix: chainPrefix,
+          rootToolCallId: rootToolCallId ?? ctx.toolCallId,
           type: type,
           description: description,
           prompt: prompt,
@@ -233,7 +278,10 @@ final class SubagentTool extends AgentTool {
       );
     }
     final report = await _await(handle, ctx);
-    if (report.status == SubagentState.cancelled) {
+    // Слот ждущего родителя возвращается до результата вызова (D46, п. 1):
+    // `false` — отмена в очереди возвращающихся, результата нет.
+    final resumed = await manager.settled(handle);
+    if (!resumed || report.status == SubagentState.cancelled) {
       throw CancelledException(ctx.cancel.reason);
     }
     return ToolExecutionResult([

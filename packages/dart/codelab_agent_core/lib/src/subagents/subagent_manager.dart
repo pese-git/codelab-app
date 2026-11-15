@@ -13,6 +13,8 @@ import '../tools/agent_tool.dart';
 import '../tools/path_lock.dart';
 import '../tools/tasks/task_list.dart';
 import '../cancel/cancel_token.dart';
+import '../compaction/estimate.dart';
+import '../compaction/settings.dart';
 import '../llm/messages.dart';
 import '../llm/usage.dart';
 import '../loop/agent.dart';
@@ -63,7 +65,10 @@ final class SubagentParent {
     required this.tasks,
     required this.locks,
     required this.maxChildDepth,
+    this.contextWindowCap = _noCap,
   });
+
+  static int? _noCap() => null;
 
   /// Схемы текущего шага родителя (`base` набора ребёнка).
   final List<AgentTool> Function() tools;
@@ -97,9 +102,63 @@ final class SubagentParent {
   final TaskList tasks;
   final PathLock locks;
 
-  /// Наибольшая глубина потомка, которую рантайм умеет запускать; до
-  /// итерации 4 — 1, поэтому `agent` ребёнку не даётся.
+  /// Наибольшая глубина потомка — `subagents.max_depth`, снимок корневой
+  /// сессии на всё дерево (D46, п. 2): `agent` ребёнку даётся, пока его
+  /// глубина меньше.
   final int maxChildDepth;
+
+  /// `compaction.context_window_cap` сессии: нужен для правила окна
+  /// потомка (D40; `agent` не входит в набор ребёнка с малым окном).
+  final int? Function() contextWindowCap;
+
+  /// Части родителя для менеджера потомка, у которого есть `agent` (D45 Т2).
+  ///
+  /// Почему копия: gate, навыки, пути, хранилище решений, правила, env,
+  /// список задач и блокировки — общие объекты корня; различаются только
+  /// схемы шага, модель и режим самого потомка — `narrow` идёт по цепочке
+  /// (SUB-2).
+  SubagentParent nestedFor({
+    required List<AgentTool> Function() tools,
+    required ModelRef Function() model,
+    required ModeResolution Function() mode,
+  }) => SubagentParent(
+    tools: tools,
+    model: model,
+    mode: mode,
+    gate: gate,
+    skills: skills,
+    agentConfigPaths: agentConfigPaths,
+    decisions: decisions,
+    rules: rules,
+    extraDeniedTiers: extraDeniedTiers,
+    env: env,
+    tasks: tasks,
+    locks: locks,
+    maxChildDepth: maxChildDepth,
+    contextWindowCap: contextWindowCap,
+  );
+}
+
+/// Связь менеджера потомка с хэндлом его сессии в менеджере родителя
+/// (`agent-core/17-3-subagents.md` §17.3.4, шаг 2; design.md change
+/// `add-subagents-and-tasks`, D3, D46, п. 1).
+///
+/// Почему: слот держит хэндл потомка в менеджере родителя, а решает, когда
+/// его отдать, менеджер самого потомка — по числу блокирующих вызовов
+/// `agent`, ждущих детей.
+///
+/// Как использовать: менеджер потомка вызывает [callBegan] при каждом
+/// запуске ребёнка и [callEnded] при его терминальном состоянии — до того,
+/// как ребёнок вернёт свой слот.
+abstract interface class SubagentSlotLink {
+  /// Начал ждать ещё один `agent`: 0 → 1 переводит хэндл в `waiting`/
+  /// `subagents` и возвращает слот.
+  void callBegan();
+
+  /// Очередной `agent` дождался: 1 → 0 ставит родителя в очередь
+  /// возвращающихся и отдаёт результат — слот получен (`true`) или родитель
+  /// отменён в очереди (`false`). `null` — ждущие вызовы ещё есть.
+  Future<bool>? callEnded();
 }
 
 /// Всё для дочерней сессии (`agent-core/05-agent-loop.md` §5.6, внутренний
@@ -125,9 +184,18 @@ final class ChildSessionSpec {
     required this.logger,
     required this.onOwnUsage,
     required this.ancestorBudget,
+    this.parent,
+    this.tree,
+    this.link,
+    this.rootSessionId,
+    this.task,
   });
 
   final SubagentSpec subagent;
+
+  /// Пункт списка, назначенный ребёнку на момент `assign`: строка
+  /// `Your task: #<id> <subject>` системного промпта (D10, D45 Т8).
+  final TaskItem? task;
 
   /// `base ∩ type.tools` (SUB-1), без `task_create`; `skill` — только со
   /// снимком [skills].
@@ -154,6 +222,14 @@ final class ChildSessionSpec {
   final Logger logger;
   final void Function(Usage own) onOwnUsage;
   final BudgetLimit? Function() ancestorBudget;
+
+  /// Для вложенности (D45 Т2): части родителя, общее дерево слотов, связь со
+  /// слотом хэндла и корень дерева. Фабрика собирает потомку свой менеджер,
+  /// только если в [tools] есть `agent`.
+  final SubagentParent? parent;
+  final SubagentTree? tree;
+  final SubagentSlotLink? link;
+  final SessionId? rootSessionId;
 }
 
 /// Дочерняя сессия, собранная фабрикой рантайма: агент со своим писателем
@@ -164,6 +240,7 @@ final class ChildSession {
     required this.journalPath,
     required this.agent,
     required Future<void> Function() close,
+    this.subagents,
   }) : _close = close;
 
   final SessionId id;
@@ -173,6 +250,10 @@ final class ChildSession {
 
   /// Первым подписчиком уже стоит писатель журнала ребёнка.
   final Agent agent;
+
+  /// Менеджер потомков самого ребёнка: есть, только если ему дан `agent`
+  /// (D45 Т2). Родитель берёт из него число активных потомков.
+  final SubagentManager? subagents;
   final Future<void> Function() _close;
 
   Future<void> close() => _close();
@@ -204,6 +285,18 @@ final class SubagentTree {
 
   /// `subagents.max_depth` на сейчас.
   int get maxDepth => _limits().maxDepth;
+
+  /// Лимиты на сейчас: менеджеры потомков читают их оттуда же (D17).
+  SubagentsConfig get config => _limits();
+
+  final _known = <SubagentId>{};
+
+  /// Все потомки дерева регистрируют id здесь: владелец пункта списка —
+  /// любой потомок, когда-либо запущенный в дереве (D45 Т8).
+  void register(SubagentId id) => _known.add(id);
+
+  /// Потомок с таким id запускался в этом дереве.
+  bool knows(SubagentId id) => _known.contains(id);
 
   /// Запусков за ход корневой сессии.
   int get spawnedThisTurn => _spawned;
@@ -315,6 +408,12 @@ abstract interface class SubagentHandle {
 /// Терминальное состояние наступает ровно один раз; поздние события ребёнка
 /// не переизлучаются.
 ///
+/// Вложенность (D45 Т2): ребёнку с `agent` фабрика дочерней сессии создаёт
+/// собственный менеджер на том же [SubagentTree]. Он не сбрасывает счётчик
+/// `max_per_turn` (это делает только ход корня), берёт gate корня, а о слоте
+/// своей сессии говорит через [SubagentSlotLink]: пока хотя бы один его
+/// `agent` ждёт детей, слот сессии возвращён дереву (D46, п. 1).
+///
 /// Как использовать: рантайм создаёт по одному на сессию с `agent`, передаёт
 /// `SubagentTool` и закрывает [closeAll] при закрытии сессии.
 final class SubagentManager {
@@ -326,15 +425,25 @@ final class SubagentManager {
     required Clock clock,
     required Logger logger,
     required SessionId sessionId,
-    required TurnBudget Function() rootBudget,
+    TurnBudget Function()? ownBudget,
     required SubagentParent Function() parent,
-  }) : _limits = limits,
+    SubagentSlotLink? link,
+    SessionId? rootSessionId,
+    BudgetLimit? Function()? upstreamBudget,
+  }) : assert(
+         ownBudget != null || upstreamBudget != null,
+         'the root manager needs ownBudget, a nested one upstreamBudget',
+       ),
+       _link = link,
+       _rootSessionId = rootSessionId ?? sessionId,
+       _upstreamBudget = upstreamBudget,
+       _limits = limits,
        _emit = emit,
        _create = create,
        _clock = clock,
        _logger = logger,
        _sessionId = sessionId,
-       _rootBudget = rootBudget,
+       _ownBudget = ownBudget,
        _parent = parent;
 
   final SubagentTree tree;
@@ -344,7 +453,23 @@ final class SubagentManager {
   final Clock _clock;
   final Logger _logger;
   final SessionId _sessionId;
-  final TurnBudget Function() _rootBudget;
+
+  /// Бюджет сессии самого менеджера: хода корня или, у менеджера потомка,
+  /// бюджет ребёнка (D45 Т5).
+  final TurnBudget Function()? _ownBudget;
+
+  /// Связь со слотом хэндла сессии этого менеджера в менеджере её родителя;
+  /// у менеджера корня `null` (корень слота не занимает).
+  final SubagentSlotLink? _link;
+
+  /// Корень дерева для логов `root_session_id` (D45 Т11): у менеджера корня —
+  /// его же сессия, у менеджера потомка — корневая, а `session_id` остаётся
+  /// сессией, которая запустила потомка.
+  final SessionId _rootSessionId;
+
+  /// Бюджет предков сессии менеджера (`ancestorBudget` её цикла): цепочка до
+  /// бюджета хода корня (D4); у менеджера корня `null`.
+  final BudgetLimit? Function()? _upstreamBudget;
 
   /// Части родителя читаются при каждом `spawn`: `_Session` и политика
   /// появляются позже менеджера.
@@ -352,23 +477,23 @@ final class SubagentManager {
 
   final _all = <_Handle>[];
 
-  /// Id всех когда-либо созданных хэндлов: `knows` не зависит от очистки
-  /// самих хэндлов.
-  final _known = <SubagentId>{};
   var _turnHandles = <_Handle>[];
-  var _rootOwn = Usage.zero;
+  var _ownUsage = Usage.zero;
 
-  /// Собственный usage хода корня (без детей): для остатка бюджета потомков.
-  set rootOwnUsage(Usage value) => _rootOwn = value;
+  /// Собственный usage сессии менеджера (без потомков: хода корня или
+  /// ребёнка): вместе с [childrenUsage] сравнивается с её бюджетом на границе
+  /// шага потомка.
+  set ownUsage(Usage value) => _ownUsage = value;
 
   /// Начало хода корня: счётчик запусков и учёт usage детей сбрасываются.
   void beginTurn() {
     tree.resetTurn();
     _turnHandles = [];
-    _rootOwn = Usage.zero;
+    _ownUsage = Usage.zero;
   }
 
-  /// Usage детей хода корня на сейчас, транзитивно (SUB-11).
+  /// Usage потомков сессии менеджера на сейчас, транзитивно (SUB-11): живой
+  /// usage каждого хэндла уже включает его потомков.
   Usage get childrenUsage {
     var total = Usage.zero;
     for (final handle in _turnHandles) {
@@ -377,8 +502,28 @@ final class SubagentManager {
     return total;
   }
 
-  /// Потомок с таким id когда-либо запускался в дереве (хэндл создан).
-  bool knows(SubagentId id) => _known.contains(id);
+  /// Потомок с таким id когда-либо запускался в дереве (хэндл создан у
+  /// любого менеджера дерева, D45 Т8).
+  bool knows(SubagentId id) => tree.knows(id);
+
+  /// Потомки менеджера и их потомки в `queued | running | waiting`
+  /// (`activeChildren`, §17.3.4, шаг 4).
+  int get activeCount {
+    var total = 0;
+    for (final handle in _all) {
+      if (!handle.done) {
+        total += 1 + handle.activeChildren;
+      }
+    }
+    return total;
+  }
+
+  /// Результат повторного взятия слота ждущим родителем для вызова `agent`
+  /// [handle] (D46, п. 1): `false` — родитель отменён в очереди
+  /// возвращающихся. Вызывает `SubagentTool` после отчёта, до результата
+  /// вызова, поэтому `ToolCallFinished` идёт после повторного взятия.
+  Future<bool> settled(SubagentHandle handle) =>
+      (handle is _Handle ? handle.resume : null) ?? Future.value(true);
 
   /// Потомки в порядке запуска.
   List<SubagentSnapshot> list() => [for (final h in _all) h.snapshot];
@@ -391,7 +536,7 @@ final class SubagentManager {
     tree.countSpawn();
     final handle = _Handle(spec, cancel, _clock);
     _all.add(handle);
-    _known.add(handle.id);
+    tree.register(handle.id);
     _turnHandles.add(handle);
     _logger.log(
       LogLevel.info,
@@ -404,6 +549,10 @@ final class SubagentManager {
         'depth': spec.depth,
       },
     );
+    // Слот возвращается до постановки ребёнка в очередь: иначе ребёнок
+    // получил бы слот родителя раньше его соседей по очереди (§17.3.4,
+    // шаг 2; сценарий «Возвращающийся родитель раньше нового ребёнка»).
+    _link?.callBegan();
     unawaited(_run(handle));
     return handle;
   }
@@ -442,20 +591,26 @@ final class SubagentManager {
     await Future.wait([for (final h in List.of(_all)) h.report]);
   }
 
-  /// Остаток бюджета корня для потомка (D4): токены и стоимость хода корня
-  /// вместе с usage всех детей; время предков не наследуется.
-  BudgetLimit? ancestorBudget() {
-    final budget = _rootBudget();
-    final total = _rootOwn + childrenUsage;
-    if (budget.maxTokens case final max?
-        when total.input + total.output >= max) {
-      return BudgetLimit.tokens;
+  /// Исчерпан ли бюджет предков для потомков этой сессии (D4, D45 Т5): токены
+  /// и стоимость бюджета самой сессии менеджера против её usage вместе с
+  /// потомками, затем цепочка выше до бюджета хода корня. Время предков не
+  /// наследуется. Потомок проверяет это на своей границе шага.
+  BudgetLimit? limitForDescendants() {
+    // Своя сессия менеджера (корень или промежуточный предок): её бюджет
+    // против её usage вместе с потомками, затем цепочка выше до бюджета хода
+    // корня (D4, D45 Т5). Время предков не наследуется.
+    if (_ownBudget?.call() case final budget?) {
+      final total = _ownUsage + childrenUsage;
+      if (budget.maxTokens case final max?
+          when total.input + total.output >= max) {
+        return BudgetLimit.tokens;
+      }
+      if (budget.maxCost case final max?
+          when total.cost.total > 0 && total.cost.total >= max) {
+        return BudgetLimit.cost;
+      }
     }
-    if (budget.maxCost case final max?
-        when total.cost.total > 0 && total.cost.total >= max) {
-      return BudgetLimit.cost;
-    }
-    return null;
+    return _upstreamBudget?.call();
   }
 
   Future<void> _run(_Handle handle) async {
@@ -470,19 +625,11 @@ final class SubagentManager {
         await _finish(handle, handle.reportOf(SubagentState.cancelled));
         return;
       }
+      handle.holdsSlot = true;
       try {
         await _runLeased(handle);
       } finally {
-        tree.release();
-        _logger.log(
-          LogLevel.debug,
-          'subagent.slot.release',
-          fields: {
-            'session_id': _sessionId.value,
-            'subagent_id': handle.id,
-            'free_slots': tree.freeSlots,
-          },
-        );
+        _releaseSlot(handle);
       }
     } on Object catch (error, stack) {
       _logger.log(
@@ -507,14 +654,138 @@ final class SubagentManager {
     }
   }
 
+  /// Возвращает слот дереву, только если им владеет [handle]: потомок,
+  /// отменённый в очереди возвращающихся, слота не держит и не может вернуть
+  /// чужой (D45 Т4).
+  void _releaseSlot(_Handle handle) {
+    if (!handle.holdsSlot) {
+      return;
+    }
+    handle.holdsSlot = false;
+    tree.release();
+    _logger.log(
+      LogLevel.debug,
+      'subagent.slot.release',
+      fields: {
+        'session_id': _sessionId.value,
+        'subagent_id': handle.id,
+        'free_slots': tree.freeSlots,
+      },
+    );
+  }
+
+  /// Потомок [handle] начал ждать ещё один `agent` (0 → 1 — вернуть слот;
+  /// D46, п. 1).
+  void _waitBegan(_Handle handle) {
+    handle.waitingCalls++;
+    if (handle.done || handle.waitingCalls != 1) {
+      return;
+    }
+    _releaseSlot(handle);
+    _syncWaiting(handle);
+  }
+
+  /// Один из ждущих `agent` потомка [handle] получил отчёт. Последний
+  /// (1 → 0) встаёт в очередь возвращающихся, пока ребёнок ещё держит свой
+  /// слот: освободившийся слот достаётся родителю, а не новому ребёнку
+  /// (SUB-23).
+  Future<bool>? _waitEnded(_Handle handle) {
+    if (handle.waitingCalls > 0) {
+      handle.waitingCalls--;
+    }
+    if (handle.waitingCalls > 0 || handle.done) {
+      return null;
+    }
+    if (handle.holdsSlot) {
+      _syncWaiting(handle);
+      return null;
+    }
+    return handle.resumePending ??= _resume(handle);
+  }
+
+  Future<bool> _resume(_Handle handle) async {
+    final leased = await tree.acquire(
+      resume: true,
+      cancel: handle.source.token,
+    );
+    handle.resumePending = null;
+    if (!leased) {
+      _syncWaiting(handle);
+      return false;
+    }
+    handle.holdsSlot = true;
+    _logger.log(
+      LogLevel.debug,
+      'subagent.slot.resume',
+      fields: {
+        'session_id': _sessionId.value,
+        'subagent_id': handle.id,
+        'free_slots': tree.freeSlots,
+      },
+    );
+    // Пока родитель стоял в очереди, он мог снова начать ждать детей (или
+    // закончиться): слот не должен остаться у ждущего.
+    if (handle.done || handle.waitingCalls > 0) {
+      _releaseSlot(handle);
+    }
+    _syncWaiting(handle);
+    return true;
+  }
+
   Future<void> _runLeased(_Handle handle) async {
     final spec = handle.spec;
     handle.startedAt = _clock.now();
     handle.setState(SubagentState.running);
     final limits = _limits();
     final parent = _parent();
+    final model = spec.type.model ?? parent.model();
+    // D40, «Ребёнок»: ребёнок с малым окном `agent` не получает.
+    final cap = parent.contextWindowCap();
+    final windowOk = subagentWindowOk(model, cap);
+    if (!windowOk &&
+        spec.depth < parent.maxChildDepth &&
+        spec.type.allowsTool('agent')) {
+      _logger.log(
+        LogLevel.info,
+        'subagent.unavailable',
+        fields: {
+          'session_id': _sessionId.value,
+          'subagent_id': handle.id,
+          'reason': 'context_window',
+          'window': effectiveContextWindow(model, cap: cap),
+          'min_window': CompactionSettings.minSubagentContextWindow,
+        },
+      );
+    }
+    // `assign` — до создания дочерней сессии (D45 Т8): `TaskListChanged`
+    // приходит раньше `SubagentStarted`, а `subject` строки `Your task:`
+    // берётся на момент назначения. Прежний владелец не проверяется —
+    // последнее назначение побеждает (D46, п. 3).
+    TaskItem? assigned;
+    if (spec.taskId case final taskId?) {
+      final result = await parent.tasks.apply(
+        AssignTask(taskId, TaskOwner(spec.id)),
+        const MainActor(),
+      );
+      switch (result) {
+        case TaskApplied(:final item):
+          assigned = item;
+        case TaskRejected():
+          // Пункт удалён, пока ребёнок стоял в очереди: назначать некому,
+          // ребёнок всё равно работает без пункта (D18).
+          _logger.log(
+            LogLevel.warning,
+            'task.assign.skipped',
+            fields: {
+              'session_id': _sessionId.value,
+              'task_id': taskId,
+              'subagent_id': spec.id,
+            },
+          );
+      }
+    }
     final childLogger = BoundLogger(_logger, {
-      'root_session_id': _sessionId.value,
+      'root_session_id': _rootSessionId.value,
       'subagent_id': handle.id,
       'parent_tool_call_id': spec.parentToolCallId,
     });
@@ -527,8 +798,9 @@ final class SubagentManager {
           depth: spec.depth,
           maxDepth: parent.maxChildDepth,
           skills: parent.skills,
+          agentVisible: windowOk,
         ),
-        model: spec.type.model ?? parent.model(),
+        model: model,
         budget: TurnBudget(
           maxSteps: limits.maxSteps,
           maxTokens: limits.maxTokens,
@@ -540,9 +812,8 @@ final class SubagentManager {
           final root? => SubagentPermissionGate(
             queue: tree.wrapGate(root),
             spec: spec,
-            // До итерации 4 родитель потомка — всегда корень: цепочка —
-            // один сегмент, id вызова `agent` корня.
-            chainPrefix: spec.parentToolCallId,
+            // Цепочка id вызовов `agent` от корня до сессии потомка (D45 Т3).
+            chainPrefix: spec.sessionChain,
             onWaiting: () => _setWaiting(handle, true),
             onResumed: () => _setWaiting(handle, false),
             logger: _logger,
@@ -559,15 +830,21 @@ final class SubagentManager {
         tasks: SubagentTaskList(
           root: parent.tasks,
           subagentId: spec.id,
-          parentToolCallId: spec.parentToolCallId,
+          parentToolCallId: spec.sessionChain,
         ),
         locks: parent.locks,
         logger: childLogger,
         onOwnUsage: (own) => handle.ownUsage = own,
-        ancestorBudget: ancestorBudget,
+        ancestorBudget: limitForDescendants,
+        parent: parent,
+        tree: tree,
+        link: _HandleLink(this, handle),
+        rootSessionId: _rootSessionId,
+        task: assigned,
       ),
     );
     handle.child = child;
+    handle.childManager = child.subagents;
     handle.childId = child.id;
     handle.journalPath = child.journalPath;
     // Отмена, пока создавалась сессия: ребёнок закрывается, к модели он не
@@ -634,33 +911,43 @@ final class SubagentManager {
     await _finish(handle, _buildReport(handle));
   }
 
-  /// Переводит потомка в `waiting`/`approval` на время вопросов и обратно в
-  /// `running` (§17.3.2). Терминальное состояние не трогается: отмена во
-  /// время вопроса побеждает (D5).
+  /// Открытый вопрос потомка к gate корня (§17.3.2).
   ///
   /// Почему счётчик: ребёнок может держать несколько открытых вопросов (два
-  /// параллельных `write` в одном шаге); в `running` он возвращается только
-  /// при нуле открытых, а не после первого ответа (ревью итерации 3).
+  /// параллельных `write` в одном шаге); состояние пересчитывается по всем
+  /// причинам ожидания сразу ([_syncWaiting]), а не после первого ответа
+  /// (ревью итерации 3).
   void _setWaiting(_Handle handle, bool waiting) {
     if (waiting) {
       handle.openQuestions++;
     } else if (handle.openQuestions > 0) {
       handle.openQuestions--;
     }
-    if (handle.done) {
+    _syncWaiting(handle);
+  }
+
+  /// Состояние потомка по причинам ожидания (D46, п. 1): открытый вопрос —
+  /// `waiting`/`approval`, иначе ждущие дети или возврат слота —
+  /// `waiting`/`subagents` (`approval` важнее), иначе `running`.
+  /// Терминальное состояние не трогается: отмена во время ожидания побеждает
+  /// (D5). Прогресс уходит при любой смене состояния или причины.
+  void _syncWaiting(_Handle handle) {
+    if (handle.done ||
+        (handle.state != SubagentState.running &&
+            handle.state != SubagentState.waiting)) {
       return;
     }
-    if (waiting && handle.state == SubagentState.running) {
-      handle.waitingFor = SubagentWait.approval;
-      handle.setState(SubagentState.waiting);
-    } else if (!waiting &&
-        handle.openQuestions == 0 &&
-        handle.state == SubagentState.waiting) {
-      handle.waitingFor = null;
-      handle.setState(SubagentState.running);
-    } else {
+    final SubagentWait? reason = handle.openQuestions > 0
+        ? SubagentWait.approval
+        : (handle.waitingCalls > 0 || handle.resumePending != null)
+        ? SubagentWait.subagents
+        : null;
+    final next = reason == null ? SubagentState.running : SubagentState.waiting;
+    if (handle.state == next && handle.waitingFor == reason) {
       return;
     }
+    handle.waitingFor = reason;
+    handle.setState(next);
     unawaited(_progress(handle, force: true));
   }
 
@@ -675,6 +962,10 @@ final class SubagentManager {
       case ToolCallStarted(:final title):
         handle.toolCalls++;
         handle.lastActivity = title;
+      // Вызовы потомков входят в итог ребёнка транзитивно (D45 Т5).
+      case SubagentActivity(event: ToolCallStarted(:final title)):
+        handle.toolCalls++;
+        handle.lastActivity = title;
       case TurnEnded():
         handle.ended = event;
       case AgentError(:final message):
@@ -682,18 +973,34 @@ final class SubagentManager {
       default:
         break;
     }
+    // Обёртка плоская (D6, D45 Т6): событие внука уже несёт свой адрес —
+    // меняется только сессия, а не вкладывается вторая обёртка.
     await _emit(
-      SubagentActivity(
-        _sessionId,
-        subagentId: handle.id,
-        parentToolCallId: handle.spec.parentToolCallId,
-        path: handle.spec.path,
-        depth: handle.spec.depth,
-        event: event,
-      ),
+      event is SubagentActivity
+          ? SubagentActivity(
+              _sessionId,
+              subagentId: event.subagentId,
+              parentToolCallId: event.parentToolCallId,
+              path: event.path,
+              depth: event.depth,
+              event: event.event,
+            )
+          : SubagentActivity(
+              _sessionId,
+              subagentId: handle.id,
+              parentToolCallId: handle.spec.parentToolCallId,
+              path: handle.spec.path,
+              depth: handle.spec.depth,
+              event: event,
+            ),
     );
-    if (event is StepEnded || event is ToolCallStarted) {
+    if (event is StepEnded ||
+        event is ToolCallStarted ||
+        (event is SubagentActivity && event.event is ToolCallStarted)) {
       await _progress(handle);
+    } else if (event is SubagentStarted || event is SubagentFinished) {
+      // Число активных потомков ребёнка изменилось (`activeChildren`).
+      await _progress(handle, force: true);
     }
   }
 
@@ -732,8 +1039,9 @@ final class SubagentManager {
   SubagentReport _buildReport(_Handle handle) {
     final ended = handle.ended;
     if (ended != null) {
-      // Итоговый usage хода ребёнка уже включает его потомков.
-      handle.ownUsage = ended.usage;
+      // Итоговый usage хода ребёнка уже включает его потомков: живую сумму
+      // «свой + менеджер потомков» заменяет окончательное значение.
+      handle.finalUsage = ended.usage;
     }
     final text = _lastText(handle.child?.agent.messages ?? const []);
     final SubagentState status;
@@ -814,6 +1122,9 @@ final class SubagentManager {
       return;
     }
     handle.done = true;
+    // Родитель встаёт в очередь возвращающихся до того, как ребёнок вернёт
+    // слот (SUB-23); результат ждёт `SubagentTool` через [settled].
+    handle.resume = _link?.callEnded();
     handle.unsubscribe?.call();
     handle.trailing?.cancel();
     handle.setState(report.status);
@@ -907,6 +1218,21 @@ final class _Handle implements SubagentHandle {
 
   ChildSession? child;
 
+  /// Менеджер потомков самого потомка (`activeChildren`, D45 Т5).
+  SubagentManager? childManager;
+
+  /// Слот держит именно этот хэндл (`release` — только у держателя, D45 Т4).
+  bool holdsSlot = false;
+
+  /// Блокирующих `agent` потомка, ждущих детей, и возврат слота в очереди
+  /// возвращающихся (D46, п. 1).
+  int waitingCalls = 0;
+  Future<bool>? resumePending;
+
+  /// Результат возврата слота для вызова `agent`, который запустил этот
+  /// хэндл (`null` — возвращать нечего).
+  Future<bool>? resume;
+
   /// Id и адрес журнала ребёнка остаются у хэндла после очистки [child]:
   /// `null` — только у отменённого в очереди.
   SessionId? childId;
@@ -953,8 +1279,12 @@ final class _Handle implements SubagentHandle {
   @override
   Future<SubagentReport> get report => reportCompleter.future;
 
+  /// Активные потомки потомка, транзитивно.
+  int get activeChildren => childManager?.activeCount ?? 0;
+
   /// Usage потомка на сейчас: живой — по шагам цикла, после итога — отчёта.
-  Usage get usageNow => finalUsage ?? ownUsage;
+  Usage get usageNow =>
+      finalUsage ?? ownUsage + (childManager?.childrenUsage ?? Usage.zero);
 
   /// Закрывает потоки: после итога подписчиков нет.
   void closeControllers() {
@@ -981,6 +1311,7 @@ final class _Handle implements SubagentHandle {
     depth: spec.depth,
     state: _state,
     waitingFor: _state == SubagentState.waiting ? waitingFor : null,
+    activeChildren: done ? 0 : activeChildren,
     steps: steps,
     toolCalls: toolCalls,
     usage: usageNow,
@@ -1016,4 +1347,20 @@ final class _Handle implements SubagentHandle {
       failureMessage: message,
     );
   }
+}
+
+/// Связь менеджера потомка со слотом его хэндла в менеджере родителя
+/// (D46, п. 1): делегирует счётчик ждущих `agent` менеджеру-владельцу
+/// хэндла, где живут слот и состояние `waiting`/`subagents`.
+final class _HandleLink implements SubagentSlotLink {
+  _HandleLink(this._manager, this._handle);
+
+  final SubagentManager _manager;
+  final _Handle _handle;
+
+  @override
+  void callBegan() => _manager._waitBegan(_handle);
+
+  @override
+  Future<bool>? callEnded() => _manager._waitEnded(_handle);
 }

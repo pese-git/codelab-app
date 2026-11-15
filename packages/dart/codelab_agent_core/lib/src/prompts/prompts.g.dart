@@ -212,6 +212,12 @@ abstract final class Prompts {
     text:
         'Change one task list item by id; pass only changed fields. Set status in_progress when you\nstart it, completed when done, deleted to remove it. blocked_by replaces the whole list.\nKeep exactly one item in_progress.',
   );
+  static const toolDescriptionsTaskUpdateSubagent = PromptTemplate(
+    id: 'tool_descriptions.task_update_subagent',
+    vars: {},
+    text:
+        'Change the status of a task list item assigned to you: in_progress when you start it, completed when done.\nYou cannot change other fields or items assigned to someone else. Your assigned item, if any, is named in your instructions.',
+  );
   static const toolDescriptionsWrite = PromptTemplate(
     id: 'tool_descriptions.write',
     vars: {},
@@ -288,6 +294,8 @@ abstract final class Prompts {
     'tool_descriptions.task_get': toolDescriptionsTaskGet,
     'tool_descriptions.task_list': toolDescriptionsTaskList,
     'tool_descriptions.task_update': toolDescriptionsTaskUpdate,
+    'tool_descriptions.task_update_subagent':
+        toolDescriptionsTaskUpdateSubagent,
     'tool_descriptions.write': toolDescriptionsWrite,
     'tools.edit': toolsEdit,
     'tools.exec': toolsExec,

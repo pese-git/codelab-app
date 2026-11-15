@@ -35,6 +35,12 @@ final class CwdTrackingStore implements SessionStore {
   }
 
   @override
+  Future<SessionSnapshot> openChild(
+    String journal, {
+    required SessionId rootSessionId,
+  }) => _inner.openChild(journal, rootSessionId: rootSessionId);
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {

@@ -28,7 +28,9 @@ final class SubagentTaskList implements TaskList {
   final TaskList root;
   final SubagentId subagentId;
 
-  /// Вызов `agent` в сессии родителя (первый сегмент цепочки).
+  /// Цепочка id вызовов `agent` от корня до сессии ребёнка (`SubagentSpec.
+  /// sessionChain`): у ребёнка корня — вызов `agent` корня, у внука
+  /// `call_3/call_2` (D45 Т3).
   final String parentToolCallId;
 
   static const _denied = TaskRejected(

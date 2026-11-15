@@ -181,6 +181,8 @@ final class SubagentSpec {
     required this.parentToolCallId,
     required this.depth,
     this.path = const [],
+    this.chainPrefix = '',
+    this.rootToolCallId,
     required this.type,
     required this.description,
     required this.prompt,
@@ -203,4 +205,24 @@ final class SubagentSpec {
 
   /// Пункт списка задач, назначенный ребёнку (только от корня).
   final String? taskId;
+
+  /// Цепочка id вызовов `agent` от корня до сессии **родителя** потомка через
+  /// `/`; у ребёнка корня пусто (design.md change `add-subagents-and-tasks`,
+  /// D45 Т3).
+  final String chainPrefix;
+
+  /// Вызов `agent` корневой сессии, под которым клиент видит всё поддерево.
+  /// Передаётся по дереву отдельным значением, а не выделяется разбором
+  /// [chainPrefix]: id вызова провайдера может содержать `/` (D45 Т3). `null` —
+  /// потомок корня: тогда это [parentToolCallId].
+  final String? rootToolCallId;
+
+  /// Цепочка id вызовов `agent` от корня до сессии самого потомка: префикс
+  /// для `toolCallId` его вопросов и операций со списком задач
+  /// (`call_3/call_2` у внука, D8, D45 Т3).
+  String get sessionChain =>
+      chainPrefix.isEmpty ? parentToolCallId : '$chainPrefix/$parentToolCallId';
+
+  /// Вызов `agent` корня, к которому клиент привязывает потомка.
+  String get rootCall => rootToolCallId ?? parentToolCallId;
 }

@@ -62,6 +62,43 @@ final class MemorySessionStore implements SessionStore {
   }
 
   @override
+  Future<SessionSnapshot> openChild(
+    String journal, {
+    required SessionId rootSessionId,
+  }) async {
+    final id = _childIdOf(journal);
+    final segments = journal.split('/');
+    final text = _children[id] ?? (throw SessionNotFound(id));
+    final parsed = parseSessionLines(text, id: id, logger: logger);
+    // Адрес — `subagents/<корень>/<id>.jsonl`: дерево чужого корня и
+    // заголовок с другим id отвергаются.
+    if (segments.length != 3 ||
+        segments[1] != rootSessionId.value ||
+        parsed.snapshot.header.id != id ||
+        parsed.snapshot.header.parent?.rootSessionId != rootSessionId) {
+      throw SessionNotFound(id);
+    }
+    if (parsed.quarantine.isNotEmpty) {
+      _children[id] = parsed.onlyTailBroken
+          ? text.substring(0, text.lastIndexOf('\n') + 1)
+          : '${parsed.keptLines.join('\n')}\n';
+    } else if (parsed.missingFinalNewline) {
+      _children[id] = '$text\n';
+    }
+    return parsed.snapshot;
+  }
+
+  /// Id потомка из адреса `subagents/<корень>/<id>.jsonl`.
+  static SessionId _childIdOf(String journal) {
+    final name = journal.split('/').last;
+    return SessionId(
+      name.endsWith('.jsonl')
+          ? name.substring(0, name.length - '.jsonl'.length)
+          : name,
+    );
+  }
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {

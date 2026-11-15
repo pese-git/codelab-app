@@ -172,11 +172,21 @@ final class TaskCreateTool extends _TaskTool {
 /// заметки (`in_progress` при незавершённых блокерах, несколько
 /// `in_progress`).
 final class TaskUpdateTool extends _TaskTool {
+  TaskUpdateTool({this.forSubagent = false});
+
+  /// Детский вариант (D46, п. 4): то же имя и схема параметров, но описание
+  /// говорит, что потомок меняет только статус своего пункта. Дети видели
+  /// описание корня и отмечали чужие пункты (`task.rejected reason=owner`).
+  /// Описание одно на всех потомков — кэш промпта не зависит от ребёнка.
+  final bool forSubagent;
+
   @override
   String get name => 'task_update';
 
   @override
-  String get description => Prompts.toolDescriptionsTaskUpdate.render(const {});
+  String get description => forSubagent
+      ? Prompts.toolDescriptionsTaskUpdateSubagent.render(const {})
+      : Prompts.toolDescriptionsTaskUpdate.render(const {});
 
   @override
   Map<String, Object?> get parameters => const {
