@@ -1170,12 +1170,12 @@ class _StatusPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final cubit = context.read<McpSettingsCubit>();
     final secondary = FluentTheme.of(context).resources.textFillColorSecondary;
-    final Widget caption;
+    final Widget? caption;
     final List<Widget> actions;
     final Widget body;
     switch (status) {
       case McpAgentStatusUnavailable():
-        caption = const SizedBox.shrink();
+        caption = null;
         actions = const [];
         body = CodeLabText(
           'Open a session to see live status',
@@ -1225,18 +1225,25 @@ class _StatusPanel extends StatelessWidget {
           ],
         );
       case McpAgentStatusText(:final text, :final canSend, :final notice):
-        caption = const SizedBox.shrink();
+        caption = null;
+        // Пара кнопок — одна группа с промежутком 8, чтобы Wrap заголовка
+        // не растягивал её до 12 и мог перенести группу целиком.
         actions = [
-          CodeLabButton(
-            key: const ValueKey('mcp-status-refresh'),
-            label: 'Refresh',
-            onPressed: canSend ? () => unawaited(cubit.refresh()) : null,
-          ),
-          const SizedBox(width: 8),
-          CodeLabButton(
-            key: const ValueKey('mcp-status-reload-all'),
-            label: 'Reload all',
-            onPressed: canSend ? () => unawaited(cubit.reloadAll()) : null,
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              CodeLabButton(
+                key: const ValueKey('mcp-status-refresh'),
+                label: 'Refresh',
+                onPressed: canSend ? () => unawaited(cubit.refresh()) : null,
+              ),
+              CodeLabButton(
+                key: const ValueKey('mcp-status-reload-all'),
+                label: 'Reload all',
+                onPressed: canSend ? () => unawaited(cubit.reloadAll()) : null,
+              ),
+            ],
           ),
         ];
         body = Column(
@@ -1267,17 +1274,31 @@ class _StatusPanel extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
+            // Заголовок занимает свою естественную ширину, а индикатор и
+            // кнопки справа переносятся строками (Wrap): при 800 pt окна
+            // странице достаётся ~400 pt, и в одной строке заголовок
+            // сжимался до слогов («Age / nt st / atus»), а Row переполнялся
+            // (окно по умолчанию, `MainMenu.xib`). На широком окне всё остаётся
+            // в одну строку, прижатое вправо, как в артборде `Mcp`.
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Expanded(
+                const Padding(
+                  padding: EdgeInsets.only(top: 4, right: 12),
                   child: CodeLabText(
                     'Agent status',
                     role: CodeLabTextRole.strong,
                   ),
                 ),
-                caption,
-                if (actions.isNotEmpty) const SizedBox(width: 12),
-                ...actions,
+                Expanded(
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 4,
+                    children: [?caption, ...actions],
+                  ),
+                ),
               ],
             ),
           ),
