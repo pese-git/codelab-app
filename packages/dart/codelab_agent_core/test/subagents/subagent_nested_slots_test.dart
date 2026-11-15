@@ -61,7 +61,7 @@ void main() {
                 oneCallStep(
                   'g1',
                   'agent',
-                  agentArgs('gamma', description: 'G'),
+                  agentArgs('gamma', description: 'Gamma'),
                 ),
                 replyStep('alpha done'),
               ],
@@ -69,7 +69,7 @@ void main() {
                 oneCallStep(
                   'd1',
                   'agent',
-                  agentArgs('delta', description: 'D'),
+                  agentArgs('delta', description: 'Delta'),
                 ),
                 replyStep('beta done'),
               ],
@@ -280,7 +280,7 @@ void main() {
           replyStep('never requested'),
         ],
         'alpha': [
-          oneCallStep('g1', 'agent', agentArgs('gamma', description: 'G')),
+          oneCallStep('g1', 'agent', agentArgs('gamma', description: 'Gamma')),
           replyStep('never requested'),
         ],
         'xholder': [
@@ -338,12 +338,16 @@ void main() {
         config: tree(maxConcurrent: 1),
         scripts: {
           'go': [
-            oneCallStep('a1', 'agent', agentArgs('alpha', description: 'A')),
+            oneCallStep(
+              'a1',
+              'agent',
+              agentArgs('alpha', description: 'Alpha'),
+            ),
             replyStep('done'),
           ],
           'alpha': [
             multiCallStep([
-              ('g1', 'agent', agentArgs('gamma', description: 'G')),
+              ('g1', 'agent', agentArgs('gamma', description: 'Gamma')),
               ('r1', 'read', {'path': 'a.txt'}),
             ]),
             replyStep('alpha done'),
@@ -405,12 +409,16 @@ void main() {
           config: tree(maxConcurrent: 1),
           scripts: {
             'go': [
-              oneCallStep('a1', 'agent', agentArgs('alpha', description: 'A')),
+              oneCallStep(
+                'a1',
+                'agent',
+                agentArgs('alpha', description: 'Alpha'),
+              ),
               replyStep('done'),
             ],
             'alpha': [
               multiCallStep([
-                ('g1', 'agent', agentArgs('gamma', description: 'G')),
+                ('g1', 'agent', agentArgs('gamma', description: 'Gamma')),
                 ('w1', 'write', {'path': 'f.txt', 'content': 'x'}),
               ]),
               replyStep('alpha done'),

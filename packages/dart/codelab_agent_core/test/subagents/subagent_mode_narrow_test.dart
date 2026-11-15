@@ -184,4 +184,37 @@ void main() {
     );
     expect(await env.stat('/proj/free.txt'), isA<Ok<FileStat, FileError>>());
   });
+
+  test('сужение по цепочке (D6, D7, SUB-2): внук типа без режима под '
+      'ребёнком в plan не может писать, хотя корень в bypass', () async {
+    final gate = FakeGate();
+    final rig = SubagentRig(
+      gate: gate,
+      projectFiles: AgentsPort([
+        agentFile('planner', extra: {'mode': 'plan'}),
+      ]),
+      config: rigConfig(mode: ModeId.bypass),
+      scripts: {
+        'go': [
+          oneCallStep('c1', 'agent', agentArgs('kid job', type: 'planner')),
+          replyStep('done'),
+        ],
+        'kid job': [
+          oneCallStep('g1', 'agent', agentArgs('grand job', type: 'general')),
+          replyStep('kid done'),
+        ],
+        'grand job': [
+          oneCallStep('w1', 'write', {'path': 'a.txt', 'content': 'x'}),
+          replyStep('grand done'),
+        ],
+      },
+    );
+    await rig.open();
+
+    await rig.run('go');
+
+    final grand = rig.requestsOf('grand job').last;
+    expect(resultIsError(grand, 'w1'), isTrue);
+    expect(gate.requests, isEmpty, reason: 'запрет режима — без вопроса');
+  });
 }

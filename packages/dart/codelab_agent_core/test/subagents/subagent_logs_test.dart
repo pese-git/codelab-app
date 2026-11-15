@@ -98,4 +98,40 @@ void main() {
     expect(denied.fields['subagent_id'], started.subagentId);
     expect(denied.fields['parent_tool_call_id'], 'c1');
   });
+
+  test('менеджер потомка: session_id — сессия, запустившая внука, '
+      'root_session_id — корень дерева (D45 Т11, D18)', () async {
+    final rig = SubagentRig(
+      scripts: {
+        'go': [
+          oneCallStep('c1', 'agent', agentArgs('kid job')),
+          replyStep('done'),
+        ],
+        'kid job': [
+          oneCallStep('g1', 'agent', agentArgs('grand job')),
+          replyStep('kid done'),
+        ],
+        'grand job': [replyStep('grand done')],
+      },
+    );
+    await rig.open();
+
+    await rig.run('go');
+
+    final kid = rig.eventsOf<SubagentStarted>().single;
+    final spawns = rig.logger.eventsOf('subagent.spawn');
+    expect(spawns, hasLength(2));
+    final nested = spawns.last;
+    expect(nested.fields['session_id'], kid.childSessionId.value);
+    expect(nested.fields['root_session_id'], rig.session.id.value);
+    expect(nested.fields['tool_call_id'], 'g1');
+    expect(nested.fields['depth'], 2);
+    final grand = allStarted(rig).last;
+    final release = rig.logger
+        .eventsOf('subagent.slot.release')
+        .where((r) => r.fields['subagent_id'] == grand.subagentId)
+        .single;
+    expect(release.fields['session_id'], kid.childSessionId.value);
+    expect(release.fields['root_session_id'], rig.session.id.value);
+  });
 }

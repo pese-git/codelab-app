@@ -477,6 +477,12 @@ final class JournalStore implements SessionStore {
   Future<String> createChild(SessionHeader header) => inner.createChild(header);
 
   @override
+  Future<SessionSnapshot> openChild(
+    String journal, {
+    required SessionId rootSessionId,
+  }) => inner.openChild(journal, rootSessionId: rootSessionId);
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {

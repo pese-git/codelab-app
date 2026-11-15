@@ -70,6 +70,60 @@ void main() {
     );
   });
 
+  test('внук застрял в инструменте: после grace ребёнок и внук — по одному '
+      'SubagentFinished(cancelled), ход завершается, менеджер внука '
+      'закрывается вместе с сессией ребёнка (D5, D45 Т2)', () async {
+    final hang = Completer<Result<String, FileError>>();
+    final env = _HangingEnv(hang.future);
+    final rig = SubagentRig(
+      baseEnv: env,
+      config: CoreConfig(
+        defaultModel: subagentTestModel,
+        subagents: const SubagentsConfig(cancelGrace: Duration(seconds: 5)),
+      ),
+      scripts: {
+        'go': [
+          oneCallStep('c1', 'agent', agentArgs('kid job')),
+          replyStep('never requested'),
+        ],
+        'kid job': [
+          oneCallStep('g1', 'agent', agentArgs('stuck grand')),
+          replyStep('never requested'),
+        ],
+        'stuck grand': [
+          oneCallStep('r1', 'read', {'path': 'a.txt'}),
+          replyStep('never requested'),
+        ],
+      },
+    );
+    await rig.open();
+
+    final turn = rig.run('go');
+    await pumpUntil(() => env.reading, reason: 'the grandchild never read');
+    await rig.session.cancel();
+    await pumpEventQueue(times: 30);
+    await rig.clock.elapse(const Duration(seconds: 5));
+    final result = await turn;
+
+    expect(result.reason, TurnEndReason.cancelled);
+    // Ребёнок объявлен отменённым по grace раньше, чем завершились его
+    // потомки: события внука после итога ребёнка до клиента не доходят.
+    final kid = rig.eventsOf<SubagentFinished>().single;
+    expect(kid.status, SubagentState.cancelled);
+    final at = rig.events.indexOf(kid);
+    expect(rig.events.skip(at + 1).whereType<SubagentActivity>(), isEmpty);
+
+    hang.complete(Err(FileError(FileErrorCode.notFound, 'a.txt')));
+    await pumpUntil(
+      () => rig.logger.eventsOf('subagent.slot.release').length == 2,
+      reason: 'both slots are released after the real stop',
+    );
+    // Менеджер внука довёл его до итога в журнале ребёнка (SUB-4, SUB-6).
+    final kidJournal = rig.store.textOf(kid.childSessionId!)!;
+    expect(kidJournal, contains('"status":"cancelled"'));
+    expect(rig.eventsOf<SubagentFinished>(), hasLength(1));
+  });
+
   test('таймер grace не создаётся после завершения вызова', () async {
     final rig = SubagentRig(
       scripts: {

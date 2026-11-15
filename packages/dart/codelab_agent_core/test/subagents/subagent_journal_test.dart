@@ -672,11 +672,158 @@ void main() {
       expect(failed.fields['subagent_id'], kidSubagent);
       expect(failed.fields['session_id'], rootId.value);
       expect(failed.fields['error_class'], isA<String>());
+      expect(failed.error, isNull, reason: 'в тексте ошибки может быть путь');
       expect(
         failed.fields.values.join(' '),
         isNot(contains('.jsonl')),
         reason: 'в логе нет пути журнала',
       );
+    });
+
+    test(
+      'цикл в ссылках на журналы (A → B → A и ссылка на себя): лечение '
+      'завершается, корень открывается, каждый журнал вылечен один раз',
+      () async {
+        final store = MemorySessionStore();
+        final a = await store.createChild(
+          headerOf(kidId, rootId, 'c1', kidSubagent, 1),
+        );
+        final b = await store.createChild(
+          headerOf(grandId, kidId, 'g1', grandSubagent, 2),
+        );
+        Future<void> loop(
+          SessionId id,
+          String callId,
+          SessionId to,
+          String path,
+        ) => putLines(store, id, [
+          user('u$callId', null, text: 'x'),
+          answer(
+            'a$callId',
+            'u$callId',
+            calls: [
+              (callId, 'agent', {'description': 'Loop', 'prompt': 'x'}),
+            ],
+          ),
+          runningRecord(
+            's$callId',
+            'a$callId',
+            subagentId: 'sub_$callId',
+            callId: callId,
+            childId: to,
+            journal: path,
+          ),
+        ]);
+        await loop(kidId, 'k1', grandId, b);
+        await loop(grandId, 'g9', kidId, a);
+        store.putText(
+          rootId,
+          journal([
+            header(cwd: '/proj', id: rootId.value),
+            modelChange('m1', null),
+            user('u1', 'm1', text: 'run it'),
+            answer(
+              'a1',
+              'u1',
+              calls: [
+                ('c1', 'agent', {'description': 'Kid job', 'prompt': 'kid'}),
+              ],
+            ),
+            runningRecord(
+              's1',
+              'a1',
+              subagentId: kidSubagent,
+              callId: 'c1',
+              childId: kidId,
+              journal: a,
+            ),
+          ]),
+        );
+        final rig = SubagentRig(store: store, scripts: const {});
+
+        await rig.load(rootId);
+
+        expect(results(store.textOf(rootId)!).single['outcome'], 'interrupted');
+        expect(results(store.textOf(kidId)!), hasLength(1));
+        expect(results(store.textOf(grandId)!), hasLength(1));
+        expect(rig.logger.eventsOf('subagent.heal_failed'), isEmpty);
+      },
+    );
+
+    test('цепочка журналов глубже предела (подложенный журнал): глубже 3 не '
+        'лечится, лог heal_failed, корень открывается', () async {
+      final store = MemorySessionStore();
+      final ids = [
+        for (var i = 0; i < 5; i++) SessionId('01JB8Q3A1D2E3F4G5H6J7K8M9$i'),
+      ];
+      final paths = <String>[];
+      for (var i = 0; i < ids.length; i++) {
+        paths.add(
+          await store.createChild(
+            headerOf(
+              ids[i],
+              i == 0 ? rootId : ids[i - 1],
+              'k$i',
+              'sub_k$i',
+              i + 1,
+            ),
+          ),
+        );
+      }
+      for (var i = 0; i < ids.length; i++) {
+        await putLines(store, ids[i], [
+          user('u$i', null, text: 'x'),
+          answer(
+            'a$i',
+            'u$i',
+            calls: [
+              ('call$i', 'agent', {'description': 'Deep', 'prompt': 'x'}),
+            ],
+          ),
+          if (i + 1 < ids.length)
+            runningRecord(
+              's$i',
+              'a$i',
+              subagentId: 'sub_k${i + 1}',
+              callId: 'call$i',
+              childId: ids[i + 1],
+              journal: paths[i + 1],
+            ),
+        ]);
+      }
+      store.putText(
+        rootId,
+        journal([
+          header(cwd: '/proj', id: rootId.value),
+          modelChange('m1', null),
+          user('u1', 'm1', text: 'run it'),
+          answer(
+            'a1',
+            'u1',
+            calls: [
+              ('c1', 'agent', {'description': 'Kid job', 'prompt': 'kid'}),
+            ],
+          ),
+          runningRecord(
+            's1',
+            'a1',
+            subagentId: 'sub_k0',
+            callId: 'c1',
+            childId: ids[0],
+            journal: paths[0],
+          ),
+        ]),
+      );
+      final rig = SubagentRig(store: store, scripts: const {});
+
+      await rig.load(rootId);
+
+      expect(results(store.textOf(rootId)!), hasLength(1));
+      for (var i = 0; i < 3; i++) {
+        expect(results(store.textOf(ids[i])!), hasLength(1), reason: '$i');
+      }
+      expect(results(store.textOf(ids[3])!), isEmpty, reason: 'глубина 4');
+      expect(rig.logger.eventsOf('subagent.heal_failed'), hasLength(1));
     });
   });
 }
