@@ -54,7 +54,7 @@ void main() {
       clock: FakeClock(),
       logger: logger,
       sessionId: const SessionId('root'),
-      rootBudget: () => const TurnBudget(),
+      ownBudget: () => const TurnBudget(),
       parent: () => SubagentParent(
         tools: () => const [],
         model: () => ModelRef(

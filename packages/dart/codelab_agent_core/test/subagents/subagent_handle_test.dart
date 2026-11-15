@@ -35,7 +35,7 @@ void main() {
       clock: clock,
       logger: RecordingLogger(),
       sessionId: const SessionId('root'),
-      rootBudget: () => const TurnBudget(),
+      ownBudget: () => const TurnBudget(),
       parent: () => SubagentParent(
         tools: () => const [],
         model: () => h.config().model,

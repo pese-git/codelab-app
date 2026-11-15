@@ -22,7 +22,7 @@ void main() {
       clock: clock,
       logger: logger,
       sessionId: const SessionId('root'),
-      rootBudget: () => const TurnBudget(),
+      ownBudget: () => const TurnBudget(),
       parent: () => throw StateError('no child must be created'),
     );
     final tool = SubagentTool(
@@ -79,7 +79,7 @@ void main() {
         clock: clock,
         logger: logger,
         sessionId: const SessionId('root'),
-        rootBudget: () => const TurnBudget(),
+        ownBudget: () => const TurnBudget(),
         parent: () => throw StateError('no child'),
       ),
       types: buildSubagentTypes(const []),
