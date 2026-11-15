@@ -1,0 +1,1298 @@
+{
+  "id": "acp/session-load-subagent-tool-tree",
+  "spec": [
+    "03-Session Setup.md#loading-a-session",
+    "03-Session Setup.md#loading-sessions",
+    "08-Tool Calls.md#creating",
+    "15-Extensibility.md#the-_meta-field"
+  ],
+  "description": "Живой ход фикстуры acp/prompt-subagent-tool-tree (ребёнок и внук, клиент объявил subagentToolCalls), затем session/load той же сессии в том же соединении по образцу acp/session-load-replay: агент повторяет историю, и сразу после tool_call вызова agent идут вызовы потомков из их журналов, рекурсивно, с итоговыми статусами и теми же toolCallId и _meta.codelab.parentToolCallId (D47 Т6, Т7). Загрузчик setup.sessions не меняется: журналы с диска новым процессом проверяет тест ядра на JsonlSessionStore. Зеленеет в агентском прогоне после 5.2 и 5.3, в клиентском после 5.4 (change add-subagents-and-tasks, задача 5.1; agent-acp-server «Реплей дерева»; design.md D21, D47 Т6, Т7, Т8).",
+  "goals": [
+    "C-06"
+  ],
+  "extensions": [
+    "capabilities",
+    "subagent",
+    "parentToolCallId"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "files": {
+      "lib/auth.dart": "void login() {}\n",
+      "test/auth_test.dart": "void main() {}\n"
+    },
+    "clientCapabilities": {
+      "fs": {
+        "readTextFile": true,
+        "writeTextFile": true
+      },
+      "terminal": true,
+      "_meta": {
+        "codelab": {
+          "tasks": {
+            "version": 1
+          },
+          "subagents": {
+            "version": 1
+          },
+          "subagentToolCalls": {
+            "version": 1
+          }
+        }
+      }
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "авторизац"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "agent",
+              "arguments": {
+                "type": "general",
+                "description": "Audit auth",
+                "prompt": "Read lib/auth.dart, then delegate listing of the tests to an explorer and report both."
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "Read lib/auth.dart"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "read",
+              "arguments": {
+                "path": "lib/auth.dart"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 1000,
+          "output": 40
+        }
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_2",
+              "name": "agent",
+              "arguments": {
+                "type": "explore",
+                "description": "List tests",
+                "prompt": "List the files in the test directory."
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 1200,
+          "output": 50
+        }
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "List the files"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "ls",
+              "arguments": {
+                "path": "test"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 700,
+          "output": 30
+        }
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "The test directory contains auth_test.dart."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 900,
+          "output": 120
+        }
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "toolResult": {
+            "toolCallId": "call_2",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Authentication is in lib/auth.dart; its tests are in test/auth_test.dart."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 1800,
+          "output": 80
+        }
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Аудит выполнен: см. отчёт субагента."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "пользователь просит проверить авторизацию; модель поручает работу субагенту general",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Проверь авторизацию и тесты"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D28: вызов agent корня опознаётся по _meta.codelab.subagent {id, type} с первого кадра; без parentToolCallId: это не вызов потомка",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": "Subagent general: Audit auth",
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "type": "general",
+              "description": "Audit auth",
+              "prompt": "Read lib/auth.dart, then delegate listing of the tests to an explorer and report both."
+            },
+            "_meta": {
+              "codelab": {
+                "subagent": {
+                  "id": {
+                    "$capture": "subagentId"
+                  },
+                  "type": "general"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "$partial": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "call_1",
+              "status": "in_progress"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "строки прогресса вызова agent корня: число не фиксируется (§17.3.2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "general · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "repeat": "+",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "D47 Т2: toolCallId потомка — цепочка «префикс/id вызова», _meta.codelab.parentToolCallId — вызов agent, запустивший его (у ребёнка — вызов корня)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1/call_1",
+            "title": {
+              "$contains": "lib/auth.dart"
+            },
+            "kind": "read",
+            "status": "pending",
+            "rawInput": {
+              "path": "lib/auth.dart"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/lib/auth.dart"
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D48 п. 1: pending → in_progress → итог, как у вызова корня; хук markInProgress ядра виден потомку",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "$partial": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "call_1/call_1",
+              "status": "in_progress"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "чтение потомка идёт через клиента, как у корня (D36 Т9)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "read1"
+        },
+        "method": "fs/read_text_file",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "path": "${cwd}/lib/auth.dart"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${read1}",
+        "result": {
+          "content": "void login() {}\n"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "строки прогресса вызова agent корня: число не фиксируется (§17.3.2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "general · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "repeat": "+",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1/call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "1| void login() {}"
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "строки прогресса вызова agent корня: число не фиксируется (§17.3.2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "general · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "repeat": "+",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "Q16, D28: tool_call вложенного agent несёт _meta.codelab.subagent {id, type} внука — как вызов agent корня; parentToolCallId — вызов ребёнка в цепочке корня",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1/call_2",
+            "title": "Subagent explore: List tests",
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "type": "explore",
+              "description": "List tests",
+              "prompt": "List the files in the test directory."
+            },
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1",
+                "subagent": {
+                  "id": {
+                    "$capture": "grandchildId"
+                  },
+                  "type": "explore"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "$partial": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "call_1/call_2",
+              "status": "in_progress"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "строки прогресса вызова agent корня: число не фиксируется (§17.3.2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "general · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "repeat": "+",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "строки прогресса вложенного agent: число не фиксируется",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1/call_2",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "explore · "
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1"
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "строки прогресса вызова agent корня: число не фиксируется (§17.3.2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "general · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "repeat": "+",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "внук: цепочка из трёх сегментов, parentToolCallId — цепочка вызова agent ребёнка (D47 Т2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1/call_2/call_1",
+            "title": {
+              "$contains": "test"
+            },
+            "kind": "search",
+            "status": "pending",
+            "rawInput": {
+              "path": "test"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/test"
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1/call_2"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "$partial": {
+              "sessionUpdate": "tool_call_update",
+              "toolCallId": "call_1/call_2/call_1",
+              "status": "in_progress"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1/call_2/call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "auth_test.dart"
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1/call_2"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "строки прогресса вызова agent корня: число не фиксируется (§17.3.2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "general · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "repeat": "+",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "строки прогресса вложенного agent: число не фиксируется",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1/call_2",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "explore · "
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1"
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "строки прогресса вызова agent корня: число не фиксируется (§17.3.2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "general · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "repeat": "+",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "D47 Т3: финальное обновление вложенного agent несёт summary внука (D24), как у корня",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1/call_2",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "The test directory contains auth_test.dart."
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1",
+                "subagent": {
+                  "id": "${grandchildId}",
+                  "summary": {
+                    "toolCalls": 1,
+                    "tokens": {
+                      "input": 1600,
+                      "output": 150
+                    },
+                    "durationMs": {
+                      "$any": 48000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "строки прогресса вызова agent корня: число не фиксируется (§17.3.2)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "general · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "repeat": "+",
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "итог корневого вызова транзитивен (D45 Т5): read и agent ребёнка и ls внука, токены всех",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "Authentication is in lib/auth.dart; its tests are in test/auth_test.dart."
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "subagent": {
+                  "id": "${subagentId}",
+                  "summary": {
+                    "toolCalls": 3,
+                    "tokens": {
+                      "input": 5600,
+                      "output": 320
+                    },
+                    "durationMs": {
+                      "$any": 48000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "текстов и мыслей потомков в кадрах нет: только ответ корня",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Аудит выполнен: см. отчёт субагента."
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "загрузка той же сессии в том же соединении: реплей открытой сессии из хранилища агента (D47 Т7)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "loadId"
+        },
+        "method": "session/load",
+        "params": {
+          "sessionId": "${sessionId}",
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "реплей: слова пользователя (agent-core §13.5, шаг 5)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Проверь авторизацию и тесты"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "вызов agent корня — один tool_call с итоговым статусом, {id, type} и summary (D24, D28)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": "Subagent general: Audit auth",
+            "kind": "think",
+            "status": "completed",
+            "rawInput": {
+              "type": "general",
+              "description": "Audit auth",
+              "prompt": "Read lib/auth.dart, then delegate listing of the tests to an explorer and report both."
+            },
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "Authentication is in lib/auth.dart; its tests are in test/auth_test.dart."
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "subagent": {
+                  "id": "${subagentId}",
+                  "type": "general",
+                  "summary": {
+                    "toolCalls": 3,
+                    "tokens": {
+                      "input": 5600,
+                      "output": 320
+                    },
+                    "durationMs": {
+                      "$any": 48000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D47 Т6: сразу после tool_call вызова agent — вызовы ребёнка из его журнала, с итоговыми статусами и теми же toolCallId и parentToolCallId, что вживую",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1/call_1",
+            "title": {
+              "$contains": "lib/auth.dart"
+            },
+            "kind": "read",
+            "status": "completed",
+            "rawInput": {
+              "path": "lib/auth.dart"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/lib/auth.dart"
+              }
+            ],
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "1| void login() {}"
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "вложенный agent: {id, type, summary} внука в одном кадре (D28, D47 Т3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1/call_2",
+            "title": "Subagent explore: List tests",
+            "kind": "think",
+            "status": "completed",
+            "rawInput": {
+              "type": "explore",
+              "description": "List tests",
+              "prompt": "List the files in the test directory."
+            },
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "The test directory contains auth_test.dart."
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1",
+                "subagent": {
+                  "id": "${grandchildId}",
+                  "type": "explore",
+                  "summary": {
+                    "toolCalls": 1,
+                    "tokens": {
+                      "input": 1600,
+                      "output": 150
+                    },
+                    "durationMs": {
+                      "$any": 48000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "реплей рекурсивен: вызовы внука идут после вызова agent ребёнка (глубина до 3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1/call_2/call_1",
+            "title": {
+              "$contains": "test"
+            },
+            "kind": "search",
+            "status": "completed",
+            "rawInput": {
+              "path": "test"
+            },
+            "locations": [
+              {
+                "path": "${cwd}/test"
+              }
+            ],
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "auth_test.dart"
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "parentToolCallId": "call_1/call_2"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "тексты потомков в реплее не проигрываются",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Аудит выполнен: см. отчёт субагента."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "после истории — режим, опции, команды, заголовок (agent-core §13.5, шаг 6)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "standard"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/load — после реплея (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${loadId}",
+        "result": {
+          "modes": {
+            "$any": {
+              "availableModes": [
+                {
+                  "id": "standard",
+                  "name": "Standard"
+                }
+              ],
+              "currentModeId": "standard"
+            }
+          },
+          "configOptions": {
+            "$any": []
+          }
+        }
+      }
+    }
+  ],
+  "roles": [
+    "agent",
+    "client"
+  ]
+}

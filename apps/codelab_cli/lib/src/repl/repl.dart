@@ -626,7 +626,9 @@ final class Repl implements ReplContext {
       case KeyAction.scrollUp ||
           KeyAction.scrollDown ||
           KeyAction.follow ||
-          KeyAction.toggleTasks:
+          KeyAction.toggleTasks ||
+          // ЗАГЛУШКА задачи 5.1: только TUI (D48 п. 2).
+          KeyAction.toggleDetails:
         return;
     }
   }

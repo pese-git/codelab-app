@@ -44,8 +44,10 @@ void main() {
     return response.resultMap;
   }
 
-  // «Субагенты выключены»: `subagents.enabled: false` — блок без ключа
-  // `subagents`; `tasks` есть всегда (D9).
+  // «Субагенты выключены»: `subagents.enabled: false` — блок без ключей
+  // `subagents` и `subagentToolCalls` (вызовов потомков нет без субагентов,
+  // D9, D47 Т12); `tasks` есть всегда. Зелёный и до 5.2: ключ не должен
+  // появиться при выключенных субагентах.
   test('subagents.enabled false: the block has only tasks', () async {
     final source = LayeredConfigSource(
       extra: {
@@ -71,6 +73,7 @@ void main() {
     final before = await h!.initialize(clientCapabilities: codelabClient);
     expect(codelabBlock(before.resultMap), {
       'subagents': {'version': 1, 'maxDepth': 3},
+      'subagentToolCalls': {'version': 1},
       'tasks': {'version': 1},
     });
 
@@ -85,6 +88,7 @@ void main() {
     // Ответ первого соединения — значение, а не живая ссылка.
     expect(codelabBlock(before.resultMap), {
       'subagents': {'version': 1, 'maxDepth': 3},
+      'subagentToolCalls': {'version': 1},
       'tasks': {'version': 1},
     });
   });
@@ -103,6 +107,7 @@ void main() {
 
     expect(codelabBlock(response.resultMap), {
       'subagents': {'version': 1, 'maxDepth': 2},
+      'subagentToolCalls': {'version': 1},
       'tasks': {'version': 1},
     });
   });

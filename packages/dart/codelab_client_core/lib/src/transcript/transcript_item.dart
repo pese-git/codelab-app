@@ -55,6 +55,20 @@ sealed class TranscriptItem with _$TranscriptItem {
     /// вызова потомка при строке корня нет; без дерева вызовов (этап 2)
     /// поле — единственное место его одобрения. У прочих строк пусто.
     @Default(<ApprovalStateView>[]) List<ApprovalStateView> childApprovals,
+
+    /// ЗАГЛУШКА задачи 5.1 (красные тесты; реализация — задача 5.4, D47 Т9):
+    /// вложенные элементы дерева вызовов потомков в порядке прихода —
+    /// [ToolCallItem] потомков и [TaskOpsItem] их операций со списком
+    /// (слияние только у соседей одного родителя, D48 п. 3). Пока всегда
+    /// пусто, а вызовы потомков остаются на верхнем уровне.
+    @Default(<TranscriptItem>[]) List<TranscriptItem> children,
+
+    /// ЗАГЛУШКА задачи 5.1: «хвост» работающего вызова `agent` (D25).
+    @Default(SubagentTailView()) SubagentTailView tail,
+
+    /// ЗАГЛУШКА задачи 5.1: число вызовов поддерева, включая вложенные
+    /// `agent` и операции (D47 Т9) — для счётчика `N tool calls`.
+    @Default(0) int subtreeCalls,
   }) = ToolCallItem;
 
   /// Операция со списком задач: тихая строка вместо вызова `think`
@@ -83,6 +97,17 @@ sealed class TranscriptItem with _$TranscriptItem {
     required String text,
     PromptFailure? failure,
   }) = NoticeItem;
+}
+
+/// ЗАГЛУШКА задачи 5.1: «хвост» работающего вызова `agent` (D25, D47 Т9) —
+/// [calls] три последних вызова поддерева по порядку прихода их `tool_call`,
+/// [moreCount] — остальные. Токенов нет (Q15). Пустой, пока вызовов потомков
+/// нет.
+final class SubagentTailView {
+  const SubagentTailView({this.calls = const [], this.moreCount = 0});
+
+  final List<ToolCallItem> calls;
+  final int moreCount;
 }
 
 /// Текст тихой строки операций со списком задач (D27).
@@ -149,6 +174,10 @@ abstract class ToolCallView with _$ToolCallView {
     /// Спрашивающий потомок вызова, объявленного только запросом разрешения
     /// (D15, D43 п. 1); не меняет [subagentCall]. Остаётся после решения.
     SubagentRequester? subagent,
+
+    /// ЗАГЛУШКА задачи 5.1: `_meta.codelab.parentToolCallId` кадров вызова
+    /// (D21, D47 Т9); `null` — вызов корня. Разбор — задача 5.4.
+    String? parentToolCallId,
   }) = _ToolCallView;
 }
 

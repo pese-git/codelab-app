@@ -29,7 +29,11 @@ enum KeyAction {
   follow('follow the output again'),
 
   /// Только TUI: спрятать и показать список задач над композером (D26).
-  toggleTasks('show or hide the task list');
+  toggleTasks('show or hide the task list'),
+
+  /// ЗАГЛУШКА задачи 5.1 (красные тесты): раскрыть и свернуть строки `agent`
+  /// в TUI (Ctrl+O, D48 п. 2). Пока ни к чему не привязано, ничего не делает.
+  toggleDetails('expand or collapse the agent rows');
 
   const KeyAction(this.description);
 

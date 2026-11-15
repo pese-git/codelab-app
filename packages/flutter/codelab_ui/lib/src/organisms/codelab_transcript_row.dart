@@ -90,6 +90,7 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
     this.approval,
     this.subagent,
     this.childApprovals = const [],
+    this.children = const [],
   });
 
   @override
@@ -109,6 +110,10 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
   /// решённые в порядке прихода (D27 п. 4, D43 п. 2). Блок рисуется под
   /// строкой и не раскрывает её; свой [approval] строки при этом пуст.
   final List<CodeLabTranscriptApproval> childApprovals;
+
+  /// ЗАГЛУШКА задачи 5.1 (логика — 5.5): вложенные строки потомков в теле
+  /// раскрытой строки `agent` (D47 Т11); у остальных строк пусто.
+  final List<CodeLabTranscriptRow> children;
 
   /// Потомок под этой строкой ждёт решения: строка не крутит индикатор
   /// работы, решение принимается в блоке под ней.
@@ -138,10 +143,23 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
 /// «Subagent `type`: `description`» — в [CodeLabToolCallRow.label], отчёт — в
 /// [CodeLabToolCallRow.output].
 final class CodeLabSubagentCall {
-  const CodeLabSubagentCall({this.stats, this.progress});
+  const CodeLabSubagentCall({
+    this.stats,
+    this.progress,
+    this.tail = const [],
+    this.tailMore = 0,
+  });
 
   final String? stats;
   final String? progress;
+
+  /// ЗАГЛУШКА задачи 5.1 (логика — 5.5): «хвост» работающего `agent` — три
+  /// последних вызова поддерева (D25).
+  final List<CodeLabToolCallRow> tail;
+
+  /// ЗАГЛУШКА задачи 5.1: сколько вызовов поддерева не вошло в [tail]
+  /// («+N more tool calls»).
+  final int tailMore;
 
   @override
   bool operator ==(Object other) =>

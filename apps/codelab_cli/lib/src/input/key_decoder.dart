@@ -31,6 +31,11 @@ enum Key {
   ctrlE('Ctrl+E'),
   ctrlL('Ctrl+L'),
 
+  /// ЗАГЛУШКА задачи 5.1 (красные тесты): раскрыть строки `agent` в TUI
+  /// (`toggle_details`, design.md change `add-subagents-and-tasks`, D48 п. 2).
+  /// Привязка, декодирование и действие — задача 5.4.
+  ctrlO('Ctrl+O'),
+
   /// Показать и спрятать значение в скрытом поле ключа мастера провайдера
   /// (design.md change `add-provider-setup-ui`, D15, U-17).
   ctrlR('Ctrl+R'),

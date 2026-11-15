@@ -206,6 +206,13 @@ sealed class ToolCallRecord with _$ToolCallRecord {
     /// признаку агента», design.md D41 п. 1). Значение не проверяется:
     /// терпимый разбор — у kit.
     String? outcome,
+
+    /// ЗАГЛУШКА задачи 5.1 (красные тесты): `_meta.codelab.parentToolCallId`
+    /// кадров `tool_call`/`tool_call_update` — id вызова `agent` родителя на
+    /// проводе (design.md change `add-subagents-and-tasks`, D21, D47 Т9).
+    /// Разбор из `_meta` и слияние кадров — задача 5.4; пока поле всегда
+    /// `null`.
+    String? parentToolCallId,
   }) = _ToolCallRecord;
 
   factory ToolCallRecord.fromToolCall(

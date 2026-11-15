@@ -292,3 +292,20 @@ String _encodeCursor(SessionSummary last) => base64Url
     throw InvalidCursor(cursor);
   }
 }
+
+/// КРАСНАЯ ЗАГЛУШКА задачи 5.1 (change `add-subagents-and-tasks`, D47 Т5):
+/// чтение журнала потомка для реплея дерева без записи и без lease.
+///
+/// Почему расширение, а не член порта: настоящий член `SessionStore` ломает
+/// компиляцию внешних реализаций и тестовых двойников порта (`JournalStore`
+/// в `codelab_agent_acp`) раньше, чем их владельцы дойдут до задачи 5.3.
+/// Задача 5.3 заменяет заглушку членом интерфейса и реализациями в
+/// `MemorySessionStore`, `JsonlSessionStore`, `CwdTrackingStore` и двойниках,
+/// а это расширение удаляет.
+// TODO(5.3): заменить членом SessionStore.
+extension OpenChildReadOnlyStub on SessionStore {
+  Future<SessionSnapshot> openChildReadOnly(
+    String journal, {
+    required SessionId rootSessionId,
+  }) => throw UnimplementedError('openChildReadOnly: задача 5.3');
+}

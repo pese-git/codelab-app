@@ -320,4 +320,208 @@ void main() {
       expect(target.readAsBytesSync(), before);
     });
   });
+
+  // Задача 5.1 (change `add-subagents-and-tasks`, D47 Т5): реплей дерева
+  // читает журнал потомка, который может ещё писать потомок, пережившего
+  // `cancel_grace`. Красная до задачи 5.3: `openChildReadOnly` — заглушка
+  // ядра, она бросает `UnimplementedError`.
+  group('openChildReadOnly (задача 5.1, D47 Т5)', () {
+    Future<String> seed() async {
+      final store = storeAt(root);
+      await store.create(headerOf(rootId));
+      final address = await store.createChild(
+        childHeader(
+          childId,
+          parentSession: rootId,
+          subagentId: 'sub_k3f9a1c2',
+          depth: 1,
+        ),
+      );
+      await store.append(
+        const SessionId(childId),
+        userRecord('cccccccc', null, 'sub task'),
+      );
+      await store.append(
+        const SessionId(childId),
+        userRecord('dddddddd', 'cccccccc', 'more'),
+      );
+      await store.close(const SessionId(childId));
+      await store.close(const SessionId(rootId));
+      return address;
+    }
+
+    /// Все файлы под корнем хранилища: путь → байты.
+    Map<String, List<int>> filesOf() => {
+      for (final f in Directory(root).listSync(recursive: true))
+        if (f is File) f.path: f.readAsBytesSync(),
+    };
+
+    test('оборванная последняя строка пропускается, файл остаётся побайтно '
+        'прежним и карантина не появляется', () async {
+      final address = await seed();
+      final file = File('$root/$address');
+      file.writeAsStringSync(
+        '{"type":"message","id":"eeeeeeee","parentId":"dddd',
+        mode: FileMode.append,
+      );
+      final before = filesOf();
+
+      final snapshot = await storeAt(
+        root,
+      ).openChildReadOnly(address, rootSessionId: const SessionId(rootId));
+
+      expect(snapshot.records.map((r) => r.id), ['cccccccc', 'dddddddd']);
+      expect(filesOf(), before, reason: 'ни ремонта, ни .corrupt на диске');
+    });
+
+    test('повреждённая строка в середине пропускается в снимке, а файл не '
+        'переписывается', () async {
+      final address = await seed();
+      final file = File('$root/$address');
+      final lines = file.readAsLinesSync();
+      file.writeAsStringSync(
+        '${[lines[0], lines[1], 'not json at all', lines[2]].join('\n')}\n',
+      );
+      final before = filesOf();
+
+      final snapshot = await storeAt(
+        root,
+      ).openChildReadOnly(address, rootSessionId: const SessionId(rootId));
+
+      expect(snapshot.records.map((r) => r.id), contains('cccccccc'));
+      expect(filesOf(), before);
+    });
+
+    test('путь не регистрируется для записи: в новом экземпляре append по id '
+        'ребёнка после чтения — SessionNotFound, а не запись в журнал '
+        'потомка', () async {
+      final address = await seed();
+      final fresh = storeAt(root);
+      await fresh.openChildReadOnly(
+        address,
+        rootSessionId: const SessionId(rootId),
+      );
+      final before = filesOf();
+
+      await expectLater(
+        fresh.append(
+          const SessionId(childId),
+          userRecord('eeeeeeee', 'dddddddd', 'must not land'),
+        ),
+        throwsA(isA<SessionNotFound>()),
+      );
+      expect(filesOf(), before);
+    });
+
+    test('экземпляр, который пишет журнал потомка, продолжает писать после '
+        'чтения: дескриптор не закрыт и запись не потеряна', () async {
+      final store = storeAt(root);
+      await store.create(headerOf(rootId));
+      final address = await store.createChild(
+        childHeader(
+          childId,
+          parentSession: rootId,
+          subagentId: 'sub_k3f9a1c2',
+          depth: 1,
+        ),
+      );
+      await store.append(
+        const SessionId(childId),
+        userRecord('cccccccc', null, 'sub task'),
+      );
+
+      final snapshot = await store.openChildReadOnly(
+        address,
+        rootSessionId: const SessionId(rootId),
+      );
+      await store.append(
+        const SessionId(childId),
+        userRecord('dddddddd', 'cccccccc', 'after read'),
+      );
+      await store.close(const SessionId(childId));
+
+      expect(snapshot.records.map((r) => r.id), ['cccccccc']);
+      expect(
+        File('$root/$address').readAsLinesSync(),
+        hasLength(3),
+        reason: 'заголовок и две записи, без дублей и потерь',
+      );
+    });
+
+    test(
+      'адрес вне subagents/ или с выходом наверх — SessionNotFound',
+      () async {
+        await seed();
+        final store = storeAt(root);
+
+        for (final bad in [
+          '../outside/2026-10-21T08-00-00-000Z_$childId.jsonl',
+          '/etc/2026-10-21T08-00-00-000Z_$childId.jsonl',
+          '${cwdSlug('/work/demo')}/2026-10-21T08-00-00-000Z_$rootId.jsonl',
+          'index.json',
+        ]) {
+          await expectLater(
+            store.openChildReadOnly(
+              bad,
+              rootSessionId: const SessionId(rootId),
+            ),
+            throwsA(isA<SessionNotFound>()),
+            reason: bad,
+          );
+        }
+      },
+    );
+
+    test('журнал чужого корня — SessionNotFound', () async {
+      final address = await seed();
+
+      await expectLater(
+        storeAt(root).openChildReadOnly(
+          address,
+          rootSessionId: const SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0S'),
+        ),
+        throwsA(isA<SessionNotFound>()),
+      );
+    });
+
+    test(
+      'заголовок с другим id, чем в имени файла, — SessionNotFound',
+      () async {
+        final address = await seed();
+        final file = File('$root/$address');
+        file.writeAsStringSync(
+          file.readAsStringSync().replaceFirst(
+            '"id":"$childId"',
+            '"id":"01JB8Q3A1D2E3F4G5H6J7K8M9Z"',
+          ),
+        );
+
+        await expectLater(
+          storeAt(
+            root,
+          ).openChildReadOnly(address, rootSessionId: const SessionId(rootId)),
+          throwsA(isA<SessionNotFound>()),
+        );
+      },
+    );
+
+    test('symlink внутри subagents/ наружу корня — SessionNotFound, внешний '
+        'файл не читается и не меняется', () async {
+      final address = await seed();
+      final outside = tempRoot('jsonl_outside_ro_', addTearDown);
+      final target = File('$outside/stolen_$childId.jsonl')
+        ..writeAsStringSync(File('$root/$address').readAsStringSync());
+      final before = target.readAsBytesSync();
+      File('$root/$address').deleteSync();
+      Link('$root/$address').createSync(target.path);
+
+      await expectLater(
+        storeAt(
+          root,
+        ).openChildReadOnly(address, rootSessionId: const SessionId(rootId)),
+        throwsA(isA<SessionNotFound>()),
+      );
+      expect(target.readAsBytesSync(), before);
+    });
+  });
 }
