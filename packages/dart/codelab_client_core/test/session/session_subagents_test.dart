@@ -12,9 +12,9 @@
 // `test/transcript/subagent_tool_tree_test.dart`. Фикстуры корпуса не
 // меняются (D49 Т12): клиентский прогон сверяет кадры, а не `subagents`.
 //
-// Тесты красные до 5b.2: `SessionView.subagents` пока заглушка и всегда пуста.
-// Тесты без `subagents` (характеристики слияния кадров, `ToolCallView`)
-// зелёные уже сейчас и фиксируют поведение, которое 5b.2 менять не вправе.
+// Тесты `SessionView.subagents` проверяют строки панели Agents (5b.2);
+// тесты без `subagents` (характеристики слияния кадров, `ToolCallView`)
+// фиксируют поведение слияния кадров, которое строки менять не вправе.
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';

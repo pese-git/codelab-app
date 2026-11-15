@@ -98,12 +98,12 @@ abstract class SessionView with _$SessionView {
     /// хост проверяет сам — оно в `WorkspaceState.connection`.
     @Default(false) bool canRetry,
 
-    /// Строки панели Agents v1 (D33). ЗАГЛУШКА 5b.1: всегда пусто до 5b.2.
+    /// Строки панели Agents v1 (D33): вызовы `agent` сессии обходом
+    /// транскрипта в глубину; пусто без субагентов и у стороннего агента.
     @Default(<SubagentRowView>[]) List<SubagentRowView> subagents,
   }) = _SessionView;
 
   /// Число строк [subagents] в состоянии [state] (счётчики заголовка панели).
-  /// ЗАГЛУШКА 5b.1: считает по [subagents]; логику строк даёт 5b.2.
   int subagentCount(SubagentRowState state) =>
       subagents.where((row) => row.state == state).length;
 }

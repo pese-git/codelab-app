@@ -1,7 +1,7 @@
-// Красные тесты задачи 5b.1 (`codelab_ui`) change `add-subagents-and-tasks`:
+// Тесты задачи 5b (`codelab_ui`) change `add-subagents-and-tasks`:
 // spec agent-workbench-ui «Панель Agents v1» (D33, D49 Т7 и Т10, D50 п. 3).
 // Вынесены в отдельный файл: организм `CodeLabAgentsPane` и запрос показа
-// строки у `CodeLabTranscriptPanel` появляются только в задаче 5b.3.
+// строки у `CodeLabTranscriptPanel`.
 //
 // Границы: организм не форматирует и не считает — время, число вызовов,
 // токены, метки `#N` приходят готовыми строками, а колбэки лишь сообщают
@@ -435,9 +435,40 @@ void main() {
           ),
           findsOneWidget,
         );
-        await tester.tap(_byKey('agents-go-to-approval-wait-1'));
+        await tester.tap(_byKey('agents-step-go-to-approval-wait-1'));
         await tester.pump();
         expect(went, ['wait-1']);
+      });
+
+      testWidgets('step with its own pending approval offers the jump too', (
+        tester,
+      ) async {
+        final went = <String>[];
+        await tester.pumpWidget(
+          _pane(
+            selectedId: 'tool-root',
+            onGoToApproval: went.add,
+            steps: [
+              CodeLabToolCallRow(
+                id: 'own-1',
+                status: CodeLabToolCallStatus.running,
+                label: 'Exec',
+                detail: 'rm -rf build',
+                approval: CodeLabTranscriptApproval.pending(
+                  risk: CodeLabApprovalRisk.shell,
+                  options: const [],
+                  onOptionSelected: (_) {},
+                ),
+              ),
+            ],
+          ),
+        );
+
+        // Решения в панели нет: только ссылка и тег, панели решения нет.
+        expect(find.byType(CodeLabApprovalPrompt), findsNothing);
+        await tester.tap(_byKey('agents-step-go-to-approval-own-1'));
+        await tester.pump();
+        expect(went, ['own-1']);
       });
     });
   });
@@ -567,6 +598,52 @@ void main() {
       );
     });
 
+    testWidgets('scrolls to a child approval block by its target id', (
+      tester,
+    ) async {
+      List<CodeLabTranscriptRow> rows() => [
+        CodeLabToolCallRow(
+          id: 'agent-1',
+          status: CodeLabToolCallStatus.running,
+          label: 'Subagent review: Review the change',
+          subagent: const CodeLabSubagentCall(),
+          childApprovals: [
+            CodeLabTranscriptApproval.pending(
+              targetId: 'approval-7',
+              risk: CodeLabApprovalRisk.shell,
+              command: 'git push',
+              options: const [],
+              onOptionSelected: (_) {},
+            ),
+          ],
+        ),
+        for (var i = 0; i < total; i++)
+          CodeLabAgentTextRow(id: 'text-$i', text: 'Answer paragraph $i'),
+      ];
+
+      await tester.pumpWidget(panel(rows()));
+      await scrollToBottom(tester);
+      await tester.pumpWidget(
+        panel(
+          rows(),
+          request: const CodeLabTranscriptShowRequest(
+            rowId: 'agent-1',
+            targetId: 'approval-7',
+            serial: 1,
+          ),
+        ),
+      );
+      await frames(tester);
+
+      final target = find.byKey(CodeLabTranscriptPanel.targetKey('approval-7'));
+      expect(target, findsOneWidget);
+      expect(isVisible(tester, target), isTrue);
+      expect(
+        find.byKey(CodeLabTranscriptPanel.highlightKey('approval-7')),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('a repeated request with a new serial scrolls again', (
       tester,
     ) async {
@@ -633,5 +710,78 @@ void main() {
         greaterThan(200),
       );
     });
+  });
+
+  // Узкий док (328 px): бейдж «waiting for approval» вместе с типом не должен
+  // давать RenderFlex overflow, бейдж усекается (D49 Т10).
+  testWidgets('a waiting row with a long type fits a narrow pane', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        // Align снимает жёсткие рамки экрана: без него SizedBox получает 800 px.
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 328,
+            height: 400,
+            child: CodeLabAgentsPane(
+              rows: [
+                CodeLabAgentRow(
+                  id: 'tool-long',
+                  depth: 1,
+                  type: 'explore',
+                  title: 'Find auth code',
+                  state: CodeLabAgentRowState.waitingForApproval,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('step approval link fits a narrow pane and is tappable', (
+    tester,
+  ) async {
+    String? went;
+    await tester.pumpWidget(
+      FluentApp(
+        // `Align` снимает жёсткие рамки окна: без него ширина — окно теста.
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 300,
+            height: 600,
+            child: CodeLabAgentsPane(
+              rows: const [_root],
+              selectedId: 'tool-root',
+              steps: const [
+                CodeLabToolCallRow(
+                  id: 'turn-1/tool-step',
+                  status: CodeLabToolCallStatus.running,
+                  label: 'Run a long command line',
+                  awaitsRootDecision: true,
+                ),
+              ],
+              onStepGoToApproval: (id) => went = id,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Бейдж и ссылка переносятся: переполнения `Row` нет.
+    expect(tester.takeException(), isNull);
+    final key = CodeLabAgentsPane.stepGoToApprovalKey('turn-1/tool-step');
+    final rect = tester.getRect(find.byKey(key));
+    expect(rect.right, lessThanOrEqualTo(300));
+
+    await tester.tap(find.byKey(key));
+    await tester.pump();
+    expect(went, 'turn-1/tool-step');
   });
 }

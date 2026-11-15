@@ -28,6 +28,7 @@ import '../../../core/platform/limited_network_image.dart';
 import '../../../core/platform/link_policy.dart';
 import '../../../core/platform/project_folder_picker.dart';
 import '../../settings/application/default_profile_resolver.dart';
+import 'agents_pane_data.dart' show AgentsShowTarget;
 import 'active_session_cubit.dart';
 import 'connection_cubit.dart';
 import 'layout_cubit.dart';
@@ -276,16 +277,25 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
        _eventLogger = eventLogger,
        _projectFilesBound = projectFilesBound,
        super(_compose(parts, projectFilesBound, workspace: workspace)) {
-    _parts.changes.listen(
-      () => emit(
+    _focusedSessionId = parts.activeSession.state.sessionId;
+    _parts.changes.listen(() {
+      // Запрос показа ленты разовый (D49 Т7): со сменой сессии в фокусе он
+      // гасится, иначе возврат в сессию повторил бы прокрутку. Гашение само
+      // сообщает об изменении, поэтому `_focusedSessionId` обновляется до него.
+      final focused = _parts.activeSession.state.sessionId;
+      if (focused != _focusedSessionId) {
+        _focusedSessionId = focused;
+        _parts.transcriptView.dropShowRequestOutside(focused);
+      }
+      emit(
         _compose(
           _parts,
           _projectFilesBound,
           workspace: _workspace,
           linkNote: _linkNote,
         ),
-      ),
-    );
+      );
+    });
     _diagnosticSubscription = _workspace.diagnostics.listen(
       _handleKitDiagnostic,
     );
@@ -303,6 +313,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// Канал событий `link.open` и `image.show` (D12): только схема, хост и
   /// исход, без пути и query.
   final Logger? _eventLogger;
+
+  /// Сессия в фокусе на прошлом изменении: по её смене гасится запрос показа.
+  String? _focusedSessionId;
 
   /// Заметка о неудачном открытии ссылки; живёт в фасаде, а не в частях, потому
   /// что принадлежит только ему.
@@ -494,6 +507,51 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   void openPane(ToolPane pane) => _layout.openPane(pane);
 
+  /// Выбор строки панели Agents сессии в фокусе (D49 Т8); без сессии — no-op.
+  void selectAgent(String agentId) {
+    final sessionId = _parts.activeSession.state.sessionId;
+    if (sessionId == null) {
+      return;
+    }
+    _parts.transcriptView.selectAgent(sessionId: sessionId, agentId: agentId);
+  }
+
+  /// «Show in transcript» панели Agents: раскрывает путь и прокручивает
+  /// ленту к строке [agentId] (D49 Т7). Только навигация по уже показанным
+  /// данным; строки нет — no-op.
+  void showAgentInTranscript(String agentId) {
+    final sessionId = _parts.activeSession.state.sessionId;
+    final target = state.agents.showTargetOf(agentId);
+    if (sessionId == null || target == null) {
+      return;
+    }
+    _parts.transcriptView.requestShow(sessionId: sessionId, target: target);
+  }
+
+  /// «Go to approval» панели Agents: прокручивает ленту к блоку одобрения
+  /// строки или шага [id]. Решение принимается только в самом блоке
+  /// (PERM-4); этот метод ответа не отправляет.
+  void goToAgentApproval(String id) =>
+      _goToApproval(state.agents.approvalTargetOf(id, state.transcriptRows));
+
+  /// «Go to approval» шага дерева [id] (id элемента ленты): одобрение берётся
+  /// только из `pendingApprovals`, строки панели с таким id не ищутся.
+  void goToAgentStepApproval(String id) => _goToApproval(
+    state.agents.stepApprovalTargetOf(id, state.transcriptRows),
+  );
+
+  void _goToApproval(AgentsShowTarget? target) {
+    final sessionId = _parts.activeSession.state.sessionId;
+    if (sessionId == null || target == null) {
+      return;
+    }
+    _parts.transcriptView.requestShow(sessionId: sessionId, target: target);
+  }
+
+  /// Лента закончила показ запроса [serial]: запрос разовый и гасится.
+  void finishTranscriptShow(int serial) =>
+      _parts.transcriptView.finishShowRequest(serial);
+
   void selectPane(ToolPane pane) => _layout.selectPane(pane);
 
   void closePane(ToolPane pane) => _layout.closePane(pane);
@@ -624,6 +682,12 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         // Протокол и debug log теперь — панель Protocol дока (change
         // `redesign-workbench-shell`, D5).
         _layout.openPane(ToolPane.protocol);
+      case 'agents':
+        // Пункт «Agents» палитры: открывает панель, пока у сессии есть
+        // субагенты (D49 Т11).
+        if (state.agentsAvailable) {
+          _layout.openPane(ToolPane.agents);
+        }
       case 'files':
         // Пункт «Files» палитры: тот же переключатель, что у app bar и
         // Cmd/Ctrl+Shift+E (design.md change `add-file-preview-and-tree`, D7).
@@ -712,11 +776,29 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       activePane: layout.activePane,
       dockOverlayOpen: layout.dockOverlayOpen,
       projectFilesAvailable: projectFilesAvailable,
+      agents: active.agents,
+      selectedAgentId: switch (transcriptView.selectedAgentFor(
+        active.sessionId,
+      )) {
+        final id? when active.agents.rowOf(id) != null => id,
+        _ => null,
+      },
+      transcriptShowRequest: switch (transcriptView.showRequestFor(
+        active.sessionId,
+      )) {
+        final request? => CodeLabTranscriptShowRequest(
+          rowId: request.rowId,
+          targetId: request.targetId,
+          serial: request.serial,
+        ),
+        null => null,
+      },
       sessionMode: active.sessionMode,
       agentCommands: active.agentCommands,
       commandCatalog: paletteCatalogOf(
         active.agentCommandViews,
         filesAvailable: projectFilesAvailable,
+        agentsAvailable: !active.agents.isEmpty,
       ),
       composerDraft: active.composerDraft,
       composerDraftRevision: active.composerDraftRevision,

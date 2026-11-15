@@ -4,7 +4,9 @@ import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
 import '../rendering/escape_for_display.dart';
 import 'codelab_approval_prompt.dart';
+import 'codelab_compact_call_line.dart';
 import 'codelab_transcript_row.dart';
+import 'codelab_transcript_target.dart';
 
 /// Вызов инструмента в ленте: одна строка и раскрываемые подробности.
 ///
@@ -31,6 +33,7 @@ class CodeLabToolCallTile extends StatefulWidget {
     this.nestedExpanded,
     this.onNestedToggle,
     this.depth = 0,
+    this.highlightedId,
     super.key,
   });
 
@@ -60,6 +63,10 @@ class CodeLabToolCallTile extends StatefulWidget {
   /// Глубина вложенности: 0 — строка ленты. У вложенных строк текст модели
   /// показывается с видимыми escape-символами (`escapeForDisplay`).
   final int depth;
+
+  /// Id цели показа, которая подсвечена сейчас (вложенная строка или блок
+  /// одобрения потомка внутри этой строки); `null` — подсветки нет (D49 Т7).
+  final String? highlightedId;
 
   @override
   State<CodeLabToolCallTile> createState() => _CodeLabToolCallTileState();
@@ -138,7 +145,7 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
       headerKey: CodeLabToolCallTile.headerKey,
       expanded: widget.expanded,
       onToggle: canToggle ? widget.onToggle : null,
-      leading: _StatusGlyph(row: row),
+      leading: StatusGlyph(row: row),
       title: pending == null
           ? _withProgress(context, _title(context, row.detail, maxLines: 1))
           : _pendingTitle(context, pending.command ?? row.detail),
@@ -181,10 +188,19 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
       children: [
         card,
         for (final child in row.childApprovals)
-          _ChildApprovalBlock(approval: child),
+          _targetOf(child.targetId, _ChildApprovalBlock(approval: child)),
       ],
     );
   }
+
+  /// Рамка цели показа вокруг блока с id; без id блок не адресуется.
+  Widget _targetOf(String? id, Widget child) => id == null
+      ? child
+      : TranscriptTargetFrame(
+          id: id,
+          highlighted: widget.highlightedId == id,
+          child: child,
+        );
 
   /// Вложенные строки потомков с отступом по глубине: те же компактные
   /// строки, а операции со списком задач — тихими строками без рамки и тега
@@ -199,15 +215,19 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: switch (child) {
-                final CodeLabToolCallRow call => CodeLabToolCallTile(
-                  key: ValueKey('nested-${call.id}'),
-                  row: call,
-                  expanded: widget.nestedExpanded?.call(call.id) ?? false,
-                  onToggle: (expanded) =>
-                      widget.onNestedToggle?.call(call.id, expanded),
-                  nestedExpanded: widget.nestedExpanded,
-                  onNestedToggle: widget.onNestedToggle,
-                  depth: widget.depth + 1,
+                final CodeLabToolCallRow call => _targetOf(
+                  call.id,
+                  CodeLabToolCallTile(
+                    key: ValueKey('nested-${call.id}'),
+                    row: call,
+                    expanded: widget.nestedExpanded?.call(call.id) ?? false,
+                    onToggle: (expanded) =>
+                        widget.onNestedToggle?.call(call.id, expanded),
+                    nestedExpanded: widget.nestedExpanded,
+                    onNestedToggle: widget.onNestedToggle,
+                    depth: widget.depth + 1,
+                    highlightedId: widget.highlightedId,
+                  ),
                 ),
                 CodeLabTaskOpsRow(:final text) => CodeLabTaskOpsLine(
                   text: text,
@@ -245,9 +265,9 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
           const SizedBox(height: 4),
           for (final item in subagent.tail)
             switch (item) {
-              final CodeLabToolCallRow call => _TailLine(
+              final CodeLabToolCallRow call => TailLine(
                 row: call,
-                title: _TailLine.titleOf(context, call),
+                title: TailLine.titleOf(context, call),
               ),
               CodeLabTaskOpsRow(:final text) => CodeLabTaskOpsLine(text: text),
               _ => const SizedBox.shrink(),
@@ -289,7 +309,7 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
   }
 
   TextSpan _titleSpan(BuildContext context, String detail) {
-    return _rowTitleSpan(context, row, detail, escape: widget.depth > 0);
+    return rowTitleSpan(context, row, detail, escape: widget.depth > 0);
   }
 
   /// Шапка ждущего вызова: команда целиком, до [pendingDetailLines] строк;
@@ -376,52 +396,6 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
         CodeLabApprovalOutcome.cancelled => CodeLabTone.warning,
         CodeLabApprovalOutcome.unknown => CodeLabTone.neutral,
       };
-}
-
-/// Значок статуса вызова; смысл дублируется тегом, цвет не единственный
-/// носитель (§12.3, A5).
-class _StatusGlyph extends StatelessWidget {
-  const _StatusGlyph({required this.row});
-
-  final CodeLabToolCallRow row;
-
-  @override
-  Widget build(BuildContext context) {
-    if (row.awaitsApproval ||
-        row.awaitsChildApproval ||
-        row.awaitsRootDecision) {
-      return const CodeLabIcon(
-        FluentIcons.permissions,
-        tone: CodeLabTone.accent,
-        size: 16,
-      );
-    }
-    return switch (row.status) {
-      CodeLabToolCallStatus.running => const SizedBox.square(
-        dimension: 16,
-        child: ProgressRing(strokeWidth: 2),
-      ),
-      CodeLabToolCallStatus.queued => const CodeLabIcon(
-        FluentIcons.circle_ring,
-        size: 16,
-      ),
-      CodeLabToolCallStatus.succeeded => const CodeLabIcon(
-        FluentIcons.check_mark,
-        tone: CodeLabTone.success,
-        size: 16,
-      ),
-      CodeLabToolCallStatus.failed => const CodeLabIcon(
-        FluentIcons.error_badge,
-        tone: CodeLabTone.danger,
-        size: 16,
-      ),
-      CodeLabToolCallStatus.cancelled => const CodeLabIcon(
-        FluentIcons.cancel,
-        tone: CodeLabTone.warning,
-        size: 16,
-      ),
-    };
-  }
 }
 
 /// Строка пути спрашивающего субагента над панелью решения.
@@ -544,35 +518,6 @@ abstract final class _ToolCallTones {
       _CodeLabToolCallTileState._outcomeTone(outcome);
 }
 
-/// Метка и деталь строки одной фразой. Для вложенных строк [escape] включает
-/// видимые escape-символы: команду и путь вложенного вызова пишет модель, и
-/// bidi-символы не должны переставить видимый текст (`AGENTS.md` §10, D47).
-TextSpan _rowTitleSpan(
-  BuildContext context,
-  CodeLabToolCallRow row,
-  String detail, {
-  required bool escape,
-}) {
-  final muted = FluentTheme.of(context).resources.textFillColorSecondary;
-  final label = escape ? escapeForDisplay(row.label) : row.label;
-  final shown = escape ? escapeForDisplay(detail) : detail;
-  return TextSpan(
-    children: [
-      TextSpan(text: label),
-      if (shown.isNotEmpty) ...[
-        const TextSpan(text: ' '),
-        TextSpan(
-          text: shown,
-          style: CodeLabText.styleOf(
-            context,
-            CodeLabTextRole.mono,
-          )?.copyWith(color: muted),
-        ),
-      ],
-    ],
-  );
-}
-
 /// Тихая строка операций со списком задач (D27): иконка списка и приглушённый
 /// текст, без рамки, тега статуса и панели вывода. Рисуется и в ленте, и
 /// внутри раскрытого `agent` (D48 п. 3); [text] целиком собирает kit.
@@ -590,40 +535,6 @@ class CodeLabTaskOpsLine extends StatelessWidget {
           const CodeLabIcon(FluentIcons.bulleted_list, size: 14),
           const SizedBox(width: 8),
           Expanded(child: CodeLabText(text, role: CodeLabTextRole.caption)),
-        ],
-      ),
-    );
-  }
-}
-
-/// Строка хвоста под свёрнутым работающим `agent`: глиф статуса и «метка
-/// деталь» одной фразой (D25). Без рамки и шапки: хвост — обзор, а не
-/// раскрывашка; вызов раскрывается в теле строки `agent`.
-class _TailLine extends StatelessWidget {
-  const _TailLine({required this.row, required this.title});
-
-  final CodeLabToolCallRow row;
-  final Widget title;
-
-  /// Заголовок вызова потомка: текст пишет модель, поэтому с escape-ами.
-  static Widget titleOf(BuildContext context, CodeLabToolCallRow row) {
-    return Text.rich(
-      _rowTitleSpan(context, row, row.detail, escape: true),
-      style: FluentTheme.of(context).typography.body,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          _StatusGlyph(row: row),
-          const SizedBox(width: 8),
-          Expanded(child: title),
         ],
       ),
     );

@@ -274,10 +274,19 @@ void main() {
 
   /// scripted: пишет агента из `codelab_acp_testing` в [tempDir]; dart: ничего не
   /// пишет, сценарий — `integration_test/llm_scripts/<mode.wireName>.json`.
+  ///
+  /// [script] — имя сценария модели без `.json`, отдельное от [mode]: режим
+  /// задаёт только настройки агента (режим разрешений, модели, журнал), а
+  /// сценарий по умолчанию носит имя режима. Нужен тесту, чьего режима нет в
+  /// `CodelabCompatibleStdioAgentMode` (панель Agents: сценарий
+  /// `agents_pane.json` с режимом `withPermissionRequest`; change
+  /// `add-subagents-and-tasks`, D49 Т12). Для `scripted` не действует:
+  /// scripted-агент сценарии `llm_scripts/` не читает.
   Future<E2eLaunch> launch(
     Directory tempDir, {
     CodelabCompatibleStdioAgentMode mode =
         CodelabCompatibleStdioAgentMode.normal,
+    String? script,
   }) async {
     switch (kind) {
       case E2eAgentKind.scripted:
@@ -309,8 +318,8 @@ void main() {
             '(melos run test:e2e:app:dart-agent)',
           );
         }
-        final script = File(
-          'integration_test/llm_scripts/${mode.wireName}.json',
+        final scriptPath = File(
+          'integration_test/llm_scripts/${script ?? mode.wireName}.json',
         ).absolute.path;
         return await _launched(
           command: _noSpaces(File(bin).absolute.path),
@@ -318,7 +327,7 @@ void main() {
             'serve',
             '--stdio',
             '--llm-script',
-            _noSpaces(script),
+            _noSpaces(scriptPath),
             ..._dartFlags(mode, tempDir),
           ].join(' '),
           sessionLabel: equals('New session'),
@@ -329,7 +338,7 @@ void main() {
           rawInputMarker: 'timeout',
         );
       case E2eAgentKind.embedded:
-        _embeddedSetup = _EmbeddedSetup.of(mode, tempDir);
+        _embeddedSetup = _EmbeddedSetup.of(mode, tempDir, script: script);
         // Сброс в конце теста, а не в `bootstrap()`: тест вправе вызвать
         // `launch()` до `bootstrap()` и перезапустить app внутри себя
         // (session_list_load_flow_test).
@@ -680,18 +689,22 @@ final class _EmbeddedSetup {
 
   factory _EmbeddedSetup.of(
     CodelabCompatibleStdioAgentMode mode,
-    Directory tempDir,
-  ) {
+    Directory tempDir, {
+    String? script,
+  }) {
     // Таблица режимов — общая с бинарём; неизвестный режим падает здесь же.
     final settings = E2eAgent._modeSettings(mode);
-    final script = File('integration_test/llm_scripts/${mode.wireName}.json');
-    if (!script.existsSync()) {
+    final scriptFile = File(
+      'integration_test/llm_scripts/${script ?? mode.wireName}.json',
+    );
+    if (!scriptFile.existsSync()) {
       throw StateError(
-        '${mode.name} has no model script ${script.path}: tag the test '
+        '${mode.name} has no model script ${scriptFile.path}: tag the test '
         '$scriptedOnly',
       );
     }
-    final json = jsonDecode(script.readAsStringSync()) as Map<String, Object?>;
+    final json =
+        jsonDecode(scriptFile.readAsStringSync()) as Map<String, Object?>;
     return _EmbeddedSetup._(
       llm: json['llm']! as Map<String, Object?>,
       // Путь вводится не в форму, а передаётся открывателю: пробелы не мешают.

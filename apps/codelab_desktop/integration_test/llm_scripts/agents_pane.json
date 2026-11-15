@@ -1,0 +1,131 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "audit the subagents"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "agent",
+              "arguments": {
+                "type": "general",
+                "description": "Audit the diff",
+                "prompt": "Delegate the review of the working tree changes to a reviewer and relay its report."
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "Delegate the review"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "agent",
+              "arguments": {
+                "type": "review",
+                "description": "Check the diff",
+                "prompt": "Run echo subagent-hello and report the output."
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "echo subagent-hello"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "exec",
+              "arguments": {
+                "command": "echo subagent-hello",
+                "timeout": 30
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "delayMs": 3000,
+        "reply": [
+          {
+            "text": "The command printed subagent-hello."
+          }
+        ],
+        "stopReason": "stop"
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "The reviewer ran the command."
+          }
+        ],
+        "stopReason": "stop"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "audit finished"
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  }
+}

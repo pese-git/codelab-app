@@ -220,6 +220,10 @@ abstract class ToolCallView with _$ToolCallView {
     /// Итог субагента из финального обновления (D24); `null` без итога.
     SubagentSummaryView? subagentSummary,
 
+    /// Причина отказа субагента из `_meta.codelab.subagent.failure`
+    /// (`parseSubagentFailure`); `null` без неё.
+    String? subagentFailure,
+
     /// Спрашивающий потомок вызова, объявленного только запросом разрешения
     /// (D15, D43 п. 1); не меняет [subagentCall]. Остаётся после решения.
     SubagentRequester? subagent,
