@@ -732,5 +732,54 @@ void main() {
       expect(update.toString(), isNot(contains('untrusted-content')));
       expect((update['_meta']! as Map)['codelab'], contains('subagent'));
     });
+
+    // D52 п. 1, agent-acp-server «Отменённый субагент без строки прогресса»:
+    // `content: []` снимает у клиента строку прогресса вызова `agent`.
+    test('a cancelled child: content is an empty list, not absent', () {
+      final result = SubagentFinished(
+        s,
+        subagentId: 'sub_a',
+        parentToolCallId: 'call_1',
+        status: SubagentState.cancelled,
+      );
+      final update = [
+        for (final u in projectEvent(
+          finished(ToolOutcome.cancelled),
+          configOptions: () => const [],
+          subagentResult: result,
+        ))
+          u.toJson(),
+      ].single;
+
+      expect(update['status'], 'failed');
+      expect(
+        (update['_meta']! as Map)['codelab'],
+        containsPair('outcome', 'cancelled'),
+      );
+      expect((update['_meta']! as Map)['codelab'], contains('subagent'));
+      expect(
+        update,
+        containsPair('content', isEmpty),
+        reason: 'D52 п. 1: у отменённого agent ключ content — пустой список',
+      );
+    });
+
+    // Защита: отменённый вызов не-`agent` по-прежнему без `content` (§13.7).
+    test('a cancelled non-agent call stays without content', () {
+      final update = [
+        for (final u in projectEvent(
+          finished(ToolOutcome.cancelled),
+          configOptions: () => const [],
+        ))
+          u.toJson(),
+      ].single;
+
+      expect(update.containsKey('content'), isFalse);
+    });
+
+    // D52 п. 1: `failed` без отчёта (не отмена) — уже `content: []`.
+    test('a failed child without a report has content: []', () {
+      expect(frames(done('')).single, containsPair('content', isEmpty));
+    });
   });
 }
