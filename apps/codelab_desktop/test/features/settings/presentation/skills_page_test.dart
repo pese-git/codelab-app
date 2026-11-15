@@ -206,7 +206,12 @@ void main() {
         view: extensionsView(
           files: [
             contextFile('AGENTS.md', bytes: 4096),
-            contextFile('a/AGENTS.md', bytes: 3000, shownBytes: 2048),
+            contextFile(
+              'a/AGENTS.md',
+              bytes: 3000,
+              shownBytes: 2048,
+              truncated: true,
+            ),
             contextFile('a/b/AGENTS.md', bytes: 2000, omitted: true),
           ],
           truncatedCount: 1,
@@ -217,6 +222,32 @@ void main() {
       expect(_in('skills-context-0', 'truncated to 4.0 KB'), findsNothing);
       expect(_in('skills-context-1', 'truncated to 2.0 KB'), findsOneWidget);
       expect(_in('skills-context-2', 'not included (budget)'), findsOneWidget);
+    });
+
+    testWidgets('the tag "truncated to …" follows the core flag, not the '
+        'byte counts: a trailing newline cut is not a truncation', (
+      tester,
+    ) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          files: [
+            // Ядро срезает завершающий перевод строки: 25 B → 24 B, бюджет не
+            // превышен.
+            contextFile('AGENTS.md', bytes: 25, shownBytes: 24),
+            contextFile(
+              'a/AGENTS.md',
+              bytes: 3000,
+              shownBytes: 2048,
+              truncated: true,
+            ),
+          ],
+        ),
+      );
+
+      expect(find.textContaining('truncated to 24 B'), findsNothing);
+      expect(_containing('skills-context-0', 'truncated'), findsNothing);
+      expect(_in('skills-context-1', 'truncated to 2.0 KB'), findsOneWidget);
     });
 
     testWidgets('"Open" of a row passes the directory of the file to the '

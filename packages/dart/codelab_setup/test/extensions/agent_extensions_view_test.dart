@@ -233,6 +233,35 @@ void main() {
     });
   });
 
+  group('ContextFileView.truncated: признак ядра, а не сравнение байтов', () {
+    test('завершающий перевод строки в пределах бюджета — не усечение, хотя '
+        'shownBytes < bytes; файл сверх бюджета — truncated', () {
+      final files = ProjectFiles(
+        context: [
+          ContextFile(path: 'AGENTS.md', content: 'r' * 100),
+          ContextFile(
+            path: 'pkg/AGENTS.md',
+            content: '# Project rules\nUse fvm.\n',
+          ),
+        ],
+      );
+      final expected = assembleProjectContext(files.context, 60)!;
+      // Условие теста: ядро срезало перевод строки у первого файла.
+      expect(expected.files.last.truncated, isFalse);
+
+      final view = _view(
+        _config(contextBytes: 60),
+        _extensions(project: PhaseLoaded(files)),
+      );
+
+      // Порядок цепочки: от корня к папке; бюджет раздаётся от ближайшего.
+      final small = view.context.files[1];
+      expect(small.shownBytes, lessThan(small.bytes));
+      expect(small.truncated, isFalse);
+      expect(view.context.files[0].truncated, isTrue);
+    });
+  });
+
   group('навыки: строки совпадают с каталогом сессии (D4 «Навыки»)', () {
     late SkillFiles files;
     late CoreConfig config;

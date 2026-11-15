@@ -78,6 +78,7 @@ ContextFileView contextFile(
   ExtensionScope scope = ExtensionScope.project,
   bool isClaudeAlias = false,
   bool omitted = false,
+  bool truncated = false,
 }) => ContextFileView(
   path: path,
   openDir:
@@ -87,6 +88,7 @@ ContextFileView contextFile(
   scope: scope,
   isClaudeAlias: isClaudeAlias,
   omitted: omitted,
+  truncated: truncated,
 );
 
 String _dirOf(String path) {

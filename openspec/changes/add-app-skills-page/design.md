@@ -134,7 +134,10 @@ final class ContextChainView { SectionOutcome outcome; List<ContextFileView> fil
   int shownBytes; int omittedCount; int truncatedCount;
   List<ExtensionDiagnostic> warnings; }   // диагностики файлов контекста (раскладка — ниже)
 final class ContextFileView { String path; String? openDir; int bytes; int shownBytes;
-  ExtensionScope scope; bool isClaudeAlias; bool omitted; }  // shownBytes < bytes — усечён по бюджету
+  ExtensionScope scope; bool isClaudeAlias; bool omitted; bool truncated; }
+  // truncated — признак ядра (assembleProjectContext), а не shownBytes < bytes:
+  // ядро срезает завершающие пробелы и перевод строки, и файл в пределах бюджета
+  // показывается на несколько байтов короче (найдено ручным прогоном итерации 5)
 final class SkillsSectionView { SectionOutcome outcome; List<SkillEntryView> entries;
   List<ExtensionDiagnostic> warnings; List<SkillConsentView> consents; }
 final class TemplatesSectionView { SectionOutcome outcome; List<TemplateEntryView> entries;

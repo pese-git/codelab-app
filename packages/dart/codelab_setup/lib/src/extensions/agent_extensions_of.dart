@@ -140,6 +140,7 @@ ContextChainView _chain(
         shownBytes: entry?.shownBytes ?? 0,
         scope: file.scope,
         isClaudeAlias: file.path.split('/').last == 'CLAUDE.md',
+        truncated: entry?.truncated ?? false,
         omitted: isOmitted,
       ),
     );
