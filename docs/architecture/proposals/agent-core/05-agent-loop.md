@@ -802,6 +802,7 @@ final class ChildSessionSpec {                        // после MVP, §17.3.
   final PermissionDecisionStore decisions; final PolicyRules rules; final Set<ToolTier> extraDeniedTiers;
   final ExecutionEnv env; final TaskList tasks;
   final PathLock locks;                               // PathLock корня: правки одного файла корнем и потомками — одна очередь (TOOL-7)
+  final List<BeforeToolCallHook> hostBeforeToolCall;  // хуки хоста корня (ACP markInProgress) — последними после политики, вызов с цепочкой toolCallId (D48 п. 1, итерация 5)
   final Logger logger;                                // с root_session_id, subagent_id, parent_tool_call_id (D18)
   final void Function(Usage own) onOwnUsage;          // usage ребёнка в usage хода родителя (D4, Т8)
   final BudgetLimit? Function() ancestorBudget;       // бюджет предков на границе шага ребёнка (D4, Т8); у потомка — цепочка через бюджет ребёнка (D45 Т5)
@@ -831,6 +832,10 @@ abstract interface class AgentSession {
   Future<void> setMode(ModeId mode);
   Future<void> setConfigOption(String id, String value);
   Iterable<AgentEvent> replay();                  // проекция журнала для session/load (§8)
+  // Change add-subagents-and-tasks, итерация 5 (D47 Т6): то же и SubagentActivity потомков сразу после
+  // ToolCallFinished(agent) — журналы потомков через SessionStore.openChildReadOnly, без записи и lease;
+  // для реплея клиенту с subagentToolCalls (§17.3.7). replay() не меняется.
+  Future<List<AgentEvent>> replayTree();
   // После MVP (§17.6.2): управление сессией
   SessionAccess get access;                       // write | readOnly (lease, §17.6.8)
   Future<String> rename(String title);            // можно во время хода

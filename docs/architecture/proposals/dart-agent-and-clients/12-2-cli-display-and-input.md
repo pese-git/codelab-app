@@ -628,7 +628,7 @@ REPL): конечный автомат над потоком байт stdin.
 | `history_prev` / `history_next` | ↑ / ↓ (на первой/последней строке композера) | композер | REPL, TUI |
 | `complete` | Tab | композер, меню | REPL, TUI |
 | `paste_image` | Ctrl+V | композер | TUI (`/paste-image` в REPL) |
-| `toggle_thoughts` | Ctrl+O | транскрипт | TUI |
+| `toggle_details` | Ctrl+O (change `add-subagents-and-tasks`, D48 п. 2) | транскрипт; раскрывает и сворачивает сразу все строки `agent`: вложенные вызовы потомков с `↳` и отчёт до 20 строк; подсказка `ctrl+o details` после `ctrl+t tasks`. Заменяет зарезервированный `toggle_thoughts`: свёрнутые мысли (режим `collapsed`) раскрываются тем же действием, когда появятся | TUI |
 | `scroll_up` / `scroll_down` | PgUp / PgDn | транскрипт | TUI |
 | `follow` | End | транскрипт | TUI |
 | `select_item` | Ctrl+↑ / Ctrl+↓, Enter — подробности | транскрипт | TUI |

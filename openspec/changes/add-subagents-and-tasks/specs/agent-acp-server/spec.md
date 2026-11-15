@@ -192,15 +192,33 @@
 - `SubagentActivity` с `ToolCallStarted` → `tool_call`; с `ToolCallProgress` → `tool_call_update` с `content`; с `ToolCallFinished` → `tool_call_update` с итоговым `status`, `content`, `diff` и `_meta.codelab.outcome` — по тем же правилам, что у вызовов корня;
 - `toolCallId` — цепочка через `/` от вызова `agent` корня (тот же id, что у запроса разрешения этого вызова, SUB-3);
 - каждый такой кадр SHALL нести `_meta.codelab.parentToolCallId` — `toolCallId` на проводе вызова `agent`, запустившего потомка;
+- финальный `tool_call_update` вложенного вызова `agent` SHALL нести `_meta.codelab.subagent` с `id`, `summary` и, при `failed`, `failure` — как у вызова `agent` корня (D24);
+- статус `in_progress` вызова потомка SHALL отправлять тот же хук `markInProgress`, что у корня: ядро передаёт его потомкам с цепочкой (agent-subagents «Сборка ребёнка», D48 п. 1); переход `pending → in_progress → итог` — как у вызова корня (§13.7);
 - текст, мысли и прочие события потомков НЕ SHALL отправляться.
 
-Когда вызов `agent` становится терминальным, адаптер SHALL отправить `tool_call_update` со `status: failed` и `_meta.codelab.outcome: "cancelled"` для каждого ещё не завершённого вызова его поддерева, до `tool_call_update` самого вызова `agent`.
+Согласием SHALL считаться только значение `clientCapabilities._meta.codelab.subagentToolCalls` — объект с целым `version: 1` (D9). Оно читается у соединения, которое сейчас владеет сессией: после переподключения действует объявление нового соединения (design.md, D47 Т3). Цепочка SHALL строиться из адреса `SubagentActivity` без разбора строк id: у ребёнка префикс — `parentToolCallId` события, у потомка глубже — префикс его родителя, `/` и `parentToolCallId` события (D47 Т2).
 
-При `session/load` такому клиенту реплей SHALL сразу после кадра `tool_call` вызова `agent` проигрывать вызовы потомков из их журналов (по записям `subagent`, рекурсивно) с итоговыми статусами и теми же `toolCallId` и `_meta.codelab.parentToolCallId`. Клиенту без `subagentToolCalls` ни вживую, ни при реплее вызовы потомков НЕ SHALL отправляться (SUB-12).
+Команда потомка через терминал клиента (`terminal/*`) SHALL исполняться так же, как команда корня, независимо от согласия: ожидание показа терминала в вызове не должно зависеть от того, ушёл ли этот вызов клиенту (D47 Т4).
+
+Когда вызов `agent` любого уровня становится терминальным, адаптер SHALL отправить `tool_call_update` со `status: failed` и `_meta.codelab.outcome: "cancelled"` для каждого ещё не завершённого вызова его поддерева, до `tool_call_update` самого вызова `agent`. После этого кадры закрытых вызовов НЕ SHALL отправляться.
+
+При `session/load` такому клиенту реплей SHALL сразу после кадра `tool_call` вызова `agent` проигрывать вызовы потомков из их журналов (по записям `subagent`, рекурсивно) с итоговыми статусами и теми же `toolCallId` и `_meta.codelab.parentToolCallId`. Журналы потомков SHALL читаться без записи на диск и без lease ребёнка (D47 Т5). Вызов потомка без результата в журнале (потомок пережил `cancel_grace`) SHALL проигрываться `failed` с `_meta.codelab.outcome: "cancelled"`, как его закрыл адаптер вживую. Журнал потомка, который не открывается, SHALL давать лог `subagent.replay_failed` и реплей без потомков этого вызова, а не отказ `session/load`. Кадры идущего хода, пришедшие во время реплея, SHALL отправляться после кадров реплея (ACP-3). Клиенту без `subagentToolCalls` ни вживую, ни при реплее вызовы потомков НЕ SHALL отправляться (SUB-12).
 
 #### Scenario: Вызовы ребёнка и внука
 - **WHEN** клиент объявил `subagentToolCalls`, ребёнок `general` вызывает `read`, затем запускает внука, внук вызывает `ls`
-- **THEN** клиент получает `tool_call` `call_1/call_1` (`read`) с `parentToolCallId: "call_1"`, `tool_call` `call_1/call_2` (`agent`) с `parentToolCallId: "call_1"` и `_meta.codelab.subagent` `{id, type}` внука (как у вызова `agent` корня, D28; Q16) и `tool_call` `call_1/call_2/call_1` (`ls`) с `parentToolCallId: "call_1/call_2"`; текстов потомков нет (фикстура `acp/prompt-subagent-tool-tree`)
+- **THEN** клиент получает `tool_call` `call_1/call_1` (`read`) с `parentToolCallId: "call_1"`, `tool_call` `call_1/call_2` (`agent`) с `parentToolCallId: "call_1"` и `_meta.codelab.subagent` `{id, type}` внука (как у вызова `agent` корня, D28; Q16) и `tool_call` `call_1/call_2/call_1` (`ls`) с `parentToolCallId: "call_1/call_2"`; финальный `tool_call_update` `call_1/call_2` несёт `_meta.codelab.subagent.summary` внука; текстов потомков нет (фикстура `acp/prompt-subagent-tool-tree`)
+
+#### Scenario: Команда потомка через терминал клиента
+- **WHEN** клиент объявил `terminal: true`, ребёнок вызывает `exec`, пользователь отвечает `allow_once`; в первом варианте клиент объявил `subagentToolCalls`, во втором — нет
+- **THEN** в обоих вариантах команда исполняется через `terminal/create` и `terminal/wait_for_exit`, ребёнок получает результат и сдаёт отчёт; в первом варианте `tool_call_update` `call_1/call_1` несёт терминал (`{"type": "terminal"}`), во втором кадров вызова ребёнка нет (`codelab_agent_acp`, тест на `server_harness`)
+
+#### Scenario: Позднее событие закрытого вызова
+- **WHEN** клиент объявил `subagentToolCalls`, вызов `exec` ребёнка закрыт адаптером при завершении вызова `agent`, после чего мост получает событие этого вызова
+- **THEN** кадр для него не отправляется (`codelab_agent_acp`, тест моста)
+
+#### Scenario: Статусы вызова потомка
+- **WHEN** клиент объявил `subagentToolCalls`, ребёнок вызывает `read`, не требующий вопроса, затем `exec`, который пользователь разрешает
+- **THEN** у `call_1/call_1` кадры `tool_call` (`pending`), `tool_call_update` `in_progress`, итог; у `exec` — `tool_call` (`pending`), `session/request_permission`, после ответа `in_progress`, итог; клиент без согласия кадров `in_progress` с цепочкой не получает (фикстура `acp/prompt-subagent-tool-tree`)
 
 #### Scenario: Запрос разрешения в строке своего вызова
 - **WHEN** клиент объявил `subagentToolCalls`, ребёнок вызывает `exec`, требующий вопроса
@@ -216,5 +234,5 @@
 
 #### Scenario: Реплей дерева
 - **WHEN** сессия с вызовом `agent`, у ребёнка которого два вызова, загружается клиентом с `subagentToolCalls`
-- **THEN** после `tool_call` вызова `agent` идут два `tool_call` ребёнка с итоговыми статусами и `parentToolCallId` (фикстура `acp/session-load-subagent-tool-tree`); клиент без согласия их не получает
+- **THEN** после `tool_call` вызова `agent` идут два `tool_call` ребёнка с итоговыми статусами и `parentToolCallId` (фикстура `acp/session-load-subagent-tool-tree`: живой ход и `session/load` в том же соединении, D47 Т7; чтение журналов с диска новым процессом — тест ядра на `JsonlSessionStore`); клиент без согласия их не получает
 

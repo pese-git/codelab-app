@@ -21,7 +21,7 @@
    - дубликат имени встроенного инструмента → `HostWiringException` (HOST-5).
 
    Это базовый реестр. Каждая сессия получает свою копию с MCP-инструментами своих серверов («MCP-серверы сессии») и с `agent`.
-5. **Политика разрешений** — первым звеном `beforeToolCall`, хуки хоста `extraBeforeToolCall` — последними; `extraAfterToolCall` — первыми в `afterToolCall`.
+5. **Политика разрешений** — первым звеном `beforeToolCall`, хуки хоста `extraBeforeToolCall` — последними; `extraAfterToolCall` — первыми в `afterToolCall`. У потомков субагентов те же хуки `extraBeforeToolCall` стоят последними после политики потомка и получают вызов с цепочкой `toolCallId` (agent-subagents «Сборка ребёнка»; design.md change `add-subagents-and-tasks`, D48 п. 1).
 6. **Промпт** из секций включённых capability.
 7. **`AgentRuntime`** с хранилищем `services.sessions`, настройками `CoreConfig.compaction` и `CoreConfig.subagents`, каталогом `services.models` (без каталога — каталог из одной `CoreConfig.defaultModel`) и усилием рассуждения по умолчанию `CoreConfig.effort` (`medium`).
 8. **`CorePlan`** со списком инструментов базового реестра, секций промпта и причин выключения, лог `host.plan`.

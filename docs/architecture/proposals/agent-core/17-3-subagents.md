@@ -424,6 +424,14 @@ Your final message must be only a JSON value that matches this JSON Schema. Do n
 {{schema}}
 ```
 
+**Хуки хоста у потомка (итерация 5 change `add-subagents-and-tasks`, D48 п. 1).** Хуки
+`extraBeforeToolCall` корневой сессии (у ACP-хоста — `markInProgress`, §13.7) подключаются к циклу
+потомка любой глубины последними в цепочке `beforeToolCall`, после хука политики потомка, как у
+корня. Хук получает вызов с `id`, равным цепочке `toolCallId` потомка (тот же id, что у запроса
+разрешения и на проводе); префикс цепочки идёт по дереву отдельным значением
+(`ChildSessionSpec.hostBeforeToolCall` и префикс в `SubagentParent`), строки id не разбираются.
+`extraAfterToolCall` к потомкам не подключаются.
+
 **Разрешения потомка через gate корневой сессии.** `SubagentPermissionGate` оборачивает
 `PermissionRequest` потомка любой глубины и передаёт его в gate **корневой сессии** (шаг 6; на
 глубине 1 родитель и есть корень). Сборка (D42 change `add-subagents-and-tasks`, Т3):
@@ -717,14 +725,16 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 | запрос разрешения потомка | `session/request_permission` | `sessionId` корневой сессии, `toolCall.toolCallId: "call_3/call_1"` (цепочка, §17.3.3), `title` с префиксом, `toolCall._meta: {"codelab": {"subagent": {"id": "sub_…", "type": "review", "description": "Check the diff", "depth": 1, "path": [], "parentToolCallId": "call_3"}}}`; `parentToolCallId` — вызов `agent` **корневой** сессии, который клиент видел (первый сегмент цепочки), `path` — id предков-субагентов от глубины 1 |
 | `SubagentActivity` | — / `tool_call`, `tool_call_update` | клиенту без `subagentToolCalls` — не отправляется (SUB-12); клиенту с ним — вызовы потомков, ниже «Шаги потомков деревом» |
 
-**Вызовы инструментов ребёнка не проецируются** клиенту, не согласовавшему дерево, как `tool_call` верхнего уровня. Причины:
+**Вызовы инструментов ребёнка не проецируются** клиенту, не согласовавшему дерево (`subagentToolCalls`, ниже), ни как `tool_call` верхнего уровня, ни вложенными. Причины:
 (1) в ACP нет вложенности вызовов — три параллельных ребёнка по десять вызовов превратили бы
 ленту сессии в 30 перемешанных строк без связи с задачами; (2) суть субагента — родитель и
 пользователь видят итог, а не шаги; (3) детали доступны отдельно — в журнале ребёнка и на
 доске. Запрос разрешения — единственное, что от ребёнка уходит клиенту напрямую: без него
-пользователь не может одобрить действие. Его `toolCallId` клиенту заранее не объявлен;
+пользователь не может одобрить действие. Клиенту без дерева его `toolCallId` заранее не объявлен;
 клиент ДОЛЖЕН показать такой запрос самостоятельно, используя `title`, `rawInput` и `content`
-запроса (golden `acp/prompt-subagent-permission`). `_meta.codelab.subagent` — расширение через
+запроса (golden `acp/prompt-subagent-permission`); клиент CodeLab ставит его блоком под строку
+вызова `agent` корня (D27 п. 4, D43 п. 2 change `add-subagents-and-tasks`). Клиенту с деревом
+`tool_call` вызова приходит раньше запроса (ниже). `_meta.codelab.subagent` — расширение через
 OpenSpec (change `add-subagents-and-tasks`).
 
 **Смысл `_meta.codelab.subagent` задаёт вид кадра** (D43, п. 1 change `add-subagents-and-tasks`).
@@ -767,6 +777,18 @@ OpenSpec (change `add-subagents-and-tasks`).
 `agent`. Клиенты (kit, app, CLI) строят дерево по `parentToolCallId`; вызов с неизвестным
 родителем показывается на верхнем уровне. Фикстуры: `acp/prompt-subagent-tool-tree`,
 `acp/session-load-subagent-tool-tree`.
+
+Уточнения сверки перед итерацией 5 (D47 change `add-subagents-and-tasks`): цепочка строится из
+адреса `SubagentActivity` без разбора строк id — префикс ребёнка равен `parentToolCallId`
+события, префикс внука — префиксу ребёнка, `/` и `parentToolCallId` события (Т2); согласие
+читается у соединения, которое сейчас владеет сессией (Т3); финальное обновление вложенного
+`agent` несёт `_meta.codelab.subagent.summary`, как у корня; команда потомка через терминал
+клиента исполняется независимо от согласия (Т4); реплей читает журналы потомков
+`SessionStore.openChildReadOnly` через `AgentSession.replayTree()`, вызов без результата у
+потомка, пережившего `cancel_grace`, проигрывается `failed` с `outcome: cancelled`, а живые
+кадры идущего хода уходят после кадров реплея (Т5, Т6). Статус `in_progress` вызова потомка
+шлёт тот же `markInProgress`, что у корня, через хуки хоста потомка (D48 п. 1): кадры вызова
+потомка — `pending → in_progress → итог`, как у корня.
 
 Пока вызов `agent` идёт, клиент с деревом может показывать в свёрнутой строке «хвост» — три
 последних вызова потомков и строку `+N more tool calls` (без токенов: они только в итоге завершённого,
@@ -1479,6 +1501,13 @@ stateDiagram-v2
 * `acp/prompt-subagent-nested-permission`: внук глубины 2 просит `exec` → `toolCallId`
   `call_1/call_1/call_1`, `_meta.codelab.subagent` с `depth: 2`, `path` из id ребёнка и
   `parentToolCallId: "call_1"` (SUB-3).
+* `acp/prompt-subagent-tool-tree`: клиент с `subagentToolCalls` получает `tool_call` вызовов
+  ребёнка и внука с цепочкой и `parentToolCallId`, у вложенного `agent` — `_meta.codelab.subagent`
+  `{id, type}` и `summary`; клиент без согласия — кадры `acp/prompt-subagent-tool-call` (SUB-12).
+* `acp/session-load-subagent-tool-tree`: живой ход с ребёнком и внуком, затем `session/load` —
+  вызовы потомков сразу после `tool_call` своего `agent` с итоговыми статусами.
+* Терминал потомка (`codelab_agent_acp`, `server_harness`): одобренный `exec` ребёнка через
+  `terminal/*` завершается и с согласием `subagentToolCalls`, и без него (D47 Т4 change).
 * `acp/initialize-codelab-extensions`: клиент объявил `clientCapabilities._meta.codelab: {}` →
   ответ содержит `agentCapabilities._meta.codelab.subagents` с `maxDepth` и `tasks`; клиент без
   этого объявления получает ответ `acp/initialize-capabilities` без изменений.
