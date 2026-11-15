@@ -22,7 +22,7 @@
 Тексты SHALL быть английскими, написанными для CodeLab (`AGENTS.md` §5); тексты, промпты и описания инструментов сторонних агентов, в том числе Claude Code, НЕ SHALL воспроизводиться (§7а `07-decision-sources.md`). Файлы:
 - `system/base.md`, `system/untrusted.md`, `modes/plan.md`;
 - `tools/read.md`, `tools/edit.md`, `tools/listing.md`, `tools/exec.md`, `tools/tasks.md` (`tools: [task_create]`; заменяет `tools/plan.md`, change `add-subagents-and-tasks`);
-- `tool_descriptions/<tool>.md` для встроенных инструментов `read`, `write`, `edit`, `ls`, `search`, `exec`, `task_create`, `task_update`, `task_list`, `task_get`, `agent`; файла для `update_plan` нет;
+- `tool_descriptions/<tool>.md` для встроенных инструментов `read`, `write`, `edit`, `ls`, `search`, `exec`, `task_create`, `task_update`, `task_list`, `task_get`, `agent`, и `tool_descriptions/task_update_subagent.md` — описание детского варианта `task_update` (design.md change `add-subagents-and-tasks`, D46, п. 4); файла для `update_plan` нет;
 - `subagent/system.md`, `subagent/task.md` (переменные `id`, `subject`) и `subagent/types/<name>.md` для `general`, `explore`, `review`, `plan` (§17.3.3, §17.16.4).
 
 #### Scenario: Синхронизация с исходниками
@@ -40,6 +40,10 @@
 #### Scenario: Описание agent до вложенности
 - **WHEN** до итерации 4 change (ребёнку `agent` не даётся) описание `agent` рендерится для корневой сессии при `max_depth: 3`
 - **THEN** `nesting` строится от эффективной глубины 1 и даёт `Subagents you start cannot start other subagents.`: описание не обещает модели вложенности, которой нет (design.md, D36, Т16)
+
+#### Scenario: Описание детского task_update
+- **WHEN** схемы шага собираются для корня и для ребёнка `general`
+- **THEN** описание `task_update` ребёнка — `Change the status of a task list item assigned to you: in_progress when you start it, completed when done.` и `You cannot change other fields or items assigned to someone else. Your assigned item, if any, is named in your instructions.`; у корня — прежнее описание; параметры обеих схем совпадают (`prompt_sections_tools_test.dart`, итерация 4; D46, п. 4)
 
 #### Scenario: Описание agent: порядок со списком задач
 - **WHEN** описание `agent` рендерится для корневой сессии

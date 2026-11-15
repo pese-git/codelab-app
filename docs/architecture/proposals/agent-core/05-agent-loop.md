@@ -764,14 +764,14 @@ final class SubagentParent {
   final List<AgentTool> Function() tools;             // схемы текущего шага родителя (base набора ребёнка)
   final ModelRef Function() model;
   final ModeResolution Function() mode;               // эффективный режим родителя для narrow (SUB-2)
-  final PermissionGate? gate;                         // до итерации 3 change — null (D38)
+  final PermissionGate? gate;                         // gate корня: вопросы потомков любой глубины (с итерации 3 change, D42 Т3); null — у корня нет gate (PERM-5)
   final SkillCatalog skills;                          // снимок каталога навыков (D34)
   final AgentConfigPaths? agentConfigPaths;           // набор PERM-11 корня (SUB-1)
   final PermissionDecisionStore decisions; final PolicyRules rules; final Set<ToolTier> extraDeniedTiers;   // корня, общие на дерево
   final ExecutionEnv env;                             // env родителя как есть (Т9)
   final TaskList tasks;                               // список задач дерева (Т7)
   final PathLock locks;                               // блокировки путей корня: одна очередь на дерево (TOOL-7, §6.3.4)
-  final int maxChildDepth;                            // глубина, которую рантайм умеет запускать; до итерации 4 — 1 (Т16)
+  final int maxChildDepth;                            // глубина, которую рантайм умеет запускать; до итерации 4 — 1 (Т16), с итерации 4 — subagents.max_depth (D45 Т9)
 }
 final class ChildSessionSpec {                        // после MVP, §17.3.3; внутренний тип ядра
   // Вместо ссылки на AgentSession родителя — его части (SubagentParent): env, хранилище решений и
@@ -780,7 +780,7 @@ final class ChildSessionSpec {                        // после MVP, §17.3.
   final List<AgentTool> tools;                        // пересечение с родителем без agent выше max_depth; задачи — детский набор (SUB-1, §17.16.4)
   final ModelRef model; final TurnBudget budget;
   final ModeResolution Function() mode;               // пара «режим разрешений и запрещённые уровни»: narrow(parentMode(), type.mode) на каждое решение (SUB-2; §7.2)
-  final PermissionGate? gate;                         // SubagentPermissionGate над gate корня; до итерации 3 change — null (D36, Т10)
+  final PermissionGate? gate;                         // SubagentPermissionGate над FIFO дерева у gate корня (с итерации 3 change, D42 Т3); null — у корня нет gate (PERM-5)
   // Навыки (D34 change add-subagents-and-tasks, итерация 2s): тот же неизменяемый снимок каталога
   // родителя, без повторной загрузки; null — у ребёнка нет skill и секции skills/catalog.
   // readOnlyRoots env ребёнка — каталоги навыков этого снимка и его каталог выноса (§17.3.6);
