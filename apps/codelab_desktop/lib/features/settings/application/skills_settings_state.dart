@@ -1,4 +1,11 @@
-import 'package:codelab_setup/codelab_setup.dart' show AgentExtensionsView;
+import 'package:codelab_setup/codelab_setup.dart'
+    show
+        AgentExtensionsView,
+        SkillsListDisabledByProject,
+        SkillsListLayerUnreadable,
+        SkillsListNotEditable,
+        SkillsListRefusal,
+        SkillsListUntrustedProject;
 
 /// Состояние страницы «Skills & extensions» (change `add-app-skills-page`,
 /// D6).
@@ -91,12 +98,35 @@ final class SkillsSettingsReady extends SkillsSettingsState {
     saving: saving,
   );
 
+  /// То же состояние с признаком записи [saving]; баннер сбрасывается:
+  /// запись начинается с чистого баннера, итог ляжет на свежее состояние
+  /// (D14). Пока идёт запись, страница не принимает новых действий.
+  SkillsSettingsReady withSaving({required bool saving}) => SkillsSettingsReady(
+    view: view,
+    userConfigPath: userConfigPath,
+    folder: folder,
+    codelabHome: codelabHome,
+    saving: saving,
+  );
+
+  /// То же состояние с [saving] `false` и ПРЕЖНИМ баннером: запись завершена,
+  /// включая перечитывание (D14).
+  SkillsSettingsReady settled() => SkillsSettingsReady(
+    view: view,
+    userConfigPath: userConfigPath,
+    folder: folder,
+    codelabHome: codelabHome,
+    banner: banner,
+  );
+
   @override
   String toString() => 'SkillsSettingsReady($view)';
 }
 
 /// Вид баннера страницы.
-enum SkillsBannerKind { openFailed }
+/// Вид баннера: [openFailed] — отказ открыть каталог; [saved], [conflict] и
+/// [error] — исход записи `skills.*` (D9).
+enum SkillsBannerKind { openFailed, saved, conflict, error }
 
 /// Баннер итога действия (ключ `skills-banner`).
 final class SkillsBanner {
@@ -108,3 +138,46 @@ final class SkillsBanner {
   @override
   String toString() => 'SkillsBanner(${kind.name})';
 }
+
+/// Текст отказа моста для баннера и подсказки неактивного переключателя
+/// (change `add-app-skills-page`, D5, D9).
+///
+/// Почему в одном месте: Cubit показывает его баннером, когда отказ случился
+/// на нажатии, а страница — подсказкой, когда мост отказал ещё при построении
+/// вида; тексты не должны расходиться. [element] — элемент `extra_roots`
+/// (`.claude/skills`) для отказа «нужно доверие»; у навыков его нет.
+String skillsRefusalText(SkillsListRefusal refusal, {String? element}) =>
+    switch (refusal) {
+      SkillsListNotEditable(:final source) => 'Set in $source; edit that file.',
+      SkillsListDisabledByProject(:final source) =>
+        'Disabled by the project config ($source).',
+      SkillsListUntrustedProject() =>
+        'Trust this project to read ${element ?? 'this folder'}.',
+      SkillsListLayerUnreadable() =>
+        'The config file of this layer cannot be read. Fix it first.',
+    };
+
+/// Вид строки согласия на каталог навыков другого агента (Q3).
+///
+/// Почему: Cubit пишет его в событие `root_consent`, страница — в ключ и
+/// подпись строки; правило «`~` в начале — домашний каталог» должно быть одним
+/// (ревью итерации 5 change `add-app-skills-page`).
+enum SkillsConsentKind {
+  /// `~/.claude/skills`: каталог пользователя.
+  home('home', 'home'),
+
+  /// `.claude/skills`: относительный элемент, от папки проекта.
+  project('project', 'project_relative');
+
+  const SkillsConsentKind(this.key, this.rootKind);
+
+  /// Суффикс ключей страницы `skills-consent-<key>`.
+  final String key;
+
+  /// Значение поля `root_kind` события `skills_settings.root_consent`.
+  final String rootKind;
+}
+
+/// Вид строки согласия по элементу `skills.extra_roots` [entry].
+SkillsConsentKind consentKindOf(String entry) =>
+    entry.startsWith('~') ? SkillsConsentKind.home : SkillsConsentKind.project;
