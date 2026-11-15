@@ -275,6 +275,15 @@ API итерации 4 (по красным тестам 4.1, 4.3, 4.5):
 
 Список навыков сессии — неизменный снимок открытия (SKL-4). Перечитывания без перезапуска нет (E-19). Агент перечитывает конфиг сам при изменении файла (§17.5.6), а ключи `skills.*` — ключи сессии (Q44). Поэтому запись действует **на сессии, открытые после неё**, без «Restart agent». Баннер после `ConfigSaved`: `Saved. New sessions use it; open sessions keep their skills.` Подпись раздела под таблицей — по артборду, с этой же оговоркой (D13). Подсказки «Restart agent» нет. Это не тот класс, что `restartRequiredServers`: `planConfigReload` не откладывает `skills.*`. Если реестр однажды пометит ключ `restartRequired`, баннер возьмёт признак из `ConfigSaved.restartRequiredKeys`. Правило одно — в ядре.
 
+API итерации 5 (по красным тестам 5.1):
+
+- `SkillsSettingsCubit.setSkillEnabled(String name, {required bool enabled})` и `setRootConsent(String entry, {required bool granted})`. Каждое действие берёт **свежий** снимок конфига в момент нажатия и само вызывает `skillsListEdit` (а не берёт `toggle` из показанного вида): между показом и нажатием файл мог измениться, а `base` плана должен быть снимком того файла, который меняется (SETUP-6).
+- Пустые `edits` — без записи, баннера и события. План — `store.apply(plan.base, plan.edits)`; после `ConfigSaved` — баннер `saved` (`Saved. New sessions use it; open sessions keep their skills.`) и перечитывание; события `skill_toggled` и `root_consent` пишутся только после `ConfigSaved`.
+- `SkillsBannerKind`: `openFailed`, `saved`, `conflict`, `error`. Конфликт и отклонение — тексты страницы Providers: `The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.` (одно перечитывание, без автоповтора) и `The config was not saved: <key: message; …>`. Исключение `apply` — баннер `error` без его текста, событие `save_failed {outcome: <имя типа>}`.
+- Подсказки отказов: `SkillsListNotEditable` — `Set in <файл>; edit that file.`; `SkillsListDisabledByProject` — `Disabled by the project config (<файл>).`; `SkillsListUntrustedProject` — `Trust this project to read <элемент>.`; `SkillsListLayerUnreadable` — `The config file of this layer cannot be read. Fix it first.`
+- Пока идёт запись (`saving`), переключатели неактивны, остальные действия игнорируются: одна запись на нажатие. Результат записи после `close()` не применяется; перечитывание на новую папку во время записи несёт баннер записи в свежее состояние.
+- Строки согласия — только для кандидатов вида: ключи `skills-consent-project` и `skills-consent-home` (вид по `~` в начале элемента), подпись `skills-consent-note-<kind>` с числом каталогов навыков; `in every trusted project` — только у относительного элемента.
+
 ### D10. Наблюдаемость
 
 Логгер `codelab_desktop.settings`, компонент `settings` (D17 change `add-app-settings-shell`). События:
