@@ -60,6 +60,61 @@ void main() {
       expect(script.models.single.baseUrl.host, 'scripted.invalid');
     });
 
+    // Цены модели сценария (задача 1.5b change `add-usage-extension`; D18 Т8):
+    // `llm.model.cost` — доллары за 10^6 токенов, как `ModelCost`.
+    Map<String, Object?> withCost(Map<String, Object?>? cost) => {
+      ...hello,
+      'model': {
+        ...(hello['model']! as Map<String, Object?>),
+        if (cost != null) 'cost': cost,
+      },
+    };
+
+    test('llm.model.cost becomes ModelRef.cost', () {
+      final script = load(
+        write(withCost({'input': 3, 'output': 15.5, 'cacheRead': 0.3})),
+      );
+
+      expect(
+        script.models.single.cost,
+        const ModelCost(input: 3, output: 15.5, cacheRead: 0.3),
+      );
+    });
+
+    test('cacheWrite is read too, absent cache prices are zero', () {
+      final script = load(
+        write(withCost({'input': 1, 'output': 2, 'cacheWrite': 1.25})),
+      );
+
+      expect(
+        script.models.single.cost,
+        const ModelCost(input: 1, output: 2, cacheWrite: 1.25),
+      );
+    });
+
+    test('without llm.model.cost the prices are unknown', () {
+      expect(load(write(hello)).models.single.cost, isNull);
+      expect(load(write(withCost(null))).models.single.cost, isNull);
+    });
+
+    test('modelsOf gives the same prices', () {
+      final path = write(withCost({'input': 3, 'output': 15}));
+
+      expect(
+        LlmScript.modelsOf(path, models: const []).single.cost,
+        const ModelCost(input: 3, output: 15),
+      );
+    });
+
+    test('models from --model keep the prices of the file', () {
+      final script = load(
+        write(withCost({'input': 3, 'output': 15})),
+        models: [ModelId('scripted/other')],
+      );
+
+      expect(script.models.single.cost, const ModelCost(input: 3, output: 15));
+    });
+
     test('models from --model replace the model of the file', () {
       final script = load(
         write(hello),
@@ -225,6 +280,84 @@ void main() {
           'b': {'context_window': 1000, 'max_output_tokens': 200},
         },
       });
+    });
+
+    // Задача 1.5b (D18 Т8): цены модели сценария доходят до конфига ключами
+    // `cost_input`/`cost_output`/`cost_cache_read`/`cost_cache_write`.
+    ModelRef priced(String id, ModelCost? cost) => ModelRef(
+      provider: ModelId(id).provider,
+      id: ModelId(id).model,
+      api: ProviderApi.openaiChat,
+      baseUrl: Uri.parse('http://scripted.invalid/v1'),
+      contextWindow: 1000,
+      maxOutputTokens: 200,
+      cost: cost,
+    );
+
+    Map<String, Object?> modelEntry(ConfigTree layer, String p, String m) =>
+        (((layer.values['providers']! as Map<String, Object?>)[p]!
+                    as Map<String, Object?>)['models']!
+                as Map<String, Object?>)[m]!
+            as Map<String, Object?>;
+
+    const flags = ConfigTree(
+      kind: ConfigLayerKind.flags,
+      source: 'flags',
+      values: {},
+    );
+
+    test('writes the price keys of a priced model', () {
+      final layer = withScriptedProviders(flags, [
+        priced(
+          'scripted/a',
+          const ModelCost(
+            input: 3,
+            output: 15,
+            cacheRead: 0.3,
+            cacheWrite: 3.75,
+          ),
+        ),
+      ]);
+
+      expect(modelEntry(layer, 'scripted', 'a'), {
+        'context_window': 1000,
+        'max_output_tokens': 200,
+        'cost_input': 3,
+        'cost_output': 15,
+        'cost_cache_read': 0.3,
+        'cost_cache_write': 3.75,
+      });
+    });
+
+    test('a model without prices gets no price keys', () {
+      final layer = withScriptedProviders(flags, [priced('scripted/a', null)]);
+
+      expect(modelEntry(layer, 'scripted', 'a'), {
+        'context_window': 1000,
+        'max_output_tokens': 200,
+      });
+    });
+
+    test('the loaded config gives the same ModelCost', () {
+      const cost = ModelCost(
+        input: 3,
+        output: 15,
+        cacheRead: 0.3,
+        cacheWrite: 3.75,
+      );
+      final layer = withScriptedProviders(flags, [
+        priced('scripted/a', cost),
+        priced('scripted/free', null),
+      ]);
+
+      final result = CoreConfig.fromLayers([layer], environment: const {});
+
+      expect(result.issues, isEmpty);
+      final models = result.config!.providers
+          .singleWhere((p) => p.config.name == 'scripted')
+          .models;
+      expect(models['a']!.cost, cost);
+      expect(models['free']!.cost, isNull);
     });
   });
 

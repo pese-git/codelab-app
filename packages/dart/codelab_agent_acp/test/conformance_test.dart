@@ -289,6 +289,8 @@ final class _HostGate implements PermissionGate {
 /// Фрагмент конфига фикстуры (§15) в объёме, который читают фикстуры
 /// этапов 0 и 4: `agent.default_model`, `agent.effort`, `budget.max_steps`,
 /// `budget.max_tokens`, `compaction.keep_recent_tokens`,
+/// `compaction.enabled` (выключает автосжатие; change `add-usage-extension`,
+/// D18 Т8, фикстура `acp/prompt-usage-compaction-off`),
 /// `providers.<id>.models.<model>` (`context_window`, `reasoning`),
 /// `skills` (`enabled`, `disabled`, `max_skills`, `catalog_max_chars`),
 /// `trusted_projects` (список путей, `${cwd}` — временный `cwd` прогона:
@@ -324,12 +326,21 @@ final class _FixtureConfig {
     final budget = _object(config['budget'], 'config.budget');
     _keys(budget, const {'max_steps', 'max_tokens'}, 'config.budget');
     final compaction = _object(config['compaction'], 'config.compaction');
-    _keys(compaction, const {'keep_recent_tokens'}, 'config.compaction');
+    _keys(compaction, const {
+      'keep_recent_tokens',
+      'enabled',
+    }, 'config.compaction');
     final llmModel = _object(setup.llm?['model'], 'llm.model');
     final scripted = _model(
       llmModel['provider'] as String? ?? 'scripted',
       llmModel['modelId'] as String? ?? 'scripted-1',
-      {'context_window': llmModel['contextWindow'] ?? 32768},
+      {
+        'context_window': llmModel['contextWindow'] ?? 32768,
+        // Цены модели сценария (`llm.model.cost`, доллары за 10^6 токенов;
+        // change `add-usage-extension`, D18 Т8): без поля цены неизвестны и
+        // `ModelRef.cost == null`.
+        'cost': llmModel['cost'],
+      },
     );
     // Каталог — модели конфига; модель llm.model входит в него, только
     // если она модель по умолчанию (нет agent.default_model).
@@ -399,6 +410,7 @@ final class _FixtureConfig {
       },
       compaction: CompactionOverrides(
         keepRecentTokens: compaction['keep_recent_tokens'] as int?,
+        enabled: compaction['enabled'] as bool? ?? true,
       ),
       budget: TurnBudget(
         maxSteps: budget['max_steps'] as int? ?? 50,
@@ -518,6 +530,16 @@ final class _FixtureConfig {
     contextWindow: fields['context_window'] as int? ?? 32768,
     maxOutputTokens: 4096,
     supportsReasoning: fields['reasoning'] as bool? ?? false,
+    cost: switch (fields['cost']) {
+      null => null,
+      final Map<String, Object?> cost => ModelCost(
+        input: (cost['input']! as num).toDouble(),
+        output: (cost['output']! as num).toDouble(),
+        cacheRead: (cost['cacheRead'] as num? ?? 0).toDouble(),
+        cacheWrite: (cost['cacheWrite'] as num? ?? 0).toDouble(),
+      ),
+      final value => throw FormatException('llm.model.cost: $value'),
+    },
   );
 
   static Map<String, Object?> _object(Object? value, String path) =>

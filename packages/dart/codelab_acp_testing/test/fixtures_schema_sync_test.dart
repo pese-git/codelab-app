@@ -93,4 +93,29 @@ void main() {
         (objectSchema('mcpServer')['properties']! as Map)['era']! as Map;
     expect((era['enum']! as List).toSet(), {'modern', 'legacy'});
   });
+
+  // change `add-usage-extension`, D18 Т8 (задача 1.5a): цены модели сценария
+  // `llm.model.cost` — объект с числами; ключи формата и `_schema.json`
+  // совпадают.
+  test('llm.model.cost is in the schema and the loader', () {
+    expect(fixtureFormatKeys['llmModel'], contains('cost'));
+    expect(fixtureFormatKeys['llmModelCost'], {
+      'input',
+      'output',
+      'cacheRead',
+      'cacheWrite',
+    });
+    expect(properties(objectSchema('llmModel')), contains('cost'));
+    final cost = objectSchema('llmModelCost');
+    expect(properties(cost), fixtureFormatKeys['llmModelCost']);
+    expect((cost['required']! as List).toSet(), {'input', 'output'});
+    final props = cost['properties']! as Map<String, Object?>;
+    for (final entry in props.entries) {
+      expect(
+        (entry.value! as Map)['type'],
+        'number',
+        reason: 'llmModelCost.${entry.key}',
+      );
+    }
+  });
 }

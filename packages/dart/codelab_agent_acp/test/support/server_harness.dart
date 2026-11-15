@@ -115,6 +115,11 @@ final class ServerHarness {
   ///
   /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
   /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
+  ///
+  /// [defaultModel] и [compaction] — модель по умолчанию (например, с ценами
+  /// `ModelCost`) и пороги сжатия для `CoreConfig`, когда нет
+  /// [configSource] и [rootConfig] (design.md change `add-usage-extension`,
+  /// D18 Т8, задача 1.3: стоимость шага и `/compact` без `setup.config`).
   static Future<ServerHarness> start({
     String profile = 'agent-serve',
     Map<HostCapability, CapabilityState> narrow = const {},
@@ -137,6 +142,8 @@ final class ServerHarness {
     LastModelStore? lastModel,
     DefaultModelSource defaultModelSource = DefaultModelSource.config,
     AgentRuntime Function(AgentRuntime inner)? wrapRuntime,
+    ModelRef? defaultModel,
+    CompactionOverrides compaction = const CompactionOverrides(),
   }) async {
     final clock = FakeClock();
     final logger = RecordingLogger();
@@ -176,7 +183,8 @@ final class ServerHarness {
       config:
           initial ??
           CoreConfig(
-            defaultModel: scriptedModel,
+            defaultModel: defaultModel ?? scriptedModel,
+            compaction: compaction,
             defaultModelSource: defaultModelSource,
             budget: budget,
             trustedProjects: trustedProjects,

@@ -127,6 +127,19 @@ const _tasksFixtures = {
   'acp/session-load-legacy-plan',
 };
 
+/// Фикстуры change `add-usage-extension`, итерация 1 (задача 1.5;
+/// acp-golden-fixtures «Фикстуры расширения usage»; design.md D13): роль
+/// только `agent` — клиентскую роль `acp/prompt-usage-steps` добавляет
+/// задача 2.7 (D18 Т8), чтобы `conformance:client` не краснел между PR.
+const _usageFixtures = {
+  'acp/prompt-usage-steps',
+  'acp/prompt-usage-unpriced',
+  'acp/prompt-usage-cancelled',
+  'acp/compact-usage-context',
+  'acp/prompt-usage-compaction-off',
+  'acp/session-load-usage-partial',
+};
+
 /// Блок `agentCapabilities._meta.codelab` ответа `initialize` фикстуры.
 Map<Object?, Object?> _agentCodelabBlock(AcpFixture fixture) {
   final response = fixture.frames
@@ -155,7 +168,58 @@ void main() {
       ..._skillFixtures,
       ..._toolKindFixtures,
       ..._tasksFixtures,
+      ..._usageFixtures,
     });
+  });
+
+  // acp-golden-fixtures «Фикстуры расширения usage» (D13, D18 Т8): метка
+  // `usage` (FIX-4, сценарий «Расширение не объявлено»), роль только
+  // `agent` в итерации 1, объявление клиента — через
+  // `setup.clientCapabilities` с `_meta.codelab.usage`.
+  test('the usage fixtures declare the usage extension and its consent', () {
+    for (final fixture in corpus.where((f) => _usageFixtures.contains(f.id))) {
+      expect(fixture.extensions, contains('usage'), reason: fixture.id);
+      expect(fixture.roles, {FixtureRole.agent}, reason: fixture.id);
+      final caps = fixture.setup.clientCapabilities as Map?;
+      final codelab = (caps?['_meta'] as Map?)?['codelab'] as Map?;
+      expect(codelab?['usage'], {
+        'version': 1,
+      }, reason: '${fixture.id}: the client must declare usage');
+    }
+  });
+
+  // D18 Т8: `acp/prompt-usage-steps`, `-unpriced` и `-cancelled` идут и во
+  // встроенном агенте (`conformance:embedded`, `codelab-agent serve --stdio`),
+  // поэтому без `setup.config` и `setup.sessions`; цены задаёт `llm.model.cost`.
+  // Отступление от текста задачи 1.5: `acp/compact-usage-context` несёт
+  // `setup.config.compaction.keep_recent_tokens: 512`, как `acp/slash-compact`:
+  // с порогом по умолчанию (16384 токена хвоста) короткая история не
+  // сжимается и `ContextCompacted` не возникает; такая фикстура — только
+  // `conformance:agent`.
+  test('the usage fixtures for all modes have no setup.config/sessions', () {
+    final byId = {for (final f in corpus) f.id: f};
+    for (final id in const [
+      'acp/prompt-usage-steps',
+      'acp/prompt-usage-unpriced',
+      'acp/prompt-usage-cancelled',
+    ]) {
+      expect(byId[id]!.setup.config, isNull, reason: id);
+      expect(byId[id]!.setup.sessions, isEmpty, reason: id);
+    }
+    expect(byId['acp/compact-usage-context']!.setup.config, {
+      'compaction': {'keep_recent_tokens': 512},
+    });
+    expect(
+      byId['acp/prompt-usage-compaction-off']!.setup.config,
+      containsPair('compaction', {'enabled': false}),
+    );
+    expect(byId['acp/session-load-usage-partial']!.setup.sessions, isNotEmpty);
+    final priced = byId['acp/prompt-usage-steps']!.llm!.model!;
+    expect(priced['cost'], isA<Map>());
+    expect(
+      byId['acp/prompt-usage-unpriced']!.llm!.model!,
+      isNot(contains('cost')),
+    );
   });
 
   // acp-golden-fixtures «Фикстуры субагентов и списка задач»: роли заданы
@@ -241,10 +305,15 @@ void main() {
     final fixture = corpus.singleWhere(
       (f) => f.id == 'acp/initialize-codelab-extensions',
     );
+    // change `add-usage-extension`, задача 1.5: ответ агента несёт `usage`
+    // (D3), метка `usage` — в `extensions` (FIX-4). Кадр клиента ниже не
+    // меняется до задачи 2.7 (D18 Т8).
+    expect(fixture.extensions, containsAll(['capabilities', 'usage']));
     expect(_agentCodelabBlock(fixture), {
       'subagents': {'version': 1, 'maxDepth': 3},
       'subagentToolCalls': {'version': 1},
       'tasks': {'version': 1},
+      'usage': {'version': 1},
     });
     final request = fixture.frames
         .where((f) => f.direction == FrameDirection.c2a)
@@ -449,6 +518,91 @@ void main() {
       });
     });
   }
+
+  // `llm.model.cost` (change `add-usage-extension`, D18 Т8; задача 1.5a):
+  // цены модели сценария, доллары за 10^6 токенов, как `ModelCost` ядра.
+  // Без поля цены неизвестны — отсюда `noPrice` в фикстуре
+  // `acp/prompt-usage-unpriced`. Неизвестный ключ и не число — громкий отказ
+  // загрузки с путём (§14.9, шаг 1).
+  group('llm.model.cost', () {
+    AcpFixture parse(Object? cost) => AcpFixture.fromJson({
+      'id': 'acp/cost-model',
+      'spec': ['05-Prompt Turn.md#1-user-message'],
+      'description': 'Фикстура теста цен модели.',
+      'setup': {'cwd': '/work/demo'},
+      'llm': {
+        'model': {
+          'provider': 'scripted',
+          'modelId': 'scripted-1',
+          'contextWindow': 32768,
+          'cost': ?cost,
+        },
+        'steps': <Object?>[],
+      },
+      'frames': [
+        {
+          'dir': 'c2a',
+          'frame': {
+            'jsonrpc': '2.0',
+            'method': 'session/cancel',
+            'params': {'sessionId': r'${sessionId}'},
+          },
+        },
+      ],
+    }, fileName: 'cost-model.json');
+
+    Matcher failsAt(String path) => throwsA(
+      isA<FixtureFormatException>().having((e) => e.path, 'path', path),
+    );
+
+    test('input and output are accepted', () {
+      final fixture = parse({'input': 3, 'output': 15});
+
+      expect(fixture.llm!.model!['cost'], {'input': 3, 'output': 15});
+    });
+
+    test('cacheRead, cacheWrite and fractional prices are accepted', () {
+      final fixture = parse({
+        'input': 3.5,
+        'output': 15,
+        'cacheRead': 0.3,
+        'cacheWrite': 3.75,
+      });
+
+      expect(fixture.llm!.model!['cost'], containsPair('cacheWrite', 3.75));
+    });
+
+    test('an unknown key fails with its path', () {
+      expect(
+        () => parse({'input': 3, 'output': 15, 'reasoning': 1}),
+        failsAt(r'$.llm.model.cost.reasoning'),
+      );
+    });
+
+    test('a non-numeric price fails with its path', () {
+      expect(
+        () => parse({'input': '3', 'output': 15}),
+        failsAt(r'$.llm.model.cost.input'),
+      );
+      expect(
+        () => parse({'input': 3, 'output': 15, 'cacheRead': true}),
+        failsAt(r'$.llm.model.cost.cacheRead'),
+      );
+    });
+
+    test('input and output are required', () {
+      expect(() => parse({'input': 3}), failsAt(r'$.llm.model.cost.output'));
+      expect(() => parse({'output': 3}), failsAt(r'$.llm.model.cost.input'));
+    });
+
+    test('cost must be an object', () {
+      expect(() => parse(3), failsAt(r'$.llm.model.cost'));
+    });
+
+    test('a model without cost stays valid', () {
+      expect(parse(null).llm!.model, isNot(contains('cost')));
+    });
+  });
 
   group('invariant checks on a temporary corpus', () {
     late Directory dir;
