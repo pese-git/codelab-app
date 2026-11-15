@@ -91,27 +91,27 @@
 ### Requirement: Уведомление `_codelab/session/usage`
 Сервер SHALL отправлять уведомление JSON-RPC `_codelab/session/usage` (без `id`) каждому соединению сессии, объявившему `clientCapabilities._meta.codelab.usage` (значение — объект с `version`, равным целому JSON-числу `1`; требование «initialize»), и НЕ SHALL отправлять его остальным соединениям (design.md change `add-usage-extension`, D1, D3). Расширение SHALL соблюдать `15-Extensibility.md` (D17): метод начинается с `_`, это уведомление без `id` (ответа и `-32601` нет), поддержка объявляется только в `_meta` capability-объектов, а стандартные типы ACP (`InitializeResponse`, `AgentCapabilities`, `PromptResponse`, `SessionNotification`) НЕ SHALL получать новых корневых полей и новых значений `sessionUpdate`. Поводы (`trigger`):
 - `step` — после каждого `StepEnded` хода;
-- `turn` — по `TurnEnded` хода, в котором был хотя бы один `StepEnded`, после последнего `session/update` хода и до ответа на `session/prompt`, при любой причине завершения, включая `cancelled` и сбой `-32603` (ACP-3, ACP-5, ACP-7);
+- `turn` — по `TurnEnded` хода, в котором был хотя бы один `StepEnded`, после последнего `session/update` хода и до ответа на `session/prompt`, при любой причине завершения, включая `cancelled` и сбой `-32603` (ACP-3, ACP-5, ACP-7); `session_info_update` с названием сессии, которое агент даёт после хода, идёт после снимка `turn` (design.md, D19 п. 5);
 - `compaction` — после `ContextCompacted`.
 
 Ход без шагов модели (встроенная команда, отмена до первого запроса) НЕ SHALL давать уведомлений.
 
-Параметры SHALL иметь форму D2: `sessionId`; `seq` — целое, начиная с 1 и строго растущее на каждый снимок в пределах сессии сервера, общее для всех её соединений; `trigger`; `turnId` при `step` и `turn`; `step` (`index`, `model` в виде `<provider>/<id>`, `tokens`, `cost`, `partial`) только при `step`; агрегат `turn` при `step` и `turn`; агрегат `session` всегда; `currency: "USD"`, если в параметрах есть хоть одно `cost`; `context` с целыми `used` и `size` и целым `compactAt` (порог автосжатия; поле отсутствует, если автосжатие выключено), если ядро сообщило заполнение контекста. Агрегат SHALL содержать `tokens` (`input`, `output`, `cacheRead`, `cacheWrite`; `reasoning` — только если сообщён), `steps` (у сессии ещё `turns`), `cost` и `partial` по правилам ниже.
+Параметры SHALL иметь форму D2: `sessionId`; `seq` — целое, начиная с 1 и строго растущее на каждый снимок в пределах сессии сервера, общее для всех её соединений; `trigger`; `turnId` при `step` и `turn`; `step` (`index`, `model` в виде `<provider>/<id>`, `tokens`, `cost`, `partial`) только при `step`; агрегат `turn` при `step` и `turn`; агрегат `session` всегда; `currency: "USD"`, если в параметрах есть хоть одно `cost`; `context` с целыми `used` и `size` и целым `compactAt` (порог автосжатия; поле отсутствует, если автосжатие выключено), если ядро сообщило заполнение контекста. Агрегат SHALL содержать `tokens` (`input`, `output`, `cacheRead`, `cacheWrite`; `reasoning` — только если сообщён), `steps` (у сессии ещё `turns` — число ходов сессии в сервере, в которых был хотя бы один `StepEnded`, включая текущий), `cost` и `partial` по правилам ниже. `context` снимка `turn` SHALL совпадать с `context` последнего `StepEnded` хода (design.md, D19 п. 3–4).
 
 Значения SHALL считаться так (D4, D6, D9):
 - шаг — usage и модель `StepEnded`; ход во время хода — сумма его шагов; ход в конце — `TurnEnded.usage`; сессия — сумма итогов завершённых ходов этой сессии в сервере плюс текущий ход;
 - стоимость — в целых микродолларах (`round(cost.total × 10⁶)` шага и итога хода, сумма ходов для сессии), на проводе — десятичная строка без хвостовых нулей с не более чем 6 знаками после точки (`"0"` для нуля); `cost` отсутствует, если ни у одной модели шагов агрегата нет цен;
-- `partial`: `noUsage` — у успешного ответа модели `input + output == 0`; `noPrice` — у модели шага нет цен при ненулевых токенах; `beforeLoad` — только у сессии, открытой в сервере через `session/load`, в журнале которой были ответы модели; у хода и сессии — объединение причин их шагов; пустой массив не отправляется.
+- `partial`: `noUsage` — у успешного ответа модели `input + output == 0`; `noPrice` — у модели шага нет цен при ненулевых токенах, а у итога хода ещё и когда `TurnEnded.subagentUsage` имеет ненулевые токены при нулевой стоимости (эвристика: цены моделей детей адаптеру не видны); `beforeLoad` — только у сессии, открытой в сервере через `session/load`, в журнале которой были ответы модели; у хода и сессии — объединение причин их шагов; у шага `noUsage` и `noPrice` вместе не бывают (`noPrice` требует ненулевых токенов); причины в массиве SHALL идти в порядке `noUsage`, `noPrice`, `beforeLoad`; пустой массив не отправляется (design.md, D19 п. 2).
 
-Уведомление НЕ SHALL нести секретов, текстов сообщений и аргументов инструментов.
+Уведомление НЕ SHALL нести секретов, текстов сообщений и аргументов инструментов. Каждая отправка SHALL давать debug-запись `acp.usage.sent {session_id, seq, trigger}` без токенов и денег (design.md, D14).
 
 #### Scenario: Два шага с ценами
 - **WHEN** клиент объявил `usage`, а ход делает два запроса к модели с ценами и заканчивается `end_turn`
-- **THEN** кадры совпадают с фикстурой `acp/prompt-usage-steps`: после первого и второго шага — `_codelab/session/usage` с `trigger: "step"` и `seq` 1 и 2, затем `trigger: "turn"` с `seq` 3, суммой двух шагов в `turn` и `session`, затем ответ `stopReason: end_turn`
+- **THEN** кадры совпадают с фикстурой `acp/prompt-usage-steps`: после первого и второго шага — `_codelab/session/usage` с `trigger: "step"` и `seq` 1 и 2 (уже в первом `session.turns` — 1), затем `trigger: "turn"` с `seq` 3, суммой двух шагов в `turn` и `session` и `context` второго шага, затем ответ `stopReason: end_turn`
 
 #### Scenario: Модель без цен и шаг без usage
 - **WHEN** у модели сессии нет цен, а scripted-модель отвечает без usage
-- **THEN** в снимках нет `cost` и `currency`, а `partial` шага, хода и сессии — `["noUsage"]`; при ненулевых токенах без цен — `["noPrice"]` (фикстура `acp/prompt-usage-unpriced`)
+- **THEN** в снимках нет `cost` и `currency`; `partial` шага с токенами — `["noPrice"]`, шага без usage — `["noUsage"]`, а хода и сессии после обоих шагов — `["noUsage", "noPrice"]` (фикстура `acp/prompt-usage-unpriced`)
 
 #### Scenario: Отмена посреди инструмента
 - **WHEN** клиент отменяет ход, пока `exec` ждёт `terminal/wait_for_exit`
@@ -129,17 +129,21 @@
 - **WHEN** у сессии `compaction.enabled: false`, клиент объявил `usage`
 - **THEN** `context` в снимках содержит `used` и `size` без `compactAt` (фикстура `acp/prompt-usage-compaction-off`)
 
-#### Scenario: Два соединения одной сессии
-- **WHEN** сессию загрузили два соединения, объявившие `usage`, и одно из них отправило промпт
-- **THEN** оба получают одинаковые снимки с одинаковыми `seq`, а ответ на `session/prompt` — только отправитель
+#### Scenario: Сессия перешла к новому соединению
+- **WHEN** после хода со снимками до `seq` 3 сессию без идущего хода загружает другое соединение, объявившее `usage` (`reattach`: у сессии один владелец, веер кадров на все соединения — после MVP, SESM-15), и отправляет промпт
+- **THEN** снимки нового хода получает только новое соединение, `seq` продолжает счёт сессии сервера без сброса (первый снимок — `seq` 4), агрегат `session` включает ходы до перехода, `partial` не содержит `beforeLoad`; прежнее соединение снимков не получает
+
+#### Scenario: Субагент на модели без цен
+- **WHEN** в ходе вызов `agent` запустил ребёнка, `TurnEnded.subagentUsage` содержит ненулевые токены, а его стоимость равна нулю
+- **THEN** у агрегатов `turn` и `session` снимка `trigger: "turn"` `partial` содержит `noPrice` (стоимость детей не оценена)
 
 #### Scenario: Встроенная команда без модели
-- **WHEN** клиент, объявивший `usage`, отправляет `/usage`
-- **THEN** кадров `_codelab/session/usage` нет (фикстура `acp/usage-and-redact-commands` не меняется)
+- **WHEN** клиент, объявивший `usage`, отправляет встроенную команду `/status`
+- **THEN** кадров `_codelab/session/usage` нет: модель не вызывалась (`usage_projection_test.dart`; встроенной команды `/usage` в агенте пока нет — design.md, D18 Т7)
 
 #### Scenario: Сжатие контекста
 - **WHEN** после хода клиент отправляет `/compact`, и сжатие записано
-- **THEN** приходит `_codelab/session/usage` с `trigger: "compaction"`, без `turnId` и `step`, с `context.used`, меньшим, чем в последнем снимке хода (фикстура `acp/compact-usage-context`)
+- **THEN** приходит `_codelab/session/usage` с `trigger: "compaction"`, без `turnId`, `step` и `turn`, с `context.used`, меньшим, чем в последнем снимке хода (`usage_projection_test.dart`), и `size`, `compactAt` последнего `StepEnded`; относительно чанка отчёта «Compacted…» порядок не фиксирован (фикстура `acp/compact-usage-context`)
 
 #### Scenario: Сессия после загрузки
 - **WHEN** сессию с ответами модели в журнале загружают через `session/load` в новом сервере и отправляют промпт
