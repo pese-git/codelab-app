@@ -110,6 +110,9 @@
                 },
                 "subagents": {
                   "version": 1
+                },
+                "subagentToolCalls": {
+                  "version": 1
                 }
               }
             }
