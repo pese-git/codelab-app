@@ -84,16 +84,13 @@ Config: invalid (issues: 1)
 
 ## Файлы
 
-По умолчанию файлы клиента и встроенного агента лежат в каталоге `CODELAB_HOME`; исключение — слои конфигурации проекта. Сам `CODELAB_HOME` по умолчанию — `~/.codelab` (`%USERPROFILE%\.codelab` в Windows).
+По умолчанию файлы клиента и встроенного агента лежат в каталоге `CODELAB_HOME`; исключение — слои конфигурации проекта. Где лежит каталог и какие файлы в нём общие с CodeLab app (`config.yaml`, `profiles.json`, `secrets.yaml`, `sessions/`), — в [каталоге `CODELAB_HOME`](../../../docs/ops/codelab-home.md). Здесь — только то, что относится к `codelab`.
 
 | Где | Что | Кто пишет |
 |---|---|---|
-| `$CODELAB_HOME/config.yaml` | глобальная конфигурация агента: провайдеры, модель, MCP, секреты | `codelab config set`, `provider`, `mcp`, мастер; вы |
 | `<проект>/.codelab/config.yaml`, `<проект>/.codelab/config.local.yaml` | слои проекта | `config set --project` и `--local`; вы |
-| `$CODELAB_HOME/profiles.json` | профили подключения к внешним агентам | `codelab profiles add` и `remove` |
 | `$CODELAB_HOME/cli_history` | история ввода диалога; создаётся с правами `0600` | диалог и полноэкранный режим |
-| `$CODELAB_HOME/sessions/`, если в конфигурации не задан `sessions.dir` | журналы сессий встроенного агента, по подкаталогу на папку проекта | встроенный агент |
-| `$CODELAB_HOME/secrets.yaml` | значения секретов, если включён `secrets.backend: file` | `codelab secret set` и `secret migrate`, `provider add --api-key-stdin`, `mcp add --header-stdin` и `--env-stdin`, мастер провайдера |
+| `$CODELAB_HOME/secrets.yaml` ([общий файл](../../../docs/ops/codelab-home.md#общие-файлы)) | какие команды `codelab` его пишут при `secrets.backend: file` | `codelab secret set` и `secret migrate`, `provider add --api-key-stdin`, `mcp add --header-stdin` и `--env-stdin`, мастер провайдера |
 
 Диалог, полноэкранный режим и `codelab profiles` создают `CODELAB_HOME` с правами `0700`, если каталога нет. Headless `-p` этого не делает: если первым запустить его, встроенный агент создаст `CODELAB_HOME` и `sessions/` с правами по umask. В CI заранее создайте каталог с правами `0700`. Подкоманды `config`, `provider`, `mcp` и `secret` не создают `sessions/`, `profiles.json` и `cli_history`.
 
@@ -111,8 +108,7 @@ local: ~/projects/demo/.codelab/config.local.yaml (missing)
 
 | Переменная | Для чего |
 |---|---|
-| `CODELAB_HOME` | каталог настроек и данных; `~` и `~/…` раскрываются в домашний каталог |
-| `HOME`, `USERPROFILE` | домашний каталог для `CODELAB_HOME` по умолчанию |
+| `CODELAB_HOME`, `HOME`, `USERPROFILE` | каталог настроек и данных — правило в [каталоге `CODELAB_HOME`](../../../docs/ops/codelab-home.md#где-лежит-каталог) |
 | `CODELAB_CONFIG` | абсолютный путь к дополнительному файлу конфигурации (слой 5) |
 | `CODELAB_SECRET_<ИМЯ>` | значение секрета без файла хранилища, подходит для CI; правило имени — в [шаге 2 настройки](../../../docs/user/configuration.md#шаг-2-задайте-ключ-api) |
 | переменная из `api_key_env` провайдера | ключ API провайдера |

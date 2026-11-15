@@ -1,17 +1,63 @@
-# codelab_desktop
+# Настольное приложение CodeLab (`codelab_desktop`)
 
-A new Flutter project.
+CodeLab app — настольное приложение для работы с AI-агентом над папкой проекта: сессии по проектам, лента переписки, одобрение действий агента, файлы проекта, терминал и настройки агента в одном окне. Как и терминальный клиент `codelab`, по умолчанию оно запускает встроенного агента в своём процессе; внешний агент подключается профилем. Сейчас приложение собирается и проверяется для macOS.
 
-## Getting Started
+![Рабочее место с открытой сессией в проекте demo](doc/images/workbench-new-session.png)
 
-This project is a starting point for a Flutter application.
+Сессия в проекте `demo` до первого сообщения: в шапке — проект и режим, под полем ввода — режим и модель.
 
-A few resources to get you started if this is your first Flutter project:
+## Кому какой документ
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+| Я хочу… | Читать |
+|---|---|
+| пользоваться CodeLab app | [Руководство пользователя](doc/user-guide.md) |
+| собрать приложение, найти его данные и логи | [Эксплуатация](doc/operations.md) |
+| менять код приложения | [Разработка](doc/development.md) |
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Быстрый старт
+
+Команды выполняются из корня репозитория. Нужны FVM и Xcode с командной строкой.
+
+1. Подготовьте репозиторий и сгенерированный код — по шагу 1 из [запуска из исходников](../../docs/user/run-from-source.md#1-подготовка).
+
+2. Запустите приложение:
+
+   ```bash
+   cd apps/codelab_desktop
+   fvm flutter run -d macos
+   ```
+
+   Откроется окно с надписью «Open a project to start a session.»
+
+3. Нажмите «Open folder…» и выберите папку проекта. Приложение запустит встроенного агента в этой папке.
+
+4. Если провайдер модели ещё не настроен, на экране появится «No model provider is configured for the embedded agent.» Нажмите «Add provider» и пройдите мастер — подробно в [руководстве пользователя](doc/user-guide.md#подключить-провайдера-модели).
+
+5. Создайте сессию сочетанием ⌘N (или «New session» в боковой панели) и напишите агенту сообщение.
+
+## Как устроено
+
+На схеме — части приложения и то, с чем они говорят.
+
+```mermaid
+flowchart LR
+  user["Вы"] --> ui["Окно: рабочее место и настройки"]
+  subgraph proc["Процесс CodeLab app"]
+    ui --> client["Клиентский слой: сессии, очередь, одобрения"]
+    client -->|"ACP в памяти"| embedded["Встроенный агент"]
+    ui --> term["Терминал пользователя"]
+  end
+  client -->|"ACP по stdio"| ext["Агент-процесс"]
+  client -->|"ACP по WebSocket"| ws["Агент по адресу ws:// или wss://"]
+  embedded --> llm["Провайдер модели"]
+  client --- home[("CODELAB_HOME: config.yaml, profiles.json, sessions/")]
+  embedded --- home
+```
+
+ACP (Agent Client Protocol) — протокол, по которому клиент и агент обмениваются сообщениями. Встроенный агент выбран по умолчанию; агент-процесс и агент по WebSocket выбираются профилем на странице «Connection». Терминал пользователя — обычная оболочка в папке сессии: он не проходит через агента и его одобрения.
+
+## Смотрите также
+
+- [Документация пользователя CodeLab](../../docs/user/README.md)
+- [Эксплуатация CodeLab](../../docs/ops/README.md)
+- [Правила приложения для разработчиков и агентов](AGENTS.md)
