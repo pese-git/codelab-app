@@ -181,16 +181,22 @@ final class SubagentSummaryView {
 
   int get totalTokens => inputTokens + outputTokens;
 
+  /// Сумма токенов `input + output`: `850`, `18.2k` (общий формат для
+  /// [text], [shortText] и строк панели Agents).
+  String get tokensText => totalTokens < 1000
+      ? '$totalTokens'
+      : '${(totalTokens / 1000).toStringAsFixed(1)}k';
+
   /// Время: `48s`, `2m 05s`, `1h 02m`.
   String get durationText => formatSubagentDuration(duration);
 
   String get _calls => subagentCallsText(toolCalls);
 
   /// Полная строка итога: `4 tool calls · 18.2k tokens · 48s`.
-  String get text => '$_calls · ${_tokens(totalTokens)} tokens · $durationText';
+  String get text => '$_calls · $tokensText tokens · $durationText';
 
   /// Сокращённый вид свёрнутой строки (D27): `4 tool calls · 18.2k · 48s`.
-  String get shortText => '$_calls · ${_tokens(totalTokens)} · $durationText';
+  String get shortText => '$_calls · $tokensText · $durationText';
 
   @override
   bool operator ==(Object other) =>
@@ -207,10 +213,6 @@ final class SubagentSummaryView {
   @override
   String toString() => 'SubagentSummaryView($text)';
 }
-
-/// `18200` → `18.2k`; меньше тысячи — число как есть (`850`).
-String _tokens(int total) =>
-    total < 1000 ? '$total' : '${(total / 1000).toStringAsFixed(1)}k';
 
 /// Формат длительности субагента: `48s`, `2m 05s`, `1h 02m` (D24, D27).
 String formatSubagentDuration(Duration duration) {
@@ -240,6 +242,13 @@ SubagentCallView? parseSubagentCall(Map<String, Object?>? meta) {
   return id is String && id.isNotEmpty
       ? SubagentCallView(id: id, type: type)
       : null;
+}
+
+/// Причина отказа из накопленного `_meta.codelab.subagent.failure`; `null`,
+/// если ключа нет или это не непустая строка (терпимый разбор).
+String? parseSubagentFailure(Map<String, Object?>? meta) {
+  final failure = meta?['failure'];
+  return failure is String && failure.isNotEmpty ? failure : null;
 }
 
 /// Итог из накопленного `_meta.codelab.subagent`; `null` при неверной форме

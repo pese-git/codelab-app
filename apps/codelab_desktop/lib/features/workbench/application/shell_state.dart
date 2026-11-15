@@ -2,6 +2,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show CommandCatalog;
 import 'package:codelab_ui/codelab_ui.dart';
 
+import 'agents_pane_data.dart';
 import 'connection_cubit.dart' show ProviderSetupNotice, RestartConfirmation;
 import 'sessions_cubit.dart' show PendingRootSession;
 import 'ui_mappers.dart';
@@ -50,6 +51,9 @@ final class CodeLabShellState {
     this.activePane,
     this.dockOverlayOpen = false,
     this.projectFilesAvailable = false,
+    this.agents = AgentsPaneData.empty,
+    this.selectedAgentId,
+    this.transcriptShowRequest,
     this.sessionMode,
     required this.agentCommands,
     required this.commandCatalog,
@@ -162,6 +166,20 @@ final class CodeLabShellState {
   /// `add-file-preview-and-tree`, D7).
   final bool projectFilesAvailable;
 
+  /// Данные панели Agents сессии в фокусе (D33, D49 Т8).
+  final AgentsPaneData agents;
+
+  /// Панель Agents предлагается: у сессии в фокусе есть хотя бы одна строка
+  /// субагента (D49 Т11). Объявление агента условием не является.
+  bool get agentsAvailable => !agents.isEmpty;
+
+  /// Выбранная строка панели Agents (`toolCallId`); `null` — не выбрана или
+  /// строки с таким id в сессии уже нет (выбор не применяется, D49 Т8).
+  final String? selectedAgentId;
+
+  /// Разовый запрос показа строки ленты для сессии в фокусе (D49 Т7).
+  final CodeLabTranscriptShowRequest? transcriptShowRequest;
+
   /// Режим активной сессии для чипа шапки; `null` — чипа нет.
   final String? sessionMode;
   final double sessionsPaneWidth;
@@ -224,6 +242,9 @@ final class CodeLabShellState {
     Object? activePane = _unset,
     bool? dockOverlayOpen,
     bool? projectFilesAvailable,
+    AgentsPaneData? agents,
+    Object? selectedAgentId = _unset,
+    Object? transcriptShowRequest = _unset,
     Object? sessionMode = _unset,
     List<CodeLabCommandAction>? agentCommands,
     CommandCatalog? commandCatalog,
@@ -288,6 +309,13 @@ final class CodeLabShellState {
       dockOverlayOpen: dockOverlayOpen ?? this.dockOverlayOpen,
       projectFilesAvailable:
           projectFilesAvailable ?? this.projectFilesAvailable,
+      agents: agents ?? this.agents,
+      selectedAgentId: identical(selectedAgentId, _unset)
+          ? this.selectedAgentId
+          : selectedAgentId as String?,
+      transcriptShowRequest: identical(transcriptShowRequest, _unset)
+          ? this.transcriptShowRequest
+          : transcriptShowRequest as CodeLabTranscriptShowRequest?,
       sessionMode: identical(sessionMode, _unset)
           ? this.sessionMode
           : sessionMode as String?,

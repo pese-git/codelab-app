@@ -659,6 +659,7 @@ ToolCallView _callView(ToolCallRecord record, {SubagentRequester? subagent}) =>
       ],
       subagentCall: parseSubagentCall(record.subagentMeta),
       subagentSummary: parseSubagentSummary(record.subagentMeta),
+      subagentFailure: parseSubagentFailure(record.subagentMeta),
       subagent: subagent,
       parentToolCallId: record.parentToolCallId,
     );

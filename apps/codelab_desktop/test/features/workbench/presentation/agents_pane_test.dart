@@ -1,5 +1,5 @@
-// Красные widget-тесты задачи 5b.1 (app) change `add-subagents-and-tasks`:
-// панель Agents v1 в доке — agent-workbench-ui «Панель Agents v1» (сценарии
+// Widget-тесты панели Agents v1 в доке (задачи 5b.1, 5b.4 change
+// `add-subagents-and-tasks`): agent-workbench-ui «Панель Agents v1» (сценарии
 // «Панель появляется с первым субагентом», «Сторонний агент», «Ребёнок, внук
 // и итог», «Ожидание одобрения и переход к нему», «Дерево шагов выбранного
 // потомка», «Переход к строке в ленте», «Пункты списка у субагента»,
@@ -8,22 +8,19 @@
 // closable pane tabs» («Unavailable pane is hidden but kept in the layout»);
 // design.md D33, D49 Т7–Т11, D50 п. 2–3.
 //
-// Красные по причине: `SessionView.subagents` в kit пока заглушка и всегда
-// пуста (5b.2), `_availablePanesOf` не знает панель Agents, пункта палитры
-// `agents` нет, а `WorkbenchAgentsPane` и `CodeLabAgentsPane` рисуют пустое
-// (5b.3, 5b.4). После реализации тесты должны стать зелёными без правок
-// поведения; ключи и тексты — из задач 5b.1 и 5b.3 (`agents-row-<toolCallId>`,
+// Ключи и тексты — из задач 5b.1 и 5b.3 (`agents-row-<toolCallId>`,
 // `agents-go-to-approval-<toolCallId>`, `agents-show-in-transcript-<toolCallId>`,
 // `transcript-row-<id>`, `CodeLabTranscriptPanel.targetKey` и `highlightKey`).
 //
 // Данные идут через настоящий граф app: сценарные `session/update` на
 // `FakeAcpTransport` проходят kit и Cubit-ы (как в `workbench_shell_test`),
 // поэтому тесты не знают, как kit строит строки. Решает «опасно ли» и выбирает
-// исход пользователь в ленте (PERM-4): в панели Agents панели решения нет.
+// исход пользователь в ленте (PERM-4): в панели Agents решения нет.
 //
-// Зелёные характеристики (проходят и сейчас, 5b.4 их менять не вправе):
-// сохранённая панель Agents без строк не даёт переключателя и остаётся в
-// раскладке; пункта палитры `agents` нет, пока панель недоступна.
+// Отдельно проверяются: панель Agents без строк не даёт переключателя и
+// остаётся в раскладке; пункта палитры `agents` нет, пока панель недоступна.
+// Группа «ревью итерации 5b» — переход к одобрению не решает, разовый запрос
+// показа ленты.
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
@@ -1083,6 +1080,196 @@ void main() {
       final idle = scene.textOf(scene.rowOf('call_1'));
       expect(idle, contains('running'));
       expect(_secondsIn(idle), isNull);
+
+      await scene.close();
+    });
+  });
+
+  group('ревью итерации 5b', () {
+    /// Два внука `explore` и `search` под ребёнком `review`; каждый ждёт
+    /// одобрения своего `exec`. Возвращает `approvalId` обоих.
+    Future<(String, String)> twoWaiting(_Scene scene) async {
+      await scene.frames([
+        ..._childWithGrandchild(),
+        _agentCall(
+          'call_1/call_4',
+          parent: 'call_1',
+          type: 'search',
+          description: 'Find usages',
+          subagentId: 'sub_c3',
+        ),
+        _call(
+          'call_1/call_2/call_3',
+          parent: 'call_1/call_2',
+          kind: 'execute',
+          status: 'pending',
+          rawInput: {'command': 'git diff --stat'},
+        ),
+        _call(
+          'call_1/call_4/call_5',
+          parent: 'call_1/call_4',
+          kind: 'execute',
+          status: 'pending',
+          rawInput: {'command': 'git log'},
+        ),
+      ]);
+      await scene.ask(
+        'call_1/call_2/call_3',
+        meta: _requester(id: 'sub_b2', type: 'explore', depth: 2),
+      );
+      await scene.ask(
+        'call_1/call_4/call_5',
+        command: 'git log',
+        meta: _requester(id: 'sub_c3', type: 'search', depth: 2),
+      );
+      await scene.frames(_fillers(60));
+      final explore = scene.cubit.state.agents
+          .rowOf('call_1/call_2')
+          ?.approvalId
+          ?.value;
+      final search = scene.cubit.state.agents
+          .rowOf('call_1/call_4')
+          ?.approvalId
+          ?.value;
+      return (explore!, search!);
+    }
+
+    testWidgets('«Go to approval» не принимает решение: запрос остаётся '
+        'ожидающим, ответ на `session/request_permission` не отправлен', (
+      tester,
+    ) async {
+      final scene = await _Scene.open(tester);
+      await scene.newSession('s1');
+      await scene.startTurn();
+      final (explore, _) = await twoWaiting(scene);
+      await scene.openPaneByToggle();
+      final focusBefore = FocusManager.instance.primaryFocus;
+      int responses() =>
+          scene.agent.sentMessages.whereType<JsonRpcResponse>().length;
+      final before = responses();
+
+      await scene.tapKey(scene.goToApproval('call_1/call_2'));
+
+      expect(responses(), before);
+      expect(
+        scene.cubit.state.agents.rowOf('call_1/call_2')?.approvalId?.value,
+        explore,
+      );
+      expect(scene.textOf(scene.rowOf('call_1/call_2')), contains('waiting'));
+      expect(scene.textOf(scene.rowOf('call_1/call_4')), contains('waiting'));
+      // Фокус остался там, где был: клавиши решения не получили его.
+      expect(FocusManager.instance.primaryFocus, same(focusBefore));
+
+      await scene.close();
+    });
+
+    testWidgets('кнопка шага «Go to approval» ведёт к блоку одобрения шага', (
+      tester,
+    ) async {
+      final scene = await _Scene.open(tester);
+      await scene.newSession('s1');
+      await scene.startTurn();
+      final (explore, _) = await twoWaiting(scene);
+      await scene.openPaneByToggle();
+      await scene.tapKey(scene.rowOf('call_1'));
+
+      // Id шага — id элемента ленты, которому принадлежит одобрение.
+      final stepId = scene.cubit.state.agents.pendingApprovals.entries
+          .firstWhere((entry) => entry.value == explore)
+          .key;
+      expect(
+        find.byKey(CodeLabAgentsPane.stepGoToApprovalKey(stepId)),
+        findsOneWidget,
+      );
+      // Ссылка шага в узком доке уходит за край окна, поэтому нажатие
+      // вызывает колбэк, который панель отдала организму.
+      tester
+          .widget<CodeLabAgentsPane>(find.byType(CodeLabAgentsPane))
+          .onStepGoToApproval!(stepId);
+      await scene.flush();
+
+      expect(
+        find.byKey(CodeLabTranscriptPanel.highlightKey(explore)),
+        findsOneWidget,
+      );
+
+      await scene.close();
+    });
+
+    testWidgets('два ожидающих одобрения: переход ведёт к блоку своего '
+        '`approvalId`', (tester) async {
+      final scene = await _Scene.open(tester);
+      await scene.newSession('s1');
+      await scene.startTurn();
+      final (explore, search) = await twoWaiting(scene);
+      await scene.openPaneByToggle();
+      expect(explore, isNot(search));
+
+      await scene.tapKey(scene.goToApproval('call_1/call_4'));
+      expect(
+        find.byKey(CodeLabTranscriptPanel.highlightKey(search)),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(CodeLabTranscriptPanel.highlightKey(explore)),
+        findsNothing,
+      );
+
+      await tester.pump(const Duration(seconds: 3));
+      await scene.tapKey(scene.goToApproval('call_1/call_2'));
+      expect(
+        find.byKey(CodeLabTranscriptPanel.highlightKey(explore)),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(CodeLabTranscriptPanel.highlightKey(search)),
+        findsNothing,
+      );
+
+      await scene.close();
+    });
+
+    testWidgets('запрос показа гаснет, когда лента закончила показ: '
+        'в состоянии запроса нет', (tester) async {
+      final scene = await _Scene.open(tester);
+      await scene.newSession('s1');
+      await scene.startTurn();
+      await scene.frames([_agentCall('call_1'), ..._fillers(60)]);
+      await scene.openPaneByToggle();
+      final rowKey = CodeLabTranscriptPanel.rowKey(scene.rootAgentRow.id);
+
+      await scene.tapKey(scene.showInTranscript('call_1'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(scene.inTranscriptView(find.byKey(rowKey)), isTrue);
+      expect(scene.cubit.state.transcriptShowRequest, isNull);
+
+      // Запроса в состоянии нет: перемонтированная лента (новый `State`)
+      // получила бы `showRequest == null` и не прокрутила бы снова.
+      expect(
+        find.byKey(CodeLabTranscriptPanel.highlightKey(scene.rootAgentRow.id)),
+        findsOneWidget,
+      );
+
+      await scene.close();
+    });
+
+    testWidgets('запрос показа разовый: после ухода в другую сессию и '
+        'возврата его в состоянии нет', (tester) async {
+      final scene = await _Scene.open(tester);
+      await scene.newSession('s1');
+      await scene.startTurn();
+      await scene.frames([_agentCall('call_1'), ..._fillers(60)]);
+      await scene.openPaneByToggle();
+
+      await scene.tapKey(scene.showInTranscript('call_1'));
+
+      await scene.newSession('s2');
+      expect(scene.cubit.state.transcriptShowRequest, isNull);
+
+      scene.cubit.selectSession('s1');
+      await scene.flush();
+      expect(scene.cubit.state.activeSessionId, 's1');
+      expect(scene.cubit.state.transcriptShowRequest, isNull);
 
       await scene.close();
     });

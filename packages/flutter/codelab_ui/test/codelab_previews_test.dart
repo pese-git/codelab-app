@@ -122,6 +122,9 @@ void main() {
     expect(tester.takeException(), isNull);
 
     // Панель Agents v1 (5b.1, D33): строки с отступом и дерево шагов.
+    // `Overlay` превью хранит `initialEntries` в `State`: без сброса дерева
+    // он показал бы записи предыдущего превью, а не панель.
+    await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(codelabAgentsPanePreview());
     expect(tester.takeException(), isNull);
     expect(find.byType(CodeLabAgentsPane), findsOneWidget);

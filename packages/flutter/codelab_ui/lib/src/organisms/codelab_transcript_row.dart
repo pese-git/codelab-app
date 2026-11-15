@@ -276,6 +276,10 @@ class CodeLabTranscriptAction {
 sealed class CodeLabTranscriptApproval {
   const CodeLabTranscriptApproval();
 
+  /// Id цели показа блока в ленте (`approvalId`); `null` — блок не
+  /// адресуется (D49 Т7).
+  String? get targetId;
+
   const factory CodeLabTranscriptApproval.pending({
     required CodeLabApprovalRisk risk,
     required List<CodeLabApprovalOption> options,
@@ -291,6 +295,7 @@ sealed class CodeLabTranscriptApproval {
     String? requesterLine,
     String? requesterHint,
     String? callTitle,
+    String? targetId,
   }) = CodeLabTranscriptApprovalPending;
 
   const factory CodeLabTranscriptApproval.resolved({
@@ -333,6 +338,7 @@ final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
     this.requesterLine,
     this.requesterHint,
     this.callTitle,
+    this.targetId,
   });
 
   final CodeLabApprovalRisk risk;
@@ -358,6 +364,14 @@ final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
   /// под строкой `agent` корня своей строки вызова нет, и без заголовка не
   /// видно, какой инструмент и какой путь человек разрешает (D43 п. 2).
   final String? callTitle;
+
+  /// Id цели показа блока в ленте (`approvalId`): app ставит его любому
+  /// ожидающему одобрению (в том числе одобрению запуска субагента), и по
+  /// нему «Go to approval» панели Agents прокручивает ленту именно к этому
+  /// блоку (`CodeLabTranscriptPanel.targetKey`, D49 Т7). `null` — блок не
+  /// адресуется.
+  @override
+  final String? targetId;
 }
 
 /// Решённое одобрение: [label] — выбранный вариант или «Cancelled».
@@ -374,4 +388,9 @@ final class CodeLabTranscriptApprovalResolved
 
   /// Строка пути спрашивавшего субагента для тега исхода под строкой корня.
   final String? requesterLine;
+
+  /// Решённый тег исхода не адресуется: «Go to approval» ведёт только к
+  /// ожидающему блоку.
+  @override
+  String? get targetId => null;
 }

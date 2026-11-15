@@ -16,6 +16,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 
+import 'agents_pane_data.dart';
 import 'shell_part.dart';
 import 'ui_mappers.dart';
 
@@ -29,6 +30,7 @@ final class ActiveSessionState {
     this.agentCommandViews = const [],
     this.configOptions = const [],
     this.currentPlan,
+    this.agents = AgentsPaneData.empty,
     this.queuedPrompts = const [],
     this.composerDraft = '',
     this.composerDraftRevision = 0,
@@ -62,6 +64,10 @@ final class ActiveSessionState {
 
   /// План сессии; `null` — плана не было или пользователь его скрыл.
   final List<CodeLabPlanEntry>? currentPlan;
+
+  /// Данные панели Agents: строки kit и связь с лентой (D33, D49 Т8);
+  /// пусто — у сессии нет субагентов, панель недоступна.
+  final AgentsPaneData agents;
 
   /// Очередь показываемой сессии; очередь фоновой сессии живёт в kit
   /// невидимо, пока её не выберут (add-multi-session-concurrency/design.md).
@@ -104,6 +110,7 @@ final class ActiveSessionState {
     List<AgentCommandView>? agentCommandViews,
     List<CodeLabConfigOption>? configOptions,
     Object? currentPlan = _unset,
+    AgentsPaneData? agents,
     List<CodeLabQueuedPrompt>? queuedPrompts,
     String? composerDraft,
     int? composerDraftRevision,
@@ -124,6 +131,7 @@ final class ActiveSessionState {
     currentPlan: identical(currentPlan, _unset)
         ? this.currentPlan
         : currentPlan as List<CodeLabPlanEntry>?,
+    agents: agents ?? this.agents,
     queuedPrompts: queuedPrompts ?? this.queuedPrompts,
     composerDraft: composerDraft ?? this.composerDraft,
     composerDraftRevision: composerDraftRevision ?? this.composerDraftRevision,
@@ -211,6 +219,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         configOptions: configOptionsOf(view?.configOptions ?? const []),
         sessionMode: modeLabelOf(view?.configOptions ?? const []),
         currentPlan: planEntriesOf(view?.plan ?? const []),
+        agents: agentsPaneDataOf(view),
         queuedPrompts: _queueOf(id),
         isPromptSubmitting: _isBusy(view?.status),
         canCancel: view?.status == SessionStatusView.running,
@@ -234,6 +243,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         configOptions: configOptionsOf(view?.configOptions ?? const []),
         sessionMode: modeLabelOf(view?.configOptions ?? const []),
         currentPlan: planEntriesOf(view?.plan ?? const []),
+        agents: agentsPaneDataOf(view),
         queuedPrompts: _queueOf(id),
         isPromptSubmitting: false,
         canCancel: false,
@@ -254,6 +264,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       configOptions: const [],
       sessionMode: null,
       currentPlan: null,
+      agents: AgentsPaneData.empty,
       queuedPrompts: _queueOf(sessionId),
       isPromptSubmitting: false,
       canCancel: false,

@@ -41,7 +41,10 @@ class CodeLabShell extends StatelessWidget {
   /// design.md change `add-file-preview-and-tree`, D7). Недоступная панель
   /// остаётся в сохранённой раскладке и возвращается вместе с локальным
   /// профилем (spec agent-workbench-ui «Unavailable pane is hidden but kept in
-  /// the layout»). Terminal входит, только если на платформе есть PTY
+  /// the layout»). Agents — тоже вычисляется: панель есть, пока у сессии в
+  /// фокусе есть хотя бы одна строка субагента (`CodeLabShellState.
+  /// agentsAvailable`, design.md change `add-subagents-and-tasks`, D49 Т11).
+  /// Terminal входит, только если на платформе есть PTY
   /// (`add-integrated-terminal`, D12): без него переключателя нет.
   static List<ToolPane> _availablePanesOf(
     CodeLabShellState state, {
@@ -49,6 +52,7 @@ class CodeLabShell extends StatelessWidget {
   }) => [
     if (state.projectFilesAvailable) ToolPane.files,
     ToolPane.plan,
+    if (state.agentsAvailable) ToolPane.agents,
     ToolPane.protocol,
     if (terminal) ToolPane.terminal,
   ];
@@ -203,9 +207,6 @@ class CodeLabShell extends StatelessWidget {
                                 pane: pane,
                                 content: switch (pane) {
                                   ToolPane.files => const ProjectFilesPane(),
-                                  // ЗАГЛУШКА 5b.1: панель недоступна, пока
-                                  // `_availablePanesOf` не знает про Agents
-                                  // (5b.4, D49 Т11).
                                   ToolPane.agents =>
                                     const WorkbenchAgentsPane(),
                                   ToolPane.plan =>

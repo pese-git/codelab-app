@@ -19,6 +19,8 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' show FluentIcons, VoidCallback;
 
+import 'agents_pane_data.dart';
+
 /// Модели инспектора — модели kit (`InspectorProjection`, design D9);
 /// прежние имена остаются для виджетов и тестов.
 typedef CodeLabInspectorCategory = InspectorCategory;
@@ -222,10 +224,7 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
         ),
         final ToolCallItem call => _toolCallRowOf(
           call,
-          // Вызов, объявленный только запросом субагента (строки корня нет,
-          // D43 п. 2), несёт стабильный id элемента транскрипта: индекс
-          // сдвигается, когда строка корня появляется позже.
-          id: _isSubagentRequested(call) ? call.id : 'tool-${index + 1}',
+          id: _toolRowIdOf(call, index),
           cwd: cwd,
           approvalsEnabled: approvalsEnabled,
           onApprovalSelected: onApprovalSelected,
@@ -233,6 +232,15 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
       },
   ];
 }
+
+/// Id строки ленты верхнего уровня для вызова [call] на позиции [index].
+///
+/// Вызов, объявленный только запросом субагента (строки корня нет, D43 п. 2),
+/// несёт стабильный id элемента транскрипта: индекс сдвигается, когда строка
+/// корня появляется позже. Тот же id нужен панели Agents (`topRowIds`), чтобы
+/// найти строку ленты по пути элементов kit.
+String _toolRowIdOf(ToolCallItem call, int index) =>
+    _isSubagentRequested(call) ? call.id : 'tool-${index + 1}';
 
 /// Строка вызова ленты; [nested] — строка потомка внутри дерева `agent`.
 ///
@@ -422,6 +430,9 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
     requesterLine: _requesterLineOf(approval.subagent),
     requesterHint: approval.subagent?.description,
     callTitle: approval.subagent == null ? null : _callTitleOf(approval),
+    // Цель «Go to approval» панели Agents: лента прокручивается к блоку по
+    // id запроса (D49 Т7). Решение по-прежнему принимается только в ленте.
+    targetId: approval.approvalId.value,
   ),
 };
 
@@ -555,6 +566,22 @@ const _filesAction = CodeLabCommandAction(
   icon: FluentIcons.folder,
 );
 
+/// Действие палитры «Agents»: открывает панель Agents дока.
+///
+/// Почему отдельно от `CodeLabCommandAction.defaults`: пункт есть только когда
+/// у сессии в фокусе есть строка субагента (панель доступна), как у «Files»
+/// (design.md change `add-subagents-and-tasks`, D49 Т11; spec
+/// agent-workbench-ui «Панель Agents v1»). Совпадение с командой агента
+/// `/agents` разрешает `CommandCatalog` (D3 change
+/// `add-command-palette-agent-commands`).
+const _agentsAction = CodeLabCommandAction(
+  id: 'agents',
+  label: 'Agents',
+  slashCommand: '/agents',
+  description: 'Go to the subagents panel.',
+  icon: FluentIcons.robot,
+);
+
 HostCommand _hostCommandOf(CodeLabCommandAction action) => HostCommand(
   id: action.id,
   name: action.slashCommand.substring(1),
@@ -574,14 +601,33 @@ final List<HostCommand> _paletteHostCommandsWithFiles = List.unmodifiable([
   _hostCommandOf(_filesAction),
 ]);
 
+final List<HostCommand> _paletteHostCommandsWithAgents = List.unmodifiable([
+  ..._paletteHostCommands,
+  _hostCommandOf(_agentsAction),
+]);
+
+final List<HostCommand> _paletteHostCommandsWithFilesAndAgents =
+    List.unmodifiable([
+      ..._paletteHostCommands,
+      _hostCommandOf(_filesAction),
+      _hostCommandOf(_agentsAction),
+    ]);
+
 /// Каталог палитры для команд агента активной сессии: команды app и
 /// [agentCommands] с правилами kit (конфликты имён, поиск — D3, D4).
-/// [filesAvailable] добавляет пункт «Files» (панель доступна, D7).
+/// [filesAvailable] добавляет пункт «Files» (панель доступна, D7),
+/// [agentsAvailable] — пункт «Agents» (у сессии есть субагенты, D49 Т11).
 CommandCatalog paletteCatalogOf(
   List<AgentCommandView> agentCommands, {
   bool filesAvailable = false,
+  bool agentsAvailable = false,
 }) => CommandCatalog(
-  host: filesAvailable ? _paletteHostCommandsWithFiles : _paletteHostCommands,
+  host: switch ((filesAvailable, agentsAvailable)) {
+    (true, true) => _paletteHostCommandsWithFilesAndAgents,
+    (true, false) => _paletteHostCommandsWithFiles,
+    (false, true) => _paletteHostCommandsWithAgents,
+    (false, false) => _paletteHostCommands,
+  },
   agent: agentCommands,
 );
 
@@ -601,10 +647,130 @@ CodeLabCommandAction _paletteActionOf(CatalogCommand command) =>
       HostCatalogCommand(:final command) =>
         command.id == _filesAction.id
             ? _filesAction
+            : command.id == _agentsAction.id
+            ? _agentsAction
             : CodeLabCommandAction.defaults.firstWhere(
                 (action) => action.id == command.id,
               ),
       AgentCatalogCommand(:final command) => _agentCommandAction(command),
+    };
+
+/// Данные панели Agents из `SessionView` сессии в фокусе (D33, D49 Т8).
+///
+/// Почему здесь: строки считает kit (`SessionView.subagents`), а app только
+/// связывает их с лентой: id вызова верхнего уровня → id его строки, id
+/// элемента → ожидающее одобрение (для шагов дерева) и заголовки пунктов
+/// плана для подсказок `#N`. Время не считается — оно зависит от часов виджета
+/// (`agentRowsOf`).
+///
+/// `null` или сессия без субагентов дают [AgentsPaneData.empty]: панель
+/// недоступна.
+AgentsPaneData agentsPaneDataOf(SessionView? view) {
+  if (view == null || view.subagents.isEmpty) {
+    return AgentsPaneData.empty;
+  }
+  final topRowIds = <String, String>{};
+  for (final (index, item) in view.transcript.indexed) {
+    if (item is ToolCallItem) {
+      topRowIds[item.id] = _toolRowIdOf(item, index);
+    }
+  }
+  final pending = <String, String>{};
+  void walk(List<TranscriptItem> items) {
+    for (final item in items) {
+      if (item is! ToolCallItem) {
+        continue;
+      }
+      if (item.approval case PendingApprovalView(:final approvalId)) {
+        pending[item.id] = approvalId.value;
+      }
+      walk(item.children);
+    }
+  }
+
+  walk(view.transcript);
+  return AgentsPaneData(
+    rows: view.subagents,
+    planTitles: {for (final entry in view.plan) ?entry.taskId: entry.content},
+    busy:
+        view.status == SessionStatusView.running ||
+        view.status == SessionStatusView.cancelling,
+    topRowIds: Map.unmodifiable(topRowIds),
+    pendingApprovals: Map.unmodifiable(pending),
+    counts: {
+      for (final state in SubagentRowState.values)
+        state: view.subagentCount(state),
+    },
+  );
+}
+
+/// Строки панели Agents: готовые тексты по данным [data] и часам [now].
+///
+/// Почему тексты здесь: `codelab_ui` ничего не форматирует
+/// (`codelab_ui/AGENTS.md` §2), а формат берётся у kit — тот же, что у итога
+/// в ленте (D24, D49 Т9, Т10).
+///
+/// Время: у терминальной строки — длительность из итога; у работающей —
+/// `now − startedAt`, но только пока сессия занята, иначе времени нет и строка
+/// просто `running` (D50 п. 2). Поля без данных остаются `null`: заглушек нет.
+List<CodeLabAgentRow> agentRowsOf(
+  AgentsPaneData data, {
+  required DateTime now,
+}) => [
+  for (final row in data.rows)
+    CodeLabAgentRow(
+      id: row.toolCallId.value,
+      depth: row.depth,
+      type: row.type,
+      title: row.title,
+      state: _agentRowStateOf(row.state),
+      time: _agentTimeOf(row, busy: data.busy, now: now),
+      calls: row.toolCalls == null ? null : subagentCallsText(row.toolCalls!),
+      tokens: row.summary == null ? null : '${row.summary!.tokensText} tokens',
+      lastAction: row.lastAction,
+      items: [
+        for (final id in row.taskIds)
+          CodeLabAgentItemRef(label: '#$id', hint: data.planTitles[id]),
+      ],
+    ),
+];
+
+String? _agentTimeOf(
+  SubagentRowView row, {
+  required bool busy,
+  required DateTime now,
+}) {
+  if (row.summary case final summary?) {
+    return summary.durationText;
+  }
+  final started = row.startedAt;
+  final running =
+      row.state == SubagentRowState.running ||
+      row.state == SubagentRowState.awaitingApproval;
+  if (!running || !busy || started == null) {
+    return null;
+  }
+  final elapsed = now.difference(started);
+  return formatSubagentDuration(elapsed.isNegative ? Duration.zero : elapsed);
+}
+
+/// Счётчики заголовка панели Agents по состояниям: числа считает kit
+/// (`SessionView.subagentCount`), здесь только соответствие состояний kit
+/// состояниям виджета — то же, что в [agentRowsOf]. Нулевые опускает сам
+/// организм.
+Map<CodeLabAgentRowState, int> agentCountsOf(AgentsPaneData data) => {
+  for (final state in SubagentRowState.values)
+    _agentRowStateOf(state): data.counts[state] ?? 0,
+};
+
+CodeLabAgentRowState _agentRowStateOf(SubagentRowState state) =>
+    switch (state) {
+      SubagentRowState.running => CodeLabAgentRowState.running,
+      SubagentRowState.awaitingApproval =>
+        CodeLabAgentRowState.waitingForApproval,
+      SubagentRowState.completed => CodeLabAgentRowState.done,
+      SubagentRowState.failed => CodeLabAgentRowState.failed,
+      SubagentRowState.cancelled => CodeLabAgentRowState.cancelled,
     };
 
 /// План сессии из kit: `SessionView.plan` в записях виджета.

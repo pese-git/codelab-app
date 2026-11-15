@@ -12,6 +12,7 @@ import '../queue/prompt_queue.dart';
 import '../restore/workspace_restorer.dart';
 import '../restore/workspace_snapshot.dart';
 import '../session/session_views.dart';
+import '../session/subagent_rows.dart';
 import '../transcript/transcript_item.dart';
 import '../transcript/transcript_projector.dart';
 import 'client_workspace_exception.dart';
@@ -273,8 +274,8 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     _sessionSubscription = backend.sessionChanges.listen(_handleSession);
   }
 
-  /// Часы kit (ЗАГЛУШКА 5b.1: пока не используются, 5b.2 передаст их в
-  /// `_SessionHandle`).
+  /// Часы kit: момент первого появления вызова `agent` для времени строк
+  /// панели Agents (D49 Т3); в `_SessionHandle` передаются при создании.
   final DateTime Function() clock;
   final AgentBackend _backend;
   final List<TransportResolver> _resolvers;
@@ -983,6 +984,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       },
       onDiagnostic: _report,
       isConnected: () => _current.connection is Connected,
+      clock: clock,
     );
     _handles[session.id] = handle;
     _order.insert(0, session.id);
@@ -1138,6 +1140,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     required void Function(PromptOutcome outcome) onOutcome,
     required void Function(WorkspaceDiagnostic diagnostic) onDiagnostic,
     required bool Function() isConnected,
+    required DateTime Function() clock,
   }) : id = session.id,
        cwd = session.cwd,
        _session = session,
@@ -1145,7 +1148,8 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
        _nextQueuedPromptId = nextQueuedPromptId,
        _onOutcome = onOutcome,
        _onDiagnostic = onDiagnostic,
-       _isConnected = isConnected {
+       _isConnected = isConnected,
+       _clock = clock {
     _projector.apply(session);
     _current = _sessionFields(
       const SessionView(revision: 0, status: SessionStatusView.idle),
@@ -1174,6 +1178,12 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   final bool Function() _isConnected;
   final _views = StreamController<SessionView>.broadcast(sync: true);
   final _projector = TranscriptProjector();
+
+  /// Часы и память строк панели Agents (D49 Т3, Т4): первое появление вызова
+  /// и защёлка итога живут столько же, сколько сессия, и переживают
+  /// `reload`, чтобы реплей не сдвигал время.
+  final DateTime Function() _clock;
+  final _rowMemory = SubagentRowMemory();
   late SessionView _current;
   AcpSession _session;
 
@@ -1524,6 +1534,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     final status = _link == _Link.detached
         ? SessionStatusView.detached
         : SessionStatusView.of(session.status);
+    final plan = planOf(session);
     return view.copyWith(
       status: status,
       canRetry: _canRetry(session, status),
@@ -1531,6 +1542,14 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
         null => _projector.items,
         final notice => _withNotice(_projector.items, notice),
       },
+      // Строки по проекции без уведомления: оно не вызов (D49 Т2).
+      subagents: subagentRowsOf(
+        session: session,
+        transcript: _projector.items,
+        plan: plan,
+        memory: _rowMemory,
+        clock: _clock,
+      ),
       configOptions: [
         for (final option in session.configOptions ?? const [])
           ConfigOptionView.of(option),
@@ -1540,7 +1559,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
           AgentCommandView.of(command),
       ],
       pendingApprovals: pendingApprovalViews(session),
-      plan: planOf(session),
+      plan: plan,
     );
   }
 

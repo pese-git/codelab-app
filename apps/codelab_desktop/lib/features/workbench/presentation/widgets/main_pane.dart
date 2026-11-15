@@ -102,6 +102,8 @@ class WorkbenchMainPane extends StatelessWidget {
           rows: state.transcriptRows,
           viewMode: state.viewMode,
           expansionOverrides: state.transcriptExpansion,
+          showRequest: state.transcriptShowRequest,
+          onShowRequestDone: cubit.finishTranscriptShow,
           onExpansionChanged: (change) =>
               cubit.setTranscriptRowExpanded(change.rowId, change.expanded),
           emptyLabel: state.activeSessionId == null
