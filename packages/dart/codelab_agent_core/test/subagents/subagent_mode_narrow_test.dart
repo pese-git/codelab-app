@@ -135,9 +135,12 @@ void main() {
     expect(await env.stat('/proj/a.txt'), isA<Err<FileStat, FileError>>());
   });
 
+  // Итерация 3 (D42 Т6): вместо отказа D38 `no approval interface is
+  // available` вопрос идёт к gate корня; красный до задачи 3.2.
   test('тип с режимом standard под корнем в bypass не получает права '
-      'корня: write ребёнка — вопрос, а вопроса без gate нет (D38)', () async {
-    final gate = FakeGate();
+      'корня: write ребёнка — вопрос к gate корня, исполнение только после '
+      'решения (D42 Т6)', () async {
+    final gate = FakeGate((_) => PermissionDecision.rejectOnce);
     final env = MemoryExecutionEnv(cwd: '/proj');
     final rig = SubagentRig(
       baseEnv: env,
@@ -166,9 +169,13 @@ void main() {
 
     await rig.run('go');
 
+    // Спросили только ребёнка с режимом standard: цепочка и префикс (D8).
+    final request = gate.requests.single;
+    expect(request.toolCallId, 'c1/w1');
+    expect(request.title, startsWith('[careful: Do the work] '));
     expect(
       resultText(rig.requestsOf('careful job')[1], 'w1'),
-      deniedText('write', 'no approval interface is available'),
+      deniedText('write', 'rejected by the user'),
     );
     expect(resultIsError(rig.requestsOf('free job')[1], 'w2'), isFalse);
     expect(
@@ -176,6 +183,5 @@ void main() {
       isA<Err<FileStat, FileError>>(),
     );
     expect(await env.stat('/proj/free.txt'), isA<Ok<FileStat, FileError>>());
-    expect(gate.requests, isEmpty);
   });
 }

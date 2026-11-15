@@ -1,6 +1,7 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
+import '../permissions/fake_gate.dart';
 import '../permissions/policy_harness.dart' show deniedText;
 import '../skills/skills_support.dart';
 import '../tools/fake_shell.dart';
@@ -174,7 +175,9 @@ void main() {
       MemoryExecutionEnv(cwd: '/repo/app'),
       answering(''),
     );
+    final gate = FakeGate((_) => PermissionDecision.rejectOnce);
     final rig = SubagentRig(
+      gate: gate,
       skillFiles: port,
       baseEnv: base,
       narrow: const {},
@@ -196,11 +199,16 @@ void main() {
 
     await rig.run('go');
 
-    // У ребёнка нет gate (D38): вопрос корня становится отказом, а не
-    // исполнением. Итерация 3 заменит отказ вопросом через gate корня.
+    // Итерация 3 (D42 Т6): вместо отказа D38 — вопрос к gate корня с цепочкой
+    // и без «разрешить всегда» (критическая команда); без решения команда не
+    // исполняется. Красный до задачи 3.2.
+    final request = gate.requests.single;
+    expect(request.toolCallId, 'c1/x1');
+    expect(request.allowAlwaysOffered, isFalse);
+    expect(request.criticalLabel, isNotNull);
     expect(
       resultText(rig.requestsOf('edit a skill').last, 'x1'),
-      deniedText('exec', 'no approval interface is available'),
+      deniedText('exec', 'rejected by the user'),
     );
     expect(base.commands, isEmpty);
   });

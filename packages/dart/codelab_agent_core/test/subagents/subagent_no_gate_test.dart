@@ -1,27 +1,26 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
-import '../permissions/fake_gate.dart';
 import '../permissions/policy_harness.dart' show deniedText;
 import 'subagent_rig.dart';
 
-/// Вопрос ребёнка без gate — отказ; gate корня не вызывается (design.md
-/// change `add-subagents-and-tasks`, D38, D36 Т10; PERM-4, PERM-5;
+/// У корня нет gate — нет и у потомков: вопрос ребёнка становится отказом
+/// `no approval interface is available` (agent-permissions «Разрешения
+/// потомка через gate корневой сессии», последний абзац; design.md change
+/// `add-subagents-and-tasks`, D8, D42 Т3, Т6; PERM-5, PERM-4;
 /// `agent-core/17-3-subagents.md` §17.3.3 шаг 6).
 ///
-/// Красный до задачи 2.4: нет ребёнка. Тест живёт только между PR итераций 2
-/// и 3: итерация 3 заменяет его сценариями agent-permissions «Разрешения
-/// потомка через gate корневой сессии» (`SubagentPermissionGate`, цепочка
-/// `toolCallId`). Почему не gate корня напрямую: сырой `call_1` ребёнка не
-/// уникален в сессии корня (PERM-4) и показал бы запрос без пути и префикса.
+/// Итерация 3 (задача 3.1) сузила тест итерации 2: прежний сценарий D38
+/// «ребёнок без gate при gate у корня» заменён сценариями
+/// `subagent_permission_prefix_test.dart`; здесь остался только случай, когда
+/// gate нет у самого корня. Тесты зелёные до и после задачи 3.2 (регрессия
+/// fail-closed).
 void main() {
-  test('write ребёнка в standard требует вопроса: отказ '
-      '`no approval interface is available`, gate корня не вызван', () async {
-    final gate = FakeGate();
+  test('write ребёнка в standard при корне без gate: отказ '
+      '`no approval interface is available`, файл не создан', () async {
     final env = MemoryExecutionEnv(cwd: '/proj');
     final rig = SubagentRig(
       baseEnv: env,
-      gate: gate,
       scripts: {
         'go': [
           oneCallStep('c1', 'agent', agentArgs('write a file')),
@@ -43,32 +42,7 @@ void main() {
       deniedText('write', 'no approval interface is available'),
     );
     expect(resultIsError(child, 'w1'), isTrue);
-    expect(gate.requests, isEmpty);
     expect(await env.stat('/proj/a.txt'), isA<Err<FileStat, FileError>>());
-  });
-
-  test('вызов agent самого корня gate не беспокоит (tier read), а write '
-      'корня после ребёнка по-прежнему идёт к gate', () async {
-    final gate = FakeGate();
-    final rig = SubagentRig(
-      gate: gate,
-      scripts: {
-        'go': [
-          oneCallStep('c1', 'agent', agentArgs('write a file')),
-          oneCallStep('w0', 'write', {'path': 'root.txt', 'content': 'y'}),
-          replyStep('done'),
-        ],
-        'write a file': [
-          oneCallStep('w1', 'write', {'path': 'a.txt', 'content': 'x'}),
-          replyStep('could not write'),
-        ],
-      },
-    );
-    await rig.open();
-
-    await rig.run('go');
-
-    expect([for (final r in gate.requests) r.toolCallId], ['w0']);
   });
 
   test('ребёнок в режиме, где вопроса нет, работает без gate: read и ls '
@@ -77,7 +51,6 @@ void main() {
     await env.writeText('/proj/a.txt', 'alpha\n');
     final rig = SubagentRig(
       baseEnv: env,
-      gate: FakeGate(),
       scripts: {
         'go': [
           oneCallStep('c1', 'agent', agentArgs('read it', type: 'explore')),

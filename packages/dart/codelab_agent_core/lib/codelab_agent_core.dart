@@ -121,6 +121,7 @@ export 'src/subagents/subagent_model.dart'
         SubagentFailure,
         SubagentId,
         SubagentReport,
+        SubagentRequestRef,
         SubagentSnapshot,
         SubagentState,
         SubagentWait,

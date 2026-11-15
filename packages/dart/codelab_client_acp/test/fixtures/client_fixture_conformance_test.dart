@@ -176,6 +176,41 @@ final _stateChecks = <String, _StateCheck>{
     expect(summary?['toolCalls'], 3);
     expect(summary?['tokens'], {'input': 6000, 'output': 400});
   },
+  // Запрос ребёнка (change `add-subagents-and-tasks`, задача 3.1 `[client]`;
+  // spec acp-client-kit «Запрос одобрения от субагента», сценарий «Запрос
+  // ребёнка не делает вызов вызовом agent»; design.md, D43 п. 1): клиент видит
+  // один вызов `agent` `call_1`; запрос к `call_1/call_1` хранит сведения о
+  // потомке у `ApprovalRequest`, а не в `subagentMeta` записи вызова, и не
+  // меняет `subagentMeta` вызова `agent`. Красный до задачи 3.4: поля
+  // `ApprovalRequest.subagentRequester` ещё нет; чтение через `dynamic`,
+  // чтобы не ломать компиляцию остальных проверок корпуса в этом файле.
+  'acp/prompt-subagent-permission': (user, _) {
+    final turn = _lastTurn(user);
+    expect(turn.status, PromptTurnStatus.completed);
+
+    final agentCall = _toolCall(user, 'call_1');
+    expect(agentCall.kind, ToolKind.think);
+    expect(agentCall.status, ToolCallStatus.completed);
+    // Метаданные вызова `agent` — id и тип ребёнка корня, итог; сведений
+    // спрашивающего (`depth`, `parentToolCallId`) в них нет.
+    expect(agentCall.subagentMeta?['type'], 'review');
+    expect(agentCall.subagentMeta, isNot(contains('parentToolCallId')));
+    expect(agentCall.subagentMeta, isNot(contains('depth')));
+
+    final approval = turn.approvals.values.single;
+    expect(approval.status, ApprovalStatus.selected);
+    expect(approval.toolCall.id, const ToolCallId('call_1/call_1'));
+    expect(approval.toolCall.subagentMeta, isNull);
+    // ignore: avoid_dynamic_calls
+    expect((approval as dynamic).subagentRequester, {
+      'id': isA<String>(),
+      'type': 'review',
+      'description': 'Check the diff',
+      'depth': 1,
+      'path': isEmpty,
+      'parentToolCallId': 'call_1',
+    });
+  },
   'acp/set-config-option-model': (user, _) {
     final model = user.app.sessions.single.configOptions!.singleWhere(
       (o) => o.id.value == 'model',

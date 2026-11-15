@@ -1,4 +1,5 @@
 import '../cancel/cancel_token.dart';
+import '../subagents/subagent_model.dart' show SubagentRequestRef;
 import '../tools/agent_tool.dart';
 
 /// The approval port (`agent-core-architecture` §7.2): the agent asks the
@@ -31,6 +32,7 @@ final class PermissionRequest {
     this.reason,
     this.criticalLabel,
     this.allowAlwaysOffered = true,
+    this.subagent,
   }) : rawInput = Map.unmodifiable(rawInput),
        locations = List.unmodifiable(locations),
        diffs = List.unmodifiable(diffs);
@@ -61,4 +63,8 @@ final class PermissionRequest {
 
   /// `false` for critical patterns.
   final bool allowAlwaysOffered;
+
+  /// Сведения о потомке, чей вызов; `null` у запроса самой корневой сессии
+  /// (D42 Т4). ЗАГЛУШКА задачи 3.1: заполняет `SubagentPermissionGate` в 3.2.
+  final SubagentRequestRef? subagent;
 }
