@@ -1,6 +1,7 @@
 library;
 
 export 'codelab_activity_bar.dart';
+export 'codelab_agents_pane.dart';
 export 'codelab_app_bar.dart';
 export 'codelab_approval_prompt.dart';
 export 'codelab_command_palette_surface.dart';

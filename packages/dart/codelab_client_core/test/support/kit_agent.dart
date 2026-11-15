@@ -17,11 +17,16 @@ final class KitAgent {
   KitAgent({
     AgentCapabilities capabilities = const AgentCapabilities(),
     this.snapshots,
+    this.clock,
   }) {
     transport.initializeAgentCapabilities = capabilities;
   }
 
   final WorkspaceSnapshotStore? snapshots;
+
+  /// Часы kit для времени работающих строк панели Agents (D49 Т3);
+  /// без них — `DateTime.now`.
+  final DateTime Function()? clock;
 
   /// Транспорт текущего процесса агента; резолвер читает его при каждом
   /// открытии, поэтому [restartAgent] подменяет агента для `reconnect`.
@@ -39,6 +44,7 @@ final class KitAgent {
     backend: AcpClientBackend(application),
     resolvers: [ConfigTransportResolver(stdio: (_) => transport)],
     snapshots: snapshots,
+    clock: clock,
   );
   final diagnostics = <WorkspaceDiagnostic>[];
   StreamSubscription<WorkspaceDiagnostic>? _subscription;

@@ -22,6 +22,7 @@ import 'widgets/debug_log_viewer_dialog.dart';
 import 'widgets/inspector_pane.dart';
 import 'widgets/main_pane.dart';
 import 'widgets/secret_migration_banner.dart';
+import 'widgets/workbench_agents_pane.dart';
 
 /// Рабочее место CodeLab: каркас из app bar, сайдбара по проектам, панели
 /// сессии и дока панелей инструментов (`dart-agent-and-clients` §12.3 A13,
@@ -202,6 +203,11 @@ class CodeLabShell extends StatelessWidget {
                                 pane: pane,
                                 content: switch (pane) {
                                   ToolPane.files => const ProjectFilesPane(),
+                                  // ЗАГЛУШКА 5b.1: панель недоступна, пока
+                                  // `_availablePanesOf` не знает про Agents
+                                  // (5b.4, D49 Т11).
+                                  ToolPane.agents =>
+                                    const WorkbenchAgentsPane(),
                                   ToolPane.plan =>
                                     CodeLabProgressChecklist.list(
                                       entries: state.currentPlan ?? const [],

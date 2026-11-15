@@ -40,6 +40,10 @@ abstract interface class ClientWorkspace {
     required AgentBackend backend,
     required List<TransportResolver> resolvers,
     WorkspaceSnapshotStore? snapshots,
+
+    /// Часы kit для времени работающих строк панели Agents (D49 Т3); по
+    /// умолчанию `DateTime.now`, тесты передают поддельные.
+    DateTime Function()? clock,
   }) = DefaultClientWorkspace;
 
   WorkspaceState get current;
@@ -256,7 +260,9 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     required AgentBackend backend,
     required List<TransportResolver> resolvers,
     WorkspaceSnapshotStore? snapshots,
-  }) : _backend = backend,
+    DateTime Function()? clock,
+  }) : clock = clock ?? DateTime.now,
+       _backend = backend,
        _resolvers = List.unmodifiable(resolvers) {
     if (snapshots != null) {
       _restorer = WorkspaceRestorer(snapshots, _RestoreHostAdapter(this));
@@ -267,6 +273,9 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     _sessionSubscription = backend.sessionChanges.listen(_handleSession);
   }
 
+  /// Часы kit (ЗАГЛУШКА 5b.1: пока не используются, 5b.2 передаст их в
+  /// `_SessionHandle`).
+  final DateTime Function() clock;
   final AgentBackend _backend;
   final List<TransportResolver> _resolvers;
 
