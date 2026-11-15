@@ -184,12 +184,12 @@ Usage потомка SHALL входить в usage прямого родител
 
 В журнал прямого родителя SHALL писаться запись `subagent`:
 - `status: running` — при получении слота;
-- итоговая запись с `status`, `failure`, `report`, `usage`, `toolCalls`, `durationMs` — `durable`, до `ToolCallFinished(agent)` (SUB-9, SUB-10).
+- итоговая запись с `status`, `failure`, `report`, `usage`, `toolCalls`, `durationMs` — `durable`, до `ToolCallFinished(agent)` (SUB-9, SUB-10); у отчёта, усечённого по `report_max_bytes` или оборванного лимитом ответа, — ещё `truncated: true`. Запись без поля SHALL читаться как не усечённая (design.md, D43, п. 5).
 
 Дочерние журналы НЕ SHALL попадать в `session/list` и `index.json`. Lease корневой сессии SHALL покрывать журналы всего дерева.
 
 После сбоя `healInterruptedTurn` SHALL для каждого вызова `agent` без результата:
-- взять результат из итоговой записи `subagent`, если она есть;
+- взять результат из итоговой записи `subagent`, если она есть, с атрибутом обёртки `truncated="true"` при `truncated: true`;
 - иначе записать `interrupted`, дописать `subagent{status: failed, failure: interrupted}` и рекурсивно вылечить журнал ребёнка.
 
 Ни один потомок НЕ SHALL перезапускаться.
@@ -197,6 +197,10 @@ Usage потомка SHALL входить в usage прямого родител
 #### Scenario: Раскладка внука
 - **WHEN** ребёнок запускает внука
 - **THEN** журнал внука лежит в `subagents/` корневой сессии, его заголовок — `parent.sessionId` ребёнка и `depth: 2`, запись `subagent` внука — в журнале ребёнка (`subagent_journal_test.dart`)
+
+#### Scenario: Усечённый отчёт после сбоя
+- **WHEN** итоговая запись `subagent` несёт отчёт, усечённый по `report_max_bytes` (во втором варианте — оборванный лимитом ответа), и `truncated: true`, а процесс убит до результата вызова `agent`
+- **THEN** после `open` результат `agent` — та же обёртка с `truncated="true"`, что вживую; запись без поля `truncated` даёт обёртку без атрибута (`subagent_journal_test.dart`, задача 3.6)
 
 #### Scenario: Сбой с двумя детьми
 - **WHEN** процесс убит, когда ребёнок A завершён (итоговая запись есть), а B работает

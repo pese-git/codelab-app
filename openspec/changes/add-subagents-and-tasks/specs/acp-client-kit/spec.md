@@ -5,7 +5,7 @@
 
 `SessionView` SHALL давать представлению для каждого пункта:
 - список незавершённых блокеров — id из `blockedBy`, чьи пункты в текущем плане не `completed`;
-- метку владельца-субагента — `type` из известного kit сведения о субагенте с этим id (`SubagentRequester`), иначе сам id; для `owner: main` и без `owner` метки нет.
+- метку владельца-субагента — `type` из известного kit сведения о субагенте с этим id (`ToolCallView.subagentCall` вызовов `agent` сессии; с итерации 3 — и `SubagentRequester` запросов одобрения), иначе сам id; для `owner: main` и без `owner` метки нет (design.md, D36 Т13, D42 Т9).
 
 #### Scenario: План с метаданными
 - **WHEN** агент присылает `plan`, где у второй entry `_meta.codelab.task: {"id": "2", "owner": "sub_a1", "blockedBy": ["1"]}`, а первая entry `pending`
@@ -20,11 +20,15 @@
 - **THEN** обновление применяется, `taskId` и `blockedBy` пустые, ошибки нет
 
 ### Requirement: Запрос одобрения от субагента
-`PendingApprovalView` и `ToolCallView` вызова, объявленного только запросом `session/request_permission`, SHALL получать поле `subagent` (`SubagentRequester`: `id`, `type`, `description`, `depth`, `parentToolCallId`) из `toolCall._meta.codelab.subagent` запроса (design.md, D15). Поле нужно, чтобы показать, кто спрашивает. Нет или неверная форма → `null`, запрос показывается как обычный. `toolCallId` с `/` SHALL оставаться непрозрачной строкой: kit его не разбирает.
+`PendingApprovalView` и `ToolCallView` вызова, объявленного только запросом `session/request_permission`, SHALL получать поле `subagent` (`SubagentRequester`: `id`, `type`, `description`, `depth`, `parentToolCallId`) из `toolCall._meta.codelab.subagent` запроса (design.md, D15). Поле нужно, чтобы показать, кто спрашивает.
 
-`SubagentRequester` SHALL давать `pathTypes` — типы цепочки от ребёнка корня до спрашивающего (D27): первый — `type` из `rawInput` вызова `agent` с id `parentToolCallId`, последний — `type` спрашивающего, промежуточные — `type` вызовов `agent`, найденных подъёмом по `parentToolCallId` в дереве вызовов (этап 2); звено, которое kit не знает (нет дерева), — `…`. Длина пути равна `depth`. Kit SHALL давать строку пути `review › explore` для представлений.
+Смысл `_meta.codelab.subagent` SHALL определяться видом кадра (design.md, D43, п. 1): в `toolCall` запроса разрешения — спрашивающий потомок, в `tool_call` и `tool_call_update` — запущенный вызовом `agent` субагент. `SubagentRequester` SHALL браться только из запроса разрешения и храниться отдельно от данных вызова `agent`; запрос НЕ SHALL делать вызов вызовом `agent` (`ToolCallView.subagentCall`) и НЕ SHALL менять его `subagentSummary`. Нет или неверная форма → `null`, запрос показывается как обычный. `toolCallId` с `/` SHALL оставаться непрозрачной строкой: kit его не разбирает.
 
-Ответ на такой запрос SHALL идти тем же `SessionHandle.respond` и только в этот запрос (PERM-4). Сведения о субагенте SHALL оставаться у строки вызова после решения.
+`SubagentRequester` SHALL давать `pathTypes` — типы цепочки от ребёнка корня до спрашивающего (D27): первый — тип вызова `agent` с id `parentToolCallId`: `subagentCall.type`, если его нет — `rawInput.type`, иначе `…` (D43, п. 4), последний — `type` спрашивающего, промежуточные — `type` вызовов `agent`, найденных подъёмом по `parentToolCallId` в дереве вызовов (этап 2); звено, которое kit не знает (нет дерева), — `…`. Длина пути равна `depth`. Kit SHALL давать строку пути `review › explore` для представлений.
+
+Ответ на такой запрос SHALL идти тем же `SessionHandle.respond` и только в этот запрос (PERM-4). Сведения о субагенте SHALL оставаться у записи вызова после решения.
+
+Вызов потомка, объявленный только запросом с `SubagentRequester`, НЕ SHALL давать отдельного элемента транскрипта, пока в ходе есть строка вызова `agent` с id `subagent.parentToolCallId` (D43, п. 2): ожидающее одобрение и после решения его исход SHALL быть доступны представлению у этой строки. Если такой строки в ходе нет, вызов SHALL показываться прежним элементом вызова, объявленного только запросом, в конце хода.
 
 Строка вызова `agent` (`kind: think`) SHALL показывать в `ToolRowView`:
 - заголовок агента как деталь;
@@ -38,6 +42,18 @@
 #### Scenario: Путь внука без дерева
 - **WHEN** клиент без `subagentToolCalls` получает запрос внука `explore` (`depth: 2`, `parentToolCallId` — вызов `agent` корня с `rawInput.type: "review"`)
 - **THEN** путь — `review › explore`; при `depth: 3` без дерева — `review › … › explore`
+
+#### Scenario: Запрос ребёнка не делает вызов вызовом agent
+- **WHEN** агент присылает запрос ребёнка `review` к `call_1/call_1` с `_meta.codelab.subagent` `{id, type, description, depth: 1, path: [], parentToolCallId: "call_1"}`, строка `call_1` — вызов `agent` с `subagentCall` `sub_a1`
+- **THEN** у записи `call_1/call_1` `subagentCall == null` и `subagentSummary == null`, `subagent` — `review`; отдельного элемента транскрипта для `call_1/call_1` нет, одобрение доступно у строки `call_1`; после решения — его исход там же
+
+#### Scenario: Запрос ребёнка без строки корня
+- **WHEN** приходит запрос ребёнка с `parentToolCallId: "call_9"`, а строки `call_9` в ходе нет
+- **THEN** вызов показывается элементом вызова, объявленного только запросом, в конце хода, с `subagent` и путём
+
+#### Scenario: Тип звена по умолчанию
+- **WHEN** у вызова `agent` корня `rawInput` без `type`, а `subagentCall.type` — `general`; приходит запрос внука `explore` (`depth: 2`)
+- **THEN** путь — `general › explore`
 
 #### Scenario: Запрос без сведений о субагенте
 - **WHEN** запрос несёт `toolCallId` с `/`, но без `_meta.codelab.subagent`
