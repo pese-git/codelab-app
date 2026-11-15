@@ -45,9 +45,9 @@
 
 ## 5. App: выключатели и согласие (итерация 5)
 
-- [ ] 5.1 `[desktop]` Красные тесты Cubit и страницы (app-settings «…запись и применение», все сценарии; D5, D9, D14): выключение пишет через `AgentConfigStore.apply` правку моста, баннер `Saved. New sessions use it; open sessions keep their skills.`, перечитывание; неактивные элементы с подсказками отказа; `ConfigConflict` — баннер и перечитывание без автоповтора; `ConfigRejected` — баннер; двойное нажатие во время `saving` — одна запись; согласие на `.claude/skills` и `~/.claude/skills` (Q3) с подписью области действия; события `skill_toggled`, `root_consent`, `save_failed` без путей.
-- [ ] 5.2 `[desktop]` Реализация 5.1: действия `SkillsSettingsCubit` (`setSkillEnabled`, `setRootConsent`) поверх `skillsListEdit`; выключатели в таблице и строки согласия на странице.
-- [ ] 5.3 `[desktop]` Дополнить `integration_test/skills_settings_flow_test.dart`: выключение навыка, затем новая сессия не объявляет `skill:<name>` в `available_commands_update` (в `feature/*` — только компиляция).
+- [x] 5.1 `[desktop]` Красные тесты Cubit и страницы (app-settings «…запись и применение», все сценарии; D5, D9, D14): выключение пишет через `AgentConfigStore.apply` правку моста, баннер `Saved. New sessions use it; open sessions keep their skills.`, перечитывание; неактивные элементы с подсказками отказа; `ConfigConflict` — баннер и перечитывание без автоповтора; `ConfigRejected` — баннер; двойное нажатие во время `saving` — одна запись; согласие на `.claude/skills` и `~/.claude/skills` (Q3) с подписью области действия; события `skill_toggled`, `root_consent`, `save_failed` без путей.
+- [x] 5.2 `[desktop]` Реализация 5.1: действия `SkillsSettingsCubit` (`setSkillEnabled`, `setRootConsent`) поверх `skillsListEdit`; выключатели в таблице и строки согласия на странице.
+- [x] 5.3 `[desktop]` Дополнить `integration_test/skills_settings_flow_test.dart`: выключение навыка, затем новая сессия не объявляет `skill:<name>` в `available_commands_update` (в `feature/*` — только компиляция).
 
 ## 6. Закрытие (итерация 6)
 

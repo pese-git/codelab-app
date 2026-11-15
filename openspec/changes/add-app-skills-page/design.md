@@ -279,10 +279,10 @@ API итерации 5 (по красным тестам 5.1):
 
 - `SkillsSettingsCubit.setSkillEnabled(String name, {required bool enabled})` и `setRootConsent(String entry, {required bool granted})`. Каждое действие берёт **свежий** снимок конфига в момент нажатия и само вызывает `skillsListEdit` (а не берёт `toggle` из показанного вида): между показом и нажатием файл мог измениться, а `base` плана должен быть снимком того файла, который меняется (SETUP-6).
 - Пустые `edits` — без записи, баннера и события. План — `store.apply(plan.base, plan.edits)`; после `ConfigSaved` — баннер `saved` (`Saved. New sessions use it; open sessions keep their skills.`) и перечитывание; события `skill_toggled` и `root_consent` пишутся только после `ConfigSaved`.
-- `SkillsBannerKind`: `openFailed`, `saved`, `conflict`, `error`. Конфликт и отклонение — тексты страницы Providers: `The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.` (одно перечитывание, без автоповтора) и `The config was not saved: <key: message; …>`. Исключение `apply` — баннер `error` без его текста, событие `save_failed {outcome: <имя типа>}`.
+- `SkillsBannerKind`: `openFailed`, `saved`, `conflict`, `error`. Заголовки InfoBar: `saved` — success `Saved`; `conflict` и `error` — warning `Not saved`; `openFailed` — warning `Cannot open the folder`. Текст баннера выводится экранированным (ячейка с `untrusted`): тексты отказов и сообщения загрузчика содержат пути. Конфликт и отклонение — тексты страницы Providers: `The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.` (одно перечитывание, без автоповтора) и `The config was not saved: <key: message; …>`. Исключение `apply` — баннер `error` без его текста, событие `save_failed {outcome: <имя типа>}`.
 - Подсказки отказов: `SkillsListNotEditable` — `Set in <файл>; edit that file.`; `SkillsListDisabledByProject` — `Disabled by the project config (<файл>).`; `SkillsListUntrustedProject` — `Trust this project to read <элемент>.`; `SkillsListLayerUnreadable` — `The config file of this layer cannot be read. Fix it first.`
-- Пока идёт запись (`saving`), переключатели неактивны, остальные действия игнорируются: одна запись на нажатие. Результат записи после `close()` не применяется; перечитывание на новую папку во время записи несёт баннер записи в свежее состояние.
-- Строки согласия — только для кандидатов вида: ключи `skills-consent-project` и `skills-consent-home` (вид по `~` в начале элемента), подпись `skills-consent-note-<kind>` с числом каталогов навыков; `in every trusted project` — только у относительного элемента.
+- Пока идёт запись (`saving`), переключатели неактивны, остальные действия игнорируются: одна запись на нажатие; флаг снимается после перечитывания, которое следует за записью. Закрытие страницы между взятием снимка и `apply` отменяет неначатую запись. Результат записи после `close()` не применяется; перечитывание на новую папку во время записи несёт баннер записи в свежее состояние.
+- Строки согласия — только для кандидатов вида: ключи `skills-consent-project` и `skills-consent-home` (вид по `~` в начале элемента), подпись `skills-consent-note-<kind>` с числом каталогов навыков (если число не посчитано — `The number of skill folders is not counted.`); вид согласия по `~` вычисляет одна функция, её используют и событие `root_consent`, и страница; подсказка отказа экранируется; `in every trusted project` — только у относительного элемента.
 
 ### D10. Наблюдаемость
 
@@ -291,7 +291,7 @@ API итерации 5 (по красным тестам 5.1):
 - `skills_settings.unreadable {issues}` (при исключении порта или хранилища — ещё `error_type`, имя типа) и `skills_settings.read_only {access: remote|not_managed}`;
 - `skills_settings.phase_failed {phase: project_files|skills, reason: timeout|<имя типа>}`;
 - `skills_settings.skill_toggled {name, enabled, layer}`, `skills_settings.root_consent {root_kind: project_relative|home, enabled, layer}`;
-- `skills_settings.save_failed {outcome: conflict|rejected|<имя типа>}`, `skills_settings.load_discarded` (поздний результат);
+- `skills_settings.save_failed {outcome: conflict|rejected|inline_secret|<имя типа>}`, `skills_settings.load_discarded` (поздний результат);
 - `skills_settings.open_failed {target: codelab_folder|file_dir}`.
 
 Имя навыка допустимо: это идентификатор, ядро пишет его в `skills.loaded`. Пути, описания, тела, тексты диагностик и `toString()` исключений в журнал НЕ попадают (`observability.md`; app-settings «События журнала настроек без секретов»).
