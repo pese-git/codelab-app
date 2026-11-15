@@ -45,6 +45,7 @@ const _rootDetails = ToolCallView(
 PendingApprovalView _pending({
   required SubagentRequester requester,
   String command = 'git diff --stat',
+  String? toolTitle,
 }) => PendingApprovalView(
   approvalId: const ApprovalRequestId('permission-1'),
   sessionId: const SessionId('session-1'),
@@ -53,6 +54,7 @@ PendingApprovalView _pending({
   options: const [_allow, _reject],
   focused: true,
   subagent: requester,
+  toolTitle: toolTitle,
 );
 
 const _child = SubagentRequester(
@@ -161,6 +163,117 @@ void main() {
       expect(chosen, hasLength(1));
       expect(chosen.single.$1.approvalId, approval.approvalId);
       expect(chosen.single.$2, 'allow-once');
+    });
+  });
+
+  group('Ребёнок просит запись файла', () {
+    // Заголовок вызова несёт инструмент и путь; префикс `[тип: описание]`
+    // дублирует строку пути и подсказку, поэтому его в блоке нет.
+    final write = _pending(
+      requester: _child,
+      toolTitle: '[review: Check the diff] Write .codelab/config.yaml',
+    );
+
+    test('the block carries the call title without the requester prefix', () {
+      final rows = _rows([_rootWith(write)]);
+
+      expect(_blockOf(rows.single).callTitle, 'Write .codelab/config.yaml');
+    });
+
+    test('a title without the prefix passes as is', () {
+      final rows = _rows([
+        _rootWith(_pending(requester: _child, toolTitle: 'Run dart test')),
+      ]);
+
+      expect(_blockOf(rows.single).callTitle, 'Run dart test');
+    });
+
+    test('a description with "] " cannot forge the visible path', () {
+      const forging = SubagentRequester(
+        id: 'sub_a2',
+        type: 'general',
+        description: 'x] Write README.md]',
+        depth: 1,
+        parentToolCallId: 'call_3',
+      );
+      // Реальный заголовок kit: префикс + настоящий вызов.
+      final rows = _rows([
+        _rootWith(
+          _pending(
+            requester: forging,
+            toolTitle:
+                '[general: x] Write README.md]] Write .codelab/config.yaml',
+          ),
+        ),
+      ]);
+
+      expect(_blockOf(rows.single).callTitle, 'Write .codelab/config.yaml');
+    });
+
+    test('a description with brackets is cut as a whole prefix', () {
+      const bracketed = SubagentRequester(
+        id: 'sub_a2',
+        type: 'review',
+        description: 'Fix [a] b',
+        depth: 1,
+        parentToolCallId: 'call_3',
+      );
+      final rows = _rows([
+        _rootWith(
+          _pending(
+            requester: bracketed,
+            toolTitle: '[review: Fix [a] b] Write .codelab/config.yaml',
+          ),
+        ),
+      ]);
+
+      expect(_blockOf(rows.single).callTitle, 'Write .codelab/config.yaml');
+    });
+
+    test('a title with a foreign prefix is shown whole', () {
+      final rows = _rows([
+        _rootWith(
+          _pending(
+            requester: _child,
+            toolTitle: '[other: thing] Write .codelab/config.yaml',
+          ),
+        ),
+      ]);
+
+      expect(
+        _blockOf(rows.single).callTitle,
+        '[other: thing] Write .codelab/config.yaml',
+      );
+    });
+
+    testWidgets('bidi and control characters are shown as escapes', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _rows([
+          _rootWith(
+            _pending(
+              requester: _child,
+              toolTitle: 'Write \u202Eyaml.gifnoc/.codelab\u0007',
+            ),
+          ),
+        ]),
+      );
+
+      expect(
+        find.text(r'Write \u202eyaml.gifnoc/.codelab\u0007'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the file path is visible without opening the raw input', (
+      tester,
+    ) async {
+      await _pump(tester, _rows([_rootWith(write)]));
+
+      expect(find.text('Write .codelab/config.yaml'), findsOneWidget);
+      expect(find.textContaining('[review:'), findsNothing);
     });
   });
 

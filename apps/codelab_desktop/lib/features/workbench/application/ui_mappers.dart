@@ -367,8 +367,28 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
     onOptionSelected: (optionId) => onSelected(approval, optionId),
     requesterLine: _requesterLineOf(approval.subagent),
     requesterHint: approval.subagent?.description,
+    callTitle: approval.subagent == null
+        ? null
+        : _titleWithoutRequesterPrefix(approval.toolTitle, approval.subagent!),
   ),
 };
+
+/// Заголовок вызова потомка без префикса `[тип: описание] ` (D8).
+///
+/// Почему: путь и описание задачи блок уже показывает строкой «review wants
+/// to run» и подсказкой, префикс их дублирует; нужны инструмент и путь файла
+/// («Write .codelab/config.yaml»), которых иначе не видно без раскрытия `{}`.
+/// Режется ровно известный префикс из `type` и `description` запроса:
+/// описание пишет модель, и поиск первой `"] "` дал бы подмену видимого пути
+/// (`x] Write README.md]`). Иной заголовок показывается целиком.
+String? _titleWithoutRequesterPrefix(
+  String? title,
+  SubagentRequester requester,
+) {
+  if (title == null) return null;
+  final prefix = '[${requester.type}: ${requester.description}] ';
+  return title.startsWith(prefix) ? title.substring(prefix.length) : title;
+}
 
 /// Строка «review › explore wants to run»: путь готовит kit (`pathText`,
 /// D43 п. 4), маппер только добавляет действие.

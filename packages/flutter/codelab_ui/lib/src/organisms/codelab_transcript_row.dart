@@ -236,6 +236,7 @@ sealed class CodeLabTranscriptApproval {
     bool shortcutsEnabled,
     String? requesterLine,
     String? requesterHint,
+    String? callTitle,
   }) = CodeLabTranscriptApprovalPending;
 
   const factory CodeLabTranscriptApproval.resolved({
@@ -277,6 +278,7 @@ final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
     this.shortcutsEnabled = true,
     this.requesterLine,
     this.requesterHint,
+    this.callTitle,
   });
 
   final CodeLabApprovalRisk risk;
@@ -297,6 +299,11 @@ final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
 
   /// Заголовок задачи спрашивающего: подсказка пути и строка под ним.
   final String? requesterHint;
+
+  /// Заголовок вызова запроса («Write .codelab/config.yaml»): у блока потомка
+  /// под строкой `agent` корня своей строки вызова нет, и без заголовка не
+  /// видно, какой инструмент и какой путь человек разрешает (D43 п. 2).
+  final String? callTitle;
 }
 
 /// Решённое одобрение: [label] — выбранный вариант или «Cancelled».
