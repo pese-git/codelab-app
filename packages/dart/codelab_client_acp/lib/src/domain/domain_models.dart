@@ -207,11 +207,10 @@ sealed class ToolCallRecord with _$ToolCallRecord {
     /// терпимый разбор — у kit.
     String? outcome,
 
-    /// ЗАГЛУШКА задачи 5.1 (красные тесты): `_meta.codelab.parentToolCallId`
-    /// кадров `tool_call`/`tool_call_update` — id вызова `agent` родителя на
-    /// проводе (design.md change `add-subagents-and-tasks`, D21, D47 Т9).
-    /// Разбор из `_meta` и слияние кадров — задача 5.4; пока поле всегда
-    /// `null`.
+    /// `_meta.codelab.parentToolCallId` кадров `tool_call`/`tool_call_update` —
+    /// id вызова родителя на проводе (design.md change
+    /// `add-subagents-and-tasks`, D21, D47 Т9); `null` — вызов корня.
+    /// Поздний кадр без поля родителя не стирает его (как `outcome`).
     String? parentToolCallId,
   }) = _ToolCallRecord;
 
@@ -233,6 +232,7 @@ sealed class ToolCallRecord with _$ToolCallRecord {
       outcome: toolCall.status == ToolCallStatus.completed
           ? null
           : outcomeOf(toolCall.meta),
+      parentToolCallId: parentToolCallIdOf(toolCall.meta),
     );
   }
 }
@@ -251,6 +251,14 @@ String? outcomeOf(Map<String, Object?>? meta) {
   final codelab = meta?['codelab'];
   final outcome = codelab is Map ? codelab['outcome'] : null;
   return outcome is String ? outcome : null;
+}
+
+/// `_meta.codelab.parentToolCallId` кадра; `null` при отсутствии, неверной
+/// форме и пустой строке (терпимый разбор, D21: отказа обработки нет).
+String? parentToolCallIdOf(Map<String, Object?>? meta) {
+  final codelab = meta?['codelab'];
+  final parent = codelab is Map ? codelab['parentToolCallId'] : null;
+  return parent is String && parent.isNotEmpty ? parent : null;
 }
 
 /// Накладывает [update] на [current]: ключи новых кадров дополняют прежние,

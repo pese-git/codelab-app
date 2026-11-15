@@ -7,9 +7,8 @@ import 'package:test/test.dart';
 ///
 /// Группа `createChild` — журнал потомка (agent-sessions «Список задач из
 /// журнала», сценарий «Дочерние журналы не в списке сессий»; design.md change
-/// `add-subagents-and-tasks`, D7, D36 Т4): красная до задачи 2.7, потому что у
-/// порта нет `createChild`, а у `SessionHeader` — типизированного поля
-/// `parent` (`SessionParent`).
+/// `add-subagents-and-tasks`, D7, D36 Т4): охраняет `createChild` порта и типизированное
+/// поле `parent` (`SessionParent`) заголовка `SessionHeader`.
 ///
 /// [make] создаёт пустое хранилище перед каждым тестом.
 void sessionStoreContract(Future<SessionStore> Function() make) {
@@ -384,10 +383,9 @@ void sessionStoreContract(Future<SessionStore> Function() make) {
     });
   });
 
-  // Задача 5.1 (change `add-subagents-and-tasks`, D47 Т5, Т6): реплей дерева
-  // читает журнал потомка без записи и без права записи ребёнка.
-  // Красная до задачи 5.3: у порта нет `openChildReadOnly` (в `lib/` стоит
-  // заглушка `OpenChildReadOnlyStub`, она бросает `UnimplementedError`).
+  // Change `add-subagents-and-tasks`, D47 Т5, Т6: реплей дерева читает
+  // журнал потомка без записи и без права записи ребёнка; группа охраняет
+  // `openChildReadOnly` порта.
   group('openChildReadOnly', () {
     const rootId = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0R');
     const childId = SessionId('01JB8Q3A1D2E3F4G5H6J7K8M9N');

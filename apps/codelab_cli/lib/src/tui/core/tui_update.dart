@@ -270,9 +270,13 @@ TuiModel _note(TuiModel model, String text) => model.copyWith(
       return (model, const []);
     case KeyAction.toggleTasks:
       return (model.copyWith(tasksHidden: !model.tasksHidden), const []);
-    // ЗАГЛУШКА задачи 5.1: действие `toggle_details` реализует задача 5.4.
+    // Раскрывает и сворачивает сразу все строки `agent` (D48 п. 2); текст
+    // композера не затрагивается.
     case KeyAction.toggleDetails:
-      return (model, const []);
+      return (
+        model.copyWith(detailsExpanded: !model.detailsExpanded),
+        const [],
+      );
   }
 }
 
@@ -316,6 +320,10 @@ TuiModel _note(TuiModel model, String text) => model.copyWith(
         ),
         KeyAction.toggleTasks => (
           model.copyWith(tasksHidden: !model.tasksHidden),
+          const [],
+        ),
+        KeyAction.toggleDetails => (
+          model.copyWith(detailsExpanded: !model.detailsExpanded),
           const [],
         ),
         _ => (model, const []),

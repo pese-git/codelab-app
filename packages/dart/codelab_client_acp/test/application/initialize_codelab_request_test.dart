@@ -7,13 +7,12 @@
 // Редакция итерации 2: к `tasks` добавляется `subagents: {version: 1}`
 // (строка `agent` и запрос потомка клиент уже показывает).
 //
-// Редакция задачи 5.4 (задача 5.1, красный тест; сценарий «Запрос initialize
-// клиента CodeLab (задача 5.4)»): к ним добавляется `subagentToolCalls:
-// {version: 1}` — согласие получать вызовы потомков, которые клиент теперь
-// показывает деревом. Тест падает на сравнении тела запроса: ключа в
-// `codelabClientExtensionsMeta` ещё нет. Фикстуру корпуса
-// `acp/initialize-codelab-extensions` ведёт протокольный исполнитель; здесь
-// кадр собран в самом тесте.
+// Редакция задачи 5.4 (сценарий «Запрос initialize клиента CodeLab (задача
+// 5.4)»; design.md, D9): к ним добавляется `subagentToolCalls: {version: 1}`
+// — согласие получать вызовы потомков, которые клиент показывает деревом.
+// Тест охраняет точное тело запроса из `codelabClientExtensionsMeta`; кадр
+// собран в самом тесте, корпус проверяет то же фикстурой
+// `acp/initialize-codelab-extensions`.
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';

@@ -2613,6 +2613,7 @@ final class AcpClientApplication {
       // Итог вызова `agent` переносится из известной записи, а ключ запроса —
       // нет: он описывает спрашивающего потомка (D43 п. 1).
       subagentMeta: known?.subagentMeta,
+      parentToolCallId: known?.parentToolCallId,
     );
   }
 

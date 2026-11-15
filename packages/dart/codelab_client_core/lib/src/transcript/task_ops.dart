@@ -83,7 +83,8 @@ List<String> _ids(Object? value) => value is List
 /// (D35): порядок кадров и сравнение планов дают ложные срабатывания у
 /// сторонних агентов и приписывают чужую операцию при параллельных вызовах.
 ///
-/// Для чего: вызов корневого уровня вида `think`, без
+/// Для чего: вызов вида `think` любого уровня дерева (корня или потомка;
+/// вложенность — итерация 5, D48 п. 3), без
 /// `_meta.codelab.subagent`, завершившийся `completed`, на который ссылается
 /// `taskChange.toolCallId` хотя бы одного `plan`, становится операцией.
 /// Разница строится из `op` и `changed`/`deleted`; `completed` у `update`
@@ -100,7 +101,6 @@ Map<ToolCallId, TaskDiff> taskOperationsOf(
 ) {
   final diffs = <String, TaskDiff>{};
   final subagent = <String>{};
-  final nested = <String>{};
   var plan = prior ?? const <PlanEntry>[];
 
   for (final update in turn.updates) {
@@ -108,9 +108,6 @@ Map<ToolCallId, TaskDiff> taskOperationsOf(
       case ToolCallSessionUpdate(:final toolCall):
         if (_hasSubagent(toolCall.meta)) {
           subagent.add(toolCall.toolCallId.value);
-        }
-        if (_parentOf(toolCall.meta) != null) {
-          nested.add(toolCall.toolCallId.value);
         }
       case ToolCallUpdateSessionUpdate(:final toolCallUpdate):
         if (_hasSubagent(toolCallUpdate.meta)) {
@@ -136,7 +133,6 @@ Map<ToolCallId, TaskDiff> taskOperationsOf(
         record.status != ToolCallStatus.completed ||
         record.cancelledByClient ||
         subagent.contains(callId) ||
-        nested.contains(callId) ||
         // Пустое изменение (например, `changed` пуст) — не операция: вызов
         // остаётся обычной строкой (D27).
         diff.isEmpty) {
@@ -220,13 +216,13 @@ List<TranscriptItem> withTaskOps(
           result.removeLast();
           continue;
         }
-        result[result.length - 1] = _item(
+        result[result.length - 1] = taskOpsItemOf(
           (result.last as TaskOpsItem).id,
           merged,
         );
       } else {
         merged = diff;
-        result.add(_item(id, diff));
+        result.add(taskOpsItemOf(id, diff));
       }
     } else {
       result.add(item);
@@ -235,7 +231,8 @@ List<TranscriptItem> withTaskOps(
   return result;
 }
 
-TaskOpsItem _item(String id, TaskDiff diff) => TaskOpsItem(
+/// Тихая строка одной операции (без слияния): элемент хвоста `agent`.
+TaskOpsItem taskOpsItemOf(String id, TaskDiff diff) => TaskOpsItem(
   id: id,
   added: diff.added,
   completed: diff.completed,
@@ -246,10 +243,4 @@ TaskOpsItem _item(String id, TaskDiff diff) => TaskOpsItem(
 bool _hasSubagent(Map<String, Object?>? meta) {
   final codelab = meta?['codelab'];
   return codelab is Map && codelab['subagent'] is Map;
-}
-
-ToolCallId? _parentOf(Map<String, Object?>? meta) {
-  final codelab = meta?['codelab'];
-  final parent = codelab is Map ? codelab['parentToolCallId'] : null;
-  return parent is String ? ToolCallId(parent) : null;
 }

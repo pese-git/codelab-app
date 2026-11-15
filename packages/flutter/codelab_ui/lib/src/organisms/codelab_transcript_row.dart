@@ -91,6 +91,7 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
     this.subagent,
     this.childApprovals = const [],
     this.children = const [],
+    this.awaitsRootDecision = false,
   });
 
   @override
@@ -111,9 +112,16 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
   /// строкой и не раскрывает её; свой [approval] строки при этом пуст.
   final List<CodeLabTranscriptApproval> childApprovals;
 
-  /// ЗАГЛУШКА задачи 5.1 (логика — 5.5): вложенные строки потомков в теле
-  /// раскрытой строки `agent` (D47 Т11); у остальных строк пусто.
+  /// Вложенные строки потомков в теле раскрытой строки `agent` (D24, D47
+  /// Т11): вызовы и тихие строки операций, глубже — тем же списком. Id строк
+  /// стабильны и уникальны, по ним лента хранит раскрытие; у остальных строк
+  /// пусто.
   final List<CodeLabTranscriptRow> children;
+
+  /// Вложенная строка ждёт решения пользователя, а панель решения стоит в
+  /// блоке под строкой корня (D27 п. 4, D47 Т9): строка показывает только
+  /// ожидание и сама кнопок не несёт — один запрос, одна панель.
+  final bool awaitsRootDecision;
 
   /// Потомок под этой строкой ждёт решения: строка не крутит индикатор
   /// работы, решение принимается в блоке под ней.
@@ -125,7 +133,10 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
 
   /// Есть что показать под заголовком строки.
   bool get isExpandable =>
-      approval != null || secondary != null || output.isNotEmpty;
+      approval != null ||
+      secondary != null ||
+      output.isNotEmpty ||
+      children.isNotEmpty;
 }
 
 /// Данные компактной строки вызова `agent`: итог справа и строка прогресса.
@@ -136,8 +147,9 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
 ///
 /// Для чего: готовые строки от kit; виджет их не считает и не разбирает.
 /// [stats] — сокращённый итог («4 tool calls · 18.2k · 48s») или счётчик
-/// работающего; [progress] — последняя строка прогресса, пока вызов идёт и
-/// дерева вызовов потомков нет (D27 п. 3).
+/// работающего без токенов («5 tool calls», Q15); [progress] — последняя
+/// строка прогресса, пока вызов идёт и дерева вызовов потомков нет (D27
+/// п. 3); [tail] и [tailMore] — хвост работающего при наличии дерева.
 ///
 /// Как использовать: передать в [CodeLabToolCallRow.subagent]; заголовок
 /// «Subagent `type`: `description`» — в [CodeLabToolCallRow.label], отчёт — в
@@ -153,22 +165,46 @@ final class CodeLabSubagentCall {
   final String? stats;
   final String? progress;
 
-  /// ЗАГЛУШКА задачи 5.1 (логика — 5.5): «хвост» работающего `agent` — три
-  /// последних вызова поддерева (D25).
-  final List<CodeLabToolCallRow> tail;
+  /// «Хвост» работающего `agent` — три последних вызова поддерева, которые
+  /// показываются под свёрнутой строкой вместо [progress] (D25, D47 Т9).
+  /// Операция со списком задач — [CodeLabTaskOpsRow] (тихая строка, D48 п. 3).
+  /// Хвост строится независимо от статуса вызова; после завершения его скрывает
+  /// сама строка (показывается только у работающего), итог берётся из [stats].
+  final List<CodeLabTranscriptRow> tail;
 
-  /// ЗАГЛУШКА задачи 5.1: сколько вызовов поддерева не вошло в [tail]
-  /// («+N more tool calls»).
+  /// Сколько вызовов поддерева не вошло в [tail] («+N more tool calls»).
   final int tailMore;
 
   @override
   bool operator ==(Object other) =>
       other is CodeLabSubagentCall &&
       other.stats == stats &&
-      other.progress == progress;
+      other.progress == progress &&
+      other.tailMore == tailMore &&
+      _sameTail(other.tail, tail);
 
   @override
-  int get hashCode => Object.hash(stats, progress);
+  int get hashCode =>
+      Object.hash(stats, progress, tailMore, Object.hashAll(tail.map(_key)));
+
+  /// Значимые для отображения поля строки хвоста: у строк нет собственного
+  /// `==`, поэтому сравниваем по ключу из id, статуса, меток и вида строки.
+  static Object _key(CodeLabTranscriptRow row) => switch (row) {
+    CodeLabToolCallRow() => ('call', row.id, row.status, row.label, row.detail),
+    CodeLabTaskOpsRow() => ('ops', row.id, row.text),
+    _ => ('other', row.id),
+  };
+
+  static bool _sameTail(
+    List<CodeLabTranscriptRow> a,
+    List<CodeLabTranscriptRow> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (_key(a[i]) != _key(b[i])) return false;
+    }
+    return true;
+  }
 }
 
 /// Тихая строка операций со списком задач: иконка списка и короткий текст.

@@ -66,6 +66,24 @@ abstract interface class SessionStore {
     required SessionId rootSessionId,
   });
 
+  /// Снимок журнала потомка для реплея дерева: без записи, без регистрации
+  /// пути и без закрытия дескриптора живого журнала (`agent-core/08-sessions.md`
+  /// §8.3; design.md change `add-subagents-and-tasks`, D47 Т5).
+  ///
+  /// Почему отдельно от [openChild]: тот закрывает дескриптор, ремонтирует
+  /// файл и регистрирует путь для `append`; на `session/load` открытой
+  /// сессии это затронуло бы журнал, который ещё пишет потомок, переживший
+  /// `cancel_grace`. Здесь разбор и ремонт идут только в памяти (по образцу
+  /// `openReadOnly`), оборванная последняя строка пропускается.
+  ///
+  /// Проверки адреса, корня [rootSessionId], заголовка и ссылки — те же, что
+  /// у [openChild]; любая из них — [SessionNotFound]. После вызова `append`,
+  /// `flush` и `close` по id потомка не меняются.
+  Future<SessionSnapshot> openChildReadOnly(
+    String journal, {
+    required SessionId rootSessionId,
+  });
+
   /// Сброс записанного на носитель (`TurnEnded`, §8.3).
   Future<void> flush(SessionId id);
 
@@ -291,21 +309,4 @@ String _encodeCursor(SessionSummary last) => base64Url
   } on Object {
     throw InvalidCursor(cursor);
   }
-}
-
-/// КРАСНАЯ ЗАГЛУШКА задачи 5.1 (change `add-subagents-and-tasks`, D47 Т5):
-/// чтение журнала потомка для реплея дерева без записи и без lease.
-///
-/// Почему расширение, а не член порта: настоящий член `SessionStore` ломает
-/// компиляцию внешних реализаций и тестовых двойников порта (`JournalStore`
-/// в `codelab_agent_acp`) раньше, чем их владельцы дойдут до задачи 5.3.
-/// Задача 5.3 заменяет заглушку членом интерфейса и реализациями в
-/// `MemorySessionStore`, `JsonlSessionStore`, `CwdTrackingStore` и двойниках,
-/// а это расширение удаляет.
-// TODO(5.3): заменить членом SessionStore.
-extension OpenChildReadOnlyStub on SessionStore {
-  Future<SessionSnapshot> openChildReadOnly(
-    String journal, {
-    required SessionId rootSessionId,
-  }) => throw UnimplementedError('openChildReadOnly: задача 5.3');
 }

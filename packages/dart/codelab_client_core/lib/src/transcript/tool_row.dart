@@ -28,6 +28,7 @@ final class ToolRowView {
     this.report,
     this.summary,
     this.summaryShort,
+    this.runningCounter,
   });
 
   /// Последняя строка прогресса, пока вызов `agent` идёт; иначе `null`.
@@ -43,6 +44,12 @@ final class ToolRowView {
 
   /// Сокращённый вид итога `N tool calls · N.Nk · <время>` (D27).
   final String? summaryShort;
+
+  /// Счётчик работающего `agent` без токенов: `5 tool calls` / `1 tool call`
+  /// (Q15, D25); формат как у [summaryShort]. `null` у завершённого вызова,
+  /// у других вызовов и пока вызовов потомков нет. Хост показывает
+  /// `summaryShort ?? runningCounter`.
+  final String? runningCounter;
 
   /// Метка по виду вызова: `Read`, `Edit`, `Run`… или `title` у `other`.
   final String label;
@@ -62,7 +69,8 @@ final class ToolRowView {
       other.progress == progress &&
       other.report == report &&
       other.summary == summary &&
-      other.summaryShort == summaryShort;
+      other.summaryShort == summaryShort &&
+      other.runningCounter == runningCounter;
 
   @override
   int get hashCode => Object.hash(
@@ -73,12 +81,13 @@ final class ToolRowView {
     report,
     summary,
     summaryShort,
+    runningCounter,
   );
 
   @override
   String toString() =>
       'ToolRowView($label, $detail, $secondary, progress: $progress, '
-      'report: $report, summary: $summary, summaryShort: $summaryShort)';
+      'report: $report, summary: $summary, summaryShort: $summaryShort, runningCounter: $runningCounter)';
 }
 
 /// Строит [ToolRowView] по вызову инструмента.
@@ -160,6 +169,9 @@ abstract final class ToolRowFormatter {
           : null,
       summary: view.subagentSummary?.text,
       summaryShort: view.subagentSummary?.shortText,
+      runningCounter: running && item.subtreeCalls > 0
+          ? subagentCallsText(item.subtreeCalls)
+          : null,
     );
   }
 

@@ -46,7 +46,7 @@ void main() {
 
   // «Субагенты выключены»: `subagents.enabled: false` — блок без ключей
   // `subagents` и `subagentToolCalls` (вызовов потомков нет без субагентов,
-  // D9, D47 Т12); `tasks` есть всегда. Зелёный и до 5.2: ключ не должен
+  // D9, D47 Т12); `tasks` есть всегда. Ключ не должен
   // появиться при выключенных субагентах.
   test('subagents.enabled false: the block has only tasks', () async {
     final source = LayeredConfigSource(

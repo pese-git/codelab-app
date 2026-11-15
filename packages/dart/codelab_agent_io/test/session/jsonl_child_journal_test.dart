@@ -13,8 +13,8 @@ import 'journal_helpers.dart';
 /// `add-subagents-and-tasks`, D7, D36 Т4; `agent-core/17-3-subagents.md`
 /// §17.3.6).
 ///
-/// Красные до задачи 2.7: у порта нет `createChild`, у `SessionHeader` — поля
-/// `parent`. Общий контракт порта (в том числе группа `createChild`) —
+/// Охраняют `createChild` порта и поле `parent` заголовка `SessionHeader`.
+/// Общий контракт порта (в том числе группа `createChild`) —
 /// `jsonl_session_store_test.dart`; здесь — раскладка файлов, которую знает
 /// только файловое хранилище.
 void main() {
@@ -321,10 +321,9 @@ void main() {
     });
   });
 
-  // Задача 5.1 (change `add-subagents-and-tasks`, D47 Т5): реплей дерева
-  // читает журнал потомка, который может ещё писать потомок, пережившего
-  // `cancel_grace`. Красная до задачи 5.3: `openChildReadOnly` — заглушка
-  // ядра, она бросает `UnimplementedError`.
+  // Change `add-subagents-and-tasks`, D47 Т5: реплей дерева читает журнал
+  // потомка, который может ещё писать потомок, переживший `cancel_grace`;
+  // группа охраняет `openChildReadOnly` (чтение без записи).
   group('openChildReadOnly (задача 5.1, D47 Т5)', () {
     Future<String> seed() async {
       final store = storeAt(root);

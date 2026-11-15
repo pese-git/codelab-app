@@ -81,6 +81,7 @@ final class TuiModel {
     this.overlay,
     this.detailsFor,
     this.tasksHidden = false,
+    this.detailsExpanded = false,
   });
 
   factory TuiModel.initial({
@@ -124,6 +125,10 @@ final class TuiModel {
   /// Блок списка задач свёрнут до одной строки (Ctrl+T, D26).
   final bool tasksHidden;
 
+  /// Строки `agent` раскрыты: вызовы потомков и отчёт (Ctrl+O, D48 п. 2).
+  /// Общий переключатель на все строки; между запусками не сохраняется.
+  final bool detailsExpanded;
+
   /// Идёт ли ход: клавиши Esc и Ctrl+C отменяют его.
   bool get running => switch (session?.status) {
     SessionStatusView.running || SessionStatusView.cancelling => true,
@@ -142,6 +147,7 @@ final class TuiModel {
     TuiOverlay? Function()? overlay,
     ApprovalRequestId? Function()? detailsFor,
     bool? tasksHidden,
+    bool? detailsExpanded,
   }) => TuiModel._(
     profile: profile,
     size: size ?? this.size,
@@ -160,6 +166,7 @@ final class TuiModel {
     overlay: overlay == null ? this.overlay : overlay(),
     detailsFor: detailsFor == null ? this.detailsFor : detailsFor(),
     tasksHidden: tasksHidden ?? this.tasksHidden,
+    detailsExpanded: detailsExpanded ?? this.detailsExpanded,
   );
 }
 
@@ -174,6 +181,7 @@ List<String> transcriptLines(TuiModel model) => model.layout.lines(
   thoughts: model.thoughts,
   unicode: model.unicode,
   color: model.color,
+  expandDetails: model.detailsExpanded,
 );
 
 /// Одобрение, которого ждёт идущий ход; `null` — композер открыт.

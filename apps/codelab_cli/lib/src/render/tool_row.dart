@@ -48,7 +48,11 @@ String toolRow(ToolCallItem item, {bool unicode = true, Duration? elapsed}) {
 /// строка прогресса, итога нет. Без `subagentSummary` (сторонний агент,
 /// сорванный вызов) итога в строке нет. Текст агента проходит
 /// `sanitizeTerminalText`.
-String subagentStatusRow(ToolCallItem item, {bool unicode = true}) {
+String subagentStatusRow(
+  ToolCallItem item, {
+  bool unicode = true,
+  bool showProgress = true,
+}) {
   final state = _stateOf(item);
   final row = ToolRowFormatter.format(item, cwd: '');
   // Заголовок — из kit (`Subagent <type>: <description>`), как в app, а не
@@ -61,7 +65,9 @@ String subagentStatusRow(ToolCallItem item, {bool unicode = true}) {
     (_, ToolCallStatusView.failed) => 'Failed',
     _ => 'Cancelled',
   };
-  final tail = state == _RowState.pending ? row.progress : row.summaryShort;
+  final tail = state == _RowState.pending
+      ? (showProgress ? row.progress : null)
+      : row.summaryShort;
   final segments = [
     ?word,
     if (tail != null && tail.isNotEmpty) sanitizeTerminalText(tail),
@@ -117,8 +123,10 @@ String _seconds(Duration elapsed) =>
 /// Строки исхода одобрений потомков под строкой `agent` корня: `  <путь>:
 /// <метка решения>` на каждое решённое (D43 п. 2).
 ///
-/// Почему: у вызова потомка при строке корня нет своей строки (дерева вызовов
-/// до этапа 2 нет), и без этих строк решение пользователя в ленте не видно.
+/// Почему: без дерева вызовов (клиент без согласия) у вызова потомка при
+/// строке корня нет своей строки, и без этих строк решение пользователя в
+/// ленте не видно; с деревом строка вызова потомка есть, но блок решения
+/// остаётся у корня (D47 Т9, Т10).
 /// Как использовать: REPL и TUI печатают строки сразу после строки вызова.
 /// Путь берётся из решённого одобрения, а без него — из типа вызова корня.
 /// Возвращает пары (индекс в `childApprovals`, строка).

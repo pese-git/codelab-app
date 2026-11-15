@@ -3,7 +3,7 @@
 // задач в ленте»; design.md, D27, D35).
 //
 // Вызов становится операцией только по ключу `plan._meta.codelab.taskChange`
-// с `toolCallId`: вызов корневого уровня вида `think`, без
+// с `toolCallId`: вызов вида `think` любого уровня дерева, без
 // `_meta.codelab.subagent`, завершившийся `completed`. Порядок кадров, статус
 // вызова в момент прихода `plan` и сравнение планов вызов не опознают.
 // Поля `TaskOpsItem`: `id`, `added`, `completed`, `removed`, `updated` и
@@ -472,7 +472,12 @@ void main() {
   });
 
   test(
-    'a nested call (parentToolCallId) is not a root-level operation',
+    // Задача 5.4: правило итерации 4 «вложенный вызов — не операция» снято —
+    // операция потомка опознаётся на любом уровне дерева (D48 п. 3, Q35 (а);
+    // acp-client-kit «Операции со списком задач в ленте»). Родителя в ходе
+    // нет, поэтому операция остаётся на верхнем уровне; вложенность и
+    // слияние у соседей — `subagent_tool_tree_test.dart`.
+    'a call with a parentToolCallId is an operation too (any tree level)',
     () async {
       await emit(
         _think(
@@ -489,7 +494,7 @@ void main() {
       );
       await emit(_finish('call-1/call-1', 'completed'));
 
-      expect(ops(), isEmpty);
+      expect(ops().single.added, ['1']);
     },
   );
 }

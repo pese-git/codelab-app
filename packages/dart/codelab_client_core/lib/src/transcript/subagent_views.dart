@@ -66,6 +66,7 @@ final class SubagentRequester {
     required this.depth,
     required this.parentToolCallId,
     this.rootType,
+    this.chainTypes,
   });
 
   /// Id спрашивающего субагента (`sub_xxxxxxxx`).
@@ -88,13 +89,21 @@ final class SubagentRequester {
   /// `null` — kit его не знает (путь покажет `…`).
   final String? rootType;
 
+  /// Типы цепочки от вызова `agent` корня до спрашивающего по дереву вызовов
+  /// (итерация 5, D47 Т9); `null` — дерева у запроса нет (клиент без согласия
+  /// или вызов без своей строки). Длина равна [depth], неизвестное звено — `…`.
+  final List<String>? chainTypes;
+
   /// Типы цепочки от ребёнка корня до спрашивающего; длина равна [depth].
   ///
-  /// Первое звено — [rootType] или `…`, последнее — [type], промежуточные
-  /// неизвестны без дерева вызовов (этап 2) и дают `…` (D27, D43 п. 4).
-  List<String> get pathTypes => depth <= 1
-      ? [type]
-      : [rootType ?? '…', for (var i = 2; i < depth; i++) '…', type];
+  /// Первое звено — [rootType] или `…`, последнее — [type]; промежуточные —
+  /// из дерева вызовов ([chainTypes]), а без него неизвестны и дают `…`
+  /// (D27, D43 п. 4).
+  List<String> get pathTypes =>
+      chainTypes ??
+      (depth <= 1
+          ? [type]
+          : [rootType ?? '…', for (var i = 2; i < depth; i++) '…', type]);
 
   /// Строка пути для представлений: `review › explore`.
   String get pathText => pathTypes.join(' › ');
@@ -106,11 +115,25 @@ final class SubagentRequester {
     depth: depth,
     parentToolCallId: parentToolCallId,
     rootType: rootType,
+    chainTypes: chainTypes,
   );
+
+  /// Копия с цепочкой типов, найденной подъёмом по дереву вызовов.
+  SubagentRequester withChainTypes(List<String> chainTypes) =>
+      SubagentRequester(
+        id: id,
+        type: type,
+        description: description,
+        depth: depth,
+        parentToolCallId: parentToolCallId,
+        rootType: rootType,
+        chainTypes: chainTypes,
+      );
 
   @override
   bool operator ==(Object other) =>
       other is SubagentRequester &&
+      other.chainTypes?.join('\u0000') == chainTypes?.join('\u0000') &&
       other.id == id &&
       other.type == type &&
       other.description == description &&
@@ -119,12 +142,27 @@ final class SubagentRequester {
       other.rootType == rootType;
 
   @override
-  int get hashCode =>
-      Object.hash(id, type, description, depth, parentToolCallId, rootType);
+  int get hashCode => Object.hash(
+    id,
+    type,
+    description,
+    depth,
+    parentToolCallId,
+    rootType,
+    chainTypes?.join('\u0000'),
+  );
 
   @override
   String toString() => 'SubagentRequester($id, $pathText)';
 }
+
+/// Счётчик вызовов `N tool calls` / `1 tool call`.
+///
+/// Почему: один формат у счётчика работающего `agent`
+/// (`ToolRowView.runningCounter`) и у итога ([SubagentSummaryView]), чтобы
+/// строка не меняла вид при завершении (D25, D27).
+String subagentCallsText(int count) =>
+    '$count tool call${count == 1 ? '' : 's'}';
 
 /// Итог субагента из `_meta.codelab.subagent.summary` финального обновления
 /// (D24). Токены — сумма `input + output`.
@@ -146,7 +184,7 @@ final class SubagentSummaryView {
   /// Время: `48s`, `2m 05s`, `1h 02m`.
   String get durationText => formatSubagentDuration(duration);
 
-  String get _calls => '$toolCalls tool call${toolCalls == 1 ? '' : 's'}';
+  String get _calls => subagentCallsText(toolCalls);
 
   /// Полная строка итога: `4 tool calls · 18.2k tokens · 48s`.
   String get text => '$_calls · ${_tokens(totalTokens)} tokens · $durationText';

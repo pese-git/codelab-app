@@ -17,10 +17,10 @@ import 'support/server_harness.dart' show scriptedModel;
 /// ядре не удержать (ребёнок завершается сам). Фальшивая сессия выпускает
 /// события явно, как `session_bridge_echo_test.dart`.
 ///
-/// Красные до 5.2 (кроме тестов «без согласия», которые охраняют SUB-12):
-/// мост не знает цепочек потомков, `_announced`/`terminalShown` их не видят,
-/// `replay()` не читает `replayTree()`. Реплей зависит ещё и от 5.3
-/// (`AgentSession.replayTree`), фальшивая сессия здесь отдаёт его сама.
+/// Тесты «без согласия» охраняют SUB-12 (кадров потомков нет), остальные —
+/// цепочки потомков в `_announced`/`terminalShown` и реплей дерева через
+/// `replayInto` (читает `replayTree()`); фальшивая сессия здесь отдаёт
+/// `replayTree()` сама.
 void main() {
   const root = SessionId('sess_fake');
 
@@ -405,8 +405,8 @@ void main() {
 
   group('without the consent', () {
     // SUB-12, «Клиент без согласия»: кадров потомков нет — ни `tool_call`,
-    // ни `in_progress`, ни закрытия висящих. Зелёный и до 5.2; охраняет
-    // реализацию 5.2 от протечки кадров.
+    // ни `in_progress`, ни закрытия висящих. Охраняет мост от протечки
+    // кадров потомков клиенту, не объявившему согласия.
     test('no frame of a descendant is sent, in_progress included', () async {
       final bridge = await open(consent: false);
       startTree();
@@ -427,7 +427,7 @@ void main() {
 
     // D47 Т3: `_announced` по цепочке ведётся независимо от согласия:
     // `AcpPermissionGate` клиента с согласием читает согласие в момент
-    // запроса, и оно может смениться при переподключении. Красный до 5.2.
+    // запроса, и оно может смениться при переподключении.
     test('the chain is announced for the gate anyway', () async {
       final bridge = await open(consent: false);
 
@@ -447,7 +447,7 @@ void main() {
 
     // D47 Т4, дефект: терминал потомка закрывает ожидание `terminalShown`
     // независимо от согласия; иначе `exec` потомка, ждущий показа терминала
-    // перед `terminal/wait_for_exit`, не завершается. Красный до 5.2.
+    // перед `terminal/wait_for_exit`, не завершается.
     test('a terminal shown by a descendant releases terminalShown', () async {
       final bridge = await open(consent: false);
       startTree();
@@ -535,6 +535,13 @@ void main() {
       act(finished('call_2', outcome: ToolOutcome.cancelled)),
     ];
 
+    /// Кадры `session/load`, как их отправляет сервер: через `replayInto`.
+    Future<List<acp.SessionUpdate>> replayFrames(SessionBridge bridge) async {
+      final frames = <acp.SessionUpdate>[];
+      await bridge.replayInto(frames.add);
+      return frames;
+    }
+
     List<Map<String, Object?>> toolFrames(List<acp.SessionUpdate> frames) => [
       for (final f in frames)
         if (f.toJson() case {'sessionUpdate': 'tool_call'} && final json) json,
@@ -549,7 +556,7 @@ void main() {
         ..replayEvents = rootEvents()
         ..replayTreeEvents = [...rootEvents(), ...childEvents()];
 
-      final frames = toolFrames(await bridge.replay());
+      final frames = toolFrames(await replayFrames(bridge));
 
       expect(frames.map((f) => f['toolCallId']), [
         'call_1',
@@ -572,8 +579,7 @@ void main() {
     });
 
     // SUB-12, «Реплей дерева»: клиент без согласия получает прежний
-    // синхронный `replay()`, журналы потомков не читаются (D47 Т6). Зелёный
-    // и до 5.2.
+    // синхронный `replay()`, журналы потомков не читаются (D47 Т6).
     test('a client without the consent gets the plain replay and the tree '
         'is not read', () async {
       final bridge = await open(consent: false);
@@ -581,7 +587,7 @@ void main() {
         ..replayEvents = rootEvents()
         ..replayTreeEvents = [...rootEvents(), ...childEvents()];
 
-      final frames = toolFrames(await bridge.replay());
+      final frames = toolFrames(await replayFrames(bridge));
 
       expect(frames.map((f) => f['toolCallId']), ['call_1']);
       expect(session.replayTreeCalls, 0);
@@ -589,10 +595,9 @@ void main() {
 
     // D47 Т6, ACP-3, AGENTS.md §9: кадр живого хода, пришедший, пока читаются
     // журналы потомков (переподключение идущего хода), не опережает кадры
-    // реплея. Мост придерживает его до конца реплея: к моменту, когда
-    // `replay()` вернул кадры (сервер отправляет их следующими), живой кадр
-    // в очередь соединения ещё не попал. Красный до 5.2: сегодня `replay()`
-    // не ждёт `replayTree()`, а живой кадр уходит сразу.
+    // реплея. Мост придерживает его, пока `replayInto` читает журналы и отдаёт
+    // кадры, и отпускает в его `finally`: порядок и перекрытие реплеев —
+    // `session_bridge_replay_test.dart`.
     test(
       'a live frame during the replay waits for the replay frames',
       () async {
@@ -603,7 +608,7 @@ void main() {
           ..replayTreeEvents = [...rootEvents(), ...childEvents()]
           ..replayTreeGate = gate;
 
-        final replay = bridge.replay();
+        final replay = replayFrames(bridge);
         await pump();
         session.emit(
           MessageDelta(
@@ -619,15 +624,16 @@ void main() {
           ),
         );
         await pump();
-        gate.complete();
-        final frames = await replay;
-
-        expect(toolFrames(frames), isNotEmpty);
         expect(
           sent.whereType<acp.AgentMessageChunk>(),
           isEmpty,
           reason: 'живой кадр не должен опередить кадры реплея',
         );
+        gate.complete();
+        final frames = await replay;
+
+        expect(toolFrames(frames), isNotEmpty);
+        expect(sent.whereType<acp.AgentMessageChunk>(), hasLength(1));
       },
     );
   });
@@ -694,8 +700,7 @@ final class _FakeSession implements AgentSession {
   @override
   Iterable<AgentEvent> replay() => replayEvents;
 
-  // Без `@override`: метод `AgentSession.replayTree()` добавляет задача 5.3
-  // (D47 Т6); тест компилируется и до неё.
+  @override
   Future<List<AgentEvent>> replayTree() async {
     replayTreeCalls++;
     await replayTreeGate?.future;

@@ -2019,11 +2019,10 @@ mixin _$ToolCallRecord {
 /// кадр без признака его не стирает (spec acp-client-kit «Отмена по
 /// признаку агента», design.md D41 п. 1). Значение не проверяется:
 /// терпимый разбор — у kit.
- String? get outcome;/// ЗАГЛУШКА задачи 5.1 (красные тесты): `_meta.codelab.parentToolCallId`
-/// кадров `tool_call`/`tool_call_update` — id вызова `agent` родителя на
-/// проводе (design.md change `add-subagents-and-tasks`, D21, D47 Т9).
-/// Разбор из `_meta` и слияние кадров — задача 5.4; пока поле всегда
-/// `null`.
+ String? get outcome;/// `_meta.codelab.parentToolCallId` кадров `tool_call`/`tool_call_update` —
+/// id вызова родителя на проводе (design.md change
+/// `add-subagents-and-tasks`, D21, D47 Т9); `null` — вызов корня.
+/// Поздний кадр без поля родителя не стирает его (как `outcome`).
  String? get parentToolCallId;
 /// Create a copy of ToolCallRecord
 /// with the given fields replaced by the non-null parameter values.
@@ -2306,11 +2305,10 @@ class _ToolCallRecord extends ToolCallRecord {
 /// признаку агента», design.md D41 п. 1). Значение не проверяется:
 /// терпимый разбор — у kit.
 @override final  String? outcome;
-/// ЗАГЛУШКА задачи 5.1 (красные тесты): `_meta.codelab.parentToolCallId`
-/// кадров `tool_call`/`tool_call_update` — id вызова `agent` родителя на
-/// проводе (design.md change `add-subagents-and-tasks`, D21, D47 Т9).
-/// Разбор из `_meta` и слияние кадров — задача 5.4; пока поле всегда
-/// `null`.
+/// `_meta.codelab.parentToolCallId` кадров `tool_call`/`tool_call_update` —
+/// id вызова родителя на проводе (design.md change
+/// `add-subagents-and-tasks`, D21, D47 Т9); `null` — вызов корня.
+/// Поздний кадр без поля родителя не стирает его (как `outcome`).
 @override final  String? parentToolCallId;
 
 /// Create a copy of ToolCallRecord

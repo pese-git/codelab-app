@@ -201,7 +201,7 @@ final _stateChecks = <String, _StateCheck>{
   // `setup.clientCapabilities` с `subagentToolCalls`; проверка не зависит от
   // точного состава кадров: у каждого вызова с цепочкой `toolCallId` родитель
   // на проводе — цепочка без последнего звена (D8), а вызовы корня родителя
-  // не имеют. Красные до задачи 5.4: `parentToolCallId` ещё не разбирается.
+  // не имеют.
   'acp/prompt-subagent-tool-tree': (user, _) {
     expect(_lastTurn(user).status, PromptTurnStatus.completed);
     _expectParentChain(user.app.sessions.single);

@@ -47,6 +47,7 @@ Widget _panel(
 );
 
 void main() {
+  _tailEquality();
   test('CodeLabSubagentCall compares by value', () {
     expect(
       const CodeLabSubagentCall(stats: _stats, progress: 'p'),
@@ -203,5 +204,29 @@ void main() {
       expect(find.text(_stats), findsOneWidget);
       expect(find.textContaining('explore: 2 tool calls'), findsNothing);
     });
+  });
+}
+
+// Ревью итерации 5: равенство `CodeLabSubagentCall` сравнивает содержимое
+// хвоста, а не только его длину.
+void _tailEquality() {
+  CodeLabSubagentCall withTail(List<CodeLabTranscriptRow> tail) =>
+      CodeLabSubagentCall(tail: tail);
+  CodeLabToolCallRow call(CodeLabToolCallStatus status) =>
+      CodeLabToolCallRow(id: 'c1', status: status, label: 'Read');
+
+  test('tails of the same length with different content are not equal', () {
+    expect(
+      withTail([call(CodeLabToolCallStatus.running)]),
+      isNot(withTail([call(CodeLabToolCallStatus.succeeded)])),
+    );
+    expect(
+      withTail([call(CodeLabToolCallStatus.running)]),
+      withTail([call(CodeLabToolCallStatus.running)]),
+    );
+    expect(
+      withTail([const CodeLabTaskOpsRow(id: 'o', text: 'Task #1 done')]),
+      isNot(withTail([call(CodeLabToolCallStatus.running)])),
+    );
   });
 }

@@ -9,6 +9,7 @@ import 'connection/acp_error.dart';
 import 'connection/client_requests.dart';
 import 'event_projection.dart';
 import 'replay.dart';
+import 'subagent_chain.dart';
 
 /// Куда мост ставит уведомления сессии: очередь соединения-владельца.
 typedef SessionUpdateSink = void Function(acp.SessionNotification update);
@@ -73,6 +74,11 @@ final class SessionBridge {
   /// теряется (ход стартует уже отменённым).
   CancelTokenSource? _turnCancel;
 
+  /// Ход закончился (`TurnEnded`) и новый ещё не начат: события потомков в
+  /// это время запоздалые и не проецируются (AGENTS.md §9). Снимается в
+  /// [prompt].
+  var _turnEnded = false;
+
   /// Соединение закрыто, сессия ждёт переподключения (D7).
   var _detached = false;
   ClockTimer? _grace;
@@ -89,7 +95,34 @@ final class SessionBridge {
   String? _effortNote;
 
   /// Вызовы, о которых клиент уже знает (`tool_call` ушёл).
+  ///
+  /// Цепочки вызовов потомков (D47 Т3) попадают сюда ВСЕГДА, независимо от
+  /// согласия: `AcpPermissionGate` читает согласие из `ClientLink` в момент
+  /// запроса, и после переподключения оно может смениться.
   final _announced = <String>{};
+
+  /// Цепочки `toolCallId` потомков (D47 Т2); общий алгоритм с реплеем.
+  final _chains = SubagentChains();
+
+  /// Открытые вызовы потомков: цепочка вызова → префикс (цепочка вызова
+  /// `agent`, чьё поддерево он составляет). Из них строится закрытие
+  /// висящих вызовов (D21, D47 Т3).
+  final _descendantOpen = <String, String>{};
+
+  /// Вызовы `agent` хода (корня и вложенные, по цепочке): только их
+  /// завершение закрывает поддерево.
+  final _agentCalls = <String>{};
+
+  /// Закрытые цепочки текущего хода: поздний кадр такой цепочки или кадр
+  /// потомка закрытого вызова `agent` не отправляется (ядро их уже не
+  /// переизлучает, D5, — это вторая защита). Очищается в начале `prompt`:
+  /// id вызова `agent` может повториться в новом ходе (ветки, импорт
+  /// журнала), и потомки нового вызова не должны отбрасываться.
+  final _closed = <String>{};
+
+  /// Итоги вложенных потомков по цепочке их вызова `agent`: итог внука
+  /// приходит внутри обёртки ребёнка до `ToolCallFinished(agent)` (D47 Т3).
+  final _nestedDone = <String, SubagentFinished>{};
 
   /// `markInProgress` сработал раньше, чем `tool_call` дошёл до проекции.
   final _earlyInProgress = <String>{};
@@ -184,23 +217,36 @@ final class SessionBridge {
   /// События сессии приходят подписчику асинхронно, а хук вызывается в
   /// цикле синхронно, поэтому `in_progress` может опередить `tool_call`
   /// своего вызова; тогда он откладывается до проекции `tool_call`.
+  ///
+  /// У вызова потомка `call.id` — цепочка (D48 п. 1; хук хоста у потомков
+  /// даёт задача 5.3). `in_progress` цепочки уходит только клиенту с
+  /// согласием `subagentToolCalls`: у остальных этого вызова нет (SUB-12),
+  /// а `_announced` по цепочке ведётся для всех (D47 Т3).
   Future<Block?> markInProgress(
     ToolCall call,
     Map<String, Object?> args,
     ToolContext ctx,
   ) async {
     if (_announced.contains(call.id)) {
-      _send(inProgressUpdate(call.id));
+      if (!_descendantOpen.containsKey(call.id) || _consent) {
+        _send(inProgressUpdate(call.id));
+      }
     } else {
       _earlyInProgress.add(call.id);
     }
     return null;
   }
 
+  /// Согласие текущего соединения на вызовы потомков (D47 Т3): читается из
+  /// `ClientLink.capabilities` при каждом событии, а не при создании моста.
+  bool get _consent => subagentToolCallsConsent(_link.capabilities);
+
   /// Запускает ход и ждёт его итога; ответ — по §13.8, сбой хода —
   /// `AcpRequestError` `-32603`.
   Future<acp.PromptResponse> prompt(List<ContentBlock> content) async {
     final turn = _turn = Completer<TurnEnded>();
+    _turnEnded = false;
+    _closed.clear();
     _failure = null;
     _ended = null;
     _cancelRequested = false;
@@ -394,33 +440,74 @@ final class SessionBridge {
     }
   }
 
-  /// Кадры `session/load` до ответа: история и хвост (§13.5, шаги 5–6).
+  /// Отдаёт кадры `session/load` до ответа через [emit]: история и хвост
+  /// (§13.5, шаги 5–6).
   ///
-  /// ЗАГЛУШКА задачи 5.1: метод стал асинхронным без изменения логики, чтобы
-  /// тесты ждали его через `await`. Задача 5.2 (D47 Т6): клиенту с согласием
-  /// `subagentToolCalls` — `session.replayTree()` и придерживание кадров
-  /// живого хода до конца реплея; без согласия — прежний синхронный
-  /// `session.replay()`.
-  Future<List<acp.SessionUpdate>> replay() async {
-    final events = session.replay().toList();
-    final plan = events.whereType<TaskListChanged>().lastOrNull;
-    final title = events.whereType<SessionTitleChanged>().lastOrNull;
-    return [
-      ...replayUpdates(events),
-      if (plan != null)
-        ...projectEvent(plan, configOptions: () => configOptions, replay: true),
-      acp.SessionUpdate.currentModeUpdate(
-        currentModeId: acp.SessionModeId(session.mode.value),
-      ),
-      acp.SessionUpdate.configOptionUpdate(configOptions: configOptions),
-      // Список команд шаблонов на прежнем месте последовательности (D9).
-      availableCommandsUpdate,
-      if (title != null)
-        acp.SessionUpdate.sessionInfoUpdate(
-          title: title.title,
-          updatedAt: formatJournalTime(title.updatedAt),
+  /// Клиенту с согласием `subagentToolCalls` история — `session.replayTree()`
+  /// с вызовами потомков, клиенту без согласия — прежний синхронный
+  /// `session.replay()`, журналы потомков не читаются (D47 Т6). Пока читаются
+  /// журналы и пока [emit] отдаёт кадры, кадры живого хода (переподключение
+  /// идущего хода) придерживаются и уходят после кадров реплея: живой кадр не
+  /// опережает реплей (ACP-3, AGENTS.md §9).
+  ///
+  /// Почему один метод: двухшаговый «кадры, затем `finishReplay`» оставлял
+  /// сессию молчащей при исключении между шагами, а реплеи двух соединений
+  /// одного моста перекрывались, и конец первого отпускал буфер второго.
+  /// Теперь буфер держит счётчик [_replayHolds]: он отпускается в `finally`
+  /// последнего из идущих реплеев, на любом пути, включая ошибки [emit].
+  Future<void> replayInto(void Function(acp.SessionUpdate update) emit) async {
+    final held = _consent;
+    if (held) {
+      _replayHeld ??= [];
+      _replayHolds++;
+    }
+    try {
+      final events = held
+          ? await session.replayTree()
+          : session.replay().toList();
+      final plan = events.whereType<TaskListChanged>().lastOrNull;
+      final title = events.whereType<SessionTitleChanged>().lastOrNull;
+      final frames = [
+        ...replayUpdates(events),
+        if (plan != null)
+          ...projectEvent(
+            plan,
+            configOptions: () => configOptions,
+            replay: true,
+          ),
+        acp.SessionUpdate.currentModeUpdate(
+          currentModeId: acp.SessionModeId(session.mode.value),
         ),
-    ];
+        acp.SessionUpdate.configOptionUpdate(configOptions: configOptions),
+        // Список команд шаблонов на прежнем месте последовательности (D9).
+        availableCommandsUpdate,
+        if (title != null)
+          acp.SessionUpdate.sessionInfoUpdate(
+            title: title.title,
+            updatedAt: formatJournalTime(title.updatedAt),
+          ),
+      ];
+      frames.forEach(emit);
+    } finally {
+      if (held && --_replayHolds == 0) {
+        _releaseReplayHeld();
+      }
+    }
+  }
+
+  /// Кадры живого хода, придержанные на время реплея дерева (D47 Т6).
+  List<acp.SessionUpdate>? _replayHeld;
+
+  /// Число идущих реплеев с придержанным буфером: буфер отпускает последний.
+  var _replayHolds = 0;
+
+  /// Придержанные кадры живого хода уходят в порядке прихода.
+  void _releaseReplayHeld() {
+    final held = _replayHeld;
+    _replayHeld = null;
+    for (final update in held ?? const <acp.SessionUpdate>[]) {
+      _send(update);
+    }
   }
 
   /// Соединение-владелец закрыто (§13.10, «Отсоединение»): кадры больше
@@ -528,11 +615,22 @@ final class SessionBridge {
   final _subagentDone = <String, SubagentFinished>{};
 
   void _onEvent(AgentEvent event) {
+    if (event is SubagentActivity) {
+      _onActivity(event);
+      return;
+    }
     switch (event) {
       case AgentError(retrying: false):
         _failure = event;
-      case ToolCallStarted(:final toolCallId):
+      case ToolCallStarted(:final toolCallId, :final tool, :final subagent):
         _announced.add(toolCallId);
+        if (tool == 'agent' || subagent != null) {
+          _agentCalls.add(toolCallId);
+        }
+      case ToolCallFinished(:final toolCallId):
+        // Висящие вызовы поддерева закрываются до итога самого вызова
+        // `agent` (D21, D47 Т3).
+        _closeSubtree(toolCallId);
       case _:
     }
     // Возможное эхо клиентского запроса: решение, чьё это `changeId`,
@@ -572,16 +670,13 @@ final class SessionBridge {
           _send(inProgressUpdate(toolCallId));
         }
       case ToolCallProgress(:final content):
-        for (final item in content.whereType<ToolCallTerminal>()) {
-          final waiting = _awaitingTerminal.remove(item.terminalId);
-          if (waiting == null) {
-            _shownTerminals.add(item.terminalId);
-          } else {
-            waiting.complete();
-          }
-        }
+        _terminalsShown(content);
       case ToolCallFinished(:final toolCallId):
         _announced.remove(toolCallId);
+        if (_agentCalls.remove(toolCallId)) {
+          // Поздние кадры потомков этого вызова `agent` отсекаются.
+          _closed.add(toolCallId);
+        }
       case TurnEnded():
         // Ожидающие объявления вызова не переживают ход: вызов уже не будет
         // объявлен. Ошибка `CancelledException` превращается шлюзом в
@@ -592,8 +687,171 @@ final class SessionBridge {
         _awaitingAnnounce.clear();
         _announced.clear();
         _earlyInProgress.clear();
+        _chains.clear();
+        _descendantOpen.clear();
+        _agentCalls.clear();
+        _nestedDone.clear();
+        for (final waiting in _awaitingTerminal.values) {
+          waiting.completeError(const CancelledException('turn ended'));
+        }
+        _awaitingTerminal.clear();
+        _shownTerminals.clear();
+        // `_closed` держится до начала следующего `prompt` (там он очищается):
+        // поздний кадр закрытой цепочки отсекается и им, и признаком
+        // `_turnEnded`.
+        _turnEnded = true;
         _ended = event;
       case _:
+    }
+  }
+
+  /// Терминалы, встроенные в вызов: освобождают ожидающий `exec` (корня или
+  /// потомка; независимо от согласия клиента, дефект D47 Т4).
+  void _terminalsShown(List<ToolCallContent> content) {
+    for (final item in content.whereType<ToolCallTerminal>()) {
+      final waiting = _awaitingTerminal.remove(item.terminalId);
+      if (waiting == null) {
+        _shownTerminals.add(item.terminalId);
+      } else {
+        waiting.complete();
+      }
+    }
+  }
+
+  /// Событие потомка (`SubagentActivity`) по цепочке (D47 Т2, Т3).
+  ///
+  /// Состояние моста — `_announced`, терминалы, открытые вызовы — ведётся
+  /// для всех клиентов: gate читает согласие в момент запроса, а `exec`
+  /// потомка ждёт `terminalShown`. Кадры уходят только клиенту с согласием
+  /// `subagentToolCalls` (SUB-12).
+  void _onActivity(SubagentActivity activity) {
+    // Терминал потомка освобождает ожидающий `exec` до любых отсевов: кадр
+    // могут отбросить (закрытая цепочка, неизвестный предок), а `exec`
+    // потомка ждёт `terminalShown` и держит терминал клиента (D47 Т4).
+    if (activity.event case ToolCallProgress(:final content)) {
+      _terminalsShown(content);
+    }
+    if (_turnEnded) {
+      // Поздний кадр потомка после конца хода: ядро его уже не ждёт (D5).
+      return;
+    }
+    final prefix = _chains.prefixOf(activity);
+    if (prefix == null) {
+      // Так быть не должно: события ребёнка приходят раньше событий внука.
+      // Молча терять вызов или слать кадр с неверной цепочкой нельзя.
+      _logger.log(
+        LogLevel.warning,
+        'acp.subagent.unknown_parent',
+        fields: {
+          'session_id': _id.value,
+          'subagent_id': activity.subagentId,
+          'parent_tool_call_id': activity.parentToolCallId,
+        },
+      );
+      return;
+    }
+    if (_closed.contains(prefix)) {
+      return;
+    }
+    final inner = activity.event;
+    if (inner is SubagentFinished) {
+      _nestedDone[SubagentChains.chainOf(prefix, inner.parentToolCallId)] =
+          inner;
+      return;
+    }
+    final consent = _consent;
+    void project({SubagentFinished? result}) {
+      if (!consent) {
+        return;
+      }
+      for (final update in projectEvent(
+        activity,
+        configOptions: () => configOptions,
+        subagentPrefix: prefix,
+        subagentResult: result,
+      )) {
+        _send(update);
+      }
+    }
+
+    switch (inner) {
+      case ToolCallStarted(:final toolCallId, :final tool, :final subagent):
+        final chain = SubagentChains.chainOf(prefix, toolCallId);
+        if (_closed.contains(chain) || _descendantOpen.containsKey(chain)) {
+          return;
+        }
+        _descendantOpen[chain] = prefix;
+        _announced.add(chain);
+        if (tool == 'agent' || subagent != null) {
+          _agentCalls.add(chain);
+        }
+        project();
+        _awaitingAnnounce.remove(chain)?.complete();
+        if (_earlyInProgress.remove(chain) && consent) {
+          _send(inProgressUpdate(chain));
+        }
+      case ToolCallProgress(:final toolCallId):
+        final chain = SubagentChains.chainOf(prefix, toolCallId);
+        if (_closed.contains(chain)) {
+          return;
+        }
+        project();
+      case ToolCallFinished(:final toolCallId):
+        final chain = SubagentChains.chainOf(prefix, toolCallId);
+        if (_closed.contains(chain)) {
+          return;
+        }
+        _closeSubtree(chain);
+        project(result: _nestedDone.remove(chain));
+        _descendantOpen.remove(chain);
+        _announced.remove(chain);
+        _agentCalls.remove(chain);
+        _closed.add(chain);
+      case _:
+    }
+  }
+
+  /// Закрывает висящие вызовы поддерева вызова `agent` [agentCall] (корня
+  /// или вложенного; D21, D47 Т3): `failed` с `outcome: cancelled`, рекурсивно,
+  /// до его собственного итога. Ядро после терминального состояния потомка
+  /// его события не переизлучает (D5), поэтому иначе у клиента остались бы
+  /// вызовы в статусе `pending`/`in_progress` навсегда.
+  void _closeSubtree(String agentCall) {
+    if (!_agentCalls.contains(agentCall)) {
+      return;
+    }
+    final consent = _consent;
+    var closedCalls = 0;
+    void close(String parent) {
+      final children = [
+        for (final MapEntry(:key, :value) in _descendantOpen.entries)
+          if (value == parent) key,
+      ];
+      for (final chain in children) {
+        _descendantOpen.remove(chain);
+        _announced.remove(chain);
+        _agentCalls.remove(chain);
+        _closed.add(chain);
+        closedCalls++;
+        if (consent) {
+          _send(closedDescendantUpdate(chain, parent));
+        }
+        close(chain);
+      }
+    }
+
+    close(agentCall);
+    if (closedCalls > 0) {
+      // §16: цепочки и тексты вызовов в журнал не идут, только счёт.
+      _logger.log(
+        LogLevel.info,
+        'acp.subagent.subtree_closed',
+        fields: {
+          'session_id': _id.value,
+          'tool_call_id': agentCall,
+          'closed_calls': closedCalls,
+        },
+      );
     }
   }
 
@@ -618,6 +876,11 @@ final class SessionBridge {
     );
   }
 
-  void _send(acp.SessionUpdate update) =>
-      sink(acp.SessionNotification(sessionId: _id, update: update));
+  void _send(acp.SessionUpdate update) {
+    if (_replayHeld case final held?) {
+      held.add(update);
+      return;
+    }
+    sink(acp.SessionNotification(sessionId: _id, update: update));
+  }
 }

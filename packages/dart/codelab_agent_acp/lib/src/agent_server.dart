@@ -339,8 +339,10 @@ final class _Connection {
   /// `maxDepth` — только если ядро включило субагентов: [subagents] читается
   /// живым геттером `AgentRuntime.subagents` в момент `initialize` (D37), так
   /// что перезагрузка конфига меняет блок для следующих соединений.
-  /// `subagentToolCalls` не объявляется до проекции вызовов потомков
-  /// (задача 5.2; D36, Т12): агент не заявляет расширение, которого нет.
+  /// `subagentToolCalls` идёт рядом с `subagents` (D47 Т12): вызовы потомков
+  /// проецируются только при включённых субагентах, а состав блока от того,
+  /// что объявил клиент, не зависит; согласие клиента мост читает отдельно
+  /// (D47 Т3).
   static Map<String, Object?>? _codelabExtensions(
     Map<String, Object?>? clientMeta,
     SubagentsInfo? subagents,
@@ -353,6 +355,7 @@ final class _Connection {
         'subagents': ?(subagents == null
             ? null
             : {'version': 1, 'maxDepth': subagents.maxDepth}),
+        'subagentToolCalls': ?(subagents == null ? null : {'version': 1}),
         'tasks': {'version': 1},
       },
     };
@@ -636,9 +639,9 @@ final class _Connection {
       bridge = wiring.bridge..attach(session);
       _server._sessions[id] = bridge;
     }
-    for (final update in await bridge.replay()) {
-      _update(request.sessionId, update);
-    }
+    // Кадры живого хода, придержанные на время реплея дерева, уходят после
+    // него; мост отпускает их сам, в том числе при ошибке.
+    await bridge.replayInto((update) => _update(request.sessionId, update));
     final response = acp.LoadSessionResponse(
       modes: sessionModes(bridge.session),
       configOptions: bridge.configOptions,

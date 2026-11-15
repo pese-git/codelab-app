@@ -175,6 +175,19 @@ abstract interface class AgentSession {
   /// События журнала активной ветки для `session/load` (§8.3, D4).
   Iterable<AgentEvent> replay();
 
+  /// События [replay] и `SubagentActivity` потомков из их журналов (design.md
+  /// change `add-subagents-and-tasks`, D47 Т6; `agent-core/05-agent-loop.md`
+  /// §5.6).
+  ///
+  /// Почему отдельный метод: [replay] синхронный и прежний (D1), а журналы
+  /// потомков читаются асинхронно через `SessionStore.openChildReadOnly` —
+  /// без записи и без lease. Для чего: реплей клиенту с согласием
+  /// `subagentToolCalls`; события потомка идут сразу после
+  /// `ToolCallFinished` вызова `agent` с адресом, как вживую. Снимок корня
+  /// берётся синхронно в момент вызова. Журнал, который не открылся, — лог
+  /// `subagent.replay_failed` и реплей без потомков этого вызова, не ошибка.
+  Future<List<AgentEvent>> replayTree();
+
   /// Отменяет идущий ход, дожидается очереди записи журнала и закрывает
   /// поток событий; журнал остаётся в хранилище.
   Future<void> close();
@@ -299,17 +312,4 @@ final class ConfigChangeResult {
 
   /// Новая модель, если вызов записал `model_change`; иначе `null`.
   final ModelRef? model;
-}
-
-/// КРАСНАЯ ЗАГЛУШКА задачи 5.1 (change `add-subagents-and-tasks`, D47 Т6):
-/// `AgentSession.replayTree()` — реплей с событиями потомков.
-///
-/// Почему расширение: член интерфейса сломал бы компиляцию двойников
-/// `AgentSession` в `codelab_agent_acp` до задачи 5.2. Задача 5.3 заменяет
-/// заглушку членом [AgentSession] и реализацией в `_Session`, а расширение
-/// удаляет.
-// TODO(5.3): заменить членом AgentSession.
-extension ReplayTreeStub on AgentSession {
-  Future<List<AgentEvent>> replayTree() =>
-      throw UnimplementedError('replayTree: задача 5.3');
 }

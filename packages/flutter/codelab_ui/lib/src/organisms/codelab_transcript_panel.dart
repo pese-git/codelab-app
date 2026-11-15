@@ -308,6 +308,12 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
                     markdownConfig: _markdownConfigFor(FluentTheme.of(context)),
                     expanded: _isExpanded(row),
                     onToggle: (expanded) => _toggle(row.id, expanded),
+                    // Вложенные строки дерева `agent` раскрываются теми же
+                    // переопределениями по своему id; по умолчанию свёрнуты
+                    // (D47 Т11).
+                    nestedExpanded: (id) =>
+                        widget.expansionOverrides[id] ?? false,
+                    onNestedToggle: _toggle,
                   ),
                 ),
               ),
@@ -333,12 +339,16 @@ class _TranscriptRowView extends StatelessWidget {
     required this.markdownConfig,
     required this.expanded,
     required this.onToggle,
+    required this.nestedExpanded,
+    required this.onNestedToggle,
   });
 
   final CodeLabTranscriptRow row;
   final CodeLabMarkdownConfig markdownConfig;
   final bool expanded;
   final ValueChanged<bool> onToggle;
+  final bool Function(String rowId) nestedExpanded;
+  final void Function(String rowId, bool expanded) onNestedToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -365,9 +375,11 @@ class _TranscriptRowView extends StatelessWidget {
         row: call,
         expanded: expanded,
         onToggle: onToggle,
+        nestedExpanded: nestedExpanded,
+        onNestedToggle: onNestedToggle,
       ),
       final CodeLabNoticeRow notice => CodeLabTranscriptNotice(row: notice),
-      CodeLabTaskOpsRow(:final text) => _TaskOpsLine(text: text),
+      CodeLabTaskOpsRow(:final text) => CodeLabTaskOpsLine(text: text),
     };
   }
 }
@@ -415,28 +427,6 @@ class _UserBubble extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-/// Тихая строка операций со списком задач (D27): иконка списка и приглушённый
-/// текст, без рамки, тега статуса и панели вывода.
-class _TaskOpsLine extends StatelessWidget {
-  const _TaskOpsLine({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          const CodeLabIcon(FluentIcons.bulleted_list, size: 14),
-          const SizedBox(width: 8),
-          Expanded(child: CodeLabText(text, role: CodeLabTextRole.caption)),
-        ],
-      ),
     );
   }
 }
