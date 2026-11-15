@@ -42,6 +42,37 @@ final class SubagentCallRef {
   int get hashCode => Object.hash(id, type);
 }
 
+/// Сведения о потомке в запросе разрешения: пара к [SubagentCallRef]
+/// (design.md change `add-subagents-and-tasks`, D8, D42 Т4; §7.2).
+///
+/// ЗАГЛУШКА задачи 3.1: только форма типа, чтобы красные тесты итерации 3
+/// компилировались. Заполняет `SubagentPermissionGate` в задаче 3.2; до неё
+/// `PermissionRequest.subagent` всегда `null`.
+final class SubagentRequestRef {
+  const SubagentRequestRef({
+    required this.id,
+    required this.type,
+    required this.description,
+    required this.depth,
+    required this.path,
+    required this.parentToolCallId,
+  });
+
+  /// Спрашивающий потомок, его тип и описание.
+  final SubagentId id;
+  final String type, description;
+
+  /// Глубина спрашивающего (ребёнок корня — 1).
+  final int depth;
+
+  /// Id предков-субагентов от глубины 1, без самого спрашивающего.
+  final List<SubagentId> path;
+
+  /// Вызов `agent` корневой сессии, который клиент видел (первый сегмент
+  /// цепочки `toolCallId`).
+  final String parentToolCallId;
+}
+
 /// Снимок потомка для прогресса и доски (§17.3.2).
 ///
 /// Почему неизменяемый снимок: события `SubagentProgress` уходят подписчикам

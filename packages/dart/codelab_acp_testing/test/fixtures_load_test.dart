@@ -113,15 +113,16 @@ const _skillFixtures = {
   'acp/skill-script-exec',
 };
 
-/// Фикстуры change `add-subagents-and-tasks` итераций 1–2 (acp-golden-fixtures
+/// Фикстуры change `add-subagents-and-tasks` итераций 1–3 (acp-golden-fixtures
 /// «Фикстуры субагентов и списка задач»). Остальные фикстуры change
-/// (`acp/prompt-subagent-permission`, `-nested-permission`, `-tool-tree`,
+/// (`-nested-permission`, `-tool-tree`,
 /// `acp/session-load-subagent-tool-tree`) приходят с итерациями 3–5 и
 /// добавляются сюда вместе с ними.
 const _tasksFixtures = {
   'acp/initialize-codelab-extensions',
   'acp/prompt-task-plan',
   'acp/prompt-subagent-tool-call',
+  'acp/prompt-subagent-permission',
   'acp/session-load-legacy-plan',
 };
 
@@ -172,6 +173,13 @@ void main() {
     // Итерация 2 (задача 2.1): вызов `agent` проигрывают обе роли — агент
     // проецирует его, kit разбирает `_meta.codelab.subagent`.
     expect(roles['acp/prompt-subagent-tool-call'], {
+      FixtureRole.agent,
+      FixtureRole.client,
+    });
+    // Итерация 3 (задача 3.1): запрос ребёнка проигрывают обе роли — агент
+    // шлёт `_meta.codelab.subagent`, kit читает его как `SubagentRequester`
+    // (D43 п. 1).
+    expect(roles['acp/prompt-subagent-permission'], {
       FixtureRole.agent,
       FixtureRole.client,
     });

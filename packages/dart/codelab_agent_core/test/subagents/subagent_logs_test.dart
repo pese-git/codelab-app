@@ -1,7 +1,6 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
-import '../permissions/fake_gate.dart';
 import 'subagent_rig.dart';
 
 /// Наблюдаемость субагентов (design.md change `add-subagents-and-tasks`, D18;
@@ -84,8 +83,10 @@ void main() {
 
   test('отказ политики ребёнка несёт session_id ребёнка, root_session_id, '
       'subagent_id и parent_tool_call_id', () async {
-    // standard: запись требует вопроса, у ребёнка нет gate — отказ.
-    final rig = await run(gate: FakeGate(), mode: ModeId.standard);
+    // standard: запись требует вопроса, у корня нет gate — отказ (PERM-5).
+    // Итерация 3: с gate у корня ребёнок спрашивал бы пользователя, поэтому
+    // отказ без вопроса проверяется при корне без gate.
+    final rig = await run(mode: ModeId.standard);
 
     final started = rig.eventsOf<SubagentStarted>().single;
     final denied = rig.logger
