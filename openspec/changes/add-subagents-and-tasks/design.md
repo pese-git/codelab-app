@@ -1167,6 +1167,108 @@ You cannot change other fields or items assigned to someone else. Your assigned 
 
 **4. Задачи.** Тесты новых и уточнённых сценариев — 5b.1 (kit `[client]`, app `[desktop]`); защёлка и второй источник отметки — 5b.2 `[client]`; время только при занятой сессии — 5b.4 `[desktop]`; 5b.3 не меняется. F.1 дополнен: снимает защёлку панели.
 
+### D51. Сверка документов с кодом перед итерацией 6 (`develop` ea10f0bb, 2026-11-16)
+
+Технические уточнения по образцу D36, D42, D45, D47, D49. Сверены документы, которые правят задачи 6.2 и 6.3, и доказательства Definition of Done. Сами документы ядра, матрица и дорожная карта в этой сверке не правятся: это работа 6.2 и 6.3, здесь их объём конкретизирован по найденным расхождениям. Находки ручных прогонов итераций 5 и 5b (Desktop на macOS, OpenRouter `openai/gpt-5.1`) разобраны до причины в коде и записаны задачами 6.1a–6.1e. Вопросы, которые меняют поведение или границы change, вынесены пользователю: Q40–Q44, решены 2026-11-16 (D52).
+
+**Т1. Доказательства Definition of Done.**
+- Фикстуры `acp/*` из DoD есть все: `prompt-task-plan`, `session-load-legacy-plan`, `prompt-update-plan` (роль только `client`), `prompt-subagent-tool-call`, `prompt-subagent-permission`, `prompt-subagent-nested-permission` (роль только `agent`), `prompt-subagent-tool-tree` и `session-load-subagent-tool-tree` (обе роли, `subagentToolCalls`), а также `initialize-codelab-extensions`.
+- Идентификаторы `core/*` из DoD — не файлы, а имена тестов (`testing.md`, правило имени: id — первый литерал **невложенного** `test(`/`group(`). Тесты есть, но под другими именами, и доказательством по этому правилу не считаются:
+
+  | Id | Файл | Сейчас |
+  |---|---|---|
+  | `core/agent-two-children-parallel` | `codelab_agent_core/test/scenarios/agent_two_children_parallel_test.dart` | id только в doc-комментарии |
+  | `core/subagent-nested-no-deadlock` | `test/scenarios/subagent_nested_no_deadlock_test.dart` | то же |
+  | `core/task-list-create-update` | `test/tools/tasks/task_list_tools_test.dart` (тест «создание, разблокировка и удаление…») | id только в комментарии |
+  | `core/task-list-cycle-rejected` | `test/tools/tasks/task_list_cycle_test.dart` | то же |
+  | `core/subagent-interrupted-not-restarted` (§17.3.14) | `test/scenarios/subagent_interrupted_not_restarted_test.dart` | то же |
+  | `core/task-list-legacy-session-continues` («Risks») | `test/scenarios/task_list_legacy_session_test.dart` | то же |
+
+  Сторож (`parity_evidence_test.dart`) проверяет только строки Must, а C-06 и C-20 — Should, поэтому `guard` сейчас зелёный. Но статусы 6.3 «по зелёным тестам» по этим id не подтвердить. Исправление — внешний `group('core/<id>', …)` вокруг существующих тестов, по образцу `test/llm/litellm_proxy_base_url_test.dart`. Тексты проверок не меняются, новых тестов нет (задача 6.3).
+
+**Т2. C-05 и R-09 — строки Must с доказательством, которое не проверяет агента.** Ячейка C-05 и строка R-09 (§4.1 и таблица сценариев §4.1) называют `acp/prompt-update-plan`. После итерации 1 это фикстура только с ролью `client`. Обязательный источник статуса `acp/<id>` — агентский прогон (`testing.md`, «Источники статуса»), поэтому в ночном статусе доказательство будет `not-run`. Проверка существования при этом зелёная, файл есть. В 6.3 доказательства переключаются на `acp/prompt-task-plan` и `acp/session-load-legacy-plan`. Фраза «Целевые доказательства после итерации 1 …» из ячейки C-05 удаляется, `app:plan_progress_checklist_flow_test.dart` остаётся. Число строк Must и сводка §7 не меняются.
+
+**Т3. Статусы матрицы.** Колонка «Py / app» описывает Python-агента и codelab-app (`agent-parity-goals.md` §1.5). Закрытие строки Dart-агентом записывается пометкой «закрыто change …» с файлами тестов и фикстур в колонке «Критерий приёмки». Поэтому в 6.3 часть «Py» строк C-06 и C-20 не меняется. Меняются часть «app» (C-06 `нет` → `есть`, C-20 `частично` → `есть`) и пометка о закрытии. D-25 (Could) называет `app:subagent_board_flow_test.dart (новый)` — это доска этапа 5. Панель v1 проверяет `app:agents_pane_flow_test.dart` (5b.5), и часть «app» строки D-25 становится `частично (панель Agents v1)`.
+
+**Т4. `agent-core/17-3-subagents.md` (§17.3).**
+- §17.3.2: абзац «До итерации 4 change … ребёнку `agent` не даётся, поэтому `nesting` строится от эффективной глубины 1» устарел: с итерации 4 `nesting` строится от настоящей глубины вызывающего.
+- §17.3.3 (шаги 5 и 7 псевдокода), §17.3.5, §17.3.6: функция обёртки отчёта называется `wrapSubagentReport` (`lib/src/subagents/subagent_report.dart`), а не `wrapReport`. Строки прогресса идут по `handle.progress` и по «сердцебиению» раз в `heartbeat_interval`, а не по подписке на `handle.snapshot`. Отмена бросает `CancelledException` и тогда, когда `manager.settled(handle)` вернул `false` (отмена в очереди возвращающихся, D46 п. 1).
+- §17.3.1, таблица этапов: строки 1, 2 и 5a — отметка «выполнено» (change `add-subagents-and-tasks`, итерации 1–5b).
+- §17.3.14:
+  - `agent_parallel_test.dart` → `test/scenarios/agent_two_children_parallel_test.dart`;
+  - `core/subagent-nested-no-deadlock` живёт в `test/scenarios/subagent_nested_no_deadlock_test.dart`, а `subagent_nested_slots_test.dart` — отдельный тест слотов;
+  - `subagent_journal_test.dart`: `session/load` id ребёнка — `-32002` «не найдена». Так говорят §17.3.6 и сам тест, а `-32602` с `subagentSession` относится к этапу 5;
+  - `subagent_resume_test.dart` → `test/scenarios/subagent_interrupted_not_restarted_test.dart`;
+  - фикстуры `acp/session-load-subagent-interrupted` нет. Реплей прерванного `agent` проверяют `codelab_agent_acp/test/session_load_subagent_test.dart` и `session_load_subagent_max_tokens_test.dart`: строка ссылается на них;
+  - `cli/headless-subagent-cancel-timeout` не реализован и не входит в спецификации change: строка помечается этапом 3 (§17.3.9), как соседние фоновые;
+  - `subagent_report_schema_test.dart` помечается этапом 4 (`output_schema`);
+  - тестов итераций 2–5 в разделе нет. Перечисляются одной строкой файлов по группам: `replay_tree_test.dart`, `subagent_host_hooks_test.dart`, `subagent_window_test.dart`, `subagent_max_tokens_failure_test.dart`, `subagent_cancel_grace_test.dart`, `subagent_question_queue_cancel_test.dart`, `subagent_no_gate_test.dart`, `subagent_path_lock_test.dart`, `subagent_protected_paths_test.dart`, `subagent_skills_test.dart`, `subagent_nested_skills_test.dart`, `subagent_task_assign_test.dart`, `subagent_task_owner_test.dart`, `subagent_logs_test.dart`, `subagent_handle_test.dart`, `subagent_tool_direct_test.dart`; в `codelab_agent_acp` — `subagent_tool_tree_test.dart`, `subagent_tool_tree_bridge_test.dart`, `subagent_chain_test.dart`, `subagent_bridge_hardening_test.dart`, `acp_permission_gate_subagent_test.dart`.
+
+**Т5. `agent-core/17-16-task-list.md` (§17.16).**
+- §17.16.2, контракт:
+  - у `TaskList.apply` есть параметр `precheck`: проверка владельца у ребёнка (TSK-4) идёт под тем же замком;
+  - у `TaskOp` есть ветка `AssignTask`;
+  - результат — `TaskApplied` или `TaskRejected` с `TaskRejectReason`;
+  - `SubagentActor.id` — `String`;
+  - реализации порта — `SessionTaskList` (список дерева) и `SubagentTaskList` (детский вариант).
+- §17.16.10: тесты `task_batch_order_test.dart`, `task_list_cancel_test.dart`, `task_list_robustness_test.dart`, `task_snapshot_test.dart` не перечислены. Id `core/task-list-*` — по Т1.
+- `session_branch_task_list_test.dart` и `core/discover-tools-mount` отсутствуют сознательно (D29–D31, задача 6.2): они остаются в документах для будущих change.
+
+**Т6. `agent-core/13-acp-adapter.md` (§13).**
+- §13.7, «Формы кадров вызова»: «пустые … `content` не отправляются» не совпадает с кодом. `finishedContent` у `agent` без отчёта (`failed`, пустой отчёт) даёт `content: []`, и этот кадр снимает строку прогресса. Отменённый вызов `content` не несёт вовсе. От этого и дефект 6.1a: у отменённого `agent` остаётся последняя строка прогресса. Комментарий `finishedContent` при этом обещает пустой контент и при отмене в очереди. Текст §13.7 правится после решения Q40.
+- §13.2 и §13.12: имена и формы `subagents`, `subagentToolCalls`, `tasks`, `_meta.codelab.subagent` (поля запроса и итога), `parentToolCallId`, `task`, `taskChange` совпадают с `agent_server.dart`, `event_projection.dart` и `acp_permission_gate.dart`. Пометки «с итерации 2 change», «итерация 5, задача 5.2» в §13.2 и в строке capability §13.12 — история. Они заменяются фразой «change `add-subagents-and-tasks`».
+
+**Т7. Вложенные `AGENTS.md`.**
+- `codelab_agent_core`: нет ни `lib/src/subagents/`, ни `lib/src/tools/tasks/`, ни запрета копировать тексты Claude Code (сейчас он записан только в §17.3.13 и §17.16.8). Строка PKG-4 «с этапа 7 — через `codelab_embedded` (ещё не создан …)» устарела: пакет есть.
+- `codelab_agent_acp`: нет новых расширений: согласие `subagentToolCalls` читается из `ClientLink.capabilities`, проекция `SubagentActivity` — с цепочкой `toolCallId`, `AcpPermissionGate` ждёт `tool_call` цепочки, реплей дерева придерживает живые кадры (D47 Т3, Т6). Строка «с этапа 7 и `codelab_embedded` (ещё не создан)» устарела.
+- `codelab_client_core`: нет разбора `_meta.codelab.*`. Kit читает `subagentCall`, `subagentSummary`, `parentToolCallId` и `outcome` из записей `codelab_client_acp` (`codelab_extensions.dart`, `state_machines.dart`). Сам он разбирает `taskChange` (`task_ops.dart`) и `PlanEntryView.owner`. Неизвестные ключи и неверная форма — как отсутствие ключа. Строки панели — обход транскрипта, а не новый разбор (D49 Т2).
+- Устаревшие строки про `codelab_embedded` правятся попутно, в тех же файлах: другого содержания эта правка не меняет (`AGENTS.md` §19).
+
+**Т8. `delivery-roadmap.md`.**
+- §6.4: строка «1 — база» говорит «запрос разрешения ребёнка через gate родителя». По коду и D42 — gate корневой сессии.
+- По 6.3: этапы 1, 2 и 5a отмечаются выполненными, а §10.1, строка 16, ячейка M4 получает «реализовано change `add-subagents-and-tasks` (итерация 5b)», по образцу строк 05 и 06.
+
+**Т9. Находки ручных прогонов итераций 5 и 5b — причины.**
+- **(а) Строка прогресса у отменённого `agent`.** `SubagentTool._await` шлёт строки прогресса `ToolCallProgress(agent)` (`<type> · running · N steps · …`). Финальный кадр отменённого вызова в `event_projection.dart` (`_finished`) несёт `content: null`, и по ACP («only the fields being changed») клиент оставляет прежний контент. Kit (`ToolRowFormatter._agentRow`) у неработающего вызова отдаёт весь оставшийся текст как `report`. Раскрытая строка в app показывает последнюю строку прогресса со словом `running`. По коду так же выйдет и в отчёте REPL (`TerminalRenderer._agentReport`) и TUI (`_reportLines`), но вручную это не проверялось. У `failed` без отчёта кадр несёт `content: []`, и дефекта там нет. В реплее дефекта тоже нет: строки прогресса в журнал не пишутся. Это расхождение со спецификацией change: agent-workbench-ui «Строка вызова субагента» требует в раскрытии дерево шагов и текст **отчёта**, а у отменённого отчёта нет. Задача 6.1a, место исправления — Q40.
+- **(б) Реплей: операции со списком задач и теги одобрения.** Тихие строки строятся только по `plan._meta.codelab.taskChange` (D35). Реплей шлёт один `plan` без него, а `TaskRecord` не хранит `toolCallId`. Спецификация acp-client-kit «Операции со списком задач в ленте» прямо говорит, что в реплее это обычные строки. Это верно и для корня, и для потомка. Теги исхода одобрения («Allow once») kit строит из живых `ApprovalRequest` (`transcript_projector.dart`, `_resolvedLabel`). Решений одобрения нет ни в журнале (записи такого вида нет в `records.dart`), ни в реплее ACP: `session/request_permission` не переигрывается. Требования показывать теги после загрузки нет ни в основной спецификации agent-workbench-ui, ни в дельте change. Обе находки — не дефект change, а пределы, принятые D35 и общей моделью реплея. Они касаются и корня. Задача 6.1b, границы — Q41, Q42.
+- **(в) «could not be restored» при старте app.** Сообщение даёт `WorkspaceRestorer.restoreAfterConnect`, когда `session/load` активной сессии снимка падает. Гипотеза «у пустой стартовой сессии нет журнала» для Dart-агента не подтверждается:
+  - журнал создаётся сразу в `session/new` (`AgentRuntime.createSession` → `_store.create(header)`), а `JsonlSessionStore` пустые журналы не удаляет;
+  - поиск корневого журнала (`_find`, `_journals`) change не менял, его правки касаются только `createChild`/`openChild*`;
+  - восстановитель (`lib/src/restore/`) change тоже не менял.
+
+  Причина без лога не устанавливается. Ветка `on Object { … }` в `restoreAfterConnect` отбрасывает ошибку загрузки, не записав её, и это само по себе пробел наблюдаемости (`AGENTS.md` §12, §16). Находка — вне change: предсуществующий дефект клиентского восстановления (задача 6.1c, Q43).
+- **(г) «The model reached its token limit» без вызова инструмента.** Kit показывает этот текст при `stopReason: max_tokens` хода корня. Лимит ответа провайдеру — `ModelRef.maxOutputTokens`: для OpenAI-совместимого API — поле `max_completion_tokens` (`ProviderConfig.maxTokensField`). Для модели без встроенной записи (`openai/gpt-5.1` в `builtin_models.dart` нет) и без `max_output_tokens` в конфиге берётся безопасное значение 4096 (`model_catalog.dart`, лог `llm.catalog.default_used`). Мастер провайдера (`ProviderSetupPlan.toEdits`) записывает `context_window` из `/models`, а `max_output_tokens` — только если он известен; `RemoteModel` знает лишь окно. У модели с рассуждением токены рассуждения входят в этот лимит, а аргументы вызова инструмента — тоже вывод. Длинный `prompt` вызова `agent` поверх рассуждения может исчерпать 4096 посреди вызова, и ход кончается `max_tokens` без вызова. Связь с субагентами косвенная: это общая настройка лимита ответа, промпт ребёнка на лимит корня не влияет. Ребёнок с тем же лимитом даёт отчёт с `failure: max_tokens` (D41 п. 6), а не это сообщение. Реальный конфиг пользователя в сверке не читался. Находка — вне change (задача 6.1d, Q44).
+
+**Т10. Итерация 6, порядок и исполнители.**
+- 6.1a — по решению Q40: красный тест и исправление в этом change.
+- 6.1b–6.1d — по рекомендации вне change. До ответов на Q41–Q44 они не выполняются, а при решении «вне change» переходят в «Follow-up вне change».
+- 6.1e — повторный ручной прогон после 6.1a.
+- 6.2 `[agent]` `[protocol]` `[client]` — документы по Т4–Т7.
+- 6.3 `[agent]`: матрица и дорожная карта по Т2, Т3, Т8 и обёртка id тестов по Т1. Обёртка — правка тестов ядра (только имена), её делает исполнитель `[agent]`, а не архитектор.
+- 6.4 — после всех.
+
+Протокол, `pubspec.yaml`, правила сторожа и граф `README.md` от сверки не меняются.
+
+### D52. Решения по сверке перед итерацией 6 (решения пользователя 2026-11-16, Q40–Q44)
+
+**1. Строка прогресса у отменённого `agent` (Q40 (а)).** Исправление — в адаптере. Финальный `tool_call_update` отменённого вызова `agent` несёт `content: []`, как у `failed` без отчёта (D51 Т6, Т9 (а)), и этим снимает строку прогресса. Отменённый вызов другого инструмента по-прежнему идёт без `content` (§13.7: текст об отмене — для модели, вывод терминала клиент уже видит). Kit не меняется и особого правила по виду вызова не получает (так же решено в D41 п. 1). `content: []` — допустимое обновление ACP (`08-Tool Calls.md`, «Only the fields being changed»), новых полей нет. Реплей не затронут: строки прогресса в журнал не пишутся. Внесено в дельту agent-acp-server: строка `ToolCallFinished(agent)` и сценарий «Отменённый субагент без строки прогресса». §13.7 и §17.3.7 приводятся тем же текстом в 6.2. Задача 6.1a, исполнитель `[protocol]`.
+
+*Отклонено:* (б) правило по статусу в kit — особый случай по виду вызова; (в) оба — лишняя вторая точка; (г) follow-up — расхождение со спецификацией самого change.
+
+**2. Тихие строки операций со списком в реплее (Q41 (а)).** Принимается как есть. Это поведение утверждено acp-client-kit «Операции со списком задач в ленте» (D35: реплей — состояние, а не операция). В руководство app добавляется строка о пределе (задача 6.1b). Формат записи `task` и D35 не меняются.
+
+*Отклонено:* (б) `toolCallId` в `TaskRecord` и `taskChange` в реплее, (в) новый ключ у `tool_call` реплея — оба меняют журнал или протокол, а Definition of Done от них не зависит.
+
+**3. Теги исхода одобрения после загрузки (Q42 (а)).** Теги одобрения есть только вживую — у корня и у потомков. Решения одобрения не пишутся в журнал и не переигрываются в ACP. Предел записывается той же строкой руководства (6.1b).
+
+*Отклонено:* (б) запись решения и расширение реплея — новое ACP-расширение без требования; (в) хранение решений на клиенте — данные сессии в клиентском хранилище, другой клиент или CLI их не увидит.
+
+**4. «could not be restored» при старте app (Q43 (а)).** Вне change, follow-up F.5. Сначала лог причины в `WorkspaceRestorer.restoreAfterConnect` (сейчас ветка `on Object` ошибку отбрасывает), затем воспроизведение и красный тест на найденную причину. Код change к дефекту не относится (D51 Т9 (в)).
+
+**5. Лимит ответа 4096 по умолчанию (Q44 (а)).** Вне change, follow-up F.6: мастер провайдера записывает `max_output_tokens`, умолчание 4096 пересматривается. В этом change — строка руководства о ключе `providers.<id>.models.<model>.max_output_tokens` (задача 6.1b).
+
+**6. Задачи.** 6.1a — `[protocol]`, в этом change. 6.1b — `[desktop]`, строки в `apps/codelab_desktop/doc/user-guide.md` (реплей, одобрения, `max_output_tokens`). 6.1c и 6.1d перенесены в F.5 и F.6. 6.1e — повторный ручной прогон. Задача 0.15 закрыта.
+
 ## Risks / Trade-offs
 
 - **[Гонка отмены и позднего отчёта]** Ребёнок завершается в момент `session/cancel`. → Под замком хэндла выигрывает первое терминальное состояние (D5). Поздние события отписанного ребёнка не переизлучаются. Тест: `subagent_cancel_test.dart` с отменой в момент `TurnEnded` ребёнка.
@@ -1210,6 +1312,13 @@ You cannot change other fields or items assigned to someone else. Your assigned 
 - **Q25. Переподключение.** (а) — только тест агентской стороны (`detach_test.dart`, тот же `toolCallId`), ограничение kit записано.
 - **Q26. Первое звено пути.** (б) — `subagentCall.type` → `rawInput.type` → `…`.
 - **Q27. Признак усечения в журнале.** (а) — поле `truncated: true` только у усечённого отчёта и сценарий agent-subagents «Усечённый отчёт после сбоя».
+
+Вопросы сверки перед итерацией 6 (D51) решены пользователем 2026-11-16 (D52):
+- **Q40. Строка прогресса у отменённого `agent`.** (а) — адаптер шлёт `content: []` у отменённого вызова `agent`; задача 6.1a `[protocol]`.
+- **Q41. Тихие строки операций со списком в реплее.** (а) — принять; строка в руководстве app.
+- **Q42. Теги исхода одобрения после загрузки.** (а) — принять, теги только вживую; та же строка руководства.
+- **Q43. «could not be restored» при старте.** (а) — отдельный fix вне change, F.5.
+- **Q44. Лимит ответа 4096.** (а) — отдельный change, F.6; в этом change — строка руководства о `max_output_tokens`.
 
 Вопросы сверки перед итерацией 5b (D49) решены пользователем 2026-11-16 (D50):
 - **Q37. Поздний неитоговый кадр после итога.** (а) — защёлка итога только в строке панели, лента до F.1 прежняя; оговорка в требовании kit; F.1 снимает защёлку.
@@ -1366,4 +1475,4 @@ Change `add-agent-skills` (E-06) и этот change разрабатываютс
 
 ## Open Questions
 
-Открытых вопросов нет: Q18–Q20 решены пользователем 2026-11-14 (D37–D39), Q21 и Q22 ручных прогонов — 2026-11-15 (D41, п. 6 и 7), Q23–Q27 сверки перед итерацией 3 — 2026-11-15 (D43), Q28–Q32 сверки перед итерацией 4 — 2026-11-15 (D46), Q33–Q36 сверки перед итерацией 5 — 2026-11-15 (D48), Q37–Q39 сверки перед итерацией 5b — 2026-11-16 (D50); все — в «Решённых вопросах».
+Открытых вопросов нет: Q18–Q20 решены пользователем 2026-11-14 (D37–D39), Q21 и Q22 ручных прогонов — 2026-11-15 (D41, п. 6 и 7), Q23–Q27 сверки перед итерацией 3 — 2026-11-15 (D43), Q28–Q32 сверки перед итерацией 4 — 2026-11-15 (D46), Q33–Q36 сверки перед итерацией 5 — 2026-11-15 (D48), Q37–Q39 сверки перед итерацией 5b — 2026-11-16 (D50), Q40–Q44 сверки перед итерацией 6 — 2026-11-16 (D52); все — в «Решённых вопросах».
