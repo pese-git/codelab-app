@@ -23,6 +23,7 @@
 // в описании навыка: журнал не должен содержать ни его, ни путей (D10).
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' show SessionId;
 import 'package:codelab_client_core/codelab_client_core.dart';
@@ -35,6 +36,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/fake_agent_extensions.dart';
 import '../../../support/fake_local_folder_opener.dart';
 import '../../../support/fake_provider_settings.dart';
+import '../../../support/real_skills_session.dart';
 import '../../../support/recording_logger.dart';
 
 const _home = '/home/u/.codelab';
@@ -828,6 +830,403 @@ void main() {
         expect(opener.opened, isEmpty);
       },
     );
+  });
+
+  // Задача 5.1 change `add-app-skills-page` (spec app-settings «Страница
+  // «Skills & extensions»: запись и применение», design.md D5, D9, D10, D14,
+  // решения Q2, Q3). Красные: `setSkillEnabled`, `setRootConsent`,
+  // `SkillsBannerKind.saved|conflict|error` ещё нет (задача 5.2).
+  //
+  // Ожидаемый API (выбран здесь):
+  // * `setSkillEnabled(String name, {required bool enabled})` — выключатель
+  //   «Enabled»: `enabled: false` кладёт имя в `skills.disabled`;
+  // * `setRootConsent(String entry, {required bool granted})` — согласие на
+  //   элемент `skills.extra_roots` (`.claude/skills`, `~/.claude/skills`);
+  // * оба берут СВЕЖИЙ снимок конфига, считают `skillsListEdit` моста и пишут
+  //   `store.apply(plan.base, plan.edits)`; пустые `edits` — без записи;
+  //   отказ `SkillsListRefused` — баннер `error` без записи;
+  // * баннеры: `saved` (`Saved. New sessions use it; open sessions keep their
+  //   skills.`), `conflict`, `error`; после любого исхода — перечитывание;
+  // * события: `skill_toggled {name, enabled, layer}`, `root_consent
+  //   {root_kind: project_relative|home, enabled, layer}` — только после
+  //   `ConfigSaved`; `save_failed {outcome: conflict|rejected|<тип>}`.
+  group('writing skills.disabled (D5, D9, D14; Fake store)', () {
+    const savedText =
+        'Saved. New sessions use it; open sessions keep their skills.';
+
+    Future<SkillsSettingsCubit> loaded() async {
+      final cubit = make();
+      await cubit.reload();
+      return cubit;
+    }
+
+    SetValue setValue(int index) =>
+        store.applied[index].edits.single as SetValue;
+
+    test(
+      'turning a skill off writes skills.disabled of the user layer '
+      'through the plan of the bridge, shows the banner and re-reads',
+      () async {
+        final cubit = await loaded();
+        final reads = session.extensionsCalls.length;
+
+        await cubit.setSkillEnabled('code-review', enabled: false);
+
+        expect(store.applied, hasLength(1));
+        expect(store.applied.single.base.path, FakeAgentConfigStore.userPath);
+        expect(setValue(0).key, 'skills.disabled');
+        expect(setValue(0).value, ['code-review']);
+        expect(ready(cubit).banner!.kind, SkillsBannerKind.saved);
+        expect(ready(cubit).banner!.text, savedText);
+        expect(ready(cubit).saving, isFalse);
+        expect(session.extensionsCalls.length, reads + 1);
+      },
+    );
+
+    test('turning a skill on removes the name; the last one is UnsetValue '
+        'and the order of the others is kept', () async {
+      store.user = {
+        'skills': {
+          'disabled': ['a', 'b', 'c'],
+        },
+      };
+      final cubit = await loaded();
+
+      await cubit.setSkillEnabled('b', enabled: true);
+      expect(setValue(0).value, ['a', 'c']);
+
+      store.user = {
+        'skills': {
+          'disabled': ['a'],
+        },
+      };
+      await cubit.reload();
+      await cubit.setSkillEnabled('a', enabled: true);
+      expect(
+        store.applied.last.edits.single,
+        const UnsetValue('skills.disabled'),
+      );
+    });
+
+    test('a list that is already like that is not written and has no '
+        'banner', () async {
+      store.user = {
+        'skills': {
+          'disabled': ['a'],
+        },
+      };
+      final cubit = await loaded();
+
+      await cubit.setSkillEnabled('a', enabled: false);
+      await cubit.setSkillEnabled('missing', enabled: true);
+
+      expect(store.applied, isEmpty);
+      expect(ready(cubit).banner, isNull);
+      expect(ready(cubit).saving, isFalse);
+      expect(events(), isNot(contains('skills_settings.skill_toggled')));
+    });
+
+    test('a list that works from config.local.yaml is changed there and the '
+        'user config is not touched', () async {
+      store.projectLocal = {
+        'skills': {
+          'disabled': ['a'],
+        },
+      };
+      final cubit = await loaded();
+
+      await cubit.setSkillEnabled('b', enabled: false);
+
+      expect(
+        store.applied.single.base.path,
+        FakeAgentConfigStore.projectLocalPath,
+      );
+      expect(setValue(0).value, ['a', 'b']);
+      expect(event('skills_settings.skill_toggled')['layer'], 'projectLocal');
+    });
+
+    test('a list of a read-only layer is a refusal: banner with the file, '
+        'no write', () async {
+      store.project = {
+        'skills': {
+          'disabled': ['a'],
+        },
+      };
+      final cubit = await loaded();
+
+      await cubit.setSkillEnabled('b', enabled: false);
+
+      expect(store.applied, isEmpty);
+      final banner = ready(cubit).banner!;
+      expect(banner.kind, SkillsBannerKind.error);
+      expect(
+        banner.text,
+        'Set in ${FakeAgentConfigStore.projectPath}; edit that file.',
+      );
+    });
+
+    test(
+      'ConfigConflict: the conflict banner, one re-read, no retry',
+      () async {
+        store.firstOutcome = const ConfigConflict(
+          FakeAgentConfigStore.userPath,
+        );
+        final cubit = await loaded();
+        final reads = session.extensionsCalls.length;
+
+        await cubit.setSkillEnabled('a', enabled: false);
+
+        expect(store.applied, hasLength(1));
+        expect(ready(cubit).banner!.kind, SkillsBannerKind.conflict);
+        expect(ready(cubit).banner!.text, contains('changed on disk'));
+        expect(session.extensionsCalls.length, reads + 1);
+        expect(event('skills_settings.save_failed')['outcome'], 'conflict');
+        expect(events(), isNot(contains('skills_settings.skill_toggled')));
+      },
+    );
+
+    test('ConfigRejected: the error banner with the loader problem, the '
+        'file is not changed', () async {
+      store.nextOutcome = const ConfigRejected([
+        ConfigIssue(
+          kind: ConfigIssueKind.value,
+          key: 'skills.disabled',
+          source: FakeAgentConfigStore.userPath,
+          message: 'must be a list of names',
+        ),
+      ]);
+      final cubit = await loaded();
+
+      await cubit.setSkillEnabled('a', enabled: false);
+
+      final banner = ready(cubit).banner!;
+      expect(banner.kind, SkillsBannerKind.error);
+      expect(banner.text, contains('skills.disabled'));
+      expect(banner.text, contains('must be a list of names'));
+      expect(event('skills_settings.save_failed')['outcome'], 'rejected');
+      // Текст проблемы — в баннере для пользователя, но не в журнале.
+      expect(logger.entries.toString(), isNot(contains('must be a list')));
+    });
+
+    test('an exception of apply is an error banner without its text and an '
+        'event with the type only', () async {
+      store.onApply = () => throw StateError('disk $leakMarker /home/u/x');
+      final cubit = await loaded();
+
+      await cubit.setSkillEnabled('a', enabled: false);
+
+      expect(ready(cubit).banner!.kind, SkillsBannerKind.error);
+      expect(ready(cubit).banner!.text, isNot(contains(leakMarker)));
+      expect(ready(cubit).saving, isFalse);
+      expect(event('skills_settings.save_failed')['outcome'], 'StateError');
+      expect(logger.entries.toString(), isNot(contains(leakMarker)));
+      expect(logger.entries.toString(), isNot(contains('/home/u/x')));
+    });
+
+    test('a double tap during the write is one write; other actions are '
+        'ignored while saving', () async {
+      final gate = Completer<void>();
+      store.onApply = () => gate.future;
+      final cubit = await loaded();
+
+      final first = cubit.setSkillEnabled('a', enabled: false);
+      await pumpEventQueue();
+      expect(ready(cubit).saving, isTrue);
+      await cubit.setSkillEnabled('a', enabled: false);
+      await cubit.setSkillEnabled('b', enabled: false);
+      await cubit.setRootConsent('~/.claude/skills', granted: true);
+      gate.complete();
+      await first;
+
+      expect(store.applied, hasLength(1));
+      expect(ready(cubit).saving, isFalse);
+      expect(ready(cubit).banner!.kind, SkillsBannerKind.saved);
+    });
+
+    test('events: skill_toggled has the name, the new state and the layer '
+        'and no path or marker', () async {
+      session.onExtensions = (_) async => richView();
+      final cubit = await loaded();
+
+      await cubit.setSkillEnabled('code-review', enabled: false);
+
+      final entry = event('skills_settings.skill_toggled');
+      expect(entry['name'], 'code-review');
+      expect(entry['enabled'], false);
+      expect(entry['layer'], 'user');
+      final text = logger.entries.toString();
+      expect(text, isNot(contains(leakMarker)));
+      expect(text, isNot(contains('/home')));
+      expect(text, isNot(contains('/work')));
+    });
+
+    test('a write that finishes after close() does not touch the closed '
+        'cubit: the re-read is discarded', () async {
+      final gate = Completer<void>();
+      store.onApply = () => gate.future;
+      final cubit = await loaded();
+
+      final writing = cubit.setSkillEnabled('a', enabled: false);
+      await pumpEventQueue();
+      await cubit.close();
+      gate.complete();
+      await writing;
+
+      expect(store.applied, hasLength(1));
+      expect(events(), contains('skills_settings.load_discarded'));
+    });
+
+    test('a reload for a new folder during the write: the banner of the '
+        'write lands on the fresh view', () async {
+      final gate = Completer<void>();
+      store.onApply = () => gate.future;
+      final cubit = await loaded();
+
+      final writing = cubit.setSkillEnabled('a', enabled: false);
+      await pumpEventQueue();
+      projectDir = '/work/other';
+      workspace.emit(
+        WorkspaceState(
+          connection: const ConnectionView.connected(),
+          profile: embeddedConnectionProfile,
+          activeSessionId: SessionId('s2'),
+        ),
+      );
+      await pumpEventQueue();
+      gate.complete();
+      await writing;
+      await pumpEventQueue();
+
+      final state = ready(cubit);
+      expect(state.folder, '/work/other');
+      expect(state.saving, isFalse);
+      expect(state.banner!.kind, SkillsBannerKind.saved);
+    });
+  });
+
+  group('consent and real files (D5, Q3; real store on temp dirs)', () {
+    late Directory root;
+    late RealSkillsSession real;
+
+    SkillsSettingsCubit makeReal() {
+      final cubit = SkillsSettingsCubit(
+        workspace: workspace,
+        defaultProfile: () async => embeddedConnectionProfile,
+        open: (access, env) async => real,
+        environment: const {'HOME': '/home/u'},
+        codelabHome: real.home,
+        projectDirectory: () => real.project,
+        folderOpener: opener,
+        logger: logger,
+      );
+      cubits.add(cubit);
+      return cubit;
+    }
+
+    setUp(() => root = Directory.systemTemp.createTempSync('skills_write_'));
+    tearDown(() => root.deleteSync(recursive: true));
+
+    String file(String path) => File(path).readAsStringSync();
+
+    test('consent to .claude/skills of a trusted project: extra_roots of '
+        'the user config, the project config is untouched, root_consent '
+        'event', () async {
+      real = await RealSkillsSession.open(root);
+      RealSkillsSession.write(real.projectConfig, 'tools:\n  max_steps: 7\n');
+      final before = file(real.projectConfig);
+      final cubit = makeReal();
+      await cubit.reload();
+
+      await cubit.setRootConsent('.claude/skills', granted: true);
+
+      expect(file(real.userConfig), contains('extra_roots'));
+      expect(file(real.userConfig), contains('.claude/skills'));
+      expect(file(real.projectConfig), before);
+      expect(ready(cubit).banner!.kind, SkillsBannerKind.saved);
+      final entry = event('skills_settings.root_consent');
+      expect(entry['root_kind'], 'project_relative');
+      expect(entry['enabled'], true);
+      expect(entry['layer'], 'user');
+      expect(logger.entries.toString(), isNot(contains(real.home)));
+    });
+
+    test('consent to ~/.claude/skills is a home root', () async {
+      real = await RealSkillsSession.open(root);
+      final cubit = makeReal();
+      await cubit.reload();
+
+      await cubit.setRootConsent('~/.claude/skills', granted: true);
+
+      expect(file(real.userConfig), contains('~/.claude/skills'));
+      expect(event('skills_settings.root_consent')['root_kind'], 'home');
+    });
+
+    test('revoking the consent removes the element; the last one drops '
+        'the key', () async {
+      real = await RealSkillsSession.open(
+        root,
+        extra: 'skills:\n  extra_roots:\n    - .claude/skills\n',
+      );
+      final cubit = makeReal();
+      await cubit.reload();
+
+      await cubit.setRootConsent('.claude/skills', granted: false);
+
+      expect(file(real.userConfig), isNot(contains('extra_roots')));
+      expect(event('skills_settings.root_consent')['enabled'], false);
+    });
+
+    test('an untrusted project: the relative consent is refused with the '
+        'Q3 text and nothing is written', () async {
+      real = await RealSkillsSession.open(root, trusted: false);
+      final before = file(real.userConfig);
+      final cubit = makeReal();
+      await cubit.reload();
+
+      await cubit.setRootConsent('.claude/skills', granted: true);
+
+      expect(file(real.userConfig), before);
+      expect(ready(cubit).banner!.kind, SkillsBannerKind.error);
+      expect(
+        ready(cubit).banner!.text,
+        'Trust this project to read .claude/skills.',
+      );
+    });
+
+    test('a name disabled by the project config of an untrusted project '
+        'cannot be turned on from the page', () async {
+      real = await RealSkillsSession.open(root, trusted: false);
+      RealSkillsSession.write(
+        real.projectConfig,
+        'skills:\n  disabled:\n    - notes\n',
+      );
+      final before = file(real.userConfig);
+      final cubit = makeReal();
+      await cubit.reload();
+
+      await cubit.setSkillEnabled('notes', enabled: true);
+
+      expect(file(real.userConfig), before);
+      final banner = ready(cubit).banner!;
+      expect(banner.kind, SkillsBannerKind.error);
+      expect(banner.text, startsWith('Disabled by the project config ('));
+      expect(banner.text, contains('config.yaml'));
+    });
+
+    test('turning off with the key unset writes the user config and keeps '
+        'the other keys', () async {
+      real = await RealSkillsSession.open(root);
+      final cubit = makeReal();
+      await cubit.reload();
+
+      await cubit.setSkillEnabled('code-review', enabled: false);
+
+      final text = file(real.userConfig);
+      expect(text, contains('code-review'));
+      expect(text, contains('trusted_projects'));
+      expect(text, contains('default_model: local/m'));
+      expect(File(real.localConfig).existsSync(), isFalse);
+    });
   });
 
   test('close() makes later actions harmless', () async {
