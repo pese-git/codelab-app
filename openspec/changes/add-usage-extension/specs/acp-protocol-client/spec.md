@@ -1,18 +1,38 @@
 ## MODIFIED Requirements
 
 ### Requirement: Объявление расширений CodeLab при initialize
-CodeLab SHALL отправлять в `InitializeRequest.clientCapabilities._meta.codelab` объект с расширениями, данные которых клиент понимает (design.md change `add-subagents-and-tasks`, D9, D21; change `add-usage-extension`, D3): `{"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}, "usage": {"version": 1}}`; `subagentToolCalls` — согласие получать вызовы потомков деревом, `usage` — согласие получать уведомление `_codelab/session/usage`. Других полей вне `_meta` CodeLab для этого НЕ SHALL добавлять (`15-Extensibility.md`).
+CodeLab SHALL отправлять в `InitializeRequest.clientCapabilities._meta.codelab` объект только с теми расширениями, которые клиент уже поддерживает (design.md change `add-subagents-and-tasks`, D9, D21): `tasks: {"version": 1}` — с итерации 1; `subagents: {"version": 1}` — с итерации 2 (строка `agent`, запрос потомка); `subagentToolCalls: {"version": 1}` — с задачи 5.4 (дерево вызовов потомков), это согласие получать вызовы потомков. Расширение, которого клиент ещё не показывает, НЕ SHALL объявляться: иначе агент слал бы клиенту вызовы потомков, которые тот показал бы плоскими строками. Других полей вне `_meta` CodeLab для этого НЕ SHALL добавлять (`15-Extensibility.md`).
+
+`usage: {"version": 1}` — с итерации 2 change `add-usage-extension` (design.md этого change, D3): согласие получать уведомление `_codelab/session/usage`; до неё клиент снимки не показывает и `usage` не объявляет.
+
+Пометки итераций и задач в сценариях без «(usage)» ниже относятся к change `add-subagents-and-tasks`; после итерации 2 change `add-usage-extension` каждое такое объявление клиента дополнительно содержит `"usage": {"version": 1}`, остальное в них не меняется.
 
 Блок `agentCapabilities._meta.codelab` в ответе SHALL разбираться терпимо:
 - его отсутствие — «агент расширений CodeLab не объявил»;
 - неизвестные ключи, нецелый или больший `version` и неверная форма значения SHALL игнорироваться без отказа `initialize`;
-- известные значения (`subagents.maxDepth`, наличие `tasks`, наличие `usage`) SHALL быть доступны приложению как согласованные возможности соединения.
+- известные значения (`subagents.maxDepth`, наличие `tasks`) SHALL быть доступны приложению как согласованные возможности соединения;
+- расширение считается согласованным, только если значение его ключа — объект, где `version` — целое JSON-число `1` (не `1.0`, не строка `"1"`, не другое число). Ключ с другой версией или неверной формой SHALL давать «расширение не согласовано» (например `tasks: false`), а не ошибку.
+- наличие согласованного `usage` SHALL быть доступно приложению так же, как `subagents.maxDepth` и наличие `tasks` (change `add-usage-extension`, D3, D8): оно определяет, что показывать до первого снимка — «ожидание» или «агент не сообщает».
 
-Данные `_meta.codelab.task` и `_meta.codelab.subagent` и уведомление `_codelab/session/usage` SHALL приниматься и без объявления агента: клиент на объявление не полагается, чтобы показ не зависел от того, кто и как загрузил сессию.
+Данные `_meta.codelab.task` и `_meta.codelab.subagent` SHALL приниматься и без объявления агента: клиент на объявление не полагается, чтобы показ не зависел от того, кто и как загрузил сессию.
 
-#### Scenario: Запрос initialize клиента CodeLab
-- **WHEN** CodeLab выполняет `initialize`
-- **THEN** `clientCapabilities._meta.codelab` равен `{"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}, "usage": {"version": 1}}`, остальные поля `clientCapabilities` — как прежде (фикстура `acp/initialize-codelab-extensions`, роль `client`)
+Уведомление `_codelab/session/usage` SHALL так же приниматься и без объявления агента (change `add-usage-extension`, D3): объявление управляет только тем, что показывать до первого снимка.
+
+#### Scenario: Запрос initialize клиента CodeLab (итерация 1)
+- **WHEN** CodeLab выполняет `initialize` после итерации 1
+- **THEN** `clientCapabilities._meta.codelab` равен `{"tasks": {"version": 1}}`, остальные поля `clientCapabilities` — как прежде (`initialize_codelab_request_test.dart`; фикстура `acp/initialize-codelab-extensions`, роль `client`, в редакции итерации 1)
+
+#### Scenario: Запрос initialize клиента CodeLab (итерация 2)
+- **WHEN** CodeLab выполняет `initialize` после итерации 2
+- **THEN** `clientCapabilities._meta.codelab` равен `{"tasks": {"version": 1}, "subagents": {"version": 1}}`
+
+#### Scenario: Запрос initialize клиента CodeLab (задача 5.4)
+- **WHEN** CodeLab выполняет `initialize` после задачи 5.4
+- **THEN** `clientCapabilities._meta.codelab` равен `{"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}}`
+
+#### Scenario: Версия не целое 1
+- **WHEN** агент отвечает `agentCapabilities._meta.codelab: {"tasks": {"version": 1.0}, "subagents": {"version": "1"}}`
+- **THEN** `initialize` успешен, ни `tasks`, ни `subagents` не согласованы
 
 #### Scenario: Агент без блока объявлений
 - **WHEN** агент отвечает на `initialize` без `agentCapabilities._meta`
@@ -20,7 +40,11 @@ CodeLab SHALL отправлять в `InitializeRequest.clientCapabilities._met
 
 #### Scenario: Будущая версия расширения
 - **WHEN** ответ содержит `agentCapabilities._meta.codelab.tasks: {"version": 2, "x": 1}` и ключ `board: true`
-- **THEN** `initialize` успешен, неизвестное игнорируется без ошибки
+- **THEN** `initialize` успешен, неизвестное игнорируется без ошибки; расширение `tasks` не согласовано (`tasks: false`), ключ `board` не даёт возможностей
+
+#### Scenario: Запрос initialize клиента CodeLab (usage)
+- **WHEN** CodeLab выполняет `initialize` после итерации 2 change `add-usage-extension`
+- **THEN** `clientCapabilities._meta.codelab` равен объявлению текущей итерации change `add-subagents-and-tasks` с добавленным `"usage": {"version": 1}` — после задачи 5.4 того change `{"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}, "usage": {"version": 1}}`; остальные поля `clientCapabilities` — как прежде (фикстура `acp/initialize-codelab-extensions`, роль `client`)
 
 #### Scenario: Запрос без новых корневых полей
 - **WHEN** CodeLab выполняет `initialize`
@@ -29,6 +53,10 @@ CodeLab SHALL отправлять в `InitializeRequest.clientCapabilities._met
 #### Scenario: Агент объявил usage
 - **WHEN** ответ содержит `agentCapabilities._meta.codelab.usage: {"version": 1}`
 - **THEN** соединение считает usage согласованным, и сессии этого соединения до первого снимка находятся в состоянии «ожидание», а не «агент не сообщает» (acp-client-kit «Usage сессии»)
+
+#### Scenario: Версия usage не целое 1
+- **WHEN** агент отвечает `agentCapabilities._meta.codelab: {"usage": {"version": "1"}}` (или `usage: true`, `{"version": 2}`)
+- **THEN** `initialize` успешен, `usage` не согласован: сессии до первого снимка — «агент не сообщает», а пришедшее `_codelab/session/usage` всё равно принимается
 
 ## ADDED Requirements
 
