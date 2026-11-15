@@ -317,9 +317,14 @@ abstract interface class SessionStore {
   /// Дальше append/flush/close — по id ребёнка; open, list и index.json дочерних журналов не видят.
   Future<String> createChild(SessionHeader header);
   /// Там же, с итерации 4 change: чтение и ремонт журнала потомка по адресу из записи subagent —
-  /// рекурсивное лечение (§8.8) и реплей дерева. Отвергается (SessionNotFound) адрес чужого корня,
-  /// заголовок с id, не совпадающим с именем файла, и ссылка за пределы хранилища (D45 Т7).
+  /// рекурсивное лечение (§8.8); дальше append/flush/close — по id потомка. Отвергается
+  /// (SessionNotFound) адрес чужого корня, заголовок с id, не совпадающим с именем файла, и ссылка
+  /// за пределы хранилища (D45 Т7).
   Future<SessionSnapshot> openChild(String journal, {required SessionId rootSessionId});
+  /// Там же, итерация 5 change (D47 Т5): журнал потомка для реплея дерева (§17.3.7) — те же проверки
+  /// адреса, что у openChild, но разбор и ремонт только в памяти, как openReadOnly: файл, дескриптор
+  /// живого журнала и lease не трогаются, оборванная последняя строка пропускается.
+  Future<SessionSnapshot> openChildReadOnly(String journal, {required SessionId rootSessionId});
   /// После MVP (§17.6.17, D-17): поиск по тексту сообщений; только чтение, без lease и ремонта на диске.
   Future<SessionSearchPage> search(SessionSearchQuery query, {required Redactor redactor});
   /// После MVP: текущая длина файла в байтах — сравнение ревизии перед append (§17.6.8).
