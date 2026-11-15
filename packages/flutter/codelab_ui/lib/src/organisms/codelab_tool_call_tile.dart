@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
+import '../rendering/escape_for_display.dart';
 import 'codelab_approval_prompt.dart';
 import 'codelab_transcript_row.dart';
 
@@ -421,6 +422,17 @@ class _ChildApprovalBlock extends StatelessWidget {
         children: [
           if (p.requesterLine case final line?)
             _RequesterHeader(line: line, hint: p.requesterHint),
+          if (p.callTitle case final title? when title.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              // Заголовок пишет модель: управляющие и bidi-символы показываем
+              // escape-ами, чтобы они не переставили видимый путь. Без
+              // maxLines: длинный путь переносится, а не обрезается.
+              child: CodeLabText(
+                escapeForDisplay(title),
+                role: CodeLabTextRole.mono,
+              ),
+            ),
           if (p.command case final command?)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
