@@ -270,6 +270,9 @@ TuiModel _note(TuiModel model, String text) => model.copyWith(
       return (model, const []);
     case KeyAction.toggleTasks:
       return (model.copyWith(tasksHidden: !model.tasksHidden), const []);
+    // ЗАГЛУШКА задачи 5.1: действие `toggle_details` реализует задача 5.4.
+    case KeyAction.toggleDetails:
+      return (model, const []);
   }
 }
 

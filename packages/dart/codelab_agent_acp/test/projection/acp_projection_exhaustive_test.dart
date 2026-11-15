@@ -3,6 +3,8 @@ import 'package:codelab_agent_acp/src/event_projection.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
+import '../support/server_harness.dart' show scriptedModel;
+
 /// Проекция списка задач и событий субагентов в кадры ACP (ACP-6).
 ///
 /// Почему отдельный файл: `every_agent_event_is_projected_test.dart` сверяет
@@ -297,7 +299,7 @@ void main() {
     startedAt: DateTime.utc(2026, 11, 14),
   );
 
-  group('Subagent* → not sent', () {
+  group('Subagent* events; SubagentActivity only by the consent', () {
     test('SubagentStarted gives no frame', () {
       final event = SubagentStarted(
         s,
@@ -332,35 +334,286 @@ void main() {
       expect(project(event), isEmpty);
     });
 
-    // SUB-12: клиенту без `subagentToolCalls` — не отправляется; в итерации 2
-    // агент это расширение не объявляет (D36, Т12), поэтому не отправляется
-    // никому.
-    test('SubagentActivity gives no frame in iteration 2', () {
-      final event = SubagentActivity(
-        s,
-        subagentId: 'sub_k3f9a1c2',
-        parentToolCallId: 'call_1',
-        path: const [],
-        depth: 1,
-        event: ToolCallStarted(
-          const SessionId('child_1'),
-          toolCallId: 'call_1',
-          tool: 'read',
-          kind: ToolKind.read,
-          title: 'Read a.dart',
-          input: const {'path': 'a.dart'},
+    SubagentActivity activity(
+      AgentEvent inner, {
+      String parent = 'call_1',
+      int depth = 1,
+      List<String> path = const [],
+    }) => SubagentActivity(
+      s,
+      subagentId: 'sub_k3f9a1c2',
+      parentToolCallId: parent,
+      path: path,
+      depth: depth,
+      event: inner,
+    );
+
+    ToolCallStarted readCall({SubagentCallRef? subagent}) => ToolCallStarted(
+      const SessionId('child_1'),
+      toolCallId: 'call_1',
+      tool: 'read',
+      kind: ToolKind.read,
+      title: 'Read a.dart',
+      input: const {'path': 'a.dart'},
+      subagent: subagent,
+    );
+
+    List<Map<String, Object?>> projectWith(
+      AgentEvent event, {
+      String? prefix,
+      SubagentFinished? subagentResult,
+    }) => [
+      for (final update in projectEvent(
+        event,
+        configOptions: () => const [],
+        subagentPrefix: prefix,
+        subagentResult: subagentResult,
+      ))
+        update.toJson(),
+    ];
+
+    // Ровно один кадр: утверждение вместо `Bad state: No element`.
+    Map<String, Object?> only(List<Map<String, Object?>> frames) {
+      expect(frames, hasLength(1));
+      return frames.single;
+    }
+
+    // SUB-12, «Клиент без согласия»: клиенту без `subagentToolCalls` вызовы
+    // потомков не отправляются. Раньше тест назывался «gives no frame in
+    // iteration 2»; с итерации 5 (D47 Т8) он делится на два случая. Этот —
+    // зелёный: без согласия мост префикс не передаёт, кадров нет.
+    test('SubagentActivity gives no frame without the consent', () {
+      expect(project(activity(readCall())), isEmpty);
+      expect(projectWith(activity(readCall())), isEmpty);
+    });
+
+    // «Вызовы ребёнка и внука», D47 Т2: с согласием `ToolCallStarted`
+    // потомка — `tool_call` с `toolCallId` «префикс/id вызова» и
+    // `_meta.codelab.parentToolCallId` — префиксом. Красный до 5.2.
+    test('with the consent a child ToolCallStarted gives a chained '
+        'tool_call', () {
+      final frames = projectWith(activity(readCall()), prefix: 'call_1');
+
+      expect(frames, [
+        {
+          'sessionUpdate': 'tool_call',
+          'toolCallId': 'call_1/call_1',
+          'title': 'Read a.dart',
+          'kind': 'read',
+          'status': 'pending',
+          'rawInput': {'path': 'a.dart'},
+          '_meta': {
+            'codelab': {'parentToolCallId': 'call_1'},
+          },
+        },
+      ]);
+    });
+
+    // Внук: префикс — цепочка вызова `agent` ребёнка, а не разбор id; id с
+    // `/` у провайдера (`call/1`) не ломает цепочку (D45 Т3, D47 Т2).
+    test('a grandchild call has a three-segment chain and the child call as '
+        'the parent', () {
+      final frames = projectWith(
+        activity(
+          readCall(),
+          parent: 'call_2',
+          depth: 2,
+          path: const ['sub_c1'],
+        ),
+        prefix: 'call/1/call_2',
+      );
+
+      expect(only(frames)['toolCallId'], 'call/1/call_2/call_1');
+      expect((only(frames)['_meta']! as Map)['codelab'], {
+        'parentToolCallId': 'call/1/call_2',
+      });
+    });
+
+    // Q16, D28: вложенный вызов `agent` несёт `{id, type}` внука — как вызов
+    // `agent` корня — рядом с `parentToolCallId`.
+    test('a nested agent call carries {id, type} next to the parent', () {
+      final nested = ToolCallStarted(
+        const SessionId('child_1'),
+        toolCallId: 'call_2',
+        tool: 'agent',
+        kind: ToolKind.think,
+        title: 'Subagent explore: List tests',
+        input: const {'type': 'explore'},
+        subagent: SubagentCallRef(id: 'sub_g1', type: 'explore'),
+      );
+
+      final frames = projectWith(
+        activity(nested, parent: 'call_1'),
+        prefix: 'call_1',
+      );
+
+      expect(only(frames)['toolCallId'], 'call_1/call_2');
+      expect((only(frames)['_meta']! as Map)['codelab'], {
+        'parentToolCallId': 'call_1',
+        'subagent': {'id': 'sub_g1', 'type': 'explore'},
+      });
+    });
+
+    test('with the consent progress is a tool_call_update with content and '
+        'the parent', () {
+      final progress = ToolCallProgress(
+        const SessionId('child_1'),
+        toolCallId: 'call_1',
+        content: [ToolCallBlock(TextContent('chunk'))],
+      );
+
+      final frames = projectWith(activity(progress), prefix: 'call_1');
+
+      expect(frames, [
+        {
+          'sessionUpdate': 'tool_call_update',
+          'toolCallId': 'call_1/call_1',
+          'status': 'in_progress',
+          'content': [
+            {
+              'type': 'content',
+              'content': {'type': 'text', 'text': 'chunk'},
+            },
+          ],
+          '_meta': {
+            'codelab': {'parentToolCallId': 'call_1'},
+          },
+        },
+      ]);
+    });
+
+    // Итог вызова потомка — по тем же правилам, что у корня: статус,
+    // контент и `outcome` (agent-acp-server «Шаги потомков деревом»).
+    test('with the consent a finished call has status, content and the '
+        'parent; a cancelled one has outcome and no content', () {
+      ToolCallFinished finished(ToolOutcome outcome) => ToolCallFinished(
+        const SessionId('child_1'),
+        toolCallId: 'call_1',
+        outcome: outcome,
+        content: const [TextContent('1| void main() {}')],
+      );
+
+      final done = only(
+        projectWith(
+          activity(finished(ToolOutcome.completed)),
+          prefix: 'call_1',
+        ),
+      );
+      final cancelled = only(
+        projectWith(
+          activity(finished(ToolOutcome.cancelled)),
+          prefix: 'call_1',
         ),
       );
 
-      expect(project(event), isEmpty);
+      expect(done['status'], 'completed');
+      expect(done['toolCallId'], 'call_1/call_1');
+      expect((done['_meta']! as Map)['codelab'], {
+        'parentToolCallId': 'call_1',
+      });
+      expect(done['content'], [
+        {
+          'type': 'content',
+          'content': {'type': 'text', 'text': '1| void main() {}'},
+        },
+      ]);
+      expect(cancelled['status'], 'failed');
+      expect(cancelled, isNot(contains('content')));
+      expect((cancelled['_meta']! as Map)['codelab'], {
+        'parentToolCallId': 'call_1',
+        'outcome': 'cancelled',
+      });
     });
 
-    test('the projection table has a "not sent" row for each of them', () {
+    // D47 Т3: финальное обновление вложенного `agent` несёт `summary` внука,
+    // как у корня (D24).
+    test('the final update of a nested agent carries the summary', () {
+      final finished = ToolCallFinished(
+        const SessionId('child_1'),
+        toolCallId: 'call_2',
+        outcome: ToolOutcome.completed,
+        content: const [
+          TextContent('<subagent-report id="sub_g1">x</subagent-report>'),
+        ],
+      );
+      final result = SubagentFinished(
+        const SessionId('child_1'),
+        subagentId: 'sub_g1',
+        parentToolCallId: 'call_2',
+        status: SubagentState.completed,
+        usage: const Usage(input: 1600, output: 150),
+        toolCalls: 1,
+        duration: const Duration(seconds: 48),
+        report: 'The test directory contains auth_test.dart.',
+      );
+
+      final update = only(
+        projectWith(
+          activity(finished, parent: 'call_1'),
+          prefix: 'call_1',
+          subagentResult: result,
+        ),
+      );
+
+      expect(update['toolCallId'], 'call_1/call_2');
+      expect((update['_meta']! as Map)['codelab'], {
+        'parentToolCallId': 'call_1',
+        'subagent': {
+          'id': 'sub_g1',
+          'summary': {
+            'toolCalls': 1,
+            'tokens': {'input': 1600, 'output': 150},
+            'durationMs': 48000,
+          },
+        },
+      });
+    });
+
+    // «текст, мысли и прочие события потомков НЕ SHALL отправляться»: и при
+    // согласии. Зелёный и до 5.2, охраняет от лишних кадров.
+    test('with the consent text and thoughts of a descendant are not '
+        'sent', () {
+      final partial = AssistantMessage(
+        content: const [],
+        model: scriptedModel,
+        usage: Usage.zero,
+        stopReason: StopReason.stop,
+        timestamp: DateTime.utc(2026),
+      );
+
+      expect(
+        projectWith(
+          activity(MessageDelta(s, delta: 'hi', partial: partial)),
+          prefix: 'call_1',
+        ),
+        isEmpty,
+      );
+      expect(
+        projectWith(
+          activity(ThoughtDelta(s, delta: 'hmm', partial: partial)),
+          prefix: 'call_1',
+        ),
+        isEmpty,
+      );
+    });
+
+    // D47 Т12: строка таблицы описывает проекцию с согласием, а не
+    // «итерацию 2». Красный до 5.2.
+    test('the projection table row of SubagentActivity describes the '
+        'consent-based projection', () {
+      final row = projectionTable[SubagentActivity]!;
+
+      expect(row, contains('subagentToolCalls'));
+      expect(row, isNot(contains('iteration 2')));
+      expect(row, isNot(startsWith('not sent: no')));
+    });
+
+    test('the projection table has a "not sent" row for the other '
+        'subagent events', () {
       for (final type in [
         SubagentStarted,
         SubagentProgress,
         SubagentFinished,
-        SubagentActivity,
       ]) {
         expect(
           projectionTable[type],

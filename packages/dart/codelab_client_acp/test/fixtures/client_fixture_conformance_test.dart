@@ -57,6 +57,25 @@ PromptTurn _lastTurn(ClientFixtureUser user) =>
 ToolCallRecord _toolCall(ClientFixtureUser user, String id) =>
     _lastTurn(user).toolCalls[ToolCallId(id)]!;
 
+/// Родитель каждого вызова с цепочкой `toolCallId` — цепочка без последнего
+/// звена; вызовы корня родителя не имеют; дерево непусто (D8, D21).
+void _expectParentChain(AcpSession session) {
+  var nested = 0;
+  for (final turn in session.turns) {
+    for (final record in turn.toolCalls.values) {
+      final id = record.id.value;
+      final slash = id.lastIndexOf('/');
+      if (slash < 0) {
+        expect(record.parentToolCallId, isNull, reason: id);
+        continue;
+      }
+      nested++;
+      expect(record.parentToolCallId, id.substring(0, slash), reason: id);
+    }
+  }
+  expect(nested, greaterThan(0), reason: 'the tree has nested calls');
+}
+
 final _stateChecks = <String, _StateCheck>{
   'acp/initialize-capabilities': (user, _) {
     final ready = user.app.connectionState as ClientConnectionReady;
@@ -175,6 +194,22 @@ final _stateChecks = <String, _StateCheck>{
     final summary = _subagentMeta(last.toolCallUpdate.meta)?['summary'] as Map?;
     expect(summary?['toolCalls'], 3);
     expect(summary?['tokens'], {'input': 6000, 'output': 400});
+  },
+  // Дерево вызовов потомков (задача 5.1 `[client]`, spec acp-client-kit
+  // «Дерево вызовов потомков»; design.md, D21, D47 Т8–Т9). Фикстуры ведёт
+  // протокольный исполнитель (задача 5.1 `[protocol]`) и задаёт
+  // `setup.clientCapabilities` с `subagentToolCalls`; проверка не зависит от
+  // точного состава кадров: у каждого вызова с цепочкой `toolCallId` родитель
+  // на проводе — цепочка без последнего звена (D8), а вызовы корня родителя
+  // не имеют. Красные до задачи 5.4: `parentToolCallId` ещё не разбирается.
+  'acp/prompt-subagent-tool-tree': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    _expectParentChain(user.app.sessions.single);
+  },
+  // Реплей дерева в том же соединении (`session/load` после живого хода,
+  // D47 Т7): дерево после загрузки тем же, без смены родителей.
+  'acp/session-load-subagent-tool-tree': (user, _) {
+    _expectParentChain(user.app.sessions.single);
   },
   // Запрос ребёнка (change `add-subagents-and-tasks`, задача 3.1 `[client]`;
   // spec acp-client-kit «Запрос одобрения от субагента», сценарий «Запрос

@@ -151,12 +151,13 @@ void main() {
     expect(result, isNot(contains('_meta')));
   });
 
-  // «Клиент CodeLab объявил расширения, вложенность (итерация 4)»:
+  // «Клиент CodeLab объявил расширения, дерево вызовов (итерация 5)»:
   // блок идёт только по объявлению клиента; субагенты включены по умолчанию
   // (`subagents.enabled: true`, `max_depth: 3`), поэтому рядом с `tasks`
   // объявлен `subagents` с `maxDepth` равным `max_depth` (3): потомки
-  // запускают своих детей до этой глубины (D9, D37, D45 Т9). `subagentToolCalls`
-  // нет — вызовы потомков адаптер ещё не проецирует (D36, Т12).
+  // запускают своих детей до этой глубины (D9, D37, D45 Т9); с задачей 5.2
+  // адаптер проецирует вызовы потомков и объявляет `subagentToolCalls`
+  // (D9, D47 Т12). Красный до 5.2: ключа в блоке ещё нет.
   test('an empty client _meta.codelab gets tasks and subagents', () async {
     h = await ServerHarness.start();
 
@@ -173,6 +174,7 @@ void main() {
     expect(caps['_meta'], {
       'codelab': {
         'subagents': {'version': 1, 'maxDepth': 3},
+        'subagentToolCalls': {'version': 1},
         'tasks': {'version': 1},
       },
     });
@@ -183,8 +185,10 @@ void main() {
 
   // Состав блока не зависит от того, что объявил клиент (D9): ни объявленный
   // `subagentToolCalls`, ни версия `subagents` его не расширяют и не
-  // сужают.
-  test('subagentToolCalls is not declared in iteration 4', () async {
+  // сужают; клиент без этого ключа получает тот же блок. Агент объявляет
+  // `subagentToolCalls`, потому что умеет проецировать вызовы потомков
+  // (итерация 5, задача 5.2).
+  test('subagentToolCalls is declared whatever the client declared', () async {
     h = await ServerHarness.start();
 
     final response = await h.initialize(
@@ -202,9 +206,40 @@ void main() {
 
     final caps =
         response.resultMap['agentCapabilities']! as Map<String, Object?>;
+    const withToolCalls = {
+      'codelab': {
+        'subagents': {'version': 1, 'maxDepth': 3},
+        'subagentToolCalls': {'version': 1},
+        'tasks': {'version': 1},
+      },
+    };
+    expect(caps['_meta'], withToolCalls);
+  });
+
+  // Согласие клиента на вызовы потомков агент читает отдельно (D47 Т3), а
+  // состав ответа от него не зависит: клиент без `subagentToolCalls` получает
+  // тот же блок, что и клиент с ним.
+  test('a client without subagentToolCalls gets the same block', () async {
+    h = await ServerHarness.start();
+
+    final response = await h.initialize(
+      clientCapabilities: {
+        'terminal': true,
+        '_meta': {
+          'codelab': {
+            'tasks': {'version': 1},
+            'subagents': {'version': 1},
+          },
+        },
+      },
+    );
+
+    final caps =
+        response.resultMap['agentCapabilities']! as Map<String, Object?>;
     expect(caps['_meta'], {
       'codelab': {
         'subagents': {'version': 1, 'maxDepth': 3},
+        'subagentToolCalls': {'version': 1},
         'tasks': {'version': 1},
       },
     });
@@ -233,10 +268,11 @@ void main() {
       expect(response.error, isNull);
       final caps =
           response.resultMap['agentCapabilities']! as Map<String, Object?>;
-      // Блок тот же, что при известном объявлении (итерация 4, D9).
+      // Блок тот же, что при известном объявлении (итерация 5, D9).
       expect(caps['_meta'], {
         'codelab': {
           'subagents': {'version': 1, 'maxDepth': 3},
+          'subagentToolCalls': {'version': 1},
           'tasks': {'version': 1},
         },
       });

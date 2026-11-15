@@ -636,7 +636,7 @@ final class _Connection {
       bridge = wiring.bridge..attach(session);
       _server._sessions[id] = bridge;
     }
-    for (final update in bridge.replay()) {
+    for (final update in await bridge.replay()) {
       _update(request.sessionId, update);
     }
     final response = acp.LoadSessionResponse(

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
+    show ClientCapabilities, FileSystemCapabilities;
 import 'package:codelab_agent_acp/src/acp_permission_gate.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
@@ -117,8 +119,9 @@ void main() {
     expect(sentToolCall().containsKey('_meta'), isFalse);
   });
 
-  // D42 Т5: цепочка потомка не проецируется (SUB-12), поэтому ждать
-  // `announced(chain)` значило бы ждать вечно; ждём вызов `agent` корня.
+  // D42 Т5: клиенту без `subagentToolCalls` цепочка потомка не проецируется
+  // (SUB-12), поэтому ждать `announced(chain)` значило бы ждать вечно; ждём
+  // вызов `agent` корня. Клиенту с согласием — цепочку (группа ниже, 5.1).
   test('a child request waits for announced(parentToolCallId), not for the '
       'chain', () async {
     rejectOnce();
@@ -258,5 +261,151 @@ void main() {
     );
 
     expect(asked, ['call_2']);
+  });
+
+  // Итерация 5 (задача 5.1; agent-acp-server «Запрос разрешения в строке
+  // своего вызова»; D42 Т5, D47 Т3): клиенту с согласием `subagentToolCalls`
+  // цепочка потомка проецируется `tool_call`, поэтому запрос ждёт
+  // объявления самой цепочки, а не вызова `agent` корня, и встаёт в строку
+  // своего вызова. Согласие читается из `ClientLink.capabilities` в момент
+  // запроса. Красный до 5.2: gate ждёт `parentToolCallId`.
+  group('with the subagentToolCalls consent', () {
+    Future<ClientChannel> consenting(Object? version) => ClientChannel.open(
+      capabilities: ClientCapabilities(
+        fs: const FileSystemCapabilities(
+          readTextFile: true,
+          writeTextFile: true,
+        ),
+        terminal: true,
+        meta: {
+          'codelab': {
+            'subagentToolCalls': {'version': version},
+          },
+        },
+      ),
+    );
+
+    test('a child request waits for announced(chain)', () async {
+      final consented = await consenting(1);
+      consented.client.handlers['session/request_permission'] = (_) => {
+        'outcome': {'outcome': 'selected', 'optionId': 'reject_once'},
+      };
+      final asked = <String>[];
+      final announcedChain = Completer<void>();
+      final gate = AcpPermissionGate(
+        consented.link,
+        logger: consented.logger,
+        announced: (toolCallId) {
+          asked.add(toolCallId);
+          return toolCallId == 'call_1/call_1'
+              ? announcedChain.future
+              : Completer<void>().future;
+        },
+      );
+
+      final decision = gate.request(childExec(), CancelToken.none);
+      await pumpEventQueue();
+
+      expect(asked, ['call_1/call_1']);
+      expect(
+        consented.client.requests,
+        isEmpty,
+        reason: 'запрос не опережает tool_call своего вызова',
+      );
+
+      announcedChain.complete();
+      expect(await decision, PermissionDecision.rejectOnce);
+      expect(
+        (consented.client.requests.single.params! as Map)['toolCall'],
+        containsPair('toolCallId', 'call_1/call_1'),
+      );
+    });
+
+    // Внук: ждём всю цепочку из трёх сегментов, id с `/` не разбирается.
+    test('a grandchild request waits for its whole chain', () async {
+      final consented = await consenting(1);
+      consented.client.handlers['session/request_permission'] = (_) => {
+        'outcome': {'outcome': 'selected', 'optionId': 'reject_once'},
+      };
+      final asked = <String>[];
+      final gate = AcpPermissionGate(
+        consented.link,
+        logger: consented.logger,
+        announced: (toolCallId) async => asked.add(toolCallId),
+      );
+
+      await gate.request(
+        PermissionRequest(
+          toolCallId: 'call/1/call_2/call_3',
+          tool: 'exec',
+          kind: ToolKind.execute,
+          tier: ToolTier.exec,
+          title: '[review: Check the diff] Run git diff --stat',
+          rawInput: const {'command': 'git diff --stat'},
+          allowAlwaysOffered: true,
+          subagent: const SubagentRequestRef(
+            id: 'sub_g1',
+            type: 'review',
+            description: 'Check the diff',
+            depth: 2,
+            path: ['sub_c1'],
+            parentToolCallId: 'call/1',
+          ),
+        ),
+        CancelToken.none,
+      );
+
+      expect(asked, ['call/1/call_2/call_3']);
+    });
+
+    // Согласие — целое `version: 1` (D9): другое значение — согласия нет,
+    // запрос ждёт вызов `agent` корня, как раньше. Зелёный и до 5.2.
+    test('a version other than the integer 1 is no consent', () async {
+      for (final version in <Object?>[2, '1', 1.5, null]) {
+        final other = await consenting(version);
+        other.client.handlers['session/request_permission'] = (_) => {
+          'outcome': {'outcome': 'selected', 'optionId': 'reject_once'},
+        };
+        final asked = <String>[];
+        final gate = AcpPermissionGate(
+          other.link,
+          logger: other.logger,
+          announced: (toolCallId) async => asked.add(toolCallId),
+        );
+
+        await gate.request(childExec(), CancelToken.none);
+
+        expect(asked, ['call_1'], reason: 'version: $version');
+      }
+    });
+
+    // D47 Т3: после переподключения действует объявление нового соединения —
+    // `ClientLink.capabilities` меняется, gate читает его при запросе, а не
+    // при создании.
+    test('the consent is read from the link at the moment of the '
+        'request', () async {
+      final plain = await ClientChannel.open();
+      plain.client.handlers['session/request_permission'] = (_) => {
+        'outcome': {'outcome': 'selected', 'optionId': 'reject_once'},
+      };
+      final asked = <String>[];
+      final gate = AcpPermissionGate(
+        plain.link,
+        logger: plain.logger,
+        announced: (toolCallId) async => asked.add(toolCallId),
+      );
+      plain.link.capabilities = ClientCapabilities(
+        terminal: true,
+        meta: {
+          'codelab': {
+            'subagentToolCalls': {'version': 1},
+          },
+        },
+      );
+
+      await gate.request(childExec(), CancelToken.none);
+
+      expect(asked, ['call_1/call_1']);
+    });
   });
 }

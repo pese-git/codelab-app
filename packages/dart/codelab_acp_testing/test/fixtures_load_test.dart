@@ -113,16 +113,17 @@ const _skillFixtures = {
   'acp/skill-script-exec',
 };
 
-/// Фикстуры change `add-subagents-and-tasks` итераций 1–4 (acp-golden-fixtures
-/// «Фикстуры субагентов и списка задач»). Остальные фикстуры change
-/// (`-tool-tree`, `acp/session-load-subagent-tool-tree`) приходят с
-/// итерацией 5 и добавляются сюда вместе с ней.
+/// Фикстуры change `add-subagents-and-tasks` итераций 1–5 (acp-golden-fixtures
+/// «Фикстуры субагентов и списка задач»); фикстуры дерева вызовов потомков —
+/// итерация 5, задача 5.1.
 const _tasksFixtures = {
   'acp/initialize-codelab-extensions',
   'acp/prompt-task-plan',
   'acp/prompt-subagent-tool-call',
   'acp/prompt-subagent-permission',
   'acp/prompt-subagent-nested-permission',
+  'acp/prompt-subagent-tool-tree',
+  'acp/session-load-subagent-tool-tree',
   'acp/session-load-legacy-plan',
 };
 
@@ -187,6 +188,14 @@ void main() {
     // читает тот же `SubagentRequester`, нового поведения клиента нет
     // (acp-golden-fixtures; design.md D45 Т1).
     expect(roles['acp/prompt-subagent-nested-permission'], {FixtureRole.agent});
+    // Итерация 5 (задача 5.1): дерево вызовов потомков и его реплей играют
+    // обе роли — агент проецирует кадры, kit строит дерево (D47 Т8).
+    for (final id in const [
+      'acp/prompt-subagent-tool-tree',
+      'acp/session-load-subagent-tool-tree',
+    ]) {
+      expect(roles[id], {FixtureRole.agent, FixtureRole.client}, reason: id);
+    }
   });
 
   // «acp/initialize-capabilities SHALL остаться вариантом "клиент без _meta"
@@ -219,22 +228,163 @@ void main() {
       byId['acp/prompt-subagent-tool-call']!.extensions,
       contains('subagent'),
     );
+    expect(
+      byId['acp/prompt-subagent-tool-tree']!.extensions,
+      containsAll(['capabilities', 'subagent', 'parentToolCallId']),
+    );
   });
 
-  // D36 Т12, D45 Т9: редакция итерации 4 объявляет `maxDepth: 3` (потомки
-  // запускают детей до `max_depth`) и по-прежнему не объявляет
-  // `subagentToolCalls` — вызовы потомков агент ещё не проецирует; ключ
-  // придёт с задачей 5.2.
-  test('initialize-codelab-extensions is the iteration 4 edition', () {
+  // D36 Т12, D45 Т9, D47 Т8: редакция итерации 5 — клиент объявляет и
+  // `subagentToolCalls`, агент отвечает тем же ключом рядом с `subagents`
+  // (`maxDepth: 3`) и `tasks`.
+  test('initialize-codelab-extensions is the iteration 5 edition', () {
     final fixture = corpus.singleWhere(
       (f) => f.id == 'acp/initialize-codelab-extensions',
     );
-    final block = _agentCodelabBlock(fixture);
-    expect(block, {
+    expect(_agentCodelabBlock(fixture), {
       'subagents': {'version': 1, 'maxDepth': 3},
+      'subagentToolCalls': {'version': 1},
       'tasks': {'version': 1},
     });
-    expect(block, isNot(contains('subagentToolCalls')));
+    final request = fixture.frames
+        .where((f) => f.direction == FrameDirection.c2a)
+        .map((f) => f.frame!)
+        .single;
+    final partial = ((request['params'] as Map)[r'$partial'] as Map);
+    final caps = partial['clientCapabilities'] as Map;
+    expect(((caps['_meta'] as Map)['codelab'] as Map), {
+      'tasks': {'version': 1},
+      'subagents': {'version': 1},
+      'subagentToolCalls': {'version': 1},
+    });
+  });
+
+  /// `tool_call` и `tool_call_update` кадров [frames] по порядку; обёртка
+  /// `$partial` (кадр `in_progress` хука допускает `_meta`) снимается.
+  List<Map<Object?, Object?>> toolFrames(Iterable<FixtureFrame> frames) => [
+    for (final frame in frames)
+      if (frame.direction == FrameDirection.a2c && frame.frame != null)
+        if (((frame.frame!['params'] as Map?)?['update']) case final Map raw)
+          if ((raw[r'$partial'] as Map? ?? raw) case final Map u)
+            if (u['sessionUpdate'] == 'tool_call' ||
+                u['sessionUpdate'] == 'tool_call_update')
+              u.cast<Object?, Object?>(),
+  ];
+
+  // D47 Т8: фикстуры дерева задают согласие `subagentToolCalls` через
+  // `setup.clientCapabilities`; без него агент вызовов потомков не пришлёт.
+  test('the tool tree fixtures declare the subagentToolCalls consent', () {
+    for (final id in const [
+      'acp/prompt-subagent-tool-tree',
+      'acp/session-load-subagent-tool-tree',
+    ]) {
+      final fixture = corpus.singleWhere((f) => f.id == id);
+      final caps = fixture.setup.clientCapabilities!;
+      final codelab = (caps['_meta'] as Map)['codelab'] as Map;
+      expect(codelab['subagentToolCalls'], {'version': 1}, reason: id);
+      expect(
+        fixture.extensions,
+        containsAll(['capabilities', 'subagent', 'parentToolCallId']),
+        reason: id,
+      );
+    }
+  });
+
+  // agent-acp-server «Вызовы ребёнка и внука», «Статусы вызова потомка», D47
+  // Т2, Т3, Q16: цепочка `toolCallId`, `parentToolCallId`, `{id, type}` внука
+  // в первом кадре, `summary` в финальном обновлении, `pending → in_progress →
+  // итог` вызовов потомков.
+  test('prompt-subagent-tool-tree fixes the chain, the parent and the '
+      'statuses of the descendants', () {
+    final fixture = corpus.singleWhere(
+      (f) => f.id == 'acp/prompt-subagent-tool-tree',
+    );
+    final frames = toolFrames(fixture.frames);
+    Map<Object?, Object?> codelab(Map<Object?, Object?> u) =>
+        ((u['_meta'] as Map?)?['codelab'] as Map? ?? const {})
+            .cast<Object?, Object?>();
+
+    final calls = frames.where((u) => u['sessionUpdate'] == 'tool_call');
+    expect(calls.map((u) => u['toolCallId']), [
+      'call_1',
+      'call_1/call_1',
+      'call_1/call_2',
+      'call_1/call_2/call_1',
+    ]);
+    expect(calls.map((u) => codelab(u)['parentToolCallId']), [
+      null,
+      'call_1',
+      'call_1',
+      'call_1/call_2',
+    ]);
+    final nested = calls.singleWhere((u) => u['toolCallId'] == 'call_1/call_2');
+    expect((codelab(nested)['subagent'] as Map).keys.toSet(), {'id', 'type'});
+    expect((codelab(nested)['subagent'] as Map)['type'], 'explore');
+
+    // Последовательность статусов каждого вызова потомка без строк
+    // прогресса (у них `content`).
+    for (final id in const [
+      'call_1/call_1',
+      'call_1/call_2',
+      'call_1/call_2/call_1',
+    ]) {
+      final statuses = [
+        for (final u in frames)
+          if (u['toolCallId'] == id && u['content'] == null ||
+              u['toolCallId'] == id && u['status'] == 'completed')
+            u['status'],
+      ];
+      expect(statuses, ['pending', 'in_progress', 'completed'], reason: id);
+    }
+
+    final finalNested = frames.lastWhere(
+      (u) => u['toolCallId'] == 'call_1/call_2' && u['status'] == 'completed',
+    );
+    final summary =
+        ((codelab(finalNested)['subagent'] as Map)['summary'] as Map);
+    expect(summary['toolCalls'], 1);
+    expect(summary['tokens'], {'input': 1600, 'output': 150});
+    final finalRoot = frames.lastWhere(
+      (u) => u['toolCallId'] == 'call_1' && u['status'] == 'completed',
+    );
+    expect(codelab(finalRoot)['parentToolCallId'], isNull);
+    expect(
+      ((codelab(finalRoot)['subagent'] as Map)['summary'] as Map)['toolCalls'],
+      3,
+    );
+  });
+
+  // agent-acp-server «Реплей дерева», D47 Т6, Т7: живой ход, затем
+  // `session/load` в том же соединении; вызовы потомков идут сразу после
+  // `tool_call` вызова `agent` корня, рекурсивно, с итоговыми статусами.
+  test('session-load-subagent-tool-tree replays the descendants right after '
+      'the agent call', () {
+    final fixture = corpus.singleWhere(
+      (f) => f.id == 'acp/session-load-subagent-tool-tree',
+    );
+    final loadIndex = fixture.frames.indexWhere(
+      (f) => f.frame?['method'] == 'session/load',
+    );
+    expect(loadIndex, isPositive);
+    final replayed = toolFrames(fixture.frames.skip(loadIndex));
+    expect(replayed.map((u) => u['toolCallId']), [
+      'call_1',
+      'call_1/call_1',
+      'call_1/call_2',
+      'call_1/call_2/call_1',
+    ]);
+    expect(
+      replayed.map((u) => u['status']),
+      everyElement('completed'),
+      reason: 'реплей отдаёт вызов одним кадром с итоговым статусом',
+    );
+    expect(
+      [
+        for (final u in replayed)
+          ((u['_meta'] as Map?)?['codelab'] as Map?)?['parentToolCallId'],
+      ],
+      [null, 'call_1', 'call_1', 'call_1/call_2'],
+    );
   });
 
   // D28, D24: первый `tool_call` вызова `agent` несёт `{id, type}`, финальное

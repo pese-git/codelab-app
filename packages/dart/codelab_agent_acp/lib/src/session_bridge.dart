@@ -395,7 +395,13 @@ final class SessionBridge {
   }
 
   /// Кадры `session/load` до ответа: история и хвост (§13.5, шаги 5–6).
-  List<acp.SessionUpdate> replay() {
+  ///
+  /// ЗАГЛУШКА задачи 5.1: метод стал асинхронным без изменения логики, чтобы
+  /// тесты ждали его через `await`. Задача 5.2 (D47 Т6): клиенту с согласием
+  /// `subagentToolCalls` — `session.replayTree()` и придерживание кадров
+  /// живого хода до конца реплея; без согласия — прежний синхронный
+  /// `session.replay()`.
+  Future<List<acp.SessionUpdate>> replay() async {
     final events = session.replay().toList();
     final plan = events.whereType<TaskListChanged>().lastOrNull;
     final title = events.whereType<SessionTitleChanged>().lastOrNull;

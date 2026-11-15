@@ -300,3 +300,16 @@ final class ConfigChangeResult {
   /// Новая модель, если вызов записал `model_change`; иначе `null`.
   final ModelRef? model;
 }
+
+/// КРАСНАЯ ЗАГЛУШКА задачи 5.1 (change `add-subagents-and-tasks`, D47 Т6):
+/// `AgentSession.replayTree()` — реплей с событиями потомков.
+///
+/// Почему расширение: член интерфейса сломал бы компиляцию двойников
+/// `AgentSession` в `codelab_agent_acp` до задачи 5.2. Задача 5.3 заменяет
+/// заглушку членом [AgentSession] и реализацией в `_Session`, а расширение
+/// удаляет.
+// TODO(5.3): заменить членом AgentSession.
+extension ReplayTreeStub on AgentSession {
+  Future<List<AgentEvent>> replayTree() =>
+      throw UnimplementedError('replayTree: задача 5.3');
+}

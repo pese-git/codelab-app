@@ -65,11 +65,19 @@ const projectionTable = <Type, String>{
 /// состояния, поэтому мост запоминает итог по `parentToolCallId` и передаёт
 /// сюда вместе с финальным событием, а `_meta.codelab.subagent.summary`
 /// (D24) строится из него.
+///
+/// [subagentPrefix] — ЗАГЛУШКА задачи 5.1 (логики нет, 5.2 её реализует):
+/// цепочка `toolCallId` вызова `agent`, запустившего потомка события
+/// `SubagentActivity` (design.md change `add-subagents-and-tasks`, D47 Т2),
+/// передаваемая только клиенту с согласием `subagentToolCalls`. `null` —
+/// согласия нет или префикс неизвестен: `SubagentActivity` кадров не даёт
+/// (SUB-12). Префикс вычисляет мост общим помощником с `replayUpdates`.
 List<acp.SessionUpdate> projectEvent(
   AgentEvent event, {
   required List<acp.SessionConfigOption> Function() configOptions,
   bool replay = false,
   SubagentFinished? subagentResult,
+  String? subagentPrefix,
 }) => switch (event) {
   TurnStarted() ||
   StepStarted() ||
