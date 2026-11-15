@@ -161,6 +161,9 @@ final class TranscriptLayout {
         item.details?.subagentCall == null
             ? toolRow(item, unicode: unicode)
             : subagentStatusRow(item, unicode: unicode),
+        // Исход одобрений потомков под строкой корня (D43 п. 2).
+        for (final (_, line) in childOutcomeLines(item))
+          ...wrapLine(line, width),
       ],
       // Тихая строка операций со списком: без рамки и статуса (D27).
       TaskOpsItem() => [

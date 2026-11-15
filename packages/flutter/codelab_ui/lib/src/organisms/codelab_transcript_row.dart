@@ -89,6 +89,7 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
     this.output = const [],
     this.approval,
     this.subagent,
+    this.childApprovals = const [],
   });
 
   @override
@@ -103,6 +104,16 @@ final class CodeLabToolCallRow extends CodeLabTranscriptRow {
   /// Вызов `agent` в компактном виде (D27); `null` у остальных вызовов и у
   /// стороннего агента без признака субагента (D28).
   final CodeLabSubagentCall? subagent;
+
+  /// Одобрения потомков под строкой `agent` корневого уровня: ожидающие и
+  /// решённые в порядке прихода (D27 п. 4, D43 п. 2). Блок рисуется под
+  /// строкой и не раскрывает её; свой [approval] строки при этом пуст.
+  final List<CodeLabTranscriptApproval> childApprovals;
+
+  /// Потомок под этой строкой ждёт решения: строка не крутит индикатор
+  /// работы, решение принимается в блоке под ней.
+  bool get awaitsChildApproval =>
+      childApprovals.any((a) => a is CodeLabTranscriptApprovalPending);
 
   /// Вызов ждёт решения пользователя.
   bool get awaitsApproval => approval is CodeLabTranscriptApprovalPending;
@@ -223,11 +234,14 @@ sealed class CodeLabTranscriptApproval {
     String? approveOptionId,
     String? rejectOptionId,
     bool shortcutsEnabled,
+    String? requesterLine,
+    String? requesterHint,
   }) = CodeLabTranscriptApprovalPending;
 
   const factory CodeLabTranscriptApproval.resolved({
     required String label,
     CodeLabApprovalOutcome outcome,
+    String? requesterLine,
   }) = CodeLabTranscriptApprovalResolved;
 }
 
@@ -261,6 +275,8 @@ final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
     this.approveOptionId,
     this.rejectOptionId,
     this.shortcutsEnabled = true,
+    this.requesterLine,
+    this.requesterHint,
   });
 
   final CodeLabApprovalRisk risk;
@@ -274,6 +290,13 @@ final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
   final String? approveOptionId;
   final String? rejectOptionId;
   final bool shortcutsEnabled;
+
+  /// Готовая строка «review › explore wants to run», когда спрашивает
+  /// субагент; путь строит kit (D27 п. 4, D43 п. 4), виджет его не разбирает.
+  final String? requesterLine;
+
+  /// Заголовок задачи спрашивающего: подсказка пути и строка под ним.
+  final String? requesterHint;
 }
 
 /// Решённое одобрение: [label] — выбранный вариант или «Cancelled».
@@ -282,8 +305,12 @@ final class CodeLabTranscriptApprovalResolved
   const CodeLabTranscriptApprovalResolved({
     required this.label,
     this.outcome = CodeLabApprovalOutcome.unknown,
+    this.requesterLine,
   });
 
   final String label;
   final CodeLabApprovalOutcome outcome;
+
+  /// Строка пути спрашивавшего субагента для тега исхода под строкой корня.
+  final String? requesterLine;
 }

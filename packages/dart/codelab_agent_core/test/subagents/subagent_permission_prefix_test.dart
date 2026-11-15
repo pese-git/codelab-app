@@ -158,6 +158,60 @@ void main() {
     );
   });
 
+  test(
+    'два параллельных вопроса одного ребёнка: waiting держится до ответа '
+    'на последний, running — только при нуле открытых (ревью итерации 3)',
+    () async {
+      final gate = _HoldingGate();
+      final rig = SubagentRig(
+        gate: gate,
+        scripts: {
+          'go': [
+            oneCallStep('c1', 'agent', agentArgs('job 1', description: 'Two')),
+            replyStep('done'),
+          ],
+          'job 1': [
+            multiCallStep([
+              ('w1', 'write', {'path': 'a.txt', 'content': 'x'}),
+              ('w2', 'write', {'path': 'b.txt', 'content': 'x'}),
+            ]),
+            replyStep('written'),
+          ],
+        },
+      );
+      await rig.open();
+
+      final turn = rig.run('go');
+      await pumpUntil(
+        () => gate.requests.isNotEmpty,
+        reason: 'the first question never reached the root gate',
+      );
+      await pumpUntil(
+        () => _snapshots(rig).any((s) => s.state == SubagentState.waiting),
+        reason: 'the child never reported waiting',
+      );
+      final before = _snapshots(rig).length;
+
+      gate.answer(0, PermissionDecision.allowOnce);
+      await pumpUntil(
+        () => gate.requests.length == 2,
+        reason: 'the second question must follow the first answer',
+      );
+
+      expect(
+        _snapshots(rig).skip(before).map((s) => s.state),
+        isNot(contains(SubagentState.running)),
+        reason: 'второй вопрос ещё открыт: ребёнок остаётся в waiting',
+      );
+      gate.answer(1, PermissionDecision.allowOnce);
+      await turn;
+      expect(
+        rig.eventsOf<SubagentFinished>().single.status,
+        SubagentState.completed,
+      );
+    },
+  );
+
   group('два ребёнка (сценарий «Два ребёнка спрашивают одновременно»)', () {
     test('второй запрос уходит в gate только после ответа на первый; '
         'toolCallId — c1/w1 и c2/w1 (FIFO дерева)', () async {

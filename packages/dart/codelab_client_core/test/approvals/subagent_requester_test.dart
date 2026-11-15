@@ -197,6 +197,18 @@ void main() {
       expect(pending().subagent!.pathText, 'general › explore');
     });
 
+    test('subagentCall.type of the root wins over rawInput.type '
+        '(D43 p. 4)', () async {
+      // Оба источника заданы и различаются: порядок `subagentCall.type` →
+      // `rawInput.type` не должен поменяться местами.
+      await emit(_agentCall('call_3', type: 'review', subagentType: 'general'));
+      await ask(
+        'call_3/call_1/call_1',
+        meta: _requesterMeta(type: 'explore', depth: 2),
+      );
+      expect(pending().subagent!.pathText, 'general › explore');
+    });
+
     test('a first link of an unknown call is `…`', () async {
       // Строки `call_9` в ходе нет: ни `subagentCall`, ни `rawInput`.
       await ask(
@@ -270,6 +282,21 @@ void main() {
     });
   });
 
+  group('the title of the child call (review: D8 prefix)', () {
+    test(
+      'the pending child approval carries the title of its tool call',
+      () async {
+        await emit(_agentCall('call_1', subagentType: 'review'));
+        await ask('call_1/call_1', meta: _requesterMeta(parent: 'call_1'));
+
+        expect(pending().toolTitle, 'Run dart test');
+        final child =
+            call('call_1').childApprovals.single as PendingApprovalView;
+        expect(child.toolTitle, 'Run dart test');
+      },
+    );
+  });
+
   group('no separate item while the root row exists (D43 p. 2)', () {
     test('the child call has no transcript item; the approval is at the root '
         'row and its outcome stays there after the decision', () async {
@@ -295,6 +322,26 @@ void main() {
         (resolved as ResolvedApprovalView).outcome,
         ApprovalOutcomeView.rejected,
       );
+    });
+
+    test('an announced child call keeps its approval on its own row '
+        '(D43 p. 2)', () async {
+      // Под строку корня переезжает только вызов «только запрос» (без кадра
+      // `tool_call`). Если вызов потомка объявлен (будущий режим дерева), у
+      // него своя строка, и одобрение остаётся на ней, а не дублируется
+      // в `childApprovals` корня.
+      await emit(_agentCall('call_3'));
+      await emit({
+        'sessionUpdate': 'tool_call',
+        'toolCallId': 'call_3/call_1',
+        'title': 'Run dart test',
+        'kind': 'execute',
+        'status': 'pending',
+      });
+      await ask('call_3/call_1', meta: _requesterMeta());
+
+      expect(call('call_3/call_1').approval, isA<PendingApprovalView>());
+      expect(call('call_3').childApprovals, isEmpty);
     });
 
     test('without the root row the call is shown by the old item at the end '

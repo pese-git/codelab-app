@@ -1,4 +1,6 @@
+import '../agents/agent_definition.dart';
 import '../llm/usage.dart';
+import '../loop/agent_events.dart' show SessionId;
 import '../loop/turn_budget.dart';
 
 /// Идентификатор субагента: `sub_` и восемь символов `[0-9a-z]` от
@@ -45,9 +47,11 @@ final class SubagentCallRef {
 /// Сведения о потомке в запросе разрешения: пара к [SubagentCallRef]
 /// (design.md change `add-subagents-and-tasks`, D8, D42 Т4; §7.2).
 ///
-/// ЗАГЛУШКА задачи 3.1: только форма типа, чтобы красные тесты итерации 3
-/// компилировались. Заполняет `SubagentPermissionGate` в задаче 3.2; до неё
-/// `PermissionRequest.subagent` всегда `null`.
+/// Почему: клиент видит только корневую сессию, а запрос потомка приходит в
+/// ней же; чтобы показать, кто спрашивает, нужны тип, описание и путь.
+///
+/// Как использовать: заполняет `SubagentPermissionGate`; ACP-адаптер кладёт
+/// значение в `toolCall._meta.codelab.subagent` запроса разрешения (D8).
 final class SubagentRequestRef {
   const SubagentRequestRef({
     required this.id,
@@ -166,4 +170,37 @@ final class SubagentsInfo {
 
   /// `subagents.max_depth` применённого конфига.
   final int maxDepth;
+}
+
+/// Что нужно, чтобы запустить потомка (`agent-core/17-3-subagents.md`
+/// §17.3.2).
+final class SubagentSpec {
+  const SubagentSpec({
+    required this.id,
+    required this.parentSessionId,
+    required this.parentToolCallId,
+    required this.depth,
+    this.path = const [],
+    required this.type,
+    required this.description,
+    required this.prompt,
+    this.taskId,
+  });
+
+  final SubagentId id;
+  final SessionId parentSessionId;
+
+  /// Вызов `agent` в сессии родителя.
+  final String parentToolCallId;
+
+  /// Глубина потомка (корневая сессия — 0, ребёнок — 1).
+  final int depth;
+
+  /// Id предков-субагентов от глубины 1, без самого потомка.
+  final List<SubagentId> path;
+  final AgentDefinition type;
+  final String description, prompt;
+
+  /// Пункт списка задач, назначенный ребёнку (только от корня).
+  final String? taskId;
 }

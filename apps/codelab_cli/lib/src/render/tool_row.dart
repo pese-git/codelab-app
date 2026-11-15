@@ -113,3 +113,21 @@ String _firstLine(String text) {
 
 String _seconds(Duration elapsed) =>
     '${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)}s';
+
+/// Строки исхода одобрений потомков под строкой `agent` корня: `  <путь>:
+/// <метка решения>` на каждое решённое (D43 п. 2).
+///
+/// Почему: у вызова потомка при строке корня нет своей строки (дерева вызовов
+/// до этапа 2 нет), и без этих строк решение пользователя в ленте не видно.
+/// Как использовать: REPL и TUI печатают строки сразу после строки вызова.
+/// Путь берётся из решённого одобрения, а без него — из типа вызова корня.
+/// Возвращает пары (индекс в `childApprovals`, строка).
+List<(int, String)> childOutcomeLines(ToolCallItem item) => [
+  for (final (index, approval) in item.childApprovals.indexed)
+    if (approval case ResolvedApprovalView(:final label, :final subagent))
+      (
+        index,
+        '  ${sanitizeTerminalText(subagent?.pathText ?? item.details?.subagentCall?.type ?? '…')}: '
+            '${sanitizeTerminalText(label)}',
+      ),
+];

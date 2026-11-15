@@ -577,6 +577,13 @@ final class SessionBridge {
       case ToolCallFinished(:final toolCallId):
         _announced.remove(toolCallId);
       case TurnEnded():
+        // Ожидающие объявления вызова не переживают ход: вызов уже не будет
+        // объявлен. Ошибка `CancelledException` превращается шлюзом в
+        // решение `cancelled`, а не в отправку запроса по завершённому ходу.
+        for (final waiting in _awaitingAnnounce.values) {
+          waiting.completeError(const CancelledException('turn ended'));
+        }
+        _awaitingAnnounce.clear();
         _announced.clear();
         _earlyInProgress.clear();
         _ended = event;

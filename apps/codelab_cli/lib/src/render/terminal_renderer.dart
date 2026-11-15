@@ -69,6 +69,9 @@ final class TerminalRenderer {
   final _toolStarted = <String, DateTime>{};
   final _toolDone = <String>{};
 
+  /// Напечатанные строки исхода одобрений потомков (`<id элемента>#<номер>`).
+  final _childPrinted = <String>{};
+
   /// Напечатанные промпты и заметки.
   final _lines = <String>{};
 
@@ -128,6 +131,7 @@ final class TerminalRenderer {
           _text(item);
         case ToolCallItem():
           _tool(item);
+          _childOutcomes(item);
         case TaskOpsItem():
           // Подряд идущие операции растут в одном элементе, а напечатанную
           // строку не переписать: последний элемент придерживается, пока за
@@ -240,6 +244,9 @@ final class TerminalRenderer {
           if (isFinalToolCall(item)) {
             _toolDone.add(id);
           }
+          for (final (index, _) in childOutcomeLines(item)) {
+            _childPrinted.add('$id#$index');
+          }
         case UserItem(:final id) || NoticeItem(:final id):
           _lines.add(id);
         case TaskOpsItem(:final id):
@@ -342,6 +349,18 @@ final class TerminalRenderer {
       _raw,
     );
     _agentReport(item);
+  }
+
+  /// Строки исхода одобрений потомков под строкой `agent` корня: по одной на
+  /// решение, один раз (D43 п. 2; отдельной строки вызова потомка нет).
+  void _childOutcomes(ToolCallItem item) {
+    for (final (index, text) in childOutcomeLines(item)) {
+      if (_childPrinted.add('${item.id}#$index')) {
+        _flushTaskOps();
+        _closeThought();
+        _line(text, _raw);
+      }
+    }
   }
 
   /// Строка прогресса вызова `agent` на месте — только на `ansi` (D27): на

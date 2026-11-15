@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 
-import '../agents/agent_definition.dart';
 import '../env/execution_env.dart';
 import '../llm/model_ref.dart';
 import '../permissions/agent_config_paths.dart';
@@ -23,6 +22,11 @@ import '../util/clock.dart';
 import '../util/logger.dart';
 import 'child_tools.dart';
 import 'subagent_model.dart';
+
+// SubagentSpec живёт в subagent_model.dart (разрыв цикла с gate); реэкспорт
+// сохраняет импорты вида subagent_manager.dart.
+export 'subagent_model.dart' show SubagentSpec;
+import 'subagent_permission_gate.dart';
 import 'subagent_report.dart';
 import 'subagent_task_list.dart';
 import 'subagents_config.dart';
@@ -35,39 +39,6 @@ final class SubagentLimitException implements Exception {
 
   @override
   String toString() => 'SubagentLimitException: at most $limit per turn';
-}
-
-/// Что нужно, чтобы запустить потомка (`agent-core/17-3-subagents.md`
-/// §17.3.2).
-final class SubagentSpec {
-  const SubagentSpec({
-    required this.id,
-    required this.parentSessionId,
-    required this.parentToolCallId,
-    required this.depth,
-    this.path = const [],
-    required this.type,
-    required this.description,
-    required this.prompt,
-    this.taskId,
-  });
-
-  final SubagentId id;
-  final SessionId parentSessionId;
-
-  /// Вызов `agent` в сессии родителя.
-  final String parentToolCallId;
-
-  /// Глубина потомка (корневая сессия — 0, ребёнок — 1).
-  final int depth;
-
-  /// Id предков-субагентов от глубины 1, без самого потомка.
-  final List<SubagentId> path;
-  final AgentDefinition type;
-  final String description, prompt;
-
-  /// Пункт списка задач, назначенный ребёнку (только от корня).
-  final String? taskId;
 }
 
 /// Части родителя, из которых менеджер собирает ребёнка (`agent-core/
@@ -102,7 +73,9 @@ final class SubagentParent {
   /// ребёнка (SUB-2).
   final ModeResolution Function() mode;
 
-  /// `null` до итерации 3: вопрос ребёнка — отказ (D38).
+  /// Gate корневой сессии (D8, D42 Т3): через него идут вопросы потомков
+  /// всего дерева. `null` — у корня нет gate, и вопрос потомка — отказ
+  /// `no approval interface is available` (PERM-5).
   final PermissionGate? gate;
 
   /// Неизменяемый снимок каталога навыков родителя (D34); `skill` входит в
@@ -264,6 +237,19 @@ final class SubagentTree {
     });
     _pump();
     return waiter.completer.future;
+  }
+
+  SubagentQuestionQueue? _questions;
+
+  /// FIFO вопросов дерева к gate корня (D8, D42 Т3): один экземпляр на
+  /// дерево, потомки любой глубины оборачивают его, а не gate родителя.
+  /// Повторный вызов с тем же [root] возвращает ту же очередь.
+  SubagentQuestionQueue wrapGate(PermissionGate root) {
+    final existing = _questions;
+    if (existing != null && identical(existing.root, root)) {
+      return existing;
+    }
+    return _questions = SubagentQuestionQueue(root);
   }
 
   /// Свободные слоты на сейчас (для лога `subagent.slot.release`).
@@ -550,7 +536,20 @@ final class SubagentManager {
           maxDuration: limits.maxDuration,
         ),
         mode: () => narrow(parent.mode(), spec.type.mode),
-        gate: parent.gate,
+        gate: switch (parent.gate) {
+          final root? => SubagentPermissionGate(
+            queue: tree.wrapGate(root),
+            spec: spec,
+            // До итерации 4 родитель потомка — всегда корень: цепочка —
+            // один сегмент, id вызова `agent` корня.
+            chainPrefix: spec.parentToolCallId,
+            onWaiting: () => _setWaiting(handle, true),
+            onResumed: () => _setWaiting(handle, false),
+            logger: _logger,
+            sessionId: _sessionId.value,
+          ),
+          null => null,
+        },
         skills: parent.skills,
         agentConfigPaths: parent.agentConfigPaths,
         decisions: parent.decisions,
@@ -633,6 +632,36 @@ final class SubagentManager {
       handle.lastError ??= 'the subagent turn failed: ${error.runtimeType}';
     }
     await _finish(handle, _buildReport(handle));
+  }
+
+  /// Переводит потомка в `waiting`/`approval` на время вопросов и обратно в
+  /// `running` (§17.3.2). Терминальное состояние не трогается: отмена во
+  /// время вопроса побеждает (D5).
+  ///
+  /// Почему счётчик: ребёнок может держать несколько открытых вопросов (два
+  /// параллельных `write` в одном шаге); в `running` он возвращается только
+  /// при нуле открытых, а не после первого ответа (ревью итерации 3).
+  void _setWaiting(_Handle handle, bool waiting) {
+    if (waiting) {
+      handle.openQuestions++;
+    } else if (handle.openQuestions > 0) {
+      handle.openQuestions--;
+    }
+    if (handle.done) {
+      return;
+    }
+    if (waiting && handle.state == SubagentState.running) {
+      handle.waitingFor = SubagentWait.approval;
+      handle.setState(SubagentState.waiting);
+    } else if (!waiting &&
+        handle.openQuestions == 0 &&
+        handle.state == SubagentState.waiting) {
+      handle.waitingFor = null;
+      handle.setState(SubagentState.running);
+    } else {
+      return;
+    }
+    unawaited(_progress(handle, force: true));
   }
 
   Future<void> _onChildEvent(_Handle handle, AgentEvent event) async {
@@ -828,6 +857,7 @@ final class SubagentManager {
           report: report.text,
           reportPreview: preview,
           budgetExceeded: report.budgetExceeded,
+          truncated: report.truncated,
         ),
       );
     } finally {
@@ -893,6 +923,12 @@ final class _Handle implements SubagentHandle {
   Usage ownUsage = Usage.zero;
   Usage? finalUsage;
 
+  /// Чего ждёт потомок в `waiting`; вне `waiting` снимок его не показывает.
+  SubagentWait? waitingFor;
+
+  /// Открытых вопросов потомка к gate корня; `waiting` держится, пока не 0.
+  int openQuestions = 0;
+
   final reportCompleter = Completer<SubagentReport>();
   final _states = StreamController<SubagentState>.broadcast(sync: true);
   final progressController = StreamController<SubagentSnapshot>.broadcast(
@@ -944,6 +980,7 @@ final class _Handle implements SubagentHandle {
     description: spec.description,
     depth: spec.depth,
     state: _state,
+    waitingFor: _state == SubagentState.waiting ? waitingFor : null,
     steps: steps,
     toolCalls: toolCalls,
     usage: usageNow,

@@ -151,6 +151,29 @@ void main() {
     expect(ch.client.requests, hasLength(1));
   });
 
+  // Ревью безопасности (LOW): отмена в окне ожидания объявления не оставляет
+  // висящего ожидания и не отправляет запрос на провод.
+  test(
+    'cancel while waiting for announced: cancelled, nothing on the wire',
+    () async {
+      final cancel = CancelTokenSource();
+      final never = Completer<void>();
+      final gate = AcpPermissionGate(
+        ch.link,
+        logger: ch.logger,
+        announced: (_) => never.future,
+      );
+
+      final decision = gate.request(childExec(), cancel.token);
+      await pumpEventQueue();
+      cancel.cancel();
+
+      expect(await decision, PermissionDecision.cancelled);
+      await pumpEventQueue();
+      expect(ch.client.requests, isEmpty);
+    },
+  );
+
   // Запрос корня по-прежнему ждёт собственный `toolCallId` (§13.7).
   test('a root request still waits for its own toolCallId', () async {
     rejectOnce();

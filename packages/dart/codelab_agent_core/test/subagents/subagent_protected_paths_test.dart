@@ -14,17 +14,18 @@ import 'subagent_rig.dart';
 /// Красный до задач 2.4 и 2.11: нет ребёнка, а политика ребёнка должна
 /// получать `agentConfigPaths` корня, а не считать их заново.
 ///
-/// Итерация 3 (задача 3.1, D42 Т6): критическое действие, которое у корня
-/// стало бы вопросом, у ребёнка — вопрос к gate корня с цепочкой `toolCallId`
-/// и `allowAlwaysOffered: false`; запись в конфигурацию агента — отказ без
-/// вопроса, как у корня. Обычная запись при `bypass` проходит без вопроса:
-/// именно это отличает критический путь от обычного. Прежние ожидания отказа
-/// D38 заменены; красные до задачи 3.2.
+/// Итерация 3 (задачи 3.1, 3.2, D42 Т6): критическое действие, которое у
+/// корня стало бы вопросом, у ребёнка — вопрос к gate корня с цепочкой
+/// `toolCallId` и `allowAlwaysOffered: false`; запись в конфигурацию агента —
+/// тоже вопрос (`reason: agent configuration`), как у корня с gate: отказ без
+/// вопроса — только при `autopilot` или без gate (§7.4, шаг 3). Обычная запись
+/// при `bypass` проходит без вопроса: именно это отличает критический путь от
+/// обычного. Прежние ожидания отказа D38 заменены.
 void main() {
   test('сценарий «Защищённые пути корня у ребёнка»: bypass, ребёнок general '
       'пишет в .codelab/config.yaml и копирует в \$CODELAB_HOME/agents — оба '
-      'вызова критические, как у корня; запись отказана без вопроса, exec — '
-      'вопрос к gate корня и не исполняется до решения', () async {
+      'вызова критические, как у корня: оба — вопрос к gate корня без '
+      '«разрешить всегда» и не исполняются без решения', () async {
     final shell = FakeShellEnv(MemoryExecutionEnv(cwd: '/proj'), answering(''));
     final gate = FakeGate((_) => PermissionDecision.rejectOnce);
     final rig = SubagentRig(
@@ -67,20 +68,26 @@ void main() {
     expect(resultIsError(child, 'w1'), isTrue);
     expect(
       resultText(child, 'w1'),
-      contains('Editing agent configuration requires a human'),
+      deniedText('write', 'rejected by the user'),
     );
     expect(resultText(child, 'x1'), deniedText('exec', 'rejected by the user'));
     // Контроль: обычная запись при bypass проходит — отказы выше вызваны
     // именно защитой путей, а не режимом.
     expect(resultIsError(child, 'w2'), isFalse);
     expect(shell.commands, isEmpty);
-    // Спросили только критический exec: запись в конфигурацию отказана без
-    // вопроса, обычная запись при bypass — без вопроса.
-    final request = gate.requests.single;
-    expect(request.toolCallId, 'c1/x1');
-    expect(request.allowAlwaysOffered, isFalse);
-    expect(request.criticalLabel, isNotNull);
-    expect(request.title, startsWith('[general: Do the work] '));
+    // Спросили оба критических вызова; обычная запись при bypass — без
+    // вопроса.
+    expect([for (final r in gate.requests) r.toolCallId], ['c1/w1', 'c1/x1']);
+    expect(
+      gate.requests.map((r) => r.allowAlwaysOffered),
+      everyElement(isFalse),
+    );
+    expect(gate.requests.first.reason, contains('agent configuration'));
+    expect(gate.requests.last.criticalLabel, isNotNull);
+    expect(
+      gate.requests.map((r) => r.title),
+      everyElement(startsWith('[general: Do the work] ')),
+    );
   });
 
   test('«разрешить всегда» корня на путь конфигурации не действует на '
@@ -117,12 +124,8 @@ void main() {
       gate.requests.map((r) => r.allowAlwaysOffered),
       everyElement(isFalse),
     );
-    // С gate у ребёнка (итерация 3) запись в конфигурацию всё равно не
-    // доходит до вопроса: спросил только корень (`w0`).
-    expect([for (final r in gate.requests) r.toolCallId], ['w0']);
-    expect(
-      resultText(rig.requestsOf('touch the config').last, 'w1'),
-      contains('requires a human'),
-    );
+    // «Разрешить всегда» на критический путь не сохраняется: ребёнок
+    // спрошен заново (`c1/w1`), а не пропущен по решению корня.
+    expect([for (final r in gate.requests) r.toolCallId], ['w0', 'c1/w1']);
   });
 }

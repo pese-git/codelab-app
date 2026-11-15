@@ -80,7 +80,7 @@ List<PendingApprovalView> pendingApprovalViews(AcpSession session) => [
   for (final turn in session.turns)
     for (final approval in turn.approvals.values)
       if (approval.status == ApprovalStatus.pending)
-        _approvalView(approval, _earliestPendingApprovalId(turn))!
+        _approvalView(turn, approval, _earliestPendingApprovalId(turn))!
             as PendingApprovalView,
 ];
 
@@ -112,6 +112,7 @@ List<TranscriptItem> _rebuildTurn(PromptTurn turn, List<PlanEntry>? prior) {
 
   final agent = <TranscriptItem>[];
   final seen = <ToolCallId>{};
+  final announced = _announcedIds(turn);
   final focused = _earliestPendingApprovalId(turn);
   _StreamKind? runKind;
   var runStart = 0;
@@ -131,7 +132,7 @@ List<TranscriptItem> _rebuildTurn(PromptTurn turn, List<PlanEntry>? prior) {
       case ToolCallSessionUpdate(:final toolCall):
         flush();
         if (seen.add(toolCall.toolCallId)) {
-          agent.add(_toolItem(turn, toolCall.toolCallId, focused));
+          agent.add(_toolItem(turn, toolCall.toolCallId, focused, announced));
         }
       case ToolCallUpdateSessionUpdate():
         flush();
@@ -154,7 +155,7 @@ List<TranscriptItem> _rebuildTurn(PromptTurn turn, List<PlanEntry>? prior) {
   }
   flush();
   final body = withTaskOps(agent, taskOperationsOf(turn, prior));
-  body.addAll(_unannouncedApprovalItems(turn, seen, focused));
+  body.addAll(_unannouncedApprovalItems(turn, seen, focused, announced));
 
   items
     ..addAll(body)
@@ -211,17 +212,21 @@ final class _TurnProjection {
     // обновления: так их показывал и прежний пересчёт
     // (embed-approval-in-thread/design.md, Decision 1).
     final focused = _earliestPendingApprovalId(turn);
+    final announced = _toolPositions.keys.toSet();
     for (final MapEntry(key: toolCallId, value: position)
         in _toolPositions.entries) {
-      final next = _toolItem(turn, toolCallId, focused);
+      final next = _toolItem(turn, toolCallId, focused, announced);
       if (next != _body[position]) {
         _body[position] = next;
       }
     }
 
-    final unannounced = _unannouncedApprovalItems(turn, {
-      ..._toolPositions.keys,
-    }, focused);
+    final unannounced = _unannouncedApprovalItems(
+      turn,
+      {...announced},
+      focused,
+      announced,
+    );
     final hasAgentItems = _body.isNotEmpty || unannounced.isNotEmpty;
     final body = _taskPlanSeen
         ? withTaskOps(_body, taskOperationsOf(turn, prior))
@@ -358,10 +363,19 @@ UserItem? _userItem(PromptTurn turn) {
 String _toolItemId(PromptTurnId turnId, ToolCallId toolCallId) =>
     '${turnId.value}/tool-${toolCallId.value}';
 
+/// Id вызовов, объявленных `tool_call` хода: у вызова потомка без дерева
+/// (этап 2) их нет, и его запрос не заводит строки, пока есть строка корня
+/// (D43 п. 2).
+Set<ToolCallId> _announcedIds(PromptTurn turn) => {
+  for (final update in turn.updates)
+    if (update case ToolCallSessionUpdate(:final toolCall)) toolCall.toolCallId,
+};
+
 TranscriptItem _toolItem(
   PromptTurn turn,
   ToolCallId toolCallId,
   ApprovalRequestId? focused,
+  Set<ToolCallId> announced,
 ) {
   final record = turn.toolCalls[toolCallId];
   return TranscriptItem.toolCall(
@@ -369,7 +383,46 @@ TranscriptItem _toolItem(
     toolCallId: toolCallId,
     title: record?.title ?? toolCallId.value,
     details: record == null ? null : _callView(record),
-    approval: _approvalView(_approvalFor(turn, toolCallId), focused),
+    approval: _approvalView(turn, _approvalFor(turn, toolCallId), focused),
+    childApprovals: [
+      for (final approval in turn.approvals.values)
+        if (_hostRowOf(approval, announced) == toolCallId)
+          _approvalView(turn, approval, focused)!,
+    ],
+  );
+}
+
+/// Строка `agent` корня, под которой стоит одобрение потомка, или `null`.
+///
+/// Почему: у запроса потомка нет кадров `tool_call` (дерево — этап 2), и
+/// отдельная строка навсегда осталась бы `pending` (D43 п. 2). Одобрение
+/// переезжает под строку корня, если она есть в ходе; иначе `null` — вызов
+/// остаётся прежним элементом «только запрос» в конце хода.
+ToolCallId? _hostRowOf(ApprovalRequest approval, Set<ToolCallId> announced) {
+  final requester = approval.subagentRequester;
+  final parent = requester?['parentToolCallId'];
+  if (parent is! String ||
+      parseSubagentRequester(requester) == null ||
+      announced.contains(approval.toolCall.id)) {
+    return null;
+  }
+  final host = ToolCallId(parent);
+  return announced.contains(host) ? host : null;
+}
+
+/// Спрашивающий потомок запроса с типом вызова `agent` корня для пути
+/// (D43 п. 4): `subagentCall.type` → `rawInput.type` → неизвестно.
+SubagentRequester? _requesterOf(PromptTurn turn, ApprovalRequest approval) {
+  final raw = approval.subagentRequester;
+  final parsed = parseSubagentRequester(raw);
+  if (parsed == null || parsed.depth <= 1) {
+    return parsed;
+  }
+  final root = turn.toolCalls[ToolCallId(parsed.parentToolCallId)];
+  final byCall = parseSubagentCall(root?.subagentMeta)?.type;
+  final byInput = root?.rawInput?['type'];
+  return parsed.withRootType(
+    byCall ?? (byInput is String && byInput.isNotEmpty ? byInput : null),
   );
 }
 
@@ -393,19 +446,28 @@ TranscriptItem _toolItem(
 /// показывается `cancelled`: он так и не исполнился. Отмена одобрения
 /// отдельной командой при идущем ходе, терминальные `completed`/`failed` и
 /// одобрения, выбранные до отмены, статус не меняют.
+///
+/// Запрос потомка при строке корня сюда не попадает: его одобрение лежит в
+/// `ToolCallItem.childApprovals` строки корня (D43 п. 2). [announced] —
+/// вызовы, объявленные `tool_call` хода.
 List<TranscriptItem> _unannouncedApprovalItems(
   PromptTurn turn,
   Set<ToolCallId> seen,
   ApprovalRequestId? focused,
+  Set<ToolCallId> announced,
 ) => [
   for (final approval in turn.approvals.values)
-    if (seen.add(approval.toolCall.id))
+    if (_hostRowOf(approval, announced) == null &&
+        seen.add(approval.toolCall.id))
       TranscriptItem.toolCall(
         id: _toolItemId(turn.id, approval.toolCall.id),
         toolCallId: approval.toolCall.id,
         title: approval.toolCall.title,
-        details: _callView(_cancelledWithTurn(turn, approval)),
-        approval: _approvalView(approval, focused),
+        details: _callView(
+          _cancelledWithTurn(turn, approval),
+          subagent: _requesterOf(turn, approval),
+        ),
+        approval: _approvalView(turn, approval, focused),
       ),
 ];
 
@@ -489,30 +551,32 @@ String? _stoppedNoticeText(StopReason? reason) => switch (reason) {
   StopReason.endTurn || StopReason.cancelled || null => null,
 };
 
-ToolCallView _callView(ToolCallRecord record) => ToolCallView(
-  kind: record.kind,
-  status: switch (record.status) {
-    _ when record.cancelledByClient => ToolCallStatusView.cancelled,
-    // Агент сообщил исход: `failed` + `outcome: cancelled` — отмена для
-    // любого вызова; прочие значения остаются `failed` (D41 п. 1).
-    ToolCallStatus.failed when record.outcome == 'cancelled' =>
-      ToolCallStatusView.cancelled,
-    ToolCallStatus.pending => ToolCallStatusView.queued,
-    ToolCallStatus.inProgress => ToolCallStatusView.running,
-    ToolCallStatus.completed => ToolCallStatusView.succeeded,
-    ToolCallStatus.failed => ToolCallStatusView.failed,
-  },
-  command: _command(record),
-  rawInput: record.rawInput,
-  paths: [for (final location in record.locations) location.path],
-  textOutput: [
-    for (final item in record.content)
-      if (item case ToolCallContentBlock(content: TextContent(:final text)))
-        text,
-  ],
-  subagentCall: parseSubagentCall(record.subagentMeta),
-  subagentSummary: parseSubagentSummary(record.subagentMeta),
-);
+ToolCallView _callView(ToolCallRecord record, {SubagentRequester? subagent}) =>
+    ToolCallView(
+      kind: record.kind,
+      status: switch (record.status) {
+        _ when record.cancelledByClient => ToolCallStatusView.cancelled,
+        // Агент сообщил исход: `failed` + `outcome: cancelled` — отмена для
+        // любого вызова; прочие значения остаются `failed` (D41 п. 1).
+        ToolCallStatus.failed when record.outcome == 'cancelled' =>
+          ToolCallStatusView.cancelled,
+        ToolCallStatus.pending => ToolCallStatusView.queued,
+        ToolCallStatus.inProgress => ToolCallStatusView.running,
+        ToolCallStatus.completed => ToolCallStatusView.succeeded,
+        ToolCallStatus.failed => ToolCallStatusView.failed,
+      },
+      command: _command(record),
+      rawInput: record.rawInput,
+      paths: [for (final location in record.locations) location.path],
+      textOutput: [
+        for (final item in record.content)
+          if (item case ToolCallContentBlock(content: TextContent(:final text)))
+            text,
+      ],
+      subagentCall: parseSubagentCall(record.subagentMeta),
+      subagentSummary: parseSubagentSummary(record.subagentMeta),
+      subagent: subagent,
+    );
 
 String? _command(ToolCallRecord record) {
   final command = record.rawInput?['command'];
@@ -548,6 +612,7 @@ ApprovalRequestId? _earliestPendingApprovalId(PromptTurn turn) {
 }
 
 ApprovalStateView? _approvalView(
+  PromptTurn turn,
   ApprovalRequest? approval,
   ApprovalRequestId? focused,
 ) {
@@ -558,6 +623,7 @@ ApprovalStateView? _approvalView(
     return ApprovalStateView.resolved(
       label: _resolvedLabel(approval),
       outcome: _resolvedOutcome(approval),
+      subagent: _requesterOf(turn, approval),
     );
   }
   return ApprovalStateView.pending(
@@ -569,6 +635,8 @@ ApprovalStateView? _approvalView(
     options: approval.options,
     focused: approval.id == focused,
     critical: approval.critical,
+    subagent: _requesterOf(turn, approval),
+    toolTitle: approval.toolCall.title,
   );
 }
 

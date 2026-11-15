@@ -43,6 +43,89 @@ final class SubagentCallView {
   String toString() => 'SubagentCallView($id, $type)';
 }
 
+/// Субагент, который просит разрешение: `_meta.codelab.subagent` в `toolCall`
+/// запроса `session/request_permission` (D8, D15, D43 п. 1).
+///
+/// Почему: ключ `_meta.codelab.subagent` на проводе один, но в запросе он
+/// называет спрашивающего потомка, а в `tool_call` — запущенный `agent`
+/// (D43 п. 1). Поэтому это отдельный тип, не [SubagentCallView]: запрос не
+/// делает `exec` потомка строкой «Subagent …».
+///
+/// Для чего: хосты показывают, кто спрашивает — строку пути
+/// `review › explore wants to run` (D27) и заголовок задачи [description].
+///
+/// Как использовать: kit кладёт значение в `PendingApprovalView.subagent`,
+/// `ResolvedApprovalView.subagent` и `ToolCallView.subagent`. [rootType] —
+/// тип вызова `agent` корня; kit заполняет его только при [depth] больше 1
+/// (при глубине 1 путь — один тип спрашивающего), хост его не задаёт.
+final class SubagentRequester {
+  const SubagentRequester({
+    required this.id,
+    required this.type,
+    required this.description,
+    required this.depth,
+    required this.parentToolCallId,
+    this.rootType,
+  });
+
+  /// Id спрашивающего субагента (`sub_xxxxxxxx`).
+  final String id;
+
+  /// Тип спрашивающего: `explore`, `review` и т. д.
+  final String type;
+
+  /// Заголовок задачи спрашивающего — подсказка и раскрытие блока (D27).
+  final String description;
+
+  /// Глубина: 1 — ребёнок корня.
+  final int depth;
+
+  /// Вызов `agent` корневого уровня, под строкой которого стоит блок
+  /// (D43 п. 2).
+  final String parentToolCallId;
+
+  /// Тип вызова `agent` корня (D43 п. 4): `subagentCall.type` → `rawInput.type`;
+  /// `null` — kit его не знает (путь покажет `…`).
+  final String? rootType;
+
+  /// Типы цепочки от ребёнка корня до спрашивающего; длина равна [depth].
+  ///
+  /// Первое звено — [rootType] или `…`, последнее — [type], промежуточные
+  /// неизвестны без дерева вызовов (этап 2) и дают `…` (D27, D43 п. 4).
+  List<String> get pathTypes => depth <= 1
+      ? [type]
+      : [rootType ?? '…', for (var i = 2; i < depth; i++) '…', type];
+
+  /// Строка пути для представлений: `review › explore`.
+  String get pathText => pathTypes.join(' › ');
+
+  SubagentRequester withRootType(String? rootType) => SubagentRequester(
+    id: id,
+    type: type,
+    description: description,
+    depth: depth,
+    parentToolCallId: parentToolCallId,
+    rootType: rootType,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is SubagentRequester &&
+      other.id == id &&
+      other.type == type &&
+      other.description == description &&
+      other.depth == depth &&
+      other.parentToolCallId == parentToolCallId &&
+      other.rootType == rootType;
+
+  @override
+  int get hashCode =>
+      Object.hash(id, type, description, depth, parentToolCallId, rootType);
+
+  @override
+  String toString() => 'SubagentRequester($id, $pathText)';
+}
+
 /// Итог субагента из `_meta.codelab.subagent.summary` финального обновления
 /// (D24). Токены — сумма `input + output`.
 final class SubagentSummaryView {
@@ -144,5 +227,40 @@ SubagentSummaryView? parseSubagentSummary(Map<String, Object?>? meta) {
     inputTokens: input,
     outputTokens: output,
     duration: Duration(milliseconds: duration),
+  );
+}
+
+/// Спрашивающий из `ApprovalRequest.subagentRequester` (сырой
+/// `_meta.codelab.subagent` запроса); `null` при неверной форме обязательных
+/// полей — запрос показывается как обычный (терпимый разбор, D43 п. 1).
+///
+/// [rootType] — тип вызова `agent` корня; применяется только при глубине
+/// больше 1 (см. [SubagentRequester.rootType]).
+SubagentRequester? parseSubagentRequester(
+  Map<String, Object?>? meta, {
+  String? rootType,
+}) {
+  final id = meta?['id'];
+  final type = meta?['type'];
+  final depth = meta?['depth'];
+  final parent = meta?['parentToolCallId'];
+  final description = meta?['description'];
+  if (id is! String ||
+      id.isEmpty ||
+      type is! String ||
+      type.isEmpty ||
+      depth is! int ||
+      depth < 1 ||
+      parent is! String ||
+      parent.isEmpty) {
+    return null;
+  }
+  return SubagentRequester(
+    id: id,
+    type: type,
+    description: description is String ? description : '',
+    depth: depth,
+    parentToolCallId: parent,
+    rootType: depth > 1 ? rootType : null,
   );
 }

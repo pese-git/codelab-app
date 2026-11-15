@@ -132,6 +132,30 @@ void main() {
       'agent_message_chunk',
     ]);
   });
+
+  // Ожидание объявления вызова не переживает ход: иначе запрос разрешения
+  // потомка в фоне висел бы вечно (ревью безопасности, LOW).
+  test('TurnEnded releases pending announced() waiters', () async {
+    var released = false;
+    unawaited(
+      bridge
+          .announced('call_never')
+          .then((_) {}, onError: (Object _) => released = true),
+    );
+    await pump();
+    expect(released, isFalse);
+
+    session.emit(
+      const TurnEnded(
+        SessionId('s'),
+        reason: TurnEndReason.completed,
+        usage: Usage.zero,
+      ),
+    );
+    await pump();
+
+    expect(released, isTrue);
+  });
 }
 
 String _label(acp.SessionUpdate update) => switch (update) {

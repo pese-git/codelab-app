@@ -4,6 +4,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
 import '../session/journal_lines.dart';
+import '../support/models.dart';
 import 'subagent_rig.dart';
 
 /// Журнал субагента глубины 1 (agent-subagents «Журнал субагента и
@@ -241,5 +242,101 @@ void main() {
     );
     expect(resultIsError(request, 'c1'), isTrue);
     expect(rig.requests.keys, ['run it'], reason: 'ребёнок не перезапущен');
+  });
+
+  // Задача 3.6 (design.md, D43 п. 5; §17.3.6 «Атрибут `truncated` при
+  // лечении»; agent-subagents «Усечённый отчёт после сбоя»). Журнал собран
+  // построчно: сбой между итоговой записью и результатом вызова в тесте
+  // невоспроизводим. Красные до кода: поле `truncated` записью не читается, и
+  // вылеченная обёртка теряет атрибут, который есть у живого хода.
+  Future<String> healedWrapper({required Map<String, Object?> extra}) async {
+    const rootId = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0D');
+    final crashed = journal([
+      header(cwd: '/proj', id: rootId.value),
+      modelChange('m1', null),
+      user('u1', 'm1', text: 'run it'),
+      answer(
+        'a1',
+        'u1',
+        calls: [
+          ('c1', 'agent', {'description': 'Review it', 'prompt': 'task a'}),
+        ],
+      ),
+      jsonEncode({
+        'type': 'subagent',
+        'id': 's1',
+        'parentId': 'a1',
+        'timestamp': at,
+        'subagentId': 'sub_aaaaaaaa',
+        'toolCallId': 'c1',
+        'agent': 'review',
+        'description': 'Review it',
+        'status': 'completed',
+        'report':
+            'line 0\n[report truncated: 10 of 99 bytes shown; the full '
+            'report is in the subagent journal]',
+        'toolCalls': 2,
+        'durationMs': 1500,
+        ...extra,
+      }),
+    ]);
+    final store = MemorySessionStore()..putText(rootId, crashed);
+    final rig = SubagentRig(
+      store: store,
+      scripts: {
+        'run it': [replyStep('Continuing.')],
+      },
+    );
+
+    await rig.load(rootId);
+    await rig.run('continue');
+
+    return resultText(rig.requestsOf('run it').single, 'c1');
+  }
+
+  test('усечённый отчёт после сбоя: запись с truncated: true даёт обёртку '
+      'с truncated="true", как живой ход', () async {
+    final text = await healedWrapper(extra: {'truncated': true});
+
+    expect(text, contains('status="completed"'));
+    expect(text, contains('truncated="true"'));
+  });
+
+  test('запись без поля truncated (старый журнал) читается как не '
+      'усечённая: обёртка без атрибута', () async {
+    final text = await healedWrapper(extra: const {});
+
+    expect(text, contains('status="completed"'));
+    expect(text, isNot(contains('truncated=')));
+  });
+
+  test('живой ход: итоговая запись усечённого report_max_bytes отчёта '
+      'несёт truncated: true, неусечённого — без поля', () async {
+    Future<Map<String, Object?>> finalRecord(String reply) async {
+      final rig = SubagentRig(
+        config: CoreConfig(
+          defaultModel: subagentTestModel,
+          subagents: const SubagentsConfig(reportMaxBytes: 1024),
+        ),
+        scripts: {
+          'go': [
+            oneCallStep('c1', 'agent', agentArgs('write the report')),
+            replyStep('done'),
+          ],
+          'write the report': [replyStep(reply)],
+        },
+      );
+      await rig.open();
+      await rig.run('go');
+      return lines(rig.rootJournal).lastWhere((r) => r['type'] == 'subagent');
+    }
+
+    final cut = await finalRecord(
+      [for (var i = 0; i < 400; i++) 'line $i of the report'].join('\n'),
+    );
+    final whole = await finalRecord('short report');
+
+    expect(cut['truncated'], isTrue);
+    expect(whole.containsKey('truncated'), isFalse);
   });
 }

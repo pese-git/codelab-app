@@ -297,7 +297,10 @@ sealed class SessionRecord {
             : null,
         toolCalls: json['toolCalls'] as int?,
         durationMs: json['durationMs'] as int?,
+        // Запись без поля — не усечённая (старые журналы, D43 п. 5).
+        truncated: json['truncated'] == true,
         extra: extra(const {
+          'truncated',
           'subagentId',
           'toolCallId',
           'agent',
@@ -676,6 +679,7 @@ final class SubagentRecord extends SessionRecord {
     this.usage,
     this.toolCalls,
     this.durationMs,
+    this.truncated = false,
     super.extra,
   });
 
@@ -697,6 +701,12 @@ final class SubagentRecord extends SessionRecord {
   final Usage? usage;
   final int? toolCalls, durationMs;
 
+  /// Отчёт усечён по `report_max_bytes` или оборван лимитом ответа (§17.3.5,
+  /// шаги 4 и 5). В журнал пишется только `true`; запись без поля читается как
+  /// не усечённая, чтобы вылеченный отчёт получил тот же атрибут обёртки
+  /// `truncated="true"`, что и живой ход (§17.3.6, D43 п. 5).
+  final bool truncated;
+
   /// Копия записи-шаблона с настоящими `id`, родителем и временем.
   SubagentRecord placed(String id, String? parentId, DateTime timestamp) =>
       SubagentRecord(
@@ -715,6 +725,7 @@ final class SubagentRecord extends SessionRecord {
         usage: usage,
         toolCalls: toolCalls,
         durationMs: durationMs,
+        truncated: truncated,
         extra: extra,
       );
 
@@ -735,6 +746,7 @@ final class SubagentRecord extends SessionRecord {
     'usage': ?usage?.toJson(),
     'toolCalls': ?toolCalls,
     'durationMs': ?durationMs,
+    if (truncated) 'truncated': true,
   };
 }
 

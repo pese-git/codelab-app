@@ -46,17 +46,21 @@ void main() {
       ),
     );
     await created;
-    final prompt = client.sendPrompt(
-      const SendPromptCommand(
-        sessionId: _session,
-        prompt: [ContentBlock.text(text: 'go')],
-      ),
-    );
+    // Обработчик ошибки вешается сразу: `dispose` в `tearDown` завершает
+    // ожидающий промпт ошибкой, и без слушателя она уходит в зону теста.
+    final prompt = client
+        .sendPrompt(
+          const SendPromptCommand(
+            sessionId: _session,
+            prompt: [ContentBlock.text(text: 'go')],
+          ),
+        )
+        .then<void>((_) {}, onError: (_) {});
     await pumpEventQueue();
     // Ход закрывается в `tearDown`; ответ на промпт здесь не нужен.
     addTearDown(() async {
       await client.dispose();
-      await prompt.then<void>((_) {}, onError: (_) {});
+      await prompt;
     });
   });
 

@@ -222,7 +222,10 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
         ),
         final ToolCallItem call => _toolCallRowOf(
           call,
-          id: 'tool-${index + 1}',
+          // Вызов, объявленный только запросом субагента (строки корня нет,
+          // D43 п. 2), несёт стабильный id элемента транскрипта: индекс
+          // сдвигается, когда строка корня появляется позже.
+          id: _isSubagentRequested(call) ? call.id : 'tool-${index + 1}',
           cwd: cwd,
           approvalsEnabled: approvalsEnabled,
           onApprovalSelected: onApprovalSelected,
@@ -262,8 +265,25 @@ CodeLabToolCallRow _toolCallRowOf(
       enabled: approvalsEnabled,
       onSelected: onApprovalSelected,
     ),
+    // Одобрения потомков — блоки под строкой корня (D27 п. 4, D43 п. 2).
+    childApprovals: [
+      for (final child in call.childApprovals)
+        ?_transcriptApprovalOf(
+          child,
+          callStatus: null,
+          enabled: approvalsEnabled,
+          onSelected: onApprovalSelected,
+        ),
+    ],
   );
 }
+
+/// Одобрение вызова пришло от субагента (`subagent` у ожидающего и решённого).
+bool _isSubagentRequested(ToolCallItem call) => switch (call.approval) {
+  PendingApprovalView(:final subagent) ||
+  ResolvedApprovalView(:final subagent) => subagent != null,
+  null => false,
+};
 
 /// Чип хода в шапке панели сессии (требование «Session pane header»):
 /// идущий ход с ожидающим одобрением — «Waiting for approval».
@@ -335,6 +355,7 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
         ApprovalOutcomeView.cancelled => CodeLabApprovalOutcome.cancelled,
         ApprovalOutcomeView.unknown => CodeLabApprovalOutcome.unknown,
       },
+      requesterLine: _requesterLineOf(approval.subagent),
     ),
   PendingApprovalView() => CodeLabTranscriptApproval.pending(
     risk: _approvalRiskOf(approval.risk),
@@ -344,8 +365,15 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
     enabled: enabled,
     shortcutsEnabled: approval.focused,
     onOptionSelected: (optionId) => onSelected(approval, optionId),
+    requesterLine: _requesterLineOf(approval.subagent),
+    requesterHint: approval.subagent?.description,
   ),
 };
+
+/// Строка «review › explore wants to run»: путь готовит kit (`pathText`,
+/// D43 п. 4), маппер только добавляет действие.
+String? _requesterLineOf(SubagentRequester? requester) =>
+    requester == null ? null : '${requester.pathText} wants to run';
 
 CodeLabApprovalRisk _approvalRiskOf(ApprovalRiskLevel risk) => switch (risk) {
   ApprovalRiskLevel.readOnly => CodeLabApprovalRisk.readOnly,

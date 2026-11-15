@@ -1333,6 +1333,9 @@ final class AcpClientApplication {
         toolCall: toolCall,
         options: permissionRequest.options,
         riskLevel: toolCall.riskLevel,
+        // Ключ `subagent` в запросе — сведения о спрашивающем потомке, не о
+        // вызове `agent` (D43 п. 1): в `toolCall.subagentMeta` не попадает.
+        subagentRequester: subagentMetaOf(permissionRequest.toolCall.meta),
         critical:
             _isCritical(permissionRequest.meta) ||
             _isCritical(permissionRequest.toolCall.meta),
@@ -2607,6 +2610,9 @@ final class AcpClientApplication {
       locations: update.locations ?? const [],
       rawInput: update.rawInput,
       rawOutput: update.rawOutput,
+      // Итог вызова `agent` переносится из известной записи, а ключ запроса —
+      // нет: он описывает спрашивающего потомка (D43 п. 1).
+      subagentMeta: known?.subagentMeta,
     );
   }
 
