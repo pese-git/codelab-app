@@ -113,16 +113,16 @@ const _skillFixtures = {
   'acp/skill-script-exec',
 };
 
-/// Фикстуры change `add-subagents-and-tasks` итераций 1–3 (acp-golden-fixtures
+/// Фикстуры change `add-subagents-and-tasks` итераций 1–4 (acp-golden-fixtures
 /// «Фикстуры субагентов и списка задач»). Остальные фикстуры change
-/// (`-nested-permission`, `-tool-tree`,
-/// `acp/session-load-subagent-tool-tree`) приходят с итерациями 3–5 и
-/// добавляются сюда вместе с ними.
+/// (`-tool-tree`, `acp/session-load-subagent-tool-tree`) приходят с
+/// итерацией 5 и добавляются сюда вместе с ней.
 const _tasksFixtures = {
   'acp/initialize-codelab-extensions',
   'acp/prompt-task-plan',
   'acp/prompt-subagent-tool-call',
   'acp/prompt-subagent-permission',
+  'acp/prompt-subagent-nested-permission',
   'acp/session-load-legacy-plan',
 };
 
@@ -183,6 +183,10 @@ void main() {
       FixtureRole.agent,
       FixtureRole.client,
     });
+    // Итерация 4 (задача 4.1): запрос внука проигрывает только агент — kit
+    // читает тот же `SubagentRequester`, нового поведения клиента нет
+    // (acp-golden-fixtures; design.md D45 Т1).
+    expect(roles['acp/prompt-subagent-nested-permission'], {FixtureRole.agent});
   });
 
   // «acp/initialize-capabilities SHALL остаться вариантом "клиент без _meta"
@@ -217,15 +221,17 @@ void main() {
     );
   });
 
-  // D36 Т12: редакция итерации 2 не объявляет `subagentToolCalls` — агент ещё
-  // не проецирует вызовы потомков; ключ придёт с задачей 5.2.
-  test('initialize-codelab-extensions is the iteration 2 edition', () {
+  // D36 Т12, D45 Т9: редакция итерации 4 объявляет `maxDepth: 3` (потомки
+  // запускают детей до `max_depth`) и по-прежнему не объявляет
+  // `subagentToolCalls` — вызовы потомков агент ещё не проецирует; ключ
+  // придёт с задачей 5.2.
+  test('initialize-codelab-extensions is the iteration 4 edition', () {
     final fixture = corpus.singleWhere(
       (f) => f.id == 'acp/initialize-codelab-extensions',
     );
     final block = _agentCodelabBlock(fixture);
     expect(block, {
-      'subagents': {'version': 1, 'maxDepth': 1},
+      'subagents': {'version': 1, 'maxDepth': 3},
       'tasks': {'version': 1},
     });
     expect(block, isNot(contains('subagentToolCalls')));

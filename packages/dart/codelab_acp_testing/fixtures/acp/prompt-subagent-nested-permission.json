@@ -1,0 +1,474 @@
+{
+  "id": "acp/prompt-subagent-nested-permission",
+  "spec": [
+    "08-Tool Calls.md#requesting-permission",
+    "08-Tool Calls.md#permission-options",
+    "15-Extensibility.md#the-_meta-field"
+  ],
+  "description": "Модель поручает работу субагенту general; ребёнок поручает проверку внуку review, внук просит exec git diff --stat. Запрос session/request_permission идёт с sessionId корня, toolCallId-цепочкой из трёх сегментов call_1/call_1/call_1, title с префиксом [review: Check the diff] и toolCall._meta.codelab.subagent {id внука, type, description, depth: 2, path: [id ребёнка], parentToolCallId: call_1} — вызов agent корня, а не разбор цепочки; запрос ждёт только объявления вызова agent корня и не ждёт tool_call цепочки (SUB-12). Клиент отвечает reject_once, внук и ребёнок сдают отчёты; клиент видит один вызов agent; итог корневого вызова транзитивен: toolCalls 2 (agent ребёнка и exec внука), токены ребёнка и внука (change add-subagents-and-tasks, задачи 4.1 и 4.6; agent-acp-server «Запрос разрешения внука»; design.md D8, D42 Т5, D45 Т1, Т3, Т5).",
+  "goals": [
+    "C-06"
+  ],
+  "extensions": [
+    "subagent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "files": {
+      "lib/auth.dart": "void login() {}\n"
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "diff"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "agent",
+              "arguments": {
+                "type": "general",
+                "description": "Audit the diff",
+                "prompt": "Delegate the review of the working tree changes to a reviewer and relay its report."
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "Delegate the review"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "agent",
+              "arguments": {
+                "type": "review",
+                "description": "Check the diff",
+                "prompt": "Run git diff --stat and report defects."
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 800,
+          "output": 50
+        }
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "git diff --stat and report"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "exec",
+              "arguments": {
+                "command": "git diff --stat"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 1000,
+          "output": 40
+        }
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": true
+          }
+        },
+        "reply": [
+          {
+            "text": "The diff command was rejected by the user; no defects could be confirmed."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 1300,
+          "output": 60
+        }
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "The reviewer could not confirm any defects."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 600,
+          "output": 40
+        }
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Ревью не выполнено: команда отклонена."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Проверь diff"
+            }
+          ]
+        }
+      },
+      "note": "пользователь просит проверить изменения; модель поручает работу субагенту general"
+    },
+    {
+      "dir": "a2c",
+      "note": "D28: с первого кадра вызов опознаётся по _meta.codelab.subagent {id, type}; id резервируется до ToolCallStarted",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": "Subagent general: Audit the diff",
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "type": "general",
+              "description": "Audit the diff",
+              "prompt": "Delegate the review of the working tree changes to a reviewer and relay its report."
+            },
+            "_meta": {
+              "codelab": {
+                "subagent": {
+                  "id": {
+                    "$capture": "subagentId"
+                  },
+                  "type": "general"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "repeat": "+",
+      "note": "строки прогресса ребёнка до запроса возможны, но не обязательны; число не фиксируется",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "general · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "D8, D42 Т5, D45 Т3: toolCallId — цепочка из трёх сегментов, title с префиксом, _meta.codelab.subagent описывает спрашивающего внука; запрос ждёт объявления только вызова agent корня (parentToolCallId, отдельное значение, не разбор цепочки)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "permId"
+        },
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "${sessionId}",
+          "toolCall": {
+            "toolCallId": "call_1/call_1/call_1",
+            "title": {
+              "$contains": "[review: Check the diff] "
+            },
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "git diff --stat"
+            },
+            "_meta": {
+              "codelab": {
+                "subagent": {
+                  "id": {
+                    "$capture": "grandchildId"
+                  },
+                  "type": "review",
+                  "description": "Check the diff",
+                  "depth": 2,
+                  "path": [
+                    "${subagentId}"
+                  ],
+                  "parentToolCallId": "call_1"
+                }
+              }
+            }
+          },
+          "options": [
+            {
+              "optionId": "allow_once",
+              "name": "Allow once",
+              "kind": "allow_once"
+            },
+            {
+              "optionId": "allow_always",
+              "name": {
+                "$any": "Always allow"
+              },
+              "kind": "allow_always"
+            },
+            {
+              "optionId": "reject_once",
+              "name": "Reject",
+              "kind": "reject_once"
+            },
+            {
+              "optionId": "reject_always",
+              "name": {
+                "$any": "Always reject"
+              },
+              "kind": "reject_always"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${permId}",
+        "result": {
+          "outcome": {
+            "outcome": "selected",
+            "optionId": "reject_once"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "repeat": "+",
+      "optional": true,
+      "note": "§17.3.2: смена состояния ребёнка (waiting, затем running) всегда даёт строку прогресса; число строк не фиксируется",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "general · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "отчёт ребёнка без обёртки; итог транзитивен (D45 Т5): вызов agent ребёнка и exec внука, usage ребёнка и внука; вызовы потомков клиенту отдельными строками не приходят (SUB-12)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$any": true
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "subagent": {
+                  "id": "${subagentId}",
+                  "summary": {
+                    "toolCalls": 2,
+                    "tokens": {
+                      "input": 3700,
+                      "output": 190
+                    },
+                    "durationMs": {
+                      "$any": 48000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "repeat": "+",
+      "match": {
+        "$text": "Ревью не выполнено: команда отклонена."
+      },
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "optional": true,
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ],
+  "roles": [
+    "agent"
+  ]
+}

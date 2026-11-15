@@ -12,6 +12,8 @@ import 'package:codelab_agent_core/src/tools/builtin/write.dart';
 import 'package:codelab_agent_core/src/tools/tasks/task_tools.dart';
 import 'package:test/test.dart';
 
+import '../subagents/subagent_rig.dart'
+    show SubagentRig, agentArgs, oneCallStep, replyStep, schemaOf;
 import '../support/package_dir.dart';
 import 'compose_test.dart' show allTools, inputs;
 
@@ -120,6 +122,52 @@ void main() {
         reason: file.path,
       );
     }
+  });
+
+  // Сценарий «Описание детского task_update» (agent-prompts; design.md change
+  // `add-subagents-and-tasks`, D46, п. 4). Красные до задачи 4.5: у ребёнка то
+  // же описание `task_update`, что у корня, и дети отмечали чужие пункты
+  // (ручной прогон: `task.rejected reason=owner`).
+  group('описание детского task_update (D46, п. 4)', () {
+    const childDescription =
+        'Change the status of a task list item assigned to you: in_progress '
+        'when you start it, completed when done.\n'
+        'You cannot change other fields or items assigned to someone else. '
+        'Your assigned item, if any, is named in your instructions.';
+
+    test('файл prompts/tool_descriptions/task_update_subagent.md есть и без '
+        'переменных', () {
+      final file = File(
+        corePath('prompts/tool_descriptions/task_update_subagent.md'),
+      );
+
+      expect(file.existsSync(), isTrue);
+      expect(file.readAsStringSync(), contains('vars: []'));
+      expect(file.readAsStringSync(), contains(childDescription));
+    });
+
+    test('схемы шага: у ребёнка general своё описание, у корня прежнее, '
+        'параметры обеих схем совпадают', () async {
+      final rig = SubagentRig(
+        scripts: {
+          'go': [
+            oneCallStep('c1', 'agent', agentArgs('kid job')),
+            replyStep('done'),
+          ],
+          'kid job': [replyStep('kid report')],
+        },
+      );
+      await rig.open();
+
+      await rig.run('go');
+
+      final root = schemaOf(rig.requestsOf('go').first, 'task_update');
+      final child = schemaOf(rig.requestsOf('kid job').single, 'task_update');
+      expect(child.description, childDescription);
+      expect(root.description, contains('Keep exactly one item in_progress.'));
+      expect(root.description, isNot(contains('assigned to you')));
+      expect(child.parameters, root.parameters);
+    });
   });
 
   test('CorePlan.promptSections lists the sections of the default mode', () {

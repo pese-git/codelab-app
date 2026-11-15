@@ -107,6 +107,18 @@ void main() {
         );
       });
 
+      // Характеризующий, зелёный сразу: правило `nesting` уже считает от
+      // глубины вызывающего (D45 Т1).
+      test('ребёнок глубины 1 при max_depth 3 — ещё один уровень', () {
+        expect(
+          toolAt(1, 3).description,
+          contains(
+            'A subagent may start its own subagents, up to 1 more level(s) '
+            'below it.',
+          ),
+        );
+      });
+
       test(
         'ребёнок глубины 2 при том же max_depth — не запускает потомков',
         () {

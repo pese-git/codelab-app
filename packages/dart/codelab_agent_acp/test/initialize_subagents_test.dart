@@ -70,7 +70,7 @@ void main() {
     h = await ServerHarness.start(configSource: source);
     final before = await h!.initialize(clientCapabilities: codelabClient);
     expect(codelabBlock(before.resultMap), {
-      'subagents': {'version': 1, 'maxDepth': 1},
+      'subagents': {'version': 1, 'maxDepth': 3},
       'tasks': {'version': 1},
     });
 
@@ -84,17 +84,17 @@ void main() {
     });
     // Ответ первого соединения — значение, а не живая ссылка.
     expect(codelabBlock(before.resultMap), {
-      'subagents': {'version': 1, 'maxDepth': 1},
+      'subagents': {'version': 1, 'maxDepth': 3},
       'tasks': {'version': 1},
     });
   });
 
-  // Т16: `maxDepth` объявления — эффективная глубина: пока ребёнку `agent` не
-  // даётся (до итерации 4), она 1 даже при `subagents.max_depth: 3`.
-  test('maxDepth is the effective depth, not the configured one', () async {
+  // D45 Т9 (итерация 4): `_maxChildDepth` убран, `maxDepth` объявления равен
+  // `subagents.max_depth` — потомки запускают своих детей до этой глубины.
+  test('maxDepth equals the configured subagents.max_depth', () async {
     final source = LayeredConfigSource(
       extra: {
-        'subagents': {'max_depth': 3},
+        'subagents': {'max_depth': 2},
       },
     );
     h = await ServerHarness.start(configSource: source);
@@ -102,7 +102,7 @@ void main() {
     final response = await h!.initialize(clientCapabilities: codelabClient);
 
     expect(codelabBlock(response.resultMap), {
-      'subagents': {'version': 1, 'maxDepth': 1},
+      'subagents': {'version': 1, 'maxDepth': 2},
       'tasks': {'version': 1},
     });
   });

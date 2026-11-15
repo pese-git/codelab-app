@@ -259,4 +259,104 @@ void main() {
       expect(names(tools), isNot(contains('skill')));
     });
   });
+
+  // Итерация 4 (D45 Т9, Т10). Красные до задачи 4.2: `_maxChildDepth = 1`
+  // не даёт потомку `agent`, а окно модели ребёнка не проверяется.
+  group('сценарий «Пересечение инструментов» при max_depth: 3 (SUB-24)', () {
+    test(
+      'agent есть у потомков глубин 1 и 2 и отсутствует у глубины 3',
+      () async {
+        final rig = SubagentRig(
+          scripts: {
+            'go': [
+              oneCallStep('c1', 'agent', agentArgs('level one')),
+              replyStep('done'),
+            ],
+            'level one': [
+              oneCallStep('c2', 'agent', agentArgs('level two')),
+              replyStep('level one done'),
+            ],
+            'level two': [
+              oneCallStep('c3', 'agent', agentArgs('level three')),
+              replyStep('level two done'),
+            ],
+            'level three': [replyStep('level three done')],
+          },
+        );
+        await rig.open();
+
+        await rig.run('go');
+
+        expect(
+          toolNamesOf(rig.requestsOf('level one').first),
+          contains('agent'),
+        );
+        expect(
+          toolNamesOf(rig.requestsOf('level two').first),
+          contains('agent'),
+        );
+        expect(
+          toolNamesOf(rig.requestsOf('level three').single),
+          isNot(contains('agent')),
+          reason: 'у потомка глубины max_depth инструмента agent нет',
+        );
+        // Остальной набор глубины 3 — по общему правилу.
+        expect(
+          toolNamesOf(rig.requestsOf('level three').single),
+          containsAll(['read', 'task_update', 'task_list', 'task_get']),
+        );
+      },
+    );
+  });
+
+  group('сценарий «Ребёнок с малым окном» (D40, D45 Т10)', () {
+    ModelRef model(String id, int window) => ModelRef(
+      provider: 'test',
+      id: id,
+      api: ProviderApi.openaiChat,
+      baseUrl: Uri.parse('http://localhost:8080/v1'),
+      contextWindow: window,
+      maxOutputTokens: 4096,
+    );
+
+    test('при max_depth 3 и окне корня 128 000 ребёнок типа с моделью окна '
+        '8 192 получает набор без agent, остальные инструменты по общему '
+        'правилу; ребёнок с большим окном agent получает', () async {
+      final big = model('big', 131072);
+      final small = model('small', 8192);
+      final rig = SubagentRig(
+        config: CoreConfig(defaultModel: big),
+        models: FixedModelCatalog([big, small]),
+        projectFiles: AgentsPort([
+          agentFile('tiny', extra: {'model': 'test/small'}),
+        ]),
+        scripts: {
+          'go': [
+            multiCallStep([
+              ('c1', 'agent', agentArgs('tiny job', type: 'tiny')),
+              ('c2', 'agent', agentArgs('roomy job', type: 'general')),
+            ]),
+            replyStep('done'),
+          ],
+          'tiny job': [replyStep('tiny report')],
+          'roomy job': [replyStep('roomy report')],
+        },
+      );
+      await rig.open();
+
+      await rig.run('go');
+
+      final tiny = toolNamesOf(rig.requestsOf('tiny job').single);
+      expect(tiny, isNot(contains('agent')));
+      expect(
+        tiny,
+        containsAll(['read', 'write', 'task_update', 'task_list', 'task_get']),
+      );
+      expect(
+        toolNamesOf(rig.requestsOf('roomy job').single),
+        contains('agent'),
+        reason: 'контраст: у ребёнка с окном 131 072 глубина позволяет agent',
+      );
+    });
+  });
 }

@@ -174,6 +174,66 @@ void main() {
     },
   );
 
+  // D45 Т3, agent-acp-server «Запрос разрешения внука»: `parentToolCallId`
+  // корня приходит отдельным значением, а не разбором цепочки. Id вызова
+  // провайдера может содержать `/` (`call/1`): разбор по первому сегменту дал
+  // бы `call`, и gate ждал бы объявления несуществующего вызова.
+  test('a grandchild request waits for the root call id that contains a '
+      'slash', () async {
+    rejectOnce();
+    final asked = <String>[];
+    final announcedRoot = Completer<void>();
+    final gate = AcpPermissionGate(
+      ch.link,
+      logger: ch.logger,
+      announced: (toolCallId) {
+        asked.add(toolCallId);
+        return toolCallId == 'call/1'
+            ? announcedRoot.future
+            : Completer<void>().future;
+      },
+    );
+
+    final decision = gate.request(
+      PermissionRequest(
+        toolCallId: 'call/1/call_2/call_3',
+        tool: 'exec',
+        kind: ToolKind.execute,
+        tier: ToolTier.exec,
+        title: '[review: Check the diff] Run git diff --stat',
+        rawInput: const {'command': 'git diff --stat'},
+        allowAlwaysOffered: true,
+        subagent: const SubagentRequestRef(
+          id: 'sub_g1',
+          type: 'review',
+          description: 'Check the diff',
+          depth: 2,
+          path: ['sub_c1'],
+          parentToolCallId: 'call/1',
+        ),
+      ),
+      CancelToken.none,
+    );
+    await pumpEventQueue();
+
+    expect(asked, ['call/1']);
+    expect(
+      ch.client.requests,
+      isEmpty,
+      reason: 'запрос не опережает tool_call',
+    );
+
+    announcedRoot.complete();
+    expect(await decision, PermissionDecision.rejectOnce);
+    final toolCall = sentToolCall();
+    expect(toolCall['toolCallId'], 'call/1/call_2/call_3');
+    final subagent =
+        ((toolCall['_meta']! as Map)['codelab']! as Map)['subagent'] as Map;
+    expect(subagent['depth'], 2);
+    expect(subagent['path'], ['sub_c1']);
+    expect(subagent['parentToolCallId'], 'call/1');
+  });
+
   // Запрос корня по-прежнему ждёт собственный `toolCallId` (§13.7).
   test('a root request still waits for its own toolCallId', () async {
     rejectOnce();

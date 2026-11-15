@@ -370,3 +370,36 @@ Map<String, Object?> windowedValues(Map<String, Object?> values) => {
     },
   },
 };
+
+/// События всего дерева субагентов: события корня, где `SubagentActivity`
+/// развёрнута в исходное событие потомка.
+///
+/// Почему: у потомка глубины 2 и больше `SubagentStarted`, `SubagentProgress`
+/// и `SubagentFinished` приходят в поток корня обёрнутыми — обёртка плоская
+/// (design.md change `add-subagents-and-tasks`, D6, D45 Т6; SUB-24). Тесты
+/// итерации 4 считают потомков всех глубин одним списком, а не ходят по
+/// вложенным обёрткам.
+///
+/// Как использовать: `treeEvents(rig).whereType<SubagentStarted>()` — все
+/// запущенные потомки в порядке прихода; адрес события (глубина, путь) тест
+/// берёт из `SubagentActivity` корня, когда он нужен.
+List<AgentEvent> treeEvents(SubagentRig rig) => [
+  for (final e in rig.events) e is SubagentActivity ? e.event : e,
+];
+
+/// Все `SubagentStarted` дерева в порядке прихода (дети корня и потомки).
+List<SubagentStarted> allStarted(SubagentRig rig) =>
+    treeEvents(rig).whereType<SubagentStarted>().toList();
+
+/// Все `SubagentFinished` дерева в порядке прихода.
+List<SubagentFinished> allFinished(SubagentRig rig) =>
+    treeEvents(rig).whereType<SubagentFinished>().toList();
+
+/// Снимки `SubagentProgress` всего дерева в порядке прихода.
+List<SubagentSnapshot> allSnapshots(SubagentRig rig) => [
+  for (final e in treeEvents(rig).whereType<SubagentProgress>()) e.snapshot,
+];
+
+/// Последний снимок потомка [id] или `null`, если прогресса ещё не было.
+SubagentSnapshot? latestSnapshot(SubagentRig rig, SubagentId id) =>
+    allSnapshots(rig).where((s) => s.id == id).lastOrNull;

@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 // Детский вариант списка — внутренний тип ядра: его создаёт фабрика дочерней
 // сессии, хосты и клиенты его не видят (D36 Т2, Т7).
 import 'package:codelab_agent_core/src/subagents/subagent_task_list.dart';
 import 'package:test/test.dart';
 
+import '../../subagents/subagent_rig.dart';
 import '../executor_harness.dart' show session;
 import 'task_harness.dart';
 
@@ -132,5 +135,167 @@ void main() {
     final text = await h.text('task_get', {'id': '9'});
 
     expect(text, startsWith('Unknown task #9.'));
+  });
+
+  // Итерация 4, задача 4.1 (agent-tools «Инструменты списка задач»,
+  // сценарии «Назначение пункта ребёнку» и «Повторное назначение пункта»;
+  // TSK-4; design.md change `add-subagents-and-tasks`, D45 Т8, D46 п. 3;
+  // `agent-core/17-16-task-list.md` §17.16.4). Красные до задачи 4.5: ядро
+  // не выполняет операцию `assign` при получении слота и не передаёт ребёнку
+  // строку `Your task:`.
+  group('назначение пункта ребёнку (операция assign)', () {
+    List<(String, String, Map<String, Object?>)> twoItems() => [
+      ('t1', 'task_create', {'subject': 'First item'}),
+      ('t2', 'task_create', {'subject': 'Parser work'}),
+    ];
+
+    List<Map<String, Object?>> journalLines(SubagentRig rig) => [
+      for (final line in const LineSplitter().convert(rig.rootJournal))
+        jsonDecode(line) as Map<String, Object?>,
+    ];
+
+    test('сценарий «Назначение пункта ребёнку»: TaskListChanged(assign) без '
+        'toolCallId приходит раньше SubagentStarted и до первого запроса '
+        'ребёнка к модели, пункт — in_progress с владельцем-ребёнком; '
+        'системный промпт ребёнка содержит строку Your task', () async {
+      final rig = SubagentRig(
+        scripts: {
+          'go': [
+            multiCallStep(twoItems()),
+            oneCallStep('c1', 'agent', agentArgs('kid job', task: '2')),
+            replyStep('done'),
+          ],
+          'kid job': [replyStep('kid report')],
+        },
+      );
+      await rig.open();
+      final seen = <String>[];
+      var kidRequestsAtAssign = -1;
+      rig.session.events.listen((e) {
+        if (e is TaskListChanged && e.change.op == 'assign') {
+          seen.add('assign');
+          kidRequestsAtAssign = rig.requestsOf('kid job').length;
+        } else if (e is SubagentStarted) {
+          seen.add('started');
+        }
+      });
+
+      await rig.run('go');
+
+      expect(seen, ['assign', 'started']);
+      expect(kidRequestsAtAssign, 0);
+      final kid = rig.eventsOf<SubagentStarted>().single.subagentId;
+      final assign = rig
+          .eventsOf<TaskListChanged>()
+          .singleWhere((e) => e.change.op == 'assign')
+          .change;
+      expect(assign.actor, const MainActor());
+      expect(assign.toolCallId, isNull);
+      final item = assign.changed.single;
+      expect(item.id, '2');
+      expect(item.owner, TaskOwner(kid));
+      expect(item.status, TaskStatus.inProgress);
+      expect(
+        rig.requestsOf('kid job').first.systemPrompt,
+        contains('Your task: #2 Parser work'),
+      );
+      // Запись task журнала корня — как у остальных операций, от main.
+      final record = journalLines(
+        rig,
+      ).singleWhere((r) => r['type'] == 'task' && r['op'] == 'assign');
+      expect(record['actor'], 'main');
+    });
+
+    test('сценарий «Повторное назначение пункта»: ребёнок B получает слот с '
+        'тем же пунктом — владелец B без проверки прежнего; update ребёнка A '
+        'отклонён с reason owner', () async {
+      final rig = SubagentRig(
+        scripts: {
+          'go': [
+            multiCallStep(twoItems()),
+            multiCallStep([
+              ('a1', 'agent', agentArgs('alpha', task: '2')),
+              ('a2', 'agent', agentArgs('beta', task: '2')),
+            ]),
+            replyStep('done'),
+          ],
+          'alpha': [
+            oneCallStep('u1', 'task_update', {
+              'id': '2',
+              'status': 'completed',
+            }, delayMs: 10),
+            replyStep('alpha done'),
+          ],
+          'beta': [replyStep('beta done', delayMs: 20)],
+        },
+      );
+      await rig.open();
+
+      final turn = rig.run('go');
+      await pumpUntil(
+        () =>
+            rig
+                .eventsOf<TaskListChanged>()
+                .where((e) => e.change.op == 'assign')
+                .length ==
+            2,
+        reason: 'both children must receive the item in turn',
+      );
+      await rig.clock.elapse(const Duration(milliseconds: 10));
+      await rig.clock.elapse(const Duration(milliseconds: 20));
+      await turn;
+
+      final started = rig.eventsOf<SubagentStarted>();
+      final alpha = started.singleWhere((s) => s.parentToolCallId == 'a1');
+      final beta = started.singleWhere((s) => s.parentToolCallId == 'a2');
+      final assigns = [
+        for (final e in rig.eventsOf<TaskListChanged>())
+          if (e.change.op == 'assign') e.change.changed.single.owner,
+      ];
+      expect(assigns, [
+        TaskOwner(alpha.subagentId),
+        TaskOwner(beta.subagentId),
+      ]);
+      expect(
+        rig.session.tasks.items.singleWhere((i) => i.id == '2').owner,
+        TaskOwner(beta.subagentId),
+        reason: 'последнее назначение побеждает',
+      );
+      final last = rig.requestsOf('alpha').last;
+      expect(
+        resultText(last, 'u1'),
+        'Subagents may change only the status of their own tasks.',
+      );
+      expect(resultIsError(last, 'u1'), isTrue);
+      final rejected = rig.logger.eventsOf('task.rejected').single;
+      expect(rejected.fields['reason'], 'owner');
+    });
+  });
+
+  // Характеризующий, зелёный сразу (D45 Т3): префикс цепочки задаёт тот, кто
+  // создаёт список; операция внука строит id как `<префикс>/<id вызова>`.
+  test('цепочка toolCallId операции внука: префикс из двух сегментов даёт '
+      '«вызов agent корня/вызов agent ребёнка/вызов внука»', () async {
+    final deep = SessionTaskList(
+      isKnownOwner: (owner) => owner.value == 'sub_deep',
+      publish: (items, change) =>
+          published.add(TaskListChanged(session, items: items, change: change)),
+    );
+    await deep.apply(
+      const CreateTask(subject: 'Deep item', owner: TaskOwner('sub_deep')),
+      const MainActor(),
+    );
+    published.clear();
+    final harness = await TaskHarness.create(
+      list: SubagentTaskList(
+        root: deep,
+        subagentId: 'sub_deep',
+        parentToolCallId: 'call_3/call_2',
+      ),
+    );
+
+    await harness.run('task_update', {'id': '1', 'status': 'completed'});
+
+    expect(published.single.change.toolCallId, 'call_3/call_2/call_1');
   });
 }
