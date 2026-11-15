@@ -206,6 +206,38 @@ class _ProvidersPageState extends State<ProvidersPage> {
     final body = CodeLabText.styleOf(context, CodeLabTextRole.body);
     final mono = CodeLabText.styleOf(context, CodeLabTextRole.mono);
     final secondary = resources.textFillColorSecondary;
+    // Значение вне списка моделей ComboBox показывает как пустое, поэтому и
+    // подсказки у него нет.
+    final selected = state.models.contains(state.defaultModel)
+        ? state.defaultModel
+        : null;
+    final combo = ComboBox<String>(
+      key: const ValueKey('providers-default-model'),
+      isExpanded: true,
+      value: selected,
+      placeholder: const Text('Choose a model'),
+      // На узком окне строка сжимает ComboBox (CodeLabSettingsRow),
+      // а список fluent_ui 4.16 той же ширины, что и кнопка: длинные
+      // имена с общим началом без подсказки неразличимы, и легко
+      // записать в конфиг не ту модель по умолчанию.
+      items: [
+        for (final model in state.models)
+          ComboBoxItem<String>(
+            value: model,
+            child: Tooltip(
+              message: model,
+              child: Text(model, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+      ],
+      onChanged: state.saving
+          ? null
+          : (model) {
+              if (model != null) {
+                unawaited(cubit.setDefaultModel(model));
+              }
+            },
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -242,39 +274,13 @@ class _ProvidersPageState extends State<ProvidersPage> {
             leading: FluentIcons.settings,
             trailing: SizedBox(
               width: 260,
-              child: ComboBox<String>(
-                key: const ValueKey('providers-default-model'),
-                isExpanded: true,
-                value: state.models.contains(state.defaultModel)
-                    ? state.defaultModel
-                    : null,
-                placeholder: const Text('Choose a model'),
-                // На узком окне строка сжимает ComboBox (CodeLabSettingsRow),
-                // а список fluent_ui 4.16 той же ширины, что и кнопка: длинные
-                // имена с общим началом без подсказки неразличимы, и легко
-                // записать в конфиг не ту модель по умолчанию.
-                items: [
-                  for (final model in state.models)
-                    ComboBoxItem<String>(
-                      value: model,
-                      child: Tooltip(
-                        message: model,
-                        child: Text(
-                          model,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                ],
-                onChanged: state.saving
-                    ? null
-                    : (model) {
-                        if (model != null) {
-                          unawaited(cubit.setDefaultModel(model));
-                        }
-                      },
-              ),
+              // Выбранное значение обрезается многоточием на узкой строке, а
+              // подсказки пунктов внутри кнопки ComboBox не получают наведения
+              // (IgnorePointer), поэтому полное имя даёт подсказка над самим
+              // ComboBox.
+              child: selected == null
+                  ? combo
+                  : Tooltip(message: selected, child: combo),
             ),
           ),
         ),
