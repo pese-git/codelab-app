@@ -6,6 +6,7 @@ import '../connection/connection_profile.dart';
 import '../connection/connection_view.dart';
 import '../queue/prompt_queue.dart';
 import '../session/session_views.dart';
+import '../session/subagent_rows.dart';
 import '../transcript/transcript_item.dart';
 
 part 'workspace_state.freezed.dart';
@@ -63,6 +64,8 @@ abstract class SessionSummaryView with _$SessionSummaryView {
 /// Для чего: `SessionHandle.current` и поток `SessionHandle.view`.
 @freezed
 abstract class SessionView with _$SessionView {
+  const SessionView._();
+
   const factory SessionView({
     required int revision,
     required SessionStatusView status,
@@ -94,7 +97,15 @@ abstract class SessionView with _$SessionView {
     /// (design D4 change `add-connection-and-error-states`). Соединение
     /// хост проверяет сам — оно в `WorkspaceState.connection`.
     @Default(false) bool canRetry,
+
+    /// Строки панели Agents v1 (D33). ЗАГЛУШКА 5b.1: всегда пусто до 5b.2.
+    @Default(<SubagentRowView>[]) List<SubagentRowView> subagents,
   }) = _SessionView;
+
+  /// Число строк [subagents] в состоянии [state] (счётчики заголовка панели).
+  /// ЗАГЛУШКА 5b.1: считает по [subagents]; логику строк даёт 5b.2.
+  int subagentCount(SubagentRowState state) =>
+      subagents.where((row) => row.state == state).length;
 }
 
 /// Статус сессии для UI и CLI.

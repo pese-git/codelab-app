@@ -32,6 +32,7 @@ export 'src/inspector/inspector_projection.dart';
 export 'src/queue/prompt_queue.dart';
 export 'src/restore/workspace_snapshot.dart';
 export 'src/session/session_views.dart';
+export 'src/session/subagent_rows.dart';
 export 'src/stores/stores.dart';
 export 'src/transcript/subagent_views.dart';
 export 'src/transcript/tool_row.dart';

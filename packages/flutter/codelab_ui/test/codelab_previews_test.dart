@@ -121,6 +121,12 @@ void main() {
     await tester.pumpWidget(codelabTranscriptPanelVerbosePreview());
     expect(tester.takeException(), isNull);
 
+    // Панель Agents v1 (5b.1, D33): строки с отступом и дерево шагов.
+    await tester.pumpWidget(codelabAgentsPanePreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabAgentsPane), findsOneWidget);
+    expect(find.text('Review the change'), findsOneWidget);
+
     await tester.pumpWidget(codelabApprovalPromptPreview());
     expect(tester.takeException(), isNull);
 

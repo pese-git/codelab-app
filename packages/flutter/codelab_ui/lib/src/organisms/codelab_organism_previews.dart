@@ -4,6 +4,7 @@ import 'package:flutter/widget_previews.dart';
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
 import 'codelab_activity_bar.dart';
+import 'codelab_agents_pane.dart';
 import 'codelab_app_bar.dart';
 import 'codelab_approval_prompt.dart';
 import 'codelab_command_palette_surface.dart';
@@ -720,6 +721,52 @@ Widget codelabSettingsNavigationPreview() {
         padding: EdgeInsets.all(24),
         child: CodeLabText('Page body', role: CodeLabTextRole.title),
       ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Agents pane',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 360),
+)
+Widget codelabAgentsPanePreview() {
+  return _AcpOrganismPreviewSurface(
+    child: CodeLabAgentsPane(
+      counts: const {
+        CodeLabAgentRowState.running: 1,
+        CodeLabAgentRowState.done: 1,
+      },
+      selectedId: 'a1',
+      rows: const [
+        CodeLabAgentRow(
+          id: 'a1',
+          depth: 1,
+          type: 'review',
+          title: 'Review the change',
+          state: CodeLabAgentRowState.running,
+          time: '12s',
+          calls: '3 tool calls',
+        ),
+        CodeLabAgentRow(
+          id: 'a2',
+          depth: 2,
+          type: 'explore',
+          title: 'Find auth code',
+          state: CodeLabAgentRowState.done,
+          time: '19s',
+          calls: '2 tool calls',
+          tokens: '10.2k',
+        ),
+      ],
+      steps: const [
+        CodeLabToolCallRow(
+          id: 's1',
+          status: CodeLabToolCallStatus.succeeded,
+          label: 'Read',
+          detail: 'lib/auth.dart',
+        ),
+      ],
     ),
   );
 }

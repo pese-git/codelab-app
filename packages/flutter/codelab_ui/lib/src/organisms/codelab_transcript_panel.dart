@@ -73,11 +73,24 @@ class CodeLabTranscriptPanel extends StatefulWidget {
     this.onExpansionChanged,
     this.emptyLabel = 'No transcript yet',
     this.viewMode = CodeLabViewMode.normal,
+    this.showRequest,
     super.key,
   });
 
   /// Ключ строки ленты по её id — для тестов и автоматизации.
   static ValueKey<String> rowKey(String id) => ValueKey('transcript-row-$id');
+
+  /// Ключ цели показа внутри строки (вложенная строка `agent`, блок
+  /// одобрения потомка); ЗАГЛУШКА 5b.1 — не применяется (D49 Т7).
+  static ValueKey<String> targetKey(String id) =>
+      ValueKey('transcript-target-$id');
+
+  /// Ключ подсветки, пока цель показа подсвечена (около 1,5 с); ЗАГЛУШКА.
+  static ValueKey<String> highlightKey(String id) =>
+      ValueKey('transcript-highlight-$id');
+
+  /// Разовый запрос показа строки (D49 Т7); ЗАГЛУШКА — игнорируется.
+  final CodeLabTranscriptShowRequest? showRequest;
 
   final List<CodeLabTranscriptRow> rows;
   final Map<String, bool> expansionOverrides;
@@ -87,6 +100,23 @@ class CodeLabTranscriptPanel extends StatefulWidget {
 
   @override
   State<CodeLabTranscriptPanel> createState() => _AcpTranscriptPanelState();
+}
+
+/// Разовый запрос показа строки в ленте (D49 Т7).
+///
+/// [rowId] — id строки верхнего уровня, [targetId] — id цели внутри неё
+/// (равен [rowId], если цель — сама строка), [serial] — номер запроса:
+/// повтор того же действия получает новый номер и прокручивает снова.
+final class CodeLabTranscriptShowRequest {
+  const CodeLabTranscriptShowRequest({
+    required this.rowId,
+    required this.targetId,
+    required this.serial,
+  });
+
+  final String rowId;
+  final String targetId;
+  final int serial;
 }
 
 /// Состояние ленты: владеет `ScrollController` и решает, когда двигать
