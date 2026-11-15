@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:collection/collection.dart'
     show DeepCollectionEquality, ListEquality;
@@ -52,6 +51,7 @@ import '../skills/skill_catalog.dart';
 import '../skills/skill_files.dart';
 import '../skills/skills_config.dart'
     show SkillsConfig, defaultSkillsCatalogMaxChars;
+import '../subagents/child_tools.dart' show subagentWindowOk;
 import '../subagents/subagent_manager.dart';
 import '../subagents/subagent_model.dart';
 import '../subagents/subagent_tool.dart';
@@ -75,6 +75,7 @@ import '../tools/executor.dart';
 import '../tools/path_lock.dart';
 import '../tools/registry.dart';
 import '../tools/tasks/task_list.dart';
+import '../tools/tasks/task_tools.dart' show TaskUpdateTool;
 import '../util/logger.dart';
 import '../util/result.dart';
 import '../host/host_profile.dart';
@@ -90,16 +91,6 @@ const _projectFilesTimeout = Duration(seconds: 5);
 
 const coreAgentVersion = '0.1.0';
 
-/// Наибольшая глубина потомка, которую рантайм запускает до итерации 4
-/// (`add-subagents-and-tasks`, задачи 4.x): ребёнку `agent` не даётся, поэтому
-/// описание `agent` не обещает вложенность глубже.
-const _maxChildDepth = 1;
-
-/// Окно модели позволяет показать `agent` (D40): эффективное окно с учётом
-/// `compaction.context_window_cap` не меньше порога.
-bool subagentWindowOk(ModelRef model, int? cap) =>
-    effectiveContextWindow(model, cap: cap) >=
-    CompactionSettings.minSubagentContextWindow;
 const coreAgentInfo = AgentInfo(
   name: 'codelab-agent',
   version: coreAgentVersion,
@@ -448,8 +439,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
   /// итерации 3); `ToolServices.tasks` — `SubagentTaskList` над списком
   /// корня; журнал — `SessionStore.createChild`.
   ///
-  /// Вложенность глубже 1 пока не запускается (набор ребёнка строится при
-  /// `maxDepth = 1`, задачи итерации 4).
+  /// Вложенность (D45 Т2): если в наборе ребёнка есть `agent`, фабрика
+  /// создаёт ему менеджер на общем дереве слотов и свой `SubagentTool`; эту же
+  /// фабрику вызывает менеджер потомка для внуков.
   Future<ChildSession> _createChildSession(
     ChildSessionSpec spec, {
     required SessionId rootId,
@@ -483,10 +475,67 @@ final class AgentRuntimeImpl implements AgentRuntime {
     late final SessionWriter writer;
     late final Agent agent;
     final skills = spec.skills;
+    // Режим промпта — более строгий из режима родителя и типа на момент
+    // запуска: промпт стабилен ради кэша, а смена режима родителя посреди
+    // работы действует через политику (D36 Т3). У внука `parentMode` — режим
+    // промпта ребёнка, а не корня.
+    final typeMode = sub.type.mode;
+    final mode =
+        typeMode != null &&
+            (typeMode.softness ?? 99) < (parentMode.softness ?? 99)
+        ? typeMode
+        : parentMode;
+    // Ребёнку с `agent` в наборе — свой менеджер на общем дереве (D45 Т2).
+    SubagentManager? nested;
+    final rootTool = spec.tools.whereType<SubagentTool>().firstOrNull;
+    final nestedParent = spec.parent;
+    final tree = spec.tree;
+    if (rootTool != null && nestedParent != null && tree != null) {
+      nested = SubagentManager(
+        tree: tree,
+        limits: () => tree.config,
+        emit: (event) => agent.emit(event),
+        create: (nestedSpec) => _createChildSession(
+          nestedSpec,
+          rootId: rootId,
+          cwd: cwd,
+          stream: stream,
+          settings: settings,
+          parentMode: mode,
+          pathResolver: pathResolver,
+          mcp: mcp,
+          projectContext: projectContext,
+        ),
+        clock: services.clock,
+        logger: logger,
+        sessionId: childId,
+        rootSessionId: spec.rootSessionId ?? rootId,
+        // Бюджет ребёнка против его usage вместе с внуками, затем цепочка
+        // предков (D4, D45 Т5).
+        ownBudget: () => spec.budget,
+        upstreamBudget: spec.ancestorBudget,
+        link: spec.link,
+        parent: () => nestedParent.nestedFor(
+          tools: () => agent.tools,
+          model: () => spec.model,
+          mode: spec.mode,
+        ),
+      );
+    }
     final registry = ToolRegistry();
     for (final tool in spec.tools) {
       registry.register(
-        tool is SkillTool && skills != null
+        tool is SubagentTool && nested != null
+            ? tool.nested(
+                manager: nested,
+                parentSessionId: childId,
+                logger: logger,
+                owner: sub,
+              )
+            : tool is TaskUpdateTool
+            // Детский вариант описания `task_update` (D46, п. 4).
+            ? TaskUpdateTool(forSubagent: true)
+            : tool is SkillTool && skills != null
             // Свой `SkillTool`: повтор активации считается по журналу ребёнка
             // (D34, «Только задача»); каталог — тот же снимок родителя.
             ? SkillTool(
@@ -501,15 +550,6 @@ final class AgentRuntimeImpl implements AgentRuntime {
             : tool,
       );
     }
-    // Режим промпта — более строгий из режима родителя и типа на момент
-    // запуска: промпт стабилен ради кэша, а смена режима родителя посреди
-    // работы действует через политику (D36 Т3).
-    final typeMode = sub.type.mode;
-    final mode =
-        typeMode != null &&
-            (typeMode.softness ?? 99) < (parentMode.softness ?? 99)
-        ? typeMode
-        : parentMode;
     final childPolicy = PermissionPolicy(
       mode: mode,
       gate: spec.gate,
@@ -545,8 +585,13 @@ final class AgentRuntimeImpl implements AgentRuntime {
         beforeToolCall: [childPolicy.asHook(registry.lookup)],
         approvalWait: toolServices.approvalWait,
         logger: logger,
-        onOwnUsage: spec.onOwnUsage,
+        onOwnUsage: (own) {
+          spec.onOwnUsage(own);
+          nested?.ownUsage = own;
+        },
         ancestorBudget: spec.ancestorBudget,
+        // Usage внуков входит в `TurnEnded.usage` и бюджет ребёнка (D45 Т5).
+        subagentUsage: nested == null ? null : () => nested!.childrenUsage,
       ),
       systemPrompt: _systemPrompt(
         cwd,
@@ -556,7 +601,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         projectContext,
         skills: skills,
         skillsCatalogMaxChars: settings.skills.catalogMaxChars,
-        subagent: (name: sub.type.name, body: sub.type.prompt, task: null),
+        subagent: (name: sub.type.name, body: sub.type.prompt, task: spec.task),
       ),
       tools: registry.tools,
     );
@@ -585,7 +630,10 @@ final class AgentRuntimeImpl implements AgentRuntime {
       id: childId,
       journalPath: journalPath,
       agent: agent,
+      subagents: nested,
       close: () async {
+        // Внуки останавливаются раньше сессии ребёнка (SUB-6).
+        await nested?.closeAll(const ShutdownCancel());
         await agent.waitForIdle();
         await _store.close(childId);
       },
@@ -1401,10 +1449,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
   @override
   SubagentsInfo? get subagents {
     final config = _applied.config.subagents;
-    // Эффективная глубина: до итерации 4 ребёнку `agent` не даётся (D37, Т16).
-    return config.enabled
-        ? SubagentsInfo(maxDepth: math.min(config.maxDepth, _maxChildDepth))
-        : null;
+    // Эффективная глубина — `subagents.max_depth` (D37, D45 Т9); значение
+    // живое и относится к новым сессиям (D46, п. 2).
+    return config.enabled ? SubagentsInfo(maxDepth: config.maxDepth) : null;
   }
 
   @override
@@ -1575,6 +1622,10 @@ final class AgentRuntimeImpl implements AgentRuntime {
       settings.compaction.contextWindowCap,
     );
     final subagentsOn = settingsOf().subagents.enabled;
+    // `max_depth` — снимок корневой сессии на всё её дерево (D46, п. 2):
+    // описание `agent` корня и наборы потомков не расходятся после
+    // перезагрузки конфига.
+    final rootMaxDepth = settingsOf().subagents.maxDepth;
     if (subagentsOn && !windowOk) {
       logger.log(
         LogLevel.info,
@@ -1600,7 +1651,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         clock: services.clock,
         logger: logger,
         sessionId: id,
-        rootBudget: () => session._agent.config.budget,
+        ownBudget: () => session._agent.config.budget,
         parent: () => parentParts!,
       );
       sessionRegistry.register(
@@ -1612,7 +1663,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
           clock: services.clock,
           logger: logger,
           parentSessionId: id,
-          maxDepth: math.min(limits.maxDepth, _maxChildDepth),
+          maxDepth: rootMaxDepth,
           maxConcurrent: limits.maxConcurrent,
         ),
       );
@@ -1729,7 +1780,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
             : () => subagentManager!.childrenUsage,
         onOwnUsage: subagentManager == null
             ? null
-            : (own) => subagentManager!.rootOwnUsage = own,
+            : (own) => subagentManager!.ownUsage = own,
       ),
       systemPrompt: _systemPrompt(
         cwd,
@@ -1841,7 +1892,8 @@ final class AgentRuntimeImpl implements AgentRuntime {
         env: env,
         tasks: taskList,
         locks: pathLocks,
-        maxChildDepth: _maxChildDepth,
+        maxChildDepth: rootMaxDepth,
+        contextWindowCap: () => settingsOf().compaction.contextWindowCap,
       );
       childFactory = (spec) => _createChildSession(
         spec,
@@ -4143,7 +4195,110 @@ final class _Session implements AgentSession {
     for (final template in interruptedChildren) {
       await _writer.append(template.placed, durable: true);
     }
+    // Журналы самих потомков лечатся рекурсивно, включая ребёнка глубины 1
+    // (D45 Т7): иначе его прерванные вызовы остались бы без результатов.
+    final visited = <String>{};
+    for (final template in interruptedChildren) {
+      await _healChild(template, healer: id, depth: 1, visited: visited);
+    }
   }
+
+  /// Предел глубины лечения: `subagents.max_depth` не больше 3 (D3), журнал
+  /// глубже — подложенный.
+  static const _maxHealDepth = 3;
+
+  /// Лечит журнал потомка по записи [template] и, рекурсивно, журналы его
+  /// детей в статусе `running` (`agent-core/17-3-subagents.md` §17.3.6;
+  /// design.md change `add-subagents-and-tasks`, D45 Т7, D46, п. 5).
+  ///
+  /// Почему ошибка не пробрасывается: потерять лечение журнала потомка лучше,
+  /// чем доступ к сессии пользователя; ошибка не теряется — лог
+  /// `subagent.heal_failed` (`session_id` — сессия, лечившая запись,
+  /// `subagent_id`, `error_class`; без пути и текста), остальные записи и
+  /// открытие корня продолжаются.
+  Future<void> _healChild(
+    SubagentRecord template, {
+    required SessionId healer,
+    required int depth,
+    required Set<String> visited,
+  }) async {
+    final journal = template.journal;
+    // Журнал лечится не больше раза и не глубже предела: ссылки берутся из
+    // данных на диске, цикл или цепочка не должны зациклить открытие сессии.
+    if (journal == null || depth > _maxHealDepth) {
+      _logHealFailed(
+        healer,
+        template,
+        journal == null ? 'MissingJournal' : 'DepthLimit',
+      );
+      return;
+    }
+    if (!visited.add(journal)) {
+      return;
+    }
+    try {
+      final snapshot = await _services.sessions.openChild(
+        journal,
+        rootSessionId: id,
+      );
+      final childId = snapshot.header.id;
+      final writer = SessionWriter(
+        store: _services.sessions,
+        snapshot: snapshot,
+        ids: _services.ids,
+        clock: _services.clock,
+        logger: _logger,
+        onFailure: (_) {},
+      );
+      try {
+        final meta = <String, ToolMeta>{
+          for (final call in findInterruptedCalls(snapshot))
+            call.id: await _describe(call),
+        };
+        final running = interruptedSubagentRecords(snapshot);
+        for (final record in healInterruptedTurn(
+          snapshot,
+          _services.ids,
+          _services.clock,
+          meta: meta,
+        )) {
+          await writer.appendBuilt(record, durable: true);
+        }
+        for (final grand in running) {
+          await writer.append(grand.placed, durable: true);
+        }
+        await _services.sessions.flush(childId);
+        for (final grand in running) {
+          await _healChild(
+            grand,
+            healer: childId,
+            depth: depth + 1,
+            visited: visited,
+          );
+        }
+      } finally {
+        await _services.sessions.close(childId);
+      }
+    } on Object catch (error) {
+      _logHealFailed(healer, template, error.runtimeType.toString());
+    }
+  }
+
+  /// `subagent.heal_failed` — без `error` и стека: текст исключения хранилища
+  /// содержит путь журнала (D46, п. 5).
+  void _logHealFailed(
+    SessionId healer,
+    SubagentRecord template,
+    String errorClass,
+  ) => _logger.log(
+    LogLevel.warning,
+    'subagent.heal_failed',
+    fields: {
+      'session_id': healer.value,
+      'subagent_id': template.subagentId,
+      'error_class': errorClass,
+    },
+  );
 
   /// Заголовок прерванного вызова — тот же `present()`, что дал бы
   /// `ToolCallStarted`; без инструмента или при ошибке — его имя.

@@ -312,6 +312,24 @@ final class DeleteTask extends TaskOp {
   final TaskId id;
 }
 
+/// Назначить пункт потомку: владелец становится [owner], `pending` →
+/// `in_progress` (design.md change `add-subagents-and-tasks`, D45 Т8, D46,
+/// п. 3; §17.16.4).
+///
+/// Почему отдельная операция, а не [UpdateTask] с `owner`: её выполняет
+/// менеджер, когда ребёнок получил слот, от имени `main` и без вызова
+/// инструмента; прежний владелец не проверяется — последнее назначение
+/// побеждает. Статус `in_progress` ставится только у `pending`: `completed`
+/// и уже начатый пункт остаются как были.
+/// Как использовать: `AssignTask('2', TaskOwner('sub_k3f9a1c2'))`; в журнале
+/// и событии — `op: assign`, `toolCallId` нет.
+final class AssignTask extends TaskOp {
+  const AssignTask(this.id, this.owner);
+
+  final TaskId id;
+  final TaskOwner owner;
+}
+
 /// Что записать в журнал и показать клиенту (§17.16.2).
 ///
 /// [op] — `create`, `update`, `delete`, `assign` или `restore`.
@@ -514,11 +532,15 @@ final class SessionTaskList implements TaskList {
             CreateTask() => 'create',
             UpdateTask() => 'update',
             DeleteTask() => 'delete',
+            AssignTask() => 'assign',
           },
           'reason': reason.wire,
           // id приходит от модели: в лог он попадает, только если пригоден
           // как id журнала, иначе отмечается флагом.
-          if (op case UpdateTask(:final id) || DeleteTask(:final id))
+          if (op
+              case UpdateTask(:final id) ||
+                  DeleteTask(:final id) ||
+                  AssignTask(:final id))
             ..._loggableId(id),
         });
     }
@@ -616,6 +638,8 @@ final class SessionTaskList implements TaskList {
         return _update(op, actor, toolCallId);
       case DeleteTask(:final id):
         return _delete(id, actor, toolCallId);
+      case AssignTask():
+        return _assign(op, actor, toolCallId);
     }
   }
 
@@ -770,6 +794,35 @@ final class SessionTaskList implements TaskList {
       snapshot: items,
       unblocked: unblocked,
     );
+  }
+
+  Future<TaskResult> _assign(
+    AssignTask op,
+    TaskActor actor,
+    String? toolCallId,
+  ) async {
+    final current = _byId(op.id);
+    if (current == null) {
+      return TaskRejected(_unknown(op.id), TaskRejectReason.unknownId);
+    }
+    if (!_isKnownOwner(op.owner)) {
+      return const TaskRejected(_ownerError, TaskRejectReason.owner);
+    }
+    final updated = current.copyWith(
+      owner: op.owner,
+      status: current.status == TaskStatus.pending
+          ? TaskStatus.inProgress
+          : null,
+    );
+    _items = [for (final item in _items) item.id == op.id ? updated : item];
+    final change = TaskChange(
+      op: 'assign',
+      actor: actor,
+      toolCallId: toolCallId,
+      changed: [updated],
+      deleted: const [],
+    );
+    return TaskApplied(change: change, item: updated, snapshot: items);
   }
 
   Future<TaskResult> _delete(

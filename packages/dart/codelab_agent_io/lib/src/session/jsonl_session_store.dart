@@ -141,6 +141,43 @@ final class JsonlSessionStore implements SessionStore {
   }
 
   @override
+  Future<SessionSnapshot> openChild(
+    String journal, {
+    required SessionId rootSessionId,
+  }) async {
+    // Адрес берётся из записи журнала корня, то есть из данных на диске:
+    // выход за `root` и чужие файлы исключаются проверкой формы
+    // (`<слаг>/<метка>_<id корня>/subagents/<метка>_<id>.jsonl`).
+    final segments = journal.split('/');
+    final id = segments.isEmpty ? null : _idOf(journal);
+    if (id == null ||
+        journal.startsWith('/') ||
+        journal.contains(r'\') ||
+        segments.contains('..') ||
+        segments.length < 3 ||
+        segments[segments.length - 2] != 'subagents' ||
+        !segments[segments.length - 3].endsWith('_${rootSessionId.value}')) {
+      throw SessionNotFound(id ?? SessionId(journal));
+    }
+    final path = '$root/$journal';
+    final snapshot = await writeQueue.run(path, () async {
+      await _drop(path);
+      final file = File(path);
+      if (!await file.exists() || !await _insideRoot(file)) {
+        throw SessionNotFound(id);
+      }
+      final parsed = await _parse(file, id);
+      if (parsed.snapshot.header.id != id) {
+        throw SessionNotFound(id);
+      }
+      await _repair(file, id, parsed);
+      return parsed.snapshot;
+    });
+    _childPaths[id] = path;
+    return snapshot;
+  }
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {
@@ -226,6 +263,19 @@ final class JsonlSessionStore implements SessionStore {
       return;
     }
     await writeQueue.run(path, () => _drop(path));
+  }
+
+  /// Файл (с учётом ссылок на него и на каталоги пути) лежит внутри [root]:
+  /// `subagents/` — каталог данных, и подложенная в нём ссылка не должна
+  /// вести чтение и ремонт (переписывание) за пределы хранилища.
+  Future<bool> _insideRoot(File file) async {
+    try {
+      final base = await Directory(root).resolveSymbolicLinks();
+      final real = await file.resolveSymbolicLinks();
+      return real.startsWith('$base${Platform.pathSeparator}');
+    } on FileSystemException {
+      return false;
+    }
   }
 
   /// Одна строка JSON без переводов строк внутри (§8.5, шаг 1).

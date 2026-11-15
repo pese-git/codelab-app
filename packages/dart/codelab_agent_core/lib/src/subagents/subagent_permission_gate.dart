@@ -123,7 +123,9 @@ final class SubagentPermissionGate implements PermissionGate {
   final SubagentSpec spec;
 
   /// Цепочка id вызовов `agent` от корня до сессии спрашивающего: для ребёнка
-  /// корня — id вызова `agent` корня.
+  /// корня — id вызова `agent` корня, для внука `call_3/call_2` (D45 Т3).
+  /// `parentToolCallId` запроса берётся из `spec.rootCall`, а не из разбора
+  /// цепочки: id вызова может содержать `/`.
   final String chainPrefix;
 
   /// Хэндл переходит в `waiting`/`approval` и обратно в `running`; менеджер
@@ -157,7 +159,7 @@ final class SubagentPermissionGate implements PermissionGate {
         description: spec.description,
         depth: spec.depth,
         path: spec.path,
-        parentToolCallId: _firstSegment(chainPrefix),
+        parentToolCallId: spec.rootCall,
       ),
     );
     logger.log(
@@ -177,10 +179,5 @@ final class SubagentPermissionGate implements PermissionGate {
     } finally {
       onResumed();
     }
-  }
-
-  static String _firstSegment(String chain) {
-    final slash = chain.indexOf('/');
-    return slash < 0 ? chain : chain.substring(0, slash);
   }
 }
