@@ -9,8 +9,10 @@
 // временный `CODELAB_HOME` с навыком пользователя, а `AGENTS.md` лежит в
 // временной папке проекта. Встроенный агент открывается настоящим
 // открывателем, поэтому тест в режиме `CODELAB_E2E_AGENT=embedded` (сценарий
-// модели вместо конфига) не имеет смысла. Выключатели и согласие (запись
-// `skills.*`) — итерация 5.
+// модели вместо конфига) не имеет смысла. Второй тест (задача 5.3, D9):
+// выключатель «Enabled» пишет `skills.disabled`, а НОВАЯ сессия не объявляет
+// `skill:<name>` в `available_commands_update` (открытая сессия свой список
+// не меняет, SKL-4).
 
 import 'dart:async';
 import 'dart:io';
@@ -110,4 +112,58 @@ void main() {
       await closeCodeLabRootScope();
     },
   );
+
+  testWidgets('turning a skill off writes skills.disabled and a new session '
+      'does not announce skill:notes', (tester) async {
+    final home = File(E2eAgent.current.profilesPath).parent.path;
+    File('$home/config.yaml').writeAsStringSync(_config);
+    Directory('$home/skills/notes').createSync(recursive: true);
+    File('$home/skills/notes/SKILL.md').writeAsStringSync(
+      '---\nname: notes\ndescription: Take short notes\n---\nBody.\n',
+    );
+
+    await tester.pumpWidget(E2eAgent.current.bootstrap());
+    await tester.pumpAndSettle();
+    final shellCubit = codeLabDependenciesOf(
+      tester.element(find.byType(CodeLabApp)),
+    ).shellCubit;
+    await ensureProject(tester, shellCubit);
+    unawaited(shellCubit.startOnLaunch());
+    await _pumpWhile(
+      tester,
+      () =>
+          shellCubit.state.connectionStatus !=
+          CodeLabConnectionStatus.connected,
+    );
+    await shellCubit.createSession();
+    bool announced() =>
+        shellCubit.state.agentCommands.any((c) => c.id == 'agent-skill:notes');
+    await _pumpWhile(tester, () => !announced());
+
+    await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+    await tester.pumpAndSettle();
+    await tester.tap(_key('settings-nav-skills-and-extensions'));
+    await tester.pumpAndSettle();
+    await _pumpUntil(tester, _key('skills-toggle-notes'));
+    await tester.tap(_key('skills-toggle-notes'));
+    await _pumpUntil(tester, _key('skills-banner'));
+
+    expect(File('$home/config.yaml').readAsStringSync(), contains('notes'));
+    expect(
+      find.descendant(
+        of: _key('skills-banner'),
+        matching: find.textContaining('Saved. New sessions use it'),
+      ),
+      findsOneWidget,
+    );
+    // Открытая сессия список не меняет (SKL-4); новая объявляет без навыка.
+    expect(announced(), isTrue);
+    await shellCubit.createSession();
+    await tester.pump(const Duration(seconds: 1));
+    expect(announced(), isFalse);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await closeCodeLabRootScope();
+  });
 }

@@ -95,6 +95,18 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
   /// Каталоги, которые страница показывает; только их можно открыть (Q5).
   Set<String> _openable = const {};
 
+  /// Сессия настроек и папка снимка последней успешной загрузки: по ним
+  /// пишутся `skills.*` (D5). `null` — страница не для записи.
+  ProviderSettingsSession? _session;
+  String? _snapshotCwd;
+
+  /// Идёт запись `skills.*`: повторные действия игнорируются (D14).
+  var _saving = false;
+
+  /// Баннер исхода записи: ложится на состояние, которое соберёт ближайшая
+  /// не устаревшая загрузка, чтобы баннер пережил перечитывание.
+  SkillsBanner? _pendingBanner;
+
   /// Читает доступ, конфиг и файлы; вызывается при открытии страницы,
   /// «Reload» и при смене профиля или папки.
   Future<void> reload() async {
@@ -171,6 +183,7 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
     required String access,
   }) {
     _profileHome = null;
+    _session = null;
     _openable = const {};
     _logger?.debug('skills_settings.read_only', context: {'access': access});
     _emit(SkillsSettingsReadOnly(notice: notice, hint: hint));
@@ -200,8 +213,9 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
     };
     final AgentConfigSnapshot snapshot;
     final AgentExtensionsView view;
+    final ProviderSettingsSession session;
     try {
-      final session = await _open(access, environment);
+      session = await _open(access, environment);
       snapshot = await session.config.snapshot(
         cwd: access.cwd ?? access.paths.codelabHome,
       );
@@ -236,13 +250,19 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
       return;
     }
     _openable = _openableOf(view);
+    _session = session;
+    _snapshotCwd = access.cwd ?? access.paths.codelabHome;
     _logLoaded(view);
+    final banner = _pendingBanner;
+    _pendingBanner = null;
     _emit(
       SkillsSettingsReady(
         view: view,
         userConfigPath: snapshot.layers[ConfigLayer.user]?.path,
         folder: folder,
         codelabHome: _profileHome,
+        banner: banner,
+        saving: _saving,
       ),
     );
   }
@@ -397,6 +417,143 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
     }
   }
 
+  // --- Запись skills.disabled и skills.extra_roots (D5, D9, D14) -----------
+
+  /// Выключатель «Enabled» навыка [name]: `enabled: false` кладёт имя в
+  /// `skills.disabled`, `true` — убирает.
+  ///
+  /// Почему снимок берётся заново: между показом страницы и нажатием файл
+  /// мог измениться, а `base` плана обязан быть снимком файла, который
+  /// меняется (SETUP-6). Что писать и можно ли, решает `skillsListEdit`
+  /// моста; Cubit его вызывает и превращает итог в баннер. События — только
+  /// после `ConfigSaved` и без путей (D10).
+  Future<void> setSkillEnabled(String name, {required bool enabled}) => _write(
+    key: 'skills.disabled',
+    element: name,
+    present: !enabled,
+    onSaved: (layer) => _logger?.info(
+      'skills_settings.skill_toggled',
+      context: {'name': name, 'enabled': enabled, 'layer': layer.name},
+    ),
+  );
+
+  /// Согласие на каталог навыков другого агента: [entry] — элемент
+  /// `skills.extra_roots` (`.claude/skills`, `~/.claude/skills`); [granted]
+  /// `true` добавляет элемент, `false` убирает (Q3).
+  Future<void> setRootConsent(String entry, {required bool granted}) => _write(
+    key: 'skills.extra_roots',
+    element: entry,
+    present: granted,
+    onSaved: (layer) => _logger?.info(
+      'skills_settings.root_consent',
+      context: {
+        'root_kind': consentKindOf(entry).rootKind,
+        'enabled': granted,
+        'layer': layer.name,
+      },
+    ),
+  );
+
+  Future<void> _write({
+    required String key,
+    required String element,
+    required bool present,
+    required void Function(ConfigLayer layer) onSaved,
+  }) async {
+    final current = state;
+    final session = _session;
+    final cwd = _snapshotCwd;
+    if (isClosed ||
+        _saving ||
+        current is! SkillsSettingsReady ||
+        session == null ||
+        cwd == null) {
+      return;
+    }
+    _saving = true;
+    final attempt = _loadAttempt;
+    _emit(current.withSaving(saving: true));
+    SkillsBanner? banner;
+    var changed = true;
+    try {
+      final snapshot = await session.config.snapshot(cwd: cwd);
+      // Страницу закрыли или перечитали на другую папку, пока брался снимок:
+      // он относится к прежнему виду, неначатая запись отменяется.
+      if (isClosed || attempt != _loadAttempt) {
+        _finishSaving();
+        return;
+      }
+      switch (skillsListEdit(snapshot, key, element, present: present)) {
+        case SkillsListRefused(:final refusal):
+          banner = SkillsBanner(
+            SkillsBannerKind.error,
+            skillsRefusalText(refusal, element: element),
+          );
+        case SkillsListPlan(:final edits) when edits.isEmpty:
+          // Уже так: файл не пишется, баннера и события нет.
+          changed = false;
+        case SkillsListPlan(:final layer, :final base, :final edits):
+          switch (await session.config.apply(base, edits)) {
+            case ConfigSaved():
+              onSaved(layer);
+              banner = const SkillsBanner(SkillsBannerKind.saved, _savedText);
+            case ConfigConflict():
+              _logSaveFailed('conflict');
+              banner = const SkillsBanner(
+                SkillsBannerKind.conflict,
+                'The config changed on disk, so nothing was saved. The page '
+                'was reloaded; review it and try again.',
+              );
+            case ConfigRejected(:final issues):
+              _logSaveFailed('rejected');
+              banner = SkillsBanner(
+                SkillsBannerKind.error,
+                'The config was not saved: ${[for (final i in issues) i.key.isEmpty ? i.message : '${i.key}: ${i.message}'].join('; ')}',
+              );
+            case ConfigInlineSecret(:final key):
+              _logSaveFailed('inline_secret');
+              banner = SkillsBanner(
+                SkillsBannerKind.error,
+                'The config was not saved: $key must not hold a literal '
+                'secret.',
+              );
+          }
+      }
+    } on Object catch (error) {
+      // Текст исключения может содержать путь или значение: наружу — тип.
+      _logSaveFailed(error.runtimeType.toString());
+      banner = const SkillsBanner(
+        SkillsBannerKind.error,
+        'The config was not saved.',
+      );
+    }
+    if (changed) {
+      // Любой исход перечитывает страницу (файл мог измениться, отказ оставляет
+      // её прежней); баннер ложится на состояние ближайшей свежей загрузки и
+      // снимается только ею (устаревшая загрузка его не применяет и не стирает).
+      _pendingBanner = banner;
+      await reload();
+    }
+    // `saving` снимается ПОСЛЕ перечитывания: одна запись на нажатие (D14).
+    _finishSaving();
+  }
+
+  void _finishSaving() {
+    _saving = false;
+    final current = state;
+    if (!isClosed && current is SkillsSettingsReady && current.saving) {
+      _emit(current.settled());
+    }
+  }
+
+  static const _savedText =
+      'Saved. New sessions use it; open sessions keep their skills.';
+
+  void _logSaveFailed(String outcome) => _logger?.warning(
+    'skills_settings.save_failed',
+    context: {'outcome': outcome},
+  );
+
   // --- Рабочее пространство -------------------------------------------------
 
   static ConnectionProfile? _connectedProfile(WorkspaceState state) =>
@@ -417,6 +574,10 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
   }
 
   void _emit(SkillsSettingsState next) {
+    // Баннер записи ждёт только состояния `Ready`; иное состояние его теряет.
+    if (next is! SkillsSettingsReady) {
+      _pendingBanner = null;
+    }
     if (!isClosed) {
       emit(next);
     }

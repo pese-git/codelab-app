@@ -1299,6 +1299,106 @@ void main() {
     });
   });
 
+  group('mutation hardening (iteration 5)', () {
+    testWidgets('while the write runs the consent switches are inactive', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      store.onApply = () => gate.future;
+      await openPage(
+        tester,
+        view: extensionsView(
+          consents: [
+            SkillConsentView(
+              entry: '~/.claude/skills',
+              path: '/home/u/.claude/skills',
+              skillDirs: 1,
+              granted: false,
+              toggle: const SkillToggle.available(),
+            ),
+            SkillConsentView(
+              entry: '.claude/skills',
+              path: '$skillsFolder/.claude/skills',
+              skillDirs: 2,
+              granted: false,
+              toggle: const SkillToggle.available(),
+            ),
+          ],
+        ),
+      );
+
+      await tester.tap(_key('skills-consent-home'));
+      await tester.pump();
+
+      for (final key in const [
+        'skills-consent-home',
+        'skills-consent-project',
+      ]) {
+        expect(
+          tester.widget<ToggleSwitch>(_key(key)).onChanged,
+          isNull,
+          reason: key,
+        );
+      }
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(store.applied, hasLength(1));
+    });
+
+    testWidgets('a rejected write is a warning banner titled "Not saved"', (
+      tester,
+    ) async {
+      store.nextOutcome = const ConfigRejected([
+        ConfigIssue(
+          kind: ConfigIssueKind.value,
+          key: 'skills.disabled',
+          source: FakeAgentConfigStore.userPath,
+          message: 'must be a list of names',
+        ),
+      ]);
+      await openPage(tester, view: extensionsView(skills: [skillEntry('a')]));
+
+      await tester.tap(_key('skills-toggle-a'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<InfoBar>(_key('skills-banner')).severity,
+        InfoBarSeverity.warning,
+      );
+      expect(_in('skills-banner', 'Not saved'), findsOneWidget);
+    });
+  });
+
+  group('review of iteration 5', () {
+    testWidgets('the hint of a refused consent shows control characters of '
+        'the file path escaped', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          consents: [
+            SkillConsentView(
+              entry: '~/.claude/skills',
+              path: '/home/u/.claude/skills',
+              skillDirs: 1,
+              granted: false,
+              toggle: SkillToggle.refused(
+                const SkillsListNotEditable('/etc/x\u202Ey.yaml'),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      final tooltip = tester.widget<Tooltip>(
+        find.ancestor(
+          of: _key('skills-consent-home'),
+          matching: find.byType(Tooltip),
+        ),
+      );
+      expect(tooltip.message, 'Set in /etc/x\\u202ey.yaml; edit that file.');
+    });
+  });
+
   group('actions', () {
     testWidgets('"Reload" re-reads the config and the files and sends '
         'nothing to the agent', (tester) async {

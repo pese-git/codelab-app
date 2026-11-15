@@ -1132,7 +1132,9 @@ void main() {
         'the user config, the project config is untouched, root_consent '
         'event', () async {
       real = await RealSkillsSession.open(root);
-      RealSkillsSession.write(real.projectConfig, 'tools:\n  max_steps: 7\n');
+      // Проектный конфиг с допустимым ключом: страж того, что согласие не
+      // пишется в проектный файл (SKL-2).
+      RealSkillsSession.write(real.projectConfig, 'skills:\n  max_skills: 5\n');
       final before = file(real.projectConfig);
       final cubit = makeReal();
       await cubit.reload();
@@ -1226,6 +1228,235 @@ void main() {
       expect(text, contains('trusted_projects'));
       expect(text, contains('default_model: local/m'));
       expect(File(real.localConfig).existsSync(), isFalse);
+    });
+  });
+
+  group('mutation hardening (iteration 5)', () {
+    Set<Object?> keysOf(Map<String, Object?> entry) =>
+        entry.keys.toSet()..removeAll(const {'event', 'level'});
+
+    Future<SkillsSettingsCubit> loaded() async {
+      final cubit = make();
+      await cubit.reload();
+      return cubit;
+    }
+
+    test('after close() neither action touches the config: no snapshot, '
+        'no apply', () async {
+      final cubit = await loaded();
+      final snapshots = store.snapshots;
+      await cubit.close();
+
+      await cubit.setSkillEnabled('a', enabled: false);
+      await cubit.setRootConsent('~/.claude/skills', granted: true);
+
+      expect(store.snapshots, snapshots);
+      expect(store.applied, isEmpty);
+    });
+
+    test('ConfigInlineSecret is an error banner about a literal secret and '
+        'save_failed inline_secret', () async {
+      store.nextOutcome = const ConfigInlineSecret(
+        key: 'skills.disabled',
+        suggestedSecretName: 'codelab/x',
+      );
+      final cubit = await loaded();
+
+      await cubit.setSkillEnabled('a', enabled: false);
+
+      final banner = ready(cubit).banner!;
+      expect(banner.kind, SkillsBannerKind.error);
+      expect(banner.text, contains('literal secret'));
+      expect(banner.text, contains('skills.disabled'));
+      expect(event('skills_settings.save_failed')['outcome'], 'inline_secret');
+    });
+
+    test('the banner of a write lives for one view only: a later reload and '
+        'a workspace-triggered reload have none', () async {
+      final cubit = await loaded();
+      await cubit.setSkillEnabled('a', enabled: false);
+      expect(ready(cubit).banner!.kind, SkillsBannerKind.saved);
+
+      await cubit.reload();
+      expect(ready(cubit).banner, isNull);
+
+      await cubit.setSkillEnabled('b', enabled: false);
+      expect(ready(cubit).banner!.kind, SkillsBannerKind.saved);
+      projectDir = '/work/other';
+      workspace.emit(
+        WorkspaceState(
+          connection: const ConnectionView.connected(),
+          profile: embeddedConnectionProfile,
+          activeSessionId: SessionId('s2'),
+        ),
+      );
+      await pumpEventQueue();
+      expect(ready(cubit).banner, isNull);
+    });
+
+    test(
+      'events have exactly the documented keys: no entry, no path',
+      () async {
+        final cubit = await loaded();
+
+        await cubit.setSkillEnabled('code-review', enabled: false);
+        await cubit.setRootConsent('~/.claude/skills', granted: true);
+
+        expect(keysOf(event('skills_settings.skill_toggled')), {
+          'name',
+          'enabled',
+          'layer',
+        });
+        expect(keysOf(event('skills_settings.root_consent')), {
+          'root_kind',
+          'enabled',
+          'layer',
+        });
+      },
+    );
+
+    test('while the write runs, a reload for a new folder publishes a Ready '
+        'that is still saving and keeps the folder and CODELAB_HOME', () async {
+      final gate = Completer<void>();
+      store.onApply = () => gate.future;
+      final cubit = await loaded();
+
+      final writing = cubit.setSkillEnabled('a', enabled: false);
+      await pumpEventQueue();
+      expect(ready(cubit).saving, isTrue);
+      expect(ready(cubit).folder, '/work/app');
+      expect(ready(cubit).codelabHome, _home);
+      projectDir = '/work/other';
+      workspace.emit(
+        WorkspaceState(
+          connection: const ConnectionView.connected(),
+          profile: embeddedConnectionProfile,
+          activeSessionId: SessionId('s2'),
+        ),
+      );
+      await pumpEventQueue();
+
+      final middle = ready(cubit);
+      expect(middle.folder, '/work/other');
+      expect(middle.saving, isTrue);
+      gate.complete();
+      await writing;
+      expect(ready(cubit).saving, isFalse);
+    });
+
+    test('a list that is already like that: one snapshot of the click and '
+        'no re-read', () async {
+      store.user = {
+        'skills': {
+          'disabled': ['a'],
+        },
+      };
+      final cubit = await loaded();
+      final snapshots = store.snapshots;
+      final reads = session.extensionsCalls.length;
+
+      await cubit.setSkillEnabled('a', enabled: false);
+
+      expect(store.snapshots, snapshots + 1);
+      expect(session.extensionsCalls.length, reads);
+      expect(store.applied, isEmpty);
+    });
+  });
+
+  group('review of iteration 5', () {
+    Future<SkillsSettingsCubit> loaded() async {
+      final cubit = make();
+      await cubit.reload();
+      return cubit;
+    }
+
+    test('a second action during the re-read after a write is ignored '
+        '(one write per tap)', () async {
+      final cubit = await loaded();
+      final gate = Completer<AgentExtensionsView>();
+      session.onExtensions = (_) => gate.future;
+
+      final first = cubit.setSkillEnabled('a', enabled: false);
+      await pumpEventQueue();
+      expect(store.applied, hasLength(1));
+      // Запись закончена, идёт перечитывание: новые действия ещё нельзя.
+      await cubit.setSkillEnabled('b', enabled: false);
+      expect(store.applied, hasLength(1));
+      gate.complete(extensionsView());
+      await first;
+
+      expect(ready(cubit).saving, isFalse);
+      expect(ready(cubit).banner!.kind, SkillsBannerKind.saved);
+    });
+
+    test('the banner of a write survives a newer reload that finishes after '
+        'the superseded load of the write', () async {
+      final cubit = await loaded();
+      final gates = [
+        Completer<AgentExtensionsView>(),
+        Completer<AgentExtensionsView>(),
+      ];
+      var call = 0;
+      session.onExtensions = (_) => gates[call++].future;
+
+      final writing = cubit.setSkillEnabled('a', enabled: false);
+      await pumpEventQueue();
+      projectDir = '/work/other';
+      workspace.emit(
+        WorkspaceState(
+          connection: const ConnectionView.connected(),
+          profile: embeddedConnectionProfile,
+          activeSessionId: SessionId('s2'),
+        ),
+      );
+      await pumpEventQueue();
+      gates[0].complete(extensionsView());
+      await writing;
+      gates[1].complete(extensionsView(folder: '/work/other'));
+      await pumpEventQueue();
+
+      expect(ready(cubit).folder, '/work/other');
+      expect(ready(cubit).banner?.kind, SkillsBannerKind.saved);
+    });
+
+    test('closing the page while the snapshot of the write is taken cancels '
+        'the write that has not begun', () async {
+      final cubit = await loaded();
+      final gate = Completer<void>();
+      store.onSnapshot = () => gate.future;
+
+      final writing = cubit.setSkillEnabled('a', enabled: false);
+      await pumpEventQueue();
+      await cubit.close();
+      gate.complete();
+      await writing;
+
+      expect(store.applied, isEmpty);
+    });
+
+    test('a newer load while the snapshot of the write is taken cancels the '
+        'write: the snapshot belongs to the old folder', () async {
+      final cubit = await loaded();
+      final gate = Completer<void>();
+      store.onSnapshot = () => gate.future;
+
+      final writing = cubit.setSkillEnabled('a', enabled: false);
+      await pumpEventQueue();
+      store.onSnapshot = null;
+      projectDir = '/work/other';
+      workspace.emit(
+        WorkspaceState(
+          connection: const ConnectionView.connected(),
+          profile: embeddedConnectionProfile,
+          activeSessionId: SessionId('s2'),
+        ),
+      );
+      await pumpEventQueue();
+      gate.complete();
+      await writing;
+
+      expect(store.applied, isEmpty);
+      expect(ready(cubit).saving, isFalse);
     });
   });
 

@@ -184,22 +184,35 @@ class SkillsPage extends StatelessWidget {
     ),
   );
 
-  /// Текст баннера содержит путь из файлов (недоверен): строку рисует таблица
-  /// с `untrusted`, чтобы управляющие и bidi-символы стали видимыми
-  /// (`escapeForDisplay` пакета не экспортируется, D12).
-  static Widget _banner(SkillsBanner banner) => _bar(
-    const ValueKey('skills-banner'),
-    InfoBarSeverity.warning,
-    'Cannot open the folder',
-    content: CodeLabStatusTable(
-      columns: const ['MESSAGE'],
-      rows: [
-        CodeLabStatusTableRow(
-          cells: [CodeLabStatusTableCell(banner.text, untrusted: true)],
-        ),
-      ],
-    ),
-  );
+  /// Баннер итога действия. Текст может содержать путь или сообщение
+  /// загрузчика из файлов (недоверен): строку рисует таблица с `untrusted`,
+  /// чтобы управляющие и bidi-символы стали видимыми (`escapeForDisplay`
+  /// пакета не экспортируется, D12). Успех записи — `success`, остальное —
+  /// `warning`.
+  static Widget _banner(SkillsBanner banner) {
+    final (severity, title) = switch (banner.kind) {
+      SkillsBannerKind.saved => (InfoBarSeverity.success, 'Saved'),
+      SkillsBannerKind.conflict => (InfoBarSeverity.warning, 'Not saved'),
+      SkillsBannerKind.error => (InfoBarSeverity.warning, 'Not saved'),
+      SkillsBannerKind.openFailed => (
+        InfoBarSeverity.warning,
+        'Cannot open the folder',
+      ),
+    };
+    return _bar(
+      const ValueKey('skills-banner'),
+      severity,
+      title,
+      content: CodeLabStatusTable(
+        columns: const ['MESSAGE'],
+        rows: [
+          CodeLabStatusTableRow(
+            cells: [CodeLabStatusTableCell(banner.text, untrusted: true)],
+          ),
+        ],
+      ),
+    );
+  }
 
   List<Widget> _ready(SkillsSettingsCubit cubit, SkillsSettingsReady state) {
     final view = state.view;
@@ -229,7 +242,7 @@ class SkillsPage extends StatelessWidget {
         ),
       ..._contextSection(cubit, view),
       ..._templatesSection(cubit, view),
-      ..._skillsSection(cubit, view),
+      ..._skillsSection(cubit, state),
     ];
   }
 
@@ -383,9 +396,9 @@ class SkillsPage extends StatelessWidget {
 
   List<Widget> _skillsSection(
     SkillsSettingsCubit cubit,
-    AgentExtensionsView view,
+    SkillsSettingsReady state,
   ) {
-    final skills = view.skills;
+    final skills = state.view.skills;
     return [
       _sectionTitle('Skills'),
       ..._phaseBody(
@@ -401,7 +414,8 @@ class SkillsPage extends StatelessWidget {
                 columns: const ['SKILL', 'INVOKE AS', 'SOURCE'],
                 columnFlex: const [4, 2, 2],
                 rows: [
-                  for (final entry in skills.entries) _skillRow(cubit, entry),
+                  for (final entry in skills.entries)
+                    _skillRow(cubit, entry, saving: state.saving),
                 ],
               ),
             const Padding(
@@ -420,6 +434,8 @@ class SkillsPage extends StatelessWidget {
               'apply to new sessions.',
               role: CodeLabTextRole.caption,
             ),
+            if (skills.consents.isNotEmpty)
+              _consentTable(cubit, skills.consents, saving: state.saving),
           ],
         ),
       ),
@@ -429,8 +445,9 @@ class SkillsPage extends StatelessWidget {
 
   CodeLabStatusTableRow _skillRow(
     SkillsSettingsCubit cubit,
-    SkillEntryView entry,
-  ) {
+    SkillEntryView entry, {
+    required bool saving,
+  }) {
     final enabled = entry.availability == SkillAvailability.enabled;
     final warningText = entry.warnings.map((d) => d.message).join('\n');
     return CodeLabStatusTableRow(
@@ -467,13 +484,85 @@ class SkillsPage extends StatelessWidget {
         key: ValueKey('skills-toggle-${entry.name}'),
         value: enabled,
         label: 'Enabled: ${entry.name}',
-        // Запись `skills.disabled` — итерация 5; здесь только состояние.
-        onChanged: null,
+        // Активен, если мост не отказал и запись не идёт; отказ — подсказка с
+        // причиной (D5, D9). Что писать, решает Cubit по свежему снимку.
+        onChanged: entry.toggle.isAvailable && !saving
+            ? (value) =>
+                  unawaited(cubit.setSkillEnabled(entry.name, enabled: value))
+            : null,
+        tooltip: entry.toggle.refusal == null
+            ? null
+            : skillsRefusalText(entry.toggle.refusal!),
       ),
       action: CodeLabStatusTableAction(
         key: ValueKey('skills-open-skill-${entry.name}'),
         label: 'Open',
         onPressed: () => unawaited(cubit.openFolder(entry.directory)),
+      ),
+    );
+  }
+
+  /// Согласие на каталоги навыков других агентов (Q3): подпись называет число
+  /// найденных каталогов и область действия; относительный элемент действует
+  /// во всех доверенных проектах, где такой каталог есть.
+  ///
+  /// Почему таблица: подсказка отказа содержит путь файла из конфигурации, а
+  /// переключатель строки таблицы всегда экранирует подпись и подсказку
+  /// (`escapeForDisplay` пакета не экспортируется, D12). Ключ строки —
+  /// `skills-consent-note-<kind>`, переключателя — `skills-consent-<kind>`.
+  Widget _consentTable(
+    SkillsSettingsCubit cubit,
+    List<SkillConsentView> consents, {
+    required bool saving,
+  }) => Padding(
+    padding: const EdgeInsets.only(top: 12),
+    child: CodeLabStatusTable(
+      columns: const ['SKILLS OF OTHER AGENTS'],
+      rows: [
+        for (final consent in consents)
+          _consentRow(cubit, consent, saving: saving),
+      ],
+    ),
+  );
+
+  CodeLabStatusTableRow _consentRow(
+    SkillsSettingsCubit cubit,
+    SkillConsentView consent, {
+    required bool saving,
+  }) {
+    final kind = consentKindOf(consent.entry);
+    final count = consent.skillDirs;
+    final found = count == null
+        ? 'The number of skill folders is not counted.'
+        : '$count skill ${count == 1 ? 'folder' : 'folders'} found.';
+    final scope = kind == SkillsConsentKind.home
+        ? ''
+        : ' Consent applies in every trusted project.';
+    return CodeLabStatusTableRow(
+      key: ValueKey('skills-consent-note-${kind.key}'),
+      cells: [
+        CodeLabStatusTableCell(
+          'Read ${consent.entry}',
+          mono: true,
+          secondary:
+              '$found$scope The .agents/skills folder of a trusted project is '
+              'read without consent.',
+        ),
+      ],
+      toggle: CodeLabStatusTableToggle(
+        key: ValueKey('skills-consent-${kind.key}'),
+        value: consent.granted,
+        label: 'Read ${consent.entry}',
+        onChanged: consent.toggle.isAvailable && !saving
+            ? (value) =>
+                  unawaited(cubit.setRootConsent(consent.entry, granted: value))
+            : null,
+        tooltip: consent.toggle.refusal == null
+            ? null
+            : skillsRefusalText(
+                consent.toggle.refusal!,
+                element: consent.entry,
+              ),
       ),
     );
   }

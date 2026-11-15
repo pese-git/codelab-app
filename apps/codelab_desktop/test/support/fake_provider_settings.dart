@@ -26,12 +26,15 @@ const leakMarker = 'sk-test-leak-0123456789';
 /// Конфиг в памяти: слои задаются картами значений.
 final class FakeAgentConfigStore implements AgentConfigStore {
   FakeAgentConfigStore({
-    this.user = const {},
+    Map<String, Object?> user = const {},
     this.project,
     this.projectLocal,
     this.issues = const [],
     this.backend = const SecretBackendInfo(id: 'file', writable: true),
-  });
+  }) : // Слой `user` правится `apply` (страница «Skills & extensions» пишет
+       // `skills.*`): константная карта по умолчанию бросила бы
+       // `UnsupportedError`, поэтому слой копируется в изменяемую.
+       user = {...user};
 
   Map<String, Object?> user;
   Map<String, Object?>? project;
@@ -70,9 +73,14 @@ final class FakeAgentConfigStore implements AgentConfigStore {
   /// упало, ревью 6a).
   Object? snapshotError;
 
+  /// Действие в начале [snapshot] (ожидание на `Completer`): тест держит
+  /// взятие снимка, пока закрывает страницу или меняет папку.
+  FutureOr<void> Function()? onSnapshot;
+
   @override
   Future<AgentConfigSnapshot> snapshot({required String cwd}) async {
     snapshots++;
+    await onSnapshot?.call();
     if (snapshotError case final error?) {
       throw error;
     }
