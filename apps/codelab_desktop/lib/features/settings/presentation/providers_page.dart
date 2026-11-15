@@ -249,9 +249,23 @@ class _ProvidersPageState extends State<ProvidersPage> {
                     ? state.defaultModel
                     : null,
                 placeholder: const Text('Choose a model'),
+                // На узком окне строка сжимает ComboBox (CodeLabSettingsRow),
+                // а список fluent_ui 4.16 той же ширины, что и кнопка: длинные
+                // имена с общим началом без подсказки неразличимы, и легко
+                // записать в конфиг не ту модель по умолчанию.
                 items: [
                   for (final model in state.models)
-                    ComboBoxItem<String>(value: model, child: Text(model)),
+                    ComboBoxItem<String>(
+                      value: model,
+                      child: Tooltip(
+                        message: model,
+                        child: Text(
+                          model,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                 ],
                 onChanged: state.saving
                     ? null
@@ -453,6 +467,9 @@ class _ProvidersPageState extends State<ProvidersPage> {
 
 /// Строка провайдера: Expander артборда (заголовок с тегом проверки и
 /// кнопками, раскрытое тело с таблицей «Key / Last check / Source»).
+///
+/// На узкой карточке (меньше [_wideHeaderMinWidth]) кнопки свёрнутой строки
+/// переносятся под подпись внутри заголовка; на широкой остаются справа.
 class _ProviderCard extends StatelessWidget {
   const _ProviderCard({
     required this.row,
@@ -476,10 +493,36 @@ class _ProviderCard extends StatelessWidget {
   final TextStyle? bodyStyle;
   final TextStyle? monoStyle;
 
+  /// Ширина карточки, с которой бейдж и кнопки помещаются в шапку рядом с
+  /// именем. Слагается из: поля шапки 16+6, значок 16 и промежутки 12×3,
+  /// имя не уже ~190, бейдж проверки ~100, три кнопки с промежутками ~230,
+  /// шеврон 32 — около 640 pt. Уже — кнопки уходят под подпись внутри
+  /// заголовка (D10: в свёрнутой строке они остаются).
+  static const _wideHeaderMinWidth = 640.0;
+
   @override
   Widget build(BuildContext context) {
     final secondary = FluentTheme.of(context).resources.textFillColorSecondary;
     final check = row.check;
+    // Узость берём по ширине самой карточки, а не окна: в окне по умолчанию
+    // (`MainMenu.xib`, 800 pt) странице достаётся ~400 pt, и бейдж с тремя
+    // кнопками в шапке вытесняли имя и переполняли Row.
+    return LayoutBuilder(
+      builder: (context, constraints) => _card(
+        context,
+        narrow: constraints.maxWidth < _wideHeaderMinWidth,
+        secondary: secondary,
+        check: check,
+      ),
+    );
+  }
+
+  Widget _card(
+    BuildContext context, {
+    required bool narrow,
+    required Color secondary,
+    required ProviderCheckView check,
+  }) {
     return CodeLabExpanderCard(
       headerKey: ValueKey('providers-row-${row.id}'),
       leading: const Icon(FluentIcons.cloud, size: 16),
@@ -489,7 +532,17 @@ class _ProviderCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              CodeLabText(row.id),
+              Flexible(
+                // Имя может обрезаться многоточием — полное по подсказке.
+                child: Tooltip(
+                  message: row.id,
+                  child: CodeLabText(
+                    row.id,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
               if (row.isDefault) ...[
                 const SizedBox(width: 8),
                 const CodeLabBadge(label: 'Default', tone: CodeLabTone.accent),
@@ -523,6 +576,16 @@ class _ProviderCard extends StatelessWidget {
               role: CodeLabTextRole.caption,
               color: secondary,
             ),
+          // Узко: кнопки под подписью, рядом с предупреждением об `http://`.
+          if (!expanded && narrow)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: _actions(subtle: true, gaps: false),
+              ),
+            ),
         ],
       ),
       trailing: Row(
@@ -540,7 +603,7 @@ class _ProviderCard extends StatelessWidget {
               },
             ),
           ),
-          if (!expanded) ...[
+          if (!expanded && !narrow) ...[
             const SizedBox(width: 12),
             ..._actions(subtle: true),
           ],
@@ -582,10 +645,12 @@ class _ProviderCard extends StatelessWidget {
   static Widget _withHint(String? hint, Widget button) =>
       hint == null ? button : Tooltip(message: hint, child: button);
 
-  /// Check, Edit и Remove: в свёрнутом заголовке без рамки, в раскрытом теле —
+  /// Check, Edit и Remove: в свёрнутом заголовке без рамки (справа от бейджа,
+  /// а на узкой карточке — под подписью; [gaps] `false` — без промежутков,
+  /// их задаёт `Wrap`), в раскрытом теле —
   /// «Check» и «Edit» обычные, «Remove» без рамки (артборд). У строки
   /// нередактируемого слоя только «Check».
-  List<Widget> _actions({required bool subtle}) {
+  List<Widget> _actions({required bool subtle, bool gaps = true}) {
     final secondary = subtle
         ? CodeLabButtonEmphasis.subtle
         : CodeLabButtonEmphasis.secondary;
@@ -605,7 +670,7 @@ class _ProviderCard extends StatelessWidget {
             : onCheck,
       ),
       if (row.editable) ...[
-        const SizedBox(width: 4),
+        if (gaps) const SizedBox(width: 4),
         _withHint(
           row.editHint,
           CodeLabButton(
@@ -615,7 +680,7 @@ class _ProviderCard extends StatelessWidget {
             onPressed: row.canEdit && !busy ? onEdit : null,
           ),
         ),
-        const SizedBox(width: 4),
+        if (gaps) const SizedBox(width: 4),
         _withHint(row.removeHint, remove),
       ],
     ];
