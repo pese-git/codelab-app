@@ -132,6 +132,79 @@ void main() {
     }
   });
 
+  group('narrow window 800x600', () {
+    // Окно по умолчанию 800x600 минус панель навигации настроек оставляет
+    // странице узкую колонку: строка провайдера не должна переполняться.
+    testWidgets('a configured provider row does not overflow and keeps its '
+        'name on one line', (tester) async {
+      final view = TestWidgetsFlutterBinding.ensureInitialized()
+          .platformDispatcher
+          .views
+          .single;
+      await openPage(tester);
+      // На 800 pt боковая панель рабочего места свёрнута, поэтому в настройки
+      // заходим на широком окне и сужаем его до размера по умолчанию.
+      view.physicalSize = const Size(800, 600);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final name = find.descendant(
+        of: _key('providers-row-anthropic'),
+        matching: find.text('anthropic'),
+      );
+      expect(name, findsOneWidget);
+      final oneLine = tester.getSize(name).height;
+      expect(oneLine, lessThan(24));
+      expect(tester.takeException(), isNull);
+
+      // Кнопки остаются в свёрнутой строке (D10, spec app-settings) и
+      // переносятся под подпись; полное имя доступно по подсказке.
+      for (final part in const ['check', 'edit', 'remove']) {
+        expect(
+          find.descendant(
+            of: _key('providers-row-anthropic'),
+            matching: _key('providers-$part-anthropic'),
+          ),
+          findsOneWidget,
+          reason: part,
+        );
+      }
+      expect(
+        find.descendant(
+          of: _key('providers-row-anthropic'),
+          matching: find.byWidgetPredicate(
+            (w) => w is Tooltip && w.message == 'anthropic',
+          ),
+        ),
+        findsOneWidget,
+      );
+      // Нажатие попадает в кнопку, а не раскрывает строку.
+      await tester.tap(_key('providers-check-anthropic'));
+      await tester.pumpAndSettle();
+      expect(find.text('Last check'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('the Default model row keeps its title on one line', (
+      tester,
+    ) async {
+      final view = TestWidgetsFlutterBinding.ensureInitialized()
+          .platformDispatcher
+          .views
+          .single;
+      await openPage(tester);
+      // На 800 pt боковая панель рабочего места свёрнута, поэтому в настройки
+      // заходим на широком окне и сужаем его до размера по умолчанию.
+      view.physicalSize = const Size(800, 600);
+      await tester.pumpAndSettle();
+
+      expect(tester.getSize(find.text('Default model')).height, lessThan(24));
+      expect(tester.takeException(), isNull);
+      await tearDownApp(tester);
+    });
+  });
+
   group('layout', () {
     testWidgets('has the header, default model, key storage, rows and the '
         'config path with the D10 keys', (tester) async {

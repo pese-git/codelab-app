@@ -53,4 +53,54 @@ void main() {
 
     expect(find.byKey(const ValueKey('settings-row-demo')), findsOneWidget);
   });
+
+  testWidgets('a wide fixed trailing shrinks on a narrow row and the title '
+      'stays on one line', (tester) async {
+    await tester.pumpWidget(
+      const FluentApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 368,
+            child: CodeLabSettingsRow(
+              title: 'Default model',
+              description: 'Used by new sessions.',
+              leading: FluentIcons.settings,
+              trailing: SizedBox(
+                key: ValueKey('wide-trailing'),
+                width: 260,
+                child: Text('control'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.text('Default model')).height, lessThan(24));
+    expect(
+      tester.getSize(find.byKey(const ValueKey('wide-trailing'))).width,
+      lessThan(260),
+    );
+  });
+
+  testWidgets('on a wide row the trailing keeps its own width', (tester) async {
+    await pumpRow(
+      tester,
+      const CodeLabSettingsRow(
+        title: 'Default model',
+        trailing: SizedBox(
+          key: ValueKey('wide-trailing'),
+          width: 260,
+          child: Text('control'),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.byKey(const ValueKey('wide-trailing'))).width,
+      260,
+    );
+  });
 }

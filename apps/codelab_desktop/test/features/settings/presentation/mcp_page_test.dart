@@ -1289,6 +1289,50 @@ void main() {
     });
   });
 
+  group('the Agent status panel at a 400 pt content column', () {
+    // Окно 800 pt минус навигация настроек (320, NavigationPane) и поля
+    // 2x40 даёт колонке 400 pt; здесь окно 480, поля те же.
+    Future<void> openNarrow(WidgetTester tester) async {
+      final view = TestWidgetsFlutterBinding.ensureInitialized()
+          .platformDispatcher
+          .views
+          .single;
+      view.physicalSize = const Size(480, 2400);
+      await openPage(tester);
+    }
+
+    void expectOneLineTitle(WidgetTester tester) {
+      expect(tester.takeException(), isNull);
+      expect(tester.getSize(find.text('Agent status')).height, lessThan(24));
+    }
+
+    testWidgets('the live table keeps the title on one line', (tester) async {
+      source.ports[_s1] = FakeMcpStatusPort(
+        'p1',
+        servers: [mcpSummary('github', tools: 42)],
+      );
+      connect(embeddedConnectionProfile, active: _s1);
+      await openNarrow(tester);
+      expectOneLineTitle(tester);
+      expect(find.text('Live from the embedded agent · 14:02'), findsOneWidget);
+      expect(_key('mcp-status-reload-all'), findsOneWidget);
+    });
+
+    testWidgets('the text variant keeps the title on one line', (tester) async {
+      externalSession();
+      connect(_remote, active: _s1);
+      await openNarrow(tester);
+      expectOneLineTitle(tester);
+      expect(_key('mcp-status-refresh'), findsOneWidget);
+      expect(_key('mcp-status-reload-all'), findsOneWidget);
+      // Между Refresh и Reload all 8 pt, как до переноса в Wrap.
+      final gap =
+          tester.getTopLeft(_key('mcp-status-reload-all')).dx -
+          tester.getTopRight(_key('mcp-status-refresh')).dx;
+      expect(gap, anyOf(8, lessThan(0)));
+    });
+  });
+
   group('the Agent status panel (D12, Q24)', () {
     testWidgets('the embedded agent shows the live table: cells, time, '
         'Reconnect per row and Reload all', (tester) async {
