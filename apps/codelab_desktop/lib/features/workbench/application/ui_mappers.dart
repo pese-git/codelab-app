@@ -367,11 +367,28 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
     onOptionSelected: (optionId) => onSelected(approval, optionId),
     requesterLine: _requesterLineOf(approval.subagent),
     requesterHint: approval.subagent?.description,
-    callTitle: approval.subagent == null
-        ? null
-        : _titleWithoutRequesterPrefix(approval.toolTitle, approval.subagent!),
+    callTitle: approval.subagent == null ? null : _callTitleOf(approval),
   ),
 };
+
+/// Заголовок вызова потомка для блока, без дубля команды.
+///
+/// Почему: заголовок вызова `exec` после срезания префикса равен самой
+/// команде, и блок показывал её дважды (ручной прогон, задача 3.5a, D44 п. 4).
+/// UI не решает, что считать дублем, поэтому сравнение здесь: совпадение с
+/// командой после обрезки пробелов — заголовка нет. У write/edit команда
+/// пуста, и заголовок («Write NOTES.md») остаётся единственным видимым путём.
+String? _callTitleOf(PendingApprovalView approval) {
+  final title = _titleWithoutRequesterPrefix(
+    approval.toolTitle,
+    approval.subagent!,
+  );
+  if (title == null) return null;
+  final command = approval.command?.trim();
+  return command != null && command.isNotEmpty && command == title.trim()
+      ? null
+      : title;
+}
 
 /// Заголовок вызова потомка без префикса `[тип: описание] ` (D8).
 ///

@@ -44,7 +44,7 @@ const _rootDetails = ToolCallView(
 
 PendingApprovalView _pending({
   required SubagentRequester requester,
-  String command = 'git diff --stat',
+  String? command = 'git diff --stat',
   String? toolTitle,
 }) => PendingApprovalView(
   approvalId: const ApprovalRequestId('permission-1'),
@@ -274,6 +274,107 @@ void main() {
 
       expect(find.text('Write .codelab/config.yaml'), findsOneWidget);
       expect(find.textContaining('[review:'), findsNothing);
+    });
+  });
+
+  group('Заголовок вызова не дублирует команду', () {
+    // Дефект ручного прогона: заголовок exec после срезания префикса равен
+    // команде, и блок показывал её дважды (задача 3.5a, D44 п. 4).
+    testWidgets('exec: the command is visible exactly once', (tester) async {
+      await _pump(
+        tester,
+        _rows([
+          _rootWith(
+            _pending(
+              requester: _child,
+              command: 'git log --oneline -3',
+              toolTitle: '[review: Check the diff] git log --oneline -3',
+            ),
+          ),
+        ]),
+      );
+
+      expect(find.text('git log --oneline -3'), findsOneWidget);
+    });
+
+    testWidgets('a title different from the command shows both', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _rows([
+          _rootWith(
+            _pending(
+              requester: _child,
+              command: 'flutter test',
+              toolTitle: '[review: Check the diff] Run tests',
+            ),
+          ),
+        ]),
+      );
+
+      expect(find.text('Run tests'), findsOneWidget);
+      expect(find.text('flutter test'), findsOneWidget);
+    });
+
+    testWidgets('write: the title stays when the command is empty', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _rows([
+          _rootWith(
+            _pending(
+              requester: _child,
+              command: '',
+              toolTitle: '[review: Check the diff] Write NOTES.md',
+            ),
+          ),
+        ]),
+      );
+
+      expect(find.text('Write NOTES.md'), findsOneWidget);
+    });
+  });
+
+  group('Команда потомка экранируется', () {
+    testWidgets('bidi in the command is shown as an escape when the title is '
+        'hidden as its duplicate', (tester) async {
+      const raw = 'echo \u202Eevil';
+      await _pump(
+        tester,
+        _rows([
+          _rootWith(
+            _pending(
+              requester: _child,
+              command: raw,
+              toolTitle: '[review: Check the diff] $raw',
+            ),
+          ),
+        ]),
+      );
+
+      expect(find.text(r'echo \u202eevil'), findsOneWidget);
+      expect(find.textContaining('\u202E'), findsNothing);
+    });
+  });
+
+  group('Write без команды (null)', () {
+    testWidgets('the title stays when the command is absent', (tester) async {
+      await _pump(
+        tester,
+        _rows([
+          _rootWith(
+            _pending(
+              requester: _child,
+              command: null,
+              toolTitle: '[review: Check the diff] Write NOTES.md',
+            ),
+          ),
+        ]),
+      );
+
+      expect(find.text('Write NOTES.md'), findsOneWidget);
     });
   });
 

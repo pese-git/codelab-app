@@ -436,7 +436,14 @@ class _ChildApprovalBlock extends StatelessWidget {
           if (p.command case final command?)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: CodeLabText(command, role: CodeLabTextRole.mono),
+              // Команду пишет модель; когда заголовок скрыт как её дубль,
+              // это единственная копия, поэтому bidi/управляющие символы
+              // экранируем (без обрезки: решение принимают по полной
+              // команде). D44 п. 4.
+              child: CodeLabText(
+                escapeForDisplay(command),
+                role: CodeLabTextRole.mono,
+              ),
             ),
           CodeLabApprovalPrompt(
             reason: p.reason,
