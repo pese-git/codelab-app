@@ -295,7 +295,9 @@ class SkillsPage extends StatelessWidget {
     int index,
     ContextFileView file,
   ) {
-    final truncated = !file.omitted && file.shownBytes < file.bytes;
+    // Усечение — признак ядра: оно срезает и завершающий перевод строки,
+    // поэтому `shownBytes < bytes` усечением по бюджету не считается.
+    final truncated = !file.omitted && file.truncated;
     return CodeLabStatusTableRow(
       key: ValueKey('skills-context-$index'),
       cells: [

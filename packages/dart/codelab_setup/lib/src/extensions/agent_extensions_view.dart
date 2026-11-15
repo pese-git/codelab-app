@@ -148,6 +148,7 @@ final class ContextFileView {
     required this.shownBytes,
     required this.scope,
     required this.isClaudeAlias,
+    required this.truncated,
     required this.omitted,
   });
 
@@ -167,6 +168,14 @@ final class ContextFileView {
 
   /// `CLAUDE.md`, прочитанный вместо `AGENTS.md` (решение Q6).
   final bool isClaudeAlias;
+
+  /// Файл усечён по бюджету — признак ядра (`AssembledContextFile.truncated`
+  /// из `assembleProjectContext`), а не сравнение [shownBytes] с [bytes].
+  ///
+  /// Почему: ядро срезает завершающий перевод строки, поэтому у целого файла
+  /// `shownBytes < bytes`, и сравнение байтов ложно показало бы усечение.
+  /// `false` у пропущенного файла ([omitted]).
+  final bool truncated;
 
   /// Файл не вошёл в промпт: бюджет исчерпан.
   final bool omitted;

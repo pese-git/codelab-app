@@ -67,6 +67,7 @@ AgentExtensionsView extensionsInHostForm(
             shownBytes: f.shownBytes,
             scope: f.scope,
             isClaudeAlias: f.isClaudeAlias,
+            truncated: f.truncated,
             omitted: f.omitted,
           ),
       ],
