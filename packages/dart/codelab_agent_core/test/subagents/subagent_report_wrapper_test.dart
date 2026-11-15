@@ -235,4 +235,91 @@ void main() {
       expect(text, isNot(contains(cutNote)));
     });
   });
+
+  // Итерация 4 (D45 Т5): итог ребёнка считает потомков транзитивно. Красный
+  // до задач 4.2 и 4.3: у ребёнка нет `agent`, а учёт `toolCalls`,
+  // `lastActivity` и usage не знает событий потомков.
+  group('сценарий «Итог с потомками» (agent-subagents «Жизненный цикл и '
+      'отмена»)', () {
+    Map<String, Object?> usage(int input, int output) => {
+      'input': input,
+      'output': output,
+    };
+
+    Future<SubagentRig> withGrandchild() async {
+      final rig = SubagentRig(
+        config: CoreConfig(
+          defaultModel: subagentTestModel,
+          // Прогресс без прореживания: тест читает lastActivity по снимкам.
+          subagents: const SubagentsConfig(progressInterval: Duration.zero),
+        ),
+        scripts: {
+          'go': [
+            oneCallStep('c1', 'agent', agentArgs('kid', type: 'general')),
+            replyStep('thanks'),
+          ],
+          'kid': [
+            multiCallStep([
+              ('r1', 'read', {'path': 'a.txt'}),
+              ('r2', 'read', {'path': 'b.txt'}),
+            ], usage: usage(10, 1)),
+            oneCallStep(
+              'g1',
+              'agent',
+              agentArgs('grandchild', type: 'general'),
+              usage: usage(20, 2),
+            ),
+            replyStep('kid report', usage: usage(5, 0)),
+          ],
+          'grandchild': [
+            multiCallStep([
+              ('x1', 'read', {'path': 'a.txt'}),
+              ('x2', 'read', {'path': 'b.txt'}),
+              ('x3', 'read', {'path': 'c.txt'}),
+            ], usage: usage(100, 10)),
+            replyStep('grandchild report', usage: usage(50, 5)),
+          ],
+        },
+      );
+      await rig.open();
+      await rig.run('go');
+      return rig;
+    }
+
+    test('toolCalls ребёнка — 6 (2 вызова, 1 agent и 3 вызова внука), usage — '
+        'сумма usage ребёнка и внука', () async {
+      final rig = await withGrandchild();
+
+      final finished = rig.eventsOf<SubagentFinished>().single;
+      expect(finished.toolCalls, 6);
+      expect(
+        finished.usage,
+        const Usage(input: 10 + 20 + 5 + 150, output: 1 + 2 + 0 + 15),
+      );
+      expect(
+        resultText(rig.requestsOf('go').last, 'c1'),
+        contains('tool_calls="6"'),
+      );
+    });
+
+    test(
+      'lastActivity ребёнка — title последнего вызова внука (D45 Т5)',
+      () async {
+        final rig = await withGrandchild();
+
+        final grandchildCalls = [
+          for (final a in rig.events.whereType<SubagentActivity>())
+            if (a.depth == 2 && a.event is ToolCallStarted)
+              (a.event as ToolCallStarted).title,
+        ];
+        final kid = rig.eventsOf<SubagentStarted>().single.subagentId;
+
+        expect(grandchildCalls, hasLength(3), reason: 'три вызова внука');
+        expect([
+          for (final s in allSnapshots(rig))
+            if (s.id == kid) s.lastActivity,
+        ], contains(grandchildCalls.last));
+      },
+    );
+  });
 }

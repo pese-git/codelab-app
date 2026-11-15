@@ -164,4 +164,38 @@ void main() {
       expect(await assign(session, 'sub_neverran'), isA<TaskRejected>());
     });
   });
+
+  // Итерация 4, задача 4.1 (D45 Т8): `isKnownOwner` смотрит на хэндлы всего
+  // дерева; менеджеры потомков регистрируют id в общем `SubagentTree`.
+  // Красный до задач 4.2 и 4.5: внуков нет, а список видит только хэндлы
+  // менеджера корня.
+  test('id внука, запущенного в дереве, принимается владельцем; после '
+      'перезагрузки — только id из записей журнала корня (id внуков '
+      'прошлых ходов владельцами не становятся)', () async {
+    final rig = SubagentRig(
+      scripts: {
+        'go': [
+          oneCallStep('c1', 'agent', agentArgs('kid job')),
+          replyStep('done'),
+        ],
+        'kid job': [
+          oneCallStep('g1', 'agent', agentArgs('grand job')),
+          replyStep('kid done'),
+        ],
+        'grand job': [replyStep('grand done')],
+      },
+    );
+    await rig.open();
+    await rig.run('go');
+    expect(allStarted(rig), hasLength(2), reason: 'ребёнок и внук запущены');
+    final kid = rig.eventsOf<SubagentStarted>().single.subagentId;
+    final grand = allStarted(rig).last.subagentId;
+
+    expect(await assign(rig.session, grand), isA<TaskApplied>());
+
+    final reloaded = SubagentRig(store: rig.store, scripts: const {});
+    final session = await reloaded.load(rig.session.id);
+    expect(await assign(session, kid), isA<TaskApplied>());
+    expect(await assign(session, grand), isA<TaskRejected>());
+  });
 }

@@ -79,11 +79,13 @@ void main() {
   });
 
   group('геттер AgentRuntime.subagents (D37)', () {
-    test('по умолчанию — включено, эффективная глубина 1 (до итерации 4)', () {
+    // Итерация 4 (D45 Т9): `_maxChildDepth` убран, эффективная глубина —
+    // `subagents.max_depth`. Красный до задачи 4.2.
+    test('по умолчанию — включено, глубина — max_depth по умолчанию 3', () {
       final rig = SubagentRig(scripts: const {});
 
       expect(rig.core.runtime.subagents, isNotNull);
-      expect(rig.core.runtime.subagents!.maxDepth, 1);
+      expect(rig.core.runtime.subagents!.maxDepth, 3);
     });
 
     test('при subagents.enabled: false — null', () {
@@ -98,7 +100,7 @@ void main() {
       expect(rig.core.runtime.subagents, isNull);
     });
 
-    test('maxDepth — min(subagents.max_depth, 1) до итерации 4', () {
+    test('maxDepth равен subagents.max_depth (D45 Т9)', () {
       final rig = SubagentRig(
         scripts: const {},
         config: CoreConfig(
@@ -107,14 +109,14 @@ void main() {
         ),
       );
 
-      expect(rig.core.runtime.subagents!.maxDepth, 1);
+      expect(rig.core.runtime.subagents!.maxDepth, 2);
     });
 
     test('значение живое: перезагрузка конфига меняет его без '
         'перезапуска', () async {
       final source = LayeredConfigSource();
       final rig = SubagentRig(scripts: const {}, source: source);
-      expect(rig.core.runtime.subagents!.maxDepth, 1);
+      expect(rig.core.runtime.subagents!.maxDepth, 3);
 
       source.user['subagents'] = {'max_depth': 1};
       await rig.core.runtime.reloadConfig();
@@ -126,7 +128,7 @@ void main() {
 
       source.user['subagents'] = {'enabled': true, 'max_depth': 2};
       await rig.core.runtime.reloadConfig();
-      expect(rig.core.runtime.subagents!.maxDepth, 1);
+      expect(rig.core.runtime.subagents!.maxDepth, 2);
     });
   });
 

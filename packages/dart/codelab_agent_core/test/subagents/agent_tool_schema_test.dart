@@ -286,6 +286,41 @@ void main() {
     });
   });
 
+  group('сценарий «Описание agent по глубине» (итерация 4, D45 Т9)', () {
+    // Красный до задачи 4.2: эффективная глубина ограничена константой
+    // `_maxChildDepth = 1`, поэтому описание корня при `max_depth` 3 всё ещё
+    // говорит «потомки не запускают потомков».
+    test('при max_depth по умолчанию (3) описание agent корня обещает ещё '
+        'два уровня', () async {
+      final rig = await runOnce();
+
+      expect(
+        schemaOf(rig.contexts.first, 'agent').description,
+        contains(
+          'A subagent may start its own subagents, up to 2 more level(s) '
+          'below it.',
+        ),
+      );
+    });
+
+    test('при max_depth 2 описание agent корня обещает один уровень', () async {
+      final rig = await runOnce(
+        config: CoreConfig(
+          defaultModel: subagentTestModel,
+          subagents: const SubagentsConfig(maxDepth: 2),
+        ),
+      );
+
+      expect(
+        schemaOf(rig.contexts.first, 'agent').description,
+        contains(
+          'A subagent may start its own subagents, up to 1 more level(s) '
+          'below it.',
+        ),
+      );
+    });
+  });
+
   group('сценарий «Глубина 1» (agent-configuration)', () {
     test('при max_depth 1 описание agent корня: потомки не запускают '
         'потомков', () async {

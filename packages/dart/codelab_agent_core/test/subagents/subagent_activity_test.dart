@@ -229,4 +229,111 @@ void main() {
       },
     );
   });
+
+  // Итерация 4, задача 4.1 (agent-subagents «События потомков в потоке
+  // родителя», сценарий «Адрес события внука»; SUB-24; design.md, D6, D45
+  // Т5, Т6). Красные до задач 4.2 и 4.4: у ребёнка нет `agent`, а менеджер
+  // обернул бы событие внука ещё раз.
+  group('внук (глубина 2)', () {
+    Future<SubagentRig> readingGrandchild({int? delayMs}) async {
+      final env = MemoryExecutionEnv(cwd: '/proj');
+      await env.writeText('/proj/a.txt', 'alpha\n');
+      final rig = SubagentRig(
+        baseEnv: env,
+        scripts: {
+          'go': [
+            oneCallStep('c1', 'agent', agentArgs('kid job')),
+            replyStep('thanks'),
+          ],
+          'kid job': [
+            oneCallStep('g1', 'agent', agentArgs('grandchild job')),
+            replyStep('kid done'),
+          ],
+          'grandchild job': [
+            oneCallStep('grand_read_1', 'read', {'path': 'a.txt'}),
+            replyStep('alpha it is', delayMs: delayMs),
+          ],
+        },
+      );
+      await rig.open();
+      return rig;
+    }
+
+    test('сценарий «Адрес события внука»: SubagentActivity с depth 2, path '
+        '[id ребёнка], parentToolCallId вызова agent ребёнка и событием '
+        'ToolCallStarted; журнал корня события не содержит', () async {
+      final rig = await readingGrandchild();
+
+      await rig.run('go');
+
+      final kid = rig.eventsOf<SubagentStarted>().single.subagentId;
+      final grandchild = allStarted(rig).last.subagentId;
+      final read = rig.eventsOf<SubagentActivity>().where((a) {
+        final inner = a.event;
+        return a.depth == 2 && inner is ToolCallStarted && inner.tool == 'read';
+      }).single;
+      expect(read.sessionId, rig.session.id, reason: 'sessionId — корня');
+      expect(read.subagentId, grandchild);
+      expect(read.path, [kid]);
+      expect(
+        read.parentToolCallId,
+        'g1',
+        reason: 'сырой id вызова agent в сессии ребёнка, не цепочка (D45 Т6)',
+      );
+      expect(rig.rootJournal, isNot(contains('grand_read_1')));
+    });
+
+    test('вложенных SubagentActivity нет: SubagentStarted и '
+        'SubagentFinished внука приходят в поток корня обёрнутыми один раз, '
+        'с исходным event (D6)', () async {
+      final rig = await readingGrandchild();
+
+      await rig.run('go');
+
+      final activity = rig.eventsOf<SubagentActivity>();
+      expect(activity.every((a) => a.event is! SubagentActivity), isTrue);
+      final grandchild = allStarted(rig).last.subagentId;
+      final started = activity.where((a) {
+        final inner = a.event;
+        return inner is SubagentStarted && inner.subagentId == grandchild;
+      });
+      final finished = activity.where((a) {
+        final inner = a.event;
+        return inner is SubagentFinished && inner.subagentId == grandchild;
+      });
+      expect(started, hasLength(1));
+      expect(finished, hasLength(1));
+      expect(
+        rig.eventsOf<SubagentStarted>(),
+        hasLength(1),
+        reason: 'в потоке корня как есть — только его ребёнок',
+      );
+    });
+
+    test(
+      'строка прогресса ребёнка называет число активных потомков: '
+      '`· 1 subagents`, пока внук работает (activeChildren, D45 Т5)',
+      () async {
+        final rig = await readingGrandchild(delayMs: 5000);
+
+        final turn = rig.run('go');
+        await pumpUntil(
+          () => rig.clock.pendingTimers > 0,
+          reason: 'the grandchild never reached the delayed step',
+        );
+        await rig.clock.elapse(const Duration(seconds: 3));
+        final lines = [
+          for (final e in rig.eventsOf<ToolCallProgress>())
+            if (e.toolCallId == 'c1')
+              for (final c in e.content)
+                if (c is ToolCallBlock && c.block is TextContent)
+                  (c.block as TextContent).text,
+        ];
+        await rig.clock.elapse(const Duration(seconds: 5));
+        await turn;
+
+        expect(lines.any((l) => l.contains(' · 1 subagents')), isTrue);
+      },
+    );
+  });
 }

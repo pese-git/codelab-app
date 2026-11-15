@@ -364,6 +364,70 @@ void main() {
     });
   });
 
+  // Итерация 4, задача 4.1 (agent-permissions «Вопрос внука»; design.md,
+  // D8, D45 Т3). Красные до задачи 4.2: у потомка нет `agent`, а `chainPrefix`
+  // gate потомка — один сегмент.
+  group('сценарий «Вопрос внука» (глубина 2)', () {
+    SubagentRig grandWriter(PermissionGate gate, {String rootCallId = 'c1'}) =>
+        SubagentRig(
+          gate: gate,
+          scripts: {
+            'go': [
+              oneCallStep(rootCallId, 'agent', agentArgs('kid job')),
+              replyStep('done'),
+            ],
+            'kid job': [
+              oneCallStep(
+                'g1',
+                'agent',
+                agentArgs('grand job', description: 'Write grand'),
+              ),
+              replyStep('kid done'),
+            ],
+            'grand job': [
+              oneCallStep('w1', 'write', {'path': 'f.txt', 'content': 'x'}),
+              replyStep('written'),
+            ],
+          },
+        );
+
+    test('gate корня получает запрос с toolCallId из трёх сегментов, title с '
+        'префиксом типа и заголовка внука и depth 2; parentToolCallId — вызов '
+        'agent корня', () async {
+      final gate = FakeGate();
+      final rig = grandWriter(gate);
+      await rig.open();
+
+      await rig.run('go');
+
+      expect(gate.requests, hasLength(1), reason: 'внук не спросил gate');
+      final request = gate.requests.single;
+      expect(request.toolCallId, 'c1/g1/w1');
+      expect(request.title, startsWith('[general: Write grand] Write '));
+      final info = request.subagent!;
+      final kid = rig.eventsOf<SubagentStarted>().single.subagentId;
+      expect(info.depth, 2);
+      expect(info.id, allStarted(rig).last.subagentId);
+      expect(info.path, [kid]);
+      expect(info.parentToolCallId, 'c1');
+    });
+
+    test('id вызова agent корня содержит «/»: parentToolCallId — он целиком, '
+        'а не результат разбора цепочки (D45 Т3)', () async {
+      final gate = FakeGate();
+      final rig = grandWriter(gate, rootCallId: 'call/with/slash');
+      await rig.open();
+
+      await rig.run('go');
+
+      expect(gate.requests, hasLength(1), reason: 'внук не спросил gate');
+      final request = gate.requests.single;
+      expect(request.toolCallId, 'call/with/slash/g1/w1');
+      expect(request.subagent!.parentToolCallId, 'call/with/slash');
+      expect(request.subagent!.depth, 2);
+    });
+  });
+
   test('характеризующий, зелёный сразу: сценарий «Запрет всегда нельзя '
       'обойти через ребёнка» — rejectAlways корня действует на ребёнка без '
       'запроса к gate (D42 Т1)', () async {

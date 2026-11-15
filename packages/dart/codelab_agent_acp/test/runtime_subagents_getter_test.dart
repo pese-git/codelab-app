@@ -27,8 +27,8 @@ void main() {
     h = await ServerHarness.start(configSource: source);
 
     expect(h!.core.runtime.subagents, isNotNull);
-    // Эффективная глубина итерации 2 (D37, Т16): 1 при `max_depth: 2`.
-    expect(h!.core.runtime.subagents!.maxDepth, 1);
+    // Итерация 4 (D45 Т9): эффективная глубина — `max_depth` конфига.
+    expect(h!.core.runtime.subagents!.maxDepth, 2);
 
     source.put('subagents.enabled', false);
     await h!.core.runtime.reloadConfig();

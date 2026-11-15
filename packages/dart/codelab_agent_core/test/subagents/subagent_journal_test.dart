@@ -339,4 +339,344 @@ void main() {
     expect(cut['truncated'], isTrue);
     expect(whole.containsKey('truncated'), isFalse);
   });
+
+  // Итерация 4, задача 4.1 (agent-subagents «Журнал субагента и прерывание»,
+  // сценарии «Раскладка внука», «Рекурсивное лечение», «Журнал потомка не
+  // открывается»; SUB-9, S-13; design.md change `add-subagents-and-tasks`,
+  // D7, D45 Т1, Т7, D46 п. 5; `agent-core/17-3-subagents.md` §17.3.6).
+  group('журналы потомков глубины 2 и больше', () {
+    const rootId = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C');
+    const kidId = SessionId('01JB8Q3A1D2E3F4G5H6J7K8M9A');
+    const grandId = SessionId('01JB8Q3A1D2E3F4G5H6J7K8M9B');
+    const kidSubagent = 'sub_aaaaaaaa';
+    const grandSubagent = 'sub_bbbbbbbb';
+
+    SessionHeader headerOf(
+      SessionId id,
+      SessionId parent,
+      String callId,
+      String subagentId,
+      int depth,
+    ) => SessionHeader(
+      id: id,
+      cwd: '/proj',
+      created: DateTime.utc(2026, 10, 21, 8),
+      agent: const AgentInfo(name: 'codelab-agent', version: '0.1.0'),
+      parent: SessionParent(
+        sessionId: parent,
+        rootSessionId: rootId,
+        toolCallId: callId,
+        subagentId: subagentId,
+        agent: 'general',
+        depth: depth,
+      ),
+    );
+
+    String runningRecord(
+      String id,
+      String? parent, {
+      required String subagentId,
+      required String callId,
+      required SessionId childId,
+      required String journal,
+    }) => jsonEncode({
+      'type': 'subagent',
+      'id': id,
+      'parentId': parent,
+      'timestamp': at,
+      'subagentId': subagentId,
+      'toolCallId': callId,
+      'agent': 'general',
+      'description': 'Job $subagentId',
+      'childSessionId': childId.value,
+      'journal': journal,
+      'status': 'running',
+    });
+
+    Future<void> putLines(
+      MemorySessionStore store,
+      SessionId id,
+      List<String> records,
+    ) async {
+      for (final line in records) {
+        await store.append(
+          id,
+          SessionRecord.fromJson(jsonDecode(line) as Map<String, Object?>),
+        );
+      }
+    }
+
+    List<Map<String, Object?>> results(String text) => [
+      for (final r in lines(text))
+        if (r['type'] == 'message' &&
+            (r['message']! as Map)['role'] == 'toolResult')
+          r,
+    ];
+
+    /// Журнал после сбоя: ребёнок ждёт внука, внук исполняет `read`.
+    Future<MemorySessionStore> crashedTree({
+      required bool withGrandchild,
+    }) async {
+      final store = MemorySessionStore();
+      final kidPath = await store.createChild(
+        headerOf(kidId, rootId, 'c1', kidSubagent, 1),
+      );
+      if (withGrandchild) {
+        final grandPath = await store.createChild(
+          headerOf(grandId, kidId, 'g1', grandSubagent, 2),
+        );
+        await putLines(store, kidId, [
+          user('ku1', null, text: 'kid'),
+          answer(
+            'ka1',
+            'ku1',
+            calls: [
+              ('g1', 'agent', {'description': 'Grand job', 'prompt': 'grand'}),
+            ],
+          ),
+          runningRecord(
+            'ks1',
+            'ka1',
+            subagentId: grandSubagent,
+            callId: 'g1',
+            childId: grandId,
+            journal: grandPath,
+          ),
+        ]);
+        await putLines(store, grandId, [
+          user('gu1', null, text: 'grand'),
+          answer(
+            'ga1',
+            'gu1',
+            calls: [
+              ('r1', 'read', {'path': 'a.txt'}),
+            ],
+          ),
+        ]);
+      } else {
+        await putLines(store, kidId, [
+          user('ku1', null, text: 'kid'),
+          answer(
+            'ka1',
+            'ku1',
+            calls: [
+              ('r0', 'read', {'path': 'a.txt'}),
+            ],
+          ),
+        ]);
+      }
+      store.putText(
+        rootId,
+        journal([
+          header(cwd: '/proj', id: rootId.value),
+          modelChange('m1', null),
+          user('u1', 'm1', text: 'run it'),
+          answer(
+            'a1',
+            'u1',
+            calls: [
+              ('c1', 'agent', {'description': 'Kid job', 'prompt': 'kid'}),
+            ],
+          ),
+          runningRecord(
+            's1',
+            'a1',
+            subagentId: kidSubagent,
+            callId: 'c1',
+            childId: kidId,
+            journal: kidPath,
+          ),
+        ]),
+      );
+      return store;
+    }
+
+    test('характеризующий, зелёный сразу: раскладка журнала внука плоская '
+        '(D45 Т1) — адрес в subagents/ корня, глубина пути не удлиняет, '
+        'open и list дочерних журналов не видят', () async {
+      final store = MemorySessionStore();
+
+      final kid = await store.createChild(
+        headerOf(kidId, rootId, 'c1', kidSubagent, 1),
+      );
+      final grand = await store.createChild(
+        headerOf(grandId, kidId, 'g1', grandSubagent, 2),
+      );
+
+      expect(kid, 'subagents/${rootId.value}/${kidId.value}.jsonl');
+      expect(grand, 'subagents/${rootId.value}/${grandId.value}.jsonl');
+      expect((await store.list()).items, isEmpty);
+      await expectLater(store.open(grandId), throwsA(isA<SessionNotFound>()));
+    });
+
+    test('сценарий «Раскладка внука»: журнал внука — parent.sessionId '
+        'ребёнка и depth 2, запись subagent внука — в журнале ребёнка, а не '
+        'корня', () async {
+      final rig = SubagentRig(
+        scripts: {
+          'go': [
+            oneCallStep('c1', 'agent', agentArgs('kid job')),
+            replyStep('done'),
+          ],
+          'kid job': [
+            oneCallStep('g1', 'agent', agentArgs('grand job')),
+            replyStep('kid done'),
+          ],
+          'grand job': [replyStep('grand done')],
+        },
+      );
+      await rig.open();
+
+      await rig.run('go');
+
+      final kid = rig.eventsOf<SubagentStarted>().single;
+      expect(allStarted(rig), hasLength(2), reason: 'ребёнок и внук');
+      final grand = allStarted(rig).last;
+      final header = lines(rig.store.textOf(grand.childSessionId)!).first;
+      expect(header['parent'], {
+        'sessionId': kid.childSessionId.value,
+        'rootSessionId': rig.session.id.value,
+        'toolCallId': 'g1',
+        'subagentId': grand.subagentId,
+        'agent': 'general',
+        'depth': 2,
+      });
+      expect(
+        grand.journalPath,
+        startsWith('subagents/${rig.session.id.value}/'),
+        reason: 'журнал внука лежит в subagents/ корня, плоско',
+      );
+      List<Object?> statuses(String text) => [
+        for (final r in lines(text))
+          if (r['type'] == 'subagent' && r['subagentId'] == grand.subagentId)
+            r['status'],
+      ];
+      expect(statuses(rig.store.textOf(kid.childSessionId)!), [
+        'running',
+        'completed',
+      ]);
+      expect(statuses(rig.rootJournal), isEmpty);
+    });
+
+    test('сценарий «Рекурсивное лечение»: убит ребёнок, ждущий внука, '
+        'внук исполняет read — после open результаты interrupted в журналах '
+        'корня, ребёнка и внука, запись внука failed/interrupted; никто не '
+        'перезапущен', () async {
+      final store = await crashedTree(withGrandchild: true);
+      final rig = SubagentRig(store: store, scripts: const {});
+
+      await rig.load(rootId);
+
+      final root = store.textOf(rootId)!;
+      expect(results(root).single['outcome'], 'interrupted');
+      final kid = store.textOf(kidId)!;
+      expect(
+        [
+          for (final r in results(kid))
+            ((r['message']! as Map)['toolCallId'], r['outcome']),
+        ],
+        [('g1', 'interrupted')],
+      );
+      final healed = lines(kid).where((r) => r['type'] == 'subagent').last;
+      expect(healed['subagentId'], grandSubagent);
+      expect(healed['status'], 'failed');
+      expect(healed['failure'], 'interrupted');
+      expect(
+        [
+          for (final r in results(store.textOf(grandId)!))
+            ((r['message']! as Map)['toolCallId'], r['outcome']),
+        ],
+        [('r1', 'interrupted')],
+      );
+      expect(rig.requests, isEmpty, reason: 'ни один потомок не запущен');
+    });
+
+    test('рекурсивное лечение затрагивает и журнал ребёнка глубины 1: его '
+        'прерванный вызов получает interrupted (D45 Т7)', () async {
+      final store = await crashedTree(withGrandchild: false);
+      final rig = SubagentRig(store: store, scripts: const {});
+
+      await rig.load(rootId);
+
+      expect(
+        [
+          for (final r in results(store.textOf(kidId)!))
+            ((r['message']! as Map)['toolCallId'], r['outcome']),
+        ],
+        [('r0', 'interrupted')],
+      );
+      final healed = lines(
+        store.textOf(rootId)!,
+      ).where((r) => r['type'] == 'subagent').last;
+      expect(healed['status'], 'failed');
+      expect(healed['failure'], 'interrupted');
+    });
+
+    test('повторное открытие вылеченного дерева ничего не дописывает: '
+        'лечение идемпотентно', () async {
+      final store = await crashedTree(withGrandchild: true);
+      await SubagentRig(store: store, scripts: const {}).load(rootId);
+      expect(
+        results(store.textOf(grandId)!),
+        isNotEmpty,
+        reason: 'первое открытие вылечило журнал внука',
+      );
+      final texts = {
+        for (final id in [rootId, kidId, grandId]) id: store.textOf(id),
+      };
+
+      await SubagentRig(store: store, scripts: const {}).load(rootId);
+
+      for (final id in [rootId, kidId, grandId]) {
+        expect(store.textOf(id), texts[id], reason: id.value);
+      }
+    });
+
+    test('сценарий «Журнал потомка не открывается»: журнал ребёнка в статусе '
+        'running удалён — корень открывается, вызов agent interrupted, лог '
+        'subagent.heal_failed с subagent_id без пути (D46, п. 5)', () async {
+      final store = MemorySessionStore()
+        ..putText(
+          rootId,
+          journal([
+            header(cwd: '/proj', id: rootId.value),
+            modelChange('m1', null),
+            user('u1', 'm1', text: 'run it'),
+            answer(
+              'a1',
+              'u1',
+              calls: [
+                ('c1', 'agent', {'description': 'Kid job', 'prompt': 'kid'}),
+              ],
+            ),
+            runningRecord(
+              's1',
+              'a1',
+              subagentId: kidSubagent,
+              callId: 'c1',
+              childId: kidId,
+              journal: 'subagents/${rootId.value}/${kidId.value}.jsonl',
+            ),
+          ]),
+        );
+      final rig = SubagentRig(store: store, scripts: const {});
+
+      await rig.load(rootId);
+
+      final root = store.textOf(rootId)!;
+      expect(results(root).single['outcome'], 'interrupted');
+      final healed = lines(root).where((r) => r['type'] == 'subagent').last;
+      expect(healed['status'], 'failed');
+      expect(healed['failure'], 'interrupted');
+      final failed = rig.logger.eventsOf('subagent.heal_failed').single;
+      expect(failed.fields['subagent_id'], kidSubagent);
+      expect(failed.fields['session_id'], rootId.value);
+      expect(failed.fields['error_class'], isA<String>());
+      expect(
+        failed.fields.values.join(' '),
+        isNot(contains('.jsonl')),
+        reason: 'в логе нет пути журнала',
+      );
+    });
+  });
 }
