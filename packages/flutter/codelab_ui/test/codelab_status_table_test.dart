@@ -13,6 +13,7 @@
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 
 const _columns = ['SERVER', 'STATE', 'TOOLS', 'LAST ERROR'];
@@ -237,5 +238,77 @@ void main() {
     await pumpTable(tester, const []);
     expect(tester.takeException(), isNull);
     expect(find.text('SERVER'), findsOneWidget);
+  });
+
+  testWidgets('on a 400 pt column every header stays on one line and keeps '
+      'its full text in a tooltip', (tester) async {
+    await tester.pumpWidget(
+      FluentApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 400,
+            child: CodeLabStatusTable(
+              columns: _columns,
+              rows: [_row('github', error: 'ECONNREFUSED 127.0.0.1:5432')],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    final header = find.text('LAST ERROR');
+    expect(header, findsOneWidget);
+    // Одна строка шрифта, а не две («LAST» / «ERROR»).
+    expect(tester.getSize(header).height, lessThan(24));
+    expect(
+      find.byWidgetPredicate((w) => w is Tooltip && w.message == 'LAST ERROR'),
+      findsOneWidget,
+    );
+    // Полный текст ошибки остаётся в дереве (переносится, не обрезается).
+    expect(find.text('ECONNREFUSED 127.0.0.1:5432'), findsOneWidget);
+  });
+
+  Widget tableOf(double width, {List<int>? columnFlex}) => FluentApp(
+    home: Align(
+      alignment: Alignment.topLeft,
+      child: SizedBox(
+        width: width,
+        child: CodeLabStatusTable(
+          columns: _columns,
+          columnFlex: columnFlex,
+          rows: [_row('github', error: 'ECONNREFUSED 127.0.0.1:5432')],
+        ),
+      ),
+    ),
+  );
+
+  // Тестовый шрифт Ahem шире настоящего (1 em на символ), поэтому ширина
+  // взята так, чтобы весовая колонка вмещала «LAST ERROR» в Ahem (140 pt):
+  // 6/16 от (520 - 24 - 120) = 141 pt. В настоящем шрифте колонке хватает
+  // и ~96 pt (колонка страницы 400 pt).
+  testWidgets('columnFlex gives LAST ERROR enough width to show whole', (
+    tester,
+  ) async {
+    await tester.pumpWidget(tableOf(520, columnFlex: const [4, 3, 3, 6]));
+
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.descendant(
+        of: find.text('LAST ERROR'),
+        matching: find.byType(RichText),
+      ),
+    );
+    expect(paragraph.didExceedMaxLines, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('without columnFlex the columns are equal', (tester) async {
+    await tester.pumpWidget(tableOf(520));
+
+    final widths = [
+      for (final title in _columns) tester.getSize(find.text(title)).width,
+    ];
+    expect(widths.toSet(), hasLength(1));
   });
 }
