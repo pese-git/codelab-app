@@ -771,7 +771,18 @@ final class SubagentParent {
   final ExecutionEnv env;                             // env родителя как есть (Т9)
   final TaskList tasks;                               // список задач дерева (Т7)
   final PathLock locks;                               // блокировки путей корня: одна очередь на дерево (TOOL-7, §6.3.4)
-  final int maxChildDepth;                            // глубина, которую рантайм умеет запускать; до итерации 4 — 1 (Т16), с итерации 4 — subagents.max_depth (D45 Т9)
+  final int maxChildDepth;                            // с итерации 4 — subagents.max_depth, снимок корневой сессии на дерево (D45 Т9, D46 п. 2)
+  final int? Function() contextWindowCap;             // compaction.context_window_cap: правило окна ребёнка (D40, D45 Т10)
+  SubagentParent nestedFor({tools, model, mode});     // части для менеджера потомка с agent: общие объекты корня, свои схемы шага, модель и режим (D45 Т2)
+}
+// Связь менеджера потомка со слотом его хэндла в менеджере родителя (внутренний тип ядра; D3, D45 Т4,
+// D46 п. 1, §17.3.4 шаг 2). callBegan — запущен ещё один agent: 0 → 1 возвращает слот и переводит
+// хэндл в waiting/subagents. callEnded — agent получил отчёт: 1 → 0 ставит родителя в очередь
+// возвращающихся (до release слота ребёнка, SUB-23) и отдаёт Future<bool> повторного взятия слота
+// (false — отмена в очереди; результат agent идёт после него). У менеджера корня связи нет.
+abstract interface class SubagentSlotLink {
+  void callBegan();
+  Future<bool>? callEnded();
 }
 final class ChildSessionSpec {                        // после MVP, §17.3.3; внутренний тип ядра
   // Вместо ссылки на AgentSession родителя — его части (SubagentParent): env, хранилище решений и
@@ -793,8 +804,16 @@ final class ChildSessionSpec {                        // после MVP, §17.3.
   final PathLock locks;                               // PathLock корня: правки одного файла корнем и потомками — одна очередь (TOOL-7)
   final Logger logger;                                // с root_session_id, subagent_id, parent_tool_call_id (D18)
   final void Function(Usage own) onOwnUsage;          // usage ребёнка в usage хода родителя (D4, Т8)
-  final BudgetLimit? Function() ancestorBudget;       // бюджет предков на границе шага ребёнка (D4, Т8)
+  final BudgetLimit? Function() ancestorBudget;       // бюджет предков на границе шага ребёнка (D4, Т8); у потомка — цепочка через бюджет ребёнка (D45 Т5)
+  // Вложенность (D45 Т2): всё, из чего фабрика собирает ребёнку менеджер с agent.
+  final SubagentParent? parent;                       // части родителя; из них — nestedFor
+  final SubagentTree? tree;                           // тот же SubagentTree корня
+  final SubagentSlotLink? link;                       // слот хэндла ребёнка в менеджере родителя (D46 п. 1)
+  final SessionId? rootSessionId;                     // корень дерева: root_session_id логов (Т11)
+  final TaskItem? task;                               // пункт после assign: строка «Your task: #id subject» (Т8)
 }
+// ChildSession (результат фабрики) несёт и subagents: SubagentManager потомков самого ребёнка (есть,
+// если в его наборе agent); родитель берёт из него activeChildren (D45 Т5), close() останавливает внуков.
 final class SessionSpec {
   final String cwd; final ModeId mode; final ModelRef model;
   final List<McpServerConfig> mcpServers;
