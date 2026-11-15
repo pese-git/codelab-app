@@ -13,6 +13,7 @@
 | `agent-core-engineer` | `codelab_agent_core`, `codelab_agent_io`, `codelab_embedded`, `apps/codelab_agent` | да |
 | `client-engineer` | `codelab_client_acp`, `codelab_client_core`, `codelab_client_io`, `apps/codelab_cli` | да |
 | `desktop-engineer` | `apps/codelab_desktop`, `packages/flutter/codelab_ui` | да |
+| `docs-writer` | `README.md` и `doc/` пакетов и приложений, `docs/user/`, `docs/ops/` | только документацию |
 | `check-runner` | проверки затронутого; полный `melos run check` — по просьбе | нет |
 | `architecture-reviewer` | спецификации, границы, слои, паттерны, тесты, комментарии | нет |
 | `acp-safety-reviewer` | безопасность, ACP, данные, состояние, наблюдаемость (§2, приоритеты 1–5) | нет |
@@ -21,12 +22,14 @@
 - `/change <задача>` — полный цикл: OpenSpec change → одобрение пользователя → реализация по `tasks.md` (TDD) → проверка затронутого (§21) → двойное ревью → исправления.
 - `/implement <change-id>` — реализовать или продолжить существующий change.
 - `/codelab-review [change-id]` — check + двойное ревью текущей ветки (не путать со встроенной `/review` Claude Code).
+- `/docs <путь | all>` — продуктовая документация пакета или приложения: `docs-writer` по стандарту skill `codelab-docs` → проверка фактов `architecture-reviewer` → исправления.
 - `/check [скрипты]` — прогон проверок; без аргументов — полный `melos run check` (явная просьба пользователя).
 
 ## Процесс
 - Задача, меняющая поведение, ACP-контракты, public API, persistence, security или архитектуру, начинается с `codelab-architect` (§17). Implementation-only правку можно сделать напрямую, но затем — `/codelab-review`.
 - Метки задач в `tasks.md`: `[protocol]`, `[agent]`, `[client]`, `[desktop]` — по ним выбирается исполнитель. Если меток нет (как в существующих changes), оркестратор определяет исполнителя по путям/пакетам задачи и таблице зон выше и показывает пользователю разбиение до старта.
 - Красный тест коммитится отдельно до кода (TDD вложенных `AGENTS.md`), но коммит — только по явной просьбе: оркестратор на этой точке спрашивает пользователя, а не коммитит сам.
+- Документация меняется вместе с кодом: изменение описанного в `README.md`/`doc/` пакета, `docs/user/` или `docs/ops/` обновляет документ в том же change (стандарт — `.claude/skills/codelab-docs/SKILL.md`).
 - Все команды Dart/Flutter — через `fvm` (§20). `test:e2e:app:*` — только в `release/*` (§21).
 - Не утверждать, что проверка прошла, если она не запускалась (§21).
 - `git commit`, `push`, PR, merge и архивирование change — только по явной просьбе (§19, §22).
