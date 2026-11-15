@@ -143,7 +143,7 @@
 | `TaskListChanged` | `session/update` `plan` со всем списком в порядке создания; у entry `content` = `subject`, `priority`, `status` и `_meta: {"codelab": {"task": {"id", "owner", "blockedBy"}}}`; пустой список — `entries: []` (TSK-5); так же — при `change.op == restore` (список новой ветки, D29). У самого `plan` — `_meta: {"codelab": {"taskChange": {"op", "actor", "toolCallId"?, "changed", "deleted"}}}` из `TaskChange` (D35): `toolCallId` — только у операции вызова `task_*` (у потомка — цепочка D8), у `restore` и `assign` его нет; ключ уходит независимо от объявления клиента |
 | `ToolCallStarted(agent)` | `tool_call` с `kind: think`, `title` `Subagent <agent>: <description>` (без непустого после обрезки `description` — `Subagent <agent>`, без двоеточия; design.md, D41, п. 3) и `_meta.codelab.subagent: {"id", "type"}` (D28); то же — у `tool_call` вызова `agent` при реплее, где `id` и `type` берутся из записи `subagent` с тем же `toolCallId`; у отклонённого вызова записи нет — при реплее `_meta.codelab.subagent: {"type"}` с `type` из аргументов вызова (`general` по умолчанию) и без `id` (D28; design.md, D36, Т15) |
 | `ToolCallProgress(agent)` | `tool_call_update` с одним текстовым блоком строки прогресса, заменяющим предыдущий |
-| `ToolCallFinished(agent)` | `tool_call_update` со `status` и телом отчёта без обёртки `<subagent-report>` и без ограды; всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` из `SubagentReport` (с потомками, D24); при `failed` — ещё `failure` (`budget_exceeded:<limit>`, `invalid_output`, `error`, `refused`, `interrupted`, `max_tokens` — design.md D41 п. 6; клиент неизвестные значения терпит) |
+| `ToolCallFinished(agent)` | `tool_call_update` со `status` и телом отчёта без обёртки `<subagent-report>` и без ограды; у отменённого вызова (`_meta.codelab.outcome: "cancelled"`) и у вызова без отчёта — `content: []`, который снимает строку прогресса (design.md, D52 п. 1); всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` из `SubagentReport` (с потомками, D24); при `failed` — ещё `failure` (`budget_exceeded:<limit>`, `invalid_output`, `error`, `refused`, `interrupted`, `max_tokens` — design.md D41 п. 6; клиент неизвестные значения терпит) |
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | не отправляются; логи `subagent.start`, `subagent.end` |
 | `SubagentActivity` | клиенту без `subagentToolCalls` — не отправляется (SUB-12); клиенту с ним — требование «Шаги потомков деревом» |
 
@@ -178,6 +178,10 @@
 #### Scenario: Итог субагента
 - **WHEN** ребёнок `explore` сделал 4 вызова, потратил 15 200 входных и 3 000 выходных токенов за 48 с, затем завершился; во втором варианте ход отменён во время работы ребёнка
 - **THEN** финальный `tool_call_update` вызова `agent` содержит `_meta.codelab.subagent.summary` `{"toolCalls": 4, "tokens": {"input": 15200, "output": 3000}, "durationMs": 48000}`; во втором варианте — `status: failed`, `_meta.codelab.outcome: "cancelled"` и `summary` с фактическими значениями; при `session/load` реплей вызова `agent` несёт тот же `summary` из итоговой записи `subagent`
+
+#### Scenario: Отменённый субагент без строки прогресса
+- **WHEN** ход отменён, пока ребёнок `explore` работает и клиент уже получил строку прогресса вызова `agent`
+- **THEN** финальный `tool_call_update` вызова `agent` содержит `status: failed`, `_meta.codelab.outcome: "cancelled"`, `_meta.codelab.subagent.summary` и `content: []`; отменённый вызов другого инструмента по-прежнему приходит без `content` (design.md, D52 п. 1)
 
 #### Scenario: Запрос разрешения ребёнка
 - **WHEN** ребёнок `review` просит `exec git diff --stat`, клиент отвечает `reject_once`

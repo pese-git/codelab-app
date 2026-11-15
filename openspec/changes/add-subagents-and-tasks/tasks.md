@@ -72,6 +72,14 @@
 - [x] 0.12 Сверка документов с кодом перед итерацией 4 (`develop` 2b5cf6d5): design.md D45 (Т1–Т12) — что уже есть (путь внука в kit, CLI и app; плоская раскладка журналов; `_meta` внука в адаптере), сборка потомка с `agent`, цепочка `toolCallId` с отдельным `parentToolCallId` корня, учёт слотов, usage и бюджет предков, плоская обёртка, рекурсивное лечение, `assign`; agent-acp-server — сценарий «(итерация 4)» и редакция 4 фикстуры `acp/initialize-codelab-extensions`; agent-subagents — окно модели ребёнка по D40 (сценарий «Ребёнок с малым окном»); §5.6 — устаревшие «до итерации 3 — null»; задачи 4.1–4.6 уточнены. Вопросы Q28–Q32 решены пользователем 2026-11-15 (design.md D46): внесены в спецификации agent-subagents, agent-tools, agent-prompts, в §17.3.3, §17.3.4, §17.3.6, §17.3.10, §17.16.4, D18 и задачи 4.1–4.5.
 - [x] 0.13 Сверка документов с кодом перед итерацией 5 (`develop` 82ea4f38): design.md D47 (Т1–Т13) — что уже есть (плоская обёртка с сырыми id, `ToolCallStarted.subagent` у вложенного `agent`, разбор `subagentToolCalls` в kit), цепочки и состояние моста по вызовам потомков, дефект команды потомка через терминал клиента (Т4), порт `openChildReadOnly` вместо `openChild` для реплея, `AgentSession.replayTree()` рядом с прежним `replay()`, асинхронный реплей без опережения живыми кадрами, фикстура реплея живым ходом без загрузчика `setup.sessions`, дерево и одобрение в дереве в kit; agent-acp-server — согласие, `summary` вложенного `agent`, сценарии «Команда потомка через терминал клиента», «Позднее событие закрытого вызова» и незавершённый вызов потомка в реплее; acp-client-kit — сценарий «Запрос в дереве», порядок и счётчик хвоста; codelab-cli и codelab-tui — правило «без отдельной строки вызова потомка» только без дерева; устаревшие строки D21, D36 Т4, proposal, §17.3.7, §17.3.14, §8.3, §5.6, `12-3-desktop-display.md` A14a, `14-golden-fixtures.md`; задачи 5.1–5.5 уточнены и упорядочены. Вопросы Q33–Q36 решены пользователем 2026-11-15 (design.md D48): хуки хоста `extraBeforeToolCall` у потомков с id-цепочкой и `in_progress` как у корня; `toggle_details` (Ctrl+O) в TUI вместо зарезервированного `toggle_thoughts`; тихие строки операций потомков в дереве; вложенный `agent` в REPL — строка с итогом без отчёта; дефект Т4 — в итерации 5 без отдельного fix PR. Внесены в D35, D36 Т2, D47, спецификации agent-subagents, agent-runtime, agent-acp-server, acp-client-kit, codelab-cli, codelab-tui, agent-workbench-ui, в §5.6, §10.7, §13.7, §17.3.3, §17.3.7, §12.2, `12-3-desktop-display.md` A14a и задачи 5.1–5.5.
 - [x] 0.14 Сверка документов с кодом перед итерацией 5b (`develop` c695315e): design.md D49 (Т1–Т14) — что уже есть (дерево, хвост и `subtreeCalls` итерации 5, `formatSubagentDuration`, `ToolPane.agents` без предиката, `TranscriptViewCubit`; нет часов kit, прокрутки ленты к строке, защиты итога от позднего кадра), строки панели обходом дерева с путём элементов, часы `ClientWorkspace(clock:)` и память первого появления, защёлка итога, одобрение строки, пункты `#N`, механизм показа строки в `CodeLabTranscriptPanel`, выбор строки и запрос показа в `TranscriptViewCubit`, тик в виджете app, организм `CodeLabAgentsPane` на общих компактных строках, предикат дока и пункт палитры, тесты и сценарий модели integration-теста без правки `codelab_acp_testing`; D33 «Состояние UI»; `12-3-desktop-display.md` (таблица компонентов, список тестов); задачи 5b.1–5b.5 уточнены и упорядочены. Вопросы Q37–Q39 решены пользователем 2026-11-16 (design.md D50, «Решённые вопросы»): Q37 (а) — защёлка итога только в строке панели, лента до F.1 прежняя, F.1 её снимает; Q38 (а) — работающая строка в незанятой сессии `running` без времени; Q39 (б) — второй источник отметки по `toolCallId` одобрения. Внесены в D33, D49, требования acp-client-kit «Список субагентов сессии» (оговорка про поздний кадр, второй источник отметки, сценарий «Запуск ждёт одобрения») и agent-workbench-ui «Панель Agents v1» (сценарии «Работающая строка в незанятой сессии», «Запуск ждёт одобрения в панели»), задачи 5b.1, 5b.2, 5b.4 и F.1.
+- [x] 0.15 Сверка документов с кодом перед итерацией 6 (`develop` ea10f0bb). В design.md записан D51 (Т1–Т10):
+  - доказательства Definition of Done: фикстуры есть, id `core/*` — только в комментариях, а не первым литералом внешнего `test(`/`group(` (Т1);
+  - C-05 и R-09 ссылаются на фикстуру только с ролью `client` (Т2);
+  - статусы «Py / app» и пометка «закрыто change» (Т3);
+  - расхождения §17.3, §17.16, §13, вложенных `AGENTS.md` и `delivery-roadmap.md` §6.4 (Т4–Т8);
+  - причины находок ручных прогонов итераций 5 и 5b (Т9).
+
+  Задачи 6.1a–6.1e добавлены, 6.2 и 6.3 конкретизированы. Сами документы ядра, матрица и дорожная карта не правились: это 6.2 и 6.3. Вопросы Q40–Q44 решены пользователем 2026-11-16 (design.md D52, «Решённые вопросы»): Q40 (а) — `content: []` у отменённого `agent` в адаптере, сценарий agent-acp-server «Отменённый субагент без строки прогресса» и строка `ToolCallFinished(agent)` внесены (6.1a); Q41 (а), Q42 (а) — пределы реплея принимаются, строка руководства (6.1b); Q43 (а) — F.5; Q44 (а) — F.6 и строка руководства о `max_output_tokens` (6.1b).
 
 ## 1. Список задач вместо `update_plan` (итерация 1)
 
@@ -311,16 +319,62 @@
   - загрузка сессии старого формата с `update_plan`.
 
   Найденные дефекты — подзадачами 6.1x с красным тестом и исправлением.
-- [ ] 6.2 `[agent]` Документы и код не расходятся: §17.3, §17.16, §13 — по фактическим именам и текстам. Правила D29–D31 для ещё не реализованных операций (смена ветки §17.6.5, откат к метке §17.11.6, `JournalTail` §17.6.8, переключатели §6.3.8 вместе с ошибкой «якорь выключен», режим `essential` §17.11.9) остаются в документах ядра с тестами `session_branch_task_list_test.dart`, `session_read_only_tail_test.dart`, `tool_switches_test.dart`, `core/discover-tools-mount` — для change, вводящих эти операции. Вложенные `AGENTS.md`:
-  - `codelab_agent_core` — `lib/src/subagents/`, `lib/src/tools/tasks/`, запрет копирования текстов Claude Code;
-  - `codelab_agent_acp` — новые расширения;
-  - `codelab_client_core` — разбор `_meta.codelab.*`.
-- [ ] 6.3 `[agent]` `agent-parity-goals.md`: статусы и доказательства C-05, C-06 (этапы 1 и 2), C-20 по зелёным тестам и фикстурам. `delivery-roadmap.md` §6.4 — отметка «этапы 1 и 2 и панель Agents v1 выполнены»; §10.1 строка 16 — часть M4.
+
+  Находки ручных прогонов итераций 5 и 5b (2026-11-16, Desktop на macOS, OpenRouter `openai/gpt-5.1`; design.md D51 Т9) — задачи 6.1a–6.1e; решения пользователя Q40–Q44 — design.md D52.
+
+- [ ] 6.1a `[protocol]` Строка прогресса у отменённого `agent` (D51 Т9 (а); решение Q40 (а), D52 п. 1; agent-acp-server «Отменённый субагент без строки прогресса»):
+  - сначала красный тест в `codelab_agent_acp`, рядом с тестами проекции итога `agent` (`test/subagent_call_test.dart` или `test/projection/event_projection_test.dart`): после `ToolCallProgress(agent)` и отмены финальный `tool_call_update` несёт `status: failed`, `_meta.codelab.outcome: "cancelled"`, `_meta.codelab.subagent.summary` и `content: []`; отменённый вызов не-`agent` — по-прежнему без `content` (§13.7); коммит красного теста — только по явной просьбе пользователя;
+  - затем код: `_finished` в `event_projection.dart` — у вызова `agent` с итогом ребёнка при отмене `content: []`; комментарии `_finished` и `finishedContent` — по-русски, со ссылкой на D52 п. 1;
+  - §13.7 и §17.3.7 — тем же текстом в 6.2.
+
+  Kit, REPL, TUI и app не меняются. Проверки: тесты `codelab_agent_acp`, `conformance:agent`, `conformance:embedded`, `test:e2e:cli:dart-agent`.
+- [ ] 6.1b `[desktop]` Руководство app (решения Q41 (а), Q42 (а), Q44 (а); D52 п. 2, 3, 5): в `apps/codelab_desktop/doc/user-guide.md` — (1) в разделе о субагентах и списке задач: после повторной загрузки сессии операции со списком задач показываются обычными строками вызовов (текущий список — в плане), а теги исхода одобрения («Allow once» и др.) видны только в живой сессии — у корня и у субагентов; (2) в разделе о провайдерах: если ход кончается «The model reached its token limit», лимит ответа модели задаёт ключ `providers.<id>.models.<model>.max_output_tokens` (без него — 4096), и у моделей с рассуждением он расходуется и на рассуждение, и на аргументы вызовов. Та же подсказка — в `docs/user/configuration.md`, если там есть раздел о моделях провайдера. Кода нет; проверка — только чтение текста.
+- 6.1c → F.5 (решение Q43 (а), D52 п. 4).
+- 6.1d → F.6 (решение Q44 (а), D52 п. 5); строка руководства — в 6.1b.
+- [ ] 6.1e `[desktop]` `[client]` Повторный ручной прогон после 6.1a: отменённый `agent` в app, REPL и TUI без строки `running` в раскрытии и отчёте.
+- [ ] 6.2 `[agent]` `[protocol]` `[client]` Документы и код не расходятся (D51 Т4–Т7). Правила D29–D31 для ещё не реализованных операций остаются в документах ядра для change, которые вводят эти операции, вместе со своими тестами:
+  - смена ветки §17.6.5 — `session_branch_task_list_test.dart`;
+  - откат к метке §17.11.6;
+  - `JournalTail` §17.6.8 — `session_read_only_tail_test.dart`;
+  - переключатели §6.3.8 и ошибка «якорь выключен» — `tool_switches_test.dart`;
+  - режим `essential` §17.11.9 — `core/discover-tools-mount`.
+
+  Конкретно:
+  - `[agent]` §17.3 (Т4):
+    - §17.3.2 — снять абзац «До итерации 4 … эффективной глубины 1»;
+    - §17.3.3, §17.3.5, §17.3.6 — `wrapReport` → `wrapSubagentReport`; строки прогресса — по `handle.progress` и `heartbeat_interval`; `CancelledException` и при `settled == false`;
+    - §17.3.1 — этапы 1, 2, 5a выполнены;
+    - §17.3.14:
+      - пути `test/scenarios/agent_two_children_parallel_test.dart`, `subagent_nested_no_deadlock_test.dart`, `subagent_interrupted_not_restarted_test.dart`;
+      - `-32002` вместо `-32602 subagentSession` у `subagent_journal_test.dart`;
+      - `acp/session-load-subagent-interrupted` → `session_load_subagent_test.dart` и `session_load_subagent_max_tokens_test.dart`;
+      - пометки этапов у `cli/headless-subagent-cancel-timeout` (этап 3) и `subagent_report_schema_test.dart` (этап 4);
+      - перечень тестов итераций 2–5 ядра и адаптера;
+    - §17.3.7 и §13.7 — `content: []` у отменённого `agent` (D52 п. 1);
+  - `[agent]` §17.16 (Т5): контракт §17.16.2 (`precheck`, `AssignTask`, `TaskApplied`/`TaskRejected`/`TaskRejectReason`, `SubagentActor.id: String`, `SessionTaskList`, `SubagentTaskList`); §17.16.10 — `task_batch_order_test.dart`, `task_list_cancel_test.dart`, `task_list_robustness_test.dart`, `task_snapshot_test.dart`;
+  - `[protocol]` §13 (Т6):
+    - §13.7 — фраза о пустом `content` по коду: `content: []` у `agent` без отчёта и у отменённого `agent` (D52 п. 1), у отменённого вызова другого инструмента `content` нет;
+    - §13.2 и строка capability §13.12 — «с итерации 2 change» и «итерация 5, задача 5.2» → «change `add-subagents-and-tasks`»;
+  - вложенные `AGENTS.md` (Т7):
+    - `[agent]` `codelab_agent_core` — раздел о `lib/src/subagents/` (`SubagentTool`, `SubagentManager`, `SubagentTree`, детские инструменты, `wrapSubagentReport`) и `lib/src/tools/tasks/` (порт `TaskList`, `SessionTaskList`, `SubagentTaskList`, инструменты `task_*`); запрет копирования текстов Claude Code со ссылкой на §17.3.13, §17.16.8 и корневой `AGENTS.md` §5; PKG-4 без «ещё не создан»;
+    - `[protocol]` `codelab_agent_acp` — расширения change: согласие `subagentToolCalls` из `ClientLink.capabilities`, цепочки `toolCallId` и `parentToolCallId`, ожидание `tool_call` цепочки в `AcpPermissionGate`, придержка живых кадров на время реплея дерева, `summary`/`failure`, `task`/`taskChange`; строка про `codelab_embedded` без «ещё не создан»;
+    - `[client]` `codelab_client_core` — где разбирается `_meta.codelab.*`: `subagentCall`, `subagentSummary`, `parentToolCallId`, `outcome` — в `codelab_client_acp`; `taskChange` и `PlanEntryView.owner` — в kit; неизвестные ключи и неверная форма — как отсутствие; панель — обход транскрипта (D49 Т2).
+- [ ] 6.3 `[agent]` Матрица и дорожная карта (D51 Т1–Т3, Т8):
+  - тесты ядра: внешний `group('core/<id>', …)` по образцу `test/llm/litellm_proxy_base_url_test.dart` вокруг тестов `core/agent-two-children-parallel`, `core/subagent-nested-no-deadlock`, `core/task-list-create-update`, `core/task-list-cycle-rejected`, `core/subagent-interrupted-not-restarted`, `core/task-list-legacy-session-continues` (только имена; проверки не меняются; `fvm dart test` ядра и `guard`);
+  - `agent-parity-goals.md`:
+    - C-05 — доказательства `acp/prompt-task-plan`, `acp/session-load-legacy-plan`, `app:plan_progress_checklist_flow_test.dart`; фраза «Целевые доказательства после итерации 1 …» удаляется;
+    - R-09 (§4.1 и таблица сценариев) — `acp/prompt-task-plan` вместо `acp/prompt-update-plan`;
+    - C-06 и C-20 — пометка «закрыто change `add-subagents-and-tasks`» с файлами тестов и фикстур, часть «app» — `есть`, часть «Py» не меняется (§1.5);
+    - D-25 — часть «app» `частично (панель Agents v1)`, доказательство v1 — `app:agents_pane_flow_test.dart`;
+    - число строк Must и сводка §7 не меняются;
+  - `delivery-roadmap.md`: §6.4 — строка «1 — база»: «gate корневой сессии» вместо «gate родителя»; этапы 1, 2 и 5a отмечены выполненными; §10.1, строка 16, ячейка M4 — «реализовано change `add-subagents-and-tasks` (итерация 5b)».
+
+  Проверки: `melos run guard` (доказательства матрицы), тесты `codelab_agent_core`.
 - [ ] 6.4 Definition of Done (ниже) выполнен; change готов к архивации по просьбе пользователя.
 
 ## Follow-up вне change
 
-Не входит в итерации и в Definition of Done этого change: каждый пункт оформляется отдельным OpenSpec change — F.1 меняет общее правило kit для всех вызовов и спецификацию `acp-client-kit` (найден в итерации 2), F.2 и F.3 — вид одобрения в app для корня и потомка, спецификация `agent-workbench-ui` (найдены в итерации 3), F.4 — хранилище журналов потомков (найден в итерации 4).
+Не входит в итерации и в Definition of Done этого change: каждый пункт оформляется отдельным OpenSpec change — F.1 меняет общее правило kit для всех вызовов и спецификацию `acp-client-kit` (найден в итерации 2), F.2 и F.3 — вид одобрения в app для корня и потомка, спецификация `agent-workbench-ui` (найдены в итерации 3), F.4 — хранилище журналов потомков (найден в итерации 4), F.5 — восстановление сессии при старте app и F.6 — лимит ответа модели (найдены ручными прогонами итераций 5 и 5b, решения Q43, Q44; design.md D52).
 
 - F.1 `[client]` Итоговый статус вызова не откатывается поздним неитоговым кадром. Сейчас статус вызова сливается из кадров по общим правилам (acp-client-kit «Отмена по признаку агента»), и поздний `pending`/`in_progress` после `completed` или `failed` может вернуть вызов в незавершённое состояние; защищены только признак `_meta.codelab.outcome` (2.16) и пометка `cancelledByClient`. Отдельный change: требование в `acp-client-kit` — итоговый статус (`completed`, `failed`) окончателен для вызова любого инструмента, вживую и в реплее, по образцу защиты `cancelledByClient` (`state_machines.dart`, `_isUnfinished`); сначала красные тесты слияния кадров `state_machines` и проекции в `codelab_client_acp`, затем код; сверка с ACP `08-Tool Calls.md` (поздний кадр — не новое поведение протокола, а правило клиента). Тот же change снимает защёлку итога строки панели Agents v1 (`_SessionHandle`, design.md D50 п. 1): строка снова берёт итог из `ToolCallView.status`, оговорка «кроме позднего неитогового кадра (до F.1)» в требовании acp-client-kit «Список субагентов сессии» удаляется, сценарий «Поздний кадр после завершения» проверяет и ленту. Проверки: тесты `codelab_client_acp` и `codelab_client_core`, `conformance:client`, `web-compile`.
 
@@ -329,6 +383,14 @@
 - F.3 `[desktop]` Команда в одобрении корня — через `escapeForDisplay` (у потомка сделано в итерации 4 вместе со скрытием заголовка-дубля). Команду пишет модель; управляющие C0/C1 и bidi-символы (U+202E и др.) позволяют показать одну команду, а одобрить другую. Сейчас `_pendingTitle`/`_titleSpan` одобрения корня (`codelab_tool_call_tile.dart`) выводят `command` как есть. Давний пробел, найден ревью безопасности итерации 3. Без обрезки (команда до решения не укорачивается). Сначала красные widget-тесты с U+202E у корня и у потомка, затем код. Проверки: `fvm flutter test` в `apps/codelab_desktop` и `packages/flutter/codelab_ui`.
 
 - F.4 `[agent]` Ужесточить `JsonlSessionStore.openChild` и `openChildReadOnly` (остаточные LOW ревью безопасности итераций 4 и 5, модель угроз — запись в каталог сессий агента): реальный путь журнала должен лежать внутри resolved-каталога `subagents/` своего корня (сейчас — внутри хранилища, поэтому ссылка на журнал другой сессии того же хранилища проходит); сверять `header.parent.rootSessionId`, как `MemorySessionStore`; окно TOCTOU между `resolveSymbolicLinks` и открытием — по возможности открывать один раз. Ужесточение относится к обоим методам — `openChild` и `openChildReadOnly` (итерация 5, D47 Т5), включая сверку `header.parent.rootSessionId` (остаточный LOW ревью безопасности итерации 5); `openChildReadOnly` при этом остаётся без записи на диск и без закрытия дескриптора живого журнала. Сначала красные тесты в `jsonl_child_journal_test.dart`.
+
+- F.5 `[client]` «Session … could not be restored» при старте app (design.md D51 Т9 (в), D52 п. 4; решение Q43 (а)). Отдельный fix-change или `feature/*` по клиентскому восстановлению; дефект существовал до этого change: код change не трогал ни `WorkspaceRestorer`, ни поиск корневого журнала, а журнал пустой сессии создаётся сразу в `session/new` (`AgentRuntime.createSession`). Порядок:
+  - красный тест `test/restore/workspace_restorer_test.dart` (`codelab_client_core`): при ошибке `session/load` восстановитель пишет `WorkspaceDiagnostic`/лог с классом ошибки и `session_id`, без данных сессии; сейчас ветка `on Object` в `restoreAfterConnect` ошибку отбрасывает (`AGENTS.md` §12, §16); затем код;
+  - воспроизведение по логу и красный тест на найденную причину — отдельной парой.
+
+  Проверки: тесты `codelab_client_core`, `web-compile`, `test:e2e:cli:dart-agent`.
+
+- F.6 `[client]` `[agent]` Лимит ответа модели (design.md D51 Т9 (г), D52 п. 5; решение Q44 (а)). Отдельный change: для модели без встроенной записи и без `max_output_tokens` в конфиге провайдеру уходит 4096 (`model_catalog.dart`); мастер (`ProviderSetupPlan.toEdits`) пишет только `context_window`. Объём: `[client]` — мастер в `codelab_setup` (`HttpProviderCheck`, `RemoteModel`, `ProviderSetupPlan`) записывает `max_output_tokens`, если каталог провайдера его даёт (у OpenRouter — по публичной документации `top_provider.max_completion_tokens`, сверить при change); `[agent]` — пересмотр безопасного умолчания 4096 для моделей с рассуждением. Красные тесты — `provider_setup_flow_test.dart` (записан `max_output_tokens` из каталога) и тест каталога моделей ядра. Подсказка пользователю до этого change — строка руководства (6.1b).
 
 ## Definition of Done
 
