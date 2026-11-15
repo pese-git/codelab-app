@@ -57,7 +57,9 @@
 
 Вывод `task_get` SHALL состоять из строк `Task #<id>: <subject>`, `Status: …`, `Priority: …`, `Owner: …`, `Description: …`, `Blocks: #<id> <subject>, …`, `Blocked by: #<id> <subject>, …` в этом порядке; пустое значение — `none`. Ребро зависимости показывается в `Blocks`, `Blocked by` и в суффиксе `(blocked by …)` строки `task_list`, пока блокер не `completed`; суффикс `(owner: …)` в `task_list` — только у владельца не `main` (§17.16.3). Неизвестный id при непустом списке — `Unknown task #<id>. Known: #<id>, ….`, при пустом — `Unknown task #<id>. The task list is empty.`
 
-Детский вариант (потомки, SUB-1, TSK-4): только `task_list`, `task_get` и `task_update`, где допустим лишь `status` и лишь у пунктов с `owner` = id этого потомка. Иначе — ошибка `Subagents may change only the status of their own tasks.`
+Детский вариант (потомки, SUB-1, TSK-4): только `task_list`, `task_get` и `task_update`, где допустим лишь `status` и лишь у пунктов с `owner` = id этого потомка. Иначе — ошибка `Subagents may change only the status of their own tasks.` Описание детского `task_update` SHALL быть текстом `tool_descriptions/task_update_subagent.md` (agent-prompts), схема параметров — та же, что у корня (design.md, D46, п. 4).
+
+Назначение пункта ребёнку (`agent` корня с полем `task`, §17.16.4) SHALL при получении ребёнком слота ставить `owner` = id ребёнка и `pending → in_progress` операцией `assign` без проверки прежнего владельца: последнее назначение побеждает (design.md, D46, п. 3).
 
 #### Scenario: Создание, разблокировка и удаление
 - **WHEN** модель создаёт `#1`, `#2` с `blocked_by: ["1"]` и `#3`, отмечает `#1` `completed`, затем удаляет `#3` и создаёт ещё один пункт
@@ -82,6 +84,10 @@
 #### Scenario: Потомок меняет чужой пункт
 - **WHEN** ребёнок вызывает `task_update` со `status: completed` у пункта с `owner: main`, а затем с `subject` у своего пункта
 - **THEN** оба вызова — ошибка `Subagents may change only the status of their own tasks.`; `task_update` своего пункта со `status: completed` проходит (`task_list_owner_test.dart`)
+
+#### Scenario: Повторное назначение пункта
+- **WHEN** ребёнок A работает с назначенным `#2`, корень запускает ребёнка B с `task: "2"`, B получает слот, затем A вызывает `task_update` `#2` со `status: completed`
+- **THEN** `TaskListChanged(assign)` ставит `#2` `owner` = id B; вызов A — ошибка `Subagents may change only the status of their own tasks.`, лог `task.rejected` с `reason: owner` (`task_list_owner_test.dart`; D46, п. 3)
 
 #### Scenario: Назначение пункта ребёнку
 - **WHEN** корень вызывает `agent` с `task: "2"`, и ребёнок получает слот
