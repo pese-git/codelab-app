@@ -85,8 +85,12 @@ class CodeLabStatusTable extends StatelessWidget {
     required this.columns,
     required this.rows,
     this.actionsLabel = 'Actions',
+    this.columnFlex,
     super.key,
-  });
+  }) : assert(
+         columnFlex == null || columnFlex.length == columns.length,
+         'columnFlex must match columns',
+       );
 
   /// Заголовки колонок (без колонки действий).
   final List<String> columns;
@@ -96,6 +100,14 @@ class CodeLabStatusTable extends StatelessWidget {
 
   /// Скрытая подпись колонки действий для чтения с экрана.
   final String actionsLabel;
+
+  /// Веса ширины колонок (без колонки действий); `null` — все равны 1.
+  ///
+  /// Почему: при равных колонках на узкой странице (~400 pt) заголовок
+  /// «LAST ERROR» обрезался, хотя «TOOLS» оставлял пустое место. Широкой
+  /// колонке — самой длинной по значениям — владелец даёт больший вес, как
+  /// авто-ширина колонок в артборде `Mcp`. Длина равна числу [columns].
+  final List<int>? columnFlex;
 
   static const _actionWidth = 120.0;
   static const _padding = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
@@ -127,7 +139,8 @@ class CodeLabStatusTable extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                for (final child in cells) Expanded(child: child),
+                for (var i = 0; i < cells.length; i++)
+                  Expanded(flex: columnFlex?[i] ?? 1, child: cells[i]),
                 SizedBox(width: _actionWidth, child: actions),
               ],
             ),
@@ -146,11 +159,22 @@ class CodeLabStatusTable extends StatelessWidget {
         children: [
           line([
             for (final title in columns)
-              Text(
-                title,
-                style: mono.copyWith(
-                  color: secondary,
-                  fontWeight: FontWeight.w600,
+              // Заголовок не переносится по пробелу («LAST / ERROR»). Ширину
+              // колонок подбирает владелец через [columnFlex]; многоточие с
+              // подсказкой — запасной вариант для совсем узкой колонки, где
+              // и по весам заголовок не помещается. Длинные значения ячеек не обрезаем,
+              // они переносятся.
+              Tooltip(
+                message: title,
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: mono.copyWith(
+                    color: secondary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
           ], Semantics(label: actionsLabel, child: const SizedBox(height: 18))),

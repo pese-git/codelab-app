@@ -197,15 +197,21 @@ class _McpPageState extends State<McpPage> {
         if (state.rejected case final rejected?) _rejected(rejected),
         Padding(
           padding: const EdgeInsets.only(top: 6, bottom: 4),
-          child: Row(
+          // Wrap, а не Row: на колонке ~400 pt (окно 800 pt, `MainMenu.xib`)
+          // подпись индикатора не помещается рядом со счётчиком и
+          // обрезалась многоточием. Теперь она уходит строкой ниже; на
+          // широкой колонке счётчик слева, подпись справа в одной строке.
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 4,
             children: [
-              Expanded(
-                child: CodeLabText(
-                  '$count ${count == 1 ? 'server' : 'servers'}',
-                  role: CodeLabTextRole.strong,
-                ),
+              CodeLabText(
+                '$count ${count == 1 ? 'server' : 'servers'}',
+                role: CodeLabTextRole.strong,
               ),
-              const Flexible(
+              const Tooltip(
+                message: 'Composition from the config · agent status below',
                 child: CodeLabStatusIndicator(
                   label: 'Composition from the config · agent status below',
                   tone: CodeLabStatusTone.active,
@@ -1196,6 +1202,15 @@ class _StatusPanel extends StatelessWidget {
         ];
         body = CodeLabStatusTable(
           columns: const ['SERVER', 'STATE', 'TOOLS', 'LAST ERROR'],
+          // Веса под колонку страницы ~400 pt (окно 800 pt): при равных
+          // колонках «LAST ERROR» обрезалось, а «TOOLS» оставляло пустоту.
+          // Из 256 pt (400 минус поля и колонка действий) выходит около
+          // 64 / 48 / 48 / 96 pt. Заголовки в моноширинном шрифте занимают
+          // ~45 / 37 / 37 / 75 pt, отдельного зазора между колонками у
+          // таблицы нет, поэтому SERVER (имена серверов длиннее заголовка)
+          // получает запас, а LAST ERROR (самые длинные значения) — самую
+          // широкую колонку. Сверено на живом окне 800×600.
+          columnFlex: const [4, 3, 3, 6],
           rows: [
             for (final row in rows)
               CodeLabStatusTableRow(
