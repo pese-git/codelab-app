@@ -321,7 +321,7 @@ API итерации 5 (по красным тестам 5.1):
 - `CodeLabStatusTableCell.secondary` — вторая строка приглушённым текстом (описание навыка под именем), с ограничением двумя строками и полным текстом в подсказке;
 - `CodeLabStatusTableCell.tags` — теги `CodeLabBadge` после текста («Overrides user skill», «Command only», «1 warning»);
 - `CodeLabStatusTableRow.toggle` — переключатель вместо кнопки действия (`value`, `onChanged`, `null` — неактивен, подсказка причины);
-- `CodeLabStatusTable.columnFlex` — доли ширины колонок (по умолчанию — равные);
+- `CodeLabStatusTable.columnFlex` — веса ширины колонок (по умолчанию — равные); параметр с тем же именем и типом `List<int>?` пришёл в develop раньше (вёрстка страницы MCP servers на окне 800 pt), страница навыков переиспользует его;
 - `CodeLabStatusTableCell.untrusted` — экранирование недоверенного текста (ниже).
 
 Цепочка `AGENTS.md` и шаблоны — та же таблица с текстовыми ячейками и кнопкой «Open». Выключатели согласия и пустые состояния — существующие `CodeLabSettingsRow` и `CodeLabSettingsSection`. Превью и тесты — в `codelab_organism_previews.dart`, `codelab_previews_test.dart`, `codelab_status_table_test.dart`. Знания о навыках у виджетов нет.
@@ -335,13 +335,13 @@ CodeLabStatusTableCell(text, {tone, secondary, tags = const [], untrusted = fals
 CodeLabStatusTableTag(label, {tone = CodeLabTone.neutral, tooltip});
 CodeLabStatusTableToggle({required value, required onChanged, required label, tooltip, key});
 CodeLabStatusTableRow(cells, {action, toggle});           // строка навыка: переключатель и «Open» вместе
-CodeLabStatusTable(columns, rows, {columnFlex});          // List<double>?, null — колонки равны
+CodeLabStatusTable(columns, rows, {columnFlex});          // List<int>?, null — колонки равны
 ```
 
 - `secondary` — не больше двух строк с многоточием, полный текст в `Tooltip`; `tags` — бейджи в `Wrap` после основного текста, у тега необязательная подсказка (тег «`<n>` warning(s)» несёт тексты предупреждений с путём `SKILL.md`).
 - `untrusted` экранирует все пути вывода ячейки: `text`, `secondary` и его подсказку, подпись индикатора при `tone`, подпись и подсказку тега. Подпись и подсказка переключателя экранируются всегда (на доверенном тексте без изменений): подпись содержит имя навыка.
 - `onChanged: null` — переключатель неактивен, `tooltip` объясняет причину; `label` уходит в `semanticLabel`; `key` вешается на `ToggleSwitch` (`skills-toggle-<name>`).
-- `columnFlex` — положительные доли, длина равна числу колонок (проверка в `build`: конструктор `const`); колонка действий остаётся фиксированной: 120 px, а если в таблице есть строка с переключателем и кнопкой одновременно — 190 px.
+- `columnFlex` — положительные целые веса, как `Expanded.flex`; длину проверяет `assert` конструктора, положительность — `assert` в `build` (`every` не вычисляется в `assert` константного конструктора). Сначала тип был `List<double>`; при перебазировании на develop, где тот же параметр уже был `List<int>?`, оставлен тип develop: все вызовы передают целые веса; колонка действий остаётся фиксированной: 120 px, а если в таблице есть строка с переключателем и кнопкой одновременно — 190 px.
 - `escapeForDisplay` дополнительно делает видимыми теги Unicode U+E0000–E007F (по символам, не по code unit), U+2060–U+2064, U+00AD, U+180E, U+034F и заполнители Hangul U+115F, U+1160, U+3164: через теги Unicode в описание навыка можно спрятать текст для модели.
 
 ### D13. Отступления от артборда `Extensions`
