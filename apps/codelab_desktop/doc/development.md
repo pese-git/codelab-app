@@ -53,7 +53,7 @@ flowchart LR
 | `lib/app/app_exit_handler.dart` | закрытие при выходе: предел 5 с, сброс журналов |
 | `lib/core/platform/` | порты и адаптеры платформы: `shared_preferences`-хранилища (недавние проекты, снимок рабочего места, раскладка, профиль по умолчанию), выбор папки, запуск оболочки (`UserShellLauncher`), открытие ссылок, загрузка изображений |
 | `lib/core/text/` | общие текстовые функции |
-| `lib/features/workbench/` | рабочее место: `CodeLabShellCubit` из частей (`ConnectionCubit`, `SessionsCubit`, `ActiveSessionCubit`, `LayoutCubit`, `SettingsCubit`, `TranscriptViewCubit`), маппер строк ленты `ui_mappers.dart`, перенос секретов; виджеты оболочки, ленты, баннеров |
+| `lib/features/workbench/` | рабочее место: `CodeLabShellCubit` из частей (`ConnectionCubit`, `SessionsCubit`, `ActiveSessionCubit`, `LayoutCubit`, `SettingsCubit`, `TranscriptViewCubit`), маппер строк ленты `ui_mappers.dart`, данные панели «Agents» `agents_pane_data.dart`, перенос секретов; виджеты оболочки, ленты, баннеров, панели «Agents» |
 | `lib/features/settings/` | настройки: страницы «Connection», «Providers», «MCP servers», диалог профиля, мастер провайдера |
 | `lib/features/project_files/` | панель «Files»: дерево и просмотр файлов |
 | `lib/features/terminal/` | терминал пользователя: вкладки, ссылки, вывод |
