@@ -24,9 +24,13 @@
 - **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}}`, а ядро собрано без инструмента `agent`
 - **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 1: `agentCapabilities._meta.codelab` — `{"tasks": {"version": 1}}`, остальные поля — как в `acp/initialize-capabilities`
 
-#### Scenario: Клиент CodeLab объявил расширения, субагенты включены (итерация 2)
+#### Scenario: Клиент CodeLab объявил расширения, субагенты включены (итерации 2–3)
 - **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}}`, ядро собрано с `subagents.enabled: true` и `max_depth: 3`
 - **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 2: `agentCapabilities._meta.codelab` — `{"subagents": {"version": 1, "maxDepth": 1}, "tasks": {"version": 1}}`: вложенности до итерации 4 нет, поэтому объявляется эффективная глубина 1, а не `max_depth: 3`; ключа `subagentToolCalls` нет: вызовы потомков адаптер ещё не проецирует
+
+#### Scenario: Клиент CodeLab объявил расширения, вложенность (итерация 4)
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}}`, ядро собрано с `subagents.enabled: true` и `max_depth: 3`
+- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 4: `agentCapabilities._meta.codelab` — `{"subagents": {"version": 1, "maxDepth": 3}, "tasks": {"version": 1}}`: потомки запускают своих детей до `max_depth`, поэтому объявляется `max_depth`; ключа `subagentToolCalls` нет (design.md, D45 Т9)
 
 #### Scenario: Клиент CodeLab объявил расширения, дерево вызовов (итерация 5)
 - **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}}`, ядро собрано с `subagents.enabled: true` и `max_depth: 3`
