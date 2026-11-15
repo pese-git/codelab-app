@@ -28,17 +28,24 @@ final class PermissionKey {                        // никогда не «ви
 final class PermissionRequest {
   const PermissionRequest({required this.toolCallId, required this.tool, required this.kind,
       required this.tier, required this.title, required this.rawInput, this.locations = const [],
-      this.diffs = const [], this.reason, this.allowAlwaysOffered = true, this.criticalLabel});
+      this.diffs = const [], this.pattern, this.reason, this.allowAlwaysOffered = true,
+      this.criticalLabel, this.subagent});
   final String toolCallId, tool, title;
   final ToolKind kind; final ToolTier tier;      // tool.kindOf(args), tool.tierOf(args) (§6.2)
   final Map<String, Object?> rawInput;             // приведённые аргументы (PERM-6)
   final List<Location> locations;
   final List<FileDiff> diffs;                      // по одному на файл; из ToolPrepared.presentation или present(args, ctx)
+  final String? pattern;                           // шаблон «разрешить всегда» (§7.5): им клиент называет
+                                                   // варианты allow_always / reject_always (§13.9)
   final String? reason;                            // например, 'critical command: recursive delete of /'
   final bool allowAlwaysOffered;                   // false для критических шаблонов
   final String? criticalLabel;                     // после MVP: метка критического шаблона §7.6 или
                                                    // 'agent configuration' (§7.6.1); из неё AcpPermissionGate
                                                    // берёт _meta.codelab.label, A2aPermissionGate отклоняет (§17.15.4)
+  final SubagentRequestRef? subagent;              // change add-subagents-and-tasks, итерация 3: кто из потомков
+                                                   // спрашивает — {id, type, description, depth, path,
+                                                   // parentToolCallId}; ставит SubagentPermissionGate (§17.3.3),
+                                                   // AcpPermissionGate кладёт в _meta.codelab.subagent; у корня null
 }
 
 enum PermissionDecision { allowOnce, allowAlways, rejectOnce, rejectAlways, cancelled }

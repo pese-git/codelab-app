@@ -31,7 +31,7 @@
 точка исполнения (§6.3.1), ни политика разрешений (§7) не получают специальных веток для детей.
 Всё особенное сосредоточено в четырёх местах: `SubagentTool`, `SubagentManager` (по одному на
 сессию-родителя любого уровня), `SubagentTree` (один на корневую сессию: общие лимиты, очередь
-слотов и очередь вопросов всего дерева) и обёртка `PermissionGate` родителя.
+слотов и очередь вопросов всего дерева) и обёртка `PermissionGate` корневой сессии (§17.3.3).
 
 **Термины.** *Корневая сессия* — сессия пользователя, глубина 0. *Ребёнок* — субагент, глубина
 1–3; у ребёнка глубины 1 родитель — корневая сессия, у ребёнка глубины 2 — ребёнок глубины 1 и
@@ -43,7 +43,7 @@
 
 | Этап | Объём | Где описано | OpenSpec |
 |---|---|---|---|
-| 1 — база | `agent` с типами `general`, `explore`, `review`, `plan`; вложенность до `max_depth`; лимиты дерева; состояния хэндла сразу полные (`queued`…`cancelled`); дочерние `CancelToken`; журнал ребёнка и запись `subagent`; события ребёнка внутри ядра с `parentToolCallId` и id субагента (`SubagentActivity`); запрос разрешения ребёнка через gate родителя; список задач §17.16 вместо `update_plan` | §17.3.2–§17.3.7 без доски, §17.3.10–§17.3.14, §17.16 | `add-subagents-and-tasks` |
+| 1 — база | `agent` с типами `general`, `explore`, `review`, `plan`; вложенность до `max_depth`; лимиты дерева; состояния хэндла сразу полные (`queued`…`cancelled`); дочерние `CancelToken`; журнал ребёнка и запись `subagent`; события ребёнка внутри ядра с `parentToolCallId` и id субагента (`SubagentActivity`); запрос разрешения потомка через gate корневой сессии; список задач §17.16 вместо `update_plan` | §17.3.2–§17.3.7 без доски, §17.3.10–§17.3.14, §17.16 | `add-subagents-and-tasks` |
 | 2 — шаги ребёнка деревом | `tool_call` потомков на проводе с `_meta.codelab.parentToolCallId` для клиентов с `subagentToolCalls`; меняет SUB-12 | §17.3.7, «Шаги потомков деревом» | `add-subagents-and-tasks`, итерация 5 |
 | 3 — фон и пробуждение | `run_in_background`, `agent_status`, `agent_cancel`, `wake` | §17.3.8, §17.3.9 | отдельный change, 1.x (первый) |
 | 4 — продолжение ребёнка (C-17) | `agent_send`, `agent_resume`, `agent_observe`; `output_schema` и ремонт отчёта | §17.3.8.1, §17.3.5 | отдельный change, 1.x (третий) |
@@ -219,7 +219,8 @@ final class SubagentSnapshot {
 /// Общее состояние дерева: один экземпляр на корневую сессию (§17.3.4).
 abstract interface class SubagentTree {
   int get maxDepth;                            // subagents.max_depth
-  Future<SlotLease> acquire(SubagentId id, {required bool resume});   // resume — родитель, дождавшийся детей
+  Future<bool> acquire({required bool resume, required CancelToken cancel});   // resume — родитель, дождавшийся детей; false — отменён в очереди
+  void release();                              // вернуть слот, передать следующему в очереди
   int get spawnedThisTurn;                     // счётчик max_per_turn за ход корневой сессии
   PermissionGate wrapGate(PermissionGate rootGate);   // общая FIFO вопросов дерева (SUB-3)
 }
@@ -420,8 +421,12 @@ Your final message must be only a JSON value that matches this JSON Schema. Do n
 {{schema}}
 ```
 
-**Разрешения ребёнка через gate родителя.** `SubagentPermissionGate` оборачивает
-`PermissionRequest` ребёнка и передаёт его в gate **родителя**:
+**Разрешения потомка через gate корневой сессии.** `SubagentPermissionGate` оборачивает
+`PermissionRequest` потомка любой глубины и передаёт его в gate **корневой сессии** (шаг 6; на
+глубине 1 родитель и есть корень). Сборка (D42 change `add-subagents-and-tasks`, Т3):
+`SubagentTree.wrapGate(rootGate)` один раз на дерево даёт общую FIFO, `SubagentPermissionGate`
+ребёнка оборачивает её, переписывает поля ниже и кладёт сведения о потомке в
+`PermissionRequest.subagent` (§7.2):
 
 | Поле запроса | Значение |
 |---|---|
@@ -639,7 +644,9 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 Записи `subagent` ставятся в дерево родителя после assistant-сообщения с вызовом `agent` и до
 его результата; цепочка `parentId` остаётся линейной (параллельные дети пишут по очереди через
 общую очередь записи, SES-4). Итоговая запись пишется **до** `ToolCallFinished(agent)` и с
-`durable` — это точка восстановления отчёта.
+`durable` — это точка восстановления отчёта. У отчёта, усечённого по `report_max_bytes` или
+оборванного лимитом ответа (§17.3.5, шаги 4 и 5), итоговая запись несёт ещё `"truncated": true`;
+запись без поля читается как не усечённая (D43, п. 5 change `add-subagents-and-tasks`).
 
 **Lease (S-09, §17.6.8).** Lease корневой сессии покрывает журналы всех потомков:
 отдельный lease на ребёнка не берётся, писатель дочерних журналов — только процесс-владелец lease
@@ -673,12 +680,10 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 запускается снова. Реплей (§13.5) показывает первый вызов `completed`, второй — `failed` с
 `_meta.codelab.outcome: "interrupted"`.
 
-**Известное ограничение — атрибут `truncated` при лечении.** Запись `subagent` не хранит признак
-усечения, поэтому отчёт, восстановленный из итоговой записи (`_reportOf` в
-`session/projections.dart`), получает обёртку без `truncated="true"`, даже если отчёт был усечён
-по `report_max_bytes` или оборван лимитом ответа (§17.3.5, шаги 4 и 5). Пометка в тексте отчёта
-сохраняется, теряется только атрибут; недочёт есть и для `report_max_bytes` с итерации 1.
-Исправление — follow-up задача change `add-subagents-and-tasks` (итерация 3, `[agent]`).
+**Атрибут `truncated` при лечении.** Отчёт, восстановленный из итоговой записи (`_reportOf` в
+`session/projections.dart`), берёт признак из поля `truncated` записи и получает ту же обёртку,
+что вживую. До задачи 3.6 change `add-subagents-and-tasks` (D43, п. 5) поля не было, и атрибут
+терялся; журналы того времени читаются без атрибута, пометка в тексте отчёта в них есть.
 
 ## 17.3.7. Проекция в ACP
 
@@ -704,6 +709,15 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 клиент ДОЛЖЕН показать такой запрос самостоятельно, используя `title`, `rawInput` и `content`
 запроса (golden `acp/prompt-subagent-permission`). `_meta.codelab.subagent` — расширение через
 OpenSpec (change `add-subagents-and-tasks`).
+
+**Смысл `_meta.codelab.subagent` задаёт вид кадра** (D43, п. 1 change `add-subagents-and-tasks`).
+В `tool_call` и `tool_call_update` ключ описывает субагента, которого запускает этот вызов `agent`
+(`{id, type}`, итог `summary`, `failure`). В `toolCall` запроса `session/request_permission` — того
+потомка, который спрашивает (`{id, type, description, depth, path, parentToolCallId}`). У вызова
+`agent` ребёнка (итерация 4) оба значения относятся к одному `toolCallId`, но к разным субагентам,
+поэтому клиент НЕ ДОЛЖЕН сливать их: kit берёт `subagentCall` и `summary` только из кадров вызова,
+а сведения о спрашивающем — только из запроса. Клиент без дерева вызовов показывает запрос потомка
+под строкой вызова `agent` корня, без отдельной строки (D27, п. 4; D43, п. 2).
 
 **Объявление в `initialize` (базовый этап).** Агент перечисляет поддержанные расширения CodeLab в
 `agentCapabilities._meta.codelab` (§13.2), только если клиент объявил
@@ -1266,16 +1280,16 @@ sequenceDiagram
     participant TT as "SubagentTool"
     participant SM as "SubagentManager"
     participant CH as "Дочерний AgentSession"
-    participant PG as "PermissionGate родителя"
+    participant PG as "PermissionGate корневой сессии"
     participant CL as "ACP-клиент"
     PL->>TT: execute agent, type review
     TT->>SM: spawn(spec, cancel хода)
-    SM->>SM: слот семафора, журнал ребёнка, запись subagent running
+    SM->>SM: слот дерева, журнал ребёнка, запись subagent running
     SM-->>PL: SubagentStarted
     SM->>CH: prompt(текст задачи)
     CH->>CH: шаг модели, вызов exec git diff
     CH->>PG: request, toolCallId call_4/call_2, title с префиксом [review: Check token tests]
-    PG->>CL: session/request_permission, sessionId родителя
+    PG->>CL: session/request_permission, sessionId корневой сессии
     CL-->>PG: allow_once
     PG-->>CH: allowOnce
     CH->>CH: exec, следующий шаг, финальный ответ
@@ -1353,8 +1367,8 @@ stateDiagram-v2
   (в) оставить глубину 1 — противоречит решению пользователя.
 * **Режим вычисляется при каждом решении.** Снимок режима на старте позволил бы ребёнку
   продолжать править файлы после того, как пользователь переключил родителя в `plan`.
-* **Разрешения через gate родителя, `allowAlways` общий.** У ребёнка нет своего клиента: ACP
-  знает только сессию родителя. Общие множества решений дают пользователю ожидаемое поведение:
+* **Разрешения через gate корневой сессии, `allowAlways` общий.** У потомка нет своего клиента: ACP
+  знает только корневую сессию. Общие множества решений дают пользователю ожидаемое поведение:
   «всегда разрешить `dart test`» действует для всей задачи, а «всегда отклонять» нельзя обойти,
   поручив то же действие ребёнку.
 * **Сериализация запросов детей.** Три одновременных диалога одобрения клиенты показывают плохо,
@@ -1410,7 +1424,7 @@ stateDiagram-v2
   журнал корня их не содержит; журнал внука — в `subagents/` корня (SUB-9, SUB-24).
 * `subagent_mode_narrow_test.dart`: таблица `parentMode × type.mode` из §17.3.3, шаг 4; родитель
   переключён в `plan` посреди работы ребёнка → следующий `write` ребёнка отклонён (SUB-2).
-* `subagent_permission_prefix_test.dart`: запрос ребёнка приходит в fake gate родителя с
+* `subagent_permission_prefix_test.dart`: запрос ребёнка приходит в fake gate корневой сессии с
   `toolCallId` `call_3/call_1`, title с префиксом; два ребёнка просят одновременно → второй
   запрос уходит только после ответа на первый; `allow_always` в ребёнке действует для родителя;
   `reject_always` родителя действует для ребёнка (SUB-3).
