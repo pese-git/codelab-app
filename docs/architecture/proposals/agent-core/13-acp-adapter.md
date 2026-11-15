@@ -93,7 +93,7 @@ design.md change `add-embedded-agent-mode`, D4.
 только вместе с проекцией вызовов потомков — итерация 5, задача 5.2; design.md change, D36, Т12) и
 `tasks: {"version": 1}` (§17.16.5). Change `add-usage-extension` добавляет `usage: {"version": 1}` — всегда, когда агент
 отвечает блоком; уведомление `_codelab/session/usage` получает только соединение, объявившее
-`clientCapabilities._meta.codelab.usage` (§13.12). Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
+`clientCapabilities._meta.codelab.usage` с `version`, равным целому JSON-числу `1` (правило согласования D9; §13.12). Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
 (§17.3.8), `sessionTree: {"version": 1}` — методы `_codelab/session/*`
 (§17.6.10), `steering: {"maxBytes", "maxPending"}` — метод `_codelab/session/steer`, только при
 `steering.enabled` (§17.7.2.2), `jobs: {"version": 1}` — методы `_codelab/jobs/*` (§17.9.11), `sessionSearch: {"version": 1, "maxLimit": 50, "scopes": ["cwd", "all"]}` — метод `_codelab/session/search`, только при `sessions.search.enabled` и `sessionPersistence`; `"all"` — только при `sessions.search.allow_all` (§17.6.17). Это единственное исключение из правила «ровно эти поля»:

@@ -3,25 +3,50 @@
 ### Requirement: initialize
 Ответ на `initialize` SHALL содержать ровно поля и значения §13.2 документа ядра: `protocolVersion: 1`; `agentCapabilities` с `loadSession` (`true` при capability `sessionPersistence`, иначе `false`), `promptCapabilities` (`image: true`, `audio: false`, `embeddedContext: true`), `mcpCapabilities` (`http: true`, если в плане ядра capability `mcp` включена с транспортом `http`, иначе `false`; `sse: false` всегда), `sessionCapabilities.list: {}` при `sessionPersistence`; `agentInfo`; `authMethods: []`. Флага stdio в `mcpCapabilities` нет: stdio обязателен для каждого агента (`03-Session Setup.md`, «MCP Servers»); профиль без stdio (`mobile`) и WS-профиль бинаря, где capability `mcp` выключена (design.md change `add-agent-mcp-client`, D3), — отклонения §13.15 документа ядра.
 
-Единственное исключение из «ровно этих полей» — блок объявлений расширений CodeLab `agentCapabilities._meta.codelab` (design.md change `add-subagents-and-tasks`, D9; change `add-usage-extension`, D3). Правила блока:
+Единственное исключение из «ровно этих полей» — блок объявлений расширений CodeLab `agentCapabilities._meta.codelab` (design.md change `add-subagents-and-tasks`, D9). Правила блока:
 - он SHALL отправляться, только если клиент прислал объект `clientCapabilities._meta.codelab` (в том числе пустой);
-- значение каждого ключа — объект с целым `version`: при `subagents.enabled` — `subagents: {"version": 1, "maxDepth": <subagents.max_depth>}` и `subagentToolCalls: {"version": 1}`; всегда — `tasks: {"version": 1}` и `usage: {"version": 1}`;
+- значение каждого ключа — объект с целым `version`: всегда — `tasks: {"version": 1}`; `subagents: {"version": 1, "maxDepth": <subagents.max_depth>}` — только если у ядра включены субагенты (инструмент `agent` при `subagents.enabled`, с итерации 2 change `add-subagents-and-tasks`); `enabled` и эффективная глубина SHALL браться из применённого конфига в момент `initialize` (геттер `AgentRuntime.subagents`; design.md, D37): `maxDepth` — это `subagents.max_depth`, ограниченная глубиной, которую реализует агент (до итерации 4 change — 1); порог окна контекста D40 объявления не меняет, поэтому перезагрузка конфига меняет блок для следующих `initialize` без перезапуска; `subagentToolCalls: {"version": 1}` — при том же условии и только когда адаптер умеет проецировать вызовы потомков (требование «Шаги потомков деревом», с итерации 5 change `add-subagents-and-tasks`, задача 5.2). Агент НЕ SHALL объявлять расширение, которого у него нет. Состав блока не зависит от того, какие ключи и версии объявил клиент;
+- `usage: {"version": 1}` — всегда, когда блок отправляется (design.md change `add-usage-extension`, D3; с итерации 1 этого change): usage ядро считает всегда, а неизвестную цену выражают поля `cost` и `partial` уведомления. Как и остальной состав блока, ключ не зависит от того, какие ключи и версии объявил клиент;
 - неизвестные ключи и значения в `clientCapabilities._meta.codelab` SHALL игнорироваться без ошибки;
 - стандартные поля и их значения блок не меняет.
 
-`clientCapabilities` SHALL сохраняться на соединение и определять env сессий этого соединения; отсутствие поля SHALL логироваться `acp.client_capabilities.absent`. Объявление клиентом `clientCapabilities._meta.codelab.usage` с целым `version` ≥ 1 SHALL сохраняться на соединение и определять, получает ли оно `_codelab/session/usage` (требование «Уведомление `_codelab/session/usage`»). Повторный `initialize` SHALL давать `-32600` «already initialized», любой метод `session/*` до `initialize` — `-32600` «initialize required». Метод `authenticate` SHALL давать `-32601` (§13.3).
+`clientCapabilities` SHALL сохраняться на соединение и определять env сессий этого соединения; отсутствие поля SHALL логироваться `acp.client_capabilities.absent`. Повторный `initialize` SHALL давать `-32600` «already initialized», любой метод `session/*` до `initialize` — `-32600` «initialize required». Метод `authenticate` SHALL давать `-32601` (§13.3).
+
+Объявление клиентом `clientCapabilities._meta.codelab.usage` SHALL сохраняться на соединение и определять, получает ли оно `_codelab/session/usage` (требование «Уведомление `_codelab/session/usage`»; design.md change `add-usage-extension`, D3). Объявление считается сделанным, только если значение ключа `usage` — объект, где `version` — целое JSON-число `1` (не `1.0`, не строка `"1"`, не другое число), — по тому же правилу, по которому клиент CodeLab согласует расширения из ответа агента (design.md change `add-subagents-and-tasks`, D9). Иное значение SHALL давать «не объявлено» без ошибки `initialize`.
+
+Блоки `agentCapabilities._meta.codelab` в сценариях change `add-subagents-and-tasks` ниже (с пометками итераций, «Субагенты выключены перезагрузкой конфига», «Неизвестные ключи и версии клиента», «Субагенты выключены») описывают ответ до итерации 1 change `add-usage-extension`; после неё каждый такой блок дополнительно содержит `"usage": {"version": 1}`, остальное в них не меняется. Сценарии change `add-usage-extension` помечены «(usage)».
 
 #### Scenario: Ответ codelab-app
-- **WHEN** клиент присылает `initialize` с `protocolVersion: 1` и `fs`/`terminal` capabilities без `_meta`
+- **WHEN** клиент присылает `initialize` с `protocolVersion: 1` и `fs`/`terminal` capabilities без `_meta` (так ведёт себя сторонний клиент; в любой итерации change)
 - **THEN** ответ совпадает с фикстурой `acp/initialize-capabilities`, где `mcpCapabilities` — `{"http": true, "sse": false}`, а `_meta` у `agentCapabilities` нет
 
-#### Scenario: Клиент CodeLab объявил расширения
-- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}, "usage": {"version": 1}, "future": true}`
-- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions`: `agentCapabilities._meta.codelab` — `{"subagents": {"version": 1, "maxDepth": 3}, "subagentToolCalls": {"version": 1}, "tasks": {"version": 1}, "usage": {"version": 1}}`, остальные поля — как в `acp/initialize-capabilities`
+#### Scenario: Клиент CodeLab объявил расширения, субагентов ещё нет (итерация 1)
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}}`, а ядро собрано без инструмента `agent`
+- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 1: `agentCapabilities._meta.codelab` — `{"tasks": {"version": 1}}`, остальные поля — как в `acp/initialize-capabilities`
+
+#### Scenario: Клиент CodeLab объявил расширения, субагенты включены (итерация 2)
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}}`, ядро собрано с `subagents.enabled: true` и `max_depth: 3`
+- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 2: `agentCapabilities._meta.codelab` — `{"subagents": {"version": 1, "maxDepth": 1}, "tasks": {"version": 1}}`: вложенности до итерации 4 нет, поэтому объявляется эффективная глубина 1, а не `max_depth: 3`; ключа `subagentToolCalls` нет: вызовы потомков адаптер ещё не проецирует
+
+#### Scenario: Клиент CodeLab объявил расширения, дерево вызовов (итерация 5)
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}}`, ядро собрано с `subagents.enabled: true` и `max_depth: 3`
+- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в редакции итерации 5: `agentCapabilities._meta.codelab` — `{"subagents": {"version": 1, "maxDepth": 3}, "subagentToolCalls": {"version": 1}, "tasks": {"version": 1}}`
+
+#### Scenario: Субагенты выключены перезагрузкой конфига
+- **WHEN** агент запущен с `subagents.enabled: true`, затем перезагрузка конфига ставит `subagents.enabled: false`, и новое соединение присылает `initialize` с `clientCapabilities._meta.codelab: {}`
+- **THEN** `agentCapabilities._meta.codelab` — `{"tasks": {"version": 1}}`; ответ `initialize`, полученный соединением до перезагрузки, не меняется (`initialize_test.dart`; D37)
+
+#### Scenario: Неизвестные ключи и версии клиента
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 2, "x": 1}, "future": true, "board": "yes"}`
+- **THEN** ошибки нет, блок ответа — тот же, что при известном объявлении (в итерации 1 — `{"tasks": {"version": 1}}`); проверяет unit-тест `initialize_test.dart` агента, а не фикстура
+
+#### Scenario: Клиентский _meta без codelab
+- **WHEN** клиент присылает `clientCapabilities._meta: {"traceparent": "…"}` без ключа `codelab`
+- **THEN** у `agentCapabilities` нет `_meta` (`initialize_test.dart`)
 
 #### Scenario: Субагенты выключены
 - **WHEN** `subagents.enabled: false`, клиент объявил `clientCapabilities._meta.codelab: {}`
-- **THEN** `agentCapabilities._meta.codelab` — `{"tasks": {"version": 1}, "usage": {"version": 1}}`
+- **THEN** `agentCapabilities._meta.codelab` — `{"tasks": {"version": 1}}`
 
 #### Scenario: Сессия до initialize
 - **WHEN** первым кадром соединения приходит `session/new`
@@ -31,13 +56,27 @@
 - **WHEN** хост собрал ядро без `AgentCoreServices.mcp`
 - **THEN** `mcpCapabilities` в ответе — `{"http": false, "sse": false}`
 
+#### Scenario: Клиент CodeLab объявил расширения (usage)
+- **WHEN** после итерации 1 change `add-usage-extension` клиент присылает `clientCapabilities._meta.codelab: {"tasks": {"version": 1}, "subagents": {"version": 1}, "subagentToolCalls": {"version": 1}, "usage": {"version": 1}, "future": true}`, ядро собрано с `subagents.enabled: true` и `max_depth: 3`
+- **THEN** ответ совпадает с фикстурой `acp/initialize-codelab-extensions` в текущей редакции: блок редакции change `add-subagents-and-tasks` с добавленным `"usage": {"version": 1}` — в итерации 2 того change `{"subagents": {"version": 1, "maxDepth": 1}, "tasks": {"version": 1}, "usage": {"version": 1}}`, после его итерации 5 — `{"subagents": {"version": 1, "maxDepth": 3}, "subagentToolCalls": {"version": 1}, "tasks": {"version": 1}, "usage": {"version": 1}}`; остальные поля — как в `acp/initialize-capabilities`
+
+#### Scenario: Субагенты выключены (usage)
+- **WHEN** после итерации 1 change `add-usage-extension` ядро собрано с `subagents.enabled: false`, а клиент объявил `clientCapabilities._meta.codelab: {}`
+- **THEN** `agentCapabilities._meta.codelab` — `{"tasks": {"version": 1}, "usage": {"version": 1}}`
+
+#### Scenario: Объявление usage не той версии (usage)
+- **WHEN** клиент присылает `clientCapabilities._meta.codelab: {"usage": {"version": 2}}` (или `{"version": 1.0}`, `{"version": "1"}`, `usage: true`)
+- **THEN** `initialize` успешен, блок ответа содержит `"usage": {"version": 1}`, но соединение не считается объявившим `usage` и кадров `_codelab/session/usage` не получает (`initialize_test.dart`)
+
 ### Requirement: Расширения протокола этапа 4
 Сервер SHALL отправлять только расширения, введённые утверждёнными changes (ACP-2):
 - change `add-dart-agent-acp-server`: `_meta.codelab.outcome`, `_meta.codelab.budgetExceeded`, `data.codelab` (`errorClass`, `message`, `retryable`, `reason`), `_meta.codelab.turnEnded`, `_meta.codelab.critical`;
-- change `add-subagents-and-tasks`: блок `agentCapabilities._meta.codelab` (`subagents`, `subagentToolCalls`, `tasks`), `_meta.codelab.task` у entries `plan`, `_meta.codelab.subagent` у `toolCall` в `session/request_permission`, у первого `tool_call` вызова `agent` (`id`, `type`) и у его финального `tool_call_update` (`summary`, при `failed` — `failure`), `_meta.codelab.parentToolCallId` у `tool_call`/`tool_call_update` вызовов потомков (только клиенту с `subagentToolCalls`);
-- change `add-usage-extension`: ключ `usage` блока `agentCapabilities._meta.codelab` и уведомление агент → клиент `_codelab/session/usage` (только соединению, объявившему `usage`).
+- change `add-subagents-and-tasks`: блок `agentCapabilities._meta.codelab` (`subagents`, `subagentToolCalls`, `tasks`), `_meta.codelab.task` у entries `plan`, `_meta.codelab.subagent` у `toolCall` в `session/request_permission`, у первого `tool_call` вызова `agent` (`id`, `type`) и у его финального `tool_call_update` (`summary`, при `failed` — `failure`), `_meta.codelab.parentToolCallId` у `tool_call`/`tool_call_update` вызовов потомков (только клиенту с `subagentToolCalls`).
+- change `add-usage-extension`: ключ `usage` блока `agentCapabilities._meta.codelab` и уведомление агент → клиент `_codelab/session/usage` (только соединению, объявившему `clientCapabilities._meta.codelab.usage`).
 
-Каждое расширение SHALL быть перечислено в §13.12 документа ядра со ссылкой на свой change. Методы и уведомления вне пространства `_codelab/*` и корневые поля ACP сервер НЕ SHALL вводить (`15-Extensibility.md`).
+Каждое расширение SHALL быть перечислено в §13.12 документа ядра со ссылкой на свой change. Новых методов и корневых полей ACP сервер НЕ SHALL вводить (`15-Extensibility.md`).
+
+Уточнение change `add-usage-extension` (D17): запрет новых методов относится к методам вне пространства `_codelab/*`. Уведомление `_codelab/session/usage` введено по разделам «Extension Methods» и «Custom Notifications» `15-Extensibility.md` (имя с `_`, без `id`), перечислено выше и не вводит ни корневых полей, ни значений `sessionUpdate`.
 
 #### Scenario: Бюджет хода
 - **WHEN** ход исчерпал лимит шагов
@@ -46,7 +85,7 @@
 ## ADDED Requirements
 
 ### Requirement: Уведомление `_codelab/session/usage`
-Сервер SHALL отправлять уведомление JSON-RPC `_codelab/session/usage` (без `id`) каждому соединению сессии, объявившему `clientCapabilities._meta.codelab.usage` с целым `version` ≥ 1, и НЕ SHALL отправлять его остальным соединениям (design.md change `add-usage-extension`, D1, D3). Расширение SHALL соблюдать `15-Extensibility.md` (D17): метод начинается с `_`, это уведомление без `id` (ответа и `-32601` нет), поддержка объявляется только в `_meta` capability-объектов, а стандартные типы ACP (`InitializeResponse`, `AgentCapabilities`, `PromptResponse`, `SessionNotification`) НЕ SHALL получать новых корневых полей и новых значений `sessionUpdate`. Поводы (`trigger`):
+Сервер SHALL отправлять уведомление JSON-RPC `_codelab/session/usage` (без `id`) каждому соединению сессии, объявившему `clientCapabilities._meta.codelab.usage` (значение — объект с `version`, равным целому JSON-числу `1`; требование «initialize»), и НЕ SHALL отправлять его остальным соединениям (design.md change `add-usage-extension`, D1, D3). Расширение SHALL соблюдать `15-Extensibility.md` (D17): метод начинается с `_`, это уведомление без `id` (ответа и `-32601` нет), поддержка объявляется только в `_meta` capability-объектов, а стандартные типы ACP (`InitializeResponse`, `AgentCapabilities`, `PromptResponse`, `SessionNotification`) НЕ SHALL получать новых корневых полей и новых значений `sessionUpdate`. Поводы (`trigger`):
 - `step` — после каждого `StepEnded` хода;
 - `turn` — по `TurnEnded` хода, в котором был хотя бы один `StepEnded`, после последнего `session/update` хода и до ответа на `session/prompt`, при любой причине завершения, включая `cancelled` и сбой `-32603` (ACP-3, ACP-5, ACP-7);
 - `compaction` — после `ContextCompacted`.
