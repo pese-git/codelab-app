@@ -158,19 +158,19 @@ Kit SHALL давать текст элемента: «Task #3 added to the plan�
 
 Строка SHALL содержать:
 - `toolCallId` вызова на проводе (ключ строки), id и `type` субагента, заголовок — `rawInput.description`, а без него — `title` вызова как есть;
-- состояние `running`, `awaitingApproval`, `completed`, `failed` или `cancelled`: терминальные — по статусу вызова `agent`, как у его строки в ленте; `awaitingApproval` — если есть ожидающее одобрение этой строки (ниже); иначе `running`;
+- состояние `running`, `awaitingApproval`, `completed`, `failed` или `cancelled`: терминальные — по статусу вызова `agent`, как у его строки в ленте, кроме позднего неитогового кадра (до follow-up F.1, ниже); `awaitingApproval` — если есть ожидающее одобрение этой строки (ниже); иначе `running`;
 - время: у терминальной строки — `duration` из `subagentSummary`; у работающей — `startedAt`, момент, когда kit впервые увидел `tool_call` вызова, по часам, внедрённым в `ClientWorkspace` (повтор кадра его не сдвигает); у терминальной строки без `subagentSummary` времени нет. Kit SHALL давать формат длительности тот же, что у строки итога (`48s`, `2m 05s`, `1h 02m`);
 - число вызовов инструментов: у терминальной строки — `subagentSummary.toolCalls`, у работающей — число вызовов её поддерева в дереве; токены `input + output` — только из `subagentSummary`;
 - последнее действие: у работающей строки — `title` последнего пришедшего вызова её поддерева, у `failed` — `_meta.codelab.subagent.failure`; иначе нет;
 - глубину: 1 для вызова без `parentToolCallId` или с неизвестным родителем, иначе глубина строки-родителя плюс 1;
 - id пунктов плана, у которых `PlanEntryView.owner` — id этого субагента, и id из `rawInput.task`;
-- `approvalId` ожидающего одобрения, у которого `PendingApprovalView.subagent.id` — id этого субагента; если строки с таким id нет, одобрение SHALL относиться к строке корневого уровня с `toolCallId`, равным `subagent.parentToolCallId`.
+- `approvalId` ожидающего одобрения, у которого `PendingApprovalView.subagent.id` — id этого субагента; если строки с таким id нет, одобрение SHALL относиться к строке корневого уровня с `toolCallId`, равным `subagent.parentToolCallId`. Кроме того, строка SHALL получать `awaitingApproval` и `approvalId` ожидающего одобрения, чей `toolCallId` равен её собственному `toolCallId`: запуск самой строки ждёт решения (design.md, D50 п. 3). Отметка спрашивающего при этом остаётся; при нескольких одобрениях строки `approvalId` — самого раннего. Счётчик `awaitingApproval` считает строки, а не одобрения.
 
 `SessionView` SHALL давать счётчики строк по состояниям.
 
 Kit НЕ SHALL разбирать `title`, строку прогресса и текст отчёта: состояния `queued` и `waiting`, шаги и токены работающего субагента в строке НЕ SHALL появляться (D33). Отсутствие или неверная форма любого источника SHALL давать пустое поле, а не отказ обработки обновления.
 
-Список SHALL быть функцией транскрипта, ожидающих одобрений и плана сессии: повтор кадров, реплей и повторная загрузка сессии SHALL давать тот же список без дублей (идемпотентность по `toolCallId`, `AGENTS.md` §9). Кадр вызова `agent`, пришедший после его терминального статуса, НЕ SHALL возвращать строку в `running` (поздние события).
+Список SHALL быть функцией транскрипта, ожидающих одобрений и плана сессии: повтор кадров, реплей и повторная загрузка сессии SHALL давать тот же список без дублей (идемпотентность по `toolCallId`, `AGENTS.md` §9). Кадр вызова `agent`, пришедший после его терминального статуса, НЕ SHALL возвращать строку в `running` (поздние события): kit SHALL помнить последний итоговый статус вызова, а смена одного итога другим (итоговый `completed` после `cancelled`) SHALL следовать ленте. До follow-up F.1, который делает итог окончательным для всех вызовов, это правило действует только для строки списка, а `ToolCallView.status` и лента не меняются (design.md, D50 п. 1).
 
 #### Scenario: Строки ребёнка и внука
 - **WHEN** клиент с `subagentToolCalls` получает `tool_call` `call_1` (`agent`, `_meta.codelab.subagent: {"id": "sub_a1", "type": "review"}`, `rawInput.description: "Check the diff"`), затем `call_1/call_1` (`read`) и `call_1/call_2` (`agent`, `sub_b2`, `explore`) с `parentToolCallId: "call_1"`, затем `call_1/call_2/call_1` (`ls`) с `parentToolCallId: "call_1/call_2"`
@@ -202,7 +202,11 @@ Kit НЕ SHALL разбирать `title`, строку прогресса и т
 
 #### Scenario: Поздний кадр после завершения
 - **WHEN** после `tool_call_update` `completed` вызова `agent` приходит ещё один `tool_call_update` того же `toolCallId` со `status: in_progress`
-- **THEN** строка остаётся `completed`
+- **THEN** строка остаётся `completed`; `ToolCallView.status` этого вызова следует общему слиянию кадров, как до этого change (до F.1)
+
+#### Scenario: Запуск ждёт одобрения
+- **WHEN** ребёнок `sub_a1` запускает внука: приходит `tool_call` `call_1/call_2` (`agent`, `_meta.codelab.subagent: {"id": "sub_b2", "type": "explore"}`, `status: pending`), и `session/request_permission` для `toolCallId` `call_1/call_2` с `_meta.codelab.subagent.id: "sub_a1"` ждёт ответа
+- **THEN** строки `sub_a1` и `sub_b2` — `awaitingApproval` с `approvalId` этого запроса, счётчик `awaitingApproval` равен 2; после ответа обе строки — `running`
 
 #### Scenario: Время работающего субагента
 - **WHEN** часы `ClientWorkspace` показывают `10:00:00`, когда приходит `tool_call` вызова `agent`, и `10:00:30`, когда тот же `tool_call` приходит повторно

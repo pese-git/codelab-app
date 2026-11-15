@@ -77,8 +77,8 @@ Cubit-ов (задача 5.9): app получает `SessionView` из `codelab_
 | `AppDestination`, `NavigationCubit` (A13) | `apps/codelab_desktop/lib/app/navigation/` | application | закрытый список экранов, текущий экран и вкладка инспектора, последняя страница настроек; переходы — только через Cubit |
 | `CommandPaletteCubit` (A13, R-20) | `.../workbench/application/` | application | группы палитры: команды агента из `available_commands_update`, действия сессии, переходы, действия app; нечёткий поиск |
 | `AcpTurnTimeline`, `AcpTurnStepData` (после MVP, D-22, A14) | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | панель дока «Timeline»: шаги хода, раскрытие шага до его вызовов |
-| `SubagentRowView`, `SessionView.subagents` (1.0, панель Agents v1, A15) | `codelab_client_core/lib/src/` | kit | список субагентов сессии из `_meta.codelab.subagent`, итога, дерева вызовов, запросов потомков и владельцев пунктов списка (design.md change `add-subagents-and-tasks`, D33) |
-| панель Agents v1 и выбор строки по сессиям (1.0, A15) | `codelab_ui/lib/src/organisms/`; `.../workbench/presentation/`, UI-часть по образцу `TranscriptViewCubit` | ui_kit, presentation | строки субагентов, «Go to approval», «Show in transcript», дерево шагов выбранного потомка |
+| `SubagentRowView`, `SessionView.subagents` (1.0, панель Agents v1, A15) | `codelab_client_core/lib/src/session/` | kit | список субагентов сессии из `_meta.codelab.subagent`, итога, дерева вызовов (`ToolCallItem.children`, `tail`, `subtreeCalls`), запросов потомков и владельцев пунктов списка; часы `ClientWorkspace(clock:)` для времени работающих (design.md change `add-subagents-and-tasks`, D33, D49 Т2–Т6) |
+| панель Agents v1 и выбор строки по сессиям (1.0, A15) | `codelab_ui/lib/src/organisms/` (`CodeLabAgentsPane`, запрос показа строки в `CodeLabTranscriptPanel`); `.../workbench/presentation/` (виджет панели с тиком раз в секунду); выбор строки и запрос показа — в `TranscriptViewCubit` (`.../workbench/application/`) | ui_kit, presentation, application | строки субагентов, «Go to approval», «Show in transcript», дерево шагов выбранного потомка (design.md change `add-subagents-and-tasks`, D49 Т7–Т11) |
 | `SubagentBoardCubit`, `JobBoardCubit` (после MVP, D-25, A15) | `.../workbench/application/` | application | снимки `_codelab/subagents/*` и `_codelab/jobs/*` через kit, действия «Stop», «Kill», «Output» |
 | `AcpTaskBoard`, `AcpTaskRowData` (после MVP, D-25, A15) | `codelab_ui/lib/src/organisms/`, `models/` | ui_kit | таблицы субагентов и фоновых задач, панель транскрипта ребёнка только для чтения |
 
@@ -1254,7 +1254,9 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
   возвращает на исходную вкладку; при ожидающем одобрении вопрос агента ждёт в ленте (DSK-25).
 * Панель Agents v1 (1.0, A15) — тесты итерации 5b change `add-subagents-and-tasks`: `session_subagents_test.dart`
   kit, widget-тесты панели app и `codelab_ui`; `app:agents_pane_flow_test.dart` — ребёнок с внуком и
-  запрос внука: строки, «Go to approval», ответ в ленте, дерево шагов; на устройстве — только в `release/*`.
+  запрос внука: строки, «Go to approval», ответ в ленте, дерево шагов; только с Dart-агентом и встроенным
+  агентом (`test:e2e:app:dart-agent`, `test:e2e:app:embedded`), scripted-агент его пропускает; на устройстве —
+  только в `release/*` (D49 Т12 change).
 * `app:subagent_board_flow_test.dart` (после MVP, D-25): scripted-агент с `subagentBoard` и
   `jobBoard` запускает ребёнка и фоновую команду → строки на вкладке «Agents»; «Open transcript»
   показывает реплей только для чтения, лента родителя не меняется; «Stop» и «Kill» шлют
