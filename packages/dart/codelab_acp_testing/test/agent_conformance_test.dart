@@ -130,6 +130,39 @@ void main() {
     expect(agent.stopped, isTrue);
   });
 
+  // Кадр `optional` + `repeat`: ноль или больше подряд идущих совпадений,
+  // затем следующий обязательный кадр (строки прогресса субагента).
+  for (final count in [0, 3]) {
+    test('an optional repeated frame absorbs $count matching frames', () async {
+      final progress = {
+        'dir': 'a2c',
+        'optional': true,
+        'repeat': '+',
+        'frame': {
+          'jsonrpc': '2.0',
+          'method': 'session/update',
+          'params': {
+            'sessionId': r'${sessionId}',
+            'update': {
+              'sessionUpdate': 'agent_thought_chunk',
+              'content': {
+                'type': 'text',
+                'text': {r'$any': true},
+              },
+            },
+          },
+        },
+      };
+      final frames = [promptFrames.first, progress, ...promptFrames.skip(1)];
+      final result = await runAgentFixture(
+        fixture(frames),
+        (transport, setup) async =>
+            _StubAgent(transport, chunks: ['Hello ', 'there'], thoughts: count),
+      );
+      expect(result.skipped, isFalse);
+    });
+  }
+
   test('a frame after the silence fails the run', () async {
     expect(
       () => runAgentFixture(
@@ -324,6 +357,7 @@ final class _StubAgent implements AgentUnderTest {
     required this.chunks,
     this.extraUpdate = false,
     this.extraRead = false,
+    this.thoughts = 0,
     this.verifyError,
     this.write,
   }) {
@@ -335,6 +369,9 @@ final class _StubAgent implements AgentUnderTest {
   final List<String> chunks;
   final bool extraUpdate;
   final bool extraRead;
+
+  /// Сколько кадров `agent_thought_chunk` отправить до текста ответа.
+  final int thoughts;
   final Object? verifyError;
   final (String, String)? write;
   late final StreamSubscription<JsonRpcMessage> _subscription;
@@ -362,6 +399,14 @@ final class _StubAgent implements AgentUnderTest {
         );
       case JsonRpcRequest(method: 'session/prompt', :final id):
         _promptId = id;
+        for (var i = 0; i < thoughts; i++) {
+          await _send(
+            _update({
+              'sessionUpdate': 'agent_thought_chunk',
+              'content': {'type': 'text', 'text': 'thinking'},
+            }),
+          );
+        }
         for (final chunk in chunks) {
           await _send(
             _update({

@@ -97,6 +97,27 @@
 - **WHEN** сессия, в которой пользователь отправил `/review lib/parser "error handling"`, загружается в новом соединении
 - **THEN** реплей содержит `user_message_chunk` с этим текстом, `available_commands_update` содержит `review` (фикстура `acp/prompt-template-command`)
 
+### Requirement: Отсоединение, переподключение и завершение
+Конец входа соединения (EOF stdin, закрытый сокет) SHALL приводить к ответам на уже прочитанные запросы, отправке очереди и закрытию транспорта, и только затем `serve` SHALL завершаться: у stdio выход живёт дольше входа (design.md change `add-codelab-agent-binary`, D7). Закрытие транспорта SHALL переводить соединение в `detached` на `detachGrace` (по умолчанию 30 с, `Duration.zero` — без ожидания). Если за это время сессию загружают новым соединением — переподключение: каждый ожидающий `session/request_permission` (корня и потомка) SHALL отправляться новым запросом на новом соединении с тем же `toolCallId` (PERM-4); счётчик JSON-RPC id ведётся на соединение (§13.9), поэтому значение id нового запроса МОЖЕТ совпасть с id первого (design.md change `add-subagents-and-tasks`, D44); решение по вызову SHALL приниматься один раз. Итог хода новому соединению — `session_info_update` с `_meta.codelab.turnEnded`. Иначе ход отменяется, разрешения → `cancelled`. `session/load` сессии, ход которой идёт в другом живом соединении, SHALL давать `-32602` с `reason: "sessionBusy"`.
+
+`shutdown({grace})` SHALL отвечать на новые запросы `-32603` «shutting down», завершать ожидающие разрешения `cancelled`, отменять ходы и ждать `TurnEnded` не дольше `grace`, затем закрывать транспорты (§13.10).
+
+#### Scenario: Переподключение во время разрешения
+- **WHEN** соединение закрывается, пока ход ждёт `session/request_permission`, а новое соединение загружает сессию до истечения grace
+- **THEN** новое соединение получает реплей и новый `session/request_permission` с тем же `toolCallId`; его JSON-RPC id выдан счётчиком нового соединения и может совпасть с прежним
+
+#### Scenario: Переподключение во время разрешения потомка
+- **WHEN** соединение закрывается, пока ребёнок ждёт `session/request_permission`, а новое соединение загружает сессию до истечения grace
+- **THEN** новое соединение получает новый запрос с тем же цепочечным `toolCallId` и `_meta.codelab.subagent` (`codelab_agent_acp/test/detach_test.dart`; D42, Т7)
+
+#### Scenario: Grace истёк
+- **WHEN** соединение закрывается во время хода и за 30 с никто не загружает сессию
+- **THEN** ход завершается `cancelled`, журнал содержит итоговые записи хода
+
+#### Scenario: Ответ после EOF входа
+- **WHEN** клиент пишет `initialize` и сразу закрывает вход соединения, а выход ещё принимает кадры
+- **THEN** ответ на `initialize` отправляется, транспорт закрывается, и `serve` завершается
+
 ### Requirement: Расширения протокола этапа 4
 Сервер SHALL отправлять только расширения, введённые утверждёнными changes (ACP-2):
 - change `add-dart-agent-acp-server`: `_meta.codelab.outcome`, `_meta.codelab.budgetExceeded`, `data.codelab` (`errorClass`, `message`, `retryable`, `reason`), `_meta.codelab.turnEnded`, `_meta.codelab.critical`;

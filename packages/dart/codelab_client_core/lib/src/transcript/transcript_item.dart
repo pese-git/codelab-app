@@ -49,6 +49,12 @@ sealed class TranscriptItem with _$TranscriptItem {
     required String title,
     ToolCallView? details,
     ApprovalStateView? approval,
+
+    /// Одобрения потомков, спросивших под этой строкой `agent` корня:
+    /// ожидающие и решённые в порядке прихода (D43 п. 2). Отдельной строки у
+    /// вызова потомка при строке корня нет; без дерева вызовов (этап 2)
+    /// поле — единственное место его одобрения. У прочих строк пусто.
+    @Default(<ApprovalStateView>[]) List<ApprovalStateView> childApprovals,
   }) = ToolCallItem;
 
   /// Операция со списком задач: тихая строка вместо вызова `think`
@@ -139,6 +145,10 @@ abstract class ToolCallView with _$ToolCallView {
 
     /// Итог субагента из финального обновления (D24); `null` без итога.
     SubagentSummaryView? subagentSummary,
+
+    /// Спрашивающий потомок вызова, объявленного только запросом разрешения
+    /// (D15, D43 п. 1); не меняет [subagentCall]. Остаётся после решения.
+    SubagentRequester? subagent,
   }) = _ToolCallView;
 }
 
@@ -171,6 +181,16 @@ sealed class ApprovalStateView with _$ApprovalStateView {
     required List<PermissionOption> options,
     required bool focused,
     @Default(false) bool critical,
+
+    /// Спрашивающий потомок (`_meta.codelab.subagent` запроса, D15); `null` —
+    /// запрос корня или стороннего агента.
+    SubagentRequester? subagent,
+
+    /// Заголовок вызова запроса (`toolCall.title`, с префиксом D8). Нужен, когда
+    /// строки вызова в ленте нет: у запроса потомка вызов лежит под строкой
+    /// `agent` корня (D43 п. 2), и без заголовка человек не видит, какой
+    /// инструмент разрешает.
+    String? toolTitle,
   }) = PendingApprovalView;
 
   /// Решено; [label] — имя выбранного варианта, `Cancelled` или `Resolved`,
@@ -179,6 +199,10 @@ sealed class ApprovalStateView with _$ApprovalStateView {
   const factory ApprovalStateView.resolved({
     required String label,
     required ApprovalOutcomeView outcome,
+
+    /// Спрашивавший потомок: по нему хост подписывает строку исхода под
+    /// строкой корня (`review: Allow`, D43 п. 2); `null` — запрос корня.
+    SubagentRequester? subagent,
   }) = ResolvedApprovalView;
 }
 

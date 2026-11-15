@@ -155,7 +155,8 @@ void main() {
       expect(find.text('Reject'), findsOneWidget);
 
       await tester.tap(find.text('Allow'));
-      await tester.pump();
+      // 100 мс: таймер HoverButton fluent_ui иначе остаётся висеть (как в codelab_molecules_test).
+      await tester.pump(const Duration(milliseconds: 100));
 
       expect(chosen, hasLength(1));
       expect(chosen.single.$1.approvalId, approval.approvalId);
@@ -210,7 +211,7 @@ void main() {
           (rows.single as CodeLabToolCallRow).childApprovals.single;
       expect(approval, isA<CodeLabTranscriptApprovalResolved>());
       expect(
-        (approval! as CodeLabTranscriptApprovalResolved).outcome,
+        (approval as CodeLabTranscriptApprovalResolved).outcome,
         CodeLabApprovalOutcome.allowed,
       );
     });
@@ -265,7 +266,8 @@ void main() {
 
       expect(find.text('review wants to run'), findsOneWidget);
       await tester.tap(find.text('Reject'));
-      await tester.pump();
+      // 100 мс: таймер HoverButton fluent_ui иначе остаётся висеть (как в codelab_molecules_test).
+      await tester.pump(const Duration(milliseconds: 100));
       expect(chosen, ['reject-once']);
     });
   });

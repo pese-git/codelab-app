@@ -196,6 +196,7 @@ final class SessionWriter {
             usage: event.usage,
             toolCalls: event.toolCalls,
             durationMs: event.duration.inMilliseconds,
+            truncated: event.truncated,
           ),
           durable: true,
         );

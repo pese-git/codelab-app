@@ -258,6 +258,7 @@ final class SubagentFinished extends AgentEvent {
     this.report = '',
     this.reportPreview = '',
     this.budgetExceeded,
+    this.truncated = false,
   });
 
   final SubagentId subagentId;
@@ -282,6 +283,10 @@ final class SubagentFinished extends AgentEvent {
 
   /// Лимит при `failure == budgetExceeded`.
   final BudgetLimit? budgetExceeded;
+
+  /// Отчёт усечён по `report_max_bytes` или оборван лимитом ответа; писатель
+  /// журнала сохраняет признак в итоговой записи `subagent` (D43 п. 5).
+  final bool truncated;
 }
 
 /// Событие потомка, переизлучённое в поток родителя (SUB-24). Обёртка

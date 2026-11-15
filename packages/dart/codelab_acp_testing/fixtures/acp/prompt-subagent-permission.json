@@ -289,6 +289,35 @@
     },
     {
       "dir": "a2c",
+      "repeat": "+",
+      "optional": true,
+      "note": "§17.3.2: смена состояния ребёнка (waiting, затем running) всегда даёт строку прогресса; число строк не фиксируется",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "review · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
       "note": "отчёт ребёнка без обёртки; запрошенный и отклонённый exec ребёнка — его собственный вызов, клиенту отдельной строкой не приходит (SUB-12); summary.toolCalls считает вызов ребёнка",
       "frame": {
         "jsonrpc": "2.0",

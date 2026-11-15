@@ -384,10 +384,15 @@ final class _AgentRun {
     }
     final template = frame.frame!;
     if (frame.optional) {
-      // Необязательный кадр: при несовпадении не потребляется (§14.9).
-      if (await inbox.waitFor(quietPeriod) &&
+      // Необязательный кадр: при несовпадении не потребляется (§14.9). С
+      // `repeat` — «ноль или больше»: строки прогресса субагента до запроса
+      // разрешения приходят в числе, которое фикстура не фиксирует.
+      while (await inbox.waitFor(quietPeriod) &&
           matcher.match(template, inbox.peek()).isEmpty) {
         _remember(inbox.take());
+        if (!frame.repeated) {
+          break;
+        }
       }
       return;
     }

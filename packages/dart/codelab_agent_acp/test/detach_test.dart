@@ -192,11 +192,13 @@ void main() {
   // agent-acp-server «Запрос разрешения ребёнка» и «Отсоединение,
   // переподключение и завершение»; design.md D42 Т7, D43 п. 3: ожидающий
   // запрос ребёнка после `session/load` задаётся заново — с тем же
-  // `toolCallId` (цепочка) и новым JSON-RPC id. Клиентского сценария нет:
+  // `toolCallId` (цепочка) на новом соединении; значение JSON-RPC id может
+  // совпасть, потому что счётчик `perm-<n>` свой у каждого соединения
+  // (§13.9). Клиентского сценария нет:
   // kit на повтор после `session/load` отвечает `cancelled` (ограничение
   // D43 п. 3). Красный до задач 3.2 (gate потомка в ядре) и 3.3 (адаптер).
   test('reconnect during a child permission: the same toolCallId chain, '
-      'a new JSON-RPC id', () async {
+      'a new request on the new connection', () async {
     h = await ServerHarness.start(
       steps: [
         {
@@ -262,13 +264,18 @@ void main() {
     await h.client.transport.close();
     await pumpEventQueue();
     final other = await h.connect();
-    await load(other, sessionId);
+    final response = await load(other, sessionId);
     final again = await nextRequest(other, 'session/request_permission');
 
+    // Запрос пришёл по новому соединению, после ответа на `session/load`.
+    expect(response.error, isNull);
+    expect(
+      other.received.indexOf(response),
+      lessThan(other.received.indexOf(again)),
+    );
     final toolCall =
         (again.params! as Map<String, Object?>)['toolCall']! as Map;
     expect(toolCall['toolCallId'], firstToolCall['toolCallId']);
-    expect(again.id, isNot(first.id));
     expect(
       ((toolCall['_meta']! as Map)['codelab']! as Map)['subagent'],
       containsPair('parentToolCallId', 'call_1'),

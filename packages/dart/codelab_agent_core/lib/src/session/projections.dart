@@ -543,6 +543,7 @@ SubagentReport _reportOf(SubagentRecord record) {
     failure: failure.failure,
     budgetExceeded: failure.limit,
     text: record.report ?? '',
+    truncated: record.truncated,
     toolCalls: record.toolCalls ?? 0,
     usage: record.usage ?? Usage.zero,
     duration: Duration(milliseconds: record.durationMs ?? 0),

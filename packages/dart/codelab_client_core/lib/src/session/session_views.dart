@@ -205,6 +205,14 @@ Map<String, String> subagentTypesOf(AcpSession session) {
         types[call.id!] = call.type;
       }
     }
+    // Второй источник метки владельца (D36 Т13, D42 Т9): спрашивающий потомок
+    // из запроса разрешения; вызов `agent` знает тот же id точнее.
+    for (final approval in turn.approvals.values) {
+      if (parseSubagentRequester(approval.subagentRequester)
+          case final requester?) {
+        types.putIfAbsent(requester.id, () => requester.type);
+      }
+    }
   }
   return types;
 }

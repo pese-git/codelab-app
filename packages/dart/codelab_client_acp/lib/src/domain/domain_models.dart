@@ -151,6 +151,14 @@ sealed class ApprovalRequest with _$ApprovalRequest {
     /// в его `toolCall`): опасная команда, которую headless-политика
     /// `allow-all` не разрешает (design.md change `add-codelab-cli`, D9).
     @Default(false) bool critical,
+
+    /// `_meta.codelab.subagent` `toolCall` запроса: спрашивает потомок, а не
+    /// корень (D8, D43 п. 1). Хранится отдельно от
+    /// `ToolCallRecord.subagentMeta`: тот же ключ в кадре вызова `agent`
+    /// описывает сам вызов, и слияние сделало бы `exec` потомка «вызовом
+    /// agent». Значения не проверяются (терпимый разбор — в
+    /// `codelab_client_core`); `null` — запрос корня или стороннего агента.
+    Map<String, Object?>? subagentRequester,
     @Default(ApprovalStatus.pending) ApprovalStatus status,
     PermissionOptionId? selectedOptionId,
     DateTime? requestedAt,

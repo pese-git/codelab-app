@@ -66,6 +66,36 @@ ToolCallItem _agentRow({List<ApprovalStateView> childApprovals = const []}) =>
 
 void main() {
   group('REPL: «Одобрение ребёнка»', () {
+    test('the Permission line shows the title of the child call', () {
+      final child = PendingApprovalView(
+        approvalId: const ApprovalRequestId('a1'),
+        sessionId: const SessionId('s1'),
+        risk: ApprovalRiskLevel.localWrite,
+        options: const [_allowOnce, _rejectOnce],
+        focused: true,
+        subagent: _review,
+        toolTitle: '[review: Check the diff] Write f1.txt',
+      );
+      final prompt = ApprovalPrompt.first(
+        SessionView(
+          revision: 1,
+          status: SessionStatusView.running,
+          transcript: [
+            _agentRow(childApprovals: [child]),
+          ],
+          pendingApprovals: [child],
+        ),
+        cwd: '/work',
+      )!;
+
+      expect(
+        prompt.block,
+        contains(
+          startsWith('Permission: [review: Check the diff] Write f1.txt'),
+        ),
+      );
+    });
+
     test('the block starts with `review wants to run` and the task title; '
         'n gives reject_once of this request', () {
       final prompt = ApprovalPrompt(
@@ -89,6 +119,8 @@ void main() {
             description: 'Find usages',
             depth: 2,
             parentToolCallId: 'call_1',
+            // Тип вызова корня уже разрешён проекцией kit (D43 п. 4).
+            rootType: 'review',
           ),
         ),
         title: 'Run ls',
@@ -96,6 +128,24 @@ void main() {
       );
 
       expect(prompt.block.first, 'review › explore wants to run');
+    });
+
+    test('a grandchild without a known root type shows `…`', () {
+      final prompt = ApprovalPrompt(
+        _childApproval(
+          subagent: const SubagentRequester(
+            id: 'sub_b2',
+            type: 'explore',
+            description: 'Find usages',
+            depth: 2,
+            parentToolCallId: 'call_1',
+          ),
+        ),
+        title: 'Run ls',
+        cwd: '/work',
+      );
+
+      expect(prompt.block.first, '… › explore wants to run');
     });
 
     test('a request of the root has no path line', () {

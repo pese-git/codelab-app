@@ -94,6 +94,8 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
               if (pending != null) ...[
                 if (row.secondary != null || showOutput)
                   const SizedBox(height: 12),
+                if (pending.requesterLine case final line?)
+                  _RequesterHeader(line: line, hint: pending.requesterHint),
                 CodeLabApprovalPrompt(
                   reason: pending.reason,
                   diffSummary: pending.diffSummary,
@@ -110,7 +112,7 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
           )
         : null;
 
-    return CodeLabExpanderCard(
+    final card = CodeLabExpanderCard(
       headerKey: CodeLabToolCallTile.headerKey,
       expanded: widget.expanded,
       onToggle: canToggle ? widget.onToggle : null,
@@ -146,6 +148,19 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
           ? const EdgeInsets.all(4)
           : const EdgeInsets.all(16),
       body: body,
+    );
+    if (row.childApprovals.isEmpty) {
+      return card;
+    }
+    // Блоки потомков стоят под строкой корня и не зависят от её раскрытия:
+    // дерево предков не раскрывается (D27 п. 4, D43 п. 2).
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        card,
+        for (final child in row.childApprovals)
+          _ChildApprovalBlock(approval: child),
+      ],
     );
   }
 
@@ -297,7 +312,7 @@ class _StatusGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (row.awaitsApproval) {
+    if (row.awaitsApproval || row.awaitsChildApproval) {
       return const CodeLabIcon(
         FluentIcons.permissions,
         tone: CodeLabTone.accent,
@@ -330,4 +345,106 @@ class _StatusGlyph extends StatelessWidget {
       ),
     };
   }
+}
+
+/// Строка пути спрашивающего субагента над панелью решения.
+///
+/// Почему: путь «review › explore wants to run» говорит, чей это запрос;
+/// заголовок задачи — в подсказке и строкой под путём (D27 п. 4).
+/// Для чего: показать готовые строки kit; виджет путь не строит.
+class _RequesterHeader extends StatelessWidget {
+  const _RequesterHeader({required this.line, this.hint});
+
+  final String line;
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = CodeLabText(line, role: CodeLabTextRole.mono);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (hint case final hint? when hint.isNotEmpty) ...[
+            Tooltip(message: hint, child: text),
+            CodeLabText(hint),
+          ] else
+            text,
+        ],
+      ),
+    );
+  }
+}
+
+/// Блок одобрения потомка под строкой `agent` корня: путь, команда и панель
+/// решения, а после решения — тег исхода (spec agent-workbench-ui «Запрос
+/// одобрения от субагента под строкой корня»). Решение уходит тем же
+/// обработчиком запроса, что и у обычного одобрения (PERM-4).
+class _ChildApprovalBlock extends StatelessWidget {
+  const _ChildApprovalBlock({required this.approval});
+
+  final CodeLabTranscriptApproval approval;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (approval) {
+      CodeLabTranscriptApprovalPending() => _pending(
+        context,
+        approval as CodeLabTranscriptApprovalPending,
+      ),
+      CodeLabTranscriptApprovalResolved(
+        :final label,
+        :final outcome,
+        :final requesterLine,
+      ) =>
+        Padding(
+          padding: const EdgeInsets.fromLTRB(32, 4, 0, 4),
+          child: Row(
+            children: [
+              CodeLabBadge(label: label, tone: _ToolCallTones.outcome(outcome)),
+              if (requesterLine != null) ...[
+                const SizedBox(width: 8),
+                CodeLabText(requesterLine, role: CodeLabTextRole.mono),
+              ],
+            ],
+          ),
+        ),
+    };
+  }
+
+  Widget _pending(BuildContext context, CodeLabTranscriptApprovalPending p) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 4, 0, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (p.requesterLine case final line?)
+            _RequesterHeader(line: line, hint: p.requesterHint),
+          if (p.command case final command?)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: CodeLabText(command, role: CodeLabTextRole.mono),
+            ),
+          CodeLabApprovalPrompt(
+            reason: p.reason,
+            diffSummary: p.diffSummary,
+            rawInput: p.rawInput,
+            options: p.options,
+            enabled: p.enabled,
+            approveOptionId: p.approveOptionId,
+            rejectOptionId: p.rejectOptionId,
+            shortcutsEnabled: p.shortcutsEnabled,
+            onOptionSelected: p.onOptionSelected,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Тоны тега исхода — те же, что у тега строки вызова.
+abstract final class _ToolCallTones {
+  static CodeLabTone outcome(CodeLabApprovalOutcome outcome) =>
+      _CodeLabToolCallTileState._outcomeTone(outcome);
 }

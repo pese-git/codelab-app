@@ -1830,6 +1830,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
               ? policy.mode.deniedTiers
               : const {},
         ),
+        // Gate корня: вопросы потомков идут через него (D8, D42 Т3); у корня
+        // без gate потомки получают отказ (PERM-5).
+        gate: gate,
         skills: skills,
         agentConfigPaths: configPaths,
         decisions: policy.decisions,

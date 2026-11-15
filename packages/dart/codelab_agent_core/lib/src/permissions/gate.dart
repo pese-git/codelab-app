@@ -65,6 +65,6 @@ final class PermissionRequest {
   final bool allowAlwaysOffered;
 
   /// Сведения о потомке, чей вызов; `null` у запроса самой корневой сессии
-  /// (D42 Т4). ЗАГЛУШКА задачи 3.1: заполняет `SubagentPermissionGate` в 3.2.
+  /// (D42 Т4); заполняет `SubagentPermissionGate` (D8).
   final SubagentRequestRef? subagent;
 }
