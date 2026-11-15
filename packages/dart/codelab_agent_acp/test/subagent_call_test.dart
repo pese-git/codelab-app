@@ -234,4 +234,44 @@ void main() {
     expect(summary['toolCalls'], 0);
     expect(summary['durationMs'], isA<int>());
   });
+
+  // D52 п. 1, agent-acp-server «Отменённый субагент без строки прогресса»:
+  // клиент уже получил строку прогресса `explore · …`, поэтому финальный
+  // кадр отменённого `agent` обязан нести `content: []` и снять её.
+  test('a cancelled turn after a progress line: the final frame has '
+      'content: []', () async {
+    final sessionId = await ready([
+      agentCall(exploreArgs),
+      {'waitForCancel': true},
+    ]);
+
+    final turn = h.prompt(sessionId, 'Where is auth?');
+    // Строка прогресса: in_progress с текстовым блоком, а не первый кадр.
+    while (true) {
+      final frame = await h.client.next();
+      if (frame case JsonRpcNotification(:final params)) {
+        final update = (params! as Map)['update']! as Map;
+        if (update['toolCallId'] == 'call_1' &&
+            update['status'] == 'in_progress' &&
+            update['content'] != null) {
+          break;
+        }
+      }
+    }
+    await h.client.notify('session/cancel', {'sessionId': sessionId});
+    final response = await turn;
+
+    final finished = updatesBefore(
+      response,
+    ).lastWhere((u) => u['toolCallId'] == 'call_1' && u['status'] != null);
+    expect(finished['status'], 'failed');
+    final meta = codelab(finished);
+    expect(meta['outcome'], 'cancelled');
+    expect((meta['subagent']! as Map)['summary'], isA<Map>());
+    expect(
+      finished,
+      containsPair('content', isEmpty),
+      reason: 'D52 п. 1: ключ content присутствует и это пустой список',
+    );
+  });
 }
