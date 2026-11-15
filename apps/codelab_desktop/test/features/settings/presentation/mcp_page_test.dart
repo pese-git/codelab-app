@@ -30,6 +30,7 @@ import 'package:codelab_setup/codelab_setup.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_mcp_status.dart';
@@ -1305,6 +1306,64 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(tester.getSize(find.text('Agent status')).height, lessThan(24));
     }
+
+    testWidgets('the count line puts the config caption under the counter '
+        'with its full text in a tooltip', (tester) async {
+      await openNarrow(tester);
+
+      expect(tester.takeException(), isNull);
+      final count = find.text('2 servers');
+      final caption = find.textContaining('Composition from the config');
+      expect(caption, findsOneWidget);
+      expect(
+        tester.getTopLeft(caption).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(count).dy),
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Tooltip &&
+              w.message == 'Composition from the config · agent status below',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    // Тестовый шрифт Ahem шире настоящего: подпись «Composition…» (48
+    // символов) занимает ~690 pt. Окно 800 pt даёт колонку 720 pt: подпись
+    // помещается одна, но вместе со счётчиком — нет.
+    testWidgets('the config caption is not truncated on a narrow column', (
+      tester,
+    ) async {
+      final view = TestWidgetsFlutterBinding.ensureInitialized()
+          .platformDispatcher
+          .views
+          .single;
+      view.physicalSize = const Size(800, 2400);
+      await openPage(tester);
+
+      final caption = find.textContaining('Composition from the config');
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(of: caption, matching: find.byType(RichText)),
+      );
+      expect(paragraph.didExceedMaxLines, isFalse);
+      expect(
+        tester.getTopLeft(caption).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(find.text('2 servers')).dy),
+      );
+    });
+
+    testWidgets('on a wide column the caption shares the line with the '
+        'counter', (tester) async {
+      await openPage(tester);
+
+      final caption = find.textContaining('Composition from the config');
+      expect(
+        tester.getCenter(caption).dy,
+        closeTo(tester.getCenter(find.text('2 servers')).dy, 2),
+      );
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets('the live table keeps the title on one line', (tester) async {
       source.ports[_s1] = FakeMcpStatusPort(

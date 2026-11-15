@@ -186,6 +186,45 @@ void main() {
       await tearDownApp(tester);
     });
 
+    testWidgets('the selected Default model has its full name in a tooltip', (
+      tester,
+    ) async {
+      await openPage(tester);
+
+      expect(
+        // Подсказки пунктов внутри кнопки ComboBox не получают наведения
+        // (IgnorePointer), поэтому подсказка нужна над самим ComboBox.
+        find.ancestor(
+          of: _key('providers-default-model'),
+          matching: find.byWidgetPredicate(
+            (w) => w is Tooltip && w.message == 'anthropic/m',
+          ),
+        ),
+        findsOneWidget,
+      );
+      await tearDownApp(tester);
+    });
+
+    testWidgets('a default model outside the list has no tooltip', (
+      tester,
+    ) async {
+      store.user = {
+        'agent': {'default_model': 'ghost/none'},
+        'providers': _two()['providers'],
+      };
+      await openPage(tester);
+
+      expect(_key('providers-default-model'), findsOneWidget);
+      expect(
+        find.ancestor(
+          of: _key('providers-default-model'),
+          matching: find.byType(Tooltip),
+        ),
+        findsNothing,
+      );
+      await tearDownApp(tester);
+    });
+
     testWidgets('the Default model row keeps its title on one line', (
       tester,
     ) async {
