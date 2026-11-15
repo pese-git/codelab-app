@@ -34,6 +34,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' hide DiagnosticLevel;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:async';
 
 import '../../../support/fake_agent_extensions.dart';
 import '../../../support/fake_local_folder_opener.dart';
@@ -897,29 +898,6 @@ void main() {
     });
   });
 
-  testWidgets('the Enabled switch of a skill is inactive in this iteration '
-      '(no write): onChanged is null and a tap changes nothing', (
-    tester,
-  ) async {
-    await openPage(
-      tester,
-      view: extensionsView(skills: [skillEntry('code-review')]),
-    );
-
-    expect(
-      tester.widget<ToggleSwitch>(_key('skills-toggle-code-review')).onChanged,
-      isNull,
-    );
-    await tester.tap(_key('skills-toggle-code-review'));
-    await tester.pumpAndSettle();
-
-    expect(
-      tester.widget<ToggleSwitch>(_key('skills-toggle-code-review')).checked,
-      isTrue,
-    );
-    expect(store.applied, isEmpty);
-  });
-
   group('review of iteration 4', () {
     String? tooltipOfOpenCodelab(WidgetTester tester) {
       final tooltip = tester.widget<Tooltip>(
@@ -978,6 +956,349 @@ void main() {
     });
   });
 
+  // Задача 5.1 change `add-app-skills-page` (spec app-settings «Страница
+  // «Skills & extensions»: запись и применение»; design.md D5, D9, D12).
+  // Красные до задачи 5.2. Ожидаемое поведение страницы:
+  // * `skills-toggle-<name>` активен, если `entry.toggle.isAvailable`, иначе
+  //   неактивен, а подсказка называет причину отказа моста:
+  //   `Set in <файл>; edit that file.` (NotEditable),
+  //   `Disabled by the project config (<файл>).` (DisabledByProject),
+  //   `Trust this project to read <элемент>.` (UntrustedProject),
+  //   `The config file of this layer cannot be read. Fix it first.`
+  //   (LayerUnreadable);
+  // * строка согласия `skills-consent-<project|home>` (`ToggleSwitch` с этим
+  //   ключом) на каждого кандидата `view.skills.consents`, подпись —
+  //   `skills-consent-note-<project|home>`: число найденных каталогов
+  //   (`3 skill folders found`), область (`in every trusted project` для
+  //   относительного элемента) и что `.agents/skills` читается без согласия;
+  // * баннер `skills-banner`: `saved` — InfoBar success с текстом
+  //   `Saved. New sessions use it; open sessions keep their skills.`;
+  //   `conflict` и `error` — warning с текстом Cubit;
+  // * пока идёт запись, переключатели неактивны.
+  group('write: toggles and consent (iteration 5)', () {
+    const savedText =
+        'Saved. New sessions use it; open sessions keep their skills.';
+
+    SkillConsentView consent(
+      String entry, {
+      int? dirs = 3,
+      bool granted = false,
+      SkillToggle toggle = const SkillToggle.available(),
+    }) => SkillConsentView(
+      entry: entry,
+      path: entry.startsWith('~')
+          ? '/home/u/.claude/skills'
+          : '$skillsFolder/.claude/skills',
+      skillDirs: dirs,
+      granted: granted,
+      toggle: toggle,
+    );
+
+    Finder tooltipOf(String key) =>
+        find.ancestor(of: _key(key), matching: find.byType(Tooltip));
+
+    String? hint(WidgetTester tester, String key) =>
+        tester.widget<Tooltip>(tooltipOf(key)).message;
+
+    testWidgets('an available switch writes skills.disabled through the '
+        'plan and the page shows the saved banner', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(skills: [skillEntry('code-review')]),
+      );
+      expect(
+        tester
+            .widget<ToggleSwitch>(_key('skills-toggle-code-review'))
+            .onChanged,
+        isNotNull,
+      );
+
+      await tester.tap(_key('skills-toggle-code-review'));
+      await tester.pumpAndSettle();
+
+      final edit = store.applied.single.edits.single as SetValue;
+      expect(edit.key, 'skills.disabled');
+      expect(edit.value, ['code-review']);
+      expect(
+        tester.widget<InfoBar>(_key('skills-banner')).severity,
+        InfoBarSeverity.success,
+      );
+      expect(_containing('skills-banner', savedText), findsOneWidget);
+      expect(session.extensionsCalls, hasLength(2));
+    });
+
+    testWidgets('a disabled skill is turned on by the same switch', (
+      tester,
+    ) async {
+      store.user = {
+        'skills': {
+          'disabled': ['flutter-golden', 'other'],
+        },
+      };
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [
+            skillEntry(
+              'flutter-golden',
+              availability: SkillAvailability.disabled,
+            ),
+          ],
+        ),
+      );
+
+      await tester.tap(_key('skills-toggle-flutter-golden'));
+      await tester.pumpAndSettle();
+
+      expect((store.applied.single.edits.single as SetValue).value, ['other']);
+    });
+
+    testWidgets('a refused toggle is inactive and the tooltip says why', (
+      tester,
+    ) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [
+            skillEntry(
+              'a',
+              toggle: SkillToggle.refused(
+                const SkillsListNotEditable('/etc/team.yaml'),
+              ),
+            ),
+            skillEntry(
+              'b',
+              toggle: SkillToggle.refused(
+                const SkillsListDisabledByProject('.codelab/config.yaml'),
+              ),
+            ),
+            skillEntry(
+              'c',
+              toggle: SkillToggle.refused(
+                const SkillsListLayerUnreadable(ConfigLayer.projectLocal),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      for (final name in const ['a', 'b', 'c']) {
+        expect(
+          tester.widget<ToggleSwitch>(_key('skills-toggle-$name')).onChanged,
+          isNull,
+          reason: name,
+        );
+      }
+      expect(
+        hint(tester, 'skills-toggle-a'),
+        'Set in /etc/team.yaml; edit that file.',
+      );
+      expect(
+        hint(tester, 'skills-toggle-b'),
+        'Disabled by the project config (.codelab/config.yaml).',
+      );
+      expect(
+        hint(tester, 'skills-toggle-c'),
+        'The config file of this layer cannot be read. Fix it first.',
+      );
+      await tester.tap(_key('skills-toggle-a'));
+      await tester.pumpAndSettle();
+      expect(store.applied, isEmpty);
+    });
+
+    testWidgets('consent rows exist only for the candidates of the view, '
+        'with the count and the scope in the caption', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          consents: [
+            consent('.claude/skills'),
+            consent('~/.claude/skills', dirs: 1, granted: true),
+          ],
+        ),
+      );
+
+      expect(_key('skills-consent-project'), findsOneWidget);
+      expect(_key('skills-consent-home'), findsOneWidget);
+      expect(
+        tester.widget<ToggleSwitch>(_key('skills-consent-project')).checked,
+        isFalse,
+      );
+      expect(
+        tester.widget<ToggleSwitch>(_key('skills-consent-home')).checked,
+        isTrue,
+      );
+      expect(
+        _containing('skills-consent-note-project', '3 skill folders'),
+        findsOneWidget,
+      );
+      expect(
+        _containing('skills-consent-note-project', 'in every trusted project'),
+        findsOneWidget,
+      );
+      expect(
+        _containing('skills-consent-note-project', '.agents/skills'),
+        findsOneWidget,
+      );
+      expect(
+        _containing('skills-consent-note-home', '1 skill folder'),
+        findsOneWidget,
+      );
+      expect(
+        _containing('skills-consent-note-home', 'in every trusted project'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('without candidates there are no consent rows', (tester) async {
+      await openPage(tester, view: extensionsView());
+
+      expect(_key('skills-consent-project'), findsNothing);
+      expect(_key('skills-consent-home'), findsNothing);
+    });
+
+    testWidgets('the consent switch gives the home root: extra_roots with '
+        'the element, the saved banner', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(consents: [consent('~/.claude/skills')]),
+      );
+
+      await tester.tap(_key('skills-consent-home'));
+      await tester.pumpAndSettle();
+
+      final edit = store.applied.single.edits.single as SetValue;
+      expect(edit.key, 'skills.extra_roots');
+      expect(edit.value, ['~/.claude/skills']);
+      expect(_containing('skills-banner', savedText), findsOneWidget);
+    });
+
+    testWidgets('a granted consent is revoked by the same switch', (
+      tester,
+    ) async {
+      store.user = {
+        'skills': {
+          'extra_roots': ['~/.claude/skills', '/opt/more'],
+        },
+      };
+      await openPage(
+        tester,
+        view: extensionsView(
+          consents: [consent('~/.claude/skills', granted: true)],
+        ),
+      );
+
+      await tester.tap(_key('skills-consent-home'));
+      await tester.pumpAndSettle();
+
+      expect((store.applied.single.edits.single as SetValue).value, [
+        '/opt/more',
+      ]);
+    });
+
+    testWidgets('a refused consent is inactive with the Q3 hint', (
+      tester,
+    ) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          trusted: false,
+          consents: [
+            consent(
+              '.claude/skills',
+              toggle: SkillToggle.refused(const SkillsListUntrustedProject()),
+            ),
+            consent(
+              '~/.claude/skills',
+              toggle: SkillToggle.refused(
+                const SkillsListNotEditable('/etc/team.yaml'),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      expect(
+        tester.widget<ToggleSwitch>(_key('skills-consent-project')).onChanged,
+        isNull,
+      );
+      expect(
+        hint(tester, 'skills-consent-project'),
+        'Trust this project to read .claude/skills.',
+      );
+      expect(
+        hint(tester, 'skills-consent-home'),
+        'Set in /etc/team.yaml; edit that file.',
+      );
+    });
+
+    testWidgets('a conflict is the warning banner and the page is '
+        're-read', (tester) async {
+      store.firstOutcome = const ConfigConflict(FakeAgentConfigStore.userPath);
+      await openPage(tester, view: extensionsView(skills: [skillEntry('a')]));
+
+      await tester.tap(_key('skills-toggle-a'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<InfoBar>(_key('skills-banner')).severity,
+        InfoBarSeverity.warning,
+      );
+      expect(_containing('skills-banner', 'changed on disk'), findsOneWidget);
+      expect(store.applied, hasLength(1));
+      expect(session.extensionsCalls, hasLength(2));
+    });
+
+    testWidgets('a rejected write is the banner with the loader problem', (
+      tester,
+    ) async {
+      store.nextOutcome = const ConfigRejected([
+        ConfigIssue(
+          kind: ConfigIssueKind.value,
+          key: 'skills.disabled',
+          source: FakeAgentConfigStore.userPath,
+          message: 'must be a list of names',
+        ),
+      ]);
+      await openPage(tester, view: extensionsView(skills: [skillEntry('a')]));
+
+      await tester.tap(_key('skills-toggle-a'));
+      await tester.pumpAndSettle();
+
+      expect(
+        _containing('skills-banner', 'must be a list of names'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('while the write runs the switches are inactive and a '
+        'second tap is not a second write', (tester) async {
+      final gate = Completer<void>();
+      store.onApply = () => gate.future;
+      await openPage(
+        tester,
+        view: extensionsView(skills: [skillEntry('a'), skillEntry('b')]),
+      );
+
+      await tester.tap(_key('skills-toggle-a'));
+      await tester.pump();
+      expect(
+        tester.widget<ToggleSwitch>(_key('skills-toggle-a')).onChanged,
+        isNull,
+      );
+      expect(
+        tester.widget<ToggleSwitch>(_key('skills-toggle-b')).onChanged,
+        isNull,
+      );
+      await tester.tap(_key('skills-toggle-b'));
+      await tester.pump();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(store.applied, hasLength(1));
+    });
+  });
+
   group('actions', () {
     testWidgets('"Reload" re-reads the config and the files and sends '
         'nothing to the agent', (tester) async {
@@ -1033,13 +1354,34 @@ void main() {
       );
     });
 
-    testWidgets('the page never offers to write: no save, no consent '
-        'switches in this iteration', (tester) async {
-      await openPage(tester, view: extensionsView(skills: [skillEntry('a')]));
+    testWidgets('a read-only page (WebSocket agent) has no skill switches '
+        'and no consent rows, and nothing is written', (tester) async {
+      await openPage(
+        tester,
+        view: extensionsView(
+          skills: [skillEntry('a')],
+          consents: [
+            SkillConsentView(
+              entry: '~/.claude/skills',
+              path: '/home/u/.claude/skills',
+              skillDirs: 1,
+              granted: false,
+              toggle: const SkillToggle.available(),
+            ),
+          ],
+        ),
+        profile: ConnectionProfile.webSocket(
+          id: 'devbox',
+          label: 'Devbox',
+          uri: Uri.parse('wss://devbox:7420/acp'),
+        ),
+      );
 
+      expect(_key('skills-read-only'), findsOneWidget);
+      expect(find.byType(ToggleSwitch), findsNothing);
+      expect(_key('skills-consent-home'), findsNothing);
       expect(find.text('Save'), findsNothing);
       expect(store.applied, isEmpty);
-      expect(_key('skills-consent-project'), findsNothing);
     });
   });
 }
