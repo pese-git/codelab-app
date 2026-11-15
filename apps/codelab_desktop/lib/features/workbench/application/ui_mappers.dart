@@ -234,12 +234,20 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
   ];
 }
 
+/// Строка вызова ленты; [nested] — строка потомка внутри дерева `agent`.
+///
+/// Почему [nested]: панель решения принадлежит блоку под строкой корня
+/// (`childApprovals`, D27 п. 4, D47 Т9), а у вложенной строки ожидающее
+/// одобрение даёт лишь пометку «ждёт решения»: две панели одного запроса
+/// дали бы два набора кнопок на одно решение (PERM-4). Решённое одобрение
+/// остаётся тегом исхода и на своём месте в дереве.
 CodeLabToolCallRow _toolCallRowOf(
   ToolCallItem call, {
   required String id,
   required String cwd,
   required bool approvalsEnabled,
   required ApprovalOptionChosen onApprovalSelected,
+  bool nested = false,
 }) {
   final view = ToolRowFormatter.format(call, cwd: cwd);
   final details = call.details;
@@ -247,6 +255,16 @@ CodeLabToolCallRow _toolCallRowOf(
   // Заголовок «Subagent <type>: <description>» и итог готовит kit
   // (`ToolRowFormatter`), маппер только переносит их; отчёт — в раскрытие.
   final isSubagent = details?.subagentCall != null;
+  final approval = call.approval;
+  final waitsRootDecision = nested && approval is PendingApprovalView;
+  CodeLabToolCallRow rowOf(ToolCallItem child) => _toolCallRowOf(
+    child,
+    id: child.id,
+    cwd: cwd,
+    approvalsEnabled: approvalsEnabled,
+    onApprovalSelected: onApprovalSelected,
+    nested: true,
+  );
   return CodeLabToolCallRow(
     id: id,
     status: _toolCallStatusOf(details?.status ?? ToolCallStatusView.queued),
@@ -257,14 +275,35 @@ CodeLabToolCallRow _toolCallRowOf(
         ? [if (view.report case final report?) ...report.split('\n')]
         : details?.textOutput ?? const [],
     subagent: isSubagent
-        ? CodeLabSubagentCall(stats: view.summaryShort, progress: view.progress)
+        ? CodeLabSubagentCall(
+            stats: view.summaryShort ?? view.runningCounter,
+            progress: view.progress,
+            // Хвост — готовый срез kit (D25, D47 Т9). Kit строит его
+            // независимо от статуса, а показывает строка только у работающего
+            // вызова; итог завершённого берётся из `summary`. Операция со
+            // списком задач — тихая строка (D48 п. 3).
+            tail: [
+              for (final tailed in call.tail.calls)
+                switch (call.tail.operations[tailed.toolCallId]) {
+                  final TaskOpsItem ops => CodeLabTaskOpsRow(
+                    id: tailed.id,
+                    text: ops.text,
+                  ),
+                  null => rowOf(tailed),
+                },
+            ],
+            tailMore: call.tail.moreCount,
+          )
         : null,
-    approval: _transcriptApprovalOf(
-      call.approval,
-      callStatus: details?.status,
-      enabled: approvalsEnabled,
-      onSelected: onApprovalSelected,
-    ),
+    approval: waitsRootDecision
+        ? null
+        : _transcriptApprovalOf(
+            approval,
+            callStatus: details?.status,
+            enabled: approvalsEnabled,
+            onSelected: onApprovalSelected,
+          ),
+    awaitsRootDecision: waitsRootDecision,
     // Одобрения потомков — блоки под строкой корня (D27 п. 4, D43 п. 2).
     childApprovals: [
       for (final child in call.childApprovals)
@@ -275,6 +314,21 @@ CodeLabToolCallRow _toolCallRowOf(
           onSelected: onApprovalSelected,
         ),
     ],
+    // Дерево вызовов потомков (D24, D47 Т11): id вложенных строк — id
+    // элементов kit (`<ход>/tool-<цепочка>`), не зависят от индекса и годятся
+    // ключом раскрытия в `TranscriptViewCubit`. Операции со списком задач
+    // потомка — те же тихие строки (D48 п. 3).
+    children: [
+      for (final child in call.children)
+        switch (child) {
+          final ToolCallItem nestedCall => rowOf(nestedCall),
+          final TaskOpsItem ops => CodeLabTaskOpsRow(
+            id: ops.id,
+            text: ops.text,
+          ),
+          _ => null,
+        },
+    ].nonNulls.toList(),
   );
 }
 

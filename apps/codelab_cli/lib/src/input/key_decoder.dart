@@ -31,9 +31,8 @@ enum Key {
   ctrlE('Ctrl+E'),
   ctrlL('Ctrl+L'),
 
-  /// ЗАГЛУШКА задачи 5.1 (красные тесты): раскрыть строки `agent` в TUI
-  /// (`toggle_details`, design.md change `add-subagents-and-tasks`, D48 п. 2).
-  /// Привязка, декодирование и действие — задача 5.4.
+  /// Раскрыть и свернуть строки `agent` в TUI (`toggle_details`, design.md
+  /// change `add-subagents-and-tasks`, D48 п. 2).
   ctrlO('Ctrl+O'),
 
   /// Показать и спрятать значение в скрытом поле ключа мастера провайдера
@@ -286,6 +285,7 @@ final class KeyDecoder {
     0x09: Key.tab,
     0x0a: Key.ctrlJ,
     0x0c: Key.ctrlL,
+    0x0f: Key.ctrlO,
     0x0d: Key.enter,
     0x12: Key.ctrlR,
     0x14: Key.ctrlT,

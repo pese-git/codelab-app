@@ -3,6 +3,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
 import 'subagent_views.dart';
 import 'task_ops.dart';
+import 'tool_call_tree.dart';
 import 'transcript_item.dart';
 
 /// Инкрементальная проекция транскрипта одной сессии.
@@ -154,12 +155,14 @@ List<TranscriptItem> _rebuildTurn(PromptTurn turn, List<PlanEntry>? prior) {
     }
   }
   flush();
-  final body = withTaskOps(agent, taskOperationsOf(turn, prior));
+  final body = [...buildToolCallTree(agent, taskOperationsOf(turn, prior))];
   body.addAll(_unannouncedApprovalItems(turn, seen, focused, announced));
 
   items
     ..addAll(body)
-    ..addAll(_notices(turn, hasAgentItems: agent.isNotEmpty));
+    // `body` уже включает одобрения без `tool_call`: ход с ними не пустой
+    // (так же считает инкрементальная проекция).
+    ..addAll(_notices(turn, hasAgentItems: body.isNotEmpty));
   return items;
 }
 
@@ -228,9 +231,12 @@ final class _TurnProjection {
       announced,
     );
     final hasAgentItems = _body.isNotEmpty || unannounced.isNotEmpty;
-    final body = _taskPlanSeen
-        ? withTaskOps(_body, taskOperationsOf(turn, prior))
-        : _body;
+    // Дерево вызовов потомков строится из плоского `_body` на каждом
+    // применении: родитель может прийти позже ребёнка (D21, D47 Т9).
+    final body = buildToolCallTree(
+      _body,
+      _taskPlanSeen ? taskOperationsOf(turn, prior) : const {},
+    );
     items = [
       ?_user,
       ...body,
@@ -364,8 +370,8 @@ String _toolItemId(PromptTurnId turnId, ToolCallId toolCallId) =>
     '${turnId.value}/tool-${toolCallId.value}';
 
 /// Id вызовов, объявленных `tool_call` хода: у вызова потомка без дерева
-/// (этап 2) их нет, и его запрос не заводит строки, пока есть строка корня
-/// (D43 п. 2).
+/// их нет, и его запрос не заводит строки, пока есть строка корня (D43 п. 2);
+/// с деревом (итерация 5) вызов потомка объявлен и стоит вложенной строкой.
 Set<ToolCallId> _announcedIds(PromptTurn turn) => {
   for (final update in turn.updates)
     if (update case ToolCallSessionUpdate(:final toolCall)) toolCall.toolCallId,
@@ -386,44 +392,122 @@ TranscriptItem _toolItem(
     approval: _approvalView(turn, _approvalFor(turn, toolCallId), focused),
     childApprovals: [
       for (final approval in turn.approvals.values)
-        if (_hostRowOf(approval, announced) == toolCallId)
+        if (_hostRowOf(turn, approval, announced) == toolCallId)
           _approvalView(turn, approval, focused)!,
     ],
   );
 }
 
-/// Строка `agent` корня, под которой стоит одобрение потомка, или `null`.
+/// Строка `agent` корня, под которой стоит блок одобрения потомка, или `null`.
 ///
-/// Почему: у запроса потомка нет кадров `tool_call` (дерево — этап 2), и
-/// отдельная строка навсегда осталась бы `pending` (D43 п. 2). Одобрение
-/// переезжает под строку корня, если она есть в ходе; иначе `null` — вызов
-/// остаётся прежним элементом «только запрос» в конце хода.
-ToolCallId? _hostRowOf(ApprovalRequest approval, Set<ToolCallId> announced) {
+/// Почему: панель решения у запроса потомка одна — блок под строкой корня
+/// (PERM-4, D43 п. 2, D47 Т9). Без дерева вызовов (клиент без согласия) у
+/// запроса потомка нет своих кадров `tool_call`, и отдельная строка навсегда
+/// осталась бы `pending`, поэтому одобрение переезжает под строку корня, если
+/// она есть в ходе; иначе `null` — вызов остаётся прежним элементом «только
+/// запрос» в конце хода. С деревом (итерация 5) вызов потомка объявлен своим
+/// `tool_call` и стоит вложенной строкой: блок с панелью — у верхнего предка
+/// дерева, а вложенная строка показывает только ожидание и исход (то же
+/// одобрение лежит в её `approval`).
+ToolCallId? _hostRowOf(
+  PromptTurn turn,
+  ApprovalRequest approval,
+  Set<ToolCallId> announced,
+) {
   final requester = approval.subagentRequester;
+  if (parseSubagentRequester(requester) == null) {
+    return null;
+  }
+  final own = approval.toolCall.id;
+  if (announced.contains(own)) {
+    return _treeRootOf(turn, own, announced);
+  }
   final parent = requester?['parentToolCallId'];
-  if (parent is! String ||
-      parseSubagentRequester(requester) == null ||
-      announced.contains(approval.toolCall.id)) {
+  if (parent is! String) {
     return null;
   }
   final host = ToolCallId(parent);
   return announced.contains(host) ? host : null;
 }
 
-/// Спрашивающий потомок запроса с типом вызова `agent` корня для пути
-/// (D43 п. 4): `subagentCall.type` → `rawInput.type` → неизвестно.
+/// Верхний предок вызова [id] в дереве хода или `null`, если вызов сам на
+/// верхнем уровне (родителя нет, он неизвестен или родители зациклены).
+///
+/// Совпадает с раскладкой `buildToolCallTree`: неизвестный родитель — верхний
+/// уровень (D21).
+ToolCallId? _treeRootOf(
+  PromptTurn turn,
+  ToolCallId id,
+  Set<ToolCallId> announced,
+) {
+  // Та же карта, что у `buildToolCallTree`: вызов цикла A↔B остаётся на
+  // верхнем уровне и в обеих раскладках, иначе одно одобрение получило бы две
+  // панели (PERM-4).
+  final parents = effectiveToolCallParents({
+    for (final callId in announced)
+      callId: turn.toolCalls[callId]?.parentToolCallId,
+  });
+  ToolCallId? root;
+  var cursor = id;
+  for (var parent = parents[cursor]; parent != null; parent = parents[cursor]) {
+    root = parent;
+    cursor = parent;
+  }
+  return root;
+}
+
+/// Тип вызова `agent` по записи: `subagentCall.type` → `rawInput.type`.
+String? _agentTypeOf(ToolCallRecord? record) {
+  final byCall = parseSubagentCall(record?.subagentMeta)?.type;
+  final byInput = record?.rawInput?['type'];
+  return byCall ?? (byInput is String && byInput.isNotEmpty ? byInput : null);
+}
+
+/// Спрашивающий потомок запроса с цепочкой типов для пути (D27, D43 п. 4).
+///
+/// Корень цепочки: `subagentCall.type` → `rawInput.type` → неизвестно. С
+/// деревом вызовов (D47 Т9) промежуточные звенья берутся подъёмом по
+/// `parentToolCallId` от вызова запроса; не найденное деревом звено остаётся
+/// `…`, без дерева путь прежний.
 SubagentRequester? _requesterOf(PromptTurn turn, ApprovalRequest approval) {
   final raw = approval.subagentRequester;
   final parsed = parseSubagentRequester(raw);
   if (parsed == null || parsed.depth <= 1) {
     return parsed;
   }
-  final root = turn.toolCalls[ToolCallId(parsed.parentToolCallId)];
-  final byCall = parseSubagentCall(root?.subagentMeta)?.type;
-  final byInput = root?.rawInput?['type'];
-  return parsed.withRootType(
-    byCall ?? (byInput is String && byInput.isNotEmpty ? byInput : null),
+  final rootType = _agentTypeOf(
+    turn.toolCalls[ToolCallId(parsed.parentToolCallId)],
   );
+  final withRoot = parsed.withRootType(rootType);
+
+  // Предки вызова запроса, ближайший первым.
+  final ancestors = <ToolCallId>[];
+  var cursor = approval.toolCall.id;
+  while (ancestors.length < parsed.depth) {
+    final parent = turn.toolCalls[cursor]?.parentToolCallId;
+    if (parent == null) {
+      break;
+    }
+    cursor = ToolCallId(parent);
+    ancestors.add(cursor);
+  }
+  if (ancestors.isEmpty) {
+    return withRoot;
+  }
+  // Предок k стоит на позиции `depth - 1 - k` пути; последняя позиция —
+  // спрашивающий, его тип берётся из запроса.
+  final chain = List<String>.filled(parsed.depth, '…');
+  chain[parsed.depth - 1] = parsed.type;
+  chain[0] = rootType ?? '…';
+  for (var k = 1; k < ancestors.length; k++) {
+    final position = parsed.depth - 1 - k;
+    if (position < 0) {
+      break;
+    }
+    chain[position] =
+        _agentTypeOf(turn.toolCalls[ancestors[k]]) ?? chain[position];
+  }
+  return withRoot.withChainTypes(chain);
 }
 
 /// Одобрения вызовов, о которых агент не объявлял `tool_call`.
@@ -457,7 +541,7 @@ List<TranscriptItem> _unannouncedApprovalItems(
   Set<ToolCallId> announced,
 ) => [
   for (final approval in turn.approvals.values)
-    if (_hostRowOf(approval, announced) == null &&
+    if (_hostRowOf(turn, approval, announced) == null &&
         seen.add(approval.toolCall.id))
       TranscriptItem.toolCall(
         id: _toolItemId(turn.id, approval.toolCall.id),
@@ -576,6 +660,7 @@ ToolCallView _callView(ToolCallRecord record, {SubagentRequester? subagent}) =>
       subagentCall: parseSubagentCall(record.subagentMeta),
       subagentSummary: parseSubagentSummary(record.subagentMeta),
       subagent: subagent,
+      parentToolCallId: record.parentToolCallId,
     );
 
 String? _command(ToolCallRecord record) {

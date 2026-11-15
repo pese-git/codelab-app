@@ -1323,6 +1323,8 @@ ToolCallRecord _withKnownCodelabMeta(
         outcome: fresh.status == ToolCallStatus.completed
             ? null
             : fresh.outcome ?? known.outcome,
+        // Родитель вызова не меняется: кадр без поля его не стирает (D21).
+        parentToolCallId: fresh.parentToolCallId ?? known.parentToolCallId,
       );
 
 PromptTurn _applyToolCallUpdate(
@@ -1384,6 +1386,8 @@ ToolCallRecord _mergeToolCallUpdate(
     outcome: status == ToolCallStatus.completed
         ? null
         : outcomeOf(update.meta) ?? current?.outcome,
+    parentToolCallId:
+        parentToolCallIdOf(update.meta) ?? current?.parentToolCallId,
   );
 }
 

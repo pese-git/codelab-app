@@ -63,6 +63,7 @@ import '../secrets/secret_template.dart' show UnusableSecretReference;
 import '../session/ids.dart';
 import '../session/projections.dart';
 import '../session/records.dart';
+import '../session/replay_tree.dart';
 import '../session/session_store.dart';
 import '../session/session_writer.dart';
 import '../session/summary.dart';
@@ -437,7 +438,9 @@ final class AgentRuntimeImpl implements AgentRuntime {
   /// хранилище решений, правила и защищаемые пути корня, **без gate**
   /// (вопрос — отказ `no approval interface is available`, D38, до
   /// итерации 3); `ToolServices.tasks` — `SubagentTaskList` над списком
-  /// корня; журнал — `SessionStore.createChild`.
+  /// корня; журнал — `SessionStore.createChild`. Хуки хоста
+  /// `extraBeforeToolCall` корня стоят в цикле ребёнка последними (D48 п. 1,
+  /// ограничение D36 Т2 снято только для `before`-хуков).
   ///
   /// Вложенность (D45 Т2): если в наборе ребёнка есть `agent`, фабрика
   /// создаёт ему менеджер на общем дереве слотов и свой `SubagentTool`; эту же
@@ -582,7 +585,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
         clock: services.clock,
         ids: services.ids,
         budget: spec.budget,
-        beforeToolCall: [childPolicy.asHook(registry.lookup)],
+        // Хуки хоста корня — последними после политики потомка, как у корня
+        // (§10.7, шаг 6; D48 п. 1). Вызов приходит с `id`-цепочкой D8 — тем же,
+        // что у запроса разрешения; префикс — отдельное значение
+        // `SubagentSpec.sessionChain`, строка id не разбирается (D45 Т3).
+        // `extraAfterToolCall` к потомкам не подключаются.
+        beforeToolCall: [
+          childPolicy.asHook(registry.lookup),
+          for (final hook in spec.hostBeforeToolCall)
+            _chainedHook(hook, sub.sessionChain),
+        ],
         approvalWait: toolServices.approvalWait,
         logger: logger,
         onOwnUsage: (own) {
@@ -639,6 +651,23 @@ final class AgentRuntimeImpl implements AgentRuntime {
       },
     );
   }
+
+  /// Оборачивает хук хоста корня для цикла потомка: вызов отдаётся с `id`
+  /// `<префикс>/<id>` (D8, D48 п. 1), остальное — как есть.
+  static BeforeToolCallHook _chainedHook(
+    BeforeToolCallHook hook,
+    String prefix,
+  ) =>
+      (call, args, ctx) => hook(
+        ToolCall(
+          id: '$prefix/${call.id}',
+          name: call.name,
+          arguments: call.arguments,
+          signature: call.signature,
+        ),
+        args,
+        ctx,
+      );
 
   /// Сессия не вернулась вызывающему: серверы MCP, подключённые в `_open`,
   /// закрываются, иначе их процессы пережили бы неудавшийся `session/new`.
@@ -1894,6 +1923,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         locks: pathLocks,
         maxChildDepth: rootMaxDepth,
         contextWindowCap: () => settingsOf().compaction.contextWindowCap,
+        hostBeforeToolCall: extraBeforeToolCall,
       );
       childFactory = (spec) => _createChildSession(
         spec,
@@ -4128,6 +4158,14 @@ final class _Session implements AgentSession {
   @override
   Iterable<AgentEvent> replay() =>
       buildReplay(_writer.snapshot, logger: _logger);
+
+  @override
+  Future<List<AgentEvent>> replayTree() => buildReplayTree(
+    // Снимок берётся синхронно, до первого `await` (D47 Т6).
+    _writer.snapshot,
+    store: _services.sessions,
+    logger: _logger,
+  );
 
   @override
   Future<void> close() async {

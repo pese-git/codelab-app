@@ -2,6 +2,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' as acp;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'connection/acp_error.dart';
+import 'subagent_chain.dart';
 
 /// Проекция событий ядра в `session/update` и итог хода в ответ
 /// `session/prompt` (`agent-core-architecture` §13.7, §13.8).
@@ -43,12 +44,16 @@ const projectionTable = <Type, String>{
   // События субагентов (change `add-subagents-and-tasks`, D24): клиент видит
   // один вызов `agent`; строку прогресса несёт `ToolCallProgress(agent)`, итог
   // уходит в `ToolCallFinished(agent)` из `SubagentFinished`, а вызовы
-  // потомков (`SubagentActivity`) без расширения `subagentToolCalls` не
-  // отправляются (SUB-12; агент его в итерации 2 не объявляет, D36 Т12).
+  // потомков (`SubagentActivity`) уходят только клиенту с согласием
+  // `subagentToolCalls`: `tool_call`/`tool_call_update` с цепочкой
+  // `toolCallId` и `_meta.codelab.parentToolCallId` (D47 Т2); без согласия
+  // не отправляются (SUB-12).
   SubagentStarted: 'not sent: log subagent.start',
   SubagentProgress: 'not sent: the progress line is ToolCallProgress(agent)',
   SubagentFinished: 'not sent: its data go into ToolCallFinished(agent)',
-  SubagentActivity: 'not sent: no subagentToolCalls in iteration 2',
+  SubagentActivity:
+      'tool_call/tool_call_update of the call by the subagentToolCalls '
+      'consent, a chained toolCallId; not sent without it',
 };
 
 /// Кадры события [event]; пустой список — событие не передаётся.
@@ -66,12 +71,13 @@ const projectionTable = <Type, String>{
 /// сюда вместе с финальным событием, а `_meta.codelab.subagent.summary`
 /// (D24) строится из него.
 ///
-/// [subagentPrefix] — ЗАГЛУШКА задачи 5.1 (логики нет, 5.2 её реализует):
-/// цепочка `toolCallId` вызова `agent`, запустившего потомка события
-/// `SubagentActivity` (design.md change `add-subagents-and-tasks`, D47 Т2),
-/// передаваемая только клиенту с согласием `subagentToolCalls`. `null` —
-/// согласия нет или префикс неизвестен: `SubagentActivity` кадров не даёт
-/// (SUB-12). Префикс вычисляет мост общим помощником с `replayUpdates`.
+/// [subagentPrefix] — цепочка `toolCallId` вызова `agent`, запустившего
+/// потомка события `SubagentActivity` (design.md change
+/// `add-subagents-and-tasks`, D47 Т2), передаваемая только клиенту с
+/// согласием `subagentToolCalls`. `null` — согласия нет или префикс
+/// неизвестен: `SubagentActivity` кадров не даёт (SUB-12). Префикс
+/// вычисляет мост помощником `SubagentChains`, общим с реплеем. Для
+/// вложенного `agent` [subagentResult] — итог его потомка (D47 Т3).
 List<acp.SessionUpdate> projectEvent(
   AgentEvent event, {
   required List<acp.SessionConfigOption> Function() configOptions,
@@ -91,8 +97,16 @@ List<acp.SessionUpdate> projectEvent(
   TurnEnded() ||
   SubagentStarted() ||
   SubagentProgress() ||
-  SubagentFinished() ||
-  SubagentActivity() => const [],
+  SubagentFinished() => const [],
+  SubagentActivity(:final event) =>
+    subagentPrefix == null
+        ? const []
+        : _chained(
+            event,
+            subagentPrefix,
+            configOptions: configOptions,
+            subagentResult: subagentResult,
+          ),
   MessageDelta(:final delta) => [
     acp.SessionUpdate.agentMessageChunk(content: _text(delta)),
   ],
@@ -188,6 +202,83 @@ List<acp.SessionUpdate> projectEvent(
     ),
   ],
 };
+
+/// Кадры вызова потомка с цепочкой `toolCallId` (D47 Т2, Т3).
+///
+/// Почему через проекцию вложенного события: статус, контент, `outcome` и
+/// `summary` вызова потомка — по тем же правилам, что у вызова корня
+/// (agent-acp-server «Шаги потомков деревом»); меняются только `toolCallId`
+/// (цепочка) и `_meta.codelab.parentToolCallId` (префикс). Текст, мысли и
+/// прочие события потомка не отправляются: проекция даёт для них пустой
+/// список.
+List<acp.SessionUpdate> _chained(
+  AgentEvent inner,
+  String prefix, {
+  required List<acp.SessionConfigOption> Function() configOptions,
+  SubagentFinished? subagentResult,
+}) {
+  if (inner is! ToolCallStarted &&
+      inner is! ToolCallProgress &&
+      inner is! ToolCallFinished) {
+    return const [];
+  }
+  return [
+    for (final update in projectEvent(
+      inner,
+      configOptions: configOptions,
+      subagentResult: subagentResult,
+    ))
+      switch (update) {
+        acp.ToolCallSessionUpdate(:final toolCall) =>
+          acp.SessionUpdate.toolCall(
+            toolCall: toolCall.copyWith(
+              toolCallId: acp.ToolCallId(
+                SubagentChains.chainOf(prefix, toolCall.toolCallId.value),
+              ),
+              meta: withParentToolCallId(toolCall.meta, prefix),
+            ),
+          ),
+        acp.ToolCallUpdateSessionUpdate(:final toolCallUpdate) =>
+          acp.SessionUpdate.toolCallUpdate(
+            toolCallUpdate: toolCallUpdate.copyWith(
+              toolCallId: acp.ToolCallId(
+                SubagentChains.chainOf(prefix, toolCallUpdate.toolCallId.value),
+              ),
+              meta: withParentToolCallId(toolCallUpdate.meta, prefix),
+            ),
+          ),
+        _ => update,
+      },
+  ];
+}
+
+/// `_meta` с добавленным `codelab.parentToolCallId` (D47 Т2): рядом с
+/// `subagent` и `outcome` того же объекта `codelab`, не вместо них.
+Map<String, Object?> withParentToolCallId(
+  Map<String, Object?>? meta,
+  String prefix,
+) => {
+  ...?meta,
+  'codelab': {
+    ...?(meta?['codelab'] as Map?)?.cast<String, Object?>(),
+    'parentToolCallId': prefix,
+  },
+};
+
+/// Кадр закрытия висящего вызова потомка: `failed` с
+/// `_meta.codelab.outcome: "cancelled"` (D21, D47 Т3), как у отменённого
+/// вызова корня; вызывается мостом до итога вызова `agent`, чьё поддерево
+/// закрывается.
+acp.SessionUpdate closedDescendantUpdate(String chain, String prefix) =>
+    acp.SessionUpdate.toolCallUpdate(
+      toolCallUpdate: acp.ToolCallUpdate(
+        toolCallId: acp.ToolCallId(chain),
+        status: acp.ToolCallStatus.failed,
+        meta: {
+          'codelab': {'parentToolCallId': prefix, 'outcome': 'cancelled'},
+        },
+      ),
+    );
 
 /// Вызов прошёл проверку разрешений и все хуки и сейчас начнёт
 /// исполняться (§13.7, «Статусы вызова»).

@@ -7,14 +7,14 @@
 // («Операции ребёнка в дереве»); design.md, D21, D25, D27 п. 4, D43 п. 4,
 // D47 Т9, D48 п. 3).
 //
-// Красные тесты. Кадры — сценарные `session/update` теста; фикстуры корпуса
+// Кадры — сценарные `session/update` теста; фикстуры корпуса
 // `acp/prompt-subagent-tool-tree` и `acp/session-load-subagent-tool-tree`
-// пишет протокольный исполнитель, клиентский прогон подхватит их сам.
+// клиентский прогон подхватывает сам.
 //
-// Для компиляции введены заглушки без логики (реализация — задача 5.4):
-//   `ToolCallView.parentToolCallId` — всегда `null`;
+// Что проверяется в kit:
+//   `ToolCallView.parentToolCallId` — родитель вызова на проводе;
 //   `ToolCallItem.children` — вложенные `ToolCallItem`/`TaskOpsItem` строки
-//     вызова в порядке прихода (имя выбирает реализация, D47 Т9);
+//     вызова в порядке прихода (D47 Т9);
 //   `ToolCallItem.tail` (`SubagentTailView.calls`, `.moreCount`) — хвост
 //     работающего `agent` (D25);
 //   `ToolCallItem.subtreeCalls` — число вызовов поддерева для счётчика

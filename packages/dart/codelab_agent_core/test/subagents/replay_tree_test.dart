@@ -15,8 +15,8 @@ import 'subagent_rig.dart';
 /// добавляет `SubagentActivity` потомков, прочитанные из их журналов через
 /// `SessionStore.openChildReadOnly`.
 ///
-/// Красные до задачи 5.3: в `lib/` стоит заглушка `ReplayTreeStub`, которая
-/// бросает `UnimplementedError`. Зелёных сразу нет.
+/// Охраняют, что `replayTree()` отдаёт `SubagentActivity` потомков из их
+/// журналов (D47 Т5, Т6), а `replay()` остаётся прежним.
 void main() {
   const rootId = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C');
   const kidId = SessionId('01JB8Q3A1D2E3F4G5H6J7K8M9A');

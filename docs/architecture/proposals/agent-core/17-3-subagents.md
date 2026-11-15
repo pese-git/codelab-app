@@ -428,8 +428,9 @@ Your final message must be only a JSON value that matches this JSON Schema. Do n
 `extraBeforeToolCall` корневой сессии (у ACP-хоста — `markInProgress`, §13.7) подключаются к циклу
 потомка любой глубины последними в цепочке `beforeToolCall`, после хука политики потомка, как у
 корня. Хук получает вызов с `id`, равным цепочке `toolCallId` потомка (тот же id, что у запроса
-разрешения и на проводе); префикс цепочки идёт по дереву отдельным значением
-(`ChildSessionSpec.hostBeforeToolCall` и префикс в `SubagentParent`), строки id не разбираются.
+разрешения и на проводе); префикс цепочки — отдельное значение `SubagentSpec.sessionChain`
+потомка, строки id не разбираются. `SubagentParent.hostBeforeToolCall` и
+`ChildSessionSpec.hostBeforeToolCall` переносят по дереву только сами хуки корня.
 `extraAfterToolCall` к потомкам не подключаются.
 
 **Разрешения потомка через gate корневой сессии.** `SubagentPermissionGate` оборачивает

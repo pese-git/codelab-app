@@ -17,6 +17,7 @@ import '../compaction/estimate.dart';
 import '../compaction/settings.dart';
 import '../llm/messages.dart';
 import '../llm/usage.dart';
+import '../loop/loop_config.dart';
 import '../loop/agent.dart';
 import '../loop/agent_events.dart';
 import '../loop/turn_budget.dart';
@@ -66,6 +67,7 @@ final class SubagentParent {
     required this.locks,
     required this.maxChildDepth,
     this.contextWindowCap = _noCap,
+    this.hostBeforeToolCall = const [],
   });
 
   static int? _noCap() => null;
@@ -111,6 +113,17 @@ final class SubagentParent {
   /// потомка (D40; `agent` не входит в набор ребёнка с малым окном).
   final int? Function() contextWindowCap;
 
+  /// Хуки хоста `extraBeforeToolCall` корневой сессии, общие на всё дерево
+  /// (design.md change `add-subagents-and-tasks`, D48 п. 1; `agent-core/
+  /// 17-3-subagents.md` §17.3.3, шаг 6).
+  ///
+  /// Почему здесь: хосту (ACP-адаптер с `markInProgress`) нужны вызовы
+  /// потомков любой глубины; как и gate, хуки корня одни на дерево, а
+  /// `nestedFor` передаёт их внукам. Префикс цепочки в них не зашит: его
+  /// фабрика берёт из `SubagentSpec.sessionChain` и подставляет отдельным
+  /// значением (D45 Т3). `extraAfterToolCall` потомкам не передаются.
+  final List<BeforeToolCallHook> hostBeforeToolCall;
+
   /// Части родителя для менеджера потомка, у которого есть `agent` (D45 Т2).
   ///
   /// Почему копия: gate, навыки, пути, хранилище решений, правила, env,
@@ -136,6 +149,7 @@ final class SubagentParent {
     locks: locks,
     maxChildDepth: maxChildDepth,
     contextWindowCap: contextWindowCap,
+    hostBeforeToolCall: hostBeforeToolCall,
   );
 }
 
@@ -178,6 +192,7 @@ final class ChildSessionSpec {
     required this.decisions,
     required this.rules,
     this.extraDeniedTiers = const {},
+    this.hostBeforeToolCall = const [],
     required this.env,
     required this.tasks,
     required this.locks,
@@ -213,6 +228,11 @@ final class ChildSessionSpec {
   final PermissionDecisionStore decisions;
   final PolicyRules rules;
   final Set<ToolTier> extraDeniedTiers;
+
+  /// Хуки хоста корня (`SubagentParent.hostBeforeToolCall`): фабрика ставит
+  /// их в цепочку `beforeToolCall` ребёнка последними, после политики, и
+  /// отдаёт вызов с `id`-цепочкой (D48 п. 1).
+  final List<BeforeToolCallHook> hostBeforeToolCall;
   final ExecutionEnv env;
   final TaskList tasks;
   final PathLock locks;
@@ -826,6 +846,7 @@ final class SubagentManager {
         decisions: parent.decisions,
         rules: parent.rules,
         extraDeniedTiers: parent.extraDeniedTiers,
+        hostBeforeToolCall: parent.hostBeforeToolCall,
         env: parent.env,
         tasks: SubagentTaskList(
           root: parent.tasks,

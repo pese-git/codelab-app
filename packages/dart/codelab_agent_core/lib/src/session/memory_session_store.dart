@@ -67,17 +67,7 @@ final class MemorySessionStore implements SessionStore {
     required SessionId rootSessionId,
   }) async {
     final id = _childIdOf(journal);
-    final segments = journal.split('/');
-    final text = _children[id] ?? (throw SessionNotFound(id));
-    final parsed = parseSessionLines(text, id: id, logger: logger);
-    // Адрес — `subagents/<корень>/<id>.jsonl`: дерево чужого корня и
-    // заголовок с другим id отвергаются.
-    if (segments.length != 3 ||
-        segments[1] != rootSessionId.value ||
-        parsed.snapshot.header.id != id ||
-        parsed.snapshot.header.parent?.rootSessionId != rootSessionId) {
-      throw SessionNotFound(id);
-    }
+    final (:text, :parsed) = _readChild(journal, id, rootSessionId);
     if (parsed.quarantine.isNotEmpty) {
       _children[id] = parsed.onlyTailBroken
           ? text.substring(0, text.lastIndexOf('\n') + 1)
@@ -86,6 +76,35 @@ final class MemorySessionStore implements SessionStore {
       _children[id] = '$text\n';
     }
     return parsed.snapshot;
+  }
+
+  /// Тот же разбор и те же проверки, что у [openChild], но текст журнала и
+  /// карантин не меняются (D47 Т5): оборванная строка просто не попадает в
+  /// снимок.
+  @override
+  Future<SessionSnapshot> openChildReadOnly(
+    String journal, {
+    required SessionId rootSessionId,
+  }) async =>
+      _readChild(journal, _childIdOf(journal), rootSessionId).parsed.snapshot;
+
+  /// Читает и проверяет журнал потомка: адрес — `subagents/<корень>/<id>.jsonl`,
+  /// дерево чужого корня и заголовок с другим id отвергаются.
+  ({String text, ParsedJournal parsed}) _readChild(
+    String journal,
+    SessionId id,
+    SessionId rootSessionId,
+  ) {
+    final segments = journal.split('/');
+    final text = _children[id] ?? (throw SessionNotFound(id));
+    final parsed = parseSessionLines(text, id: id, logger: logger);
+    if (segments.length != 3 ||
+        segments[1] != rootSessionId.value ||
+        parsed.snapshot.header.id != id ||
+        parsed.snapshot.header.parent?.rootSessionId != rootSessionId) {
+      throw SessionNotFound(id);
+    }
+    return (text: text, parsed: parsed);
   }
 
   /// Id потомка из адреса `subagents/<корень>/<id>.jsonl`.

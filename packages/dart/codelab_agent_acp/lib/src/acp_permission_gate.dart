@@ -3,6 +3,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'connection/client_requests.dart';
 import 'event_projection.dart' show acpContent, acpDiff, acpLocations;
+import 'subagent_chain.dart';
 
 /// Порт разрешений через `session/request_permission`
 /// (`agent-core-architecture` §7.8, §13.9).
@@ -50,18 +51,24 @@ final class AcpPermissionGate implements PermissionGate {
     CancelToken cancel,
   ) async {
     if (_announced case final announced?) {
-      // Цепочка `toolCallId` потомка клиенту не проецируется (SUB-12) и
-      // не будет объявлена никогда; клиент видел вызов `agent` корня, его и
-      // ждём (D42 Т5). Запрос корня ждёт свой `toolCallId` (§13.7).
+      // Клиенту с согласием `subagentToolCalls` цепочка потомка
+      // проецируется `tool_call`, и запрос ждёт её объявления, чтобы встать в
+      // строку своего вызова (D42 Т5, D47 Т3). Клиенту без согласия цепочка
+      // не проецируется (SUB-12) и не будет объявлена никогда; он видел
+      // вызов `agent` корня, его и ждём. Согласие читается из
+      // `ClientLink.capabilities` в момент запроса: после переподключения
+      // оно может смениться. Запрос корня ждёт свой `toolCallId` (§13.7).
       // Ожидание гоняется с отменой: иначе при отмене в этом окне остался бы
       // висящий future (с фоновыми потомками — вечное зависание). Исход —
       // `cancelled`, запрос на провод не уходит. Завершение хода мостом
       // сессии тоже приходит как `CancelledException` (`SessionBridge`).
       try {
-        await raceCancel(
-          announced(req.subagent?.parentToolCallId ?? req.toolCallId),
-          cancel,
-        );
+        final subagent = req.subagent;
+        final waitFor =
+            subagent != null && !subagentToolCallsConsent(_link.capabilities)
+            ? subagent.parentToolCallId
+            : req.toolCallId;
+        await raceCancel(announced(waitFor), cancel);
       } on CancelledException {
         return PermissionDecision.cancelled;
       }

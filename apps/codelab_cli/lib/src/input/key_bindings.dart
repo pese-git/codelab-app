@@ -31,8 +31,9 @@ enum KeyAction {
   /// Только TUI: спрятать и показать список задач над композером (D26).
   toggleTasks('show or hide the task list'),
 
-  /// ЗАГЛУШКА задачи 5.1 (красные тесты): раскрыть и свернуть строки `agent`
-  /// в TUI (Ctrl+O, D48 п. 2). Пока ни к чему не привязано, ничего не делает.
+  /// Только TUI: раскрыть и свернуть сразу все строки `agent` — вызовы
+  /// потомков с `↳` и отчёт (Ctrl+O; design.md change
+  /// `add-subagents-and-tasks`, D48 п. 2).
   toggleDetails('expand or collapse the agent rows');
 
   const KeyAction(this.description);
@@ -153,6 +154,7 @@ final class KeyBindings {
     KeyBinding(KeyScope.any, Key.pageDown, KeyAction.scrollDown),
     KeyBinding(KeyScope.any, Key.end, KeyAction.follow),
     KeyBinding(KeyScope.any, Key.ctrlT, KeyAction.toggleTasks),
+    KeyBinding(KeyScope.any, Key.ctrlO, KeyAction.toggleDetails),
   ]);
 
   final List<KeyBinding> bindings;

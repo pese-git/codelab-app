@@ -11,9 +11,10 @@ const _supportedExtensionVersion = 1;
 /// design.md change `add-subagents-and-tasks`, D9, D21).
 ///
 /// Состав растёт вместе с поддержкой: сейчас клиент объявляет `tasks` и
-/// `subagents` (строка `agent`, итог, запрос потомка; итерация 2, задача 2.9a);
-/// `subagentToolCalls` добавит итерация 5 (когда клиент научится показывать
-/// вызовы потомков), иначе агент слал бы данные, которых клиент не понимает.
+/// `subagents` (строка `agent`, итог, запрос потомка; итерация 2, задача 2.9a)
+/// и `subagentToolCalls` (дерево вызовов потомков; итерация 5, задача 5.4:
+/// клиент показывает их вложенными строками, поэтому агент вправе слать кадры
+/// потомков с `_meta.codelab.parentToolCallId`).
 ///
 /// Для чего: `initialize` кладёт его в `ClientCapabilities.meta`; агент
 /// отвечает блоком объявлений, только если этот объект пришёл. Других
@@ -22,6 +23,7 @@ const Map<String, Object?> codelabClientExtensionsMeta = {
   'codelab': {
     'tasks': {'version': _supportedExtensionVersion},
     'subagents': {'version': _supportedExtensionVersion},
+    'subagentToolCalls': {'version': _supportedExtensionVersion},
   },
 };
 

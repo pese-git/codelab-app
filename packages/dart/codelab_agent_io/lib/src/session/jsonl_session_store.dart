@@ -145,21 +145,7 @@ final class JsonlSessionStore implements SessionStore {
     String journal, {
     required SessionId rootSessionId,
   }) async {
-    // Адрес берётся из записи журнала корня, то есть из данных на диске:
-    // выход за `root` и чужие файлы исключаются проверкой формы
-    // (`<слаг>/<метка>_<id корня>/subagents/<метка>_<id>.jsonl`).
-    final segments = journal.split('/');
-    final id = segments.isEmpty ? null : _idOf(journal);
-    if (id == null ||
-        journal.startsWith('/') ||
-        journal.contains(r'\') ||
-        segments.contains('..') ||
-        segments.length < 3 ||
-        segments[segments.length - 2] != 'subagents' ||
-        !segments[segments.length - 3].endsWith('_${rootSessionId.value}')) {
-      throw SessionNotFound(id ?? SessionId(journal));
-    }
-    final path = '$root/$journal';
+    final (:id, :path) = _childAddress(journal, rootSessionId);
     final snapshot = await writeQueue.run(path, () async {
       await _drop(path);
       final file = File(path);
@@ -175,6 +161,56 @@ final class JsonlSessionStore implements SessionStore {
     });
     _childPaths[id] = path;
     return snapshot;
+  }
+
+  /// Снимок журнала потомка для реплея дерева: те же проверки адреса, корня,
+  /// заголовка и ссылки, что у [openChild], но файл и дескрипторы не
+  /// трогаются (design.md change `add-subagents-and-tasks`, D47 Т5).
+  ///
+  /// Почему: на `session/load` открытой сессии потомок, переживший
+  /// `cancel_grace`, может ещё писать в этот журнал; `_drop`, `_repair` и
+  /// регистрация пути [_childPaths] ему навредили бы. Чтение идёт в очереди
+  /// записи пути, поэтому снимок не видит наполовину записанную строку;
+  /// оборванная последняя строка в любом случае пропускается разбором.
+  @override
+  Future<SessionSnapshot> openChildReadOnly(
+    String journal, {
+    required SessionId rootSessionId,
+  }) async {
+    final (:id, :path) = _childAddress(journal, rootSessionId);
+    return writeQueue.run(path, () async {
+      final file = File(path);
+      if (!await file.exists() || !await _insideRoot(file)) {
+        throw SessionNotFound(id);
+      }
+      final parsed = await _parse(file, id);
+      if (parsed.snapshot.header.id != id) {
+        throw SessionNotFound(id);
+      }
+      return parsed.snapshot;
+    });
+  }
+
+  /// Адрес журнала потомка из записи журнала корня, то есть из данных на
+  /// диске: выход за `root` и чужие файлы исключаются проверкой формы
+  /// (`<слаг>/<метка>_<id корня>/subagents/<метка>_<id>.jsonl`); общая для
+  /// [openChild] и [openChildReadOnly].
+  ({SessionId id, String path}) _childAddress(
+    String journal,
+    SessionId rootSessionId,
+  ) {
+    final segments = journal.split('/');
+    final id = segments.isEmpty ? null : _idOf(journal);
+    if (id == null ||
+        journal.startsWith('/') ||
+        journal.contains(r'\') ||
+        segments.contains('..') ||
+        segments.length < 3 ||
+        segments[segments.length - 2] != 'subagents' ||
+        !segments[segments.length - 3].endsWith('_${rootSessionId.value}')) {
+      throw SessionNotFound(id ?? SessionId(journal));
+    }
+    return (id: id, path: '$root/$journal');
   }
 
   @override

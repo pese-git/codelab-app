@@ -2,6 +2,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' as acp;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'event_projection.dart';
+import 'subagent_chain.dart';
 
 /// История сессии для `session/load` (`agent-core-architecture` §13.5,
 /// шаг 5).
@@ -15,6 +16,12 @@ import 'event_projection.dart';
 /// `AgentSession.replay()` и ставит кадры в очередь до хвоста (план, режим,
 /// опции, команды, заголовок) и ответа `session/load`.
 ///
+/// Клиенту с согласием `subagentToolCalls` мост передаёт события
+/// `AgentSession.replayTree()`: обёртки `SubagentActivity` проигрываются
+/// вызовами потомков с цепочкой `toolCallId` и `parentToolCallId` — тем же
+/// алгоритмом `SubagentChains`, что у живой проекции (D47 Т2, Т6). Всё, что
+/// в обёртке не вызов и не итог потомка, пропускается, как вживую.
+///
 /// `replay()` уже пропустил служебные user-записи (§8.2.5); `compaction`,
 /// план, режим и заголовок посреди истории не отправляются — последние
 /// значения идут хвостом (§13.5, шаг 6).
@@ -23,7 +30,23 @@ List<acp.SessionUpdate> replayUpdates(Iterable<AgentEvent> events) {
   // Итог ребёнка приходит до `ToolCallFinished(agent)` (SUB-10, D24).
   final subagentDone = <String, SubagentFinished>{};
   final updates = <acp.SessionUpdate>[];
-  for (final event in events) {
+  final chains = SubagentChains();
+  for (final raw in events) {
+    // Вызов потомка: событие вложено в обёртку, id — цепочка (D47 Т2).
+    String? prefix;
+    var event = raw;
+    if (raw is SubagentActivity) {
+      prefix = chains.prefixOf(raw);
+      event = raw.event;
+      if (prefix == null ||
+          (event is! ToolCallStarted &&
+              event is! ToolCallFinished &&
+              event is! SubagentFinished)) {
+        continue;
+      }
+    }
+    String idOf(String id) =>
+        prefix == null ? id : SubagentChains.chainOf(prefix, id);
     switch (event) {
       case MessageEnded(message: UserMessage(:final content)):
         for (final block in content) {
@@ -50,10 +73,11 @@ List<acp.SessionUpdate> replayUpdates(Iterable<AgentEvent> events) {
           }
         }
       case ToolCallStarted(:final toolCallId):
-        started[toolCallId] = event;
+        started[idOf(toolCallId)] = event;
       case SubagentFinished(:final parentToolCallId):
-        subagentDone[parentToolCallId] = event;
-      case ToolCallFinished(:final toolCallId):
+        subagentDone[idOf(parentToolCallId)] = event;
+      case ToolCallFinished(toolCallId: final rawId):
+        final toolCallId = idOf(rawId);
         final call = started.remove(toolCallId);
         final done = subagentDone.remove(toolCallId);
         // Отклонённый проверкой вызов `agent`: записи `subagent` нет, а живой
@@ -85,7 +109,13 @@ List<acp.SessionUpdate> replayUpdates(Iterable<AgentEvent> events) {
               rawInput: call?.input,
               locations: acpLocations(call?.locations ?? const []),
               content: finishedContent(event, subagentResult: done),
-              meta: _mergeMeta(callMeta, finishMeta),
+              meta: switch (_mergeMeta(callMeta, finishMeta)) {
+                final merged when prefix != null => withParentToolCallId(
+                  merged,
+                  prefix,
+                ),
+                final merged => merged,
+              },
             ),
           ),
         );

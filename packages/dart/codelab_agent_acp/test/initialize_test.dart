@@ -157,7 +157,7 @@ void main() {
   // объявлен `subagents` с `maxDepth` равным `max_depth` (3): потомки
   // запускают своих детей до этой глубины (D9, D37, D45 Т9); с задачей 5.2
   // адаптер проецирует вызовы потомков и объявляет `subagentToolCalls`
-  // (D9, D47 Т12). Красный до 5.2: ключа в блоке ещё нет.
+  // (D9, D47 Т12); ключ `subagentToolCalls` охраняется этим тестом.
   test('an empty client _meta.codelab gets tasks and subagents', () async {
     h = await ServerHarness.start();
 

@@ -389,7 +389,7 @@ void main() {
 
     // «Вызовы ребёнка и внука», D47 Т2: с согласием `ToolCallStarted`
     // потомка — `tool_call` с `toolCallId` «префикс/id вызова» и
-    // `_meta.codelab.parentToolCallId` — префиксом. Красный до 5.2.
+    // `_meta.codelab.parentToolCallId` — префиксом.
     test('with the consent a child ToolCallStarted gives a chained '
         'tool_call', () {
       final frames = projectWith(activity(readCall()), prefix: 'call_1');
@@ -570,7 +570,7 @@ void main() {
     });
 
     // «текст, мысли и прочие события потомков НЕ SHALL отправляться»: и при
-    // согласии. Зелёный и до 5.2, охраняет от лишних кадров.
+    // согласии. Охраняет от лишних кадров.
     test('with the consent text and thoughts of a descendant are not '
         'sent', () {
       final partial = AssistantMessage(
@@ -598,7 +598,7 @@ void main() {
     });
 
     // D47 Т12: строка таблицы описывает проекцию с согласием, а не
-    // «итерацию 2». Красный до 5.2.
+    // «итерацию 2».
     test('the projection table row of SubagentActivity describes the '
         'consent-based projection', () {
       final row = projectionTable[SubagentActivity]!;

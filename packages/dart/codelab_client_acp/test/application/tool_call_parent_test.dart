@@ -1,11 +1,9 @@
 // `ToolCallRecord.parentToolCallId` из `_meta.codelab.parentToolCallId`
 // (задача 5.1, часть kit `[client]`, change `add-subagents-and-tasks`; spec
-// acp-client-kit «Дерево вызовов потомков»; design.md, D21, D47 Т9; реализация
-// — задача 5.4).
+// acp-client-kit «Дерево вызовов потомков»; design.md, D21, D47 Т9).
 //
-// Красный тест: поле есть как заглушка (всегда `null`), разбор не написан, и
-// тесты падают на сравнениях. Правило терпимое, как у `outcome`: не строка —
-// `null` без отказа обработки; поздний кадр без поля родителя не стирает его.
+// Правило терпимое, как у `outcome`: не строка — `null` без отказа обработки;
+// поздний кадр без поля родителя не стирает его.
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';

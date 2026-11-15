@@ -1,19 +1,18 @@
-// Красные widget-тесты задачи 5.1 (app) change `add-subagents-and-tasks`:
+// Widget-тесты задачи 5.1 (app) change `add-subagents-and-tasks`:
 // дерево вызовов потомков в ленте — agent-workbench-ui «Вложенные вызовы
 // потомков» («Свёрнутые шаги ребёнка», «Тихие строки потомка»), «Строка вызова
 // субагента» («Хвост работающего субагента», «Без дерева — строка прогресса»),
 // «Запрос одобрения от субагента под строкой корня» («Вопрос внука не
 // раскрывает дерево»); design.md D24, D25, D27, D47 Т9 и Т11, D48 п. 3.
 //
-// Что красное и почему (реализация — задачи 5.4 kit и 5.5 app):
-//  - `CodeLabToolCallRow.children`, `CodeLabSubagentCall.tail` и `tailMore`
-//    пока заглушки (поля без логики): маппер `transcriptRowsOf` их не
-//    заполняет, `CodeLabToolCallTile` не рисует вложенные строки и хвост;
-//  - счётчик работающего `N tool calls` приходит из kit
-//    (`ToolRowFormatter` → `summaryShort` по `ToolCallItem.subtreeCalls`) —
-//    пока только у завершённого.
-// Зелёные характеристики (поведение, которое не должно сломаться): «Без дерева —
-// строка прогресса», хвост исчезает после завершения, блок вопроса внука под
+// Что проверяется (реализация — задачи 5.4 kit и 5.5 app):
+//  - маппер `transcriptRowsOf` заполняет `CodeLabToolCallRow.children`,
+//    `CodeLabSubagentCall.tail` и `tailMore`, а `CodeLabToolCallTile` рисует
+//    вложенные строки и хвост;
+//  - счётчик работающего `N tool calls` приходит из kit (`ToolRowFormatter`:
+//    `summaryShort` у завершённого, `runningCounter` у работающего).
+// Отдельно закреплено, что не должно сломаться: «Без дерева — строка
+// прогресса», хвост не показывается после завершения, блок вопроса внука под
 // свёрнутой строкой корня.
 //
 // Границы: дерево, хвост, счётчик и путь вопроса строит kit, маппер лишь
@@ -346,7 +345,7 @@ void main() {
 
     testWidgets('after the end the tail is gone, the summary with tokens is '
         'on the right (characteristic)', (tester) async {
-      // После завершения kit отдаёт пустой хвост; итог — из `summary` (D24).
+      // После завершения строка хвост не показывает; итог — из `summary` (D24).
       await _pump(
         tester,
         _rows([_agent(subtreeCalls: 5, children: calls, summary: _summary)]),

@@ -996,6 +996,12 @@ final class _GateStore implements SessionStore {
   }) => inner.openChild(journal, rootSessionId: rootSessionId);
 
   @override
+  Future<SessionSnapshot> openChildReadOnly(
+    String journal, {
+    required SessionId rootSessionId,
+  }) => inner.openChildReadOnly(journal, rootSessionId: rootSessionId);
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {

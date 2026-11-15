@@ -773,6 +773,7 @@ final class SubagentParent {
   final PathLock locks;                               // блокировки путей корня: одна очередь на дерево (TOOL-7, §6.3.4)
   final int maxChildDepth;                            // с итерации 4 — subagents.max_depth, снимок корневой сессии на дерево (D45 Т9, D46 п. 2)
   final int? Function() contextWindowCap;             // compaction.context_window_cap: правило окна ребёнка (D40, D45 Т10)
+  final List<BeforeToolCallHook> hostBeforeToolCall;  // хуки хоста корня для потомков любой глубины; только хуки, префикс цепочки — SubagentSpec.sessionChain (D48 п. 1)
   SubagentParent nestedFor({tools, model, mode});     // части для менеджера потомка с agent: общие объекты корня, свои схемы шага, модель и режим (D45 Т2)
 }
 // Связь менеджера потомка со слотом его хэндла в менеджере родителя (внутренний тип ядра; D3, D45 Т4,
@@ -802,7 +803,7 @@ final class ChildSessionSpec {                        // после MVP, §17.3.
   final PermissionDecisionStore decisions; final PolicyRules rules; final Set<ToolTier> extraDeniedTiers;
   final ExecutionEnv env; final TaskList tasks;
   final PathLock locks;                               // PathLock корня: правки одного файла корнем и потомками — одна очередь (TOOL-7)
-  final List<BeforeToolCallHook> hostBeforeToolCall;  // хуки хоста корня (ACP markInProgress) — последними после политики, вызов с цепочкой toolCallId (D48 п. 1, итерация 5)
+  final List<BeforeToolCallHook> hostBeforeToolCall;  // хуки хоста корня (ACP markInProgress) — последними после политики, вызов с цепочкой toolCallId; префикс — subagent.sessionChain (D48 п. 1, итерация 5)
   final Logger logger;                                // с root_session_id, subagent_id, parent_tool_call_id (D18)
   final void Function(Usage own) onOwnUsage;          // usage ребёнка в usage хода родителя (D4, Т8)
   final BudgetLimit? Function() ancestorBudget;       // бюджет предков на границе шага ребёнка (D4, Т8); у потомка — цепочка через бюджет ребёнка (D45 Т5)

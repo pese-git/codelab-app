@@ -89,9 +89,17 @@ final class TerminalRenderer {
   String? _progressText;
 
   /// Операция со списком задач, ещё способная расти (последний элемент), и
-  /// уже напечатанные.
+  /// уже напечатанные. [_pendingDepth] — глубина дерева, где она стоит: 0 —
+  /// верхний уровень, больше — вложенная операция потомка (D48 п. 3).
   TaskOpsItem? _pendingOps;
+  var _pendingDepth = 0;
   final _opsPrinted = <String>{};
+
+  /// Когда вызов потомка впервые попал в рендер: время его итоговой строки.
+  /// Вызовы потомков не печатаются до завершения (прогресс на месте у них
+  /// не обновляется), поэтому `_toolStarted` — «уже напечатан» — для времени
+  /// не годится.
+  final _childSeen = <String, DateTime>{};
 
   /// Элемент, текст которого дописывается сейчас: следующий элемент
   /// начинается с новой строки.
@@ -132,17 +140,9 @@ final class TerminalRenderer {
         case ToolCallItem():
           _tool(item);
           _childOutcomes(item);
+          _subtree(item, 1);
         case TaskOpsItem():
-          // Подряд идущие операции растут в одном элементе, а напечатанную
-          // строку не переписать: последний элемент придерживается, пока за
-          // ним не пришёл другой или не кончился ход (D27).
-          if (_opsPrinted.contains(item.id)) {
-            continue;
-          }
-          if (_pendingOps?.id != item.id) {
-            _flushTaskOps();
-          }
-          _pendingOps = item;
+          _holdOps(item, 0);
         case NoticeItem(:final id, :final kind):
           _flushTaskOps();
           if (_lines.add(id)) {
@@ -155,7 +155,9 @@ final class TerminalRenderer {
     // Придержанная операция закончила расти, если после неё в транскрипте
     // есть что-то, кроме скрытых бегущих `think`: они ещё могут стать
     // следующей операцией и влиться в тот же элемент.
-    if (_pendingOps case final pending?) {
+    // Вложенная операция потомка так не проверяется: её соседей в транскрипте
+    // верхнего уровня нет, она ждёт следующей печатной строки или конца хода.
+    if (_pendingOps case final pending? when _pendingDepth == 0) {
       final at = view.transcript.indexWhere((item) => item.id == pending.id);
       if (view.transcript.skip(at + 1).any((item) => !_isHiddenCall(item))) {
         _flushTaskOps();
@@ -191,7 +193,79 @@ final class TerminalRenderer {
     _pendingOps = null;
     _opsPrinted.add(ops.id);
     _closeThought();
-    _line(_styled(sanitizeTerminalText(ops.text), sgrDim), _raw);
+    final text = sanitizeTerminalText(ops.text);
+    _line(
+      _styled(
+        _pendingDepth == 0 ? text : '${_stepPrefix(_pendingDepth)}$text',
+        sgrDim,
+      ),
+      _raw,
+    );
+  }
+
+  /// Придерживает операцию [item] глубины [depth], пока она может расти.
+  ///
+  /// Подряд идущие операции растут в одном элементе, а напечатанную строку не
+  /// переписать: последний элемент придерживается, пока за ним не пришёл
+  /// другой или не кончился ход (D27). У потомка то же правило действует
+  /// среди соседей одного родителя (D48 п. 3).
+  void _holdOps(TaskOpsItem item, int depth) {
+    if (_opsPrinted.contains(item.id)) {
+      return;
+    }
+    if (_pendingOps?.id != item.id) {
+      _flushTaskOps();
+    }
+    _pendingOps = item;
+    _pendingDepth = depth;
+  }
+
+  /// Отступ и маркер строки потомка глубины [depth]: два пробела на уровень и
+  /// `↳ ` (на `raw` и без UTF-8 — `> `, чтобы строка не ломала поток; D48
+  /// п. 3).
+  String _stepPrefix(int depth) =>
+      '${'  ' * depth}${_raw || !unicode ? '> ' : '↳ '}';
+
+  /// Строки потомков [parent] под его строкой — вложенно, по глубине [depth]
+  /// (acp-client-kit «Дерево вызовов потомков», D21, D47 Т10).
+  ///
+  /// Почему: вызов потомка печатается один раз строкой завершения, а
+  /// прогресс потомков на месте не обновляется — терминал умеет только
+  /// дописывать (D48 п. 3). Строки внука идут раньше строки его `agent`:
+  /// так шаги следуют хронологии завершения.
+  void _subtree(ToolCallItem parent, int depth) {
+    for (final child in parent.children) {
+      switch (child) {
+        case ToolCallItem():
+          _subtree(child, depth + 1);
+          _childLine(child, depth);
+        case TaskOpsItem():
+          _holdOps(child, depth);
+        default:
+      }
+    }
+  }
+
+  /// Строка завершения вызова потомка; бегущий вызов не печатается.
+  ///
+  /// Вложенный `agent` — одна строка с итогом в скобках (его печатает
+  /// `toolRow`), без отчёта и без времени: время уже в итоге (D48 п. 4).
+  void _childLine(ToolCallItem item, int depth) {
+    final now = _clock();
+    final seen = _childSeen.putIfAbsent(item.id, () => now);
+    if (_toolDone.contains(item.id) || !isFinalToolCall(item)) {
+      return;
+    }
+    _toolDone.add(item.id);
+    _toolStarted[item.id] = seen;
+    _flushTaskOps();
+    _closeThought();
+    final row = toolRow(
+      item,
+      unicode: unicode,
+      elapsed: item.details?.subagentCall == null ? now.difference(seen) : null,
+    );
+    _line('${_stepPrefix(depth)}$row', _raw);
   }
 
   /// План целиком: заголовок и строка на запись (`[x]`, `[~]`, `[ ]`); на
@@ -247,6 +321,7 @@ final class TerminalRenderer {
           for (final (index, _) in childOutcomeLines(item)) {
             _childPrinted.add('$id#$index');
           }
+          _skipSubtree(item, now);
         case UserItem(:final id) || NoticeItem(:final id):
           _lines.add(id);
         case TaskOpsItem(:final id):
@@ -255,6 +330,23 @@ final class TerminalRenderer {
     }
     _pendingOps = null;
     _plan = view.plan;
+  }
+
+  /// Считает вложенные строки [parent] напечатанными (для [skip]).
+  void _skipSubtree(ToolCallItem parent, DateTime now) {
+    for (final child in parent.children) {
+      switch (child) {
+        case ToolCallItem(:final id):
+          _toolStarted[id] = now;
+          if (isFinalToolCall(child)) {
+            _toolDone.add(id);
+          }
+          _skipSubtree(child, now);
+        case TaskOpsItem(:final id):
+          _opsPrinted.add(id);
+        default:
+      }
+    }
   }
 
   void _text(AgentTextItem item) {
@@ -326,6 +418,12 @@ final class TerminalRenderer {
       }
       _flushTaskOps();
       _closeThought();
+      if (isFinalToolCall(item)) {
+        // Реплей завершённого вызова с деревом: шаги потомков раньше итоговой
+        // строки и отчёта, как они шли бы вживую.
+        _subtree(item, 1);
+        _flushTaskOps();
+      }
       _line(toolRow(item, unicode: unicode), _raw);
       if (isFinalToolCall(item)) {
         _agentReport(item);

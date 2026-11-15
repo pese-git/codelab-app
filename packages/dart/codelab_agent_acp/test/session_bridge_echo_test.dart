@@ -239,6 +239,10 @@ final class _FakeSession implements AgentSession {
   @override
   Future<void> cancel() async {}
 
+  // Реплея в этом двойнике нет: сценарии эха его не используют (D47 Т6).
+  @override
+  Future<List<AgentEvent>> replayTree() => throw UnimplementedError();
+
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError(invocation.memberName.toString());

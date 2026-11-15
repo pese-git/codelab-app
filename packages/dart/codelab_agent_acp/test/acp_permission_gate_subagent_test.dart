@@ -13,11 +13,10 @@ import 'support/client_channel.dart';
 /// разрешения ребёнка»; design.md D8, D42 Т5, D43 п. 1).
 ///
 /// Почему отдельный файл: файл `acp_permission_gate_test.dart` описывает
-/// запросы корня и остаётся зелёным; здесь всё, что зависит от поля
-/// `PermissionRequest.subagent` (`SubagentRequestRef`, D42 Т4). Пока ядро
-/// его не вводит (задача 3.2), файл не компилируется, а после заглушки ядра
-/// остаётся красным до `AcpPermissionGate` (задача 3.3): `_meta.codelab`
-/// без `subagent`, а ожидание объявления берёт цепочку `toolCallId`.
+/// запросы корня; здесь всё, что зависит от поля
+/// `PermissionRequest.subagent` (`SubagentRequestRef`, D42 Т4): `_meta.codelab`
+/// запроса потомка несёт `subagent`, а ожидание объявления берёт цепочку
+/// `toolCallId`.
 void main() {
   late ClientChannel ch;
 
@@ -268,7 +267,7 @@ void main() {
   // цепочка потомка проецируется `tool_call`, поэтому запрос ждёт
   // объявления самой цепочки, а не вызова `agent` корня, и встаёт в строку
   // своего вызова. Согласие читается из `ClientLink.capabilities` в момент
-  // запроса. Красный до 5.2: gate ждёт `parentToolCallId`.
+  // запроса. Без согласия gate ждёт вызов `agent` корня.
   group('with the subagentToolCalls consent', () {
     Future<ClientChannel> consenting(Object? version) => ClientChannel.open(
       capabilities: ClientCapabilities(
@@ -359,7 +358,7 @@ void main() {
     });
 
     // Согласие — целое `version: 1` (D9): другое значение — согласия нет,
-    // запрос ждёт вызов `agent` корня, как раньше. Зелёный и до 5.2.
+    // запрос ждёт вызов `agent` корня, как раньше.
     test('a version other than the integer 1 is no consent', () async {
       for (final version in <Object?>[2, '1', 1.5, null]) {
         final other = await consenting(version);

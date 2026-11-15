@@ -51,23 +51,29 @@ sealed class TranscriptItem with _$TranscriptItem {
     ApprovalStateView? approval,
 
     /// Одобрения потомков, спросивших под этой строкой `agent` корня:
-    /// ожидающие и решённые в порядке прихода (D43 п. 2). Отдельной строки у
-    /// вызова потомка при строке корня нет; без дерева вызовов (этап 2)
-    /// поле — единственное место его одобрения. У прочих строк пусто.
+    /// ожидающие и решённые в порядке прихода (D43 п. 2). Панель решения у
+    /// запроса потомка одна — блок под строкой корня; при дереве вызовов
+    /// (итерация 5) то же одобрение лежит и в [approval] вложенной строки
+    /// (там — только ожидание и исход, D47 Т9). Без дерева поле — единственное
+    /// место его одобрения. У прочих строк пусто.
     @Default(<ApprovalStateView>[]) List<ApprovalStateView> childApprovals,
 
-    /// ЗАГЛУШКА задачи 5.1 (красные тесты; реализация — задача 5.4, D47 Т9):
-    /// вложенные элементы дерева вызовов потомков в порядке прихода —
-    /// [ToolCallItem] потомков и [TaskOpsItem] их операций со списком
-    /// (слияние только у соседей одного родителя, D48 п. 3). Пока всегда
-    /// пусто, а вызовы потомков остаются на верхнем уровне.
+    /// Вложенные элементы дерева вызовов потомков в порядке прихода `tool_call`:
+    /// [ToolCallItem] потомков и [TaskOpsItem] их операций со списком (слияние
+    /// только у соседей одного родителя, D48 п. 3). Дерево строится по
+    /// `parentToolCallId` кадров (D21); вызов с неизвестным родителем остаётся
+    /// на верхнем уровне. Пусто у вызовов без потомков и у клиентов без
+    /// согласия на дерево (агент кадров потомков не шлёт).
     @Default(<TranscriptItem>[]) List<TranscriptItem> children,
 
-    /// ЗАГЛУШКА задачи 5.1: «хвост» работающего вызова `agent` (D25).
+    /// «Хвост» вызова `agent` (D25): три последних вызова поддерева по порядку
+    /// прихода `tool_call` и число остальных. Хост показывает его у
+    /// работающего вызова вместо строки прогресса; пуст без вызовов потомков.
     @Default(SubagentTailView()) SubagentTailView tail,
 
-    /// ЗАГЛУШКА задачи 5.1: число вызовов поддерева, включая вложенные
-    /// `agent` и операции (D47 Т9) — для счётчика `N tool calls`.
+    /// Число вызовов поддерева, включая вложенные `agent` и операции со
+    /// списком (D47 Т9) — для счётчика `N tool calls`; совпадает с
+    /// `summary.toolCalls` итога (D24), поэтому счётчик не прыгает на финале.
     @Default(0) int subtreeCalls,
   }) = ToolCallItem;
 
@@ -99,15 +105,58 @@ sealed class TranscriptItem with _$TranscriptItem {
   }) = NoticeItem;
 }
 
-/// ЗАГЛУШКА задачи 5.1: «хвост» работающего вызова `agent` (D25, D47 Т9) —
-/// [calls] три последних вызова поддерева по порядку прихода их `tool_call`,
-/// [moreCount] — остальные. Токенов нет (Q15). Пустой, пока вызовов потомков
-/// нет.
+/// «Хвост» вызова `agent` (D25, D47 Т9).
+///
+/// Почему: пока потомок работает, человеку нужно видеть, что он делает сейчас,
+/// не раскрывая дерево; строка прогресса агента несёт токены, которых хвост
+/// не показывает (Q15), а разбирать её клиент не вправе.
+///
+/// Для чего: [calls] — три последних вызова поддерева по порядку прихода их
+/// `tool_call` (включая вложенные `agent` и операции со списком задач:
+/// «вызовами поддерева считаются все вызовы потомков», acp-client-kit «Итог и
+/// хвост субагента», D48 п. 3), [moreCount] — число остальных вызовов
+/// поддерева (`+N more tool calls`). Пустой, пока вызовов потомков нет.
+///
+/// [operations] — подмножество [calls], которое является операциями со
+/// списком задач: `toolCallId → тихая строка` ([TaskOpsItem] одной операции,
+/// без слияния с соседними). Хост рисует такой элемент хвоста тихой строкой
+/// (`item.text`), а не обычным вызовом `think`.
+///
+/// Как использовать: читать из [ToolCallItem.tail]; элементы хвоста — плоские
+/// строки без вложенных [ToolCallItem.children].
 final class SubagentTailView {
-  const SubagentTailView({this.calls = const [], this.moreCount = 0});
+  const SubagentTailView({
+    this.calls = const [],
+    this.moreCount = 0,
+    this.operations = const {},
+  });
 
   final List<ToolCallItem> calls;
   final int moreCount;
+  final Map<ToolCallId, TaskOpsItem> operations;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SubagentTailView &&
+      other.moreCount == moreCount &&
+      other.calls.length == calls.length &&
+      other.operations.length == operations.length &&
+      [
+        for (var i = 0; i < calls.length; i++) calls[i] == other.calls[i],
+      ].every((same) => same) &&
+      operations.entries.every((e) => other.operations[e.key] == e.value);
+
+  @override
+  int get hashCode => Object.hash(
+    moreCount,
+    Object.hashAll(calls),
+    Object.hashAllUnordered([
+      for (final e in operations.entries) Object.hash(e.key, e.value),
+    ]),
+  );
+
+  @override
+  String toString() => 'SubagentTailView($calls, +$moreCount)';
 }
 
 /// Текст тихой строки операций со списком задач (D27).
@@ -175,8 +224,8 @@ abstract class ToolCallView with _$ToolCallView {
     /// (D15, D43 п. 1); не меняет [subagentCall]. Остаётся после решения.
     SubagentRequester? subagent,
 
-    /// ЗАГЛУШКА задачи 5.1: `_meta.codelab.parentToolCallId` кадров вызова
-    /// (D21, D47 Т9); `null` — вызов корня. Разбор — задача 5.4.
+    /// `_meta.codelab.parentToolCallId` кадров вызова (D21, D47 Т9); `null` —
+    /// вызов корня.
     String? parentToolCallId,
   }) = _ToolCallView;
 }
