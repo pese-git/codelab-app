@@ -88,6 +88,7 @@ export 'package:codelab_agent_core/codelab_agent_core.dart'
         SkillRootInfo;
 export 'src/project/project_extensions.dart'
     show ProjectExtensionsLoader, loadProjectExtensions;
+export 'src/project/load_agent_definitions.dart';
 export 'src/project/project_files_loader.dart';
 export 'src/secrets/client_secret_access.dart';
 export 'src/secrets/env_secret_store.dart';

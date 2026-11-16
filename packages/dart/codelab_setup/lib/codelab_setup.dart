@@ -108,6 +108,12 @@ export 'src/provider/provider_setup_committer.dart';
 export 'src/provider/provider_setup_flow.dart';
 export 'src/provider/provider_setup_plan.dart';
 export 'src/secret/secret_value.dart';
+export 'src/views/agent_definition_row_view.dart'
+    show
+        AgentDefinitionRowView,
+        AgentRowScope,
+        AgentRowStatus,
+        agentDefinitionRowsOf;
 export 'src/views/key_status_view.dart';
 export 'src/views/mcp_server_entry_view.dart';
 export 'src/views/provider_entry_view.dart'

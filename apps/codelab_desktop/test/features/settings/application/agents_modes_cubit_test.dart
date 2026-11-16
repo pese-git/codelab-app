@@ -16,11 +16,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_desktop/core/platform/path_opener.dart';
 import 'package:codelab_desktop/features/settings/application/agents_modes_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/fake_path_opener.dart';
 import '../../../support/fake_provider_settings.dart' show FakeWorkspace;
 import '../../../support/modes_fixture.dart';
 import '../../../support/recording_logger.dart';
@@ -75,7 +77,12 @@ void main() {
     return fx;
   }
 
-  AgentsModesCubit make(ModesFixture fx) {
+  AgentsModesCubit make(
+    ModesFixture fx, {
+    FakeDefinitionsLoader? loader,
+    FakePathOpener? opener,
+    Map<String, String>? environment,
+  }) {
     final cubit = AgentsModesCubit(
       workspace: workspace,
       defaultProfile: () async => embeddedConnectionProfile,
@@ -83,10 +90,12 @@ void main() {
         opened.add(access);
         return ModesSession(fx.store);
       },
-      environment: {'HOME': fx.home},
+      environment: environment ?? {'HOME': fx.home},
       codelabHome: fx.home,
       projectDirectory: () => projectDir(),
       logger: logger,
+      loadDefinitions: loader?.call,
+      pathOpener: opener,
     );
     cubits.add(cubit);
     return cubit;
@@ -1165,6 +1174,562 @@ void main() {
       expect(text, isNot(contains(ok.rootPath)));
       expect(text, isNot(contains('config.yaml')));
       expect(text, isNot(contains('config.local.yaml')));
+    });
+  });
+
+  group('Таблица определений агентов (итерация 2)', () {
+    // Пути вымышлены: загрузчик и порт — двойники, а HOME теста `/home/u`
+    // даёт подпись `~/.codelab/agents/...`.
+    const env = {'HOME': '/home/u'};
+    const userDir = userAgentsDir;
+    const migrator = '$userDir/migrator.md';
+
+    AgentDefinitionRowView builtin(String name, {AgentRowStatus? status}) =>
+        AgentDefinitionRowView(
+          name: name,
+          status: status ?? AgentRowStatus.available,
+          availableIn: name == 'default'
+              ? AgentRowScope.session
+              : AgentRowScope.subagent,
+          tools: const ['read'],
+          model: 'session model',
+        );
+
+    final brokenRows = [
+      builtin('default'),
+      const AgentDefinitionRowView(
+        name: 'reviewer',
+        status: AgentRowStatus.available,
+        description: 'Reviews diffs',
+        path: '$userDir/reviewer.md',
+        availableIn: AgentRowScope.both,
+        tools: ['read', 'grep'],
+        model: 'session model',
+      ),
+      const AgentDefinitionRowView(
+        name: 'migrator',
+        status: AgentRowStatus.error,
+        path: migrator,
+        errorLine: 4,
+        errorMessage: 'tools must be a list',
+      ),
+    ];
+
+    FakeDefinitionsLoader loaderOf(
+      List<AgentDefinitionRowView> rows, {
+      bool untrusted = false,
+      bool timedOut = false,
+      bool userExists = true,
+      String? projectDir,
+      bool projectExists = false,
+    }) => FakeDefinitionsLoader(
+      AgentDefinitionsLoad(
+        rows: rows,
+        untrustedProject: untrusted,
+        timedOut: timedOut,
+        userDirectory: userDir,
+        userDirectoryExists: userExists,
+        projectDirectory: projectDir,
+        projectDirectoryExists: projectExists,
+      ),
+    );
+
+    AgentsDefinitionsView definitionsOf(AgentsModesCubit cubit) =>
+        now(cubit).definitions!;
+
+    test('a broken definition: the valid one is Available, the broken one is '
+        '"Error · line 4"; the InfoBar names the file and not the value '
+        '(Битое определение)', () async {
+      final fx = await fixture();
+      final cubit = make(fx, loader: loaderOf(brokenRows), environment: env);
+
+      await ready(cubit);
+
+      final view = definitionsOf(cubit);
+      final byName = {for (final r in view.rows) r.name: r};
+      expect(byName['reviewer']!.status, 'Available');
+      expect(byName['reviewer']!.tone, AgentsStatusTone.success);
+      expect(byName['reviewer']!.source, '~/.codelab/agents/reviewer.md');
+      expect(byName['reviewer']!.availableIn, 'both');
+      expect(byName['reviewer']!.tools, 'read, grep');
+      expect(byName['migrator']!.status, 'Error · line 4');
+      expect(byName['migrator']!.tone, AgentsStatusTone.danger);
+      expect(byName['default']!.source, 'built-in');
+      final error = view.errors.single;
+      expect(error.index, 0);
+      expect(error.pathLabel, '~/.codelab/agents/migrator.md');
+      expect(error.path, migrator);
+      expect(error.line, 4);
+      expect(error.message, 'tools must be a list');
+      expect(error.message, isNot(contains('read')));
+    });
+
+    test(
+      'rows come in the order of the bridge: default, built-ins, files',
+      () async {
+        final fx = await fixture();
+        final cubit = make(fx, loader: loaderOf(brokenRows), environment: env);
+
+        await ready(cubit);
+
+        expect(definitionsOf(cubit).rows.map((r) => r.name), [
+          'default',
+          'reviewer',
+          'migrator',
+        ]);
+      },
+    );
+
+    test('an error without a line is "Error"', () async {
+      final fx = await fixture();
+      final cubit = make(
+        fx,
+        loader: loaderOf([
+          builtin('default'),
+          const AgentDefinitionRowView(
+            name: 'x',
+            status: AgentRowStatus.error,
+            path: '$userDir/x.md',
+            errorMessage: 'the file cannot be read',
+          ),
+        ]),
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      expect(
+        definitionsOf(cubit).rows.firstWhere((r) => r.name == 'x').status,
+        'Error',
+      );
+      expect(definitionsOf(cubit).errors.single.line, isNull);
+    });
+
+    test('every status of the table has its text and tone (D7)', () async {
+      final fx = await fixture();
+      AgentDefinitionRowView row(String n, AgentRowStatus s, {String? by}) =>
+          AgentDefinitionRowView(
+            name: n,
+            status: s,
+            path: '$userDir/$n.md',
+            overriddenBy: by,
+          );
+      final cubit = make(
+        fx,
+        loader: loaderOf([
+          builtin('default'),
+          row('docs-writer', AgentRowStatus.modelNotConfigured),
+          row('dup', AgentRowStatus.duplicate),
+          row('shadow', AgentRowStatus.shadowed),
+          row('general', AgentRowStatus.overridden, by: '$userDir/general.md'),
+        ]),
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      final status = {
+        for (final r in definitionsOf(cubit).rows) r.name: (r.status, r.tone),
+      };
+      expect(status['docs-writer'], (
+        'Model not configured',
+        AgentsStatusTone.warning,
+      ));
+      expect(status['dup'], (
+        'Not loaded: duplicate name',
+        AgentsStatusTone.danger,
+      ));
+      expect(status['shadow'], (
+        'Shadowed by project',
+        AgentsStatusTone.warning,
+      ));
+      expect(status['general'], (
+        'Overridden by ~/.codelab/agents/general.md',
+        AgentsStatusTone.warning,
+      ));
+    });
+
+    test('built-in types of a config with subagents.enabled false are '
+        '"Subagents off" (Q12 (а))', () async {
+      final fx = await fixture(userYaml: 'subagents:\n  enabled: false\n');
+      final cubit = make(
+        fx,
+        loader: loaderOf([
+          builtin('default'),
+          for (final n in const ['general', 'explore', 'review', 'plan'])
+            builtin(n, status: AgentRowStatus.subagentsOff),
+        ]),
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      final rows = {for (final r in definitionsOf(cubit).rows) r.name: r};
+      for (final n in const ['general', 'explore', 'review', 'plan']) {
+        expect(rows[n]!.status, 'Subagents off', reason: n);
+        expect(rows[n]!.availableIn, 'subagent', reason: n);
+      }
+      expect(rows['default']!.status, 'Available');
+    });
+
+    test('definitions load together with the snapshot and get a cancel '
+        'token (D11)', () async {
+      final fx = await fixture();
+      final loader = loaderOf(brokenRows);
+      final cubit = make(fx, loader: loader, environment: env);
+
+      await ready(cubit);
+
+      expect(loader.tokens, hasLength(1));
+      expect(loader.tokens.single, isNotNull);
+      expect(loader.tokens.single!.isCancelled, isFalse);
+    });
+
+    test('a late result of an earlier load is discarded after a newer '
+        'Reload (Поздний результат после Reload)', () async {
+      final fx = await fixture();
+      final loader = loaderOf([builtin('default'), brokenRows[1]]);
+      final cubit = make(fx, loader: loader, environment: env);
+      final reached = Completer<void>();
+      final gate = Completer<AgentDefinitionsLoad>();
+      final second = AgentDefinitionsLoad(
+        rows: [builtin('default'), brokenRows[2]],
+        userDirectory: userDir,
+        userDirectoryExists: true,
+      );
+      loader.script = (call) {
+        if (call == 1) {
+          reached.complete();
+          return gate.future;
+        }
+        return Future.value(second);
+      };
+
+      final first = cubit.reload();
+      await reached.future;
+      await cubit.reload();
+      expect(
+        definitionsOf(cubit).rows.map((r) => r.name),
+        contains('migrator'),
+      );
+      gate.complete(loader.load);
+      await first;
+
+      expect(
+        definitionsOf(cubit).rows.map((r) => r.name),
+        contains('migrator'),
+      );
+      expect(
+        definitionsOf(cubit).rows.map((r) => r.name),
+        isNot(contains('reviewer')),
+      );
+      expect(events('agents_modes.load_discarded').single['reason'], 'reload');
+      expect(loader.tokens.first!.isCancelled, isTrue);
+    });
+
+    test('closing the page cancels the load', () async {
+      final fx = await fixture();
+      final loader = loaderOf(brokenRows);
+      final cubit = make(fx, loader: loader, environment: env);
+      final reached = Completer<void>();
+      final gate = Completer<AgentDefinitionsLoad>();
+      loader.script = (call) {
+        reached.complete();
+        return gate.future;
+      };
+
+      final first = cubit.reload();
+      await reached.future;
+      await cubit.close();
+      gate.complete(loader.load);
+      await first;
+
+      expect(loader.tokens.single!.isCancelled, isTrue);
+    });
+
+    test('the table is not loaded for a WebSocket agent', () async {
+      final fx = await fixture();
+      workspace.emit(WorkspaceState(connection: _connected, profile: _remote));
+      final loader = loaderOf(brokenRows);
+      final cubit = make(fx, loader: loader, environment: env);
+
+      await cubit.reload();
+
+      expect(cubit.state, isA<AgentsModesReadOnly>());
+      expect(loader.tokens, isEmpty);
+    });
+
+    test(
+      'a timeout shows the flag and logs the reason without a path',
+      () async {
+        final fx = await fixture();
+        final cubit = make(
+          fx,
+          loader: loaderOf([builtin('default')], timedOut: true),
+          environment: env,
+        );
+
+        await ready(cubit);
+
+        expect(definitionsOf(cubit).timedOut, isTrue);
+        final failed = events('agents_modes.definitions_failed').single;
+        expect(failed['reason'], 'timeout');
+        expect(failed['level'], 'warning');
+      },
+    );
+
+    test(
+      'an unexpected exception shows the failure and logs its type only',
+      () async {
+        final fx = await fixture();
+        final loader = loaderOf(brokenRows)
+          ..script = (call) async => throw const FileSystemException(
+            'boom',
+            '/Users/demo/.codelab/agents',
+          );
+        final cubit = make(fx, loader: loader, environment: env);
+
+        await ready(cubit);
+
+        final view = definitionsOf(cubit);
+        expect(view.failed, isTrue);
+        expect(view.rows, isEmpty);
+        final failed = events('agents_modes.definitions_failed').single;
+        expect(failed['reason'], 'error');
+        expect(failed['error_type'], 'FileSystemException');
+        expect(logger.entries.toString(), isNot(contains('/Users/demo')));
+        expect(logger.entries.toString(), isNot(contains('boom')));
+        // Режим и effort остаются доступными.
+        expect(now(cubit).mode, 'standard');
+      },
+    );
+
+    test(
+      'an untrusted project is reported and has no project folder',
+      () async {
+        final fx = await fixture(trusted: false);
+        final cubit = make(
+          fx,
+          loader: loaderOf(
+            [builtin('default')],
+            untrusted: true,
+            projectDir: null,
+          ),
+          environment: env,
+        );
+
+        await ready(cubit);
+
+        final view = definitionsOf(cubit);
+        expect(view.untrustedProject, isTrue);
+        expect(view.projectFolderAvailable, isFalse);
+      },
+    );
+
+    test(
+      'the loaded event counts file rows and errors, without paths',
+      () async {
+        final fx = await fixture();
+        final cubit = make(fx, loader: loaderOf(brokenRows), environment: env);
+
+        await ready(cubit);
+
+        final loaded = events('agents_modes.loaded').single;
+        expect(loaded['definitions'], 2);
+        expect(loaded['errors'], 1);
+        expect(logger.entries.toString(), isNot(contains('migrator')));
+      },
+    );
+
+    group('Open file и Open folder', () {
+      test('"Open file" passes the path from the state and logs the kind '
+          'and the outcome without the path', () async {
+        final fx = await fixture();
+        final opener = FakePathOpener();
+        final cubit = make(
+          fx,
+          loader: loaderOf(brokenRows),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        await cubit.openDefinitionFile(migrator);
+
+        expect(opener.files, [migrator]);
+        final opened = events('agents_modes.open_path').single;
+        expect(opened['kind'], 'file');
+        expect(opened['outcome'], 'opened');
+        expect(opened['level'], 'info');
+        expect(logger.entries.toString(), isNot(contains('migrator')));
+        expect(definitionsOf(cubit).openFailure, isNull);
+      });
+
+      test('a path that is not in the state is not_allowed and never reaches '
+          'the port', () async {
+        final fx = await fixture();
+        final opener = FakePathOpener();
+        final cubit = make(
+          fx,
+          loader: loaderOf(brokenRows),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        await cubit.openDefinitionFile('/etc/passwd');
+        await cubit.openDefinitionFile('$userDir/../../.ssh/id_rsa');
+
+        expect(opener.untouched, isTrue);
+        final outcomes = events('agents_modes.open_path');
+        expect(outcomes.map((e) => e['outcome']), everyElement('not_allowed'));
+        expect(logger.entries.toString(), isNot(contains('passwd')));
+      });
+
+      test('a failure of the platform shows the open-failed state', () async {
+        final fx = await fixture();
+        final opener = FakePathOpener()..fileOutcome = PathOpenOutcome.failed;
+        final cubit = make(
+          fx,
+          loader: loaderOf(brokenRows),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        await cubit.openDefinitionFile(migrator);
+
+        expect(definitionsOf(cubit).openFailure, isNotNull);
+        expect(events('agents_modes.open_path').single['outcome'], 'failed');
+      });
+
+      test('"User definitions" asks the port to create the folder and logs '
+          '"created" (Пользовательского каталога нет)', () async {
+        final fx = await fixture();
+        final opener = FakePathOpener();
+        final cubit = make(
+          fx,
+          loader: loaderOf([builtin('default')], userExists: false),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        await cubit.openFolder(AgentsFolder.user);
+
+        expect(opener.directories, [(path: userDir, create: true)]);
+        final opened = events('agents_modes.open_path').single;
+        expect(opened['kind'], 'user_dir');
+        expect(opened['outcome'], 'created');
+      });
+
+      test('an existing user folder is opened with create too (the port '
+          'creates only what is missing)', () async {
+        final fx = await fixture();
+        final opener = FakePathOpener()
+          ..directoryOutcome = PathOpenOutcome.opened;
+        final cubit = make(
+          fx,
+          loader: loaderOf([builtin('default')]),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        await cubit.openFolder(AgentsFolder.user);
+
+        expect(events('agents_modes.open_path').single['outcome'], 'opened');
+      });
+
+      test('a failed creation shows the open-failed state', () async {
+        final fx = await fixture();
+        final opener = FakePathOpener()
+          ..directoryOutcome = PathOpenOutcome.failed;
+        final cubit = make(
+          fx,
+          loader: loaderOf([builtin('default')], userExists: false),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        await cubit.openFolder(AgentsFolder.user);
+
+        expect(definitionsOf(cubit).openFailure, isNotNull);
+      });
+
+      test('the project folder of a trusted project is opened WITHOUT create '
+          '(Q11)', () async {
+        final fx = await fixture();
+        const projectAgents = '/work/demo/.codelab/agents';
+        final opener = FakePathOpener();
+        final cubit = make(
+          fx,
+          loader: loaderOf(
+            [builtin('default')],
+            projectDir: projectAgents,
+            projectExists: true,
+          ),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        expect(definitionsOf(cubit).projectFolderAvailable, isTrue);
+        expect(definitionsOf(cubit).projectFolderExists, isTrue);
+        await cubit.openFolder(AgentsFolder.project);
+
+        expect(opener.directories, [(path: projectAgents, create: false)]);
+        expect(events('agents_modes.open_path').single['kind'], 'project_dir');
+      });
+
+      test('a missing project folder is never created by the app '
+          '(Проектного каталога нет)', () async {
+        final fx = await fixture();
+        final opener = FakePathOpener();
+        final cubit = make(
+          fx,
+          loader: loaderOf(
+            [builtin('default')],
+            projectDir: '/work/demo/.codelab/agents',
+            projectExists: false,
+          ),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        expect(definitionsOf(cubit).projectFolderAvailable, isTrue);
+        expect(definitionsOf(cubit).projectFolderExists, isFalse);
+        await cubit.openFolder(AgentsFolder.project);
+
+        expect(opener.untouched, isTrue);
+        expect(
+          events('agents_modes.open_path').single['outcome'],
+          'not_allowed',
+        );
+      });
+
+      test('an untrusted project has no project folder to open '
+          '(Проект без доверия)', () async {
+        final fx = await fixture(trusted: false);
+        final opener = FakePathOpener();
+        final cubit = make(
+          fx,
+          loader: loaderOf([builtin('default')], untrusted: true),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        await cubit.openFolder(AgentsFolder.project);
+
+        expect(opener.untouched, isTrue);
+        expect(
+          events('agents_modes.open_path').single['outcome'],
+          'not_allowed',
+        );
+      });
     });
   });
 }

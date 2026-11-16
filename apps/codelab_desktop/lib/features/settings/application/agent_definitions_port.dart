@@ -1,0 +1,55 @@
+import 'package:codelab_setup/codelab_setup.dart';
+
+/// Результат загрузки определений агентов для страницы «Agents & modes»
+/// (design.md change `add-settings-agents-modes`, D7, D11).
+///
+/// ЗАГЛУШКА итерации 2, задача 2.1.
+///
+/// Почему отдельный тип, а не `AgentDefinitionRows` моста: тот живёт в
+/// `codelab_setup/io.dart`, который сторож пускает только в `lib/app/`;
+/// `features/` получает определения через этот тип, а адаптер в `lib/app/`
+/// (`agentDefinitionRowsAt`) его строит (SETUP-9).
+///
+/// Для чего: строки моста, признаки диагностики и каталоги определений;
+/// значений и тел файлов здесь нет.
+final class AgentDefinitionsLoad {
+  const AgentDefinitionsLoad({
+    required this.rows,
+    required this.userDirectory,
+    required this.userDirectoryExists,
+    this.untrustedProject = false,
+    this.timedOut = false,
+    this.projectDirectory,
+    this.projectDirectoryExists = false,
+  });
+
+  /// Строки таблицы: `default`, встроенные типы, файлы.
+  final List<AgentDefinitionRowView> rows;
+
+  /// Диагностика `untrusted_project`: проектный каталог не читался.
+  final bool untrustedProject;
+
+  /// Загрузка не уложилась в тайм-аут (5 с).
+  final bool timedOut;
+
+  /// `$CODELAB_HOME/agents` и признак его наличия.
+  final String userDirectory;
+  final bool userDirectoryExists;
+
+  /// `<project>/.codelab/agents` доверенного проекта; `null` — папки проекта
+  /// нет или проект недоверенный.
+  final String? projectDirectory;
+  final bool projectDirectoryExists;
+}
+
+/// Загрузчик определений: адаптер `agentDefinitionRowsAt` собирает
+/// composition root (`lib/app/`).
+///
+/// [cancel] обрывает загрузку при новом «Reload» и закрытии страницы (D11).
+typedef AgentDefinitionsLoader =
+    Future<AgentDefinitionsLoad> Function({
+      required AgentConfigSnapshot snapshot,
+      required EditableSettings access,
+      required Map<String, String> environment,
+      CancelToken? cancel,
+    });
