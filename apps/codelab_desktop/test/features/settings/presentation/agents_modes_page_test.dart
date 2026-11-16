@@ -73,6 +73,14 @@ final class FakeAgentsModesCubit extends Cubit<AgentsModesState>
   Future<void> selectEffort(String id) async => calls.add('selectEffort:$id');
 
   @override
+  Future<void> openDefinitionFile(String path) async =>
+      calls.add('openFile:$path');
+
+  @override
+  Future<void> openFolder(AgentsFolder folder) async =>
+      calls.add('openFolder:${folder.name}');
+
+  @override
   void selectTarget(ConfigLayer layer) =>
       calls.add('selectTarget:${layer.name}');
 }
@@ -88,6 +96,7 @@ AgentsModesReady _ready({
   bool canTargetProject = true,
   bool saving = false,
   AgentsModesBanner? banner,
+  AgentsDefinitionsView? definitions,
 }) => AgentsModesReady(
   mode: mode,
   modeLabel: modeLabel ?? mode,
@@ -99,6 +108,7 @@ AgentsModesReady _ready({
   canTargetProject: canTargetProject,
   saving: saving,
   banner: banner,
+  definitions: definitions,
 );
 
 Finder _key(String key) => find.byKey(ValueKey(key));
@@ -762,6 +772,338 @@ void main() {
       );
 
       expect(_text('agents-modes-banner', 'changed on disk'), findsOneWidget);
+    });
+  });
+
+  group('Блок «Agent definitions» (итерация 2)', () {
+    const reviewer = AgentsDefinitionRow(
+      name: 'reviewer',
+      description: 'Reviews diffs',
+      source: '~/.codelab/agents/reviewer.md',
+      availableIn: 'both',
+      tools: 'read, grep',
+      model: 'session model',
+      status: 'Available',
+      tone: AgentsStatusTone.success,
+    );
+    const migrator = AgentsDefinitionRow(
+      name: 'migrator',
+      description: '—',
+      source: '~/.codelab/agents/migrator.md',
+      availableIn: '—',
+      tools: '—',
+      model: '—',
+      status: 'Error · line 4',
+      tone: AgentsStatusTone.danger,
+    );
+    const error = AgentsDefinitionError(
+      index: 0,
+      path: '/home/u/.codelab/agents/migrator.md',
+      pathLabel: '~/.codelab/agents/migrator.md',
+      line: 4,
+      message: 'tools must be a list',
+    );
+    const broken = AgentsDefinitionsView(
+      rows: [reviewer, migrator],
+      errors: [error],
+      projectFolderAvailable: true,
+      projectFolderExists: true,
+    );
+
+    testWidgets('the table shows the rows with their texts and statuses '
+        '(Битое определение, Модель вне каталога)', (tester) async {
+      await pumpPage(tester, _ready(definitions: broken));
+
+      expect(_key('agents-definitions-table'), findsOneWidget);
+      for (final text in const [
+        'reviewer',
+        'migrator',
+        'Available',
+        'Error · line 4',
+        'Name',
+        'Description',
+        'Source',
+        'Available in',
+        'Tools',
+        'Model',
+        'Status',
+      ]) {
+        expect(
+          find.descendant(
+            of: _key('agents-definitions-table'),
+            matching: find.text(text),
+          ),
+          findsWidgets,
+          reason: text,
+        );
+      }
+    });
+
+    testWidgets('a status "Model not configured" and a "Subagents off" row '
+        'are shown as tags', (tester) async {
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: const AgentsDefinitionsView(
+            rows: [
+              AgentsDefinitionRow(
+                name: 'docs-writer',
+                description: '—',
+                source: '~/.codelab/agents/docs-writer.md',
+                availableIn: 'session',
+                tools: 'all',
+                model: 'openai/gpt-x',
+                status: 'Model not configured',
+                tone: AgentsStatusTone.warning,
+              ),
+              AgentsDefinitionRow(
+                name: 'general',
+                description: '—',
+                source: 'built-in',
+                availableIn: 'subagent',
+                tools: 'all',
+                model: 'session model',
+                status: 'Subagents off',
+                tone: AgentsStatusTone.warning,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('Model not configured'), findsOneWidget);
+      expect(find.text('Subagents off'), findsOneWidget);
+    });
+
+    testWidgets('an error InfoBar names the file and the line but never the '
+        'value, and offers "Open file"', (tester) async {
+      await pumpPage(tester, _ready(definitions: broken));
+
+      expect(
+        _text('agents-definitions-error-0', '~/.codelab/agents/migrator.md'),
+        findsOneWidget,
+      );
+      expect(_text('agents-definitions-error-0', 'line 4'), findsOneWidget);
+      expect(
+        _text('agents-definitions-error-0', 'tools must be a list'),
+        findsOneWidget,
+      );
+      expect(_text('agents-definitions-error-0', 'read'), findsNothing);
+      expect(
+        tester.widget<InfoBar>(_key('agents-definitions-error-0')).severity,
+        InfoBarSeverity.error,
+      );
+      expect(
+        find.descendant(
+          of: _key('agents-definitions-error-0'),
+          matching: find.text('Open file'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('"Open file" passes the path of the state to the Cubit', (
+      tester,
+    ) async {
+      await pumpPage(tester, _ready(definitions: broken));
+
+      await tester.tap(_key('agents-definitions-open-file-0'));
+      await tester.pumpAndSettle();
+
+      expect(cubit.calls, ['openFile:/home/u/.codelab/agents/migrator.md']);
+    });
+
+    testWidgets('Reload re-reads the snapshot and the definitions', (
+      tester,
+    ) async {
+      await pumpPage(tester, _ready(definitions: broken));
+
+      await tester.tap(_key('agents-definitions-reload'));
+      await tester.pumpAndSettle();
+
+      expect(cubit.calls, ['reload']);
+    });
+
+    testWidgets('the caption says that definitions are read when a session '
+        'is created and the choice for one session is in the composer', (
+      tester,
+    ) async {
+      await pumpPage(tester, _ready(definitions: broken));
+
+      expect(
+        find.textContaining('read when a session is created'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('composer'), findsWidgets);
+    });
+
+    testWidgets('the untrusted-project InfoBar has the info severity', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: const AgentsDefinitionsView(
+            rows: [reviewer],
+            untrustedProject: true,
+            projectLabel: '~/work/demo',
+          ),
+        ),
+      );
+
+      expect(
+        _text(
+          'agents-definitions-untrusted',
+          'are not read: the project is not trusted',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<InfoBar>(_key('agents-definitions-untrusted')).severity,
+        InfoBarSeverity.info,
+      );
+    });
+
+    testWidgets('the timeout InfoBar', (tester) async {
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: const AgentsDefinitionsView(rows: [], timedOut: true),
+        ),
+      );
+
+      expect(
+        _text(
+          'agents-definitions-timeout',
+          'Agent definitions were not read within 5 s.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('no InfoBars for a clean load', (tester) async {
+      await pumpPage(
+        tester,
+        _ready(definitions: const AgentsDefinitionsView(rows: [reviewer])),
+      );
+
+      expect(_key('agents-definitions-table'), findsOneWidget);
+      expect(_key('agents-definitions-error-0'), findsNothing);
+      expect(_key('agents-definitions-untrusted'), findsNothing);
+      expect(_key('agents-definitions-timeout'), findsNothing);
+      expect(_key('agents-definitions-open-failed'), findsNothing);
+    });
+
+    testWidgets('the open-failed InfoBar names what did not open', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: const AgentsDefinitionsView(
+            rows: [reviewer],
+            openFailure: '~/.codelab/agents',
+          ),
+        ),
+      );
+
+      expect(
+        _text(
+          'agents-definitions-open-failed',
+          'Could not open ~/.codelab/agents.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    group('меню «Open folder»', () {
+      testWidgets('offers both folders for a trusted project and opens the '
+          'user one', (tester) async {
+        await pumpPage(tester, _ready(definitions: broken));
+
+        await tester.tap(_key('agents-definitions-open-folder'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('User definitions (~/.codelab/agents)'),
+          findsOneWidget,
+        );
+        expect(find.text('This project (.codelab/agents)'), findsOneWidget);
+        await tester.tap(find.text('User definitions (~/.codelab/agents)'));
+        await tester.pumpAndSettle();
+        expect(cubit.calls, ['openFolder:user']);
+      });
+
+      testWidgets('opens the project folder when it exists', (tester) async {
+        await pumpPage(tester, _ready(definitions: broken));
+
+        await tester.tap(_key('agents-definitions-open-folder'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('This project (.codelab/agents)'));
+        await tester.pumpAndSettle();
+
+        expect(cubit.calls, ['openFolder:project']);
+      });
+
+      testWidgets('an untrusted project has no project item '
+          '(Проект без доверия)', (tester) async {
+        await pumpPage(
+          tester,
+          _ready(
+            definitions: const AgentsDefinitionsView(
+              rows: [reviewer],
+              untrustedProject: true,
+            ),
+          ),
+        );
+
+        await tester.tap(_key('agents-definitions-open-folder'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('User definitions (~/.codelab/agents)'),
+          findsOneWidget,
+        );
+        expect(find.text('This project (.codelab/agents)'), findsNothing);
+      });
+
+      testWidgets('a missing project folder is inactive with a hint '
+          '(Проектного каталога нет)', (tester) async {
+        await pumpPage(
+          tester,
+          _ready(
+            definitions: const AgentsDefinitionsView(
+              rows: [reviewer],
+              projectFolderAvailable: true,
+              projectFolderExists: false,
+            ),
+          ),
+        );
+
+        await tester.tap(_key('agents-definitions-open-folder'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byTooltip(
+            'Create .codelab/agents in the project to add definitions.',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('This project (.codelab/agents)'));
+        await tester.pumpAndSettle();
+
+        expect(cubit.calls, isEmpty);
+      });
+    });
+
+    testWidgets('a read-only page has no definitions block', (tester) async {
+      await pumpPage(
+        tester,
+        const AgentsModesReadOnly(notice: 'Read-only: elsewhere.'),
+      );
+
+      expect(_key('agents-definitions-table'), findsNothing);
+      expect(_key('agents-definitions-reload'), findsNothing);
+      expect(_key('agents-definitions-open-folder'), findsNothing);
     });
   });
 }

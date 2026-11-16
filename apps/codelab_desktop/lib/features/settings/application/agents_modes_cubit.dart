@@ -15,10 +15,16 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/platform/path_opener.dart';
+import 'agent_definitions_port.dart';
 import 'agents_modes_state.dart';
 import 'provider_settings_session.dart';
 
+export 'agent_definitions_port.dart';
 export 'agents_modes_state.dart';
+
+/// Каталог определений агентов для меню «Open folder» (D8).
+enum AgentsFolder { user, project }
 
 /// Привязка подтверждения `bypass` к состоянию страницы в момент открытия
 /// диалога (design.md change `add-settings-agents-modes`, D5, D11).
@@ -76,6 +82,8 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     required String? codelabHome,
     required String? Function() projectDirectory,
     Logger? logger,
+    AgentDefinitionsLoader? loadDefinitions,
+    PathOpener? pathOpener,
   }) : _workspace = workspace,
        _defaultProfile = defaultProfile,
        _open = open,
@@ -335,6 +343,16 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
   }
 
   // --- Выбор пользователя ----------------------------------------------------
+
+  /// «Open file» у InfoBar ошибки: открывает [path], только если он есть в
+  /// состоянии страницы (D8); иначе `not_allowed` без вызова порта.
+  /// Заглушка итерации 2, задача 2.1.
+  Future<void> openDefinitionFile(String path) async {}
+
+  /// Меню «Open folder»: [folder] — `$CODELAB_HOME/agents` (с `create: true`)
+  /// или `<project>/.codelab/agents` доверенного проекта (без создания,
+  /// Q11). Заглушка итерации 2, задача 2.1.
+  Future<void> openFolder(AgentsFolder folder) async {}
 
   /// Переключатель цели: [layer] — `user` или `projectLocal` (D4).
   void selectTarget(ConfigLayer layer) {
