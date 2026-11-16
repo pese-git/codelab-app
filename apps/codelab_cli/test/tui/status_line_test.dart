@@ -305,5 +305,108 @@ void main() {
         expect(row, isNot(contains('\x1b')));
       });
     });
+    group('очистка сегментов от управляющих символов', () {
+      const leak = 'sk-test-leak-0123456789';
+
+      test('ESC в профиле, режиме и модели не попадает в строку', () {
+        final line = statusLine(
+          StatusInfo(
+            profile: 'pr\x1b[2Jo',
+            mode: 'pl\x1b[31man\x07',
+            model: 'm\x1b]0;$leak\x07odel',
+          ),
+          120,
+        );
+        expect(line, 'pr[2Jo · pl[31man · m]0;${leak}odel');
+        expect(line, isNot(contains('\x1b')));
+        expect(line, isNot(contains('\x07')));
+      });
+
+      test('перевод строки в режиме и модели заменён пробелом', () {
+        final line = statusLine(
+          const StatusInfo(profile: 'p', mode: 'pl\nan', model: 'evil\nmodel'),
+          120,
+        );
+        expect(line, 'p · pl an · evil model');
+        expect(line, isNot(contains('\n')));
+      });
+
+      test('ESC в валюте стоимости не попадает в строку', () {
+        final usage = reported(
+          cost: const Money(micros: 125000, currency: 'E\x1b[31mUR\x07'),
+        );
+        final line = statusLine(info(usage), 120);
+        expect(line, contains('0.13 E[31mUR'));
+        expect(line, isNot(contains('\x1b')));
+        expect(line, isNot(contains('\x07')));
+      });
+
+      test('statusInfoOf + render: ESC из опций сессии вырезан', () {
+        final (model, _) = reduce(
+          TuiModel.initial(
+            profile: 'default',
+            size: const TerminalSize(columns: 120, rows: 30),
+            color: false,
+          ),
+          SessionViewMsg(
+            SessionView(
+              revision: 1,
+              status: SessionStatusView.idle,
+              configOptions: [
+                ConfigOptionView(
+                  id: 'mode',
+                  name: 'Mode',
+                  currentValue: 'pl\x1b[31man',
+                  values: const [],
+                ),
+                ConfigOptionView(
+                  id: 'model',
+                  name: 'Model',
+                  currentValue: 'm\x1b]0;$leak\x07odel',
+                  values: const [],
+                ),
+              ],
+            ),
+            at: DateTime.utc(2026, 11, 16),
+          ),
+        );
+        final row = render(
+          model,
+          TuiChrome(now: DateTime.utc(2026, 11, 16)),
+        ).lines.last;
+        expect(row, contains('pl[31man'));
+        expect(row, isNot(contains('\x1b')));
+        expect(row, isNot(contains('\x07')));
+      });
+    });
+
+    test('нулевые токены хода скрыты, стоимость остаётся', () {
+      final usage = reported(
+        tokens: const TokenCounts(
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+        ),
+      );
+      final line = statusLine(info(usage, profile: 'p'), 120);
+      expect(line, isNot(contains('↑')));
+      expect(line, isNot(contains('↓')));
+      expect(line, contains('\$0.13'));
+    });
+
+    test('сумма входа насыщается, а не переполняет int', () {
+      const max = 0x7fffffffffffffff;
+      final usage = reported(
+        tokens: const TokenCounts(
+          input: max,
+          output: 1,
+          cacheRead: max,
+          cacheWrite: 5,
+        ),
+      );
+      final line = statusLine(info(usage), 120);
+      expect(line, contains('↑9007199254.7M'));
+    });
   });
 }

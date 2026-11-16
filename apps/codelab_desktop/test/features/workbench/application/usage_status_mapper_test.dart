@@ -143,6 +143,31 @@ void main() {
       expect(running.usage, isNull);
       expect(running.busy, isTrue);
     });
+
+    test('awaiting: busy also while the turn is being cancelled', () {
+      final cancelling = sessionStatusDataOf(
+        _view(
+          usage: const UsageView(support: UsageSupport.awaiting),
+          status: SessionStatusView.cancelling,
+        ),
+      );
+      expect(cancelling.busy, isTrue);
+    });
+
+    test('reported: never busy, whatever the session status', () {
+      for (final status in [
+        SessionStatusView.running,
+        SessionStatusView.cancelling,
+      ]) {
+        final data = sessionStatusDataOf(
+          _view(
+            usage: _reported(lastTurn: const UsageTotals(tokens: _noCache)),
+            status: status,
+          ),
+        );
+        expect(data.busy, isFalse, reason: status.name);
+      }
+    });
   });
 
   group('two turns', () {
@@ -205,6 +230,134 @@ void main() {
         ),
       ).usage!.tooltip!;
       expect(noReasoning, isNot(contains('reasoning')));
+    });
+  });
+
+  group('zero turn tokens', () {
+    test('↑0 ↓0 hides the token segment, the cost stays', () {
+      final data = _of(
+        _reported(
+          lastTurn: UsageTotals(
+            tokens: const TokenCounts(
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+            ),
+            cost: _usd(4100),
+          ),
+          session: UsageTotals(tokens: _noCache, cost: _usd(1200000)),
+        ),
+      );
+      expect(data.usage, isNull);
+      expect(data.cost?.label, r'$0.0041 · session $1.20');
+    });
+
+    test('a single non-zero counter keeps the segment', () {
+      final data = _of(
+        _reported(
+          lastTurn: const UsageTotals(
+            tokens: TokenCounts(
+              input: 0,
+              output: 5,
+              cacheRead: 0,
+              cacheWrite: 0,
+            ),
+          ),
+        ),
+      );
+      expect(data.usage?.label, '0 → 5');
+    });
+  });
+
+  group('huge counters', () {
+    test('the input sum saturates: no negative number, segment stays', () {
+      const huge = 9223372036854775807; // int64 max на VM
+      final data = _of(
+        _reported(
+          lastTurn: const UsageTotals(
+            tokens: TokenCounts(
+              input: huge,
+              output: 5,
+              cacheRead: 1,
+              cacheWrite: 0,
+            ),
+          ),
+        ),
+      );
+      // Ручная сумма дала бы int64 min (отрицательное); kit насыщает на
+      // 2^53 − 1.
+      expect(data.usage?.label, '9007199254.7M → 5');
+    });
+  });
+
+  group('partial reasons in the hint', () {
+    test('«Подсказка причин неполноты»: two lines, exact text', () {
+      final data = _of(
+        _reported(
+          lastTurn: const UsageTotals(
+            tokens: TokenCounts(
+              input: 1200,
+              output: 300,
+              cacheRead: 0,
+              cacheWrite: 0,
+            ),
+            partial: {UsagePartial.noUsage, UsagePartial.beforeLoad},
+          ),
+        ),
+      );
+      expect(data.usage?.label, '~1.2k → 300');
+      expect(
+        data.usage?.tooltip,
+        'input 1200 · output 300 · cache read 0 · cache write 0\n'
+        'approximate: agent sent no usage for some steps, '
+        'before the session was loaded',
+      );
+    });
+
+    test('«Причина noPrice в подсказке токенов»: no «~», reason in hint', () {
+      final data = _of(
+        _reported(
+          lastTurn: const UsageTotals(
+            tokens: _noCache,
+            partial: {UsagePartial.noPrice},
+          ),
+        ),
+      );
+      expect(data.usage?.label, '120 → 30');
+      expect(
+        data.usage?.tooltip,
+        contains('approximate: price unknown for some steps'),
+      );
+    });
+  });
+
+  group('session total without a turn snapshot', () {
+    test('«Итог сессии без снимка хода»: no tokens, «— · session ~\$1.20»', () {
+      final data = _of(
+        _reported(
+          session: UsageTotals(
+            tokens: _noCache,
+            cost: _usd(1200000),
+            partial: const {UsagePartial.beforeLoad},
+          ),
+        ),
+      );
+      expect(data.usage, isNull);
+      expect(data.cost?.label, r'— · session ~$1.20');
+    });
+
+    test('without session.cost there is no cost segment', () {
+      final data = _of(
+        _reported(
+          session: const UsageTotals(
+            tokens: _noCache,
+            partial: {UsagePartial.beforeLoad},
+          ),
+        ),
+      );
+      expect(data.usage, isNull);
+      expect(data.cost, isNull);
     });
   });
 

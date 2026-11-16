@@ -8,6 +8,7 @@ import 'output_surface.dart';
 import 'plan_format.dart';
 import 'sanitize.dart';
 import 'tool_row.dart';
+import 'usage_segments.dart';
 
 /// Показ мыслей модели: `/thoughts dim|collapsed|hidden` (§12.2.3).
 ///
@@ -296,6 +297,25 @@ final class TerminalRenderer {
   /// строки в stdout, а на [OutputSurface.raw] — в stderr, чтобы stdout
   /// оставался ответом агента.
   void line(String text) => _line(text, _raw);
+
+  /// Строка статуса после хода: режим, модель, контекст, токены и стоимость
+  /// (D12, Q9 (б), Q18 (а)).
+  ///
+  /// Почему отдельный метод, а не [line]: на [OutputSurface.raw] её не
+  /// печатают вовсе (ни в stdout, ни в stderr — stdout это данные для
+  /// скриптов), а [line] на `raw` пишет в stderr. На `ansi` строка
+  /// приглушена, на `plain` без SGR. Зовёт `ReplSession.onOutcome` после
+  /// строки отмены или сбоя; без данных (нет режима, модели и usage)
+  /// ничего не печатает.
+  void afterTurnStatus(SessionView view) {
+    if (_raw) {
+      return;
+    }
+    final text = afterTurnStatusLine(view);
+    if (text != null) {
+      _line(_styled(text, sgrDim));
+    }
+  }
 
   /// Печатает уже загруженную сессию целиком, с промптами пользователя
   /// (`--continue`, `/resume`).

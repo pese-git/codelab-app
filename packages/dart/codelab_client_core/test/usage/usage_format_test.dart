@@ -130,4 +130,46 @@ void main() {
       }
     });
   });
+
+  group('usageInputTokens (D24)', () {
+    test('обычная сумма: input + cacheRead + cacheWrite', () {
+      expect(
+        usageInputTokens(
+          const TokenCounts(
+            input: 90000,
+            output: 7249,
+            cacheRead: 3000,
+            cacheWrite: 1049,
+          ),
+        ),
+        94049,
+      );
+    });
+
+    test('насыщение на 2^53 − 1 на огромных значениях', () {
+      const limit = 9007199254740991;
+      expect(
+        usageInputTokens(
+          const TokenCounts(
+            input: limit,
+            output: 1,
+            cacheRead: limit,
+            cacheWrite: 5,
+          ),
+        ),
+        limit,
+      );
+      expect(
+        usageInputTokens(
+          const TokenCounts(
+            input: 0x7fffffffffffffff,
+            output: 0,
+            cacheRead: 0x7fffffffffffffff,
+            cacheWrite: 0x7fffffffffffffff,
+          ),
+        ),
+        limit,
+      );
+    });
+  });
 }

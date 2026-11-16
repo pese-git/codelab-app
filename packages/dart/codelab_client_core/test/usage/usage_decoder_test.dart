@@ -312,6 +312,41 @@ void main() {
       expect(decode(_withSessionCost(0.5))!.session.cost, isNull);
     });
 
+    // Валюта — ISO 4217: `^[A-Z]{3}$`. Поле необязательное (снимок не
+    // отбрасывается), как и при отсутствии валюты: стоимость пропадает,
+    // токены остаются, причина — `wrong_format` без сырого значения.
+    for (final bad in ['', 'usd', 'US', 'USDX', 'U\x1b[31m', ' USD', 'ЮСД']) {
+      test('currency "${bad.runes.length} chars" not matching [A-Z]{3} '
+          'gives no cost and a wrong_format warning', () {
+        final snapshot = decode(_params({'currency': bad}))!;
+
+        expect(snapshot.session.cost, isNull);
+        expect(snapshot.turn!.cost, isNull);
+        expect(snapshot.session.tokens.input, 9100);
+        expect(warnings, [('currency', 'wrong_format')]);
+      });
+    }
+
+    test('currency EUR is accepted with the cost in EUR', () {
+      final snapshot = decode(
+        _params({
+          'currency': 'EUR',
+          'session': {
+            'turns': 1,
+            'steps': 1,
+            'tokens': _tokens(),
+            'cost': '1.2',
+          },
+        }),
+      )!;
+
+      expect(
+        snapshot.session.cost,
+        const Money(micros: 1200000, currency: 'EUR'),
+      );
+      expect(warnings, isEmpty);
+    });
+
     test('cost without currency gives no cost', () {
       final snapshot = decode(_params({'currency': null}))!;
 

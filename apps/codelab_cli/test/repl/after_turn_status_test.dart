@@ -7,8 +7,10 @@
 // `TerminalRenderer` для неё нет (задача 3.12); тексты строятся функцией
 // сегментов поверх `codelab_client_core` (3.0a, 3.11). Файл компилируется;
 // падают проверки вывода. «Агент без usage» красный только пока строки нет
-// вовсе. Отсутствие строки в headless — `test/headless/` (там `ReplSession`
-// не используется, проверка зелёная и без доработок).
+// вовсе. Отсутствие строки в headless проверяет
+// `test/headless/headless_usage_status_test.dart` (там `ReplSession` не
+// используется, проверка зелёная и без доработок); ветку `PromptQueued` —
+// `test/repl/repl_session_queued_test.dart`.
 //
 // Формат строки (spec): `─ <режим> · <модель> · ctx N% · ↑<вход> ↓<выход> ·
 // $<стоимость сессии>`; на `ansi` — внутри `ESC[2m … ESC[0m`, на `plain` —
@@ -211,9 +213,11 @@ void main() {
     agent.respond(prompt, {'stopReason': 'end_turn'});
 
     await eventually(() => terminal.text.contains('─ ask · a'));
+    // SGR снимаем: `ESC[0m` содержит «0», а проверяется текст строки.
     final line = terminal.text
         .split('\n')
-        .firstWhere((l) => l.contains('─ ask · a'));
+        .firstWhere((l) => l.contains('─ ask · a'))
+        .replaceAll(RegExp('\x1b\\[[0-9;]*m'), '');
     for (final mark in ['ctx', r'$', '0', '↑', '↓']) {
       expect(line, isNot(contains(mark)), reason: line);
     }
@@ -274,6 +278,48 @@ void main() {
 
     usageThenRespond(second, 'end_turn', first: 3, turn: 2);
     await eventually(() => _statusText.allMatches(terminal.text).length == 2);
+    await quit(exit);
+  });
+
+  test('ESC и управляющие символы в режиме и модели не доходят до терминала '
+      '(sanitize сегментов, ревью итерации 3)', () async {
+    agent = FakeAgent(capabilities: _usageCapabilities);
+    terminal = FakeTerminal();
+    final exit = Repl(
+      workspace: agent.workspace,
+      terminal: terminal,
+      profile: FakeAgent.profile,
+      tokenSource: fakeTokenSource,
+      cwd: '/work',
+      history: _MemoryHistoryStore(),
+      surface: OutputSurface.ansi,
+      firstMessage: 'hi',
+      escapeTimeout: const Duration(milliseconds: 10),
+      cancelGrace: const Duration(milliseconds: 200),
+    ).run();
+    await agent.acceptNewSession(
+      's1',
+      configOptions: [
+        {
+          ..._modeOption,
+          'currentValue': 'as\x1b[31mk-test-leak-0123456789\x07',
+        },
+        {..._modelOption, 'currentValue': 'mo\x1b]0;evil\x07del\nx'},
+      ],
+    );
+    await eventually(() => terminal.rawEnabled, reason: 'raw mode');
+    final prompt = await agent.next(sessionPromptMethod);
+    usageThenRespond(prompt, 'end_turn');
+
+    await eventually(() => terminal.text.contains('─ as'));
+    // Берём текст от начала строки статуса: перед ней идёт управление
+    // курсором самой строки ввода, а проверяется то, что пришло от агента.
+    final text = terminal.text;
+    final line = text.substring(text.indexOf('─ as')).split('\n').first;
+    expect(line, contains('as[31mk-test-leak-0123456789 · mo]0;evildel x'));
+    expect(line, isNot(contains('\x07')));
+    // Единственные ESC после начала строки — SGR самого рендера (`ESC[0m`).
+    expect(line.replaceAll('\x1b[0m', ''), isNot(contains('\x1b')));
     await quit(exit);
   });
 }

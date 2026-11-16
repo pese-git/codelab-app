@@ -155,7 +155,11 @@ final class E2eCliAgent {
   static Future<E2eCliLaunch> _scripted(Directory dir, _Mode mode) async =>
       E2eCliLaunch._(
         agent: await scriptedAgent(dir, mode: mode),
-        answer: 'hello from compatible stdio agent',
+        // Режим `withUsage` отвечает своим текстом (`usage reply <ход>`,
+        // add-usage-extension, 3.9); остальные — общим.
+        answer: mode == _Mode.withUsage
+            ? 'usage reply 1'
+            : 'hello from compatible stdio agent',
         permissionTitle: 'Run test command',
         criticalTitle: 'Run rm -rf build',
         permissionCommand: 'echo hello',

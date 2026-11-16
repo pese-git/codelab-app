@@ -55,6 +55,7 @@ final class CodeLabShellState {
     this.selectedAgentId,
     this.transcriptShowRequest,
     this.sessionMode,
+    this.statusBar,
     required this.agentCommands,
     required this.commandCatalog,
     required this.composerDraft,
@@ -182,6 +183,9 @@ final class CodeLabShellState {
 
   /// Режим активной сессии для чипа шапки; `null` — чипа нет.
   final String? sessionMode;
+
+  /// Строка статуса под композером (D11); `null` — строки нет.
+  final CodeLabSessionStatusData? statusBar;
   final double sessionsPaneWidth;
   final double dockWidth;
 
@@ -246,6 +250,7 @@ final class CodeLabShellState {
     Object? selectedAgentId = _unset,
     Object? transcriptShowRequest = _unset,
     Object? sessionMode = _unset,
+    Object? statusBar = _unset,
     List<CodeLabCommandAction>? agentCommands,
     CommandCatalog? commandCatalog,
     String? composerDraft,
@@ -319,6 +324,9 @@ final class CodeLabShellState {
       sessionMode: identical(sessionMode, _unset)
           ? this.sessionMode
           : sessionMode as String?,
+      statusBar: identical(statusBar, _unset)
+          ? this.statusBar
+          : statusBar as CodeLabSessionStatusData?,
       agentCommands: agentCommands ?? this.agentCommands,
       commandCatalog: commandCatalog ?? this.commandCatalog,
       composerDraft: composerDraft ?? this.composerDraft,

@@ -12,7 +12,8 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         PromptOutcome,
         PromptQueued,
         SessionHandle,
-        SessionStatusView;
+        SessionStatusView,
+        SessionView;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 
@@ -40,6 +41,7 @@ final class ActiveSessionState {
     this.isRespondingToConfigOption = false,
     this.sessionMode,
     this.turnState,
+    this.statusBar,
   });
 
   static const _emptyInspectorEntry = CodeLabInspectorEntry(
@@ -100,6 +102,10 @@ final class ActiveSessionState {
   /// (требование «Session pane header», change `redesign-transcript-rows`).
   final CodeLabTurnState? turnState;
 
+  /// Данные строки статуса под композером (change `add-usage-extension`,
+  /// D11, D23 Т1); `null` — нет `SessionView` показываемой сессии, строки нет.
+  final CodeLabSessionStatusData? statusBar;
+
   static const Object _unset = Object();
 
   ActiveSessionState _copyWith({
@@ -120,6 +126,7 @@ final class ActiveSessionState {
     bool? isRespondingToConfigOption,
     Object? sessionMode = _unset,
     Object? turnState = _unset,
+    Object? statusBar = _unset,
   }) => ActiveSessionState(
     sessionId: sessionId ?? this.sessionId,
     transcriptRows: transcriptRows ?? this.transcriptRows,
@@ -147,6 +154,9 @@ final class ActiveSessionState {
     turnState: identical(turnState, _unset)
         ? this.turnState
         : turnState as CodeLabTurnState?,
+    statusBar: identical(statusBar, _unset)
+        ? this.statusBar
+        : statusBar as CodeLabSessionStatusData?,
   );
 }
 
@@ -182,6 +192,8 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   final ClientWorkspace _workspace;
   final ShellDiagnostics _diagnostics;
   late final StreamSubscription<PromptOutcome> _outcomeSubscription;
+  StreamSubscription<SessionView>? _viewSubscription;
+  SessionHandle? _watchedHandle;
 
   /// Последний показанный снимок: по нему лента перестраивается при потере
   /// соединения, чтобы убрать Retry (design D4 change
@@ -224,8 +236,10 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         isPromptSubmitting: _isBusy(view?.status),
         canCancel: view?.status == SessionStatusView.running,
         turnState: turnStateOf(view),
+        statusBar: view == null ? null : sessionStatusDataOf(view),
       ),
     );
+    _watchView(id);
   }
 
   /// Показывает только что созданную сессию: лента пуста, ход не идёт.
@@ -248,29 +262,35 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         isPromptSubmitting: false,
         canCancel: false,
         turnState: null,
+        statusBar: view == null ? null : sessionStatusDataOf(view),
       ),
     );
+    _watchView(id);
   }
 
   /// Выбрана сессия, которой нет в ядре клиента: показывать нечего, кроме
   /// её очереди.
-  void showMissing(String sessionId) => emit(
-    state._copyWith(
-      sessionId: sessionId,
-      transcriptRows: const [],
-      inspectorEntries: const [],
-      agentCommands: const [],
-      agentCommandViews: const [],
-      configOptions: const [],
-      sessionMode: null,
-      currentPlan: null,
-      agents: AgentsPaneData.empty,
-      queuedPrompts: _queueOf(sessionId),
-      isPromptSubmitting: false,
-      canCancel: false,
-      turnState: null,
-    ),
-  );
+  void showMissing(String sessionId) {
+    emit(
+      state._copyWith(
+        sessionId: sessionId,
+        transcriptRows: const [],
+        inspectorEntries: const [],
+        agentCommands: const [],
+        agentCommandViews: const [],
+        configOptions: const [],
+        sessionMode: null,
+        currentPlan: null,
+        agents: AgentsPaneData.empty,
+        queuedPrompts: _queueOf(sessionId),
+        isPromptSubmitting: false,
+        canCancel: false,
+        turnState: null,
+        statusBar: null,
+      ),
+    );
+    _watchView(null);
+  }
 
   /// Неожиданная потеря соединения: ход не идёт, запросы в полёте ядро уже
   /// не завершит — их флаги сбрасываются здесь (design D4).
@@ -483,8 +503,44 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     ),
   );
 
+  /// Подписка на `SessionHandle.view` показываемой сессии (D23 Т1).
+  ///
+  /// Почему: снимок usage меняет только `SessionView` (`revision + 1` без
+  /// нового `AcpSession`, D21 Т4), а [show] вызывают лишь `sessionChanges`
+  /// ядра; без подписки строка статуса обновлялась бы со следующим
+  /// `session/update` или концом хода. Подписка пересчитывает только данные
+  /// строки, не перестраивая ленту.
+  ///
+  /// Владелец подписки — этот Cubit (как `_outcomeSubscription`,
+  /// `AGENTS.md` §9): одна подписка, переподписка при смене сессии или
+  /// её handle, отмена в [showMissing] и [close]. Повторный [show] той же
+  /// сессии подписку не пересоздаёт — он идёт на каждое `session/update`.
+  void _watchView(String? sessionId) {
+    final handle = sessionId == null ? null : _handle(sessionId);
+    if (identical(handle, _watchedHandle)) {
+      return;
+    }
+    unawaited(_viewSubscription?.cancel());
+    _watchedHandle = handle;
+    _viewSubscription = handle?.view.listen(
+      (view) => _onView(handle.id.value, view),
+    );
+  }
+
+  void _onView(String sessionId, SessionView view) {
+    // Поздняя ревизия сессии, которую уже не показывают, не трогает строку.
+    if (isClosed || state.sessionId != sessionId) {
+      return;
+    }
+    final data = sessionStatusDataOf(view);
+    if (data != state.statusBar) {
+      emit(state._copyWith(statusBar: data));
+    }
+  }
+
   @override
   Future<void> close() async {
+    await _viewSubscription?.cancel();
     await _outcomeSubscription.cancel();
     return super.close();
   }
