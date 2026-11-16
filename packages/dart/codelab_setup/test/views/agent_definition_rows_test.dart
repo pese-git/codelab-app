@@ -3,10 +3,17 @@ import 'package:codelab_agent_core/codelab_agent_core.dart'
         AgentDefinition,
         AgentScope,
         DiagnosticLevel,
+        ConfigLayerKind,
+        ConfigTree,
         ExtensionDiagnostic,
+        ExtensionScope,
+        MarkdownFile,
         ModeId,
         ModelRef,
-        ProviderApi;
+        ProviderApi,
+        StaticModelCatalog,
+        parseAgentDefinitions;
+import 'package:codelab_agent_core/testing.dart' show RecordingLogger;
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:test/test.dart';
 
@@ -146,14 +153,39 @@ void main() {
   });
 
   group('статусы отклонённых файлов (Q7)', () {
-    test('диагностика model — Model not configured, имя без .md', () {
+    test('модель вне каталога — Model not configured, имя без .md', () {
       final all = rows(
-        diagnostics: [diagnostic('$home/agents/broken.md', 'model', line: 3)],
+        diagnostics: [
+          diagnostic(
+            '$home/agents/broken.md',
+            'invalid_value',
+            line: 3,
+            message: '"model" must be a model of the catalog: <provider>/<id>',
+          ),
+        ],
       );
 
       final row = rowOf(all, 'broken', path: '$home/agents/broken.md');
       expect(row.status, AgentRowStatus.modelNotConfigured);
       expect(row.availableIn, isNull);
+    });
+
+    test('другое неверное поле — Error, а не Model not configured', () {
+      final all = rows(
+        diagnostics: [
+          diagnostic(
+            '$home/agents/x.md',
+            'invalid_value',
+            line: 2,
+            message: '"name" is required',
+          ),
+        ],
+      );
+
+      expect(
+        rowOf(all, 'x', path: '$home/agents/x.md').status,
+        AgentRowStatus.error,
+      );
     });
 
     test('другая error — Error со строкой и фиксированным текстом', () {
@@ -223,6 +255,55 @@ void main() {
       );
 
       expect(all, hasLength(5));
+    });
+  });
+
+  group('диагностика настоящего parseAgentDefinitions', () {
+    MarkdownFile source(String name, Map<String, Object?> values) =>
+        MarkdownFile(
+          path: '$home/agents/$name.md',
+          scope: ExtensionScope.user,
+          body: 'SECRET-BODY',
+          bodyLine: 5,
+          frontmatter: ConfigTree(
+            kind: ConfigLayerKind.user,
+            source: '$home/agents/$name.md',
+            values: values,
+          ),
+        );
+
+    List<AgentDefinitionRowView> parsedRows(List<MarkdownFile> files) {
+      final parsed = parseAgentDefinitions(
+        files,
+        models: StaticModelCatalog(const [], logger: RecordingLogger()),
+      );
+      return rows(definitions: parsed.agents, diagnostics: parsed.diagnostics);
+    }
+
+    test('модель вне каталога по константе ядра', () {
+      final all = parsedRows([
+        source('broken', {
+          'name': 'broken',
+          'description': 'Broken',
+          'model': 'nope/missing',
+        }),
+      ]);
+
+      expect(
+        rowOf(all, 'broken', path: '$home/agents/broken.md').status,
+        AgentRowStatus.modelNotConfigured,
+      );
+    });
+
+    test('другой invalid_value не считается моделью', () {
+      final all = parsedRows([
+        source('bad', {'name': 'Bad Name', 'description': 'Broken'}),
+      ]);
+
+      expect(
+        rowOf(all, 'bad', path: '$home/agents/bad.md').status,
+        AgentRowStatus.error,
+      );
     });
   });
 

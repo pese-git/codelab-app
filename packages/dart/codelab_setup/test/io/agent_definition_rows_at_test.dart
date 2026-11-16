@@ -155,4 +155,20 @@ void main() {
     expect(result.rows.map((r) => r.name), contains('user-one'));
     expect(result.rows.map((r) => r.name), isNot(contains('proj-one')));
   });
+
+  test('projectTrusted совпадает с доверием папки', () async {
+    expect((await rowsAt()).projectTrusted, isTrue);
+    expect((await rowsAt(trusted: false)).projectTrusted, isFalse);
+    expect((await rowsAt(withFolder: false)).projectTrusted, isFalse);
+  });
+
+  test('symlink вместо проектного каталога не считается каталогом', () async {
+    final target = Directory('$base/elsewhere')..createSync();
+    Directory('$repo/.codelab').createSync(recursive: true);
+    Link('$repo/.codelab/agents').createSync(target.path);
+
+    final result = await rowsAt();
+
+    expect(result.projectDirectoryExists, isFalse);
+  });
 }

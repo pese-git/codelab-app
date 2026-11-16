@@ -134,6 +134,21 @@ final class AgentParseResult {
   ];
 }
 
+/// Текст диагностики определения агента, чья `model` не из каталога моделей.
+///
+/// Почему константа: у такой диагностики тот же код `invalid_value`, что и у
+/// прочих неверных полей, а менять код нельзя (вывод `config check` и
+/// спецификация `agent-definitions` остаются прежними). Мост `codelab_setup`
+/// отличает «модель вне каталога» (статус `Model not configured`) именно по
+/// этому тексту, не копируя строку (design.md change
+/// `add-settings-agents-modes`, D18).
+///
+/// Как использовать: сравнивать `diagnostic.code == 'invalid_value' &&
+/// diagnostic.message == agentDefinitionModelNotInCatalogMessage`; текст целиком
+/// фиксирован и не содержит значения поля.
+const agentDefinitionModelNotInCatalogMessage =
+    '"model" must be a model of the catalog: <provider>/<id>';
+
 final _nameRule = RegExp(r'^[a-z][a-z0-9-]{0,47}$');
 final _toolRule = RegExp(r'^[A-Za-z0-9_-]+\*?$');
 const _maxDescription = 200;
@@ -309,10 +324,7 @@ AgentDefinition? _parseOne(
         ? models.resolve(ModelId(value))
         : null;
     if (model == null) {
-      invalid(
-        'model',
-        '"model" must be a model of the catalog: <provider>/<id>',
-      );
+      invalid('model', agentDefinitionModelNotInCatalogMessage);
     }
   }
 

@@ -395,6 +395,10 @@ const rules = [
   // `core/platform/` app; Cubit-ы и виджеты идут через `ExternalLinkOpener`
   // (D5; `platform-integration.md`). Тот же порт открывает ссылки OSC 8
   // терминала (change `add-integrated-terminal`, D11, Q16) — второго правила нет.
+  // Открытие файла и каталога определений агентов страницы «Agents & modes» —
+  // второй порт `core/platform/`, `PathOpener` (change
+  // `add-settings-agents-modes`, D8): политика `ExternalLinkOpener` к путям
+  // из настроек не подходит. Правило то же, второго нет.
   PackageRule(
     'apps/codelab_desktop/lib',
     forbidden: ['package:url_launcher/'],

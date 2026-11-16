@@ -58,8 +58,6 @@ final class AgentsModesBanner {
 enum AgentsStatusTone { success, warning, danger }
 
 /// Строка таблицы `agents-definitions-table` в виде готовых ячеек.
-///
-/// ЗАГЛУШКА итерации 2, задача 2.1.
 final class AgentsDefinitionRow {
   const AgentsDefinitionRow({
     required this.name,
@@ -116,8 +114,6 @@ final class AgentsDefinitionError {
 /// Блок «Agent definitions» страницы (design.md change
 /// `add-settings-agents-modes`, D7, D8, D11); `null` у `AgentsModesReady`,
 /// пока загрузчика нет.
-///
-/// ЗАГЛУШКА итерации 2, задача 2.1.
 final class AgentsDefinitionsView {
   const AgentsDefinitionsView({
     required this.rows,

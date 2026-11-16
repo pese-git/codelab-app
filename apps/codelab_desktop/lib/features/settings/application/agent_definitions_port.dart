@@ -3,8 +3,6 @@ import 'package:codelab_setup/codelab_setup.dart';
 /// Результат загрузки определений агентов для страницы «Agents & modes»
 /// (design.md change `add-settings-agents-modes`, D7, D11).
 ///
-/// ЗАГЛУШКА итерации 2, задача 2.1.
-///
 /// Почему отдельный тип, а не `AgentDefinitionRows` моста: тот живёт в
 /// `codelab_setup/io.dart`, который сторож пускает только в `lib/app/`;
 /// `features/` получает определения через этот тип, а адаптер в `lib/app/`
@@ -36,8 +34,9 @@ final class AgentDefinitionsLoad {
   final String userDirectory;
   final bool userDirectoryExists;
 
-  /// `<project>/.codelab/agents` доверенного проекта; `null` — папки проекта
-  /// нет или проект недоверенный.
+  /// `<project>/.codelab/agents` при любой известной папке проекта; `null` —
+  /// папка проекта не известна. Недоверие отсекает Cubit: для недоверенного
+  /// проекта путь не открывается и не показывается как доступный.
   final String? projectDirectory;
   final bool projectDirectoryExists;
 }
