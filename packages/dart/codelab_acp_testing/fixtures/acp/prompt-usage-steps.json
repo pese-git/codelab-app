@@ -5,7 +5,7 @@
     "15-Extensibility.md#advertising-custom-capabilities",
     "05-Prompt Turn.md#4-check-for-completion"
   ],
-  "description": "Расширение usage (change add-usage-extension, D2, D4, D13): клиент объявил clientCapabilities._meta.codelab.usage; ход из двух шагов модели с ценами (3/15/0.3/3.75 долларов за 10^6 токенов): вызов task_create, затем текстовый ответ. После каждого шага агент шлёт уведомление _codelab/session/usage с trigger step (seq 1 и 2), перед ответом на session/prompt — trigger turn (seq 3); стоимость — десятичная строка из микродолларов (0.0111 + 0.0171 = 0.0282); session.turns считает и текущий ход. context.used после шага с инструментом зависит от оценки хвоста и сверяется матчером $any, после последнего шага — якорь usage (1500 + 12000 + 800 + 400); compactAt = 32768 - 8192.",
+  "description": "Расширение usage (change add-usage-extension, D2, D4, D13; роль client — D21 Т7: клиентский драйвер сверяет _meta.codelab как подмножество, лишние ключи клиента допустимы): клиент объявил clientCapabilities._meta.codelab.usage; ход из двух шагов модели с ценами (3/15/0.3/3.75 долларов за 10^6 токенов): вызов task_create, затем текстовый ответ. После каждого шага агент шлёт уведомление _codelab/session/usage с trigger step (seq 1 и 2), перед ответом на session/prompt — trigger turn (seq 3); стоимость — десятичная строка из микродолларов (0.0111 + 0.0171 = 0.0282); session.turns считает и текущий ход. context.used после шага с инструментом зависит от оценки хвоста и сверяется матчером $any, после последнего шага — якорь usage (1500 + 12000 + 800 + 400); compactAt = 32768 - 8192.",
   "goals": [
     "L-11"
   ],
@@ -14,7 +14,8 @@
     "usage"
   ],
   "roles": [
-    "agent"
+    "agent",
+    "client"
   ],
   "setup": {
     "cwd": "/work/demo",

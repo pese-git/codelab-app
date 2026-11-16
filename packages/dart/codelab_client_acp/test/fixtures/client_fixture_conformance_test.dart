@@ -16,6 +16,12 @@ void main() {
         env,
       ) {
         user = ClientFixtureUser(env);
+        // Поток уведомлений usage — broadcast без повтора: подписка нужна до
+        // первого кадра фикстуры, иначе снимки не увидеть (D21 Т2, Т7).
+        final delivered = <Object>[];
+        _usageDelivered[user] = delivered;
+        final subscription = user.app.usageNotifications.listen(delivered.add);
+        addTearDown(subscription.cancel);
         return user.app;
       }, onBeforeExpect: (step) => user.act(step));
       if (result.skipped) {
@@ -30,6 +36,22 @@ void main() {
     });
   }
 }
+
+/// Уведомления `_codelab/session/usage`, доставленные ядром клиента за
+/// прогон фикстуры (задача 2.7a; D21 Т7). Элемент — запись потока
+/// `AcpClientApplication.usageNotifications` с `sessionId`, `params` и
+/// `generation` (D21 Т2).
+final _usageDelivered = Expando<List<Object>>('usage notifications');
+
+List<({Map<String, Object?> params, int generation})> _usageOf(
+  ClientFixtureUser user,
+) => [
+  for (final item in _usageDelivered[user]!)
+    (
+      params: (item as dynamic).params as Map<String, Object?>,
+      generation: (item as dynamic).generation as int,
+    ),
+];
 
 typedef _StateCheck =
     void Function(
@@ -168,6 +190,19 @@ final _stateChecks = <String, _StateCheck>{
     // блока по итерациям ведёт фикстура протокольного исполнителя; `tasks`
     // есть в любой редакции.
     expect(ready.codelabExtensions.tasks, isTrue);
+    // Фикстура объявляет `usage: {version: 1}` в ответе агента (D3, D21 Т7).
+    expect(ready.codelabExtensions.usage, isTrue);
+  },
+  // Расширение usage (change `add-usage-extension`, задача 2.7a; spec
+  // acp-golden-fixtures «Фикстуры расширения usage»; D2, D7, D21 Т7): ход
+  // завершён, ядро клиента доставило три снимка `seq` 1…3, последний —
+  // `trigger: turn`; уведомления не меняют автомат хода.
+  'acp/prompt-usage-steps': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    final usage = _usageOf(user);
+    expect(usage.map((u) => u.params['seq']), [1, 2, 3]);
+    expect(usage.last.params['trigger'], 'turn');
+    expect(usage.map((u) => u.generation).toSet(), hasLength(1));
   },
   // Вызов `agent` (change `add-subagents-and-tasks`, задача 2.1; spec
   // acp-golden-fixtures, acp-client-kit «Итог и хвост субагента»): клиент
@@ -262,11 +297,15 @@ final _stateChecks = <String, _StateCheck>{
     expect(turn.status, PromptTurnStatus.completed);
     expect(turn.updates.whereType<AgentThoughtChunk>(), isNotEmpty);
   },
+  // Причина остановки по бюджету (D10, D21 Т3, Т7): `_meta.codelab.
+  // budgetExceeded` ответа попадает в итог хода.
   'acp/prompt-max-turn-requests': (user, _) {
     expect(_lastTurn(user).status, PromptTurnStatus.maxed);
+    expect(_lastTurn(user).budgetExceeded, 'steps');
   },
   'acp/prompt-turn-budget-exceeded': (user, _) {
     expect(_lastTurn(user).status, PromptTurnStatus.maxed);
+    expect(_lastTurn(user).budgetExceeded, 'tokens');
   },
   'acp/prompt-failed-provider-auth': (user, _) {
     expect(_lastTurn(user).status, PromptTurnStatus.failed);

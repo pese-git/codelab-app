@@ -173,13 +173,21 @@ void main() {
   });
 
   // acp-golden-fixtures «Фикстуры расширения usage» (D13, D18 Т8): метка
-  // `usage` (FIX-4, сценарий «Расширение не объявлено»), роль только
-  // `agent` в итерации 1, объявление клиента — через
+  // `usage` (FIX-4, сценарий «Расширение не объявлено»), роль `agent`
+  // (у `acp/prompt-usage-steps` ещё и `client`, задача 2.7), объявление клиента — через
   // `setup.clientCapabilities` с `_meta.codelab.usage`.
   test('the usage fixtures declare the usage extension and its consent', () {
     for (final fixture in corpus.where((f) => _usageFixtures.contains(f.id))) {
       expect(fixture.extensions, contains('usage'), reason: fixture.id);
-      expect(fixture.roles, {FixtureRole.agent}, reason: fixture.id);
+      // Задача 2.7 (D21 Т7): `acp/prompt-usage-steps` играет и клиентский
+      // прогон (подмножество `_meta.codelab`); остальные — только агент.
+      expect(
+        fixture.roles,
+        fixture.id == 'acp/prompt-usage-steps'
+            ? {FixtureRole.agent, FixtureRole.client}
+            : {FixtureRole.agent},
+        reason: fixture.id,
+      );
       final caps = fixture.setup.clientCapabilities as Map?;
       final codelab = (caps?['_meta'] as Map?)?['codelab'] as Map?;
       expect(codelab?['usage'], {
@@ -325,6 +333,7 @@ void main() {
       'tasks': {'version': 1},
       'subagents': {'version': 1},
       'subagentToolCalls': {'version': 1},
+      'usage': {'version': 1},
     });
   });
 

@@ -103,4 +103,64 @@ void main() {
 
     expect(ready.codelabExtensions.tasks, isFalse);
   });
+
+  // Задача 2.1 change `add-usage-extension` (spec acp-protocol-client
+  // «Объявление расширений CodeLab при initialize»: «Агент объявил usage»,
+  // «Версия usage не целое 1», «Будущая версия расширения»; D3, D21 Т1).
+  // `CodelabExtensions.usage` ещё нет — файл целиком не компилируется до 2.8.
+  group('usage', () {
+    test('usage: {version: 1} is negotiated', () async {
+      final ready = await connect(
+        const AgentCapabilities(
+          meta: {
+            'codelab': {
+              'usage': {'version': 1},
+            },
+          },
+        ),
+      );
+
+      expect(ready.codelabExtensions.usage, isTrue);
+    });
+
+    test('no agentCapabilities._meta means usage is not negotiated', () async {
+      final ready = await connect();
+
+      expect(ready.codelabExtensions.usage, isFalse);
+    });
+
+    for (final (name, value) in <(String, Object?)>[
+      ('a bare true', true),
+      ('a string version', {'version': '1'}),
+      ('a future version', {'version': 2}),
+    ]) {
+      test('$name is not negotiated and initialize still succeeds', () async {
+        final ready = await connect(
+          AgentCapabilities(
+            meta: {
+              'codelab': {'usage': value},
+            },
+          ),
+        );
+
+        expect(client.connectionState, isA<ClientConnectionReady>());
+        expect(ready.codelabExtensions.usage, isFalse);
+      });
+    }
+
+    // `1.0 is int` истинно на web, поэтому проверка только на VM (D21 Т1).
+    test('a non-integer version 1.0 is not negotiated', () async {
+      final ready = await connect(
+        const AgentCapabilities(
+          meta: {
+            'codelab': {
+              'usage': {'version': 1.0},
+            },
+          },
+        ),
+      );
+
+      expect(ready.codelabExtensions.usage, isFalse);
+    }, testOn: 'vm');
+  });
 }

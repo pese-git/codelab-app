@@ -437,6 +437,60 @@ void main() {
     expect(result.client!.sessions, isEmpty);
   });
 
+  group('объявление клиента в handshake — подмножество (D21 Т7, Q15 (б))', () {
+    // Клиент CodeLab объявляет `tasks`, `subagents`, `subagentToolCalls`
+    // (и `usage` после задачи 2.8); `setup.clientCapabilities._meta.codelab`
+    // фикстуры перечисляет только нужные ей ключи.
+    AcpFixture withCodelab(Map<String, Object?> codelab) => _fixture(
+      _promptTextEndTurn,
+      setup: {
+        'cwd': '/work/demo',
+        'clientCapabilities': {
+          '_meta': {'codelab': codelab},
+        },
+      },
+    );
+
+    test('лишние ключи объявления клиента допустимы', () async {
+      final result = await _run(
+        withCodelab({
+          'subagents': {'version': 1},
+        }),
+      );
+
+      expect(result.skipped, isFalse);
+      expect(
+        result.client!.sessions.single.turns.single.status,
+        PromptTurnStatus.completed,
+      );
+    });
+
+    test(
+      'указанный ключ, которого клиент не объявил, — несовпадение',
+      () async {
+        await expectLater(
+          _run(
+            withCodelab({
+              'futureExtension': {'version': 1},
+            }),
+          ),
+          throwsA(isA<ClientFixtureFailure>()),
+        );
+      },
+    );
+
+    test('указанный ключ с другим значением — несовпадение', () async {
+      await expectLater(
+        _run(
+          withCodelab({
+            'subagents': {'version': 2},
+          }),
+        ),
+        throwsA(isA<ClientFixtureFailure>()),
+      );
+    });
+  });
+
   group('FixtureTerminalProcessRunner', () {
     test('a script with exitCode exits at once with its output', () async {
       final runner = FixtureTerminalProcessRunner({
