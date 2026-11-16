@@ -58,12 +58,13 @@ final class TaskItem {
 /// Кто выполняет операцию: корневая сессия или субагент (детский вариант, §17.16.4).
 sealed class TaskActor { const TaskActor(); }
 final class MainActor extends TaskActor { const MainActor(); }
-final class SubagentActor extends TaskActor { final SubagentId id; const SubagentActor(this.id); }
+final class SubagentActor extends TaskActor { final String id; const SubagentActor(this.id); }   // id субагента: String, SubagentId — псевдоним §17.3.2
 
 sealed class TaskOp { const TaskOp(); }
 final class CreateTask extends TaskOp { /* subject, description?, priority?, owner?, blockedBy? */ }
 final class UpdateTask extends TaskOp { /* id, subject?, description?, status?, priority?, owner?, blockedBy? */ }
 final class DeleteTask extends TaskOp { final TaskId id; }
+final class AssignTask extends TaskOp { final TaskId id; final TaskOwner owner; }   // назначение при получении слота, без вызова модели (TSK-4)
 
 final class TaskChange {                       // что записать в журнал и показать клиенту
   final String op;                             // create | update | delete | assign | restore
@@ -81,13 +82,21 @@ abstract interface class TaskList {
   /// Проверяет и применяет операцию атомарно; публикует TaskListChanged до возврата.
   /// Ошибка проверки — TaskRejected с текстом для модели, список не меняется.
   /// Отмену не проверяет: начатая операция применяется и после session/cancel (D35).
-  Future<TaskResult> apply(TaskOp op, TaskActor actor, {String? toolCallId});
+  /// precheck — проверка по живым пунктам под тем же замком (владелец пункта у ребёнка, TSK-4):
+  /// непустой TaskRejected возвращается как результат, список не меняется.
+  Future<TaskResult> apply(TaskOp op, TaskActor actor,
+      {String? toolCallId, TaskRejected? Function(List<TaskItem> items)? precheck});
   /// Состояние пришло извне, а не операцией модели (§17.16.6): из журнала при open
   /// (announce: false — без публикации) или из новой ветки после BranchChanged
   /// (announce: true — TaskListChanged с op: restore). Записи task не даёт (TSK-1).
   /// Берёт тот же замок, что apply; nextId не убывает — max(текущий, переданный) (TSK-3).
   Future<void> restore(List<TaskItem> items, {required int nextId, required bool announce});
 }
+
+sealed class TaskResult { const TaskResult(); }
+final class TaskApplied extends TaskResult { /* change, item?, snapshot, unblocked */ }
+final class TaskRejected extends TaskResult { final String message; final TaskRejectReason reason; }
+enum TaskRejectReason { validation, limit, unknownId, cycle, owner, blockedBy }
 
 final class TaskListChanged extends AgentEvent {   // заменяет PlanUpdated (§5.3)
   final List<TaskItem> items;                  // весь список после операции
@@ -111,6 +120,11 @@ final class TaskListChanged extends AgentEvent {   // заменяет PlanUpdat
 реализация со своим хранилищем, ветке не следует. Поэтому имена контракта нейтральны: `restore`
 значит «состояние пришло извне», а не «пришло из ветки». Второй реализации и общего хранилища в
 1.0 нет, порт не расширяется заранее (`AGENTS.md` §13).
+
+Реализации порта в `codelab_agent_core`: `SessionTaskList` (`lib/src/tools/tasks/task_list.dart`) —
+список дерева, один на корневую сессию, и `SubagentTaskList` (`lib/src/subagents/subagent_task_list.dart`) —
+детский вариант: тот же список, но операции идут от имени субагента с проверкой владельца (TSK-4,
+§17.16.4). Инструменты `task_*` — `lib/src/tools/tasks/task_tools.dart`.
 
 ## 17.16.3. Инструменты
 
@@ -388,9 +402,9 @@ Blocked by: #<id> <subject>, … | none
   §17.16.3; id после удаления не повторяется (TSK-1, TSK-3).
 * `task_list_cycle_test.dart` (`core/task-list-cycle-rejected`): `#2 blocked_by #1`, затем
   `#1 blocked_by #2` → ошибка с цепочкой, список и журнал не изменились (TSK-2).
-* `task_list_owner_test.dart`: `agent` с `task: "2"` → `assign` при получении слота; ребёнок
+* `task_list_owner_test.dart` и `subagents/subagent_task_assign_test.dart`, `subagents/subagent_task_owner_test.dart`: `agent` с `task: "2"` → `assign` при получении слота; ребёнок
   закрывает свой пункт; попытка ребёнка изменить `subject` или чужой пункт — ошибка (TSK-4).
-* `task_list_journal_test.dart`: свёртка записей `task` даёт тот же список после `open`; журнал только с
+* `test/session/task_list_journal_test.dart`: свёртка записей `task` даёт тот же список после `open`; журнал только с
   записью `plan` открывается со списком `"1"…"n"`, первая операция `task_update` продолжает его
   (TSK-6); журнал с двумя ветками (запись `leaf`, §8.2.4), где покинутая ветка выдала `#4` и `#5`,
   а активная — `#1`…`#3`, открывается со списком `#1`…`#3`, следующий `task_create` даёт `#6`
@@ -399,11 +413,16 @@ Blocked by: #<id> <subject>, … | none
   публикует один `TaskListChanged` с `op: restore`, `changed` — весь новый список, `deleted` — id
   исчезнувших пунктов; `SessionWriter` на него ничего не пишет; `nextId` меньше текущего не
   уменьшает счётчик (TSK-1, TSK-3).
-* `session_branch_task_list_test.dart` (в change, вводящем `switchBranch`, §17.6): переключение на
+* `session_branch_task_list_test.dart` (ещё не создан; делается в change, вводящем `switchBranch`, §17.6, D29–D31): переключение на
   ветку до первого `task_create` → `BranchChanged`, затем `TaskListChanged(restore)` с пустым
   списком; перемотка на ветку с другим списком → список этой ветки, записи `task` нет; `checkpoint
   rewind` — то же внутри хода; читатель `JournalTail` после записи `branch` владельца — то же
   (TSK-7).
+* `task_batch_order_test.dart` — операции одного пакета идут по одному, `task_*` — барьер пакета (D39);
+  `task_list_cancel_test.dart` — `TaskChange.toolCallId` и применение начатой операции при отмене во
+  время ожидания замка (D35); `task_list_robustness_test.dart` — логи `task.op` и `task.rejected` без
+  текста пунктов (D18); `task_snapshot_test.dart` — ответ `task_create`/`task_update` строится по снимку
+  `TaskApplied`, а не по `items` вне замка (все в `test/tools/tasks/`).
 * `acp/prompt-task-plan` (C-20, C-05): три `task_create`, `task_update` → четыре `plan` со всем
   списком и `_meta.codelab.task`; `task_list` не даёт `plan`.
 * `acp_projection_exhaustive_test.dart`: `TaskListChanged` с `op: restore` → `plan` со всем списком,

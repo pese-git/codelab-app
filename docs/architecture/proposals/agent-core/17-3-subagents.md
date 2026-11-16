@@ -43,11 +43,11 @@
 
 | Этап | Объём | Где описано | OpenSpec |
 |---|---|---|---|
-| 1 — база | `agent` с типами `general`, `explore`, `review`, `plan`; вложенность до `max_depth`; лимиты дерева; состояния хэндла сразу полные (`queued`…`cancelled`); дочерние `CancelToken`; журнал ребёнка и запись `subagent`; события ребёнка внутри ядра с `parentToolCallId` и id субагента (`SubagentActivity`); запрос разрешения потомка через gate корневой сессии; список задач §17.16 вместо `update_plan` | §17.3.2–§17.3.7 без доски, §17.3.10–§17.3.14, §17.16 | `add-subagents-and-tasks` |
-| 2 — шаги ребёнка деревом | `tool_call` потомков на проводе с `_meta.codelab.parentToolCallId` для клиентов с `subagentToolCalls`; меняет SUB-12 | §17.3.7, «Шаги потомков деревом» | `add-subagents-and-tasks`, итерация 5 |
+| 1 — база | `agent` с типами `general`, `explore`, `review`, `plan`; вложенность до `max_depth`; лимиты дерева; состояния хэндла сразу полные (`queued`…`cancelled`); дочерние `CancelToken`; журнал ребёнка и запись `subagent`; события ребёнка внутри ядра с `parentToolCallId` и id субагента (`SubagentActivity`); запрос разрешения потомка через gate корневой сессии; список задач §17.16 вместо `update_plan` | §17.3.2–§17.3.7 без доски, §17.3.10–§17.3.14, §17.16 | `add-subagents-and-tasks` — **выполнено** (итерации 1–4) |
+| 2 — шаги ребёнка деревом | `tool_call` потомков на проводе с `_meta.codelab.parentToolCallId` для клиентов с `subagentToolCalls`; меняет SUB-12 | §17.3.7, «Шаги потомков деревом» | `add-subagents-and-tasks`, итерация 5 — **выполнено** |
 | 3 — фон и пробуждение | `run_in_background`, `agent_status`, `agent_cancel`, `wake` | §17.3.8, §17.3.9 | отдельный change, 1.x (первый) |
 | 4 — продолжение ребёнка (C-17) | `agent_send`, `agent_resume`, `agent_observe`; `output_schema` и ремонт отчёта | §17.3.8.1, §17.3.5 | отдельный change, 1.x (третий) |
-| 5a — панель Agents v1 (клиент) | список субагентов сессии в доке app из данных этапов 1 и 2 (`_meta.codelab.subagent`, итог, дерево `parentToolCallId`, запросы потомков); ядро и протокол не меняются | dart-agent-and-clients §12.3, A15 | `add-subagents-and-tasks`, итерация 5b |
+| 5a — панель Agents v1 (клиент) | список субагентов сессии в доке app из данных этапов 1 и 2 (`_meta.codelab.subagent`, итог, дерево `parentToolCallId`, запросы потомков); ядро и протокол не меняются | dart-agent-and-clients §12.3, A15 | `add-subagents-and-tasks`, итерация 5b — **выполнено** |
 | 5 — доска (U-21, D-25) и `/tasks` | `_codelab/subagents/*` в той же панели Agents, вид CLI `tasks` | §17.3.7, §17.3.8 | `add-subagent-board`, 1.x (второй) |
 | 6 — фоновые команды (T-10) | `_codelab/jobs/*` на той же доске | §17.9 | `add-background-jobs`, 1.x (четвёртый) |
 | позже | общий список задач между сессиями; изоляция ребёнка в git worktree | — | — |
@@ -160,7 +160,7 @@ Agent types:
 вызывающего: `depth + 1 < max_depth` → `A subagent may start its own subagents, up to <max_depth - depth - 1> more level(s) below it.`;
 иначе → `Subagents you start cannot start other subagents.` `background` — пустая строка в
 базовом этапе; с этапом 3 (§17.3.8) — `\nSet run_in_background to keep working while the subagent runs: its report arrives later as a notice.`
-До итерации 4 change `add-subagents-and-tasks` ребёнку `agent` не даётся, поэтому `nesting` строится от эффективной глубины 1 (`Subagents you start cannot start other subagents.`) — D36, Т16. `agent` скрыт из схем шага (инструмент зарегистрирован в сессии), если эффективное окно контекста её модели меньше 32 768 токенов (D40 того же change; лог `subagent.unavailable`); правило пересчитывается со следующего шага при смене модели и при перезагрузке `compaction.context_window_cap`. Текст описания для одной глубины детерминирован, поэтому схема и описание стабильны для prompt
+`nesting` строится от настоящей глубины вызывающего (с итерации 4 change `add-subagents-and-tasks`; D36, Т16; D51, Т4). `agent` скрыт из схем шага (инструмент зарегистрирован в сессии), если эффективное окно контекста её модели меньше 32 768 токенов (D40 того же change; лог `subagent.unavailable`); правило пересчитывается со следующего шага при смене модели и при перезагрузке `compaction.context_window_cap`. Текст описания для одной глубины детерминирован, поэтому схема и описание стабильны для prompt
 cache (§11). Схема `agent` базового этапа — без `output_schema` и `run_in_background`; оба поля
 добавляются своими этапами (таблица этапов выше) без смены остальных полей. Поле `task`
 (необязательное, id пункта списка задач §17.16) есть только в схеме корневой сессии: ребёнок,
@@ -308,10 +308,13 @@ SubagentTool.execute(args, ctx):
  4  handle := manager.spawn(SubagentSpec(...), ctx.cancel)
       SubagentLimitException → `Subagent limit reached: at most <N> subagents per turn. Combine the
       remaining work into fewer tasks or do it yourself.` (outcome failed)
- 5  подписка на handle.snapshot → ctx.onUpdate(progressLine(snapshot)) (§17.3.4)
+ 5  подписка на handle.progress → ctx.onUpdate(progressLine(snapshot)) при каждом событии и раз в
+    heartbeat_interval при тишине (§17.3.4)
  6  report := await handle.report
- 7  вернуть wrapReport(report) (§17.3.5); status cancelled → бросить CancelledException
-    (единая точка даёт outcome cancelled, CAN-5); failed → isError: true
+ 7  settled := await manager.settled(handle) (слот ждущего родителя возвращён, D46 п. 1)
+    вернуть wrapSubagentReport(report) (§17.3.5); status cancelled или settled == false (отмена в
+    очереди возвращающихся) → бросить CancelledException (единая точка даёт outcome cancelled,
+    CAN-5); failed → isError: true
 ```
 
 `SubagentManager.spawn` строит ребёнка из **текущего** состояния родителя:
@@ -569,7 +572,7 @@ Reply with only a JSON value that matches the schema. Do not add any other text.
 
 `errors` — перечень нарушений в формате ошибок валидации §6.3.2, по строке на нарушение.
 
-**Что видит модель родителя.** `wrapReport` строит один `TextContent`; атрибуты в фиксированном
+**Что видит модель родителя.** `wrapSubagentReport` (`lib/src/subagents/subagent_report.dart`) строит один `TextContent`; атрибуты в фиксированном
 порядке, значения экранируются как атрибуты XML (`&`, `<`, `"`):
 
 ```text
@@ -720,7 +723,7 @@ $CODELAB_HOME/sessions/<cwd-slug>/
 | `ToolCallStarted(agent)` | `tool_call` | `kind: "think"`, `title: "Subagent explore: Find auth code"`, `status: "pending"`, `rawInput` (все аргументы, включая `prompt`), `_meta.codelab.subagent: {"id": "sub_…", "type": "explore"}` — клиент опознаёт вызов субагента с первого кадра; `id` резервируется в `present` и переносится в `ToolCallStarted.subagent`, при реплее — из записи `subagent` (решение пользователя 2026-11-10, design.md change `add-subagents-and-tasks`, D28) |
 | `markInProgress` | `tool_call_update` | `status: "in_progress"` |
 | `ToolCallProgress(agent)` | `tool_call_update` | `content: [{"type":"content","content":{"type":"text","text":"<строка прогресса>"}}]` — заменяет предыдущую строку (в ACP `content` обновления заменяет коллекцию) |
-| `ToolCallFinished(agent)` | `tool_call_update` | `status: "completed"` или `"failed"` (отмена — `failed` с `_meta.codelab.outcome: "cancelled"`); `content` — один текстовый блок с **телом** отчёта (без обёртки `<subagent-report>` и ограды: клиент показывает человеку текст); всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` — итог ребёнка вместе с потомками из `SubagentReport` (`toolCalls`, `usage`, `duration`; решение пользователя 2026-11-10, design.md change `add-subagents-and-tasks`, D24); для `failed` — ещё `failure` |
+| `ToolCallFinished(agent)` | `tool_call_update` | `status: "completed"` или `"failed"` (отмена — `failed` с `_meta.codelab.outcome: "cancelled"`); `content` — один текстовый блок с **телом** отчёта (без обёртки `<subagent-report>` и ограды: клиент показывает человеку текст); у `failed` без отчёта и у отменённого `agent` с итогом ребёнка — `content: []`, который снимает последнюю строку прогресса (`explore · running · …`); частичный отчёт отменённого ребёнка клиенту не уходит; так же — в реплее `session/load` и у вложенного `agent`, закрытого вместе с поддеревом (`failed`, `outcome: cancelled`, D53); у отменённого вызова другого инструмента `content` нет вовсе (D52 п. 1, §13.7); всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` — итог ребёнка вместе с потомками из `SubagentReport` (`toolCalls`, `usage`, `duration`; решение пользователя 2026-11-10, design.md change `add-subagents-and-tasks`, D24); для `failed` — ещё `failure` |
 | `SubagentStarted`, `SubagentFinished` | — | лог `subagent.start` / `subagent.end`; доска (ниже) |
 | `SubagentProgress` | — | только доска (ниже); строку прогресса уже несёт `ToolCallProgress` |
 | запрос разрешения потомка | `session/request_permission` | `sessionId` корневой сессии, `toolCall.toolCallId: "call_3/call_1"` (цепочка, §17.3.3), `title` с префиксом, `toolCall._meta: {"codelab": {"subagent": {"id": "sub_…", "type": "review", "description": "Check the diff", "depth": 1, "path": [], "parentToolCallId": "call_3"}}}`; `parentToolCallId` — вызов `agent` **корневой** сессии, который клиент видел (первый сегмент цепочки), `path` — id предков-субагентов от глубины 1 |
@@ -917,7 +920,7 @@ FIFO. Бюджет ребёнка — свой `TurnBudget` (§17.3.3, шаг 9)
      <subagent-notice id="<id>" agent="<agent>" status="<status>" description="<description>">
      The background subagent finished. Its report follows. Continue your work with it.
      </subagent-notice>
-     + wrapReport(report) (§17.3.5) внутри ограды untrusted-content source="agent"
+     + wrapSubagentReport(report) (§17.3.5) внутри ограды untrusted-content source="agent"
 4  ход идёт → agent.steer(message, origin: SubagentNoticeOrigin(id)) (§5.6); иначе — ждать следующего prompt()
 5  доставка = запись в журнал message{role: user, origin: "subagent_notice", subagentId} и
    MessageStarted; из pending уведомление удаляется только после этой записи
@@ -1091,7 +1094,7 @@ agent_observe: Show the last messages of a subagent (running or finished) withou
        6 и 7) → вместо текста продолжения повторяется message из аргументов исходного agent_send
 8  child.prompt([сообщение]); отчёт — buildReport (§17.3.5) по последнему ответу этого прогона,
    ремонт по output_schema исходного agent — ровно один раз на прогон
-9  блокирующий: прогресс и ожидание как §17.3.3, шаги 5–7; результат — wrapReport с атрибутом
+9  блокирующий: прогресс и ожидание как §17.3.3, шаги 5–7; результат — wrapSubagentReport с атрибутом
    run="<run>"; фоновый: сразу `Started run <run> of background subagent <id> (<agent>).`,
    отчёт — уведомлением §17.3.8 с атрибутом run="<run>"
 ```
@@ -1450,7 +1453,7 @@ stateDiagram-v2
   набор `read`, `ls`, `search`; при `max_depth: 3` у ребёнка глубины 1 и 2 есть `agent`, у глубины 3
   нет; при `max_depth: 1` `agent` нет у ребёнка; инструменты списка задач у ребёнка — детский
   вариант (SUB-1, SUB-24).
-* `subagent_nested_slots_test.dart` (`core/subagent-nested-no-deadlock`): `max_concurrent: 1`,
+* `core/subagent-nested-no-deadlock` (`test/scenarios/subagent_nested_no_deadlock_test.dart`) и отдельный тест слотов `subagent_nested_slots_test.dart`: `max_concurrent: 1`,
   `max_depth: 3`, ребёнок запускает внука, внук — правнука → все трое завершаются, ни один не
   ждёт слот дольше работы держателя; родитель, дождавшийся детей, получает слот раньше нового
   ребёнка, поставленного в очередь позже (SUB-23); пакет из трёх `agent` корня, каждый из которых
@@ -1468,15 +1471,16 @@ stateDiagram-v2
   `toolCallId` `call_3/call_1`, title с префиксом; два ребёнка просят одновременно → второй
   запрос уходит только после ответа на первый; `allow_always` в ребёнке действует для родителя;
   `reject_always` родителя действует для ребёнка (SUB-3).
-* `core/agent-two-children-parallel` (`agent_parallel_test.dart`, scripted LLM для родителя и
-  детей): два `agent` в одном ответе — оба ребёнка стартуют до завершения любого; `max_concurrent
-  = 1` — второй стартует после первого; порядок результатов в транскрипте — порядок вызовов,
-  `ToolCallFinished` — порядок завершения; четыре `agent` при `max_concurrent = 3` — один в
-  `queued`; одиннадцатый вызов при `max_per_turn = 10` — ошибка лимита (SUB-5, LOOP-3).
+* `core/agent-two-children-parallel` (`test/scenarios/agent_two_children_parallel_test.dart`, scripted LLM для родителя и
+  детей): `task_update` и два `agent` в одном ответе — `task_update` выполняется барьером, оба ребёнка
+  стартуют до завершения любого; результаты в транскрипте — в порядке ответа, `ToolCallFinished` —
+  в порядке завершения; три `agent` при `max_concurrent = 2` — слот держат не больше двух, третий
+  ждёт в очереди и стартует после освобождения слота; третий запуск при `max_per_turn = 2` —
+  ошибка лимита (SUB-5, LOOP-3).
 * `subagent_cancel_test.dart`: отмена хода родителя → оба ребёнка `cancelled`, `TurnEnded`
   родителя после двух `ToolCallFinished(cancelled)`; ребёнок в очереди не вызывает модель и не
   создаёт файл; `manager.cancel` одного ребёнка не трогает второго и родителя (SUB-4, SUB-6).
-* `subagent_report_schema_test.dart`: валидный JSON с первого раза; невалидный → ровно один
+* `subagent_report_schema_test.dart` (этап 4, `output_schema`; ещё не создан): валидный JSON с первого раза; невалидный → ровно один
   ремонт с текстом `schema_fix`, затем `completed`; два невалидных → `failed` с `invalid_output`;
   JSON внутри fenced-блока извлекается; отчёт длиннее `report_max_bytes` усечён с пометкой
   (SUB-8).
@@ -1488,8 +1492,8 @@ stateDiagram-v2
   родителя по `maxTokens` на ближайшей границе шага (SUB-11).
 * `subagent_journal_test.dart`: файл ребёнка в `<родитель>/subagents/`, заголовок с `parent`;
   две записи `subagent` в журнале родителя (`running`, итог с `report`); `session/list` не
-  содержит ребёнка; `session/load` id ребёнка → `-32602` с `reason: subagentSession` (SUB-9).
-* `subagent_resume_test.dart` (`core/subagent-interrupted-not-restarted`): процесс убит, когда
+  содержит ребёнка; `session/load` id ребёнка → `-32002` «сессия не найдена» (§17.3.6; `-32602` с `reason: subagentSession` относится к этапу 5) (SUB-9).
+* `core/subagent-interrupted-not-restarted` (`test/scenarios/subagent_interrupted_not_restarted_test.dart`): процесс убит, когда
   ребёнок A завершён (итоговая запись есть), а B работает → после `open` вызов A получает отчёт
   из записи, B — `interrupted`, в журнал B дописан синтетический результат, ни один ребёнок не
   запущен снова (SUB-10, SES-10).
@@ -1512,16 +1516,23 @@ stateDiagram-v2
 * `acp/initialize-codelab-extensions`: клиент объявил `clientCapabilities._meta.codelab: {}` →
   ответ содержит `agentCapabilities._meta.codelab.subagents` с `maxDepth` и `tasks`; клиент без
   этого объявления получает ответ `acp/initialize-capabilities` без изменений.
-* `acp/session-load-subagent-interrupted`: реплей после сбоя показывает завершённый `agent` как
-  `completed`, прерванный — `failed` с `_meta.codelab.outcome: "interrupted"`.
+* Реплей после сбоя (`codelab_agent_acp/test/session_load_subagent_test.dart` и `session_load_subagent_max_tokens_test.dart`; фикстуры `acp/session-load-subagent-interrupted` нет): завершённый `agent` — `completed`, прерванный — `failed` с `_meta.codelab.outcome: "interrupted"`.
 * `cli/headless-drains-background-job`: scripted-агент объявляет расширение списка фоновой
   работы и после ответа на `session/prompt` сообщает один элемент `running`, через 2 с —
   `completed` → CLI печатает строку ожидания в stderr и выходит с кодом 0 после завершения
   элемента; вариант с `--drain-timeout 1s` → `*/cancel` для элемента, строка о прерывании, код 1;
   агент без расширения → выход сразу (§17.3.9); вариант с фоновыми командами — §17.9.16.
-* `cli/headless-subagent-cancel-timeout`: `codelab -p --timeout 2s`, ребёнок работает дольше →
+* `cli/headless-subagent-cancel-timeout` (этап 3, §17.3.9; ещё не реализован): `codelab -p --timeout 2s`, ребёнок работает дольше →
   ответ `cancelled` приходит после остановки ребёнка, код выхода 130, журнал ребёнка
   завершён записью результата `cancelled`.
+* Тесты итераций 2–5 change `add-subagents-and-tasks` (`codelab_agent_core/test/subagents/`): `replay_tree_test.dart`,
+  `subagent_host_hooks_test.dart`, `subagent_window_test.dart`, `subagent_max_tokens_failure_test.dart`,
+  `subagent_cancel_grace_test.dart`, `subagent_question_queue_cancel_test.dart`, `subagent_no_gate_test.dart`,
+  `subagent_path_lock_test.dart`, `subagent_protected_paths_test.dart`, `subagent_skills_test.dart`,
+  `subagent_nested_skills_test.dart`, `subagent_task_assign_test.dart`, `subagent_task_owner_test.dart`,
+  `subagent_logs_test.dart`, `subagent_handle_test.dart`, `subagent_tool_direct_test.dart`; в `codelab_agent_acp/test/` —
+  `subagent_tool_tree_test.dart`, `subagent_tool_tree_bridge_test.dart`, `subagent_chain_test.dart`,
+  `subagent_bridge_hardening_test.dart`, `acp_permission_gate_subagent_test.dart`.
 * `acp_projection_exhaustive_test.dart` (ACP-6): строки таблицы §17.3.7 есть для
   `SubagentStarted`, `SubagentProgress`, `SubagentFinished`.
 * `subagent_background_test.dart` (`core/agent-background-notice-steered`): `agent` с
