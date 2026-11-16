@@ -218,6 +218,7 @@ final class ProjectConfigRig {
   });
 
   static ProjectConfigRig create({
+    Map<String, Object?>? rootUser,
     Map<String, Object?> rootProject = const {},
     Map<String, Object?> rootLocal = const {},
     bool withPort = true,
@@ -260,7 +261,12 @@ final class ProjectConfigRig {
       );
     }
 
-    final root = folderResult('/A', project: rootProject, local: rootLocal);
+    final root = folderResult(
+      '/A',
+      user: rootUser,
+      project: rootProject,
+      local: rootLocal,
+    );
     loader.results['/A'] = () => root;
     final initial = root.config!;
     final models = makeModels(initial);
@@ -323,12 +329,14 @@ final class ProjectConfigRig {
   /// Результат папки [path] и фиксация его в загрузчике.
   void setFolder(
     String path, {
+    Map<String, Object?>? user,
     Map<String, Object?> project = const {},
     Map<String, Object?> local = const {},
     bool trusted = true,
   }) {
     final result = folderResult(
       path,
+      user: user,
       project: project,
       local: local,
       trusted: trusted,

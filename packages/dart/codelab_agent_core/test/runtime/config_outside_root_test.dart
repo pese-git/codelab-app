@@ -137,7 +137,8 @@ void main() {
       expect(rig.gate.requests, isEmpty, reason: 'deny and allow: no question');
       final log = rig.logger.eventsOf('config.session.project').single;
       expect(log.fields['cwd'], '/B');
-      expect(log.fields['config_root'], '/A');
+      expect(log.fields['process_root'], '/A');
+      expect(log.fields.containsKey('config_root'), isFalse);
       expect(log.fields['trusted'], isTrue);
       expect(log.fields['session_id'], inB.id.value);
       expect(rig.logger.eventsOf('config.session.outside_root'), isEmpty);
@@ -545,6 +546,56 @@ void main() {
     });
 
     test(
+      'reload of a root whose project layer sets agent.default_model, '
+      'while a global edit points agent.default_model at a new provider '
+      'with a key: fixes the behaviour of withDeferred for a previous '
+      'model outside the catalog of the snapshot without the project',
+      () async {
+        Map<String, Object?> userWith({bool newProvider = false}) {
+          final user = baseUser()..remove('agent');
+          if (newProvider) {
+            (user['providers']! as Map<String, Object?>)['n'] = norm({
+              'kind': 'openai-compatible',
+              'base_url': 'https://n.test/v1',
+              'api_key_secret': 'codelab/n',
+              'models': {'m': <String, Object?>{}},
+            });
+            user['agent'] = norm({'default_model': 'n/m'});
+          }
+          return user;
+        }
+
+        final rig = ProjectConfigRig.create(
+          rootUser: userWith(),
+          rootLocal: localProvider(id: 'rp'),
+          withSource: true,
+        );
+        final runtime = rig.runtime as AgentRuntimeImpl;
+        expect(runtime.config.defaultModel.provider, 'rp');
+        expect(runtime.config.withoutProject!.defaultModel.provider, 'rp');
+        rig.source!.next = () => folderResult(
+          '/A',
+          user: userWith(newProvider: true),
+          local: localProvider(id: 'rp'),
+        );
+
+        final report = await rig.runtime.reloadConfig();
+
+        // Фактическое поведение: перезагрузка применяется, модель полного
+        // снимка корня прежняя (проектная `rp/m`), снимок без проекта получил
+        // неявную модель по своим провайдерам, а не недоступную `rp/m`.
+        expect(report.outcome, ConfigReloadOutcome.applied);
+        expect(
+          report.restartRequiredKeys,
+          containsAll(['agent.default_model', 'providers.n']),
+        );
+        expect(runtime.config.defaultModel.provider, 'rp');
+        expect(runtime.config.validateSnapshot(), isEmpty);
+        expect(runtime.config.withoutProject!.defaultModel.provider, 'p');
+      },
+    );
+
+    test(
       '/config check in a session of another folder checks the config of '
       'the launch root, as before: the port is not called (task C2.7)',
       () async {
@@ -654,6 +705,341 @@ void main() {
       expect(rig.loader.calls, ['/B']);
       expect(viaFolder.model.provider, 'local');
     });
+  });
+
+  // change `defer-restart-keys-in-folder-sessions` (design.md D1–D9;
+  // agent-runtime «Сессии других папок при перезагрузке корня»). Красные
+  // тесты задачи 2.1.
+  group('deferred keys in sessions of another folder', () {
+    const leak = 'sk-test-leak-0123456789';
+
+    /// Глобальный слой с провайдером `openrouter` и ключом из переменной.
+    Map<String, Object?> orUser({
+      String env = 'K1',
+      bool extraModel = false,
+      Map<String, Object?> extra = const {},
+    }) {
+      final user = baseUser();
+      (user['providers']! as Map<String, Object?>)['openrouter'] = norm({
+        'kind': 'openai-compatible',
+        'base_url': 'https://or.test/v1',
+        'api_key_env': env,
+        'models': {
+          'm': <String, Object?>{},
+          if (extraModel) 'm2': <String, Object?>{},
+        },
+      });
+      return {...user, ...extra};
+    }
+
+    EnvKeyRef? orKey(CoreConfig config) =>
+        config.providers.singleWhere((p) => p.config.name == 'openrouter').key
+            as EnvKeyRef?;
+
+    test('the log names the root of the process and has no config_root '
+        '(scenario "Лог называет корень процесса")', () async {
+      final rig = ProjectConfigRig.create();
+      rig.setFolder('/B', local: localProvider());
+
+      await rig.session('/B');
+
+      final log = rig.logger.eventsOf('config.session.project').single;
+      expect(log.fields['cwd'], '/B');
+      expect(log.fields['process_root'], '/A');
+      expect(log.fields.containsKey('config_root'), isFalse);
+    });
+
+    test('a global api_key_env edit after the start: the session of /B '
+        'keeps the group of the applied snapshot and logs restart_pending; '
+        'after a restart the new group applies (scenario "Глобальная смена '
+        'api_key_env ждёт перезапуска и в другой папке")', () async {
+      final rig = ProjectConfigRig.create(rootUser: orUser(), withSource: true);
+      rig.setFolder('/B', user: orUser(env: 'K2', extraModel: true));
+
+      final inB = await rig.session('/B');
+
+      final built = rig.modelsForCalls.last;
+      expect(built.projectRoot, '/B');
+      expect(orKey(built)?.variable, 'K1');
+      expect(ProjectConfigRig.modelIds(inB), contains('openrouter/m2'));
+      final log = rig.logger.eventsOf('config.session.restart_pending');
+      expect(log, hasLength(1));
+      expect(log.single.level, LogLevel.warning);
+      expect(log.single.fields.keys, {'session_id', 'cwd', 'keys'});
+      expect(log.single.fields['session_id'], inB.id.value);
+      expect(log.single.fields['cwd'], '/B');
+      expect(log.single.fields['keys'], ['providers.openrouter']);
+      for (final text in ['K1', 'K2', 'or.test']) {
+        expect(log.single.fields.toString(), isNot(contains(text)));
+      }
+
+      // `session/load` папки подставляет отложенное так же, как `session/new`.
+      await inB.close();
+      final pendingBefore = rig.logger
+          .eventsOf('config.session.restart_pending')
+          .length;
+      final loaded = await rig.runtime.loadSession(
+        inB.id,
+        const SessionHostPorts(),
+        cwd: '/B',
+      );
+      expect(orKey(rig.modelsForCalls.last)?.variable, 'K1');
+      final pendingLogs = rig.logger.eventsOf('config.session.restart_pending');
+      expect(pendingLogs, hasLength(pendingBefore + 1));
+      expect(pendingLogs.last.fields['session_id'], loaded.id.value);
+
+      // «Перезапуск»: новый рантайм, начальный снимок уже с новым ключом.
+      final restarted = ProjectConfigRig.create(
+        rootUser: orUser(env: 'K2'),
+        withSource: true,
+      );
+      restarted.setFolder('/B', user: orUser(env: 'K2', extraModel: true));
+      await restarted.session('/B');
+      expect(orKey(restarted.modelsForCalls.last)?.variable, 'K2');
+      expect(
+        restarted.logger.eventsOf('config.session.restart_pending'),
+        isEmpty,
+      );
+    });
+
+    test('a trusted provider of the folder works at once next to a deferred '
+        'global edit (scenario "Проектный провайдер доверенной папки '
+        'работает сразу")', () async {
+      final rig = ProjectConfigRig.create(rootUser: orUser(), withSource: true);
+      rig.setFolder(
+        '/B',
+        user: orUser(env: 'K2'),
+        local: localProvider(),
+      );
+
+      final inB = await rig.session('/B');
+
+      expect(inB.model.provider, 'local');
+      expect(orKey(rig.modelsForCalls.last)?.variable, 'K1');
+      expect(
+        rig.logger
+            .eventsOf('config.session.restart_pending')
+            .single
+            .fields['keys'],
+        ['providers.openrouter'],
+      );
+    });
+
+    group('global permissions after the start (R0-1, a1)', () {
+      final execAllow = {
+        'permissions': {
+          'tools': {'exec': 'allow'},
+        },
+      };
+
+      test('a folder with project layers is refused: no journal, a log '
+          'project_invalid (scenario "Глобальные права после старта в папке '
+          'с проектными слоями")', () async {
+        final rig = ProjectConfigRig.create(withSource: true);
+        rig.setFolder(
+          '/B',
+          user: {...baseUser(), ...norm(execAllow)},
+          project: {
+            'budget': {'max_steps': 7},
+          },
+        );
+
+        await expectLater(
+          rig.session('/B'),
+          throwsA(
+            isA<ProjectConfigException>()
+                .having((e) => e.issues.single.key, 'key', 'permissions')
+                .having(
+                  (e) => e.issues.single.source,
+                  'source',
+                  'config reload',
+                )
+                .having(
+                  (e) => e.issues.single.message,
+                  'message',
+                  'the global permissions changed after the agent started; '
+                      'restart the agent to open sessions in this folder',
+                ),
+          ),
+        );
+        expect((await rig.runtime.listSessions()).items, isEmpty);
+        expect(
+          rig.logger.eventsOf('config.session.project_invalid'),
+          hasLength(1),
+        );
+        expect(rig.logger.eventsOf('config.session.project'), isEmpty);
+        expect(rig.mcp.requests, isEmpty);
+      });
+
+      test('a folder without project layers gets the section of the applied '
+          'snapshot (scenario "Глобальные права после старта в папке без '
+          'проектных слоёв")', () async {
+        final rig = ProjectConfigRig.create(withSource: true);
+        rig.setFolder('/B', user: {...baseUser(), ...norm(execAllow)});
+
+        await rig.session('/B');
+
+        expect(rig.modelsForCalls.last.permissions.rules.toolPolicies, isEmpty);
+        expect(
+          rig.logger
+              .eventsOf('config.session.restart_pending')
+              .single
+              .fields['keys'],
+          ['permissions.tools.exec'],
+        );
+      });
+    });
+
+    test('the base of the opening is the snapshot at its start: a reload of '
+        'the root that applies a live edit while /B is loading does not '
+        'change the group taken for /B (scenario "Перезагрузка во время '
+        'открытия не меняет базу", D9)', () async {
+      Map<String, Object?> withQ(String host, {bool keyed = false}) {
+        final user = baseUser();
+        (user['providers']! as Map<String, Object?>)['q'] = norm({
+          'kind': 'openai-compatible',
+          'base_url': 'https://$host.test/v1',
+          'api_key_env': ?(keyed ? 'K1' : null),
+          'models': {'m': <String, Object?>{}},
+        });
+        return user;
+      }
+
+      // `q` без ключа: правка адреса применяется на лету. Папка читает `q`
+      // уже с ключом и новым адресом: группа откладывается и берётся из базы.
+      // База «до await» даёт адрес q0, «применённый после await» — q1.
+      final rig = ProjectConfigRig.create(
+        rootUser: withQ('q0'),
+        withSource: true,
+      );
+      rig.setFolder('/B', user: withQ('q1', keyed: true));
+      final gate = rig.loader.gates['/B'] = Completer<void>();
+      final pending = rig.session('/B');
+      await rig.loader.enteredOf('/B').future;
+      rig.source!.next = () => folderResult('/A', user: withQ('q1'));
+
+      final report = await rig.runtime.reloadConfig();
+      gate.complete();
+      await pending;
+
+      expect(report.outcome, ConfigReloadOutcome.applied);
+      expect(report.changedKeys, contains('providers.q.base_url'));
+      final q = rig.modelsForCalls.last.providers.singleWhere(
+        (p) => p.config.name == 'q',
+      );
+      expect(q.config.baseUrl, Uri.parse('https://q0.test/v1'));
+      expect(q.key, isNull);
+      expect(
+        rig.logger
+            .eventsOf('config.session.restart_pending')
+            .single
+            .fields['keys'],
+        ['providers.q'],
+      );
+    });
+
+    test(
+      'opening a session does not change the restart state: '
+      'pendingRestartKeys stays empty, /config check shows the key '
+      '(scenario "Открытие сессии не меняет состояние перезапуска")',
+      () async {
+        final rig = ProjectConfigRig.create(
+          rootUser: orUser(),
+          withSource: true,
+        );
+        rig.setFolder('/B', user: orUser(env: 'K2'));
+        rig.source!.next = () => folderResult('/A', user: orUser(env: 'K2'));
+
+        await rig.session('/B');
+
+        expect(rig.runtime.configStatus().pendingRestartKeys, isEmpty);
+        final check = await rig.runtime.checkConfig();
+        expect(
+          [
+            for (final w in check.warnings)
+              if (w.event == 'config.reload.restart_required') w.key,
+          ],
+          ['providers.openrouter'],
+        );
+        expect(rig.runtime.configStatus().pendingRestartKeys, isEmpty);
+      },
+    );
+
+    test('a global edit of a process key after the start is not attributed '
+        'to the folder; a key set by the project layers of the folder is '
+        '(scenario "Глобальная правка ключа процесса не приписывается '
+        'папке")', () async {
+      final rig = ProjectConfigRig.create();
+      rig.setFolder(
+        '/B',
+        user: {
+          ...baseUser(),
+          'logging': {'level': 'debug'},
+        },
+      );
+      rig.setFolder(
+        '/C',
+        user: {
+          ...baseUser(),
+          'logging': {'level': 'debug'},
+        },
+        local: {
+          'sessions': {'dir': '/very-secret-dir'},
+        },
+      );
+
+      await rig.session('/B');
+      expect(
+        rig.logger.eventsOf('config.session.process_keys_ignored'),
+        isEmpty,
+      );
+      final inC = await rig.session('/C');
+
+      final logs = rig.logger.eventsOf('config.session.process_keys_ignored');
+      expect(logs.single.fields['session_id'], inC.id.value);
+      expect(logs.single.fields['keys'], ['sessions.dir']);
+      expect(logs.single.fields.toString(), isNot(contains('very-secret')));
+      expect(logs.single.fields.toString(), isNot(contains(leak)));
+    });
+
+    test('a host without a ConfigSource has no applied values: global '
+        'permissions are neither refused nor reported (no-config-source '
+        'branch of _projectScope)', () async {
+      final rig = ProjectConfigRig.create();
+      rig.setFolder(
+        '/B',
+        user: {
+          ...baseUser(),
+          'permissions': {
+            'tools': {'exec': 'allow'},
+          },
+        },
+        project: {
+          'budget': {'max_steps': 7},
+        },
+      );
+
+      final session = await rig.session('/B');
+
+      expect(session.id.value, isNotEmpty);
+      expect(rig.logger.eventsOf('config.session.restart_pending'), isEmpty);
+      expect(rig.logger.eventsOf('config.session.project_invalid'), isEmpty);
+    });
+
+    test(
+      'a session in the root: the loader is not called, no restart_pending',
+      () async {
+        final rig = ProjectConfigRig.create(
+          rootUser: orUser(),
+          withSource: true,
+        );
+
+        await rig.session('/A');
+
+        expect(rig.loader.calls, isEmpty);
+        expect(rig.logger.eventsOf('config.session.restart_pending'), isEmpty);
+      },
+    );
   });
 
   group('the assembly of the port', () {

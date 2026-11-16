@@ -461,6 +461,48 @@ permissions:
       },
     );
 
+    // change `defer-restart-keys-in-folder-sessions`, задача 3.2: правка
+    // глобального файла после открытия агента, которую перезагрузка
+    // откладывает до перезапуска (R0-4), не доходит и до сессии другой папки.
+    test('a deferred global edit after the start does not reach the session '
+        'of another folder: the key of the applied snapshot is used '
+        '(scenario "Глобальная смена api_key_env ждёт перезапуска и в другой '
+        'папке")', () async {
+      const newValue = 'sk-test-other-9876543210';
+      final other = Directory('${temp.path}/other')..createSync();
+      final rootPath = project.resolveSymbolicLinksSync();
+      final otherPath = other.resolveSymbolicLinksSync();
+      final trusted = 'trusted_projects:\n  - $rootPath\n  - $otherPath\n';
+      writeHome('${providers()}$trusted');
+      final (mock, authorizations) = denyingClient();
+      final opened = await opener(
+        environment: {
+          'CODELAB_SECRET_CODELAB_P': value,
+          'CODELAB_SECRET_CODELAB_P2': newValue,
+        },
+        http: mock,
+      )(cwd: project.path, hostProfile: 'embedded-cli');
+      agent = opened;
+      client = TestAcpClient(opened.clientTransport);
+      await client!.start();
+      await client!.initialize();
+      writeHome(
+        '${providers().replaceFirst('codelab/p', 'codelab/p2')}$trusted',
+      );
+
+      final inOther = await client!.newSession(other.path);
+      await promptOutcome(inOther);
+
+      expect(authorizations, ['Bearer $value']);
+      expect(
+        logger.eventsOf('config.session.restart_pending').single.fields['keys'],
+        ['providers.p'],
+      );
+      final everything = '${logger.records.join('\n')}\n${frames()}';
+      expect(everything, isNot(contains(value)));
+      expect(everything, isNot(contains(newValue)));
+    });
+
     test('a broken config of the folder B refuses session/new: no session '
         'is created', () async {
       final other = Directory('${temp.path}/other')..createSync();

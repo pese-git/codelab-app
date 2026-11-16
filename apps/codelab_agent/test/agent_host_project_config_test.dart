@@ -198,6 +198,187 @@ budget:
     expect(created, isA<Map<String, Object?>>());
     expect(logger.eventsOf('config.session.project'), isEmpty);
   });
+
+  // change `defer-restart-keys-in-folder-sessions`, задача 3.1: правка
+  // глобального файла после старта, которую перезагрузка откладывает до
+  // перезапуска (R0-4), не действует и в сессиях других папок. Настоящий
+  // `FileConfigSource`, временные `CODELAB_HOME` и папки, HTTP — `MockClient`.
+  group('a deferred global edit after the start (R0-4)', () {
+    const oldKey = 'sk-test-leak-0123456789';
+    const newKey = 'sk-test-other-9876543210';
+
+    late String plain;
+    late String withProvider;
+
+    setUp(() {
+      final parent = temp.resolveSymbolicLinksSync();
+      plain = '$parent/c';
+      withProvider = '$parent/d';
+      Directory(plain).createSync(recursive: true);
+      File('$withProvider/.codelab/config.local.yaml')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('''
+providers:
+  local:
+    kind: openai-compatible
+    base_url: https://local.test/v1
+    models:
+      m: {}
+agent:
+  default_model: local/m
+''');
+      final file = File('${temp.path}/home/config.yaml');
+      file.writeAsStringSync(
+        file.readAsStringSync().replaceFirst(
+          'trusted_projects:\n',
+          'trusted_projects:\n  - $plain\n  - $withProvider\n',
+        ),
+      );
+    });
+
+    /// Запускает хост и после старта переписывает глобальный файл: ключ
+    /// провайдера берётся из `OPENAI_KEY2` вместо `OPENAI_KEY`.
+    Future<(AcpPeer, List<http.BaseRequest>, RecordingLogger)> run() async {
+      final requests = <http.BaseRequest>[];
+      final logger = RecordingLogger();
+      final parsed = parseServeArgs(
+        ['serve', '--stdio'],
+        environment: {
+          'CODELAB_HOME': '${temp.path}/home',
+          'OPENAI_KEY': oldKey,
+          'OPENAI_KEY2': newKey,
+          'ANTHROPIC_KEY': 'sk-anthropic-test',
+          'CODELAB_SECRET_CODELAB_K': oldKey,
+        },
+      );
+      final host = await buildHost(
+        parsed,
+        cwd: root,
+        logger: logger,
+        httpClient: MockClient.streaming((request, body) async {
+          requests.add(request);
+          return http.StreamedResponse(
+            Stream.value(utf8.encode('{"error":{"message":"denied"}}')),
+            401,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+      final link = InProcessAcpLink();
+      unawaited(host.createServer().serve(link.agent));
+      await link.client.start();
+      addTearDown(() => host.shutdown(grace: Duration.zero));
+      final peer = AcpPeer(link.client);
+      await peer.call('initialize', {'protocolVersion': 1});
+      final file = File('${temp.path}/home/config.yaml');
+      file.writeAsStringSync(
+        file.readAsStringSync().replaceFirst(
+          'api_key_env: OPENAI_KEY\n',
+          'api_key_env: OPENAI_KEY2\n',
+        ),
+      );
+      return (peer, requests, logger);
+    }
+
+    Future<void> turn(AcpPeer peer, String cwd) async {
+      final id = await peer.newSession(cwd);
+      await peer.send('session/prompt', {
+        'sessionId': id,
+        'prompt': [
+          {'type': 'text', 'text': 'hi'},
+        ],
+      });
+    }
+
+    test('a folder without .codelab/ keeps the key of the applied snapshot; '
+        'the trusted folder with its own provider works at once (scenarios '
+        '"Глобальная смена api_key_env ждёт перезапуска и в другой папке", '
+        '"Проектный провайдер доверенной папки работает сразу")', () async {
+      final (peer, requests, logger) = await run();
+
+      await turn(peer, plain);
+
+      final toOpenai = requests.where((r) => r.url.host == 'openai.test');
+      expect(toOpenai, hasLength(1));
+      expect(
+        toOpenai.single.headers['Authorization'],
+        'Bearer $oldKey',
+        reason: 'R0-4: the new variable waits for the restart',
+      );
+      final pending = logger.eventsOf('config.session.restart_pending');
+      expect(pending, hasLength(1));
+      expect(pending.single.fields['cwd'], plain);
+      expect(pending.single.fields['keys'], ['providers.openai']);
+
+      await turn(peer, withProvider);
+
+      expect(
+        requests.where((r) => r.url.host == 'local.test'),
+        hasLength(1),
+        reason: 'the provider of the trusted folder needs no restart',
+      );
+      expect(
+        logger
+            .eventsOf('config.session.restart_pending')
+            .map((e) => e.fields['keys']),
+        everyElement(['providers.openai']),
+      );
+      expect(logger.records.join('\n'), isNot(contains(oldKey)));
+      expect(logger.records.join('\n'), isNot(contains(newKey)));
+    });
+
+    test('a key supplied by the project layer does not follow a global '
+        'address that changed after the start (R0-4, D3; the marker is the '
+        'secret value)', () async {
+      final parent = temp.resolveSymbolicLinksSync();
+      final keyed = '$parent/e';
+      File('$keyed/.codelab/config.local.yaml')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('''
+providers:
+  keyless:
+    api_key_secret: codelab/k
+agent:
+  default_model: keyless/m
+''');
+      final home = File('${temp.path}/home/config.yaml');
+      home.writeAsStringSync(
+        home
+            .readAsStringSync()
+            .replaceFirst(
+              'trusted_projects:\n',
+              'trusted_projects:\n  - $keyed\n',
+            )
+            .replaceFirst(
+              'providers:\n',
+              'providers:\n  keyless:\n    kind: openai-compatible\n'
+                  '    base_url: https://k.test/v1\n    models:\n      m: {}\n',
+            ),
+      );
+      final (peer, requests, logger) = await run();
+      home.writeAsStringSync(
+        home.readAsStringSync().replaceFirst(
+          'https://k.test/v1',
+          'https://evil.test/v1',
+        ),
+      );
+
+      await turn(peer, keyed);
+
+      expect(requests.where((r) => r.url.host == 'evil.test'), isEmpty);
+      for (final request in requests) {
+        expect(request.headers.values.join(), isNot(contains(oldKey)));
+      }
+      expect(
+        logger
+            .eventsOf('config.session.restart_pending')
+            .map((e) => e.fields['keys'])
+            .single,
+        contains('providers.keyless'),
+      );
+      expect(logger.records.join('\n'), isNot(contains(oldKey)));
+    });
+  });
 }
 
 /// Клиент и записанные `CoreConfig` (шов `modelsFor`).
