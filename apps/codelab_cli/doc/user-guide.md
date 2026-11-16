@@ -356,6 +356,7 @@ sequenceDiagram
 |---|---|---|
 | `codelab: …: agent.default_model: no model is configured; add a provider with at least one model` и `Configure the embedded agent in ~/.codelab/config.yaml; check it with: codelab config check` | у встроенного агента нет модели | запустите `codelab` в терминале — откроется мастер, — или `codelab provider add` |
 | `codelab: request failed after 4 attempts in …` (в `-p`) или `error: request failed after …` (в диалоге) с `network (connection failed: …)` | провайдер модели не отвечает по адресу из конфигурации | проверьте адрес и что сервер запущен; для локальной модели — что запущены LM Studio или Ollama |
+| `The turn stopped: budget exceeded: <лимит>.` в диалоге | ход остановился: агент исчерпал лимит бюджета. `<лимит>` — `steps` (`budget.max_steps`), `tokens` (`budget.max_tokens`), `cost` (`budget.max_cost`) или `duration` (`budget.max_duration`) | увеличьте соответствующий ключ секции `budget` в конфигурации агента и перезапустите агента. Если агент не назвал лимит, заметка читается «The turn reached the limit of model requests.» |
 | `codelab: Unknown agent profile. Run "codelab profiles list".` | профиля с таким id нет | посмотрите `codelab profiles list` |
 | `codelab: --ui tui needs a terminal on stdin and stdout` | полноэкранный режим запущен с перенаправленным вводом или выводом | запустите в терминале без `<`, `>` и `|` |
 | `codelab: --ui applies only to the interactive mode` | `--ui=tui` вместе с `-p` | уберите один из флагов |
