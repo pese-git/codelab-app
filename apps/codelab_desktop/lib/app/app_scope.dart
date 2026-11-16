@@ -442,14 +442,11 @@ final class CodeLabPlatformModule extends Module {
     UserShellLauncher? userShellLauncher,
     ExternalLinkOpener? externalLinkOpener,
     LocalFolderOpener? localFolderOpener,
-    this.projectFolderPicker,
-  }) : _userShellLauncher = userShellLauncher,
-       _externalLinkOpener = externalLinkOpener,
-       _localFolderOpener = localFolderOpener;
     PathOpener? pathOpener,
     this.projectFolderPicker,
   }) : _userShellLauncher = userShellLauncher,
        _externalLinkOpener = externalLinkOpener,
+       _localFolderOpener = localFolderOpener,
        _pathOpener = pathOpener;
 
   /// Порт запуска shell пользователя; шов тестов
