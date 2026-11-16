@@ -45,6 +45,7 @@ void main() {
   Future<void> journal(
     List<Map<String, Object?>> records, {
     required ({String outcome, String text, bool isError})? result,
+    String tool = 'agent',
     Map<String, Object?> arguments = const {
       'type': 'explore',
       'description': 'Find auth code',
@@ -77,9 +78,7 @@ void main() {
         parentId: 'r1',
         timestamp: at,
         message: AssistantMessage(
-          content: [
-            ToolCall(id: 'call_1', name: 'agent', arguments: arguments),
-          ],
+          content: [ToolCall(id: 'call_1', name: tool, arguments: arguments)],
           model: scriptedModel,
           usage: Usage.zero,
           stopReason: StopReason.toolUse,
@@ -120,7 +119,7 @@ void main() {
           ),
           message: ToolResultMessage(
             toolCallId: 'call_1',
-            toolName: 'agent',
+            toolName: tool,
             content: [TextContent(result.text)],
             isError: result.isError,
             timestamp: at,
@@ -182,6 +181,46 @@ void main() {
     final text =
         (((call['content']! as List).single as Map)['content'] as Map)['text'];
     expect(text, 'Auth is in lib/auth/session.dart:12-80.');
+  });
+
+  // D52 п. 1: реплей совпадает с живой проекцией. Отменённый `agent` с
+  // частичным отчётом ребёнка уходит с `content: []`: текст ребёнка,
+  // написанный до отмены, клиенту не показывается, живой кадр его не нёс.
+  test('a cancelled child with a partial report replays content: []', () async {
+    h = await ServerHarness.start();
+    await h.initialize();
+    await journal(
+      [
+        {'status': 'running'},
+        {
+          'status': 'cancelled',
+          'report': 'Partial findings before the cancel.',
+          'usage': {
+            'input': 900,
+            'output': 80,
+            'cacheRead': 0,
+            'cacheWrite': 0,
+          },
+          'toolCalls': 1,
+          'durationMs': 5000,
+        },
+      ],
+      result: (
+        outcome: 'cancelled',
+        text:
+            '<subagent-report agent="explore" status="cancelled">\n'
+            'Partial findings before the cancel.\n'
+            '</subagent-report>',
+        isError: true,
+      ),
+    );
+
+    final response = await load();
+
+    final call = replayedCall(response, 'call_1');
+    expect(call['status'], 'failed');
+    expect(codelab(call)['outcome'], 'cancelled');
+    expect(call['content'], isEmpty);
   });
 
   test('a failed child carries failure next to the summary', () async {
