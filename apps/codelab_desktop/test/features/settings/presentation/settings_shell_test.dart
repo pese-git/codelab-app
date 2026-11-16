@@ -329,6 +329,59 @@ void main() {
     expect(settingsPageBuilders, contains(SettingsPage.mcpServers));
   });
 
+  // Задача 1.1 change `add-settings-agents-modes` (spec app-settings
+  // «Страницы Providers и MCP servers в навигации», сценарии «Четыре
+  // страницы группы Agent» и «Поиск режима bypass»): красные до задачи 1.4
+  // (`SettingsPage.agentsAndModes` в `defaultSettingsPages`,
+  // `settingsPageBuilders` и ключевых словах поиска).
+  testWidgets('Four pages of the Agent group: Connection, Providers, MCP '
+      'servers and Agents & modes in this order, no App title', (tester) async {
+    await pumpShell(tester, available: defaultSettingsPages.available);
+
+    expect(SettingsPage.agentsAndModes.navKey, 'settings-nav-agents-and-modes');
+    expect(_nav(SettingsPage.agentsAndModes), findsOneWidget);
+    final connection = tester.getTopLeft(_nav(SettingsPage.connection));
+    final providers = tester.getTopLeft(_nav(SettingsPage.providers));
+    final mcp = tester.getTopLeft(_nav(SettingsPage.mcpServers));
+    final agents = tester.getTopLeft(_nav(SettingsPage.agentsAndModes));
+    expect(connection.dy, lessThan(providers.dy));
+    expect(providers.dy, lessThan(mcp.dy));
+    expect(mcp.dy, lessThan(agents.dy));
+    expect(find.text('Agent'), findsOneWidget);
+    expect(find.text('App'), findsNothing);
+    expect(settingsPageBuilders, contains(SettingsPage.agentsAndModes));
+    expect(defaultSettingsPages.visible, [
+      SettingsPage.connection,
+      SettingsPage.providers,
+      SettingsPage.mcpServers,
+      SettingsPage.agentsAndModes,
+    ]);
+  });
+
+  testWidgets('search "bypass" keeps Agents & modes and choosing the result '
+      'selects that page', (tester) async {
+    SettingsPage? tapped;
+    await pumpShell(
+      tester,
+      available: defaultSettingsPages.available,
+      onSelected: (page) => tapped = page,
+    );
+
+    await tester.enterText(
+      find.byKey(CodeLabSettingsNavigation.searchKey),
+      'bypass',
+    );
+    await tester.pumpAndSettle();
+
+    expect(_nav(SettingsPage.agentsAndModes), findsOneWidget);
+    expect(_nav(SettingsPage.connection), findsNothing);
+    expect(_nav(SettingsPage.providers), findsNothing);
+    expect(_nav(SettingsPage.mcpServers), findsNothing);
+    await tester.tap(_nav(SettingsPage.agentsAndModes));
+    await tester.pumpAndSettle();
+    expect(tapped, SettingsPage.agentsAndModes);
+  });
+
   testWidgets('search "headers" keeps MCP servers', (tester) async {
     await pumpShell(tester, available: defaultSettingsPages.available);
 
@@ -433,6 +486,36 @@ void main() {
           SettingsPage.mcpServers,
         ], reason: word);
       }
+    });
+
+    test('matches Agents & modes keywords (design.md D9, change '
+        'add-settings-agents-modes)', () {
+      const pages = [
+        SettingsPage.connection,
+        SettingsPage.providers,
+        SettingsPage.mcpServers,
+        SettingsPage.agentsAndModes,
+      ];
+      for (final word in const [
+        'mode',
+        'permission',
+        'bypass',
+        'plan',
+        'effort',
+        'reasoning',
+        'agent',
+        'definition',
+        'subagent',
+      ]) {
+        expect(
+          SettingsSearchIndex.search(pages, word),
+          contains(SettingsPage.agentsAndModes),
+          reason: word,
+        );
+      }
+      expect(SettingsSearchIndex.search(pages, 'bypass'), [
+        SettingsPage.agentsAndModes,
+      ]);
     });
 
     test('never returns a page that is not visible', () {
