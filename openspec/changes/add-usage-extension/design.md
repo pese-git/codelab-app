@@ -156,7 +156,7 @@ enum UsagePartial { noUsage, noPrice, beforeLoad }   // незнакомые с�
 
 Правила:
 - обязательные поля (`sessionId`, `seq`, `trigger`, `session.tokens`) не разобрались → снимок отброшен целиком, предупреждение `usage.decode_failed` (D14); необязательное поле неверного типа → поле отсутствует, то же предупреждение; исключений нет (§12.1.10);
-- `lastTurn` заменяется, когда приходит снимок с другим `turnId`; между ходами показывается последний ход;
+- каждый снимок с `turnId` заменяет `lastTurn` агрегатом `turn` (тот же `turnId` — ход идёт); снимок без `turnId` `lastTurn` не меняет; новый `turnId` без разобранного `turn` — `lastTurn` пуст; между ходами показывается последний ход (уточнено D22 п. 2);
 - клиент суммы не считает и окно модели не оценивает: всё — из снимка (отличие от §12.1.5 п. 3 первой редакции, где клиент суммировал ходы сам; документ правится задачей 0.x);
 - `SessionStatusBar` и `StatusBarProjector` из §12.1.1 этим change не вводятся: модель и режим клиенты уже берут из опций сессии, ветка git вне объёма (Q9 (б)), а второй слой ради одного поля — церемония. `SessionView.usage` — единственное новое поле.
 
@@ -165,7 +165,7 @@ enum UsagePartial { noUsage, noPrice, beforeLoad }   // незнакомые с�
 ### D9. Деньги на проводе и в клиенте (решение пользователя, Q4 (а))
 
 - На проводе — десятичная строка `^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$`: целая часть, точка и до 6 знаков без хвостовых нулей; ноль — `"0"`. Агент печатает её из целых микродолларов (D4, п. 7), поэтому строка детерминирована для фикстур. Валюта — `currency` в корне параметров.
-- Клиент разбирает строку в `Money.micros` без `double`; больше 6 знаков, знак, экспонента или пустая строка — поле неверно (D8). `cost` без `currency` — тоже.
+- Клиент разбирает строку в `Money.micros` без `double`; больше 6 знаков, знак, экспонента или пустая строка — поле неверно (D8). `cost` без `currency` — тоже. Целая часть — не более 9 цифр (не более `999999999.999999`): тогда микроединицы меньше `2^53` и остаются точным целым и на web; большее значение — цена неизвестна, WARNING `usage.decode_failed` с `reason: wrong_format` (D22 п. 3).
 - Цена неизвестна — `cost` нет → клиент показывает «—» (DSK-11), никогда не `$0`.
 
 *Альтернативы:* число JSON (`0.0041`) — `double` на обеих сторонах, неточное представление в фикстурах; целые микроединицы (`4100`) — точно, но имя поля и масштаб легко перепутать стороннему читателю протокола; стоимость по категориям (`input`/`output`/…, как `UsageCost`) — избыточна для строки статуса, нужна только панели, и её можно добавить необязательным полем.
@@ -212,7 +212,7 @@ enum UsagePartial { noUsage, noPrice, beforeLoad }   // незнакомые с�
 ### D14. Наблюдаемость
 
 - **Агент.** *Решение 2026-11-16 (Q14 (б), заменяет предложение ниже):* каждая отправка снимка — debug `acp.usage.sent {session_id, seq, trigger, turn_id?}`, без токенов и денег; `turn_id` — у `step` и `turn` (ход известен), у `compaction` его нет (D20 п. 5). Новых событий лога на шаг нет: usage хода уже пишет `turn.end`. При `initialize` в существующую запись согласованных возможностей соединения попадает `usage` (если запись есть; иначе — debug `acp.extensions.negotiated {keys}`; поле `connection` снято — D18 Т9, D19 п. 7). *Сверка 2026-11-16:* `turn.end` в коде нет, записи согласованных возможностей нет, id соединения в логах нет — D18, Т9; Q14 (б).
-- **Клиент.** DEBUG `usage.received {session_id, seq, trigger}`; DEBUG `usage.stale {session_id, seq, last_seq}`; WARNING `usage.decode_failed {session_id, field, reason}` — не чаще раза на сессию и поле (как в дельте acp-client-kit). Payload — только в developer-only трассировке протокола (`category=protocol`), как для пропущенных `session/update`. Секретов в уведомлении нет; id модели — не секрет.
+- **Клиент.** DEBUG `usage.received {session_id, seq, trigger}`; DEBUG `usage.stale {session_id, seq, last_seq}`; WARNING `usage.decode_failed {session_id, field, reason}` — не чаще раза на сессию и поле (как в дельте acp-client-kit). Окончательный состав записей и полей — D22 п. 1. Payload — только в developer-only трассировке протокола (`category=protocol`), как для пропущенных `session/update`. Секретов в уведомлении нет; id модели — не секрет.
 
 ### D15. Пакеты, зависимости, безопасность
 
@@ -366,6 +366,19 @@ enum UsagePartial { noUsage, noPrice, beforeLoad }   // незнакомые с�
 - Handshake клиентского прогона (`lib/src/fixtures/client_conformance.dart`, `_handshake`, строки 466–487) сверяет `clientCapabilities` как `$partial` от `setup.clientCapabilities`, но `_meta.codelab` внутри — точно, а ответ агента — `agentCapabilities: {}` (usage не согласован: в клиентском прогоне `acp/prompt-usage-steps` `support` идёт `unknown` → `reported`). Следствия: `acp/prompt-usage-steps` с `setup.clientCapabilities._meta.codelab: {usage}` в клиентском прогоне красная при любом объявлении клиента; `acp/prompt-subagent-tool-tree` и `acp/session-load-subagent-tool-tree` (роли `agent`, `client`, объявление без `usage`) станут красными с задачей 2.8. Тот же `setup.clientCapabilities` агентский драйвер шлёт агенту буквально (`agent_conformance.dart`, `agentFixtureHandshake`), поэтому `usage` в нём включает снимки в агентском прогоне. Решение пользователя 2026-11-16 — Q15 (б): сверка `_meta.codelab` handshake как подмножества.
 
 **Т8. Пути тестов итерации 2:** 2.1 — существующие `codelab_client_acp/test/application/initialize_codelab_request_test.dart` и `initialize_codelab_extensions_test.dart`; 2.2 — новый `codelab_client_acp/test/application/usage_notification_test.dart` (тесты приложения лежат в `test/application/`); 2.3 — новый `codelab_client_acp/test/application/budget_exceeded_test.dart`; 2.4, 2.5 — новые `codelab_client_core/test/usage/usage_decoder_test.dart`, `session_usage_test.dart` (каталога `test/usage/` ещё нет); 2.6 — новый `codelab_client_core/test/transcript/budget_notice_test.dart`; 2.7 — Т7. У `codelab_client_acp` и `codelab_acp_testing` вложенного `AGENTS.md` нет: действуют корневой и `codelab_client_core/AGENTS.md` (§5 — разбор `_meta.codelab.*` только в `codelab_client_acp` и kit; §3 — kit опирается на отбрасывание поздних событий бэкендом).
+
+### D22. Исправления по двойному ревью итерации 2 (2026-11-16)
+
+Технические решения оркестратора 2026-11-16 по ревью архитектуры и безопасности итерации 2. Новых методов, полей и значений на проводе нет; уточняются наблюдаемость клиента (D14, D21 Т5), свёртка `lastTurn` (D8) и разбор денег (D9).
+
+1. **Записи журнала клиента.** Отбросы получают имена, у записей kit есть корреляция с соединением (§16 `AGENTS.md`):
+   - `codelab_client_acp`: DEBUG `usage.received {session_id, seq, trigger}`, где `trigger` — только `step`, `turn` или `compaction`, любое другое значение пишется как `other` (строка агента не попадает в журнал как есть); DEBUG `usage.dropped {reason}` — уведомление без строкового `sessionId`, без payload;
+   - kit (`ClientWorkspace`): DEBUG `usage.stale {session_id, seq, last_seq, connection_generation}` — только дубль или опоздание по `seq`; DEBUG `usage.unknown_session {session_id, connection_generation}` — снимок сессии, которой нет в рабочем пространстве (прежняя формулировка «`usage.stale` без `last_seq` для неизвестной сессии» снята); WARNING `usage.decode_failed {session_id, field, reason, connection_generation}` — не чаще раза на сессию и поле.
+   Сумм, цен и текста уведомления в записях по-прежнему нет. Документ — `docs/architecture/observability.md`, раздел о `_codelab/session/usage`.
+   *Альтернатива:* одна запись `usage.stale` с необязательным `last_seq` для всех отбросов kit — отклонена: по журналу не отличить опоздание от снимка чужой или закрытой сессии.
+2. **`lastTurn` привязан к `turnId`.** Каждый снимок с `turnId` заменяет `lastTurn` агрегатом `turn` этого снимка (тот же `turnId` — ход идёт, итог обновляется); снимок без `turnId` (`compaction`) `lastTurn` не меняет; новый `turnId` без разобранного `turn` (поле отсутствует или неверно) — `lastTurn` пуст, а не итог прежнего хода. Для корректного агента (D2: `turn` есть у каждого снимка `step` и `turn`) поведение прежнее; правило убирает показ итога чужого хода под новым `turnId`. Дельта `acp-client-kit`, `12-1-view-model.md` §12.1.5 п. 3.
+3. **Предел денег клиента.** Целая часть `cost` — не более 9 цифр (значение не более `999999999.999999`): микроединицы тогда меньше `10^15 < 2^53` и точно представимы целым и на web, где `int` — `double`. Большее значение — цена неизвестна (поле `cost` отсутствует), WARNING `usage.decode_failed` с `reason: wrong_format` (D9). Агент таких сумм не шлёт: его предел — `2^53 − 1` микроединиц (D20 п. 3), а реальные суммы на порядки меньше. *Альтернатива:* `BigInt` — точно при любой длине, но ради недостижимых сумм тянет второй тип денег во всю модель и UI.
+4. **`compactionSoon` без переполнения.** Порог `used ≥ 0.9 × compactAt` считается в целых без промежуточных значений больше `2^53` (никакого `used × 10` или `compactAt × 9` на больших числах), поэтому при любых разобранных `used` и `compactAt` результат одинаков на VM и web и не переполняется.
 
 ## Risks / Trade-offs
 

@@ -651,6 +651,8 @@ terminal
 
 События `app.exit_*` и `app.shutdown_step_failed` — change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D6. Ядро клиента пишет `terminal_processes_killed` — `count`, `reason` (`connection_closed` | `dispose`), без команд, путей и идентификаторов терминалов; событие пишется после отправки сигналов, сбой журнала не мешает завершению процессов. Ответ на `terminal/*`, не отправленный из-за смены соединения или закрытия ядра, виден как `event_ignored {reason: stale_generation, kind}` (`kind`: `terminal_create_result` или `terminal_response`; §20, D15 change).
 
+Уведомление `_codelab/session/usage` (change `add-usage-extension`, D14, D21 Т5, D22): клиентский слой `codelab_client_acp` пишет DEBUG `usage.received` — `session_id`, `seq`, `trigger` (только `step`, `turn` или `compaction`, любое другое значение — `other`; без токенов и денег; payload — только в трассировке `category=protocol`) и DEBUG `usage.dropped` — `reason` (уведомление без строкового `sessionId` отброшено до ядра клиента; без payload). Ядро клиента (`ClientWorkspace`, необязательный `Logger`) пишет DEBUG `usage.stale` — `session_id`, `seq`, `last_seq`, `connection_generation` (дубль или опоздание по правилу `seq`), DEBUG `usage.unknown_session` — `session_id`, `connection_generation` (снимок сессии, которой нет в рабочем пространстве) и WARNING `usage.decode_failed` — `session_id`, `field`, `reason`, `connection_generation`, не чаще раза на сессию и поле. Сумм, цен и текста уведомления в записях нет.
+
 Путей, окружения, аргументов и `toString()` исключений в них нет (§43–§45).
 
 ---

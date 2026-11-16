@@ -296,7 +296,7 @@ final class SessionStatusBar {
 // этот change их не вводит; новое поле — только SessionView.usage.
 final class UsageView {
   final UsageSupport support;                       // unknown | awaiting | reported
-  final UsageTotals? lastTurn;                      // ход последнего снимка с turnId
+  final UsageTotals? lastTurn;                      // turn последнего снимка с turnId (D22 п. 2)
   final UsageTotals? session;                       // сумму считает агент, клиент не суммирует
   final ContextFillView? context;
   final int lastSeq;                                // свёртка по seq снимков
@@ -572,12 +572,20 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    "session":{"turns":3,"steps":7,"tokens":{…},"cost":"0.0372","partial":["beforeLoad"]},
    "currency":"USD","context":{"used":22900,"size":200000,"compactAt":183616}}`.
 3. **Свёртка.** Снимок применяется, только если его `seq` больше последнего применённого для
-   сессии в текущем поколении соединения; дубли и опоздания отбрасываются. `lastTurn` заменяется
-   снимком с другим `turnId`, `session` и `context` — каждым снимком. Клиент ничего не суммирует и
+   сессии в текущем поколении соединения; дубли и опоздания отбрасываются. Каждый снимок с `turnId` заменяет
+   `lastTurn` агрегатом `turn` (тот же `turnId` — ход идёт); снимок без `turnId` `lastTurn` не меняет;
+   новый `turnId` без разобранного `turn` — `lastTurn` пуст (change `add-usage-extension`, D22 п. 2).
+   `session` и `context` меняет каждый снимок. Клиент ничего не суммирует и
    окно модели не оценивает: сумму сессии считает агент (после `session/load` она неполная — причина
    `beforeLoad`, полная — change `add-usage-ledger`). Деньги приходят десятичной строкой и хранятся в
-   целых микроединицах: сумма дробных долларов в `double` накапливает ошибку. Переподключение и
-   `session/load` сбрасывают `usage` сессии в `awaiting` или `unknown`.
+   целых микроединицах: сумма дробных долларов в `double` накапливает ошибку. Целая часть — не более
+   9 цифр, чтобы микроединицы оставались точным целым и на web; большее значение — цена неизвестна
+   (D9, D22 п. 3). `session/load`
+   сбрасывает `usage` сессии в `awaiting` или `unknown`. Смена соединения сбрасывает `lastSeq` по
+   *поколению уведомления*, а не по началу `reconnect` в kit (`suspend()`): старый агент ещё может
+   прислать снимок после начала `reconnect`, а новый агент начнёт с `seq: 1` (change
+   `add-usage-extension`, D21 Т2, Т4). Свёртка — чистый класс без зависимости от `ClientWorkspace`;
+   её же использует тест корпуса фикстур.
 4. **Без расширения** `UsageSupport.unknown`: сегменты токенов, стоимости и контекста отсутствуют
    (не «0»). Это обычный режим со сторонним агентом. `awaiting` — агент объявил `usage`, снимков ещё
    нет. `compaction soon` — только при известном `compactAt` (порог автосжатия) и
@@ -780,6 +788,10 @@ Setext-заголовки, HTML, сноски и ссылки-определен
   деньги без накопления ошибки на 1000 ходах (VIEW-6).
 * `usage/usage_decoder_test.dart` и `usage/session_usage_test.dart` (change `add-usage-extension`, задачи 2.4, 2.5): форма D2 `_codelab/session/usage`; свёртка по `seq`; `compactionSoon`; неизвестные поля игнорируются,
   неверный тип поля — `null` и диагностика, не исключение.
+* `usage/usage_fixture_test.dart` (change `add-usage-extension`, задача 2.7b; `runClientFixture`, как
+  `transcript/transcript_projector_test.dart`): после `acp/prompt-usage-steps` — `reported`,
+  `lastTurn` и `session` равны последнему снимку фикстуры, клиент не шлёт кадров в ответ на
+  уведомления; заметка хода `acp/prompt-turn-budget-exceeded` — `The turn stopped: budget exceeded: tokens.`
 * `attachments/prompt_content_builder_test.dart`: PNG с расширением `.jpg` → `image/png`; без
   `image` в возможностях → `resource_link` и пометка; `embeddedContext` → `resource`; путь вне
   `cwd` без подтверждения не отправлен; одиннадцатое вложение → `tooMany`; `.env` →
