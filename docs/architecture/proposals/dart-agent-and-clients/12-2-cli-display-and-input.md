@@ -176,31 +176,46 @@ TTY: вывод headless — данные для скриптов.
 
 | Сегмент | Пример | Источник | Отбрасывается |
 |---|---|---|---|
-| режим | `plan` | `modeLabel` | никогда |
-| модель | `gpt-4.1` | `modelLabel`; при нехватке места — часть после последнего `/` | 5-м (сначала сокращается) |
-| контекст | `ctx 18%` | `usage.context.fraction`; ≥ 80 % — жёлтым, ≥ 95 % — красным | 4-м |
-| токены | `↑12.3k ↓1.1k` | `usage.session.tokens`: вход = `input + cacheRead + cacheWrite`, выход = `output`; `~` перед числами при причинах `noUsage` или `beforeLoad` | 3-м |
-| стоимость | `$0.04` | `usage.session.cost` (целые микроединицы); `~` перед суммой при любой причине `partial` | 2-м |
-| ветка | `⎇ main` (ASCII: `git:main`) | `gitBranch` | 1-м |
-| очередь | `в очереди: 2`; после MVP при ожидающем steering — `в очереди: 2 · направлено: 1` | `queued > 0`; `steered > 0` (длина `SessionView.pendingSteers`, C-03, §12.1, agent-core-architecture §17.7.6) | никогда |
+| ход (только TUI) | `• 12s` | значок `SpinnerModel` и время идущего хода | никогда |
+| профиль (только TUI) | `embedded` | профиль подключения | 1-м |
+| режим | `plan` | `currentValue` опции с id `mode`, иначе категории `mode` (`sessionOptionValue`) | никогда |
+| модель | `gpt-4.1` | то же для `model`; при нехватке места — часть после последнего `/` | 5-м (сначала сокращается) |
+| контекст | `ctx 18%` | `usageContextOf(usage.context)` (§12.1.5, п. 4b): целый процент вниз, `<1%`; ≥ 80 % — жёлтым, ≥ 95 % — красным (только TUI) | 4-м |
+| токены | `↑12.3k ↓1.1k` | `usage.session.tokens`: вход — `usageInputTokens` (`input + cacheRead + cacheWrite`), выход — `output`; `~` перед `↑` при причинах `noUsage` или `beforeLoad`; оба числа нулевые — сегмента нет | 3-м |
+| стоимость | `$0.04` | `formatUsageMoney(usage.session.cost)` (целые микроединицы); `~` перед суммой при любой причине `partial`; цена неизвестна — сегмента нет, известный ноль — `$0.00` | 2-м |
+| ветка | `⎇ main` (ASCII: `git:main`) | `gitBranch` — вне change `add-usage-extension`, в коде нет | — |
+| очередь | `queue: 2`; после MVP при ожидающем steering — ещё `направлено: 1` | `queued > 0`; `steered > 0` (длина `SessionView.pendingSteers`, C-03, §12.1, agent-core-architecture §17.7.6) | никогда |
+| одобрение (только TUI) | `approval pending · esc to answer` | запрос разрешения ждёт ответа под модальным экраном (change `add-provider-setup-ui`, D17) | никогда |
 | только чтение | `read-only` | после MVP: `readOnly` (`SessionHandle.access` — `ReadOnlyAccess`, S-09, agent-core-architecture §17.6.11) | никогда |
 
-Разделитель ` · `; сегмент без данных не выводится (VIEW-6). Usage приходит уведомлением
-`_codelab/session/usage` (change `add-usage-extension`, D12): TUI показывает ещё профиль
-первым сегментом и отбрасывает его раньше всех (профиль, стоимость, токены, контекст, модель);
-ветка git — вне того change. `~` ставится префиксом, как в desktop (артборд CliStatus ставит его
-после суммы — отступление подтвердил пользователь 2026-11-13, D12 того change). Если даже режим и очередь не
-помещаются — строка обрезается с `…`. Числа токенов: до 1000 — как есть, далее `12.3k`, `1.2M`.
+Разделитель ` · `; сегмент без данных не выводится, `0` вместо неизвестного не печатается
+(VIEW-6). Usage приходит уведомлением `_codelab/session/usage` (change `add-usage-extension`, D12):
+сегменты контекста, токенов и стоимости собирает одна чистая функция `usageSegmentsOf`
+(`apps/codelab_cli/lib/src/render/usage_segments.dart`) для TUI и REPL поверх функций форматирования
+kit (D24, §12.1.5, п. 4b), своих правил формата у CLI нет. TUI отбрасывает сегменты в порядке
+профиль, стоимость, токены, контекст, модель; если даже режим, очередь и одобрение не помещаются —
+строка обрезается с `…`. `~` ставится префиксом, как в desktop: артборд CliStatus ставит его после
+суммы — отступление подтвердил пользователь 2026-11-13 (D12 того change); подсказок и текста причин
+у `~` в терминале нет (D23 Т9 п. 1). Все сегменты — режим, модель, профиль, стоимость с валютой —
+проходят очистку `sanitizeStatusText` (управляющие символы, переводы строки) до вывода: тексты
+опций приходят от агента (D23 Т9 п. 5, TUI-11).
 
-* **Построчный режим:** после каждого хода печатается одна приглушённая строка
-  `─ plan · gpt-4.1 · ctx 18% · ↑12.3k ↓1.1k · $0.04 · ⎇ main`; на `plain` — без цвета; на `raw` и
-  в headless — не печатается (в `stream-json` usage идёт полем `usage` событий `turn_end` и
-  `result`; `null` без расширения, §12.5.3).
-  Ключ `status_line.after_turn = true|false` (по умолчанию `true`).
+* **Построчный режим (REPL):** после каждого исхода хода, кроме постановки в очередь, — в том
+  числе после `cancelled` и сбоя, следом за их строкой (Q18 (а)), — печатается одна строка
+  `─ plan · gpt-4.1 · ctx 18% · ↑12.3k ↓1.1k · $0.04` (`afterTurnStatusLine`,
+  `TerminalRenderer.afterTurnStatus`): на `ansi` приглушённо и без цвета порогов, на `plain` — без
+  SGR; на `raw` и в headless — не печатается. Без usage строка содержит только режим и модель;
+  без них и без usage — не печатается. Ширина не ограничивается. В `stream-json` usage идёт полем
+  `usage` событий `turn_end` и `result` (`null` без расширения, §12.5.3) — после MVP, вне change.
 * **TUI:** последняя строка экрана, обновляется при каждой ревизии `SessionView`; во время хода
-  слева добавляется значок хода и время `• 12s`.
-* **Набор сегментов:** `status_line.segments = ["mode", "model", "context", "tokens", "cost",
-  "branch", "queue"]` — список и порядок; неизвестное имя — предупреждение при старте и пропуск.
+  слева добавляется значок хода и время `• 12s`. Раскладка — `statusLayout`
+  (`tui/core/status_line.dart`): строка без SGR и границы сегмента контекста, цвет порога вставляет
+  `render` внутрь приглушённой строки; `TuiRunner._printSummary` печатает ту же строку при выходе.
+* **Настройки (после MVP, в коде нет):** ключ `status_line.after_turn = true|false` (по умолчанию
+  `true`) и набор сегментов `status_line.segments = ["mode", "model", "context", "tokens", "cost",
+  "branch", "queue"]` — список и порядок; неизвестное имя — предупреждение при старте и пропуск
+  (§12.2.10). Change `add-usage-extension` их не вводит: строка REPL печатается всегда, состав
+  сегментов фиксирован.
 
 ## 12.2.7. Полноэкранный TUI
 
@@ -910,12 +925,17 @@ CLI сам пишет только файлы состояния (`~/.codelab/cl
   `toDartTuiCmd` на фальшивом `SessionHandle`; исключение команды → `EffectFailedMsg`;
   `test/tui/tui_command_context_test.dart` — вывод команд заметками и смена сессии.
   `test/tui/tui_input_test.dart` — §12.2.9, «Два источника клавиш».
-* **`cli/status-line-usage`** (`test/e2e/status_line_usage_test.dart`, U-13): scripted-агент
-  отвечает с usage уведомлением `_codelab/session/usage` (change `add-usage-extension`, задача 3.6); после хода строка содержит модель, режим,
-  `ctx 9%`, `↑…k ↓…`, `$0.04`, ветку временного git-репозитория; тот же сценарий без usage — нет
-  сегментов токенов, стоимости и контекста и нет `0` (VIEW-6). Модульно —
-  `test/render/status_line_renderer_test.dart`: ширины 120, 60, 30, 15 — сегменты отбрасываются в
-  порядке таблицы §12.2.6.
+* **`cli/status-line-usage`** (`test/e2e/status_line_usage_test.dart`, U-13): `--ui tui` против
+  scripted-агента в режиме `withUsage` (change `add-usage-extension`, задачи 3.5, 3.9) — после хода
+  строка содержит `ctx 9%`, `↑… ↓…`, `$0.04`; с Dart-агентом и встроенным агентом — сценарий модели
+  `test/e2e/llm_scripts/with_usage.json`, проверяется форма сегментов. Тот же сценарий без usage
+  (только scripted-агент, тег `scripted-only`) — нет сегментов токенов, стоимости и контекста и
+  нет `0` (VIEW-6). Ветка git не проверяется: её нет в коде (вне change). Модульно —
+  `test/tui/status_line_test.dart`: ширины 120, 60, 40, 25 — сегменты отбрасываются в порядке
+  таблицы §12.2.6; `approval pending · esc to answer` не отбрасывается; цвет порога по целому
+  проценту; управляющие символы в профиле, режиме, модели и валюте не попадают в строку. Строка
+  REPL — `test/repl/after_turn_status_test.dart` (`ansi`, `plain`, нет на `raw`, после
+  `cancelled` и сбоя, промпт в очереди), headless — `test/headless/headless_usage_status_test.dart`.
 * **`cli/prompt-steer-during-turn`** (после MVP, C-03, agent-core-architecture §17.7.11): во время
   хода Ctrl+Enter и `/steer` шлют `_codelab/session/steer`, Enter — в очередь
   (`cli/prompt-queue-drains-after-turn` не меняется); строка `↳` в транскрипте и сегмент

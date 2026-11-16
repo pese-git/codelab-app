@@ -10,7 +10,8 @@
 - 0 — документы;
 - 1 — протокол и агент;
 - 2 — клиентский слой;
-- 3 — desktop и CLI.
+- 3 — desktop и CLI;
+- 4 — отмена посреди потока модели: задача 4.3 (D25, D26), отдельная ветка после merge PR #343 (решение пользователя 2026-11-17).
 
 Решения пользователя 2026-11-13 по Q1–Q9 внесены (design.md, «Решения пользователя 2026-11-13»).
 
@@ -149,5 +150,15 @@
 
 ## 4. Завершение
 
-- [ ] 4.1 `[desktop]` Ручная проверка на macOS (debug): встроенный агент с моделью с ценами и без цен; отмена хода; `/compact`; перезапуск app и загрузка сессии — `~`. Итог — в design.md.
-- [ ] 4.2 Документы и код не расходятся (`packages/dart/codelab_agent_core/AGENTS.md` §3, п. «е»): §13, §12.1, §12.2.6, §12.3 A7, матрица; устаревшее по D23 Т8 и артборд CliStatus по D23 Т7; `openspec validate add-usage-extension --strict`.
+- [x] 4.1 `[desktop]` Ручная проверка на macOS (debug): встроенный агент с моделью с ценами и без цен; отмена хода; `/compact`; перезапуск app и загрузка сессии — `~`. Итог — в design.md, D25 (2026-11-17): desktop, REPL и TUI совпали с журналом сессии; снимок `compaction` вручную не воспроизведён (`Nothing to compact.`), его покрывает фикстура `acp/compact-usage-context`; отмена посреди потока модели без usage провайдера даёт сумму без «~» — решение D26, задача 4.3.
+- [ ] 4.3 `[protocol]` (итерация 4, отдельная ветка после merge PR #343) `noUsage` у шага, прерванного отменой без usage провайдера (design.md, D26; agent-acp-server «Отмена посреди потока без usage провайдера», «Отмена посреди потока с частичным usage провайдера», «Ошибка модели без usage», «Отмена посреди инструмента»). Ядро не меняется: `AgentLoop` уже эмитит `StepEnded` для `aborted` с usage, полученным от провайдера (D26, «Где решается»). Поэтому метка — `[protocol]` (`codelab_agent_acp`, таблица меток выше), а не `[agent]`.
+  - **Красный тест 1** — `packages/dart/codelab_agent_acp/test/usage_bridge_test.dart`, по образцу `a priced step without tokens has cost "0"`. `StepEnded` со `stopReason: aborted` и `Usage.zero` на модели с ценами: у `step` `partial` — `["noUsage"]`, `cost` — `"0"`; после `TurnEnded` у `turn` и `session` `partial` содержит `noUsage`. `aborted` с `input > 0`: `noUsage` нет. `error` с `Usage.zero`: `noUsage` нет. Сейчас красный только первый случай, остальные фиксируют прежнее поведение.
+  - **Красный тест 2** — `packages/dart/codelab_agent_acp/test/usage_projection_test.dart`, сквозной через ядро на `server_harness`. Scripted-модель отвечает шагом со `stopReason: aborted` без `usage` (`ScriptedStreamFunction` поддерживает `aborted`); снимок `step` несёт `["noUsage"]`, снимок `turn` идёт до ответа `stopReason: cancelled`. Удобнее всего прервать поток настоящей `session/cancel` посреди ответа модели, если harness позволяет задержать поток. Способ — исполнителю.
+  - **Без правок ожиданий** остаются `cancel during exec: the turn snapshot is before cancelled` в `usage_projection_test.dart` и фикстура `acp/prompt-usage-cancelled`: шаг там завершён `toolUse` с usage 800/120, `noUsage` у него нет (D26). Если фикстура или тест покраснеют, это дефект реализации, а не повод править фикстуру.
+  - **Реализация** — `UsageAccounting.stepEnded` в `packages/dart/codelab_agent_acp/lib/src/usage_accounting.dart`: условие `succeeded` заменяется на «`stopReason` не `error`», комментарий — по-русски, со ссылкой на D26 вместо «ответ с ошибкой или отменой и нулём — не причина (D6)».
+  - **Проверки:** `fvm dart format`, `fvm dart analyze` и `fvm dart test` в `codelab_agent_acp`; `conformance:agent`, `conformance:embedded`, `protocol-conformance` — зелёные без правки фикстур.
+  - **Клиентский слой и desktop не меняются**: «~» и подсказка `agent sent no usage for some steps` уже выводятся по `noUsage` (D6, D24, D23 Т9 п. 1). Подсказка причин у стоимости при скрытых токенах не добавляется (Q20 (а), решение пользователя 2026-11-17).
+  - **После реализации** — повторить ручной сценарий отмены посреди потока из D25 и записать итог в D25.
+- [x] 4.2 Документы и код не расходятся (`packages/dart/codelab_agent_core/AGENTS.md` §3, п. «е»): §13, §12.1, §12.2.6, §12.3 A7, матрица; устаревшее по D23 Т8 и артборд CliStatus по D23 Т7; `openspec validate add-usage-extension --strict`.
+  - **Сделано 2026-11-17** (сверка с кодом `develop` после итерации 3; D26 описан как решённое поведение итерации 4): `agent-core/13-acp-adapter.md` §13.12 (агрегаты `UsageAccounting`, причины `partial`, `noUsage` у `aborted` — D26), §13.13 (снимки при отмене посреди инструмента), §13.16 (модульные тесты); `dart-agent-and-clients/12-1-view-model.md` — схема, §12.1.1 (`UsageView`, `UsageSnapshot`, `UsageDecoder`, `UsageFold`, функции `usage_format.dart`), §12.1.5 (модель и режим у хостов, п. 4a «Неполные суммы», п. 4b «Форматирование» D24, проектор — эскиз), §12.1.10; `12-2-cli-display-and-input.md` §12.2.6 (таблица по коду, `usageSegmentsOf`, строка REPL, очистка, настройки `status_line.*` — после MVP), §12.2.13 (`cli/status-line-usage` без ветки git, `test/tui/status_line_test.dart`, задачи 3.5, 3.9); `12-3-desktop-display.md` §12.3.1, §12.3.2 (`CodeLabSessionStatusBar`, `sessionStatusDataOf`, `ActiveSessionState.statusBar`), A7, §12.3.4, §12.3.7; `12-5-stream-json.md` (`lastTurnCost` нет в kit); `16-non-mvp-and-open-questions.md` §16.2 (итерация 4); `agent-parity-goals.md` — L-11, U-13 (ветка git не закрыта), D-09 (`— / есть`); D23 Т7, Т8.
+  - **Артборд CliStatus** не правится — решение пользователя 2026-11-17 (design.md, раздел «Решения пользователя 2026-11-17»; отступление — D12, D23 Т7).

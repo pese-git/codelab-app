@@ -888,6 +888,19 @@ OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, 
 | capability `usage: {"version": 1}` (change `add-usage-extension`, D3) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize` | клиент понимает `_codelab/session/usage`; агент объявляет ключ всегда, когда отвечает блоком D9 |
 | `_codelab/session/usage` (change `add-usage-extension`, D1, D2; соответствие `15-Extensibility.md` — D17) | уведомление агент → клиент, только соединениям, объявившим `usage`; поводы `step`, `turn` (до ответа `session/prompt`), `compaction` | снимок usage шага, хода и сессии (`tokens`, `cost` десятичной строкой с `currency`, `steps`, `turns`, `partial`), заполнение контекста (`used`, `size`, `compactAt`) и `seq` сессии для идемпотентности; для строки статуса клиента (L-11, U-13, D-09, §12.6); новых корневых полей и видов `sessionUpdate` нет |
 
+Агрегаты `_codelab/session/usage` считает `UsageAccounting` (`codelab_agent_acp/lib/src/usage_accounting.dart`)
+на сессию сервера: шаг — из `StepEnded`, итог хода — из `TurnEnded.usage`, сессия — сумма итогов
+ходов; стоимость — в целых микродолларах, на проводе — десятичная строка (change
+`add-usage-extension`, D4, D9). Причины неполноты `partial` (D6): `noPrice` — у модели шага нет
+цен при ненулевых токенах (у итога хода — ещё дети с токенами и нулевой стоимостью); `beforeLoad` —
+у сессии, открытой через `session/load` журнала с ответами модели; `noUsage` — у ответа модели со
+`stopReason`, отличным от `error`, с `input + output == 0`: провайдер usage не прислал. Шаг,
+прерванный отменой посреди потока модели (`aborted`) без usage провайдера, тоже получает `noUsage` —
+решение пользователя 2026-11-17 (D26), итерация 4 change, задача 4.3; до неё адаптер ставил
+`noUsage` только успешному ответу. Шаг с ошибкой (`error`) `noUsage` не получает: ответа модели не
+было. Ядро для этого не меняется: `AgentLoop` уже эмитит `StepEnded` для `aborted` с usage,
+который провайдер успел прислать.
+
 Вход по подписке (`authMethods` и `authenticate`, §13.3, §17.10.6) — стандартные поля ACP, не
 расширение. Хуки и плагины (§17.14) новых расширений протокола не вводят.
 
@@ -945,7 +958,8 @@ sequenceDiagram
     E->>C: terminal/release
     S-->>A: ToolCallFinished cancelled
     A-->>C: tool_call_update failed, outcome cancelled
-    S-->>A: TurnEnded cancelled
+    S-->>A: StepEnded и TurnEnded cancelled
+    A-->>C: _codelab/session/usage step, затем turn, если клиент объявил usage
     A-->>C: ответ id 9 stopReason cancelled
 ```
 
@@ -1037,7 +1051,7 @@ sequenceDiagram
 * `acp/config-model-options-from-endpoint` (golden, fake `/models`): `session/new` до ответа endpoint — опция `model` из конфига и кэша; после фонового обновления — один `config_option_update` с моделями endpoint в порядке §2.12.2; повторное обновление без изменений — уведомлений нет; модель текущей сессии, исчезнувшая из ответа, остаётся `currentValue` и в `options` (ACP-11, LLM-13).
 * `acp/config-effort-option` (golden): модель с рассуждением — опция `effort` третьей, `category: "thought_level"`, `currentValue` из `agent.effort`; `set_config_option effort=high` → ответ с полным снимком, запись `config_change`, следующий запрос несёт параметр рассуждения; смена на модель без рассуждения → опции `effort` нет, первый `agent_message_chunk` следующего хода — заметка §2.12.3 ровно один раз, в запросе параметра нет; `set_config_option effort` в этом состоянии → `-32602`; смена обратно → опция с `high`; `session/load` восстанавливает значение (ACP-10).
 * `acp/usage-and-redact-commands` (golden): `available_commands_update` содержит `usage` и `redact` сразу после `status`; `/usage` и `/redact layers` отвечают текстом §12.6.1 и §12.4.3 с `end_turn`; число записей журнала до и после не меняется, scripted LLM не вызвана (ACP-12).
-* Usage (change `add-usage-extension`, D13): фикстуры `acp/prompt-usage-steps`, `acp/prompt-usage-unpriced`, `acp/prompt-usage-cancelled`, `acp/compact-usage-context`, `acp/prompt-usage-compaction-off`, `acp/session-load-usage-partial`, у которых `extensions` содержит `usage` (D19 п. 8); ключ `usage` в `acp/initialize-codelab-extensions`; фикстуры без объявления `usage` кадров `_codelab/session/usage` не содержат.
+* Usage (change `add-usage-extension`, D13): фикстуры `acp/prompt-usage-steps`, `acp/prompt-usage-unpriced`, `acp/prompt-usage-cancelled`, `acp/compact-usage-context`, `acp/prompt-usage-compaction-off`, `acp/session-load-usage-partial`, у которых `extensions` содержит `usage` (D19 п. 8); ключ `usage` в `acp/initialize-codelab-extensions`; фикстуры без объявления `usage` кадров `_codelab/session/usage` не содержат. Модульно — `packages/dart/codelab_agent_acp/test/usage_bridge_test.dart` (агрегаты, причины `partial`, микродоллары) и `usage_projection_test.dart` (порядок кадров, `seq`, отмена посреди инструмента и посреди потока модели, сбой провайдера, переход сессии к новому соединению, `acp.usage.sent`). Отмена посреди потока без usage провайдера (`noUsage`, D26) проверяется только модульными тестами: шаг `aborted` без `session/cancel` клиента не является поведением ACP, и фикстуры для него нет.
 
 ---
 
