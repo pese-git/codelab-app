@@ -14,6 +14,7 @@ import 'connection/outbound_queue.dart';
 import 'connection/pending_requests.dart';
 import 'prompt_content.dart';
 import 'session_bridge.dart';
+import 'usage_accounting.dart';
 
 /// Таймауты запросов агента к клиенту (§13.9).
 final class AcpTimeouts {
@@ -302,6 +303,13 @@ final class _Connection {
       _logger.log(LogLevel.warning, 'acp.client_capabilities.absent');
     }
     _client = request.clientCapabilities;
+    // D14, D18 Т9, D19 п. 7: что клиент согласовал, видно в журнале (иначе
+    // «нет уведомлений usage» не отличить от ошибки согласования).
+    _logger.log(
+      LogLevel.debug,
+      'acp.extensions.negotiated',
+      fields: {'keys': _negotiatedKeys(request.clientCapabilities.meta)},
+    );
     final persistent = _server._persistent;
     final response = acp.InitializeResponse(
       protocolVersion: const acp.ProtocolVersion(1),
@@ -339,6 +347,8 @@ final class _Connection {
   /// `maxDepth` — только если ядро включило субагентов: [subagents] читается
   /// живым геттером `AgentRuntime.subagents` в момент `initialize` (D37), так
   /// что перезагрузка конфига меняет блок для следующих соединений.
+  /// `usage` объявляется всегда рядом с `tasks` (change `add-usage-extension`,
+  /// D3, D9).
   /// `subagentToolCalls` идёт рядом с `subagents` (D47 Т12): вызовы потомков
   /// проецируются только при включённых субагентах, а состав блока от того,
   /// что объявил клиент, не зависит; согласие клиента мост читает отдельно
@@ -357,9 +367,32 @@ final class _Connection {
             : {'version': 1, 'maxDepth': subagents.maxDepth}),
         'subagentToolCalls': ?(subagents == null ? null : {'version': 1}),
         'tasks': {'version': 1},
+        // Всегда, когда агент отвечает блоком (D3, D9): `usage` не зависит от
+        // субагентов; согласие клиента мост читает через `usageConsent`.
+        'usage': {'version': 1},
       },
     };
   }
+
+  /// Ключи `_meta.codelab` клиента, признанные согласованными (D14, D19 п. 7).
+  ///
+  /// Признаётся известный агенту ключ, согласованный по [codelabKeyAgreed]
+  /// (объект с целым `version: 1`); неизвестные ключи и другие версии
+  /// пропускаются, как и требует forward compatibility
+  /// (`15-Extensibility.md`).
+  static List<String> _negotiatedKeys(Map<String, Object?>? clientMeta) {
+    return [
+      for (final key in _knownExtensionKeys)
+        if (codelabKeyAgreed(clientMeta, key)) key,
+    ];
+  }
+
+  static const _knownExtensionKeys = [
+    'subagents',
+    'subagentToolCalls',
+    'tasks',
+    'usage',
+  ];
 
   /// `session/new` (§13.4) в объёме этапа 4.
   Future<Reply> _sessionNew(Object? params) async {
@@ -522,6 +555,7 @@ final class _Connection {
       final bridge = SessionBridge(
         owner: this,
         sink: _notify,
+        usageSink: _notifyFrame,
         link: link,
         clock: _server.clock,
         logger: _logger,
@@ -553,6 +587,7 @@ final class _Connection {
     final bridge = SessionBridge(
       owner: this,
       sink: _notify,
+      usageSink: _notifyFrame,
       link: link,
       clock: _server.clock,
       logger: _logger,
@@ -607,6 +642,7 @@ final class _Connection {
         requests: _requests,
         capabilities: _client!,
         sink: _notify,
+        usageSink: _notifyFrame,
       );
       // Открытая сессия: серверы клиента заменяются без пересоздания (D11).
       // Без хода набор применяется до ответа; во время хода метод
@@ -636,7 +672,9 @@ final class _Connection {
       } on ProjectConfigException catch (error) {
         throw _projectConfigInvalid(error, cwd: cwd, sessionId: id);
       }
-      bridge = wiring.bridge..attach(session);
+      bridge = wiring.bridge
+        ..attach(session)
+        ..markLoadedFromJournal();
       _server._sessions[id] = bridge;
     }
     // Кадры живого хода, придержанные на время реплея дерева, уходят после
@@ -827,6 +865,12 @@ final class _Connection {
         ),
       ),
     );
+  }
+
+  /// Кадр вне `session/update` (`_codelab/session/usage`) — в ту же очередь,
+  /// чтобы порядок с `session/update` держала она (D18 Т5, R7).
+  void _notifyFrame(acp.JsonRpcMessage frame) {
+    unawaited(_outbound.enqueue(frame));
   }
 
   static bool _isAbsolute(String path) => path.startsWith('/');

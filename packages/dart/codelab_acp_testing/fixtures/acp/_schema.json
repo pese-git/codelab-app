@@ -176,7 +176,19 @@
       "properties": {
         "provider": {"type": "string"},
         "modelId": {"type": "string"},
-        "contextWindow": {"type": "integer"}
+        "contextWindow": {"type": "integer"},
+        "cost": {"$ref": "#/$defs/llmModelCost"}
+      }
+    },
+    "llmModelCost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output"],
+      "properties": {
+        "input": {"type": "number", "minimum": 0},
+        "output": {"type": "number", "minimum": 0},
+        "cacheRead": {"type": "number", "minimum": 0},
+        "cacheWrite": {"type": "number", "minimum": 0}
       }
     },
     "llmStep": {

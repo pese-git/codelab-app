@@ -345,9 +345,46 @@ void main() {
     expect(frames.map((f) => f['trigger']), ['step', 'turn']);
     expect(asMap(frames[0]['step'])['partial'], ['noUsage']);
     expect(asMap(frames.last['session'])['partial'], ['noUsage']);
-    // Цены у модели есть, но считать нечего: стоимости нет, а не `"0"`.
-    expect(asMap(frames.last['session']), isNot(contains('cost')));
+    // Цены у модели есть, токенов нет: `cost` присутствует всегда, `"0"`
+    // (D6, дельта agent-acp-server).
+    expect(asMap(frames[0]['step'])['cost'], '0');
+    expect(asMap(frames.last['turn'])['cost'], '0');
+    expect(asMap(frames.last['session'])['cost'], '0');
+    expect(frames.last['currency'], 'USD');
   });
+
+  // Отрицательная цена модели — «цены нет» (D6): ход идёт штатно, `cost` на
+  // проводе нет, причина `noPrice`; исключения в обработчике события моста
+  // нет (защита `_micros`, §12.1.5). Бесконечную цену через ядро не
+  // проверить: журнал сессии не пишет `Infinity` (ошибка `storage`, зона
+  // ядра), она покрыта в `usage_bridge_test.dart`.
+  for (final (name, input) in [('negative', -3000.0)]) {
+    test('a $name model price is noPrice and the turn ends normally', () async {
+      final sessionId = await ready(
+        model: ModelRef(
+          provider: 'scripted',
+          id: 'scripted-1',
+          api: ProviderApi.openaiChat,
+          baseUrl: Uri.parse('http://localhost:8080/v1'),
+          contextWindow: 32768,
+          maxOutputTokens: 4096,
+          cost: ModelCost(input: input, output: 15),
+        ),
+        steps: [
+          textStep('Привет', const {'input': 100, 'output': 20}),
+        ],
+      );
+
+      final response = await h.prompt(sessionId, 'Привет');
+      expect(response.resultMap, {'stopReason': 'end_turn'});
+      final frames = usageOf(h.client);
+      expect(frames.map((f) => f['trigger']), ['step', 'turn']);
+      expect(frames.last, isNot(contains('currency')));
+      expect(asMap(frames.first['step']), isNot(contains('cost')));
+      expect(asMap(frames.first['step'])['partial'], ['noPrice']);
+      expect(asMap(frames.last['session']), isNot(contains('cost')));
+    });
+  }
 
   // «Отмена посреди инструмента» (D7; фикстура `acp/prompt-usage-cancelled`):
   // потраченное до отмены — настоящий расход; снимок turn — после
@@ -429,6 +466,7 @@ void main() {
     expect(frames.map((f) => f['trigger']), ['step', 'step', 'turn']);
     final failedStep = asMap(frames[1]['step']);
     expect(failedStep['tokens'], tokens());
+    expect(failedStep['cost'], '0');
     expect(failedStep, isNot(contains('partial')));
     expect(asMap(frames.last['turn'])['tokens'], tokens(100, 20));
     expect(
@@ -634,7 +672,7 @@ void main() {
   );
 
   // Q14 (б), D14: каждая отправка — debug `acp.usage.sent` с
-  // `{session_id, seq, trigger}` и без токенов, денег и текстов; уведомление
+  // `{session_id, seq, trigger, turn_id}` и без токенов, денег и текстов; уведомление
   // не несёт текстов сообщений (маркер утечки в запросе и ответе).
   test('every send is a debug acp.usage.sent without tokens and money, and '
       'the notification has no secrets', () async {
@@ -654,6 +692,7 @@ void main() {
         'session_id': sessionId,
         'seq': frames[i]['seq'],
         'trigger': frames[i]['trigger'],
+        'turn_id': frames[i]['turnId'],
       });
     }
     expect(jsonEncode(frames), isNot(contains(leak)));

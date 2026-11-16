@@ -595,6 +595,46 @@ void main() {
       expect(() => parse({'output': 3}), failsAt(r'$.llm.model.cost.input'));
     });
 
+    // Отрицательная или не конечная цена бессмысленна и ломает расчёт
+    // стоимости у потребителя: отказ загрузки (D19 п. 6). Отрицательная — с
+    // путём ключа; не конечная (JSON её не выражает, `1e999` декодируется в
+    // Infinity) — отказом канонизации.
+    test('a negative price fails with its path, a non-finite one fails', () {
+      expect(
+        () => parse({'input': -1, 'output': 15}),
+        failsAt(r'$.llm.model.cost.input'),
+      );
+      // Не конечное число отсекает канонизация фикстуры до разбора ключей.
+      expect(
+        () => parse({'input': 3, 'output': double.infinity}),
+        throwsA(isA<FixtureFormatException>()),
+      );
+      expect(
+        () => parse({'input': 3, 'output': 15, 'cacheRead': double.nan}),
+        throwsA(isA<FixtureFormatException>()),
+      );
+      expect(
+        () => parse({'input': 3, 'output': 15, 'cacheWrite': -0.5}),
+        failsAt(r'$.llm.model.cost.cacheWrite'),
+      );
+    });
+
+    test('a zero price is accepted', () {
+      expect(parse({'input': 0, 'output': 0}).llm!.model, contains('cost'));
+    });
+
+    test('the schema forbids negative prices', () {
+      final schema =
+          jsonDecode(File('fixtures/acp/_schema.json').readAsStringSync())
+              as Map<String, Object?>;
+      final props =
+          ((schema[r'$defs']! as Map)['llmModelCost']! as Map)['properties']!
+              as Map;
+      for (final key in ['input', 'output', 'cacheRead', 'cacheWrite']) {
+        expect((props[key]! as Map)['minimum'], 0, reason: key);
+      }
+    });
+
     test('cost must be an object', () {
       expect(() => parse(3), failsAt(r'$.llm.model.cost'));
     });

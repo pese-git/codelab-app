@@ -1277,6 +1277,24 @@ final class _Builder {
     final output = _num([...at, 'cost_output']);
     final read = _num([...at, 'cost_cache_read']);
     final write = _num([...at, 'cost_cache_write']);
+    // Цена — конечное число не меньше нуля (add-usage-extension, решение
+    // 2026-11-16, D20 п. 2): `inf`/`nan` достижимы из TOML/YAML и дали бы
+    // бесконечную или NaN-стоимость в usage и бюджете.
+    var pricesOk = true;
+    for (final (key, price) in [
+      ('cost_input', input),
+      ('cost_output', output),
+      ('cost_cache_read', read),
+      ('cost_cache_write', write),
+    ]) {
+      if (price != null && (!price.isFinite || price < 0)) {
+        _bad([...at, key], 'must be a finite number not less than 0');
+        pricesOk = false;
+      }
+    }
+    if (!pricesOk) {
+      return null;
+    }
     ModelCost? cost;
     if ((input == null) != (output == null) ||
         (input == null && (read != null || write != null))) {

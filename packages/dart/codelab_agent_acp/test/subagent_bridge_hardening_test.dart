@@ -34,6 +34,7 @@ void main() {
     sent = [];
     return SessionBridge(
       owner: Object(),
+      usageSink: (_) {},
       sink: (n) => sent.add(n.update),
       link: channel.link,
       clock: channel.clock,

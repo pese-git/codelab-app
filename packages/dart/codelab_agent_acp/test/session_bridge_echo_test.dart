@@ -36,6 +36,7 @@ void main() {
     log = [];
     bridge = SessionBridge(
       owner: Object(),
+      usageSink: (_) {},
       sink: (n) {
         sent.add(n.update);
         log.add(_label(n.update));

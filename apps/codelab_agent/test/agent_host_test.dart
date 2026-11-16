@@ -133,6 +133,33 @@ void main() {
       );
     });
 
+    // Неверная цена модели — ошибка использования (код 64) с путём поля
+    // (acp-golden-fixtures «Неверная цена в --llm-script»; D20 п. 2 change
+    // `add-usage-extension`). Регрессионный: `LlmScriptException` →
+    // `UsageError` уже в `agent_host.dart`/`serve_config.dart`.
+    test('a negative model cost is a usage error with the field path', () {
+      final script = writeScript({
+        'model': {
+          'cost': {'input': 1, 'output': -0.5},
+        },
+        'steps': <Object?>[],
+      });
+      expect(
+        () => buildHost(
+          cwd: temp.path,
+          scriptedOptions(script),
+          logger: RecordingLogger(),
+        ),
+        throwsA(
+          isA<UsageError>().having(
+            (e) => e.message,
+            'message',
+            contains('llm.model.cost.output'),
+          ),
+        ),
+      );
+    });
+
     test('a missing script file is a usage error', () async {
       expect(
         () => buildHost(
@@ -392,5 +419,37 @@ void main() {
         }
       },
     );
+
+    // Расширение `usage` (задача 1.9 change `add-usage-extension`; Q6 (а),
+    // D3): объявление не зависит от транспорта и записывается одним ключом
+    // `usage` в `_meta.codelab` ответа `initialize`. Регрессионный: правка
+    // хоста не нужна, ключ добавляет `codelab_agent_acp` (задача 1.7).
+    test('initialize: usage is declared over stdio and over ws', () async {
+      final script = writeScript({'steps': <Object?>[]});
+
+      for (final transport in ['--stdio', '--ws']) {
+        final (_, peer) = await start(
+          scriptedOptions(script, transport: transport),
+        );
+        final init = await peer.call('initialize', {
+          'protocolVersion': 1,
+          'clientCapabilities': {
+            '_meta': {
+              'codelab': {
+                'usage': {'version': 1},
+              },
+            },
+          },
+        });
+
+        final caps = init['agentCapabilities']! as Map<String, Object?>;
+        final codelab = (caps['_meta']! as Map<String, Object?>)['codelab'];
+        expect(
+          codelab,
+          containsPair('usage', {'version': 1}),
+          reason: transport,
+        );
+      }
+    });
   });
 }

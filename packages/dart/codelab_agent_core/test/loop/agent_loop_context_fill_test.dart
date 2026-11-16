@@ -2,7 +2,6 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/compaction/estimate.dart';
 import 'package:codelab_agent_core/src/compaction/settings.dart';
 import 'package:codelab_agent_core/src/loop/agent_loop.dart';
-import 'package:codelab_agent_core/src/loop/loop_config.dart';
 import 'package:codelab_agent_core/src/tools/builtin/read.dart';
 import 'package:test/test.dart';
 
@@ -107,7 +106,7 @@ void main() {
               .config(contextWindowCap: 20000)
               .copyWith(
                 contextEstimator: estimateLlmContext,
-                compaction: overrides,
+                compaction: (value: overrides),
               ),
         );
 
@@ -120,6 +119,20 @@ void main() {
         expect(fill.compactAt, inExclusiveRange(0, fill.window));
       },
     );
+
+    test('copyWith(compaction: (value: null)) сбрасывает параметры сжатия, '
+        'а без аргумента сохраняет (D18)', () async {
+      final h = await readHarness([textStep('done')]);
+      final withCompaction = h.config().copyWith(
+        compaction: (value: const CompactionOverrides(reserveTokens: 4000)),
+      );
+
+      expect(withCompaction.copyWith().compaction, isNotNull);
+      expect(
+        withCompaction.copyWith(compaction: (value: null)).compaction,
+        isNull,
+      );
+    });
 
     test(
       'compaction == null: compactAt == null (автосжатие выключено)',
@@ -194,7 +207,7 @@ void main() {
         config: withEstimator
             ? cfg.copyWith(
                 contextEstimator: estimateLlmContext,
-                compaction: const CompactionOverrides(),
+                compaction: (value: const CompactionOverrides()),
               )
             : cfg,
       );
