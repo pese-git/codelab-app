@@ -20,6 +20,7 @@ import '../config/config_issue.dart';
 import '../config/config_reload_plan.dart';
 import '../config/config_source.dart';
 import '../config/core_config.dart';
+import '../config/folder_session_config.dart';
 import '../config/host_settings.dart';
 import '../config/project_config.dart';
 import '../config/key_path.dart' show pathComponents, samePath;
@@ -276,10 +277,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
   final _outsideRootLogged = <String>{};
 
   /// Папки, для которых `config.session.project` уже записан: одна запись на
-  /// папку за жизнь рантайма, как у [_outsideRootLogged] (D21).
+  /// папку за жизнь рантайма, как у [_outsideRootLogged] (D21). Событие
+  /// `config.session.restart_pending` этим набором не ограничено: оно пишется
+  /// на каждое открытие с подстановкой, потому что называет действие
+  /// пользователя (design.md change `defer-restart-keys-in-folder-sessions`,
+  /// D6).
   final _projectLogged = <String>{};
 
   /// Папки, для которых `config.session.process_keys_ignored` уже записан.
+  /// Ключи берутся по паре снимков загрузки папки (D8): глобальная правка
+  /// после старта папке не приписывается.
   final _processKeysLogged = <String>{};
 
   /// Отменяется в [dispose]: подключение MCP-серверов не должно пережить
@@ -891,7 +898,16 @@ final class AgentRuntimeImpl implements AgentRuntime {
   }
 
   /// Тройка сессии папки, отличной от корня запуска (D21): `loadForProject`,
-  /// `validateSnapshot`, `modelsFor` — по порядку, без кэша.
+  /// подстановка отложенного, `validateSnapshot`, `modelsFor` — по порядку,
+  /// без кэша.
+  ///
+  /// Подстановка ([deferForFolderSession], design.md change
+  /// `defer-restart-keys-in-folder-sessions`, D2–D5): то, что перезагрузка
+  /// корня отложила бы до перезапуска (R0-1, R0-4), сессия папки получает из
+  /// применённого снимка [start], а не из свежепрочитанных файлов. Иначе
+  /// сессия другой папки обходила бы правило «только после перезапуска».
+  /// База — [start], захваченный до `await loadForProject`: перезагрузка
+  /// корня, завершившаяся во время загрузки, базу не меняет (D9).
   ///
   /// Любая проблема — [ProjectConfigException] (fail closed): ни снимок корня,
   /// ни снимок без проекта не подставляются, потому что сессия без запретов
@@ -950,8 +966,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
     if (_disposed) {
       throw const CancelledException(ShutdownCancel());
     }
-    final config = result.config;
-    if (config == null || result.issues.isNotEmpty) {
+    if (result.config == null || result.issues.isNotEmpty) {
       throw _refuseProject(
         canonical,
         logger,
@@ -967,6 +982,26 @@ final class AgentRuntimeImpl implements AgentRuntime {
               ],
       );
     }
+    // Без `ConfigSource` у рантайма нет `values` применённого снимка (они
+    // приходят из `initial` источника), а значит, нет и сравнения: пустая
+    // карта дала бы ложный отказ по правам и ложный `restart_pending`. Такой
+    // хост перезагрузки не имеет, и подставлять нечего. Реальные хосты
+    // реализуют оба порта одним классом (`FileConfigSource`).
+    final deferred = services.config == null
+        ? FolderSessionAccepted(result.config!)
+        : deferForFolderSession(
+            applied: start.config,
+            appliedValues: start.values,
+            folder: result,
+          );
+    final FolderSessionAccepted(:config, :restartKeys) = switch (deferred) {
+      final FolderSessionAccepted accepted => accepted,
+      FolderSessionRefused(:final problem) => throw _refuseProject(
+        canonical,
+        logger,
+        [problem],
+      ),
+    };
     final recheck = config.validateSnapshot();
     if (recheck.isNotEmpty) {
       throw _refuseProject(canonical, logger, recheck);
@@ -999,16 +1034,28 @@ final class AgentRuntimeImpl implements AgentRuntime {
         fields: {
           'session_id': id.value,
           'cwd': cwd,
-          'config_root': start.config.projectRoot,
+          // Корень процесса, а не источник конфигурации: конфигурация сессии
+          // читается из слоёв её `cwd` (D6; прежнее имя `config_root`
+          // выдавало корень за источник).
+          'process_root': start.config.projectRoot,
           'trusted':
               canonicalResolved &&
               config.trustedProjects.any((r) => samePath(r, canonical)),
         },
       );
     }
-    // Ключи процесса из слоёв папки не применяются (таблица D21): сравниваются
-    // только ключи, которые папка задаёт иначе, чем применённый снимок.
-    final ignored = _ignoredProcessKeys(start.values, result.values);
+    if (restartKeys.isNotEmpty) {
+      // Без значений и без `_projectLogged`: это действие пользователя
+      // («Restart agent»), `session_id` связывает его с сессией (D6, §16).
+      logger.log(
+        LogLevel.warning,
+        'config.session.restart_pending',
+        fields: {'session_id': id.value, 'cwd': cwd, 'keys': restartKeys},
+      );
+    }
+    // Ключи процесса из слоёв папки не применяются (таблица D21): к папке
+    // приписываются только ключи, которые задают её проектные слои (D8).
+    final ignored = _ignoredProcessKeys(result);
     if (ignored.isNotEmpty && _processKeysLogged.add(folder)) {
       logger.log(
         LogLevel.warning,
@@ -1032,12 +1079,21 @@ final class AgentRuntimeImpl implements AgentRuntime {
   }
 
   /// Ключи процесса (`HostSettings`, `exec.*`, `compaction.enabled`,
-  /// `trusted_projects`), которые [folder] задаёт иначе, чем [applied]; только
+  /// `trusted_projects`), которые задают проектные слои папки: значение в
+  /// `values` загрузки отличается от `withoutProjectValues` той же загрузки
+  /// (design.md change `defer-restart-keys-in-folder-sessions`, D8). Только
   /// имена, без значений (§16).
-  static List<String> _ignoredProcessKeys(
-    Map<String, Object?> applied,
-    Map<String, Object?> folder,
-  ) {
+  ///
+  /// Почему не сравнение с применённым снимком (прежнее D21): глобальная
+  /// правка файла после старта давала ложное предупреждение, хотя папка ключ
+  /// не задавала. Без проектных слоёв (`withoutProject == null`) ключей нет.
+  static List<String> _ignoredProcessKeys(ConfigLoadResult load) {
+    final bare = load.config?.withoutProject;
+    if (bare == null) {
+      return const [];
+    }
+    final applied = load.config?.withoutProjectValues ?? const {};
+    final folder = load.values;
     const sections = [
       'secrets',
       'sessions',

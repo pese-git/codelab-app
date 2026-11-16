@@ -273,13 +273,13 @@ _SnapshotPlan _planSnapshot(
     }
     final isNew = !previousProviders.contains(id);
     final groupChanged =
-        isNew || diff.any((key) => _providerGroupKey(key, id) != null);
+        isNew || diff.any((key) => providerGroupField(key, id) != null);
     if (!groupChanged) {
       continue;
     }
     final withKey =
-        (!isNew && _providerWithKey(previousValues, id)) ||
-        _providerWithKey(nextValues, id);
+        (!isNew && providerWithKey(previousValues, id)) ||
+        providerWithKey(nextValues, id);
     if (!withKey) {
       continue;
     }
@@ -289,7 +289,7 @@ _SnapshotPlan _planSnapshot(
       newDeferredProviders.add(id);
     }
     for (final key in diff) {
-      final inGroup = _providerGroupKey(key, id) != null;
+      final inGroup = providerGroupField(key, id) != null;
       if (inGroup || (isNew && _isUnderProvider(key, id))) {
         reverted.add(key);
       }
@@ -409,7 +409,7 @@ String? _coveredDisplay(
     return key;
   }
   for (final id in deferred.providers) {
-    if (_providerGroupKey(key, id) != null ||
+    if (providerGroupField(key, id) != null ||
         (!previousProviders.contains(id) && _isUnderProvider(key, id))) {
       return KeyPath('providers').child(id).value;
     }
@@ -437,7 +437,12 @@ bool _isUnderProvider(String key, String id) {
 
 /// Поле группы адреса и аутентификации провайдера [id], если [key] лежит
 /// в ней; иначе `null`.
-String? _providerGroupKey(String key, String id) {
+///
+/// Внутри пакета (не экспортируется из бареля): по этому же правилу
+/// `deferForFolderSession` ищет листы группы при определении перекрытия
+/// проектным слоем (design.md change `defer-restart-keys-in-folder-sessions`,
+/// D3), второй копии списка полей нет.
+String? providerGroupField(String key, String id) {
   final prefix = '${KeyPath('providers').child(id).value}.';
   if (!key.startsWith(prefix)) {
     return null;
@@ -451,10 +456,14 @@ String? _providerGroupKey(String key, String id) {
   return null;
 }
 
+// Внутри пакета (не экспортируется из бареля): `deferForFolderSession` применяет
+// её к значениям полного снимка папки, где ключ даёт проектный слой (D3).
+// Второй копии правила «с ключом» нет.
+
 /// Провайдер «с ключом» по значениям файла (D8, R0-4): ссылка определяется
 /// по значению, а не по имени. `${VAR}` в `base_url` тоже делает провайдера
 /// «с ключом»: значение переменной может нести токен в query или userinfo.
-bool _providerWithKey(Map<String, Object?> values, String id) {
+bool providerWithKey(Map<String, Object?> values, String id) {
   final prefix = KeyPath('providers').child(id).value;
   if (values['$prefix.api_key_secret'] != null ||
       values['$prefix.api_key_env'] != null) {
