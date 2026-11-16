@@ -18,7 +18,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 ## ADDED Requirements
 
 ### Requirement: Страница «Agents & modes» только для чтения
-Страница «Agents & modes» SHALL вычислять доступ так же, как «Providers» и «MCP servers»: `resolveSettingsAccess` для профиля текущего подключения, без подключения — для профиля по умолчанию; папка — папка сессии в фокусе, иначе выбранный проект, иначе без папки (требование «Доступ к настройкам агента на страницах Providers и MCP servers»). Смена подключения или папки SHALL перечитывать доступ и снимок.
+Страница «Agents & modes» SHALL вычислять доступ так же, как «Providers» и «MCP servers»: `resolveSettingsAccess` для профиля текущего подключения, без подключения — для профиля по умолчанию; папка — папка сессии в фокусе, иначе выбранный проект, иначе без папки (требование «Доступ к настройкам агента на страницах Providers и MCP servers»). Смена подключения или папки SHALL перечитывать доступ и снимок, в том числе смена папки сессии в фокусе при открытых настройках без смены профиля (design.md, D11).
 
 Для `RemoteReadOnly` и `NotManaged` страница НЕ SHALL читать локальный конфиг и файлы определений, НЕ SHALL показывать блоков режима, effort и таблицы определений и SHALL показывать InfoBar уровня `warning` `agents-modes-read-only`: `Read-only: this agent runs on <scheme://host:port>. Change its modes and agents on that host: codelab config set, .codelab/agents.` или `Agent settings are managed by <agentName>.` (решение пользователя 2026-11-16, Q5 (а)).
 
@@ -35,9 +35,11 @@ Composition root SHALL делать видимыми страницы «Connecti
 ### Requirement: Режим разрешений новой сессии на странице «Agents & modes»
 Блок «Default permission mode» SHALL показывать радиогруппу `plan`, `ask`, `standard`, `accept-edits`, `bypass` с выбранным итоговым режимом снимка и его источником (`agents-modes-mode-source`: `default`, `user`, `project`, `local` и т. п.) и неактивную строку `autopilot` с текстом `Only as a launch flag of the agent (codelab-agent serve --permission-mode autopilot); never saved in config.` Значение `autopilot` НЕ SHALL записываться никогда.
 
-Выбор режима, кроме `bypass`, SHALL записывать `SetValue('permissions.mode', <id>)` одним `AgentConfigStore.apply` в цель переключателя `agents-modes-target` (требование «Цель записи на странице «Agents & modes»»). Выбор `bypass` SHALL сначала открывать `ContentDialog` `agents-modes-bypass-confirm` с заголовком `Use bypass for new sessions?`; запись SHALL выполняться только после «Use bypass»; «Cancel» и Esc SHALL возвращать выбор к итоговому режиму без записи (решение пользователя 2026-11-16, Q4 (б)).
+Выбор режима, кроме `bypass`, SHALL записывать `SetValue('permissions.mode', <id>)` одним `AgentConfigStore.apply` в цель переключателя `agents-modes-target` (требование «Цель записи на странице «Agents & modes»»). Выбор `bypass` SHALL сначала открывать `ContentDialog` `agents-modes-bypass-confirm` с заголовком `Use bypass for new sessions?` и текстом `Only critical commands, changes to the agent's configuration and network tools still ask. Commands run without asking and can reach the network too. Use bypass only in a disposable checkout.` (решение пользователя 2026-11-16, Q13 (а); design.md, D15); запись SHALL выполняться только после «Use bypass»; «Cancel» и Esc SHALL возвращать выбор к итоговому режиму без записи (решение пользователя 2026-11-16, Q4 (б)).
 
-После `ConfigSaved` с `permissions.mode` в `restartRequiredKeys` страница SHALL перечитывать снимок и показывать баннер `agents-modes-banner`: `Saved. New sessions use <mode> after Restart agent.`, если агент профиля подключён, иначе `Saved. New sessions use <mode> when the agent starts.` Страница НЕ SHALL менять режим открытых сессий и НЕ SHALL отправлять агенту `session/set_mode` или `session/set_config_option` (решение пользователя 2026-11-16, Q2 (а)).
+Подтверждение SHALL быть привязано к состоянию на момент открытия диалога: номеру загрузки и цели записи (design.md, D17). Если к «Use bypass» сменились загрузка, доступ, папка или цель, запись НЕ SHALL выполняться, а страница SHALL показывать баннер `agents-modes-banner` `Settings changed while the dialog was open; bypass was not saved.` и писать `agents_modes.save_failed` с `outcome: stale`. Если цели записи нет в снимке, запись любого режима и effort НЕ SHALL выполняться, страница SHALL показывать баннер `Cannot save: the target config file is not available.` и НЕ SHALL подменять цель на `user`.
+
+После `ConfigSaved` с `permissions.mode` в `restartRequiredKeys` страница SHALL перечитывать снимок и строить баннер `agents-modes-banner` по действующему значению нового снимка (design.md, D16): если оно равно записанному — `Saved. New sessions use <mode> after Restart agent.`, когда агент профиля подключён, иначе `Saved. New sessions use <mode> when the agent starts.`; если оно перекрыто другим слоем или сужено недоверенным проектом — баннер уровня `warning` `Saved to <target>; <source> overrides it: new sessions use <effective>` с тем же хвостом про перезапуск. Баннер НЕ SHALL утверждать, что новые сессии получат записанное значение, если действующее от него отличается. Страница НЕ SHALL менять режим открытых сессий и НЕ SHALL отправлять агенту `session/set_mode` или `session/set_config_option` (решение пользователя 2026-11-16, Q2 (а)).
 
 Если итог загрузки содержит предупреждение `config.project.untrusted_key` для `permissions.mode`, страница SHALL показывать InfoBar `agents-modes-mode-narrowed` уровня `warning` с итоговым режимом: `This project is not trusted, so its config can only make the mode stricter. New sessions here use <effective>.` Итог «`ask` с запретом `write` и `exec`» SHALL показываться как `ask (edits and commands blocked by plan)`.
 
@@ -55,6 +57,30 @@ Composition root SHALL делать видимыми страницы «Connecti
 - **WHEN** пользователь выбирает `bypass` и нажимает «Use bypass»
 - **THEN** цель записи содержит `permissions.mode: bypass`, журнал содержит `agents_modes.mode_changed` с `mode: bypass`
 
+#### Scenario: Текст подтверждения bypass
+- **WHEN** пользователь выбирает `bypass`
+- **THEN** `agents-modes-bypass-confirm` содержит `Commands run without asking and can reach the network too.` и `Use bypass only in a disposable checkout.`, файл конфига ещё не изменён
+
+#### Scenario: Смена доступа при открытом диалоге bypass
+- **WHEN** диалог `agents-modes-bypass-confirm` открыт, подключение переходит на профиль `wss://devbox:7420/acp` (или папка сессии в фокусе меняется), и пользователь нажимает «Use bypass»
+- **THEN** ни один файл конфига не изменён, диалог закрыт, журнал содержит `agents_modes.save_failed` с `outcome: stale`, `agents_modes.mode_changed` нет
+
+#### Scenario: Смена цели при открытом диалоге bypass
+- **WHEN** диалог открыт при цели «All projects», цель переключается на «This project only», и пользователь нажимает «Use bypass»
+- **THEN** записи нет, баннер `agents-modes-banner` содержит `bypass was not saved`
+
+#### Scenario: Нет целевого слоя
+- **WHEN** цель записи «This project only», но слоя `projectLocal` этой папки нет в снимке, и пользователь выбирает `plan`
+- **THEN** ни `<project>/.codelab/config.local.yaml`, ни `$CODELAB_HOME/config.yaml` не изменены, баннер содержит `Cannot save`, журнал содержит `agents_modes.save_failed` с `outcome: rejected`
+
+#### Scenario: Перекрытое значение после записи
+- **WHEN** выбран проект `/work/demo`, его `.codelab/config.local.yaml` задаёт `permissions.mode: plan`, цель — «All projects», агент подключён, и пользователь выбирает `accept-edits`
+- **THEN** `$CODELAB_HOME/config.yaml` содержит `permissions.mode: accept-edits`, баннер уровня `warning` содержит `Saved to All projects;`, `overrides it: new sessions use plan` и `after Restart agent`, но не содержит `New sessions use accept-edits`
+
+#### Scenario: Суженное значение после записи
+- **WHEN** папка проекта не в `trusted_projects`, её `config.local.yaml` задаёт `plan`, цель — «All projects», и пользователь выбирает `ask`
+- **THEN** `$CODELAB_HOME/config.yaml` содержит `permissions.mode: ask`, баннер уровня `warning` содержит `the untrusted project overrides it: new sessions use ask (edits and commands blocked by plan)`, InfoBar `agents-modes-mode-narrowed` показан
+
 #### Scenario: Недоверенный проект не смягчает режим
 - **WHEN** пользовательский слой задаёт `ask`, папка проекта не в `trusted_projects`, а `<project>/.codelab/config.local.yaml` задаёт `bypass`
 - **THEN** выбран `ask`, показан `agents-modes-mode-narrowed` с `New sessions here use ask`
@@ -64,7 +90,7 @@ Composition root SHALL делать видимыми страницы «Connecti
 - **THEN** итоговый режим показан как `ask (edits and commands blocked by plan)`
 
 ### Requirement: Уровень рассуждения новой сессии на странице «Agents & modes»
-Блок «Default reasoning effort» SHALL показывать ComboBox `agents-modes-effort` со значениями `low`, `medium`, `high`, выбранным итоговым `agent.effort` и его источником. Выбор SHALL записывать `SetValue('agent.effort', <value>)` в цель переключателя `agents-modes-target`. После `ConfigSaved` без `agent.effort` в `restartRequiredKeys` баннер SHALL быть `Saved. New sessions use <effort>.`, с ним — как у режима. Подпись блока SHALL говорить, что значение отправляется опцией сессии, только если модель поддерживает рассуждение, а одну сессию меняет композер.
+Блок «Default reasoning effort» SHALL показывать ComboBox `agents-modes-effort` со значениями `low`, `medium`, `high`, выбранным итоговым `agent.effort` и его источником. Выбор SHALL записывать `SetValue('agent.effort', <value>)` в цель переключателя `agents-modes-target`. После `ConfigSaved` страница SHALL перечитывать снимок; без `agent.effort` в `restartRequiredKeys` баннер SHALL быть `Saved. New sessions use <effort>.`, с ним — как у режима; если действующий effort отличается от записанного — баннер `warning` по правилу режима (design.md, D16). Подпись блока SHALL говорить, что значение отправляется опцией сессии, только если модель поддерживает рассуждение, а одну сессию меняет композер.
 
 #### Scenario: Смена effort
 - **WHEN** встроенный агент подключён и пользователь выбирает `high`

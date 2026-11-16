@@ -6,7 +6,7 @@
 
 `[protocol]` и `[client]` в этом change задач не имеют: ACP, kit клиента и CLI не меняются (design.md, D2, D13).
 
-Итерации — отдельными PR в `develop` (design.md, D1): 0 — документы; 1 — оболочка страницы, режим и effort; 2 — таблица определений; 3 — ручная проверка, документы, Definition of Done. Зависимости: 1 ← 0; 2 ← 1; 3 ← 2. Решения пользователя 2026-11-16 Q1–Q12 внесены (design.md, «Решения пользователя 2026-11-16»); открытых вопросов нет.
+Итерации — отдельными PR в `develop` (design.md, D1): 0 — документы; 1 — оболочка страницы, режим и effort; 2 — таблица определений; 3 — ручная проверка, документы, Definition of Done. Зависимости: 1 ← 0; 2 ← 1; 3 ← 2. Решения пользователя 2026-11-16 Q1–Q13 внесены (design.md, «Решения пользователя 2026-11-16»); открытых вопросов нет.
 
 Проверки каждой задачи — только для затронутого (AGENTS.md §21): `fvm dart format` изменённых файлов; `fvm dart analyze` / `fvm flutter analyze` пакета; `fvm dart test` / `fvm flutter test` пакета; `melos run guard` — при правке импортов, реэкспортов и `pubspec.yaml`; `melos run web-compile` — при правке основного бареля `codelab_setup` и ядра. Интеграционные тесты app в `feature/*` только компилируются (design.md, D14).
 
@@ -21,15 +21,23 @@
 
 ## 1. Оболочка страницы, режим и effort (итерация 1)
 
-- [ ] 1.1 `[agent]` `[desktop]` Красные тесты отдельным коммитом:
+- [x] 1.1 `[agent]` `[desktop]` Красные тесты отдельным коммитом (коммит `aa5e3378`):
   - `packages/dart/codelab_setup/test/views/session_defaults_view_test.dart` — сценарии client-agent-setup «Умолчания новой сессии в мосте»: «Псевдоним и источник», «Сужение проектом», сочетание `ask`+`plan`, цель записи с папкой и без;
   - `apps/codelab_desktop/test/features/settings/application/agents_modes_cubit_test.dart` — `Loading → Ready`, `ReadOnly` для `RemoteReadOnly`/`NotManaged` без чтения конфига, `Unreadable` для `autopilot` в файле, запись режима и effort в цель (`user`, `projectLocal`), `bypass` без записи до подтверждения, конфликт без автоповтора, повторный выбор во время `saving` игнорируется, поздний снимок после смены доступа и `close()` отброшен (D11), события D12 без путей;
   - `apps/codelab_desktop/test/features/settings/presentation/agents_modes_page_test.dart` — сценарии app-settings «Режим разрешений новой сессии…» («Выбор accept-edits», «Отказ от bypass», «Подтверждённый bypass», «Недоверенный проект не смягчает режим», «Сочетание ask и plan»), «Уровень рассуждения…» («Смена effort»), «Цель записи…» («Без папки нет цели проекта», «Только этот проект», «Одна цель для режима и effort» — Q10 (а)), «Страница «Agents & modes» только для чтения» («WebSocket-агент» — без таблицы, «autopilot в файле»); неактивная строка `autopilot`; ключи D9;
   - `apps/codelab_desktop/test/features/settings/presentation/settings_shell_test.dart` (дополнение) — «Четыре страницы группы Agent», «Поиск режима bypass».
-- [ ] 1.2 `[agent]` `codelab_setup`: `SessionDefaultsView`, `sessionDefaultsOf` (D6) в основном бареле; doc-комментарии §15; `AGENTS.md` пакета — пункт состава. Тесты 1.1 моста зелёные, `web-compile`.
-- [ ] 1.3 `[desktop]` `features/settings/application/`: `AgentsModesCubit` и закрытая иерархия `AgentsModesState` (`Loading | ReadOnly | Unreadable | Ready`, запись — флаг `Ready.saving`, баннер D3) по образцу `ProviderSettingsCubit`; запись — `AgentConfigStore.apply` сессии страницы из `lib/app/provider_settings_session.dart` (новый адаптер не нужен, если хватает `ProviderSettingsSession.config`; иначе — узкий метод там же). Cubit создаётся на каждое открытие страницы (`CodeLabDependencies`).
-- [ ] 1.4 `[desktop]` `features/settings/presentation/agents_modes_page.dart`: блоки режима и effort, переключатель цели, диалог `bypass` (`CodeLabDialogTitle`), InfoBar сужения и только чтения; `lib/app/`: `defaultSettingsPages` += `agentsAndModes`, `settingsPageBuilders`, ключевые слова поиска (`settings_search_index.dart`). Виджеты кита — D9; новый виджет кита — только по правилу второго употребления, с превью и widget-тестом в `codelab_ui`.
-- [ ] 1.5 `[desktop]` `apps/codelab_desktop/AGENTS.md` — раздел «Страница «Agents & modes»» (D3–D6, D9, D11, D12). Тесты 1.1 app зелёные; `fvm flutter analyze`, `melos run guard`.
+- [x] 1.2 `[agent]` `codelab_setup`: `SessionDefaultsView`, `sessionDefaultsOf` (D6) в основном бареле; doc-комментарии §15; `AGENTS.md` пакета — пункт состава. Тесты 1.1 моста зелёные, `web-compile`.
+- [x] 1.3 `[desktop]` `features/settings/application/`: `AgentsModesCubit` и закрытая иерархия `AgentsModesState` (`Loading | ReadOnly | Unreadable | Ready`, запись — флаг `Ready.saving`, баннер D3) по образцу `ProviderSettingsCubit`; запись — `AgentConfigStore.apply` сессии страницы из `lib/app/provider_settings_session.dart` (новый адаптер не нужен, если хватает `ProviderSettingsSession.config`; иначе — узкий метод там же). Cubit создаётся на каждое открытие страницы (`CodeLabDependencies`).
+- [x] 1.4 `[desktop]` `features/settings/presentation/agents_modes_page.dart`: блоки режима и effort, переключатель цели, диалог `bypass` (`CodeLabDialogTitle`), InfoBar сужения и только чтения; `lib/app/`: `defaultSettingsPages` += `agentsAndModes`, `settingsPageBuilders`, ключевые слова поиска (`settings_search_index.dart`). Виджеты кита — D9; новый виджет кита — только по правилу второго употребления, с превью и widget-тестом в `codelab_ui`.
+- [x] 1.5 `[desktop]` `apps/codelab_desktop/AGENTS.md` — раздел «Страница «Agents & modes»» (D3–D6, D9, D11, D12). Тесты 1.1 app зелёные; `fvm flutter analyze`, `melos run guard`.
+- [x] 1.6 `[agent]` `[desktop]` Исправления ревью итерации 1 (безопасность и архитектура), тест → реализация:
+  - `[agent]` `session_defaults_view_test.dart` — сценарии client-agent-setup «Источник сочетания ask и plan из слоя user» и «Сочетание ask и plan без ask в слое user»; затем `sessionDefaultsOf`: подмена источника на `user` только по листу `permissions.mode` слоя `user`, без ветки `modeOverride` (D6);
+  - `[desktop]` `agents_modes_page_test.dart` — «Текст подтверждения bypass» (текст D15 дословно); затем текст диалога `agents-modes-bypass-confirm` (D5, D15);
+  - `[desktop]` `agents_modes_cubit_test.dart` и `agents_modes_page_test.dart` — «Перекрытое значение после записи», «Суженное значение после записи», баннер effort по D16; затем баннер после перечитывания по действующему значению (D16);
+  - `[desktop]` `agents_modes_cubit_test.dart` — «Смена доступа при открытом диалоге bypass» (подключение и папка фокуса), «Смена цели при открытом диалоге bypass», «Нет целевого слоя»; затем токен подтверждения (номер загрузки + цель), `outcome: stale`, запрет подмены цели на `user` (D17, D12);
+  - `[desktop]` `agents_modes_cubit_test.dart` — смена папки сессии в фокусе без смены профиля перечитывает доступ и снимок, прежняя загрузка отброшена (D11); затем подписка страницы на папку фокуса в `lib/app/`;
+  - `[desktop]` `apps/codelab_desktop/AGENTS.md` — раздел страницы дополняется D15–D17; руководство пользователя по D15 — в задаче 3.2.
+  Тесты зелёные; `fvm dart analyze` `codelab_setup`, `fvm flutter analyze` app, `melos run web-compile`.
 
 ## 2. Таблица определений агентов (итерация 2)
 
@@ -49,7 +57,7 @@
 ## 3. Ручная проверка, документы, Definition of Done (итерация 3)
 
 - [ ] 3.1 `[desktop]` Ручной прогон на macOS со встроенным агентом и `CODELAB_HOME` во временной папке: выбор каждого режима и effort, баннер «after Restart agent», «Restart agent» на «Connection» и проверка режима новой сессии в композере; `bypass` с «Cancel» и «Use bypass»; «This project only» для доверенного и недоверенного проекта (InfoBar сужения); битое определение, модель вне каталога, «Open file», «Open folder» (в том числе без `$CODELAB_HOME/agents` — каталог создаётся; без проектного `.codelab/agents` — пункт неактивен), `subagents.enabled: false` — `Subagents off`, «Reload»; WebSocket-профиль — только чтение. Итог — заметкой в этом файле.
-- [ ] 3.2 `[desktop]` `apps/codelab_desktop/doc/user-guide.md` — раздел «Agents & modes»: режим по умолчанию и перезапуск, `autopilot` только флагом агента, определения агентов и их ошибки, где лежат каталоги.
+- [ ] 3.2 `[desktop]` `apps/codelab_desktop/doc/user-guide.md` — раздел «Agents & modes»: режим по умолчанию и перезапуск, `bypass` точно и с предупреждением (D15: спрашиваются только критические команды, правки конфигурации агента и сетевые инструменты; команды идут без вопроса и могут ходить в сеть), `autopilot` только флагом агента, определения агентов и их ошибки, где лежат каталоги.
 - [ ] 3.3 `[agent]` Документы и код без расхождений: `12-4-first-run-and-settings.md`, `agent-parity-goals.md` (P-05, P-06, R-15, U-31 — ссылка на страницу app), `delivery-roadmap.md`, `AGENTS.md` пакетов `codelab_setup`, `codelab_agent_io` и `apps/codelab_desktop`.
 - [ ] 3.4 Definition of Done: все задачи закрыты; проверки затронутого (AGENTS.md §21) прогнаны и перечислены в PR, полный `melos run check` не запускался, если пользователь не просил; `openspec validate add-settings-agents-modes --strict`; двойное ревью (`architecture-reviewer`, `acp-safety-reviewer`) без открытых замечаний. Архивирование — только по просьбе пользователя.
 

@@ -50,9 +50,9 @@
 
 `permissions.mode` — `restartRequired` (spec agent-configuration «Реестр настроек»: `restartRequired` истинен для `permissions.*`; правило отложенного применения — защита от смены режима посреди работы агента). Ядро не меняется (решение пользователя 2026-11-16, Q2 (а)).
 
-После `ConfigSaved`, в `restartRequiredKeys` которого есть `permissions.mode`, страница показывает баннер `agents-modes-banner`: `Saved. New sessions use <mode> after Restart agent.`, если агент профиля сейчас подключён (`Connected`/`Reconnecting`), иначе `Saved. New sessions use <mode> when the agent starts.` Кнопки перезапуска на странице нет: «Restart agent» живёт на странице «Connection» (одно место, D9 change `add-app-settings-shell`). Подпись блока: `New sessions start in it after Restart agent; change it for one session from the composer.` — отступление от подписи холста «New sessions start in it», которая обещала бы живое применение (D10).
+После `ConfigSaved`, в `restartRequiredKeys` которого есть `permissions.mode`, страница перечитывает снимок и, если действующее значение совпадает с записанным, показывает баннер `agents-modes-banner`: `Saved. New sessions use <mode> after Restart agent.`, если агент профиля сейчас подключён (`Connected`/`Reconnecting`), иначе `Saved. New sessions use <mode> when the agent starts.` Кнопки перезапуска на странице нет: «Restart agent» живёт на странице «Connection» (одно место, D9 change `add-app-settings-shell`). Подпись блока: `New sessions start in it after Restart agent; change it for one session from the composer.` — отступление от подписи холста «New sessions start in it», которая обещала бы живое применение (D10).
 
-`agent.effort` применяется живой перезагрузкой конфига (`config.watch`, по умолчанию включён): баннер `Saved. New sessions use <effort>.` Если запись вернула `agent.effort` в `restartRequiredKeys` (наблюдение выключено), текст — как у режима.
+`agent.effort` применяется живой перезагрузкой конфига (`config.watch`, по умолчанию включён): баннер `Saved. New sessions use <effort>.` Если запись вернула `agent.effort` в `restartRequiredKeys` (наблюдение выключено), текст — как у режима. Если после перечитывания действующее значение отличается от записанного, баннер строится по D16.
 
 *Альтернатива:* (б) применять режим к следующей сессии живого агента — изменение ядра с отдельным ревью безопасности; отклонено пользователем.
 
@@ -66,7 +66,7 @@
 
 ### D5. Подтверждение `bypass` и строка `autopilot`
 
-Выбор `bypass` (радиокнопка) не пишет сразу: открывается `ContentDialog` `agents-modes-bypass-confirm` (заголовок — `CodeLabDialogTitle` `Use bypass for new sessions?`, текст `Tools run without asking, except critical command patterns, edits of the agent config in the project and network access. Use it in a disposable checkout.`, кнопки «Use bypass» и «Cancel») (решение пользователя 2026-11-16, Q4 (б)). «Cancel» и Esc возвращают радиогруппу к итоговому значению снимка, записи нет. Причина: запись постоянна и действует на все новые сессии во всех проектах цели — безопасность выше UX (`AGENTS.md` §2). Подтверждения других режимов нет: только `bypass` исполняет команды без вопроса; `accept-edits` разрешает без вопроса лишь правки, команды и сеть по-прежнему спрашиваются (P-06, spec agent-permissions «Режимы и уровни»).
+Выбор `bypass` (радиокнопка) не пишет сразу: открывается `ContentDialog` `agents-modes-bypass-confirm` (заголовок — `CodeLabDialogTitle` `Use bypass for new sessions?`, текст — дословно по D15: `Only critical commands, changes to the agent's configuration and network tools still ask. Commands run without asking and can reach the network too. Use bypass only in a disposable checkout.`, кнопки «Use bypass» и «Cancel») (решение пользователя 2026-11-16, Q4 (б); текст — Q13 (а), D15). Подтверждение привязано к состоянию страницы на момент открытия диалога (D17). «Cancel» и Esc возвращают радиогруппу к итоговому значению снимка, записи нет. Причина: запись постоянна и действует на все новые сессии во всех проектах цели — безопасность выше UX (`AGENTS.md` §2). Подтверждения других режимов нет: только `bypass` исполняет команды без вопроса; `accept-edits` разрешает без вопроса лишь правки, команды и сеть по-прежнему спрашиваются (P-06, spec agent-permissions «Режимы и уровни»).
 
 Строка `autopilot` — неактивная радиокнопка с текстом `Only as a launch flag of the agent (codelab-agent serve --permission-mode autopilot); never saved in config.` Холст пишет «Headless only (codelab -p)», но у `codelab -p` флага `--permission-mode` нет (D10). Значение `autopilot` из файла конфига — ошибка схемы: страница в состоянии `Unreadable` (как «Providers»).
 
@@ -85,7 +85,8 @@ SessionDefaultsView sessionDefaultsOf(AgentConfigSnapshot snapshot, EditableSett
 
 - итоговые значения берутся из разобранного итога `snapshot.loaded.config` (`CoreConfig`: режим и дополнительно запрещённые уровни `PermissionsConfig`, effort), а не из сырых листьев: псевдонимы (`acceptEdits`, `alwaysAsk`) и сочетание `ask`+`plan` уже разобраны ядром;
 - источник — `snapshot.originOf(key)` (`ConfigSourceView`); без листа — `default` (умолчание профиля хоста: режим `standard`, effort `medium`);
-- признак сужения — предупреждение `config.project.untrusted_key` с путём `permissions.mode` в `loaded.warnings`.
+- признак сужения — предупреждение `config.project.untrusted_key` с путём `permissions.mode` в `loaded.warnings`;
+- сочетание `ask`+`plan` (итог `ask` с запретом `write` и `exec`) не совпадает ни с одним слоем, и снимок приписывает ему внешний источник. Источником отдаётся слой `user`, только если в листьях слоя `user` `permissions.mode` даёт `ask` (основной id или псевдоним, `ModeId.tryParse`); иначе — источник снимка как есть (`ask` из окружения или `--config` не выдаётся за `user`). Ветки по `modeOverride` (`autopilot` флагом запуска) в мосте нет: спецификация её не требует, а для клиента она недостижима — снимок строит мост в процессе клиента без флагов запуска агента, флаг `--permission-mode autopilot` есть только у процесса `codelab-agent serve` (ревью итерации 1).
 
 Отдельного автомата или коммиттера нет: запись — одна `SetValue` в `AgentConfigStore.apply`, как «Default model» (§13 пропорциональность). Представление нужно, чтобы правила чтения итога и источника не повторялись в app и, позже, в TUI.
 
@@ -174,8 +175,10 @@ HTML и CSS холста в репозиторий не копируются; р
 | снимок конфига и строки определений | `AgentsModesCubit` | один номер загрузки на пару «снимок + определения»: поздний результат после «Reload», смены подключения или папки, `close()` отбрасывается (`agents_modes.load_discarded`) |
 | загрузка определений | функция моста | тайм-аут 5 с и отмена `CancelTokenSource` при новой загрузке и `close()` (как `config check`) |
 | запись режима или effort | `AgentsModesCubit` | флаг `Ready.saving`: повторные выборы и «Reload» игнорируются до итога; конфликт — баннер и перечитывание без автоповтора (SETUP-6); после `close()` итог только в журнал |
-| диалог `bypass` | страница | запись начинается после «Use bypass»; закрытие страницы закрывает диалог без записи |
+| диалог `bypass` | страница и `AgentsModesCubit` | запись начинается после «Use bypass» и только если токен подтверждения (номер загрузки + цель) ещё действителен (D17); закрытие страницы закрывает диалог без записи |
 | «Open file» / «Open folder» | порт | путь сверяется с текущим состоянием Cubit-а в момент клика; исход — только InfoBar, без повторов |
+
+Папка страницы — папка сессии в фокусе, иначе выбранный проект (D2). Фокус может перейти на сессию другой папки при открытых настройках без смены профиля и подключения; страница ДОЛЖНА следить и за папкой фокуса, а не только за подключением: смена папки — новый номер загрузки, перечитывание доступа и снимка (`agents_modes.load_discarded` с `reason: access_changed` для прежней загрузки) и недействительный токен открытого диалога `bypass` (D17). Иначе цель «This project only» и подтверждение могли бы относиться к папке, которой уже нет в фокусе (ревью итерации 1).
 
 Ошибки fire-and-forget (загрузка, открытие пути) переводятся в состояние и событие журнала (`AGENTS.md` §12).
 
@@ -192,7 +195,7 @@ HTML и CSS холста в репозиторий не копируются; р
 | `agents_modes.mode_changed` | info | `mode`, `target: user \| local` |
 | `agents_modes.bypass_cancelled` | info | — |
 | `agents_modes.effort_changed` | info | `effort`, `target` |
-| `agents_modes.save_failed` | warning | `key: mode \| effort`, `outcome: conflict \| rejected \| error`, `error_type?` |
+| `agents_modes.save_failed` | warning | `key: mode \| effort`, `outcome: conflict \| rejected \| stale \| error`, `error_type?` (`stale` — D17) |
 | `agents_modes.open_path` | info | `kind: file \| user_dir \| project_dir`, `outcome: opened \| created \| failed \| not_allowed` |
 
 Пути, имена файлов определений, описания, тела и тексты исключений в события не попадают (§16; D14 change `add-agent-project-files`).
@@ -212,10 +215,48 @@ HTML и CSS холста в репозиторий не копируются; р
 
 В `feature/*`: `fvm dart test` — `codelab_agent_core`, `codelab_agent_io`, `codelab_setup`; `fvm flutter test` — `codelab_desktop`, при новом виджете — `codelab_ui`; `melos run guard`, `melos run web-compile`. Интеграционный тест app `integration_test/agents_modes_settings_flow_test.dart` во временном `CODELAB_HOME` в `feature/*` только компилируется (`fvm flutter analyze`); на устройстве — в `release/<version>` (`AGENTS.md` §21).
 
+### D15. Текст подтверждения `bypass` и руководства — точно и с предупреждением
+
+Решение пользователя 2026-11-16, Q13 (а), по итогам ревью безопасности итерации 1. Прежний текст D5 («Tools run without asking, except critical command patterns, edits of the agent config in the project and network access») был неточен в двух местах:
+- по spec agent-permissions «Режимы и уровни» в `bypass` спрашивается только уровень `network` (`codelab_agent_core/lib/src/permissions/modes.dart`, `bypass` → `PermissionMode.yolo`); это уровень сетевых *инструментов*, а `exec curl …` — уровень `exec` и идёт без вопроса. Фраза «network access» обещала защиту, которой нет;
+- защита правок конфигурации агента (PERM-11, spec agent-permissions: вопрос «в любом режиме, включая `bypass`») покрывает и проект, и `$CODELAB_HOME` (`agentConfigPathsFor`), а не только «config in the project».
+
+Текст диалога `agents-modes-bypass-confirm` (англ., дословно):
+
+> Only critical commands, changes to the agent's configuration and network tools still ask. Commands run without asking and can reach the network too. Use bypass only in a disposable checkout.
+
+Раздел «Agents & modes» руководства пользователя (`apps/codelab_desktop/doc/user-guide.md`, задача 3.2) описывает `bypass` той же семантикой: спрашиваются только критические команды, правки конфигурации агента (проект и `$CODELAB_HOME`) и сетевые инструменты; команды, в том числе сетевые, идут без вопроса; только в одноразовой копии. Страница семантику режима не вычисляет — текст фиксированный и меняется вместе со spec agent-permissions.
+
+*Альтернатива:* (б) короткий текст без перечисления («Most tools run without asking») — не врёт, но не предупреждает о сети через команды. Отклонено пользователем.
+
+### D16. Баннер «Saved» — по действующему значению после перечитывания
+
+Ревью архитектуры итерации 1 (MEDIUM): запись в слой `user` не гарантирует, что новые сессии получат записанное значение — его может перекрыть слой выше (`projectLocal`, `project` доверенного проекта, окружение, `--config`) или сузить недоверенный проект (D4). Баннер «Saved. New sessions use <value>…» в таком случае обманывал бы.
+
+Правило: после `ConfigSaved` страница перечитывает снимок (как при конфликте) и строит баннер по `sessionDefaultsOf` нового снимка:
+- действующее значение равно записанному — тексты D3 (`Saved. New sessions use <value> after Restart agent.` / `… when the agent starts.` / `Saved. New sessions use <effort>.`);
+- значение перекрыто другим слоем (источник действующего значения ≠ цель записи) — уровень `warning`: `Saved to <target>; <source> overrides it: new sessions use <effective>` и хвост по D3 (` after Restart agent.` / ` when the agent starts.` / `.`). `<target>` — `All projects` или `This project only`; `<source>` — подпись источника, как у `agents-modes-mode-source`;
+- значение сужено недоверенным проектом (признак `narrowedByProject`) — тот же `warning` с `<source>` = `the untrusted project` и `<effective>` в виде D4 (`ask (edits and commands blocked by plan)` для сочетания); InfoBar `agents-modes-mode-narrowed` остаётся.
+
+Сравнение — по основным id из моста (`ModeChoiceView.id`, `EffortChoiceView.id`), без своего разбора слоёв (SETUP-8). Если перечитывание не удалось, баннер — `Saved to <target>.` без утверждения о новых сессиях, а состояние — по общим правилам (`Unreadable`). Событие `agents_modes.mode_changed`/`effort_changed` пишется по факту записи, как раньше; новых полей журнала нет.
+
+*Альтернатива:* предупреждать до записи, предсказывая перекрытие, — повтор правил слоёв в app (SETUP-8). Отклонено.
+
+### D17. Подтверждение `bypass` привязано к состоянию на момент открытия
+
+Ревью безопасности итерации 1 (MEDIUM): между открытием `agents-modes-bypass-confirm` и «Use bypass» могут смениться подключение, папка (D11), доступ (`RemoteReadOnly`, `NotManaged`) или цель переключателя; запись `bypass` по новому состоянию была бы согласием, которого пользователь не давал.
+
+Правило: при открытии диалога Cubit выдаёт токен подтверждения — номер загрузки и цель записи (`ConfigLayer` и папка `projectLocal`). «Use bypass» передаёт токен обратно; запись выполняется, только если состояние — `Ready` с тем же номером загрузки и той же целью и не идёт другая запись. Иначе записи нет, диалог закрывается, баннер `agents-modes-banner` уровня `warning`: `Settings changed while the dialog was open; bypass was not saved.`, событие `agents_modes.save_failed` с `key: mode`, `outcome: stale` (дополнение D12). Смена доступа на `ReadOnly`/`Unreadable` при открытом диалоге закрывает его без записи.
+
+Нет целевого слоя (LOW): если цель записи (`user` или `projectLocal(<папка>)`) отсутствует в снимке (`EditableSettings` её не даёт, путь не разрешён), запись не выполняется для любого режима и для effort — баннер уровня `error` `Cannot save: the target config file is not available.`, событие `agents_modes.save_failed` с `outcome: rejected`. Молчаливой подмены цели на `user` нет: пользователь выбрал «This project only», и запись во все проекты расширила бы действие (особенно для `bypass`).
+
+*Альтернатива:* перечитывать снимок при «Use bypass» и писать по свежему состоянию — тот же разрыв согласия. Отклонено.
+
 ## Risks / Trade-offs
 
 - [Пользователь ждёт, что новый режим действует сразу] → подпись блока и баннер называют «Restart agent» (D3).
-- [`bypass` по ошибке] → подтверждение (D5); подтверждение не защищает от правки файла руками, это вне страницы.
+- [`bypass` по ошибке] → подтверждение (D5) с точным текстом (D15), привязанное к состоянию открытия (D17); подтверждение не защищает от правки файла руками, это вне страницы.
+- [Записанное значение перекрыто или сужено] → баннер по действующему значению после перечитывания (D16).
 - [Недоверенный проект не может смягчить режим] → итоговый режим и InfoBar по предупреждению загрузчика (D4), без своей копии правила.
 - [Строка отклонённого файла без имени определения] → имя файла (D7, Q7 (а)); при необходимости — отдельный change `agent-definitions`.
 - [Расхождение с агентом из-за другого каталога моделей] → тот же `StaticModelCatalog` конфига, что у `config check`; каталог `/models` провайдера (`list_models`) агент тоже не использует для проверки определения.
@@ -239,7 +280,10 @@ HTML и CSS холста в репозиторий не копируются; р
 - Q10 (а) — один переключатель «This project only» на режим и effort (D4).
 - Q11 (а) + (б) — отсутствующий `$CODELAB_HOME/agents` создаётся и открывается; отсутствующий проектный `.codelab/agents` — пункт неактивен с подсказкой (D8).
 - Q12 (а) — встроенные типы субагентов при `subagents.enabled: false` показываются со статусом `Subagents off` (D7).
+- Q13 (а) — текст подтверждения `bypass` и руководства — точно и с предупреждением о командах и сети (D15; ревью итерации 1).
+
+Ревью итерации 1 (безопасность и архитектура) без вопросов пользователю: баннер по действующему значению (D16), токен подтверждения `bypass` и запрет подмены цели (D17), перечитывание при смене папки фокуса (D11), источник `ask`+`plan` и отказ от ветки `modeOverride` в мосте (D6).
 
 ## Open Questions
 
-Нет: Q1–Q12 решены пользователем 2026-11-16 (раздел выше).
+Нет: Q1–Q13 решены пользователем 2026-11-16 (раздел выше).
