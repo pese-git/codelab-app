@@ -80,6 +80,7 @@ void main() {
     ModelCost? price = const ModelCost(input: 3, output: 15),
     Usage? used,
     int index = 0,
+    StopReason reason = StopReason.stop,
   }) {
     final spent =
         used ??
@@ -101,7 +102,7 @@ void main() {
           content: const [],
           model: modelWith(price),
           usage: spent,
-          stopReason: StopReason.stop,
+          stopReason: reason,
           timestamp: DateTime.utc(2026),
         ),
         results: const [],
@@ -206,6 +207,59 @@ void main() {
     expect((usage.last['turn']! as Map)['cost'], '0');
     expect((usage.last['session']! as Map)['cost'], '0');
     expect(usage.last['currency'], 'USD');
+  });
+
+  // D26: `aborted` с нулевым usage провайдера — провайдер usage не прислал
+  // (отмена посреди потока), поэтому `noUsage` ставится шагу, ходу и сессии.
+  test('an aborted step without provider usage is noUsage (D26)', () async {
+    await open();
+
+    startTurn();
+    session.emit(step(used: Usage.zero, reason: StopReason.aborted));
+    endTurn();
+    await pump();
+
+    final first = usage.first['step']! as Map;
+    expect(first['partial'], ['noUsage']);
+    expect(first['cost'], '0');
+    expect((usage.last['turn']! as Map)['partial'], contains('noUsage'));
+    expect((usage.last['session']! as Map)['partial'], contains('noUsage'));
+  });
+
+  // D26, контроль: частичный usage провайдера (`input > 0`) — не причина.
+  test(
+    'an aborted step with partial provider usage is not noUsage (D26)',
+    () async {
+      await open();
+
+      startTurn();
+      session.emit(
+        step(
+          used: const Usage(input: 40, output: 0),
+          reason: StopReason.aborted,
+        ),
+      );
+      endTurn();
+      await pump();
+
+      expect(usage.first['step']! as Map, isNot(contains('partial')));
+      expect(usage.last['turn']! as Map, isNot(contains('partial')));
+      expect(usage.last['session']! as Map, isNot(contains('partial')));
+    },
+  );
+
+  // D26, контроль: `error` с нулями — сбой, а не молчание провайдера.
+  test('an error step with zero usage is not noUsage (D26)', () async {
+    await open();
+
+    startTurn();
+    session.emit(step(used: Usage.zero, reason: StopReason.error));
+    endTurn();
+    await pump();
+
+    expect(usage.first['step']! as Map, isNot(contains('partial')));
+    expect(usage.last['turn']! as Map, isNot(contains('partial')));
+    expect(usage.last['session']! as Map, isNot(contains('partial')));
   });
 
   // D18 Т5: кадр usage, построенный во время реплея, уходит после кадров
