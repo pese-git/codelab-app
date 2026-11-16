@@ -186,7 +186,10 @@ final class E2eCliAgent {
       _Mode.withSessionList ||
       _Mode.hangsUntilCancel ||
       _Mode.promptError ||
-      _Mode.emptyResponse => const <String>[],
+      _Mode.emptyResponse ||
+      // Сценарий `llm_scripts/with_usage.json` с ценами модели и usage шагов
+      // (change `add-usage-extension`, D23 Т3; задача 3.9).
+      _Mode.withUsage => const <String>[],
       _Mode.withPermissionRequest ||
       _Mode.withCriticalPermission => const ['--permission-mode', 'standard'],
       _Mode.withConfigOptions => const ['--model', 'gpt-5', '--model', 'gpt-4'],
@@ -230,6 +233,7 @@ final class E2eCliAgent {
       _Mode.hangsUntilCancel ||
       _Mode.promptError ||
       _Mode.emptyResponse ||
+      _Mode.withUsage ||
       _Mode.withConfigOptions => null,
       _ => throw StateError(
         'no embedded script for ${mode.wireName}: tag the test '

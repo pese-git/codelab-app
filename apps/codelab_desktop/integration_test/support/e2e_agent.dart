@@ -487,31 +487,37 @@ void main() {
   /// Единая таблица режимов сценария для бинаря Dart-агента (флаги) и
   /// встроенного агента (параметры `scriptedEmbeddedAgentOpener`): режим без
   /// сценария падает одинаково — [StateError], а не молча без настроек.
-  static _ModeSettings _modeSettings(CodelabCompatibleStdioAgentMode mode) =>
-      switch (mode) {
-        CodelabCompatibleStdioAgentMode.normal ||
-        CodelabCompatibleStdioAgentMode.withPlan ||
-        CodelabCompatibleStdioAgentMode.withMarkdownReply ||
-        CodelabCompatibleStdioAgentMode.echoesCwd => const _ModeSettings(),
-        CodelabCompatibleStdioAgentMode.withConfigOptions =>
-          const _ModeSettings(models: ['gpt-5', 'gpt-4']),
-        CodelabCompatibleStdioAgentMode.withPermissionRequest ||
-        CodelabCompatibleStdioAgentMode.withQueuedPromptDrain ||
-        CodelabCompatibleStdioAgentMode.withConcurrentSessions =>
-          const _ModeSettings(permissionMode: 'standard'),
-        CodelabCompatibleStdioAgentMode.withFsAccess => const _ModeSettings(
-          permissionMode: 'accept-edits',
-        ),
-        CodelabCompatibleStdioAgentMode.withTerminalExecution =>
-          const _ModeSettings(permissionMode: 'bypass'),
-        CodelabCompatibleStdioAgentMode.withSessionList => const _ModeSettings(
-          sessions: true,
-        ),
-        final other => throw StateError(
-          '${other.name} has no Dart agent scenario: tag the test '
-          '$scriptedOnly',
-        ),
-      };
+  static _ModeSettings _modeSettings(
+    CodelabCompatibleStdioAgentMode mode,
+  ) => switch (mode) {
+    CodelabCompatibleStdioAgentMode.normal ||
+    CodelabCompatibleStdioAgentMode.withPlan ||
+    CodelabCompatibleStdioAgentMode.withMarkdownReply ||
+    // Режим `withUsage` (задача 3.8 change `add-usage-extension`): настройки
+    // по умолчанию; цены модели и `contextWindow` задаёт сценарий
+    // `llm_scripts/with_usage.json` (D23 Т2).
+    CodelabCompatibleStdioAgentMode.withUsage ||
+    CodelabCompatibleStdioAgentMode.echoesCwd => const _ModeSettings(),
+    CodelabCompatibleStdioAgentMode.withConfigOptions => const _ModeSettings(
+      models: ['gpt-5', 'gpt-4'],
+    ),
+    CodelabCompatibleStdioAgentMode.withPermissionRequest ||
+    CodelabCompatibleStdioAgentMode.withQueuedPromptDrain ||
+    CodelabCompatibleStdioAgentMode.withConcurrentSessions =>
+      const _ModeSettings(permissionMode: 'standard'),
+    CodelabCompatibleStdioAgentMode.withFsAccess => const _ModeSettings(
+      permissionMode: 'accept-edits',
+    ),
+    CodelabCompatibleStdioAgentMode.withTerminalExecution =>
+      const _ModeSettings(permissionMode: 'bypass'),
+    CodelabCompatibleStdioAgentMode.withSessionList => const _ModeSettings(
+      sessions: true,
+    ),
+    final other => throw StateError(
+      '${other.name} has no Dart agent scenario: tag the test '
+      '$scriptedOnly',
+    ),
+  };
 
   /// Относительная команда разрешается от `apps/codelab_desktop`: спавн агента
   /// идёт из папки проекта, где относительный путь уже не найдётся. Голое
