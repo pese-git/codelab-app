@@ -38,9 +38,11 @@ flowchart LR
         MD["IncrementalMarkdown"]
         DF["LineDiff (Myers)"]
         UD["UsageDecoder"]
-        SB["StatusBarProjector"]
+        UF["UsageFold"]
+        UFM["usage_format<br/>(D24)"]
+        SB["StatusBarProjector<br/>(эскиз, не введён)"]
         TR["ToolRowFormatter"]
-        SV["SessionView<br/>transcript + statusBar"]
+        SV["SessionView<br/>transcript + usage"]
     end
     subgraph Ports["Порты (реализация в codelab_client_io)"]
         GB["GitBranchProbe"]
@@ -57,17 +59,26 @@ flowchart LR
     TP --> MD
     TP --> DF
     TP --> SV
-    UD --> SB
-    GB --> SB
+    UD --> UF
+    UF --> SV
+    GB -.-> SB
+    SB -.-> SV
     TO --> TP
     CL --> TP
-    SB --> SV
     SV --> TR
     SV --> CLI
     TR --> CLI
+    UFM --> CLI
     SV --> APP
     TR --> APP
+    UFM --> APP
 ```
+
+Usage на схеме — как реализовано change `add-usage-extension` (итерации 1–3): `UsageDecoder`
+разбирает уведомление, `UsageFold` сворачивает снимки в `SessionView.usage`, функции
+`usage_format.dart` форматируют числа одинаково для обоих клиентов (D24). Пунктир —
+`StatusBarProjector` и `GitBranchProbe` из эскиза: этот change их не вводит (D8, Q9 (б)), модель и
+режим клиенты берут из опций сессии сами (§12.1.5, п. 1).
 
 ## 12.1.1. Контракт (Dart)
 
@@ -293,29 +304,54 @@ final class SessionStatusBar {
 }
 
 // Change add-usage-extension (design.md D8): SessionStatusBar и StatusBarProjector выше — эскиз,
-// этот change их не вводит; новое поле — только SessionView.usage.
-final class UsageView {
+// этот change их не вводит; новое поле — только SessionView.usage. Ниже — как реализовано
+// (codelab_client_core/lib/src/usage/, экспорт основным барелем; сверка 2026-11-17, задача 4.2).
+final class UsageView {                             // freezed; по умолчанию support == unknown
   final UsageSupport support;                       // unknown | awaiting | reported
   final UsageTotals? lastTurn;                      // turn последнего снимка с turnId (D22 п. 2)
   final UsageTotals? session;                       // сумму считает агент, клиент не суммирует
   final ContextFillView? context;
-  final int lastSeq;                                // свёртка по seq снимков
+  final int lastSeq;                                // seq последнего применённого снимка; 0 — снимков нет
 }
 enum UsageSupport { unknown, awaiting, reported }   // unknown — агент не объявил usage (VIEW-6)
 final class UsageTotals { final TokenCounts tokens; final Money? cost; final int steps;
   final Set<UsagePartial> partial; }               // «~»: noUsage, beforeLoad — у токенов; любая — у стоимости
 final class TokenCounts { final int input, output, cacheRead, cacheWrite; final int? reasoning; }
-final class Money { final int micros; final String currency; }        // целые микроединицы
-enum UsagePartial { noUsage, noPrice, beforeLoad }
+final class Money { final int micros; final String currency; }        // целые микроединицы; currency — ^[A-Z]{3}$
+enum UsagePartial { noUsage, noPrice, beforeLoad }  // незнакомые строки провода отбрасываются
 final class ContextFillView { final int used; final int? size, compactAt;
-  double? get fraction;                             // null без size или при size == 0
-  bool get compactionSoon; }                        // compactAt != null && used >= 0.9 × compactAt
+  double? get fraction;                             // null без size или при size ≤ 0
+  bool get compactionSoon; }                        // compactAt != null && used ≥ 0.9 × compactAt (в целых)
+
+/// Разобранный снимок — вход свёртки; не путать с UsageView (итог многих снимков).
+enum UsageTrigger { step, turn, compaction, unknown }  // unknown — незнакомое значение провода (D2)
+final class UsageSnapshot { final SessionId sessionId; final int seq; final UsageTrigger trigger;
+  final String? turnId; final UsageTotals? turn; final UsageTotals session;
+  final ContextFillView? context; }
 
 /// Единственное место, знающее форму `_codelab/session/usage` (§12.1.5); одна форма —
 /// одна реализация, без интерфейса (`AGENTS.md` §13).
 final class UsageDecoder {
-  UsageSnapshot? decode(Map<String, Object?> params);   // null и диагностика вместо исключения
+  UsageSnapshot? decode(Map<String, Object?> params,   // null — снимок отброшен
+      {required void Function(String field, String reason) onWarning});  // без исключений и сырых значений
 }
+
+/// Свёртка по seq в поколении соединения (D7, D21 Т2, Т4); чистый неизменяемый класс.
+final class UsageFold {
+  UsageFold.initial({required bool declared});      // awaiting при объявленном usage, иначе unknown
+  UsageFold? apply(UsageSnapshot snapshot, {required int generation});  // null — дубль или опоздание
+  final UsageView view;
+}
+
+// Форматирование для отображения (usage_format.dart, D24): одно правило для desktop и CLI.
+enum UsageLevel { normal, warning, danger }         // по целому проценту: ≥ 80 — warning, ≥ 95 — danger
+final class UsageContextLabel { final String label; final UsageLevel level; }  // «79%», «<1%», «125%»
+String formatUsageMoney(Money money);               // $1.20, $0.0041, 12.34 EUR
+String formatUsageTokens(int count);                // 999, 94.0k, 1.2M
+int usageInputTokens(TokenCounts tokens);           // input + cacheRead + cacheWrite, насыщение на 2^53 − 1
+UsageContextLabel? usageContextOf(ContextFillView context);  // null — сегмент скрыт
+bool usageTokensPartial(Set<UsagePartial> partial); // noUsage или beforeLoad
+bool usageCostPartial(Set<UsagePartial> partial);   // любая причина
 
 // ---------- Вложения ----------
 sealed class PromptAttachment {}
@@ -422,7 +458,8 @@ abstract interface class SessionSearch { /* view, update, loadMore, dispose — 
 abstract interface class LocalCalendar { DateTime startOfLocalDay(DateTime instant); }
 ```
 
-`SessionView` (§9.10) получает поле `final SessionStatusBar statusBar;`. Имя `SessionStatusView`
+`SessionView` (§9.10) получает поле `final SessionStatusBar statusBar;` (эскиз; change
+`add-usage-extension` вместо него ввёл только `final UsageView usage;`, D8). Имя `SessionStatusView`
 в §9.10 уже занято состоянием сессии (`idle | running | …`), поэтому модель статус-строки
 названа `SessionStatusBar`. `SessionView.queue` — список `QueuedPrompt` выше: промпт с
 вложениями, поставленный в очередь, хранит их до отправки, а `PromptQueue.edit` меняет только
@@ -562,7 +599,12 @@ Setext-заголовки, HTML, сноски и ссылки-определен
 1. **Модель и режим.** `modelId/modelLabel` — текущее значение опции конфигурации категории
    `model` (если категорий нет — опции с id `model`); подпись — `name` выбранного значения.
    Режим — то же для категории `mode`, иначе `currentModeId` из `current_mode_update` с именем из
-   списка режимов сессии. Ничего нет — поле `null`.
+   списка режимов сессии. Ничего нет — поле `null`. *Как реализовано (change
+   `add-usage-extension`, D8, D23 Т1, Т4):* проектора в kit нет, хосты читают
+   `SessionView.configOptions` сами. Desktop (`modelLabelOf`, `modeLabelOf` в `ui_mappers.dart`) —
+   опция категории, подпись — `name` выбранного значения, иначе `currentValue`; CLI
+   (`sessionOptionValue`, `render/usage_segments.dart`) — `currentValue` опции с id `mode`/`model`,
+   затем по категории.
 2. **Usage.** Источник — только расширение агента: уведомление `_codelab/session/usage` с
    объявлением `usage: {"version": 1}` в `_meta.codelab` при `initialize` (change
    `add-usage-extension`, D1–D3, D17; `AGENTS.md` §3.4). Kit разбирает форму в одной реализации
@@ -590,13 +632,35 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    (не «0»). Это обычный режим со сторонним агентом. `awaiting` — агент объявил `usage`, снимков ещё
    нет. `compaction soon` — только при известном `compactAt` (порог автосжатия) и
    `used ≥ 0.9 × compactAt`.
+4a. **Неполные суммы.** Причины `partial` выставляет агент (design.md change, D6), клиент только
+   ставит «~»: перед токенами — при `noUsage` или `beforeLoad` (`usageTokensPartial`), перед
+   стоимостью — при любой причине (`usageCostPartial`). `noUsage` агент ставит ответу модели со
+   `stopReason`, отличным от `error`, у которого `input + output == 0`: провайдер usage не прислал.
+   Сюда входит и шаг, прерванный отменой посреди потока модели (`aborted`), — решение пользователя
+   2026-11-17, D26, итерация 4 change (задача 4.3; до неё агент помечал только успешный ответ).
+   Клиент для этого не меняется: «~» и подсказка причин выводятся по `noUsage` так же, как раньше.
+4b. **Форматирование** (`usage_format.dart`, D24; решения Q16 (а), Q17 (а)) — одна функция kit для
+   desktop и CLI, без `double`, `intl` и локали, разделитель — точка:
+   * деньги: `0` — `0.00`; от 0,01 — два знака, половина вверх (`1.2` → `1.20`, `0.125` → `0.13`);
+     меньше 0,01 — две значащие цифры без хвостовых нулей (`0.0041`, `0.004`, `0.004567` →
+     `0.0046`); округление до 0,01 даёт `0.01`; `USD` — префикс `$`, иная валюта — суффикс
+     через пробел (`12.34 EUR`);
+   * токены: до 1000 — как есть; до 10⁶ — тысячи с одним знаком, половина вверх (`94.0k`;
+     `999950` → `1.0M`); дальше — миллионы (`1.2M`);
+   * контекст: без `size`, при `size ≤ 0` или `used = 0` — сегмента нет; иначе целый процент вниз
+     (`79.6 %` → `79%`), `<1%` при нулевом проценте, больше 100 % — как есть; уровень по тому же
+     проценту: ≥ 80 — `warning`, ≥ 95 — `danger`. Цвет и тон выбирает хост.
+   Состав сегментов — у хостов: desktop §12.3.3 (A7), CLI §12.2.6.
 5. **Ветка git.** `GitBranchProbe.branchOf(cwd)` вызывается при открытии сессии, после каждого
    хода и не чаще раза в 5 с; результат кэшируется. Реализация в `codelab_client_io` читает
    `.git/HEAD` (с переходом по файлу `.git` с `gitdir:` для worktree и подмодулей), без запуска
    процесса: `ref: refs/heads/<имя>` → `<имя>`, иначе первые 7 символов хеша. Нет репозитория
    или ошибка чтения → `null`.
 6. `StatusBarProjector` собирает `SessionStatusBar` из пунктов 1–5 и длины очереди; изменение
-   любого источника даёт новую ревизию `SessionView`.
+   любого источника даёт новую ревизию `SessionView`. *Эскиз:* change `add-usage-extension` его не
+   вводит (D8); применённый снимок usage даёт новую ревизию `SessionView` без нового `AcpSession`
+   (D21 Т4), поэтому desktop подписывается на `SessionHandle.view` показываемой сессии (D23 Т1).
+   Ветки git (п. 5) в коде нет — вне того change (Q9 (б)).
 7. **Сообщение о лимите** (после MVP, L-32). `NoticeItem` с `rateLimit` показывается одной
    локализованной строкой: `requests` — «Лимит запросов исчерпан», `tokens` — «Лимит токенов
    исчерпан», `subscription` — «Лимит подписки исчерпан», `quota` — «Квота аккаунта исчерпана»,
@@ -786,8 +850,13 @@ Setext-заголовки, HTML, сноски и ссылки-определен
   проверяет `usage/session_usage_test.dart`): модель и режим из опций категорий и из
   `current_mode_update`; без usage — `UsageView.unknown`; частичная сумма после `session/load`;
   деньги без накопления ошибки на 1000 ходах (VIEW-6).
-* `usage/usage_decoder_test.dart` и `usage/session_usage_test.dart` (change `add-usage-extension`, задачи 2.4, 2.5): форма D2 `_codelab/session/usage`; свёртка по `seq`; `compactionSoon`; неизвестные поля игнорируются,
-  неверный тип поля — `null` и диагностика, не исключение.
+* `usage/usage_decoder_test.dart`, `usage/usage_fold_test.dart` и `usage/session_usage_test.dart`
+  (change `add-usage-extension`, задачи 2.4, 2.5, 3.13): форма D2 `_codelab/session/usage`; свёртка
+  по `seq` и поколению соединения; `compactionSoon`; неизвестные поля игнорируются, неверный тип
+  поля — `null` и диагностика, не исключение; `currency` не по `^[A-Z]{3}$` — стоимостей снимка
+  нет, `usage.decode_failed` с `reason: wrong_format`.
+* `usage/usage_format_test.dart` (change `add-usage-extension`, задача 3.0): деньги, токены,
+  процент и уровень контекста, признаки «~» по таблицам D24 (§12.1.5, п. 4b).
 * `usage/usage_fixture_test.dart` (change `add-usage-extension`, задача 2.7b; `runClientFixture`, как
   `transcript/transcript_projector_test.dart`): после `acp/prompt-usage-steps` — `reported`,
   `lastTurn` и `session` равны последнему снимку фикстуры, клиент не шлёт кадров в ответ на

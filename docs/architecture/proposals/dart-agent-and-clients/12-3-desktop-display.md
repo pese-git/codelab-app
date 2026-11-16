@@ -11,8 +11,8 @@
 стоимость в статусе чата (D-09) и вложения в композере (D-12). Работа идёт после разделения
 Cubit-ов (задача 5.9): app получает `SessionView` из `codelab_client_core` и только отображает его.
 Логика проекции, построения hunks
-(`LineDiff`, §12.1.3), строки инструмента (`ToolRowFormatter`, §12.1.6), статус-строки
-(`SessionStatusBar`, §12.1.5) и выбора `ContentBlock` (`PromptContentBuilder.build`, §12.1.7)
+(`LineDiff`, §12.1.3), строки инструмента (`ToolRowFormatter`, §12.1.6), usage и его форматирования
+(`SessionView.usage`, `usage_format.dart`, §12.1.5) и выбора `ContentBlock` (`PromptContentBuilder.build`, §12.1.7)
 остаётся в kit.
 
 > **Уточнение 2026-11-11 (решение пользователя, change [`add-desktop-markdown`](../../../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1).** Markdown
@@ -59,7 +59,8 @@ Cubit-ов (задача 5.9): app получает `SessionView` из `codelab_
 | `CodeLabMarkdown`, `CodeLabMarkdownConfig`, `CodeLabMarkdownScope`, `CodeLabCodeBlock` | `codelab_ui/lib/src/rendering/` | ui_kit | ответ агента через `gpt_markdown`: тема и builder'ы, созданные один раз; политика ссылок и изображений из app; код с подсветкой, языком и кнопкой копирования (`add-desktop-markdown`, D2–D4) |
 | `AcpThoughtBlock` | `codelab_ui/lib/src/molecules/` | ui_kit | сворачиваемый блок мыслей |
 | `AcpDiffView`, `AcpDiffViewerDialog` | `codelab_ui/lib/src/molecules/`, `organisms/` | ui_kit | unified и side-by-side, свёрнутый предпросмотр, полный просмотр в диалоге |
-| `AcpSessionStatusBar` | `codelab_ui/lib/src/molecules/` | ui_kit | модель, режим, токены, стоимость, заполнение контекста |
+| `CodeLabSessionStatusBar`, `CodeLabSessionStatusData`, `CodeLabStatusSegment` | `codelab_ui/lib/src/molecules/codelab_session_status_bar.dart` | ui_kit | строка статуса под композером: модель, режим, токены хода, стоимость, контекст из готовых подписей, подсказок и тона; логики нет (change `add-usage-extension`, D11, D23 Т1) |
+| `sessionStatusDataOf` | `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart` | application | `SessionView` → `CodeLabSessionStatusData`: состав сегментов поверх функций форматирования kit (D24) |
 | `AcpAttachmentChip`, композер с вложениями | `codelab_ui/lib/src/molecules/` | ui_kit | чипы, удаление, подсветка зоны сброса |
 | `CodeLabCodeHighlighter`, `CodeLabCodeTheme` | `codelab_ui/lib/src/rendering/` | ui_kit | токенизация кода на `val_highlight` (синхронно или в isolate), кеш, палитры светлой и тёмной темы (`add-desktop-markdown`, D4) |
 | `TranscriptRowMapper` | `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart` | application | `SessionView` → `List<AcpTranscriptRow>` с переиспользованием неизменившихся строк |
@@ -103,7 +104,7 @@ flowchart LR
     end
     subgraph UI["codelab_ui + presentation"]
         TP["CodeLabTranscriptPanel"]
-        SB["AcpSessionStatusBar"]
+        SB["CodeLabSessionStatusBar"]
         PC["CodeLabPromptComposer + ComposerDropZone"]
     end
     SV --> MAP --> ASC --> TP
@@ -125,7 +126,7 @@ final class ActiveSessionState {
   final SessionId? sessionId;
   final int sourceRevision;                  // SessionView.revision, из которого построены rows
   final List<AcpTranscriptRow> rows;         // результат TranscriptRowMapper
-  final AcpSessionStatusData status;         // из SessionView.statusBar; UsageView.unknown → null-поля
+  final CodeLabSessionStatusData? statusBar; // sessionStatusDataOf(SessionView) показываемой сессии (A7; change add-usage-extension, D23 Т1)
   // план, очередь, команды, опции конфигурации — как в 5.9, без изменений
 }
 
@@ -228,19 +229,21 @@ class AcpDiffView extends StatelessWidget {
 enum AcpDiffPresentation { summaryLine, preview, full }
 enum AcpDiffLayoutPreference { auto, unified, sideBySide }
 
-class AcpSessionStatusBar extends StatelessWidget {
-  const AcpSessionStatusBar({required AcpSessionStatusData data, Key? key});
+// Как реализовано change add-usage-extension (D11, D23 Т1): готовые подписи, подсказки и тон,
+// без сырых счётчиков — числа и «~» форматирует маппер app функциями kit (D24).
+class CodeLabSessionStatusBar extends StatelessWidget {
+  const CodeLabSessionStatusBar({required CodeLabSessionStatusData data, Key? key});
 }
-final class AcpSessionStatusData {
-  final String? model; final String? mode;                // modelLabel, modeLabel
-  final AcpUsageData? turn; final AcpUsageData? session;  // null — агент не сообщает usage
-  final double? contextFraction;                          // UsageView.contextFraction, null — неизвестно
-  final bool turnRunning;
+class CodeLabSessionStatusData {
+  final String? modelLabel; final String? modeLabel;      // из опций сессии
+  final CodeLabStatusSegment? usage;                      // токены хода или «usage: —»; null — нет сегмента
+  final CodeLabStatusSegment? cost;                       // «$0.0041 · session $1.20», «—»
+  final CodeLabStatusSegment? context;                    // «85% context · compaction soon»
+  final bool busy;                                        // индикатор вместо usage и cost
 }
-final class AcpUsageData {                                // из TokenCounts и Money (§12.1.1)
-  final int input, output, cacheRead, cacheWrite, reasoning;
-  final String? costLabel;                                // готовая строка из Money; null — цена неизвестна
-  final bool partial;                                     // UsageView.sessionPartial → префикс «~»
+class CodeLabStatusSegment {
+  final String label; final String? tooltip;              // tooltip == null — Tooltip не создаётся
+  final CodeLabTone tone;                                 // neutral по умолчанию
 }
 
 // Композер: новые параметры, существующие не меняются.
@@ -483,39 +486,48 @@ userinfo не загружается. Выбор хранится в `Transcript
 4. Мысли не попадают в «Копировать ответ» и не подсвечиваются как ответ. При `summary` блок
    остаётся одной строкой заголовка.
 
-**A7. Статус чата и usage.** `AcpSessionStatusBar` стоит строкой под композером, слева
-направо: модель · режим · контекст · токены · стоимость.
+**A7. Статус чата и usage.** `CodeLabSessionStatusBar` стоит строкой под композером показываемой
+сессии (`state.activeSessionId != null`; на стартовом экране строки нет), слева направо: модель ·
+режим · токены хода · стоимость · контекст (`Wrap`: в узком окне сегменты переносятся).
 
-Источник — `SessionView.statusBar` (`SessionStatusBar`, §12.1.5); десктоп ничего не собирает
-сам.
+Источник — `SessionView.usage` (`UsageView`, §12.1.5) и опции сессии; данные строки собирает
+функция `sessionStatusDataOf` в `ui_mappers.dart`, числа форматируют функции kit
+`usage_format.dart` (D24), своих правил формата и суммирования у app нет. `SessionStatusBar` и
+`StatusBarProjector` из §12.1.1 change `add-usage-extension` не вводит (D8).
 
-| Поле | Источник | Неизвестно |
+| Сегмент (ключ) | Источник | Неизвестно |
 |---|---|---|
-| модель | `SessionStatusBar.modelLabel` (kit уже выбрал опцию категории `model`) | поле скрыто |
-| режим | `SessionStatusBar.modeLabel` (опция категории `mode` или `current_mode_update`) | поле скрыто |
-| контекст | `usage.contextFraction` (из `contextUsed`/`contextWindow`) | индикатор скрыт; 0 % не показывается |
-| токены хода и сессии | `usage.lastTurn`, `usage.session` (`TokenCounts`); при `sessionPartial` — префикс `~` | `UsageView.unknown`: «usage: —» с подсказкой «агент не сообщает расход» |
-| стоимость хода и сессии | `usage.lastTurnCost`, `usage.sessionCost` (`Money`) | «—»; при известных токенах без цены — «цена неизвестна» |
+| модель | `modelLabelOf`: опция категории `model`, подпись — `name` выбранного значения, иначе `currentValue` | поле скрыто |
+| режим | `modeLabelOf`: то же для категории `mode` | поле скрыто |
+| токены хода (`status-bar-usage`) | `usage.lastTurn.tokens`: `<вход> → <выход>`, вход — `usageInputTokens` (`input + cacheRead + cacheWrite`); `~` перед входом при `noUsage` или `beforeLoad` хода | `unknown` — «usage: —» с подсказкой `agent does not report usage`; нет снимка хода или все счётчики хода `0` — сегмента нет |
+| стоимость (`status-bar-cost`) | `usage.lastTurn.cost` и `usage.session.cost` (`Money`): `<ход> · session <сессия>`; `~` перед суммой при любой причине `partial` её агрегата | цена хода неизвестна — `— · session $X`; неизвестны обе — `—` с подсказкой `price unknown`; цены сессии нет — только стоимость хода; нет снимка хода и цены сессии — сегмента нет |
+| контекст (`status-bar-context`) | `usageContextOf(usage.context)`: `<N>% context`, ` · compaction soon` при `compactionSoon`; тон по уровню kit: `warning` от 80 %, `danger` от 95 % | без `size` и при `used = 0` — сегмента нет |
 
 `gitBranch` и `queued` статус-бар десктопа не показывает: очередь видна в своей панели (R-18),
 ветка — вне объёма D-09.
 
 Данные usage приходят от агента уведомлением расширения `_codelab/session/usage` (L-11, change
-`add-usage-extension`, D11; §12.1.5). Виджет — `CodeLabSessionStatusBar` в `codelab_ui`; состояния
-`unknown` («usage: —»), `awaiting` (агент объявил usage, снимков нет — сегментов нет, во время хода
-индикатор) и `reported`; стоимость без цены при известных токенах — «—» с подсказкой
-`price unknown`; подпись `compaction soon` — только при известном `compactAt` (порог
-автосжатия) и `used ≥ 0.9 × compactAt`; в этом change строка некликабельна (переход в панель Usage —
-`add-desktop-usage-pane`). Без расширения kit отдаёт `UsageView.unknown`, поля остаются в
-состоянии «неизвестно» и никогда не превращаются в нули (VIEW-6). Подпись:
-`12,3k → 1,2k · $0,042 · сессия $1,20`; вход — `input + cacheRead + cacheWrite`, выход —
-`output`, как в CLI (§12.2.6). Подсказка показывает `input`, `output`, `cacheRead`,
-`cacheWrite`, `reasoning`. Если агент шлёт usage во время хода, значение хода обновляется на
-месте. Если только в ответе `session/prompt`, оно появляется в конце хода; до этого рядом с полем
-хода крутится `CodeLabProgressIndicator`. Пороги контекста: ≥ 80 % — `CodeLabTone.warning`, ≥ 95 % —
-`CodeLabTone.danger`. Стоимость форматируется из целых микроединиц `Money.micros` без `double` по
-локали: 2 значащих знака после первой ненулевой цифры для сумм меньше 0,01 и 2 знака после
-запятой для остальных. Валюта — `Money.currency`; десктоп ничего не пересчитывает.
+`add-usage-extension`, D11; §12.1.5). Состояния: `unknown` — «usage: —»; `awaiting` (агент объявил
+usage, снимков нет) — сегментов usage нет, при статусе сессии `running` или `cancelling` вместо них
+крутится `CodeLabProgressIndicator` (D23 Т9 п. 2: отмена — ещё не исход хода, снимок `turn` может
+прийти до ответа `cancelled`); `reported` — значения, индикатора нет, между шагами числа хода
+обновляются на месте. Без расширения поля остаются в состоянии «неизвестно» и никогда не
+превращаются в нули (VIEW-6, DSK-11). Подпись: `12.3k → 1.2k  $0.042 · session $1.20  62% context`;
+числа — по D24 (§12.1.5, п. 4b): точка, без локали, деньги от 0,01 — два знака, меньше — две
+значащие цифры; `USD` — префикс `$`, иная валюта — суффикс (`12.34 EUR`). Подсказка
+`status-bar-usage` — первая строка `input N · output N · cache read N · cache write N` и
+` · reasoning N`, если `reasoning` известен; при непустом `partial` хода — вторая строка
+`approximate: <причины>` в порядке `noUsage`, `noPrice`, `beforeLoad` с текстами
+`agent sent no usage for some steps`, `price unknown for some steps`,
+`before the session was loaded` (D23 Т9 п. 1). У `status-bar-cost` своей подсказки причин нет:
+если токены хода скрыты нулями (отмена на первом шаге без usage провайдера, D26), «~» видна
+только у стоимости — решение пользователя 2026-11-17, Q20 (а). Строка некликабельна (переход в
+панель Usage — `add-desktop-usage-pane`).
+
+Обновление: снимок usage меняет только `SessionView` (новая ревизия без нового `AcpSession`), поэтому
+`ActiveSessionCubit` подписан на `SessionHandle.view` показываемой сессии и пересчитывает только
+данные строки; подписка одна, переподписка при смене сессии, отмена при `showMissing` и в `close`
+(D23 Т1, `AGENTS.md` §9).
 
 **A8. Вложения.**
 
@@ -979,9 +991,9 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
 `lib/a.dart  +900 −300`, первые 20 строк side-by-side без подсветки (вне лимита) и кнопка
 «Показать полностью». Диалог показывает все строки с прокруткой.
 
-Агент без расширения usage: статус-бар показывает `claude-sonnet · standard · usage: —`. Тот же
-агент после включения расширения через OpenSpec показывает
-`claude-sonnet · standard · ▮▮▮▯ 62 % · 12,3k → 1,2k · $0,042 · сессия $1,20`.
+Агент без расширения usage: статус-бар показывает `claude-sonnet  standard  usage: —`. Агент с
+расширением (`_codelab/session/usage`, change `add-usage-extension`) после хода показывает
+`claude-sonnet  standard  12.3k → 1.2k  $0.042 · session $1.20  62% context`.
 
 Пользователь перетаскивает `shot.png` (800 КиБ) и `/etc/hosts` в сессию с `cwd = ~/proj`.
 Агент объявил `image: true, embeddedContext: false`. Получаются чипы `shot.png · 800 КБ ·
@@ -1167,8 +1179,8 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 | `acp_thought_block_test.dart: visually distinct from agent answer and excluded from copy` | D-08 |
 | `acp_thought_block_test.dart: thought text is shown as is without markdown parsing` | D-08 |
 | `acp_thought_block_test.dart: Enter and Space toggle with expanded semantics` | A9 |
-| `acp_session_status_bar_test.dart: unknown usage shows dash and never zero` | D-09, DSK-11 |
-| `acp_session_status_bar_test.dart: context thresholds switch tone at 80 and 95 percent` | D-09 |
+| `codelab_session_status_bar_test.dart: unknown usage: «usage: —» with a hint and no other segments`; `unknown price: «—» with the hint «price unknown», not $0` | D-09, DSK-11 |
+| `codelab_session_status_bar_test.dart: the tone of a segment comes from the data, not from the label`; пороги 80 и 95 % — `apps/codelab_desktop/test/features/workbench/application/usage_status_mapper_test.dart` (группа `context`) | D-09 |
 | `acp_prompt_composer_test.dart: chips render delivery and warnings and remove by button and Delete` | D-12 |
 | `acp_prompt_composer_test.dart: Cmd+Backspace still rejects approval and does not remove chip` | DSK-18 |
 | `acp_transcript_panel_test.dart: pending approval auto-scroll unchanged with row model` | DSK-17 |
@@ -1240,11 +1252,17 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
   «Направить» в композере и в строке очереди шлёт `_codelab/session/steer`; пузырь с меткой «во
   время хода»; агент без capability — второй части кнопки нет; «Отправить сейчас» (R-18)
   по-прежнему отменяет ход (`app:prompt_queue_flow_test.dart` не меняется).
-* `app:usage_display_flow_test.dart` (D-09):
-  1. агент без расширения usage → `status-bar-usage` показывает «—», стоимость скрыта;
-  2. агент с расширением (режим scripted-агента после принятия расширения через OpenSpec)
-     присылает usage двух ходов → поле хода показывает второй ход, поле сессии — сумму;
-     подсказка содержит пять счётчиков; контекст 85 % в тоне `warning`.
+* `app:usage_display_flow_test.dart` (D-09; change `add-usage-extension`, задача 3.8):
+  1. агент без расширения usage → `status-bar-usage` показывает «usage: —», стоимости и контекста
+     нет; только scripted-агент (Dart-агент и встроенный агент объявляют `usage` всегда, тест
+     помечен `skip` с причиной в имени);
+  2. агент с расширением (режим `withUsage` scripted-агента; для `dart` и `embedded` — сценарий
+     `integration_test/llm_scripts/with_usage.json`) присылает usage двух ходов → поле хода
+     показывает второй ход, поле сессии — сумму; подсказка содержит пять счётчиков; контекст 85 %
+     в тоне `warning`.
+  Модульно — `usage_status_mapper_test.dart` (маппер), `active_session_status_bar_test.dart`
+  (подписка `ActiveSessionCubit`), `presentation/session_status_bar_test.dart` (граф app на
+  `FakeAcpTransport`).
 * `app:transcript_rendering_flow_test.dart` (новый, D-06/D-07/D-08 сквозь весь стек): scripted
   агент стримит мысли, markdown с блоком кода и правку файла → блок мыслей свёрнут после конца,
   код подсвечен, diff показан и открывается полностью, одобрение правки показывает diff.
@@ -1282,9 +1300,9 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 * запись полученных `ContentBlock` каждого `session/prompt`, чтобы тест проверял точный состав
   блоков (сценарии `prompt_attachments_flow_test.dart`);
 * отказ `-32602` на промпт с `resource_link` (проверка повтора с путями текстом, §12.1.7, шаг 5);
-* usage уведомлением `_codelab/session/usage` (change `add-usage-extension`, задача 3.5) — режим
-  scripted-агента появляется в итерации 3 того change; до неё сценарий 2
-  `usage_display_flow_test.dart` помечен `skip` со ссылкой на change;
+* usage уведомлением `_codelab/session/usage` — режим `withUsage` (`with_usage`) scripted-агента
+  (change `add-usage-extension`, задача 3.9, тест 3.5 `codelab_acp_testing/test/usage_agent_test.dart`):
+  объявляет `usage` и шлёт снимки `step` и `turn` до ответа только клиенту, объявившему `usage`;
 * стрим мыслей, markdown с оградой и правки с `content` типа `diff` по сценарию из фикстуры
   (`transcript_rendering_flow_test.dart`).
 

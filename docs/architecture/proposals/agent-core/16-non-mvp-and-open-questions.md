@@ -51,7 +51,7 @@
 | Лицензия репозитория и место `THIRD_PARTY_NOTICES.md` | MIT; `LICENSE` и один `THIRD_PARTY_NOTICES.md` — в корне репозитория (этап 0) | dart-agent-and-clients §9.5 (задача 0.9), §7а, §11 |
 | Кодек изображений для подготовки картинок (T-29) | отдельный пакет `codelab_agent_images` на `package:image` (`PureDartImagePreparer`, в `lib/io.dart` — `IsolateImagePreparer`); ядро держит только порт `ImagePreparer`, allowlist ядра не растёт; добавление `image` — OpenSpec change и запись в `technology-stack.md` | §1.2, §17.11.2.1 |
 | SHA-256 в ядре (C-16, PKCE, снимок запроса) | `package:crypto` в allowlist ядра (PKG-2): официальный пакет dart-lang на чистом Dart, работает в web; своя реализация не окупается | §1.2, §17.11.2.2 |
-| Передача usage и стоимости клиенту (L-11, U-13, D-09) | уведомление расширения `_codelab/session/usage` с объявлением `usage: {"version": 1}` в `_meta.codelab` при `initialize`; агент шлёт снимок шага, хода и сессии только объявившему клиенту; без расширения клиенты показывают usage как неизвестный (VIEW-6). Решение пользователя 2026-11-13, change `add-usage-extension`; реализация — итерации 1–3 того change | §13.12, §12.6 |
+| Передача usage и стоимости клиенту (L-11, U-13, D-09) | уведомление расширения `_codelab/session/usage` с объявлением `usage: {"version": 1}` в `_meta.codelab` при `initialize`; агент шлёт снимок шага, хода и сессии только объявившему клиенту; без расширения клиенты показывают usage как неизвестный (VIEW-6). Решение пользователя 2026-11-13, change `add-usage-extension`; реализация — итерации 1–3 того change; итерация 4 — `noUsage` у шага, прерванного отменой без usage провайдера (D26, решение пользователя 2026-11-17) | §13.12, §12.6 |
 
 ## 16.3. Открытые вопросы
 
