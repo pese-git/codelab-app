@@ -341,6 +341,28 @@ void main() {
       expectNoPayloadInLogs();
     });
 
+    for (final (name, trigger, expected) in <(String, Object?, Object?)>[
+      ('a long string', 'x' * 500, 'other'),
+      ('an unfamiliar string', 'secret-trigger', 'other'),
+      ('a known value', 'compaction', 'compaction'),
+      ('a number', 7, null),
+    ]) {
+      test('trigger $name: the entry holds only the closed set '
+          '(D14, §16)', () async {
+        transport.emitInbound(
+          _usageFrame(_snapshot(seq: 1, extra: {'trigger': trigger})),
+        );
+
+        final entry = logger.entries.singleWhere(
+          (e) => e.event == 'usage.received',
+        );
+        expect(entry.context['trigger'], expected);
+        if (trigger is String && expected == 'other') {
+          expect(entry.context.values, isNot(contains(trigger)));
+        }
+      });
+    }
+
     for (final (name, sessionId) in <(String, Object?)>[
       ('missing', null),
       ('a number', 42),

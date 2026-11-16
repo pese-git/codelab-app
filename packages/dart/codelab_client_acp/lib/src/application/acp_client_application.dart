@@ -14,6 +14,7 @@ import '../domain/state_machines.dart';
 import '../domain/terminal_access.dart';
 import '../infrastructure/structured_log_logger.dart';
 import 'application_models.dart';
+import 'usage_notification.dart';
 
 final class AcpClientApplicationException implements Exception {
   const AcpClientApplicationException(this.message, {this.cause});
@@ -221,6 +222,13 @@ final class AcpClientApplication {
     logCategoryKey: protocolTraceLogCategory,
   });
   final _sessionController = StreamController<AcpSession>.broadcast(sync: true);
+
+  /// Снимки `_codelab/session/usage` (D8, D21 Т2); владелец — ядро клиента,
+  /// закрывается в [dispose]. `sync: true`, как у [sessionChanges]: порядок
+  /// доставки совпадает с порядком кадров.
+  final _usageController = StreamController<UsageNotification>.broadcast(
+    sync: true,
+  );
   final _diagnosticController = StreamController<DiagnosticEntry>.broadcast(
     sync: true,
   );
@@ -272,6 +280,15 @@ final class AcpClientApplication {
   int get generation => _generation;
 
   Stream<AcpSession> get sessionChanges => _sessionController.stream;
+
+  /// Принятые уведомления `_codelab/session/usage` с сырыми `params` и
+  /// поколением соединения (change `add-usage-extension`, D8, D21 Т2).
+  ///
+  /// Почему отдельный поток, а не часть [AcpSession]: расход не участвует в
+  /// автомате хода (D7) и разбирается ядром клиента в одной реализации.
+  /// Кадры прежнего транспорта сюда не попадают — их отбрасывает
+  /// `_bindTransport` до маршрутизации.
+  Stream<UsageNotification> get usageNotifications => _usageController.stream;
 
   Stream<DiagnosticEntry> get diagnosticChanges => _diagnosticController.stream;
 
@@ -509,6 +526,7 @@ final class AcpClientApplication {
       final completedSession = SessionStateMachine.completeTurn(
         _requireSession(command.sessionId),
         stopReason: response.stopReason,
+        budgetExceeded: _budgetExceededOf(response),
         completedAt: DateTime.now(),
       ).stateOrThrow;
 
@@ -947,6 +965,7 @@ final class AcpClientApplication {
     ]);
     await _diagnosticController.close();
     await _sessionController.close();
+    await _usageController.close();
     await _connectionStateController.close();
   }
 
@@ -1196,6 +1215,8 @@ final class AcpClientApplication {
         unawaited(_handleReleaseTerminalRequest(message));
       case JsonRpcNotification(method: sessionUpdateMethod):
         _handleSessionUpdate(message);
+      case JsonRpcNotification(method: usageNotificationMethod):
+        _handleUsageNotification(message);
       case JsonRpcNotification():
         // A notification gets no reply, so an unknown one (e.g. a custom
         // `_vendor/...` extension) is simply not our concern.
@@ -2651,6 +2672,73 @@ final class AcpClientApplication {
     }
 
     return session;
+  }
+
+  /// Причина остановки по бюджету из `_meta.codelab.budgetExceeded` ответа
+  /// (D10, D21 Т3); не строка или чужая форма — `null`, без ошибки: сторонний
+  /// агент вправе не слать расширение. Значение — открытое множество, поэтому
+  /// не сверяется со списком известных лимитов; осмысленна лишь при
+  /// `max_turn_requests`, что проверяет автомат хода.
+  String? _budgetExceededOf(PromptResponse response) {
+    final codelab = response.meta?['codelab'];
+    if (codelab is! Map) {
+      return null;
+    }
+    final value = codelab['budgetExceeded'];
+    return value is String ? value : null;
+  }
+
+  /// Маршрут `_codelab/session/usage` (D8, D14, D21 Т2, Т5): передаёт
+  /// `sessionId` и сырые `params` подписчику, ничего не разбирая и не
+  /// отвечая (у уведомления нет id).
+  ///
+  /// Без строкового `params.sessionId` кадр отбрасывается DEBUG-записью без
+  /// payload: полный текст — только в трассировке протокола, которая уже
+  /// пишет каждое входящее сообщение (`observability.md`).
+  void _handleUsageNotification(JsonRpcNotification notification) {
+    final params = notification.params;
+    final sessionId = params is Map ? params['sessionId'] : null;
+    if (params is! Map || sessionId is! String) {
+      _logger
+          .bind({logComponentKey: protocolComponent})
+          .withCorrelation(connectionGeneration: _generation)
+          .debug('usage.dropped', context: {'reason': 'missing_session_id'});
+      return;
+    }
+    final seq = params['seq'];
+    final trigger = params['trigger'];
+    // В журнал — только элемент закрытого множества: строка с провода может
+    // быть сколь угодно длинной или содержать лишнее (D14, §16).
+    final loggedTrigger = trigger is! String
+        ? null
+        : const {'step', 'turn', 'compaction'}.contains(trigger)
+        ? trigger
+        : 'other';
+    _logger
+        .bind({logComponentKey: protocolComponent})
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: sessionId,
+        )
+        .debug(
+          'usage.received',
+          context: {
+            // Размер записи ограничен: `seq` — целое, `trigger` — элемент
+            // закрытого множества (`step`/`turn`/`compaction`/`other`); суммы,
+            // цены и произвольные строки провода в журнал не попадают.
+            if (seq is int) 'seq': seq,
+            'trigger': ?loggedTrigger,
+          },
+        );
+    if (!_usageController.isClosed) {
+      _usageController.add(
+        UsageNotification(
+          sessionId: SessionId(sessionId),
+          params: Map<String, Object?>.from(params),
+          generation: _generation,
+        ),
+      );
+    }
   }
 
   void _storeSession(AcpSession session) {

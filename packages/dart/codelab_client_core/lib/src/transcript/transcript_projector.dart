@@ -602,18 +602,18 @@ List<TranscriptItem> _notices(
   if (!hasAgentItems &&
       turn.isTerminal &&
       turn.status != PromptTurnStatus.failed &&
-      _stoppedNoticeText(turn.stopReason) == null)
+      _stoppedNoticeText(turn) == null)
     TranscriptItem.notice(
       id: '${turn.id.value}/completed',
       kind: NoticeKind.emptyTurn,
       text: 'Completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
     ),
   if (turn.status != PromptTurnStatus.failed &&
-      _stoppedNoticeText(turn.stopReason) != null)
+      _stoppedNoticeText(turn) != null)
     TranscriptItem.notice(
       id: '${turn.id.value}/stopped',
       kind: NoticeKind.turnStopped,
-      text: _stoppedNoticeText(turn.stopReason)!,
+      text: _stoppedNoticeText(turn)!,
     ),
   if (turn.status == PromptTurnStatus.failed && turn.failureMessage != null)
     TranscriptItem.notice(
@@ -625,12 +625,27 @@ List<TranscriptItem> _notices(
     ),
 ];
 
+/// Лимиты бюджета хода, которые заметка называет по имени (D10 change
+/// `add-usage-extension`): значения `BudgetLimit.name` агента CodeLab.
+/// Незнакомое значение (открытое множество) даёт прежний текст — подставлять
+/// в заметку произвольную строку от агента нельзя.
+const _knownBudgetLimits = {'steps', 'tokens', 'cost', 'duration', 'deadline'};
+
 /// Текст заметки исхода хода (D27, Q33); `null` — заметка не нужна.
 /// Смысл причин — `docs/protocols/acp/protocol/05-Prompt Turn.md`.
-String? _stoppedNoticeText(StopReason? reason) => switch (reason) {
+///
+/// Принимает ход, а не только `stopReason`: при `max_turn_requests` агент
+/// CodeLab называет исчерпанный лимит (`PromptTurn.budgetExceeded`, D10,
+/// D21 Т6). Функция общая для инкрементальной проекции и эталона
+/// `projectTranscript`, поэтому они остаются равными.
+String? _stoppedNoticeText(PromptTurn turn) => switch (turn.stopReason) {
   StopReason.maxTokens =>
     'The model reached its token limit, so the turn ended.',
-  StopReason.maxTurnRequests => 'The turn reached the limit of model requests.',
+  StopReason.maxTurnRequests => switch (turn.budgetExceeded) {
+    final limit? when _knownBudgetLimits.contains(limit) =>
+      'The turn stopped: budget exceeded: $limit.',
+    _ => 'The turn reached the limit of model requests.',
+  },
   StopReason.refusal => 'The agent refused to continue.',
   StopReason.endTurn || StopReason.cancelled || null => null,
 };

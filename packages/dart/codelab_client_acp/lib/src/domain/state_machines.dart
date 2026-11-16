@@ -103,6 +103,7 @@ sealed class PromptTurnStateEvent with _$PromptTurnStateEvent {
 
   const factory PromptTurnStateEvent.complete({
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) = PromptTurnCompleted;
 
@@ -153,6 +154,7 @@ sealed class SessionStateEvent with _$SessionStateEvent {
 
   const factory SessionStateEvent.completeTurn({
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) = SessionTurnCompleted;
 
@@ -343,11 +345,17 @@ class PromptTurnStateMachine {
         ),
       PromptTurnApprovalCancelled(:final approvalId, :final resolvedAt) =>
         _cancelApproval(turn, approvalId: approvalId, resolvedAt: resolvedAt),
-      PromptTurnCompleted(:final stopReason, :final completedAt) => _complete(
-        turn,
-        stopReason: stopReason,
-        completedAt: completedAt,
-      ),
+      PromptTurnCompleted(
+        :final stopReason,
+        :final budgetExceeded,
+        :final completedAt,
+      ) =>
+        _complete(
+          turn,
+          stopReason: stopReason,
+          budgetExceeded: budgetExceeded,
+          completedAt: completedAt,
+        ),
       PromptTurnFailed(:final message, :final failure, :final completedAt) =>
         _fail(
           turn,
@@ -426,12 +434,14 @@ class PromptTurnStateMachine {
   static StateTransitionResult<PromptTurn> complete(
     PromptTurn turn, {
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) {
     return reduce(
       turn,
       PromptTurnStateEvent.complete(
         stopReason: stopReason,
+        budgetExceeded: budgetExceeded,
         completedAt: completedAt,
       ),
     );
@@ -578,6 +588,7 @@ class PromptTurnStateMachine {
   static StateTransitionResult<PromptTurn> _complete(
     PromptTurn turn, {
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) {
     if (turn.isTerminal) {
@@ -588,6 +599,10 @@ class PromptTurnStateMachine {
       turn.copyWith(
         status: _statusForStopReason(stopReason),
         stopReason: stopReason,
+        // Причина бюджета осмыслена только при `max_turn_requests` (D10).
+        budgetExceeded: stopReason == StopReason.maxTurnRequests
+            ? budgetExceeded
+            : null,
         completedAt: completedAt ?? turn.completedAt,
       ),
     );
@@ -708,10 +723,15 @@ class SessionStateMachine {
           approvalId: approvalId,
           resolvedAt: resolvedAt,
         ),
-      SessionTurnCompleted(:final stopReason, :final completedAt) =>
+      SessionTurnCompleted(
+        :final stopReason,
+        :final budgetExceeded,
+        :final completedAt,
+      ) =>
         _completeTurn(
           session,
           stopReason: stopReason,
+          budgetExceeded: budgetExceeded,
           completedAt: completedAt,
         ),
       SessionTurnFailed(:final message, :final failure, :final completedAt) =>
@@ -895,12 +915,14 @@ class SessionStateMachine {
   static StateTransitionResult<AcpSession> completeTurn(
     AcpSession session, {
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) {
     return reduce(
       session,
       SessionStateEvent.completeTurn(
         stopReason: stopReason,
+        budgetExceeded: budgetExceeded,
         completedAt: completedAt,
       ),
     );
@@ -1092,6 +1114,7 @@ class SessionStateMachine {
   static StateTransitionResult<AcpSession> _completeTurn(
     AcpSession session, {
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) {
     final activeTurn = session.activeTurn;
@@ -1102,6 +1125,7 @@ class SessionStateMachine {
     final turn = PromptTurnStateMachine.complete(
       activeTurn,
       stopReason: stopReason,
+      budgetExceeded: budgetExceeded,
       completedAt: completedAt,
     );
     return switch (turn) {
