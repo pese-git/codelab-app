@@ -61,7 +61,7 @@ CodeLab SHALL отправлять в `InitializeRequest.clientCapabilities._met
 ## ADDED Requirements
 
 ### Requirement: Приём уведомления `_codelab/session/usage`
-CodeLab SHALL принимать уведомление агента `_codelab/session/usage` и передавать его `sessionId` и `params` ядру клиента вместе с поколением соединения, на котором оно пришло (design.md change `add-usage-extension`, D7, D8). Уведомление SHALL NOT менять автомат хода: не завершает, не оживляет и не отменяет prompt turn. Уведомление без строкового `params.sessionId` SHALL отбрасываться с записью уровня DEBUG без payload. Другие незнакомые уведомления SHALL по-прежнему отбрасываться без ответа.
+CodeLab SHALL принимать уведомление агента `_codelab/session/usage` и передавать его `sessionId` и `params` ядру клиента вместе с поколением соединения, на котором оно пришло (design.md change `add-usage-extension`, D7, D8, D21 Т2). Уведомление SHALL NOT менять автомат хода: не завершает, не оживляет и не отменяет prompt turn. Уведомление без строкового `params.sessionId` SHALL отбрасываться с записью уровня DEBUG без payload. Другие незнакомые уведомления SHALL по-прежнему отбрасываться без ответа.
 
 #### Scenario: Снимок во время хода
 - **WHEN** во время prompt turn приходит `_codelab/session/usage` для этой сессии
@@ -73,7 +73,7 @@ CodeLab SHALL принимать уведомление агента `_codelab/s
 
 #### Scenario: Уведомление старого соединения
 - **WHEN** после переподключения доставляется `_codelab/session/usage`, пришедшее по прежнему транспорту
-- **THEN** оно помечено прежним поколением и не меняет состояние сессий нового соединения
+- **THEN** оно отбрасывается до маршрутизации, как любое входящее сообщение прежнего поколения (запись DEBUG `event_ignored` с `reason: stale_generation`), не доходит до ядра клиента и не меняет состояние сессий нового соединения; уведомления текущего соединения передаются ядру клиента с номером его поколения (design.md, D21 Т2)
 
 ### Requirement: Причина остановки по бюджету
 Если ответ на `session/prompt` имеет `stopReason: max_turn_requests` и строковое `_meta.codelab.budgetExceeded`, CodeLab SHALL сохранять это значение в итоге prompt turn (design.md change `add-usage-extension`, D10). Значение SHALL приниматься как открытая строка (известны `steps`, `tokens`, `cost`, `duration`, `deadline`); не строка или отсутствие поля SHALL давать итог без причины без ошибки. При другом `stopReason` поле SHALL игнорироваться.

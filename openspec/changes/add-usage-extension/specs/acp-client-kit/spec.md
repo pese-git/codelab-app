@@ -52,13 +52,39 @@
 - **WHEN** после применённого снимка с `seq` 9 соединение переподключается, и новый агент присылает снимок с `seq` 1
 - **THEN** снимок с `seq` 1 применён
 
-### Requirement: Заметка остановки по бюджету
-Если итог хода — `max_turn_requests` с причиной бюджета (acp-protocol-client «Причина остановки по бюджету»), заметка хода `turnStopped` SHALL называть лимит: `The turn stopped: budget exceeded: <limit>.` для `steps`, `tokens`, `cost`, `duration`, `deadline`. Без причины или с незнакомой причиной SHALL оставаться текст `The turn reached the limit of model requests.` (design.md change `add-usage-extension`, D10).
+## MODIFIED Requirements
+
+### Requirement: Инкрементальная проекция транскрипта
+`TranscriptProjector` SHALL строить `TranscriptItem` сессии инкрементально по новым `session/update`: дельты `agent_message_chunk` и `agent_thought_chunk` подряд дописываются в один элемент того же вида, любое другое обновление закрывает отрезок; `tool_call` с известным `toolCallId` обновляет существующий элемент, а не добавляет второй; статус и одобрение вызова берутся из read-модели хода ядра клиента; запрос разрешения привязывается к `ToolCallItem` по `toolCallId`, а для вызова без `tool_call` — к элементу вызова в конце хода; сорвавшийся ход добавляет `NoticeItem` вида `error` с типизированным сбоем хода (`PromptFailure`), завершённый ход без вывода агента — `NoticeItem` вида `emptyTurn`; ход, завершённый с `stopReason` `max_tokens`, `max_turn_requests` или `refusal`, — `NoticeItem` вида `turnStopped` всегда, даже при выводе агента, и вместо `emptyTurn` у хода без вывода (решение пользователя 2026-11-08, design.md change `add-provider-setup-ui`, Q33, D27). Заметка `turnStopped` SHALL строиться только по `stopReason` ответа на `session/prompt`: у ходов реплея `session/load` его нет, и заметки у них нет (Q36). Тексты `turnStopped`: `max_tokens` — `The model reached its token limit, so the turn ended.`; `max_turn_requests` — `The turn reached the limit of model requests.`; `refusal` — `The agent refused to continue.`. Если итог хода `max_turn_requests` несёт причину бюджета (acp-protocol-client «Причина остановки по бюджету») со значением `steps`, `tokens`, `cost`, `duration` или `deadline`, заметка `turnStopped` SHALL называть лимит: `The turn stopped: budget exceeded: <limit>.`; без причины или с незнакомой причиной SHALL оставаться текст `The turn reached the limit of model requests.` (design.md change `add-usage-extension`, D10, D21 Т6). Повторно обработанный снимок сессии SHALL быть no-op. Для любой последовательности обновлений результат инкрементальной проекции SHALL совпадать с проекцией с нуля по всем ходам сессии.
+
+#### Scenario: Свойство на корпусе фикстур
+- **WHEN** выполняется `transcript_projector_test.dart: incremental projection equals full rebuild for every fixture`
+- **THEN** для каждой фикстуры корпуса с ролью `client` на каждом шаге инкрементальная проекция равна проекции с нуля
+
+#### Scenario: Повторная доставка tool_call
+- **WHEN** агент дважды присылает `tool_call` с одним `toolCallId`
+- **THEN** транскрипт содержит один `ToolCallItem` на прежней позиции с полями второго кадра
+
+#### Scenario: Заметка о сбое несёт причину агента
+- **WHEN** ход срывается ответом агента, как в фикстуре `acp/prompt-failed-provider-auth`
+- **THEN** `NoticeItem` вида `error` этого хода несёт `PromptFailure.agent` с `errorClass: "auth"`, сообщением агента и `retryable: false`
+
+#### Scenario: Ход упёрся в лимит токенов после размышлений
+- **WHEN** ход содержит только `agent_thought_chunk` и завершается ответом агента с `stopReason: max_tokens`
+- **THEN** транскрипт хода содержит `ThoughtItem` и один `NoticeItem` вида `turnStopped` с текстом `The model reached its token limit, so the turn ended.`; `NoticeItem` вида `emptyTurn` нет
+
+#### Scenario: Отказ агента после текста
+- **WHEN** ход содержит `agent_message_chunk` и завершается с `stopReason: refusal`
+- **THEN** после `AgentTextItem` хода есть `NoticeItem` вида `turnStopped` с текстом `The agent refused to continue.`; ход `end_turn` и `cancelled` такой заметки не получает
+
+#### Scenario: Реплей session/load без заметки исхода
+- **WHEN** сессия загружена через `session/load`, и в реплее истории есть ход, который при живом выполнении завершился с `stopReason: max_tokens` (реплей ACP не передаёт `stopReason`, `03-Session Setup.md`, «Loading a Session»), а после загрузки новый ход той же сессии завершается с `stopReason: max_tokens`
+- **THEN** ход реплея не получает `NoticeItem` вида `turnStopped`, а новый ход получает; исход хода клиент не хранит и не восстанавливает (решение пользователя 2026-11-09, design.md change `add-provider-setup-ui`, Q36)
 
 #### Scenario: Лимит стоимости
 - **WHEN** ход завершён `max_turn_requests` с причиной `cost`
-- **THEN** в ленте заметка `The turn stopped: budget exceeded: cost.`
+- **THEN** в ленте заметка `turnStopped` с текстом `The turn stopped: budget exceeded: cost.`
 
 #### Scenario: Причина неизвестна
 - **WHEN** ход завершён `max_turn_requests` без причины или с причиной `energy`
-- **THEN** в ленте заметка `The turn reached the limit of model requests.`
+- **THEN** в ленте заметка `turnStopped` с текстом `The turn reached the limit of model requests.`
