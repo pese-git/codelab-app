@@ -98,7 +98,7 @@ final class AgentsDefinitionError {
 
   final int index;
 
-  /// Полный путь: только для `openDefinitionFile`, в журнал и текст не идёт.
+  /// Полный путь: только для `openDefinitionFolder`, в журнал и текст не идёт.
   final String path;
 
   /// Путь с `~` вместо домашнего каталога: показывается пользователю.

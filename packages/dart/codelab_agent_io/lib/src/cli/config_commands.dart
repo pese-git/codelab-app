@@ -7,6 +7,7 @@ import 'package:meta/meta.dart';
 import '../config/config_loader.dart';
 import '../config/config_paths.dart';
 import '../config/config_writer.dart' show ConfigWriteSeam;
+import '../project/agent_definitions_parse.dart';
 import '../project/project_extensions.dart';
 import '../secrets/open_secret_store.dart';
 import '../secrets/secret_process_runner.dart';
@@ -665,10 +666,6 @@ final class ConfigCommands {
     switch (extensions.projectFiles) {
       case PhaseLoaded<ProjectFiles>(:final value):
         try {
-          final models = StaticModelCatalog(
-            config.providers,
-            logger: const SilentLogger(),
-          );
           // Диагностики файлов проекта (D13): `warning:` для `error` и
           // `warning`, `note:` для `untrusted_project`; прочие `info`
           // (`shadowed`) не печатаются.
@@ -676,10 +673,7 @@ final class ConfigCommands {
             _diagnosticLines([
               ...value.diagnostics,
               ...parseCommandTemplates(value.templates).diagnostics,
-              ...parseAgentDefinitions(
-                value.agents,
-                models: models,
-              ).diagnostics,
+              ...parseAgentDefinitionsOf(config, value.agents).diagnostics,
             ]),
           );
         } on Object catch (error) {

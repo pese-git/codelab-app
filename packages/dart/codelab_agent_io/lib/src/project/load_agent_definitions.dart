@@ -9,41 +9,29 @@ library;
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
-import '../util/silent_logger.dart';
+import 'agent_definitions_parse.dart';
 
 /// Результат [loadAgentDefinitions]: принятые определения и диагностика.
 ///
 /// Как использовать: поля только для чтения. [diagnostics] — диагностика
-/// порта чтения файлов и разбора ядра (`untrusted_project`,
+/// порта чтения файлов, затем разбора ядра (`untrusted_project`,
 /// `invalid_value`, `duplicate`, `shadowed`…) без тел файлов (D14 change
-/// `add-agent-project-files`). [files] и [parseDiagnostics] нужны `config
-/// check`, чтобы сохранить прежний порядок строк вывода (диагностика
-/// шаблонов команд стоит между ними).
+/// `add-agent-project-files`).
 final class AgentDefinitionsReport {
   const AgentDefinitionsReport({
     this.definitions = const [],
-    this.files = ProjectFiles.empty,
-    this.parseDiagnostics = const [],
+    this.diagnostics = const [],
     this.timedOut = false,
   });
 
   /// Принятые определения всех областей в байтовом порядке имён.
   final List<AgentDefinition> definitions;
 
-  /// Сырые файлы, как их отдал порт; пусты при [timedOut].
-  final ProjectFiles files;
-
-  /// Диагностика разбора определений (`parseAgentDefinitions`).
-  final List<ExtensionDiagnostic> parseDiagnostics;
+  /// Диагностика чтения файлов, затем разбора определений.
+  final List<ExtensionDiagnostic> diagnostics;
 
   /// Чтение не уложилось в `timeout`; остальные поля пусты.
   final bool timedOut;
-
-  /// Диагностика чтения файлов, затем разбора определений.
-  List<ExtensionDiagnostic> get diagnostics => [
-    ...files.diagnostics,
-    ...parseDiagnostics,
-  ];
 }
 
 /// Читает и разбирает определения агентов тем же путём, что `config check`.
@@ -85,27 +73,15 @@ Future<AgentDefinitionsReport> loadAgentDefinitions({
       cancelSource.cancel();
       return const AgentDefinitionsReport(timedOut: true);
     }
-    final visible = cwd == null
-        ? ProjectFiles(
-            agents: files.agents,
-            templates: files.templates,
-            diagnostics: [
-              for (final item in files.diagnostics)
-                if (item.code != 'untrusted_project') item,
-            ],
-          )
-        : files;
-    final parsed = parseAgentDefinitions(
-      visible.agents,
-      models: StaticModelCatalog(
-        config.providers,
-        logger: const SilentLogger(),
-      ),
-    );
+    final parsed = parseAgentDefinitionsOf(config, files.agents);
     return AgentDefinitionsReport(
       definitions: parsed.agents,
-      files: visible,
-      parseDiagnostics: parsed.diagnostics,
+      diagnostics: [
+        for (final item in files.diagnostics)
+          // Без папки «проекта» нет: его диагностику страница не показывает.
+          if (cwd != null || item.code != 'untrusted_project') item,
+        ...parsed.diagnostics,
+      ],
     );
   } on Object {
     cancelSource.cancel();

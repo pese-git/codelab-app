@@ -335,8 +335,9 @@ void main() {
   // страницы группы Agent» и «Поиск режима bypass»): красные до задачи 1.4
   // (`SettingsPage.agentsAndModes` в `defaultSettingsPages`,
   // `settingsPageBuilders` и ключевых словах поиска).
-  testWidgets('Four pages of the Agent group: Connection, Providers, MCP '
-      'servers and Agents & modes in this order, no App title', (tester) async {
+  testWidgets('Five pages of the Agent group: Connection, Providers, MCP '
+      'servers, Agents & modes and Skills & extensions in this order, no App '
+      'title', (tester) async {
     await pumpShell(tester, available: defaultSettingsPages.available);
 
     expect(SettingsPage.agentsAndModes.navKey, 'settings-nav-agents-and-modes');
@@ -347,7 +348,9 @@ void main() {
     final agents = tester.getTopLeft(_nav(SettingsPage.agentsAndModes));
     expect(connection.dy, lessThan(providers.dy));
     expect(providers.dy, lessThan(mcp.dy));
+    final skills = tester.getTopLeft(_nav(SettingsPage.skillsAndExtensions));
     expect(mcp.dy, lessThan(agents.dy));
+    expect(agents.dy, lessThan(skills.dy));
     expect(find.text('Agent'), findsOneWidget);
     expect(find.text('App'), findsNothing);
     expect(settingsPageBuilders, contains(SettingsPage.agentsAndModes));
@@ -356,6 +359,7 @@ void main() {
       SettingsPage.providers,
       SettingsPage.mcpServers,
       SettingsPage.agentsAndModes,
+      SettingsPage.skillsAndExtensions,
     ]);
   });
 

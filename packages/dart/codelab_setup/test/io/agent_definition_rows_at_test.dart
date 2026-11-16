@@ -72,10 +72,14 @@ void main() {
   Future<AgentDefinitionRows> rowsAt({
     bool trusted = true,
     bool withFolder = true,
+    String? folder,
   }) => agentDefinitionRowsAt(
     snapshot: snapshot(trusted: trusted),
     access: EditableSettings(
-      ConfigPaths(codelabHome: home, projectDir: withFolder ? repo : null),
+      ConfigPaths(
+        codelabHome: home,
+        projectDir: withFolder ? folder ?? repo : null,
+      ),
     ),
     env: {'CODELAB_HOME': home},
   );
@@ -162,13 +166,34 @@ void main() {
     expect((await rowsAt(withFolder: false)).projectTrusted, isFalse);
   });
 
-  test('symlink вместо проектного каталога не считается каталогом', () async {
+  test('Каталог-ссылка считается существующим', () async {
     final target = Directory('$base/elsewhere')..createSync();
     Directory('$repo/.codelab').createSync(recursive: true);
     Link('$repo/.codelab/agents').createSync(target.path);
 
     final result = await rowsAt();
 
+    expect(result.projectDirectoryExists, isTrue);
+  });
+
+  test('Битая ссылка вместо каталога не считается существующей', () async {
+    Directory('$repo/.codelab').createSync(recursive: true);
+    Link('$repo/.codelab/agents').createSync('$base/missing-target');
+
+    final result = await rowsAt();
+
     expect(result.projectDirectoryExists, isFalse);
+  });
+
+  test('папка за ссылкой: projectDirectory совпадает с путями строк', () async {
+    write('$repo/.codelab/agents/proj-one.md', agent('proj-one'));
+    Link('$base/link').createSync(repo);
+
+    final result = await rowsAt(folder: '$base/link');
+
+    final row = result.rows.singleWhere((r) => r.name == 'proj-one');
+    expect(result.projectDirectory, '$repo/.codelab/agents');
+    expect(row.path, startsWith('${result.projectDirectory}/'));
+    expect(result.projectDirectoryExists, isTrue);
   });
 }

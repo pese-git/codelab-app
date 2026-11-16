@@ -61,9 +61,9 @@ final class AgentDefinitionRows {
 }
 
 /// Читает определения функцией `codelab_agent_io`, общей с `config check`, и
-/// строит строки. Каталоги не создаёт; существование каталога проверяется
-/// без следования по symlink (ссылка на каталог или бандл каталогом не
-/// считается).
+/// строит строки. Каталоги не создаёт; существование каталога проверяется по
+/// раскрытой ссылке: каталог-ссылка существует (агент читает определения через
+/// неё же), битая ссылка — нет (D21 change `add-settings-agents-modes`).
 ///
 /// Дом — `access.paths.codelabHome` (профиль важнее окружения клиента, как у
 /// `FileAgentConfigStore`). Доверие — как у `config check`: канонический путь
@@ -82,11 +82,13 @@ Future<AgentDefinitionRows> agentDefinitionRowsAt({
   final home = codelabHomeOf(environment);
   final folder = access.paths.projectDir;
   final userDirectory = '$home/agents';
-  final projectDirectory = folder == null ? null : '$folder/.codelab/agents';
   final config = snapshot.loaded.config;
 
   var report = const AgentDefinitionsReport();
   var trusted = false;
+  // Каталог проекта — от канонического `cwd`: пути файлов определений
+  // приходят от него же, и клиент сопоставляет с ними `dirname` (D21).
+  var projectRoot = folder;
   if (config != null) {
     String? cwd;
     if (folder != null) {
@@ -96,6 +98,7 @@ Future<AgentDefinitionRows> agentDefinitionRowsAt({
         environment: environment,
       );
       cwd = trust.cwd;
+      projectRoot = trust.cwd;
       trusted = trust.trusted;
     }
     report = await loadAgentDefinitions(
@@ -116,6 +119,9 @@ Future<AgentDefinitionRows> agentDefinitionRowsAt({
     );
   }
 
+  final projectDirectory = projectRoot == null
+      ? null
+      : '$projectRoot/.codelab/agents';
   return AgentDefinitionRows(
     rows: agentDefinitionRowsOf(
       definitions: report.definitions,
@@ -135,8 +141,6 @@ Future<AgentDefinitionRows> agentDefinitionRowsAt({
   );
 }
 
-/// Каталог ли [path]; symlink не разыменовывается, поэтому ссылка на каталог
-/// или бандл каталогом не считается.
+/// Каталог ли [path] после раскрытия ссылки (D21).
 Future<bool> _isDirectory(String path) async =>
-    await FileSystemEntity.type(path, followLinks: false) ==
-    FileSystemEntityType.directory;
+    await FileSystemEntity.type(path) == FileSystemEntityType.directory;

@@ -60,7 +60,6 @@ import '../core/platform/connection_preferences.dart';
 import '../core/platform/dock_layout_store.dart';
 import '../core/platform/external_link_opener.dart';
 import '../core/platform/local_folder_opener.dart';
-import '../core/platform/path_opener.dart';
 import '../core/platform/limited_network_image.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
@@ -126,7 +125,6 @@ Scope createCodeLabRootScope({
   UserShellLauncher? userShellLauncher,
   ExternalLinkOpener? externalLinkOpener,
   LocalFolderOpener? localFolderOpener,
-  PathOpener? pathOpener,
   ProjectFolderPicker? projectFolderPicker,
   ProjectFiles? projectFiles,
   bool projectFilesEnabled = true,
@@ -162,7 +160,6 @@ Scope createCodeLabRootScope({
         userShellLauncher: userShellLauncher,
         externalLinkOpener: externalLinkOpener,
         localFolderOpener: localFolderOpener,
-        pathOpener: pathOpener,
         projectFolderPicker: projectFolderPicker,
       ),
       CodeLabConnectionModule(
@@ -442,12 +439,10 @@ final class CodeLabPlatformModule extends Module {
     UserShellLauncher? userShellLauncher,
     ExternalLinkOpener? externalLinkOpener,
     LocalFolderOpener? localFolderOpener,
-    PathOpener? pathOpener,
     this.projectFolderPicker,
   }) : _userShellLauncher = userShellLauncher,
        _externalLinkOpener = externalLinkOpener,
-       _localFolderOpener = localFolderOpener,
-       _pathOpener = pathOpener;
+       _localFolderOpener = localFolderOpener;
 
   /// Порт запуска shell пользователя; шов тестов
   /// (`createCodeLabRootScope(userShellLauncher:)`, `add-integrated-terminal`,
@@ -463,10 +458,6 @@ final class CodeLabPlatformModule extends Module {
   /// (`createCodeLabRootScope(localFolderOpener:)`, change `add-app-skills-page`,
   /// D8): без него — адаптер на `url_launcher`.
   final LocalFolderOpener? _localFolderOpener;
-  /// Порт открытия файла и каталога определений агентов; шов тестов
-  /// (`createCodeLabRootScope(pathOpener:)`, change `add-settings-agents-modes`,
-  /// D8): без него — адаптер на `url_launcher`.
-  final PathOpener? _pathOpener;
 
   /// Системный выбор папки; тесты подменяют его, чтобы не открывать диалог.
   final ProjectFolderPicker? projectFolderPicker;
@@ -488,16 +479,13 @@ final class CodeLabPlatformModule extends Module {
     bind<ExternalLinkOpener>().toInstance(
       _externalLinkOpener ?? const UrlLauncherExternalLinkOpener(),
     );
-    // Открытие каталогов страницы «Skills & extensions» (D8): отдельный порт,
+    // Открытие каталогов страниц «Skills & extensions» (D8) и «Agents & modes»
+    // (D20.3, D21): один порт на двух потребителей, отдельный порт,
     // потому что `ExternalLinkOpener` по политике открывает только
     // `http`/`https`/`mailto`.
     bind<LocalFolderOpener>().toInstance(
       _localFolderOpener ?? const UrlLauncherLocalFolderOpener(),
     );
-    // Открытие файла и каталога определений агентов страницы «Agents & modes»
-    // (D8): отдельный порт, политика ссылок `ExternalLinkOpener` его не
-    // касается; `url_launcher` по-прежнему только в `core/platform/`.
-    bind<PathOpener>().toInstance(_pathOpener ?? UrlLauncherPathOpener());
     // Загрузка изображений ответа: лимиты тела, редиректы, размер (D6, R4).
     bind<ImageProviderFor>().toInstance(defaultImageProviderFor);
     bind<ProjectFolderPicker>().toInstance(
@@ -870,7 +858,7 @@ final class CodeLabPresentationModule extends Module {
         projectDirectory: () => _focusFolder(currentScope),
         logger: _settingsLogger(),
         loadDefinitions: loadAgentDefinitionsForPage,
-        pathOpener: currentScope.resolve<PathOpener>(),
+        folderOpener: currentScope.resolve<LocalFolderOpener>(),
       );
     });
     // Страница «MCP servers»: новый Cubit на каждое открытие (D11); сессия
@@ -1306,6 +1294,7 @@ final class CodeLabDependencies {
   /// Создаёт Cubit страницы «Skills & extensions»; страница владеет им и
   /// закрывает (change `add-app-skills-page`, D6).
   final SkillsSettingsCubit Function() createSkillsSettingsCubit;
+
   /// Создаёт Cubit страницы «Agents & modes»; страница владеет им и закрывает
   /// (design.md change `add-settings-agents-modes`, D11).
   final AgentsModesCubit Function() createAgentsModesCubit;

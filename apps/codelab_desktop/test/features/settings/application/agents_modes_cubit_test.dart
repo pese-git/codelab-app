@@ -16,13 +16,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_client_core/codelab_client_core.dart';
-import 'package:codelab_desktop/core/platform/path_opener.dart';
+import 'package:codelab_desktop/core/platform/local_folder_opener.dart';
 import 'package:codelab_desktop/features/settings/application/agents_modes_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../../support/fake_path_opener.dart';
+import '../../../support/fake_definitions_loader.dart';
+import '../../../support/fake_local_folder_opener.dart';
 import '../../../support/fake_provider_settings.dart' show FakeWorkspace;
 import '../../../support/modes_fixture.dart';
 import '../../../support/recording_logger.dart';
@@ -80,7 +81,7 @@ void main() {
   AgentsModesCubit make(
     ModesFixture fx, {
     FakeDefinitionsLoader? loader,
-    FakePathOpener? opener,
+    FakeLocalFolderOpener? opener,
     Map<String, String>? environment,
   }) {
     final cubit = AgentsModesCubit(
@@ -95,7 +96,7 @@ void main() {
       projectDirectory: () => projectDir(),
       logger: logger,
       loadDefinitions: loader?.call,
-      pathOpener: opener,
+      folderOpener: opener,
     );
     cubits.add(cubit);
     return cubit;
@@ -1703,7 +1704,7 @@ void main() {
     test('a load without an explicit trust flag is fail-closed: the project '
         'is untrusted when its folder is known (3.3a)', () async {
       final fx = await fixture();
-      final opener = FakePathOpener();
+      final opener = FakeLocalFolderOpener();
       final cubit = make(
         fx,
         loader: FakeDefinitionsLoader(
@@ -1744,7 +1745,7 @@ void main() {
           ),
         ),
       );
-      final opener = FakePathOpener();
+      final opener = FakeLocalFolderOpener();
       final cubit = make(
         fx,
         loader: FakeDefinitionsLoader(
@@ -1876,11 +1877,11 @@ void main() {
       },
     );
 
-    group('Open file и Open folder', () {
-      test('"Open file" passes the path from the state and logs the kind '
-          'and the outcome without the path', () async {
+    group('Open folder (D8, D20.3, D21)', () {
+      test('"Open folder" of an error InfoBar passes the folder of the file to '
+          'the port and logs "file_dir" without paths', () async {
         final fx = await fixture();
-        final opener = FakePathOpener();
+        final opener = FakeLocalFolderOpener();
         final cubit = make(
           fx,
           loader: loaderOf(brokenRows),
@@ -1889,66 +1890,24 @@ void main() {
         );
         await ready(cubit);
 
-        await cubit.openDefinitionFile(migrator);
+        await cubit.openDefinitionFolder(migrator);
 
-        expect(opener.files, [migrator]);
+        expect(opener.calls, [(directory: userDir, create: false)]);
         final opened = events('agents_modes.open_path').single;
-        expect(opened['kind'], 'file');
+        expect(opened['kind'], 'file_dir');
         expect(opened['outcome'], 'opened');
         expect(opened['level'], 'info');
         expect(logger.entries.toString(), isNot(contains('migrator')));
+        expect(logger.entries.toString(), isNot(contains(userDir)));
         expect(definitionsOf(cubit).openFailure, isNull);
       });
 
-      test('a path that is not in the state is not_allowed and never reaches '
-          'the port', () async {
-        final fx = await fixture();
-        final opener = FakePathOpener();
-        final cubit = make(
-          fx,
-          loader: loaderOf(brokenRows),
-          opener: opener,
-          environment: env,
-        );
-        await ready(cubit);
-
-        await cubit.openDefinitionFile('/etc/passwd');
-        await cubit.openDefinitionFile('$userDir/../../.ssh/id_rsa');
-
-        expect(opener.untouched, isTrue);
-        final outcomes = events('agents_modes.open_path');
-        expect(outcomes.map((e) => e['outcome']), everyElement('not_allowed'));
-        expect(logger.entries.toString(), isNot(contains('passwd')));
-      });
-
-      test('a refusal of the port (a symlinked folder) shows the open-failed '
-          'state too', () async {
-        final fx = await fixture();
-        final opener = FakePathOpener()
-          ..directoryOutcome = PathOpenOutcome.notAllowed;
-        final cubit = make(
-          fx,
-          loader: loaderOf([builtin('default')]),
-          opener: opener,
-          environment: env,
-        );
-        await ready(cubit);
-
-        await cubit.openFolder(AgentsFolder.user);
-
-        expect(definitionsOf(cubit).openFailure, '~/.codelab/agents');
-        expect(
-          events('agents_modes.open_path').single['outcome'],
-          'not_allowed',
-        );
-      });
-
       test(
-        'a refusal of the port for a file shows the open-failed state',
+        'a folder that is not among the definition folders of the state is '
+        'not_allowed and never reaches the port (Каталог вне состояния)',
         () async {
           final fx = await fixture();
-          final opener = FakePathOpener()
-            ..fileOutcome = PathOpenOutcome.notAllowed;
+          final opener = FakeLocalFolderOpener();
           final cubit = make(
             fx,
             loader: loaderOf(brokenRows),
@@ -1957,33 +1916,116 @@ void main() {
           );
           await ready(cubit);
 
-          await cubit.openDefinitionFile(migrator);
+          await cubit.openDefinitionFolder('/etc/passwd');
+          await cubit.openDefinitionFolder('$userDir/../../.ssh/id_rsa');
 
-          expect(definitionsOf(cubit).openFailure, isNotNull);
+          expect(opener.untouched, isTrue);
+          final outcomes = events('agents_modes.open_path');
+          expect(
+            outcomes.map((e) => e['outcome']),
+            everyElement('not_allowed'),
+          );
+          expect(logger.entries.toString(), isNot(contains('passwd')));
         },
       );
 
-      test('a failure of the platform shows the open-failed state', () async {
-        final fx = await fixture();
-        final opener = FakePathOpener()..fileOutcome = PathOpenOutcome.failed;
-        final cubit = make(
-          fx,
-          loader: loaderOf(brokenRows),
-          opener: opener,
-          environment: env,
-        );
-        await ready(cubit);
+      test(
+        'the folder of a file in the trusted project folder is allowed',
+        () async {
+          final fx = await fixture();
+          const projectAgents = '/work/demo/.codelab/agents';
+          final opener = FakeLocalFolderOpener();
+          final cubit = make(
+            fx,
+            loader: loaderOf(
+              [
+                builtin('default'),
+                const AgentDefinitionRowView(
+                  name: 'p',
+                  status: AgentRowStatus.error,
+                  path: '$projectAgents/p.md',
+                ),
+              ],
+              projectDir: projectAgents,
+              projectExists: true,
+            ),
+            opener: opener,
+            environment: env,
+          );
+          await ready(cubit);
 
-        await cubit.openDefinitionFile(migrator);
+          await cubit.openDefinitionFolder('$projectAgents/p.md');
 
-        expect(definitionsOf(cubit).openFailure, isNotNull);
-        expect(events('agents_modes.open_path').single['outcome'], 'failed');
+          expect(opener.calls, [(directory: projectAgents, create: false)]);
+        },
+      );
+
+      test(
+        'the folder of a file of an untrusted project is not_allowed',
+        () async {
+          final fx = await fixture(trusted: false);
+          const projectAgents = '/work/demo/.codelab/agents';
+          final opener = FakeLocalFolderOpener();
+          final cubit = make(
+            fx,
+            loader: loaderOf(
+              [
+                builtin('default'),
+                const AgentDefinitionRowView(
+                  name: 'p',
+                  status: AgentRowStatus.error,
+                  path: '$projectAgents/p.md',
+                ),
+              ],
+              untrusted: true,
+              projectDir: projectAgents,
+              projectExists: true,
+            ),
+            opener: opener,
+            environment: env,
+          );
+          await ready(cubit);
+
+          await cubit.openDefinitionFolder('$projectAgents/p.md');
+
+          expect(opener.untouched, isTrue);
+        },
+      );
+
+      test('"failed" and "missing" of the port show the open-failed state '
+          'and are logged by name', () async {
+        for (final (outcome, name) in [
+          (FolderOpenOutcome.failed, 'failed'),
+          (FolderOpenOutcome.missing, 'missing'),
+        ]) {
+          logger.entries.clear();
+          final fx = await fixture();
+          final opener = FakeLocalFolderOpener(outcome: outcome);
+          final cubit = make(
+            fx,
+            loader: loaderOf(brokenRows),
+            opener: opener,
+            environment: env,
+          );
+          await ready(cubit);
+
+          await cubit.openFolder(AgentsFolder.user);
+
+          expect(
+            definitionsOf(cubit).openFailure,
+            '~/.codelab/agents',
+            reason: name,
+          );
+          expect(events('agents_modes.open_path').single['outcome'], name);
+        }
       });
 
       test('"User definitions" asks the port to create the folder and logs '
           '"created" (Пользовательского каталога нет)', () async {
         final fx = await fixture();
-        final opener = FakePathOpener();
+        final opener = FakeLocalFolderOpener(
+          outcome: FolderOpenOutcome.created,
+        );
         final cubit = make(
           fx,
           loader: loaderOf([builtin('default')], userExists: false),
@@ -1994,34 +2036,19 @@ void main() {
 
         await cubit.openFolder(AgentsFolder.user);
 
-        expect(opener.directories, [(path: userDir, create: true)]);
+        expect(opener.calls, [(directory: userDir, create: true)]);
         final opened = events('agents_modes.open_path').single;
         expect(opened['kind'], 'user_dir');
         expect(opened['outcome'], 'created');
+        expect(definitionsOf(cubit).openFailure, isNull);
       });
 
-      test('an existing user folder is opened with create too (the port '
-          'creates only what is missing)', () async {
+      test('a broken link in place of the user folder is "missing": InfoBar, '
+          'no creation by the Cubit (Битая ссылка)', () async {
         final fx = await fixture();
-        final opener = FakePathOpener()
-          ..directoryOutcome = PathOpenOutcome.opened;
-        final cubit = make(
-          fx,
-          loader: loaderOf([builtin('default')]),
-          opener: opener,
-          environment: env,
+        final opener = FakeLocalFolderOpener(
+          outcome: FolderOpenOutcome.missing,
         );
-        await ready(cubit);
-
-        await cubit.openFolder(AgentsFolder.user);
-
-        expect(events('agents_modes.open_path').single['outcome'], 'opened');
-      });
-
-      test('a failed creation shows the open-failed state', () async {
-        final fx = await fixture();
-        final opener = FakePathOpener()
-          ..directoryOutcome = PathOpenOutcome.failed;
         final cubit = make(
           fx,
           loader: loaderOf([builtin('default')], userExists: false),
@@ -2033,69 +2060,17 @@ void main() {
         await cubit.openFolder(AgentsFolder.user);
 
         expect(definitionsOf(cubit).openFailure, isNotNull);
+        expect(events('agents_modes.open_path').single['outcome'], 'missing');
       });
 
-      test('the project folder of a trusted project is opened WITHOUT create '
-          '(Q11)', () async {
+      test('a link to an application package of the project folder is '
+          '"failed" (Ссылка на пакет приложения)', () async {
         final fx = await fixture();
-        const projectAgents = '/work/demo/.codelab/agents';
-        final opener = FakePathOpener();
+        final opener = FakeLocalFolderOpener(outcome: FolderOpenOutcome.failed);
         final cubit = make(
           fx,
           loader: loaderOf(
             [builtin('default')],
-            projectDir: projectAgents,
-            projectExists: true,
-          ),
-          opener: opener,
-          environment: env,
-        );
-        await ready(cubit);
-
-        expect(definitionsOf(cubit).projectFolderAvailable, isTrue);
-        expect(definitionsOf(cubit).projectFolderExists, isTrue);
-        await cubit.openFolder(AgentsFolder.project);
-
-        expect(opener.directories, [(path: projectAgents, create: false)]);
-        expect(events('agents_modes.open_path').single['kind'], 'project_dir');
-      });
-
-      test('a missing project folder is never created by the app '
-          '(Проектного каталога нет)', () async {
-        final fx = await fixture();
-        final opener = FakePathOpener();
-        final cubit = make(
-          fx,
-          loader: loaderOf(
-            [builtin('default')],
-            projectDir: '/work/demo/.codelab/agents',
-            projectExists: false,
-          ),
-          opener: opener,
-          environment: env,
-        );
-        await ready(cubit);
-
-        expect(definitionsOf(cubit).projectFolderAvailable, isTrue);
-        expect(definitionsOf(cubit).projectFolderExists, isFalse);
-        await cubit.openFolder(AgentsFolder.project);
-
-        expect(opener.untouched, isTrue);
-        expect(
-          events('agents_modes.open_path').single['outcome'],
-          'not_allowed',
-        );
-      });
-
-      test('an untrusted project is not opened even if the loader names an '
-          'existing project folder', () async {
-        final fx = await fixture(trusted: false);
-        final opener = FakePathOpener();
-        final cubit = make(
-          fx,
-          loader: loaderOf(
-            [builtin('default')],
-            untrusted: true,
             projectDir: '/work/demo/.codelab/agents',
             projectExists: true,
           ),
@@ -2106,16 +2081,44 @@ void main() {
 
         await cubit.openFolder(AgentsFolder.project);
 
-        expect(opener.untouched, isTrue);
-        final opened = events('agents_modes.open_path').single;
-        expect(opened['kind'], 'project_dir');
-        expect(opened['outcome'], 'not_allowed');
+        expect(opener.calls, [
+          (directory: '/work/demo/.codelab/agents', create: false),
+        ]);
+        expect(definitionsOf(cubit).openFailure, isNotNull);
+        expect(events('agents_modes.open_path').single['outcome'], 'failed');
+        expect(logger.entries.toString(), isNot(contains('/work/demo')));
       });
 
-      test('an untrusted project has no project folder to open '
-          '(Проект без доверия)', () async {
+      test(
+        'the project folder is never created by the app (Q11 (б))',
+        () async {
+          final fx = await fixture();
+          final opener = FakeLocalFolderOpener();
+          final cubit = make(
+            fx,
+            loader: loaderOf(
+              [builtin('default')],
+              projectDir: '/work/demo/.codelab/agents',
+              projectExists: false,
+            ),
+            opener: opener,
+            environment: env,
+          );
+          await ready(cubit);
+
+          await cubit.openFolder(AgentsFolder.project);
+
+          expect(opener.untouched, isTrue);
+          expect(
+            events('agents_modes.open_path').single['outcome'],
+            'not_allowed',
+          );
+        },
+      );
+
+      test('an untrusted project has no project folder to open', () async {
         final fx = await fixture(trusted: false);
-        final opener = FakePathOpener();
+        final opener = FakeLocalFolderOpener();
         final cubit = make(
           fx,
           loader: loaderOf([builtin('default')], untrusted: true),

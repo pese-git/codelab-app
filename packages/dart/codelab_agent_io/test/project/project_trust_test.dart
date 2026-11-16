@@ -78,4 +78,27 @@ void main() {
 
     expect(trust.trusted, isFalse);
   });
+
+  // client-agent-setup «Одно правило доверия с config check»: функция
+  // `config check` (`loadProjectExtensions`) и `projectTrustAt` дают одно
+  // доверие для папки, открытой по пути-ссылке.
+  test('loadProjectExtensions и projectTrustAt согласны для ссылки', () async {
+    Link('$base/link').createSync(repo);
+    final cfg = config([repo]);
+
+    final trust = await projectTrustAt(
+      config: cfg,
+      folder: '$base/link',
+      environment: const {},
+    );
+    final extensions = await loadProjectExtensions(
+      cwd: '$base/link',
+      config: cfg,
+      environment: {'CODELAB_HOME': '$base/home'},
+    );
+
+    expect(extensions.cwd, trust.cwd);
+    expect(extensions.trusted, trust.trusted);
+    expect(extensions.trusted, isTrue);
+  });
 }
