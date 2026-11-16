@@ -18,7 +18,8 @@
 
 Изменения существующих фикстур:
 - `acp/initialize-codelab-extensions` SHALL ожидать `usage: {"version": 1}` в `clientCapabilities._meta.codelab` и в `agentCapabilities._meta.codelab` и объявлять расширение `usage`;
-- клиентские фикстуры, в которых kit отправляет `initialize`, SHALL ожидать `usage` в `clientCapabilities._meta.codelab`;
+- фикстуры с ролью `client` и явным кадром `initialize` клиента (`acp/initialize-codelab-extensions`, `acp/session-load-interrupted-turn`, `acp/session-new-modes-config`, `acp/set-config-option-model`) SHALL ожидать полное объявление клиента с `usage` в `clientCapabilities._meta.codelab`;
+- клиентский драйвер в стандартном handshake SHALL сверять `_meta.codelab` из `setup.clientCapabilities` как подмножество объявления клиента: каждый указанный ключ — точно, лишние ключи клиента допустимы; агентский драйвер по-прежнему отправляет `setup.clientCapabilities` как есть (design.md, Q15 (б), D21 Т7);
 - `acp/prompt-turn-budget-exceeded` SHALL проигрываться и клиентским драйвером;
 - фикстуры, где клиент не объявляет `usage`, НЕ SHALL получать кадров `_codelab/session/usage`.
 
@@ -44,8 +45,12 @@
 
 #### Scenario: Клиентский прогон
 - **WHEN** клиентский драйвер проигрывает `acp/prompt-usage-steps`
-- **THEN** `SessionView.usage` после хода — `reported`, `lastTurn` и `session` равны значениям последнего снимка, клиент не отправляет кадров в ответ на уведомления
+- **THEN** `SessionView.usage` после хода — `reported`, `lastTurn` и `session` равны значениям последнего снимка, клиент не отправляет кадров в ответ на уведомления (проверка `SessionView` — тестом `codelab_client_core` на том же драйвере, доставка снимков ядром клиента — `conformance:client`; design.md, D21 Т7)
 
 #### Scenario: Причина бюджета у клиента
 - **WHEN** клиентский драйвер проигрывает `acp/prompt-turn-budget-exceeded`
-- **THEN** заметка хода — `The turn stopped: budget exceeded: tokens.`
+- **THEN** итог prompt turn ядра клиента несёт причину `tokens`, а заметка хода в транскрипте kit — `The turn stopped: budget exceeded: tokens.` (design.md, D21 Т7)
+
+#### Scenario: Объявление клиента в handshake — подмножество
+- **WHEN** клиентский драйвер проигрывает фикстуру без `skipInitialize` с `setup.clientCapabilities._meta.codelab: {"usage": {"version": 1}}`, а клиент объявляет `tasks`, `subagents`, `subagentToolCalls` и `usage`
+- **THEN** кадр `initialize` клиента совпадает; если клиент не объявил `usage` или объявил его с другим значением, кадр не совпадает
