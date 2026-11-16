@@ -40,6 +40,7 @@ void main() {
     log = [];
     return SessionBridge(
       owner: Object(),
+      usageSink: (_) {},
       sink: (n) => log.add('live:${n.update.toJson()['sessionUpdate']}'),
       link: channel.link,
       clock: channel.clock,
@@ -180,6 +181,7 @@ void main() {
       log = [];
       final bridge = SessionBridge(
         owner: Object(),
+        usageSink: (_) {},
         sink: (n) => log.add('live:${n.update.toJson()['sessionUpdate']}'),
         link: channel.link,
         clock: channel.clock,

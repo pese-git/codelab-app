@@ -27,6 +27,14 @@ ConfigTree withScriptedProviders(ConfigTree flags, List<ModelRef> models) {
     (entry['models']! as Map<String, Object?>)[model.id] = {
       'context_window': model.contextWindow,
       'max_output_tokens': model.maxOutputTokens,
+      // Цены сценария (`llm.model.cost`) доходят до `ModelRef.cost` ядра
+      // ключами `cost_*` (add-usage-extension, D18 Т8); без цен ключей нет.
+      if (model.cost case final cost?) ...{
+        'cost_input': cost.input,
+        'cost_output': cost.output,
+        'cost_cache_read': cost.cacheRead,
+        'cost_cache_write': cost.cacheWrite,
+      },
     };
   }
   return ConfigTree(

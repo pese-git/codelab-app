@@ -1,6 +1,8 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' as acp;
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
+import 'usage_accounting.dart';
+
 /// Согласие клиента на вызовы потомков: `clientCapabilities._meta.codelab.
 /// subagentToolCalls` — объект с целым `version: 1` (design.md change
 /// `add-subagents-and-tasks`, D9, D47 Т3).
@@ -8,20 +10,11 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// Почему отдельная функция: согласие читают и мост (кому слать кадры
 /// потомков), и `AcpPermissionGate` (что ждать перед запросом), причём из
 /// `ClientLink.capabilities` в момент события или запроса: после
-/// переподключения объявление может смениться. Любое другое значение
-/// (`2`, `'1'`, `1.5`, не объект) — согласия нет, как у kit.
-bool subagentToolCallsConsent(acp.ClientCapabilities capabilities) {
-  final codelab = capabilities.meta?['codelab'];
-  if (codelab is! Map) {
-    return false;
-  }
-  final extension = codelab['subagentToolCalls'];
-  if (extension is! Map) {
-    return false;
-  }
-  final version = extension['version'];
-  return version is int && version == 1;
-}
+/// переподключения объявление может смениться. Правило версии — общее,
+/// [codelabKeyAgreed]: любое другое значение (`2`, `'1'`, `1.5`, не объект) —
+/// согласия нет, как у kit.
+bool subagentToolCallsConsent(acp.ClientCapabilities capabilities) =>
+    codelabKeyAgreed(capabilities.meta, 'subagentToolCalls');
 
 /// Цепочки `toolCallId` вызовов потомков (D47 Т2).
 ///

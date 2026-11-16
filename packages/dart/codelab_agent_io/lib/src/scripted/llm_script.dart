@@ -128,6 +128,7 @@ final class LlmScript {
       _ => const <String, Object?>{},
     };
     final window = model['contextWindow'] as int? ?? 32768;
+    final cost = _costOf(model['cost']);
     final ids = models.isNotEmpty
         ? models
         : [
@@ -145,7 +146,48 @@ final class LlmScript {
           baseUrl: Uri.parse('http://scripted.invalid/v1'),
           contextWindow: window,
           maxOutputTokens: 4096,
+          cost: cost,
         ),
     ];
+  }
+
+  /// Цены модели сценария: `llm.model.cost` — доллары за 10^6 токенов, как
+  /// `ModelCost` (add-usage-extension, D18 Т8). Разбор здесь, а не через
+  /// `codelab_acp_testing`: формат проверяет загрузчик фикстур (задача 1.6a),
+  /// а сценарий читает сырой JSON. Нет поля `cost` (или `null`) — цены
+  /// неизвестны (`null`). Не объект, нет `input`/`output`, не число,
+  /// отрицательное или не конечное значение — [LlmScriptException]: молчаливое
+  /// «нет цен» скрыло бы опечатку в сценарии (решение 2026-11-16, D20 п. 2);
+  /// правила совпадают с проверкой `cost_*` в конфигурации.
+  static ModelCost? _costOf(Object? raw) {
+    if (raw == null) {
+      return null;
+    }
+    if (raw is! Map<String, Object?>) {
+      throw const LlmScriptException('llm.model.cost: must be an object');
+    }
+    double price(String key, {required bool required}) {
+      final value = raw[key];
+      if (value == null && !required) {
+        return 0;
+      }
+      if (value is! num || !value.isFinite || value < 0) {
+        throw LlmScriptException(
+          'llm.model.cost.$key: must be a finite number not less than 0',
+        );
+      }
+      return value.toDouble();
+    }
+
+    final input = price('input', required: true);
+    final output = price('output', required: true);
+    final cacheRead = price('cacheRead', required: false);
+    final cacheWrite = price('cacheWrite', required: false);
+    return ModelCost(
+      input: input,
+      output: output,
+      cacheRead: cacheRead,
+      cacheWrite: cacheWrite,
+    );
   }
 }

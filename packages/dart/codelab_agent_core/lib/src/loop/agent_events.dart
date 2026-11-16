@@ -176,10 +176,39 @@ final class ToolPairingRepaired extends AgentEvent {
   final PairingReport report;
 }
 
+/// Заполнение контекста сессии после шага (change `add-usage-extension`, D5).
+///
+/// Почему в ядре: адаптер токены не оценивает, а оценка с якорем на usage
+/// (`agent-core-architecture` §9.3) и порог автосжатия известны только циклу.
+///
+/// Для чего: клиент показывает «сколько окна занято» и когда сработает
+/// сжатие; поле лежит в [StepEnded], а не в `StepResult`, который получает и
+/// `prepareNextStep`.
+///
+/// Как использовать: цикл считает значение сам, если в `AgentLoopConfig`
+/// задан `contextEstimator`; потребитель события только читает поля.
+final class ContextFill {
+  const ContextFill({required this.used, required this.window, this.compactAt});
+
+  /// Оценка токенов контекста после результатов инструментов шага.
+  final int used;
+
+  /// Эффективное окно текущей модели цикла (`effectiveContextWindow`, CMP-6).
+  final int window;
+
+  /// Порог автосжатия `afterTurn` в токенах; `null` — автосжатие выключено
+  /// (`AgentLoopConfig.compaction == null`, Q10 (а)).
+  final int? compactAt;
+}
+
 final class StepEnded extends AgentEvent {
-  const StepEnded(super.sessionId, {required this.result});
+  const StepEnded(super.sessionId, {required this.result, this.context});
 
   final StepResult result;
+
+  /// Заполнение контекста после шага (D5); `null`, если в конфигурации цикла
+  /// нет `contextEstimator`.
+  final ContextFill? context;
 }
 
 /// Список задач изменился (`agent-core/17-16-task-list.md` §17.16.2; change

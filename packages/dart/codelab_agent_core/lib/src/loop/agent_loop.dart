@@ -1,5 +1,6 @@
 import '../cancel/cancel_token.dart';
 import '../compaction/estimate.dart';
+import '../compaction/settings.dart';
 import '../llm/errors.dart';
 import '../llm/event_stream.dart';
 import '../llm/events.dart';
@@ -189,6 +190,7 @@ final class _Turn {
                 results: const [],
                 usage: response.usage,
               ),
+              context: _contextFill(),
             ),
           );
           reason = _failureReason(response);
@@ -211,7 +213,9 @@ final class _Turn {
           results: results,
           usage: response.usage,
         );
-        await _emit(StepEnded(_session, result: stepResult));
+        await _emit(
+          StepEnded(_session, result: stepResult, context: _contextFill()),
+        );
         _step++;
         pending = calls.isNotEmpty;
         if (!pending && empty) {
@@ -537,6 +541,45 @@ final class _Turn {
     await _emit(MessageStarted(_session, message: response));
     await _emit(MessageEnded(_session, message: response));
     return response;
+  }
+
+  /// Заполнение контекста для `StepEnded.context` (design.md change
+  /// `add-usage-extension`, D5, D18 Т2).
+  ///
+  /// Почему здесь: оценка с якорем на usage только что полученного ответа
+  /// (§9.3) считает лишь хвост результатов шага, и цикл единственный знает
+  /// актуальные транскрипт и модель. Контекст — та же база, что у проверки
+  /// `afterTurn` (`transformContext` не применяется). Окно — по текущей
+  /// модели цикла: `StepEnded` эмитится до `prepareNextStep`, поэтому смена
+  /// модели видна со следующего шага (Q12 (а)). Состояние цикла, журнал и
+  /// бюджет не меняются. `null` без `contextEstimator`.
+  ContextFill? _contextFill() {
+    final estimator = _config.contextEstimator;
+    if (estimator == null) {
+      return null;
+    }
+    final window = effectiveContextWindow(
+      _config.model,
+      cap: _config.contextWindowCap,
+    );
+    final overrides = _config.compaction;
+    return ContextFill(
+      used: estimator(
+        LlmContext(
+          systemPrompt: _context.systemPrompt,
+          messages: _transcript,
+          tools: [for (final tool in _context.tools) tool.toSchema()],
+          cacheKey: _session.value,
+        ),
+      ),
+      window: window,
+      compactAt: overrides == null
+          ? null
+          : compactionThreshold(
+              window,
+              CompactionSettings.forWindow(window, overrides: overrides),
+            ),
+    );
   }
 
   /// Читает ответ: первый блок кладёт снимок в транскрипт с

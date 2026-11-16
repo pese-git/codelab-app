@@ -19,6 +19,15 @@ void main() {
   setUp(() => temp = Directory.systemTemp.createTempSync('llm_script_'));
   tearDown(() => temp.deleteSync(recursive: true));
 
+  LlmScriptException failure(void Function() body) {
+    try {
+      body();
+    } on LlmScriptException catch (error) {
+      return error;
+    }
+    fail('LlmScriptException expected');
+  }
+
   const hello = <String, Object?>{
     'model': {
       'provider': 'scripted',
@@ -64,10 +73,7 @@ void main() {
     // `llm.model.cost` — доллары за 10^6 токенов, как `ModelCost`.
     Map<String, Object?> withCost(Map<String, Object?>? cost) => {
       ...hello,
-      'model': {
-        ...(hello['model']! as Map<String, Object?>),
-        if (cost != null) 'cost': cost,
-      },
+      'model': {...(hello['model']! as Map<String, Object?>), 'cost': ?cost},
     };
 
     test('llm.model.cost becomes ModelRef.cost', () {
@@ -95,6 +101,64 @@ void main() {
     test('without llm.model.cost the prices are unknown', () {
       expect(load(write(hello)).models.single.cost, isNull);
       expect(load(write(withCost(null))).models.single.cost, isNull);
+    });
+
+    // Неверные цены — явная ошибка загрузки, а не молчаливое «нет цен»
+    // (add-usage-extension, решение 2026-11-16, D18). `fromJson` принимает
+    // карту напрямую, поэтому достижимы и `Infinity`/`NaN` (JSON их не
+    // содержит).
+    group('invalid llm.model.cost is a load error', () {
+      void expectRejected(Object? cost, {String? mentions}) {
+        final llm = {
+          ...hello,
+          'model': {...(hello['model']! as Map<String, Object?>), 'cost': cost},
+        };
+
+        final error = failure(
+          () => LlmScript.fromJson(
+            llm,
+            models: const [],
+            clock: FakeClock(),
+            cwdOf: (_) => null,
+          ),
+        );
+
+        expect(error.message, contains('cost'));
+        if (mentions != null) {
+          expect(error.message, contains(mentions));
+        }
+      }
+
+      test('a non-object cost', () => expectRejected('free'));
+      test('a missing input or output', () {
+        expectRejected({'input': 3});
+        expectRejected({'output': 3});
+      });
+      test('a non-number price', () {
+        expectRejected({'input': '3', 'output': 15}, mentions: 'input');
+        expectRejected({
+          'input': 3,
+          'output': 15,
+          'cacheRead': 'x',
+        }, mentions: 'cacheRead');
+      });
+      test('a negative price', () {
+        expectRejected({'input': -1, 'output': 15}, mentions: 'input');
+        expectRejected({
+          'input': 3,
+          'output': 15,
+          'cacheWrite': -0.5,
+        }, mentions: 'cacheWrite');
+      });
+      test('a non-finite price', () {
+        expectRejected({'input': double.infinity, 'output': 15});
+        expectRejected({'input': 3, 'output': double.nan}, mentions: 'output');
+      });
+      test('zero prices are valid', () {
+        final script = load(write(withCost({'input': 0, 'output': 0})));
+
+        expect(script.models.single.cost, const ModelCost(input: 0, output: 0));
+      });
     });
 
     test('modelsOf gives the same prices', () {
@@ -165,15 +229,6 @@ void main() {
   });
 
   group('LlmScriptException', () {
-    LlmScriptException failure(void Function() body) {
-      try {
-        body();
-      } on LlmScriptException catch (error) {
-        return error;
-      }
-      fail('LlmScriptException expected');
-    }
-
     test('an invalid step names the field path and the file', () {
       final path = write({'steps': 'not a list'});
 

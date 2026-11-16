@@ -10,9 +10,16 @@ import 'connection/client_requests.dart';
 import 'event_projection.dart';
 import 'replay.dart';
 import 'subagent_chain.dart';
+import 'usage_accounting.dart';
 
 /// Куда мост ставит уведомления сессии: очередь соединения-владельца.
 typedef SessionUpdateSink = void Function(acp.SessionNotification update);
+
+/// Куда мост ставит кадры вне `session/update` — уведомления
+/// `_codelab/session/usage`: та же очередь соединения-владельца, что у
+/// [SessionUpdateSink] (D18 Т5), поэтому порядок с `session/update` держит
+/// очередь, а не дисциплина моста (R7).
+typedef SessionFrameSink = void Function(acp.JsonRpcMessage frame);
 
 /// Сессия ACP поверх `AgentSession` (§13.7).
 ///
@@ -39,6 +46,7 @@ final class SessionBridge {
     required Clock clock,
     required Logger logger,
     AcpClientExecutionEnv? clientEnv,
+    required this.usageSink,
   }) : _link = link,
        _clock = clock,
        _logger = logger,
@@ -49,6 +57,11 @@ final class SessionBridge {
 
   /// Очередь соединения-владельца; меняется при переподключении.
   SessionUpdateSink sink;
+
+  /// Очередь соединения-владельца для `_codelab/session/usage`; меняется при
+  /// переподключении вместе с [sink] и глохнет в [detach]. Обязателен: хост без
+  /// расширений передаёт явную пустую функцию.
+  SessionFrameSink usageSink;
   final ClientLink _link;
 
   final Clock _clock;
@@ -59,6 +72,10 @@ final class SessionBridge {
 
   late final AgentSession session;
   late final acp.SessionId _id;
+
+  /// Агрегаты usage сессии сервера и `seq` (D4, D7): живут столько же, сколько
+  /// мост, и переживают `reattach` без сброса (Q11 (а)).
+  final _usage = UsageAccounting();
 
   /// Модель сессии на момент последней сверки заметки §2.12.3: смену командой
   /// `/model` мост видит только по `ModelOptionsChanged`, `before` у него нет.
@@ -168,6 +185,19 @@ final class SessionBridge {
 
   /// Соединение-владелец закрыто, а сессия ещё не переподключена.
   bool get detached => _detached;
+
+  /// Сессия открыта через `session/load` в этом сервере: если в журнале уже
+  /// были ответы модели, ранние ходы в сумму usage не вошли и сессия получает
+  /// причину `beforeLoad` (D6, Q7 (а), D18 Т5).
+  ///
+  /// Вызывается один раз веткой `session/load`, создавшей мост; мост
+  /// `session/new` и мост, найденный повторным `session/load`, признак не
+  /// получают и при `reattach` он не меняется.
+  void markLoadedFromJournal() {
+    _usage.beforeLoad = session.replay().any(
+      (event) => event is MessageEnded && event.message is AssistantMessage,
+    );
+  }
 
   /// Подключает созданную или загруженную сессию и начинает проекцию.
   void attach(AgentSession session) {
@@ -496,7 +526,10 @@ final class SessionBridge {
   }
 
   /// Кадры живого хода, придержанные на время реплея дерева (D47 Т6).
-  List<acp.SessionUpdate>? _replayHeld;
+  ///
+  /// Хранит и `session/update`, и `_codelab/session/usage`: снимок не должен
+  /// опережать кадры реплея и меняться местами с кадрами хода (D18 Т5).
+  List<void Function()>? _replayHeld;
 
   /// Число идущих реплеев с придержанным буфером: буфер отпускает последний.
   var _replayHolds = 0;
@@ -505,8 +538,8 @@ final class SessionBridge {
   void _releaseReplayHeld() {
     final held = _replayHeld;
     _replayHeld = null;
-    for (final update in held ?? const <acp.SessionUpdate>[]) {
-      _send(update);
+    for (final frame in held ?? const <void Function()>[]) {
+      frame();
     }
   }
 
@@ -517,6 +550,7 @@ final class SessionBridge {
     _detached = true;
     // События остаются в журнале, реплей отдаст их новому соединению.
     sink = (_) {};
+    usageSink = (_) {};
     if (_turn == null) {
       return;
     }
@@ -540,6 +574,7 @@ final class SessionBridge {
     required ClientRequests requests,
     required acp.ClientCapabilities capabilities,
     required SessionUpdateSink sink,
+    required SessionFrameSink usageSink,
   }) {
     final moved = _detached && _turn != null;
     _grace?.cancel();
@@ -547,6 +582,7 @@ final class SessionBridge {
     _detached = false;
     this.owner = owner;
     this.sink = sink;
+    this.usageSink = usageSink;
     _link
       ..requests = requests
       ..capabilities = capabilities;
@@ -677,7 +713,27 @@ final class SessionBridge {
           // Поздние кадры потомков этого вызова `agent` отсекаются.
           _closed.add(toolCallId);
         }
+      case TurnStarted(:final turnId):
+        _usage.turnStarted(turnId);
+      case StepEnded():
+        // Снимок `step` — только если шаг учтён: шаг вне хода кадра не даёт
+        // и `seq` не тратит, как `TurnEnded` ниже (AGENTS.md §9).
+        if (_usage.stepEnded(event)) {
+          _sendUsage('step', _usage.stepSnapshot);
+        }
+      case ContextCompacted(:final tokensAfter):
+        _sendUsage(
+          'compaction',
+          (sessionId) => _usage.compactionSnapshot(sessionId, tokensAfter),
+        );
       case TurnEnded():
+        // Снимок `turn` строится из `TurnEnded` и уходит до `_finishTurn`:
+        // ответ `session/prompt` (в том числе `-32603`) и `session_info_update`
+        // перенесённого хода идут после него (D7, D18 Т5, ACP-3). Ход без
+        // шагов (`/status`) снимка не даёт (D4 п. 5).
+        if (_usage.turnEnded(event)) {
+          _sendUsage('turn', _usage.turnSnapshot);
+        }
         // Ожидающие объявления вызова не переживают ход: вызов уже не будет
         // объявлен. Ошибка `CancelledException` превращается шлюзом в
         // решение `cancelled`, а не в отправку запроса по завершённому ходу.
@@ -878,9 +934,59 @@ final class SessionBridge {
 
   void _send(acp.SessionUpdate update) {
     if (_replayHeld case final held?) {
-      held.add(update);
+      held.add(() => _send(update));
       return;
     }
     sink(acp.SessionNotification(sessionId: _id, update: update));
+  }
+
+  /// Ставит снимок usage в очередь владельца тем же путём, что [_send]:
+  /// придерживается на время реплея, молчит после [detach], а получатель —
+  /// соединение, текущее на момент отправки (D18 Т5).
+  ///
+  /// Агрегаты ведутся всегда, а снимок строится (и тратит `seq`) только если
+  /// кадр уйдёт: согласие читается из `ClientLink.capabilities` в момент
+  /// события, как у `subagentToolCallsConsent` (D3, D18 Т4); у отсоединённой
+  /// сессии кадр некому доставить — пропуск `seq` клиент считает нормой (D7).
+  /// Запись `acp.usage.sent` — без токенов и денег (D14, Q14 (б), §16);
+  /// `turn_id` — если снимок относится к ходу (у `compaction` его нет).
+  void _sendUsage(
+    String trigger,
+    Map<String, Object?> Function(String sessionId) build,
+  ) {
+    if (_detached || !usageConsent(_link.capabilities)) {
+      return;
+    }
+    final params = build(_id.value);
+    _logger.log(
+      LogLevel.debug,
+      'acp.usage.sent',
+      fields: {
+        'session_id': _id.value,
+        'seq': params['seq'],
+        'trigger': trigger,
+        if (params['turnId'] case final String turnId) 'turn_id': turnId,
+      },
+    );
+    _sendFrame(
+      acp.JsonRpcMessage.notification(
+        method: usageNotificationMethod,
+        params: params,
+      ),
+    );
+  }
+
+  void _sendFrame(acp.JsonRpcMessage frame) {
+    if (_replayHeld case final held?) {
+      // Согласие перечитывается при выпуске: за время реплея владелец мог
+      // смениться, а кадр уходит только объявившему `usage` (D3).
+      held.add(() {
+        if (!_detached && usageConsent(_link.capabilities)) {
+          _sendFrame(frame);
+        }
+      });
+      return;
+    }
+    usageSink(frame);
   }
 }

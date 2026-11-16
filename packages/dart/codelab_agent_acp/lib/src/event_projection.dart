@@ -30,16 +30,22 @@ const projectionTable = <Type, String>{
   ToolCallProgress: 'tool_call_update with content',
   ToolCallFinished: 'tool_call_update, completed or failed with outcome',
   ToolPairingRepaired: 'not sent',
-  StepEnded: 'not sent',
+  // Usage уходит не в `session/update`, а уведомлением
+  // `_codelab/session/usage` соединению, объявившему `usage`; его строит мост
+  // (`SessionBridge`), а не `projectEvent` (change `add-usage-extension`,
+  // D1, D18 Т5): `step` — после каждого `StepEnded`.
+  StepEnded: 'not sent as session/update: _codelab/session/usage, step',
   // Список задач целиком, у entry `_meta.codelab.task`; `op: restore` (список
   // новой ветки, D29) проецируется так же (agent-acp-server «Проекция
   // субагентов и списка задач»).
   TaskListChanged: 'plan',
   ModeChanged: 'current_mode_update and config_option_update',
   AgentError: 'not sent: the turn result carries the failure',
-  ContextCompacted: 'not sent',
+  ContextCompacted:
+      'not sent as session/update: _codelab/session/usage, compaction',
   SessionTitleChanged: 'session_info_update',
-  TurnEnded: 'the answer to session/prompt',
+  TurnEnded:
+      'the answer to session/prompt; _codelab/session/usage, turn, before it',
   ModelOptionsChanged: 'config_option_update',
   // События субагентов (change `add-subagents-and-tasks`, D24): клиент видит
   // один вызов `agent`; строку прогресса несёт `ToolCallProgress(agent)`, итог

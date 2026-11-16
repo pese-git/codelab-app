@@ -1859,6 +1859,11 @@ final class AgentRuntimeImpl implements AgentRuntime {
             ? (cause, cancel) => session._emergency(cause, cancel)
             : null,
         contextWindowCap: settings.compaction.contextWindowCap,
+        // Заполнение контекста для `StepEnded.context` нужно и без
+        // автосжатия (add-usage-extension, D5, Q10 (а)); `compactAt` — только
+        // при включённой capability `compaction`.
+        contextEstimator: estimateLlmContext,
+        compaction: compaction ? settings.compaction : null,
         // Usage детей входит в бюджет хода корня (SUB-11, D36 Т8).
         subagentUsage: subagentManager == null
             ? null
@@ -3482,6 +3487,9 @@ final class _Session implements AgentSession {
     _agent.config = _agent.config.copyWith(
       budget: settings.budget,
       contextWindowCap: (value: settings.compaction.contextWindowCap),
+      // `compactAt` в `StepEnded.context` — по тем же параметрам, что и
+      // проверка `afterTurn` (D5, CFG-16: со следующего хода).
+      compaction: (value: _compactionOn ? settings.compaction : null),
     );
     if (_compactionOn) {
       _compaction = settings.compaction;
