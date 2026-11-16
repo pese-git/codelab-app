@@ -128,6 +128,7 @@ export 'src/subagents/subagent_model.dart'
         SubagentState,
         SubagentWait,
         SubagentsInfo;
+export 'src/subagents/subagent_types.dart' show builtinSubagentTypes;
 export 'src/subagents/subagents_config.dart' show SubagentsConfig;
 export 'src/skills/skills_config.dart';
 export 'src/runtime/agent_runtime.dart' show AgentRuntime, coreAgentVersion;

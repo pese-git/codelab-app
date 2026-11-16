@@ -15,6 +15,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/platform/home_path_label.dart';
 import '../../../core/platform/path_opener.dart';
 import 'agent_definitions_port.dart';
 import 'agents_modes_state.dart';
@@ -85,6 +86,8 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     AgentDefinitionsLoader? loadDefinitions,
     PathOpener? pathOpener,
   }) : _workspace = workspace,
+       _loadDefinitions = loadDefinitions,
+       _pathOpener = pathOpener,
        _defaultProfile = defaultProfile,
        _open = open,
        _environment = environment,
@@ -101,6 +104,8 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
   static const _efforts = {'low', 'medium', 'high'};
 
   final ClientWorkspace _workspace;
+  final AgentDefinitionsLoader? _loadDefinitions;
+  final PathOpener? _pathOpener;
   final Future<ConnectionProfile> Function() _defaultProfile;
   final ProviderSettingsOpener _open;
   final Map<String, String> _environment;
@@ -126,6 +131,20 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
   ConfigLayer? _chosenTarget;
 
   var _saving = false;
+
+  /// Определения агентов последней успешной загрузки; `null` — загрузчика нет,
+  /// загрузка не удалась или страница не `Ready`.
+  AgentDefinitionsLoad? _definitions;
+
+  /// Загрузка определений упала непредвиденным исключением.
+  var _definitionsFailed = false;
+
+  /// Подпись того, что не удалось открыть (`Could not open <label>.`).
+  String? _openFailure;
+
+  /// Отмена идущей загрузки определений: новая загрузка и [close] обрывают её
+  /// (D11).
+  CancelTokenSource? _definitionsCancel;
   AgentsModesBanner? _banner;
 
   /// Номер загрузки, давшей текущее `Ready` (для [BypassToken]).
@@ -147,6 +166,8 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
   Future<void> _load(String reason) async {
     _supersededBy = reason;
     final attempt = ++_loadAttempt;
+    _definitionsCancel?.cancel('superseded');
+    _definitionsCancel = null;
     _accessProfile = _connectedProfile(_workspace.current);
     final profile = _accessProfile ?? await _defaultProfile();
     if (_stale(attempt)) {
@@ -227,6 +248,9 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     _snapshot = null;
     _defaults = null;
     _saved = null;
+    _definitions = null;
+    _definitionsFailed = false;
+    _openFailure = null;
   }
 
   Future<void> _loadEditable(int attempt, EditableSettings access) async {
@@ -267,6 +291,53 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
       ]);
       return;
     }
+    // Определения читаются тем же номером загрузки, что и снимок (D11): ошибка
+    // таблицы не делает страницу нечитаемой, режим и effort остаются.
+    AgentDefinitionsLoad? definitions;
+    var definitionsFailed = false;
+    final loader = _loadDefinitions;
+    if (loader != null) {
+      final cancel = CancelTokenSource();
+      _definitionsCancel = cancel;
+      try {
+        definitions = await loader(
+          snapshot: snapshot,
+          access: access,
+          environment: environment,
+          cancel: cancel.token,
+        );
+      } on Object catch (error) {
+        if (_stale(attempt)) {
+          cancel.dispose();
+          return;
+        }
+        definitionsFailed = true;
+        _logger?.warning(
+          'agents_modes.definitions_failed',
+          context: {
+            'reason': 'error',
+            'error_type': error.runtimeType.toString(),
+          },
+        );
+      }
+      // Чтение закончено: источник отмены освобождается (D11).
+      cancel.dispose();
+      if (identical(_definitionsCancel, cancel)) {
+        _definitionsCancel = null;
+      }
+      if (_stale(attempt)) {
+        return;
+      }
+      if (definitions != null && definitions.timedOut) {
+        _logger?.warning(
+          'agents_modes.definitions_failed',
+          context: {'reason': 'timeout'},
+        );
+      }
+    }
+    _definitions = definitions;
+    _definitionsFailed = definitionsFailed;
+    _openFailure = null;
     _session = session;
     _snapshot = snapshot;
     _defaults = sessionDefaultsOf(snapshot, access);
@@ -282,7 +353,22 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
         _banner = _savedBanner(note);
       }
     }
-    _logger?.debug('agents_modes.loaded', context: {'access': 'editable'});
+    _logger?.debug(
+      'agents_modes.loaded',
+      context: {
+        'access': 'editable',
+        if (definitions != null) ...{
+          'definitions': definitions.rows.where((r) => r.path != null).length,
+          'errors': definitions.rows
+              .where(
+                (r) =>
+                    r.status == AgentRowStatus.error ||
+                    r.status == AgentRowStatus.modelNotConfigured,
+              )
+              .length,
+        },
+      },
+    );
     // `_saving` здесь не трогается: перечитывание посреди записи не должно
     // разрешать вторую запись (D11); сбрасывает его только `_write`.
     _emit(_buildReady());
@@ -339,20 +425,194 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
       canTargetProject: _canTargetProject,
       saving: _saving,
       banner: _banner,
+      definitions: _definitionsView(),
     );
   }
+
+  // --- Блок «Agent definitions» ------------------------------------------------
+
+  AgentsDefinitionsView? _definitionsView() {
+    if (_loadDefinitions == null) {
+      return null;
+    }
+    final loaded = _definitions;
+    if (loaded == null) {
+      return AgentsDefinitionsView(
+        rows: const [],
+        failed: _definitionsFailed,
+        openFailure: _openFailure,
+      );
+    }
+    final rows = <AgentsDefinitionRow>[];
+    final errors = <AgentsDefinitionError>[];
+    for (final row in loaded.rows) {
+      final path = row.path;
+      // Отклонённый файл не загружен: «Available in», «Tools» и «Model» у него
+      // прочерк (D7).
+      final failed = switch (row.status) {
+        AgentRowStatus.error ||
+        AgentRowStatus.modelNotConfigured ||
+        AgentRowStatus.duplicate ||
+        AgentRowStatus.shadowed => true,
+        _ => false,
+      };
+      rows.add(
+        AgentsDefinitionRow(
+          name: row.name,
+          description: row.description ?? '—',
+          source: path == null ? 'built-in' : homePathLabel(path, _environment),
+          availableIn: failed ? '—' : (row.availableIn?.name ?? '—'),
+          // `null` у рабочей строки — «все инструменты» и модель сессии (D7).
+          tools: failed ? '—' : (row.tools?.join(', ') ?? 'all'),
+          model: failed ? '—' : (row.model ?? 'session model'),
+          status: _statusText(row),
+          tone: _statusTone(row.status),
+        ),
+      );
+      // InfoBar с «Open file» — каждому файлу с диагностикой уровня `error`:
+      // разбор (`error`), модель вне каталога (диагностика `invalid_value` с
+      // текстом константы ядра, D18) и дубликат имени. Перекрытый файл
+      // (`shadowed`, уровень info) — не ошибка.
+      if ((row.status == AgentRowStatus.error ||
+              row.status == AgentRowStatus.modelNotConfigured ||
+              row.status == AgentRowStatus.duplicate) &&
+          path != null) {
+        errors.add(
+          AgentsDefinitionError(
+            index: errors.length,
+            path: path,
+            pathLabel: homePathLabel(path, _environment),
+            line: row.errorLine,
+            message:
+                row.errorMessage ??
+                switch (row.status) {
+                  AgentRowStatus.modelNotConfigured =>
+                    'The model of this definition is not configured.',
+                  AgentRowStatus.duplicate =>
+                    'Not loaded: another definition has the same name.',
+                  _ => 'The definition cannot be loaded.',
+                },
+          ),
+        );
+      }
+    }
+    final untrusted = loaded.untrustedProject;
+    final cwd = _loadedCwd;
+    return AgentsDefinitionsView(
+      rows: rows,
+      errors: errors,
+      untrustedProject: untrusted,
+      projectLabel: untrusted && cwd != null
+          ? homePathLabel(cwd, _environment)
+          : null,
+      timedOut: loaded.timedOut,
+      projectFolderAvailable: !untrusted && loaded.projectDirectory != null,
+      projectFolderExists: loaded.projectDirectoryExists,
+      openFailure: _openFailure,
+    );
+  }
+
+  String _statusText(AgentDefinitionRowView row) => switch (row.status) {
+    AgentRowStatus.available => 'Available',
+    AgentRowStatus.overridden =>
+      row.overriddenBy == null
+          ? 'Overridden'
+          : 'Overridden by ${homePathLabel(row.overriddenBy!, _environment)}',
+    AgentRowStatus.modelNotConfigured => 'Model not configured',
+    AgentRowStatus.error =>
+      row.errorLine == null ? 'Error' : 'Error · line ${row.errorLine}',
+    AgentRowStatus.duplicate => 'Not loaded: duplicate name',
+    AgentRowStatus.shadowed => 'Shadowed by project',
+    AgentRowStatus.subagentsOff => 'Subagents off',
+  };
+
+  static AgentsStatusTone _statusTone(AgentRowStatus status) =>
+      switch (status) {
+        AgentRowStatus.available => AgentsStatusTone.success,
+        AgentRowStatus.overridden ||
+        AgentRowStatus.modelNotConfigured ||
+        AgentRowStatus.shadowed ||
+        AgentRowStatus.subagentsOff => AgentsStatusTone.warning,
+        AgentRowStatus.error ||
+        AgentRowStatus.duplicate => AgentsStatusTone.danger,
+      };
 
   // --- Выбор пользователя ----------------------------------------------------
 
   /// «Open file» у InfoBar ошибки: открывает [path], только если он есть в
   /// состоянии страницы (D8); иначе `not_allowed` без вызова порта.
-  /// Заглушка итерации 2, задача 2.1.
-  Future<void> openDefinitionFile(String path) async {}
+  Future<void> openDefinitionFile(String path) async {
+    final opener = _pathOpener;
+    final known = _definitions?.rows.any((row) => row.path == path) ?? false;
+    if (opener == null || !known) {
+      _logOpen('file', 'not_allowed');
+      return;
+    }
+    final outcome = await opener.open(path);
+    _finishOpen('file', outcome, path);
+  }
 
   /// Меню «Open folder»: [folder] — `$CODELAB_HOME/agents` (с `create: true`)
   /// или `<project>/.codelab/agents` доверенного проекта (без создания,
-  /// Q11). Заглушка итерации 2, задача 2.1.
-  Future<void> openFolder(AgentsFolder folder) async {}
+  /// Q11). Путь берётся из состояния, а не от вызывающего (D8).
+  Future<void> openFolder(AgentsFolder folder) async {
+    final opener = _pathOpener;
+    final loaded = _definitions;
+    if (opener == null || loaded == null) {
+      _logOpen(_folderKind(folder), 'not_allowed');
+      return;
+    }
+    final String path;
+    final bool create;
+    switch (folder) {
+      case AgentsFolder.user:
+        path = loaded.userDirectory;
+        // Каталог в доме создаётся: в него кладут первое определение (Q11 (а)).
+        create = true;
+      case AgentsFolder.project:
+        final projectPath = loaded.projectDirectory;
+        if (loaded.untrustedProject ||
+            projectPath == null ||
+            !loaded.projectDirectoryExists) {
+          // В папке проекта app ничего не создаёт без явной просьбы (Q11 (б)).
+          _logOpen('project_dir', 'not_allowed');
+          return;
+        }
+        path = projectPath;
+        create = false;
+    }
+    final outcome = await opener.openDirectory(path, create: create);
+    _finishOpen(_folderKind(folder), outcome, path);
+  }
+
+  static String _folderKind(AgentsFolder folder) =>
+      folder == AgentsFolder.user ? 'user_dir' : 'project_dir';
+
+  void _finishOpen(String kind, PathOpenOutcome outcome, String path) {
+    _logOpen(kind, switch (outcome) {
+      PathOpenOutcome.opened => 'opened',
+      PathOpenOutcome.created => 'created',
+      PathOpenOutcome.failed => 'failed',
+      PathOpenOutcome.notAllowed => 'not_allowed',
+    });
+    if (isClosed) {
+      return;
+    }
+    // Отказ порта (`notAllowed`: ссылка вместо каталога, не тот вид записи)
+    // пользователю виден так же, как сбой платформы.
+    _openFailure =
+        outcome == PathOpenOutcome.failed ||
+            outcome == PathOpenOutcome.notAllowed
+        ? homePathLabel(path, _environment)
+        : null;
+    _publishReady();
+  }
+
+  /// Событие без пути и имени файла (D12).
+  void _logOpen(String kind, String outcome) => _logger?.info(
+    'agents_modes.open_path',
+    context: {'kind': kind, 'outcome': outcome},
+  );
 
   /// Переключатель цели: [layer] — `user` или `projectLocal` (D4).
   void selectTarget(ConfigLayer layer) {
@@ -637,6 +897,7 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     // Поздний снимок и итог записи после закрытия страницы не меняют
     // состояние (D11).
     _loadAttempt++;
+    _definitionsCancel?.cancel('closed');
     await _workspaceSubscription.cancel();
     return super.close();
   }

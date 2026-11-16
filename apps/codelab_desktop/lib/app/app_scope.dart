@@ -60,6 +60,7 @@ import '../core/platform/connection_preferences.dart';
 import '../core/platform/dock_layout_store.dart';
 import '../core/platform/external_link_opener.dart';
 import '../core/platform/local_folder_opener.dart';
+import '../core/platform/path_opener.dart';
 import '../core/platform/limited_network_image.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
@@ -93,6 +94,7 @@ import 'embedded_logger.dart';
 import 'embedded_mcp_status_source.dart';
 import 'embedded_secret_migration_runner.dart';
 import 'embedded_transport_resolver.dart';
+import 'agent_definitions_loader.dart';
 import 'provider_settings_session.dart';
 import 'provider_setup_offer.dart';
 import 'provider_setup_probe.dart';
@@ -124,6 +126,7 @@ Scope createCodeLabRootScope({
   UserShellLauncher? userShellLauncher,
   ExternalLinkOpener? externalLinkOpener,
   LocalFolderOpener? localFolderOpener,
+  PathOpener? pathOpener,
   ProjectFolderPicker? projectFolderPicker,
   ProjectFiles? projectFiles,
   bool projectFilesEnabled = true,
@@ -159,6 +162,7 @@ Scope createCodeLabRootScope({
         userShellLauncher: userShellLauncher,
         externalLinkOpener: externalLinkOpener,
         localFolderOpener: localFolderOpener,
+        pathOpener: pathOpener,
         projectFolderPicker: projectFolderPicker,
       ),
       CodeLabConnectionModule(
@@ -442,6 +446,11 @@ final class CodeLabPlatformModule extends Module {
   }) : _userShellLauncher = userShellLauncher,
        _externalLinkOpener = externalLinkOpener,
        _localFolderOpener = localFolderOpener;
+    PathOpener? pathOpener,
+    this.projectFolderPicker,
+  }) : _userShellLauncher = userShellLauncher,
+       _externalLinkOpener = externalLinkOpener,
+       _pathOpener = pathOpener;
 
   /// Порт запуска shell пользователя; шов тестов
   /// (`createCodeLabRootScope(userShellLauncher:)`, `add-integrated-terminal`,
@@ -457,6 +466,10 @@ final class CodeLabPlatformModule extends Module {
   /// (`createCodeLabRootScope(localFolderOpener:)`, change `add-app-skills-page`,
   /// D8): без него — адаптер на `url_launcher`.
   final LocalFolderOpener? _localFolderOpener;
+  /// Порт открытия файла и каталога определений агентов; шов тестов
+  /// (`createCodeLabRootScope(pathOpener:)`, change `add-settings-agents-modes`,
+  /// D8): без него — адаптер на `url_launcher`.
+  final PathOpener? _pathOpener;
 
   /// Системный выбор папки; тесты подменяют его, чтобы не открывать диалог.
   final ProjectFolderPicker? projectFolderPicker;
@@ -484,6 +497,10 @@ final class CodeLabPlatformModule extends Module {
     bind<LocalFolderOpener>().toInstance(
       _localFolderOpener ?? const UrlLauncherLocalFolderOpener(),
     );
+    // Открытие файла и каталога определений агентов страницы «Agents & modes»
+    // (D8): отдельный порт, политика ссылок `ExternalLinkOpener` его не
+    // касается; `url_launcher` по-прежнему только в `core/platform/`.
+    bind<PathOpener>().toInstance(_pathOpener ?? UrlLauncherPathOpener());
     // Загрузка изображений ответа: лимиты тела, редиректы, размер (D6, R4).
     bind<ImageProviderFor>().toInstance(defaultImageProviderFor);
     bind<ProjectFolderPicker>().toInstance(
@@ -855,6 +872,8 @@ final class CodeLabPresentationModule extends Module {
         codelabHome: environment.codelabHome,
         projectDirectory: () => _focusFolder(currentScope),
         logger: _settingsLogger(),
+        loadDefinitions: loadAgentDefinitionsForPage,
+        pathOpener: currentScope.resolve<PathOpener>(),
       );
     });
     // Страница «MCP servers»: новый Cubit на каждое открытие (D11); сессия

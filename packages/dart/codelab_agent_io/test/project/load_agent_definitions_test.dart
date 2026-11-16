@@ -105,7 +105,29 @@ void main() {
       expect(report.diagnostics, isEmpty);
     });
 
-    test('диагностика разбора: модель вне каталога даёт код model', () async {
+    test('битый YAML со строкой-секретом: сообщение её не содержит', () async {
+      const secret = 'sk-test-leak-0123456789';
+      write(
+        '$home/agents/leaky.md',
+        '---\nname: leaky\ndescription: [unclosed $secret\n  key: "$secret\n---\nBody $secret\n',
+      );
+
+      final report = await loadAgentDefinitions(
+        config: config(),
+        cwd: null,
+        projectTrusted: false,
+        source: realSource(),
+      );
+
+      expect(report.definitions, isEmpty);
+      expect(report.diagnostics, isNotEmpty, reason: 'проверка не пустая');
+      for (final item in report.diagnostics) {
+        expect(item.message, isNot(contains(secret)));
+        expect(item.toString(), isNot(contains(secret)));
+      }
+    });
+
+    test('диагностика разбора: модель вне каталога', () async {
       write(
         '$home/agents/broken.md',
         agent('broken', extra: 'model: nope/missing\n'),
@@ -120,7 +142,9 @@ void main() {
 
       expect(report.definitions, isEmpty);
       final diagnostic = report.diagnostics.single;
-      expect(diagnostic.code, 'model');
+      // Отдельного кода у ядра нет: отличает фиксированный текст.
+      expect(diagnostic.code, 'invalid_value');
+      expect(diagnostic.message, agentDefinitionModelNotInCatalogMessage);
       expect(diagnostic.path, '$home/agents/broken.md');
     });
   });

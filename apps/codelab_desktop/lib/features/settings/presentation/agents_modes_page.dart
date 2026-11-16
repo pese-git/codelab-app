@@ -189,7 +189,191 @@ class AgentsModesPage extends StatelessWidget {
         title: 'Default reasoning effort',
         children: [_effortRow(cubit, state)],
       ),
+      if (state.definitions case final definitions?)
+        _definitionsSection(context, cubit, definitions, secondary),
     ]);
+  }
+
+  /// Блок «Agent definitions» (design.md change `add-settings-agents-modes`,
+  /// D7, D8, D9): таблица только для чтения, InfoBar ошибок файлов с «Open
+  /// file», меню «Open folder» и «Reload». Что читать, открывать и создавать,
+  /// решает Cubit; здесь только отображение и вызовы.
+  Widget _definitionsSection(
+    BuildContext context,
+    AgentsModesCubit cubit,
+    AgentsDefinitionsView definitions,
+    Color secondary,
+  ) {
+    final bars = <Widget>[
+      for (final error in definitions.errors)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: InfoBar(
+            key: ValueKey('agents-definitions-error-${error.index}'),
+            title: Text(
+              error.line == null
+                  ? error.pathLabel
+                  : '${error.pathLabel} · line ${error.line}',
+            ),
+            content: Text(error.message),
+            severity: InfoBarSeverity.error,
+            isLong: true,
+            action: CodeLabButton(
+              key: ValueKey('agents-definitions-open-file-${error.index}'),
+              label: 'Open file',
+              onPressed: () => unawaited(cubit.openDefinitionFile(error.path)),
+            ),
+          ),
+        ),
+      if (definitions.untrustedProject)
+        _bar(
+          const ValueKey('agents-definitions-untrusted'),
+          InfoBarSeverity.info,
+          'Definitions in ${definitions.projectLabel ?? 'the project'}/.codelab/agents '
+          'are not read: the project is not trusted.',
+        ),
+      if (definitions.timedOut)
+        _bar(
+          const ValueKey('agents-definitions-timeout'),
+          InfoBarSeverity.warning,
+          'Agent definitions were not read within 5 s.',
+        ),
+      if (definitions.failed)
+        _bar(
+          const ValueKey('agents-definitions-failed'),
+          InfoBarSeverity.error,
+          'Agent definitions could not be read.',
+        ),
+      if (definitions.openFailure case final label?)
+        _bar(
+          const ValueKey('agents-definitions-open-failed'),
+          InfoBarSeverity.warning,
+          'Could not open $label.',
+        ),
+    ];
+    return CodeLabSettingsSection(
+      title: 'Agent definitions',
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: CodeLabText(
+                'Definitions are read when a session is created; choose one '
+                'for a single session in the composer agent menu.',
+                role: CodeLabTextRole.caption,
+                color: secondary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            DropDownButton(
+              key: const ValueKey('agents-definitions-open-folder'),
+              title: const Text('Open folder'),
+              items: [
+                MenuFlyoutItem(
+                  key: const ValueKey('agents-definitions-open-user'),
+                  text: const Text('User definitions (~/.codelab/agents)'),
+                  onPressed: () =>
+                      unawaited(cubit.openFolder(AgentsFolder.user)),
+                ),
+                if (definitions.projectFolderAvailable)
+                  MenuFlyoutItem(
+                    key: const ValueKey('agents-definitions-open-project'),
+                    text: definitions.projectFolderExists
+                        ? const Text('This project (.codelab/agents)')
+                        : const Tooltip(
+                            message:
+                                'Create .codelab/agents in the project to add '
+                                'definitions.',
+                            child: Text('This project (.codelab/agents)'),
+                          ),
+                    // Каталога проекта нет: app его не создаёт (Q11 (б)).
+                    onPressed: definitions.projectFolderExists
+                        ? () =>
+                              unawaited(cubit.openFolder(AgentsFolder.project))
+                        : null,
+                  ),
+              ],
+            ),
+            const SizedBox(width: 8),
+            CodeLabButton(
+              key: const ValueKey('agents-definitions-reload'),
+              label: 'Reload',
+              icon: FluentIcons.refresh,
+              onPressed: () => unawaited(cubit.reload()),
+            ),
+          ],
+        ),
+        ...bars,
+        LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: constraints.maxWidth < 880 ? 880 : constraints.maxWidth,
+              child: CodeLabStatusTable(
+                key: const ValueKey('agents-definitions-table'),
+                columns: const [
+                  'Name',
+                  'Description',
+                  'Source',
+                  'Available in',
+                  'Tools',
+                  'Model',
+                  'Status',
+                ],
+                columnFlex: const [3, 4, 5, 2, 3, 3, 4],
+                rows: [
+                  for (final (index, row) in definitions.rows.indexed)
+                    CodeLabStatusTableRow(
+                      key: ValueKey(_rowKey(definitions.rows, index)),
+                      cells: [
+                        CodeLabStatusTableCell(row.name, mono: true),
+                        CodeLabStatusTableCell(
+                          row.description,
+                          muted: row.description == '—',
+                        ),
+                        CodeLabStatusTableCell(row.source, mono: true),
+                        CodeLabStatusTableCell(
+                          row.availableIn,
+                          muted: row.availableIn == '—',
+                        ),
+                        CodeLabStatusTableCell(
+                          row.tools,
+                          muted: row.tools == '—',
+                        ),
+                        CodeLabStatusTableCell(
+                          row.model,
+                          muted: row.model == '—',
+                        ),
+                        CodeLabStatusTableCell(
+                          row.status,
+                          tone: switch (row.tone) {
+                            AgentsStatusTone.success =>
+                              CodeLabStatusTone.active,
+                            AgentsStatusTone.warning =>
+                              CodeLabStatusTone.warning,
+                            AgentsStatusTone.danger => CodeLabStatusTone.danger,
+                          },
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Ключ строки: `agents-definitions-row-<name>` у первой строки имени и
+  /// `…-<name>#<n>` (n с 2; `#` не встречается в имени файла) у следующих — имена не уникальны (встроенный
+  /// `review` и файл `review.md`, пользовательский и проектный файлы).
+  static String _rowKey(List<AgentsDefinitionRow> rows, int index) {
+    final name = rows[index].name;
+    final n = rows.take(index).where((r) => r.name == name).length + 1;
+    return n == 1
+        ? 'agents-definitions-row-$name'
+        : 'agents-definitions-row-$name#$n';
   }
 
   Widget _modeCard(
