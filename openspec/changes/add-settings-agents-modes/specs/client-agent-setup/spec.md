@@ -4,6 +4,7 @@
 Основной барель `codelab_setup` (чистый Dart, web-безопасно) SHALL давать `SessionDefaultsView` и `sessionDefaultsOf(AgentConfigSnapshot snapshot, EditableSettings access)` (design.md change `add-settings-agents-modes`, D6):
 - итоговый режим новой сессии из разобранного итога загрузки (`CoreConfig`), а не из сырого листа: псевдонимы (`acceptEdits`, `alwaysAsk`) приводятся к `accept-edits`, `ask`; сочетание `ask` и `plan` даёт `ask` с признаком запрета `write` и `exec`;
 - источник режима — `originOf('permissions.mode')`, без листа — `default` с умолчанием профиля хоста `standard`;
+- для сочетания `ask` и `plan` источник — слой `user`, только если `permissions.mode` в листьях слоя `user` даёт `ask` (основной id или псевдоним `alwaysAsk`); иначе источник снимка без подмены. Ветки по режиму флага запуска (`autopilot`) представление НЕ SHALL иметь (design.md, D6);
 - признак сужения проектом — предупреждение `config.project.untrusted_key` с путём `permissions.mode` в итоге загрузки;
 - итоговый `agent.effort` и его источник, без листа — `default` и `medium`;
 - предлагаемую цель записи: редактируемый слой источника `permissions.mode`, иначе `user`; `projectLocal` — только если его даёт `access`.
@@ -17,6 +18,14 @@
 #### Scenario: Сужение проектом
 - **WHEN** пользовательский слой задаёт `standard`, а недоверенный проект в `config.local.yaml` — `bypass`
 - **THEN** режим — `standard`, признак сужения истинен
+
+#### Scenario: Источник сочетания ask и plan из слоя user
+- **WHEN** пользовательский слой задаёт `permissions.mode: alwaysAsk`, а недоверенный проект — `plan`
+- **THEN** режим — `ask` с признаком запрета `write` и `exec`, источник — `user`, предлагаемая цель — `user`
+
+#### Scenario: Сочетание ask и plan без ask в слое user
+- **WHEN** `ask` задан не слоем `user` (окружение или `--config`), а недоверенный проект задаёт `plan`
+- **THEN** источник режима — источник снимка, а не `user`
 
 #### Scenario: Основной барель без dart:io
 - **WHEN** выполняется `melos run web-compile`
