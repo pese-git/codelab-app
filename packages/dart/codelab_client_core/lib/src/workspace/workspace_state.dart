@@ -8,6 +8,7 @@ import '../queue/prompt_queue.dart';
 import '../session/session_views.dart';
 import '../session/subagent_rows.dart';
 import '../transcript/transcript_item.dart';
+import '../usage/usage_models.dart';
 
 part 'workspace_state.freezed.dart';
 
@@ -101,6 +102,13 @@ abstract class SessionView with _$SessionView {
     /// Строки панели Agents v1 (D33): вызовы `agent` сессии обходом
     /// транскрипта в глубину; пусто без субагентов и у стороннего агента.
     @Default(<SubagentRowView>[]) List<SubagentRowView> subagents,
+
+    /// Расход сессии по снимкам `_codelab/session/usage` (change
+    /// `add-usage-extension`, D8): без расширения агента — `unknown`, числа
+    /// не рисуются. Единственное поле, которое не выводится из `AcpSession`:
+    /// его ведёт `UsageFold`, а сбрасывают `session/load` и смена
+    /// соединения.
+    @Default(UsageView()) UsageView usage,
   }) = _SessionView;
 
   /// Число строк [subagents] в состоянии [state] (счётчики заголовка панели).

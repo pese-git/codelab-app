@@ -448,6 +448,23 @@ final class _ClientRun<C> {
   );
 }
 
+/// Кадры handshake клиентского прогона: `initialize` → `session/new`.
+///
+/// Почему: клиент CodeLab объявляет в `initialize` больше расширений
+/// (`tasks`, `subagents`, `usage`…), чем нужно отдельной фикстуре, а
+/// точное сравнение `_meta.codelab` связало бы фикстуры разных расширений
+/// (D21 Т7, решение Q15 (б)).
+///
+/// Для чего: `clientCapabilities` сверяется как `$partial`, а
+/// `_meta.codelab` из `setup.clientCapabilities` — как подмножество: каждый
+/// указанный ключ проверяется точно (значение целиком), лишние ключи
+/// объявления клиента допустимы. Остальные поля `_meta` и сами
+/// `clientCapabilities` — как прежде. Агентский драйвер не меняется: он
+/// шлёт `setup.clientCapabilities` агенту буквально.
+///
+/// Как использовать: вызывается только драйвером клиентского прогона.
+/// Полное объявление клиента точно проверяют фикстуры с явным кадром
+/// `initialize` и `initialize_codelab_request_test.dart`.
 List<FixtureFrame> _handshake(FixtureSetup setup) {
   FixtureFrame frame(
     int index,
@@ -474,7 +491,7 @@ List<FixtureFrame> _handshake(FixtureSetup setup) {
         r'$partial': {
           'protocolVersion': 1,
           if (capabilities != null)
-            'clientCapabilities': {r'$partial': capabilities},
+            'clientCapabilities': {r'$partial': _codelabSubset(capabilities)},
         },
       },
     }),
@@ -509,6 +526,25 @@ List<FixtureFrame> _handshake(FixtureSetup setup) {
       },
     }),
   ];
+}
+
+/// Делает `_meta.codelab` в `clientCapabilities` подмножеством (Q15 (б)).
+///
+/// Остальные ключи `_meta` и `clientCapabilities` не меняются.
+Map<String, Object?> _codelabSubset(Map<String, Object?> capabilities) {
+  final meta = capabilities['_meta'];
+  if (meta is! Map<String, Object?>) return capabilities;
+  final codelab = meta['codelab'];
+  if (codelab is! Map<String, Object?>) return capabilities;
+  return {
+    ...capabilities,
+    '_meta': {
+      r'$partial': {
+        ...meta,
+        'codelab': {r'$partial': codelab},
+      },
+    },
+  };
 }
 
 /// Puts the `match.$text` of a repeated `a2c` frame into its

@@ -14,7 +14,9 @@ const _supportedExtensionVersion = 1;
 /// `subagents` (строка `agent`, итог, запрос потомка; итерация 2, задача 2.9a)
 /// и `subagentToolCalls` (дерево вызовов потомков; итерация 5, задача 5.4:
 /// клиент показывает их вложенными строками, поэтому агент вправе слать кадры
-/// потомков с `_meta.codelab.parentToolCallId`).
+/// потомков с `_meta.codelab.parentToolCallId`) и `usage` (уведомление
+/// `_codelab/session/usage`, change `add-usage-extension`, D3, D21 Т1: агент
+/// шлёт снимки расхода только объявившему клиенту).
 ///
 /// Для чего: `initialize` кладёт его в `ClientCapabilities.meta`; агент
 /// отвечает блоком объявлений, только если этот объект пришёл. Других
@@ -24,6 +26,7 @@ const Map<String, Object?> codelabClientExtensionsMeta = {
     'tasks': {'version': _supportedExtensionVersion},
     'subagents': {'version': _supportedExtensionVersion},
     'subagentToolCalls': {'version': _supportedExtensionVersion},
+    'usage': {'version': _supportedExtensionVersion},
   },
 };
 
@@ -45,6 +48,7 @@ final class CodelabExtensions {
     this.tasks = false,
     this.subagents = false,
     this.subagentToolCalls = false,
+    this.usage = false,
     this.subagentsMaxDepth,
   });
 
@@ -74,6 +78,7 @@ final class CodelabExtensions {
       tasks: known('tasks') != null,
       subagents: subagents != null,
       subagentToolCalls: known('subagentToolCalls') != null,
+      usage: known('usage') != null,
       subagentsMaxDepth: maxDepth is int && maxDepth > 0 ? maxDepth : null,
     );
   }
@@ -81,6 +86,10 @@ final class CodelabExtensions {
   final bool tasks;
   final bool subagents;
   final bool subagentToolCalls;
+
+  /// Агент объявил `usage: {"version": 1}` и шлёт `_codelab/session/usage`
+  /// (D3). Та же оговорка про `1.0` на web, что и у остальных ключей.
+  final bool usage;
 
   /// `subagents.maxDepth`; `null` — не объявлено или неверной формы.
   final int? subagentsMaxDepth;

@@ -15,6 +15,9 @@ import '../session/session_views.dart';
 import '../session/subagent_rows.dart';
 import '../transcript/transcript_item.dart';
 import '../transcript/transcript_projector.dart';
+import '../usage/usage_decoder.dart';
+import '../usage/usage_fold.dart';
+import '../usage/usage_models.dart';
 import 'client_workspace_exception.dart';
 import 'workspace_state.dart';
 
@@ -45,6 +48,12 @@ abstract interface class ClientWorkspace {
     /// Часы kit для времени работающих строк панели Agents (D49 Т3); по
     /// умолчанию `DateTime.now`, тесты передают поддельные.
     DateTime Function()? clock,
+
+    /// Журнал kit (D14, D21 Т5): `usage.stale`, `usage.decode_failed` и отброс
+    /// снимка неизвестной сессии. По умолчанию — `StructuredLogLogger`, как у
+    /// `AcpClientApplication`; секретов, сумм и текста уведомлений в записях
+    /// нет.
+    Logger? logger,
   }) = DefaultClientWorkspace;
 
   WorkspaceState get current;
@@ -262,9 +271,13 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     required List<TransportResolver> resolvers,
     WorkspaceSnapshotStore? snapshots,
     DateTime Function()? clock,
+    Logger? logger,
   }) : clock = clock ?? DateTime.now,
        _backend = backend,
-       _resolvers = List.unmodifiable(resolvers) {
+       _resolvers = List.unmodifiable(resolvers),
+       _logger = (logger ?? StructuredLogLogger('codelab_client_core')).bind({
+         logComponentKey: clientComponent,
+       }) {
     if (snapshots != null) {
       _restorer = WorkspaceRestorer(snapshots, _RestoreHostAdapter(this));
     }
@@ -272,6 +285,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       _handleConnectionState,
     );
     _sessionSubscription = backend.sessionChanges.listen(_handleSession);
+    _usageSubscription = backend.usageNotifications.listen(_handleUsage);
   }
 
   /// Часы kit: момент первого появления вызова `agent` для времени строк
@@ -333,6 +347,17 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
   late final StreamSubscription<ClientConnectionState> _connectionSubscription;
   late final StreamSubscription<AcpSession> _sessionSubscription;
+
+  /// Подписка на `_codelab/session/usage`: владелец — рабочее пространство,
+  /// `dispose` её отменяет (`AGENTS.md` §9).
+  late final StreamSubscription<UsageNotification> _usageSubscription;
+  final Logger _logger;
+  static const _usageDecoder = UsageDecoder();
+
+  /// Пары «сессия, поле», по которым `usage.decode_failed` уже записан:
+  /// предупреждение не чаще раза на сессию и поле (D14), иначе агент с
+  /// постоянным дефектом заливал бы журнал на каждом шаге.
+  final _usageWarned = <String>{};
   var _current = const WorkspaceState();
 
   /// Какой переход ведёт явный вызов: промежуточные состояния ядра
@@ -462,6 +487,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         return;
       }
       _capabilities = _capabilitiesOf(connectionState);
+      _resetUsage();
       _publishConnection(_viewFor(connectionState));
     } on Object catch (error) {
       if (_isStale(attempt)) {
@@ -561,6 +587,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         return;
       }
       _capabilities = _capabilitiesOf(connectionState);
+      _resetUsage();
       _publishConnection(_viewFor(connectionState));
     } on Object catch (error) {
       if (_isStale(attempt)) {
@@ -872,6 +899,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     await _restorer?.flush();
     await _connectionSubscription.cancel();
     await _sessionSubscription.cancel();
+    await _usageSubscription.cancel();
     for (final handle in _handles.values) {
       await handle.close();
     }
@@ -950,6 +978,65 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     );
   }
 
+  /// Объявил ли агент текущего соединения `usage` (D3, D21 Т4).
+  bool get _usageDeclared => CodelabExtensions.parse(_capabilities.meta).usage;
+
+  /// Новое соединение — новый агент: расход каждой открытой сессии
+  /// сбрасывается, даже если сессию новое соединение не загрузило
+  /// (`detached`). Сброс идёт здесь, по готовому `initialize` нового
+  /// соединения, а не в `suspend()` начала `reconnect`: до замены транспорта
+  /// старый агент ещё может прислать снимок (D21 Т2); дальше поколение
+  /// снимка защищает от него в `UsageFold`.
+  ///
+  /// В окне до сброса (между новым соединением и готовым `initialize`) агент
+  /// CodeLab снимков не шлёт — первый снимок идёт только после первого хода
+  /// (Q7), поэтому там нечего терять. Ключи [_usageWarned] очищаются
+  /// вместе со сбросом: набор не растёт за жизнь рабочего пространства, а
+  /// новый агент снова вправе получить одну запись `usage.decode_failed`.
+  void _resetUsage() {
+    _usageWarned.clear();
+    for (final handle in _handles.values) {
+      handle.resetUsage();
+    }
+  }
+
+  /// Снимок `_codelab/session/usage` (D7, D14, D21 Т4, Т5): разбор, свёртка
+  /// по `seq` и поколению, одна ревизия `SessionView` на применённый снимок.
+  void _handleUsage(UsageNotification notification) {
+    final sessionId = notification.sessionId.value;
+    final handle = _handles[notification.sessionId];
+    // Поколение соединения снимка — в каждую запись kit (D14, §16).
+    final log = _logger.withCorrelation(
+      sessionId: sessionId,
+      connectionGeneration: notification.generation,
+    );
+    if (handle == null) {
+      log.debug('usage.unknown_session');
+      return;
+    }
+    final snapshot = _usageDecoder.decode(
+      notification.params,
+      onWarning: (field, reason) {
+        if (_usageWarned.add('$sessionId|$field')) {
+          log.warning(
+            'usage.decode_failed',
+            context: {'field': field, 'reason': reason},
+          );
+        }
+      },
+    );
+    if (snapshot == null) {
+      return;
+    }
+    final lastSeq = handle.current.usage.lastSeq;
+    if (!handle.applyUsage(snapshot, generation: notification.generation)) {
+      log.debug(
+        'usage.stale',
+        context: {'seq': snapshot.seq, 'last_seq': lastSeq},
+      );
+    }
+  }
+
   void _handleSession(AcpSession session) {
     final previous = _handles[session.id];
     final previousStatus = previous?.current.status;
@@ -985,6 +1072,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       onDiagnostic: _report,
       isConnected: () => _current.connection is Connected,
       clock: clock,
+      usageDeclared: () => _usageDeclared,
     );
     _handles[session.id] = handle;
     _order.insert(0, session.id);
@@ -1141,6 +1229,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     required void Function(WorkspaceDiagnostic diagnostic) onDiagnostic,
     required bool Function() isConnected,
     required DateTime Function() clock,
+    required bool Function() usageDeclared,
   }) : id = session.id,
        cwd = session.cwd,
        _session = session,
@@ -1149,10 +1238,16 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
        _onOutcome = onOutcome,
        _onDiagnostic = onDiagnostic,
        _isConnected = isConnected,
-       _clock = clock {
+       _clock = clock,
+       _usageDeclared = usageDeclared,
+       _usage = UsageFold.initial(declared: usageDeclared()) {
     _projector.apply(session);
     _current = _sessionFields(
-      const SessionView(revision: 0, status: SessionStatusView.idle),
+      SessionView(
+        revision: 0,
+        status: SessionStatusView.idle,
+        usage: _usage.view,
+      ),
       session,
     );
   }
@@ -1186,6 +1281,15 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   final _rowMemory = SubagentRowMemory();
   late SessionView _current;
   AcpSession _session;
+
+  /// Объявил ли агент текущего соединения `usage`: читается при каждом
+  /// сбросе, потому что соединение меняется быстрее сессии.
+  final bool Function() _usageDeclared;
+
+  /// Свёртка снимков расхода сессии (D8, D21 Т4); в `SessionView` попадает
+  /// её `view`. Не выводится из `AcpSession`, поэтому `_sessionFields` поле
+  /// `usage` не трогает.
+  UsageFold _usage;
 
   @override
   SessionView get current => _current;
@@ -1511,12 +1615,41 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     _projector.reset();
     _session = session;
     _projector.apply(session);
+    // `session/load` — новая точка отсчёта расхода: агент считает сумму
+    // заново (после загрузки — только по ходам после неё, `beforeLoad`, D6).
+    _usage = UsageFold.initial(declared: _usageDeclared());
     _publish(
       _sessionFields(
-        _current.copyWith(revision: _current.revision + 1),
+        _current.copyWith(revision: _current.revision + 1, usage: _usage.view),
         session,
       ),
     );
+  }
+
+  /// Сброс расхода при смене соединения (D21 Т2, Т4); ревизия растёт, только
+  /// если вид изменился.
+  void resetUsage() {
+    _usage = UsageFold.initial(declared: _usageDeclared());
+    if (_usage.view == _current.usage) {
+      return;
+    }
+    _publish(
+      _current.copyWith(revision: _current.revision + 1, usage: _usage.view),
+    );
+  }
+
+  /// Применяет [snapshot] соединения поколения [generation]; `false` —
+  /// дубль или опоздание, ревизия не растёт (D7, VIEW-6).
+  bool applyUsage(UsageSnapshot snapshot, {required int generation}) {
+    final next = _usage.apply(snapshot, generation: generation);
+    if (next == null) {
+      return false;
+    }
+    _usage = next;
+    _publish(
+      _current.copyWith(revision: _current.revision + 1, usage: next.view),
+    );
+    return true;
   }
 
   /// [items] с [notice] на месте [_noticeAt]; проекция могла стать короче

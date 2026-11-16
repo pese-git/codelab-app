@@ -86,6 +86,13 @@ sealed class PromptTurn with _$PromptTurn {
     required List<ContentBlock> prompt,
     @Default(PromptTurnStatus.pending) PromptTurnStatus status,
     StopReason? stopReason,
+
+    /// Лимит, из-за которого агент остановил ход при `max_turn_requests`
+    /// (`_meta.codelab.budgetExceeded` ответа `session/prompt`): открытое
+    /// множество строк — `steps`, `tokens`, `cost`, `duration`, `deadline` и
+    /// будущие. `null` — причины нет (сторонний агент, другой `stopReason`,
+    /// значение не строка). Change `add-usage-extension`, D10, D21 Т3.
+    String? budgetExceeded,
     @Default([]) List<SessionUpdate> updates,
     @Default({}) Map<ToolCallId, ToolCallRecord> toolCalls,
     @Default({}) Map<ApprovalRequestId, ApprovalRequest> approvals,

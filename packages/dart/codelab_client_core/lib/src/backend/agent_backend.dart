@@ -20,6 +20,11 @@ abstract interface class AgentBackend {
 
   Stream<AcpSession> get sessionChanges;
 
+  /// Уведомления `_codelab/session/usage` текущих соединений: сырые `params`
+  /// и поколение (change `add-usage-extension`, D8, D21 Т2). Кадры прежнего
+  /// транспорта реализация отбрасывает сама, как и для остальных потоков.
+  Stream<UsageNotification> get usageNotifications;
+
   Future<ClientConnectionState> connect(AcpTransport transport);
 
   Future<ClientConnectionState> reconnect(ReconnectCommand command);
@@ -66,6 +71,10 @@ final class AcpClientBackend implements AgentBackend {
 
   @override
   Stream<AcpSession> get sessionChanges => _application.sessionChanges;
+
+  @override
+  Stream<UsageNotification> get usageNotifications =>
+      _application.usageNotifications;
 
   @override
   Future<ClientConnectionState> connect(AcpTransport transport) =>

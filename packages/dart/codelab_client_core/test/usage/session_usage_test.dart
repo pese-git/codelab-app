@@ -249,12 +249,49 @@ void main() {
       expect(session.current.revision, revision);
       expect(session.current.usage.support, UsageSupport.awaiting);
       expect(agent.workspace.current, workspaceBefore);
+      final entries = agent.logger.where('usage.unknown_session').toList();
+      expect(entries, hasLength(1));
+      expect(entries.single.level, 'debug');
+      expect(entries.single.context['session_id'], 'ghost');
+      expect(entries.single.context['connection_generation'], isA<int>());
+    });
+
+    test('usage.stale and usage.decode_failed carry connection_generation '
+        '(D14)', () async {
+      await connected(usageCapabilities);
+
+      agent.usage(usageParams(sessionId: 's-1', seq: 2));
+      agent.usage(usageParams(sessionId: 's-1', seq: 2));
+      agent.usage({'sessionId': 's-1', 'seq': 3, 'trigger': 'turn'});
+
       expect(
-        agent.logger.entries.where(
-          (e) => e.level == 'debug' && e.context['session_id'] == 'ghost',
-        ),
-        isNotEmpty,
+        agent.logger
+            .where('usage.stale')
+            .single
+            .context['connection_generation'],
+        isA<int>(),
       );
+      expect(
+        agent.logger
+            .where('usage.decode_failed')
+            .first
+            .context['connection_generation'],
+        isA<int>(),
+      );
+    });
+
+    test('a snapshot after workspace.dispose is not published and does not '
+        'throw (TEST-005)', () async {
+      final session = await connected(usageCapabilities);
+      final revision = session.current.revision;
+      final entries = agent.logger.entries.length;
+
+      await agent.workspace.dispose();
+      agent.usage(usageParams(sessionId: 's-1', seq: 1));
+
+      expect(session.current.revision, revision);
+      expect(session.current.usage.support, UsageSupport.awaiting);
+      expect(agent.logger.entries.length, entries);
     });
 
     test('one SessionView revision per applied snapshot, observed on the '

@@ -13,6 +13,7 @@ export 'package:codelab_acp_transports/codelab_acp_transports.dart'
 
 export 'src/application/acp_client_application.dart';
 export 'src/application/application_models.dart';
+export 'src/application/usage_notification.dart';
 export 'src/application/use_cases.dart';
 export 'src/domain/approval_policy.dart';
 export 'src/domain/codelab_extensions.dart';
