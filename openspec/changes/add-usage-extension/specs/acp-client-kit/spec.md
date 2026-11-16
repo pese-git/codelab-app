@@ -13,6 +13,7 @@
 - смена поколения соединения (переподключение, перезапуск агента) и `session/load` SHALL сбрасывать `usage` сессии в `awaiting` или `unknown` по объявлению нового соединения;
 - каждый снимок с `turnId` заменяет `lastTurn` агрегатом `turn` (тот же `turnId` — ход идёт); снимок без `turnId` (`compaction`) `lastTurn` не меняет и меняет только `session` и `context`; новый `turnId` без разобранного `turn` — `lastTurn` пуст;
 - деньги SHALL храниться в целых микроединицах (`Money.micros`) с валютой; строка `cost` разбирается без `double`; целая часть — не более 9 цифр (не более `999999999.999999`), чтобы микроединицы оставались точным целым и на web; неверная строка, большее значение или `cost` без `currency` — стоимость отсутствует (цена неизвестна), предупреждение `usage.decode_failed` с `reason: wrong_format` для неверной строки и большего значения;
+- `currency` SHALL приниматься только как код ISO 4217 вида `^[A-Z]{3}$`; иная строка — поле неверно: стоимостей снимка нет, как у `cost` без `currency`, предупреждение `usage.decode_failed` с `field: currency`, `reason: wrong_format`; токены и контекст снимка применяются (решение пользователя 2026-11-16 по ревью итерации 3, design.md, D9, D23 Т9 п. 5);
 - причины `partial` переводятся в множество известных значений (`noUsage`, `noPrice`, `beforeLoad`); незнакомые строки отбрасываются;
 - `context.fraction` SHALL быть `null` без `size` или при `size == 0`; `context.compactionSoon` SHALL быть `true` только при известном `compactAt` и `used ≥ 0.9 × compactAt` (design.md, D11; решение пользователя Q3 (б)) и SHALL считаться без переполнения при больших значениях (D22);
 - не разобрались обязательные поля (`sessionId`, `seq`, `trigger`, `session.tokens`) — снимок отбрасывается целиком; необязательное поле неверного типа — поле отсутствует; в обоих случаях — предупреждение `usage.decode_failed` (`session_id`, `field`, `reason`, `connection_generation`; не чаще раза на сессию и поле) без payload, исключения нет;
@@ -35,6 +36,10 @@
 #### Scenario: Деньги без накопления ошибки
 - **WHEN** 1 000 снимков подряд несут `session.cost`, растущую на `"0.000001"`
 - **THEN** `session.cost.micros` последнего снимка равно значению из его строки точно
+
+#### Scenario: Валюта не ISO 4217
+- **WHEN** снимок несёт `session.cost` `"1.2"` и `currency` `"usd"`, `"US$"` или `"\u001b[31m"`
+- **THEN** снимок применён с токенами и контекстом, `session.cost` — `null`, записано одно предупреждение `usage.decode_failed` с `field: currency` и `reason: wrong_format`; с `currency` `"EUR"` — `session.cost.micros` `1200000` и `currency` `EUR`
 
 #### Scenario: Неверный тип поля
 - **WHEN** снимок содержит `context: {"used": "many", "size": 200000}`
