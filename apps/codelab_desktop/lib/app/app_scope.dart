@@ -71,6 +71,7 @@ import '../features/settings/application/connection_settings_cubit.dart';
 import '../features/settings/application/default_profile_resolver.dart';
 import '../features/settings/application/embedded_profile.dart';
 import '../features/settings/application/profiles_unavailable.dart';
+import '../features/settings/application/agents_modes_cubit.dart';
 import '../features/settings/application/mcp_settings_cubit.dart';
 import '../features/settings/application/skills_settings_cubit.dart';
 import '../features/settings/application/provider_settings_cubit.dart';
@@ -842,6 +843,20 @@ final class CodeLabPresentationModule extends Module {
             currentScope.resolve<CodeLabShellCubit>().retryStart(),
       );
     });
+    // Страница «Agents & modes»: новый Cubit на каждое открытие (D11); сессия
+    // настроек и доступ — те же, что у «Providers» (D2).
+    bind<AgentsModesCubit>().toProvide(() {
+      final environment = currentScope.resolve<ConnectionEnvironment>();
+      return AgentsModesCubit(
+        workspace: currentScope.resolve<ClientWorkspace>(),
+        defaultProfile: currentScope.resolve<DefaultProfileResolver>().resolve,
+        open: openSettings,
+        environment: environment.variables,
+        codelabHome: environment.codelabHome,
+        projectDirectory: () => _focusFolder(currentScope),
+        logger: _settingsLogger(),
+      );
+    });
     // Страница «MCP servers»: новый Cubit на каждое открытие (D11); сессия
     // настроек и доступ — те же, что у «Providers», порт состояния MCP
     // встроенного агента берётся у резолвера текущего соединения (D12).
@@ -1235,6 +1250,7 @@ final class CodeLabDependencies {
     required this.createProviderSettingsCubit,
     required this.createMcpSettingsCubit,
     required this.createSkillsSettingsCubit,
+    required this.createAgentsModesCubit,
     required this.openEmbeddedWizard,
     this.projectFilesCubit,
   });
@@ -1274,6 +1290,9 @@ final class CodeLabDependencies {
   /// Создаёт Cubit страницы «Skills & extensions»; страница владеет им и
   /// закрывает (change `add-app-skills-page`, D6).
   final SkillsSettingsCubit Function() createSkillsSettingsCubit;
+  /// Создаёт Cubit страницы «Agents & modes»; страница владеет им и закрывает
+  /// (design.md change `add-settings-agents-modes`, D11).
+  final AgentsModesCubit Function() createAgentsModesCubit;
 
   /// Открывает мастер встроенного агента из баннера соединения; владелец
   /// закрывает Cubit после диалога (design.md change `add-provider-setup-ui`,
@@ -1366,6 +1385,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     createProviderSettingsCubit: _scope.resolve<ProviderSettingsCubit>,
     createMcpSettingsCubit: _scope.resolve<McpSettingsCubit>,
     createSkillsSettingsCubit: _scope.resolve<SkillsSettingsCubit>,
+    createAgentsModesCubit: _scope.resolve<AgentsModesCubit>,
     openEmbeddedWizard: _scope.resolve<EmbeddedWizardOpener>(),
     projectFilesCubit: _projectFilesCubitOf(_scope),
   );

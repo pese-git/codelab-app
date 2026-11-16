@@ -32,6 +32,17 @@ final class SettingsSearchIndex {
       'base url',
     ],
     SettingsPage.mcpServers: ['mcp', 'server', 'tools', 'headers'],
+    SettingsPage.agentsAndModes: [
+      'mode',
+      'permission',
+      'bypass',
+      'plan',
+      'effort',
+      'reasoning',
+      'agent',
+      'definition',
+      'subagent',
+    ],
     SettingsPage.skillsAndExtensions: [
       'skill',
       'agents.md',

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../../app/navigation/settings_page.dart';
 import '../application/settings_search_index.dart';
+import 'agents_modes_page.dart';
 import 'connection_page.dart';
 import 'mcp_page.dart';
 import 'providers_page.dart';
@@ -24,6 +25,7 @@ final Map<SettingsPage, WidgetBuilder> settingsPageBuilders =
       SettingsPage.connection: buildConnectionPage,
       SettingsPage.providers: buildProvidersPage,
       SettingsPage.mcpServers: buildMcpPage,
+      SettingsPage.agentsAndModes: buildAgentsModesPage,
       SettingsPage.skillsAndExtensions: buildSkillsPage,
     });
 
