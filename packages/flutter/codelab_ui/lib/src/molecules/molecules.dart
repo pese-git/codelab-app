@@ -9,6 +9,7 @@ export 'codelab_expander_card.dart';
 export 'codelab_form.dart';
 export 'codelab_key_value_list.dart';
 export 'codelab_prompt_composer.dart';
+export 'codelab_session_status_bar.dart';
 export 'codelab_settings_row.dart';
 export 'codelab_settings_section.dart';
 export 'codelab_step_breadcrumb.dart';

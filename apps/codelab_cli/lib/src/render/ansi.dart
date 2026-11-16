@@ -12,6 +12,12 @@ const sgrReset = '\x1b[0m';
 /// Приглушённый текст (SGR 2) — мысли модели.
 const sgrDim = '\x1b[2m';
 
+/// Жёлтый текст (SGR 33) — контекст от 80 % (D12).
+const sgrYellow = '\x1b[33m';
+
+/// Красный текст (SGR 31) — контекст от 95 % (D12).
+const sgrRed = '\x1b[31m';
+
 /// Курсор в начало строки и очистка строки.
 const clearCurrentLine = '\r\x1b[2K';
 

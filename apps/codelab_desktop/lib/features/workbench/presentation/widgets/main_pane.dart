@@ -168,6 +168,12 @@ class WorkbenchMainPane extends StatelessWidget {
           onConfigOptionSelected: cubit.setSessionConfigOption,
           isRespondingToConfigOption: state.isRespondingToConfigOption,
         ),
+        // Строка статуса — только у показываемой сессии: композер виден и на
+        // стартовом экране, где «usage» говорить не о чем (D23 Т1, D11).
+        if (state.activeSessionId != null && state.statusBar != null) ...[
+          const SizedBox(height: 6),
+          CodeLabSessionStatusBar(data: state.statusBar!),
+        ],
       ],
     );
   }

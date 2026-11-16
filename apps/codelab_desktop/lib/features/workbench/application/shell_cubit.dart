@@ -794,6 +794,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         null => null,
       },
       sessionMode: active.sessionMode,
+      statusBar: active.statusBar,
       agentCommands: active.agentCommands,
       commandCatalog: paletteCatalogOf(
         active.agentCommandViews,

@@ -7,6 +7,7 @@ import 'codelab_connection_status_row.dart';
 import 'codelab_form.dart';
 import 'codelab_key_value_list.dart';
 import 'codelab_prompt_composer.dart';
+import 'codelab_session_status_bar.dart';
 import 'codelab_settings_row.dart';
 import 'codelab_settings_section.dart';
 import 'codelab_step_breadcrumb.dart';
@@ -94,6 +95,40 @@ Widget codelabConnectionStatusRowPreview() {
       transportLabel: 'stdio',
       profileLabel: 'Codelab Agent',
       detail: 'codelab serve --stdio',
+    ),
+  );
+}
+
+@Preview(
+  name: 'Session status bar',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 100),
+)
+Widget codelabSessionStatusBarPreview() {
+  // `Tooltip` сегментов требует `Overlay`; превью рендерится без `FluentApp`.
+  return _AcpPreviewSurface(
+    child: Overlay(
+      initialEntries: [
+        OverlayEntry(
+          builder: (_) => const CodeLabSessionStatusBar(
+            data: CodeLabSessionStatusData(
+              modelLabel: 'GPT-5',
+              modeLabel: 'Standard',
+              usage: CodeLabStatusSegment(
+                label: '12.3k → 1.2k',
+                tooltip:
+                    'input 9300 · output 1200 · cache read 3000 · '
+                    'cache write 0',
+              ),
+              cost: CodeLabStatusSegment(label: r'$0.0041 · session $1.20'),
+              context: CodeLabStatusSegment(
+                label: '85% context',
+                tone: CodeLabTone.warning,
+              ),
+            ),
+          ),
+        ),
+      ],
     ),
   );
 }

@@ -2,6 +2,9 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
 import 'usage_models.dart';
 
+/// Допустимый код валюты (ISO 4217): три заглавные латинские буквы.
+final RegExp _isoCurrency = RegExp(r'^[A-Z]{3}$');
+
 /// Разбор параметров `_codelab/session/usage` версии 1 (D2, D8, D9).
 ///
 /// Почему: форма расширения известна одному месту — `_meta.codelab.*`
@@ -44,11 +47,22 @@ final class UsageDecoder {
     }
 
     // Валюта нужна только стоимости; читается один раз для обоих агрегатов.
+    // Формат — ISO 4217 `^[A-Z]{3}$`: значение уходит в строки статуса
+    // хостов, и произвольный текст агента (в том числе управляющие символы)
+    // туда не допускается. Поле необязательное, как и при отсутствии валюты:
+    // снимок не отбрасывается, стоимость пропадает, причина — `wrong_format`
+    // (без сырого значения).
     final currency = params['currency'];
-    final currencyText = currency is String && currency.isNotEmpty
-        ? currency
-        : null;
+    String? currencyText;
     var currencyWarned = false;
+    if (currency is String) {
+      if (_isoCurrency.hasMatch(currency)) {
+        currencyText = currency;
+      } else {
+        currencyWarned = true;
+        onWarning('currency', 'wrong_format');
+      }
+    }
     String? currencyFor() {
       if (currencyText == null && !currencyWarned) {
         currencyWarned = true;

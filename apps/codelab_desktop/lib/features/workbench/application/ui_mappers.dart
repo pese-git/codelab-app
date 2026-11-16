@@ -888,9 +888,18 @@ List<CodeLabSidebarProject> sidebarProjectsOf({
 
 /// Значение опции режима для чипа шапки сессии — по категории `mode` из
 /// ACP; без такой опции чипа нет (change `redesign-workbench-shell`, D7).
-String? modeLabelOf(List<ConfigOptionView> options) {
+String? modeLabelOf(List<ConfigOptionView> options) =>
+    _selectedLabelOf(options, 'mode');
+
+/// Подпись модели для строки статуса — по категории `model` из ACP, тем же
+/// правилом, что [modeLabelOf] (D23 Т1: имя выбранного значения, иначе
+/// `currentValue`).
+String? modelLabelOf(List<ConfigOptionView> options) =>
+    _selectedLabelOf(options, 'model');
+
+String? _selectedLabelOf(List<ConfigOptionView> options, String category) {
   for (final option in options) {
-    if (option.category != 'mode') {
+    if (option.category != category) {
       continue;
     }
     for (final value in option.values) {
@@ -901,6 +910,140 @@ String? modeLabelOf(List<ConfigOptionView> options) {
     return option.currentValue;
   }
   return null;
+}
+
+/// Данные строки статуса под композером из `SessionView` (change
+/// `add-usage-extension`, D11, D23 Т1; spec `agent-workbench-ui` «Строка
+/// статуса сессии под композером»).
+///
+/// Почему: виджет `CodeLabSessionStatusBar` ничего не считает, а числа и
+/// «~» — политика kit. Здесь только состав сегментов: числа форматирует
+/// общая функция `usage_format.dart` (D24, Q16 (а)), своих правил формата и
+/// суммирования у маппера нет.
+///
+/// Как использовать: `ActiveSessionCubit` зовёт при каждой ревизии
+/// `SessionHandle.view`. `unknown` даёт «usage: —»; `awaiting` — только
+/// индикатор во время хода; `reported` — токены хода, стоимость и контекст.
+/// `busy` задан только для `awaiting` и пока ход идёт или отменяется
+/// (`running`/`cancelling`, D23 Т9 п. 2): у `reported` числа
+/// остаются на месте между шагами хода.
+CodeLabSessionStatusData sessionStatusDataOf(SessionView view) {
+  final usage = view.usage;
+  final modelLabel = modelLabelOf(view.configOptions);
+  final modeLabel = modeLabelOf(view.configOptions);
+  switch (usage.support) {
+    case UsageSupport.unknown:
+      return CodeLabSessionStatusData(
+        modelLabel: modelLabel,
+        modeLabel: modeLabel,
+        usage: const CodeLabStatusSegment(
+          label: 'usage: —',
+          tooltip: 'agent does not report usage',
+        ),
+      );
+    case UsageSupport.awaiting:
+      return CodeLabSessionStatusData(
+        modelLabel: modelLabel,
+        modeLabel: modeLabel,
+        busy:
+            view.status == SessionStatusView.running ||
+            view.status == SessionStatusView.cancelling,
+      );
+    case UsageSupport.reported:
+      return CodeLabSessionStatusData(
+        modelLabel: modelLabel,
+        modeLabel: modeLabel,
+        usage: _usageSegmentOf(usage.lastTurn),
+        cost: _costSegmentOf(usage.lastTurn, usage.session),
+        context: _contextSegmentOf(usage.context),
+      );
+  }
+}
+
+/// Токены хода: `<вход> → <выход>`, вход = `input + cacheRead + cacheWrite`
+/// (D11). Подсказка — пять счётчиков точными числами и причины неполноты.
+/// Нулевые токены хода (`0 → 0`) сегмент не рисуют (D23 Т9 п. 4):
+/// ноль вместо «ничего не пришло» вводил бы в заблуждение.
+CodeLabStatusSegment? _usageSegmentOf(UsageTotals? turn) {
+  if (turn == null) {
+    return null;
+  }
+  final tokens = turn.tokens;
+  final input = usageInputTokens(tokens);
+  if (input == 0 && tokens.output == 0) {
+    return null;
+  }
+  final mark = usageTokensPartial(turn.partial) ? '~' : '';
+  final lines = [
+    'input ${tokens.input}',
+    'output ${tokens.output}',
+    'cache read ${tokens.cacheRead}',
+    'cache write ${tokens.cacheWrite}',
+    if (tokens.reasoning != null) 'reasoning ${tokens.reasoning}',
+  ];
+  final reasons = [
+    for (final reason in UsagePartial.values)
+      if (turn.partial.contains(reason)) _partialReasonOf(reason),
+  ];
+  return CodeLabStatusSegment(
+    label:
+        '$mark${formatUsageTokens(input)} → '
+        '${formatUsageTokens(tokens.output)}',
+    tooltip: [
+      lines.join(' · '),
+      if (reasons.isNotEmpty) 'approximate: ${reasons.join(', ')}',
+    ].join('\n'),
+  );
+}
+
+String _partialReasonOf(UsagePartial reason) => switch (reason) {
+  UsagePartial.noUsage => 'agent sent no usage for some steps',
+  UsagePartial.noPrice => 'price unknown for some steps',
+  UsagePartial.beforeLoad => 'before the session was loaded',
+};
+
+/// `<стоимость хода> · session <стоимость сессии>` (D11, Q19 (а)); «~» — по
+/// правилу kit перед суммой, чья полнота под вопросом (D6).
+CodeLabStatusSegment? _costSegmentOf(UsageTotals? turn, UsageTotals? session) {
+  final turnCost = turn?.cost;
+  final sessionCost = session?.cost;
+  if (turnCost == null && sessionCost == null) {
+    return turn == null
+        ? null
+        : const CodeLabStatusSegment(label: '—', tooltip: 'price unknown');
+  }
+  final turnText = turnCost == null
+      ? '—'
+      : '${usageCostPartial(turn!.partial) ? '~' : ''}'
+            '${formatUsageMoney(turnCost)}';
+  if (sessionCost == null) {
+    return CodeLabStatusSegment(label: turnText);
+  }
+  final mark = usageCostPartial(session!.partial) ? '~' : '';
+  return CodeLabStatusSegment(
+    label: '$turnText · session $mark${formatUsageMoney(sessionCost)}',
+  );
+}
+
+/// `<N>% context[ · compaction soon]`; тон — по уровню kit (D24, Q17 (а)).
+CodeLabStatusSegment? _contextSegmentOf(ContextFillView? context) {
+  if (context == null) {
+    return null;
+  }
+  final fill = usageContextOf(context);
+  if (fill == null) {
+    return null;
+  }
+  return CodeLabStatusSegment(
+    label:
+        '${fill.label} context'
+        '${context.compactionSoon ? ' · compaction soon' : ''}',
+    tone: switch (fill.level) {
+      UsageLevel.normal => CodeLabTone.neutral,
+      UsageLevel.warning => CodeLabTone.warning,
+      UsageLevel.danger => CodeLabTone.danger,
+    },
+  );
 }
 
 /// Подсказка бейджа соединения: профиль, транспорт и команда или адрес —

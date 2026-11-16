@@ -39,6 +39,7 @@ export 'src/transcript/tool_row.dart';
 export 'src/transcript/transcript_item.dart';
 export 'src/usage/usage_decoder.dart';
 export 'src/usage/usage_fold.dart';
+export 'src/usage/usage_format.dart';
 export 'src/usage/usage_models.dart';
 export 'src/workspace/client_workspace.dart';
 export 'src/workspace/client_workspace_exception.dart';

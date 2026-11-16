@@ -107,6 +107,42 @@ void main() {
     }
     expect(sub(turn, 'turn')['steps'], 1);
     expect(sub(turn, 'session')['turns'], 1);
+    // Провайдер `reasoning` на первом ходу не сообщил — ключа нет (D2).
+    expect(sub(turn, 'session')['tokens'], {
+      'input': 12000,
+      'output': 800,
+      'cacheRead': 5000,
+      'cacheWrite': 200,
+    });
+    expect(sub(turn, 'session')['tokens'], isNot(contains('reasoning')));
+  });
+
+  test('two sessions of one process keep seq, cost and tokens apart '
+      '(D4: агрегаты на сессию)', () async {
+    await initialize(usage: {'version': 1});
+    final first = await agent.newSession(directory.path);
+    final second = await agent.newSession(directory.path);
+
+    await agent.prompt(first, 'a');
+    await agent.prompt(second, 'b');
+
+    final all = snapshots();
+    for (final id in [first, second]) {
+      final own = [
+        for (final s in all)
+          if (s['sessionId'] == id) s,
+      ];
+      expect([for (final s in own) s['seq']], [1, 2]);
+      final session = sub(own.last, 'session');
+      expect(session['turns'], 1);
+      expect(session['cost'], '0.04');
+      expect(session['tokens'], {
+        'input': 12000,
+        'output': 800,
+        'cacheRead': 5000,
+        'cacheWrite': 200,
+      });
+    }
   });
 
   test('the second turn sends context 85 % and all five token counters '
@@ -141,6 +177,17 @@ void main() {
     // Сессия — накопление двух ходов.
     expect(sub(turn, 'session')['turns'], 2);
     expect(sub(turn, 'session')['cost'], '0.09');
+    // D4 п. 4: токены сессии — сумма ходов, а не токены последнего хода;
+    // `reasoning` есть только у второго хода и входит в сумму как есть.
+    expect(sub(turn, 'session')['tokens'], {
+      'input': 32000,
+      'output': 2300,
+      'cacheRead': 145000,
+      'cacheWrite': 8200,
+      'reasoning': 300,
+    });
+    expect(sub(turn, 'session')['steps'], 2);
+    expect(sub(step, 'session')['tokens'], sub(turn, 'session')['tokens']);
   });
 
   test('a client without the usage declaration gets no snapshots', () async {

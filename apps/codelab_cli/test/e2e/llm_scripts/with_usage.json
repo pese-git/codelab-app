@@ -1,0 +1,46 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 200000,
+      "cost": {
+        "input": 2.2,
+        "output": 0.8,
+        "cacheRead": 0.02,
+        "cacheWrite": 0.2
+      }
+    },
+    "steps": [
+      {
+        "reply": [
+          {
+            "text": "hello from compatible stdio agent"
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 18000,
+          "output": 500,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        }
+      },
+      {
+        "reply": [
+          {
+            "text": "hello from compatible stdio agent"
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 20000,
+          "output": 2000,
+          "cacheRead": 140000,
+          "cacheWrite": 8000,
+          "reasoning": 300
+        }
+      }
+    ]
+  }
+}

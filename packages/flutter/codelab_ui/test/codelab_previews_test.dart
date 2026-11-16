@@ -24,6 +24,10 @@ void main() {
     await tester.pumpWidget(codelabConnectionStatusRowPreview());
     expect(tester.takeException(), isNull);
 
+    await tester.pumpWidget(codelabSessionStatusBarPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabSessionStatusBar), findsOneWidget);
+
     await tester.pumpWidget(codelabConnectionBannerPreview());
     expect(tester.takeException(), isNull);
 
