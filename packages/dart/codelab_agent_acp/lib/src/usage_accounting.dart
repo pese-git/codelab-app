@@ -251,13 +251,14 @@ final class UsageAccounting {
     // `"0"` при нуле токенов (D6, дельта agent-acp-server).
     final priced = model.cost != null && _micros(usage) != null;
     final step = _Totals()..addUsage(usage, priced: priced);
-    // `noUsage` — только успешный ответ без входных и выходных токенов:
-    // настоящий ответ всегда тратит вход, значит, провайдер usage не прислал
-    // (DF-15); ответ с ошибкой или отменой и нулём — не причина (D6).
-    final succeeded =
-        response.stopReason != StopReason.error &&
-        response.stopReason != StopReason.aborted;
-    if (succeeded && usage.input + usage.output == 0) {
+    // `noUsage` — ответ модели без токенов вообще: настоящий ответ всегда
+    // тратит вход, значит, провайдер usage не прислал (DF-15). Кэш-токены
+    // считаются: шаг только с ними — usage прислан, а `noUsage` и `noPrice`
+    // у шага вместе не бывают (инвариант дельты agent-acp-server). Сюда
+    // входит и `aborted` (отмена посреди потока), решение D26. `error` — в
+    // том числе синтетический `overflow` из `_exhausted`, где провайдер не
+    // вызывался, — не причина: ответа модели не было (D6, D26).
+    if (response.stopReason != StopReason.error && stepTotal == 0) {
       step.partial.add(UsagePartial.noUsage);
     }
     if (!priced && stepTotal > 0) {
