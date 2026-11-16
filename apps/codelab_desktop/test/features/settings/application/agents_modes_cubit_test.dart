@@ -1264,6 +1264,92 @@ void main() {
       expect(error.message, isNot(contains('read')));
     });
 
+    test('rejected files show a dash in "Available in", "Tools" and "Model" '
+        '(D7)', () async {
+      final fx = await fixture();
+      AgentDefinitionRowView rejected(String name, AgentRowStatus status) =>
+          AgentDefinitionRowView(
+            name: name,
+            status: status,
+            path: '$userDir/$name.md',
+            availableIn: AgentRowScope.both,
+            tools: const ['read'],
+            model: 'openai/gpt-x',
+          );
+      final cubit = make(
+        fx,
+        loader: loaderOf([
+          builtin('default'),
+          rejected('a', AgentRowStatus.modelNotConfigured),
+          rejected('b', AgentRowStatus.duplicate),
+          rejected('c', AgentRowStatus.shadowed),
+          rejected('d', AgentRowStatus.error),
+        ]),
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      for (final name in const ['a', 'b', 'c', 'd']) {
+        final row = definitionsOf(cubit).rows.firstWhere((r) => r.name == name);
+        expect(row.availableIn, '—', reason: name);
+        expect(row.tools, '—', reason: name);
+        expect(row.model, '—', reason: name);
+      }
+    });
+
+    test('a working row without tools shows "all" and without a model '
+        '"session model" (D7)', () async {
+      final fx = await fixture();
+      final cubit = make(
+        fx,
+        loader: loaderOf([
+          const AgentDefinitionRowView(
+            name: 'default',
+            status: AgentRowStatus.available,
+            availableIn: AgentRowScope.session,
+          ),
+          const AgentDefinitionRowView(
+            name: 'plain',
+            status: AgentRowStatus.available,
+            path: '$userDir/plain.md',
+            availableIn: AgentRowScope.subagent,
+          ),
+        ]),
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      for (final row in definitionsOf(cubit).rows) {
+        expect(row.tools, 'all', reason: row.name);
+        expect(row.model, 'session model', reason: row.name);
+      }
+    });
+
+    test('an overridden row without a path says just "Overridden"', () async {
+      final fx = await fixture();
+      final cubit = make(
+        fx,
+        loader: loaderOf([
+          builtin('default'),
+          const AgentDefinitionRowView(
+            name: 'general',
+            status: AgentRowStatus.overridden,
+            availableIn: AgentRowScope.subagent,
+          ),
+        ]),
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      expect(
+        definitionsOf(cubit).rows.firstWhere((r) => r.name == 'general').status,
+        'Overridden',
+      );
+    });
+
     test(
       'rows come in the order of the bridge: default, built-ins, files',
       () async {
@@ -1347,6 +1433,94 @@ void main() {
         'Overridden by ~/.codelab/agents/general.md',
         AgentsStatusTone.warning,
       ));
+    });
+
+    test('a model outside the catalog also gets an error InfoBar with '
+        '"Open file" (Модель вне каталога)', () async {
+      final fx = await fixture();
+      final cubit = make(
+        fx,
+        loader: loaderOf([
+          builtin('default'),
+          const AgentDefinitionRowView(
+            name: 'docs-writer',
+            status: AgentRowStatus.modelNotConfigured,
+            path: '$userAgentsDir/docs-writer.md',
+            errorMessage: 'the model is not in the config',
+          ),
+          ...brokenRows.skip(2),
+        ]),
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      final view = definitionsOf(cubit);
+      expect(
+        view.rows.firstWhere((r) => r.name == 'docs-writer').status,
+        'Model not configured',
+      );
+      expect(view.errors.map((e) => e.index), [0, 1]);
+      expect(view.errors.first.path, '$userAgentsDir/docs-writer.md');
+      expect(view.errors.first.pathLabel, '~/.codelab/agents/docs-writer.md');
+      expect(view.errors.first.message, 'the model is not in the config');
+      expect(view.errors.first.line, isNull);
+      expect(view.errors.last.path, migrator);
+    });
+
+    test(
+      'a duplicate also gets an error InfoBar, a shadowed file does not',
+      () async {
+        final fx = await fixture();
+        final cubit = make(
+          fx,
+          loader: loaderOf([
+            builtin('default'),
+            const AgentDefinitionRowView(
+              name: 'dup',
+              status: AgentRowStatus.duplicate,
+              path: '$userAgentsDir/dup.md',
+            ),
+            const AgentDefinitionRowView(
+              name: 'shadow',
+              status: AgentRowStatus.shadowed,
+              path: '$userAgentsDir/shadow.md',
+            ),
+          ]),
+          environment: env,
+        );
+
+        await ready(cubit);
+
+        final errors = definitionsOf(cubit).errors;
+        expect(errors, hasLength(1));
+        expect(errors.single.path, '$userAgentsDir/dup.md');
+        expect(
+          errors.single.message,
+          'Not loaded: another definition has the same name.',
+        );
+        expect(errors.single.line, isNull);
+      },
+    );
+
+    test('a model error without a message gets a fixed text', () async {
+      final fx = await fixture();
+      final cubit = make(
+        fx,
+        loader: loaderOf([
+          builtin('default'),
+          const AgentDefinitionRowView(
+            name: 'docs-writer',
+            status: AgentRowStatus.modelNotConfigured,
+            path: '$userAgentsDir/docs-writer.md',
+          ),
+        ]),
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      expect(definitionsOf(cubit).errors.single.message, isNotEmpty);
     });
 
     test('built-in types of a config with subagents.enabled false are '
@@ -1586,6 +1760,48 @@ void main() {
         expect(logger.entries.toString(), isNot(contains('passwd')));
       });
 
+      test('a refusal of the port (a symlinked folder) shows the open-failed '
+          'state too', () async {
+        final fx = await fixture();
+        final opener = FakePathOpener()
+          ..directoryOutcome = PathOpenOutcome.notAllowed;
+        final cubit = make(
+          fx,
+          loader: loaderOf([builtin('default')]),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        await cubit.openFolder(AgentsFolder.user);
+
+        expect(definitionsOf(cubit).openFailure, '~/.codelab/agents');
+        expect(
+          events('agents_modes.open_path').single['outcome'],
+          'not_allowed',
+        );
+      });
+
+      test(
+        'a refusal of the port for a file shows the open-failed state',
+        () async {
+          final fx = await fixture();
+          final opener = FakePathOpener()
+            ..fileOutcome = PathOpenOutcome.notAllowed;
+          final cubit = make(
+            fx,
+            loader: loaderOf(brokenRows),
+            opener: opener,
+            environment: env,
+          );
+          await ready(cubit);
+
+          await cubit.openDefinitionFile(migrator);
+
+          expect(definitionsOf(cubit).openFailure, isNotNull);
+        },
+      );
+
       test('a failure of the platform shows the open-failed state', () async {
         final fx = await fixture();
         final opener = FakePathOpener()..fileOutcome = PathOpenOutcome.failed;
@@ -1708,6 +1924,31 @@ void main() {
           events('agents_modes.open_path').single['outcome'],
           'not_allowed',
         );
+      });
+
+      test('an untrusted project is not opened even if the loader names an '
+          'existing project folder', () async {
+        final fx = await fixture(trusted: false);
+        final opener = FakePathOpener();
+        final cubit = make(
+          fx,
+          loader: loaderOf(
+            [builtin('default')],
+            untrusted: true,
+            projectDir: '/work/demo/.codelab/agents',
+            projectExists: true,
+          ),
+          opener: opener,
+          environment: env,
+        );
+        await ready(cubit);
+
+        await cubit.openFolder(AgentsFolder.project);
+
+        expect(opener.untouched, isTrue);
+        final opened = events('agents_modes.open_path').single;
+        expect(opened['kind'], 'project_dir');
+        expect(opened['outcome'], 'not_allowed');
       });
 
       test('an untrusted project has no project folder to open '

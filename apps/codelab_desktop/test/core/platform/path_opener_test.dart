@@ -48,18 +48,84 @@ void main() {
 
     test('a platform that refuses is "failed"', () async {
       launchResult = false;
+      final file = File('${root.path}/a.md')..writeAsStringSync('x');
 
-      final outcome = await make().open('${root.path}/a.md');
+      final outcome = await make().open(file.path);
 
       expect(outcome, PathOpenOutcome.failed);
     });
 
     test('a platform exception is "failed", not a throw', () async {
       launchError = PlatformException(code: 'no-handler');
+      final file = File('${root.path}/a.md')..writeAsStringSync('x');
 
-      final outcome = await make().open('${root.path}/a.md');
+      final outcome = await make().open(file.path);
 
       expect(outcome, PathOpenOutcome.failed);
+    });
+  });
+
+  group('what may be opened (D8, review of iteration 2)', () {
+    test('a symlink to a definition is not opened', () async {
+      final target = File('${root.path}/real.md')..writeAsStringSync('x');
+      final link = Link('${root.path}/link.md')..createSync(target.path);
+
+      final outcome = await make().open(link.path);
+
+      expect(outcome, PathOpenOutcome.notAllowed);
+      expect(launched, isEmpty);
+    });
+
+    test('a file that is not a .md definition is not opened', () async {
+      final file = File('${root.path}/id_rsa')..writeAsStringSync('x');
+
+      final outcome = await make().open(file.path);
+
+      expect(outcome, PathOpenOutcome.notAllowed);
+      expect(launched, isEmpty);
+    });
+
+    test('a folder is not opened as a file', () async {
+      final dir = Directory('${root.path}/dir.md')..createSync();
+
+      final outcome = await make().open(dir.path);
+
+      expect(outcome, PathOpenOutcome.notAllowed);
+      expect(launched, isEmpty);
+    });
+
+    test('a missing file is not opened', () async {
+      final outcome = await make().open('${root.path}/missing.md');
+
+      expect(outcome, PathOpenOutcome.notAllowed);
+      expect(launched, isEmpty);
+    });
+
+    test(
+      'a symlink to a folder is not opened, with or without create',
+      () async {
+        final target = Directory('${root.path}/real')..createSync();
+        final link = Link('${root.path}/agents')..createSync(target.path);
+
+        expect(
+          await make().openDirectory(link.path),
+          PathOpenOutcome.notAllowed,
+        );
+        expect(
+          await make().openDirectory(link.path, create: true),
+          PathOpenOutcome.notAllowed,
+        );
+        expect(launched, isEmpty);
+      },
+    );
+
+    test('a file in place of a folder is not opened', () async {
+      final file = File('${root.path}/agents')..writeAsStringSync('x');
+
+      final outcome = await make().openDirectory(file.path, create: true);
+
+      expect(outcome, PathOpenOutcome.notAllowed);
+      expect(launched, isEmpty);
     });
   });
 
