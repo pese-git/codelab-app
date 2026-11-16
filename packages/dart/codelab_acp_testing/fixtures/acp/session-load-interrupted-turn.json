@@ -113,13 +113,16 @@
                 },
                 "subagentToolCalls": {
                   "version": 1
+                },
+                "usage": {
+                  "version": 1
                 }
               }
             }
           }
         }
       },
-      "note": "клиент CodeLab объявляет расширения (D9, в итерации 1 — tasks)"
+      "note": "клиент CodeLab объявляет расширения tasks, subagents, subagentToolCalls и usage (D9, D21 Т7)"
     },
     {
       "dir": "a2c",

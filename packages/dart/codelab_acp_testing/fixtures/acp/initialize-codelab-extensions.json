@@ -6,7 +6,7 @@
     "15-Extensibility.md#advertising-custom-capabilities",
     "15-Extensibility.md#the-_meta-field"
   ],
-  "description": "Редакция итерации 5 (change add-subagents-and-tasks, задачи 5.1, 5.2 и 5.4) с ключом usage в ответе агента (change add-usage-extension, итерация 1, D3, D18 Т8; кадр клиента с usage — задача 2.7): клиент CodeLab объявляет в clientCapabilities._meta.codelab расширения tasks, subagents и subagentToolCalls (согласие получать вызовы потомков деревом; клиентский прогон зеленеет с задачей 5.4); агент с включёнными субагентами (subagents.enabled, max_depth 3 по умолчанию) отвечает теми же полями, что в acp/initialize-capabilities, и блоком agentCapabilities._meta.codelab {subagents: {version: 1, maxDepth: 3}, subagentToolCalls: {version: 1}, tasks: {version: 1}, usage: {version: 1}}: адаптер умеет проецировать вызовы потомков (agent-acp-server «Клиент CodeLab объявил расширения, дерево вызовов (итерация 5)»; D9, D21, D36 Т12, D37, D45 Т9, D47 Т8).",
+  "description": "Редакция итерации 5 (change add-subagents-and-tasks, задачи 5.1, 5.2 и 5.4) с ключом usage в ответе агента (change add-usage-extension, итерация 1, D3, D18 Т8; кадр клиента с usage — задача 2.7, D21 Т7): клиент CodeLab объявляет в clientCapabilities._meta.codelab расширения tasks, subagents, subagentToolCalls и usage (согласие получать вызовы потомков деревом; клиентский прогон зеленеет с задачей 5.4); агент с включёнными субагентами (subagents.enabled, max_depth 3 по умолчанию) отвечает теми же полями, что в acp/initialize-capabilities, и блоком agentCapabilities._meta.codelab {subagents: {version: 1, maxDepth: 3}, subagentToolCalls: {version: 1}, tasks: {version: 1}, usage: {version: 1}}: адаптер умеет проецировать вызовы потомков (agent-acp-server «Клиент CodeLab объявил расширения, дерево вызовов (итерация 5)»; D9, D21, D36 Т12, D37, D45 Т9, D47 Т8).",
   "goals": [
     "C-20",
     "C-05"
@@ -24,7 +24,7 @@
   "frames": [
     {
       "dir": "c2a",
-      "note": "клиент объявляет fs, terminal и расширения CodeLab tasks, subagents и subagentToolCalls (D9)",
+      "note": "клиент объявляет fs, terminal и расширения CodeLab tasks, subagents, subagentToolCalls и usage (D9, D21 Т7)",
       "frame": {
         "jsonrpc": "2.0",
         "id": {
@@ -49,6 +49,9 @@
                     "version": 1
                   },
                   "subagentToolCalls": {
+                    "version": 1
+                  },
+                  "usage": {
                     "version": 1
                   }
                 }
