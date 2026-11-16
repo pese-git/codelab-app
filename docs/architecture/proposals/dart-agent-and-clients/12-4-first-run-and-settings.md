@@ -1082,6 +1082,35 @@ sequenceDiagram
   умолчанию выключен (D8);
 * «Join a session started in the CLI» (D-10) — статичная справка без lease (D10).
 
+**Страница «Agents & modes»** — OpenSpec change `add-settings-agents-modes` (решения пользователя
+2026-11-16). Первая версия — три блока строки «Agents & modes (21)» таблицы выше; остальные блоки
+холста скрыты до своих changes (SETUP-17):
+* **режим новой сессии** — `permissions.mode` (`plan`, `ask`, `standard`, `accept-edits`, `bypass`;
+  ключ `restartRequired`, поэтому новый режим действует после «Restart agent», и страница это
+  говорит). `autopilot` — неактивная строка: в файле конфига он ошибка схемы (CFG-4), включается
+  только флагом агента `--permission-mode`. Выбор `bypass` записывается только после
+  подтверждения в диалоге (D3, D5 change);
+* **effort новой сессии** — `agent.effort` (`low`, `medium`, `high`), применяется живой
+  перезагрузкой конфига; одну сессию по-прежнему меняет опция `effort` в композере;
+* **цель записи** обоих ключей — как у «Default model» (§12.4.5, шаг 3): слой, где ключ определён,
+  если он редактируемый, иначе `user`; один переключатель «This project only» (`projectLocal`) на
+  оба блока. Правило «проект только ужесточает режим» (§15.3) страница не повторяет: показывает
+  итоговый режим и предупреждение загрузчика (D4 change). Итог и источник даёт `sessionDefaultsOf`
+  моста;
+* **определения агентов** — таблица только для чтения: `default`, встроенные типы субагентов
+  `general`, `explore`, `review`, `plan` (при `subagents.enabled: false` — статус `Subagents off`),
+  затем файлы `$CODELAB_HOME/agents/*.md` и, для доверенного проекта, `.codelab/agents/*.md`.
+  Строки и статусы строит мост (`agentDefinitionRowsAt`) тем же разбором, что `config check`;
+  ошибка файла — InfoBar с фиксированным текстом кода и «Open file». «Open folder» открывает
+  каталоги через порт app `PathOpener` (не `ExternalLinkOpener`): отсутствующий
+  `$CODELAB_HOME/agents` создаётся, отсутствующий проектный каталог не создаётся — пункт неактивен
+  (D7, D8 change);
+* для `RemoteReadOnly` и `NotManaged` — только InfoBar «только чтение» (SETUP-2).
+
+Скрыты до своих changes: «Remember model per project folder» (U-27, `add-folder-model-memory`,
+§12.6.9), «Model roles» (L-10), «Model limits override» (U-30, L-34, `add-model-limits`),
+«Remote A2A agents» (E-22); встроенные профили `architect` и `review` в опции `agent` — C-04.
+
 **Страница «Redaction» (D-24, Could).** Читает и пишет `redact.*` (agent-core-architecture
 §12.4.3) только в `ConfigTarget.user()` и `ConfigTarget.projectLocal(cwd)` (SETUP-3).
 
