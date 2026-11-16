@@ -446,6 +446,39 @@ void main() {
     expect(turnAt, lessThan(h.client.received.indexOf(response)));
   });
 
+  // «Отмена посреди потока без usage провайдера» (D26): шаг прерван отменой,
+  // usage не пришёл — шаг и ход несут `noUsage`, снимок turn идёт до
+  // ответа `cancelled`. Фикстура `acp/prompt-usage-cancelled` не меняется:
+  // её шаг завершён `toolUse` с usage, `noUsage` у него нет.
+  test('cancel mid-stream without provider usage: noUsage, turn before '
+      'cancelled (D26)', () async {
+    final sessionId = await ready(
+      model: pricedModel,
+      steps: [
+        {
+          'reply': [
+            {'text': 'Начинаю отвечать'},
+          ],
+          'waitForCancel': true,
+        },
+      ],
+    );
+
+    final turn = h.prompt(sessionId, 'Hi');
+    await pumpEventQueue();
+    await h.client.notify('session/cancel', {'sessionId': sessionId});
+    final response = await turn;
+
+    expect(response.resultMap, {'stopReason': 'cancelled'});
+    final frames = usageOf(h.client);
+    expect(frames.first['trigger'], 'step');
+    expect(asMap(frames.first['step'])['partial'], ['noUsage']);
+    expect(frames.last['trigger'], 'turn');
+    expect(asMap(frames.last['turn'])['partial'], contains('noUsage'));
+    final turnAt = positionOfUsage(h.client, frames.last['seq']! as int);
+    expect(turnAt, lessThan(h.client.received.indexOf(response)));
+  });
+
   // «Сбой провайдера» (D7, ACP-7): расход до сбоя показан — снимок turn идёт
   // перед ошибкой `-32603`, шаг с ошибкой не даёт `noUsage` (D6).
   test('a provider failure: the turn snapshot is before -32603', () async {
