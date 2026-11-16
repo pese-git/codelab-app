@@ -830,11 +830,11 @@ final class SessionBridge {
       for (final chain in children) {
         _descendantOpen.remove(chain);
         _announced.remove(chain);
-        _agentCalls.remove(chain);
+        final isAgent = _agentCalls.remove(chain);
         _closed.add(chain);
         closedCalls++;
         if (consent) {
-          _send(closedDescendantUpdate(chain, parent));
+          _send(closedDescendantUpdate(chain, parent, isAgentCall: isAgent));
         }
         close(chain);
       }

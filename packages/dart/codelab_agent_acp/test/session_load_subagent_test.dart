@@ -223,6 +223,29 @@ void main() {
     expect(call['content'], isEmpty);
   });
 
+  // Расхождение с живой проекцией (там у отменённого не-`agent` ключа
+  // `content` нет) известно и вынесено в follow-up F.7 (tasks.md). Тест
+  // фиксирует текущее поведение: правило D52 п. 1 (`content: []`) касается
+  // только `agent`, а реплей отменённого не-`agent` по-прежнему отдаёт текст
+  // результата из журнала через `finishedContent`.
+  test('a cancelled non-agent call replays the journal text, not []', () async {
+    h = await ServerHarness.start();
+    await h.initialize();
+    await journal(
+      const [],
+      tool: 'exec',
+      arguments: const {'command': 'sleep 100'},
+      result: (outcome: 'cancelled', text: 'Cancelled by user.', isError: true),
+    );
+
+    final call = replayedCall(await load(), 'call_1');
+
+    expect(codelab(call)['outcome'], 'cancelled');
+    final text =
+        (((call['content']! as List).single as Map)['content'] as Map)['text'];
+    expect(text, 'Cancelled by user.');
+  });
+
   test('a failed child carries failure next to the summary', () async {
     h = await ServerHarness.start();
     await h.initialize();
