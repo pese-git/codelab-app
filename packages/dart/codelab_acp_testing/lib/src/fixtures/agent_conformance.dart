@@ -8,6 +8,7 @@ import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 
 import 'fixture.dart';
 import 'matcher.dart';
+import 'open_frames.dart';
 
 /// Conformance агента на golden-фикстурах (`14-golden-fixtures.md` §14.9;
 /// design.md change `add-dart-agent-acp-server`, D8).
@@ -315,6 +316,18 @@ final class _AgentRun {
   /// Последний `content` кадра `fs/write_text_file` по пути (§14.9, шаг 10).
   final _written = <String, String>{};
 
+  /// Необязательные кадры и хвосты обязательных повторов, ещё ждущие своих
+  /// кадров (§14.9, шаг 7).
+  late final _open = OpenFrames(
+    matcher,
+    (frame, mismatches, repeats) => _fail(
+      frame,
+      'repeated frames differ',
+      mismatches: mismatches,
+      actual: repeats,
+    ),
+  );
+
   Future<void> play(AgentUnderTest agent) async {
     final frames = [
       if (!fixture.setup.skipInitialize)
@@ -324,6 +337,7 @@ final class _AgentRun {
     for (final frame in frames) {
       switch (frame.direction) {
         case FrameDirection.c2a:
+          await _settleOpen();
           await _send(frame);
         case FrameDirection.a2c:
           await _expect(frame);
@@ -367,7 +381,7 @@ final class _AgentRun {
     if (frame.unordered case final templates?) {
       final actual = <Object?>[];
       for (var i = 0; i < templates.length; i++) {
-        actual.add(await _next(frame));
+        actual.add(await _take(frame));
       }
       final mismatches = matcher.matchUnordered(templates, actual);
       if (mismatches.isNotEmpty) {
@@ -384,19 +398,14 @@ final class _AgentRun {
     }
     final template = frame.frame!;
     if (frame.optional) {
-      // Необязательный кадр: при несовпадении не потребляется (§14.9). С
-      // `repeat` — «ноль или больше»: строки прогресса субагента до запроса
-      // разрешения приходят в числе, которое фикстура не фиксирует.
-      while (await inbox.waitFor(quietPeriod) &&
-          matcher.match(template, inbox.peek()).isEmpty) {
-        _remember(inbox.take());
-        if (!frame.repeated) {
-          break;
-        }
-      }
+      // Необязательный кадр не ждём: он остаётся открытым и поглощает
+      // «следующий фактический кадр» (§14.4, `optional`), когда тот придёт, —
+      // с `repeat` «ноль или больше» таких кадров (строки прогресса
+      // субагента до запроса разрешения). `$text` у него не сверяется.
+      _open.add(frame, template);
       return;
     }
-    final first = await _next(frame);
+    final first = await _take(frame);
     final mismatches = matcher.match(template, first);
     if (mismatches.isNotEmpty) {
       _fail(
@@ -408,36 +417,74 @@ final class _AgentRun {
       );
     }
     _remember(first);
-    if (!frame.repeated) {
-      return;
-    }
-    final repeats = [first];
-    while (await inbox.waitFor(quietPeriod) &&
-        matcher.match(template, inbox.peek()).isEmpty) {
-      repeats.add(inbox.take());
-    }
-    if (frame.matchText case final text?) {
-      final textMismatches = matcher.matchText(text, repeats);
-      if (textMismatches.isNotEmpty) {
-        _fail(
-          frame,
-          'repeated frames differ',
-          mismatches: textMismatches,
-          actual: repeats,
-        );
-      }
+    if (frame.repeated) {
+      // Хвост повтора тоже открыт до первого несовпадающего кадра, а не до
+      // конца окна тишины; `$text` сверяется, когда повтор закрывается.
+      _open.add(frame, template, repeats: [first]);
     }
   }
 
-  Future<Object?> _next(FixtureFrame frame) async {
-    if (!await inbox.waitFor(frameTimeout)) {
+  /// Следующий кадр для обязательного ожидания [frame]: кадры открытых
+  /// шаблонов ([OpenFrames]) поглощаются по пути. Открытые шаблоны
+  /// проверяются раньше обязательного — как и прежнее жадное поглощение в
+  /// окне тишины; первый не поглощённый кадр закрывает их все.
+  ///
+  /// Срок [frameTimeout] — один на всё ожидание, а не на каждый кадр: иначе
+  /// бесконечный поток поглощаемых кадров (heartbeat зависшего субагента
+  /// каждые 15 с при сроке 30 с у `test-scenario`) держал бы прогон вечно
+  /// вместо провала по таймауту (AGENTS.md §12, §16).
+  Future<Object?> _take(FixtureFrame frame) async {
+    final deadline = DateTime.now().add(frameTimeout);
+    final absorbed = <Object?>[];
+    while (true) {
+      final actual = await _next(frame, deadline, absorbed);
+      if (_open.absorb(actual)) {
+        _remember(actual);
+        absorbed.add(actual);
+        continue;
+      }
+      _open.closeAll();
+      return actual;
+    }
+  }
+
+  /// Перед кадром `c2a` даёт открытым шаблонам окно тишины, как прежде
+  /// давали необязательный кадр и хвост повтора: агент успевает дослать
+  /// ожидаемые кадры до действия клиента (например, дельты ответа до
+  /// `session/cancel`, `acp/prompt-cancel-mid-stream`). Шаблоны при этом не
+  /// закрываются: поздний кадр после `c2a` они ещё поглотят (§14.9, шаг 7).
+  ///
+  /// Окно ограничено сроком [frameTimeout]: агент, стримящий без пауз до
+  /// `session/cancel`, иначе не дал бы драйверу отправить отмену. По сроку
+  /// прогон не падает — `c2a` уходит, шаблоны остаются открытыми.
+  Future<void> _settleOpen() async {
+    final deadline = DateTime.now().add(frameTimeout);
+    while (_open.isNotEmpty &&
+        DateTime.now().isBefore(deadline) &&
+        await inbox.waitFor(quietPeriod) &&
+        _open.absorb(inbox.peek())) {
+      _remember(inbox.take());
+    }
+  }
+
+  Future<Object?> _next(
+    FixtureFrame frame,
+    DateTime deadline,
+    List<Object?> absorbed,
+  ) async {
+    // Просроченный срок не мешает взять уже пришедший кадр: `waitFor` с
+    // отрицательным остатком отвечает по очереди без ожидания.
+    if (!await inbox.waitFor(deadline.difference(DateTime.now()))) {
       _fail(
         frame,
         'timed out after ${frameTimeout.inMilliseconds} ms waiting for an '
-        'a2c frame',
+        'a2c frame'
+        '${absorbed.isEmpty ? '' : ' (${absorbed.length} frames absorbed by '
+                  'optional or repeated frames before it)'}',
         expected: _templates(frame).length == 1
             ? matcher.substitute(_templates(frame).single)
             : _templates(frame),
+        actual: absorbed.isEmpty ? null : absorbed,
       );
     }
     return inbox.take();
@@ -454,10 +501,20 @@ final class _AgentRun {
 
   Future<void> _expectSilence() async {
     await Future<void>.delayed(quietPeriod);
-    if (inbox.isEmpty) {
+    // Кадры, пришедшие за время тишины, ещё могут принадлежать открытым
+    // шаблонам (необязательный кадр в конце фикстуры, хвост повтора).
+    final extra = <Object?>[];
+    for (final frame in inbox.takeAll()) {
+      if (_open.absorb(frame)) {
+        _remember(frame);
+      } else {
+        extra.add(frame);
+      }
+    }
+    _open.closeAll();
+    if (extra.isEmpty) {
       return;
     }
-    final extra = inbox.takeAll();
     final requests = [
       for (final frame in extra)
         if (frame case {'method': final String method, 'id': _?})
