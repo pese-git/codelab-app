@@ -1083,7 +1083,8 @@ sequenceDiagram
 * «Join a session started in the CLI» (D-10) — статичная справка без lease (D10).
 
 **Страница «Agents & modes»** — OpenSpec change `add-settings-agents-modes` (решения пользователя
-2026-11-16, итерации 1 и 2). Первая версия — три блока строки «Agents & modes (21)» таблицы выше;
+2026-11-16, итерации 1 и 2; перенос на develop — D20, D21). В навигации стоит между «MCP servers» и
+«Skills & extensions». Первая версия — три блока строки «Agents & modes (21)» таблицы выше;
 остальные блоки холста скрыты до своих changes (SETUP-17). Код — `features/settings/` app
 (`AgentsModesCubit`, `AgentsModesPage`), мост `codelab_setup`; ACP страница не использует:
 `session/set_mode` и опции сессии шлёт только композер.
@@ -1101,7 +1102,10 @@ sequenceDiagram
   папка фокуса, доступ или цель, записи нет, баннер `Settings changed while the dialog was open;
   bypass was not saved.` (D17);
 * **effort новой сессии** — `agent.effort` (`low`, `medium`, `high`), применяется живой
-  перезагрузкой конфига; одну сессию по-прежнему меняет опция `effort` в композере;
+  перезагрузкой конфига; одну сессию по-прежнему меняет опция `effort` в композере. Пока агент не
+  перезапущен после глобальной правки `permissions.mode`, новые сессии других папок с проектным
+  конфигом агент отклоняет (D4 change `defer-restart-keys-in-folder-sessions`); страница этого не
+  предсказывает, тексты баннеров не меняются (D20.5);
 * **цель записи** обоих ключей — как у «Default model» (§12.4.5, шаг 3): слой, где ключ определён,
   если он редактируемый, иначе `user`; один переключатель «All projects» / «This project only»
   (`projectLocal`) на оба блока. Цели нет в снимке — записи нет (`Cannot save: the target config
@@ -1120,15 +1124,18 @@ sequenceDiagram
   `Available in`, `Tools`, `Model`, `Status`): `default`, встроенные типы субагентов `general`,
   `explore`, `review`, `plan` (при `subagents.enabled: false` — статус `Subagents off`), затем файлы
   `$CODELAB_HOME/agents/*.md` и, для доверенного проекта, `.codelab/agents/*.md`. Строки и статусы
-  строит мост (`agentDefinitionRowsAt`) функцией `loadAgentDefinitions` из `codelab_agent_io`,
-  общей с `config check`. Статусы: `Available`, `Overridden by <путь>`, `Model not configured`
+  строит мост (`agentDefinitionRowsAt`) функцией `loadAgentDefinitions` из `codelab_agent_io`: тот же
+  загрузчик файлов проекта, что у `config check` (`loadProjectExtensions`), и общий с ним разбор
+  «каталог моделей + `parseAgentDefinitions`» (D20.2). Статусы: `Available`, `Overridden by <путь>`, `Model not configured`
   (диагностика `invalid_value` с текстом константы ядра `agentDefinitionModelNotInCatalogMessage`,
   D18), `Error · line N`, `Not loaded: duplicate name`, `Shadowed by project`, `Subagents off`.
   У отклонённых файлов «Available in», «Tools» и «Model» — `—`; `session model` — только у `default`,
   встроенных типов и рабочих определений без `model` (D19). Ключ строки —
   `agents-definitions-row-<name>`, следующие строки того же имени — `agents-definitions-row-<name>#<n>`
-  с `n` от 2 (D9, D19);
-* **InfoBar ошибок** с «Open file» — у каждого файла с диагностикой уровня `error`: прочая ошибка
+  с `n` от 2 (D9, D19). Текст из файлов (имя отклонённого файла, описание, путь, инструменты) и тексты
+  InfoBar с путями выводятся экранированными, как на странице навыков (`CodeLabStatusTableCell.untrusted`,
+  D20.4);
+* **InfoBar ошибок** с «Open folder» (каталог, где лежит файл) — у каждого файла с диагностикой уровня `error`: прочая ошибка
   (фиксированный текст кода), `Model not configured` и дубликат имени (`Not loaded: another
   definition has the same name.`); перекрытый `shadowed` — без InfoBar. Блок показывает и InfoBar
   недоверенного проекта, тайм-аута 5 с и непредвиденной ошибки чтения; режим и effort при этом
@@ -1136,16 +1143,20 @@ sequenceDiagram
 * **доверие проекта** — явный признак `projectTrusted` результата моста (`AgentDefinitionRows`),
   а не вывод из диагностики `untrusted_project`: без сведений проект недоверенный (fail-closed,
   D19). Правило одно с `config check` — функция `projectTrustAt` пакета `codelab_agent_io`
-  (канонизация папки и сравнение с `trusted_projects`);
-* **«Open file» и «Open folder»** — узкий порт app `PathOpener` (`core/platform/path_opener.dart`), не
-  `ExternalLinkOpener` (D8). Cubit передаёт в порт только пути из своего состояния: файл строки
-  определения и каталоги `$CODELAB_HOME/agents` и `<project>/.codelab/agents` (последний — только
-  при доверенном проекте). Порт сам проверяет вид пути без следования по символической ссылке:
-  `open` — только обычный файл `.md`, `openDirectory` — только каталог; иначе `notAllowed` без вызова
-  платформы (D19). Отказ и сбой — InfoBar `Could not open <label>.`. Отсутствующий
-  `$CODELAB_HOME/agents` создаётся; отсутствующий проектный каталог не создаётся — пункт меню
-  неактивен с подсказкой `Create .codelab/agents in the project to add definitions.`; каталог-ссылка
-  считается отсутствующим (Q11, D19);
+  (канонизация папки и сравнение с `trusted_projects`); её вызывают мост и `loadProjectExtensions`
+  (D20.2);
+* **«Open folder»** — порт app `LocalFolderOpener` (`core/platform/local_folder_opener.dart`), общий
+  со страницей «Skills & extensions», не `ExternalLinkOpener` (D8, D21; решения пользователя Q14 (б),
+  Q15 (а)). App файлы не открывает: кнопка InfoBar ошибки открывает каталог, где лежит файл. Cubit
+  передаёт в порт только каталоги из своего состояния: `$CODELAB_HOME/agents` и
+  `<project>/.codelab/agents` (последний — только при доверенном проекте). Порт раскрывает
+  символическую ссылку, отклоняет каталог-пакет по имени раскрытого каталога (`.app`, `{GUID}`),
+  битая ссылка и не каталог — `missing`, платформе уходит раскрытый путь. Отказ и сбой — InfoBar
+  `Could not open <label>.`. Отсутствующий `$CODELAB_HOME/agents` порт создаёт (`create: true`,
+  только если по пути нет никакой записи, даже битой ссылки); отсутствующий проектный каталог не
+  создаётся — пункт меню неактивен с подсказкой `Create .codelab/agents in the project to add
+  definitions.` Признаки существования каталогов мост считает по раскрытой ссылке: каталог-ссылка
+  существует, битая — нет (Q11, D21);
 * для `RemoteReadOnly` и `NotManaged` — только InfoBar «только чтение» без таблицы (SETUP-2, Q5);
 * журнал — `codelab_desktop.settings`, события `agents_modes.*` без путей, имён файлов и текстов
   исключений (D12).

@@ -1,11 +1,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Страницы Providers и MCP servers в навигации
-Composition root SHALL делать видимыми страницы «Connection», «Providers», «MCP servers» и «Agents & modes» группы «Agent» в порядке требования «Навигация настроек»; остальные страницы остаются скрытыми (SETUP-17). Тела страниц SHALL иметь ключи `settings-providers`, `settings-mcp` и `settings-agents-modes`. Поиск «Find a setting» SHALL находить «Providers» по ключевым словам `provider`, `model`, `api key`, `key storage`, `base url`, «MCP servers» — по `mcp`, `server`, `tools`, `headers`, а «Agents & modes» — по `mode`, `permission`, `bypass`, `plan`, `effort`, `reasoning`, `agent`, `definition`, `subagent` (design.md change `add-settings-agents-modes`, D9).
+Composition root SHALL делать видимыми страницы «Connection», «Providers», «MCP servers», «Agents & modes» и «Skills & extensions» группы «Agent» в порядке требования «Навигация настроек»; остальные страницы остаются скрытыми (SETUP-17). Тела страниц SHALL иметь ключи `settings-providers`, `settings-mcp`, `settings-agents-modes` и `settings-skills`. Поиск «Find a setting» SHALL находить «Providers» по ключевым словам `provider`, `model`, `api key`, `key storage`, `base url`, «MCP servers» — по `mcp`, `server`, `tools`, `headers`, «Agents & modes» — по `mode`, `permission`, `bypass`, `plan`, `effort`, `reasoning`, `agent`, `definition`, `subagent` (design.md change `add-settings-agents-modes`, D9, D20), а «Skills & extensions» — по `skill`, `agents.md`, `context`, `template`, `prompt`, `extension` (design.md change `add-app-skills-page`, D13).
 
-#### Scenario: Четыре страницы группы Agent
+#### Scenario: Пять страниц группы Agent
 - **WHEN** пользователь открывает настройки
-- **THEN** навигация показывает в группе «Agent» пункты `settings-nav-connection`, `settings-nav-providers`, `settings-nav-mcp-servers`, `settings-nav-agents-and-modes` в этом порядке, заголовка «App» нет
+- **THEN** навигация показывает в группе «Agent» пункты `settings-nav-connection`, `settings-nav-providers`, `settings-nav-mcp-servers`, `settings-nav-agents-and-modes`, `settings-nav-skills-and-extensions` в этом порядке, заголовка «App» нет
 
 #### Scenario: Поиск ключа API
 - **WHEN** пользователь вводит `api key` в «Find a setting»
@@ -14,6 +14,10 @@ Composition root SHALL делать видимыми страницы «Connecti
 #### Scenario: Поиск режима bypass
 - **WHEN** пользователь вводит `bypass` в «Find a setting»
 - **THEN** в навигации остаётся «Agents & modes», а выбор результата открывает тело `settings-agents-modes`
+
+#### Scenario: Поиск AGENTS.md
+- **WHEN** пользователь вводит `agents.md` в «Find a setting»
+- **THEN** в навигации остаётся «Skills & extensions»
 
 ## ADDED Requirements
 
@@ -116,19 +120,21 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 У строк отклонённых файлов (`Model not configured`, `Not loaded: duplicate name`, `Shadowed by project`, `Error…`) ячейки «Available in», «Tools» и «Model» SHALL быть `—`. «Model» SHALL быть `session model` у `default`, встроенных типов и рабочих определений без модели (design.md, D7, D19).
 
-Ключ строки SHALL быть `agents-definitions-row-<name>` для первой строки имени в порядке таблицы и `agents-definitions-row-<name>#<n>` (`n` с 2) для следующих строк того же имени; разделитель `#` не встречается в именах принятых определений (`^[a-z][a-z0-9-]{0,47}Ключ строки SHALL быть `agents-definitions-row-<name>` для первой строки имени в порядке таблицы и `agents-definitions-row-<name>#<n>` (`n` с 2) для следующих строк того же имени; ; у строки отклонённого файла имя — имя файла и теоретически может содержать `#`, такой редкий конфликт ключей допустим), поэтому ключ следующей строки не совпадает с ключом другого имени; два виджета строк с одним ключом НЕ SHALL появляться (design.md, D9, D19).
+Ключ строки SHALL быть `agents-definitions-row-<name>` для первой строки имени в порядке таблицы и `agents-definitions-row-<name>#<n>` (`n` с 2) для следующих строк того же имени; разделитель `#` не встречается в именах принятых определений (`^[a-z][a-z0-9-]{0,47}$`; у строки отклонённого файла имя — имя файла и теоретически может содержать `#`, такой редкий конфликт ключей допустим), поэтому ключ следующей строки не совпадает с ключом другого имени; два виджета строк с одним ключом НЕ SHALL появляться (design.md, D9, D19).
 
-Для каждого файла с диагностикой уровня `error` — прочий `error`, `Model not configured` и `duplicate` (в ядре уровень `error`) — страница SHALL показывать InfoBar `agents-definitions-error-<n>` уровня `error` с путём (`~` вместо домашнего каталога), строкой и фиксированным сообщением кода и кнопкой «Open file» (`agents-definitions-open-file-<n>`); для `duplicate` текст SHALL быть `Not loaded: another definition has the same name.` Сообщение НЕ SHALL содержать имени неизвестного ключа, значений, фрагментов файла и путей других файлов. Файл с `shadowed` (уровень `info`) НЕ SHALL получать InfoBar (design.md, D7). Недоверенный проект SHALL давать InfoBar `agents-definitions-untrusted` уровня `info`; признак — явный `projectTrusted` результата моста при известной папке, а не наличие диагностики `untrusted_project` (design.md, D19); загрузка дольше 5 с — `agents-definitions-timeout`; непредвиденная ошибка чтения — InfoBar `agents-definitions-failed` уровня `error` `Agent definitions could not be read.` без имени типа и пути (имя типа — только в журнал, design.md, D7).
+Текст из файлов определений — имя отклонённого файла, описание, путь источника, инструменты, путь в `Overridden by …` — и тексты InfoBar с путями (`agents-definitions-error-<n>`, `agents-definitions-untrusted`, `agents-definitions-open-failed`) SHALL выводиться как недоверенный простой текст: управляющие, невидимые и bidi-символы показываются видимыми, без markdown и ссылок (design.md, D20.4; D12 change `add-app-skills-page`).
+
+Для каждого файла с диагностикой уровня `error` — прочий `error`, `Model not configured` и `duplicate` (в ядре уровень `error`) — страница SHALL показывать InfoBar `agents-definitions-error-<n>` уровня `error` с путём (`~` вместо домашнего каталога), строкой и фиксированным сообщением кода и кнопкой «Open folder» (`agents-definitions-open-file-<n>`), которая открывает каталог, где лежит файл (требование «Открытие каталогов определений»); для `duplicate` текст SHALL быть `Not loaded: another definition has the same name.` Сообщение НЕ SHALL содержать имени неизвестного ключа, значений, фрагментов файла и путей других файлов. Файл с `shadowed` (уровень `info`) НЕ SHALL получать InfoBar (design.md, D7). Недоверенный проект SHALL давать InfoBar `agents-definitions-untrusted` уровня `info`; признак — явный `projectTrusted` результата моста при известной папке, а не наличие диагностики `untrusted_project` (design.md, D19); загрузка дольше 5 с — `agents-definitions-timeout`; непредвиденная ошибка чтения — InfoBar `agents-definitions-failed` уровня `error` `Agent definitions could not be read.` без имени типа и пути (имя типа — только в журнал, design.md, D7).
 
 «Reload» (`agents-definitions-reload`) SHALL перечитывать снимок и определения; результат прежней загрузки, пришедший после нового «Reload», смены доступа или закрытия страницы, НЕ SHALL применяться. Подпись блока SHALL говорить, что определения читаются при создании сессии, а выбор для одной сессии — в меню агента композера.
 
 #### Scenario: Битое определение
 - **WHEN** `$CODELAB_HOME/agents/migrator.md` содержит в строке 4 `tools: read` (строка вместо списка), а `reviewer.md` валиден
-- **THEN** таблица содержит строку `reviewer` со статусом `Available` и строку `migrator` со статусом `Error · line 4`; InfoBar `agents-definitions-error-0` содержит `~/.codelab/agents/migrator.md` и `Open file`, но не содержит `read`
+- **THEN** таблица содержит строку `reviewer` со статусом `Available` и строку `migrator` со статусом `Error · line 4`; InfoBar `agents-definitions-error-0` содержит `~/.codelab/agents/migrator.md` и `Open folder`, но не содержит `read`
 
 #### Scenario: Модель вне каталога
 - **WHEN** `docs-writer.md` задаёт `model: openai/gpt-x`, а провайдера `openai` в конфиге нет
-- **THEN** строка `docs-writer` имеет статус `Model not configured`, и для `docs-writer.md` показан InfoBar `agents-definitions-error-<n>` уровня `error` с путём и кнопкой «Open file»
+- **THEN** строка `docs-writer` имеет статус `Model not configured`, и для `docs-writer.md` показан InfoBar `agents-definitions-error-<n>` уровня `error` с путём и кнопкой «Open folder»
 
 #### Scenario: Определения не прочитаны
 - **WHEN** загрузчик определений завершается непредвиденным исключением
@@ -148,24 +154,30 @@ Composition root SHALL делать видимыми страницы «Connecti
 
 #### Scenario: Дубликат имени и затенённый файл
 - **WHEN** `$CODELAB_HOME/agents/a.md` и `$CODELAB_HOME/agents/b.md` оба задают `name: helper`, а пользовательский `reviewer.md` затенён проектным `reviewer.md` доверенного проекта
-- **THEN** для `a.md` и `b.md` показаны InfoBar `agents-definitions-error-<n>` уровня `error` с текстом `Not loaded: another definition has the same name.` и кнопкой «Open file», без пути другого файла; для пользовательского `reviewer.md` со статусом `Shadowed by project` InfoBar нет
+- **THEN** для `a.md` и `b.md` показаны InfoBar `agents-definitions-error-<n>` уровня `error` с текстом `Not loaded: another definition has the same name.` и кнопкой «Open folder», без пути другого файла; для пользовательского `reviewer.md` со статусом `Shadowed by project` InfoBar нет
 
 #### Scenario: Доверие по признаку моста
 - **WHEN** порт загрузки возвращает для известной папки `projectTrusted: false` без диагностики `untrusted_project` (например, при тайм-ауте чтения)
 - **THEN** страница считает проект недоверенным: меню «Open folder» не содержит `This project (.codelab/agents)`
 
+#### Scenario: Невидимые символы в описании определения
+- **WHEN** `$CODELAB_HOME/agents/reviewer.md` валиден, а его `description` содержит символ U+202E и тег Unicode U+E0041
+- **THEN** ячейка «Description» строки `reviewer` показывает эти символы в видимой экранированной форме, а не применяет их
+
 #### Scenario: Поздний результат после Reload
 - **WHEN** первая загрузка определений не завершилась, пользователь нажимает «Reload», и вторая завершается раньше первой
 - **THEN** таблица показывает результат второй загрузки, а поздний результат первой отброшен (`agents_modes.load_discarded`)
 
-### Requirement: Открытие файла и каталога определений
-«Open file» и «Open folder» SHALL открывать путь в приложении ОС через порт `PathOpener` (`apps/codelab_desktop/lib/core/platform/`), а не через `ExternalLinkOpener` (решение пользователя 2026-11-16, Q8 (б)). Порт SHALL получать только путь файла строки текущего состояния страницы или каталоги `$CODELAB_HOME/agents` и `<project>/.codelab/agents` (последний — только для доверенного проекта); иначе исход `notAllowed` без вызова платформы. Доверие проекта страница SHALL брать из `projectTrusted` результата моста (design.md, D19). Сам порт SHALL открывать через `open` только обычный файл с окончанием `.md`, а через `openDirectory` — только каталог, определяя вид пути без следования по символической ссылке; ссылка, файл другого вида или расширения SHALL давать `notAllowed` без вызова платформы (ревью безопасности итерации 2, design.md, D8, D19). «Open folder» SHALL быть меню из пунктов `User definitions (~/.codelab/agents)` и `This project (.codelab/agents)`. Сбой открытия (`failed`) и отказ (`notAllowed` порта или Cubit-а) SHALL давать InfoBar `agents-definitions-open-failed` `Could not open <label>.` без причины отказа (design.md, D8, D19).
+### Requirement: Открытие каталогов определений
+«Open folder» в шапке блока и кнопка «Open folder» InfoBar ошибки определения SHALL открывать каталог в файловом менеджере ОС через порт платформы app `LocalFolderOpener` (`apps/codelab_desktop/lib/core/platform/`), общий со страницей «Skills & extensions», а не через `ExternalLinkOpener` (design.md, D8, D21). Файлы НЕ SHALL открываться и запускаться: кнопка InfoBar ошибки SHALL открывать каталог, где лежит файл определения (решение пользователя 2026-11-16, Q14 (б)).
 
-Если `$CODELAB_HOME/agents` нет, «User definitions» SHALL создавать каталог (вместе с недостающими родителями) и открывать его; сбой создания — тот же InfoBar. Если `<project>/.codelab/agents` нет, пункт «This project» SHALL быть неактивен с подсказкой `Create .codelab/agents in the project to add definitions.`, и app НЕ SHALL создавать каталоги в папке проекта (решение пользователя 2026-11-16, Q11 (а) + (б)).
+Порт SHALL получать только каталоги `$CODELAB_HOME/agents` и `<project>/.codelab/agents` из текущего состояния страницы (последний — только при `projectTrusted` результата моста, design.md, D19); иной каталог SHALL отклоняться без вызова порта. Порт SHALL раскрывать символическую ссылку, отказывать (`failed`) без вызова платформы, если у имени раскрытого каталога есть расширение или суффикс `{…}` (каталог-пакет), давать `missing` для битой ссылки и не каталога и передавать платформе раскрытый путь (решение пользователя 2026-11-16, Q15 (а); D8 change `add-app-skills-page`). «Open folder» в шапке SHALL быть меню из пунктов `User definitions (<$CODELAB_HOME/agents с ~>)` и `This project (.codelab/agents)`. Сбой (`failed`), отсутствие (`missing`) и отказ страницы SHALL давать InfoBar `agents-definitions-open-failed` `Could not open <label>.` без причины.
 
-#### Scenario: Open file
-- **WHEN** пользователь нажимает «Open file» у InfoBar битого `migrator.md`
-- **THEN** порт получает путь `migrator.md` из состояния, журнал содержит `agents_modes.open_path` с `kind: file` и `outcome: opened` без пути
+Если по пути `$CODELAB_HOME/agents` нет никакой записи, «User definitions» SHALL создавать каталог (вместе с недостающими родителями) и открывать его; если по пути есть битая ссылка или файл, каталог НЕ SHALL создаваться. Если `<project>/.codelab/agents` нет, пункт «This project» SHALL быть неактивен с подсказкой `Create .codelab/agents in the project to add definitions.`, и app НЕ SHALL создавать каталоги в папке проекта (решение пользователя 2026-11-16, Q11 (а) + (б)).
+
+#### Scenario: Каталог файла из InfoBar ошибки
+- **WHEN** пользователь нажимает «Open folder» у InfoBar битого `$CODELAB_HOME/agents/migrator.md`
+- **THEN** порт получает абсолютный путь каталога `$CODELAB_HOME/agents`, а не `migrator.md`; журнал содержит `agents_modes.open_path` с `kind: file_dir` и `outcome: opened` без пути
 
 #### Scenario: Проект без доверия
 - **WHEN** папка проекта не в `trusted_projects`
@@ -179,17 +191,21 @@ Composition root SHALL делать видимыми страницы «Connecti
 - **WHEN** папка проекта доверенная, а `<project>/.codelab/agents` нет
 - **THEN** пункт «This project (.codelab/agents)» неактивен с подсказкой `Create .codelab/agents in the project to add definitions.`, каталог в проекте не создан
 
-#### Scenario: Ссылка вместо файла определения
-- **WHEN** `$CODELAB_HOME/agents/reviewer.md` — символическая ссылка (на файл или пакет приложения), и порт получает её путь в `open`
-- **THEN** исход — `notAllowed`, платформа не вызвана, журнал содержит `agents_modes.open_path` с `outcome: not_allowed` без пути
-
-#### Scenario: Файл не определения
-- **WHEN** порт получает в `open` путь обычного файла `run.command` или каталога
-- **THEN** исход — `notAllowed`, платформа не вызвана
-
 #### Scenario: Каталог-ссылка
-- **WHEN** `$CODELAB_HOME/agents` — символическая ссылка на каталог, и пользователь выбирает «Open folder» → «User definitions»
-- **THEN** порт возвращает `notAllowed`, платформа не вызвана, каталог по ссылке не создаётся и не открывается; страница показывает InfoBar `agents-definitions-open-failed` с текстом `Could not open ~/.codelab/agents.`
+- **WHEN** `$CODELAB_HOME/agents` — символическая ссылка на каталог `/data/agents`, и пользователь выбирает «Open folder» → «User definitions»
+- **THEN** платформа получает раскрытый путь `/data/agents`, каталог не создаётся, журнал содержит `agents_modes.open_path` с `outcome: opened`
+
+#### Scenario: Ссылка на пакет приложения
+- **WHEN** `<project>/.codelab/agents` доверенного проекта — символическая ссылка на `/Applications/Tool.app`, и пользователь выбирает «This project (.codelab/agents)»
+- **THEN** порт возвращает `failed`, платформа не вызвана, страница показывает InfoBar `agents-definitions-open-failed`, журнал содержит `agents_modes.open_path` с `outcome: failed` без пути
+
+#### Scenario: Битая ссылка вместо пользовательского каталога
+- **WHEN** `$CODELAB_HOME/agents` — символическая ссылка на несуществующий путь, и пользователь выбирает «Open folder» → «User definitions»
+- **THEN** ни каталог, ни цель ссылки не созданы, платформа не вызвана, страница показывает InfoBar `agents-definitions-open-failed`, журнал содержит `agents_modes.open_path` с `outcome: missing`
+
+#### Scenario: Каталог вне состояния
+- **WHEN** Cubit получает просьбу открыть каталог, которого нет среди каталогов определений текущего состояния
+- **THEN** порт не вызван, журнал содержит `agents_modes.open_path` с `outcome: not_allowed` без пути
 
 ### Requirement: События журнала страницы «Agents & modes» без путей и значений
 Страница SHALL писать события `agents_modes.{loaded,unreadable,load_discarded,definitions_failed,mode_changed,bypass_cancelled,effort_changed,save_failed,open_path}` в логгер `codelab_desktop.settings` с полями design.md change `add-settings-agents-modes`, D12. События НЕ SHALL содержать путей, имён файлов определений, описаний и тел определений, значений конфига, кроме `mode` и `effort`, и текстов исключений — только имя типа.
