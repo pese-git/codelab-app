@@ -108,7 +108,11 @@ List<acp.SessionUpdate> replayUpdates(Iterable<AgentEvent> events) {
               status: finishedStatus(event),
               rawInput: call?.input,
               locations: acpLocations(call?.locations ?? const []),
-              content: finishedContent(event, subagentResult: done),
+              // D52 п. 1, как в живой проекции: у отменённого `agent` с итогом
+              // ребёнка — `[]`, частичный текст ребёнка клиенту не уходит.
+              content: event.outcome == ToolOutcome.cancelled && done != null
+                  ? const []
+                  : finishedContent(event, subagentResult: done),
               meta: switch (_mergeMeta(callMeta, finishMeta)) {
                 final merged when prefix != null => withParentToolCallId(
                   merged,

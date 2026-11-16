@@ -269,16 +269,25 @@ Map<String, Object?> withParentToolCallId(
 /// `_meta.codelab.outcome: "cancelled"` (D21, D47 Т3), как у отменённого
 /// вызова корня; вызывается мостом до итога вызова `agent`, чьё поддерево
 /// закрывается.
-acp.SessionUpdate closedDescendantUpdate(String chain, String prefix) =>
-    acp.SessionUpdate.toolCallUpdate(
-      toolCallUpdate: acp.ToolCallUpdate(
-        toolCallId: acp.ToolCallId(chain),
-        status: acp.ToolCallStatus.failed,
-        meta: {
-          'codelab': {'parentToolCallId': prefix, 'outcome': 'cancelled'},
-        },
-      ),
-    );
+///
+/// [isAgentCall] — закрываемый вызов сам является `agent` (вложенный ребёнок
+/// или внук): клиент уже мог получить его строку прогресса, поэтому кадр несёт
+/// `content: []`, как финальный кадр отменённого `agent` корня (D52 п. 1,
+/// `_finished`). У прочих вызовов поддерева ключа `content` нет.
+acp.SessionUpdate closedDescendantUpdate(
+  String chain,
+  String prefix, {
+  bool isAgentCall = false,
+}) => acp.SessionUpdate.toolCallUpdate(
+  toolCallUpdate: acp.ToolCallUpdate(
+    toolCallId: acp.ToolCallId(chain),
+    status: acp.ToolCallStatus.failed,
+    content: isAgentCall ? const [] : null,
+    meta: {
+      'codelab': {'parentToolCallId': prefix, 'outcome': 'cancelled'},
+    },
+  ),
+);
 
 /// Вызов прошёл проверку разрешений и все хуки и сейчас начнёт
 /// исполняться (§13.7, «Статусы вызова»).
@@ -365,8 +374,13 @@ acp.SessionUpdate _finished(
     status: finishedStatus(event),
     // §13.7: у отменённого вызова — только статус и outcome; текст об
     // отмене — для модели, клиент уже видит вывод в терминале.
+    // Исключение — `agent` с итогом ребёнка (D52 п. 1): клиент уже получил
+    // строку прогресса `explore · …`, и без ключа `content` в финальном кадре
+    // она осталась бы в состоянии `running`. Пустой список (`content: []`,
+    // «only the fields being changed», ACP `08-Tool Calls.md`) снимает её;
+    // у отменённого вызова другого инструмента ключа по-прежнему нет.
     content: event.outcome == ToolOutcome.cancelled
-        ? null
+        ? (subagentResult != null ? const [] : null)
         : finishedContent(event, subagentResult: subagentResult),
     meta: finishedMeta(event, subagentResult: subagentResult),
   ),
@@ -384,9 +398,14 @@ acp.ToolCallStatus finishedStatus(ToolCallFinished event) =>
 /// [subagentResult] — итог ребёнка вызова `agent`: клиент показывает человеку
 /// тело отчёта без обёртки `<subagent-report>` и ограды `untrusted-content`,
 /// которые нужны только модели (§17.3.7, D24). Ребёнок без отчёта
-/// (`failed`, отмена в очереди) даёт пустой контент: текст результата в
-/// журнале — это та же обёртка, а `SubagentFinished` текста сбоя не несёт.
-/// Вызов `agent` без итога (отклонён проверкой) — как любой вызов.
+/// (`failed`) или с пустым отчётом (`completed`) даёт пустой список: текст
+/// результата в журнале — это та же обёртка, а `SubagentFinished` текста сбоя
+/// не несёт. Вызов `agent` без итога (отклонён проверкой) — как любой вызов.
+///
+/// Отмена (D52 п. 1): живая проекция (`_finished`) и реплей (`replay.dart`)
+/// для отменённого `agent` с итогом сами подставляют `[]` и эту функцию не
+/// вызывают — частичный текст ребёнка клиенту не уходит. У отменённого
+/// не-`agent` живая проекция ключа `content` не шлёт вовсе.
 List<acp.ToolCallContent> finishedContent(
   ToolCallFinished event, {
   SubagentFinished? subagentResult,
