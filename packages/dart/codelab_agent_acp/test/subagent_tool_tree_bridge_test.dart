@@ -245,6 +245,35 @@ void main() {
       expect(closing.last, 'tool_call_update call_1 failed cancelled');
     });
 
+    // D52 п. 1: клиент уже получил строку прогресса вложенного `agent`
+    // (`ToolCallProgress` ребёнка доходит до него как вызов цепочки), поэтому
+    // кадр закрытия вложенного `agent` несёт `content: []`, иначе строка
+    // осталась бы в `running`. Кадры прочих вызовов поддерева — без `content`.
+    test('closing a nested agent call after its progress line carries '
+        'content: []', () async {
+      await open();
+      startTree();
+      session
+        ..emit(
+          act(
+            ToolCallProgress(
+              root,
+              toolCallId: 'call_2',
+              content: const [ToolCallBlock(TextContent('explore · 1 tool'))],
+            ),
+          ),
+        )
+        ..emit(finished('call_1', outcome: ToolOutcome.cancelled));
+      await pump();
+
+      Map<String, Object?> frame(String id) => sent
+          .map((u) => u.toJson())
+          .lastWhere((j) => j['toolCallId'] == id && j['status'] == 'failed');
+      expect(frame('call_1/call_2'), containsPair('content', isEmpty));
+      expect(frame('call_1/call_1'), isNot(contains('content')));
+      expect(frame('call_1/call_2/call_1'), isNot(contains('content')));
+    });
+
     // D47 Т3: закрытие срабатывает на `ToolCallFinished` любого `agent`, в
     // том числе вложенного: внук ещё держит `exec`, а вызов `agent` ребёнка
     // уже завершён.
