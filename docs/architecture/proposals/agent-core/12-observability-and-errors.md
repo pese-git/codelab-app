@@ -86,7 +86,7 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp` | `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (`trace`), `mcp.servers.replace_failed`, `mcp.tools.changed`, `mcp.tools.refresh_failed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (`debug`) (этап 8, поля ниже) |
 | `acp` | `acp.frame.in`, `acp.frame.out`, `acp.frame.bad`, `acp.cancel.no_turn`, `acp.prompt.rejected`, `acp.detached`, `acp.client_capabilities.absent` (§13.2), `acp.terminal.release_failed` (§13.9) |
 | `host` | `host.plan`, `host.config.loaded`, `serve.config.invalid` (бинарь `serve`, ошибка загрузки конфига) |
-| `config` | `config.env.unknown`, `config.project.untrusted_key` (§15.3), `config.key.not_applied` (§15.5), `config.provider.key_missing`, `config.file.ignored`, `config.legacy_found` (§15.7), `config.session.outside_root` (§10.3); таблица ниже |
+| `config` | `config.env.unknown`, `config.project.untrusted_key` (§15.3), `config.key.not_applied` (§15.5), `config.provider.key_missing`, `config.file.ignored`, `config.legacy_found` (§15.7), `config.session.outside_root`, `config.session.project`, `config.session.project_invalid`, `config.session.process_keys_ignored`, `config.session.restart_pending` (§10.3); таблица ниже |
 
 События `mcp.*` (этап 8; `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md`, D13). `session_id` есть
 всегда, `server` — `name` сервера:
@@ -110,7 +110,7 @@ final class LogRecord {           // то, что получает sink хост
 События `config.*` и загрузки конфига (change `add-agent-configuration`, D16; новые отмечены).
 Значения ключей, переменных и секретов в поля не попадают: только пути ключей, имена переменных и
 секретов, источники и пути файлов. Каждое событие предупреждения загрузки (`config.*` ниже, кроме
-`config.session.outside_root`, и `mcp.server.skipped`) несёт также поле `message` — английский текст
+`config.session.*`, и `mcp.server.skipped`) несёт также поле `message` — английский текст
 `ConfigIssue.message` без значений, та же строка, что печатает `config check`:
 
 | Событие | Уровень | Поля |
@@ -125,6 +125,10 @@ final class LogRecord {           // то, что получает sink хост
 | `config.file.ignored` (новое) | warning | `path`, `hint` (`config.yml` рядом с `config.yaml`) |
 | `config.legacy_found` (новое) | warning | `files` (только пути; содержимое файла не читается, §15.7) |
 | `config.session.outside_root` (новое) | info | `session_id`, `cwd`, `config_root`; пишется логгером сессии, один раз на нормализованный `cwd` (§10.3) |
+| `config.session.project` | info | `session_id`, `cwd`, `process_root`, `trusted`; сессия другой папки при хосте с портом `ProjectConfigLoader`, один раз на каноническую папку (§10.3). `process_root` — канонический корень процесса (`CoreConfig.projectRoot` применённого снимка): относительно него папка «другая», а конфигурация сессии читается из слоёв `cwd`. Поле `config_root` переименовано в `process_root` (design.md change `defer-restart-keys-in-folder-sessions`, D6) |
+| `config.session.project_invalid` | error | `cwd`, `issues` (`source`, `line`, `column`, `key`, `kind`; без текстов и значений) — отказ в сессии другой папки, в том числе по отложенной правке `permissions.*` при проектных слоях папки (D4 того же change) |
+| `config.session.process_keys_ignored` | warning | `session_id`, `keys` (ключи показа, без значений); один раз на папку. Ключ процесса приписывается папке, только если `values` её загрузки отличается от `withoutProjectValues` той же загрузки; с применённым снимком не сравнивается, поэтому глобальная правка после старта предупреждения не даёт (D8 того же change) |
+| `config.session.restart_pending` (новое) | warning | `session_id`, `cwd`, `keys` — отсортированные ключи показа частей, подставленных из применённого снимка (`providers.<id>`, `mcp.servers[<name>]`, `agent.default_model`, листья `permissions.*`), как у `config.reload.restart_required`, без значений; на каждое открытие сессии другой папки с непустой подстановкой (§10.3, D6 того же change) |
 | `mcp.server.skipped` | info | `server`, `reason: "disabled in config"` (новая причина для `enabled: false`), `message` |
 
 Прежние `config.legacy_ignored`, `config.legacy_key_dropped` и `config.legacy_active` удалены:
