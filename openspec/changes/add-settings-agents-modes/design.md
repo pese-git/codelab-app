@@ -98,15 +98,21 @@ SessionDefaultsView sessionDefaultsOf(AgentConfigSnapshot snapshot, EditableSett
 Future<AgentDefinitionsReport> loadAgentDefinitions({
   required CoreConfig config, required String? cwd, required bool projectTrusted,
   required ProjectFilesSource source, Duration timeout = const Duration(seconds: 5),
+  CancelToken? cancel, int? contextMaxBytes,
 });
-// AgentDefinitionsReport: definitions, diagnostics, timedOut
+// AgentDefinitionsReport: definitions, files, parseDiagnostics, timedOut;
+// diagnostics — геттер-объединение files.diagnostics + parseDiagnostics
 ```
+
+`cancel` — внешний токен: функция строит от него дочерний `CancelTokenSource`, и отмена снаружи (новый «Reload», `close()` страницы, D11) обрывает чтение источника. `contextMaxBytes` по умолчанию — `config.projectContextMaxBytes`, как у `config check`; странице контекст не нужен. `files` и `parseDiagnostics` раздельно нужны `config check`, чтобы сохранить прежний порядок строк вывода (диагностика шаблонов команд стоит между ними); клиенты берут объединение `diagnostics`. При `timedOut` остальные поля пусты; исключение источника не скрывается — вызывающий переводит его в состояние.
 
 Без папки (`cwd == null`) читается только `$CODELAB_HOME/agents`; если `ProjectFilesLoader` требует `cwd`, функция добавляет узкий путь для пользовательского каталога, не меняя `ProjectFilesLoader.load` для агента. Ядро экспортирует `builtinSubagentTypes()` из основного бареля (поведение не меняется).
 
 Мост:
 - основной барель — `AgentDefinitionRowView` и чистая `agentDefinitionRowsOf(report-данные, builtins, subagentsEnabled)`: строки, колонки и статус;
-- `io.dart` — `agentDefinitionRowsAt({snapshot, access, env})`: строит `ProjectFilesLoader` для дома и окружения агента, вызывает `loadAgentDefinitions` и `agentDefinitionRowsOf`.
+- `io.dart` — `agentDefinitionRowsAt({snapshot, access, env, timeout = 5 s, cancel})`: строит `ProjectFilesLoader` для дома и окружения агента, вызывает `loadAgentDefinitions` и `agentDefinitionRowsOf` и возвращает `AgentDefinitionRows{rows, diagnostics, timedOut, userDirectory, userDirectoryExists, projectDirectory?, projectDirectoryExists, projectTrusted}` (`projectDirectory` — `null` без папки). `projectTrusted` — итог общей функции доверия `codelab_agent_io`, той же, что у `config check` (D19); без папки — `false`. `userDirectoryExists` и `projectDirectoryExists` считаются без следования по символической ссылке (`FileSystemEntity.typeSync(path, followLinks: false) == directory`): каталог-ссылка считается отсутствующим (D19).
+
+App (D13): Cubit страницы зависит от порта `AgentDefinitionsLoader` (typedef функции `({snapshot, access, environment, cancel}) → Future<AgentDefinitionsLoad>`) в `features/settings/application/agent_definitions_port.dart`; `AgentDefinitionsLoad` — значения порта: `rows`, `projectTrusted` (явный признак моста, D19; заменяет флаг `untrustedProject`, который адаптер выводил из диагностики `untrusted_project`), `timedOut`, `userDirectory`, `userDirectoryExists`, `projectDirectory?`, `projectDirectoryExists`. Адаптер `loadAgentDefinitionsForPage` живёт в `lib/app/agent_definitions_loader.dart` и только он импортирует `package:codelab_setup/io.dart` (правило сторожа SETUP-9); `features/` его не импортирует и типов диагностики ядра не видит.
 
 Строки (решение пользователя 2026-11-16, Q6 (б)):
 
@@ -115,14 +121,18 @@ Future<AgentDefinitionsReport> loadAgentDefinitions({
 | `default` | `built-in` | `session` | `all` | `session model` | `Available` |
 | `general`, `explore`, `review`, `plan` | `built-in` | `subagent` | из определения (`all`, если `tools == null`) | `session model` | `Available`; `Overridden by <путь>` при определении с тем же именем и `scope` `subagent`/`both`; `Subagents off` при `subagents.enabled: false` (решение пользователя 2026-11-16, Q12 (а)) |
 | файл, прошедший проверку | путь с `~` вместо дома (`homePathLabel`) | `session`, `subagent` или `both` (`scope`) | список или `all` | `<provider>/<model>` или `session model` | `Available` |
-| файл с диагностикой `error` кода `model` | путь | — | — | — | `Model not configured` (решение пользователя 2026-11-16, Q7 (а)) |
+| файл с диагностикой «модель вне каталога» (`error`, код `invalid_value`, сообщение — константа ядра, D18) | путь | — | — | — | `Model not configured` (решение пользователя 2026-11-16, Q7 (а)) |
 | файл с другой диагностикой `error` | путь | — | — | — | `Error · line N` (без строки — `Error`) |
 | файл с `duplicate` | путь | — | — | — | `Not loaded: duplicate name` |
 | пользовательский файл с `shadowed` | путь | — | — | — | `Shadowed by project` |
 
+Ячейки (ревью итерации 2, D19): у отклонённых файлов (`Model not configured`, `Not loaded: duplicate name`, `Shadowed by project`, `Error…`) «Available in», «Tools» и «Model» — `—`: определение не загружено, и значения его полей агент не применит. «Model» = `session model` у `default`, у встроенных типов и у рабочего определения без `model`. Ключ строки — D9.
+
 Имя строки файла, не прошедшего проверку, — имя файла без `.md`: разбор ядра не отдаёт имя отклонённого определения, спецификация `agent-definitions` не меняется (Q7 (а)). Описание и тело файла в строку не попадают, кроме `description` прошедшего проверку определения (как в опции `agent`). Сообщения ошибок — фиксированные тексты кодов (D14 change `add-agent-project-files`): ни ключа, ни фрагмента файла.
 
-Недоверенный проект: диагностика `untrusted_project` даёт InfoBar `agents-definitions-untrusted` уровня `info`: `Definitions in <project>/.codelab/agents are not read: the project is not trusted.` Тайм-аут загрузки — InfoBar `agents-definitions-timeout`: `Agent definitions were not read within 5 s.`; непредвиденное исключение — `Agent definitions could not be read.` (имя типа — только в журнал).
+Недоверенный проект (`projectDirectory != null` и `projectTrusted == false`, D19; Cubit проверяет признак, а не диагностику `untrusted_project`) даёт InfoBar `agents-definitions-untrusted` уровня `info`: `Definitions in <project>/.codelab/agents are not read: the project is not trusted.` Тайм-аут загрузки — InfoBar `agents-definitions-timeout`: `Agent definitions were not read within 5 s.`; непредвиденное исключение — InfoBar `agents-definitions-failed` уровня `error`: `Agent definitions could not be read.` (имя типа — только в журнал, `agents_modes.definitions_failed` с `reason: error`).
+
+InfoBar `agents-definitions-error-<n>` с «Open file» показывается для каждого файла с диагностикой уровня `error`: прочий `error` (фиксированный текст кода), `Model not configured` и `duplicate` (в ядре `duplicate` — уровень `error`; текст InfoBar — фиксированный `Not loaded: another definition has the same name.`, а не сообщение ядра, которое перечисляет пути файлов-близнецов). Статус в таблице и InfoBar строятся из одной диагностики, и файл, который агент не загрузит, не должен оставаться без пути и кнопки. У пользовательского файла с `shadowed` (уровень `info`) InfoBar нет: он не ошибка, проектный файл того же имени работает, а статус `Shadowed by project` виден в таблице.
 
 *Альтернатива:* строить строки в app из событий `agents.loaded` живой сессии — только у встроенного агента, без ошибок разбора и только при открытой сессии. Отклонено.
 
@@ -139,19 +149,21 @@ abstract interface class PathOpener {
 final class UrlLauncherPathOpener implements PathOpener { … } // launchUrl(Uri.file(path)); create — Directory.create(recursive: true)
 ```
 
-`ExternalLinkOpener` не расширяется схемой `file:`: его политика — ссылки из ответа агента (DSK-7), а путь из настроек — другой источник; общая политика ослабила бы первую. Cubit страницы передаёт в порт только пути из своего текущего состояния: файл строки определения и каталоги `$CODELAB_HOME/agents` и `<project>/.codelab/agents` (последний — только для доверенного проекта); иначе — `notAllowed` без вызова платформы. `url_launcher` по-прежнему импортируется только в `core/platform/` (правило сторожа есть, меняется его комментарий). Исход `failed` — InfoBar `agents-definitions-open-failed`: `Could not open <label>.`
+Порт сам проверяет вид пути до вызова платформы (ревью безопасности итерации 2, D19): `open` открывает только обычный файл с окончанием `.md` (`FileSystemEntity.typeSync(path, followLinks: false) == FileSystemEntityType.file`), `openDirectory` — только каталог без ссылки (`typeSync(followLinks: false) == directory`; для `create: true` проверка повторяется после создания). Символическая ссылка, файл другого расширения, каталог вместо файла и наоборот — `notAllowed` без вызова платформы. Это второй рубеж после проверки Cubit-ом по состоянию: ОС открывает файл программой по его виду, и ссылка `reviewer.md → ~/bin/tool.app` или файл `.command` стал бы запуском, а не просмотром.
+
+`ExternalLinkOpener` не расширяется схемой `file:`: его политика — ссылки из ответа агента (DSK-7), а путь из настроек — другой источник; общая политика ослабила бы первую. Cubit страницы передаёт в порт только пути из своего текущего состояния: файл строки определения и каталоги `$CODELAB_HOME/agents` и `<project>/.codelab/agents` (последний — только для доверенного проекта); иначе — `notAllowed` без вызова платформы. `url_launcher` по-прежнему импортируется только в `core/platform/` (правило сторожа есть, меняется его комментарий). Исходы `failed` и `notAllowed` (отказ порта по виду пути — например, каталог-ссылка `~/.codelab/agents` — или отказ Cubit-а по состоянию) — InfoBar `agents-definitions-open-failed`: `Could not open <label>.` (D19.3): нажатие без видимого итога выглядело бы как зависшая кнопка; причина отказа в InfoBar не раскрывается, она — в журнале (`agents_modes.open_path` с `outcome: not_allowed`).
 
 «Open folder» — `DropDownButton` с пунктами `User definitions (~/.codelab/agents)` и `This project (.codelab/agents)`; второй — только при доверенной папке проекта. Отсутствующий каталог (решение пользователя 2026-11-16, Q11 (а) + (б)):
 - `$CODELAB_HOME/agents` — Cubit вызывает `openDirectory(path, create: true)`: порт создаёт каталог (`recursive`) и открывает его, исход `created`; сбой создания — `failed` и тот же InfoBar. Создание каталога в доме безвредно и нужно, чтобы положить туда первое определение;
 - `<project>/.codelab/agents` — пункт неактивен с подсказкой `Create .codelab/agents in the project to add definitions.`; app без явной просьбы ничего не создаёт в рабочем дереве проекта. `create: true` для проектного каталога Cubit не передаёт никогда.
 
-Существует ли каталог, сообщает строка состояния моста (`agentDefinitionRowsAt` возвращает признаки наличия обоих каталогов), а не проверка в виджете.
+Существует ли каталог, сообщает результат моста (`AgentDefinitionRows.userDirectoryExists` и `projectDirectoryExists`, без следования по ссылке; через порт — те же поля `AgentDefinitionsLoad`, D7), а не проверка в виджете. Доверен ли проект, Cubit берёт из `AgentDefinitionsLoad.projectTrusted` (D19): пункт «This project» и путь `<project>/.codelab/agents` допустимы только при `projectTrusted == true`.
 
 ### D9. Разметка, ключи и виджеты
 
 Порядок блоков: шапка (`Agents & modes`, «Open folder», «Reload»), «Default permission mode», «Default reasoning effort», «Agent definitions». Блоков «Remember model per project folder», «Model roles», «Model limits override», «Remote A2A agents» нет (SETUP-17; Q9 (а)).
 
-Ключи тестов: тело `settings-agents-modes`; `agents-modes-target`, `agents-modes-mode-<id>` (`plan`, `ask`, `standard`, `accept-edits`, `bypass`, `autopilot`), `agents-modes-mode-source`, `agents-modes-mode-narrowed`, `agents-modes-bypass-confirm`, `agents-modes-effort`, `agents-modes-banner`, `agents-modes-read-only`, `agents-modes-unreadable`; `agents-definitions-table`, `agents-definitions-row-<name>`, `agents-definitions-error-<n>`, `agents-definitions-open-file-<n>`, `agents-definitions-open-folder`, `agents-definitions-reload`, `agents-definitions-untrusted`, `agents-definitions-timeout`, `agents-definitions-open-failed`.
+Ключи тестов: тело `settings-agents-modes`; `agents-modes-target`, `agents-modes-mode-<id>` (`plan`, `ask`, `standard`, `accept-edits`, `bypass`, `autopilot`), `agents-modes-mode-source`, `agents-modes-mode-narrowed`, `agents-modes-bypass-confirm`, `agents-modes-effort`, `agents-modes-banner`, `agents-modes-read-only`, `agents-modes-unreadable`; `agents-definitions-table`, `agents-definitions-row-<name>` (первая строка с именем `<name>`) и `agents-definitions-row-<name>#<n>` (`n` с 2 — следующие строки того же имени в порядке таблицы; имена повторяются: встроенный тип и заменяющий его файл, пользовательский `shadowed` и проектный файл, D19), `agents-definitions-error-<n>`, `agents-definitions-open-file-<n>`, `agents-definitions-open-folder`, `agents-definitions-open-user`, `agents-definitions-open-project` (пункты меню «Open folder», D8), `agents-definitions-reload`, `agents-definitions-untrusted`, `agents-definitions-timeout`, `agents-definitions-failed` (непредвиденная ошибка чтения, D7), `agents-definitions-open-failed`. `agents-definitions-error-<n>` — для каждого файла с диагностикой уровня `error`: прочий `error`, `Model not configured` и `duplicate`; у `shadowed` (уровень `info`) InfoBar нет (D7, D18, D19).
 
 Виджеты `codelab_ui` переиспользуются: `CodeLabSettingsSection`, `CodeLabSettingsRow`, `CodeLabForm*` (радио), `CodeLabStatusTable` (таблица определений: колонки и ячейки — готовые строки, виджет не знает `AgentDefinitionRowView`), `CodeLabBadge` (статус с текстом рядом со значком, `CodeLabTone`), `CodeLabDialogTitle`. Новый виджет — только если радио с подписью под вариантом не собирается из `CodeLabForm*` и встречается второй раз (правило атома, `codelab_ui/AGENTS.md` §3). Тон статуса решает app: `Available` — `success`, `Model not configured`, `Shadowed by project`, `Overridden by …`, `Subagents off` — `warning`, `Error`, `Not loaded` — `danger`.
 
@@ -173,10 +185,10 @@ HTML и CSS холста в репозиторий не копируются; р
 | Операция | Владелец | Защита |
 |---|---|---|
 | снимок конфига и строки определений | `AgentsModesCubit` | один номер загрузки на пару «снимок + определения»: поздний результат после «Reload», смены подключения или папки, `close()` отбрасывается (`agents_modes.load_discarded`) |
-| загрузка определений | функция моста | тайм-аут 5 с и отмена `CancelTokenSource` при новой загрузке и `close()` (как `config check`) |
+| загрузка определений | `AgentsModesCubit` через порт `AgentDefinitionsLoader` | тайм-аут 5 с — в мосте (`agentDefinitionRowsAt`); Cubit на каждую загрузку создаёт `CancelTokenSource` и передаёт его токен в порт (`cancel`), новая загрузка и `close()` отменяют прежний; мост передаёт токен в `loadAgentDefinitions` (D7) |
 | запись режима или effort | `AgentsModesCubit` | флаг `Ready.saving`: повторные выборы и «Reload» игнорируются до итога; конфликт — баннер и перечитывание без автоповтора (SETUP-6); после `close()` итог только в журнал |
 | диалог `bypass` | страница и `AgentsModesCubit` | запись начинается после «Use bypass» и только если токен подтверждения (номер загрузки + цель) ещё действителен (D17); закрытие страницы закрывает диалог без записи |
-| «Open file» / «Open folder» | порт | путь сверяется с текущим состоянием Cubit-а в момент клика; исход — только InfoBar, без повторов |
+| «Open file» / «Open folder» | порт | путь сверяется с текущим состоянием Cubit-а в момент клика, вид пути — в порту без следования по ссылке (D19); исход — только InfoBar, без повторов |
 
 Папка страницы — папка сессии в фокусе, иначе выбранный проект (D2). Фокус может перейти на сессию другой папки при открытых настройках без смены профиля и подключения; страница ДОЛЖНА следить и за папкой фокуса, а не только за подключением: смена папки — новый номер загрузки, перечитывание доступа и снимка (`agents_modes.load_discarded` с `reason: access_changed` для прежней загрузки) и недействительный токен открытого диалога `bypass` (D17). Иначе цель «This project only» и подтверждение могли бы относиться к папке, которой уже нет в фокусе (ревью итерации 1).
 
@@ -204,10 +216,10 @@ HTML и CSS холста в репозиторий не копируются; р
 
 | Пакет | Что меняется | Слой |
 |---|---|---|
-| `codelab_agent_core` | экспорт `builtinSubagentTypes` | core |
-| `codelab_agent_io` | `loadAgentDefinitions`, `AgentDefinitionsReport`; `ConfigCommands.check` на ней | io |
-| `codelab_setup` | `SessionDefaultsView`, `sessionDefaultsOf`, `AgentDefinitionRowView`, `agentDefinitionRowsOf` (основной барель); `agentDefinitionRowsAt` (`io.dart`); show-списки реэкспорта | мост |
-| `apps/codelab_desktop` | `features/settings/`: `AgentsModesCubit`, `AgentsModesState`, `AgentsModesPage`; `core/platform/path_opener.dart`; `lib/app/`: сборка сессии страницы, `defaultSettingsPages`, `settingsPageBuilders`, поиск | app |
+| `codelab_agent_core` | экспорт `builtinSubagentTypes`; публичная константа текста «модель вне каталога» (D18) в `src/agents/agent_definition.dart`; основной барель уже экспортирует этот файл целиком (`export 'src/agents/agent_definition.dart';`, без `show`), поэтому правки бареля не нужно; `parseAgentDefinitions` использует её, текст и код не меняются | core |
+| `codelab_agent_io` | `loadAgentDefinitions`, `AgentDefinitionsReport`; общая функция доверия проекта (D19, `projectTrustAt`); `ConfigCommands.check` на них, вывод не меняется | io |
+| `codelab_setup` | `SessionDefaultsView`, `sessionDefaultsOf`, `AgentDefinitionRowView`, `agentDefinitionRowsOf` (основной барель); `agentDefinitionRowsAt`, `AgentDefinitionRows` с `projectTrusted` (`io.dart`); show-списки реэкспорта | мост |
+| `apps/codelab_desktop` | `features/settings/`: `AgentsModesCubit`, `AgentsModesState`, `AgentsModesPage`, порт `AgentDefinitionsLoader`/`AgentDefinitionsLoad` (`application/agent_definitions_port.dart`); `core/platform/path_opener.dart`; `lib/app/`: сборка сессии страницы, адаптер `agent_definitions_loader.dart`, `defaultSettingsPages`, `settingsPageBuilders`, поиск | app |
 
 Новых рёбер зависимостей нет (`codelab_desktop → codelab_setup → codelab_agent_core`, `codelab_setup/io.dart → codelab_agent_io` уже есть); граф в `README.md` не меняется. Новых правил сторожа нет: `codelab_setup/io.dart` только в `lib/app/`, `dart:io` запрещён в `features/settings/presentation`, `url_launcher` — только в `core/platform/` (правила уже есть). Allowlist ядра (PKG-2) не меняется. Основной барель `codelab_setup` остаётся web-безопасным (`web-compile`). Исполнитель задач моста — `[agent]`, как в change `add-provider-setup-ui` (D2).
 
@@ -252,15 +264,44 @@ HTML и CSS холста в репозиторий не копируются; р
 
 *Альтернатива:* перечитывать снимок при «Use bypass» и писать по свежему состоянию — тот же разрыв согласия. Отклонено.
 
+### D18. «Модель вне каталога» — по коду `invalid_value` и константе текста ядра
+
+Сверка итерации 2: в ядре нет кода диагностики `model`. `parseAgentDefinitions` (`codelab_agent_core/lib/src/agents/agent_definition.dart`) отдаёт модель вне каталога кодом `invalid_value`, как и прочие неверные поля, с фиксированным текстом `"model" must be a model of the catalog: <provider>/<id>`. D7 и спецификация client-agent-setup до этой сверки ссылались на несуществующий код `model`.
+
+Решение:
+- код диагностики и вывод `config check` не меняются (spec agent-configuration «config check показывает диагностику файлов проекта», spec agent-definitions не трогается — Q7 (а));
+- текст выносится в публичную константу ядра (`agentDefinitionModelNotInCatalogMessage`) в `src/agents/agent_definition.dart`; она доступна из основного бареля `lib/codelab_agent_core.dart` без правки бареля, потому что он экспортирует этот файл целиком (без `show`); `parseAgentDefinitions` формирует диагностику этой константой;
+- мост (`agentDefinitionRowsOf`) распознаёт статус `Model not configured` по `code == 'invalid_value'` и точному равенству `message` константе, без своей копии текста и без сравнения по префиксу; константу мост получает реэкспортом ядра, клиентам она не нужна.
+
+*Альтернативы:* (а) ввести код `model` в ядре — меняет вывод `config check` и контракт диагностики `agent-definitions`, вне охвата change (Q7 (а)); вынесено в follow-up F.8 (tasks.md). (б) сравнение по префиксу строки в мосте без константы — расхождение при правке текста в ядре не ловится ни компилятором, ни тестом. Отклонено.
+
+Хрупкость остаётся: распознавание завязано на текст сообщения, а не на код (Risks). Тест моста строит диагностику настоящим `parseAgentDefinitions`, а не руками, чтобы правка текста в ядре ломала тест, а не молча превращала `Model not configured` в `Error`.
+
+### D19. Исправления ревью итерации 2
+
+Ревью архитектуры и безопасности итерации 2 (2026-11-16), без вопросов пользователю.
+
+1. **Ключи строк таблицы.** Имена строк повторяются: встроенный `review` и файл `review.md`, который его заменил (`Overridden by …`); пользовательский `shadowed` и проектный файл того же имени. Один ключ `agents-definitions-row-<name>` на две строки — дубликат `ValueKey` во Flutter и неоднозначный тест. Правило: первая строка имени в порядке таблицы — `agents-definitions-row-<name>`, следующие — `agents-definitions-row-<name>#<n>`, `n` с 2. Разделитель `#`, а не `-`: имена определений — `^[a-z][a-z0-9-]{0,47}$`, и ключ `review-2` совпал бы с ключом первой строки определения `review-2`; `#` в имени принятого определения не встречается (у отклонённого файла имя берётся из имени файла и может содержать `#` — редкий конфликт ключа допустим). Первая строка остаётся без суффикса, чтобы ключи итерации 2 для уникальных имён не менялись. Ключ строит страница по порядку строк моста; мост ключей не знает.
+2. **Ячейки отклонённых файлов.** `Model not configured`, `duplicate`, `shadowed`, `error`: «Available in», «Tools», «Model» — `—` (D7). Значение `session model` в «Model» — только у `default`, встроенных типов и рабочих определений без `model`: у отклонённого файла оно обещало бы модель, с которой агент его не запустит.
+3. **`PathOpener` проверяет вид пути сам** (ревью безопасности, LOW; D8). `open` — только обычный файл `.md` без следования по ссылке, `openDirectory` — только каталог без ссылки; иначе `notAllowed` без вызова платформы. Отказ порта страница показывает тем же InfoBar `agents-definitions-open-failed` `Could not open <label>.`, что и сбой платформы (D8). Мост считает `userDirectoryExists`/`projectDirectoryExists` тоже без следования по ссылке. Заменяет принятый ранее риск «symlink файла определения открывается как есть» (Risks).
+   *Альтернатива:* раскрывать ссылку (`resolveSymbolicLinks`) и проверять, что цель внутри каталога определений — сложнее, и цель внутри каталога всё равно может быть исполняемым пакетом. Отклонено: ссылки в каталогах определений не нужны для работы страницы.
+4. **Явное `projectTrusted`.** `AgentDefinitionRows` и `AgentDefinitionsLoad` несут признак доверия; Cubit решает о пункте «This project», допустимости пути `<project>/.codelab/agents` и InfoBar `agents-definitions-untrusted` по нему. Прежний вывод из диагностики `untrusted_project` связывал политику безопасности app с текстовым кодом диагностики загрузчика: если загрузчик её не выдал (тайм-аут, исключение, другой путь чтения), проект считался бы доверенным — fail-open. С явным признаком отсутствие сведений — `false` (fail-closed).
+5. **Одно правило доверия** (SETUP-8). Канонизация папки (`LocalExecutionEnv.realpath`) и сравнение с `trusted_projects` (после `\` → `/`; без раскрытого пути — недоверенный) сейчас повторены в `ConfigCommands._fileLines` и `agentDefinitionRowsAt`. `[agent]` выносит их в публичную функцию `codelab_agent_io` — `projectTrustAt({config, folder, environment}) → ProjectTrust ({String cwd, bool trusted})` — и вызывает её из `ConfigCommands.check` и моста. Вывод `config check` не меняется (существующие тесты зелёные без правок). Ядро не меняется: `samePath` ядра по-прежнему не экспортируется.
+   *Альтернатива:* оставить две копии с общим тестом — расхождение ловится только тестом, а правило безопасности остаётся в двух местах. Отклонено.
+
+Новых рёбер зависимостей и правил сторожа нет: `codelab_setup/io.dart → codelab_agent_io` уже есть; `dart:io` в порту — `core/platform/`, где он и так разрешён.
+
 ## Risks / Trade-offs
 
 - [Пользователь ждёт, что новый режим действует сразу] → подпись блока и баннер называют «Restart agent» (D3).
 - [`bypass` по ошибке] → подтверждение (D5) с точным текстом (D15), привязанное к состоянию открытия (D17); подтверждение не защищает от правки файла руками, это вне страницы.
 - [Записанное значение перекрыто или сужено] → баннер по действующему значению после перечитывания (D16).
 - [Недоверенный проект не может смягчить режим] → итоговый режим и InfoBar по предупреждению загрузчика (D4), без своей копии правила.
+- [Распознавание «модели вне каталога» по тексту сообщения, а не по коду] → общая константа ядра и тест моста на настоящем разборе (D18); структурный код — follow-up F.8.
 - [Строка отклонённого файла без имени определения] → имя файла (D7, Q7 (а)); при необходимости — отдельный change `agent-definitions`.
 - [Расхождение с агентом из-за другого каталога моделей] → тот же `StaticModelCatalog` конфига, что у `config check`; каталог `/models` провайдера (`list_models`) агент тоже не использует для проверки определения.
-- [Открытие пути] → только пути из состояния (D8); symlink файла определения открывается как есть — содержимое не читается app.
+- [Открытие пути] → только пути из состояния (D8) и только обычный `.md`-файл или каталог без символической ссылки, проверка в самом порту (D19). Прежний принятый риск «symlink файла определения открывается как есть» снят ревью безопасности итерации 2. Остаётся гонка «проверка — открытие» (TOCTOU): файл можно подменить ссылкой между `typeSync` и вызовом ОС; окно узкое, а подменить файл может только тот, кто и так пишет в `$CODELAB_HOME/agents` или в доверенный проект.
+- [Каталог-ссылка `.codelab/agents`] → считается отсутствующим (D19): пункт «This project» неактивен, хотя агент читает определения через ссылку; пользователь открывает каталог сам.
 
 ## Migration Plan
 
@@ -274,7 +315,7 @@ HTML и CSS холста в репозиторий не копируются; р
 - Q4 (б) — `ContentDialog` подтверждения перед записью `bypass` (D5).
 - Q5 (а) — для удалённого и чужого агента InfoBar только для чтения, без таблицы (spec app-settings «Страница «Agents & modes» только для чтения»).
 - Q6 (б) — таблица: `default`, встроенные типы субагентов с колонкой «Available in», файлы (D7).
-- Q7 (а) — строка файла по диагностике `model`, без изменения `agent-definitions` (D7).
+- Q7 (а) — строка файла по диагностике «модель вне каталога», без изменения `agent-definitions` (D7; распознавание — D18).
 - Q8 (б) — новый узкий порт открытия пути в `core/platform` (D8).
 - Q9 (а) — U-27 на странице не показывается (D9).
 - Q10 (а) — один переключатель «This project only» на режим и effort (D4).
@@ -283,6 +324,8 @@ HTML и CSS холста в репозиторий не копируются; р
 - Q13 (а) — текст подтверждения `bypass` и руководства — точно и с предупреждением о командах и сети (D15; ревью итерации 1).
 
 Ревью итерации 1 (безопасность и архитектура) без вопросов пользователю: баннер по действующему значению (D16), токен подтверждения `bypass` и запрет подмены цели (D17), перечитывание при смене папки фокуса (D11), источник `ask`+`plan` и отказ от ветки `modeOverride` в мосте (D6).
+
+Ревью итерации 2 (безопасность и архитектура) без вопросов пользователю: ключи повторяющихся строк, ячейки отклонённых файлов, проверка вида пути в `PathOpener`, явный `projectTrusted`, общая функция доверия в `codelab_agent_io` (D19; правки D7, D8, D9, D13).
 
 ## Open Questions
 
