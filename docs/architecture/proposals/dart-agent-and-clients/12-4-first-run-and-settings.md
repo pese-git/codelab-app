@@ -1050,7 +1050,7 @@ sequenceDiagram
 | Agent | Connection (20) | U-06, D-04, D-10, R-12, U-26 | профили `ProfileStore` (`~/.codelab/profiles.json`, общий с CLI): встроенный, stdio (команда и аргументы), WebSocket (URL, имя секрета токена); «Add profile» (ниже), «Use», «Restart agent» («Test connection» удалена change `remove-test-connection`) | `ProfileStore`, `SecretStore` |
 | Agent | Providers (05) | D-05, L-17, L-24 | §12.4.5 | `ConfigWriter` |
 | Agent | MCP servers (05b) | E-02…E-05, E-13 | §12.4.6 | `ConfigWriter` |
-| Agent | Agents & modes (21) | P-05, P-06, C-04, R-15, U-31, L-10, L-16, U-27, U-30, E-22 | режим новой сессии `permissions.mode` (без `autopilot`: только флаг); определения агентов из `.codelab/agents/*.md` и `~/.codelab/agents/` с ошибками загрузки; роли моделей, переопределение окна и лимита ответа, удалённые A2A-агенты — по ключам ядра этих целей | `ConfigWriter` |
+| Agent | Agents & modes (21) | P-05, P-06, C-04, R-15, U-31, L-10, L-16, U-27, U-30, E-22 | режим новой сессии `permissions.mode` (без `autopilot`: только флаг) и effort новой сессии `agent.effort`; определения агентов из `.codelab/agents/*.md` и `~/.codelab/agents/` с ошибками загрузки; роли моделей, переопределение окна и лимита ответа, удалённые A2A-агенты — по ключам ядра этих целей | `ConfigWriter` |
 | Agent | Permissions & tools (22) | P-03, P-07, P-08, T-26, T-35 | `permissions.tools` (allow, ask, deny по инструменту, включая `mcp__<server>__<tool>`), `permissions.deny`, `tools.disabled` (agent-core-architecture §6.3.8); критические шаблоны §7.6 — только для чтения; граница рабочей папки — справка; «Always allow» не показывается: решение живёт до закрытия сессии (P-03), в конфиг не пишется; запрет чтения файлов учётных данных (P-18) — строка-ссылка на «Redaction» | `ConfigWriter` |
 | Agent | Redaction (23) | D-24, P-10, P-14, P-18, P-19 | ниже | `ConfigWriter` |
 | Agent | Skills & extensions (24) | E-01, E-06, E-07 | §12.4.6а (change [`add-app-skills-page`](../../../../openspec/changes/add-app-skills-page/proposal.md)): цепочка `AGENTS.md` и шаблоны — только чтение; навыки с выключателями (`skills.disabled`) и согласием на каталоги другого агента (`skills.extra_roots`); «Open» открывает каталог. Будущие: E-08, E-09, E-10, E-17…E-19 — строки появятся с их changes | `ConfigWriter` |
@@ -1083,29 +1083,72 @@ sequenceDiagram
 * «Join a session started in the CLI» (D-10) — статичная справка без lease (D10).
 
 **Страница «Agents & modes»** — OpenSpec change `add-settings-agents-modes` (решения пользователя
-2026-11-16). Первая версия — три блока строки «Agents & modes (21)» таблицы выше; остальные блоки
-холста скрыты до своих changes (SETUP-17):
+2026-11-16, итерации 1 и 2). Первая версия — три блока строки «Agents & modes (21)» таблицы выше;
+остальные блоки холста скрыты до своих changes (SETUP-17). Код — `features/settings/` app
+(`AgentsModesCubit`, `AgentsModesPage`), мост `codelab_setup`; ACP страница не использует:
+`session/set_mode` и опции сессии шлёт только композер.
 * **режим новой сессии** — `permissions.mode` (`plan`, `ask`, `standard`, `accept-edits`, `bypass`;
-  ключ `restartRequired`, поэтому новый режим действует после «Restart agent», и страница это
-  говорит). `autopilot` — неактивная строка: в файле конфига он ошибка схемы (CFG-4), включается
-  только флагом агента `--permission-mode`. Выбор `bypass` записывается только после
-  подтверждения в диалоге (D3, D5 change);
+  ключ `restartRequired`, поэтому новый режим действует после «Restart agent» на странице
+  «Connection», и подпись блока это говорит). `autopilot` — неактивная строка `Only as a launch flag
+  of the agent (codelab-agent serve --permission-mode autopilot); never saved in config.`: в файле
+  конфига он ошибка схемы (CFG-4). Выбор `bypass` записывается только после диалога
+  `Use bypass for new sessions?` с точным текстом `Only critical commands, changes to the agent's
+  configuration and network tools still ask. Commands run without asking and can reach the network
+  too. Use bypass only in a disposable checkout.` (D5, D15): в `bypass` спрашиваются критические
+  шаблоны, правки конфигурации агента в проекте и в `$CODELAB_HOME` (PERM-11) и инструменты уровня
+  `network`; команда `exec` с выходом в сеть идёт без вопроса. Подтверждение — токен, выданный при
+  открытии диалога (номер загрузки, цель и папка): если за время диалога сменились подключение,
+  папка фокуса, доступ или цель, записи нет, баннер `Settings changed while the dialog was open;
+  bypass was not saved.` (D17);
 * **effort новой сессии** — `agent.effort` (`low`, `medium`, `high`), применяется живой
   перезагрузкой конфига; одну сессию по-прежнему меняет опция `effort` в композере;
 * **цель записи** обоих ключей — как у «Default model» (§12.4.5, шаг 3): слой, где ключ определён,
-  если он редактируемый, иначе `user`; один переключатель «This project only» (`projectLocal`) на
-  оба блока. Правило «проект только ужесточает режим» (§15.3) страница не повторяет: показывает
-  итоговый режим и предупреждение загрузчика (D4 change). Итог и источник даёт `sessionDefaultsOf`
-  моста;
-* **определения агентов** — таблица только для чтения: `default`, встроенные типы субагентов
-  `general`, `explore`, `review`, `plan` (при `subagents.enabled: false` — статус `Subagents off`),
-  затем файлы `$CODELAB_HOME/agents/*.md` и, для доверенного проекта, `.codelab/agents/*.md`.
-  Строки и статусы строит мост (`agentDefinitionRowsAt`) тем же разбором, что `config check`;
-  ошибка файла — InfoBar с фиксированным текстом кода и «Open file». «Open folder» открывает
-  каталоги через порт app `PathOpener` (не `ExternalLinkOpener`): отсутствующий
-  `$CODELAB_HOME/agents` создаётся, отсутствующий проектный каталог не создаётся — пункт неактивен
-  (D7, D8 change);
-* для `RemoteReadOnly` и `NotManaged` — только InfoBar «только чтение» (SETUP-2).
+  если он редактируемый, иначе `user`; один переключатель «All projects» / «This project only»
+  (`projectLocal`) на оба блока. Цели нет в снимке — записи нет (`Cannot save: the target config
+  file is not available.`), подмены на `user` нет (D17). Правило «проект только ужесточает режим»
+  (§15.3) страница не повторяет: итог, источник и признак сужения даёт `sessionDefaultsOf` моста;
+  при сужении — InfoBar `This project is not trusted, so its config can only make the mode
+  stricter. New sessions here use <effective>.`, сочетание `ask` и `plan` показывается как
+  `ask (edits and commands blocked by plan)` (D4, D6);
+* **баннер после записи** строится по действующему значению перечитанного снимка, а не по
+  записанному (D16): совпало — `Saved. New sessions use <value>` и хвост ` after Restart agent.`
+  (агент подключён), ` when the agent starts.` (не подключён) или `.` (effort при живой
+  перезагрузке); перекрыто слоем выше или сужено недоверенным проектом — `warning`
+  `Saved to <target>; <source> overrides it: new sessions use <effective>…`; перечитывание не
+  удалось — `Saved to <target>.`;
+* **определения агентов** — таблица только для чтения (`Name`, `Description`, `Source`,
+  `Available in`, `Tools`, `Model`, `Status`): `default`, встроенные типы субагентов `general`,
+  `explore`, `review`, `plan` (при `subagents.enabled: false` — статус `Subagents off`), затем файлы
+  `$CODELAB_HOME/agents/*.md` и, для доверенного проекта, `.codelab/agents/*.md`. Строки и статусы
+  строит мост (`agentDefinitionRowsAt`) функцией `loadAgentDefinitions` из `codelab_agent_io`,
+  общей с `config check`. Статусы: `Available`, `Overridden by <путь>`, `Model not configured`
+  (диагностика `invalid_value` с текстом константы ядра `agentDefinitionModelNotInCatalogMessage`,
+  D18), `Error · line N`, `Not loaded: duplicate name`, `Shadowed by project`, `Subagents off`.
+  У отклонённых файлов «Available in», «Tools» и «Model» — `—`; `session model` — только у `default`,
+  встроенных типов и рабочих определений без `model` (D19). Ключ строки —
+  `agents-definitions-row-<name>`, следующие строки того же имени — `agents-definitions-row-<name>#<n>`
+  с `n` от 2 (D9, D19);
+* **InfoBar ошибок** с «Open file» — у каждого файла с диагностикой уровня `error`: прочая ошибка
+  (фиксированный текст кода), `Model not configured` и дубликат имени (`Not loaded: another
+  definition has the same name.`); перекрытый `shadowed` — без InfoBar. Блок показывает и InfoBar
+  недоверенного проекта, тайм-аута 5 с и непредвиденной ошибки чтения; режим и effort при этом
+  остаются доступными (D7);
+* **доверие проекта** — явный признак `projectTrusted` результата моста (`AgentDefinitionRows`),
+  а не вывод из диагностики `untrusted_project`: без сведений проект недоверенный (fail-closed,
+  D19). Правило одно с `config check` — функция `projectTrustAt` пакета `codelab_agent_io`
+  (канонизация папки и сравнение с `trusted_projects`);
+* **«Open file» и «Open folder»** — узкий порт app `PathOpener` (`core/platform/path_opener.dart`), не
+  `ExternalLinkOpener` (D8). Cubit передаёт в порт только пути из своего состояния: файл строки
+  определения и каталоги `$CODELAB_HOME/agents` и `<project>/.codelab/agents` (последний — только
+  при доверенном проекте). Порт сам проверяет вид пути без следования по символической ссылке:
+  `open` — только обычный файл `.md`, `openDirectory` — только каталог; иначе `notAllowed` без вызова
+  платформы (D19). Отказ и сбой — InfoBar `Could not open <label>.`. Отсутствующий
+  `$CODELAB_HOME/agents` создаётся; отсутствующий проектный каталог не создаётся — пункт меню
+  неактивен с подсказкой `Create .codelab/agents in the project to add definitions.`; каталог-ссылка
+  считается отсутствующим (Q11, D19);
+* для `RemoteReadOnly` и `NotManaged` — только InfoBar «только чтение» без таблицы (SETUP-2, Q5);
+* журнал — `codelab_desktop.settings`, события `agents_modes.*` без путей, имён файлов и текстов
+  исключений (D12).
 
 Скрыты до своих changes: «Remember model per project folder» (U-27, `add-folder-model-memory`,
 §12.6.9), «Model roles» (L-10), «Model limits override» (U-30, L-34, `add-model-limits`),
