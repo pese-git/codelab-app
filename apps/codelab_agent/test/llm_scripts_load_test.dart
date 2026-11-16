@@ -33,6 +33,8 @@ void main() {
     'with_concurrent_sessions',
     'echoes_cwd',
     'with_session_list',
+    // Строка статуса usage (change `add-usage-extension`, задача 3.8).
+    'with_usage',
   ];
 
   /// Сценарии e2e вне таблицы режимов: агента запускает сам тест app
@@ -78,6 +80,8 @@ void main() {
       'hangs_until_cancel',
       'prompt_error',
       'empty_response',
+      // Строка статуса usage (change `add-usage-extension`, задача 3.8).
+      'with_usage',
     ];
 
     test('every mode has a scenario and nothing else is there', () {
