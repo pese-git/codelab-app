@@ -125,6 +125,7 @@ final class AgentsDefinitionsView {
     this.projectFolderAvailable = false,
     this.projectFolderExists = false,
     this.openFailure,
+    this.userFolderLabel = '~/.codelab/agents',
   });
 
   final List<AgentsDefinitionRow> rows;
@@ -151,6 +152,9 @@ final class AgentsDefinitionsView {
   /// Подпись того, что не открылось: InfoBar `agents-definitions-open-failed`
   /// (`Could not open <label>.`); `null` — сбоя нет.
   final String? openFailure;
+
+  /// Подпись пользовательского каталога определений для меню «Open folder».
+  final String userFolderLabel;
 }
 
 /// Страница готова к правкам; запись — флаг [saving] (D11).

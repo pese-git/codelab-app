@@ -1,5 +1,6 @@
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -111,5 +112,44 @@ void main() {
     );
 
     expect(find.text('Ready'), findsOneWidget);
+  });
+
+  group('CodeLabStatusIndicator label lines', () {
+    const long = 'Not loaded: duplicate name';
+
+    Future<RenderParagraph> pumpLabel(
+      WidgetTester tester, {
+      int? maxLines,
+    }) async {
+      await tester.pumpWidget(
+        FluentApp(
+          home: Center(
+            child: SizedBox(
+              width: 160,
+              child: maxLines == null
+                  ? const CodeLabStatusIndicator(label: long)
+                  : CodeLabStatusIndicator(label: long, maxLines: maxLines),
+            ),
+          ),
+        ),
+      );
+      return tester.renderObject<RenderParagraph>(find.text(long));
+    }
+
+    testWidgets('a long label is cut to one line by default', (tester) async {
+      final paragraph = await pumpLabel(tester);
+
+      expect(paragraph.didExceedMaxLines, isTrue);
+    });
+
+    testWidgets('maxLines lets the label wrap instead of being cut', (
+      tester,
+    ) async {
+      final cut = (await pumpLabel(tester)).size.height;
+      final paragraph = await pumpLabel(tester, maxLines: 6);
+
+      expect(paragraph.didExceedMaxLines, isFalse);
+      expect(paragraph.size.height, greaterThan(cut));
+    });
   });
 }

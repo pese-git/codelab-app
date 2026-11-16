@@ -313,6 +313,52 @@ void main() {
   });
 
   _skillsTableTests();
+
+  testWidgets('a tone cell with maxLines wraps its label, the default cuts it '
+      '(the MCP table keeps one line)', (tester) async {
+    const long = 'Not loaded: duplicate name';
+    await tester.pumpWidget(
+      FluentApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 420,
+            child: CodeLabStatusTable(
+              columns: const ['NAME', 'STATUS'],
+              rows: const [
+                CodeLabStatusTableRow(
+                  cells: [
+                    CodeLabStatusTableCell('cut', mono: true),
+                    CodeLabStatusTableCell(
+                      long,
+                      tone: CodeLabStatusTone.danger,
+                    ),
+                  ],
+                ),
+                CodeLabStatusTableRow(
+                  cells: [
+                    CodeLabStatusTableCell('wrapped', mono: true),
+                    CodeLabStatusTableCell(
+                      long,
+                      tone: CodeLabStatusTone.danger,
+                      maxLines: 6,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final paragraphs = tester
+        .renderObjectList<RenderParagraph>(find.text(long))
+        .toList();
+    expect(paragraphs, hasLength(2));
+    expect(paragraphs.first.didExceedMaxLines, isTrue);
+    expect(paragraphs.last.didExceedMaxLines, isFalse);
+  });
 }
 
 // Красные тесты 3.1 change `add-app-skills-page` (D12, D13): аддитивное

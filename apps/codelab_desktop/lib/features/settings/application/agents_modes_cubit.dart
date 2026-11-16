@@ -150,6 +150,11 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
   /// Номер загрузки, давшей текущее `Ready` (для [BypassToken]).
   var _readyAttempt = 0;
 
+  /// Папка проекта, которую читает агент профиля (`access.cwd`): `null` у
+  /// stdio-профиля без `runInProjectDirectory` — проектных слоёв и определений
+  /// проекта нет, и «недоверенного проекта» тоже.
+  String? _accessCwd;
+
   /// Папка, для которой прочитан доступ: смена папки фокуса без смены профиля
   /// (сессия в фокусе, выбранный проект) тоже повод перечитать (D2).
   String? _loadedCwd;
@@ -336,6 +341,7 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
       }
     }
     _definitions = definitions;
+    _accessCwd = access.cwd;
     _definitionsFailed = definitionsFailed;
     _openFailure = null;
     _session = session;
@@ -359,13 +365,8 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
         'access': 'editable',
         if (definitions != null) ...{
           'definitions': definitions.rows.where((r) => r.path != null).length,
-          'errors': definitions.rows
-              .where(
-                (r) =>
-                    r.status == AgentRowStatus.error ||
-                    r.status == AgentRowStatus.modelNotConfigured,
-              )
-              .length,
+          // Столько же, сколько InfoBar ошибок файлов (D7, D19).
+          'errors': definitions.rows.where(_hasErrorInfoBar).length,
         },
       },
     );
@@ -473,14 +474,11 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
       // разбор (`error`), модель вне каталога (диагностика `invalid_value` с
       // текстом константы ядра, D18) и дубликат имени. Перекрытый файл
       // (`shadowed`, уровень info) — не ошибка.
-      if ((row.status == AgentRowStatus.error ||
-              row.status == AgentRowStatus.modelNotConfigured ||
-              row.status == AgentRowStatus.duplicate) &&
-          path != null) {
+      if (_hasErrorInfoBar(row)) {
         errors.add(
           AgentsDefinitionError(
             index: errors.length,
-            path: path,
+            path: path!,
             pathLabel: homePathLabel(path, _environment),
             line: row.errorLine,
             message:
@@ -496,8 +494,9 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
         );
       }
     }
-    final untrusted = loaded.untrustedProject;
-    final cwd = _loadedCwd;
+    // Папка проекта известна, а доверия нет: проект недоверенный (fail-closed).
+    final untrusted = _accessCwd != null && !loaded.projectTrusted;
+    final cwd = _accessCwd;
     return AgentsDefinitionsView(
       rows: rows,
       errors: errors,
@@ -506,11 +505,22 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
           ? homePathLabel(cwd, _environment)
           : null,
       timedOut: loaded.timedOut,
-      projectFolderAvailable: !untrusted && loaded.projectDirectory != null,
+      // Проект читается, только если агент работает в его папке.
+      projectFolderAvailable:
+          _accessCwd != null && !untrusted && loaded.projectDirectory != null,
       projectFolderExists: loaded.projectDirectoryExists,
       openFailure: _openFailure,
+      userFolderLabel: homePathLabel(loaded.userDirectory, _environment),
     );
   }
+
+  /// Файл с диагностикой уровня `error` и известным путём: ему положен InfoBar
+  /// «Open file» (`shadowed` — уровень info, без InfoBar).
+  static bool _hasErrorInfoBar(AgentDefinitionRowView row) =>
+      row.path != null &&
+      (row.status == AgentRowStatus.error ||
+          row.status == AgentRowStatus.modelNotConfigured ||
+          row.status == AgentRowStatus.duplicate);
 
   String _statusText(AgentDefinitionRowView row) => switch (row.status) {
     AgentRowStatus.available => 'Available',
@@ -571,7 +581,8 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
         create = true;
       case AgentsFolder.project:
         final projectPath = loaded.projectDirectory;
-        if (loaded.untrustedProject ||
+        if (_accessCwd == null ||
+            !loaded.projectTrusted ||
             projectPath == null ||
             !loaded.projectDirectoryExists) {
           // В папке проекта app ничего не создаёт без явной просьбы (Q11 (б)).
