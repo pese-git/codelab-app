@@ -26,6 +26,7 @@ import 'package:codelab_desktop/features/settings/presentation/agents_modes_page
 import 'package:codelab_setup/codelab_setup.dart' show ConfigLayer;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -887,6 +888,98 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+
+    testWidgets('status tags stay inside the content area of a 1280 px '
+        'window and wrap instead of being cut (3.1a)', (tester) async {
+      tester.view.physicalSize = const Size(1280, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const statuses = [
+        'Overridden by ~/g.md',
+        'Model not configured',
+        'Not loaded: duplicate name',
+      ];
+      cubit = FakeAgentsModesCubit(
+        _ready(
+          definitions: AgentsDefinitionsView(
+            rows: [
+              for (final (i, status) in statuses.indexed)
+                AgentsDefinitionRow(
+                  name: 'row$i',
+                  description: 'A long description of the helper $i',
+                  source: '/private/var/folders/xx/.codelab/agents/row$i.md',
+                  availableIn: 'subagent',
+                  tools: 'read, grep, edit',
+                  model: 'anthropic/claude-sonnet',
+                  status: status,
+                  tone: AgentsStatusTone.warning,
+                ),
+            ],
+          ),
+        ),
+      );
+      addTearDown(cubit.close);
+      // Область содержимого окна 1280 px: за вычетом навигации настроек и
+      // полей остаётся около 940 px.
+      const boxKey = ValueKey('content-box');
+      await tester.pumpWidget(
+        FluentApp(
+          home: ScaffoldPage(
+            content: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                key: boxKey,
+                width: 940,
+                child: SingleChildScrollView(
+                  child: BlocProvider<AgentsModesCubit>.value(
+                    value: cubit,
+                    child: const AgentsModesPage(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final box = tester.getRect(find.byKey(boxKey));
+      for (final status in statuses) {
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.text(status),
+        );
+        expect(paragraph.didExceedMaxLines, isFalse, reason: status);
+        expect(
+          tester.getRect(find.text(status)).right,
+          lessThanOrEqualTo(box.right),
+          reason: status,
+        );
+      }
+    });
+
+    testWidgets('the user-folder menu item names the real folder (3.1b)', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: const AgentsDefinitionsView(
+            rows: [reviewer],
+            userFolderLabel: '/srv/codelab/agents',
+          ),
+        ),
+      );
+
+      await tester.tap(_key('agents-definitions-open-folder'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('User definitions (/srv/codelab/agents)'),
+        findsOneWidget,
+      );
+      expect(find.text('User definitions (~/.codelab/agents)'), findsNothing);
     });
 
     testWidgets('a status "Model not configured" and a "Subagents off" row '

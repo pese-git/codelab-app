@@ -15,7 +15,7 @@ final class AgentDefinitionsLoad {
     required this.rows,
     required this.userDirectory,
     required this.userDirectoryExists,
-    this.untrustedProject = false,
+    this.projectTrusted = false,
     this.timedOut = false,
     this.projectDirectory,
     this.projectDirectoryExists = false,
@@ -24,8 +24,10 @@ final class AgentDefinitionsLoad {
   /// Строки таблицы: `default`, встроенные типы, файлы.
   final List<AgentDefinitionRowView> rows;
 
-  /// Диагностика `untrusted_project`: проектный каталог не читался.
-  final bool untrustedProject;
+  /// Папка проекта в `trusted_projects`. По умолчанию `false`: без явного
+  /// признака проект считается недоверенным (fail-closed, D7, D19). Без папки
+  /// проекта признак не используется.
+  final bool projectTrusted;
 
   /// Загрузка не уложилась в тайм-аут (5 с).
   final bool timedOut;

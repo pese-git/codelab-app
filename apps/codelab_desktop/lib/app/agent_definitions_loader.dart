@@ -34,9 +34,8 @@ Future<AgentDefinitionsLoad> loadAgentDefinitionsForPage({
   );
   return AgentDefinitionsLoad(
     rows: report.rows,
-    // Явное поле моста, а не диагностика: без папки проекта «недоверенного»
-    // проекта нет (SETUP-8).
-    untrustedProject: access.cwd != null && !report.projectTrusted,
+    // Явное поле моста, а не диагностика (SETUP-8).
+    projectTrusted: report.projectTrusted,
     timedOut: report.timedOut,
     userDirectory: report.userDirectory,
     userDirectoryExists: report.userDirectoryExists,

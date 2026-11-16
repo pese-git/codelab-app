@@ -271,7 +271,9 @@ class AgentsModesPage extends StatelessWidget {
               items: [
                 MenuFlyoutItem(
                   key: const ValueKey('agents-definitions-open-user'),
-                  text: const Text('User definitions (~/.codelab/agents)'),
+                  text: Text(
+                    'User definitions (${definitions.userFolderLabel})',
+                  ),
                   onPressed: () =>
                       unawaited(cubit.openFolder(AgentsFolder.user)),
                 ),
@@ -308,6 +310,8 @@ class AgentsModesPage extends StatelessWidget {
           builder: (context, constraints) => SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
+              // Таблица не уже 880 px и прокручивается по горизонтали; длинные
+              // статусы и пути источника переносятся (до трёх строк).
               width: constraints.maxWidth < 880 ? 880 : constraints.maxWidth,
               child: CodeLabStatusTable(
                 key: const ValueKey('agents-definitions-table'),
@@ -320,7 +324,8 @@ class AgentsModesPage extends StatelessWidget {
                   'Model',
                   'Status',
                 ],
-                columnFlex: const [3, 4, 5, 2, 3, 3, 4],
+                // Длинный путь источника переносится, а не съедает статус.
+                columnFlex: const [2, 3, 3, 2, 2, 2, 7],
                 rows: [
                   for (final (index, row) in definitions.rows.indexed)
                     CodeLabStatusTableRow(
@@ -346,6 +351,7 @@ class AgentsModesPage extends StatelessWidget {
                         ),
                         CodeLabStatusTableCell(
                           row.status,
+                          maxLines: 3,
                           tone: switch (row.tone) {
                             AgentsStatusTone.success =>
                               CodeLabStatusTone.active,

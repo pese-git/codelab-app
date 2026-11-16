@@ -1225,7 +1225,7 @@ void main() {
     }) => FakeDefinitionsLoader(
       AgentDefinitionsLoad(
         rows: rows,
-        untrustedProject: untrusted,
+        projectTrusted: !untrusted,
         timedOut: timedOut,
         userDirectory: userDir,
         userDirectoryExists: userExists,
@@ -1699,6 +1699,167 @@ void main() {
         expect(view.projectFolderAvailable, isFalse);
       },
     );
+
+    test('a load without an explicit trust flag is fail-closed: the project '
+        'is untrusted when its folder is known (3.3a)', () async {
+      final fx = await fixture();
+      final opener = FakePathOpener();
+      final cubit = make(
+        fx,
+        loader: FakeDefinitionsLoader(
+          const AgentDefinitionsLoad(
+            rows: [],
+            userDirectory: userAgentsDir,
+            userDirectoryExists: true,
+            projectDirectory: '/work/demo/.codelab/agents',
+            projectDirectoryExists: true,
+          ),
+        ),
+        opener: opener,
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      final view = definitionsOf(cubit);
+      expect(view.untrustedProject, isTrue);
+      expect(view.projectFolderAvailable, isFalse);
+      await cubit.openFolder(AgentsFolder.project);
+      expect(opener.untouched, isTrue);
+    });
+
+    test('a stdio agent that does not run in the project folder has no '
+        'untrusted project and no project item (review 3)', () async {
+      final fx = await fixture();
+      workspace.emit(
+        const WorkspaceState(
+          connection: _connected,
+          profile: ConnectionProfile.stdio(
+            id: 'dev',
+            label: 'Dev',
+            command: '/opt/bin/codelab-agent',
+            args: ['serve', '--stdio'],
+            runInProjectDirectory: false,
+            env: {'CODELAB_HOME': '/srv/codelab'},
+          ),
+        ),
+      );
+      final opener = FakePathOpener();
+      final cubit = make(
+        fx,
+        loader: FakeDefinitionsLoader(
+          const AgentDefinitionsLoad(
+            rows: [],
+            userDirectory: userAgentsDir,
+            userDirectoryExists: true,
+            projectDirectory: '/work/demo/.codelab/agents',
+            projectDirectoryExists: true,
+          ),
+        ),
+        opener: opener,
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      final view = definitionsOf(cubit);
+      expect(opened.single.cwd, isNull);
+      expect(view.untrustedProject, isFalse);
+      expect(view.projectFolderAvailable, isFalse);
+      await cubit.openFolder(AgentsFolder.project);
+      expect(opener.untouched, isTrue);
+    });
+
+    test(
+      'without a project folder there is no untrusted project (3.3a)',
+      () async {
+        final fx = await fixture();
+        final cubit = make(
+          fx,
+          loader: FakeDefinitionsLoader(
+            const AgentDefinitionsLoad(
+              rows: [],
+              userDirectory: userAgentsDir,
+              userDirectoryExists: true,
+            ),
+          ),
+          environment: env,
+        );
+        projectDir = () => null;
+
+        await ready(cubit);
+
+        expect(definitionsOf(cubit).untrustedProject, isFalse);
+      },
+    );
+
+    test('the user folder label comes from the real folder, not a constant '
+        '(3.1b)', () async {
+      final fx = await fixture();
+      final cubit = make(
+        fx,
+        loader: FakeDefinitionsLoader(
+          const AgentDefinitionsLoad(
+            rows: [],
+            userDirectory: '/srv/codelab/agents',
+            userDirectoryExists: true,
+          ),
+        ),
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      expect(definitionsOf(cubit).userFolderLabel, '/srv/codelab/agents');
+    });
+
+    test('the user folder label shortens the home (3.1b)', () async {
+      final fx = await fixture();
+      final cubit = make(fx, loader: loaderOf(brokenRows), environment: env);
+
+      await ready(cubit);
+
+      expect(definitionsOf(cubit).userFolderLabel, '~/.codelab/agents');
+    });
+
+    test('the loaded event counts exactly the error InfoBars, duplicates '
+        'included (3.1c)', () async {
+      final fx = await fixture();
+      final cubit = make(
+        fx,
+        loader: loaderOf([
+          builtin('default'),
+          const AgentDefinitionRowView(
+            name: 'dup',
+            status: AgentRowStatus.duplicate,
+            path: '$userAgentsDir/dup.md',
+          ),
+          const AgentDefinitionRowView(
+            name: 'm',
+            status: AgentRowStatus.modelNotConfigured,
+            path: '$userAgentsDir/m.md',
+          ),
+          const AgentDefinitionRowView(
+            name: 'e',
+            status: AgentRowStatus.error,
+            path: '$userAgentsDir/e.md',
+          ),
+          const AgentDefinitionRowView(
+            name: 's',
+            status: AgentRowStatus.shadowed,
+            path: '$userAgentsDir/s.md',
+          ),
+        ]),
+        environment: env,
+      );
+
+      await ready(cubit);
+
+      final loaded = events('agents_modes.loaded').single;
+      expect(loaded['errors'], 3);
+      expect(loaded['errors'], definitionsOf(cubit).errors.length);
+      expect(loaded['definitions'], 4);
+    });
 
     test(
       'the loaded event counts file rows and errors, without paths',
