@@ -51,6 +51,7 @@ void main() {
     required CoreConfig config,
     Map<String, Object?> values = const {},
     bool narrowedKey = false,
+    ConfigSourceView? Function(String key)? external,
   }) => AgentConfigSnapshot.fromLayers(
     cwd: cwd,
     layers: {
@@ -90,6 +91,7 @@ void main() {
       ],
     ),
     secrets: backend,
+    externalOrigin: external,
   );
 
   const userSource = ConfigSourceView(
@@ -209,6 +211,95 @@ void main() {
 
       expect(view.mode.id, 'ask');
       expect(view.mode.blocksWriteAndExec, isTrue);
+    });
+
+    test(
+      'ask в user и недоверенный plan: источник user, цель user, не env',
+      () {
+        // Итог `ask+plan` не совпадает ни с одним слоем, и реальный снимок
+        // приписывает ему `env` (внешний источник).
+        final snapshot = snapshotOf(
+          user: {
+            'permissions': {'mode': 'ask'},
+          },
+          config: coreConfig(
+            permissions: const PermissionsConfig(
+              mode: ModeId.ask,
+              extraDeniedTiers: {ToolTier.write, ToolTier.exec},
+            ),
+          ),
+          values: {'permissions.mode': 'ask+plan'},
+          narrowedKey: true,
+          external: (key) => key == 'permissions.mode'
+              ? const ConfigSourceView(
+                  kind: ConfigSourceKind.environment,
+                  label: 'env',
+                )
+              : null,
+        );
+        expect(
+          snapshot.originOf('permissions.mode')?.kind,
+          ConfigSourceKind.environment,
+          reason: 'предпосылка: загрузчик даёт env',
+        );
+
+        final view = sessionDefaultsOf(snapshot, withFolder);
+
+        expect(view.mode.source, userSource);
+        expect(view.suggestedTarget, ConfigLayer.user);
+        expect(view.mode.blocksWriteAndExec, isTrue);
+      },
+    );
+
+    test(
+      'ask не из user (окружение) и недоверенный plan: источник не user',
+      () {
+        final snapshot = snapshotOf(
+          config: coreConfig(
+            permissions: const PermissionsConfig(
+              mode: ModeId.ask,
+              extraDeniedTiers: {ToolTier.write, ToolTier.exec},
+            ),
+          ),
+          values: {'permissions.mode': 'ask+plan'},
+          narrowedKey: true,
+          external: (key) => key == 'permissions.mode'
+              ? const ConfigSourceView(
+                  kind: ConfigSourceKind.environment,
+                  label: 'env',
+                )
+              : null,
+        );
+
+        final view = sessionDefaultsOf(snapshot, withFolder);
+
+        expect(view.mode.source?.kind, ConfigSourceKind.environment);
+        expect(view.suggestedTarget, ConfigLayer.user);
+      },
+    );
+
+    test('псевдоним alwaysAsk в user и недоверенный plan: источник user', () {
+      final snapshot = snapshotOf(
+        user: {
+          'permissions': {'mode': 'alwaysAsk'},
+        },
+        config: coreConfig(
+          permissions: const PermissionsConfig(
+            mode: ModeId.ask,
+            extraDeniedTiers: {ToolTier.write, ToolTier.exec},
+          ),
+        ),
+        values: {'permissions.mode': 'ask+plan'},
+        narrowedKey: true,
+        external: (key) => key == 'permissions.mode'
+            ? const ConfigSourceView(
+                kind: ConfigSourceKind.environment,
+                label: 'env',
+              )
+            : null,
+      );
+
+      expect(sessionDefaultsOf(snapshot, withFolder).mode.source, userSource);
     });
 
     test('чистый ask без запретов уровней', () {
