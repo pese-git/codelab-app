@@ -839,6 +839,56 @@ void main() {
       }
     });
 
+    testWidgets('row keys stay unique when names repeat: the first row of a '
+        'name has the plain key, the next ones get #2, #3', (tester) async {
+      AgentsDefinitionRow row(String name, String source) =>
+          AgentsDefinitionRow(
+            name: name,
+            description: '—',
+            source: source,
+            availableIn: 'subagent',
+            tools: 'all',
+            model: 'session model',
+            status: 'Available',
+            tone: AgentsStatusTone.success,
+          );
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: AgentsDefinitionsView(
+            rows: [
+              row('review', 'built-in'),
+              row('review', '~/.codelab/agents/review.md'),
+              row('review', '.codelab/agents/review.md'),
+              row('review-2', '~/.codelab/agents/review-2.md'),
+              row('docs', '~/.codelab/agents/docs.md'),
+            ],
+          ),
+        ),
+      );
+
+      expect(_key('agents-definitions-row-review'), findsOneWidget);
+      expect(_key('agents-definitions-row-review#2'), findsOneWidget);
+      expect(_key('agents-definitions-row-review#3'), findsOneWidget);
+      expect(_key('agents-definitions-row-review-2'), findsOneWidget);
+      expect(_key('agents-definitions-row-docs'), findsOneWidget);
+      expect(_key('agents-definitions-row-docs#2'), findsNothing);
+      expect(
+        find.descendant(
+          of: _key('agents-definitions-row-review'),
+          matching: find.text('built-in'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: _key('agents-definitions-row-review#2'),
+          matching: find.text('~/.codelab/agents/review.md'),
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('a status "Model not configured" and a "Subagents off" row '
         'are shown as tags', (tester) async {
       await pumpPage(
@@ -900,6 +950,65 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+
+    testWidgets('a model error has the same InfoBar with "Open file"', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: const AgentsDefinitionsView(
+            rows: [reviewer],
+            errors: [
+              AgentsDefinitionError(
+                index: 0,
+                path: '/home/u/.codelab/agents/docs-writer.md',
+                pathLabel: '~/.codelab/agents/docs-writer.md',
+                message: 'the model is not in the config',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(
+        _text('agents-definitions-error-0', 'docs-writer.md'),
+        findsOneWidget,
+      );
+      expect(_text('agents-definitions-error-0', 'line'), findsNothing);
+      await tester.tap(_key('agents-definitions-open-file-0'));
+      await tester.pumpAndSettle();
+      expect(cubit.calls, ['openFile:/home/u/.codelab/agents/docs-writer.md']);
+    });
+
+    testWidgets('a duplicate has the same InfoBar with "Open file"', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: const AgentsDefinitionsView(
+            rows: [reviewer],
+            errors: [
+              AgentsDefinitionError(
+                index: 0,
+                path: '/work/demo/.codelab/agents/review.md',
+                pathLabel: '/work/demo/.codelab/agents/review.md',
+                message: 'Not loaded: another definition has the same name.',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(
+        _text('agents-definitions-error-0', 'has the same name'),
+        findsOneWidget,
+      );
+      await tester.tap(_key('agents-definitions-open-file-0'));
+      await tester.pumpAndSettle();
+      expect(cubit.calls, ['openFile:/work/demo/.codelab/agents/review.md']);
     });
 
     testWidgets('"Open file" passes the path of the state to the Cubit', (

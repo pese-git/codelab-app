@@ -5,6 +5,7 @@ import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snaps
     show kWorkspaceSnapshotPrefsKey;
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/core/platform/external_link_opener.dart';
+import 'package:codelab_desktop/core/platform/path_opener.dart';
 import 'package:codelab_desktop/core/platform/user_shell_launcher.dart'
     show UserShellLauncher;
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart'
@@ -97,6 +98,7 @@ final class CodeLabTestBinding {
     Future<bool> Function(String cwd)? providerSetupProbe,
     UserShellLauncher? userShellLauncher,
     ExternalLinkOpener? externalLinkOpener,
+    PathOpener? pathOpener,
     ProjectFiles? projectFiles,
     bool stdioDefault = true,
     String? project,
@@ -165,6 +167,8 @@ final class CodeLabTestBinding {
       // Настоящий `url_launcher` открывал бы браузер: тесты ссылок терминала
       // передают `FakeExternalLinkOpener`.
       externalLinkOpener: externalLinkOpener,
+      // Настоящий `url_launcher` открывал бы файлы: тесты передают двойник.
+      pathOpener: pathOpener,
       // Без подмены «Open folder…» открыл бы системный диалог.
       projectFolderPicker: projectFolderPicker ?? const _NoFolderPicker(),
       // Настоящий `IoProjectFiles` читал бы диск разработчика и зависал бы в
