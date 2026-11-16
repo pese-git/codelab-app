@@ -248,6 +248,97 @@ void main() {
     },
   );
 
+  // D26, контроль: `aborted` с `input == 0`, но `output > 0` — провайдер usage
+  // прислал, условие именно `input + output == 0`, а не `input == 0`.
+  test('an aborted step with output only is not noUsage (D26)', () async {
+    await open();
+
+    startTurn();
+    session.emit(
+      step(used: const Usage(input: 0, output: 7), reason: StopReason.aborted),
+    );
+    endTurn();
+    await pump();
+
+    expect(usage.first['step']! as Map, isNot(contains('partial')));
+    expect(usage.last['turn']! as Map, isNot(contains('partial')));
+    expect(usage.last['session']! as Map, isNot(contains('partial')));
+  });
+
+  // D26, инвариант дельты agent-acp-server: `noUsage` и `noPrice` у шага вместе
+  // не бывают. Шаг только с кэш-токенами — usage провайдер прислал, значит,
+  // `noUsage` нет; на модели без цен остаётся одно `noPrice`.
+  for (final reason in [StopReason.stop, StopReason.aborted]) {
+    test('a cache-only ${reason.name} step on a model without prices is '
+        'noPrice only', () async {
+      await open();
+
+      startTurn();
+      session.emit(
+        step(
+          price: null,
+          used: const Usage(input: 0, output: 0, cacheRead: 10000),
+          reason: reason,
+        ),
+      );
+      endTurn();
+      await pump();
+
+      expect((usage.first['step']! as Map)['partial'], ['noPrice']);
+      expect((usage.last['turn']! as Map)['partial'], ['noPrice']);
+      expect((usage.last['session']! as Map)['partial'], ['noPrice']);
+    });
+
+    test('a cache-only ${reason.name} step on a priced model has no partial '
+        'and cost by cacheRead', () async {
+      await open();
+
+      startTurn();
+      session.emit(
+        step(
+          price: const ModelCost(input: 3, output: 15, cacheRead: 0.3),
+          used: const Usage(
+            input: 0,
+            output: 0,
+            cacheRead: 10000,
+            cost: UsageCost(cacheRead: 0.003),
+          ),
+          reason: reason,
+        ),
+      );
+      endTurn();
+      await pump();
+
+      final first = usage.first['step']! as Map;
+      expect(first, isNot(contains('partial')));
+      expect(first['cost'], '0.003');
+      expect(usage.last['turn']! as Map, isNot(contains('partial')));
+      expect(usage.last['session']! as Map, isNot(contains('partial')));
+    });
+  }
+
+  // D26: только `cacheWrite` — тоже usage провайдера, `noUsage` нет.
+  test(
+    'a cacheWrite-only step on a model without prices is noPrice only',
+    () async {
+      await open();
+
+      startTurn();
+      session.emit(
+        step(
+          price: null,
+          used: const Usage(input: 0, output: 0, cacheWrite: 500),
+          reason: StopReason.aborted,
+        ),
+      );
+      endTurn();
+      await pump();
+
+      expect((usage.first['step']! as Map)['partial'], ['noPrice']);
+      expect((usage.last['turn']! as Map)['partial'], ['noPrice']);
+    },
+  );
+
   // D26, контроль: `error` с нулями — сбой, а не молчание провайдера.
   test('an error step with zero usage is not noUsage (D26)', () async {
     await open();
@@ -260,6 +351,39 @@ void main() {
     expect(usage.first['step']! as Map, isNot(contains('partial')));
     expect(usage.last['turn']! as Map, isNot(contains('partial')));
     expect(usage.last['session']! as Map, isNot(contains('partial')));
+  });
+
+  // D26, контроль: синтетический `overflow` (`_exhausted`, провайдер не
+  // вызывался) — это `error` с нулями, `noUsage` у него нет.
+  test('a synthetic overflow step is not noUsage (D26)', () async {
+    await open();
+
+    startTurn();
+    const spent = Usage.zero;
+    session.emit(
+      StepEnded(
+        root,
+        result: StepResult(
+          stepIndex: 0,
+          response: AssistantMessage(
+            content: const [],
+            model: modelWith(const ModelCost(input: 3, output: 15)),
+            usage: spent,
+            stopReason: StopReason.error,
+            errorClass: LlmErrorClass.overflow,
+            errorMessage: 'context exhausted',
+            timestamp: DateTime.utc(2026),
+          ),
+          results: const [],
+          usage: spent,
+        ),
+      ),
+    );
+    endTurn();
+    await pump();
+
+    expect(usage.first['step']! as Map, isNot(contains('partial')));
+    expect(usage.last['turn']! as Map, isNot(contains('partial')));
   });
 
   // D18 Т5: кадр usage, построенный во время реплея, уходит после кадров

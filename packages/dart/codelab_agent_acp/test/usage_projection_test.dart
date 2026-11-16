@@ -331,8 +331,8 @@ void main() {
     expect(asMap(frames[2]['turn'])['tokens'], tokens(500, 100));
   });
 
-  // `noUsage` — только при успешном ответе: ответ без usage у единственного
-  // шага даёт `noUsage` без `noPrice` (токенов нет, значит, цены не нужны).
+  // `noUsage` — ответ без usage (кроме `error`, D6, D26): ответ без usage у
+  // единственного шага даёт `noUsage` без `noPrice` (токенов нет, значит, цены не нужны).
   test('an answer without usage alone is noUsage, not noPrice', () async {
     final sessionId = await ready(
       model: pricedModel,
