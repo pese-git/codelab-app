@@ -16,8 +16,10 @@
 // Ожидаемый публичный API: `AgentsModesPage` читает `AgentsModesCubit` из
 // `BlocProvider`; страница не определяет сама, опасно ли действие: выбор
 // `bypass` открывает диалог, а решение «Use bypass» / «Cancel» отдаёт Cubit
-// (`confirmBypass` / `cancelBypass`), `selectMode('bypass')` страница не
+// (`beginBypass` / `confirmBypass(token)` / `cancelBypass`), `selectMode('bypass')` страница не
 // вызывает.
+
+import 'dart:async';
 
 import 'package:codelab_desktop/features/settings/application/agents_modes_cubit.dart';
 import 'package:codelab_desktop/features/settings/presentation/agents_modes_page.dart';
@@ -43,7 +45,26 @@ final class FakeAgentsModesCubit extends Cubit<AgentsModesState>
   Future<void> selectMode(String id) async => calls.add('selectMode:$id');
 
   @override
-  Future<void> confirmBypass() async => calls.add('confirmBypass');
+  BypassToken? beginBypass() {
+    calls.add('beginBypass');
+    return token;
+  }
+
+  /// Показывает состояние (в самом Cubit `emit` защищён).
+  void show(AgentsModesState state) => emit(state);
+
+  @override
+  void dismissBypass(BypassToken token) => calls.add('dismissBypass');
+
+  @override
+  bool isCurrent(BypassToken token) => true;
+
+  /// Токен, который двойник отдаёт странице.
+  final token = BypassToken(0, ConfigLayer.user, null);
+
+  @override
+  Future<void> confirmBypass(BypassToken token) async =>
+      calls.add(identical(token, this.token) ? 'confirmBypass' : 'wrongToken');
 
   @override
   void cancelBypass() => calls.add('cancelBypass');
@@ -237,6 +258,48 @@ void main() {
     });
   });
 
+  /// Страница настроек поверх базового маршрута: `pop` лишнего маршрута
+  /// заметен по `navigator.canPop()`.
+  Future<NavigatorState> pumpOnTopOfRoute(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1200, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    cubit = FakeAgentsModesCubit(_ready());
+    addTearDown(cubit.close);
+    await tester.pumpWidget(
+      FluentApp(
+        home: Builder(
+          builder: (context) => ScaffoldPage(
+            content: SingleChildScrollView(
+              child: BlocProvider<AgentsModesCubit>.value(
+                value: cubit,
+                child: const AgentsModesPage(),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    // Страница настроек — маршрут под диалогом.
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    unawaited(
+      navigator.push(
+        FluentPageRoute<void>(
+          builder: (_) => ScaffoldPage(
+            content: BlocProvider<AgentsModesCubit>.value(
+              value: cubit,
+              child: const AgentsModesPage(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    return navigator;
+  }
+
   group('bypass', () {
     testWidgets('a tap on bypass opens the confirmation and writes nothing '
         'yet (Отказ от bypass / Подтверждённый bypass)', (tester) async {
@@ -250,10 +313,14 @@ void main() {
       expect(find.text('Use bypass'), findsOneWidget);
       expect(find.text('Cancel'), findsOneWidget);
       expect(
-        find.textContaining('Use it in a disposable checkout.'),
+        find.text(
+          "Only critical commands, changes to the agent's configuration and "
+          'network tools still ask. Commands run without asking and can reach '
+          'the network too. Use bypass only in a disposable checkout.',
+        ),
         findsOneWidget,
       );
-      expect(cubit.calls, isEmpty);
+      expect(cubit.calls, ['beginBypass']);
     });
 
     testWidgets('Cancel closes the dialog and reports the cancellation', (
@@ -267,7 +334,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_key('agents-modes-bypass-confirm'), findsNothing);
-      expect(cubit.calls, ['cancelBypass']);
+      expect(cubit.calls, ['beginBypass', 'cancelBypass']);
       expect(checked(tester, 'ask'), isTrue);
       expect(checked(tester, 'bypass'), isFalse);
     });
@@ -281,7 +348,122 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_key('agents-modes-bypass-confirm'), findsNothing);
-      expect(cubit.calls, ['cancelBypass']);
+      expect(cubit.calls, ['beginBypass', 'cancelBypass']);
+    });
+
+    testWidgets('the dialog closes without a write when the page leaves '
+        'Ready (the agent changed)', (tester) async {
+      await pumpPage(tester, _ready());
+
+      await tester.tap(_key('agents-modes-mode-bypass'));
+      await tester.pumpAndSettle();
+      cubit.show(const AgentsModesReadOnly(notice: 'Read-only: elsewhere.'));
+      await tester.pumpAndSettle();
+
+      expect(_key('agents-modes-bypass-confirm'), findsNothing);
+      expect(cubit.calls, ['beginBypass', 'dismissBypass']);
+      expect(_key('agents-modes-read-only'), findsOneWidget);
+    });
+
+    testWidgets('two non-ready states in a row close only the dialog, not '
+        'the route under it', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      cubit = FakeAgentsModesCubit(_ready());
+      addTearDown(cubit.close);
+      await tester.pumpWidget(
+        FluentApp(
+          home: Builder(
+            builder: (context) => ScaffoldPage(
+              content: SingleChildScrollView(
+                child: BlocProvider<AgentsModesCubit>.value(
+                  value: cubit,
+                  child: const AgentsModesPage(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      // Страница настроек — маршрут под диалогом.
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(
+        navigator.push(
+          FluentPageRoute<void>(
+            builder: (_) => ScaffoldPage(
+              content: BlocProvider<AgentsModesCubit>.value(
+                value: cubit,
+                child: const AgentsModesPage(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(_key('agents-modes-mode-bypass'));
+      await tester.pumpAndSettle();
+      cubit.show(const AgentsModesReadOnly(notice: 'one'));
+      cubit.show(const AgentsModesUnreadable(problems: ['two']));
+      await tester.pumpAndSettle();
+
+      expect(_key('agents-modes-bypass-confirm'), findsNothing);
+      // Маршрут страницы остался: страница показывает последнее состояние.
+      expect(navigator.canPop(), isTrue);
+      expect(_key('agents-modes-unreadable'), findsOneWidget);
+    });
+
+    testWidgets('Cancel and a page leaving Ready while the dialog fades out '
+        'do not pop the route under it', (tester) async {
+      final navigator = await pumpOnTopOfRoute(tester);
+
+      await tester.tap(_key('agents-modes-mode-bypass'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      // Диалог уже закрывается (анимация идёт), а страница уходит из Ready.
+      await tester.pump();
+      cubit.show(const AgentsModesReadOnly(notice: 'gone'));
+      await tester.pumpAndSettle();
+
+      expect(_key('agents-modes-bypass-confirm'), findsNothing);
+      expect(navigator.canPop(), isTrue);
+    });
+
+    testWidgets('"Use bypass" and a page leaving Ready before the dialog is '
+        'gone close only the dialog', (tester) async {
+      final navigator = await pumpOnTopOfRoute(tester);
+
+      await tester.tap(_key('agents-modes-mode-bypass'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use bypass'));
+      await tester.pump();
+      cubit.show(const AgentsModesUnreadable(problems: ['gone']));
+      await tester.pumpAndSettle();
+
+      expect(_key('agents-modes-bypass-confirm'), findsNothing);
+      expect(navigator.canPop(), isTrue);
+    });
+
+    testWidgets('a warning banner is shown with the warning severity', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        _ready(
+          banner: const AgentsModesBanner(
+            AgentsModesBannerKind.warning,
+            'Saved to All projects; local overrides it: new sessions use '
+            'plan after Restart agent.',
+          ),
+        ),
+      );
+
+      expect(
+        tester.widget<InfoBar>(_key('agents-modes-banner')).severity,
+        InfoBarSeverity.warning,
+      );
     });
 
     testWidgets('"Use bypass" confirms the write', (tester) async {
@@ -293,7 +475,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_key('agents-modes-bypass-confirm'), findsNothing);
-      expect(cubit.calls, ['confirmBypass']);
+      expect(cubit.calls, ['beginBypass', 'confirmBypass']);
     });
   });
 
@@ -517,6 +699,28 @@ void main() {
       expect(_key('agents-modes-mode-plan'), findsNothing);
       expect(_key('agents-modes-effort'), findsNothing);
       expect(_key('agents-modes-target'), findsNothing);
+    });
+
+    testWidgets('an unreadable page still shows the saved banner', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        const AgentsModesUnreadable(
+          problems: ['Cannot read the agent settings.'],
+          banner: AgentsModesBanner(
+            AgentsModesBannerKind.saved,
+            'Saved to All projects.',
+          ),
+        ),
+      );
+
+      expect(
+        _text('agents-modes-banner', 'Saved to All projects.'),
+        findsOneWidget,
+      );
+      expect(_key('agents-modes-unreadable'), findsOneWidget);
+      expect(_key('agents-modes-mode-plan'), findsNothing);
     });
 
     testWidgets('while loading the body shows a progress ring and no '

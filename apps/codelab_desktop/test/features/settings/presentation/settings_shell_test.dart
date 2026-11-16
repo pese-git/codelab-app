@@ -299,12 +299,13 @@ void main() {
     expect(backs, 2);
   });
 
-  test('the production set shows Connection, Providers, MCP servers and '
-      'Skills & extensions in the Agent group (SETUP-17)', () {
+  test('the production set shows the five pages of the Agent group in '
+      'order (SETUP-17)', () {
     expect(defaultSettingsPages.visible, [
       SettingsPage.connection,
       SettingsPage.providers,
       SettingsPage.mcpServers,
+      SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
     ]);
   });

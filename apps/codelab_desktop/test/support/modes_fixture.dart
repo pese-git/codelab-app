@@ -49,12 +49,19 @@ final class ControlledConfigStore implements AgentConfigStore {
   /// Исключение вместо записи.
   Object? applyError;
 
+  /// Ключи, которые настоящий успешный исход дополнительно называет
+  /// `restartRequiredKeys` (правило ядра отдаёт их только для части ключей).
+  List<String> extraRestartKeys = const [];
+
+  /// Правка снимка после чтения (например, убрать слой).
+  AgentConfigSnapshot Function(AgentConfigSnapshot snapshot)? transform;
+
   @override
   Future<AgentConfigSnapshot> snapshot({required String cwd}) async {
     final call = ++snapshotCalls;
     final snapshot = await _inner.snapshot(cwd: cwd);
     await onSnapshot?.call(call);
-    return snapshot;
+    return transform?.call(snapshot) ?? snapshot;
   }
 
   @override
@@ -67,7 +74,18 @@ final class ControlledConfigStore implements AgentConfigStore {
     if (applyError case final error?) {
       throw error;
     }
-    return forcedOutcome ?? await _inner.apply(base, edits);
+    final outcome = forcedOutcome ?? await _inner.apply(base, edits);
+    if (outcome is ConfigSaved && extraRestartKeys.isNotEmpty) {
+      return ConfigSaved(
+        fingerprint: outcome.fingerprint,
+        warnings: outcome.warnings,
+        restartRequiredKeys: [
+          ...outcome.restartRequiredKeys,
+          ...extraRestartKeys,
+        ],
+      );
+    }
+    return outcome;
   }
 }
 
@@ -104,14 +122,14 @@ final class ModesFixture {
 
   /// Создаёт фикстуру. [userYaml] дописывается к минимальному конфигу дома
   /// (`realHomeConfig`); [trusted] добавляет проект в `trusted_projects`;
-  /// [localYaml] и [projectYaml] — содержимое `config.local.yaml` и
+  /// [effort] — `agent.effort` в том же блоке `agent:`; [localYaml] и [projectYaml] — содержимое `config.local.yaml` и
   /// `config.yaml` проекта.
   static Future<ModesFixture> open({
     String userYaml = '',
     bool trusted = true,
     String? localYaml,
     String? projectYaml,
-    bool withProject = true,
+    String? effort,
   }) async {
     final root = Directory.systemTemp.createTempSync('codelab_modes_');
     final real = root.resolveSymbolicLinksSync();
@@ -134,7 +152,7 @@ final class ModesFixture {
       home: home,
       project: project,
       config:
-          '$realHomeConfig$userYaml'
+          '${realHomeConfigWith(effort: effort)}$userYaml'
           '${trusted ? 'trusted_projects:\n  - $project\n' : ''}',
     );
     return ModesFixture._(
@@ -142,9 +160,7 @@ final class ModesFixture {
       home,
       project,
       ControlledConfigStore(session.config),
-      withProject
-          ? session.access
-          : EditableSettings(ConfigPaths(codelabHome: home)),
+      session.access,
     );
   }
 

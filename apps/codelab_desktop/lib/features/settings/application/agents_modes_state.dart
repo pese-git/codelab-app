@@ -4,8 +4,7 @@ import 'package:codelab_setup/codelab_setup.dart' show ConfigLayer;
 /// `add-settings-agents-modes`, D3, D4, D11; spec app-settings «Страница
 /// «Agents & modes» только для чтения»).
 ///
-/// ЗАГЛУШКА итерации 1, задача 1.1: форма состояния нужна, чтобы компилировались
-/// красные тесты; логику и документацию полей допишет задача 1.3.
+/// Для чего: чистые значения для отображения; строит их `AgentsModesCubit`.
 ///
 /// Почему закрытая иерархия, а не набор флагов: страница либо загружается,
 /// либо только читает (WebSocket и сторонний агент, SETUP-2), либо не может
@@ -33,14 +32,19 @@ final class AgentsModesReadOnly extends AgentsModesState {
 /// `config.yaml` не разбирается или нарушает схему (в том числе
 /// `permissions.mode: autopilot`): записи нет (`agents-modes-unreadable`).
 final class AgentsModesUnreadable extends AgentsModesState {
-  const AgentsModesUnreadable({required this.problems});
+  const AgentsModesUnreadable({required this.problems, this.banner});
 
   /// Проблемы загрузчика с путём ключа, по строке на проблему.
   final List<String> problems;
+
+  /// Баннер записи, после которой перечитывание не удалось: `Saved to
+  /// <цель>.` без утверждений о новых сессиях (design.md D16); `null` — записи
+  /// не было.
+  final AgentsModesBanner? banner;
 }
 
 /// Вид баннера результата записи (`agents-modes-banner`).
-enum AgentsModesBannerKind { saved, conflict, error }
+enum AgentsModesBannerKind { saved, warning, conflict, error }
 
 /// Баннер результата записи.
 final class AgentsModesBanner {
@@ -95,5 +99,7 @@ final class AgentsModesReady extends AgentsModesState {
   /// Запись идёт: повторные выборы игнорируются (D11).
   final bool saving;
 
+  /// Баннер результата последней записи (`agents-modes-banner`); `null` — записи
+  /// не было или баннер сброшен началом новой записи.
   final AgentsModesBanner? banner;
 }
