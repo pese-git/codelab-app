@@ -174,7 +174,7 @@ SKIP acp/prompt-max-turn-requests (0.0s)
 …
 SKIP acp/prompt-update-plan (0.0s)
     acp/prompt-update-plan has roles [client] without "agent"
-17 passed, 0 failed, 4 skipped
+21 passed, 0 failed, 5 skipped
 ```
 
 - Аргументы — файлы фикстур или каталоги с ними. `--filter` — шаблон id фикстур, `--timeout` — ожидание кадра агента (по умолчанию `30s`).
