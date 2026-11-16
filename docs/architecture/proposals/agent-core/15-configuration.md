@@ -333,8 +333,8 @@ api_key_secret are mutually exclusive`: конфликт источников (�
 | `name` | string | id модели | имя в селекторе `model` (§13.6) |
 | `image` | bool | `false` | принимает картинки |
 | `reasoning` | bool | `false` | поддерживает рассуждения |
-| `cost_input`, `cost_output` | float | нет | цена за 1 млн токенов, USD |
-| `cost_cache_read`, `cost_cache_write` | float | нет | то же для кеша |
+| `cost_input`, `cost_output` | float ≥ 0, конечное | нет | цена за 1 млн токенов, USD; отрицательное, `.nan` или `.inf` — проблема ключа (change `add-usage-extension`, D20) |
+| `cost_cache_read`, `cost_cache_write` | float ≥ 0, конечное | нет | то же для кеша |
 | `hidden_reasoning` | bool | нет | закрытое рассуждение: длинный таймаут простоя до первого контента (§2.10.5) |
 | `thinking_mode` | `"adaptive"` \| `"budget"` | нет (§2.12.2; безопасное значение `adaptive`) | форма рассуждения у Anthropic: `budget` — для Claude 4.5 и старше (§2.8, §2.12.3) |
 | `tools` | bool | нет (§2.12.2) | после MVP: `false` — вызов инструментов через промпт (§17.10.11) |
