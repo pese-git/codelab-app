@@ -126,6 +126,45 @@ class AgentsModesPage extends StatelessWidget {
     ],
   );
 
+  /// Недоверенный текст (путь из файлов и проекта) одной ячейкой таблицы с
+  /// `untrusted`: управляющие и bidi-символы становятся видимыми `\\uXXXX`
+  /// (D20.4, как `skills-banner`).
+  static Widget _escaped(
+    String text, {
+    bool mono = false,
+    String column = 'PATH',
+  }) => CodeLabStatusTable(
+    columns: const ['PATH'],
+    rows: [
+      CodeLabStatusTableRow(
+        cells: [CodeLabStatusTableCell(text, mono: mono, untrusted: true)],
+      ),
+    ],
+  );
+
+  Widget _escapedBar(
+    Key key,
+    InfoBarSeverity severity,
+    String title,
+    String text,
+  ) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: InfoBar(
+      key: key,
+      title: Text(title),
+      content: CodeLabStatusTable(
+        columns: const ['MESSAGE'],
+        rows: [
+          CodeLabStatusTableRow(
+            cells: [CodeLabStatusTableCell(text, untrusted: true)],
+          ),
+        ],
+      ),
+      severity: severity,
+      isLong: true,
+    ),
+  );
+
   Widget _bar(
     Key key,
     InfoBarSeverity severity,
@@ -212,25 +251,37 @@ class AgentsModesPage extends StatelessWidget {
             key: ValueKey('agents-definitions-error-${error.index}'),
             title: Text(
               error.line == null
-                  ? error.pathLabel
-                  : '${error.pathLabel} · line ${error.line}',
+                  ? 'Cannot load the definition'
+                  : 'Cannot load the definition · line ${error.line}',
             ),
-            content: Text(error.message),
+            // Путь файла — недоверенный текст: показывается экранированным,
+            // как в `skills-banner` (D20.4).
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _escaped(error.pathLabel, mono: true),
+                const SizedBox(height: 4),
+                // Сообщение разбора YAML может нести символы из файла.
+                _escaped(error.message, column: 'MESSAGE'),
+              ],
+            ),
             severity: InfoBarSeverity.error,
             isLong: true,
             action: CodeLabButton(
               key: ValueKey('agents-definitions-open-file-${error.index}'),
-              label: 'Open file',
-              onPressed: () => unawaited(cubit.openDefinitionFile(error.path)),
+              label: 'Open folder',
+              onPressed: () =>
+                  unawaited(cubit.openDefinitionFolder(error.path)),
             ),
           ),
         ),
       if (definitions.untrustedProject)
-        _bar(
+        _escapedBar(
           const ValueKey('agents-definitions-untrusted'),
           InfoBarSeverity.info,
+          'Project definitions are not read',
           'Definitions in ${definitions.projectLabel ?? 'the project'}/.codelab/agents '
-          'are not read: the project is not trusted.',
+              'are not read: the project is not trusted.',
         ),
       if (definitions.timedOut)
         _bar(
@@ -245,9 +296,10 @@ class AgentsModesPage extends StatelessWidget {
           'Agent definitions could not be read.',
         ),
       if (definitions.openFailure case final label?)
-        _bar(
+        _escapedBar(
           const ValueKey('agents-definitions-open-failed'),
           InfoBarSeverity.warning,
+          'Cannot open the folder',
           'Could not open $label.',
         ),
     ];
@@ -331,12 +383,21 @@ class AgentsModesPage extends StatelessWidget {
                     CodeLabStatusTableRow(
                       key: ValueKey(_rowKey(definitions.rows, index)),
                       cells: [
-                        CodeLabStatusTableCell(row.name, mono: true),
+                        CodeLabStatusTableCell(
+                          row.name,
+                          mono: true,
+                          untrusted: true,
+                        ),
                         CodeLabStatusTableCell(
                           row.description,
                           muted: row.description == '—',
+                          untrusted: true,
                         ),
-                        CodeLabStatusTableCell(row.source, mono: true),
+                        CodeLabStatusTableCell(
+                          row.source,
+                          mono: true,
+                          untrusted: true,
+                        ),
                         CodeLabStatusTableCell(
                           row.availableIn,
                           muted: row.availableIn == '—',
@@ -344,6 +405,7 @@ class AgentsModesPage extends StatelessWidget {
                         CodeLabStatusTableCell(
                           row.tools,
                           muted: row.tools == '—',
+                          untrusted: true,
                         ),
                         CodeLabStatusTableCell(
                           row.model,
@@ -352,6 +414,8 @@ class AgentsModesPage extends StatelessWidget {
                         CodeLabStatusTableCell(
                           row.status,
                           maxLines: 3,
+                          // «Overridden by <путь>»: путь из файлов (D20.4).
+                          untrusted: true,
                           tone: switch (row.tone) {
                             AgentsStatusTone.success =>
                               CodeLabStatusTone.active,

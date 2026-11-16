@@ -14,9 +14,10 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         profileOrigin;
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../core/platform/home_path_label.dart';
-import '../../../core/platform/path_opener.dart';
+import '../../../core/platform/local_folder_opener.dart';
 import 'agent_definitions_port.dart';
 import 'agents_modes_state.dart';
 import 'provider_settings_session.dart';
@@ -84,10 +85,10 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     required String? Function() projectDirectory,
     Logger? logger,
     AgentDefinitionsLoader? loadDefinitions,
-    PathOpener? pathOpener,
+    LocalFolderOpener? folderOpener,
   }) : _workspace = workspace,
        _loadDefinitions = loadDefinitions,
-       _pathOpener = pathOpener,
+       _folderOpener = folderOpener,
        _defaultProfile = defaultProfile,
        _open = open,
        _environment = environment,
@@ -105,7 +106,7 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
 
   final ClientWorkspace _workspace;
   final AgentDefinitionsLoader? _loadDefinitions;
-  final PathOpener? _pathOpener;
+  final LocalFolderOpener? _folderOpener;
   final Future<ConnectionProfile> Function() _defaultProfile;
   final ProviderSettingsOpener _open;
   final Map<String, String> _environment;
@@ -470,7 +471,7 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
           tone: _statusTone(row.status),
         ),
       );
-      // InfoBar с «Open file» — каждому файлу с диагностикой уровня `error`:
+      // InfoBar с «Open folder» — каждому файлу с диагностикой уровня `error`:
       // разбор (`error`), модель вне каталога (диагностика `invalid_value` с
       // текстом константы ядра, D18) и дубликат имени. Перекрытый файл
       // (`shadowed`, уровень info) — не ошибка.
@@ -515,7 +516,7 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
   }
 
   /// Файл с диагностикой уровня `error` и известным путём: ему положен InfoBar
-  /// «Open file» (`shadowed` — уровень info, без InfoBar).
+  /// «Open folder» (`shadowed` — уровень info, без InfoBar).
   static bool _hasErrorInfoBar(AgentDefinitionRowView row) =>
       row.path != null &&
       (row.status == AgentRowStatus.error ||
@@ -549,36 +550,48 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
 
   // --- Выбор пользователя ----------------------------------------------------
 
-  /// «Open file» у InfoBar ошибки: открывает [path], только если он есть в
-  /// состоянии страницы (D8); иначе `not_allowed` без вызова порта.
-  Future<void> openDefinitionFile(String path) async {
-    final opener = _pathOpener;
-    final known = _definitions?.rows.any((row) => row.path == path) ?? false;
-    if (opener == null || !known) {
-      _logOpen('file', 'not_allowed');
+  /// «Open folder» у InfoBar ошибки определения: открывает каталог, где лежит
+  /// файл [filePath] (`dirname`), а сам файл не открывается никогда (Q14 (б),
+  /// D21). Каталог должен быть одним из каталогов определений состояния
+  /// (`$CODELAB_HOME/agents`, `<project>/.codelab/agents` доверенного
+  /// проекта); иначе `not_allowed` без вызова порта (D8).
+  Future<void> openDefinitionFolder(String filePath) async {
+    final directory = p.dirname(filePath);
+    final loaded = _definitions;
+    if (_folderOpener == null ||
+        loaded == null ||
+        !_isDefinitionsFolder(loaded, directory)) {
+      _logOpen('file_dir', 'not_allowed');
       return;
     }
-    final outcome = await opener.open(path);
-    _finishOpen('file', outcome, path);
+    await _openFolderIn('file_dir', directory, create: false);
+  }
+
+  bool _isDefinitionsFolder(AgentDefinitionsLoad loaded, String directory) {
+    if (p.equals(directory, loaded.userDirectory)) {
+      return true;
+    }
+    final project = loaded.projectDirectory;
+    return project != null &&
+        _accessCwd != null &&
+        loaded.projectTrusted &&
+        p.equals(directory, project);
   }
 
   /// Меню «Open folder»: [folder] — `$CODELAB_HOME/agents` (с `create: true`)
   /// или `<project>/.codelab/agents` доверенного проекта (без создания,
   /// Q11). Путь берётся из состояния, а не от вызывающего (D8).
   Future<void> openFolder(AgentsFolder folder) async {
-    final opener = _pathOpener;
     final loaded = _definitions;
-    if (opener == null || loaded == null) {
+    if (_folderOpener == null || loaded == null) {
       _logOpen(_folderKind(folder), 'not_allowed');
       return;
     }
-    final String path;
-    final bool create;
     switch (folder) {
       case AgentsFolder.user:
-        path = loaded.userDirectory;
-        // Каталог в доме создаётся: в него кладут первое определение (Q11 (а)).
-        create = true;
+        // Каталог в доме создаётся: в него кладут первое определение (Q11 (а));
+        // поверх битой ссылки порт его не создаёт (D21).
+        await _openFolderIn('user_dir', loaded.userDirectory, create: true);
       case AgentsFolder.project:
         final projectPath = loaded.projectDirectory;
         if (_accessCwd == null ||
@@ -589,32 +602,34 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
           _logOpen('project_dir', 'not_allowed');
           return;
         }
-        path = projectPath;
-        create = false;
+        await _openFolderIn('project_dir', projectPath, create: false);
     }
-    final outcome = await opener.openDirectory(path, create: create);
-    _finishOpen(_folderKind(folder), outcome, path);
   }
 
   static String _folderKind(AgentsFolder folder) =>
       folder == AgentsFolder.user ? 'user_dir' : 'project_dir';
 
-  void _finishOpen(String kind, PathOpenOutcome outcome, String path) {
+  Future<void> _openFolderIn(
+    String kind,
+    String directory, {
+    required bool create,
+  }) async {
+    final outcome = await _folderOpener!.open(directory, create: create);
     _logOpen(kind, switch (outcome) {
-      PathOpenOutcome.opened => 'opened',
-      PathOpenOutcome.created => 'created',
-      PathOpenOutcome.failed => 'failed',
-      PathOpenOutcome.notAllowed => 'not_allowed',
+      FolderOpenOutcome.opened => 'opened',
+      FolderOpenOutcome.created => 'created',
+      FolderOpenOutcome.failed => 'failed',
+      FolderOpenOutcome.missing => 'missing',
     });
     if (isClosed) {
       return;
     }
-    // Отказ порта (`notAllowed`: ссылка вместо каталога, не тот вид записи)
-    // пользователю виден так же, как сбой платформы.
+    // Сбой и отсутствие каталога пользователю видны одним InfoBar; причину
+    // (и путь) в состояние и журнал не кладём.
     _openFailure =
-        outcome == PathOpenOutcome.failed ||
-            outcome == PathOpenOutcome.notAllowed
-        ? homePathLabel(path, _environment)
+        outcome == FolderOpenOutcome.failed ||
+            outcome == FolderOpenOutcome.missing
+        ? homePathLabel(directory, _environment)
         : null;
     _publishReady();
   }

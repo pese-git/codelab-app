@@ -74,8 +74,8 @@ final class FakeAgentsModesCubit extends Cubit<AgentsModesState>
   Future<void> selectEffort(String id) async => calls.add('selectEffort:$id');
 
   @override
-  Future<void> openDefinitionFile(String path) async =>
-      calls.add('openFile:$path');
+  Future<void> openDefinitionFolder(String filePath) async =>
+      calls.add('openFolderOf:$filePath');
 
   @override
   Future<void> openFolder(AgentsFolder folder) async =>
@@ -1019,7 +1019,7 @@ void main() {
     });
 
     testWidgets('an error InfoBar names the file and the line but never the '
-        'value, and offers "Open file"', (tester) async {
+        'value, and offers "Open folder"', (tester) async {
       await pumpPage(tester, _ready(definitions: broken));
 
       expect(
@@ -1039,13 +1039,13 @@ void main() {
       expect(
         find.descendant(
           of: _key('agents-definitions-error-0'),
-          matching: find.text('Open file'),
+          matching: find.text('Open folder'),
         ),
         findsOneWidget,
       );
     });
 
-    testWidgets('a model error has the same InfoBar with "Open file"', (
+    testWidgets('a model error has the same InfoBar with "Open folder"', (
       tester,
     ) async {
       await pumpPage(
@@ -1072,10 +1072,123 @@ void main() {
       expect(_text('agents-definitions-error-0', 'line'), findsNothing);
       await tester.tap(_key('agents-definitions-open-file-0'));
       await tester.pumpAndSettle();
-      expect(cubit.calls, ['openFile:/home/u/.codelab/agents/docs-writer.md']);
+      expect(cubit.calls, [
+        'openFolderOf:/home/u/.codelab/agents/docs-writer.md',
+      ]);
     });
 
-    testWidgets('a duplicate has the same InfoBar with "Open file"', (
+    testWidgets('invisible characters of file-sourced text are shown, not '
+        'applied (Невидимые символы в описании определения, D20.4)', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: const AgentsDefinitionsView(
+            rows: [
+              AgentsDefinitionRow(
+                name: 'rev\u202eiewer',
+                description: 'Reviews\u202e diffs\u{E0041}',
+                source: '~/.codelab/agents/rev\u202eiewer.md',
+                availableIn: 'both',
+                tools: 'read, gr\u202eep',
+                model: 'session model',
+                status: 'Overridden by ~/x\u202e.md',
+                tone: AgentsStatusTone.warning,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final table = _key('agents-definitions-table');
+      for (final shown in const [
+        'rev\\u202eiewer',
+        'Reviews\\u202e diffs\\ue0041',
+        '~/.codelab/agents/rev\\u202eiewer.md',
+        'read, gr\\u202eep',
+        'Overridden by ~/x\\u202e.md',
+      ]) {
+        expect(
+          find.descendant(of: table, matching: find.textContaining(shown)),
+          findsWidgets,
+          reason: shown,
+        );
+      }
+      expect(find.textContaining('\u202e'), findsNothing);
+    });
+
+    testWidgets('the message of an error InfoBar is escaped too: a YAML '
+        'message may carry characters of the file (D20.4)', (tester) async {
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: const AgentsDefinitionsView(
+            rows: [reviewer],
+            errors: [
+              AgentsDefinitionError(
+                index: 0,
+                path: '/home/u/.codelab/agents/m.md',
+                pathLabel: '~/.codelab/agents/m.md',
+                line: 2,
+                message: 'unexpected \u202e key',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(
+        find.descendant(
+          of: _key('agents-definitions-error-0'),
+          matching: find.textContaining('unexpected \\u202e key'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('\u202e'), findsNothing);
+    });
+
+    testWidgets('the paths of the InfoBars are escaped the same way as in '
+        'the skills banner (D20.4)', (tester) async {
+      await pumpPage(
+        tester,
+        _ready(
+          definitions: const AgentsDefinitionsView(
+            rows: [reviewer],
+            errors: [
+              AgentsDefinitionError(
+                index: 0,
+                path: '/home/u/.codelab/agents/mig\u202erator.md',
+                pathLabel: '~/.codelab/agents/mig\u202erator.md',
+                line: 4,
+                message: 'tools must be a list',
+              ),
+            ],
+            untrustedProject: true,
+            projectLabel: '~/work/de\u202emo',
+            openFailure: '~/.codelab/ag\u202eents',
+          ),
+        ),
+      );
+
+      for (final key in const [
+        'agents-definitions-error-0',
+        'agents-definitions-untrusted',
+        'agents-definitions-open-failed',
+      ]) {
+        expect(
+          find.descendant(
+            of: _key(key),
+            matching: find.textContaining('\\u202e'),
+          ),
+          findsWidgets,
+          reason: key,
+        );
+      }
+      expect(find.textContaining('\u202e'), findsNothing);
+    });
+
+    testWidgets('a duplicate has the same InfoBar with "Open folder"', (
       tester,
     ) async {
       await pumpPage(
@@ -1101,10 +1214,12 @@ void main() {
       );
       await tester.tap(_key('agents-definitions-open-file-0'));
       await tester.pumpAndSettle();
-      expect(cubit.calls, ['openFile:/work/demo/.codelab/agents/review.md']);
+      expect(cubit.calls, [
+        'openFolderOf:/work/demo/.codelab/agents/review.md',
+      ]);
     });
 
-    testWidgets('"Open file" passes the path of the state to the Cubit', (
+    testWidgets('"Open folder" passes the path of the state to the Cubit', (
       tester,
     ) async {
       await pumpPage(tester, _ready(definitions: broken));
@@ -1112,7 +1227,7 @@ void main() {
       await tester.tap(_key('agents-definitions-open-file-0'));
       await tester.pumpAndSettle();
 
-      expect(cubit.calls, ['openFile:/home/u/.codelab/agents/migrator.md']);
+      expect(cubit.calls, ['openFolderOf:/home/u/.codelab/agents/migrator.md']);
     });
 
     testWidgets('Reload re-reads the snapshot and the definitions', (

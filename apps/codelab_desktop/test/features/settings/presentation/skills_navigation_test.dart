@@ -2,10 +2,9 @@
 // `add-app-skills-page`; spec app-settings «Страницы Providers и MCP servers
 // в навигации», сценарии «Четыре страницы группы Agent» и «Поиск AGENTS.md»).
 //
-// Отдельный файл: прежние тесты `settings_shell_test.dart` фиксируют набор из
-// трёх страниц (`defaultSettingsPages.visible`) и обновляются отдельным
-// решением; здесь — проверка нового набора на тех же данных, что в
-// production (`defaultSettingsPages`, `settingsPageBuilders`).
+// Проверка набора из пяти страниц на тех же данных, что в production
+// (`defaultSettingsPages`, `settingsPageBuilders`); порядок и объединение
+// поиска двух change — design.md `add-settings-agents-modes`, D20.1.
 
 import 'package:codelab_desktop/app/default_settings_pages.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
@@ -46,12 +45,13 @@ void main() {
       SettingsPage.connection,
       SettingsPage.providers,
       SettingsPage.mcpServers,
+      SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
     ]);
     expect(settingsPageBuilders, contains(SettingsPage.skillsAndExtensions));
   });
 
-  testWidgets('Four pages of the Agent group in this order, no App title', (
+  testWidgets('Five pages of the Agent group in this order, no App title', (
     tester,
   ) async {
     await pumpShell(tester);
@@ -61,12 +61,13 @@ void main() {
         SettingsPage.connection,
         SettingsPage.providers,
         SettingsPage.mcpServers,
+        SettingsPage.agentsAndModes,
         SettingsPage.skillsAndExtensions,
       ])
         tester.getTopLeft(_nav(page)).dy,
     ];
     expect(ys, [...ys]..sort());
-    expect(ys.toSet(), hasLength(4));
+    expect(ys.toSet(), hasLength(5));
     expect(
       SettingsPage.skillsAndExtensions.navKey,
       'settings-nav-skills-and-extensions',
@@ -88,6 +89,22 @@ void main() {
     expect(_nav(SettingsPage.providers), findsNothing);
     expect(_nav(SettingsPage.mcpServers), findsNothing);
     expect(_nav(SettingsPage.connection), findsNothing);
+    // `agents.md` не входит подстрокой ни в `agent`, ни в «Agents & modes».
+    expect(_nav(SettingsPage.agentsAndModes), findsNothing);
+  });
+
+  testWidgets('search "agent" keeps both Agents & modes and Skills & '
+      'extensions (D20.1)', (tester) async {
+    await pumpShell(tester);
+
+    await tester.enterText(
+      find.byKey(CodeLabSettingsNavigation.searchKey),
+      'agent',
+    );
+    await tester.pumpAndSettle();
+
+    expect(_nav(SettingsPage.agentsAndModes), findsOneWidget);
+    expect(_nav(SettingsPage.skillsAndExtensions), findsOneWidget);
   });
 
   test('every keyword of the page finds it', () {
