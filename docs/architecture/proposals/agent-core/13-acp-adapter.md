@@ -87,10 +87,10 @@ design.md change `add-embedded-agent-mode`, D4.
 (§13.12). Схема объявления (change `add-subagents-and-tasks`, §17.3.7): блок отправляется, только
 если клиент объявил `clientCapabilities._meta.codelab` (объект, возможно пустой); значение каждого
 ключа — объект с целым `version`; нет ключа — нет расширения; неизвестные ключи игнорируются.
-Этапы 1 и 2 субагентов объявляют `subagents: {"version": 1, "maxDepth": <n>}` (при
-`subagents.enabled`, с итерации 2 change; `enabled` и `max_depth` — из применённого конфига в момент
-`initialize` через геттер `AgentRuntime.subagents`, D37 change), `subagentToolCalls: {"version": 1}` (при том же условии и
-только вместе с проекцией вызовов потомков — итерация 5, задача 5.2; design.md change, D36, Т12) и
+Change `add-subagents-and-tasks` объявляет `subagents: {"version": 1, "maxDepth": <n>}` (при
+`subagents.enabled`; `enabled` и `max_depth` — из применённого конфига в момент
+`initialize` через геттер `AgentRuntime.subagents`, D37 change), `subagentToolCalls: {"version": 1}` (при том же условии:
+агент проецирует вызовы потомков; design.md change, D36, Т12) и
 `tasks: {"version": 1}` (§17.16.5). Change `add-usage-extension` добавляет `usage: {"version": 1}` — всегда, когда агент
 отвечает блоком; уведомление `_codelab/session/usage` получает только соединение, объявившее
 `clientCapabilities._meta.codelab.usage` с `version`, равным целому JSON-числу `1` (правило согласования D9; §13.12). Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
@@ -610,7 +610,17 @@ change `switch-default-agent-to-dart`); до него `/<server>:<prompt>` — �
 
 Формы кадров вызова: `ToolCallProgress` — `tool_call_update` со `status: "in_progress"`; у
 отменённого вызова — только `status: "failed"` и `_meta.codelab.outcome`, без `content` (текст об
-отмене — для модели); пустые `locations` и `content` не отправляются. События сессии приходят
+отмене — для модели, вывод терминала клиент уже видит). Исключение — отменённый вызов `agent` с
+итогом ребёнка: его финальный кадр несёт `content: []`, частичный отчёт отменённого ребёнка клиенту
+не уходит; так же — в реплее `session/load` и у вложенного `agent`, закрытого вместе с поддеревом
+(`failed`, `outcome: cancelled`; D52 п. 1 и D53 change `add-subagents-and-tasks`). Прочие вызовы
+поддерева закрываются без `content`. Реплей отменённого вызова другого инструмента пока несёт текст
+результата из журнала, а вживую ключа нет — давнее расхождение, follow-up F.7 change
+`add-subagents-and-tasks`.
+Пустой список — допустимое обновление ACP (`08-Tool Calls.md`, «Only the fields being changed»);
+он снимает строку прогресса `explore · …`, которую клиент получил раньше, а без ключа она осталась бы
+в состоянии `running`. `content: []` уходит и у `agent` без отчёта (`failed`, пустой отчёт): так же
+снимается строка прогресса. Пустые `locations` не отправляются (ключа нет). События сессии приходят
 подписчику асинхронно, поэтому запрос разрешения ждёт, пока `tool_call` его вызова встанет в
 очередь, а `terminal/wait_for_exit` — пока в очередь встанет `tool_call_update` с терминалом.
 
@@ -842,9 +852,9 @@ OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, 
 | `_meta.codelab.critical` (`critical`, `label`) | `toolCall` в `session/request_permission` критической команды (§7.8) | клиент выделяет опасный вызов; `allow_always` не предлагается |
 | `SetSessionModeRequest` в `codelab_acp_protocol` | кодек | метод уже есть в спецификации, нет в модели |
 | `clientCapabilities._meta.codelab` (change `add-subagents-and-tasks`) | `initialize`, запрос клиента | клиент CodeLab просит блок объявлений агента; без него ответ `initialize` не меняется |
-| capability `subagents: {"version", "maxDepth"}`, `subagentToolCalls: {"version"}`, `tasks: {"version"}` (change `add-subagents-and-tasks`) | `agentCapabilities._meta.codelab` в `initialize` | агент поддерживает `agent` с вложенностью до `maxDepth` и `_meta.codelab.task` у plan entries; в итерации 1 объявляется только `tasks`, `subagents` — вместе с инструментом `agent` (итерация 2, задача 2.8a), `subagentToolCalls` — вместе с проекцией вызовов потомков (итерация 5, задача 5.2) |
+| capability `subagents: {"version", "maxDepth"}`, `subagentToolCalls: {"version"}`, `tasks: {"version"}` (change `add-subagents-and-tasks`) | `agentCapabilities._meta.codelab` в `initialize` | агент поддерживает `agent` с вложенностью до `maxDepth` и `_meta.codelab.task` у plan entries; `tasks` объявляется всегда, `subagents` и `subagentToolCalls` — при `subagents.enabled` (`agent_server.dart`) |
 | `_meta.codelab.subagent` `{id, type, description, depth, path, parentToolCallId}` (тип субагента везде — `type`, решение пользователя 2026-11-10) (change `add-subagents-and-tasks`, §17.3.7) | `toolCall` в `session/request_permission` от потомка; первый `tool_call` вызова `agent` вживую и при реплее — всегда `{id, type}` (D28); финальный `tool_call_update` вызова `agent` — всегда `{id, summary: {toolCalls, tokens: {input, output}, durationMs}}`, при `failed` ещё `failure` | связь запроса с вызовом `agent` корневой сессии и с потомком любой глубины; смысл задаёт вид кадра: в запросе разрешения — спрашивающий потомок, в `tool_call`/`tool_call_update` — запущенный субагент; клиент не сливает их (D43, п. 1 change); итог ребёнка с потомками для строки «N tool calls · N.Nk tokens · время» (D24) |
-| `_meta.codelab.parentToolCallId` (change `add-subagents-and-tasks`, этап 2, §17.3.7) | `tool_call`, `tool_call_update` вызовов потомков — только клиенту с `clientCapabilities._meta.codelab.subagentToolCalls`, вживую и при реплее | шаги потомков деревом: клиент вкладывает вызов в строку вызова `agent` с этим id |
+| `_meta.codelab.parentToolCallId` (change `add-subagents-and-tasks`, §17.3.7) | `tool_call`, `tool_call_update` вызовов потомков — только клиенту с `clientCapabilities._meta.codelab.subagentToolCalls`, вживую и при реплее | шаги потомков деревом: клиент вкладывает вызов в строку вызова `agent` с этим id |
 | `_meta.codelab.task` `{id, owner, blockedBy}` (change `add-subagents-and-tasks`, §17.16.5) | entries `plan` вживую и при реплее | id, владелец и зависимости пункта списка задач; без расширения — обычный план |
 | `_meta.codelab.taskChange` `{op, actor, toolCallId?, changed, deleted}` (change `add-subagents-and-tasks`, D35, §17.16.5) | `plan` вживую; при реплее нет | операция, изменившая список, и вызов `task_*`, который её сделал; без ключа клиент показывает обычный план и обычные строки вызовов |
 | capability `subagentBoard` (после MVP) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize` | согласование доски субагентов (U-21) |

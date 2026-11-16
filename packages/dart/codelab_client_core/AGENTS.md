@@ -36,6 +36,14 @@
 * Восстановление ничего не отправляет агенту само: ни промптов, ни ответов на одобрения.
 * Сессии снимка принадлежат его проекту: если хост выбрал другой проект (через `selectProject` или папку в `connect`), восстановление отменяется, а неоткрытые сессии снимка в следующую запись не попадают.
 
-## 5. Тесты
+## 5. Расширения `_meta.codelab.*`
+
+* Разбор `_meta.codelab.*` — только здесь и в `codelab_client_acp`; виджеты и app (`apps/codelab_desktop`, `apps/codelab_cli`) `_meta` НЕ ПАРСЯТ и берут готовые поля `ToolCallView`, `PlanEntryView`, `SubagentRowView` и `ApprovalRequest` (корневой `AGENTS.md` §7; design.md change `add-subagents-and-tasks`, D51 Т7).
+* `codelab_client_acp`, `domain/domain_models.dart`: `subagentMetaOf` (`_meta.codelab.subagent` кадра вызова как есть → `ToolCallRecord.subagentMeta`; запрос потомка идёт в `ApprovalRequest.subagentRequester`), `outcomeOf` (`outcome`), `parentToolCallIdOf` (`parentToolCallId` кадров `tool_call`/`tool_call_update`). Слияние поздних кадров, не стирающее известные `outcome`, `parentToolCallId` и `subagentMeta`, — в `domain/state_machines.dart`. Согласованные при `initialize` расширения — `CodelabExtensions.parse` в `domain/codelab_extensions.dart`.
+* `codelab_client_core`: `parseSubagentCall`, `parseSubagentSummary`, `parseSubagentFailure`, `parseSubagentRequester` (`transcript/subagent_views.dart`) строят `ToolCallView.subagentCall`, `subagentSummary` и представление спрашивающего; `taskChangeOf` (`plan._meta.codelab.taskChange`, `transcript/task_ops.dart`) даёт операции над задачами; `taskMetaOf` и `PlanEntryView.of` (`session/session_views.dart`) читают `_meta.codelab.task` пункта плана (`id`, `owner`, `blockedBy`).
+* Разбор терпимый: неизвестные ключи и неверная форма значения означают «данных нет», а не ошибку обработки обновления; поздний кадр без поля не стирает известное значение.
+* Панель Agents — не отдельный разбор, а обход транскрипта: `subagentRowsOf` с памятью `SubagentRowMemory` (`session/subagent_rows.dart`) строит `SubagentRowView` по дереву вызовов (`transcript/tool_call_tree.dart`) (D49 Т2).
+
+## 6. Тесты
 
 Тесты — `fvm dart test packages/dart/codelab_client_core`, на `FakeAcpTransport` из `codelab_acp_testing` (dev-зависимость). Поведение app на время переноса защищают характеризационные тесты `apps/codelab_desktop/test/features/workbench/application/shell_cubit_characterization/`: их текст не менялся до конца change `extract-acp-client-kit` (design D1); новое поведение меняет их только явно и с обоснованием в `design.md` — так в `add-session-list-and-reload` сужена проверка `reconnect_test.dart` из-за уведомления `detached`.

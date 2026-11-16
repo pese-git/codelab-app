@@ -143,7 +143,7 @@
 | `TaskListChanged` | `session/update` `plan` со всем списком в порядке создания; у entry `content` = `subject`, `priority`, `status` и `_meta: {"codelab": {"task": {"id", "owner", "blockedBy"}}}`; пустой список — `entries: []` (TSK-5); так же — при `change.op == restore` (список новой ветки, D29). У самого `plan` — `_meta: {"codelab": {"taskChange": {"op", "actor", "toolCallId"?, "changed", "deleted"}}}` из `TaskChange` (D35): `toolCallId` — только у операции вызова `task_*` (у потомка — цепочка D8), у `restore` и `assign` его нет; ключ уходит независимо от объявления клиента |
 | `ToolCallStarted(agent)` | `tool_call` с `kind: think`, `title` `Subagent <agent>: <description>` (без непустого после обрезки `description` — `Subagent <agent>`, без двоеточия; design.md, D41, п. 3) и `_meta.codelab.subagent: {"id", "type"}` (D28); то же — у `tool_call` вызова `agent` при реплее, где `id` и `type` берутся из записи `subagent` с тем же `toolCallId`; у отклонённого вызова записи нет — при реплее `_meta.codelab.subagent: {"type"}` с `type` из аргументов вызова (`general` по умолчанию) и без `id` (D28; design.md, D36, Т15) |
 | `ToolCallProgress(agent)` | `tool_call_update` с одним текстовым блоком строки прогресса, заменяющим предыдущий |
-| `ToolCallFinished(agent)` | `tool_call_update` со `status` и телом отчёта без обёртки `<subagent-report>` и без ограды; у отменённого вызова (`_meta.codelab.outcome: "cancelled"`) и у вызова без отчёта — `content: []`, который снимает строку прогресса (design.md, D52 п. 1); всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` из `SubagentReport` (с потомками, D24); при `failed` — ещё `failure` (`budget_exceeded:<limit>`, `invalid_output`, `error`, `refused`, `interrupted`, `max_tokens` — design.md D41 п. 6; клиент неизвестные значения терпит) |
+| `ToolCallFinished(agent)` | `tool_call_update` со `status` и телом отчёта без обёртки `<subagent-report>` и без ограды; у отменённого вызова с итогом ребёнка (`_meta.codelab.outcome: "cancelled"`) и у вызова без отчёта — `content: []`, который снимает строку прогресса; частичный отчёт отменённого ребёнка клиенту не уходит; так же — в реплее `session/load` и у вложенного вызова `agent`, закрытого вместе с поддеревом (design.md, D52 п. 1, D53); всегда — `_meta.codelab.subagent: {"id", "summary": {"toolCalls", "tokens": {"input", "output"}, "durationMs"}}` из `SubagentReport` (с потомками, D24); при `failed` — ещё `failure` (`budget_exceeded:<limit>`, `invalid_output`, `error`, `refused`, `interrupted`, `max_tokens` — design.md D41 п. 6; клиент неизвестные значения терпит) |
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | не отправляются; логи `subagent.start`, `subagent.end` |
 | `SubagentActivity` | клиенту без `subagentToolCalls` — не отправляется (SUB-12); клиенту с ним — требование «Шаги потомков деревом» |
 
@@ -183,6 +183,10 @@
 - **WHEN** ход отменён, пока ребёнок `explore` работает и клиент уже получил строку прогресса вызова `agent`
 - **THEN** финальный `tool_call_update` вызова `agent` содержит `status: failed`, `_meta.codelab.outcome: "cancelled"`, `_meta.codelab.subagent.summary` и `content: []`; отменённый вызов другого инструмента по-прежнему приходит без `content` (design.md, D52 п. 1)
 
+#### Scenario: Реплей отменённого субагента с частичным отчётом
+- **WHEN** загружается сессия, где ход был отменён во время работы ребёнка `explore`, и итоговая запись `subagent` ребёнка (`status: cancelled`) несёт частичный отчёт
+- **THEN** `tool_call` вызова `agent` при реплее содержит `status: failed`, `_meta.codelab.outcome: "cancelled"`, `_meta.codelab.subagent.summary` и `content: []`, без текста частичного отчёта — как живой кадр (design.md, D53; `codelab_agent_acp`, `session_load_subagent_test.dart`)
+
 #### Scenario: Запрос разрешения ребёнка
 - **WHEN** ребёнок `review` просит `exec git diff --stat`, клиент отвечает `reject_once`
 - **THEN** кадр `session/request_permission` содержит `sessionId` корня, `toolCallId` `call_1/call_1`, title `[review: …] …` и `_meta.codelab.subagent` с `depth: 1` и `parentToolCallId: "call_1"`; ребёнок продолжает и сдаёт отчёт (фикстура `acp/prompt-subagent-permission`)
@@ -204,7 +208,7 @@
 
 Команда потомка через терминал клиента (`terminal/*`) SHALL исполняться так же, как команда корня, независимо от согласия: ожидание показа терминала в вызове не должно зависеть от того, ушёл ли этот вызов клиенту (D47 Т4).
 
-Когда вызов `agent` любого уровня становится терминальным, адаптер SHALL отправить `tool_call_update` со `status: failed` и `_meta.codelab.outcome: "cancelled"` для каждого ещё не завершённого вызова его поддерева, до `tool_call_update` самого вызова `agent`. После этого кадры закрытых вызовов НЕ SHALL отправляться.
+Когда вызов `agent` любого уровня становится терминальным, адаптер SHALL отправить `tool_call_update` со `status: failed` и `_meta.codelab.outcome: "cancelled"` для каждого ещё не завершённого вызова его поддерева, до `tool_call_update` самого вызова `agent`. Кадр закрытия вложенного вызова `agent` SHALL нести `content: []`, который снимает его строку прогресса, как у отменённого вызова `agent` корня (D52 п. 1, D53); кадры прочих закрываемых вызовов `content` НЕ SHALL нести. После этого кадры закрытых вызовов НЕ SHALL отправляться.
 
 При `session/load` такому клиенту реплей SHALL сразу после кадра `tool_call` вызова `agent` проигрывать вызовы потомков из их журналов (по записям `subagent`, рекурсивно) с итоговыми статусами и теми же `toolCallId` и `_meta.codelab.parentToolCallId`. Журналы потомков SHALL читаться без записи на диск и без lease ребёнка (D47 Т5). Вызов потомка без результата в журнале (потомок пережил `cancel_grace`) SHALL проигрываться `failed` с `_meta.codelab.outcome: "cancelled"`, как его закрыл адаптер вживую. Журнал потомка, который не открывается, SHALL давать лог `subagent.replay_failed` и реплей без потомков этого вызова, а не отказ `session/load`. Кадры идущего хода, пришедшие во время реплея, SHALL отправляться после кадров реплея (ACP-3). Клиенту без `subagentToolCalls` ни вживую, ни при реплее вызовы потомков НЕ SHALL отправляться (SUB-12).
 
@@ -235,6 +239,10 @@
 #### Scenario: Висящие вызовы при отмене
 - **WHEN** ход отменён, а ребёнок не завершил `exec` в пределах `cancel_grace`
 - **THEN** до `tool_call_update` вызова `agent` клиент получает `tool_call_update` вызова `exec` ребёнка со `status: failed` и `_meta.codelab.outcome: "cancelled"`; поздних кадров этого вызова после него нет
+
+#### Scenario: Закрытие вложенного agent после строки прогресса
+- **WHEN** клиент объявил `subagentToolCalls`, ребёнок вызывает `read` и запускает внука (`call_1/call_2`), внук вызывает `ls`, клиент получил строку прогресса `call_1/call_2`, затем вызов `agent` корня отменяется, пока потомки не завершены
+- **THEN** до `tool_call_update` `call_1` клиент получает кадры закрытия со `status: failed` и `_meta.codelab.outcome: "cancelled"`: у `call_1/call_2` — с `content: []`, у `call_1/call_1` и `call_1/call_2/call_1` — без `content` (design.md, D53; `codelab_agent_acp`, `subagent_tool_tree_bridge_test.dart`)
 
 #### Scenario: Реплей дерева
 - **WHEN** сессия с вызовом `agent`, у ребёнка которого два вызова, загружается клиентом с `subagentToolCalls`

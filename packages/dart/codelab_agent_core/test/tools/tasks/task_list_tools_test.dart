@@ -68,34 +68,39 @@ void main() {
   });
 
   // Сценарий «Создание, разблокировка и удаление» (`core/task-list-create-update`).
-  test('создание, разблокировка и удаление: шесть TaskListChanged', () async {
-    final created1 = await h.run('task_create', {'subject': 'Read the test'});
-    final created2 = await h.run('task_create', {
-      'subject': 'Fix the parser',
-      'blocked_by': ['1'],
+  group('core/task-list-create-update', () {
+    test('создание, разблокировка и удаление: шесть TaskListChanged', () async {
+      final created1 = await h.run('task_create', {'subject': 'Read the test'});
+      final created2 = await h.run('task_create', {
+        'subject': 'Fix the parser',
+        'blocked_by': ['1'],
+      });
+      await h.run('task_create', {'subject': 'Update the docs'});
+
+      final done = await h.run('task_update', {
+        'id': '1',
+        'status': 'completed',
+      });
+      await h.run('task_update', {'id': '3', 'status': 'deleted'});
+      final created4 = await h.run('task_create', {'subject': 'Run the tests'});
+
+      expect(created1.outcome, ToolOutcome.completed);
+      expect(created2.outcome, ToolOutcome.completed);
+      expect(textOf(created4), startsWith('Created task #4: Run the tests.'));
+      expect(textOf(done), contains('Unblocked: #2 Fix the parser'));
+      final listed = await h.text('task_list', {});
+      expect(listed.split('\n'), [
+        '#1 [completed] Read the test',
+        '#2 [pending] Fix the parser',
+        '#4 [pending] Run the tests',
+      ]);
+      // По одному событию на операцию, изменившую список; task_list не считается.
+      expect(h.changes, hasLength(6));
+      expect(
+        [for (final c in h.changes) c.change.op],
+        ['create', 'create', 'create', 'update', 'delete', 'create'],
+      );
     });
-    await h.run('task_create', {'subject': 'Update the docs'});
-
-    final done = await h.run('task_update', {'id': '1', 'status': 'completed'});
-    await h.run('task_update', {'id': '3', 'status': 'deleted'});
-    final created4 = await h.run('task_create', {'subject': 'Run the tests'});
-
-    expect(created1.outcome, ToolOutcome.completed);
-    expect(created2.outcome, ToolOutcome.completed);
-    expect(textOf(created4), startsWith('Created task #4: Run the tests.'));
-    expect(textOf(done), contains('Unblocked: #2 Fix the parser'));
-    final listed = await h.text('task_list', {});
-    expect(listed.split('\n'), [
-      '#1 [completed] Read the test',
-      '#2 [pending] Fix the parser',
-      '#4 [pending] Run the tests',
-    ]);
-    // По одному событию на операцию, изменившую список; task_list не считается.
-    expect(h.changes, hasLength(6));
-    expect(
-      [for (final c in h.changes) c.change.op],
-      ['create', 'create', 'create', 'update', 'delete', 'create'],
-    );
   });
 
   group('task_create', () {
