@@ -49,9 +49,10 @@ flowchart LR
 | `lib/app/connection_environment.dart` | окружение процесса и путь к `profiles.json` |
 | `lib/app/client_profile_secrets.dart`, `reopenable_profile_secrets.dart` | хранилище секретов для токенов профилей |
 | `lib/app/provider_settings_session.dart`, `provider_setup_probe.dart`, `provider_setup_offer.dart` | конфигурация агента для страниц «Providers» и «MCP servers» и мастера провайдера |
+| `lib/app/agent_definitions_loader.dart` | чтение определений агентов для страницы «Agents & modes»: `agentDefinitionRowsAt` из `codelab_setup/io.dart`, тайм-аут 5 с |
 | `lib/app/secret_migration_offer.dart`, `embedded_secret_migration_runner.dart` | перенос секретов из `config.yaml` |
 | `lib/app/app_exit_handler.dart` | закрытие при выходе: предел 5 с, сброс журналов |
-| `lib/core/platform/` | порты и адаптеры платформы: `shared_preferences`-хранилища (недавние проекты, снимок рабочего места, раскладка, профиль по умолчанию), выбор папки, запуск оболочки (`UserShellLauncher`), открытие ссылок, загрузка изображений |
+| `lib/core/platform/` | порты и адаптеры платформы: `shared_preferences`-хранилища (недавние проекты, снимок рабочего места, раскладка, профиль по умолчанию), выбор папки, запуск оболочки (`UserShellLauncher`), открытие ссылок, открытие файла или каталога в программе ОС (порт `PathOpener`, адаптер `UrlLauncherPathOpener` на `url_launcher`; путь берёт Cubit страницы «Agents & modes» из своего состояния, каталог пользовательских определений порт может создать), загрузка изображений |
 | `lib/core/text/` | общие текстовые функции |
 | `lib/features/workbench/` | рабочее место: `CodeLabShellCubit` из частей (`ConnectionCubit`, `SessionsCubit`, `ActiveSessionCubit`, `LayoutCubit`, `SettingsCubit`, `TranscriptViewCubit`), маппер строк ленты `ui_mappers.dart`, данные панели «Agents» `agents_pane_data.dart`, перенос секретов; виджеты оболочки, ленты, баннеров, панели «Agents» |
 | `lib/features/settings/` | настройки: страницы «Connection», «Providers», «MCP servers», «Agents & modes» (`AgentsModesCubit` читает умолчания сессии через мост `sessionDefaultsOf` из `codelab_setup`), диалог профиля, мастер провайдера |

@@ -319,6 +319,22 @@ MCP-сервер даёт агенту дополнительные инстру
 - Если файл изменился на диске, пока страница была открыта, запись не выполняется: «The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.» Если выбранный файл конфигурации недоступен — «Cannot save: the target config file is not available.» При другом сбое — «The config was not saved.» Нечитаемый конфиг страница не перезаписывает: «Cannot read the agent config. Fix or remove the file; CodeLab will not overwrite it.»
 - Для агента по WebSocket страница только показывает: «Read-only: this agent runs on <адрес>. Change its modes and agents on that host: codelab config set, .codelab/agents.» Для чужого агента-программы — «Agent settings are managed by <имя>.»
 
+#### Определения агентов
+
+Блок «Agent definitions» под режимом и effort показывает, какие определения агентов увидит новая сессия. Определения читаются при создании сессии; выбрать одно для сессии можно в меню агентов композера.
+
+<!-- screenshot: блок Agent definitions страницы Agents & modes (settings-agents-definitions.png): таблица со строками default, general, explore, review, plan и пользовательским определением; снять запуском приложения с изолированным CODELAB_HOME -->
+
+- Таблица только для чтения. Колонки: «Name», «Description», «Source», «Available in», «Tools», «Model», «Status». Первой идёт строка `default` (источник `built-in`, «Available in» — `session`), затем встроенные типы субагентов `general`, `explore`, `review`, `plan` (источник `built-in`, «Available in» — `subagent`), затем файлы по имени. «Available in» принимает значения `session`, `subagent` и `both`. В «Tools» — перечень инструментов или `all`; в «Model» — `<провайдер>/<модель>` или `session model`, если модель берётся от сессии. У отклонённых файлов («Model not configured», дубликат, перекрытый проектным, «Error») «Available in», «Tools» и «Model» — `—`.
+- Файлы лежат в `$CODELAB_HOME/agents` и в `.codelab/agents` проекта; проектный каталог читается, только если проект назван в `trusted_projects`. Пути в таблице сокращаются до `~`.
+- «Status»: «Available»; «Overridden by <путь>» — встроенный тип заменён определением из файла (если путь неизвестен — просто «Overridden»); «Model not configured» — модель определения вне каталога моделей; «Error · line N» (или «Error», если номер строки неизвестен) — файл не разобран; «Not loaded: duplicate name» — имя уже занято; «Shadowed by project» — пользовательский файл заменён проектным; «Subagents off» — встроенный тип недоступен, потому что в конфигурации `subagents.enabled: false`.
+- Для каждого файла с ошибкой (включая «Model not configured» и дубликат имени) над таблицей появляется панель ошибки: заголовок — путь файла, а при известном номере — `<путь> · line N`; текст — причина разбора, для модели вне каталога без собственного текста — «The model of this definition is not configured.», для дубликата — «Not loaded: another definition has the same name.». У файла, перекрытого проектным («Shadowed by project»), панели ошибки нет. Кнопка «Open file» открывает файл в программе ОС, но только обычный файл `.md`: символьная ссылка, каталог и другие пути не открываются.
+- «Open folder» открывает каталог в программе ОС, но только настоящий каталог: символьная ссылка на месте каталога не открывается: «User definitions (~/.codelab/agents)» — каталог в `CODELAB_HOME`, при отсутствии он создаётся; «This project (.codelab/agents)» — каталог проекта, он не создаётся: пока его нет (или `.codelab/agents` — символьная ссылка), пункт неактивен, и подсказка говорит «Create .codelab/agents in the project to add definitions.». Пункта проекта нет, если проект не выбран или не доверенный. Если открыть не удалось — сбой платформы или отказ по этим правилам (например, `~/.codelab/agents` — символьная ссылка), — появляется «Could not open <что>.»
+- «Reload» перечитывает определения.
+- Недоверенный проект: «Definitions in <проект>/.codelab/agents are not read: the project is not trusted.»
+- Если чтение не уложилось в 5 секунд: «Agent definitions were not read within 5 s.»; если упало — «Agent definitions could not be read.»
+- Для агента по WebSocket и чужого агента-программы таблицы нет: страница показывает только сообщение «только чтение» из предыдущего раздела.
+
 Общие настройки агента — файлы, слои, ключи — описаны в [настройке агента](../../../docs/user/configuration.md).
 
 ## Если что-то пошло не так
