@@ -1,3 +1,4 @@
+import 'package:meta/meta.dart' show internal;
 import '../llm/model_catalog.dart';
 import '../llm/model_ref.dart';
 import '../loop/turn_budget.dart';
@@ -89,8 +90,11 @@ final class PermissionsConfig {
 ///
 /// Как использовать: `planConfigReload` возвращает значение в
 /// `ConfigReloadPlan.deferred` (объединение по полному снимку и снимку без
-/// проекта); рантайм передаёт его в [CoreConfig.withDeferred]. Тесты строят
-/// значение напрямую.
+/// проекта); рантайм передаёт его в [CoreConfig.withDeferred]. Сессия другой
+/// папки получает такое значение от `deferForFolderSession` (design.md change
+/// `defer-restart-keys-in-folder-sessions`, D2–D5): каждому полю там
+/// соответствует правило перекрытия проектным слоем. Тесты строят значение
+/// напрямую.
 final class DeferredConfigParts {
   const DeferredConfigParts({
     this.providers = const {},
@@ -309,16 +313,30 @@ final class CoreConfig {
     // отложенный новый провайдер, вставленный перед прежним, стал бы моделью
     // и `validateSnapshot` отклонил бы всю перезагрузку. Явная модель — по
     // прежним правилам (`deferred.defaultModel`).
+    // Прежняя модель вне каталога прежних провайдеров (снимок без проекта
+    // корня, чья резервная модель пришла из проектного слоя, `_resolve`,
+    // `fallbackModel`): вернуть её значило бы получить снимок, который не
+    // проходит `validateSnapshot`. Тогда модель считается неявной по итоговым
+    // провайдерам — как у сессии без `agent.default_model`.
+    final previousKnown = previous.providers.any(
+      (p) =>
+          p.config.name == previous.defaultModel.provider &&
+          p.models.containsKey(previous.defaultModel.id),
+    );
+    final keepPrevious = deferred.defaultModel && previousKnown;
     final implicit =
-        !deferred.defaultModel &&
-            next.defaultModelSource == DefaultModelSource.firstProvider
+        (!deferred.defaultModel &&
+                next.defaultModelSource == DefaultModelSource.firstProvider) ||
+            (deferred.defaultModel && !previousKnown)
         ? implicitDefaultModel(finalProviders, problems, next.effort)
         : null;
     return next._copyWith(
-      defaultModel: deferred.defaultModel ? previous.defaultModel : implicit,
-      defaultModelSource: deferred.defaultModel
+      defaultModel: keepPrevious ? previous.defaultModel : implicit,
+      defaultModelSource: keepPrevious
           ? previous.defaultModelSource
-          : null,
+          : (implicit != null && deferred.defaultModel
+                ? DefaultModelSource.firstProvider
+                : null),
       permissions: deferred.permissions ? previous.permissions : null,
       mcpServers: [
         for (final server in next.mcpServers)
@@ -341,6 +359,19 @@ final class CoreConfig {
       withoutProjectValues: withoutProjectValues,
     );
   }
+
+  /// Тот же снимок без вложенного [withoutProject].
+  ///
+  /// Почему: конфигурацию сессии другой папки читают напрямую, а вложенный
+  /// снимок без проекта нужен только `forSessionCwd` корня. После подстановки
+  /// отложенного для папки он мог бы оказаться несогласованным (проект папки
+  /// задал `agent.default_model`, а вложенный снимок ссылается на исключённого
+  /// провайдера) и дал бы ложный отказ `validateSnapshot`.
+  ///
+  /// Для чего и как: только внутри пакета (`deferForFolderSession`), поэтому
+  /// `@internal`; не часть публичного API.
+  @internal
+  CoreConfig withoutNestedProject() => _copyWith(withoutProject: null);
 
   /// Единственное место, где `CoreConfig` копируется поле за полем: новое
   /// поле нельзя забыть в одной из точек подстановки. `null` — поле берётся
