@@ -80,15 +80,53 @@
 
 ## 3. Бюджет в клиенте и панели (итерация 3)
 
-- [ ] 3.1 `[client]` Красные тесты `codelab_client_core/test/usage/usage_budget_test.dart` и клиентская роль `acp/prompt-usage-budget`: разбор `budget`, подполя и `field: budget.<подполе>` в `usage.decode_failed`, свёртка по `turnId`, `receivedAt` по часам рабочего пространства, сброс при переподключении и загрузке (acp-client-kit «Бюджет хода в usage сессии», все сценарии; acp-golden-fixtures, сценарий «Клиентский прогон»; D9).
-- [ ] 3.2 `[client]` Реализация `UsageView.budget` (`TurnBudgetView`), разбор в `UsageDecoder`, свёртка в `UsageFold`; барель; `codelab_client_core/AGENTS.md` §5 (перечень назначения), если меняется; `web-compile`, `conformance:client`, `test:e2e:cli:dart-agent`.
-- [ ] 3.3 `[desktop]` Красные тесты блока «Turn budget»:
-  - маппер — строки по присутствующим лимитам, `This turn` и `Last turn`, тон 80 % и 100 %, больше 100 %, `— / $0.50` и `not checked: price unknown`, `m:ss` и `h:mm:ss`, подсказка Tokens (R2);
-  - виджет — тик раз в секунду только при показанной панели, `running`, отсутствии одобрений и наличии `duration`; таймер отменяется при скрытии;
+Документы итерации сверены с кодом 2026-11-18 (design.md, D9 — уточнения). Решения пользователя 2026-11-18: Q11 (а) — признак итога хода `ended`, Q12 (а) — интеграционный тест по агентам (design.md, «Решения пользователя 2026-11-18»).
+
+- [x] 3.1 `[client]` Красные тесты kit (acp-client-kit «Бюджет хода в usage сессии», все сценарии; D9):
+  - `codelab_client_core/test/usage/usage_budget_test.dart`, группы:
+    - `UsageDecoder` — подполя и их отсутствие, `cost` без `used`, `budget.cost` без `currency` (предупреждение `currency`), неверное подполе (`field: budget.<подполе>`), `budget` не объект (`field: budget`), незнакомые ключи молча, `budget` без известных подполей — отсутствует, лимит стоимости от 10⁹ — `cost` отброшен;
+    - `UsageFold` — замена, `ended` по поводу (`step` — ложен, `turn` — истинен), снимок `turn` того же хода без `budget` ставит `ended`, тот же `turnId` без `budget` (и `receivedAt` не меняется), новый `turnId` без `budget` — `null`, `compaction`, `compactionDiscarded`, `load` не меняют, дубль по `seq` не меняет, `receivedAt` — переданный момент;
+    - `ClientWorkspace` — `receivedAt` по часам `ClientWorkspace(clock:)`, одна запись `usage.decode_failed` на сессию и поле, сброс `budget` при переподключении и при `session/load`;
+  - `codelab_client_core/test/usage/usage_fixture_test.dart` — клиентская роль `acp/prompt-usage-budget`: после снимка `turn` `usage.budget` — итоговый (`ended`), `steps` 2/50, `tokens` 3400/200000, `cost` `0.0282`/`0.5`, без `duration` (acp-golden-fixtures, сценарий «Клиентский прогон»).
+- [x] 3.1a `[protocol]` Фикстура и проекция (вместе с красными тестами 3.1, одним коммитом):
+  - `acp/prompt-usage-budget`: роль `client` в `roles`, описание без «роль client добавляет итерация 3»; `conformance:client` проходит без правки kit — уведомление идёт сырыми `params`;
+  - сторожевой тест в `codelab_agent_acp/test/usage_budget_projection_test.dart`: снимок `compactionDiscarded` не несёт `budget` (agent-acp-server, сценарий «Снимок сжатия»). Он зелёный сразу: код итерации 2 уже не шлёт поле, тест закрепляет это после change `fix-discarded-compaction-usage`;
+  - проверки: `protocol-conformance`, `conformance:client`, `conformance:agent`.
+- [ ] 3.2 `[client]` Реализация:
+  - `TurnBudgetView` и типы подполей в `usage/usage_models.dart`, `UsageView.budget`, `build_runner` для freezed;
+  - разбор `budget` в `UsageDecoder` на общих функциях `usage_parsing.dart`;
+  - свёртка с признаком `ended` в `UsageFold.apply(…, receivedAt:)`, вызов из `_SessionHandle.applyUsage` с часами рабочего пространства; существующие вызовы `apply` в тестах получают `receivedAt`;
+  - барель; `codelab_client_core/AGENTS.md` §5, если меняется перечень назначения;
+  - проверки: `web-compile`, `conformance:client`, `test:e2e:cli:dart-agent`.
+- [x] 3.3 `[desktop]` Красные тесты блока «Turn budget» (agent-workbench-ui «Бюджет хода в панели Usage», все сценарии; D9):
+  - `apps/codelab_desktop/test/features/usage/application/usage_budget_test.dart`, маппер:
+    - строки только по присутствующим подполям, порядок Steps, Tokens, Cost, Time;
+    - подписи `3 / 50`, `92.0k / 200.0k`, `$0.41 / $0.50`, `— / $0.50` и `not checked: price unknown`;
+    - `m:ss` и `h:mm:ss`, секунды вниз;
+    - тон 80 % и 100 % в целых, больше 100 %, лимит 0;
+    - подсказка Tokens (R2);
+    - `This turn` и `Last turn` по статусу и признаку `ended`: `running` с итоговым бюджетом прошлого хода — `Last turn` с его числами и без тика, первый `step` нового хода — `This turn` (сценарий «Начало нового хода»; Q11 (а));
+    - Time на момент `now`: `running` без одобрений с неитоговым бюджетом — `usedMs + (now − receivedAt)`, с одобрением, при `cancelling` и с итоговым бюджетом — `usedMs`, отрицательная разность — ноль;
+    - признак тика;
+    - блок у агента без журнала;
+  - тот же файл, группа `ActiveSessionCubit`: смена статуса или ожидающих одобрений без новой ревизии `usage` меняет заголовок и признак тика (ключ кэша D1, D9);
+  - `apps/codelab_desktop/test/features/usage/presentation/usage_budget_tick_test.dart` — виджет `WorkbenchUsagePane(clock:)`:
+    - тик раз в секунду только при показанной панели, `running`, без одобрений, с неитоговым бюджетом и с `duration`; в начале нового хода до первого `step` тика нет;
+    - таймер отменяется при скрытии панели, конце хода и появлении одобрения;
+    - часы kit и виджета — один поддельный источник;
+  - `packages/flutter/codelab_ui/test/codelab_usage_pane_test.dart`, группа `Turn budget`: заголовок, строки и ключи `usage-budget-<limit>`, тон и заполнение полосы (не больше 100 %), подсказка, пояснение под блоком; тексты и тон приходят из данных.
+- [ ] 3.4 `[desktop]` Реализация:
+  - `codelab_ui`: модель строки бюджета и блок в `CodeLabUsagePane` (полоса, подпись, подсказка и тон из данных, без логики), превью;
+  - desktop `features/usage/application/`: данные блока в `UsagePaneData.budget`, чистая функция строки Time на момент `now`, формат времени;
+  - `ActiveSessionCubit`: ключ кэша данных панели — статус сессии и признак одобрений;
+  - `presentation/`: маппер в модель кита, тик в `WorkbenchUsagePane` (параметр `clock`, как у `WorkbenchAgentsPane`);
+  - `apps/codelab_desktop/AGENTS.md` (раздел «Панель Usage») — тик и его владелец.
+- [ ] 3.5 `[desktop]` Интеграционный тест `apps/codelab_desktop/integration_test/usage_pane_flow_test.dart` (приёмка `release/*`; в скрипт `test:e2e:app:usage` рядом с `usage_display_flow_test.dart`). Состав — по решению пользователя Q12 (а): scripted-агент не даёт журнала, а Dart-агент и встроенный в e2e не дают лимитов, поэтому сценарии разделены по агентам:
+  - scripted (`withUsageBudget`, `skip: !e2e.isScripted`): клик по строке статуса открывает панель без журнала, после хода блок `Last turn` — `1 / 50`, `12.8k / 200.0k`, `$0.04 / $0.50`, `0:01 / 10:00`;
+  - Dart и встроенный (`withUsage`, `llm_scripts/with_usage.json`): раскрытие хода, «Rebuild from log», экспорт CSV во временный каталог через шов порта;
+  - `This turn` и тик — только widget-тестами 3.3.
   
-  (agent-workbench-ui «Бюджет хода в панели Usage», все сценарии; D9).
-- [ ] 3.4 `[desktop]` Реализация блока в `CodeLabUsagePane` (`codelab_ui`, полосы и подписи из данных) и в маппере и виджете desktop; часы виджета внедряются тестами, как у `WorkbenchAgentsPane`.
-- [ ] 3.5 `[desktop]` Интеграционный тест `apps/codelab_desktop/integration_test/usage_pane_flow_test.dart` (приёмка `release/*`; в скрипт `test:e2e:app:usage` рядом с `usage_display_flow_test.dart`): scripted-агент с usage, журналом и бюджетом — открытие панели кликом по строке статуса, раскрытие хода, «Rebuild from log», «Turn budget» во время хода, экспорт CSV во временный каталог через шов порта. В ветке `feature/*` не запускается (AGENTS.md §21).
+  В ветке `feature/*` тест не запускается, только `fvm flutter analyze` (AGENTS.md §21).
 
 ## 4. Закрытие (итерация 4)
 

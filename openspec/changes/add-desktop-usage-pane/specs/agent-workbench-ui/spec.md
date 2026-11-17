@@ -201,17 +201,33 @@ CodeLab SHALL предлагать в доке панель Usage (`ToolPane.usa
 - **THEN** файл не записан, заметки нет, в журнале событий — `usage_pane.export` с исходом `cancelled`
 
 ### Requirement: Бюджет хода в панели Usage
-Панель Usage SHALL показывать блок `Turn budget` по `SessionView.usage.budget` сессии в фокусе (C-13; design.md change `add-desktop-usage-pane`, D9, Q5). Заголовок блока — `This turn`, пока сессия `running` или `cancelling`, иначе `Last turn`. Строки — Steps, Tokens, Cost и Time для лимитов, присутствующих в `budget` (`usage-budget-steps`, `usage-budget-tokens`, `usage-budget-cost`, `usage-budget-time`), с полосой и подписью `<израсходовано> / <лимит>` (`92k / 200k`, `$0.41 / $0.50`, `3:00 / 10:00`; время — `m:ss`, от часа — `h:mm:ss`). Тон полосы — `warning` от 80 % и `danger` от 100 %; больше 100 % SHALL показываться как есть. Без израсходованной стоимости (у модели нет цен) строка Cost SHALL показывать `— / <лимит>` и `not checked: price unknown`. Подсказка строки Tokens SHALL называть правило `input + output, including subagents`.
+Панель Usage SHALL показывать блок `Turn budget` по `SessionView.usage.budget` сессии в фокусе (C-13; design.md change `add-desktop-usage-pane`, D9, Q5). Блок стоит между карточками и `Per turn`. Его источник — `usage`, а не журнал, поэтому он SHALL показываться и у агента без журнала (D10). Заголовок блока — `This turn`, пока сессия `running` или `cancelling` и `budget` не итоговый (не из снимка `turn`), иначе `Last turn` (решение пользователя Q11 (а)): от начала нового хода до его первого снимка `step` блок SHALL показывать `Last turn` прошлого хода с его числами.
 
-Пока сессия `running`, у неё нет ожидающих одобрений и в `budget` есть `duration`, строка Time SHALL обновляться раз в секунду как `usedMs + (now − receivedAt)`; иначе она показывает `usedMs` последнего снимка. Таймер SHALL идти только пока панель показана и SHALL отменяться при скрытии панели. Без `budget` блока НЕ SHALL быть.
+Строки идут в порядке Steps, Tokens, Cost, Time и есть только для подполей, присутствующих в `budget` (`usage-budget-steps`, `usage-budget-tokens`, `usage-budget-cost`, `usage-budget-time`). У каждой строки полоса и подпись `<израсходовано> / <лимит>`:
+- Steps — целые: `3 / 50`;
+- Tokens — функцией kit `formatUsageTokens`: `92.0k / 200.0k`; подсказка строки SHALL называть правило `input + output, including subagents`;
+- Cost — функцией kit `formatUsageMoney`: `$0.41 / $0.50`; без израсходованной стоимости (у модели нет цен) строка SHALL показывать `— / <лимит>` и `not checked: price unknown` без тона;
+- Time — `m:ss`, от часа — `h:mm:ss`, секунды отбрасываются: `3:00 / 10:00`.
+
+Тон полосы — `warning` от 80 % и `danger` от 100 %. Больше 100 % SHALL показываться в подписи как есть, а заполнение полосы ограничено 100 %. Под блоком — `When a limit is hit, the turn stops at the next step boundary.`
+
+Пока сессия `running`, у неё нет ожидающих одобрений, `budget` не итоговый и в нём есть `duration`, строка Time SHALL обновляться раз в секунду как `usedMs + (now − receivedAt)`; иначе она показывает `usedMs` последнего снимка. Таймер SHALL идти только пока панель показана и SHALL отменяться при скрытии панели и при смене условия. Без `budget` блока НЕ SHALL быть.
 
 #### Scenario: Прогресс во время хода
 - **WHEN** идёт ход, и последний снимок `step` несёт `budget` с `tokens {used 92000, limit 200000}`, `cost {used "0.41", limit "0.5"}`, `duration {usedMs 180000, limitMs 600000}`, `steps {used 3, limit 50}`
-- **THEN** блок `This turn` показывает `92k / 200k`, `$0.41 / $0.50` (тон `warning`), `3:00 / 10:00` и `3 / 50`
+- **THEN** блок `This turn` показывает `3 / 50`, `92.0k / 200.0k`, `$0.41 / $0.50` (тон `warning`) и `3:00 / 10:00`
 
 #### Scenario: Время идёт между шагами
 - **WHEN** снимок применён с `duration.usedMs` 180000, сессия `running`, одобрений нет, прошло 5 с
 - **THEN** строка Time показывает `3:05 / 10:00`; при ожидающем одобрении — `3:00 / 10:00`
+
+#### Scenario: Таймер только при показанной панели
+- **WHEN** идёт ход с `duration` в `budget`, и пользователь переключает док на другую вкладку или ход завершается
+- **THEN** таймер панели отменён, перестроений раз в секунду нет
+
+#### Scenario: Начало нового хода
+- **WHEN** ход A завершился снимком `turn` с `budget` (`duration.usedMs` 90000), пользователь отправил новый промпт, сессия `running`, а снимков хода B ещё нет
+- **THEN** блок `Last turn` показывает итог хода A (`1:30 / 10:00`) без тика; после первого снимка `step` хода B с `budget` блок — `This turn` с числами хода B, и Time тикает
 
 #### Scenario: Цена неизвестна
 - **WHEN** `budget.cost` несёт `limit` `"0.5"` без `used`
@@ -219,7 +235,11 @@ CodeLab SHALL предлагать в доке панель Usage (`ToolPane.usa
 
 #### Scenario: После хода
 - **WHEN** ход завершился снимком `turn` с `budget`, где `cost.used` `"0.52"` при `limit` `"0.5"`
-- **THEN** блок `Last turn` показывает `$0.52 / $0.50` в тоне `danger`
+- **THEN** блок `Last turn` показывает `$0.52 / $0.50` в тоне `danger`, полоса заполнена полностью
+
+#### Scenario: Бюджет у агента без журнала
+- **WHEN** агент объявил `usage`, не объявил `usageLedger`, и снимок `turn` несёт `budget`
+- **THEN** панель показывает карточки, заметку `This agent does not provide usage history.` и блок `Turn budget`
 
 #### Scenario: Без лимитов
 - **WHEN** снимки сессии не несут `budget`

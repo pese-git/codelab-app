@@ -661,12 +661,20 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    нет цен — цикл тогда лимит не проверяет), `duration` `{usedMs, limitMs}` — только заданные.
    Числа считает цикл агента тем же правилом, что проверку бюджета (токены — `input + output` с
    потомками, без кэша; время — без ожидания одобрения), поэтому клиент их не пересчитывает.
-   `UsageDecoder` кладёт поле в `UsageView.budget` (`TurnBudgetView`) с `turnId` и `receivedAt` —
-   моментом применения по часам рабочего пространства. Свёртка: снимок с `turnId` и `budget`
-   заменяет его; тот же `turnId` без `budget` — не меняет; новый `turnId` без `budget` — `null`;
-   снимок без `turnId` — не меняет. Неверное подполе — подполя нет, `usage.decode_failed` с
-   `field: budget.<подполе>`. Время между снимками досчитывает хост (`usedMs + (now −
-   receivedAt)`, пока ход идёт без ожидающих одобрений); kit `DateTime.now` в проекции не зовёт.
+   `UsageDecoder` кладёт поле в `UsageView.budget` (`TurnBudgetView`): подполя необязательны (агент
+   шлёт только заданные лимиты), деньги — правилом `cost` (`cost.used` нет — цена неизвестна; без
+   `currency` — общее предупреждение `currency`/`required_with_cost`), незнакомые ключи — молча.
+   Неверное подполе — подполя нет, `usage.decode_failed` с `field: budget.<подполе>`; `budget` не
+   объект — `field: budget`; без единого известного подполя `budget` считается отсутствующим.
+   `ended` — «итог хода» (снимок с поводом `turn`; решение пользователя Q11 (а)); снимок `turn` того же
+   хода без `budget` ставит `ended` при прежних числах. `turnId` и `receivedAt` — момент применения: `UsageFold` чистый, его передаёт вызывающий
+   (`apply(…, receivedAt:)`) по часам рабочего пространства (`ClientWorkspace(clock:)`). Свёртка:
+   снимок с `turnId` и `budget` заменяет его; тот же `turnId` без `budget` — не меняет; новый `turnId`
+   без `budget` — `null`; снимок без `turnId` (`compaction`, `compactionDiscarded`, `load`,
+   незнакомый повод) — не меняет; переподключение и `session/load` сбрасывают его вместе с `usage`.
+   Время между снимками досчитывает хост (`usedMs + (now − receivedAt)`, пока ход идёт без
+   ожидающих одобрений); kit `DateTime.now` в проекции не зовёт. Лимит стоимости от 10⁹ USD kit не
+   разбирает (9 цифр целой части) — подполя `cost` нет (design.md change, D9).
 4. **Без расширения** `UsageSupport.unknown`: сегменты токенов, стоимости и контекста отсутствуют
    (не «0»). Это обычный режим со сторонним агентом. `awaiting` — агент объявил `usage`, снимков ещё
    нет. `compaction soon` — только при известном `compactAt` (порог автосжатия) и
@@ -912,8 +920,10 @@ Setext-заголовки, HTML, сноски и ссылки-определен
   сбросом загрузки и ждёт регистрации сессии.
 * `usage/usage_format_test.dart` (change `add-desktop-usage-pane`, задача 1.2):
   `formatUsageMoneyExact` — `2.26`, `0.000041`, `0`, `999999999.999999`, обратимость разбором `cost`.
-  `usage/usage_budget_test.dart` (задача 3.1): разбор `budget`, подполя, свёртка по `turnId`,
-  `receivedAt`; клиентская роль `acp/prompt-usage-budget`.
+  `usage/usage_budget_test.dart` (задача 3.1): разбор `budget`, подполя и предупреждения
+  `budget.<подполе>`, свёртка по `turnId` (в том числе `compactionDiscarded`), `receivedAt` по часам
+  рабочего пространства, сброс при переподключении и `session/load`; клиентская роль
+  `acp/prompt-usage-budget` — в `usage/usage_fixture_test.dart`.
 * `attachments/prompt_content_builder_test.dart`: PNG с расширением `.jpg` → `image/png`; без
   `image` в возможностях → `resource_link` и пометка; `embeddedContext` → `resource`; путь вне
   `cwd` без подтверждения не отправлен; одиннадцатое вложение → `tooMany`; `.env` →
