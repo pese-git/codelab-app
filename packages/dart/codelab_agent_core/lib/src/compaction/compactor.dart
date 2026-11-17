@@ -116,6 +116,8 @@ Future<CompactionOutcome> compact({
   Logger? logger,
   SkillCatalog? skillCatalog,
   SkillsConfig skillsConfig = const SkillsConfig(),
+  // ЗАГЛУШКА красных тестов (задача 1.1): параметр пока игнорируется (1.4).
+  CompactionAnchor? anchor,
 }) async {
   LlmContextProjection project(SessionSnapshot snapshot, {Logger? log}) =>
       buildLlmContext(
