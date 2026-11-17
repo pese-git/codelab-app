@@ -689,12 +689,14 @@ structuredCompact(snapshot, trigger, settings, st, cancel):
    наименьшее число, после которого бюджет соблюдён; merges := их номера; turns := []
 8  ничего не выбрано → NothingToCompact
 9  recs := [hideA?, hideB…, hideC?] с n подряд; projected := buildLlmContext(snapshot + recs);
-   after := estimateContextTokens(projected); у каждой записи tokensBefore/tokensAfter —
-   оценки до и после неё
+   after := estimateAfterCompaction(before, H(P), H(projected)) — согласованная оценка §9.3
+   (якоря в projected нет); у каждой записи tokensBefore/tokensAfter — оценки до и после неё
+   той же функцией; after >= before → NothingToCompact("no reduction"), записей нет (CMP-10)
 10 cancel.throwIfCancelled(); append каждой записи (durable) — только теперь скрытие существует
 11 транскрипт := projected.messages; emit ContextCompacted(before, after); лог info
    compaction.structured.pass {trigger, elided, folded, merged, before, after}
-12 after > threshold: st.fallbackClassic → классический compact() §9.8 на новом снимке
+12 max(after, H(projected)) > threshold (порог — по тому, что увидит цикл, §9.3, D9 change
+   fix-compaction-estimate-and-no-gain): st.fallbackClassic → классический compact() §9.8 на новом снимке
    (лог compaction.structured.fallback); иначе AgentError(cls: compaction, "Context is still over
    the limit after hiding old records.") и правило CMP-5 о трёх проходах
 ```

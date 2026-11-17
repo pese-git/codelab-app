@@ -108,13 +108,19 @@ void main() {
     // ответ — с usage, отличным от других (`input` растёт с номером вызова).
     // Разрезанный ход даёт два запроса на проход, поэтому событий меньше
     // вызовов; число проходов (не меньше двух) подбирается размерами ниже.
+    // Каждый проход обязан давать выигрыш (CMP-10, change
+    // `fix-compaction-estimate-and-no-gain`): первое резюме короче региона,
+    // но оценка остаётся выше порога, и идёт второй проход с коротким.
     final turns = ScriptedStreamFunction.fromJson({
       'steps': [for (var i = 0; i < 12; i++) textStep('a' * 8000)],
     });
     final summarizer = ScriptedStreamFunction.fromJson({
       'steps': [
         for (var i = 0; i < 12; i++)
-          summaryStep('x' * 20000, usage: Usage(input: 100 + i, output: 10)),
+          summaryStep(
+            i == 0 ? 'x' * 8000 : 'x' * 400,
+            usage: Usage(input: 100 + i, output: 10),
+          ),
       ],
     });
     final clock = FakeClock();

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/compaction/compactor.dart' as engine;
 import 'package:codelab_agent_core/src/compaction/compactor.dart'
-    show CompactionOutcome, CompactionTrigger, Compacted;
+    show CompactionOutcome, CompactionTrigger, Compacted, NothingToCompact;
 import 'package:codelab_agent_core/src/compaction/estimate.dart';
 import 'package:codelab_agent_core/src/compaction/settings.dart';
 import 'package:codelab_agent_core/src/prompts/prompts.g.dart';
@@ -1017,6 +1017,59 @@ void main() {
       expect(out.tokensAfter - estimate(without), greaterThan(2900));
     });
 
+    test(
+      'D6: the estimate is below the threshold, but the only reason '
+      'there is no gain is the skills message: NothingToCompact('
+      "'no reduction'), no record, no skills.reattached, the active skills "
+      'are as before (change fix-compaction-estimate-and-no-gain, D3, D6)',
+      () async {
+        final catalog = catalogOf([validSkill('big', body: rows(300))]);
+        final rig = _Rig(sid, settings);
+        // Регион — давний ход почти без текста: убираются лишь вызов навыка и
+        // его результат (тело ≈ 3 000 токенов), а возвращается то же тело в
+        // сообщении навыков плюс резюме с обёрткой — «после» не меньше «до».
+        final chain = _Chain(catalog)
+          ..user(40)
+          ..load('big')
+          ..say(30)
+          ..user(30)
+          ..say(2500);
+        await rig.open(chain.records);
+        final activeBefore = [
+          for (final a in activeSkills(
+            rig.writer.snapshot,
+            catalog,
+            const SkillsConfig(),
+          ))
+            a.name,
+        ];
+
+        final out = await rig.compact(catalog, bigWindow);
+
+        expect(out, isA<NothingToCompact>());
+        expect((out as NothingToCompact).reason, 'no reduction');
+        expect(rig.store.appended, isEmpty);
+        expect(rig.logger.eventsOf('skills.reattached'), isEmpty);
+        final skipped = rig.logger.eventsOf('compaction.skipped').single;
+        expect(skipped.fields['reason'], 'no reduction');
+        expect(
+          skipped.fields['tokens_after'] as int,
+          lessThan(compactionThreshold(bigWindow, settings)),
+          reason:
+              'below the threshold: the skills are not dropped by the window',
+        );
+        expect(activeBefore, ['big']);
+        expect(
+          activeSkills(
+            rig.writer.snapshot,
+            catalog,
+            const SkillsConfig(),
+          ).map((a) => a.name),
+          activeBefore,
+        );
+      },
+    );
+
     // Решение Q49 (б), D20 «M2»: навык, из-за которого оценка выше порога,
     // не запускает новый проход, а выбрасывается по окну с конца списка.
     test('CMP-5 and the window: a skill that lifts the estimate above the '
@@ -1065,6 +1118,73 @@ void main() {
       expect(log.fields['names'], isEmpty);
       expect(log.fields['dropped_window'], 1);
       expect(withSkill.context(catalog).messages, hasLength(3));
+    });
+
+    test('D9: the window drop compares max(after, H(after)): with the skill '
+        'after is within the threshold but H(after) is not, without it H(after) '
+        'fits — the skill is dropped, one record, dropped_window 1 '
+        '(change fix-compaction-estimate-and-no-gain, D9)', () async {
+      final catalog = catalogOf([validSkill('mid', body: rows(100))]);
+      // Длинный промпт и якорь ниже эвристики: согласованное «после» с
+      // навыком укладывается в порог (6 144), эвристика проекции — нет.
+      final prompt = 'p' * 12000;
+      _Chain build({Usage usage = Usage.zero}) => _Chain(catalog)
+        ..user(40)
+        ..load('mid')
+        ..say(2000)
+        ..user(30)
+        ..say(2500, usage: usage);
+      final probe = _Rig(sid, settings);
+      await probe.open(build().records);
+      final hBefore = estimateTokens(
+        probe.context(catalog).messages,
+        systemPrompt: prompt,
+      );
+      final rig = _Rig(sid, settings);
+      await rig.open(
+        build(usage: Usage(input: hBefore - 2000, output: 0)).records,
+      );
+      final threshold = compactionThreshold(smallWindow, settings);
+
+      final out =
+          await rig.compact(catalog, smallWindow, systemPrompt: prompt)
+              as Compacted;
+
+      final withSkill = estimateTokens(
+        buildLlmContext(
+          rig.writer.snapshot.withRecord(
+            CompactionRecord(
+              id: 'probe',
+              parentId: rig.writer.snapshot.leafId,
+              timestamp: DateTime.utc(2026),
+              summary: 'S',
+              firstKeptId: out.record.firstKeptId,
+              tokensBefore: 0,
+              tokensAfter: 0,
+              skills: [
+                CompactionSkill(
+                  name: 'mid',
+                  fingerprint: sha(catalog.skills.single.body),
+                ),
+              ],
+            ),
+            'probe',
+          ),
+          skillCatalog: catalog,
+        ).messages,
+        systemPrompt: prompt,
+      );
+      expect(withSkill, greaterThan(threshold), reason: 'H(after) with skill');
+      expect(
+        estimateTokens(rig.context(catalog).messages, systemPrompt: prompt),
+        lessThanOrEqualTo(threshold),
+        reason: 'H(after) without the skill',
+      );
+      expect(rig.compactionRecords, hasLength(1));
+      expect(out.record.toJson()['skills'], isNull);
+      expect(out.tokensAfter, lessThanOrEqualTo(threshold));
+      final log = rig.logger.eventsOf('skills.reattached').single;
+      expect(log.fields['dropped_window'], 1);
     });
 
     test('a small window: two skills of ~2000 tokens; the oldest is dropped '
@@ -1129,10 +1249,13 @@ void main() {
       final rig = _Rig(sid, settings);
       await rig.open(chain.records);
 
+      // CMP-10 / D1: проход с резюме длиннее региона не записывается, поэтому
+      // каждое резюме короче своего региона (раньше тут было `'x' * 16000`),
+      // а оценка после первого прохода всё равно выше порога: нужны проходы.
       await rig.compact(
         catalog,
         smallWindow,
-        summary: 'x' * 16000, // само резюме выше порога: нужны проходы
+        summaryAt: (call) => call == 1 ? 'x' * 400 : 'y' * 40,
       );
 
       expect(rig.compactionRecords.length, greaterThanOrEqualTo(2));
@@ -1376,11 +1499,11 @@ final class _Chain {
   );
 
   /// Ответ модели размером в [tokens].
-  void say(int tokens) => _add(
+  void say(int tokens, {Usage usage = Usage.zero}) => _add(
     AssistantMessage(
       content: [TextContent('a' * ((tokens - 4) * 4))],
       model: testModel,
-      usage: Usage.zero,
+      usage: usage,
       stopReason: StopReason.stop,
       timestamp: _at,
     ),
@@ -1513,16 +1636,18 @@ final class _Rig {
     SkillsConfig skills = const SkillsConfig(),
     void Function(LlmContextProjection)? onCompacted,
     String summary = 'S',
+    String Function(int call)? summaryAt,
+    String systemPrompt = _systemPrompt,
   }) => engine.compact(
     writer: writer,
     trigger: CompactionTrigger.manual,
     summarize: (request, cancel) async {
       summaries++;
-      return summaryOf(summary);
+      return summaryOf(summaryAt?.call(summaries) ?? summary);
     },
     settings: settings,
     window: window,
-    systemPrompt: _systemPrompt,
+    systemPrompt: systemPrompt,
     tools: const [],
     ids: SequentialIdGenerator(prefix: 'cmp'),
     clock: FakeClock(),
