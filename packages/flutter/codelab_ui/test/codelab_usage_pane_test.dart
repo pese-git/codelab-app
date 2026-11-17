@@ -13,6 +13,7 @@
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _pane(CodeLabUsagePane pane) => FluentApp(
@@ -387,5 +388,96 @@ void main() {
 
     expect(find.byKey(const ValueKey('usage-rebuild')), findsNothing);
     expect(find.byKey(const ValueKey('usage-export')), findsNothing);
+  });
+
+  // Ошибка ручной проверки PR #354: столбцы чисел были шириной 64 px, а
+  // `maxLines: 1` без overflow молча резал `$0.00058` до `$0.0005` — пользователь
+  // видел неверную сумму. Ширина столбца обязана определяться содержимым.
+  group('числа в столбцах не обрезаются на ширине дока', () {
+    const longValues = [r'$0.00058', r'~$123.45', r'$1234.56', '999.9k'];
+    const wideTurns = [
+      CodeLabUsageRow(
+        id: 'w1',
+        label:
+            '12 · “A very long prompt that must wrap or shrink, not push'
+            ' the numeric columns out of the dock”',
+        input: '999.9k',
+        output: '999.9k',
+        cost: r'$0.00058',
+        children: [
+          CodeLabUsageRow(
+            id: 'w1-0',
+            label: 'step 1 · Read lib/a_very_long_file_name_indeed.dart',
+            input: '999.9k',
+            output: '999.9k',
+            cost: r'~$123.45',
+          ),
+        ],
+      ),
+    ];
+    const wideModels = [
+      CodeLabUsageRow(
+        id: 'm',
+        label: 'openai / gpt-5-with-a-long-name',
+        input: '999.9k',
+        output: '999.9k',
+        cost: r'$1234.56',
+      ),
+    ];
+
+    testWidgets('значения целиком, без overflow, подпись переносится', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        _pane(_full(turns: wideTurns, models: wideModels)),
+      );
+      await tester.tap(find.byKey(const ValueKey('usage-turn-w1')));
+      await tester.pump();
+
+      for (final value in [...longValues, r'$1234.56']) {
+        for (final element in find.text(value).evaluate()) {
+          final paragraph = element.renderObject! as RenderParagraph;
+          expect(
+            paragraph.didExceedMaxLines,
+            isFalse,
+            reason: '«$value» обрезано',
+          );
+          // Одна строка: текст не разломан посреди значения.
+          expect(
+            paragraph.size.height,
+            lessThan(paragraph.text.style!.fontSize! * 2),
+            reason: '«$value» перенесено',
+          );
+        }
+      }
+      expect(find.text(r'$0.00058'), findsOneWidget);
+      expect(find.text(r'~$123.45'), findsOneWidget);
+      expect(find.text(r'$1234.56'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('столбцы Input/Output/Cost выровнены между строками и шапкой', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(_pane(_full(turns: wideTurns, models: const [])));
+      await tester.tap(find.byKey(const ValueKey('usage-turn-w1')));
+      await tester.pump();
+
+      double right(Finder f) => tester.getTopRight(f.first).dx;
+      // Левые края подписи `Cost` в шапке таблицы (последняя на экране, после
+      // карточки) и значения в строке хода равны: столбец общий.
+      expect(
+        tester.getTopLeft(_in('usage-turn-w1', find.text(r'$0.00058'))).dx,
+        tester.getTopLeft(find.text('Cost').last).dx,
+      );
+      expect(right(find.text('Cost')), lessThanOrEqualTo(400));
+      expect(tester.takeException(), isNull);
+    });
   });
 }

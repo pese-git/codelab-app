@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 
 import '../atomics/atomics.dart';
 import '../atomics/codelab_pressable.dart';
@@ -225,6 +226,7 @@ class _CodeLabUsagePaneState extends State<CodeLabUsagePane> {
           if (widget.turns.isNotEmpty)
             _Table(
               title: 'Per turn',
+              rows: widget.turns,
               children: [
                 for (final turn in widget.turns)
                   _TurnView(
@@ -237,6 +239,7 @@ class _CodeLabUsagePaneState extends State<CodeLabUsagePane> {
           if (widget.models.isNotEmpty)
             _Table(
               title: 'Per model',
+              rows: widget.models,
               children: [
                 for (final (index, model) in widget.models.indexed)
                   _RowCells(
@@ -355,43 +358,122 @@ class _NoteView extends StatelessWidget {
   }
 }
 
+/// Ширины трёх числовых столбцов таблицы, общие для шапки и всех строк.
+///
+/// Почему: фиксированные 64 px резали `$0.00058` до `$0.0005` — пользователь
+/// видел неверную сумму. Ширина берётся по самому широкому значению таблицы,
+/// поэтому значение не обрезается, а столбцы выровнены между строками и шапкой.
+class _ColumnWidths extends InheritedWidget {
+  const _ColumnWidths({required this.widths, required super.child});
+
+  /// Ширины Input, Output, Cost.
+  final List<double> widths;
+
+  static List<double> of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_ColumnWidths>()!.widths;
+
+  @override
+  bool updateShouldNotify(_ColumnWidths old) => !listEquals(widths, old.widths);
+}
+
+/// Зазор между числовыми столбцами.
+const double _columnGap = 12;
+
+/// Измеряет значения столбцов таблицы тем же стилем, которым они рисуются.
+///
+/// Раскладка, а не логика приложения: считаются только размеры готовых строк.
+/// Шаги хода учитываются всегда, раскрыт ход или нет, чтобы столбцы не
+/// «прыгали» при раскрытии.
+List<double> _measureColumns(BuildContext context, List<CodeLabUsageRow> rows) {
+  final scaler = MediaQuery.textScalerOf(context);
+  final body = CodeLabText.styleOf(context, CodeLabTextRole.body);
+  final caption = CodeLabText.styleOf(context, CodeLabTextRole.caption);
+  double measure(String text, TextStyle? style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  final widths = [
+    for (final header in const ['Input', 'Output', 'Cost'])
+      measure(header, caption),
+  ];
+  void visit(CodeLabUsageRow row, TextStyle? style) {
+    final values = [row.input, row.output, row.cost];
+    for (var i = 0; i < 3; i++) {
+      final width = measure(values[i], style);
+      if (width > widths[i]) widths[i] = width;
+    }
+    for (final child in row.children) {
+      visit(child, caption);
+    }
+  }
+
+  for (final row in rows) {
+    visit(row, body);
+  }
+  // Запас в долю пикселя: округление раскладки не должно переносить значение.
+  return [for (final w in widths) w.ceilToDouble() + 1 + _columnGap];
+}
+
 /// Таблица с заголовком секции и подписями столбцов.
 class _Table extends StatelessWidget {
-  const _Table({required this.title, required this.children});
+  const _Table({
+    required this.title,
+    required this.rows,
+    required this.children,
+  });
 
   final String title;
+
+  /// Данные строк — для измерения ширины столбцов.
+  final List<CodeLabUsageRow> rows;
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(child: CodeLabText(title, role: CodeLabTextRole.strong)),
-              for (final column in const ['Input', 'Output', 'Cost'])
-                SizedBox(
-                  width: _columnWidth,
-                  child: CodeLabText(
-                    column,
-                    role: CodeLabTextRole.caption,
-                    maxLines: 1,
-                  ),
+    final widths = _measureColumns(context, rows);
+    return _ColumnWidths(
+      widths: widths,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: CodeLabText(title, role: CodeLabTextRole.strong),
                 ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          ...children,
-        ],
+                for (final (i, column) in const [
+                  'Input',
+                  'Output',
+                  'Cost',
+                ].indexed)
+                  SizedBox(
+                    width: widths[i],
+                    child: CodeLabText(
+                      column,
+                      role: CodeLabTextRole.caption,
+                      maxLines: 1,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            ...children,
+          ],
+        ),
       ),
     );
   }
 }
-
-const double _columnWidth = 64;
 
 /// Строка хода: раскрывается до шагов по клику, Enter и Space.
 class _TurnView extends StatelessWidget {
@@ -471,6 +553,7 @@ class _RowCells extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final role = caption ? CodeLabTextRole.caption : CodeLabTextRole.body;
+    final widths = _ColumnWidths.of(context);
     final label = CodeLabText(
       escapeForDisplay(row.label),
       role: role,
@@ -499,9 +582,13 @@ class _RowCells extends StatelessWidget {
                     tone: CodeLabTone.accent,
                   ),
                 ),
-              for (final value in [row.input, row.output, row.cost])
+              for (final (i, value) in [
+                row.input,
+                row.output,
+                row.cost,
+              ].indexed)
                 SizedBox(
-                  width: _columnWidth,
+                  width: widths[i],
                   child: CodeLabText(value, role: role, maxLines: 1),
                 ),
             ],
