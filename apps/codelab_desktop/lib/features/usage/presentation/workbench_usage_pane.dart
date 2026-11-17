@@ -28,7 +28,12 @@ import 'usage_pane_view.dart';
 /// считает экземпляры, поэтому пересборка дока с двумя экземплярами на миг
 /// показ не гасит.
 class WorkbenchUsagePane extends StatefulWidget {
-  const WorkbenchUsagePane({super.key});
+  const WorkbenchUsagePane({this.clock, super.key});
+
+  /// Часы блока `Turn budget` (D9): `null` — `DateTime.now`. Тесты внедряют
+  /// один поддельный источник для часов kit (`receivedAt`) и виджета (`now`),
+  /// как `WorkbenchAgentsPane.clock`. Заглушка задачи 3.3: пока не читается.
+  final DateTime Function()? clock;
 
   @override
   State<WorkbenchUsagePane> createState() => _WorkbenchUsagePaneState();

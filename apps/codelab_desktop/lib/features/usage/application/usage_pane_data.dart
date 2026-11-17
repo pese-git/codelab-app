@@ -21,6 +21,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         usageInputTokens,
         usageTokensPartial;
 
+import 'usage_budget.dart';
 import 'usage_step_label.dart';
 
 /// Заметка под шапкой панели Usage (design.md change `add-desktop-usage-pane`,
@@ -167,6 +168,7 @@ final class UsagePaneData {
     this.cards = const [],
     this.turns = const [],
     this.models = const [],
+    this.budget,
     this.canRebuild = false,
     this.canExport = false,
   });
@@ -199,6 +201,10 @@ final class UsagePaneData {
   /// Ходы от нового к старому.
   final List<UsagePaneTurn> turns;
   final List<UsagePaneModel> models;
+
+  /// Блок `Turn budget` (D9); `null` — блока нет. Заглушка задачи 3.3:
+  /// `usagePaneDataOf` его пока не заполняет (задача 3.4).
+  final UsageBudgetData? budget;
   final bool canRebuild;
   final bool canExport;
 }

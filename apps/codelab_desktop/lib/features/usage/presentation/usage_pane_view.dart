@@ -57,3 +57,12 @@ List<CodeLabUsageRow> usageModelRowsOf(UsagePaneData data) => [
       note: model.detail,
     ),
 ];
+
+/// Блок `Turn budget` в модели кита на момент [now] (D9): тон переводится в
+/// `CodeLabTone`, Time пересчитывает `usageBudgetRowsAt`. `null` — блока нет.
+///
+/// Заглушка задачи 3.3: всегда `null` (реализация — задача 3.4).
+CodeLabUsageBudget? usageBudgetViewOf(
+  UsagePaneData data, {
+  required DateTime now,
+}) => null;

@@ -80,6 +80,63 @@ class CodeLabUsageNote {
   final String? retryLabel;
 }
 
+/// Строка блока `Turn budget`: полоса и подпись одного лимита хода
+/// (`usage-budget-<id>`; design.md change `add-desktop-usage-pane`, D9).
+///
+/// Почему готовые значения: «израсходовано / лимит», тон по доле и доля
+/// заполнения считает application (`UsagePaneData.budget`); виджет только
+/// рисует (`codelab_ui/AGENTS.md` §2).
+///
+/// Для чего: Steps, Tokens, Cost, Time. Как использовать: [id] — суффикс
+/// ключа (`steps`, `tokens`, `cost`, `time`); [fill] — доля заполнения
+/// полосы, виджет ограничивает её диапазоном 0..1; [tone] выше нейтрального
+/// рисуется плашкой вокруг [value]; [hint] — подсказка строки; [note] —
+/// строка под подписью (`not checked: price unknown`).
+///
+/// Заглушка задачи 3.3: блок пока не рисуется (реализация — задача 3.4).
+class CodeLabUsageBudgetRow {
+  const CodeLabUsageBudgetRow({
+    required this.id,
+    required this.label,
+    required this.value,
+    required this.fill,
+    this.tone = CodeLabTone.neutral,
+    this.hint,
+    this.note,
+  });
+
+  final String id;
+  final String label;
+  final String value;
+  final double fill;
+  final CodeLabTone tone;
+  final String? hint;
+  final String? note;
+}
+
+/// Блок `Turn budget` панели Usage: заголовок, строки лимитов и пояснение
+/// под ними (`usage-budget`; D9).
+///
+/// Почему отдельная модель: заголовок `This turn` / `Last turn` и набор строк
+/// решает application по статусу сессии и признаку «итог хода» (Q11 (а)).
+/// Как использовать: передаётся в [CodeLabUsagePane.budget]; `null` — блока
+/// нет. Блок стоит между карточками и `Per turn`.
+///
+/// Заглушка задачи 3.3 (см. [CodeLabUsageBudgetRow]).
+class CodeLabUsageBudget {
+  const CodeLabUsageBudget({
+    required this.title,
+    required this.rows,
+    required this.footnote,
+  });
+
+  final String title;
+  final List<CodeLabUsageBudgetRow> rows;
+
+  /// Пояснение под блоком (`usage-budget-note`).
+  final String footnote;
+}
+
 /// Панель Usage дока: шапка, карточки, таблицы `Per turn` и `Per model`
 /// (экран 17; D1, D2).
 ///
@@ -101,6 +158,7 @@ class CodeLabUsagePane extends StatefulWidget {
     this.statusLine,
     this.turns = const [],
     this.models = const [],
+    this.budget,
     this.loading = false,
     this.refreshing = false,
     this.notes = const [],
@@ -124,6 +182,10 @@ class CodeLabUsagePane extends StatefulWidget {
 
   /// Строки `Per model` в порядке показа.
   final List<CodeLabUsageRow> models;
+
+  /// Блок `Turn budget` между карточками и `Per turn`; `null` — блока нет
+  /// (D9). Заглушка задачи 3.3: пока не рисуется.
+  final CodeLabUsageBudget? budget;
 
   /// Журнала для показа ещё нет: вместо таблиц индикатор (`usage-progress`).
   final bool loading;

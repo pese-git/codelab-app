@@ -14,9 +14,9 @@ import 'support/server_harness.dart';
 /// правилами «когда есть» (только при `max_tokens`, `max_cost` или
 /// `max_duration`), а `usage_projection_test.dart` проверяет остальной снимок.
 ///
-/// Файл красный до задачи 2.4: адаптер поле `budget` ещё не проецирует (и
-/// до задачи 2.2 ядро не заполняет `StepEnded.budget`). Тесты «поля нет»
-/// зелёные уже сейчас: это защита от лишнего ключа у существующих фикстур.
+/// Тесты «поля нет» (в том числе у снимков `compaction`, `compactionDiscarded`
+/// и `load`) — защита от лишнего ключа у существующих фикстур и поводов уровня
+/// сессии (D7).
 ///
 /// Числа — как в фикстуре `acp/prompt-usage-budget` и
 /// `acp/prompt-usage-steps` (цены 3 / 15 / 0.3 / 3.75 доллара за 10^6
@@ -395,5 +395,76 @@ void main() {
     final frames = usageOf(h.client);
     expect(frames.single['trigger'], 'load');
     expect(frames.single, isNot(contains('budget')));
+  });
+
+  // Снимок `compactionDiscarded` (change `fix-discarded-compaction-usage`,
+  // CMP-13) бюджета не несёт: он идёт вне хода, лимиты хода к нему не
+  // относятся (agent-acp-server «Снимок сжатия»; D7, задача 3.1a).
+  //
+  // Сторожевой тест: зелёный сразу, потому что `_sessionSnapshot` поле не
+  // передаёт. Строим сводку напрямую, без сервера: ход с заданными лимитами
+  // нужен лишь затем, чтобы у сводки был `budget` последнего шага и итога
+  // хода, который снимок обязан НЕ унаследовать.
+  test('the compactionDiscarded snapshot has no budget even with limits '
+      'set and a budget on the last step and turn', () {
+    const limits = TurnBudget(maxTokens: 200000, maxCost: 0.5);
+    const root = SessionId('sess_discarded');
+    final spent = Usage(
+      input: 1200,
+      output: 300,
+      cost: const UsageCost(input: 0.0036, output: 0.0045),
+    );
+    final progress = BudgetProgress(
+      limits: limits,
+      steps: 1,
+      tokens: 1500,
+      cost: 0.0081,
+      active: Duration.zero,
+    );
+    final accounting = UsageAccounting()
+      ..turnStarted(const TurnId('turn_1'))
+      ..stepEnded(
+        StepEnded(
+          root,
+          result: StepResult(
+            stepIndex: 0,
+            response: AssistantMessage(
+              content: const [],
+              model: priced,
+              usage: spent,
+              stopReason: StopReason.stop,
+              timestamp: DateTime.utc(2026),
+            ),
+            results: const [],
+            usage: spent,
+          ),
+          context: const ContextFill(
+            used: 120,
+            window: 32768,
+            compactAt: 24576,
+          ),
+          budget: progress,
+        ),
+      )
+      ..turnEnded(
+        TurnEnded(
+          root,
+          reason: TurnEndReason.completed,
+          usage: spent,
+          budget: progress,
+        ),
+      );
+    // Контроль: у снимков хода поле при тех же лимитах есть, иначе тест
+    // прошёл бы зря.
+    expect(accounting.turnSnapshot(root.value), contains('budget'));
+
+    accounting.summarizerEnded(
+      const Usage(input: 900, output: 120),
+      priced: true,
+    );
+    final frame = accounting.compactionDiscardedSnapshot(root.value, 120);
+
+    expect(frame['trigger'], 'compactionDiscarded');
+    expect(frame, isNot(contains('budget')));
   });
 }

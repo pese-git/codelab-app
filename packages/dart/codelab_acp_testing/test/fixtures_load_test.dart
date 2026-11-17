@@ -138,8 +138,8 @@ const _usageFixtures = {
   'acp/prompt-usage-cancelled',
   'acp/compact-usage-context',
   'acp/prompt-usage-compaction-off',
-  // change `add-desktop-usage-pane`, задача 2.3 (D7): роль `agent`; клиентскую
-  // роль добавляет итерация 3.
+  // change `add-desktop-usage-pane`: роль `agent` — задача 2.3 (D7), роль
+  // `client` — задача 3.1a (уведомление идёт сырыми `params`, kit не нужен).
   'acp/prompt-usage-budget',
 };
 
@@ -197,11 +197,16 @@ void main() {
   test('the usage fixtures declare the usage extension and its consent', () {
     for (final fixture in corpus.where((f) => _usageFixtures.contains(f.id))) {
       expect(fixture.extensions, contains('usage'), reason: fixture.id);
-      // Задача 2.7 (D21 Т7): `acp/prompt-usage-steps` играет и клиентский
-      // прогон (подмножество `_meta.codelab`); остальные — только агент.
+      // Задача 2.7 (D21 Т7) и 3.1a (change `add-desktop-usage-pane`):
+      // `acp/prompt-usage-steps` и `acp/prompt-usage-budget` играют и
+      // клиентский прогон (подмножество `_meta.codelab`); остальные — только
+      // агент.
       expect(
         fixture.roles,
-        fixture.id == 'acp/prompt-usage-steps'
+        const {
+              'acp/prompt-usage-steps',
+              'acp/prompt-usage-budget',
+            }.contains(fixture.id)
             ? {FixtureRole.agent, FixtureRole.client}
             : {FixtureRole.agent},
         reason: fixture.id,

@@ -58,7 +58,15 @@ final class UsageFold {
   /// нового (D21 Т2).
   ///
   /// Возвращает `null` для дубля и опоздания: состояние и ревизия не меняются.
-  UsageFold? apply(UsageSnapshot snapshot, {required int generation}) {
+  ///
+  /// [receivedAt] — момент применения по часам вызывающего (D9, «Часы»):
+  /// свёртка чистая и `DateTime.now` не зовёт. Заглушка задачи 3.1: параметр
+  /// необязательный, пока существующие вызовы не обновлены (задача 3.2).
+  UsageFold? apply(
+    UsageSnapshot snapshot, {
+    required int generation,
+    DateTime? receivedAt,
+  }) {
     final known = this.generation;
     if (known != null && generation < known) {
       return null;
