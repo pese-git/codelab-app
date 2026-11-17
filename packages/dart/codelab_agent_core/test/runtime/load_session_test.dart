@@ -309,6 +309,42 @@ void main() {
       expect(estimated, heuristicOf(request));
     });
 
+    test('the log compaction.anchor with source load; none without a '
+        'compaction', () async {
+      final store = MemorySessionStore()
+        ..putText(
+          id,
+          j.journal([
+            j.header(id: id.value, cwd: '/proj'),
+            ...branchWithCompaction(700),
+          ]),
+        );
+      final h = anchorHarness(const [], sessions: store);
+
+      await h.core.runtime.loadSession(id, const SessionHostPorts());
+
+      final log = h.logger.eventsOf('compaction.anchor').single;
+      expect(log.level, LogLevel.debug);
+      expect(log.fields.keys, {'session_id', 'tokens', 'raw', 'source'});
+      expect(log.fields['tokens'], 700);
+      expect(log.fields['source'], 'load');
+      await h.core.runtime.dispose();
+
+      final plain = MemorySessionStore()
+        ..putText(
+          id,
+          j.journal([
+            j.header(id: id.value, cwd: '/proj'),
+            j.user('u1', null),
+            j.answer('a1', 'u1'),
+          ]),
+        );
+      final p = anchorHarness(const [], sessions: plain);
+      await p.core.runtime.loadSession(id, const SessionHostPorts());
+      expect(p.logger.eventsOf('compaction.anchor'), isEmpty);
+      await p.core.runtime.dispose();
+    });
+
     test('a journal without a compaction: the plain heuristic', () async {
       final (estimated, request) = await loadAndAsk([
         j.user('u1', null, text: 'hello'),

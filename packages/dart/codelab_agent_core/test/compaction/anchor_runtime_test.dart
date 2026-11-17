@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 
 import '../host/core_harness.dart' show inMemoryJournal, noExec;
 import '../permissions/fake_gate.dart';
+import '../support/manual_stream.dart';
 import '../support/models.dart';
 import 'anchor_support.dart';
 
@@ -22,18 +23,23 @@ void main() {
       contexts.where((c) => c.cacheKey?.endsWith(':summary') ?? false).length;
   late int hooked;
   late BuiltAgentCore core;
+  late ManualStream manual;
+  late RecordingLogger logger;
   late MemorySessionStore store;
 
   /// [onSummary] вызывается при n-м запросе суммаризатора (с 1) до ответа.
   Future<void> open(
     List<Map<String, Object?>> steps, {
     void Function(int n)? onSummary,
+    int? holdSummary,
   }) async {
     final clock = FakeClock();
     final scripted = ScriptedStreamFunction.fromJson({
       'steps': steps,
     }, clock: clock);
     contexts = [];
+    manual = ManualStream(clock);
+    logger = RecordingLogger(clock: clock);
     hooked = 0;
     store = MemorySessionStore();
     core = buildAgentCore(
@@ -43,7 +49,7 @@ void main() {
       services: AgentCoreServices(
         baseEnv: MemoryExecutionEnv(cwd: '/proj'),
         gate: FakeGate(),
-        logger: RecordingLogger(clock: clock),
+        logger: logger,
         clock: clock,
         ids: SequentialIdGenerator(),
         sessions: store,
@@ -56,7 +62,12 @@ void main() {
       streamFunction: (ref, context, {cancel}) {
         contexts.add(context);
         if (context.cacheKey?.endsWith(':summary') ?? false) {
-          onSummary?.call(++hooked);
+          hooked++;
+          onSummary?.call(hooked);
+          // Суммаризатор n-го запроса висит, пока тест не отпустит его.
+          if (hooked == holdSummary) {
+            return manual.call(ref, context, cancel: cancel);
+          }
         }
         return scripted.call(ref, context, cancel: cancel);
       },
@@ -195,4 +206,70 @@ void main() {
     expect(records.whereType<CompactionRecord>(), hasLength(1));
     await expectFirstAnchorKept();
   });
+
+  // R3, D1, D7: `raw` якоря считается по промпту и схемам, снятым на старте
+  // сжатия, — как `tokensAfter`. Смена режима, пока суммаризатор фонового
+  // `afterTurn` ещё висит, не должна сдвигать `raw`.
+  test('setMode while the afterTurn summary is pending: the anchor uses the '
+      'prompt and the schemas of the compaction start (D1, D7)', () async {
+    await open([
+      turn('a' * 8000, input: 3000),
+      turn('b' * 8000, input: 7500),
+      turn('ok'),
+    ], holdSummary: 1);
+    await say('first task');
+    await say('second task');
+    await pumpEventQueue();
+    expect(hooked, 1, reason: 'the precondition: the summary is pending');
+    final before = contexts.where((c) => c.tools.isNotEmpty).last;
+
+    await session.setMode(ModeId.plan);
+    final state = manual.state..start();
+    final block = state.openBlock(BlockKind.text);
+    state
+      ..append(block, '## Summary')
+      ..finish(StopReason.stop);
+    manual.end();
+    await say('third task');
+
+    final record = await firstRecord();
+    final after = contexts.lastWhere((c) => c.tools.isNotEmpty);
+    int constant(LlmContext c) =>
+        estimateTokens(const [], systemPrompt: c.systemPrompt, tools: c.tools);
+    expect(
+      constant(after),
+      isNot(constant(before)),
+      reason: 'the premise: the plan mode changes the prompt or the schemas',
+    );
+    final requested = firstRequestOfTurn(events, 2);
+    expect(requested, isNotNull);
+    expect(
+      requested!.estimatedTokens,
+      record.tokensAfter +
+          estimateTokens([after.messages.last]) +
+          constant(after) -
+          constant(before),
+    );
+  });
+
+  // §16, D3: фиксация якоря диагностируется отладочным логом без текстов.
+  test(
+    'the log compaction.anchor: debug, only numbers, source compaction',
+    () async {
+      await open([...head(), turn('ok')]);
+      await say('first task');
+      await say('second task');
+      await say('third task');
+
+      final record = await firstRecord();
+      final log = logger.eventsOf('compaction.anchor').single;
+      expect(log.level, LogLevel.debug);
+      expect(log.fields.keys, {'session_id', 'tokens', 'raw', 'source'});
+      expect(log.fields['session_id'], session.id.value);
+      expect(log.fields['tokens'], record.tokensAfter);
+      expect(log.fields['raw'], isA<int>());
+      expect(log.fields['source'], 'compaction');
+      expect(log.toString(), isNot(contains('## Summary')));
+    },
+  );
 }

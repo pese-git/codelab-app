@@ -5,7 +5,7 @@
 **Оценка** (`codelab_agent_core/lib/src/compaction/estimate.dart`, §9.3):
 - `estimateTokens(messages, systemPrompt, tools)` — эвристика `ceil(chars / 4)`; дальше `H`.
 - `estimateContextTokens(messages, systemPrompt, tools)` — якорь на последнем `AssistantMessage` с ненулевым `input + cacheRead + cacheWrite`: `input + cacheRead + cacheWrite + output + H(сообщений после него)`. Без якоря — `H` всего контекста.
-- `estimateLlmContext(LlmContext)` — та же функция по payload; её рантайм передаёт циклу как `estimateTokens` (проверка `preflight`, `ModelRequested.estimatedTokens`) и `contextEstimator` (`StepEnded.context.used`).
+- `estimateLlmContext(LlmContext)` — та же функция по payload; её рантайм передаёт циклу как `estimateTokens` (проверка `preflight`, `ModelRequested.estimatedTokens`) и `contextEstimator` (`StepEnded.context.used`). Этот change её удаляет: потребителей не остаётся (D3).
 - `estimateAfterCompaction(before, rawBefore, rawAfter) = max(0, before + rawAfter − rawBefore)` — согласованное «после» (D1 предшественника).
 
 **Компактор** (`compactor.dart`): `before` первого прохода — `estimateContextTokens(P_before)`, следующих — `after` прошлого (D2 предшественника). Для пробной проекции считаются `after` и `raw = H(P_after)`. `after` идёт в `tokensAfter` записи, `Compacted`, `ContextCompacted`, логи и проверку выигрыша CMP-10; порог CMP-5 и выброс навыков по окну — по `max(after, raw)` (D9 предшественника).
@@ -83,22 +83,25 @@ estimateContextTokens(C, compaction: anchor):
 
 ### D3. Где живёт якорь: состояние сессии, меняется только вместе с транскриптом
 
-Якорь — поле `AgentSession` (`_compactionAnchor`, `agent_runtime.dart`). Оно меняется в одном методе вместе с транскриптом из журнала — чтобы ни одна будущая операция не заменила транскрипт без якоря:
+Якорь — поле `AgentSession` (`_compactionAnchor`, `agent_runtime.dart`). Транскрипт из журнала и якорь меняет единый метод сессии `_adoptProjection`, принимающий проекцию, системный промпт и схемы, — чтобы ни одна будущая операция не заменила транскрипт без якоря. Метод вызывается:
 
-- `afterTurn`, `manual`: в `onCompacted` — транскрипт := `p.messages`, якорь := `compactionAnchorOf(p, systemPrompt, schemas)`;
-- `preflight`, `overflow` (`_emergency`): в `onCompacted` — якорь := `compactionAnchorOf(p, …)`, проекция → `LoopContext` (транскрипт агента цикл заменит после хода, §9.8);
-- загрузка: после `_restoreAgent` (D5).
+- `afterTurn`, `manual`: из `onCompacted` — транскрипт := `p.messages`, якорь := `compactionAnchorOf(p, systemPrompt, schemas)`;
+- загрузка: после `_restoreAgent` (D5) — проекция, которой восстановлен транскрипт, промпт и схемы восстановленного агента.
+
+`preflight`, `overflow` (`_emergency`): в `onCompacted` меняется только якорь (тем же `compactionAnchorOf`), проекция → `LoopContext`; транскрипт агента цикл заменит после хода (§9.8).
+
+**Какие промпт и схемы.** При сжатии `raw` считается по тем промпту и схемам, по которым компактор посчитал `tokensAfter`, — снятым на старте `compact` (`_compact` сессии), а не текущим на момент `onCompacted`. Фоновое `afterTurn` идёт вне хода, и смена режима или набора MCP-инструментов может случиться между стартом сжатия и записью; если считать `raw` по новым промпту и схемам, а `tokensAfter` — по старым, разница пропала бы из оценки. С `raw` по снятым значениям изменение учитывается потом как разность `H(C) − raw` по D7. При загрузке — промпт и схемы агента после `_restoreAgent`.
 
 Каждый проход вызывает `onCompacted`, поэтому при нескольких проходах остаётся якорь последнего записанного. Отменённый или неудачный проход `onCompacted` не вызывает (CMP-3) — якорь прежний.
 
 Потребители — одна функция сессии `int _estimate(LlmContext c) => estimateContextTokens(c.messages, systemPrompt: c.systemPrompt, tools: c.tools, compaction: _compactionAnchor)`:
-- `AgentLoopConfig.estimateTokens` и `contextEstimator` — вместо `estimateLlmContext` (сигнатура `EstimateTokens` и цикл не меняются);
+- `AgentLoopConfig.estimateTokens` и `contextEstimator` (сигнатура `EstimateTokens` и цикл не меняются); `estimateLlmContext` (оценка payload без якоря сжатия) потребителей больше не имеет и удаляется;
 - `_compactAfterTurn` — вместо прямого `estimateContextTokens`;
 - компактор — новый необязательный параметр `compact(..., CompactionAnchor? anchor)` для «до» первого прохода (D8).
 
-`raw`, который сессия фиксирует в `onCompacted`, совпадает с `raw` пробной проекции компактора: та же функция проекции, те же промпт и схемы, сообщения отличаются только числом `tokensAfter` записи, которое в текст не входит. Это закрепляется тестом (tasks.md, 1.1), а не дублированием поля в `Compacted`.
+`raw`, который сессия фиксирует в `onCompacted`, совпадает с `raw` пробной проекции компактора: та же функция проекции, те же (снятые на старте) промпт и схемы, сообщения отличаются только числом `tokensAfter` записи, которое в текст не входит. Это закрепляется тестом (tasks.md, 1.1), а не дублированием поля в `Compacted`.
 
-Гонки: фоновое `afterTurn` идёт вне хода, `prompt()` его дожидается, а `onCompacted` синхронно меняет транскрипт и якорь — промежуточного состояния нет. Аварийное сжатие идёт внутри хода и меняет якорь до возврата `LoopContext`, то есть до следующей оценки `preflight`. Закрытие сессии отменяет фоновое сжатие до записи (CMP-4) — якорь не тронут.
+Гонки: фоновое `afterTurn` идёт вне хода, `prompt()` его дожидается, а `onCompacted` синхронно меняет транскрипт и якорь — промежуточного состояния нет. Аварийное сжатие идёт внутри хода и меняет якорь до возврата `LoopContext`, то есть до следующей оценки `preflight`. Закрытие сессии отменяет фоновое сжатие до записи (CMP-4) — якорь не тронут. `setMode`, `setModel`, `setConfigOption` фонового сжатия не ждут: промпт и схемы могут смениться между стартом `compact` и `onCompacted`, поэтому `raw` берётся по снятым на старте (выше) — тест 1.7. Связанный предсуществующий дефект журнала — R6, вне scope.
 
 Альтернативы:
 - **Якорь в цикле.** Цикл не знает журнала и записи `compaction`; ему пришлось бы разбирать проекцию. Отклонено.
@@ -158,7 +161,8 @@ estimateContextTokens(C, compaction: anchor):
 - `ModelRequested.estimatedTokens` первого запроса после сжатия — `tokensAfter + H(хвоста)` (было — эвристика всего контекста). Требование `agent-loop` «Оценка в ModelRequested» не меняется: событие несёт результат оценщика, меняется оценщик.
 - `StepEnded.context.used`: шаг с ответом с usage — без изменений; шаг с ответом без usage после сжатия — по якорю сжатия (было — эвристика).
 - Снимок `_codelab/session/usage` (`codelab_agent_acp`): `trigger: "compaction"` по-прежнему из `tokensAfter`; снимки хода — из `StepEnded`. Форма и порядок не меняются, ACP не затронут.
-- Логи `compaction.done` и `compaction.skipped` — те же поля. Новых логов нет: якорь выводится из записи журнала и диагностируется по `tokens_after` и `ModelRequested.estimatedTokens`.
+- Логи `compaction.done` и `compaction.skipped` — те же поля.
+- Новый лог фиксации якоря (`compaction.anchor`, `debug`): поля `session_id`, `tokens`, `raw`, `source` (`compaction` — запись сжатия любого триггера, `load` — загрузка сессии); текстов сообщений, промпта и схем нет. Пишет единый метод сессии (D3) и аварийный путь в `onCompacted`. Без него `raw` не виден нигде (в журнал он не пишется, Q2), и расхождение оценки с `tokens_after` после загрузки или смены режима не диагностировать (корневой `AGENTS.md` §16). Перечень — `12-observability-and-errors.md`, §9.8.
 
 ### D10. Пакеты, зависимости, граница
 
@@ -174,6 +178,7 @@ estimateContextTokens(C, compaction: anchor):
 - **R3. Устаревший якорь.** Если будущая операция заменит транскрипт из журнала, не обновив якорь, оценка будет считать новый контекст от старого `tokensAfter`. Защита: один метод сессии для транскрипта и якоря (D3), правило в §8.7 и §9.3 (D5), тест загрузки. Внутри хода смена контекста (`StepUpdate.context`) приходит только из аварийного сжатия, где якорь уже обновлён.
 - **R4. Гонки, отмена, поздние события.** Порядок шагов компактора не меняется; якорь меняется синхронно в `onCompacted` после `append` (D3). Отменённое или неудачное сжатие ничего не пишет и якорь не трогает (CMP-3, CMP-4). Фоновое `afterTurn` `prompt()` дожидается; закрытие сессии его отменяет до записи. Поздних событий новых нет.
 - **R5. Субагенты.** Дочерние сессии с включённым сжатием используют тот же код сессии и получают свой якорь; общих полей между сессиями нет.
+- **R6 (вне scope, предсуществующий дефект, найден ревью).** `setMode`, `setModel` и `setConfigOption` идут через `_serial` и не ждут фонового сжатия `afterTurn`, а `CompactionRecord.parentId` равен `snapshot.leafId`, снятому до суммаризации. Запись смены режима (модели, опции), сделанная во время суммаризации, становится ребёнком прежнего листа, а запись `compaction` — её сестрой; лист переходит на `compaction`, и запись смены уходит на боковую ветку — после `loadSession` она теряется. Этот change дефект не вносит и не чинит: якорь от него не зависит (D3, промпт и схемы на старте `compact`; в открытой сессии смена учитывается по D7). Исправляется отдельным change (варианты — ожидание фонового сжатия в этих операциях или перечитывание листа перед `append`); тест на сохранение смены режима после загрузки — в нём.
 - **Permissions и containment** не затронуты. **ACP**: новых методов, полей и состояний нет; forward compatibility не затронута. **Web-безопасность**: только чистый Dart. **PKG-2**: зависимости не меняются.
 
 ## Migration Plan

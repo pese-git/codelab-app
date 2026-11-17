@@ -2,7 +2,7 @@
 
 Метки исполнителей (CLAUDE.md, таблица зон): `[agent]` — `codelab_agent_core` и документы ядра. Задач `[protocol]`, `[client]`, `[desktop]` нет: мост ACP, фикстуры и клиенты кода не меняют (design.md, D10); задача 3.2 только прогоняет их проверки, а красная фикстура — остановка и вопрос архитектору.
 
-Порядок: 0.1 → 0.2 → 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 1.6 → 2.1 → 3. Ветка `feature/anchor-context-estimate-after-compaction`, один PR в `develop`.
+Порядок: 0.1 → 0.2 → 1.1 → 1.2 → 1.3 → 1.4 → 1.5 → 1.6 → 1.7 → 2.1 → 3 (после 1.7 проверки 3.1–3.3 повторяются). Ветка `feature/anchor-context-estimate-after-compaction`, один PR в `develop`.
 
 Проверки — только затронутое (корневой `AGENTS.md` §21); полный `melos run check` — по просьбе пользователя.
 
@@ -38,16 +38,22 @@
   - Изменение схем после сжатия (сценарий «Изменение схем после сжатия»; D7): после сжатия сессия меняет набор инструментов (смена режима или агента с другим набором) — оценка следующего запроса отличается от `tokensAfter + H(хвоста)` ровно на разницу эвристик схем.
   - Отмена и ошибка (сценарии «Ошибка суммаризатора», «Отмена посреди генерации» в части якоря; R4): после неудачного и отменённого сжатия `ModelRequested.estimatedTokens` следующего запроса считается от прежнего якоря.
 - [x] 1.2 `[agent]` Пересмотр существующих тестов, закрепивших D9 или эвристику после сжатия (характеризационный шаг, `AGENTS.md` ядра §2, исключение (а)): прогнать `fvm dart test` в `codelab_agent_core` на коде до 1.3 с тестами 1.1 и выписать падающие, кроме новых. Уже известны (по коду после merge `e954ee24`): тесты D9 в `compactor_test.dart` (группа с `(D1, D9)`, `(D3, D9)`, `(D9, CMP-5)`), выброс навыков по окну через `max` — `skills_reattach_test.dart` («D9: the window drop compares max(after, H(after))»); `preflight_after_compaction_test.dart` (две записи, два запроса суммаризатора, проверка `estimateLlmContext ≤ window`); возможно `long_session_test.dart` и `overflow_then_compact_test.dart`, если считают «после» через `estimateLlmContext` без якоря. Переписать с сохранением проверяемого поведения; каждую правку сопроводить комментарием со ссылкой на D8 или CMP-11.
-- [ ] 1.3 `[agent]` Реализация оценки (1.1, первые два пункта; D1, D2, D6):
+- [x] 1.3 `[agent]` Реализация оценки (1.1, первые два пункта; D1, D2, D6):
   - `lib/src/session/projections.dart`: поле `LlmContextProjection.compactionCovered` (число начальных сообщений, порождённых последней записью `compaction` и сохранённой частью до неё; 0 без сжатия) с doc-комментарием (почему, для чего, как; §8.7, D1);
   - `lib/src/compaction/estimate.dart`: `typedef CompactionAnchor = ({int tokens, int raw})`, параметр `CompactionAnchor? compaction` у `estimateContextTokens`, `compactionAnchorOf(projection, systemPrompt:, tools:)`; doc-комментарии по §15 корневого `AGENTS.md` со ссылками на D1, D2, D6; в барель не экспортируются.
-- [ ] 1.4 `[agent]` Реализация компактора (1.1, `compactor_test.dart`; D8): параметр `CompactionAnchor? anchor` у `compact` для `before` первого прохода; сравнения с порогом (CMP-5, оба условия и цикл выброса навыков по окну) — по `after`; `raw` пробной проекции остаётся только для `estimateAfterCompaction`. Doc-комментарий `compact` и комментарии у порога и выброса навыков переписать (ссылка на D8 вместо D9).
-- [ ] 1.5 `[agent]` Реализация сессии (1.1, тесты рантайма и загрузки; D3, D5): `lib/src/runtime/agent_runtime.dart` —
-  - поле `_compactionAnchor` и один метод, который меняет транскрипт и якорь вместе; `onCompacted` для `afterTurn` и `manual` — через него; `_emergency` — якорь в `onCompacted` до возврата `LoopContext`;
+- [x] 1.4 `[agent]` Реализация компактора (1.1, `compactor_test.dart`; D8): параметр `CompactionAnchor? anchor` у `compact` для `before` первого прохода; сравнения с порогом (CMP-5, оба условия и цикл выброса навыков по окну) — по `after`; `raw` пробной проекции остаётся только для `estimateAfterCompaction`. Doc-комментарий `compact` и комментарии у порога и выброса навыков переписать (ссылка на D8 вместо D9).
+- [x] 1.5 `[agent]` Реализация сессии (1.1, тесты рантайма и загрузки; D3, D5): `lib/src/runtime/agent_runtime.dart` —
+  - поле `_compactionAnchor` и единый метод сессии `_adoptProjection`, принимающий проекцию, промпт и схемы, который меняет транскрипт и якорь вместе; вызывается из `onCompacted` для `afterTurn` и `manual` (промпт и схемы, снятые на старте `_compact`) и из загрузки после `_restoreAgent`; `_emergency` — якорь в `onCompacted` до возврата `LoopContext` (доведение до единого метода и снятие промпта на старте — 1.7.1, 1.7.4);
   - оценщик сессии `(LlmContext c) => estimateContextTokens(..., compaction: _compactionAnchor)` для `AgentLoopConfig.estimateTokens` (только с capability `compaction`, как сейчас) и `contextEstimator`; `_compactAfterTurn` — тем же оценщиком; `_compact` передаёт `anchor: _compactionAnchor`;
   - `loadSession`: якорь фиксируется после `_restoreAgent` по проекции, которой восстановлен транскрипт, с промптом и схемами восстановленного агента (D5).
   Doc-комментарии полей и метода — почему, для чего, как (§15 корневого `AGENTS.md`), со ссылками на D3, D5, CMP-11.
-- [ ] 1.6 `[agent]` Рефакторинг и сверка документов с кодом: имена и шаги `09-compaction.md` §9.3, §9.8, §9.9 и `08-sessions.md` §8.7 совпадают с кодом; упоминаний D9 и `max(after, raw)` в коде и комментариях не осталось; `estimateLlmContext` либо используется, либо удалён, если потребителей не осталось (без мёртвого кода).
+- [x] 1.6 `[agent]` Рефакторинг и сверка документов с кодом: имена и шаги `09-compaction.md` §9.3, §9.8, §9.9 и `08-sessions.md` §8.7 совпадают с кодом; упоминаний D9 и `max(after, raw)` в коде и комментариях не осталось; `estimateLlmContext` потребителей не имеет и удаляется (без мёртвого кода; выполняется в 1.7).
+- [x] 1.7 `[agent]` Исправления по итогам ревью (тест → реализация; документы синхронизированы архитектором — `09-compaction.md` §9.2, §9.3, §9.8, `08-sessions.md` §8.7, `12-observability-and-errors.md`):
+  - [x] 1.7.1 Тест: смена режима (`setMode`) во время фонового `afterTurn`-сжатия (суммаризатор на паузе) — якорь фиксируется по промпту и схемам, снятым на старте `compact`: `raw == H(P_after)` пробной проекции, а оценка следующего запроса — `tokensAfter + H(хвоста)` плюс разность эвристик промпта и схем нового режима (D3, D7; сценарий «Изменение схем после сжатия»). Реализация: `_compact` снимает промпт и схемы на старте и передаёт их в фиксацию якоря.
+  - [x] 1.7.2 Тест: `overflow` после сжатия без зацикливания — провайдер повторно отвечает `overflow`, аварийное сжатие с якорем не уходит в бесконечный цикл: число аварийных сжатий в ходе ограничено правилом CMP-8, ход завершается `failed` с ошибкой `overflow` (D8, R1).
+  - [x] 1.7.3 Удалить `estimateLlmContext` из `lib/src/compaction/estimate.dart` и его тесты/упоминания в комментариях (D3; §9.2 `09-compaction.md`).
+  - [x] 1.7.4 Единый метод сессии `_adoptProjection`, принимающий проекцию, промпт и схемы, меняет транскрипт и якорь; вызывается из `onCompacted` (`afterTurn`, `manual`) и из загрузки после `_restoreAgent`; doc-комментарий — почему, для чего, как (D3, D5, R3). Тест: загрузка и `afterTurn`/`manual` дают якорь через этот метод (существующие тесты 1.1 зелёные).
+  - [x] 1.7.5 Тест → реализация: debug-лог фиксации якоря (имя `compaction.anchor`, уровень debug; поля `session_id`, `tokens`, `raw`, `source: compaction|load`; без текстов) при записи сжатия и при загрузке (D9; §16 корневого `AGENTS.md`). Итоговое имя события и полей сверить с `12-observability-and-errors.md` и §9.8 `09-compaction.md`.
 
 ## 2. Спецификация
 
@@ -55,6 +61,6 @@
 
 ## 3. Проверки
 
-- [ ] 3.1 `[agent]` `fvm dart format --set-exit-if-changed` изменённых файлов; `fvm dart analyze` и `fvm dart test` в `packages/dart/codelab_agent_core`.
-- [ ] 3.2 `[agent]` `fvm dart test` в `packages/dart/codelab_agent_acp` (снимки `_codelab/session/usage`: `usage_projection_test.dart`, `usage_bridge_test.dart`, `builtin_commands_bridge_test.dart`) и `fvm dart run melos run conformance:agent` (фикстуры `acp/slash-compact`, `acp/compact-usage-context`, `acp/compaction-long-session-continues`; ожидание по D10 — без правок фикстур). Если фикстура краснеет — остановиться и вернуть вопрос архитектору: правка фикстуры — задача `[protocol]` со ссылкой на D8.
-- [ ] 3.3 `[agent]` `fvm dart run melos run web-compile` (изменён web-безопасный `codelab_agent_core`).
+- [x] 3.1 `[agent]` `fvm dart format --set-exit-if-changed` изменённых файлов; `fvm dart analyze` и `fvm dart test` в `packages/dart/codelab_agent_core`.
+- [x] 3.2 `[agent]` `fvm dart test` в `packages/dart/codelab_agent_acp` (снимки `_codelab/session/usage`: `usage_projection_test.dart`, `usage_bridge_test.dart`, `builtin_commands_bridge_test.dart`) и `fvm dart run melos run conformance:agent` (фикстуры `acp/slash-compact`, `acp/compact-usage-context`, `acp/compaction-long-session-continues`; ожидание по D10 — без правок фикстур). Если фикстура краснеет — остановиться и вернуть вопрос архитектору: правка фикстуры — задача `[protocol]` со ссылкой на D8.
+- [x] 3.3 `[agent]` `fvm dart run melos run web-compile` (изменён web-безопасный `codelab_agent_core`).

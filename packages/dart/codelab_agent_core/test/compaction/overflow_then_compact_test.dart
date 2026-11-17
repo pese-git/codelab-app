@@ -70,6 +70,40 @@ void main() {
     },
   );
 
+  // CMP-8: аварийный вызов один на шаг. Повторный overflow после успешного
+  // сжатия завершает ход `failed`, а следующий ход работает обычным путём без
+  // зацикливания (change `anchor-context-estimate-after-compaction`, D3).
+  test('overflow, compaction, a second overflow: the turn fails once, the '
+      'next turn completes without a compaction loop (CMP-8)', () async {
+    final h = harness([
+      textStep('b' * 8000),
+      textStep('a' * 8000),
+      overflow,
+      textStep('## Open user requests\n- second task'),
+      textStep('Turn prefix: first task.'),
+      overflow,
+      textStep('Done.'),
+    ]);
+    final session = await h.core.runtime.createSession(
+      SessionSpec(cwd: '/proj'),
+    );
+    final events = <AgentEvent>[];
+    session.events.listen(events.add);
+    await session.prompt(const [TextContent('zeroth task')]);
+    await session.prompt(const [TextContent('first task')]);
+
+    final failed = await session.prompt(const [TextContent('second task')]);
+    final next = await session.prompt(const [TextContent('third task')]);
+
+    expect(failed.reason, TurnEndReason.failed);
+    expect(next.reason, TurnEndReason.completed);
+    h.model.verify();
+    expect(events.whereType<ContextCompacted>(), hasLength(1));
+    final snapshot = await h.sessions.open(session.id);
+    expect(snapshot.records.whereType<CompactionRecord>(), hasLength(1));
+    await h.core.runtime.dispose();
+  });
+
   test('overflow, then a summary longer than the region: no record, no '
       'retry, the turn fails (D5, CMP-8, CMP-10)', () async {
     final h = harness([
