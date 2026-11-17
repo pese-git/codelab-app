@@ -129,6 +129,43 @@ void main() {
     );
   });
 
+  /// agent-compaction «Согласованная оценка после сжатия» (design.md change
+  /// `fix-compaction-estimate-and-no-gain`, D1): `before + rawAfter −
+  /// rawBefore`, не ниже 0.
+  group('estimateAfterCompaction', () {
+    final cases = <(String, int, int, int, int)>[
+      // (имя, before, rawBefore, rawAfter, ожидание)
+      (
+        'anchor below the heuristic: the difference is applied',
+        3043,
+        4450,
+        3567,
+        2160,
+      ),
+      (
+        'no anchor (before == rawBefore): equals rawAfter',
+        4450,
+        4450,
+        3567,
+        3567,
+      ),
+      ('no gain: the estimate does not fall', 3000, 4000, 4500, 3500),
+      ('lower bound: never negative', 100, 4000, 500, 0),
+    ];
+    for (final (name, before, rawBefore, rawAfter, expected) in cases) {
+      test(name, () {
+        expect(
+          estimateAfterCompaction(
+            before: before,
+            rawBefore: rawBefore,
+            rawAfter: rawAfter,
+          ),
+          expected,
+        );
+      });
+    }
+  });
+
   group('effectiveContextWindow', () {
     test('is the model window without a cap', () {
       expect(effectiveContextWindow(testModel), testModel.contextWindow);

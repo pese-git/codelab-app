@@ -46,8 +46,9 @@ final class RegionBuilder {
     origin: RecordOrigin.loopNudge,
   );
 
-  void assistant(int tokens) =>
-      _message(_answer([TextContent(_text(tokens, 'a'))]));
+  /// Ответ модели; [usage] — usage провайдера (якорь оценки, §9.3).
+  void assistant(int tokens, {Usage usage = Usage.zero}) =>
+      _message(_answer([TextContent(_text(tokens, 'a'))], usage: usage));
 
   /// Ответ с одним вызовом [name] (`{"path": ...}`).
   void call(String callId, String name, {String path = 'a.txt'}) => _message(
@@ -104,10 +105,11 @@ final class RegionBuilder {
   AssistantMessage _answer(
     List<ContentBlock> content, {
     StopReason stop = StopReason.stop,
+    Usage usage = Usage.zero,
   }) => AssistantMessage(
     content: content,
     model: testModel,
-    usage: Usage.zero,
+    usage: usage,
     stopReason: stop,
     timestamp: _at,
   );

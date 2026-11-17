@@ -122,6 +122,33 @@ void main() {
       expect((await rig.records(session)).length, before.length);
     });
 
+    test('a summary longer than the region: the same text, one summary '
+        'request, no compaction record (scenario "/compact без выигрыша", '
+        'CMP-10, D4)', () async {
+      // Резюме в пять раз длиннее региона: проход не даёт выигрыша.
+      final rig = await _Rig.create(
+        steps: [
+          textStep('a' * 8000),
+          textStep('b' * 16000),
+          textStep('x' * 80000),
+        ],
+      );
+      final session = await rig.session();
+      await rig.history(session);
+      final before = await rig.records(session);
+
+      final reply = await rig.ask(session, '/compact');
+
+      expect(reply.text, 'Nothing to compact.');
+      expect(rig.summaryCalls, 1);
+      final after = await rig.records(session);
+      expect(after.length, before.length);
+      expect(after.whereType<CompactionRecord>(), isEmpty);
+      expect(reply.events.whereType<ContextCompacted>(), isEmpty);
+      expect(reply.result.reason, TurnEndReason.completed);
+      expect(rig.logger.eventsOf('compaction.skipped'), hasLength(1));
+    });
+
     test('a running background afterTurn is awaited first: no two '
         'compactions of one branch at once (D5, §9.5)', () async {
       final rig = await _Rig.create(
