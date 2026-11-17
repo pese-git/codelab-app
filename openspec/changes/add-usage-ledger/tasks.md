@@ -172,7 +172,7 @@
 
 ### 3a. Красные тесты
 
-- [ ] 3.1 `[client]` `codelab_client_acp/test/application/usage_ledger_request_test.dart` (новый, на `FakeAcpTransport`):
+- [x] 3.1 `[client]` `codelab_client_acp/test/application/usage_ledger_request_test.dart` (новый, на `FakeAcpTransport`):
   - `CodelabExtensions.usageLedger` только при целом `version: 1`;
   - запрос с `rebuild` и без него — кадр, сырой результат и поколение;
   - без ключа — отказ без кадра;
@@ -180,7 +180,7 @@
   - клиент не объявляет `usageLedger` (`initialize_codelab_request_test.dart` не меняется).
   
   (acp-protocol-client «Запрос журнала usage»; D7, D9). Красный.
-- [ ] 3.2 `[client]` `codelab_client_core/test/usage/usage_ledger_decoder_test.dart` (новый):
+- [x] 3.2 `[client]` `codelab_client_core/test/usage/usage_ledger_decoder_test.dart` (новый):
   - форма D6; деньги в микроединицах, валюта, незнакомые причины;
   - без `sessionId`, `seq` или `total.tokens` — отказ; ход или шаг без обязательных полей пропущен;
   - неверный тип необязательного поля — поля нет, одно предупреждение на сессию и поле;
@@ -188,7 +188,7 @@
   - общий разбор агрегата с `UsageDecoder` — существующие `usage_decoder_test.dart` зелёные.
   
   (acp-client-kit «Журнал usage сессии в клиенте»; D10). Красный.
-- [ ] 3.3 `[client]` `codelab_client_core/test/usage/session_usage_ledger_test.dart` (новый, на `ClientWorkspace` с `AcpClientBackend` и `FakeAcpTransport`):
+- [x] 3.3 `[client]` `codelab_client_core/test/usage/session_usage_ledger_test.dart` (новый, на `ClientWorkspace` с `AcpClientBackend` и `FakeAcpTransport`):
   - `unavailable` без ключа; `idle` → `loading` → `loaded`;
   - слияние вызовов с `rebuild`;
   - ответ после переподключения отброшен с `usage.ledger.stale`; ответ после `session/load` той же сессии отброшен;
@@ -196,21 +196,21 @@
   - сброс в `idle` при переподключении и `session/load`.
   
   (acp-client-kit «Журнал usage сессии в клиенте»: все сценарии). Красный.
-- [ ] 3.4 `[client]` `codelab_client_core/test/usage/session_usage_test.dart` (существующий) — снимок `load`:
+- [x] 3.4 `[client]` `codelab_client_core/test/usage/session_usage_test.dart` (существующий) — снимок `load`:
   - повторная загрузка открытой сессии, снимок обработан раньше обновления сессии по ответу — сумма не стёрта;
   - первая загрузка сессии из списка — снимок ждёт регистрации;
   - сбой загрузки — снимок отброшен с `usage.unknown_session`;
   - `UsageTrigger.load` не меняет `lastTurn`.
   
   (acp-client-kit «Usage сессии»: «Снимок load после загрузки», «Снимок load до регистрации сессии», «Загрузка сорвалась»; D10). Красный.
-- [ ] 3.5 `[protocol]` Роль `client` фикстуры `acp/usage-ledger-request`: проверка состояния в `codelab_client_acp/test/fixtures/client_fixture_conformance_test.dart` (запрос ушёл с теми же параметрами) и в `codelab_client_core/test/usage/usage_fixture_test.dart` (`usageLedger` — `loaded`, один ход, два шага) (acp-golden-fixtures «Клиентский прогон журнала»). Красная в `conformance:client`.
-- [ ] 3.6 `[desktop]` `apps/codelab_desktop/test/features/workbench/application/usage_status_mapper_test.dart` (существующий): после загрузки сессии со снимком `load` строка статуса до первого хода — `— · session $X` без «~» (D23 Т9 п. 3 change `add-usage-extension`; D8). Красный до 3.8 только если маппер требует правки; иначе тест — регрессионный и зелёный сразу, это фиксируется в PR.
-- [ ] 3.7 `[client]` `apps/codelab_cli`: PTY-e2e `--continue` со scripted-агентом в режиме `with_usage` — строка REPL после первого хода без `~` от `beforeLoad` (`test/e2e/status_line_usage_test.dart`, существующий; D8). Регрессионный, как 3.6: на scripted-агенте `with_usage` тест зелёный с самого начала, потому что агент пишет ответ `session/load` и снимок `load` одним куском. Перенесено из 2.8: `test:e2e:cli:dart-agent` с Dart-агентом (`cli/resume-last-session`) зелёный только после 3.9 — до неё `codelab -c` печатает `usage.unknown_session`. Порядок D10 (снимок до регистрации сессии) детерминированно воспроизводят 3.4 и Dart-агент.
+- [x] 3.5 `[protocol]` Роль `client` фикстуры `acp/usage-ledger-request`: проверка состояния в `codelab_client_acp/test/fixtures/client_fixture_conformance_test.dart` (запрос ушёл с теми же параметрами) и в `codelab_client_core/test/usage/usage_fixture_test.dart` (`usageLedger` — `loaded`, один ход, два шага) (acp-golden-fixtures «Клиентский прогон журнала»). Красная в `conformance:client`.
+- [x] 3.6 `[desktop]` `apps/codelab_desktop/test/features/workbench/application/usage_status_mapper_test.dart` (существующий): после загрузки сессии со снимком `load` строка статуса до первого хода — `— · session $X` без «~» (D23 Т9 п. 3 change `add-usage-extension`; D8). Красный до 3.8 только если маппер требует правки; иначе тест — регрессионный и зелёный сразу, это фиксируется в PR.
+- [x] 3.7 `[client]` `apps/codelab_cli`: PTY-e2e `--continue` со scripted-агентом в режиме `with_usage` — строка REPL после первого хода без `~` от `beforeLoad` (`test/e2e/status_line_usage_test.dart`, существующий; D8). Регрессионный, как 3.6: на scripted-агенте `with_usage` тест зелёный с самого начала, потому что агент пишет ответ `session/load` и снимок `load` одним куском. Перенесено из 2.8: `test:e2e:cli:dart-agent` с Dart-агентом (`cli/resume-last-session`) зелёный только после 3.9 — до неё `codelab -c` печатает `usage.unknown_session`. Порядок D10 (снимок до регистрации сессии) детерминированно воспроизводят 3.4 и Dart-агент.
 
 ### 3b. Реализация
 
-- [ ] 3.8 `[client]` `codelab_client_acp`: признак `usageLedger` в `CodelabExtensions` (`domain/codelab_extensions.dart`); метод запроса журнала в `AcpClientApplication` через `_sendRequest` с поколением соединения и типизированным сбоем. Тест 3.1 зелёный; `web-compile`.
-- [ ] 3.9 `[client]` `codelab_client_core`, `lib/src/usage/`:
+- [x] 3.8 `[client]` `codelab_client_acp`: признак `usageLedger` в `CodelabExtensions` (`domain/codelab_extensions.dart`); метод запроса журнала в `AcpClientApplication` через `_sendRequest` с поколением соединения и типизированным сбоем. Тест 3.1 зелёный; `web-compile`.
+- [x] 3.9 `[client]` `codelab_client_core`, `lib/src/usage/`:
   - общий разбор агрегата из `UsageDecoder`;
   - `UsageLedgerDecoder`, модель журнала и состояние (freezed), `SessionView.usageLedger`;
   - `AgentBackend` с операцией запроса и реализация в `AcpClientBackend`;
@@ -220,7 +220,7 @@
   - `build_runner`.
   
   Тесты 3.2–3.5 зелёные; `web-compile`, `conformance:client`.
-- [ ] 3.10 `[desktop]`, `[client]` Правки маппера desktop и статус-строки CLI, если 3.6 или 3.7 красные; иначе — без кода. `test:e2e:cli:dart-agent`.
+- [x] 3.10 `[desktop]`, `[client]` Правки маппера desktop и статус-строки CLI, если 3.6 или 3.7 красные; иначе — без кода. `test:e2e:cli:dart-agent`.
 
 ## 4. Закрытие
 

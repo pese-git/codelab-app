@@ -643,7 +643,15 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    `UsageLedgerDecoder` с теми же правилами денег, валюты и причин, что `UsageDecoder` (общий разбор
    агрегата). Шаг несёт `toolCallIds`: хост подписывает шаг по транскрипту. Kit журнал со снимками не
    сливает и сам не суммирует; когда обновлять, решает хост по `usageLedger.seq` и `usage.lastSeq`
-   (панель Usage — change `add-desktop-usage-pane`).
+   (панель Usage — change `add-desktop-usage-pane`). Возможности агента kit берёт не только из
+   результата `connect`, но и из потока состояний соединения (прогон фикстур, где хост сам ведёт
+   `AcpClientApplication`): заменяется весь набор возможностей, а состояние usage и журнала
+   сбрасывается в `unavailable` или `idle` только в `connect`/`reconnect` kit. Слитый следующий запрос
+   перед отправкой заново проверяет объявление, `dispose`, эпоху и поколение; `sessionId` ответа
+   сверяется с запрошенным (`decode`, `mismatch`); строки агента (`title`, `model`, `ledger.reason`,
+   `toolCallIds`) очищаются от C0/C1 и ограничиваются длиной (`title` — 64 руны). Сессия, которой
+   нет в рабочем пространстве, — `Future.error(ClientWorkspaceException)`. Сорвавшийся
+   `session/load` прежние числа usage не восстанавливает (change `add-usage-ledger`, R10).
 4. **Без расширения** `UsageSupport.unknown`: сегменты токенов, стоимости и контекста отсутствуют
    (не «0»). Это обычный режим со сторонним агентом. `awaiting` — агент объявил `usage`, снимков ещё
    нет. `compaction soon` — только при известном `compactAt` (порог автосжатия) и
