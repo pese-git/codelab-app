@@ -79,7 +79,8 @@ enum CodeLabLayoutClass {
 /// пока [sidebarOverlayOpen]. Клик мимо выдвинутой панели и Esc вызывают
 /// [onSidebarOverlayDismiss] / [onDockOverlayDismiss]. Панель сессии остаётся
 /// тем же элементом дерева при любом классе, поэтому лента и композер не
-/// теряют прокрутку и черновик (MOB-3).
+/// теряют прокрутку и черновик (MOB-3). Зоны лежат внутри системной
+/// безопасной области (статус-бар, вырез, индикатор «домой»), фон — под ней.
 class CodeLabWorkbenchLayout extends StatelessWidget {
   const CodeLabWorkbenchLayout({
     required this.appBar,
@@ -146,103 +147,108 @@ class CodeLabWorkbenchLayout extends StatelessWidget {
     final dock = this.dock;
     final collapsed = sidebarCollapsed && layoutClass.sidebarAsColumn;
 
+    // Фон под статус-баром и вырезом экрана остаётся цветом mica, а зоны
+    // уходят в безопасную область: иначе на iOS и Android app bar рисуется
+    // под временем и Dynamic Island. На десктопе отступы нулевые.
     return ColoredBox(
       color: FluentTheme.of(context).micaBackgroundColor,
-      child: Padding(
-        padding: padding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Slot(slotKey: appBarKey, label: 'App bar', child: appBar),
-            SizedBox(height: gap),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) => Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (layoutClass.sidebarAsColumn) ...[
-                          SizedBox(
-                            key: const ValueKey('workbench-sidebar-column'),
-                            width: collapsed
-                                ? compactSidebarWidth
-                                : sidebarWidth,
+      child: SafeArea(
+        child: Padding(
+          padding: padding,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Slot(slotKey: appBarKey, label: 'App bar', child: appBar),
+              SizedBox(height: gap),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) => Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (layoutClass.sidebarAsColumn) ...[
+                            SizedBox(
+                              key: const ValueKey('workbench-sidebar-column'),
+                              width: collapsed
+                                  ? compactSidebarWidth
+                                  : sidebarWidth,
+                              child: _Slot(
+                                slotKey: sidebarKey,
+                                label: 'Sessions sidebar',
+                                child: sidebar,
+                              ),
+                            ),
+                            _divider(
+                              key: const ValueKey('workbench-sidebar-divider'),
+                              onWidthChanged: collapsed
+                                  ? null
+                                  : onSidebarWidthChanged,
+                              onResizeEnd: onSidebarResizeEnd,
+                            ),
+                          ],
+                          Expanded(
+                            key: _sessionCellKey,
                             child: _Slot(
-                              slotKey: sidebarKey,
-                              label: 'Sessions sidebar',
-                              child: sidebar,
+                              slotKey: sessionPaneKey,
+                              label: 'Session pane',
+                              child: sessionPane,
                             ),
                           ),
-                          _divider(
-                            key: const ValueKey('workbench-sidebar-divider'),
-                            onWidthChanged: collapsed
-                                ? null
-                                : onSidebarWidthChanged,
-                            onResizeEnd: onSidebarResizeEnd,
-                          ),
+                          if (layoutClass.dockAsColumn && dock != null) ...[
+                            _divider(
+                              key: const ValueKey('workbench-dock-divider'),
+                              onWidthChanged: onDockWidthChanged == null
+                                  ? null
+                                  : (dx) => onDockWidthChanged!(-dx),
+                              onResizeEnd: onDockResizeEnd,
+                            ),
+                            SizedBox(
+                              key: const ValueKey('workbench-dock-column'),
+                              width: dockWidth,
+                              child: _Slot(
+                                slotKey: dockKey,
+                                label: 'Tool dock',
+                                child: dock,
+                              ),
+                            ),
+                          ],
                         ],
-                        Expanded(
-                          key: _sessionCellKey,
+                      ),
+                      if (!layoutClass.sidebarAsColumn && sidebarOverlayOpen)
+                        _Overlay(
+                          alignment: AlignmentDirectional.centerStart,
+                          width: sidebarWidth.clamp(
+                            0,
+                            constraints.maxWidth * 0.9,
+                          ),
+                          onDismiss: onSidebarOverlayDismiss,
                           child: _Slot(
-                            slotKey: sessionPaneKey,
-                            label: 'Session pane',
-                            child: sessionPane,
+                            slotKey: sidebarKey,
+                            label: 'Sessions sidebar',
+                            child: sidebar,
                           ),
                         ),
-                        if (layoutClass.dockAsColumn && dock != null) ...[
-                          _divider(
-                            key: const ValueKey('workbench-dock-divider'),
-                            onWidthChanged: onDockWidthChanged == null
-                                ? null
-                                : (dx) => onDockWidthChanged!(-dx),
-                            onResizeEnd: onDockResizeEnd,
+                      if (!layoutClass.dockAsColumn &&
+                          dock != null &&
+                          dockOverlayOpen)
+                        _Overlay(
+                          alignment: AlignmentDirectional.centerEnd,
+                          width: dockWidth.clamp(0, constraints.maxWidth * 0.9),
+                          onDismiss: onDockOverlayDismiss,
+                          child: _Slot(
+                            slotKey: dockKey,
+                            label: 'Tool dock',
+                            child: dock,
                           ),
-                          SizedBox(
-                            key: const ValueKey('workbench-dock-column'),
-                            width: dockWidth,
-                            child: _Slot(
-                              slotKey: dockKey,
-                              label: 'Tool dock',
-                              child: dock,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (!layoutClass.sidebarAsColumn && sidebarOverlayOpen)
-                      _Overlay(
-                        alignment: AlignmentDirectional.centerStart,
-                        width: sidebarWidth.clamp(
-                          0,
-                          constraints.maxWidth * 0.9,
                         ),
-                        onDismiss: onSidebarOverlayDismiss,
-                        child: _Slot(
-                          slotKey: sidebarKey,
-                          label: 'Sessions sidebar',
-                          child: sidebar,
-                        ),
-                      ),
-                    if (!layoutClass.dockAsColumn &&
-                        dock != null &&
-                        dockOverlayOpen)
-                      _Overlay(
-                        alignment: AlignmentDirectional.centerEnd,
-                        width: dockWidth.clamp(0, constraints.maxWidth * 0.9),
-                        onDismiss: onDockOverlayDismiss,
-                        child: _Slot(
-                          slotKey: dockKey,
-                          label: 'Tool dock',
-                          child: dock,
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
