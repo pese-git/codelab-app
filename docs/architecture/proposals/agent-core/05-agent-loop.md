@@ -150,6 +150,14 @@ enum BudgetLimit { steps, tokens, cost, duration, deadline }   // deadline — �
 одобрения (`PermissionGate`) вычитается из `maxDuration`. При превышении ход завершается `TurnEnded(reason: completed, budgetExceeded: limit)`;
 ACP-адаптер отдаёт `stopReason: max_turn_requests`, а вид лимита — в `_meta` (расширение через OpenSpec).
 
+**Прогресс бюджета** (change `add-desktop-usage-pane`, D8). `StepEnded` и `TurnEnded` несут прогресс
+бюджета хода (`BudgetProgress`; имя — реализации): лимиты `TurnBudget` хода и израсходованное к
+событию — завершённые шаги корня, токены `input + output` своих шагов и потомков (без кэша),
+стоимость той же суммы или `null`, если у текущей модели нет цен, и время хода без ожидания
+одобрения. Прогресс и проверку LOOP-12 считает одна функция, поэтому значение в `StepEnded` — то,
+по которому на этой границе шага решается остановка. Поле заполняется при любых лимитах; передавать
+ли его клиенту, решает адаптер (§13.12, поле `budget` в `_codelab/session/usage`).
+
 **Сборка payload** (каждый запрос, транскрипт не меняется — LOOP-7):
 
 1. `messages = transformContext?.call(transcript)` или копия транскрипта.
