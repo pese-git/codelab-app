@@ -446,6 +446,31 @@ void main() {
       expect(asMap(after['total'])['steps'], 2);
     });
 
+    // Ход начался (`turnActive`), но его записи `user` ещё нет в журнале:
+    // последний ход журнала — прошлый и закончен, `running` не ставится
+    // (мутация «running = turnActive» этот тест роняет). Момент задают ворота
+    // записи `JournalStore.appendGate`, без задержек.
+    test('a turn that has started but is not in the journal yet does not '
+        'make the last journal turn running', () async {
+      final sessionId = await ready();
+      final gate = Completer<void>();
+      h.store.appendGate = gate;
+      final turn = h.prompt(sessionId, 'Ещё один вопрос');
+      turn.ignore();
+      await pumpEventQueue();
+
+      final response = await ledger(sessionId);
+
+      expect(response.error, isNull);
+      final turns = (response.resultMap['turns']! as List)
+          .cast<Map<String, Object?>>();
+      expect(turns, hasLength(1));
+      expect(turns.single, isNot(contains('running')));
+      gate.complete();
+      h.store.appendGate = null;
+      await turn;
+    });
+
     test('session/cancel does not cancel the request', () async {
       final paused = await pausedTurn();
 
@@ -459,6 +484,233 @@ void main() {
       expect(response.resultMap['sessionId'], paused.sessionId);
       final end = await paused.turn;
       expect(end.resultMap['stopReason'], 'cancelled');
+    });
+  });
+
+  // Ход журнала, слитый из пользовательского и служебного (R2), не сбивает
+  // `running`: признак выводится из шагов журнала, а не из счёта ходов
+  // (design.md change `add-usage-ledger`, D6, R2).
+  group('running with a merged journal turn (R2)', () {
+    test('a notification turn with a step is merged into the previous journal '
+        'turn; a user turn paused after its step is the running one', () async {
+      final id = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C');
+      final journal = UsageJournal(id)
+        ..user('Первый вопрос')
+        ..assistant('Первый ответ.', pricedUsage(100, 10))
+        ..serviceUser('subagent finished')
+        ..assistant('Ответ на уведомление.', pricedUsage(200, 20));
+      final store = JournalStore();
+      await journal.seedInto(store);
+      h = await ServerHarness.start(
+        sessions: store,
+        defaultModel: pricedModel,
+        steps: [
+          {
+            'reply': [
+              {
+                'toolCall': {
+                  'id': 'call_5',
+                  'name': 'write',
+                  'arguments': {'path': 'a.txt', 'content': 'a'},
+                },
+              },
+            ],
+            'usage': step0,
+          },
+          textStep('Written.', step1),
+        ],
+      );
+      await h.initialize(clientCapabilities: usageClient);
+      h.client.serveFiles(MemoryExecutionEnv(cwd: '/work/demo'));
+      await h.client.request('session/load', {
+        'sessionId': id.value,
+        'cwd': '/work/demo',
+        'mcpServers': <Object?>[],
+      });
+      final turn = h.prompt(id.value, 'Write a.txt');
+      JsonRpcRequest? permission;
+      while (permission == null) {
+        final frame = await h.client.next();
+        if (frame is JsonRpcRequest &&
+            frame.method == 'session/request_permission') {
+          permission = frame;
+        }
+      }
+
+      final result = (await ledger(id.value)).resultMap;
+
+      final turns = (result['turns']! as List).cast<Map<String, Object?>>();
+      expect(turns, hasLength(2));
+      expect(turns.first, isNot(contains('running')));
+      expect(turns.last['running'], isTrue);
+      expect(turns.last['title'], 'Write a.txt');
+      await h.client.respond(permission, {
+        'outcome': {'outcome': 'selected', 'optionId': 'allow_once'},
+      });
+      await turn;
+    });
+  });
+
+  // «Запросы одного вида склеиваются»: одновременные запросы с одинаковым
+  // `rebuild` получают один и тот же результат, файл читается один раз.
+  test('simultaneous requests with the same rebuild share one build', () async {
+    final port = MemoryUsageLedgerStore();
+    final sessionId = await ready(port: port);
+    // Чтение держится на воротах: запросы пересекаются, а не идут один за
+    // другим (после первого файл уже свежий, и второй увидел бы `upToDate`).
+    final gate = port.readGate = Completer<void>();
+
+    final pending = Future.wait([
+      ledger(sessionId),
+      ledger(sessionId),
+      ledger(sessionId),
+    ]);
+    await pumpEventQueue();
+    gate.complete();
+    final results = await pending;
+
+    expect(results.map((r) => r.error), everyElement(isNull));
+    expect(results.map((r) => jsonEncode(r.result)).toSet(), hasLength(1));
+    // Склейка в мосту (`_ledgerInFlight`) видна по debug-записи
+    // `acp.usage.ledger.coalesced`: её пишет каждый запрос, присоединившийся
+    // к идущему построению (первый строит сам и не пишет). По проводу
+    // склейку не отличить — транспорт копирует ответы.
+    final joined = h.logger.eventsOf('acp.usage.ledger.coalesced');
+    expect(joined, hasLength(2));
+    for (final record in joined) {
+      expect(record.level, LogLevel.debug);
+      expect(record.fields, {'session_id': sessionId, 'rebuild': false});
+    }
+    expect(port.reads, 1);
+    expect(port.writes, 1);
+  });
+
+  group('the full sums of the journal and the live rules (D2, D20)', () {
+    test(
+      'a step before the first user words is in total and models: '
+      'total comes from the whole journal, not from the listed turns',
+      () async {
+        final id = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C');
+        final journal = UsageJournal(id)
+          ..assistant('Ответ до слов пользователя.', pricedUsage(100, 10))
+          ..user('Вопрос')
+          ..assistant('Ответ.', pricedUsage(200, 20));
+        final store = JournalStore();
+        await journal.seedInto(store);
+        h = await ServerHarness.start(
+          sessions: store,
+          defaultModel: pricedModel,
+        );
+        await h.initialize(clientCapabilities: usageClient);
+        await h.client.request('session/load', {
+          'sessionId': id.value,
+          'cwd': '/work/demo',
+          'mcpServers': <Object?>[],
+        });
+        await pumpEventQueue();
+
+        final result = (await ledger(id.value)).resultMap;
+
+        expect(asMap(result['total']), {
+          'turns': 1,
+          'steps': 2,
+          'tokens': tokens(300, 30),
+          'cost': '0.00135',
+        });
+        expect(asMap((result['models']! as List).single)['steps'], 2);
+        // Засев — из тех же сумм: `session` снимка `load` равна `total`.
+        final load = usageOf(h.client).single;
+        expect(load['session'], result['total']);
+      },
+    );
+
+    test('a priced step before the first user words with no listed turn: '
+        'total has cost, so currency is USD', () async {
+      final id = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C');
+      final journal = UsageJournal(id)
+        ..assistant('Ответ до слов пользователя.', pricedUsage(100, 10))
+        ..user('Вопрос без ответа');
+      final store = JournalStore();
+      await journal.seedInto(store);
+      h = await ServerHarness.start(sessions: store, defaultModel: pricedModel);
+      await h.initialize(clientCapabilities: usageClient);
+      await h.client.request('session/load', {
+        'sessionId': id.value,
+        'cwd': '/work/demo',
+        'mcpServers': <Object?>[],
+      });
+
+      final result = (await ledger(id.value)).resultMap;
+
+      expect(result['turns'], isEmpty);
+      expect(asMap(result['total'])['cost'], '0.00045');
+      expect(result['currency'], 'USD');
+    });
+
+    test('a turn of zero-token steps on a priced model has cost "0", like the '
+        'live session sum', () async {
+      final sessionId = await ready(
+        steps: [textStep('Ответ.', null)],
+        prompt: 'Привет',
+      );
+
+      final result = (await ledger(sessionId)).resultMap;
+
+      final live = asMap(usageOf(h.client).last['session']);
+      expect(live['cost'], '0');
+      expect(asMap(result['total'])['cost'], live['cost']);
+      expect(asMap(result['total'])['partial'], live['partial']);
+      expect(
+        asMap(asMap((result['turns']! as List).single)['total'])['cost'],
+        '0',
+      );
+    });
+
+    test('subagent price is judged per run of the turn: a priced and an '
+        'unpriced run give cost and noPrice', () async {
+      final id = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C');
+      final journal = UsageJournal(id)
+        ..user('Найди код')
+        ..assistant(
+          'Ищу.',
+          pricedUsage(100, 10),
+          calls: const ['call_1', 'call_2'],
+        )
+        ..subagent(
+          'call_1',
+          const Usage(
+            input: 500,
+            output: 100,
+            cost: UsageCost(input: 0.0015, output: 0.0015),
+          ),
+          subagentId: 'sub_a',
+        )
+        ..subagent(
+          'call_2',
+          const Usage(input: 300, output: 50),
+          subagentId: 'sub_b',
+        )
+        ..assistant('Нашёл.', pricedUsage(200, 20));
+      final store = JournalStore();
+      await journal.seedInto(store);
+      h = await ServerHarness.start(sessions: store, defaultModel: pricedModel);
+      await h.initialize(clientCapabilities: usageClient);
+      await h.client.request('session/load', {
+        'sessionId': id.value,
+        'cwd': '/work/demo',
+        'mcpServers': <Object?>[],
+      });
+
+      final result = (await ledger(id.value)).resultMap;
+
+      final turn = asMap((result['turns']! as List).single);
+      final subagents = asMap(turn['subagents']);
+      expect(subagents['runs'], 2);
+      expect(subagents['tokens'], tokens(800, 150));
+      expect(subagents['cost'], isNotNull);
+      expect(subagents['partial'], ['noPrice']);
+      expect(asMap(turn['total'])['partial'], ['noPrice']);
+      expect(asMap(result['total'])['partial'], ['noPrice']);
     });
   });
 
@@ -576,7 +828,12 @@ void main() {
     expect(response.resultMap, contains('ledger'));
     final frames = h.client.received.take(before);
     for (final frame in frames) {
-      final text = jsonEncode(frame);
+      final payload = switch (frame) {
+        JsonRpcNotification(:final params) => params,
+        JsonRpcRequest(:final params) => params,
+        JsonRpcResponse(:final result) => result,
+      };
+      final text = jsonEncode(payload);
       expect(text, isNot(contains('"ledger"')), reason: text);
     }
     // Запрос не порождает уведомлений: ни `session/update`, ни снимков usage.

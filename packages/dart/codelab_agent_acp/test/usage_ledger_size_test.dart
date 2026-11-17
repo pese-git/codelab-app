@@ -63,7 +63,7 @@ void main() {
       final response = await h.client.request('_codelab/session/usage/ledger', {
         'sessionId': id.value,
       }, const Duration(minutes: 1));
-      final encoded = jsonEncode(response.result);
+      final encoded = utf8.encode(jsonEncode(response.result));
       watch.stop();
 
       // Размер и время идут в вывод теста: по ним решают, нужна ли пагинация.

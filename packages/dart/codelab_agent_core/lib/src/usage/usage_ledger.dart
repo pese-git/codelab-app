@@ -90,6 +90,7 @@ final class UsageLedgerTurn {
     required this.usage,
     required this.steps,
     this.subagents,
+    this.subagentRuns = const [],
   });
 
   final String recordId;
@@ -101,6 +102,12 @@ final class UsageLedgerTurn {
   final Usage usage;
   final List<UsageLedgerStep> steps;
   final UsageLedgerGroup? subagents;
+
+  /// Usage каждого прогона субагента хода, в порядке записей. В `usage.json`
+  /// не пишется (формат v1 хранит сумму группы): нужен цене группы хода по
+  /// каждому прогону отдельно, как у группы сессии (D2, «Цена групп без
+  /// шагов»; change `add-usage-ledger`, ревью итерации 2).
+  final List<Usage> subagentRuns;
 }
 
 /// Сумма шагов одной модели (D1 п. 7).
@@ -410,6 +417,7 @@ final class _TurnBuilder {
     subagents: subagents.isEmpty
         ? null
         : UsageLedgerGroup(count: subagents.length, usage: _sum(subagents)),
+    subagentRuns: List.unmodifiable(subagents),
   );
 }
 

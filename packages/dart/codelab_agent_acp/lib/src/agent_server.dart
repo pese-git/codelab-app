@@ -274,6 +274,7 @@ final class _Connection {
       // Терпимость: уведомление, присланное запросом, получает ещё и ответ
       // null (§13.7, шаг 6).
       acp.sessionCancelMethod => _cancelRequest(request.params),
+      usageLedgerMethod => _usageLedger(request.params),
       _ => throw AcpRequestError.methodNotFound('Method not found: $method'),
     };
   }
@@ -370,6 +371,10 @@ final class _Connection {
         // Всегда, когда агент отвечает блоком (D3, D9): `usage` не зависит от
         // субагентов; согласие клиента мост читает через `usageConsent`.
         'usage': {'version': 1},
+        // Всегда рядом с `usage` (change `add-usage-ledger`, D7): агент
+        // принимает запрос `_codelab/session/usage/ledger`; ключ клиента
+        // `usageLedger` ни на что не влияет.
+        'usageLedger': {'version': 1},
       },
     };
   }
@@ -672,9 +677,9 @@ final class _Connection {
       } on ProjectConfigException catch (error) {
         throw _projectConfigInvalid(error, cwd: cwd, sessionId: id);
       }
-      bridge = wiring.bridge
-        ..attach(session)
-        ..markLoadedFromJournal();
+      bridge = wiring.bridge..attach(session);
+      // Засев суммы сессии журналом (D8): до реплея, пока событий хода нет.
+      await bridge.seedUsage();
       _server._sessions[id] = bridge;
     }
     // Кадры живого хода, придержанные на время реплея дерева, уходят после
@@ -686,7 +691,30 @@ final class _Connection {
     );
     return Reply(
       acp.acpSessionLoad.encodeResult(response),
-      after: reconnect ? bridge.resume : null,
+      // Снимок `load` идёт сразу после ответа и до возобновления идущего хода
+      // (D8): реплей к этому моменту выпущен, сброс usage клиента v1 при
+      // загрузке стереть его уже не может.
+      after: () {
+        // Сбой снимка не отнимает возобновление хода у нового владельца и
+        // не уходит необработанным из роутера: только warning с классом
+        // исключения, без текста (D8, D15).
+        try {
+          bridge!.sendLoadSnapshot();
+        } on Object catch (error) {
+          _logger.log(
+            LogLevel.warning,
+            'acp.usage.load_snapshot_failed',
+            fields: {
+              'session_id': id,
+              'error_class': error.runtimeType.toString(),
+            },
+          );
+        } finally {
+          if (reconnect) {
+            bridge!.resume();
+          }
+        }
+      },
     );
   }
 
@@ -791,6 +819,64 @@ final class _Connection {
     }
     final response = await bridge.prompt(content);
     return Reply(acp.acpSessionPrompt.encodeResult(response));
+  }
+
+  /// Запрос клиента `_codelab/session/usage/ledger` (change `add-usage-ledger`,
+  /// D6; `15-Extensibility.md`, «Custom Requests»; правила расширения —
+  /// D17 change `add-usage-extension`): история usage сессии ходами, шагами
+  /// и моделями.
+  ///
+  /// Сессия ищется среди открытых в сервере, как у `session/prompt`; путь к
+  /// файлу из параметров не строится (D13). Запрос только читает: во время
+  /// хода он обслуживается, а `session/cancel` его не отменяет — ответ
+  /// строится из снимка журнала. Исключение свёртки — `-32603` с
+  /// `data.codelab.reason: "usageLedgerFailed"`; сбой записи файла ошибкой не
+  /// является (статус `notSaved`).
+  Future<Reply> _usageLedger(Object? params) async {
+    final map = params is Map ? params : const <Object?, Object?>{};
+    final sessionId = map['sessionId'];
+    final rebuild = map['rebuild'];
+    if (sessionId is! String) {
+      throw const AcpRequestError.invalidParams('sessionId must be a string');
+    }
+    if (rebuild != null && rebuild is! bool) {
+      throw const AcpRequestError.invalidParams('rebuild must be a boolean');
+    }
+    final bridge = _bridge(acp.SessionId(sessionId));
+    final started = _server.clock.now();
+    final UsageLedgerResult built;
+    try {
+      built = await bridge.usageLedgerResult(rebuild: rebuild == true);
+    } on Object catch (error) {
+      _logger.log(
+        LogLevel.warning,
+        'acp.usage.ledger_failed',
+        fields: {
+          'session_id': sessionId,
+          'error': error.runtimeType.toString(),
+        },
+      );
+      throw const AcpRequestError(
+        acp.jsonRpcInternalErrorCode,
+        'usage ledger failed',
+        data: {
+          'codelab': {'reason': 'usageLedgerFailed'},
+        },
+      );
+    }
+    _logger.log(
+      LogLevel.debug,
+      'acp.usage.ledger',
+      fields: {
+        'session_id': sessionId,
+        'rebuild': rebuild == true,
+        'status': (built.result['ledger']! as Map)['status'],
+        'turns': built.turns,
+        'steps': built.steps,
+        'duration_ms': _server.clock.now().difference(started).inMilliseconds,
+      },
+    );
+    return Reply(built.result);
   }
 
   Future<Reply> _cancelRequest(Object? params) async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'server_harness.dart' show JournalStore, scriptedModel;
@@ -26,9 +28,16 @@ final class MemoryUsageLedgerStore implements UsageLedgerStore {
   /// порта — «сбой свёртки», а не «сбой записи».
   Object? failRead;
 
+  /// Если задан, `read` ждёт его завершения: тест держит операцию начатой,
+  /// чтобы одновременные запросы журнала пересеклись.
+  Completer<void>? readGate;
+
   @override
   Future<String?> read(SessionId id) async {
     reads++;
+    if (readGate case final gate?) {
+      await gate.future;
+    }
     if (failRead case final error?) {
       throw error;
     }
@@ -94,6 +103,19 @@ final class UsageJournal {
       message: UserMessage([TextContent(text)], timestamp: at),
     ),
   );
+
+  /// Служебная запись `user` с [origin] (например `subagent_notice`): ход она
+  /// не открывает (D1 п. 3, Q9) и сливается с предыдущим (R2).
+  void serviceUser(String text, {String origin = 'subagent_notice'}) =>
+      records.add(
+        MessageRecord(
+          id: _id(),
+          parentId: _parent,
+          timestamp: at,
+          origin: origin,
+          message: UserMessage([TextContent(text)], timestamp: at),
+        ),
+      );
 
   /// Ответ модели `scripted/scripted-1` с [usage]; [calls] — вызовы
   /// инструментов `agent` (id вызова).
@@ -167,7 +189,11 @@ final class UsageJournal {
 
   /// Две записи `subagent` (`running`, затем `completed` с итоговым [usage])
   /// и результат вызова `agent` [callId].
-  void subagent(String callId, Usage usage) {
+  void subagent(
+    String callId,
+    Usage usage, {
+    String subagentId = 'sub_k3f9a1c2',
+  }) {
     for (final status in ['running', 'completed']) {
       records.add(
         SessionRecord.fromJson({
@@ -175,7 +201,7 @@ final class UsageJournal {
           'id': _id(),
           'parentId': _parent,
           'timestamp': at.toIso8601String(),
-          'subagentId': 'sub_k3f9a1c2',
+          'subagentId': subagentId,
           'toolCallId': callId,
           'agent': 'explore',
           'description': 'Find auth code',

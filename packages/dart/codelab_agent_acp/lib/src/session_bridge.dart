@@ -186,16 +186,105 @@ final class SessionBridge {
   /// Соединение-владелец закрыто, а сессия ещё не переподключена.
   bool get detached => _detached;
 
-  /// Сессия открыта через `session/load` в этом сервере: если в журнале уже
-  /// были ответы модели, ранние ходы в сумму usage не вошли и сессия получает
-  /// причину `beforeLoad` (D6, Q7 (а), D18 Т5).
+  /// Засевает агрегаты usage отчётом журнала в памяти при открытии сессии
+  /// `session/load` (design.md change `add-usage-ledger`, D8, Q3 (а)).
   ///
-  /// Вызывается один раз веткой `session/load`, создавшей мост; мост
-  /// `session/new` и мост, найденный повторным `session/load`, признак не
-  /// получают и при `reattach` он не меняется.
-  void markLoadedFromJournal() {
-    _usage.beforeLoad = session.replay().any(
-      (event) => event is MessageEnded && event.message is AssistantMessage,
+  /// Почему вместо `markLoadedFromJournal`: причина `beforeLoad` говорила, что
+  /// ранние ходы в сумму не вошли; теперь они входят, и `session` снимка
+  /// `load` равна `total` ответа журнала по построению
+  /// ([UsageLedgerProjection]). Файл `usage.json` не читается и не пишется:
+  /// засев идёт по уже открытым записям, `O(records)` без ввода-вывода (R7).
+  ///
+  /// Как использовать: один раз веткой `session/load`, создавшей мост, сразу
+  /// после [attach]; `reattach` и мост `session/new` не засеваются. Пишет
+  /// debug `acp.usage.seeded {session_id, turns, steps, duration_ms}` без
+  /// токенов и денег (D12).
+  Future<void> seedUsage() async {
+    final started = _clock.now();
+    try {
+      final projection = UsageLedgerProjection.of(
+        await session.usageLedgerInMemory(),
+      );
+      _usage.seed(projection);
+      _logger.log(
+        LogLevel.debug,
+        'acp.usage.seeded',
+        fields: {
+          'session_id': _id.value,
+          'turns': projection.turns,
+          'steps': projection.steps,
+          'duration_ms': _clock.now().difference(started).inMilliseconds,
+        },
+      );
+    } on Object catch (error) {
+      // Сбой свёртки не должен ронять `session/load`: сессия регистрируется, а
+      // сумма честно помечается неполной (`beforeLoad`, откат по Migration
+      // Plan). В лог — только класс исключения, без текста и путей (D15).
+      _usage.beforeLoad = true;
+      _logger.log(
+        LogLevel.warning,
+        'acp.usage.seed_failed',
+        fields: {
+          'session_id': _id.value,
+          'error_class': error.runtimeType.toString(),
+        },
+      );
+    }
+  }
+
+  /// Снимок `trigger: "load"` после ответа на `session/load` (D8): только если
+  /// в сумме сессии есть хотя бы один шаг; объявившему `usage` его уходит
+  /// очередь [_sendUsage]. Зовётся и при `reattach`: новый владелец получает
+  /// текущую сумму с очередным `seq`.
+  void sendLoadSnapshot() {
+    if (_usage.hasSteps) {
+      _sendUsage('load', _usage.loadSnapshot);
+    }
+  }
+
+  /// Идущие запросы журнала по значению `rebuild`: одновременные запросы с
+  /// одинаковым `rebuild` получают один результат и одну проекцию (D6).
+  final _ledgerInFlight = <bool, Future<UsageLedgerResult>>{};
+
+  /// Отчёт журнала для запроса `_codelab/session/usage/ledger` (D6): отчёт
+  /// ядра (свежий файл или пересчёт), проекция в wire и `seq` моста; число
+  /// ходов и шагов — для лога без повторного разбора результата.
+  Future<UsageLedgerResult> usageLedgerResult({required bool rebuild}) {
+    final running = _ledgerInFlight[rebuild];
+    if (running != null) {
+      // Запрос присоединился к идущему построению: проекцию и кодирование
+      // второй раз не делаем. Запись нужна диагностике и тесту склейки, без
+      // токенов, денег и подписей (D12, §16).
+      _logger.log(
+        LogLevel.debug,
+        'acp.usage.ledger.coalesced',
+        fields: {'session_id': _id.value, 'rebuild': rebuild},
+      );
+      return running;
+    }
+    return _ledgerInFlight[rebuild] = _buildLedger(rebuild).whenComplete(() {
+      // Блок, а не `=> remove(...)`: `remove` вернул бы сам этот `Future`, и
+      // `whenComplete` ждал бы собственного завершения.
+      _ledgerInFlight.remove(rebuild);
+    });
+  }
+
+  Future<UsageLedgerResult> _buildLedger(bool rebuild) async {
+    final report = await session.usageLedger(rebuild: rebuild);
+    final projection = UsageLedgerProjection.of(report);
+    // `running`: ход сессии идёт и в журнале уже есть шаги сверх шагов
+    // завершённых ходов. Сравнение по шагам, а не по ходам: ход от
+    // уведомления субагента сливается в журнале с предыдущим (R2), и число
+    // ходов расходится навсегда. У хода без записанных шагов последний ход
+    // журнала закончен (D6).
+    return (
+      result: projection.result(
+        sessionId: _id.value,
+        seq: _usage.seq,
+        running: turnActive && projection.steps > _usage.completedSteps,
+      ),
+      turns: projection.turns,
+      steps: projection.steps,
     );
   }
 
@@ -721,7 +810,17 @@ final class SessionBridge {
         if (_usage.stepEnded(event)) {
           _sendUsage('step', _usage.stepSnapshot);
         }
-      case ContextCompacted(:final tokensAfter):
+      case ContextCompacted(:final tokensAfter, :final usage, :final model):
+        // Usage суммаризатора входит в сумму сессии до построения снимка, но
+        // не в ход (D4, Q6 (а)); цена — по каталогу сессии (Q4).
+        if (usage != null) {
+          _usage.summarizerEnded(
+            usage,
+            priced:
+                model != null &&
+                session.models.resolve(ModelId(model))?.cost != null,
+          );
+        }
         _sendUsage(
           'compaction',
           (sessionId) => _usage.compactionSnapshot(sessionId, tokensAfter),

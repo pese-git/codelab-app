@@ -524,12 +524,17 @@ void main() {
       return other;
     }
 
-    Future<JsonRpcResponse> load(TestClient client, String sessionId) =>
-        client.request('session/load', {
-          'sessionId': sessionId,
-          'cwd': '/work/demo',
-          'mcpServers': <Object?>[],
-        });
+    // Снимок `load` уходит после ответа (D8, `Reply.after`): пауза даёт ему
+    // дойти до клиента.
+    Future<JsonRpcResponse> load(TestClient client, String sessionId) async {
+      final response = await client.request('session/load', {
+        'sessionId': sessionId,
+        'cwd': '/work/demo',
+        'mcpServers': <Object?>[],
+      });
+      await pumpEventQueue();
+      return response;
+    }
 
     test('a moved turn: the turn snapshot goes before the turnEnded update '
         'to the new owner', () async {
@@ -884,6 +889,7 @@ void main() {
       'mcpServers': <Object?>[],
     });
     expect(load.error, isNull);
+    await pumpEventQueue();
     final loadFrames = usageOf(h.client);
     expect(loadFrames, hasLength(1));
     expect(loadFrames.single['trigger'], 'load');

@@ -1,9 +1,10 @@
 import 'dart:async';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
-    show JsonRpcNotification, JsonRpcResponse;
+    show JsonRpcNotification, JsonRpcRequest, JsonRpcResponse;
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_core/testing.dart' show RecordingLogger;
 import 'package:test/test.dart';
 
 import 'support/server_harness.dart';
@@ -145,12 +146,18 @@ void main() {
     await h.initialize(clientCapabilities: declare ? usageClient : null);
   }
 
-  Future<JsonRpcResponse> load(TestClient client, {String? id}) =>
-      client.request('session/load', {
-        'sessionId': id ?? sessionId.value,
-        'cwd': '/work/demo',
-        'mcpServers': <Object?>[],
-      });
+  /// `session/load`; после ответа даёт очереди событий разойтись: снимок
+  /// `load` уходит действием `Reply.after`, уже после ответа (D8), и без
+  /// паузы тест прочитал бы кадры раньше, чем они пришли.
+  Future<JsonRpcResponse> load(TestClient client, {String? id}) async {
+    final response = await client.request('session/load', {
+      'sessionId': id ?? sessionId.value,
+      'cwd': '/work/demo',
+      'mcpServers': <Object?>[],
+    });
+    await pumpEventQueue();
+    return response;
+  }
 
   Future<TestClient> connectDeclaring() async {
     final link = InProcessAcpLink();
@@ -461,4 +468,165 @@ void main() {
     expect(usageOf(other).single['trigger'], 'load');
     expect(asMap(usageOf(other).single['session'])['turns'], 4);
   });
+
+  // Сбой засева (design.md change `add-usage-ledger`, D8, D15): загрузка не
+  // падает и сессия регистрируется, сумма честно помечена как неполная
+  // (`beforeLoad`, откат по Migration Plan), в лог уходит только класс
+  // исключения.
+  test('a seed failure does not fail the load: warning seed_failed with '
+      'error_class, the session works, the sum is beforeLoad', () async {
+    final store = JournalStore();
+    await threeTurns().seedInto(store);
+    final catalog = _BreakableCatalog(pricedModel);
+    h = await ServerHarness.start(
+      sessions: store,
+      defaultModel: pricedModel,
+      models: catalog,
+      steps: [
+        textStep('Вот ответ.', const {'input': 100, 'output': 50}),
+      ],
+    );
+    await h.initialize(clientCapabilities: usageClient);
+    catalog.broken = true;
+
+    final response = await load(h.client);
+    catalog.broken = false;
+
+    expect(response.error, isNull);
+    final warnings = h.logger.eventsOf('acp.usage.seed_failed');
+    expect(warnings, hasLength(1));
+    expect(warnings.single.level, LogLevel.warning);
+    expect(warnings.single.fields, {
+      'session_id': sessionId.value,
+      'error_class': 'StateError',
+    });
+    expect(h.logger.eventsOf('acp.usage.seeded'), isEmpty);
+    // Нет засева — нет снимка `load`, а сессия зарегистрирована и ходит.
+    expect(usageOf(h.client), isEmpty);
+    final turn = await h.prompt(sessionId.value, 'Ещё раз');
+    expect(turn.resultMap, {'stopReason': 'end_turn'});
+    final session = asMap(usageOf(h.client).last['session']);
+    expect(session['partial'], contains('beforeLoad'));
+    expect(session['turns'], 1);
+  });
+
+  // `after:` ответа `session/load` (D8): сбой снимка `load` не отнимает
+  // возобновление идущего хода у нового владельца.
+  test('a failure of the load snapshot does not skip the resume of a moved '
+      'turn', () async {
+    h = await ServerHarness.start(
+      defaultModel: pricedModel,
+      wrapLogger: (inner) => _FailingLogger(
+        inner,
+        (event, fields) =>
+            event == 'acp.usage.sent' && fields['trigger'] == 'load',
+      ),
+      steps: [
+        textStep('Здравствуйте.', const {'input': 10, 'output': 5}),
+        {
+          'reply': [
+            {
+              'toolCall': {
+                'id': 'call_5',
+                'name': 'write',
+                'arguments': {'path': 'a.txt', 'content': 'a'},
+              },
+            },
+          ],
+          'usage': const {'input': 1200, 'output': 300},
+        },
+        textStep('Written.', const {'input': 1500, 'output': 400}),
+      ],
+    );
+    await h.initialize(clientCapabilities: usageClient);
+    h.client.serveFiles(MemoryExecutionEnv(cwd: '/work/demo'));
+    final id = await h.newSession();
+    // Первый ход закончен: в сумме сессии есть шаг, и снимок `load` нужен.
+    await h.prompt(id, 'Привет');
+    final turn = h.prompt(id, 'Write a.txt');
+    turn.ignore();
+    while (true) {
+      final frame = await h.client.next();
+      if (frame is JsonRpcRequest &&
+          frame.method == 'session/request_permission') {
+        break;
+      }
+    }
+    await h.client.transport.close();
+    await pumpEventQueue();
+
+    final other = await connectDeclaring();
+    other.serveFiles(MemoryExecutionEnv(cwd: '/work/demo'));
+    await load(other, id: id);
+    JsonRpcRequest? again;
+    while (again == null) {
+      final frame = await other.next();
+      if (frame is JsonRpcRequest &&
+          frame.method == 'session/request_permission') {
+        again = frame;
+      }
+    }
+
+    // Запрос разрешения пришёл заново: `resume` выполнен, хотя снимок упал.
+    expect(again, isNotNull);
+    expect(h.logger.eventsOf('acp.usage.sent').last.fields['trigger'], 'load');
+    final failed = h.logger.eventsOf('acp.usage.load_snapshot_failed');
+    expect(failed, hasLength(1));
+    expect(failed.single.fields['error_class'], 'StateError');
+  });
+}
+
+/// Каталог, который можно сломать после создания сессии: `resolve` бросает
+/// [StateError] — сбой свёртки засева вне контракта порта.
+final class _BreakableCatalog implements ModelCatalog {
+  _BreakableCatalog(ModelRef model) : _inner = FixedModelCatalog([model]);
+
+  final FixedModelCatalog _inner;
+  var broken = false;
+
+  @override
+  List<ModelEntry> get models => _inner.models;
+
+  @override
+  ModelRef? resolve(ModelId id, {ReasoningEffort? effort}) {
+    // Ломается только вызов свёртки засева (`modelsWithoutPrice`): создание
+    // и загрузка сессии каталогом пользуются сами и должны пройти.
+    if (broken &&
+        StackTrace.current.toString().contains('modelsWithoutPrice')) {
+      throw StateError('catalog is broken');
+    }
+    return _inner.resolve(id, effort: effort);
+  }
+
+  @override
+  Stream<void> get changes => _inner.changes;
+
+  @override
+  Future<void> refresh({bool force = false}) => _inner.refresh(force: force);
+}
+
+/// Логгер, который после записи события бросает исключение: имитирует сбой
+/// внутри `after:` ответа.
+final class _FailingLogger implements Logger {
+  _FailingLogger(this.inner, this.failOn);
+
+  final RecordingLogger inner;
+  final bool Function(String event, Map<String, Object?> fields) failOn;
+
+  @override
+  bool isEnabled(LogLevel level) => inner.isEnabled(level);
+
+  @override
+  void log(
+    LogLevel level,
+    String event, {
+    Map<String, Object?> fields = const {},
+    Object? error,
+    StackTrace? stack,
+  }) {
+    inner.log(level, event, fields: fields, error: error, stack: stack);
+    if (failOn(event, fields)) {
+      throw StateError('logger failure');
+    }
+  }
 }

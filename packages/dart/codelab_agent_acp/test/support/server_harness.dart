@@ -126,6 +126,10 @@ final class ServerHarness {
   /// [usageLedger] — порт файла журнала usage (design.md change
   /// `add-usage-ledger`, D3): без него отчёт журнала — `inMemory`.
   ///
+  /// [wrapLogger] — обёртка над логгером ядра и сервера: тест заставляет
+  /// запись определённого события бросить исключение (сбой в `after:` ответа).
+  /// `ServerHarness.logger` остаётся внутренним `RecordingLogger`.
+  ///
   /// [defaultModel] и [compaction] — модель по умолчанию (например, с ценами
   /// `ModelCost`) и пороги сжатия для `CoreConfig`, когда нет
   /// [configSource] и [rootConfig] (design.md change `add-usage-extension`,
@@ -155,9 +159,13 @@ final class ServerHarness {
     ModelRef? defaultModel,
     CompactionOverrides compaction = const CompactionOverrides(),
     UsageLedgerStore? usageLedger,
+    Logger Function(RecordingLogger inner)? wrapLogger,
   }) async {
     final clock = FakeClock();
-    final logger = RecordingLogger();
+    final recording = RecordingLogger();
+    final Logger logger = wrapLogger == null
+        ? recording
+        : wrapLogger(recording);
     final store = sessions ?? JournalStore();
     final model = ScriptedStreamFunction.fromJson({
       'steps': steps,
@@ -234,7 +242,7 @@ final class ServerHarness {
       core,
       server,
       client,
-      logger,
+      recording,
       store,
       clock,
       model,
@@ -507,6 +515,11 @@ final class JournalStore implements SessionStore {
   /// минутами, а замеряется не запись журнала, а ответ по нему.
   final prebuilt = <SessionId, SessionSnapshot>{};
 
+  /// Ворота записи: пока задан, `append` ждёт его завершения. Так тест
+  /// держит ход начавшимся (`turnActive`), а его запись `user` — ещё не в
+  /// журнале (`usage_ledger_request_test.dart`, `running`).
+  Completer<void>? appendGate;
+
   @override
   Future<void> create(SessionHeader header) => inner.create(header);
 
@@ -530,7 +543,12 @@ final class JournalStore implements SessionStore {
     SessionId id,
     SessionRecord record, {
     bool durable = false,
-  }) => inner.append(id, record, durable: durable);
+  }) async {
+    if (appendGate case final gate?) {
+      await gate.future;
+    }
+    await inner.append(id, record, durable: durable);
+  }
 
   @override
   Future<void> flush(SessionId id) => inner.flush(id);

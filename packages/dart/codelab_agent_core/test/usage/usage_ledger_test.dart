@@ -202,6 +202,22 @@ void main() {
       expect(ledger.byModel.single.usage.input, 100);
     });
 
+    test('a turn keeps the usage of each of its subagent runs apart '
+        '(price per run, D2)', () {
+      final b = _Journal(at)
+        ..user('task')
+        ..assistant(gpt, _u(input: 100))
+        ..subagent('s1', 'completed', usage: _u(input: 40, cost: 0.004))
+        ..subagent('s2', 'completed', usage: _u(input: 60));
+
+      final ledger = buildUsageLedger(b.snapshot());
+
+      final runs = ledger.turns.single.subagentRuns;
+      expect(runs.map((r) => r.input), [40, 60]);
+      expect(runs.map((r) => r.cost.total), [closeTo(0.004, 1e-9), 0]);
+      expect(ledger.turns.single.subagents!.count, 2);
+    });
+
     test('a compaction with details.usage goes to summaries and the total, '
         'not to a turn or the models; one without it does not count', () {
       final b = _Journal(at)
