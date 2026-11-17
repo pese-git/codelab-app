@@ -18,10 +18,13 @@ import 'package:codelab_agent_core/testing.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
+import '../host/core_harness.dart' show inMemoryJournal, noExec;
+import '../permissions/fake_gate.dart';
 import '../session/journal_lines.dart' as j;
 import '../session/recording_store.dart';
 import '../skills/skills_support.dart';
 import '../support/models.dart';
+import 'anchor_support.dart';
 
 /// Навыки после сжатия — тесты итерации 4, задачи 4.1–4.5 (change
 /// `add-agent-skills`: agent-compaction «Навыки после сжатия», agent-skills
@@ -1119,10 +1122,14 @@ void main() {
       expect(withSkill.context(catalog).messages, hasLength(3));
     });
 
-    test('D9: the window drop compares max(after, H(after)): with the skill '
-        'after is within the threshold but H(after) is not, without it H(after) '
-        'fits — the skill is dropped, one record, dropped_window 1 '
-        '(change fix-compaction-estimate-and-no-gain, D9)', () async {
+    // Заменил тест D9 предшественника (`fix-compaction-estimate-and-no-gain`,
+    // «навык выбрасывается, если H(after) с ним выше порога»): D9 снят, окно
+    // решает по согласованному `after` (change
+    // `anchor-context-estimate-after-compaction`, D8, CMP-11).
+    test('D8: the window drop compares after only: with the skill after is '
+        'within the threshold, H(after) is not — the skill is NOT dropped, '
+        'one record, dropped_window 0 (change '
+        'anchor-context-estimate-after-compaction, D8, CMP-5)', () async {
       final catalog = catalogOf([validSkill('mid', body: rows(100))]);
       // Длинный промпт и якорь ниже эвристики: согласованное «после» с
       // навыком укладывается в порог (6 144), эвристика проекции — нет.
@@ -1174,16 +1181,14 @@ void main() {
         systemPrompt: prompt,
       );
       expect(withSkill, greaterThan(threshold), reason: 'H(after) with skill');
-      expect(
-        estimateTokens(rig.context(catalog).messages, systemPrompt: prompt),
-        lessThanOrEqualTo(threshold),
-        reason: 'H(after) without the skill',
-      );
       expect(rig.compactionRecords, hasLength(1));
-      expect(out.record.toJson()['skills'], isNull);
+      expect(out.record.toJson()['skills'], [
+        {'name': 'mid', 'fingerprint': sha(catalog.skills.single.body)},
+      ]);
       expect(out.tokensAfter, lessThanOrEqualTo(threshold));
       final log = rig.logger.eventsOf('skills.reattached').single;
-      expect(log.fields['dropped_window'], 1);
+      expect(log.fields['names'], ['mid']);
+      expect(log.fields['dropped_window'], 0);
     });
 
     test('a small window: two skills of ~2000 tokens; the oldest is dropped '
@@ -1387,6 +1392,118 @@ void main() {
         expect(a, b);
       },
     );
+  });
+
+  // CMP-11, D4 (change `anchor-context-estimate-after-compaction`): сообщение
+  // навыков после резюме входит в `tokensAfter` и в `raw` якоря сжатия, но
+  // не в хвост — оценка следующего запроса не считает его дважды.
+  group('the skills message is counted once after the compaction (D4, '
+      'CMP-11)', () {
+    test('ModelRequested.estimatedTokens of the next request is tokensAfter '
+        'plus the new message', () async {
+      final port = FakeSkillPort()
+        ..files = SkillFiles(skills: [validSkill('big', body: rows(80))]);
+      final clock = FakeClock();
+      final scripted = ScriptedStreamFunction.fromJson({
+        'steps': [
+          {
+            'reply': [
+              {
+                'toolCall': {
+                  'id': 'c1',
+                  'name': 'skill',
+                  'arguments': {'name': 'big'},
+                },
+              },
+            ],
+            'usage': {'input': 1500, 'output': 20},
+          },
+          {
+            'reply': [
+              {'text': 'a' * 8000},
+            ],
+            'usage': {'input': 3000, 'output': 20},
+          },
+          {
+            'reply': [
+              {'text': 'b' * 8000},
+            ],
+            'usage': {'input': 7500, 'output': 20},
+          },
+          {
+            'reply': [
+              {'text': '## Summary'},
+            ],
+          },
+          {
+            'reply': [
+              {'text': 'Done.'},
+            ],
+          },
+        ],
+      }, clock: clock);
+      final store = MemorySessionStore();
+      final contexts = <LlmContext>[];
+      final core = buildAgentCore(
+        profile: HostProfile.of(
+          'agent-serve',
+        ).narrowed({...inMemoryJournal, ...noExec}),
+        services: AgentCoreServices(
+          baseEnv: MemoryExecutionEnv(cwd: '/proj'),
+          gate: FakeGate(),
+          logger: RecordingLogger(clock: clock),
+          clock: clock,
+          ids: SequentialIdGenerator(),
+          sessions: store,
+          skillFiles: port,
+          projectFiles: AnchorAgents(4000),
+        ),
+        config: CoreConfig(
+          defaultModel: modelWithWindow(16384),
+          compaction: anchorCompaction,
+          permissions: const PermissionsConfig(mode: ModeId.bypass),
+        ),
+        streamFunction: (ref, context, {cancel}) {
+          contexts.add(context);
+          return scripted.call(ref, context, cancel: cancel);
+        },
+      );
+      addTearDown(core.runtime.dispose);
+      final session = await core.runtime.createSession(
+        SessionSpec(cwd: '/proj'),
+      );
+      final events = <AgentEvent>[];
+      session.events.listen(events.add);
+      await session.prompt(const [TextContent('first task')]);
+      await session.prompt(const [TextContent('second task')]);
+
+      // Следующий prompt дожидается фонового сжатия.
+      await session.prompt(const [TextContent('third task')]);
+
+      final record = (await store.open(
+        session.id,
+      )).records.whereType<CompactionRecord>().single;
+      expect(
+        record.toJson()['skills'],
+        isNotNull,
+        reason: 'the premise: the skill is in the compaction record',
+      );
+      final request = contexts.lastWhere((c) => c.tools.isNotEmpty);
+      expect(
+        request.messages.where((m) => textOf(m).contains('<skill name="big"')),
+        hasLength(1),
+        reason: 'the premise: the skills message is in the context',
+      );
+      final requested = firstRequestOfTurn(events, 2);
+      expect(requested, isNotNull);
+      final tail = UserMessage([
+        const TextContent('third task'),
+      ], timestamp: DateTime.utc(2026));
+      expect(
+        requested!.estimatedTokens,
+        record.tokensAfter + estimateMessageTokens(tail),
+      );
+    });
   });
 }
 

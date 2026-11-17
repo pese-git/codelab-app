@@ -17,6 +17,7 @@ import 'dart:math' as math;
 import '../llm/messages.dart';
 import '../llm/model_ref.dart';
 import '../llm/stream_function.dart';
+import '../session/projections.dart';
 
 /// Стоимость картинки — константа: размер base64 не говорит о числе
 /// токенов изображения у провайдера (§9.3).
@@ -59,6 +60,17 @@ int estimateTokens(
     (tools.isEmpty ? 0 : _chars(_schemasJson(tools).length)) +
     messages.fold(0, (sum, m) => sum + estimateMessageTokens(m));
 
+/// ЗАГЛУШКА красных тестов (change `anchor-context-estimate-after-compaction`,
+/// задача 1.1): настоящий тип — задача 1.3.
+typedef CompactionAnchor = ({int tokens, int raw});
+
+/// ЗАГЛУШКА красных тестов (задача 1.1): всегда `null`; настоящая — 1.3.
+CompactionAnchor? compactionAnchorOf(
+  LlmContextProjection projection, {
+  required String systemPrompt,
+  required List<ToolSchema> tools,
+}) => null;
+
 /// Оценка контекста с якорем на `usage` (§9.3).
 ///
 /// Якорь — последний ответ модели с ненулевым
@@ -70,6 +82,7 @@ int estimateContextTokens(
   List<Message> messages, {
   required String systemPrompt,
   required List<ToolSchema> tools,
+  CompactionAnchor? compaction,
 }) {
   final anchor = messages.lastIndexWhere(
     (m) =>

@@ -1,9 +1,11 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_core/src/compaction/estimate.dart';
 import 'package:test/test.dart';
 
 import '../host/core_harness.dart';
 import '../permissions/fake_gate.dart';
 import '../support/models.dart';
+import 'anchor_support.dart';
 
 /// Фоновое сжатие после хода (задача 9.5; agent-compaction «Точки
 /// срабатывания сжатия», триггер `afterTurn`; design.md, D8).
@@ -159,5 +161,49 @@ void main() {
 
     capped.model.verify();
     expect(events.whereType<ContextCompacted>(), hasLength(1));
+  });
+
+  // CMP-11, design.md change `anchor-context-estimate-after-compaction`, D3:
+  // после `afterTurn`-сжатия `tokensAfter` в пороге, а эвристика проекции
+  // (большой `AGENTS.md`) — выше. Следующий ход отвечает без usage (только
+  // `output`, якорем usage это не служит, D2): оценка — `tokensAfter` плюс
+  // хвост, поэтому нового фонового сжатия нет.
+  test('after the compaction the next turn without usage is estimated by '
+      'tokensAfter plus the tail and does not start another afterTurn '
+      'compaction (CMP-11, D3)', () async {
+    final h = anchorHarness([
+      turn('a' * 8000, input: 3000),
+      turn('b' * 8000, input: 7500),
+      turn('## Summary'),
+      turn('Done.'),
+      turn('Done again.'),
+      // Запас: лишний запрос суммаризатора на старом коде не должен
+      // сдвигать ответы ходов.
+      turn('## Summary of the bug'),
+      turn('spare'),
+    ]);
+    final (session, events) = await open(h);
+    await session.prompt(const [TextContent('first task')]);
+    await session.prompt(const [TextContent('second task')]);
+
+    await session.prompt(const [TextContent('third task')]);
+    // Следующий prompt дожидается фонового сжатия, если оно запущено.
+    await session.prompt(const [TextContent('fourth task')]);
+
+    final compacted = events.whereType<ContextCompacted>().toList();
+    expect(compacted, hasLength(1));
+    expect(summaryRequests(h), hasLength(1));
+    // Первый запрос третьего хода — после сжатия, ответов с usage в
+    // проекции нет.
+    final third = firstRequestOfTurn(events, 2);
+    expect(third, isNotNull);
+    final tail = UserMessage([
+      const TextContent('third task'),
+    ], timestamp: DateTime.utc(2026));
+    expect(
+      third!.estimatedTokens,
+      compacted.single.tokensAfter + estimateMessageTokens(tail),
+    );
+    await h.core.runtime.dispose();
   });
 }

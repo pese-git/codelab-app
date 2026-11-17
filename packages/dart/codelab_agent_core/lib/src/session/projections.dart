@@ -58,6 +58,10 @@ final class LlmContextProjection {
   /// Последние `config_change` по `optionId`.
   final Map<String, String> config;
   final CompactionRecord? lastCompaction;
+
+  /// ЗАГЛУШКА красных тестов (change `anchor-context-estimate-after-compaction`,
+  /// задача 1.1): всегда 0; настоящее поле — задача 1.3.
+  int get compactionCovered => 0;
 }
 
 /// Записи активной ветки [path], которые видит модель: последнее сжатие,

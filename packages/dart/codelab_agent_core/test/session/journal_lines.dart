@@ -174,10 +174,11 @@ String compaction(
   String? parent, {
   required String firstKept,
   String summary = '## Goal\nFix it',
+  int tokensAfter = 100,
 }) => jsonEncode({
   ..._common('compaction', id, parent),
   'summary': summary,
   'firstKeptId': firstKept,
   'tokensBefore': 1000,
-  'tokensAfter': 100,
+  'tokensAfter': tokensAfter,
 });

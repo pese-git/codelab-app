@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/compaction/estimate.dart';
+import 'package:codelab_agent_core/src/session/projections.dart';
 import 'package:test/test.dart';
 
+import '../session/journal_lines.dart' as j;
 import '../support/models.dart';
 
 /// agent-compaction «Оценка токенов с якорем на usage» (задача 7.1,
@@ -161,6 +163,149 @@ void main() {
             rawAfter: rawAfter,
           ),
           expected,
+        );
+      });
+    }
+  });
+
+  /// agent-compaction «Обнулённый usage без якоря сжатия», «Обнулённый usage
+  /// после сжатия», «Первый ответ с usage снимает якорь сжатия», «Ответ без
+  /// usage не снимает якорь сжатия» (design.md change
+  /// `anchor-context-estimate-after-compaction`, D1, D2): третья ветка
+  /// оценки — смещение `tokens − raw`, зафиксированное при сжатии.
+  group('estimateContextTokens with a compaction anchor (D1, D2)', () {
+    // Хвост после сжатия: одно сообщение пользователя, ceil(40/4)+4 = 14.
+    final tail = user('t' * 40);
+    const prompt = 'p';
+    // Эвристика контекста «промпт + хвост»: 1 + 14.
+    const h = 1 + 14;
+
+    int estimate(List<Message> messages, CompactionAnchor? anchor) =>
+        estimateContextTokens(
+          messages,
+          systemPrompt: prompt,
+          tools: const [],
+          compaction: anchor,
+        );
+
+    final cases = <(String, CompactionAnchor?, int)>[
+      ('no anchor: the plain heuristic', null, h),
+      (
+        'the offset is applied: tokens + H − raw',
+        (tokens: 5000, raw: 4000),
+        5000 + h - 4000,
+      ),
+      (
+        'raw below the heuristic: the estimate grows over tokens',
+        (tokens: 3000, raw: 1),
+        3000 + h - 1,
+      ),
+      (
+        'right after the compaction (H == raw) the estimate is tokens',
+        (tokens: 3000, raw: h),
+        3000,
+      ),
+      ('lower bound: never negative', (tokens: 100, raw: 4000), 0),
+    ];
+    for (final (name, anchor, expected) in cases) {
+      test(name, () => expect(estimate([tail], anchor), expected));
+    }
+
+    test('the usage anchor in the messages wins over the compaction anchor '
+        '(D2)', () {
+      final messages = [
+        tail,
+        assistant([
+          const TextContent('reply'),
+        ], usage: const Usage(input: 500, output: 7)),
+      ];
+
+      expect(estimate(messages, (tokens: 3000, raw: 1)), 507);
+    });
+
+    test('a reply with output only does not drop the compaction anchor, its '
+        'text is in the tail (D2)', () {
+      final reply = assistant([
+        TextContent('r' * 8),
+      ], usage: const Usage(output: 50));
+
+      expect(
+        estimate([tail, reply], (tokens: 3000, raw: 1)),
+        3000 + (1 + 14 + (2 + 4)) - 1,
+      );
+    });
+
+    test('a reply with a zero usage does not drop the compaction anchor '
+        '(D2)', () {
+      final reply = assistant([TextContent('r' * 8)]);
+
+      expect(
+        estimate([tail, reply], (tokens: 3000, raw: 1)),
+        3000 + (1 + 14 + (2 + 4)) - 1,
+      );
+    });
+  });
+
+  /// `compactionAnchorOf` (D1, D6): якорь из проекции активной ветки.
+  group('compactionAnchorOf (D1, D6)', () {
+    const sid = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C');
+    const prompt = 'system prompt';
+
+    LlmContextProjection project(List<String> lines) => buildLlmContext(
+      parseSessionLines(
+        j.journal([j.header(id: sid.value), ...lines]),
+        id: sid,
+      ).snapshot,
+    );
+
+    List<String> chain({int tokensAfter = 700}) => [
+      j.user('u1', null, text: 'old request'),
+      j.answer('a1', 'u1'),
+      j.user('u2', 'a1', text: 'kept request'),
+      j.answer('a2', 'u2'),
+      j.compaction('k1', 'a2', firstKept: 'u2', tokensAfter: tokensAfter),
+      j.user('u3', 'k1', text: 'tail ${'t' * 400}'),
+    ];
+
+    test('no compaction: null', () {
+      final p = project([j.user('u1', null), j.answer('a1', 'u1')]);
+
+      expect(
+        compactionAnchorOf(p, systemPrompt: prompt, tools: const []),
+        isNull,
+      );
+    });
+
+    test('tokens is tokensAfter of the last compaction, raw is H of the '
+        'prompt, the schemas and the covered messages only', () {
+      final p = project(chain());
+      final tools = [
+        ToolSchema(name: 'read', description: 'Read a file', parameters: {}),
+      ];
+
+      final anchor = compactionAnchorOf(p, systemPrompt: prompt, tools: tools);
+
+      // Покрыто: резюме + u2 + a2; хвост u3 в raw не входит.
+      expect(p.compactionCovered, 3);
+      expect(anchor, isNotNull);
+      expect(anchor!.tokens, 700);
+      expect(
+        anchor.raw,
+        estimateTokens(
+          p.messages.take(3).toList(),
+          systemPrompt: prompt,
+          tools: tools,
+        ),
+      );
+    });
+
+    for (final tokensAfter in [0, -5]) {
+      test('tokensAfter $tokensAfter is not an anchor: null (D6)', () {
+        final p = project(chain(tokensAfter: tokensAfter));
+
+        expect(
+          compactionAnchorOf(p, systemPrompt: prompt, tools: const []),
+          isNull,
         );
       });
     }
