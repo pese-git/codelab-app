@@ -12,6 +12,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:math' as math;
 
 import '../llm/messages.dart';
 import '../llm/model_ref.dart';
@@ -85,6 +86,34 @@ int estimateContextTokens(
       usage.output +
       estimateTokens(messages.sublist(anchor + 1));
 }
+
+/// Согласованная оценка контекста после прохода сжатия (§9.3 «Оценка после
+/// сжатия»; design.md change `fix-compaction-estimate-and-no-gain`, D1).
+///
+/// Почему: «до» ([before]) якорится на точном `usage` провайдера, а после
+/// сжатия якоря в проекции нет (§8.7), и «после» было бы чистой эвристикой
+/// `chars / 4`. Эвристика завышает постоянную часть (промпт и схемы
+/// инструментов — JSON, а не проза), поэтому оценка «после» могла оказаться
+/// выше «до», хотя контекст уменьшился.
+///
+/// Для чего: считает «после» от той же базы, что и «до». Системный промпт,
+/// схемы и сохранённый хвост входят в обе проекции одинаково, так что
+/// эвристикой оценивается только разница — убранный регион против резюме с
+/// обёрткой и сообщением навыков. Без якоря [before] равен [rawBefore], и
+/// результат — [rawAfter], как прежде. Нижняя граница 0: scripted-модели
+/// задают usage произвольно, а отрицательной оценке в записи журнала не
+/// место (недооценку ловит аварийный путь `overflow`, CMP-8).
+///
+/// Как использовать: единственный потребитель — компактор; [before] — оценка
+/// контекста перед проходом (на первом проходе [estimateContextTokens], на
+/// следующих — результат прошлого прохода, D2), [rawBefore] и [rawAfter] —
+/// [estimateTokens] без якоря по проекциям до прохода и после (с ещё не
+/// записанной записью). Из бареля не экспортируется.
+int estimateAfterCompaction({
+  required int before,
+  required int rawBefore,
+  required int rawAfter,
+}) => math.max(0, before + rawAfter - rawBefore);
 
 /// Оценка payload запроса — оценщик цикла (`AgentLoopConfig.estimateTokens`).
 int estimateLlmContext(LlmContext context) => estimateContextTokens(
