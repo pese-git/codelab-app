@@ -543,3 +543,15 @@ ADR хранит **историю причины решения**, но не я�
 `docs/architecture/`
 
 без чтения всей истории ADR.
+
+---
+
+## 27. Реестр ADR
+
+| ADR | Решение | Статус |
+|---|---|---|
+| [ADR-0001](0001-embed-dart-agent-core-behind-acp.md) | Встраиваемое ядро Dart-агента за ACP | Accepted |
+| [ADR-0002](0002-name-packages-codelab-side-layer.md) | Имена пакетов по схеме `codelab_<сторона>_<слой>` | Accepted |
+| [ADR-0003](0003-build-project-site-with-astro-in-monorepo.md) | Сайт CodeLab на Astro в `site/` monorepo, документация читается на месте | Proposed |
+
+Новый ADR добавляется в таблицу вместе с файлом; статус в таблице меняется вместе со строкой `Status:` в ADR.

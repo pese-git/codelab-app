@@ -10,6 +10,7 @@
 * `pubspec.yaml` — ограничения версий и declared dependencies;
 * `pubspec.lock` — разрешённые версии зависимостей;
 * секция `melos:` корневого `pubspec.yaml` — monorepo orchestration (отдельного `melos.yaml` нет).
+* `site/.nvmrc`, `site/package.json` и `site/package-lock.json` — версия Node и зависимости сайта `site/` (§28; вне pub workspace и Melos).
 
 Общие обязательные правила для AI-agents находятся в корневом `AGENTS.md`.
 
@@ -45,6 +46,7 @@
 | Подсветка кода (`codelab_ui`, только `lib/src/rendering/`) | `val_highlight` (change `add-desktop-markdown`, D4) |
 | Открытие внешних ссылок (`codelab_desktop`, только `lib/core/platform/`) | `url_launcher` (change `add-desktop-markdown`, D5) |
 | Локализация интерфейса (`codelab_desktop`, `codelab_ui`) | `flutter_localizations`, `gen-l10n` (ARB), `intl` для сгенерированного кода (change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md), D1; §20ж) |
+| Сайт-визитка (`site/`, вне pub workspace и Melos) | Astro на Node, пакетный менеджер npm (ADR-0003, §28) |
 
 Технологии из этой таблицы считаются **утверждёнными решениями проекта**.
 
@@ -1146,3 +1148,20 @@ Architecture Decision Record требуется при значимом изме
 `technology-stack.md` должен описывать **актуальный утверждённый стек**, а не историю всех ранее использовавшихся libraries.
 
 История значимых решений хранится в ADR.
+
+---
+
+## 28. Сайт `site/`: Astro, Node и npm
+
+**Статус: предложено** (ADR-0003, `Proposed` до одобрения change пользователем; 2026-11-17). Реализация — change [`add-astro-site`](../../openspec/changes/add-astro-site/design.md).
+
+1. **Назначение.** Статический сайт-визитка CodeLab: главная, возможности трёх продуктов, установка, документация, новости выпусков. Документация читается из репозитория на месте (content collections Astro), а не копируется.
+2. **Где.** Только каталог `site/` и джоб `site` в `.github/workflows/ci.yml`. Версия Node — `site/.nvmrc`, зависимости — `site/package.json` с точными версиями и закоммиченный `site/package-lock.json`; установка — `npm ci`.
+3. **Где НЕ использовать.** Node, npm и JavaScript-зависимости НЕ ДОЛЖНЫ появляться вне `site/`: в пакетах, приложениях, скриптах Melos и `tool/`. `site/` НЕ ДОЛЖЕН входить в `workspace:` корневого `pubspec.yaml` и в Melos; сторож `codelab_architecture_tests` его не проверяет.
+4. **Какую проблему решает.** Публичная точка входа и навигация по продуктовой документации без второй копии текста; проверка ссылок документации при каждой её правке.
+5. **Влияние на границы.** Граф пакетов не меняется: сайт не пакет и не зависит от Dart-кода. Связь с остальным репозиторием — только чтение Markdown и изображений из опубликованных источников (allowlist в design.md change `add-astro-site`, D3).
+6. **Заменяет ли существующую технологию.** Нет. Второй генератор сайта или документации НЕ СЛЕДУЕТ добавлять.
+7. **Migration.** Не требуется.
+8. **ADR.** ADR-0003.
+
+Зависимости сайта добавляются по §25 с поправкой на npm: лицензия — MIT, BSD, ISC или Apache-2.0 (copyleft не допускается), версия — точная, lock-файл — в том же коммите. Правила разработки сайта — skill `.claude/skills/codelab-site/`.
