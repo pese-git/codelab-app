@@ -28,11 +28,23 @@ typedef RecordBuilder<R extends SessionRecord> =
 /// записей, проставляет `parentId` и время и пишет записи по таблице §8.3.
 /// Результат инструмента пишется с `durable` (SES-9), конец хода — сброс.
 ///
+/// Очередь записей (SES-16, `agent-core-architecture` §8.5, change
+/// `fix-config-change-during-background-compaction`, D1). Почему: запись
+/// ждёт хранилища, а родитель берётся из листа снимка; две одновременные
+/// записи (смена режима во время хода или сжатия) получали бы один и тот же
+/// родитель, и вторая уходила на боковую ветку, невидимую для
+/// `buildLlmContext`. Поэтому [append], [appendBuilt], [appendWith] и записи
+/// из [handle] встают в одну цепочку: родитель, id и время вычисляются, когда
+/// до записи дошла очередь, то есть после всех предыдущих. Сбой одной записи
+/// уходит её вызывающему и очередь не останавливает.
+///
 /// Как использовать: сессия создаёт писателя над снимком (новым или
 /// открытым), вызывает [handle] для каждого события и [append] — для своих
-/// записей (`model_change`, синтетические результаты). Ошибка записи не
-/// бросается наружу: писатель логирует `session.append.failed`, зовёт
-/// [onFailure] и до конца хода больше ничего не пишет.
+/// записей (`model_change`, синтетические результаты); компактор пишет
+/// запись сжатия через [appendWith]. Ошибка записи [handle] не бросается
+/// наружу: писатель логирует `session.append.failed`, зовёт [onFailure] и до
+/// конца хода больше ничего не пишет. Построители внутри очереди не должны
+/// вызывать писателя: очередь ждала бы сама себя.
 final class SessionWriter {
   SessionWriter({
     required SessionStore store,
@@ -219,21 +231,68 @@ final class SessionWriter {
 
   /// Пишет запись сессии; ошибка хранилища уходит вызывающему, снимок при
   /// этом не меняется.
+  ///
+  /// Почему [build] вызывается не сразу: родитель — лист после всех
+  /// предыдущих записей, а они могут быть ещё в очереди (SES-16). Построитель
+  /// синхронный и не вызывает писателя.
   Future<R> append<R extends SessionRecord>(
     RecordBuilder<R> build, {
     bool durable = false,
-  }) async {
+  }) => _enqueue(() async {
     final record = build(
       newRecordId(_ids, _snapshot.byId.containsKey),
       _snapshot.leafId,
       _clock.now(),
     );
-    await appendBuilt(record, durable: durable);
+    await _commit(record, durable: durable);
     return record;
+  });
+
+  /// Пишет уже собранную запись (синтетические результаты §8.8, ремонт).
+  ///
+  /// `parentId` записи задал вызывающий; очередь только упорядочивает
+  /// запись среди других (SES-16).
+  Future<void> appendBuilt(SessionRecord record, {bool durable = false}) =>
+      _enqueue(() => _commit(record, durable: durable));
+
+  /// Собирает запись по снимку после всех предыдущих записей и пишет её;
+  /// `null` от [build] — ничего не пишется, результат `null`.
+  ///
+  /// Почему: запись, зависящая от состояния журнала (запись сжатия решает,
+  /// можно ли ей лечь на текущий лист), не может проверить его до очереди —
+  /// между проверкой и записью успела бы вклиниться другая (CMP-12, design.md
+  /// change `fix-config-change-during-background-compaction`, D2).
+  ///
+  /// Как использовать: [build] получает `current` — снимок после последней
+  /// успешной записи; он синхронный и не вызывает писателя. Ошибка
+  /// хранилища уходит вызывающему.
+  Future<R?> appendWith<R extends SessionRecord>(
+    R? Function(SessionSnapshot current) build, {
+    bool durable = false,
+  }) => _enqueue(() async {
+    final record = build(_snapshot);
+    if (record == null) {
+      return null;
+    }
+    await _commit(record, durable: durable);
+    return record;
+  });
+
+  /// Хвост очереди записей (SES-16); сбой звена хвост не рвёт.
+  Future<void> _tail = Future.value();
+
+  /// Ставит [operation] в хвост очереди.
+  ///
+  /// Результат ОБЯЗАН ждать вызывающий: хвост очереди ошибку глотает (чтобы
+  /// сбой одной записи не рвал остальные), и без `await` у вызывающего ошибка
+  /// записи потерялась бы (корневой `AGENTS.md` §12).
+  Future<T> _enqueue<T>(Future<T> Function() operation) {
+    final run = _tail.then((_) => operation());
+    _tail = run.then<void>((_) {}, onError: (_) {});
+    return run;
   }
 
-  /// Пишет уже собранную запись (синтетические результаты §8.8).
-  Future<void> appendBuilt(SessionRecord record, {bool durable = false}) async {
+  Future<void> _commit(SessionRecord record, {required bool durable}) async {
     await _store.append(_id, record, durable: durable);
     // Порядок «файл → индекс»: снимок меняется только после записи (§8.5).
     _snapshot = _snapshot.withRecord(record, leafAfter(record));
