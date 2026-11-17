@@ -90,11 +90,17 @@
 
 ## 4. Проверки
 
-- [ ] 4.1 `fvm dart format --set-exit-if-changed` изменённых файлов; `fvm dart analyze` и `fvm dart test` в `codelab_agent_core`, `codelab_agent_acp`, `codelab_client_core` (только тесты 3.1).
-- [ ] 4.2 `fvm dart run melos run conformance:agent`: новая фикстура и существующие фикстуры сжатия без правок (сценарий «Корпус не меняется»). `fvm dart run melos run protocol-conformance` — корпус фикстур.
-- [ ] 4.3 `fvm dart run melos run web-compile` (изменён `codelab_agent_core`); `fvm dart run melos run test:e2e:cli:dart-agent` (изменён агент, через который работает CLI).
-- [ ] 4.4 Ручная проверка (по образцу D16 change `add-usage-ledger`): CLI REPL, встроенный агент, модель с ценами, `compaction.keep_recent_tokens: 100`, `/compact` без выигрыша. Ожидается: строка статуса растёт на стоимость вызова сразу; `/usage` — `Summaries: 1 (1 discarded), …`; после перезапуска с `--continue` сумма та же, без «~». Ключа провайдера нет ни в журнале, ни в `usage.json`.
-- [ ] 4.5 `openspec validate fix-discarded-compaction-usage --strict`.
+- [x] 4.1 `fvm dart format --set-exit-if-changed` изменённых файлов; `fvm dart analyze` и `fvm dart test` в `codelab_agent_core`, `codelab_agent_acp`, `codelab_client_core` (только тесты 3.1). *Итог 2026-11-17:* 25 файлов без изменений; analyze чист (ещё `codelab_acp_testing`, `codelab_embedded`, `apps/codelab_agent`); тесты: core 3304, acp 522, acp_testing 377, client_core 744, embedded 82.
+- [x] 4.2 `fvm dart run melos run conformance:agent`: новая фикстура и существующие фикстуры сжатия без правок (сценарий «Корпус не меняется»). `fvm dart run melos run protocol-conformance` — корпус фикстур. *Итог:* conformance:agent 82, protocol-conformance 135, conformance:client 47 — зелёные; `guard` — зелёный.
+- [x] 4.3 `fvm dart run melos run web-compile` (изменён `codelab_agent_core`); `fvm dart run melos run test:e2e:cli:dart-agent` (изменён агент, через который работает CLI). *Итог:* web-compile без ошибок, e2e CLI 81 — зелёные.
+- [x] 4.4 Ручная проверка (по образцу D16 change `add-usage-ledger`): CLI REPL, встроенный агент, модель с ценами, `compaction.keep_recent_tokens: 100`, `/compact` без выигрыша. Ожидается: строка статуса растёт на стоимость вызова сразу; `/usage` — `Summaries: 1 (1 discarded), …`; после перезапуска с `--continue` сумма та же, без «~». Ключа провайдера нет ни в журнале, ни в `usage.json`.
+  *Итог 2026-11-17:* CLI (сборка ветки), встроенный агент, OpenRouter `openai/gpt-4o-mini` с ценами в конфигурации модели, изолированный `CODELAB_HOME`. С `keep_recent_tokens: 100` три коротких хода не дают точки среза (`Nothing to compact.` без вызова суммаризатора, журнал не меняется — верно), поэтому взят `keep_recent_tokens: 10`.
+  - REPL: три хода по одному предложению, `/compact` → `Nothing to compact.`; `/usage` до — `Total: input 738, output 81, …, cost $0.0007`, после — `Total: input 1204, output 235, …, cost $0.0008` и `Summaries: 1 (1 discarded), input 466, output 154, …, cost $0.0002`; `Ledger: rebuilt from journal (9 records)`.
+  - Журнал: одна запись `custom` `codelab.compaction_discarded` с `reason: "no reduction"`, `trigger: "manual"`, `pass: 1`, `tokensBefore: 2580`, `tokensAfter: 2712`, `summaryModel`, `usage` (D1). `usage.json`: `version` 1, `summaries` — `count: 1, discarded: 1` (D3).
+  - `--continue`, REPL: `/usage` — та же сумма, `Summaries: 1 (1 discarded)`, `Ledger: up to date (9 records)`.
+  - `--continue`, TUI: до первого хода строка `↑8.0k ↓235 · $0.00083` без «~» — засев включает отброшенный вызов (1204 + 6784 = 7988). `/compact` без выигрыша → `Nothing to compact.`, строка сразу `↑8.5k ↓362 · $0.00098` (+466 / +127 / +$0.00015 — второй отброшенный вызов, снимок `compactionDiscarded`); `/usage` — `Summaries: 2 (2 discarded), input 932, output 281, …, cost $0.0003`.
+  - Безопасность: `sk-or-` — 0 совпадений в `CODELAB_HOME` и выводе.
+- [x] 4.5 `openspec validate fix-discarded-compaction-usage --strict`.
 
 ## 5. Закрытие
 
