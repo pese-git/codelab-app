@@ -92,7 +92,7 @@
   - `acp/prompt-usage-budget`: роль `client` в `roles`, описание без «роль client добавляет итерация 3»; `conformance:client` проходит без правки kit — уведомление идёт сырыми `params`;
   - сторожевой тест в `codelab_agent_acp/test/usage_budget_projection_test.dart`: снимок `compactionDiscarded` не несёт `budget` (agent-acp-server, сценарий «Снимок сжатия»). Он зелёный сразу: код итерации 2 уже не шлёт поле, тест закрепляет это после change `fix-discarded-compaction-usage`;
   - проверки: `protocol-conformance`, `conformance:client`, `conformance:agent`.
-- [ ] 3.2 `[client]` Реализация:
+- [x] 3.2 `[client]` Реализация:
   - `TurnBudgetView` и типы подполей в `usage/usage_models.dart`, `UsageView.budget`, `build_runner` для freezed;
   - разбор `budget` в `UsageDecoder` на общих функциях `usage_parsing.dart`;
   - свёртка с признаком `ended` в `UsageFold.apply(…, receivedAt:)`, вызов из `_SessionHandle.applyUsage` с часами рабочего пространства; существующие вызовы `apply` в тестах получают `receivedAt`;
@@ -113,20 +113,22 @@
   - `apps/codelab_desktop/test/features/usage/presentation/usage_budget_tick_test.dart` — виджет `WorkbenchUsagePane(clock:)`:
     - тик раз в секунду только при показанной панели, `running`, без одобрений, с неитоговым бюджетом и с `duration`; в начале нового хода до первого `step` тика нет;
     - таймер отменяется при скрытии панели, конце хода и появлении одобрения;
-    - часы kit и виджета — один поддельный источник;
+    - часы: kit в графе app берёт системные часы, отдельного шва `ClientWorkspace(clock:)` в root scope desktop нет и ради теста не вводится (D9, «Тик»). Тест ведёт часы виджета от `receivedAt`, записанного kit: `now = receivedAt + сдвиг`, сдвиг двигается вместе с `tester.pump(Duration)`;
+    - обвязка `_Scene.snapshot()` сбрасывает базу часов при каждом снимке: до применения — на системное время (построение при применении идёт раньше, чем тест узнаёт `receivedAt`), после — на `receivedAt` нового снимка, сдвиг — ноль. Иначе сдвиг прошлого снимка попадал бы в Time нового;
   - `packages/flutter/codelab_ui/test/codelab_usage_pane_test.dart`, группа `Turn budget`: заголовок, строки и ключи `usage-budget-<limit>`, тон и заполнение полосы (не больше 100 %), подсказка, пояснение под блоком; тексты и тон приходят из данных.
-- [ ] 3.4 `[desktop]` Реализация:
+- [x] 3.4 `[desktop]` Реализация:
   - `codelab_ui`: модель строки бюджета и блок в `CodeLabUsagePane` (полоса, подпись, подсказка и тон из данных, без логики), превью;
   - desktop `features/usage/application/`: данные блока в `UsagePaneData.budget`, чистая функция строки Time на момент `now`, формат времени;
   - `ActiveSessionCubit`: ключ кэша данных панели — статус сессии и признак одобрений;
   - `presentation/`: маппер в модель кита, тик в `WorkbenchUsagePane` (параметр `clock`, как у `WorkbenchAgentsPane`);
   - `apps/codelab_desktop/AGENTS.md` (раздел «Панель Usage») — тик и его владелец.
-- [ ] 3.5 `[desktop]` Интеграционный тест `apps/codelab_desktop/integration_test/usage_pane_flow_test.dart` (приёмка `release/*`; в скрипт `test:e2e:app:usage` рядом с `usage_display_flow_test.dart`). Состав — по решению пользователя Q12 (а): scripted-агент не даёт журнала, а Dart-агент и встроенный в e2e не дают лимитов, поэтому сценарии разделены по агентам:
+- [x] 3.5 `[desktop]` Интеграционный тест `apps/codelab_desktop/integration_test/usage_pane_flow_test.dart` (приёмка `release/*`; в скрипт `test:e2e:app:usage` рядом с `usage_display_flow_test.dart`). Состав — по решению пользователя Q12 (а): scripted-агент не даёт журнала, а Dart-агент и встроенный в e2e не дают лимитов, поэтому сценарии разделены по агентам:
   - scripted (`withUsageBudget`, `skip: !e2e.isScripted`): клик по строке статуса открывает панель без журнала, после хода блок `Last turn` — `1 / 50`, `12.8k / 200.0k`, `$0.04 / $0.50`, `0:01 / 10:00`;
   - Dart и встроенный (`withUsage`, `llm_scripts/with_usage.json`): раскрытие хода, «Rebuild from log», экспорт CSV во временный каталог через шов порта;
   - `This turn` и тик — только widget-тестами 3.3.
   
   В ветке `feature/*` тест не запускается, только `fvm flutter analyze` (AGENTS.md §21).
+  Написан, запуск — в `release/*` (`test:e2e:app:usage` для scripted, `test:e2e:app:dart-agent` и `test:e2e:app:embedded` для остальных). Шов CSV — `E2eAgent.bootstrap(usageCsvSaver:)`.
 
 ## 4. Закрытие (итерация 4)
 

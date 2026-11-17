@@ -4,6 +4,7 @@
 `UsageView` SHALL содержать `budget` — прогресс бюджета хода из поля `budget` снимков `_codelab/session/usage` (design.md change `add-desktop-usage-pane`, D9). В нём необязательные подполя `steps`, `tokens` (`used`, `limit` — целые), `cost` (израсходованное — `Money?`, лимит — `Money`) и `duration` (`usedMs`, `limitMs` — целые), а также `turnId` снимка, `receivedAt` — момент применения снимка по часам рабочего пространства (`ClientWorkspace(clock: …)`) — и признак `ended` «итог хода»: бюджет взят из снимка с поводом `turn` (решение пользователя Q11 (а)). Свёртка SHALL оставаться чистой: момент применения передаёт вызывающий, а kit НЕ SHALL вызывать `DateTime.now` в проекции.
 
 Разбор SHALL жить в `UsageDecoder` по общим правилам снимка:
+- `budget` SHALL читаться только у снимка с `turnId`; у снимка без `turnId`, в том числе с `turnId` неверного типа, поле `budget` НЕ SHALL читаться и НЕ SHALL давать предупреждений `budget*`;
 - `steps`, `tokens`, `duration` — объект с обоими целыми ≥ 0;
 - `cost.limit` обязателен, `cost.used` необязателен; оба разбираются правилом `cost` (микроединицы без `double`, целая часть не длиннее 9 цифр). Отсутствующий `used` — цена неизвестна, `used` или `limit` не по формату — подполя `cost` нет;
 - `budget.cost` без `currency` SHALL отсутствовать с общим предупреждением `currency` (`required_with_cost`);
@@ -11,7 +12,7 @@
 - незнакомые ключи внутри `budget` и его подполей SHALL игнорироваться без предупреждения;
 - `budget` без единого разобранного известного подполя SHALL считаться отсутствующим в снимке.
 
-Свёртка: снимок с `turnId` и `budget` SHALL заменять `budget`, `ended` SHALL быть истинен только у снимка с поводом `turn`; снимок с тем же `turnId` без `budget` его не меняет, кроме снимка `turn`, который SHALL ставить `ended` при прежних числах; снимок с новым `turnId` без `budget` SHALL делать его `null`; снимок без `turnId` (`compaction`, `compactionDiscarded`, `load`, незнакомый повод) его не меняет. Правила `seq`, поколения соединения, сброса при переподключении и `session/load` — те же, что у остального `usage` (требование «Usage сессии»): сброс SHALL делать `budget` равным `null`. Kit НЕ SHALL досчитывать время сам: оценку между снимками делает хост по `receivedAt`.
+Свёртка: снимок с `turnId` и `budget` SHALL заменять `budget`, `ended` SHALL быть истинен только у снимка с поводом `turn`; снимок с тем же `turnId` без `budget` его не меняет, кроме снимка `turn`, который SHALL ставить `ended` при прежних числах; `ended` SHALL оставаться истинным для того же `turnId`: снимок `step` того же хода после итогового `turn` обновляет числа и `receivedAt`, но `ended` не снимает; снимок с новым `turnId` без `budget` SHALL делать его `null`; снимок без `turnId` (`compaction`, `compactionDiscarded`, `load`, незнакомый повод) его не меняет. Правила `seq`, поколения соединения, сброса при переподключении и `session/load` — те же, что у остального `usage` (требование «Usage сессии»): сброс SHALL делать `budget` равным `null`. Kit НЕ SHALL досчитывать время сам: оценку между снимками делает хост по `receivedAt`.
 
 #### Scenario: Бюджет из снимка шага
 - **WHEN** снимок `step` хода A несёт `budget` с `tokens {used 92000, limit 200000}` и `cost {used "0.41", limit "0.5"}` при `currency` `USD`, а часы рабочего пространства показывают T
@@ -20,6 +21,14 @@
 #### Scenario: Итог хода
 - **WHEN** после снимков `step` хода A с `budget` приходит снимок `turn` хода A с `budget`
 - **THEN** `usage.budget` — числа снимка `turn`, `ended` истинен; следующий снимок `step` хода B с `budget` делает `ended` ложным
+
+#### Scenario: Шаг после итога того же хода
+- **WHEN** после снимка `turn` хода A с `budget` приходит снимок `step` хода A с `budget` (нарушение порядка агентом)
+- **THEN** `usage.budget` — числа и `receivedAt` снимка `step`, `ended` остаётся истинным
+
+#### Scenario: Бюджет без хода не читается
+- **WHEN** снимок без `turnId` или с `turnId` неверного типа несёт `budget` — строку
+- **THEN** `usage.budget` не меняется, предупреждений с `field: budget` нет (у `turnId` неверного типа — только его предупреждение `turnId`)
 
 #### Scenario: Цена неизвестна
 - **WHEN** `budget.cost` — `{"limit": "0.5"}` без `used`, `currency` — `USD`
