@@ -247,6 +247,7 @@ final class LogRecord {           // то, что получает sink хост
 | `redact` (дополнение) | `redact.block.denied` (info) (§17.12.7) |
 | `agent` | `agent.profile_overridden` (info) (§17.12.2) |
 | `acp` (дополнение) | `acp.mode.legacy_alias` (info) (§17.12.2) |
+| `acp` (usage, change `add-usage-ledger`) | `acp.usage.ledger` (debug: `session_id`, `rebuild`, `status`, `turns`, `steps`, `duration_ms`), `acp.usage.ledger.coalesced` (debug: `session_id`, `rebuild` — запрос присоединился к идущему построению журнала), `acp.usage.seeded` (debug), `acp.usage.seed_failed` (warning), `acp.usage.load_snapshot_failed` (warning: `session_id`, `error_class` — построение снимка `load` в `after` ответа `session/load` бросило; возобновление хода выполняется всё равно); без токенов, денег и подписей ходов (§13.12) |
 | `session` (дополнение, масштаб) | `session.window.open`, `session.index.rebuild`, `session.segment.rotated` (§17.13.2) |
 | `compaction` (дополнение) | `compaction.structured.pass`, `compaction.structured.fallback`, `compaction.structured.unavailable` (§17.13.4) |
 | `context` | `context.expand` (§17.13.4) |
@@ -643,121 +644,160 @@ final class TurnUsage {
 }
 ```
 
-`TurnEnded.usage` — сумма `usage` всех шагов хода, включая неудачные попытки (§2.4) и вызовы
-суммаризатора при аварийном сжатии (отдельной строкой `compactionUsage`). `ModelRequested`
-несёт оценку токенов запроса (§9.3). Usage пишется в лог `turn.end`. Стандартного поля для usage в
-ACP нет, поэтому клиенту его передаёт расширение CodeLab — уведомление `_codelab/session/usage`
-(change `add-usage-extension`, D1–D6; §13.12): снимок шага, хода и сессии и заполнения контекста,
-только соединению, объявившему `usage`. Агрегаты считает адаптер ACP на сессию сервера; итог хода —
-`TurnEnded.usage`. Вызовы суммаризатора в сумму сессии этого уведомления не входят до change
-`add-usage-ledger` (там — `summaries`, §12.6.1).
+`TurnEnded.usage` — сумма `usage` всех шагов хода, включая неудачные попытки (§2.4), и usage детей
+хода (`subagentUsage`). Вызовы суммаризатора в ход не входят, в том числе при аварийном сжатии
+посреди хода: их usage несёт `ContextCompacted.usage` и запись `compaction` (`details.usage`, §9),
+и он входит в сумму сессии (change `add-usage-ledger`, D4). `ModelRequested` несёт оценку токенов
+запроса (§9.3). Стандартного поля для usage в ACP нет, поэтому клиенту его передаёт расширение
+CodeLab — уведомление `_codelab/session/usage` (change `add-usage-extension`, D1–D6; §13.12):
+снимок шага, хода и сессии и заполнения контекста, только соединению, объявившему `usage`.
+Агрегаты считает адаптер ACP на сессию сервера; итог хода — `TurnEnded.usage`; сумма сессии —
+засев из журнала usage при `session/load` (§12.6.1), итоги ходов и суммаризатор (change
+`add-usage-ledger`, D8). Историю по ходам и шагам клиент получает запросом
+`_codelab/session/usage/ledger` (§13.12).
 
 ### 12.6.1. Журнал usage сессии (L-29)
 
-`usage.json` — свёртка usage всех записей журнала сессии: по шагам, моделям, веткам, субагентам и
-вызовам суммаризатора. Это **производный** файл: его можно удалить в любой момент, он
-пересчитывается из журнала и никогда не служит источником истины — ядро не читает его ни для
-бюджета (§5.2), ни для сжатия (§9), ни для опций. Поэтому после сбоя, ремонта хвоста журнала
-(§8.6) или fork (§17.6.7) он не расходится с журналом: устаревшая версия просто пересчитывается.
+Журнал usage — свёртка записей журнала сессии по ходам, шагам, моделям, субагентам и вызовам
+суммаризатора (change `add-usage-ledger`, D1–D3). Это **производные** данные: ядро строит их
+чистой функцией записей (`buildUsageLedger`, `lib/src/usage/`) и не читает ни для бюджета (§5.2),
+ни для сжатия (§9), ни для опций. Файл `usage.json` — кэш свёртки: его можно удалить в любой
+момент, после сбоя, ремонта хвоста журнала (§8.6) или fork (§17.6.7) устаревшая версия просто
+пересчитывается.
 
 **Расположение** — каталог сессии (§8.9): `<файл журнала без .jsonl>/usage.json`, например
 `sessions/work-demo-9c3e51a7/2026-10-21T08-00-00-000Z_01JB8Q2W6R9T3M5K7N1P4X8Z0C/usage.json`.
-Удаление сессии удаляет его вместе с каталогом.
+Пишет и читает файл хост через необязательный порт `UsageLedgerStore` (`read(SessionId) →
+String?`, `write(SessionId, String)`; §10, `AgentCoreServices`); реализация — `codelab_agent_io`,
+путь она строит по своему индексу журналов. Без порта (встроенный агент на web, тесты на памяти,
+сессия только для чтения, §17.6.8) свёртка живёт только в памяти. Удаление сессии удаляет файл
+вместе с каталогом.
 
-**Формат** (`Usage` — форма §8.2.3; ключи в указанном порядке, `null` опускается):
+**Формат v1** (`Usage` — форма §8.2.3; ключи в указанном порядке, `null` и пустые блоки
+опускаются):
 
 ```json
 {
   "version": 1,
   "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
-  "source": {"bytes": 482113, "records": 214, "lastRecordId": "q1w2e3r4"},
+  "source": {"records": 214, "lastRecordId": "q1w2e3r4"},
   "steps": 37,
   "total": {"input": 120800, "output": 8200, "cacheRead": 902000, "cacheWrite": 41000, "reasoning": 1200,
             "cost": {"input": 0.302, "output": 0.082, "cacheRead": 0.2255, "cacheWrite": 0.0}},
-  "inherited": null,
   "byModel": [{"model": "openai/gpt-4o", "steps": 30, "usage": {"…": "…"}}],
-  "byBranch": [{"leafId": "c4d5e6f7", "active": true, "steps": 20, "usage": {"…": "…"}, "exclusive": null},
-               {"leafId": "a1b2c3d4", "active": false, "steps": 17, "usage": {"…": "…"}, "exclusive": {"…": "…"}}],
+  "turns": [{"recordId": "p7d2e8b4", "title": "Fix the failing test in test/a_test.dart",
+             "usage": {"…": "…"},
+             "steps": [{"recordId": "q1w2e3r4", "model": "openai/gpt-4o", "usage": {"…": "…"},
+                        "noUsage": false, "toolCallIds": ["call_1"]}],
+             "subagents": {"runs": 1, "usage": {"…": "…"}}}],
   "subagents": {"runs": 2, "usage": {"…": "…"}},
-  "summaries": {"count": 1, "usage": {"…": "…"}},
-  "stepRecords": [{"recordId": "q1w2e3r4", "model": "openai/gpt-4o", "usage": {"…": "…"}}]
+  "summaries": {"count": 1, "usage": {"…": "…"}, "models": ["openai/gpt-4o"]}
 }
 ```
 
-**Алгоритм свёртки** (чистая функция байтов журнала):
+`byBranch` и `inherited` в v1 не пишутся: ядро пока не пишет веток и fork. Они появятся
+необязательными ключами вместе с деревом сессии (§17.6). `source` не содержит `bytes`: ядро
+байтов файла не видит (PKG-1), а ремонт хвоста меняет и число записей, и id последней. Признак
+«цена неизвестна» в файле не хранится (ниже, «Цена»). Свёртка в памяти дополнительно несёт
+`subagentRuns` и `summaryCalls` — usage и модель каждого прогона и вызова суммаризатора для правила
+цены; в файл они не пишутся. Отчёт всегда строится из снимка журнала, а файл читается только для
+проверки свежести и статуса.
+
+**Алгоритм свёртки** (чистая функция записей `SessionSnapshot`):
 
 ```text
-rebuild(journalPath):
-1. bytes := файл журнала целиком; записи разбираются тем же читателем, что при открытии (§8.6),
-   но без ремонта на диске: неразбираемая строка пропускается; header := первая запись;
-   после MVP журнал из нескольких сегментов читается сканером §17.13.2 сегмент за сегментом;
-   записи hide и pin usage не несут
+build(snapshot):
+1. записи — в порядке файла, как их отдал читатель при открытии (§8.6); неразбираемые строки
+   уже пропущены; после MVP журнал из нескольких сегментов читается сканером §17.13.2
 2. для каждой записи r в порядке файла:
-   a. message с role assistant и usage → шаг: steps += 1; total += u;
-      byModel["<provider>/<id>"] += u; stepRecords.add(r.id, model, u)
+   a. message роли assistant, кроме origin loop_note (синтетическая заметка цикла, §5.4.1) →
+      шаг: steps += 1; total += u; byModel["<provider>/<id>"] += u;
+      noUsage := stopReason != error и input = output = cacheRead = cacheWrite = 0;
+      toolCallIds := id блоков toolCall ответа по порядку
    b. subagent, последняя запись своего subagentId в файле, status завершён и usage есть →
       subagents.runs += 1; subagents.usage += u; total += u      // журналы детей не читаются
-   c. compaction или branch с details.usage → summaries.count += 1; summaries.usage += u; total += u
-   c'. после MVP: toolResult с auxUsage {model, usage} (вспомогательный запрос инструмента,
-      inspect_image, §17.11.5) → total += usage; byModel[model] += usage; шагом не считается
+   c. compaction с details.usage → summaries.count += 1; summaries.usage += u; total += u;
+      summaries.models += details.summaryModel (различные, по алфавиту); u — сумма всех запросов прохода
+   c'. после MVP: toolResult с auxUsage {model, usage} (inspect_image, §17.11.5) →
+      total += usage; byModel[model] += usage; шагом не считается
    d. прочие записи и поля (spill, diff, toolMeta, outcome) не влияют
-3. ветки: leaves := записи, чей id не является parentId ни одной записи; для каждого листа
-   path := pathToLeaf (§8.4); usage := сумма usage-записей шага 2 на path;
-   active := лист активной ветки по правилу §8.4; exclusive := сумма тех же записей на path,
-   которых нет на пути активной ветки (у активной — null)
-   порядок byBranch: активная первой, затем по позиции листа в файле
-4. fork: header.forkedFrom есть → inherited := сумма usage-записей шага 2, являющихся предками
-   записи forkedFrom.recordId или ею самой (их скопировал fork, §17.6.7); иначе null
-5. byModel — по model лексикографически; суммирование — в порядке файла; каждое значение cost
+3. ходы — по пути до активного листа (pathToLeaf, §8.4): ход начинается с записи user, для
+   которой isUserWords истинно (§8.2.5) и origin не steer (steering — слова посреди хода,
+   §17.7.5); остальные записи до следующего начала принадлежат ходу, в том числе служебные
+   user (уведомления, подсказки цикла). Шаги хода — шаги 2a на его отрезке, номер с 0; субагенты
+   хода — записи 2b на его отрезке. Подпись — первые 64 руны текста первой записи хода по
+   правилу заголовка сессии S-16 (sessionTitleFrom: пробелы и переводы строк схлопываются,
+   края обрезаются, предел 64 руны), у записи с command — исходный текст команды. Ход без шагов
+   в turns не входит
+4. byModel — по model лексикографически; суммирование — в порядке файла; каждое значение cost
    округляется до 10⁻⁶ при записи
-6. source := {bytes: длина файла, records: число разобранных записей, lastRecordId: id последней}
-7. JSON без пробелов вне строк, ключи в порядке формата, перевод строки в конце
+5. source := {records: число разобранных записей, lastRecordId: id последней}
+6. JSON без пробелов вне строк, ключи в порядке формата, перевод строки в конце
 ```
 
-Один и тот же журнал даёт побайтово один и тот же `usage.json`: в файле нет времени построения
-и других значений вне журнала.
+Одни и те же записи дают побайтово один и тот же `usage.json`: в файле нет времени построения
+и других значений вне журнала (OBS-10). Пока веток нет, путь до листа совпадает с файлом, и
+сумма ходов плюс суммаризатор равна `total`. Ход, запущенный уведомлением фонового субагента
+или задачи, сливается с предыдущим ходом (решение Q9 (а) change `add-usage-ledger`, R2).
 
-**Когда пересчитывается.** Файл **свежий**, если он разбирается, `version == 1` и `source.bytes`
-и `source.lastRecordId` совпадают с текущим журналом (журнал только дописывается; ремонт хвоста
-меняет длину). Иначе — устаревший.
+**Цена.** В журнале «бесплатно» и «цена неизвестна» неразличимы: у модели без цен
+`calculateCost` даёт ноль. Отчёт для показа добавляет к свёртке множество моделей без цены по
+каталогу сессии `AgentSession.models` в момент показа: у модели `cost == null` или её нет в
+каталоге (решение Q4 (а)). Модель, убранная из конфигурации, даёт своим старым шагам «цена
+неизвестна». Множество моделей без цены считается по моделям шагов и `summaries.models`. Запись
+суммаризатора — с ценой, если её `summaryModel` есть в каталоге с ценами;
+прогон субагента с токенами и нулевой стоимостью — без цены (модели детей не видны).
 
-1. `/usage` — файл свежий → показать; отсутствует, битый или устаревший → `rebuild`, записать,
-   показать (лениво: ядро не пересчитывает файл после каждого хода).
-2. `/usage rebuild` — `rebuild` всегда, независимо от свежести.
-3. Запись — `usage.json.tmp` → `rename`, без `fsync` (файл производный). Сбой записи →
-   warning `usage.ledger.write_failed {session_id, reason}`, отчёт всё равно показывается. Сессия
-   только для чтения (§17.6.8) → свёртка в памяти, на диск не пишется.
-4. Каждый пересчёт — лог info `usage.ledger.rebuild {session_id, reason: missing|invalid|stale|explicit,
-   records, bytes, duration_ms}`.
+**Когда пересчитывается.** Файл **свежий**, если он разбирается, `version == 1`, а
+`source.records` и `source.lastRecordId` совпадают со снимком журнала. Иначе — устаревший
+(`stale`), битый (`invalid`) или отсутствующий (`missing`).
 
-**Вывод `/usage`** — агентская команда (§13.6), ответ `agent_message_chunk` и
-`stopReason: end_turn`, в журнал не пишется, модели не отправляется. Текст фиксированный,
-английский; числа — целые без разделителей, стоимость — `$` и 4 знака после точки; строка
-`reasoning <n>` — только если значение есть. Шаблон строки usage:
-`input <n>, output <n>, cache read <n>, cache write <n>[, reasoning <n>], cost $<x.xxxx>`.
+1. `/usage` и запрос `_codelab/session/usage/ledger` без `rebuild` — файл свежий → показать;
+   иначе `rebuild`, записать, показать (лениво: ядро не пересчитывает файл после каждого хода).
+2. `/usage rebuild` и запрос с `rebuild: true` — `rebuild` всегда (`explicit`).
+3. Засев адаптера на `session/load` (§13.5) строит свёртку в памяти и файл не читает и не пишет.
+4. Запись — `usage.json.tmp` → `rename`, без `fsync` (файл производный). Сбой записи →
+   warning `usage.ledger.write_failed {session_id, reason}`, отчёт всё равно показывается со
+   статусом `notSaved`. Без порта — статус `inMemory`.
+4a. Containment и пределы (`codelab_agent_io`): каталог сессии, `usage.json` и `.tmp` проверяются
+   на символические ссылки за пределы `sessions/` — такой файл не читается (`invalid`) и не пишется
+   (`notSaved`); файл больше предела реализации — `invalid`; сбой ОС при поиске каталога —
+   `notSaved`. После закрытия сессии новая запись не начинается.
+5. На сессию одновременно идёт не больше одной операции с записью: повторный вызов ждёт идущую,
+   `rebuild` во время обычной — одна операция после неё. Закрытие сессии ждёт начатую запись.
+6. Каждый пересчёт — лог info `usage.ledger.rebuild {session_id, reason: missing|invalid|stale|explicit,
+   records, duration_ms}`.
+
+**Вывод `/usage [rebuild]`** — агентская команда (§13.4, §13.6), ответ `agent_message_chunk` и
+`stopReason: end_turn`, в журнал не пишется, модели не отправляется (ACP-12). Аргумент, отличный
+от `rebuild`, — ответ `Usage: /usage [rebuild]`. Текст фиксированный, английский; числа — целые
+без разделителей. Шаблон строки usage:
+`input <n>, output <n>, cache read <n>, cache write <n>[, reasoning <n>], cost <cost>`;
+`reasoning` — только если значение есть. `<cost>` — `$x.xxxx` (4 знака после точки), если цена
+известна у всех частей строки; `~$x.xxxx` при любой причине неполноты строки (`noUsage` или `noPrice`); `unknown`, если цены нет ни
+у одной части (решение Q7 (а) change `add-usage-ledger`; уточнено ревью итерации 1). Правило одно для строк `Total`, `By model`, `Subagents` и
+`Summaries`; части — шаги, прогоны субагентов и записи суммаризатора с ненулевыми токенами. При `noUsage` у части строки перед числом `input` ставится `~`.
 
 ```text
-Session usage: 37 steps
-Total: input 120800, output 8200, cache read 902000, cache write 41000, reasoning 1200, cost $0.6095
+Session usage: 9 turns, 37 steps
+Total: input 122900, output 8540, cache read 902000, cache write 41000, reasoning 1200, cost $0.6163
 By model:
-  openai/gpt-4o: 30 steps, input 100000, output 7000, cache read 800000, cache write 0, cost $0.4500
   anthropic/claude-sonnet-4: 7 steps, input 20400, output 1200, cache read 102000, cache write 41000, cost $0.1585
-By branch:
-  * c4d5e6f7: 20 steps, input 80400, output 5200, cache read 600000, cache write 41000, cost $0.4085
-    a1b2c3d4: 17 steps, exclusive input 40000, output 3000, cache read 302000, cache write 0, cost $0.2000
+  openai/gpt-4o: 30 steps, input 100000, output 7000, cache read 800000, cache write 0, cost $0.4500
 Subagents: 2 runs, input 400, output 0, cache read 0, cache write 0, cost $0.0010
-Summaries: 1, input 0, output 0, cache read 0, cache write 0, cost $0.0000
+Summaries: 1, input 2100, output 340, cache read 0, cache write 0, cost $0.0068
 Ledger: rebuilt from journal (214 records)
 ```
 
-Правила строк: `Total` — сумма шагов, субагентов и суммаризатора; `By model` — только шаги.
-`Inherited from fork: <usage>` — сразу после `Total`, только при `inherited`; блок `By branch` —
-только если веток больше одной, активная ветка помечена `*` и показывает usage своего пути,
-остальные — usage, которого нет на активном пути, со словом `exclusive` перед ним; `Subagents` и `Summaries` — только при
-ненулевом счётчике. Последняя строка — одна из: `Ledger: up to date (<n> records)`,
-`Ledger: rebuilt from journal (<n> records)`, `Ledger: rebuilt in memory (read-only session)`,
+Правила строк: `Total` — сумма шагов, субагентов и суммаризатора; `By model` — только шаги, по
+алфавиту; `Subagents` и `Summaries` — только при ненулевом счётчике; вызов суммаризатора со всеми нулевыми счётчиками —
+`noUsage`, как шаг, и даёт «~» строкам `Summaries` и `Total` (`input ~0`, `cost ~$0.0000` у модели
+с ценами); строк по ходам нет (таблица
+ходов — панель Usage). Блоки `By branch` и `Inherited from fork` появятся вместе с деревом сессии
+(§17.6). Последняя строка — одна из: `Ledger: up to date (<n> records)`,
+`Ledger: rebuilt from journal (<n> records)`, `Ledger: rebuilt in memory (<n> records)`,
 `Ledger: rebuilt, not saved (<причина ОС на английском>)`. Пустая сессия — одна строка
-`Session usage: no model requests yet`. Модели без цен дают `cost $0.0000` — цены неизвестны (§2.12).
+`Session usage: no model requests yet`.
 
 ## 12.7. Инварианты
 
@@ -770,7 +810,7 @@ Ledger: rebuilt from journal (214 records)
 7. **OBS-7.** Файловый sink лога (§12.3.1) получает те же записи после той же редакции, что основной sink; ни один sink не пишет в stdout процесса с ACP по stdio.
 8. **OBS-8.** Послойная редакция сохраняет число переводов строк текста; перекрывающиеся совпадения решает слой с более высоким приоритетом; белый список не отменяет слои `exact` и `credential_files`. *После 1.0 (§12.4, R8-1).*
 9. **OBS-9.** Результаты `write`, `edit` и инструментов из `redact.exempt_tools` не редактируются ни перед журналом, ни перед провайдером; все остальные точки таблицы §12.4.2 редактируются всегда, в том числе при `redact.enabled = false` слоем `exact`. *После 1.0 (§12.4, R8-1).*
-10. **OBS-10.** `usage.json` — чистая функция байтов журнала: одинаковый журнал даёт побайтово одинаковый файл; ядро не читает его для решений; файл, не совпадающий с журналом по `source`, пересчитывается до показа.
+10. **OBS-10.** `usage.json` — чистая функция записей журнала (change `add-usage-ledger`, D1): одинаковые записи дают побайтово одинаковый файл; ядро не читает его для решений; файл, не совпадающий с журналом по `source`, пересчитывается до показа.
 
 ## 12.8. Обоснование решения
 
@@ -816,7 +856,9 @@ Ledger: rebuilt from journal (214 records)
 * После 1.0 (R8-1): `core/redaction-preserves-line-count` (`redaction_layers_test.dart`): табличный тест на каждый слой и каждую пару перекрывающихся слоёв — победитель по приоритету; многострочный PEM внутри результата `read` с номерами строк — число строк и номера следующих строк не меняются; `redact(redact(x)) == redact(x)` на всём корпусе; git SHA и UUID не трогаются слоями 3–7, но точный секрет вида UUID заменяется; `entropy` выключен по умолчанию (OBS-5, OBS-8).
 * После 1.0 (R8-1): `core/redaction-write-results-exempt` (`redaction_exempt_test.dart`): `write` и `edit` с содержимым `API_KEY=sk-…` — результат, `diff` в журнале и аргументы в payload следующего шага без маркеров; тот же текст в результате `exec` заменён; MCP-инструмент из `redact.exempt_tools` не редактируется, не указанный — редактируется (OBS-9).
 * После 1.0 (R8-1): `redact_command_test.dart`: `/redact stats` и `/redact layers` дают фиксированный текст §12.4.3, без значений; `/redact` без аргумента — `Usage: /redact stats | layers`; ни одной записи в журнале.
-* `core/usage-ledger-rebuild-deterministic` (`usage_ledger_test.dart`): журнал с ветками, fork, субагентом и сжатием — `rebuild` дважды даёт одинаковые байты; удалённый `usage.json` восстанавливается побайтово тем же; дописанная запись делает файл устаревшим, `/usage` пересчитывает; обрезанный ремонтом хвост — тоже; `inherited` у fork равен сумме скопированных шагов; поля `spill` не влияют на результат; вывод `/usage` совпадает с golden-текстом (OBS-10).
+* `core/usage-ledger-rebuild-deterministic` (change `add-usage-ledger`, задачи 1.1, 1.2, 1.5): `usage_ledger_test.dart` — журнал с двумя ходами, steering, заметкой цикла, субагентом и сжатием с `details.usage`: ходы и шаги, `toolCallIds`, `noUsage`, сериализация дважды побайтово равна; `usage_ledger_report_test.dart` — `missing`, `upToDate`, `stale` после дописанной записи и ремонта хвоста, `invalid`, `explicit`, `notSaved`, `inMemory`, одна запись при параллельных вызовах; `codelab_agent_io/test/session/usage_ledger_store_test.dart` — удалённый `usage.json` восстанавливается побайтово тем же. Ветки и `inherited` — с деревом сессии (§17.6) (OBS-10).
+* `usage_command_test.dart` (задача 1.4) и фикстура `acp/slash-usage`: вывод `/usage` совпадает с golden-текстом; `cost unknown` у модели без цен; `Usage: /usage [rebuild]`.
+* `compaction_usage_test.dart` (задача 1.3): `details.usage` и `ContextCompacted.usage`; аварийное сжатие не меняет `TurnEnded.usage`.
 
 ---
 

@@ -1,0 +1,467 @@
+{
+  "id": "acp/usage-ledger-rebuild",
+  "spec": [
+    "15-Extensibility.md#custom-requests",
+    "15-Extensibility.md#advertising-custom-capabilities",
+    "03-Session Setup.md#loading-a-session"
+  ],
+  "description": "Пересчёт журнала usage по требованию (change add-usage-ledger, D3, D6, D11): сессия из setup.sessions с двумя ходами загружается (снимок load seq 1), клиент шлёт _codelab/session/usage/ledger с rebuild: true, и агент отвечает ledger.status rebuilt с reason explicit, seq 1, итогом, равным session снимка load, двумя ходами с подписью и шагами. Фабрика агентского прогона даёт порт usage.json на файле во временном каталоге (метка usageLedger); без порта статус был бы inMemory (unit-тест). Роль только agent: setup.sessions клиентский драйвер не воспроизводит.",
+  "goals": [
+    "L-29"
+  ],
+  "extensions": [
+    "usage",
+    "usageLedger"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "clientCapabilities": {
+      "fs": {
+        "readTextFile": true,
+        "writeTextFile": true
+      },
+      "terminal": true,
+      "_meta": {
+        "codelab": {
+          "usage": {
+            "version": 1
+          }
+        }
+      }
+    },
+    "sessions": {
+      "01JB8Q2W6R9T3M5K7N1P4X8Z0C": [
+        {
+          "type": "session",
+          "version": 1,
+          "id": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "cwd": "${cwd}",
+          "created": "2026-10-25T10:00:00.000Z",
+          "agent": {
+            "name": "codelab-agent",
+            "version": "0.1.0"
+          }
+        },
+        {
+          "type": "model_change",
+          "id": "r0",
+          "parentId": null,
+          "timestamp": "2026-10-25T10:00:00.000Z",
+          "provider": "scripted",
+          "modelId": "scripted-1"
+        },
+        {
+          "type": "message",
+          "id": "r1",
+          "parentId": "r0",
+          "timestamp": "2026-10-25T10:00:01.000Z",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Привет"
+              }
+            ],
+            "timestamp": "2026-10-25T10:00:01.000Z"
+          }
+        },
+        {
+          "type": "message",
+          "id": "r2",
+          "parentId": "r1",
+          "timestamp": "2026-10-25T10:00:02.000Z",
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Здравствуйте."
+              }
+            ],
+            "model": {
+              "provider": "scripted",
+              "id": "scripted-1"
+            },
+            "usage": {
+              "input": 10,
+              "output": 5,
+              "cost": {
+                "input": 3e-05,
+                "output": 7.5e-05
+              }
+            },
+            "stopReason": "stop",
+            "timestamp": "2026-10-25T10:00:02.000Z"
+          }
+        },
+        {
+          "type": "message",
+          "id": "r3",
+          "parentId": "r2",
+          "timestamp": "2026-10-25T10:00:03.000Z",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Расскажи ещё"
+              }
+            ],
+            "timestamp": "2026-10-25T10:00:03.000Z"
+          }
+        },
+        {
+          "type": "message",
+          "id": "r4",
+          "parentId": "r3",
+          "timestamp": "2026-10-25T10:00:04.000Z",
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Вот рассказ."
+              }
+            ],
+            "model": {
+              "provider": "scripted",
+              "id": "scripted-1"
+            },
+            "usage": {
+              "input": 20,
+              "output": 10,
+              "cost": {
+                "input": 6e-05,
+                "output": 0.00015
+              }
+            },
+            "stopReason": "stop",
+            "timestamp": "2026-10-25T10:00:04.000Z"
+          }
+        }
+      ]
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768,
+      "cost": {
+        "input": 3,
+        "output": 15,
+        "cacheRead": 0.3,
+        "cacheWrite": 3.75
+      }
+    },
+    "steps": []
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "loadId"
+        },
+        "method": "session/load",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      },
+      "note": "сессия из журнала с ответом модели загружается через session/load"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Привет"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Здравствуйте."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Расскажи ещё"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Вот рассказ."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "standard"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/load — после реплея (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${loadId}",
+        "result": {
+          "modes": {
+            "$any": {
+              "availableModes": [
+                {
+                  "id": "standard",
+                  "name": "Standard"
+                }
+              ],
+              "currentModeId": "standard"
+            }
+          },
+          "configOptions": {
+            "$any": []
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D8: снимок load — после ответа на session/load, а не в конце реплея; session — полная сумма журнала (turns 2, steps 2), partial без beforeLoad; context неизвестен мосту, turnId, step и turn нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "seq": 1,
+          "trigger": "load",
+          "session": {
+            "turns": 2,
+            "steps": 2,
+            "tokens": {
+              "input": 30,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.000315"
+          },
+          "currency": "USD"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "ledgerId"
+        },
+        "method": "_codelab/session/usage/ledger",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "rebuild": true
+        }
+      },
+      "note": "rebuild: true — пересчёт всегда"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${ledgerId}",
+        "result": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "seq": 1,
+          "currency": "USD",
+          "ledger": {
+            "status": "rebuilt",
+            "reason": "explicit",
+            "records": {
+              "$any": true
+            }
+          },
+          "total": {
+            "turns": 2,
+            "steps": 2,
+            "tokens": {
+              "input": 30,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.000315"
+          },
+          "turns": [
+            {
+              "index": 1,
+              "title": "Привет",
+              "total": {
+                "steps": 1,
+                "tokens": {
+                  "input": 10,
+                  "output": 5,
+                  "cacheRead": 0,
+                  "cacheWrite": 0
+                },
+                "cost": "0.000105"
+              },
+              "steps": [
+                {
+                  "$partial": {
+                    "index": 0,
+                    "model": "scripted/scripted-1",
+                    "tokens": {
+                      "input": 10,
+                      "output": 5,
+                      "cacheRead": 0,
+                      "cacheWrite": 0
+                    },
+                    "cost": "0.000105",
+                    "toolCallIds": []
+                  }
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "title": "Расскажи ещё",
+              "total": {
+                "steps": 1,
+                "tokens": {
+                  "input": 20,
+                  "output": 10,
+                  "cacheRead": 0,
+                  "cacheWrite": 0
+                },
+                "cost": "0.00021"
+              },
+              "steps": [
+                {
+                  "$partial": {
+                    "index": 0,
+                    "model": "scripted/scripted-1",
+                    "tokens": {
+                      "input": 20,
+                      "output": 10,
+                      "cacheRead": 0,
+                      "cacheWrite": 0
+                    },
+                    "cost": "0.00021",
+                    "toolCallIds": []
+                  }
+                }
+              ]
+            }
+          ],
+          "models": [
+            {
+              "model": "scripted/scripted-1",
+              "steps": 2,
+              "tokens": {
+                "input": 30,
+                "output": 15,
+                "cacheRead": 0,
+                "cacheWrite": 0
+              },
+              "cost": "0.000315"
+            }
+          ]
+        }
+      },
+      "note": "итоги те же, что без rebuild; total равен session снимка load (D8)"
+    }
+  ]
+}

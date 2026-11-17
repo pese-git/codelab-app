@@ -206,7 +206,7 @@ final class ModeChanged extends AgentEvent { final ModeId mode; }
 final class CommandsChanged extends AgentEvent { final List<SlashCommand> commands; }
 final class ConfigOptionChanged extends AgentEvent { final String optionId, value; }   // уровень AgentSession (§8.3)
 final class SessionTitleChanged extends AgentEvent { final String title; final DateTime updatedAt; }   // уровень AgentSession (§8.3)
-final class ContextCompacted extends AgentEvent { final int tokensBefore, tokensAfter; }
+final class ContextCompacted extends AgentEvent { final int tokensBefore, tokensAfter; final Usage? usage; final String? model; } // model — '<provider>/<id>' // usage, model — суммаризатор, change add-usage-ledger, D4; в TurnEnded.usage не входит
 final class AgentError extends AgentEvent { final AgentErrorClass cls; final LlmErrorClass? errorClass; final String message; final bool retrying; final RateLimitInfo? rateLimit; }   // rateLimit — после MVP (§17.10.4.1)
                                                   // errorClass — только при cls == provider (§2.2)
 final class TurnEnded extends AgentEvent {
@@ -275,7 +275,7 @@ final class SlashCommand {
 | `StepEnded` | шаг завершён | ответ модели, результаты в порядке вызовов; заполнение контекста после шага (`used`, `window`, `compactAt` — порог автосжатия или `null`; change `add-usage-extension`, D5) |
 | `TaskListChanged` | после change `add-subagents-and-tasks`: операция `task_*` или назначение пункта субагенту (`assign`) изменила список задач, до `ToolCallFinished` вызова (§17.16.5), или список восстановлен из новой ветки после `BranchChanged` (`op: restore`, без записи `task`, §17.16.6); до change — `PlanUpdated` от `update_plan` | `items` (весь список), `change` |
 | `ModeChanged`, `CommandsChanged` | смена режима, списка slash-команд | новое значение |
-| `ContextCompacted` | сжатие записано в журнал (§9) | `tokensBefore`, `tokensAfter` |
+| `ContextCompacted` | сжатие записано в журнал (§9) | `tokensBefore`, `tokensAfter`, `usage` и `model` суммаризатора (`null` у реплея записи без `details.usage`; change `add-usage-ledger`, D4) |
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | после MVP: эмитит `SubagentManager` сессии родителя, не цикл (§17.3.2) | идентификаторы ребёнка, снимок прогресса, итог |
 | `BranchChanged` | после MVP: эмитит `AgentSession` после записи `branch` — переключение ветки или перемотка (§17.6.5); у читателя в режиме только чтения — после перечитывания снимка (§17.6.8) | `leafId`, `fromLeafId`, `reason` |
 | `SessionAccessChanged` | после MVP: эмитит `AgentSession` при потере lease, чужой записи или освобождении lease владельцем (§17.6.8) | `access`, `owner?`, `reason` |

@@ -61,6 +61,7 @@ final class EmbeddedHostServices {
     this.configSource,
     this.projectConfig,
     this.closeConfigSource,
+    this.usageLedger,
   });
 
   /// Локальный env хоста: базовое окружение инструментов ядра.
@@ -72,6 +73,14 @@ final class EmbeddedHostServices {
   final ExecutionEnv Function(String cwd) localEnv;
 
   final SessionStore sessions;
+
+  /// Файл `usage.json` рядом с журналом сессии (change `add-usage-ledger`, D3,
+  /// D13): настольный открыватель передаёт `JsonlUsageLedgerStore` над тем же
+  /// хранилищем журналов. `null` — у основного барела (web), сценарного
+  /// открывателя и тестов: отчёт `/usage` строится в памяти. Тип из ядра:
+  /// основной барель остаётся web-безопасным.
+  final UsageLedgerStore? usageLedger;
+
   final SecretResolver secrets;
 
   /// HTTP-клиент провайдеров и MCP.

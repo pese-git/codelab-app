@@ -38,6 +38,7 @@ final class CoreHarness {
     AgentConfigPaths? agentConfigPaths,
     LastModelStore? lastModel,
     DefaultModelSource defaultModelSource = DefaultModelSource.config,
+    UsageLedgerStore? usageLedger,
     Future<void>? Function(LlmContext context)? hold,
   }) {
     final c = clock ?? FakeClock();
@@ -65,6 +66,7 @@ final class CoreHarness {
         secrets: secrets,
         agentConfigPaths: agentConfigPaths,
         lastModel: lastModel,
+        usageLedger: usageLedger,
       ),
       config: CoreConfig(
         defaultModel: defaultModel ?? subagentTestModel,

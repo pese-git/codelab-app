@@ -1,12 +1,14 @@
 {
   "id": "acp/session-load-interrupted-turn",
   "spec": [
-    "03-Session Setup.md#loading-a-session"
+    "03-Session Setup.md#loading-a-session",
+    "15-Extensibility.md#custom-notifications"
   ],
   "description": "Журнал кончается вызовом без результата (процесс агента остановился посреди хода); при session/load агент дописывает синтетический результат и показывает вызов tool_call со статусом failed и _meta.codelab.outcome interrupted, инструмент повторно не вызывается.",
   "extensions": [
     "outcome",
-    "capabilities"
+    "capabilities",
+    "usage"
   ],
   "roles": [
     "agent",
@@ -279,6 +281,32 @@
           },
           "configOptions": {
             "$any": []
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "снимок load после ответа на session/load (change add-usage-ledger, D8): клиент объявил usage, а в журнале есть ответ модели; модель без цен — noPrice, cost нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "seq": 1,
+          "trigger": "load",
+          "session": {
+            "turns": 1,
+            "steps": 1,
+            "tokens": {
+              "input": 10,
+              "output": 5,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "partial": [
+              "noPrice"
+            ]
           }
         }
       }

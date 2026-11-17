@@ -25,6 +25,7 @@ import '../session/recording_store.dart';
 import '../skills/skills_support.dart';
 import '../support/models.dart';
 import 'anchor_support.dart';
+import 'region.dart' show summaryOf;
 
 /// Навыки после сжатия — тесты итерации 4, задачи 4.1–4.5 (change
 /// `add-agent-skills`: agent-compaction «Навыки после сжатия», agent-skills
@@ -1259,7 +1260,7 @@ void main() {
       await rig.compact(
         catalog,
         smallWindow,
-        summaryOf: (call) => call == 1 ? 'x' * 400 : 'y' * 40,
+        summaryAt: (call) => call == 1 ? 'x' * 400 : 'y' * 40,
       );
 
       expect(rig.compactionRecords.length, greaterThanOrEqualTo(2));
@@ -1752,14 +1753,14 @@ final class _Rig {
     SkillsConfig skills = const SkillsConfig(),
     void Function(LlmContextProjection)? onCompacted,
     String summary = 'S',
-    String Function(int call)? summaryOf,
+    String Function(int call)? summaryAt,
     String systemPrompt = _systemPrompt,
   }) => engine.compact(
     writer: writer,
     trigger: CompactionTrigger.manual,
     summarize: (request, cancel) async {
       summaries++;
-      return summaryOf?.call(summaries) ?? summary;
+      return summaryOf(summaryAt?.call(summaries) ?? summary);
     },
     settings: settings,
     window: window,

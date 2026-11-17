@@ -87,7 +87,7 @@ void main() {
   Summarizer fixed(String text, {List<SummaryRequest>? seen}) =>
       (request, cancel) async {
         seen?.add(request);
-        return text;
+        return summaryOf(text);
       };
 
   Future<CompactionOutcome> run(
@@ -110,7 +110,6 @@ void main() {
     cancel: cancel ?? CancelToken.none,
     emit: events.add,
     onCompacted: onCompacted,
-    summaryModel: 'test/model-1',
     logger: logger,
     anchor: anchor,
   );
@@ -140,6 +139,7 @@ void main() {
       'modifiedFiles': ['lib/b.dart'],
       'splitTurn': false,
       'summaryModel': 'test/model-1',
+      'usage': Usage.zero.toJson(),
     });
     expect(rebuilt!.messages.map((m) => m.runtimeType), [
       UserMessage,
@@ -201,7 +201,7 @@ void main() {
       // оценка остаётся выше порога, и идёт второй проход.
       final outcome = await run((request, cancel) async {
         calls++;
-        return calls == 1 ? 'x' * 400 : 'y' * 40;
+        return summaryOf(calls == 1 ? 'x' * 400 : 'y' * 40);
       });
 
       expect(outcome, isA<Compacted>());
@@ -325,7 +325,7 @@ void main() {
       final outcome = await run(
         (request, cancel) async {
           calls++;
-          return 'short';
+          return summaryOf('short');
         },
         systemPrompt: longPrompt,
         tools: tools,
@@ -368,7 +368,7 @@ void main() {
       final outcome = await run(
         (request, cancel) async {
           calls++;
-          return calls == 1 ? 'x' * 400 : 'y' * 40;
+          return summaryOf(calls == 1 ? 'x' * 400 : 'y' * 40);
         },
         systemPrompt: longPrompt,
         tools: tools,
@@ -548,7 +548,7 @@ void main() {
 
         await run((request, cancel) async {
           calls++;
-          return calls == 1 ? 'x' * 400 : 'y' * 40;
+          return summaryOf(calls == 1 ? 'x' * 400 : 'y' * 40);
         });
 
         final records = [
@@ -607,7 +607,7 @@ void main() {
 
       final outcome = await run((request, cancel) async {
         calls++;
-        return calls == 1 ? 'x' * 400 : 'y' * 80000;
+        return summaryOf(calls == 1 ? 'x' * 400 : 'y' * 80000);
       });
 
       expect(calls, 2);
@@ -684,7 +684,7 @@ void main() {
     await expectLater(
       run((request, cancel) async {
         source.cancel(const UserCancel());
-        return 'too late';
+        return summaryOf('too late');
       }, cancel: source.token),
       throwsA(isA<CancelledException>()),
     );
@@ -759,7 +759,7 @@ void main() {
         started.complete();
       }
       await release.future;
-      return text;
+      return summaryOf(text);
     };
 
     Future<void> pump() async {
@@ -945,11 +945,11 @@ void main() {
       final future = run((request, cancel) async {
         calls++;
         if (calls == 1) {
-          return 'x' * 400;
+          return summaryOf('x' * 400);
         }
         started.complete();
         await release.future;
-        return 'y' * 40;
+        return summaryOf('y' * 40);
       });
       await started.future;
       await writer.append(
@@ -992,7 +992,7 @@ void main() {
       final summarized = Completer<void>();
       final future = run((request, cancel) async {
         summarized.complete();
-        return 'summary';
+        return summaryOf('summary');
       }, cancel: source.token);
       final outcome = expectLater(future, throwsA(isA<CancelledException>()));
       await summarized.future;

@@ -22,14 +22,33 @@ Future<SessionView> _runWithWorkspace(String fixtureId) async {
   );
   late ClientFixtureUser user;
   late ClientWorkspace workspace;
-  final result = await runClientFixture<AcpClientApplication>(fixture, (env) {
-    user = ClientFixtureUser(env);
-    workspace = ClientWorkspace(
-      backend: AcpClientBackend(user.app),
-      resolvers: const [],
-    );
-    return user.app;
-  }, onBeforeExpect: (step) => user.act(step));
+  final result = await runClientFixture<AcpClientApplication>(
+    fixture,
+    (env) {
+      user = ClientFixtureUser(env);
+      workspace = ClientWorkspace(
+        backend: AcpClientBackend(user.app),
+        resolvers: const [],
+      );
+      return user.app;
+    },
+    onBeforeExpect: (step) {
+      // Запрос журнала в рабочем пространстве идёт через
+      // `ClientWorkspace.refreshUsageLedger` (design.md change
+      // `add-usage-ledger`, D10: `refreshUsageLedger(sessionId, {rebuild})`), а
+      // не прямым вызовом приложения: состояние `SessionView.usageLedger`
+      // ведёт рабочее пространство.
+      if (step.expected['method'] == '_codelab/session/usage/ledger') {
+        step.track(
+          workspace.refreshUsageLedger(
+            const SessionId(standardFixtureSessionId),
+          ),
+        );
+        return;
+      }
+      user.act(step);
+    },
+  );
   addTearDown(() async {
     await workspace.dispose();
     await user.app.dispose();
@@ -71,5 +90,21 @@ void main() {
       (notice) => notice.kind == NoticeKind.turnStopped,
     );
     expect(notices.single.text, 'The turn stopped: budget exceeded: tokens.');
+  });
+
+  // Роль `client` фикстуры `acp/usage-ledger-request` (change
+  // `add-usage-ledger`, задача 3.5; spec acp-golden-fixtures «Клиентский
+  // прогон журнала»; design.md D10): после ответа `SessionView.usageLedger` —
+  // `loaded` с одним ходом и двумя шагами.
+  test('acp/usage-ledger-request: the ledger state is loaded with one turn '
+      'and two steps', () async {
+    final view = await _runWithWorkspace('acp/usage-ledger-request');
+
+    final state = view.usageLedger;
+    expect(state, isA<UsageLedgerLoaded>());
+    final ledger = (state as UsageLedgerLoaded).view;
+    expect(ledger.seq, 3);
+    expect(ledger.turns, hasLength(1));
+    expect(ledger.turns.single.steps, hasLength(2));
   });
 }

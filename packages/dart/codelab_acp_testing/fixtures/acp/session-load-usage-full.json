@@ -1,17 +1,19 @@
 {
-  "id": "acp/session-load-usage-partial",
+  "id": "acp/session-load-usage-full",
   "spec": [
     "15-Extensibility.md#custom-notifications",
     "15-Extensibility.md#advertising-custom-capabilities",
     "05-Prompt Turn.md#4-check-for-completion",
     "03-Session Setup.md#loading-a-session"
   ],
-  "description": "Сессия с ответом модели в журнале (setup.sessions) загружается в новом сервере (change add-usage-extension, D6, Q7): до хода снимков usage нет, затем ход даёт снимки, где session.turns считает только ходы после загрузки, а session.partial содержит beforeLoad — usage ранних ходов в сумму не вошёл. Handshake фикстуры создаёт отдельную сессию; загружается сессия из журнала.",
+  "description": "Полная сумма сессии после session/load (change add-usage-ledger, D8, Q3 (а); заменяет acp/session-load-usage-partial change add-usage-extension): журнал из setup.sessions с двумя ходами по ответу модели (10+5 и 20+10 токенов, стоимость в записях) загружается в новом сервере: реплей, ответ на session/load, затем снимок _codelab/session/usage с trigger load и полной суммой (turns 2, steps 2, без beforeLoad; turnId, step и turn нет, context неизвестен). Затем ход продолжает сумму: seq 2 и 3, session.turns 3. Handshake фикстуры создаёт отдельную сессию; загружается сессия из журнала.",
   "goals": [
-    "L-11"
+    "L-11",
+    "L-29"
   ],
   "extensions": [
-    "usage"
+    "usage",
+    "usageLedger"
   ],
   "roles": [
     "agent"
@@ -90,10 +92,59 @@
             },
             "usage": {
               "input": 10,
-              "output": 5
+              "output": 5,
+              "cost": {
+                "input": 3e-05,
+                "output": 7.5e-05
+              }
             },
             "stopReason": "stop",
             "timestamp": "2026-10-25T10:00:02.000Z"
+          }
+        },
+        {
+          "type": "message",
+          "id": "r3",
+          "parentId": "r2",
+          "timestamp": "2026-10-25T10:00:03.000Z",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Расскажи ещё"
+              }
+            ],
+            "timestamp": "2026-10-25T10:00:03.000Z"
+          }
+        },
+        {
+          "type": "message",
+          "id": "r4",
+          "parentId": "r3",
+          "timestamp": "2026-10-25T10:00:04.000Z",
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Вот рассказ."
+              }
+            ],
+            "model": {
+              "provider": "scripted",
+              "id": "scripted-1"
+            },
+            "usage": {
+              "input": 20,
+              "output": 10,
+              "cost": {
+                "input": 6e-05,
+                "output": 0.00015
+              }
+            },
+            "stopReason": "stop",
+            "timestamp": "2026-10-25T10:00:04.000Z"
           }
         }
       ]
@@ -191,6 +242,40 @@
         "params": {
           "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
           "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Расскажи ещё"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Вот рассказ."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
             "sessionUpdate": "current_mode_update",
             "currentModeId": "standard"
           }
@@ -231,7 +316,7 @@
     },
     {
       "dir": "a2c",
-      "note": "ответ session/load — после реплея (ACP-3); снимков usage до хода нет: реплей идёт мимо учёта (D18 Т1)",
+      "note": "ответ session/load — после реплея (ACP-3)",
       "frame": {
         "jsonrpc": "2.0",
         "id": "${loadId}",
@@ -250,6 +335,31 @@
           "configOptions": {
             "$any": []
           }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D8: снимок load — после ответа на session/load, а не в конце реплея; session — полная сумма журнала (turns 2, steps 2), partial без beforeLoad; context неизвестен мосту, turnId, step и turn нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "seq": 1,
+          "trigger": "load",
+          "session": {
+            "turns": 2,
+            "steps": 2,
+            "tokens": {
+              "input": 30,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.000315"
+          },
+          "currency": "USD"
         }
       }
     },
@@ -302,7 +412,7 @@
         "method": "_codelab/session/usage",
         "params": {
           "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
-          "seq": 1,
+          "seq": 2,
           "trigger": "step",
           "turnId": {
             "$capture": "turnId"
@@ -329,18 +439,15 @@
             "cost": "0.00105"
           },
           "session": {
-            "turns": 1,
-            "steps": 1,
+            "turns": 3,
+            "steps": 3,
             "tokens": {
-              "input": 100,
-              "output": 50,
+              "input": 130,
+              "output": 65,
               "cacheRead": 0,
               "cacheWrite": 0
             },
-            "cost": "0.00105",
-            "partial": [
-              "beforeLoad"
-            ]
+            "cost": "0.001365"
           },
           "currency": "USD",
           "context": {
@@ -358,7 +465,7 @@
         "method": "_codelab/session/usage",
         "params": {
           "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
-          "seq": 2,
+          "seq": 3,
           "trigger": "turn",
           "turnId": "${turnId}",
           "turn": {
@@ -372,18 +479,15 @@
             "cost": "0.00105"
           },
           "session": {
-            "turns": 1,
-            "steps": 1,
+            "turns": 3,
+            "steps": 3,
             "tokens": {
-              "input": 100,
-              "output": 50,
+              "input": 130,
+              "output": 65,
               "cacheRead": 0,
               "cacheWrite": 0
             },
-            "cost": "0.00105",
-            "partial": [
-              "beforeLoad"
-            ]
+            "cost": "0.001365"
           },
           "currency": "USD",
           "context": {
@@ -393,7 +497,7 @@
           }
         }
       },
-      "note": "session.turns — только ходы после загрузки, beforeLoad — ранние ходы не учтены (Q7)"
+      "note": "session.turns 3: два хода журнала и новый (D8); beforeLoad нет"
     },
     {
       "dir": "a2c",

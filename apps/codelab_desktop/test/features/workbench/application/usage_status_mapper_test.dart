@@ -347,6 +347,21 @@ void main() {
       expect(data.cost?.label, r'— · session ~$1.20');
     });
 
+    // Задача 3.6 add-usage-ledger (D8, D23 Т9 п. 3 add-usage-extension):
+    // после загрузки со снимком `load` сумма полная из журнала, без
+    // `beforeLoad`, снимка хода ещё нет. Регрессионная страховка: маппер
+    // правило уже соблюдает.
+    test('«Полная сумма после load»: «— · session \$1.20» без «~»', () {
+      final data = _of(
+        _reported(
+          session: UsageTotals(tokens: _noCache, cost: _usd(1200000)),
+        ),
+      );
+      expect(data.usage, isNull);
+      expect(data.cost?.label, r'— · session $1.20');
+      expect(data.cost?.label, isNot(contains('~')));
+    });
+
     test('without session.cost there is no cost segment', () {
       final data = _of(
         _reported(

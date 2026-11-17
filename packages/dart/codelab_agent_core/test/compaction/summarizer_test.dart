@@ -131,13 +131,13 @@ void main() {
       ..user(10)
       ..assistant(10);
 
-    final summary = await summarizerOf(m)(
+    final summary = (await summarizerOf(m)(
       SummaryRequest(
         region: messages(r),
         fileOps: const FileOps(read: ['lib/a.dart'], modified: ['lib/b.dart']),
       ),
       CancelToken.none,
-    );
+    )).text;
 
     expect(summary, '## Open user requests\n- fix the build');
     final request = m.requests.single;
@@ -207,10 +207,10 @@ void main() {
       ..call('c1', 'read')
       ..result('c1', 'read', 6);
 
-    final summary = await summarizerOf(m)(
+    final summary = (await summarizerOf(m)(
       SummaryRequest(region: messages(region), turnPrefix: messages(prefix)),
       CancelToken.none,
-    );
+    )).text;
 
     expect(m.requests, hasLength(2));
     expect(requestText(m, 1), contains('[tool call read]'));
@@ -226,14 +226,45 @@ void main() {
       ..user(8, fill: 'w')
       ..assistant(6);
 
-    final summary = await summarizerOf(m)(
+    final summary = (await summarizerOf(m)(
       SummaryRequest(region: const [], turnPrefix: messages(prefix)),
       CancelToken.none,
-    );
+    )).text;
 
     expect(m.requests, hasLength(1));
     expect(summary, contains('## Current turn context (split turn)'));
   });
+
+  test(
+    'usage and the model: the sum of all requests of one pass (D4)',
+    () async {
+      final m = model([
+        {
+          ...reply('earlier work'),
+          'usage': {'input': 900, 'output': 120},
+        },
+        {
+          ...reply('turn so far'),
+          'usage': {'input': 40, 'output': 10},
+        },
+      ]);
+      final region = RegionBuilder()
+        ..user(10)
+        ..assistant(10);
+      final prefix = RegionBuilder()
+        ..user(8)
+        ..assistant(6);
+
+      final result = await summarizerOf(m)(
+        SummaryRequest(region: messages(region), turnPrefix: messages(prefix)),
+        CancelToken.none,
+      );
+
+      expect(result.usage.input, 940);
+      expect(result.usage.output, 130);
+      expect(result.model, 'test/model-1');
+    },
+  );
 
   group('failures', () {
     test('an ErrorEvent is CompactionFailure', () async {

@@ -209,4 +209,73 @@ void main() {
 
     expect(snapshots(), isEmpty);
   });
+
+  // change `add-usage-ledger`, D8, задача 2.8: `session/load` режима
+  // `withUsage` отвечает без истории и шлёт снимок `load` с суммой двух
+  // прежних ходов; следующий ход — третий.
+  group('session/load (add-usage-ledger, D8)', () {
+    test('initialize advertises loadSession', () async {
+      final result = await initialize(usage: {'version': 1});
+
+      expect(sub(result, 'agentCapabilities')['loadSession'], isTrue);
+    });
+
+    test('the load snapshot follows the answer with the full sum, without '
+        'turnId, step, turn and context', () async {
+      await initialize(usage: {'version': 1});
+
+      final response = await agent.request('session/load', {
+        'sessionId': 'journal-1',
+        'cwd': directory.path,
+        'mcpServers': <Object?>[],
+      });
+
+      expect(response['result'], <String, Object?>{});
+      // Барьер: агент пишет кадры по порядку, ответ следующего запроса
+      // приходит после снимка `load`.
+      await agent.newSession(directory.path);
+      final load = snapshots().single;
+      expect(load['trigger'], 'load');
+      expect(load['seq'], 1);
+      expect(load['sessionId'], 'journal-1');
+      expect(
+        load.keys.toSet().intersection({'turnId', 'step', 'turn', 'context'}),
+        isEmpty,
+      );
+      final session = sub(load, 'session');
+      expect(session['turns'], 2);
+      expect(session['steps'], 2);
+      expect(session['cost'], '0.09');
+      expect(session, isNot(contains('partial')));
+    });
+
+    test('the next turn continues the sum: seq 2 and 3, turns 3', () async {
+      await initialize(usage: {'version': 1});
+      await agent.request('session/load', {
+        'sessionId': 'journal-1',
+        'cwd': directory.path,
+        'mcpServers': <Object?>[],
+      });
+
+      await agent.prompt('journal-1', 'more');
+
+      final frames = snapshots();
+      expect(frames.map((f) => f['seq']), [1, 2, 3]);
+      expect(sub(frames.last, 'session')['turns'], 3);
+      expect(sub(frames.last, 'session')['cost'], '0.14');
+    });
+
+    test('a client without the usage declaration gets no snapshot', () async {
+      await initialize();
+
+      final response = await agent.request('session/load', {
+        'sessionId': 'journal-1',
+        'cwd': directory.path,
+        'mcpServers': <Object?>[],
+      });
+
+      expect(response['result'], <String, Object?>{});
+      expect(snapshots(), isEmpty);
+    });
+  });
 }

@@ -50,6 +50,11 @@ final class ClientFixtureUser {
   /// действия пользователя.
   final promptErrors = <Object>[];
 
+  /// Сырые результаты запроса журнала `_codelab/session/usage/ledger` по
+  /// порядку (change `add-usage-ledger`, D9, задача 3.5) и его сбои.
+  final usageLedgerResults = <UsageLedgerReply>[];
+  final usageLedgerErrors = <Object>[];
+
   void act(ClientFixtureStep<AcpClientApplication> step) {
     final expected = step.expected;
     switch (expected['method']) {
@@ -86,6 +91,20 @@ final class ClientFixtureUser {
               cwd: env.cwd,
             ),
           ),
+        );
+      case '_codelab/session/usage/ledger':
+        // Прямой вызов операции клиента (D9): сырой результат и поколение.
+        final params = expected['params']! as Map<String, Object?>;
+        step.track(
+          app
+              .requestUsageLedger(
+                sessionId: _session.id,
+                rebuild: params['rebuild'] == true,
+              )
+              .then<void>(
+                usageLedgerResults.add,
+                onError: usageLedgerErrors.add,
+              ),
         );
       case 'session/cancel':
         step.track(app.cancelTurn(CancelTurnCommand(sessionId: _session.id)));

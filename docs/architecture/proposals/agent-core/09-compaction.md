@@ -39,8 +39,12 @@ bool shouldCompact(int contextTokens, int window, CompactionSettings s) =>
 final class CutPoint { final int firstKeptIndex; final bool splitTurn; final int turnStartIndex; }
 CutPoint? findCutPoint(List<SessionRecord> region, CompactionSettings s);
 
-typedef Summarizer = Future<String> Function(SummaryRequest request, CancelToken cancel);
+typedef Summarizer = Future<SummaryResult> Function(SummaryRequest request, CancelToken cancel);
                                        // бросает CompactionFailure (ошибка модели, пустой ответ) или CancelledException
+final class SummaryResult {             // change add-usage-ledger, D4: usage суммаризатора не теряется
+  final String text; final Usage usage; final String model;     // usage — сумма всех запросов прохода (резюме и контекст хода);
+                                                                 // model — '<provider>/<id>' ответа, пишется в details.summaryModel
+}
 final class SummaryRequest {
   final List<MessageRecord> region;    // что сжимаем; записи — чтобы отличить слова пользователя от уведомлений
   final List<MessageRecord>? turnPrefix;
@@ -55,7 +59,7 @@ Future<CompactionOutcome> compact({required SessionWriter writer, required Compa
     void Function(LlmContextProjection p)? onCompacted,   // сессия заменяет транскрипт и якорь до ContextCompacted
     CompactionAnchor? anchor,          // якорь последнего сжатия сессии: для before первого прохода (§9.3)
     String? focus,                     // только при trigger == manual
-    String? summaryModel, Logger? logger});
+    Logger? logger});                     // summaryModel не передаётся: модель — SummaryResult.model (change add-usage-ledger, D4)
 sealed class CompactionOutcome {}      // Compacted(record, before, after) | NothingToCompact(reason) | CompactionFailed(error)
                                        // reason: 'no cut point' (нет среза) | 'no reduction' (нет выигрыша, CMP-10)
                                        // | 'stale' (журнал изменился во время прохода, CMP-12)
@@ -496,8 +500,8 @@ compact(snapshot, trigger, summarize, settings, cancel, focus, anchor):
                       вернуть CompactionFailed; журнал и транскрипт не меняются (CMP-3)
 7. cancel.throwIfCancelled()                   // отмена после ответа модели тоже не пишет запись
 8. rec := compaction(summary, firstKeptId: region[cut.firstKeptIndex].id, tokensBefore: before,
-                     tokensAfter: 0, details: fileOps + splitTurn + summaryModel
-                     + после MVP usage ответа суммаризатора — details.usage, §12.6.1)
+                     tokensAfter: 0, details: fileOps + splitTurn + summaryModel (из SummaryResult.model)
+                     + usage ответа суммаризатора — details.usage, §12.6.1; change add-usage-ledger, D4)
 9. projected := buildLlmContext(snapshot + rec)
    rawAfter := estimateTokens(projected)                                  // без якоря
    after := estimateAfterCompaction(before, rawBefore, rawAfter)         // §9.3
@@ -516,7 +520,9 @@ compact(snapshot, trigger, summarize, settings, cancel, focus, anchor):
     якорь сжатия сессии := compactionAnchorOf(projected, промпт и схемы на старте compact) —
     единым методом сессии (§9.3), лог compaction.anchor(source: compaction); аварийный путь
     меняет якорь и отдаёт проекцию циклу через LoopContext
-12. emit ContextCompacted(tokensBefore: before, tokensAfter: after)
+12. emit ContextCompacted(tokensBefore: before, tokensAfter: after, usage: summary.usage, model: summary.model)
+    // usage суммаризатора входит в сумму сессии, но не в TurnEnded.usage, даже при аварийном
+    // сжатии посреди хода (§12.6; change add-usage-ledger, D4); реплей записи без details.usage — usage: null
 13. если after > threshold и проходов < 3 → повторить с шага 3 (CMP-5); before := after
 ```
 

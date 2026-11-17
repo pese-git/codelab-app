@@ -373,6 +373,10 @@
       "description": "Show the model, mode, working directory and MCP servers"
     },
     {
+      "name": "usage",
+      "description": "Show token usage and cost of the session"
+    },
+    {
       "name": "help",
       "description": "List commands"
     }

@@ -46,6 +46,10 @@ enum UsageTrigger {
   turn,
   compaction,
 
+  /// Снимок после `session/load` (change `add-usage-ledger`, D8, D10): без
+  /// `turnId`, меняет `session` и `context`, `lastTurn` не меняет.
+  load,
+
   /// Незнакомое значение: снимок принимается как снимок без шага (D2).
   unknown,
 }

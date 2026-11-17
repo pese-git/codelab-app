@@ -383,9 +383,20 @@ final class ContextCompacted extends AgentEvent {
     super.sessionId, {
     required this.tokensBefore,
     required this.tokensAfter,
+    this.usage,
+    this.model,
   });
 
   final int tokensBefore, tokensAfter;
+
+  /// Usage вызова суммаризатора (design.md change `add-usage-ledger`, D4).
+  /// `null` — у реплея старой записи без `details.usage`. В `TurnEnded.usage`
+  /// не входит; учитывается в сумме сессии и в `summaries` журнала.
+  final Usage? usage;
+
+  /// Модель ответа суммаризатора, `<provider>/<id>` (D4); `null` вместе с
+  /// [usage] у старой записи.
+  final String? model;
 }
 
 /// Заголовок сессии записан в журнал (событие уровня `AgentSession`,

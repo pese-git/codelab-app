@@ -78,6 +78,9 @@ import '../tools/path_lock.dart';
 import '../tools/registry.dart';
 import '../tools/tasks/task_list.dart';
 import '../tools/tasks/task_tools.dart' show TaskUpdateTool;
+import '../usage/usage_ledger_keeper.dart';
+import '../usage/usage_ledger_report.dart';
+import '../usage/usage_report_text.dart';
 import '../util/logger.dart';
 import '../util/result.dart';
 import '../host/host_profile.dart';
@@ -3020,10 +3023,21 @@ final class _Session implements AgentSession {
       logger: logger,
       onFailure: _onStorageFailure,
     );
+    _usage = UsageLedgerKeeper(
+      sessionId: id,
+      store: services.usageLedger,
+      logger: logger,
+      clock: services.clock,
+      snapshot: () => _writer.snapshot,
+      catalog: () => _catalog,
+      isClosed: () => _closed,
+    );
     // Писатель — первый подписчик агента: запись идёт до того, как событие
     // увидят остальные (§8.3, SES-8).
     _agent.subscribe(_onEvent);
     _builtin = BuiltinCommands(
+      usageReport: (rebuild) async =>
+          formatUsageReport(await _usage.report(rebuild: rebuild)),
       reloadConfig: reloadConfig,
       checkConfig: () async {
         try {
@@ -3083,6 +3097,16 @@ final class _Session implements AgentSession {
 
   /// Исполнитель встроенных команд `/config` и `/mcp` (D12).
   late final BuiltinCommands _builtin;
+
+  /// Операции отчёта журнала usage (design.md change `add-usage-ledger`, D3).
+  late final UsageLedgerKeeper _usage;
+
+  @override
+  Future<UsageLedgerReport> usageLedger({bool rebuild = false}) =>
+      _usage.report(rebuild: rebuild);
+
+  @override
+  Future<UsageLedgerReport> usageLedgerInMemory() => _usage.inMemory();
 
   /// Слот хода занят встроенной командой: второй `prompt` отклоняется так
   /// же, как во время хода модели (D12, «Слот хода и ход модели»). Отдельный
@@ -4344,6 +4368,8 @@ final class _Session implements AgentSession {
         stack: stack,
       );
     }
+    // Начатая запись `usage.json` доходит до конца (D3), как запись журнала.
+    await _usage.settle();
     await _services.sessions.close(id);
     if (!_live.isClosed) {
       await _live.close();
@@ -4607,7 +4633,6 @@ final class _Session implements AgentSession {
         onCompacted?.call(p);
       },
       focus: focus,
-      summaryModel: '${model.provider}/${model.id}',
       logger: _logger,
       skillCatalog: skills,
       skillsConfig: skillsConfig,
