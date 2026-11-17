@@ -150,6 +150,8 @@ const _usageLedgerFixtures = {
   'acp/usage-ledger-rebuild',
   'acp/session-load-usage-full',
   'acp/compact-usage-summary',
+  // change `fix-discarded-compaction-usage`, D7: отброшенный проход сжатия.
+  'acp/compact-no-gain-usage',
 };
 
 /// Блок `agentCapabilities._meta.codelab` ответа `initialize` фикстуры.

@@ -49,6 +49,10 @@ String formatUsageReport(UsageLedgerReport report) {
   // все четыре счётчика нулевые. К прогонам субагентов правило не применяется:
   // у записи `subagent` нет `stopReason`, а нулевой usage — это и ребёнок, не
   // обращавшийся к модели (отменён в очереди), поэтому «~» там была бы ложью.
+  // Отброшенные вызовы показываются только при ненулевом числе (D4 change
+  // `fix-discarded-compaction-usage`).
+  final discarded = ledger.summaries?.discarded ?? 0;
+  final discardedNote = discarded > 0 ? ' ($discarded discarded)' : '';
   final summaryApprox = ledger.summaryCalls.any((c) => _tokens(c.usage) == 0);
   final total = _usage(ledger.total, [
     ...modelParts,
@@ -65,7 +69,7 @@ String formatUsageReport(UsageLedgerReport report) {
     if (ledger.subagents case final g?)
       'Subagents: ${g.count} runs, ${_usage(g.usage, runParts)}',
     if (ledger.summaries case final g?)
-      'Summaries: ${g.count}, '
+      'Summaries: ${g.count}$discardedNote, '
           '${_usage(g.usage, summaryParts, approx: summaryApprox)}',
     _ledgerLine(report),
   ].join('\n');

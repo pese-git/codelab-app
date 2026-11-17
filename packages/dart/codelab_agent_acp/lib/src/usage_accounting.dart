@@ -189,7 +189,8 @@ List<String>? _partialJson(Set<UsagePartial> partial) {
 /// от моста, который решает, кому и когда слать кадр (D7, D18 Т5).
 ///
 /// Для чего: превращает события ядра (`TurnStarted`, `StepEnded`, `TurnEnded`,
-/// `ContextCompacted`) в параметры уведомления формы D2 и ведёт `seq`.
+/// `ContextCompacted`, `CompactionDiscarded`) в параметры уведомления формы
+/// D2 и ведёт `seq`.
 ///
 /// Как использовать: мост подаёт события в [turnStarted], [stepEnded],
 /// [turnEnded] всегда; снимок берёт через [stepSnapshot], [turnSnapshot],
@@ -247,7 +248,8 @@ final class UsageAccounting {
       ..merge(projection._summaries);
   }
 
-  /// Учитывает вызов суммаризатора (`ContextCompacted.usage`): [priced] —
+  /// Учитывает вызов суммаризатора (`ContextCompacted.usage`,
+  /// `CompactionDiscarded.usage`): [priced] —
   /// у модели ответа в каталоге есть цена. Нулевой usage ничего не меняет;
   /// ненулевые токены без цены дают `noPrice` (D4).
   void summarizerEnded(Usage usage, {required bool priced}) {
@@ -417,19 +419,41 @@ final class UsageAccounting {
 
   /// Снимок `compaction`: `used` — `tokensAfter`, `size` и `compactAt` — из
   /// последнего `StepEnded` сессии; без шагов `context` нет (D5).
-  Map<String, Object?> compactionSnapshot(String sessionId, int tokensAfter) {
+  Map<String, Object?> compactionSnapshot(String sessionId, int tokensAfter) =>
+      _sessionSnapshot(sessionId, 'compaction', tokensAfter);
+
+  /// Снимок `compactionDiscarded` (change `fix-discarded-compaction-usage`,
+  /// D5, CMP-13): оплаченный вызов суммаризатора без записанного сжатия.
+  ///
+  /// Почему `used` — [tokensBefore]: заполнение контекста не изменилось
+  /// (сжатия нет), и индикатор у клиента не должен прыгать; это та же
+  /// согласованная оценка, что у `context.used` последнего снимка.
+  /// Полей `turnId`, `step` и `turn` нет, как у `compaction`.
+  ///
+  /// Как использовать: мост зовёт после [summarizerEnded] на событие
+  /// `CompactionDiscarded`, когда кадр действительно уйдёт.
+  Map<String, Object?> compactionDiscardedSnapshot(
+    String sessionId,
+    int tokensBefore,
+  ) => _sessionSnapshot(sessionId, 'compactionDiscarded', tokensBefore);
+
+  /// Снимок уровня сессии без хода и шага: `session` — сумма, `context` —
+  /// заполнение [used] с `size` и `compactAt` последнего `StepEnded`; без
+  /// шагов `context` нет (D5). Общий построитель `compaction` и
+  /// `compactionDiscarded`: повод — параметр, правила одни.
+  Map<String, Object?> _sessionSnapshot(
+    String sessionId,
+    String trigger,
+    int used,
+  ) {
     final last = _lastContext;
     return _snapshot(
       sessionId,
-      'compaction',
+      trigger,
       session: _sessionJson(),
       context: last == null
           ? null
-          : {
-              'used': tokensAfter,
-              'size': last.window,
-              'compactAt': ?last.compactAt,
-            },
+          : {'used': used, 'size': last.window, 'compactAt': ?last.compactAt},
     );
   }
 
@@ -632,7 +656,15 @@ final class UsageLedgerProjection {
       if (unpriced) {
         summaries.partial.add(UsagePartial.noPrice);
       }
-      summariesJson = _groupJson('count', group.count, group.usage, judged);
+      summariesJson = _groupJson(
+        'count',
+        group.count,
+        group.usage,
+        judged,
+        // Отброшенные проходы (CMP-13) показываются отдельным числом только
+        // при ненулевом значении; версия `usageLedger` остаётся 1 (D5, Q2).
+        discarded: group.discarded,
+      );
     }
 
     // Всё, что журнал насчитал сверх перечисленных ходов и суммаризатора: шаги
@@ -801,17 +833,20 @@ Usage _minus(Usage a, Usage b) {
 
 /// Группа без шагов — субагенты (`runs`) или суммаризатор (`count`): токены,
 /// `cost` при известной цене хотя бы у одной части с токенами, `noPrice` при
-/// неизвестной (D2, D6).
+/// неизвестной (D2, D6). [discarded] — только у суммаризатора: число
+/// отброшенных вызовов, ключ при нуле не пишется.
 Map<String, Object?> _groupJson(
   String countKey,
   int count,
   Usage usage,
-  ({bool priced, bool unpriced}) judged,
-) {
+  ({bool priced, bool unpriced}) judged, {
+  int discarded = 0,
+}) {
   final totals = _Totals()
     ..addUsage(usage, priced: judged.priced && _micros(usage) != null);
   return {
     countKey: count,
+    if (discarded > 0) 'discarded': discarded,
     'tokens': totals.tokensJson(),
     if (totals.priced) 'cost': _costString(totals.micros),
     'partial': ?_partialJson({if (judged.unpriced) UsagePartial.noPrice}),

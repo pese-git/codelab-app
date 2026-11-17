@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
@@ -562,10 +563,12 @@ void main() {
       },
     );
 
-    test('a summary longer than the region: NothingToCompact, nothing is '
-        'written, compaction.skipped without the summary (CMP-10)', () async {
+    test('a summary longer than the region: NothingToCompact, no compaction '
+        'record, the only new record is the accounting one (D1), '
+        'compaction.skipped without the summary (CMP-10)', () async {
       await journal(twoTurns());
       final before = store.inner.textOf(sid);
+      final contextBefore = _context(writer);
       var compacted = 0;
 
       final outcome = await run(
@@ -575,12 +578,25 @@ void main() {
 
       expect(outcome, isA<NothingToCompact>());
       expect((outcome as NothingToCompact).reason, 'no reduction');
-      expect(store.appended, isEmpty);
-      expect(store.inner.textOf(sid), before);
+      // Характеризационная правка (change `fix-discarded-compaction-usage`,
+      // D1, R2): раньше тут было «журнал не изменился». Теперь единственная
+      // новая запись — служебная запись учёта; записей `compaction` нет,
+      // проекция и транскрипт те же.
+      final record = store.appended.single.record;
+      expect(record, isA<CustomRecord>());
+      expect((record as CustomRecord).customType, _discardedType);
+      expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
+      expect(
+        store.inner.textOf(sid),
+        startsWith(before!),
+        reason: 'the journal only grows by the accounting record',
+      );
+      expect(_context(writer), contextBefore);
       expect(events.whereType<ContextCompacted>(), isEmpty);
       expect(compacted, 0);
       final skipped = logger.eventsOf('compaction.skipped').single;
       expect(skipped.level, LogLevel.info);
+      // D6: в логе прибавились `usage_record_id` и `summary_model`.
       expect(skipped.fields.keys, {
         'session_id',
         'trigger',
@@ -588,11 +604,14 @@ void main() {
         'reason',
         'tokens_before',
         'tokens_after',
+        'usage_record_id',
+        'summary_model',
       });
       expect(skipped.fields['session_id'], sid.value);
       expect(skipped.fields['trigger'], 'afterTurn');
       expect(skipped.fields['pass'], 1);
       expect(skipped.fields['reason'], 'no reduction');
+      expect(skipped.fields['usage_record_id'], record.id);
       expect(
         skipped.fields['tokens_after'] as int,
         greaterThanOrEqualTo(skipped.fields['tokens_before'] as int),
@@ -600,8 +619,9 @@ void main() {
       expect(skipped.toString(), isNot(contains('xxxx')));
     });
 
-    test('a second pass without gain: the first record stays, the result is '
-        'its Compacted, compaction.skipped has pass 2', () async {
+    test('a second pass without gain: the first record stays, then the '
+        'accounting record of pass 2; the result is the first Compacted, '
+        'compaction.skipped has pass 2', () async {
       await journal(longChain());
       var calls = 0;
 
@@ -611,11 +631,258 @@ void main() {
       });
 
       expect(calls, 2);
-      expect(store.appended.map((a) => a.record), hasLength(1));
       expect(events.whereType<ContextCompacted>(), hasLength(1));
-      final first = store.appended.single.record as CompactionRecord;
+      // Характеризационная правка (change `fix-discarded-compaction-usage`,
+      // D1, R2): после записи `compaction` первого прохода — одна запись
+      // учёта второго, отброшенного прохода (`pass: 2`).
+      final appended = store.appended.map((a) => a.record).toList();
+      expect(appended, hasLength(2));
+      final first = appended.first as CompactionRecord;
       expect((outcome as Compacted).record, same(first));
-      expect(logger.eventsOf('compaction.skipped').single.fields['pass'], 2);
+      final discarded = appended.last as CustomRecord;
+      expect(discarded.customType, _discardedType);
+      expect(discarded.parentId, first.id);
+      expect((discarded.data! as Map)['pass'], 2);
+      expect(
+        writer.snapshot.records.whereType<CompactionRecord>(),
+        hasLength(1),
+      );
+      final skipped = logger.eventsOf('compaction.skipped').single.fields;
+      expect(skipped['pass'], 2);
+      expect(skipped['usage_record_id'], discarded.id);
+    });
+  });
+
+  // Учёт оплаченного вызова суммаризатора у прохода, который не записан
+  // (change `fix-discarded-compaction-usage`, D1, Q1 (а), Q6 (а); критерий
+  // «Учёт вызова суммаризатора отброшенного прохода»). События
+  // `CompactionDiscarded` проверяет `compaction_discarded_event_test.dart`.
+  group('a discarded pass is accounted (D1)', () {
+    const usage = Usage(
+      input: 764,
+      output: 171,
+      cost: UsageCost(input: 0.0001146, output: 0.0001026),
+    );
+    const model = 'openai/gpt-4o-mini';
+
+    Summarizer paid(String text) =>
+        (request, cancel) async =>
+            SummaryResult(text: text, usage: usage, model: model);
+
+    test('the record: custom, the fields of D1, no summary text, not '
+        'durable, a child of the leaf', () async {
+      await journal(twoTurns());
+      final leaf = writer.snapshot.leafId;
+
+      await run(paid('x' * 20000));
+
+      final appended = store.appended.single;
+      expect(appended.durable, isFalse);
+      final record = appended.record as CustomRecord;
+      expect(record.customType, 'codelab.compaction_discarded');
+      expect(record.parentId, leaf);
+      expect(writer.snapshot.leafId, record.id);
+      final skipped = logger.eventsOf('compaction.skipped').single.fields;
+      expect(record.data, {
+        'reason': 'no reduction',
+        'trigger': 'afterTurn',
+        'pass': 1,
+        'tokensBefore': skipped['tokens_before'],
+        'tokensAfter': skipped['tokens_after'],
+        'summaryModel': model,
+        'usage': usage.toJson(),
+      });
+      expect(skipped['summary_model'], model);
+      expect(skipped['usage_record_id'], record.id);
+      expect(jsonEncode(record.toJson()), isNot(contains('xxxx')));
+    });
+
+    test('no cut point, a failed summary and a cancel right after the '
+        'answer write no accounting record (R3, Q5)', () async {
+      await journal(
+        RegionBuilder()
+          ..user(40)
+          ..assistant(100),
+      );
+      await run(paid('never'));
+      expect(store.appended, isEmpty);
+
+      await journal(twoTurns());
+      await run(
+        (request, cancel) async => throw const CompactionFailure('down'),
+      );
+      expect(store.appended, isEmpty);
+
+      await journal(twoTurns());
+      final source = CancelTokenSource();
+      await expectLater(
+        run((request, cancel) async {
+          source.cancel(const UserCancel());
+          return SummaryResult(text: 'late', usage: usage, model: model);
+        }, cancel: source.token),
+        throwsA(isA<CancelledException>()),
+      );
+      expect(store.appended, isEmpty);
+    });
+
+    test('the next compaction gets the accounting record in its region and '
+        'finds the same cut point and request as without it', () async {
+      // Контроль: тот же журнал, прямо без записи учёта.
+      await journal(longChain());
+      final controlSeen = <SummaryRequest>[];
+      final control =
+          await run(fixed('x' * 400, seen: controlSeen)) as Compacted;
+
+      await journal(longChain());
+      await run(paid('x' * 400000));
+      expect(
+        store.appended.single.record,
+        isA<CustomRecord>(),
+        reason: 'precondition: the discarded pass wrote the record',
+      );
+      store.appended.clear();
+      final seen = <SummaryRequest>[];
+      final outcome = await run(fixed('x' * 400, seen: seen)) as Compacted;
+
+      expect(outcome.record.firstKeptId, control.record.firstKeptId);
+      expect(
+        seen.first.region.map((m) => m.id),
+        controlSeen.first.region.map((m) => m.id),
+      );
+      expect(seen.first.previousSummary, controlSeen.first.previousSummary);
+      expect(
+        seen.first.turnPrefix?.length,
+        controlSeen.first.turnPrefix?.length,
+      );
+      expect(store.appended.last.record, isA<CompactionRecord>());
+    });
+
+    test(
+      'a mode change during the summary of a pass without gain stays on '
+      'the active branch: the accounting record is its child (SES-16)',
+      () async {
+        await journal(twoTurns());
+        final started = Completer<void>();
+        final release = Completer<void>();
+        final future = run((request, cancel) async {
+          started.complete();
+          await release.future;
+          return SummaryResult(text: 'x' * 20000, usage: usage, model: model);
+        });
+        await started.future;
+        final change = await writer.append(
+          (id, parent, at) => ModeChangeRecord(
+            id: id,
+            parentId: parent,
+            timestamp: at,
+            modeId: 'plan',
+          ),
+        );
+        release.complete();
+
+        final outcome = await future;
+
+        expect(outcome, isA<NothingToCompact>());
+        final record = store.appended.last.record as CustomRecord;
+        expect(record.customType, _discardedType);
+        expect(record.parentId, change.id);
+        expect(writer.snapshot.leafId, record.id);
+        expect(
+          pathToLeaf(writer.snapshot).map((r) => r.id),
+          containsAllInOrder([change.id, record.id]),
+        );
+        final reopened = await store.inner.open(sid);
+        expect(buildLlmContext(reopened).modeId, 'plan');
+      },
+    );
+
+    test('a cancel that comes after appendWith returned null for stale does '
+        'not undo the accounting record (Q9, CMP-13)', () async {
+      await journal(twoTurns());
+      // Токен «отменяется» сразу после проверки в построителе записи: первый
+      // опрос `isCancelled` (в очереди писателя) — ложь, дальше — истина.
+      final token = _CancelAfterFirstCheck();
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final future = run((request, cancel) async {
+        started.complete();
+        await release.future;
+        return SummaryResult(text: 'y', usage: usage, model: model);
+      }, cancel: token);
+      await started.future;
+      await writer.append(
+        (id, parent, at) => MessageRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          message: UserMessage(const [TextContent('late')], timestamp: at),
+        ),
+      );
+      release.complete();
+
+      final outcome = await future;
+
+      expect((outcome as NothingToCompact).reason, 'stale');
+      expect(token.checks, greaterThanOrEqualTo(1));
+      final record = store.appended.last.record as CustomRecord;
+      expect(record.customType, _discardedType);
+      expect((record.data! as Map)['reason'], 'stale');
+      expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
+    });
+
+    test('a stale pass (a message during the summary) is accounted too, '
+        'reason stale, a child of the current leaf (CMP-12, Q6)', () async {
+      await journal(twoTurns());
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final future = run((request, cancel) async {
+        started.complete();
+        await release.future;
+        return SummaryResult(
+          text: 'secret summary',
+          usage: usage,
+          model: model,
+        );
+      });
+      await started.future;
+      final late = await writer.append(
+        (id, parent, at) => MessageRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          message: UserMessage(const [TextContent('late')], timestamp: at),
+        ),
+      );
+      release.complete();
+
+      final outcome = await future;
+
+      expect((outcome as NothingToCompact).reason, 'stale');
+      final record = store.appended.last.record as CustomRecord;
+      expect(record.customType, _discardedType);
+      expect(record.parentId, late.id);
+      expect(writer.snapshot.leafId, record.id);
+      expect((record.data! as Map)['reason'], 'stale');
+      expect((record.data! as Map)['usage'], usage.toJson());
+      expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
+      final skipped = logger.eventsOf('compaction.skipped').single;
+      expect(skipped.level, LogLevel.warning);
+      expect(skipped.fields.keys, {
+        'session_id',
+        'trigger',
+        'pass',
+        'reason',
+        'tokens_before',
+        'tokens_after',
+        'blocking_type',
+        'usage_record_id',
+        'summary_model',
+      });
+      expect(skipped.fields['reason'], 'stale');
+      expect(skipped.fields['blocking_type'], 'message');
+      expect(skipped.fields['summary_model'], model);
+      expect(skipped.fields['usage_record_id'], record.id);
+      expect(skipped.toString(), isNot(contains('secret summary')));
     });
   });
 
@@ -818,42 +1085,48 @@ void main() {
       });
     }
 
-    test('a message during the summary is stale: nothing is written', () async {
-      await journal(twoTurns());
-      final started = Completer<void>();
-      final release = Completer<void>();
-      var rebuilt = 0;
-      final future = run(
-        held('secret summary', started: started, release: release),
-        onCompacted: (_) => rebuilt++,
-      );
-      await started.future;
-      await writer.append(
-        (id, parent, at) => MessageRecord(
-          id: id,
-          parentId: parent,
-          timestamp: at,
-          message: UserMessage(const [TextContent('late')], timestamp: at),
-        ),
-      );
-      release.complete();
+    // Запись `compaction` не пишется; единственная новая запись — учёт
+    // вызова суммаризатора (CMP-13, Q6 (а)); подробности — в группе «a
+    // discarded pass is accounted».
+    test(
+      'a message during the summary is stale: no compaction record',
+      () async {
+        await journal(twoTurns());
+        final started = Completer<void>();
+        final release = Completer<void>();
+        var rebuilt = 0;
+        final future = run(
+          held('secret summary', started: started, release: release),
+          onCompacted: (_) => rebuilt++,
+        );
+        await started.future;
+        await writer.append(
+          (id, parent, at) => MessageRecord(
+            id: id,
+            parentId: parent,
+            timestamp: at,
+            message: UserMessage(const [TextContent('late')], timestamp: at),
+          ),
+        );
+        release.complete();
 
-      final outcome = await future;
+        final outcome = await future;
 
-      expect(outcome, isA<NothingToCompact>());
-      expect((outcome as NothingToCompact).reason, 'stale');
-      expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
-      expect(events.whereType<ContextCompacted>(), isEmpty);
-      expect(rebuilt, 0);
-      final skipped = logger.eventsOf('compaction.skipped').single;
-      expect(skipped.level, LogLevel.warning);
-      expect(skipped.fields['session_id'], sid.value);
-      expect(skipped.fields['trigger'], 'afterTurn');
-      expect(skipped.fields['pass'], 1);
-      expect(skipped.fields['reason'], 'stale');
-      expect(skipped.fields['blocking_type'], 'message');
-      expect(skipped.toString(), isNot(contains('secret summary')));
-    });
+        expect(outcome, isA<NothingToCompact>());
+        expect((outcome as NothingToCompact).reason, 'stale');
+        expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
+        expect(events.whereType<ContextCompacted>(), isEmpty);
+        expect(rebuilt, 0);
+        final skipped = logger.eventsOf('compaction.skipped').single;
+        expect(skipped.level, LogLevel.warning);
+        expect(skipped.fields['session_id'], sid.value);
+        expect(skipped.fields['trigger'], 'afterTurn');
+        expect(skipped.fields['pass'], 1);
+        expect(skipped.fields['reason'], 'stale');
+        expect(skipped.fields['blocking_type'], 'message');
+        expect(skipped.toString(), isNot(contains('secret summary')));
+      },
+    );
 
     test('an unknown record kind is stale too (fail-closed)', () async {
       await journal(twoTurns());
@@ -1008,8 +1281,44 @@ void main() {
       await outcome;
       expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
       expect(events.whereType<ContextCompacted>(), isEmpty);
+      // Отмена в очереди писателя — вне учёта (R3, Q5 (а)): записи учёта нет.
+      expect(writer.snapshot.records.whereType<CustomRecord>(), isEmpty);
     });
   });
+}
+
+/// `customType` записи учёта отброшенного прохода (change
+/// `fix-discarded-compaction-usage`, D1). Константы ядра ещё нет (красная
+/// фаза), поэтому тест держит литерал: он же фиксирует формат журнала.
+const _discardedType = 'codelab.compaction_discarded';
+
+/// Сообщения контекста модели по снимку писателя в JSON: сравнение «до» и
+/// «после» не зависит от идентичности объектов.
+List<Map<String, Object?>> _context(SessionWriter writer) => [
+  for (final m in buildLlmContext(writer.snapshot).messages) m.toJson(),
+];
+
+/// Токен, который отвечает «не отменён» на первый опрос `isCancelled`
+/// (построитель записи в очереди писателя) и «отменён» на следующие и на
+/// `throwIfCancelled`: так тест ставит отмену ровно после решения `stale`.
+final class _CancelAfterFirstCheck implements CancelToken {
+  var checks = 0;
+
+  @override
+  bool get isCancelled => checks++ > 0;
+
+  @override
+  Object? get reason => checks > 0 ? const UserCancel() : null;
+
+  @override
+  Future<void> get onCancel => Completer<void>().future;
+
+  @override
+  void throwIfCancelled() {
+    if (checks > 0) {
+      throw CancelledException(reason);
+    }
+  }
 }
 
 /// Список событий, который вызывает [onAdd] при каждом `ContextCompacted`:
