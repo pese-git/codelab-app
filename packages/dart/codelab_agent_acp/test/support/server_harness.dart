@@ -123,6 +123,9 @@ final class ServerHarness {
   /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
   /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
   ///
+  /// [usageLedger] — порт файла журнала usage (design.md change
+  /// `add-usage-ledger`, D3): без него отчёт журнала — `inMemory`.
+  ///
   /// [defaultModel] и [compaction] — модель по умолчанию (например, с ценами
   /// `ModelCost`) и пороги сжатия для `CoreConfig`, когда нет
   /// [configSource] и [rootConfig] (design.md change `add-usage-extension`,
@@ -151,6 +154,7 @@ final class ServerHarness {
     AgentRuntime Function(AgentRuntime inner)? wrapRuntime,
     ModelRef? defaultModel,
     CompactionOverrides compaction = const CompactionOverrides(),
+    UsageLedgerStore? usageLedger,
   }) async {
     final clock = FakeClock();
     final logger = RecordingLogger();
@@ -179,6 +183,7 @@ final class ServerHarness {
         clock: clock,
         ids: SequentialIdGenerator(),
         sessions: store,
+        usageLedger: usageLedger,
         models: initial == null ? models : catalogOf(initial),
         config: configSource,
         projectConfig: projectConfig,
@@ -379,20 +384,31 @@ final class TestClient {
   }
 
   /// Запрос с новым числовым id; ответ — по этому id.
-  Future<JsonRpcResponse> request(String method, [Object? params]) {
+  ///
+  /// [timeout] — сколько ждать ответ; замер журнала usage на 40 000 шагов
+  /// (`usage_ledger_size_test.dart`) ждёт дольше обычных пяти секунд.
+  Future<JsonRpcResponse> request(
+    String method, [
+    Object? params,
+    Duration timeout = const Duration(seconds: 5),
+  ]) {
     final id = JsonRpcId.integer(_nextId++);
     return send(
       JsonRpcMessage.request(id: id, method: method, params: params)
           as JsonRpcRequest,
+      timeout,
     );
   }
 
   /// Отправляет запрос как есть и ждёт ответ на его id.
-  Future<JsonRpcResponse> send(JsonRpcRequest request) async {
+  Future<JsonRpcResponse> send(
+    JsonRpcRequest request, [
+    Duration timeout = const Duration(seconds: 5),
+  ]) async {
     final completer = Completer<JsonRpcResponse>();
     _pending[request.id] = completer;
     await transport.send(request);
-    return completer.future.timeout(const Duration(seconds: 5));
+    return completer.future.timeout(timeout);
   }
 
   Future<void> notify(String method, [Object? params]) => transport.send(
@@ -485,6 +501,12 @@ final class TestClient {
 final class JournalStore implements SessionStore {
   final inner = MemorySessionStore();
 
+  /// Готовые снимки журналов: `open` отдаёт их без `append` по одной записи.
+  /// Нужны замеру `usage_ledger_size_test.dart`: 80 000 записей через
+  /// `MemorySessionStore.append` (копия списка на запись) строились бы
+  /// минутами, а замеряется не запись журнала, а ответ по нему.
+  final prebuilt = <SessionId, SessionSnapshot>{};
+
   @override
   Future<void> create(SessionHeader header) => inner.create(header);
 
@@ -514,7 +536,8 @@ final class JournalStore implements SessionStore {
   Future<void> flush(SessionId id) => inner.flush(id);
 
   @override
-  Future<SessionSnapshot> open(SessionId id) => inner.open(id);
+  Future<SessionSnapshot> open(SessionId id) async =>
+      prebuilt[id] ?? await inner.open(id);
 
   @override
   Future<SessionPage> list({String? cwd, String? cursor, int pageSize = 50}) =>

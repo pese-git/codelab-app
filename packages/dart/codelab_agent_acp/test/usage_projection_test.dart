@@ -599,9 +599,12 @@ void main() {
       expect(positionOfUsage(other, 3), lessThan(endedAt()));
     });
 
-    // «Сессия перешла к новому соединению» (Q11 (а), D4): снимки нового хода
-    // получает только новое соединение, `seq` продолжает счёт без сброса,
-    // агрегат `session` включает прежние ходы, `beforeLoad` нет.
+    // «Сессия перешла к новому соединению» (Q11 (а), D4; change
+    // `add-usage-ledger`, D8): после ответа на `session/load` новое
+    // соединение получает снимок `load` с `seq` 4 и суммой ходов до перехода,
+    // снимки нового хода получает только оно, `seq` продолжает счёт без
+    // сброса (5, 6), агрегат `session` включает прежние ходы, `beforeLoad`
+    // нет.
     test('a session that moved to a new connection continues seq without a '
         'reset', () async {
       final sessionId = await ready(
@@ -616,8 +619,23 @@ void main() {
       expect(usageOf(h.client).map((f) => f['seq']), [1, 2, 3]);
 
       final other = await connectDeclaring();
-      expect((await load(other, sessionId)).error, isNull);
-      expect(usageOf(other), isEmpty, reason: 'replay is not accounting');
+      final loaded = await load(other, sessionId);
+      expect(loaded.error, isNull);
+      // Реплей — не учёт: единственный снимок до хода — `load` после ответа.
+      final handover = usageOf(other);
+      expect(handover.map((f) => f['trigger']), ['load']);
+      expect(handover.single['seq'], 4);
+      expect(
+        positionOfUsage(other, 4),
+        greaterThan(other.received.indexOf(loaded)),
+      );
+      expect(asMap(handover.single['session'])['turns'], 1);
+      expect(asMap(handover.single['session'])['steps'], 2);
+      expect(
+        asMap(handover.single['session'])['tokens'],
+        tokens(2700, 700, 22000, 800),
+      );
+      expect(asMap(handover.single['session']), isNot(contains('partial')));
       final second = await other.request('session/prompt', {
         'sessionId': sessionId,
         'prompt': [
@@ -627,9 +645,9 @@ void main() {
 
       expect(second.resultMap, {'stopReason': 'end_turn'});
       final frames = usageOf(other);
-      expect(frames.map((f) => f['seq']), [4, 5]);
-      expect(frames.map((f) => f['trigger']), ['step', 'turn']);
-      expect(frames.first['turnId'], isNot(usageOf(h.client).first['turnId']));
+      expect(frames.map((f) => f['seq']), [4, 5, 6]);
+      expect(frames.map((f) => f['trigger']), ['load', 'step', 'turn']);
+      expect(frames[1]['turnId'], isNot(usageOf(h.client).first['turnId']));
       final session = asMap(frames.last['session']);
       expect(session['turns'], 2);
       expect(session['steps'], 3);
@@ -834,12 +852,14 @@ void main() {
     );
   });
 
-  // «Сессия после загрузки» (Q7 (а), D6; фикстура
-  // `acp/session-load-usage-partial`): журнал с ответами модели загружен в
-  // новом сервере — до хода снимков нет, потом `session.partial` содержит
-  // `beforeLoad`, а `session.turns` считает только ходы после загрузки.
-  test('session/load of a journal with model answers: beforeLoad after the '
-      'first turn, no snapshots before it', () async {
+  // «Сессия после загрузки» (change `add-usage-ledger`, D8, Q3 (а); фикстура
+  // `acp/session-load-usage-full`): журнал с ответами модели загружен в
+  // новом сервере — после реплея и ответа приходит снимок `load` с полной
+  // суммой журнала без `beforeLoad`, а снимки нового хода её продолжают.
+  // Заменяет сценарий `acp/session-load-usage-partial` change
+  // `add-usage-extension` (D6, Q7 (а)).
+  test('session/load of a journal with model answers: the load snapshot with '
+      'the full sum after the answer, the next turn continues it', () async {
     final sessionId = await ready(
       model: pricedModel,
       steps: [
@@ -864,18 +884,80 @@ void main() {
       'mcpServers': <Object?>[],
     });
     expect(load.error, isNull);
-    expect(usageOf(h.client), isEmpty, reason: 'replay is not accounting');
+    final loadFrames = usageOf(h.client);
+    expect(loadFrames, hasLength(1));
+    expect(loadFrames.single['trigger'], 'load');
+    expect(loadFrames.single['seq'], 1);
+    expect(
+      positionOfUsage(h.client, 1),
+      greaterThan(h.client.received.indexOf(load)),
+    );
+    final loaded = asMap(loadFrames.single['session']);
+    expect(loaded['turns'], 1);
+    expect(loaded['steps'], 1);
+    expect(loaded['tokens'], tokens(10, 5));
+    expect(loaded['cost'], '0.000105');
+    expect(loaded, isNot(contains('partial')));
 
     await h.prompt(sessionId, 'Ещё раз');
 
-    final frames = usageOf(h.client);
-    expect(frames.map((f) => f['seq']), [1, 2]);
+    final frames = usageOf(h.client).skip(1).toList();
+    expect(frames.map((f) => f['seq']), [2, 3]);
     for (final frame in frames) {
       final session = asMap(frame['session']);
-      expect(session['partial'], ['beforeLoad']);
-      expect(session['turns'], 1);
-      expect(session['tokens'], tokens(100, 50));
-      expect(session['cost'], '0.00105');
+      expect(session, isNot(contains('partial')));
+      expect(session['turns'], 2);
+      expect(session['steps'], 2);
+      expect(session['tokens'], tokens(110, 55));
+      expect(session['cost'], '0.001155');
     }
+  });
+
+  // «Загрузка сессии без шагов»: ни одного ответа модели — снимка `load`
+  // нет, а первый ход считается с нуля.
+  test('session/load of a journal without model answers: no load snapshot, '
+      'the first turn counts from zero', () async {
+    final store = JournalStore();
+    await store.create(
+      SessionHeader(
+        id: SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C'),
+        cwd: '/work/demo',
+        created: DateTime.utc(2026, 11, 17),
+        agent: const AgentInfo(name: 'codelab-agent', version: '0.1.0'),
+      ),
+    );
+    await store.append(
+      SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C'),
+      MessageRecord(
+        id: 'r001',
+        parentId: null,
+        timestamp: DateTime.utc(2026, 11, 17),
+        message: UserMessage([
+          const TextContent('Вопрос без ответа'),
+        ], timestamp: DateTime.utc(2026, 11, 17)),
+      ),
+    );
+    h = await ServerHarness.start(
+      sessions: store,
+      defaultModel: pricedModel,
+      steps: [
+        textStep('Вот ответ.', const {'input': 100, 'output': 50}),
+      ],
+    );
+    await h.initialize(clientCapabilities: usageClient);
+
+    final load = await h.client.request('session/load', {
+      'sessionId': '01JB8Q2W6R9T3M5K7N1P4X8Z0C',
+      'cwd': '/work/demo',
+      'mcpServers': <Object?>[],
+    });
+
+    expect(load.error, isNull);
+    expect(usageOf(h.client), isEmpty);
+    await h.prompt('01JB8Q2W6R9T3M5K7N1P4X8Z0C', 'Ещё раз');
+    final frames = usageOf(h.client);
+    expect(frames.map((f) => f['seq']), [1, 2]);
+    expect(asMap(frames.last['session'])['turns'], 1);
+    expect(asMap(frames.last['session']), isNot(contains('partial')));
   });
 }

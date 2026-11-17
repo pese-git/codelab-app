@@ -1,0 +1,535 @@
+{
+  "id": "acp/usage-ledger-request",
+  "spec": [
+    "15-Extensibility.md#custom-requests",
+    "15-Extensibility.md#advertising-custom-capabilities",
+    "15-Extensibility.md#custom-notifications"
+  ],
+  "description": "Запрос журнала usage (change add-usage-ledger, D6, D7, D11; роль agent — задача 2.5, роль client — задача 3.5): клиент объявил clientCapabilities._meta.codelab.usage; ход из двух шагов модели с ценами (вызов task_create call_1, затем текст) даёт снимки _codelab/session/usage seq 1–3, как в acp/prompt-usage-steps. Затем клиент шлёт _codelab/session/usage/ledger, и агент отвечает по D6: seq равен seq последнего снимка (3), total совпадает с session снимка turn, один ход с подписью (начало промпта) и двумя шагами, у первого шага toolCallIds [call_1], одна строка models. Фабрика агентского прогона даёт порт usage.json на файле во временном каталоге (метка usageLedger), поэтому первое чтение — ledger.status rebuilt с причиной missing; число записей журнала не фиксируется.",
+  "goals": [
+    "L-29",
+    "L-11"
+  ],
+  "extensions": [
+    "task",
+    "usage",
+    "usageLedger"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "clientCapabilities": {
+      "fs": {
+        "readTextFile": true,
+        "writeTextFile": true
+      },
+      "terminal": true,
+      "_meta": {
+        "codelab": {
+          "usage": {
+            "version": 1
+          }
+        }
+      }
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768,
+      "cost": {
+        "input": 3,
+        "output": 15,
+        "cacheRead": 0.3,
+        "cacheWrite": 3.75
+      }
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "список"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "task_create",
+              "arguments": {
+                "subject": "Прочитать тесты",
+                "priority": "high"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 1200,
+          "output": 300,
+          "cacheRead": 10000,
+          "cacheWrite": 0
+        }
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Список готов."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 1500,
+          "output": 400,
+          "cacheRead": 12000,
+          "cacheWrite": 800
+        }
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Составь список задач для исправления теста"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": "Create task",
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "subject": "Прочитать тесты",
+              "priority": "high"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              {
+                "content": "Прочитать тесты",
+                "priority": "high",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "1",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "taskChange": {
+                  "op": "create",
+                  "actor": "main",
+                  "toolCallId": "call_1",
+                  "changed": [
+                    "1"
+                  ],
+                  "deleted": []
+                }
+              }
+            }
+          }
+        }
+      },
+      "note": "план целиком; TaskListChanged приходит до завершения вызова (TSK-1)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "Created task #1"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "${sessionId}",
+          "seq": 1,
+          "trigger": "step",
+          "turnId": {
+            "$capture": "turnId"
+          },
+          "step": {
+            "index": 0,
+            "model": "scripted/scripted-1",
+            "tokens": {
+              "input": 1200,
+              "output": 300,
+              "cacheRead": 10000,
+              "cacheWrite": 0
+            },
+            "cost": "0.0111"
+          },
+          "turn": {
+            "steps": 1,
+            "tokens": {
+              "input": 1200,
+              "output": 300,
+              "cacheRead": 10000,
+              "cacheWrite": 0
+            },
+            "cost": "0.0111"
+          },
+          "session": {
+            "turns": 1,
+            "steps": 1,
+            "tokens": {
+              "input": 1200,
+              "output": 300,
+              "cacheRead": 10000,
+              "cacheWrite": 0
+            },
+            "cost": "0.0111"
+          },
+          "currency": "USD",
+          "context": {
+            "used": {
+              "$any": true
+            },
+            "size": 32768,
+            "compactAt": 24576
+          }
+        }
+      },
+      "note": "шаг с инструментом: снимок после результата вызова"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Список готов."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "${sessionId}",
+          "seq": 2,
+          "trigger": "step",
+          "turnId": "${turnId}",
+          "step": {
+            "index": 1,
+            "model": "scripted/scripted-1",
+            "tokens": {
+              "input": 1500,
+              "output": 400,
+              "cacheRead": 12000,
+              "cacheWrite": 800
+            },
+            "cost": "0.0171"
+          },
+          "turn": {
+            "steps": 2,
+            "tokens": {
+              "input": 2700,
+              "output": 700,
+              "cacheRead": 22000,
+              "cacheWrite": 800
+            },
+            "cost": "0.0282"
+          },
+          "session": {
+            "turns": 1,
+            "steps": 2,
+            "tokens": {
+              "input": 2700,
+              "output": 700,
+              "cacheRead": 22000,
+              "cacheWrite": 800
+            },
+            "cost": "0.0282"
+          },
+          "currency": "USD",
+          "context": {
+            "used": 14700,
+            "size": 32768,
+            "compactAt": 24576
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "${sessionId}",
+          "seq": 3,
+          "trigger": "turn",
+          "turnId": "${turnId}",
+          "turn": {
+            "steps": 2,
+            "tokens": {
+              "input": 2700,
+              "output": 700,
+              "cacheRead": 22000,
+              "cacheWrite": 800
+            },
+            "cost": "0.0282"
+          },
+          "session": {
+            "turns": 1,
+            "steps": 2,
+            "tokens": {
+              "input": 2700,
+              "output": 700,
+              "cacheRead": 22000,
+              "cacheWrite": 800
+            },
+            "cost": "0.0282"
+          },
+          "currency": "USD",
+          "context": {
+            "used": 14700,
+            "size": 32768,
+            "compactAt": 24576
+          }
+        }
+      },
+      "note": "итог хода — после последнего session/update и до ответа (ACP-3)"
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "ledgerId"
+        },
+        "method": "_codelab/session/usage/ledger",
+        "params": {
+          "sessionId": "${sessionId}"
+        }
+      },
+      "note": "D6: запрос журнала после хода; параметры — sessionId (rebuild по умолчанию false)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${ledgerId}",
+        "result": {
+          "sessionId": "${sessionId}",
+          "seq": 3,
+          "currency": "USD",
+          "ledger": {
+            "status": "rebuilt",
+            "reason": "missing",
+            "records": {
+              "$any": true
+            }
+          },
+          "total": {
+            "turns": 1,
+            "steps": 2,
+            "tokens": {
+              "input": 2700,
+              "output": 700,
+              "cacheRead": 22000,
+              "cacheWrite": 800
+            },
+            "cost": "0.0282"
+          },
+          "turns": [
+            {
+              "index": 1,
+              "title": "Составь список задач для исправления теста",
+              "total": {
+                "steps": 2,
+                "tokens": {
+                  "input": 2700,
+                  "output": 700,
+                  "cacheRead": 22000,
+                  "cacheWrite": 800
+                },
+                "cost": "0.0282"
+              },
+              "steps": [
+                {
+                  "$partial": {
+                    "index": 0,
+                    "model": "scripted/scripted-1",
+                    "tokens": {
+                      "input": 1200,
+                      "output": 300,
+                      "cacheRead": 10000,
+                      "cacheWrite": 0
+                    },
+                    "cost": "0.0111",
+                    "toolCallIds": [
+                      "call_1"
+                    ]
+                  }
+                },
+                {
+                  "$partial": {
+                    "index": 1,
+                    "model": "scripted/scripted-1",
+                    "tokens": {
+                      "input": 1500,
+                      "output": 400,
+                      "cacheRead": 12000,
+                      "cacheWrite": 800
+                    },
+                    "cost": "0.0171",
+                    "toolCallIds": []
+                  }
+                }
+              ]
+            }
+          ],
+          "models": [
+            {
+              "model": "scripted/scripted-1",
+              "steps": 2,
+              "tokens": {
+                "input": 2700,
+                "output": 700,
+                "cacheRead": 22000,
+                "cacheWrite": 800
+              },
+              "cost": "0.0282"
+            }
+          ]
+        }
+      },
+      "note": "seq равен seq снимка turn (3); total — session снимка turn; subagents и summaries нет (счётчики нулевые)"
+    }
+  ]
+}
