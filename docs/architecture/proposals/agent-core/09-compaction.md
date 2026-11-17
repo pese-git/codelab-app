@@ -32,8 +32,12 @@ bool shouldCompact(int contextTokens, int window, CompactionSettings s) =>
 final class CutPoint { final int firstKeptIndex; final bool splitTurn; final int turnStartIndex; }
 CutPoint? findCutPoint(List<SessionRecord> region, CompactionSettings s);
 
-typedef Summarizer = Future<String> Function(SummaryRequest request, CancelToken cancel);
+typedef Summarizer = Future<SummaryResult> Function(SummaryRequest request, CancelToken cancel);
                                        // бросает CompactionFailure (ошибка модели, пустой ответ) или CancelledException
+final class SummaryResult {             // change add-usage-ledger, D4: usage суммаризатора не теряется
+  final String text; final Usage usage; final String model;     // usage — сумма всех запросов прохода (резюме и контекст хода);
+                                                                 // model — '<provider>/<id>' ответа, пишется в details.summaryModel
+}
 final class SummaryRequest {
   final List<MessageRecord> region;    // что сжимаем; записи — чтобы отличить слова пользователя от уведомлений
   final List<MessageRecord>? turnPrefix;
@@ -363,12 +367,14 @@ compact(snapshot, trigger, summarize, settings, cancel, focus):
 7. cancel.throwIfCancelled()                   // отмена после ответа модели тоже не пишет запись
 8. rec := compaction(summary, firstKeptId: region[cut.firstKeptIndex].id, tokensBefore: before,
                      tokensAfter: 0, details: fileOps + splitTurn + summaryModel
-                     + после MVP usage ответа суммаризатора — details.usage, §12.6.1)
+                     + usage ответа суммаризатора — details.usage, §12.6.1; change add-usage-ledger, D4)
 9. projected := buildLlmContext(snapshot + rec); after := estimateContextTokens(projected)
    rec.tokensAfter := after
 10. append(rec, durable: true)                 // только теперь сжатие существует
 11. транскрипт Agent := projected.messages     // с обнулённым usage (§8.7)
-12. emit ContextCompacted(tokensBefore: before, tokensAfter: after)
+12. emit ContextCompacted(tokensBefore: before, tokensAfter: after, usage: summary.usage, model: summary.model)
+    // usage суммаризатора входит в сумму сессии, но не в TurnEnded.usage, даже при аварийном
+    // сжатии посреди хода (§12.6; change add-usage-ledger, D4); реплей записи без details.usage — usage: null
 13. если after > threshold и проходов < 3 → повторить с шага 3 (CMP-5)
 ```
 

@@ -127,7 +127,7 @@ packages/dart/codelab_agent_core/
 | `spec` | string[] | да, непустой | ссылки на разделы спецификации: `"05-Prompt Turn.md#5-tool-invocation-and-status-reporting"` (путь относительно `docs/protocols/acp/protocol/`) |
 | `description` | string | да | что проверяется, одним абзацем |
 | `goals` | string[] | нет | id целей паритета (`P-02`, `C-01`) |
-| `extensions` | string[] | нет | используемые расширения (§13.12): имя — ключ после `codelab.` (`outcome`, `budgetExceeded`, `usage`, …), для `data.codelab` — `errorData` |
+| `extensions` | string[] | нет | используемые расширения (§13.12): имя — ключ после `codelab.` (`outcome`, `budgetExceeded`, `usage`, `usageLedger`, …), для `data.codelab` — `errorData`; `usageLedger` — фикстуры запроса `_codelab/session/usage/ledger` и `/usage` (change `add-usage-ledger`, D11) |
 | `roles` | string[] | нет, по умолчанию `["agent", "client"]` | какие проверки берут фикстуру: `agent` — conformance агента (§14.9), `client` — проверка клиента (§14.10). Только `client` — сценарии, которые агент не порождает (`acp/errors-unknown-session-update-tolerated`); только `agent` — сценарии, которые клиент не принимает от агента (`acp/errors-bad-frame-survives`: мусор шлёт клиент) |
 | `setup` | object | да | начальные условия (ниже) |
 | `llm` | object | нет | scripted-модель для conformance агента (§14.7; `llm.model.cost` — цены модели); клиентская проверка его игнорирует |

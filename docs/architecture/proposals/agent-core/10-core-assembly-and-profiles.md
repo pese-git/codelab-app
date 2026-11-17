@@ -87,6 +87,7 @@ final class AgentCoreServices {                    // всё внешнее, ч�
   final ProjectContextLoader? projectContext;      // читает AGENTS.md через env хоста
   final NetworkAddressResolver? resolver;          // после MVP (§17.1.2): null → проверка SSRF только по литералам
   final SpillStore? spills;                        // этап 3 (§17.4.2): null → outputSpill off
+  final UsageLedgerStore? usageLedger;             // change add-usage-ledger, D3 (§12.6.1): null → журнал usage только в памяти, /usage — «rebuilt in memory»
   final ConfigSource? config;                      // этап 8.10 (§17.5.2; change add-config-writer-and-reload, D7, D8): null → живая перезагрузка и /config недоступны; задан → нужен modelsFor
   final ModelCatalog? models;                      // каталог моделей начального снимка (§2.12.2); хост с ConfigSource берёт его из modelsFor(config).catalog (D8)
   final AgentConfigPaths? agentConfigPaths;        // этап 8.10 (D8; OQ2): {paths, expansions, caseInsensitive} — пути PERM-11 (§7.6.1), HOME/CODELAB_HOME для exec, регистр ФС
