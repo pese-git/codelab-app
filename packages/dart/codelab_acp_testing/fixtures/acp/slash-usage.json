@@ -1,0 +1,498 @@
+{
+  "id": "acp/slash-usage",
+  "spec": [
+    "14-Slash Commands.md#advertising-commands",
+    "14-Slash Commands.md#running-commands",
+    "15-Extensibility.md#custom-notifications"
+  ],
+  "description": "Встроенная команда /usage (change add-usage-ledger, D5, D11, Q7 (а); agent-slash-commands «Команда /usage»): после session/new список содержит compact, mode, model, status, usage, mcp, help — usage сразу после status (config нет — у прогона нет источника конфигурации). Клиент не объявляет _meta.codelab.usage, поэтому уведомлений _codelab/session/usage нет и в ходе. Ход из двух шагов модели с ценами (вызов task_create, затем текст), затем «/usage» — один agent_message_chunk с отчётом §12.6.1 (Total, By model, стоимость $0.0282, последняя строка — состояние файла; без порта это «rebuilt in memory») и end_turn без модели и без _codelab/session/usage; «/usage x» — «Usage: /usage [rebuild]». Красная, пока команды /usage нет (задача 1.6 add-usage-ledger).",
+  "goals": [
+    "R-08",
+    "L-11"
+  ],
+  "extensions": [
+    "task",
+    "usage",
+    "usageLedger"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768,
+      "cost": {
+        "input": 3,
+        "output": 15,
+        "cacheRead": 0.3,
+        "cacheWrite": 3.75
+      }
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "список"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "task_create",
+              "arguments": {
+                "subject": "Прочитать тесты",
+                "priority": "high"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 1200,
+          "output": 300,
+          "cacheRead": 10000,
+          "cacheWrite": 0
+        }
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Список готов."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 1500,
+          "output": 400,
+          "cacheRead": 12000,
+          "cacheWrite": 800
+        }
+      }
+    ]
+  },
+  "normalize": {
+    "replace": [
+      {
+        "path": "$.params.update.content.text",
+        "regex": "(?<=^Ledger: rebuilt in memory \\()\\d+(?= records\\)$)",
+        "with": "<N>"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          },
+          "clientInfo": {
+            "name": "fixture-client",
+            "version": "0.0.0"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ initialize; поля проверяет acp/initialize-capabilities",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент создаёт сессию без MCP-серверов",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/new; команды идут отдельным кадром после него (ACP-8)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "sessionId"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D5, D11 change add-usage-ledger, §13.4: usage идёт сразу после status; config нет — у прогона нет источника конфигурации",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+              {
+                "name": "compact",
+                "description": "Compact the session history",
+                "input": {
+                  "hint": "[focus]"
+                }
+              },
+              {
+                "name": "mode",
+                "description": "Switch the session mode",
+                "input": {
+                  "hint": "plan | ask | standard | accept-edits | bypass"
+                }
+              },
+              {
+                "name": "model",
+                "description": "Switch the model",
+                "input": {
+                  "hint": "provider/model"
+                }
+              },
+              {
+                "name": "status",
+                "description": "Show the model, mode, working directory and MCP servers"
+              },
+              {
+                "name": "usage",
+                "description": "Show token usage and cost of the session",
+                "input": {
+                  "hint": "[rebuild]"
+                }
+              },
+              {
+                "name": "mcp",
+                "description": "List, reload, enable or disable MCP servers",
+                "input": {
+                  "hint": "list | reload [<id>] | enable <id> | disable <id>"
+                }
+              },
+              {
+                "name": "help",
+                "description": "List commands"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "turnPromptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Составь список задач для исправления теста"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": "Create task",
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "subject": "Прочитать тесты",
+              "priority": "high"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "plan",
+            "entries": [
+              {
+                "content": "Прочитать тесты",
+                "priority": "high",
+                "status": "pending",
+                "_meta": {
+                  "codelab": {
+                    "task": {
+                      "id": "1",
+                      "owner": "main",
+                      "blockedBy": []
+                    }
+                  }
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "taskChange": {
+                  "op": "create",
+                  "actor": "main",
+                  "toolCallId": "call_1",
+                  "changed": [
+                    "1"
+                  ],
+                  "deleted": []
+                }
+              }
+            }
+          }
+        }
+      },
+      "note": "план целиком; TaskListChanged приходит до завершения вызова (TSK-1)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "Created task #1"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Список готов."
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${turnPromptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "D5: без аргумента — отчёт; модель не вызывается, ход без шагов",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "usageId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/usage"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D5, Q7 (а): строки §12.6.1 без By turn и By branch; цены известны — cost $x.xxxx; в прогоне нет порта UsageLedgerStore — состояние «rebuilt in memory», число записей журнала нормализуется в <N> (normalize.replace); кадров _codelab/session/usage нет (ход без шагов)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Session usage: 1 turns, 2 steps\nTotal: input 2700, output 700, cache read 22000, cache write 800, cost $0.0282\nBy model:\n  scripted/scripted-1: 2 steps, input 2700, output 700, cache read 22000, cache write 800, cost $0.0282\nLedger: rebuilt in memory (<N> records)"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "end_turn; _codelab/session/usage не отправляется (D5)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${usageId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "D5: иной аргумент — подсказка, журнал usage не строится",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "badId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/usage x"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "точный текст D5 (как /redact в §12.4.3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Usage: /usage [rebuild]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "end_turn",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${badId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

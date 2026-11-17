@@ -13,6 +13,7 @@ import '../skills/skill_files.dart';
 import '../session/session_store.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
+import '../usage/usage_ledger_store.dart';
 import '../util/logger.dart';
 
 /// Функция модели и каталог, которые хост строит по `CoreConfig`
@@ -49,6 +50,7 @@ final class AgentCoreServices {
     this.projectConfig,
     this.agentConfigPaths,
     this.lastModel,
+    this.usageLedger,
   });
 
   /// Local | ACP client | memory (tests).
@@ -153,4 +155,9 @@ final class AgentCoreServices {
   /// `FileLastModelStore`; `--llm-script`, сценарные открыватели, web и
   /// тесты оставляют `null`.
   final LastModelStore? lastModel;
+
+  /// Порт файла журнала usage сессии (design.md change `add-usage-ledger`,
+  /// D3). `null` — файла нет (web, тесты на памяти, сессия только для
+  /// чтения): отчёт `/usage` строится в памяти со статусом `inMemory`. Хост на `dart:io` передаёт реализацию `codelab_agent_io`.
+  final UsageLedgerStore? usageLedger;
 }

@@ -35,6 +35,7 @@ void main() {
           'mode',
           'model',
           'status',
+          'usage',
           'config',
           'mcp',
           'help',
@@ -44,7 +45,7 @@ void main() {
       expect(
         [for (final c in session.commands) c.source],
         [
-          ...List.filled(7, SlashCommandSource.builtin),
+          ...List.filled(8, SlashCommandSource.builtin),
           SlashCommandSource.template,
         ],
       );
@@ -62,7 +63,7 @@ void main() {
 
       expect(
         [for (final c in session.commands) c.name],
-        ['mode', 'model', 'status', 'help'],
+        ['mode', 'model', 'status', 'usage', 'help'],
       );
     });
 
@@ -91,6 +92,10 @@ void main() {
         'description':
             'Show the model, mode, working directory and MCP servers',
         'hint': null,
+      });
+      expect(of('usage'), {
+        'description': 'Show token usage and cost of the session',
+        'hint': '[rebuild]',
       });
       expect(of('config'), {
         'description': 'Reload or check the agent config',
@@ -130,7 +135,7 @@ void main() {
 
       expect(
         [for (final c in session.commands) c.name],
-        ['compact', 'mode', 'model', 'status', 'mcp', 'help'],
+        ['compact', 'mode', 'model', 'status', 'usage', 'mcp', 'help'],
       );
       final reply = await rig.ask(session, '/config check');
 
@@ -461,6 +466,7 @@ void main() {
         'Switch the session mode\n'
         '/model provider/model - Switch the model\n'
         '/status - Show the model, mode, working directory and MCP servers\n'
+        '/usage [rebuild] - Show token usage and cost of the session\n'
         '/config reload | check - Reload or check the agent config\n'
         '/mcp list | reload [<id>] | enable <id> | disable <id> - '
         'List, reload, enable or disable MCP servers\n'
@@ -472,7 +478,7 @@ void main() {
     });
 
     test('the list follows the declared commands: without config, '
-        'compaction and mcp it is the four lines', () async {
+        'compaction and mcp it is the five lines', () async {
       final rig = await _Rig.create(
         withSource: false,
         compaction: false,
@@ -488,6 +494,7 @@ void main() {
             'Switch the session mode',
         '/model provider/model - Switch the model',
         '/status - Show the model, mode, working directory and MCP servers',
+        '/usage [rebuild] - Show token usage and cost of the session',
         '/help - List commands',
       ]);
     });

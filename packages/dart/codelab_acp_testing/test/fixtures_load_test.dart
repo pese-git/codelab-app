@@ -100,6 +100,7 @@ const _stage8ProjectFilesFixtures = {
 const _slashCommandFixtures = {
   'acp/slash-compact',
   'acp/slash-help',
+  'acp/slash-usage',
   'acp/slash-mode-plan',
 };
 

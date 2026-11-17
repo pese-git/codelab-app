@@ -104,7 +104,7 @@ void main() {
 
       expect(
         [for (final c in session.commands) c.name],
-        ['compact', 'mode', 'model', 'status', 'help'],
+        ['compact', 'mode', 'model', 'status', 'usage', 'help'],
       );
       expect(session.commands.map((c) => c.source).toSet(), {
         SlashCommandSource.builtin,
