@@ -11,7 +11,7 @@ change это риск R8.
 
 | ID | P | Тип | Область | Кратко | OpenSpec | Issue |
 |---|---|---|---|---|---|---|
-| REV-2 | P2 | bug | agent, protocol | Вызов суммаризатора с нулевым usage не даёт `noUsage` в протоколе и `usage.json`, хотя D4 `add-usage-ledger` это обещает | да | — |
+| REV-2 | P2 | bug | agent, protocol | Вызов суммаризатора с нулевым usage не даёт `noUsage` в протоколе и `usage.json`, хотя D4 `add-usage-ledger` это обещает | да | [#353](https://github.com/pese-git/codelab-app/issues/353) |
 
 ## Карточки
 
