@@ -666,8 +666,11 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    `currency` — общее предупреждение `currency`/`required_with_cost`), незнакомые ключи — молча.
    Неверное подполе — подполя нет, `usage.decode_failed` с `field: budget.<подполе>`; `budget` не
    объект — `field: budget`; без единого известного подполя `budget` считается отсутствующим.
+   `budget` читается только у снимка с `turnId`: у снимка без `turnId` (в том числе с `turnId`
+   неверного типа) поле не разбирается и предупреждений `budget*` не даёт.
    `ended` — «итог хода» (снимок с поводом `turn`; решение пользователя Q11 (а)); снимок `turn` того же
-   хода без `budget` ставит `ended` при прежних числах. `turnId` и `receivedAt` — момент применения: `UsageFold` чистый, его передаёт вызывающий
+   хода без `budget` ставит `ended` при прежних числах; `ended` липкий для того же `turnId` — снимок
+   `step` того же хода после итогового `turn` обновляет числа, но `ended` не снимает. `turnId` и `receivedAt` — момент применения: `UsageFold` чистый, его передаёт вызывающий
    (`apply(…, receivedAt:)`) по часам рабочего пространства (`ClientWorkspace(clock:)`). Свёртка:
    снимок с `turnId` и `budget` заменяет его; тот же `turnId` без `budget` — не меняет; новый `turnId`
    без `budget` — `null`; снимок без `turnId` (`compaction`, `compactionDiscarded`, `load`,

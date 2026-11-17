@@ -1022,13 +1022,13 @@ D27; артборд 30 холста «CodeLab Desktop — Feature UI/UX», ут�
    хода без тика (`ended`, решение пользователя Q11 (а)). Строки Steps, Tokens,
    Cost, Time — только присутствующие в `budget`, с полосой и подписью `<израсходовано> / <лимит>`:
    `3 / 50`, `92.0k / 200.0k` (`formatUsageTokens`), `$0.41 / $0.50` (`formatUsageMoney`),
-   `3:00 / 10:00` (`m:ss`, от часа `h:mm:ss`, формат — маппер desktop). Тон в целых: `warning` при
-   `used·5 ≥ limit·4`, `danger` при `used ≥ limit`; больше 100 % — в подписи как есть, полоса не
+   `3:00 / 10:00` (`m:ss`, от часа `h:mm:ss`, формат — маппер desktop). Тон в целых без переполнения: `warning` при
+   `used ≥ ⌈4·limit/5⌉` (`limit − limit ~/ 5`), `danger` при `used ≥ limit`; больше 100 % — в подписи как есть, полоса не
    длиннее 100 %, лимит 0 — полоса полная, `danger`. Без израсходованной стоимости — `— / $0.50`,
    `not checked: price unknown`, без тона; подсказка Tokens — `input + output, including subagents`;
    под блоком — `When a limit is hit, the turn stops at the next step boundary.` Пока сессия
    `running` без ожидающих одобрений и бюджет не итоговый, Time показывает `usedMs + (now − receivedAt)` (отрицательная
-   разность — ноль), иначе `usedMs` снимка. Тик — `Timer.periodic` раз в секунду в
+   разность — ноль, сложение насыщающее до 2⁶³ − 1), иначе `usedMs` снимка. Тик — `Timer.periodic` раз в секунду в
    `WorkbenchUsagePane`, как у Agents (A15): идёт, пока панель смонтирована, сессия `running`, нет
    одобрений, бюджет не итоговый и есть `duration`; признак тика даёт application, часы виджета (`clock`) внедряют
    тесты. Без `budget` блока нет.
@@ -1335,7 +1335,12 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 | `usage_pane_test.dart`, группа `слот дока (D1, D3)`: `«Панель с журналом»: открытие даёт один запрос журнала без rebuild, …`; `«Rebuild from log»: запрос с rebuild: true, строка состояния обновляется`; `«Сбой загрузки журнала»: заметка и Retry, …, Retry шлёт один`; `«Агент без журнала»: …`; `закрытая панель журнал не запрашивает` | A17 пп. 1–4 |
 | `usage_pane_test.dart`, группа `экспорт CSV (D5; «Отказ в диалоге»)`: `сохранено: порт получил CSV с заголовком и предложенное имя codelab-usage-<sessionId>-<дата>.csv, заметки нет`; `отказ в диалоге: ни файла, ни заметки`; `сбой записи: заметка Couldn't save the file.` (двойник порта — `test/support/fake_usage_csv_saver.dart`) | A17 п. 7 |
 
-Блок «Turn budget» (задачи 3.3–3.4) добавит строки в эту таблицу в итерации 3: маппер — `test/features/usage/application/usage_budget_test.dart`, тик — `test/features/usage/presentation/usage_budget_tick_test.dart`, организм — группа `Turn budget` в `codelab_usage_pane_test.dart`.
+| `application/usage_budget_test.dart`, группы `строки по присутствующим подполям (D9)`, `подписи строк (D9, «Прогресс во время хода»)`, `Cost без израсходованной суммы (R8, «Цена неизвестна»)`: `все четыре: порядок Steps, Tokens, Cost, Time`; `Time есть, только если есть duration`; `Steps 3 / 50, Tokens 92.0k / 200.0k, Cost $0.41 / $0.50, Time 3:00 / 10:00`; `Cost в другой валюте печатает kit`; `подсказка Tokens называет правило input + output, including subagents (R2)`; `подпись — / $0.50, не $0.00 / $0.50`; `пояснение not checked: price unknown`; `без тона и с пустой полосой` | A17 п. 6 |
+| `usage_budget_test.dart`, группы `тон по доле в целых (D9)`, `заполнение полосы и больше 100 %`, `formatUsageDuration: m:ss и h:mm:ss, секунды вниз`: `граница без double: 79999 из 100000 — нейтральный, 80000 — warning`; `числа около 2^62 с провода: тон без переполнения умножения`; `граница warning равна ceil(4·L/5) на малых лимитах`; `больше 100 %: полоса не больше 1, подпись с настоящими числами`; `лимит 0: полоса полная, danger, деления на ноль нет`; `от часа — h:mm:ss`; `отрицательное значение считается нулём` | A17 п. 6 |
+| `usage_budget_test.dart`, группы `заголовок This turn / Last turn (Q11 (а))`, `признак тика (D9)`, `Time на момент now (D9, «Время между снимками», R3)`: `running с итоговым бюджетом прошлого хода — Last turn с его числами, без тика («Начало нового хода»)`; `первый step нового хода (ended ложен) переключает на This turn и включает тик`; `ожидающее одобрение отключает тик`; `итоговый бюджет — без тика`; `running без одобрений: usedMs + (now − receivedAt)`; `usedMs около 2^63−1: сложение насыщается, не уходит в минус`; `отрицательная разность (часы позади часов kit) считается нулём` | A17 п. 6, R3 |
+| `usage_budget_test.dart`, группы `блок без журнала и без бюджета (D10, «Без лимитов»)`, `ActiveSessionCubit: ключ кэша данных панели (D1, D9)`: `агент без журнала: панель доступна, блок есть из usage`; `без budget блока нет`; `смена статуса без новой ревизии usage меняет заголовок и тик`; `появление и снятие ожидающего одобрения меняют признак тика` | A17 пп. 2, 6 |
+| `presentation/usage_budget_tick_test.dart` (`WorkbenchUsagePane(clock:)`, часы виджета от `receivedAt` kit со сдвигом): `«Время идёт между шагами»: … Time обновляется раз в секунду`; `панель скрыта: часов не спрашивают, таймера нет`; `скрытая панель при показе снова тикает`; `«Таймер только при показанной панели»: конец хода отменяет таймер`; `ожидающее одобрение останавливает тик, Time остаётся 3:00 / 10:00`; `без duration в бюджете таймера нет`; `«Начало нового хода»: до первого step нового хода блок Last turn с итогом прошлого и без тика; первый step включает This turn и тик`; `без бюджета блока и таймера нет` | A17 п. 6, `AGENTS.md` §12 |
+| `packages/flutter/codelab_ui/test/codelab_usage_pane_test.dart`, группа `Turn budget`: `показывает заголовок, подписи строк и пояснение из данных`; `строки только по присутствующим подполям, в порядке данных`; `блок стоит между карточками и Per turn`; `больше 100 %: полоса не шире дорожки, подпись — как пришла`; `тон из данных: warning и danger — плашка того же тона, нейтральная строка — без плашки`; `подсказка строки Tokens — в Tooltip`; `Cost без израсходованной суммы: подпись и пояснение строки приходят готовыми и без тона`; `смена данных (тик времени) обновляет подпись без смены остальных строк` | A17 п. 6 |
 
 Сигнатуры файлов, лимиты и пометка «вне папки» проверяются тестами kit (§12.1.10,
 `attachments/prompt_content_builder_test.dart`); app их не дублирует.
@@ -1385,12 +1390,14 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
   (подписка `ActiveSessionCubit`), `presentation/session_status_bar_test.dart` (граф app на
   `FakeAcpTransport`).
 * `app:usage_pane_flow_test.dart` (D-09, C-13; change `add-desktop-usage-pane`, задача 3.5;
-  приёмка `release/*`, скрипт `test:e2e:app:usage`): scripted-агент с usage, журналом и бюджетом —
-  клик по строке статуса открывает панель, раскрытие хода до шагов, «Rebuild from log», «Turn
-  budget» во время хода, экспорт CSV во временный каталог через шов порта. Сценарии разделены по
-  агентам (решение пользователя Q12 (а)): scripted `withUsageBudget` — клик по строке статуса и блок
+  приёмка `release/*`). Сценарии разделены по агентам (решение пользователя Q12 (а)): scripted-агент
+  не даёт журнала, а Dart-агент и встроенный в e2e не дают лимитов. Scripted `withUsageBudget`
+  (`test:e2e:app:usage`) — клик по строке статуса открывает панель без журнала, после хода блок
   `Last turn` (`1 / 50`, `12.8k / 200.0k`, `$0.04 / $0.50`, `0:01 / 10:00`); Dart и встроенный с
-  `withUsage` — раскрытие хода, «Rebuild from log», CSV; `This turn` и тик — только widget-тесты. Модульно —
+  `withUsage` (`test:e2e:app:dart-agent`, `test:e2e:app:embedded`) — раскрытие хода до шагов,
+  «Rebuild from log», экспорт CSV во временный каталог через шов порта
+  (`E2eAgent.bootstrap(usageCsvSaver:)`). `This turn` и тик в e2e не проверяются — только
+  widget-тестами (`usage_budget_tick_test.dart`). Модульно —
   `test/features/usage/application/` (маппер, подписи, правило обновления, CSV),
   `codelab_usage_pane_test.dart`, `test/features/usage/presentation/usage_pane_test.dart`.
 * `app:transcript_rendering_flow_test.dart` (новый, D-06/D-07/D-08 сквозь весь стек): scripted
