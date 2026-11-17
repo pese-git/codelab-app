@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/compaction/compactor.dart';
+import 'package:codelab_agent_core/src/compaction/cut_point.dart';
 import 'package:codelab_agent_core/src/compaction/estimate.dart';
 import 'package:codelab_agent_core/src/compaction/settings.dart';
 import 'package:codelab_agent_core/src/compaction/summarizer.dart';
@@ -92,6 +93,7 @@ void main() {
     void Function(LlmContextProjection)? onCompacted,
     String systemPrompt = 'You are CodeLab.',
     List<ToolSchema> tools = const [],
+    CompactionAnchor? anchor,
   }) => compact(
     writer: writer,
     trigger: CompactionTrigger.afterTurn,
@@ -106,6 +108,7 @@ void main() {
     emit: events.add,
     onCompacted: onCompacted,
     logger: logger,
+    anchor: anchor,
   );
 
   test('writes a durable compaction record and rebuilds the context', () async {
@@ -216,7 +219,7 @@ void main() {
     // `fix-compaction-estimate-and-no-gain` (якорь 3043 при эвристике 4450).
     // 12 000 символов: эвристика проекции после (≈5 600) остаётся ниже порога
     // (6 144), поэтому здесь один проход; случай «эвристика выше порога» — в
-    // тесте D9 ниже.
+    // тесте D8 ниже.
     final prompt = 'p' * 12000;
 
     int heuristic() => estimateTokens(
@@ -262,7 +265,7 @@ void main() {
     );
 
     test('with an anchor the record keeps the consistent estimate, not '
-        'H(after) (D1, D9)', () async {
+        'H(after) (D1, D8)', () async {
       await journal(twoTurns());
       final hBefore = heuristic();
       await journal(
@@ -272,8 +275,8 @@ void main() {
       await run(fixed('short summary'), systemPrompt: prompt, tools: tools);
 
       // Без якоря в проекции после сжатия (§8.7): H(после) — чистая
-      // эвристика, а в запись идёт согласованное «после», не она (D9: порог
-      // сравнивается с max, запись и события — с согласованным).
+      // эвристика, а в запись, события и сравнение с порогом идёт
+      // согласованное «после», не она (D8).
       final record = store.appended.first.record as CompactionRecord;
       final hAfter = heuristic();
       expect(record.tokensAfter, record.tokensBefore + hAfter - hBefore);
@@ -292,9 +295,11 @@ void main() {
       expect(record.tokensAfter, heuristic());
     });
 
+    // Якорь выше: согласованное «после» первого прохода всё ещё выше порога
+    // (D8: решает оно, а не эвристика), резать дальше нечего.
     test('the second pass without a cut point after the first is recorded: '
         'compaction.skipped pass 2, the outcome is the first Compacted '
-        '(D3, D9)', () async {
+        '(D3, D8)', () async {
       final longPrompt = 'p' * 22000;
       RegionBuilder build({Usage usage = Usage.zero}) => RegionBuilder()
         ..user(40)
@@ -310,8 +315,8 @@ void main() {
       );
       // После первого прохода в регионе остаются ответ и последний ход
       // (≈2 150 токенов): срезать дальше нечего (ход не больше хвоста), а
-      // эвристика проекции после (промпт ≈5 500) выше порога.
-      await journal(build(usage: Usage(input: hBefore - 6000, output: 0)));
+      // согласованное «после» (промпт ≈5 500) выше порога.
+      await journal(build(usage: Usage(input: hBefore - 1000, output: 0)));
       var calls = 0;
 
       final outcome = await run(
@@ -327,7 +332,7 @@ void main() {
       final first = store.appended.single.record as CompactionRecord;
       expect(
         first.tokensAfter,
-        lessThanOrEqualTo(compactionThreshold(window, settings)),
+        greaterThan(compactionThreshold(window, settings)),
       );
       expect((outcome as Compacted).record, same(first));
       final skipped = logger.eventsOf('compaction.skipped').single.fields;
@@ -335,44 +340,199 @@ void main() {
       expect(skipped['reason'], 'no cut point');
     });
 
-    test(
-      'a consistent after below the threshold but H(after) above it: the '
-      'next pass runs; the record keeps the consistent estimate (D9, CMP-5)',
-      () async {
-        final longPrompt = 'p' * 20000;
-        await journal(longChain());
-        final hBefore = estimateTokens(
+    // Заменил тест D9 предшественника «Порог проверяется и по эвристике без
+    // якоря»: D9 снят, число проходов определяет согласованная оценка
+    // (change `anchor-context-estimate-after-compaction`, D8, CMP-5, CMP-11).
+    test('the threshold is checked by the consistent estimate: after of the '
+        'first pass is within it, H(after) is not, a region for a second '
+        'pass exists — one summarizer call, one record, the first Compacted '
+        '(D8, CMP-5)', () async {
+      final longPrompt = 'p' * 20000;
+      await journal(longChain());
+      final hBefore = estimateTokens(
+        buildLlmContext(writer.snapshot).messages,
+        systemPrompt: longPrompt,
+        tools: tools,
+      );
+      // Якорь на 12 000 токенов ниже эвристики (провайдер считает промпт и
+      // результаты заметно дешевле `chars / 4`): согласованное «после»
+      // укладывается в порог, а эвристика проекции после — нет.
+      await journal(
+        longChain(lastUsage: Usage(input: hBefore - 12000, output: 0)),
+      );
+      var calls = 0;
+
+      final outcome = await run(
+        (request, cancel) async {
+          calls++;
+          return summaryOf(calls == 1 ? 'x' * 400 : 'y' * 40);
+        },
+        systemPrompt: longPrompt,
+        tools: tools,
+      );
+
+      final threshold = compactionThreshold(window, settings);
+      final record = store.appended.single.record as CompactionRecord;
+      expect(record.tokensAfter, lessThanOrEqualTo(threshold));
+      expect(
+        estimateTokens(
           buildLlmContext(writer.snapshot).messages,
           systemPrompt: longPrompt,
           tools: tools,
-        );
-        // Якорь на 12 000 токенов ниже эвристики (провайдер считает промпт и
-        // результаты заметно дешевле `chars / 4`): согласованное «после»
-        // укладывается в порог, а эвристика проекции после — нет.
-        await journal(
-          longChain(lastUsage: Usage(input: hBefore - 12000, output: 0)),
-        );
-        var calls = 0;
+        ),
+        greaterThan(threshold),
+        reason: 'H(after) is above the threshold',
+      );
+      expect(
+        compactionRegion(writer.snapshot).region,
+        isNotEmpty,
+        reason: 'a second pass would have a region',
+      );
+      expect(calls, 1);
+      expect(store.appended, hasLength(1));
+      expect((outcome as Compacted).record, same(record));
+      expect(logger.eventsOf('compaction.skipped'), isEmpty);
+    });
 
-        await run(
-          (request, cancel) async {
-            calls++;
-            return summaryOf(calls == 1 ? 'x' * 400 : 'y' * 40);
-          },
-          systemPrompt: longPrompt,
+    // CMP-11 и «Сжатие сразу после сжатия» (D8): «до» нового прохода
+    // продолжает шкалу прошлой записи, а не возвращается к эвристике.
+    test('a compaction right after a compaction: tokensBefore is tokensAfter '
+        'of the first record plus H of the new messages (D8); without the '
+        'anchor parameter — the former heuristic', () async {
+      final prompt = 'p' * 12000;
+      await journal(twoTurns());
+      final hBefore = estimateTokens(
+        buildLlmContext(writer.snapshot).messages,
+        systemPrompt: prompt,
+        tools: tools,
+      );
+      await journal(
+        twoTurns(lastUsage: Usage(input: hBefore - 4000, output: 0)),
+      );
+      LlmContextProjection? first;
+      await run(
+        fixed('first'),
+        systemPrompt: prompt,
+        tools: tools,
+        onCompacted: (p) => first = p,
+      );
+      final firstRecord = store.appended.single.record as CompactionRecord;
+      final anchor = compactionAnchorOf(
+        first!,
+        systemPrompt: prompt,
+        tools: tools,
+      );
+      expect(anchor, isNotNull);
+      expect(anchor!.tokens, firstRecord.tokensAfter);
+      // Новые сообщения после первой записи: ход с чтением и ответ.
+      final more = RegionBuilder()
+        ..call('c3', 'read', path: 'lib/c.dart')
+        ..result('c3', 'read', 3000)
+        ..user(30)
+        ..assistant(2500);
+      var added = 0;
+      for (final record in more.records.cast<MessageRecord>()) {
+        added += estimateMessageTokens(record.message);
+        await writer.append(
+          (id, parent, at) => MessageRecord(
+            id: id,
+            parentId: parent,
+            timestamp: at,
+            message: record.message,
+          ),
+        );
+      }
+      store.appended.clear();
+      final snapshot = writer.snapshot;
+      final heuristicBefore = estimateTokens(
+        buildLlmContext(snapshot).messages,
+        systemPrompt: prompt,
+        tools: tools,
+      );
+
+      await run(
+        fixed('second'),
+        systemPrompt: prompt,
+        tools: tools,
+        anchor: anchor,
+      );
+
+      final second = store.appended.single.record as CompactionRecord;
+      expect(second.tokensBefore, firstRecord.tokensAfter + added);
+      expect(second.tokensBefore, isNot(heuristicBefore));
+
+      // Без параметра — прежняя эвристика (границы нет).
+      await journal(
+        twoTurns(lastUsage: Usage(input: hBefore - 4000, output: 0)),
+      );
+      await run(fixed('first'), systemPrompt: prompt, tools: tools);
+      for (final record in more.records.cast<MessageRecord>()) {
+        await writer.append(
+          (id, parent, at) => MessageRecord(
+            id: id,
+            parentId: parent,
+            timestamp: at,
+            message: record.message,
+          ),
+        );
+      }
+      store.appended.clear();
+      await run(fixed('second'), systemPrompt: prompt, tools: tools);
+      expect(
+        (store.appended.single.record as CompactionRecord).tokensBefore,
+        heuristicBefore,
+      );
+    });
+
+    // D3: `raw`, который сессия фиксирует по проекции из `onCompacted`,
+    // совпадает с `raw` пробной проекции компактора, поэтому сразу после
+    // записи оценка равна `tokensAfter` (CMP-11).
+    test(
+      'the anchor of the projection from onCompacted: raw is H of the '
+      'trial projection, the estimate equals tokensAfter (D3, CMP-11)',
+      () async {
+        final prompt = 'p' * 12000;
+        await journal(twoTurns());
+        final hBefore = estimateTokens(
+          buildLlmContext(writer.snapshot).messages,
+          systemPrompt: prompt,
           tools: tools,
         );
+        await journal(
+          twoTurns(lastUsage: Usage(input: hBefore - 4000, output: 0)),
+        );
+        LlmContextProjection? rebuilt;
 
-        final records = [
-          for (final a in store.appended) a.record as CompactionRecord,
-        ];
-        // Первая запись: согласованное после уже ниже порога (6144), но
-        // эвристика проекции после — выше: раньше проход был бы один.
-        final threshold = compactionThreshold(window, settings);
-        expect(records.first.tokensAfter, lessThanOrEqualTo(threshold));
-        expect(records, hasLength(greaterThan(1)));
-        expect(records[1].tokensBefore, records[0].tokensAfter);
-        expect(calls, lessThanOrEqualTo(maxCompactionPasses));
+        await run(
+          fixed('short'),
+          systemPrompt: prompt,
+          tools: tools,
+          onCompacted: (p) => rebuilt = p,
+        );
+
+        final record = store.appended.single.record as CompactionRecord;
+        final anchor = compactionAnchorOf(
+          rebuilt!,
+          systemPrompt: prompt,
+          tools: tools,
+        );
+        expect(anchor, isNotNull);
+        expect(anchor!.tokens, record.tokensAfter);
+        expect(
+          anchor.raw,
+          estimateTokens(rebuilt!.messages, systemPrompt: prompt, tools: tools),
+        );
+        expect(
+          estimateContextTokens(
+            rebuilt!.messages,
+            systemPrompt: prompt,
+            tools: tools,
+            compaction: anchor,
+          ),
+          record.tokensAfter,
+        );
+        // Предпосылка: эвристика «после» отличается от `tokensAfter`.
+        expect(anchor.raw, isNot(record.tokensAfter));
       },
     );
 

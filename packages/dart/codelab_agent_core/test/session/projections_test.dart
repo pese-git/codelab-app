@@ -1,8 +1,13 @@
+import 'dart:convert';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/prompts/prompts.g.dart';
 import 'package:codelab_agent_core/src/session/projections.dart';
 import 'package:codelab_agent_core/testing.dart';
+import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
+
+import '../skills/skills_support.dart';
 
 import 'fixtures.dart';
 import 'journal_lines.dart';
@@ -144,6 +149,104 @@ void main() {
       ).snapshot;
 
       expect(buildLlmContext(s).config, {'effort': 'high'});
+    });
+  });
+
+  /// `compactionCovered` (design.md change
+  /// `anchor-context-estimate-after-compaction`, D1, D4): число начальных
+  /// сообщений проекции, которые покрывает `tokensAfter` последней записи
+  /// `compaction` — резюме, сообщение навыков и сохранённые сообщения.
+  group('compactionCovered (D1, D4)', () {
+    test('is 0 without a compaction', () {
+      final s = snapshot([
+        user('u1', null),
+        answer('a1', 'u1'),
+        user('u2', 'a1'),
+      ]);
+
+      expect(buildLlmContext(s).compactionCovered, 0);
+    });
+
+    test('the summary plus the kept messages; the tail is not covered', () {
+      final s = snapshot([
+        user('u1', null, text: 'old'),
+        answer('a1', 'u1'),
+        user('u2', 'a1', text: 'kept'),
+        answer('a2', 'u2'),
+        compaction('k1', 'a2', firstKept: 'u2'),
+        user('u3', 'k1', text: 'tail one'),
+        answer('a3', 'u3'),
+      ]);
+
+      final context = buildLlmContext(s);
+
+      // резюме + u2 + a2; u3 и a3 после записи — хвост.
+      expect(context.messages, hasLength(5));
+      expect(context.compactionCovered, 3);
+    });
+
+    test('the summary, the skills message and the kept messages', () {
+      final catalog = parse([validSkill('notes', body: 'Take notes.')]);
+      final fingerprint = sha256
+          .convert(utf8.encode(catalog.skills.single.body))
+          .toString();
+      final record =
+          jsonDecode(compaction('k1', 'a2', firstKept: 'u2'))
+              as Map<String, Object?>;
+      record['skills'] = [
+        {'name': 'notes', 'fingerprint': fingerprint},
+      ];
+      final s = snapshot([
+        user('u1', null),
+        answer('a1', 'u1'),
+        user('u2', 'a1'),
+        answer('a2', 'u2'),
+        jsonEncode(record),
+        user('u3', 'k1', text: 'tail'),
+      ]);
+
+      final context = buildLlmContext(s, skillCatalog: catalog);
+
+      // резюме + сообщение навыков + u2 + a2; u3 — хвост.
+      expect(context.messages, hasLength(5));
+      expect(context.compactionCovered, 4);
+    });
+
+    test('without the skill catalog the skills message is not counted', () {
+      final record =
+          jsonDecode(compaction('k1', 'a2', firstKept: 'u2'))
+              as Map<String, Object?>;
+      record['skills'] = [
+        {'name': 'notes', 'fingerprint': 'f'},
+      ];
+      final s = snapshot([
+        user('u1', null),
+        answer('a1', 'u1'),
+        user('u2', 'a1'),
+        answer('a2', 'u2'),
+        jsonEncode(record),
+      ]);
+
+      expect(buildLlmContext(s).compactionCovered, 3);
+    });
+
+    test('two compactions in a row: counted by the last one', () {
+      final s = snapshot([
+        user('u1', null),
+        answer('a1', 'u1'),
+        user('u2', 'a1'),
+        answer('a2', 'u2'),
+        compaction('k1', 'a2', firstKept: 'u2'),
+        compaction('k2', 'k1', firstKept: 'u2'),
+        user('u3', 'k2'),
+      ]);
+
+      final context = buildLlmContext(s);
+
+      expect(context.lastCompaction?.id, 'k2');
+      // резюме k2 + u2 + a2 (прошлая запись k1 заменена резюме k2).
+      expect(context.compactionCovered, 3);
+      expect(context.messages, hasLength(4));
     });
   });
 

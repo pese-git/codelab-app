@@ -82,8 +82,8 @@ final class CliRuntime {
 /// пространство.
 ///
 /// [environment] даёт токен WebSocket (`CODELAB_AGENT_TOKEN`); [verbose] —
-/// лог ядра клиента в [stderr], иначе лог выключен: stdout и stderr headless
-/// не должны засоряться служебными строками.
+/// лог ядра клиента и kit (`ClientWorkspace`) в [stderr], иначе лог выключен:
+/// stdout и stderr headless не должны засоряться служебными строками.
 ///
 /// Встроенный агент (`EmbeddedProfile`) открывает [embeddedOpener]; по
 /// умолчанию — `localEmbeddedAgentOpener` с окружением процесса, логгером в
@@ -106,13 +106,17 @@ CliRuntime buildCliRuntime({
   Duration embeddedCloseTimeout = const Duration(seconds: 10),
 }) {
   const textFileIo = IoTextFileIo();
+  // Один логгер на ядро клиента и kit: без него `ClientWorkspace` берёт
+  // логгер по умолчанию, который пишет JSON в stdout процесса и ломает
+  // headless (H-01).
+  final clientLogger = verbose ? CliLogger(stderr) : CliLogger.silent();
   final application = AcpClientApplication(
     transport: _NotConnectedTransport(),
     clientInfo: const Implementation(name: 'codelab-cli', version: cliVersion),
     textFileReader: textFileIo,
     textFileWriter: textFileIo,
     terminalProcessRunner: const IoTerminalProcessRunner(),
-    logger: verbose ? CliLogger(stderr) : CliLogger.silent(),
+    logger: clientLogger,
   );
   // Лог агента: полный с `--verbose`; `--debug-secrets` (или
   // `CODELAB_DEBUG_SECRETS=1`) без `--verbose` пишет только `secrets.lookup`
@@ -140,6 +144,7 @@ CliRuntime buildCliRuntime({
       ),
       resolver,
     ],
+    logger: clientLogger,
   );
   return CliRuntime._(
     application,

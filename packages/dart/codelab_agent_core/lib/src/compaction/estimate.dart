@@ -17,6 +17,7 @@ import 'dart:math' as math;
 import '../llm/messages.dart';
 import '../llm/model_ref.dart';
 import '../llm/stream_function.dart';
+import '../session/projections.dart';
 
 /// Стоимость картинки — константа: размер base64 не говорит о числе
 /// токенов изображения у провайдера (§9.3).
@@ -59,17 +60,67 @@ int estimateTokens(
     (tools.isEmpty ? 0 : _chars(_schemasJson(tools).length)) +
     messages.fold(0, (sum, m) => sum + estimateMessageTokens(m));
 
-/// Оценка контекста с якорем на `usage` (§9.3).
+/// Якорь на последнее сжатие: пара чисел, зафиксированная в момент записи
+/// сжатия (§9.3 «Якорь на последнее сжатие»; design.md change
+/// `anchor-context-estimate-after-compaction`, D1).
 ///
-/// Якорь — последний ответ модели с ненулевым
-/// `input + cacheRead + cacheWrite`: `input` провайдера уже включает
-/// системный промпт, схемы и все сообщения до него. Ответы до сжатия в
-/// проекции несут `Usage.zero` (§8.7) и якорем не служат — иначе оценка
-/// помнила бы размер несжатого контекста.
+/// Почему: после сжатия в контексте нет ответа с usage провайдера (§8.7), и
+/// оценка падала на чистую эвристику, которая завышает постоянную часть
+/// (промпт, схемы). `tokens` — `tokensAfter` записи (согласованная оценка
+/// компактора), `raw` — эвристика [estimateTokens] ровно по тому, что
+/// `tokensAfter` покрывает: промпт, схемы и первые `compactionCovered`
+/// сообщений проекции.
+///
+/// Как использовать: сессия получает его из [compactionAnchorOf] и хранит
+/// вместе с транскриптом (D3); оценщик применяет как смещение
+/// `tokens − raw`. Из бареля не экспортируется.
+typedef CompactionAnchor = ({int tokens, int raw});
+
+/// Якорь сжатия по проекции [projection] активной ветки (D1, D6).
+///
+/// Почему отдельная функция: якорь строит и сессия (после записи сжатия, при
+/// загрузке), и тесты; `raw` обязан считаться теми же [systemPrompt] и
+/// [tools], что видела оценка, иначе смещение потеряет смысл.
+///
+/// Возвращает `null`, если сжатия нет или `tokensAfter ≤ 0` (вырожденная
+/// запись, ручная правка файла): оценка остаётся чистой эвристикой — безопасная
+/// сторона, завышение ловит аварийное сжатие (D6).
+CompactionAnchor? compactionAnchorOf(
+  LlmContextProjection projection, {
+  required String systemPrompt,
+  required List<ToolSchema> tools,
+}) {
+  final record = projection.lastCompaction;
+  if (record == null || record.tokensAfter <= 0) {
+    return null;
+  }
+  return (
+    tokens: record.tokensAfter,
+    raw: estimateTokens(
+      projection.messages.take(projection.compactionCovered).toList(),
+      systemPrompt: systemPrompt,
+      tools: tools,
+    ),
+  );
+}
+
+/// Оценка контекста с якорями (§9.3).
+///
+/// Три ветви по порядку (D1, D2):
+/// 1. якорь на `usage`: последний ответ модели с ненулевым
+///    `input + cacheRead + cacheWrite` — `input` провайдера уже включает
+///    системный промпт, схемы и все сообщения до него. Ответы до сжатия в
+///    проекции несут `Usage.zero` (§8.7) и якорем не служат — поэтому любой
+///    ответ с usage в сообщениях получен после сжатия и точнее якоря сжатия;
+/// 2. иначе, если задан [compaction], — `max(0, tokens + H − raw)`: смещение
+///    эвристики, зафиксированное при сжатии; сразу после записи оценка равна
+///    `tokensAfter` (CMP-11). Ответы без usage якорь сжатия не снимают;
+/// 3. иначе — чистая эвристика всего контекста.
 int estimateContextTokens(
   List<Message> messages, {
   required String systemPrompt,
   required List<ToolSchema> tools,
+  CompactionAnchor? compaction,
 }) {
   final anchor = messages.lastIndexWhere(
     (m) =>
@@ -77,7 +128,14 @@ int estimateContextTokens(
         m.usage.input + m.usage.cacheRead + m.usage.cacheWrite > 0,
   );
   if (anchor < 0) {
-    return estimateTokens(messages, systemPrompt: systemPrompt, tools: tools);
+    final heuristic = estimateTokens(
+      messages,
+      systemPrompt: systemPrompt,
+      tools: tools,
+    );
+    return compaction == null
+        ? heuristic
+        : math.max(0, compaction.tokens + heuristic - compaction.raw);
   }
   final usage = (messages[anchor] as AssistantMessage).usage;
   return usage.input +
@@ -114,13 +172,6 @@ int estimateAfterCompaction({
   required int rawBefore,
   required int rawAfter,
 }) => math.max(0, before + rawAfter - rawBefore);
-
-/// Оценка payload запроса — оценщик цикла (`AgentLoopConfig.estimateTokens`).
-int estimateLlmContext(LlmContext context) => estimateContextTokens(
-  context.messages,
-  systemPrompt: context.systemPrompt,
-  tools: context.tools,
-);
 
 /// Окно для порога, проверки перед запросом и индикатора (CMP-6).
 int effectiveContextWindow(ModelRef model, {int? cap}) =>

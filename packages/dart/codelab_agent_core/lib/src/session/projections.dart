@@ -43,6 +43,7 @@ final class LlmContextProjection {
     this.model,
     this.modeId,
     this.lastCompaction,
+    this.compactionCovered = 0,
   }) : messages = List.unmodifiable(messages),
        config = Map.unmodifiable(config);
 
@@ -58,6 +59,17 @@ final class LlmContextProjection {
   /// Последние `config_change` по `optionId`.
   final Map<String, String> config;
   final CompactionRecord? lastCompaction;
+
+  /// Число начальных сообщений [messages], порождённых последней записью
+  /// `compaction` и сохранённой частью до неё: резюме, сообщение навыков (если
+  /// есть) и сохранённые сообщения; 0 без сжатия.
+  ///
+  /// Почему поле: `tokensAfter` записи покрывает ровно эту часть контекста, а
+  /// сообщения после записи — хвост. Якорь сжатия (§9.3, design.md change
+  /// `anchor-context-estimate-after-compaction`, D1, D4) считает `raw` по
+  /// покрытым сообщениям, поэтому границу знает проекция, а не оценщик.
+  /// Читает его `compactionAnchorOf`.
+  final int compactionCovered;
 }
 
 /// Записи активной ветки [path], которые видит модель: последнее сжатие,
@@ -152,7 +164,16 @@ LlmContextProjection buildLlmContext(
   );
   final position = {for (final (i, r) in path.indexed) r.id: i};
   final messages = <Message>[];
-  for (final record in kept) {
+  // Записи `kept` после сжатия — хвост; всё до него покрыто `tokensAfter`
+  // (D1): резюме с навыками и сохранённая часть.
+  final coveredRecords = compaction == null
+      ? 0
+      : kept.length - (path.length - compactionIndex - 1);
+  var covered = 0;
+  for (final (index, record) in kept.indexed) {
+    if (index == coveredRecords) {
+      covered = messages.length;
+    }
     switch (record) {
       case MessageRecord(:final message):
         messages.add(
@@ -198,12 +219,16 @@ LlmContextProjection buildLlmContext(
         break;
     }
   }
+  if (coveredRecords > 0 && coveredRecords == kept.length) {
+    covered = messages.length;
+  }
   return LlmContextProjection(
     messages: messages,
     config: config,
     model: model,
     modeId: modeId,
     lastCompaction: compaction,
+    compactionCovered: covered,
   );
 }
 

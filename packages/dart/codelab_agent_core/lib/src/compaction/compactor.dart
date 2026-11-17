@@ -11,8 +11,6 @@
 /// [onCompacted] — до события `ContextCompacted`.
 library;
 
-import 'dart:math' as math;
-
 import '../cancel/cancel_token.dart';
 import '../llm/messages.dart';
 import '../llm/stream_function.dart';
@@ -84,17 +82,20 @@ const maxCompactionPasses = 3;
 /// выбрасываются из записи вместо нового прохода (Q49 (б), D20 «M2»).
 /// `skillCatalog == null` — навыков нет, поведение прежнее.
 ///
-/// Порог CMP-5 и выброс навыков по окну сравнивают `max(согласованное после,
-/// эвристика проекции без якоря)` (D9): цикл после сжатия видит именно
-/// эвристику, и «после» ниже порога при эвристике выше окна терял бы ход.
-/// В запись, событие и лог идёт согласованное «после».
+/// Порог CMP-5 и выброс навыков по окну сравнивают согласованное «после»
+/// (design.md change `anchor-context-estimate-after-compaction`, D8): сессия
+/// сразу после записи фиксирует якорь сжатия, и `preflight`, `afterTurn` и
+/// `ModelRequested` видят ровно это число (CMP-11) — сравнивать с порогом
+/// эвристику проекции незачем. [anchor] — якорь последнего сжатия сессии:
+/// «до» первого прохода берётся от него, если в контексте нет ответа с usage,
+/// иначе шкала рвалась бы на стыке двух сжатий.
 ///
 /// Первый проход без среза или без выигрыша — [NothingToCompact] (причины
 /// `no cut point` и `no reduction`; обе пишут лог `compaction.skipped` с
 /// `reason`). Проход без выигрыша — когда согласованная оценка после него не
 /// меньше оценки до (`after >= before`, CMP-10, D3): запись не пишется.
 /// Оценка «после» — [estimateAfterCompaction] (D1), «до» следующего прохода —
-/// «после» прошлого (D2). Пока `max(после, эвристика)` выше порога (D9), идёт
+/// «после» прошлого (D2). Пока «после» выше порога (CMP-5), идёт
 /// следующий проход (не больше [maxCompactionPasses]); его [NothingToCompact]
 /// или [CompactionFailed] не отменяют уже записанное, и результатом остаётся
 /// [Compacted] прошлого прохода.
@@ -115,6 +116,7 @@ Future<CompactionOutcome> compact({
   Logger? logger,
   SkillCatalog? skillCatalog,
   SkillsConfig skillsConfig = const SkillsConfig(),
+  CompactionAnchor? anchor,
 }) async {
   LlmContextProjection project(SessionSnapshot snapshot, {Logger? log}) =>
       buildLlmContext(
@@ -127,6 +129,7 @@ Future<CompactionOutcome> compact({
     p.messages,
     systemPrompt: systemPrompt,
     tools: tools,
+    compaction: anchor,
   );
   // Эвристика без якоря: из её разницы строится согласованное «после» (D1).
   int raw(LlmContextProjection p) =>
@@ -137,9 +140,10 @@ Future<CompactionOutcome> compact({
   for (var pass = 0; pass < maxCompactionPasses; pass++) {
     final snapshot = writer.snapshot;
     final projectionBefore = project(snapshot, log: logger);
-    // «До» первого прохода — с якорем на usage. Следующие проходы берут
-    // «после» прошлого: в проекции уже нет якоря (§8.7), и пересчёт дал бы
-    // чистую эвристику — ту же ошибку, что D1 убирает (D2).
+    // «До» первого прохода — с якорем на usage или на прошлое сжатие (D8).
+    // Следующие проходы берут «после» прошлого: в проекции уже нет якоря
+    // (§8.7), и пересчёт дал бы чистую эвристику — ту же ошибку, что D1
+    // убирает (D2).
     final before = done?.tokensAfter ?? estimate(projectionBefore);
     final rawBefore = raw(projectionBefore);
     final (:region, :last) = compactionRegion(snapshot, logger: logger);
@@ -232,31 +236,19 @@ Future<CompactionOutcome> compact({
       details: details,
       skills: skills.isEmpty ? null : skills,
     );
-    // Две величины одной проекции после прохода (D1, D9): `after` —
-    // согласованная оценка (идёт в запись, события, лог и проверку выигрыша),
-    // `raw` — чистая эвристика без якоря, то есть то, что увидят preflight
-    // цикла и `afterTurn` (якоря после сжатия нет, §8.7).
-    ({int after, int raw}) estimateWith(List<CompactionSkill> skills) {
+    // Согласованное «после» проекции с ещё не записанной записью (D1): идёт
+    // в запись, событие, лог, проверку выигрыша и порог (D8). Эвристика
+    // проекции без якоря нужна только для разницы с `rawBefore`.
+    int estimateWith(List<CompactionSkill> skills) {
       final draft = withFields(skills: skills);
-      final rawAfter = raw(
-        project(snapshot.withRecord(draft, leafAfter(draft))),
-      );
-      return (
-        after: estimateAfterCompaction(
-          before: before,
-          rawBefore: rawBefore,
-          rawAfter: rawAfter,
-        ),
-        raw: rawAfter,
+      return estimateAfterCompaction(
+        before: before,
+        rawBefore: rawBefore,
+        rawAfter: raw(project(snapshot.withRecord(draft, leafAfter(draft)))),
       );
     }
 
-    // Порог сравнивается с `max(after, raw)` (D9): иначе согласованное
-    // «после» ниже порога, а цикл после сжатия получает эвристику выше окна —
-    // аварийный вызов уже использован (CMP-8), и ход теряется. Для всех
-    // триггеров одинаково.
-    bool overThreshold(({int after, int raw}) e) =>
-        math.max(e.after, e.raw) > threshold;
+    bool overThreshold(int after) => after > threshold;
 
     // Навыки записи (D15, D20): активные до сжатия, кроме тех, чья последняя
     // активация осталась в хвосте после нового `firstKeptId` — их блок и так
@@ -270,7 +262,7 @@ Future<CompactionOutcome> compact({
     // будет — давние навыки выбрасываются с конца, пока оценка не уложится.
     // Если не укладывается и без них, работает обычный CMP-5. Решение лежит в
     // самой записи, поэтому проекция и `activeSkills` окна не знают. Сравнение
-    // с порогом — по `max(after, raw)` (D9), как у CMP-5.
+    // с порогом — по согласованному `after` (D8), как у CMP-5.
     var skills = candidates;
     var estimated = estimateWith(skills);
     if (skills.isNotEmpty &&
@@ -281,7 +273,7 @@ Future<CompactionOutcome> compact({
         estimated = estimateWith(skills);
       }
     }
-    final after = estimated.after;
+    final after = estimated;
     final droppedWindow = skillCatalog == null
         ? 0
         : _attachedCount(candidates, skillCatalog, skillsConfig) -
