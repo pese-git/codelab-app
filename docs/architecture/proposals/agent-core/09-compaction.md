@@ -58,6 +58,7 @@ Future<CompactionOutcome> compact({required SessionWriter writer, required Compa
     String? summaryModel, Logger? logger});
 sealed class CompactionOutcome {}      // Compacted(record, before, after) | NothingToCompact(reason) | CompactionFailed(error)
                                        // reason: 'no cut point' (нет среза) | 'no reduction' (нет выигрыша, CMP-10)
+                                       // | 'stale' (журнал изменился во время прохода, CMP-12)
                                        // Compacted.record — CompactionRecord или (после MVP) HideRecord (§17.13.4)
 enum CompactionTrigger { afterTurn, preflight, overflow, manual }
 
@@ -504,7 +505,13 @@ compact(snapshot, trigger, summarize, settings, cancel, focus, anchor):
 9а. если after >= before → нет выигрыша (CMP-10): лог compaction.skipped(reason: "no reduction"), запись не пишется,
    транскрипт не меняется, ContextCompacted нет; вернуть NothingToCompact("no reduction")
    (на следующем проходе — Compacted прошлого прохода)
-10. append(rec, durable: true)                 // только теперь сжатие существует
+10. appendWith(durable: true, current →       // в очереди писателя, §8.5; CMP-12
+      отменён → null, затем CancelledException (CMP-3, CMP-4)
+      между snapshot.leafId и current.leafId только model_change, mode_change, config_change,
+        session_info → rec с parentId := current.leafId (id заново, если занят)
+      иначе → null: лог warning compaction.skipped(reason: "stale", blocking_type), вернуть NothingToCompact("stale")
+        (на следующем проходе — Compacted прошлого прохода))
+    // только теперь сжатие существует
 11. onCompacted(projected): транскрипт Agent := projected.messages (usage обнулён, §8.7) и
     якорь сжатия сессии := compactionAnchorOf(projected, промпт и схемы на старте compact) —
     единым методом сессии (§9.3), лог compaction.anchor(source: compaction); аварийный путь
@@ -521,7 +528,8 @@ compact(snapshot, trigger, summarize, settings, cancel, focus, anchor):
 после хода — `TurnOutput.history + added` (§5.2). Логи: `compaction.done` (`info`, проход, оценки
 до и после), `compaction.skipped` (`info`: `session_id`, `trigger`, `pass`, `reason`; при
 `reason: "no cut point"` — нет среза, шаг 4, оценок нет; при `reason: "no reduction"` — нет
-выигрыша, шаг 9а, плюс `tokens_before`, `tokens_after`; пишется на любом проходе) и
+выигрыша, шаг 9а, плюс `tokens_before`, `tokens_after`; при `reason: "stale"` (уровень `warning`) — журнал изменился
+во время прохода, плюс `blocking_type` — вид первой мешающей записи, шаг 10, CMP-12; пишется на любом проходе) и
 `compaction.failed` (`warning`; неожиданное исключение фонового `afterTurn` `AgentSession` пишет
 под тем же именем с уровнем `error`, §12). Фиксацию якоря на последнее сжатие сессия пишет в
 `compaction.anchor` (`debug`; `session_id`, `tokens`, `raw`, `source`: `compaction` — шаг 11
@@ -540,6 +548,17 @@ CMP-8. Для `afterTurn` отдельной защиты нет: пока ре�
 
 `tokensAfter` считается до записи по снимку с ещё не записанной записью — запись пишется
 один раз и уже с итоговым числом.
+
+Запись на текущий лист (шаг 10; change `fix-config-change-during-background-compaction`, D2, D3).
+Пока суммаризатор отвечает, смены режима, модели, `effort` и агента пишутся в журнал: сеттеры
+сессии сжатие не ждут и не отменяют. Запись `compaction` с родителем — листом начала прохода
+оставила бы их на боковой ветке, и `loadSession` откатил бы конфигурацию. Поэтому запись
+собирается в очереди писателя по текущему снимку. Разрешённые между листами записи не дают
+сообщений проекции (§8.7, шаг 6) и не влияют на `activeSkills`, поэтому `firstKeptId`, хвост,
+навыки и все оценки прохода остаются верными. Любая другая запись (сообщение, сжатие, неизвестный
+вид) — исход `stale` без записи (fail-closed); в текущем ядре он недостижим и служит защитой для
+будущих путей записи. Промпт, схемы и окно прохода — снятые при его начале; если смена их
+изменила, следующий `preflight` или `afterTurn` считает уже с новыми.
 
 Навыки (change `add-agent-skills`, D15): на шаге 8 запись получает необязательное поле `skills` —
 имена и отпечатки элементов `activeSkills` до нового сжатия, кроме навыков, чья последняя активация
@@ -585,6 +604,7 @@ sequenceDiagram
 9. **CMP-9.** Открытые просьбы предыдущего резюме передаются суммаризатору при каждом следующем сжатии (`previousSummary`).
 10. **CMP-10.** Записанное сжатие уменьшает оценку контекста: `tokensAfter < tokensBefore`; проход без выигрыша не пишет запись и не меняет транскрипт.
 11. **CMP-11.** Сразу после записанного сжатия оценка контекста, которую видят `preflight`, `ModelRequested`, `StepEnded` без usage, `afterTurn` и следующий проход компактора, равна `tokensAfter` записи; до первого ответа с usage она — `tokensAfter` плюс эвристика изменившейся части (хвост, промпт, схемы).
+12. **CMP-12.** Запись `compaction` ложится на текущий лист: записи состояния сессии (`model_change`, `mode_change`, `config_change`, `session_info`), сделанные во время прохода, остаются на активной ветке до неё; если между листом начала прохода и текущим есть запись другого вида, сжатие не записывается (`stale`).
 
 ## 9.10. Обоснование решения
 
@@ -652,6 +672,7 @@ sequenceDiagram
 * Тест лога `compaction.skipped`: `reason: "no cut point"` без оценок, `reason: "no reduction"` с
   `tokens_before`/`tokens_after`; навыки не выбрасываются ради выигрыша (D3, D6).
 * Тест одной функции окна: `cap = 50 000` при окне модели 128 000 → порог, preflight и значение для индикатора считаются от 50 000 (CMP-6).
+* Тест смены конфигурации во время сжатия: суммаризатор удержан, во время резюме записан `mode_change` (`model_change`, `config_change`, `session_info`) → запись `compaction` с родителем — этой записью, оценки те же; записано сообщение или неизвестная запись → `NothingToCompact('stale')`, лог `compaction.skipped(reason: "stale", blocking_type)` уровня `warning`; отмена, пока запись ждёт очереди писателя → `CancelledException`, записи нет. Сквозной: `setMode`/`setModel`/`setEffort`/`setAgent` во время `afterTurn`, `/compact` и аварийного сжатия → после `loadSession` значение смены восстановлено (CMP-12, SES-16).
 
 ---
 
