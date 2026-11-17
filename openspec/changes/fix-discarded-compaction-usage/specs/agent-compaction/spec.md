@@ -9,7 +9,7 @@
 - `reason` — `"no reduction"` или `"stale"`;
 - `trigger`, `pass`, `tokensBefore`, `tokensAfter` — согласованные оценки прохода.
 
-Текста резюме запись НЕ SHALL содержать. Запись SHALL идти через `SessionWriter.append` без `durable` (родитель — лист в очереди писателя, SES-16), после проверки отмены, выбора навыков и проверки выигрыша, а для `stale` — после того, как `appendWith` вернул `null` и отмена проверена; проверка CMP-12 к ней не применяется. Сбой записи SHALL уходить из `compact` так же, как сбой записи `compaction` (SES-8).
+Текста резюме запись НЕ SHALL содержать. Запись SHALL идти через `SessionWriter.append` без `durable` (родитель — лист в очереди писателя, SES-16), после проверки отмены, выбора навыков и проверки выигрыша, а для `stale` — после того, как построитель `appendWith` проверил отмену и вернул `null` из-за `stale`; проверка CMP-12 к записи учёта не применяется. Отмена хода или закрытие сессии, пришедшие после проверки выигрыша (для `stale` — после проверки в построителе), запись учёта и событие НЕ SHALL отменять: оплаченный вызов учитывается, а `/compact` отвечает прежним текстом `Nothing to compact.`; stopReason ответа на `session/prompt` определяет мост по правилам отмены ACP (при `session/cancel` — `cancelled`, ACP-5) (решение пользователя Q9 (а), уточнено по ACP-5). Сбой записи SHALL уходить из `compact` так же, как сбой записи `compaction` (SES-8).
 
 После успешной записи ядро SHALL эмитить событие `CompactionDiscarded` с `tokensBefore`, `tokensAfter`, `usage` и `model` (строка `<provider>/<id>`, не `null`; D2). `ContextCompacted` для такого прохода НЕ SHALL эмититься. Usage вызова НЕ SHALL входить в `TurnEnded.usage`, в том числе на аварийном пути. Реплей журнала НЕ SHALL давать `CompactionDiscarded`.
 

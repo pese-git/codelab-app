@@ -12,7 +12,7 @@
 2. слияние PR #346 (`add-usage-ledger`) в `develop`;
 3. перебазирование ветки `feature/fix-discarded-compaction-usage` на `develop`.
 
-Порядок: 0.2б → 0.3 → 0.4 → 1.1 → 1.2 → 1.3 → 2.1 → 2.2 → 3.1 → 4 → 5. Одна ветка, один PR в `develop`.
+Порядок: 0.2б → 0.3 → 0.4 → 1.1 → 1.2 → 1.3 → 2.1 → 2.2 → 2.3 → 3.1 → 4 → 5. Одна ветка, один PR в `develop`.
 
 Проверки — только затронутое (корневой `AGENTS.md` §21); полный `melos run check` — по просьбе пользователя.
 
@@ -34,7 +34,7 @@
 
 ## 1. Ядро (`codelab_agent_core`)
 
-- [ ] 1.1 `[agent]` Красные тесты (дельты `agent-compaction`, `agent-sessions`, `agent-slash-commands`; D1–D4, D6):
+- [x] 1.1 `[agent]` Красные тесты (дельты `agent-compaction`, `agent-sessions`, `agent-slash-commands`; D1–D4, D6):
   - `test/compaction/compactor_test.dart`:
     - «/compact без выигрыша записывает учёт»: резюме `'x' * 20000` с usage `{input: 764, output: 171}` и моделью. Ожидается одна запись `custom` `codelab.compaction_discarded` с полями `data` по D1 и без `summary`; сообщения `buildLlmContext` до и после равны; `CompactionDiscarded` с теми же usage и моделью; `ContextCompacted` нет; лог `compaction.skipped` с `usage_record_id` и `summary_model`;
     - «Второй проход без выигрыша»: запись `compaction`, затем запись учёта с `pass: 2`; по одному `ContextCompacted` и `CompactionDiscarded`;
@@ -47,35 +47,42 @@
   - `test/session/` (реплей): журнал с записью учёта — реплей без `CompactionDiscarded`; читатель сохраняет запись как `CustomRecord`, проекция та же («Старое ядро читает новую запись»: проверить, что старый путь разбора `custom` не меняется).
   - `test/usage/usage_ledger_test.dart`: «Отброшенный вызов в свёртке», «Записанный и отброшенный проходы», «Цена отброшенного вызова» (через отчёт и каталог), «Запись неверной формы»; детерминизм сериализации с `discarded`.
   - `test/usage/usage_report_text_test.dart` (или рядом с тестом текста `/usage`): «/usage после /compact без выигрыша», «Без отброшенных вызовов».
-- [ ] 1.2 `[agent]` Характеризационная правка тестов change `fix-compaction-estimate-and-no-gain`, которые проверяют неизменный журнал при проходе без выигрыша (design.md, R2; исключение (а) TDD ядра): `compactor_test.dart` «Резюме длиннее региона», «Второй проход без выигрыша», «Навыки не выбрасываются ради выигрыша», `builtin_slash_commands_test.dart` «/compact без выигрыша», `overflow_then_compact_test.dart` «Аварийное сжатие без выигрыша». Ожидание «журнал не изменился» заменяется на «единственная новая запись — учёт D1; записей `compaction` нет; проекция и транскрипт те же». Каждая правка — с комментарием-ссылкой на D1 этого change.
-- [ ] 1.3 `[agent]` Реализация 1.1–1.2:
+- [x] 1.2 `[agent]` Характеризационная правка тестов change `fix-compaction-estimate-and-no-gain`, которые проверяют неизменный журнал при проходе без выигрыша (design.md, R2; исключение (а) TDD ядра): `compactor_test.dart` «Резюме длиннее региона», «Второй проход без выигрыша», «Навыки не выбрасываются ради выигрыша», `builtin_slash_commands_test.dart` «/compact без выигрыша», `overflow_then_compact_test.dart` «Аварийное сжатие без выигрыша». Ожидание «журнал не изменился» заменяется на «единственная новая запись — учёт D1; записей `compaction` нет; проекция и транскрипт те же». Каждая правка — с комментарием-ссылкой на D1 этого change.
+- [x] 1.3 `[agent]` Реализация 1.1–1.2:
   - `lib/src/loop/agent_events.dart`: `CompactionDiscarded` с doc-комментарием (почему, для чего, как; D2); экспорт в барели;
   - `lib/src/compaction/compactor.dart`: на ветке `after >= before` и после `null` от `appendWith` при `stale` — `writer.append` (не `appendWith`) записи `CustomRecord` с соответствующим `reason` (D1), затем `emit(CompactionDiscarded(...))`, затем лог `compaction.skipped` с `usage_record_id`, `summary_model`; doc-комментарии `compact` и `NothingToCompact` обновить;
   - исчерпывающие `switch` по `AgentEvent` в ядре (`session_writer.dart` и др.) — ветка без действия;
   - `lib/src/usage/usage_ledger.dart`: разбор записи учёта в `buildUsageLedger`, `UsageLedgerGroup.discarded`, ключ `discarded` в сериализации `usage.json` (D3);
   - `lib/src/usage/usage_report_text.dart`: строка `Summaries` (D4);
-  - константа `customType` — одна, в ядре, рядом с компактором или свёрткой; без дублирования строки.
+  - константа `customType` — одна, в `lib/src/session/records.dart` рядом с `CustomRecord` (§8.2.4); компактор и свёртка её импортируют, строка не дублируется.
 
 ## 2. Адаптер ACP и фикстура
 
-- [ ] 2.1 `[protocol]` Красные тесты (дельта `agent-acp-server`; D5):
+- [x] 2.1 `[protocol]` Красные тесты (дельта `agent-acp-server`; D5):
   - `packages/dart/codelab_agent_acp/test/usage_bridge_test.dart`:
     - «/compact без выигрыша в живой сумме»: снимок `compactionDiscarded` с суммой, прежними `turns`/`steps`, `context.used` = `tokensBefore`, без `turnId`/`step`/`turn`;
     - «Клиент без объявления»: кадров нет;
-    - при нулевом usage — `noUsage`;
+    - при нулевом usage — снимок уходит, сумма не растёт, `partial` без `noUsage` (design.md, R8, Q7 (а));
     - модель без цен — `noPrice`;
     - «Записанное сжатие без изменений»;
   - `usage_projection_test.dart`, «Сумма после session/load»: засев включает отброшенный вызов; `session` снимка `load` равен `total` ответа журнала;
   - тест ответа журнала: `summaries.discarded` при ненулевом значении и его отсутствие при нуле;
   - фикстура `packages/dart/codelab_acp_testing` `acp/compact-no-gain-usage` по D7 (красная до 2.2 в `conformance:agent`).
-- [ ] 2.2 `[protocol]` Реализация 2.1:
+- [x] 2.2 `[protocol]` Реализация 2.1:
   - `session_bridge.dart`: ветка `CompactionDiscarded` — `summarizerEnded` и `_sendUsage('compactionDiscarded', …)`;
   - `usage_accounting.dart`: построитель снимка (общий с `compactionSnapshot` по `used`, повод — параметр) и `discarded` в `summaries` ответа журнала;
   - `event_projection.dart`: ветка `CompactionDiscarded() => const []`.
 
+- [x] 2.3 `[protocol]` Тесты гонки отмены после проверки выигрыша (design.md, D5, решение пользователя Q9 (а), уточнено по ACP-5; CMP-13): суммаризатор отвечает резюме без выигрыша, отмена приходит после проверки выигрыша, но до записи учёта:
+  - `session/cancel` во время `/compact` → в журнале одна запись учёта, снимок `compactionDiscarded` ушёл, сумма включает вызов, текст `Nothing to compact.`; ответ на `session/prompt` — `stopReason: cancelled` (ACP-5);
+  - `close()` или остановка сервера в этом окне → запись учёта на диске до закрытия писателя, после `session/load` сумма включает вызов; ответа на prompt нет или он прежний;
+  - `stale` — тестами ядра.
+  
+  *Итог 2026-11-17:* мост покрыт тестами `usage_ledger_seed_test.dart` «a race after the gain check (Q9)» (cancel и shutdown). `stale` через мост детерминированно недостижим, а ветки по `reason` у моста нет; этот исход покрыт тестами ядра (задача 1.1).
+
 ## 3. Клиент
 
-- [ ] 3.1 `[client]` Тесты совместимости без кода (D5, R7):
+- [x] 3.1 `[client]` Тесты совместимости без кода (D5, R7):
   - `packages/dart/codelab_client_core/test/usage/` — снимок `trigger: "compactionDiscarded"` разбирается как `UsageTrigger.unknown`, обновляет `session` и `context` и не трогает `lastTurn`;
   - ответ журнала с `summaries.discarded` разбирается без предупреждения `usage.ledger.decode_failed`, `summaries.count` и токены — из ответа.
   

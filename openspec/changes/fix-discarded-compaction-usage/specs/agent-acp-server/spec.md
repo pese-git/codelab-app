@@ -10,13 +10,13 @@
 - с `seq` по общему правилу;
 - с debug-записью `acp.usage.sent`.
 
-Снимок SHALL отправляться и при нулевом usage вызова (причина `noUsage`). Стандартные типы ACP новых полей и значений НЕ SHALL получать. Кадров `session/update` событие НЕ SHALL давать.
+Снимок SHALL отправляться и при нулевом usage вызова; сумма тогда не растёт, причины `noUsage` у суммаризатора нет — как у записанного сжатия (design.md, R8). Снимок и сообщение агента `/compact` идут в любом порядке, оба SHALL предшествовать ответу на `session/prompt`. Стандартные типы ACP новых полей и значений НЕ SHALL получать. Кадров `session/update` событие НЕ SHALL давать.
 
 В ответе `_codelab/session/usage/ledger` объект `summaries` SHALL содержать целое `discarded` — число отброшенных вызовов, только при ненулевом значении. `usageLedger.version` остаётся `1` (правило совместимости D6 change `add-usage-ledger`; решение пользователя Q2 (а)). Засев на `session/load` SHALL включать отброшенные вызовы из свёртки, и инвариант «сразу после засева `session` равен `total` ответа журнала» (требование «Полная сумма сессии после session/load» change `add-usage-ledger`) SHALL сохраняться.
 
 #### Scenario: /compact без выигрыша в живой сумме
 - **WHEN** клиент объявил `usage`, после хода с одним шагом приходит `/compact`, и проход отброшен по CMP-10 с usage суммаризатора на модели с ценами
-- **THEN** приходит `_codelab/session/usage` с `trigger: "compactionDiscarded"`, `session` с токенами и стоимостью суммаризатора сверх итога хода, прежними `session.turns` и `session.steps` и `context.used`, равным `used` последнего снимка хода; затем ответ `end_turn` (фикстура `acp/compact-no-gain-usage`; `usage_bridge_test.dart`)
+- **THEN** приходит `_codelab/session/usage` с `trigger: "compactionDiscarded"`, `session` с токенами и стоимостью суммаризатора сверх итога хода, прежними `session.turns` и `session.steps` и `context.used`, равным `used` последнего снимка хода; снимок и `agent_message_chunk` `Nothing to compact.` — в любом порядке, затем ответ `end_turn` (фикстура `acp/compact-no-gain-usage`; `usage_bridge_test.dart`)
 
 #### Scenario: Журнал после отброшенного прохода
 - **WHEN** после этого клиент запрашивает `_codelab/session/usage/ledger`
