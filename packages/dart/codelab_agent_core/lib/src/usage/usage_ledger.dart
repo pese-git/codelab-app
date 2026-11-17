@@ -65,6 +65,7 @@ final class UsageLedgerGroup {
     required this.count,
     required this.usage,
     this.models = const [],
+    this.discarded = 0,
   });
 
   final int count;
@@ -73,6 +74,12 @@ final class UsageLedgerGroup {
   /// Только у `summaries` (D1 п. 6): отсортированные различные
   /// `details.summaryModel`, `<provider>/<id>`.
   final List<String> models;
+
+  /// Только у `summaries` (design.md change `fix-discarded-compaction-usage`,
+  /// D3): сколько из [count] вызовов оплачены, но их проход сжатия не записан
+  /// (запись учёта `codelab.compaction_discarded`, CMP-13). В `usage.json` ключ
+  /// `discarded` пишется только при ненулевом значении.
+  final int discarded;
 }
 
 /// Ход сессии: от слов пользователя до следующего хода (D1 п. 3, Q9).
@@ -178,6 +185,7 @@ final class UsageLedger {
   String serialize() {
     Map<String, Object?> group(UsageLedgerGroup g, String countKey) => {
       countKey: g.count,
+      if (g.discarded > 0) 'discarded': g.discarded,
       'usage': _usageJson(g.usage),
       if (g.models.isNotEmpty) 'models': g.models,
     };
@@ -263,6 +271,7 @@ UsageLedger buildUsageLedger(SessionSnapshot snapshot) {
   final byModel = <String, ({int steps, Usage usage})>{};
   final runs = <Usage>[];
   final calls = <({Usage usage, String? model})>[];
+  var discarded = 0;
   for (final r in records) {
     switch (r) {
       case MessageRecord(:final message) when _isStep(r):
@@ -284,6 +293,21 @@ UsageLedger buildUsageLedger(SessionSnapshot snapshot) {
           final usage = Usage.fromJson(raw);
           final model = details?['summaryModel'];
           calls.add((usage: usage, model: model is String ? model : null));
+          total += usage;
+        }
+      case CustomRecord(customType: compactionDiscardedCustomType, :final data):
+        // Отброшенный проход сжатия (D3 change `fix-discarded-compaction-usage`):
+        // тот же вызов суммаризатора, что в `compaction.details`, но без
+        // записи `compaction`. Запись неверной формы пропускается молча, как
+        // неразбираемая строка; `reason` не проверяется — учёт не зависит от
+        // причины (Q6).
+        final fields = data is Map<String, Object?> ? data : null;
+        final raw = fields?['usage'];
+        if (raw is Map<String, Object?>) {
+          final usage = Usage.fromJson(raw);
+          final model = fields!['summaryModel'];
+          calls.add((usage: usage, model: model is String ? model : null));
+          discarded++;
           total += usage;
         }
       default:
@@ -351,6 +375,7 @@ UsageLedger buildUsageLedger(SessionSnapshot snapshot) {
             count: calls.length,
             usage: _sum([for (final c in calls) c.usage]),
             models: summaryModels,
+            discarded: discarded,
           ),
     subagentRuns: runs,
     summaryCalls: calls,
