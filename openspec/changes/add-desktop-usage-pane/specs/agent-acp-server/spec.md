@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Бюджет хода в уведомлении `_codelab/session/usage`
-Снимки `_codelab/session/usage` с поводом `step` и `turn` SHALL нести необязательное поле `budget`, если у хода задан хотя бы один из лимитов `budget.max_tokens`, `budget.max_cost`, `budget.max_duration` (design.md change `add-desktop-usage-pane`, D7, Q5; правило совместимости D2 change `add-usage-extension`: новое необязательное поле — без смены версии `usage`). Без таких лимитов поля НЕ SHALL быть; в снимках `compaction` и `load` его НЕ SHALL быть.
+Снимки `_codelab/session/usage` с поводом `step` и `turn` SHALL нести необязательное поле `budget`, если у хода задан хотя бы один из лимитов `budget.max_tokens`, `budget.max_cost`, `budget.max_duration` (design.md change `add-desktop-usage-pane`, D7, Q5; правило совместимости D2 change `add-usage-extension`: новое необязательное поле — без смены версии `usage`). Без таких лимитов поля НЕ SHALL быть; в снимках `compaction`, `compactionDiscarded` (change `fix-discarded-compaction-usage`) и `load` его НЕ SHALL быть.
 
 Состав (значения — из прогресса бюджета `StepEnded` и `TurnEnded`, требование agent-loop «Прогресс бюджета хода в событиях шага и хода»):
 - `steps` — `{"used": <целое>, "limit": <целое>}`, всегда при наличии поля;
@@ -26,8 +26,8 @@
 - **THEN** `budget.cost` — `{"limit": "0.5"}` без `used`, снимок несёт `currency` `USD`
 
 #### Scenario: Снимок сжатия
-- **WHEN** после хода с лимитами идёт фоновое сжатие
-- **THEN** снимок `compaction` не несёт `budget`
+- **WHEN** после хода с лимитами идёт фоновое сжатие, или проход сжатия отброшен после оплаченного вызова суммаризатора
+- **THEN** снимок `compaction` или `compactionDiscarded` не несёт `budget`
 
 #### Scenario: Невалидный лимит стоимости
 - **WHEN** `max_cost` — NaN, а `max_tokens` задан

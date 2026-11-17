@@ -8,8 +8,8 @@
 - **THEN** каждый снимок `step` и `turn` содержит `budget` с ожидаемыми `used` и `limit`, и снимков без `budget` в ходе нет
 
 #### Scenario: Клиентский прогон
-- **WHEN** `conformance:client` проигрывает `acp/prompt-usage-budget`
-- **THEN** после кадра снимка `turn` `SessionView.usage.budget` несёт `tokens.used`, `tokens.limit`, `cost.used` и `cost.limit` из кадра
+- **WHEN** клиентский драйвер проигрывает `acp/prompt-usage-budget`
+- **THEN** после кадра снимка `turn` `SessionView.usage.budget` несёт `steps`, `tokens.used`, `tokens.limit`, `cost.used` и `cost.limit` из кадра и не несёт `duration`, а клиент не отправляет кадров в ответ на уведомления (проверка `SessionView` — тестом `codelab_client_core` на том же драйвере, `test/usage/usage_fixture_test.dart`; доставка снимков ядром клиента — `conformance:client`; как у `acp/prompt-usage-steps`, D21 Т7 change `add-usage-extension`)
 
 #### Scenario: Существующие фикстуры
 - **WHEN** агентский драйвер проигрывает `acp/prompt-usage-steps`

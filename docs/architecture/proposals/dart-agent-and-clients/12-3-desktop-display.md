@@ -975,7 +975,7 @@ D27; артборд 30 холста «CodeLab Desktop — Feature UI/UX», ут�
    (A7); второй подписки нет. Ревизии `SessionView` приходят на каждый фрагмент ответа, поэтому
    данные панели кэшируются: `usagePaneDataOf` пересчитывается только при смене сессии, `cwd`,
    identity `usage` и `usageLedger` или ревизии транскрипта (её признак — identity всех `ToolCallItem` ленты;
-   индекс вызовов для подписей шагов строится один раз на ревизию, D4). Сохранение CSV — порт
+   индекс вызовов для подписей шагов строится один раз на ревизию, D4); для блока «Turn budget» ключ кэша расширяется статусом сессии и признаком ожидающих одобрений (заголовок и тик, п. 6). Сохранение CSV — порт
    `UsageCsvSaver` в `lib/core/platform/` (`file_selector` и `dart:io`).
 2. **Доступность** (`usageAvailable`, Q7). `usageLedger` не `unavailable` — полная панель; есть
    только `usage` (`awaiting` или `reported`) — карточки из `usage.session`, заметка `This agent
@@ -1016,12 +1016,22 @@ D27; артборд 30 холста «CodeLab Desktop — Feature UI/UX», ут�
    остальные вызовы — ` +N`; без вызовов — `reply`; вызов не найден — `N tool calls`.
 6. **Бюджет хода** (C-13, Q5). Источник — `usage.budget` (§12.1.5, п. 3b), поле `budget` снимков
    `step` и `turn`: агент шлёт его только при заданных `max_tokens`, `max_cost` или
-   `max_duration`. Блок `This turn` во время хода и `Last turn` после; строки Steps, Tokens, Cost,
-   Time с полосой `<израсходовано> / <лимит>`; тон `warning` от 80 %, `danger` от 100 %, больше
-   100 % — как есть; без израсходованной стоимости — `— / $0.50` и `not checked: price unknown`;
-   подсказка Tokens — `input + output, including subagents`. Пока сессия `running` без ожидающих
-   одобрений, Time тикает раз в секунду: `usedMs + (now − receivedAt)` (таймер в виджете, как у
-   Agents); иначе — `usedMs` снимка. Без `budget` блока нет.
+   `max_duration`. Блок стоит между карточками и `Per turn` и не зависит от журнала: он есть и у
+   агента без журнала (п. 2). Заголовок `This turn` во время хода (`running`, `cancelling`) при неитоговом
+   бюджете, иначе `Last turn`: от начала нового хода до его первого снимка `step` — `Last turn` прошлого
+   хода без тика (`ended`, решение пользователя Q11 (а)). Строки Steps, Tokens,
+   Cost, Time — только присутствующие в `budget`, с полосой и подписью `<израсходовано> / <лимит>`:
+   `3 / 50`, `92.0k / 200.0k` (`formatUsageTokens`), `$0.41 / $0.50` (`formatUsageMoney`),
+   `3:00 / 10:00` (`m:ss`, от часа `h:mm:ss`, формат — маппер desktop). Тон в целых: `warning` при
+   `used·5 ≥ limit·4`, `danger` при `used ≥ limit`; больше 100 % — в подписи как есть, полоса не
+   длиннее 100 %, лимит 0 — полоса полная, `danger`. Без израсходованной стоимости — `— / $0.50`,
+   `not checked: price unknown`, без тона; подсказка Tokens — `input + output, including subagents`;
+   под блоком — `When a limit is hit, the turn stops at the next step boundary.` Пока сессия
+   `running` без ожидающих одобрений и бюджет не итоговый, Time показывает `usedMs + (now − receivedAt)` (отрицательная
+   разность — ноль), иначе `usedMs` снимка. Тик — `Timer.periodic` раз в секунду в
+   `WorkbenchUsagePane`, как у Agents (A15): идёт, пока панель смонтирована, сессия `running`, нет
+   одобрений, бюджет не итоговый и есть `duration`; признак тика даёт application, часы виджета (`clock`) внедряют
+   тесты. Без `budget` блока нет.
 7. **CSV** (Q2). RFC 4180, разделитель `,`, CRLF, UTF-8 без BOM. Столбцы
    `kind,turn,step,title,model,input,output,cache_read,cache_write,reasoning,cost,currency,partial`.
    Строки хронологически: `turn`, его `step` и `subagents`, затем `model`, группы сессии
@@ -1325,7 +1335,7 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 | `usage_pane_test.dart`, группа `слот дока (D1, D3)`: `«Панель с журналом»: открытие даёт один запрос журнала без rebuild, …`; `«Rebuild from log»: запрос с rebuild: true, строка состояния обновляется`; `«Сбой загрузки журнала»: заметка и Retry, …, Retry шлёт один`; `«Агент без журнала»: …`; `закрытая панель журнал не запрашивает` | A17 пп. 1–4 |
 | `usage_pane_test.dart`, группа `экспорт CSV (D5; «Отказ в диалоге»)`: `сохранено: порт получил CSV с заголовком и предложенное имя codelab-usage-<sessionId>-<дата>.csv, заметки нет`; `отказ в диалоге: ни файла, ни заметки`; `сбой записи: заметка Couldn't save the file.` (двойник порта — `test/support/fake_usage_csv_saver.dart`) | A17 п. 7 |
 
-Блок «Turn budget» (задачи 3.3–3.4) добавит строки в эту таблицу в итерации 3.
+Блок «Turn budget» (задачи 3.3–3.4) добавит строки в эту таблицу в итерации 3: маппер — `test/features/usage/application/usage_budget_test.dart`, тик — `test/features/usage/presentation/usage_budget_tick_test.dart`, организм — группа `Turn budget` в `codelab_usage_pane_test.dart`.
 
 Сигнатуры файлов, лимиты и пометка «вне папки» проверяются тестами kit (§12.1.10,
 `attachments/prompt_content_builder_test.dart`); app их не дублирует.
@@ -1377,7 +1387,10 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 * `app:usage_pane_flow_test.dart` (D-09, C-13; change `add-desktop-usage-pane`, задача 3.5;
   приёмка `release/*`, скрипт `test:e2e:app:usage`): scripted-агент с usage, журналом и бюджетом —
   клик по строке статуса открывает панель, раскрытие хода до шагов, «Rebuild from log», «Turn
-  budget» во время хода, экспорт CSV во временный каталог через шов порта. Модульно —
+  budget» во время хода, экспорт CSV во временный каталог через шов порта. Сценарии разделены по
+  агентам (решение пользователя Q12 (а)): scripted `withUsageBudget` — клик по строке статуса и блок
+  `Last turn` (`1 / 50`, `12.8k / 200.0k`, `$0.04 / $0.50`, `0:01 / 10:00`); Dart и встроенный с
+  `withUsage` — раскрытие хода, «Rebuild from log», CSV; `This turn` и тик — только widget-тесты. Модульно —
   `test/features/usage/application/` (маппер, подписи, правило обновления, CSV),
   `codelab_usage_pane_test.dart`, `test/features/usage/presentation/usage_pane_test.dart`.
 * `app:transcript_rendering_flow_test.dart` (новый, D-06/D-07/D-08 сквозь весь стек): scripted
