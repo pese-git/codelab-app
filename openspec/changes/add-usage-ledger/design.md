@@ -206,6 +206,8 @@
 - `CodelabExtensions` получает признак `usageLedger` по правилу D7.
 - `AcpClientApplication` получает метод запроса журнала (`sessionId`, `rebuild`). Он возвращает сырой результат (`Map`) и поколение соединения, на котором ушёл запрос, а ошибку JSON-RPC — типизированным сбоем, как другие запросы приложения. Содержимое ответа слой не разбирает: форма живёт в `codelab_client_core` (D8 change `add-usage-extension`, `codelab_client_core/AGENTS.md` §5). Запрос без объявленного `usageLedger` даёт типизированный отказ без отправки.
 
+- *Сверка с красными тестами итерации 3 (2026-11-17):* метод — `AcpClientApplication.requestUsageLedger({sessionId, rebuild})`, результат — `UsageLedgerReply {result, generation}`. Сбой JSON-RPC и отказ без ключа `usageLedger` — существующий `AcpClientApplicationException`; у сбоя `cause` — `JsonRpcError`, код берётся из `cause.code`. Новых типов ошибок слой не вводит.
+
 ### D10. Клиент: `codelab_client_core`
 
 - **Модель** (имена — исполнителю, freezed): `UsageLedgerView`:
@@ -240,6 +242,14 @@
   
   Это решения по `AGENTS.md` §9: порядок между потоком сессий и потоком уведомлений `codelab_client_acp` не гарантирован.
 - **Сторонний агент** без `usageLedger` — `unavailable`; панель покажет «журнал недоступен», а не нули (VIEW-6).
+
+- *Сверка с красными тестами итерации 3 (2026-11-17), технические решения:*
+  - операция — `ClientWorkspace.refreshUsageLedger(SessionId, {rebuild = false})`;
+  - `UsageLedgerView`: ходы — список `turns`, число ходов суммы — `turnCount`, `total` — `UsageTotals` (`steps`, `partial`);
+  - состояния — `unavailable`, `idle`, `loading(previous)`, `loaded(view)`, `failed(reason, previous)`; `reason` — `UsageLedgerFailure(kind, code)`, виды `agentError` (ошибка JSON-RPC агента, `code` — её код), `decode` (ответ не разобран), `request` (сбой отправки или отказ без ключа);
+  - `seq` ответа журнала может быть `0` («снимков не было»), в отличие от снимков `_codelab/session/usage`, где `seq ≥ 1`;
+  - декодер даёт причину `required` для отсутствующего или неверного обязательного поля и `wrong_format` для денег и валюты; ограничение «одно предупреждение на сессию и поле» держит `ClientWorkspace`, а не декодер;
+  - ответ запроса, ушедшего до переподключения, даёт `idle` и DEBUG `usage.ledger.stale`, а не `failed`, даже если ядро завершит запрос ошибкой при замене транспорта.
 
 ### D11. Фикстуры conformance
 

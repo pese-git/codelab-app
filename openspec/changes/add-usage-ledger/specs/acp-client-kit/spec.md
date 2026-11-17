@@ -74,17 +74,17 @@
 ## ADDED Requirements
 
 ### Requirement: Журнал usage сессии в клиенте
-`SessionView` SHALL содержать `usageLedger` — состояние журнала usage сессии, полученного запросом `_codelab/session/usage/ledger` (design.md change `add-usage-ledger`, D6, D10). Состояние — закрытая иерархия: `unavailable` (агент не объявил `usageLedger`), `idle` (объявил, журнал не запрашивали), `loading` (с предыдущим журналом, если был), `loaded` (журнал), `failed` (причина и предыдущий журнал, если был).
+`SessionView` SHALL содержать `usageLedger` — состояние журнала usage сессии, полученного запросом `_codelab/session/usage/ledger` (design.md change `add-usage-ledger`, D6, D10). Состояние — закрытая иерархия: `unavailable` (агент не объявил `usageLedger`), `idle` (объявил, журнал не запрашивали), `loading` (с предыдущим журналом, если был), `loaded` (журнал), `failed` (причина `UsageLedgerFailure(kind, code)` с видами `agentError`, `decode`, `request` и предыдущий журнал, если был). Модель журнала — `UsageLedgerView` с `seq` (может быть `0` — снимков не было), `turns`, `turnCount` и `total` типа `UsageTotals`.
 
 `ClientWorkspace.refreshUsageLedger(sessionId, {rebuild = false})` SHALL:
 - без объявленного `usageLedger` не отправлять запрос и оставлять `unavailable`;
 - держать на сессию не больше одного запроса в полёте; вызовы во время полёта сливаются в один следующий запрос, `rebuild` в слиянии побеждает;
-- применять ответ, только если с момента отправки не сменились поколение соединения и поколение загрузки сессии; иначе отбрасывать с записью DEBUG `usage.ledger.stale`;
+- применять ответ, только если с момента отправки не сменились поколение соединения и поколение загрузки сессии; иначе отбрасывать с записью DEBUG `usage.ledger.stale` — в том числе ошибку, которой ядро завершило запрос при замене транспорта: состояние тогда `idle`, а не `failed`;
 - при ошибке JSON-RPC переходить в `failed` с кодом ошибки и записью WARNING `usage.ledger.failed {session_id, code}`.
 
 Переподключение и `session/load` SHALL сбрасывать `usageLedger` в `idle` или `unavailable` по объявлению соединения. Kit НЕ SHALL складывать журнал со снимками `_codelab/session/usage` и сам ничего не суммирует; решение, когда обновлять журнал, принимает хост, сравнивая `usageLedger.seq` с `usage.lastSeq`.
 
-Разбор ответа SHALL жить в одном месте пакета (`UsageLedgerDecoder`) и SHALL использовать те же правила денег, валюты и причин, что `UsageDecoder` (требование «Usage сессии»): микроединицы без `double`, `currency` по `^[A-Z]{3}$`, незнакомые причины отбрасываются. Не разобрались `sessionId`, `seq` или `total.tokens` — ответ отбрасывается, состояние `failed` с причиной `decode`; ход или шаг без обязательных полей пропускается; необязательное поле неверного типа отсутствует; в каждом случае — WARNING `usage.ledger.decode_failed {session_id, field, reason}` не чаще раза на сессию и поле, без payload, исключения нет. Шаг SHALL сохранять `toolCallIds`, чтобы хост подписывал шаг по транскрипту.
+Разбор ответа SHALL жить в одном месте пакета (`UsageLedgerDecoder`) и SHALL использовать те же правила денег, валюты и причин, что `UsageDecoder` (требование «Usage сессии»): микроединицы без `double`, `currency` по `^[A-Z]{3}$`, незнакомые причины отбрасываются. Не разобрались `sessionId`, `seq` или `total.tokens` — ответ отбрасывается, состояние `failed` с причиной `decode`; ход или шаг без обязательных полей пропускается; необязательное поле неверного типа отсутствует; в каждом случае — WARNING `usage.ledger.decode_failed {session_id, field, reason}` (`reason`: `required` для обязательных полей, `wrong_format` для денег и валюты) не чаще раза на сессию и поле (ограничение держит `ClientWorkspace`), без payload, исключения нет. Шаг SHALL сохранять `toolCallIds`, чтобы хост подписывал шаг по транскрипту.
 
 #### Scenario: Агент без журнала
 - **WHEN** агент не объявил `usageLedger`, и хост вызывает `refreshUsageLedger`
