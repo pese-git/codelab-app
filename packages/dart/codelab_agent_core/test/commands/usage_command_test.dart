@@ -14,7 +14,13 @@ import '../permissions/fake_gate.dart';
 /// Модели — две: с ценами в каталоге сессии (`test/priced`) и без
 /// (`test/free`, `cost == null`): «цена неизвестна» решает каталог (Q4).
 void main() {
-  final priced = _model('priced', const ModelCost(input: 1, output: 2));
+  // Цену в usage ответа ставит провайдерный слой по ценам модели
+  // (`calculateCost`), а не сценарий: цены `test/priced` подобраны так, чтобы
+  // стоимость `first` и `second` была равна указанной в них.
+  final priced = _model(
+    'priced',
+    const ModelCost(input: 1, output: 2, cacheRead: 0.25),
+  );
   final free = _model('free', null);
 
   /// Ответ модели с usage; стоимость — как её посчитал бы адаптер провайдера
@@ -35,7 +41,7 @@ void main() {
   const second = Usage(
     input: 500,
     output: 50,
-    cacheRead: 1000,
+    cacheRead: 800,
     cost: UsageCost(input: 0.0005, output: 0.0001, cacheRead: 0.0002),
   );
   const unpriced = Usage(input: 300, output: 30);
@@ -110,10 +116,10 @@ void main() {
       expect(
         reply.text,
         'Session usage: 2 turns, 2 steps\n'
-        'Total: input 1500, output 150, cache read 3000, cache write 0, '
+        'Total: input 1500, output 150, cache read 2800, cache write 0, '
         'cost \$0.0025\n'
         'By model:\n'
-        '  test/priced: 2 steps, input 1500, output 150, cache read 3000, '
+        '  test/priced: 2 steps, input 1500, output 150, cache read 2800, '
         'cache write 0, cost \$0.0025\n'
         'Ledger: rebuilt from journal ($records records)',
       );
@@ -466,6 +472,24 @@ void main() {
         expect(lines.any((l) => l.startsWith('Subagents:')), isFalse);
       },
     );
+
+    test('a summarizer call without usage: ~ before input in Summaries and '
+        'Total, not in Subagents (the step rule, D1 п. 2; a run with zero '
+        'tokens may be a child that never asked the model)', () async {
+      final lines = await usageOf(
+        [const Usage()],
+        'test/priced',
+        const Usage(),
+      );
+
+      expect(line(lines, 'Summaries:'), startsWith('Summaries: 1, input ~0,'));
+      expect(
+        line(lines, 'Subagents:'),
+        startsWith('Subagents: 1 runs, input 0,'),
+      );
+      expect(line(lines, 'Total:'), startsWith('Total: input ~1000,'));
+      expect(line(lines, '  test/priced:'), contains('input 1000,'));
+    });
 
     test('with zero counters the lines are absent', () async {
       await open([answer(first)]);

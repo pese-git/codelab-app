@@ -13,20 +13,33 @@ import '../support/models.dart';
 /// проверяется то, что видит хост — событие `ContextCompacted`, запись
 /// `compaction` в журнале и `TurnEnded.usage`.
 void main() {
-  /// Usage ответа суммаризатора: токены и цена заданы шагом сценария.
-  const summaryUsage = Usage(
-    input: 900,
-    output: 120,
-    cost: UsageCost(input: 0.0009, output: 0.0003),
-  );
+  // Цену usage ставит провайдерный слой по ценам модели (`calculateCost`),
+  // а не сценарий: поэтому у модели тестов есть цены, а ожидаемый usage
+  // считается теми же ценами.
+  const rates = ModelCost(input: 1, output: 2);
+  Usage priced(int input, int output) =>
+      calculateCost(Usage(input: input, output: output), rates);
+  final summaryUsage = priced(900, 120);
 
-  Map<String, Object?> summaryStep(String text, {Usage usage = summaryUsage}) =>
-      {
-        'reply': [
-          {'text': text},
-        ],
-        'usage': usage.toJson(),
-      };
+  ModelRef pricedModel(int window) {
+    final m = modelWithWindow(window);
+    return ModelRef(
+      provider: m.provider,
+      id: m.id,
+      api: m.api,
+      baseUrl: m.baseUrl,
+      contextWindow: m.contextWindow,
+      maxOutputTokens: m.maxOutputTokens,
+      cost: rates,
+    );
+  }
+
+  Map<String, Object?> summaryStep(String text, {Usage? usage}) => {
+    'reply': [
+      {'text': text},
+    ],
+    'usage': (usage ?? summaryUsage).toJson(),
+  };
 
   Map<String, Object?> turnStep(String text, Usage usage) => {
     'reply': [
@@ -46,7 +59,7 @@ void main() {
       baseEnv: MemoryExecutionEnv(cwd: '/proj'),
       narrow: noExec,
       gate: FakeGate(),
-      defaultModel: modelWithWindow(window),
+      defaultModel: pricedModel(window),
       compaction: compaction,
       steps: steps,
     );
@@ -213,16 +226,8 @@ void main() {
   test('a split turn: two summarizer requests of one pass give the sum of '
       'their usage in one record and one event (D4, scenario "Разрезанный '
       'ход")', () async {
-    const regionUsage = Usage(
-      input: 900,
-      output: 120,
-      cost: UsageCost(input: 0.0009, output: 0.0003),
-    );
-    const contextUsage = Usage(
-      input: 40,
-      output: 10,
-      cost: UsageCost(input: 0.0001),
-    );
+    final regionUsage = priced(900, 120);
+    final contextUsage = priced(40, 10);
     final h = harness([
       textStep('a' * 8000),
       textStep('b' * 16000),

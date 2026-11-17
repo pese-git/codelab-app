@@ -95,7 +95,6 @@ Future<CompactionOutcome> compact({
   required AgentEventSink emit,
   void Function(LlmContextProjection projection)? onCompacted,
   String? focus,
-  String? summaryModel,
   Logger? logger,
   SkillCatalog? skillCatalog,
   SkillsConfig skillsConfig = const SkillsConfig(),
@@ -132,9 +131,9 @@ Future<CompactionOutcome> compact({
               .toList()
         : null;
     final files = _fileOps([...summarized, ...?prefix], last);
-    final String summary;
+    final SummaryResult result;
     try {
-      summary = await summarize(
+      result = await summarize(
         SummaryRequest(
           region: summarized,
           previousSummary: last?.summary,
@@ -176,7 +175,10 @@ Future<CompactionOutcome> compact({
       'readFiles': files.read,
       'modifiedFiles': files.modified,
       'splitTurn': cut.splitTurn,
-      'summaryModel': ?summaryModel,
+      // Модель и usage суммаризатора (design.md change `add-usage-ledger`,
+      // D4): формат журнала не меняется, поле `usage` описано в §8.2.4.
+      'summaryModel': result.model,
+      'usage': result.usage.toJson(),
     };
     CompactionRecord withFields({
       List<CompactionSkill> skills = const [],
@@ -185,7 +187,7 @@ Future<CompactionOutcome> compact({
       id: recordId,
       parentId: snapshot.leafId,
       timestamp: recordTime,
-      summary: summary,
+      summary: result.text,
       firstKeptId: firstKeptId,
       tokensBefore: before,
       tokensAfter: tokensAfter,
@@ -230,7 +232,13 @@ Future<CompactionOutcome> compact({
     await writer.appendBuilt(record, durable: true);
     onCompacted?.call(project(writer.snapshot, log: logger));
     await emit(
-      ContextCompacted(session, tokensBefore: before, tokensAfter: after),
+      ContextCompacted(
+        session,
+        tokensBefore: before,
+        tokensAfter: after,
+        usage: result.usage,
+        model: result.model,
+      ),
     );
     if (skillCatalog != null && candidates.isNotEmpty) {
       _logReattached(

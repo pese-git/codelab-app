@@ -21,7 +21,7 @@ final scriptedModel = ModelRef(
 /// Встроенные команды в кадре `available_commands_update` (agent-slash-commands
 /// «Встроенные команды MVP», «Список команд сессии»; design.md change
 /// `add-agent-builtin-slash-commands`, D2): порядок `compact`, `mode`,
-/// `model`, `status`, `config`, `mcp`, `help`, затем шаблоны. Профиль
+/// `model`, `status`, `usage`, `config`, `mcp`, `help`, затем шаблоны. Профиль
 /// `agent-serve` включает capability `compaction`; `config` и `mcp` тест
 /// вставляет сам между [builtinCommandsBeforeConfig] и [builtinHelpCommand].
 const builtinCommandsBeforeConfig = <Map<String, Object?>>[
@@ -43,6 +43,13 @@ const builtinCommandsBeforeConfig = <Map<String, Object?>>[
   {
     'name': 'status',
     'description': 'Show the model, mode, working directory and MCP servers',
+  },
+  // Сразу после `status` (design.md change `add-usage-ledger`, D5); команда
+  // есть всегда, независимо от порта журнала usage.
+  {
+    'name': 'usage',
+    'description': 'Show token usage and cost of the session',
+    'input': {'hint': '[rebuild]'},
   },
 ];
 

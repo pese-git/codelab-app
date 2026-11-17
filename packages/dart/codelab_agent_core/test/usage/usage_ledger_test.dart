@@ -123,6 +123,41 @@ void main() {
     );
   });
 
+  group('the turn title follows S-16 (D1 п. 3)', () {
+    String titleOf(String text, {CommandRef? command}) {
+      final b = _Journal(at)
+        ..user(text, command: command)
+        ..assistant(gpt, _u(input: 1));
+      return buildUsageLedger(b.snapshot()).turns.single.title;
+    }
+
+    test('trimmed, whitespace and line breaks collapsed to one space', () {
+      expect(titleOf('  fix\n\n the   test\t\tnow \r\n'), 'fix the test now');
+    });
+
+    test('the limit of 64 runes counts after the collapse', () {
+      final text = '${'я' * 30}\n\n\n${'ы' * 60}';
+
+      final title = titleOf(text);
+
+      expect(title.runes.length, 64);
+      expect(title, '${'я' * 30} ${'ы' * 33}');
+    });
+
+    test('a command text is normalized the same way', () {
+      final title = titleOf(
+        'expanded body',
+        command: const CommandRef(
+          source: 'template',
+          name: 'review',
+          args: 'a.dart   b.dart\n',
+        ),
+      );
+
+      expect(title, '/review a.dart b.dart');
+    });
+  });
+
   group('noUsage (D1 п. 2)', () {
     test('set for an answer without usage, not for error or cache-only', () {
       final b = _Journal(at)
@@ -130,11 +165,13 @@ void main() {
         ..assistant(gpt, const Usage())
         ..assistant(gpt, const Usage(), stop: StopReason.error)
         ..assistant(gpt, const Usage(cacheRead: 500))
+        // Только запись в кэш — тоже usage провайдера (D1 п. 2).
+        ..assistant(gpt, const Usage(cacheWrite: 300))
         ..assistant(gpt, const Usage(input: 1));
 
       final steps = buildUsageLedger(b.snapshot()).turns.single.steps;
 
-      expect(steps.map((s) => s.noUsage), [true, false, false, false]);
+      expect(steps.map((s) => s.noUsage), [true, false, false, false, false]);
     });
   });
 

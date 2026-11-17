@@ -87,7 +87,16 @@ void main() {
       // `add-agent-builtin-slash-commands`), затем шаблоны по имени.
       expect(
         [for (final c in session.commands) c.name],
-        ['compact', 'mode', 'model', 'status', 'help', 'plain', 'review'],
+        [
+          'compact',
+          'mode',
+          'model',
+          'status',
+          'usage',
+          'help',
+          'plain',
+          'review',
+        ],
       );
       final review = session.commands.last;
       expect(review.source, SlashCommandSource.template);

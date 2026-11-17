@@ -87,6 +87,25 @@ void main() {
     expect(store.writes, hasLength(2));
   });
 
+  test('the same records count but another lastRecordId: stale (a replaced '
+      'record, D3)', () async {
+    await open();
+    final first = await session.usageLedger();
+    final last = first.ledger.lastRecordId!;
+    final text = store.files[session.id]!;
+    expect(text, contains('"lastRecordId":"$last"'));
+    store.files[session.id] = text.replaceFirst(
+      '"lastRecordId":"$last"',
+      '"lastRecordId":"other-record"',
+    );
+
+    final report = await session.usageLedger();
+
+    expect(report.state, UsageLedgerFileState.rebuilt);
+    expect(report.reason, UsageLedgerRebuildReason.stale);
+    expect(store.files[session.id], first.ledger.serialize());
+  });
+
   test('a broken JSON file: invalid', () async {
     await open();
     store.files[session.id] = 'this is not json';
@@ -212,6 +231,22 @@ void main() {
     await pending;
     expect(closed, isTrue);
     expect(store.files[session.id], isNotNull);
+  });
+
+  test('after close(): the report is in memory, the file is neither read '
+      'nor written (D3: close waits for the write that has begun, a new one '
+      'does not start)', () async {
+    await open();
+    await session.close();
+
+    final report = await session.usageLedger();
+    final rebuilt = await session.usageLedger(rebuild: true);
+
+    expect(report.state, UsageLedgerFileState.inMemory);
+    expect(rebuilt.state, UsageLedgerFileState.inMemory);
+    expect(report.ledger.turns, hasLength(2));
+    expect(store.reads, 0);
+    expect(store.writes, isEmpty);
   });
 
   test(

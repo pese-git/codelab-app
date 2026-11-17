@@ -67,7 +67,7 @@ void main() {
   Summarizer fixed(String text, {List<SummaryRequest>? seen}) =>
       (request, cancel) async {
         seen?.add(request);
-        return text;
+        return summaryOf(text);
       };
 
   Future<CompactionOutcome> run(
@@ -87,7 +87,6 @@ void main() {
     cancel: cancel ?? CancelToken.none,
     emit: events.add,
     onCompacted: onCompacted,
-    summaryModel: 'test/model-1',
     logger: logger,
   );
 
@@ -116,6 +115,7 @@ void main() {
       'modifiedFiles': ['lib/b.dart'],
       'splitTurn': false,
       'summaryModel': 'test/model-1',
+      'usage': Usage.zero.toJson(),
     });
     expect(rebuilt!.messages.map((m) => m.runtimeType), [
       UserMessage,
@@ -183,7 +183,7 @@ void main() {
 
       final outcome = await run((request, cancel) async {
         calls++;
-        return 'x' * 16000;
+        return summaryOf('x' * 16000);
       });
 
       expect(outcome, isA<Compacted>());
@@ -244,7 +244,7 @@ void main() {
     await expectLater(
       run((request, cancel) async {
         source.cancel(const UserCancel());
-        return 'too late';
+        return summaryOf('too late');
       }, cancel: source.token),
       throwsA(isA<CancelledException>()),
     );

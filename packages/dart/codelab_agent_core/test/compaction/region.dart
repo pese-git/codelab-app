@@ -1,4 +1,6 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_core/src/compaction/summarizer.dart'
+    show SummaryResult;
 import 'package:codelab_agent_core/src/session/user_words.dart';
 
 import '../support/models.dart';
@@ -112,3 +114,7 @@ final class RegionBuilder {
     timestamp: _at,
   );
 }
+
+/// Результат суммаризатора без токенов: тесты компактора не про usage.
+SummaryResult summaryOf(String text, {Usage usage = Usage.zero}) =>
+    SummaryResult(text: text, usage: usage, model: 'test/model-1');

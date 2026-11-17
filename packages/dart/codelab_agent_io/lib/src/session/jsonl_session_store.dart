@@ -301,6 +301,38 @@ final class JsonlSessionStore implements SessionStore {
     await writeQueue.run(path, () => _drop(path));
   }
 
+  /// Каталог данных сессии — путь её файла журнала без `.jsonl` (§8.9;
+  /// design.md change `add-usage-ledger`, D3, D13). `null`, если журнала с
+  /// таким id нет под [root] или его файл по ссылкам выходит за [root].
+  ///
+  /// Почему здесь: путь строится по индексу этого хранилища, а не по строке
+  /// извне, поэтому `SessionId` с `..` или разделителем не может вывести
+  /// запись за `sessions/`. Каталог может ещё не существовать.
+  Future<String?> dataDirectoryOf(SessionId id) async {
+    final path = _paths[id] ?? await _find(id);
+    if (path == null || !path.endsWith('.jsonl')) {
+      return null;
+    }
+    if (!await _insideRoot(File(path))) {
+      return null;
+    }
+    return path.substring(0, path.length - '.jsonl'.length);
+  }
+
+  /// Путь [path] (с учётом ссылок на него и на каталоги пути) лежит внутри
+  /// [root]. Для файлов данных сессии рядом с журналом (`usage.json`, каталог
+  /// сессии): ссылка наружу не должна вести запись за пределы хранилища
+  /// (design.md change `add-usage-ledger`, D13). Несуществующий путь — `false`.
+  Future<bool> isInsideRoot(String path) async {
+    try {
+      final base = await Directory(root).resolveSymbolicLinks();
+      final real = await Directory(path).resolveSymbolicLinks();
+      return real.startsWith('$base${Platform.pathSeparator}');
+    } on FileSystemException {
+      return false;
+    }
+  }
+
   /// Файл (с учётом ссылок на него и на каталоги пути) лежит внутри [root]:
   /// `subagents/` — каталог данных, и подложенная в нём ссылка не должна
   /// вести чтение и ремонт (переписывание) за пределы хранилища.

@@ -107,6 +107,7 @@ Agent commands:
   /agent:mode  Switch the session mode
   /agent:model  Switch the model
   /status  Show the model, mode, working directory and MCP servers
+  /usage [rebuild]  Show token usage and cost of the session
   /agent:config  Reload or check the agent config
   /mcp  List, reload, enable or disable MCP servers
   /agent:help  List commands

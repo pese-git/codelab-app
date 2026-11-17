@@ -170,7 +170,7 @@ void main() {
           await compact(
                 writer: writer,
                 trigger: CompactionTrigger.manual,
-                summarize: (request, cancel) async => 'S',
+                summarize: (request, cancel) async => summaryOf('S'),
                 settings: const CompactionSettings(
                   reserveTokens: 2048,
                   keepRecentTokens: 2048,

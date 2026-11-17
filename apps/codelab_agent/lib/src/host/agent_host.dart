@@ -130,6 +130,9 @@ final class AgentHost {
     final ModelCatalog catalog;
     final StreamFunction streamFunction;
     final SessionStore sessions;
+    // Файл журнала usage сессии: только у журнала на диске; сценарий пишет его
+    // лишь в явном `--sessions-dir` (change `add-usage-ledger`, D3, D13).
+    UsageLedgerStore? usageLedger;
     // Фабрика пары «функция модели + каталог» для перезагрузки; со сценарием
     // источника нет, и она не нужна (D8, «modelsFor и streamFunction»).
     ConfiguredModels Function(CoreConfig config)? reloadModels;
@@ -184,14 +187,14 @@ final class AgentHost {
           },
         );
       }
-      final store = CwdTrackingStore(switch (options.sessionsDir) {
-        final root? => JsonlSessionStore(
-          root: root,
-          clock: clock,
-          logger: logger,
-        ),
-        null => MemorySessionStore(),
-      });
+      final files = options.sessionsDir == null
+          ? null
+          : JsonlSessionStore(
+              root: options.sessionsDir!,
+              clock: clock,
+              logger: logger,
+            );
+      final store = CwdTrackingStore(files ?? MemorySessionStore());
       final LlmScript script;
       try {
         script = LlmScript.load(
@@ -208,6 +211,14 @@ final class AgentHost {
       catalog = FixedModelCatalog(script.models);
       streamFunction = script.function.call;
       sessions = store;
+      // Порт `usage.json` — только при `--sessions-dir`: каталог задан явно и
+      // принадлежит тесту (драйвер `test-scenario` даёт временный), поэтому
+      // фикстуры `usageLedger` видят «rebuilt from journal» (change
+      // `add-usage-ledger`, D3, D11). Без каталога сессии в памяти — отчёт
+      // `/usage` строится «in memory».
+      if (files != null) {
+        usageLedger = JsonlUsageLedgerStore(files);
+      }
       // `buildAgentCore` не видит память под обёрткой, поэтому capability
       // сужает хост (D2).
       if (options.sessionsDir == null) {
@@ -242,12 +253,14 @@ final class AgentHost {
       final initialModels = reloadModels(config);
       catalog = initialModels.catalog;
       streamFunction = initialModels.stream;
-      sessions = openHostSessions(
+      final journals = openHostSessions(
         codelabHome: options.codelabHome,
         settings: settings,
         clock: clock,
         logger: logger,
       );
+      sessions = journals;
+      usageLedger = JsonlUsageLedgerStore(journals);
     }
     logger.log(
       LogLevel.info,
@@ -318,6 +331,7 @@ final class AgentHost {
           clock: clock,
           ids: RandomIdGenerator(Random.secure()),
           sessions: sessions,
+          usageLedger: usageLedger,
           platform: Platform.operatingSystem,
           models: catalog,
           secrets: secrets,

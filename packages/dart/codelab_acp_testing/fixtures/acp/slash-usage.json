@@ -5,7 +5,7 @@
     "14-Slash Commands.md#running-commands",
     "15-Extensibility.md#custom-notifications"
   ],
-  "description": "Встроенная команда /usage (change add-usage-ledger, D5, D11, Q7 (а); agent-slash-commands «Команда /usage»): после session/new список содержит compact, mode, model, status, usage, mcp, help — usage сразу после status (config нет — у прогона нет источника конфигурации). Клиент не объявляет _meta.codelab.usage, поэтому уведомлений _codelab/session/usage нет и в ходе. Ход из двух шагов модели с ценами (вызов task_create, затем текст), затем «/usage» — один agent_message_chunk с отчётом §12.6.1 (Total, By model, стоимость $0.0282, последняя строка — состояние файла; без порта это «rebuilt in memory») и end_turn без модели и без _codelab/session/usage; «/usage x» — «Usage: /usage [rebuild]». Красная, пока команды /usage нет (задача 1.6 add-usage-ledger).",
+  "description": "Встроенная команда /usage (change add-usage-ledger, D5, D11, Q7 (а); agent-slash-commands «Команда /usage»): после session/new список содержит compact, mode, model, status, usage, mcp, help — usage сразу после status (config нет — у прогона нет источника конфигурации). Клиент не объявляет _meta.codelab.usage, поэтому уведомлений _codelab/session/usage нет и в ходе. Ход из двух шагов модели с ценами (вызов task_create, затем текст), затем «/usage» — один agent_message_chunk с отчётом §12.6.1 (Total, By model, стоимость $0.0282, последняя строка — состояние файла: «rebuilt from journal», файл usage.json появляется в каталоге сессии) и end_turn без модели и без _codelab/session/usage; «/usage x» — «Usage: /usage [rebuild]». Красная, пока команды /usage нет (задача 1.6 add-usage-ledger).",
   "goals": [
     "R-08",
     "L-11"
@@ -90,7 +90,7 @@
     "replace": [
       {
         "path": "$.params.update.content.text",
-        "regex": "(?<=^Ledger: rebuilt in memory \\()\\d+(?= records\\)$)",
+        "regex": "(?<=Ledger: rebuilt from journal \\()\\d+(?= records\\))",
         "with": "<N>"
       }
     ]
@@ -418,7 +418,7 @@
     },
     {
       "dir": "a2c",
-      "note": "D5, Q7 (а): строки §12.6.1 без By turn и By branch; цены известны — cost $x.xxxx; в прогоне нет порта UsageLedgerStore — состояние «rebuilt in memory», число записей журнала нормализуется в <N> (normalize.replace); кадров _codelab/session/usage нет (ход без шагов)",
+      "note": "D5, Q7 (а): строки §12.6.1 без By turn и By branch; цены известны — cost $x.xxxx; метка usageLedger включает порт на файлах во временном каталоге (задача 1.11) — usage.json пишется, состояние «rebuilt from journal», число записей журнала нормализуется в <N> (normalize.replace); кадров _codelab/session/usage нет (ход без шагов)",
       "frame": {
         "jsonrpc": "2.0",
         "method": "session/update",
@@ -428,7 +428,7 @@
             "sessionUpdate": "agent_message_chunk",
             "content": {
               "type": "text",
-              "text": "Session usage: 1 turns, 2 steps\nTotal: input 2700, output 700, cache read 22000, cache write 800, cost $0.0282\nBy model:\n  scripted/scripted-1: 2 steps, input 2700, output 700, cache read 22000, cache write 800, cost $0.0282\nLedger: rebuilt in memory (<N> records)"
+              "text": "Session usage: 1 turns, 2 steps\nTotal: input 2700, output 700, cache read 22000, cache write 800, cost $0.0282\nBy model:\n  scripted/scripted-1: 2 steps, input 2700, output 700, cache read 22000, cache write 800, cost $0.0282\nLedger: rebuilt from journal (<N> records)"
             }
           }
         }

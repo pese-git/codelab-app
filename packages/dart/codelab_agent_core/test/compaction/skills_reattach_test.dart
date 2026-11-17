@@ -22,6 +22,7 @@ import '../session/journal_lines.dart' as j;
 import '../session/recording_store.dart';
 import '../skills/skills_support.dart';
 import '../support/models.dart';
+import 'region.dart' show summaryOf;
 
 /// Навыки после сжатия — тесты итерации 4, задачи 4.1–4.5 (change
 /// `add-agent-skills`: agent-compaction «Навыки после сжатия», agent-skills
@@ -1517,7 +1518,7 @@ final class _Rig {
     trigger: CompactionTrigger.manual,
     summarize: (request, cancel) async {
       summaries++;
-      return summary;
+      return summaryOf(summary);
     },
     settings: settings,
     window: window,

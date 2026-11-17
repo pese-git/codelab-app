@@ -1,13 +1,11 @@
-/// Отчёт журнала usage для показа и операция сессии (design.md change
-/// `add-usage-ledger`, D2, D3).
+/// Отчёт журнала usage для показа (design.md change `add-usage-ledger`, D2,
+/// D3).
 ///
-/// ЗАГЛУШКА красной итерации (задачи 1.2, 1.4): сигнатуры из design.md, тела —
-/// `UnimplementedError`. Реализация — задача 1.7: операция становится членом
-/// `AgentSession` (сейчас — расширение, чтобы не ломать реализации интерфейса
-/// в тестах `codelab_agent_acp`).
+/// Почему отдельный тип: журнал (`UsageLedger`) зависит только от записей, а
+/// показ добавляет состояние файла и цену по каталогу в момент показа (Q4).
+/// Операции — `AgentSession.usageLedger` и `usageLedgerInMemory`.
 library;
 
-import '../runtime/agent_session.dart';
 import 'usage_ledger.dart';
 
 /// Состояние файла `usage.json` в отчёте (D2).
@@ -29,6 +27,13 @@ enum UsageLedgerFileState {
 enum UsageLedgerRebuildReason { missing, invalid, stale, explicit }
 
 /// Журнал и состояние его файла плюс модели без цены (D2).
+///
+/// Почему не в самом журнале: файл зависит только от записей (OBS-10), а
+/// состояние файла и цена по каталогу меняются независимо от них (Q4).
+/// Для чего: единый результат `/usage` и запроса журнала адаптера. Как
+/// использовать: `session.usageLedger()`; [reason] есть у `rebuilt` и
+/// `notSaved`, [saveError] — только у `notSaved`, [noPriceModels] — модели
+/// `<provider>/<id>` без цен в каталоге сессии.
 final class UsageLedgerReport {
   const UsageLedgerReport({
     required this.ledger,
@@ -49,17 +54,4 @@ final class UsageLedgerReport {
 
   /// Модели без цены по каталогу сессии на момент построения (Q4).
   final Set<String> noPriceModels;
-}
-
-/// Операции отчёта сессии (D3).
-extension UsageLedgerOnSession on AgentSession {
-  /// Отчёт: свежий файл — как есть; иначе пересчёт и запись; [rebuild] —
-  /// пересчёт всегда (`explicit`). Не больше одной операции с записью на
-  /// сессию одновременно.
-  Future<UsageLedgerReport> usageLedger({bool rebuild = false}) =>
-      throw UnimplementedError('usage ledger: task 1.7');
-
-  /// Свёртка в памяти без файла: засев адаптера на `session/load` (D8).
-  Future<UsageLedgerReport> usageLedgerInMemory() =>
-      throw UnimplementedError('usage ledger: task 1.7');
 }

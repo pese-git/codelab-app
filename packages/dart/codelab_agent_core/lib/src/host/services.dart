@@ -11,9 +11,9 @@ import '../project/project_files.dart';
 import '../secrets/secret_resolver.dart';
 import '../skills/skill_files.dart';
 import '../session/session_store.dart';
+import '../usage/usage_ledger_store.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
-import '../usage/usage_ledger_store.dart';
 import '../util/logger.dart';
 
 /// Функция модели и каталог, которые хост строит по `CoreConfig`
@@ -158,6 +158,7 @@ final class AgentCoreServices {
 
   /// Порт файла журнала usage сессии (design.md change `add-usage-ledger`,
   /// D3). `null` — файла нет (web, тесты на памяти, сессия только для
-  /// чтения): отчёт `/usage` строится в памяти со статусом `inMemory`. Хост на `dart:io` передаёт реализацию `codelab_agent_io`.
+  /// чтения): отчёт `/usage` строится в памяти со статусом `inMemory`. Хост на `dart:io` передаёт реализацию
+  /// `codelab_agent_io`.
   final UsageLedgerStore? usageLedger;
 }

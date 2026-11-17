@@ -164,7 +164,28 @@ Future<AgentUnderTest> startAgent(
   final clock = FakeClock();
   final logger = RecordingLogger();
   final config = _FixtureConfig.parse(setup);
-  final store = JournalStore();
+  // Метка `usageLedger` в `extensions` фикстуры (FIX-4) включает настоящие
+  // файлы: журналы — `JsonlSessionStore`, порт usage — `JsonlUsageLedgerStore`
+  // над ним, оба во временном каталоге, который `stop()` удаляет (design.md
+  // change `add-usage-ledger`, D11, задача 1.11: `/usage` строит отчёт по
+  // `usage.json`, «rebuilt from journal»). Остальным фикстурам хватает
+  // памяти: порта нет, отчёт строится «in memory».
+  final withFiles = setup.fixture.extensions.contains('usageLedger');
+  final sessionsDir = withFiles
+      ? Directory.systemTemp.createTempSync('agent_fixture_sessions_')
+      : null;
+  final SessionStore store;
+  UsageLedgerStore? usageLedger;
+  if (sessionsDir == null) {
+    store = JournalStore();
+  } else {
+    final files = JsonlSessionStore(
+      root: '${sessionsDir.path}/sessions',
+      clock: clock,
+    );
+    store = files;
+    usageLedger = JsonlUsageLedgerStore(files);
+  }
   // setup.sessions: состояние журнала, которого не получить кадрами
   // (прерванный ход, §8.8).
   for (final MapEntry(key: id, value: records) in setup.sessions.entries) {
@@ -197,6 +218,7 @@ Future<AgentUnderTest> startAgent(
       clock: clock,
       ids: SequentialIdGenerator(),
       sessions: store,
+      usageLedger: usageLedger,
       // Один загрузчик отдаёт и файлы проекта, и навыки (design.md change
       // `add-agent-skills`, D3, D16): фикстуры `acp/skill-*` кладут навыки в
       // `setup.files` под `.codelab/skills/`.
@@ -250,16 +272,25 @@ Future<AgentUnderTest> startAgent(
     clock: clock,
   );
   unawaited(server.serve(transport));
-  return _ServedAgent(server, model, mcp, home);
+  return _ServedAgent(server, model, mcp, home, sessionsDir);
 }
 
 final class _ServedAgent implements AgentUnderTest {
-  _ServedAgent(this._server, this._model, this._mcp, this._home);
+  _ServedAgent(
+    this._server,
+    this._model,
+    this._mcp,
+    this._home,
+    this._sessionsDir,
+  );
 
   final AcpAgentServer _server;
   final ScriptedStreamFunction _model;
   final _FixtureMcp _mcp;
   final Directory _home;
+
+  /// Каталог файловых журналов; `null` — журналы в памяти.
+  final Directory? _sessionsDir;
 
   @override
   void verify() {
@@ -271,6 +302,7 @@ final class _ServedAgent implements AgentUnderTest {
   Future<void> stop() async {
     await _server.shutdown(grace: Duration.zero);
     _home.deleteSync(recursive: true);
+    _sessionsDir?.deleteSync(recursive: true);
   }
 }
 

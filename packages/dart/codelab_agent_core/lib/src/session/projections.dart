@@ -307,12 +307,22 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
             case final mode?) {
           events.add(ModeChanged(session, mode: mode));
         }
-      case CompactionRecord(:final tokensBefore, :final tokensAfter):
+      case CompactionRecord(
+        :final tokensBefore,
+        :final tokensAfter,
+        :final details,
+      ):
+        // Usage и модель суммаризатора — из `details` (design.md change
+        // `add-usage-ledger`, D4); у старой записи без них — `null`.
+        final usage = details?['usage'];
+        final model = details?['summaryModel'];
         events.add(
           ContextCompacted(
             session,
             tokensBefore: tokensBefore,
             tokensAfter: tokensAfter,
+            usage: usage is Map<String, Object?> ? Usage.fromJson(usage) : null,
+            model: model is String ? model : null,
           ),
         );
       case SessionInfoRecord(title: final title?, :final timestamp)
