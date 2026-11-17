@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/compaction/estimate.dart';
+import 'package:codelab_agent_core/src/session/tree.dart';
 import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 
@@ -126,6 +127,22 @@ void main() {
           constant(after) -
           constant(before),
     );
+    // Смена режима во время фонового сжатия переживает загрузку: `compaction`
+    // и `mode_change` лежат на активной ветке (CMP-12, SES-16; change
+    // `fix-config-change-during-background-compaction`, задача 3.1).
+    final snapshot = await store.open(session.id);
+    final branch = pathToLeaf(snapshot);
+    expect(branch.whereType<CompactionRecord>(), isNotEmpty);
+    expect(
+      branch.whereType<ModeChangeRecord>().map((r) => r.modeId),
+      contains('plan'),
+    );
+    await session.close();
+    final loaded = await core.runtime.loadSession(
+      session.id,
+      const SessionHostPorts(),
+    );
+    expect(loaded.mode, ModeId.plan);
   });
 
   /// Сжатие №2 по `/compact` после небольшого третьего хода; якорь первой

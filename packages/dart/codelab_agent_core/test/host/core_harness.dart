@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/testing.dart';
 
@@ -36,6 +38,7 @@ final class CoreHarness {
     AgentConfigPaths? agentConfigPaths,
     LastModelStore? lastModel,
     DefaultModelSource defaultModelSource = DefaultModelSource.config,
+    Future<void>? Function(LlmContext context)? hold,
   }) {
     final c = clock ?? FakeClock();
     final logger = RecordingLogger();
@@ -75,7 +78,32 @@ final class CoreHarness {
       streamFunction: (ref, context, {cancel}) {
         requested.add(ref);
         contexts.add(context);
-        return model.call(ref, context, cancel: cancel);
+        final inner = model.call(ref, context, cancel: cancel);
+        // Запрос уже учтён сценарием (порядок шагов не меняется); задержка
+        // касается только выдачи событий. Для тестов гонок с фоновым
+        // сжатием: резюме «висит», пока тест не завершит `Completer`.
+        final gate = hold?.call(context);
+        if (gate == null) {
+          return inner;
+        }
+        final out = AssistantMessageEventStream();
+        // Отмена удержанного запроса gate не прерывает: событие отмены
+        // придёт из `inner` после отпускания (тест сам завершает gate).
+        gate.then((_) async {
+          try {
+            await for (final event in inner) {
+              out.push(event);
+            }
+          } on Object catch (error, stack) {
+            // У потока ответа нет канала ошибок: без терминального события
+            // `end()` даст потребителю StateError, а причина уходит в зону
+            // теста и валит его, а не теряется.
+            Zone.current.handleUncaughtError(error, stack);
+          } finally {
+            out.end();
+          }
+        });
+        return out;
       },
     );
     return CoreHarness._(core, model, c, logger, store, requested, contexts);
