@@ -43,6 +43,9 @@
 ///   `disableHere`), удаление — `McpServerRemover` (`remove`, `enableHere`);
 ///   `AgentConfigSnapshot.rejections` — проблемы, из-за которых агент отклонит
 ///   конфиг (Q30);
+/// - `sessionDefaultsOf(snapshot, access)` → `SessionDefaultsView` — режим и
+///   effort новых сессий, источники, сужение проектом, цель записи (change
+///   `add-settings-agents-modes`, D6);
 /// - `restartRequiredServers(before, after)` и `restartRequiredProviders` —
 ///   что агент отложит до перезапуска (Q31, Q35); правило одно, в
 ///   `planConfigReload` ядра, мост лишь называет имена;
@@ -82,6 +85,7 @@ export 'package:codelab_agent_core/codelab_agent_core.dart'
         UpsertMcpServer,
         before1Note,
         isValidMcpServerName;
+
 export 'src/access/settings_access.dart';
 export 'src/config/agent_config_store.dart';
 export 'src/config/config_source_view.dart';
@@ -104,8 +108,15 @@ export 'src/provider/provider_setup_committer.dart';
 export 'src/provider/provider_setup_flow.dart';
 export 'src/provider/provider_setup_plan.dart';
 export 'src/secret/secret_value.dart';
+export 'src/views/agent_definition_row_view.dart'
+    show
+        AgentDefinitionRowView,
+        AgentRowScope,
+        AgentRowStatus,
+        agentDefinitionRowsOf;
 export 'src/views/key_status_view.dart';
 export 'src/views/mcp_server_entry_view.dart';
 export 'src/views/provider_entry_view.dart'
     show ProviderEntryView, providerEntriesOf;
+export 'src/views/session_defaults_view.dart';
 export 'src/views/setting_field_view.dart';

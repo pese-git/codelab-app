@@ -29,7 +29,7 @@ const codelabOrganismPreviewGroup = 'ACP organisms';
 @Preview(
   name: 'Status table',
   group: codelabOrganismPreviewGroup,
-  size: Size(820, 260),
+  size: Size(820, 320),
 )
 Widget codelabStatusTablePreview() {
   return const _AcpOrganismPreviewSurface(child: _StatusTableSample());
@@ -38,7 +38,7 @@ Widget codelabStatusTablePreview() {
 @Preview(
   name: 'Status table dark',
   group: codelabOrganismPreviewGroup,
-  size: Size(820, 260),
+  size: Size(820, 320),
   brightness: Brightness.dark,
 )
 Widget codelabStatusTableDarkPreview() {
@@ -84,6 +84,19 @@ class _StatusTableSample extends StatelessWidget {
             label: 'Reconnect',
             onPressed: codelabPreviewReconnect,
           ),
+        ),
+        const CodeLabStatusTableRow(
+          cells: [
+            CodeLabStatusTableCell('filesystem', mono: true),
+            // Длинный статус переносится на вторую строку (`maxLines: 3`).
+            CodeLabStatusTableCell(
+              'failed · retry in 24 s after the connection was refused',
+              tone: CodeLabStatusTone.danger,
+              maxLines: 3,
+            ),
+            CodeLabStatusTableCell('—', muted: true),
+            CodeLabStatusTableCell('—', muted: true),
+          ],
         ),
         const CodeLabStatusTableRow(
           cells: [

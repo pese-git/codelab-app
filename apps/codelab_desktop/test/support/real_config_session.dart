@@ -18,13 +18,7 @@ import 'package:codelab_setup/io.dart' as setup;
 import 'fake_provider_wizard.dart';
 import 'recording_logger.dart';
 
-/// Конфиг дома с одним локальным провайдером: достаточно, чтобы загрузчик
-/// построил `loaded.config`. Бэкенд секретов — по умолчанию (`env`, только
-/// для чтения): значения идут в двойник `FakeWizardKeys`, а файловому
-/// бэкенду нужны права 0700 на дом, то есть внешний процесс `chmod`.
-const realHomeConfig = '''
-agent:
-  default_model: local/m
+const _realHomeProviders = '''
 providers:
   local:
     kind: openai-compatible
@@ -33,6 +27,18 @@ providers:
       m:
         context_window: 32000
 ''';
+
+/// Конфиг дома с одним локальным провайдером: достаточно, чтобы загрузчик
+/// построил `loaded.config`. Бэкенд секретов — по умолчанию (`env`, только
+/// для чтения): значения идут в двойник `FakeWizardKeys`, а файловому
+/// бэкенду нужны права 0700 на дом, то есть внешний процесс `chmod`.
+const realHomeConfig = 'agent:\n  default_model: local/m\n$_realHomeProviders';
+
+/// То же с `agent.effort` в блоке `agent:` (второй блок `agent:` в YAML —
+/// ошибка дублирующего ключа).
+String realHomeConfigWith({String? effort}) =>
+    'agent:\n  default_model: local/m\n'
+    '${effort == null ? '' : '  effort: $effort\n'}$_realHomeProviders';
 
 final class RealConfigSession implements ProviderSettingsSession {
   RealConfigSession._(this.config, this.secrets, this.access)

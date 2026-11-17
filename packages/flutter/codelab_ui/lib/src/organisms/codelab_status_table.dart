@@ -20,6 +20,7 @@ class CodeLabStatusTableCell {
     this.secondary,
     this.tags = const [],
     this.untrusted = false,
+    this.maxLines = 1,
   });
 
   /// Текст ячейки (при [tone] — подпись индикатора).
@@ -50,6 +51,10 @@ class CodeLabStatusTableCell {
   /// подсказка) становятся видимыми `\uXXXX`; текст — только простой, без
   /// markdown и ссылок. По умолчанию `false`: ячейки MCP servers прежние.
   final bool untrusted;
+
+  /// Строк подписи индикатора при [tone] (по умолчанию одна — прежнее
+  /// поведение таблицы MCP); обычный текст переносится всегда.
+  final int maxLines;
 }
 
 /// Тег ячейки [CodeLabStatusTable]: подпись и тон `CodeLabBadge`.
@@ -239,7 +244,11 @@ class CodeLabStatusTable extends StatelessWidget {
       String shown(String value) =>
           cell.untrusted ? escapeForDisplay(value) : value;
       if (cell.tone case final tone?) {
-        return CodeLabStatusIndicator(label: shown(cell.text), tone: tone);
+        return CodeLabStatusIndicator(
+          label: shown(cell.text),
+          tone: tone,
+          maxLines: cell.maxLines,
+        );
       }
       var style = cell.mono ? mono : body;
       if (cell.muted) {

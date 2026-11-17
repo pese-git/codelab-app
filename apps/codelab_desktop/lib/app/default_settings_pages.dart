@@ -10,15 +10,17 @@ import 'navigation/settings_page.dart';
 ///
 /// Как использовать: change `add-app-settings-shell` добавил «Connection»,
 /// change `add-provider-setup-ui` — «Providers» (итерация 2) и «MCP servers»
-/// (итерация 5; Migration Plan, п. 2; SETUP-17), change `add-app-skills-page` —
-/// «Skills & extensions» (итерация 4, только чтение); следующие страницы появятся
-/// вместе со своими телами.
+/// (итерация 5; Migration Plan, п. 2; SETUP-17), change
+/// `add-settings-agents-modes` — «Agents & modes» (итерация 1, D9), change
+/// `add-app-skills-page` — «Skills & extensions» (итерация 4, только чтение);
+/// следующие страницы появятся вместе со своими телами.
 /// Страница из набора ДОЛЖНА иметь построитель в `settingsPageBuilders`.
 const defaultSettingsPages = SettingsPages(
   available: {
     SettingsPage.connection,
     SettingsPage.providers,
     SettingsPage.mcpServers,
+    SettingsPage.agentsAndModes,
     SettingsPage.skillsAndExtensions,
   },
 );
