@@ -130,8 +130,8 @@
 
 ### 2a. Красные тесты
 
-- [ ] 2.1 `[protocol]` `codelab_agent_acp/test/initialize_test.dart` (существующий): `usageLedger: {"version": 1}` в блоке при любом `clientCapabilities._meta.codelab`; ключ `usageLedger` от клиента ни на что не влияет; без `_meta.codelab` — блока нет (agent-acp-server «initialize»: «(usageLedger)»; D7). Красный.
-- [ ] 2.2 `[protocol]` `codelab_agent_acp/test/usage_ledger_request_test.dart` (новый, на `test/support/server_harness.dart`):
+- [x] 2.1 `[protocol]` `codelab_agent_acp/test/initialize_test.dart` (существующий): `usageLedger: {"version": 1}` в блоке при любом `clientCapabilities._meta.codelab`; ключ `usageLedger` от клиента ни на что не влияет; без `_meta.codelab` — блока нет (agent-acp-server «initialize»: «(usageLedger)»; D7). Красный.
+- [x] 2.2 `[protocol]` `codelab_agent_acp/test/usage_ledger_request_test.dart` (новый, на `test/support/server_harness.dart`):
   - форма результата D6 после хода с двумя шагами и `read`;
   - `seq` — последний снимок; `total` равен `session` последнего снимка;
   - `rebuild` — `explicit`; незнакомая сессия — `-32002`; неверный тип `rebuild` — `-32602`;
@@ -142,7 +142,7 @@
   - стандартные типы без новых полей.
   
   (agent-acp-server «Запрос `_codelab/session/usage/ledger`»; D6). Красный.
-- [ ] 2.3 `[protocol]` `codelab_agent_acp/test/usage_ledger_seed_test.dart` (новый):
+- [x] 2.3 `[protocol]` `codelab_agent_acp/test/usage_ledger_seed_test.dart` (новый):
   - засев на `session/load` журнала с тремя ходами, субагентом и сжатием с usage суммаризатора — `session` снимка `load` равен `total` ответа журнала по токенам, стоимости, `turns`, `steps`, `partial`; `beforeLoad` нет;
   - следующий ход прибавляется;
   - `reattach` — без пересева, снимок `load` с очередным `seq`;
@@ -153,20 +153,20 @@
   - лог `acp.usage.seeded`.
   
   Тест `usage_projection_test.dart`: ожидание `beforeLoad` заменяется полной суммой; сценарий «Сессия перешла к новому соединению» — снимок `load` с `seq` 4, ход с `seq` 5 (agent-acp-server «Полная сумма сессии после session/load», «Уведомление»: «Сессия после загрузки», «Загрузка сессии без шагов», «Суммаризатор в сумме сессии»; D4, D8). Красный.
-- [ ] 2.4 `[protocol]` Замер R4: `codelab_agent_acp/test/usage_ledger_size_test.dart` (новый, тег `slow`, входит в `check`) на синтетическом журнале 1 000 ходов × 40 шагов. Время построения и кодирования ответа и размер JSON печатаются в вывод теста; тест падает при размере больше 16 МБ или времени больше 5 с на CI. Если порог не проходит, работа останавливается: вопрос о пагинации (Q8 (б)) возвращается к пользователю до итерации 3. Красный до 2.6.
-- [ ] 2.5 `[protocol]` Фикстуры D11 с ролью `agent`: `acp/usage-ledger-request` (роль `client` — в 3.5), `acp/usage-ledger-rebuild`, `acp/session-load-usage-full` (вместо удаляемой `acp/session-load-usage-partial`), `acp/compact-usage-summary`. В `acp/initialize-codelab-extensions` — `usageLedger` в ответе агента (`a2c`). Фабрика агентского прогона даёт порт во временном каталоге и сценарный ответ суммаризатора с usage (D11). Красные в `conformance:agent`.
+- [x] 2.4 `[protocol]` Замер R4: `codelab_agent_acp/test/usage_ledger_size_test.dart` (новый, тег `slow`, входит в `check`) на синтетическом журнале 1 000 ходов × 40 шагов. Время построения и кодирования ответа и размер JSON печатаются в вывод теста; тест падает при размере больше 16 МБ или времени больше 5 с на CI. Если порог не проходит, работа останавливается: вопрос о пагинации (Q8 (б)) возвращается к пользователю до итерации 3. Красный до 2.6.
+- [x] 2.5 `[protocol]` Фикстуры D11 с ролью `agent`: `acp/usage-ledger-request` (роль `client` — в 3.5), `acp/usage-ledger-rebuild`, `acp/session-load-usage-full` (вместо удаляемой `acp/session-load-usage-partial`), `acp/compact-usage-summary`. В `acp/initialize-codelab-extensions` — `usageLedger` в ответе агента (`a2c`). Фабрика агентского прогона даёт порт во временном каталоге и сценарный ответ суммаризатора с usage (D11). Красные в `conformance:agent`.
 
 ### 2b. Реализация
 
-- [ ] 2.6 `[protocol]` `codelab_agent_acp`:
+- [x] 2.6 `[protocol]` `codelab_agent_acp`:
   - ключ `usageLedger` в `_codelabExtensions` (`agent_server.dart`);
   - ветка `_codelab/session/usage/ledger` в `_onRequest`: поиск `_bridge`, разбор параметров, `AgentSession.usageLedger`;
   - проекция отчёта в результат D6 — микродоллары и причины общей функцией с `UsageAccounting` (D2), `seq` моста;
   - лог `acp.usage.ledger`; doc-комментарии по-русски со ссылкой на D6, D17 change `add-usage-extension`.
   
   Тесты 2.1, 2.2, 2.4 зелёные.
-- [ ] 2.7 `[protocol]` Засев `UsageAccounting` отчётом в памяти при создании моста веткой `session/load` вместо `markLoadedFromJournal`. Снимок `trigger: "load"` через `Reply.after` после ответа `session/load`, в том числе при `reattach`: только объявившим `usage` и только при ненулевых шагах. Слагаемое суммаризатора по `ContextCompacted.usage` (не в ход). `noPrice` суммаризатора по каталогу. Лог `acp.usage.seeded`. `UsagePartial.beforeLoad` остаётся в перечислении, но мостом CodeLab не ставится. Тест 2.3 зелёный.
-- [ ] 2.8 `[protocol]` `codelab_acp_testing` (сужено по сверке с кодом итерации 1: списки команд уже правлены в 1.6, R9). Scripted-агент `codelab_compatible_stdio_agent.dart` в режиме `with_usage` шлёт снимок `load` после ответа `session/load` — для e2e клиентов в 3.6, 3.7. Фикстуры 2.5 и `acp/slash-usage` зелёные в `conformance:agent`, `conformance:embedded`; `protocol-conformance`; `test:e2e:cli:dart-agent`.
+- [x] 2.7 `[protocol]` Засев `UsageAccounting` отчётом в памяти при создании моста веткой `session/load` вместо `markLoadedFromJournal`. Снимок `trigger: "load"` через `Reply.after` после ответа `session/load`, в том числе при `reattach`: только объявившим `usage` и только при ненулевых шагах. Слагаемое суммаризатора по `ContextCompacted.usage` (не в ход). `noPrice` суммаризатора по каталогу. Лог `acp.usage.seeded`. `UsagePartial.beforeLoad` остаётся в перечислении, но мостом CodeLab не ставится. Тест 2.3 зелёный.
+- [x] 2.8 `[protocol]` `codelab_acp_testing` (сужено по сверке с кодом итерации 1: списки команд уже правлены в 1.6, R9). Scripted-агент `codelab_compatible_stdio_agent.dart` в режиме `with_usage` шлёт снимок `load` после ответа `session/load` — для e2e клиентов в 3.6, 3.7. Фикстуры 2.5 и `acp/slash-usage` зелёные в `conformance:agent`, `conformance:embedded`; `protocol-conformance`. `test:e2e:cli:dart-agent` перенесён в 3.7: до клиентской правки D10 (3.9) `codelab -c` печатает `usage.unknown_session` (ревью итерации 2).
 
 ## 3. Клиент (итерация 3)
 
@@ -205,7 +205,7 @@
   (acp-client-kit «Usage сессии»: «Снимок load после загрузки», «Снимок load до регистрации сессии», «Загрузка сорвалась»; D10). Красный.
 - [ ] 3.5 `[protocol]` Роль `client` фикстуры `acp/usage-ledger-request`: проверка состояния в `codelab_client_acp/test/fixtures/client_fixture_conformance_test.dart` (запрос ушёл с теми же параметрами) и в `codelab_client_core/test/usage/usage_fixture_test.dart` (`usageLedger` — `loaded`, один ход, два шага) (acp-golden-fixtures «Клиентский прогон журнала»). Красная в `conformance:client`.
 - [ ] 3.6 `[desktop]` `apps/codelab_desktop/test/features/workbench/application/usage_status_mapper_test.dart` (существующий): после загрузки сессии со снимком `load` строка статуса до первого хода — `— · session $X` без «~» (D23 Т9 п. 3 change `add-usage-extension`; D8). Красный до 3.8 только если маппер требует правки; иначе тест — регрессионный и зелёный сразу, это фиксируется в PR.
-- [ ] 3.7 `[client]` `apps/codelab_cli`: PTY-e2e `--continue` со scripted-агентом в режиме `with_usage` — строка REPL после первого хода без `~` от `beforeLoad` (`test/e2e/status_line_usage_test.dart`, существующий; D8). Регрессионный, как 3.6.
+- [ ] 3.7 `[client]` `apps/codelab_cli`: PTY-e2e `--continue` со scripted-агентом в режиме `with_usage` — строка REPL после первого хода без `~` от `beforeLoad` (`test/e2e/status_line_usage_test.dart`, существующий; D8). Регрессионный, как 3.6. Перенесено из 2.8: `test:e2e:cli:dart-agent` зелёный только после 3.9 (снимок `load` до регистрации сессии, D10); до неё `codelab -c` печатает `usage.unknown_session`, поэтому тест — красный, а не регрессионный.
 
 ### 3b. Реализация
 

@@ -247,6 +247,7 @@ final class LogRecord {           // то, что получает sink хост
 | `redact` (дополнение) | `redact.block.denied` (info) (§17.12.7) |
 | `agent` | `agent.profile_overridden` (info) (§17.12.2) |
 | `acp` (дополнение) | `acp.mode.legacy_alias` (info) (§17.12.2) |
+| `acp` (usage, change `add-usage-ledger`) | `acp.usage.ledger` (debug: `session_id`, `rebuild`, `status`, `turns`, `steps`, `duration_ms`), `acp.usage.ledger.coalesced` (debug: `session_id`, `rebuild` — запрос присоединился к идущему построению журнала), `acp.usage.seeded` (debug), `acp.usage.seed_failed` (warning), `acp.usage.load_snapshot_failed` (warning: `session_id`, `error_class` — построение снимка `load` в `after` ответа `session/load` бросило; возобновление хода выполняется всё равно); без токенов, денег и подписей ходов (§13.12) |
 | `session` (дополнение, масштаб) | `session.window.open`, `session.index.rebuild`, `session.segment.rotated` (§17.13.2) |
 | `compaction` (дополнение) | `compaction.structured.pass`, `compaction.structured.fallback`, `compaction.structured.unavailable` (§17.13.4) |
 | `context` | `context.expand` (§17.13.4) |
