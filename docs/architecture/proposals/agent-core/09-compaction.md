@@ -17,6 +17,8 @@
 int estimateTokens(List<Message> messages, {String? systemPrompt, List<ToolSchema> tools = const []});
 int estimateContextTokens(List<Message> messages, {required String systemPrompt, required List<ToolSchema> tools});
 int estimateLlmContext(LlmContext c);                     // оценщик цикла: estimateContextTokens по payload
+int estimateAfterCompaction({required int before, required int rawBefore, required int rawAfter});
+                                       // max(0, before + rawAfter - rawBefore): оценка после сжатия (§9.3), внутренняя
 int effectiveContextWindow(ModelRef model, {int? cap});   // min(model.contextWindow, cap)
 
 final class CompactionSettings {
@@ -49,6 +51,7 @@ Future<CompactionOutcome> compact({required SessionWriter writer, required Compa
     String? focus,                     // только при trigger == manual
     String? summaryModel, Logger? logger});
 sealed class CompactionOutcome {}      // Compacted(record, before, after) | NothingToCompact(reason) | CompactionFailed(error)
+                                       // reason: 'no cut point' (нет среза) | 'no reduction' (нет выигрыша, CMP-10)
                                        // Compacted.record — CompactionRecord или (после MVP) HideRecord (§17.13.4)
 enum CompactionTrigger { afterTurn, preflight, overflow, manual }
 
@@ -103,6 +106,60 @@ estimateContextTokens(projection, systemPrompt, tools):
 результат `read` на 12 000 символов и сообщение пользователя на 200 символов:
 `41000 + 9000 + 0 + 600 + (3000 + 1 + 4) + (50 + 4) = 53 659` токенов.
 
+### Оценка после сжатия
+
+Change `fix-compaction-estimate-and-no-gain` (design.md, D1, D2). После сжатия весь сохранённый
+хвост лежит в пути до новой записи `compaction`, и проекция §8.7 обнуляет usage всех ответов —
+якоря нет. Если считать «после» той же `estimateContextTokens`, «до» окажется числом провайдера, а
+«после» — эвристикой всего контекста, включая системный промпт и схемы. У них эвристика
+ошибается сильнее всего (JSON схем, длинный промпт), и ошибка целиком попадает в «после». Ручная
+проверка с `openai/gpt-4o-mini` дала `Compacted: 3043 → 3567 tokens.`: промпт и схемы профиля
+`agent-serve` — около 10 700 символов, ≈ 2 670 оценочных токенов, тогда как у токенайзера
+провайдера весь контекст с тремя ходами — 3 043.
+
+Поэтому компактор оценивает эвристикой только разницу, а базу берёт из «до»:
+
+```text
+H(P)   := estimateTokens(P.messages, systemPrompt, tools)            // без якоря
+P_before := buildLlmContext(снимок перед проходом)
+P_after  := buildLlmContext(снимок + ещё не записанная запись)        // с приложенным сообщением навыков
+before := estimateContextTokens(P_before)      // первый проход; следующий проход — after прошлого
+after  := estimateAfterCompaction(before, rawBefore: H(P_before), rawAfter: H(P_after))
+        = max(0, before + H(P_after) − H(P_before))
+```
+
+Промпт, схемы и сохранённый хвост входят в обе проекции одинаково и сокращаются; эвристикой
+оценивается только убранный регион (и прошлое резюме) против нового резюме, обёртки
+`summary_wrapper` и сообщения навыков. Без якоря `before == H(P_before)`, и `after == H(P_after)`.
+Пример (числа условные): `before = 3043`, `H(P_before) = 4450`, `H(P_after) = 3567` →
+`after = 2160`.
+
+`before` второго и третьего прохода — `after` прошлого: после первого прохода в проекции якоря
+нет, и новая `estimateContextTokens` вернула бы ту же завышенную эвристику. Нижняя граница 0 —
+защита от вырожденного якоря (scripted-модели задают usage произвольно).
+
+Эта оценка — `tokensAfter` записи, `ContextCompacted`, логи `compaction.done` и
+`compaction.skipped`, проверка выигрыша CMP-10. Между сжатием и следующим ответом модели
+(`preflight` цикла, `afterTurn`, `ModelRequested.estimatedTokens`) оценка по-прежнему считается
+`estimateContextTokens` по проекции без якоря, то есть равна `H(P_after)` — завышение в безопасную
+сторону (design.md change `fix-compaction-estimate-and-no-gain`, R1).
+
+Поэтому сравнения компактора с порогом идут не по `after`, а по тому, что увидит цикл
+(design.md, D9):
+
+```text
+fit := max(after, H(P_after))
+```
+
+CMP-5 (следующий проход, пока `fit > threshold`) и выброс навыков по окну сравнивают с порогом
+`fit`, для всех триггеров. Иначе у провайдера с компактным токенайзером компактор остановился бы
+при `after ≤ threshold`, а `preflight` повторного запроса увидел бы `H(P_after) > window` (если
+`H(P_after) − after > reserveTokens`); второго аварийного вызова в ходе нет (CMP-8), и ход
+завершился бы `overflow`. `max`, а не одна эвристика: при якоре выше эвристики (scripted-модели,
+токенайзер дороже `chars/4`) `after > H(P_after)`, и остановка по эвристике была бы ранней. Без
+якоря `fit == after == H(P_after)`. Якорь оценки на `tokensAfter` записи, после которого `max` не
+нужен, — отдельный change (design.md, D9 (б), Q2).
+
 Одна функция окна `effectiveContextWindow` используется порогом, проверкой перед запросом и
 индикатором заполнения в клиенте (`_meta`, после MVP) — иначе индикатор показывал бы «есть
 место», а запрос падал бы с overflow (CMP-6).
@@ -145,7 +202,7 @@ forWindow(w):                                  // w — effectiveContextWindow
 | `afterTurn` | после `TurnEnded(completed | maxTokens)`, если `shouldCompact` | фоновое (до следующего `prompt`); следующий `prompt` ждёт его завершения; после `cancelled` и `failed` не запускается |
 | `preflight` | при сборке payload шага (§5.2): оценка запроса `> w` (больше **окна**, не порога) | один аварийный вызов за ход; если после него запрос всё ещё больше окна — шаг завершается ошибкой `overflow`, ход — `TurnEnded(failed)` |
 | `overflow` | провайдер вернул `errorClass: overflow` | сжатие и **один** повтор того же запроса; второй overflow — `TurnEnded(failed)` |
-| `manual` | slash-команда `/compact [указание]` (§13.6) | вне хода; непустой текст после имени команды передаётся как `SummaryRequest.focus`; при пустом регионе — `NothingToCompact` и текстовый ответ пользователю |
+| `manual` | slash-команда `/compact [указание]` (§13.6) | вне хода; непустой текст после имени команды передаётся как `SummaryRequest.focus`; при пустом регионе или без выигрыша (§9.8, шаг 9а) — `NothingToCompact` и текстовый ответ пользователю |
 
 Правило «аварийная помощь один раз»: в пределах одного хода `preflight` и `overflow` вместе
 вызывают сжатие не более одного раза. Без этого правила модель с ошибочно указанным окном
@@ -351,9 +408,12 @@ unless the new fragment closes it." Так открытая просьба, сд
 ```text
 compact(snapshot, trigger, summarize, settings, cancel, focus):
 1. если идёт ход и trigger ∈ {afterTurn, manual} → дождаться конца хода
-2. window := effectiveContextWindow(model, cap); before := estimateContextTokens(...)
+2. window := effectiveContextWindow(model, cap)
+   before := первый проход ? estimateContextTokens(buildLlmContext(snapshot)) : after прошлого прохода   // §9.3
+   rawBefore := estimateTokens(buildLlmContext(snapshot))                  // без якоря
 3. region := записи активной ветки начиная с firstKeptId последней compaction (или с начала)
-4. cut := findCutPoint(region, settings); null → NothingToCompact
+4. cut := findCutPoint(region, settings); null → лог compaction.skipped(reason: "no cut point"),
+   вернуть NothingToCompact("no cut point") (на следующем проходе — Compacted прошлого прохода)
 5. req := SummaryRequest(region[..cut], previousSummary: lastCompaction?.summary, focus: focus,
                          turnPrefix: cut.splitTurn ? region[cut.turnStartIndex..cut.firstKeptIndex-1] : null)
    при splitTurn регион сжатия = region[..cut.turnStartIndex-1], префикс хода — отдельно
@@ -364,21 +424,41 @@ compact(snapshot, trigger, summarize, settings, cancel, focus):
 8. rec := compaction(summary, firstKeptId: region[cut.firstKeptIndex].id, tokensBefore: before,
                      tokensAfter: 0, details: fileOps + splitTurn + summaryModel
                      + после MVP usage ответа суммаризатора — details.usage, §12.6.1)
-9. projected := buildLlmContext(snapshot + rec); after := estimateContextTokens(projected)
+9. projected := buildLlmContext(snapshot + rec)
+   rawAfter := estimateTokens(projected)                                  // то, что увидит цикл
+   after := estimateAfterCompaction(before, rawBefore, rawAfter)         // §9.3
+   fit := max(after, rawAfter)                                           // для порога, D9
    rec.tokensAfter := after
+9а. если after >= before → нет выигрыша (CMP-10): лог compaction.skipped(reason: "no reduction"), запись не пишется,
+   транскрипт не меняется, ContextCompacted нет; вернуть NothingToCompact("no reduction")
+   (на следующем проходе — Compacted прошлого прохода)
 10. append(rec, durable: true)                 // только теперь сжатие существует
 11. транскрипт Agent := projected.messages     // с обнулённым usage (§8.7)
 12. emit ContextCompacted(tokensBefore: before, tokensAfter: after)
-13. если after > threshold и проходов < 3 → повторить с шага 3 (CMP-5)
+13. если fit > threshold и проходов < 3 → повторить с шага 3 (CMP-5, D9); before := after
 ```
 
-Проход после успешного: `NothingToCompact` или `CompactionFailed` не отменяют уже записанное —
+Проход после успешного: `NothingToCompact` (нет среза или нет выигрыша) или `CompactionFailed` не отменяют уже записанное —
 результат `compact` остаётся `Compacted` прошлого прохода (неудача всё равно даёт `AgentError`).
 `afterTurn` запускается после возврата `prompt()`, когда агент уже вне хода и транскрипт можно
 заменить (`replaceTranscript`); закрытие сессии отменяет фоновое сжатие. Аварийный путь
 (`preflight`, `overflow`) получает новый контекст шага через `LoopContext`, а транскрипт `Agent`
 после хода — `TurnOutput.history + added` (§5.2). Логи: `compaction.done` (`info`, проход, оценки
-до и после) и `compaction.failed` (`warning`).
+до и после), `compaction.skipped` (`info`: `session_id`, `trigger`, `pass`, `reason`; при
+`reason: "no cut point"` — нет среза, шаг 4, оценок нет; при `reason: "no reduction"` — нет
+выигрыша, шаг 9а, плюс `tokens_before`, `tokens_after`; пишется на любом проходе) и
+`compaction.failed` (`warning`; неожиданное исключение фонового `afterTurn` `AgentSession` пишет
+под тем же именем с уровнем `error`, §12).
+
+Нет выигрыша (шаг 9а; change `fix-compaction-estimate-and-no-gain`, D3, D5). По §9.3
+`after − before = H(P_after) − H(P_before)`, то есть условие сравнивает эвристики убранного и
+добавленного текста и от якоря не зависит; равенство — тоже «нет выигрыша». Для `manual` ответ —
+`Nothing to compact.` (§13.6); для `preflight` и `overflow` это «сжатие не помогло»:
+`emergencyCompact` возвращает `null`, цикл завершает шаг ошибкой `overflow`, вызов засчитан в
+CMP-8. Для `afterTurn` отдельной защиты нет: пока регион мал, суммаризатор вызывается после
+каждого хода, как и раньше, но бесполезной записи нет; каждый новый ход сдвигает срез и растит
+регион. Usage вызова суммаризатора без записи в v1 не учитывается — как и с записью (change
+`add-usage-extension`, D4 п. 6).
 
 `tokensAfter` считается до записи по снимку с ещё не записанной записью — запись пишется
 один раз и уже с итоговым числом.
@@ -388,7 +468,8 @@ compact(snapshot, trigger, summarize, settings, cancel, focus):
 остаётся в хвосте, — то есть и навыков, чья активация ушла в резюме, и навыков, приложенных прошлым
 сжатием (целиком или усечёнными); выпавшие по общему бюджету не переносятся; на шаге 9 `buildLlmContext` после
 резюме прикладывает их блоки из снимка каталога в пределах бюджетов `skills.reattach.*`, и
-`tokensAfter` их учитывает (§17.2.7а).
+`tokensAfter` их учитывает (§17.2.7а). Выброс навыков по окну сравнивает с порогом `fit` §9.3 (D9);
+проверка шага 9а идёт по итоговому списку, и навыки ради появления выигрыша не выбрасываются.
 
 ```mermaid
 sequenceDiagram
@@ -401,12 +482,16 @@ sequenceDiagram
     K->>K: регион после прошлого сжатия, findCutPoint
     K->>M: регион, прошлое резюме, файлы
     M-->>K: текст резюме
-    K->>K: проекция с новой записью, tokensAfter
-    K->>J: append compaction, durable
-    J-->>K: ok
-    K-->>S: Compacted
-    S->>S: транскрипт из buildLlmContext, usage обнулён
-    S-->>S: emit ContextCompacted
+    K->>K: проекция с новой записью, tokensAfter (§9.3)
+    alt tokensAfter >= tokensBefore
+        K-->>S: NothingToCompact no reduction, журнал не тронут
+    else есть выигрыш
+        K->>J: append compaction, durable
+        J-->>K: ok
+        K-->>S: Compacted
+        S->>S: транскрипт из buildLlmContext, usage обнулён
+        S-->>S: emit ContextCompacted
+    end
 ```
 
 ## 9.9. Инварианты
@@ -415,11 +500,12 @@ sequenceDiagram
 2. **CMP-2.** Сжатие не удаляет и не меняет записи журнала; оно только добавляет запись `compaction`.
 3. **CMP-3.** Неудачное или отменённое сжатие не меняет журнал и транскрипт.
 4. **CMP-4.** Отмена сжатия пробрасывается вызывающему коду как `CancelledException`, а не как `NothingToCompact`.
-5. **CMP-5.** После успешного сжатия оценка контекста ниже порога `shouldCompact`; иначе — следующий проход, всего не более 3.
+5. **CMP-5.** После успешного сжатия и согласованная оценка контекста, и эвристика проекции без якоря, которую до следующего ответа модели видят `preflight` и `afterTurn` (`fit = max(after, H(P_after))`, §9.3), не выше порога `shouldCompact`; иначе — следующий проход, всего не более 3.
 6. **CMP-6.** Порог, проверка перед запросом и индикатор используют одну функцию `effectiveContextWindow`.
 7. **CMP-7.** Последние `keepRecentUserTurns` сообщений пользователя (записей с `isUserWords`, §8.2.5; по умолчанию одно) попадают в контекст дословно — в хвосте или, при разрезанном ходе, цитатой в резюме.
 8. **CMP-8.** В пределах одного хода аварийное сжатие (`preflight` и `overflow`) выполняется не более одного раза.
 9. **CMP-9.** Открытые просьбы предыдущего резюме передаются суммаризатору при каждом следующем сжатии (`previousSummary`).
+10. **CMP-10.** Записанное сжатие уменьшает оценку контекста: `tokensAfter < tokensBefore`; проход без выигрыша не пишет запись и не меняет транскрипт.
 
 ## 9.10. Обоснование решения
 
@@ -428,6 +514,10 @@ sequenceDiagram
 * **Эвристика с якорем.** Точный подсчёт требует токенайзера каждого провайдера; якорь на
   `usage` даёт точное значение для большей части контекста, эвристика оценивает только хвост в
   несколько сообщений.
+* **Разница эвристик поверх якоря после сжатия.** Чистая эвристика с обеих сторон разошлась бы
+  с индикатором и `StepEnded.used`, калибровка коэффициентом искажает именно разницу (завышена в
+  основном постоянная часть — JSON схем); разница эвристик одного и того же текста сравнима
+  (change `fix-compaction-estimate-and-no-gain`, D1).
 * **Классический компактор в MVP.** Структурное сжатие (скрытие с раскрытием по запросу)
   требует отдельного инструмента и сложной проекции; классический алгоритм проще проверить
   тестами и он закрывает цели K-01…K-04. После 9 — структурный движок (§17.13.4, K-05) вторым
@@ -445,6 +535,19 @@ sequenceDiagram
 * Тест указания `/compact <текст>`: `SummaryRequest.focus` равен тексту после имени команды, запрос к суммаризатору содержит блок `<focus>` с этим текстом; без указания блока нет, `afterTurn` и аварийные триггеры `focus` не передают (K-02).
 * Тест итеративного обновления: второе сжатие получает `previousSummary`, открытая просьба из первого резюме присутствует в запросе к суммаризатору (CMP-9).
 * Тест аварийного пути: overflow от провайдера → одно сжатие, один повтор; второй overflow → `TurnEnded(failed)` без второго сжатия (CMP-8).
+* Регрессионный тест согласованной оценки: якорный usage меньше эвристики промпта и схем →
+  `tokensAfter < tokensBefore` и `tokensAfter == tokensBefore + H(после) − H(до)`; без якоря —
+  прежние числа; `tokensBefore` второго прохода равен `tokensAfter` первого (CMP-5, CMP-10).
+* Тест сжатия без выигрыша: резюме длиннее региона → `NothingToCompact('no reduction')`, журнал
+  побайтово не изменился, `ContextCompacted` нет, лог `compaction.skipped`; `/compact` отвечает
+  `Nothing to compact.`; второй проход без выигрыша оставляет `Compacted` первого (CMP-10).
+* Тест порога по эвристике без якоря: после прохода согласованное `after` не выше порога, а
+  `H(после)` выше → второй проход; выброс навыков по окну решает по той же величине (CMP-5, D9).
+* Интеграционный тест аварийного пути с малым окном и длинным промптом: якорный usage ниже
+  эвристики промпта и схем больше чем на `reserveTokens`, overflow → сжатие → повтор проходит
+  `preflight`, `TurnEnded(completed)`, сжатие одно (CMP-5, CMP-8, D9).
+* Тест лога `compaction.skipped`: `reason: "no cut point"` без оценок, `reason: "no reduction"` с
+  `tokens_before`/`tokens_after`; навыки не выбрасываются ради выигрыша (D3, D6).
 * Тест одной функции окна: `cap = 50 000` при окне модели 128 000 → порог, preflight и значение для индикатора считаются от 50 000 (CMP-6).
 
 ---

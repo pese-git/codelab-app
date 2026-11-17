@@ -439,7 +439,7 @@ Slash-команды приходят обычным `session/prompt` с тек�
 
 * `/compact [<указание>]` — ручное сжатие с триггером `manual` (§9.5; непустой текст после имени —
   `SummaryRequest.focus`, §9.2); идущее фоновое сжатие `afterTurn` команда ждёт. Итог —
-  `Compacted: <X> → <Y> tokens.` (§13.7), пустой регион — `Nothing to compact.`; отказ — событие
+  `Compacted: <X> → <Y> tokens.` (§13.7), нечего сжимать (нет среза или нет выигрыша, CMP-10, §9.8) — `Nothing to compact.`; отказ — событие
   `AgentError(compaction)` и `TurnEnded(failed)` без сообщения, мост отвечает `-32603` (§13.8);
   отмена во время резюме — `stopReason: cancelled`, записи `compaction` нет. Объявляется только
   при capability `compaction`.
