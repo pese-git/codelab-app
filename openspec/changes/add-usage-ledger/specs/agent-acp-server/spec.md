@@ -208,9 +208,9 @@
 
 Ответ SHALL строиться из отчёта журнала usage ядра (capability `agent-sessions`, «Журнал usage сессии»): без `rebuild` — свежий `usage.json` или пересчёт, если файла нет, он битый или устарел; с `rebuild` — пересчёт всегда. Результат SHALL иметь поля:
 - `sessionId`; `seq` — последний `seq`, потраченный на снимки `_codelab/session/usage` этой сессии сервера к моменту построения, `0` — снимков не было;
-- `ledger` — `status` (`upToDate`, `rebuilt`, `inMemory`, `notSaved`), `reason` при `rebuilt` (`missing`, `invalid`, `stale`, `explicit`), `records`;
+- `ledger` — `status` (`upToDate`, `rebuilt`, `inMemory`, `notSaved`), `reason` только при `rebuilt` (`missing`, `invalid`, `stale`, `explicit`; у остальных статусов поля нет), `records`;
 - `total` — агрегат формы D2 change `add-usage-extension` (`turns`, `steps`, `tokens`, `cost`, `partial`) по всем записям журнала: шаги, субагенты и суммаризатор;
-- `turns` — ходы с шагами по пути до активного листа: `index` (с 1), `title` (если есть), `total` (агрегат хода с шагами и субагентами хода), `steps` (каждый — `index` с 0 в ходе, `model` в виде `<provider>/<id>`, `tokens`, `cost`, `partial`, `toolCallIds`), `subagents` (`runs` и агрегат без `steps`; только при ненулевом `runs`), `running: true` у последнего хода, если ход сессии идёт;
+- `turns` — ходы с шагами по пути до активного листа: `index` (с 1), `title` (если есть), `total` (агрегат хода с шагами и субагентами хода), `steps` (каждый — `index` с 0 в ходе, `model` в виде `<provider>/<id>`, `tokens`, `cost`, `partial`, `toolCallIds` — всегда, у шага без вызовов инструментов пустой список `[]`), `subagents` (`runs` и агрегат без `steps`; только при ненулевом `runs`), `running: true` у последнего хода, если ход сессии идёт;
 - `models` — `model`, `steps` и агрегат шагов этой модели, в лексикографическом порядке `model`;
 - `subagents` и `summaries` — `runs` или `count` с агрегатом, только при ненулевом счётчике;
 - `currency: "USD"`, если в результате есть хоть одно `cost`.
