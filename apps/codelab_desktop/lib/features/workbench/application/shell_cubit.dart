@@ -27,6 +27,7 @@ import '../../../core/platform/external_link_opener.dart';
 import '../../../core/platform/limited_network_image.dart';
 import '../../../core/platform/link_policy.dart';
 import '../../../core/platform/project_folder_picker.dart';
+import '../../../core/platform/usage_csv_saver.dart';
 import '../../settings/application/default_profile_resolver.dart';
 import 'agents_pane_data.dart' show AgentsShowTarget;
 import 'active_session_cubit.dart';
@@ -100,6 +101,8 @@ final class CodeLabShellParts {
     Logger? eventLogger,
     ProfileSecretSource? tokenSecrets,
     ProviderSetupOffer? providerSetupOffer,
+    required UsageCsvSaver usageCsvSaver,
+    Logger? usageLogger,
   }) {
     final changes = ShellChanges();
     final diagnostics = ShellDiagnostics(logger: logger);
@@ -115,6 +118,8 @@ final class CodeLabShellParts {
       changes: changes,
       workspace: workspace,
       diagnostics: diagnostics,
+      usageCsvSaver: usageCsvSaver,
+      usageLogger: usageLogger,
     );
     final connection = ConnectionCubit(
       changes: changes,
@@ -217,6 +222,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     ImageProviderFor? imageProviderFor,
     Logger? eventLogger,
     bool projectFilesBound = false,
+    UsageCsvSaver? usageCsvSaver,
   }) {
     // Без графа токена из окружения нет: ссылки `env:` дают подключение без
     // токена (тесты передают свой источник).
@@ -257,6 +263,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             directoryExists: directoryExists,
             dockLayoutStore: dockLayoutStore,
             logger: logger,
+            // Запасной путь без графа (тесты): настоящий порт открывает
+            // диалог только по `Export CSV`, а в обычной сборке порт
+            // приходит из `app_scope` через [parts].
+            usageCsvSaver: usageCsvSaver ?? const FileSelectorUsageCsvSaver(),
           ),
     );
   }
@@ -507,6 +517,25 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
 
   void openPane(ToolPane pane) => _layout.openPane(pane);
 
+  /// Открывает панель Usage и делает её активной; повторный вызов её не
+  /// закрывает (клик по строке статуса и пункт палитры, D6, D11).
+  void openUsagePane() => _layout.openPane(ToolPane.usage);
+
+  /// Панель Usage показана или скрыта — сигнал виджета панели; правило
+  /// автоматического запроса журнала у `ActiveSessionCubit` (D3).
+  void usagePaneShown(bool shown) => _activeSession.usagePaneShown(shown);
+
+  /// `Retry` панели Usage: запрос журнала без `rebuild` (D3).
+  Future<void> refreshUsageLedger() => _activeSession.refreshUsageLedger();
+
+  /// `Rebuild from log`: запрос журнала с `rebuild: true` (D3, Q3).
+  Future<void> rebuildUsageLedger() =>
+      _activeSession.refreshUsageLedger(rebuild: true);
+
+  /// `Export CSV`: сохраняет журнал панели через порт `UsageCsvSaver` (D5).
+  Future<UsageCsvSaveResult> exportUsageCsv() =>
+      _activeSession.exportUsageCsv();
+
   /// Выбор строки панели Agents сессии в фокусе (D49 Т8); без сессии — no-op.
   void selectAgent(String agentId) {
     final sessionId = _parts.activeSession.state.sessionId;
@@ -688,6 +717,11 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         if (state.agentsAvailable) {
           _layout.openPane(ToolPane.agents);
         }
+      case 'usage-pane':
+        // Пункт «Usage» палитры: открывает панель, пока она доступна (D11).
+        if (state.usageAvailable) {
+          openUsagePane();
+        }
       case 'files':
         // Пункт «Files» палитры: тот же переключатель, что у app bar и
         // Cmd/Ctrl+Shift+E (design.md change `add-file-preview-and-tree`, D7).
@@ -795,11 +829,13 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       },
       sessionMode: active.sessionMode,
       statusBar: active.statusBar,
+      usage: active.usage,
       agentCommands: active.agentCommands,
       commandCatalog: paletteCatalogOf(
         active.agentCommandViews,
         filesAvailable: projectFilesAvailable,
         agentsAvailable: !active.agents.isEmpty,
+        usageAvailable: active.usage.available,
       ),
       composerDraft: active.composerDraft,
       composerDraftRevision: active.composerDraftRevision,

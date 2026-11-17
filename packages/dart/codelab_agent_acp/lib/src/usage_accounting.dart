@@ -169,6 +169,72 @@ String _costString(int micros) {
   return '$whole.$digits';
 }
 
+/// Поле `budget` снимков `step` и `turn` из прогресса цикла (design.md change
+/// `add-desktop-usage-pane`, D7, D8; `13-acp-adapter.md` §13.12).
+///
+/// Почему решение здесь: ядро заполняет `BudgetProgress` всегда, а клиенту
+/// поле нужно, только если задан `max_tokens`, `max_cost` или `max_duration`;
+/// лимит шагов есть всегда (50), и одного его для поля мало — иначе все
+/// существующие usage-фикстуры получили бы лишний ключ. `null` — поля нет
+/// (событие вне цикла или лимитов, кроме шагов, нет).
+///
+/// Для чего: числа берутся из `BudgetProgress` как есть, то есть те же, что
+/// проверяет цикл (LOOP-12); адаптер второго подсчёта не ведёт. Состав:
+/// `steps` — всегда, `tokens`, `cost`, `duration` — по заданным лимитам;
+/// `cost.used` нет, если цен модели нет; деньги — строки D9 из микродолларов.
+Map<String, Object?>? budgetJson(BudgetProgress? progress) {
+  if (progress == null) {
+    return null;
+  }
+  final limits = progress.limits;
+  final maxTokens = limits.maxTokens;
+  final maxCost = limits.maxCost;
+  final maxDuration = limits.maxDuration;
+  if (maxTokens == null && maxCost == null && maxDuration == null) {
+    return null;
+  }
+  Map<String, Object?>? cost;
+  if (maxCost != null) {
+    final limitMicros = _roundMicros(maxCost);
+    // Лимит, не помещающийся в микродоллары (NaN, минус, огромное число),
+    // показать нельзя: поля cost нет, остальной бюджет остаётся.
+    if (limitMicros != null) {
+      final used = progress.cost;
+      final usedMicros = used == null ? null : _roundMicros(used);
+      cost = {
+        'used': ?usedMicros == null ? null : _costString(usedMicros),
+        'limit': _costString(limitMicros),
+      };
+    }
+  }
+  // Невалидный `max_cost` был единственным лимитом: показывать нечего, одного
+  // лимита шагов мало (D7).
+  if (maxTokens == null && cost == null && maxDuration == null) {
+    return null;
+  }
+  return {
+    'steps': {'used': progress.steps, 'limit': limits.maxSteps},
+    if (maxTokens != null)
+      'tokens': {'used': progress.tokens, 'limit': maxTokens},
+    'cost': ?cost,
+    if (maxDuration != null)
+      'duration': {
+        'usedMs': progress.active.inMilliseconds,
+        'limitMs': maxDuration.inMilliseconds,
+      },
+  };
+}
+
+/// Доллары в целые микродоллары; `null` — не конечное, отрицательное или не
+/// помещающееся в точное целое `double` (как [_micros]).
+int? _roundMicros(double dollars) {
+  final micros = dollars * 1e6;
+  if (!micros.isFinite || micros < 0 || micros > 9007199254740991) {
+    return null;
+  }
+  return micros.round();
+}
+
 /// Массив причин в порядке таблицы D6; пустой не отправляется (D19 п. 2).
 List<String>? _partialJson(Set<UsagePartial> partial) {
   if (partial.isEmpty) {
@@ -283,6 +349,12 @@ final class UsageAccounting {
   /// Последний шаг хода — для снимка `step`.
   Map<String, Object?>? _lastStep;
 
+  /// Поле `budget` последнего шага и итога хода (D7 change
+  /// `add-desktop-usage-pane`): считается в момент события, потому что
+  /// прогресс цикла — значение на границе шага, а не живой счётчик.
+  Map<String, Object?>? _stepBudget;
+  Map<String, Object?>? _turnBudget;
+
   /// Начинает ход: сбрасывает его накопления и запоминает [turnId].
   ///
   /// Почему здесь нет переноса незакрытого хода в сессию: ядро гарантирует
@@ -303,6 +375,8 @@ final class UsageAccounting {
     _closed = null;
     _turnContext = null;
     _lastStep = null;
+    _stepBudget = null;
+    _turnBudget = null;
   }
 
   /// Учитывает шаг: usage и модель берутся из `StepEnded.result` (D4 п. 1).
@@ -344,6 +418,7 @@ final class UsageAccounting {
       ..steps += 1;
     _turnContext = event.context;
     _lastContext = event.context;
+    _stepBudget = budgetJson(event.budget);
     _lastStep = {
       'index': result.stepIndex,
       'model': '${model.provider}/${model.id}',
@@ -391,6 +466,7 @@ final class UsageAccounting {
       total.partial.add(UsagePartial.noPrice);
     }
     _closed = total;
+    _turnBudget = budgetJson(event.budget);
     _completed.merge(total);
     _completedTurns += 1;
     return true;
@@ -405,6 +481,7 @@ final class UsageAccounting {
     turn: _open!.toJson(),
     session: _sessionJson(),
     context: _contextJson(_turnContext),
+    budget: _stepBudget,
   );
 
   /// Снимок `turn` после [turnEnded] (`true`): итог хода (D7).
@@ -415,6 +492,7 @@ final class UsageAccounting {
     turn: _closed!.toJson(),
     session: _sessionJson(),
     context: _contextJson(_turnContext),
+    budget: _turnBudget,
   );
 
   /// Снимок `compaction`: `used` — `tokensAfter`, `size` и `compactAt` — из
@@ -496,12 +574,17 @@ final class UsageAccounting {
     Map<String, Object?>? turn,
     required Map<String, Object?> session,
     Map<String, Object?>? context,
+    Map<String, Object?>? budget,
   }) {
-    final hasCost = [
-      step,
-      turn,
-      session,
-    ].any((part) => part != null && part.containsKey('cost'));
+    // Лимит стоимости — тоже сумма: при `budget.cost` валюта нужна, даже если
+    // `cost.used` нет (модель без цен; D7 change `add-desktop-usage-pane`).
+    final hasCost =
+        [
+          step,
+          turn,
+          session,
+        ].any((part) => part != null && part.containsKey('cost')) ||
+        (budget?.containsKey('cost') ?? false);
     return {
       'sessionId': sessionId,
       'seq': ++_seq,
@@ -512,6 +595,7 @@ final class UsageAccounting {
       'session': session,
       if (hasCost) 'currency': 'USD',
       'context': ?context,
+      'budget': ?budget,
     };
   }
 }

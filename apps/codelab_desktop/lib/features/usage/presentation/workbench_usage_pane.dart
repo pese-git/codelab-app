@@ -1,0 +1,128 @@
+import 'dart:async';
+
+import 'package:codelab_ui/codelab_ui.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../core/platform/usage_csv_saver.dart';
+import '../../workbench/application/shell_cubit.dart';
+import '../application/usage_pane_data.dart';
+import 'usage_pane_view.dart';
+
+/// Панель Usage дока: расход сессии в фокусе (spec agent-workbench-ui
+/// «Панель Usage»; design.md change `add-desktop-usage-pane`, D1, D2, D3, D5).
+///
+/// Почему виджет с состоянием: он сообщает фасаду, что панель показана (D3),
+/// и держит заметку о сбое сохранения CSV — временное состояние просмотра,
+/// которое не нужно ни Cubit-у, ни между запусками.
+///
+/// Для чего: только отображение. Данные — `CodeLabShellState.usage`
+/// (собирает `ActiveSessionCubit`), решения «когда обновлять журнал» и
+/// «доступна ли панель» принимает application. Виджет вызывает `Retry`,
+/// `Rebuild from log` и `Export CSV` у фасада и ничего не пишет в файл сам.
+///
+/// Как использовать: слот `ToolPane.usage` в `CodeLabShell`; нужен
+/// `BlocProvider<CodeLabShellCubit>`. Док монтирует только активную вкладку и
+/// строится, только когда виден, поэтому «смонтирован» значит «показан»:
+/// `initState` шлёт `usagePaneShown(true)`, `dispose` — `false`; фасад
+/// считает экземпляры, поэтому пересборка дока с двумя экземплярами на миг
+/// показ не гасит.
+class WorkbenchUsagePane extends StatefulWidget {
+  const WorkbenchUsagePane({super.key});
+
+  @override
+  State<WorkbenchUsagePane> createState() => _WorkbenchUsagePaneState();
+}
+
+class _WorkbenchUsagePaneState extends State<WorkbenchUsagePane> {
+  late final CodeLabShellCubit _cubit;
+
+  /// Сохранение CSV не удалось: заметка `Couldn't save the file.` до
+  /// следующего экспорта (отказ в диалоге заметки не даёт, D5).
+  bool _saveFailed = false;
+
+  /// Экспорт идёт: вторая кнопка не нужна, пока диалог открыт.
+  bool _exporting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _cubit = context.read<CodeLabShellCubit>();
+    _cubit.usagePaneShown(true);
+  }
+
+  @override
+  void dispose() {
+    _cubit.usagePaneShown(false);
+    super.dispose();
+  }
+
+  Future<void> _export() async {
+    final sessionId = _cubit.state.activeSessionId;
+    setState(() {
+      _exporting = true;
+      _saveFailed = false;
+    });
+    final result = await _cubit.exportUsageCsv();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _exporting = false;
+      // Фокус ушёл на другую сессию, пока шёл диалог: заметка о файле чужой
+      // сессии здесь не нужна.
+      _saveFailed =
+          result is UsageCsvFailed && _cubit.state.activeSessionId == sessionId;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Заметка о сбое записи относится к сессии, в фокусе которой был экспорт:
+    // при смене сессии она сбрасывается.
+    return BlocListener<CodeLabShellCubit, CodeLabShellState>(
+      listenWhen: (previous, current) =>
+          previous.activeSessionId != current.activeSessionId,
+      listener: (context, state) => setState(() => _saveFailed = false),
+      child: BlocBuilder<CodeLabShellCubit, CodeLabShellState>(
+        buildWhen: (previous, current) => previous.usage != current.usage,
+        builder: (context, state) {
+          final data = state.usage;
+          return SingleChildScrollView(
+            child: CodeLabUsagePane(
+              title: 'This session',
+              cards: usageCardsOf(data),
+              statusLine: data.statusLine,
+              turns: usageTurnRowsOf(data),
+              models: usageModelRowsOf(data),
+              loading: data.busy && data.ledger == null,
+              refreshing: data.busy && data.ledger != null,
+              notes: [
+                switch (data.notice) {
+                  UsagePaneNotice.ledgerFailed => CodeLabUsageNote(
+                    text: "Couldn't load usage history.",
+                    hint: data.failureHint,
+                    retryLabel: 'Retry',
+                  ),
+                  UsagePaneNotice.noLedger => const CodeLabUsageNote(
+                    text: 'This agent does not provide usage history.',
+                  ),
+                  UsagePaneNotice.none => null,
+                },
+                if (_saveFailed)
+                  const CodeLabUsageNote(text: "Couldn't save the file."),
+              ].nonNulls.toList(),
+              showRebuild: data.ledgerAvailable,
+              showExport: data.canExport,
+              onRebuild: data.canRebuild
+                  ? () => unawaited(_cubit.rebuildUsageLedger())
+                  : null,
+              onExport: _exporting ? null : () => unawaited(_export()),
+              onRetry: () => unawaited(_cubit.refreshUsageLedger()),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

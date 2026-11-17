@@ -134,6 +134,35 @@ Widget codelabSessionStatusBarPreview() {
 }
 
 @Preview(
+  name: 'Session status bar (clickable)',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 100),
+)
+Widget codelabSessionStatusBarClickablePreview() {
+  // Со строкой связано `onTap` (change `add-desktop-usage-pane`, D6): вся
+  // строка кликабельна, подсказки сегментов остаются.
+  return _AcpPreviewSurface(
+    child: Overlay(
+      initialEntries: [
+        OverlayEntry(
+          builder: (_) => CodeLabSessionStatusBar(
+            onTap: () {},
+            data: const CodeLabSessionStatusData(
+              modelLabel: 'GPT-5',
+              usage: CodeLabStatusSegment(
+                label: '12.3k → 1.2k',
+                tooltip: 'input 9300 · output 1200',
+              ),
+              cost: CodeLabStatusSegment(label: r'$0.0041 · session $1.20'),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+@Preview(
   name: 'Connection banner lost',
   group: codelabMoleculePreviewGroup,
   size: Size(620, 140),

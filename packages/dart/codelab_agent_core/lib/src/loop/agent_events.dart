@@ -202,7 +202,16 @@ final class ContextFill {
 }
 
 final class StepEnded extends AgentEvent {
-  const StepEnded(super.sessionId, {required this.result, this.context});
+  const StepEnded(
+    super.sessionId, {
+    required this.result,
+    this.context,
+    this.budget,
+  });
+
+  /// Прогресс бюджета хода после шага (D8): тем же значением цикл решает
+  /// остановку. `null` — событие собрано вне цикла (например, в тестах).
+  final BudgetProgress? budget;
 
   final StepResult result;
 
@@ -482,7 +491,12 @@ final class TurnEnded extends AgentEvent {
     this.budgetExceeded,
     this.held,
     this.subagentUsage,
+    this.budget,
   });
+
+  /// Итоговый прогресс бюджета хода (D8), включая usage потомков; `null` —
+  /// событие собрано вне цикла (отмена, сбой до цикла).
+  final BudgetProgress? budget;
 
   final TurnEndReason reason;
 

@@ -50,7 +50,11 @@ void main() {
       final result = await runAgentFixture(fixture, _replay);
       expect(result.skipped, isFalse, reason: fixture.id);
     }
-  });
+    // Корпус проигрывается последовательно одним тестом (~0,4 с на фикстуру),
+    // и с 80 фикстурами проход перерос стандартные 30 с `package:test`.
+    // Предел с запасом на рост корпуса и медленный CI: зависшая фикстура всё
+    // равно упадёт по таймауту, а не повесит прогон.
+  }, timeout: const Timeout(Duration(minutes: 3)));
 
   test('a spoiled copy against the original replay fails with a '
       'diff', () async {

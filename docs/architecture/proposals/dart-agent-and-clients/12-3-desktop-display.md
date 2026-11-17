@@ -521,13 +521,15 @@ usage, снимков нет) — сегментов usage нет, при ста
 `agent sent no usage for some steps`, `price unknown for some steps`,
 `before the session was loaded` (D23 Т9 п. 1). У `status-bar-cost` своей подсказки причин нет:
 если токены хода скрыты нулями (отмена на первом шаге без usage провайдера, D26), «~» видна
-только у стоимости — решение пользователя 2026-11-17, Q20 (а). Строка некликабельна (переход в
-панель Usage — `add-desktop-usage-pane`).
+только у стоимости — решение пользователя 2026-11-17, Q20 (а). Клик по строке открывает панель
+Usage дока и делает её активной (A17; change `add-desktop-usage-pane`, D6, решение пользователя
+Q10 (а)): строка кликабельна (курсор-рука, фокус, Enter и Space), только пока панель Usage
+доступна; повторный клик панель не закрывает. Без доступной панели строка некликабельна.
 
 После загрузки сессии агент CodeLab (change `add-usage-ledger`, D8) шлёт снимок `trigger: "load"` с
 полной суммой сессии без `beforeLoad`: до первого хода строка показывает `— · session $X` без «~»
 (снимка хода ещё нет). `beforeLoad` и «~» от него остаются только для других или старых агентов.
-Панель Usage (экран 17, change `add-desktop-usage-pane`) берёт историю ходов, шагов и моделей из
+Панель Usage (экран 17, A17, change `add-desktop-usage-pane`) берёт историю ходов, шагов и моделей из
 `SessionView.usageLedger` (§12.1.5, п. 3a), а подпись шага — из транскрипта по `toolCallIds`.
 
 Обновление: снимок usage меняет только `SessionView` (новая ревизия без нового `AcpSession`), поэтому
@@ -808,7 +810,8 @@ workbench) и сочетания шага 3 вместе с их экранам�
    (A14), Usage (D-09), Agents (A15), Branches (A10) — стали панелями дока наравне с Files, Diff,
    Terminal и Protocol. Панель без данных не предлагается: Timeline — без соответствующего
    расширения агента, Agents — пока у сессии в фокусе нет вызова `agent` с
-   `_meta.codelab.subagent` (A15, «Панель Agents v1»), Branches — без `sessionTree`.
+   `_meta.codelab.subagent` (A15, «Панель Agents v1»), Usage — пока агент сессии в фокусе не
+   объявил ни `usage`, ни `usageLedger` (A17), Branches — без `sessionTree`.
 6a. **Split view (29).** В центре одна или две панели сессии; третья сессия, открытая сбоку,
    заменяет ту, что не в фокусе. Фокус — по клику в панель; к сессии в фокусе привязаны панели
    инструментов и сочетания композера. Закрытие панели сессии не закрывает сессию, она остаётся в
@@ -958,6 +961,83 @@ D27; артборд 30 холста «CodeLab Desktop — Feature UI/UX», ут�
    проекта, а не к `cwd` сессии.
 7. **Ключи тестов:** `tool-pane-terminal`, `tool-toggle-terminal`, `terminal-tab-<id>`,
    `terminal-tab-close-<id>`, `terminal-new-tab`, `terminal-disclosure`, `palette-item-terminal`.
+
+**A17. Панель Usage (D-09, C-13; OpenSpec change `add-desktop-usage-pane`, решения пользователя
+2026-11-17, Q1–Q10 — все (а)).** Вкладка дока `ToolPane.usage` показывает расход сессии в фокусе
+(экран 17, артборд «17 Usage pane»; блок «Session deadline» — change `add-session-deadline`).
+
+1. **Слои.** Как у Agents (A15), а не как у Files: своего порта данных нет, всё — из `SessionView`.
+   `codelab_ui` — организм `CodeLabUsagePane` без логики. `apps/codelab_desktop/lib/features/usage/`:
+   `application/` (без Flutter и `dart:io`, правило сторожа) — `UsagePaneData`, маппер
+   `usagePaneDataOf`, подписи шагов, правило обновления журнала, сборка CSV; `presentation/` —
+   слот дока `WorkbenchUsagePane` (сигнал «панель показана», тик таймера бюджета). Данные панели
+   собирает `ActiveSessionCubit` в той же подписке на `SessionHandle.view`, что и строку статуса
+   (A7); второй подписки нет. Ревизии `SessionView` приходят на каждый фрагмент ответа, поэтому
+   данные панели кэшируются: `usagePaneDataOf` пересчитывается только при смене сессии, `cwd`,
+   identity `usage` и `usageLedger` или ревизии транскрипта (её признак — identity всех `ToolCallItem` ленты;
+   индекс вызовов для подписей шагов строится один раз на ревизию, D4). Сохранение CSV — порт
+   `UsageCsvSaver` в `lib/core/platform/` (`file_selector` и `dart:io`).
+2. **Доступность** (`usageAvailable`, Q7). `usageLedger` не `unavailable` — полная панель; есть
+   только `usage` (`awaiting` или `reported`) — карточки из `usage.session`, заметка `This agent
+   does not provide usage history.`, без таблиц, CSV и «Rebuild»; нет ни того, ни другого — панели
+   нет (переключателя, вкладки и пункта палитры), раскладка не меняется. Пункт палитры — `Usage`,
+   команда `/usage-pane`: имя `/usage` остаётся у команды агента.
+3. **Состав** (Q3, Q8, Q9). Шапка `This session`, «Rebuild from log»
+   (`refreshUsageLedger(rebuild: true)` без подтверждения), «Export CSV», строка состояния журнала
+   (`Ledger: up to date · N records`, `rebuilt from journal (<reason>) · N records`, `in memory`,
+   `not saved`). Карточки — из `total` журнала, без журнала — из `usage.session`:
+   * Input — `input + cacheRead + cacheWrite`, как A7; вторая строка `cache read N · write N`;
+   * Output — `output`, вторая строка `reasoning N`;
+   * Cost — «~», `—` и `price unknown`, тексты причин A7;
+   * Turns · steps — `avg N.N steps per turn` в целых.
+
+   Карточка с неполной суммой (значение с «~») рисуется тоном `warning`. Решение принимает
+   application (`UsagePaneCard.approximate`, правила те же, что у «~»), виджет берёт тон из данных.
+   Карточка со значением `—` тона не получает.
+   
+   «Turn budget» — п. 6. «Per turn» — ходы от нового к старому, `N · “<title>”`, пометка
+   `running`, раскрытие до шагов `step <index + 1> · <подпись>` (модель — в подсказке), строка
+   `subagents · N runs` — в раскрытом ходе после его шагов. «Per model» — модели журнала (`<provider> / <id>`) и строки `Subagents` и
+   `Summaries`. Строка без usage — `—` во всех столбцах, без цены — `—` в Cost; нулей вместо
+   неизвестного нет (DSK-11). Числа — функции kit `usage_format.dart`. Отступления от артборда:
+   нет пометки `fallback` (её нет в журнале), есть строки `Subagents` и `Summaries` и строка
+   состояния журнала.
+4. **Обновление журнала** (Q4). `refreshUsageLedger(id)` без `rebuild` уходит, когда панель
+   показана (вкладка активна, док виден), сессия не `running` и не `cancelling`, журнал `idle` или
+   `loaded` с `seq < usage.lastSeq`, и автоматический запрос ещё не уходил для этого
+   `usage.lastSeq` **или** журнал вернулся в `idle` из другого состояния. Возврат в `idle` — сброс
+   kit при переподключении или загрузке; `lastSeq` при этом может не измениться, и без нового
+   запроса панель ждала бы следующего хода. Поэтому возврат в `idle` даёт ровно один новый
+   автозапрос при том же `lastSeq`. Учёт ведётся по сессии в фокусе, смена сессии его сбрасывает.
+   Поводы получаются сами: показ, конец хода, фоновое сжатие, загрузка, переподключение, смена
+   фокуса. `failed` сам не повторяется — только «Retry» и «Rebuild». Опроса нет.
+5. **Подпись шага** (Q6) — по транскрипту клиента: первый `toolCallId` шага среди вызовов
+   корневого уровня — метка и деталь `ToolRowFormatter` (`Read lib/acp_transcript_panel.dart`),
+   остальные вызовы — ` +N`; без вызовов — `reply`; вызов не найден — `N tool calls`.
+6. **Бюджет хода** (C-13, Q5). Источник — `usage.budget` (§12.1.5, п. 3b), поле `budget` снимков
+   `step` и `turn`: агент шлёт его только при заданных `max_tokens`, `max_cost` или
+   `max_duration`. Блок `This turn` во время хода и `Last turn` после; строки Steps, Tokens, Cost,
+   Time с полосой `<израсходовано> / <лимит>`; тон `warning` от 80 %, `danger` от 100 %, больше
+   100 % — как есть; без израсходованной стоимости — `— / $0.50` и `not checked: price unknown`;
+   подсказка Tokens — `input + output, including subagents`. Пока сессия `running` без ожидающих
+   одобрений, Time тикает раз в секунду: `usedMs + (now − receivedAt)` (таймер в виджете, как у
+   Agents); иначе — `usedMs` снимка. Без `budget` блока нет.
+7. **CSV** (Q2). RFC 4180, разделитель `,`, CRLF, UTF-8 без BOM. Столбцы
+   `kind,turn,step,title,model,input,output,cache_read,cache_write,reasoning,cost,currency,partial`.
+   Строки хронологически: `turn`, его `step` и `subagents`, затем `model`, группы сессии
+   `subagents` и `summaries`, последней — `total`. Токены целыми, деньги — `formatUsageMoneyExact`
+   kit, неизвестное — пустая ячейка, причины через `;`. У «немой» строки (без usage: счётчики
+   нулевые и `noUsage`) пусты все числовые ячейки, включая `cost` и `currency`. Текст, начинающийся
+   с `=`, `+`, `-`, `@`, TAB или CR, получает префикс `'`. Порт сохранения не бросает, а возвращает
+   исход `saved`, `cancelled` или `failed`; при `failed` — класс ошибки, без текста и пути. Запись
+   идёт во временный файл рядом с целевым и `rename`: сбой не оставляет обрезанный CSV. Отказ в
+   диалоге — без заметки; сбой записи — `Couldn't save the file.`. События `usage_pane.refresh` и
+   `usage_pane.export` (`error_class` при сбое — класс исключения порта) — без пути, подписей,
+   токенов и денег. Экспорт без журнала — `cancelled` без диалога и без события.
+8. **Ключи тестов:** `tool-pane-usage`, `tool-toggle-usage`, `palette-item-usage-pane`,
+   `usage-rebuild`, `usage-export`, `usage-ledger-status`, `usage-card-input`, `usage-card-output`,
+   `usage-card-cost`, `usage-card-turns`, `usage-budget-<limit>`, `usage-turn-<index>`,
+   `usage-step-<turn>-<index>`, `usage-model-<n>`.
 
 **A13. Секреты в файле конфига встроенного агента (задача 8.11; решения пользователя 2026-11-04
 R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Литеральный секрет в файле
@@ -1187,6 +1267,11 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 | `acp_thought_block_test.dart: Enter and Space toggle with expanded semantics` | A9 |
 | `codelab_session_status_bar_test.dart: unknown usage: «usage: —» with a hint and no other segments`; `unknown price: «—» with the hint «price unknown», not $0` | D-09, DSK-11 |
 | `codelab_session_status_bar_test.dart: the tone of a segment comes from the data, not from the label`; пороги 80 и 95 % — `apps/codelab_desktop/test/features/workbench/application/usage_status_mapper_test.dart` (группа `context`) | D-09 |
+| `codelab_session_status_bar_test.dart`, группа `onTap (D6)`: `a click on the row calls onTap`; `the gap between segments is part of the row too`; `a click on a segment also calls onTap and keeps its tooltip`; `the row shows the hand cursor`; `Enter and Space on the focused row call onTap`; `without onTap the row is not clickable: no hand cursor and no focus stop` | D-09 (A7, A17; R9 change `add-desktop-usage-pane`) |
+| `codelab_usage_pane_test.dart: shows the header, the ledger status and the four cards as ready strings`; `the tone of a card comes from the data: a toned value is a badge, a neutral one is plain text`; `a card without a second line shows no empty line` | D-09 (A17 п. 3) |
+| `codelab_usage_pane_test.dart: turns keep the order of the data; the running mark and the dashes are shown as given`; `a turn expands to its steps on tap and collapses on the second tap`; `the subagents line of an expanded turn goes after its steps (D2 item 4)`; `the model of a step is the tooltip of its row`; `a turn without steps does not expand`; `models are numbered by position and carry the group note` | D-09 (A17 п. 3) |
+| `codelab_usage_pane_test.dart: without a ledger yet an indicator replaces the tables`; `refreshing keeps the old tables and shows the indicator in the header`; `no indicator when the journal is idle of work`; `a failure note shows the text and Retry, and the hint is its tooltip`; `the no-history note has no Retry action` | D-09, DSK-11 (A17 пп. 2–3) |
+| `codelab_usage_pane_test.dart: Rebuild from log and Export CSV report taps`; `a button without a callback is disabled, not hidden`; `buttons the data does not offer are absent` | D-09 (A17 пп. 3, 7) |
 | `acp_prompt_composer_test.dart: chips render delivery and warnings and remove by button and Delete` | D-12 |
 | `acp_prompt_composer_test.dart: Cmd+Backspace still rejects approval and does not remove chip` | DSK-18 |
 | `acp_transcript_panel_test.dart: pending approval auto-scroll unchanged with row model` | DSK-17 |
@@ -1221,6 +1306,26 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 * `composer_cubit_test.dart: outside cwd attachment asks confirmation and cancel keeps draft` (DSK-15);
 * `composer_cubit_test.dart: queued prompt keeps attachments after text edit` (R-18);
 * `attachment_intake_test.dart: symlink is resolved to realpath, directory and unreadable file are rejected`.
+
+Панель Usage (A17, D-09; change `add-desktop-usage-pane`, задачи 1.4 и 1.6) —
+`apps/codelab_desktop/test/features/usage/`:
+
+| Файл: тест | Цель |
+|---|---|
+| `application/usage_pane_data_test.dart`, группа `доступность панели (D10, Q7)`: `журнал объявлен — панель доступна независимо от usage`; `только usage (awaiting или reported) — доступна`; `ни usage, ни журнала — недоступна; без сессии — недоступна`; `недоступная панель — пустые данные` | A17 п. 2 |
+| `usage_pane_data_test.dart`, группы `карточки из журнала (D2 п. 2, Q8)`, `Cost и неполнота (…)`, `Тон карточек: «немая» карточка не жёлтая (D2 п. 2)`: `Input — input + cacheRead + cacheWrite, вторая строка — кэш`; `Turns · steps — ходы · шаги и среднее в целых десятых`; `среднее: половина вверх, десятые считаются в целых`; `noUsage: «~» перед стоимостью и текст причины`; `цена неизвестна: «—» и price unknown, не $0`; `«~» перед токенами при noUsage и beforeLoad, но не при noPrice`; `Cost со значением «—» не approximate, со значением — approximate`; `Input и Output со значением «—» не approximate` | A17 п. 3, DSK-11 |
+| `usage_pane_data_test.dart`, группы `«Per turn» (D2 п. 4)`, `Неизвестное — «—», не 0 (…)`, `«Per model» (D2 п. 5, Q9)`: `ходы идут от нового к старому`; `подпись N · “title”, без title — N`; `у хода с субагентами — строка subagents · N runs`; `ход без usage — «—» в Input, Output и Cost`; `«0» и «$0.00» не встречаются там, где значение неизвестно`; `группы Subagents и Summaries — строками после моделей` | A17 п. 3, DSK-11 |
+| `usage_pane_data_test.dart`, группы `строка состояния журнала (Q3)`, `состояния журнала (D2 п. 6)`, `агент без журнала, но с usage (…)`: `rebuilt с причиной и числом записей`; `loading с прежним журналом: прежние данные, Export есть, Rebuild недоступен`; `failed: заметка, код ошибки в подсказке, прежний журнал сохранён`; `таблиц, Export CSV и Rebuild нет, есть заметка noLedger` | A17 пп. 2–3 |
+| `application/usage_step_label_test.dart`: `шаг с одним вызовом: метка и деталь строки ленты`; `шаг с тремя вызовами: подпись первого найденного и суффикс +2`; `шаг без вызовов — reply`; `вызовы не найдены в транскрипте — N tool calls`; `вызов потомка не ищется на вложенном уровне: вызов только корня`; `первый вызов шага не найден, найден второй: подпись второго` | A17 п. 5 |
+| `application/ledger_refresh_test.dart`, группа `ledgerRefreshNeeded (D3)`: `панель не показана — не нужен`; `во время хода (running, cancelling) — не нужен`; `loaded с seq меньше lastSeq — нужен; с равным и большим — нет`; `loading, failed и unavailable автоматически не повторяются`; `для значения lastSeq запрос уже уходил — не нужен` | A17 п. 4 |
+| `ledger_refresh_test.dart`, группа `ActiveSessionCubit владеет обновлением журнала (D1, D3)`: `показ панели запускает один запрос без rebuild`; `журнал загружен (seq 7), ход идёт и завершается: ровно один запрос после перехода в idle, …`; `журнал не догоняет снимки: второй запрос для того же lastSeq не уходит, …`; `сбой загрузки не повторяется автоматически`; `переподключение сбрасывает журнал в idle: ровно один новый автозапрос при том же lastSeq (D3)`; `смена сессии в фокусе: данные панели — сессии B, запрос уходит для B, поздняя ревизия A ничего не меняет` | A17 п. 4, §9 `AGENTS.md` |
+| `application/usage_csv_test.dart`, группы `формат (D5, Q2)`, `строки и их порядок`: `первая строка — заголовок, перевод строки — CRLF, без BOM`; `хронологический порядок: turn, его steps и subagents, затем model, группы сессии, total`; `точные числа и деньги: 184200, 0.000041, USD, noUsage`; `неизвестная цена — пустые cost и currency, а не 0`; `причины partial — через «;» в порядке noUsage, noPrice, beforeLoad` | A17 п. 7 |
+| `usage_csv_test.dart`, группы `кавычки и защита от формул (D5)`, `«немая» строка без usage (D5, DSK-11)`: `запятая и кавычка: поле в кавычках, кавычка удваивается`; `одиночный CR внутри значения: поле в кавычках`; `формула: префикс ' и затем обычное квотирование`; `модель агента с формулой тоже защищена`; `числа префикса не получают`; `шаг без usage при цене 0: токены, cost и currency пустые, как «—» в панели` | A17 п. 7, DSK-11 |
+| `presentation/usage_pane_test.dart`, группа `доступность и клик по строке статуса (D6, D10)`: `«Агент без usage»: …, сохранённая раскладка не меняется`; `«Строка без данных некликабельна»: …`; `«Клик открывает панель Usage»: док показывает вкладку активной, повторный клик её не закрывает`; `пункт палитры Usage (/usage-pane) стоит рядом с командой агента /usage и открывает панель`; `панель только с usage без журнала доступна и в палитре есть` | A7, A17 п. 2 |
+| `usage_pane_test.dart`, группа `слот дока (D1, D3)`: `«Панель с журналом»: открытие даёт один запрос журнала без rebuild, …`; `«Rebuild from log»: запрос с rebuild: true, строка состояния обновляется`; `«Сбой загрузки журнала»: заметка и Retry, …, Retry шлёт один`; `«Агент без журнала»: …`; `закрытая панель журнал не запрашивает` | A17 пп. 1–4 |
+| `usage_pane_test.dart`, группа `экспорт CSV (D5; «Отказ в диалоге»)`: `сохранено: порт получил CSV с заголовком и предложенное имя codelab-usage-<sessionId>-<дата>.csv, заметки нет`; `отказ в диалоге: ни файла, ни заметки`; `сбой записи: заметка Couldn't save the file.` (двойник порта — `test/support/fake_usage_csv_saver.dart`) | A17 п. 7 |
+
+Блок «Turn budget» (задачи 3.3–3.4) добавит строки в эту таблицу в итерации 3.
 
 Сигнатуры файлов, лимиты и пометка «вне папки» проверяются тестами kit (§12.1.10,
 `attachments/prompt_content_builder_test.dart`); app их не дублирует.
@@ -1269,6 +1374,12 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
   Модульно — `usage_status_mapper_test.dart` (маппер), `active_session_status_bar_test.dart`
   (подписка `ActiveSessionCubit`), `presentation/session_status_bar_test.dart` (граф app на
   `FakeAcpTransport`).
+* `app:usage_pane_flow_test.dart` (D-09, C-13; change `add-desktop-usage-pane`, задача 3.5;
+  приёмка `release/*`, скрипт `test:e2e:app:usage`): scripted-агент с usage, журналом и бюджетом —
+  клик по строке статуса открывает панель, раскрытие хода до шагов, «Rebuild from log», «Turn
+  budget» во время хода, экспорт CSV во временный каталог через шов порта. Модульно —
+  `test/features/usage/application/` (маппер, подписи, правило обновления, CSV),
+  `codelab_usage_pane_test.dart`, `test/features/usage/presentation/usage_pane_test.dart`.
 * `app:transcript_rendering_flow_test.dart` (новый, D-06/D-07/D-08 сквозь весь стек): scripted
   агент стримит мысли, markdown с блоком кода и правку файла → блок мыслей свёрнут после конца,
   код подсвечен, diff показан и открывается полностью, одобрение правки показывает diff.
@@ -1309,6 +1420,10 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 * usage уведомлением `_codelab/session/usage` — режим `withUsage` (`with_usage`) scripted-агента
   (change `add-usage-extension`, задача 3.9, тест 3.5 `codelab_acp_testing/test/usage_agent_test.dart`):
   объявляет `usage` и шлёт снимки `step` и `turn` до ответа только клиенту, объявившему `usage`;
+* бюджет хода — отдельный режим `withUsageBudget` (`with_usage_budget`; change
+  `add-desktop-usage-pane`, D12, задача 2.4, тест `codelab_acp_testing/test/usage_budget_agent_test.dart`):
+  `withUsage` плюс поле `budget` в снимках `step` и `turn` для `app:usage_pane_flow_test.dart`.
+  `withUsage` не меняется: его числа закреплены тестами CLI и app;
 * стрим мыслей, markdown с оградой и правки с `content` типа `diff` по сценарию из фикстуры
   (`transcript_rendering_flow_test.dart`).
 

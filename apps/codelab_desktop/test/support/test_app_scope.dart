@@ -5,6 +5,8 @@ import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snaps
     show kWorkspaceSnapshotPrefsKey;
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/core/platform/external_link_opener.dart';
+import 'package:codelab_desktop/core/platform/usage_csv_saver.dart'
+    show UsageCsvSaver;
 import 'package:codelab_desktop/core/platform/user_shell_launcher.dart'
     show UserShellLauncher;
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart'
@@ -101,6 +103,7 @@ final class CodeLabTestBinding {
     bool stdioDefault = true,
     String? project,
     ProjectFolderPicker? projectFolderPicker,
+    UsageCsvSaver? usageCsvSaver,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
     // а у плагина в тестах нет реализации канала: без моков каждая загрузка
@@ -167,6 +170,9 @@ final class CodeLabTestBinding {
       externalLinkOpener: externalLinkOpener,
       // Без подмены «Open folder…» открыл бы системный диалог.
       projectFolderPicker: projectFolderPicker ?? const _NoFolderPicker(),
+      // Настоящий порт открывал бы системный диалог сохранения: тесты панели
+      // Usage передают `FakeUsageCsvSaver` (change `add-desktop-usage-pane`, D5).
+      usageCsvSaver: usageCsvSaver,
       // Настоящий `IoProjectFiles` читал бы диск разработчика и зависал бы в
       // fake-async зоне: панель Files в тестах есть, только если тест передал
       // двойник (`FakeProjectFiles`).

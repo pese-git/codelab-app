@@ -21,6 +21,7 @@ import 'codelab_terminal_pane.dart';
 import 'codelab_tool_dock.dart';
 import 'codelab_transcript_panel.dart';
 import 'codelab_transcript_row.dart';
+import 'codelab_usage_pane.dart';
 import 'codelab_workbench_layout.dart';
 
 const codelabOrganismPreviewGroup = 'ACP organisms';
@@ -801,6 +802,96 @@ Widget codelabSettingsNavigationPreview() {
       child: const Padding(
         padding: EdgeInsets.all(24),
         child: CodeLabText('Page body', role: CodeLabTextRole.title),
+      ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Usage pane',
+  group: codelabOrganismPreviewGroup,
+  size: Size(440, 640),
+)
+Widget codelabUsagePanePreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SingleChildScrollView(
+      child: CodeLabUsagePane(
+        title: 'This session',
+        statusLine: 'Ledger: up to date · 12 records',
+        showRebuild: true,
+        showExport: true,
+        onRebuild: codelabPreviewCancel,
+        onExport: codelabPreviewCancel,
+        cards: const [
+          CodeLabUsageCard(
+            id: 'input',
+            title: 'Input',
+            value: '184.2k',
+            detail: 'cache read 121.0k · write 18.4k',
+          ),
+          CodeLabUsageCard(
+            id: 'output',
+            title: 'Output',
+            value: '9.8k',
+            detail: 'reasoning 1.2k',
+          ),
+          CodeLabUsageCard(
+            id: 'cost',
+            title: 'Cost',
+            value: r'~$2.26',
+            detail: 'agent sent no usage for some steps',
+            tone: CodeLabTone.warning,
+          ),
+          CodeLabUsageCard(
+            id: 'turns',
+            title: 'Turns · steps',
+            value: '3 · 7',
+            detail: 'avg 2.3 steps per turn',
+          ),
+        ],
+        turns: const [
+          CodeLabUsageRow(
+            id: '3',
+            label: '3 · “Fix the build”',
+            input: '41.0k',
+            output: '2.1k',
+            cost: r'$0.0041',
+            running: true,
+            children: [
+              CodeLabUsageRow(
+                id: '3-0',
+                label: 'step 1 · Read lib/main.dart',
+                input: '20.0k',
+                output: '600',
+                cost: r'$0.002',
+                hint: 'openai/gpt-5',
+              ),
+              CodeLabUsageRow(
+                id: '3-1',
+                label: 'step 2 · reply',
+                input: '21.0k',
+                output: '1.5k',
+                cost: r'$0.0021',
+              ),
+            ],
+          ),
+          CodeLabUsageRow(
+            id: '2',
+            label: '2',
+            input: '—',
+            output: '—',
+            cost: '—',
+          ),
+        ],
+        models: const [
+          CodeLabUsageRow(
+            id: 'openai/gpt-5',
+            label: 'openai / gpt-5',
+            input: '184.2k',
+            output: '9.8k',
+            cost: r'$2.26',
+          ),
+        ],
       ),
     ),
   );

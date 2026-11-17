@@ -62,6 +62,7 @@ import '../core/platform/external_link_opener.dart';
 import '../core/platform/local_folder_opener.dart';
 import '../core/platform/limited_network_image.dart';
 import '../core/platform/project_folder_picker.dart';
+import '../core/platform/usage_csv_saver.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
 import '../core/platform/user_shell_launcher.dart';
@@ -126,6 +127,7 @@ Scope createCodeLabRootScope({
   ExternalLinkOpener? externalLinkOpener,
   LocalFolderOpener? localFolderOpener,
   ProjectFolderPicker? projectFolderPicker,
+  UsageCsvSaver? usageCsvSaver,
   ProjectFiles? projectFiles,
   bool projectFilesEnabled = true,
 }) {
@@ -161,6 +163,7 @@ Scope createCodeLabRootScope({
         externalLinkOpener: externalLinkOpener,
         localFolderOpener: localFolderOpener,
         projectFolderPicker: projectFolderPicker,
+        usageCsvSaver: usageCsvSaver,
       ),
       CodeLabConnectionModule(
         environment: connectionEnvironment,
@@ -440,6 +443,7 @@ final class CodeLabPlatformModule extends Module {
     ExternalLinkOpener? externalLinkOpener,
     LocalFolderOpener? localFolderOpener,
     this.projectFolderPicker,
+    this.usageCsvSaver,
   }) : _userShellLauncher = userShellLauncher,
        _externalLinkOpener = externalLinkOpener,
        _localFolderOpener = localFolderOpener;
@@ -461,6 +465,11 @@ final class CodeLabPlatformModule extends Module {
 
   /// Системный выбор папки; тесты подменяют его, чтобы не открывать диалог.
   final ProjectFolderPicker? projectFolderPicker;
+
+  /// Сохранение CSV панели Usage; шов тестов
+  /// (`createCodeLabRootScope(usageCsvSaver:)`, change `add-desktop-usage-pane`,
+  /// D5): без него — адаптер на `file_selector`.
+  final UsageCsvSaver? usageCsvSaver;
 
   /// Проверка папки проекта; тесты с вымышленными путями подменяют её.
   final DirectoryExists directoryExists;
@@ -490,6 +499,9 @@ final class CodeLabPlatformModule extends Module {
     bind<ImageProviderFor>().toInstance(defaultImageProviderFor);
     bind<ProjectFolderPicker>().toInstance(
       projectFolderPicker ?? const FileSelectorProjectFolderPicker(),
+    );
+    bind<UsageCsvSaver>().toInstance(
+      usageCsvSaver ?? const FileSelectorUsageCsvSaver(),
     );
     bind<RecentProjectsStore>().toInstance(
       const SharedPreferencesRecentProjectsStore(),
@@ -689,6 +701,10 @@ final class CodeLabPresentationModule extends Module {
             tokenSecrets: currentScope.resolve<ProfileSecretSource>(),
             eventLogger: _settingsLogger(),
             providerSetupOffer: currentScope.resolve<ProviderSetupOffer>(),
+            // Панель Usage: порт сохранения CSV и события `usage_pane.*`
+            // (change `add-desktop-usage-pane`, D5, D13).
+            usageCsvSaver: currentScope.resolve<UsageCsvSaver>(),
+            usageLogger: _usageLogger(),
           ),
         )
         .singleton();
@@ -954,6 +970,13 @@ List<TransportResolver> _transportResolvers(Scope scope) => [
   // `ConfigTransportResolver` профиль `embedded` не поддержан (D7).
   scope.resolve<EmbeddedTransportResolver>(),
 ];
+
+/// Логгер событий панели Usage (`usage_pane.refresh`, `usage_pane.export`):
+/// категория `application`, компонент `usage` (change
+/// `add-desktop-usage-pane`, D13).
+Logger _usageLogger() => StructuredLogLogger(
+  'codelab_desktop.usage',
+).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'usage'});
 
 /// Структурный логгер событий настроек (design.md change
 /// `add-app-settings-shell`, D17): категория `application`, компонент

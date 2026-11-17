@@ -320,7 +320,8 @@ final class _HostGate implements PermissionGate {
 
 /// Фрагмент конфига фикстуры (§15) в объёме, который читают фикстуры
 /// этапов 0 и 4: `agent.default_model`, `agent.effort`, `budget.max_steps`,
-/// `budget.max_tokens`, `compaction.keep_recent_tokens`,
+/// `budget.max_tokens`, `budget.max_cost` (фикстура `acp/prompt-usage-budget`,
+/// change `add-desktop-usage-pane`, D7), `compaction.keep_recent_tokens`,
 /// `compaction.enabled` (выключает автосжатие; change `add-usage-extension`,
 /// D18 Т8, фикстура `acp/prompt-usage-compaction-off`),
 /// `providers.<id>.models.<model>` (`context_window`, `reasoning`),
@@ -356,7 +357,11 @@ final class _FixtureConfig {
     final agent = _object(config['agent'], 'config.agent');
     _keys(agent, const {'default_model', 'effort'}, 'config.agent');
     final budget = _object(config['budget'], 'config.budget');
-    _keys(budget, const {'max_steps', 'max_tokens'}, 'config.budget');
+    _keys(budget, const {
+      'max_steps',
+      'max_tokens',
+      'max_cost',
+    }, 'config.budget');
     final compaction = _object(config['compaction'], 'config.compaction');
     _keys(compaction, const {
       'keep_recent_tokens',
@@ -447,6 +452,7 @@ final class _FixtureConfig {
       budget: TurnBudget(
         maxSteps: budget['max_steps'] as int? ?? 50,
         maxTokens: budget['max_tokens'] as int?,
+        maxCost: (budget['max_cost'] as num?)?.toDouble(),
       ),
     );
   }

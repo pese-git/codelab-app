@@ -184,6 +184,7 @@ final class _Turn {
           await _emit(
             StepEnded(
               _session,
+              budget: _progress(_step + 1),
               result: StepResult(
                 stepIndex: _step,
                 response: response,
@@ -193,6 +194,10 @@ final class _Turn {
               context: _contextFill(),
             ),
           );
+          // Шаг уже отправлен в StepEnded: считаем его завершённым, чтобы
+          // TurnEnded.budget.steps совпал с числом StepEnded (C-13). Решение
+          // об остановке принято, `_step` после цикла читает только итог.
+          _step++;
           reason = _failureReason(response);
           break;
         }
@@ -214,7 +219,12 @@ final class _Turn {
           usage: response.usage,
         );
         await _emit(
-          StepEnded(_session, result: stepResult, context: _contextFill()),
+          StepEnded(
+            _session,
+            result: stepResult,
+            context: _contextFill(),
+            budget: _progress(_step + 1),
+          ),
         );
         _step++;
         pending = calls.isNotEmpty;
@@ -305,38 +315,31 @@ final class _Turn {
         budgetExceeded: exceeded,
         held: held,
         subagentUsage: _childUsage == Usage.zero ? null : _childUsage,
+        budget: _progress(_step),
       ),
     );
     return TurnOutput(added: _added.sublist(_historyFrom), history: _history);
   }
 
   /// Лимит бюджета, исчерпанный к границе шага, или `null` (LOOP-12).
-  /// Время ожидания одобрения из времени хода вычитается (design.md, D6).
-  BudgetLimit? _budgetExceeded() {
-    final budget = _config.budget;
-    if (_step >= budget.maxSteps) {
-      return BudgetLimit.steps;
-    }
-    // Usage потомков входит в бюджет хода (SUB-11, D36 Т8).
+  /// Считает та же [_progress], что попадает в события (D8): второго подсчёта
+  /// нет. Время ожидания одобрения из времени хода вычитается (D6).
+  BudgetLimit? _budgetExceeded() =>
+      _progress(_step).exceeded ?? _config.ancestorBudget?.call();
+
+  /// Прогресс бюджета хода при [steps] завершённых шагах. Usage потомков
+  /// входит в бюджет (SUB-11, D36 Т8); стоимость `null`, пока у модели нет цен.
+  BudgetProgress _progress(int steps) {
     final total = _usage + _childUsage;
-    if (budget.maxTokens case final max?
-        when total.input + total.output >= max) {
-      return BudgetLimit.tokens;
-    }
-    if (budget.maxCost case final max?
-        when _config.model.cost != null && total.cost.total >= max) {
-      return BudgetLimit.cost;
-    }
-    if (budget.maxDuration case final max?) {
-      final waited =
-          (_config.approvalWait?.total ?? Duration.zero) - _waitAtStart;
-      final elapsed = _config.clock.now().difference(_startedAt) - waited;
-      if (elapsed >= max) {
-        return BudgetLimit.duration;
-      }
-    }
-    // Бюджет предков проверяет потомок на своей границе шага (D4).
-    return _config.ancestorBudget?.call();
+    final waited =
+        (_config.approvalWait?.total ?? Duration.zero) - _waitAtStart;
+    return BudgetProgress(
+      limits: _config.budget,
+      steps: steps,
+      tokens: total.input + total.output,
+      cost: _config.model.cost == null ? null : total.cost.total,
+      active: _config.clock.now().difference(_startedAt) - waited,
+    );
   }
 
   /// Usage потомков хода на сейчас; нулевой, если потомков нет.

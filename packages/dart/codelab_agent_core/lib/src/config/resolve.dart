@@ -1956,7 +1956,9 @@ final class _Builder {
     if (tokens != null && tokens < 1) {
       _bad(['budget', 'max_tokens'], 'must be greater than 0');
     }
-    if (cost != null && cost <= 0) {
+    // `nan` и `inf` достижимы из TOML/YAML; `nan <= 0` ложно, и без
+    // isFinite бюджет стоимости молча отключался бы (как у цен модели).
+    if (cost != null && (!cost.isFinite || cost <= 0)) {
       _bad(['budget', 'max_cost'], 'must be greater than 0');
     }
     if (duration != null && duration <= Duration.zero) {
@@ -2010,7 +2012,7 @@ final class _Builder {
       tokens = null;
     }
     var cost = _num(['subagents', 'max_cost']);
-    if (cost != null && cost <= 0) {
+    if (cost != null && (!cost.isFinite || cost <= 0)) {
       _bad(['subagents', 'max_cost'], 'must be greater than 0');
       cost = null;
     }
