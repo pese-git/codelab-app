@@ -221,6 +221,8 @@ String describe(AgentEvent e) => switch (e) {
         '${held == null ? '' : ' held'})',
   ContextCompacted(:final tokensBefore, :final tokensAfter) =>
     'ContextCompacted($tokensBefore -> $tokensAfter)',
+  CompactionDiscarded(:final tokensBefore, :final tokensAfter) =>
+    'CompactionDiscarded($tokensBefore -> $tokensAfter)',
   SessionTitleChanged(:final title) => 'SessionTitleChanged($title)',
   ModelOptionsChanged() => 'ModelOptionsChanged',
   SubagentStarted(:final subagentId) => 'SubagentStarted($subagentId)',

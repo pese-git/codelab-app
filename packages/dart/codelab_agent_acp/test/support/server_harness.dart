@@ -520,6 +520,19 @@ final class JournalStore implements SessionStore {
   /// журнале (`usage_ledger_request_test.dart`, `running`).
   Completer<void>? appendGate;
 
+  /// Выборочные ворота: пока заданы, `append` записи, для которой
+  /// [holdWhen] истинно, ждёт [releaseHeld]; [heldReached] завершается, когда
+  /// запись дошла до ворот. Так тест ставит «команда уже оплатила вызов, а
+  /// запись учёта ещё идёт» без пауз (гонки отмены, change
+  /// `fix-discarded-compaction-usage`, Q9).
+  bool Function(SessionRecord record)? holdWhen;
+  final _heldGate = Completer<void>();
+  final _heldReached = Completer<void>();
+
+  Future<void> get heldReached => _heldReached.future;
+
+  void releaseHeld() => _heldGate.complete();
+
   @override
   Future<void> create(SessionHeader header) => inner.create(header);
 
@@ -546,6 +559,12 @@ final class JournalStore implements SessionStore {
   }) async {
     if (appendGate case final gate?) {
       await gate.future;
+    }
+    if (holdWhen?.call(record) ?? false) {
+      if (!_heldReached.isCompleted) {
+        _heldReached.complete();
+      }
+      await _heldGate.future;
     }
     await inner.append(id, record, durable: durable);
   }

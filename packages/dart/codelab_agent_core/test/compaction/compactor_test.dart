@@ -796,6 +796,40 @@ void main() {
       },
     );
 
+    test('a cancel that comes after appendWith returned null for stale does '
+        'not undo the accounting record (Q9, CMP-13)', () async {
+      await journal(twoTurns());
+      // Токен «отменяется» сразу после проверки в построителе записи: первый
+      // опрос `isCancelled` (в очереди писателя) — ложь, дальше — истина.
+      final token = _CancelAfterFirstCheck();
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final future = run((request, cancel) async {
+        started.complete();
+        await release.future;
+        return SummaryResult(text: 'y', usage: usage, model: model);
+      }, cancel: token);
+      await started.future;
+      await writer.append(
+        (id, parent, at) => MessageRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          message: UserMessage(const [TextContent('late')], timestamp: at),
+        ),
+      );
+      release.complete();
+
+      final outcome = await future;
+
+      expect((outcome as NothingToCompact).reason, 'stale');
+      expect(token.checks, greaterThanOrEqualTo(1));
+      final record = store.appended.last.record as CustomRecord;
+      expect(record.customType, _discardedType);
+      expect((record.data! as Map)['reason'], 'stale');
+      expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
+    });
+
     test('a stale pass (a message during the summary) is accounted too, '
         'reason stale, a child of the current leaf (CMP-12, Q6)', () async {
       await journal(twoTurns());
@@ -833,7 +867,20 @@ void main() {
       expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
       final skipped = logger.eventsOf('compaction.skipped').single;
       expect(skipped.level, LogLevel.warning);
+      expect(skipped.fields.keys, {
+        'session_id',
+        'trigger',
+        'pass',
+        'reason',
+        'tokens_before',
+        'tokens_after',
+        'blocking_type',
+        'usage_record_id',
+        'summary_model',
+      });
       expect(skipped.fields['reason'], 'stale');
+      expect(skipped.fields['blocking_type'], 'message');
+      expect(skipped.fields['summary_model'], model);
       expect(skipped.fields['usage_record_id'], record.id);
       expect(skipped.toString(), isNot(contains('secret summary')));
     });
@@ -1038,42 +1085,48 @@ void main() {
       });
     }
 
-    test('a message during the summary is stale: nothing is written', () async {
-      await journal(twoTurns());
-      final started = Completer<void>();
-      final release = Completer<void>();
-      var rebuilt = 0;
-      final future = run(
-        held('secret summary', started: started, release: release),
-        onCompacted: (_) => rebuilt++,
-      );
-      await started.future;
-      await writer.append(
-        (id, parent, at) => MessageRecord(
-          id: id,
-          parentId: parent,
-          timestamp: at,
-          message: UserMessage(const [TextContent('late')], timestamp: at),
-        ),
-      );
-      release.complete();
+    // Запись `compaction` не пишется; единственная новая запись — учёт
+    // вызова суммаризатора (CMP-13, Q6 (а)); подробности — в группе «a
+    // discarded pass is accounted».
+    test(
+      'a message during the summary is stale: no compaction record',
+      () async {
+        await journal(twoTurns());
+        final started = Completer<void>();
+        final release = Completer<void>();
+        var rebuilt = 0;
+        final future = run(
+          held('secret summary', started: started, release: release),
+          onCompacted: (_) => rebuilt++,
+        );
+        await started.future;
+        await writer.append(
+          (id, parent, at) => MessageRecord(
+            id: id,
+            parentId: parent,
+            timestamp: at,
+            message: UserMessage(const [TextContent('late')], timestamp: at),
+          ),
+        );
+        release.complete();
 
-      final outcome = await future;
+        final outcome = await future;
 
-      expect(outcome, isA<NothingToCompact>());
-      expect((outcome as NothingToCompact).reason, 'stale');
-      expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
-      expect(events.whereType<ContextCompacted>(), isEmpty);
-      expect(rebuilt, 0);
-      final skipped = logger.eventsOf('compaction.skipped').single;
-      expect(skipped.level, LogLevel.warning);
-      expect(skipped.fields['session_id'], sid.value);
-      expect(skipped.fields['trigger'], 'afterTurn');
-      expect(skipped.fields['pass'], 1);
-      expect(skipped.fields['reason'], 'stale');
-      expect(skipped.fields['blocking_type'], 'message');
-      expect(skipped.toString(), isNot(contains('secret summary')));
-    });
+        expect(outcome, isA<NothingToCompact>());
+        expect((outcome as NothingToCompact).reason, 'stale');
+        expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
+        expect(events.whereType<ContextCompacted>(), isEmpty);
+        expect(rebuilt, 0);
+        final skipped = logger.eventsOf('compaction.skipped').single;
+        expect(skipped.level, LogLevel.warning);
+        expect(skipped.fields['session_id'], sid.value);
+        expect(skipped.fields['trigger'], 'afterTurn');
+        expect(skipped.fields['pass'], 1);
+        expect(skipped.fields['reason'], 'stale');
+        expect(skipped.fields['blocking_type'], 'message');
+        expect(skipped.toString(), isNot(contains('secret summary')));
+      },
+    );
 
     test('an unknown record kind is stale too (fail-closed)', () async {
       await journal(twoTurns());
@@ -1244,6 +1297,29 @@ const _discardedType = 'codelab.compaction_discarded';
 List<Map<String, Object?>> _context(SessionWriter writer) => [
   for (final m in buildLlmContext(writer.snapshot).messages) m.toJson(),
 ];
+
+/// Токен, который отвечает «не отменён» на первый опрос `isCancelled`
+/// (построитель записи в очереди писателя) и «отменён» на следующие и на
+/// `throwIfCancelled`: так тест ставит отмену ровно после решения `stale`.
+final class _CancelAfterFirstCheck implements CancelToken {
+  var checks = 0;
+
+  @override
+  bool get isCancelled => checks++ > 0;
+
+  @override
+  Object? get reason => checks > 0 ? const UserCancel() : null;
+
+  @override
+  Future<void> get onCancel => Completer<void>().future;
+
+  @override
+  void throwIfCancelled() {
+    if (checks > 0) {
+      throw CancelledException(reason);
+    }
+  }
+}
 
 /// Список событий, который вызывает [onAdd] при каждом `ContextCompacted`:
 /// так тест видит журнал в момент события.

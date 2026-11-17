@@ -667,6 +667,81 @@ void main() {
       );
     });
 
+    // Q9 (change `fix-discarded-compaction-usage`): отмена после проверки
+    // выигрыша запись учёта не отменяет — вызов оплачен, учёт доводится до
+    // конца, как запись `compaction` в соседнем тесте.
+    List<Map<String, Object?>> noGainSteps() => [
+      textStep('a' * 8000),
+      textStep('b' * 16000),
+      {
+        'reply': [
+          {'text': 'x' * 80000},
+        ],
+        'usage': const Usage(input: 764, output: 171).toJson(),
+      },
+    ];
+
+    test('/compact without gain: cancel while the accounting record waits '
+        'in the writer queue — the record and CompactionDiscarded are there, '
+        'the answer is Nothing to compact., end_turn (Q9)', () async {
+      final rig = await _Rig.create(steps: noGainSteps());
+      final session = await rig.session();
+      await rig.history(session);
+      rig.gate.arm((r) => r is CustomRecord);
+
+      final command = rig.ask(session, '/compact');
+      await rig.gate.reached;
+      await session.cancel();
+      await pumpEventQueue();
+      rig.gate.release();
+      final reply = await command;
+
+      expect(reply.result.reason, TurnEndReason.completed);
+      expect(reply.text, 'Nothing to compact.');
+      expect(reply.events.whereType<CompactionDiscarded>(), hasLength(1));
+      expect(reply.events.whereType<ContextCompacted>(), isEmpty);
+      expect(reply.events.last, isA<TurnEnded>());
+      final records = await rig.records(session);
+      expect(records.whereType<CompactionRecord>(), isEmpty);
+      final discarded = records.whereType<CustomRecord>().single;
+      expect(discarded.customType, 'codelab.compaction_discarded');
+    });
+
+    test('a background afterTurn without gain and close(): close waits for '
+        'it, the accounting record is in the journal, no error (Q9)', () async {
+      final rig = await _Rig.create(
+        steps: [
+          textStep('a' * 8000),
+          // Выше порога afterTurn: фоновое сжатие стартует.
+          textStep('b' * 100000),
+          {
+            'reply': [
+              {'text': 'x' * 400000},
+            ],
+            'usage': const Usage(input: 764, output: 171).toJson(),
+          },
+        ],
+      );
+      final session = await rig.session();
+      rig.gate.arm((r) => r is CustomRecord);
+      await session.prompt(const [TextContent('first task')]);
+      await session.prompt(const [TextContent('second task')]);
+      await rig.gate.reached;
+
+      final closing = session.close();
+      await pumpEventQueue();
+      rig.gate.release();
+      await closing;
+
+      final records = await rig.records(session);
+      final discarded = records.whereType<CustomRecord>().single;
+      expect(discarded.customType, 'codelab.compaction_discarded');
+      expect((discarded.data! as Map)['trigger'], 'afterTurn');
+      expect(records.whereType<CompactionRecord>(), isEmpty);
+      expect(rig.logger.eventsOf('compaction.failed'), isEmpty);
+      expect(rig.logger.eventsOf('compaction.skipped'), hasLength(1));
+    });
+
     test('close() while /mode waits in the queue of changes behind a held '
         'client setMode: cancelled, no AgentError, no failed warning, no '
         'records after the close', () async {

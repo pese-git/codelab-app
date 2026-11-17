@@ -261,6 +261,34 @@ final class UsageJournal {
     ),
   );
 
+  /// Служебная запись учёта отброшенного прохода сжатия (CMP-13; design.md
+  /// change `fix-discarded-compaction-usage`, D1): суммаризатор оплачен, а
+  /// записи `compaction` нет. Форма `data` — как у компактора.
+  void discarded(
+    Usage usage, {
+    String reason = 'no reduction',
+    int tokensBefore = 3000,
+    int tokensAfter = 3100,
+  }) => records.add(
+    CustomRecord(
+      id: _id(),
+      parentId: _parent,
+      timestamp: at,
+      // Литерал, а не константа ядра: тест фиксирует формат записи на диске
+      // независимо от того, экспортирует ли барель ядра эту константу.
+      customType: 'codelab.compaction_discarded',
+      data: {
+        'reason': reason,
+        'trigger': 'manual',
+        'pass': 1,
+        'tokensBefore': tokensBefore,
+        'tokensAfter': tokensAfter,
+        'summaryModel': 'scripted/scripted-1',
+        'usage': usage.toJson(),
+      },
+    ),
+  );
+
   /// Журнал целиком одним снимком (для `JournalStore.prebuilt`).
   SessionSnapshot snapshot() => SessionSnapshot(
     header: _header(),
