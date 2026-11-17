@@ -927,6 +927,17 @@ final class SessionInfoRecord extends SessionRecord {
   Map<String, Object?> get _fields => {'title': ?title, 'source': ?source};
 }
 
+/// `customType` служебной записи учёта отброшенного прохода сжатия (CMP-13;
+/// design.md change `fix-discarded-compaction-usage`, D1; §8.2.4).
+///
+/// Почему здесь, рядом с [CustomRecord]: запись пишет компактор, а читает
+/// свёртка журнала usage; одна константа не даёт строке разойтись, а свёртке
+/// не нужно импортировать компактор. Для чего: известный ядру `custom`
+/// (как `codelab.cwd_changed`); старое ядро игнорирует его по правилу
+/// §8.2.4. Как использовать: значение `CustomRecord.customType`; поля
+/// `data` описаны в design.md D1.
+const compactionDiscardedCustomType = 'codelab.compaction_discarded';
+
 /// Данные хоста или запись неизвестного типа.
 ///
 /// Почему одна запись на оба случая: обе ядро хранит, но не

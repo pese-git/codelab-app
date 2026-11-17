@@ -218,6 +218,7 @@ final class CommandsChanged extends AgentEvent { final List<SlashCommand> comman
 final class ConfigOptionChanged extends AgentEvent { final String optionId, value; }   // уровень AgentSession (§8.3)
 final class SessionTitleChanged extends AgentEvent { final String title; final DateTime updatedAt; }   // уровень AgentSession (§8.3)
 final class ContextCompacted extends AgentEvent { final int tokensBefore, tokensAfter; final Usage? usage; final String? model; } // model — '<provider>/<id>' // usage, model — суммаризатор, change add-usage-ledger, D4; в TurnEnded.usage не входит
+final class CompactionDiscarded extends AgentEvent { final int tokensBefore, tokensAfter; final Usage usage; final String model; } // суммаризатор оплачен, сжатие не записано (no reduction, stale; §9.8, CMP-13); change fix-discarded-compaction-usage, D2; в TurnEnded.usage не входит, реплей не даёт
 final class AgentError extends AgentEvent { final AgentErrorClass cls; final LlmErrorClass? errorClass; final String message; final bool retrying; final RateLimitInfo? rateLimit; }   // rateLimit — после MVP (§17.10.4.1)
                                                   // errorClass — только при cls == provider (§2.2)
 final class TurnEnded extends AgentEvent {
@@ -287,6 +288,7 @@ final class SlashCommand {
 | `TaskListChanged` | после change `add-subagents-and-tasks`: операция `task_*` или назначение пункта субагенту (`assign`) изменила список задач, до `ToolCallFinished` вызова (§17.16.5), или список восстановлен из новой ветки после `BranchChanged` (`op: restore`, без записи `task`, §17.16.6); до change — `PlanUpdated` от `update_plan` | `items` (весь список), `change` |
 | `ModeChanged`, `CommandsChanged` | смена режима, списка slash-команд | новое значение |
 | `ContextCompacted` | сжатие записано в журнал (§9) | `tokensBefore`, `tokensAfter`, `usage` и `model` суммаризатора (`null` у реплея записи без `details.usage`; change `add-usage-ledger`, D4) |
+| `CompactionDiscarded` | проход сжатия отброшен (`no reduction`, CMP-10, или `stale`, CMP-12) после оплаченного ответа суммаризатора; запись учёта `custom` `codelab.compaction_discarded` уже в журнале (§9.8, CMP-13) | `tokensBefore`, `tokensAfter` прохода, `usage` и `model` суммаризатора; в `TurnEnded.usage` не входит; реплей события не даёт (change `fix-discarded-compaction-usage`, D2) |
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | после MVP: эмитит `SubagentManager` сессии родителя, не цикл (§17.3.2) | идентификаторы ребёнка, снимок прогресса, итог |
 | `BranchChanged` | после MVP: эмитит `AgentSession` после записи `branch` — переключение ветки или перемотка (§17.6.5); у читателя в режиме только чтения — после перечитывания снимка (§17.6.8) | `leafId`, `fromLeafId`, `reason` |
 | `SessionAccessChanged` | после MVP: эмитит `AgentSession` при потере lease, чужой записи или освобождении lease владельцем (§17.6.8) | `access`, `owner?`, `reason` |
@@ -869,7 +871,7 @@ final class TurnResult { final TurnEndReason reason; final Usage usage; final Bu
 
 `AgentSession` подписывается на `Agent` первым слушателем и пишет в журнал на `MessageEnded`
 и `ModeChanged` («хост сохраняет, цикл эмитит»); запись `compaction` пишет компактор до события
-`ContextCompacted` (§9.8); затем события уходят в
+`ContextCompacted`, запись учёта отброшенного прохода — до `CompactionDiscarded` (§9.8); затем события уходят в
 `events`. Поток `events` широковещательный; поздний подписчик получает события текущего хода с
 начала (буфер одного хода). `prompt()` очищает grants разрешений на ход (PERM-8), редактирует
 текстовые блоки пользователя (`Redactor.redact` с `RedactionPoint.userInput`, §12.4.1) до записи в

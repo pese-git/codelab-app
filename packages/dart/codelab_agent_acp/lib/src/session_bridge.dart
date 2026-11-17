@@ -825,6 +825,22 @@ final class SessionBridge {
           'compaction',
           (sessionId) => _usage.compactionSnapshot(sessionId, tokensAfter),
         );
+      case CompactionDiscarded(:final tokensBefore, :final usage, :final model):
+        // Проход отброшен (CMP-10, CMP-12), но суммаризатор оплачен: usage
+        // входит в сумму сессии, а не хода, по тому же правилу цены, что у
+        // `ContextCompacted` (D5 change `fix-discarded-compaction-usage`).
+        // Снимок уходит всегда, когда пришло событие, даже при нулевом usage;
+        // кадров `session/update` событие не даёт. Реплей события не
+        // эмитит: после загрузки сумму даёт засев журналом (D2, D3).
+        _usage.summarizerEnded(
+          usage,
+          priced: session.models.resolve(ModelId(model))?.cost != null,
+        );
+        _sendUsage(
+          'compactionDiscarded',
+          (sessionId) =>
+              _usage.compactionDiscardedSnapshot(sessionId, tokensBefore),
+        );
       case TurnEnded():
         // Снимок `turn` строится из `TurnEnded` и уходит до `_finishTurn`:
         // ответ `session/prompt` (в том числе `-32603`) и `session_info_update`
@@ -1048,7 +1064,8 @@ final class SessionBridge {
   /// события, как у `subagentToolCallsConsent` (D3, D18 Т4); у отсоединённой
   /// сессии кадр некому доставить — пропуск `seq` клиент считает нормой (D7).
   /// Запись `acp.usage.sent` — без токенов и денег (D14, Q14 (б), §16);
-  /// `turn_id` — если снимок относится к ходу (у `compaction` его нет).
+  /// `turn_id` — если снимок относится к ходу (у `compaction` и
+  /// `compactionDiscarded` его нет).
   void _sendUsage(
     String trigger,
     Map<String, Object?> Function(String sessionId) build,

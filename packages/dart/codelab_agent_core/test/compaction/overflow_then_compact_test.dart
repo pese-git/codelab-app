@@ -104,15 +104,23 @@ void main() {
     await h.core.runtime.dispose();
   });
 
-  test('overflow, then a summary longer than the region: no record, no '
-      'retry, the turn fails (D5, CMP-8, CMP-10)', () async {
+  test('overflow, then a summary longer than the region: no compaction '
+      'record, one accounting record, no retry, the turn fails (D5, CMP-8, '
+      'CMP-10, change fix-discarded-compaction-usage D1)', () async {
+    // Платные ответы суммаризатора: usage уходит в запись учёта, но не в ход.
+    Map<String, Object?> paid(String text) => {
+      'reply': [
+        {'text': text},
+      ],
+      'usage': const Usage(input: 300, output: 60).toJson(),
+    };
     final h = harness([
       textStep('b' * 8000),
       textStep('a' * 8000),
       overflow,
       // Резюме в несколько раз длиннее региона: выигрыша нет.
-      textStep('x' * 80000),
-      textStep('y' * 80000),
+      paid('x' * 80000),
+      paid('y' * 80000),
     ]);
     final session = await h.core.runtime.createSession(
       SessionSpec(cwd: '/proj'),
@@ -137,6 +145,22 @@ void main() {
     expect(events.whereType<ContextCompacted>(), isEmpty);
     final snapshot = await h.sessions.open(session.id);
     expect(snapshot.records.whereType<CompactionRecord>(), isEmpty);
+    // Характеризационная правка (change `fix-discarded-compaction-usage`, D1,
+    // R2): раньше журнал не менялся. Теперь — одна запись учёта с триггером
+    // `overflow` и суммой двух запросов суммаризатора.
+    final discarded = snapshot.records.whereType<CustomRecord>().single;
+    expect(discarded.customType, 'codelab.compaction_discarded');
+    final data = discarded.data! as Map;
+    expect(data['trigger'], 'overflow');
+    expect(data['reason'], 'no reduction');
+    expect((data['usage']! as Map)['input'], 600);
+    expect((data['usage']! as Map)['output'], 120);
+    // Usage суммаризатора не входит в usage хода, в том числе на аварийном
+    // пути (D2 change `add-usage-ledger`).
+    final ended = events.whereType<TurnEnded>().last;
+    expect(ended.reason, TurnEndReason.failed);
+    expect(result.usage, Usage.zero);
+    expect(ended.usage, Usage.zero);
     await h.core.runtime.dispose();
   });
 

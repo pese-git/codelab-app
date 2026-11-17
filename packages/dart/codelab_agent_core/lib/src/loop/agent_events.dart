@@ -408,6 +408,42 @@ final class ContextCompacted extends AgentEvent {
   final String? model;
 }
 
+/// Оплаченный вызов суммаризатора, после которого сжатие не записано
+/// (CMP-13; design.md change `fix-discarded-compaction-usage`, D2).
+///
+/// Почему отдельное событие: [ContextCompacted] означает «сжатие записано» и
+/// несёт `used = tokensAfter`; у прохода без выигрыша (CMP-10) или устаревшего
+/// (CMP-12) записи `compaction` нет, но запрос к модели уже оплачен. Флаг в
+/// [ContextCompacted] заставил бы ветвиться всех его потребителей.
+///
+/// Для чего: хост (мост ACP) добавляет [usage] в сумму сессии, не меняя
+/// транскрипт и заполнение контекста. В `TurnEnded.usage` вызов не входит.
+///
+/// Как использовать: компактор эмитит событие после записи учёта
+/// `codelab.compaction_discarded` в журнал; реплей его не даёт — после
+/// загрузки сумму даёт свёртка журнала. Потребители, которым учёт не нужен,
+/// пропускают ветку.
+final class CompactionDiscarded extends AgentEvent {
+  const CompactionDiscarded(
+    super.sessionId, {
+    required this.tokensBefore,
+    required this.tokensAfter,
+    required this.usage,
+    required this.model,
+  });
+
+  /// Согласованные оценки прохода (CMP-5, D1 change
+  /// `fix-compaction-estimate-and-no-gain`); `tokensAfter >= tokensBefore`
+  /// у `no reduction`.
+  final int tokensBefore, tokensAfter;
+
+  /// Usage вызова суммаризатора: сумма запросов прохода.
+  final Usage usage;
+
+  /// Модель ответа, `<provider>/<id>`, как у [ContextCompacted.model].
+  final String model;
+}
+
 /// Заголовок сессии записан в журнал (событие уровня `AgentSession`,
 /// §8.3, §8.10).
 ///

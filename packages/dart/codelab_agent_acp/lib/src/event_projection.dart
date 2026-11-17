@@ -43,6 +43,10 @@ const projectionTable = <Type, String>{
   AgentError: 'not sent: the turn result carries the failure',
   ContextCompacted:
       'not sent as session/update: _codelab/session/usage, compaction',
+  // Кадров `session/update` нет; снимок `compactionDiscarded` строит мост
+  // (D5 change `fix-discarded-compaction-usage`).
+  CompactionDiscarded:
+      'not sent as session/update: _codelab/session/usage, compactionDiscarded',
   SessionTitleChanged: 'session_info_update',
   TurnEnded:
       'the answer to session/prompt; _codelab/session/usage, turn, before it',
@@ -100,6 +104,9 @@ List<acp.SessionUpdate> projectEvent(
   StepEnded() ||
   AgentError() ||
   ContextCompacted() ||
+  // Учёт вызова суммаризатора без кадров ACP (D5 change
+  // `fix-discarded-compaction-usage`): снимок usage — в `SessionBridge`.
+  CompactionDiscarded() ||
   TurnEnded() ||
   SubagentStarted() ||
   SubagentProgress() ||

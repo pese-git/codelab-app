@@ -274,6 +274,173 @@ void main() {
     });
   });
 
+  // Учёт отброшенных проходов сжатия (change `fix-discarded-compaction-usage`,
+  // D3; решения пользователя Q2 (а), Q3 (а), Q6 (а)). Число `discarded` в
+  // группе — в `usage_ledger_discarded_test.dart` (нужен новый тип).
+  group('a discarded compaction call (D3)', () {
+    test('goes to summaries and the total, not to a turn or the models: '
+        'count, usage, models, summaryCalls (scenario "Отброшенный вызов в '
+        'свёртке")', () {
+      final b = _Journal(at)
+        ..user('task')
+        ..assistant(gpt, _u(input: 100))
+        ..discarded(usage: _u(input: 764, output: 171, cost: 0.0002));
+
+      final ledger = buildUsageLedger(b.snapshot());
+
+      expect(ledger.summaries!.count, 1);
+      expect(ledger.summaries!.usage.input, 764);
+      expect(ledger.summaries!.usage.output, 171);
+      expect(ledger.summaries!.models, ['openai/gpt-4o-mini']);
+      expect(ledger.summaryCalls, hasLength(1));
+      expect(ledger.summaryCalls.single.usage.input, 764);
+      expect(ledger.summaryCalls.single.model, 'openai/gpt-4o-mini');
+      expect(ledger.total.input, 864);
+      expect(ledger.turns.single.usage.input, 100);
+      expect(ledger.byModel.single.model, 'openai/gpt-4o');
+      expect(ledger.steps, 1);
+    });
+
+    test('a written and a discarded pass: both are calls, the usages are '
+        'summed (scenario "Записанный и отброшенный проходы")', () {
+      final b = _Journal(at)
+        ..user('task')
+        ..assistant(gpt, _u(input: 100))
+        ..compaction(usage: _u(input: 900, output: 120))
+        ..discarded(
+          usage: _u(input: 764, output: 171),
+          model: 'anthropic/claude-haiku',
+        );
+
+      final summaries = buildUsageLedger(b.snapshot()).summaries!;
+
+      expect(summaries.count, 2);
+      expect(summaries.usage.input, 1664);
+      expect(summaries.usage.output, 291);
+      expect(summaries.models, [
+        'anthropic/claude-haiku',
+        'openai/gpt-4o-mini',
+      ]);
+    });
+
+    test('the record counts at any reason, stale included (Q6)', () {
+      final b = _Journal(at)
+        ..user('task')
+        ..assistant(gpt, _u(input: 100))
+        ..discarded(usage: _u(input: 10), reason: 'stale')
+        ..discarded(usage: _u(input: 20), reason: 'something else');
+
+      final summaries = buildUsageLedger(b.snapshot()).summaries!;
+
+      expect(summaries.count, 2);
+      expect(summaries.usage.input, 30);
+    });
+
+    test('a model unknown to the record is a call without a model name', () {
+      final b = _Journal(at)
+        ..user('task')
+        ..assistant(gpt, _u(input: 100))
+        ..discarded(usage: _u(input: 10), model: null);
+
+      final ledger = buildUsageLedger(b.snapshot());
+
+      expect(ledger.summaries!.count, 1);
+      expect(ledger.summaries!.models, isEmpty);
+      expect(ledger.summaryCalls.single.model, isNull);
+    });
+
+    test('data of the wrong shape and a foreign customType are skipped '
+        'without a reason of incompleteness (scenario "Запись неверной '
+        'формы")', () {
+      final b = _Journal(at)
+        ..user('task')
+        ..assistant(gpt, _u(input: 100))
+        ..discarded(data: 'not an object')
+        ..discarded(data: const {'reason': 'no reduction'})
+        ..discarded(data: const {'usage': 'many'})
+        ..discarded(data: const <Object?>[1, 2])
+        ..discarded(usage: _u(input: 5), customType: 'codelab.cwd_changed')
+        ..discarded(usage: _u(input: 6), customType: 'host');
+
+      final ledger = buildUsageLedger(b.snapshot());
+
+      expect(ledger.summaries, isNull);
+      expect(ledger.summaryCalls, isEmpty);
+      expect(ledger.total.input, 100);
+      expect(ledger.serialize(), isNot(contains('"summaries"')));
+    });
+
+    test('the price: a discarded call of a model without a price is listed '
+        'by modelsWithoutPrice like a written one (scenario "Цена '
+        'отброшенного вызова")', () {
+      final b = _Journal(at)
+        ..user('task')
+        ..assistant(gpt, _u(input: 100))
+        ..discarded(usage: _u(input: 764), model: 'local/free-summarizer');
+      final ledger = buildUsageLedger(b.snapshot());
+      final priced = ModelRef(
+        provider: gpt.provider,
+        id: gpt.id,
+        api: gpt.api,
+        baseUrl: gpt.baseUrl,
+        contextWindow: gpt.contextWindow,
+        maxOutputTokens: gpt.maxOutputTokens,
+        cost: const ModelCost(input: 2.5, output: 10),
+      );
+
+      expect(modelsWithoutPrice(ledger, FixedModelCatalog([priced])), {
+        'local/free-summarizer',
+      });
+    });
+
+    test('the file: key discarded sits right after count and only when '
+        'non-zero; the version stays 1 (Q3)', () {
+      final b = _Journal(at)
+        ..user('task')
+        ..assistant(gpt, _u(input: 100))
+        ..compaction(usage: _u(input: 900))
+        ..discarded(usage: _u(input: 764));
+
+      final text = buildUsageLedger(b.snapshot()).serialize();
+
+      final json = jsonDecode(text) as Map<String, Object?>;
+      expect(json['version'], 1);
+      final summaries = json['summaries']! as Map<String, Object?>;
+      expect(summaries.keys, ['count', 'discarded', 'usage', 'models']);
+      expect(summaries['count'], 2);
+      expect(summaries['discarded'], 1);
+    });
+
+    test('without discarded calls the summaries block is as before: no '
+        'discarded key', () {
+      final b = _Journal(at)
+        ..user('task')
+        ..assistant(gpt, _u(input: 100))
+        ..compaction(usage: _u(input: 900));
+
+      final json =
+          jsonDecode(buildUsageLedger(b.snapshot()).serialize())
+              as Map<String, Object?>;
+
+      expect((json['summaries']! as Map).keys, ['count', 'usage', 'models']);
+    });
+
+    test('built twice from the same records with discarded calls: '
+        'byte-for-byte equal (OBS-10)', () {
+      _Journal make() => _Journal(at)
+        ..user('task')
+        ..assistant(gpt, _u(input: 100))
+        ..compaction(usage: _u(input: 900))
+        ..discarded(usage: _u(input: 764), model: 'z/last')
+        ..discarded(usage: _u(input: 5), model: 'a/first');
+
+      final first = buildUsageLedger(make().snapshot()).serialize();
+
+      expect(buildUsageLedger(make().snapshot()).serialize(), first);
+      expect(first, contains('"discarded":2'));
+    });
+  });
+
   group('serialization (D3, OBS-10)', () {
     _Journal full() => _Journal(at)
       ..user('first task')
@@ -558,6 +725,35 @@ final class _Journal {
           },
         ),
       );
+
+  /// Запись учёта отброшенного прохода сжатия (change
+  /// `fix-discarded-compaction-usage`, D1): `custom` с `data` по формату D1.
+  /// [data] целиком заменяет `data`, чтобы собрать запись неверной формы.
+  void discarded({
+    Usage? usage,
+    String? model = 'openai/gpt-4o-mini',
+    String reason = 'no reduction',
+    Object? data,
+    String customType = 'codelab.compaction_discarded',
+  }) => records.add(
+    CustomRecord(
+      id: _id(),
+      parentId: _parent,
+      timestamp: at,
+      customType: customType,
+      data:
+          data ??
+          {
+            'reason': reason,
+            'trigger': 'manual',
+            'pass': 1,
+            'tokensBefore': 3043,
+            'tokensAfter': 3567,
+            'summaryModel': ?model,
+            'usage': ?usage?.toJson(),
+          },
+    ),
+  );
 
   SessionSnapshot snapshot() => SessionSnapshot(
     header: _header(at),

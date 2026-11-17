@@ -52,7 +52,8 @@ final class Compacted extends CompactionOutcome {
 }
 
 /// Сжимать нечего: `no cut point` — нет среза, `no reduction` — резюме не
-/// уменьшает оценку контекста (CMP-10), `stale` — пока шло резюме, в журнале
+/// уменьшает оценку контекста (CMP-10; журнал получает только запись учёта
+/// CMP-13), `stale` — пока шло резюме, в журнале
 /// появилась запись, с которой посчитанная запись сжатия была бы неверной
 /// (CMP-12); причина видна в логе `compaction.skipped`. Хосты отвечают на все
 /// причины одинаково (`/compact` — `Nothing to compact.`), аварийный путь
@@ -105,7 +106,14 @@ const maxCompactionPasses = 3;
 /// (причины `no cut point`, `no reduction` и `stale`; все пишут лог
 /// `compaction.skipped` с `reason`). Проход без выигрыша — когда
 /// согласованная оценка после него не меньше оценки до (`after >= before`,
-/// CMP-10, D3): запись не пишется.
+/// CMP-10, D3): запись `compaction` не пишется.
+///
+/// Суммаризатор в этих двух исходах уже оплачен, поэтому вместо записи
+/// `compaction` пишется служебная запись учёта (`compactionDiscardedCustomType`)
+/// и эмитится `CompactionDiscarded` (CMP-13, change
+/// `fix-discarded-compaction-usage`, D1, D2); лог `compaction.skipped`
+/// получает `usage_record_id` и `summary_model`. Без среза, при сбое и отмене
+/// суммаризатор не оплачен или результат утерян (R3) — записи учёта нет.
 /// Оценка «после» — [estimateAfterCompaction] (D1), «до» следующего прохода —
 /// «после» прошлого (D2). Пока «после» выше порога (CMP-5), идёт
 /// следующий проход (не больше [maxCompactionPasses]); его [NothingToCompact]
@@ -149,6 +157,66 @@ Future<CompactionOutcome> compact({
   final session = writer.snapshot.header.id;
   final threshold = compactionThreshold(window, settings);
   Compacted? done;
+
+  /// Учёт оплаченного вызова отброшенного прохода (CMP-13, D1, D2, D6):
+  /// запись `custom`, затем событие, затем лог `compaction.skipped`.
+  ///
+  /// Через `append`, а не `appendWith`: родитель — лист в очереди писателя
+  /// (SES-16), проверка CMP-12 записи без сообщений не нужна. Не `durable`:
+  /// запись производна от уже потраченных денег, не точка восстановления.
+  /// Сбой записи уходит из `compact` (SES-8).
+  Future<void> discard({
+    required int pass,
+    required String reason,
+    required int before,
+    required int after,
+    required SummaryResult result,
+    LogLevel level = LogLevel.info,
+    Map<String, Object?> extra = const {},
+  }) async {
+    final record = await writer.append(
+      (id, parent, at) => CustomRecord(
+        id: id,
+        parentId: parent,
+        timestamp: at,
+        customType: compactionDiscardedCustomType,
+        data: {
+          'reason': reason,
+          'trigger': trigger.name,
+          'pass': pass,
+          'tokensBefore': before,
+          'tokensAfter': after,
+          'summaryModel': result.model,
+          'usage': result.usage.toJson(),
+        },
+      ),
+    );
+    await emit(
+      CompactionDiscarded(
+        session,
+        tokensBefore: before,
+        tokensAfter: after,
+        usage: result.usage,
+        model: result.model,
+      ),
+    );
+    logger?.log(
+      level,
+      'compaction.skipped',
+      fields: {
+        'session_id': session.value,
+        'trigger': trigger.name,
+        'pass': pass,
+        'reason': reason,
+        'tokens_before': before,
+        'tokens_after': after,
+        ...extra,
+        'usage_record_id': record.id,
+        'summary_model': result.model,
+      },
+    );
+  }
+
   for (var pass = 0; pass < maxCompactionPasses; pass++) {
     final snapshot = writer.snapshot;
     final projectionBefore = project(snapshot, log: logger);
@@ -297,17 +365,12 @@ Future<CompactionOutcome> compact({
     // до записи; навыки ради выигрыша не выбрасываются (D6), их активации
     // остаются в контексте как были.
     if (after >= before) {
-      logger?.log(
-        LogLevel.info,
-        'compaction.skipped',
-        fields: {
-          'session_id': session.value,
-          'trigger': trigger.name,
-          'pass': pass + 1,
-          'reason': 'no reduction',
-          'tokens_before': before,
-          'tokens_after': after,
-        },
+      await discard(
+        pass: pass + 1,
+        reason: 'no reduction',
+        before: before,
+        after: after,
+        result: result,
       );
       return done ?? const NothingToCompact('no reduction');
     }
@@ -318,10 +381,12 @@ Future<CompactionOutcome> compact({
     // резюме, сессия могла дописать смену конфигурации, и запись на прежнем
     // листе увела бы её на боковую ветку.
     var stale = false;
+    var cancelledInQueue = false;
     String? blockingType;
     final record = await writer.appendWith<CompactionRecord>((current) {
       // Отмена, пришедшая, пока запись ждала очереди, тоже не пишет (CMP-3).
       if (cancel.isCancelled) {
+        cancelledInQueue = true;
         return null;
       }
       final blocking = _blockingBetween(current, snapshot.leafId);
@@ -340,20 +405,24 @@ Future<CompactionOutcome> compact({
       );
     }, durable: true);
     if (record == null) {
-      cancel.throwIfCancelled();
+      // Отмену проверяет только решение построителя (`cancelledInQueue`):
+      // отмена, пришедшая после `stale`, учёт не отменяет — вызов оплачен
+      // (Q9, CMP-13). Проверка токена здесь расходилась бы с этим правилом.
+      if (cancelledInQueue) {
+        cancel.throwIfCancelled();
+      }
       assert(stale, 'appendWith returned null for a reason other than stale');
       // `warning`: в текущем ядре исход недостижим (design.md, D3), его
       // появление — сигнал о новом пути записи. В лог идёт только вид записи.
-      logger?.log(
-        LogLevel.warning,
-        'compaction.skipped',
-        fields: {
-          'session_id': session.value,
-          'trigger': trigger.name,
-          'pass': pass + 1,
-          'reason': 'stale',
-          'blocking_type': blockingType,
-        },
+      // Суммаризатор оплачен, поэтому учёт пишется и здесь (Q6 (а)).
+      await discard(
+        pass: pass + 1,
+        reason: 'stale',
+        before: before,
+        after: after,
+        result: result,
+        level: LogLevel.warning,
+        extra: {'blocking_type': blockingType},
       );
       return done ?? const NothingToCompact('stale');
     }

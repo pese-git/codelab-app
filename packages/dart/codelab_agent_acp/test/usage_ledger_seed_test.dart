@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show JsonRpcNotification, JsonRpcRequest, JsonRpcResponse;
@@ -444,6 +445,256 @@ void main() {
         (sum, t) => sum + (asMap(asMap(t['total'])['tokens'])['input']! as int),
       );
       expect(inTurns, 20100);
+    });
+  });
+
+  // «Отброшенный проход сжатия» в живой сессии (change
+  // `fix-discarded-compaction-usage`, D5, D7; фикстура
+  // `acp/compact-no-gain-usage`): резюме суммаризатора длиннее региона,
+  // проход отбрасывается по CMP-10, а оплаченный вызов входит в сумму сессии.
+  group('/compact without a gain in a live session (D5)', () {
+    late String id;
+
+    setUp(() async {
+      h = await ServerHarness.start(
+        defaultModel: pricedModel,
+        compaction: const CompactionOverrides(keepRecentTokens: 512),
+        steps: [
+          textStep('Первый ответ подробно. ' * 100, const {
+            'input': 100,
+            'output': 20,
+          }),
+          // Резюме длиннее региона и с usage: 900 + 120.
+          textStep('Пользователь задал вопрос. ' * 3, const {
+            'input': 900,
+            'output': 120,
+          }),
+        ],
+      );
+      await h.initialize(clientCapabilities: usageClient);
+      id = await h.newSession();
+      await h.prompt(id, 'Первый вопрос');
+    });
+
+    test('the answer is Nothing to compact, then the snapshot, then end_turn '
+        'with the summarizer in session and turns/steps unchanged', () async {
+      final before = usageOf(h.client).last;
+
+      final response = await h.prompt(id, '/compact');
+
+      expect(response.resultMap, {'stopReason': 'end_turn'});
+      final frame = usageOf(h.client).last;
+      expect(frame['trigger'], 'compactionDiscarded');
+      expect(frame['seq'], 3);
+      expect(
+        frame.keys.toSet().intersection({'turnId', 'step', 'turn'}),
+        isEmpty,
+      );
+      final session = asMap(frame['session']);
+      expect(session['turns'], 1);
+      expect(session['steps'], 1);
+      expect(session['tokens'], tokens(1000, 140));
+      expect(session['cost'], '0.0051');
+      expect(session, isNot(contains('partial')));
+      expect(asMap(frame['context'])['used'], asMap(before['context'])['used']);
+      final text = [
+        for (final f in h.client.received)
+          if (f is JsonRpcNotification && f.method == 'session/update')
+            jsonEncode(f.params),
+      ];
+      expect(text.last, contains('Nothing to compact.'));
+      expect(
+        positionOfUsage(h.client, 3),
+        lessThan(h.client.received.indexOf(response)),
+      );
+    });
+
+    test('the ledger: summaries.count 1 and discarded 1, total equals the '
+        'session of the last snapshot', () async {
+      await h.prompt(id, '/compact');
+
+      final result = (await h.client.request('_codelab/session/usage/ledger', {
+        'sessionId': id,
+      })).resultMap;
+
+      final summaries = asMap(result['summaries']);
+      expect(summaries['count'], 1);
+      expect(summaries['discarded'], 1);
+      expect(summaries['tokens'], tokens(900, 120));
+      expect(summaries['cost'], '0.0045');
+      expect(result['total'], usageOf(h.client).last['session']);
+      expect((result['ledger']! as Map)['status'], isNotNull);
+    });
+  });
+
+  // Гонки отмены после проверки выигрыша (Q9 (а), CMP-13): проход уже признан
+  // отброшенным, вызов оплачен, и ни `session/cancel`, ни закрытие сессии
+  // запись учёта не отменяют. `stale` через мост недостижим: сообщение или
+  // иная запись во время резюме возможна только из хода или команды той же
+  // сессии, а они идут по очереди, `/compact` их не пропускает; поэтому этот
+  // исход покрывают тесты ядра (`compactor_test.dart`), а мост различает
+  // исходы не по `reason`, а по событию, которое одно и то же.
+  group('a race after the gain check (Q9)', () {
+    late JournalStore store;
+    late String id;
+
+    setUp(() async {
+      store = JournalStore()..holdWhen = (r) => r is CustomRecord;
+      h = await ServerHarness.start(
+        sessions: store,
+        defaultModel: pricedModel,
+        compaction: const CompactionOverrides(keepRecentTokens: 512),
+        steps: [
+          textStep('Первый ответ подробно. ' * 100, const {
+            'input': 100,
+            'output': 20,
+          }),
+          textStep('Пользователь задал вопрос. ' * 3, const {
+            'input': 900,
+            'output': 120,
+          }),
+        ],
+      );
+      await h.initialize(clientCapabilities: usageClient);
+      id = await h.newSession();
+      await h.prompt(id, 'Первый вопрос');
+    });
+
+    test(
+      'session/cancel while the accounting record waits: the snapshot is '
+      'sent, the sum has the call, Nothing to compact., ACP-5 cancelled',
+      () async {
+        final answer = h.client.request('session/prompt', {
+          'sessionId': id,
+          'prompt': [
+            {'type': 'text', 'text': '/compact'},
+          ],
+        });
+        await store.heldReached;
+        await h.client.notify('session/cancel', {'sessionId': id});
+        await pumpEventQueue();
+        store.releaseHeld();
+        final response = await answer;
+
+        // Ядро завершает команду как `completed`, но ACP-5 требует от моста
+        // ответ `cancelled` на ход, для которого пришёл `session/cancel`
+        // (05-Prompt Turn.md, Cancellation); учёт вызова от этого не зависит.
+        expect(response.resultMap, {'stopReason': 'cancelled'});
+        final frame = usageOf(h.client).last;
+        expect(frame['trigger'], 'compactionDiscarded');
+        final session = asMap(frame['session']);
+        expect(session['tokens'], tokens(1000, 140));
+        expect(session['cost'], '0.0051');
+        expect(
+          [
+            for (final f in h.client.received)
+              if (f is JsonRpcNotification && f.method == 'session/update')
+                jsonEncode(f.params),
+          ].last,
+          contains('Nothing to compact.'),
+        );
+        final ledger = (await h.client.request(
+          '_codelab/session/usage/ledger',
+          {'sessionId': id},
+        )).resultMap;
+        expect(asMap(ledger['summaries'])['discarded'], 1);
+        expect(ledger['total'], session);
+      },
+    );
+
+    test('close() of the server while the record waits: the record is on '
+        'disk, after session/load the sum has the call', () async {
+      // `shutdown` отменяет ход и ждёт запись до закрытия писателя.
+      unawaited(
+        h.client.request('session/prompt', {
+          'sessionId': id,
+          'prompt': [
+            {'type': 'text', 'text': '/compact'},
+          ],
+        }),
+      );
+      await store.heldReached;
+      final closing = h.server.shutdown(grace: Duration.zero);
+      await pumpEventQueue();
+      store.releaseHeld();
+      await closing;
+
+      store.holdWhen = null;
+      h = await ServerHarness.start(sessions: store, defaultModel: pricedModel);
+      await h.initialize(clientCapabilities: usageClient);
+      final loaded = await load(h.client, id: id);
+      expect(loaded.error, isNull);
+
+      final session = asMap(usageOf(h.client).single['session']);
+      expect(session['tokens'], tokens(1000, 140));
+      final ledger = await ledgerOf(h.client, id);
+      expect(ledger['total'], session);
+      expect(asMap(ledger['summaries'])['discarded'], 1);
+    });
+  });
+
+  // «Сумма после session/load» и ответ журнала с отброшенным проходом
+  // (D3, D5): запись учёта `codelab.compaction_discarded` входит в `summaries`
+  // и в засев; `discarded` — только при ненулевом значении.
+  group('the seed of a journal with a discarded pass (D5)', () {
+    UsageJournal journalWithDiscarded() => UsageJournal(sessionId)
+      ..user('Первый вопрос')
+      ..assistant('Первый ответ.', pricedUsage(100, 20))
+      ..discarded(pricedUsage(900, 120));
+
+    test('the load snapshot includes the discarded call and equals total of '
+        'the ledger; summaries.discarded is 1', () async {
+      await serverWith(journalWithDiscarded());
+      await load(h.client);
+
+      final frame = usageOf(h.client).single;
+      expect(frame['trigger'], 'load');
+      final session = asMap(frame['session']);
+      expect(session['turns'], 1);
+      expect(session['steps'], 1);
+      expect(session['tokens'], tokens(1000, 140));
+      expect(session['cost'], '0.0051');
+
+      final result = await ledgerOf(h.client);
+      expect(result['total'], session);
+      final summaries = asMap(result['summaries']);
+      expect(summaries['count'], 1);
+      expect(summaries['discarded'], 1);
+    });
+
+    test('a journal with a written pass only: no discarded key', () async {
+      final journal = UsageJournal(sessionId)
+        ..user('Первый вопрос')
+        ..assistant('Первый ответ.', pricedUsage(100, 20));
+      final first = journal.lastId;
+      journal.compaction(first, pricedUsage(900, 120));
+      await serverWith(journal);
+      await load(h.client);
+
+      final summaries = asMap((await ledgerOf(h.client))['summaries']);
+
+      expect(summaries['count'], 1);
+      expect(summaries, isNot(contains('discarded')));
+    });
+
+    test('a written and a discarded pass: count 2, discarded 1', () async {
+      final journal = UsageJournal(sessionId)
+        ..user('Первый вопрос')
+        ..assistant('Первый ответ.', pricedUsage(100, 20));
+      final first = journal.lastId;
+      journal
+        ..compaction(first, pricedUsage(900, 120))
+        ..discarded(pricedUsage(500, 60));
+      await serverWith(journal);
+      await load(h.client);
+
+      final result = await ledgerOf(h.client);
+
+      final summaries = asMap(result['summaries']);
+      expect(summaries['count'], 2);
+      expect(summaries['discarded'], 1);
+      expect(summaries['tokens'], tokens(1400, 180));
+      expect(result['total'], usageOf(h.client).single['session']);
     });
   });
 
