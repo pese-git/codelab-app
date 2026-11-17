@@ -219,7 +219,7 @@ void main() {
     // `fix-compaction-estimate-and-no-gain` (якорь 3043 при эвристике 4450).
     // 12 000 символов: эвристика проекции после (≈5 600) остаётся ниже порога
     // (6 144), поэтому здесь один проход; случай «эвристика выше порога» — в
-    // тесте D9 ниже.
+    // тесте D8 ниже.
     final prompt = 'p' * 12000;
 
     int heuristic() => estimateTokens(
@@ -265,7 +265,7 @@ void main() {
     );
 
     test('with an anchor the record keeps the consistent estimate, not '
-        'H(after) (D1, D9)', () async {
+        'H(after) (D1, D8)', () async {
       await journal(twoTurns());
       final hBefore = heuristic();
       await journal(
@@ -275,8 +275,8 @@ void main() {
       await run(fixed('short summary'), systemPrompt: prompt, tools: tools);
 
       // Без якоря в проекции после сжатия (§8.7): H(после) — чистая
-      // эвристика, а в запись идёт согласованное «после», не она (D9: порог
-      // сравнивается с max, запись и события — с согласованным).
+      // эвристика, а в запись, события и сравнение с порогом идёт
+      // согласованное «после», не она (D8).
       final record = store.appended.first.record as CompactionRecord;
       final hAfter = heuristic();
       expect(record.tokensAfter, record.tokensBefore + hAfter - hBefore);

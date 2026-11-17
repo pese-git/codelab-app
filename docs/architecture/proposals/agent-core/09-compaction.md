@@ -17,8 +17,8 @@
 int estimateTokens(List<Message> messages, {String? systemPrompt, List<ToolSchema> tools = const []});
 int estimateContextTokens(List<Message> messages, {required String systemPrompt, required List<ToolSchema> tools,
     CompactionAnchor? compaction});                       // якоря: usage → последнее сжатие → эвристика (§9.3)
-int estimateLlmContext(LlmContext c);                     // estimateContextTokens по payload без якоря сжатия;
-                                       // оценщик цикла рантайм собирает сам — с якорем сжатия сессии (§9.3)
+                                       // оценщик цикла (EstimateTokens) рантайм собирает сам по payload —
+                                       // estimateContextTokens с якорем сжатия сессии (§9.3)
 int estimateAfterCompaction({required int before, required int rawBefore, required int rawAfter});
                                        // max(0, before + rawAfter - rawBefore): оценка после сжатия (§9.3), внутренняя
 typedef CompactionAnchor = ({int tokens, int raw});       // якорь на последнее сжатие (§9.3), внутренний
@@ -208,9 +208,15 @@ compactionAnchorOf(P, systemPrompt, tools):
 * **Изменения после фиксации.** Смена режима, подключение MCP-сервера, перезагрузка файлов
   проекта, заметка `Revise`, ремонт парности в `buildPayload` меняют `H(C)`, и эвристикой
   оценивается только разница; якорь при этом не сбрасывается (D7).
-* **Где живёт якорь.** Поле `AgentSession`, которое меняется одним методом вместе с транскриптом
-  из журнала: в `onCompacted` каждого записанного прохода любого триггера и при загрузке сессии —
-  по проекции активной ветки и по промпту и схемам после восстановления агента (D3, D5). Неудачное
+* **Где живёт якорь.** Поле `AgentSession`. Транскрипт из журнала и якорь меняет единый метод
+  сессии, принимающий проекцию, системный промпт и схемы: его вызывают `onCompacted` триггеров
+  `afterTurn` и `manual` и загрузка сессии после восстановления агента; аварийный путь (`preflight`,
+  `overflow`) в `onCompacted` меняет только якорь, транскрипт после хода заменит цикл (D3, D5).
+  `raw` при сжатии считается по тем промпту и схемам, по которым компактор считал `tokensAfter`, —
+  снятым на старте `compact`; смена режима или набора MCP-инструментов во время фонового сжатия
+  учитывается потом как разность по правилу «Изменения после фиксации» (D7). При загрузке — по
+  промпту и схемам агента после восстановления (режим, набор инструментов). Фиксация якоря
+  пишется в лог `compaction.anchor` (`debug`; §9.8, §12). Неудачное
   или отменённое сжатие `onCompacted` не вызывает, якорь прежний (CMP-3). Любая будущая операция,
   которая строит транскрипт из журнала внутри открытой сессии (смена ветки, откат к метке), ОБЯЗАНА
   менять транскрипт и якорь тем же методом (§8.7).
@@ -500,7 +506,8 @@ compact(snapshot, trigger, summarize, settings, cancel, focus, anchor):
    (на следующем проходе — Compacted прошлого прохода)
 10. append(rec, durable: true)                 // только теперь сжатие существует
 11. onCompacted(projected): транскрипт Agent := projected.messages (usage обнулён, §8.7) и
-    якорь сжатия сессии := compactionAnchorOf(projected) — одним методом (§9.3); аварийный путь
+    якорь сжатия сессии := compactionAnchorOf(projected, промпт и схемы на старте compact) —
+    единым методом сессии (§9.3), лог compaction.anchor(source: compaction); аварийный путь
     меняет якорь и отдаёт проекцию циклу через LoopContext
 12. emit ContextCompacted(tokensBefore: before, tokensAfter: after)
 13. если after > threshold и проходов < 3 → повторить с шага 3 (CMP-5); before := after
@@ -516,7 +523,10 @@ compact(snapshot, trigger, summarize, settings, cancel, focus, anchor):
 `reason: "no cut point"` — нет среза, шаг 4, оценок нет; при `reason: "no reduction"` — нет
 выигрыша, шаг 9а, плюс `tokens_before`, `tokens_after`; пишется на любом проходе) и
 `compaction.failed` (`warning`; неожиданное исключение фонового `afterTurn` `AgentSession` пишет
-под тем же именем с уровнем `error`, §12).
+под тем же именем с уровнем `error`, §12). Фиксацию якоря на последнее сжатие сессия пишет в
+`compaction.anchor` (`debug`; `session_id`, `tokens`, `raw`, `source`: `compaction` — шаг 11
+любого триггера, `load` — загрузка сессии; текстов нет; change
+`anchor-context-estimate-after-compaction`, D9).
 
 Нет выигрыша (шаг 9а; change `fix-compaction-estimate-and-no-gain`, D3, D5). По §9.3
 `after − before = H(P_after) − H(P_before)`, то есть условие сравнивает эвристики убранного и
