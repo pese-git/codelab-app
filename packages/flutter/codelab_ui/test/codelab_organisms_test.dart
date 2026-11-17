@@ -942,6 +942,26 @@ void main() {
       );
     });
 
+    testWidgets('phone keeps zones inside the system safe area', (
+      tester,
+    ) async {
+      // iPhone с Dynamic Island: статус-бар сверху, индикатор «домой» снизу.
+      setWindow(tester, const Size(440, 956));
+      tester.view.padding = const FakeViewPadding(top: 62, bottom: 34);
+      addTearDown(tester.view.resetPadding);
+      await tester.pumpWidget(layout(dock: null));
+
+      expect(tester.takeException(), isNull);
+      final appBar = tester.getRect(
+        find.byKey(CodeLabWorkbenchLayout.appBarKey),
+      );
+      final session = tester.getRect(
+        find.byKey(CodeLabWorkbenchLayout.sessionPaneKey),
+      );
+      expect(appBar.top, greaterThanOrEqualTo(62));
+      expect(session.bottom, lessThanOrEqualTo(956 - 34));
+    });
+
     testWidgets('wide window shows the four zones left to right', (
       tester,
     ) async {
