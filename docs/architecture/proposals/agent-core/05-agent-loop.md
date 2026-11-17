@@ -83,7 +83,7 @@ final class AgentLoopConfig {
   final ApprovalWaitMeter? approvalWait;             // тот же счётчик, что ToolServices.approvalWait; maxDuration
                                                      // считает время хода минус его прирост с начала хода
   final Logger? logger;                              // логи цикла (loop.empty_response, §5.4.1)
-  final int Function(LlmContext)? estimateTokens;    // оценка payload (§9)
+  final int Function(LlmContext)? estimateTokens;    // оценка payload (§9.3); рантайм — с якорем сжатия сессии
   final Future<LoopContext?> Function(EmergencyCause cause, CancelToken cancel)? emergencyCompact;
                                                      // один аварийный вызов сжатия за ход, общий для preflight и overflow (CMP-8)
   final int? contextWindowCap;                       // окно preflight = effectiveContextWindow(model, cap) (CMP-6)
@@ -163,7 +163,7 @@ ACP-адаптер отдаёт `stopReason: max_turn_requests`, а вид ли�
 2. Ремонт парности вызовов (§6.3.3); непустой отчёт → событие `ToolPairingRepaired`.
 3. Если есть заметка `Revise` — добавить `UserMessage([TextContent(note)])` в конец payload.
 3a. После MVP: если у сессии есть дедлайн (§17.12.5) — `UserMessage([TextContent(deadline.timeLeftLine(now))])` последним сообщением payload; в транскрипт не входит.
-4. Оценка размера `estimateTokens(LlmContext)`; если больше окна `effectiveContextWindow(model, cap: contextWindowCap)` — один вызов `emergencyCompact(preflight, …)` за ход (CMP-8) и пересборка с шага 1; если сжатие не помогло или его нет — синтетический `AssistantMessage(stopReason: error, errorClass: overflow, errorMessage: 'context window exhausted')` без обращения к провайдеру и без `ModelRequested`.
+4. Оценка размера `estimateTokens(LlmContext)`; если больше окна `effectiveContextWindow(model, cap: contextWindowCap)` — один вызов `emergencyCompact(preflight, …)` за ход (CMP-8) и пересборка с шага 1; если сжатие не помогло или его нет — синтетический `AssistantMessage(stopReason: error, errorClass: overflow, errorMessage: 'context window exhausted')` без обращения к провайдеру и без `ModelRequested`. Оценщик передаёт рантайм: оценка сессии с якорями usage и последнего сжатия (§9.3, «Якорь на последнее сжатие»), поэтому сразу после сжатия проверка видит `tokensAfter` записи плюс изменившуюся часть (CMP-11); сигнатура `estimateTokens` при этом не меняется, и цикл о журнале и записях `compaction` не знает.
 5. `LlmContext(systemPrompt, messages, tools.map(toSchema))` → `ModelRequested` → `stream(...)`.
 
 `systemPrompt` и `tools` берутся из текущего `LoopContext` и между шагами меняются только через
