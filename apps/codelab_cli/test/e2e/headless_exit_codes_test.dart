@@ -31,7 +31,7 @@ void main() {
     launch = await E2eCliAgent.current.launch(tmp, mode: mode);
     return CliProcess.run(
       [...args, '-a', launch.agent, '-C', tmp.path],
-      environment: environment,
+      environment: {...environment, ...launch.environment},
       stdin: stdin,
     );
   }
@@ -43,15 +43,10 @@ void main() {
       tmp,
       mode: _Mode.hangsUntilCancel,
     );
-    final process = await CliProcess.start([
-      '-p',
-      'hello',
-      '-a',
-      launch.agent,
-      '-C',
-      tmp.path,
-      '-v',
-    ], environment: environment);
+    final process = await CliProcess.start(
+      ['-p', 'hello', '-a', launch.agent, '-C', tmp.path, '-v'],
+      environment: {...environment, ...launch.environment},
+    );
     // Строка `-v` клиента — общая для всех агентов: соединение готово.
     await process.waitFor('to=ClientConnectionReady');
     // Промпт уходит сразу после `session/new`; пауза с запасом на старт VM.

@@ -2,8 +2,11 @@ import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
+import '../rendering/escape_for_display.dart';
 import 'codelab_approval_prompt.dart';
+import 'codelab_compact_call_line.dart';
 import 'codelab_transcript_row.dart';
+import 'codelab_transcript_target.dart';
 
 /// Вызов инструмента в ленте: одна строка и раскрываемые подробности.
 ///
@@ -27,6 +30,10 @@ class CodeLabToolCallTile extends StatefulWidget {
     required this.row,
     required this.expanded,
     required this.onToggle,
+    this.nestedExpanded,
+    this.onNestedToggle,
+    this.depth = 0,
+    this.highlightedId,
     super.key,
   });
 
@@ -43,6 +50,23 @@ class CodeLabToolCallTile extends StatefulWidget {
   final CodeLabToolCallRow row;
   final bool expanded;
   final ValueChanged<bool> onToggle;
+
+  /// Раскрыта ли вложенная строка [CodeLabToolCallRow.children] по её id;
+  /// без обработчика вложенные строки свёрнуты. Состояние хранит лента
+  /// (`TranscriptViewCubit`, D47 Т11), а не `State` строки: строки
+  /// виртуализированы.
+  final bool Function(String rowId)? nestedExpanded;
+
+  /// Пользователь раскрыл или свернул вложенную строку [rowId].
+  final void Function(String rowId, bool expanded)? onNestedToggle;
+
+  /// Глубина вложенности: 0 — строка ленты. У вложенных строк текст модели
+  /// показывается с видимыми escape-символами (`escapeForDisplay`).
+  final int depth;
+
+  /// Id цели показа, которая подсвечена сейчас (вложенная строка или блок
+  /// одобрения потомка внутри этой строки); `null` — подсветки нет (D49 Т7).
+  final String? highlightedId;
 
   @override
   State<CodeLabToolCallTile> createState() => _CodeLabToolCallTileState();
@@ -87,13 +111,20 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
                       ? Colors.red
                       : null,
                 ),
-              if (showOutput) ...[
+              if (row.children.isNotEmpty) ...[
                 if (row.secondary != null) const SizedBox(height: 8),
+                _nestedRows(),
+              ],
+              if (showOutput) ...[
+                if (row.secondary != null || row.children.isNotEmpty)
+                  const SizedBox(height: 8),
                 CodeLabText(_outputTail, role: CodeLabTextRole.mono),
               ],
               if (pending != null) ...[
                 if (row.secondary != null || showOutput)
                   const SizedBox(height: 12),
+                if (pending.requesterLine case final line?)
+                  _RequesterHeader(line: line, hint: pending.requesterHint),
                 CodeLabApprovalPrompt(
                   reason: pending.reason,
                   diffSummary: pending.diffSummary,
@@ -110,13 +141,13 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
           )
         : null;
 
-    return CodeLabExpanderCard(
+    final card = CodeLabExpanderCard(
       headerKey: CodeLabToolCallTile.headerKey,
       expanded: widget.expanded,
       onToggle: canToggle ? widget.onToggle : null,
-      leading: _StatusGlyph(row: row),
+      leading: StatusGlyph(row: row),
       title: pending == null
-          ? _title(context, row.detail, maxLines: 1)
+          ? _withProgress(context, _title(context, row.detail, maxLines: 1))
           : _pendingTitle(context, pending.command ?? row.detail),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -128,11 +159,16 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
             ),
             const SizedBox(width: 6),
           ],
-          CodeLabBadge(
-            key: CodeLabToolCallTile.statusTagKey,
-            label: statusLabel,
-            tone: statusTone,
-          ),
+          if (row.subagent?.stats case final stats?) ...[
+            CodeLabText(stats, role: CodeLabTextRole.mono),
+            const SizedBox(width: 12),
+          ],
+          if (!_hidesStatusTag(pending != null))
+            CodeLabBadge(
+              key: CodeLabToolCallTile.statusTagKey,
+              label: statusLabel,
+              tone: statusTone,
+            ),
         ],
       ),
       // Полоса решения — узкая полоса внизу строки под тонкой линией тела
@@ -141,6 +177,122 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
           ? const EdgeInsets.all(4)
           : const EdgeInsets.all(16),
       body: body,
+    );
+    if (row.childApprovals.isEmpty) {
+      return card;
+    }
+    // Блоки потомков стоят под строкой корня и не зависят от её раскрытия:
+    // дерево предков не раскрывается (D27 п. 4, D43 п. 2).
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        card,
+        for (final child in row.childApprovals)
+          _targetOf(child.targetId, _ChildApprovalBlock(approval: child)),
+      ],
+    );
+  }
+
+  /// Рамка цели показа вокруг блока с id; без id блок не адресуется.
+  Widget _targetOf(String? id, Widget child) => id == null
+      ? child
+      : TranscriptTargetFrame(
+          id: id,
+          highlighted: widget.highlightedId == id,
+          child: child,
+        );
+
+  /// Вложенные строки потомков с отступом по глубине: те же компактные
+  /// строки, а операции со списком задач — тихими строками без рамки и тега
+  /// (D24, D48 п. 3). Вложенный `agent` раскрывается по своему id.
+  Widget _nestedRows() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final child in row.children)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: switch (child) {
+                final CodeLabToolCallRow call => _targetOf(
+                  call.id,
+                  CodeLabToolCallTile(
+                    key: ValueKey('nested-${call.id}'),
+                    row: call,
+                    expanded: widget.nestedExpanded?.call(call.id) ?? false,
+                    onToggle: (expanded) =>
+                        widget.onNestedToggle?.call(call.id, expanded),
+                    nestedExpanded: widget.nestedExpanded,
+                    onNestedToggle: widget.onNestedToggle,
+                    depth: widget.depth + 1,
+                    highlightedId: widget.highlightedId,
+                  ),
+                ),
+                CodeLabTaskOpsRow(:final text) => CodeLabTaskOpsLine(
+                  text: text,
+                ),
+                _ => const SizedBox.shrink(),
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Свёрнутый успешный `agent` не несёт тега «Done»: статус передаёт глиф
+  /// (D27, spec agent-workbench-ui «Завершённый субагент свёрнут»).
+  /// «Failed», «Cancelled» и «Running» остаются; ждущий одобрения — тоже.
+  bool _hidesStatusTag(bool pending) =>
+      row.subagent != null &&
+      !pending &&
+      !widget.expanded &&
+      row.status == CodeLabToolCallStatus.succeeded;
+
+  /// Что стоит под заголовком свёрнутой строки работающего `agent`: хвост из
+  /// трёх последних вызовов поддерева и «+N more tool calls» (D25, Q15), а
+  /// клиенту без дерева — последняя строка прогресса (D27 п. 3).
+  Widget _withProgress(BuildContext context, Widget title) {
+    if (row.status != CodeLabToolCallStatus.running || widget.expanded) {
+      return title;
+    }
+    final subagent = row.subagent;
+    if (subagent != null && subagent.tail.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          title,
+          const SizedBox(height: 4),
+          for (final item in subagent.tail)
+            switch (item) {
+              final CodeLabToolCallRow call => TailLine(
+                row: call,
+                title: TailLine.titleOf(context, call),
+              ),
+              CodeLabTaskOpsRow(:final text) => CodeLabTaskOpsLine(text: text),
+              _ => const SizedBox.shrink(),
+            },
+          if (subagent.tailMore > 0)
+            Padding(
+              padding: const EdgeInsets.only(left: 24, top: 2),
+              child: CodeLabText(
+                '+${subagent.tailMore} more tool calls',
+                role: CodeLabTextRole.caption,
+              ),
+            ),
+        ],
+      );
+    }
+    final progress = subagent?.progress;
+    if (progress == null || progress.isEmpty) {
+      return title;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        title,
+        CodeLabText(progress, role: CodeLabTextRole.mono, maxLines: 1),
+      ],
     );
   }
 
@@ -157,22 +309,7 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
   }
 
   TextSpan _titleSpan(BuildContext context, String detail) {
-    final muted = FluentTheme.of(context).resources.textFillColorSecondary;
-    return TextSpan(
-      children: [
-        TextSpan(text: row.label),
-        if (detail.isNotEmpty) ...[
-          const TextSpan(text: ' '),
-          TextSpan(
-            text: detail,
-            style: CodeLabText.styleOf(
-              context,
-              CodeLabTextRole.mono,
-            )?.copyWith(color: muted),
-          ),
-        ],
-      ],
-    );
+    return rowTitleSpan(context, row, detail, escape: widget.depth > 0);
   }
 
   /// Шапка ждущего вызова: команда целиком, до [pendingDetailLines] строк;
@@ -228,6 +365,11 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
   }
 
   (String, CodeLabTone) get _statusTag {
+    // Вложенный вызов ждёт решения в блоке под строкой корня: тег говорит
+    // об ожидании, а кнопок у строки нет (D27 п. 4).
+    if (row.awaitsRootDecision) {
+      return ('Awaiting approval', CodeLabTone.accent);
+    }
     return switch (row.status) {
       CodeLabToolCallStatus.queued => ('Queued', CodeLabTone.neutral),
       CodeLabToolCallStatus.running => ('Running', CodeLabTone.accent),
@@ -256,46 +398,145 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
       };
 }
 
-/// Значок статуса вызова; смысл дублируется тегом, цвет не единственный
-/// носитель (§12.3, A5).
-class _StatusGlyph extends StatelessWidget {
-  const _StatusGlyph({required this.row});
+/// Строка пути спрашивающего субагента над панелью решения.
+///
+/// Почему: путь «review › explore wants to run» говорит, чей это запрос;
+/// заголовок задачи — в подсказке и строкой под путём (D27 п. 4).
+/// Для чего: показать готовые строки kit; виджет путь не строит.
+class _RequesterHeader extends StatelessWidget {
+  const _RequesterHeader({required this.line, this.hint});
 
-  final CodeLabToolCallRow row;
+  final String line;
+  final String? hint;
 
   @override
   Widget build(BuildContext context) {
-    if (row.awaitsApproval) {
-      return const CodeLabIcon(
-        FluentIcons.permissions,
-        tone: CodeLabTone.accent,
-        size: 16,
-      );
-    }
-    return switch (row.status) {
-      CodeLabToolCallStatus.running => const SizedBox.square(
-        dimension: 16,
-        child: ProgressRing(strokeWidth: 2),
+    final text = CodeLabText(line, role: CodeLabTextRole.mono);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (hint case final hint? when hint.isNotEmpty) ...[
+            Tooltip(message: hint, child: text),
+            CodeLabText(hint),
+          ] else
+            text,
+        ],
       ),
-      CodeLabToolCallStatus.queued => const CodeLabIcon(
-        FluentIcons.circle_ring,
-        size: 16,
+    );
+  }
+}
+
+/// Блок одобрения потомка под строкой `agent` корня: путь, команда и панель
+/// решения, а после решения — тег исхода (spec agent-workbench-ui «Запрос
+/// одобрения от субагента под строкой корня»). Решение уходит тем же
+/// обработчиком запроса, что и у обычного одобрения (PERM-4).
+class _ChildApprovalBlock extends StatelessWidget {
+  const _ChildApprovalBlock({required this.approval});
+
+  final CodeLabTranscriptApproval approval;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (approval) {
+      CodeLabTranscriptApprovalPending() => _pending(
+        context,
+        approval as CodeLabTranscriptApprovalPending,
       ),
-      CodeLabToolCallStatus.succeeded => const CodeLabIcon(
-        FluentIcons.check_mark,
-        tone: CodeLabTone.success,
-        size: 16,
-      ),
-      CodeLabToolCallStatus.failed => const CodeLabIcon(
-        FluentIcons.error_badge,
-        tone: CodeLabTone.danger,
-        size: 16,
-      ),
-      CodeLabToolCallStatus.cancelled => const CodeLabIcon(
-        FluentIcons.cancel,
-        tone: CodeLabTone.warning,
-        size: 16,
-      ),
+      CodeLabTranscriptApprovalResolved(
+        :final label,
+        :final outcome,
+        :final requesterLine,
+      ) =>
+        Padding(
+          padding: const EdgeInsets.fromLTRB(32, 4, 0, 4),
+          child: Row(
+            children: [
+              CodeLabBadge(label: label, tone: _ToolCallTones.outcome(outcome)),
+              if (requesterLine != null) ...[
+                const SizedBox(width: 8),
+                CodeLabText(requesterLine, role: CodeLabTextRole.mono),
+              ],
+            ],
+          ),
+        ),
     };
+  }
+
+  Widget _pending(BuildContext context, CodeLabTranscriptApprovalPending p) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 4, 0, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (p.requesterLine case final line?)
+            _RequesterHeader(line: line, hint: p.requesterHint),
+          if (p.callTitle case final title? when title.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              // Заголовок пишет модель: управляющие и bidi-символы показываем
+              // escape-ами, чтобы они не переставили видимый путь. Без
+              // maxLines: длинный путь переносится, а не обрезается.
+              child: CodeLabText(
+                escapeForDisplay(title),
+                role: CodeLabTextRole.mono,
+              ),
+            ),
+          if (p.command case final command?)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              // Команду пишет модель; когда заголовок скрыт как её дубль,
+              // это единственная копия, поэтому bidi/управляющие символы
+              // экранируем (без обрезки: решение принимают по полной
+              // команде). D44 п. 4.
+              child: CodeLabText(
+                escapeForDisplay(command),
+                role: CodeLabTextRole.mono,
+              ),
+            ),
+          CodeLabApprovalPrompt(
+            reason: p.reason,
+            diffSummary: p.diffSummary,
+            rawInput: p.rawInput,
+            options: p.options,
+            enabled: p.enabled,
+            approveOptionId: p.approveOptionId,
+            rejectOptionId: p.rejectOptionId,
+            shortcutsEnabled: p.shortcutsEnabled,
+            onOptionSelected: p.onOptionSelected,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Тоны тега исхода — те же, что у тега строки вызова.
+abstract final class _ToolCallTones {
+  static CodeLabTone outcome(CodeLabApprovalOutcome outcome) =>
+      _CodeLabToolCallTileState._outcomeTone(outcome);
+}
+
+/// Тихая строка операций со списком задач (D27): иконка списка и приглушённый
+/// текст, без рамки, тега статуса и панели вывода. Рисуется и в ленте, и
+/// внутри раскрытого `agent` (D48 п. 3); [text] целиком собирает kit.
+class CodeLabTaskOpsLine extends StatelessWidget {
+  const CodeLabTaskOpsLine({required this.text, super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          const CodeLabIcon(FluentIcons.bulleted_list, size: 14),
+          const SizedBox(width: 8),
+          Expanded(child: CodeLabText(text, role: CodeLabTextRole.caption)),
+        ],
+      ),
+    );
   }
 }

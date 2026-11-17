@@ -23,6 +23,49 @@ const _rejectOnce = PermissionOption(
   kind: PermissionOptionKind.rejectOnce,
 );
 
+// Три варианта, которые агент присылает для смены режима (switch_mode).
+const _autoAccept = PermissionOption(
+  optionId: PermissionOptionId('auto-accept'),
+  name: 'Yes, and auto-accept all actions',
+  kind: PermissionOptionKind.allowAlways,
+);
+const _manualAccept = PermissionOption(
+  optionId: PermissionOptionId('manual-accept'),
+  name: 'Yes, and manually accept actions',
+  kind: PermissionOptionKind.allowOnce,
+);
+const _stay = PermissionOption(
+  optionId: PermissionOptionId('stay'),
+  name: 'No, stay in architect mode',
+  kind: PermissionOptionKind.rejectOnce,
+);
+
+/// Строка ленты для вызова заданного вида с запросом разрешения и риском
+/// `unknown` (change `tolerate-unknown-tool-kind`, D5).
+CodeLabToolCallRow _rowOf(ToolKind kind, String title) {
+  final rows = transcriptRowsOf(
+    [
+      TranscriptItem.toolCall(
+        id: 't1/tool-call-1',
+        toolCallId: const ToolCallId('call-1'),
+        title: title,
+        details: ToolCallView(kind: kind, status: ToolCallStatusView.queued),
+        approval: const PendingApprovalView(
+          approvalId: ApprovalRequestId('permission-1'),
+          sessionId: SessionId('session-1'),
+          risk: ApprovalRiskLevel.unknown,
+          options: [_autoAccept, _manualAccept, _stay],
+          focused: true,
+        ),
+      ),
+    ],
+    cwd: '/work',
+    approvalsEnabled: true,
+    onApprovalSelected: (_, _) {},
+  );
+  return rows.single as CodeLabToolCallRow;
+}
+
 void main() {
   test('connection views map to the connection status badge', () {
     expect(
@@ -235,6 +278,66 @@ void main() {
       );
     });
 
+    // Задача 6.1c-3 change `add-provider-setup-ui` (Q32; design.md D27):
+    // неизвестный уровень риска клиента — тег «Unknown risk» в ленте.
+    test('an unknown risk level maps to the unknown tag, not to read-only', () {
+      const pending = PendingApprovalView(
+        approvalId: ApprovalRequestId('permission-1'),
+        sessionId: SessionId('session-1'),
+        risk: ApprovalRiskLevel.unknown,
+        options: [_allowOnce, _rejectOnce],
+        focused: true,
+      );
+
+      final entries = transcriptRowsOf(
+        const [
+          TranscriptItem.toolCall(
+            id: 't1/tool-call-1',
+            toolCallId: ToolCallId('call-1'),
+            title: 'Query',
+            details: ToolCallView(
+              kind: ToolKind.other,
+              status: ToolCallStatusView.queued,
+            ),
+            approval: pending,
+          ),
+        ],
+        cwd: '/work',
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+      );
+
+      final approval =
+          entries.single.approval! as CodeLabTranscriptApprovalPending;
+      expect(approval.risk, CodeLabApprovalRisk.unknown);
+    });
+
+    // Задача 6.1d-2 (Q33; D27): заметка исхода хода — строка ленты по образцу
+    // `emptyTurn`, информационная.
+    test('a turn-stopped notice becomes an info notice row', () {
+      final rows = transcriptRowsOf(
+        const [
+          TranscriptItem.notice(
+            id: 't1/stopped',
+            kind: NoticeKind.turnStopped,
+            text: 'The model reached its token limit, so the turn ended.',
+          ),
+        ],
+        cwd: '/work',
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+      );
+
+      final notice = rows.single as CodeLabNoticeRow;
+      expect(rows.single.kind, 'notice');
+      expect(notice.id, 'notice-1');
+      expect(notice.severity, CodeLabNoticeSeverity.info);
+      expect(
+        notice.body,
+        'The model reached its token limit, so the turn ended.',
+      );
+    });
+
     test('a pending approval is interactive and answers through the '
         'callback with its own identity', () {
       const pending = PendingApprovalView(
@@ -330,6 +433,159 @@ void main() {
         rows.first.body,
         'The agent cannot restore sessions after reconnecting.',
       );
+    });
+
+    // Ответ агента — одна строка с текстом как есть; разбор markdown и
+    // огороженного блока делает `codelab_ui` (change `add-desktop-markdown`,
+    // D3, D11). Маппер `unfenceSingleBlock` не вызывает: функция остаётся
+    // только у панели «Agent status» (SETUP-11).
+    group('agent reply is one row with the text as is (D3, D11)', () {
+      List<CodeLabTranscriptRow> rowsOf(
+        String text, {
+        bool isRunning = false,
+        List<TranscriptItem> before = const [],
+      }) => transcriptRowsOf(
+        [...before, TranscriptItem.agentText(id: 'a1', text: text)],
+        cwd: '/work',
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+        isRunning: isRunning,
+      );
+
+      test('a /mcp list reply keeps its text and fences for the kit '
+          '(scenario «Ответ /mcp list в ленте»)', () {
+        const text = '```text\nMCP servers (1)\n  a  ok\n```';
+        final row = rowsOf(text).single as CodeLabAgentTextRow;
+
+        expect(row.id, 'agent-1');
+        expect(row.text, text);
+        expect(row.streaming, isFalse);
+      });
+
+      test('prose around a fenced block and two blocks stay one row with '
+          'the original text (scenario «Текст вокруг блока»)', () {
+        const around = 'Here:\n\n```text\nbody\n```\n\nDone.';
+        const two = '```text\na\n```\n\n```text\nb\n```';
+
+        expect((rowsOf(around).single as CodeLabAgentTextRow).text, around);
+        expect((rowsOf(two).single as CodeLabAgentTextRow).text, two);
+      });
+
+      test('an opening fence of a running turn stays in the text and the '
+          'row is streaming (scenario «Открывающая строка во время хода»)', () {
+        const text = '```text\nMCP servers (1)';
+        final row = rowsOf(text, isRunning: true).single as CodeLabAgentTextRow;
+
+        expect(row.text, text);
+        expect(row.streaming, isTrue);
+      });
+
+      test('prose stays as is', () {
+        final row = rowsOf('Hello there.').single as CodeLabAgentTextRow;
+
+        expect(row.text, 'Hello there.');
+        expect(row.streaming, isFalse);
+      });
+
+      test('only the last item of a running turn is streaming', () {
+        final rows = transcriptRowsOf(
+          const [
+            TranscriptItem.user(id: 'u1', text: 'go'),
+            TranscriptItem.agentText(id: 'a1', text: 'first'),
+            TranscriptItem.toolCall(
+              id: 't1/tool-call-1',
+              toolCallId: ToolCallId('call-1'),
+              title: 'Read',
+              details: ToolCallView(
+                kind: ToolKind.read,
+                status: ToolCallStatusView.succeeded,
+              ),
+            ),
+            TranscriptItem.agentText(id: 'a2', text: 'second'),
+          ],
+          cwd: '/work',
+          approvalsEnabled: true,
+          onApprovalSelected: (_, _) {},
+          isRunning: true,
+        );
+
+        final replies = rows.whereType<CodeLabAgentTextRow>().toList();
+        expect(replies.map((row) => row.id), ['agent-2', 'agent-4']);
+        expect(replies.map((row) => row.streaming), [false, true]);
+      });
+
+      test('after the turn ends the last reply stops streaming', () {
+        final row = rowsOf('answer').single as CodeLabAgentTextRow;
+
+        expect(row.streaming, isFalse);
+      });
+    });
+
+    group('one tag for a cancelled call (6.1j-2)', () {
+      CodeLabToolCallRow rowOf(
+        ToolCallStatusView status,
+        ApprovalStateView? approval,
+      ) =>
+          transcriptRowsOf(
+                [
+                  TranscriptItem.toolCall(
+                    id: 't1/tool-call-1',
+                    toolCallId: const ToolCallId('call-1'),
+                    title: 'Clean',
+                    details: ToolCallView(
+                      kind: ToolKind.execute,
+                      status: status,
+                    ),
+                    approval: approval,
+                  ),
+                ],
+                cwd: '/work',
+                approvalsEnabled: true,
+                onApprovalSelected: (_, _) {},
+              ).single
+              as CodeLabToolCallRow;
+
+      ResolvedApprovalView resolved(ApprovalOutcomeView outcome) =>
+          ResolvedApprovalView(label: outcome.name, outcome: outcome);
+
+      test('a cancelled approval on a cancelled call has no outcome tag', () {
+        final row = rowOf(
+          ToolCallStatusView.cancelled,
+          resolved(ApprovalOutcomeView.cancelled),
+        );
+
+        expect(row.status, CodeLabToolCallStatus.cancelled);
+        expect(row.approval, isNull);
+      });
+
+      test('allowed, rejected and unknown outcomes keep their tag', () {
+        for (final outcome in [
+          ApprovalOutcomeView.allowed,
+          ApprovalOutcomeView.rejected,
+          ApprovalOutcomeView.unknown,
+        ]) {
+          final row = rowOf(ToolCallStatusView.cancelled, resolved(outcome));
+
+          expect(
+            (row.approval! as CodeLabTranscriptApprovalResolved).label,
+            outcome.name,
+            reason: outcome.name,
+          );
+        }
+      });
+
+      test('a cancelled approval with a late completed call keeps both', () {
+        final row = rowOf(
+          ToolCallStatusView.succeeded,
+          resolved(ApprovalOutcomeView.cancelled),
+        );
+
+        expect(row.status, CodeLabToolCallStatus.succeeded);
+        expect(
+          (row.approval! as CodeLabTranscriptApprovalResolved).outcome,
+          CodeLabApprovalOutcome.cancelled,
+        );
+      });
     });
 
     test('a resolved approval is a compact label', () {
@@ -440,6 +696,38 @@ void main() {
     );
   });
 
+  // Вызов смены режима и вызова без известного вида в ленте (задача 1.10
+  // change `tolerate-unknown-tool-kind`; agent-workbench-ui «Вызов смены режима
+  // и неизвестного вида в ленте»; design.md D5, D7).
+  group('transcriptRowsOf switch_mode and other calls', () {
+    test('a switch_mode call reads "Mode <title>" with the unknown-risk tag '
+        'and the three agent options', () {
+      final row = _rowOf(ToolKind.switchMode, 'Ready for implementation');
+
+      expect(row.label, 'Mode');
+      expect(row.detail, 'Ready for implementation');
+      final approval = row.approval! as CodeLabTranscriptApprovalPending;
+      expect(approval.risk, CodeLabApprovalRisk.unknown);
+      expect(approval.options.map((option) => option.id), [
+        'auto-accept',
+        'manual-accept',
+        'stay',
+      ]);
+      expect(row.text, isNot(contains('switch_mode')));
+    });
+
+    test('an other call shows its title and the unknown-risk tag', () {
+      final row = _rowOf(ToolKind.other, 'Plan sync');
+
+      expect(row.label, 'Plan sync');
+      expect(
+        (row.approval! as CodeLabTranscriptApprovalPending).risk,
+        CodeLabApprovalRisk.unknown,
+      );
+      expect(row.text, isNot(contains('future_kind')));
+    });
+  });
+
   group('planEntriesOf', () {
     test('an empty plan is null', () {
       expect(planEntriesOf(const []), isNull);
@@ -468,6 +756,55 @@ void main() {
         CodeLabPlanEntryPriority.high,
         CodeLabPlanEntryPriority.medium,
       ]);
+    });
+  });
+
+  group('task list (add-subagents-and-tasks, 1.8)', () {
+    test('plan entries carry task id, owner label and open blockers', () {
+      final plan = planEntriesOf(const [
+        PlanEntryView(
+          content: 'Check callers',
+          status: PlanEntryStatus.inProgress,
+          priority: PlanEntryPriority.medium,
+          taskId: '2',
+          owner: 'sub_a1',
+          ownerLabel: 'explore',
+          blockedBy: ['1'],
+          openBlockers: ['1'],
+        ),
+        PlanEntryView(
+          content: 'Third party',
+          status: PlanEntryStatus.pending,
+          priority: PlanEntryPriority.low,
+        ),
+      ])!;
+
+      expect(plan[0].taskId, '2');
+      expect(plan[0].ownerLabel, 'explore');
+      expect(plan[0].blockedBy, ['1']);
+      expect(plan[1].taskId, isNull);
+      expect(plan[1].ownerLabel, isNull);
+      expect(plan[1].blockedBy, isEmpty);
+    });
+
+    test('TaskOpsItem becomes a quiet CodeLabTaskOpsRow with the kit text', () {
+      final rows = transcriptRowsOf(
+        const [
+          TranscriptItem.taskOps(
+            id: 't1/task-ops-1',
+            added: ['1', '2', '3', '4'],
+          ),
+        ],
+        cwd: '/workspace',
+        approvalsEnabled: true,
+        onApprovalSelected: (_, _) {},
+      );
+
+      expect(rows.single, isA<CodeLabTaskOpsRow>());
+      expect(
+        (rows.single as CodeLabTaskOpsRow).text,
+        'Tasks #1–#4 added to the plan',
+      );
     });
   });
 
@@ -587,6 +924,47 @@ void main() {
       expect(turnStateOf(view(SessionStatusView.idle)), isNull);
       expect(turnStateOf(view(SessionStatusView.detached)), isNull);
       expect(turnStateOf(null), isNull);
+    });
+  });
+
+  // Q23 (require-project-folder): один агент обслуживает сессии разных
+  // папок, поэтому открытые сессии раскладываются по группам с тем же путём.
+  group('sidebarProjectsOf (Q23)', () {
+    CodeLabSessionListItem item(String id, String cwd) =>
+        CodeLabSessionListItem(
+          id: id,
+          title: id,
+          status: CodeLabSessionStatus.running,
+          subtitle: cwd,
+        );
+
+    test('a session of /work/a stays in the group a after the move to '
+        '/work/b; a session without a group is under the selected project', () {
+      final groups = sidebarProjectsOf(
+        selectedProjectPath: '/work/b',
+        sessionFolders: const {
+          'sa': '/work/a',
+          'sb': '/work/b',
+          'sx': '/elsewhere',
+        },
+        sessions: [
+          item('sa', '/work/a'),
+          item('sb', '/work/b'),
+          item('sx', '/elsewhere'),
+        ],
+        recentProjects: const [
+          CodeLabRecentProject(path: '/work/b'),
+          CodeLabRecentProject(path: '/work/a'),
+        ],
+      );
+
+      final selected = groups.first;
+      expect(selected.path, '/work/b');
+      expect([for (final s in selected.sessions) s.id], ['sb', 'sx']);
+      final other = groups.singleWhere((g) => g.path == '/work/a');
+      expect([for (final s in other.sessions) s.id], ['sa']);
+      // Идущая сессия раскрывает свою группу (Q23).
+      expect(other.expanded, isTrue);
     });
   });
 }

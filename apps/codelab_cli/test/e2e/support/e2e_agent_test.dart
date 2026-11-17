@@ -84,6 +84,50 @@ void main() {
     );
   });
 
+  test('embedded: the script, permission mode and models go to the test '
+      'entry point through the environment, the agent is the word '
+      '"embedded"', () async {
+    final agent = E2eCliAgent.fromEnvironment(const {
+      'CODELAB_E2E_AGENT': 'embedded',
+    });
+
+    final permission = await agent.launch(
+      dir,
+      mode: _Mode.withPermissionRequest,
+    );
+    final models = await agent.launch(dir, mode: _Mode.withConfigOptions);
+
+    expect(agent.kind, E2eAgentKind.embedded);
+    expect(permission.agent, 'embedded');
+    expect(
+      permission.environment['CODELAB_E2E_LLM_SCRIPT'],
+      endsWith('llm_scripts/with_permission_request.json'),
+    );
+    expect(permission.environment['CODELAB_E2E_PERMISSION_MODE'], 'standard');
+    expect(
+      permission.environment['CODELAB_E2E_SESSIONS_DIR'],
+      contains(dir.path),
+    );
+    expect(permission.permissionTitle, 'echo hello');
+    expect(
+      models.environment['CODELAB_E2E_MODELS'],
+      'scripted/gpt-5,scripted/gpt-4',
+    );
+    expect(models.models, ['scripted/gpt-5', 'scripted/gpt-4']);
+    expect(agent.needsStoredProfile, isNotNull);
+  });
+
+  test('embedded: a mode without a script is a state error', () async {
+    final agent = E2eCliAgent.fromEnvironment(const {
+      'CODELAB_E2E_AGENT': 'embedded',
+    });
+
+    expect(
+      agent.launch(dir, mode: _Mode.withAvailableCommands),
+      throwsStateError,
+    );
+  });
+
   group('python', () {
     /// `codelab` в своём каталоге `PATH`: печатает [help] на `serve --help`.
     Future<Map<String, String>> fakeCodelab(String help, {int code = 0}) async {
@@ -98,6 +142,34 @@ void main() {
       final agent = E2eCliAgent.fromEnvironment(
         await fakeCodelab('Usage: codelab [options]', code: 64),
       );
+
+      expect(
+        await agent.unavailable(),
+        'Python agent (codelab serve) is not installed',
+      );
+    });
+
+    // Задача 1.9 change `retire-python-agent`, D12: Dart CLI с алиасом на
+    // `serve --help` уходит в `codelab-agent serve --help` — код 64, справка
+    // в stderr, пустой stdout. Признака Python-агента (код 0 и `--stdio` в
+    // stdout) нет. Тест закрепляет зависимость от того, что у
+    // `codelab-agent serve` нет `--help` с кодом 0.
+    test('codelab with the serve alias (codelab-agent help in stderr, '
+        'code 64) is a skip reason', () async {
+      final bin = await Directory('${dir.path}/bin').create();
+      final file = File('${bin.path}/codelab')
+        ..writeAsStringSync(
+          '#!/bin/sh\n'
+          'echo \'codelab: "codelab serve" is deprecated and will be removed '
+          'in a future release; use "codelab-agent serve" instead.\' >&2\n'
+          'echo "Usage: codelab-agent serve [--stdio] [--port <n>]" >&2\n'
+          'exit 64\n',
+        );
+      await Process.run('chmod', ['+x', file.path]);
+      final agent = E2eCliAgent.fromEnvironment({
+        'CODELAB_E2E_AGENT': 'python',
+        'PATH': bin.path,
+      });
 
       expect(
         await agent.unavailable(),

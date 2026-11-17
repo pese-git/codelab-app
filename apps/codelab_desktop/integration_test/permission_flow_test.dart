@@ -4,7 +4,6 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
-import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/inspector_pane.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,33 +12,6 @@ import 'package:integration_test/integration_test.dart';
 import 'support/e2e_agent.dart';
 import '../test/support/transcript_rows.dart';
 
-// See stdio_connect_flow_test.dart for why the connection setup dialog and
-// the connect round trip need this specific choreography.
-Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _closeConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(Button, 'Close'));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _tapConnectAndWaitUntilSettled(
-  WidgetTester tester,
-  CodeLabShellCubit shellCubit,
-) async {
-  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
-  await tester.pump();
-  final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus ==
-          CodeLabConnectionStatus.connecting &&
-      DateTime.now().isBefore(deadline)) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-  await tester.pumpAndSettle();
-}
-
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -47,7 +19,7 @@ void main() {
     'requests permission for a tool call and completes the turn once the '
     'user approves it, against a real stdio process',
     (tester) async {
-      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
 
       final agentDirectory = await Directory.systemTemp.createTemp(
@@ -67,17 +39,7 @@ void main() {
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
 
-      await _openConnectionSetupDialog(tester);
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Command')),
-        launch.command,
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Args')),
-        launch.args,
-      );
-      await _closeConnectionSetupDialog(tester);
-      await _tapConnectAndWaitUntilSettled(tester, shellCubit);
+      await launch.connect(tester, shellCubit);
 
       expect(find.text('Connected'), findsWidgets);
 
@@ -168,6 +130,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(rawInputIn(WorkbenchInspectorPane), findsWidgets);
 
+      // При ширине окна меньше 1280 px (окно e2e на macOS — 800×600) док
+      // выдвигается поверх ленты с затемнением, и клик мимо только закрывает
+      // его (`CodeLabLayoutClass.dockAsColumn`, change
+      // `redesign-workbench-shell`). Пользователь сначала убирает док, поэтому
+      // и тест убирает его до нажатия «Allow»; панель Protocol при этом
+      // остаётся открытой вкладкой.
+      shellCubit.dismissDockOverlay();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.ensureVisible(find.byKey(CodeLabApprovalPrompt.allowKey));
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.byKey(CodeLabApprovalPrompt.allowKey));
       await tester.pump();
 
@@ -179,10 +151,17 @@ void main() {
           DateTime.now().isBefore(turnDeadline)) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      await tester.pumpAndSettle();
+      // Ход проверяется до `pumpAndSettle`: незавершённый ход оставляет
+      // спиннер кнопки отправки, и тест висел бы до общего таймаута вместо
+      // понятного падения здесь.
+      expect(shellCubit.state.isPromptSubmitting, isFalse);
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 100),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 10),
+      );
 
       expect(find.text('approved: allow_once'), findsWidgets);
-      expect(shellCubit.state.isPromptSubmitting, isFalse);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

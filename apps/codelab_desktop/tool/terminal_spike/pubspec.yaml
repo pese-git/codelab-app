@@ -1,0 +1,21 @@
+name: terminal_spike
+description: Спайк 1.1 add-integrated-terminal (D14, D15). Не часть workspace, удаляется в задаче 3.9.
+publish_to: none
+
+environment:
+  sdk: ">=3.11.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  fluent_ui: ^4.0.0
+  pty2: 0.8.1
+  xterm2: 5.4.0
+  xterm2_core: 1.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: any
+  test_api: any

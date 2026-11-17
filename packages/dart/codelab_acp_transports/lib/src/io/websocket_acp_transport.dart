@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:web_socket_channel/io.dart';
@@ -6,6 +7,49 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../acp_transport.dart';
 import '../transport_configs.dart';
+
+/// Проверяет значения заголовков до отправки, не раскрывая их.
+///
+/// Почему: `HttpHeaders.set` при недопустимом символе (например `\n` в токене)
+/// бросает `FormatException`, чей текст содержит само значение заголовка, то
+/// есть секрет попал бы в ошибку и логи.
+///
+/// Для чего: заменить такую ошибку типизированной, где есть только имя
+/// заголовка. Это защита в глубину и она строже `dart:io`: отклоняются код
+/// < 32 (кроме табуляции), 127 и любой код > 127 (только ASCII), чтобы
+/// управляющие и не-ASCII символы не дошли до `dart:io` и его ошибки со
+/// значением.
+void _validateHeaders(Map<String, String> headers) {
+  for (final MapEntry(:key, :value) in headers.entries) {
+    final valid = value.codeUnits.every(
+      (c) => c <= 127 && (c >= 32 || c == 9) && c != 127,
+    );
+    if (key.isEmpty || !valid) {
+      throw AcpTransportException(
+        code: AcpTransportErrorCode.startFailed,
+        message: 'Invalid header value for $key.',
+      );
+    }
+  }
+}
+
+/// Приводит ошибку подключения к исходной, а отказ рукопожатия — к типу.
+///
+/// Почему: `IOWebSocketChannel` оборачивает ошибку в
+/// `WebSocketChannelException`, а `dart:io` кладёт HTTP-статус отказа в
+/// `WebSocketException.httpStatusCode` (Dart >= 3.10); разбирать текст
+/// запрещено (design.md change `add-app-settings-shell`, D12).
+///
+/// Для чего: 401/403 отличается от недоступного агента через
+/// `AcpWebSocketHandshakeRejected(statusCode)`. Токен в такую ошибку не
+/// попадает: берётся только число.
+Object _unwrapConnectError(Object error) {
+  final inner = error is WebSocketChannelException ? error.inner : error;
+  if (inner is WebSocketException && inner.httpStatusCode != null) {
+    return AcpWebSocketHandshakeRejected(inner.httpStatusCode!);
+  }
+  return inner ?? error;
+}
 
 final class WebSocketAcpTransport implements AcpTransport {
   WebSocketAcpTransport(this.config);
@@ -45,24 +89,52 @@ final class WebSocketAcpTransport implements AcpTransport {
     _setState(AcpTransportState.connecting);
 
     try {
+      _validateHeaders(config.effectiveHeaders);
       final channel = IOWebSocketChannel.connect(
         config.uri,
         headers: config.effectiveHeaders,
       );
+      try {
+        await channel.ready;
+      } on Object catch (error) {
+        // `FormatException` из заголовков несёт их значение: не передаём её.
+        if (error is WebSocketChannelException &&
+            error.inner is FormatException) {
+          throw const AcpTransportException(
+            code: AcpTransportErrorCode.startFailed,
+            message: 'Invalid WebSocket handshake request.',
+          );
+        }
+        throw _unwrapConnectError(error);
+      }
+      if (_isClosed) {
+        // close() вызван во время рукопожатия: сокет открылся уже после
+        // него, поэтому закрываем его здесь, иначе он повиснет.
+        unawaited(channel.sink.close().catchError((Object _) {}));
+        return;
+      }
       _channel = channel;
       _listenToChannel(channel);
-      await channel.ready;
-      _setState(AcpTransportState.connected);
+      // Подписка после `ready`: при отказе рукопожатия поток канала тоже
+      // отдаёт ошибку, и подписка раньше дала бы второй сбой `receiveFailed`.
+      // Сервер мог закрыть сокет до этой строки: тогда `_handleDone` уже
+      // перевёл транспорт в failed, затирать его connected нельзя.
+      if (_state == AcpTransportState.connecting) {
+        _setState(AcpTransportState.connected);
+      }
     } on Object catch (error, stackTrace) {
       _fail(
-        AcpTransportException(
-          code: AcpTransportErrorCode.startFailed,
-          message: 'Failed to connect WebSocket ACP agent.',
-          cause: error,
-          stackTrace: stackTrace,
-        ),
+        error is AcpTransportException
+            ? error
+            : AcpTransportException(
+                code: AcpTransportErrorCode.startFailed,
+                message: 'Failed to connect WebSocket ACP agent.',
+                cause: error,
+                stackTrace: stackTrace,
+              ),
       );
-      rethrow;
+      if (error is AcpTransportException) rethrow;
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 

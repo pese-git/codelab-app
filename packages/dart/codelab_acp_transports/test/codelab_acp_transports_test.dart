@@ -16,10 +16,13 @@ void main() {
     expect(acpProtocolPackageName, 'codelab_acp_protocol');
   });
 
-  test('exports editable Codelab Agent stdio profile', () {
-    expect(codelabAgentStdioProfile.name, 'Codelab Agent');
+  // Сценарий «Описание указывает на Dart-агента» (agent-transports,
+  // change switch-default-agent-to-dart, D10): после переключения stdio-описание
+  // запускает `codelab-agent serve --stdio`, а не Python-агента `codelab serve`.
+  test('exports editable codelab-agent stdio profile', () {
+    expect(codelabAgentStdioProfile.name, 'codelab-agent (stdio)');
     expect(codelabAgentStdioProfile.type, 'custom');
-    expect(codelabAgentStdioProfile.command, 'codelab');
+    expect(codelabAgentStdioProfile.command, 'codelab-agent');
     expect(codelabAgentStdioProfile.args, ['serve', '--stdio']);
     expect(codelabAgentStdioProfile.env, {'CODELAB_LOG_LEVEL': 'DEBUG'});
     expect(codelabAgentStdioProfile.cwd, isNull);
@@ -30,7 +33,7 @@ void main() {
       env: {...codelabAgentStdioProfile.env, 'CODELAB_AGENT_PROFILE': 'local'},
     );
 
-    expect(edited.name, 'Codelab Agent');
+    expect(edited.name, 'codelab-agent (stdio)');
     expect(edited.type, 'custom');
     expect(edited.command, '/opt/homebrew/bin/codelab');
     expect(edited.args, ['serve', '--stdio']);
@@ -41,11 +44,22 @@ void main() {
     });
   });
 
-  test('Codelab Agent profile creates stdio transport config', () {
+  // Сценарий «Нет умолчаний Python-агента» (agent-transports, D10): команда
+  // `codelab` после переключения принадлежит терминальному клиенту, поэтому
+  // описание не должно сочетать её с `serve`.
+  test('stdio profile never defaults to the Python agent codelab serve', () {
+    expect(
+      codelabAgentStdioProfile.command == 'codelab' &&
+          codelabAgentStdioProfile.args.contains('serve'),
+      isFalse,
+    );
+  });
+
+  test('codelab-agent profile creates stdio transport config', () {
     expect(
       codelabAgentStdioProfile.toTransportConfig(),
       const StdioAcpTransportConfig(
-        command: 'codelab',
+        command: 'codelab-agent',
         args: ['serve', '--stdio'],
         env: {'CODELAB_LOG_LEVEL': 'DEBUG'},
       ),

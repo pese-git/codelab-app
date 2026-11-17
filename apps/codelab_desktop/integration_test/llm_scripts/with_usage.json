@@ -1,0 +1,58 @@
+{
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 198000,
+      "cost": {
+        "input": 1,
+        "output": 12,
+        "cacheRead": 0.05,
+        "cacheWrite": 0.625
+      }
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "first"
+          }
+        },
+        "reply": [
+          {
+            "text": "First answer."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 16000,
+          "output": 2000,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        }
+      },
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "second"
+          }
+        },
+        "reply": [
+          {
+            "text": "Second answer."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 20000,
+          "output": 1500,
+          "cacheRead": 140000,
+          "cacheWrite": 8000,
+          "reasoning": 300
+        }
+      }
+    ]
+  }
+}

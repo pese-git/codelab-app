@@ -83,6 +83,35 @@ void main() {
       expect(resolver.opened, isEmpty);
     });
 
+    test('an embedded profile without an embedded resolver fails as an '
+        'unsupported profile (acp-client-kit, D7)', () async {
+      final workspace = workspaceWith([
+        ConfigTransportResolver(
+          stdio: (_) => FakeAcpTransport(),
+          webSocket: (_) => FakeAcpTransport(),
+        ),
+      ]);
+      const profile = ConnectionProfile.embedded(
+        id: 'embedded',
+        label: 'Embedded agent',
+        hostProfile: 'embedded-cli',
+      );
+
+      await expectLater(
+        workspace.connect(profile, projectDirectory: '/work'),
+        throwsA(isA<UnsupportedConnectionProfileException>()),
+      );
+
+      expect(
+        workspace.current.connection,
+        isA<ConnectionFailed>().having(
+          (failed) => failed.message,
+          'message',
+          contains('No transport resolver supports'),
+        ),
+      );
+    });
+
     test('a transport that cannot start leaves ConnectionFailed and '
         'rethrows', () async {
       final workspace = workspaceWith([

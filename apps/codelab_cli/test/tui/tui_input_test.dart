@@ -49,6 +49,7 @@ void main() {
       ('e', Key.ctrlE),
       ('l', Key.ctrlL),
       ('u', Key.ctrlU),
+      ('t', Key.ctrlT),
     ]) {
       expect(
         key(_press(tea.KeyCode.rune, text: letter, mods: {tea.KeyMod.ctrl})),

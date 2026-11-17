@@ -17,7 +17,10 @@ final class AgentProcess {
     _process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .listen(_stdout.add, onDone: _stdout.close);
+        .listen((line) {
+          _stdoutLog.writeln(line);
+          _stdout.add(line);
+        }, onDone: _stdout.close);
     _process.stderr.transform(utf8.decoder).listen(_stderr.write);
   }
 
@@ -25,6 +28,7 @@ final class AgentProcess {
   final _stdout = StreamController<String>();
   late final StreamIterator<String> _lines = StreamIterator(_stdout.stream);
   final _stderr = StringBuffer();
+  final _stdoutLog = StringBuffer();
 
   static Future<String>? _kernel;
 
@@ -59,6 +63,10 @@ final class AgentProcess {
   Future<int> get exitCode => _process.exitCode;
 
   String get stderrText => _stderr.toString();
+
+  /// Все строки stdout (кадры ACP), пришедшие к этому моменту, в том числе
+  /// уже прочитанные [nextStdoutLine]: тест проверяет, что в них нет секретов.
+  String get stdoutText => _stdoutLog.toString();
 
   void sendLine(String line) => _process.stdin.writeln(line);
 
@@ -118,22 +126,56 @@ final class AgentProcess {
     await exitCode;
   }
 
-  static Future<String> _compile() async {
-    final dir = await Directory.systemTemp.createTemp('codelab_agent_kernel_');
-    final output = '${dir.path}/codelab_agent.dill';
-    final result = await Process.run(dartExecutable(), [
+  static Future<String> _compile() => _compileTestKernel(
+    'codelab_agent.dill',
+    (output) => Process.run(dartExecutable(), [
       'compile',
       'kernel',
       'bin/codelab_agent.dart',
       '-o',
       output,
-    ], workingDirectory: appDirectory);
+    ], workingDirectory: appDirectory),
+  );
+}
+
+/// Собирает kernel бинаря в постоянный кэш приложения.
+///
+/// Почему: раньше каждый тестовый изолят (`dart test` запускает файл в своём
+/// изоляте, статический `Future` живёт в нём) компилировал `.dill` в новый
+/// `Directory.systemTemp.createTemp` и не удалял его — прогоны оставляли
+/// десятки каталогов по ~24 МБ в `$TMPDIR`. Удалять в `tearDownAll` нельзя:
+/// помощник вызывается из тестов, а хука «изолят завершается» в Dart нет.
+/// Та же схема — `compileTestKernel` в `apps/codelab_cli/test/support/
+/// cli_process.dart`; тесты разных пакетов друг друга не импортируют.
+///
+/// Для чего: `.dill` лежит по постоянному пути
+/// `<app>/.dart_tool/codelab_test_kernels/<name>`. Компиляция идёт во
+/// временный подкаталог кэша, затем `rename` атомарно заменяет файл:
+/// параллельные изоляты и процессы ничего не удаляют друг у друга, а
+/// процесс, уже запустивший старый `.dill`, держит его inode. Каждый изолят
+/// компилирует сам, поэтому устаревший файл после правки кода не
+/// используется. Временный подкаталог удаляется всегда.
+///
+/// Как использовать: [build] пишет `.dill` в переданный путь; ненулевой код
+/// компиляции даёт [StateError].
+Future<String> _compileTestKernel(
+  String name,
+  Future<ProcessResult> Function(String output) build,
+) async {
+  final cache = Directory('$appDirectory/.dart_tool/codelab_test_kernels');
+  await cache.create(recursive: true);
+  final work = await cache.createTemp('$name.');
+  try {
+    final output = '${work.path}/$name';
+    final result = await build(output);
     if (result.exitCode != 0) {
       throw StateError(
         'dart compile kernel failed:\n${result.stdout}\n${result.stderr}',
       );
     }
-    return output;
+    return (await File(output).rename('${cache.path}/$name')).path;
+  } finally {
+    await work.delete(recursive: true);
   }
 }
 

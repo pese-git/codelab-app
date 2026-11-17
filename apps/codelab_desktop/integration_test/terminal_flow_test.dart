@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
-import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -11,33 +10,6 @@ import 'package:integration_test/integration_test.dart';
 
 import 'support/e2e_agent.dart';
 
-// See stdio_connect_flow_test.dart for why the connection setup dialog and
-// the connect round trip need this specific choreography.
-Future<void> _openConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _closeConnectionSetupDialog(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(Button, 'Close'));
-  await tester.pumpAndSettle();
-}
-
-Future<void> _tapConnectAndWaitUntilSettled(
-  WidgetTester tester,
-  CodeLabShellCubit shellCubit,
-) async {
-  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
-  await tester.pump();
-  final deadline = DateTime.now().add(const Duration(seconds: 10));
-  while (shellCubit.state.connectionStatus ==
-          CodeLabConnectionStatus.connecting &&
-      DateTime.now().isBefore(deadline)) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-  await tester.pumpAndSettle();
-}
-
 /// Connects the real app to a real stdio agent of [mode] and creates a
 /// session — shared choreography for all tests below.
 Future<CodeLabShellCubit> _connectAndCreateSession(
@@ -45,7 +17,7 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
   required CodelabCompatibleStdioAgentMode mode,
   required Directory agentDirectory,
 }) async {
-  await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+  await tester.pumpWidget(E2eAgent.current.bootstrap());
   await tester.pumpAndSettle();
 
   final launch = await E2eAgent.current.launch(agentDirectory, mode: mode);
@@ -54,17 +26,7 @@ Future<CodeLabShellCubit> _connectAndCreateSession(
     tester.element(find.byType(CodeLabApp)),
   ).shellCubit;
 
-  await _openConnectionSetupDialog(tester);
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Command')),
-    launch.command,
-  );
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Args')),
-    launch.args,
-  );
-  await _closeConnectionSetupDialog(tester);
-  await _tapConnectAndWaitUntilSettled(tester, shellCubit);
+  await launch.connect(tester, shellCubit);
 
   expect(find.text('Connected'), findsWidgets);
 
@@ -102,7 +64,9 @@ void main() {
 
   testWidgets(
     'terminal/create runs a real command and the agent observes its real '
-    'output and exit code',
+    'output and exit code'
+    '${E2eAgent.current.skipNote}',
+    skip: E2eAgent.current.skipFsAndTerminal,
     (tester) async {
       final agentDirectory = await Directory.systemTemp.createTemp(
         'codelab_app_terminal_e2e_',
@@ -140,7 +104,9 @@ void main() {
 
   testWidgets(
     'terminal/create with a cwd outside the working directory is rejected '
-    'before starting a process',
+    'before starting a process'
+    '${E2eAgent.current.skipNote}',
+    skip: E2eAgent.current.skipFsAndTerminal,
     (tester) async {
       final agentDirectory = await Directory.systemTemp.createTemp(
         'codelab_app_terminal_e2e_',
@@ -171,36 +137,42 @@ void main() {
     tags: scriptedOnly,
   );
 
-  testWidgets('terminal/kill terminates a real long-running process without '
-      'releasing its terminalId', (tester) async {
-    final agentDirectory = await Directory.systemTemp.createTemp(
-      'codelab_app_terminal_e2e_',
-    );
-    addTearDown(() async {
-      if (await agentDirectory.exists()) {
-        await agentDirectory.delete(recursive: true);
-      }
-    });
+  testWidgets(
+    'terminal/kill terminates a real long-running process without '
+    'releasing its terminalId'
+    '${E2eAgent.current.skipNote}',
+    (tester) async {
+      final agentDirectory = await Directory.systemTemp.createTemp(
+        'codelab_app_terminal_e2e_',
+      );
+      addTearDown(() async {
+        if (await agentDirectory.exists()) {
+          await agentDirectory.delete(recursive: true);
+        }
+      });
 
-    final shellCubit = await _connectAndCreateSession(
-      tester,
-      mode: CodelabCompatibleStdioAgentMode.withTerminalKill,
-      agentDirectory: agentDirectory,
-    );
+      final shellCubit = await _connectAndCreateSession(
+        tester,
+        mode: CodelabCompatibleStdioAgentMode.withTerminalKill,
+        agentDirectory: agentDirectory,
+      );
 
-    await _sendPromptAndWaitForTurn(tester, shellCubit);
+      await _sendPromptAndWaitForTurn(tester, shellCubit);
 
-    // The agent started a real `sleep 30`, killed it via terminal/kill,
-    // then successfully called terminal/output with the SAME terminalId
-    // — proving the real IoTerminalProcessRunner did not release it, and
-    // that the real OS process was actually terminated (signal SIGKILL/
-    // SIGTERM shows up in the reported exit status).
-    expect(find.textContaining('terminal output:'), findsWidgets);
-    expect(find.textContaining('SIGTERM'), findsWidgets);
-    expect(shellCubit.state.isPromptSubmitting, isFalse);
+      // The agent started a real `sleep 30`, killed it via terminal/kill,
+      // then successfully called terminal/output with the SAME terminalId
+      // — proving the real IoTerminalProcessRunner did not release it, and
+      // that the real OS process was actually terminated (signal SIGKILL/
+      // SIGTERM shows up in the reported exit status).
+      expect(find.textContaining('terminal output:'), findsWidgets);
+      expect(find.textContaining('SIGTERM'), findsWidgets);
+      expect(shellCubit.state.isPromptSubmitting, isFalse);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpAndSettle();
-    await closeCodeLabRootScope();
-  }, tags: scriptedOnly);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await closeCodeLabRootScope();
+    },
+    tags: scriptedOnly,
+    skip: E2eAgent.current.skipFsAndTerminal,
+  );
 }

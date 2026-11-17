@@ -66,6 +66,32 @@ agent:
     timeout: const Timeout(Duration(seconds: 90)),
   );
 
+  test('config check: secrets.backend: keychain gives code 1 and the problem, '
+      'no transport', () async {
+    // agent-secrets «keychain ещё не поддерживается»: `config check` — код 1.
+    Directory('${temp.path}/home').createSync();
+    File(
+      '${temp.path}/home/config.yaml',
+    ).writeAsStringSync('secrets:\n  backend: keychain\n');
+
+    final (code, agent) = await run(['config', 'check']);
+
+    expect(code, 1, reason: agent.stderrText);
+    final out = <String>[];
+    String? line;
+    while ((line = await agent.nextStdoutLine()) != null) {
+      out.add(line!);
+    }
+    expect(
+      out.join('\n'),
+      contains(
+        'secrets.backend: keychain is not supported yet '
+        '(supported: auto, env, file)',
+      ),
+    );
+    expect(out.last, isNot('Config: valid'));
+  }, timeout: const Timeout(Duration(seconds: 90)));
+
   test('config check: a typo gives code 1 and the position', () async {
     File('$project/.codelab/config.yaml').writeAsStringSync('budgett: {}\n');
 
@@ -150,6 +176,36 @@ agent:
     timeout: const Timeout(Duration(seconds: 90)),
   );
 
+  // agent-configuration «Тильда без домашнего каталога»: `~/x` без `HOME`
+  // (пустой) и `USERPROFILE` (не задан — `AgentProcess` его не передаёт) —
+  // ошибка использования, код 64, тот же текст, что у `codelab-agent serve`.
+  test(
+    'config check: CODELAB_HOME=~/x without HOME or USERPROFILE is code 64',
+    () async {
+      final agent = await AgentProcess.start(
+        ['config', 'check', '--cwd', project],
+        environment: {'CODELAB_HOME': '~/x', 'HOME': ''},
+        workingDirectory: project,
+      );
+      addTearDown(() async {
+        agent.kill(ProcessSignal.sigkill);
+        await agent.exitCode;
+      });
+      final code = await agent.exitCode.timeout(const Duration(seconds: 30));
+
+      expect(code, 64, reason: agent.stderrText);
+      expect(
+        agent.stderrText,
+        contains(
+          'CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an '
+          'absolute path',
+        ),
+      );
+      expect(await agent.nextStdoutLine(), isNull);
+    },
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
+
   // D17, 10.5 (защита от регрессий): `serve --stdio` с `~bob/cl` завершается
   // кодом 64 с текстом ошибки до чтения stdin.
   test(
@@ -212,8 +268,11 @@ agent:
     expect(code, 1, reason: agent.stderrText);
   }, timeout: const Timeout(Duration(seconds: 90)));
 
+  // `config set` теперь рабочая подкоманда (change
+  // `add-config-writer-and-reload`, D6; её сценарии — в
+  // `config_write_command_process_test.dart`); `migrate` и пустая команда
+  // по-прежнему ошибка использования.
   for (final args in [
-    ['config', 'set', 'budget.max_steps', '10'],
     ['config', 'migrate'],
     ['config'],
   ]) {
@@ -261,5 +320,53 @@ agent:
 
     expect(code, 64);
     expect(agent.stderrText, contains('codelab-agent config check'));
+  }, timeout: const Timeout(Duration(seconds: 90)));
+
+  // Задача 1.11 change `add-agent-skills` (agent-configuration «Битый навык»):
+  // кода приложения не требует, `ConfigCommands` общий; красный до 1.10.
+  test('config check: a broken skill in CODELAB_HOME/skills is a warning '
+      'line with the path of SKILL.md, Config: valid, code 0', () async {
+    // Путь навыка в выводе канонический (realpath): на macOS `/var` — ссылка.
+    final home = '${temp.resolveSymbolicLinksSync()}/home';
+    Directory(home).createSync();
+    File('$home/config.yaml').writeAsStringSync('''
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    models:
+      m: {}
+agent:
+  default_model: p/m
+''');
+    File('$home/skills/notes/SKILL.md')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        '---\nname: Notes\ndescription: D\n---\nbody sk-test-secret\n',
+      );
+    final agent = await AgentProcess.start(
+      ['config', 'check'],
+      environment: {'CODELAB_HOME': home, 'HOME': '${temp.path}/no-home'},
+      workingDirectory: project,
+    );
+    addTearDown(() async {
+      agent.kill(ProcessSignal.sigkill);
+      await agent.exitCode;
+    });
+
+    final code = await agent.exitCode.timeout(const Duration(seconds: 30));
+
+    expect(code, 0, reason: agent.stderrText);
+    final lines = <String>[];
+    String? line;
+    while ((line = await agent.nextStdoutLine()) != null) {
+      lines.add(line!);
+    }
+    expect(
+      lines,
+      contains(startsWith('warning: $home/skills/notes/SKILL.md:2:')),
+    );
+    expect(lines.join('\n'), isNot(contains('sk-test-secret')));
+    expect(lines.last, 'Config: valid');
   }, timeout: const Timeout(Duration(seconds: 90)));
 }

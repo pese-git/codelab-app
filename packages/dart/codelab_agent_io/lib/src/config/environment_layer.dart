@@ -1,5 +1,23 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 
+/// Ключи конфигурации, у которых есть переменная окружения, и имена этих
+/// переменных — единственный источник для слоя окружения
+/// ([buildEnvironmentLayer]) и для вывода `config get`, который вместо
+/// значения печатает `<from env:NAME>` (`cli/config_output.dart`).
+///
+/// Почему таблица, а не два списка: новая переменная, добавленная в слой,
+/// иначе не получила бы подпись в `config get`, и её значение могло бы
+/// попасть в вывод (ревью итерации 4, arch L4; R0-2). Предконфигурация
+/// провайдера (`CODELAB_PROVIDER_*`) подписывается именем своего источника
+/// (`env:…`) и в таблицу не входит.
+const environmentLayerVariables = {
+  'agent.default_model': 'CODELAB_MODEL',
+  'budget.max_steps': 'CODELAB_MAX_STEPS',
+  'permissions.mode': 'CODELAB_PERMISSION_MODE',
+  'logging.level': 'CODELAB_LOG_LEVEL',
+  'logging.file': 'CODELAB_LOG_FILE',
+};
+
 /// Слой окружения: переменные `CODELAB_*`, у которых есть ключ конфигурации
 /// (`agent-core-architecture` §15.6; design.md change
 /// `add-agent-configuration`, D4).
@@ -21,9 +39,16 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// `type` без значения переменной (оно не должно попадать в текст ошибок);
 /// `autopilot` из `CODELAB_PERMISSION_MODE` отклоняет валидатор ядра: режим
 /// включается только флагом (CFG-4). Пустой слой возвращается как `null`.
+///
+/// Предконфигурация провайдера `CODELAB_PROVIDER_*` (L-25) — отдельный слой в
+/// `provider_preconfig.dart` (`preconfigLayer`): он стоит перед этим слоем,
+/// чтобы `CODELAB_MODEL` переопределял модель предконфигурации (design.md
+/// change `add-config-writer-and-reload`, D3).
 ({ConfigTree? layer, List<ConfigIssue> issues}) buildEnvironmentLayer(
   Map<String, String> environment,
 ) {
+  // Имя переменной берётся из таблицы по ключу, а не пишется второй раз.
+  String variable(String key) => environmentLayerVariables[key]!;
   String? value(String name) {
     final raw = environment[name];
     return raw == null || raw.isEmpty ? null : raw;
@@ -32,31 +57,31 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
   final values = <String, Object?>{};
   final issues = <ConfigIssue>[];
 
-  if (value('CODELAB_MODEL') case final model?) {
+  if (value(variable('agent.default_model')) case final model?) {
     values['agent'] = {'default_model': model};
   }
-  if (value('CODELAB_MAX_STEPS') case final raw?) {
+  if (value(variable('budget.max_steps')) case final raw?) {
     final steps = int.tryParse(raw);
     if (steps == null) {
       issues.add(
-        const ConfigIssue(
+        ConfigIssue(
           kind: ConfigIssueKind.type,
           key: 'budget.max_steps',
           source: 'env',
-          message: 'CODELAB_MAX_STEPS must be an integer',
+          message: '${variable('budget.max_steps')} must be an integer',
         ),
       );
     } else {
       values['budget'] = {'max_steps': steps};
     }
   }
-  if (value('CODELAB_PERMISSION_MODE') case final mode?) {
+  if (value(variable('permissions.mode')) case final mode?) {
     values['permissions'] = {'mode': mode};
   }
   final logging = <String, Object?>{
     // Регистр не важен: профиль `codelab-app` передаёт `DEBUG`.
-    'level': ?value('CODELAB_LOG_LEVEL')?.toLowerCase(),
-    'file': ?value('CODELAB_LOG_FILE'),
+    'level': ?value(variable('logging.level'))?.toLowerCase(),
+    'file': ?value(variable('logging.file')),
   };
   if (logging.isNotEmpty) {
     values['logging'] = logging;
@@ -77,6 +102,19 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 /// Переменные `CODELAB_*`, которые знают ядро и его хосты (`agent-core-
 /// architecture` §15.6). Другие дают предупреждение: опечатка не должна
 /// молча игнорироваться.
+///
+/// `CODELAB_TEST_SECRET_STORE` (каталог тестового хранилища секретов) известен
+/// только в сборке с `--dart-define=CODELAB_ALLOW_TEST_SECRETS=true`: в
+/// обычной сборке переменная не читается, каталог не создаётся, а
+/// `config.env.unknown` называет её имя (§15.6; design.md change
+/// `add-agent-secret-store`, D14). Условие вычисляется при компиляции:
+/// окружением процесса его не включить (§12.4.13).
+///
+/// `CODELAB_SERVE_ALIAS_ACTIVE` — маркер переходного алиаса `codelab serve`:
+/// алиас ставит его агенту при каждом запуске, поэтому без записи здесь
+/// каждый такой запуск давал бы ложное предупреждение. Агент маркер не
+/// читает (change `retire-python-agent`, Q10, D7). Запись временная: снимается
+/// вместе с алиасом в change `remove-python-agent` (D13).
 const _knownVariables = {
   'CODELAB_HOME',
   'CODELAB_CONFIG',
@@ -92,8 +130,33 @@ const _knownVariables = {
   'CODELAB_DEBUG_LLM_SNAPSHOT',
   'CODELAB_AGENT_TOKEN',
   'CODELAB_POWER_HELPER',
-  'CODELAB_TEST_SECRET_STORE',
+  'CODELAB_SERVE_ALIAS_ACTIVE',
+  if (bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS'))
+    'CODELAB_TEST_SECRET_STORE',
 };
+
+/// Путь `secrets.yaml` тестового хранилища секретов из окружения (`null` —
+/// обычный выбор по `secrets.backend`).
+///
+/// Почему здесь: правило «переменная действует только в сборке с
+/// `-DCODELAB_ALLOW_TEST_SECRETS=true`» одно и то же для загрузчика
+/// ([_knownVariables]) и для хоста, который выбирает хранилище. Define
+/// вычисляется при компиляции, поэтому в рабочей сборке ветка вычищена, а
+/// переменная даёт `config.env.unknown` (change `add-embedded-agent-mode`,
+/// D5; §12.4.13).
+///
+/// Как использовать: открыватель хоста передаёт результат в
+/// `openHostSecrets(testStorePath:)`; каталог из переменной получает имя
+/// `secrets.yaml`.
+String? testSecretStorePath(Map<String, String> environment) {
+  if (!const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')) {
+    return null;
+  }
+  final directory = environment['CODELAB_TEST_SECRET_STORE'];
+  return directory == null || directory.isEmpty
+      ? null
+      : '$directory/secrets.yaml';
+}
 
 /// Семейства переменных, известные целиком (§15.6).
 const _knownFamilies = [

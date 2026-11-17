@@ -1,5 +1,6 @@
 import '../../env/execution_env.dart';
 import '../../llm/messages.dart';
+import '../../util/posix_path.dart';
 import '../../util/result.dart';
 import '../../prompts/prompts.g.dart';
 import '../agent_tool.dart';
@@ -10,9 +11,33 @@ import 'common.dart';
 const _defaultTimeout = 120;
 const _maxTimeout = 3600;
 
-/// `exec` — a shell command (`agent-core-architecture` §6.4). A non-zero
-/// exit code is an error result with the output: data for the model.
+/// `exec` — команда оболочки (`agent-core-architecture` §6.4).
+///
+/// Почему ненулевой код выхода — ошибка с выводом: для модели это данные
+/// (что упало и почему), а не сбой инструмента.
+///
+/// Как использовать: модель передаёт `command` и при необходимости `timeout`
+/// и `cwd`; инструмент регистрируется при включённой capability `shellExec`.
+///
+/// Подсказка Q23 (design.md change `add-agent-skills`, D5, D17): если env
+/// сессии — клиент ACP, он отклонит `cwd` вне рабочей папки, поэтому `cwd` в
+/// каталоге навыка инструмент отклоняет сам, до вызова env, и подсказывает
+/// запустить скрипт по абсолютному пути. [readOnlyRoots] и
+/// [execInReadOnlyRoots] рантайм передаёт на сессию (`SkillCatalog.readOnlyRoots`
+/// и признак локального исполнения); без корней инструмент прежний, а
+/// `BoundedEnv` остаётся последним рубежом.
 final class ExecTool extends AgentTool {
+  ExecTool({
+    List<String> readOnlyRoots = const [],
+    this.execInReadOnlyRoots = false,
+  }) : readOnlyRoots = List.unmodifiable(readOnlyRoots);
+
+  /// Каталоги навыков вне рабочей папки сессии.
+  final List<String> readOnlyRoots;
+
+  /// Env сессии исполняет команды на машине агента: `cwd` в навыке допустим.
+  final bool execInReadOnlyRoots;
+
   @override
   String get name => 'exec';
 
@@ -77,6 +102,16 @@ final class ExecTool extends AgentTool {
       notes.add(
         '[Note: timeout must be within 1..$_maxTimeout seconds; using $timeout.]',
       );
+    }
+    if (!execInReadOnlyRoots && readOnlyRoots.isNotEmpty) {
+      final abs = normalizePath(ctx.env.cwd, cwd);
+      if (abs != null && readOnlyRoots.any((r) => isInside(r, abs))) {
+        return errorResult(
+          'The working directory $cwd is outside the client workspace; run '
+          'the skill script by its absolute path from the skill block, with '
+          'the workspace as the working directory.',
+        );
+      }
     }
     final result = await ctx.env.exec(
       command,

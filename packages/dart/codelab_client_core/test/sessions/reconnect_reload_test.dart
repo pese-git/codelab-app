@@ -137,6 +137,41 @@ void main() {
     expect(texts(a), ['user: hello', 'agent: replayed']);
   });
 
+  // Один агент обслуживает сессии любых папок (D11, D16 change
+  // `require-project-folder`): каждая сессия загружается со своим `cwd`.
+  test('reconnect() loads each open session with its own cwd', () async {
+    agent = KitAgent(capabilities: _withLoad);
+    await agent.start();
+    for (final (id, cwd) in [('s-a', '/work/a'), ('s-b', '/work/b')]) {
+      final created = agent.next(sessionNewMethod);
+      final opening = agent.workspace.newSession(cwd: cwd);
+      agent.respond(await created, {'sessionId': id});
+      await opening;
+      agent.transport.drainSentMessages();
+    }
+
+    agent.restartAgent(capabilities: _withLoad);
+    final first = agent.next(sessionLoadMethod);
+    final reconnecting = agent.workspace.reconnect();
+    final firstLoad = await first;
+    final second = agent.next(sessionLoadMethod);
+    agent.respond(firstLoad, const <String, Object?>{});
+    final secondLoad = await second;
+    agent.respond(secondLoad, const <String, Object?>{});
+    await reconnecting;
+
+    expect(
+      [
+        for (final request in [firstLoad, secondLoad])
+          (
+            LoadSessionRequest.fromJson(request.params).sessionId.value,
+            LoadSessionRequest.fromJson(request.params).cwd,
+          ),
+      ],
+      [('s-b', '/work/b'), ('s-a', '/work/a')],
+    );
+  });
+
   test('a prompt to a detached session fails without a frame and its queue '
       'does not drain', () async {
     agent = KitAgent(capabilities: _withLoad);

@@ -406,6 +406,8 @@ force kill
 
 Application lifecycle должен определять, когда используется каждый вариант.
 
+В CodeLab: graceful shutdown — закрытие stdin (stdio-агент, MCP stdio) или `hangUp` (терминал пользователя); terminate — `SIGTERM`; force kill — `SIGKILL` по истечении grace владельца (2 с у `terminal/*`, stdio-агента после `SIGTERM` и `exec` агента; 3 с у терминала пользователя). Ожидание выхода процесса без предела запрещено (`concurrency.md` §46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D3, D4).
+
 ---
 
 ## 23. Orphan processes
@@ -413,6 +415,10 @@ Application lifecycle должен определять, когда исполь
 При закрытии приложения не должны оставаться orphan child processes, если это не intentional product behavior.
 
 Shutdown flow должен включать cleanup process resources.
+
+Терминал пользователя (панель Terminal, change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D4) закрывает свои shell при выходе из app явно: `SIGHUP`, затем принудительное завершение по таймауту. Страховка на случай краха или убийства app — сам PTY: при закрытии PTY-мастера ядро шлёт `SIGHUP` сеансу shell. При штатном выходе страховка не срабатывает: `pty2` ждёт код выхода каждого shell блокирующим `waitpid` в отдельном isolate, Dart VM при остановке ждёт этот isolate, а shell ждёт закрытия мастера, который живёт вместе с процессом app. Поэтому явное закрытие при выходе обязательно, без него app зависает (решение пользователя 2026-11-12; D4, D15 п. 9 change). Сиротами остаются только задания, которые пользователь намеренно отвязал (`nohup`, `disown`) — это intentional behavior пользователя.
+
+Остальные дочерние процессы клиента — ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента — закрываются тем же обработчиком выхода через `CodeLabRootLifecycle.dispose()`, параллельно с терминалом, с общим пределом 5 с (`concurrency.md` §45–§46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md)). На EOF stdin при смерти app опираться нельзя: `terminal/*` stdin не читает, команды `exec` и внуки обёрток (`npx`) его не видят. Остаточный риск — потомки `terminal/*` и stdio-агента: сигнал получает только корень (design.md change, Q2), и аварийное завершение app, при котором обработчик не вызывается.
 
 ---
 
@@ -427,6 +433,8 @@ agent process exited unexpectedly
 ```
 
 UI не должен анализировать numeric exit codes напрямую.
+
+Код выхода `dart:io` на POSIX для процесса, завершённого сигналом, отрицателен (`-15`, `-9`). Адаптер, который отдаёт статус выхода наружу, переводит его сам. Для ACP `terminal/*` это `exitCode: null` и имя сигнала: схема `TerminalExitStatus` требует `exitCode` ≥ 0. Признак «какой сигнал посылали» статусом выхода не считается: процесс мог выйти сам или обработать `SIGTERM` (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D14).
 
 ---
 
@@ -820,6 +828,8 @@ Shell execution — high-risk capability.
 
 Не следует выполнять shell command напрямую из BLoC/Widget.
 
+**Исключение: терминал пользователя.** Интерактивный shell панели Terminal десктопа (D-28; change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D8) — действие пользователя, а не агента. Permission policy к нему не применяется (`permissions.md` §2, «Терминал пользователя — не действие агента»), рабочая папка его не ограничивает. Остальные требования раздела действуют: запуск централизован в одном порту (`UserShellLauncher`, `lib/core/platform/` app), журнал содержит только метаданные (без ввода, вывода, аргументов и окружения), время жизни процессов ограничено вкладкой и запуском app.
+
 ---
 
 ## 53. Environment variables
@@ -829,6 +839,8 @@ Sensitive environment variables не должны попадать в logs.
 При запуске child process следует передавать только необходимые environment values.
 
 Не следует автоматически наследовать весь environment, если это создаёт security risk и продукт этого не требует.
+
+**Исключение: терминал пользователя.** Shell панели Terminal получает окружение процесса app целиком плюс `TERM=xterm-256color` и `COLORTERM=truecolor` и запускается как login shell (`$SHELL -l`) (решение пользователя Q9, change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D5). Продукт этого требует: это собственный shell пользователя, урезанное окружение сломало бы его инструменты, а app из Finder (macOS) получает минимальное окружение, и `PATH` восстанавливает login shell. Окружение по-прежнему не логируется (§65).
 
 ---
 
@@ -1162,4 +1174,27 @@ Flutter Plugin / dart:io / OS API
 
 Если feature напрямую знает о конкретном desktop plugin, platform path rules и OS branching, boundary следует пересмотреть.
 
-Дальше логично закрыть cross-cutting части: `observability.md`, затем `testing.md`.
+---
+
+## 80. Агент CodeLab: встроенный в процесс app и `codelab-agent` как процесс
+
+Агент CodeLab запускается двумя способами. Клиент выбирает профиль подключения; ACP-контракт у обоих одинаков (`acp-boundary.md`, раздел 49).
+
+| | Встроенный агент | `codelab-agent` как процесс |
+|---|---|---|
+| Где работает | в процессе клиента (app или `codelab`), в его isolate, пара `InProcessAcpLink` вместо сокета и пайпа | отдельный процесс: `codelab-agent serve --stdio` или `--ws` |
+| Кто владеет | `codelab_embedded` (хост ядра); клиент получает `EmbeddedAgent` и закрывает его при выходе | процесс запускает клиент по профилю stdio (раздел 20) или внешний клиент вроде Zed; для `--ws` — тот, кто запустил |
+| Профиль по умолчанию | да: app без выбора и `codelab` без `--agent` | нет: выбирается явно |
+| Файлы и команды | сам агент через `AcpServerConfig.localEnv` (профили `embedded-app-desktop`, `embedded-cli`); `fs/*` и `terminal/*` клиенту не уходят | через `fs/*` и `terminal/*` клиента (или локальный листинг по stdio); так редактор видит несохранённые буферы |
+| Конфиг и состояние | `$CODELAB_HOME` (по умолчанию `~/.codelab`): `config.yaml`, сессии, секреты | то же, плюс `CODELAB_*` и флаги запуска |
+| Логи | в `Logger` клиента; диагностика по разделу 65 | stderr процесса, при желании `--log-file`; stdout занят протоколом (раздел 21) |
+| Остановка | `dispose` встроенного агента: активные ходы отменяются, журнал дописывается | EOF stdin — код `0`, `SIGINT` — `130`, `SIGTERM` — `143`; ход отменяется, журнал дописывается |
+
+Правила платформенной границы для встроенного агента:
+
+* Filesystem, процессы, хранилище секретов и MCP-серверы — infrastructure: их реализуют `codelab_agent_io` и настольный открыватель `codelab_embedded/io.dart`, а не код приложения или ядро. Основной барель `codelab_embedded` остаётся web-безопасным; `io.dart` импортирует только composition root клиента (`AGENTS.md` §5).
+* Контейнмент путей инструментов обеспечивает `BoundedEnv` рабочей папки сессии, а не клиентские проверки платформы. Платформенные ветки (`Platform.is*`) в агенте не распространяются: различия скрыты за портами ядра.
+* Хранилище секретов агента — `env` (по умолчанию) или явный `file`; хранилищ ОС (keychain) в этой версии нет. Секреты приложения и секреты агента не смешиваются (раздел 25–26).
+* Встроенный агент не должен блокировать UI isolate: ходы и вывод инструментов идут асинхронно; тяжёлые процессы — дочерние процессы инструмента `exec`, а не вычисления в isolate app. Долгая работа по-прежнему отменяется через `session/cancel`.
+* Бинарь `codelab-agent` собирается отдельно (`fvm dart run melos run build:agent`) и не входит в сборку app. Приложение, запущенное из меню, не видит `PATH` оболочки, поэтому профиль stdio хранит абсолютный путь к бинарю (раздел 55).
+* Отказ встроенного агента — типизированная ошибка открытия (`EmbeddedAgentConfigException` для невалидного конфига) до сетевых вызовов; падение зоны агента закрывает его и сообщается клиенту как сбой соединения, а не необработанное исключение приложения.

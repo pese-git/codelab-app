@@ -173,6 +173,22 @@ final class _OpenSpy implements SessionStore {
   Future<void> create(SessionHeader header) => _inner.create(header);
 
   @override
+  Future<SessionSnapshot> openChild(
+    String journal, {
+    required SessionId rootSessionId,
+  }) => _inner.openChild(journal, rootSessionId: rootSessionId);
+
+  @override
+  Future<SessionSnapshot> openChildReadOnly(
+    String journal, {
+    required SessionId rootSessionId,
+  }) => _inner.openChildReadOnly(journal, rootSessionId: rootSessionId);
+
+  @override
+  Future<String> createChild(SessionHeader header) =>
+      _inner.createChild(header);
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {

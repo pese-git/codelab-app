@@ -58,11 +58,7 @@ void main() {
     () async {
       final store = MemorySessionStore();
       final first = harness(store, [
-        callStep('c1', 'update_plan', {
-          'entries': [
-            {'content': 'Read', 'priority': 'high', 'status': 'pending'},
-          ],
-        }),
+        callStep('c1', 'task_create', {'subject': 'Read', 'priority': 'high'}),
         textStep('Planned.'),
         textStep('Second answer.'),
       ]);
@@ -91,10 +87,10 @@ void main() {
             .map((m) => (m.content.single as TextContent).text),
         ['Make a plan', 'Go on'],
       );
-      expect(
-        replay.whereType<PlanUpdated>().single.entries.single.content,
-        'Read',
-      );
+      // Реплей отдаёт список ветки одним снимком после истории (§17.16.6).
+      final restored = replay.whereType<TaskListChanged>().single;
+      expect(restored.items.single.subject, 'Read');
+      expect(restored.change.op, 'restore');
       expect(replay.whereType<ModeChanged>().single.mode, ModeId.plan);
 
       await loaded.prompt(const [TextContent('And now?')]);

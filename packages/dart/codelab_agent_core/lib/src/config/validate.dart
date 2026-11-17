@@ -62,11 +62,15 @@ final class LayerWalk {
   void _section(Map<String, Object?> map, SectionNode node, KeyPath path) {
     for (final MapEntry(key: name, value: value) in map.entries) {
       final child = path.child(name);
-      if (node.rejectsInlineSecrets && inlineSecretKeys.contains(name)) {
-        _issue(ConfigIssueKind.inlineSecret, child, _inlineSecretMessage(path));
+      final field = node.fields[name];
+      // Ключ из `inlineSecretKeys` без поля в схеме — литеральный секрет в
+      // файле: проблемы схемы нет, загрузка предупреждает отдельно
+      // (`inline_secrets.dart`) и ключ не применяет (CFG-9, R8-4, D4).
+      if (field == null &&
+          node.toleratesInlineSecrets &&
+          inlineSecretKeys.contains(name)) {
         continue;
       }
-      final field = node.fields[name];
       if (field != null) {
         _node(value, field, child);
         continue;
@@ -107,14 +111,6 @@ final class LayerWalk {
       hint == null ? 'unknown key' : 'unknown key (did you mean $hint?)',
     );
   }
-
-  /// Текст не содержит значения: оно может быть секретом (CFG-2).
-  String _inlineSecretMessage(KeyPath owner) =>
-      owner.value.startsWith('mcp.servers')
-      ? 'secrets are not stored in the config; reference an environment '
-            'variable with \${NAME} in env or headers'
-      : 'secrets are not stored in the config; use api_key_env '
-            '(or api_key_secret with the secret store)';
 
   void _node(Object? value, SchemaNode node, KeyPath path) {
     switch (node) {

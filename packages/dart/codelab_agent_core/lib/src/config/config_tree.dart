@@ -27,14 +27,14 @@ enum ConfigLayerKind {
   /// Локальный проектный `config.local.yaml` (слой 4).
   projectLocal,
 
-  /// `--config <path>` / `CODELAB_CONFIG` (слой 4а): файл назвал тот, кто
+  /// `--config <path>` / `CODELAB_CONFIG` (слой 5): файл назвал тот, кто
   /// запускает агента, доверие не применяется.
   extra,
 
-  /// Переменные `CODELAB_*` (слой 5).
+  /// Переменные `CODELAB_*` (слой 6).
   environment,
 
-  /// Флаги командной строки (слой 6): единственный источник `autopilot`
+  /// Флаги командной строки (слой 7): единственный источник `autopilot`
   /// (CFG-4).
   flags,
 

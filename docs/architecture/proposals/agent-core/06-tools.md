@@ -15,7 +15,7 @@
 ```dart
 enum ToolTier { read, write, network, exec }   // по умолчанию exec (TOOL-5); network — выход в сеть
                                                // по адресу, выбранному моделью (после MVP, §17.1),
-                                               // и task с удалённым A2A-агентом (tierOf, §17.15.3)
+                                               // и agent с удалённым A2A-агентом (tierOf, §17.15.3)
 enum ToolExecutionMode { parallel, sequential }
 enum ToolKind { read, edit, delete, move, search, execute, think, fetch, other }   // = ACP ToolKind
 enum ContentTrust { trusted, untrusted }
@@ -31,7 +31,7 @@ abstract base class AgentTool {
   /// С этапа 3 (§17.4.2): результат больше лимитов усечения выносится в файл, а не усекается.
   bool get spillable => false;
   SpillDirection get spillDirection => SpillDirection.head;
-  bool get redactResult => true;   // false — результат не редактируется (код модели, §12.4.2)
+  bool get redactResult => true;   // после 1.0 (P-10, §12.4, R8-1): false — результат не редактируется (код модели, §12.4.2)
   /// true — инструмент усекает вывод сам со своим уведомлением (§6.3.5); иначе точка исполнения
   /// усекает голову с общим уведомлением `[Output truncated: showing the first N lines of M.]` (TOOL-9).
   bool get truncatesOutput => false;
@@ -54,13 +54,13 @@ abstract base class AgentTool {
   ToolKind kindOf(Map<String, Object?> args) => kind;          // ACP kind, PermissionRequest.kind
   ToolExecutionMode? executionModeOf(Map<String, Object?> args) => executionMode;   // режим пакета (§5.5)
   bool offersAllowAlways(Map<String, Object?> args) => true;   // false → вариант allow_always не предлагается
-  String get permissionKeyName => name;   // после MVP (§17.3.8.1): task_send, task_resume → 'task'; ключ PermissionKey и PolicyRules (§7.3)
+  String get permissionKeyName => name;   // после MVP (§17.3.8.1): agent_send, agent_resume → 'agent'; ключ PermissionKey и PolicyRules (§7.3)
   /// Асинхронная подготовка после preflight и до разрешений (§6.3.1, шаг 3b). Ошибка — текст для
   /// модели, вопрос человеку не задаётся. presentation заменяет present(args, ctx) в запросе разрешения.
   Future<ToolPreparation> prepare(Map<String, Object?> args, ToolContext ctx) async => const ToolPrepared();
   Future<ToolExecutionResult> execute(Map<String, Object?> args, ToolContext ctx);
   ArgsRewrite? rewriteArgs(Map<String, Object?> rawArgs) => null;   // после MVP, P-14 (§17.12.6): только exec
-  bool get heartbeat => true;   // после MVP, C-09 (§17.12.3): false у task, task_send, task_resume
+  bool get heartbeat => true;   // после MVP, C-09 (§17.12.3): false у agent, agent_send, agent_resume
   ToolSchema toSchema() => ToolSchema(name: name, description: description, parameters: parameters);
 }
 
@@ -86,7 +86,8 @@ final class ToolContext {
   final CancelToken cancel, yieldToken;
   final void Function(ToolExecutionResult partial) onUpdate;
   final String toolCallId;
-  final ToolServices services;                  // сервис плана, Clock, Logger; с этапа 3 — SpillService? spill (§17.4.2),
+  final ToolServices services;                  // список задач TaskList (§17.16.2; до change add-subagents-and-tasks —
+                                                // сервис плана), Clock, Logger; с этапа 3 — SpillService? spill (§17.4.2),
                                                 // JobManager? jobs (§17.9.2.2; null — capability backgroundJobs off);
                                                 // после MVP (§17.11): ReadLedger? readLedger, MemoryService? memory,
                                                 // CheckpointService? checkpoints, SessionHistory? history,
@@ -144,19 +145,48 @@ final class ToolRegistry {
 3b. После MVP (§17.8.2): `prepare(args, ctx)`. `ToolPrepareFailed(message)` → результат-ошибка с этим текстом, outcome `failed`; разрешения не проверяются, вопрос человеку не задаётся (LSP-1). `ToolPrepared.presentation` (если есть) заменяет `present(args, ctx)` в запросе разрешения, `state` передаётся в `ToolContext.prepared` шага 7. Исключение в `prepare` — как в шаге 7; `CancelledException` → `cancelled`. Встроенные инструменты MVP `prepare` не переопределяют; `lsp rename` строит в нём план правки всех файлов (§17.8.8). Шаги 0–3b идут до проверки разрешений (PERM-1), поэтому `rewriteArgs`, `preflight` и `prepare` НЕ ДОЛЖНЫ иметь побочных эффектов: они только читают (`ExecutionEnv`, языковой сервер) и не пишут файлы, не запускают команд и не ходят в сеть. Исключение (PERM-1) — `prepare` инструмента `lsp`: ленивый запуск языкового сервера из доверенной конфигурации (LSP-11) и синхронизация документов (`didOpen`/`didChange`, §17.8.5); на диск он не пишет.
 4. Цепочка `beforeToolCall` с приведёнными аргументами; первой — проверка разрешений (§7). `Block(reason)` → результат-ошибка с текстом `reason`, outcome из `Block` (`rejected`). После MVP вторым звеном цепочки идут пользовательские хуки `before_tool` (§17.14.2.3): ненулевой код → `Block` с текстом `Blocked by hook "<name>" …`.
 5. `cancel.isCancelled` → outcome `cancelled`, текст `Tool call was cancelled`.
-6. Для `write`/`edit` — захват блокировки пути (§6.3.4); после захвата повторная проверка отмены. Инструмент, меняющий набор файлов (`lsp rename`, §17.8.8), захватывает все пути сам через `PathLock.runAll` и после захвата тоже проверяет отмену.
+6. Для `write`/`edit` — захват блокировки пути (§6.3.4); ожидание захвата прерывается отменой хода, после него — повторная проверка отмены: вызов в очереди за держателем, который уже захватил путь и не реагирует на отмену, завершается `cancelled` сразу, а его место в очереди освобождается только после предыдущего держателя. Подход к захвату и прерывание ожидания отменой пишутся в debug-лог `tool.lock.wait` (вызов дошёл до захвата, в том числе при свободном пути) и `tool.lock.cancelled` с полями `tool` и `tool_call_id`, без пути; у `tool.lock.cancelled` есть ещё `reason` — вид причины отмены (`user`, `shutdown`, `storage_failure` или `other`; `watchdog` — защитное значение: сторож отменяет только токен попытки запроса к модели, до токена хода такая отмена не доходит), а не её текст: текст `StorageFailure` несёт ошибку записи журнала и может содержать путь. Токен отмены вызова живёт не дольше хода: слушатель `onCancel` у ожидания не снимается. Инструмент, меняющий набор файлов (`lsp rename`, §17.8.8), захватывает все пути сам через `PathLock.runAll` и после захвата тоже проверяет отмену.
 7. `execute(args, ctx)`. Исключение → результат-ошибка с текстом исключения без служебных префиксов Dart (`Exception: `, `Bad state: `, `Invalid argument(s): ` срезаются в цикле, пока есть), outcome `failed`. `CancelledException` → `cancelled`. После MVP — тикер heartbeat и stuck (§17.12.3), останавливается до шага 8.
 8. Обработка результата — четыре подшага в фиксированном порядке (§17.4.2):
    * **8-. Подготовка картинок** (после MVP, T-29): каждый `ImageContent` результата проходит
      `ImagePreparer.prepare` (§17.11.2.1); сбой → блок заменяется `TextContent("[image omitted: <message>]")`,
      `isError` не меняется. Без `services.images` — пропуск.
    * **8a. Доверие:** `trust` и `source` по §6.3.6 (для `read`/`search` вынесенного файла — из `SpillRef`, §17.4.4).
-   * **8b. Редакция:** если `tool.redactResult` — каждый `TextContent` проходит `Redactor.redact(text, RedactionContext(point: toolResult, toolName, readPath))` (§12.4.1); иначе пропускается. `write` и `edit` возвращают `redactResult == false`; MCP-инструменты — `!redact.exempt_tools.contains(name)`.
+   * **8b. Редакция** (после 1.0, P-10, §12.4; до 1.0 шаг пропускается — решение пользователя 2026-11-04 R8-1, design.md change `add-config-literal-secrets-and-migrate`, D1): если `tool.redactResult` — каждый `TextContent` проходит `Redactor.redact(text, RedactionContext(point: toolResult, toolName, readPath))` (§12.4.1); иначе пропускается. `write` и `edit` возвращают `redactResult == false`; MCP-инструменты — `!redact.exempt_tools.contains(name)`.
    * **8c. Вынос или усечение:** `tool.spillable`, `services.spill != null` и текст больше лимитов усечения → вынос в файл (§17.4.3); иначе усечение (§6.3.5). Вынос появляется на этапе 3 вместе с журналом; до него и при выключенной capability `outputSpill` — всегда усечение.
    * **8d. Ограда** недоверенного вывода с `source` из 8a (§6.3.6).
 9. Только для вызовов, дошедших до шага 7; после `Block`, отмены и ошибок шагов 1a–3b цепочка не вызывается. Цепочка `afterToolCall` — переопределение полей (§5.2; после MVP последним идёт хук языковых серверов, §17.8.5). Порядок: хуки хоста, пользовательские хуки `after_tool` (§17.14.2.3), хук языковых серверов.
 9a. Учёт предохранителя (§6.3.7): если вызов завершился результатом-ошибкой на шаге 2, 3, 3a или 3b, `warning = ctx.misuse?.recordInvalid(key)`; не `null` → предупреждение дописывается в конец текста результата через `\n`. Ошибки шагов 4–7 (отказ разрешения, отмена, исключение и `isError` исполнения), исключение при валидации шага 3 и заблокированный вызов шага 1a счётчик не меняют.
 10. `emit ToolCallFinished`; вернуть `ToolResultMessage` (outcome `completed`, если `isError == false`, иначе `failed`).
+
+**Фазы и откат.** Шаги разнесены по трём операциям `ToolExecutor` (§5.2), чтобы параллельная группа
+пакета объявляла все вызовы в порядке ответа до их исполнения (§5.5):
+
+* `announce` — шаги 0–1: найти инструмент в реестре и в схемах шага (сам ответ «нет» выдаёт шаг 2),
+  создать `ToolContext`, занять место в очереди пути (`PathLock.reserve` по нормализованному
+  `lockPath(rawArgs)`, §6.3.4), вызвать `present` и эмитить `ToolCallStarted`. Если `announce`
+  бросает (на практике — сбой `emit ToolCallStarted`: `AgentEventSink` бросать не запрещено, а
+  `Agent.emit` пробрасывает ошибку подписчика), он сам отпускает занятое место и пробрасывает
+  исключение; handle вызывающему не достаётся. Отпускание не рвёт очередь: место освободится
+  только после предыдущего держателя (TOOL-7).
+* `complete` — шаги 1a–10; место в очереди пути отпускается в `finally` после шагов 1a–9, до
+  `ToolCallFinished`.
+* `abandon` — вызов объявлен, но исполняться не будет: место в очереди отпускается первым
+  действием, затем — ожидание отправленных `ToolCallProgress` и `ToolCallFinished(cancelled)` с
+  текстом `Tool call was cancelled before it started`; шаги 1a–9 не выполняются. Сбой эмита в
+  `abandon` путь уже не держит. Цикл вызывает `abandon` в двух случаях: отмена хода до исполнения
+  группы (§5.5, шаг 3a) и откат уже объявленных вызовов группы, когда объявление следующего упало
+  (§5.5, шаг 3c). В обоих случаях цикл запускает `abandon` всех объявленных вызовов группы до
+  первого ожидания, так что места в очереди пути свободны раньше любого `ToolCallFinished`, и сбой
+  или зависание эмита одного вызова не держит пути остальных (PR #326). Каждый сбой `abandon` цикл
+  пишет в лог `tool.abandon.error` (warning; `session_id`, `tool`, `tool_call_id`, `error_class` —
+  `runtimeType` исключения, само исключение — в
+  `error`/`stack` записи, §12.3; сбой самого логгера глотается) и дожидается остальных. Ход
+  завершается `failed` (LOOP-1): после сбоя объявления — с исходной ошибкой объявления, при отмене —
+  с первой ошибкой отката. Алгоритм пакета целиком, с таблицей случаев, — §5.5.1.
+
+Для каждого объявленного вызова вызывается ровно одно из `complete` или `abandon`, поэтому у
+каждого `ToolCallStarted` ровно один `ToolCallFinished` (LOOP-9), пока приёмник событий не сломан.
 
 ```mermaid
 flowchart LR
@@ -282,13 +312,15 @@ final class PathLock {
 
 Порядок захвата = порядок вызова `run`, а цикл вызывает инструменты пакета в порядке ответа,
 поэтому параллельные правки одного файла применяются в порядке вызовов (TOOL-7). Один экземпляр
-`PathLock` на сессию.
+`PathLock` на дерево корневой сессии: корень создаёт его, каждый ребёнок получает тот же экземпляр
+(`ChildSessionSpec.locks`, §17.3.3, шаг 3), и экземпляр живёт всю сессию корня.
 
 Точка исполнения занимает место в очереди не в шаге 6, а при объявлении вызова (`announce`, шаг 1):
 `reserve(key)` возвращает билет с `acquired` и `release`, шаг 6 ждёт `acquired`. Иначе порядок
 захвата зависел бы от того, чей хук разрешений (шаг 4) ответит раньше. Ключ — нормализованный
 абсолютный путь из `AgentTool.lockPath(rawArgs)`; билет освобождается на любом пути завершения
-вызова, в том числе после отказа, ошибки валидации и `abandon`.
+вызова, в том числе после отказа, ошибки валидации, `abandon` и упавшего `announce` (§6.3.1, «Фазы и
+откат»).
 
 ```dart
 // в PathLock:
@@ -345,7 +377,7 @@ Future<T> runAll<T>(Iterable<String> keys, Future<T> Function() body) {
 | `read`, `search` | `untrusted` для файлов вне `cwd` (в MVP недостижимо из-за `BoundedEnv`; после MVP — сопутствующие файлы skills из `readOnlyRoots`, §17.2.3) и для каталогов из `tools.untrusted_paths` конфига (по умолчанию `node_modules`, `.dart_tool`, `vendor`); иначе `trusted` |
 | `exec` | `untrusted`, если команда — сетевая по списку §10.6; иначе `trusted` |
 | `read`, `search` вынесенного файла (`spills/<n>.txt`, с этапа 3) | доверие и `source` исходного результата из записи журнала (`SpillRef`); файл каталога выноса без записи — `untrusted`; профиль и `untrusted_paths` не повышают (SPL-4, §17.4.4) |
-| `ls`, `write`, `edit`, `update_plan` | `trusted` (вывод формирует сам инструмент) |
+| `ls`, `write`, `edit`, `task_create`, `task_update`, `task_list`, `task_get` (§17.16.3; до change `add-subagents-and-tasks` — `update_plan`) | `trusted` (вывод формирует сам инструмент) |
 | `read` архива (список и `member`, после MVP) | всегда `untrusted`, `source="read"` (§17.11.2) |
 | `inspect_image` (после MVP) | всегда `untrusted` (§17.11.5) |
 | `memory`, `ask`, `checkpoint`, `discover_tools` (после MVP) | `trusted` (§17.11) |
@@ -465,8 +497,9 @@ bool toolEnabled(String name, List<ToolSwitch> switches);   // последни�
 `on`/`off` — без учёта регистра. Пустое значение (`--tools ""`) — ничего не меняет.
 
 **Селекторы.** Имя встроенного инструмента из фиксированного списка `read`, `write`, `edit`,
-`ls`, `search`, `exec`, `update_plan`, `web_fetch`, `web_search`, `skill`, `task`, `task_status`,
-`task_cancel`, `task_send`, `task_resume`, `task_observe`, `lsp`, `job_output`, `job_kill`, `memory`, `inspect_image`, `checkpoint`, `ask`,
+`ls`, `search`, `exec`, `task_create`, `task_update`, `task_list`, `task_get` (§17.16.3; до change
+`add-subagents-and-tasks` — `update_plan`), `web_fetch`, `web_search`, `skill`, `agent`, `agent_status`,
+`agent_cancel`, `agent_send`, `agent_resume`, `agent_observe`, `lsp`, `job_output`, `job_kill`, `memory`, `inspect_image`, `checkpoint`, `ask`,
 `session_history`, `discover_tools`, `context_expand` (последние — после MVP, §17.11, §17.13.4;
 имя известно всегда, даже если capability выключена),
 имя MCP-инструмента `mcp__<server>__<tool>` или шаблон `mcp__<server>__*`, `mcp__*`. `*`
@@ -476,10 +509,11 @@ bool toolEnabled(String name, List<ToolSwitch> switches);   // последни�
 
 | Случай | Сообщение |
 |---|---|
-| неизвестное имя встроенного инструмента | `tools.disabled[1]: неизвестный инструмент exce (может быть, exec?). Известные инструменты: ask, checkpoint, context_expand, discover_tools, edit, exec, inspect_image, job_kill, job_output, ls, lsp, memory, read, search, session_history, skill, task, task_cancel, task_observe, task_resume, task_send, task_status, update_plan, web_fetch, web_search, write` (для флага и переменной — префикс `--tools` или `CODELAB_TOOLS`) |
+| неизвестное имя встроенного инструмента | `tools.disabled[1]: неизвестный инструмент exce (может быть, exec?). Известные инструменты: agent, agent_cancel, agent_observe, agent_resume, agent_send, agent_status, ask, checkpoint, context_expand, discover_tools, edit, exec, inspect_image, job_kill, job_output, ls, lsp, memory, read, search, session_history, skill, task_create, task_get, task_list, task_update, web_fetch, web_search, write` (до change `add-subagents-and-tasks` в списке `update_plan` вместо `task_*`) (для флага и переменной — префикс `--tools` или `CODELAB_TOOLS`) |
 | неверный формат элемента | `--tools: ожидалось <tool>=on или <tool>=off, получено "exec:off"` |
 | `*` не в конце MCP-шаблона или у встроенного имени | `--tools: шаблон * допустим только в форме mcp__<server>__* или mcp__*: "ex*"` |
 | `on` для встроенного инструмента, чья capability выключена профилем, сервисом или конфигом | `--tools exec=on: инструмент недоступен: capability shellExec выключена (на платформе нет shell)` |
+| явный `on` для зависимого инструмента, чей якорь в итоге выключен (`agent` → `agent_*`, `exec` → `job_*`, `task_create` → `task_update`, `task_list`, `task_get`; шаг 1 ниже) | `--tools task_get=on: инструмент недоступен: выключен инструмент task_create, от которого он зависит (включите task_create или уберите task_get=on)` |
 
 MCP-селектор, которому при создании сессии не соответствует ни один инструмент подключённых
 серверов, — не ошибка (серверы клиента приходят в `session/new`), а предупреждение
@@ -488,10 +522,21 @@ MCP-селектор, которому при создании сессии не
 **Алгоритм применения.**
 
 1. `buildAgentCore` (§10.7, шаг 5f): после сборки реестра встроенных инструментов удалить из него
-   каждый инструмент с `toolEnabled(name, switches) == false`. Выключение `task` удаляет и
-   `task_status`, `task_cancel`, `task_send`, `task_resume`, `task_observe` (без `task` им нечем управлять); выключение `exec` удаляет и
-   `job_output`, `job_kill` (после MVP, §17.9). `on` для инструмента, которого нет
-   в реестре из-за capability, — ошибка из таблицы выше.
+   каждый инструмент с `toolEnabled(name, switches) == false`. Выключение `agent` удаляет и
+   `agent_status`, `agent_cancel`, `agent_send`, `agent_resume`, `agent_observe` (без `agent` им нечем управлять); выключение `exec` удаляет и
+   `job_output`, `job_kill` (после MVP, §17.9); выключение `task_create` удаляет и `task_update`,
+   `task_list`, `task_get` (без `task_create` список корня всегда пуст; секция `tools/tasks` уходит
+   по шагу 4; решение пользователя 2026-11-12, design.md change `add-subagents-and-tasks`, D30).
+   Обратного правила нет: `task_update`, `task_list`, `task_get` выключаются и по одному, остальные
+   остаются. Правило — только для переключателей этого раздела; тип субагента со списком `tools`,
+   где есть `task_update` без `task_create`, допустим (потомок меняет статусы своих пунктов,
+   §17.16.4, TSK-4). `on` для инструмента, которого нет в реестре из-за capability, — ошибка из
+   таблицы выше. Явный `on` зависимого инструмента при выключенном якоре — тоже ошибка таблицы
+   («якорь выключен»), одно правило для `agent_*`, `job_*` и `task_*`: проверяется после слияния
+   всех источников, когда известно итоговое состояние якоря (`task_create=off,task_get=on` — ошибка;
+   `task_get=on` без выключенного `task_create` — не ошибка). Молча игнорировать `on` нельзя:
+   пользователь, включивший инструмент явно, должен узнать, почему его нет (решение пользователя
+   2026-11-12, design.md change `add-subagents-and-tasks`, D30).
 2. MCP-инструменты (на сессию, в том числе после переподключения и `tools/list_changed`,
    §17.5.7): выключенный инструмент не регистрируется.
 3. Определение агента (§15.8, шаг 5) и тип субагента (§17.3.3, шаг 3) **пересекаются** с уже
@@ -514,7 +559,8 @@ MCP-селектор, которому при создании сессии не
 видимостью: deny оставляет схему и отказывает при вызове, выключение убирает схему.
 
 Пример: `codelab -p "fix the failing test" --tools exec=off,mcp__github__*=off` → схемы `read`,
-`write`, `edit`, `ls`, `search`, `update_plan`; секций `tools/exec` и строки сервера `github` в
+`write`, `edit`, `ls`, `search`, `task_create`, `task_update`, `task_list`, `task_get` (до change
+`add-subagents-and-tasks` — `update_plan`); секций `tools/exec` и строки сервера `github` в
 секции `mcp` нет; `codelab -p … --tools exec=on` при `tools.disabled: [exec]` в глобальном
 конфиге возвращает `exec`, и он по-прежнему спрашивает одобрение в режиме `standard`.
 
@@ -649,23 +695,20 @@ MCP-селектор, которому при создании сессии не
    `backgroundJobs` (§17.9). Перезапись секретов в команде и заметка — §17.12.6; запрет
    команд-читателей файлов учётных данных — §17.12.7.
 
-### update_plan — tier `read`, kind `think`
+### Инструменты списка задач — tier `read`, kind `think`
 
-```json
-{"type":"object","properties":{
-  "entries":{"type":"array","items":{"type":"object","properties":{
-    "content":{"type":"string"},
-    "priority":{"type":"string","enum":["high","medium","low"]},
-    "status":{"type":"string","enum":["pending","in_progress","completed"]}},
-   "required":["content","priority","status"]}}},
- "required":["entries"]}
-```
+После change `add-subagents-and-tasks` план ведут четыре инструмента списка задач: `task_create`,
+`task_update`, `task_list`, `task_get` — tier `read`, kind `think`, `outputTrust` `trusted`,
+`permissionPattern` `*` (§7.5). Схемы, тексты вывода и ошибок, детский вариант для субагентов и
+проекция в ACP `plan` с `_meta.codelab.task` — [§17.16.3–§17.16.5](17-16-task-list.md#17163-инструменты).
+Список — `TaskList` в `ToolServices.tasks`; каждая операция, изменившая список, эмитит
+`TaskListChanged` до своего `ToolCallFinished`, журнал получает запись `task` (§8.2.4, §17.16.6).
 
-Заменяет план целиком (так требует ACP `plan`: клиент заменяет весь список). Сервис плана
-сессии (`PlanService` в `ToolServices.plan`; сессия задаёт ему `publish` — эмит в очередь `Agent`,
-§5.6) эмитит `PlanUpdated(entries)`, и `update_plan` ждёт доставки до своего `ToolCallFinished` → ACP `session/update` `plan`; журнал получает запись `plan`
-(§8). Больше одного `in_progress` допускается, но дописывается `[Note: more than one entry is in_progress.]`.
-Вывод: `Plan updated: 3 entries (1 completed, 1 in progress, 1 pending).`
+До change `add-subagents-and-tasks` здесь был `update_plan`: модель присылала план целиком
+(`entries` с `content`, `priority`, `status`), сервис плана (`PlanService` в `ToolServices.plan`)
+эмитил `PlanUpdated(entries)` → ACP `plan`, журнал получал запись `plan`. Инструмента в схемах
+больше нет; его вызовы в истории старых сессий остаются как есть, а последняя запись `plan`
+становится начальным списком задач (§17.16.6).
 
 ### MCP-инструменты
 
@@ -868,7 +911,7 @@ essential`, §17.11.9). Схемы, тексты и алгоритмы — §17.
 * `mcp_tool_adapter_test.dart`: имя `mcp__<server>__<tool>` из 80 символов → ровно 64 символа: первые 56, `_`, 7 hex-символов SHA-256 полного имени; два имени с общими первыми 56 символами дают разные имена; сокращение детерминировано между запусками; `readOnlyHint: true` → `kind: read`, `destructiveHint: true` → `edit` или `execute` по `openWorldHint`, без аннотаций → `other`; `tier` всегда `exec`, `readOnlyHint: true` не снимает вопрос одобрения в режиме `standard`.
 * `fence_test.dart`: MCP-результат с `ignore previous instructions` и поддельным закрывающим маркером попадает в запрос к модели целиком внутри ограды (TOOL-10).
 * `misuse_breaker_test.dart` — критерий матрицы **`core/misuse-breaker-blocks-repeat`** (C-08), scripted LLM с `warnAfter = 3`, `blockAfter = 6`: семь шагов подряд с вызовом `read {"limit":"ten"}` → ответы 1–2 без предупреждения, 3–5 с `[Warning: this exact call has failed <n> times …]`, 6 — с `… is now blocked until the turn ends.]`, 7 — `Blocked: this exact call to read has already failed 6 times …`, outcome `failed`, `validate` и gate на седьмом не вызывались; `{"path":"a","limit":"ten"}` и `{"limit":"ten","path":"a"}` — один ключ, `{"limit":10}` — другой и исполняется; шесть отказов разрешения подряд и шесть `exec` с ненулевым кодом не блокируются; `loop.misuse.enabled: false` → блокировки нет; ACP-проекция — `tool_call_update` `failed` с текстом блокировки (TOOL-11).
-* `tool_switches_test.dart` (ядро): `tools.disabled: [exec, mcp__github__*]` в глобальном конфиге + `CODELAB_TOOLS=exec=on` → `exec` есть; флаг `--tools exec=off` поверх → нет; `mcp__github__create_issue=on` после шаблона `mcp__github__*=off` возвращает один инструмент; проектный `tools.disabled: []` не возвращает глобально выключенный `exec` (объединение); схемы запроса, `Available tools` и системный промпт не содержат `exec` и секции `tools/exec`; определение агента с `tools: [read, exec]` даёт только `read`; субагент не получает `exec`; режим `standard` спрашивает одобрение на `write` как без выключения; `exec=on` в профиле `mobile` → `ConfigException` про `shellExec`; `exce=off` → ошибка со списком и подсказкой `exec`; выключение `task` убирает `task_status` и `task_cancel` (TOOL-12, TOOL-13).
+* `tool_switches_test.dart` (ядро): `tools.disabled: [exec, mcp__github__*]` в глобальном конфиге + `CODELAB_TOOLS=exec=on` → `exec` есть; флаг `--tools exec=off` поверх → нет; `mcp__github__create_issue=on` после шаблона `mcp__github__*=off` возвращает один инструмент; проектный `tools.disabled: []` не возвращает глобально выключенный `exec` (объединение); схемы запроса, `Available tools` и системный промпт не содержат `exec` и секции `tools/exec`; определение агента с `tools: [read, exec]` даёт только `read`; субагент не получает `exec`; режим `standard` спрашивает одобрение на `write` как без выключения; `exec=on` в профиле `mobile` → `ConfigException` про `shellExec`; `exce=off` → ошибка со списком и подсказкой `exec`; выключение `agent` убирает `agent_status` и `agent_cancel`; `task_create=off` убирает `task_update`, `task_list`, `task_get` и секцию `tools/tasks`, а `task_get=off` — только `task_get`; `task_create=off,task_get=on`, `agent=off,agent_status=on` и `exec=off,job_output=on` → `ConfigException` «якорь выключен»; тип субагента с `tools: [read, task_update]` при включённом `task_create` получает `task_update` (TOOL-12, TOOL-13; D30 change `add-subagents-and-tasks`).
 * `cli/tools-flag-disables-exec` (критерий матрицы T-26, сценарий CLI на scripted провайдере): `codelab -p "list files" --tools exec=off` со встроенным агентом → первый запрос к модели не содержит схемы `exec` и секции `tools/exec`; модель зовёт `exec` → результат `Tool "exec" is not available. Available tools: …` без вопроса одобрения; код выхода 0; `--tools exce=off` → ошибка со списком инструментов, код выхода 64.
 * `builtin_tools_golden_test.dart`: каждый инструмент на `MemoryExecutionEnv` — вывод совпадает с golden; `search` с glob `**/*.dart`; `exec` на `MemoryExecutionEnv` → текст `Shell commands are not available...`.
 

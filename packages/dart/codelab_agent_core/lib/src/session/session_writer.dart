@@ -1,7 +1,9 @@
 import '../commands/expand_command.dart' show CommandRef;
 import '../llm/messages.dart';
 import '../loop/agent_events.dart';
+import '../subagents/subagent_report.dart' show failureWire;
 import '../tools/agent_tool.dart';
+import '../tools/tasks/task_list.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
 import '../util/logger.dart';
@@ -140,14 +142,63 @@ final class SessionWriter {
             modeId: mode.value,
           ),
         );
-      case PlanUpdated(:final entries):
+      case TaskListChanged(:final change):
+        // Восстановление списка не операция: состояние выводится из ветки
+        // журнала, запись продублировала бы её (TSK-1, D29).
+        if (change.op != TaskChange.restoreOp) {
+          await _write(
+            (id, parent, at) => TaskRecord(
+              id: id,
+              parentId: parent,
+              timestamp: at,
+              op: change.op,
+              actor: change.actor,
+              items: change.changed,
+              deleted: change.deleted,
+            ),
+          );
+        }
+      case SubagentStarted():
+        // Связь с журналом ребёнка, `durable`: после сбоя по ней видно, что
+        // ребёнок был запущен (SUB-9; agent-sessions, таблица событий).
         await _write(
-          (id, parent, at) => PlanRecord(
+          (id, parent, at) => SubagentRecord(
             id: id,
             parentId: parent,
             timestamp: at,
-            entries: entries,
+            subagentId: event.subagentId,
+            toolCallId: event.parentToolCallId,
+            agent: event.agent,
+            description: event.description,
+            childSessionId: event.childSessionId.value,
+            journal: event.journalPath,
+            status: 'running',
           ),
+          durable: true,
+        );
+      case SubagentFinished():
+        // Итоговая запись — точка восстановления отчёта; пишется до
+        // `ToolCallFinished(agent)` (SUB-10).
+        await _write(
+          (id, parent, at) => SubagentRecord(
+            id: id,
+            parentId: parent,
+            timestamp: at,
+            subagentId: event.subagentId,
+            toolCallId: event.parentToolCallId,
+            agent: event.agent,
+            description: event.description,
+            childSessionId: event.childSessionId?.value,
+            journal: event.journalPath,
+            status: event.status.name,
+            failure: failureWire(event.failure, event.budgetExceeded),
+            report: event.report,
+            usage: event.usage,
+            toolCalls: event.toolCalls,
+            durationMs: event.duration.inMilliseconds,
+            truncated: event.truncated,
+          ),
+          durable: true,
         );
       case SessionTitleChanged(:final title):
         await _write(

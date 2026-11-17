@@ -243,7 +243,7 @@
             "sessionUpdate": "tool_call",
             "toolCallId": "call_1",
             "title": "mcp__fake__write_note",
-            "kind": "read",
+            "kind": "other",
             "status": "pending",
             "rawInput": {
               "text": "x"

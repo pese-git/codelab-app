@@ -2,6 +2,8 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import '../transcript/subagent_views.dart';
+
 part 'session_views.freezed.dart';
 
 /// Опция конфигурации сессии (`session/new`, `config_option_update`,
@@ -90,24 +92,140 @@ abstract class AgentCommandView with _$AgentCommandView {
 ///
 /// Почему: план показывают и app, и CLI, а правило «последнее обновление
 /// заменяет план целиком» должно быть одним (design.md change
-/// `add-codelab-cli`, D14; прежде — `currentPlanOf` app).
+/// `add-codelab-cli`, D14; прежде — `currentPlanOf` app). Список задач
+/// CodeLab приходит тем же `plan`, а его id, владелец и блокеры — в
+/// `_meta.codelab.task` пункта (change `add-subagents-and-tasks`, D15).
 ///
 /// Для чего: элемент `SessionView.plan`; статус и приоритет — значения ACP
-/// как есть.
+/// как есть. Поля задачи пусты у плана стороннего агента без `_meta`:
+/// [taskId] — `null`, [blockedBy] и [openBlockers] — пустые.
+///
+/// Как использовать: хост печатает `#<taskId> [<status>] <content>`, а
+/// [ownerLabel] и [openBlockers] — суффиксами; [blockedBy] — сырой список
+/// из `_meta`, [openBlockers] — его часть, чьи пункты в текущем плане не
+/// `completed`. Метка владельца — `type` субагента из вызова `agent` сессии
+/// (`ToolCallView.subagentCall`, 2.9b), а без известного вызова — его id;
+/// для `owner: main` и без `owner` метки нет.
 @freezed
 abstract class PlanEntryView with _$PlanEntryView {
   const factory PlanEntryView({
     required String content,
     required PlanEntryStatus status,
     required PlanEntryPriority priority,
+
+    /// `_meta.codelab.task.id`.
+    String? taskId,
+
+    /// `_meta.codelab.task.owner`: `main` или id субагента.
+    String? owner,
+
+    /// `_meta.codelab.task.blockedBy` как пришёл (только строки).
+    @Default(<String>[]) List<String> blockedBy,
+
+    /// Незавершённые блокеры: id из [blockedBy], пункты которых есть в
+    /// текущем плане и не `completed`.
+    @Default(<String>[]) List<String> openBlockers,
+
+    /// Метка владельца-субагента; `null` для `main` и без владельца.
+    String? ownerLabel,
   }) = _PlanEntryView;
 
-  factory PlanEntryView.of(PlanEntry entry) => PlanEntryView(
-    content: entry.content,
-    status: entry.status,
-    priority: entry.priority,
-  );
+  /// Представление без знания остального плана: блокеры не вычисляются.
+  /// Для плана целиком — [planViewsOf].
+  factory PlanEntryView.of(PlanEntry entry) {
+    final task = taskMetaOf(entry);
+    final owner = task?['owner'];
+    return PlanEntryView(
+      content: entry.content,
+      status: entry.status,
+      priority: entry.priority,
+      taskId: _stringOf(task?['id']),
+      owner: _stringOf(owner),
+      blockedBy: _stringsOf(task?['blockedBy']),
+      ownerLabel: owner is String && owner != 'main' ? owner : null,
+    );
+  }
 }
+
+/// `_meta.codelab.task` пункта плана; `null` при любой неверной форме
+/// (терпимый разбор: отказа обработки обновления нет).
+Map<String, Object?>? taskMetaOf(PlanEntry entry) {
+  final codelab = entry.meta?['codelab'];
+  if (codelab is! Map) {
+    return null;
+  }
+  final task = codelab['task'];
+  return task is Map ? task.cast<String, Object?>() : null;
+}
+
+String? _stringOf(Object? value) => value is String ? value : null;
+
+List<String> _stringsOf(Object? value) =>
+    value is List ? [for (final v in value) ?_stringOf(v)] : const [];
+
+/// Представления пунктов плана [entries] с вычисленными незавершёнными
+/// блокерами (по статусам пунктов этого же плана).
+///
+/// [subagentTypes] — `id` субагента → `type` (см. [subagentTypesOf]): по ним
+/// метка владельца становится типом; без записи остаётся id.
+List<PlanEntryView> planViewsOf(
+  List<PlanEntry> entries, {
+  Map<String, String> subagentTypes = const {},
+}) {
+  final status = <String, PlanEntryStatus>{
+    for (final entry in entries)
+      ?_stringOf(taskMetaOf(entry)?['id']): entry.status,
+  };
+  return List.unmodifiable([
+    for (final entry in entries)
+      _withOwnerType(
+        _withBlockers(PlanEntryView.of(entry), status),
+        subagentTypes,
+      ),
+  ]);
+}
+
+PlanEntryView _withOwnerType(PlanEntryView view, Map<String, String> types) {
+  final owner = view.owner;
+  final type = owner == null ? null : types[owner];
+  return type == null || view.ownerLabel == null
+      ? view
+      : view.copyWith(ownerLabel: type);
+}
+
+/// Типы субагентов сессии: `id` → `type` по вызовам `agent` всех её ходов
+/// (`_meta.codelab.subagent` первого кадра, D28). Сторонний `think` без
+/// признака источником типов не служит.
+Map<String, String> subagentTypesOf(AcpSession session) {
+  final types = <String, String>{};
+  for (final turn in session.turns) {
+    for (final record in turn.toolCalls.values) {
+      if (parseSubagentCall(record.subagentMeta) case final call?
+          when call.id != null) {
+        types[call.id!] = call.type;
+      }
+    }
+    // Второй источник метки владельца (D36 Т13, D42 Т9): спрашивающий потомок
+    // из запроса разрешения; вызов `agent` знает тот же id точнее.
+    for (final approval in turn.approvals.values) {
+      if (parseSubagentRequester(approval.subagentRequester)
+          case final requester?) {
+        types.putIfAbsent(requester.id, () => requester.type);
+      }
+    }
+  }
+  return types;
+}
+
+PlanEntryView _withBlockers(
+  PlanEntryView view,
+  Map<String, PlanEntryStatus> status,
+) => view.copyWith(
+  openBlockers: [
+    for (final id in view.blockedBy)
+      if (status[id] case final s? when s != PlanEntryStatus.completed) id,
+  ],
+);
 
 /// План сессии — записи последнего `SessionUpdate.plan` по всем её ходам.
 ///
@@ -123,7 +241,8 @@ List<PlanEntryView> planOf(AcpSession session) {
       }
     }
   }
-  return List.unmodifiable([
-    for (final entry in latest ?? const <PlanEntry>[]) PlanEntryView.of(entry),
-  ]);
+  return planViewsOf(
+    latest ?? const <PlanEntry>[],
+    subagentTypes: subagentTypesOf(session),
+  );
 }

@@ -6,34 +6,22 @@ import 'config_support.dart';
 const _secret = 'sk-test-secret';
 
 /// Секреты только ссылками (agent-configuration «Секреты только
-/// ссылками»; CFG-2; `core/config-rejects-inline-api-key`; design.md change
-/// `add-agent-configuration`, D8).
+/// ссылками»; CFG-2; `core/config-warns-inline-api-key` (заменил
+/// `core/config-rejects-inline-api-key`: R8-4 сделал литерал в файле
+/// предупреждением, а не отказом); design.md change `add-agent-configuration`,
+/// D8).
 void main() {
-  group('an inline secret', () {
-    for (final key in ['api_key', 'apiKey', 'token', 'secret', 'password']) {
-      test('$key in providers.* is rejected without the value', () {
-        final result = load([
-          layer(
-            withValues(baseValues(), {
-              'providers': {
-                'p': {key: _secret},
-              },
-            }),
-          ),
-        ]);
-
-        final issue = issuesAt(result, 'providers.p.$key').single;
-        expect(issue.kind, ConfigIssueKind.inlineSecret);
-        expect(issue.message, contains('api_key_env'));
-        expect(result.issues.join('\n'), isNot(contains(_secret)));
-        expect(result.config, isNull);
-      });
-    }
-
-    test('in an mcp.servers item is rejected too', () {
+  // До R8-4 (design.md change `add-config-literal-secrets-and-migrate`, D4)
+  // здесь были отказы загрузки `inlineSecret`; теперь литерал в файле —
+  // предупреждение, подробные сценарии — `config_inline_secret_test.dart`.
+  group('an inline secret in a file is a warning, not an error', () {
+    test('providers.* and an mcp.servers item load with the warning only', () {
       final result = load([
         layer(
           withValues(baseValues(), {
+            'providers': {
+              'p': {'apiKey': _secret},
+            },
             'mcp': {
               'servers': [
                 {
@@ -48,28 +36,29 @@ void main() {
         ),
       ]);
 
-      final issue = issuesAt(result, 'mcp.servers[gh].token').single;
-      expect(issue.kind, ConfigIssueKind.inlineSecret);
-      expect(result.issues.join('\n'), isNot(contains(_secret)));
+      expect(result.issues, isEmpty, reason: result.issues.join('\n'));
+      expect(warningsOf(result, 'config.secret.in_file').map((w) => w.key), [
+        'providers.p.apiKey',
+        'mcp.servers[gh].token',
+      ]);
+      expect(result.warnings.join('\n'), isNot(contains(_secret)));
     });
 
-    test('orThrow throws ConfigInlineSecretException with the key path', () {
-      final result = load([
-        layer(
-          withValues(baseValues(), {
-            'providers': {
-              'p': {'api_key': _secret},
-            },
-          }),
-        ),
-      ]);
-
+    test('orThrow maps an issue of the inlineSecret kind to '
+        'ConfigInlineSecretException (synthetic issue: the file loader never '
+        'produces one now)', () {
+      const issue = ConfigIssue(
+        kind: ConfigIssueKind.inlineSecret,
+        key: 'providers.p.api_key',
+        source: 'x',
+        message: 'm',
+      );
       try {
-        result.orThrow();
+        const ConfigLoadResult(issues: [issue]).orThrow();
         fail('must throw');
       } on ConfigInlineSecretException catch (error) {
         expect(error.key, 'providers.p.api_key');
-        expect(error.toString(), isNot(contains(_secret)));
+        expect(error.suggestedSecretName, 'codelab/p');
       }
     });
   });
@@ -81,14 +70,15 @@ void main() {
       },
     });
 
-    test('is read from the environment at load time', () {
+    test('is not read at load time: the provider keeps a reference', () {
       final result = load(
         [layer(withKeyEnv())],
         environment: {'OPENAI_API_KEY': _secret},
       );
 
       final config = result.config!;
-      expect(config.providers.single.config.apiKey, _secret);
+      expect(config.providers.single.config.apiKey, isNull);
+      expect(config.providers.single.key, isA<EnvKeyRef>());
       expect(config.providerProblems, isEmpty);
       expect(result.warnings, isEmpty);
       expect(result.warnings.join(), isNot(contains(_secret)));
@@ -131,79 +121,6 @@ void main() {
       final issue = issuesAt(result, 'providers.p.api_key_secret').single;
       expect(issue.kind, ConfigIssueKind.value);
       expect(issue.message, contains('mutually exclusive'));
-    });
-  });
-
-  group('before the secret store (D8)', () {
-    test('api_key_secret is accepted; choosing the provider gets a '
-        'reason', () {
-      final result = load([
-        layer(
-          withValues(baseValues(), {
-            'providers': {
-              'p': {'api_key_secret': 'codelab/anthropic'},
-            },
-          }),
-        ),
-      ]);
-
-      expect(result.issues, isEmpty);
-      expect(warningsOf(result, 'config.secret.unavailable').single.fields, {
-        'key': 'providers.p.api_key_secret',
-      });
-      expect(
-        result.config!.providerProblems['p'],
-        'API key secret codelab/anthropic cannot be read: the secret store '
-        'is not available yet',
-      );
-    });
-
-    test(r'a ${secret:...} in a provider header gives the same reason', () {
-      final result = load([
-        layer(
-          withValues(baseValues(), {
-            'providers': {
-              'p': {
-                'headers': {'X-Key': r'${secret:codelab/p/key}'},
-              },
-            },
-          }),
-        ),
-      ]);
-
-      expect(warningsOf(result, 'config.secret.unavailable').single.fields, {
-        'key': 'providers.p.headers.X-Key',
-      });
-      expect(result.config!.providerProblems['p'], contains('codelab/p/key'));
-    });
-
-    test(r'an MCP server with ${secret:...} is skipped, the rest of the '
-        'config works', () {
-      final result = load([
-        layer(
-          withValues(baseValues(), {
-            'mcp': {
-              'servers': [
-                {
-                  'name': 'gh',
-                  'type': 'http',
-                  'url': 'https://gh.test/mcp',
-                  'headers': {
-                    'Authorization': r'${secret:codelab/mcp/gh/authorization}',
-                  },
-                },
-                {'name': 'ok', 'type': 'stdio', 'command': 'ok-mcp'},
-              ],
-            },
-          }),
-        ),
-      ]);
-
-      expect(result.issues, isEmpty);
-      expect([for (final s in result.config!.mcpServers) s.name], ['ok']);
-      expect(warningsOf(result, 'config.secret.unavailable').single.fields, {
-        'key': 'mcp.servers[gh].headers.Authorization',
-      });
     });
   });
 

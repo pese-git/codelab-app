@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_setup/codelab_setup.dart'
+    show ConfigLayer, ProviderSetupEvent;
 import 'package:dart_tui/dart_tui.dart' as tea;
 
 import '../input/history.dart';
@@ -37,15 +39,29 @@ final class TuiEffects {
     required HistoryStore history,
     required void Function(int code) onQuit,
     required Future<void> Function(String line) runCommand,
+    void Function(ProviderSetupEvent event, int overlayId)? wizardEvent,
+    Future<void> Function(
+      int overlayId,
+      String key,
+      String? raw,
+      ConfigLayer layer,
+      bool explicitLayer,
+    )?
+    applySetting,
   }) : _session = session,
        _history = history,
        _onQuit = onQuit,
-       _runCommand = runCommand;
+       _runCommand = runCommand,
+       _wizardEvent = wizardEvent,
+       _applySetting = applySetting;
 
   final SessionHandle Function() _session;
   final HistoryStore _history;
   final void Function(int code) _onQuit;
   final Future<void> Function(String line) _runCommand;
+  final void Function(ProviderSetupEvent event, int overlayId)? _wizardEvent;
+  final Future<void> Function(int, String, String?, ConfigLayer, bool)?
+  _applySetting;
 
   /// Один `Cmd` на список команд: несколько — `batch`, пусто — `null`.
   tea.Cmd? toDartTuiCmd(List<TuiCmd> cmds) {
@@ -64,6 +80,21 @@ final class TuiEffects {
       () => _session().respond(approvalId, optionId),
     ),
     RunCommandCmd(:final line) => _guarded(() => _runCommand(line)),
+    // Событие мастера уходит автомату, владельцу подписки на `flow.states`.
+    WizardEventCmd(:final event, :final overlayId) => _guarded(
+      () async => _wizardEvent?.call(event, overlayId),
+    ),
+    // Запись экрана настроек: исход вернётся `SettingsAppliedMsg`.
+    ApplySettingCmd(
+      :final overlayId,
+      :final key,
+      :final raw,
+      :final layer,
+      explicitLayer: final explicit,
+    ) =>
+      _guarded(
+        () async => _applySetting?.call(overlayId, key, raw, layer, explicit),
+      ),
     SaveHistoryCmd(:final entries) => _guarded(() => _history.save(entries)),
     QuitCmd(:final code) => () {
       _onQuit(code);

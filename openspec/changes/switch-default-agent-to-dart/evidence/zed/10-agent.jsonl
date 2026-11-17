@@ -1,0 +1,4 @@
+{"ts": "2026-11-10T15:38:50.415794Z", "level": "info", "event": "session.model.selected", "session_id": "01M731SB5E1H51DTGZ07EM1PMV", "model": "lm/qwen/qwen3.5-9b", "source": "config"}
+{"ts": "2026-11-10T16:40:20.762135Z", "level": "info", "event": "session.model.selected", "session_id": "01M7359Z0SA03YFMJPNHF88DAA", "model": "lm/qwen/qwen3.5-9b", "source": "config"}
+{"ts": "2026-11-10T16:43:17.137353Z", "level": "info", "event": "session.model.selected", "session_id": "01M735FB8FCP8Q1XQKG4QFERVN", "model": "lm/qwen/qwen3.5-9b", "source": "config"}
+{"ts": "2026-11-10T16:44:24.836258Z", "level": "info", "event": "permission.denied", "tool_call_id": "121370437", "tool": "edit", "reason": "plan mode: changes are not allowed"}

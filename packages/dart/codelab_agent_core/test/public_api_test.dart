@@ -69,9 +69,21 @@ void main() {
     for (final public in [
       'src/config/config_tree.dart',
       'src/config/config_issue.dart',
+      'src/config/config_edit.dart',
+      'src/config/settings_registry.dart',
       'src/config/core_config.dart',
       'src/config/host_settings.dart',
       'src/config/redact_settings.dart',
+      // Живая перезагрузка: порт источника и типы отчёта (change
+      // `add-config-writer-and-reload`, D7, D8).
+      'src/config/config_source.dart',
+      // Порт конфигурации папки сессии и его ошибка (change
+      // `require-project-folder`, D21).
+      'src/config/project_config.dart',
+      'src/runtime/config_reload.dart',
+      // План перезагрузки: мост настроек определяет по нему, какой сервер MCP
+      // ждёт перезапуска (change `add-provider-setup-ui`, D11, Q31).
+      'src/config/config_reload_plan.dart',
     ]) {
       expect(barrel, contains("export '$public"), reason: public);
     }
@@ -85,6 +97,30 @@ void main() {
     ]) {
       expect(barrel, isNot(contains("export '$internal")), reason: internal);
     }
+  });
+
+  // Привязка ссылок к адресу (D23) открыта хосту узко: мигратор (D26, C5.6)
+  // решает по ней, можно ли переносить ссылку; правило группы и разбор слоёв
+  // остаются внутри.
+  test('the barrel exposes only the reference binding of provider_binding', () {
+    expect(
+      barrel,
+      contains("export 'src/config/provider_binding.dart'\n    show"),
+    );
+    expect(barrel, isNot(contains('applyProviderGroupRule')));
+    expect(barrel, isNot(contains('providerEntry')));
+  });
+
+  // change `bind-mcp-secrets-to-origin`, D3, D9: ссылки и origin HTTP-сервера
+  // MCP открыты мигратору тем же узким `show`; причина блокировки сервера —
+  // публичное поле `McpServerConfig`.
+  test('the barrel exposes the MCP reference helpers and blockedReason', () {
+    expect(barrel, contains('mcpServerReferences'));
+    expect(barrel, contains('mcpServerOrigin'));
+    final config = File(
+      corePath('lib/src/mcp/mcp_server_config.dart'),
+    ).readAsStringSync();
+    expect(config, contains('final String? blockedReason;'));
   });
 
   test('the barrel exports the runtime and the assembly', () {

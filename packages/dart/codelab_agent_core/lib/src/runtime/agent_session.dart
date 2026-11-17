@@ -1,4 +1,5 @@
 import '../agents/agent_definition.dart';
+import '../skills/skill_catalog.dart';
 import '../cancel/cancel_token.dart';
 import '../commands/slash_command.dart';
 import '../env/execution_env.dart';
@@ -12,6 +13,7 @@ import '../loop/turn_budget.dart';
 import '../mcp/mcp_server_config.dart';
 import '../permissions/gate.dart';
 import '../permissions/modes.dart';
+import '../tools/tasks/task_list.dart';
 import '../util/logger.dart';
 
 /// Публичный API сессии (`agent-core-architecture` §5.6).
@@ -37,6 +39,17 @@ abstract interface class AgentSession {
   /// `model` (§13.6; design.md change `add-dart-agent-acp-server`, D3).
   ModelRef get model;
 
+  /// Каталог моделей этой сессии (design.md change `require-project-folder`,
+  /// D21).
+  ///
+  /// Почему на сессии, а не на рантайме: у сессии папки, отличной от корня
+  /// запуска, свой каталог (провайдер «This project only» проекта `B` есть в
+  /// сессиях `B` и не виден сессиям `A`). ACP-адаптер берёт из него варианты
+  /// опции `model` и проверку `session/set_config_option`; у сессии в корне
+  /// это каталог применённого снимка, и он меняется перезагрузкой (после неё
+  /// сессия получает `ModelOptionsChanged`).
+  ModelCatalog get models;
+
   /// Уровень рассуждения сессии; хранится и у модели без рассуждения, но в
   /// запрос уходит только у модели с `supportsReasoning` (§2.12.3).
   ReasoningEffort get effort;
@@ -54,12 +67,18 @@ abstract interface class AgentSession {
   /// шага.
   Future<void> setEffort(ReasoningEffort effort);
 
-  /// Команды шаблонов проекта и пользователя в байтовом порядке имён
+  /// Команды сессии: сначала встроенные в порядке §13.4 — `compact`, `mode`,
+  /// `model`, `status`, `config`, `mcp`, `help` (design.md changes
+  /// `add-config-writer-and-reload`, D12, и `add-agent-builtin-slash-commands`,
+  /// D2), затем команды шаблонов проекта и пользователя в байтовом порядке имён
   /// (design.md change `add-agent-project-files`, D7, D9).
   ///
-  /// Список строится при открытии сессии и не меняется до её закрытия. ACP-
-  /// адаптер публикует его как `available_commands_update`; инструменты
-  /// модели в него не входят (R-07). Без порта файлов проекта список пуст.
+  /// `compact` объявлена при включённой capability `compaction`; `config` —
+  /// если ядру передан `ConfigSource` и `buildAgentCore` вызван с
+  /// `configCommand: true`; `mcp` — при включённой capability `mcp`; `mode`,
+  /// `model`, `status` и `help` — всегда. Список строится при открытии сессии и
+  /// не меняется до её закрытия. ACP-адаптер публикует его как
+  /// `available_commands_update`; инструменты модели в него не входят (R-07).
   List<SlashCommand> get commands;
 
   /// Определения агентов со `scope` `session` и `both` в байтовом порядке имён
@@ -69,6 +88,13 @@ abstract interface class AgentSession {
   /// адаптер строит из него опцию `agent` (D12); пуст — опции нет. Без порта
   /// файлов проекта список пуст.
   List<AgentDefinition> get agents;
+
+  /// Снимок навыков сессии (design.md change `add-agent-skills`, D10, D16):
+  /// строится при открытии и загрузке сессии и не меняется до её закрытия, в
+  /// том числе при перезагрузке конфигурации (SKL-4). Секция промпта,
+  /// инструмент `skill`, команды `skill:*` и приложение после сжатия читают
+  /// только его. [SkillCatalog.empty] — навыков нет.
+  SkillCatalog get skills;
 
   /// Имя текущего агента; [defaultAgentName] (`default`) — профиль не выбран.
   String get agent;
@@ -98,8 +124,22 @@ abstract interface class AgentSession {
   /// шаблоны и PERM-11 выбор агента не меняет.
   Future<ConfigChangeResult> setAgent(String name);
 
-  /// Запускает ход; второй вызов во время хода — [StateError] (LOOP-10).
-  /// Возвращается после `TurnEnded` и записи журнала.
+  /// Запускает ход; второй вызов во время хода или встроенной команды —
+  /// [StateError] (LOOP-10). Возвращается после `TurnEnded` и записи журнала.
+  ///
+  /// Контракт доставки: к возврату все события хода (включая `TurnEnded`)
+  /// доставлены подписчикам [events], не ставящим подписку на паузу, — так
+  /// мост ACP строит ответ на `session/prompt` по `TurnEnded` (ACP-3).
+  ///
+  /// Встроенные команды (`compact`, `mode`, `model`, `status`, `config`, `mcp`,
+  /// `help`; первый текстовый блок, слово до первого пробельного символа)
+  /// исполняются здесь же, без модели и без записи промпта в журнал (CFG-18):
+  /// события `TurnStarted`, одно сообщение агента, `TurnEnded(completed)`;
+  /// отмена — `TurnEnded(cancelled)` без текста, сбой — `AgentError` и
+  /// `TurnEnded(failed)`. Слово `/x` без команды и без шаблона — ответ
+  /// `Unknown command` без модели (D3, D4 change
+  /// `add-agent-builtin-slash-commands`). Команда занимает слот хода, но ходом
+  /// модели не является (D12).
   Future<TurnResult> prompt(List<ContentBlock> content, {CancelToken? cancel});
 
   Future<void> cancel();
@@ -126,8 +166,27 @@ abstract interface class AgentSession {
   /// Вызов на закрытой сессии — [StateError].
   Future<void> setMcpServers(List<McpServerConfig> servers);
 
+  /// Список задач дерева сессии (`agent-core/17-16-task-list.md` §17.16).
+  ///
+  /// Для чтения: пункты меняют только инструменты `task_*`, а открытие сессии
+  /// и смена ветки восстанавливают список из журнала.
+  TaskList get tasks;
+
   /// События журнала активной ветки для `session/load` (§8.3, D4).
   Iterable<AgentEvent> replay();
+
+  /// События [replay] и `SubagentActivity` потомков из их журналов (design.md
+  /// change `add-subagents-and-tasks`, D47 Т6; `agent-core/05-agent-loop.md`
+  /// §5.6).
+  ///
+  /// Почему отдельный метод: [replay] синхронный и прежний (D1), а журналы
+  /// потомков читаются асинхронно через `SessionStore.openChildReadOnly` —
+  /// без записи и без lease. Для чего: реплей клиенту с согласием
+  /// `subagentToolCalls`; события потомка идут сразу после
+  /// `ToolCallFinished` вызова `agent` с адресом, как вживую. Снимок корня
+  /// берётся синхронно в момент вызова. Журнал, который не открылся, — лог
+  /// `subagent.replay_failed` и реплей без потомков этого вызова, не ошибка.
+  Future<List<AgentEvent>> replayTree();
 
   /// Отменяет идущий ход, дожидается очереди записи журнала и закрывает
   /// поток событий; журнал остаётся в хранилище.
@@ -141,12 +200,16 @@ final class TurnResult {
     required this.usage,
     this.budgetExceeded,
     this.held,
+    this.subagentUsage,
   });
 
   final TurnEndReason reason;
   final Usage usage;
   final BudgetLimit? budgetExceeded;
   final String? held;
+
+  /// Usage детей хода, уже включённый в [usage]; `null` — детей не было.
+  final Usage? subagentUsage;
 }
 
 /// Ports of one session; each falls back to `AgentCoreServices`.
@@ -162,6 +225,7 @@ final class SessionHostPorts {
     this.logger,
     this.extraBeforeToolCall = const [],
     this.extraAfterToolCall = const [],
+    this.execOnHost = false,
   });
 
   final ExecutionEnv? env;
@@ -173,6 +237,16 @@ final class SessionHostPorts {
 
   /// Первыми в `afterToolCall`.
   final List<AfterToolCallHook> extraAfterToolCall;
+
+  /// [env] исполняет команды на машине агента (design.md change
+  /// `add-agent-skills`, D5, D17).
+  ///
+  /// Почему явный признак: окружение клиента ACP команды запускает у клиента
+  /// и отклоняет `cwd` в каталоге навыка агента, а обёртки env скрывают тип
+  /// объекта. Хост ставит `true` только для локального окружения (встроенный
+  /// агент, `localEnv`); при `env == null` сессия и так исполняет на
+  /// `baseEnv` хоста, признак не нужен.
+  final bool execOnHost;
 }
 
 final class SessionSpec {

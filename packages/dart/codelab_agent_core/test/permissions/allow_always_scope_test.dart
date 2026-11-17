@@ -3,6 +3,7 @@ import 'package:codelab_agent_core/src/tools/builtin/edit.dart';
 import 'package:codelab_agent_core/src/tools/builtin/exec.dart';
 import 'package:test/test.dart';
 
+import '../subagents/subagent_rig.dart';
 import 'fake_gate.dart';
 import 'policy_harness.dart';
 
@@ -38,4 +39,39 @@ void main() {
       expect(gate.requests.map((r) => r.toolCallId), ['a1', 'b1', 'x1']);
     },
   );
+
+  // Характеризующий, зелёный сразу (D42 Т1): `SubagentTool.permissionPattern`
+  // уже возвращает имя типа. Сценарий agent-permissions «Всегда для типа
+  // субагента»; `agent` в `ask` спрашивает даже на уровне read.
+  test('always for agent explore does not allow agent general '
+      '(agent-permissions «Всегда для типа субагента», PERM-3)', () async {
+    final gate = FakeGate(
+      (req) => req.rawInput['type'] == 'explore'
+          ? PermissionDecision.allowAlways
+          : PermissionDecision.allowOnce,
+    );
+    final rig = SubagentRig(
+      gate: gate,
+      config: rigConfig(mode: ModeId.ask),
+      scripts: {
+        'go': [
+          oneCallStep('c1', 'agent', agentArgs('look 1', type: 'explore')),
+          multiCallStep([
+            ('c2', 'agent', agentArgs('look 2', type: 'explore')),
+            ('c3', 'agent', agentArgs('work', type: 'general')),
+          ]),
+          replyStep('done'),
+        ],
+        'look 1': [replyStep('seen 1')],
+        'look 2': [replyStep('seen 2')],
+        'work': [replyStep('worked')],
+      },
+    );
+    await rig.open();
+
+    await rig.run('go');
+
+    expect([for (final r in gate.requests) r.toolCallId], ['c1', 'c3']);
+    expect(gate.requests.map((r) => r.pattern), ['explore', 'general']);
+  });
 }

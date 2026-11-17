@@ -36,7 +36,13 @@ final _graph = [
   WorkspacePackage('codelab_agent', 'apps/codelab_agent', {
     'codelab_agent_acp',
   }),
-  WorkspacePackage('codelab_cli', 'apps/codelab_cli', {'codelab_client_acp'}),
+  WorkspacePackage('codelab_embedded', 'packages/dart/codelab_embedded', {
+    'codelab_agent_acp',
+  }),
+  WorkspacePackage('codelab_cli', 'apps/codelab_cli', {
+    'codelab_client_acp',
+    'codelab_embedded',
+  }),
   WorkspacePackage('codelab_ui', 'packages/flutter/codelab_ui'),
   WorkspacePackage('codelab_desktop', 'apps/codelab_desktop', {
     'codelab_ui',
@@ -60,6 +66,35 @@ void main() {
       'apps/codelab_cli/AGENTS.md',
       'README.md',
     ]);
+
+    expect(scope.full, isFalse);
+    expect(scope.jobs, isEmpty);
+  });
+
+  test('Правка только матрицы: изменение agent-parity-goals.md даёт джоб '
+      'guard (change switch-default-agent-to-dart, D7)', () {
+    // Разбор матрицы (D2) ломается от правки таблицы, поэтому pull request,
+    // который меняет только её, обязан прогнать сторож, а не ждать ночи.
+    final scope = _scope(['docs/architecture/proposals/agent-parity-goals.md']);
+
+    expect(scope.full, isFalse);
+    expect(scope.jobs.map((j) => j.job), ['guard']);
+    expect(_byName(scope)['guard']!.scripts, 'guard');
+  });
+
+  test('матрица рядом с другой документацией по-прежнему даёт guard', () {
+    final scope = _scope([
+      'docs/architecture/testing.md',
+      'docs/architecture/proposals/agent-parity-goals.md',
+      'openspec/changes/x/tasks.md',
+    ]);
+
+    expect(scope.full, isFalse);
+    expect(scope.jobs.map((j) => j.job), ['guard']);
+  });
+
+  test('другой документ из docs/proposals по-прежнему не даёт джобов', () {
+    final scope = _scope(['docs/architecture/proposals/delivery-roadmap.md']);
 
     expect(scope.full, isFalse);
     expect(scope.jobs, isEmpty);
@@ -118,6 +153,7 @@ void main() {
       'codelab_client_acp',
       'codelab_agent_acp',
       'codelab_agent',
+      'codelab_embedded',
       'codelab_cli',
       'codelab_desktop',
     });
@@ -131,10 +167,16 @@ void main() {
       _scope(['packages/dart/codelab_acp_protocol/lib/a.dart']),
     );
 
-    expect(client['conformance']!.scripts, 'conformance:client');
+    // Корпус против встроенного агента играет CLI: он затронут и клиентским
+    // слоем, и мостом `codelab_embedded` (change `add-embedded-agent-mode`).
+    expect(
+      client['conformance']!.scripts,
+      'conformance:client conformance:embedded',
+    );
     expect(
       protocol['conformance']!.scripts,
-      'protocol-conformance conformance:client conformance:agent',
+      'protocol-conformance conformance:client conformance:agent '
+      'conformance:embedded',
     );
     expect(_byName(_scope(['apps/codelab_desktop/lib/a.dart'])), {
       'format': anything,
@@ -157,6 +199,32 @@ void main() {
       _byName(_scope(['packages/flutter/codelab_ui/lib/a.dart'])).keys,
       isNot(contains('e2e-cli-dart')),
     );
+  });
+
+  test('the embedded CLI e2e and corpus run when the CLI or the embedded '
+      'agent is affected', () {
+    for (final file in [
+      'apps/codelab_cli/lib/a.dart',
+      'packages/dart/codelab_embedded/lib/a.dart',
+      'packages/dart/codelab_agent_acp/lib/a.dart',
+    ]) {
+      final jobs = _byName(_scope([file]));
+
+      expect(jobs.keys, contains('e2e-cli-embedded'), reason: file);
+      expect(jobs['e2e-cli-embedded']!.scripts, 'test:e2e:cli:embedded');
+      expect(jobs['conformance']!.scripts, contains('conformance:embedded'));
+    }
+    expect(
+      _byName(_scope(['apps/codelab_desktop/lib/a.dart'])).keys,
+      isNot(contains('e2e-cli-embedded')),
+    );
+  });
+
+  test('the full run has the embedded jobs of the check script', () {
+    final jobs = {for (final job in fullJobs) job.job: job};
+
+    expect(jobs['e2e-cli-embedded']!.scripts, 'test:e2e:cli:embedded');
+    expect(jobs['conformance']!.scripts, contains('conformance:embedded'));
   });
 
   test('the agent core adds prompts:check and web-compile, so does any of '

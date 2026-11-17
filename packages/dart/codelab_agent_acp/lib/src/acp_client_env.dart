@@ -180,11 +180,26 @@ final class AcpClientExecutionEnv implements ExecutionEnv {
         ExecError(ExecErrorCode.spawnFailed, message: _describe(failure)),
       );
     }
-    if (options.onTerminal case final onTerminal?) {
-      onTerminal(terminal.value);
-      await terminalShown?.call(terminal.value);
-    }
     try {
+      if (options.onTerminal case final onTerminal?) {
+        onTerminal(terminal.value);
+        // Показ терминала ждёт кадр моста, а мост может его отбросить (ход
+        // отменён, `cancel_grace` истёк, D47 Т4): гонка с отменой не даёт
+        // `exec` повиснуть, а `finally` ниже освобождает терминал и тогда.
+        final shown = terminalShown?.call(terminal.value);
+        if (shown != null) {
+          try {
+            await raceCancel(shown, options.cancel);
+          } on CancelledException {
+            return Err(
+              ExecError(
+                ExecErrorCode.aborted,
+                duration: _clock.now().difference(started),
+              ),
+            );
+          }
+        }
+      }
       return await _awaitTerminal(sessionId, terminal, options, started);
     } finally {
       // ENV-7: терминал освобождается на любом пути, включая ошибки,

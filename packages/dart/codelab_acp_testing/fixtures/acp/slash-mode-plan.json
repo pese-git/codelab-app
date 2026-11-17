@@ -1,0 +1,250 @@
+{
+  "id": "acp/slash-mode-plan",
+  "spec": [
+    "12-Session Model.md#setting-the-current-mode",
+    "14-Slash Commands.md#running-commands",
+    "13-Session Config Options.md#from-the-agent"
+  ],
+  "description": "Команда «/mode plan» (R-08; agent-core-architecture §13.6; design.md change add-agent-builtin-slash-commands, D6, Q3): сессия в режиме standard. «/help» — один agent_message_chunk со списком команд. «/mode plan» исполняет агент без модели: сначала смена — current_mode_update с currentModeId plan и config_option_update с полным снимком опций (правило 4 §13.6, смену делает агент), затем agent_message_chunk «Mode: plan.», затем end_turn. «/nope» — agent_message_chunk «Unknown command: /nope. Run /help to list commands.» и end_turn. Все уведомления хода идут до ответа на session/prompt (ACP-3); scripted-модель запросов не получает.",
+  "goals": [
+    "R-08"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard"
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": []
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "helpId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/help"
+            }
+          ]
+        }
+      },
+      "note": "список команд"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Commands:\n/compact [focus] - Compact the session history\n/mode plan | ask | standard | accept-edits | bypass - Switch the session mode\n/model provider/model - Switch the model\n/status - Show the model, mode, working directory and MCP servers\n/mcp list | reload [<id>] | enable <id> | disable <id> - List, reload, enable or disable MCP servers\n/help - List commands"
+            }
+          }
+        }
+      },
+      "note": "тот же текст, что в acp/slash-help"
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${helpId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "modeId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/mode plan"
+            }
+          ]
+        }
+      },
+      "note": "пользователь переключает режим командой"
+    },
+    {
+      "dir": "a2c",
+      "note": "режим сессии сменился: первым кадром хода (Q3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "plan"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "смену сделал агент, а не клиент: полный снимок опций уходит уведомлением (agent-core-architecture §13.6, правило 4); mode = plan, model — единственная модель прогона",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": [
+              {
+                "id": "mode",
+                "name": "Mode",
+                "category": "mode",
+                "type": "select",
+                "currentValue": "plan",
+                "options": [
+                  {
+                    "value": "plan",
+                    "name": "Plan"
+                  },
+                  {
+                    "value": "ask",
+                    "name": "Ask"
+                  },
+                  {
+                    "value": "standard",
+                    "name": "Standard"
+                  },
+                  {
+                    "value": "accept-edits",
+                    "name": "Accept edits"
+                  },
+                  {
+                    "value": "bypass",
+                    "name": "Bypass"
+                  }
+                ]
+              },
+              {
+                "id": "model",
+                "name": "Model",
+                "category": "model",
+                "type": "select",
+                "currentValue": "scripted/scripted-1",
+                "options": [
+                  {
+                    "value": "scripted/scripted-1",
+                    "name": "scripted-1"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Mode: plan."
+            }
+          }
+        }
+      },
+      "note": "подтверждение после смены (D6, Q3)"
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3); запросов к scripted-модели нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${modeId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "nopeId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "/nope"
+            }
+          ]
+        }
+      },
+      "note": "неизвестная команда: слово подходит под разбор, но команды и шаблона нет (§13.6, правило 3)"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Unknown command: /nope. Run /help to list commands."
+            }
+          }
+        }
+      },
+      "note": "текстовый ответ, а не ошибка протокола"
+    },
+    {
+      "dir": "a2c",
+      "note": "end_turn; запросов к scripted-модели нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${nopeId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+# CodeLab user config
+agent:
+  default_model: local-<port>/m1
+providers:
+  local-<port>:
+    base_url: http://127.0.0.1:<port>/v1
+    kind: openai-compatible
+    models:
+      m1:
+        context_window: 8000
+secrets:
+  backend: file # keys live in secrets.yaml
+
+# models are added below

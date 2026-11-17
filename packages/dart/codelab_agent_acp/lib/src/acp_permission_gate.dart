@@ -3,6 +3,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 
 import 'connection/client_requests.dart';
 import 'event_projection.dart' show acpContent, acpDiff, acpLocations;
+import 'subagent_chain.dart';
 
 /// Порт разрешений через `session/request_permission`
 /// (`agent-core-architecture` §7.8, §13.9).
@@ -50,7 +51,27 @@ final class AcpPermissionGate implements PermissionGate {
     CancelToken cancel,
   ) async {
     if (_announced case final announced?) {
-      await announced(req.toolCallId);
+      // Клиенту с согласием `subagentToolCalls` цепочка потомка
+      // проецируется `tool_call`, и запрос ждёт её объявления, чтобы встать в
+      // строку своего вызова (D42 Т5, D47 Т3). Клиенту без согласия цепочка
+      // не проецируется (SUB-12) и не будет объявлена никогда; он видел
+      // вызов `agent` корня, его и ждём. Согласие читается из
+      // `ClientLink.capabilities` в момент запроса: после переподключения
+      // оно может смениться. Запрос корня ждёт свой `toolCallId` (§13.7).
+      // Ожидание гоняется с отменой: иначе при отмене в этом окне остался бы
+      // висящий future (с фоновыми потомками — вечное зависание). Исход —
+      // `cancelled`, запрос на провод не уходит. Завершение хода мостом
+      // сессии тоже приходит как `CancelledException` (`SessionBridge`).
+      try {
+        final subagent = req.subagent;
+        final waitFor =
+            subagent != null && !subagentToolCallsConsent(_link.capabilities)
+            ? subagent.parentToolCallId
+            : req.toolCallId;
+        await raceCancel(announced(waitFor), cancel);
+      } on CancelledException {
+        return PermissionDecision.cancelled;
+      }
     }
     Object? raw;
     while (true) {
@@ -94,7 +115,6 @@ final class AcpPermissionGate implements PermissionGate {
 
   acp.RequestPermissionRequest _params(PermissionRequest req) {
     final pattern = req.pattern;
-    final label = req.criticalLabel;
     // Пустой список не отправляется: фикстуры и клиенты ждут ключ только
     // с содержимым (§14.8).
     final content = [
@@ -112,11 +132,7 @@ final class AcpPermissionGate implements PermissionGate {
         rawInput: req.rawInput,
         locations: acpLocations(req.locations),
         content: content.isEmpty ? null : content,
-        meta: label == null
-            ? null
-            : {
-                'codelab': {'critical': true, 'label': label},
-              },
+        meta: _meta(req),
       ),
       options: [
         _option(acp.PermissionOptionKind.allowOnce, 'Allow once'),
@@ -132,6 +148,32 @@ final class AcpPermissionGate implements PermissionGate {
         ),
       ],
     );
+  }
+
+  /// Один объект `_meta.codelab` для `critical`/`label` и `subagent`
+  /// (D42 Т5, §13.12, §17.3.7): раздельные ключи верхнего уровня затёрли бы
+  /// друг друга. Ключ `subagent` значит «спрашивает потомок» (D43 п. 1);
+  /// у запроса корня без критичности `_meta` нет вовсе (§14.8).
+  static Map<String, Object?>? _meta(PermissionRequest req) {
+    final label = req.criticalLabel;
+    final sub = req.subagent;
+    if (label == null && sub == null) {
+      return null;
+    }
+    return {
+      'codelab': {
+        if (label != null) ...{'critical': true, 'label': label},
+        if (sub != null)
+          'subagent': {
+            'id': sub.id,
+            'type': sub.type,
+            'description': sub.description,
+            'depth': sub.depth,
+            'path': sub.path,
+            'parentToolCallId': sub.parentToolCallId,
+          },
+      },
+    };
   }
 
   /// `optionId` совпадает с `kind` варианта (§7.8, шаг 2).

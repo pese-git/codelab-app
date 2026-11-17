@@ -12,9 +12,12 @@ library;
 
 import '../commands/expand_command.dart' show CommandRef;
 import '../llm/messages.dart';
+import '../llm/usage.dart';
+import '../subagents/subagent_model.dart';
 import '../llm/model_ref.dart';
 import '../loop/agent_events.dart';
 import '../tools/agent_tool.dart';
+import '../tools/tasks/task_list.dart';
 
 /// Текущая версия формата журнала (SES-2).
 const sessionFormatVersion = 1;
@@ -62,6 +65,7 @@ final class SessionHeader {
     required this.created,
     required this.agent,
     this.version = sessionFormatVersion,
+    this.parent,
     Map<String, Object?> metadata = const {},
     Map<String, Object?> extra = const {},
   }) : metadata = Map.unmodifiable(metadata),
@@ -83,6 +87,9 @@ final class SessionHeader {
       created: DateTime.parse(_string(json, 'created')),
       agent: AgentInfo.fromJson(_object(json, 'agent')),
       version: version,
+      parent: json['parent'] is Map<String, Object?>
+          ? SessionParent.fromJson(json['parent']! as Map<String, Object?>)
+          : null,
       metadata: json['metadata'] is Map<String, Object?>
           ? json['metadata']! as Map<String, Object?>
           : const {},
@@ -94,6 +101,7 @@ final class SessionHeader {
         'created',
         'agent',
         'metadata',
+        'parent',
       }),
     );
   }
@@ -109,6 +117,11 @@ final class SessionHeader {
   /// Свободные данные хоста; ядро их не интерпретирует.
   final Map<String, Object?> metadata;
 
+  /// Связь журнала потомка с деревом; `null` у журнала сессии пользователя
+  /// (`agent-core/17-3-subagents.md` §17.3.6; change `add-subagents-and-tasks`,
+  /// D7, D36 Т4). Обязателен для `SessionStore.createChild`.
+  final SessionParent? parent;
+
   /// Неизвестные поля заголовка известной версии.
   final Map<String, Object?> extra;
 
@@ -120,7 +133,47 @@ final class SessionHeader {
     'created': formatJournalTime(created),
     'agent': agent.toJson(),
     if (metadata.isNotEmpty) 'metadata': metadata,
+    if (parent != null) 'parent': parent!.toJson(),
     ...extra,
+  };
+}
+
+/// Поле `parent` заголовка журнала потомка: прямой родитель, корень дерева,
+/// вызов `agent`, id, тип и глубина потомка.
+///
+/// Почему в заголовке: дерево восстанавливается по заголовкам и записям
+/// `subagent` (журналы лежат плоско в `subagents/` корня, D7). `agent` —
+/// имя типа: в журнале поле называется так, потому что `type` — вид записи.
+final class SessionParent {
+  const SessionParent({
+    required this.sessionId,
+    required this.rootSessionId,
+    required this.toolCallId,
+    required this.subagentId,
+    required this.agent,
+    required this.depth,
+  });
+
+  factory SessionParent.fromJson(Map<String, Object?> json) => SessionParent(
+    sessionId: SessionId(_string(json, 'sessionId')),
+    rootSessionId: SessionId(_string(json, 'rootSessionId')),
+    toolCallId: _string(json, 'toolCallId'),
+    subagentId: _string(json, 'subagentId'),
+    agent: _string(json, 'agent'),
+    depth: _int(json, 'depth'),
+  );
+
+  final SessionId sessionId, rootSessionId;
+  final String toolCallId, subagentId, agent;
+  final int depth;
+
+  Map<String, Object?> toJson() => {
+    'sessionId': sessionId.value,
+    'rootSessionId': rootSessionId.value,
+    'toolCallId': toolCallId,
+    'subagentId': subagentId,
+    'agent': agent,
+    'depth': depth,
   };
 }
 
@@ -149,6 +202,7 @@ sealed class SessionRecord {
         _rest(json, {'type', 'id', 'parentId', 'timestamp', ...known});
     // Поле, которое не разобралось, остаётся в `extra` и пишется обратно.
     final command = CommandRef.tryParse(json['command']);
+    final skills = CompactionSkill.tryParseList(json['skills']);
     return switch (json['type']) {
       'message' => MessageRecord(
         id: id,
@@ -209,6 +263,58 @@ sealed class SessionRecord {
         ],
         extra: extra(const {'entries'}),
       ),
+      'task' => TaskRecord(
+        id: id,
+        parentId: parentId,
+        timestamp: timestamp,
+        op: _string(json, 'op'),
+        actor: TaskActor.fromWire(json['actor']),
+        items: [
+          for (final item in json['items'] as List<Object?>? ?? const [])
+            TaskItem.fromJson(item! as Map<String, Object?>),
+        ],
+        deleted: [
+          for (final id in json['deleted'] as List<Object?>? ?? const [])
+            parseTaskId(id),
+        ],
+        extra: extra(const {'op', 'actor', 'items', 'deleted'}),
+      ),
+      'subagent' => SubagentRecord(
+        id: id,
+        parentId: parentId,
+        timestamp: timestamp,
+        subagentId: _string(json, 'subagentId'),
+        toolCallId: _string(json, 'toolCallId'),
+        agent: _string(json, 'agent'),
+        description: json['description'] as String? ?? '',
+        childSessionId: json['childSessionId'] as String?,
+        journal: json['journal'] as String?,
+        status: _string(json, 'status'),
+        failure: json['failure'] as String?,
+        report: json['report'] as String?,
+        usage: json['usage'] is Map<String, Object?>
+            ? Usage.fromJson(json['usage']! as Map<String, Object?>)
+            : null,
+        toolCalls: json['toolCalls'] as int?,
+        durationMs: json['durationMs'] as int?,
+        // Запись без поля — не усечённая (старые журналы, D43 п. 5).
+        truncated: json['truncated'] == true,
+        extra: extra(const {
+          'truncated',
+          'subagentId',
+          'toolCallId',
+          'agent',
+          'description',
+          'childSessionId',
+          'journal',
+          'status',
+          'failure',
+          'report',
+          'usage',
+          'toolCalls',
+          'durationMs',
+        }),
+      ),
       'compaction' => CompactionRecord(
         id: id,
         parentId: parentId,
@@ -218,12 +324,14 @@ sealed class SessionRecord {
         tokensBefore: _int(json, 'tokensBefore'),
         tokensAfter: _int(json, 'tokensAfter'),
         details: json['details'] as Map<String, Object?>?,
-        extra: extra(const {
+        skills: skills,
+        extra: extra({
           'summary',
           'firstKeptId',
           'tokensBefore',
           'tokensAfter',
           'details',
+          if (skills != null) 'skills',
         }),
       ),
       'label' => LabelRecord(
@@ -464,17 +572,37 @@ final class ConfigChangeRecord extends SessionRecord {
   Map<String, Object?> get _fields => {'optionId': optionId, 'value': value};
 }
 
-/// Полный снимок плана после `update_plan`.
+/// Пункт плана старого формата (запись `plan`).
+///
+/// Почему не [TaskItem]: запись `plan` больше не пишется, но читается всегда
+/// (`agent-core/17-16-task-list.md` §17.16.6, D12), и её JSON должен
+/// сохраняться побайтово; поэтому здесь только три поля старого формата.
+final class PlanRecordEntry {
+  const PlanRecordEntry({
+    required this.content,
+    required this.priority,
+    required this.status,
+  });
+
+  final String content;
+  final TaskPriority priority;
+  final TaskStatus status;
+}
+
+/// Запись `plan` старого формата: полный снимок плана после `update_plan`.
+///
+/// Новые журналы её не пишут (D12); проекция `buildTaskList` превращает
+/// последнюю запись в список задач «1»…«n».
 final class PlanRecord extends SessionRecord {
   PlanRecord({
     required super.id,
     required super.parentId,
     required super.timestamp,
-    required List<PlanEntry> entries,
+    required List<PlanRecordEntry> entries,
     super.extra,
   }) : entries = List.unmodifiable(entries);
 
-  final List<PlanEntry> entries;
+  final List<PlanRecordEntry> entries;
 
   @override
   String get type => 'plan';
@@ -486,9 +614,139 @@ final class PlanRecord extends SessionRecord {
         {
           'content': e.content,
           'priority': e.priority.name,
-          'status': planStatusWire(e.status),
+          'status': e.status.wire,
         },
     ],
+  };
+}
+
+/// Операция над списком задач (`agent-core/17-16-task-list.md` §17.16.6):
+/// одна запись на `TaskListChanged`, кроме `op: restore` (TSK-1).
+///
+/// [items] — полные снимки изменённых пунктов, [deleted] — удалённые id.
+/// Запись служебная: в контекст модели не входит.
+final class TaskRecord extends SessionRecord {
+  TaskRecord({
+    required super.id,
+    required super.parentId,
+    required super.timestamp,
+    required this.op,
+    required this.actor,
+    required List<TaskItem> items,
+    required List<TaskId> deleted,
+    super.extra,
+  }) : items = List.unmodifiable(items),
+       deleted = List.unmodifiable(deleted);
+
+  final String op;
+  final TaskActor actor;
+  final List<TaskItem> items;
+  final List<TaskId> deleted;
+
+  @override
+  String get type => 'task';
+
+  @override
+  Map<String, Object?> get _fields => {
+    'op': op,
+    'actor': actor.wire,
+    'items': [for (final item in items) item.toJson()],
+    'deleted': deleted,
+  };
+}
+
+/// Связь вызова `agent` с журналом потомка (`agent-core/17-3-subagents.md`
+/// §17.3.6): `running` при получении слота и итоговая запись с отчётом.
+///
+/// Последняя запись с данным [subagentId] выигрывает. Запись служебная, в
+/// контекст модели не входит; итоговая пишется `durable` до
+/// `ToolCallFinished(agent)` (SUB-10) — это точка восстановления отчёта после
+/// сбоя. [agent] — имя типа (в журнале поле называется так, D28).
+final class SubagentRecord extends SessionRecord {
+  SubagentRecord({
+    required super.id,
+    required super.parentId,
+    required super.timestamp,
+    required this.subagentId,
+    required this.toolCallId,
+    required this.agent,
+    required this.description,
+    this.childSessionId,
+    this.journal,
+    required this.status,
+    this.failure,
+    this.report,
+    this.usage,
+    this.toolCalls,
+    this.durationMs,
+    this.truncated = false,
+    super.extra,
+  });
+
+  final SubagentId subagentId;
+  final String toolCallId, agent, description;
+
+  /// `null` у ребёнка, отменённого в очереди.
+  final String? childSessionId, journal;
+
+  /// `running | completed | failed | cancelled`.
+  final String status;
+
+  /// `budget_exceeded:` и лимит, `invalid_output`, `error`, `refused`,
+  /// `interrupted`.
+  final String? failure;
+
+  /// У итоговой записи — тело отчёта после усечения, без обёртки.
+  final String? report;
+  final Usage? usage;
+  final int? toolCalls, durationMs;
+
+  /// Отчёт усечён по `report_max_bytes` или оборван лимитом ответа (§17.3.5,
+  /// шаги 4 и 5). В журнал пишется только `true`; запись без поля читается как
+  /// не усечённая, чтобы вылеченный отчёт получил тот же атрибут обёртки
+  /// `truncated="true"`, что и живой ход (§17.3.6, D43 п. 5).
+  final bool truncated;
+
+  /// Копия записи-шаблона с настоящими `id`, родителем и временем.
+  SubagentRecord placed(String id, String? parentId, DateTime timestamp) =>
+      SubagentRecord(
+        id: id,
+        parentId: parentId,
+        timestamp: timestamp,
+        subagentId: subagentId,
+        toolCallId: toolCallId,
+        agent: agent,
+        description: description,
+        childSessionId: childSessionId,
+        journal: journal,
+        status: status,
+        failure: failure,
+        report: report,
+        usage: usage,
+        toolCalls: toolCalls,
+        durationMs: durationMs,
+        truncated: truncated,
+        extra: extra,
+      );
+
+  @override
+  String get type => 'subagent';
+
+  @override
+  Map<String, Object?> get _fields => {
+    'subagentId': subagentId,
+    'toolCallId': toolCallId,
+    'agent': agent,
+    'description': description,
+    'childSessionId': ?childSessionId,
+    'journal': ?journal,
+    'status': status,
+    'failure': ?failure,
+    'report': ?report,
+    'usage': ?usage?.toJson(),
+    'toolCalls': ?toolCalls,
+    'durationMs': ?durationMs,
+    if (truncated) 'truncated': true,
   };
 }
 
@@ -503,6 +761,7 @@ final class CompactionRecord extends SessionRecord {
     required this.tokensBefore,
     required this.tokensAfter,
     this.details,
+    this.skills,
     super.extra,
   });
 
@@ -511,6 +770,11 @@ final class CompactionRecord extends SessionRecord {
 
   /// Прочитанные и изменённые файлы, `splitTurn`, модель резюме.
   final Map<String, Object?>? details;
+
+  /// Активные навыки на момент сжатия: имя и отпечаток без тела, от новой
+  /// активации к старой (design.md change `add-agent-skills`, D15, D20).
+  /// `null` — поля нет (сессия без активаций, старая запись).
+  final List<CompactionSkill>? skills;
 
   @override
   String get type => 'compaction';
@@ -522,7 +786,82 @@ final class CompactionRecord extends SessionRecord {
     'tokensBefore': tokensBefore,
     'tokensAfter': tokensAfter,
     'details': ?details,
+    'skills': ?skills == null
+        ? null
+        : [for (final skill in skills!) skill.toJson()],
   };
+}
+
+/// Элемент `compaction.skills`: имя навыка и SHA-256 hex его тела в снимке
+/// каталога. Тела и аргументов команды в записи нет (CMP-2, D15).
+///
+/// Почему такой тип: журнал можно подложить или испортить, а запись должна
+/// переживать чтение и запись без потерь (§8.2.2, как `CommandRef`). Поэтому
+/// неизвестные ключи элемента лежат в [extra], а элемент, который не
+/// разобрался (не объект, нет строкового `name` или `fingerprint`), хранит
+/// исходное значение и пишется обратно как есть (design.md change
+/// `add-agent-skills`, D20, LOW (б)).
+///
+/// Как использовать: `compact` создаёт полные элементы; приложение и
+/// `activeSkills` берут только [isValid]. Парсер даёт [tryParseList].
+final class CompactionSkill {
+  const CompactionSkill({
+    required String this.name,
+    required String this.fingerprint,
+    this.extra = const {},
+  }) : _raw = null,
+       _isRaw = false;
+
+  const CompactionSkill._raw(Object? raw)
+    : name = null,
+      fingerprint = null,
+      extra = const {},
+      _raw = raw,
+      _isRaw = true;
+
+  /// Читает один элемент: объект с двумя строковыми полями даёт полный
+  /// элемент, всё остальное — «сырой» (пропускается при приложении).
+  factory CompactionSkill.fromJson(Object? json) {
+    if (json is Map<String, Object?> &&
+        json['name'] is String &&
+        json['fingerprint'] is String) {
+      return CompactionSkill(
+        name: json['name']! as String,
+        fingerprint: json['fingerprint']! as String,
+        extra: Map.unmodifiable({
+          for (final e in json.entries)
+            if (e.key != 'name' && e.key != 'fingerprint') e.key: e.value,
+        }),
+      );
+    }
+    return CompactionSkill._raw(json);
+  }
+
+  /// `null`, если [json] — не список: поле тогда остаётся в `extra` записи и
+  /// пишется обратно как есть (§8.2.2).
+  static List<CompactionSkill>? tryParseList(Object? json) =>
+      json is List<Object?>
+      ? [for (final item in json) CompactionSkill.fromJson(item)]
+      : null;
+
+  /// Имя навыка; `null` у неразобранного элемента.
+  final String? name;
+
+  /// SHA-256 hex тела снимка; `null` у неразобранного элемента.
+  final String? fingerprint;
+
+  /// Неизвестные ключи элемента.
+  final Map<String, Object?> extra;
+
+  final Object? _raw;
+  final bool _isRaw;
+
+  /// Можно ли приложить навык: есть и имя, и отпечаток.
+  bool get isValid => !_isRaw;
+
+  Object? toJson() => _isRaw
+      ? _raw
+      : <String, Object?>{'name': name, 'fingerprint': fingerprint, ...extra};
 }
 
 /// Закладка на запись; пустая метка снимает её.
@@ -628,22 +967,11 @@ final class CustomRecord extends SessionRecord {
   Map<String, Object?> toJson() => _raw ?? super.toJson();
 }
 
-/// Статус плана на проводе (`in_progress`), как в ACP `plan`.
-String planStatusWire(PlanStatus status) => switch (status) {
-  PlanStatus.pending => 'pending',
-  PlanStatus.inProgress => 'in_progress',
-  PlanStatus.completed => 'completed',
-};
-
-PlanEntry _planEntry(Map<String, Object?> json) => PlanEntry(
+PlanRecordEntry _planEntry(Map<String, Object?> json) => PlanRecordEntry(
   content: _string(json, 'content'),
   priority:
-      PlanPriority.values.asNameMap()[json['priority']] ?? PlanPriority.medium,
-  status: switch (json['status']) {
-    'in_progress' => PlanStatus.inProgress,
-    'completed' => PlanStatus.completed,
-    _ => PlanStatus.pending,
-  },
+      TaskPriority.values.asNameMap()[json['priority']] ?? TaskPriority.medium,
+  status: TaskStatus.fromWire(json['status']) ?? TaskStatus.pending,
 );
 
 FileDiff _diff(Map<String, Object?> json) => FileDiff(

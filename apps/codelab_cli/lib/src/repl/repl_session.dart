@@ -123,6 +123,9 @@ final class ReplSession {
       case _:
         break;
     }
+    // Снимок `turn` агент шлёт до ответа (D7), поэтому итог хода уже в
+    // `handle.current.usage`; после любого исхода, кроме очереди (Q18 (а)).
+    renderer.afterTurnStatus(handle.current);
     drawInput();
   }
 

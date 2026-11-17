@@ -131,6 +131,8 @@ void main() {
         sessionId: 's1',
         toolCallId: 'call_1',
         kind: ToolKind.read,
+        // Риск `readOnly` требует содержимого без команды оболочки (D5).
+        rawInput: const {'path': 'README.md'},
       );
       expect((await outcomeOf(7))['optionId'], 'allow-once');
       agent

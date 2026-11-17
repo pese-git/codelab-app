@@ -3,11 +3,13 @@
 // «Интеграционный тест палитры с командами агента»; строка Must R-20
 // матрицы паритета).
 //
-// Только scripted-агент: бинарь `codelab-agent` объявляет пустой
-// `availableCommands` (agent-acp-server), поэтому команд агента в палитре у
-// него нет. Вместо тега `scripted-only` — `skip` в режиме `dart`: тег
-// исключил бы единственный тест файла, и `flutter test` завершился бы
-// ошибкой «No tests ran» (как dart-only тест `session_list_load_flow_test`).
+// Два теста (tasks 1.8 change `add-agent-builtin-slash-commands`, design D9):
+// полный сценарий с тегом `scripted-only` (команда `plan` с `input.hint`
+// есть только у scripted-агента) и тест без тега для встроенной команды
+// `compact`, который идёт во всех режимах (`scripted`, `dart`, `embedded`).
+// Теперь в файле есть тест без тега, поэтому прогон `dart` с
+// `--exclude-tags scripted-only` не падает с «No tests ran», а пропуск
+// `!isScripted` не нужен.
 
 import 'dart:io';
 
@@ -27,23 +29,14 @@ import '../test/support/transcript_rows.dart';
 CodeLabShellCubit _cubit(WidgetTester tester) =>
     codeLabDependenciesOf(tester.element(find.byType(CodeLabApp))).shellCubit;
 
-/// Вводит команду агента в форму и подключается (как в
-/// stdio_connect_flow_test.dart).
-Future<void> _connect(WidgetTester tester, E2eLaunch launch) async {
-  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-  await tester.pumpAndSettle();
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Command')),
-    launch.command,
-  );
-  await tester.enterText(
-    find.byKey(const ValueKey('transport-field-Args')),
-    launch.args,
-  );
-  await tester.tap(find.widgetWithText(Button, 'Close'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.widgetWithText(CodeLabButton, 'Connect').first);
-  await tester.pump();
+/// Выбирает профиль агента на странице «Connection» и ждёт подключения
+/// (как в stdio_connect_flow_test.dart).
+Future<void> _connect(
+  WidgetTester tester,
+  E2eLaunch launch, {
+  String? project,
+}) async {
+  await launch.connect(tester, _cubit(tester), project: project);
   await _waitFor(
     tester,
     () =>
@@ -91,6 +84,42 @@ Finder _paletteRow(String slash) => find.descendant(
   matching: find.text(slash),
 );
 
+/// Прокручивает список палитры, пока строка [slash] не окажется построена и
+/// видна: список ленивый, и строка ниже видимой части (после пункта «Files» и
+/// команд агента это `/plan`) в дереве ещё не существует, так что
+/// `ensureVisible` её не найдёт.
+Future<void> _scrollToPaletteRow(WidgetTester tester, String slash) async {
+  await tester.scrollUntilVisible(
+    _paletteRow(slash),
+    80,
+    scrollable: find
+        .descendant(
+          of: find.byKey(CodeLabCommandPaletteSurface.listKey),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  await tester.pumpAndSettle();
+}
+
+/// Нажимает строку палитры [slash], предварительно прокрутив к ней список:
+/// у Dart-агента команд больше, чем помещается в 260 px списка, и строка
+/// может лежать за его видимой областью (как у пользователя — прокруткой).
+Future<void> _tapPaletteRow(WidgetTester tester, String slash) async {
+  await _scrollToPaletteRow(tester, slash);
+  await tester.tap(_paletteRow(slash));
+  await tester.pumpAndSettle();
+}
+
+/// Закрывает app и root scope Cherrypick в конце теста: следующий тест файла
+/// создаёт новый scope (`bootstrap()`), без закрытия прежний остаётся и
+/// `CodeLabShellCubit` не разрешается (как в connection_profiles_flow_test).
+Future<void> _shutdown(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pumpAndSettle();
+  await closeCodeLabRootScope();
+}
+
 /// Вводит [text] в композер, как пользователь, и выбирает подсвеченную
 /// команду inline-палитры клавишей `Enter`.
 Future<void> _pickInline(WidgetTester tester, String text) async {
@@ -109,10 +138,70 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
+    'built-in compact: the palette shows the agent command instead of the '
+    'client stub, it is inserted without session/prompt and the agent '
+    'answers on send',
+    (tester) async {
+      final project = await Directory.systemTemp.createTemp(
+        'codelab_command_palette_compact_e2e_',
+      );
+      addTearDown(() async {
+        if (await project.exists()) {
+          await project.delete(recursive: true);
+        }
+      });
+      final launch = await E2eAgent.current.launch(
+        project,
+        mode: E2eAgent.current.compactMode,
+      );
+
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
+      await tester.pumpAndSettle();
+      await _connect(tester, launch, project: project.path);
+      await tester.tap(find.byKey(const ValueKey('new-session-button')));
+      await tester.pumpAndSettle();
+      await _waitFor(
+        tester,
+        () => _cubit(
+          tester,
+        ).state.agentCommands.any((c) => c.id == 'agent-compact'),
+      );
+
+      // Палитра: `/compact` агента вместо заглушки клиента.
+      await _openPalette(tester);
+      expect(
+        find.byKey(CodeLabCommandPaletteSurface.agentSectionHeaderKey),
+        findsOneWidget,
+      );
+      expect(_paletteRow('/compact'), findsOneWidget);
+      final ids = [for (final a in _cubit(tester).state.paletteActions) a.id];
+      expect(ids, contains('agent-compact'));
+      expect(ids, isNot(contains('compact')));
+
+      // Выбор вставляет команду и ничего не отправляет.
+      await _tapPaletteRow(tester, '/compact');
+      expect(_composerText(tester), '/compact ');
+      expect(_transcript(tester), isEmpty);
+
+      // Отправка: реплика `/compact` и ответ агента своего режима.
+      await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+      await tester.pump();
+      await _waitFor(
+        tester,
+        () =>
+            _transcript(tester).contains(E2eAgent.current.compactReply) &&
+            !_cubit(tester).state.isPromptSubmitting,
+      );
+      expect(_transcript(tester), ['/compact', E2eAgent.current.compactReply]);
+      await _shutdown(tester);
+    },
+  );
+
+  testWidgets(
     'agent-declared commands replace the client stubs in the palette, are '
     'inserted into the composer and reach the agent on send, and fuzzy '
     'search finds them inline',
-    skip: !E2eAgent.current.isScripted,
+    tags: scriptedOnly,
     (tester) async {
       final project = await Directory.systemTemp.createTemp(
         'codelab_command_palette_e2e_',
@@ -127,11 +216,9 @@ void main() {
         mode: CodelabCompatibleStdioAgentMode.withAvailableCommands,
       );
 
-      await tester.pumpWidget(const CodeLabBootstrap(child: CodeLabApp()));
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
-      await _cubit(tester).selectProject(project.path);
-      await tester.pumpAndSettle();
-      await _connect(tester, launch);
+      await _connect(tester, launch, project: project.path);
       await tester.tap(find.byKey(const ValueKey('new-session-button')));
       await tester.pumpAndSettle();
       await _waitFor(
@@ -146,7 +233,9 @@ void main() {
         find.byKey(CodeLabCommandPaletteSurface.agentSectionHeaderKey),
         findsOneWidget,
       );
+      await _scrollToPaletteRow(tester, '/compact');
       expect(_paletteRow('/compact'), findsOneWidget);
+      await _scrollToPaletteRow(tester, '/plan');
       expect(_paletteRow('/plan'), findsOneWidget);
       final ids = [for (final a in _cubit(tester).state.paletteActions) a.id];
       expect(ids, containsAll(['agent-compact', 'agent-plan', 'permissions']));
@@ -154,8 +243,7 @@ void main() {
       expect(ids, isNot(contains('plan')));
 
       // 2. Выбор вставляет команду в композер и ничего не отправляет.
-      await tester.tap(_paletteRow('/compact'));
-      await tester.pumpAndSettle();
+      await _tapPaletteRow(tester, '/compact');
       expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
       expect(_composerText(tester), '/compact ');
       expect(_transcript(tester), isEmpty);
@@ -188,13 +276,13 @@ void main() {
       // 5. Команда клиента выполняется в app без `session/prompt`.
       final sessionsBefore = _cubit(tester).state.sessions.length;
       await _openPalette(tester);
-      await tester.tap(_paletteRow('/new'));
-      await tester.pumpAndSettle();
+      await _tapPaletteRow(tester, '/new');
       await _waitFor(
         tester,
         () => _cubit(tester).state.sessions.length == sessionsBefore + 1,
       );
       expect(_transcript(tester), isEmpty);
+      await _shutdown(tester);
     },
   );
 }

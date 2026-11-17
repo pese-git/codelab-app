@@ -700,7 +700,7 @@ void main() {
 
   // D9: снимок без проектных слоёв для сессий вне корня запуска.
   group('the snapshot without the project layers (D9)', () {
-    test('holds the keys of layers 1, 2, 4a-6 only', () {
+    test('holds the keys of layers 1, 2, 5-7 only', () {
       final result = load([
         layer(
           withValues(baseValues(), {

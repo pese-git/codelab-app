@@ -3,7 +3,6 @@ import 'package:codelab_agent_core/src/loop/agent_loop.dart';
 import 'package:codelab_agent_core/src/loop/loop_config.dart';
 import 'package:codelab_agent_core/src/tools/executor.dart';
 import 'package:codelab_agent_core/src/tools/misuse.dart';
-import 'package:codelab_agent_core/src/tools/plan_service.dart';
 import 'package:codelab_agent_core/src/tools/registry.dart';
 import 'package:codelab_agent_core/testing.dart';
 
@@ -60,7 +59,7 @@ final class LoopHarness {
     final registry = ToolRegistry();
     tools.forEach(registry.register);
     final logger = RecordingLogger();
-    final plan = PlanService();
+    final tasks = SessionTaskList();
     final approvalWait = ApprovalWaitMeter();
     final executor = ToolCallExecutor(
       registry: registry,
@@ -68,7 +67,7 @@ final class LoopHarness {
       services: ToolServices(
         clock: clock,
         logger: logger,
-        plan: plan,
+        tasks: tasks,
         approvalWait: approvalWait,
       ),
     );
@@ -85,8 +84,8 @@ final class LoopHarness {
       approvalWait,
     );
     h.scripted = scripted;
-    plan.publish = (entries) =>
-        h.events.add(PlanUpdated(session, entries: entries));
+    tasks.publish = (items, change) =>
+        h.events.add(TaskListChanged(session, items: items, change: change));
     return h;
   }
 
@@ -119,6 +118,7 @@ final class LoopHarness {
     EstimateTokens? estimateTokens,
     EmergencyCompact? emergencyCompact,
     int? contextWindowCap,
+    Logger? logger,
   }) => AgentLoopConfig(
     sessionId: session,
     model: testModel,
@@ -139,7 +139,7 @@ final class LoopHarness {
     steering: steering,
     followUp: followUp,
     approvalWait: approvalWait,
-    logger: logger,
+    logger: logger ?? this.logger,
     estimateTokens: estimateTokens,
     emergencyCompact: emergencyCompact,
     contextWindowCap: contextWindowCap,
@@ -151,19 +151,24 @@ final class LoopHarness {
     List<Message> history = const [],
     AgentLoopConfig? config,
     CancelToken? cancel,
+    AgentEventSink? emit,
   }) async => (await runTurn(
     prompts,
     history: history,
     config: config,
     cancel: cancel,
+    emit: emit,
   )).added;
 
   /// Итог хода целиком: с историей, заменённой аварийным сжатием.
+  ///
+  /// [emit] заменяет запись в [events] — для тестов сбойного приёмника.
   Future<TurnOutput> runTurn(
     List<Message> prompts, {
     List<Message> history = const [],
     AgentLoopConfig? config,
     CancelToken? cancel,
+    AgentEventSink? emit,
   }) => runAgentLoop(
     prompts: prompts,
     context: LoopContext(
@@ -172,7 +177,7 @@ final class LoopHarness {
       tools: tools,
     ),
     config: config ?? this.config(),
-    emit: events.add,
+    emit: emit ?? events.add,
     cancel: cancel ?? CancelToken.none,
   );
 
@@ -207,7 +212,7 @@ String describe(AgentEvent e) => switch (e) {
     'ToolCallFinished($toolCallId ${outcome.name})',
   ToolPairingRepaired() => 'ToolPairingRepaired',
   StepEnded(:final result) => 'StepEnded(${result.stepIndex})',
-  PlanUpdated() => 'PlanUpdated',
+  TaskListChanged() => 'TaskListChanged',
   ModeChanged(:final mode) => 'ModeChanged(${mode.value})',
   AgentError(:final cls, :final errorClass) =>
     'AgentError(${cls.name}${errorClass == null ? '' : ' ${errorClass.name}'})',
@@ -217,4 +222,11 @@ String describe(AgentEvent e) => switch (e) {
   ContextCompacted(:final tokensBefore, :final tokensAfter) =>
     'ContextCompacted($tokensBefore -> $tokensAfter)',
   SessionTitleChanged(:final title) => 'SessionTitleChanged($title)',
+  ModelOptionsChanged() => 'ModelOptionsChanged',
+  SubagentStarted(:final subagentId) => 'SubagentStarted($subagentId)',
+  SubagentProgress() => 'SubagentProgress',
+  SubagentFinished(:final subagentId, :final status) =>
+    'SubagentFinished($subagentId ${status.name})',
+  SubagentActivity(:final subagentId, :final event) =>
+    'SubagentActivity($subagentId ${describe(event)})',
 };

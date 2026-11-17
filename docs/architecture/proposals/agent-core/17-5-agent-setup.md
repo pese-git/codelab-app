@@ -11,7 +11,8 @@ E-13 со стороны агента (команды `/mcp list`, `/mcp reload`
 `codelab_setup` описаны в документе клиентов
 ([`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §12.4); здесь — контракт агента, на
 который они опираются. Затрагивает §6.4 (MCP-инструменты), §10.3 (`SecretStore`,
-`AgentCoreServices`), §11.5 (перечитывание project context), §12.3 (события `config.*`,
+`AgentCoreServices`), §11.5 (перечитывание project context — в 8.10 не выполняется: файлы проекта
+читаются только новыми сессиями, D9 design.md change `add-config-writer-and-reload`), §12.3 (события `config.*`,
 `secrets.*`, `mcp.*`), §12.4 (источники точных секретов), §13.4 (подключение MCP), §13.6
 (команды `/mcp`, `/config`, строки `/status`), §15.2–§15.6 (слой окружения, ключи `secrets` и
 `config`, подстановка `${secret:…}`), §17.2.9 (пример `available_commands_update`).
@@ -24,7 +25,9 @@ E-13 со стороны агента (команды `/mcp list`, `/mcp reload`
 1. **Контейнер и CI.** Файла конфига нет, есть только окружение. Агент должен получить провайдера
    и модель из двух переменных (L-25).
 2. **Ключ без файла.** Пользователь вводит ключ один раз — в CLI или в настройках app; ключ
-   уходит в хранилище секретов ОС, а конфиг хранит только его имя (P-12). Ключ, вписанный в
+   уходит в хранилище секретов ОС, а конфиг хранит только его имя (P-12). В 1.0 — в явно
+   выбранный `secrets.yaml` или в переменную `CODELAB_SECRET_<…>`; хранилище ОС — после 1.0
+   (change `add-agent-secret-store`, D13). Ключ, вписанный в
    конфиг значением, — ошибка с подсказкой, как сделать правильно.
 3. **Одни настройки в двух клиентах.** CLI и app редактируют один и тот же конфиг через один
    писатель и показывают одни и те же ключи из одного реестра (E-15). Тест полноты не даёт
@@ -39,9 +42,9 @@ E-13 со стороны агента (команды `/mcp list`, `/mcp reload`
 
 ## 17.5.2. Контракт
 
-**Секреты.** `SecretStore` из §10.3 не меняется. Расширение — необязательный интерфейс описания
-бэкенда и резолвер ядра, через который проходит каждое чтение секрета
-(`codelab_agent_core/lib/src/secrets/`):
+**Секреты** (этап 8.9; уточнено design.md change `add-agent-secret-store`, D2, D3). `SecretStore` из
+§10.3 не меняется. Расширение — необязательный интерфейс описания бэкенда и резолвер ядра, через
+который проходит каждое чтение секрета (`codelab_agent_core/lib/src/secrets/`, чистый Dart):
 
 ```dart
 /// Расширение §10.3: реализация сообщает, куда пишет и читает. Хранилища codelab_agent_io
@@ -50,43 +53,83 @@ abstract interface class DescribedSecretStore implements SecretStore {
   SecretBackendInfo get backend;
 }
 final class SecretBackendInfo {
-  final String id;                 // keychain-macos | secret-service | wincred | env | file | memory
+  final String id;                 // env | file | memory; после 1.0 — keychain-macos | secret-service | wincred
   final bool writable;             // env — только чтение
-  final String? unavailableReason; // почему ОС-хранилище не выбрано (для `auto`), иначе null
+  final String? unavailableReason; // почему auto не выбрал хранилище ОС, иначе null
 }
-/// Хранилище недоступно или не ответило за 10 с. Сообщение не содержит значения секрета.
+/// Хранилище недоступно (права secrets.yaml, после 1.0 — утилита ОС не ответила за 10 с).
+/// reason — наш текст, без значения секрета и без stderr утилит.
 final class SecretStoreUnavailableException implements Exception {
   final String backend; final String reason;
 }
 
-/// Правило имени секрета (SecretNames.validate бросает ArgumentError с причиной).
+/// Правило имени секрета. problem — значение, а не ArgumentError: ошибка имени в конфиге —
+/// проблема загрузки (ConfigIssue), а не исключение (D2).
 abstract final class SecretNames {
   static final RegExp pattern = RegExp(r'^[a-z0-9][a-z0-9._/-]{0,127}$');  // без "..", без "/" в конце
+  static const int maxLength = 128;
+  /// null — имя годится; иначе английская причина без самого имени:
+  /// "expected a secret name: lowercase letters, digits and . _ / -, up to 128 characters".
+  static String? problem(String name);
+  /// Префикс CODELAB_SECRET_, имя в верхнем регистре, символы вне [A-Z0-9] → "_". Отображение
+  /// необратимо, поэтому secret set отклоняет имя, чья переменная совпала с чужой (D8).
   static String envOverride(String name);   // "codelab/anthropic" → "CODELAB_SECRET_CODELAB_ANTHROPIC"
-  static String suggestFor(String configPath); // "providers.openai.api_key" → "codelab/openai"
+  /// "providers.openai.api_key" → "codelab/openai"; "tools.web.search.backends.brave.api_key" →
+  /// "codelab/search-brave"; прочий путь → "codelab/<нормализованный путь>". Результат всегда
+  /// проходит problem: части обрезаются, пустая часть — "x".
+  static String suggestFor(String configPath);
   /// "github", "Authorization" → "codelab/mcp/github/authorization": обе части в нижнем регистре,
   /// символы вне [a-z0-9._-] → "-"; так же suggestFor("mcp.servers[github].headers.Authorization").
   static String forMcp(String server, String key);
 }
 
-/// Единственная дорога к значению секрета в ядре (§17.5.4). Значения кэшируются до invalidate().
+/// Результат обращения: «не задан» и «хранилище недоступно» требуют от человека разных действий.
+sealed class SecretLookup { const SecretLookup(); }
+final class SecretFound extends SecretLookup { final String value; final String source; }  // cache | env | <backend.id>; toString без значения
+final class SecretMissing extends SecretLookup { final String backend; }
+final class SecretUnavailable extends SecretLookup { final String backend; final String reason; }
+
+/// Единственная дорога к значению секрета в ядре (§17.5.4). Создаёт хост, один на процесс;
+/// найденные значения кэшируются до конца процесса, ненайденные — нет.
 final class SecretResolver {
-  SecretResolver({required SecretStore store, required Map<String, String> environment,
-      required Redactor redactor, required Logger logger, bool debug = false});
-  /// api_key_secret, ${secret:<name>}, exec.secrets. purpose — путь ключа конфига.
-  Future<String?> secret(String name, {required String purpose});
-  /// api_key_env и ${ENV} в ключах провайдеров.
-  String? env(String variable, {required String purpose});
-  void invalidate();               // при перезагрузке конфига (§17.5.6)
+  SecretResolver({required DescribedSecretStore store, required Map<String, String> environment,
+      required Logger logger, bool debug = false});
+  /// api_key_secret, ${secret:<name>}. purpose — путь ключа конфига.
+  Future<SecretLookup> secret(String name, {required String purpose});
+  /// api_key_env: синхронное чтение окружения, переданного резолверу (окружение процесса хоста),
+  /// под debug — secrets.lookup.
+  SecretLookup env(String variable, {required String purpose});
 }
 ```
+
+Там же лежат `SecretTemplate` (значение ключа конфига с `${secret:…}` — список частей
+`SecretLiteral` и `SecretReference`, §15.5, п. 7; D4) и `MemorySecretStore` (id `memory`, для
+тестов и хостов без постоянного хранилища); всё перечисленное экспортирует барель ядра.
+
+**Отступления 8.9 от прежнего контракта** (design.md change `add-agent-secret-store`, D3):
+- `SecretLookup` вместо `String?`: со `String?` ошибка хода «хранилище недоступно» и «секрет не
+  задан» была бы одинаковой и в первом случае вводила бы в заблуждение (приоритет наблюдаемости
+  выше простоты);
+- параметра `redactor` нет: `Redactor` появится вместе со своим параметром конструктора в change
+  редакции после 1.0 (D10; §12.4; решение пользователя 2026-11-04 R8-1, design.md change `add-config-literal-secrets-and-migrate`, D1);
+- `invalidate()` нет: перезагрузки конфига в 8.9 нет, сброс кэша добавит 8.10 вместе с ней
+  (§17.5.6);
+- таймаута в резолвере нет: ядро не создаёт таймеры (PKG-6), предел ожидания соблюдают бэкенды
+  `codelab_agent_io` (в 1.0 — `env` и `file`, ожидания нет), мобильные и web-хосты — свои
+  реализации;
+- `exec.secrets` в 8.9 потребителя не имеет (`config.key.not_applied`).
 
 `AgentCoreServices` (§10.3) получает два необязательных поля:
 
 ```dart
-  final ConfigSource? config;      // null → живая перезагрузка и команда /config недоступны
-  final bool debugSecrets;         // --debug-secrets или CODELAB_DEBUG_SECRETS=1 (P-17)
+  final SecretResolver? secrets;   // 8.9 (D3, D4): null → ключ провайдера не читается («the host has no secret resolver»), MCP — «no secret store»
+  final ConfigSource? config;      // 8.10: null → живая перезагрузка и команда /config недоступны
 ```
+
+Поля `debugSecrets` нет: режим отладки (`--debug-secrets`, `CODELAB_DEBUG_SECRETS=1`, P-17) — параметр
+`debug` резолвера. В сервисах лежит резолвер, а не `SecretStore`: функцию модели хост строит раньше
+ядра (`createRoutedStreamFunction(…, secrets:)` вызывается до `buildAgentCore`), а переменные
+переопределения требуют окружения процесса, которого у ядра нет (D3, D11, D15).
 
 **Источник конфига и перезагрузка** (`codelab_agent_core/lib/src/config/`). `ConfigSource` — порт
 хоста: `apps/codelab_agent` и `codelab_embedded` реализуют его поверх `ConfigLoader` и
@@ -109,56 +152,147 @@ final class ConfigLoadResult {
   final HostSettings? host;        // ключи хоста: sessions.*, logging.*, profile.* (§15.1)
   final List<ConfigIssue> issues, warnings;
   final List<String> sources;      // слои по порядку: "defaults", пути файлов, "env:…", "flags"
+  final Map<String, Object?> values; // 8.10 (D8): плоская карта листьев итогового дерева, основа diff перезагрузки
   CoreConfig orThrow();            // config или ConfigException / ConfigInlineSecretException
 }
+// 8.10 (D8): CoreConfig.withoutProjectValues — та же плоская карта для снимка withoutProject
+// (null — снимка без проекта нет). Лежит в CoreConfig, а не в ConfigLoadResult: адаптеры
+// источника пересобирают ConfigLoadResult и потеряли бы её, и сравнение второго снимка дало бы
+// пустой diff (fail-open); отсутствующая карта сравнивается как пустая (fail closed).
+// Отложенное перезагрузки — структурой, а не строками ключей показа:
+final class DeferredConfigParts {
+  final Set<String> providers;     // провайдеры R0-4: группа адреса и аутентификации прежняя
+  final Set<String> servers;       // имена mcp.servers: прежний элемент, нового нет — исключается
+  final bool permissions;          // раздел permissions прежний (R0-1)
+  final bool defaultModel;         // agent.default_model прежняя
+  DeferredConfigParts union(DeferredConfigParts other);   // отложенное по любому из двух снимков
+}
+// static CoreConfig CoreConfig.withDeferred(CoreConfig previous, CoreConfig next,
+//     DeferredConfigParts deferred, {Map<String, Object?>? withoutProjectValues});
 // codelab.toml не читается (§15.7, решение пользователя 2026-10-29): поля legacy нет, найденный
 // файл — предупреждение config.legacy_found в warnings.
-// ConfigInlineSecretException.suggestedSecretName добавляет change add-agent-secret-store (8.9)
-// вместе с SecretNames; в 8.5 исключение несёт только key первой проблемы inlineSecret.
+// ConfigInlineSecretException с 8.9 (change add-agent-secret-store, D2) несёт key первой проблемы
+// inlineSecret и suggestedSecretName = SecretNames.suggestFor(key); в 8.5 было только key.
+
+/// Источник конфигурации работающего агента: те же слои, окружение и флаги, что при старте хоста.
+/// Один на хост, для корня запуска (8.10, D7, D8).
 abstract interface class ConfigSource {
-  Future<ConfigLoadResult> load({required String cwd});
-  /// Изменился один из файлов, прочитанных для этого cwd (уже после debounce 300 мс).
-  Stream<String> get changedRoots; // cwd затронутых сессий; "" — глобальный слой, все сессии
+  /// Результат стартовой загрузки, с которым хост собрал ядро: исходные values для первого diff.
+  ConfigLoadResult get initial;
+  /// Загрузка для корня запуска хоста; ConfigLoadResult — как при старте (полный снимок и withoutProject).
+  /// Доверие проектам закреплено на initial до перезапуска: загрузчик передаёт список в
+  /// CoreConfig.fromLayers(..., pinnedTrustedProjects:), доверие вычисляет ядро (D8).
+  /// rebase: false — загрузка для проверки (/config check): база наблюдателя не сдвигается (D7).
+  Future<ConfigLoadResult> load({bool rebase = true});
+  /// Сигнал «прочитанные файлы изменились» — уже после debounce 300 мс и сравнения sha256.
+  Stream<void> get changes;
 }
+
+enum ConfigReloadOutcome { applied, unchanged, failed }
 final class ConfigApplyReport {
-  final bool applied;              // false: конфиг невалиден или изменений нет
-  final List<ConfigIssue> issues;
-  final List<String> changedKeys, restartRequiredKeys;
-  final List<String> mcpConnected, mcpDisconnected, mcpReconnected;
+  final ConfigReloadOutcome outcome;
+  final List<ConfigIssue> issues;                       // только failed
+  final List<String> changedKeys;          // применённые листья; mcp.servers — "mcp.servers[<name>]"; отсортирован
+  final List<String> restartRequiredKeys;  // ключи показа: лист, "mcp.servers[<name>]", "providers.<id>"; отсортирован
 }
 // AgentRuntime (§10.3) получает:
-//   Future<ConfigApplyReport> reloadConfig({String? cwd});   // /config reload, /mcp reload, ConfigSource
-//   Future<ConfigApplyReport> applyConfig(String cwd, CoreConfig next);   // мобильный и web-хост
-//   ConfigStatus configStatus(String cwd);                    // для /status и /config check
+//   Future<ConfigApplyReport> reloadConfig();   // ConfigSource.changes, /config reload, /mcp reload; не бросает
+//   Future<ConfigLoadResult> checkConfig();     // /config check: load(rebase: false), план по обоим снимкам,
+//                                               // withDeferred + validateSnapshot, без применения; отложенные
+//                                               // ключи — warnings с event 'config.reload.restart_required' и key
+//   ConfigStatus configStatus();                // работает и без источника
+//   без ConfigSource reloadConfig и checkConfig бросают StateError (D8, «Контракт вызовов»)
 final class ConfigStatus {
   final DateTime loadedAt; final List<String> sources;
   final DateTime? lastFailureAt; final List<ConfigIssue> lastIssues;   // пусто, если последняя попытка удалась
-  final List<String> pendingRestartKeys;
+  final List<String> pendingRestartKeys;   // restartRequiredKeys последней успешной перезагрузки;
+                                           // описывает применённый снимок и действует для сессий всех
+                                           // папок; открытие сессии другой папки его не меняет (D7
+                                           // change defer-restart-keys-in-folder-sessions, §17.5.6)
 }
+
+// buildAgentCore (§10.3) получает параметр modelsFor — функцию хоста, которая строит функцию
+// модели и каталог по CoreConfig; ядро вызывает её на каждом применённом снимке (D8):
+typedef ConfiguredModels = ({StreamFunction stream, ModelCatalog catalog});
+//   buildAgentCore(..., ConfiguredModels Function(CoreConfig config)? modelsFor)
+//   services.config != null и modelsFor == null → HostWiringException
+//   streamFunction (required) — функция начального снимка; modelsFor вызывается только после
+//   перезагрузки; хост с источником передаёт streamFunction: modelsFor(config).stream
+// SecretResolver (выше) получает void invalidate() — сброс кэша найденных значений (D8).
+// AgentCoreServices получает AgentConfigPaths? agentConfigPaths {paths, expansions, caseInsensitive} —
+// канонические пути PERM-11, значения HOME/CODELAB_HOME и регистр ФС от хоста (D8, §7.6.1);
+// buildAgentCore — bool configCommand = true: false у serve --ws, /config не объявляется (D12, R0-3).
+// Начальный каталог — AgentCoreServices.models; хост с источником берёт его и streamFunction из
+// одного вызова modelsFor(config).
 ```
 
-**MCP-супервизор** — интерфейс ядра (`codelab_agent_core/lib/src/mcp/mcp_supervisor.dart`),
-реализация на сессию — `McpSessionSupervisor` в `codelab_agent_mcp`:
+**Отступления 8.10 от прежнего контракта** (design.md change `add-config-writer-and-reload`, D7,
+D8, D10, D11):
+- **Один корень на хост.** У `ConfigSource` нет параметра `cwd`, а вместо `changedRoots` — сигнал
+  `changes`. Единица перезагрузки — корень запуска хоста: пара «полный `CoreConfig` +
+  `withoutProject`» (D9 change `add-agent-configuration`) заменяется целиком. С change
+  `require-project-folder` (D21, Q12, Q19) это остаётся верным для *перезагрузки*: сессии других
+  папок, конфигурацию которых построил порт `ProjectConfigLoader`, держат снимок открытия и
+  перезагрузкой корня не затрагиваются (ни функция модели, ни `ModelOptionsChanged`, ни серверы
+  конфигурации); правки глобальных слоёв доходят до них при следующем открытии. Живая перезагрузка
+  проектных слоёв чужих папок отложена до выхода 1.0.
+- **`modelsFor` вместо пересборки в ядре.** Функцию модели и каталог строит хост: `http.Client` и
+  сервисы LLM — его (PKG-6), `--llm-script` подставляет сценарий. `modelsFor` — замыкание хоста над
+  `createConfiguredStreamFunction(config, llm, secrets:)` и `StaticModelCatalog(config.providers)`
+  (D8).
+- **`ConfigApplyReport` без полей MCP, с `outcome`.** Поля `mcpConnected`, `mcpDisconnected`,
+  `mcpReconnected` убраны: серверы конфига применяются после хода (D10), и отчёт их ещё не знает;
+  итог MCP — в логе `mcp.server.*`. `bool applied` заменён на `outcome`: «изменений нет» и
+  «конфиг невалиден» требуют разных ответов `/config reload` (D8).
+- **`applyConfig` нет.** Мобильному и web-хосту он понадобится вместе с хранилищем конфига в
+  приложении — этап 10 (D13).
+- **`invalidate()` с поколениями.** Поиск, начатый до `invalidate` и завершившийся после, отдаёт
+  значение вызывающему, но в кэш его не кладёт: счётчик поколений не даёт устаревшему значению
+  пережить сброс. Single-flight сохраняется внутри поколения (D8).
+
+**Супервизия MCP-серверов** (8.10; design.md change `add-config-writer-and-reload`, D11) —
+расширение существующего порта ядра `McpSessionTools` (§10.3), реализация — сессия
+`McpClientConnector` в `codelab_agent_mcp`, которая уже владеет клиентами серверов:
 
 ```dart
 enum McpServerState { connecting, connected, failed, disabled }
 enum McpServerOrigin { config, session }      // mcp.servers конфига или session/new.mcpServers
-final class McpServerStatus {
-  final String id; final McpServerOrigin origin;
-  final String transport;                     // stdio | http
+final class McpServerSummary {
+  // новые поля — с умолчаниями: origin = session, transport = 'stdio', state = connected
+  final String name; final int toolCount;               // как до 8.10; у disabled — 0
+  final McpServerOrigin origin; final String transport; // stdio | http
   final McpServerState state;
-  final int toolCount;
-  final String? lastError;                    // после редакции §12.4, ≤ 200 символов
-  final Duration? retryIn;                    // только для failed
+  final String? lastError;                              // текст кода CodeLab, ≤ 200 символов, без значений
+  final Duration? retryIn;                              // только failed с назначенным повтором
 }
-abstract interface class McpSupervisor {
-  List<McpServerStatus> snapshot();           // порядок: config по порядку конфига, затем session
-  Stream<List<McpServerStatus>> get changes;  // для страницы настроек встроенного агента
-  Future<void> reconnect(String id);          // /mcp reload <id>: разорвать и подключить сразу
-  Future<void> setEnabled(String id, bool enabled);   // /mcp enable|disable: только эта сессия
-  Future<void> applyConfigServers(List<McpServerConfig> servers);   // §17.5.7; session-серверы не трогает
-}
+// McpServerConfig: + bool enabled (умолчание true; не входит в sameConnection)
+// McpConnectRequest: + McpSecretExpander? expandSecrets  // раскрытие ${secret:…} перед каждой попыткой
+typedef McpSecretExpander = Future<McpServerConfig> Function(McpServerConfig server);
+final class McpSecretsException implements Exception { final String reason; }  // текст без значения
+// McpSessionTools (§10.3):
+//   List<McpServerSummary> get servers;      // ВСЕ серверы сессии в порядке списка, включая failed и disabled
+//   Future<void> reconnect(String name);     // /mcp reload <id>: разорвать и подключить сразу
+//   Future<void> setEnabled(String name, bool enabled);   // /mcp enable|disable: только эта сессия, в памяти
+//   Future<void> replaceServers(List<McpServerConfig> servers);   // как до 8.10; им же — перезагрузка (§17.5.7)
 ```
+
+Новые поля `McpServerSummary` получают значения по умолчанию в конструкторе: существующие
+реализации (fake-коннекторы тестов ядра) компилируются без правок.
+
+**Отступление 8.10: нет отдельного `McpSupervisor`** (D11). Второй объект на сессию держал бы тот же
+список клиентов, что и сессия коннектора, и пришлось бы синхронизировать два владельца одного
+транспорта; порт `McpSessionTools` уже стоит в точке расширения ядра. Отдельного
+`applyConfigServers` тоже нет: `replaceServers` с полным желаемым списком делает то же (D10,
+§17.5.7). Поток состояний для страницы настроек встроенного агента вводит change
+`add-provider-setup-ui` вместе с потребителем (OQ4 закрыт, design.md change, D12):
+`McpSessionTools.changes` — широковещательный поток полных списков `McpServerSummary` после каждой
+смены состояния, числа инструментов, ошибки или состава серверов, без повтора последнего значения,
+закрывается в `close()`; `AgentRuntime.mcpStatus(SessionId)` — порт хоста (снимок `servers`,
+`changes`, `reconnect(name)`; порт есть у любой открытой сессии — без серверов `servers` пуст, а
+серверы, появившиеся после перезагрузки конфига, приходят в `changes`; `null` — только для
+неизвестной или закрытой сессии; решение Q18 change) — `McpStatusPort`
+(`codelab_agent_core/lib/src/mcp/mcp_status_port.dart`); `EmbeddedAgent.mcpStatus` в
+`codelab_embedded` поверх него. ACP не меняется.
 
 **Правки конфига** — чистые типы ядра (`codelab_agent_core/lib/src/config/config_edit.dart`): их
 используют писатель `codelab_agent_io`, клиентский пакет `codelab_setup` (через реэкспорт, без
@@ -177,7 +311,7 @@ final class ConfigTarget {
 }
 final class ConfigSnapshot {
   final ConfigTarget target; final String path;   // путь после разрешения символической ссылки
-  final String? fingerprint;                      // sha256 байтов файла; null — файла нет
+  final String? fingerprint;                      // configFingerprint(bytes); null — файла нет
   final Map<String, Object?> values;              // разобранный слой (без слияния)
   Object? get(String key);                        // "providers.openai.base_url", "mcp.servers[github].url"
 }
@@ -189,10 +323,24 @@ final class RemoveMcpServer extends ConfigEdit { final String name; const Remove
 /// Ключ-отображение целиком со всем поддеревом: "providers.local-1234" удаляет и providers.local-1234.models.*.
 final class RemoveTable extends ConfigEdit { final String key; const RemoveTable(this.key); }
 
+/// Отпечаток байтов файла: sha256, 64 hex-символа в нижнем регистре. В ядре, потому что crypto
+/// есть в allowlist ядра и нет в allowlist codelab_agent_io; один на всех писателей (8.10, D1, D5).
+String configFingerprint(List<int> bytes);
+/// Разбор пути "a.b.\"c.d\"[name]" — общий у ConfigWriter, SettingsRegistry.lookup и маскирования
+/// вывода (key_path.dart; 8.10, D1, D5); null — путь синтаксически неверен.
+typedef KeyPathSegment = ({String value, bool isElement});
+List<KeyPathSegment>? splitKeyPath(String path);
+/// Имена ключей-секретов значением (CFG-9, п. 1); экспортируются из config_issue.dart, потому что
+/// schema.dart не экспортируется (CFG-5), а список нужен писателю и маскированию (8.10, D5, D6).
+const inlineSecretKeys = {'api_key', 'apiKey', 'token', 'secret', 'password'};
+
 /// Встроенный секрет (CFG-9): бросают валидатор §15.5 (шаг 3) и ConfigWriter.apply.
 final class ConfigInlineSecretException extends ConfigException {
   final String key; final String suggestedSecretName;   // для подсказки `codelab secret set <name>`
 }
+/// Файл изменился после read или занят lock. Тип ядра: клиенты ловят его через реэкспорт
+/// codelab_setup, не видя codelab_agent_io (8.10, D5).
+final class ConfigConflictException implements Exception { final String path; }
 ```
 
 **Запись конфига** (`codelab_agent_io/lib/src/config/config_writer.dart`, `dart:io`):
@@ -204,17 +352,25 @@ final class ConfigWriteResult {
   final List<String> restartRequiredKeys;         // по SettingsRegistry
 }
 
+/// Итог ConfigLoader.validateCandidate: issues запрещают запись (если новые, R3-1), warnings —
+/// в ConfigWriteResult.warnings (незаданная ${VAR} и др.).
+typedef ConfigCandidateResult = ({List<ConfigIssue> issues, List<ConfigIssue> warnings});
+
 final class ConfigWriter {
   ConfigWriter({required String codelabHome, required Map<String, String> environment,
-      required ConfigLoader loader, required Logger logger});
+      required ConfigLoader loader, required Logger logger,
+      required SecretProcessRunner processRunner, required Clock clock, required Random random,
+      String? cwd, String? platform,
+      @visibleForTesting Future<void> Function(ConfigWriteSeam point)? seam});   // 8.10, D5
   Future<ConfigSnapshot> read(ConfigTarget target);
   /// Применяет правки к YAML-документу base через YamlEditor, проверяет итог и атомарно
   /// заменяет файл (§17.5.5). ConfigConflictException — файл изменился после read;
-  /// ConfigInlineSecretException; ConfigException(issues) — итог невалиден или правку нельзя
-  /// выполнить без потери структуры документа. Файл при ошибке не меняется.
+  /// ConfigInlineSecretException; ConfigException(issues) — правка вносит новую ошибку загрузки
+  /// (R3-1; прежние — warnings) или её нельзя выполнить без потери структуры документа.
+  /// Файл при ошибке не меняется; правка без изменений файл не трогает.
   Future<ConfigWriteResult> apply(ConfigSnapshot base, List<ConfigEdit> edits);
 }
-final class ConfigConflictException implements Exception { final String path; }
+// ConfigConflictException — тип ядра (выше, D5).
 ```
 
 Исключения `apply` — контракт для вызывающих: `ConfigConflictException`, `ConfigInlineSecretException` (подкласс `ConfigException`, поэтому
@@ -253,7 +409,7 @@ abstract final class SettingsRegistry {
 ## 17.5.3. Алгоритм: загрузка с окружением (L-25)
 
 Две переменные задают провайдера целиком: `CODELAB_PROVIDER_TYPE` — `"openai-compatible"`,
-`"anthropic"` или, после MVP, `"gemini"` (§17.10.3) — как `kind`, §15.4; другие значения — ошибка со списком допустимых,
+`"anthropic"` или, после MVP, `"gemini"` (§17.10.3) — как `kind`, §15.4; другие значения — проблема со списком допустимых,
 `CODELAB_PROVIDER_CONFIG` — JSON-объект. Вместо второй МОЖНО задать
 `CODELAB_PROVIDER_CONFIG_BASE64` (тот же JSON в base64, стандартный или URL-safe алфавит,
 `=` в конце необязательны) — для оркестраторов, которые портят кавычки.
@@ -276,37 +432,104 @@ envPreconfigLayer(environment, flags):
      (--provider-type, --provider-config <json | @путь>); переменные CODELAB_PROVIDER_* не читаются,
      лог info config.preconfig.shadowed {by: "flags"}
    иначе источник := окружение; ни одной из трёх переменных нет → вернуть null
-2. заданы обе CODELAB_PROVIDER_CONFIG и CODELAB_PROVIDER_CONFIG_BASE64 → ConfigException
-   задана только TYPE или только CONFIG → ConfigException("CODELAB_PROVIDER_TYPE задан, а CODELAB_PROVIDER_CONFIG нет")
-3. BASE64 → декодировать; ошибка → ConfigException("CODELAB_PROVIDER_CONFIG_BASE64: не base64")
-4. разобрать JSON; ошибка → ConfigException("<имя переменной>: неверный JSON, смещение <n>")
+2. заданы обе CODELAB_PROVIDER_CONFIG и CODELAB_PROVIDER_CONFIG_BASE64 → проблема
+   задана только TYPE или только CONFIG → проблема, текст называет обе переменные
+   TYPE не из списка → проблема "expected one of: openai-compatible, anthropic"
+3. BASE64 → декодировать; ошибка → проблема "CODELAB_PROVIDER_CONFIG_BASE64: not base64"
+4. разобрать JSON; ошибка → проблема "<имя переменной>: invalid JSON at offset <n>"
      текст исключения парсера НЕ включается: он цитирует фрагмент значения
-   корень не объект → ConfigException("<имя>: ожидается JSON-объект")
-5. проверка полей по таблице: неизвестное поле → ConfigException("<имя>.<поле>: неизвестное поле
-     (может быть, <ближайшее>?)"); поля api_key, apiKey, key → ConfigInlineSecretException (CFG-9);
-     неверный тип → ошибка с ожидаемым типом; значение поля в сообщение не попадает
+   корень не объект → проблема "<имя>: expected a JSON object"
+5. проверка полей по таблице: неизвестное поле → проблема "<имя>.<поле>: unknown key
+     (did you mean <ближайшее>?)" (Левенштейн, как у неизвестного ключа файла);
+     поля api_key, apiKey, key, token, secret, password → проблема inlineSecret с
+     suggestedSecretName = codelab/<id> (CFG-9);
+     неверный тип → проблема с ожидаемым типом; значение поля в сообщение не попадает
 6. построить слой-таблицу: providers.<id> {kind: TYPE, …} и agent.default_model
 7. вернуть слой с источником "env:CODELAB_PROVIDER_CONFIG" (или "…_BASE64", "flags")
 ```
 
-Слой окружения встаёт в §15.5 на шаг 7 как часть слоя 5 (флаги — слой 6), то есть приоритет
-**флаг → окружение → локальный проектный → проектный → пользовательский**. Внутри слоя 5
+Каждая проблема — `ConfigIssue` без строки и столбца с источником
+`env:CODELAB_PROVIDER_CONFIG` (`…_BASE64`, `flags`), а не исключение: загрузка собирает её вместе с
+проблемами файлов, и `config check` печатает все сразу. Тексты английские, как у остальных
+`ConfigIssue` (design.md change `add-config-writer-and-reload`, D3).
+
+**Флаги `serve`** (D3, OQ6). `--provider-config @путь` — путь относительно текущего каталога
+процесса; файл, который не читается, — ошибка использования `64`. Задан только один из двух флагов —
+ошибка использования `64`. Вместе с `--provider`/`--base-url` (провайдер `cli` этапа 4) — ошибка
+использования `64` `--provider-type cannot be combined with --provider`: два способа задать
+провайдера флагами в одном запуске неоднозначны. У встроенного агента флагов нет, только
+переменные. Внутри слоя флагов предконфигурация применяется первой, `--model` — после неё: `--model`
+побеждает модель предконфигурации флагов, а `CODELAB_MODEL` (слой окружения) ей проигрывает. Справка
+рекомендует `--provider-config @путь`: JSON в argv виден в `ps`. Литеральный секретный заголовок в
+JSON флага или переменной — проблема `inlineSecret` по правилу имён §17.5.5 (ревью итерации 0,
+D3).
+
+Слой окружения — слой 6, переменные `CODELAB_*` (нумерация §15.2 и спецификации
+agent-configuration «Слои конфигурации и их порядок»: слой 5 — `--config`/`CODELAB_CONFIG`);
+флаги — слой 7 над ним. Приоритет **флаг → окружение → `--config` → локальный проектный → проектный →
+пользовательский** (D3). Внутри слоя окружения
 предконфигурация применяется первой, `CODELAB_MODEL` — после неё (более частное значение).
 Слой проходит ту же строгую проверку §15.5 и правила подстановки; доверие §15.3 к нему не
 применяется (окружение задаёт тот, кто запускает агента). Таблица `providers.<id>` сливается с
 файлами по §15.2: одноимённый провайдер из файла дополняется, поля окружения побеждают.
-`host.config.loaded` перечисляет источники (`"env:CODELAB_PROVIDER_CONFIG"`), но не значения;
-значения `headers` регистрируются как точные секреты `Redactor` (§12.4, п. 4).
+`host.config.loaded` перечисляет источники (`"env:CODELAB_PROVIDER_CONFIG"`), но не значения.
+Значения `headers` проходят тот же путь шаблонов, что у файлов (`SecretTemplate`, D4 change
+`add-agent-secret-store`); регистрация значений как точных секретов `Redactor` (§12.4, п. 4) — после 1.0 (R8-1)
+(D3).
 
 ## 17.5.4. Алгоритм: секреты (P-12, P-17)
 
 **Ссылки на секреты в конфиге.** У провайдера (и у бэкенда поиска, §17.1.6) — ровно одно из
 `api_key_secret = "<name>"` и `api_key_env = "<VAR>"`; оба сразу — `ConfigException`. В значениях
 `headers` и `env` MCP-серверов и `headers` провайдеров допустима подстановка `${secret:<name>}`
-рядом с `${ENV}` (§15.5): значение берётся из `SecretResolver` при подключении или запросе,
-отсутствующий секрет — ошибка подключения сервера с текстом `secret <name> is not set`.
+рядом с `${ENV}` (§15.5, п. 7).
 
-**Встроенный ключ — ошибка (CFG-9).** Валидатор §15.5 (шаг 3) отклоняет:
+**Где разрешаются ссылки** (этап 8.9; design.md change `add-agent-secret-store`, D4). Загрузка
+секреты не читает: `CatalogProvider.key` хранит ссылку (`EnvKeyRef` для `api_key_env`,
+`SecretKeyRef` для `api_key_secret`), значения с `${secret:…}` — шаблоны `SecretTemplate`
+(`CatalogProvider.headerTemplates`, `McpServerConfig.secretValues`).
+- **Провайдер — при первом запросе.** `createRoutedStreamFunction(…, secrets:)` разрешает ключ и
+  шаблоны заголовков через резолвер внутри `runProvider` и кэширует цепочку на процесс только при
+  успехе. `SecretMissing` — отказ `auth` без HTTP-запроса `API key secret <name> is not set. Run:
+  codelab secret set <name>`; `SecretUnavailable` — `API key secret <name> cannot be read: <backend>
+  is unavailable (<reason>). Set <envOverride(name)> or fix the secret store`. Без резолвера
+  (`secrets == null`) ключ не читается ни из хранилища, ни из окружения: `API key variable <VAR>
+  cannot be read: the host has no secret resolver` (для `api_key_secret` — `API key secret <name>
+  cannot be read: …`); каждый хост с ключом передаёт резолвер (`openHostSecrets`, D15). В
+  `ProviderConfig.secrets` попадают и собранные строки (`Bearer <v>`), и сырые значения ссылок —
+  тело `401` часто цитирует сам токен. Отмена хода во время ожидания завершает поток сразу ошибкой
+  класса `aborted` (`StopReason.aborted`, LLM-7); позднее значение только наполняет кэш.
+- **MCP-сервер конфига — перед каждой попыткой подключения** (8.10; design.md change
+  `add-config-writer-and-reload`, D11). `AgentRuntimeImpl` передаёт коннектору серверы с шаблонами
+  и замыкание раскрытия `McpConnectRequest.expandSecrets` над резолвером; коннектор зовёт его перед
+  каждой попыткой (первой и повторной) сервера с шаблонами, а раскрытую копию держит только в этой
+  попытке. Ненайденный секрет, недоступное хранилище или отсутствие резолвера —
+  `McpSecretsException(reason)` с причиной `secret <name> is not set`,
+  `secret <name> cannot be read: <backend> is unavailable` или `no secret store` (значение —
+  никогда): транспорт не открывается, сервер остаётся в списке сессии в `failed` с `lastError`,
+  на первом сбое — `mcp.server.failed {server, transport, reason}`, дальше — повтор по расписанию
+  §17.5.7, поэтому после `codelab secret set` сервер подключается сам. Сессия создаётся без
+  инструментов этого сервера. До 8.10 сервер с ненайденным секретом выпадал до `connect`.
+  `dispose()`/`close()` во время раскрытия отбрасывают попытку: транспорт не открывается,
+  `mcp.server.failed` нет, сервер — `failed` с `connection cancelled` без таймера. Заголовки после
+  раскрытия — в порядке файла конфига.
+- **Заблокированный сервер проектного слоя** (change `bind-mcp-secrets-to-origin`, D4, D5). HTTP-сервер
+  проектного слоя с ссылкой, не привязанной к адресу (§15.3), приходит коннектору без значений этой
+  ссылки и с `McpServerConfig.blockedReason`. Коннектор проверяет причину первой — до функции
+  раскрытия и до фабрики транспорта: попытка — сбой с `lastError` = причине, хранилище не
+  вызывается, транспорт не открывается; повтор по расписанию без ввода-вывода. Свойство безопасности
+  держит загрузка: коннектор, не знающий признака, подключился бы без заголовка, но не с ключом.
+- **Только `env` и `headers`.** `${secret:…}` в `args`, `url` MCP-сервера и `base_url` провайдера —
+  проблема конфига `secret references ${secret:…} are allowed only in env and headers values`
+  (§15.5, п. 7): argv и URL видны в `ps` и логах.
+- **Ссылка от клиента ACP — литерал.** Серверы `session/new.mcpServers` шаблонов не имеют:
+  `${secret:…}` в их `env`/`headers` передаётся серверу как есть. Иначе клиент мог бы вытянуть
+  любой секрет хранилища на свой адрес.
+- **Доверие.** `providers` и `mcp.servers` недоверенного проекта отбрасываются целиком (§15.3),
+  поэтому `${secret:…}` из чужого репозитория до резолвера не доходит; у доверенного проекта ссылка
+  работает (§17.5.9).
+
+**Секрет в конфиге (CFG-9).** Валидатор §15.5 (шаг 3) распознаёт:
 
 1. ключи `api_key`, `apiKey`, `token`, `secret`, `password` в `providers.*`,
    `tools.web.search.backends.*`, `mcp.servers.*`;
@@ -315,56 +538,176 @@ envPreconfigLayer(environment, flags):
 3. значение `api_key_env` или `api_key_secret`, совпадающее с шаблоном §12.4 (частая ошибка:
    ключ вписан вместо имени).
 
-Ошибка — `ConfigInlineSecretException` с подсказкой; значение в сообщение не попадает:
-`config.yaml:7:5: providers.openai.api_key: ключ не хранится в конфиге. Сохраните его командой
-codelab secret set codelab/openai и укажите api_key_secret: codelab/openai`. Имя в подсказке —
+В 8.9–8.10 пункт 1 для `providers.*` и элементов `mcp.servers` был ошибкой (проблема `inlineSecret`;
+`inlineSecretKeys` — в `config_issue.dart` с 8.10). `tools.web.search.backends.*` получит правило вместе с
+инструментом поиска (§17.1.6).
+
+**С 8.11 — предупреждение, а не ошибка** (решение пользователя 2026-11-04 R8-4, заменяет прежнее
+«ошибка загрузки»; design.md change `add-config-literal-secrets-and-migrate`, D3, D4). Путь «как Claude Code» до 1.0: `.mcp.json` допускает
+литералы, а ошибка старта из-за файла, правленного руками, хуже предупреждения с готовой командой
+переноса. Риск — проектный конфиг с секретом уйдёт в git: предупреждение это показывает, но не
+предотвращает.
+- **Распознавание** — функции ядра `literalSecretTag` и `findInlineSecrets` (`config/inline_secrets.dart`,
+  публичный барель):
+  - литеральные части значения между `${…}` проверяются по шаблонам §12.4: `Bearer ${secret:x}` —
+    без находки, `Bearer sk-… ${X}` (R1-1) — находка;
+  - пароль userinfo URL, который не состоит целиком из одной `${…}`, — находка (DSN, разрезанный
+    подстановкой);
+  - `url`/`base_url` не проверяются: `config get` печатает их без userinfo (R4-5).
+- **Предупреждение** на каждую находку файлового слоя (по слою, независимо от `enabled`):
+  `config.secret.in_file {key, source}` с файлом, строкой и столбцом, без значения. Шаблон текста один:
+  `<key>: a secret is stored in the config file; move it to the secret store: <command>`. Здесь
+  `<command>` — `codelab secret migrate` у слоя `user`, `codelab secret migrate --project|--local` у
+  проектных, `codelab secret set <suggestedSecretName>` у `CODELAB_CONFIG` (`migrate` его не пишет).
+  `config check` печатает предупреждение строкой `warning:`.
+- **Ссылка п. 3, похожая на значение,** не даёт проблемы формата имени: в `CoreConfig` она попадает
+  маркером — `UnusableKeyRef` у ключа провайдера, `UnusableSecretReference` в шаблоне заголовка или
+  `env`. Маркер не ищется в хранилище (`config check`), не даёт `config.provider.key_missing`,
+  `providerProblems` и `secrets.lookup`. Токен в `${ghp_…}` вместо имени переменной — та же находка
+  (`referenceName`, маркер `UnusableSecretReference`): окружение не читается, проблемы загрузки нет —
+  только предупреждение; MCP-сервер — `failed`, провайдер — ошибка `auth` хода. Шаблон `sk-…` к именам
+  применяется только в начале значения (`literalSecretTag(value, asName: true)`).
+- **Реестр:** дескриптор `providers.*.api_key` — `fileOnly`, `secret: true`; `provider add --api-key-*`
+  удаляет литерал (R4-4, R8-6); `provider list` — `key: literal in config file` (у `api_key: ${VAR}` — `env <VAR>: set|not set`);
+  `url`/`base_url` в `config get` после удаления userinfo проверяются `hasInlineSecret` (токен в пути →
+  `<redacted>`); `config get` печатает
+  литеральный `api_key` и ссылку п. 3 как `<redacted>`.
+- **`--provider-config @путь`** — файл, но не слой конфига: `api_key` там остаётся проблемой
+  `inlineSecret`, перенос невозможен.
+- **Литеральный `api_key`** — ключ провайдера (`ProviderConfig.apiKey`, без резолвера). Литерал от 8
+  символов входит в `ProviderConfig.secrets`; порог действует только для литерала из файла, ключи
+  хранилища и окружения вычищаются без порога. Литерал с управляющими или не-ASCII символами — проблема
+  загрузки без значения (`api_key must be printable ASCII`; у литерала секретно названного заголовка
+  провайдера — `<Header> must be printable ASCII`, у MCP-заголовков проверки нет). Смесь литерала и
+  ссылки — `api_key may use ${secret:…} only as the whole value`. Порог — флаг
+  `ProviderConfig.literalApiKey`, его ставит только загрузка. `api_key: "${VAR}"` и `api_key: "${secret:<name>}"` — ссылка, как в
+  заголовках: без предупреждения, R8-6 и R0-4 — как для подстановки, `migrate` не трогает (решение
+  пользователя 2026-11-04 R8-8). Вместе с `api_key_env`/`api_key_secret` — проблема
+  `api_key, api_key_env and api_key_secret are mutually exclusive` (два источника ключа —
+  неоднозначность). Прочие ключи п. 1 (`apiKey`, `token`, `secret`, `password`) не применяются.
+- **Ссылка п. 3, похожая на значение,** не разрешается: ошибка хода `API key reference
+  providers.<id>.<key> looks like a secret value, not a name; run: codelab secret migrate` (у
+  MCP-сервера — `failed`). Иначе токен ушёл бы как имя в тексты ошибок и в `secrets.lookup`.
+- **Недоверенный проект:** его `providers` и `mcp.servers` и так отбрасываются (`config.project.untrusted_key`),
+  предупреждения `in_file` нет — `secret migrate` не переносит чужие значения (H4).
+- **Предконфигурация** (§17.5.3) не меняется: `api_key` там — проблема `inlineSecret`.
+- **Запись** (писатель, `config set`, `mcp add`, `provider add`, страницы настроек) литерал
+  по-прежнему отклоняет, в том числе по шаблону в `headers`, `env` и `mcp.servers[*].args`
+  (решение R8-5; D5). Взамен — `mcp add --header-stdin|--env-stdin` (§17.5.5; D11).
+- **Подкоманды `secret set|delete`** отклоняют имя, похожее на значение, кодом `64`: `the secret name
+  looks like a secret value; pass the value on stdin` (D6).
+
+Ошибка писателя и предконфигурации — `ConfigInlineSecretException` с подсказкой; значение в сообщение
+не попадает (у предупреждения файла — свой шаблон `<key>: a secret is stored in the config file; move it to the
+secret store: <command>`, см. выше):
+`config.yaml:7:5: providers.openai.api_key: secrets are not stored in the config; run: codelab
+secret set codelab/openai, then use api_key_secret: codelab/openai (or api_key_env with an
+environment variable)`; у элемента `mcp.servers` вместо `api_key_secret` подсказка называет
+`${secret:<name>}` в `env` или `headers`. Имя в подсказке —
 `SecretNames.suggestFor(путь)`: `codelab/<id провайдера>`, `codelab/mcp/<сервер>/<ключ>`
-(`SecretNames.forMcp`: имя переменной `env` или заголовка, в нижнем регистре),
-`codelab/search-<имя бэкенда>`. Эти же имена пишут мастер и страницы настроек клиентов.
+(`SecretNames.forMcp`: имя переменной `env`, заголовка или ключа элемента вроде `token`, в нижнем
+регистре), `codelab/search-<имя бэкенда>`, для прочих путей — `codelab/<нормализованный путь>`. Эти же имена пишут мастер и страницы настроек клиентов.
 После MVP пул ключей: имена `<name>_2` … `<name>_16` и переменные `NAME_2` … (§17.10.4); токены
 входа — `codelab/oauth/<id>` (§17.10.6).
 
-**Порядок разрешения** `SecretResolver.secret(name)`:
+**Порядок разрешения** `SecretResolver.secret(name, purpose)` (design.md change
+`add-agent-secret-store`, D3):
 
 ```text
-1. SecretNames.validate(name); ошибка → ConfigException на загрузке (а не здесь)
-2. кэш процесса содержит name → вернуть (без лога, кроме --debug-secrets: source "cache")
-3. v := environment[SecretNames.envOverride(name)]; v не пуст → source "env", перейти к 6
-     CODELAB_SECRET_* — переопределение для CI и контейнеров без связки ключей
-4. v := await store.read(name) с таймаутом 10 с; source := store.backend.id
-     SecretStoreUnavailableException → лог warning secrets.backend.unavailable {backend, reason},
-     вернуть null
-5. v == null → вернуть null; вызывающий превращает это в ошибку там, где ключ нужен:
-     провайдер — AgentError(cls: provider, errorClass: auth) с текстом "API key secret codelab/openai is not set.
-     Run: codelab secret set codelab/openai"; MCP — сервер failed с тем же текстом
-6. redactor.addExact(v); кэш[name] := v; вернуть v
-debug: на шагах 2–5 лог info secrets.lookup {name, purpose, source, found}; значения, длины,
-  префиксы, хеши — никогда (CFG-10)
+1. SecretNames.problem(name) != null → SecretMissing (имя уже проверено загрузкой; защита в глубину)
+2. кэш процесса содержит name → SecretFound(source: "cache")
+3. v := environment[SecretNames.envOverride(name)]; v не пуст → кэш[name] := v; SecretFound(source: "env")
+     CODELAB_SECRET_* — переопределение для CI и контейнеров; побеждает хранилище при любом backend
+4. идёт обращение к store по name → дождаться его (single-flight)
+5. v := await store.read(name)
+     SecretStoreUnavailableException(b, r) → warning secrets.backend.unavailable {backend: b, reason: r}
+       (один раз на пару (b, r) за процесс) → SecretUnavailable(b, r)
+     v == null или пусто → SecretMissing(store.backend.id)
+     иначе → кэш[name] := v; SecretFound(source: store.backend.id)
+debug: на каждом вызове — info secrets.lookup {name, purpose, source, found}; source у SecretMissing
+  и SecretUnavailable — id бэкенда; значение, длина, префикс, хеш — никогда (CFG-10)
 ```
 
-`SecretResolver.env(VAR)` читает только окружение процесса хоста; найденное значение тоже
-регистрируется в `Redactor`. Без `--debug-secrets` чтения не логируются, кроме отказов бэкенда.
+Таймаута в резолвере нет (PKG-6): предел ожидания держат бэкенды. Кэшируются только найденные
+значения, поэтому секрет, заданный `secret set` после старта, подхватывается следующим запросом
+без перезапуска, а замена уже прочитанного требует перезапуска до 8.10. Регистрация значения в
+`Redactor` (CFG-10) добавляется в шаги 3 и 5 до возврата `SecretFound` change редакции после 1.0
+(D10; §12.4; решение R8-1).
 
-**Бэкенды** (`codelab_agent_io/lib/src/secrets/`). Служба — `codelab`, учётная запись — имя
-секрета. Значение секрета НЕ ДОЛЖНО попадать в argv дочернего процесса: argv виден другим
+`SecretResolver.env(VAR, purpose)` синхронно читает только окружение, которое хост передал
+резолверу (окружение процесса), — дорога
+`api_key_env` (D4); под `debug` пишет `secrets.lookup {name: <VAR>, purpose, source: "env", found}`.
+Без `--debug-secrets` чтения не логируются, кроме отказов бэкенда.
+
+**Бэкенды** (`codelab_agent_io/lib/src/secrets/`). У хранилищ ОС (после 1.0) служба — `codelab`,
+учётная запись — имя секрета. Значение секрета НЕ ДОЛЖНО попадать в argv дочернего процесса: argv виден другим
 пользователям через `ps`.
+
+**В 1.0 (change `add-agent-secret-store`, сужение 8.9 решением пользователя 2026-10-31) реализуются только `env` и `file`** (D5, D13, D14). Строки `keychain-macos`, `secret-service` и `wincred` — проект для черновика `add-agent-os-secret-backends` (после 1.0); порт `SecretStore` уже рассчитан на них, вызывающие не меняются.
 
 | Бэкенд (`id`) | Платформа | Запись | Чтение | Список имён |
 |---|---|---|---|---|
-| `keychain-macos` | macOS | `security -i`, команда `add-generic-password -U -s codelab -a <name> -w "<value>"` подаётся в stdin (экранирование `"` и `\`; значение с переводом строки отклоняется) | `security find-generic-password -s codelab -a <name> -w` (stdout) | индекс `$CODELAB_HOME/secret-names.json` (только имена), сверяется чтением |
-| `secret-service` | Linux | `secret-tool store --label "CodeLab: <name>" service codelab account <name>`, значение — в stdin без перевода строки | `secret-tool lookup service codelab account <name>` | `secret-tool search --all service codelab`, поле `attribute.account` |
-| `wincred` | Windows | `dart:ffi` → `advapi32` `CredWriteW`, цель `codelab:<name>`, `CRED_TYPE_GENERIC`, `CRED_PERSIST_LOCAL_MACHINE` | `CredReadW` | `CredEnumerateW("codelab:*")` |
-| `env` | все | нет: `SecretStoreUnavailableException("env backend is read-only")` | `CODELAB_SECRET_<…>` | имена из окружения |
-| `file` | все, только по явному выбору | `$CODELAB_HOME/secrets.yaml`, права `0600`, атомарно (tmp + rename) | тот же файл; права шире `0600` → отказ чтения с ошибкой | ключи файла |
+| `keychain-macos` (после 1.0) | macOS | `/usr/bin/security -i` (абсолютный путь), команда `add-generic-password -U -s codelab -a <name> -w "<value>"` подаётся в stdin (экранирование `"` и `\` — по итогу разведки утилит черновика `add-agent-os-secret-backends`) | `/usr/bin/security find-generic-password -s codelab -a <name> -w` (stdout) | индекс `$CODELAB_HOME/secret-names.json` (только имена), сверяется проверкой существования без `-w` |
+| `secret-service` (после 1.0) | Linux | `secret-tool store --label "CodeLab: <name>" service codelab account <name>`, значение — в stdin без перевода строки | `secret-tool lookup service codelab account <name>` | тот же индекс `secret-names.json`: `secret-tool search` печатает значения найденных записей, поэтому для списка не используется |
+| `wincred` (после 1.0) | Windows | свои привязки `advapi32` через `dart:ffi` и `package:ffi` (только `codelab_agent_io/lib/src/secrets/wincred/`, за портом `WinCredApi`): `CredWriteW`, цель `codelab:<name>`, `CRED_TYPE_GENERIC`, `CRED_PERSIST_LOCAL_MACHINE`, значение UTF-16LE до 1280 символов | `CredReadW`; `ERROR_NOT_FOUND` → нет секрета | `CredEnumerateW("codelab:*")`, только `TargetName`; индекс не нужен |
+| `env` | все | нет: `SecretStoreUnavailableException("env backend is read-only")`, удаление — то же | `CODELAB_SECRET_<…>` | имён секретов нет: `envOverride` необратимо, поэтому `secret list` печатает имена переменных строкой `Environment overrides` (D6, D8) |
+| `file` | macOS, Linux; только по явному выбору | `$CODELAB_HOME/secrets.yaml`: файл создаёт только запись (`secret set`); уникальный tmp `secrets.tmp-<pid>-<counter>-<random>` в приватном `$CODELAB_HOME/.secrets-tmp/` (`0700`) получает права `0600` с проверкой (и `.secrets-tmp`) до записи значения и перед rename; после rename широкие права `secrets.yaml` исправляются `chmod 600`, файл удаляется, только если не удалось; перед заменой — no-op `chmod` проверяет владельца `$CODELAB_HOME` (root обходит, чтение не покрыто); очередь записей на нормализованный путь в пределах процесса; брошенные tmp старше 10 мин удаляются следующей записью; каталог после rename не fsync-ится — при отключении питания теряется только последнее обновление | тот же файл; символическая ссылка или права шире `0600` → отказ с текстом `run: chmod 600 <path>`; `$CODELAB_HOME` — ссылка или с записью для группы/остальных → отказ с `chmod go-w` (как у ssh; владельца `dart:io` не сообщает); файл ≤ 1 МиБ | ключи файла |
 
-Выбор — ключ `secrets.backend` (только глобальный конфиг, §15.3): `"auto"` (по умолчанию) —
-ОС-хранилище, если доступно (Linux: `secret-tool` в `PATH`, задан `DBUS_SESSION_BUS_ADDRESS`, проба
-`secret-tool search --all service codelab` завершилась с кодом 0 за 3 с), иначе `env` с одним
-предупреждением `secrets.backend.unavailable` при старте; `"keychain"` — ОС-хранилище обязательно,
-недоступно → ошибка старта; `"env"` — только окружение; `"file"` — открытый текст, при каждом
-старте предупреждение `secrets.backend.plaintext`. Мобильный и web-хосты передают свою
-реализацию `DescribedSecretStore` поверх хранилища платформы; встроенный агент desktop-app
-использует ту же реализацию `codelab_agent_io`, что и CLI.
+Значение с переводом строки, длиннее 64 КиБ в UTF-8 или с непарным суррогатом отклоняется при
+записи; текст исключений бэкендов значения не содержит (D5). Права `0600` (tmp) и `0700`
+(`.secrets-tmp`, а также `$CODELAB_HOME`, если его создал сам бэкенд) бэкенд `file` выставляет
+процессом `/bin/chmod` (нет его — `/usr/bin/chmod`) через узкий порт `SecretProcessRunner` (`codelab_agent_io`; абсолютный путь
+утилиты, без оболочки и окружения родителя, в argv только режим и путь; результат — код выхода и
+признак таймаута, вывод отбрасывается), потому что в `dart:io` нет API смены прав (D5, D14).
+Существующий `$CODELAB_HOME` бэкенд не изменяет. После 1.0 (черновик `add-agent-os-secret-backends`): каждое обращение к
+хранилищу ОС ограничено 10 с — процесс утилиты убивается, вызов `advapi32` (в отдельном изоляте)
+отбрасывается; stderr утилит в тексты ошибок не попадает.
+
+Выбор — ключ `secrets.backend` (только глобальный конфиг и `--config`, §15.3), значения
+`auto | keychain | env | file`. **В 1.0:** `"auto"` (по умолчанию) — `env` на всех ОС, без проб
+и процессов; `"keychain"` — ошибка конфигурации `not supported yet`; `"env"` — только окружение;
+`"file"` — открытый текст, при каждом старте предупреждение `secrets.backend.plaintext`, строка
+`warning:` в `config check` и в подкомандах `secret`; на Windows `"file"` — ошибка конфигурации
+`secrets.backend: file backend is not supported on Windows; use env with CODELAB_SECRET_* variables`
+(ACL NTFS `dart:io` не проверяет), поэтому на Windows в 1.0 доступен только `env`. Значение
+проверяет одна функция `secretsBackendProblem` у `ConfigLoader`, `openSecretStore` и
+`FileSecretStore`; `openSecretStore` с недопустимым значением бросает
+`SecretStoreUnavailableException` с тем же текстом (D7). Причина `auto` — `OS keychain backends are
+not available in this version; set secrets.backend: file or CODELAB_SECRET_* variables`, на Windows —
+без упоминания `file`. `auto`
+**никогда не выбирает `file`** — ни сразу, ни как запасной вариант (CFG-11). `secret set` при `env`
+отвечает кодом 1 и подсказывает `secrets.backend: file` или переменную `CODELAB_SECRET_<…>`;
+`config check` даёт ту же подсказку для незаданного ссылочного секрета. **После 1.0**
+(`add-agent-os-secret-backends`): `auto` лениво, при первом обращении, выбирает ОС-хранилище, если
+оно доступно (macOS — `/usr/bin/security`; Linux — `secret-tool` в `PATH`,
+`DBUS_SESSION_BUS_ADDRESS`, проба за 3 с; Windows — `advapi32.dll`), иначе `env`; `"keychain"`
+требует ОС-хранилище (проба при старте). Тестовое хранилище `CODELAB_TEST_SECRET_STORE` этапа 7
+(§12.4.13) — бэкенд `file` с явным путём `<каталог>/secrets.yaml`. Мобильный и web-хосты передают
+свою реализацию `DescribedSecretStore`; встроенный агент desktop-app использует ту же реализацию
+`codelab_agent_io`, что и CLI. Решения — design.md change `add-agent-secret-store` (D5–D7, D13,
+D14).
+
+**Настольные хосты, встроенные профили и другие платформы** (change `add-agent-secret-store`,
+D15, D16). Резолвер у `codelab-agent` и у встроенного агента этапа 7 строит одна фабрика
+`openHostSecrets` (`codelab_agent_io`), у ядра в отдельном isolate — внутри него. Desktop
+использует те же бэкенды, что CLI (в 1.0 — те же переменные и `secrets.yaml`, после 1.0 — та же
+служба `codelab` в хранилищах ОС), поэтому `flutter_secure_storage` на
+desktop не применяется; программная запись для страницы настроек — `SecretAdmin` через
+`codelab_setup/io.dart` (результаты `SecretStored`, `SecretUpdated`, `SecretReadOnly`, `SecretFailed` и
+др.; `checkStore(name)` — проверки без значения, D15). Клиенты (app и CLI) обращаются к хранилищу
+через `ClientSecretAccess` (`codelab_agent_io/lib/src/secrets/client_secret_access.dart`, реэкспорт
+из `codelab_setup/io.dart`; change `add-provider-setup-ui`, D4): бэкенд выбирается по
+`secrets.backend` пользовательского слоя (битый конфиг → `env` только для чтения), запись — через
+`SecretAdmin`, `isSet` — без чтения значения, `read` — без кэша, в порядке резолвера
+(`CODELAB_SECRET_<…>`, затем бэкенд). Подсказку бэкенда только для чтения строит общая
+`secretReadOnlyHint` (её же использует `SecretCommands`). Кэш найденных значений живёт до конца процесса: работающий агент видит
+замену уже прочитанного секрета только после перезапуска (до 8.10). Условие App Sandbox для
+будущего `keychain-macos` записано в черновике `add-agent-os-secret-backends`. Готовые пакеты (`flutter_secure_storage`, `keyring`, `keybay`) не берутся (пересмотр — при старте
+`add-agent-os-secret-backends`, если появится зрелый пакет без Flutter от подтверждённого издателя):
+Flutter-плагины не работают в бинарях `dart compile exe`, а малоизвестные пакеты на пути к
+секретам — риск цепочки поставок. Мобильный профиль — адаптер порта поверх
+`flutter_secure_storage` в мобильном приложении; web — ключи на клиенте не сохраняются (серверный
+прокси или ключ только в памяти сессии), решение — при старте web-профиля.
 
 **Почему нет зашифрованного файла по умолчанию.** Ключ шифрования пришлось бы хранить рядом —
 на том же диске, с теми же правами; такой файл не защищает ни от кого, кто может прочитать
@@ -372,12 +715,44 @@ debug: на шагах 2–5 лог info secrets.lookup {name, purpose, source, 
 TTY (`agent-serve`, CI) не может. Поэтому выбор честный: хранилище ОС, переменные окружения или
 явно выбранный открытый файл с правами `0600`.
 
-**CLI.** `codelab secret set <name>` читает значение из stdin (с TTY — без эха, ввод до Enter; без
-TTY — весь stdin, один завершающий `\n` отбрасывается); значение аргументом командной строки —
-ошибка использования `pass the secret value on stdin, not as an argument`. Имя, у которого
-`envOverride` совпадает с `envOverride` уже существующего другого имени, отклоняется.
-`codelab secret delete <name>`; `codelab secret list` печатает бэкенд и имена, без значений и длин.
-Те же подкоманды есть у `codelab-agent`.
+**CLI** (design.md change `add-agent-secret-store`, D8). Одна реализация — `SecretCommands`
+(`codelab_agent_io`); `codelab-agent secret …` и `codelab secret …` (через `codelab_setup/io.dart`)
+только разбирают аргументы, поэтому вывод и коды `SecretCommands` у двух бинарей совпадают; своё у
+каждого — только справка `secret` и сообщения разбора argv (они называют бинарь). Бэкенд
+подкоманды берут из `secrets.backend` в `$CODELAB_HOME/config.yaml` и файле `CODELAB_CONFIG` — и
+только этот ключ: невалидный остальной конфиг (например, ключ вписан значением) не блокирует
+команду, которая его чинит; флаг `serve --config` подкоманды не видят. Недопустимый
+`CODELAB_CONFIG` (относительный путь или расширение не `.yaml`/`.yml` без учёта регистра) —
+`warning: CODELAB_CONFIG ignored: <reason>`, бэкенд только из `$CODELAB_HOME/config.yaml`, код
+выхода не меняется. Без домашнего каталога (`CODELAB_HOME`, `HOME` и `USERPROFILE` не заданы или
+пусты) подкоманды отказывают кодом `64` с `cannot find the home folder: set CODELAB_HOME or HOME`
+без справки, не читая stdin и не создавая файлов: запасного `./.codelab` у них нет, иначе
+`secrets.yaml` лёг бы в текущий каталог, например в git-репозиторий (`serve` и `config check` это
+правило не меняет).
+- Код `64` — два класса. Ошибка использования (неверное имя, значение аргументом, нет или неизвестна
+  подкоманда, ошибка argv) — сообщение и справка `secret`; ошибка разбора argv печатает только
+  `<бинарь>: invalid arguments for secret`, без присланных слов (среди них может быть значение).
+  Ошибка значения (пустое, перевод строки, `secret value must be valid UTF-8`, длиннее 64 КиБ,
+  непарный суррогат, коллизия `envOverride`) — только сообщение, без справки.
+- `codelab secret set <name>` читает значение из stdin. С TTY — неканонический режим (эхо и
+  построчный режим выключены, Backspace и Ctrl+D обрабатываются вручную, Enter завершает ввод):
+  каноническая строка терминала обрезалась бы на `MAX_CANON`. Байты после перевода строки (вставка
+  нескольких строк) — код `64` `secret value must be a single line`, остаток ввода вычитывается до
+  восстановления режимов; режимы восстанавливаются в `finally` и по `SIGINT` (код `130`). Без TTY —
+  весь stdin, один завершающий `\n` или `\r\n` отбрасывается. Значение аргументом — код `64`,
+  `pass the secret value on stdin, not as an argument`, аргумент не печатается. Бэкенд `env` (в том
+  числе `auto` в 1.0) — код `1` без чтения stdin, с подсказкой `secrets.backend: file` или
+  переменной `CODELAB_SECRET_<…>` (на Windows — только переменной). Успех — `Stored secret <name>
+  in <backend>`, перезапись без `--force` — `Updated secret <name> in <backend>`.
+- `codelab secret delete <name>` — код `0` и для отсутствующего имени (`Secret <name> was not set in
+  <backend>`): команда идемпотентна для скриптов.
+- `codelab secret list` — строка `Backend: <id>` (у `auto` — с причиной), имена по алфавиту и строка
+  `Environment overrides: <VAR>, …`, без значений и длин; хранилище недоступно — код `1`.
+- С бэкендом `file` каждая подкоманда пишет в stderr предупреждение об открытом тексте; файл
+  `secrets.yaml` создаёт только `set`.
+
+Кэш работающего агента подкоманды не сбрасывают: новый секрет он подхватит сразу, замену
+прочитанного — после перезапуска (до 8.10, D15).
 
 ## 17.5.5. Алгоритм: запись конфига
 
@@ -398,24 +773,124 @@ apply(base, edits):
      ключа нет в слое → ConfigException("<key>: нет в <путь>"); d — дескриптор любого ключа поддерева
    base.target.layer ∉ d.layers → ConfigException("<key> записывается только в <слои>")
    SetValue со значением-секретом (правила CFG-9) → ConfigInlineSecretException (ничего не пишется)
-2. слой project: правило доверия §15.3 для ключа и значения при текущем trusted_projects;
+   UpsertMcpServer: литеральный секрет (правило ниже) → ConfigInlineSecretException
+2. только слои project/projectLocal (у user доверие не проверяется): правило доверия §15.3 для ключа и значения при trusted_projects текущих слоёв
+   user и --config/CODELAB_CONFIG (тех же, что у загрузки; проверку выполняет trust.dart ядра);
    ключ был бы проигнорирован → ConfigException("<key>: в недоверенном проекте ключ не действует;
    используйте --local или добавьте проект в trusted_projects")
-3. lock := эксклюзивное создание <path>.lock (существующий старше 10 с — удалить, лог warning);
-   занят → ConfigConflictException
+3. путь цели раскрывается resolveSymbolicLinks (ссылка остаётся ссылкой, правится цель);
+   > 32 переходов по ссылкам → ConfigException("too many symbolic links: <path>");
+   слои project/projectLocal: раскрытая цель (и .codelab, если он ссылка) вне канонического
+   <cwd>/.codelab → ConfigException до lock и до создания каталогов; у user ссылка — куда угодно;
+   созданный писателем $CODELAB_HOME получает права 0700 (кроме Windows);
+   lock := эксклюзивное создание <path>.lock с содержимым "<pid> <nonce>"; существующий старше
+   порога устаревания (10 с) снимается через rename в <path>.lock.stale-<nonce> с повторной
+   проверкой возраста и содержимого (свежий — вернуть на место и ConfigConflictException), лог
+   warning config.write.stale_lock {path, age_ms}; занят → ConfigConflictException;
+   под lock: брошенные <path>.tmp-* старше 10 с удаляются
 4. bytes := прочитать <path> (нет файла → пусто); sha256(bytes) != base.fingerprint →
    снять lock, ConfigConflictException(path): вызывающий перечитывает (read) и повторяет правки
 5. text := применить правки к bytes через YamlEditor (ниже); перевод строк (LF/CRLF) и
      завершающий \n — как в файле; файла нет → документ строится с пустого
-6. проверка: loader.validateCandidate(target, text) — §15.5 шаги 1–8 по всем файловым слоям
-   с заменой этого слоя на text плюс слой окружения процесса писателя;
-   незаданная ${VAR} — предупреждение, а не ошибка (окружение агента может отличаться);
-   ошибки → снять lock, ConfigException(issues); файл не тронут
-7. записать <path>.tmp-<pid>-<rand> в том же каталоге (права — как у файла, новый — 0644),
-   flush + fsync; rename поверх <path> (Windows — MoveFileEx с заменой); fsync каталога (POSIX)
+6. проверка: loader.validateCandidate(target, text, {cwd, environment}) — тот же порядок слоёв
+   и fromLayers, что у загрузки, с заменой этого слоя на text;
+   незаданная ${VAR} (структурный признак ConfigIssue ядра, не текст) — предупреждение
+   ConfigWriteResult.warnings, а не ошибка (окружение агента может отличаться; проверка
+   повторяется с подставленным значением);
+   base := полная проверка исходного текста слоя тем же validateCandidate без обрыва ступеней
+   (R3-3): проблемы всех ступеней, включая каскадные; кандидат проверяется в том же режиме;
+   неполная проверка кандидата (config.validation.incomplete: вырезан предок вместо точного пути или весь слой,
+   нет прогресса, исчерпан лимит 8 кругов; доверие — по исходным слоям до вырезания) — всегда отказ; неполнота одной базы не блокирует;
+   обычная загрузка так не делает;
+   правка блокируется, только если в кандидате есть проблема вне base; сравнение проблем по
+   сигнатуре kind|key|source, без значений и позиции (R3-1), с учётом числа проблем каждой
+   сигнатуры — проблемы с пустым ключом не схлопываются: новые — снять lock, ConfigException(новые); файл не тронут;
+   бывшие и до правки — в ConfigWriteResult.warnings, запись продолжается
+7. эксклюзивно создать пустой <path>.tmp-<pid>-<rand> в каталоге цели; права существующего файла
+   (FileStat.mode) выставить на пустой tmp через порт SecretProcessRunner (абсолютный /bin/chmod,
+   в argv только режим и путь; таймаут chmod 5 с строго меньше порога устаревания lock 10 с) ДО записи
+   содержимого; сбой chmod → удалить tmp, снять lock,
+   ConfigException("cannot set permissions on <path>"), rename не выполняется; новый файл — права
+   по umask процесса; на Windows права не переносятся; затем записать text, flush(flushAll);
+   перед rename перечитать свой lock (nonce) и отпечаток цели: lock чужой или снят, отпечаток
+   не тот → удалить tmp, ConfigConflictException (чужой lock не трогать);
+   rename поверх цели (Windows — MoveFileEx с заменой); каталог не fsync-ится
+   ошибка IO при записи tmp или rename → удалить tmp, снять lock,
+   ConfigException("cannot write <path>: <runtimeType>"); исходный файл цел
 8. снять lock; лог info config.write {path, keys}; вернуть ConfigWriteResult(новый fingerprint,
    предупреждения, restartRequiredKeys по реестру)
 ```
+
+**Отступления 8.10** (design.md change `add-config-writer-and-reload`, D5):
+- **Без fsync каталога.** `dart:io` не открывает каталог. Содержимое tmp сбрасывается
+  `flush(flushAll)` до `rename`; при отключении питания теряется только последняя правка,
+  повреждённого файла не будет — как у `secrets.yaml` (D14 change `add-agent-secret-store`).
+- **Права через `SecretProcessRunner`.** В `dart:io` нет API смены прав, поэтому писатель берёт
+  существующий порт бэкенда `file` (D5 change `add-agent-secret-store`). Порт не переименовывается
+  (§19 корневого `AGENTS.md`); его doc-комментарий называет второго потребителя. Писать в
+  существующий файл на месте нельзя: сбой посреди записи оставил бы обрезанный конфиг (CFG-13).
+- **Права до содержимого.** tmp создаётся эксклюзивно и пустым, права выставляются до записи
+  текста, сбой `chmod` — отказ записи (fail closed): конфиг с правами `0600` не должен на мгновение
+  стать `0644`.
+- **Литеральные секреты — по итоговому поддереву.** Проверяется каждое изменённое этой записью
+  значение в `providers.*.headers`, `mcp.servers[*].headers`, `mcp.servers[*].env` — независимо от
+  типа правки, поэтому `config set mcp.servers '…'` и `config set providers.x.headers '…'` проходят
+  ту же проверку, что `UpsertMcpServer`. Имя нормализуется (нижний регистр, без `-` и `_`) и
+  секретное, если содержит `token`, `secret`, `password`, `apikey`, `auth`, `cookie`, `key` или
+  `privatetoken`. Значение такого имени без `${secret:…}` и `${VAR}` → `ConfigInlineSecretException` с
+  `suggestedSecretName` (`SecretNames.forMcp(server, key)`, у провайдера — `suggestFor(path)`), без
+  значения в тексте. Правило получают `codelab mcp add`, `config set`, будущая страница MCP-серверов
+  и предконфигурация (§17.5.3), а перезагрузка — для «провайдера с ключом» (R0-4); функции имён
+  (`isSecretLikeName`, `hasSecretReference`) — одна копия в публичном барели ядра. Ручная правка файла с таким литералом загружается; с 8.11
+  литерал по шаблонам §12.4 даёт предупреждение `config.secret.in_file` (CFG-9, пп. 2–3; R8-4). Fail closed на пути записи дешевле, чем объяснять, почему
+  CLI записал токен в файл (ревью итерации 0, D5). Ревью итерации 3: в поддеревьях непрозрачных
+  узлов (`providers.*.auth`, `key_rotation`, `tools.web`, `llm`, `hooks`, …) правило имён действует
+  на любой лист; `inlineSecretKeys` сравниваются после той же нормализации имени; нестроковый
+  скаляр под секретным именем — литерал; изменённость элемента `mcp.servers` определяется по номеру
+  элемента, поэтому дубль `name` не прячет литерал.
+- **Lock без гонки.** Устаревший lock снимается переименованием в уникальное имя с повторной
+  проверкой; свой lock писатель удаляет, только если в нём его nonce (D5). Ревью итерации 3:
+  брошенные tmp удаляются только под lock; таймаут `chmod` (5 с) строго меньше порога (10 с) устаревания lock,
+  чтобы lock живого писателя не выглядел устаревшим; перед `rename` писатель перечитывает свой lock
+  и отпечаток цели — иначе `ConfigConflictException`. Окно между перепроверкой и `rename` — один
+  системный вызов.
+- **Containment ссылок проектных слоёв** (ревью итерации 3, D5, п. 5). Проектный каталог приходит
+  из чужого репозитория: ссылка `.codelab/config.local.yaml` → `~/.codelab/config.yaml` не должна
+  превращать `config set --local` в запись глобального конфига. Цель `project`/`projectLocal` —
+  только внутри канонического `<cwd>/.codelab`; у слоя `user` ссылки разрешены (dotfiles). Больше
+  32 переходов — `too many symbolic links`. Созданный писателем `$CODELAB_HOME` — `0700`. С задачи
+  8.5 то же правило (общий код `config_link_containment.dart`) действует и при чтении, но по
+  реальному пути ОС (`realpath`), а не посегментным разбором писателя: загрузчик не читает
+  проектный файл с реальным путём вне `<cwd>/.codelab` (проблема загрузки), ошибка раскрытия —
+  всегда проблема, наблюдатель §17.5.6 цель снаружи не читает и не замеряет; висячая ссылка
+  наружу при чтении — отсутствующий слой (§15.3, «Ссылки проектных файлов»).
+- **Служебные имена писателя** (`<имя>.lock`, `<имя>.lock.stale-*`, `<имя>.tmp-*`) — константы
+  `config_write_lock.dart`; их же берёт наблюдатель §17.5.6, чтобы не перезагружаться от
+  собственных служебных файлов писателя (D5 «Где», D7).
+- **Блокируют только новые ошибки** (R3-1, решение пользователя 2026-11-02). Писатель проверяет
+  и исходный текст слоя и сравнивает проблемы до и после правки по сигнатуре
+  `kind|key|source`, без значений; позиции в сигнатуре нет — вставка выше сдвигает строки, и
+  прежняя ошибка выглядела бы новой; сравнение по числу проблем каждой сигнатуры, поэтому проблемы
+  с пустым ключом не схлопываются.
+  Новая проблема — отказ записи; бывшая и до правки — предупреждение `ConfigWriteResult.warnings`,
+  CLI печатает её строкой `warning:`. Поэтому `config set budget.max_steps 40` в пустом `$CODELAB_HOME` проходит с
+  предупреждением `agent.default_model: no model is configured; …` (событие `config.model.none`),
+  а `provider add` без `--default` — без предупреждений: `agent.default_model` необязателен, и
+  модель новой сессии выбирается правилом §15.4 (change `optional-default-model`). Удаление
+  провайдера, на которого ссылается явная `agent.default_model`, и удаление последнего провайдера
+  с моделью отклоняются.
+  Литеральный секрет, вносимый правкой, ключ вне реестра, запрещённый слой и ключ, отброшенный
+  правилом доверия (шаги 1–2), блокируют всегда. Загрузка проверяет ступенями (схема и
+  неизвестные ключи раньше семантики), и ранняя ошибка скрывает поздние; поэтому базу писатель
+  строит полной проверкой исходного текста без обрыва ступеней (R3-3, решение пользователя
+  2026-11-03): поздняя ошибка, открывшаяся после исправления ранней, — предупреждение, а не
+  отказ. Так `config unset providers.lm.api_key` удаляет литеральный секрет при неверном
+  `base_url` того же провайдера. `config check` и `serve` по-прежнему останавливаются на первой
+  провалившейся ступени.
+- **Отпечаток и разбор пути — в ядре.** `configFingerprint` (sha256; `crypto` есть в allowlist
+  ядра и нет в allowlist `codelab_agent_io`), `splitKeyPath` — общий разбор пути писателя,
+  `SettingsRegistry.lookup` и маскирования вывода; `inlineSecretKeys` экспортируется из
+  `config_issue.dart` (D1, D5).
 
 **Правка с сохранением формата.** Писатель не пересериализует документ: он применяет правки
 через `YamlEditor` из `package:yaml_edit` (`codelab_agent_io`), и всё вне изменённых узлов
@@ -427,12 +902,17 @@ apply(base, edits):
    с этим `name`.
 2. `SetValue` существующего ключа — `YamlEditor.update(path, value)`: меняется только узел
    значения, хвостовой комментарий `# …` остаётся. Нового ключа — `update` в ближайшее
-   существующее отображение-предок; новый ключ добавляется в конец этого отображения;
-   недостающие предки создаются как вложенные отображения в блочном стиле.
+   существующее отображение-предок; новый ключ вставляется по правилу `YamlEditor` (R3-2): в
+   отображение, ключи которого отсортированы по алфавиту, — на своё место по алфавиту, иначе —
+   в конец; недостающие предки создаются как вложенные отображения в блочном стиле. Известная
+   граница (ревью итерации 3): `YamlEditor` относит комментарий над ключом к промежутку перед ним,
+   поэтому при вставке по алфавиту комментарий над следующим ключом оказывается над новым ключом;
+   байты комментария сохраняются (D5, «Порядок вставки»).
 3. `UnsetValue` — `YamlEditor.remove(path)`; опустевшее отображение-предок удаляется тем же
    способом, если в нём нет комментариев.
 4. `UpsertMcpServer` — `update` элемента `mcp.servers[<name>]` по ключам (лишние ключи —
-   `remove`, новые — в конец элемента) или `appendToList(["mcp", "servers"], server)`;
+   `remove`, новые — по правилу п. 2) или `appendToList(["mcp", "servers"], server)` — новый
+   элемент всегда в конец списка;
    `RemoveMcpServer` — `remove` элемента списка. `RemoveTable(key)` — `remove(key)`: ключ
    удаляется вместе со всем поддеревом и комментариями внутри него; комментарий над следующим
    ключом сохраняется.
@@ -440,8 +920,11 @@ apply(base, edits):
    пробела, если в файле нет вложенности); правка внутри существующей flow-коллекции
    (`{…}`, `[…]`) сохраняет её flow-стиль — так работает `yaml_edit`, документ не
    переформатируется. Строки пишутся без кавычек, если значение читается обратно той же
-   строкой по профилю §15.5, иначе в двойных кавычках (`"off"`, `"yes"`, `"${GITHUB_TOKEN}"`,
-   `"exec:git push --force"`); `int`, `float`, `bool`; `duration` — строка `30s`.
+   строкой по профилю §15.5. Строка с `${` — в одинарных кавычках (`'${GITHUB_TOKEN}'`,
+   `'Bearer ${secret:codelab/mcp/gh/x}'`): в двойных `yaml_edit` экранирует `/` как `\/`
+   (8.11; design.md change `add-config-literal-secrets-and-migrate`, D5). Прочие строки, которые
+   прочитались бы не строкой, и строки с управляющими символами — в двойных кавычках (`"off"`,
+   `"yes"`, `"exec:git push --force"`); `int`, `float`, `bool`; `duration` — строка `30s`.
 6. Если `YamlEditor` отказывает (документ нарушает профиль §15.5 или правку нельзя выполнить без
    потери структуры), писатель возвращает `ConfigException` с путём ключа и текстом
    `cannot edit <key> automatically; edit the file manually`; файл не трогается.
@@ -449,28 +932,168 @@ apply(base, edits):
    6 алгоритма выше; результат, не прошедший проверку, не пишется.
 
 **Подкоманды CLI** (общая реализация в `codelab_agent_io/lib/src/cli/` — типизированные методы
-`ConfigCommands` с результатом `{exitCode, stdout, stderr}`; аргументы разбирают сами приложения
+`ConfigCommands` с результатом `{exitCode, stdout, stderr}`; `check` асинхронный (`Future<ConfigCommandResult>`): он ждёт загрузчик файлов проекта (change `add-agent-project-files`, D13); аргументы разбирают сами приложения
 своим `package:args`, которого в allowlist `codelab_agent_io` нет; `codelab` вызывает реализацию
-через `package:codelab_setup/io.dart`; у `codelab` и `codelab-agent` подкоманды одинаковые; слой по умолчанию — `user`, `--project` и `--local` — слои 3 и 4
-для текущего `cwd`; код выхода 0 — успех, 1 — ошибка валидации или конфликт, 64 — ошибка
-использования, как у `codelab -p`, dart-agent-and-clients §9.11):
+через `package:codelab_setup/io.dart`; у `codelab` и `codelab-agent` подкоманды одинаковые; слой записи по умолчанию — `user`, `--project` и `--local` — слои 3 и 4
+для `cwd`; `config get` без `--layer` читает `merged`; код выхода 0 — успех, 1 — ошибка валидации или конфликт, 64 — ошибка
+использования, как у `codelab -p`, dart-agent-and-clients §9.11).
+
+**Правила 8.10** (design.md change `add-config-writer-and-reload`, D6):
+- **Классы.** `ConfigCommands` получает `path`, `get`, `set`, `unset`; новые `ProviderCommands`
+  (`add`, `list`, `remove`) и `McpServerCommands` (`add`, `list`, `remove`). Имя `McpServerCommands`,
+  а не `McpCommands`, — чтобы не путать с агентской командой `/mcp` (§17.5.7). Все три класса и их
+  опции реэкспортирует `codelab_setup/lib/io.dart`.
+- **Слой** (решение пользователя 2026-11-03). Слой `user` по умолчанию — только у записи: `set`,
+  `unset`, `provider add|remove`, `mcp add|remove`. `config get` без `--layer` — `merged`.
+- **`cwd`.** `--cwd` подкоманды (есть у `config path|get|set|unset|check`, `provider list`,
+  `mcp list`; у `provider add|remove` и `mcp add|remove` нет), иначе общий `-C`/`--cwd` у `codelab`,
+  иначе текущий каталог; путь канонизирует загрузчик, как у `config check`.
+- **Отсутствующая запись** (решение пользователя 2026-11-03). `config unset`, `provider remove`,
+  `mcp remove` без такой записи в файле слоя — код `0` без записи, stdout `<key> is not set in
+  <path>`. `config get` отсутствующего ключа — код `1`. Наличие ключа определяется по пути, а не по
+  значению (ревью итерации 4): ключ со значением `null` (`max_steps:`) присутствует, и `config unset`
+  его удаляет.
+- **`provider add` — upsert** (решение пользователя 2026-11-03): для существующего `<id>` переданные
+  флаги перезаписывают свои поля, остальные сохраняются; так повторный `--api-key-stdin` меняет ключ.
+  Любой флаг ключа (`--api-key-stdin`, `--api-key-secret`, `--api-key-env`) заменяет источник ключа
+  целиком: поля другого источника удаляются той же записью, пары `api_key_env` + `api_key_secret`
+  после команды нет (R4-4, решение пользователя 2026-11-03). Недостающие обязательные флаги
+  перечисляются все одной строкой stderr.
+- **Прочие проверки.** `provider remove` со ссылкой из `agent.*` — stderr дополнительно содержит
+  `change the model first: config set agent.default_model <provider>/<model>`. Имя MCP-сервера в
+  `mcp add` и `mcp remove` без пробелов, `[`, `]`, `"` (иначе ломается путь `mcp.servers[<name>]`) —
+  иначе `64`. `mcp remove <name>` ищет сервер только по `name`, никогда по номеру элемента
+  (`mcp remove 0` без сервера `0` — код `0`, `is not set`).
+- **argv не цитируется.** Ошибка разбора argv у `config set|unset`, `provider` и `mcp` — фиксированная
+  фраза `invalid arguments for config <sub>` (`… provider`, `… mcp`) и справка без цитирования слов
+  argv (та же политика, что у `secret`): значение могло начинаться с `-`, ключ могли передать флагом.
+  Неизвестная подкоманда `provider`/`mcp` и лишние аргументы — `unknown <cmd> arguments (<n>)`, в обоих
+  бинарях одинаково, кроме имени бинаря.
+- **Маскирование `config get` и `provider list`** (R0-2, решение пользователя 2026-11-02; D6).
+  Значение любого листа (на любой глубине), чьё имя — ключ из `inlineSecretKeys` или секретное по
+  правилу имён выше, без `${…}` → `<redacted>`; значение со ссылкой — как есть; непрозрачное
+  поддерево схемы (`providers.*.auth`, `key_rotation`, разделы после MVP) → `<opaque: edit the
+  file>`. Правило имён — для листьев без дескриптора реестра и элементов отображений с
+  произвольными ключами (`headers`, `env`); скалярный лист реестра (`api_key_secret`, `api_key_env`,
+  `auth_header`) печатается как есть; известная консервативная граница — `exec.secrets[].secret`
+  печатается `<redacted>`; значение из слоя окружения (`env:*`, в том
+  числе предконфигурация) → имя источника `<from env:CODELAB_PROVIDER_CONFIG>`; URL (`base_url`,
+  `url`) разбирается как URI и печатается без userinfo, неразбираемый URL и URL с `@` без авторитета → `<redacted>`, значение
+  query-параметра или пары во фрагменте с секретным именем без `${…}` → `<redacted>` (R4-5: `https://u:p@ss@host/v1?api_key=X&v=2`
+  не выводит ни `p@ss`, ни `X`); отображения и списки — поэлементно. Маскирует одна функция
+  `cli/config_output.dart`. С 8.11 (R4-6; design.md change `add-config-literal-secrets-and-migrate`, D5, OQ3) `config get` маскирует
+  элементы `mcp.servers[*].args`: по шаблону §12.4 → `<redacted>`, после флага с секретным именем
+  (`--token X`) → `<redacted>`, `--api-key=X` → `--api-key=<redacted>`, ссылки — как есть; запись
+  элемента `args` по шаблону отклоняется с подсказкой `--env <NAME>='${secret:…}'`; загрузка `args`
+  не проверяет.
+- **`get` никогда не раскрывает подстановки.** Печатается сырое значение слоя-победителя
+  (`"${GITHUB_TOKEN}"`, `"Bearer ${secret:…}"`), даже при `--layer merged`: значение `${VAR}` —
+  содержимое окружения, а оно может быть секретом. Значения ключей `secret: true` — имена секретов,
+  они печатаются.
+- **Коды выхода.** `0` — успех, в том числе удаление отсутствующей записи; `1` — невалидный итог,
+  отказ доверия, `inlineSecret`, конфликт после повтора, отказ хранилища секретов, `config get`
+  отсутствующего ключа; `64` — неизвестный ключ в `set`, разбор значения, лишние или
+  недостающие аргументы, несовместимые флаги, `provider add` без `--kind`/`--model`/`--context-window`,
+  недопустимое имя MCP-сервера, неизвестная подкоманда.
+- **Повтор при конфликте.** `ConfigConflictException` — одно автоматическое повторение `read` →
+  `apply`: правки CLI декларативны, а устаревшего экрана, который нужно защитить, у CLI нет. Второй
+  конфликт — код `1`, `config file changed during the edit; run the command again`.
+- **Формат вывода** (общий контракт двух бинарей). `config get` — значение (скаляр одной строкой,
+  структура — JSON с отступом) и строка `layer: <name>` (`user`, `project`, `local`, `extra` — файл
+  `CODELAB_CONFIG`/`--config`, `env`, `flags`); победитель — старший слой, где ключ задан, его
+  поддерево целиком. `config path` — `user: <path> (exists|missing)`, `project: …`, `local: …`, при
+  `CODELAB_CONFIG` — `CODELAB_CONFIG: …`; с `--project`/`--local` — только путь. `provider list` —
+  `<id>  kind: …  base_url: …  models: a, b  key: <source>`, без `base_url` — `(default)`.
+  `mcp list` — `<name>  type: …  layer: …  enabled: true|false`.
+- **Вывод успеха.** `Updated <key> in <path>` (`Updated providers.<id> in <path>`,
+  `Updated mcp.servers[<name>] in <path>`) или `Removed <key> from <path>`, затем строки `warning:` из
+  `ConfigWriteResult.warnings` и `note: restart the agent to apply: <keys>` при
+  `restartRequiredKeys`. Работающий агент подхватывает правку перезагрузкой (§17.5.6).
+- **`provider add --api-key-stdin`:** проверка кандидата конфига без записи →
+  `SecretAdmin.checkStore("codelab/<id>")` (бэкенд `env` — код `1` с подсказкой `secrets.backend:
+  file` или переменной) → ввод через `SecretInput` → `SecretAdmin.store` → `apply` с
+  `api_key_secret: codelab/<id>`. Сбой последнего шага оставляет сохранённый секрет и называет его в
+  stderr (`the secret codelab/<id> was stored; the config was not changed: …`): секрет без ссылки
+  безвреден, а повтор команды перезапишет его тем же значением. Существующий секрет заменяется со
+  строкой `warning: replaced the existing secret codelab/<id>` (D6).
+- **Совпадение бинарей.** stdout, stderr и коды выхода `codelab-agent` и `codelab` одинаковы, кроме
+  имени бинаря в справке использования. Флаги подключения CLI вместе с этими подкомандами — `64`, как
+  у `config check` и `secret`.
 
 | Подкоманда | Действие |
 |---|---|
-| `config path [--project\|--local]` | путь файла слоя; без флага — все слои с пометкой `exists`/`missing` |
-| `config get <key> [--layer user\|project\|local\|merged]` | значение (по умолчанию итоговое) и слой-источник; секреты — только имя |
-| `config set <key> <value> [--project\|--local]` | `SetValue`; значение разбирает `SettingsRegistry.parseCliValue` (списки и таблицы — JSON) |
-| `config unset <key> [--project\|--local]` | `UnsetValue` |
-| `config check [--cwd <dir>]` | полная загрузка §15.5 для `cwd` с окружением процесса целиком (включая `CODELAB_CONFIG`), без флагов `serve`. Первая строка — `Sources: defaults, <канонический абсолютный путь>, …` (`ConfigLoadResult.sources`); проблемы — `ConfigIssue.toString()` (подсказка `did you mean …?` — часть текста); предупреждения — `warning: <location>: [<key>: ]<message>`, включая `config.legacy_found` (§15.7) и `config.env.unknown` (неизвестные `CODELAB_*` распознаёт `ConfigLoader`); последняя строка `Config: valid` или `Config: invalid (issues: <n>)`, предупреждения проблемами не считаются. Только при валидном конфиге, перед последней строкой — диагностика файлов проекта для канонического `cwd` (тот же `ProjectFilesLoader`, что у runtime, §17.2): `error`/`warning` — строками `warning: <path>[:<line>[:<column>]]: <message>` (фиксированные тексты кодов, без фрагментов файлов), для недоверенного проекта — `note: <каталог>: the project is not trusted; add it to trusted_projects` по строке на `.codelab/prompts`/`.codelab/agents`, прочие `info` не печатаются; сбой загрузчика — `warning: <cwd>: project files could not be read: <runtimeType>`, загрузка дольше 5 с — `warning: <cwd>: project files were not read within 5 s`. На код выхода диагностика файлов проекта не влияет (change `add-agent-project-files`, D13). Код `0` / `1` / `64`; `64` — несуществующий `--cwd`, `ConfigUsageException` (`CODELAB_CONFIG` с `.toml` или относительный) или ошибка разбора аргументов: текст и справка в stderr, stdout пуст. Ничего не пишет. Появляется первой, в change `add-agent-configuration` (8.5, D13) |
-| `provider add <id> --kind <kind> [--base-url U] --model M --context-window N [--api-key-secret S \| --api-key-env V \| --api-key-stdin] [--default]` | одна `apply` со списком `SetValue` ключей `providers.<id>.*` и `providers.<id>.models.<M>.*`; `--api-key-stdin` сначала пишет секрет `codelab/<id>`; `--default` — `SetValue("agent.default_model", "<id>/<M>")` |
-| `provider list` | id, kind, base_url, модели, источник ключа (`secret codelab/openai: found`); первая строка — `Secrets: <backend.id>`, при `unavailableReason` — `Secrets: env (<причина>)` |
-| `provider remove <id>` | `RemoveTable("providers.<id>")`; ссылка из `agent.*` или `llm.roles.*` → ошибка валидации с подсказкой сменить модель |
-| `mcp add <name> --type stdio --command C [--arg A]… [--env K=V]… \| --type http --url U [--header K=V]… [--disabled]` | `UpsertMcpServer`; литеральный секрет в `--header`/`--env` → подсказка `${secret:<name>}` |
-| `mcp list` | серверы файлов по слоям: name, type, слой, enabled (без подключения) |
-| `mcp remove <name>` | `RemoveMcpServer` |
+| `config path [--project\|--local] [--cwd D]` | путь файла слоя; без флага — все слои `user`, `project`, `local` и файл `CODELAB_CONFIG` с пометкой `exists`/`missing` |
+| `config get <key> [--layer user\|project\|local\|merged] [--cwd D]` | сырое значение слоя-победителя (без `--layer` — `merged`) и слой-источник; подстановки не раскрываются, секреты — только имя; отсутствующий ключ — `1` |
+| `config set <key> <value> [--project\|--local] [--cwd D]` | `SetValue`; значение разбирает `SettingsRegistry.parseCliValue` (списки и таблицы — JSON) |
+| `config unset <key> [--project\|--local] [--cwd D]` | `UnsetValue`: принимает и ключ вне реестра, если он есть в файле (так удаляются опечатки и `api_key`) |
+| `config check [--cwd <dir>]` | полная загрузка §15.5 для `cwd` с окружением процесса целиком (включая `CODELAB_CONFIG`), без флагов `serve`. Первая строка — `Sources: defaults, <канонический абсолютный путь>, …` (`ConfigLoadResult.sources`); проблемы — `ConfigIssue.toString()` (подсказка `did you mean …?` — часть текста); предупреждения — `warning: <location>: [<key>: ]<message>`, включая `config.legacy_found` (§15.7) и `config.env.unknown` (неизвестные `CODELAB_*` распознаёт `ConfigLoader`); последняя строка `Config: valid` или `Config: invalid (issues: <n>)`, предупреждения проблемами не считаются. Только при валидном конфиге, перед последней строкой — диагностика файлов проекта для канонического `cwd` (тот же `ProjectFilesLoader`, что у runtime, §17.2): `error`/`warning` — строками `warning: <path>[:<line>[:<column>]]: <message>` (фиксированные тексты кодов, без фрагментов файлов), для недоверенного проекта — `note: <каталог>: the project is not trusted; add it to trusted_projects` по строке на `.codelab/prompts`/`.codelab/agents`, прочие `info` не печатаются; сбой загрузчика — `warning: <cwd>: project files could not be read: <runtimeType>`, загрузка дольше 5 с — `warning: <cwd>: project files were not read within 5 s`. На код выхода диагностика файлов проекта не влияет (change `add-agent-project-files`, D13). Код `0` / `1` / `64`; `64` — несуществующий `--cwd`, `ConfigUsageException` (`CODELAB_CONFIG` с `.toml` или относительный; `CODELAB_HOME` вида `~user/…` или `~` без домашнего каталога, §15.6, D17) или ошибка разбора аргументов: текст и справка в stderr, stdout пуст. Ничего не пишет. Появляется первой, в change `add-agent-configuration` (8.5, D13) |
+| `provider add <id> --kind <kind> [--base-url U] --model M --context-window N [--api-key-secret S \| --api-key-env V \| --api-key-stdin] [--default] [--project\|--local]` | одна `apply` со списком `SetValue` ключей `providers.<id>.*` и `providers.<id>.models.<M>.*`; `--api-key-stdin` сначала пишет секрет `codelab/<id>`; `--default` — `SetValue("agent.default_model", "<id>/<M>")`; существующий `<id>` — upsert; флаг ключа добавляет `UnsetValue` полей другого источника ключа, которые есть в файле слоя (R4-4) |
+| `provider list [--cwd D]` | по строке на провайдера итогового конфига: id, kind, base_url, модели, источник ключа (`secret codelab/x: found\|not set\|unavailable`, `env VAR: set\|not set`); первая строка — `Secrets: <backend.id>`, при `unavailableReason` — `Secrets: env (<причина>)` |
+| `provider remove <id> [--project\|--local]` | `RemoveTable("providers.<id>")`; ссылка из `agent.*` (после MVP — и `llm.roles.*`) → `ConfigException` с подсказкой сменить модель |
+| `mcp add <name> --type stdio --command C [--arg A]… [--env K=V]… \| --type http --url U [--header K=V]… [--header-stdin Name [--header-scheme S] \| --env-stdin NAME] [--disabled] [--project\|--local]` | `UpsertMcpServer`; литеральный секрет в `--header`/`--env` → `ConfigInlineSecretException` с подсказкой `${secret:<name>}` (D5); с 8.11 — флаги stdin: значение в хранилище, в файл — `${secret:…}` (design.md change `add-config-literal-secrets-and-migrate`, D11) |
+| `mcp list [--cwd D]` | серверы файлов по слоям: name, type, слой, enabled (без подключения) |
+| `mcp remove <name> [--project\|--local]` | `RemoveMcpServer`: только по `name`, никогда по номеру элемента |
 | `secret set\|delete\|list` | §17.5.4 |
+| `secret migrate [--all \| [--project] [--local]] [--cwd D] [--dry-run] [--force]` | с 8.11 (D7): переносит находки `findInlineSecrets` в хранилище и заменяет их ссылками; ниже |
 | `config export-providers [--layer user\|project\|local\|merged] [--output F] [--provider ID]…` | после MVP: файл обмена провайдеров без значений секретов (§17.14.4.3) |
 | `config import-providers <file\|-> [--force] [--dry-run] [--skip-agent] [--map-secret OLD=NEW]… [--project\|--local]` | после MVP: слияние провайдеров, моделей и ролей одной `apply`; существующее не меняется без `--force` (§17.14.4.4) |
+
+**`mcp add --header-stdin <Name> [--header-scheme <Scheme>] | --env-stdin <NAME>`** (8.11; решение
+пользователя 2026-11-04 R8-5; design.md change `add-config-literal-secrets-and-migrate`, D11). Значение из stdin (`SecretInput`, как у
+`--api-key-stdin`) сохраняется под `SecretNames.forMcp(server, key)`, а в файл пишется
+`${secret:<имя>}` (со схемой — `'Bearer ${secret:<имя>}'`, в одинарных кавычках). Флаг допускается один
+на вызов (stdin один); `--header-stdin` — только для `--type http`, `--env-stdin` — только для
+`--type stdio`. Имя секрета, уже занятое другим сервером или провайдером, — код `1` до хранилища и
+stdin. Бэкенд только для чтения — код `1` без чтения stdin. Собственный секрет сервера заменяется с
+`warning: replaced the existing secret`. Порядок: кандидат, коллизия имени, `checkStore`, stdin,
+секрет, конфиг.
+Литерал в argv (`claude mcp add --header …` в Claude Code) отклонён: история shell, `ps`, логи CI.
+
+**`secret migrate`** (8.11; D7). Движок `SecretMigrator` (`codelab_agent_io`) возвращает отчёт без
+значений; `SecretCommands.migrate` и кнопка codelab-app (D8) — его обёртки.
+- Загрузка обычная, со всеми проверками.
+- Переносятся находки `findInlineSecrets` применяемых слоёв:
+  - `api_key`/`apiKey` и ключ вместо имени → `api_key_secret: <name>`;
+  - прочие ключи п. 1 → значение сохраняется **до** удаления ключа, плюс строка `action required`;
+  - участки в `headers`/`env` → `${secret:<name>}` (`<name>-2` для следующих участков одного значения;
+    не пул `_2` §17.10.4);
+  - `${secret:<литерал>}` → ссылка на `<name>`.
+- Не переносятся (строка `not migrated`, код не меняется):
+  - `args` — с подсказкой `--env`;
+  - недоверенные проекты — значения в хранилище не попадают никогда (H4);
+  - `CODELAB_CONFIG`.
+- Слои: по умолчанию `user`; `--project` и/или `--local`; `--all` (с ними — код `64`).
+- Порядок:
+  1. без записи — находки, доверие писателя, итог слияния всех слоёв с правками всех выбранных
+     файлов (R8-10: часть слоёв, оставляющая провайдеру два источника ключа, — код `1` до записи и
+     хранилища с советом `--all` или убрать ключ из `CODELAB_CONFIG`; оговорка D25 change
+     `require-project-folder`: пара `user`/`project`/`local` двух источников больше не даёт — проектный
+     слой не наследует аутентификацию нижних, — поэтому перенос одного файлового слоя при своём ключе
+     в другом проходит с кодом `0`, а отказ остаётся для конфликта с `CODELAB_CONFIG`), `checkStore` (если есть что
+     переносить), конфликты, `validateCandidate`;
+  2. конфликты — то же значение переиспользуется, другое → код `1` до записи (внутри запуска — суффикс
+     `-2`; с хранилищем — отказ с перечнем ссылающихся ключей); `--force` заменяет **безвозвратно** с
+     предупреждением;
+  3. секреты всех выбранных файлов, затем по файлу одна атомарная `ConfigWriter.apply`; порядок записи
+     `user`, `local`, `project` (D26 change `require-project-folder`: провайдер закоммиченного
+     `config.yaml` доверенного проекта с находкой в поле группы D23 переезжает целиком в
+     `config.local.yaml` — иначе ссылка из `config.yaml`, не привязанная к адресу, ломает провайдера;
+     сбой между записями оставляет рабочий конфиг; `config.local.yaml` с иной группой — `not migrated`;
+     D7 change `bind-mcp-secrets-to-origin`: HTTP-сервер MCP закоммиченного `config.yaml` с находкой в
+     `headers` копируется целиком в `config.local.yaml`, где у каждой находки `headers` и `env` — ссылка,
+     а из `config.yaml` удаляются только ключи с находками; чужая ссылка элемента без глобальной
+     привязки к origin его `url` или элемент с тем же `name` в `config.local.yaml` — `not migrated`;
+     если хоть одну находку сервера хранилище не примет — `not migrated: mcp.servers[<name>] in <path>:
+     a value of this server cannot be stored; move it by hand`, и все находки сервера остаются на
+     месте (в отличие от общего `cannot be stored`); stdio-серверы — в том же файле);
+  4. сбой конфига после секретов — код `1` с именами; повтор переиспользует значения и не
+     отказывает сразу на проблеме R8-6: итог с правками выбранных слоёв проверяется до хранилища и должен быть без проблем (R8-11).
+- Имя, на которое тот же владелец (`providers.<id>`, `mcp.servers[<имя>]`) уже ссылается, а хранилище
+  держит другое значение или не держит его, пропускается — берётся `<name>-2`; ссылка другого
+  владельца — конфликт или `--force`.
+- `--dry-run` — план с тем же кодом.
+- После переноса — `restart the agent to use the moved secrets` (смена источника ключа — `restartRequired`,
+  R0-4).
 
 Команды `config migrate` нет: `codelab.toml` не читается и не переводится (§15.7), запись конфига
 от его наличия не зависит.
@@ -479,47 +1102,211 @@ apply(base, edits):
 запускает общий автомат клиентов, а с флагами проверяет адрес запросом списка моделей до записи
 (`--skip-check` пропускает проверку, `--preset` подставляет `kind` и `base_url`)
 ([`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §12.4.4). Флаги ядра, набор правок и
-коды выхода те же; `codelab-agent provider add` мастера и проверки не имеет.
+коды выхода те же; `codelab-agent provider add` мастера и проверки не имеет. В 8.10 мастера нет и у
+`codelab`: `provider add` без флагов на TTY — ошибка использования `64`, как у `codelab-agent`;
+мастер добавит change `add-provider-setup-ui`, не меняя флаговую форму (design.md change
+`add-config-writer-and-reload`, D6).
 
 ## 17.5.6. Алгоритм: живая перезагрузка (E-04)
 
-**Наблюдение.** `ConfigWatcher` (`codelab_agent_io`) следит за файлами, прочитанными загрузчиком
-для каждого корня: глобальный конфиг, `--config`, и для каждого `cwd` живых сессий —
-`.codelab/config.yaml` и `.codelab/config.local.yaml`, включая ещё не существующие. Механизм —
-`FileSystemEntity.watch` на родительском каталоге (замена файла через rename — событие каталога);
-где события недоступны или каталог на сетевой ФС — опрос раз в `config.poll_interval`
-(`"2s"`) по `(mtime, size)` и sha256 при их смене. Событие запускает таймер 300 мс; новые события
-перезапускают его (debounce). Совпадение sha256 с последним загруженным — не изменение. Окружение
-и флаги не перечитываются: они не меняются у живого процесса. `config.watch = false` выключает
-наблюдение; `/config reload` работает и тогда.
+**Наблюдение** (design.md change `add-config-writer-and-reload`, D7). Источник —
+`FileConfigSource` (`codelab_agent_io`): `ConfigLoader` с параметрами запуска хоста плюс
+`ConfigWatcher`. `ConfigWatcher` следит за файлами, которые загрузчик читает или прочитал бы для
+корня запуска хоста: `$CODELAB_HOME/config.yaml`, файл `--config`/`CODELAB_CONFIG`,
+`<root>/.codelab/config.yaml` и `config.local.yaml`, включая ещё не существующие, а при
+`secrets.backend: file` — `$CODELAB_HOME/secrets.yaml`. Последний пункт закрывает ограничение 8.9:
+замена ключа даёт перезагрузку без изменений конфига, а она сбрасывает кэш резолвера и пересобирает
+функцию модели. Механизм — `Directory.watch` на родительском каталоге, одна подписка на каталог
+(замена файла через rename — событие каталога). Отсутствующий каталог распознаётся до подписки: на
+macOS `watch` по нему не бросает и молчит, поэтому настоящая фабрика событий сама бросает
+`PathNotFoundException`. Нет каталога, фабрика бросила, поток вернул ошибку или завершился (`onDone`) — файлы каталога
+уходят на опрос раз в `config.poll_interval` (`"2s"`, `1s..60s`) по `(exists, mtime, size)` и
+остаются на нём до закрытия (каталог `.codelab/`, созданный позже, наблюдается опросом). Сигнал
+запускает только событие с точным именем наблюдаемого файла (путь или цель `rename`); оно включает
+таймер 300 мс на часах `Clock` ядра (`FakeClock` в тестах), новые события перезапускают его
+(debounce). Затем считаются sha256 всех файлов: совпадение с базой — не изменение; отсутствующий и
+нечитаемый файл — отдельные состояния; файл больше лимита загрузчика (`maxConfigBytes`) не
+читается и сравнивается по `(size, mtime)`. База обновляется при каждом сигнале и в `rebase()`,
+который `load()` вызывает перед чтением слоёв: собственное чтение повторного сигнала не даёт, правка
+во время чтения — даёт. `rebase()` — только на пути перезагрузки: `checkConfig()` вызывает
+`load(rebase: false)`, иначе `/config check` во время debounce сдвинул бы базу, и правка не дала бы
+сигнала (D7). Для файла-ссылки наблюдаются и лексический путь, и каталог канонической цели
+(цель пересчитывается в `rebase()`), содержимое сравнивается по лексическому пути. События по
+служебным файлам `ConfigWriter` (`config.yaml.lock`, `*.lock.stale-*`, `*.tmp-*`) в
+`$CODELAB_HOME` и `.codelab/` перезагрузку не запускают — их распознаёт предикат из
+`config_write_lock.dart`; запись писателя даёт один сигнал по итоговому `rename` (D7 change
+`add-config-writer-and-reload`). Хост создаёт источник до сборки ядра; правка между стартовой
+загрузкой и созданием источника сигнала не даёт (известная граница, Risks change). Наблюдатель и
+загрузчик работают синхронным IO (`statSync` на тике опроса, чтение и `resolveSymbolicLinksSync` по
+сигналу, `ConfigLoader.load`), в том числе в изоляте UI десктопа; файлы маленькие, чтение ограничено
+лимитом размера — принято (Risks change, «Синхронный IO наблюдателя»).
+Окружение и флаги не перечитываются: они не меняются у живого процесса. `config.watch = false` —
+источник без наблюдателя: `changes` не срабатывает, `/config reload` работает. Ошибка потока
+`watch` переводит файл на опрос с `config.watch.fallback {path, reason}`, исключение опроса —
+`config.watch.failed {path, error_class}`, опрос продолжается. Владелец источника — хост, который
+его создал; хост закрывает его после `runtime.dispose()`. Тот же список файлов (плюс
+`$CODELAB_HOME/agents`, `prompts` и `$CODELAB_HOME/secrets.yaml` при любом `secrets.backend`,
+хотя наблюдатель следит за ним только при `file`, R5-1) хост передаёт политике как пути PERM-11 —
+`AgentCoreServices.agentConfigPaths`, канонические, из одной функции `agentConfigPathsFor`
+(`codelab_agent_io`): что агент перечитывает на лету, то модель не правит без человека (OQ2; D8;
+§7.6.1). Unit-тесты наблюдателя подают события через шов-фабрику
+`Stream<DirectoryChange> Function(Directory)` (`FileSystemEvent` запечатан и в тестах не строится)
+и замер опроса через шов `ConfigFileProbe`; настоящий `watch` проверяет один интеграционный тест с
+пределом времени (D7).
 
-Хост, обслуживающий сессии с разными `cwd`, держит снимок `CoreConfig` на корень (глобальный слой
-общий): правка проектного файла касается только сессий этого `cwd`.
+**Снимок — на корень запуска хоста** (отступление 8.10, D8; уточнено D21 change
+`require-project-folder`). Снимок — пара «полный `CoreConfig` + `withoutProject`» (D9 change
+`add-agent-configuration`), и перезагрузка заменяет её целиком. Единица перезагрузки остаётся
+корнем запуска. Сессия другой папки при хосте с портом `ProjectConfigLoader` держит собственную
+тройку «`CoreConfig`, каталог, функция модели», построенную при открытии: `reloadConfig()` её не
+меняет (шаг 7а и `ModelOptionsChanged` её пропускают). Без порта (`serve --ws`, `--llm-script`,
+сценарный открыватель, сторонние хосты) такие сессии получают `withoutProject`, как раньше.
+
+Отложенное до перезапуска действует для сессий **всех папок** процесса, а не только корня (design.md
+change `defer-restart-keys-in-folder-sessions`, D1–D5). Сессия другой папки при открытии сравнивает
+глобальные слои своей загрузки с применённым снимком тем же `planConfigReload` (шаг 5 ниже) и
+берёт отложенные части — группу провайдера, элемент сервера, `agent.default_model` — из применённого
+снимка через `CoreConfig.withDeferred`, если их не перекрыл проектный слой папки. Проектный
+провайдер доверенной папки по-прежнему работает сразу (D21, Q11). Провайдер, ключ которого даёт
+только проектный слой папки (`config.local.yaml`, D23 (a)), план по глобальным значениям не видит,
+поэтому он тоже проверяется: если его глобальный адрес изменился после старта и проект адрес не
+перекрыл, группа берётся из применённого снимка, и секрет проекта на новый адрес не уходит (D3).
+Отложенная правка `permissions.*` при проектных слоях папки — отказ в открытии до перезапуска
+(вариант (a1), D4). Хост без `ConfigSource` подстановки не делает: перезагрузки у него нет, ничего не
+отложено, сессия получает загрузку как есть. `CoreConfig.withDeferred` при этом уточнён для одного
+случая, который раньше давал отказ `validateSnapshot`: модель базы вне каталога прежних провайдеров
+(резервная модель из проектного слоя корня) считается неявной по итоговым провайдерам (D5).
+Алгоритм и правила перекрытия — §10.3, абзац «Отложенные правки в сессиях другой папки».
 
 ```text
-reloadConfig(cwd?):                       // ConfigSource.changedRoots, /config reload, /mcp reload
-1. перезагрузка уже идёт → отметить повтор (не больше одного в очереди), вернуть её результат
-2. корни := cwd ? [cwd] : все корни живых сессий; для каждого: result := source.load(cwd)
+reloadConfig():                          // ConfigSource.changes, /config reload, /mcp reload
+1. перезагрузка уже идёт → отметить повтор (не больше одного в очереди), вернуть Future повтора;
+   все вызовы во время идущей получают итог повтора, который видит последние файлы
+2. result := await config.load(); dispose() во время ожидания → результат отбрасывается, ничего
+   не применяется, уведомлений нет, итог unchanged; до замены снимка других await нет
+   исключение load() или modelsFor → как шаг 3, но лог config.reload.failed {error_class} без текста
 3. result.issues не пусто →
      status.lastFailureAt := now; status.lastIssues := issues
-     лог error config.reload.failed {cwd, sources, issues (ключи и файлы, без значений)}
-     старый снимок остаётся полностью; клиентам ничего не отправляется; к следующему корню
-4. diff := листовые ключи, у которых значение отличается (mcp.servers — по name)
-   секретный кэш: resolver.invalidate() — даже при пустом diff (ключ в связке мог смениться)
-5. restart := diff ∩ {d.restartRequired}; в новом снимке их значения заменяются старыми;
-   повторная семантическая проверка снимка; ошибка → как шаг 3
-   restart не пусто → status.pendingRestartKeys ∪= restart; лог warning config.reload.restart_required
-6. атомарно заменить снимок корня; применение — по таблице ниже
-7. для каждой сессии корня:
-     a. mcp: supervisor.applyConfigServers(новые config-серверы)        // §17.5.7
-     b. каталог skills и шаблонов перечитан (§17.2.4), если изменились skills.*, prompts.*
-        или файлы каталогов; команды пересчитаны → изменились → CommandsChanged
-        → available_commands_update
-     c. опции model пересчитаны (каталог моделей) → изменились → config_option_update (полный снимок)
-     d. project context (AGENTS.md, §11.5) перечитан; действует со следующего хода
-8. status.lastIssues := []; лог info config.reload.applied {cwd, keys, restart_required,
-     mcp_connected, mcp_disconnected, mcp_reconnected}; вернуть ConfigApplyReport
+     лог error config.reload.failed {sources, issues: [{source, line, column, key, kind}]}, без значений
+     прежний снимок остаётся целиком; клиентам ничего не отправляется (CFG-15); итог failed
+4. diff := листовые ключи с другим значением; mcp.servers — по name и sameConnection
+5. restart := diff ∩ {d.restartRequired} (§17.5.8; ключи хоста sessions.*, logging.*, profile.* —
+   все restartRequired; R0-1: permissions.*, trusted_projects и элементы mcp.servers[<name>] с
+   type: stdio без прежнего old с old.sameConnection(new) && (old.enabled || !new.enabled) —
+   новые (и сразу выключенные), включённые из enabled: false, сменившие тип http → stdio, с другими
+   command/args/env, в том числе выключенные (R6-1: иначе /mcp enable подключил бы команду,
+   вписанную в выключенный сервер); выключение true → false применяется сразу, а вместе с правкой
+   соединения — выключение сразу, параметры прежние; R0-4, ссылка — по значению (любая
+   подстановка ${…}: ${secret:…} или ${VAR}): HTTP-серверы по тому же условию с подстановкой в
+   url/headers/env; провайдер с ключом
+   (api_key_secret, api_key_env, подстановка в base_url/headers/auth_header) — новый или со сменой группы
+   kind, base_url, headers, auth_header, api_key_secret, api_key_env; с 8.11 литерал приравнен к
+   подстановке (design.md change add-config-literal-secrets-and-migrate, D12): находка findInlineSecrets в элементе сервера или провайдера, литеральный api_key
+   делают его «с ключом», а api_key входит в группу; ссылки на модели нового
+   отложенного провайдера, в том числе agent.default_model);
+   план строится по обоим снимкам — полному и withoutProject (сессии вне корня запуска): ключ
+   отложен, если отложен по любому из сравнений (ключ, перекрытый проектным слоем в полном снимке,
+   может измениться в withoutProject; его листья — CoreConfig.withoutProjectValues); набор
+   отложенного — DeferredConfigParts {providers, servers, permissions, defaultModel} (план,
+   union по обоим снимкам) — передаётся в withDeferred структурированно, строки ключей показа
+   повторно не разбираются (имя сервера может содержать ']': разбор дал бы null и оставил бы новый
+   stdio-сервер в снимке — fail-open);
+   доверие закреплено в ядре (CoreConfig.fromLayers(pinnedTrustedProjects:) — проектные слои и
+   CoreConfig.trustedProjects); остальное — CoreConfig.withDeferred(previous, next, deferred,
+   withoutProjectValues:) над CoreConfig и withoutProject (permissions, элементы серверов, группа
+   полей провайдера с прежними key и headerTemplates; модели — новые; итог хранит
+   withoutProjectValues после подстановки — основу следующего сравнения), прежние HostSettings и values подставляет рантайм; повторная семантическая
+   проверка (validateSnapshot); отложенная ссылка на модель нового провайдера — не failed;
+   ошибка → как шаг 3
+   status.pendingRestartKeys := restart — не объединение: values применённого снимка хранят прежние
+     значения отложенных листьев, поэтому неотменённый ключ снова попадает в restart, а возвращённый
+     в файле к прежнему значению уходит; restart не пусто → лог warning config.reload.restart_required {keys}
+6. secrets?.invalidate() и models := modelsFor(next) — всегда, даже при пустом diff: значение в
+     хранилище могло смениться, а цепочки провайдеров держат разрешённый ключ
+   атомарно заменить запись (config, withoutProject, models) — одно присваивание; шаг, ход и
+     проверка разрешения читают запись один раз
+   diff пуст → лог debug config.reload.noop; итог unchanged (diff только из отложенных ключей — applied)
+7. для каждой живой сессии (возвращённой до замены и не закрытой):
+     a. серверы конфига — McpSessionTools.replaceServers (§17.5.7, D10): без хода — сразу,
+        во время хода — после TurnEnded
+     b. список моделей нового каталога отличается от прежнего → событие ModelOptionsChanged
+        → config_option_update с полным снимком опций сессии (§13.6); публикуется сразу, вне очереди
+        агента (и во время хода), в журнал сессии не пишется и в историю хода не буферизуется
+        (подписчик, подключившийся к ходу позже, его не получает)
+8. status.lastIssues := []; лог info config.reload.applied {keys, restart_required}; итог applied
 ```
+
+**Конкурентность и поздние события** (D8; корневой `AGENTS.md` §9, §12). Подписку на
+`ConfigSource.changes` держит рантайм: она создаётся в `buildAgentCore` и отменяется в `dispose()`.
+Ошибка `reloadConfig`, запущенного сигналом, не теряется и не уходит в зону хоста — её пишет
+`config.reload.failed` с `error_class`. `createSession`/`loadSession` берёт снимок один раз в
+начале; сессия, создаваемая во время замены, получает старый снимок целиком, а в шаге 7 считается
+живой, только если вернулась до замены. Её первый ход берёт новую функцию модели; шаг 7b для неё не
+нужен — опции ответа `session/new` строились по снимку начала, а уведомление до ответа запрещено
+ACP-8. Расхождение списка моделей в этом окне исправит следующая перезагрузка (риск принят).
+Закрытая сессия пропускается.
+
+**Файлы проекта живой сессией не перечитываются** (отступление 8.10, D9, OQ7). Прежний шаг 7b
+(шаблоны и skills) и 7d (`AGENTS.md`, §11.5) не выполняются: контекст проекта, шаблоны команд и
+определения агентов читаются только при создании и загрузке сессии. Новые
+`tools.project_context.*` и `prompts.*` действуют для новых сессий, новые `trusted_projects` —
+только после перезапуска (R0-1); список команд живой сессии не
+меняется до её закрытия. Почему: наблюдатель файлы каталогов `prompts`/`agents` не видит, и
+перечитывание только по правке `config.yaml` дало бы неочевидное правило «шаблон обновится, если
+поправить конфиг»; skills ещё нет. Перечитывание живой сессией — вместе со skills (§17.2.4) или
+отдельным change.
+
+**Когда действует новое значение в сборке 1.0** (D8, CFG-16; ключи схемы этой сборки). Строки
+таблицы ниже для разделов после MVP вводят change этих разделов; при расхождении с ней для ключей
+этой сборки действует эта таблица:
+
+| Ключи | Когда |
+|---|---|
+| `providers.*` (включая модели), маршруты | следующий шаг любой сессии: шаг берёт функцию модели в начале. Сессия, чья текущая модель исчезла из каталога, продолжает работать на функции модели прежнего снимка до смены модели; опция `model` показывает её текущей |
+| `agent.default_model`, `agent.effort` | новые сессии; модель идущей сессии меняют `/model`, `session/set_config_option` |
+| `budget.*`, `compaction.*` | следующий ход |
+| `mcp.servers`: HTTP-серверы без подстановок `${…}`, удаление и выключение любых серверов | после текущего хода, без хода — сразу (D10) |
+| `tools.project_context.*` | новые сессии (файлы проекта фиксируются при создании, D9) |
+| `redact.*` | не применяется до change редакции после 1.0 (`config.key.not_applied`; R8-1) |
+| `tools.disabled`, `exec.*`, `tools.untrusted_paths` и другие ключи без потребителя (`applied: false`) | не применяются (`config.key.not_applied`); `restartRequired` решает change потребителя (D8, «Обязанность будущих change»): снятие `tools.disabled` на лету снова включает инструмент |
+| `permissions.*`, `trusted_projects`, новый или изменённый (`command`, `args`, `env`) stdio-сервер `mcp.servers[<name>]`, в том числе включённый из `enabled: false` и выключенный (`enabled: false`, R6-1, решение пользователя 2026-11-03) | только после перезапуска, для сессий всех папок процесса: ослабление прав на лету не применяется (R0-1, решение пользователя 2026-11-02; защита в глубину поверх PERM-11). Сессия другой папки получает прежний раздел `permissions` и прежний элемент сервера из применённого снимка, если проектный слой папки элемент не перекрыл; отложенная правка `permissions.*` при проектных слоях папки — отказ в открытии до перезапуска (design.md change `defer-restart-keys-in-folder-sessions`, D4, D5) |
+| новый или изменённый HTTP-сервер с подстановкой `${…}` (`${secret:…}` или `${VAR}` — по значению) или литеральным секретом (находка `findInlineSecrets`, с 8.11, design.md change `add-config-literal-secrets-and-migrate`, D12) в `url`/`headers`/`env`, в том числе выключенный (R6-1); новый провайдер с ключом (в том числе литеральным `api_key` или литералом в элементе) и смена группы `kind`, `base_url`, `headers`, `auth_header`, `api_key_secret`, `api_key_env`, `api_key` у провайдера с ключом (группа атомарна); ссылки на модели нового отложенного провайдера, в том числе `agent.default_model` | только после перезапуска, для сессий всех папок процесса: секрет не уходит на новый адрес без перезапуска (R0-4, решение пользователя 2026-11-02); новые модели провайдера применяются. Сессия другой папки получает прежнюю группу провайдера, прежний элемент сервера и прежнюю `agent.default_model` из применённого снимка, если проектный слой папки их не перекрыл; проектный провайдер доверенной папки работает сразу (design.md change `defer-restart-keys-in-folder-sessions`, D3, D5) |
+| `sessions.*`, `logging.*` (включая `logging.level`, OQ5), `profile.*`, `secrets.backend`, `config.*` | только после перезапуска (`restartRequired`) |
+
+**Доверие закреплено на стартовом снимке** (D8, «Пересборка снимка с отложенными ключами»).
+`FileConfigSource` передаёт загрузчику `pinnedTrustedProjects` из `initial.config.trustedProjects`,
+а загрузчик — в `CoreConfig.fromLayers`: доверие вычисляет ядро (`resolve.dart`). По закреплённому
+списку строятся и проектные слои, и `CoreConfig.trustedProjects` (с `withoutProject`), по которому
+новая сессия читает `prompts` и `agents` проекта; новое значение `trusted_projects` попадает только в
+`pendingRestartKeys`. Вернуть прежнее значение листа после загрузки было бы недостаточно — доверие
+уже решило, какие проектные ключи вошли в дерево. Проект, добавленный в `trusted_projects`, получает
+свои провайдеры и серверы только после перезапуска; снятое доверие тоже действует после перезапуска.
+
+**`pendingRestartKeys` и сессии других папок** (design.md change `defer-restart-keys-in-folder-sessions`,
+D7, Q3). `restartRequiredKeys`, `pendingRestartKeys`, строки `Restart required` команд `/config` и
+`/status`, лог `config.reload.restart_required` и подсказки клиентов «после Restart agent» описывают
+применённый снимок процесса и верны для сессий всех папок: отложенное при открытии сессии другой
+папки — подмножество того, что отложит перезагрузка той же правки (база сравнения та же, а план
+перезагрузки строится и по снимку без проекта корня). Открытие сессии набор не меняет: иначе он
+потерял бы определение «отличается от применённого снимка по итогу перезагрузки» и рос бы от
+открытий, а не от правок. Пока перезагрузки не было (наблюдатель выключен, правка ждёт debounce),
+`pendingRestartKeys` пуст, а сессия другой папки уже пишет `config.session.restart_pending`; ключ при
+этом показывает `/config check`, который строит тот же план по снимку без проекта.
+
+**Остаточный риск: условие (b) D23 по неприменённой глобальной правке** (Q4, решение пользователя
+2026-11-16 — принят). Проектный провайдер из `config.yaml`, перекрывший группу, может получить
+привязку ссылки на ключ к origin по условию (b) правила D23 (`15-configuration.md` §15.3) из
+глобальной правки, которая для сессий корня ещё ждёт перезапуска. Ключ уходит на адрес проекта, но
+только если его origin совпадает с origin, к которому ту же ссылку привязала глобальная
+конфигурация пользователя: адрес выбрал сам пользователь, нарушено лишь «до перезапуска». Закрыть это без
+происхождения привязки в `ConfigLoadResult` нельзя: по `values` условие (a) (`config.local.yaml`) от
+условия (b) не отличить. Исправление — отдельный change (условие привязки в результате загрузчика).
+
+Сессия, чья модель исчезла из каталога, пишет `config.reload.model_orphaned {session_id, model}`
+(info, один раз на сессию и модель; D14).
+
+Целевая таблица всех ключей (строки `permissions.*`, `trusted_projects` и `mcp.servers` в ней
+уточнены решением R0-1 — таблица выше):
 
 | Ключи | Когда действует новое значение |
 |---|---|
@@ -528,8 +1315,8 @@ reloadConfig(cwd?):                       // ConfigSource.changedRoots, /config 
 | `llm.retry.*`, `llm.timeouts.*` (после MVP, §17.10.12) | следующий запрос к модели |
 | `images.*` (после MVP, §17.11.10) | следующая подготавливаемая картинка; `images.dedup`, `max_per_request` — следующий запрос |
 | `sessions.search.*` (после MVP, §17.6.17) | новые соединения: capability `sessionSearch` пересчитывается в следующем `initialize` |
-| `agent.default_model`, `agent.effort`, `permissions.mode` | новые сессии; режим и модель идущей сессии — выбор пользователя, их меняют `/mode`, `/model` |
-| `permissions.deny`, `permissions.tools`, `permissions.timeout` | следующий вызов инструмента |
+| `agent.default_model`, `agent.effort` | новые сессии; модель идущей сессии — выбор пользователя, её меняет `/model` |
+| `permissions.*` | только после перезапуска (R0-1), для сессий всех папок процесса; режим идущей сессии меняет `/mode` |
 | `tools.disabled` | новые сессии: набор инструментов фиксируется при создании сессии (§6.3.8) |
 | `tools.load`, `tools.mounted`, `tools.edit.anchors` (после MVP, §17.11.10); `tools.inspect_image.enabled`, `tools.checkpoint.enabled`, `tools.history.enabled` | новые сессии: набор схем фиксируется при создании |
 | `compaction.engine` (после MVP, §17.13.4) | новые и загружаемые сессии: набор инструментов фиксируется при создании |
@@ -540,17 +1327,18 @@ reloadConfig(cwd?):                       // ConfigSource.changedRoots, /config 
 | `loop.*` (после MVP — включая `loop.final_response.*`, §17.12.4) | следующий ход |
 | `redact.*` (после MVP — включая `redact.block` и `redact.command_rewrite`, §17.12.6–§17.12.7) | следующий вызов `redact` (выражения компилируются при применении снимка); `redact.block`, `redact.command_rewrite` — следующий вызов инструмента |
 | `model_catalog.*`, `providers.*.list_models*` | при применении — `ModelCatalog.refresh(force: true)` в фоне; изменение списка → `config_option_update` (§2.12.2) |
-| `budget.*`, `compaction.*` (кроме `engine`), `prompts.*`, `skills.*` (кроме `enabled`) | следующий ход (системный промпт не меняется посреди хода, PR-3) |
+| `budget.*`, `compaction.*` (кроме `engine`) | следующий ход (системный промпт не меняется посреди хода, PR-3) |
+| `prompts.*`, `tools.project_context.*` | новые сессии: файлы проекта и шаблоны живой сессией не перечитываются (D9) |
 | `tools.output.*`, `tools.untrusted_paths`, `tools.web.*` (кроме `enabled`), `exec.*` (кроме `shell`), `tools.spill.*` (кроме `enabled`), `subagents.*` (лимиты), `jobs.*` (кроме `enabled`; идущие задачи сохраняют свой срок) | следующий вызов инструмента |
-| `mcp.servers` | сразу: подключение и отключение; набор инструментов — на границе шага (§17.5.7) |
+| `mcp.servers` | после текущего хода, без хода — сразу (D10); новые и изменённые stdio-серверы и HTTP-серверы с подстановками `${…}` — после перезапуска (R0-1, R0-4); набор инструментов — на границе шага (§17.5.7) |
 | `steering.*` (после MVP, §17.7.7) | следующий ход; объявленная в `initialize` capability в рамках соединения не меняется: `enabled: false` → отказ `steeringDisabled` |
 | `lsp.servers.*` (после MVP, §17.8.10) | следующий вызов `lsp`: сервер с изменившимся `fingerprint` или удалённый останавливается после запросов в полёте; новый или изменённый запускается лениво; `failed` и `backoff` сбрасываются у всех серверов корня |
 | `lsp.idle_timeout`, `lsp.*_timeout`, `lsp.max_*`, `lsp.rename_max_files`, `lsp.diagnostics_after_edit` (после MVP) | следующий вызов `lsp` или инструмента; `max_servers` меньше числа живых — лишние простаивающие останавливаются по старшинству `lastUsed` |
-| `logging.level` | сразу |
-| `a2a.agents.*`, `a2a.client.*` (после MVP, §17.15.5) | следующий прогон удалённого типа; набор типов в `enum` `task` — в новых сессиях (схемы стабильны, §17.3.2) |
+| `a2a.agents.*`, `a2a.client.*` (после MVP, §17.15.5) | следующий прогон удалённого типа; набор типов в `enum` `agent` — в новых сессиях (схемы стабильны, §17.3.2) |
 | `a2a.server.tokens` (после MVP, §17.15.4) | сразу: новые запросы проверяются по новому списку, потоки отозванных токенов закрываются |
-| `trusted_projects` | в этом же проходе: проектные слои переоцениваются по §15.3 |
-| `logging.file`, `logging.trace`, `logging.trace_payload`, `sessions.*` (кроме `sessions.search.*`), `profile.*`, `secrets.backend`, `config.*`, `exec.shell`, `tools.web.enabled`, `skills.enabled`, `tools.spill.enabled`, `subagents.enabled`, `subagents.background`, `subagents.follow_ups` (§17.3.8.1), `lsp.enabled`, `jobs.enabled`; после MVP — `sessions.window.*`, `sessions.segments.*` (§17.13.2, как `sessions`), `tools.ask.enabled`, `memory.enabled` (capability на соединение, §17.11), `plugins.enabled` (§17.14.3.4), `a2a.server.*` кроме `tokens` (§17.15.4) | только после перезапуска (`restartRequired`): sink, транспорт и набор capability собираются один раз (§10.7) |
+| `skills.*` (change `add-agent-skills`, решения Q44, Q45) | в сессиях, открытых после перезагрузки: снимок навыков живой сессии не меняется; `skills.enabled` — ключ сессии, capability не сужает, поэтому перезапуск не нужен |
+| `trusted_projects` | только после перезапуска (R0-1) |
+| `logging.level` (OQ5: уровень логгера принадлежит хосту, канала «хост, примени новые настройки хоста» в ядре нет; D14), `logging.file`, `logging.trace`, `logging.trace_payload`, `sessions.*` (кроме `sessions.search.*`), `profile.*`, `secrets.backend`, `config.*`, `exec.shell`, `tools.web.enabled`, `tools.spill.enabled`, `subagents.enabled`, `subagents.background`, `subagents.follow_ups` (§17.3.8.1), `lsp.enabled`, `jobs.enabled`; после MVP — `sessions.window.*`, `sessions.segments.*` (§17.13.2, как `sessions`), `tools.ask.enabled`, `memory.enabled` (capability на соединение, §17.11), `plugins.enabled` (§17.14.3.4), `a2a.server.*` кроме `tokens` (§17.15.4) | только после перезапуска (`restartRequired`): sink, транспорт и набор capability собираются один раз (§10.7) |
 
 «Следующий шаг» означает: шаг читает снимок конфига в начале и пользуется им до конца, идущий
 вызов инструмента доигрывает со старыми значениями. Транспорт ACP (`--stdio`, `--ws`, порт) —
@@ -558,8 +1346,9 @@ reloadConfig(cwd?):                       // ConfigSource.changedRoots, /config 
 
 **Ошибка перезагрузки не шлёт сообщений.** Вне хода в ACP нет канала для текста агента:
 `agent_message_chunk` без `session/prompt` клиент не связывает ни с чем, а ход ради ошибки
-открывать нельзя. Ошибка видна в логе, в `/status` (строка `Config:`) и в `/config check`;
-`codelab config check` даёт то же из терминала. Записи, сделанные через `ConfigWriter`, уже
+открывать нельзя. Ошибка видна в логе, в `/config check`, в ответе `/config reload` и в
+`codelab config check` из терминала; строка `Config:` в `/status` — с change встроенных команд
+(design.md change `add-config-writer-and-reload`, D8, D12). Записи, сделанные через `ConfigWriter`, уже
 провалидированы до замены файла, поэтому сбой перезагрузки возможен только после ручной правки,
 а её автор и запускает проверку.
 
@@ -569,48 +1358,96 @@ sequenceDiagram
     participant FW as "ConfigWatcher"
     participant RT as "AgentRuntime"
     participant LD as "ConfigLoader"
-    participant MS as "McpSupervisor сессии"
+    participant MS as "McpSessionTools сессии"
     participant CL as "ACP-клиент"
     WR->>FW: файл заменён (rename)
     FW->>FW: debounce 300 мс, сравнение sha256
-    FW->>RT: changedRoots cwd
-    RT->>LD: load(cwd)
+    FW->>RT: changes
+    RT->>LD: load()
     alt конфиг невалиден
         LD-->>RT: issues
-        RT->>RT: старый снимок остаётся, лог config.reload.failed
-        Note over RT,CL: клиенту ничего не отправляется, ошибка видна в /status и /config check
+        RT->>RT: прежний снимок остаётся, лог config.reload.failed
+        Note over RT,CL: клиенту ничего не отправляется, ошибка видна в /config check
     else конфиг валиден
         LD-->>RT: CoreConfig
-        RT->>RT: diff, restart-ключи отложены, снимок заменён
-        RT->>MS: applyConfigServers(config-серверы)
-        MS-->>RT: подключён, отключён, переподключён
+        RT->>RT: invalidate, modelsFor, restart-ключи отложены, снимок заменён
+        RT->>MS: replaceServers(серверы конфига и session/new), без хода или после TurnEnded
         RT-->>CL: config_option_update (если сменился список моделей)
-        RT-->>CL: available_commands_update (если сменились команды)
         Note over RT,MS: инструменты обновляются на границе следующего шага
     end
 ```
 
+Диаграмма — по D7, D8 и D10 design.md change `add-config-writer-and-reload`: сигнал без `cwd`,
+замена серверов существующей дорогой `replaceServers`, `available_commands_update` после
+перезагрузки не отправляется (D9).
+
 **Агентские команды** (стандартный `available_commands_update`; обрабатываются без модели, в
 журнал не пишутся, ответ — `agent_message_chunk` и `stopReason: end_turn`, как `/status`, §13.6).
-Команда объявлена, только если `services.config != null`; в мобильном и web-хосте её нет. Запись
-в `available_commands_update` — после `redact`, перед `mcp` (порядок §13.4):
+Команда объявлена, только если `services.config != null` и `buildAgentCore(configCommand: true)`;
+в мобильном и web-хосте её нет, у `serve --ws` — тоже: ответ раскрывал бы пути и тексты проблем
+конфига машины агента клиенту по сети (R0-3, D12). Запись
+в `available_commands_update` — после `redact`, перед `mcp` (порядок §13.4); в 8.10 других
+встроенных команд нет, поэтому список сессии начинается с `config`, затем `mcp`, затем шаблоны
+(D12):
 `{"name":"config","description":"Reload or check the agent config","input":{"hint":"reload | check"}}`.
+
+**Механизм 8.10** (D12, OQ1 (а); минимальный, его расширит change встроенных команд):
+`AgentSession.prompt` до разворачивания шаблонов проверяет первый текстовый блок — первый символ
+`/` (ведущие пробелы не пропускаются, как у шаблонов), затем `config` или `mcp` и пробел или конец
+строки. Команда исполняется без модели событиями `TurnStarted`,
+`MessageStarted`, `MessageDelta`, `MessageEnded`, `TurnEnded(endTurn)`; ни промпт, ни ответ в
+журнал не пишутся (CFG-18), источник — `SlashCommandSource.builtin`, лог
+`command.builtin {session_id, name, subcommand}` без аргументов. Строки от пользователя (`<id>`,
+неизвестный аргумент) обрезаются до 64 символов по рунам; строки проблем конфига не обрезаются.
+`/x` для любого другого `x` без шаблона по-прежнему уходит модели (ответ `Unknown command`, §13.6, —
+change встроенных команд).
+
+**Слот хода и ход модели** (D12). Встроенная команда занимает слот хода сессии: второй
+`AgentSession.prompt` той же сессии во время неё отклоняется так же, как во время хода модели;
+правило держит `AgentSession`, поэтому оно действует и вне моста ACP. Ходом модели команда не
+является: отсрочку замены серверов до `TurnEnded` она не вызывает, и замена, вызванная `/mcp
+reload`, применяется до ответа.
+
+**Отмена** (D12, «Отмена встроенной команды»). `session/cancel` и закрытие сессии во время любой
+встроенной команды отменяют только ожидание ответа: команда отвечает `stopReason: cancelled` без
+текста, освобождает слот и пишет `command.builtin.cancelled {session_id, name, subcommand}` (info).
+Начатая перезагрузка и уже исполняемое ручное действие над сервером доводятся до конца; новых
+действий отменённая команда не начинает: `/mcp reload` после отмены серверы `failed` не будит, а
+её действие, ещё ждавшее в очереди замен, не исполняется (§17.5.7).
+
+**Отказ команды** (D12). Исключение внутри команды (кроме сбоя загрузки у `/config check`)
+завершает ход как сбой хода модели: `AgentError(cls: hook, 'the built-in command failed (<Type>)')`
+и `TurnEnded(failed)` без сообщения; мост отвечает `-32603` (§13.8, ACP-7); лог warning
+`command.builtin.failed {session_id, name, subcommand, error_class}`, только `runtimeType`.
+
+**Доставка событий** (D12, ACP-3). К возврату `AgentSession.prompt` все события хода доставлены
+подписчикам `events`. У встроенной команды нет записи журнала, которая отдала бы управление, поэтому
+после `TurnEnded` она отдаёт один оборот цикла событий (`await Future<void>(() {})`) — это не таймер
+ожидания (PKG-6): длительности нет, часы не читаются.
 
 | Команда | Ответ (фиксированный английский текст) |
 |---|---|
-| `/config reload` | `Config reloaded: <n> keys changed.` \| `Config unchanged.` \| `Config reload failed (<n> issues). Current settings kept. Run /config check.`; при отложенных ключах — строка `Restart required: <k1>, <k2>` |
-| `/config check` | перезагрузка без применения. Первая строка — ровно `Config: ok` или `Config: invalid`; при `invalid` — по строке на проблему `- <source>:<line>: <message>` (без номера строки — `- <source>: <message>`); затем `Sources: …` и `Restart required: …` (если есть). Клиенты определяют исход только по первой строке |
+| `/config reload` | первая строка по исходу: `applied` — `Config reloaded: 1 key changed.` при одном применённом ключе, `Config reloaded: <n> keys changed.` при `n ≥ 2`, `Config reloaded: no keys applied now.`, если `changedKeys` пуст и все изменённые ключи отложены (R7-1); `unchanged` — `Config unchanged.`; `failed` — `Config reload failed (1 issue). Current settings kept. Run /config check.` при одной проблеме, `Config reload failed (<n> issues). Current settings kept. Run /config check.` при `n ≥ 2` (R7-2). Затем при непустом `restartRequiredKeys` — строка `Restart required: <k1>, <k2>`. У `unchanged` её не бывает: ожидающий ключ снова попадает в diff, и исход — `applied` (design.md change `add-config-writer-and-reload`, D8, D12) |
+| `/config check` | перезагрузка без применения. Первая строка — ровно `Config: valid` или `Config: invalid (issues: <n>)`, та же строка, что итог `config check` CLI (без склонения и при `n = 1`); при `invalid` — по строке на проблему `- ` + `ConfigIssue.toString()`: `- <source>[:<line>:<column>]: <key>: <message>` (без `<key>: ` при пустом ключе) — тот же формат, что у `config check` (D12 design.md change `add-config-writer-and-reload`); затем `Sources: …` и `Restart required: …` (если есть). Клиенты определяют исход только по первой строке. Если загрузка бросила исключение (сбой чтения, а не проблемы конфига) — ровно `Config check failed (<ErrorType>). See the agent log.` (`<ErrorType>` — `runtimeType`, текст исключения не выводится), лог warning `config.check.failed {session_id, error_class}` |
 | `/config` с другим аргументом | `Usage: /config reload \| /config check` |
 
 `/status` (§13.6) получает строки: `Config: ok` или
-`Config: reload failed at <ISO-время> (<n> issues). Run /config check.`, и при наличии —
-`Restart required: <ключи>`.
+`Config: reload failed at <ISO-время> (<n> issues). Run /config check.` (при одной проблеме — `1 issue`, R7-2), и при наличии —
+`Restart required: <ключи>` — вместе с change встроенных команд, не в 8.10 (D12).
 
 ## 17.5.7. Алгоритм: MCP-переподключение и команды (E-04, E-13)
 
-Супервизор живёт в сессии и ведёт каждый сервер сессии — из конфига (`origin: config`) и из
-`session/new.mcpServers` (`origin: session`; при совпадении имени побеждает сервер клиента, §13.4).
-Переподключение после сбоя работает для обоих; перезагрузка конфига трогает только `config`.
+Супервизия живёт в сессии `McpClientConnector` (`codelab_agent_mcp`), которая уже владеет
+клиентами серверов, — отдельного объекта `McpSupervisor` нет (design.md change
+`add-config-writer-and-reload`, D11). Сессия ведёт каждый свой сервер — из конфига (`origin:
+config`) и из `session/new.mcpServers` (`origin: session`; при совпадении имени побеждает сервер
+клиента, §13.4). Переподключение после сбоя работает для обоих; перезагрузка конфига трогает только
+`config`. Таймер — `Clock.timer`, `Random` приходит параметром `McpClientConnector` от хоста (PKG-6);
+в тестах — `FakeClock` и `Random(0)`. Сервер, не подключившийся при `session/new`, тоже переходит в
+`failed` и пробуется в фоне; ответ `session/new` ждёт только первую попытку (`connectTimeout`).
+Шаблоны `${secret:…}` сервера конфига раскрываются заново перед каждой попыткой замыканием
+раскрытия, которое ядро передаёт коннектору: после `invalidate` новая попытка берёт новое значение,
+а значение не живёт в коннекторе между попытками.
 
 ```mermaid
 stateDiagram-v2
@@ -618,7 +1455,7 @@ stateDiagram-v2
     connecting --> connected: "initialize и tools/list успешны"
     connecting --> failed: "ошибка или таймаут connect_timeout"
     connected --> failed: "процесс вышел, транспорт закрыт, HTTP 404 сессии"
-    failed --> connecting: "задержка 1..30 с или /mcp reload"
+    failed --> connecting: "задержка 1..30 с, перезагрузка или /mcp reload"
     connected --> disabled: "/mcp disable или enabled = false"
     failed --> disabled: "/mcp disable или enabled = false"
     disabled --> connecting: "/mcp enable или enabled = true"
@@ -632,15 +1469,30 @@ supervise(server):
 2. успех → state := connected; lastError := null; инструменты → отложенное обновление реестра;
    prompts → команды <server>:<prompt>; attempt := 0, если прошлое соединение прожило ≥ 10 с
      (иначе attempt не сбрасывается: сервер, падающий сразу после подключения, не дёргается раз в секунду)
-3. сбой → state := failed; lastError := redact(краткая причина) (≤ 200 символов)
+3. сбой → state := failed; lastError := текст кода CodeLab без текстов сервера (≤ 200 символов;
+     Redactor — после 1.0, R8-1); неудачное раскрытие ${secret:…} (McpSecretsException) — тоже сбой попытки,
+     транспорт не открывается: lastError "secret <name> is not set",
+     "secret <name> cannot be read: <backend> is unavailable" или "no secret store" (D11);
+     сервер с McpServerConfig.blockedReason (ссылка проектного слоя не привязана к адресу, change
+     bind-mcp-secrets-to-origin, D4) — сбой попытки до раскрытия и транспорта, lastError = причине
+   отмена токена запроса (закрытие сессии, dispose) во время попытки → state := failed,
+     lastError "connection cancelled", без таймера и без mcp.server.failed
    вызовы этого сервера в полёте → результат isError: "MCP server <id> disconnected during the call: <reason>"
      (повтора нет: у вызова могли быть побочные эффекты)
    delay := min(30 с, 2^attempt с × (1 + 0.2·r)), r ∈ [0, 1) из Random хоста; attempt += 1
-   лог warning mcp.server.failed на 1-м и каждом 10-м подряд сбое, info mcp.server.retry — на остальных
+   лог warning mcp.server.failed {server, transport, reason} на 1-м и каждом 10-м подряд сбое,
+     info mcp.server.retry {server, attempt, delay_ms} — на остальных (attempt — номер сбоя подряд с 1);
+     пишет только супервизор: McpClient под коннектором создаётся с logFailures: false
    ждать delay, или wake (перезагрузка, /mcp reload), или отмены сессии → п. 1
-4. пока failed после успешного подключения, инструменты сервера остаются в реестре (схемы стабильны);
-   вызов → isError "MCP server <id> is not connected (retry in <n>s). Continue without it or try later."
+4. пока сервер не connected после успешного подключения, инструменты остаются в реестре (схемы
+   стабильны); McpTool вызывает McpToolCaller сервера, а не клиента, поэтому после переподключения
+   тот же инструмент идёт на новое соединение; вызов в простое →
+   isError "MCP server <id> is not connected (retry in <n>s). Continue without it or try later."
+   без обращения к транспорту (n — секунды до попытки, округлённые, ≥ 1)
    сервер, ни разу не подключившийся, инструментов не имеет (§13.4)
+   новый набор после таймерного переподключения — только через takeUpdate() на границе шага;
+   явные действия (начальное подключение, reconnect, setEnabled(true), replaceServers) кладут набор
+   в tools сессии коннектора сразу
 5. disabled → закрыть транспорт, снять таймер; инструменты и команды сервера удаляются
 6. закрытие сессии → закрыть транспорт; stdio-процессу SIGTERM, через 5 с SIGKILL
 
@@ -652,51 +1504,115 @@ onToolsListChanged(server):               // notifications/tools/list_changed
    mcp__<server>__* в реестре; лог info mcp.tools.changed {server, added, removed, changed}
 onPromptsListChanged(server): prompts/list → команды → CommandsChanged → available_commands_update
    (инструменты в available_commands_update не входят, SKL-6; их смена клиенту не сообщается)
+   MCP prompts как команды — change встроенных команд, не 8.10
 
-applyConfigServers(servers):             // из перезагрузки
-1. old, new := config-серверы по name; серверы, затенённые session-сервером того же name, пропускаются
-2. в new, нет в old (или enabled стал true) → supervise
-3. в old, нет в new (или enabled = false) → дождаться вызовов в полёте (≤ 10 с, затем отмена) → disabled → удалить
-4. в обоих, любое поле отличается → разорвать и supervise заново (attempt := 0)
-5. в обоих без изменений → не трогать (идущий backoff не сбрасывается)
+серверы конфига при перезагрузке (D10):  // существующий McpSessionTools.replaceServers
+1. желаемый список := новые серверы конфига, затем текущие серверы session/new (берутся на момент
+   применения); сервер session/new с тем же name затеняет сервер конфига
+2. совпавшие по sameConnection и enabled остаются; неизменённый сервер в failed будится сразу;
+   выбор /mcp enable|disable у неизменённого сервера сохраняется (R6-2): выключенный командой не
+   будится, включённый командой вопреки enabled: false не закрывается
+3. исчезнувшие и выключенные (enabled: true → false) закрываются; изменённый сервер — новое состояние
+   из конфига; отложенные правки (R0-1, R0-4, R6-1) применённый элемент не меняют
+4. новые подключаются и занимают имена инструментов последними (коллизия отключает новый сервер)
+когда: без хода — до итога reloadConfig; во время хода — после TurnEnded. Замены от перезагрузки и от
+  session/load идут через одну очередь сессии со счётчиком поколений: последний желаемый набор
+  побеждает, устаревший результат не перекрывает новый
 ```
 
-**Команда `/mcp`** — одна запись в `available_commands_update` (между `config` и `help`):
+**Отступление 8.10 от прежнего алгоритма** (D10, OQ8). Отдельного `applyConfigServers` нет:
+`replaceServers` уже делает то же. Замена идёт после хода, а не «сразу» с ожиданием вызовов в
+полёте «≤ 10 с, затем отмена»: инструмент, удаляемый посреди пакета вызовов, ломал бы вызов в
+полёте; второе ожидание рядом с проверенной отсрочкой `setMcpServers` — лишний механизм; ход
+ограничен бюджетом, а правка списка серверов не срочна. Неизменённый сервер в `failed` будится
+сразу (как «отключённый или не подключившийся сервер пробуется заново» у `replaceServers`), а не
+продолжает идущий backoff.
+
+**Выключенные серверы конфига** (D10). `CoreConfig.mcpServers` и `McpConnectRequest.servers` несут и
+серверы с `enabled: false` (`McpServerConfig.enabled`): коннектор держит их в `disabled` без
+подключения, `/mcp list` их показывает; лог загрузки `mcp.server.skipped` с причиной `disabled in
+config` сохраняется. Проблемы построения выключенного сервера конфиг невалидным не делают, элемент
+без `type` либо `command`/`url` выпадает с тем же `mcp.server.skipped`; `values` содержит и
+выключенные серверы. Правка параметров соединения выключенного stdio-сервера или HTTP-сервера с
+подстановкой ждёт перезапуска, как у включённого (R6-1, решение пользователя 2026-11-03): иначе
+модель вписала бы команду в выключенный сервер, а человек включил бы его `/mcp enable`, не видя
+подмены.
+
+**Ручной выбор и перезагрузка** (R6-2, решение пользователя 2026-11-03). `/mcp enable|disable`
+действует, пока элемент этого сервера в применённом снимке не изменился (`sameConnection` и
+`enabled`); правки других ключей и серверов его не сбрасывают; правка самого сервера в файле, в том
+числе `enabled`, даёт новое состояние из конфига с учётом R0-1, R0-4 и R6-1. Правка сроков
+(`connect_timeout`, `call_timeout`) у сервера с ручным выбором сбрасывает выбор и пересоздаёт
+соединение (stdio — перезапуск процесса); у нетронутого сервера правка одних сроков соединение не
+сбрасывает.
+
+**Команда `/mcp`** — одна запись в `available_commands_update` (между `config` и `help`; в 8.10 —
+сразу после `config`, D12):
 `{"name":"mcp","description":"List, reload, enable or disable MCP servers","input":{"hint":"list | reload [<id>] | enable <id> | disable <id>"}}`;
 объявлена при включённой capability `mcp`.
 
 | Вызов | Действие | Ответ |
 |---|---|---|
-| `/mcp list` (и `/mcp` без аргументов) | `supervisor.snapshot()` | таблица ниже |
-| `/mcp reload` | `reloadConfig(cwd)` (config-серверы по `applyConfigServers`), затем немедленное `wake` всех `failed` | строка итога (`Config reloaded: …` или `Config reload failed (<n> issues); MCP servers unchanged. Run /config check.`), затем таблица |
-| `/mcp reload <id>` | `supervisor.reconnect(id)` без перечитывания конфига; работает и для `session`-сервера | таблица |
-| `/mcp disable <id>`, `/mcp enable <id>` | `setEnabled` — только для этой сессии, в памяти: не пишется ни в конфиг, ни в журнал; после `session/load` действует конфиг | таблица |
+| `/mcp list` (и `/mcp` без аргументов) | `McpSessionTools.servers` | таблица ниже |
+| `/mcp reload` | `reloadConfig()`, затем — только при исходе `applied` или `unchanged` — немедленное пробуждение всех `failed`; при `failed` серверы не будятся: прежний снимок остаётся целиком, как и обещает `MCP servers unchanged`, а серверы `failed` ждут своего расписания. `/mcp` — не ход модели, поэтому замена серверов конфига (D10) происходит до ответа, и таблица показывает состояние на момент ответа | строки итога — те же, что у `/config reload` (§17.5.6: `Config reloaded: 1 key changed.`, `Config reloaded: <n> keys changed.`, `Config reloaded: no keys applied now.`, `Config unchanged.`, затем `Restart required: …`), кроме исхода `failed`: `Config reload failed (1 issue); MCP servers unchanged. Run /config check.` при одной проблеме, `Config reload failed (<n> issues); MCP servers unchanged. Run /config check.` при `n ≥ 2` (R7-1, R7-2); затем таблица |
+| `/mcp reload <id>` | `McpSessionTools.reconnect(id)` без перечитывания конфига; работает и для `session`-сервера | таблица |
+| `/mcp disable <id>`, `/mcp enable <id>` | `setEnabled` — только для этой сессии, в памяти: не пишется ни в конфиг, ни в журнал; после `session/load` действует конфиг. `enable` подключает и сервер с `enabled: false` в конфиге — с параметрами применённого снимка (это действие человека, R0-1 к нему не относится; R6-1), и выключенный коллизией имён — повторная коллизия снова даёт `disabled` (D11). `<id>` ищется только среди серверов применённого снимка: отложенный новый — `Unknown MCP server`, у отложенного изменённого включается прежний вариант (D10) | таблица |
 | неизвестный `<id>` | — | `Unknown MCP server: <id>. Run /mcp list.` |
 | другой аргумент | — | `Usage: /mcp list \| /mcp reload [<id>] \| /mcp enable <id> \| /mcp disable <id>` |
 
-Таблица `/mcp list` — фиксированный английский текст в блоке ```` ```text ````, колонки выровнены
-пробелами по самой длинной ячейке плюс два пробела; `LAST ERROR` — `lastError` или `-`, для
-`failed` с суффиксом ` (retry in <n>s)`; пустой список — строка `No MCP servers.` без блока:
+Таблица `/mcp list` — фиксированный английский текст, побайтово (D12, «Таблица `/mcp list`»;
+образец — фикстура `acp/slash-mcp-list`); пустой список — строка `No MCP servers.` без блока:
+- текст: ```` ```text ```` и `\n`, шапка `MCP servers (<n>)` (`n` — число серверов) и `\n`, строки
+  таблицы через `\n`, затем `\n` и закрывающая ограда ```` ``` ````; после ограды `\n` нет — текст ею
+  заканчивается (у `/mcp reload` строки итога стоят перед блоком);
+- первая строка таблицы — заголовки; каждая колонка, кроме последней, дополняется пробелами справа
+  до длины самой длинной ячейки колонки (с заголовком) **в рунах** плюс два, поэтому разделитель —
+  не меньше двух пробелов; последняя колонка `LAST ERROR` не дополняется, хвостовых пробелов нет;
+- `SOURCE` — `config` | `session`, `TRANSPORT` — `stdio` | `http`, `STATE` — `connecting` |
+  `connected` | `failed` | `disabled`, `TOOLS` — `toolCount` (у `disabled` — `0`);
+- `LAST ERROR` — `lastError`, а при `lastError == null` — `-` в любом состоянии, в том числе у
+  сервера с `enabled: false` в конфиге; только у `failed` с назначенным повтором к ячейке
+  дописывается ` (retry in <n>s)`: `n` — `retryIn`, округлённый до целых секунд (половина — вверх),
+  не меньше `1`;
+- порядок строк — `McpSessionTools.servers` без пересортировки: серверы применённого снимка конфига
+  в порядке `mcp.servers`, затем серверы клиента ACP (`session/new`, `session/load`) в порядке
+  запроса; сервер клиента с тем же `name` затеняет сервер конфига, строка у имени одна.
 
 ```text
 MCP servers (3)
 ID        SOURCE   TRANSPORT  STATE      TOOLS  LAST ERROR
 github    config   http       connected  12     -
-docs      session  stdio      failed     4      process exited with code 1 (retry in 8s)
 local-db  config   stdio      disabled   0      disabled by /mcp disable
+docs      session  stdio      failed     4      process exited with code 1 (retry in 8s)
 ```
 
+**Ручные действия и ход модели** (D11, D12). `/mcp reload <id>` и `/mcp enable|disable` идут через
+очередь замен сессии. Ручные `reconnect` и `setEnabled` не меняют набор инструментов и системный
+промпт посреди шага: действие, завершившееся во время хода модели, применяется на границе шага тем же
+`takeUpdate()`, что после таймерного переподключения (п. 4 `supervise`). Сбой ручного действия —
+`mcp.server.failed {session_id, server, transport, action, reason}` (warning; `action` —
+`reconnect`, `enable` или `disable`, `reason` — `MCP action failed: <runtimeType>`): схема события
+та же, что у сбоя подключения (§15.5, §12.3), с добавленным `action`.
+
 Постоянные изменения (добавить, изменить, удалить, выключить сервер) делают клиенты через
-`ConfigWriter` (§17.5.5); агент подхватывает их перезагрузкой. Страница настроек app для
-встроенного агента читает `McpSupervisor.snapshot()` и `changes` напрямую и вызывает
-`reconnect`; для локального stdio-агента — отправляет `/mcp list` и `/mcp reload <id>` обычным
-`session/prompt`. Машиночитаемый статус по ACP — не часть этого раздела; если понадобится, он
-добавляется только через OpenSpec.
+`ConfigWriter` (§17.5.5); агент подхватывает их перезагрузкой, кроме отложенных до перезапуска
+(таблица §17.5.6; клиенты узнают их функциями моста `restartRequiredServers` и
+`restartRequiredProviders` поверх `planConfigReload`, change `add-provider-setup-ui`, D11, Q31, Q35).
+Страница настроек app для
+встроенного агента читает состояние серверов через `EmbeddedAgent.mcpStatus` и вызывает
+`reconnect` (change `add-provider-setup-ui`, D12; OQ4 закрыт); для локального stdio-агента и
+удалённого агента — отправляет `/mcp list` и `/mcp reload <id>` обычным `session/prompt` только по
+кнопке пользователя и только без идущего хода (SETUP-11).
+Машиночитаемый статус по ACP — не часть этого раздела: OQ4 закрыт портом хоста без расширения
+ACP; расширение `_meta.codelab`/`_codelab/*` для агента вне процесса — только отдельным OpenSpec
+(SETUP-11).
 
 ## 17.5.8. Алгоритм: реестр настроек (E-15)
 
 Схема §15.4 становится данными: валидатор строится из `ConfigSchema` (листовые ключи, типы,
-значения по умолчанию, перечисления, диапазоны), реестр — из `SettingsRegistry.all`. Клиенты
+перечисления, признак «применяется»), реестр — из `SettingsRegistry.all`. Умолчаний и диапазонов
+в узлах схемы сборки 1.0 нет: умолчания применяет разрешение `CoreConfig`, диапазоны проверяет
+валидатор кодом (ограничение теста полноты ниже). Клиенты
 (`/settings` в CLI, страница настроек app) рисуют редакторы по `type` и пишут через
 `ConfigWriter`: `secretName` — поле «задать ключ» (`SecretStore.write`, затем `SetValue` имени),
 `modelRef` — выбор из каталога моделей, `mapList` (`mcp.servers`) — список с формой сервера.
@@ -706,8 +1622,8 @@ local-db  config   stdio      disabled   0      disabled by /mcp disable
 
 | Ключ | Тип | Scope | Restart | Причина `fileOnly` / заметка |
 |---|---|---|---|---|
-| `trusted_projects` | pathList | shared | нет | слой только `user` |
-| `agent.default_model`, `agent.fallback`, `agent.summary_model` | modelRef, modelRefList, modelRef | shared | нет | — |
+| `trusted_projects` | pathList | shared | да | слой только `user`; перезапуск — R0-1 |
+| `agent.default_model`, `agent.fallback`, `agent.summary_model` | modelRef, modelRefList, modelRef | shared | нет | в 1.0 `agent.fallback` и `agent.summary_model` без потребителя — `fileOnly`, `not applied in this version` |
 | `agent.effort` | enumeration `low, medium, high` | shared | нет | — |
 | `providers.*.kind`, `.base_url` | enumeration (после MVP в `enumValues` — также `gemini`, §17.10.3), string | shared | нет | — |
 | `providers.*.preset` | enumeration id пресетов | shared | нет | после MVP (§17.10.2) |
@@ -730,15 +1646,15 @@ local-db  config   stdio      disabled   0      disabled by /mcp disable
 | `images.dedup` | bool | shared | нет | после MVP (§17.11.2.2) |
 | `images` (прочие) | map | fileOnly | нет | после MVP (§17.11.10): лимиты подготовки картинок |
 | `model_catalog` | map | fileOnly | нет | внешний источник метаданных и сетевые параметры каталога |
-| `permissions.mode` | enumeration `plan, ask, standard, accept-edits, bypass` | shared | нет | — |
-| `permissions.timeout`, `permissions.deny`, `permissions.tools` | duration, stringList, map | shared | нет | значения `permissions.tools` — `allow, ask, deny` |
+| `permissions.mode` | enumeration `plan, ask, standard, accept-edits, bypass` | shared | да | R0-1: ослабление прав не применяется на лету |
+| `permissions.timeout`, `permissions.deny`, `permissions.tools` | duration, stringList, map | shared | да (R0-1) | значения `permissions.tools` — `allow, ask, deny`; в 1.0 `permissions.timeout` без потребителя — `fileOnly`, `not applied in this version` |
 | `budget.*` | int, int, float, duration | shared | нет | — |
 | `compaction.enabled` | bool | shared | нет | — |
 | `compaction.engine` | enumeration `classic, structured` | shared | нет | после MVP (§17.13.4) |
 | `compaction.structured` | map | fileOnly | нет | после MVP: бюджеты маркеров, пинов и раскрытия; доли окна §17.13.4 |
 | `compaction.context_window_cap`, `.reserve_tokens`, `.keep_recent_tokens`, `.keep_recent_user_turns` | int | fileOnly | нет | арифметика токенов §9.4; неверное значение ломает сжатие |
-| `tools.output`, `tools.untrusted_paths`, `tools.project_context` | map, pathList, map | fileOnly | нет | граница доверия и лимиты усечения; меняются осознанно |
-| `tools.disabled` | stringList | shared | нет | — |
+| `tools.output`, `tools.untrusted_paths`, `tools.project_context.max_bytes` | map, stringList, int | fileOnly | нет | граница доверия и лимиты усечения; меняются осознанно; в 1.0 `tools.output` и `tools.untrusted_paths` без потребителя — `not applied in this version` |
+| `tools.disabled` | stringList | shared | нет | в 1.0 без потребителя — `fileOnly`, `not applied in this version`; `restartRequired` решит change потребителя (D8) |
 | `tools.load` | enumeration `all, essential` | shared | нет | после MVP (§17.11.9) |
 | `tools.mounted` | stringList | shared | нет | после MVP (§17.11.9) |
 | `tools.edit.anchors` | bool | shared | нет | после MVP (§17.11.3) |
@@ -746,7 +1662,7 @@ local-db  config   stdio      disabled   0      disabled by /mcp disable
 | `tools.ask.enabled` | bool | shared | да | после MVP: capability `userQuestions` на соединение (§17.11.7) |
 | `tools.ask.timeout` | duration | shared | нет | после MVP |
 | `tools.heartbeat` | map | shared | нет | после MVP (§17.12.3) |
-| `loop.empty_response_retries`, `loop.misuse`, `loop.final_response` | int, map, map | fileOnly | нет | поведение цикла при сбоях модели, после MVP — ревизии и одобрение ответа (§17.12.4); значения по умолчанию подходят почти всем |
+| `loop.empty_response_retries`, `loop.misuse`, `loop.final_response` | int, map, map | fileOnly | нет | в 1.0 `empty_response_retries` и `misuse` без потребителя — `not applied in this version`; поведение цикла при сбоях модели, после MVP — ревизии и одобрение ответа (§17.12.4); значения по умолчанию подходят почти всем |
 | `redact` | map | fileOnly | нет | граница безопасности: ослабление редакции — сознательная правка файла; после MVP покрывает `redact.block` и `redact.command_rewrite` (§17.12.6–§17.12.7) |
 | `tools.web.enabled` | bool | shared | да | — |
 | `tools.web.search.backend` | enumeration | shared | нет | — |
@@ -764,9 +1680,7 @@ local-db  config   stdio      disabled   0      disabled by /mcp disable
 | `lsp` (прочие) | map | fileOnly | нет | лимиты пула и таймауты серверов |
 | `prompts.templates` | bool | shared | нет | — |
 | `prompts` (прочие) | map | fileOnly | нет | длинные тексты и пути промптов, в том числе `append_system`, `append_system_text` (§11.6.1) |
-| `skills.enabled` | bool | shared | да | — |
-| `skills.operative.lines` | stringList | shared | нет | — |
-| `skills` (прочие) | map | fileOnly | нет | согласие на чужие каталоги (`extra_roots`) даётся правкой файла; лимиты каталога |
+| `skills.*` | — | fileOnly | нет | все листья `skills.*` — `fileOnly` (change `add-agent-skills`, D11): согласие на чужие каталоги (`extra_roots`) даётся правкой файла; `skills.operative` — непрозрачный узел после MVP |
 | `subagents.enabled`, `subagents.background`, `subagents.follow_ups` | bool | shared | да | `follow_ups` — после MVP (§17.3.8.1) |
 | `subagents` (прочие) | map | fileOnly | нет | лимиты параллелизма и бюджеты детей |
 | `jobs.enabled` | bool | shared | да | после MVP (§17.9.12) |
@@ -780,28 +1694,83 @@ local-db  config   stdio      disabled   0      disabled by /mcp disable
 | `a2a.agents`, `a2a.client` | mapList, map | fileOnly | нет | после MVP (§17.15.5): адреса, куда агент отправляет задачи с фрагментами кода, и их секреты — граница безопасности; правятся в файле |
 | `a2a.server.tokens` | list | fileOnly | нет | после MVP (§17.15.4): принципалы и имена секретов; ротация без перезапуска |
 | `a2a.server` (прочие) | map | fileOnly | да | после MVP (§17.15.4): сетевой сервер агента с shell; адрес, режим и лимиты — сознательной правкой файла |
-| `logging.level` | enumeration | shared | нет | — |
+| `logging.level` | enumeration | shared | да | уровень логгера принадлежит хосту; в 1.0 — только после перезапуска (OQ5, D14 change `add-config-writer-and-reload`) |
 | `logging.file`, `logging.trace`, `logging.trace_payload` | path, bool, bool | fileOnly | да | sink открывается один раз; trace — диагностика |
-| `logging.llm_snapshot` | enumeration `off, headers, body` | fileOnly | нет | после MVP (§17.10.10): диагностика; тело запроса — только сознательной правкой |
-| `profile` | map | fileOnly | да | сужение capability зависит от хоста; после MVP — также `memory`, `user_questions`, `user_hooks` |
+| `logging.llm_snapshot` | enumeration `off, headers, body` | fileOnly | да | после MVP (§17.10.10): диагностика; тело запроса — только сознательной правкой; в 1.0 непрозрачный узел раздела хоста `logging` — перезапуск по D8 `logging.*` |
+| `profile` | map | fileOnly | да | сужение capability зависит от хоста; слои — все, как у загрузчика; после MVP — также `memory`, `user_questions`, `user_hooks` |
 | `secrets.backend` | enumeration `auto, keychain, env, file` | fileOnly | да | открытый файл секретов выбирается только сознательной правкой; слой только `user` |
 | `config.watch`, `config.poll_interval` | bool, duration | fileOnly | да | поведение наблюдателя; из UI менять бессмысленно |
+| `agents` | map | fileOnly | нет | ключ верхнего уровня схемы; определения агентов — markdown-файлы, а не YAML |
 
 Новые ключи этого раздела (дополнение §15.4): `secrets.backend` (`"auto"`) — только глобальный
-конфиг; `config.watch` (`true`) и `poll_interval` (`"2s"`, `1s..60s`) — слои 2 и 4.
+конфиг; `config.watch` (`true`) и `poll_interval` (`"2s"`, `1s..60s`) — слои 2, 4 и
+`--config`/`CODELAB_CONFIG`, в проектном слое 3 отбрасываются с `config.project.untrusted_key`
+всегда, в слое 4 — только у недоверенного проекта (design.md change `add-config-writer-and-reload`, D7).
+
+**Объём в 1.0** (D4). Таблица выше — целевой состав. Дескрипторы сборки 1.0 — на ключи схемы этой
+сборки:
+- **Типы — как у узлов схемы**: `tools.untrusted_paths` — `stringList` (`ListNode(string)`);
+  `tools.project_context.max_bytes` и `loop.empty_response_retries` — листья `int`; `agents` —
+  `map`/`fileOnly`.
+- **Разделы после MVP** (`afterMvpSections`: `llm`, `images`, `subagents`, `jobs`,
+  `hooks`, `plugins`, `a2a`, `memory`, `steering`, `lsp`, а также непрозрачные узлы `tools.web`,
+  `tools.spill`, `skills.operative` и подобные внутри разделов ядра; раздел `skills` применяется — change `add-agent-skills`) — непрозрачные узлы схемы. Каждый получает один
+  дескриптор `map`/`fileOnly` с причиной `not supported in this version; edit the file manually`,
+  `restartRequired: false`. Их строки таблицы вводят change этих разделов вместе со схемой.
+- **Непрозрачные узлы внутри разделов хоста** наследуют правило D8 своего раздела:
+  `logging.llm_snapshot` — `restartRequired: true`, слои раздела `logging`.
+- **Ключи без потребителя** (узел схемы `applied: false`) — `fileOnly` с причиной
+  `not applied in this version`, в том числе объявленные в таблице `shared`: `agent.fallback`,
+  `agent.summary_model`, `permissions.timeout`, `tools.disabled`. Change, который даёт ключу
+  потребителя, переводит дескриптор в целевой `scope` и решает его `restartRequired`.
+- **`config.watch`, `config.poll_interval`** — листья, `fileOnly`, `restartRequired: true`, слои
+  `user` и `projectLocal`.
+- **`secrets.backend`** — `fileOnly`, `restartRequired: true`, слой только `user`.
+- **`profile`** — `map`/`fileOnly`, `restartRequired: true`, слои — все, как у загрузчика.
+
+Реестр — отдельная таблица данных в `config/settings_registry.dart`, а не метаданные узлов
+`schema.dart`: схема описывает проверку (тип, перечисление, правило, область `core`/`host`), реестр —
+показ и запись (раздел UI, метка, `shared`/`fileOnly`, `restartRequired`, `layers`). Схема — дерево
+узлов валидатора, реестр — плоский список в порядке показа; слить их — значит тащить UI-поля в
+валидатор и перестроить проверенный в 8.5 код. Согласованность держит тест полноты (D4).
+`restartRequired` реестра — единственный источник для `ConfigWriteResult.restartRequiredKeys` и
+перезагрузки (§17.5.6).
+
+`parseCliValue(d, raw)` разбирает значение `config set` по `type`: `bool` — только `true`/`false`;
+`int`, `float` — с `min`/`max`; `duration` — `30s`; `enumeration` — по `enumValues`; `stringList`,
+`pathList`, `modelRefList`, `map`, `mapList` — JSON. Ошибка — исключение ядра `ConfigValueException
+{key, expected}` с ожидаемым форматом, без цитирования значения; подкоманда переводит его в `64`
+(D4: `ConfigUsageException` живёт в `codelab_agent_io` и ядру недоступна).
+
+`permissions.*` и `trusted_projects` — `restartRequired: true` (R0-1); у `mcp.servers` флаг `false`,
+а новые и изменённые stdio-элементы откладывает правило перезагрузки (§17.5.6). В итерации 2 раздел
+`config` ещё непрозрачен и покрыт одним дескриптором `map`/`fileOnly`; его листья и ключи
+перезапуска `config.*` появляются в итерации 5 (D4, «Порядок итераций»).
 
 **Тест полноты** (`settings_registry_complete_test.dart`):
 
 ```text
 1. leaves := все листовые пути ConfigSchema (имена — "*")
 2. для каждого leaf: ровно один дескриптор покрывает его (сам ключ или предок с типом map/mapList)
-3. для каждого дескриптора: путь есть в ConfigSchema; type, defaultValue, enumValues, min/max
-   совпадают со схемой валидатора
+3. для каждого дескриптора: путь есть в ConfigSchema; type и enumValues совпадают со схемой;
+   min/max каждого int — зонд валидатора (граница принимается, значение за ней отклоняется);
+   defaultValue применяемого ключа == значение разрешённого CoreConfig пустой конфигурации,
+   умолчания остальных — константа теста «только по §15.4»
 4. scope == fileOnly ⇔ fileOnlyReason не пуст; label и description не пусты
 5. каждый ключ верхнего уровня схемы покрыт хотя бы одним дескриптором (формулировка E-15)
-6. restartRequired == true ровно для ключей из таблицы §17.5.6
+6. restartRequired == true ровно для ключей «только после перезапуска» таблицы сборки 1.0 §17.5.6;
+   список — константа теста со ссылкой на D8 design.md change add-config-writer-and-reload
 7. layers ⊆ слоёв, которые §15.3 разрешает для ключа
+8. scope == shared ⇒ все покрытые узлы схемы applied: true
 ```
+
+**Ограничение п. 3.** В узлах схемы сборки 1.0 нет умолчаний и диапазонов, поэтому умолчания
+ключей без потребителя, ключей хоста и непрозрачных узлов сверить не с чем: они перечислены явной
+константой теста и держатся ревью. Перенос умолчаний и диапазонов в узлы схемы — отдельный
+рефакторинг вне 8.10 (design.md change `add-config-writer-and-reload`, D4, Risks).
+
+Функция покрытия, на которой стоят `lookup` и тест полноты, — не публичный API: клиенты пользуются
+только `SettingsRegistry.lookup`.
 
 `SettingsRegistry.lookup`: более конкретный дескриптор побеждает `*` и «прочие» (`plugins.enabled`
 против `plugins.*`, `memory.enabled` против `memory`); в шаге 2 теста «ровно один» — после этого
@@ -815,7 +1784,7 @@ local-db  config   stdio      disabled   0      disabled by /mcp disable
 ```yaml
 # ~/.codelab/config.yaml
 secrets:
-  backend: auto               # auto | keychain | env | file
+  backend: auto               # auto | keychain | env | file; в 1.0 auto = env, keychain — «not supported yet» (D7)
 
 config:
   watch: true
@@ -839,28 +1808,39 @@ mcp:
 
 | Ключи | Слой 3 (проект) | Слой 4 (локальный) | Условие снятия ограничения |
 |---|---|---|---|
-| `secrets.*` | нет | нет | только глобальный конфиг |
-| `config.*` | нет | да | — |
-| `${secret:<name>}` в `headers`, `env` | нет (подстановка — литерал с предупреждением) | да | проект в `trusted_projects` |
+| `secrets.*` | нет | нет | только пользовательский конфиг и `--config`/`CODELAB_CONFIG` (D7) |
+| `config.*` | нет: отбрасывается с `config.project.untrusted_key` (8.10, D7) | да, если проект в `trusted_projects`; иначе — как слой 3 (§15.2) | — |
+| `${secret:<name>}` в `headers`, `env` | нет: `providers` и `mcp.servers` недоверенного проекта отбрасываются целиком, ссылка до резолвера не доходит (D4) | да | проект в `trusted_projects` |
+| `${secret:<name>}` в `session/new.mcpServers` клиента ACP | — | — | никогда: литерал, не раскрывается (D4) |
 
 Окружение и флаги (дополнение §15.6):
 
 | Переменная | Флаг | Смысл |
 |---|---|---|
 | `CODELAB_PROVIDER_TYPE` | `--provider-type <kind>` | тип провайдера предконфигурации (§17.5.3) |
-| `CODELAB_PROVIDER_CONFIG` | `--provider-config <json \| @путь>` | JSON провайдера |
+| `CODELAB_PROVIDER_CONFIG` | `--provider-config <json \| @путь>` | JSON провайдера; флаги затеняют обе переменные, один флаг без другого и сочетание с `--provider`/`--base-url` — ошибка использования `64` (D3, OQ6) |
 | `CODELAB_PROVIDER_CONFIG_BASE64` | — | то же в base64 |
-| `CODELAB_SECRET_<ИМЯ>` | — | переопределение секрета по имени (§17.5.4) |
-| `CODELAB_DEBUG_SECRETS=1` | `--debug-secrets` | лог каждого обращения к секретам без значений (P-17) |
+| `CODELAB_SECRET_<ИМЯ>` | — | переопределение секрета по имени (§17.5.4); побеждает хранилище при любом бэкенде (D3) |
+| `CODELAB_DEBUG_SECRETS=1` | `--debug-secrets` (флаг `serve`, без значения; 8.9) | событие `secrets.lookup` на каждое обращение, без значений (P-17). Режим не меняет уровень лога; другие значения переменной — как незаданная. Встроенные профили этапа 7 включают его переменной или опцией хоста `debugSecrets`, `embedded-cli` — своим `--debug-secrets`; ключа конфига нет (D10, D11, D15) |
 
 События лога (дополнение §12.3): `config.reload.applied`, `config.reload.failed`,
-`config.reload.noop`, `config.reload.restart_required`, `config.preconfig.shadowed`,
-`config.write`; `secrets.lookup` (только `--debug-secrets`), `secrets.backend.unavailable`,
-`secrets.backend.plaintext`; `mcp.server.state`, `mcp.server.retry`, `mcp.tools.changed`.
+`config.reload.noop`, `config.reload.restart_required`, `config.reload.model_orphaned`,
+`config.preconfig.shadowed`, `config.write`, `config.write.stale_lock`, `config.watch.debounce` (debug, `path`), `config.watch.fallback`, `config.watch.failed`,
+`command.builtin`, `command.builtin.cancelled`, `command.builtin.failed`, `config.check.failed` (уровни и поля — §12.3, таблица событий 8.10; design.md change
+`add-config-writer-and-reload`, D14); `secrets.lookup` (только `--debug-secrets`), `secrets.backend.selected`,
+`secrets.backend.unavailable`, `secrets.backend.plaintext`, `secrets.file.refused` (поля и условия —
+§12.3, таблица `secrets.*`; design.md change `add-agent-secret-store`, D10); `config.secret.unavailable`
+этапа 8.5 снято (D4); `mcp.server.state`, `mcp.server.retry` (D14), `mcp.tools.changed`.
+Значения ключей, подстановок и секретов не пишутся ни в одно поле; `keys` — пути.
 
 Подкоманды CLI — таблица §17.5.5 и §17.5.4: `codelab config get|set|unset|path|check|export-providers|import-providers`,
 `codelab provider add|list|remove`, `codelab mcp add|list|remove`,
-`codelab secret set|delete|list`; агентские команды — `/config reload|check`,
+`codelab secret set|delete|list|migrate` (8.9, D8; `migrate` — 8.11, design.md change `add-config-literal-secrets-and-migrate`, D7: те же подкоманды у `codelab-agent`, бэкенд — из
+`secrets.backend`; `config check` с 8.9 печатает бэкенд и строку `warning:` на каждый незаданный
+ссылочный секрет, при `file` — строку об открытом тексте всегда, а отказ `file` — одной строкой
+(права — `<path> has permissions <mode>; run: chmod 600 <path>`, иначе `file is unavailable
+(<reason>)`) без строк по именам; код выхода не меняется, D9);
+агентские команды — `/config reload|check`,
 `/mcp list|reload [<id>]|enable <id>|disable <id>`.
 
 ## 17.5.10. Примеры
@@ -878,21 +1858,32 @@ docker run \
 Итоговый каталог содержит `gw/qwen3-coder`, `agent.default_model = "gw/qwen3-coder"`; лог
 `host.config.loaded {sources: ["defaults", "env:CODELAB_PROVIDER_CONFIG"]}`. Опечатка
 `"contex_window"` →
-`CODELAB_PROVIDER_CONFIG.contex_window: неизвестное поле (может быть, context_window?)`.
+`CODELAB_PROVIDER_CONFIG.contex_window: unknown key (did you mean context_window?)` (тексты
+английские, design.md change `add-config-writer-and-reload`, D3).
 
-**Ключ в конфиге.** Файл содержит `api_key: sk-proj-…` в `providers.openai`. Старт:
+**Ключ в конфиге** (с 8.11; решение пользователя 2026-11-04 R8-4, design.md change
+`add-config-literal-secrets-and-migrate`, D4, D7). Пользовательский `config.yaml` содержит
+`api_key: sk-proj-…` в `providers.openai`. Агент стартует, литерал работает как ключ провайдера, а
+загрузка и `codelab config check` печатают предупреждение без значения:
 
 ```text
-config.yaml:9:5: providers.openai.api_key: ключ не хранится в конфиге. Сохраните его командой codelab secret set codelab/openai и укажите api_key_secret: codelab/openai
+warning: config.yaml:9:5: providers.openai.api_key: a secret is stored in the config file; move it to the secret store: codelab secret migrate
 ```
 
-Исправление:
+Исправление одной командой (в 1.0 — при `secrets.backend: file`):
 
 ```bash
-codelab secret set codelab/openai                      # ввод без эха
-codelab config unset providers.openai.api_key          # итог валиден — запись проходит
-codelab config set providers.openai.api_key_secret codelab/openai
+codelab secret migrate --dry-run   # <path>: providers.openai.api_key -> api_key_secret: codelab/openai (new)
+codelab secret migrate             # Moved providers.openai.api_key in <path> to secret codelab/openai
+                                   # restart the agent to use the moved secrets
 ```
+
+В файле `api_key` заменяется на `api_key_secret: codelab/openai`, комментарии сохраняются. При
+`secrets.backend: auto` (= `env`) `migrate` отвечает кодом `1` и подсказывает `secrets.backend: file`
+или переменную `CODELAB_SECRET_CODELAB_OPENAI`. Литерал в файле `CODELAB_CONFIG` `migrate` не пишет:
+подсказка там — `codelab secret set codelab/openai`, затем `config unset`/`set` вручную. До 8.11
+такой файл не загружался (проблема `inlineSecret`); в JSON предконфигурации (§17.5.3) `api_key`
+по-прежнему проблема.
 
 **Сохранение формата.** До `codelab config set agent.default_model anthropic/claude-sonnet-4`:
 
@@ -912,25 +1903,31 @@ agent:
   fallback: [anthropic/claude-sonnet-4]
 ```
 
-**`--debug-secrets`.** Строки лога одного запроса:
+**`--debug-secrets`.** Строки лога одного запроса при `secrets.backend: file` (D10):
 
 ```json
-{"level":"info","event":"secrets.lookup","fields":{"name":"codelab/anthropic","purpose":"providers.anthropic.api_key_secret","source":"keychain-macos","found":true}}
+{"level":"info","event":"secrets.lookup","fields":{"name":"codelab/anthropic","purpose":"providers.anthropic.api_key_secret","source":"file","found":true}}
 {"level":"info","event":"secrets.lookup","fields":{"name":"codelab/anthropic","purpose":"providers.anthropic.api_key_secret","source":"cache","found":true}}
 ```
 
 **Перезагрузка после ручной ошибки.** Пользователь опечатался в `reserve_token`; агент продолжает
-работать со старым конфигом. `/status`:
+работать со старым конфигом. `/config reload`:
 
 ```text
-Config: reload failed at 2026-10-21T08:03:10Z (1 issues). Run /config check.
+Config reload failed (1 issue). Current settings kept. Run /config check.
+```
+
+`/status` с change встроенных команд (не 8.10, D12):
+
+```text
+Config: reload failed at 2026-10-21T08:03:10Z (1 issue). Run /config check.
 ```
 
 `/config check`:
 
 ```text
-Config: invalid
-- /Users/me/.codelab/config.yaml:12:3: неизвестный ключ compaction.reserve_token (может быть, reserve_tokens?)
+Config: invalid (issues: 1)
+- /Users/me/.codelab/config.yaml:12:3: compaction.reserve_token: unknown key (did you mean reserve_tokens?)
 Sources: defaults, /Users/me/.codelab/config.yaml, /work/demo/.codelab/config.yaml
 ```
 
@@ -943,15 +1940,15 @@ Sources: defaults, /Users/me/.codelab/config.yaml, /work/demo/.codelab/config.ya
 
 Нумерация продолжает §15.10 (CFG-1 … CFG-8); CFG-20 и CFG-21 — тоже в §15.10.
 
-9. **CFG-9.** Ключ API и другой секрет не принимаются значением ни в файле конфига, ни в JSON предконфигурации: только `api_key_secret`, `api_key_env` или `${secret:…}`/`${ENV}`. Ошибка называет ключ и команду `codelab secret set <name>` и не содержит значения.
-10. **CFG-10.** Значение секрета не попадает в лог (в том числе при `--debug-secrets`: ни значение, ни длина, ни префикс, ни хеш), в сообщения об ошибках, в argv дочерних процессов и в файл конфига; каждое прочитанное значение регистрируется в `Redactor` до первого использования.
+9. **CFG-9.** Ключ API и другой секрет не принимаются значением в JSON предконфигурации и при записи (писатель, CLI, страницы настроек): только `api_key_secret`, `api_key_env` или `${secret:…}`/`${ENV}`; ошибка называет ключ и команду `codelab secret set <name>` и не содержит значения. Литерал в **файле** конфига (пп. 1–3, §17.5.4) с 8.11 — предупреждение `config.secret.in_file` с командой переноса, без значения, а не ошибка (решение пользователя 2026-11-04 R8-4; design.md change `add-config-literal-secrets-and-migrate`, D4).
+10. **CFG-10.** Значение секрета не попадает в лог (в том числе при `--debug-secrets`: ни значение, ни длина, ни префикс, ни хеш), в сообщения об ошибках, в argv дочерних процессов и в файл конфига. Регистрация каждого прочитанного значения в `Redactor` — после 1.0 вместе с P-10 (решение пользователя 2026-11-04 R8-1); в 1.0 тексты ошибок провайдера вычищаются по `ProviderConfig.secrets` (design.md change `add-config-literal-secrets-and-migrate`, D2).
 11. **CFG-11.** Открытое хранение секретов — только при `secrets.backend = "file"` в глобальном конфиге; без этого ключа агент не пишет секреты на диск сам.
 12. **CFG-12.** Приоритет источников провайдера: флаг → окружение → локальный проектный → проектный → пользовательский конфиг. Ошибка предконфигурации называет переменную и поле и не цитирует значение.
 13. **CFG-13.** `ConfigWriter` либо атомарно заменяет файл YAML-документом, прошедшим валидацию §15.5, либо не меняет его вовсе; байты вне изменённых узлов (комментарии, порядок ключей, стиль) сохраняются; файл, изменённый после чтения, не перезаписывается (`ConfigConflictException`); TOML писатель не пишет никогда (CFG-20).
 14. **CFG-14.** Клиенты пишут конфиг только локального агента (встроенного или запущенного через stdio на той же машине); конфиг удалённого агента клиент не пишет.
-15. **CFG-15.** Невалидный конфиг при перезагрузке не применяется ни частично: остаётся прежний снимок целиком, клиентам ничего не отправляется, ошибка видна в логе, `/status` и `/config check`.
+15. **CFG-15.** Невалидный конфиг при перезагрузке не применяется ни частично: остаётся прежний снимок целиком, клиентам ничего не отправляется, ошибка видна в логе и `/config check` (строка `/status` — с change встроенных команд; design.md change `add-config-writer-and-reload`, D12).
 16. **CFG-16.** Новый конфиг вступает в силу только на границах: шаг, вызов инструмента, ход или новая сессия по таблице §17.5.6; набор схем инструментов внутри шага неизменен; ключи `restartRequired` не применяются частично и перечисляются как ожидающие перезапуска.
-17. **CFG-17.** Упавший MCP-сервер переподключается с задержкой от 1 до 30 с (экспонента с джиттером), пока жива сессия; перезагрузка трогает только изменившиеся `config`-серверы и никогда не трогает серверы `session/new`.
+17. **CFG-17.** Упавший MCP-сервер переподключается с задержкой от 1 до 30 с (экспонента с джиттером), пока жива сессия; перезагрузка трогает только изменившиеся `config`-серверы (и будит неизменённые в `failed`, D10, OQ8) и никогда не трогает серверы `session/new`.
 18. **CFG-18.** `/mcp` и `/config` не вызывают модель, не пишут журнал и отвечают фиксированным английским текстом; `/mcp enable|disable` действуют только на текущую сессию и не меняют конфиг.
 19. **CFG-19.** Каждый листовой ключ схемы конфига покрыт ровно одним `SettingDescriptor`; `fileOnly` всегда с причиной; значения по умолчанию, типы и перечисления реестра совпадают с валидатором.
 
@@ -989,25 +1986,48 @@ Sources: defaults, /Users/me/.codelab/config.yaml, /work/demo/.codelab/config.ya
 
 ## 17.5.13. Как проверить
 
-Тесты ядра — `packages/dart/codelab_agent_core/test/config/` и `test/secrets/`; хранилища, писатель
-и наблюдатель — `packages/dart/codelab_agent_io/test/{secrets,config}/`; супервизор —
-`packages/dart/codelab_agent_mcp/test/supervisor/`.
+Тесты ядра — `packages/dart/codelab_agent_core/test/config/`, `test/secrets/`, `test/runtime/` и
+`test/commands/`; хранилища, писатель и наблюдатель — `packages/dart/codelab_agent_io/test/{secrets,config,cli}/`;
+супервизия — `packages/dart/codelab_agent_mcp/test/supervisor/`. Состав тестов 8.10 — design.md change
+`add-config-writer-and-reload`, D15.
 
-* `provider_preconfig_env_test.dart` — критерий матрицы **`core/provider-preconfig-from-env`**: `TYPE` + `CONFIG` без файлов → каталог с `env/<model>`, `default_model` из JSON; `_BASE64` даёт тот же `CoreConfig`; флаги затеняют переменные; файл с `default_model` проигрывает окружению, `CODELAB_MODEL` выигрывает у предконфигурации; битый JSON, обе переменные сразу, неизвестное поле → `ConfigException` с именем переменной; ни в одном сообщении и записи лога нет подстроки значения (CFG-12).
-* `config_inline_secret_test.dart` — **`core/config-rejects-inline-api-key`**: `api_key` в провайдере, `Authorization = "Bearer ghp_…"` литералом в MCP, `api_key_env = "sk-…"`, `api_key` в JSON предконфигурации → `ConfigInlineSecretException` с `codelab secret set codelab/<id>`; текст исключения не содержит значения; `${secret:…}` и `${ENV}` принимаются (CFG-9).
-* `debug_secrets_test.dart` — **`core/debug-secrets-never-logs-value`**: `MemorySecretStore` со значением `sk-test-0123456789abcdef`, флаг `debug`; запрос к scripted-провайдеру → записи `secrets.lookup` с `found: true` и `source`; в сырых `LogRecord` **до** редакции нет значения, его префикса из 4+ символов, длины и хеша; без флага `secrets.lookup` нет (CFG-10).
+* `provider_preconfig_env_test.dart` — критерий матрицы **`core/provider-preconfig-from-env`**: `TYPE` + `CONFIG` без файлов → каталог с `env/<model>`, `default_model` из JSON; `_BASE64` даёт тот же `CoreConfig`; файл с `default_model` проигрывает окружению, `CODELAB_MODEL` выигрывает у предконфигурации; битый JSON, обе переменные сразу, одна из пары, не base64, неизвестное поле, `api_key` → `ConfigIssue` с источником-переменной (`inlineSecret` у `api_key`); ни в одном сообщении и записи лога нет подстроки значения (CFG-12). Флаги `serve` — `apps/codelab_agent/test/serve_flags_test.dart` и `provider_preconfig_process_test.dart`: затеняют переменные (`config.preconfig.shadowed`), один флаг и сочетание с `--provider` — `64`.
+* `config_inline_secret_test.dart` — **`core/config-warns-inline-api-key`** (с 8.11 заменил `core/config-rejects-inline-api-key`, решение пользователя 2026-11-04 R8-4): литеральный `api_key` в файле — предупреждение `config.secret.in_file` с `codelab secret migrate` и ключ провайдера; токен у элемента `mcp.servers` — предупреждение, поле не применяется; текст без значения; `${secret:…}` и `${ENV}` принимаются (CFG-9, п. 1). До 8.11 тот же файл проверял отказ загрузки `ConfigInlineSecretException` (design.md change `add-agent-secret-store`, D10, D12). Отказ для `api_key` в JSON предконфигурации — `provider_preconfig_env_test.dart`.
+* `debug_secrets_test.dart` — **`core/debug-secrets-never-logs-value`**: `MemorySecretStore` со значением `sk-test-0123456789abcdef` под `api_key_secret` провайдеров `openai` и `org`, резолвер с `debug`; две функции `createRoutedStreamFunction` над одним резолвером на фейковом `http.Client` → записи `secrets.lookup` с `found: true` по порядку `memory`, `memory`, `cache`, `cache`, повторный ход первой функции новых записей не добавляет; в сырых `LogRecord` **до** редакции нет значения, его подстрок из 4+ символов, длины и SHA-256 (hex и base64); без флага `secrets.lookup` нет (CFG-10).
 * `settings_registry_complete_test.dart` — **`core/settings-registry-complete`**: алгоритм §17.5.8; отдельный случай — фиктивный ключ, добавленный в схему теста, роняет проверку с текстом про `SettingDescriptor` (CFG-19).
 * `mcp_reconnect_test.dart` — **`core/mcp-reconnect-after-crash`**: fake-транспорт закрывается после подключения; fake `Clock` и `Random(0)` → задержки 1, 2, 4, 8, 16, 30, 30 с (с джиттером в пределах +20 %, не больше 30 с); после успеха и 10 с жизни счётчик сброшен; вызов во время простоя → текст `not connected`; вызов в полёте при падении → `disconnected during the call`; после переподключения с новым `tools/list` реестр меняется только на границе шага (CFG-17).
-* `mcp_list_changed_test.dart`: `notifications/tools/list_changed` дважды за шаг → один re-list после текущего, замена на границе; `prompts/list_changed` → `CommandsChanged`; коллизия имени → сервер `disabled` с причиной.
-* Golden ACP-фикстура **`acp/slash-mcp-list`**: `session/new` с одним `session`-сервером и конфигом с двумя серверами (один `enabled = false`); `session/prompt` с `/mcp list` → один `agent_message_chunk` с таблицей §17.5.7 побайтово, `stopReason: end_turn`, запросов к scripted-модели нет, журнал без новых записей; `/mcp disable github` → `STATE disabled`; `/mcp frob` → текст `Usage: …` (CFG-18).
-* `config_reload_test.dart`: правка `permissions.deny` → действует на следующем вызове; `agent.default_model` → только новые сессии; `logging.file` → `Restart required: logging.file` в `/config reload` и `/status`; невалидная правка → прежний снимок, ни одного кадра клиенту, `/status` со строкой `Config: reload failed`; правка списка моделей → `config_option_update` с полным снимком (CFG-15, CFG-16).
-* `mcp_apply_config_test.dart`: изменён `url` одного сервера → переподключён только он; удалён сервер → инструменты убраны после вызовов в полёте; одноимённый `session`-сервер не тронут; backoff неизменённого сервера продолжается (CFG-17).
-* `config_watcher_test.dart` (`codelab_agent_io`): три записи за 200 мс → одна перезагрузка через 300 мс после последней; замена через rename замечена; файл появился после старта — замечен; та же sha256 — без перезагрузки; режим опроса на временном каталоге.
-* `config_writer_test.dart`: комментарии (в том числе хвостовые), пустые строки, порядок ключей и CRLF сохранены побайтово вне изменённого узла; новый ключ — в конец своего отображения, недостающие предки — в блочном стиле с отступом файла; правка внутри flow-списка `[…]` сохраняет flow-стиль; строки `off`, `yes`, `${VAR}` записаны в кавычках и читаются обратно строками; элемент `mcp.servers` находится и заменяется по `name`, новый — в конец списка; `RemoveTable("providers.local")` удаляет `providers.local` вместе с `models."qwen2.5-coder-32b"` и комментариями внутри, комментарий над следующим ключом сохранён; `RemoveTable` несуществующего ключа и ключа вне схемы → `ConfigException`; сегмент в кавычках (`models."qwen2.5-coder-32b"`) находится и создаётся одним ключом; отказ `YamlEditor` → `ConfigException` с `edit the file manually`, файл не изменён; невалидный итог → файл не изменён; правка файла между `read` и `apply` → `ConfigConflictException`; `mcp.servers` в недоверенный проектный слой → отказ с подсказкой `--local`; `trusted_projects` в проектный слой → отказ(CFG-13).
-* `config_writer_atomic_test.dart`: сбой после записи tmp и до rename → исходный файл цел, tmp удалён при следующей записи; символическая ссылка сохраняется, правится цель.
-* `secret_store_backends_test.dart`: fake `ProcessRunner` — значение секрета ни разу не встречается в argv `security` и `secret-tool`, только в stdin; таймаут 10 с → `SecretStoreUnavailableException`; `auto` без D-Bus → `env` с предупреждением; `file` с правами `0644` → отказ чтения (CFG-10, CFG-11). Реальные хранилища ОС — интеграционные тесты с тегом `os-keychain`, вне обязательного CI.
-* `secret_resolver_test.dart`: `CODELAB_SECRET_CODELAB_OPENAI` побеждает хранилище; отсутствие → `AgentError` с текстом `codelab secret set`; `invalidate` после перезагрузки перечитывает; коллизия `envOverride` при `secret set` отклонена; `SecretNames.forMcp("GitHub", "Authorization") == "codelab/mcp/github/authorization"` и `suggestFor` для пути MCP-заголовка дают одно имя, проходящее `pattern`.
-* `cli_config_commands_test.dart`: `codelab config set|get|unset|path|check`, `provider add --api-key-stdin` (секрет записан, в конфиге только имя), `mcp add|list|remove`, `secret set` со значением аргументом → код 64.
+* `mcp_supervisor_state_test.dart` (`codelab_agent_mcp`): состояния и `McpServerSummary` (`origin`, `transport`, `lastError`, `retryIn`), `reconnect`, `setEnabled`, закрытие сессии во время ожидания повтора и подключение, завершившееся после `close()` (D11).
+* `mcp_list_changed_test.dart`: `notifications/tools/list_changed` дважды за шаг → один re-list после текущего, замена на границе; коллизия имени → сервер `disabled` с причиной; `prompts/list_changed` → `CommandsChanged` — вместе с MCP prompts как командами (change встроенных команд).
+* Golden ACP-фикстура **`acp/slash-mcp-list`**: `session/new` с одним `session`-сервером и конфигом с двумя серверами (один `enabled = false`); `session/prompt` с `/mcp list` → один `agent_message_chunk` с таблицей §17.5.7 побайтово, `stopReason: end_turn`, запросов к scripted-модели нет, журнал без новых записей; `/mcp disable github` → `STATE disabled`; `/mcp frob` → текст `Usage: …` (CFG-18). Обновлённая фикстура `acp/available-commands-no-tools` — `mcp` первой, затем шаблон (D12).
+* `builtin_commands_test.dart` (ядро, `test/commands/`): `/config reload|check`, `/mcp …`, тексты побайтово, ответ без модели и без записей журнала, `/config` без `ConfigSource` и при `configCommand: false` уходит модели, `session/cancel` во время `/config reload`, параллельный `prompt` во время `/mcp reload` отклонён, `/mcp reload` после отложенной замены (D12, R0-3).
+* `agent_config_paths_test.dart` (ядро, `test/permissions/`, и `codelab_agent_io`): PERM-11 по `agentConfigPaths` — `bypass` и `autopilot`, symlink dotfiles, проектный конфиг корня запуска из сессии с другим `cwd`, файл `--config`, `exec` с `mv`/`rename`/`ln -sf`/`install`/`dd of=`/`cd ~/.codelab && …`, пути `~/…`, `$HOME/…`, `${CODELAB_HOME}/…`, `../../.codelab/…`, регистр; подмена каталога ссылкой (`ln -s sub .codelab`, затем `write sub/config.yaml`); `agentConfigPathsFor` совпадает с файлами наблюдателя (OQ2, D8).
+* `config_reload_notifications_test.dart` (`codelab_agent_acp`): `config_option_update` после перезагрузки на каждую живую сессию, ни одного кадра при неудаче, ничего до ответа `session/new` (ACP-8).
+* `config_reload_test.dart` (ядро, `test/runtime/`, фейковый `ConfigSource` и `FakeClock`): правка `permissions.*` и `trusted_projects`, stdio-сервер без прежнего `sameConnection` (в том числе `http` → `stdio`) → не применяются, в `pendingRestartKeys` (R0-1); проект, добавленный в `trusted_projects`, — без своих провайдеров и серверов до перезапуска, снятое доверие — тоже до перезапуска; R0-4 — смена адреса провайдера с ключом и HTTP-сервер со ссылкой на секрет отложены, новые модели применены; HTTP-сервер и удаление применяются; `agent.default_model` → только новые сессии; `config.reload.model_orphaned`; `modelsFor` не вызывается при сборке; `logging.file` → `restartRequiredKeys` и `pendingRestartKeys`; невалидная правка → прежний снимок, ни одного события сессиям, `configStatus().lastIssues`; правка списка моделей → `ModelOptionsChanged`; коалесценция; `dispose` во время загрузки; сессия в окне создания (CFG-15, CFG-16; D8).
+* `secret_resolver_test.dart` (ядро): `invalidate` сбрасывает кэш; поиск, начатый до `invalidate`, в кэш не попадает (поколения, D8).
+* `mcp_apply_config_test.dart` (ядро, `test/runtime/`, fake-коннектор): изменён `url` одного сервера → переподключён только он; удалённый во время хода сервер закрыт после `TurnEnded`; две перезагрузки во время хода → применён последний набор; одноимённый `session`-сервер не тронут; неизменённый сервер в `failed` будится сразу (CFG-17; D10, OQ8).
+* `config_watcher_test.dart` (`codelab_agent_io`): три записи за 200 мс → один сигнал через 300 мс после последней; замена через rename замечена; файл появился после старта — замечен; та же sha256 — без сигнала; режим опроса на временном каталоге (`FakeClock`); события — через шов-фабрику потока, плюс один интеграционный тест настоящего `watch` с пределом 5 с; `config.*` в `config.local.yaml` недоверенного проекта отброшен; события служебных файлов писателя (`*.lock`, `*.lock.stale-*`, `*.tmp-*`) сигнала не дают, запись `ConfigWriter` — один сигнал. `file_config_source_test.dart` — сигнал `changes`, `config.watch: false` без наблюдателя, `close()` без сигналов после него (D7).
+* `config_writer_test.dart`: комментарии (в том числе хвостовые), пустые строки, порядок ключей и CRLF сохранены побайтово вне изменённого узла; новый ключ — по правилу `YamlEditor` (в отсортированном отображении по алфавиту, иначе в конец; R3-2), недостающие предки — в блочном стиле с отступом файла; правка внутри flow-списка `[…]` сохраняет flow-стиль; строки `off`, `yes`, `${VAR}` записаны в кавычках и читаются обратно строками; элемент `mcp.servers` находится и заменяется по `name`, новый — в конец списка; `RemoveTable("providers.local")` удаляет `providers.local` вместе с `models."qwen2.5-coder-32b"` и комментариями внутри, комментарий над следующим ключом сохранён; `RemoveTable` несуществующего ключа и ключа вне схемы → `ConfigException`; сегмент в кавычках (`models."qwen2.5-coder-32b"`) находится и создаётся одним ключом; отказ `YamlEditor` → `ConfigException` с `edit the file manually`, файл не изменён; новая ошибка загрузки итога → файл не изменён, прежняя — предупреждение (R3-1; первая запись в пустой конфиг проходит с предупреждением `agent.default_model: no model is configured; add a provider with at least one model` и событием `config.model.none`, первый провайдер с моделью без `agent.default_model` — без предупреждений, удаление провайдера из `agent.default_model` отклоняется; change `optional-default-model`, D4, D9); правка файла между `read` и `apply` → `ConfigConflictException`; `mcp.servers` в недоверенный проектный слой → отказ с подсказкой `--local`; `trusted_projects` в проектный слой → отказ; занятый lock → `ConfigConflictException`, lock старше 10 с — `config.write.stale_lock`; литеральный `Authorization` в `UpsertMcpServer` → `ConfigInlineSecretException` с `codelab/mcp/<server>/authorization`; тот же отказ для `config set mcp.servers '…'` и `providers.*.headers` по нормализованному имени; сбой `chmod` → файл цел, tmp удалён; права выставлены до содержимого; гонка снятия устаревшего lock; литералы в непрозрачных поддеревьях, `API_KEY` по нормализованному `inlineSecretKeys`, числовой `token`, дубль `name` в `mcp.servers`; проблемы без ключа не схлопываются, прежняя ошибка ниже вставки — предупреждение; комментарий над следующим ключом оказывается над новым ключом (граница R3-2) (CFG-13; D5).
+* `config_writer_atomic_test.dart`: сбой после записи tmp и до rename → исходный файл цел, tmp удалён при следующей записи; символическая ссылка сохраняется, правится цель; права цели переносятся через фейковый `SecretProcessRunner`; lock снят или отпечаток изменён перед rename → `ConfigConflictException`; брошенный tmp не удаляется без lock; ссылка проектного слоя вне `<cwd>/.codelab` → отказ до lock; > 32 ссылок → `too many symbolic links`; новый `$CODELAB_HOME` — `0700` (D5).
+**Секреты 8.9** (design.md change `add-agent-secret-store`, D12; хранилищ ОС в 1.0 нет):
+* ядро, `codelab_agent_core/test/secrets/`: `secret_names_test.dart` — правило, `envOverride`, `suggestFor` и `forMcp` (`forMcp("GitHub", "Authorization") == "codelab/mcp/github/authorization"`, результат всегда проходит `pattern`); `secret_resolver_test.dart` — `CODELAB_SECRET_CODELAB_OPENAI` побеждает хранилище, кэш найденного, ненайденное не кэшируется, single-flight, недоступность — одно предупреждение на причину, `env()`, `SecretFound.toString()` без значения;
+* ядро, `test/config/`, `test/llm/`, `test/runtime/`: `config_secret_refs_test.dart` (строгие имена, запрещённые позиции `${secret:…}`, `CatalogProvider.key`, шаблоны заголовков и `secretValues` в порядке файла, литерал `$${secret:x}`, недоверенный проект, `secrets.backend`), `config_inline_secret_test.dart` и `config_secrets_test.dart` (CFG-9, п. 1; формат `api_key_env`); `routed_stream_function_secrets_test.dart` — ключ при первом запросе, `auth` без HTTP, хост без резолвера, недоступное хранилище, отмена во время ожидания, сырое значение в теле `401`; `mcp_secret_values_test.dart` — раскрытие перед `connect` при `createSession`, `loadSession` и `setMcpServers`, литерал клиента ACP, `no secret store`, `dispose()` и `close()` во время раскрытия;
+* `codelab_agent_io/test/secrets/`: `env_secret_store_test.dart` (только чтение); `file_secret_store_test.dart` во временном `CODELAB_HOME` на macOS и Linux — `0644` и символическая ссылка → отказ с `chmod 600`, отсутствующий файл не создаётся, права `0600` до записи значения (фейковый `SecretProcessRunner`, в argv только путь), приватный `.secrets-tmp`, владелец `$CODELAB_HOME`, атомарность и очистка брошенных tmp, общая очередь экземпляров, пределы размера, подменённая платформа `windows` → отказ (CFG-10, CFG-11); `secret_process_runner_test.dart` — настоящий `IoSecretProcessRunner` (stdin, код выхода, таймаут); `open_secret_store_test.dart` — `auto` = `env` без процессов, `auto` не выбирает `file`, единая `secretsBackendProblem`; `secret_admin_test.dart`, `host_secrets_test.dart` (резолвер в `Isolate.run`); `codelab_agent_io/test/config/config_loader_test.dart` — `file` на Windows как проблема конфига;
+* `codelab_agent_io/test/cli/`: `secret_commands_test.dart` — все ветки D8 на фейковом `SecretInput`, в том числе значение аргументом → код `64` и отсутствие домашнего каталога; `secret_input_test.dart` — скрытый ввод `StdinSecretInput` (Backspace, Ctrl+D, многострочная вставка, `SIGINT` → `130`, восстановление режимов); `config_commands_test.dart` — строки `note:`/`warning:` секретов в `config check` (D9); `codelab_setup/test/secret_exports_test.dart` — реэкспорты моста;
+* процессные тесты с `env` или `file` во временном `CODELAB_HOME`: `apps/codelab_agent/test/secret_store_process_test.dart` (ключ из `CODELAB_SECRET_*`, ошибка хода, `--debug-secrets`, `--llm-script` не открывает `secrets.yaml`, `secrets.backend.plaintext`, `keychain` → `64`), `agent_host_secrets_test.dart` (`AgentHost` для `--stdio` и `--ws`), `secret_command_process_test.dart`, `serve_flags_test.dart`; `apps/codelab_cli/test/secret_command_test.dart` и `e2e/secret_command_test.dart` (совпадение вывода `codelab-agent secret` и `codelab secret`, флаги подключения и ошибки разбора с `secret`).
+
+Тесты хранилищ ОС (тег `os-keychain`, argv `security`/`secret-tool`, таймаут 10 с) — черновик
+`add-agent-os-secret-backends` (D13). `invalidate` после перезагрузки и `provider add --api-key-stdin`
+— 8.10.
+* `cli_config_commands_test.dart` (8.10, `codelab_agent_io/test/cli/`): `config path|get|set|unset`, `provider add --api-key-stdin` на фейковом `SecretInput` (секрет записан, в конфиге только имя), `provider list|remove`, `mcp add|list|remove`, повтор при конфликте, предупреждение о замене существующего секрета (D6); `config_output_test.dart` — маскирование R0-2 по веткам (`inlineSecretKeys`, секретные заголовки и `env`, ссылки как есть, `<from env:…>`, userinfo URL, непрозрачные поддеревья `<opaque: edit the file>`); `config_edit_test.dart` (ядро) — `ConfigTarget`, `ConfigSnapshot.get`, равенство правок (D5); `codelab_setup/test/config_write_exports_test.dart` — реэкспорты моста.
+* Процессные тесты 8.10 (Dart VM, `Timeout(Duration(seconds: 60))`, временные каталоги; D15): `apps/codelab_agent/test/config_reload_process_test.dart` (правка `config.yaml` работающего `serve --stdio` → `config_option_update` не позже 5 с; битая правка → кадров нет), `config_write_command_process_test.dart`; `apps/codelab_cli/test/e2e/config_write_command_test.dart` — совпадение вывода `codelab` и `codelab-agent`; `codelab_embedded/test/embedded_config_reload_test.dart` — источник закрыт после `dispose`, наблюдателей и процессов не осталось.
+
+**Секреты в конфиге 8.11** (design.md change `add-config-literal-secrets-and-migrate`; решения
+пользователя R8-1…R8-11):
+* ядро, `codelab_agent_core/test/`: `config/inline_secrets_test.dart` — `literalSecretTag` по каждому шаблону, литеральные части между `${…}`, DSN с паролем, разрезанным подстановкой, белый список, враждебный 1 МиБ не дольше 2 с, `findInlineSecrets` пп. 1–3 (D3); `config/config_secret_in_file_test.dart` — предупреждения файловых слоёв по одному шаблону, `CODELAB_CONFIG` с `codelab secret set <name>`, недоверенный проект без `in_file`, предконфигурация без изменений, маркер `UnusableKeyRef` без проблемы формата, R8-6 через слои, выключенный сервер, дескриптор `providers.*.api_key` (D4); `config/config_inline_secret_test.dart` — `core/config-warns-inline-api-key`; `llm/literal_api_key_test.dart` — литеральный ключ без резолвера, вычистка из текста `401`, ссылка п. 3 — `auth` без HTTP (D2, D4); `runtime/config_reload_literals_test.dart` — литералы в правиле R0-4 (D12);
+* `codelab_agent_io/test/`: `cli/config_check_secret_warning_test.dart` — `warning:` в `config check`, маркер не ищется в хранилище; `cli/provider_commands_test.dart` — `key: literal in config file`, `--api-key-secret` удаляет литерал (R8-6); `cli/config_get_masking_test.dart`, `cli/config_output_test.dart` — маскирование литерального `api_key`, ссылки п. 3 и `args` (D5, R4-6); `config/literal_secret_rule_test.dart` — отказ записи по шаблону в `headers`, `env`, `args` (R1-1, OQ3, R8-5); `secrets/secret_migrator_test.dart` и `cli/secret_migrate_command_test.dart` — `secret migrate`: слои, `--dry-run`, бэкенд `env`, конфликт и `--force`, суффиксы `-2`, `cannot be stored`, недоверенный проект (H4), повтор после сбоя записи, итог слияния R8-10 и R8-11 (D7); `cli/mcp_add_stdin_test.dart` — `--header-stdin|--env-stdin|--header-scheme` (D11); `cli/secret_commands_test.dart` — имя, похожее на значение (D6);
+* мосты: `codelab_setup/test/secret_migrate_exports_test.dart`; `codelab_embedded/test/secrets_in_config_test.dart` — `EmbeddedAgent.secretsInConfig` и мигратор из `io.dart` (D8);
+* процессы и e2e: `apps/codelab_agent/test/config_invalid_process_test.dart` (литерал — старт с предупреждением, значения нет в stderr и логе), `secret_migrate_process_test.dart`, `mcp_add_stdin_process_test.dart`; `apps/codelab_cli/test/e2e/secret_migrate_test.dart`, `mcp_add_stdin_test.dart`, `config_get_args_masking_test.dart` — вывод, коды и байты файла совпадают с `codelab-agent`, строка о 1.0 в справке (R8-7, D13);
+* codelab-app: `apps/codelab_desktop/test/features/workbench/application/secret_migration_cubit_test.dart`, `secret_migration_turns_test.dart`, `test/features/workbench/presentation/secret_migration_banner_test.dart`, `test/app/embedded_secret_offer_test.dart`, `app_scope_embedded_test.dart` (D8).
 
 ---
 

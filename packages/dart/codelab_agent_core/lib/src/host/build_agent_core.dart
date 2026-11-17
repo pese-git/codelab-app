@@ -10,9 +10,9 @@ import '../tools/builtin/exec.dart';
 import '../tools/builtin/ls.dart';
 import '../tools/builtin/read.dart';
 import '../tools/builtin/search.dart';
-import '../tools/builtin/update_plan.dart';
 import '../tools/builtin/write.dart';
 import '../tools/registry.dart';
+import '../tools/tasks/task_tools.dart';
 import '../util/logger.dart';
 import 'host_profile.dart';
 import 'services.dart';
@@ -59,12 +59,36 @@ final class BuiltAgentCore {
 /// тестах. Несовместимые сервисы (журнал в памяти при `sessionPersistence`,
 /// env без shell при `shellExec`) — `HostWiringException`;
 /// `CoreConfig.compaction.enabled: false` выключает capability `compaction`.
+///
+/// Живая перезагрузка (design.md change `add-config-writer-and-reload`, D8):
+/// [streamFunction] остаётся функцией модели начального снимка, начальный
+/// каталог — `AgentCoreServices.models`. [modelsFor] нужен, если передан
+/// `AgentCoreServices.config` (иначе `HostWiringException`), и вызывается
+/// только на снимках, применённых перезагрузкой, — при сборке нет; хост с
+/// источником строит начальную пару одним вызовом того же замыкания. Без
+/// источника [modelsFor] не требуется и не вызывается. [configCommand] `false`
+/// не объявляет и не исполняет встроенную `/config` (`serve --ws`, R0-3).
 BuiltAgentCore buildAgentCore({
   required HostProfile profile,
   required AgentCoreServices services,
   required CoreConfig config,
   required StreamFunction streamFunction,
+  ConfiguredModels Function(CoreConfig config)? modelsFor,
+  bool configCommand = true,
 }) {
+  if (services.config != null && modelsFor == null) {
+    throw const HostWiringException(
+      'AgentCoreServices.config требует modelsFor: перезагрузка строит '
+      'функцию модели и каталог по новому снимку',
+    );
+  }
+  // D21: без `modelsFor` функцию модели и каталог сессии папки не построить.
+  if (services.projectConfig != null && modelsFor == null) {
+    throw const HostWiringException(
+      'AgentCoreServices.projectConfig требует modelsFor: сессия другой '
+      'папки получает функцию модели и каталог по своей конфигурации',
+    );
+  }
   final narrowed = profile.narrowed({
     if (services.gate == null)
       HostCapability.interactiveApproval: const CapabilityOff(
@@ -78,6 +102,14 @@ BuiltAgentCore buildAgentCore({
       HostCapability.compaction: const CapabilityOff('выключено конфигом'),
     if (services.mcp == null)
       HostCapability.mcp: const CapabilityOff('сервис MCP не передан'),
+    // Навыки (design.md change `add-agent-skills`, D11, D16, Q44, Q45):
+    // `skills.enabled` capability НЕ сужает. Настройка принадлежит папке
+    // сессии: рантайм читает её из конфигурации сессии и для сессий с
+    // `enabled: false` отдаёт `SkillCatalog.empty`, не вызывая порт. Если
+    // сузить capability по конфигу корня запуска, сессии доверенной папки
+    // `/B` с `enabled: true` навыков не получили бы. Сужает только профиль
+    // (`profile.<name>.skills: off`); без порта (`skillFiles == null`)
+    // capability остаётся `on`, сессия без навыков.
   });
   // §10.8: журнал на постоянном носителе требует хранилища, которое не
   // теряет записи при выходе процесса.
@@ -119,7 +151,12 @@ BuiltAgentCore buildAgentCore({
   register('read', () => registry.register(ReadTool()));
   register('write', () => registry.register(WriteTool()));
   register('edit', () => registry.register(EditTool()));
-  register('update_plan', () => registry.register(UpdatePlanTool()));
+  // Список задач вместо update_plan (change `add-subagents-and-tasks`, D13):
+  // четыре инструмента всегда; секцию промпта включает якорь task_create.
+  register('task_create', () => registry.register(TaskCreateTool()));
+  register('task_update', () => registry.register(TaskUpdateTool()));
+  register('task_list', () => registry.register(TaskListTool()));
+  register('task_get', () => registry.register(TaskGetTool()));
   if (narrowed.isOn(HostCapability.shellExec)) {
     register('exec', () => registry.register(ExecTool()));
   }
@@ -164,6 +201,12 @@ BuiltAgentCore buildAgentCore({
       config: config,
       registry: registry,
       stream: streamFunction,
+      // Нужен и перезагрузке корня (`config`), и сессиям других папок
+      // (`projectConfig`, D21): порт может быть без источника.
+      modelsFor: services.config == null && services.projectConfig == null
+          ? null
+          : modelsFor,
+      configCommand: configCommand,
     ),
   );
 }

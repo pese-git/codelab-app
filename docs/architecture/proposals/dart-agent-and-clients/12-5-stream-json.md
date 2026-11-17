@@ -139,7 +139,7 @@ flowchart LR
 
 `usage` (в `turn_end` и `result`) — `{"input","output","cacheRead","cacheWrite","reasoning",
 "cost":{"amount":"0.0041","currency":"USD"}|null,"context":{"used","size"}|null}`. Источник —
-`UsageView` (§12.1.5): в `turn_end` — `lastTurn` и `lastTurnCost`; в `result` — сумма по ходам
+`UsageView` (§12.1.5): в `turn_end` — `lastTurn` (токены и `cost`); в `result` — сумма по ходам
 прогона, если у всех ходов `usage != null`, иначе `null`. Пока `add-usage-extension` не принят,
 `usage` всегда `null`, нулей вместо неизвестного нет (VIEW-6). Сумма денег — строка десятичной
 дроби из `Money.micros`, а не число с плавающей точкой.

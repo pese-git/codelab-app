@@ -1,0 +1,491 @@
+{
+  "id": "acp/skill-script-exec",
+  "spec": [
+    "08-Tool Calls.md#requesting-permission",
+    "10-Terminal.md#executing-commands"
+  ],
+  "description": "Скрипт навыка проекта .codelab/skills/pdf/scripts/extract.py: exec с cwd — каталог навыка (внутри рабочей папки) задаёт обычный вопрос уровня exec; после allow_once агент шлёт terminal/create с cwd каталога навыка и tool_call_update completed (E-06; design.md change add-agent-skills, D5, решения Q17, Q24 (а)). Второй шаг — рекомендованный абсолютный путь скрипта с cwd рабочей папки (Q25, Q26) — фикстурой не выражается: scripted-модель подставляет ${cwd} только в text и thinking, а не в аргументы вызова, поэтому абсолютный путь временной папки прогона фикстуре неизвестен; оба шага проверяет codelab_agent_acp/test/skill_script_exec_test.dart на фейковом клиенте.",
+  "goals": [
+    "E-06"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true,
+    "files": {
+      ".codelab/skills/pdf/SKILL.md": "---\nname: pdf\ndescription: Extract text from PDF files\n---\nRun scripts/extract.py on the PDF.\n",
+      ".codelab/skills/pdf/scripts/extract.py": "print('page 1')\n"
+    },
+    "config": {
+      "trusted_projects": [
+        "${cwd}"
+      ]
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "PDF"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "exec",
+              "arguments": {
+                "command": "python3 scripts/extract.py",
+                "cwd": ".codelab/skills/pdf"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Готово."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs и terminal и запрашивает версию 1",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": true,
+              "writeTextFile": true
+            },
+            "terminal": true
+          },
+          "clientInfo": {
+            "name": "fixture-client",
+            "version": "0.0.0"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ initialize; поля проверяет acp/initialize-capabilities",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "$partial": {
+            "protocolVersion": 1
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "клиент создаёт сессию в доверенном проекте с навыком из .codelab/skills",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "session/new",
+        "params": {
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/new; команды идут отдельным кадром после него (ACP-8)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "$partial": {
+            "sessionId": {
+              "$capture": "sessionId"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "список команд (подробно — acp/skill-command-listed)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "note": "пользователь просит извлечь текст",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Extract text from the PDF"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": {
+              "$contains": "extract.py"
+            },
+            "kind": "execute",
+            "status": "pending",
+            "rawInput": {
+              "command": "python3 scripts/extract.py",
+              "cwd": ".codelab/skills/pdf"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "обычный вопрос уровня exec: все четыре варианта, включая allow_always; критического шаблона нет (Q24 (а), Q25)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "perm1"
+        },
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "${sessionId}",
+          "toolCall": {
+            "$partial": {
+              "toolCallId": "call_1",
+              "kind": "execute",
+              "status": "pending",
+              "rawInput": {
+                "command": "python3 scripts/extract.py",
+                "cwd": ".codelab/skills/pdf"
+              }
+            }
+          },
+          "options": [
+            {
+              "optionId": "allow_once",
+              "name": {
+                "$any": "Allow once"
+              },
+              "kind": "allow_once"
+            },
+            {
+              "optionId": "allow_always",
+              "name": {
+                "$any": "Always allow"
+              },
+              "kind": "allow_always"
+            },
+            {
+              "optionId": "reject_once",
+              "name": {
+                "$any": "Reject"
+              },
+              "kind": "reject_once"
+            },
+            {
+              "optionId": "reject_always",
+              "name": {
+                "$any": "Always reject"
+              },
+              "kind": "reject_always"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${perm1}",
+        "result": {
+          "outcome": {
+            "outcome": "selected",
+            "optionId": "allow_once"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "Q24 (а): каталог навыка проекта внутри рабочей папки — terminal/create с cwd навыка, как обычно",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "create1"
+        },
+        "method": "terminal/create",
+        "params": {
+          "$partial": {
+            "sessionId": "${sessionId}",
+            "command": "/bin/sh",
+            "args": [
+              "-c",
+              "python3 scripts/extract.py"
+            ],
+            "cwd": "${cwd}/.codelab/skills/pdf"
+          }
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${create1}",
+        "result": {
+          "terminalId": "term_1"
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "терминал встраивается в вызов",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "terminal",
+                "terminalId": "term_1"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "wait1"
+        },
+        "method": "terminal/wait_for_exit",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "term_1"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${wait1}",
+        "result": {
+          "$partial": {
+            "exitCode": 0
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "out1"
+        },
+        "method": "terminal/output",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "term_1"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${out1}",
+        "result": {
+          "output": "page 1\n",
+          "truncated": false
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "rel1"
+        },
+        "method": "terminal/release",
+        "params": {
+          "sessionId": "${sessionId}",
+          "terminalId": "term_1"
+        }
+      },
+      "note": "release всегда в конце (ACP-9)"
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${rel1}",
+        "result": {
+          "$oneOf": [
+            null,
+            {}
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": {
+              "$any": [
+                {
+                  "type": "terminal",
+                  "terminalId": "term_1"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Готово."
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

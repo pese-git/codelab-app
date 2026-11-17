@@ -1,13 +1,86 @@
+import 'dart:convert';
+
 import 'package:codelab_desktop/app/app_scope.dart';
+import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snapshot_store.dart'
+    show kWorkspaceSnapshotPrefsKey;
+import 'package:codelab_desktop/app/navigation/settings_page.dart';
+import 'package:codelab_desktop/core/platform/external_link_opener.dart';
+import 'package:codelab_desktop/core/platform/user_shell_launcher.dart'
+    show UserShellLauncher;
+import 'package:codelab_desktop/core/platform/project_folder_picker.dart'
+    show ProjectFolderPicker;
+import 'package:codelab_desktop/features/workbench/application/connection_cubit.dart'
+    show stdioConnectionProfileOf;
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart'
+    show codelabAgentStdioProfile;
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show ProfileSecrets, ProfileStore, ProjectFiles;
+import 'package:codelab_desktop/features/settings/application/provider_settings_session.dart'
+    show ProviderSettingsOpener;
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:cherrypick/cherrypick.dart';
+import 'package:codelab_embedded/codelab_embedded.dart'
+    show EmbeddedAgent, EmbeddedAgentOpener;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart'
     show TestWidgetsFlutterBinding, addTearDown;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'in_memory_profile_store.dart';
+
+/// stdio-профиль, который тестовая сборка делает профилем по умолчанию.
+///
+/// Почему: до change `add-app-settings-shell` форма подключения стартовала с
+/// `codelabAgentStdioProfile`, и сотни проверок подключения опираются на «Connect
+/// запускает stdio-агента через `stdioTransportFactory`». Теперь профиль по
+/// умолчанию — встроенный агент (D5), поэтому тестовая сборка явно хранит
+/// выбор этого профиля, как это делает пользователь радиокнопкой
+/// (`codelab.connection.default_profile`). Тесты правила «нет выбора —
+/// встроенный агент» передают `stdioDefault: false`.
+final testStdioProfile = stdioConnectionProfileOf(codelabAgentStdioProfile);
+
+/// Открыватель встроенного агента по умолчанию в тестах: сразу падает.
+///
+/// Почему: настоящий `localEmbeddedAgentOpener` без заданного окружения читает
+/// реальный `~/.codelab` разработчика, и исход теста зависел бы от машины.
+/// Для чего: тесты, которым встроенный агент не нужен, получают
+/// предсказуемый `ConnectionFailed` без ввода-вывода и таймеров.
+/// Как использовать: подставляется `CodeLabTestBinding`, если не переданы
+/// ни `embeddedOpener`, ни `environment`.
+Future<EmbeddedAgent> _embeddedAgentNotInThisTest({
+  required String cwd,
+  required String hostProfile,
+}) async => throw StateError('the embedded agent is not part of this test');
+
+/// Выбор папки по умолчанию в тестах: пользователь закрыл диалог.
+final class _NoFolderPicker implements ProjectFolderPicker {
+  const _NoFolderPicker();
+
+  @override
+  Future<String?> pickFolder({String? initialDirectory}) async => null;
+}
+
+/// Снимок рабочего пространства с одним выбранным проектом [project] и без
+/// открытых сессий.
+String _snapshotOf(String project) => jsonEncode({
+  'version': 1,
+  'windows': {
+    'main': {'projectDirectory': project, 'openSessions': <Object?>[]},
+  },
+});
+
+/// Тестовая сборка графа app.
+///
+/// Почему: без выбранного проекта у app нет папки агента и сессий
+/// (require-project-folder/design.md, D1, D20), поэтому тесты, которые
+/// подключаются и создают сессии, должны явно начинать с проекта.
+///
+/// Как использовать: [project] — путь стартового проекта; он подкладывается
+/// снимком рабочего пространства и выбирается при создании `SettingsCubit`
+/// (ждать выбора — `SettingsCubit.projectRestored`). Без [project] проект не
+/// выбран.
 final class CodeLabTestBinding {
   CodeLabTestBinding({
     FakeAcpTransport? transport,
@@ -15,6 +88,19 @@ final class CodeLabTestBinding {
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
     Map<String, Object> preferences = const {},
     DirectoryExists? directoryExists,
+    EmbeddedAgentOpener? embeddedOpener,
+    Map<String, String>? environment,
+    SettingsPages? settingsPages,
+    ProfileStore? profileStore,
+    ProfileSecrets? profileSecrets,
+    ProviderSettingsOpener? providerSettingsOpener,
+    Future<bool> Function(String cwd)? providerSetupProbe,
+    UserShellLauncher? userShellLauncher,
+    ExternalLinkOpener? externalLinkOpener,
+    ProjectFiles? projectFiles,
+    bool stdioDefault = true,
+    String? project,
+    ProjectFolderPicker? projectFolderPicker,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
     // а у плагина в тестах нет реализации канала: без моков каждая загрузка
@@ -24,7 +110,16 @@ final class CodeLabTestBinding {
     // after test completion»). Пустое хранилище убирает обращение к каналу.
     // [preferences] — сохранённое прошлым запуском (недавние проекты,
     // снимок рабочего пространства).
-    SharedPreferences.setMockInitialValues(preferences);
+    SharedPreferences.setMockInitialValues({
+      if (stdioDefault)
+        'codelab.connection.default_profile': testStdioProfile.id,
+      // Стартовый проект — снимок рабочего пространства, который app
+      // восстанавливает обычным `restoreProject`, как после перезапуска
+      // (require-project-folder/design.md, D20). Явный [preferences]
+      // переопределяет его.
+      if (project != null) kWorkspaceSnapshotPrefsKey: _snapshotOf(project),
+      ...preferences,
+    });
     scope = createCodeLabRootScope(
       transportFactory: () => this.transport,
       stdioTransportFactory: stdioTransportFactory,
@@ -32,6 +127,51 @@ final class CodeLabTestBinding {
       // Тесты работают с вымышленными путями вроде `/work/app`; по
       // умолчанию любая папка считается существующей.
       directoryExists: directoryExists ?? (_) async => true,
+      // Без своего окружения настоящий открыватель читал бы реальный
+      // `~/.codelab/config.yaml` разработчика: исход теста зависел бы от
+      // машины, а открытый агент оставлял бы таймер опроса конфига
+      // (`ConfigWatcher`) в fake-async зоне. Поэтому по умолчанию встроенный
+      // агент не открывается; тест с временным `CODELAB_HOME` передаёт
+      // `environment:` и получает настоящий открыватель на изолированной
+      // папке.
+      embeddedOpener:
+          embeddedOpener ??
+          (environment == null ? _embeddedAgentNotInThisTest : null),
+      environment: environment,
+      settingsPages: settingsPages,
+      // Файл профилей в `testWidgets` зависал бы в fake-async зоне: тесты
+      // работают с хранилищем в памяти, а настоящий файл проверяет
+      // `app_scope_profiles_test.dart`.
+      profileStore:
+          profileStore ??
+          InMemoryProfileStore([if (stdioDefault) testStdioProfile]),
+      // Настоящее хранилище читало бы `$CODELAB_HOME` разработчика: тесты
+      // передают двойник (`FakeProfileSecrets`) либо остаются с хранилищем
+      // «не открыто».
+      profileSecrets: profileSecrets,
+      // Настоящая сессия читала бы `$CODELAB_HOME` разработчика: тесты
+      // страницы «Providers» передают двойник, остальные не открывают её.
+      providerSettingsOpener:
+          providerSettingsOpener ??
+          (access, env) async =>
+              throw StateError('provider settings are not part of this test'),
+      // Настоящая функция читала бы `$CODELAB_HOME` разработчика: по
+      // умолчанию «провайдер не нужен» (прежнее поведение баннера).
+      providerSetupProbe: providerSetupProbe ?? (cwd) async => false,
+      // Настоящий `pty2` в тестах не запускается: по умолчанию — порт по
+      // умолчанию app (без вкладок он ничего не делает), тесты терминала
+      // передают `FakeUserShellLauncher`.
+      userShellLauncher: userShellLauncher,
+      // Настоящий `url_launcher` открывал бы браузер: тесты ссылок терминала
+      // передают `FakeExternalLinkOpener`.
+      externalLinkOpener: externalLinkOpener,
+      // Без подмены «Open folder…» открыл бы системный диалог.
+      projectFolderPicker: projectFolderPicker ?? const _NoFolderPicker(),
+      // Настоящий `IoProjectFiles` читал бы диск разработчика и зависал бы в
+      // fake-async зоне: панель Files в тестах есть, только если тест передал
+      // двойник (`FakeProjectFiles`).
+      projectFiles: projectFiles,
+      projectFilesEnabled: projectFiles != null,
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own

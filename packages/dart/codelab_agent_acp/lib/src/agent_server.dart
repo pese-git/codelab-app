@@ -14,6 +14,7 @@ import 'connection/outbound_queue.dart';
 import 'connection/pending_requests.dart';
 import 'prompt_content.dart';
 import 'session_bridge.dart';
+import 'usage_accounting.dart';
 
 /// Таймауты запросов агента к клиенту (§13.9).
 final class AcpTimeouts {
@@ -38,12 +39,17 @@ final class AcpTimeouts {
 /// агент на одной машине, `ls` и `search` идут по локальной ФС; по
 /// WebSocket его нет, и хост выключает `fileListing` при сборке ядра
 /// (design.md change `add-dart-agent-acp-server`, D5).
+///
+/// Встроенный агент (профили `embedded-*`) передаёт [localEnv]: файлы,
+/// команды и листинг исполняет сам хост (design.md change
+/// `add-embedded-agent-mode`, D4; `agent-core-architecture` §13.1).
 final class AcpServerConfig {
   const AcpServerConfig({
     required this.agentInfo,
     this.detachGrace = const Duration(seconds: 30),
     this.timeouts = const AcpTimeouts(),
     this.localListing,
+    this.localEnv,
   });
 
   /// `agentInfo` ответа `initialize`.
@@ -55,6 +61,29 @@ final class AcpServerConfig {
 
   /// Локальный env для `listDir` сессии с рабочей папкой `cwd`.
   final ExecutionEnv Function(String cwd)? localListing;
+
+  /// Фабрика env сессии по её `cwd`, которую задаёт хост встроенного агента.
+  ///
+  /// Почему: клиент и агент в одном процессе, и гонять файлы и команды через
+  /// `fs/*` и `terminal/*` того же процесса незачем (§10.4 `shellExec:
+  /// transport local`). Объявленные клиентом `fs` и `terminal` разрешают
+  /// агенту вызывать эти методы, но не обязывают (`09-File System.md`,
+  /// `10-Terminal.md`), поэтому `initialize` не меняется (D4).
+  ///
+  /// Для чего: если задана, `session/new` и `session/load` ставят сессии env
+  /// `localEnv(cwd)` вместо `AcpClientExecutionEnv` и [localListing]; запросы
+  /// `fs/*` и `terminal/*` клиенту не уходят. Gate остаётся
+  /// `AcpPermissionGate` (вопрос идёт `session/request_permission`),
+  /// containment по `cwd` даёт `BoundedEnv` ядра (ENV-2).
+  ///
+  /// Как использовать: фабрика обязана быть без побочных эффектов (без
+  /// обращения к ФС, без валидации cwd): сервер один раз вызывает её с cwd
+  /// `/` при создании (если в профиле `fileListing`), чтобы проверить
+  /// `env is DirectoryListing`, затем на каждый `session/new` и
+  /// `session/load` — для проверки существования каталога и env сессии.
+  /// Такой env заменяет [localListing]: листинг обязан дать сам `localEnv`,
+  /// иначе `HostWiringException`. Без поля поведение прежнее (§13.9).
+  final ExecutionEnv Function(String cwd)? localEnv;
 }
 
 /// ACP-сервер Dart-агента: проекция `AgentRuntime` в ACP
@@ -77,13 +106,25 @@ final class AcpAgentServer {
   }) : _core = core,
        _logger = logger {
     // Реестр инструментов общий на ядро, а локальный листинг — свойство
-    // хоста: они должны совпадать (design.md, D5).
-    if (core.plan.profile.isOn(HostCapability.fileListing) &&
-        config.localListing == null) {
-      throw const HostWiringException(
-        'capability fileListing требует AcpServerConfig.localListing: '
-        'без него ls и search некуда направить',
-      );
+    // хоста: они должны совпадать (design.md, D5). Env от хоста (`localEnv`)
+    // листинг не получает из оверлея, поэтому реализовать его обязан сам
+    // (change `add-embedded-agent-mode`, D4).
+    if (core.plan.profile.isOn(HostCapability.fileListing)) {
+      final localEnv = config.localEnv;
+      if (localEnv != null) {
+        if (localEnv('/') is! DirectoryListing) {
+          throw const HostWiringException(
+            'capability fileListing requires the env from '
+            'AcpServerConfig.localEnv to implement DirectoryListing: '
+            'ls and search have nowhere to go without it',
+          );
+        }
+      } else if (config.localListing == null) {
+        throw const HostWiringException(
+          'capability fileListing requires AcpServerConfig.localListing: '
+          'ls and search have nowhere to go without it',
+        );
+      }
     }
   }
 
@@ -262,6 +303,13 @@ final class _Connection {
       _logger.log(LogLevel.warning, 'acp.client_capabilities.absent');
     }
     _client = request.clientCapabilities;
+    // D14, D18 Т9, D19 п. 7: что клиент согласовал, видно в журнале (иначе
+    // «нет уведомлений usage» не отличить от ошибки согласования).
+    _logger.log(
+      LogLevel.debug,
+      'acp.extensions.negotiated',
+      fields: {'keys': _negotiatedKeys(request.clientCapabilities.meta)},
+    );
     final persistent = _server._persistent;
     final response = acp.InitializeResponse(
       protocolVersion: const acp.ProtocolVersion(1),
@@ -279,11 +327,72 @@ final class _Connection {
         sessionCapabilities: acp.SessionCapabilities(
           list: persistent ? const acp.SessionListCapabilities() : null,
         ),
+        meta: _codelabExtensions(
+          request.clientCapabilities.meta,
+          _server._runtime.subagents,
+        ),
       ),
       agentInfo: _server.config.agentInfo,
     );
     return Reply(acp.acpInitialize.encodeResult(response));
   }
+
+  /// Блок объявлений расширений CodeLab `agentCapabilities._meta` (design.md
+  /// change `add-subagents-and-tasks`, D9; §13.2).
+  ///
+  /// Почему по объявлению клиента: сторонний клиент (Zed) получает ответ
+  /// «ровно эти поля», поэтому блок уходит, только если клиент прислал объект
+  /// `clientCapabilities._meta.codelab` (пусть пустой). Неизвестные ключи и
+  /// значения клиента игнорируются. `tasks` — всегда; `subagents` с
+  /// `maxDepth` — только если ядро включило субагентов: [subagents] читается
+  /// живым геттером `AgentRuntime.subagents` в момент `initialize` (D37), так
+  /// что перезагрузка конфига меняет блок для следующих соединений.
+  /// `usage` объявляется всегда рядом с `tasks` (change `add-usage-extension`,
+  /// D3, D9).
+  /// `subagentToolCalls` идёт рядом с `subagents` (D47 Т12): вызовы потомков
+  /// проецируются только при включённых субагентах, а состав блока от того,
+  /// что объявил клиент, не зависит; согласие клиента мост читает отдельно
+  /// (D47 Т3).
+  static Map<String, Object?>? _codelabExtensions(
+    Map<String, Object?>? clientMeta,
+    SubagentsInfo? subagents,
+  ) {
+    if (clientMeta?['codelab'] is! Map) {
+      return null;
+    }
+    return {
+      'codelab': {
+        'subagents': ?(subagents == null
+            ? null
+            : {'version': 1, 'maxDepth': subagents.maxDepth}),
+        'subagentToolCalls': ?(subagents == null ? null : {'version': 1}),
+        'tasks': {'version': 1},
+        // Всегда, когда агент отвечает блоком (D3, D9): `usage` не зависит от
+        // субагентов; согласие клиента мост читает через `usageConsent`.
+        'usage': {'version': 1},
+      },
+    };
+  }
+
+  /// Ключи `_meta.codelab` клиента, признанные согласованными (D14, D19 п. 7).
+  ///
+  /// Признаётся известный агенту ключ, согласованный по [codelabKeyAgreed]
+  /// (объект с целым `version: 1`); неизвестные ключи и другие версии
+  /// пропускаются, как и требует forward compatibility
+  /// (`15-Extensibility.md`).
+  static List<String> _negotiatedKeys(Map<String, Object?>? clientMeta) {
+    return [
+      for (final key in _knownExtensionKeys)
+        if (codelabKeyAgreed(clientMeta, key)) key,
+    ];
+  }
+
+  static const _knownExtensionKeys = [
+    'subagents',
+    'subagentToolCalls',
+    'tasks',
+    'usage',
+  ];
 
   /// `session/new` (§13.4) в объёме этапа 4.
   Future<Reply> _sessionNew(Object? params) async {
@@ -292,9 +401,14 @@ final class _Connection {
     await _checkCwd(cwd);
     final mapped = _mapMcpServers(request.mcpServers);
     final wiring = _wire(cwd);
-    final session = await _server._runtime.createSession(
-      SessionSpec(cwd: cwd, ports: wiring.ports, mcpServers: mapped.servers),
-    );
+    final AgentSession session;
+    try {
+      session = await _server._runtime.createSession(
+        SessionSpec(cwd: cwd, ports: wiring.ports, mcpServers: mapped.servers),
+      );
+    } on ProjectConfigException catch (error) {
+      throw _projectConfigInvalid(error, cwd: cwd);
+    }
     // Пропуски пишутся после создания: id сессии известен только теперь.
     _logMcpSkips(session.id.value, mapped.skips);
     wiring.link.sessionId = session.id.value;
@@ -308,9 +422,49 @@ final class _Connection {
     );
     return Reply(
       acp.acpSessionNew.encodeResult(response),
-      // Команды шаблонов сессии (D9 change `add-agent-project-files`);
-      // без шаблонов список пуст, встроенных команд на этом этапе нет.
+      // Команды сессии `AgentSession.commands`: встроенные в порядке D2
+      // (design.md change `add-agent-builtin-slash-commands`), затем шаблоны
+      // (D9 change `add-agent-project-files`); без команд список пуст.
       after: () => _update(sessionId, wiring.bridge.availableCommandsUpdate),
+    );
+  }
+
+  /// Ошибка `session/new` / `session/load` для [ProjectConfigException]:
+  /// `-32603` с `data.codelab.reason: "projectConfigInvalid"` (design.md
+  /// change `require-project-folder`, D21, Q20 (a)).
+  ///
+  /// Почему явный `catch` у вызывающих: общий обработчик маршрутизатора
+  /// отвечает на любое постороннее исключение `Internal error` без `data`, и
+  /// клиент не отличил бы сбой конфигурации папки от ошибки агента. Почему
+  /// такой `message`: это одна строка из всех проблем через `; ` без значений
+  /// секретов (`ProjectConfigException.message`); других полей в `data`, кроме
+  /// `codelab.reason`, нет, кодов ACP не добавляется — соглашение
+  /// `acp_error.dart`.
+  ///
+  /// Лог несёт идентификаторы корреляции (`AGENTS.md` §16, C5.5): [cwd]
+  /// запроса и, у `session/load`, [sessionId]. Значений конфига и текста
+  /// проблем в нём нет — они могут содержать пути и секреты (CFG-2), в лог
+  /// идёт только число проблем.
+  AcpRequestError _projectConfigInvalid(
+    ProjectConfigException error, {
+    required String cwd,
+    String? sessionId,
+  }) {
+    _logger.log(
+      LogLevel.warning,
+      'acp.session.project_config_invalid',
+      fields: {
+        'cwd': cwd,
+        'session_id': ?sessionId,
+        'issues': error.issues.length,
+      },
+    );
+    return AcpRequestError(
+      acp.jsonRpcInternalErrorCode,
+      error.message,
+      data: const {
+        'codelab': {'reason': 'projectConfigInvalid'},
+      },
     );
   }
 
@@ -386,10 +540,42 @@ final class _Connection {
 
   /// Env, gate и мост сессии этого соединения (D5, D6): файлы и команды —
   /// через клиента, листинг — локально, если хост его дал.
+  ///
+  /// Если хост задал `localEnv`, env сессии — `localEnv(cwd)` целиком
+  /// (change `add-embedded-agent-mode`, D4; §13.1): `fs/*` и `terminal/*`
+  /// не отправляются, даже если клиент их объявил. `ClientLink` остаётся
+  /// для `AcpPermissionGate`, а `clientEnv` не создаётся: отменять
+  /// незавершённые запросы к клиенту нечему.
   ({ClientLink link, SessionBridge bridge, SessionHostPorts ports}) _wire(
     String cwd,
   ) {
     final link = ClientLink(requests: _requests, capabilities: _client!);
+    final localEnv = _server.config.localEnv;
+    if (localEnv != null) {
+      final bridge = SessionBridge(
+        owner: this,
+        sink: _notify,
+        usageSink: _notifyFrame,
+        link: link,
+        clock: _server.clock,
+        logger: _logger,
+      );
+      final ports = SessionHostPorts(
+        env: localEnv(cwd),
+        gate: AcpPermissionGate(
+          link,
+          logger: _logger,
+          waitForReconnect: bridge.waitForReconnect,
+          announced: bridge.announced,
+        ),
+        extraBeforeToolCall: [bridge.markInProgress],
+        // Команды `localEnv` идут на машине агента, а не у клиента через
+        // `terminal/*`: рантайму можно разрешить `exec` с `cwd` в корне
+        // навыка (design.md `add-agent-skills`, D5, D17, Q23).
+        execOnHost: true,
+      );
+      return (link: link, bridge: bridge, ports: ports);
+    }
     final clientEnv = AcpClientExecutionEnv(
       link: link,
       cwd: cwd,
@@ -401,8 +587,8 @@ final class _Connection {
     final bridge = SessionBridge(
       owner: this,
       sink: _notify,
+      usageSink: _notifyFrame,
       link: link,
-      catalog: _server._runtime.models,
       clock: _server.clock,
       logger: _logger,
       clientEnv: clientEnv,
@@ -418,6 +604,8 @@ final class _Connection {
         announced: bridge.announced,
       ),
       extraBeforeToolCall: [bridge.markInProgress],
+      // `execOnHost` остаётся `false`: `terminal/*` исполняет клиент и не
+      // видит каталог навыка агента (D17).
     );
     clientEnv.terminalShown = bridge.terminalShown;
     return (link: link, bridge: bridge, ports: ports);
@@ -454,6 +642,7 @@ final class _Connection {
         requests: _requests,
         capabilities: _client!,
         sink: _notify,
+        usageSink: _notifyFrame,
       );
       // Открытая сессия: серверы клиента заменяются без пересоздания (D11).
       // Без хода набор применяется до ответа; во время хода метод
@@ -480,13 +669,17 @@ final class _Connection {
         );
       } on SessionNotFound {
         throw AcpRequestError.notFound('Session not found: $id');
+      } on ProjectConfigException catch (error) {
+        throw _projectConfigInvalid(error, cwd: cwd, sessionId: id);
       }
-      bridge = wiring.bridge..attach(session);
+      bridge = wiring.bridge
+        ..attach(session)
+        ..markLoadedFromJournal();
       _server._sessions[id] = bridge;
     }
-    for (final update in bridge.replay()) {
-      _update(request.sessionId, update);
-    }
+    // Кадры живого хода, придержанные на время реплея дерева, уходят после
+    // него; мост отпускает их сам, в том числе при ошибке.
+    await bridge.replayInto((update) => _update(request.sessionId, update));
     final response = acp.LoadSessionResponse(
       modes: sessionModes(bridge.session),
       configOptions: bridge.configOptions,
@@ -507,7 +700,7 @@ final class _Connection {
       case 'mode':
         await bridge.setMode(_mode(value));
       case 'model'
-          when _server._runtime.models.models.any((m) => m.id.value == value):
+          when bridge.session.models.models.any((m) => m.id.value == value):
         await bridge.setModel(ModelId(value));
       case 'effort' when bridge.session.model.supportsReasoning:
         await bridge.setEffort(
@@ -544,7 +737,7 @@ final class _Connection {
   }
 
   static ModeId _mode(String value) =>
-      parseModeId(value) ??
+      ModeId.tryParse(value) ??
       (throw AcpRequestError.invalidParams('unknown mode: $value'));
 
   /// `session/list` (§13.5): страница хранилища.
@@ -628,14 +821,17 @@ final class _Connection {
       _server._sessions[id.value] ??
       (throw AcpRequestError.notFound('Session not found: ${id.value}'));
 
-  /// Абсолютный путь; при локальном листинге — существующий каталог.
+  /// Абсолютный путь; при локальном листинге или `localEnv` — существующий
+  /// каталог.
   /// Без листинга проверить каталог нечем: в ACP нет stat каталога
   /// (design.md, D5).
   Future<void> _checkCwd(String cwd) async {
     if (!_isAbsolute(cwd)) {
       throw const AcpRequestError.invalidParams('cwd must be an absolute path');
     }
-    final listing = _server.config.localListing;
+    // Env от хоста (`localEnv`) приоритетнее `localListing`: в базовой
+    // спецификации несуществующий каталог при локальном листинге — -32602.
+    final listing = _server.config.localEnv ?? _server.config.localListing;
     if (listing == null) {
       return;
     }
@@ -669,6 +865,12 @@ final class _Connection {
         ),
       ),
     );
+  }
+
+  /// Кадр вне `session/update` (`_codelab/session/usage`) — в ту же очередь,
+  /// чтобы порядок с `session/update` держала она (D18 Т5, R7).
+  void _notifyFrame(acp.JsonRpcMessage frame) {
+    unawaited(_outbound.enqueue(frame));
   }
 
   static bool _isAbsolute(String path) => path.startsWith('/');

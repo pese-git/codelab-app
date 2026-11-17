@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:codelab_agent/codelab_agent.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_core/testing.dart';
+import 'package:codelab_agent_io/codelab_agent_io.dart' show logConfigWarnings;
 import 'package:test/test.dart';
 
 /// Разбор флагов и переменных `codelab-agent serve` (задача 4.6; agent-binary
@@ -25,8 +29,49 @@ void main() {
   Matcher usageError(Object message) =>
       throwsA(isA<UsageError>().having((e) => e.message, 'message', message));
 
-  test('the general usage names `config check`', () {
-    expect(serveUsage(), contains('codelab-agent config check [--cwd <dir>]'));
+  // agent-binary «Общая справка называет подкоманды» (change
+  // `add-config-writer-and-reload`, D6): `config`, `provider` и `mcp`.
+  test('the general usage names `config`, `provider` and `mcp`', () {
+    final usage = serveUsage();
+    expect(usage, contains('codelab-agent config check|path|get|set|unset'));
+    expect(usage, contains('codelab-agent provider add|list|remove'));
+    expect(usage, contains('codelab-agent mcp add|list|remove'));
+  });
+
+  group('--debug-secrets (change add-agent-secret-store, D11)', () {
+    test('the flag turns the mode on, the default is off', () {
+      expect(parse(scripted).debugSecrets, isFalse);
+      expect(parse([...scripted, '--debug-secrets']).debugSecrets, isTrue);
+    });
+
+    test('CODELAB_DEBUG_SECRETS=1 turns it on; other values do not', () {
+      expect(
+        parse(scripted, {'CODELAB_DEBUG_SECRETS': '1'}).debugSecrets,
+        isTrue,
+      );
+      for (final other in ['0', 'true', '', 'yes']) {
+        expect(
+          parse(scripted, {'CODELAB_DEBUG_SECRETS': other}).debugSecrets,
+          isFalse,
+          reason: other,
+        );
+      }
+    });
+
+    test('the flag takes no value', () {
+      expect(
+        () => parse([...scripted, '--debug-secrets=1']),
+        throwsA(isA<UsageError>()),
+      );
+    });
+
+    test(
+      'the general usage names --debug-secrets and secret set|delete|list',
+      () {
+        expect(serveUsage(), contains('--debug-secrets'));
+        expect(serveUsage(), contains('codelab-agent secret set|delete|list'));
+      },
+    );
   });
 
   group('transport', () {
@@ -219,8 +264,10 @@ void main() {
 
     // Правка характеризационного теста в фазе реализации 9.3: запуск без
     // модели больше не ошибка разбора флагов, а проблема конфига
-    // `agent.default_model: required` (agent-binary «Конфиг бинаря…»,
-    // требование «Минимальный конфиг из флагов» удалено).
+    // `agent.default_model: no model is configured; add a provider with at
+    // least one model` с событием `config.model.none` (agent-binary «Конфиг
+    // бинаря…», сценарий «Нет ни одной модели»; change
+    // `optional-default-model`, D4; раньше текст был `required`).
     test('--provider without a model is a usage error; no model source is '
         'left to the config', () {
       expect(
@@ -445,6 +492,259 @@ void main() {
         parse(provider, {'HOME': '/home/u'}).codelabHome,
         '/home/u/.codelab',
       );
+    });
+  });
+
+  // Флаги предконфигурации провайдера (agent-binary «Флаги предконфигурации
+  // провайдера»; agent-configuration, сценарий «Флаги и модель»; design.md
+  // change `add-config-writer-and-reload`, D3, OQ6; задача 1.3).
+  group('--provider-type and --provider-config (L-25)', () {
+    const base = ['serve', '--stdio'];
+    const gateway =
+        '{"id":"a","base_url":"https://llm.internal/v1","model":"m1",'
+        '"context_window":1000}';
+    const envPreconfig = {
+      'CODELAB_PROVIDER_TYPE': 'openai-compatible',
+      'CODELAB_PROVIDER_CONFIG':
+          '{"id":"env","base_url":"https://env.internal/v1","model":"e1",'
+          '"context_window":1000}',
+    };
+
+    late Directory temp;
+    late String home;
+    late String cwd;
+
+    setUp(() {
+      temp = Directory.systemTemp.createTempSync('serve_flags_preconfig_');
+      home = '${temp.path}/home';
+      cwd = '${temp.path}/proj';
+      Directory(home).createSync();
+      Directory(cwd).createSync();
+    });
+
+    tearDown(() => temp.deleteSync(recursive: true));
+
+    ServeOptions parsed(
+      List<String> extra, [
+      Map<String, String> env = const {},
+    ]) => parse([...base, ...extra], {'CODELAB_HOME': home, ...env});
+
+    ConfigLoadResult loaded(ServeOptions options) =>
+        loadServeConfig(options, cwd: cwd);
+
+    String names(ConfigLoadResult result) =>
+        result.config!.providers.map((p) => p.config.name).join(',');
+
+    test('the help recommends @path: JSON in argv is visible in ps', () {
+      expect(serveUsage(), contains('--provider-type'));
+      expect(serveUsage(), contains('--provider-config'));
+      expect(serveUsage(), contains('@'));
+      expect(serveUsage(), contains('ps'));
+    });
+
+    test('one flag of the two is a usage error', () {
+      expect(
+        () => parsed(['--provider-type', 'anthropic']),
+        usageError(
+          allOf(contains('--provider-type'), contains('--provider-config')),
+        ),
+      );
+      expect(
+        () => parsed(['--provider-config', gateway]),
+        usageError(
+          allOf(contains('--provider-type'), contains('--provider-config')),
+        ),
+      );
+    });
+
+    test('the combination with --provider or --base-url is a usage error', () {
+      for (final other in [
+        ['--provider', 'anthropic', '--model', 'm'],
+        ['--base-url', 'http://x'],
+      ]) {
+        expect(
+          () => parsed([
+            ...other,
+            '--provider-type',
+            'openai-compatible',
+            '--provider-config',
+            gateway,
+          ]),
+          usageError(
+            contains('--provider-type cannot be combined with --provider'),
+          ),
+          reason: '$other',
+        );
+      }
+    });
+
+    test(
+      '@path that cannot be read is a usage error without the file text',
+      () {
+        expect(
+          () => parsed([
+            '--provider-type',
+            'openai-compatible',
+            '--provider-config',
+            '@${temp.path}/missing.json',
+          ]),
+          usageError(
+            allOf(contains('--provider-config'), contains('missing.json')),
+          ),
+        );
+      },
+    );
+
+    test('@path is read; the flags give the catalog and the options hide '
+        'the text', () {
+      const marker = 'not-a-real-team-7';
+      final file = File('${temp.path}/p.json')
+        ..writeAsStringSync(
+          gateway.replaceFirst(
+            '"model"',
+            '"headers":{"X-Team":"$marker"},"model"',
+          ),
+        );
+
+      final options = parsed([
+        '--provider-type',
+        'openai-compatible',
+        '--provider-config',
+        '@${file.path}',
+      ]);
+
+      expect(names(loaded(options)), 'a');
+      expect('$options', isNot(contains(marker)));
+      expect('$options', isNot(contains('llm.internal')));
+    });
+
+    test('@path to a directory or a FIFO is a usage error with the path', () {
+      final dir = Directory('${temp.path}/adir')..createSync();
+      final paths = [dir.path];
+      if (!Platform.isWindows) {
+        final fifo = '${temp.path}/afifo';
+        if (Process.runSync('mkfifo', [fifo]).exitCode == 0) {
+          paths.add(fifo);
+        }
+      }
+      for (final path in paths) {
+        expect(
+          () => parsed([
+            '--provider-type',
+            'openai-compatible',
+            '--provider-config',
+            '@$path',
+          ]),
+          usageError(allOf(contains('--provider-config'), contains(path))),
+          reason: path,
+        );
+      }
+    });
+
+    test('@path larger than 1 MiB is a usage error', () {
+      final file = File('${temp.path}/big.json')
+        ..writeAsBytesSync(List.filled(1024 * 1024 + 1, 0x20));
+      expect(
+        () => parsed([
+          '--provider-type',
+          'openai-compatible',
+          '--provider-config',
+          '@${file.path}',
+        ]),
+        usageError(contains('1 MiB')),
+      );
+    });
+
+    test('the inline JSON is not in the string form of the options', () {
+      final options = parsed([
+        '--provider-type',
+        'openai-compatible',
+        '--provider-config',
+        gateway.replaceFirst('"a"', '"not-a-real-key-id"'),
+      ]);
+
+      expect('$options', isNot(contains('not-a-real-key-id')));
+    });
+
+    test('flags shadow the variables: the catalog has a, not env; the log '
+        'gets config.preconfig.shadowed {by: flags}', () {
+      final result = loaded(
+        parsed([
+          '--provider-type',
+          'openai-compatible',
+          '--provider-config',
+          gateway,
+        ], envPreconfig),
+      );
+
+      expect(result.issues, isEmpty);
+      expect(names(result), 'a');
+      expect(result.sources, contains('flags'));
+      expect(result.sources, isNot(contains('env:CODELAB_PROVIDER_CONFIG')));
+      final logger = RecordingLogger();
+      logConfigWarnings(logger, result);
+      final record = logger.eventsOf('config.preconfig.shadowed').single;
+      expect(record.level, LogLevel.info);
+      expect(record.fields['by'], 'flags');
+    });
+
+    test('--model beats the flags preconfiguration; CODELAB_MODEL loses to '
+        'it (spec «Флаги и модель»)', () {
+      // Предконфигурация объявляет одну модель (`a/m1`); `a/m2` для
+      // `--model` должна быть объявлена файлом: таблица `providers.a`
+      // сливается с файлами (D3), а модели вне каталога конфиг отклоняет.
+      File('$home/config.yaml').writeAsStringSync('''
+providers:
+  a:
+    kind: openai-compatible
+    base_url: https://a.file.test/v1
+    models:
+      m2: {}
+  openai:
+    kind: openai-compatible
+    base_url: https://api.openai.test/v1
+    models:
+      gpt-4o: {}
+''');
+      const flags = [
+        '--provider-type',
+        'openai-compatible',
+        '--provider-config',
+        gateway,
+      ];
+      final env = {'CODELAB_MODEL': 'openai/gpt-4o'};
+
+      final first = loaded(parsed(flags, env));
+      final second = loaded(parsed([...flags, '--model', 'a/m2'], env));
+      final third = loaded(parsed([...flags, '--model', 'openai/gpt-4o'], env));
+
+      expect(first.issues, isEmpty);
+      expect(first.config!.defaultModel.id, 'm1');
+      expect(first.config!.defaultModel.provider, 'a');
+      expect(second.config!.defaultModel.id, 'm2');
+      expect(second.config!.defaultModel.provider, 'a');
+      expect(third.config!.defaultModel.provider, 'openai');
+    });
+
+    test('a literal secret header in the flag JSON is inlineSecret without '
+        'the value', () {
+      final result = loaded(
+        parsed([
+          '--provider-type',
+          'openai-compatible',
+          '--provider-config',
+          gateway.replaceFirst(
+            '"model"',
+            '"headers":{"Authorization":"Bearer not-a-real-key-3"},"model"',
+          ),
+        ]),
+      );
+
+      expect(result.config, isNull);
+      final issue = result.issues.single;
+      expect(issue.kind, ConfigIssueKind.inlineSecret);
+      expect(issue.source, 'flags');
+      expect('$issue', isNot(contains('not-a-real-key-3')));
     });
   });
 

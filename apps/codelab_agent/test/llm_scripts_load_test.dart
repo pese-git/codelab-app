@@ -1,8 +1,7 @@
 import 'dart:io';
 
-import 'package:codelab_agent/src/cli/serve_args.dart';
-import 'package:codelab_agent/src/host/llm_script.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_io/testing.dart';
 import 'package:test/test.dart';
 
 import 'support/agent_process.dart';
@@ -34,6 +33,8 @@ void main() {
     'with_concurrent_sessions',
     'echoes_cwd',
     'with_session_list',
+    // Строка статуса usage (change `add-usage-extension`, задача 3.8).
+    'with_usage',
   ];
 
   /// Сценарии e2e вне таблицы режимов: агента запускает сам тест app
@@ -79,6 +80,8 @@ void main() {
       'hangs_until_cancel',
       'prompt_error',
       'empty_response',
+      // Строка статуса usage (change `add-usage-extension`, задача 3.8).
+      'with_usage',
     ];
 
     test('every mode has a scenario and nothing else is there', () {
@@ -105,19 +108,7 @@ void main() {
     }
   });
 
-  test('a broken scenario is a usage error', () {
-    final temp = Directory.systemTemp.createTempSync('llm_script_');
-    addTearDown(() => temp.deleteSync(recursive: true));
-    final file = File('${temp.path}/broken.json')
-      ..writeAsStringSync('{"llm": {"steps": [{"reply": [{"txt": "x"}]}]}}');
-    expect(
-      () => LlmScript.load(
-        file.path,
-        models: const [],
-        clock: const SystemClock(),
-        cwdOf: (_) => null,
-      ),
-      throwsA(isA<UsageError>()),
-    );
-  });
+  // Случай «битый сценарий» разбора перенесён в
+  // `codelab_agent_io/test/scripted/llm_script_test.dart`; перевод в
+  // `UsageError` (код 64) проверяет `agent_host_test.dart`.
 }

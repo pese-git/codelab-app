@@ -157,6 +157,143 @@ void main() {
       expect(again.turns.single.status, PromptTurnStatus.completed);
     },
   );
+
+  group('the old agent ends the turn while the new transport is opening', () {
+    // Встроенный агент: резолвер освобождает прежнего агента внутри фабрики
+    // транспорта, то есть до замены транспорта в клиенте. Выгрузка агента
+    // отменяет ход, и ответ `session/prompt` успевает прийти (D22 change
+    // `require-project-folder`).
+    Future<FakeAcpTransport> reconnectEndingTurnWith(
+      Map<String, Object?> promptResult,
+    ) async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      final prompt = client.sendPrompt(
+        const SendPromptCommand(
+          sessionId: _session,
+          prompt: [ContentBlock.text(text: 'long task')],
+        ),
+      );
+      await _pump();
+      final promptRequest =
+          transport.drainSentMessages().single as JsonRpcRequest;
+
+      final replacement = FakeAcpTransport();
+      addTearDown(replacement.close);
+      final opening = Completer<FakeAcpTransport>();
+      final reconnecting = client.reconnect(
+        ReconnectCommand(transportFactory: () => opening.future),
+      );
+      await _pump();
+      // Старый агент закончил ход, пока открывался новый.
+      transport.emitInbound(
+        JsonRpcMessage.response(id: promptRequest.id, result: promptResult),
+      );
+      await prompt;
+      expect(current().activeTurn, isNull);
+
+      opening.complete(replacement);
+      await reconnecting;
+      replacement.drainSentMessages();
+      return replacement;
+    }
+
+    test('a turn the old agent cancelled is shown cancelled after '
+        'session/load', () async {
+      final replacement = await reconnectEndingTurnWith({
+        'stopReason': 'cancelled',
+      });
+
+      final session = await load(replacement);
+
+      expect(session.turns.single.status, PromptTurnStatus.cancelled);
+      expect(session.turns.single.stopReason, StopReason.cancelled);
+    });
+
+    test('a turn the old agent completed normally is not marked', () async {
+      final replacement = await reconnectEndingTurnWith({
+        'stopReason': 'end_turn',
+      });
+
+      final session = await load(replacement);
+
+      expect(session.turns.single.status, PromptTurnStatus.completed);
+      expect(session.turns.single.stopReason, isNull);
+    });
+
+    // Фабрика встроенного агента может упасть уже после выгрузки старого.
+    Future<void> failedReconnectThenEnd(Map<String, Object?> result) async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      final prompt = client.sendPrompt(
+        const SendPromptCommand(
+          sessionId: _session,
+          prompt: [ContentBlock.text(text: 'long task')],
+        ),
+      );
+      await _pump();
+      final promptRequest =
+          transport.drainSentMessages().single as JsonRpcRequest;
+      final opening = Completer<FakeAcpTransport>();
+      final failed = client.reconnect(
+        ReconnectCommand(transportFactory: () => opening.future),
+      );
+      unawaited(expectLater(failed, throwsA(isA<StateError>())));
+      await _pump();
+      transport.emitInbound(
+        JsonRpcMessage.response(id: promptRequest.id, result: result),
+      );
+      await prompt;
+      opening.completeError(StateError('open failed'));
+      await _pump();
+    }
+
+    test('a turn cancelled in the window of a failed factory keeps the mark '
+        'for the next reconnect', () async {
+      await failedReconnectThenEnd({'stopReason': 'cancelled'});
+      final replacement = FakeAcpTransport();
+      addTearDown(replacement.close);
+      await client.reconnect(
+        ReconnectCommand(transportFactory: () => replacement),
+      );
+      replacement.drainSentMessages();
+
+      final session = await load(replacement);
+
+      expect(session.turns.single.status, PromptTurnStatus.cancelled);
+    });
+
+    test('a turn still running at a failed factory is not marked once it '
+        'completes', () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      final prompt = client.sendPrompt(
+        const SendPromptCommand(
+          sessionId: _session,
+          prompt: [ContentBlock.text(text: 'long task')],
+        ),
+      );
+      await _pump();
+      final promptRequest =
+          transport.drainSentMessages().single as JsonRpcRequest;
+      final failed = client.reconnect(
+        ReconnectCommand(transportFactory: () => throw StateError('no')),
+      );
+      await expectLater(failed, throwsA(isA<StateError>()));
+      transport.emitInbound(
+        JsonRpcMessage.response(
+          id: promptRequest.id,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await prompt;
+      transport.drainSentMessages();
+
+      final session = await load(transport);
+
+      expect(session.turns.single.status, PromptTurnStatus.completed);
+    });
+  });
 }
 
 Future<void> _createSession(

@@ -27,6 +27,7 @@ StreamFunction anthropicStreamFunction(
       (state) =>
           _AnthropicTurn(config, services, model, state).run(context, cancel),
       classify: classifyException,
+      secrets: config.secrets,
     );
 
 const _ephemeral = {'type': 'ephemeral'};

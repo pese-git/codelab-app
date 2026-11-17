@@ -1,9 +1,21 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:args/args.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart'
-    show ConfigUsageException, checkConfigFileName, codelabHomeOf;
+    show
+        ConfigUsageException,
+        ProviderPreconfigFlags,
+        before1Note,
+        checkConfigFileName,
+        codelabHomeOf,
+        maxConfigBytes;
 
 import 'config_cli.dart';
+import 'mcp_cli.dart';
+import 'provider_cli.dart';
+import 'secret_cli.dart';
 
 /// Транспорт команды `serve`.
 enum ServeTransport { stdio, ws }
@@ -64,7 +76,9 @@ final class ServeOptions {
     required this.logFile,
     required this.codelabHome,
     required this.configPath,
+    required this.debugSecrets,
     required this.flags,
+    required this.preconfig,
     required this.environment,
   });
 
@@ -99,14 +113,28 @@ final class ServeOptions {
   /// Корень состояния (`CODELAB_HOME`, по умолчанию `~/.codelab`).
   final String codelabHome;
 
-  /// `--config <path>`: дополнительный файл конфигурации (слой 4а); `null` —
+  /// `--config <path>`: дополнительный файл конфигурации (слой 5); `null` —
   /// флага нет (тогда действует `CODELAB_CONFIG`).
   final String? configPath;
+
+  /// Режим отладки секретов: `--debug-secrets` или `CODELAB_DEBUG_SECRETS=1`
+  /// (design.md change `add-agent-secret-store`, D11). Включает событие
+  /// `secrets.lookup` у `SecretResolver`; уровень лога не меняет. Другие
+  /// значения переменной — как не заданная.
+  final bool debugSecrets;
 
   /// Слой флагов для `ConfigLoader`: провайдер `cli`, модель, режим, лимит
   /// шагов и логи из флагов (§15.6). Секретов в нём нет: ключ провайдера
   /// назван переменной `api_key_env`.
   final ConfigTree flags;
+
+  /// Предконфигурация провайдера из `--provider-type` и `--provider-config`
+  /// (`null` — флагов нет). Хранит текст JSON, который может содержать
+  /// заголовки с токеном, поэтому в [toString] его нет (CFG-12). Загрузчик
+  /// строит из неё слой флагов перед слоем [flags] и не читает переменные
+  /// `CODELAB_PROVIDER_*` (design.md change `add-config-writer-and-reload`,
+  /// D3).
+  final ProviderPreconfigFlags? preconfig;
 
   /// Переменные процесса: из них загрузчик берёт `CODELAB_HOME`,
   /// `CODELAB_CONFIG`, слой окружения и значения `${ENV}`. Содержат секреты,
@@ -156,6 +184,19 @@ final ArgParser _serveParser = ArgParser()
         'config.',
   )
   ..addOption(
+    'provider-type',
+    help:
+        'Provider kind of the preconfiguration; use together with '
+        '--provider-config (CODELAB_PROVIDER_TYPE). Not with --provider.',
+  )
+  ..addOption(
+    'provider-config',
+    help:
+        'Provider JSON (id, base_url, model, context_window, …) or @path to '
+        'a file with it (CODELAB_PROVIDER_CONFIG). Prefer @path: JSON in '
+        'argv is visible to other users via ps.',
+  )
+  ..addOption(
     'permission-mode',
     help:
         'plan, ask, standard, accept-edits, bypass or autopilot '
@@ -170,6 +211,13 @@ final ArgParser _serveParser = ArgParser()
     'config',
     help: 'Extra config.yaml, above config.local.yaml (CODELAB_CONFIG).',
   )
+  ..addFlag(
+    'debug-secrets',
+    negatable: false,
+    help:
+        'Log secrets.lookup (name, source, found) for every secret lookup; '
+        'never the value (CODELAB_DEBUG_SECRETS=1).',
+  )
   ..addOption(
     'max-steps',
     help: 'Model steps per turn, a positive integer (CODELAB_MAX_STEPS).',
@@ -182,9 +230,13 @@ final ArgParser _serveParser = ArgParser()
 
 final ArgParser _parser = ArgParser()
   ..addCommand('serve', _serveParser)
-  ..addCommand('config', configParser);
+  ..addCommand('config', configParser)
+  ..addCommand('provider', providerParser)
+  ..addCommand('mcp', mcpParser)
+  ..addCommand('secret', secretParser);
 
-/// Разбирает верхний уровень командной строки: `serve` или `config`.
+/// Разбирает верхний уровень командной строки: `serve`, `config`,
+/// `provider`, `mcp` или `secret`.
 ///
 /// Почему отдельная функция: `run.dart` выбирает команду по результату, а
 /// каждая команда сама проверяет свои аргументы. Ошибка разбора — [UsageError].
@@ -200,7 +252,11 @@ ArgResults parseCommandLine(List<String> args) {
 /// нет.
 String serveUsage() =>
     'Usage: codelab-agent serve (--stdio | --ws) [options]\n'
-    '       codelab-agent config check [--cwd <dir>]\n\n'
+    '       codelab-agent config check|path|get|set|unset ...\n'
+    '       codelab-agent provider add|list|remove ...\n'
+    '       codelab-agent mcp add|list|remove ...\n'
+    '       codelab-agent secret set|delete|list|migrate\n\n'
+    '$before1Note\n\n'
     '${_serveParser.usage}';
 
 /// Разбирает [args] и [environment] по правилам §15.6: флаг сильнее
@@ -225,7 +281,9 @@ ServeOptions parseServeResults(
     throw const UsageError('missing command: codelab-agent serve');
   }
   if (serve.rest.isNotEmpty) {
-    throw UsageError('unexpected arguments: ${serve.rest.join(' ')}');
+    // Токены не цитируются: после `secret` среди них может быть значение
+    // секрета (agent-secrets: ошибка разбора не печатает argv; D8).
+    throw UsageError('unexpected arguments (${serve.rest.length})');
   }
 
   final stdio = serve.flag('stdio');
@@ -345,6 +403,11 @@ ServeOptions parseServeResults(
     }
   }
 
+  final preconfig = _preconfigFlags(
+    serve,
+    withProvider: provider != null || serve.option('base-url') != null,
+  );
+
   final flags = _flagsLayer(
     provider: provider,
     scripted: llmScript != null,
@@ -370,9 +433,86 @@ ServeOptions parseServeResults(
         serve.option('log-file') ?? _nonEmpty(environment['CODELAB_LOG_FILE']),
     codelabHome: home,
     configPath: configPath,
+    debugSecrets:
+        serve.flag('debug-secrets') ||
+        environment['CODELAB_DEBUG_SECRETS'] == '1',
     flags: flags,
+    preconfig: preconfig,
     environment: Map.unmodifiable(environment),
   );
+}
+
+/// Предконфигурация провайдера из флагов (`agent-binary` «Флаги
+/// предконфигурации провайдера»; design.md change
+/// `add-config-writer-and-reload`, D3, OQ6).
+///
+/// Почему здесь: все три отказа — ошибки использования с кодом `64` до
+/// загрузки конфига и старта транспорта. Проверка самого JSON и литеральных
+/// секретных заголовков — не здесь, а в слое предконфигурации загрузчика
+/// (`preconfigLayer`): так `config check` и встроенный агент проверяют то
+/// же самое.
+///
+/// Как использовать: один флаг из пары, сочетание с `--provider`/`--base-url`
+/// и нечитаемый файл `@путь` — [UsageError]. Путь `@путь` относителен
+/// текущему каталогу процесса. Тексты не содержат значения `--provider-config`
+/// (в JSON могут быть заголовки с токеном, CFG-12); путь файла называется.
+ProviderPreconfigFlags? _preconfigFlags(
+  ArgResults serve, {
+  required bool withProvider,
+}) {
+  final type = serve.option('provider-type');
+  final config = serve.option('provider-config');
+  if (type == null && config == null) {
+    return null;
+  }
+  if (type == null || config == null) {
+    throw const UsageError(
+      '--provider-type and --provider-config must be used together',
+    );
+  }
+  if (withProvider) {
+    throw const UsageError(
+      '--provider-type cannot be combined with --provider (or --base-url): '
+      'two ways to set the provider by flags are ambiguous',
+    );
+  }
+  return ProviderPreconfigFlags(
+    providerType: type,
+    providerConfig: config.startsWith('@')
+        ? _readConfigFile(config.substring(1))
+        : config,
+  );
+}
+
+/// Читает файл `--provider-config @путь` не больше [maxConfigBytes] в строгом
+/// UTF-8; причина сбоя без текста файла и без цитат системной ошибки.
+///
+/// Только обычный файл: FIFO и устройства (`/dev/zero`) заблокировали бы или
+/// переполнили чтение. Размер проверяется по факту чтения (`maxConfigBytes + 1`
+/// байт), а не по `stat`: файл мог вырасти между проверкой и чтением.
+String _readConfigFile(String path) {
+  UsageError failure(String reason) =>
+      UsageError('--provider-config: cannot read the file $path: $reason');
+  try {
+    if (File(path).statSync().type != FileSystemEntityType.file) {
+      throw failure('not a regular file');
+    }
+    final file = File(path).openSync();
+    final List<int> bytes;
+    try {
+      bytes = file.readSync(maxConfigBytes + 1);
+    } finally {
+      file.closeSync();
+    }
+    if (bytes.length > maxConfigBytes) {
+      throw failure('the file is larger than 1 MiB');
+    }
+    return utf8.decode(bytes);
+  } on FileSystemException {
+    throw failure('no such file or no access');
+  } on FormatException {
+    throw failure('the file is not valid UTF-8');
+  }
 }
 
 /// `<id>` или `<провайдер>/<id>` с провайдером этого запуска: у `--provider`

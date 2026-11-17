@@ -5,109 +5,17 @@
     "11-Agent Plan.md#plan-entries",
     "11-Agent Plan.md#updating-plans"
   ],
-  "description": "Модель вызывает update_plan с тремя пунктами pending, затем с тем же списком, где первый пункт completed; агент присылает два обновления plan, каждое со всем списком, затем модель отвечает текстом и ход завершается end_turn.",
+  "description": "Только клиентская роль: сторонний агент (инструмента update_plan у Dart-агента больше нет, агентскую сторону проверяет acp/prompt-task-plan) присылает два обновления plan без _meta — три пункта pending, затем тот же список с первым completed; каждое со всем списком, клиент заменяет план целиком, затем ответ текстом и ход завершается end_turn.",
   "goals": [
     "C-05"
+  ],
+  "roles": [
+    "client"
   ],
   "setup": {
     "cwd": "/work/demo",
     "profile": "agent-serve",
     "mode": "standard"
-  },
-  "llm": {
-    "model": {
-      "provider": "scripted",
-      "modelId": "scripted-1",
-      "contextWindow": 32768
-    },
-    "steps": [
-      {
-        "expect": {
-          "lastMessage": {
-            "role": "user",
-            "$textContains": "план"
-          }
-        },
-        "reply": [
-          {
-            "toolCall": {
-              "id": "call_1",
-              "name": "update_plan",
-              "arguments": {
-                "entries": [
-                  {
-                    "content": "Прочитать тесты",
-                    "priority": "high",
-                    "status": "pending"
-                  },
-                  {
-                    "content": "Исправить ошибку",
-                    "priority": "high",
-                    "status": "pending"
-                  },
-                  {
-                    "content": "Запустить тесты",
-                    "priority": "medium",
-                    "status": "pending"
-                  }
-                ]
-              }
-            }
-          }
-        ],
-        "stopReason": "toolUse"
-      },
-      {
-        "expect": {
-          "toolResult": {
-            "toolCallId": "call_1",
-            "isError": false
-          }
-        },
-        "reply": [
-          {
-            "toolCall": {
-              "id": "call_2",
-              "name": "update_plan",
-              "arguments": {
-                "entries": [
-                  {
-                    "content": "Прочитать тесты",
-                    "priority": "high",
-                    "status": "completed"
-                  },
-                  {
-                    "content": "Исправить ошибку",
-                    "priority": "high",
-                    "status": "pending"
-                  },
-                  {
-                    "content": "Запустить тесты",
-                    "priority": "medium",
-                    "status": "pending"
-                  }
-                ]
-              }
-            }
-          }
-        ],
-        "stopReason": "toolUse"
-      },
-      {
-        "expect": {
-          "toolResult": {
-            "toolCallId": "call_2",
-            "isError": false
-          }
-        },
-        "reply": [
-          {
-            "text": "План обновлён."
-          }
-        ],
-        "stopReason": "stop"
-      }
-    ]
   },
   "frames": [
     {

@@ -13,7 +13,9 @@
 library;
 
 import 'dart:convert';
+
 import 'package:collection/collection.dart';
+
 import '../loop/agent_events.dart';
 import '../util/logger.dart';
 import 'records.dart';
@@ -185,7 +187,7 @@ ParsedJournal parseSessionLines(
     logger?.log(
       LogLevel.warning,
       'session.leaf.healed',
-      fields: {'from': healedFrom, 'to': leaf},
+      fields: {'session_id': id.value, 'from': healedFrom, 'to': leaf},
     );
   }
   final brokenLinks = records

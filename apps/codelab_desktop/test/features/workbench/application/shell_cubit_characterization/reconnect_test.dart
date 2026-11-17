@@ -31,7 +31,7 @@ void main() {
     final generation = h.application.generation;
     final (states, _) = h.recordStates();
 
-    await h.cubit.reconnect();
+    await h.cubit.restartAgent();
     await h.settle();
 
     expect(starts, 2);
@@ -72,7 +72,7 @@ void main() {
     );
     await h.connect();
 
-    await h.cubit.reconnect();
+    await h.cubit.restartAgent();
 
     expect(starts, 2);
     expect(h.cubit.state.connectionStatus, CodeLabConnectionStatus.failed);
@@ -94,7 +94,7 @@ void main() {
     );
     await h.connect();
     await h.createSession('session-1');
-    await h.cubit.reconnect();
+    await h.cubit.restartAgent();
     expect(lingering.closeRequested, isTrue);
     final before = h.cubit.state;
     final (states, _) = h.recordStates();

@@ -21,6 +21,7 @@ library;
 import 'dart:async';
 
 import 'package:codelab_client_acp/codelab_client_acp.dart';
+import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_ui/codelab_ui.dart';
@@ -51,8 +52,17 @@ final class ShellHarness {
     FakeAcpTransport? agent,
     CodeLabStdioTransportFactory? stdioTransportFactory,
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
+    Map<String, String>? environment,
+    DirectoryExists? directoryExists,
   }) : agent = agent ?? FakeAcpTransport() {
+    // Проект выбран с самого начала: без него агент не стартует и сессию
+    // создать нельзя (require-project-folder/design.md, D1, D20). Тесты,
+    // которые проверяют именно «без проекта», собирают `CodeLabTestBinding`
+    // сами. Папка вымышленная: проверка существования в тестах всегда
+    // отвечает «есть», настоящая папка не нужна.
+    project = '/work/harness-project';
     binding = CodeLabTestBinding(
+      project: project,
       stdioTransportFactory:
           stdioTransportFactory ??
           (_) {
@@ -60,6 +70,8 @@ final class ShellHarness {
             return this.agent;
           },
       webSocketTransportFactory: webSocketTransportFactory,
+      environment: environment,
+      directoryExists: directoryExists,
     );
   }
 
@@ -67,6 +79,9 @@ final class ShellHarness {
   final FakeAcpTransport agent;
 
   late final CodeLabTestBinding binding;
+
+  /// Папка стартового проекта (D20): `cwd` сессий, созданных харнессом.
+  late final String project;
 
   /// Сколько раз Cubit запросил stdio-транспорт у фабрики по умолчанию.
   var stdioStarts = 0;
@@ -107,8 +122,21 @@ final class ShellHarness {
         message,
   ];
 
+  /// Ждёт, пока стартовый проект выбран из снимка. Нужен тестам, которые
+  /// вызывают синхронно читающие проект действия (`createSession`) раньше
+  /// `connect`; сам `connect` восстановление ждёт.
+  Future<void> projectReady() =>
+      binding.scope.resolve<CodeLabShellParts>().settings.projectRestored;
+
+  /// Стартует агента триггером запуска и ждёт `connected`.
+  ///
+  /// Почему: ручного Connect нет, агент стартует сам (D13, D19 change
+  /// `require-project-folder`); без виджета приложения триггер запуска вызывает
+  /// харнесс. Утверждения характеризационных тестов не меняются.
   Future<void> connect() async {
-    await cubit.connect();
+    // Стартовый проект выбирается асинхронно при создании графа.
+    await projectReady();
+    await cubit.startOnLaunch();
     expect(cubit.state.connectionStatus, CodeLabConnectionStatus.connected);
   }
 

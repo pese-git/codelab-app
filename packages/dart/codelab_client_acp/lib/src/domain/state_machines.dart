@@ -71,8 +71,20 @@ sealed class PromptTurnStateEvent with _$PromptTurnStateEvent {
   const factory PromptTurnStateEvent.start({DateTime? startedAt}) =
       PromptTurnStartRequested;
 
-  const factory PromptTurnStateEvent.update({required SessionUpdate update}) =
-      PromptTurnUpdateReceived;
+  /// Применяет обновление сессии к ходу.
+  ///
+  /// Почему есть [toolKindUnrecognized]: кодек сводит незнакомый вид вызова к
+  /// `other` (D1), и по DTO он неотличим от явного `other`; признак,
+  /// посчитанный приложением по сырому payload (D4), несёт это различие в
+  /// машину состояний (D9, change `tolerate-unknown-tool-kind`).
+  ///
+  /// Как использовать: `true` только для `tool_call_update` с незнакомым
+  /// видом. Поле влияет лишь на вид записи для отображения (запись сохраняет
+  /// прежний вид вместо `other`); риск от него не зависит.
+  const factory PromptTurnStateEvent.update({
+    required SessionUpdate update,
+    @Default(false) bool toolKindUnrecognized,
+  }) = PromptTurnUpdateReceived;
 
   const factory PromptTurnStateEvent.requestApproval({
     required ApprovalRequest approval,
@@ -91,6 +103,7 @@ sealed class PromptTurnStateEvent with _$PromptTurnStateEvent {
 
   const factory PromptTurnStateEvent.complete({
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) = PromptTurnCompleted;
 
@@ -114,8 +127,15 @@ sealed class SessionStateEvent with _$SessionStateEvent {
     DateTime? startedAt,
   }) = SessionTurnStartRequested;
 
-  const factory SessionStateEvent.update({required SessionUpdate update}) =
-      SessionUpdateReceived;
+  /// Применяет обновление к активному ходу сессии.
+  ///
+  /// [toolKindUnrecognized] передаётся ходу как есть: вид вызова в обновлении
+  /// был незнаком кодеку (D9); влияет только на вид записи для отображения,
+  /// подробности — в [PromptTurnStateEvent.update].
+  const factory SessionStateEvent.update({
+    required SessionUpdate update,
+    @Default(false) bool toolKindUnrecognized,
+  }) = SessionUpdateReceived;
 
   const factory SessionStateEvent.requestApproval({
     required ApprovalRequest approval,
@@ -134,6 +154,7 @@ sealed class SessionStateEvent with _$SessionStateEvent {
 
   const factory SessionStateEvent.completeTurn({
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) = SessionTurnCompleted;
 
@@ -305,7 +326,8 @@ class PromptTurnStateMachine {
         turn,
         startedAt: startedAt,
       ),
-      PromptTurnUpdateReceived(:final update) => _applyUpdate(turn, update),
+      PromptTurnUpdateReceived(:final update, :final toolKindUnrecognized) =>
+        _applyUpdate(turn, update, toolKindUnrecognized),
       PromptTurnApprovalRequested(:final approval) => _requestApproval(
         turn,
         approval,
@@ -323,11 +345,17 @@ class PromptTurnStateMachine {
         ),
       PromptTurnApprovalCancelled(:final approvalId, :final resolvedAt) =>
         _cancelApproval(turn, approvalId: approvalId, resolvedAt: resolvedAt),
-      PromptTurnCompleted(:final stopReason, :final completedAt) => _complete(
-        turn,
-        stopReason: stopReason,
-        completedAt: completedAt,
-      ),
+      PromptTurnCompleted(
+        :final stopReason,
+        :final budgetExceeded,
+        :final completedAt,
+      ) =>
+        _complete(
+          turn,
+          stopReason: stopReason,
+          budgetExceeded: budgetExceeded,
+          completedAt: completedAt,
+        ),
       PromptTurnFailed(:final message, :final failure, :final completedAt) =>
         _fail(
           turn,
@@ -351,9 +379,16 @@ class PromptTurnStateMachine {
 
   static StateTransitionResult<PromptTurn> applyUpdate(
     PromptTurn turn,
-    SessionUpdate update,
-  ) {
-    return reduce(turn, PromptTurnStateEvent.update(update: update));
+    SessionUpdate update, {
+    bool toolKindUnrecognized = false,
+  }) {
+    return reduce(
+      turn,
+      PromptTurnStateEvent.update(
+        update: update,
+        toolKindUnrecognized: toolKindUnrecognized,
+      ),
+    );
   }
 
   static StateTransitionResult<PromptTurn> requestApproval(
@@ -399,12 +434,14 @@ class PromptTurnStateMachine {
   static StateTransitionResult<PromptTurn> complete(
     PromptTurn turn, {
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) {
     return reduce(
       turn,
       PromptTurnStateEvent.complete(
         stopReason: stopReason,
+        budgetExceeded: budgetExceeded,
         completedAt: completedAt,
       ),
     );
@@ -451,12 +488,17 @@ class PromptTurnStateMachine {
   static StateTransitionResult<PromptTurn> _applyUpdate(
     PromptTurn turn,
     SessionUpdate update,
+    bool toolKindUnrecognized,
   ) {
     if (turn.isTerminal) {
       return _ignored(turn, 'terminal prompt turn ignores late updates');
     }
 
-    final next = _applyUpdateToTurn(turn, update);
+    final next = _applyUpdateToTurn(
+      turn,
+      update,
+      toolKindUnrecognized: toolKindUnrecognized,
+    );
     if (next == turn) {
       return _ignored(
         turn,
@@ -546,6 +588,7 @@ class PromptTurnStateMachine {
   static StateTransitionResult<PromptTurn> _complete(
     PromptTurn turn, {
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) {
     if (turn.isTerminal) {
@@ -556,6 +599,10 @@ class PromptTurnStateMachine {
       turn.copyWith(
         status: _statusForStopReason(stopReason),
         stopReason: stopReason,
+        // Причина бюджета осмыслена только при `max_turn_requests` (D10).
+        budgetExceeded: stopReason == StopReason.maxTurnRequests
+            ? budgetExceeded
+            : null,
         completedAt: completedAt ?? turn.completedAt,
       ),
     );
@@ -653,7 +700,8 @@ class SessionStateMachine {
         turn,
         startedAt: startedAt,
       ),
-      SessionUpdateReceived(:final update) => _applyUpdate(session, update),
+      SessionUpdateReceived(:final update, :final toolKindUnrecognized) =>
+        _applyUpdate(session, update, toolKindUnrecognized),
       SessionApprovalRequested(:final approval) => _requestApproval(
         session,
         approval,
@@ -675,10 +723,15 @@ class SessionStateMachine {
           approvalId: approvalId,
           resolvedAt: resolvedAt,
         ),
-      SessionTurnCompleted(:final stopReason, :final completedAt) =>
+      SessionTurnCompleted(
+        :final stopReason,
+        :final budgetExceeded,
+        :final completedAt,
+      ) =>
         _completeTurn(
           session,
           stopReason: stopReason,
+          budgetExceeded: budgetExceeded,
           completedAt: completedAt,
         ),
       SessionTurnFailed(:final message, :final failure, :final completedAt) =>
@@ -713,11 +766,22 @@ class SessionStateMachine {
     );
   }
 
+  /// Применяет обновление к сессии; [toolKindUnrecognized] — вид вызова в
+  /// [update] был незнаком кодеку (D9 change `tolerate-unknown-tool-kind`):
+  /// запись сохраняет прежний вид для отображения, а риск остаётся не ниже
+  /// `unknown` за счёт `kind: other` в самом DTO.
   static StateTransitionResult<AcpSession> applyUpdate(
     AcpSession session,
-    SessionUpdate update,
-  ) {
-    return reduce(session, SessionStateEvent.update(update: update));
+    SessionUpdate update, {
+    bool toolKindUnrecognized = false,
+  }) {
+    return reduce(
+      session,
+      SessionStateEvent.update(
+        update: update,
+        toolKindUnrecognized: toolKindUnrecognized,
+      ),
+    );
   }
 
   /// Раскладывает историю, повторённую агентом в ответ на `session/load`,
@@ -741,10 +805,14 @@ class SessionStateMachine {
   /// `session/load` с буфером обновлений этой сессии в порядке прихода;
   /// [nextTurnId] выдаёт идентификаторы ходов. Ходы добавляются к
   /// `session.turns`; сессия должна быть без активного хода.
+  /// [toolKindUnrecognizedAt] — индексы в [updates], чей вид вызова был
+  /// незнаком кодеку (D9 change `tolerate-unknown-tool-kind`); буфер реплея
+  /// — список только для добавления, поэтому индексы стабильны.
   static AcpSession replayHistory(
     AcpSession session,
     List<SessionUpdate> updates, {
     required PromptTurnId Function() nextTurnId,
+    Set<int> toolKindUnrecognizedAt = const {},
   }) {
     var current = session;
     PromptTurn? turn;
@@ -763,7 +831,8 @@ class SessionStateMachine {
       turn = null;
     }
 
-    for (final update in updates) {
+    for (var index = 0; index < updates.length; index++) {
+      final update = updates[index];
       final scoped = _applySessionScopedUpdate(current, update);
       if (scoped != null) {
         current = scoped;
@@ -795,6 +864,7 @@ class SessionStateMachine {
               status: PromptTurnStatus.running,
             ),
         update,
+        toolKindUnrecognized: toolKindUnrecognizedAt.contains(index),
       );
     }
     closeTurn();
@@ -845,12 +915,14 @@ class SessionStateMachine {
   static StateTransitionResult<AcpSession> completeTurn(
     AcpSession session, {
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) {
     return reduce(
       session,
       SessionStateEvent.completeTurn(
         stopReason: stopReason,
+        budgetExceeded: budgetExceeded,
         completedAt: completedAt,
       ),
     );
@@ -937,6 +1009,7 @@ class SessionStateMachine {
   static StateTransitionResult<AcpSession> _applyUpdate(
     AcpSession session,
     SessionUpdate update,
+    bool toolKindUnrecognized,
   ) {
     // Сессионные обновления (команды, опции, режим, заголовок) относятся к
     // сессии, а не к ходу: ACP разрешает их «в любой момент сессии», в том
@@ -953,7 +1026,11 @@ class SessionStateMachine {
         return _applied(scoped);
       }
 
-      final turn = PromptTurnStateMachine.applyUpdate(activeTurn, update);
+      final turn = PromptTurnStateMachine.applyUpdate(
+        activeTurn,
+        update,
+        toolKindUnrecognized: toolKindUnrecognized,
+      );
       return _sessionResultFromTurnResult(scoped, turn);
     }
 
@@ -962,7 +1039,11 @@ class SessionStateMachine {
       return _ignored(session, 'session has no active prompt turn');
     }
 
-    final turn = PromptTurnStateMachine.applyUpdate(activeTurn, update);
+    final turn = PromptTurnStateMachine.applyUpdate(
+      activeTurn,
+      update,
+      toolKindUnrecognized: toolKindUnrecognized,
+    );
     return _sessionResultFromTurnResult(session, turn);
   }
 
@@ -1033,6 +1114,7 @@ class SessionStateMachine {
   static StateTransitionResult<AcpSession> _completeTurn(
     AcpSession session, {
     required StopReason stopReason,
+    String? budgetExceeded,
     DateTime? completedAt,
   }) {
     final activeTurn = session.activeTurn;
@@ -1043,6 +1125,7 @@ class SessionStateMachine {
     final turn = PromptTurnStateMachine.complete(
       activeTurn,
       stopReason: stopReason,
+      budgetExceeded: budgetExceeded,
       completedAt: completedAt,
     );
     return switch (turn) {
@@ -1175,14 +1258,27 @@ StateTransitionResult<T> _rejected<T>(String reason) {
   return StateTransitionResult.rejected(reason: reason);
 }
 
-PromptTurn _applyUpdateToTurn(PromptTurn turn, SessionUpdate update) {
+PromptTurn _applyUpdateToTurn(
+  PromptTurn turn,
+  SessionUpdate update, {
+  bool toolKindUnrecognized = false,
+}) {
   return switch (update) {
     ToolCallSessionUpdate(:final toolCall) => _applyToolCallUpdate(
       turn,
       update,
-      ToolCallRecord.fromToolCall(
-        toolCall,
-        riskLevel: ApprovalPolicy.classifyToolCall(toolCall),
+      _withKnownCodelabMeta(
+        turn.toolCalls[toolCall.toolCallId],
+        ToolCallRecord.fromToolCall(
+          toolCall,
+          // Повторный `tool_call` с тем же id обновляет данные записи, но не
+          // снижает уже показанный риск (review 6b, L-2; D27).
+          riskLevel: ApprovalPolicy.max(
+            turn.toolCalls[toolCall.toolCallId]?.riskLevel ??
+                ApprovalRiskLevel.readOnly,
+            ApprovalPolicy.classifyToolCall(toolCall),
+          ),
+        ),
       ),
     ),
     ToolCallUpdateSessionUpdate(:final toolCallUpdate) => _applyToolCallUpdate(
@@ -1191,6 +1287,7 @@ PromptTurn _applyUpdateToTurn(PromptTurn turn, SessionUpdate update) {
       _mergeToolCallUpdate(
         turn.toolCalls[toolCallUpdate.toolCallId],
         toolCallUpdate,
+        toolKindUnrecognized: toolKindUnrecognized,
       ),
     ),
     // Чанки — приращения без id и номера: повторная доставка неотличима от
@@ -1232,6 +1329,28 @@ SessionUpdate? _latestOfKind(
   return null;
 }
 
+/// Повторный `tool_call` (реплей) не стирает `_meta.codelab`, уже накопленное
+/// записью: итог субагента (`subagentMeta`) и признак исхода (`outcome`,
+/// D41 п. 1) переживают повтор кадра без них; итоговый `completed` снимает
+/// `outcome`.
+ToolCallRecord _withKnownCodelabMeta(
+  ToolCallRecord? known,
+  ToolCallRecord fresh,
+) => known == null
+    ? fresh
+    : fresh.copyWith(
+        subagentMeta: known.subagentMeta == null
+            ? fresh.subagentMeta
+            : mergeSubagentMeta(known.subagentMeta, fresh.subagentMeta),
+        // Признак исхода переживает повтор кадра без него; итоговый
+        // `completed` его снимает (D41 п. 1).
+        outcome: fresh.status == ToolCallStatus.completed
+            ? null
+            : fresh.outcome ?? known.outcome,
+        // Родитель вызова не меняется: кадр без поля его не стирает (D21).
+        parentToolCallId: fresh.parentToolCallId ?? known.parentToolCallId,
+      );
+
 PromptTurn _applyToolCallUpdate(
   PromptTurn turn,
   SessionUpdate update,
@@ -1247,10 +1366,20 @@ PromptTurn _applyToolCallUpdate(
   );
 }
 
+/// Сливает `tool_call_update` с записью вызова.
+///
+/// [toolKindUnrecognized] (D9 change `tolerate-unknown-tool-kind`): вид в
+/// обновлении был незнаком кодеку и сведён к `other`. Тогда метка вызова
+/// (`kind`) берётся из записи — `Run` у `execute` не превращается в `other`;
+/// без записи остаётся `other`. Признак управляет только видом: риск ниже
+/// считает [ApprovalPolicy.classifyToolCallUpdateWithin] по `kind: other` в
+/// DTO как `max(риск записи, unknown)`. Явный `kind: other` агента признака
+/// не получает и перезаписывает вид по общему правилу.
 ToolCallRecord _mergeToolCallUpdate(
   ToolCallRecord? current,
-  ToolCallUpdate update,
-) {
+  ToolCallUpdate update, {
+  bool toolKindUnrecognized = false,
+}) {
   // A call the client cancelled stays ended unless the agent reports how it
   // actually ended: a late non-final status does not put it back to work.
   final cancelledByClient = current?.cancelledByClient ?? false;
@@ -1260,19 +1389,29 @@ ToolCallRecord _mergeToolCallUpdate(
   return ToolCallRecord(
     id: update.toolCallId,
     title: update.title ?? current?.title ?? update.toolCallId.value,
-    kind: update.kind ?? current?.kind ?? ToolKind.other,
+    kind: toolKindUnrecognized && current != null
+        ? current.kind
+        : update.kind ?? current?.kind ?? ToolKind.other,
     status: status,
     cancelledByClient: cancelledByClient && status != ToolCallStatus.completed,
-    riskLevel: ApprovalPolicy.max(
-      current?.riskLevel ?? ApprovalRiskLevel.readOnly,
-      ApprovalPolicy.classifyToolCallUpdate(update),
-    ),
+    // Единое правило риска с запросом одобрения (L-1, D27).
+    riskLevel: ApprovalPolicy.classifyToolCallUpdateWithin(current, update),
     content: update.content ?? current?.content ?? const [],
     locations: update.locations ?? current?.locations ?? const [],
     rawInput: update.rawInput ?? current?.rawInput,
     rawOutput: update.rawOutput ?? current?.rawOutput,
     startedAt: current?.startedAt,
     completedAt: current?.completedAt,
+    subagentMeta: mergeSubagentMeta(
+      current?.subagentMeta,
+      subagentMetaOf(update.meta),
+    ),
+    // Поздний кадр без признака не снимает исход; снимает только completed.
+    outcome: status == ToolCallStatus.completed
+        ? null
+        : outcomeOf(update.meta) ?? current?.outcome,
+    parentToolCallId:
+        parentToolCallIdOf(update.meta) ?? current?.parentToolCallId,
   );
 }
 

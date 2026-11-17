@@ -1,6 +1,59 @@
+import '../secrets/secret_names.dart';
 import '../util/logger.dart';
 import 'core_config.dart';
 import 'host_settings.dart';
+
+/// Имена ключей, значение которых — секрет, записанный в конфиг (CFG-2,
+/// `agent-core-architecture` §17.5.4, пункт 1).
+///
+/// Почему здесь, а не в `schema.dart`: схема — внутренность проверки и не
+/// экспортируется (CFG-5), а список нужен и за её пределами — писателю
+/// `ConfigWriter` и маскированию вывода `config get` в `codelab_agent_io`
+/// (design.md change `add-config-writer-and-reload`, D5, D6). Один список на
+/// валидатор, писатель и вывод: иначе запись и загрузка расходились бы.
+///
+/// Как использовать: `inlineSecretKeys.contains(name)` для имени листа
+/// (регистр важен: `apiKey` и `api_key` — разные имена).
+const inlineSecretKeys = {'api_key', 'apiKey', 'token', 'secret', 'password'};
+
+/// Текст проблемы «у провайдера больше одного источника ключа» (R8-6).
+///
+/// Почему константа: один и тот же текст выдаёт `resolve.dart` ядра, а
+/// `SecretMigrator` (`codelab_agent_io`) по нему распознаёт промежуточный
+/// конфликт, который снимают правки выбранных слоёв (R8-10, design.md change
+/// `add-config-literal-secrets-and-migrate`, D7). Ключ проблемы —
+/// `providers.<id>.api_key`.
+const providerKeySourcesConflictMessage =
+    'api_key, api_key_env and api_key_secret are mutually exclusive';
+
+/// Событие предупреждения «секрет лежит в файле конфига» (`ConfigIssue.event`,
+/// поля `key`, `source`): CFG-9, пункты 1–3, в файловом слое (design.md change
+/// `add-config-literal-secrets-and-migrate`, D4, R8-4). Значения в записи нет.
+const secretInFileEvent = 'config.secret.in_file';
+
+/// Событие проблемы «переменная `${NAME}` не задана» (`ConfigIssue.event`,
+/// поле `variable`): структурный признак для писателя конфига, чтобы он не
+/// разбирал текст сообщения (design.md change `add-config-writer-and-reload`,
+/// D5, шаг 6).
+const unsetVariableEvent = 'config.variable.unset';
+
+/// Событие служебной проблемы «проверка неполна» (`ConfigIssue.event`):
+/// режим `collectAll` не смог вырезать ошибочный ключ или исчерпал число
+/// кругов, поэтому поздние ступени (в том числе правила доверия) не
+/// выполнены (R3-3, решение 2026-11-03). Писатель всегда считает её новой
+/// проблемой кандидата (fail-closed); значений ключей в ней нет.
+const validationIncompleteEvent = 'config.validation.incomplete';
+
+/// Событие проблемы «нет ни одной модели» (`ConfigIssue.event`) для ключа
+/// `agent.default_model` вида `value` (design.md change
+/// `optional-default-model`, D4): провайдеров нет или у них нет моделей.
+/// Структурный признак: клиент и `provider remove` отличают его от «явная
+/// модель не в каталоге» (тот же ключ и вид) без разбора текста.
+const modelNoneEvent = 'config.model.none';
+
+/// Текст проблемы [modelNoneEvent]: говорит, что сделать (D4).
+const modelNoneMessage =
+    'no model is configured; add a provider with at least one model';
 
 /// Класс проблемы конфигурации (`agent-core-architecture` §15.1, §17.5.2).
 ///
@@ -22,7 +75,10 @@ enum ConfigIssueKind {
   /// Значение вне допустимого: перечисление, формат, подстановка.
   value,
 
-  /// Секрет, записанный значением (CFG-2).
+  /// Секрет, записанный значением (CFG-2): отказ записи `ConfigWriter` и
+  /// предконфигурации из окружения. Литерал в **файле** конфига с R8-4 — не
+  /// проблема, а предупреждение [secretInFileEvent] (design.md change
+  /// `add-config-literal-secrets-and-migrate`, D4).
   inlineSecret,
 
   /// Межключевая проверка §15.5, шаг 8.
@@ -90,6 +146,7 @@ final class ConfigLoadResult {
     this.issues = const [],
     this.warnings = const [],
     this.sources = const [],
+    this.values = const {},
   });
 
   final CoreConfig? config;
@@ -102,9 +159,26 @@ final class ConfigLoadResult {
   /// Источники слоёв по порядку.
   final List<String> sources;
 
+  /// Плоская карта листьев итогового дерева после слияния (design.md change
+  /// `add-config-writer-and-reload`, D8, «ConfigLoadResult.values»).
+  ///
+  /// Почему: перезагрузка сравнивает прежний и новый снимок по ключам, а у
+  /// `CoreConfig` и `HostSettings` общего вида листьев нет. Карта — основа
+  /// списка `changedKeys` и решения об отложенных ключах.
+  ///
+  /// Что внутри: путь ключа (формат [KeyPath], как у `SettingsRegistry`) →
+  /// значение листа «как в файлах», без раскрытия `${…}`. Список — один лист
+  /// (`permissions.deny`); отображение раскрыто до листьев; элемент
+  /// `mcp.servers` лежит целиком под `mcp.servers[<имя>]`, и только у
+  /// включённого сервера (выключенного нет и в `CoreConfig`). Пусто при
+  /// проблемах загрузки. В лог и отчёты попадают только ключи.
+  final Map<String, Object?> values;
+
   /// Конфиг или исключение: так делает хост, которому ошибка конфигурации —
-  /// отказ при старте (`serve`, код `64`). При секрете значением бросается
-  /// [ConfigInlineSecretException] (§17.5.2).
+  /// отказ при старте (`serve`, код `64`). При проблеме вида
+  /// `ConfigIssueKind.inlineSecret` (писатель, предконфигурация; файл конфига
+  /// её больше не даёт, R8-4) бросается [ConfigInlineSecretException]
+  /// (§17.5.2).
   CoreConfig orThrow() {
     final config = this.config;
     if (config != null && issues.isEmpty) {
@@ -136,4 +210,9 @@ final class ConfigInlineSecretException extends ConfigException {
 
   /// Путь первого ключа с секретом.
   final String key;
+
+  /// Имя для подсказки `codelab secret set <name>`: `SecretNames.suggestFor`
+  /// от [key] (design.md change `add-agent-secret-store`, D2). Допустимое имя
+  /// по правилу `SecretNames`; значения секрета в нём нет.
+  String get suggestedSecretName => SecretNames.suggestFor(key);
 }

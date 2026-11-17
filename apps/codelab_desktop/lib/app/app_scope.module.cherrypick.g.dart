@@ -48,7 +48,13 @@ final class $CodeLabRootLifecycleModuleContract
             currentScope.resolve<AcpClientApplication>(),
             currentScope.resolve<AcpTransport>(),
             currentScope.resolve<ClientWorkspace>(),
+            currentScope.resolve<EmbeddedTransportResolver>(),
+            currentScope.resolve<EmbeddedCloseSettings>(),
             currentScope.resolve<CodeLabShellCubit>(),
+            currentScope.resolve<SecretMigrationCubit>(),
+            currentScope.resolve<SecretMigrationOffer>(),
+            currentScope.resolve<NavigationCubit>(),
+            currentScope.resolve<TerminalTabsCubit>(),
           ),
         )
         .singleton();

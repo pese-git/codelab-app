@@ -205,7 +205,7 @@
             "sessionUpdate": "tool_call",
             "toolCallId": "call_1",
             "title": "mcp__fake__delete_issue",
-            "kind": "execute",
+            "kind": "other",
             "status": "pending",
             "rawInput": {
               "id": "42"
@@ -227,7 +227,7 @@
           "toolCall": {
             "toolCallId": "call_1",
             "title": "mcp__fake__delete_issue",
-            "kind": "execute",
+            "kind": "other",
             "status": "pending",
             "rawInput": {
               "id": "42"

@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:codelab_client_acp/codelab_client_acp.dart'
     show DiagnosticSeverity;
-import 'package:codelab_client_io/codelab_client_io.dart'
-    show DirectoryExists, WorkingDirectoryProvider;
+import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:codelab_client_core/codelab_client_core.dart'
     show ClientWorkspace, RecentProjectsStore;
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabRecentProject;
 
 import '../../../core/platform/project_folder_picker.dart';
+import 'project_paths.dart';
 import 'shell_part.dart';
 import 'ui_mappers.dart';
 
@@ -16,32 +16,23 @@ import 'ui_mappers.dart';
 final class SettingsState {
   const SettingsState({
     this.selectedProjectPath,
-    this.runAgentFromProjectDirectory = true,
     this.recentProjects = const [],
   });
 
   /// Рабочая папка («проект»), выбранная через «Open Project», — `cwd`
   /// следующей сессии и для stdio, и для WebSocket. `null` — проект не
-  /// выбран, тогда берётся `WorkingDirectoryProvider.currentPath`
-  /// (add-open-project-picker/design.md, Decision 1).
+  /// выбран: папки агента и сессий нет, папка процесса её не заменяет
+  /// (require-project-folder/design.md, D1).
   final String? selectedProjectPath;
-
-  /// Только stdio: процесс агента запускается в папке проекта. По умолчанию
-  /// `true` — прежнее неявное «cwd процесса == проект» (design.md,
-  /// Decision 2).
-  final bool runAgentFromProjectDirectory;
 
   /// Недавние проекты, самый свежий первым (design.md, Decision 4).
   final List<CodeLabRecentProject> recentProjects;
 
   SettingsState _copyWith({
     String? selectedProjectPath,
-    bool? runAgentFromProjectDirectory,
     List<CodeLabRecentProject>? recentProjects,
   }) => SettingsState(
     selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
-    runAgentFromProjectDirectory:
-        runAgentFromProjectDirectory ?? this.runAgentFromProjectDirectory,
     recentProjects: recentProjects ?? this.recentProjects,
   );
 }
@@ -53,7 +44,9 @@ final class SettingsState {
 /// `09-10`, строка «Проект»; design D10 change `extract-acp-client-kit`).
 ///
 /// Для чего: владелец выбранного проекта; [projectDirectory] — `cwd` для
-/// подключения и новых сессий.
+/// подключения и новых сессий, `null` без проекта. Неявной папки нет: ни
+/// папка процесса, ни домашняя папка проект не заменяют (D1,
+/// `platform-integration.md` §54).
 ///
 /// Как использовать: создаётся вместе с остальными частями
 /// (`CodeLabShellParts`) и сразу загружает недавние проекты и проект
@@ -68,54 +61,111 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     required super.changes,
     required ClientWorkspace workspace,
     required ShellDiagnostics diagnostics,
-    required WorkingDirectoryProvider workingDirectoryProvider,
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
     DirectoryExists? directoryExists,
+    this.projectRestoreTimeout = const Duration(seconds: 2),
   }) : _workspace = workspace,
        _diagnostics = diagnostics,
-       _workingDirectoryProvider = workingDirectoryProvider,
        _projectFolderPicker = projectFolderPicker,
        _recentProjectsStore = recentProjectsStore,
        _directoryExists = directoryExists,
        super(const SettingsState()) {
     // Недавние проекты прошлого запуска видны до первого открытия выбора.
     unawaited(_loadRecentProjects());
-    unawaited(_restoreProject());
+    projectRestored = _restoreProject().whenComplete(
+      () => _projectRestoreFinished = true,
+    );
+    unawaited(projectRestored);
   }
+
+  /// Завершается, когда проект прошлого запуска восстановлен или решено его
+  /// не восстанавливать. Триггер запуска (`startOnLaunch`, D19) ждёт его, чтобы
+  /// стартовать агента уже с папкой проекта.
+  late final Future<void> projectRestored;
+
+  var _projectRestoreFinished = false;
+
+  /// [projectRestored] уже завершился: действие пользователя ждёт
+  /// восстановления, только пока оно идёт ([awaitProject]).
+  bool get projectRestoreFinished => _projectRestoreFinished;
+
+  /// Сколько действие пользователя ждёт восстановления проекта (D3). Больше
+  /// не ждём: зависшее чтение снимка не должно делать приложение немым.
+  /// Параметр конструктора нужен тестам.
+  final Duration projectRestoreTimeout;
+
+  /// Проект для действия пользователя (New session, «Restart agent»):
+  /// выбранный проект, а пока проект прошлого запуска восстанавливается —
+  /// после ожидания не дольше [projectRestoreTimeout].
+  ///
+  /// Почему: действие в первые миллисекунды после старта не должно получать
+  /// отказ «нет проекта», когда снимок вот-вот его вернёт (D3). После
+  /// таймаута или ошибки восстановления возвращает то, что выбрано к этому
+  /// моменту, — возможно `null`. Одна функция для всех действий, чтобы
+  /// правило не расходилось. Вызывающий проверяет номер своего намерения
+  /// после ожидания (AGENTS.md §9).
+  Future<String?> awaitProject() async {
+    if (!_projectRestoreFinished) {
+      try {
+        await projectRestored.timeout(projectRestoreTimeout);
+      } on Object {
+        // Таймаут или сбой восстановления: берём, что выбрано.
+      }
+    }
+    return projectDirectory;
+  }
+
+  Future<void> Function(String project)? _onProjectSelected;
+
+  /// Связывает выбор проекта со стартом агента (D13 п. 1).
+  ///
+  /// Почему метод, а не публичное поле: `ConnectionCubit` создаётся после
+  /// этого Cubit, поэтому связь ставится сборкой частей один раз
+  /// (`CodeLabShellParts.build`); свободно перезаписываемое поле позволяло бы
+  /// любому коду подменить триггер. Восстановление проекта прошлого запуска
+  /// ([_restoreProject]) триггер не вызывает — его вызывает `startOnLaunch`
+  /// (D19), иначе каждая сборка графа в тестах запускала бы агента.
+  ///
+  /// Как использовать: сборка зовёт `bindProjectStart(connection.startAgent)`;
+  /// тест, который стартует агента явно (D20), зовёт `bindProjectStart(null)`.
+  void bindProjectStart(Future<void> Function(String project)? start) =>
+      _onProjectSelected = start;
 
   final ClientWorkspace _workspace;
   final ShellDiagnostics _diagnostics;
-  final WorkingDirectoryProvider _workingDirectoryProvider;
   final ProjectFolderPicker _projectFolderPicker;
   final RecentProjectsStore _recentProjectsStore;
 
   /// `null` — папка проекта не проверяется (тесты с вымышленными путями).
   final DirectoryExists? _directoryExists;
 
-  /// Папка для `cwd` сессии и процесса агента: выбранный проект, иначе
-  /// текущая папка процесса CodeLab (add-open-project-picker/design.md,
-  /// Goals).
-  String get projectDirectory {
+  /// Папка для `cwd` сессии и процесса агента: выбранный проект без
+  /// пробелов по краям; `null` — проект не выбран (пустая строка — не
+  /// проект). Запасного варианта нет: `Process.start(workingDirectory: '')`
+  /// падает на `chdir`, а домашняя папка — та же неявная папка (D1).
+  ///
+  /// Вызывающий читает геттер один раз на намерение и передаёт значение
+  /// дальше (D3).
+  String? get projectDirectory {
     final selected = state.selectedProjectPath?.trim();
-    return selected == null || selected.isEmpty
-        ? _workingDirectoryProvider.currentPath
-        : selected;
+    return selected == null || selected.isEmpty ? null : selected;
   }
 
-  /// Папка [projectDirectory], если её нет на диске; `null` — папка на месте
-  /// или проверка не подключена.
+  /// [path], если его нет на диске; `null` — папка на месте или проверка не
+  /// подключена.
   ///
   /// Вызывает `ConnectionCubit` перед запуском локального агента: процесс в
   /// исчезнувшей папке не стартует, а `session/new` с таким `cwd` отклоняет
   /// агент, и обе ошибки не говорят, что дело в папке. Ошибка самой проверки
-  /// не блокирует подключение — тогда ответит агент.
-  Future<String?> missingProjectDirectory() async {
+  /// не блокирует подключение — тогда ответит агент. Папку [path] вызывающий
+  /// берёт из [projectDirectory] один раз и передаёт и сюда, и в
+  /// `ClientWorkspace` (D3): проект могли сменить, пока шла проверка.
+  Future<String?> missingProjectDirectory(String path) async {
     final exists = _directoryExists;
     if (exists == null) {
       return null;
     }
-    final path = projectDirectory;
     try {
       return await exists(path) ? null : path;
     } on Object {
@@ -125,7 +175,8 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
 
   /// Выбирает [path] проектом следующей сессии, записывает его в недавние и
   /// сразу перечитывает их — выбор проекта показывает новую запись, не
-  /// дожидаясь следующего запуска.
+  /// дожидаясь следующего запуска. Пустой путь и путь из пробелов проектом не
+  /// являются и ничего не меняют (D1).
   Future<void> selectProject(String path) async {
     final trimmed = path.trim();
     if (trimmed.isEmpty) {
@@ -135,6 +186,9 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     emit(state._copyWith(selectedProjectPath: trimmed));
     _workspace.selectProject(trimmed);
     _diagnostics.record('Selected project: $trimmed.', source: 'project');
+    // Ошибки старта не теряются: `ConnectionCubit` публикует их состоянием
+    // соединения и диагностикой, наружу старт не бросает.
+    unawaited(_onProjectSelected?.call(trimmed) ?? Future<void>.value());
 
     try {
       await _recentProjectsStore.record(trimmed);
@@ -162,16 +216,26 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     await selectProject(path);
   }
 
-  void toggleRunAgentFromProjectDirectory(bool value) =>
-      emit(state._copyWith(runAgentFromProjectDirectory: value));
-
   /// Проект прошлого запуска выбирается, только если пользователь ещё не
-  /// выбрал свой, пока снимок читался, и его папка ещё есть на диске.
+  /// выбрал свой, пока снимок читался, он не корень файловой системы и его
+  /// папка ещё есть на диске.
   /// Исчезнувшая папка не выбирается: иначе первое же подключение упало бы
   /// в ней; пользователь видит предупреждение и выбирает папку заново.
+  /// Корень (`/`) оставили версии, подставлявшие папку процесса вместо
+  /// проекта; он тоже не выбирается, а сессии такого снимка убирает правило
+  /// kit «выбор другого проекта отменяет восстановление» (D10).
   Future<void> _restoreProject() async {
     final project = await _workspace.restoreProject();
     if (isClosed || project == null || state.selectedProjectPath != null) {
+      return;
+    }
+    if (isFilesystemRoot(project)) {
+      _diagnostics.record(
+        'Project folder from the last run is the filesystem root: $project. '
+        'Choose a folder with Open folder….',
+        severity: DiagnosticSeverity.warning,
+        source: 'project',
+      );
       return;
     }
     if (_directoryExists case final exists?) {

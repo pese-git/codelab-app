@@ -30,6 +30,60 @@ abstract interface class SessionStore {
     bool durable = false,
   });
 
+  /// Создаёт журнал потомка в каталоге `subagents/` корневой сессии и
+  /// возвращает непрозрачный адрес для поля `journal` записи `subagent` и
+  /// `SubagentStarted.journalPath` (`agent-core/17-3-subagents.md` §17.3.6;
+  /// design.md change `add-subagents-and-tasks`, D7, D36 Т4).
+  ///
+  /// Почему на порту: раскладка файлов — дело хранилища, ядро знает только
+  /// корень дерева из `header.parent`. `header.parent` обязателен
+  /// (`ArgumentError` без него); повторный id — `StateError`. Дальше
+  /// `append`, `flush` и `close` работают по `header.id`; `open` с этим id,
+  /// `list` и `index.json` дочерних журналов не видят.
+  Future<String> createChild(SessionHeader header);
+
+  /// Открывает журнал потомка по адресу [journal], который вернул
+  /// [createChild] (поле `journal` записи `subagent`): снимок для лечения
+  /// прерванного дерева (`agent-core/17-3-subagents.md` §17.3.6; design.md
+  /// change `add-subagents-and-tasks`, D45 Т7).
+  ///
+  /// Почему на порту: адрес непрозрачен для ядра, а раскладка файлов — дело
+  /// хранилища. После вызова `append`, `flush` и `close` работают по id
+  /// потомка (он берётся из адреса и заголовка), в том числе у нового
+  /// экземпляра хранилища после перезапуска. Журнал открывается под тем же
+  /// правом записи, что и корень: отдельной блокировки у потомка нет.
+  ///
+  /// [rootSessionId] — корень дерева, чей журнал лечится: адрес читается из
+  /// данных на диске и не должен вести в дерево другого корня, а заголовок
+  /// журнала — называть другой id, чем имя файла (журнал подложен).
+  ///
+  /// Ремонт повреждённых строк — как у [open]. Нет журнала, адрес не
+  /// разбирается, он чужого корня, заголовок не совпал с именем или файл —
+  /// ссылка за пределы хранилища — [SessionNotFound]; `open` с id потомка
+  /// по-прежнему [SessionNotFound], `list` его не видит.
+  Future<SessionSnapshot> openChild(
+    String journal, {
+    required SessionId rootSessionId,
+  });
+
+  /// Снимок журнала потомка для реплея дерева: без записи, без регистрации
+  /// пути и без закрытия дескриптора живого журнала (`agent-core/08-sessions.md`
+  /// §8.3; design.md change `add-subagents-and-tasks`, D47 Т5).
+  ///
+  /// Почему отдельно от [openChild]: тот закрывает дескриптор, ремонтирует
+  /// файл и регистрирует путь для `append`; на `session/load` открытой
+  /// сессии это затронуло бы журнал, который ещё пишет потомок, переживший
+  /// `cancel_grace`. Здесь разбор и ремонт идут только в памяти (по образцу
+  /// `openReadOnly`), оборванная последняя строка пропускается.
+  ///
+  /// Проверки адреса, корня [rootSessionId], заголовка и ссылки — те же, что
+  /// у [openChild]; любая из них — [SessionNotFound]. После вызова `append`,
+  /// `flush` и `close` по id потомка не меняются.
+  Future<SessionSnapshot> openChildReadOnly(
+    String journal, {
+    required SessionId rootSessionId,
+  });
+
   /// Сброс записанного на носитель (`TurnEnded`, §8.3).
   Future<void> flush(SessionId id);
 

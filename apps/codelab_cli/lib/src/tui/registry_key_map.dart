@@ -25,6 +25,8 @@ final class RegistryKeyMap implements tea.KeyMap {
     KeyAction.newline: 'new line',
     KeyAction.cancelTurn: 'cancel',
     KeyAction.scrollUp: 'scroll',
+    KeyAction.toggleTasks: 'tasks',
+    KeyAction.toggleDetails: 'details',
     KeyAction.exit: 'exit',
   };
 
@@ -38,7 +40,16 @@ final class RegistryKeyMap implements tea.KeyMap {
           tea.KeyBinding(
             keys: [for (final b in bound) b.key.label],
             help: (
-              key: {for (final b in bound) b.key.label}.join('/'),
+              // Подсказки списка задач и раскрытия `agent` — в нижнем
+              // регистре, как в заголовке блока задач (`ctrl+t hide`, spec
+              // codelab-tui, D26, D48 п. 2: `ctrl+o details`).
+              key: {
+                for (final b in bound)
+                  action == KeyAction.toggleTasks ||
+                          action == KeyAction.toggleDetails
+                      ? b.key.label.toLowerCase()
+                      : b.key.label,
+              }.join('/'),
               description: label,
             ),
           ),

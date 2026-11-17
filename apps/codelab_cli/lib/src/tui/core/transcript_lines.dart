@@ -1,7 +1,7 @@
-import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../../render/ansi.dart';
+import '../../render/plan_format.dart';
 import '../../render/sanitize.dart';
 import '../../render/terminal_renderer.dart';
 import '../../render/tool_row.dart';
@@ -61,6 +61,7 @@ final class TranscriptLayout {
     ThoughtsMode thoughts = ThoughtsMode.dim,
     bool unicode = true,
     bool color = true,
+    bool expandDetails = false,
   }) {
     final out = <String>[];
     void addNotes(int after) {
@@ -83,7 +84,9 @@ final class TranscriptLayout {
           thoughts != ThoughtsMode.hidden) {
         out.add('');
       }
-      out.addAll(_itemLines(item, width, thoughts, unicode, color));
+      out.addAll(
+        _itemLines(item, width, thoughts, unicode, color, expandDetails),
+      );
       addNotes(index + 1);
       previous = item;
     }
@@ -105,8 +108,7 @@ final class TranscriptLayout {
   /// `[~]`, `[ ]`) — для блока в конце транскрипта и для `/plan`.
   static List<String> planLines(List<PlanEntryView> plan) => [
     planHeader,
-    for (final entry in plan)
-      '  ${_planMark(entry.status)} ${sanitizeTerminalText(entry.content)}',
+    for (final entry in plan) '  ${planEntryText(entry)}',
   ];
 
   List<String> _itemLines(
@@ -115,17 +117,19 @@ final class TranscriptLayout {
     ThoughtsMode thoughts,
     bool unicode,
     bool color,
+    bool expanded,
   ) {
     final cached = _cache[item.id];
     if (cached != null &&
         cached.item == item &&
         cached.width == width &&
-        cached.thoughts == thoughts) {
+        cached.thoughts == thoughts &&
+        cached.expanded == expanded) {
       return cached.lines;
     }
     computed++;
-    final lines = _build(item, width, thoughts, unicode, color);
-    _cache[item.id] = _Entry(item, width, thoughts, lines);
+    final lines = _build(item, width, thoughts, unicode, color, expanded);
+    _cache[item.id] = _Entry(item, width, thoughts, expanded, lines);
     return lines;
   }
 
@@ -135,6 +139,7 @@ final class TranscriptLayout {
     ThoughtsMode thoughts,
     bool unicode,
     bool color,
+    bool expanded,
   ) {
     List<String> wrapped(String text) => [
       for (final line in sanitizeTerminalText(text).split('\n'))
@@ -157,26 +162,123 @@ final class TranscriptLayout {
         ThoughtsMode.collapsed => [dim(unicode ? 'thinking…' : 'thinking...')],
         ThoughtsMode.hidden => const [],
       },
-      ToolCallItem() => [toolRow(item, unicode: unicode)],
+      ToolCallItem() => _toolLines(item, width, unicode, color, expanded),
+      // Тихая строка операций со списком: без рамки и статуса (D27).
+      TaskOpsItem() => [
+        dim('${unicode ? '☰ ' : '- '}${sanitizeTerminalText(item.text)}'),
+      ],
       NoticeItem(:final kind) => wrapped(
         '${kind == NoticeKind.error ? errorPrefix : notePrefix}'
         '${noticeText(item)}',
       ),
     };
   }
+}
 
-  static String _planMark(PlanEntryStatus status) => switch (status) {
-    PlanEntryStatus.completed => '[x]',
-    PlanEntryStatus.inProgress => '[~]',
-    PlanEntryStatus.pending => '[ ]',
-  };
+/// Предел строк отчёта субагента в раскрытой строке (D27, D48 п. 2).
+const _maxReportLines = 20;
+
+/// Строки вызова: обычный вызов — одна строка; `agent` — строка статуса,
+/// исход одобрений потомков, «хвост» работающего (D25) и в раскрытом виде
+/// вложенные вызовы потомков и отчёт (D48 п. 2).
+///
+/// Почему: пока потомок работает, нужно видеть, что он делает, а полное
+/// дерево и отчёт — по запросу (Ctrl+O), иначе длинный отчёт съел бы экран.
+List<String> _toolLines(
+  ToolCallItem item,
+  int width,
+  bool unicode,
+  bool color,
+  bool expanded,
+) {
+  if (item.details?.subagentCall == null) {
+    return [toolRow(item, unicode: unicode)];
+  }
+  final tail = item.tail;
+  final tailShown =
+      !isFinalToolCall(item) && !expanded && tail.calls.isNotEmpty;
+  return [
+    // Вызов `agent`: итог в самой строке статуса (D24, D27); с хвостом
+    // строки прогресса нет — он показывает, что делает потомок, без токенов
+    // (Q15).
+    subagentStatusRow(item, unicode: unicode, showProgress: !tailShown),
+    // Исход одобрений потомков под строкой корня (D43 п. 2).
+    for (final (_, line) in childOutcomeLines(item)) ...wrapLine(line, width),
+    if (expanded) ...[
+      ..._stepLines(item.children, 1, width, unicode, color),
+      ..._reportLines(item, width),
+    ] else if (tailShown) ...[
+      for (final call in tail.calls)
+        // Операция со списком задач — тихая строка, как в раскрытом виде
+        // (D48 п. 3); остальные — обычная строка вызова.
+        if (tail.operations[call.toolCallId] case final operation?)
+          _quietLine(operation, 1, unicode, color)
+        else
+          '${_stepPrefix(1, unicode)}${toolRow(call, unicode: unicode)}',
+      if (tail.moreCount > 0) '  +${tail.moreCount} more tool calls',
+    ],
+  ];
+}
+
+/// Отступ и маркер вложенной строки: два пробела на уровень и `↳ ` (без
+/// UTF-8 — `> `).
+String _stepPrefix(int depth, bool unicode) =>
+    '${'  ' * depth}${unicode ? '↳ ' : '> '}';
+
+/// Вложенные строки раскрытого `agent`: вызовы потомков по порядку, вложенный
+/// `agent` — строкой с итогом без отчёта, операция со списком — тихой строкой
+/// (D48 п. 3, 4).
+List<String> _stepLines(
+  List<TranscriptItem> children,
+  int depth,
+  int width,
+  bool unicode,
+  bool color,
+) {
+  final prefix = _stepPrefix(depth, unicode);
+  return [
+    for (final child in children)
+      ...switch (child) {
+        ToolCallItem() => [
+          // Вложенный `agent` — та же строка с итогом в скобках, что в REPL
+          // (`toolRow`), без отчёта (D48 п. 4).
+          '$prefix${toolRow(child, unicode: unicode)}',
+          ..._stepLines(child.children, depth + 1, width, unicode, color),
+        ],
+        TaskOpsItem() => [_quietLine(child, depth, unicode, color)],
+        _ => const <String>[],
+      },
+  ];
+}
+
+/// Тихая строка операции со списком задач: приглушённый текст без значка.
+String _quietLine(TaskOpsItem item, int depth, bool unicode, bool color) {
+  final text =
+      '${_stepPrefix(depth, unicode)}${sanitizeTerminalText(item.text)}';
+  return color ? '$sgrDim$text$sgrReset' : text;
+}
+
+/// Отчёт `agent` корня до [_maxReportLines] строк и `… (<n> more lines)`.
+List<String> _reportLines(ToolCallItem item, int width) {
+  final report = ToolRowFormatter.format(item, cwd: '').report;
+  if (report == null) {
+    return const [];
+  }
+  final lines = report.split('\n');
+  return [
+    for (final line in lines.take(_maxReportLines))
+      ...wrapLine('  ${sanitizeTerminalText(line)}', width),
+    if (lines.length > _maxReportLines)
+      '  … (${lines.length - _maxReportLines} more lines)',
+  ];
 }
 
 final class _Entry {
-  const _Entry(this.item, this.width, this.thoughts, this.lines);
+  const _Entry(this.item, this.width, this.thoughts, this.expanded, this.lines);
 
   final TranscriptItem item;
   final int width;
+  final bool expanded;
   final ThoughtsMode thoughts;
   final List<String> lines;
 }

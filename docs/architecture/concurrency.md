@@ -91,6 +91,31 @@ CPU-heavy работу следует выносить из UI isolate, если
 
 Не следует вводить isolate для любой небольшой операции.
 
+### 4.1. Встроенный агент в UI isolate (решение 7.8)
+
+Встроенный Dart-агент (`codelab_embedded`) работает в процессе клиента, в том же isolate, что и UI: агентский и клиентский концы соединены парой `InProcessAcpLink`, без отдельного isolate. Решение принято по замеру задачи 7.8 ([design.md change `add-embedded-agent-mode`](../../openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md), D11, «Решение 7.8»; решение пользователя 2026-11-02):
+
+* критерий переноса ядра в `IsolateAcpLink` — p99 задержки цикла событий больше 8 мс или максимум больше 50 мс на 10 000 чанков ответа (AOT, эталонная машина);
+* критерии выполняются, пока провайдер отдаёт не больше 7 SSE-событий на одно чтение сокета; задержка растёт примерно на 1 мс на каждое событие в пачке. Это граница пачек: при пачках от 8 событий (занятый цикл событий, буферизующий прокси, провайдер без flush) p99 превышает 8 мс;
+* больше половины стоимости чанка — клиентская проекция kit (`AcpClientApplication`, `ClientWorkspace`), а не ядро, поэтому isolate ядра сдвинул бы границу ненамного; `IsolateAcpLink` не делается;
+* разбор журнала сессии при открытии (`JsonlSessionStore.open`) выполняется в `Isolate.run` независимо от замера; сжатие контекста остаётся в главном isolate — оно ждёт ответа LLM, его CPU-часть мала (D11; замер его не измерял);
+* на web isolate нет — там всегда `InProcessAcpLink`.
+
+Остаточный риск и follow-up — [`docs/backlog/perf-2026-11-02-stream-latency.md`](../backlog/perf-2026-11-02-stream-latency.md): PERF-1 — удешевить клиентскую проекцию потока чанков в kit; PERF-2 — замерить реальный размер пачки SSE у LM Studio и облачного провайдера; если пачки от 8 событий встречаются на практике, решение 7.8 пересматривается. Синхронный бесконечный цикл в ядре зависнет вместе с UI: охраняемая зона встроенного агента его не прерывает.
+
+
+### 4.2. Терминал пользователя: isolate вкладки (решение Q24) — план после 1.0
+
+**Статус.** Решение принято 2026-11-12, реализация отложена на после 1.0. **Текущий адаптер вызывает `pty2` на UI isolate, запись в PTY синхронная** — известное нарушение §2 этого документа, принятое для 1.0 как известная проблема (решение пользователя 2026-11-12, вариант 2): терминал выпускается в 1.0, вставка больше ~1 КБ в программу, которая не читает ввод, замораживает app до её завершения (Risks change, «Синхронная запись в PTY»; ограничение — в примечаниях к выпуску). Ниже — план задачи 2.13.
+
+`pty2` пишет в PTY синхронно: при полном буфере ввода (на macOS около 1 КБ) `write` крутит `poll` на вызывающем isolate, пока программа не прочитает ввод. Ручной замер: вставка 4–200 КБ в программу, которая не читает stdin, держала isolate ~7,5 с. Поэтому по плану адаптер `PtyUserShellLauncher` будет держать `pty2` в долгоживущем isolate — по одному на shell вкладки, чтобы висящая запись одной вкладки не задерживала другие ([design.md change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D2, «Фоновый isolate вкладки»; D4):
+
+* владелец isolate — объект `UserShell` адаптера; isolate завершается после выхода процесса, при сбое и принудительно;
+* `UserShell.write` в UI isolate отправляет строку сообщением и сразу возвращается; очередь записи — FIFO в isolate вкладки, порядок ввода сохраняется, при `hangUp`, `kill`, выходе и сбое очередь отбрасывается;
+* сигналы идут мимо очереди записи: UI isolate шлёт их по `pid` сам (`Process.killPid`), пока процесс не вышел, и дублирует сообщением в isolate вкладки;
+* если после `kill()` код выхода не пришёл за 2 с, UI isolate завершает isolate вкладки (`Isolate.kill(priority: Isolate.immediate)`), `exitCode` завершается ошибкой, вкладка — `exited(null)` (§24, §25);
+* сообщения — неизменяемые, без Flutter-объектов и без текстов ошибок (§41).
+
 ---
 
 ## 5. Ownership
@@ -775,9 +800,10 @@ State machine должна воспринимать expected exit как intenti
 `terminal/create` управляет отдельным session-scoped реестром процессов
 (`SessionId → Map<TerminalId, TerminalProcessHandle>`), независимым от
 собственного child-процесса ACP transport (§42-43) и от
-`TerminalProcessFactory` локальной интерактивной terminal-панели
-(`add-integrated-terminal`) — два разных owner'а, два разных lifecycle
-(`add-acp-terminal-client-support/design.md`, Decision 6).
+процессов панели Terminal пользователя (порт `UserShellLauncher`, владелец
+`TerminalTabsCubit`; change `add-integrated-terminal`, D10) — разные
+owner'ы, разные lifecycle (`add-acp-terminal-client-support/design.md`,
+Decision 6). Разрыв соединения с агентом процессы панели Terminal не трогает.
 
 Правила:
 
@@ -833,6 +859,50 @@ close transport/process
 dispose containers
 ```
 
+Терминал пользователя (панель Terminal, change `add-integrated-terminal`, D4) встроен в этот поток через `AppLifecycleListener.onExitRequested` composition root:
+
+```text
+exit requested
+      │
+      ▼
+TerminalTabsCubit.closeAll()   — новые вкладки больше не создаются
+      │
+      ▼
+SIGHUP всем shell → ожидание до 3 с → принудительное завершение оставшихся
+      │
+      ▼
+AppExitResponse.exit
+```
+
+Shell, вернувшийся из асинхронного старта после начала `closeAll`, сразу завершается и в реестр не попадает (stale result, §10). Повторный `closeAll` из закрытия root scope ничего не делает.
+
+Опираться только на `dispose containers` терминал не может: при штатном завершении app (macOS `terminate:`) дерево виджетов не размонтируется, и `AppScope.dispose` не выполняется. Dart VM при остановке движка ждёт все isolate, а isolate `pty2` каждого живого shell стоит в блокирующем FFI `waitpid` — без `closeAll()` в `onExitRequested` выход зависает (решение пользователя 2026-11-12; change, D4, D15 п. 9). Тот же вывод для любого будущего isolate с блокирующим FFI-вызовом: его владелец обязан снять блокировку до `AppExitResponse.exit`, `Isolate.kill` её не прерывает.
+
+По той же причине (`dispose containers` при штатном выходе не выполняется) обработчик выхода закрывает не только терминал, а весь `CodeLabRootLifecycle.dispose()` — иначе процессы ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента остаются сиротами (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D1, D2):
+
+```text
+exit requested ─────────────────────────────── app.exit_requested
+      │
+      ├──► ветка терминала: TerminalTabsCubit.closeAll() (hangUp → 3 с → kill)
+      │
+      └──► клиентская ветка: Cubit-ы → ClientWorkspace.dispose()
+                ├──► EmbeddedTransportResolver.close()   (отмена ходов, exec, MCP)
+                │      → SecretMigrationOffer.close()
+                └──► начальный транспорт → AcpClientApplication.dispose(closeTimeout: 2 с)
+                       ├─ terminal/*: SIGTERM → 2 с → SIGKILL
+                       └─ stdio-агент: EOF → 2 с → SIGTERM → 2 с → SIGKILL
+      │
+      ▼  все ветки, не дольше 5 с от запроса  ── app.exit_closed | app.exit_timeout {pending}
+сброс журнала ≤ 500 мс
+      │
+      ▼
+AppExitResponse.exit
+```
+
+Ветки параллельны: терминал пользователя и ACP-сторона независимы (§44). Внутри клиентской ветки Cubit-ы и рабочее пространство закрываются первыми (§42 `session-lifecycle.md`). Дальше встроенный агент и ядро клиента закрываются параллельно: закрытие клиентского конца само запускает тот же `dispose` встроенного агента, а ожидание встроенного агента (до 10 с) не должно задерживать сигналы `terminal/*` и stdio-агенту (D11 change). Повторный запрос выхода и последующее закрытие root scope ждут тот же проход: `dispose()` мемоизирован, сигналы повторно не шлются.
+
+Закрытие владельца во время идущего подключения — отдельная гонка (§9 `AGENTS.md`). Операция подключения после каждого `await` проверяет, не закрыт ли владелец. Если закрыт, полученный ресурс закрывается, не привязывается и не запускается, а операция завершается ошибкой. Иначе процесс, запущенный после `dispose`, остаётся без владельца. В CodeLab это `AcpClientApplication` (флаг `_disposed`, проверки в `reconnect`, `_replaceTransport`, `_establishConnection`, `terminal/create`) и `StdioAcpTransport` (`close` во время `start` дожидается запуска и закрывает процесс), D12, D13 change.
+
 ---
 
 ## 46. Shutdown timeout
@@ -842,6 +912,14 @@ dispose containers
 После timeout возможен force termination, если это соответствует policy.
 
 Такой behavior должен быть централизован.
+
+Политика CodeLab desktop (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D2–D4):
+
+* общий предел выхода — 5 с от запроса ОС, держит его один владелец — `AppExitHandler`; по истечении ответ всё равно `exit`, отмены выхода нет;
+* второго реестра процессов для «добить оставшихся» нет: каждый владелец сам эскалирует до принудительного завершения в пределах своего бюджета, а бюджеты подобраны так, чтобы уложиться в общий предел. Это работает, только если шаг, посылающий сигналы, начинается рано: шаг, не начатый к пределу, не послал ничего. Поэтому шаги с сигналами не ставятся в очередь за долгими шагами без сигналов (встроенный агент), а `pending` в `app.exit_timeout` перечисляет и не начатые шаги (D10, D11 change) (`StdioAcpTransport.close`: `timeout` → `SIGTERM` → 2 с → `SIGKILL`; `IoTerminalProcessRunner.kill()`: `SIGTERM` → 2 с → `SIGKILL`; терминал пользователя: `hangUp` → 3 с → `kill`; `exec` агента: `terminateTree`, 2 с);
+* ожидание выхода процесса без предела запрещено ни на одном шаге закрытия;
+* повторное закрытие владельца ждёт идущее (мемоизированный `Future`), а не возвращается сразу: иначе вызывающий с более коротким пределом считает ресурс закрытым, пока тот ещё ждёт. У `StdioAcpTransport.close` более ранний предел повторного вызова сокращает ожидание EOF (D13 change);
+* шаги закрытия изолированы: сбой одного (`app.shutdown_step_failed`) не отменяет следующие.
 
 ---
 

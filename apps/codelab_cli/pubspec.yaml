@@ -26,6 +26,11 @@ dependencies: # allowlist — workspace-architecture «Автоматическ�
     path: ../../packages/dart/codelab_client_core
   codelab_client_io:
     path: ../../packages/dart/codelab_client_io
+  # Встроенный агент в процессе CLI (design.md change
+  # `add-embedded-agent-mode`, D3): `io.dart` — только `composition_root.dart`,
+  # `testing.dart` — только `lib/src/scenario/` (правила сторожа).
+  codelab_embedded:
+    path: ../../packages/dart/codelab_embedded
   # Мост настроек агента: `codelab config check` (design.md change
   # `add-agent-configuration`, D14); вместо прямого `codelab_agent_*`.
   codelab_setup:

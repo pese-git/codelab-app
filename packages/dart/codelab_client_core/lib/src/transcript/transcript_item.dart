@@ -2,6 +2,8 @@ import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'subagent_views.dart';
+
 part 'transcript_item.freezed.dart';
 
 /// Элемент транскрипта сессии для отображения.
@@ -47,7 +49,48 @@ sealed class TranscriptItem with _$TranscriptItem {
     required String title,
     ToolCallView? details,
     ApprovalStateView? approval,
+
+    /// Одобрения потомков, спросивших под этой строкой `agent` корня:
+    /// ожидающие и решённые в порядке прихода (D43 п. 2). Панель решения у
+    /// запроса потомка одна — блок под строкой корня; при дереве вызовов
+    /// (итерация 5) то же одобрение лежит и в [approval] вложенной строки
+    /// (там — только ожидание и исход, D47 Т9). Без дерева поле — единственное
+    /// место его одобрения. У прочих строк пусто.
+    @Default(<ApprovalStateView>[]) List<ApprovalStateView> childApprovals,
+
+    /// Вложенные элементы дерева вызовов потомков в порядке прихода `tool_call`:
+    /// [ToolCallItem] потомков и [TaskOpsItem] их операций со списком (слияние
+    /// только у соседей одного родителя, D48 п. 3). Дерево строится по
+    /// `parentToolCallId` кадров (D21); вызов с неизвестным родителем остаётся
+    /// на верхнем уровне. Пусто у вызовов без потомков и у клиентов без
+    /// согласия на дерево (агент кадров потомков не шлёт).
+    @Default(<TranscriptItem>[]) List<TranscriptItem> children,
+
+    /// «Хвост» вызова `agent` (D25): три последних вызова поддерева по порядку
+    /// прихода `tool_call` и число остальных. Хост показывает его у
+    /// работающего вызова вместо строки прогресса; пуст без вызовов потомков.
+    @Default(SubagentTailView()) SubagentTailView tail,
+
+    /// Число вызовов поддерева, включая вложенные `agent` и операции со
+    /// списком (D47 Т9) — для счётчика `N tool calls`; совпадает с
+    /// `summary.toolCalls` итога (D24), поэтому счётчик не прыгает на финале.
+    @Default(0) int subtreeCalls,
   }) = ToolCallItem;
+
+  /// Операция со списком задач: тихая строка вместо вызова `think`
+  /// (design.md change `add-subagents-and-tasks`, D27).
+  ///
+  /// Поля — id пунктов (`_meta.codelab.task.id`): [added] — добавленные,
+  /// [completed] — ставшие `completed`, [removed] — удалённые, [updated] —
+  /// прочие изменённые. Подряд идущие операции сливаются в один элемент
+  /// (поля объединяются); [id] — id первого. Текст — [TaskOpsItemText.text].
+  const factory TranscriptItem.taskOps({
+    required String id,
+    @Default(<String>[]) List<String> added,
+    @Default(<String>[]) List<String> completed,
+    @Default(<String>[]) List<String> removed,
+    @Default(<String>[]) List<String> updated,
+  }) = TaskOpsItem;
 
   /// Итог хода, который не виден из обновлений агента.
   ///
@@ -60,6 +103,92 @@ sealed class TranscriptItem with _$TranscriptItem {
     required String text,
     PromptFailure? failure,
   }) = NoticeItem;
+}
+
+/// «Хвост» вызова `agent` (D25, D47 Т9).
+///
+/// Почему: пока потомок работает, человеку нужно видеть, что он делает сейчас,
+/// не раскрывая дерево; строка прогресса агента несёт токены, которых хвост
+/// не показывает (Q15), а разбирать её клиент не вправе.
+///
+/// Для чего: [calls] — три последних вызова поддерева по порядку прихода их
+/// `tool_call` (включая вложенные `agent` и операции со списком задач:
+/// «вызовами поддерева считаются все вызовы потомков», acp-client-kit «Итог и
+/// хвост субагента», D48 п. 3), [moreCount] — число остальных вызовов
+/// поддерева (`+N more tool calls`). Пустой, пока вызовов потомков нет.
+///
+/// [operations] — подмножество [calls], которое является операциями со
+/// списком задач: `toolCallId → тихая строка` ([TaskOpsItem] одной операции,
+/// без слияния с соседними). Хост рисует такой элемент хвоста тихой строкой
+/// (`item.text`), а не обычным вызовом `think`.
+///
+/// Как использовать: читать из [ToolCallItem.tail]; элементы хвоста — плоские
+/// строки без вложенных [ToolCallItem.children].
+final class SubagentTailView {
+  const SubagentTailView({
+    this.calls = const [],
+    this.moreCount = 0,
+    this.operations = const {},
+  });
+
+  final List<ToolCallItem> calls;
+  final int moreCount;
+  final Map<ToolCallId, TaskOpsItem> operations;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SubagentTailView &&
+      other.moreCount == moreCount &&
+      other.calls.length == calls.length &&
+      other.operations.length == operations.length &&
+      [
+        for (var i = 0; i < calls.length; i++) calls[i] == other.calls[i],
+      ].every((same) => same) &&
+      operations.entries.every((e) => other.operations[e.key] == e.value);
+
+  @override
+  int get hashCode => Object.hash(
+    moreCount,
+    Object.hashAll(calls),
+    Object.hashAllUnordered([
+      for (final e in operations.entries) Object.hash(e.key, e.value),
+    ]),
+  );
+
+  @override
+  String toString() => 'SubagentTailView($calls, +$moreCount)';
+}
+
+/// Текст тихой строки операций со списком задач (D27).
+///
+/// Почему: текст один для app, REPL и TUI, поэтому строится в kit, а не в
+/// хостах. Для чего: «Task #3 added to the plan», «Tasks #1–#4 added to the
+/// plan» (подряд идущие id — диапазоном, иначе списком `#1, #3`), «Task #2
+/// done», «Task #2 removed», «Task #2 updated»; части идут в этом порядке и
+/// объединяются через `; `.
+extension TaskOpsItemText on TaskOpsItem {
+  String get text => [
+    if (added.isNotEmpty) '${_tasks(added)} added to the plan',
+    if (completed.isNotEmpty) '${_tasks(completed)} done',
+    if (removed.isNotEmpty) '${_tasks(removed)} removed',
+    if (updated.isNotEmpty) '${_tasks(updated)} updated',
+  ].join('; ');
+}
+
+String _tasks(List<String> ids) =>
+    '${ids.length == 1 ? 'Task' : 'Tasks'} ${_idList(ids)}';
+
+String _idList(List<String> ids) {
+  final numbers = [for (final id in ids) int.tryParse(id)];
+  final consecutive =
+      ids.length > 1 &&
+      !numbers.contains(null) &&
+      [
+        for (var i = 1; i < numbers.length; i++) numbers[i]! - numbers[i - 1]!,
+      ].every((step) => step == 1);
+  return consecutive
+      ? '#${ids.first}–#${ids.last}'
+      : ids.map((id) => '#$id').join(', ');
 }
 
 /// Состояние вызова инструмента в элементе транскрипта.
@@ -83,14 +212,35 @@ abstract class ToolCallView with _$ToolCallView {
     /// Тексты элементов `content` с текстовым блоком в порядке прихода:
     /// вывод вызова, причина отказа или ошибки.
     @Default(<String>[]) List<String> textOutput,
+
+    /// Признак вызова `agent` из `_meta.codelab.subagent` первого кадра
+    /// (D28); `null` — обычный вызов (сторонний агент).
+    SubagentCallView? subagentCall,
+
+    /// Итог субагента из финального обновления (D24); `null` без итога.
+    SubagentSummaryView? subagentSummary,
+
+    /// Причина отказа субагента из `_meta.codelab.subagent.failure`
+    /// (`parseSubagentFailure`); `null` без неё.
+    String? subagentFailure,
+
+    /// Спрашивающий потомок вызова, объявленного только запросом разрешения
+    /// (D15, D43 п. 1); не меняет [subagentCall]. Остаётся после решения.
+    SubagentRequester? subagent,
+
+    /// `_meta.codelab.parentToolCallId` кадров вызова (D21, D47 Т9); `null` —
+    /// вызов корня.
+    String? parentToolCallId,
   }) = _ToolCallView;
 }
 
 /// Статус вызова для отображения.
 ///
-/// [cancelled] — вызов не закончился к `session/cancel` клиента: в ACP такого
-/// статуса нет, ядро хранит его как `failed` с флагом `cancelledByClient`
-/// (fix-prompt-cancel-tool-calls/design.md, D3).
+/// [cancelled] — вызов не закончился: в ACP такого статуса нет. Два источника:
+/// `session/cancel` клиента (ядро хранит `failed` с флагом
+/// `cancelledByClient`, fix-prompt-cancel-tool-calls/design.md, D3) и признак
+/// агента `_meta.codelab.outcome: "cancelled"` у `failed`-кадра, в том числе
+/// при реплее `session/load` (add-subagents-and-tasks, D41 п. 1).
 enum ToolCallStatusView { queued, running, succeeded, failed, cancelled }
 
 /// Одобрение вызова инструмента, встроенное в его элемент.
@@ -113,6 +263,16 @@ sealed class ApprovalStateView with _$ApprovalStateView {
     required List<PermissionOption> options,
     required bool focused,
     @Default(false) bool critical,
+
+    /// Спрашивающий потомок (`_meta.codelab.subagent` запроса, D15); `null` —
+    /// запрос корня или стороннего агента.
+    SubagentRequester? subagent,
+
+    /// Заголовок вызова запроса (`toolCall.title`, с префиксом D8). Нужен, когда
+    /// строки вызова в ленте нет: у запроса потомка вызов лежит под строкой
+    /// `agent` корня (D43 п. 2), и без заголовка человек не видит, какой
+    /// инструмент разрешает.
+    String? toolTitle,
   }) = PendingApprovalView;
 
   /// Решено; [label] — имя выбранного варианта, `Cancelled` или `Resolved`,
@@ -121,6 +281,10 @@ sealed class ApprovalStateView with _$ApprovalStateView {
   const factory ApprovalStateView.resolved({
     required String label,
     required ApprovalOutcomeView outcome,
+
+    /// Спрашивавший потомок: по нему хост подписывает строку исхода под
+    /// строкой корня (`review: Allow`, D43 п. 2); `null` — запрос корня.
+    SubagentRequester? subagent,
   }) = ResolvedApprovalView;
 }
 
@@ -145,6 +309,12 @@ enum NoticeKind {
 
   /// Ход завершился без вывода агента; текст — `Completed with stopReason …`.
   emptyTurn,
+
+  /// Ход остановлен агентом по причине, которую пользователь иначе не
+  /// увидит: `max_tokens`, `max_turn_requests`, `refusal` (design D27,
+  /// решение Q33). Добавляется всегда, даже если агент что-то вывел; id
+  /// `<turnId>/stopped`. Ходу с такой заметкой `emptyTurn` не добавляется.
+  turnStopped,
 
   /// Связь сессии с агентом потеряна после переподключения: агент не умеет
   /// загружать сессии или `session/load` не удался (design D5 change

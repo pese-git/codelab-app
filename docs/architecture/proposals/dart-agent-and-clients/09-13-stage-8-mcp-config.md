@@ -57,9 +57,9 @@
    `codelab config check [--cwd <dir>]` (через мост `codelab_setup`). Тесты:
    `core/config-legacy-found-warning`, `config_yaml_profile_test.dart`,
    `config_legacy_found_test.dart`. Здесь же читаются ключи `redact.*` редакции секретов
-   (задача 8.11; agent-core-architecture §12.4.3, правило доверия проекту §15.3).
+   (потребитель — редакция секретов P-10, перенесена после 1.0 решением пользователя 2026-11-04 R8-1; agent-core-architecture §12.4.3, правило доверия проекту §15.3).
 6. **8.6. Инструкции проекта** (agent-core-architecture §11.5; change
-   [`add-agent-project-files`](../../../../openspec/changes/add-agent-project-files/), D2, D5):
+   [`add-agent-project-files`](../../../../openspec/changes/archive/2026-10-30-add-agent-project-files/), D2, D5):
    `ProjectFilesLoader` (`codelab_agent_io`, порт ядра `ProjectFilesSource`) читает файлы с локальной
    файловой системы процесса агента через `BoundedEnv` корня области — не через env сессии ACP: до
    ответа `session/new` клиент не знает `sessionId` (ACP-8), а в ACP нет `stat` и листинга. Обход
@@ -92,55 +92,188 @@
    agent-core-architecture §15.8; тесты `agent_definition_parse_test.dart`,
    `agent_definition_trust_test.dart`, `agent_select_test.dart`, фикстура
    `acp/set-config-option-agent`.
-9. **8.9. Хранилище секретов** (P-12, P-17; agent-core-architecture §17.5.4) — нужна MVP:
-   встроенный агент этапа 7 берёт ключ провайдера отсюда. `SecretResolver` (порядок разрешения
-   §17.5.4: кэш → переменная `CODELAB_SECRET_<…>` → хранилище ОС), бэкенды `keychain-macos`
-   (`security`), `secret-service` (`secret-tool`), `wincred`; значение секрета передаётся утилите
-   только через stdin, никогда в argv; подкоманды `codelab secret set|delete|list`;
-   `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1` пишет обращения без
-   значений. Тесты (agent-core-architecture §17.5.13): `secret_resolver_test.dart`,
-   `secret_store_backends_test.dart` (fake `ProcessRunner`), `debug_secrets_test.dart`
-   (`core/debug-secrets-never-logs-value`); настоящие связки ключей — отдельный интеграционный
-   тест на macOS и Linux (исключение (г) правила TDD).
+
+   **Итог 8.6–8.8.** Сделано change [`add-agent-project-files`](../../../../openspec/changes/archive/2026-10-30-add-agent-project-files/)
+   (итерации 0–5): порт ядра `ProjectFilesSource` и загрузчик `ProjectFilesLoader` в
+   `codelab_agent_io` с границей `BoundedEnv` по корню области (D1, D2); инструкции проекта
+   `AGENTS.md`/`CLAUDE.md` в секции `project_context` с бюджетом от ближнего файла (D5); шаблоны
+   `prompts/*.md` как команды `/имя аргументы`, их публикация в `available_commands_update` и
+   исходный текст команды в журнале и реплее (D7–D9); определения агентов `agents/*.md` и
+   ACP-опция `agent` без `category`, режим определения не мягче режима конфига, одна очередь
+   смен конфигурации сессии (D10–D12); `config check` печатает диагностику файлов проекта и
+   заметки `note:` для недоверенного проекта (D13); `CODELAB_HOME` с `~` раскрывается одинаково у
+   `codelab-agent` и `codelab` (D17). Отступления: в `serve --ws` файлы проекта и `$CODELAB_HOME`
+   не читаются (D2, D16); встроенные команды, MCP prompts и ответ «Unknown command» — отдельный
+   change встроенных команд (OQ1). Сторож импортов и allowlist зависимостей не менялись (D1).
+9. **8.9. Хранилище секретов** (P-12 — частично, P-17; agent-core-architecture §17.5.4) — нужна MVP:
+   встроенный агент этапа 7 берёт ключ провайдера отсюда. Change
+   [`add-agent-secret-store`](../../../../openspec/changes/archive/2026-11-01-add-agent-secret-store/) (design.md, D3–D8, D13–D15). `SecretResolver`
+   (порядок разрешения §17.5.4: кэш → переменная `CODELAB_SECRET_<…>` → хранилище; ссылки
+   `api_key_secret` и `${secret:…}` разрешаются при запросе к провайдеру и подключении MCP-сервера,
+   а не при загрузке). Бэкенды 1.0 — `env` (только чтение `CODELAB_SECRET_*`) и `file` (открытый
+   `$CODELAB_HOME/secrets.yaml`, только по явному `secrets.backend: file`, права `0600`
+   проверяются при каждом доступе, на Windows не поддерживается). `auto` в 1.0 — `env` на всех ОС и
+   никогда не `file`; `keychain` — ошибка конфигурации «not supported yet». `secret set` при `env`
+   отвечает кодом 1 и подсказывает `secrets.backend: file` или переменную; так же подсказывает
+   `config check` для незаданного ссылочного секрета. Подкоманды `codelab secret set|delete|list` и
+   `codelab-agent secret …` (одна реализация `SecretCommands`), программная запись `SecretAdmin`
+   для страницы настроек, фабрика `openHostSecrets` для встроенных профилей;
+   `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1` пишет обращения без значений. Сторож и allowlist
+   не меняются. Тесты (agent-core-architecture §17.5.13): `secret_resolver_test.dart`,
+   `file_secret_store_test.dart`, `open_secret_store_test.dart`, `debug_secrets_test.dart`
+   (`core/debug-secrets-never-logs-value`). **Хранилища ОС** (`keychain-macos`, `secret-service`,
+   `wincred` с `ffi`), индекс имён и ручной тест `os-keychain` — после 1.0, черновик
+   [`add-agent-os-secret-backends`](../../../../openspec/changes/add-agent-os-secret-backends/)
+   (решение пользователя 2026-10-31: сужение 8.9).
+
+   **Итог 8.9.** Сделано change [`add-agent-secret-store`](../../../../openspec/changes/archive/2026-11-01-add-agent-secret-store/)
+   (итерации 0–5): правило имён `SecretNames` и `SecretResolver` в ядре с порядком «кэш →
+   `CODELAB_SECRET_*` → хранилище», single-flight и типизированным `SecretLookup` (D2, D3); ссылки
+   `api_key_secret`, `api_key_env` и `${secret:…}` разрешаются при первом запросе к провайдеру и
+   перед подключением MCP-сервера конфига, `${secret:…}` вне `env`/`headers` — проблема конфига,
+   в `session/new.mcpServers` — литерал (D4); бэкенды `env` и `file` за общим `openSecretStore`
+   с единой проверкой `secretsBackendProblem`, `file` — открытый `secrets.yaml` с проверкой прав,
+   владельца `$CODELAB_HOME` и атомарной записью через приватный `.secrets-tmp` (D5–D7, D14);
+   `SecretAdmin` и фабрика `openHostSecrets` для настольных хостов и встроенных профилей (D15);
+   подкоманды `codelab-agent secret` и `codelab secret` — одна реализация `SecretCommands` со
+   скрытым вводом с TTY (D8); `config check` печатает состояние ссылочных секретов (D9);
+   `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1` — `secrets.lookup` без значений (D10, D11). P-12 —
+   **частично**: `env` и `file`, пункт 1 CFG-9; хранилище ОС — после 1.0
+   (`add-agent-os-secret-backends`), пункты 2–3 CFG-9 — 8.11. P-17 — **выполнено**. Отступления:
+   хранилищ ОС, индекса имён и `ffi` в 1.0 нет, `auto` = `env`, `keychain` — проблема конфига «not
+   supported yet» (D13); замена уже прочитанного секрета видна работающему агенту только после
+   перезапуска (до 8.10). Сторож импортов и allowlist зависимостей не менялись (D1).
 10. **8.10. Запись конфига, живая перезагрузка, реестр настроек, переподключение MCP**
     (L-25, E-04, E-15; agent-core-architecture §17.5.3, §17.5.5–§17.5.8) — **Should — не блокирует
-    MVP**: `ConfigWriter` (`yaml_edit`, атомарная запись) и подкоманды `codelab config set|unset`,
-    `provider add|list|remove`, `mcp add|list|remove`; `ConfigWatcher` и живая перезагрузка;
-    `McpSupervisor` с переподключением; `SettingsRegistry` с тестом полноты; предконфигурация
-    провайдера из окружения (L-25); агентские команды `/config` и `/mcp`. Клиентская часть
-    (мастер, страницы настроек) — §12.4. Без 8.10 конфиг правится вручную, а `config check`
-    (8.5) его проверяет.
-11. **8.11. Редакция секретов** (P-10, *Should — не блокирует MVP*; перенесена с этапа 3):
-    вывод инструментов (`exec env`, `read .env`), промпт пользователя и лог не попадают в журнал
-    сессии и к провайдеру с сырыми секретами. Состав:
-    * `Redactor` в `codelab_agent_core` с послойным алгоритмом agent-core-architecture §12.4.1:
-      слои `exact`, `credential_files`, `formats`, `pem`, `connection_strings`, `key_values`;
-      `entropy` выключен; белый список `git_sha`, `uuid`; идемпотентность и сохранение числа строк;
-    * признак `AgentTool.redactResult` — `false` у `write` и `edit` (§6.2);
-    * точки применения §12.4.2 — `userInput`, `toolResult`, `providerRequest`, `journal`, `log`
-      (точка `spill` — вместе с выносом результата, задача 3.8);
-    * источники точных секретов (§12.4) — переменные окружения по шаблону имён, ключ провайдера,
-      значения `SecretStore` (8.9) и токены MCP-серверов (8.1) через `addExactSecret`;
-    * ключи `redact.*` из конфигурации (8.5) с правилом доверия проекту (§12.4.3, §15.3).
+    MVP**: `ConfigWriter` (`yaml_edit`, атомарная запись) и подкоманды `config path|get|set|unset`,
+    `provider add|list|remove`, `mcp add|list|remove` у `codelab-agent` и `codelab`; `ConfigWatcher`,
+    `FileConfigSource` и живая перезагрузка; переподключение MCP-серверов в сессии
+    `McpClientConnector`; `SettingsRegistry` с тестом полноты; предконфигурация провайдера из
+    окружения (L-25); агентские команды `/config` и `/mcp`. Клиентская часть (мастер, страницы
+    настроек, `AgentConfigStore`) — §12.4, change `add-provider-setup-ui`. Без 8.10 конфиг
+    правится вручную, а `config check` (8.5) его проверяет.
 
-    Команда `/redact stats | layers` — после MVP (§13.4). До этой задачи журналы этапов 4–7
-    хранят вывод инструментов как есть. Тесты: `core/redaction-before-journal`,
-    `core/redaction-preserves-line-count`, `core/redaction-write-results-exempt`. Вынос
-    результата (задача 3.8, change `add-agent-core-output-spill`) идёт после неё: файл выноса не
-    должен содержать сырых секретов (SPL-3).
+    **Change** [`add-config-writer-and-reload`](../../../../openspec/changes/archive/2026-11-03-add-config-writer-and-reload/)
+    — девять итераций, каждая — отдельный PR (или 2–3) в `develop` (design.md, D16): 0 — документы;
+    1 — L-25; 2 — реестр и типы правок (E-15); 3 — `ConfigWriter`; 4 — подкоманды записи у обоих
+    бинарей и мост `codelab_setup`; 5 — живая перезагрузка (ядро, `FileConfigSource`, хосты,
+    `config_option_update`); 6 — переподключение MCP и серверы конфига при перезагрузке (E-04); 7 —
+    команды `/config`, `/mcp` и фикстуры; 8 — матрица, сверка документов, DoD. Зависимости: 3 ← 2,
+    4 ← 3, 6 ← 5, 7 ← 5 и 6; итерация 1 независима.
+
+    Решения пользователя 2026-11-02 (OQ1–OQ8 того change, все — по рекомендации):
+    * OQ1 — команды `/config` и `/mcp` входят в change; минимальный механизм «ответ без модели» —
+      точка расширения change встроенных команд (D11, D12);
+    * OQ2 — список путей PERM-11 (agent-core §7.6.1) расширяется `$CODELAB_HOME/config.yaml`,
+      `$CODELAB_HOME/secrets.yaml` и файлом `CODELAB_CONFIG`: правка глобального конфига моделью
+      иначе вступала бы в силу сразу после перезагрузки;
+    * OQ3 — один change, девять итераций (D16);
+    * OQ4 — машиночитаемого статуса MCP по ACP нет; поток состояний для встроенного агента — change
+      `add-provider-setup-ui` (D12);
+    * OQ5 — `logging.level` только с перезапуском (D8, D14);
+    * OQ6 — флаги `--provider-type`/`--provider-config` у `serve`, сочетание с `--provider` —
+      ошибка `64` (D3);
+    * OQ7 — файлы проекта читаются только новыми сессиями (D9);
+    * OQ8 — неизменённый сервер в `failed` при перезагрузке будится сразу (D10).
+
+    Решения пользователя 2026-11-02 по двойному ревью итерации 0:
+    * R0-1 — ключи, ослабляющие права (`permissions.*`, `trusted_projects`, новые и изменённые
+      stdio-серверы), живой перезагрузкой не применяются, только после перезапуска (D8);
+    * R0-2 — `config get` и `provider list` маскируют секреты, значения окружения и userinfo URL (D6);
+    * R0-3 — по WebSocket `/config` не объявляется и не исполняется (D12, D13).
+
+    Отступления от agent-core §17.5 (внесены в документ итерацией 0): один снимок на корень запуска
+    хоста и `ConfigSource` без `cwd` (D7, D8); `modelsFor` хоста вместо пересборки функции модели в
+    ядре (D8); супервизия MCP в `McpSessionTools` без отдельного `McpSupervisor`, серверы конфига —
+    существующим `replaceServers` после хода (D10, D11); без fsync каталога при записи (D5).
+    Сторож импортов и allowlist зависимостей не меняются; `yaml_edit` уже в `ioAllowlist` (D1, D2).
+
+    **Итог 8.10.** Сделано change [`add-config-writer-and-reload`](../../../../openspec/changes/archive/2026-11-03-add-config-writer-and-reload/)
+    (итерации 0–8): предконфигурация провайдера `CODELAB_PROVIDER_*` и флаги `serve`
+    `--provider-type`/`--provider-config` первыми в слоях 6 и 7, слияние с `providers.<id>` доверенных
+    файлов, литеральный секретный заголовок — `inlineSecret` (D3; L-25); `SettingsRegistry` ядра с
+    тестом полноты по схеме валидатора и единственным источником `restartRequired` (D4; E-15);
+    `ConfigWriter` на `yaml_edit` — правки ядра `ConfigEdit`, lock с отпечатком sha256, tmp с правами
+    до записи, атомарный `rename`, запись блокируют только новые ошибки по полной базе (R3-1, R3-3),
+    литеральные секреты на любой глубине, containment ссылок проектных слоёв (D2, D5); подкоманды
+    `config path|get|set|unset`, `provider add|list|remove`, `mcp add|list|remove` у обоих бинарей
+    одной реализацией через мост `codelab_setup` с маскированием вывода (D6, R0-2, R4-1…R4-5);
+    `ConfigWatcher` и `FileConfigSource` с закреплённым доверием, `AgentRuntime.reloadConfig`/
+    `checkConfig`, `config_option_update` после смены списка моделей, `SecretResolver.invalidate` с
+    поколениями (D7, D8, D13, D14); супервизия серверов в сессии `McpClientConnector` и серверы
+    конфига через `replaceServers` после хода (D10, D11; E-04); пути PERM-11 от хоста
+    (`agentConfigPaths`) с белым списком чтения `exec` (D8, OQ2, R5-1…R5-4); встроенные команды
+    `/config` и `/mcp` без модели, фикстура `acp/slash-mcp-list` (D12; агентская часть E-13).
+    Отступления от плана 8.10 и agent-core §17.5 (кроме перечисленных выше):
+    * D8 — один снимок на корень запуска, `ConfigSource` без `cwd`, `modelsFor` хоста; ключи,
+      ослабляющие права (`permissions.*`, `trusted_projects`, новые и изменённые stdio-серверы), и
+      правки, способные направить секрет на другой адрес (HTTP-серверы с `${…}`, адрес и ключ
+      провайдера с ключом), применяются только после перезапуска (R0-1, R0-4, R6-1) — E-04
+      выполнена в этих границах;
+    * D9 (OQ7) — файлы проекта (контекст, шаблоны, агенты) и список команд перечитывают только новые
+      сессии;
+    * D10 — неизменённый сервер в `failed` будится сразу (OQ8); ручной выбор `/mcp enable|disable`
+      живёт, пока элемент сервера не изменился (R6-2);
+    * D11 — отдельного `McpSupervisor` нет: супервизия — расширение `McpSessionTools`; ручные
+      действия идут через очередь замен сессии;
+    * OQ5 — `logging.level` только с перезапуском;
+    * задача 8.5 — containment ссылок проектных слоёв и при чтении: проектный файл с целью вне
+      `<cwd>/.codelab` — проблема загрузки, наблюдатель цель снаружи не читает (D5, D7);
+    * известные границы до 8.11 — смешанное значение секретного заголовка (R1-1) и литеральные
+      токены в `mcp.servers[*].args` (R4-6) — **закрыты 8.11** (change
+      `add-config-literal-secrets-and-migrate`): R1-1 — предупреждением `config.secret.in_file` при
+      загрузке и отказом записи, R4-6 — отказом записи по шаблону и маскированием `args` в
+      `config get` (D4, D5); висячая ссылка на месте каталога-предка в PERM-11 (R5-3).
+
+    Клиентская часть (мастер, страницы настроек, `AgentConfigStore`, реэкспорт `ConfigEdit` и
+    `SettingsRegistry` в основном барели моста) — change `add-provider-setup-ui`. Сторож импортов и
+    allowlist зависимостей не менялись; новое ребро графа — нет (D1).
+11. **8.11. Секреты в конфиге** (P-12, пункты 2–3 CFG-9; *Should — не блокирует MVP*). Change
+    `add-config-literal-secrets-and-migrate` (прежнее имя `add-agent-core-secret-redaction` — до решения R8-1). Решения пользователя
+    2026-11-04 — design.md change, «Open Questions»:
+    * **R8-1:** редакция секретов (P-10: `Redactor`, точки §12.4.2, `AgentTool.redactResult`,
+      ключи `redact.*`) переносится **после 1.0**. До 1.0 агент работает «как Claude Code»: вывод
+      инструментов, промпт, запрос к провайдеру, журнал и ACP не редактируются (D1, D2). Прежний
+      состав задачи и находки ревью — вход будущего change (design.md, «Перенесено после 1.0»).
+    * **R8-4:** литеральный секрет в файле конфига (CFG-9, пп. 1–3, R1-1, DSN) — предупреждение
+      `config.secret.in_file` с подсказкой `codelab secret migrate`, а не ошибка. Литеральный
+      `api_key` работает как ключ провайдера; ссылки п. 3, похожие на значение, не разрешаются (D3, D4).
+    * **R8-5:** запись литерала через CLI отклоняется, в том числе по шаблону в `headers`, `env` и
+      `mcp.servers[*].args` (R4-6); `config get` маскирует `args` (D5). Взамен —
+      `mcp add --header-stdin|--env-stdin` (D11).
+    * `secret migrate` у обоих бинарей (D7) и `secret set|delete` с именем-значением (D6).
+    * **R8-3:** предупреждение и кнопка `Migrate secrets` в codelab-app (D8).
+
+    Итерации (каждая — PR в `develop`):
+    0. документы;
+    1. распознавание и предупреждения загрузки;
+    2. писатель и R4-6;
+    3. `secret migrate`, `mcp add` из stdin;
+    4. codelab-app;
+    5. матрица и DoD.
+
+    Вынос результата (задача 3.8, change `add-agent-core-output-spill`, SPL-3) от 8.11 больше не
+    зависит: редакция файла выноса — вместе с P-10 после 1.0.
+
+    Итоги (итерации 0–4 — PR #233–#237, итерация 5 — матрица и DoD): P-12 — **частично**: `env` и
+    `file`, CFG-9 пп. 1–3 выполнены, хранилище ОС — после 1.0; P-10 — после 1.0 (R8-1). R1-1 и R4-6
+    закрыты (п. 10). Отступления: литерал в файле — рабочий ключ провайдера с предупреждением
+    (ослабление CFG-2, R8-4); `url`/`base_url` с паролем не распознаются (L5); писатель в `args` не
+    смотрит пару «секретный флаг + значение» (R8-9). Новых пакетов, зависимостей, правил сторожа и
+    рёбер графа нет (D9).
 
 **OpenSpec change.** [`add-agent-mcp-client`](../../../../openspec/changes/archive/2026-10-29-add-agent-mcp-client/) (8.1–8.4; scope: протокол MCP, транспорты, имена и
 виды MCP-инструментов, проверка разрешений; решение о библиотеке MCP — в его `design.md`),
 `add-agent-configuration` (8.5; scope: файлы, порядок слоёв, формат YAML и его профиль,
 предупреждение `config.legacy_found` вместо чтения `codelab.toml`, подкоманда `config check`,
 минимальный `codelab_setup`; новая зависимость `yaml` как решение о технологии по
-`AGENTS.md` §4; `toml` не добавляется, `yaml_edit` — в 8.10), [`add-agent-project-files`](../../../../openspec/changes/add-agent-project-files/) (8.6–8.8; scope: инструкции проекта, шаблоны промптов как команды, определения агентов в Markdown, порт `ProjectFilesSource`, `config check` с диагностикой файлов проекта; ACP не расширяется),
-`add-agent-secret-store` (8.9; scope: имена секретов, порядок разрешения, бэкенды ОС, команды
-`secret`, диагностика без значений) и `add-config-writer-and-reload` (8.10, Should; scope:
-запись конфига, наблюдатель и перезагрузка, реестр настроек, `McpSupervisor`, команды
-`config`/`provider`/`mcp` на запись) и `add-agent-core-secret-redaction` (8.11, Should; scope:
-слои и точки применения редакции, `AgentTool.redactResult`, источники точных секретов, ключи
-`redact.*`). `tasks.md` — пары "тест → реализация" со ссылкой на
+`AGENTS.md` §4; `toml` не добавляется, `yaml_edit` — в 8.10), [`add-agent-project-files`](../../../../openspec/changes/archive/2026-10-30-add-agent-project-files/) (8.6–8.8; scope: инструкции проекта, шаблоны промптов как команды, определения агентов в Markdown, порт `ProjectFilesSource`, `config check` с диагностикой файлов проекта; ACP не расширяется),
+[`add-agent-secret-store`](../../../../openspec/changes/archive/2026-11-01-add-agent-secret-store/) (8.9; scope: имена секретов, порядок разрешения, бэкенды `env` и `file`, команды
+`secret`, диагностика без значений; бэкенды ОС — черновик `add-agent-os-secret-backends` после 1.0) и `add-config-writer-and-reload` (8.10, Should; scope:
+запись конфига, наблюдатель и перезагрузка, реестр настроек, переподключение MCP в сессии
+коннектора, команды `config`/`provider`/`mcp` на запись, агентские `/config` и `/mcp`) и `add-config-literal-secrets-and-migrate` (8.11, Should; scope после решений 2026-11-04: секреты в файле
+конфига — предупреждение, запись литерала отклоняется, маскирование `args`, `secret migrate`,
+`mcp add` из stdin, кнопка codelab-app; редакция P-10 — после 1.0). `tasks.md` — пары "тест → реализация" со ссылкой на
 критерий (§9.0, правило 3).
 
 Бинарь (`add-agent-mcp-client`, итерация 3) собирает `McpClientConnector` со
@@ -170,7 +303,7 @@ stdio MUST) записано в §13.15, включение явным флаг�
 В `design.md` записываются: кандидаты, отметки по каждому пункту, решение и версия пакета (если
 выбран).
 
-**Что прочитать.** Документ ядра §6, §7, §10 (capability `mcp`), §11, §12.4 (редакция, 8.11), §15; спецификация MCP
+**Что прочитать.** Документ ядра §6, §7, §10 (capability `mcp`), §11, §12.4 (редакция — после 1.0, R8-1), §15; спецификация MCP
 (стандарт протокола, раздел о транспортах); `docs/protocols/acp/protocol/03-Session Setup.md`,
 `14-Slash Commands.md`.
 
@@ -179,45 +312,85 @@ stdio MUST) записано в §13.15, включение явным флаг�
 * `packages/dart/codelab_agent_mcp/test/mcp_tool_goes_through_policy_test.dart: MCP tool is not executed without a permission decision` (закрывает F5.1). **Выполнено** (8.3, change `add-agent-mcp-client`).
 * `packages/dart/codelab_agent_mcp/test/streamable_http_test.dart` на `MockClient`. **Выполнено** (8.1, обе эпохи MCP; change `add-agent-mcp-client`).
 * `packages/dart/codelab_agent_io/test/config/config_loader_test.dart: invalid config reports key path and line` — битый конфиг даёт ошибку с путём ключа, а не исключение при первом ходе (8.5, change `add-agent-configuration`). **Выполнено** (8.5, change `add-agent-configuration`): `ConfigIssue` с файлом, строкой `3`, столбцом `3` и ключом `budget.max_stepz`; в бинаре — код `64` до чтения stdin (`apps/codelab_agent/test/config_invalid_process_test.dart`).
-* Фикстуры `acp/session-new-with-mcp`, `acp/available-commands-no-tools` зелёные. `acp/session-new-with-mcp` — **выполнено** (8.4, change `add-agent-mcp-client`); `acp/available-commands-no-tools` — задачи 8.6–8.8.
+* Фикстуры `acp/session-new-with-mcp`, `acp/available-commands-no-tools` зелёные. **Выполнено**: `acp/session-new-with-mcp` — 8.4, change `add-agent-mcp-client`; `acp/available-commands-no-tools` (`packages/dart/codelab_acp_testing/fixtures/acp/available-commands-no-tools.json`, агентский прогон — `packages/dart/codelab_agent_acp/test/conformance_test.dart`) — 8.7, change `add-agent-project-files`: в списке только шаблон проекта, без встроенных инструментов и `mcp__fake__echo`.
 * `melos run guard`: `codelab_agent_mcp` без `dart:io`. **Выполнено**: правило пакета в `packages/dart/codelab_architecture_tests/test/support/rules.dart`, allowlist — `pubspec_allowlist_test.dart` (D14 change `add-agent-mcp-client`).
 * Чек-лист библиотеки MCP заполнен в `design.md`, решение записано. **Выполнено**: D1 change `add-agent-mcp-client` — у каждого кандидата есть «нет», свой минимальный клиент; `THIRD_PARTY_NOTICES.md` не меняется.
 * Все Must-строки матрицы этапа 8 зелёные; критерий — сценарий строки в матрице. Строки P-01,
   P-16, E-02, E-03, E-05, R-24 закрыты change `add-agent-mcp-client` (файлы тестов и фикстур —
   в колонке «Критерий приёмки» матрицы); серверы конфигурации в E-02 и E-03 и строка R-16 —
-  change `add-agent-configuration` (8.5):
+  change `add-agent-configuration` (8.5); строки E-01, R-15, Should-строка E-07 и часть шаблонов
+  R-07 — change `add-agent-project-files` (8.6–8.8):
 
   | Строка | Проверка | Критерий (кратко) |
   |---|---|---|
   | P-01 | `core/no-tool-bypasses-gate`, `acp/mcp-tool-permission` | `session/request_permission` приходит до обращения к MCP-серверу; после отказа сервер вызова не получил |
   | P-16 | `acp/mcp-result-fenced`, `core/mcp-tool-cannot-declare-trusted` | весь результат MCP-инструмента внутри одной ограды, поддельный маркер экранирован; «доверенный» MCP-инструмент регистрируется как недоверенный |
-  | E-01 | `core/project-context-agents-md-leaf-first` | системный промпт содержит правила `AGENTS.md` от корня репозитория к `cwd` |
+  | E-01 | `core/project-context-agents-md-leaf-first` | системный промпт содержит правила `AGENTS.md` от корня репозитория к `cwd`. **Выполнено** (8.6, change `add-agent-project-files`): `packages/dart/codelab_agent_io/test/project/project_context_loader_test.dart` («core/project-context-agents-md-leaf-first: the root file comes before the file of cwd», «the first model request has rule A before rule B (E-01, end to end over real files)»; алиас `CLAUDE.md`, worktree, symlink наружу, 64 уровня); сборка и бюджет — `codelab_agent_core/test/project/assemble_project_context_test.dart`; секция и экранирование — `codelab_agent_core/test/prompts/prompt_project_context_test.dart`, golden `test/prompts/golden/agent-serve-standard-project.txt`; порт, доверие, таймаут и отмена — `codelab_agent_core/test/runtime/project_files_runtime_test.dart`; бинарь (`--llm-script` без `$CODELAB_HOME`, `--ws` без файлов проекта) — `apps/codelab_agent/test/project_files_process_test.dart`, `agent_host_project_files_test.dart` |
+  | E-07 (Should) | `acp/prompt-template-command` | шаблон `.codelab/prompts/review.md` — команда `/review` с подстановкой аргументов; реплей показывает исходную команду. **Выполнено** (8.7, change `add-agent-project-files`): фикстура `packages/dart/codelab_acp_testing/fixtures/acp/prompt-template-command.json` (агентский прогон — `codelab_agent_acp/test/conformance_test.dart`); `codelab_agent_core/test/runtime/command_expansion_test.dart` («E-07: the model gets the body with substituted arguments»), `test/commands/expand_command_test.dart`, `arguments_test.dart`, `template_parse_test.dart`, `test/session/record_command_test.dart`; загрузка и доверие — `codelab_agent_io/test/project/prompt_templates_load_test.dart`; без `prompts.templates_dirs` |
   | E-02 | `acp/mcp-stdio-tool-call` | вызов `mcp__fake__echo` после одобрения — `completed` с «hi»; после закрытия сессии процесс сервера завершён. Серверы конфигурации — **выполнено** (8.5): `apps/codelab_agent/test/config_mcp_servers_test.dart` (сервер из `mcp.servers` без `mcpServers` в `session/new`), `config_mcp_ws_test.dart` (в `serve --ws` не запускается) |
   | E-03 | `acp/mcp-http-tool-call` | HTTP-инструмент вызывается; сервер неподдерживаемого типа пропущен с `mcp.server.skipped`, сессия создана. Серверы конфигурации — **выполнено** (8.5): `apps/codelab_agent/test/agent_host_config_test.dart`, группа «MCP servers of the config»; `type: sse` в конфиге — проблема (`codelab_agent_core/test/config/config_mcp_servers_test.dart`) |
   | E-05 | `core/mcp-tool-name-sanitized` | `mcp__my_srv__get_issue`; длинное имя — ровно 64 символа и уникально; коллизия имён отключает сервер с причиной, называющей оба источника, сессия создаётся (HOST-5; `mcp.server.failed`) |
   | K-02 | `acp/slash-compact` | `/compact` даёт отчёт «сжато: X → Y токенов» и запись сжатия в журнале (сценарий палитры app — R-20, этап 5) |
-  | R-07 | `acp/available-commands-no-tools` | в `available_commands_update` только команды, без инструментов модели |
+  | R-07 | `acp/available-commands-no-tools` | в `available_commands_update` только команды, без инструментов модели. **Часть шаблонов выполнена** (8.7, change `add-agent-project-files`): фикстура `packages/dart/codelab_acp_testing/fixtures/acp/available-commands-no-tools.json` — встроенные инструменты, fake MCP-сервер с `echo` и шаблон доверенного проекта, в списке только `review` с `input.hint`; повторная загрузка открытой сессии и команда без подсказки — `codelab_agent_acp/test/session_load_project_files_test.dart`. Встроенные команды и MCP prompts в списке — отдельный change встроенных команд (решение пользователя 2026-10-30, OQ1); до него строка закрыта частично |
   | R-08 | `acp/slash-help`, `acp/slash-mode-plan`, `acp/mcp-prompt-command` | встроенные команды агента и команды из MCP-промптов выполняются |
   | R-14 | `core/litellm-proxy-base-url` | LiteLLM Proxy как OpenAI-совместимый `baseUrl` из конфигурации |
-  | R-15 | `core/agent-definition-markdown-frontmatter`, `acp/set-config-option-agent` | опция `agent` содержит определение из `.codelab/agents/*.md`, многострочный `tools` разобран, битый YAML — диагностика с именем файла |
+  | R-15 | `core/agent-definition-markdown-frontmatter`, `acp/set-config-option-agent` | опция `agent` содержит определение из `.codelab/agents/*.md`, многострочный `tools` разобран, битый YAML — диагностика с именем файла. **Выполнено** (8.8, change `add-agent-project-files`): `codelab_agent_core/test/agents/agent_select_test.dart` (группа «select and return (R-15)» — `core/agent-definition-markdown-frontmatter`), `agent_select_serial_test.dart` (очередь смен, режим со следующего шага, пол при восстановлении), `agent_definition_parse_test.dart` (многострочный `tools`, ошибки, `duplicate`), `test/runtime/agent_restore_test.dart`; доверие и лимиты — `codelab_agent_io/test/project/agent_definition_trust_test.dart`; фикстура `packages/dart/codelab_acp_testing/fixtures/acp/set-config-option-agent.json` и края опции — `codelab_agent_acp/test/config_options_agent_test.dart`; битый YAML с именем файла — `agent_definition_trust_test.dart` («a broken frontmatter is an error diagnostic, not a failure») и `codelab_agent_io/test/cli/config_commands_test.dart` («a broken agent definition: a warning with path, line and column; Config: valid; code 0»). Режим определения мягче режима конфига не применяется (OQ3) |
   | R-16 | `core/config-legacy-found-warning` | `codelab.toml` не читается: без `config.yaml` — одно предупреждение `config.legacy_found` с путём и ссылкой на таблицу ручного переноса §15.7; при `config.yaml` предупреждения нет. Изменено решением пользователя 2026-10-29 (change `add-agent-configuration`); строки DF-12 и DF-15 — `core/config-rejects-yaml-agent-definitions`, `core/config-unknown-provider-error`. **Выполнено** (8.5): `codelab_agent_io/test/config/config_legacy_found_test.dart`; DF-12 и DF-15 — `codelab_agent_core/test/config/config_schema_test.dart` |
   | R-24 | `acp/session-new-with-mcp` | сервер из `session/new.mcpServers` подключается, его инструмент доступен модели в этой сессии; на этапе 4 такие серверы только пропускались с `mcp.server.skipped` (R-02) |
 * 8.9 (MVP): `secret_resolver_test.dart`, `secret_store_backends_test.dart`,
   `debug_secrets_test.dart` зелёные; `codelab secret set codelab/openai` с ключом из stdin, затем
   `codelab -p` во встроенном режиме (этап 7) использует ключ; значение секрета не встречается в
-  логах, trace и argv дочерних процессов.
-* Если сделано (8.10, Should — не блокирует MVP): `config_writer_test.dart`,
-  `config_writer_atomic_test.dart`, `config_watcher_test.dart`, `config_reload_test.dart`,
-  `mcp_reconnect_test.dart` (`core/mcp-reconnect-after-crash`, E-04), `mcp_apply_config_test.dart`,
+  логах, trace и argv дочерних процессов. **Выполнено в части 8.9** (change
+  `add-agent-secret-store`; `secret_store_backends_test.dart` — тест бэкендов хранилищ ОС, он
+  перенесён в черновик `add-agent-os-secret-backends`, в 1.0 его место занимают тесты `env` и
+  `file`):
+
+  | Строка | Проверка | Тесты 8.9 |
+  |---|---|---|
+  | P-12 (частично) | `core/config-rejects-inline-api-key` (с 8.11 — `core/config-warns-inline-api-key`, строка 8.11 ниже); ссылки по имени; бэкенды `env` и `file` | `packages/dart/codelab_agent_core/test/config/config_inline_secret_test.dart`, `config_secret_refs_test.dart`; `test/secrets/secret_names_test.dart`, `secret_resolver_test.dart`; `test/llm/routed_stream_function_secrets_test.dart`; `test/runtime/mcp_secret_values_test.dart`; `packages/dart/codelab_agent_io/test/secrets/env_secret_store_test.dart`, `file_secret_store_test.dart`, `open_secret_store_test.dart`, `secret_admin_test.dart`, `host_secrets_test.dart`; `test/cli/secret_commands_test.dart`, `config_commands_test.dart` (группа `secrets`); `apps/codelab_agent/test/secret_store_process_test.dart`, `secret_command_process_test.dart`, `config_invalid_process_test.dart`; `apps/codelab_cli/test/secret_command_test.dart`, `e2e/secret_command_test.dart`. Хранилище ОС — после 1.0, пункты 2–3 CFG-9 — 8.11 |
+  | P-17 | `core/debug-secrets-never-logs-value` | `packages/dart/codelab_agent_core/test/secrets/debug_secrets_test.dart`; `apps/codelab_agent/test/serve_flags_test.dart`, `agent_host_secrets_test.dart` (группа `--debug-secrets`), `secret_store_process_test.dart` |
+
+  Значение не попадает в argv дочерних процессов — `codelab_agent_io/test/secrets/secret_admin_test.dart`
+  («no child process receives the value in argv or stdin») и `file_secret_store_test.dart`
+  («permissions are set before the value is written; argv has only the path»). Сквозная проверка
+  «`codelab secret set`, затем `codelab -p` во встроенном режиме» — этап 7 (встроенного режима
+  в 8.9 нет).
+* 8.10 (Should — не блокирует MVP): `config_writer_test.dart`, `config_writer_atomic_test.dart`,
+  `config_watcher_test.dart`, `config_reload_test.dart`, `mcp_reconnect_test.dart`
+  (`core/mcp-reconnect-after-crash`, E-04), `mcp_apply_config_test.dart`,
   `settings_registry_complete_test.dart` (`core/settings-registry-complete`, E-15),
   `provider_preconfig_env_test.dart` (`core/provider-preconfig-from-env`, L-25),
-  `cli_config_commands_test.dart` и фикстура `acp/slash-mcp-list` зелёные.
-* Если сделано (8.11, Should — не блокирует MVP): `core/redaction-before-journal`,
-  `core/redaction-preserves-line-count`, `core/redaction-write-results-exempt` зелёные; журнал
-  сессии с выводом `exec env` и `read .env` не содержит значений секретов.
+  `cli_config_commands_test.dart` и фикстура `acp/slash-mcp-list` зелёные. Тесты — change
+  `add-config-writer-and-reload` (итерации 1–8). **Выполнено** (задача 8.4 change, DoD: тесты, `guard`,
+  `web-compile` и `openspec validate --strict` зелёные; PR #230):
+
+  | Строка | Проверка | Тесты 8.10 |
+  |---|---|---|
+  | L-25 | `core/provider-preconfig-from-env` | `packages/dart/codelab_agent_io/test/config/provider_preconfig_env_test.dart`; флаги `serve` — `apps/codelab_agent/test/serve_flags_test.dart` (группа «--provider-type and --provider-config (L-25)»), `provider_preconfig_process_test.dart` |
+  | E-15 | `core/settings-registry-complete` | `packages/dart/codelab_agent_core/test/config/settings_registry_complete_test.dart`; типы правок — `config_edit_test.dart`, `config_fingerprint_test.dart` |
+  | E-04 | `core/mcp-reconnect-after-crash`, перечитывание конфига | `packages/dart/codelab_agent_mcp/test/supervisor/mcp_reconnect_test.dart`, `mcp_supervisor_state_test.dart`; `apps/codelab_agent/test/mcp_reconnect_process_test.dart`; `packages/dart/codelab_agent_core/test/runtime/config_reload_test.dart`, `mcp_apply_config_test.dart`, `test/secrets/secret_resolver_test.dart`; `packages/dart/codelab_agent_io/test/config/config_watcher_test.dart`, `file_config_source_test.dart`, `config_loader_link_containment_test.dart`; `packages/dart/codelab_agent_acp/test/config_reload_notifications_test.dart`; `apps/codelab_agent/test/config_reload_process_test.dart`, `agent_host_config_test.dart`; `packages/dart/codelab_embedded/test/embedded_config_reload_test.dart` |
+  | E-13 (агентская часть) | `acp/slash-mcp-list` | `packages/dart/codelab_acp_testing/fixtures/acp/slash-mcp-list.json` (агентский прогон — `packages/dart/codelab_agent_acp/test/conformance_test.dart`, `session_new_test.dart`); `packages/dart/codelab_agent_core/test/commands/builtin_commands_test.dart`; `apps/codelab_agent/test/agent_host_ws_commands_test.dart` (R0-3) |
+  | запись конфига | CFG-13, D5, D6 | `packages/dart/codelab_agent_io/test/config/config_writer_test.dart`, `config_writer_atomic_test.dart`, `config_validate_candidate_test.dart`; `test/cli/cli_config_commands_test.dart`, `config_output_test.dart`; `packages/dart/codelab_setup/test/config_write_exports_test.dart`; `apps/codelab_agent/test/config_write_command_process_test.dart`; `apps/codelab_cli/test/config_command_test.dart`, `provider_mcp_command_test.dart`, `e2e/config_write_command_test.dart` (байты файла совпадают с `codelab-agent`) |
+  | PERM-11 | OQ2, R5-1…R5-4 | `packages/dart/codelab_agent_core/test/permissions/agent_config_paths_test.dart`, `packages/dart/codelab_agent_io/test/config/agent_config_paths_test.dart` |
+
+  `melos run guard` и `web-compile` — условие задачи 8.4 change; страница MCP-серверов app
+  (`app:mcp_settings_flow_test.dart`) — change `add-provider-setup-ui`.
+* Если сделано (8.11, Should — не блокирует MVP): `core/config-warns-inline-api-key` и тесты
+  итераций 1–4 change `add-config-literal-secrets-and-migrate` зелёные; литерал в файле конфига даёт
+  предупреждение без значения, `secret migrate` переносит его в хранилище. Тесты редакции
+  `core/redaction-*` — после 1.0 (R8-1). **Выполнено** (задачи 5.1–5.3 и 5.5 change; итерации 0–4 —
+  PR #233–#237; ручной smoke — задача 5.4, результат в описании PR итерации 5; зелёный `melos run check`
+  в CI pull request итерации 5 — условие merge):
+
+  | Строка | Проверка | Тесты 8.11 |
+  |---|---|---|
+  | P-12 (частично, CFG-9 пп. 1–3) | `core/config-warns-inline-api-key`; распознавание, предупреждения загрузки, литеральный `api_key`, ссылки п. 3, R0-4 (итерация 1) | `packages/dart/codelab_agent_core/test/config/config_inline_secret_test.dart`, `inline_secrets_test.dart`, `config_secret_in_file_test.dart`, `config_secrets_test.dart`, `config_collect_all_test.dart`; `test/llm/literal_api_key_test.dart`; `test/runtime/config_reload_literals_test.dart`, `config_reload_test.dart`; `test/secrets/secret_names_test.dart`; `packages/dart/codelab_agent_io/test/cli/config_check_secret_warning_test.dart`, `config_commands_test.dart`, `config_get_masking_test.dart`, `provider_commands_test.dart`; `packages/dart/codelab_embedded/test/io/local_opener_test.dart`; `apps/codelab_agent/test/config_invalid_process_test.dart`, `agent_host_secrets_test.dart`, `provider_preconfig_process_test.dart` |
+  | R1-1, R4-6 | отказ записи литерала по шаблону в `headers`, `env`, `args`; маскирование `args` в `config get` (итерация 2) | `packages/dart/codelab_agent_io/test/config/literal_secret_rule_test.dart`, `config_writer_test.dart`; `test/cli/config_output_test.dart`, `cli_config_commands_test.dart`; `apps/codelab_cli/test/e2e/config_get_args_masking_test.dart` |
+  | P-12: перенос | `secret migrate`, `mcp add --header-stdin\|--env-stdin`, имя-значение у `secret set\|delete`, строка о 1.0 в справке (итерация 3) | `packages/dart/codelab_agent_io/test/secrets/secret_migrator_test.dart`; `test/cli/secret_migrate_command_test.dart`, `mcp_add_stdin_test.dart`, `secret_commands_test.dart`; `packages/dart/codelab_setup/test/secret_migrate_exports_test.dart`; `apps/codelab_agent/test/secret_migrate_process_test.dart`, `mcp_add_stdin_process_test.dart`; `apps/codelab_cli/test/e2e/secret_migrate_test.dart`, `e2e/mcp_add_stdin_test.dart`, `e2e/secret_command_test.dart`, `secret_command_test.dart` |
+  | P-12: codelab-app | `EmbeddedAgent.secretsInConfig`, предупреждение и кнопка `Migrate secrets` (итерация 4) | `packages/dart/codelab_embedded/test/secrets_in_config_test.dart`; `apps/codelab_desktop/test/app/embedded_secret_offer_test.dart`, `app_scope_embedded_test.dart`; `test/features/workbench/application/secret_migration_cubit_test.dart`, `secret_migration_turns_test.dart`; `test/features/workbench/presentation/secret_migration_banner_test.dart` |
 
 **Зависимости.** Этап 4; задачи 8.5–8.9 не зависят от MCP и идут параллельно; 8.11 — после
-8.5 и 8.9 (ключи `redact.*` и источник `SecretStore`). Этап 7 ждёт
+8.5, 8.9 и 8.10 (схема конфига, хранилище секретов, писатель `ConfigWriter`). Этап 7 ждёт
 8.5 и 8.9 (порядок D3: `{6, 8} → 7`); 8.10 его не блокирует.
 
 **Риски.** Нет зрелого MCP SDK на Dart — свой клиент (протокол небольшой); готовые пакеты pub.dev

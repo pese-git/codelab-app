@@ -26,7 +26,15 @@ enum KeyAction {
   /// Только TUI: прокрутка транскрипта (§12.2.7, «Транскрипт и прокрутка»).
   scrollUp('scroll the transcript up'),
   scrollDown('scroll the transcript down'),
-  follow('follow the output again');
+  follow('follow the output again'),
+
+  /// Только TUI: спрятать и показать список задач над композером (D26).
+  toggleTasks('show or hide the task list'),
+
+  /// Только TUI: раскрыть и свернуть сразу все строки `agent` — вызовы
+  /// потомков с `↳` и отчёт (Ctrl+O; design.md change
+  /// `add-subagents-and-tasks`, D48 п. 2).
+  toggleDetails('expand or collapse the agent rows');
 
   const KeyAction(this.description);
 
@@ -145,6 +153,8 @@ final class KeyBindings {
     KeyBinding(KeyScope.any, Key.pageUp, KeyAction.scrollUp),
     KeyBinding(KeyScope.any, Key.pageDown, KeyAction.scrollDown),
     KeyBinding(KeyScope.any, Key.end, KeyAction.follow),
+    KeyBinding(KeyScope.any, Key.ctrlT, KeyAction.toggleTasks),
+    KeyBinding(KeyScope.any, Key.ctrlO, KeyAction.toggleDetails),
   ]);
 
   final List<KeyBinding> bindings;

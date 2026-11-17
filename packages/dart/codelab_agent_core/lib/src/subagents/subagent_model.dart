@@ -1,0 +1,228 @@
+import '../agents/agent_definition.dart';
+import '../llm/usage.dart';
+import '../loop/agent_events.dart' show SessionId;
+import '../loop/turn_budget.dart';
+
+/// Идентификатор субагента: `sub_` и восемь символов `[0-9a-z]` от
+/// `IdGenerator` (`agent-core/17-3-subagents.md` §17.3.2; design.md change
+/// `add-subagents-and-tasks`, D28, D36 Т6).
+typedef SubagentId = String;
+
+/// Состояния хэндла потомка (§17.3.2). Терминальное — ровно одно (SUB-4).
+enum SubagentState { queued, running, waiting, completed, failed, cancelled }
+
+/// Чего ждёт потомок в состоянии `waiting`.
+enum SubagentWait { approval, subagents }
+
+/// Причина `failed`; значение `failure` записи журнала и `_meta` ACP.
+enum SubagentFailure {
+  error,
+  budgetExceeded,
+  invalidOutput,
+  interrupted,
+  refused,
+
+  /// Ответ ребёнка оборван лимитом выходных токенов без текста (D41, п. 6).
+  maxTokens,
+}
+
+/// Признак вызова `agent` с первого кадра: id и тип, зарезервированные
+/// `SubagentTool.present` до `ToolCallStarted` (D28).
+final class SubagentCallRef {
+  const SubagentCallRef({required this.id, required this.type});
+
+  final SubagentId id;
+
+  /// Имя типа субагента из аргументов вызова.
+  final String type;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SubagentCallRef && other.id == id && other.type == type;
+
+  @override
+  int get hashCode => Object.hash(id, type);
+}
+
+/// Сведения о потомке в запросе разрешения: пара к [SubagentCallRef]
+/// (design.md change `add-subagents-and-tasks`, D8, D42 Т4; §7.2).
+///
+/// Почему: клиент видит только корневую сессию, а запрос потомка приходит в
+/// ней же; чтобы показать, кто спрашивает, нужны тип, описание и путь.
+///
+/// Как использовать: заполняет `SubagentPermissionGate`; ACP-адаптер кладёт
+/// значение в `toolCall._meta.codelab.subagent` запроса разрешения (D8).
+final class SubagentRequestRef {
+  const SubagentRequestRef({
+    required this.id,
+    required this.type,
+    required this.description,
+    required this.depth,
+    required this.path,
+    required this.parentToolCallId,
+  });
+
+  /// Спрашивающий потомок, его тип и описание.
+  final SubagentId id;
+  final String type, description;
+
+  /// Глубина спрашивающего (ребёнок корня — 1).
+  final int depth;
+
+  /// Id предков-субагентов от глубины 1, без самого спрашивающего.
+  final List<SubagentId> path;
+
+  /// Вызов `agent` корневой сессии, который клиент видел (первый сегмент
+  /// цепочки `toolCallId`).
+  final String parentToolCallId;
+}
+
+/// Снимок потомка для прогресса и доски (§17.3.2).
+///
+/// Почему неизменяемый снимок: события `SubagentProgress` уходят подписчикам
+/// асинхронно, а хэндл продолжает меняться.
+final class SubagentSnapshot {
+  const SubagentSnapshot({
+    required this.id,
+    required this.parentToolCallId,
+    required this.agent,
+    required this.description,
+    required this.depth,
+    required this.state,
+    this.waitingFor,
+    this.steps = 0,
+    this.toolCalls = 0,
+    this.usage = Usage.zero,
+    this.activeChildren = 0,
+    required this.startedAt,
+    this.endedAt,
+    this.lastActivity,
+  });
+
+  final SubagentId id;
+  final String parentToolCallId, agent, description;
+  final int depth;
+  final SubagentState state;
+
+  /// Только при `state == waiting`.
+  final SubagentWait? waitingFor;
+  final int steps, toolCalls;
+
+  /// Вместе с потомками потомка.
+  final Usage usage;
+
+  /// Потомки в `queued | running | waiting`.
+  final int activeChildren;
+  final DateTime startedAt;
+  final DateTime? endedAt;
+
+  /// Заголовок последнего `ToolCallStarted` потомка или его потомка.
+  final String? lastActivity;
+}
+
+/// Итог потомка (§17.3.2, §17.3.5): текст, статус, счётчики вместе с
+/// потомками.
+final class SubagentReport {
+  const SubagentReport({
+    required this.id,
+    required this.agent,
+    required this.status,
+    this.failure,
+    this.budgetExceeded,
+    this.text = '',
+    this.truncated = false,
+    this.steps = 0,
+    this.toolCalls = 0,
+    this.usage = Usage.zero,
+    this.duration = Duration.zero,
+    this.failureMessage,
+  });
+
+  final SubagentId id;
+  final String agent;
+
+  /// `completed | failed | cancelled`.
+  final SubagentState status;
+  final SubagentFailure? failure;
+
+  /// При `failure == budgetExceeded`.
+  final BudgetLimit? budgetExceeded;
+
+  /// Финальный текст ребёнка после усечения.
+  final String text;
+  final bool truncated;
+  final int steps, toolCalls;
+  final Usage usage;
+  final Duration duration;
+
+  /// Текст ошибки ребёнка для тела `Subagent failed: …`.
+  final String? failureMessage;
+}
+
+/// Что агент умеет сообщить клиенту о субагентах: значение геттера
+/// `AgentRuntime.subagents` (design.md change `add-subagents-and-tasks`,
+/// D37).
+///
+/// Почему отдельный тип: объявление в `initialize` строится по живому
+/// применённому конфигу, а не по `CorePlan`; поле одно — глубина.
+final class SubagentsInfo {
+  const SubagentsInfo({required this.maxDepth});
+
+  /// `subagents.max_depth` применённого конфига.
+  final int maxDepth;
+}
+
+/// Что нужно, чтобы запустить потомка (`agent-core/17-3-subagents.md`
+/// §17.3.2).
+final class SubagentSpec {
+  const SubagentSpec({
+    required this.id,
+    required this.parentSessionId,
+    required this.parentToolCallId,
+    required this.depth,
+    this.path = const [],
+    this.chainPrefix = '',
+    this.rootToolCallId,
+    required this.type,
+    required this.description,
+    required this.prompt,
+    this.taskId,
+  });
+
+  final SubagentId id;
+  final SessionId parentSessionId;
+
+  /// Вызов `agent` в сессии родителя.
+  final String parentToolCallId;
+
+  /// Глубина потомка (корневая сессия — 0, ребёнок — 1).
+  final int depth;
+
+  /// Id предков-субагентов от глубины 1, без самого потомка.
+  final List<SubagentId> path;
+  final AgentDefinition type;
+  final String description, prompt;
+
+  /// Пункт списка задач, назначенный ребёнку (только от корня).
+  final String? taskId;
+
+  /// Цепочка id вызовов `agent` от корня до сессии **родителя** потомка через
+  /// `/`; у ребёнка корня пусто (design.md change `add-subagents-and-tasks`,
+  /// D45 Т3).
+  final String chainPrefix;
+
+  /// Вызов `agent` корневой сессии, под которым клиент видит всё поддерево.
+  /// Передаётся по дереву отдельным значением, а не выделяется разбором
+  /// [chainPrefix]: id вызова провайдера может содержать `/` (D45 Т3). `null` —
+  /// потомок корня: тогда это [parentToolCallId].
+  final String? rootToolCallId;
+
+  /// Цепочка id вызовов `agent` от корня до сессии самого потомка: префикс
+  /// для `toolCallId` его вопросов и операций со списком задач
+  /// (`call_3/call_2` у внука, D8, D45 Т3).
+  String get sessionChain =>
+      chainPrefix.isEmpty ? parentToolCallId : '$chainPrefix/$parentToolCallId';
+
+  /// Вызов `agent` корня, к которому клиент привязывает потомка.
+  String get rootCall => rootToolCallId ?? parentToolCallId;
+}

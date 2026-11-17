@@ -272,6 +272,62 @@ void main() {
       );
     });
 
+    // Повторный `tool_call` с тем же id не снижает показанный риск
+    // (review 6b, L-2; D27).
+    test('a repeated tool_call does not lower the shown risk', () {
+      final withOther = PromptTurnStateMachine.applyUpdate(
+        PromptTurnStateMachine.start(_pendingTurn).stateOrThrow,
+        const SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: ToolCallId('tool-1'),
+            title: 'Lookup',
+            kind: ToolKind.other,
+          ),
+        ),
+      ).stateOrThrow;
+      final repeated = PromptTurnStateMachine.applyUpdate(
+        withOther,
+        const SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: ToolCallId('tool-1'),
+            title: 'Lookup',
+            kind: ToolKind.read,
+          ),
+        ),
+      ).stateOrThrow;
+
+      final record = repeated.toolCalls[const ToolCallId('tool-1')]!;
+      expect(record.riskLevel, ApprovalRiskLevel.unknown);
+      expect(record.kind, ToolKind.read);
+    });
+
+    test('a status-only update keeps the risk of a read call', () {
+      final withRead = PromptTurnStateMachine.applyUpdate(
+        PromptTurnStateMachine.start(_pendingTurn).stateOrThrow,
+        const SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: ToolCallId('tool-1'),
+            title: 'Read',
+            kind: ToolKind.read,
+          ),
+        ),
+      ).stateOrThrow;
+      final updated = PromptTurnStateMachine.applyUpdate(
+        withRead,
+        const SessionUpdate.toolCallUpdate(
+          toolCallUpdate: ToolCallUpdate(
+            toolCallId: ToolCallId('tool-1'),
+            status: ToolCallStatus.completed,
+          ),
+        ),
+      ).stateOrThrow;
+
+      expect(
+        updated.toolCalls[const ToolCallId('tool-1')]?.riskLevel,
+        ApprovalRiskLevel.readOnly,
+      );
+    });
+
     // Чанки — приращения текста без id и номера (ACP не даёт ключа
     // дедупликации, `streaming.md` §8): одинаковые соседние дельты вроде
     // `----------------` в таблице Markdown — разные куски ответа.
@@ -1122,6 +1178,284 @@ void main() {
         PromptTurnStatus.failed,
         PromptTurnStatus.running,
       ]);
+    });
+  });
+
+  // Незнакомый вид вызова и смена режима (change `tolerate-unknown-tool-kind`,
+  // D5, D9; approval-safety «Риск вызова неизвестного вида и смены режима»).
+  group('Risk of an unknown tool kind and mode switch', () {
+    const callId = ToolCallId('tool-1');
+
+    ToolCallRecord record(ToolKind kind, ApprovalRiskLevel risk) =>
+        ToolCallRecord(id: callId, title: 'x', kind: kind, riskLevel: risk);
+
+    test('switchMode without diff or terminal is unknown', () {
+      expect(
+        ApprovalPolicy.classifyToolCall(
+          const ToolCall(
+            toolCallId: callId,
+            title: 'Ready for implementation',
+            kind: ToolKind.switchMode,
+          ),
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+    });
+
+    test('unknown risk is never allowed without approval in any mode', () {
+      for (final mode in PermissionMode.values) {
+        expect(
+          ApprovalPolicy.decidePermission(
+            mode: mode,
+            riskLevel: ApprovalRiskLevel.unknown,
+          ),
+          isNot(PermissionModeDecision.allowWithoutApproval),
+          reason: '$mode',
+        );
+      }
+    });
+
+    test('an update with an explicit other kind lifts a read record', () {
+      expect(
+        ApprovalPolicy.classifyToolCallUpdateWithin(
+          record(ToolKind.read, ApprovalRiskLevel.readOnly),
+          const ToolCallUpdate(toolCallId: callId, kind: ToolKind.other),
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+    });
+
+    test('an unrecognized kind (decoded as other) lifts a read record and '
+        'a later explicit read does not lower it', () {
+      final lifted = ApprovalPolicy.classifyToolCallUpdateWithin(
+        record(ToolKind.read, ApprovalRiskLevel.readOnly),
+        const ToolCallUpdate(toolCallId: callId, kind: ToolKind.other),
+      );
+      expect(lifted, ApprovalRiskLevel.unknown);
+      expect(
+        ApprovalPolicy.classifyToolCallUpdateWithin(
+          record(ToolKind.read, lifted),
+          const ToolCallUpdate(toolCallId: callId, kind: ToolKind.read),
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+    });
+
+    test('an execute record stays shell under other or switchMode', () {
+      for (final kind in [ToolKind.other, ToolKind.switchMode]) {
+        expect(
+          ApprovalPolicy.classifyToolCallUpdateWithin(
+            record(ToolKind.execute, ApprovalRiskLevel.shell),
+            ToolCallUpdate(toolCallId: callId, kind: kind),
+          ),
+          ApprovalRiskLevel.shell,
+          reason: '$kind',
+        );
+      }
+    });
+
+    test('without a record an other kind is unknown', () {
+      expect(
+        ApprovalPolicy.classifyToolCallUpdateWithin(
+          null,
+          const ToolCallUpdate(toolCallId: callId, kind: ToolKind.other),
+        ),
+        ApprovalRiskLevel.unknown,
+      );
+    });
+  });
+
+  // Признак `toolKindUnrecognized` управляет только видом для отображения;
+  // нижняя граница риска следует из `kind: other` в DTO (D9).
+  group('toolKindUnrecognized (D9)', () {
+    const callId = ToolCallId('call-1');
+    const readCall = SessionUpdate.toolCall(
+      toolCall: ToolCall(
+        toolCallId: callId,
+        title: 'Read a.txt',
+        kind: ToolKind.read,
+      ),
+    );
+    const otherUpdate = SessionUpdate.toolCallUpdate(
+      toolCallUpdate: ToolCallUpdate(
+        toolCallId: callId,
+        kind: ToolKind.other,
+        status: ToolCallStatus.inProgress,
+      ),
+    );
+
+    AcpSession running() => SessionStateMachine.startTurn(
+      const AcpSession(id: _sessionId, cwd: '/workspace'),
+      _pendingTurn,
+    ).stateOrThrow;
+
+    ToolCallRecord? recordOf(AcpSession session) =>
+        session.turns.last.toolCalls[callId];
+
+    test('a flagged update keeps the kind of the record, risk is unknown', () {
+      final withRead = SessionStateMachine.applyUpdate(
+        running(),
+        readCall,
+      ).stateOrThrow;
+      final updated = SessionStateMachine.applyUpdate(
+        withRead,
+        otherUpdate,
+        toolKindUnrecognized: true,
+      ).stateOrThrow;
+
+      expect(recordOf(updated)?.kind, ToolKind.read);
+      expect(recordOf(updated)?.riskLevel, ApprovalRiskLevel.unknown);
+    });
+
+    test('an unflagged other update overwrites the kind', () {
+      final withRead = SessionStateMachine.applyUpdate(
+        running(),
+        readCall,
+      ).stateOrThrow;
+      final updated = SessionStateMachine.applyUpdate(
+        withRead,
+        otherUpdate,
+      ).stateOrThrow;
+
+      expect(recordOf(updated)?.kind, ToolKind.other);
+      expect(recordOf(updated)?.riskLevel, ApprovalRiskLevel.unknown);
+    });
+
+    test('a flagged update without a record gives kind other', () {
+      final updated = SessionStateMachine.applyUpdate(
+        running(),
+        otherUpdate,
+        toolKindUnrecognized: true,
+      ).stateOrThrow;
+
+      expect(recordOf(updated)?.kind, ToolKind.other);
+    });
+
+    test('replayHistory honours toolKindUnrecognizedAt', () {
+      var next = 0;
+      final replayed = SessionStateMachine.replayHistory(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        const [readCall, otherUpdate],
+        nextTurnId: () => PromptTurnId('replay-${next++}'),
+        toolKindUnrecognizedAt: const {1},
+      );
+
+      expect(recordOf(replayed)?.kind, ToolKind.read);
+      expect(recordOf(replayed)?.riskLevel, ApprovalRiskLevel.unknown);
+    });
+
+    test('a repeated flagged update is a duplicate and keeps unknown risk', () {
+      final withRead = SessionStateMachine.applyUpdate(
+        running(),
+        readCall,
+      ).stateOrThrow;
+      final first = SessionStateMachine.applyUpdate(
+        withRead,
+        otherUpdate,
+        toolKindUnrecognized: true,
+      ).stateOrThrow;
+      final second = SessionStateMachine.applyUpdate(
+        first,
+        otherUpdate,
+        toolKindUnrecognized: true,
+      );
+
+      expect(second, isA<IgnoredStateTransition<AcpSession>>());
+      expect(
+        recordOf(second.stateOrThrow)?.riskLevel,
+        ApprovalRiskLevel.unknown,
+      );
+      expect(recordOf(second.stateOrThrow)?.kind, ToolKind.read);
+    });
+  });
+
+  // Слияние кадров и `ToolCallRecord.outcome` (D41 п. 1; spec acp-client-kit
+  // «Отмена по признаку агента»): признак ставится кадром, не стирается
+  // кадром без него и снимается итоговым `completed`.
+  group('outcome of a tool call record (D41)', () {
+    const callId = ToolCallId('call-1');
+    Map<String, Object?> meta(String outcome) => {
+      'codelab': {'outcome': outcome},
+    };
+    SessionUpdate call({ToolCallStatus? status, Map<String, Object?>? m}) =>
+        SessionUpdate.toolCall(
+          toolCall: ToolCall(
+            toolCallId: callId,
+            title: 'Run',
+            status: status ?? ToolCallStatus.inProgress,
+            meta: m,
+          ),
+        );
+    SessionUpdate upd({ToolCallStatus? status, Map<String, Object?>? m}) =>
+        SessionUpdate.toolCallUpdate(
+          toolCallUpdate: ToolCallUpdate(
+            toolCallId: callId,
+            status: status,
+            meta: m,
+          ),
+        );
+
+    AcpSession apply(List<SessionUpdate> updates) {
+      var session = SessionStateMachine.startTurn(
+        const AcpSession(id: _sessionId, cwd: '/workspace'),
+        _pendingTurn,
+      ).stateOrThrow;
+      for (final u in updates) {
+        session = SessionStateMachine.applyUpdate(session, u).stateOrThrow;
+      }
+      return session;
+    }
+
+    ToolCallRecord? recordOf(AcpSession s) => s.turns.last.toolCalls[callId];
+
+    test('tool_call_update sets the outcome', () {
+      final s = apply([
+        call(),
+        upd(status: ToolCallStatus.failed, m: meta('cancelled')),
+      ]);
+      expect(recordOf(s)?.outcome, 'cancelled');
+    });
+
+    test('a later frame without the sign keeps the outcome', () {
+      final s = apply([
+        call(),
+        upd(status: ToolCallStatus.failed, m: meta('cancelled')),
+        upd(status: ToolCallStatus.failed),
+      ]);
+      expect(recordOf(s)?.outcome, 'cancelled');
+    });
+
+    test('completed clears the outcome', () {
+      final s = apply([
+        call(),
+        upd(status: ToolCallStatus.failed, m: meta('cancelled')),
+        upd(status: ToolCallStatus.completed),
+      ]);
+      expect(recordOf(s)?.outcome, isNull);
+    });
+
+    test('a repeated tool_call keeps the outcome and completed clears it', () {
+      final kept = apply([
+        call(),
+        upd(status: ToolCallStatus.failed, m: meta('rejected')),
+        call(status: ToolCallStatus.failed),
+      ]);
+      expect(recordOf(kept)?.outcome, 'rejected');
+
+      final cleared = apply([
+        call(),
+        upd(status: ToolCallStatus.failed, m: meta('rejected')),
+        call(status: ToolCallStatus.completed),
+      ]);
+      expect(recordOf(cleared)?.outcome, isNull);
+    });
+
+    test('a repeated tool_call with the sign sets the outcome', () {
+      final s = apply([
+        call(),
+        call(status: ToolCallStatus.failed, m: meta('interrupted')),
+      ]);
+      expect(recordOf(s)?.outcome, 'interrupted');
     });
   });
 }

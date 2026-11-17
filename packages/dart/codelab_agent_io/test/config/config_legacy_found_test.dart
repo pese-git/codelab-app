@@ -65,92 +65,96 @@ void main() {
       if (w.event == 'config.legacy_found') w,
   ];
 
-  test('only codelab.toml: one warning per cwd, no content, no issues', () {
-    write('$cwd/codelab.toml', 'this is [not toml sk-toml-secret\n');
-    write('$home/auth.toml', 'token = "sk-auth-secret"\n');
+  // Строка R-16 матрицы agent-parity-goals: id — первый литерал внешней
+  // группы (design.md change `switch-default-agent-to-dart`, D3).
+  group('core/config-legacy-found-warning', () {
+    test('only codelab.toml: one warning per cwd, no content, no issues', () {
+      write('$cwd/codelab.toml', 'this is [not toml sk-toml-secret\n');
+      write('$home/auth.toml', 'token = "sk-auth-secret"\n');
 
-    final first = load();
-    final second = load();
+      final first = load();
+      final second = load();
 
-    expect(first.issues, isEmpty);
-    expect(first.config, isNotNull);
-    final warning = legacy(first).single;
-    expect(warning.level, LogLevel.warning);
-    expect(warning.fields['files'], ['$home/auth.toml', '$cwd/codelab.toml']);
-    // Первый файл — локация строки (`ConfigIssue.source`), в тексте его нет;
-    // остальные перечислены в тексте.
-    expect(warning.source, '$home/auth.toml');
-    expect(
-      warning.message,
-      'codelab.toml is not used by the Dart agent. Move the settings to '
-      'config.yaml manually; the key mapping is in '
-      'docs/architecture/proposals/agent-core/15-configuration.md, '
-      'section 15.7. Also found: $cwd/codelab.toml.',
-    );
-    expect(warning.message, isNot(contains('$home/auth.toml')));
-    expect(warning.toString(), isNot(contains('sk-toml-secret')));
-    expect(warning.toString(), isNot(contains('sk-auth-secret')));
-    expect(legacy(second), isEmpty, reason: 'once per process and cwd');
-  });
+      expect(first.issues, isEmpty);
+      expect(first.config, isNotNull);
+      final warning = legacy(first).single;
+      expect(warning.level, LogLevel.warning);
+      expect(warning.fields['files'], ['$home/auth.toml', '$cwd/codelab.toml']);
+      // Первый файл — локация строки (`ConfigIssue.source`), в тексте его нет;
+      // остальные перечислены в тексте.
+      expect(warning.source, '$home/auth.toml');
+      expect(
+        warning.message,
+        'codelab.toml is not used by the Dart agent. Move the settings to '
+        'config.yaml manually; the key mapping is in '
+        'docs/architecture/proposals/agent-core/15-configuration.md, '
+        'section 15.7. Also found: $cwd/codelab.toml.',
+      );
+      expect(warning.message, isNot(contains('$home/auth.toml')));
+      expect(warning.toString(), isNot(contains('sk-toml-secret')));
+      expect(warning.toString(), isNot(contains('sk-auth-secret')));
+      expect(legacy(second), isEmpty, reason: 'once per process and cwd');
+    });
 
-  test('another cwd gets its own warning', () {
-    write('$cwd/codelab.toml', 'x');
-    final other = '${root.path}/other';
-    write('$other/codelab.local.toml', 'x');
+    test('another cwd gets its own warning', () {
+      write('$cwd/codelab.toml', 'x');
+      final other = '${root.path}/other';
+      write('$other/codelab.local.toml', 'x');
 
-    load();
-    final result = load(dir: other);
+      load();
+      final result = load(dir: other);
 
-    expect(legacy(result).single.fields['files'], [
-      '$other/codelab.local.toml',
-    ]);
-  });
+      expect(legacy(result).single.fields['files'], [
+        '$other/codelab.local.toml',
+      ]);
+    });
 
-  test('the file is never opened: an unreadable one still counts', () {
-    write('$cwd/codelab.toml', 'x');
-    Process.runSync('chmod', ['000', '$cwd/codelab.toml']);
-    addTearDown(() => Process.runSync('chmod', ['644', '$cwd/codelab.toml']));
+    test('the file is never opened: an unreadable one still counts', () {
+      write('$cwd/codelab.toml', 'x');
+      Process.runSync('chmod', ['000', '$cwd/codelab.toml']);
+      addTearDown(() => Process.runSync('chmod', ['644', '$cwd/codelab.toml']));
 
-    final result = load();
+      final result = load();
 
-    expect(result.issues, isEmpty);
-    expect(legacy(result), hasLength(1));
-  });
+      expect(result.issues, isEmpty);
+      expect(legacy(result), hasLength(1));
+    });
 
-  test('config.yaml next to codelab.toml: no warning', () {
-    write('$home/config.yaml', 'budget:\n  max_steps: 5\n');
-    write('$cwd/codelab.toml', 'x');
+    test('config.yaml next to codelab.toml: no warning', () {
+      write('$home/config.yaml', 'budget:\n  max_steps: 5\n');
+      write('$cwd/codelab.toml', 'x');
 
-    final result = load();
+      final result = load();
 
-    expect(result.issues, isEmpty);
-    expect(legacy(result), isEmpty);
-  });
+      expect(result.issues, isEmpty);
+      expect(legacy(result), isEmpty);
+    });
 
-  test('a project config.yaml is enough to stay silent', () {
-    write('$cwd/.codelab/config.local.yaml', 'budget:\n  max_steps: 5\n');
-    write('$home/codelab.toml', 'x');
+    test('a project config.yaml is enough to stay silent', () {
+      write('$cwd/.codelab/config.local.yaml', 'budget:\n  max_steps: 5\n');
+      write('$home/codelab.toml', 'x');
 
-    expect(legacy(load()), isEmpty);
-  });
+      expect(legacy(load()), isEmpty);
+    });
 
-  test('--config with a codelab.toml around: no warning', () {
-    write('$cwd/codelab.toml', 'x');
-    write('${root.path}/x.yaml', 'budget:\n  max_steps: 5\n');
+    test('--config with a codelab.toml around: no warning', () {
+      write('$cwd/codelab.toml', 'x');
+      write('${root.path}/x.yaml', 'budget:\n  max_steps: 5\n');
 
-    expect(legacy(load(extraConfig: '${root.path}/x.yaml')), isEmpty);
-  });
+      expect(legacy(load(extraConfig: '${root.path}/x.yaml')), isEmpty);
+    });
 
-  test('with a script the files are not looked for', () {
-    write('$cwd/codelab.toml', 'x');
+    test('with a script the files are not looked for', () {
+      write('$cwd/codelab.toml', 'x');
 
-    expect(legacy(load(scripted: true)), isEmpty);
-  });
+      expect(legacy(load(scripted: true)), isEmpty);
+    });
 
-  test('codelab.toml.example is a template and is not looked for', () {
-    write('$cwd/codelab.toml.example', 'x');
-    write('$home/codelab.toml.example', 'x');
+    test('codelab.toml.example is a template and is not looked for', () {
+      write('$cwd/codelab.toml.example', 'x');
+      write('$home/codelab.toml.example', 'x');
 
-    expect(legacy(load()), isEmpty);
+      expect(legacy(load()), isEmpty);
+    });
   });
 }

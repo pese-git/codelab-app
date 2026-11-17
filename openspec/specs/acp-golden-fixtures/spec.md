@@ -94,13 +94,13 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/code
 
 ### Requirement: Агентский драйвер фикстур
 `codelab_acp_testing` SHALL предоставлять драйвер `runAgentFixture(fixture, startAgent)`, который проигрывает фикстуру с ролью `agent` против агента по алгоритму §14.9 документа ядра:
-- агент поднимается фабрикой теста на агентском конце пары транспортов в памяти (`InProcessAcpLink`, тестовая копия в `codelab_acp_testing`, design.md change `add-dart-agent-acp-server`, D9) с `ScriptedStreamFunction` из блока `llm`, `FakeClock` и `SequentialIdGenerator`;
+- агент поднимается фабрикой теста на агентском конце пары транспортов в памяти (`InProcessAcpLink` из основного бареля `codelab_acp_transports`; design.md change `add-in-process-acp-transport`, D5) с `ScriptedStreamFunction` из блока `llm`, `FakeClock` и `SequentialIdGenerator`;
 - файлы и команды агент получает через ACP: кадры `fs/*` и `terminal/*` — часть фикстуры, ответы клиента берутся из её кадров `c2a`; `setup.files` пишутся во временный `cwd` только для локального листинга;
 - кадры `c2a` отправляются агенту, кадры `a2c` ожидаются (таймаут 5 с) и сравниваются после нормализации с матчерами `repeat`, `optional`, `unordered`;
 - после последнего кадра 200 мс тишины: лишний кадр или лишний запрос агента — провал;
 - все шаги scripted-модели использованы, лишних запросов нет; `after.files` сверяются с последним `fs/write_text_file`.
 
-Драйвер НЕ SHALL зависеть от пакетов агента. Фикстура без роли `agent` и фикстура с `setup.transport` SHALL пропускаться с указанием причины: транспортные фикстуры играет транспортный драйвер. Скрипт `melos run conformance:agent` SHALL входить в `melos run check`.
+Драйвер НЕ SHALL зависеть от пакетов агента и НЕ SHALL содержать собственную реализацию пары транспортов в памяти. Фикстура без роли `agent` и фикстура с `setup.transport` SHALL пропускаться с указанием причины: транспортные фикстуры играет транспортный драйвер. Скрипт `melos run conformance:agent` SHALL входить в `melos run check`.
 
 #### Scenario: Ход с разрешением
 - **WHEN** драйвер проигрывает `acp/prompt-tool-permission-allow` против `AcpAgentServer`
@@ -117,6 +117,10 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/code
 #### Scenario: Транспортная фикстура в памяти
 - **WHEN** агентский драйвер получает `acp/stdio-framing-large-line`
 - **THEN** он её пропускает и сообщает, что её играет транспортный драйвер
+
+#### Scenario: Пара транспортов из codelab_acp_transports
+- **WHEN** агентский драйвер поднимает агента для фикстуры
+- **THEN** агентский конец — `InProcessAcpLink().agent` из `package:codelab_acp_transports/codelab_acp_transports.dart`, а в `packages/dart/codelab_acp_testing/lib/` нет определения классов `InProcessAcpLink` и `InProcessAcpTransport`
 
 ### Requirement: Транспортный драйвер фикстур
 Фикстуры с `setup.transport` SHALL проигрываться транспортным драйвером `apps/codelab_agent/test/transport_conformance_test.dart` против процесса бинаря: `dart run bin/codelab_agent.dart serve --stdio` или `serve --ws --port 0` со сценарием из блока `llm` фикстуры. Кадры SHALL идти через настоящий stdio или WebSocket и сравниваться тем же алгоритмом, что у агентского драйвера (нормализация, матчеры, 200 мс тишины). Для `ws` попытки `attempts` SHALL проверять HTTP-статус отказа до основного подключения. Корпус этапа 4 SHALL содержать транспортные фикстуры `acp/stdio-framing-large-line` и `acp/ws-auth-bearer-required` с ролью `agent`.
@@ -165,5 +169,65 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/code
 
 #### Scenario: Клиентский прогон
 - **WHEN** клиентский драйвер получает MCP-фикстуру
+- **THEN** он её пропускает с причиной «роль только agent»
+
+### Requirement: Фикстуры файлов проекта этапа 8
+Корпус SHALL содержать фикстуры с ролью `agent` и ссылками `spec` на `14-Slash Commands.md` и `13-Session Config Options.md` (design.md change `add-agent-project-files`, D15):
+- `acp/prompt-template-command` (E-07) — шаблон `.codelab/prompts/review.md` доверенного проекта; `available_commands_update` после `session/new` содержит встроенные `compact`, `mode`, `model`, `status`, `mcp`, `help` (capability `compaction` и `mcp` агентского прогона включены; design.md change `add-config-writer-and-reload`, D12; design.md change `add-agent-builtin-slash-commands`, D2), затем `review` с `input.hint`; `session/prompt` с `/review lib/parser "error handling"` — scripted-модель получает развёрнутый текст; после `session/load` реплей содержит `user_message_chunk` с исходной командой;
+- `acp/available-commands-no-tools` (R-07, часть шаблонов и встроенных команд) — встроенные инструменты, fake MCP-сервер с `echo` и один шаблон; список команд — встроенные `compact`, `mode`, `model`, `status`, `mcp`, `help` и шаблон, без инструментов (design.md change `add-config-writer-and-reload`, D12; design.md change `add-agent-builtin-slash-commands`, D2);
+- `acp/set-config-option-agent` (R-15) — `.codelab/agents/reviewer.md` с многострочным `tools`; `configOptions` содержит `agent`; `session/set_config_option` с `agent: reviewer` даёт `current_mode_update`, ответ с согласованными `agent`, `model`, `mode`; следующий запрос к модели содержит только схемы из списка;
+- `acp/slash-mcp-list` (E-13, агентская часть; E-04) — `session/new` с одним сервером клиента и конфигом с двумя серверами, один из которых `enabled: false`:
+  - `/mcp list` — один `agent_message_chunk` с таблицей `agent-core-architecture` §17.5.7 побайтово, `stopReason: end_turn`, запросов к scripted-модели нет;
+  - `/mcp disable <id>` — строка сервера в состоянии `disabled`;
+  - `/mcp frob` — текст `Usage: …`;
+  - после `session/load` реплей не содержит ни одной из этих команд.
+
+Файлы сценария SHALL задаваться `setup.files`; формат фикстур НЕ SHALL меняться. Фабрика агентского прогона `codelab_agent_acp` SHALL подключать `ProjectFilesLoader` с временным `CODELAB_HOME` и принимать в `setup.config` ключи `trusted_projects` (с подстановкой `${cwd}`) и `mcp.servers`. Сервер `mcp.servers` с `type: stdio` и `command`, равным имени fake-сервера фабрики, подключается к этому fake-серверу; любой другой `command` — громкий провал. Другой неизвестный ключ — по-прежнему громкий провал. Фабрика НЕ SHALL передавать ядру `ConfigSource`: перезагрузка проверяется тестами хоста.
+
+#### Scenario: Команда шаблона
+- **WHEN** агентский драйвер проигрывает `acp/prompt-template-command`
+- **THEN** кадры совпадают с фикстурой, scripted-модель получила развёрнутый текст
+
+#### Scenario: Таблица /mcp list
+- **WHEN** агентский драйвер проигрывает `acp/slash-mcp-list`
+- **THEN** кадры совпадают с фикстурой побайтово, scripted-модель не получила ни одного запроса, журнал сессии не содержит записей команд
+
+#### Scenario: Клиентский прогон
+- **WHEN** клиентский драйвер получает одну из этих фикстур
+- **THEN** он её пропускает с причиной «роль только agent»
+
+### Requirement: Фикстура неизвестного вида вызова
+Корпус SHALL содержать фикстуру `acp/tool-kind-unknown-tolerated` с ролью только `client` (Dart-агент таких видов не выдаёт) и ссылками `spec` на `08-Tool Calls.md#creating`, `08-Tool Calls.md#updating`, `08-Tool Calls.md#requesting-permission`, `12-Session Model.md#exiting-plan-modes`, `17-Schema.md#toolkind` и `05-Prompt Turn.md#4-check-for-completion`. В одном ходе агент SHALL присылать: `tool_call` с `kind: "future_kind"`, его `tool_call_update` с тем же видом и `status: "completed"`, `tool_call` с `kind: "switch_mode"` и `session/request_permission` на него с вариантами `allow_always`, `allow_once`, `reject_once` по образцу `12-Session Model.md`; ожидаемый кадр клиента — ответ `selected` с вариантом `reject_once`; затем `tool_call_update` `failed` и ответ `session/prompt` `end_turn` (design.md change `tolerate-unknown-tool-kind`, D8).
+
+#### Scenario: Клиентский прогон
+- **WHEN** клиентский драйвер проигрывает `acp/tool-kind-unknown-tolerated`, а тест в хуке выбирает вариант `reject_once`
+- **THEN** ответ клиента на `session/request_permission` — `selected` с `optionId` `reject`, а не `cancelled`, и ход завершается кадром ответа `session/prompt`
+
+#### Scenario: Состояние после прогона
+- **WHEN** клиентский прогон этой фикстуры завершён
+- **THEN** вызов `call_future` в ходе имеет вид `other`, статус `completed` и риск `unknown`, вызов `call_switch_mode_001` — вид `switchMode` и риск `unknown`, а диагностик уровня error нет
+
+#### Scenario: Агентский прогон пропускает фикстуру
+- **WHEN** агентский драйвер получает `acp/tool-kind-unknown-tolerated`
+- **THEN** он её пропускает и сообщает, что у фикстуры нет роли `agent`
+
+### Requirement: Фикстуры встроенных команд агента
+Корпус SHALL содержать фикстуры с ролью `agent` и ссылками `spec` на `14-Slash Commands.md`, `05-Prompt Turn.md` и, для режима, `13-Session Config Options.md` и `12-Session Model.md` (design.md change `add-agent-builtin-slash-commands`, D8; строки Must K-02, R-08):
+- `acp/slash-compact` (K-02) — сессия с историей, достаточной для среза (`setup.config` с малым `compaction.keep_recent_tokens`), затем `session/prompt` с `/compact <указание>`: scripted-суммаризатор получает блок `<focus>` с указанием; ответ — один `agent_message_chunk` `Compacted: <X> → <Y> tokens.` и `stopReason: end_turn`; ни `tool_call`, ни `plan` в ходе нет;
+- `acp/slash-help` (R-08) — `available_commands_update` после `session/new`, затем `/help`: один `agent_message_chunk` со списком команд в порядке объявления и `stopReason: end_turn`, запросов к scripted-модели нет;
+- `acp/slash-mode-plan` (R-08, сценарий приёмки) — сессия в режиме `standard`: `/help`, затем `/mode plan` — `current_mode_update` с `plan`, `config_option_update` с полным снимком, `agent_message_chunk` `Mode: plan.`, `stopReason: end_turn`; затем `/nope` — `agent_message_chunk` `Unknown command: /nope. Run /help to list commands.` и `stopReason: end_turn`; запросов к scripted-модели нет.
+
+Все уведомления хода SHALL идти до ответа на `session/prompt` (ACP-3).
+
+#### Scenario: /mode plan в корпусе
+- **WHEN** агентский драйвер проигрывает `acp/slash-mode-plan`
+- **THEN** кадры совпадают с фикстурой, scripted-модель не получила ни одного запроса
+
+#### Scenario: /compact в корпусе
+- **WHEN** агентский драйвер проигрывает `acp/slash-compact`
+- **THEN** кадры совпадают с фикстурой, суммаризатор получил указание, основная модель после `/compact` запросов не получила
+
+#### Scenario: Клиентский прогон
+- **WHEN** клиентский драйвер получает одну из этих фикстур
 - **THEN** он её пропускает с причиной «роль только agent»
 

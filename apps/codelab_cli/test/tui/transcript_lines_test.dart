@@ -41,6 +41,19 @@ void main() {
     );
   });
 
+  test('a turn stopped notice is a note line (design D27, Q33)', () {
+    expect(
+      lines(const [
+        TranscriptItem.notice(
+          id: 't1/stopped',
+          kind: NoticeKind.turnStopped,
+          text: 'The agent refused to continue.',
+        ),
+      ]),
+      ['note: The agent refused to continue.'],
+    );
+  });
+
   test('the answer wraps to the width', () {
     expect(
       lines(const [

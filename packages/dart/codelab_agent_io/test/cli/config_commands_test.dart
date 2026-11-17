@@ -154,6 +154,31 @@ agent:
   });
 
   test(
+    'CODELAB_TEST_SECRET_STORE in a regular build: a warning naming the '
+    'variable, not the path; the directory is not created; the config stays '
+    'valid (config.env.unknown, §12.4.13)',
+    () async {
+      write('$home/config.yaml', providers);
+      final store = '${root.path}/secret-store';
+
+      final result = await check(env: {'CODELAB_TEST_SECRET_STORE': store});
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      final warning = result.stdout.singleWhere(
+        (l) => l.startsWith('warning: '),
+      );
+      expect(warning, contains('CODELAB_TEST_SECRET_STORE'));
+      expect(result.stdout.join('\n'), isNot(contains(store)));
+      expect(result.stdout.last, 'Config: valid');
+      expect(Directory(store).existsSync(), isFalse);
+    },
+    skip: const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')
+        ? 'сборка с CODELAB_ALLOW_TEST_SECRETS: покрыто процессным тестом '
+              'codelab_embedded/test/io/test_secret_store_process_test.dart'
+        : false,
+  );
+
+  test(
     'config.yml next to nothing: warning line, config stays valid',
     () async {
       write('$home/config.yaml', providers);
@@ -181,7 +206,8 @@ agent:
     expect(Directory('$home/logs').existsSync(), isFalse);
   });
 
-  test('an inline secret never reaches the output', () async {
+  test('an inline secret is a warning and never reaches the output '
+      '(R8-4: not an error any more)', () async {
     write(
       '$home/config.yaml',
       providers.replaceFirst(
@@ -192,9 +218,9 @@ agent:
 
     final result = await check();
 
-    expect(result.exitCode, 1);
+    expect(result.exitCode, 0);
     final all = [...result.stdout, ...result.stderr].join('\n');
-    expect(all, contains('providers.p.api_key'));
+    expect(all, contains('providers.p.api_key: a secret is stored'));
     expect(all, isNot(contains('sk-test-secret')));
   });
 
@@ -217,6 +243,25 @@ agent:
       expect(result.stderr.join('\n'), contains('codelab.toml'));
     },
   );
+
+  test('CODELAB_CONFIG is honoured: absolute extra.yaml with an unknown key '
+      'appears in Sources: and its problem gives code 1 (agent-configuration, '
+      'CODELAB_CONFIG учитывается)', () async {
+    write('$home/config.yaml', providers);
+    final extra = '${root.path}/extra.yaml';
+    write(extra, 'bogus_key: 1\n');
+
+    final result = await check(env: {'CODELAB_CONFIG': extra});
+
+    final out = result.stdout.join('\n');
+    expect(result.exitCode, 1, reason: out);
+    expect(
+      result.stdout.firstWhere((l) => l.startsWith('Sources:')),
+      contains(extra),
+    );
+    expect(out, contains('bogus_key'));
+    expect(result.stdout.last, startsWith('Config: invalid'));
+  });
 
   test('a missing cwd is a usage error: code 64', () async {
     final result = await ConfigCommands().check(
@@ -720,6 +765,638 @@ agent:
       });
     });
   });
+
+  // Состояние секретов (agent-configuration «config check показывает
+  // состояние секретов», все сценарии; design.md change
+  // `add-agent-secret-store`, D9). Тест не читает настоящий `~/.codelab`:
+  // хранилище — фейк или `secrets.yaml` во временном `CODELAB_HOME`.
+  group('secrets', () {
+    // Бэкенд `file` отказывает при каталоге, доступном на запись группе
+    // (umask 0002 на Debian), поэтому права задаются явно (D14).
+    setUp(() => Process.runSync('/bin/chmod', ['700', home]));
+
+    const value = 'sk-test-0123456789abcdef';
+
+    const withSecretKey = '''
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    api_key_secret: codelab/openai
+    models:
+      m: {}
+agent:
+  default_model: p/m
+''';
+
+    /// Команда над фейковым хранилищем; [opened] фиксирует выбор бэкенда.
+    ConfigCommands over(
+      DescribedSecretStore store, {
+      List<String?>? opened,
+      String? platform,
+    }) => ConfigCommands(
+      platform: platform,
+      openStore: ({required choice, required environment, required home}) {
+        opened?.add(choice);
+        return store;
+      },
+    );
+
+    List<String> secretLines(ConfigCommandResult result) => [
+      for (final line in result.stdout)
+        if (line.startsWith('note: secrets') ||
+            line.startsWith('warning: secrets') ||
+            line.contains(': secret '))
+          line,
+    ];
+
+    void seedFile(String mode) {
+      write('$home/secrets.yaml', '# CodeLab secrets in plaintext.\n');
+      Process.runSync('/bin/chmod', ['700', home]);
+      Process.runSync('/bin/chmod', [mode, '$home/secrets.yaml']);
+    }
+
+    test('auto: note с причиной и warning с подсказкой env/file, перед '
+        'Config: valid, код 0', () async {
+      write('$home/config.yaml', withSecretKey);
+
+      final result = await check(commands: ConfigCommands(platform: 'linux'));
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      final note = result.stdout.indexWhere(
+        (l) => l.startsWith('note: secrets backend: env ('),
+      );
+      final warning = result.stdout.indexWhere(
+        (l) => l.contains('secret codelab/openai is not set'),
+      );
+      expect(note, greaterThan(0));
+      expect(warning, greaterThan(note));
+      expect(warning, lessThan(result.stdout.length - 1));
+      expect(
+        result.stdout[warning],
+        matches(
+          RegExp(
+            '^warning: ${RegExp.escape(home)}/config\\.yaml:\\d+:\\d+: '
+            r'providers\.p\.api_key_secret: secret codelab/openai is not set; '
+            r"set CODELAB_SECRET_CODELAB_OPENAI or add 'secrets.backend: file' "
+            r'and run: codelab secret set codelab/openai$',
+          ),
+        ),
+      );
+      expect(result.stdout.last, 'Config: valid');
+    });
+
+    test('Windows: подсказка только с переменной', () async {
+      write('$home/config.yaml', withSecretKey);
+
+      final result = await check(commands: ConfigCommands(platform: 'windows'));
+
+      final warning = result.stdout.singleWhere(
+        (l) => l.contains('secret codelab/openai is not set'),
+      );
+      expect(
+        warning,
+        endsWith('is not set; set CODELAB_SECRET_CODELAB_OPENAI'),
+      );
+      expect(result.exitCode, 0);
+    });
+
+    test('file без секрета: подсказка set, note без причины, строка об '
+        'открытом тексте', () async {
+      write('$home/config.yaml', 'secrets:\n  backend: file\n$withSecretKey');
+      seedFile('600');
+
+      final result = await check(commands: ConfigCommands(platform: 'linux'));
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('note: secrets backend: file'));
+      expect(
+        result.stdout,
+        contains(
+          'warning: secrets: file backend stores secrets unencrypted in '
+          '$home/secrets.yaml',
+        ),
+      );
+      expect(
+        result.stdout.singleWhere((l) => l.contains('is not set')),
+        endsWith(
+          'secret codelab/openai is not set; run: codelab secret set codelab/openai',
+        ),
+      );
+      expect(result.stdout.last, 'Config: valid');
+    });
+
+    test('секрет задан переменной: строки warning нет, значение не '
+        'печатается', () async {
+      write('$home/config.yaml', withSecretKey);
+
+      final result = await check(
+        env: {'CODELAB_SECRET_CODELAB_OPENAI': value},
+        commands: ConfigCommands(platform: 'linux'),
+      );
+
+      expect(result.exitCode, 0);
+      expect(result.stdout.where((l) => l.contains('is not set')), isEmpty);
+      expect(result.stdout, contains(startsWith('note: secrets backend: env')));
+      expect(
+        [...result.stdout, ...result.stderr].join(),
+        isNot(contains(value)),
+      );
+    });
+
+    test('секрет найден в хранилище: ни warning, ни значения', () async {
+      write('$home/config.yaml', withSecretKey);
+
+      final result = await check(
+        commands: over(MemorySecretStore({'codelab/openai': value})),
+      );
+
+      expect(secretLines(result), ['note: secrets backend: memory']);
+      expect(result.stdout.join(), isNot(contains(value)));
+    });
+
+    test('заголовок и MCP: каждое имя проверяется, без повторов', () async {
+      write('$home/config.yaml', r'''
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    api_key_secret: codelab/openai
+    headers:
+      X-Org: "${secret:codelab/openai}"
+      X-Team: "${secret:codelab/team}"
+    models:
+      m: {}
+agent:
+  default_model: p/m
+mcp:
+  servers:
+    - name: gh
+      type: http
+      url: https://gh.test/mcp
+      headers:
+        Authorization: "Bearer ${secret:codelab/gh}"
+''');
+
+      final result = await check(commands: over(MemorySecretStore()));
+
+      final missing = result.stdout.where((l) => l.contains('is not set'));
+      expect(missing, hasLength(3));
+      expect(
+        missing,
+        containsAll([
+          contains(
+            'providers.p.api_key_secret: secret codelab/openai is not set',
+          ),
+          contains(
+            'providers.p.headers.X-Team: secret codelab/team is not set',
+          ),
+          contains(
+            'mcp.servers[gh].headers.Authorization: secret codelab/gh is not set',
+          ),
+        ]),
+      );
+      expect(result.exitCode, 0);
+    });
+
+    test(
+      'без ссылок на секреты хранилище не вызывается, вывод прежний',
+      () async {
+        write('$home/config.yaml', providers);
+        final opened = <String?>[];
+        final store = _CountingStore();
+
+        final result = await check(commands: over(store, opened: opened));
+
+        expect(store.calls, 0);
+        expect(opened, isEmpty);
+        expect(secretLines(result), isEmpty);
+        expect(result.stdout.last, 'Config: valid');
+      },
+    );
+
+    test(
+      'только api_key_env: строк секретов нет, хранилище не вызывается',
+      () async {
+        write('$home/config.yaml', '''
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    api_key_env: P_KEY
+    models:
+      m: {}
+agent:
+  default_model: p/m
+''');
+        final store = _CountingStore();
+
+        final result = await check(
+          env: {'P_KEY': 'k-test-value'},
+          commands: over(store),
+        );
+
+        expect(store.calls, 0);
+        expect(secretLines(result), isEmpty);
+      },
+    );
+
+    test('недоступное хранилище: одна строка unavailable, код 0', () async {
+      write('$home/config.yaml', r'''
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    api_key_secret: codelab/openai
+    headers:
+      X-Team: "${secret:codelab/team}"
+    models:
+      m: {}
+agent:
+  default_model: p/m
+''');
+
+      final result = await check(commands: over(_UnavailableStore()));
+
+      expect(secretLines(result), [
+        'note: secrets backend: osfake',
+        'warning: secrets: osfake is unavailable (locked by test)',
+      ]);
+      expect(result.exitCode, 0);
+    });
+
+    test('бэкенд берётся из secrets.backend загруженного конфига', () async {
+      write('$home/config.yaml', 'secrets:\n  backend: env\n$withSecretKey');
+      final opened = <String?>[];
+
+      await check(commands: over(MemorySecretStore(), opened: opened));
+
+      expect(opened, ['env']);
+    });
+
+    test(
+      'невалидный конфиг: строк секретов нет, хранилище не вызывается',
+      () async {
+        write('$home/config.yaml', '${withSecretKey}budgett: {}\n');
+        final store = _CountingStore();
+
+        final result = await check(commands: over(store));
+
+        expect(result.exitCode, 1);
+        expect(store.calls, 0);
+        expect(secretLines(result), isEmpty);
+      },
+    );
+
+    test('file без ссылок: строка об открытом тексте всегда, права 0600 — '
+        'строки о правах нет', () async {
+      write('$home/config.yaml', 'secrets:\n  backend: file\n$providers');
+      seedFile('600');
+
+      final result = await check(commands: ConfigCommands(platform: 'linux'));
+
+      expect(secretLines(result), [
+        'warning: secrets: file backend stores secrets unencrypted in '
+            '$home/secrets.yaml',
+      ]);
+      expect(result.exitCode, 0);
+      expect(result.stdout.last, 'Config: valid');
+    });
+
+    test('file без файла и без ссылок: файл не создаётся', () async {
+      write('$home/config.yaml', 'secrets:\n  backend: file\n$providers');
+
+      final result = await check(commands: ConfigCommands(platform: 'linux'));
+
+      expect(secretLines(result), hasLength(1));
+      expect(File('$home/secrets.yaml').existsSync(), isFalse);
+    });
+
+    test('file с правами 0644: строка о правах с chmod 600, код 0', () async {
+      write('$home/config.yaml', 'secrets:\n  backend: file\n$providers');
+      seedFile('644');
+
+      final result = await check(commands: ConfigCommands(platform: 'linux'));
+
+      expect(
+        result.stdout,
+        containsAllInOrder([
+          'warning: secrets: file backend stores secrets unencrypted in '
+              '$home/secrets.yaml',
+          'warning: secrets: $home/secrets.yaml has permissions 0644; run: '
+              'chmod 600 $home/secrets.yaml',
+        ]),
+      );
+      expect(result.exitCode, 0);
+      expect(result.stdout.last, 'Config: valid');
+    });
+
+    test('secrets.backend: keychain: проблема конфигурации, код 1', () async {
+      // agent-secrets «keychain ещё не поддерживается»: `config check` — код 1.
+      write('$home/config.yaml', 'secrets:\n  backend: keychain\n$providers');
+
+      final result = await check();
+
+      expect(result.exitCode, 1);
+      expect(
+        result.stdout.join('\n'),
+        contains(
+          'secrets.backend: keychain is not supported yet '
+          '(supported: auto, env, file)',
+        ),
+      );
+      expect(result.stdout.last, isNot('Config: valid'));
+    });
+
+    test('file с правами 0644 и ссылками: секреты недоступны, отдельных '
+        'warning на каждое имя нет', () async {
+      // agent-configuration «Отказ file без строк по именам»: две ссылки
+      // (провайдер и заголовок MCP) дают одну строку о правах.
+      write('$home/config.yaml', r'''
+secrets:
+  backend: file
+providers:
+  p:
+    kind: openai-compatible
+    base_url: https://llm.test/v1
+    api_key_secret: codelab/openai
+    models:
+      m: {}
+agent:
+  default_model: p/m
+mcp:
+  servers:
+    - name: github
+      type: http
+      url: https://gh.test/mcp
+      headers:
+        Authorization: "Bearer ${secret:codelab/mcp/github/authorization}"
+''');
+      seedFile('644');
+
+      final result = await check(commands: ConfigCommands(platform: 'linux'));
+
+      expect(result.stdout.where((l) => l.contains('is not set')), isEmpty);
+      expect(result.stdout.where((l) => l.contains('is unavailable')), isEmpty);
+      expect(
+        result.stdout.where(
+          (l) =>
+              l ==
+              'warning: secrets: $home/secrets.yaml has permissions 0644; '
+                  'run: chmod 600 $home/secrets.yaml',
+        ),
+        hasLength(1),
+      );
+      expect(result.stdout.last, 'Config: valid');
+      expect(result.exitCode, 0);
+    });
+
+    /// Отказ файлового бэкенда не про права: строка `file is unavailable
+    /// (<причина>)` (D9), без строки о правах и без строк по именам.
+    void expectUnavailable(ConfigCommandResult result, String reasonPart) {
+      final lines = secretLines(result);
+      expect(
+        lines.where(
+          (l) => l.startsWith('warning: secrets: file is unavailable ('),
+        ),
+        hasLength(1),
+        reason: lines.join('\n'),
+      );
+      expect(
+        lines.singleWhere((l) => l.contains('file is unavailable')),
+        contains(reasonPart),
+      );
+      expect(lines.where((l) => l.contains('has permissions')), isEmpty);
+      expect(lines.where((l) => l.contains('is not set')), isEmpty);
+      expect(result.exitCode, 0);
+    }
+
+    test('file: secrets.yaml — символьная ссылка: file is unavailable '
+        '(symbolic link)', () async {
+      write('$home/config.yaml', 'secrets:\n  backend: file\n$withSecretKey');
+      Process.runSync('/bin/chmod', ['700', home]);
+      write('$home/real.yaml', '# CodeLab secrets in plaintext.\n');
+      Link('$home/secrets.yaml').createSync('$home/real.yaml');
+
+      final result = await check(commands: ConfigCommands(platform: 'linux'));
+
+      expectUnavailable(result, 'is a symbolic link');
+    });
+
+    test('file: каталог доступен на запись группе: file is unavailable '
+        '(writable by group or others)', () async {
+      write('$home/config.yaml', 'secrets:\n  backend: file\n$withSecretKey');
+      write('$home/secrets.yaml', '# CodeLab secrets in plaintext.\n');
+      Process.runSync('/bin/chmod', ['600', '$home/secrets.yaml']);
+      Process.runSync('/bin/chmod', ['770', home]);
+
+      final result = await check(commands: ConfigCommands(platform: 'linux'));
+
+      expectUnavailable(result, 'writable by group or others');
+    });
+
+    test('file: secrets.yaml больше 1 МиБ: file is unavailable '
+        '(larger than 1 MiB)', () async {
+      write('$home/config.yaml', 'secrets:\n  backend: file\n$withSecretKey');
+      write('$home/secrets.yaml', 'x' * (1024 * 1024 + 1));
+      Process.runSync('/bin/chmod', ['700', home]);
+      Process.runSync('/bin/chmod', ['600', '$home/secrets.yaml']);
+
+      final result = await check(commands: ConfigCommands(platform: 'linux'));
+
+      expectUnavailable(result, 'larger than 1 MiB');
+    });
+  });
+
+  // ---- строка Default model (optional-default-model, D9; задача 3.4) --------
+
+  group('Default model: <p>/<m> (<source>)', () {
+    const gwOnly = '''
+providers:
+  gw:
+    kind: openai-compatible
+    base_url: https://x/v1
+    models:
+      m: {}
+      m2: {}
+''';
+
+    String lastModelPath() => '$home/state/last-model.json';
+
+    test('a provider without agent.default_model: gw/m (first-provider), '
+        'no "required", valid (scenario "Модель первого провайдера в '
+        'config check")', () async {
+      write('$home/config.yaml', gwOnly);
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(result.stdout.last, 'Config: valid');
+      expect(result.stdout.join('\n'), isNot(contains('required')));
+      // Строка стоит перед последней.
+      expect(
+        result.stdout.indexOf('Default model: gw/m (first-provider)'),
+        result.stdout.length - 2,
+      );
+    });
+
+    test('an explicit key: the source is config (scenario "Источник модели '
+        'в config check", variant 1)', () async {
+      write('$home/config.yaml', '${gwOnly}agent:\n  default_model: gw/m\n');
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m (config)'));
+    });
+
+    test('the explicit key wins over the state file, which is not even '
+        'needed', () async {
+      write('$home/config.yaml', '${gwOnly}agent:\n  default_model: gw/m\n');
+      write(lastModelPath(), '{"v": 1, "model": "gw/m2"}');
+
+      final result = await check();
+
+      expect(result.stdout, contains('Default model: gw/m (config)'));
+    });
+
+    test('a last model of the catalog: last-used (variant 2); the file is '
+        'only read', () async {
+      write('$home/config.yaml', gwOnly);
+      write(lastModelPath(), '{"v": 1, "model": "gw/m2"}');
+      final before = File(lastModelPath()).readAsBytesSync();
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m2 (last-used)'));
+      expect(File(lastModelPath()).readAsBytesSync(), before);
+    });
+
+    test('a last model outside the catalog gives first-provider without a '
+        'warning', () async {
+      write('$home/config.yaml', gwOnly);
+      write(lastModelPath(), '{"v": 1, "model": "gone/z"}');
+
+      final result = await check();
+
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(
+        result.stdout.where((l) => l.contains('last model state ignored')),
+        isEmpty,
+      );
+    });
+
+    test('an unreadable state file: a warning with the path and the reason, '
+        'then the next step; the file is untouched (variant 3)', () async {
+      write('$home/config.yaml', gwOnly);
+      write(lastModelPath(), 'not json sk-test-leak-0123456789');
+      final before = File(lastModelPath()).readAsBytesSync();
+
+      final result = await check();
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(
+        result.stdout,
+        contains(
+          allOf(
+            startsWith(
+              'warning: ${lastModelPath()}: last model state ignored: ',
+            ),
+          ),
+        ),
+      );
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(result.stdout.last, 'Config: valid');
+      expect(result.stdout.join('\n'), isNot(contains('sk-test-leak')));
+      expect(File(lastModelPath()).readAsBytesSync(), before);
+    });
+
+    test('an invalid config has no Default model line', () async {
+      write('$cwd/.codelab/config.yaml', 'budget:\n  max_stepz: 3\n');
+
+      final result = await check();
+
+      expect(result.exitCode, 1);
+      expect(
+        result.stdout.where((l) => l.startsWith('Default model:')),
+        isEmpty,
+      );
+    });
+
+    test('an empty CODELAB_HOME: one problem with the new text, no Default '
+        'model, code 1', () async {
+      final result = await check();
+
+      expect(result.exitCode, 1);
+      expect(
+        result.stdout,
+        contains(
+          endsWith(
+            'agent.default_model: no model is configured; add a provider '
+            'with at least one model',
+          ),
+        ),
+      );
+      expect(result.stdout.join('\n'), isNot(contains('required')));
+      expect(result.stdout.last, 'Config: invalid (issues: 1)');
+    });
+
+    test('the choice of the model adds no store reads: the same reads as with '
+        'an explicit agent.default_model (CFG-10)', () async {
+      // `ConfigLoader` хранилища не принимает вовсе (структурная гарантия
+      // загрузки). `config check` сам спрашивает хранилище о состоянии
+      // секретов (прежнее поведение), поэтому выбор модели проверяется
+      // сравнением: чтений ровно столько же, сколько при явной модели.
+      final withRef = gwOnly.replaceFirst(
+        '    models:',
+        '    api_key_secret: codelab/gw\n    models:',
+      );
+      ConfigCommands commandsOver(_CountingSecretStore store) => ConfigCommands(
+        openStore: ({required choice, required environment, required home}) =>
+            store,
+      );
+
+      write('$home/config.yaml', '${withRef}agent:\n  default_model: gw/m\n');
+      final explicit = _CountingSecretStore({
+        'codelab/gw': 'sk-test-leak-0123',
+      });
+      await check(commands: commandsOver(explicit));
+
+      write('$home/config.yaml', withRef);
+      final implicit = _CountingSecretStore({
+        'codelab/gw': 'sk-test-leak-0123',
+      });
+      final result = await check(commands: commandsOver(implicit));
+
+      expect(result.exitCode, 0, reason: result.stdout.join('\n'));
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      expect(implicit.reads, explicit.reads);
+      expect(result.stdout.join('\n'), isNot(contains('sk-test-leak')));
+    });
+
+    test('no secret reaches the line when the provider has a secret '
+        'reference', () async {
+      write(
+        '$home/config.yaml',
+        gwOnly.replaceFirst(
+          '    models:',
+          '    api_key_secret: codelab/gw\n    models:',
+        ),
+      );
+
+      final result = await check();
+
+      expect(result.stdout, contains('Default model: gw/m (first-provider)'));
+      // Имя секрета названо прежним предупреждением `secretLines` (не
+      // значение); строка модели его не несёт.
+      final line = result.stdout.singleWhere(
+        (l) => l.startsWith('Default model:'),
+      );
+      expect(line, isNot(contains('codelab/gw')));
+    });
+  });
 }
 
 /// Источник, бросающий исключение с «секретным» текстом: в вывод попадает
@@ -739,4 +1416,84 @@ final class _HangingSource implements ProjectFilesSource {
     cancel = query.cancel;
     return Completer<ProjectFiles>().future;
   }
+}
+
+/// Хранилище, считающее обращения: «без ссылок оно не вызывается» (D9).
+final class _CountingStore implements DescribedSecretStore {
+  int calls = 0;
+
+  @override
+  SecretBackendInfo get backend {
+    calls++;
+    return const SecretBackendInfo(id: 'counting', writable: true);
+  }
+
+  @override
+  Future<String?> read(String name) async {
+    calls++;
+    return null;
+  }
+
+  @override
+  Future<void> write(String name, String value) async => calls++;
+
+  @override
+  Future<void> delete(String name) async => calls++;
+
+  @override
+  Future<List<String>> names() async {
+    calls++;
+    return const [];
+  }
+}
+
+/// Хранилище, отказывающее при чтении (`SecretUnavailable`).
+final class _UnavailableStore implements DescribedSecretStore {
+  @override
+  SecretBackendInfo get backend =>
+      const SecretBackendInfo(id: 'osfake', writable: true);
+
+  @override
+  Future<String?> read(String name) async =>
+      throw const SecretStoreUnavailableException(
+        backend: 'osfake',
+        reason: 'locked by test',
+      );
+
+  @override
+  Future<void> write(String name, String value) async {}
+
+  @override
+  Future<void> delete(String name) async {}
+
+  @override
+  Future<List<String>> names() async => const [];
+}
+
+/// Хранилище, считающее чтения значений: `config check` смотрит имена, но не
+/// значения секретов.
+final class _CountingSecretStore implements DescribedSecretStore {
+  _CountingSecretStore(Map<String, String> initial)
+    : _inner = MemorySecretStore(initial);
+
+  final MemorySecretStore _inner;
+  final reads = <String>[];
+
+  @override
+  SecretBackendInfo get backend => _inner.backend;
+
+  @override
+  Future<String?> read(String name) {
+    reads.add(name);
+    return _inner.read(name);
+  }
+
+  @override
+  Future<void> write(String name, String value) => _inner.write(name, value);
+
+  @override
+  Future<void> delete(String name) => _inner.delete(name);
+
+  @override
+  Future<List<String>> names() => _inner.names();
 }

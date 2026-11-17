@@ -36,10 +36,11 @@ PendingApprovalView _approval({
     _rejectAlways,
   ],
   bool critical = false,
+  ApprovalRiskLevel risk = ApprovalRiskLevel.shell,
 }) => PendingApprovalView(
   approvalId: const ApprovalRequestId('a1'),
   sessionId: const SessionId('s1'),
-  risk: ApprovalRiskLevel.shell,
+  risk: risk,
   options: options,
   focused: true,
   critical: critical,
@@ -61,7 +62,7 @@ void main() {
   test('read-only allows a read once and rejects anything else', () {
     expect(
       decideApproval(
-        _approval(),
+        _approval(risk: ApprovalRiskLevel.readOnly),
         ApprovePolicy.readOnly,
         kind: ToolKind.read,
       ).optionId,
@@ -75,13 +76,27 @@ void main() {
     ]) {
       expect(
         decideApproval(
-          _approval(),
+          _approval(risk: ApprovalRiskLevel.readOnly),
           ApprovePolicy.readOnly,
           kind: kind,
         ).optionId,
         _rejectOnce.optionId,
         reason: '$kind',
       );
+    }
+  });
+
+  // D5/D9: вид записи остаётся `read`, а запрос с незнакомым видом,
+  // `switch_mode` или `execute` поднимает риск выше `readOnly`.
+  test('read-only rejects a read whose risk is above readOnly', () {
+    for (final risk in [ApprovalRiskLevel.unknown, ApprovalRiskLevel.shell]) {
+      final decision = decideApproval(
+        _approval(risk: risk),
+        ApprovePolicy.readOnly,
+        kind: ToolKind.read,
+      );
+      expect(decision.optionId, _rejectOnce.optionId, reason: '$risk');
+      expect(decision.reason, ApprovalReason.policy, reason: '$risk');
     }
   });
 

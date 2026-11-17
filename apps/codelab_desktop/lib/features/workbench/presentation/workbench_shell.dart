@@ -8,14 +8,21 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 
 import '../../../app/app_scope.dart';
+import '../../../app/navigation/navigation_cubit.dart';
+import '../../../app/navigation/settings_page.dart';
+import '../application/sessions_cubit.dart' show PendingRootSession;
+import '../../project_files/presentation/project_files_pane.dart';
+import '../../terminal/application/terminal_tabs_cubit.dart';
+import '../../terminal/presentation/terminal_pane.dart';
 import '../application/shell_cubit.dart';
 import '../application/ui_mappers.dart'
     show connectionTooltipOf, sidebarProjectsOf;
-import 'widgets/connection_setup_dialog.dart';
 import 'widgets/debug_log_pane.dart';
 import 'widgets/debug_log_viewer_dialog.dart';
 import 'widgets/inspector_pane.dart';
 import 'widgets/main_pane.dart';
+import 'widgets/secret_migration_banner.dart';
+import 'widgets/workbench_agents_pane.dart';
 
 /// Рабочее место CodeLab: каркас из app bar, сайдбара по проектам, панели
 /// сессии и дока панелей инструментов (`dart-agent-and-clients` §12.3 A13,
@@ -28,7 +35,27 @@ class CodeLabShell extends StatelessWidget {
   const CodeLabShell({super.key});
 
   /// Панели дока, для которых есть данные (D5); остальные ждут своих change.
-  static const _availablePanes = [ToolPane.plan, ToolPane.protocol];
+  ///
+  /// Files вычисляется: он есть, только когда папка сессии на этой машине и
+  /// хост привязал `ProjectFiles` (`CodeLabShellState.projectFilesAvailable`,
+  /// design.md change `add-file-preview-and-tree`, D7). Недоступная панель
+  /// остаётся в сохранённой раскладке и возвращается вместе с локальным
+  /// профилем (spec agent-workbench-ui «Unavailable pane is hidden but kept in
+  /// the layout»). Agents — тоже вычисляется: панель есть, пока у сессии в
+  /// фокусе есть хотя бы одна строка субагента (`CodeLabShellState.
+  /// agentsAvailable`, design.md change `add-subagents-and-tasks`, D49 Т11).
+  /// Terminal входит, только если на платформе есть PTY
+  /// (`add-integrated-terminal`, D12): без него переключателя нет.
+  static List<ToolPane> _availablePanesOf(
+    CodeLabShellState state, {
+    required bool terminal,
+  }) => [
+    if (state.projectFilesAvailable) ToolPane.files,
+    ToolPane.plan,
+    if (state.agentsAvailable) ToolPane.agents,
+    ToolPane.protocol,
+    if (terminal) ToolPane.terminal,
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -36,10 +63,15 @@ class CodeLabShell extends StatelessWidget {
       builder: (context, state) {
         final cubit = context.read<CodeLabShellCubit>();
         final logBuffer = codeLabDependenciesOf(context).logBuffer;
+        final terminals = context.read<TerminalTabsCubit>();
         final layoutClass = CodeLabLayoutClass.ofContext(context);
+        final availablePanes = _availablePanesOf(
+          state,
+          terminal: terminals.isSupported,
+        );
         final openPanes = [
           for (final pane in state.openPanes)
-            if (_availablePanes.contains(pane)) pane,
+            if (availablePanes.contains(pane)) pane,
         ];
         // В узких классах док выдвигается поверх ленты; скрытый док не значит
         // закрытые панели, поэтому переключатель сначала снова выдвигает
@@ -50,12 +82,20 @@ class CodeLabShell extends StatelessWidget {
 
         return CodeLabWorkbenchShortcuts(
           onOpenCommandPalette: cubit.openCommandPalette,
-          onCancel: state.isCommandPaletteOpen
+          onCancel: state.pendingRootSession != null
+              ? cubit.cancelRootSession
+              : state.isCommandPaletteOpen
               ? cubit.closeCommandPalette
               : (state.canCancel ? cubit.cancelTurn : null),
-          onNewSession:
-              state.connectionStatus == CodeLabConnectionStatus.connected
+          // Агент стартует сам (D13): «New session» доступна при выбранном
+          // проекте и без соединения.
+          onNewSession: state.selectedProjectPath != null
               ? () => unawaited(cubit.createSession())
+              : null,
+          onOpenSettings: () =>
+              _openSettings(context, SettingsOpenSource.shortcut),
+          onToggleFiles: state.projectFilesAvailable
+              ? () => cubit.togglePane(ToolPane.files)
               : null,
           onToggleSidebar: layoutClass.sidebarAsColumn
               ? cubit.toggleSidebarCollapsed
@@ -82,7 +122,7 @@ class CodeLabShell extends StatelessWidget {
                         : 'Ctrl+K',
                     onSearch: cubit.openCommandPalette,
                     paneToggles: [
-                      for (final pane in _availablePanes)
+                      for (final pane in availablePanes)
                         CodeLabPaneToggle(
                           pane: pane,
                           selected:
@@ -91,16 +131,30 @@ class CodeLabShell extends StatelessWidget {
                               openPanes.contains(pane),
                         ),
                     ],
-                    onPaneToggled: (pane) => dockVisible
-                        ? cubit.togglePane(pane)
-                        : cubit.openPane(pane),
+                    onPaneToggled: (pane) {
+                      // Панель закрывается, только если она видна и активна;
+                      // иначе действие её открывает (`togglePane`).
+                      final opens =
+                          !(dockVisible &&
+                              state.activePane == pane &&
+                              openPanes.contains(pane));
+                      dockVisible
+                          ? cubit.togglePane(pane)
+                          : cubit.openPane(pane);
+                      // Открытие действием пользователя создаёт первую
+                      // вкладку; восстановленный док её не создаёт (D1).
+                      if (opens && pane == ToolPane.terminal) {
+                        unawaited(terminals.ensureTab());
+                      }
+                    },
                     connectionTooltip: connectionTooltipOf(
                       profileLabel: state.profileLabel,
                       transportLabel: state.transportLabel,
                       connectionDetail: state.connectionDetail,
                     ),
-                    onRetry: () => unawaited(cubit.reconnect()),
-                    onConnect: () => unawaited(cubit.connect()),
+                    // Бейдж без «Connect» (D18): агент стартует сам; в
+                    // `lost`/`failed` «Retry» делает то же, что кнопка баннера.
+                    onRetry: () => unawaited(cubit.retryStart()),
                     onMenu: layoutClass.sidebarAsColumn
                         ? null
                         : cubit.toggleSidebarOverlay,
@@ -110,6 +164,7 @@ class CodeLabShell extends StatelessWidget {
                       selectedProjectPath: state.selectedProjectPath,
                       sessions: state.sessions,
                       recentProjects: state.recentProjects,
+                      sessionFolders: state.sessionFolders,
                     ),
                     activeSessionId: state.activeSessionId,
                     onSessionSelected: (id) {
@@ -127,9 +182,19 @@ class CodeLabShell extends StatelessWidget {
                         ? () => unawaited(cubit.loadMoreSessions())
                         : null,
                     onOpenFolder: () => unawaited(cubit.browseForProject()),
-                    onSettings: () => ConnectionSetupDialog.show(context),
+                    onSettings: () =>
+                        _openSettings(context, SettingsOpenSource.sidebar),
                   ),
-                  sessionPane: WorkbenchMainPane(state: state, cubit: cubit),
+                  sessionPane: WorkbenchMainPane(
+                    state: state,
+                    cubit: cubit,
+                    // «Restart agent» — тот же единственный перезапуск с
+                    // подтверждением при работе (D22); прежний агент
+                    // закрывает резолвер (D6 change `add-embedded-agent-mode`).
+                    secretMigrationBanner: SecretMigrationBanner(
+                      onRestart: () => unawaited(cubit.restartAgent()),
+                    ),
+                  ),
                   dock: openPanes.isEmpty
                       ? null
                       : CodeLabToolDock(
@@ -141,10 +206,15 @@ class CodeLabShell extends StatelessWidget {
                               CodeLabDockTab(
                                 pane: pane,
                                 content: switch (pane) {
+                                  ToolPane.files => const ProjectFilesPane(),
+                                  ToolPane.agents =>
+                                    const WorkbenchAgentsPane(),
                                   ToolPane.plan =>
                                     CodeLabProgressChecklist.list(
                                       entries: state.currentPlan ?? const [],
                                     ),
+                                  ToolPane.terminal =>
+                                    const WorkbenchTerminalPane(),
                                   _ => _ProtocolPane(
                                     state: state,
                                     logBuffer: logBuffer,
@@ -156,6 +226,8 @@ class CodeLabShell extends StatelessWidget {
                 ),
                 if (state.isCommandPaletteOpen)
                   _CommandPaletteOverlay(state: state, cubit: cubit),
+                if (state.pendingRootSession case final pending?)
+                  _RootSessionDialog(pending: pending, cubit: cubit),
               ],
             ),
           ),
@@ -163,6 +235,30 @@ class CodeLabShell extends StatelessWidget {
       },
     );
   }
+}
+
+/// Открывает настройки: Cmd/Ctrl+, и кнопка «Settings» сайдбара.
+///
+/// Почему через `NavigationCubit`: переход — состояние приложения, а не
+/// маршрут (design.md change `add-app-settings-shell`, D1). Открывается
+/// последняя страница или «Connection»; при пустом наборе страниц вызов
+/// ничего не делает (SETUP-17).
+void _openSettings(BuildContext context, SettingsOpenSource source) {
+  unawaited(
+    codeLabDependenciesOf(context).navigationCubit.openSettings(source: source),
+  );
+}
+
+/// «Configure connection» экрана подключения и баннера соединения: открывает
+/// страницу «Connection» (design.md change `add-app-settings-shell`, D6;
+/// вместо прежнего диалога подключения).
+void openConnectionSettings(BuildContext context) {
+  unawaited(
+    codeLabDependenciesOf(context).navigationCubit.openSettings(
+      page: SettingsPage.connection,
+      source: SettingsOpenSource.banner,
+    ),
+  );
 }
 
 /// Панель Protocol дока: записи протокола текущей сессии (бывший Inspector)
@@ -192,6 +288,51 @@ class _ProtocolPane extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Диалог подтверждения открытия сессии в корне диска (D24).
+///
+/// Почему: сессия в `/` даёт агенту весь диск; решение, что это опасно,
+/// принимает `SessionsCubit` (`pendingRootSession`), а виджет только
+/// показывает вопрос и возвращает ответ (AGENTS.md §10). Диалог рисуется по
+/// состоянию, поэтому вытеснение новым действием фокуса закрывает его без
+/// участия виджета.
+class _RootSessionDialog extends StatelessWidget {
+  const _RootSessionDialog({required this.pending, required this.cubit});
+
+  final PendingRootSession pending;
+  final CodeLabShellCubit cubit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black.withAlpha(60),
+        child: Center(
+          child: ContentDialog(
+            key: const ValueKey('root-session-dialog'),
+            title: const Text('Open session in the disk root?'),
+            content: Text(
+              'This session runs in the disk root (${pending.cwd}). '
+              'The agent gets access to the whole disk. Open anyway?',
+            ),
+            actions: [
+              FilledButton(
+                key: const ValueKey('root-session-open'),
+                onPressed: cubit.confirmRootSession,
+                child: const Text('Open'),
+              ),
+              Button(
+                key: const ValueKey('root-session-cancel'),
+                onPressed: cubit.cancelRootSession,
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

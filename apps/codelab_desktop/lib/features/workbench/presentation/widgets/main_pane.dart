@@ -1,22 +1,32 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
+import '../../../../core/platform/link_policy.dart';
 import '../../application/shell_cubit.dart';
-import '../workbench_shell.dart' show selectPaletteCommand;
-import 'connection_setup_dialog.dart';
+import '../workbench_shell.dart'
+    show openConnectionSettings, selectPaletteCommand;
 import '../../application/ui_mappers.dart' show projectNameOf;
+import 'provider_setup_banner.dart';
 
 class WorkbenchMainPane extends StatelessWidget {
   const WorkbenchMainPane({
     required this.state,
     required this.cubit,
+    this.secretMigrationBanner,
     super.key,
   });
 
   final CodeLabShellState state;
   final CodeLabShellCubit cubit;
+
+  /// Предупреждение о секретах в файле конфига встроенного агента (D8
+  /// change `add-config-literal-secrets-and-migrate`). Слот, а не прямое
+  /// обращение к `SecretMigrationCubit`: панель остаётся зависимой только от
+  /// фасада рабочего места, а предупреждение собирает `CodeLabShell`.
+  final Widget? secretMigrationBanner;
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +36,11 @@ class WorkbenchMainPane extends StatelessWidget {
     // visible would mean it stays until manually dismissed).
     final plan = state.currentPlan;
     final activityBarSections = <CodeLabActivityBarSection>[
+      // Пока в доке открыта панель Plan, сводка её дублирует и скрыта
+      // (agent-workbench-ui «Чек-лист задач…», D27 change
+      // `add-subagents-and-tasks`).
       if (plan != null &&
+          !state.openPanes.contains(ToolPane.plan) &&
           plan.any((entry) => entry.status != CodeLabPlanEntryStatus.completed))
         CodeLabProgressChecklist.section(
           id: 'plan',
@@ -44,60 +58,58 @@ class WorkbenchMainPane extends StatelessWidget {
         ),
     ];
 
-    // Экран подключения — только пока соединение не установлено; пустая
-    // сессия при соединении показывает пустую ленту с подсказкой
-    // (требование «Empty session after connecting», change
-    // `redesign-transcript-rows`, D7).
+    // Пока соединение не установлено, пустая лента показывает стартовый экран
+    // (агент стартует сам, D13, D18) или экран сбоя с «Retry»; пустая сессия
+    // при соединении показывает пустую ленту с подсказкой (требование «Empty
+    // session after connecting», change `redesign-transcript-rows`, D7).
     final showConnectionScreen =
         state.transcriptRows.isEmpty &&
         state.connectionStatus != CodeLabConnectionStatus.connected;
+    final startFailed =
+        state.connectionStatus == CodeLabConnectionStatus.failed ||
+        state.connectionStatus == CodeLabConnectionStatus.lost;
+    // Встроенный агент не открылся только из-за отсутствия провайдера: вместо
+    // сырого текста проблем — понятная причина и «Add provider» (D26).
+    final notice = state.connectionStatus == CodeLabConnectionStatus.failed
+        ? state.providerSetupNotice
+        : null;
+    final connectionMessage = notice == null
+        ? state.connectionMessage
+        : noProviderMessage;
     final Widget content;
     if (showConnectionScreen) {
-      content = LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _SessionHeader(state: state),
-                const SizedBox(height: 12),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: constraints.maxHeight > 180
-                        ? constraints.maxHeight - 180
-                        : 0,
-                  ),
-                  child: CodeLabConnectionScreen(
-                    status: state.connectionStatus,
-                    transportLabel: state.transportLabel,
-                    profileLabel: state.profileLabel,
-                    detail: state.connectionDetail,
-                    // Причина сбоя видна и до первой записи ленты, а не
-                    // только в баннере над ней.
-                    description:
-                        state.connectionMessage ??
-                        'Connect an ACP agent to start a session.',
-                    onConnect: cubit.connect,
-                    onReconnect: cubit.reconnect,
-                    onConfigureConnection: () =>
-                        ConnectionSetupDialog.show(context),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
+      content = startFailed
+          ? _failureScreen(context, connectionMessage, notice)
+          : _startScreen();
     } else {
-      content = CodeLabTranscriptPanel(
-        rows: state.transcriptRows,
-        viewMode: state.viewMode,
-        expansionOverrides: state.transcriptExpansion,
-        onExpansionChanged: (change) =>
-            cubit.setTranscriptRowExpanded(change.rowId, change.expanded),
-        emptyLabel: state.activeSessionId == null
-            ? 'Start a new session to talk to the agent.'
-            : 'Send a message to start.',
+      // Политику ссылок и изображений ответа агента принимает app (D2, D5,
+      // D6): кит получает функции-решения и колбэки действий пользователя.
+      content = CodeLabMarkdownScope(
+        canOpenLink: isOpenableLink,
+        // Устойчивые функции (tear-off метода Cubit и функции верхнего уровня):
+        // смена ссылок на них перестраивала бы картинки в ленте (DSK-3).
+        // `Future` от `openExternalLink` намеренно не ждём: клик — событие.
+        onOpenLink: cubit.openExternalLink,
+        canLoadImage: isLoadableImage,
+        // Лимит тела, редиректы только на https и декодирование не больше
+        // 1440×1440 (D6, R4) — за портом в графе; загрузка начинается только
+        // после «Show image».
+        imageFor: cubit.imageFor,
+        shownImages: state.shownImages,
+        onShowImage: cubit.showImage,
+        onImageFailed: cubit.reportImageFailure,
+        child: CodeLabTranscriptPanel(
+          rows: state.transcriptRows,
+          viewMode: state.viewMode,
+          expansionOverrides: state.transcriptExpansion,
+          showRequest: state.transcriptShowRequest,
+          onShowRequestDone: cubit.finishTranscriptShow,
+          onExpansionChanged: (change) =>
+              cubit.setTranscriptRowExpanded(change.rowId, change.expanded),
+          emptyLabel: state.activeSessionId == null
+              ? 'Start a new session to talk to the agent.'
+              : 'Send a message to start.',
+        ),
       );
     }
 
@@ -112,9 +124,23 @@ class WorkbenchMainPane extends StatelessWidget {
           if (_bannerStatusOf(state.connectionStatus) case final status?) ...[
             CodeLabConnectionBanner(
               status: status,
-              message: state.connectionMessage,
-              onReconnect: cubit.reconnect,
-              onConfigureConnection: () => ConnectionSetupDialog.show(context),
+              message: connectionMessage,
+              onReconnect: cubit.retryStart,
+              reconnectLabel: 'Retry',
+              onConfigureConnection: () => openConnectionSettings(context),
+              extraAction: notice == null
+                  ? null
+                  : providerSetupAction(context, cubit, notice),
+            ),
+            const SizedBox(height: 12),
+          ],
+          ?secretMigrationBanner,
+          // Платформа отказала открыть ссылку из ответа (D5).
+          if (state.linkNote case final note?) ...[
+            InfoBar(
+              title: Text(note),
+              severity: InfoBarSeverity.warning,
+              onClose: cubit.dismissLinkNote,
             ),
             const SizedBox(height: 12),
           ],
@@ -141,6 +167,96 @@ class WorkbenchMainPane extends StatelessWidget {
           configOptions: state.configOptions,
           onConfigOptionSelected: cubit.setSessionConfigOption,
           isRespondingToConfigOption: state.isRespondingToConfigOption,
+        ),
+        // Строка статуса — только у показываемой сессии: композер виден и на
+        // стартовом экране, где «usage» говорить не о чем (D23 Т1, D11).
+        if (state.activeSessionId != null && state.statusBar != null) ...[
+          const SizedBox(height: 6),
+          CodeLabSessionStatusBar(data: state.statusBar!),
+        ],
+      ],
+    );
+  }
+
+  /// Экран сбоя старта (D18): причина, «Retry» (повторяет намерение, вызвавшее
+  /// старт), «Configure connection» и при повторе `Failed again (n)`.
+  Widget _failureScreen(
+    BuildContext context,
+    String? connectionMessage,
+    ProviderSetupNotice? notice,
+  ) {
+    final repeat = state.connectionRepeat;
+    final reason = connectionMessage ?? 'Could not start the agent.';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SessionHeader(state: state),
+              const SizedBox(height: 12),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight > 180
+                      ? constraints.maxHeight - 180
+                      : 0,
+                ),
+                child: CodeLabConnectionScreen(
+                  status: state.connectionStatus,
+                  transportLabel: state.transportLabel,
+                  profileLabel: state.profileLabel,
+                  detail: state.connectionDetail,
+                  // Причина сбоя видна и до первой записи ленты, а не только
+                  // в баннере над ней.
+                  description: repeat > 0
+                      ? '$reason Failed again ($repeat)'
+                      : reason,
+                  extraAction: notice == null
+                      ? null
+                      : providerSetupAction(context, cubit, notice),
+                  // С «Add provider» третья кнопка перенесла бы ряд на вторую
+                  // строку, а «Retry» после записи провайдера даёт баннер.
+                  onReconnect: notice == null ? cubit.retryStart : null,
+                  reconnectLabel: 'Retry',
+                  onConfigureConnection: () => openConnectionSettings(context),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Стартовый экран без сессии в фокусе (D18): без проекта — «Open
+  /// folder…», с проектом — «New session»; пока агент стартует — индикатор
+  /// `Starting <profile>…`.
+  Widget _startScreen() {
+    final project = state.selectedProjectPath;
+    final starting =
+        state.connectionStatus == CodeLabConnectionStatus.connecting ||
+        state.connectionStatus == CodeLabConnectionStatus.reconnecting;
+    final busy = starting ? 'Starting ${state.profileLabel}…' : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SessionHeader(state: state),
+        Expanded(
+          child: project == null
+              ? CodeLabStartScreen(
+                  message: 'Open a project to start a session.',
+                  actionLabel: 'Open folder…',
+                  actionKey: const ValueKey('start-open-project'),
+                  onAction: () => unawaited(cubit.browseForProject()),
+                  busyLabel: busy,
+                )
+              : CodeLabStartScreen(
+                  message: 'Start a new session in ${projectNameOf(project)}.',
+                  actionLabel: 'New session',
+                  actionKey: const ValueKey('start-new-session'),
+                  onAction: () => unawaited(cubit.createSession()),
+                  busyLabel: busy,
+                ),
         ),
       ],
     );

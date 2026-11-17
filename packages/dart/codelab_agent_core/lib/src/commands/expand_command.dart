@@ -1,5 +1,7 @@
 import 'arguments.dart';
+import 'command_line.dart';
 import 'command_template.dart';
+import '../skills/skill_commands.dart' show skillCommandPrefix;
 import 'slash_command.dart';
 
 /// Исходная команда сообщения: что пользователь набрал до разворачивания
@@ -42,6 +44,8 @@ final class CommandRef {
     );
   }
 
+  /// Источник команды: `SlashCommandSource.wire` или значение из более нового
+  /// журнала (хранится как есть).
   final String source;
 
   /// Имя без `/`.
@@ -53,8 +57,14 @@ final class CommandRef {
   /// Неизвестные поля объекта `command` журнала: пишутся обратно.
   final Map<String, Object?> extra;
 
-  /// Текст реплея: `/<name>` или `/<name> <args>`.
-  String get displayText => args.isEmpty ? '/$name' : '/$name $args';
+  /// Текст реплея: `/<name>` или `/<name> <args>`; у навыка — с префиксом
+  /// `skill:` (`name` в журнале хранится без него, D18).
+  String get displayText {
+    final word = source == SlashCommandSource.skill.wire
+        ? '$skillCommandPrefix$name'
+        : name;
+    return args.isEmpty ? '/$word' : '/$word $args';
+  }
 
   Map<String, Object?> toJson() => {
     'source': source,
@@ -75,59 +85,71 @@ final class CommandRef {
 }
 
 /// Итог [expandCommand].
+///
+/// Почему sealed: вызывающий обязан обработать обе ветки (не команда и
+/// развёрнутая команда), иначе новая ветка пройдёт мимо компилятора.
+///
+/// Как использовать: `switch` по значению; [NotACommand] — текст уходит модели
+/// как есть, [Expanded] — текст и ссылка на команду для журнала.
 sealed class CommandExpansion {
   const CommandExpansion();
 }
 
 /// Текст не команда шаблона: он уходит модели без изменений.
+///
+/// Неизвестную команду (слово без шаблона и без встроенной команды) не
+/// отличает: ответ «Unknown command» даёт `BuiltinCommands.match` раньше, до
+/// вызова этой функции (design.md change `add-agent-builtin-slash-commands`,
+/// D3, D4).
+///
+/// Как использовать: константный экземпляр, создаёт [expandCommand].
 final class NotACommand extends CommandExpansion {
   const NotACommand();
 }
 
 /// Команда развёрнута: [text] заменяет первый текстовый блок промпта.
+///
+/// Почему рядом [command]: журнал хранит и развёрнутый текст, и то, что
+/// набрал пользователь, чтобы клиент мог показать исходную команду (D8).
+///
+/// Как использовать: результат [expandCommand]; рантайм подставляет [text] в
+/// промпт и пишет [command] в запись сообщения.
 final class Expanded extends CommandExpansion {
   const Expanded(this.text, this.command);
 
+  /// Текст для модели: тело шаблона после подстановки аргументов.
   final String text;
+
+  /// Исходная команда для журнала: источник, имя и сырые аргументы.
   final CommandRef command;
 }
-
-final _commandWord = RegExp(r'^[A-Za-z0-9][A-Za-z0-9:_-]*$');
-final _whitespace = RegExp(r'\s');
 
 /// Разворачивает `/<имя> <аргументы>` шаблоном (§17.2.6 шаги 1 и 4 в объёме
 /// шаблонов; D8).
 ///
-/// Почему `NotACommand` для неизвестной команды: ответ «Unknown command» без
-/// вызова модели требует механизма, который вводит change встроенных команд
-/// (OQ1); до него `/nope x` и путь `/usr/bin/foo` уходят модели, как раньше.
+/// Почему `NotACommand` для слова без шаблона: «Unknown command» отвечает
+/// `BuiltinCommands.match` на шаге 4 разбора D3 (change
+/// `add-agent-builtin-slash-commands`); здесь только шаблоны (шаг 3).
 ///
 /// Как использовать: [text] — первый текстовый блок промпта; результат
 /// [Expanded.text] заменяет его, остальные блоки идут следом. Функция чистая:
 /// не исполняет shell и не читает файлы (SKL-8).
 CommandExpansion expandCommand(String text, List<CommandTemplate> templates) {
-  if (!text.startsWith('/')) {
+  final line = parseCommandLine(text);
+  if (line == null) {
     return const NotACommand();
   }
-  final end = text.indexOf(_whitespace);
-  final word = text.substring(1, end < 0 ? text.length : end);
-  if (!_commandWord.hasMatch(word)) {
-    return const NotACommand();
-  }
-  final template = templates.where((t) => t.name == word).firstOrNull;
+  final template = templates.where((t) => t.name == line.word).firstOrNull;
   if (template == null) {
     return const NotACommand();
   }
-  var raw = end < 0 ? '' : text.substring(end).trimLeft();
-  // Завершающий перевод строки снимается и в CRLF: `\r` не должен попасть в
-  // `$ARGUMENTS` и в `command.args` журнала.
-  if (raw.endsWith('\r\n')) {
-    raw = raw.substring(0, raw.length - 2);
-  } else if (raw.endsWith('\n')) {
-    raw = raw.substring(0, raw.length - 1);
-  }
+  final raw = line.raw;
   return Expanded(
     substituteArguments(template.body, raw, splitArguments(raw)),
-    CommandRef(source: SlashCommandSource.template.wire, name: word, args: raw),
+    CommandRef(
+      source: SlashCommandSource.template.wire,
+      name: line.word,
+      args: raw,
+    ),
   );
 }

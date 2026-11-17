@@ -2,9 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:meta/meta.dart';
 
+import '../secrets/secrets_backend_problem.dart';
+import 'config_link_containment.dart';
 import 'environment_layer.dart';
 import 'legacy_notice.dart';
+import 'provider_preconfig.dart';
 import 'yaml_reader.dart';
 
 /// Ошибка использования загрузчика: запрос, который нельзя выполнить и нельзя
@@ -14,12 +18,43 @@ import 'yaml_reader.dart';
 /// `64` и справкой (`agent-core-architecture` §13.10), а проблемы файлов —
 /// это [ConfigIssue] в результате загрузки. Сообщение значений не содержит.
 final class ConfigUsageException implements Exception {
-  const ConfigUsageException(this.message);
+  const ConfigUsageException(this.message, {this.source});
 
   final String message;
 
+  /// Что именно задано неверно: `CODELAB_HOME`, `CODELAB_CONFIG` или
+  /// `--config`. Хост без разбора текста называет источник в проблеме
+  /// (встроенный агент, `EmbeddedAgentConfigException`); `null` — источник не
+  /// определён.
+  final String? source;
+
   @override
   String toString() => 'ConfigUsageException: $message';
+}
+
+/// Абсолютный ли путь: POSIX `/…` или Windows `C:\\…` / `C:/…`.
+///
+/// Почему отдельно: одну проверку используют загрузчик и подкоманды `secret`
+/// (design.md change `add-agent-secret-store`, D8), и она не должна
+/// расходиться.
+bool isAbsoluteConfigPath(String path) =>
+    path.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
+
+/// Проверяет значение `CODELAB_CONFIG`: имя файла и абсолютный путь.
+///
+/// Почему: относительный путь переменной зависел бы от каталога, из которого
+/// клиент запустил процесс, — один и тот же `CODELAB_CONFIG` читал бы разные
+/// файлы. Флаг `--config` вводит пользователь в этом каталоге, поэтому для
+/// него требование не действует. Нарушение — [ConfigUsageException]; одну
+/// функцию вызывают `ConfigLoader` и `SecretCommands`.
+void checkConfigEnvPath(String path) {
+  checkConfigFileName(path, origin: 'CODELAB_CONFIG');
+  if (!isAbsoluteConfigPath(path)) {
+    throw const ConfigUsageException(
+      'CODELAB_CONFIG must be an absolute path',
+      source: 'CODELAB_CONFIG',
+    );
+  }
 }
 
 /// Проверяет имя файла `--config` / `CODELAB_CONFIG`: `.yaml` или `.yml`.
@@ -35,10 +70,14 @@ void checkConfigFileName(String path, {required String origin}) {
     throw ConfigUsageException(
       '$origin needs a .yaml file; codelab.toml is not supported, see '
       'agent-core-architecture §15.7',
+      source: origin,
     );
   }
   if (!lower.endsWith('.yaml') && !lower.endsWith('.yml')) {
-    throw ConfigUsageException('$origin needs a .yaml or .yml file');
+    throw ConfigUsageException(
+      '$origin needs a .yaml or .yml file',
+      source: origin,
+    );
   }
 }
 
@@ -46,10 +85,58 @@ void checkConfigFileName(String path, {required String origin}) {
 /// architecture` §15.5). Настоящий конфиг на порядки меньше.
 const maxConfigBytes = 1024 * 1024;
 
+/// Итоговый текст слоя, который запишет та же операция следом (R8-10).
+///
+/// Почему: проверка кандидата одного файла сливает его с остальными слоями с
+/// диска; когда файлов несколько (`secret migrate --all`), нужен итог всех
+/// правок сразу. Значение — текст конфига: в `toString` не попадает.
+final class PendingConfigText {
+  const PendingConfigText({required this.kind, required this.text});
+
+  /// Слой, чей файл получит [text]: кандидат этого слоя заменяется текстом
+  /// при слиянии, остальные слои читаются с диска (R8-10).
+  final ConfigLayerKind kind;
+
+  /// Полный текст файла слоя после правки. Может содержать значения
+  /// секретов, поэтому в `toString` не попадает.
+  final String text;
+
+  @override
+  String toString() => 'PendingConfigText($kind)';
+}
+
+/// Итог [ConfigLoader.validateCandidate]: проблемы запрещают запись, а
+/// предупреждения (в том числе `config.project.untrusted_key` и незаданная
+/// `${VAR}`) сообщаются вызывающему (design.md change
+/// `add-config-writer-and-reload`, D5).
+typedef ConfigCandidateResult = ({
+  List<ConfigIssue> issues,
+  List<ConfigIssue> warnings,
+});
+
+/// Вид слоя загрузчика по слою записи (`ConfigLayer` ядра): одно отображение
+/// для загрузчика и писателя.
+@internal
+ConfigLayerKind configLayerKindOf(ConfigLayer layer) => switch (layer) {
+  ConfigLayer.user => ConfigLayerKind.user,
+  ConfigLayer.project => ConfigLayerKind.project,
+  ConfigLayer.projectLocal => ConfigLayerKind.projectLocal,
+};
+
+bool _isUnsetVariable(ConfigIssue issue) => issue.event == unsetVariableEvent;
+
 /// Домашний каталог пользователя: `HOME`, на Windows `USERPROFILE`.
 ///
 /// Пустое значение считается отсутствующим: тильда с пустым `HOME` не должна
 /// превращаться в корень (`/x`), поэтому без домашнего каталога раскрытия нет.
+///
+/// Для чего: единственный источник домашнего каталога процесса для корней
+/// навыков и PERM-11. Как использовать: хост берёт результат из того же
+/// словаря окружения, что передаёт в `agentConfigPathsFor`, и отдаёт его в
+/// `ProjectFilesLoader(userHome:)` — тогда корни загрузки навыков и пути
+/// защиты PERM-11 не расходятся (design.md change `add-agent-skills`, D9,
+/// D19). `Platform.environment` напрямую хосты не читают: тест подставляет
+/// временный каталог словарём.
 String? userHomeOf(Map<String, String> environment) {
   for (final name in const ['HOME', 'USERPROFILE']) {
     final value = environment[name];
@@ -98,12 +185,14 @@ String codelabHomeOf(Map<String, String> environment) {
     if (explicit.startsWith('~') && explicit.length > 1 && explicit[1] != '/') {
       throw const ConfigUsageException(
         'CODELAB_HOME: ~user is not supported, use an absolute path',
+        source: 'CODELAB_HOME',
       );
     }
     if (home == null && (explicit == '~' || explicit.startsWith('~/'))) {
       throw const ConfigUsageException(
         'CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an '
         'absolute path',
+        source: 'CODELAB_HOME',
       );
     }
     return _expandHomeTilde(explicit, home);
@@ -127,8 +216,13 @@ String codelabHomeOf(Map<String, String> environment) {
 /// 3. `<cwd>/.codelab/config.yaml`;
 /// 4. `<cwd>/.codelab/config.local.yaml`;
 /// 5. файл `--config` / `CODELAB_CONFIG` (`.yaml` или `.yml`);
-/// 6. переменные `CODELAB_*` ([buildEnvironmentLayer]);
-/// 7. флаги (дерево строит хост).
+/// 6. переменные `CODELAB_*`: сначала предконфигурация провайдера
+///    `CODELAB_PROVIDER_*` ([preconfigLayer]), затем остальные
+///    ([buildEnvironmentLayer]);
+/// 7. флаги: сначала предконфигурация `--provider-type`/`--provider-config`
+///    ([ProviderPreconfigFlags]), затем дерево флагов, которое строит хост
+///    (поэтому `--model` побеждает модель предконфигурации, а `CODELAB_MODEL`
+///    ей проигрывает; design.md change `add-config-writer-and-reload`, D3).
 ///
 /// Как использовать: один [ConfigLoader] на процесс —
 /// `loader.load(cwd: …, environment: Platform.environment, flags: …)`.
@@ -155,13 +249,139 @@ final class ConfigLoader {
   /// которые назвал хост (переменная токена `--token-env`): они не опечатка.
   /// Неизвестные `CODELAB_*` попадают в `warnings` событием
   /// `config.env.unknown` (D13): правило одно для `serve` и `config check`.
+  /// [preconfigFlags] — предконфигурация провайдера из флагов `serve`: если
+  /// задана, переменные `CODELAB_PROVIDER_*` не читаются (D3). Её значение
+  /// не попадает ни в проблемы, ни в лог.
+  /// [platform] подменяет `Platform.operatingSystem` в тестах: на `windows`
+  /// `secrets.backend: file` — проблема конфигурации (change
+  /// `add-agent-secret-store`, D14).
+  ///
+  /// [pinnedTrustedProjects] — закреплённое доверие проектам (design.md change
+  /// `add-config-writer-and-reload`, D8): загрузчик лишь передаёт список в
+  /// `CoreConfig.fromLayers`, а доверие вычисляет ядро. Передаёт
+  /// `FileConfigSource` (`initial.config.trustedProjects`); `null` — доверие
+  /// по слоям, как при старте.
   ConfigLoadResult load({
     required String cwd,
     required Map<String, String> environment,
     ConfigTree? flags,
+    ProviderPreconfigFlags? preconfigFlags,
     String? extraConfig,
     bool scripted = false,
     Set<String> knownVariables = const {},
+    String? platform,
+    List<String>? pinnedTrustedProjects,
+  }) => loadWithLayers(
+    cwd: cwd,
+    environment: environment,
+    flags: flags,
+    preconfigFlags: preconfigFlags,
+    extraConfig: extraConfig,
+    scripted: scripted,
+    knownVariables: knownVariables,
+    platform: platform,
+    pinnedTrustedProjects: pinnedTrustedProjects,
+  ).result;
+
+  /// Проверяет итоговый [text] слоя [target] теми же слоями и `fromLayers`,
+  /// что обычная загрузка, не читая файл этого слоя с диска (design.md change
+  /// `add-config-writer-and-reload`, D5, шаг 6 `agent-core-architecture`
+  /// §17.5.5).
+  ///
+  /// Почему здесь: порядок слоёв, канонизация `trusted_projects`, слой
+  /// окружения и правила доверия принадлежат загрузчику; писатель не
+  /// повторяет их, иначе проверка записи разошлась бы с загрузкой.
+  ///
+  /// [pending] — итоговые тексты ДРУГИХ слоёв, которые та же операция запишет
+  /// следом (`secret migrate --all`, R8-10): без них правка первого файла
+  /// сливалась бы с ещё не переписанным вторым и давала промежуточный
+  /// конфликт источников ключа (R8-6). По умолчанию пусто — одиночная запись
+  /// не меняется.
+  ///
+  /// Как использовать: [cwd] — корень запуска (для слоёв `project` — каталог
+  /// проекта), [environment] — переменные процесса писателя. Остальные слои
+  /// читаются с диска. Незаданная `${VAR}` попадает в `warnings`, а не в
+  /// `issues` (окружение агента может отличаться от окружения писателя);
+  /// значения кандидата в проблемы не попадают (CFG-2).
+  ///
+  /// Проверка идёт в режиме `collectAll` ядра (R3-1, R3-3, решение
+  /// пользователя 2026-11-03): ошибка ранней ступени не скрывает ошибки
+  /// поздних, поэтому набор проблем исходного файла и кандидата полный и
+  /// сравнивается писателем по сигнатуре. Обычная загрузка [load] режима не
+  /// использует.
+  ConfigCandidateResult validateCandidate(
+    ConfigTarget target,
+    String text, {
+    required String cwd,
+    required Map<String, String> environment,
+    String? platform,
+    @internal List<PendingConfigText> pending = const [],
+  }) {
+    final kind = configLayerKindOf(target.layer);
+    ConfigLoadResult run(Map<String, String> env) => loadWithLayers(
+      cwd: cwd,
+      environment: env,
+      platform: platform,
+      candidate: (kind: kind, text: text),
+      pending: pending,
+      collectAll: true,
+    ).result;
+
+    var loaded = run(environment);
+    // Незаданная `${VAR}` — предупреждение: окружение агента может
+    // отличаться от окружения писателя (§17.5.5, шаг 6). Но без значения
+    // переменной ядро не строит провайдера, и следом идут проблемы-
+    // последствия (`default_model` не в каталоге). Поэтому проверка
+    // повторяется с подставленным значением, а исходные проблемы
+    // подстановки остаются предупреждениями.
+    final unset = [
+      for (final issue in loaded.issues)
+        if (_isUnsetVariable(issue)) issue,
+    ];
+    if (unset.isNotEmpty) {
+      loaded = run({
+        for (final issue in unset)
+          '${issue.fields['variable']}': 'https://unset.invalid',
+        ...environment,
+      });
+    }
+    final issues = <ConfigIssue>[];
+    final warnings = [...unset, ...loaded.warnings];
+    for (final issue in loaded.issues) {
+      if (_isUnsetVariable(issue)) {
+        warnings.add(issue);
+      } else {
+        issues.add(issue);
+      }
+    }
+    return (issues: issues, warnings: warnings);
+  }
+
+  /// То же, что [load], плюс разобранные слои по порядку приоритета.
+  ///
+  /// Почему: `config check` называет файл и строку ключа, на который ссылается
+  /// предупреждение о секрете (`providers.p.api_key_secret`), а результат
+  /// ядра позиций ссылок не хранит (design.md change `add-agent-secret-store`,
+  /// D9). Слои — те же деревья, что ушли в `CoreConfig.fromLayers`; в них могут
+  /// быть и значения, вписанные в конфиг (`api_key`), поэтому вызывающий
+  /// использует только позиции ключей, а значения не печатает.
+  ///
+  /// Как использовать: только внутри пакета (`ConfigCommands`); для
+  /// приложений — [load].
+  @internal
+  ({ConfigLoadResult result, List<ConfigTree> layers}) loadWithLayers({
+    required String cwd,
+    required Map<String, String> environment,
+    ConfigTree? flags,
+    ProviderPreconfigFlags? preconfigFlags,
+    String? extraConfig,
+    bool scripted = false,
+    Set<String> knownVariables = const {},
+    String? platform,
+    ({ConfigLayerKind kind, String text})? candidate,
+    List<PendingConfigText> pending = const [],
+    bool collectAll = false,
+    List<String>? pinnedTrustedProjects,
   }) {
     final extraPath =
         _nonEmpty(extraConfig) ?? _nonEmpty(environment['CODELAB_CONFIG']);
@@ -169,14 +389,10 @@ final class ConfigLoader {
         ? '--config'
         : 'CODELAB_CONFIG';
     if (extraPath != null) {
-      checkConfigFileName(extraPath, origin: extraOrigin);
-      // Относительный путь переменной зависел бы от каталога, из которого
-      // клиент запустил процесс: один и тот же `CODELAB_CONFIG` читал бы
-      // разные файлы. Флаг `--config` вводит пользователь в этом каталоге.
-      if (extraOrigin == 'CODELAB_CONFIG' && !_isAbsolute(extraPath)) {
-        throw const ConfigUsageException(
-          'CODELAB_CONFIG must be an absolute path',
-        );
+      if (extraOrigin == 'CODELAB_CONFIG') {
+        checkConfigEnvPath(extraPath);
+      } else {
+        checkConfigFileName(extraPath, origin: extraOrigin);
       }
     }
 
@@ -195,23 +411,76 @@ final class ConfigLoader {
     // У явного файла источник проблемы чтения — имя флага или переменной
     // ([origin]), а путь идёт в текст: так stderr называет, откуда пришёл путь.
     void readFile(String path, ConfigLayerKind kind, {String? origin}) {
-      if (!FileSystemEntity.isFileSync(path)) {
-        if (origin != null) {
+      final String? text;
+      final PendingConfigText? replacement =
+          candidate != null && candidate.kind == kind
+          ? PendingConfigText(kind: candidate.kind, text: candidate.text)
+          : pending.where((p) => p.kind == kind).firstOrNull;
+      if (replacement != null) {
+        // Кандидат записи заменяет слой целиком (D5, шаг 6): файла на диске
+        // может не быть или он может отличаться от того, что будет записано.
+        // Имя источника остаётся путём слоя, чтобы проблемы называли файл
+        // конфига, а не tmp.
+        yamlFound = true;
+        if (utf8.encode(replacement.text).length > maxConfigBytes) {
           issues.add(
             ConfigIssue(
               kind: ConfigIssueKind.syntax,
               key: '',
-              source: origin,
-              message: 'cannot read the file: $path: no such file',
+              source: path,
+              message: 'the file is larger than 1 MiB',
             ),
           );
+          return;
         }
-        return;
-      }
-      yamlFound = true;
-      final text = _readText(path, issues, origin: origin);
-      if (text == null) {
-        return;
+        text = replacement.text;
+      } else {
+        // 8.5: проектный слой читается только по реальному пути внутри
+        // `<cwd>/.codelab` (проверенное и открытое совпадают). Существующая
+        // цель вне `.codelab`, цикл и `..` в хвосте — проблема с путём слоя,
+        // без содержимого и цели ссылки; висячая ссылка (внутрь или наружу) —
+        // слой молча отсутствует: ничего снаружи не читается, а проект с
+        // `.codelab`-ссылкой на общий каталог без config-файлов должен
+        // запускаться. Слой `user` и `--config` пользователь выбрал сам.
+        var readFrom = path;
+        if (kind == ConfigLayerKind.project ||
+            kind == ConfigLayerKind.projectLocal) {
+          switch (checkProjectLayer(path, root)) {
+            case ProjectLayerReadable(:final realPath):
+              readFrom = realPath;
+            case ProjectLayerAbsent():
+              return;
+            case ProjectLayerRefused(:final message):
+              yamlFound = true;
+              issues.add(
+                ConfigIssue(
+                  kind: ConfigIssueKind.syntax,
+                  key: '',
+                  source: path,
+                  message: message,
+                ),
+              );
+              return;
+          }
+        }
+        if (!FileSystemEntity.isFileSync(readFrom)) {
+          if (origin != null) {
+            issues.add(
+              ConfigIssue(
+                kind: ConfigIssueKind.syntax,
+                key: '',
+                source: origin,
+                message: 'cannot read the file: $path: no such file',
+              ),
+            );
+          }
+          return;
+        }
+        yamlFound = true;
+        text = _readText(path, issues, origin: origin, readFrom: readFrom);
+        if (text == null) {
+          return;
+        }
       }
       final result = readYamlTree(text, source: path, kind: kind);
       if (result.tree case final tree?) {
@@ -256,9 +525,21 @@ final class ConfigLoader {
     warnings.addAll(
       unknownEnvironmentWarnings(environment, extraKnown: knownVariables),
     );
+    // Слои 6 и 7 (D3): предконфигурация идёт первой в своём слое, чтобы более
+    // частное значение (`CODELAB_MODEL`, `--model`) её переопределяло.
+    final preconfig = preconfigLayer(environment, flags: preconfigFlags);
+    issues.addAll(preconfig.issues);
+    warnings.addAll(preconfig.notices);
+    final preconfigFromFlags = preconfig.layer?.kind == ConfigLayerKind.flags;
+    if (preconfig.layer case final layer? when !preconfigFromFlags) {
+      layers.add(layer);
+    }
     final env = buildEnvironmentLayer(environment);
     issues.addAll(env.issues);
     if (env.layer case final layer?) {
+      layers.add(layer);
+    }
+    if (preconfig.layer case final layer? when preconfigFromFlags) {
       layers.add(layer);
     }
     if (flags != null && flags.values.isNotEmpty) {
@@ -266,23 +547,87 @@ final class ConfigLoader {
     }
 
     if (issues.isNotEmpty) {
-      return ConfigLoadResult(
-        issues: issues,
-        warnings: warnings,
-        sources: [for (final layer in layers) layer.source],
+      return (
+        result: ConfigLoadResult(
+          issues: issues,
+          warnings: warnings,
+          sources: [for (final layer in layers) layer.source],
+        ),
+        layers: layers,
       );
     }
     final result = CoreConfig.fromLayers(
       layers,
       environment: environment,
       projectRoot: root,
+      collectAll: collectAll,
+      pinnedTrustedProjects: pinnedTrustedProjects,
     );
-    return ConfigLoadResult(
-      config: result.config,
-      host: result.host,
-      issues: result.issues,
-      warnings: [...warnings, ...result.warnings],
-      sources: result.sources,
+    final windowsFile = scripted
+        ? null
+        : _fileBackendOnWindows(result, layers, platform);
+    if (windowsFile != null) {
+      return (
+        result: ConfigLoadResult(
+          issues: [...result.issues, windowsFile],
+          warnings: [...warnings, ...result.warnings],
+          sources: result.sources,
+          values: result.values,
+        ),
+        layers: layers,
+      );
+    }
+    return (
+      result: ConfigLoadResult(
+        config: result.config,
+        host: result.host,
+        issues: result.issues,
+        warnings: [...warnings, ...result.warnings],
+        sources: result.sources,
+        values: result.values,
+      ),
+      layers: layers,
+    );
+  }
+
+  /// Проблема `secrets.backend: file` на Windows (agent-secrets «Бэкенд file»,
+  /// design.md change `add-agent-secret-store`, D7, D14).
+  ///
+  /// Почему здесь, а не в ядре: ядро платформу не знает (PKG-1). Права NTFS
+  /// `dart:io` не проверяет, поэтому открытый файл на Windows недопустим;
+  /// `FileSecretStore` отказывает и сам (защита в глубину). Со [scripted]
+  /// проверки нет: сценарий всегда использует `env` (D11). Позиция берётся из
+  /// слоя, где задан ключ, чтобы сообщение указало файл и строку.
+  ConfigIssue? _fileBackendOnWindows(
+    ConfigLoadResult result,
+    List<ConfigTree> layers,
+    String? platform,
+  ) {
+    // Тот же `secretsBackendProblem`, что у `openSecretStore`: тексты не
+    // расходятся. Ядро уже отсекло `keychain` и незнакомые значения, поэтому
+    // здесь срабатывает только `file` на Windows.
+    final problem = secretsBackendProblem(
+      result.host?.secretsBackend,
+      platform ?? Platform.operatingSystem,
+    );
+    if (problem == null) {
+      return null;
+    }
+    ConfigTree? origin;
+    for (final layer in layers.reversed) {
+      if (layer.positions.containsKey('secrets.backend')) {
+        origin = layer;
+        break;
+      }
+    }
+    final position = origin?.positions['secrets.backend'];
+    return ConfigIssue(
+      kind: ConfigIssueKind.value,
+      key: 'secrets.backend',
+      source: origin?.source ?? 'config',
+      line: position?.line,
+      column: position?.column,
+      message: problem.message,
     );
   }
 
@@ -310,8 +655,14 @@ final class ConfigLoader {
   /// Читает файл не больше [maxConfigBytes]: размер проверяется по `stat` до
   /// чтения, чтобы файл в гигабайты не попал в память (CFG-21). Байты
   /// декодируются строго: не-UTF-8 — проблема файла, а не молчаливая замена
-  /// символов, которая исказила бы ключи.
-  String? _readText(String path, List<ConfigIssue> issues, {String? origin}) {
+  /// символов, которая исказила бы ключи. [readFrom] — реальный путь проектного
+  /// слоя (8.5): читается он, а в проблемах называется [path].
+  String? _readText(
+    String path,
+    List<ConfigIssue> issues, {
+    String? origin,
+    String? readFrom,
+  }) {
     void fail(String message, {bool unreadable = false}) => issues.add(
       ConfigIssue(
         kind: ConfigIssueKind.syntax,
@@ -321,11 +672,12 @@ final class ConfigLoader {
       ),
     );
     try {
-      if (File(path).statSync().size > maxConfigBytes) {
+      final actual = readFrom ?? path;
+      if (File(actual).statSync().size > maxConfigBytes) {
         fail('the file is larger than 1 MiB');
         return null;
       }
-      return utf8.decode(File(path).readAsBytesSync());
+      return utf8.decode(File(actual).readAsBytesSync());
     } on FileSystemException catch (error) {
       fail(
         'cannot read the file: $path: '
@@ -386,8 +738,7 @@ final class ConfigLoader {
     }
   }
 
-  bool _isAbsolute(String path) =>
-      path.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
+  bool _isAbsolute(String path) => isAbsoluteConfigPath(path);
 
   String? _nonEmpty(String? value) =>
       value == null || value.isEmpty ? null : value;

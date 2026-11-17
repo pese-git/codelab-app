@@ -4,9 +4,11 @@ import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
+import '../rendering/rendering.dart';
 import 'codelab_tool_call_tile.dart';
 import 'codelab_transcript_notice.dart';
 import 'codelab_transcript_row.dart';
+import 'codelab_transcript_target.dart';
 
 /// Наибольшая ширина колонки переписки вместе с её боковыми полями
 /// [_columnSidePadding] (артборд Main: `max-width: 760px` с
@@ -64,7 +66,9 @@ const _autoScrollBottomThreshold = 80.0;
 ///
 /// Как использовать: хост передаёт строки и [onExpansionChanged]; без него
 /// строки раскрываются только по умолчанию. Ожидающее одобрение всегда
-/// раскрыто.
+/// раскрыто. [showRequest] — разовый запрос показа (панель Agents: «Show in
+/// transcript», «Go to approval»); раскрытие строк пути хост делает сам через
+/// [expansionOverrides] в том же обновлении.
 class CodeLabTranscriptPanel extends StatefulWidget {
   const CodeLabTranscriptPanel({
     required this.rows,
@@ -72,11 +76,32 @@ class CodeLabTranscriptPanel extends StatefulWidget {
     this.onExpansionChanged,
     this.emptyLabel = 'No transcript yet',
     this.viewMode = CodeLabViewMode.normal,
+    this.showRequest,
+    this.onShowRequestDone,
     super.key,
   });
 
   /// Ключ строки ленты по её id — для тестов и автоматизации.
   static ValueKey<String> rowKey(String id) => ValueKey('transcript-row-$id');
+
+  /// Ключ цели показа внутри строки (вложенная строка `agent`, блок
+  /// одобрения потомка с `targetId`) — для тестов и автоматизации (D49 Т7).
+  static ValueKey<String> targetKey(String id) => transcriptTargetKey(id);
+
+  /// Ключ накладки подсветки: есть, пока цель показа подсвечена (около 1,5 с).
+  static ValueKey<String> highlightKey(String id) => transcriptHighlightKey(id);
+
+  /// Разовый запрос показа строки (D49 Т7): прокрутить ленту к строке или к
+  /// цели внутри неё и коротко подсветить. Новый [CodeLabTranscriptShowRequest.serial]
+  /// — новый запрос; тот же номер при перестроении повторно не прокручивает.
+  /// Хост очищать запрос не обязан.
+  final CodeLabTranscriptShowRequest? showRequest;
+
+  /// Показ с этим номером закончен: цель показана или шаги исчерпаны. Не
+  /// вызывается, если цепочку оборвала смена или исчезновение запроса, смена
+  /// сессии или `dispose`. Хост по нему гасит разовый запрос, чтобы
+  /// перемонтированная лента не прокрутила снова (D49 Т7).
+  final ValueChanged<int>? onShowRequestDone;
 
   final List<CodeLabTranscriptRow> rows;
   final Map<String, bool> expansionOverrides;
@@ -86,6 +111,24 @@ class CodeLabTranscriptPanel extends StatefulWidget {
 
   @override
   State<CodeLabTranscriptPanel> createState() => _AcpTranscriptPanelState();
+}
+
+/// Разовый запрос показа строки в ленте (D49 Т7): панель Agents просит
+/// показать строку `agent` или блок одобрения потомка.
+///
+/// [rowId] — id строки верхнего уровня, [targetId] — id цели внутри неё
+/// (равен [rowId], если цель — сама строка), [serial] — номер запроса:
+/// повтор того же действия получает новый номер и прокручивает снова.
+final class CodeLabTranscriptShowRequest {
+  const CodeLabTranscriptShowRequest({
+    required this.rowId,
+    required this.targetId,
+    required this.serial,
+  });
+
+  final String rowId;
+  final String targetId;
+  final int serial;
 }
 
 /// Состояние ленты: владеет `ScrollController` и решает, когда двигать
@@ -117,6 +160,32 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   /// approval.
   bool _isFollowingTail = false;
 
+  /// Номер текущего показа строки: смена отменяет цепочку кадров прежнего
+  /// запроса и поздний кадр после `dispose` (AGENTS.md §9, D49 Т7).
+  int _showToken = 0;
+
+  /// Номер последнего исполненного запроса показа. Номер монотонный и общий
+  /// для всех сессий, а лента одна: при возврате в сессию прежний запрос
+  /// снова приходит в `showRequest` и без этой памяти повторил бы прокрутку
+  /// и подсветку (D49 Т7). Исполняется только запрос с бо́льшим номером.
+  int? _lastShowSerial;
+
+  /// Цель, подсвеченная сейчас; живёт около [_highlightDuration].
+  String? _highlightId;
+  Timer? _highlightTimer;
+
+  /// Конфигурация markdown, общая для всех строк ответа (D3). Живёт в
+  /// `State`, а не создаётся в `build`: пакет кеширует закрытые блоки, только
+  /// пока тема и builder'ы — те же объекты (DSK-3).
+  CodeLabMarkdownConfig? _markdownConfig;
+
+  /// Конфигурация для текущей темы Fluent; новая — только при смене темы.
+  CodeLabMarkdownConfig _markdownConfigFor(FluentThemeData theme) {
+    final current = _markdownConfig;
+    if (current != null && current.theme == theme) return current;
+    return _markdownConfig = CodeLabMarkdownConfig(theme);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -127,10 +196,15 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
     if (_pendingApprovalEntryIds(widget.rows).isNotEmpty) {
       _bringApprovalIntoView();
     }
+    if (widget.showRequest case final request?) {
+      _startShow(request);
+    }
   }
 
   @override
   void dispose() {
+    _showToken++;
+    _highlightTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -138,6 +212,21 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   @override
   void didUpdateWidget(covariant CodeLabTranscriptPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Запрос показа важнее следования за хвостом: он сам переводит ленту в
+    // режим чтения истории (D49 Т7), иначе обновление строк ниже вернуло бы
+    // её к низу.
+    final request = widget.showRequest;
+    if (request?.serial != oldWidget.showRequest?.serial) {
+      // Смена или исчезновение запроса (в том числе смена сессии) обрывает
+      // цепочку кадров прежнего: иначе она нашла бы `rowId` в чужих строках.
+      _showToken++;
+      final last = _lastShowSerial;
+      if (request != null && (last == null || request.serial > last)) {
+        _startShow(request);
+        return;
+      }
+    }
 
     // Метрики контроллера ещё описывают прежнюю раскладку: после раскладки
     // новая запись уже отодвинет низ, и «был у низа» станет не отличить от
@@ -240,6 +329,148 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
     });
   }
 
+  /// Сколько кадров лента ищет построенную цель, двигаясь к ней.
+  static const _maxShowAttempts = 40;
+  static const _highlightDuration = Duration(milliseconds: 1500);
+
+  /// Начинает показ: программная прокрутка — такое же «чтение истории», как
+  /// прокрутка пользователем; следование за хвостом и удержание одобрения
+  /// выключаются, иначе поток вернул бы ленту к низу (D49 Т7; change
+  /// `follow-transcript-tail`). Возврат к хвосту — прокруткой пользователя.
+  void _startShow(CodeLabTranscriptShowRequest request) {
+    final token = ++_showToken;
+    _lastShowSerial = request.serial;
+    _isReadingHistory = true;
+    _isFollowingTail = false;
+    _isKeepingApprovalInView = false;
+    _highlightTimer?.cancel();
+    _highlightId = null;
+    _scheduleShowStep(request, token, 0);
+  }
+
+  void _scheduleShowStep(
+    CodeLabTranscriptShowRequest request,
+    int token,
+    int attempt,
+  ) {
+    WidgetsBinding.instance
+      ..addPostFrameCallback((_) {
+        if (!mounted || token != _showToken || !_controller.hasClients) return;
+        _showStep(request, token, attempt);
+      })
+      // `jumpTo` в ту же позицию кадра не вызовет, а цепочка ждёт кадра.
+      ..scheduleFrame();
+  }
+
+  /// Один шаг показа. Ленивый список не знает высоту непостроенных строк, и
+  /// строки нет в дереве, пока она далеко от окна: первый шаг прыгает по
+  /// оценке смещения, дальше лента двигается к строке окнами, пока цель не
+  /// построена, и тогда `ensureVisible` ставит её точно (D49 Т7).
+  void _showStep(CodeLabTranscriptShowRequest request, int token, int attempt) {
+    if (widget.showRequest?.serial != request.serial) return;
+    final index = widget.rows.indexWhere((row) => row.id == request.rowId);
+    if (index < 0) {
+      widget.onShowRequestDone?.call(request.serial);
+      return;
+    }
+    final target = _findKeyed(_targetKeyOf(request));
+    if (target != null) {
+      _reveal(target);
+      _setHighlight(request.targetId);
+      // Строки выше цели достроились и могли сдвинуть её: ещё один кадр
+      // уточняет положение.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || token != _showToken) return;
+        final again = _findKeyed(_targetKeyOf(request));
+        if (again != null) _reveal(again);
+        widget.onShowRequestDone?.call(request.serial);
+      });
+      return;
+    }
+    if (attempt >= _maxShowAttempts) {
+      widget.onShowRequestDone?.call(request.serial);
+      return;
+    }
+
+    final position = _controller.position;
+    final total = position.maxScrollExtent + position.viewportDimension;
+    if (attempt == 0 &&
+        _findKeyed(CodeLabTranscriptPanel.rowKey(request.rowId)) == null) {
+      _controller.jumpTo(
+        (total * index / widget.rows.length).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        ),
+      );
+    } else if (_findKeyed(CodeLabTranscriptPanel.rowKey(request.rowId)) ==
+        null) {
+      // Строки нет в окне: идём туда, где она относительно построенных.
+      final firstBuilt = _firstBuiltRowIndex();
+      final direction = firstBuilt != null && index < firstBuilt ? -1 : 1;
+      _controller.jumpTo(
+        (position.pixels + direction * position.viewportDimension * 0.8).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        ),
+      );
+    }
+    _scheduleShowStep(request, token, attempt + 1);
+  }
+
+  /// Ключ цели: строка верхнего уровня — её `rowKey`, иначе ключ цели внутри.
+  static Key _targetKeyOf(CodeLabTranscriptShowRequest request) =>
+      request.targetId == request.rowId
+      ? CodeLabTranscriptPanel.rowKey(request.rowId)
+      : CodeLabTranscriptPanel.targetKey(request.targetId);
+
+  void _reveal(BuildContext target) {
+    Scrollable.ensureVisible(target, alignment: 0.1, duration: Duration.zero);
+  }
+
+  void _setHighlight(String id) {
+    _highlightTimer?.cancel();
+    setState(() => _highlightId = id);
+    _highlightTimer = Timer(_highlightDuration, () {
+      if (mounted) setState(() => _highlightId = null);
+    });
+  }
+
+  /// Элемент построенного виджета с этим ключом или `null`: ключи цели —
+  /// `ValueKey`, не `GlobalKey`, поэтому ищем обходом построенных элементов
+  /// (строк в окне немного: ленивый список).
+  BuildContext? _findKeyed(Key key) {
+    BuildContext? found;
+    void visit(Element element) {
+      if (found != null) return;
+      if (element.widget.key == key) {
+        found = element;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    (context as Element).visitChildren(visit);
+    return found;
+  }
+
+  /// Наименьший индекс построенной сейчас строки ленты.
+  int? _firstBuiltRowIndex() {
+    int? first;
+    void visit(Element element) {
+      final key = element.widget.key;
+      if (key is ValueKey<String> && key.value.startsWith('transcript-row-')) {
+        final id = key.value.substring('transcript-row-'.length);
+        final index = widget.rows.indexWhere((row) => row.id == id);
+        if (index >= 0 && (first == null || index < first!)) first = index;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    (context as Element).visitChildren(visit);
+    return first;
+  }
+
   bool _isExpanded(CodeLabTranscriptRow row) {
     if (row is CodeLabToolCallRow && row.awaitsApproval) {
       return true;
@@ -290,10 +521,25 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
                     right: _columnSidePadding,
                     bottom: isLast ? 0 : _rowGap,
                   ),
-                  child: _TranscriptRowView(
-                    row: row,
-                    expanded: _isExpanded(row),
-                    onToggle: (expanded) => _toggle(row.id, expanded),
+                  child: TranscriptTargetFrame(
+                    id: row.id,
+                    keyed: false,
+                    highlighted: _highlightId == row.id,
+                    child: _TranscriptRowView(
+                      row: row,
+                      markdownConfig: _markdownConfigFor(
+                        FluentTheme.of(context),
+                      ),
+                      expanded: _isExpanded(row),
+                      onToggle: (expanded) => _toggle(row.id, expanded),
+                      // Вложенные строки дерева `agent` раскрываются теми же
+                      // переопределениями по своему id; по умолчанию свёрнуты
+                      // (D47 Т11).
+                      nestedExpanded: (id) =>
+                          widget.expansionOverrides[id] ?? false,
+                      onNestedToggle: _toggle,
+                      highlightedId: _highlightId,
+                    ),
                   ),
                 ),
               ),
@@ -316,21 +562,36 @@ Set<String> _pendingApprovalEntryIds(List<CodeLabTranscriptRow> rows) {
 class _TranscriptRowView extends StatelessWidget {
   const _TranscriptRowView({
     required this.row,
+    required this.markdownConfig,
     required this.expanded,
     required this.onToggle,
+    required this.nestedExpanded,
+    required this.onNestedToggle,
+    this.highlightedId,
   });
 
+  final String? highlightedId;
   final CodeLabTranscriptRow row;
+  final CodeLabMarkdownConfig markdownConfig;
   final bool expanded;
   final ValueChanged<bool> onToggle;
+  final bool Function(String rowId) nestedExpanded;
+  final void Function(String rowId, bool expanded) onNestedToggle;
 
   @override
   Widget build(BuildContext context) {
     return switch (row) {
       CodeLabUserRow(:final text) => _UserBubble(text: text),
-      CodeLabAgentTextRow(:final text) => Align(
+      // Ответ агента — markdown (SMK-07, D3); огороженный ответ целиком
+      // становится блоком кода внутри `CodeLabMarkdown` (D11).
+      CodeLabAgentTextRow(:final id, :final text, :final streaming) => Align(
         alignment: Alignment.centerLeft,
-        child: CodeLabText(text),
+        child: CodeLabMarkdown(
+          id: id,
+          text: text,
+          streaming: streaming,
+          config: markdownConfig,
+        ),
       ),
       CodeLabThoughtRow(:final text, :final streaming) => CodeLabThoughtBlock(
         text: text,
@@ -342,8 +603,12 @@ class _TranscriptRowView extends StatelessWidget {
         row: call,
         expanded: expanded,
         onToggle: onToggle,
+        nestedExpanded: nestedExpanded,
+        onNestedToggle: onNestedToggle,
+        highlightedId: highlightedId,
       ),
       final CodeLabNoticeRow notice => CodeLabTranscriptNotice(row: notice),
+      CodeLabTaskOpsRow(:final text) => CodeLabTaskOpsLine(text: text),
     };
   }
 }

@@ -9,6 +9,7 @@ import '../fake_acp_transport.dart';
 import '../fake_terminal_process_runner.dart';
 import 'fixture.dart';
 import 'matcher.dart';
+import 'open_frames.dart';
 
 /// Client conformance driver — `14-golden-fixtures.md` §14.10, design.md D4.
 ///
@@ -222,6 +223,19 @@ final class _ClientRun<C> {
   final Duration quietPeriod;
   final _actions = <Future<void>>[];
 
+  /// Необязательные кадры и хвосты обязательных повторов, ещё ждущие своих
+  /// кадров; граница — по содержимому, а не по окну тишины (§14.9, шаг 7;
+  /// §14.10).
+  late final _open = OpenFrames(
+    matcher,
+    (frame, mismatches, repeats) => _fail(
+      frame,
+      'repeated frames differ',
+      mismatches: mismatches,
+      actual: repeats,
+    ),
+  );
+
   Future<void> play(C client) async {
     final frames = [
       if (!fixture.setup.skipInitialize) ..._handshake(fixture.setup),
@@ -293,7 +307,7 @@ final class _ClientRun<C> {
     if (frame.unordered case final templates?) {
       final actual = <Object?>[];
       for (var i = 0; i < templates.length; i++) {
-        actual.add(await _next(frame, frameTimeout));
+        actual.add(await _take(frame));
       }
       final mismatches = matcher.matchUnordered(templates, actual);
       if (mismatches.isNotEmpty) {
@@ -310,14 +324,21 @@ final class _ClientRun<C> {
 
     final template = frame.frame!;
     if (frame.optional) {
+      // Окно тишины остаётся: следующий кадр `a2c` драйвер выдаёт сам, и
+      // клиент успевает ответить до него, как раньше. Но граница кадра — не
+      // окно: шаблон открыт и поглотит поздний кадр клиента — не больше
+      // одного, `repeat` здесь не учитывается (§14.10, `single`). Кадр из
+      // окна предлагается всем открытым шаблонам в порядке фикстуры, как в
+      // агентском прогоне.
+      _open.add(frame, template, single: true);
       if (await inbox.waitFor(quietPeriod, _hasActionError) &&
-          matcher.match(template, inbox.peek()).isEmpty) {
+          _open.absorb(inbox.peek())) {
         inbox.take();
       }
       return;
     }
 
-    final first = await _next(frame, frameTimeout);
+    final first = await _take(frame);
     final mismatches = matcher.match(template, first);
     if (mismatches.isNotEmpty) {
       _fail(
@@ -333,27 +354,57 @@ final class _ClientRun<C> {
     }
 
     final repeats = [first];
-    while (await inbox.waitFor(quietPeriod, _hasActionError) &&
+    // Окно хвоста ограничено сроком: поток кадров без пауз не держит прогон;
+    // остаток хвоста поглотит открытый шаблон.
+    final deadline = DateTime.now().add(frameTimeout);
+    while (DateTime.now().isBefore(deadline) &&
+        await inbox.waitFor(quietPeriod, _hasActionError) &&
         matcher.match(template, inbox.peek()).isEmpty) {
       repeats.add(inbox.take());
     }
-    if (frame.matchText case final text?) {
-      final textMismatches = matcher.matchText(text, repeats);
-      if (textMismatches.isNotEmpty) {
-        _fail(frame, 'repeated frames differ', mismatches: textMismatches);
+    // Хвост повтора открыт и после окна; `$text` сверяется при закрытии.
+    _open.add(frame, template, repeats: repeats);
+  }
+
+  /// Следующий кадр клиента для обязательного ожидания [frame]: поздние
+  /// кадры открытых шаблонов ([OpenFrames]) поглощаются по пути, первый не
+  /// поглощённый кадр закрывает их все. Срок [frameTimeout] — один на всё
+  /// ожидание, а не на каждый поглощённый кадр (как в агентском прогоне).
+  Future<Object?> _take(FixtureFrame frame) async {
+    final deadline = DateTime.now().add(frameTimeout);
+    final absorbed = <Object?>[];
+    while (true) {
+      final left = deadline.difference(DateTime.now());
+      final actual = await _next(
+        frame,
+        left > Duration.zero ? left : Duration.zero,
+        absorbed,
+      );
+      if (!_open.absorb(actual)) {
+        _open.closeAll();
+        return actual;
       }
+      absorbed.add(actual);
     }
   }
 
-  Future<Object?> _next(FixtureFrame frame, Duration timeout) async {
+  Future<Object?> _next(
+    FixtureFrame frame,
+    Duration timeout,
+    List<Object?> absorbed,
+  ) async {
     if (!await inbox.waitFor(timeout, _hasActionError)) {
       _failOnActionError(frame);
       _fail(
         frame,
-        'timed out after ${timeout.inMilliseconds} ms waiting for a c2a frame',
+        'timed out after ${frameTimeout.inMilliseconds} ms waiting for a c2a '
+        'frame'
+        '${absorbed.isEmpty ? '' : ' (${absorbed.length} frames absorbed by '
+                  'optional or repeated frames before it)'}',
         expected: _templates(frame).length == 1
             ? matcher.substitute(_templates(frame).single)
             : _templates(frame),
+        actual: absorbed.isEmpty ? null : absorbed,
       );
     }
     _failOnActionError(frame);
@@ -394,11 +445,17 @@ final class _ClientRun<C> {
 
   Future<void> _expectSilence() async {
     await Future<void>.delayed(quietPeriod);
-    if (inbox.isNotEmpty) {
+    // Кадры за время тишины ещё могут принадлежать открытым шаблонам.
+    final extra = [
+      for (final frame in inbox.takeAll())
+        if (!_open.absorb(frame)) frame,
+    ];
+    _open.closeAll();
+    if (extra.isNotEmpty) {
       _fail(
         _endFrame(),
         'unexpected frames from the client after the scenario',
-        actual: inbox.takeAll(),
+        actual: extra,
       );
     }
   }
@@ -448,6 +505,23 @@ final class _ClientRun<C> {
   );
 }
 
+/// Кадры handshake клиентского прогона: `initialize` → `session/new`.
+///
+/// Почему: клиент CodeLab объявляет в `initialize` больше расширений
+/// (`tasks`, `subagents`, `usage`…), чем нужно отдельной фикстуре, а
+/// точное сравнение `_meta.codelab` связало бы фикстуры разных расширений
+/// (D21 Т7, решение Q15 (б)).
+///
+/// Для чего: `clientCapabilities` сверяется как `$partial`, а
+/// `_meta.codelab` из `setup.clientCapabilities` — как подмножество: каждый
+/// указанный ключ проверяется точно (значение целиком), лишние ключи
+/// объявления клиента допустимы. Остальные поля `_meta` и сами
+/// `clientCapabilities` — как прежде. Агентский драйвер не меняется: он
+/// шлёт `setup.clientCapabilities` агенту буквально.
+///
+/// Как использовать: вызывается только драйвером клиентского прогона.
+/// Полное объявление клиента точно проверяют фикстуры с явным кадром
+/// `initialize` и `initialize_codelab_request_test.dart`.
 List<FixtureFrame> _handshake(FixtureSetup setup) {
   FixtureFrame frame(
     int index,
@@ -474,7 +548,7 @@ List<FixtureFrame> _handshake(FixtureSetup setup) {
         r'$partial': {
           'protocolVersion': 1,
           if (capabilities != null)
-            'clientCapabilities': {r'$partial': capabilities},
+            'clientCapabilities': {r'$partial': _codelabSubset(capabilities)},
         },
       },
     }),
@@ -509,6 +583,25 @@ List<FixtureFrame> _handshake(FixtureSetup setup) {
       },
     }),
   ];
+}
+
+/// Делает `_meta.codelab` в `clientCapabilities` подмножеством (Q15 (б)).
+///
+/// Остальные ключи `_meta` и `clientCapabilities` не меняются.
+Map<String, Object?> _codelabSubset(Map<String, Object?> capabilities) {
+  final meta = capabilities['_meta'];
+  if (meta is! Map<String, Object?>) return capabilities;
+  final codelab = meta['codelab'];
+  if (codelab is! Map<String, Object?>) return capabilities;
+  return {
+    ...capabilities,
+    '_meta': {
+      r'$partial': {
+        ...meta,
+        'codelab': {r'$partial': codelab},
+      },
+    },
+  };
 }
 
 /// Puts the `match.$text` of a repeated `a2c` frame into its

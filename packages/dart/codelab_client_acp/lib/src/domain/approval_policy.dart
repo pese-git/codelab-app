@@ -35,6 +35,35 @@ final class ApprovalPolicy {
     );
   }
 
+  /// Риск обновления вызова с учётом уже известной записи [current].
+  ///
+  /// Почему: обновление без `kind` (только статус, `session/request_permission`
+  /// с одним `toolCallId`) само по себе `unknown`, но вид вызова уже известен
+  /// из `tool_call`; а риск вызова не должен снижаться — ни повтором, ни
+  /// запросом одобрения с более мягким `kind` (review 6b, L-1; D27).
+  ///
+  /// Как использовать: единое правило для слияния обновлений вызова и для
+  /// риска `ApprovalRequest`: итог — `max(current.riskLevel, классификация
+  /// обновления с видом записи, если в обновлении его нет)`.
+  ///
+  /// Незнакомый вид (D9 change `tolerate-unknown-tool-kind`): кодек сводит
+  /// его к `ToolKind.other`, и обновление с `kind: other` даёт `unknown`;
+  /// итог — `max(риск записи, unknown)`. Сигнатура и ветки не менялись:
+  /// нижняя граница риска закодирована в самом DTO, а признак
+  /// «вид был незнаком» управляет только видом для отображения.
+  static ApprovalRiskLevel classifyToolCallUpdateWithin(
+    ToolCallRecord? current,
+    ToolCallUpdate update,
+  ) {
+    final effective = update.kind == null && current != null
+        ? update.copyWith(kind: current.kind)
+        : update;
+    return max(
+      current?.riskLevel ?? ApprovalRiskLevel.readOnly,
+      classifyToolCallUpdate(effective),
+    );
+  }
+
   static ApprovalRiskLevel max(
     ApprovalRiskLevel first,
     ApprovalRiskLevel second,
@@ -50,6 +79,7 @@ final class ApprovalPolicy {
       PermissionMode.readOnly => switch (riskLevel) {
         ApprovalRiskLevel.readOnly =>
           PermissionModeDecision.allowWithoutApproval,
+        ApprovalRiskLevel.unknown ||
         ApprovalRiskLevel.localWrite ||
         ApprovalRiskLevel.network ||
         ApprovalRiskLevel.shell ||
@@ -59,6 +89,7 @@ final class ApprovalPolicy {
       PermissionMode.ask => switch (riskLevel) {
         ApprovalRiskLevel.readOnly =>
           PermissionModeDecision.allowWithoutApproval,
+        ApprovalRiskLevel.unknown ||
         ApprovalRiskLevel.localWrite ||
         ApprovalRiskLevel.network ||
         ApprovalRiskLevel.shell ||
@@ -70,12 +101,15 @@ final class ApprovalPolicy {
           PermissionModeDecision.allowWithoutApproval,
         ApprovalRiskLevel.localWrite ||
         ApprovalRiskLevel.destructive => PermissionModeDecision.unavailable,
-        ApprovalRiskLevel.network || ApprovalRiskLevel.shell =>
+        ApprovalRiskLevel.unknown ||
+        ApprovalRiskLevel.network ||
+        ApprovalRiskLevel.shell =>
           PermissionModeDecision.requireExplicitApproval,
       },
       PermissionMode.autoEdits => switch (riskLevel) {
         ApprovalRiskLevel.readOnly || ApprovalRiskLevel.localWrite =>
           PermissionModeDecision.allowWithoutApproval,
+        ApprovalRiskLevel.unknown ||
         ApprovalRiskLevel.network ||
         ApprovalRiskLevel.shell ||
         ApprovalRiskLevel.destructive =>
@@ -121,9 +155,16 @@ ApprovalRiskLevel _riskForKind(ToolKind? kind) {
     ToolKind.fetch => ApprovalRiskLevel.network,
     ToolKind.read ||
     ToolKind.search ||
-    ToolKind.think ||
-    ToolKind.other ||
-    null => ApprovalRiskLevel.readOnly,
+    ToolKind.think => ApprovalRiskLevel.readOnly,
+    // `other` и отсутствующий вид — не «только чтение»: вид от недоверенного
+    // сервера ничего не гарантирует (D27, Q32; AGENTS.md §10).
+    // `switchMode` — тоже не `readOnly`: само по себе одобрение смены режима
+    // ничего не пишет, но может включить автоодобрение всех следующих
+    // действий («Yes, and auto-accept all actions», `12-Session Model.md`,
+    // «Exiting plan modes»). Не `shell`/`destructive`: команд смена режима
+    // не исполняет, а завышенный риск обесценивает тег (design D5 change
+    // `tolerate-unknown-tool-kind`).
+    ToolKind.switchMode || ToolKind.other || null => ApprovalRiskLevel.unknown,
   };
 }
 
@@ -229,9 +270,10 @@ bool _containsAny(String value, List<String> needles) {
 int _rank(ApprovalRiskLevel risk) {
   return switch (risk) {
     ApprovalRiskLevel.readOnly => 0,
-    ApprovalRiskLevel.localWrite => 1,
-    ApprovalRiskLevel.network => 2,
-    ApprovalRiskLevel.shell => 3,
-    ApprovalRiskLevel.destructive => 4,
+    ApprovalRiskLevel.unknown => 1,
+    ApprovalRiskLevel.localWrite => 2,
+    ApprovalRiskLevel.network => 3,
+    ApprovalRiskLevel.shell => 4,
+    ApprovalRiskLevel.destructive => 5,
   };
 }

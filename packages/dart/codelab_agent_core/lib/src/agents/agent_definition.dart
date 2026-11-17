@@ -99,6 +99,12 @@ final class AgentDefinition {
 }
 
 /// Результат [parseAgentDefinitions].
+///
+/// Почему пара: определение с ошибкой не прерывает загрузку, поэтому принятые
+/// определения и диагностики об отброшенных возвращаются вместе (D3, D6).
+///
+/// Как использовать: рантайм берёт [sessionAgents] для опции `agent`, а
+/// [diagnostics] пишет в лог; тексты файлов в них не попадают (D14).
 final class AgentParseResult {
   AgentParseResult(
     List<AgentDefinition> agents,
@@ -118,6 +124,13 @@ final class AgentParseResult {
   List<AgentDefinition> get sessionAgents => [
     for (final agent in agents)
       if (agent.forSession) agent,
+  ];
+
+  /// Определения, доступные как тип субагента (`scope` `subagent` и `both`;
+  /// change `add-subagents-and-tasks`, D36 Т1).
+  List<AgentDefinition> get subagentAgents => [
+    for (final agent in agents)
+      if (agent.scope != AgentScope.session) agent,
   ];
 }
 

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' hide SessionId;
-import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_agent_acp/codelab_agent_acp.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/testing.dart';
@@ -17,6 +17,40 @@ final scriptedModel = ModelRef(
   contextWindow: 32000,
   maxOutputTokens: 4096,
 );
+
+/// Встроенные команды в кадре `available_commands_update` (agent-slash-commands
+/// «Встроенные команды MVP», «Список команд сессии»; design.md change
+/// `add-agent-builtin-slash-commands`, D2): порядок `compact`, `mode`,
+/// `model`, `status`, `config`, `mcp`, `help`, затем шаблоны. Профиль
+/// `agent-serve` включает capability `compaction`; `config` и `mcp` тест
+/// вставляет сам между [builtinCommandsBeforeConfig] и [builtinHelpCommand].
+const builtinCommandsBeforeConfig = <Map<String, Object?>>[
+  {
+    'name': 'compact',
+    'description': 'Compact the session history',
+    'input': {'hint': '[focus]'},
+  },
+  {
+    'name': 'mode',
+    'description': 'Switch the session mode',
+    'input': {'hint': 'plan | ask | standard | accept-edits | bypass'},
+  },
+  {
+    'name': 'model',
+    'description': 'Switch the model',
+    'input': {'hint': 'provider/model'},
+  },
+  {
+    'name': 'status',
+    'description': 'Show the model, mode, working directory and MCP servers',
+  },
+];
+
+/// Команда `help` — последняя из встроенных (D2).
+const builtinHelpCommand = <String, Object?>{
+  'name': 'help',
+  'description': 'List commands',
+};
 
 /// `agentInfo` сервера в тестах (§13.2).
 const testAgentInfo = Implementation(
@@ -49,13 +83,49 @@ final class ServerHarness {
   /// [projectFiles] — порт файлов проекта для `AgentCoreServices` (design.md
   /// change `add-agent-project-files`, D1); без него сессии без файлов.
   ///
+  /// [skillFiles] и [trustedProjects] — порт файлов навыков и доверенные
+  /// проекты (design.md change `add-agent-skills`, D1, D16): навыки проекта
+  /// читаются только из доверенного.
+  ///
+  /// [baseEnv] — env хоста вместо памяти: резолвер политики разрешений берёт
+  /// из него признак «обычный файл» (`FileSystem.stat`), без которого
+  /// исключения E1–E3 для скриптов навыков не действуют (fail closed, D17).
+  ///
+  /// [localEnv] — `AcpServerConfig.localEnv`: env сессии от хоста вместо
+  /// `fs/*` и `terminal/*` клиента (design.md change
+  /// `add-embedded-agent-mode`, D4).
+  ///
+  /// [configSource] — источник конфигурации для живой перезагрузки (design.md
+  /// change `add-config-writer-and-reload`, D8): ядро собирается по его
+  /// `initial`, каталог моделей — по `providers` снимка, а `modelsFor`
+  /// строит такой же каталог при каждой применённой перезагрузке.
+  ///
+  /// [lastModel] и [defaultModelSource] — память последней модели и источник
+  /// модели по умолчанию (design.md change `optional-default-model`, D5, D6,
+  /// D11): без конфига-источника `CoreConfig` собирается из них.
+  ///
+  /// [projectConfig] и [rootConfig] — порт конфигурации папки сессии и
+  /// снимок корня запуска (design.md change `require-project-folder`, D21):
+  /// сессия папки, отличной от `rootConfig.projectRoot`, получает свой
+  /// каталог моделей от порта. Без [configSource] корень берётся из
+  /// [rootConfig].
+  ///
+  /// [wrapRuntime] — обёртка над рантаймом ядра: тест видит `SessionSpec`,
+  /// который сервер передал в `createSession` (проверка `SessionHostPorts`).
+  ///
   /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
   /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
+  ///
+  /// [defaultModel] и [compaction] — модель по умолчанию (например, с ценами
+  /// `ModelCost`) и пороги сжатия для `CoreConfig`, когда нет
+  /// [configSource] и [rootConfig] (design.md change `add-usage-extension`,
+  /// D18 Т8, задача 1.3: стоимость шага и `/compact` без `setup.config`).
   static Future<ServerHarness> start({
     String profile = 'agent-serve',
     Map<HostCapability, CapabilityState> narrow = const {},
     List<Map<String, Object?>> steps = const [],
     ExecutionEnv Function(String cwd)? localListing,
+    ExecutionEnv Function(String cwd)? localEnv,
     JournalStore? sessions,
     TurnBudget budget = const TurnBudget(),
     bool slow = false,
@@ -63,6 +133,17 @@ final class ServerHarness {
     Duration detachGrace = const Duration(seconds: 30),
     McpConnector Function(Clock clock)? mcp,
     ProjectFilesSource? projectFiles,
+    SkillFilesSource? skillFiles,
+    ExecutionEnv? baseEnv,
+    List<String> trustedProjects = const [],
+    ConfigSource? configSource,
+    ProjectConfigLoader? projectConfig,
+    CoreConfig? rootConfig,
+    LastModelStore? lastModel,
+    DefaultModelSource defaultModelSource = DefaultModelSource.config,
+    AgentRuntime Function(AgentRuntime inner)? wrapRuntime,
+    ModelRef? defaultModel,
+    CompactionOverrides compaction = const CompactionOverrides(),
   }) async {
     final clock = FakeClock();
     final logger = RecordingLogger();
@@ -73,36 +154,61 @@ final class ServerHarness {
     // Имена инструментов каждого запроса к модели: так тесты MCP видят,
     // что получила модель, не зная точного состава встроенных инструментов.
     final toolsSeen = <List<String>>[];
+    final initial = configSource?.initial.config ?? rootConfig;
+    ModelCatalog catalogOf(CoreConfig config) =>
+        StaticModelCatalog(config.providers, logger: logger);
     final core = buildAgentCore(
       profile: HostProfile.of(profile).narrowed({
-        if (localListing == null)
+        if (localListing == null && localEnv == null)
           HostCapability.fileListing: const CapabilityOff(
             'клиент не на этой машине',
           ),
         ...narrow,
       }),
       services: AgentCoreServices(
-        baseEnv: HostEnv(MemoryExecutionEnv(cwd: '/', clock: clock)),
+        baseEnv: baseEnv ?? HostEnv(MemoryExecutionEnv(cwd: '/', clock: clock)),
         gate: const UnusedGate(),
         logger: logger,
         clock: clock,
         ids: SequentialIdGenerator(),
         sessions: store,
-        models: models,
+        models: initial == null ? models : catalogOf(initial),
+        config: configSource,
+        projectConfig: projectConfig,
         mcp: mcp?.call(clock),
         projectFiles: projectFiles,
+        skillFiles: skillFiles,
+        lastModel: lastModel,
       ),
-      config: CoreConfig(defaultModel: scriptedModel, budget: budget),
+      config:
+          initial ??
+          CoreConfig(
+            defaultModel: defaultModel ?? scriptedModel,
+            compaction: compaction,
+            defaultModelSource: defaultModelSource,
+            budget: budget,
+            trustedProjects: trustedProjects,
+          ),
+      modelsFor: configSource == null && projectConfig == null
+          ? null
+          : (config) => (
+              stream: (model_, context, {cancel}) =>
+                  model.call(model_, context, cancel: cancel),
+              catalog: catalogOf(config),
+            ),
       streamFunction: (model_, context, {cancel}) {
         toolsSeen.add([for (final tool in context.tools) tool.name]);
         return model.call(model_, context, cancel: cancel);
       },
     );
     final server = AcpAgentServer(
-      core: core,
+      core: wrapRuntime == null
+          ? core
+          : BuiltAgentCore(plan: core.plan, runtime: wrapRuntime(core.runtime)),
       config: AcpServerConfig(
         agentInfo: testAgentInfo,
         localListing: localListing,
+        localEnv: localEnv,
         detachGrace: detachGrace,
       ),
       logger: logger,
@@ -376,6 +482,21 @@ final class JournalStore implements SessionStore {
   Future<void> create(SessionHeader header) => inner.create(header);
 
   @override
+  Future<String> createChild(SessionHeader header) => inner.createChild(header);
+
+  @override
+  Future<SessionSnapshot> openChild(
+    String journal, {
+    required SessionId rootSessionId,
+  }) => inner.openChild(journal, rootSessionId: rootSessionId);
+
+  @override
+  Future<SessionSnapshot> openChildReadOnly(
+    String journal, {
+    required SessionId rootSessionId,
+  }) => inner.openChildReadOnly(journal, rootSessionId: rootSessionId);
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {
@@ -497,6 +618,10 @@ final class SpyMcpSession implements McpSessionTools {
   @override
   List<McpServerSummary> get servers => const [];
 
+  /// Поток состояний (D12): этим тестам события не нужны, поток пуст.
+  @override
+  Stream<List<McpServerSummary>> get changes => const Stream.empty();
+
   @override
   McpToolsUpdate? takeUpdate() => null;
 
@@ -507,6 +632,17 @@ final class SpyMcpSession implements McpSessionTools {
       await gate.future;
     }
   }
+
+  /// Имена из вызовов `reconnect` и `(имя, enabled)` из `setEnabled` (D11).
+  final reconnected = <String>[];
+  final enabledCalls = <(String, bool)>[];
+
+  @override
+  Future<void> reconnect(String name) async => reconnected.add(name);
+
+  @override
+  Future<void> setEnabled(String name, bool enabled) async =>
+      enabledCalls.add((name, enabled));
 
   @override
   Future<void> close() async {

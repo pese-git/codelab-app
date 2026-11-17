@@ -86,6 +86,13 @@ sealed class PromptTurn with _$PromptTurn {
     required List<ContentBlock> prompt,
     @Default(PromptTurnStatus.pending) PromptTurnStatus status,
     StopReason? stopReason,
+
+    /// Лимит, из-за которого агент остановил ход при `max_turn_requests`
+    /// (`_meta.codelab.budgetExceeded` ответа `session/prompt`): открытое
+    /// множество строк — `steps`, `tokens`, `cost`, `duration`, `deadline` и
+    /// будущие. `null` — причины нет (сторонний агент, другой `stopReason`,
+    /// значение не строка). Change `add-usage-extension`, D10, D21 Т3.
+    String? budgetExceeded,
     @Default([]) List<SessionUpdate> updates,
     @Default({}) Map<ToolCallId, ToolCallRecord> toolCalls,
     @Default({}) Map<ApprovalRequestId, ApprovalRequest> approvals,
@@ -108,7 +115,27 @@ sealed class PromptTurn with _$PromptTurn {
   };
 }
 
-enum ApprovalRiskLevel { readOnly, localWrite, network, shell, destructive }
+/// Уровень риска вызова инструмента для политики одобрений.
+///
+/// Почему [unknown]: вид `ToolKind.other` (и отсутствующий вид), смена режима
+/// `ToolKind.switchMode` и незнакомый вид (кодек сводит его к `other`) ничего
+/// не гарантируют — так агент помечает, например, MCP-инструменты, а их
+/// аннотации недоверенные; считать такой вызов «только чтением» нельзя
+/// (design.md `add-provider-setup-ui` D27, Q32; `tolerate-unknown-tool-kind`
+/// D5, D9; AGENTS.md §10).
+///
+/// Для чего: [unknown] по рангу между [readOnly] и [localWrite]
+/// (`ApprovalPolicy.max`), а `ApprovalPolicy.decidePermission` требует для
+/// него явного одобрения в любом режиме. Хосты показывают его отдельной
+/// меткой («unknown risk»).
+enum ApprovalRiskLevel {
+  readOnly,
+  unknown,
+  localWrite,
+  network,
+  shell,
+  destructive,
+}
 
 enum ApprovalStatus { pending, selected, cancelled }
 
@@ -122,12 +149,23 @@ sealed class ApprovalRequest with _$ApprovalRequest {
     required PromptTurnId turnId,
     required ToolCallRecord toolCall,
     required List<PermissionOption> options,
-    @Default(ApprovalRiskLevel.readOnly) ApprovalRiskLevel riskLevel,
+
+    /// Без классификации вид неизвестен — как у `kind` по умолчанию (`other`):
+    /// безопасное значение по умолчанию требует явного одобрения (D27).
+    @Default(ApprovalRiskLevel.unknown) ApprovalRiskLevel riskLevel,
 
     /// Агент пометил запрос `_meta.codelab.critical: true` (в запросе или
     /// в его `toolCall`): опасная команда, которую headless-политика
     /// `allow-all` не разрешает (design.md change `add-codelab-cli`, D9).
     @Default(false) bool critical,
+
+    /// `_meta.codelab.subagent` `toolCall` запроса: спрашивает потомок, а не
+    /// корень (D8, D43 п. 1). Хранится отдельно от
+    /// `ToolCallRecord.subagentMeta`: тот же ключ в кадре вызова `agent`
+    /// описывает сам вызов, и слияние сделало бы `exec` потомка «вызовом
+    /// agent». Значения не проверяются (терпимый разбор — в
+    /// `codelab_client_core`); `null` — запрос корня или стороннего агента.
+    Map<String, Object?>? subagentRequester,
     @Default(ApprovalStatus.pending) ApprovalStatus status,
     PermissionOptionId? selectedOptionId,
     DateTime? requestedAt,
@@ -146,7 +184,9 @@ sealed class ToolCallRecord with _$ToolCallRecord {
     required String title,
     @Default(ToolKind.other) ToolKind kind,
     @Default(ToolCallStatus.pending) ToolCallStatus status,
-    @Default(ApprovalRiskLevel.readOnly) ApprovalRiskLevel riskLevel,
+
+    /// Согласовано с `kind` по умолчанию (`other`) и `_riskForKind` (D27).
+    @Default(ApprovalRiskLevel.unknown) ApprovalRiskLevel riskLevel,
     @Default([]) List<ToolCallContent> content,
     @Default([]) List<ToolCallLocation> locations,
     Map<String, Object?>? rawInput,
@@ -158,11 +198,32 @@ sealed class ToolCallRecord with _$ToolCallRecord {
     @Default(false) bool cancelledByClient,
     DateTime? startedAt,
     DateTime? completedAt,
+
+    /// `_meta.codelab.subagent` вызова `agent`, накопленный по кадрам: первый
+    /// `tool_call` даёт `{id, type}`, финальное обновление — `summary` или
+    /// `failure` (design.md change `add-subagents-and-tasks`, D24, D28).
+    /// Значения не проверяются: терпимый разбор — у kit
+    /// (`codelab_client_core`); `null` — вызов без признака (сторонний агент).
+    Map<String, Object?>? subagentMeta,
+
+    /// `_meta.codelab.outcome` последнего кадра, где он был: признак агента,
+    /// как закончился неуспешный вызов (`cancelled`, `rejected`,
+    /// `interrupted`, неизвестное). Снимается итоговым `completed`; поздний
+    /// кадр без признака его не стирает (spec acp-client-kit «Отмена по
+    /// признаку агента», design.md D41 п. 1). Значение не проверяется:
+    /// терпимый разбор — у kit.
+    String? outcome,
+
+    /// `_meta.codelab.parentToolCallId` кадров `tool_call`/`tool_call_update` —
+    /// id вызова родителя на проводе (design.md change
+    /// `add-subagents-and-tasks`, D21, D47 Т9); `null` — вызов корня.
+    /// Поздний кадр без поля родителя не стирает его (как `outcome`).
+    String? parentToolCallId,
   }) = _ToolCallRecord;
 
   factory ToolCallRecord.fromToolCall(
     ToolCall toolCall, {
-    ApprovalRiskLevel riskLevel = ApprovalRiskLevel.readOnly,
+    ApprovalRiskLevel riskLevel = ApprovalRiskLevel.unknown,
   }) {
     return ToolCallRecord(
       id: toolCall.toolCallId,
@@ -174,9 +235,45 @@ sealed class ToolCallRecord with _$ToolCallRecord {
       locations: toolCall.locations ?? const [],
       rawInput: toolCall.rawInput,
       rawOutput: toolCall.rawOutput,
+      subagentMeta: subagentMetaOf(toolCall.meta),
+      outcome: toolCall.status == ToolCallStatus.completed
+          ? null
+          : outcomeOf(toolCall.meta),
+      parentToolCallId: parentToolCallIdOf(toolCall.meta),
     );
   }
 }
+
+/// `_meta.codelab.subagent` кадра вызова как есть; `null` при любой неверной
+/// форме (терпимый разбор, D28: отказа обработки обновления нет).
+Map<String, Object?>? subagentMetaOf(Map<String, Object?>? meta) {
+  final codelab = meta?['codelab'];
+  final subagent = codelab is Map ? codelab['subagent'] : null;
+  return subagent is Map ? subagent.cast<String, Object?>() : null;
+}
+
+/// `_meta.codelab.outcome` кадра; `null` при отсутствии или неверной форме
+/// (терпимый разбор, как у [subagentMetaOf]).
+String? outcomeOf(Map<String, Object?>? meta) {
+  final codelab = meta?['codelab'];
+  final outcome = codelab is Map ? codelab['outcome'] : null;
+  return outcome is String ? outcome : null;
+}
+
+/// `_meta.codelab.parentToolCallId` кадра; `null` при отсутствии, неверной
+/// форме и пустой строке (терпимый разбор, D21: отказа обработки нет).
+String? parentToolCallIdOf(Map<String, Object?>? meta) {
+  final codelab = meta?['codelab'];
+  final parent = codelab is Map ? codelab['parentToolCallId'] : null;
+  return parent is String && parent.isNotEmpty ? parent : null;
+}
+
+/// Накладывает [update] на [current]: ключи новых кадров дополняют прежние,
+/// а не стирают (признак первого кадра переживает финальное обновление).
+Map<String, Object?>? mergeSubagentMeta(
+  Map<String, Object?>? current,
+  Map<String, Object?>? update,
+) => update == null ? current : {...?current, ...update};
 
 enum SessionLifecycleStatus {
   idle,

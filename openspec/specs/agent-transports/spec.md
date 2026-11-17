@@ -20,6 +20,21 @@ CodeLab SHALL предоставлять общую абстракцию transpo
 ### Requirement: Stdio transport
 CodeLab SHALL поддерживать локальных ACP-агентов через JSON-RPC 2.0 поверх stdio.
 
+Закрытие stdio-транспорта клиентом SHALL следовать `docs/protocols/acp/protocol/16-Transports.md` («Close stdin, terminate subprocess») и быть ограниченным по времени (design.md change `add-client-process-shutdown-on-exit`, D3):
+1. закрыть stdin процесса агента;
+2. ждать его выхода не дольше `timeout` вызова `close` (по умолчанию 5 s);
+3. не вышел — послать `SIGTERM` и ждать не дольше 2 s;
+4. не вышел — послать `SIGKILL`.
+
+`close` SHALL завершаться не позже чем примерно через `timeout` + 2 s и SHALL NOT ждать выхода процесса без предела. Выход процесса при закрытии SHALL считаться штатным, а не сбоем транспорта.
+
+Повторный и параллельный `close` (design.md change `add-client-process-shutdown-on-exit`, D13):
+- SHALL ждать то же закрытие и SHALL NOT повторно слать сигналы;
+- если закрытие ещё ждёт выхода после закрытия stdin, а предел повторного вызова истекает раньше, ожидание SHALL сокращаться до него;
+- более поздний предел SHALL NOT продлевать ожидание; ожидание после `SIGTERM` (2 s) SHALL NOT сокращаться.
+
+`close`, вызванный во время `start`, SHALL дождаться запуска процесса и закрыть запущенный процесс в том же порядке. `start` в этом случае SHALL завершаться ошибкой транспорта с кодом `closed` и SHALL NOT публиковать событий о подключении.
+
 #### Scenario: Дочерний процесс запускается
 - **WHEN** пользователь подключается через stdio
 - **THEN** CodeLab запускает настроенную команду как дочерний процесс с настроенными args, cwd и env
@@ -27,6 +42,22 @@ CodeLab SHALL поддерживать локальных ACP-агентов ч�
 #### Scenario: Потоки протокола и диагностики разделены
 - **WHEN** дочерний процесс пишет в stdout и stderr
 - **THEN** stdout разбирается как протокольный поток ACP, а stderr показывается как поток диагностики/логов
+
+#### Scenario: Агент выходит по закрытию stdin
+- **WHEN** клиент вызывает `close`, и агент завершается по EOF stdin до истечения `timeout`
+- **THEN** сигналы агенту не отправляются, транспорт переходит в `closed` без события сбоя
+
+#### Scenario: Агент игнорирует EOF и SIGTERM
+- **WHEN** клиент вызывает `close(timeout: 200 ms)` для агента, игнорирующего EOF stdin и `SIGTERM`
+- **THEN** агент получает `SIGTERM`, через 2 s — `SIGKILL`, процесс завершён, `close` завершается не позже чем примерно через 2,5 s
+
+#### Scenario: Повторное закрытие с меньшим пределом
+- **WHEN** идёт `close(timeout: 5 s)` агента, игнорирующего EOF, и через 100 ms вызывается `close(timeout: 200 ms)`
+- **THEN** оба вызова завершаются вместе, агент получает `SIGTERM` примерно через 300 ms после первого вызова, а не через 5 s, `SIGTERM` отправлен один раз
+
+#### Scenario: Закрытие во время запуска
+- **WHEN** `close` вызывается, пока `start` ещё запускает процесс агента
+- **THEN** после запуска процесс получает закрытие stdin и при необходимости сигналы, процесс завершён, `start` завершается ошибкой с кодом `closed`, `close` завершается после завершения процесса
 
 ### Requirement: Референсный профиль codelab-agent
 CodeLab SHALL предоставлять встроенный редактируемый stdio-профиль для `https://github.com/pese-git/codelab-agent`.
@@ -41,6 +72,8 @@ CodeLab SHALL предоставлять встроенный редактиру
 
 ### Requirement: WebSocket transport
 CodeLab SHALL support remote ACP agents over WebSocket for MVP remote workflows, including user-initiated and automatic reconnect after disconnect.
+
+`WebSocketAcpTransport` SHALL выполнять рукопожатие штатным `WebSocket.connect` из `dart:io`, без собственной реализации рукопожатия (design.md change `add-app-settings-shell`, D12, задача 3.3a). При отказе рукопожатия со статусом, отличным от 101, транспорт SHALL завершать открытие `AcpTransportException` с кодом `startFailed` и причиной `AcpWebSocketHandshakeRejected(statusCode)`, где `statusCode` берётся из типизированного поля `WebSocketException.httpStatusCode`. Текст `WebSocketException` НЕ SHALL разбираться. Если значение заголовка (например, токена) недопустимо для HTTP, ошибка открытия НЕ SHALL содержать это значение ни в тексте, ни в причине. Заголовок `Authorization` НЕ SHALL переноситься при редиректе на другой origin.
 
 #### Scenario: Remote agent connects
 - **WHEN** user configures a WebSocket endpoint and token/header if required
@@ -58,6 +91,18 @@ CodeLab SHALL support remote ACP agents over WebSocket for MVP remote workflows,
 - **WHEN** a WebSocket reconnect attempt fails (network error, auth failure, or protocol mismatch)
 - **THEN** CodeLab sets connection status to failed and records a user-readable diagnostic describing the failure, without leaving the UI in the connecting state indefinitely
 
+#### Scenario: Отказ рукопожатия со статусом
+- **WHEN** WebSocket-сервер на loopback отвечает на запрос обновления соединения статусом 401
+- **THEN** открытие транспорта завершается `AcpTransportException(startFailed)` с причиной `AcpWebSocketHandshakeRejected` и `statusCode` 401
+
+#### Scenario: Недопустимое значение заголовка
+- **WHEN** транспорт открывается с токеном `sk-test-leak-0123456789\n`, содержащим перевод строки
+- **THEN** открытие завершается `AcpTransportException(startFailed)`, а ни текст ошибки, ни её причина не содержат `sk-test-leak-0123456789`
+
+#### Scenario: Редирект на другой origin
+- **WHEN** сервер на loopback отвечает на рукопожатие с токеном редиректом на другой порт loopback
+- **THEN** второй сервер не получает заголовок `Authorization`
+
 ### Requirement: Тестирование transport
 CodeLab SHALL включать fake transport и интеграционные тесты для stdio и совместимости с codelab-agent.
 
@@ -70,11 +115,20 @@ CodeLab SHALL включать fake transport и интеграционные т
 - **THEN** CodeLab фиксирует типизированные состояния и диагностику, не падая
 
 ### Requirement: Web-безопасный публичный барель transport
-Основная точка входа `package:codelab_acp_transports/codelab_acp_transports.dart` SHALL экспортировать порт transport и классы конфигурации (`StdioAcpTransportConfig`, `StdioAcpAgentProfile`, `WebSocketAcpTransportConfig`) без транзитивного импорта `dart:io`. Реализации `StdioAcpTransport` и `WebSocketAcpTransport` SHALL экспортироваться только из отдельной точки входа `package:codelab_acp_transports/io.dart`. Файлы основного бареля НЕ SHALL ссылаться на файлы IO-точки входа.
+Основная точка входа `package:codelab_acp_transports/codelab_acp_transports.dart` SHALL экспортировать без транзитивного импорта `dart:io`:
+- порт transport;
+- классы конфигурации `StdioAcpTransportConfig`, `StdioAcpAgentProfile` и `WebSocketAcpTransportConfig`;
+- пару транспортов в памяти `InProcessAcpLink` и `InProcessAcpTransport`.
+
+Реализации `StdioAcpTransport` и `WebSocketAcpTransport` SHALL экспортироваться только из отдельной точки входа `package:codelab_acp_transports/io.dart`. Файлы основного бареля НЕ SHALL ссылаться на файлы IO-точки входа.
 
 #### Scenario: Основной барель не тянет dart:io
 - **WHEN** сторож архитектуры проверяет `packages/dart/codelab_acp_transports/lib/` по правилу web-безопасного пакета с исключением IO-точки входа
-- **THEN** нарушений нет, а `grep -rn "dart:io"` по `lib/codelab_acp_transports.dart` и `lib/src/transport_configs.dart` ничего не находит
+- **THEN** нарушений нет. `grep -rn "dart:io"` по `lib/codelab_acp_transports.dart`, `lib/src/transport_configs.dart` и `lib/src/in_process_acp_transport.dart` ничего не находит, а `web_safe_barrel_test.dart` не находит `dart:io`, достижимого из этих точек входа
+
+#### Scenario: Пара в памяти доступна из основного бареля
+- **WHEN** код импортирует только `package:codelab_acp_transports/codelab_acp_transports.dart`
+- **THEN** ему доступны `InProcessAcpLink` и `InProcessAcpTransport`, и импорт `package:codelab_acp_transports/io.dart` для них не нужен
 
 #### Scenario: Код создания транспорта импортирует io.dart
 - **WHEN** composition root приложения создаёт `StdioAcpTransport` или `WebSocketAcpTransport`
@@ -102,4 +156,109 @@ CodeLab SHALL включать fake transport и интеграционные т
 #### Scenario: Порядок записи
 - **WHEN** сервер отправляет 1 000 сообщений подряд без ожидания
 - **THEN** выход содержит 1 000 строк в порядке отправки, каждая — целое сообщение
+
+### Requirement: Пара транспортов в памяти
+`package:codelab_acp_transports/codelab_acp_transports.dart` SHALL экспортировать `InProcessAcpLink` — пару соединённых концов `client` и `agent` типа `InProcessAcpTransport`, реализаций порта `AcpTransport`. Сообщение, отправленное в один конец, SHALL приходить в `inbound` другого объектом `JsonRpcMessage` без кодирования в текст (`agent-core-architecture` §13.11; design.md, D1). Концы создаются только парой: публичного конструктора у `InProcessAcpTransport` нет.
+
+Доставка (design.md, D4):
+- доставка SHALL быть асинхронной: обработчики получателя НЕ SHALL вызываться изнутри `send` отправителя;
+- в одном направлении сообщения SHALL доставляться в порядке вызовов `send`;
+- сообщение, пришедшее на конец, который ещё не запущен или у `inbound` которого ещё не было ни одного подписчика, SHALL буферизоваться и выдаваться по порядку, когда конец в `connected` и подписчик появился;
+- буфер SHALL держаться только до первого подписчика: если у запущенного конца подписчик `inbound` уже был, а сейчас подписчиков нет, пришедшее сообщение SHALL выбрасываться; сообщения, накопленные в `idle` после того, как подписчик пришёл и отписался, SHALL выбрасываться при `start()`, и подписавшийся позже его НЕ SHALL получать. Подписчик, появившийся при живом подписчике, SHALL получать только сообщения, пришедшие после его подписки;
+- `send` на конце не в `connected` SHALL бросать `AcpTransportException` с кодом `sendFailed`; `start()` на конце в `closing`, `closed` или `failed` — с кодом `closed`.
+
+Копирование (design.md, D3):
+- `send` SHALL делать глубокую копию дерева JSON в `params`, `result` и `error.data`; получатель SHALL получать неизменяемые `Map` и `List`;
+- значение вне JSON — объект не из `null`/`bool`/`String`/конечного `num`/`List`/`Map`, ключ `Map` не строкой, `NaN`, `±Infinity` — SHALL давать `AcpTransportException` с кодом `sendFailed` на отправляющей стороне. Сообщение при этом НЕ SHALL доставляться, а состояние конца НЕ SHALL меняться;
+- любая другая ошибка при копировании — включая `Error`, например `StackOverflowError` на цикле в `params` или исключение из итератора пользовательского `Map`, — SHALL давать тот же `AcpTransportException` с кодом `sendFailed` с теми же гарантиями: сообщение не доставляется, состояние не меняется;
+- текст исключения копирования SHALL быть общим для всех причин; он, `cause` и диагностика НЕ SHALL содержать значение из сообщения или текст исходной ошибки.
+
+Закрытие (design.md, D4):
+- `close()` SHALL переводить конец через `closing` в `closed` с событиями `stateChanged`, закрывать его `events` и `inbound`; повторный `close()` SHALL ничего не делать;
+- второй конец, если он не в `closing`, `closed` или `failed`, SHALL получить событие `failure` с кодом `disconnected`, перейти в `failed` и закрыть `inbound` после сообщений, отправленных до `close()`;
+- невыданные сообщения второго конца — он не запущен или у его `inbound` ещё не было подписчика — SHALL выбрасываться при закрытии первого конца. Если выброшено хотя бы одно сообщение, второй конец SHALL до события `failure` писать в свои `events` одну диагностику уровня `warning` с числом выброшенных сообщений; диагностика НЕ SHALL содержать методы, id и содержимое сообщений. `events` широковещательный: диагностику получают подписчики `events` в момент закрытия первого конца, в том числе подписанные до `start()`;
+- сообщение, доставка которого приходится на конец, закрытый своим владельцем, SHALL выбрасываться без исключения у отправителя и без диагностики.
+
+#### Scenario: Порядок 1000 сообщений
+- **WHEN** оба конца запущены, у `agent.inbound` есть подписчик, а `client` отправляет 1000 запросов с id `1…1000` подряд без ожидания доставки
+- **THEN** `agent.inbound` отдаёт ровно 1000 сообщений с id `1…1000` в порядке отправки
+
+#### Scenario: Доставка не реентерабельна
+- **WHEN** подписчик `agent.inbound` записывает факт получения, а тест проверяет запись сразу после `await client.send(...)` и до следующей микрозадачи
+- **THEN** запись пуста, а после `pumpEventQueue()` содержит сообщение
+
+#### Scenario: Сообщение до start() получателя
+- **WHEN** `agent` запущен, `client` ещё в `idle` и подписан на `inbound`, `agent` отправляет запрос
+- **THEN** до `client.start()` подписчик ничего не получает, после `client.start()` получает запрос
+
+#### Scenario: Сообщение до первого подписчика
+- **WHEN** оба конца запущены, у `agent.inbound` нет подписчика, `client` отправляет два запроса, затем на `agent.inbound` подписываются
+- **THEN** подписчик получает оба запроса в порядке отправки
+
+#### Scenario: После отписки сообщения не буферизуются
+- **WHEN** оба конца запущены, на `agent.inbound` подписываются и отписываются, затем `client` отправляет запрос, затем на `agent.inbound` подписываются снова
+- **THEN** новый подписчик ничего не получает; следующий запрос `client` он получает
+
+#### Scenario: Поздний подписчик при живом подписчике
+- **WHEN** оба конца запущены, первый подписчик `agent.inbound` получил запрос `1`, затем подписывается второй, и `client` отправляет запрос `2`
+- **THEN** первый подписчик получает `1` и `2`, второй — только `2`
+
+#### Scenario: Изменение Map после send не видно получателю
+- **WHEN** `client` отправляет запрос с `params` `{"prompt": [{"type": "text", "text": "hi"}]}`, а после `send` отправитель очищает вложенный список и добавляет ключ во внешний `Map`
+- **THEN** получатель видит исходное `{"prompt": [{"type": "text", "text": "hi"}]}`, а попытка изменить полученные `params` бросает `UnsupportedError`
+
+#### Scenario: Копия error.data
+- **WHEN** `agent` отправляет ответ с `error` `{code: -32603, message: "x", data: {"codelab": {"reason": "r"}}}`, а после `send` отправитель меняет вложенный `Map`
+- **THEN** получатель видит `data` `{"codelab": {"reason": "r"}}`, и `data` неизменяемо
+
+#### Scenario: DateTime в params
+- **WHEN** `client` отправляет запрос с `params` `{"at": DateTime.utc(2026)}`
+- **THEN** `send` бросает `AcpTransportException` с кодом `sendFailed`, текст которого не содержит `2026`; получатель ничего не получает; `client.state` остаётся `connected`, и следующий корректный запрос доставляется
+
+#### Scenario: Ключ не строкой и нечисловой double
+- **WHEN** `client` отправляет `params` `{1: "x"}`, затем `{"v": double.nan}`, затем `{"v": double.infinity}`
+- **THEN** каждый `send` бросает `AcpTransportException` с кодом `sendFailed`, получатель ничего не получает
+
+#### Scenario: Ошибка итератора при копировании
+- **WHEN** `client` отправляет `params` — `Map`, чей итератор `entries` бросает `StateError` с текстом `secret-42`
+- **THEN** `send` бросает `AcpTransportException` с кодом `sendFailed` и тем же текстом, что при `DateTime` в `params`; текст не содержит `secret-42`, `cause` равен `null`; получатель ничего не получает, `client.state` остаётся `connected`
+
+#### Scenario: send до start и после close
+- **WHEN** `client.send` вызывается до `client.start()`, затем после `client.close()`
+- **THEN** оба вызова бросают `AcpTransportException` с кодом `sendFailed`
+
+#### Scenario: Закрытие одного конца
+- **WHEN** оба конца запущены, и `client.close()` завершился
+- **THEN** `client.state` — `closed`; `agent.events` содержит `failure` с кодом `disconnected` и `stateChanged(failed)`; `agent.state` — `failed`; поток `agent.inbound` завершён (done); `agent.send` бросает `AcpTransportException` с кодом `sendFailed`
+
+#### Scenario: Сообщения до close доставляются до отсоединения
+- **WHEN** `agent` отправляет три уведомления и сразу, не дожидаясь доставки, вызывает `close()`
+- **THEN** подписчик `client.inbound` получает все три уведомления до события done, затем `client.state` — `failed`
+
+#### Scenario: Повторный close идемпотентен
+- **WHEN** `client.close()` вызывается дважды
+- **THEN** второй вызов завершается без исключения и без новых событий; `agent.events` содержит ровно одно событие `failure`
+
+#### Scenario: События состояний
+- **WHEN** подписчик `client.events` наблюдает `client.start()`, затем `client.close()`
+- **THEN** он получает `stateChanged` с состояниями `connecting`, `connected`, `closing`, `closed` в этом порядке
+
+#### Scenario: Закрытие конца в failed и start после закрытия
+- **WHEN** `client` закрыт, `agent` в `failed`, затем вызываются `agent.close()` и `agent.start()`
+- **THEN** `agent.close()` переводит его в `closed`, а `agent.start()` бросает `AcpTransportException` с кодом `closed`
+
+#### Scenario: Невыданный буфер при закрытии второго конца
+- **WHEN** на `client.events` подписан наблюдатель, `client` либо запущен без подписчика `inbound`, либо ещё в `idle`; `agent` запущен, отправляет два уведомления с текстом `secret-42` в `params` и сразу вызывает `close()`
+- **THEN** наблюдатель `client.events` получает ровно одну `diagnostic` уровня `warning`, текст которой содержит число `2` и не содержит `secret-42` и имён методов, затем `failure` с кодом `disconnected` и `stateChanged(failed)`; подписка на `client.inbound` получает done без сообщений
+
+#### Scenario: Доставка на закрытый конец
+- **WHEN** наблюдатель подписан на `agent.events`, `client` отправляет запрос, а `agent.close()` вызывается до доставки
+- **THEN** `client.send` завершается без исключения, запрос никому не доставлен, наблюдатель `agent.events` не получает `diagnostic`
+
+### Requirement: Ошибка запуска stdio transport без аргументов
+Если дочерний процесс не запускается, `StdioAcpTransport.start()` SHALL отдавать наружу — и брошенным исключением, и полем `cause` ошибки `AcpTransportException(startFailed)` в событии `AcpTransportFailure` — `ProcessException` без аргументов команды: `executable`, `message` и `errorCode` исходной ошибки сохраняются, `arguments` пусты (design.md change `redact-cli-stdio-profile-args`, D8). Аргументы могут нести секрет, а `ProcessException.toString()` печатает их строкой `Command: <executable> <arguments>`, и этот текст попадает в журналы и вывод клиентов. Тип ошибки и `errorCode` SHALL оставаться прежними: по ним клиенты могут классифицировать сбой без разбора текста (design.md change `remove-test-connection`, D2). Ошибки запуска другого типа SHALL передаваться без изменений.
+
+#### Scenario: Аргументы не попадают в ошибку запуска
+- **WHEN** `StdioAcpTransport` с командой `/nonexistent/agent` и аргументами `--api-key`, `sk-test-leak-0123456789`, `sk-test-leak-0123456789` вызывает `start()`
+- **THEN** `start()` бросает `ProcessException` с `executable` `/nonexistent/agent`, пустыми `arguments`, тем же `errorCode` и `message`, что у ошибки ОС; событие `AcpTransportFailure` несёт `AcpTransportException` с кодом `startFailed` и той же ошибкой в `cause`; `toString()` обеих не содержит `sk-test-leak-0123456789` и `--api-key`
 

@@ -21,12 +21,59 @@ String toolRow(ToolCallItem item, {bool unicode = true, Duration? elapsed}) {
   final detail = command == null
       ? null
       : _firstLine(sanitizeTerminalText(command));
+  // Итог субагента (D24) — в скобках сразу за заголовком и без слова «Done»;
+  // у бегущего вызова и у стороннего агента без `summary` скобок нет.
+  final summary = isFinalToolCall(item) && item.details?.subagentCall != null
+      ? item.details?.subagentSummary?.text
+      : null;
   return [
     icon,
     title,
+    if (summary != null) '($summary)',
     if (detail != null && detail.isNotEmpty && !title.contains(detail)) detail,
     if (elapsed != null) _seconds(elapsed),
   ].join(' ');
+}
+
+/// Строка вызова `agent` в статусе TUI: `✓ <заголовок>  <итог>` (D24, D27).
+///
+/// Почему: в TUI итог стоит в самой строке статуса, а не в скобках REPL:
+/// глиф ✓ и сокращённый итог без «tokens» и без слова «Done»; неуспех и
+/// отмена называются явно (`Failed`, `Cancelled`), чтобы не полагаться на
+/// один глиф (spec codelab-tui «Субагенты и список задач в TUI», «Итог в
+/// статусе»).
+///
+/// Как использовать: транскрипт вызывает её для вызова с
+/// `ToolCallView.subagentCall`; пока вызов идёт, в конце строки — последняя
+/// строка прогресса, итога нет. Без `subagentSummary` (сторонний агент,
+/// сорванный вызов) итога в строке нет. Текст агента проходит
+/// `sanitizeTerminalText`.
+String subagentStatusRow(
+  ToolCallItem item, {
+  bool unicode = true,
+  bool showProgress = true,
+}) {
+  final state = _stateOf(item);
+  final row = ToolRowFormatter.format(item, cwd: '');
+  // Заголовок — из kit (`Subagent <type>: <description>`), как в app, а не
+  // из `title` агента.
+  final title = _firstLine(
+    sanitizeTerminalText('${row.label} ${row.detail}'.trim()),
+  );
+  final word = switch ((state, item.details?.status)) {
+    (_RowState.pending || _RowState.done, _) => null,
+    (_, ToolCallStatusView.failed) => 'Failed',
+    _ => 'Cancelled',
+  };
+  final tail = state == _RowState.pending
+      ? (showProgress ? row.progress : null)
+      : row.summaryShort;
+  final segments = [
+    ?word,
+    if (tail != null && tail.isNotEmpty) sanitizeTerminalText(tail),
+  ];
+  return '${_icon(state, unicode)} $title'
+      '${segments.isEmpty ? '' : '  ${segments.join('  ')}'}';
 }
 
 /// Итоговый ли статус: после него строка вызова печатается последний раз.
@@ -72,3 +119,23 @@ String _firstLine(String text) {
 
 String _seconds(Duration elapsed) =>
     '${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)}s';
+
+/// Строки исхода одобрений потомков под строкой `agent` корня: `  <путь>:
+/// <метка решения>` на каждое решённое (D43 п. 2).
+///
+/// Почему: без дерева вызовов (клиент без согласия) у вызова потомка при
+/// строке корня нет своей строки, и без этих строк решение пользователя в
+/// ленте не видно; с деревом строка вызова потомка есть, но блок решения
+/// остаётся у корня (D47 Т9, Т10).
+/// Как использовать: REPL и TUI печатают строки сразу после строки вызова.
+/// Путь берётся из решённого одобрения, а без него — из типа вызова корня.
+/// Возвращает пары (индекс в `childApprovals`, строка).
+List<(int, String)> childOutcomeLines(ToolCallItem item) => [
+  for (final (index, approval) in item.childApprovals.indexed)
+    if (approval case ResolvedApprovalView(:final label, :final subagent))
+      (
+        index,
+        '  ${sanitizeTerminalText(subagent?.pathText ?? item.details?.subagentCall?.type ?? '…')}: '
+            '${sanitizeTerminalText(label)}',
+      ),
+];

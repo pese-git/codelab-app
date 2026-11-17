@@ -4,21 +4,20 @@ import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/core/platform/recent_projects_store.dart';
-import 'package:codelab_desktop/core/platform/working_directory_provider.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
-import 'package:codelab_desktop/features/workbench/presentation/widgets/connection_setup_dialog.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/debug_log_pane.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/debug_log_viewer_dialog.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/main_pane.dart';
 import 'package:codelab_desktop/features/workbench/presentation/workbench_shell.dart'
     show selectPaletteCommand;
 import 'package:codelab_client_acp/codelab_client_acp.dart';
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show ConnectionProfile, ProfileSecretSource;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_ui/codelab_ui.dart';
-import 'package:fluent_ui/fluent_ui.dart'
-    show ComboBox, FluentApp, FluentIcons, TextBox;
+import 'package:fluent_ui/fluent_ui.dart' show ComboBox, FluentApp, FluentIcons;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,6 +28,37 @@ import 'package:structured_log_fluent/structured_log_fluent.dart'
 
 import 'support/test_app_scope.dart';
 import 'support/transcript_rows.dart';
+import 'features/workbench/application/shell_cubit_characterization/harness.dart'
+    show ThrowingStartTransport;
+import 'support/start_agent.dart';
+
+/// stdio-профиль окна вместо прежней формы подключения (задача 2.4 change
+/// `add-app-settings-shell`, D6). Метка и команда — произвольные литералы теста
+/// (прежние значения описания), а не `codelabAgentStdioProfile`: тесты этого
+/// хелпера проверяют профиль окна, а не встроенное описание (D10 change
+/// `switch-default-agent-to-dart`).
+ConnectionProfile _stdioProfile({
+  String command = 'codelab',
+  List<String> args = const ['serve', '--stdio'],
+  Map<String, String> env = const {'CODELAB_LOG_LEVEL': 'DEBUG'},
+  bool runInProjectDirectory = true,
+}) => ConnectionProfile.stdio(
+  id: 'window',
+  label: 'Codelab Agent',
+  command: command,
+  args: args,
+  env: env,
+  runInProjectDirectory: runInProjectDirectory,
+);
+
+/// WebSocket-профиль окна; токен — только ссылка `env:` (D13).
+ConnectionProfile _webSocketProfile(String endpoint, {String? tokenRef}) =>
+    ConnectionProfile.webSocket(
+      id: 'remote',
+      label: 'Remote ACP Agent',
+      uri: Uri.parse(endpoint),
+      tokenRef: tokenRef,
+    );
 
 /// The prompt composer's text field. `find.byType(EditableText).last` is
 /// ambiguous now: the docked `FluentLogViewer` has its own search box, which
@@ -60,10 +90,12 @@ void main() {
   });
 
   testWidgets('renders the desktop workbench shell', (tester) async {
-    final binding = CodeLabTestBinding();
+    final binding = CodeLabTestBinding(project: '/workspace');
     final scope = binding.scope;
 
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
 
     // Каркас A13 шаг 0 (change `redesign-workbench-shell`): app bar,
     // сайдбар по проектам, панель сессии; док без открытых панелей скрыт.
@@ -74,18 +106,20 @@ void main() {
     expect(find.byType(CodeLabSessionPaneHeader), findsOneWidget);
     expect(find.byKey(CodeLabWorkbenchLayout.dockKey), findsNothing);
     expect(find.byType(WorkbenchDebugLogPane), findsNothing);
-    expect(find.text('Codelab Agent'), findsWidgets);
+    // D10 (switch-default-agent-to-dart): имя описания stdio-агента теперь
+    // `codelab-agent (stdio)`; значение проверяется явно, не ослабляется.
+    // Профиль виден в состоянии фасада (на экране его показывает только
+    // подсказка бейджа); стартовый экран с проектом вместо экрана подключения
+    // (D18, D20).
     expect(
-      find.text('Connect an ACP agent to start a session.'),
-      findsOneWidget,
+      scope.resolve<CodeLabShellCubit>().state.profileLabel,
+      'codelab-agent (stdio)',
     );
+    expect(find.text('Start a new session in workspace.'), findsOneWidget);
     expect(find.text('No active session'), findsOneWidget);
-    expect(
-      scope.resolve<CodeLabShellCubit>().state.transportType,
-      CodeLabTransportType.stdio,
-    );
+    expect(scope.resolve<CodeLabShellCubit>().state.transportLabel, 'stdio');
     expect(find.byType(CodeLabWorkbenchLayout), findsOneWidget);
-    expect(find.byType(CodeLabConnectionScreen), findsOneWidget);
+    expect(find.byType(CodeLabStartScreen), findsOneWidget);
     expect(find.byType(CodeLabPromptComposer), findsOneWidget);
     expect(find.byType(CodeLabWorkbenchShortcuts), findsOneWidget);
     expect(
@@ -94,10 +128,10 @@ void main() {
     );
     expect(scope.resolve<StdioAcpAgentProfile>(), codelabAgentStdioProfile);
     expect(
-      scope.resolve<CodeLabShellCubit>().state.stdioCommand,
-      codelabAgentStdioProfile.command,
+      scope.resolve<CodeLabShellCubit>().state.connectionDetail,
+      // D10: команда описания — `codelab-agent` (было `codelab`).
+      'codelab-agent',
     );
-    expect(scope.resolve<CodeLabShellCubit>().state.stdioArgs, 'serve --stdio');
     expect(scope.resolve<AcpClientApplication>(), isA<AcpClientApplication>());
     expect(scope.resolve<AcpTransport>(), same(binding.transport));
     expect(scope.resolve<CodeLabRootLifecycle>(), isA<CodeLabRootLifecycle>());
@@ -114,13 +148,15 @@ void main() {
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('requires a session before sending a prompt', (tester) async {
-    final binding = CodeLabTestBinding();
+    final binding = CodeLabTestBinding(project: '/workspace');
 
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
 
     await tester.enterText(_composerField(), 'hello');
     await tester.pump();
@@ -135,165 +171,141 @@ void main() {
     expect(binding.transport.sentMessages, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
-  testWidgets('selects WebSocket and keeps endpoint in shell state', (
-    tester,
-  ) async {
-    final binding = CodeLabTestBinding();
+  testWidgets('a WebSocket profile of the window keeps its endpoint in the '
+      'shell state', (tester) async {
+    final binding = CodeLabTestBinding(
+      project: '/workspace',
+      webSocketTransportFactory: (_) => FakeAcpTransport(),
+    );
 
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
 
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
-    expect(shellCubit.state.transportType, CodeLabTransportType.stdio);
-    expect(find.text('Codelab Agent'), findsWidgets);
-
-    await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.widgetWithText(CodeLabButton, 'WebSocket'));
-    await tester.pump(const Duration(milliseconds: 100));
+    expect(shellCubit.state.transportLabel, 'stdio');
+    // D10 (switch-default-agent-to-dart): имя описания stdio-агента теперь
+    // `codelab-agent (stdio)`; значение проверяется явно, не ослабляется.
+    expect(shellCubit.state.profileLabel, 'codelab-agent (stdio)');
 
     const endpoint = 'wss://agent.example.test/acp';
-    await tester.enterText(
-      find.byKey(const ValueKey('transport-field-Endpoint')),
-      endpoint,
+    await tester.runAsync(
+      () => shellCubit.startWith(_webSocketProfile(endpoint)),
     );
     await tester.pump();
 
-    expect(shellCubit.state.transportType, CodeLabTransportType.webSocket);
-    expect(shellCubit.state.webSocketEndpoint, endpoint);
-    expect(shellCubit.state.connectionDetail, endpoint);
-    expect(binding.transport.state, AcpTransportState.idle);
+    expect(shellCubit.state.transportLabel, 'WebSocket');
+    expect(shellCubit.state.profileLabel, 'Remote ACP Agent');
+    // Деталь — только origin: путь и query могут нести токен (L1).
+    expect(shellCubit.state.connectionDetail, 'wss://agent.example.test');
     expect(binding.transport.sentMessages, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
-  testWidgets('does not open the connection setup dialog on first run', (
-    tester,
-  ) async {
-    final binding = CodeLabTestBinding();
+  testWidgets('does not open the settings screen on first run', (tester) async {
+    final binding = CodeLabTestBinding(project: '/workspace');
 
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
 
-    expect(find.byType(ConnectionSetupDialog), findsNothing);
+    expect(find.byKey(const ValueKey('settings-nav-connection')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
-  testWidgets(
-    'Configure connection in the command bar opens the dialog regardless '
-    'of transcript state',
-    (tester) async {
-      final binding = CodeLabTestBinding();
+  testWidgets('Settings in the sidebar opens the Connection page regardless of '
+      'transcript state', (tester) async {
+    final binding = CodeLabTestBinding(project: '/workspace');
 
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
 
-      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+    await tester.pumpAndSettle();
 
-      expect(find.byType(ConnectionSetupDialog), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings-nav-connection')),
+      findsOneWidget,
+    );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScopeInTest();
+  });
 
-  testWidgets(
-    'Configure connection on the empty connection screen opens the same '
-    'dialog pre-filled with current values',
-    (tester) async {
-      tester.view.physicalSize = const Size(1400, 900);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets('Configure connection on the empty connection screen opens the '
+      'Connection page showing the profile of the window', (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
 
-      final binding = CodeLabTestBinding();
+    final binding = CodeLabTestBinding(
+      project: '/workspace',
+      stdioTransportFactory: (_) =>
+          ThrowingStartTransport(StateError('no agent')),
+    );
 
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
-      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
 
-      final buttonFinder = find.descendant(
-        of: find.byType(CodeLabConnectionScreen),
-        matching: find.text('Configure connection'),
-      );
-      await tester.tap(buttonFinder);
-      await tester.pumpAndSettle();
+    // Экран подключения теперь — экран сбоя старта (D18): старт агента
+    // профиля по умолчанию не удаётся, и на экране есть «Configure connection».
+    final shell = binding.scope.resolve<CodeLabShellCubit>();
+    await tester.runAsync(() => shell.startOnLaunch());
+    await tester.pump();
+    final buttonFinder = find.descendant(
+      of: find.byType(CodeLabConnectionScreen),
+      matching: find.text('Configure connection'),
+    );
+    await tester.tap(buttonFinder);
+    await tester.pumpAndSettle();
 
-      expect(find.byType(ConnectionSetupDialog), findsOneWidget);
-      expect(
-        tester
-            .widget<TextBox>(
-              find.byKey(const ValueKey('transport-field-Command')),
-            )
-            .controller!
-            .text,
-        shellCubit.state.stdioCommand,
-      );
+    // Профиль по умолчанию тестовой сборки — stdio-профиль с меткой
+    // `codelab-agent (stdio)` (`testStdioProfile`, D10): его строка стоит на
+    // странице.
+    expect(
+      find.byKey(ValueKey('connection-profile-row-${testStdioProfile.id}')),
+      findsOneWidget,
+    );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await closeCodeLabRootScopeInTest();
+  });
 
-  testWidgets('editing a field inside the connection setup dialog applies '
-      'immediately to shell state', (tester) async {
-    final binding = CodeLabTestBinding();
+  testWidgets('Esc closes the settings screen and keeps the connection state', (
+    tester,
+  ) async {
+    final binding = CodeLabTestBinding(project: '/workspace');
 
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
     await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
     await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(const ValueKey('transport-field-Command')),
-      'custom-agent',
-    );
-    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
 
-    expect(shellCubit.state.stdioCommand, 'custom-agent');
+    expect(find.byKey(const ValueKey('settings-nav-connection')), findsNothing);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.disconnected,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
-
-  testWidgets(
-    'Esc closes the connection setup dialog and keeps the last-edited '
-    'field values',
-    (tester) async {
-      final binding = CodeLabTestBinding();
-
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
-      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
-
-      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        find.byKey(const ValueKey('transport-field-Command')),
-        'custom-agent',
-      );
-      await tester.pump();
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ConnectionSetupDialog), findsNothing);
-      expect(shellCubit.state.stdioCommand, 'custom-agent');
-      expect(
-        shellCubit.state.connectionStatus,
-        CodeLabConnectionStatus.disconnected,
-      );
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
-    },
-  );
 
   test('creates a session and tracks it as active', () async {
     final initialTransport = FakeAcpTransport();
@@ -311,14 +323,13 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
 
     await shellCubit.selectProject('/workspace');
-    await shellCubit.connect();
+    await shellCubit.startWith();
     expect(
       shellCubit.state.connectionStatus,
       CodeLabConnectionStatus.connected,
@@ -367,16 +378,16 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => FakeAcpTransport(),
       webSocketTransportFactory: (_) => agentTransport,
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
-    shellCubit
-      ..selectTransport(CodeLabTransportType.webSocket)
-      ..updateWebSocketEndpoint('wss://agent.example.test/acp');
+    // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+    await shellCubit.useProfile(
+      _webSocketProfile('wss://agent.example.test/acp'),
+    );
     await shellCubit.selectProject('/remote/workspace');
-    await shellCubit.connect();
+    await shellCubit.startOnLaunch();
     expect(
       shellCubit.state.connectionStatus,
       CodeLabConnectionStatus.connected,
@@ -400,12 +411,11 @@ void main() {
     await application.dispose();
   });
 
-  test('createSession falls back to the process cwd when no project is '
-      'selected', () async {
+  test('createSession sends the selected project as cwd; without a project '
+      'it sends no session/new (require-project-folder D1, D5)', () async {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
-    const workingDirectoryProvider = IoWorkingDirectoryProvider();
     final shellCubit = CodeLabShellCubit(
       profile: codelabAgentStdioProfile,
       application: application,
@@ -417,19 +427,26 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: workingDirectoryProvider,
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
-    await shellCubit.connect();
-    final sentRequest = agentTransport.sent.first;
+    // Без проекта нет ни подключения, ни `session/new`.
+    await shellCubit.startWith();
+    final withoutProject = shellCubit.createSession();
+    await pumpEventQueue();
+    expect(agentTransport.sentMessages, isEmpty);
+    await withoutProject;
+    expect(shellCubit.state.sessions, isEmpty);
+
+    await shellCubit.selectProject('/work/app');
+    await shellCubit.startWith();
+    final sentRequest = agentTransport.sent.firstWhere(
+      (message) => message is JsonRpcRequest && message.method == 'session/new',
+    );
     final createFuture = shellCubit.createSession();
     final request = await sentRequest as dynamic;
-    expect(
-      request.params,
-      containsPair('cwd', workingDirectoryProvider.currentPath),
-    );
+    expect(request.params, containsPair('cwd', '/work/app'));
 
     agentTransport.emitInbound(
       JsonRpcMessage.response(
@@ -443,7 +460,7 @@ void main() {
     await application.dispose();
   });
 
-  test("_stdioConfigFromState's cwd follows runAgentFromProjectDirectory: on "
+  test("the stdio cwd follows runInProjectDirectory of the profile: on "
       'matches the selected project, off is null', () async {
     final configs = <StdioAcpTransportConfig>[];
     final application = AcpClientApplication(transport: FakeAcpTransport());
@@ -461,20 +478,22 @@ void main() {
         return FakeAcpTransport();
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
     );
 
+    // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+    await shellCubit.useProfile(_stdioProfile());
     await shellCubit.selectProject('/workspace');
-    expect(shellCubit.state.runAgentFromProjectDirectory, isTrue);
-    await shellCubit.connect();
+    await shellCubit.startOnLaunch();
     expect(configs.single.cwd, '/workspace');
 
-    shellCubit.toggleRunAgentFromProjectDirectory(false);
-    await shellCubit.reconnect();
+    // Профиль без папки проекта — другой профиль: «Use» и «Restart agent»
+    // (D22), а не ручной Connect.
+    await shellCubit.useProfile(_stdioProfile(runInProjectDirectory: false));
+    await shellCubit.restartAgent();
     expect(configs[1].cwd, isNull);
-    // The selected project itself is untouched by the toggle.
+    // Сам выбранный проект от профиля не меняется.
     expect(shellCubit.state.selectedProjectPath, '/workspace');
 
     await shellCubit.close();
@@ -497,14 +516,13 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
 
     await shellCubit.selectProject('/workspace');
-    await shellCubit.connect();
+    await shellCubit.startWith();
 
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
@@ -583,12 +601,13 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
     );
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    await shellCubit.selectProject('/workspace');
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
     final createRequest = await createRequestFuture as dynamic;
@@ -693,12 +712,13 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
     );
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    await shellCubit.selectProject('/workspace');
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
     final createRequest = await createRequestFuture as dynamic;
@@ -789,12 +809,13 @@ void main() {
         setSessionConfigOptionUseCase: SetSessionConfigOption(application),
         stdioTransportFactory: (_) => agentTransport,
         webSocketTransportFactory: (_) => FakeAcpTransport(),
-        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
         projectFolderPicker: _FakeProjectFolderPicker(),
         recentProjectsStore: _FakeRecentProjectsStore(),
       );
+      // Проект выбран явно: неявной папки нет (require-project-folder D1).
+      await shellCubit.selectProject('/workspace');
 
-      await shellCubit.connect();
+      await shellCubit.startWith();
       final createRequestFuture = agentTransport.sent.first;
       final createFuture = shellCubit.createSession();
       final createRequest = await createRequestFuture as dynamic;
@@ -911,12 +932,13 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
     );
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    await shellCubit.selectProject('/workspace');
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
     final createRequest = await createRequestFuture as dynamic;
@@ -993,14 +1015,13 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
 
     await shellCubit.selectProject('/workspace');
-    await shellCubit.connect();
+    await shellCubit.startWith();
     expect(
       shellCubit.state.connectionStatus,
       CodeLabConnectionStatus.connected,
@@ -1074,14 +1095,15 @@ void main() {
         return _FailingStartTransport();
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
-
-    shellCubit.updateStdioCommand('missing-codelab');
-    await shellCubit.connect();
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+    await shellCubit.useProfile(_stdioProfile(command: 'missing-codelab'));
+    await shellCubit.selectProject('/workspace');
+    await shellCubit.startOnLaunch();
 
     expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     final lossMessages = logger.entries.where(
@@ -1123,20 +1145,19 @@ void main() {
             : _FailingStartTransport();
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
 
     await shellCubit.selectProject('/workspace');
-    await shellCubit.connect();
+    await shellCubit.startWith();
     expect(
       shellCubit.state.connectionStatus,
       CodeLabConnectionStatus.connected,
     );
 
-    await shellCubit.reconnect();
+    await shellCubit.restartAgent();
 
     expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     final lossMessages = logger.entries.where(
@@ -1160,13 +1181,14 @@ void main() {
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
       final binding = CodeLabTestBinding(
+        project: '/workspace',
         transport: initialTransport,
         stdioTransportFactory: (_) => agentTransport,
       );
       final application = binding.scope.resolve<AcpClientApplication>();
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-      await shellCubit.connect();
+      await shellCubit.startWith();
 
       final createRequestFuture = agentTransport.sent.first;
       final createFuture = shellCubit.createSession();
@@ -1285,7 +1307,7 @@ void main() {
       );
       await submitFuture.timeout(const Duration(seconds: 2));
 
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -1294,12 +1316,13 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       transport: initialTransport,
       stdioTransportFactory: (_) => agentTransport,
     );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
 
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
@@ -1410,7 +1433,7 @@ void main() {
     );
     await submitFuture.timeout(const Duration(seconds: 2));
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   test('two parallel pending approvals are both embedded independently, and '
@@ -1418,12 +1441,13 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       transport: initialTransport,
       stdioTransportFactory: (_) => agentTransport,
     );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
 
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
@@ -1543,7 +1567,7 @@ void main() {
     );
     await submitFuture.timeout(const Duration(seconds: 2));
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   test('cancelTurn sends session cancel and stays busy until the agent '
@@ -1563,13 +1587,14 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    await shellCubit.selectProject('/workspace');
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
     final createRequest = await createRequestFuture as dynamic;
@@ -1682,13 +1707,14 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    await shellCubit.selectProject('/workspace');
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
     final createRequest = await createRequestFuture as dynamic;
@@ -1738,15 +1764,17 @@ void main() {
         return stdioTransport;
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
 
+    // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+    await shellCubit.useProfile(
+      _stdioProfile(env: {'CODELAB_LOG_LEVEL': 'DEBUG', 'EXTRA': 'value'}),
+    );
     await shellCubit.selectProject('/tmp/codelab');
-    shellCubit.updateStdioEnv('CODELAB_LOG_LEVEL=DEBUG\nEXTRA=value');
-    await shellCubit.connect();
+    await shellCubit.startOnLaunch();
 
     expect(configs, [
       const StdioAcpTransportConfig(
@@ -1764,11 +1792,11 @@ void main() {
     );
     expect(
       logger.entries.map((entry) => entry['event']),
-      contains('Starting stdio ACP agent: codelab serve --stdio.'),
+      contains('Starting stdio ACP agent: codelab.'),
     );
     expect(
       logger.entries.map((entry) => entry['event']),
-      contains('Stdio ACP agent started: codelab serve --stdio.'),
+      contains('Stdio ACP agent started: codelab.'),
     );
 
     await shellCubit.close();
@@ -1776,7 +1804,8 @@ void main() {
   });
 
   test(
-    'reconnect starts replacement stdio transport from editable state',
+    'reconnect starts replacement stdio transport with the profile of the window '
+    'and the current project',
     () async {
       final configs = <StdioAcpTransportConfig>[];
       final initialTransport = FakeAcpTransport();
@@ -1799,26 +1828,32 @@ void main() {
           return replacements.removeAt(0);
         },
         webSocketTransportFactory: (_) => FakeAcpTransport(),
-        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
         projectFolderPicker: _FakeProjectFolderPicker(),
         recentProjectsStore: _FakeRecentProjectsStore(),
         logger: logger,
       );
 
-      await shellCubit.connect();
-      shellCubit
-        ..updateStdioCommand('custom-agent')
-        ..updateStdioArgs('serve --stdio --profile local')
-        ..updateStdioEnv('CODELAB_LOG_LEVEL=TRACE\nFEATURE_FLAG=enabled');
+      // Подключению нужен проект: неявной папки нет (require-project-folder
+      // D1), поэтому тест выбирает первый проект явно.
+      // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+      await shellCubit.useProfile(
+        _stdioProfile(
+          command: 'custom-agent',
+          args: const ['serve', '--stdio', '--profile', 'local'],
+          env: const {'CODELAB_LOG_LEVEL': 'TRACE', 'FEATURE_FLAG': 'enabled'},
+        ),
+      );
+      await shellCubit.selectProject('/tmp/first-codelab');
+      await shellCubit.startOnLaunch();
       await shellCubit.selectProject('/tmp/custom-codelab');
-      await shellCubit.reconnect();
+      await shellCubit.restartAgent();
 
       expect(configs, [
-        StdioAcpTransportConfig(
-          command: 'codelab',
-          args: const ['serve', '--stdio'],
-          cwd: const IoWorkingDirectoryProvider().currentPath,
-          env: const {'CODELAB_LOG_LEVEL': 'DEBUG'},
+        const StdioAcpTransportConfig(
+          command: 'custom-agent',
+          args: ['serve', '--stdio', '--profile', 'local'],
+          cwd: '/tmp/first-codelab',
+          env: {'CODELAB_LOG_LEVEL': 'TRACE', 'FEATURE_FLAG': 'enabled'},
         ),
         const StdioAcpTransportConfig(
           command: 'custom-agent',
@@ -1835,15 +1870,11 @@ void main() {
       );
       expect(
         logger.entries.map((entry) => entry['event']),
-        contains(
-          'Reconnecting stdio ACP agent: custom-agent serve --stdio --profile local.',
-        ),
+        contains('Reconnecting stdio ACP agent: custom-agent.'),
       );
       expect(
         logger.entries.map((entry) => entry['event']),
-        contains(
-          'Stdio ACP agent reconnected: custom-agent serve --stdio --profile local.',
-        ),
+        contains('Stdio ACP agent reconnected: custom-agent.'),
       );
 
       await shellCubit.close();
@@ -1869,14 +1900,15 @@ void main() {
         return FakeAcpTransport();
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
-
-    shellCubit.updateStdioCommand('');
-    await shellCubit.connect();
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+    await shellCubit.useProfile(_stdioProfile(command: ''));
+    await shellCubit.selectProject('/workspace');
+    await shellCubit.startOnLaunch();
 
     expect(configs, isEmpty);
     expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
@@ -1907,14 +1939,15 @@ void main() {
         return _FailingStartTransport();
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
-
-    shellCubit.updateStdioCommand('missing-codelab');
-    await shellCubit.connect();
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+    await shellCubit.useProfile(_stdioProfile(command: 'missing-codelab'));
+    await shellCubit.selectProject('/workspace');
+    await shellCubit.startOnLaunch();
 
     expect(configs.single.command, 'missing-codelab');
     expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
@@ -1948,17 +1981,22 @@ void main() {
         configs.add(config);
         return agentTransport;
       },
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
+      // Токен — значение переменной окружения: профиль хранит ссылку `env:`.
+      secrets: const ProfileSecretSource({'AGENT_TOKEN': 'secret-token'}),
       logger: logger,
     );
-
-    shellCubit
-      ..selectTransport(CodeLabTransportType.webSocket)
-      ..updateWebSocketEndpoint('wss://agent.example.test/acp')
-      ..updateWebSocketToken('secret-token');
-    await shellCubit.connect();
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+    await shellCubit.useProfile(
+      _webSocketProfile(
+        'wss://agent.example.test/acp',
+        tokenRef: 'env:AGENT_TOKEN',
+      ),
+    );
+    await shellCubit.selectProject('/workspace');
+    await shellCubit.startOnLaunch();
 
     expect(configs, [
       WebSocketAcpTransportConfig(
@@ -1973,87 +2011,86 @@ void main() {
     );
     expect(
       logger.entries.map((entry) => entry['event']),
-      contains('WebSocket ACP agent connected: wss://agent.example.test/acp.'),
+      contains('WebSocket ACP agent connected: wss://agent.example.test.'),
     );
 
     await shellCubit.close();
     await application.dispose();
   });
 
-  test(
-    'reconnect starts replacement WebSocket transport from editable state',
-    () async {
-      final configs = <WebSocketAcpTransportConfig>[];
-      final initialTransport = FakeAcpTransport();
-      final connectedTransport = FakeAcpTransport();
-      final reconnectedTransport = FakeAcpTransport();
-      final replacements = [connectedTransport, reconnectedTransport];
-      final application = AcpClientApplication(transport: initialTransport);
-      final logger = _RecordingLogger();
-      final shellCubit = CodeLabShellCubit(
-        profile: codelabAgentStdioProfile,
-        application: application,
-        createSessionUseCase: CreateSession(application),
-        sendPromptUseCase: SendPrompt(application),
-        cancelTurnUseCase: CancelTurn(application),
-        reconnectUseCase: Reconnect(application),
-        respondToPermissionUseCase: RespondToPermission(application),
-        setSessionConfigOptionUseCase: SetSessionConfigOption(application),
-        stdioTransportFactory: (_) => FakeAcpTransport(),
-        webSocketTransportFactory: (config) {
-          configs.add(config);
-          return replacements.removeAt(0);
-        },
-        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
-        projectFolderPicker: _FakeProjectFolderPicker(),
-        recentProjectsStore: _FakeRecentProjectsStore(),
-        logger: logger,
-      );
+  test('reconnect starts replacement WebSocket transport and reads the token '
+      'from the environment again', () async {
+    final configs = <WebSocketAcpTransportConfig>[];
+    final initialTransport = FakeAcpTransport();
+    final connectedTransport = FakeAcpTransport();
+    final reconnectedTransport = FakeAcpTransport();
+    final replacements = [connectedTransport, reconnectedTransport];
+    final application = AcpClientApplication(transport: initialTransport);
+    final logger = _RecordingLogger();
+    // Значение переменной меняется между подключениями: токен читается из
+    // окружения в момент открытия транспорта, а не хранится (D13, D15).
+    final environment = {'AGENT_TOKEN': 'initial-token'};
+    final shellCubit = CodeLabShellCubit(
+      profile: codelabAgentStdioProfile,
+      application: application,
+      createSessionUseCase: CreateSession(application),
+      sendPromptUseCase: SendPrompt(application),
+      cancelTurnUseCase: CancelTurn(application),
+      reconnectUseCase: Reconnect(application),
+      respondToPermissionUseCase: RespondToPermission(application),
+      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
+      stdioTransportFactory: (_) => FakeAcpTransport(),
+      webSocketTransportFactory: (config) {
+        configs.add(config);
+        return replacements.removeAt(0);
+      },
+      projectFolderPicker: _FakeProjectFolderPicker(),
+      recentProjectsStore: _FakeRecentProjectsStore(),
+      secrets: ProfileSecretSource(environment),
+      logger: logger,
+    );
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+    await shellCubit.useProfile(
+      _webSocketProfile(
+        'wss://agent.example.test/acp-v2',
+        tokenRef: 'env:AGENT_TOKEN',
+      ),
+    );
+    await shellCubit.selectProject('/workspace');
+    await shellCubit.startOnLaunch();
 
-      shellCubit
-        ..selectTransport(CodeLabTransportType.webSocket)
-        ..updateWebSocketEndpoint('wss://agent.example.test/acp')
-        ..updateWebSocketToken('initial-token');
-      await shellCubit.connect();
+    environment['AGENT_TOKEN'] = 'rotated-token';
+    await shellCubit.restartAgent();
 
-      shellCubit
-        ..updateWebSocketEndpoint('wss://agent.example.test/acp-v2')
-        ..updateWebSocketToken('rotated-token');
-      await shellCubit.reconnect();
+    expect(configs, [
+      WebSocketAcpTransportConfig(
+        uri: Uri.parse('wss://agent.example.test/acp-v2'),
+        token: 'initial-token',
+      ),
+      WebSocketAcpTransportConfig(
+        uri: Uri.parse('wss://agent.example.test/acp-v2'),
+        token: 'rotated-token',
+      ),
+    ]);
+    expect(connectedTransport.state, AcpTransportState.closed);
+    expect(reconnectedTransport.state, AcpTransportState.connected);
+    expect(
+      shellCubit.state.connectionStatus,
+      CodeLabConnectionStatus.connected,
+    );
+    expect(
+      logger.entries.map((entry) => entry['event']),
+      contains('Reconnecting WebSocket ACP agent: wss://agent.example.test.'),
+    );
+    expect(
+      logger.entries.map((entry) => entry['event']),
+      contains('WebSocket ACP agent reconnected: wss://agent.example.test.'),
+    );
 
-      expect(configs, [
-        WebSocketAcpTransportConfig(
-          uri: Uri.parse('wss://agent.example.test/acp'),
-          token: 'initial-token',
-        ),
-        WebSocketAcpTransportConfig(
-          uri: Uri.parse('wss://agent.example.test/acp-v2'),
-          token: 'rotated-token',
-        ),
-      ]);
-      expect(connectedTransport.state, AcpTransportState.closed);
-      expect(reconnectedTransport.state, AcpTransportState.connected);
-      expect(
-        shellCubit.state.connectionStatus,
-        CodeLabConnectionStatus.connected,
-      );
-      expect(
-        logger.entries.map((entry) => entry['event']),
-        contains(
-          'Reconnecting WebSocket ACP agent: wss://agent.example.test/acp-v2.',
-        ),
-      );
-      expect(
-        logger.entries.map((entry) => entry['event']),
-        contains(
-          'WebSocket ACP agent reconnected: wss://agent.example.test/acp-v2.',
-        ),
-      );
-
-      await shellCubit.close();
-      await application.dispose();
-    },
-  );
+    await shellCubit.close();
+    await application.dispose();
+  });
 
   test('reconnect reports WebSocket failure without crashing', () async {
     final initialTransport = FakeAcpTransport();
@@ -2076,22 +2113,23 @@ void main() {
         // reconnect() under test, which must fail (e.g. auth rejected).
         return attempts == 1 ? FakeAcpTransport() : _FailingStartTransport();
       },
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
-
-    shellCubit
-      ..selectTransport(CodeLabTransportType.webSocket)
-      ..updateWebSocketEndpoint('wss://agent.example.test/acp');
-    await shellCubit.connect();
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+    await shellCubit.useProfile(
+      _webSocketProfile('wss://agent.example.test/acp'),
+    );
+    await shellCubit.selectProject('/workspace');
+    await shellCubit.startOnLaunch();
     expect(
       shellCubit.state.connectionStatus,
       CodeLabConnectionStatus.connected,
     );
 
-    await shellCubit.reconnect();
+    await shellCubit.restartAgent();
 
     expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
     expect(
@@ -2118,12 +2156,13 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
     );
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    await shellCubit.selectProject('/workspace');
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
     final createRequest = await createRequestFuture as dynamic;
@@ -2199,14 +2238,15 @@ void main() {
           throw StateError('auth failed: token=sk-super-secret-value');
         },
         webSocketTransportFactory: (_) => FakeAcpTransport(),
-        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
         projectFolderPicker: _FakeProjectFolderPicker(),
         recentProjectsStore: _FakeRecentProjectsStore(),
         logger: logger,
       );
-
-      shellCubit.updateStdioCommand('missing-codelab');
-      await shellCubit.connect();
+      // Проект выбран явно: неявной папки нет (require-project-folder D1).
+      // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
+      await shellCubit.useProfile(_stdioProfile(command: 'missing-codelab'));
+      await shellCubit.selectProject('/workspace');
+      await shellCubit.startOnLaunch();
 
       expect(shellCubit.state.connectionStatus, CodeLabConnectionStatus.failed);
       final message = logger.entries.last['event'];
@@ -2235,13 +2275,14 @@ void main() {
       setSessionConfigOptionUseCase: SetSessionConfigOption(application),
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
-      workingDirectoryProvider: const IoWorkingDirectoryProvider(),
       projectFolderPicker: _FakeProjectFolderPicker(),
       recentProjectsStore: _FakeRecentProjectsStore(),
       logger: logger,
     );
+    // Проект выбран явно: неявной папки нет (require-project-folder D1).
+    await shellCubit.selectProject('/workspace');
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
     agentTransport.failNextSend(
       const AcpTransportException(
         code: AcpTransportErrorCode.sendFailed,
@@ -2265,8 +2306,10 @@ void main() {
   testWidgets('Ctrl+K opens the command palette and Esc closes it', (
     tester,
   ) async {
-    final binding = CodeLabTestBinding();
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final binding = CodeLabTestBinding(project: '/workspace');
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
     expect(shellCubit.state.isCommandPaletteOpen, isFalse);
@@ -2286,15 +2329,17 @@ void main() {
     expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('Cmd+K opens the palette from the focused composer, moves typing '
       'into the palette search and returns focus to the composer on Esc', (
     tester,
   ) async {
-    final binding = CodeLabTestBinding();
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final binding = CodeLabTestBinding(project: '/workspace');
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
     await tester.showKeyboard(_composerField());
@@ -2330,7 +2375,7 @@ void main() {
     expect(shellCubit.state.isCommandPaletteOpen, isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
   testWidgets('selecting /new from the palette creates a session and closes '
@@ -2338,13 +2383,16 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       transport: initialTransport,
       stdioTransportFactory: (_) => agentTransport,
     );
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-    await tester.runAsync(() => shellCubit.connect());
+    await tester.runAsync(() => shellCubit.startWith());
     await tester.pump();
     shellCubit.openCommandPalette();
     await tester.pumpAndSettle(
@@ -2371,7 +2419,7 @@ void main() {
     expect(shellCubit.state.isCommandPaletteOpen, isFalse);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets(
@@ -2382,13 +2430,16 @@ void main() {
       final reconnectedTransport = FakeAcpTransport();
       final replacements = [connectedTransport, reconnectedTransport];
       final binding = CodeLabTestBinding(
+        project: '/workspace',
         transport: initialTransport,
         stdioTransportFactory: (_) => replacements.removeAt(0),
       );
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-      await tester.runAsync(() => shellCubit.connect());
+      await tester.runAsync(() => shellCubit.startWith());
       await tester.pump();
       shellCubit.openCommandPalette();
       await tester.pump();
@@ -2421,15 +2472,17 @@ void main() {
       expect(shellCubit.state.isCommandPaletteOpen, isFalse);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
   testWidgets('selecting /logs opens the Protocol pane of the tool dock', (
     tester,
   ) async {
-    final binding = CodeLabTestBinding();
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final binding = CodeLabTestBinding(project: '/workspace');
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
     expect(shellCubit.state.openPanes, isEmpty);
@@ -2453,13 +2506,15 @@ void main() {
     expect(shellCubit.state.activeSessionId, isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets('the docked Debug log panel\'s Expand button opens the same '
       'full-screen log viewer as /logs', (tester) async {
-    final binding = CodeLabTestBinding();
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final binding = CodeLabTestBinding(project: '/workspace');
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
     shellCubit.togglePane(ToolPane.protocol);
     await tester.pump();
@@ -2484,7 +2539,7 @@ void main() {
     expect(shellCubit.state.activeSessionId, isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets(
@@ -2496,10 +2551,13 @@ void main() {
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
       final binding = CodeLabTestBinding(
+        project: '/workspace',
         transport: initialTransport,
         stdioTransportFactory: (_) => agentTransport,
       );
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
       shellCubit.togglePane(ToolPane.protocol);
       await tester.pump();
@@ -2510,7 +2568,7 @@ void main() {
 
       final logBuffer = binding.scope.resolve<LogBuffer>();
 
-      await tester.runAsync(() => shellCubit.connect());
+      await tester.runAsync(() => shellCubit.startWith());
       await tester.pump();
       final createRequestFuture = agentTransport.sent.first;
       final createFuture = shellCubit.createSession();
@@ -2542,7 +2600,7 @@ void main() {
       expect(find.byType(ComboBox<String?>), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -2550,8 +2608,10 @@ void main() {
     'selecting an unavailable command keeps the palette open without a '
     'fake diagnostic',
     (tester) async {
-      final binding = CodeLabTestBinding();
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      final binding = CodeLabTestBinding(project: '/workspace');
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
       shellCubit.openCommandPalette();
@@ -2573,14 +2633,16 @@ void main() {
       expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
   testWidgets('typing / at the start of the composer opens the inline '
       'palette with the same command set as Ctrl+K', (tester) async {
-    final binding = CodeLabTestBinding();
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    final binding = CodeLabTestBinding(project: '/workspace');
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
 
     await tester.enterText(_composerField(), '/ne');
     await tester.pump();
@@ -2589,7 +2651,7 @@ void main() {
     expect(find.text('/new'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets(
@@ -2599,13 +2661,16 @@ void main() {
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
       final binding = CodeLabTestBinding(
+        project: '/workspace',
         transport: initialTransport,
         stdioTransportFactory: (_) => agentTransport,
       );
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-      await tester.runAsync(() => shellCubit.connect());
+      await tester.runAsync(() => shellCubit.startWith());
       await tester.pump();
       final createRequestFuture = agentTransport.sent.first;
       final createFuture = shellCubit.createSession();
@@ -2711,7 +2776,7 @@ void main() {
       );
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -2722,13 +2787,16 @@ void main() {
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
       final binding = CodeLabTestBinding(
+        project: '/workspace',
         transport: initialTransport,
         stdioTransportFactory: (_) => agentTransport,
       );
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-      await tester.runAsync(() => shellCubit.connect());
+      await tester.runAsync(() => shellCubit.startWith());
       await tester.pump();
       final createRequestFuture = agentTransport.sent.first;
       final createFuture = shellCubit.createSession();
@@ -2789,7 +2857,7 @@ void main() {
       expect(agentTransport.sentMessages.length, sentBefore);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -2800,13 +2868,16 @@ void main() {
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
       final binding = CodeLabTestBinding(
+        project: '/workspace',
         transport: initialTransport,
         stdioTransportFactory: (_) => agentTransport,
       );
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-      await tester.runAsync(() => shellCubit.connect());
+      await tester.runAsync(() => shellCubit.startWith());
       await tester.pump();
       final createRequestFuture = agentTransport.sent.first;
       final createFuture = shellCubit.createSession();
@@ -2869,7 +2940,7 @@ void main() {
       expect(shellCubit.state.agentCommands, isEmpty);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -2879,13 +2950,15 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final binding = CodeLabTestBinding(
+      // Проект не '/workspace': путь вне проекта показывается полностью.
+      project: '/project',
       transport: initialTransport,
       stdioTransportFactory: (_) => agentTransport,
     );
     final application = binding.scope.resolve<AcpClientApplication>();
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
 
     // session-1: create it, submit a prompt, and leave an approval
     // pending on it.
@@ -3004,7 +3077,7 @@ void main() {
     );
     await submitFuture1.timeout(const Duration(seconds: 2));
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   testWidgets(
@@ -3014,13 +3087,16 @@ void main() {
       final initialTransport = FakeAcpTransport();
       final agentTransport = FakeAcpTransport();
       final binding = CodeLabTestBinding(
+        project: '/workspace',
         transport: initialTransport,
         stdioTransportFactory: (_) => agentTransport,
       );
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
       final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-      await tester.runAsync(() => shellCubit.connect());
+      await tester.runAsync(() => shellCubit.startWith());
       await tester.pump();
       final createRequestFuture = agentTransport.sent.first;
       final createFuture = shellCubit.createSession();
@@ -3055,7 +3131,7 @@ void main() {
       expect(find.text('GPT-5'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     },
   );
 
@@ -3064,12 +3140,13 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       transport: initialTransport,
       stdioTransportFactory: (_) => agentTransport,
     );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
     final createRequest = await createRequestFuture as dynamic;
@@ -3132,7 +3209,7 @@ void main() {
     expect(shellCubit.state.configOptions.single.currentValue, 'gpt-4');
     expect(shellCubit.state.isRespondingToConfigOption, isFalse);
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   test('a config_option_update without an active turn updates the config '
@@ -3140,12 +3217,13 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       transport: initialTransport,
       stdioTransportFactory: (_) => agentTransport,
     );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
     final createRequestFuture = agentTransport.sent.first;
     final createFuture = shellCubit.createSession();
     final createRequest = await createRequestFuture as dynamic;
@@ -3191,7 +3269,7 @@ void main() {
     expect(shellCubit.state.configOptions.single.id, 'mode');
     expect(shellCubit.state.configOptions.single.currentValue, 'ask');
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   test("switching sessions shows the newly active session's own config "
@@ -3199,12 +3277,13 @@ void main() {
     final initialTransport = FakeAcpTransport();
     final agentTransport = FakeAcpTransport();
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       transport: initialTransport,
       stdioTransportFactory: (_) => agentTransport,
     );
     final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
 
-    await shellCubit.connect();
+    await shellCubit.startWith();
 
     final createRequestFuture1 = agentTransport.sent.first;
     final createFuture1 = shellCubit.createSession();
@@ -3254,18 +3333,20 @@ void main() {
 
     expect(shellCubit.state.configOptions, isEmpty);
 
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   });
 
   group('resizable workbench panels', () {
     Future<CodeLabTestBinding> pumpDesktopShell(WidgetTester tester) async {
-      final binding = CodeLabTestBinding();
+      final binding = CodeLabTestBinding(project: '/workspace');
       tester.view.physicalSize = const Size(1440, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
       return binding;
     }
 
@@ -3293,7 +3374,7 @@ void main() {
         expect(shellCubit.state.sessionsPaneWidth, closeTo(320, 1));
 
         await tester.pumpWidget(const SizedBox.shrink());
-        await closeCodeLabRootScope();
+        await closeCodeLabRootScopeInTest();
       },
     );
 
@@ -3318,7 +3399,7 @@ void main() {
       );
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
 
     testWidgets('dragging the sessions divider past the minimum stops at the '
@@ -3335,7 +3416,7 @@ void main() {
       expect(shellCubit.state.sessionsPaneWidth, kSessionsPaneMinWidth);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
 
     testWidgets('dragging the sessions divider past the maximum stops at the '
@@ -3352,7 +3433,7 @@ void main() {
       expect(shellCubit.state.sessionsPaneWidth, kSessionsPaneMaxWidth);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
 
     testWidgets('dragging the dock divider past the minimum stops at '
@@ -3373,7 +3454,7 @@ void main() {
       expect(shellCubit.state.dockWidth, kDockMinWidth);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
 
     testWidgets('dragging the dock divider past the maximum stops at '
@@ -3392,7 +3473,7 @@ void main() {
       expect(shellCubit.state.dockWidth, kDockMaxWidth);
 
       await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScope();
+      await closeCodeLabRootScopeInTest();
     });
 
     testWidgets(
@@ -3421,7 +3502,7 @@ void main() {
         );
 
         await tester.pumpWidget(const SizedBox.shrink());
-        await closeCodeLabRootScope();
+        await closeCodeLabRootScopeInTest();
       },
     );
   });
@@ -3464,12 +3545,15 @@ void main() {
         setSessionConfigOptionUseCase: SetSessionConfigOption(application),
         stdioTransportFactory: (_) => agentTransport,
         webSocketTransportFactory: (_) => FakeAcpTransport(),
-        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
         projectFolderPicker: _FakeProjectFolderPicker(),
         recentProjectsStore: _FakeRecentProjectsStore(),
       );
+      // Проект выбран явно: неявной папки нет (require-project-folder D1).
+      // Выбор проекта стартует агента (D13), поэтому и он идёт в зоне
+      // `settle`: старт в fake-async зоне не дождался бы реального времени.
+      await settle(tester, () => shellCubit.selectProject('/workspace'));
 
-      await settle(tester, shellCubit.connect);
+      await settle(tester, shellCubit.startWith);
       final createRequestFuture = agentTransport.sent.first;
       final createFuture = shellCubit.createSession();
       final createRequest =
@@ -3710,6 +3794,71 @@ void main() {
       },
     );
 
+    // Требование «Чек-лист задач с id, владельцем и блокерами», сценарий
+    // «Сводка скрыта при открытой панели Plan» (agent-workbench-ui, change
+    // `add-subagents-and-tasks`, D27, решение пользователя 2026-11-10):
+    // сводка над композером дублирует открытую панель Plan, поэтому пока
+    // панель в доке, сводки нет; после закрытия — снова по прежним правилам.
+    // Красный тест: сейчас `WorkbenchMainPane` не смотрит на `openPanes`.
+    testWidgets('the docked plan summary is hidden while the Plan pane is '
+        'open and returns once it is closed', (tester) async {
+      final harness = await createSessionCubit(tester: tester);
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      const plan = [
+        CodeLabPlanEntry(
+          content: 'Reproduce the token refresh race condition',
+          status: CodeLabPlanEntryStatus.inProgress,
+          priority: CodeLabPlanEntryPriority.high,
+        ),
+      ];
+      CodeLabShellState stateWith() => harness.shellCubit.state.copyWith(
+        transcriptRows: const [
+          CodeLabUserRow(id: 'user-1', text: 'Fix the token refresh race.'),
+        ],
+        currentPlan: plan,
+      );
+      Future<void> pumpMainPane() => tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(
+            state: stateWith(),
+            cubit: harness.shellCubit,
+          ),
+        ),
+      );
+
+      await pumpMainPane();
+      expect(find.byType(CodeLabActivityBar), findsOneWidget);
+      expect(
+        find.text('Reproduce the token refresh race condition'),
+        findsOneWidget,
+      );
+
+      harness.shellCubit.togglePane(ToolPane.plan);
+      expect(harness.shellCubit.state.openPanes, contains(ToolPane.plan));
+      await pumpMainPane();
+      expect(find.byType(CodeLabActivityBar), findsNothing);
+      expect(
+        find.text('Reproduce the token refresh race condition'),
+        findsNothing,
+      );
+
+      harness.shellCubit.togglePane(ToolPane.plan);
+      expect(
+        harness.shellCubit.state.openPanes,
+        isNot(contains(ToolPane.plan)),
+      );
+      await pumpMainPane();
+      expect(find.byType(CodeLabActivityBar), findsOneWidget);
+      expect(
+        find.text('Reproduce the token refresh race condition'),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('dismissing the plan from the activity bar clears it on the '
         'real cubit', (tester) async {
       final harness = await createSessionCubit(tester: tester);
@@ -3749,8 +3898,9 @@ void main() {
     // Баннер соединения над непустой лентой (spec agent-workbench-ui
     // «Connection banner above a non-empty transcript»; design D6 change
     // `add-connection-and-error-states`).
+    // Подпись повтора — «Retry» (D18): ручного Connect и «Reconnect» нет.
     testWidgets('a lost connection shows the banner with its reason and '
-        'Reconnect above a non-empty transcript', (tester) async {
+        'Retry above a non-empty transcript', (tester) async {
       final harness = await createSessionCubit(tester: tester);
       addTearDown(harness.shellCubit.close);
       addTearDown(harness.application.dispose);
@@ -3773,7 +3923,7 @@ void main() {
 
       expect(find.text('Connection to the agent lost'), findsOneWidget);
       expect(find.text('Agent process exited with code 1.'), findsOneWidget);
-      expect(find.text('Reconnect'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
       expect(find.text('Connection settings'), findsOneWidget);
       expect(
         find.text('Fix the token refresh race condition.'),
@@ -3791,7 +3941,7 @@ void main() {
         ),
       );
       expect(find.text('Reconnecting…'), findsOneWidget);
-      expect(find.text('Reconnect'), findsNothing);
+      expect(find.text('Retry'), findsNothing);
 
       await tester.pumpWidget(
         FluentApp(
@@ -3806,7 +3956,7 @@ void main() {
       );
       expect(find.text('Could not connect to the agent'), findsOneWidget);
       expect(find.text('agent binary missing'), findsOneWidget);
-      expect(find.text('Reconnect'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
 
       await tester.pumpWidget(
         FluentApp(
@@ -3820,6 +3970,44 @@ void main() {
       );
       expect(find.text('Connection to the agent lost'), findsNothing);
       expect(find.text('Could not connect to the agent'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    // Отказ по токену (spec agent-workbench-ui «Отказ подключения из-за
+    // токена в workbench», D25): текст причины виден в баннере main pane и на
+    // экране подключения, а не общий «Failed to start ACP transport.».
+    testWidgets('a rejected token shows its reason in the banner and on the '
+        'connection screen', (tester) async {
+      final harness = await createSessionCubit(tester: tester);
+      addTearDown(harness.shellCubit.close);
+      addTearDown(harness.application.dispose);
+
+      const reason = 'The agent rejected the token (HTTP 401).';
+      final failed = harness.shellCubit.state.copyWith(
+        connectionStatus: CodeLabConnectionStatus.failed,
+        connectionMessage: reason,
+      );
+      await tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(
+            state: failed.copyWith(
+              transcriptRows: const [CodeLabUserRow(id: 'u', text: 'hi')],
+            ),
+            cubit: harness.shellCubit,
+          ),
+        ),
+      );
+      expect(find.text('Could not connect to the agent'), findsOneWidget);
+      expect(find.text(reason), findsOneWidget);
+
+      await tester.pumpWidget(
+        FluentApp(
+          home: WorkbenchMainPane(state: failed, cubit: harness.shellCubit),
+        ),
+      );
+      expect(find.byType(CodeLabConnectionScreen), findsOneWidget);
+      expect(find.text(reason), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -3845,7 +4033,7 @@ void main() {
 
       expect(find.text('Connection to the agent lost'), findsNothing);
       expect(find.byType(CodeLabConnectionScreen), findsOneWidget);
-      expect(find.text('Reconnect'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -3967,13 +4155,16 @@ void main() {
         setSessionConfigOptionUseCase: SetSessionConfigOption(application),
         stdioTransportFactory: (_) => agentTransport,
         webSocketTransportFactory: (_) => FakeAcpTransport(),
-        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
         projectFolderPicker: _FakeProjectFolderPicker(),
         recentProjectsStore: _FakeRecentProjectsStore(),
         logger: logger,
       );
+      // Проект выбран явно: неявной папки нет (require-project-folder D1).
+      // Выбор проекта стартует агента (D13), поэтому и он идёт в зоне
+      // `settle`: старт в fake-async зоне не дождался бы реального времени.
+      await settle(tester, () => shellCubit.selectProject('/workspace'));
 
-      await settle(tester, shellCubit.connect);
+      await settle(tester, shellCubit.startWith);
       final createRequestFuture = agentTransport.sent.first;
       final createFuture = shellCubit.createSession();
       final createRequest =
@@ -4516,12 +4707,13 @@ void main() {
         setSessionConfigOptionUseCase: SetSessionConfigOption(application),
         stdioTransportFactory: (_) => agentTransport,
         webSocketTransportFactory: (_) => FakeAcpTransport(),
-        workingDirectoryProvider: const IoWorkingDirectoryProvider(),
         projectFolderPicker: _FakeProjectFolderPicker(),
         recentProjectsStore: _FakeRecentProjectsStore(),
       );
+      // Проект выбран явно: неявной папки нет (require-project-folder D1).
+      await shellCubit.selectProject('/workspace');
 
-      await shellCubit.connect();
+      await shellCubit.startWith();
       return (
         shellCubit: shellCubit,
         agentTransport: agentTransport,

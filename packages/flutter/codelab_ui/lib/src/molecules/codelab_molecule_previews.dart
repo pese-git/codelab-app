@@ -4,7 +4,13 @@ import 'package:flutter/widget_previews.dart';
 import 'codelab_approval_option_group.dart';
 import 'codelab_connection_banner.dart';
 import 'codelab_connection_status_row.dart';
+import 'codelab_form.dart';
+import 'codelab_key_value_list.dart';
 import 'codelab_prompt_composer.dart';
+import 'codelab_session_status_bar.dart';
+import 'codelab_settings_row.dart';
+import 'codelab_settings_section.dart';
+import 'codelab_step_breadcrumb.dart';
 import 'codelab_tool_call_summary.dart';
 import 'codelab_view_mode.dart';
 import '../atomics/atomics.dart';
@@ -94,6 +100,40 @@ Widget codelabConnectionStatusRowPreview() {
 }
 
 @Preview(
+  name: 'Session status bar',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 100),
+)
+Widget codelabSessionStatusBarPreview() {
+  // `Tooltip` сегментов требует `Overlay`; превью рендерится без `FluentApp`.
+  return _AcpPreviewSurface(
+    child: Overlay(
+      initialEntries: [
+        OverlayEntry(
+          builder: (_) => const CodeLabSessionStatusBar(
+            data: CodeLabSessionStatusData(
+              modelLabel: 'GPT-5',
+              modeLabel: 'Standard',
+              usage: CodeLabStatusSegment(
+                label: '12.3k → 1.2k',
+                tooltip:
+                    'input 9300 · output 1200 · cache read 3000 · '
+                    'cache write 0',
+              ),
+              cost: CodeLabStatusSegment(label: r'$0.0041 · session $1.20'),
+              context: CodeLabStatusSegment(
+                label: '85% context',
+                tone: CodeLabTone.warning,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+@Preview(
   name: 'Connection banner lost',
   group: codelabMoleculePreviewGroup,
   size: Size(620, 140),
@@ -154,17 +194,185 @@ void codelabPreviewApprovalSelected(String optionId) {}
 
 void codelabPreviewCancel() {}
 
+@Preview(
+  name: 'Settings section with rows',
+  group: codelabMoleculePreviewGroup,
+  size: Size(640, 220),
+)
+Widget codelabSettingsSectionPreview() {
+  return _AcpPreviewSurface(
+    child: CodeLabSettingsSection(
+      title: 'Behavior',
+      children: [
+        CodeLabSettingsRow(
+          leading: FluentIcons.power_button,
+          title: 'Connect on start',
+          description: 'Off: the app opens disconnected and waits for Connect',
+          trailing: ToggleSwitch(checked: true, onChanged: (_) {}),
+        ),
+        CodeLabSettingsRow(
+          leading: FluentIcons.refresh,
+          title: 'Restart agent',
+          description: 'Cancels running turns and reloads open sessions.',
+          trailing: Button(onPressed: () {}, child: const Text('Restart')),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Образец формы «Add connection profile» (макет `AddProfile`): переключатель
+/// типа, поле с подсказкой, предупреждением и ошибкой.
+///
+/// Почему отдельная функция: светлое и тёмное превью показывают одно и то же,
+/// и содержимое не должно разойтись (design.md change
+/// `add-app-settings-shell`, D16, задача 3.8a).
+Widget _formSample() {
+  return CodeLabForm(
+    children: [
+      CodeLabFormRow(
+        label: 'Type',
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: CodeLabSegmentedControl<String>(
+            value: 'websocket',
+            semanticLabel: 'Profile type',
+            options: const [
+              CodeLabSegment(value: 'stdio', label: 'Local stdio'),
+              CodeLabSegment(value: 'websocket', label: 'WebSocket'),
+            ],
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+      CodeLabFormRow(
+        label: 'URL',
+        notes: const [
+          CodeLabFormNote('Use ws:// or wss:// with a host.'),
+          CodeLabFormNote(
+            'ws:// to another machine: the token is sent unencrypted.',
+            tone: CodeLabFormNoteTone.warning,
+          ),
+          CodeLabFormNote('Enter a name.', tone: CodeLabFormNoteTone.error),
+        ],
+        child: const TextBox(placeholder: 'wss://host:7420/acp'),
+      ),
+    ],
+  );
+}
+
+@Preview(
+  name: 'Form rows and notes',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 220),
+)
+Widget codelabFormPreview() {
+  return _AcpPreviewSurface(child: _formSample());
+}
+
+@Preview(
+  name: 'Form rows and notes (dark)',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 220),
+  brightness: Brightness.dark,
+)
+Widget codelabFormDarkPreview() {
+  return _AcpPreviewSurface(brightness: Brightness.dark, child: _formSample());
+}
+
+@Preview(
+  name: 'Key-value list',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 160),
+)
+Widget codelabKeyValueListPreview() {
+  return _AcpPreviewSurface(child: _keyValueSample());
+}
+
+@Preview(
+  name: 'Key-value list (dark)',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 160),
+  brightness: Brightness.dark,
+)
+Widget codelabKeyValueListDarkPreview() {
+  return _AcpPreviewSurface(
+    brightness: Brightness.dark,
+    child: _keyValueSample(),
+  );
+}
+
+Widget _keyValueSample() {
+  return const CodeLabKeyValueList(
+    entries: [
+      CodeLabKeyValueEntry(
+        label: 'Key',
+        value: 'In keychain-macos as ',
+        monoValue: 'codelab/anthropic',
+      ),
+      CodeLabKeyValueEntry(
+        label: 'Last check',
+        value: '14:01 · 12 models · 184 ms',
+      ),
+      CodeLabKeyValueEntry(
+        label: 'Source',
+        monoValue: '~/.codelab/config.yaml',
+      ),
+    ],
+  );
+}
+
+@Preview(
+  name: 'Step breadcrumb',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 60),
+)
+Widget codelabStepBreadcrumbPreview() {
+  return const _AcpPreviewSurface(child: _BreadcrumbSample());
+}
+
+@Preview(
+  name: 'Step breadcrumb (dark)',
+  group: codelabMoleculePreviewGroup,
+  size: Size(620, 60),
+  brightness: Brightness.dark,
+)
+Widget codelabStepBreadcrumbDarkPreview() {
+  return const _AcpPreviewSurface(
+    brightness: Brightness.dark,
+    child: _BreadcrumbSample(),
+  );
+}
+
+class _BreadcrumbSample extends StatelessWidget {
+  const _BreadcrumbSample();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CodeLabStepBreadcrumb(
+      steps: ['API type', 'Base URL', 'Key', 'Check', 'Model', 'Review'],
+      current: 3,
+    );
+  }
+}
+
 class _AcpPreviewSurface extends StatelessWidget {
-  const _AcpPreviewSurface({required this.child});
+  const _AcpPreviewSurface({
+    required this.child,
+    this.brightness = Brightness.light,
+  });
 
   final Widget child;
+
+  /// Тема превью: тёмный вариант нужен виджетам с тонами и обводками (D16).
+  final Brightness brightness;
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.ltr,
       child: FluentTheme(
-        data: FluentThemeData(),
+        data: FluentThemeData(brightness: brightness),
         child: Builder(
           builder: (context) {
             return ColoredBox(

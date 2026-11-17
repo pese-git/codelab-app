@@ -41,6 +41,7 @@ Future<void> main() async {
         'HOME': '${dir.path}/home',
         'CODELAB_HOME': '${dir.path}/codelab',
         'LANG': 'en_US.UTF-8',
+        ...launch.environment,
       },
     );
   }
@@ -82,15 +83,64 @@ Future<void> main() async {
     expect(await pty.exitCode, 0);
   }, skip: skip);
 
+  // U-03. Один тест на все агенты: имя начинается с id матрицы parity
+  // (D3 change `switch-default-agent-to-dart`). Ожидания — из
+  // `launch` (`support/e2e_agent.dart`); против `dart` и `embedded` меню
+  // содержит клиентские `/help`, `/mode`, `/model`, `/config`, команды агента
+  // с пометкой `(agent)` и одноимённые под префиксом `/agent:`, а
+  // `/agent:help` печатает ответ агента (tasks 1.7 change
+  // `add-agent-builtin-slash-commands`, D10, Q1, Q8).
+  test('cli/slash-menu-merges-agent-commands', () async {
+    final scripted = E2eCliAgent.current.isScripted;
+    final pty = await repl(
+      scripted
+          ? CodelabCompatibleStdioAgentMode.withAvailableCommands
+          : CodelabCompatibleStdioAgentMode.normal,
+    );
+    await pty.waitFor('> ');
+    // Команды агент объявляет после ответа на `session/new`: ждём, пока
+    // они дойдут, по Tab на их префиксе.
+    final from = pty.text.length;
+    pty.write('/\t');
+    final expected = [...launch.agentCommands, ...launch.prefixedAgentCommands];
+    for (final command in expected) {
+      await pty.waitFor(command, from: from);
+    }
+    final menu = pty.text.substring(from);
+    // Пометка проверяется на строке самой команды: у клиента есть своя
+    // `/config`, и одно имя в меню не доказывает, что есть команда агента.
+    for (final command in launch.agentCommands) {
+      expect(
+        menu,
+        matches(RegExp('${RegExp.escape(command)} [^\\n]*\\(agent\\)')),
+        reason: 'the menu has no agent command $command',
+      );
+    }
+    for (final client in const ['/help', '/mode', '/model', '/config']) {
+      expect(menu, contains(client));
+    }
+
+    pty.write('\x15');
+    if (launch.agentHelpAnswer.isNotEmpty) {
+      final helpFrom = pty.text.length;
+      pty.write('/agent:help\r');
+      for (final fragment in launch.agentHelpAnswer) {
+        await pty.waitFor(fragment, from: helpFrom);
+      }
+    }
+    pty.write('\x04');
+    expect(await pty.exitCode, 0);
+  }, skip: skip);
+
+  // Прежняя проверка со scripted-агентом: префикс `/agent:` и разбор команд
+  // агента отвечает сам scripted-агент.
   test(
-    'cli/slash-menu-merges-agent-commands',
+    'cli/slash-menu-scripted-agent-prefix',
     () async {
       final pty = await repl(
         CodelabCompatibleStdioAgentMode.withAvailableCommands,
       );
       await pty.waitFor('> ');
-      // Команды агент объявляет после ответа на `session/new`: ждём, пока
-      // они дойдут, по Tab на их префиксе.
       final from = pty.text.length;
       pty.write('/\t');
       await pty.waitFor('/compact', from: from);
@@ -103,7 +153,6 @@ Future<void> main() async {
       await send(pty, '/plan', 'No plan yet.');
       pty.write('\x04');
       expect(await pty.exitCode, 0);
-      // Dart-агент объявит свои команды на этапе 8 (R-07, R-08).
     },
     skip: skip,
     tags: scriptedOnly,

@@ -20,12 +20,12 @@
 ```dart
 typedef AgentEventSink = FutureOr<void> Function(AgentEvent event);   // цикл ждёт каждый emit
 
-/// Единая точка исполнения (§6.3.1) в две фазы: параллельный пакет сначала объявляет все вызовы
-/// в порядке ответа (ToolCallStarted), потом исполняет их одновременно (§5.5).
+/// Единая точка исполнения (§6.3.1) в две фазы: параллельная группа пакета сначала объявляет все
+/// свои вызовы в порядке ответа (ToolCallStarted), потом исполняет их одновременно (§5.5).
 abstract interface class ToolExecutor {
   Future<ToolCallHandle> announce(ToolCall call, ToolInvocation invocation);   // шаг 1: present, ToolCallStarted
   Future<ToolExecutionOutcome> complete(ToolCallHandle handle);                // шаги 1a–10
-  Future<ToolExecutionOutcome> abandon(ToolCallHandle handle);                 // отмена до старта (§5.5, шаг 3)
+  Future<ToolExecutionOutcome> abandon(ToolCallHandle handle);                 // отмена до старта и откат упавшего объявления (§5.5, шаги 3a, 3c)
 }
 final class ToolInvocation {             // что цикл передаёт точке исполнения на один вызов
   final SessionId sessionId; final CancelToken cancel;
@@ -198,8 +198,10 @@ final class ToolCallFinished extends AgentEvent {
   final List<FileDiff> diffs;               // по одному на изменённый файл; пусто — правок нет (§6.2)
   final SpillRef? spill; }                  // с этапа 3 (§17.4.2): результат вынесен в файл
 final class ToolPairingRepaired extends AgentEvent { final PairingReport report; }
-final class StepEnded extends AgentEvent { final StepResult result; }
-final class PlanUpdated extends AgentEvent { final List<PlanEntry> entries; }
+final class StepEnded extends AgentEvent { final StepResult result;
+  final ContextFill? context; }            // change add-usage-extension (D5): used, window, compactAt?
+// Change add-subagents-and-tasks (§17.16.2): заменяет PlanUpdated(List<PlanEntry> entries) инструмента update_plan
+final class TaskListChanged extends AgentEvent { final List<TaskItem> items; final TaskChange change; }
 final class ModeChanged extends AgentEvent { final ModeId mode; }
 final class CommandsChanged extends AgentEvent { final List<SlashCommand> commands; }
 final class ConfigOptionChanged extends AgentEvent { final String optionId, value; }   // уровень AgentSession (§8.3)
@@ -270,8 +272,8 @@ final class SlashCommand {
 | `ToolCallHeartbeat`, `ToolCallStuck` | после MVP: вызов исполняется дольше порога / молчит дольше порога (§17.12.3) | `toolCallId`, `elapsed`, `sinceOutput` |
 | `ToolCallFinished` | вызов завершён | `toolCallId`, `outcome`, `content`, `diffs` (по одному на файл), `spill?` (§17.4: `content` — фрагмент вынесенного результата) |
 | `ToolPairingRepaired` | payload запроса потребовал ремонта пар | отчёт о ремонте |
-| `StepEnded` | шаг завершён | ответ модели, результаты в порядке вызовов |
-| `PlanUpdated` | инструмент `update_plan` обновил план | `entries` |
+| `StepEnded` | шаг завершён | ответ модели, результаты в порядке вызовов; заполнение контекста после шага (`used`, `window`, `compactAt` — порог автосжатия или `null`; change `add-usage-extension`, D5) |
+| `TaskListChanged` | после change `add-subagents-and-tasks`: операция `task_*` или назначение пункта субагенту (`assign`) изменила список задач, до `ToolCallFinished` вызова (§17.16.5), или список восстановлен из новой ветки после `BranchChanged` (`op: restore`, без записи `task`, §17.16.6); до change — `PlanUpdated` от `update_plan` | `items` (весь список), `change` |
 | `ModeChanged`, `CommandsChanged` | смена режима, списка slash-команд | новое значение |
 | `ContextCompacted` | сжатие записано в журнал (§9) | `tokensBefore`, `tokensAfter` |
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | после MVP: эмитит `SubagentManager` сессии родителя, не цикл (§17.3.2) | идентификаторы ребёнка, снимок прогресса, итог |
@@ -468,11 +470,239 @@ payload шага 2 — `[user, user(nudge 1), user(nudge 2)]`. Если и ша�
 
 0. В начале хода цикл создаёт один `MisuseBreaker(config.misuse)` (§6.3.7); каждый `ToolContext`
    этого хода получает его в поле `misuse`. Следующий ход начинает с пустого счётчика.
-1. Режим пакета: `sequential`, если хотя бы для одного вызова пакета `tool.executionModeOf(args) == sequential` (по умолчанию — объявленный инструментом `executionMode`, §6.2; после MVP режим может зависеть от аргументов, например `lsp rename`, §17.8.9); иначе `parallel`.
-2. **Parallel.** Для каждого вызова в порядке ответа: `emit ToolCallStarted`. Затем все вызовы исполняются через `executor` одновременно (`Future.wait`); каждый `ToolCallFinished` эмитится в момент завершения своего вызова (под общей очередью emit, LOOP-2). Результаты-сообщения добавляются после всего пакета в порядке вызовов (LOOP-3).
-3. **Sequential.** Для каждого вызова: `ToolCallStarted` → исполнение → `ToolCallFinished`; перед следующим вызовом — проверка отмены. При отмене оставшиеся вызовы не исполняются и получают `ToolCallStarted` + `ToolCallFinished(cancelled)` с текстом `Tool call was cancelled before it started` — у каждого вызова ответа есть результат (парность, TOOL-6).
+1. **Группы.** Режим вызова — `tool.executionModeOf(args)` (по умолчанию — объявленный инструментом `executionMode`, §6.2; после MVP режим может зависеть от аргументов, например `lsp rename`, §17.8.9). Пакет делится по порядку ответа модели на группы: подряд идущие `parallel`-вызовы — одна параллельная группа, каждый `sequential`-вызов — барьер, отдельная группа из одного вызова. Группы исполняются строго друг за другом: барьер начинается после завершения всех вызовов группы перед ним, следующая группа — после барьера. Пример: `[read, task_update, agent, agent]` → `{read}`, `{task_update}`, `{agent, agent}` (решение пользователя 2026-11-14, design.md change `add-subagents-and-tasks`, D39; прежде один `sequential`-вызов делал последовательным весь пакет).
+2. **Параллельная группа.** Для каждого вызова группы в порядке ответа: `emit ToolCallStarted`. Затем вызовы группы исполняются через `executor` одновременно (`Future.wait`); каждый `ToolCallFinished` эмитится в момент завершения своего вызова (под общей очередью emit, LOOP-2).
+3. **Барьер.** `ToolCallStarted` → исполнение → `ToolCallFinished`.
+3a. **Отмена.** Перед исполнением каждой группы — проверка отмены (после объявления вызовов группы, §5.5.1, строка 8). При отмене вызовы ещё не начатых групп не исполняются и получают `ToolCallStarted` + `ToolCallFinished(cancelled)` с текстом `Tool call was cancelled before it started` — у каждого вызова ответа есть результат (парность, TOOL-6). Закрытие `abandon` запускается сразу для всех объявленных вызовов группы, поэтому сбой или зависание эмита одного из них не держит места в очереди пути остальных; каждый сбой закрытия пишется в лог `tool.abandon.error`, а первый из них завершает ход `failed` (LOOP-1). Уже идущие вызовы группы получают отмену через токен хода, как прежде.
+3b. **Результаты.** Сообщения-результаты добавляются после всего пакета в порядке вызовов ответа (LOOP-3), независимо от групп.
+3c. **Сбой объявления.** Если объявление вызова (`announce`, §6.3.1, шаг 1) бросило исключение — на практике это сбой `emit ToolCallStarted`, — упавший вызов сам отпускает своё место в очереди пути, а уже объявленные вызовы той же группы закрываются `abandon` (`ToolCallFinished(cancelled)` с тем же текстом) — все сразу, как при отмене; сбой самого `abandon` пишется в лог `tool.abandon.error` (§12.3) и не прерывает откат остальных. Затем исходная ошибка завершает ход (LOOP-1): упавший вызов, остальные вызовы группы и все следующие группы не объявляются вовсе. Подробно — §5.5.1.
 4. Steering во время пакета не прерывает его (CAN-6): сообщение ждёт в очереди до шага 25 алгоритма хода — после всего пакета любого режима; между вызовом и его результатом сообщение не вставляется (TOOL-6, STEER-2).
 5. Частичные результаты (`onUpdate`) после завершения вызова игнорируются; цикл дожидается доставки уже отправленных `ToolCallProgress`, прежде чем эмитить `ToolCallFinished`.
+
+### 5.5.1. Алгоритм барьера D39 подробно
+
+Раздел описывает текущую стратегию исполнения пакета (`agent_loop.dart`, `_runBatch`) так, чтобы её
+можно было воспроизвести без чтения кода. Источник решения — D39 change `add-subagents-and-tasks`
+(решение пользователя 2026-11-14, Q18); откат упавшего объявления и одновременный откат всей группы — исправления
+утечки места в очереди пути (PR #324 и PR #326, TOOL-7). Что делает каждая фаза точки исполнения — §6.3.1.
+
+**Три операции точки исполнения**, на которых построен алгоритм (§5.2, §6.3.1):
+
+| Операция | Что делает | События | Место в очереди `PathLock` |
+|---|---|---|---|
+| `announce(call, inv)` | ищет инструмент в схемах шага, строит `ToolContext`, занимает место в очереди пути, вызывает `present` | `ToolCallStarted` | занимает (`reserve`), если `lockPath(rawArgs)` не `null`; при исключении внутри `announce` отпускает сам и пробрасывает исключение — handle не возвращается |
+| `complete(handle)` | шаги 1a–9 §6.3.1: предохранитель, валидация, `preflight`, `beforeToolCall` (разрешения), проверка отмены, ожидание пути, `execute`, обработка результата, `afterToolCall` | `ToolCallProgress`, у `task_*` — `TaskListChanged`, затем `ToolCallFinished` | отпускает в `finally` после исполнения, до `ToolCallFinished` |
+| `abandon(handle)` | закрывает объявленный вызов без исполнения: outcome `cancelled`, текст `Tool call was cancelled before it started` | `ToolCallFinished(cancelled)` | отпускает **первым действием**, до эмита: сбой эмита место уже не держит |
+
+Для каждого handle вызывается ровно одно из `complete` или `abandon`.
+
+**Откат группы** (`abandonAll`, строки 7 и 8 псевдокода) закрывает объявленные вызовы без
+исполнения. Все `abandon` запускаются до первого ожидания, поэтому места в очереди пути всех
+вызовов группы свободны раньше, чем цикл начнёт ждать хотя бы один `ToolCallFinished`: сбой или
+зависание эмита одного вызова не держит пути остальных. Исходы ждутся по порядку объявления;
+сбой каждого вызова пишется в лог `tool.abandon.error` (`error_class` — тип исключения, само оно —
+в `error` и `stack` записи), а сбой самого логгера глотается, чтобы не
+подменить ошибку хода.
+
+**Псевдокод.**
+
+```text
+runBatch(calls):              # calls — вызовы ответа в порядке модели; id уже уникальны (LOOP-11)
+1  if calls пуст: return []
+2  inv := ToolInvocation(session, cancel хода, stepTools := имена схем текущего шага, emit,
+          beforeToolCall, afterToolCall, misuse хода (LOOP-16), supportsImages модели шага)
+3  # разбиение на группы — чистое, без событий и без мест в очереди пути
+   groups := []; lastIsBarrier := false
+   для call из calls по порядку:
+     tool := первый инструмент схем шага с именем call.name, иначе null
+     barrier := tool != null and tool.executionModeOf(call.arguments) == sequential
+                # null-режим, parallel и «инструмента нет в схемах шага» — не барьер
+     if barrier or groups пуст or lastIsBarrier: groups.add([call])   # новая группа
+     else: groups.last.add(call)                                      # продолжить параллельную
+     lastIsBarrier := barrier
+4  results := {}                                  # toolCallId → ToolResultMessage
+5  для group из groups по порядку:                # группа начинается после завершения предыдущей
+6    handles := []
+7    для call из group по порядку ответа:         # фаза объявления, по одному
+       try:
+         handles.add(await executor.announce(call, inv))     # ToolCallStarted, место в очереди пути
+       catch e:                                   # announce уже отпустил своё место
+         abandonAll(handles)                      # откат объявленных; его ошибка не пробрасывается
+         rethrow e                                # ход → AgentError + TurnEnded(failed), LOOP-1
+8    if cancel.isCancelled:                       # после объявления группы, до её исполнения
+       (outcomes, first) := abandonAll(handles)
+       if first != null: throw first              # ход failed с первой ошибкой отката, LOOP-1
+     else:
+       outcomes := await Future.wait([executor.complete(h) для h из handles])
+                   # одновременно; ждёт все вызовы, даже если один бросил; группа из одного
+                   # вызова (барьер) исполняется так же — Future.wait одного элемента
+9    для o из outcomes: results[o.message.toolCallId] := o.message
+10 return [results[call.id] для call из calls]   # порядок ответа (LOOP-3)
+
+abandonAll(handles):                              # общий откат строк 7 и 8
+a  pending := [(h, settle(executor.abandon(h))) для h из handles по порядку]
+              # все abandon запускаются до первого ожидания: каждый синхронно отпускает своё
+              # место в очереди пути, затем эмитит ToolCallFinished через общую очередь emit
+              # (LOOP-2); settle превращает синхронный и асинхронный сбой в значение (ошибка, стек)
+b  outcomes := []; first := null
+c  для (h, p) из pending по порядку:
+     r := await p                                 # зависший emit задерживает ход, но не пути
+     if r — исход: outcomes.add(r); continue
+     first := first ?? r.ошибка
+     try: log warning 'tool.abandon.error' {session_id, tool, tool_call_id, error_class}, error, stack
+     catch: ничего                                # сломанный логгер не подменяет ошибку хода
+d  return (outcomes, first)
+```
+
+Цикл добавляет результаты в транскрипт и эмитит их `MessageStarted`/`MessageEnded` только после
+`runBatch` (§5.4, шаг 19); `ToolCallFinished` каждого вызова эмитит сама точка исполнения в момент
+его завершения под общей очередью `emit` (LOOP-2).
+
+**Пример.** Ответ `[read, task_create, agent(task: "1"), agent(task: "2"), ls]`; `task_create` —
+`sequential`, остальные — без режима или `parallel`. Строка 3 даёт группы `{read}`, `{task_create}`,
+`{agent 1, agent 2, ls}`: `read` — отдельная группа, потому что за ним барьер; три вызова после
+барьера идут одной группой.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant L as Цикл, runBatch
+    participant X as Точка исполнения
+    participant M as SubagentManager
+    participant S as Подписчик emit
+    Note over L,S: Группа 1 — read
+    L->>X: announce(read)
+    X->>S: ToolCallStarted(read)
+    L->>X: complete(read)
+    X->>S: ToolCallFinished(read)
+    Note over L,S: Группа 2 — барьер task_create, начинается после завершения группы 1
+    L->>X: announce(task_create)
+    X->>S: ToolCallStarted(task_create)
+    L->>X: complete(task_create)
+    X->>S: TaskListChanged
+    X->>S: ToolCallFinished(task_create)
+    Note over L,S: Группа 3 — сначала все объявления по порядку ответа
+    L->>X: announce(agent 1)
+    X->>S: ToolCallStarted(agent 1)
+    L->>X: announce(agent 2)
+    X->>S: ToolCallStarted(agent 2)
+    L->>X: announce(ls)
+    X->>S: ToolCallStarted(ls)
+    Note over L,X: проверка отмены, затем Future.wait трёх complete
+    par agent 1
+        L->>X: complete(agent 1)
+        X->>M: spawn, слот дерева
+    and agent 2
+        L->>X: complete(agent 2)
+        X->>M: spawn, слот дерева
+    and ls
+        L->>X: complete(ls)
+        X->>S: ToolCallFinished(ls)
+    end
+    M-->>X: отчёт ребёнка 2
+    X->>S: ToolCallFinished(agent 2)
+    M-->>X: отчёт ребёнка 1
+    X->>S: ToolCallFinished(agent 1)
+    X-->>L: все три complete завершены
+    Note over L: результаты в порядке ответа — read, task_create, agent 1, agent 2, ls
+```
+
+`ToolCallFinished` третьей группы приходят в порядке завершения (здесь `ls`, затем ребёнок 2, затем
+ребёнок 1); дети стартуют в порядке `ToolCallStarted`, то есть в порядке ответа, и занимают слоты
+дерева в этом же порядке (§17.3.4, п. 2).
+
+**Случаи.**
+
+| Случай | Что происходит |
+|---|---|
+| Отмена до пакета или между группами | Вызовы очередной группы всё равно объявляются (`ToolCallStarted`), затем строка 8 видит отмену и закрывает их `abandonAll`: места в очереди пути всех вызовов отпущены сразу, `ToolCallFinished(cancelled)` с текстом `Tool call was cancelled before it started`. Так же проходит каждая следующая группа. Результат есть у каждого вызова; после пакета ход завершается `cancelled` (§5.4, шаг 24). |
+| Отмена во время объявления группы | Объявление не проверяет отмену: группа объявляется до конца, затем строка 8 закрывает её целиком через `abandon`. |
+| Отмена во время исполнения группы | Каждый `complete` видит токен хода: проверка после разрешений (§6.3.1, шаг 5) → `cancelled` с текстом `Tool call was cancelled`; ожидание пути прерывается отменой (шаг 6); инструмент в `execute` отвечает сам (`CancelledException`, `ToolCancelled`); `agent` отменяет детей каскадом и ждёт их не дольше `cancel_grace` (§17.3.4, п. 8). `Future.wait` ждёт все вызовы группы; следующие группы — как в первой строке. |
+| Сбой `announce` (бросил `emit ToolCallStarted`; исключение `present` сбоем не считается — оно ловится, заголовком становится имя инструмента) | Упавший вызов сам отпускает своё место в очереди пути. Объявленные раньше вызовы этой группы закрываются `abandonAll` — все сразу. Исходная ошибка пробрасывается: ход завершается `AgentError` + `TurnEnded(failed)` (LOOP-1). Упавший вызов, вызовы группы после него и все следующие группы не получают ни `ToolCallStarted`, ни `ToolCallFinished`. Результаты уже завершённых групп в транскрипт не добавляются: `ToolCallFinished` у них был, а сообщений-результатов нет, поэтому следующий запрос к модели получает синтетические результаты ремонта парности (§6.3.3, TOOL-6). Если приёмник событий сломан насовсем, не доходят и `AgentError`/`TurnEnded` — исключение выходит из `prompt()`. |
+| Сбой `abandon` при откате упавшего объявления | Места в очереди всех объявленных вызовов уже отпущены (`abandon` отпускает место первым действием, а все `abandon` запущены сразу); не доходит только `ToolCallFinished` упавшего. Лог `tool.abandon.error` (warning; `session_id`, `tool`, `tool_call_id`, исключение — в `error`/`stack` записи, §12.3) на каждый упавший вызов; остальные вызовы получают свой `ToolCallFinished(cancelled)`. Ход завершается исходной ошибкой объявления, а не ошибкой отката. |
+| Сбой `abandon` в ветке отмены (строка 8) | Места в очереди всех вызовов группы отпущены; остальные вызовы получают свой `ToolCallFinished(cancelled)`; каждый сбой — запись `tool.abandon.error`. Когда закрыты все вызовы, первая ошибка отката пробрасывается: ход завершается `AgentError` с ней и `TurnEnded(failed)`, а не `cancelled` (LOOP-1). Сообщения-результаты пакета в транскрипт не добавляются — недостающие даёт ремонт парности (§6.3.3). |
+| Зависание `emit ToolCallFinished` при откате (в любой ветке) | Места в очереди всех вызовов группы отпущены до ожидания: следующий `write`/`edit` того же пути в сессии или у детей проходит. Ход ждёт зависший эмит (LOOP-2); когда приёмник отпустит его, остальные вызовы тоже получают `ToolCallFinished(cancelled)`, и ход завершается как обычно: в ветке отмены — `cancelled`, в ветке сбоя объявления — `failed` с исходной ошибкой. |
+| Сбой логгера на записи `tool.abandon.error` | Глотается: откат остальных вызовов продолжается, исход хода не меняется — исходная ошибка объявления в ветке сбоя, первая ошибка отката в ветке отмены. |
+| Исключение из `complete` (практически — сбой `emit` прогресса или `ToolCallFinished`) | Место в очереди пути отпущено в `finally` до эмита. `Future.wait` дожидается остальных вызовов группы и пробрасывает первую ошибку; следующие группы не объявляются; ход `failed` (LOOP-1). У упавшего вызова может не быть `ToolCallFinished` — приёмник событий сломан. |
+| Ошибка инструмента (исключение в `execute`, результат с `isError`) | Обычный результат-ошибка, outcome `failed` (TOOL-3). Пакет продолжается: барьер после такой группы стартует как обычно. |
+| Отказ в разрешении (`Block` из `beforeToolCall`) | Результат-ошибка с текстом причины, outcome `rejected` (§6.3.1, шаг 4); пакет продолжается. Запросы разрешений вызовов одной группы идут одновременно; порядок их ответов не меняет порядок захвата путей — места в очереди заняты при объявлении. Барьер, ждущий решения человека, задерживает все следующие группы. |
+| Steering во время пакета | Пакет не прерывается и не делится; сообщение ждёт в очереди до шага 25 алгоритма хода — после всего пакета, а не между группами (CAN-6, STEER-2, §17.7). |
+| Вызов неизвестного или недоступного инструмента (имени нет в схемах шага: неизвестное, выключенное §6.3.8, вне набора агента, `agent` при малом окне — D40) | При разбиении `tool == null` → вызов не барьер и входит в параллельную группу соседей. `announce` эмитит `ToolCallStarted` с `kind: other` и заголовком-именем, места в очереди пути не занимает; `complete` возвращает ошибку шага 2 §6.3.1 (`Tool "<name>" is not available. …` или текст недоступности, CFG-7), которую считает предохранитель (§6.3.7). |
+| Исключение в `executionModeOf(args)` | Строка 3 выполняется до любого объявления: ни одного `ToolCallStarted`, мест в очереди пути нет; ход `failed` (LOOP-1). Встроенные инструменты режим не вычисляют — это геттер без логики. |
+| Ответ обрезан (`stopReason: length`) | `runBatch` не вызывается: каждый вызов получает ошибку обрезанных аргументов (LOOP-5). |
+
+**Инварианты алгоритма.**
+
+* **Парность (TOOL-6, LOOP-9).** Каждый объявленный вызов закрывается ровно одним `complete` или
+  `abandon`, то есть ровно одним `ToolCallFinished`; вызов, объявление которого упало, и вызовы, до
+  объявления которых дело не дошло, не получают ни одного события. Исключение — сломанный приёмник
+  событий: тогда не доходит и сам `ToolCallFinished`. Сообщение-результат есть у каждого вызова
+  ответа, если `runBatch` вернулся; если бросил — недостающие результаты даёт ремонт парности в
+  payload (§6.3.3).
+* **Порядок (LOOP-3, LOOP-4).** Внутри группы объявления идут в порядке ответа, группы — в порядке
+  ответа, поэтому `ToolCallStarted` всего пакета идут в порядке ответа. `ToolCallFinished` — в
+  порядке завершения внутри группы; ни один `ToolCallStarted` группы не опережает последний
+  `ToolCallFinished` предыдущей группы. Результаты — в порядке ответа (строка 10).
+* **Очередь путей (TOOL-7).** Место в очереди занимается при объявлении, а объявления всего пакета
+  идут в порядке ответа, поэтому правки одного пути применяются в порядке вызовов. Место отпускается
+  на каждом пути завершения: `complete` — в `finally`, `abandon` — первым действием, упавший
+  `announce` — сам, до проброса исключения. При откате группы все `abandon` запускаются до первого
+  ожидания, поэтому сбой или зависание эмита одного вызова не держит места остальных.
+  Это важно, потому что `PathLock` живёт всю сессию и общий для дерева: не отпущенное место
+  держало бы путь для всех следующих ходов корня и детей.
+* **Конец хода (LOOP-1).** Любое исключение `runBatch` превращается в `AgentError` +
+  `TurnEnded(failed)` ровно один раз; `runBatch` его не глотает. При сбое объявления ошибка
+  отката только логируется, а наружу идёт исходная; в ветке отмены ошибкой хода становится первая
+  ошибка отката. Сбой логгера исход хода не меняет.
+* **Предохранитель (LOOP-16).** Все вызовы пакета видят один `MisuseBreaker` хода. Барьер
+  завершается до начала следующей группы, поэтому вызовы после барьера видят его учёт; внутри
+  параллельной группы порядок учёта — порядок завершения проверок.
+
+**Связь с субагентами.**
+
+* `agent` режима не объявляет, поэтому несколько `agent` подряд — одна параллельная группа; дети
+  стартуют в порядке `ToolCallStarted` и встают в очередь слотов дерева (`max_concurrent`, §17.3.4,
+  п. 2). Группа с `agent` завершается, только когда все её дети терминальны (`Future.wait`), поэтому
+  барьер после неё ждёт самого долгого ребёнка: `[agent, task_update, agent]` исполняет детей не
+  одновременно.
+* `PathLock` один на дерево корневой сессии: рантайм создаёт его при сборке корня и передаёт
+  каждому ребёнку (`ChildSessionSpec.locks` → `ToolCallExecutor(locks:)`, §17.3.3, шаг 3). Правка
+  корня и правка ребёнка одного пути упорядочены по моменту объявления. Корень в группе
+  `{agent, write a.txt}` объявляет `write` раньше, чем ребёнок успеет объявить свой `write a.txt`,
+  поэтому ребёнок ждёт корня; правки двух параллельных детей одного пути упорядочены по моменту
+  объявления у каждого ребёнка, а не по порядку ответа корня. Взаимоблокировки нет: держатель места
+  в очереди пути ждёт только разрешения, отмены или своего инструмента, но не слота и не детей
+  (SUB-23 для слотов).
+* Детский цикл — тот же `runAgentLoop`, поэтому пакеты ребёнка исполняются этим же алгоритмом.
+  В наборе ребёнка есть `task_update`, `task_list`, `task_get` (тоже `sequential`, барьеры в его
+  пакете), нет `task_create` (§17.16.4); `agent` у ребёнка появится только с итерации 4 change
+  (до неё эффективная глубина — 1, D36 Т16).
+* `agent` не виден в схемах шага при эффективном окне меньше 32 768 токенов (D40): его вызов
+  обрабатывается как вызов недоступного инструмента (таблица выше).
+
+**Известные ограничения.**
+
+* **Голова очереди.** Группа ждёт свой самый долгий вызов: барьер после группы `{agent, ls}` не
+  начнётся, пока не завершится ребёнок, хотя `ls` давно готов. Параллельность `agent` по обе стороны
+  барьера модель получает, только поставив `task_*` до или после всех `agent` ответа: пакет
+  `[agent, task_*, agent]` идёт волнами. Описание `agent` просит модель ставить вызовы списка задач
+  до первого `agent` ответа (§17.3.2; change `add-subagents-and-tasks`, D41 п. 4).
+* **Режим — свойство инструмента, а не конфликт ресурсов.** Барьер ставит любой
+  `sequential`-вызов, даже если соседи не трогают то же состояние; одновременные правки файлов
+  упорядочивает не барьер, а очередь путей (§6.3.4).
+* **Зависший приёмник событий задерживает ход.** Откат освобождает места в очереди путей, но не
+  ход: цикл ждёт каждый `emit` (LOOP-2), поэтому зависший эмит `ToolCallFinished` держит ход до тех
+  пор, пока приёмник его не отпустит. Тайм-аута на эмит нет.
+
+**Сравнение с другими стратегиями** (D39, «Отклонено» и «Обоснование и источники»):
+
+| Стратегия | Поведение | Почему не она |
+|---|---|---|
+| Весь пакет последовательно (прежний LOOP-4) | один `sequential`-вызов делает последовательным весь пакет | ответ «`task_update` и три `agent`» исполнял бы детей по одному; параллельность `agent` зависела бы от того, разнесёт ли модель вызовы по разным ответам |
+| Разделяемая и исключительная блокировка (RwLock, Codex) | параллельные вызовы берут разделяемую блокировку, остальные — исключительную; по порядку прихода это даёт те же группы с барьерами | наблюдаемое поведение совпадает с барьером; блокировка нужна, когда вызовы стартуют по мере прихода из потока, а цикл ядра получает весь ответ до исполнения (§5.4, шаг 15) и делит его явно — проще проверить и детерминировать |
+| Разбиение подряд идущих вызовов (partition, Claude Code) | безопасные для параллельности вызовы идут вместе, небезопасные — по одному | это то же правило; D39 воспроизводит только наблюдаемое поведение, код не заимствуется (`dart-agent-and-clients/07-decision-sources.md` §7а) |
+| Отдельный режим `ordered` для `task_*`; снять режим с `task_*` | — | второй режим с той же семантикой барьера; без режима порядок операций и id пунктов одного ответа перестаёт совпадать с порядком вызовов (TSK-1, TSK-3, D35) |
+| Очередь по ключу ресурса (D39-alt) | `task_*` без `sequential` и без барьеров берут ключ `tasks` (`AgentTool.lockKey`) и идут по очереди ключа в порядке ответа; `agent` с `task` встаёт в ту же очередь и отпускает ключ после проверки пункта; остальные вызовы ждут только тех, кто трогает тот же ключ | отложенная альтернатива D39-alt: PR #321 закрыт без влития, вернуться в итерации 4, если пакеты `[agent, task_*, agent]` окажутся частыми. Плюс — нет волн при любом порядке вызовов; минусы — новые члены контракта ядра, обязанность каждого читателя списка объявлять ключ, ожидание ключа не прерывается отменой. Подробно — design.md change `add-subagents-and-tasks`, D39 (д) |
 
 ## 5.6. Контракт: Agent и публичный API
 
@@ -493,7 +723,8 @@ final class Agent {
   List<Message> get messages;                      // неизменяемая копия транскрипта
   bool get isRunning;
   void replaceTranscript(List<Message> messages);  // только вне хода: после сжатия (§9)
-  /// Общая очередь событий (LOOP-2): через неё эмитят цикл и сервисы сессии (PlanService → PlanUpdated).
+  /// Общая очередь событий (LOOP-2): через неё эмитят цикл и сервисы сессии (TaskList → TaskListChanged, §17.16.2;
+  /// до change add-subagents-and-tasks — PlanService → PlanUpdated).
   Future<void> emit(AgentEvent event);
   AgentLoopConfig config;                          // меняется между ходами (модель, режим)
 }
@@ -519,21 +750,73 @@ abstract interface class AgentRuntime {
   Future<String> renameSession(SessionId id, String title);   // §17.6.4
   Future<ForkResult> forkSession(ForkSpec spec);              // §17.6.7; lease источника не нужен
   Future<SessionTree> sessionTree(SessionId id);              // §17.6.3
-  /// После MVP (§17.3.3): дочерняя сессия субагента. Журнал — в каталоге журнала родителя
-  /// (§17.3.6), заголовок с полем parent; в listSessions не попадает.
-  Future<AgentSession> createChildSession(ChildSessionSpec spec);
-  /// После MVP (§17.3.8.1): открыть существующую дочернюю сессию из её журнала для нового прогона
-  /// (task_send, task_resume). Под lease родителя; heal (§8.8) уже выполнен при open родителя.
-  Future<AgentSession> openChildSession(ChildSessionSpec spec, SessionId childSessionId);
   Future<void> dispose();
 }
-final class ChildSessionSpec {                        // после MVP, §17.3.3
-  final AgentSession parent; final SubagentId subagentId; final SubagentSpec subagent;
-  final List<AgentTool> tools;                        // пересечение с родителем без task и update_plan (SUB-1)
-  final ModelRef model; final TurnBudget budget;
-  final PermissionMode Function() mode;               // narrow(parentMode(), type.mode) на каждое решение (SUB-2)
-  final PermissionGate? gate;                         // SubagentPermissionGate над gate родителя
+// Внутренняя фабрика рантайма, не часть публичного AgentRuntime: её вызывает только
+// SubagentManager ядра (сверка с кодом, D36 change add-subagents-and-tasks, Т2).
+//   createChildSession(ChildSessionSpec) — дочерняя сессия субагента (§17.3.3); журнал — через
+//     SessionStore.createChild в каталоге subagents/ корня (§17.3.6), заголовок с полем parent;
+//     в listSessions не попадает.
+//   openChildSession(ChildSessionSpec, SessionId) — после MVP (§17.3.8.1): существующая дочерняя
+//     сессия из её журнала (SessionStore.openChild) для agent_send, agent_resume; под lease родителя.
+// Части родителя, из которых SubagentManager собирает ребёнка (внутренний тип ядра; D36, Т2, Т9, Т10):
+// функции читаются при каждом spawn («текущее состояние родителя»), остальное постоянно для сессии.
+final class SubagentParent {
+  final List<AgentTool> Function() tools;             // схемы текущего шага родителя (base набора ребёнка)
+  final ModelRef Function() model;
+  final ModeResolution Function() mode;               // эффективный режим родителя для narrow (SUB-2)
+  final PermissionGate? gate;                         // gate корня: вопросы потомков любой глубины (с итерации 3 change, D42 Т3); null — у корня нет gate (PERM-5)
+  final SkillCatalog skills;                          // снимок каталога навыков (D34)
+  final AgentConfigPaths? agentConfigPaths;           // набор PERM-11 корня (SUB-1)
+  final PermissionDecisionStore decisions; final PolicyRules rules; final Set<ToolTier> extraDeniedTiers;   // корня, общие на дерево
+  final ExecutionEnv env;                             // env родителя как есть (Т9)
+  final TaskList tasks;                               // список задач дерева (Т7)
+  final PathLock locks;                               // блокировки путей корня: одна очередь на дерево (TOOL-7, §6.3.4)
+  final int maxChildDepth;                            // с итерации 4 — subagents.max_depth, снимок корневой сессии на дерево (D45 Т9, D46 п. 2)
+  final int? Function() contextWindowCap;             // compaction.context_window_cap: правило окна ребёнка (D40, D45 Т10)
+  final List<BeforeToolCallHook> hostBeforeToolCall;  // хуки хоста корня для потомков любой глубины; только хуки, префикс цепочки — SubagentSpec.sessionChain (D48 п. 1)
+  SubagentParent nestedFor({tools, model, mode});     // части для менеджера потомка с agent: общие объекты корня, свои схемы шага, модель и режим (D45 Т2)
 }
+// Связь менеджера потомка со слотом его хэндла в менеджере родителя (внутренний тип ядра; D3, D45 Т4,
+// D46 п. 1, §17.3.4 шаг 2). callBegan — запущен ещё один agent: 0 → 1 возвращает слот и переводит
+// хэндл в waiting/subagents. callEnded — agent получил отчёт: 1 → 0 ставит родителя в очередь
+// возвращающихся (до release слота ребёнка, SUB-23) и отдаёт Future<bool> повторного взятия слота
+// (false — отмена в очереди; результат agent идёт после него). У менеджера корня связи нет.
+abstract interface class SubagentSlotLink {
+  void callBegan();
+  Future<bool>? callEnded();
+}
+final class ChildSessionSpec {                        // после MVP, §17.3.3; внутренний тип ядра
+  // Вместо ссылки на AgentSession родителя — его части (SubagentParent): env, хранилище решений и
+  // PolicyRules корня, список задач дерева, блокировки путей, логгер (D36, Т2).
+  final SubagentSpec subagent;                        // id ребёнка — subagent.id
+  final List<AgentTool> tools;                        // пересечение с родителем без agent выше max_depth; задачи — детский набор (SUB-1, §17.16.4)
+  final ModelRef model; final TurnBudget budget;
+  final ModeResolution Function() mode;               // пара «режим разрешений и запрещённые уровни»: narrow(parentMode(), type.mode) на каждое решение (SUB-2; §7.2)
+  final PermissionGate? gate;                         // SubagentPermissionGate над FIFO дерева у gate корня (с итерации 3 change, D42 Т3); null — у корня нет gate (PERM-5)
+  // Навыки (D34 change add-subagents-and-tasks, итерация 2s): тот же неизменяемый снимок каталога
+  // родителя, без повторной загрузки; null — у ребёнка нет skill и секции skills/catalog.
+  // readOnlyRoots env ребёнка — каталоги навыков этого снимка и его каталог выноса (§17.3.6);
+  // пока выноса (§17.4) нет, env ребёнка — env родителя как есть (D36, Т9).
+  final SkillCatalog? skills;
+  // Защищаемые пути конфигурации агента (PERM-11) — набор корневой сессии, не новый расчёт (SUB-1).
+  final AgentConfigPaths? agentConfigPaths;
+  final PermissionDecisionStore decisions; final PolicyRules rules; final Set<ToolTier> extraDeniedTiers;
+  final ExecutionEnv env; final TaskList tasks;
+  final PathLock locks;                               // PathLock корня: правки одного файла корнем и потомками — одна очередь (TOOL-7)
+  final List<BeforeToolCallHook> hostBeforeToolCall;  // хуки хоста корня (ACP markInProgress) — последними после политики, вызов с цепочкой toolCallId; префикс — subagent.sessionChain (D48 п. 1, итерация 5)
+  final Logger logger;                                // с root_session_id, subagent_id, parent_tool_call_id (D18)
+  final void Function(Usage own) onOwnUsage;          // usage ребёнка в usage хода родителя (D4, Т8)
+  final BudgetLimit? Function() ancestorBudget;       // бюджет предков на границе шага ребёнка (D4, Т8); у потомка — цепочка через бюджет ребёнка (D45 Т5)
+  // Вложенность (D45 Т2): всё, из чего фабрика собирает ребёнку менеджер с agent.
+  final SubagentParent? parent;                       // части родителя; из них — nestedFor
+  final SubagentTree? tree;                           // тот же SubagentTree корня
+  final SubagentSlotLink? link;                       // слот хэндла ребёнка в менеджере родителя (D46 п. 1)
+  final SessionId? rootSessionId;                     // корень дерева: root_session_id логов (Т11)
+  final TaskItem? task;                               // пункт после assign: строка «Your task: #id subject» (Т8)
+}
+// ChildSession (результат фабрики) несёт и subagents: SubagentManager потомков самого ребёнка (есть,
+// если в его наборе agent); родитель берёт из него activeChildren (D45 Т5), close() останавливает внуков.
 final class SessionSpec {
   final String cwd; final ModeId mode; final ModelRef model;
   final List<McpServerConfig> mcpServers;
@@ -551,6 +834,10 @@ abstract interface class AgentSession {
   Future<void> setMode(ModeId mode);
   Future<void> setConfigOption(String id, String value);
   Iterable<AgentEvent> replay();                  // проекция журнала для session/load (§8)
+  // Change add-subagents-and-tasks, итерация 5 (D47 Т6): то же и SubagentActivity потомков сразу после
+  // ToolCallFinished(agent) — журналы потомков через SessionStore.openChildReadOnly, без записи и lease;
+  // для реплея клиенту с subagentToolCalls (§17.3.7). replay() не меняется.
+  Future<List<AgentEvent>> replayTree();
   // После MVP (§17.6.2): управление сессией
   SessionAccess get access;                       // write | readOnly (lease, §17.6.8)
   Future<String> rename(String title);            // можно во время хода
@@ -593,7 +880,7 @@ final class TurnResult { final TurnEndReason reason; final Usage usage; final Bu
 1. **LOOP-1.** `TurnEnded` — всегда последнее событие хода и эмитится ровно один раз, в том числе при исключении в хуке (оно превращается в `TurnEnded(failed)` с `AgentError`).
 2. **LOOP-2.** Цикл ждёт завершения каждого `emit`; следующее событие не эмитится, пока подписчики не обработали предыдущее.
 3. **LOOP-3.** `ToolCallFinished` в параллельном пакете приходят в порядке завершения; сообщения-результаты в транскрипте — в порядке вызовов в ответе модели.
-4. **LOOP-4.** Пакет исполняется последовательно, если хотя бы для одного вызова пакета `executionModeOf(args)` — `sequential`.
+4. **LOOP-4.** Вызов, для которого `executionModeOf(args)` — `sequential`, — барьер внутри пакета: он начинается после завершения всех вызовов ответа перед ним, а вызовы после него — после его завершения; подряд идущие `parallel`-вызовы между барьерами исполняются одновременно; вызов, которого нет в схемах шага, барьером не считается (D39 change `add-subagents-and-tasks`; алгоритм — §5.5.1).
 5. **LOOP-5.** При `stopReason: length` ни один вызов из обрезанного ответа не исполняется; каждый получает результат-ошибку `Tool call arguments were truncated because the response hit the output token limit. Retry with smaller arguments.`
 6. **LOOP-6.** Цикл не обращается к хранилищу и не знает о протоколе; всё сохранение делает подписчик.
 7. **LOOP-7.** `transformContext`, ремонт парности, заметки `Revise` и (после MVP) ссылки на картинки `[Image N]` меняют только payload; транскрипт `Agent` после запроса равен транскрипту до запроса плюс новые сообщения.
@@ -648,7 +935,9 @@ final class TurnResult { final TurnEndReason reason; final Usage usage; final Bu
 * `loop_sequences_test.dart` на scripted `StreamFunction` и fake `ToolExecutor`: эталонные последовательности событий для текста, одного вызова, двух параллельных, `length`, ошибки провайдера, отмены (LOOP-1, LOOP-3, LOOP-5, LOOP-9).
 * `slow_subscriber_test.dart`: подписчик с `await Future.delayed` — события не обгоняют `await` (LOOP-2).
 * `hook_throws_test.dart`: исключение в `transformContext` и в `prepareNextStep` → `AgentError(hook)` + `TurnEnded(failed)` ровно один раз (LOOP-1).
-* `sequential_mode_test.dart`: пакет с одним `sequential`-инструментом исполняется по порядку; инструмент, у которого `executionModeOf(args)` зависит от аргументов, переводит пакет в `sequential` только при нужных аргументах (LOOP-4).
+* `sequential_mode_test.dart`: барьер делит пакет на группы — `[read, task_update, agent, agent]` даёт `{read}` → `{task_update}` → два `agent` одновременно; два `sequential` подряд — по одному; отмена во время группы — вызовы следующих групп `cancelled` до старта; порядок `ToolCallStarted`/`ToolCallFinished` по группам и результатов в порядке ответа; инструмент, у которого `executionModeOf(args)` зависит от аргументов, становится барьером только при нужных аргументах (LOOP-4, D39 change `add-subagents-and-tasks`).
+* `batch_cancel_abandon_failure_test.dart` (PR #326): ветка отмены — эмит `ToolCallFinished` бросает на всех вызовах → записи `tool.abandon.error` для `c1` и `c2`, `AgentError` с ошибкой отката, `TurnEnded(failed)`, путь свободен; эмит `ToolCallFinished(c1)` повис → путь свободен ещё до его отпускания, затем оба вызова `cancelled`, `TurnEnded(cancelled)`; ветка сбоя объявления (`ToolCallStarted(c3)` бросает) — сбой отката `c1` не обрывает откат `c2`, `AgentError` с исходной ошибкой объявления; зависший откат `c1` не держит путь; логгер, бросающий на `tool.abandon.error`, исход хода не меняет (TOOL-7, LOOP-1, §5.5.1).
+* `parallel_edit_test.dart`, группа `a failed announce does not leave the path taken`: в параллельной группе `ToolCallStarted` второго вызова бросает — первый вызов закрыт `abandon` ровно одним `ToolCallFinished(cancelled)`, у второго нет ни одного события, ход `failed`, путь свободен в следующем ходе той же сессии; приёмник ломается насовсем — `abandon` первого вызова падает, одна запись `tool.abandon.error` с его `tool_call_id`, путь всё равно свободен (TOOL-7, §5.5, шаг 3c, §5.5.1).
 * `steering_test.dart`: `steer` во время инструмента доставляется после пакета; все сообщения очереди забираются одним опросом в порядке FIFO; 25 при лимите 20 → один шаг на опрос, не больше 20 шагов (LOOP-8, CAN-6, STEER-6).
 * `payload_immutability_test.dart`: транскрипт до и после запроса с ремонтом пар и `transformContext` отличается только новыми сообщениями (LOOP-7).
 * `duplicate_tool_ids_test.dart`: провайдер дважды присылает `call_1` в разных шагах → второй получает `call_1_2` уже в первом `MessageStarted` (LOOP-11).

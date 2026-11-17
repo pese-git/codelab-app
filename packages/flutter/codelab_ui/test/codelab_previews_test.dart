@@ -1,5 +1,7 @@
 import 'package:codelab_ui/src/molecules/codelab_molecule_previews.dart';
 import 'package:codelab_ui/src/organisms/codelab_organism_previews.dart';
+import 'package:codelab_ui/codelab_ui.dart';
+import 'package:fluent_ui/fluent_ui.dart' show FluentTheme, ToggleSwitch;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -22,11 +24,102 @@ void main() {
     await tester.pumpWidget(codelabConnectionStatusRowPreview());
     expect(tester.takeException(), isNull);
 
+    await tester.pumpWidget(codelabSessionStatusBarPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabSessionStatusBar), findsOneWidget);
+
     await tester.pumpWidget(codelabConnectionBannerPreview());
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(codelabApprovalOptionGroupPreview());
     expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(codelabSettingsSectionPreview());
+    expect(tester.takeException(), isNull);
+
+    // Виджеты формы (3.8a, D16): светлая и тёмная тема, все тона заметок и
+    // оба состояния переключателя.
+    await tester.pumpWidget(codelabFormPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabForm), findsOneWidget);
+    expect(find.byType(CodeLabFormRow), findsWidgets);
+    expect(find.byType(CodeLabFormNote), findsNWidgets(3));
+    expect(find.byType(CodeLabSegmentedControl<String>), findsOneWidget);
+
+    await tester.pumpWidget(codelabFormDarkPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabForm), findsOneWidget);
+    expect(
+      FluentTheme.of(tester.element(find.byType(CodeLabForm))).brightness,
+      Brightness.dark,
+    );
+  });
+
+  testWidgets('key-value list previews render in both themes', (tester) async {
+    await tester.pumpWidget(codelabKeyValueListPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabKeyValueList), findsOneWidget);
+
+    await tester.pumpWidget(codelabKeyValueListDarkPreview());
+    expect(tester.takeException(), isNull);
+    expect(
+      FluentTheme.of(
+        tester.element(find.byType(CodeLabKeyValueList)),
+      ).brightness,
+      Brightness.dark,
+    );
+  });
+
+  testWidgets('step breadcrumb previews render in both themes', (tester) async {
+    await tester.pumpWidget(codelabStepBreadcrumbPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabStepBreadcrumb), findsOneWidget);
+
+    await tester.pumpWidget(codelabStepBreadcrumbDarkPreview());
+    expect(tester.takeException(), isNull);
+    expect(
+      FluentTheme.of(
+        tester.element(find.byType(CodeLabStepBreadcrumb)),
+      ).brightness,
+      Brightness.dark,
+    );
+  });
+
+  // Задача 5.6 change `add-provider-setup-ui` (D19): превью организма
+  // `CodeLabStatusTable` в светлой и тёмной теме — функции
+  // `codelabStatusTablePreview` и `codelabStatusTableDarkPreview` в
+  // `codelab_organism_previews.dart` (реализация — задача 5.9).
+  testWidgets('status table previews render in both themes', (tester) async {
+    await tester.pumpWidget(codelabStatusTablePreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabStatusTable), findsOneWidget);
+    // Строка с действием, строка сбоя и выключенная строка без действия.
+    expect(find.byType(CodeLabButton), findsWidgets);
+    expect(find.byType(CodeLabStatusIndicator), findsWidgets);
+
+    await tester.pumpWidget(codelabStatusTableDarkPreview());
+    expect(tester.takeException(), isNull);
+    expect(
+      FluentTheme.of(
+        tester.element(find.byType(CodeLabStatusTable)),
+      ).brightness,
+      Brightness.dark,
+    );
+  });
+
+  // Задача 3.2 change `add-app-skills-page` (D12): превью таблицы навыков.
+  testWidgets('skills table preview shows tags, toggles and escaped text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(codelabSkillsTablePreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabBadge), findsWidgets);
+    final toggles = tester
+        .widgetList<ToggleSwitch>(find.byType(ToggleSwitch))
+        .toList();
+    expect(toggles.map((t) => t.checked), [true, false]);
+    expect(toggles.last.onChanged, isNull);
+    expect(find.text('deploy\\u202egpj'), findsOneWidget);
   });
 
   testWidgets('organism previews render in bounded preview surfaces', (
@@ -47,10 +140,32 @@ void main() {
     await tester.pumpWidget(codelabTranscriptPanelVerbosePreview());
     expect(tester.takeException(), isNull);
 
+    // Панель Agents v1 (5b.1, D33): строки с отступом и дерево шагов.
+    // `Overlay` превью хранит `initialEntries` в `State`: без сброса дерева
+    // он показал бы записи предыдущего превью, а не панель.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(codelabAgentsPanePreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabAgentsPane), findsOneWidget);
+    expect(find.text('Review the change'), findsOneWidget);
+
     await tester.pumpWidget(codelabApprovalPromptPreview());
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(codelabConnectionScreenPreview());
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(codelabFileTreePreview());
+    expect(tester.takeException(), isNull);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(codelabFilePreviewPreview());
+    expect(tester.takeException(), isNull);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(codelabFilePreviewBinaryPreview());
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(codelabSessionSidebarPreview());
@@ -69,6 +184,10 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(codelabSettingsNavigationPreview());
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(
       SizedBox(

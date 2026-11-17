@@ -142,6 +142,18 @@ void main() {
       expect(_names(catalog.search('host lo')), ['host:logs']);
     });
 
+    // Страж D8 change `add-agent-skills`: команда навыка — обычная команда
+    // агента, палитра находит её без особых правил по имени и по префиксу.
+    test('a skill command is found by the skill name and by its prefix', () {
+      final skills = CommandCatalog(
+        host: [_host('new')],
+        agent: [_agent('skill:release-notes', description: 'Release notes')],
+      );
+
+      expect(_names(skills.search('release')), ['agent:skill:release-notes']);
+      expect(_names(skills.search('/skill')), ['agent:skill:release-notes']);
+    });
+
     test('nothing matches', () {
       expect(catalog.search('zzz'), isEmpty);
     });

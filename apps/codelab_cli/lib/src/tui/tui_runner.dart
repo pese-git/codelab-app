@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:dart_tui/dart_tui.dart' as tea;
+import 'package:codelab_embedded/codelab_embedded.dart'
+    show EmbeddedAgentConfigException;
 
 import '../exit_codes.dart';
 import '../input/history.dart';
@@ -12,6 +14,7 @@ import '../repl/command_router.dart';
 import '../repl/commands/commands.dart';
 import '../repl/repl_command.dart';
 import '../session_setup.dart';
+import '../setup/setup_commands.dart';
 import '../strings.dart';
 import 'core/status_line.dart';
 import 'core/tui_chrome.dart';
@@ -69,6 +72,9 @@ final class TuiRunner {
     List<tea.ProgramOption> programOptions = const [],
     Duration cancelGrace = const Duration(seconds: 2),
     DateTime Function()? clock,
+    SecretSource? tokenSource,
+    Stream<List<int>>? input,
+    SetupCommands? setup,
   }) : _workspace = workspace,
        _profile = profile,
        _cwd = cwd,
@@ -83,12 +89,23 @@ final class TuiRunner {
        _color = color,
        _output = output ?? stdout,
        _errorOutput = errorOutput ?? stderr,
-       _programOptions = programOptions,
+       _programOptions = [
+         // Общий поток stdin: мастер первого запуска читал тот же терминал, и
+         // второй `listen` на `io.stdin` невозможен (D15, D16).
+         if (input != null) tea.withInput(input),
+         ...programOptions,
+       ],
+       _setup = setup,
        _cancelGrace = cancelGrace,
+       _tokenSource = tokenSource,
        _clock = clock ?? DateTime.now;
 
   final ClientWorkspace _workspace;
   final ConnectionProfile _profile;
+
+  /// Источник токена профиля для текста отказа по токену
+  /// (`describeStartFailure`).
+  final SecretSource? _tokenSource;
   final String _cwd;
   final HistoryStore _history;
   final String? _firstMessage;
@@ -105,7 +122,9 @@ final class TuiRunner {
   final Duration _cancelGrace;
   final DateTime Function() _clock;
 
-  final _router = CommandRouter(mvpReplCommands);
+  final SetupCommands? _setup;
+
+  final _router = CommandRouter(replCommands);
   TuiCommandContext? _context;
   tea.Program? _program;
 
@@ -134,13 +153,16 @@ final class TuiRunner {
       );
       await applyConfigFlag(handle, 'model', _model);
       await applyConfigFlag(handle, 'mode', _mode);
+    } on EmbeddedAgentConfigException {
+      // Ошибка использования (`64`), как в `-p`: текст печатает `runCodelab`.
+      rethrow;
     } on Object catch (error) {
       _errorOutput.writeln(
         sanitizeTerminalText(
           error is SessionSetupError
               ? 'codelab: ${error.message}'
               : 'codelab: cannot start the agent ${describeProfile(_profile)}: '
-                    '${describeFailure(error)}',
+                    '${await describeStartFailure(error, _profile, tokenSource: _tokenSource)}',
         ),
       );
       return failureExit;
@@ -151,6 +173,11 @@ final class TuiRunner {
       history: _history,
       onQuit: (code) => _code ??= code,
       runCommand: _runCommand,
+      // Мастер и экран настроек живут в контексте: он держит единственную
+      // подписку на `flow.states` и порт записи (D17, D21).
+      wizardEvent: (event, id) => _context?.wizardEvent(event, overlayId: id),
+      applySetting: (id, key, raw, layer, explicit) async => _context
+          ?.applySettingFor(id, key, raw, layer, explicitLayer: explicit),
     );
     final app = TuiApp(
       model: TuiModel.initial(
@@ -160,7 +187,7 @@ final class TuiRunner {
         unicode: _unicode,
         color: _color,
         cwd: _cwd,
-        commands: mvpReplCommands,
+        commands: replCommands,
       ),
       input: TuiInput(),
       effects: effects,
@@ -186,7 +213,9 @@ final class TuiRunner {
         program.quit();
       },
       resolveProfile: _resolveProfile,
+      tokenSource: _tokenSource,
       clock: _clock,
+      setup: _setup,
     )..attach(handle);
     _context = context;
     // Исход хода, которого не видно из транскрипта: отмена и сбой без

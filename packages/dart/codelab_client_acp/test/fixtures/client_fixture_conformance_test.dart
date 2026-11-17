@@ -16,6 +16,12 @@ void main() {
         env,
       ) {
         user = ClientFixtureUser(env);
+        // Поток уведомлений usage — broadcast без повтора: подписка нужна до
+        // первого кадра фикстуры, иначе снимки не увидеть (D21 Т2, Т7).
+        final delivered = <Object>[];
+        _usageDelivered[user] = delivered;
+        final subscription = user.app.usageNotifications.listen(delivered.add);
+        addTearDown(subscription.cancel);
         return user.app;
       }, onBeforeExpect: (step) => user.act(step));
       if (result.skipped) {
@@ -31,17 +37,66 @@ void main() {
   }
 }
 
+/// Уведомления `_codelab/session/usage`, доставленные ядром клиента за
+/// прогон фикстуры (задача 2.7a; D21 Т7). Элемент — запись потока
+/// `AcpClientApplication.usageNotifications` с `sessionId`, `params` и
+/// `generation` (D21 Т2).
+final _usageDelivered = Expando<List<Object>>('usage notifications');
+
+List<({Map<String, Object?> params, int generation})> _usageOf(
+  ClientFixtureUser user,
+) => [
+  for (final item in _usageDelivered[user]!)
+    (
+      params: (item as dynamic).params as Map<String, Object?>,
+      generation: (item as dynamic).generation as int,
+    ),
+];
+
 typedef _StateCheck =
     void Function(
       ClientFixtureUser user,
       ClientFixtureResult<AcpClientApplication> result,
     );
 
+/// `_meta.codelab.task.id` пункта плана.
+String? _taskId(PlanEntry entry) {
+  final codelab = entry.meta?['codelab'];
+  final task = codelab is Map ? codelab['task'] : null;
+  return task is Map ? task['id'] as String? : null;
+}
+
+/// `_meta.codelab.subagent` кадра вызова (D24, D28).
+Map<Object?, Object?>? _subagentMeta(Map<String, Object?>? meta) {
+  final codelab = meta?['codelab'];
+  final subagent = codelab is Map ? codelab['subagent'] : null;
+  return subagent is Map ? subagent : null;
+}
+
 PromptTurn _lastTurn(ClientFixtureUser user) =>
     user.app.sessions.single.turns.last;
 
 ToolCallRecord _toolCall(ClientFixtureUser user, String id) =>
     _lastTurn(user).toolCalls[ToolCallId(id)]!;
+
+/// Родитель каждого вызова с цепочкой `toolCallId` — цепочка без последнего
+/// звена; вызовы корня родителя не имеют; дерево непусто (D8, D21).
+void _expectParentChain(AcpSession session) {
+  var nested = 0;
+  for (final turn in session.turns) {
+    for (final record in turn.toolCalls.values) {
+      final id = record.id.value;
+      final slash = id.lastIndexOf('/');
+      if (slash < 0) {
+        expect(record.parentToolCallId, isNull, reason: id);
+        continue;
+      }
+      nested++;
+      expect(record.parentToolCallId, id.substring(0, slash), reason: id);
+    }
+  }
+  expect(nested, greaterThan(0), reason: 'the tree has nested calls');
+}
 
 final _stateChecks = <String, _StateCheck>{
   'acp/initialize-capabilities': (user, _) {
@@ -93,12 +148,138 @@ final _stateChecks = <String, _StateCheck>{
     final turn = _lastTurn(user);
     expect(turn.status, PromptTurnStatus.completed);
     final plans = turn.updates.whereType<PlanUpdate>().toList();
+    // План стороннего агента (роль `client`): дважды заменяется целиком
+    // тремя пунктами без `_meta` — id задач нет (acp-client-kit «Метаданные
+    // пунктов плана», «План стороннего агента»).
     expect(plans, hasLength(2));
+    for (final plan in plans) {
+      expect(plan.entries, hasLength(3));
+      expect(plan.entries.every((e) => e.meta == null), isTrue);
+    }
     expect(plans.last.entries.map((e) => e.status), [
       PlanEntryStatus.completed,
       PlanEntryStatus.pending,
       PlanEntryStatus.pending,
     ]);
+  },
+  'acp/prompt-task-plan': (user, _) {
+    final turn = _lastTurn(user);
+    expect(turn.status, PromptTurnStatus.completed);
+    // Четыре `plan` — по числу операций со списком; каждый несёт весь список
+    // и `_meta.codelab.task` у каждого пункта (D15); после `task_list`
+    // нового `plan` нет.
+    final plans = turn.updates.whereType<PlanUpdate>().toList();
+    expect(plans, hasLength(4));
+    expect(
+      [
+        for (final plan in plans) [for (final e in plan.entries) _taskId(e)],
+      ],
+      [
+        ['1'],
+        ['1', '2'],
+        ['1', '2', '3'],
+        ['1', '2', '3'],
+      ],
+    );
+    expect(plans.last.entries.first.status, PlanEntryStatus.completed);
+  },
+  'acp/initialize-codelab-extensions': (user, _) {
+    final ready = user.app.connectionState as ClientConnectionReady;
+    // Согласованные расширения разобраны из `agentCapabilities._meta.codelab`
+    // (spec acp-protocol-client «Объявление расширений CodeLab»). Состав
+    // блока по итерациям ведёт фикстура протокольного исполнителя; `tasks`
+    // есть в любой редакции.
+    expect(ready.codelabExtensions.tasks, isTrue);
+    // Фикстура объявляет `usage: {version: 1}` в ответе агента (D3, D21 Т7).
+    expect(ready.codelabExtensions.usage, isTrue);
+  },
+  // Расширение usage (change `add-usage-extension`, задача 2.7a; spec
+  // acp-golden-fixtures «Фикстуры расширения usage»; D2, D7, D21 Т7): ход
+  // завершён, ядро клиента доставило три снимка `seq` 1…3, последний —
+  // `trigger: turn`; уведомления не меняют автомат хода.
+  'acp/prompt-usage-steps': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    final usage = _usageOf(user);
+    expect(usage.map((u) => u.params['seq']), [1, 2, 3]);
+    expect(usage.last.params['trigger'], 'turn');
+    expect(usage.map((u) => u.generation).toSet(), hasLength(1));
+  },
+  // Вызов `agent` (change `add-subagents-and-tasks`, задача 2.1; spec
+  // acp-golden-fixtures, acp-client-kit «Итог и хвост субагента»): клиент
+  // видит ровно один вызов `think`, опознанный с первого кадра по
+  // `_meta.codelab.subagent {id, type}` (D28); финальное обновление несёт
+  // `summary` (D24). Вызовов ребёнка (`call_1/…`) у клиента без
+  // `subagentToolCalls` нет.
+  'acp/prompt-subagent-tool-call': (user, _) {
+    final turn = _lastTurn(user);
+    expect(turn.status, PromptTurnStatus.completed);
+
+    final call = _toolCall(user, 'call_1');
+    expect(call.kind, ToolKind.think);
+    expect(call.status, ToolCallStatus.completed);
+    expect(call.title, 'Subagent explore: Find auth code');
+    expect(turn.toolCalls, hasLength(1));
+
+    final first = turn.updates.whereType<ToolCallSessionUpdate>().first;
+    expect(_subagentMeta(first.toolCall.meta), {
+      'id': isA<String>(),
+      'type': 'explore',
+    });
+    final last = turn.updates.whereType<ToolCallUpdateSessionUpdate>().last;
+    final summary = _subagentMeta(last.toolCallUpdate.meta)?['summary'] as Map?;
+    expect(summary?['toolCalls'], 3);
+    expect(summary?['tokens'], {'input': 6000, 'output': 400});
+  },
+  // Дерево вызовов потомков (задача 5.1 `[client]`, spec acp-client-kit
+  // «Дерево вызовов потомков»; design.md, D21, D47 Т8–Т9). Фикстуры ведёт
+  // протокольный исполнитель (задача 5.1 `[protocol]`) и задаёт
+  // `setup.clientCapabilities` с `subagentToolCalls`; проверка не зависит от
+  // точного состава кадров: у каждого вызова с цепочкой `toolCallId` родитель
+  // на проводе — цепочка без последнего звена (D8), а вызовы корня родителя
+  // не имеют.
+  'acp/prompt-subagent-tool-tree': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    _expectParentChain(user.app.sessions.single);
+  },
+  // Реплей дерева в том же соединении (`session/load` после живого хода,
+  // D47 Т7): дерево после загрузки тем же, без смены родителей.
+  'acp/session-load-subagent-tool-tree': (user, _) {
+    _expectParentChain(user.app.sessions.single);
+  },
+  // Запрос ребёнка (change `add-subagents-and-tasks`, задача 3.1 `[client]`;
+  // spec acp-client-kit «Запрос одобрения от субагента», сценарий «Запрос
+  // ребёнка не делает вызов вызовом agent»; design.md, D43 п. 1): клиент видит
+  // один вызов `agent` `call_1`; запрос к `call_1/call_1` хранит сведения о
+  // потомке у `ApprovalRequest`, а не в `subagentMeta` записи вызова, и не
+  // меняет `subagentMeta` вызова `agent`. Красный до задачи 3.4: поля
+  // `ApprovalRequest.subagentRequester` ещё нет; чтение через `dynamic`,
+  // чтобы не ломать компиляцию остальных проверок корпуса в этом файле.
+  'acp/prompt-subagent-permission': (user, _) {
+    final turn = _lastTurn(user);
+    expect(turn.status, PromptTurnStatus.completed);
+
+    final agentCall = _toolCall(user, 'call_1');
+    expect(agentCall.kind, ToolKind.think);
+    expect(agentCall.status, ToolCallStatus.completed);
+    // Метаданные вызова `agent` — id и тип ребёнка корня, итог; сведений
+    // спрашивающего (`depth`, `parentToolCallId`) в них нет.
+    expect(agentCall.subagentMeta?['type'], 'review');
+    expect(agentCall.subagentMeta, isNot(contains('parentToolCallId')));
+    expect(agentCall.subagentMeta, isNot(contains('depth')));
+
+    final approval = turn.approvals.values.single;
+    expect(approval.status, ApprovalStatus.selected);
+    expect(approval.toolCall.id, const ToolCallId('call_1/call_1'));
+    expect(approval.toolCall.subagentMeta, isNull);
+    // ignore: avoid_dynamic_calls
+    expect((approval as dynamic).subagentRequester, {
+      'id': isA<String>(),
+      'type': 'review',
+      'description': 'Check the diff',
+      'depth': 1,
+      'path': isEmpty,
+      'parentToolCallId': 'call_1',
+    });
   },
   'acp/set-config-option-model': (user, _) {
     final model = user.app.sessions.single.configOptions!.singleWhere(
@@ -116,11 +297,15 @@ final _stateChecks = <String, _StateCheck>{
     expect(turn.status, PromptTurnStatus.completed);
     expect(turn.updates.whereType<AgentThoughtChunk>(), isNotEmpty);
   },
+  // Причина остановки по бюджету (D10, D21 Т3, Т7): `_meta.codelab.
+  // budgetExceeded` ответа попадает в итог хода.
   'acp/prompt-max-turn-requests': (user, _) {
     expect(_lastTurn(user).status, PromptTurnStatus.maxed);
+    expect(_lastTurn(user).budgetExceeded, 'steps');
   },
   'acp/prompt-turn-budget-exceeded': (user, _) {
     expect(_lastTurn(user).status, PromptTurnStatus.maxed);
+    expect(_lastTurn(user).budgetExceeded, 'tokens');
   },
   'acp/prompt-failed-provider-auth': (user, _) {
     expect(_lastTurn(user).status, PromptTurnStatus.failed);
@@ -258,5 +443,27 @@ final _stateChecks = <String, _StateCheck>{
       isEmpty,
     );
     expect(session.diagnostics, isEmpty);
+  },
+  // Незнакомый вид вызова и `switch_mode` (change `tolerate-unknown-tool-kind`,
+  // D8; acp-golden-fixtures «Состояние после прогона»).
+  'acp/tool-kind-unknown-tolerated': (user, _) {
+    final turn = _lastTurn(user);
+    expect(turn.status, PromptTurnStatus.completed);
+
+    final future = _toolCall(user, 'call_future');
+    expect(future.kind, ToolKind.other);
+    expect(future.status, ToolCallStatus.completed);
+    expect(future.riskLevel, ApprovalRiskLevel.unknown);
+
+    final mode = _toolCall(user, 'call_switch_mode_001');
+    expect(mode.kind, ToolKind.switchMode);
+    expect(mode.riskLevel, ApprovalRiskLevel.unknown);
+
+    // Хук выбирает `reject`, а не `cancelled`: запрос дошёл до пользователя.
+    expect(turn.approvals.values.single.status, ApprovalStatus.selected);
+    expect(
+      user.app.diagnostics.where((d) => d.severity == DiagnosticSeverity.error),
+      isEmpty,
+    );
   },
 };

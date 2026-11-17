@@ -3,6 +3,10 @@ import '../mcp/mcp_connector.dart';
 import '../mcp/mcp_tool_name.dart';
 import '../permissions/modes.dart';
 import '../project/project_context.dart';
+import '../skills/catalog_entries.dart';
+import '../skills/skill_catalog.dart';
+import '../skills/skills_config.dart' show defaultSkillsCatalogMaxChars;
+import '../tools/tasks/task_list.dart' show TaskItem;
 import '../tools/truncate.dart';
 import 'prompts.g.dart';
 import 'template.dart';
@@ -31,8 +35,12 @@ final class PromptInputs {
     List<McpServerSummary> mcpServers = const [],
     this.projectContext,
     this.agentProfile,
+    this.subagent,
+    List<SkillDefinition> skills = const [],
+    this.skillsCatalogMaxChars = defaultSkillsCatalogMaxChars,
   }) : toolNames = Set.unmodifiable(toolNames),
-       mcpServers = List.unmodifiable(mcpServers);
+       mcpServers = List.unmodifiable(mcpServers),
+       skills = List.unmodifiable(skills);
 
   final String cwd;
 
@@ -61,6 +69,20 @@ final class PromptInputs {
   /// промпт побайтово прежний (PR-3). Тело вставляется как значение и шаблоном
   /// не обрабатывается (§11.4).
   final ({String name, String body})? agentProfile;
+
+  /// Тип, тело определения и назначенный пункт списка у потомка; `null` — у
+  /// корневой сессии. Даёт секции 12–14 §11.5 (change
+  /// `add-subagents-and-tasks`, D36 Т11); профиль агента сессии родителя
+  /// ребёнку не передаётся.
+  final ({String name, String body, TaskItem? task})? subagent;
+
+  /// Навыки `modelVisible` снимка каталога сессии (design.md change
+  /// `add-agent-skills`, D6, D17); порядок входа не важен — строки идут по
+  /// имени. Пусто — секции `skills.catalog` нет и промпт побайтово прежний.
+  final List<SkillDefinition> skills;
+
+  /// `skills.catalog_max_chars` сессии: бюджет строк каталога.
+  final int skillsCatalogMaxChars;
 }
 
 /// Лимит записей `ls` для секции `tools/listing`.
@@ -113,8 +135,8 @@ List<(String, String)> _sections(PromptInputs inputs) {
           'defaultTimeout': '$_defaultExecTimeout',
         }),
       ),
-    if (on(Prompts.toolsPlan))
-      (Prompts.toolsPlan.id, Prompts.toolsPlan.render({})),
+    if (on(Prompts.toolsTasks))
+      (Prompts.toolsTasks.id, Prompts.toolsTasks.render({})),
     // Шаг 9 §11.5: секция `mcp` только при включённой capability и хотя бы
     // одном сервере с инструментами, строки — в порядке регистрации.
     if (inputs.profile.isOn(HostCapability.mcp) && servers.isNotEmpty)
@@ -126,6 +148,21 @@ List<(String, String)> _sections(PromptInputs inputs) {
               '- ${server.name}: ${server.toolCount} tools, '
                   'prefix ${mcpServerPrefix(server.name)}',
           ].join('\n'),
+        }),
+      ),
+    // Шаг 9a §11.5: каталог навыков после `mcp` и до инструкций проекта.
+    // Секция называет инструмент `skill`, поэтому входит, только если он среди
+    // инструментов сессии (PR-6), и только при включённой capability (HOST-4).
+    if (inputs.profile.isOn(HostCapability.skills) &&
+        inputs.skills.isNotEmpty &&
+        on(Prompts.skillsCatalog))
+      (
+        Prompts.skillsCatalog.id,
+        Prompts.skillsCatalog.render({
+          'entries': skillsCatalogEntries(
+            inputs.skills,
+            inputs.skillsCatalogMaxChars,
+          ).entries,
         }),
       ),
     // Шаг 10 §11.5: инструкции проекта идут последними среди секций этапа:
@@ -154,6 +191,23 @@ List<(String, String)> _sections(PromptInputs inputs) {
           'body': profile.body.trim(),
         }),
       ),
+    // Шаги 12–14 §11.5: только у потомка — база ребёнка, профиль типа и
+    // строка назначенного пункта (D16, D36 Т11).
+    if (inputs.subagent case final child?) ...[
+      (Prompts.subagentSystem.id, Prompts.subagentSystem.render({})),
+      (
+        Prompts.subagentProfile.id,
+        Prompts.subagentProfile.render({
+          'name': child.name,
+          'body': child.body.trim(),
+        }),
+      ),
+      if (child.task case final task?)
+        (
+          Prompts.subagentTask.id,
+          Prompts.subagentTask.render({'id': task.id, 'subject': task.subject}),
+        ),
+    ],
   ];
 }
 

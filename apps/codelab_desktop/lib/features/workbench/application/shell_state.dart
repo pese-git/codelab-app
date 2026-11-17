@@ -2,7 +2,9 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show CommandCatalog;
 import 'package:codelab_ui/codelab_ui.dart';
 
-import 'connection_cubit.dart';
+import 'agents_pane_data.dart';
+import 'connection_cubit.dart' show ProviderSetupNotice, RestartConfirmation;
+import 'sessions_cubit.dart' show PendingRootSession;
 import 'ui_mappers.dart';
 
 /// Состояние рабочего места в прежней форме — то, что читают виджеты,
@@ -20,23 +22,21 @@ import 'ui_mappers.dart';
 final class CodeLabShellState {
   const CodeLabShellState({
     required this.connectionStatus,
-    required this.transportType,
-    required this.stdioProfileName,
-    required this.stdioCommand,
-    required this.stdioArgs,
-    required this.stdioEnv,
-    required this.webSocketEndpoint,
-    required this.webSocketToken,
     required this.transportLabel,
     required this.profileLabel,
     required this.connectionDetail,
     this.connectionMessage,
+    this.providerSetupNotice,
+    this.connectionRepeat = 0,
+    this.pendingRestart,
     required this.currentSessionLabel,
     required this.currentSessionDetail,
     required this.sessions,
     required this.activeSessionId,
     required this.transcriptRows,
     this.transcriptExpansion = const {},
+    this.shownImages = const {},
+    this.linkNote,
     this.turnState,
     required this.inspectorEntries,
     required this.viewMode,
@@ -50,7 +50,12 @@ final class CodeLabShellState {
     this.openPanes = const [],
     this.activePane,
     this.dockOverlayOpen = false,
+    this.projectFilesAvailable = false,
+    this.agents = AgentsPaneData.empty,
+    this.selectedAgentId,
+    this.transcriptShowRequest,
     this.sessionMode,
+    this.statusBar,
     required this.agentCommands,
     required this.commandCatalog,
     required this.composerDraft,
@@ -60,22 +65,17 @@ final class CodeLabShellState {
     required this.sessionsPaneWidth,
     this.dockWidth = 360,
     required this.selectedProjectPath,
-    required this.runAgentFromProjectDirectory,
     required this.recentProjects,
     this.hasMoreSessions = false,
+    this.pendingRootSession,
+    this.sessionFolders = const {},
+    this.restartsRemote = false,
     required this.currentPlan,
     required this.queuedPrompts,
   });
 
   // Подключение — `ConnectionCubit`.
   final CodeLabConnectionStatus connectionStatus;
-  final CodeLabTransportType transportType;
-  final String stdioProfileName;
-  final String stdioCommand;
-  final String stdioArgs;
-  final String stdioEnv;
-  final String webSocketEndpoint;
-  final String webSocketToken;
   final String transportLabel;
   final String profileLabel;
   final String connectionDetail;
@@ -83,6 +83,18 @@ final class CodeLabShellState {
   /// Причина потери соединения или неудачного подключения для баннера над
   /// лентой (design D6 change `add-connection-and-error-states`).
   final String? connectionMessage;
+
+  /// Метка сбоя встроенного агента «не настроен провайдер»: баннер с «Add
+  /// provider» вместо сырого текста проблем (change `add-provider-setup-ui`,
+  /// D26); `null` — сбой другой.
+  final ProviderSetupNotice? providerSetupNotice;
+
+  /// Сколько раз подряд повторился тот же сбой старта (`Failed again (n)`,
+  /// D13); `0` — сбой первый.
+  final int connectionRepeat;
+
+  /// Диалог «Restart agent» ждёт ответа (D22); `null` — не ждёт.
+  final RestartConfirmation? pendingRestart;
 
   // Список и выбор сессий — `SessionsCubit`.
   final String currentSessionLabel;
@@ -95,6 +107,15 @@ final class CodeLabShellState {
 
   /// Ручное раскрытие строк ленты активной сессии — `TranscriptViewCubit`.
   final Map<String, bool> transcriptExpansion;
+
+  /// Ключи `<rowId>#image:<url>` изображений, показанных пользователем в
+  /// активной сессии: снимок `TranscriptViewCubit`, не отдельное хранилище
+  /// (change `add-desktop-markdown`, D6).
+  final Set<String> shownImages;
+
+  /// Заметка для InfoBar над лентой после неудачного открытия ссылки (D5);
+  /// `null` — заметки нет.
+  final String? linkNote;
 
   /// Чип состояния хода в шапке; `null` — сессия свободна.
   final CodeLabTurnState? turnState;
@@ -140,19 +161,54 @@ final class CodeLabShellState {
   final ToolPane? activePane;
   final bool dockOverlayOpen;
 
+  /// Панель Files предлагается: папка сессии на этой машине
+  /// (`sessionFolderIsLocal` профиля окна) и хост привязал `ProjectFiles`.
+  /// Решает application, а не виджет (design.md change
+  /// `add-file-preview-and-tree`, D7).
+  final bool projectFilesAvailable;
+
+  /// Данные панели Agents сессии в фокусе (D33, D49 Т8).
+  final AgentsPaneData agents;
+
+  /// Панель Agents предлагается: у сессии в фокусе есть хотя бы одна строка
+  /// субагента (D49 Т11). Объявление агента условием не является.
+  bool get agentsAvailable => !agents.isEmpty;
+
+  /// Выбранная строка панели Agents (`toolCallId`); `null` — не выбрана или
+  /// строки с таким id в сессии уже нет (выбор не применяется, D49 Т8).
+  final String? selectedAgentId;
+
+  /// Разовый запрос показа строки ленты для сессии в фокусе (D49 Т7).
+  final CodeLabTranscriptShowRequest? transcriptShowRequest;
+
   /// Режим активной сессии для чипа шапки; `null` — чипа нет.
   final String? sessionMode;
+
+  /// Строка статуса под композером (D11); `null` — строки нет.
+  final CodeLabSessionStatusData? statusBar;
   final double sessionsPaneWidth;
   final double dockWidth;
 
   // Проект — `SettingsCubit`.
   final String? selectedProjectPath;
-  final bool runAgentFromProjectDirectory;
   final List<CodeLabRecentProject> recentProjects;
 
   /// У агента есть следующая страница сессий — сайдбар показывает
   /// `Load more sessions` (design D7 change `add-session-list-and-reload`).
   final bool hasMoreSessions;
+
+  /// Сессия в корне диска ждёт подтверждения (D24): виджет показывает диалог
+  /// `Open anyway?`; `null` — подтверждения нет.
+  final PendingRootSession? pendingRootSession;
+
+  /// Папка (`cwd`) каждой сессии по id — из `WorkspaceState`, не из подписи
+  /// строки (Q23): сайдбар раскладывает по ним сессии разных папок.
+  final Map<String, String> sessionFolders;
+
+  /// Перезапускается удалённый агент (WebSocket): пункт палитры `/reconnect`
+  /// называется «Reconnect», для локального — «Restart agent» (Q24), как
+  /// `ConnectionSettingsState.restartTitle`.
+  final bool restartsRemote;
 
   /// Отличает «не передан» от «явно `null`» для [currentPlan] в [copyWith].
   static const Object _unset = Object();
@@ -161,23 +217,21 @@ final class CodeLabShellState {
   /// панели на подготовленном состоянии; фасад состояние так не меняет.
   CodeLabShellState copyWith({
     CodeLabConnectionStatus? connectionStatus,
-    CodeLabTransportType? transportType,
-    String? stdioProfileName,
-    String? stdioCommand,
-    String? stdioArgs,
-    String? stdioEnv,
-    String? webSocketEndpoint,
-    String? webSocketToken,
     String? transportLabel,
     String? profileLabel,
     String? connectionDetail,
     Object? connectionMessage = _unset,
+    Object? providerSetupNotice = _unset,
+    int? connectionRepeat,
+    Object? pendingRestart = _unset,
     String? currentSessionLabel,
     String? currentSessionDetail,
     List<CodeLabSessionListItem>? sessions,
     String? activeSessionId,
     List<CodeLabTranscriptRow>? transcriptRows,
     Map<String, bool>? transcriptExpansion,
+    Set<String>? shownImages,
+    Object? linkNote = _unset,
     Object? turnState = _unset,
     List<CodeLabInspectorEntry>? inspectorEntries,
     CodeLabViewMode? viewMode,
@@ -191,7 +245,12 @@ final class CodeLabShellState {
     List<ToolPane>? openPanes,
     Object? activePane = _unset,
     bool? dockOverlayOpen,
+    bool? projectFilesAvailable,
+    AgentsPaneData? agents,
+    Object? selectedAgentId = _unset,
+    Object? transcriptShowRequest = _unset,
     Object? sessionMode = _unset,
+    Object? statusBar = _unset,
     List<CodeLabCommandAction>? agentCommands,
     CommandCatalog? commandCatalog,
     String? composerDraft,
@@ -201,33 +260,39 @@ final class CodeLabShellState {
     double? sessionsPaneWidth,
     double? dockWidth,
     String? selectedProjectPath,
-    bool? runAgentFromProjectDirectory,
     List<CodeLabRecentProject>? recentProjects,
     bool? hasMoreSessions,
+    Object? pendingRootSession = _unset,
+    Map<String, String>? sessionFolders,
+    bool? restartsRemote,
     Object? currentPlan = _unset,
     List<CodeLabQueuedPrompt>? queuedPrompts,
   }) {
     return CodeLabShellState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
-      transportType: transportType ?? this.transportType,
-      stdioProfileName: stdioProfileName ?? this.stdioProfileName,
-      stdioCommand: stdioCommand ?? this.stdioCommand,
-      stdioArgs: stdioArgs ?? this.stdioArgs,
-      stdioEnv: stdioEnv ?? this.stdioEnv,
-      webSocketEndpoint: webSocketEndpoint ?? this.webSocketEndpoint,
-      webSocketToken: webSocketToken ?? this.webSocketToken,
       transportLabel: transportLabel ?? this.transportLabel,
       profileLabel: profileLabel ?? this.profileLabel,
       connectionDetail: connectionDetail ?? this.connectionDetail,
       connectionMessage: identical(connectionMessage, _unset)
           ? this.connectionMessage
           : connectionMessage as String?,
+      providerSetupNotice: identical(providerSetupNotice, _unset)
+          ? this.providerSetupNotice
+          : providerSetupNotice as ProviderSetupNotice?,
+      connectionRepeat: connectionRepeat ?? this.connectionRepeat,
+      pendingRestart: identical(pendingRestart, _unset)
+          ? this.pendingRestart
+          : pendingRestart as RestartConfirmation?,
       currentSessionLabel: currentSessionLabel ?? this.currentSessionLabel,
       currentSessionDetail: currentSessionDetail ?? this.currentSessionDetail,
       sessions: sessions ?? this.sessions,
       activeSessionId: activeSessionId ?? this.activeSessionId,
       transcriptRows: transcriptRows ?? this.transcriptRows,
       transcriptExpansion: transcriptExpansion ?? this.transcriptExpansion,
+      shownImages: shownImages ?? this.shownImages,
+      linkNote: identical(linkNote, _unset)
+          ? this.linkNote
+          : linkNote as String?,
       // `null` здесь — «сессия свободна», а не «не менять».
       turnState: identical(turnState, _unset)
           ? this.turnState
@@ -247,9 +312,21 @@ final class CodeLabShellState {
           ? this.activePane
           : activePane as ToolPane?,
       dockOverlayOpen: dockOverlayOpen ?? this.dockOverlayOpen,
+      projectFilesAvailable:
+          projectFilesAvailable ?? this.projectFilesAvailable,
+      agents: agents ?? this.agents,
+      selectedAgentId: identical(selectedAgentId, _unset)
+          ? this.selectedAgentId
+          : selectedAgentId as String?,
+      transcriptShowRequest: identical(transcriptShowRequest, _unset)
+          ? this.transcriptShowRequest
+          : transcriptShowRequest as CodeLabTranscriptShowRequest?,
       sessionMode: identical(sessionMode, _unset)
           ? this.sessionMode
           : sessionMode as String?,
+      statusBar: identical(statusBar, _unset)
+          ? this.statusBar
+          : statusBar as CodeLabSessionStatusData?,
       agentCommands: agentCommands ?? this.agentCommands,
       commandCatalog: commandCatalog ?? this.commandCatalog,
       composerDraft: composerDraft ?? this.composerDraft,
@@ -261,10 +338,13 @@ final class CodeLabShellState {
       sessionsPaneWidth: sessionsPaneWidth ?? this.sessionsPaneWidth,
       dockWidth: dockWidth ?? this.dockWidth,
       selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
-      runAgentFromProjectDirectory:
-          runAgentFromProjectDirectory ?? this.runAgentFromProjectDirectory,
       recentProjects: recentProjects ?? this.recentProjects,
       hasMoreSessions: hasMoreSessions ?? this.hasMoreSessions,
+      sessionFolders: sessionFolders ?? this.sessionFolders,
+      restartsRemote: restartsRemote ?? this.restartsRemote,
+      pendingRootSession: identical(pendingRootSession, _unset)
+          ? this.pendingRootSession
+          : pendingRootSession as PendingRootSession?,
       currentPlan: identical(currentPlan, _unset)
           ? this.currentPlan
           : currentPlan as List<CodeLabPlanEntry>?,
@@ -275,12 +355,30 @@ final class CodeLabShellState {
   /// Полный список палитры: команды клиента, затем команды агента; команда
   /// агента вытесняет одноимённую недоступную команду клиента (D3).
   List<CodeLabCommandAction> get paletteActions =>
-      paletteActionsOf(commandCatalog);
+      _restartLabelled(paletteActionsOf(commandCatalog));
 
   /// Команды палитры под запрос пользователя, лучшие — первыми (D4); её
   /// получают палитра `Ctrl/Cmd+K` и inline-триггер композера.
   List<CodeLabCommandAction> searchPalette(String query) =>
-      searchPaletteActions(commandCatalog, query);
+      _restartLabelled(searchPaletteActions(commandCatalog, query));
+
+  /// Подпись пункта `reconnect` по типу профиля (Q24): для локального агента
+  /// это единственный перезапуск «Restart agent» (D22).
+  List<CodeLabCommandAction> _restartLabelled(
+    List<CodeLabCommandAction> actions,
+  ) => restartsRemote
+      ? actions
+      : [
+          for (final action in actions)
+            action.id == 'reconnect'
+                ? action.copyWith(
+                    label: 'Restart agent',
+                    description:
+                        'Restart the agent with the selected profile and '
+                        'reload open sessions.',
+                  )
+                : action,
+        ];
 
   String get selectedProfileLabel => profileLabel;
 

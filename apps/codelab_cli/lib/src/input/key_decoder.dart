@@ -30,6 +30,18 @@ enum Key {
   ctrlD('Ctrl+D'),
   ctrlE('Ctrl+E'),
   ctrlL('Ctrl+L'),
+
+  /// Раскрыть и свернуть строки `agent` в TUI (`toggle_details`, design.md
+  /// change `add-subagents-and-tasks`, D48 п. 2).
+  ctrlO('Ctrl+O'),
+
+  /// Показать и спрятать значение в скрытом поле ключа мастера провайдера
+  /// (design.md change `add-provider-setup-ui`, D15, U-17).
+  ctrlR('Ctrl+R'),
+
+  /// Показать и спрятать список задач в TUI (design.md change
+  /// `add-subagents-and-tasks`, D26).
+  ctrlT('Ctrl+T'),
   ctrlU('Ctrl+U');
 
   const Key(this.label);
@@ -273,7 +285,10 @@ final class KeyDecoder {
     0x09: Key.tab,
     0x0a: Key.ctrlJ,
     0x0c: Key.ctrlL,
+    0x0f: Key.ctrlO,
     0x0d: Key.enter,
+    0x12: Key.ctrlR,
+    0x14: Key.ctrlT,
     0x15: Key.ctrlU,
     0x7f: Key.backspace,
   };

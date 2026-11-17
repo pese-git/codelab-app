@@ -28,17 +28,24 @@ final class PermissionKey {                        // никогда не «ви
 final class PermissionRequest {
   const PermissionRequest({required this.toolCallId, required this.tool, required this.kind,
       required this.tier, required this.title, required this.rawInput, this.locations = const [],
-      this.diffs = const [], this.reason, this.allowAlwaysOffered = true, this.criticalLabel});
+      this.diffs = const [], this.pattern, this.reason, this.allowAlwaysOffered = true,
+      this.criticalLabel, this.subagent});
   final String toolCallId, tool, title;
   final ToolKind kind; final ToolTier tier;      // tool.kindOf(args), tool.tierOf(args) (§6.2)
   final Map<String, Object?> rawInput;             // приведённые аргументы (PERM-6)
   final List<Location> locations;
   final List<FileDiff> diffs;                      // по одному на файл; из ToolPrepared.presentation или present(args, ctx)
+  final String? pattern;                           // шаблон «разрешить всегда» (§7.5): им клиент называет
+                                                   // варианты allow_always / reject_always (§13.9)
   final String? reason;                            // например, 'critical command: recursive delete of /'
   final bool allowAlwaysOffered;                   // false для критических шаблонов
   final String? criticalLabel;                     // после MVP: метка критического шаблона §7.6 или
                                                    // 'agent configuration' (§7.6.1); из неё AcpPermissionGate
                                                    // берёт _meta.codelab.label, A2aPermissionGate отклоняет (§17.15.4)
+  final SubagentRequestRef? subagent;              // change add-subagents-and-tasks, итерация 3: кто из потомков
+                                                   // спрашивает — {id, type, description, depth, path,
+                                                   // parentToolCallId}; ставит SubagentPermissionGate (§17.3.3),
+                                                   // AcpPermissionGate кладёт в _meta.codelab.subagent; у корня null
 }
 
 enum PermissionDecision { allowOnce, allowAlways, rejectOnce, rejectAlways, cancelled }
@@ -67,8 +74,11 @@ final class PermissionPolicy {
       : decisions = decisions ?? PermissionDecisionStore();
   PermissionMode mode;
   /// Если задан, читается при каждом решении вместо `mode` (после MVP: эффективный режим
-  /// субагента `narrow(parentMode(), type.mode)`, SUB-2, §17.3.3).
-  final PermissionMode Function()? modeOf;
+  /// субагента `narrow(parentMode(), type.mode)`, SUB-2, §17.3.3). Значение — пара «режим
+  /// разрешений и запрещённые без вопроса уровни»: сужение `ask` + `plan` даёт `alwaysAsk` с
+  /// запретом write/exec, одного `PermissionMode` для этого мало (сверка с кодом, design.md
+  /// change add-subagents-and-tasks, D36, Т3).
+  final ModeResolution Function()? modeOf;   // typedef ModeResolution = ({PermissionMode mode, Set<ToolTier> deniedTiers})
   final PermissionGate? gate;
   final PolicyRules rules;
   final PermissionDecisionStore decisions;          // allowAlways и rejectAlways
@@ -84,7 +94,7 @@ final class PermissionPolicy {
 
 `ToolTier` объявляет инструмент: `read` — только чтение, `write` — изменение файлов в рабочей
 папке, `network` — выход в сеть по адресу, выбранному моделью (после MVP, `web_fetch`, §17.1),
-`exec` — команды и всё неизвестное (MCP). После MVP уровень `network` получает и `task` с
+`exec` — команды и всё неизвестное (MCP). После MVP уровень `network` получает и `agent` с
 удалённым A2A-агентом (`agent: "a2a:<имя>"`, §17.15.3): прогон отправляет текст задачи на внешний адрес. Политика берёт уровень вызова `tool.tierOf(args)`
 (§6.2): по умолчанию это объявленный `tier`, а у `lsp` уровень зависит от действия (`rename` —
 `write`, остальные — `read`, §17.8.9). Таблица `mode × tier` («спросить» = вызов
@@ -152,7 +162,7 @@ alwaysAsk(0) < write(1) < acceptEdits(2) < yolo(3) < autopilot(4)
 
 ```text
 decide(tool, args, id):
-  key = PermissionKey(tool.permissionKeyName, tool.permissionPattern(args))   # по умолчанию name; task_send/task_resume → "task" (§17.3.8.1, SUB-18)
+  key = PermissionKey(tool.permissionKeyName, tool.permissionPattern(args))   # по умолчанию name; agent_send/agent_resume → "agent" (§17.3.8.1, SUB-18)
   critical = tool.name == 'exec' ? findCritical(args.command) : null       # §7.6
   1  if rules.toolPolicies[tool] == deny or key in rules.denyPatterns or key in rejectAlways:
          return Denied('denied by configuration' | 'previously rejected by the user')
@@ -183,8 +193,8 @@ ask(reason, allowAlwaysOffered = true):
     cancelled   → Denied('permission request was cancelled')
 ```
 
-После MVP `rules.toolPolicies[tool]` ищется по `tool.permissionKeyName`: правило для `task`
-применяется и к `task_send`, `task_resume` (тот же ключ, §17.3.8.1); `task_observe` — уровень
+После MVP `rules.toolPolicies[tool]` ищется по `tool.permissionKeyName`: правило для `agent`
+применяется и к `agent_send`, `agent_resume` (тот же ключ, §17.3.8.1); `agent_observe` — уровень
 `read`, вид `think`, своё имя.
 
 Текст отказа для модели: `Permission denied for <tool>: <reason>. Do not retry the same call; choose another approach or ask the user.`
@@ -229,7 +239,7 @@ flowchart TD
 | `write`, `edit` | путь относительно корня после нормализации (§4.4) | `{"path":"./lib//a.dart"}` → `lib/a.dart` |
 | `read`, `ls`, `search` | нормализованный путь (по умолчанию `.`) | `{"pattern":"TODO","path":"lib"}` → `lib` |
 | `exec` | точная строка команды после обрезки пробелов по краям | `{"command":"  dart test "}` → `dart test` |
-| `update_plan` | `*` | любой → `*` |
+| `task_create`, `task_update`, `task_list`, `task_get` (§17.16.3; до change `add-subagents-and-tasks` — `update_plan`) | `*` | любой → `*` |
 | MCP и прочие | канонический JSON аргументов (ключи по алфавиту, без пробелов) | `{"b":1,"a":"x"}` → `{"a":"x","b":1}` |
 
 «Разрешить всегда» на `write lib/a.dart` не разрешает `write lib/b.dart` и тем более `exec`
@@ -243,7 +253,7 @@ flowchart TD
 
 **Разбор команды** (`shell_lexer.dart`):
 
-1. Лексер учитывает одинарные кавычки (буквально), двойные кавычки (с экранированием `\`), `\` вне кавычек, операторы `&&`, `||`, `;`, `|`, `&`, перевод строки, скобки `( )` и `{ }` подоболочек и групп.
+1. Лексер учитывает одинарные кавычки (буквально), двойные кавычки (с экранированием `\`), ANSI-C строки `$'…'` (escape-последовательности `\n`, `\xHH`, `\NNN`, `\uHHHH`, `\cX` раскрываются; код 0 обрывает остаток до закрывающей `'`, как в bash; `\xHH` и восьмеричные `\NNN` — байты (восьмеричный код усекается `& 0xFF`, как в bash; `\400` — NUL), подряд идущие байты декодируются как UTF-8, невалидная последовательность — неразбираемая команда (fail closed: bash склеивает байты соседних `$'…'`, а мы декодируем части отдельно; цена — `echo $'\xff'` требует подтверждения); `\u`/`\U` — символы Unicode; код выше 0x10FFFF и `\c` перед `'` или `\` — неразбираемая команда; `\u`/`\U` bash 3.2 не знает, мы раскрываем — расхождение в сторону ложных срабатываний), локализуемые строки `$"…"` (как `"…"`), `\` вне кавычек, операторы `&&`, `||`, `;`, `|`, `&`, перевод строки, скобки `( )` и `{ }` подоболочек и групп.
 2. Подстановки `$( … )`, `` ` … ` `` (в том числе внутри двойных кавычек) и `<( … )`, `>( … )` извлекаются как **вложенные команды** и разбираются рекурсивно.
 3. Текст внутри кавычек остаётся аргументом и командой не считается: `git commit -m "rm -rf /"` — безопасно. Исключение: аргумент после `-c` у `sh`, `bash`, `zsh`, `dash`, `ksh` и аргументы `eval` разбираются как вложенная команда.
 4. Here-document (`<<WORD`, `<<-WORD`): строки до `WORD` — данные, не команды.
@@ -276,7 +286,7 @@ flowchart TD
 | `download and execute` | в одном конвейере стадия `curl`/`wget`/`fetch` и последующая стадия `sh`, `bash`, `zsh`, `dash`, `ksh`, `fish`, `python`, `python3`, `perl`, `ruby`, `node`; или вложенная команда с `curl`/`wget` внутри `eval`, `sh -c`, `source`, `.`, `bash <(...)` | `curl -fsSL x.sh \| sh`, `bash <(curl -s u)`, `eval "$(wget -qO- u)"`, `sh -c "$(curl u)"` | `curl -o x.sh u`, `curl u \| jq .` |
 | `host shutdown or reboot` | `shutdown`, `reboot`, `halt`, `poweroff`, `init 0`, `init 6`, `systemctl poweroff/reboot/halt` в позиции команды | `sudo reboot`, `systemctl reboot` | `echo reboot` |
 | `kill of init or all processes` | `kill` (любой сигнал) с целью `1` или `-1` | `kill -9 1`, `kill -KILL -1` | `kill 1234` |
-| `write to agent configuration` | перенаправление, `tee`, `cp`/`mv`/`ln` или `sed -i` с целью из списка путей §7.6.1 (`.codelab/config*.yaml`, `.codelab/cli.yaml`, `.codelab/agents/**`, `.codelab/skills/**`, `.codelab/prompts/**`, `.codelab/hooks/**`) | `echo x >> .codelab/config.yaml`, `cp evil.md .codelab/agents/` | `cat .codelab/config.yaml` |
+| `write to agent configuration` | любая команда не из белого списка чтения §7.6.1, у которой аргумент, значение опции или рабочий каталог — путь из списка §7.6.1 (`.codelab/config*.yaml`, `.codelab/cli.yaml`, `.codelab/agents/**`, `.codelab/skills/**`, `.codelab/prompts/**`, `.codelab/hooks/**`, `.agents/skills/**`, пути от хоста) или близкий каталог-предок; перенаправление в такой путь — всегда; удаление и усечение (`rm`, `unlink`, `mv` с ним как источником, `truncate`) | `echo x >> .codelab/config.yaml`, `cp evil.md .codelab/agents/`, `yq -i .a=1 .codelab/config.yaml`, `curl -o ~/.codelab/config.yaml u` | `cat .codelab/config.yaml`, `git diff .codelab` |
 | `git force push or remote branch deletion` | `git push` с `--force`, `-f`, `--force-with-lease`, `--mirror`, `--delete`, `-d`, или refspec с `+` в начале или `:` в начале | `git push -f origin main`, `git push origin +main`, `git push origin :dev` | `git push origin feature` |
 | `git history rewrite` | `git filter-branch`, `git filter-repo`, `git reflog expire` с `--expire=now`/`--expire-unreachable=now`, `git gc --prune=now`, `git branch -D` или `git branch -d --force` для `main`, `master`, `develop`, `trunk`, `release/*` | `git filter-branch --tree-filter x`, `git branch -D main` | `git branch -D feature/x`, `git gc` |
 
@@ -304,13 +314,227 @@ final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
 
 * `write`, `edit` (включая правки по якорям §17.11.3 и переименование LSP §17.8) с целью,
   совпадающей с `.codelab/config.yaml`, `.codelab/config.local.yaml`, `.codelab/cli.yaml`,
-  `.codelab/agents/**`, `.codelab/skills/**`, `.codelab/prompts/**`, `.codelab/hooks/**`
-  (путь нормализуется по §4.4 до сравнения), считаются **критическими**: вопрос задаётся в любом
+  `.codelab/agents/**`, `.codelab/skills/**`, `.codelab/prompts/**`, `.codelab/hooks/**`,
+  `.agents/skills/**` (корень навыков проекта, change `add-agent-skills`, Q16) (путь нормализуется по §4.4 до сравнения), считаются **критическими**: вопрос задаётся в любом
   режиме, включая `bypass` и `accept-edits`; `allow_always` не предлагается и ранее выданные
   «разрешить всегда» на них не действуют; в `autopilot` и без интерфейса одобрения — отказ с
   текстом `Editing agent configuration requires a human: <path>`;
-* `exec` с перенаправлением, `tee`, `cp`/`mv`/`ln` или `sed -i` с целью из того же списка —
-  критический шаблон с меткой `write to agent configuration` (строка таблицы выше).
+* `exec`, у которого путь из того же списка — аргумент команды не из белого списка чтения или цель
+  перенаправления, — критический шаблон с меткой `write to agent configuration` (строка таблицы
+  выше; правило — ниже, «Белый список чтения»).
+
+**Пути конфигурации агента от хоста** (этап 8.10; design.md change
+`add-config-writer-and-reload`, D8, OQ2). С живой перезагрузкой (§17.5.6) правка глобального
+конфига действовала бы на следующем шаге, поэтому те же правила применяются к путям, которые хост
+передаёт полем `AgentCoreServices.agentConfigPaths: AgentConfigPaths {paths, expansions,
+caseInsensitive}`:
+
+* `paths` — файлы, которые наблюдает `ConfigWatcher` (`$CODELAB_HOME/config.yaml`, файл
+  `--config`/`CODELAB_CONFIG`, `<корень запуска>/.codelab/config.yaml` и `config.local.yaml`),
+  `$CODELAB_HOME/secrets.yaml` при любом `secrets.backend` и каталоги `$CODELAB_HOME/agents`,
+  `$CODELAB_HOME/prompts` с поддеревом; с change `add-agent-skills` (D9, решения Q9, Q16, Q27) — и корни
+  навыков с поддеревом, не зависящие от сессии: `$CODELAB_HOME/skills`, `~/.agents/skills`,
+  абсолютные элементы `skills.extra_roots` (корни, зависящие от `cwd`, — пути сессии, ниже). Список корней строит та же функция, что даёт их загрузчику навыков.
+  `secrets.yaml` защищён всегда, хотя наблюдатель следит за
+  ним только при `file`: иначе агент мог бы создать файл и переключить бэкенд следующей правкой
+  (R5-1 того change). Строит их одна функция `agentConfigPathsFor` (`codelab_agent_io`), та же,
+  что даёт файлы наблюдателю, поэтому каждый наблюдаемый файл защищён. Пути канонические: `~`
+  раскрыт, ссылки раскрыты по самому глубокому существующему предку;
+* `expansions` — значения `HOME` и `CODELAB_HOME` окружения хоста: ими раскрываются `~`, `$HOME`,
+  `${HOME}`, `$CODELAB_HOME`, `${CODELAB_HOME}` в командах `exec` (у ядра своего окружения нет);
+* `caseInsensitive` — признак ФС без учёта регистра; его определяет хост.
+
+**Запуск скрипта навыка** (change `add-agent-skills`, D9; решения пользователя Q24, Q25, Q29 и их
+уточнения Q33–Q38). Каталоги навыков защищены, а скрипт навыка запускается по абсолютному пути
+из рабочей папки (рекомендованный путь, §17.2.3) или из каталога навыка. Поэтому действуют три узких
+исключения — точная формулировка в спецификации `agent-permissions` («Критические пути правок
+конфигурации агента»):
+
+Исключения для навыков (design.md change `add-agent-skills`, D9; решения пользователя Q24, Q25, Q29 и их уточнения Q33–Q38) применяются к каждой простой команде строки отдельно (`cd`, `pushd` и `popd` меняют рабочий каталог последующих команд, но не снимают их критичность). «Внутри каталога навыка» везде проверяется по **каноническому** пути — после разрешения ссылок тем же резолвером путей политики, поэтому `scripts/run -> /bin/cp`, аргумент-ссылка наружу или ссылка на `SKILL.md` исключения не получают. Имя `SKILL.md` сравнивается с базовым именем канонического пути без учёта регистра (на нечувствительной к регистру ФС `skill.md` — тот же файл). Исключения не убирают срабатывание там, где путь записи в корень навыков явно виден в команде; запись, которую разбор не видит (скрипт из файла и другие известные пределы ниже), исключения не создают и не закрывают. Каталоги загруженных навыков политика сессии получает полем `AgentConfigPaths.skillDirs` (рантайм — через `withSession` вместе с путями сессии); «существующий обычный файл» проверяется `stat` резолвера политики, если он `FileSystem`, иначе исключение не действует (fail closed; D17 change `add-agent-skills`):
+
+* **E1 — скрипт навыка** (Q25, уточнено Q34, Q36, Q37). Исполняемый файл SHALL NOT делать команду критической при любом рабочем каталоге, только если: (1) это существующий обычный файл под `<dir>/scripts/` загруженного навыка (имя каталога — по `specification.md`), в пути после `scripts/` нет сегментов, начинающихся с `.`, и сегментов `node_modules`, `site-packages`, `vendor`; не `SKILL.md`; (2) он стоит первым словом команды и это слово содержит `/` (слово без `/` оболочка ищет в `PATH`, а не в рабочем каталоге: `cd <dir> && run.sh` под E1 не подпадает), или он — первый позиционный аргумент интерпретатора, узнанного по **голому базовому имени** из `PATH`: `python`, `python3`, `node`, `tsx`, `bash`, `sh`, `zsh`, `pwsh`, `ruby`, `perl`, `deno run`, `bun run`, `uv run`, `pipx run`; интерпретатор с путём под E1 не подпадает; (3) у интерпретатора перед путём скрипта **нет ни одной опции**, кроме `pwsh -File`/`-f` (Q34: allowlist безопасных опций не заводится; опции кода, модуля и stdin — `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-m`, `-M`, `-r`, `-s`, `-`, `--eval`, `--print`, `--require`, `--import`, `--loader`, `--preload`, `-Command`, `-EncodedCommand`, `--with`, `--spec` — частные случаи этого правила); (4) скрипт или интерпретатор стоит **первым словом** простой команды: перед ним нет ни префиксного присваивания (`NAME=… python3 …`), ни лаунчера — любой программы, запускающей следующую за ней команду (`env` в любой форме, `sudo`, `doas`, `time`, `nohup`, `timeout`, `command`, `exec`, `nice`, `ionice`, `stdbuf`, `xargs` и другие); и **все сегменты, исполненные раньше в той же оболочке, а для вложенной строки — и на всех охватывающих уровнях, взяты из разрешённого списка**: `cd`, `pushd`, `popd`, `:` и команды белого списка чтения без опций, задающих переменную (`printf -v` исключён). Любая другая команда раньше скрипта — в том числе другой вызов скрипта навыка (в `python3 <p1> && python3 <p2>` второй вызов критичен, fail closed), присваивание, `export`, `declare`, `read`, `mapfile`, `set`, `trap`, `source`/`.`, `alias`, `hash`, `enable`, определение функции, — а также зарезервированные слова оболочки (`if`, `then`, `elif`, `else`, `fi`, `for`, `select`, `while`, `until`, `do`, `done`, `case`, `esac`, `function`, `{`, `}`, `[[`, `]]`, `!`; `[` и `test` — команды белого списка чтения, они E1 не отключают) и `eval` на том же уровне отключают E1 (решение Q47: разрешённый список вместо перечня запретов, по образцу Q34 — неизвестное отключает; fail closed: переменные окружения, функции, псевдонимы и ловушки меняют исполняемый код). Вложенная строка `-c` получает E1, только если оболочка — `sh`, `bash` или `dash` по голому имени, вызванная с `-c` и, кроме него, лишь с `-e`, `-u`, `-x`, `-o pipefail`, без `-l`, `--login`, `-i`, `--rcfile`, `--init-file` (startup-файлы исполняют неизвестный код); опции проверяются на всём отрезке между именем оболочки и текстом команды, в том числе после `-c` (`bash -c -l "…"`, `bash -c -i "…"`, `sh -c -i "…"` — без E1); `zsh -c`, `env -S` и `eval` E1 не дают. Файл навыка, названный как интерпретатор (`<dir>/scripts/…/tsx`, `<dir>/scripts/bin/node`), подчиняется для своих аргументов тем же правилам (3) и (4): любая его опция перед первым позиционным аргументом, в том числе опции кода, модуля и stdin Q34, отключает E1; файл навыка с именем раннера `deno`, `bun`, `uv`, `pipx` требует подкоманду `run`, и опции до скрипта отключают E1 (Q36, Q47).
+* **E2 — рабочий каталог навыка** (Q24, сужено Q33). Рабочий каталог (`ExecOptions.cwd`, `cd <dir>`, `pushd <dir>`) в каталоге загруженного навыка SHALL NOT делать простую команду критической, **только если** её исполняемый файл — скрипт навыка по E1 или команда из белого списка чтения. Любая другая команда с таким рабочим каталогом — критическая, даже без единого слова-пути: `tar -x`, `unzip -o`, `7z x`, `cpio -i`, `jar x`, `git pull`, `git merge`, `npm install`, `find -delete` и подобные пишут в рабочий каталог неявно. `env -C DIR` и опция `-C DIR` под E2 сознательно не подпадают и проверяются как прежде (безопасная сторона).
+* **E3 — ресурс навыка аргументом его скрипта** (Q29, уточнено Q35, Q38). Слово-аргумент или значение опции SHALL NOT делать критической простую команду, **только если** её исполняемый файл — скрипт навыка по E1 и слово по каноническому пути — существующий обычный файл под `<dir>/assets/` **того же** навыка с расширением не `.md`. Файлы под `references/` и `scripts/`, сам `SKILL.md` любого навыка (по Q30 это доверенные инструкции и исполняемый код), файлы другого навыка (в том числе через `..`), слова с маской или фигурными скобками (`*`, `?`, `[…]`, `{…}` — каждый вариант раскрытия проверяется как отдельное слово) исключения E3 не получают никогда. Дополнительная эвристика — значения опций вывода исключения не получают и для `assets/`: `-o`, `-o<path>`, `-O`, `--output`, `--output=…`, `--out`, `--out=…`, `--outfile`, `--output-file`, `--out-file`, `--outdir`, `--dest`, `--target`, `--write`, `-w`, `of=…`; опцией вывода считается и короткий кластер, кончающийся на `o`, `O` или `w` (`-vo <path>`, `-vo<path>`, `-xw <path>`), и сокращение длинной опции вывода из списка, которое принимает GNU getopt (`--outp`, `--outf=…`, `--wri`) — уточнение ревью итерации 2. Жёсткие ссылки E3 не различает: `FileStat` порта окружения не отдаёт число ссылок (`nlink`), поэтому ограничение `nlink == 1` не вводится — известный предел.
+
+Пишущие команды (`cp`, `mv`, `rm`, `sed -i`, `ln`, `tee`, `curl -o`, `wget -O`, `install`, `rsync`, `truncate`, `dd of=` и другие команды не из белого списка чтения, не подпадающие под E1), цели перенаправления (`>`, `>>`) в каталог навыка, ещё не существующие пути в каталоге навыка и прочие слова, попадающие в защищаемые пути, проверяются по правилу белого списка чтения, как выше, и остаются критическими. Команда, подпадающая под исключения, идёт по обычной политике уровня `exec`, в том числе с `allow_always`. Остаточные риски: скрипт навыка сам пишет в свой каталог или исполняет переданный ему код (`<dir>/scripts/run.sh "rm …"`) — политика не разбирает содержимое программ; проверка идёт в `beforeToolCall`, а исполнение — позже (TOCTOU: файл или ссылка могут смениться между проверкой и запуском).
+
+**Корни навыков, зависящие от сессии** (решение Q27). Уровни проекта выше рабочей папки
+(`<уровень>/.codelab/skills`, `<уровень>/.agents/skills`) и относительные элементы
+`skills.extra_roots`, разрешённые от `cwd` (`.claude/skills`), защищены так же, но это пути
+**сессии**: рантайм добавляет их к защищаемым путям политики сессии при её открытии той же
+функцией списка корней, что даёт их загрузчику; поле хоста `agentConfigPaths` действует на весь
+процесс и их не содержит. Защита не зависит от доверия проекту и от существования каталога.
+
+Сравнение:
+
+* цель `write`/`edit` — после канонизации `BoundedEnv` (тот же результат, что для containment
+  §4.4); каноническая форма защищаемых путей пересчитывается на каждой проверке — асинхронно в
+  `beforeToolCall` политики тем же вызовом `ExecutionEnv`, что у containment, поэтому подмена каталога-предка ссылкой после старта (`ln -s sub .codelab`, затем
+  `write sub/config.yaml`) путь из-под защиты не выводит; защита действует для сессии с любым `cwd`;
+* резолвер путей политики (пересчёт защищаемых путей и второй проход `exec`) — окружение сессии,
+  только если оно реализует `PathResolver`, иначе окружение хоста `AgentCoreServices.baseEnv`. У
+  сессий `serve` окружение — клиент ACP, который ссылок не раскрывает, а защищаемые пути — пути
+  хоста; для `--ws` клиент подключён по loopback, это та же машина;
+* `exec` — белый список чтения (R5-4 того change). Разбирается каждая простая команда строки — в
+  цепочках `&&`, `||`, `;`, в конвейерах, внутри `sh -c`/`bash -c`, после `env` (в том числе
+  `env -C DIR`) и после `cd DIR` (`DIR` — рабочий каталог следующих команд). Текст команды
+  `sh`/`bash`/`dash -c` определяется по порядку разбора опций оболочки: `-o`/`+o`/`-O`/`+O` забирают
+  следующее слово (и после `-c`), в кластере каждая `o`/`O` забирает по слову (`-co pipefail`,
+  `-ceo x`, `-cO x`), `--rcfile`/`--init-file` — со значением, `--`/`-` завершают опции, неизвестная
+  длинная опция — неразбираемая команда (критична); иначе `bash -O extglob -c 'rm -rf /'` обходил
+  все критические шаблоны (ревью безопасности 2026-11-13, D17 change `add-agent-skills`). Известный
+  предел: у `zsh` и `ksh` длинные опции другие, и `zsh --no-rcs -c …`, `ksh --… -c …` — неразбираемая
+  команда (критична); направление безопасное. Проверяются
+  слова-аргументы, значения опций (`-o FILE`, `-C DIR`, `--output=FILE`, `-d DIR`, `of=FILE`) и
+  рабочий каталог — после раскрытия `~`, `$HOME`, `${HOME}`, `$CODELAB_HOME`, `${CODELAB_HOME}` и
+  разрешения относительно рабочего каталога команды (включая `../`). Если значение разрешается в
+  защищаемый путь, путь внутри защищаемого каталога или близкий каталог-предок, команда критична,
+  кроме команд только чтения: `cat`, `less`, `more`, `head`, `tail`, `grep`/`egrep`/`fgrep`, `rg`,
+  `ag`, `ls`, `stat`, `file`, `wc`, `diff`, `cmp`, `sha256sum`/`shasum`/`md5sum`, `jq`/`yq`,
+  `git diff|log|show|status|blame`, `test`/`[`, `realpath`, `readlink`, `dirname`,
+  `basename`, `echo`/`printf` — без опций записи и исполнения (ниже). Перенаправление в защищаемый путь критично всегда, в том числе у
+  команды из списка. Примеры критичных: `>`/`>>`, `tee`, `cp`, `mv`, `rename`, `ln`, `install`,
+  `dd of=`, `sed -i`, `yq -i`, `perl -pi`, `curl -o`, `wget -O`, `git checkout|restore --
+  .codelab/…`, `cp -r evil/. ~/.codelab`, `rsync`, `tar -C ~/.codelab`, `unzip -d ~/.codelab`,
+  `find ~/.codelab -delete`. Список консервативен: `cp .codelab/config.yaml /tmp/b.yaml` тоже
+  спрашивается;
+* опции записи и исполнения снимают исключение белого списка — команда проверяется как любая
+  другая: `jq`/`yq` с `-i`, `--in-place*`, `--inplace*`, `-s`, `--split-exp`; `rg`/`ag` с `--pre`,
+  `--pre-glob`, `--search-zip` (`-z`); `less` с `-o`, `-O`, `--log-file`; `file` с `-C`, `--compile`;
+  `git` с глобальными `-c`, `--config-env`, `--exec-path`,
+  `--git-dir`, `--work-tree`; `git diff --output|--ext-diff|--textconv` (решение оркестратора
+  2026-11-03 по повторному ревью итерации 5, fail closed);
+* значение опции, которое программа исполняет как команду, разбирается как вложенный текст, как
+  `sh -c`: `git -c` с `core.pager`, `core.fsmonitor`, `core.sshCommand`, `core.editor`,
+  `interactive.diffFilter`, `diff.external`, `*.textconv`, `sequence.editor`, `alias.<имя>=!…`,
+  `credential.helper`, драйверы `merge`/`filter` и другие; `rg --pre`; `find -exec`, `-execdir`,
+  `-ok`, `-okdir`; строка команды `watch` и `script -c`. Так же разбираются переменные с командой
+  (`GIT_PAGER`, `PAGER`, `GIT_EXTERNAL_DIFF`, `GIT_EDITOR`, `EDITOR`, `VISUAL`,
+  `GIT_SEQUENCE_EDITOR`, `GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_ASKPASS`, `SSH_ASKPASS`, `LESSOPEN`,
+  `LESSCLOSE`) в префиксном присваивании, `env NAME=…` и `export|declare|typeset|readonly|local`.
+  Критичны всегда: `git --config-env`, `git -c core.hooksPath|include.path|includeIf.*` и
+  присваивание `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_*`, `GIT_CONFIG_VALUE_*`,
+  `GIT_CONFIG_PARAMETERS`, `GIT_EXEC_PATH`, `GIT_DIR`, `GIT_WORK_TREE` — что исполнится, неизвестно;
+* распаковка архива (`tar -x`, `bsdtar -x`, `unzip` кроме листинга, `cpio -i|-p`, `7z x|e`, `jar x`
+  в каталог запуска), `ditto`, `rsync` и `cp -r|-a` со слитным источником (`X/.`, `X/*`, `.`; у BSD
+  `cp` на macOS — и `X/`) критичны, если приёмник широкий: корень
+  запуска и выше (`tar -C ~`), предок защищаемого пути, `.codelab` или каталог конфигурации хоста;
+  приёмник — `-C`/`--directory`, `-d`, `-o`, последний путь `rsync`, назначение `cp`, по умолчанию
+  рабочий каталог команды. Команда создаёт поддерево неизвестного состава, и двухшаговая запись
+  (`evil/.codelab/config.yaml`, затем распаковка, синхронизация или `cp -r evil/. .` в корень)
+  обходит сравнение путей. В обычный подкаталог (`tar -xf a.tar -C build`, `rsync -a src/ dst/`)
+  и `cp -r src .` — не критичны;
+* `git apply`, `git am`, `patch` критичны всегда: пути правок задаёт содержимое патча;
+* git-подкоманды, стирающие дерево, критичны всегда, без проверки путей: `git clean -f…`,
+  `git reset --hard`, `git stash` кроме `list|show`, `git checkout|restore .`,
+  `git checkout|switch --force|-f|--discard-changes`, `git checkout-index -a|-f`, `git read-tree -u`.
+  Ядро не видит ФС, поэтому корень считается
+  содержащим `.codelab`: `git clean -fdx` удалил бы неотслеживаемый `.codelab/config.local.yaml` с
+  `permissions.deny` (R5-2). `git checkout <ветка>`, `merge`, `pull`, `rebase` не критичны;
+* каталоги-предки — любой предок каждой формы защищаемого пути, кроме `/`, двух видов.
+  **Широкий** — корень запуска, `cwd` сессии, `~` и выше: команда с ним критична, только если
+  разрушает, перемещает или подменяет сам каталог — `rm`/`rmdir`/`mkdir` и предок в роли источника
+  `mv`/`ln` (`rm -rf ~`, `mv ~/proj x`) всегда, предок в роли назначения `mv`/`ln` — пока его нет
+  на диске (в существующий каталог файл кладётся внутрь, это ловит сравнение пути `DIR/x`); запись
+  внутрь ловится сравнением конкретных путей, поэтому `make`, `cp -r src dst`, `rm -rf build`,
+  `mkdir -p src/x`, `mv a b`, `mv a .` в корне не критичны (исключения — распаковка, `rsync`, патчи и
+  git, стирающий дерево, выше). **Близкий** — `<корень>/.codelab`,
+  `$CODELAB_HOME`, каталог файла `--config` и промежуточные: в аргументах команды не из белого списка
+  он критичен как защищаемый путь;
+* маски (glob `*`, `?`, `[`, brace `{…}`) — по префиксу до первого символа маски: префикс внутри
+  защищаемого пути, `.codelab` или `$CODELAB_HOME` либо совпадающий с ними делает команду не из
+  белого списка критичной (fail closed): `rm .codelab/*.yaml`, `cp x ~/.codelab/{agents,prompts}/`.
+  Файлы политики: правила PERM-11 для `exec` — `permissions/agent_config_rules.dart`, общий с
+  таблицей §7.6 разбор аргументов — `permissions/command_args.dart` (две копии разбора разошлись бы).
+  Сопоставление — своя реализация политики `permissions/shell_glob.dart`, а не `tools/glob.dart`
+  инструментов поиска: маска одной компоненты пути, правило точки оболочки (`*` не совпадает с
+  `.codelab`), сломанная маска считается совпадающей (fail closed);
+* удаление и усечение самого защищаемого файла — `rm`, `unlink`, `mv <защищаемый> …`, `truncate`,
+  перенаправление `>` — тот же шаблон `write to agent configuration`: удаление проектного конфига
+  может снять записанный в нём `permissions.deny` (R5-2 того change);
+* символическая ссылка НА защищаемый файл (`ln -s ~/.codelab/config.yaml /tmp/x`) критична по
+  белому списку (`ln` не читает); запись по уже существующей ссылке ловится канонизацией цели —
+  `write`/`edit` через `BoundedEnv`, `exec` (`>`, `tee`, `sed -i`, `rm`, `truncate`) вторым
+  проходом шаблона через резолвер путей политики, если ссылка и её цель существуют;
+* жёсткая ссылка — `ln` без `-s` и `cp -l`/`cp --link` с защищаемым путём в любой позиции
+  (источник или цель) — тоже критическая: через неё защищаемый файл правится по другому пути.
+
+Известная граница — висячая ссылка: после одобренного человеком `ln -s sub .codelab` при
+несуществующем `sub` запись `write sub/config.yaml` не распознаётся, потому что порт `PathResolver`
+не раскрывает висячие ссылки (нет `readlink`); закрытие — новая capability порта окружения
+отдельной задачей (R5-3 того change).
+
+Разбор `exec` не видит и такие случаи (дополнено change `add-agent-skills`): команда в shell через
+stdin (`echo '…' | sh`), запись из программы `sed -n 'w …'` и `awk '{print > …}'`, `pwsh -Command`,
+`fish -c`, подстановку по умолчанию `${HOME:-x}`, путь в переменной (`F=…; rm $F`), каталоги
+`.agents/skills` и `.codelab/skills` в подкаталогах проекта, которые станут корнями навыков для
+сессий в подпроектах (уровни выше `cwd` защищаются только для сессии, в которой они корни, Q27);
+остаточные риски исключений для навыков: скрипт навыка пишет в свой каталог или в переданный
+ресурс (Q25, Q29), а записанный им файл потом читается как доверенный (Q30).
+Исправлено отдельным fix (решение пользователя 2026-11-12).
+
+* `env -S`/`--split-string` разбирается как вложенная команда `env <слова до -S> <слова значения>
+  <остаток>`. Значение токенизируется **по правилам самого `env`**, а не shell (`env` метасимволы
+  shell не знает: `;`, `&`, `|`, `<<` и перевод строки — обычные символы аргументов): разделители —
+  пробел и `\t \n \v \f \r`; кавычки `'…'` (внутри только `\\` и `\'`) и `"…"`; `\_`, `\t`, `\n`,
+  `\v`, `\f`, `\r` вне кавычек — разделитель, в двойных — пробельный символ; `\\ \" \' \$ \#` — сам
+  символ; `\c` обрывает значение; `#` в начале слова — комментарий до конца; `${NAME}` —
+  подстановка. Каждое слово выводится в одинарных кавычках, `${NAME}` — вне них, чтобы правила
+  видели раскрытие `${HOME}`/`${CODELAB_HOME}`; остаток после значения тоже берётся в кавычки
+  (`'#'`, `'x;'` остаются данными). Значение само может начинаться с опций и присваиваний `env`,
+  в том числе с вложенного `-S`; глубину ограничивает `maxShellNesting`
+  (`shell_lexer.dart`: `_scanEnv`, `_envSplitWords`, `_envSplitText`; один проход по опциям
+  для поиска команды, `-S` и `-C`). Строки `$'…'` и `$"…"` раскрываются лексером для всех команд (правило 1 §7.6).
+* Опции `env` кончаются на значении `-S`. Поддержаны `-S значение`, `-Sзначение`, `-S ''`, кластеры
+  (`-iS`), `--split-string значение`, `--split-string=значение` (пустое после `=` следующее слово
+  не берёт) и однозначные сокращения длинных опций (`--sp`, `--split-s`, `--chd`, `--un`).
+  Опции со значением: `-u`, `-C`, `-S`, `-a`/`--argv0`, `--unset`, `--chdir`, а для macOS/BSD —
+  `-P`, `-L`, `-U`; флаги без значения — `-i`, `-0`, `-v`.
+* **`unparsable command`** (fail closed): неизвестная короткая опция `env`; в значении `-S` голый
+  `$` или `${…` без закрытия и с неверным именем, незакрытые кавычки, любой `\x`, кроме
+  перечисленных, `\` в конце, `\x` внутри одинарных кавычек, кроме `\\` и `\'`; слово-кластер
+  коротких флагов длиннее 256 символов у команды вне белого списка чтения (перебор суффиксов
+  квадратичен, а метка «write to agent configuration» на длинных `-I<путь>` и `-d{json}` вводила бы
+  в заблуждение).
+* У склеенных коротких флагов со значением (`curl -sSo<path>`, `wget -qO<path>`, `wget -q4O<path>`)
+  кандидатами пути служат суффиксы слова после каждого символа кластера, похожие на путь:
+  начинаются с `/`, `~`, `.` или `$` либо содержат `/` (`agent_config_rules.dart`,
+  `_pathCandidates`). Относительное имя без таких признаков (`curl -sSoconfig.yaml`) ловит правило
+  «команда в каталоге конфигурации». Возможны ложные срабатывания (fail closed).
+
+Известные пределы, которые **не исправляются** этим fix: (1) нормализация Unicode на APFS
+(NFC/NFD): `rm -rf /Users/Сергей` с `й` в NFD не совпадает с защищаемым путём, сравнение путей идёт
+без нормализации; (2) регистр на APFS: `rm ~/.CODELAB/config.yaml` — требует проверки, отдаёт ли
+`canonicalizeSeen` (realpath) регистр с диска; если нет, это обход на macOS (отдельная задача).
+
+Известная проблема, **исправляется отдельной задачей**: ложное срабатывание на `curl -d '{"a":1}'` — одноэлементные `{…}` в кавычках раскрываются как фигурные скобки и дают метку `write to agent configuration` (старое поведение). Там же: регулярное выражение `forkBomb`
+(`critical_patterns.dart`) квадратично на длинной цепочке `\w`-символов в строке команды
+(8000 символов — около 1,4 с, 32000 — около 21 с); встроенный агент работает в UI-изоляте
+desktop. Остаются пределы этого fix: однозначные сокращения длинных опций других лаунчеров
+(`sudo --pro`, `nice --adj`, `timeout --sig`) не распознаются — требует проверки; `less '+!cmd'` (команда
+из опции запуска `less`). Известные пределы исключений для навыков: `bun run <имя>` ищет скрипт
+`package.json`, а не файл, — под E1 такое слово не подпадает, только путь с `/`; жёсткие ссылки
+E3 не различает (`FileStat` не отдаёт число ссылок); проверка в `beforeToolCall` и исполнение
+разнесены во времени (TOCTOU); корни навыков, зависящие от `cwd` (уровни выше `cwd` до корня git,
+относительные и собственные абсолютные `skills.extra_roots` папки сессии), политика сессии получает из
+результата фазы навыков, поэтому без него — `skills.enabled: false` в конфигурации папки, хост без порта
+навыков (`serve --ws`, web), таймаут, исключение или отмена фазы — они в этой сессии не защищены; корни
+хоста (`$CODELAB_HOME/skills`, `~/.agents/skills`, абсолютные `extra_roots` корня запуска) и проектное
+правило у `cwd` (`.codelab/skills/**`, `.agents/skills/**`) защищены всегда (решение Q46 (а) и D17
+change `add-agent-skills`).
+
+Разбор `exec` не видит пути, которых нет в словах команды: строка программы интерпретатора
+(`python -c`, `node -e`), скрипт из файла, подстановка `$(…)`, маска с префиксом короче
+защищаемого пути (`rm -rf .c*`), запись внутрь широкого предка без явного пути
+(`find . -delete` в корне), `xargs rm` из конвейера, переменные, кроме `HOME`/`CODELAB_HOME`,
+удалённое назначение `rsync` `host:path`, удалённые команды (`ssh host "…"`), `git worktree add`,
+`git submodule update`, `git cherry-pick`, `git revert`, `**` без `globstar` (одна компонента, точечные каталоги
+не видит; маска ловится, только если префикс уже в `.codelab`); ложные срабатывания на путь в значении опции, не
+задающей запись (`--exclude=`, `-m`), приняты как лишний вопрос. Git-подкоманды, меняющие
+отслеживаемые файлы (`checkout <ветка>`, `merge`, `pull`, `rebase`), могут переписать
+закоммиченный `.codelab/config.yaml`, но для доверенного проекта это обычная работа. Остаточный риск смягчает то, что ключи,
+ослабляющие права, и правки, способные направить секрет на другой адрес, живой перезагрузкой не
+применяются (§17.5.6; R0-1, R0-4 того change).
 
 Чтение этих файлов не ограничено. Правило не мешает клиентам: `ConfigWriter` работает вне
 инструментов модели.
@@ -382,7 +606,7 @@ sequenceDiagram
 8. **PERM-8.** Grants на ход очищаются в начале каждого `prompt()`.
 9. **PERM-9.** В `autopilot` критический шаблон отклоняется без вопроса; для критического шаблона вариант `allow_always` не предлагается.
 10. **PERM-10.** В `acceptEdits` вызовы уровней `read` и `write` разрешаются режимом без вопроса, а `network`, `exec` и критические шаблоны спрашиваются; `narrow` и ужесточение конфигом используют один порядок `alwaysAsk < write < acceptEdits < yolo < autopilot`.
-11. **PERM-11.** Правка конфигурационных файлов агента в проекте (§7.6.1) спрашивается в любом режиме, не принимает `allow_always` и отклоняется без человека.
+11. **PERM-11.** Правка конфигурационных файлов агента в проекте и путей конфигурации агента, переданных хостом (§7.6.1), спрашивается в любом режиме, не принимает `allow_always` и отклоняется без человека.
 
 ## 7.10. Обоснование решения
 
@@ -416,6 +640,7 @@ sequenceDiagram
 * `turn_grants_test.dart`: grant на ход не действует в следующем `prompt()` (PERM-8).
 * `accept_edits_mode_test.dart`: табличный тест строки `acceptEdits` §7.3 по всем уровням и критическому шаблону; `permissions.tools.exec = "allow"` снимает вопрос; `narrow` для всех пар пяти режимов совпадает с минимумом по порядку §7.3.1; проектный `permissions.mode: bypass` поверх глобального `accept-edits` отклонён как ослабление, `standard` — принят (PERM-10).
 * `acp/set-mode-accept-edits` (критерий матрицы P-06, фикстура §14): `session/new` перечисляет пять режимов в порядке `plan`, `ask`, `standard`, `accept-edits`, `bypass`; `session/set_mode` с `modeId: "accept-edits"` → `{}` и `current_mode_update`; ход, где scripted модель зовёт `edit`, затем `exec` → для `edit` нет `session/request_permission`, `tool_call_update` `completed` с diff; для `exec` — `session/request_permission` без `_meta.codelab.critical`; синоним `acceptEdits` на входе нормализуется в `accept-edits` (PERM-10).
+* `agent_config_paths_test.dart` (8.10): пути от хоста в `bypass` и `autopilot`, symlink dotfiles, проектный конфиг корня запуска из сессии с другим `cwd`, файл `--config`, `exec` с `mv`/`rename`/`ln -sf`/`install`/`dd of=`/`cd ~/.codelab && …`, пути `~/…`, `$HOME/…`, `${CODELAB_HOME}/…`, `../../.codelab/…`, регистр, подмена каталога ссылкой (PERM-11; design.md change `add-config-writer-and-reload`, D8).
 * `acp_permission_gate_test.dart` на fake-клиенте: состав запроса совпадает с примером §7.8 (`rawInput`, `locations`, diff) (PERM-6); `cancelled` → отказ, ход продолжается (PERM-7); неизвестный `optionId` → отказ; поздний ответ после отмены игнорируется (PERM-4).
 
 ---

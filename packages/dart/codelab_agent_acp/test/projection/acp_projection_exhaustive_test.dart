@@ -1,0 +1,785 @@
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' as acp;
+import 'package:codelab_agent_acp/src/event_projection.dart';
+import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:test/test.dart';
+
+import '../support/server_harness.dart' show scriptedModel;
+
+/// Проекция списка задач и событий субагентов в кадры ACP (ACP-6).
+///
+/// Почему отдельный файл: `every_agent_event_is_projected_test.dart` сверяет
+/// таблицу `projectionTable` с иерархией `AgentEvent`, а здесь проверяется
+/// содержимое кадра: `TaskListChanged` → `plan` (включая восстановление из
+/// новой ветки), строки `Subagent*` и вызов `agent` (D24, D28). Источники:
+/// agent-acp-server «Проекция субагентов и списка задач», design.md change
+/// `add-subagents-and-tasks` D24, D28, D29, §17.16.5–§17.16.6 и §17.3.7
+/// документов ядра; задачи 1.1, 1.5a, 2.1, 2.8.
+///
+void main() {
+  const s = SessionId('sess_1');
+
+  List<Map<String, Object?>> project(AgentEvent event) => [
+    for (final update in projectEvent(event, configOptions: () => const []))
+      update.toJson(),
+  ];
+
+  TaskItem item(
+    String id,
+    String subject, {
+    TaskStatus status = TaskStatus.pending,
+    TaskPriority priority = TaskPriority.medium,
+    TaskOwner owner = TaskOwner.main,
+    List<String> blockedBy = const [],
+    String? description,
+  }) => TaskItem(
+    id: id,
+    subject: subject,
+    description: description,
+    status: status,
+    priority: priority,
+    owner: owner,
+    blockedBy: blockedBy,
+  );
+
+  TaskListChanged restore(
+    List<TaskItem> items, {
+    List<String> deleted = const [],
+  }) => TaskListChanged(
+    s,
+    items: items,
+    change: TaskChange(
+      op: 'restore',
+      actor: const MainActor(),
+      changed: items,
+      deleted: deleted,
+    ),
+  );
+
+  group('TaskListChanged → plan', () {
+    // agent-acp-server «Список новой ветки»: ядро публикует `restore` с
+    // пустым списком, затем с пунктами `#1`, `#4`; клиент получает пустой
+    // `plan` (иначе он продолжил бы показывать список покинутой ветки,
+    // `11-Agent Plan.md`: клиент заменяет план целиком), затем `plan` с двумя
+    // entries и `_meta.codelab.task.id` "1", "4".
+    test('op restore with an empty list is a plan with no entries', () {
+      expect(project(restore(const [], deleted: const ['1', '2'])), [
+        {
+          'sessionUpdate': 'plan',
+          'entries': <Object?>[],
+          // «Список новой ветки без toolCallId» (D35): ключа toolCallId нет.
+          '_meta': {
+            'codelab': {
+              'taskChange': {
+                'op': 'restore',
+                'actor': 'main',
+                'changed': <String>[],
+                'deleted': ['1', '2'],
+              },
+            },
+          },
+        },
+      ]);
+    });
+
+    test('op restore with items #1 and #4 is a plan with both of them', () {
+      final frames = project(
+        restore([
+          item(
+            '1',
+            'Read the failing test',
+            status: TaskStatus.completed,
+            priority: TaskPriority.high,
+          ),
+          item(
+            '4',
+            'Fix the parser',
+            status: TaskStatus.inProgress,
+            owner: const TaskOwner('sub_k3f9a1c2'),
+            blockedBy: const ['1'],
+          ),
+        ]),
+      );
+
+      expect(frames, [
+        {
+          'sessionUpdate': 'plan',
+          'entries': [
+            {
+              'content': 'Read the failing test',
+              'priority': 'high',
+              'status': 'completed',
+              '_meta': {
+                'codelab': {
+                  'task': {'id': '1', 'owner': 'main', 'blockedBy': <String>[]},
+                },
+              },
+            },
+            {
+              'content': 'Fix the parser',
+              'priority': 'medium',
+              'status': 'in_progress',
+              '_meta': {
+                'codelab': {
+                  'task': {
+                    'id': '4',
+                    'owner': 'sub_k3f9a1c2',
+                    'blockedBy': ['1'],
+                  },
+                },
+              },
+            },
+          ],
+          '_meta': {
+            'codelab': {
+              'taskChange': {
+                'op': 'restore',
+                'actor': 'main',
+                'changed': ['1', '4'],
+                'deleted': <String>[],
+              },
+            },
+          },
+        },
+      ]);
+    });
+
+    // §17.16.5: `restore` — не особый кадр, а тот же `plan`, что у `create`
+    // и `update` (D29: «клиенту — обычный plan со всем списком»).
+    test('op restore and op create produce the same entries', () {
+      final items = [
+        item('1', 'A'),
+        item('2', 'B', blockedBy: const ['1']),
+      ];
+      final created = TaskListChanged(
+        s,
+        items: items,
+        change: TaskChange(
+          op: 'create',
+          actor: const MainActor(),
+          changed: [items.last],
+          deleted: const [],
+        ),
+      );
+
+      expect(
+        project(restore(items)).single['entries'],
+        project(created).single['entries'],
+      );
+    });
+
+    // agent-acp-server «Список задач в ходе», D35: операция вызова `task_*`
+    // несёт `toolCallId`, `changed` и `deleted` — id пунктов, а не снимки.
+    test('a task_* operation carries taskChange with toolCallId', () {
+      final items = [item('1', 'A'), item('2', 'B')];
+      final event = TaskListChanged(
+        s,
+        items: [items.first],
+        change: TaskChange(
+          op: 'delete',
+          actor: const MainActor(),
+          toolCallId: 'call_7',
+          changed: [items.first],
+          deleted: const ['2'],
+        ),
+      );
+
+      final meta = project(event).single['_meta'];
+      expect(meta, {
+        'codelab': {
+          'taskChange': {
+            'op': 'delete',
+            'actor': 'main',
+            'toolCallId': 'call_7',
+            'changed': ['1'],
+            'deleted': ['2'],
+          },
+        },
+      });
+    });
+
+    // `assign` и операция потомка: `actor` — id субагента, `toolCallId`
+    // опускается, пока ядро его не передало (§17.16.5).
+    test('a subagent operation without a call has no toolCallId key', () {
+      final items = [item('1', 'A', owner: const TaskOwner('sub_k3f9a1c2'))];
+      final event = TaskListChanged(
+        s,
+        items: items,
+        change: TaskChange(
+          op: 'assign',
+          actor: const SubagentActor('sub_k3f9a1c2'),
+          changed: items,
+          deleted: const [],
+        ),
+      );
+
+      final change =
+          ((project(event).single['_meta']! as Map)['codelab']!
+                  as Map)['taskChange']!
+              as Map;
+      expect(change['actor'], 'sub_k3f9a1c2');
+      expect(change, isNot(contains('toolCallId')));
+    });
+
+    // §17.16.5: `description` в ACP не уходит; порядок entries — порядок
+    // списка (создания), а не id.
+    test('description stays out of the frame, the order is the list order', () {
+      final frames = project(
+        restore([
+          item('4', 'Later id first', description: 'long text'),
+          item('1', 'Earlier id second'),
+        ]),
+      );
+
+      final entries = (frames.single['entries']! as List).cast<Map>();
+      expect(entries.map((e) => e['content']), [
+        'Later id first',
+        'Earlier id second',
+      ]);
+      expect(entries.every((e) => !e.containsKey('description')), isTrue);
+      expect(frames.toString(), isNot(contains('long text')));
+    });
+
+    // «Реплей плана без taskChange» (D35): с `replay: true` у `plan` нет
+    // `_meta` вовсе, entries с `_meta.codelab.task` остаются.
+    test('a replayed plan has no taskChange', () {
+      final event = TaskListChanged(
+        s,
+        items: [item('1', 'A')],
+        change: TaskChange(
+          op: 'update',
+          actor: const MainActor(),
+          toolCallId: 'call_7',
+          changed: [item('1', 'A')],
+          deleted: const [],
+        ),
+      );
+
+      final frame = projectEvent(
+        event,
+        configOptions: () => const [],
+        replay: true,
+      ).single.toJson();
+
+      expect(frame, isNot(contains('_meta')));
+      final entry = (frame['entries']! as List).single as Map;
+      expect(entry['_meta'], isNotNull);
+    });
+
+    // ACP-6: строка таблицы §13.7 существует и называет `plan`.
+    test('the projection table has a plan row for TaskListChanged', () {
+      expect(projectionTable[TaskListChanged], contains('plan'));
+    });
+
+    // Тип кадра — настоящий `SessionUpdate.plan` кодека, а не сырой JSON:
+    // все сообщения ACP — типизированные модели (AGENTS.md §7).
+    test('the frame is a typed SessionUpdate', () {
+      final updates = projectEvent(
+        restore([item('1', 'A')]),
+        configOptions: () => const [],
+      );
+
+      expect(updates.single, isA<acp.SessionUpdate>());
+      expect(updates.single.toJson()['sessionUpdate'], 'plan');
+    });
+  });
+
+  // Строки `Subagent*` и первый кадр вызова `agent` (agent-acp-server
+  // «Проекция субагентов и списка задач»; D24, D28; задачи 2.1, 2.8).
+  SubagentSnapshot snapshot() => SubagentSnapshot(
+    id: 'sub_k3f9a1c2',
+    parentToolCallId: 'call_1',
+    agent: 'explore',
+    description: 'Find auth code',
+    depth: 1,
+    state: SubagentState.running,
+    steps: 1,
+    toolCalls: 2,
+    usage: Usage.zero,
+    activeChildren: 0,
+    startedAt: DateTime.utc(2026, 11, 14),
+  );
+
+  group('Subagent* events; SubagentActivity only by the consent', () {
+    test('SubagentStarted gives no frame', () {
+      final event = SubagentStarted(
+        s,
+        subagentId: 'sub_k3f9a1c2',
+        parentToolCallId: 'call_1',
+        agent: 'explore',
+        description: 'Find auth code',
+        childSessionId: const SessionId('child_1'),
+        journalPath: 'subagents/child_1.jsonl',
+      );
+
+      expect(project(event), isEmpty);
+    });
+
+    // Строку прогресса клиент получает через `ToolCallProgress(agent)`, а не
+    // из `SubagentProgress` (§17.3.7): иначе строка пришла бы дважды.
+    test('SubagentProgress gives no frame', () {
+      expect(project(SubagentProgress(s, snapshot: snapshot())), isEmpty);
+    });
+
+    test('SubagentFinished gives no frame', () {
+      final event = SubagentFinished(
+        s,
+        subagentId: 'sub_k3f9a1c2',
+        parentToolCallId: 'call_1',
+        status: SubagentState.completed,
+        usage: Usage.zero,
+        duration: const Duration(seconds: 48),
+        reportPreview: 'Auth is in lib/auth/session.dart',
+      );
+
+      expect(project(event), isEmpty);
+    });
+
+    SubagentActivity activity(
+      AgentEvent inner, {
+      String parent = 'call_1',
+      int depth = 1,
+      List<String> path = const [],
+    }) => SubagentActivity(
+      s,
+      subagentId: 'sub_k3f9a1c2',
+      parentToolCallId: parent,
+      path: path,
+      depth: depth,
+      event: inner,
+    );
+
+    ToolCallStarted readCall({SubagentCallRef? subagent}) => ToolCallStarted(
+      const SessionId('child_1'),
+      toolCallId: 'call_1',
+      tool: 'read',
+      kind: ToolKind.read,
+      title: 'Read a.dart',
+      input: const {'path': 'a.dart'},
+      subagent: subagent,
+    );
+
+    List<Map<String, Object?>> projectWith(
+      AgentEvent event, {
+      String? prefix,
+      SubagentFinished? subagentResult,
+    }) => [
+      for (final update in projectEvent(
+        event,
+        configOptions: () => const [],
+        subagentPrefix: prefix,
+        subagentResult: subagentResult,
+      ))
+        update.toJson(),
+    ];
+
+    // Ровно один кадр: утверждение вместо `Bad state: No element`.
+    Map<String, Object?> only(List<Map<String, Object?>> frames) {
+      expect(frames, hasLength(1));
+      return frames.single;
+    }
+
+    // SUB-12, «Клиент без согласия»: клиенту без `subagentToolCalls` вызовы
+    // потомков не отправляются. Раньше тест назывался «gives no frame in
+    // iteration 2»; с итерации 5 (D47 Т8) он делится на два случая. Этот —
+    // зелёный: без согласия мост префикс не передаёт, кадров нет.
+    test('SubagentActivity gives no frame without the consent', () {
+      expect(project(activity(readCall())), isEmpty);
+      expect(projectWith(activity(readCall())), isEmpty);
+    });
+
+    // «Вызовы ребёнка и внука», D47 Т2: с согласием `ToolCallStarted`
+    // потомка — `tool_call` с `toolCallId` «префикс/id вызова» и
+    // `_meta.codelab.parentToolCallId` — префиксом.
+    test('with the consent a child ToolCallStarted gives a chained '
+        'tool_call', () {
+      final frames = projectWith(activity(readCall()), prefix: 'call_1');
+
+      expect(frames, [
+        {
+          'sessionUpdate': 'tool_call',
+          'toolCallId': 'call_1/call_1',
+          'title': 'Read a.dart',
+          'kind': 'read',
+          'status': 'pending',
+          'rawInput': {'path': 'a.dart'},
+          '_meta': {
+            'codelab': {'parentToolCallId': 'call_1'},
+          },
+        },
+      ]);
+    });
+
+    // Внук: префикс — цепочка вызова `agent` ребёнка, а не разбор id; id с
+    // `/` у провайдера (`call/1`) не ломает цепочку (D45 Т3, D47 Т2).
+    test('a grandchild call has a three-segment chain and the child call as '
+        'the parent', () {
+      final frames = projectWith(
+        activity(
+          readCall(),
+          parent: 'call_2',
+          depth: 2,
+          path: const ['sub_c1'],
+        ),
+        prefix: 'call/1/call_2',
+      );
+
+      expect(only(frames)['toolCallId'], 'call/1/call_2/call_1');
+      expect((only(frames)['_meta']! as Map)['codelab'], {
+        'parentToolCallId': 'call/1/call_2',
+      });
+    });
+
+    // Q16, D28: вложенный вызов `agent` несёт `{id, type}` внука — как вызов
+    // `agent` корня — рядом с `parentToolCallId`.
+    test('a nested agent call carries {id, type} next to the parent', () {
+      final nested = ToolCallStarted(
+        const SessionId('child_1'),
+        toolCallId: 'call_2',
+        tool: 'agent',
+        kind: ToolKind.think,
+        title: 'Subagent explore: List tests',
+        input: const {'type': 'explore'},
+        subagent: SubagentCallRef(id: 'sub_g1', type: 'explore'),
+      );
+
+      final frames = projectWith(
+        activity(nested, parent: 'call_1'),
+        prefix: 'call_1',
+      );
+
+      expect(only(frames)['toolCallId'], 'call_1/call_2');
+      expect((only(frames)['_meta']! as Map)['codelab'], {
+        'parentToolCallId': 'call_1',
+        'subagent': {'id': 'sub_g1', 'type': 'explore'},
+      });
+    });
+
+    test('with the consent progress is a tool_call_update with content and '
+        'the parent', () {
+      final progress = ToolCallProgress(
+        const SessionId('child_1'),
+        toolCallId: 'call_1',
+        content: [ToolCallBlock(TextContent('chunk'))],
+      );
+
+      final frames = projectWith(activity(progress), prefix: 'call_1');
+
+      expect(frames, [
+        {
+          'sessionUpdate': 'tool_call_update',
+          'toolCallId': 'call_1/call_1',
+          'status': 'in_progress',
+          'content': [
+            {
+              'type': 'content',
+              'content': {'type': 'text', 'text': 'chunk'},
+            },
+          ],
+          '_meta': {
+            'codelab': {'parentToolCallId': 'call_1'},
+          },
+        },
+      ]);
+    });
+
+    // Итог вызова потомка — по тем же правилам, что у корня: статус,
+    // контент и `outcome` (agent-acp-server «Шаги потомков деревом»).
+    test('with the consent a finished call has status, content and the '
+        'parent; a cancelled one has outcome and no content', () {
+      ToolCallFinished finished(ToolOutcome outcome) => ToolCallFinished(
+        const SessionId('child_1'),
+        toolCallId: 'call_1',
+        outcome: outcome,
+        content: const [TextContent('1| void main() {}')],
+      );
+
+      final done = only(
+        projectWith(
+          activity(finished(ToolOutcome.completed)),
+          prefix: 'call_1',
+        ),
+      );
+      final cancelled = only(
+        projectWith(
+          activity(finished(ToolOutcome.cancelled)),
+          prefix: 'call_1',
+        ),
+      );
+
+      expect(done['status'], 'completed');
+      expect(done['toolCallId'], 'call_1/call_1');
+      expect((done['_meta']! as Map)['codelab'], {
+        'parentToolCallId': 'call_1',
+      });
+      expect(done['content'], [
+        {
+          'type': 'content',
+          'content': {'type': 'text', 'text': '1| void main() {}'},
+        },
+      ]);
+      expect(cancelled['status'], 'failed');
+      expect(cancelled, isNot(contains('content')));
+      expect((cancelled['_meta']! as Map)['codelab'], {
+        'parentToolCallId': 'call_1',
+        'outcome': 'cancelled',
+      });
+    });
+
+    // D47 Т3: финальное обновление вложенного `agent` несёт `summary` внука,
+    // как у корня (D24).
+    test('the final update of a nested agent carries the summary', () {
+      final finished = ToolCallFinished(
+        const SessionId('child_1'),
+        toolCallId: 'call_2',
+        outcome: ToolOutcome.completed,
+        content: const [
+          TextContent('<subagent-report id="sub_g1">x</subagent-report>'),
+        ],
+      );
+      final result = SubagentFinished(
+        const SessionId('child_1'),
+        subagentId: 'sub_g1',
+        parentToolCallId: 'call_2',
+        status: SubagentState.completed,
+        usage: const Usage(input: 1600, output: 150),
+        toolCalls: 1,
+        duration: const Duration(seconds: 48),
+        report: 'The test directory contains auth_test.dart.',
+      );
+
+      final update = only(
+        projectWith(
+          activity(finished, parent: 'call_1'),
+          prefix: 'call_1',
+          subagentResult: result,
+        ),
+      );
+
+      expect(update['toolCallId'], 'call_1/call_2');
+      expect((update['_meta']! as Map)['codelab'], {
+        'parentToolCallId': 'call_1',
+        'subagent': {
+          'id': 'sub_g1',
+          'summary': {
+            'toolCalls': 1,
+            'tokens': {'input': 1600, 'output': 150},
+            'durationMs': 48000,
+          },
+        },
+      });
+    });
+
+    // «текст, мысли и прочие события потомков НЕ SHALL отправляться»: и при
+    // согласии. Охраняет от лишних кадров.
+    test('with the consent text and thoughts of a descendant are not '
+        'sent', () {
+      final partial = AssistantMessage(
+        content: const [],
+        model: scriptedModel,
+        usage: Usage.zero,
+        stopReason: StopReason.stop,
+        timestamp: DateTime.utc(2026),
+      );
+
+      expect(
+        projectWith(
+          activity(MessageDelta(s, delta: 'hi', partial: partial)),
+          prefix: 'call_1',
+        ),
+        isEmpty,
+      );
+      expect(
+        projectWith(
+          activity(ThoughtDelta(s, delta: 'hmm', partial: partial)),
+          prefix: 'call_1',
+        ),
+        isEmpty,
+      );
+    });
+
+    // D47 Т12: строка таблицы описывает проекцию с согласием, а не
+    // «итерацию 2».
+    test('the projection table row of SubagentActivity describes the '
+        'consent-based projection', () {
+      final row = projectionTable[SubagentActivity]!;
+
+      expect(row, contains('subagentToolCalls'));
+      expect(row, isNot(contains('iteration 2')));
+      expect(row, isNot(startsWith('not sent: no')));
+    });
+
+    test('the projection table has a "not sent" row for the other '
+        'subagent events', () {
+      for (final type in [
+        SubagentStarted,
+        SubagentProgress,
+        SubagentFinished,
+      ]) {
+        expect(
+          projectionTable[type],
+          allOf(isNotNull, startsWith('not sent')),
+          reason: '$type',
+        );
+      }
+    });
+  });
+
+  group('ToolCallStarted(agent) → tool_call with _meta.codelab.subagent', () {
+    ToolCallStarted agentCall({SubagentCallRef? subagent}) => ToolCallStarted(
+      s,
+      toolCallId: 'call_1',
+      tool: 'agent',
+      kind: ToolKind.think,
+      title: 'Subagent explore: Find auth code',
+      input: const {
+        'type': 'explore',
+        'description': 'Find auth code',
+        'prompt': 'Find where authentication is implemented.',
+      },
+      subagent: subagent,
+    );
+
+    // D28: признак вызова `agent` с первого кадра — только данные `_meta`.
+    test('the first frame carries {id, type}', () {
+      final frames = project(
+        agentCall(
+          subagent: SubagentCallRef(id: 'sub_k3f9a1c2', type: 'explore'),
+        ),
+      );
+
+      expect(frames, [
+        {
+          'sessionUpdate': 'tool_call',
+          'toolCallId': 'call_1',
+          'title': 'Subagent explore: Find auth code',
+          'kind': 'think',
+          'status': 'pending',
+          'rawInput': {
+            'type': 'explore',
+            'description': 'Find auth code',
+            'prompt': 'Find where authentication is implemented.',
+          },
+          '_meta': {
+            'codelab': {
+              'subagent': {'id': 'sub_k3f9a1c2', 'type': 'explore'},
+            },
+          },
+        },
+      ]);
+    });
+
+    // Вызов без `SubagentCallRef` (любой другой инструмент) `_meta` не
+    // получает: расширение не должно протекать в чужие вызовы.
+    test('a call without SubagentCallRef has no _meta', () {
+      final frame = project(agentCall()).single;
+
+      expect(frame, isNot(contains('_meta')));
+    });
+  });
+
+  group('ToolCallFinished(agent) content', () {
+    ToolCallFinished finished(ToolOutcome outcome) => ToolCallFinished(
+      s,
+      toolCallId: 'call_1',
+      outcome: outcome,
+      content: const [
+        TextContent(
+          '<untrusted-content source="agent">\n'
+          '<subagent-report id="sub_a" agent="explore" status="failed">\n'
+          'Subagent failed: boom\n'
+          '</subagent-report>\n'
+          '</untrusted-content>',
+        ),
+      ],
+    );
+
+    SubagentFinished done(String report) => SubagentFinished(
+      s,
+      subagentId: 'sub_a',
+      parentToolCallId: 'call_1',
+      status: SubagentState.failed,
+      failure: SubagentFailure.error,
+      report: report,
+    );
+
+    List<Map<String, Object?>> frames(SubagentFinished result) => [
+      for (final u in projectEvent(
+        finished(ToolOutcome.failed),
+        configOptions: () => const [],
+        subagentResult: result,
+      ))
+        u.toJson(),
+    ];
+
+    // Дельта agent-acp-server: клиенту — тело отчёта без обёртки и ограды.
+    test('a failed child with a report gets the bare body', () {
+      final update = frames(done('Partial findings.')).single;
+
+      expect(update['content'], [
+        {
+          'type': 'content',
+          'content': {'type': 'text', 'text': 'Partial findings.'},
+        },
+      ]);
+    });
+
+    // Пустой отчёт: обёртка из результата для модели клиенту не уходит.
+    test('a failed child without a report gets no wrapped text', () {
+      final update = frames(done('')).single;
+
+      expect(update['status'], 'failed');
+      expect(update.toString(), isNot(contains('subagent-report')));
+      expect(update.toString(), isNot(contains('untrusted-content')));
+      expect((update['_meta']! as Map)['codelab'], contains('subagent'));
+    });
+
+    // D52 п. 1, agent-acp-server «Отменённый субагент без строки прогресса»:
+    // `content: []` снимает у клиента строку прогресса вызова `agent`.
+    test('a cancelled child: content is an empty list, not absent', () {
+      final result = SubagentFinished(
+        s,
+        subagentId: 'sub_a',
+        parentToolCallId: 'call_1',
+        status: SubagentState.cancelled,
+      );
+      final update = [
+        for (final u in projectEvent(
+          finished(ToolOutcome.cancelled),
+          configOptions: () => const [],
+          subagentResult: result,
+        ))
+          u.toJson(),
+      ].single;
+
+      expect(update['status'], 'failed');
+      expect(
+        (update['_meta']! as Map)['codelab'],
+        containsPair('outcome', 'cancelled'),
+      );
+      expect((update['_meta']! as Map)['codelab'], contains('subagent'));
+      expect(
+        update,
+        containsPair('content', isEmpty),
+        reason: 'D52 п. 1: у отменённого agent ключ content — пустой список',
+      );
+    });
+
+    // Защита: отменённый вызов не-`agent` по-прежнему без `content` (§13.7).
+    test('a cancelled non-agent call stays without content', () {
+      final update = [
+        for (final u in projectEvent(
+          finished(ToolOutcome.cancelled),
+          configOptions: () => const [],
+        ))
+          u.toJson(),
+      ].single;
+
+      expect(update.containsKey('content'), isFalse);
+    });
+
+    // D52 п. 1: `failed` без отчёта (не отмена) — уже `content: []`.
+    test('a failed child without a report has content: []', () {
+      expect(frames(done('')).single, containsPair('content', isEmpty));
+    });
+  });
+}

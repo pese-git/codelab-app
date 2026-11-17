@@ -13,6 +13,7 @@ import 'dart:io';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_cli/codelab_cli.dart';
+import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:dart_tui/dart_tui.dart' as tea;
 import 'package:test/test.dart';
 
@@ -77,14 +78,20 @@ void main() {
     await agent.dispose();
   });
 
-  TuiRunner runner({String? firstMessage}) => TuiRunner(
+  final errors = StringBuffer();
+
+  TuiRunner runner({
+    String? firstMessage,
+    ConnectionProfile profile = FakeAgent.profile,
+  }) => TuiRunner(
     workspace: agent.workspace,
-    profile: FakeAgent.profile,
+    profile: profile,
+    tokenSource: fakeTokenSource,
     cwd: '/w',
     history: _NoHistory(),
     firstMessage: firstMessage,
     output: sink,
-    errorOutput: StringBuffer(),
+    errorOutput: errors,
     programOptions: [
       tea.withInput(input.stream),
       tea.withOutput(sink),
@@ -132,6 +139,80 @@ void main() {
     );
   });
 
+  group('a handshake rejected because of the token', () {
+    Future<int> runRejected(int status, WebSocketProfile profile) async {
+      await agent.dispose();
+      agent = FakeAgent(openError: handshakeRejected(status));
+      return runner(profile: profile).run();
+    }
+
+    test('with a token the message says the agent rejected it', () async {
+      expect(await runRejected(401, wsProfile()), 1);
+
+      expect(
+        errors.toString(),
+        contains(
+          'codelab: cannot start the agent ws://127.0.0.1:9: '
+          'the agent rejected the token (HTTP 401).',
+        ),
+      );
+      expect(errors.toString(), isNot(contains(fakeTokenMarker)));
+      for (final leak in fakeUrlLeaks) {
+        expect(errors.toString(), isNot(contains(leak)));
+      }
+    });
+
+    test('without a token the message says the agent requires one', () async {
+      await runRejected(403, wsProfile(withToken: false));
+
+      expect(errors.toString(), contains('the agent requires a token'));
+      expect(errors.toString(), contains('(HTTP 403)'));
+    });
+
+    test('other statuses keep the previous text', () async {
+      await runRejected(500, wsProfile());
+
+      expect(errors.toString(), contains('Failed to connect ACP transport.'));
+    });
+  });
+
+  // Значения аргументов stdio-профиля не печатаются (design.md change
+  // `redact-cli-stdio-profile-args`, D1, D2; spec codelab-cli «Аргументы
+  // stdio-профиля в выводе CLI»: «Ошибка запуска в --ui tui»).
+  test('a stdio start failure prints the command and the argument count, '
+      'not the values', () async {
+    const marker = 'sk-test-leak-0123456789';
+    await agent.dispose();
+    agent = FakeAgent(
+      openError: const ProcessException(
+        '/nonexistent/agent',
+        ['--api-key', marker, marker],
+        'No such file or directory',
+        2,
+      ),
+    );
+
+    final code = await runner(
+      profile: const StdioProfile(
+        id: 'broken',
+        label: 'Broken',
+        command: '/nonexistent/agent',
+        args: ['--api-key', marker, marker],
+      ),
+    ).run();
+
+    expect(code, 1);
+    expect(
+      errors.toString(),
+      contains(
+        'codelab: cannot start the agent "/nonexistent/agent" with 3 '
+        'arguments:',
+      ),
+    );
+    expect(errors.toString(), isNot(contains(marker)));
+    expect(errors.toString(), isNot(contains('--api-key')));
+  });
+
   test('the first message is sent at once', () async {
     final exit = await started(firstMessage: 'hello');
 
@@ -139,6 +220,35 @@ void main() {
     expect(_promptText(prompt), 'hello');
     agent.respond(prompt, {'stopReason': 'end_turn'});
 
+    type('\x04');
+    expect(await exit, 0);
+  });
+
+  // Дефект ручной проверки итерации 1 (задача 1.7, D26): `TuiInput` не
+  // переводил Ctrl+T, и байт 0x14 терялся до карты клавиш. Тест идёт путём
+  // «байт -> Program -> действие -> кадр».
+  test('Ctrl+T (byte 0x14) hides and shows the task list (D26)', () async {
+    final exit = await started();
+    // План живёт в обновлениях хода (`planOf`), поэтому сначала ход.
+    type('go\r');
+    final prompt = await agent.next(sessionPromptMethod);
+    agent.update('s1', {
+      'sessionUpdate': 'plan',
+      'entries': [
+        {'content': 'First', 'priority': 'medium', 'status': 'completed'},
+        {'content': 'Second', 'priority': 'medium', 'status': 'pending'},
+      ],
+    });
+    await eventually(() => output.text.contains('ctrl+t hide'));
+
+    type('\x14');
+    await eventually(() => output.text.contains('ctrl+t show'));
+
+    type('\x14');
+    final mark = output.text.length;
+    await eventually(() => output.text.substring(mark).contains('ctrl+t hide'));
+
+    agent.respond(prompt, {'stopReason': 'end_turn'});
     type('\x04');
     expect(await exit, 0);
   });

@@ -7,12 +7,12 @@ import 'package:codelab_agent_core/src/tools/builtin/exec.dart';
 import 'package:codelab_agent_core/src/tools/builtin/ls.dart';
 import 'package:codelab_agent_core/src/tools/builtin/read.dart';
 import 'package:codelab_agent_core/src/tools/builtin/search.dart';
-import 'package:codelab_agent_core/src/tools/builtin/update_plan.dart';
 import 'package:codelab_agent_core/src/tools/builtin/write.dart';
 import 'package:test/test.dart';
 
 import '../support/package_dir.dart';
 import 'executor_harness.dart';
+import 'tasks/task_harness.dart' as tasks;
 
 /// Golden-вывод встроенных инструментов (agent-tools «Встроенные
 /// инструменты MVP»): тексты для модели — часть контракта §6.4, и любое их
@@ -68,27 +68,68 @@ final _cases = <String, List<Map<String, Object?>>>{
   'exec': [
     {'command': 'dart test'},
   ],
-  'update_plan': [
-    {
-      'entries': [
-        {
-          'content': 'read main.dart',
-          'priority': 'high',
-          'status': 'completed',
-        },
-        {
-          'content': 'rename greet',
-          'priority': 'medium',
-          'status': 'in_progress',
-        },
-        {'content': 'run tests', 'priority': 'low', 'status': 'pending'},
-      ],
-    },
-  ],
 };
+
+/// Список задач ведётся несколькими инструментами подряд, поэтому он — один
+/// сквозной сценарий (`golden/tasks.txt`): `(инструмент, аргументы)` в порядке
+/// вызовов на общем `SessionTaskList` (agent-tools «Golden-вывод
+/// инструментов»: `task_create`, `task_update`, `task_list`, `task_get`).
+/// Golden `update_plan.txt` удалён вместе с инструментом (D13).
+const _taskScenario = <(String, Map<String, Object?>)>[
+  ('task_create', {'subject': 'read main.dart', 'priority': 'high'}),
+  (
+    'task_create',
+    {
+      'subject': 'rename greet',
+      'description': 'Rename greet to hello in lib/',
+      'blocked_by': ['1'],
+    },
+  ),
+  (
+    'task_create',
+    {
+      'subject': 'run tests',
+      'blocked_by': ['2'],
+    },
+  ),
+  ('task_update', {'id': '1', 'status': 'completed'}),
+  ('task_update', {'id': '2', 'status': 'in_progress', 'priority': 'high'}),
+  ('task_list', {}),
+  ('task_get', {'id': '2'}),
+  ('task_get', {'id': '9'}),
+  ('task_update', {'id': '3', 'status': 'deleted'}),
+  ('task_list', {}),
+  ('task_create', {'subject': ''}),
+];
 
 void main() {
   final update = Platform.environment['UPDATE_GOLDEN'] == '1';
+
+  test('task_* match test/tools/golden/tasks.txt', () async {
+    final h = await tasks.TaskHarness.create();
+    final out = StringBuffer();
+    for (final (i, (tool, args)) in _taskScenario.indexed) {
+      final outcome = await h.run(tool, args, id: 'call_${i + 1}');
+      out
+        ..writeln('## $tool ${jsonEncode(args)}')
+        ..writeln('outcome: ${outcome.outcome.name}')
+        ..writeln(textOf(outcome))
+        ..writeln();
+    }
+
+    final file = File(corePath('test/tools/golden/tasks.txt'));
+    if (update) {
+      file
+        ..createSync(recursive: true)
+        ..writeAsStringSync('$out');
+    }
+    expect(
+      file.existsSync(),
+      isTrue,
+      reason: 'нет golden-файла; запустите с UPDATE_GOLDEN=1',
+    );
+    expect('$out', file.readAsStringSync());
+  });
 
   for (final MapEntry(key: tool, value: calls) in _cases.entries) {
     test('$tool matches test/tools/golden/$tool.txt', () async {
@@ -103,7 +144,6 @@ void main() {
         LsTool(),
         SearchTool(),
         ExecTool(),
-        UpdatePlanTool(),
       ], memory: memory);
       final out = StringBuffer();
       for (final (i, args) in calls.indexed) {

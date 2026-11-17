@@ -1,0 +1,60 @@
+## task_create {"subject":"read main.dart","priority":"high"}
+outcome: completed
+Created task #1: read main.dart.
+Task list: 1 items (0 completed, 0 in progress, 1 pending).
+
+## task_create {"subject":"rename greet","description":"Rename greet to hello in lib/","blocked_by":["1"]}
+outcome: completed
+Created task #2: rename greet.
+Task list: 2 items (0 completed, 0 in progress, 2 pending).
+
+## task_create {"subject":"run tests","blocked_by":["2"]}
+outcome: completed
+Created task #3: run tests.
+Task list: 3 items (0 completed, 0 in progress, 3 pending).
+
+## task_update {"id":"1","status":"completed"}
+outcome: completed
+Updated task #1: status.
+Unblocked: #2 rename greet
+Task list: 3 items (1 completed, 0 in progress, 2 pending).
+
+## task_update {"id":"2","status":"in_progress","priority":"high"}
+outcome: completed
+Updated task #2: status, priority.
+Task list: 3 items (1 completed, 1 in progress, 1 pending).
+
+## task_list {}
+outcome: completed
+#1 [completed] read main.dart
+#2 [in_progress] rename greet
+#3 [pending] run tests (blocked by #2)
+
+## task_get {"id":"2"}
+outcome: completed
+Task #2: rename greet
+Status: in_progress
+Priority: high
+Owner: main
+Description: Rename greet to hello in lib/
+Blocks: #3 run tests
+Blocked by: none
+
+## task_get {"id":"9"}
+outcome: failed
+Unknown task #9. Known: #1, #2, #3.
+
+## task_update {"id":"3","status":"deleted"}
+outcome: completed
+Deleted task #3.
+Task list: 2 items (1 completed, 1 in progress, 0 pending).
+
+## task_list {}
+outcome: completed
+#1 [completed] read main.dart
+#2 [in_progress] rename greet
+
+## task_create {"subject":""}
+outcome: failed
+Invalid task: subject must be 1-200 characters.
+

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 /// Читает JSON-объект из [path]; нет файла — `null`.
 ///
@@ -17,14 +18,40 @@ Future<Map<String, Object?>?> readJsonObject(String path) async {
   return decoded;
 }
 
-/// Записывает [value] в [path] через временный файл и переименование, чтобы
-/// сбой посреди записи не оставил полфайла.
+/// Записывает [value] в [path] через уникальный временный файл и
+/// переименование, чтобы сбой посреди записи не оставил полфайла.
+///
+/// Почему: `profiles.json` общий у app и CLI (design.md change
+/// `add-app-settings-shell`, D7); с общим `<file>.tmp` две одновременные
+/// записи писали бы в один файл и переименование отдало бы смесь. Имя
+/// содержит pid и случайный суффикс, поэтому каждый писатель работает со
+/// своим файлом, а `rename` в том же каталоге атомарен: итог — запись
+/// последнего писателя целиком. Права доступа прежнего файла не переносятся:
+/// в `dart:io` нет API установки режима без запуска процесса. При сбое
+/// временный файл удаляется.
 Future<void> writeJsonObject(String path, Map<String, Object?> value) async {
   final file = File(path);
   await file.parent.create(recursive: true);
-  final temporary = File('$path.tmp');
-  await temporary.writeAsString(
-    const JsonEncoder.withIndent('  ').convert(value),
-  );
-  await temporary.rename(path);
+  final suffix = _random.nextInt(1 << 32).toRadixString(36);
+  final temporary = File('$path.$pid.$suffix.tmp');
+  try {
+    await temporary.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(value),
+      // flush: данные дошли до диска до rename, иначе после сбоя питания
+      // на месте профилей может оказаться пустой файл.
+      flush: true,
+    );
+    await temporary.rename(path);
+  } on Object {
+    try {
+      if (await temporary.exists()) {
+        await temporary.delete();
+      }
+    } on FileSystemException {
+      // Очистка best-effort: исходная ошибка записи важнее.
+    }
+    rethrow;
+  }
 }
+
+final _random = Random.secure();

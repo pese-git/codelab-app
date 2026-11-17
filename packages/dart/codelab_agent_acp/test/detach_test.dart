@@ -3,6 +3,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
+import 'support/layered_config_source.dart';
 import 'support/server_harness.dart';
 
 /// agent-acp-server «Отсоединение, переподключение и завершение» (задача
@@ -187,4 +188,100 @@ void main() {
       await h.client.closed;
     },
   );
+
+  // agent-acp-server «Запрос разрешения ребёнка» и «Отсоединение,
+  // переподключение и завершение»; design.md D42 Т7, D43 п. 3: ожидающий
+  // запрос ребёнка после `session/load` задаётся заново — с тем же
+  // `toolCallId` (цепочка) на новом соединении; значение JSON-RPC id может
+  // совпасть, потому что счётчик `perm-<n>` свой у каждого соединения
+  // (§13.9). Клиентского сценария нет:
+  // kit на повтор после `session/load` отвечает `cancelled` (ограничение
+  // D43 п. 3). Красный до задач 3.2 (gate потомка в ядре) и 3.3 (адаптер).
+  test('reconnect during a child permission: the same toolCallId chain, '
+      'a new request on the new connection', () async {
+    h = await ServerHarness.start(
+      steps: [
+        {
+          'reply': [
+            {
+              'toolCall': {
+                'id': 'call_1',
+                'name': 'agent',
+                'arguments': {
+                  'type': 'review',
+                  'description': 'Check the diff',
+                  'prompt': 'Review the working tree changes.',
+                },
+              },
+            },
+          ],
+        },
+        {
+          'reply': [
+            {
+              'toolCall': {
+                'id': 'call_1',
+                'name': 'exec',
+                'arguments': {'command': 'git diff --stat'},
+              },
+            },
+          ],
+        },
+        {
+          'reply': [
+            {'text': 'Rejected, nothing to report.'},
+          ],
+        },
+        {
+          'reply': [
+            {'text': 'Done.'},
+          ],
+        },
+      ],
+      // D40: `agent` виден модели с окном не меньше порога.
+      configSource: LayeredConfigSource(
+        extra: {
+          'providers': {
+            'a': {
+              'kind': 'openai-compatible',
+              'base_url': 'https://a.test/v1',
+              'models': {
+                'm1': {'context_window': 65536},
+              },
+            },
+          },
+        },
+      ),
+    );
+    await h.initialize();
+    final sessionId = await h.newSession();
+    h.prompt(sessionId, 'Check the diff').ignore();
+    final first = await nextRequest(h.client, 'session/request_permission');
+    final firstToolCall =
+        (first.params! as Map<String, Object?>)['toolCall']! as Map;
+    expect(firstToolCall['toolCallId'], 'call_1/call_1');
+
+    await h.client.transport.close();
+    await pumpEventQueue();
+    final other = await h.connect();
+    final response = await load(other, sessionId);
+    final again = await nextRequest(other, 'session/request_permission');
+
+    // Запрос пришёл по новому соединению, после ответа на `session/load`.
+    expect(response.error, isNull);
+    expect(
+      other.received.indexOf(response),
+      lessThan(other.received.indexOf(again)),
+    );
+    final toolCall =
+        (again.params! as Map<String, Object?>)['toolCall']! as Map;
+    expect(toolCall['toolCallId'], firstToolCall['toolCallId']);
+    expect(
+      ((toolCall['_meta']! as Map)['codelab']! as Map)['subagent'],
+      containsPair('parentToolCallId', 'call_1'),
+    );
+    await other.respond(again, {
+      'outcome': {'outcome': 'selected', 'optionId': 'reject_once'},
+    });
+  });
 }

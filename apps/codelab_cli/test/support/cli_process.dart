@@ -34,21 +34,46 @@ final class CliProcess {
   late final Future<void> _stderrDone;
 
   static Future<String>? _kernel;
+  static Future<String>? _embeddedKernel;
 
-  /// Путь к `.dill` CLI.
-  static Future<String> kernel() => _kernel ??= _compile();
+  /// Прогон e2e идёт против встроенного агента (`CODELAB_E2E_AGENT=embedded`,
+  /// testing-quality «Встроенный режим в e2e и conformance»).
+  static bool get embeddedVariant =>
+      Platform.environment['CODELAB_E2E_AGENT'] == 'embedded';
+
+  /// Путь к `.dill` CLI, который запускают тесты варианта прогона.
+  static Future<String> kernel() => kernelOf(CliEntry.variant);
+
+  /// Путь к `.dill` выбранной точки входа; каждая собирается один раз.
+  static Future<String> kernelOf(CliEntry entry) {
+    final scripted = switch (entry) {
+      CliEntry.variant => embeddedVariant,
+      CliEntry.production => false,
+      CliEntry.scriptedEmbedded => true,
+    };
+    return scripted
+        ? _embeddedKernel ??= _compile(
+            'test/e2e/support/embedded_cli_main.dart',
+            'embedded_codelab.dill',
+          )
+        : _kernel ??= _compile('bin/codelab.dart', 'codelab.dill');
+  }
 
   /// Запускает CLI; [environment] заменяет окружение целиком, кроме `PATH`.
   /// `HOME` по умолчанию — несуществующая папка, чтобы тест не видел
   /// настоящий `~/.codelab`.
+  ///
+  /// [entry] — какая точка входа: по умолчанию та, что задаёт вариант прогона
+  /// ([CliEntry.variant]).
   static Future<CliProcess> start(
     List<String> args, {
     Map<String, String> environment = const {},
     String? workingDirectory,
+    CliEntry entry = CliEntry.variant,
   }) async {
     final process = await Process.start(
       dartExecutable(),
-      [await kernel(), ...args],
+      [await kernelOf(entry), ...args],
       workingDirectory: workingDirectory,
       environment: {
         'PATH': Platform.environment['PATH'] ?? '',
@@ -67,11 +92,13 @@ final class CliProcess {
     String? workingDirectory,
     String? stdin,
     Duration timeout = const Duration(seconds: 60),
+    CliEntry entry = CliEntry.variant,
   }) async {
     final process = await start(
       args,
       environment: environment,
       workingDirectory: workingDirectory,
+      entry: entry,
     );
     if (stdin != null) {
       process._process.stdin.write(stdin);
@@ -121,23 +148,42 @@ final class CliProcess {
     return CliResult(code, stdoutText, stderrText);
   }
 
-  static Future<String> _compile() async {
-    final dir = await Directory.systemTemp.createTemp('codelab_cli_kernel_');
-    final output = '${dir.path}/codelab.dill';
-    final result = await Process.run(dartExecutable(), [
-      'compile',
-      'kernel',
-      'bin/codelab.dart',
-      '-o',
-      output,
-    ], workingDirectory: appDirectory);
-    if (result.exitCode != 0) {
-      throw StateError(
-        'dart compile kernel failed:\n${result.stdout}\n${result.stderr}',
+  /// Обе точки входа — файлы с окончанием `codelab.dill`: SIGTERM-тесты
+  /// (`repl_turn_test.dart`, `tui_smoke_test.dart`) ищут процесс CLI
+  /// `pkill -f '.*codelab\.dill --agent …'` в любом варианте прогона.
+  static Future<String> _compile(String entry, String name) =>
+      compileTestKernel(
+        name,
+        (work, output) => Process.run(dartExecutable(), [
+          'compile',
+          'kernel',
+          entry,
+          '-o',
+          output,
+        ], workingDirectory: appDirectory),
       );
-    }
-    return output;
-  }
+}
+
+/// Точка входа процесса `codelab` в тестах.
+///
+/// Почему три: рабочий `bin/codelab.dart` открывает встроенного агента
+/// настоящим `localEmbeddedAgentOpener` — с конфигом, ключом и сетью, а e2e
+/// нужен детерминированный сценарий модели. Его подставляет тестовая точка
+/// входа `test/e2e/support/embedded_cli_main.dart` (design.md change
+/// `add-embedded-agent-mode`, D8, D10); `package:codelab_embedded/testing.dart`
+/// в рабочий код не попадает.
+enum CliEntry {
+  /// Как требует вариант прогона: в `embedded` — тестовая точка входа, иначе
+  /// рабочая.
+  variant,
+
+  /// Всегда рабочий `bin/codelab.dart` (настоящий открыватель: конфиг, ключи,
+  /// отладка секретов).
+  production,
+
+  /// Всегда тестовая точка входа со сценарием модели; сценарий задаёт
+  /// `E2eCliLaunch.environment` варианта `embedded`.
+  scriptedEmbedded,
 }
 
 /// Итог процесса `codelab`.
@@ -160,6 +206,52 @@ Future<String> scriptedAgent(
 }) async {
   final file = await writeCodelabCompatibleStdioAgent(directory, mode: mode);
   return "stdio:'${dartExecutable()}' '${file.path}' serve --stdio";
+}
+
+/// Собирает kernel тестового бинаря в постоянный кэш приложения.
+///
+/// Почему: раньше каждый тестовый изолят (`dart test` запускает файл в своём
+/// изоляте, статический `Future` живёт в нём) компилировал `.dill` в новый
+/// `Directory.systemTemp.createTemp` и не удалял его — прогон `test:e2e:cli`
+/// оставлял десятки каталогов по ~24 МБ, за месяцы набралось 100+ ГБ в
+/// `$TMPDIR`. Удалять в `tearDownAll` нельзя: помощник вызывается из тестов,
+/// а `tearDownAll` регистрируется только при объявлении; хука «изолят
+/// завершается» в Dart нет.
+///
+/// Для чего: `.dill` лежит по постоянному пути
+/// `<app>/.dart_tool/codelab_test_kernels/<name>` — один файл на имя, сколько
+/// бы ни было прогонов. Компиляция идёт во временный подкаталог кэша, затем
+/// `rename` атомарно заменяет файл: параллельные изоляты и процессы тестов
+/// ничего не удаляют друг у друга, а процесс, уже запустивший старый
+/// `.dill`, держит его inode. Содержимое одинаково — все собирают одни и те
+/// же исходники рабочей копии; каждый изолят по-прежнему компилирует сам,
+/// поэтому устаревший файл после правки кода не используется. Временный
+/// подкаталог удаляется всегда, в том числе при ошибке компиляции.
+///
+/// Как использовать: `compileTestKernel('codelab.dill', (work, output) =>
+/// Process.run(dart, ['compile', 'kernel', entry, '-o', output]))` — [build]
+/// пишет `.dill` в `output`; [work] — пустой временный каталог для
+/// сгенерированных исходников. Возвращает путь к файлу в кэше; ненулевой код
+/// компиляции даёт [StateError].
+Future<String> compileTestKernel(
+  String name,
+  Future<ProcessResult> Function(Directory work, String output) build,
+) async {
+  final cache = Directory('$appDirectory/.dart_tool/codelab_test_kernels');
+  await cache.create(recursive: true);
+  final work = await cache.createTemp('$name.');
+  try {
+    final output = '${work.path}/$name';
+    final result = await build(work, output);
+    if (result.exitCode != 0) {
+      throw StateError(
+        'dart compile kernel failed:\n${result.stdout}\n${result.stderr}',
+      );
+    }
+    return (await File(output).rename('${cache.path}/$name')).path;
+  } finally {
+    await work.delete(recursive: true);
+  }
 }
 
 /// Каталог `apps/codelab_cli`: тесты запускаются из него или из корня.

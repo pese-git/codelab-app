@@ -26,8 +26,19 @@ final class AcpServerConfig {
   final Implementation agentInfo; final Duration detachGrace;   // по умолчанию 30 с; бинарь MVP — 0 (§13.10)
   final AcpTimeouts timeouts;
   final ExecutionEnv Function(String cwd)? localListing;        // §10.4: бинарь по stdio
+  final ExecutionEnv Function(String cwd)? localEnv;            // §10.4: встроенные профили embedded-*
 }
 ```
+
+`localEnv` задаёт хост встроенного агента (профили `embedded-*`, этап 7). Если поле задано, env
+сессии — `localEnv(cwd)`: файлы, команды и листинг исполняет хост, а `fs/*` и `terminal/*`
+клиенту не отправляются, даже если клиент объявил `fs` и `terminal`. Возможности клиента в ACP
+разрешают агенту вызывать его методы, но не обязывают к этому (`09-File System.md`,
+`10-Terminal.md`), поэтому ответ `initialize` не меняется. Gate остаётся `AcpPermissionGate`:
+одобрение спрашивается у клиента `session/request_permission`, containment даёт `BoundedEnv`
+ядра по `cwd` сессии (ENV-2). Без `localEnv` файлы и команды идут через клиента
+(`AcpClientExecutionEnv`, §13.9), а листинг — через `localListing`. Решение и альтернативы —
+design.md change `add-embedded-agent-mode`, D4.
 
 Сырые кадры разбирает транспорт: порт `AcpTransport` отдаёт `JsonRpcMessage`, поэтому ответы
 `-32700` и `-32600` на неразбираемый JSON или кадр не JSON-RPC 2.0 даёт серверный транспорт
@@ -73,7 +84,16 @@ final class AcpServerConfig {
 | `authMethods` | `[]`; после MVP при `services.login != null` — по методу `codelab-login-<id>` на провайдер с входом по подписке (§17.10.6) | аутентификации на уровне ACP нет (§13.3) |
 
 После MVP `agentCapabilities._meta.codelab` объявляет расширения, введённые через OpenSpec
-(§13.12): `subagentBoard` (§17.3.7), `subagentWake: true` — агент поддерживает пробуждение
+(§13.12). Схема объявления (change `add-subagents-and-tasks`, §17.3.7): блок отправляется, только
+если клиент объявил `clientCapabilities._meta.codelab` (объект, возможно пустой); значение каждого
+ключа — объект с целым `version`; нет ключа — нет расширения; неизвестные ключи игнорируются.
+Change `add-subagents-and-tasks` объявляет `subagents: {"version": 1, "maxDepth": <n>}` (при
+`subagents.enabled`; `enabled` и `max_depth` — из применённого конфига в момент
+`initialize` через геттер `AgentRuntime.subagents`, D37 change), `subagentToolCalls: {"version": 1}` (при том же условии:
+агент проецирует вызовы потомков; design.md change, D36, Т12) и
+`tasks: {"version": 1}` (§17.16.5). Change `add-usage-extension` добавляет `usage: {"version": 1}` — всегда, когда агент
+отвечает блоком; уведомление `_codelab/session/usage` получает только соединение, объявившее
+`clientCapabilities._meta.codelab.usage` с `version`, равным целому JSON-числу `1` (правило согласования D9; §13.12). Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
 (§17.3.8), `sessionTree: {"version": 1}` — методы `_codelab/session/*`
 (§17.6.10), `steering: {"maxBytes", "maxPending"}` — метод `_codelab/session/steer`, только при
 `steering.enabled` (§17.7.2.2), `jobs: {"version": 1}` — методы `_codelab/jobs/*` (§17.9.11), `sessionSearch: {"version": 1, "maxLimit": 50, "scopes": ["cwd", "all"]}` — метод `_codelab/session/search`, только при `sessions.search.enabled` и `sessionPersistence`; `"all"` — только при `sessions.search.allow_all` (§17.6.17). Это единственное исключение из правила «ровно эти поля»:
@@ -134,20 +154,32 @@ final class AcpServerConfig {
 
    Пропуск не ошибка запроса: сессия создаётся. Серверы из конфига (§15) добавляются к серверам
    клиента; при совпадении `name` побеждает сервер клиента.
-3. `runtime.createSession(SessionSpec(cwd, mode: config.permissions.mode ?? profile.defaultMode (§10.5), model: config.defaultModel,
+3. `runtime.createSession(SessionSpec(cwd, mode: config.permissions.mode ?? profile.defaultMode (§10.5), model: не передаётся — модель выбирает рантайм по §15.4 `agent`,
    env: из clientCapabilities, gate: AcpPermissionGate(connection)))`. Сессия пишет заголовок и
    `model_change`.
 4. MCP-серверы подключаются параллельно, не дольше `mcpConnectTimeout` (10 с) каждый; ответ
-   `session/new` ждёт подключения (уведомлений до ответа нет, ACP-8); сбой сервера — лог `mcp.server.failed`, сессия создаётся без его инструментов. После MVP сбой не
+   `session/new` ждёт подключения (уведомлений до ответа нет, ACP-8); сбой сервера — лог `mcp.server.failed`, сессия создаётся без его инструментов. С этапа 8.10 сбой не
    окончателен: сервер переходит в `failed` и переподключается с задержкой 1…30 с, пока жива
-   сессия; инструменты появляются на границе шага после первого успешного подключения (§17.5.7).
+   сессия; ответ ждёт только первую попытку, инструменты появляются на границе шага после первого
+   успешного подключения (§17.5.7; design.md change `add-config-writer-and-reload`, D11).
 5. Ответ `NewSessionResponse(sessionId, modes, configOptions)`.
 6. **После** ответа — уведомление `available_commands_update` (до ответа клиент не знает
    `sessionId`, ранние уведомления он отбросил бы). На этапе 4 встроенных команд ещё нет и
    список пуст (`availableCommands: []`). С этапа 8.7 список — команды шаблонов промптов
    `AgentSession.commands` (§17.2.2; design.md change `add-agent-project-files`, D9); встроенные команды и порядок ниже добавляет
-   отдельный change встроенных команд (решение пользователя 2026-10-30, OQ1). Фикстуры этапов 0 и 4
-   сверяют список через `$any` (§14.2).
+   отдельный change встроенных команд (решение пользователя 2026-10-30, OQ1). С этапа 8.10 список
+   начинается со встроенных `config` (только при `services.config != null` и
+   `configCommand: true`; у `serve --ws` её нет — R0-3) и `mcp` (при включённой capability `mcp`;
+   у `serve --ws` она выключена) — первыми, в порядке правила ниже, затем шаблоны (design.md change
+   `add-config-writer-and-reload`, D12; OQ1 (а) того change). Встроенные команды MVP добавил change
+   `add-agent-builtin-slash-commands` (D2): список — `compact` (только при включённой capability
+   `compaction`), `mode`, `model`, `status`, `config`, `mcp`, `help` в порядке правила ниже, затем
+   шаблоны; например, с конфигом, `compaction` и `mcp` — `compact, mode, model, status, config, mcp,
+   help, review`, без них — `mode, model, status, help`. Элементы MVP — как в примере ниже (подсказка
+   `model` — `provider/model`). Список не меняется до закрытия сессии, в том числе при перезагрузке
+   конфига (D9). Фикстуры этапов 0 и 4 сверяют список через `$any` (§14.2); точные списки
+   `acp/available-commands-no-tools`, `acp/prompt-template-command` и `acp/slash-mcp-list`
+   обновлены этим change.
 
 ```json
 {"jsonrpc":"2.0","id":1,"result":{"sessionId":"01JB8Q2W6R9T3M5K7N1P4X8Z0C","modes":{"currentModeId":"standard","availableModes":[{"id":"plan","name":"Plan","description":"Read and plan only, no changes"},{"id":"ask","name":"Ask","description":"Approve every call, including reads"},{"id":"standard","name":"Standard","description":"Reads without asking, edits and commands with approval"},{"id":"accept-edits","name":"Accept edits","description":"Reads and edits without asking, commands and network with approval"},{"id":"bypass","name":"Bypass","description":"No approval except for critical commands, agent config edits and network access"}]},"configOptions":[{"id":"mode","name":"Mode","category":"mode","type":"select","currentValue":"standard","options":[{"value":"plan","name":"Plan"},{"value":"ask","name":"Ask"},{"value":"standard","name":"Standard"},{"value":"accept-edits","name":"Accept edits"},{"value":"bypass","name":"Bypass"}]},{"id":"model","name":"Model","category":"model","type":"select","currentValue":"openai/gpt-4o","options":[{"value":"openai/gpt-4o","name":"GPT-4o"},{"value":"anthropic/claude-sonnet-4","name":"Claude Sonnet 4"}]}]}}
@@ -236,7 +268,9 @@ final class AcpServerConfig {
      `Earlier history of this session is not shown: <n> records before this point.` с
      `_meta.codelab.replayWindow`, затем реплей с границы хода (§17.13.2, SCL-6);
    * `user` → если `isUserWords(record)` (§8.2.5, SES-14) — `user_message_chunk` по одному на
-     каждый блок контента; у `origin: "steer"` каждый блок получает
+     каждый блок контента; у записи с полем `command` (§8.2.3, этап 8.7) первым блоком идёт
+     исходный текст `/<name>` или `/<name> <args>` вместо развёрнутого тела шаблона, затем
+     остальные блоки (design.md change `add-agent-project-files`, D8); у `origin: "steer"` каждый блок получает
      `_meta.codelab.steer: {"id": steerId}` (§17.7.5, STEER-9); прочие user-записи (уведомления
      субагентов и задач, подсказки цикла, уведомления дедлайна, §8.2.3) пропускаются;
    * `assistant` → по блокам: `thinking` → `agent_thought_chunk`, `text` → `agent_message_chunk`,
@@ -265,14 +299,22 @@ final class AcpServerConfig {
    * после MVP при объявленном `sessionTree` у `user_message_chunk` и `agent_message_chunk`
      реплея — `_meta.codelab.recordId` (id записи, для «перемотать сюда», §17.6.10); в режиме только
      чтения вызов без результата уходит со статусом `in_progress` (§17.6.8).
-6. После истории: последняя запись `plan` → `plan` (если план был); затем `current_mode_update`,
-   `config_option_update` (полный снимок), `available_commands_update`, `session_info_update`
-   (`title`, `updatedAt`) — если у сессии есть заголовок.
+6. После истории: `plan` со списком задач из `buildTaskList` активной ветки, если в ветке была
+   запись `task` или `plan` (change `add-subagents-and-tasks`, §17.16.6; до change — последняя
+   запись `plan` → `plan`, если план был); затем `current_mode_update`,
+   `config_option_update` (полный снимок; с этапа 8.8 — с опцией `agent` и восстановленным
+   агентом, если она есть), `available_commands_update` (команды `AgentSession.commands`),
+   `session_info_update` (`title`, `updatedAt`) — если у сессии есть заголовок. Повторный
+   `session/load` уже открытой в процессе сессии идёт через `reattach` без
+   `AgentRuntime.loadSession`: файлы проекта не перечитываются, команды и определения агентов
+   остаются прежними до закрытия сессии (design.md change `add-agent-project-files`, D6).
 7. Ответ `LoadSessionResponse(modes, configOptions)` — после всех уведомлений реплея; после MVP в
    `_meta.codelab` — `readOnly` (шаг 4) и `forkedFrom` (§17.6.10).
-8. Если сессия была переподключена (шаг 3b): каждому ожидающему `session/request_permission`
-   отправляется **новый** запрос с новым JSON-RPC id и тем же `toolCallId`; ответ на старый id
-   (если придёт) игнорируется (PERM-4).
+8. Если сессия была переподключена (шаг 3b): каждый ожидающий `session/request_permission`
+   отправляется **новым** запросом на новом соединении с тем же `toolCallId`. Счётчик JSON-RPC id
+   ведётся на соединение (§13.9), поэтому значение id может совпасть с id первого запроса;
+   ответ, пришедший по старому соединению, до нового запроса не доходит, а решение принимается
+   один раз (PERM-4; change `add-subagents-and-tasks`, D44).
 9. По `TurnEnded` переподключённого хода ответ на исходный `session/prompt` отправить некуда
    (его соединение закрыто). Адаптер отправляет новому соединению `session_info_update` с
    `_meta.codelab.turnEnded: {"stopReason": "..."}` (расширение, §13.12), при сбое хода —
@@ -340,6 +382,10 @@ final class AcpServerConfig {
 6. Запросы `session/set_config_option` и `session/set_mode` одной сессии мост обрабатывает по
    очереди в порядке прихода: эхо `ModeChanged` принадлежит текущему запросу, на каждый запрос —
    один ответ, итог — последний запрос (design.md change `add-agent-project-files`, D12).
+7. `agent` (этап 8.8) → `AgentSession.setAgent` (§15.8): если режим сессии изменился —
+   `current_mode_update` до ответа; смена модели через `agent` ставит ту же заметку §2.12.3, что
+   `configId: "model"`; ответ — полный снимок с согласованными `agent`, `model`, `mode`, без
+   `config_option_update` (design.md change `add-agent-project-files`, D12).
 
 Смена модели или усилия посреди хода доходит до цикла хуком `prepareNextStep` сессии на границе
 шага. Заметку §2.12.3 о смене на модель без рассуждения ставит мост сессии ACP-адаптера: смена
@@ -350,8 +396,9 @@ final class AcpServerConfig {
 | `id` | `category` | Значения | Когда есть в списке | Текущее значение |
 |---|---|---|---|---|
 | `mode` | `mode` | режимы таблицы выше | всегда | последний `mode_change` ветки или режим профиля |
-| `model` | `model` | `ModelCatalog.models` (§2.12.2): `value` — `provider/model`, `name` — имя модели | всегда | последний `model_change` ветки или `agent.default_model` |
+| `model` | `model` | `ModelCatalog.models` (§2.12.2): `value` — `provider/model`, `name` — имя модели | всегда | последний `model_change` ветки или модель новой сессии по §15.4 (`agent.default_model`, последняя выбранная, первый доступный провайдер) |
 | `effort` | `thought_level` | `low`, `medium`, `high` (имена `Low`, `Medium`, `High`) | только если у текущей модели `supportsReasoning` (§2.12.3) | последний `config_change` с `optionId: "effort"` на ветке или `agent.effort` |
+| `agent` | нет (категории без `_` зарезервированы ACP, D12) | `default` (имя `Default`), затем `AgentSession.agents` по имени с `description` определения | только если у сессии есть хотя бы одно определение со `scope` `session` или `both` (§15.8, этап 8.8) | `AgentSession.agent`: последний `config_change` с `optionId: "agent"` на ветке, если определение есть, иначе `default` |
 
 ```json
 {"id":"effort","name":"Reasoning effort","category":"thought_level","type":"select","currentValue":"medium","options":[{"value":"low","name":"Low"},{"value":"medium","name":"Medium"},{"value":"high","name":"High"}]}
@@ -367,9 +414,14 @@ final class AcpServerConfig {
 2. `session/set_config_option` с `configId: "effort"`, когда опции нет в списке (модель без
    рассуждения), → `-32602` «unknown config option» — так же, как для любого неизвестного `configId`.
 3. Каталог моделей изменился (фоновое обновление, §2.12.2, или живая перезагрузка конфига,
-   §17.5.6, шаг 7c): для каждой открытой сессии пересчитываются опции `model` и `effort`; снимок
+   §17.5.6, шаг 7b): для каждой открытой сессии пересчитываются опции `model` и `effort`; снимок
    отличается от последнего отправленного → `config_option_update` с полным списком опций. Во
-   время хода уведомление уходит в той же очереди (§13.10), ход не прерывается.
+   время хода уведомление уходит в той же очереди (§13.10), ход не прерывается. Перезагрузка
+   доходит до адаптера событием сессии `ModelOptionsChanged` (новая ветка `AgentEvent`, этап 8.10;
+   design.md change `add-config-writer-and-reload`, D8); `switch` проекции остаётся исчерпывающим.
+   Уведомление не уходит до ответа на `session/new`/`session/load` этой сессии (ACP-8); неудачная
+   перезагрузка не даёт ни одного кадра (CFG-15); текущая модель сессии, исчезнувшая из каталога,
+   остаётся `currentValue` и в `options`.
 
 `session/set_mode` есть в спецификации ACP (`12-Session Model.md`, схема
 `SetSessionModeRequest {sessionId, modeId}`), но ещё не реализован в `codelab_acp_protocol`. Решение:
@@ -378,11 +430,45 @@ OpenSpec change этапа 4 добавляет `SetSessionModeRequest`/`SetSess
 уведомление `current_mode_update`. До этого изменения метод отвечает `-32601`, а клиенты
 используют `configOptions` (их спецификация называет предпочтительным способом).
 
-Slash-команды приходят обычным `session/prompt` с текстом `/<имя> <аргументы>` (R-08). MVP:
-`/compact [<указание>]` (§9.5; текст после имени команды — `SummaryRequest.focus`, §9.2; ответ — `agent_message_chunk` с итогом сжатия), `/mode <id>`, `/model <id>`,
-`/status` (модель, режим, `cwd`, MCP-серверы), `/help`, а также MCP prompts как команды с именем
-`<server>:<prompt>` (имя сервера из конфига, двоеточие отделяет пространство имён; встроенные
-команды двоеточия не содержат). После MVP добавляются шаблоны `/<template>` и `/skill:<name>`
+Slash-команды приходят обычным `session/prompt` с текстом `/<имя> <аргументы>` (R-08). MVP
+(change `add-agent-builtin-slash-commands`, D1–D7; тексты — спецификация `agent-slash-commands`,
+«Встроенные команды MVP»): `/compact [<указание>]`, `/mode [<id>]`, `/model [<provider/model>]`,
+`/status`, `/help`. Команды исполняет `AgentSession` без модели: ответ — одно сообщение агента
+(`agent_message_chunk`) с фиксированным английским текстом, строки соединяются `\n`, затем
+`stopReason: end_turn`; ни промпт, ни ответ в журнал не пишутся. Ответы:
+
+* `/compact [<указание>]` — ручное сжатие с триггером `manual` (§9.5; непустой текст после имени —
+  `SummaryRequest.focus`, §9.2); идущее фоновое сжатие `afterTurn` команда ждёт. Итог —
+  `Compacted: <X> → <Y> tokens.` (§13.7), пустой регион — `Nothing to compact.`; отказ — событие
+  `AgentError(compaction)` и `TurnEnded(failed)` без сообщения, мост отвечает `-32603` (§13.8);
+  отмена во время резюме — `stopReason: cancelled`, записи `compaction` нет. Объявляется только
+  при capability `compaction`.
+* `/mode <id>` — `AgentSession.setMode` (тот же путь, что `configId: "mode"`: запись
+  `mode_change`, `ModeChanged`), затем `Mode: <id>.` с основным id; синонимы таблицы выше
+  нормализуются. Без аргумента — `Mode: <текущий id>. Available: plan, ask, standard,
+  accept-edits, bypass.`; неизвестный id (в том числе `autopilot`) — `Unknown mode: <id>.
+  Available: plan, ask, standard, accept-edits, bypass.`, режим не меняется.
+* `/model <provider/model>` — модель из `ModelCatalog` → `AgentSession.setModel` (запись
+  `model_change`, правила `effort` ниже), затем `Model: <provider/model>.`. Без аргумента —
+  `Model: <текущая модель>. Run /model <provider/model> to switch.`; модели нет в каталоге или
+  аргумент начинается с `--` (форма `--role` — после MVP, §17.10.5) — `Unknown model: <аргумент>.
+  Run /status to see the current model.`, модель не меняется.
+* Порядок кадров `/mode` и `/model`: сначала смена — `current_mode_update` и `config_option_update`
+  (`/mode`) или `config_option_update` (`/model`; смена пришла не запросом клиента, п. 4), затем
+  `agent_message_chunk`, затем ответ `end_turn`. Записи `mode_change` и `model_change` — данные
+  сессии: `session/load` восстанавливает режим и модель, реплей не содержит текстов команд.
+* `/status` — строки `Model: <provider/model>`, `Mode: <id>`, `Working directory: <cwd>`,
+  `MCP servers: none` или `MCP servers: <id> (<state>), …`; строки `Config` и `Restart required`
+  (ниже) — только если в сессии объявлена `config`, поэтому по WebSocket их нет (R0-3).
+* `/help` — первая строка `Commands:`, затем по строке на команду `AgentSession.commands` в
+  порядке §13.4: `/<name>[ <hint>] - <description>`, у шаблона в конце ` (template)` (§17.2.9).
+  Аргументы `/status` и `/help` игнорируются.
+
+MCP prompts как команды с именем `<server>:<prompt>` (имя сервера из конфига, двоеточие отделяет
+пространство имён; встроенные команды двоеточия не содержат) — после MVP, строка Should E-24
+[матрицы целей](../agent-parity-goals.md), будущий change (решение пользователя 2026-11-10, Q10
+change `switch-default-agent-to-dart`); до него `/<server>:<prompt>` — неизвестная команда
+(правило 3). После MVP добавляются шаблоны `/<template>` и `/skill:<name>`
 (§17.2.6), `/config reload|check` (§17.5.6) и `/mcp list|reload [<id>]|enable <id>|disable <id>`
 (§17.5.7), команды сессии `/rename <title>`, `/branches`, `/branch <n> | <record id>`,
 `/rewind [<n> | <record id>]`, `/fork [<n> | <record id>]`, `/label <text> | clear` (§17.6.10;
@@ -392,10 +478,12 @@ Slash-команды приходят обычным `session/prompt` с тек�
 все, как `/status`, отвечают
 `agent_message_chunk` с фиксированным английским текстом и `stopReason: end_turn`, в журнал не
 пишутся и модели не отправляются; `/status` получает строку `Config: ok` или
-`Config: reload failed at <ISO-время> (<n> issues). Run /config check.` и, если есть отложенные
-ключи, `Restart required: <ключи>` (§17.5.6). В MVP `/status` также показывает строку
-`System prompt: custom (<source>)` или `System prompt: appended (<source>)`, если базовый промпт
-заменён или дополнен (§11.6.1), и `Tools disabled: <names>`, если инструменты выключены (§6.3.8).
+`Config: reload failed at <ISO-время> (<n> issues). Run /config check.` (при одной проблеме — `1 issue`, R7-2) и, если есть отложенные
+ключи, `Restart required: <ключи>` (§17.5.6) — с change `add-agent-builtin-slash-commands`, не в
+8.10, и только при объявленной `config`. Строки `System prompt: custom (<source>)` или
+`System prompt: appended (<source>)`, если базовый промпт заменён или дополнен (§11.6.1), и
+`Tools disabled: <names>`, если инструменты выключены (§6.3.8), `/status` получает вместе с этими
+настройками (E-08, §6.3.8): в change `add-agent-builtin-slash-commands` их в ядре ещё нет.
 
 После 9 (§17.10–§17.14) — те же правила ответа:
 
@@ -417,17 +505,36 @@ Slash-команды приходят обычным `session/prompt` с тек�
 (§17.14.2.4), `Plugins: <name> <version>, …` и `Plugins skipped: <name> (<reason>)` (§17.14.3.4).
 Порядок команд в `available_commands_update` — §13.4.
 
+**Этап 8.10** (design.md change `add-config-writer-and-reload`, D12; OQ1 (а) того change).
+Из встроенных команд реализуются только `/config reload|check` и
+`/mcp list|reload [<id>]|enable <id>|disable <id>` — минимальным механизмом, который расширит change
+встроенных команд: `AgentSession.prompt` до разворачивания шаблонов узнаёт `/config` или `/mcp`
+(слово до пробела или конца блока) и отвечает без модели кадрами `agent_message_chunk` и
+`stopReason: end_turn` (`cancelled` — при `session/cancel`), без `tool_call`, `plan` и
+`usage_update`; ни промпт, ни ответ в журнал не пишутся (CFG-18). Команда занимает слот хода
+сессии: второй `session/prompt` во время неё отклоняется тем же путём, что во время хода модели;
+ходом модели она не является, поэтому замена серверов, вызванная `/mcp reload`, применяется до
+ответа. По WebSocket `/config` не объявляется и не исполняется (R0-3): ответ раскрывал бы пути и
+тексты проблем конфига машины агента. В 8.10 `/x` для любого другого `x` без шаблона
+уходил модели как обычный текст; правило 3 ниже (`Unknown command`) действует с change
+`add-agent-builtin-slash-commands` (D4): этот механизм он расширил командами MVP, а необъявленные
+`/config` и `/mcp` (WebSocket, нет `ConfigSource`, выключена capability `mcp`) стали неизвестными
+командами (Q6). Новых методов, полей и `_meta` нет.
+
 Разбор:
 
 1. Первый текстовый блок начинается с `/`, а слово после него (до первого пробельного символа)
    соответствует `^[A-Za-z0-9][A-Za-z0-9:_-]*$` — это команда. Иначе (например,
    `/usr/bin/foo is broken`) текст уходит модели как обычное сообщение.
-2. Известная команда исполняется агентом; MCP prompt разворачивается в сообщение пользователя.
-   После MVP порядок поиска имени: встроенная команда → команда плагина (§17.14.3) → шаблон →
-   `skill:` → MCP prompt.
+2. Известная команда исполняется агентом: в MVP порядок поиска имени — объявленная в сессии
+   встроенная команда → шаблон (§17.2.6, шаги 2 и 4). После MVP: встроенная команда → команда
+   плагина (§17.14.3) → шаблон → `skill:` → MCP prompt (E-24; MCP prompt разворачивается в
+   сообщение пользователя).
 3. **Неизвестная команда** модели не отправляется: ответ — `agent_message_chunk` с текстом
-   `Unknown command: /<name>. Run /help to list commands.` и `stopReason: end_turn`; в журнал
-   ничего не пишется (R-08).
+   `Unknown command: /<name>. Run /help to list commands.` (`<name>` обрезается до 64 символов по
+   рунам) и `stopReason: end_turn`; в журнал ничего не пишется (R-08). Лог —
+   `command.unknown {session_id, name_bytes}` без имени (§12). Действует с change
+   `add-agent-builtin-slash-commands` (D4).
 
 ## 13.7. `session/prompt`, проекция событий и `session/cancel`
 
@@ -479,21 +586,23 @@ Slash-команды приходят обычным `session/prompt` с тек�
 | результат `interrupted` (реплей, §8.8) | `tool_call` | `status: "failed"`, `_meta: {"codelab": {"outcome": "interrupted"}}` |
 | `ToolCallFinished` со `spill` (с этапа 3, §17.4) | `tool_call_update` | статус по `outcome`, как в строках выше; `content` — фрагмент вынесенного результата (начало, маркер `[output spilled: …]` с абсолютным путём на машине агента, конец), побайтово равный тексту для модели; `locations` путь выноса не получает; `_meta.codelab.spill` — только после OpenSpec (§13.12) |
 | `ToolPairingRepaired` | — | лог `tool.pairing_repaired` |
-| `StepEnded` | — | лог |
-| `PlanUpdated` | `plan` | `entries` целиком (`content`, `priority`, `status`) |
+| `StepEnded` | — | лог; соединениям, объявившим `usage`, — `_codelab/session/usage` с `trigger: "step"` (change `add-usage-extension`, §13.12) |
+| `PlanUpdated` (до change `add-subagents-and-tasks`) | `plan` | `entries` целиком (`content`, `priority`, `status`); заменяется `TaskListChanged` (ниже) |
 | `ModeChanged` | `current_mode_update` | `currentModeId`; плюс `config_option_update`, если изменение не было ответом на запрос клиента |
 | `CommandsChanged` | `available_commands_update` | `availableCommands` |
 | `ConfigOptionChanged` | `config_option_update` | полный снимок `configOptions` |
 | `SessionTitleChanged` | `session_info_update` | `title`, `updatedAt`; после MVP — всем подключённым соединениям (§17.6.4) |
 | `BranchChanged` (после MVP) | `session_info_update` | при объявленном `sessionTree` — `_meta.codelab.branchChanged: {leafId, fromLeafId, reason}`, всем подключённым; без расширения не передаётся (ответ команды предлагает перезагрузить сессию, §17.6.10) |
 | `SessionAccessChanged` (после MVP) | `session_info_update` | при объявленном `sessionTree` — `_meta.codelab.readOnly: {owner}` или `null` (`leaseAvailable`); лог `session.lease.lost` при `leaseLost`/`foreignWrite` (§17.6.8) |
-| `ContextCompacted` | — | лог; при `/compact` — `agent_message_chunk` с итогом `Compacted: 118400 → 21950 tokens.` |
-| `SubagentStarted`, `SubagentFinished` (после MVP) | — | лог `subagent.start` / `subagent.end`; при согласованной доске — `_codelab/subagents/update` (§17.3.7); у прогона `run ≥ 2` — те же кадры; title вызова `task_send`/`task_resume` — `… (follow-up <run>)` / `… (resume <run>)` (§17.3.8.1) |
-| `SubagentProgress` (после MVP) | — | только доска `_codelab/subagents/update`; строку прогресса уже несёт `ToolCallProgress(task)` (§17.3.7) |
+| `ContextCompacted` | — | лог; при `/compact` — `agent_message_chunk` с итогом `Compacted: 118400 → 21950 tokens.`; соединениям, объявившим `usage`, — `_codelab/session/usage` с `trigger: "compaction"` (change `add-usage-extension`) |
+| `SubagentStarted`, `SubagentFinished` (после MVP) | — | лог `subagent.start` / `subagent.end`; при согласованной доске — `_codelab/subagents/update` (§17.3.7); у прогона `run ≥ 2` — те же кадры; title вызова `agent_send`/`agent_resume` — `… (follow-up <run>)` / `… (resume <run>)` (§17.3.8.1) |
+| `SubagentProgress` (после MVP) | — | только доска `_codelab/subagents/update`; строку прогресса уже несёт `ToolCallProgress(agent)` (§17.3.7) |
+| `SubagentActivity` (change `add-subagents-and-tasks`) | — или `tool_call`/`tool_call_update` | клиенту с `subagentToolCalls` — вызовы потомков с `_meta.codelab.parentToolCallId` (§17.3.7, «Шаги потомков деревом»); остальным — не отправляется (SUB-12) |
+| `TaskListChanged` (change `add-subagents-and-tasks`) | `plan` | весь список, у entry `_meta.codelab.task` (§17.16.5); при `op: restore` (смена ветки, §17.16.6) — так же, пустой список — `entries: []` |
 | `ToolCallStarted(exec)` с `run_in_background` (после MVP, §17.9) | `tool_call` | `title: "Run in background: <command>"`, `kind: "execute"`; `ToolCallFinished` — сразу `completed` с текстом запуска (и терминалом во внешнем режиме) |
 | `JobStarted`, `JobSettled` (после MVP) | — | лог `job.start`/`job.end`; при согласованном `jobBoard` — `_codelab/jobs/update` и поздний `tool_call_update` с `_meta.codelab.job` (§17.9.11) |
 | `AgentError` | — | лог и trace; итог хода — через ответ (§13.8) |
-| `TurnEnded` | ответ `session/prompt` | §13.8; после MVP непустой `returnedSteers` → `steerReturned` (§17.7.2.2) |
+| `TurnEnded` | ответ `session/prompt` | §13.8; после MVP непустой `returnedSteers` → `steerReturned` (§17.7.2.2); если в ходе были шаги модели — перед ответом (и перед `-32603`) соединениям, объявившим `usage`, `_codelab/session/usage` с `trigger: "turn"` (change `add-usage-extension`, ACP-3) |
 
 Ответ `session/prompt` ставится в очередь, когда `AgentSession.prompt` вернулся: после
 `TurnEnded` сессия ещё пишет автоматический заголовок (§8.10), и его `session_info_update` идёт
@@ -501,7 +610,17 @@ Slash-команды приходят обычным `session/prompt` с тек�
 
 Формы кадров вызова: `ToolCallProgress` — `tool_call_update` со `status: "in_progress"`; у
 отменённого вызова — только `status: "failed"` и `_meta.codelab.outcome`, без `content` (текст об
-отмене — для модели); пустые `locations` и `content` не отправляются. События сессии приходят
+отмене — для модели, вывод терминала клиент уже видит). Исключение — отменённый вызов `agent` с
+итогом ребёнка: его финальный кадр несёт `content: []`, частичный отчёт отменённого ребёнка клиенту
+не уходит; так же — в реплее `session/load` и у вложенного `agent`, закрытого вместе с поддеревом
+(`failed`, `outcome: cancelled`; D52 п. 1 и D53 change `add-subagents-and-tasks`). Прочие вызовы
+поддерева закрываются без `content`. Реплей отменённого вызова другого инструмента пока несёт текст
+результата из журнала, а вживую ключа нет — давнее расхождение, follow-up F.7 change
+`add-subagents-and-tasks`.
+Пустой список — допустимое обновление ACP (`08-Tool Calls.md`, «Only the fields being changed»);
+он снимает строку прогресса `explore · …`, которую клиент получил раньше, а без ключа она осталась бы
+в состоянии `running`. `content: []` уходит и у `agent` без отчёта (`failed`, пустой отчёт): так же
+снимается строка прогресса. Пустые `locations` не отправляются (ключа нет). События сессии приходят
 подписчику асинхронно, поэтому запрос разрешения ждёт, пока `tool_call` его вызова встанет в
 очередь, а `terminal/wait_for_exit` — пока в очередь встанет `tool_call_update` с терминалом.
 
@@ -515,7 +634,10 @@ Slash-команды приходят обычным `session/prompt` с тек�
 синхронно: если `tool_call` вызова ещё не спроецирован, `in_progress` откладывается до его
 проекции. Если ход отменён, пока шёл запрос разрешения, вызов получает исход `cancelled`, а не
 `rejected`: он отменён до старта. Если вызов отклонён, отменён до старта или не прошёл валидацию, хук не
-срабатывает и статус идёт `pending → failed`. После MVP вызов `ask` (§17.11.7) остаётся в
+срабатывает и статус идёт `pending → failed`. Вызовы потомков субагентов получают тот же хук: ядро
+подключает к ним хуки хоста с цепочкой `toolCallId` (§17.3.3; D48 п. 1 change
+`add-subagents-and-tasks`), и клиенту с `subagentToolCalls` `in_progress` вызова потомка уходит
+так же; клиенту без согласия — нет, этого вызова у него нет (SUB-12). После MVP вызов `ask` (§17.11.7) остаётся в
 `status: "pending"`, пока клиент не ответит на запрос `_codelab/ask`. Итоговые переходы:
 
 | Путь вызова | Статусы на проводе |
@@ -573,7 +695,7 @@ JSON-RPC ошибку: ответ всегда `cancelled`, как требуе�
 успешный, а `codelab -p` вернёт код 0. JSON-RPC ошибка на запрос — штатный способ сообщить, что
 операция не удалась; codelab-app превращает её в состояние «ход завершился ошибкой». Все
 уведомления хода, ушедшие до сбоя, остаются у клиента. Класс и текст ошибки идут в `data`
-(свободное поле JSON-RPC) после редакции (OBS-2).
+(свободное поле JSON-RPC) после редакции (OBS-2; до 1.0 — только вычистка `ProviderConfig.secrets` из текстов ошибок провайдера, редакция §12.4 — после 1.0, решение пользователя 2026-11-04 R8-1, design.md change `add-config-literal-secrets-and-migrate`, D2).
 
 ```json
 {"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"Turn failed: provider authentication error","data":{"codelab":{"errorClass":"auth","message":"401 Unauthorized from openai: check api_key_env","retryable":false}}}}
@@ -623,7 +745,7 @@ JSON-RPC id исходящих запросов — строки `perm-<n>`, `fs
 | Порядок | все кадры соединения — через одну `OutboundQueue`; ответ на `session/prompt` — после последнего уведомления хода; ответ `session/load` — после реплея |
 | Сбой отправки | исключение транспорта при записи → соединение `detached`; ход продолжает работу и пишет журнал; уведомления копятся только как события ядра (не кадры) |
 | Отсоединение | EOF stdin или закрытие WebSocket → соединение отвечает на уже прочитанные запросы, отправляет очередь и закрывает транспорт (у stdio выход живёт дольше входа: `echo '{…}' \| codelab-agent serve --stdio` ждёт ответа после EOF); сессии → `detached` на `detachGrace` (по умолчанию `AcpAgentServer` — 30 с; бинарь `codelab-agent` в MVP задаёт ноль, см. конец строки); после MVP — только когда отсоединились все соединения, подключённые к сессии (§17.6.9): отсоединение одного клиента ход не отменяет. Если за это время сессию загрузили новым соединением — переподключение (§13.5, шаг 3b). Иначе: активный ход отменяется (`cancelled`), ожидающие разрешения → `cancelled`. Для stdio отсоединение означает конец процесса агента, поэтому grace не ждётся. После MVP окончательное отсоединение (grace истёк) закрывает сессию `AgentSession.close`, что останавливает фоновые команды (§17.9.9). Сессия, открытая с `_meta.codelab.sealOnClose: true`, закрывается сразу при отсоединении открывшего её соединения, без `detachGrace`, с `seal: true` (§8.5.1), если других подключённых соединений нет. Бинарь `codelab-agent` в MVP задаёт `detachGrace` ноль и для WebSocket: ход без клиента не может исполнять `fs/*` и `terminal/*`, а клиент MVP не читает `turnEnded` (change `cancel-turn-on-ws-disconnect`); переподключение хода включается после MVP |
-| Повторная доставка разрешения | при переподключении неотвеченный `session/request_permission` отправляется заново с новым id и тем же `toolCallId`; решение принимается один раз (PERM-4) |
+| Повторная доставка разрешения | при переподключении неотвеченный `session/request_permission` отправляется новым запросом на новом соединении с тем же `toolCallId`; счётчик JSON-RPC id — на соединение (§13.9), значение id может совпасть с прежним; решение принимается один раз (PERM-4; D44 change `add-subagents-and-tasks`) |
 | Безопасное завершение | `shutdown()`: новые запросы → `-32603` «shutting down»; ожидающие разрешения → `cancelled`; активные ходы отменяются и дожидаются `TurnEnded` (не дольше `grace`); журналы дописываются; после MVP освобождаются lease сессий (§17.6.8); затем `transport.close()` |
 | Нет тихих no-op | `session/cancel` без хода, `session/prompt` при активном ходе, ответ на устаревший запрос — каждое логируется отдельным событием |
 | MCP по WebSocket | в `codelab-agent serve --ws` capability `mcp` выключена: серверы `mcpServers` пропускаются `mcp.server.skipped` с причиной профиля, `mcpCapabilities.http: false`; держатель токена WebSocket не может запускать команды на машине агента (отклонение §13.15, D3 change `add-agent-mcp-client`) |
@@ -664,138 +786,52 @@ dart-agent-and-clients §12.5), поэтому отдельные коды дл�
 ## 13.11. InProcessAcpLink
 
 Встроенный режим соединяет `AcpClientApplication` клиента и `AcpAgentServer` парой транспортов в
-памяти: `InProcessAcpLink` с концами `client` и `agent` (`packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart`,
-этап 7, dart-agent-and-clients §9.12). Оба конца — `InProcessAcpTransport`, реализация
-существующего интерфейса `AcpTransport` (`packages/dart/codelab_acp_transports/lib/src/acp_transport.dart`):
+памяти: `InProcessAcpLink` с концами `client` и `agent` (этап 7, dart-agent-and-clients §9.12). Оба
+конца — `InProcessAcpTransport`, реализация существующего интерфейса `AcpTransport`
+([`acp_transport.dart`](../../../../packages/dart/codelab_acp_transports/lib/src/acp_transport.dart)):
 сообщения передаются объектами `JsonRpcMessage` без кодирования в текст.
 
-```dart
-/// Пара соединённых транспортов: отправленное в один приходит в inbound другого.
-/// `client` отдаётся AcpClientApplication, `agent` — AcpAgentServer.serve.
-final class InProcessAcpLink {
-  factory InProcessAcpLink({bool copyMessages = true}) {
-    final client = InProcessAcpTransport._('client', copyMessages);
-    final agent = InProcessAcpTransport._('agent', copyMessages);
-    client._peer = agent;
-    agent._peer = client;
-    return InProcessAcpLink._(client, agent);
-  }
-  InProcessAcpLink._(this.client, this.agent);
-  final InProcessAcpTransport client;
-  final InProcessAcpTransport agent;
-}
-
-final class InProcessAcpTransport implements AcpTransport {
-  InProcessAcpTransport._(this._side, this._copy);
-  final String _side;
-  final bool _copy;
-  late final InProcessAcpTransport _peer;
-
-  // Асинхронные контроллеры: доставка в следующей микрозадаче, порядок сохраняется,
-  // отправитель не вызывает обработчики получателя реентерабельно.
-  final _inbound = StreamController<JsonRpcMessage>.broadcast();
-  final _events = StreamController<AcpTransportEvent>.broadcast();
-  final _beforeStart = <JsonRpcMessage>[];  // агент может ответить раньше, чем клиент вызвал start()
-  var _state = AcpTransportState.idle;
-
-  @override Stream<JsonRpcMessage> get inbound => _inbound.stream;
-  @override Stream<AcpTransportEvent> get events => _events.stream;
-  @override AcpTransportState get state => _state;
-  bool get _isDown => const {AcpTransportState.closing, AcpTransportState.closed, AcpTransportState.failed}.contains(_state);
-
-  @override
-  Future<void> start() async {
-    if (_state == AcpTransportState.connected) return;
-    if (_isDown) throw _error(AcpTransportErrorCode.closed, 'is closed');
-    _setState(AcpTransportState.connecting);
-    _setState(AcpTransportState.connected);
-    _beforeStart..forEach(_inbound.add)..clear();
-  }
-
-  @override
-  Future<void> send(JsonRpcMessage message) async {
-    if (_state != AcpTransportState.connected) throw _error(AcpTransportErrorCode.sendFailed, 'is not connected');
-    final JsonRpcMessage copy;
-    try {
-      copy = _copy ? _copyMessage(message) : message;
-    } on ArgumentError catch (e) {             // как проводной транспорт с не-JSON значением
-      throw _error(AcpTransportErrorCode.sendFailed, 'got a non-JSON value: ${e.message}');
-    }
-    _peer._deliver(copy);
-  }
-
-  void _deliver(JsonRpcMessage message) {
-    if (_state == AcpTransportState.connected) {
-      _inbound.add(message);
-    } else if (!_isDown) {
-      _beforeStart.add(message);
-    } else {
-      _events.add(const AcpTransportEvent.diagnostic(message: 'Dropped in-process message after close.',
-          severity: AcpTransportDiagnosticSeverity.warning, source: 'in_process'));
-    }
-  }
-
-  @override
-  Future<void> close({Duration? timeout}) async {
-    if (_state == AcpTransportState.closed || _state == AcpTransportState.closing) return;
-    _setState(AcpTransportState.closing);
-    _setState(AcpTransportState.closed);
-    await _events.close();
-    await _inbound.close();
-    _peer._onPeerClosed();
-  }
-
-  void _onPeerClosed() {
-    if (_isDown) return;
-    _events.add(AcpTransportEvent.failure(_error(AcpTransportErrorCode.disconnected, 'peer closed the connection')));
-    _setState(AcpTransportState.failed);
-  }
-
-  void _setState(AcpTransportState next) {
-    _state = next;
-    if (!_events.isClosed) _events.add(AcpTransportEvent.stateChanged(next));
-  }
-
-  AcpTransportException _error(AcpTransportErrorCode code, String text) =>
-      AcpTransportException(code: code, message: 'In-process $_side transport $text.');
-}
-
-/// Глубокая копия JSON-дерева без строкового кодирования: стороны не делят изменяемые
-/// Map/List, а не-JSON значения (DateTime, объекты домена) ловятся сразу, как на проводе.
-JsonRpcMessage _copyMessage(JsonRpcMessage m) => switch (m) {
-  JsonRpcRequest(:final id, :final method, :final params) =>
-    JsonRpcMessage.request(id: id, method: method, params: _copyJson(params)),
-  JsonRpcNotification(:final method, :final params) =>
-    JsonRpcMessage.notification(method: method, params: _copyJson(params)),
-  JsonRpcResponse(:final id, :final result, :final error) =>
-    JsonRpcMessage.response(id: id, result: _copyJson(result), error: error),
-};
-
-Object? _copyJson(Object? v) => switch (v) {
-  null || bool() || num() || String() => v,
-  List() => List<Object?>.unmodifiable(v.map(_copyJson)),
-  Map() => Map<String, Object?>.unmodifiable({
-    for (final MapEntry(:key, :value) in v.entries)
-      (key is String ? key : throw ArgumentError.value(key, 'key', 'must be a String')): _copyJson(value),
-  }),
-  _ => throw ArgumentError.value(v, 'value', 'not JSON-compatible'),
-};
-```
+Код — [`packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart`](../../../../packages/dart/codelab_acp_transports/lib/src/in_process_acp_transport.dart),
+экспорт из основного web-безопасного бареля `package:codelab_acp_transports/codelab_acp_transports.dart`.
+Эскиза кода здесь нет: эскиз, план этапа, тестовая копия и реализация расходились, и каждое решение
+приходилось переносить в четыре места. Поведение задаёт требование «Пара транспортов в памяти»
+спецификации `agent-transports`, решения и альтернативы — design.md change
+`add-in-process-acp-transport` (D2–D4, D9).
 
 Правила:
 
 * Доставка асинхронная, по одному сообщению, в порядке `send`: семантика та же, что у
   stdio-кадров, а обработчики не вызываются изнутри `send` другой стороны.
-* `copyMessages: true` (по умолчанию, во всех сборках) делает глубокую копию JSON-дерева каждого
-  сообщения: стороны не делят изменяемые `Map`/`List`, а не-JSON значение (`DateTime`, объект
-  домена) даёт `AcpTransportException` с кодом `sendFailed`, как на проводе — встроенный режим не
-  может разойтись с проводным форматом. `copyMessages: false` — только для замеров.
-* `send` на конце не в состоянии `connected` (до `start()` или после `close()`) — `sendFailed`.
-  Сообщение, пришедшее до `start()` получателя, буферизуется и доставляется при `start()`: агент
-  может ответить раньше, чем клиент запустил свой конец.
+* Каждое сообщение во всех сборках копируется глубоко, как JSON-дерево — `params`, `result` и
+  `error.data`: стороны не делят изменяемые `Map`/`List`, получатель видит неизменяемые копии.
+  Код, который правит полученные `params`/`result` на месте, на проводе работает, а здесь падает с
+  `UnsupportedError` — такие места копируют данные перед правкой. Выключателя копии нет (D9):
+  сравнение без копии для замера 7.8, если понадобится, вводит change `add-embedded-agent-mode`.
+* Не-JSON значение (`DateTime`, объект домена, объект с `toJson`, ключ `Map` не строкой, `NaN`,
+  `±Infinity`) и любая другая ошибка копирования (цикл в `params` → `StackOverflowError`, исключение
+  из итератора пользовательского `Map`) дают `AcpTransportException` с кодом `sendFailed` на
+  отправляющей стороне, как на проводе. Сообщение не доставляется, состояние не меняется,
+  соединение живёт. Текст ошибки общий для всех причин: без значения, без текста исходной ошибки и
+  без `cause`.
+* `send` на конце не в состоянии `connected` (до `start()`, после `close()`, после закрытия другого
+  конца) — `sendFailed`; `start()` закрытого или упавшего конца — `closed`.
+* Сообщение, пришедшее до `start()` получателя или до **первого** подписчика его `inbound`,
+  буферизуется и выдаётся по порядку, когда конец в `connected` и подписчик есть: агент может
+  ответить раньше, чем клиент запустил свой конец, а `AcpAgentServer.serve` подписывается после
+  `await start()`. Буфер держится только до первого подписчика: если подписчик уже был, а сейчас
+  подписчиков нет, сообщение выбрасывается, как у широковещательного потока; подписавшийся позже
+  получает только новые сообщения. Размер буфера не ограничен — конец, который не запускают, держит
+  память до закрытия.
 * Закрытие одного конца переводит другой в `failed` с `disconnected` и закрывает его `inbound` —
-  как EOF у stdio; сервер отрабатывает отсоединение по §13.10. Сообщение, пришедшее после закрытия, отбрасывается с
-  диагностикой `warning`.
+  как EOF у stdio, после сообщений, отправленных до `close()`; сервер отрабатывает отсоединение по
+  §13.10. Если выдать их некому (второй конец не запущен или без первого подписчика), буфер
+  выбрасывается, а второй конец перед `failure` пишет в `events` одну диагностику `warning` с числом
+  выброшенных сообщений, без методов, id и содержимого. `events` широковещательный: её видят те, кто
+  подписан на момент закрытия (клиент подписывается до `start()`).
+* Повторный `close()` ничего не делает; `close()` упавшего конца переводит его в `closed`. Свой
+  невыданный буфер при `close()` выбрасывается без диагностики.
+* Сообщение, доставка которого пришлась на конец, закрытый владельцем, выбрасывается без исключения
+  у отправителя и без диагностики: `events` этого конца закрыт, наблюдать некому.
 * `codelab_embedded` создаёт `InProcessAcpLink()`, отдаёт `link.client` `AcpClientApplication`,
   а `link.agent` — `AcpAgentServer.serve`.
 
@@ -815,7 +851,12 @@ OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, 
 | `_meta.codelab.turnEnded` | `session_info_update` после переподключения | итог хода, ответ на который отправить некуда |
 | `_meta.codelab.critical` (`critical`, `label`) | `toolCall` в `session/request_permission` критической команды (§7.8) | клиент выделяет опасный вызов; `allow_always` не предлагается |
 | `SetSessionModeRequest` в `codelab_acp_protocol` | кодек | метод уже есть в спецификации, нет в модели |
-| `_meta.codelab.subagent` (после MVP, §17.3.7) | `session/request_permission` от субагента; `tool_call_update` `task` со `status: failed` (`failure`) | связь запроса с вызовом `task` и типом ребёнка |
+| `clientCapabilities._meta.codelab` (change `add-subagents-and-tasks`) | `initialize`, запрос клиента | клиент CodeLab просит блок объявлений агента; без него ответ `initialize` не меняется |
+| capability `subagents: {"version", "maxDepth"}`, `subagentToolCalls: {"version"}`, `tasks: {"version"}` (change `add-subagents-and-tasks`) | `agentCapabilities._meta.codelab` в `initialize` | агент поддерживает `agent` с вложенностью до `maxDepth` и `_meta.codelab.task` у plan entries; `tasks` объявляется всегда, `subagents` и `subagentToolCalls` — при `subagents.enabled` (`agent_server.dart`) |
+| `_meta.codelab.subagent` `{id, type, description, depth, path, parentToolCallId}` (тип субагента везде — `type`, решение пользователя 2026-11-10) (change `add-subagents-and-tasks`, §17.3.7) | `toolCall` в `session/request_permission` от потомка; первый `tool_call` вызова `agent` вживую и при реплее — всегда `{id, type}` (D28); финальный `tool_call_update` вызова `agent` — всегда `{id, summary: {toolCalls, tokens: {input, output}, durationMs}}`, при `failed` ещё `failure` | связь запроса с вызовом `agent` корневой сессии и с потомком любой глубины; смысл задаёт вид кадра: в запросе разрешения — спрашивающий потомок, в `tool_call`/`tool_call_update` — запущенный субагент; клиент не сливает их (D43, п. 1 change); итог ребёнка с потомками для строки «N tool calls · N.Nk tokens · время» (D24) |
+| `_meta.codelab.parentToolCallId` (change `add-subagents-and-tasks`, §17.3.7) | `tool_call`, `tool_call_update` вызовов потомков — только клиенту с `clientCapabilities._meta.codelab.subagentToolCalls`, вживую и при реплее | шаги потомков деревом: клиент вкладывает вызов в строку вызова `agent` с этим id |
+| `_meta.codelab.task` `{id, owner, blockedBy}` (change `add-subagents-and-tasks`, §17.16.5) | entries `plan` вживую и при реплее | id, владелец и зависимости пункта списка задач; без расширения — обычный план |
+| `_meta.codelab.taskChange` `{op, actor, toolCallId?, changed, deleted}` (change `add-subagents-and-tasks`, D35, §17.16.5) | `plan` вживую; при реплее нет | операция, изменившая список, и вызов `task_*`, который её сделал; без ключа клиент показывает обычный план и обычные строки вызовов |
 | capability `subagentBoard` (после MVP) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize` | согласование доски субагентов (U-21) |
 | `_codelab/subagents/update`, `/list`, `/cancel`, `/history` (после MVP) | уведомление и методы | доска субагентов: снимки, отмена ребёнка, реплей журнала ребёнка (§17.3.7); `pendingNotices` для фонового режима (§17.3.8); поля снимка `run`, `followUps` и `_meta.codelab.subagentRun` в `/history` (§17.3.8.1) |
 | capability `subagentWake` и `_meta.codelab.wake: true` на `session/prompt` с `prompt: []` (после MVP) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize`; `session/prompt` | пробуждение: клиент открывает ход только для доставки уведомлений фоновых субагентов; агент сам ход не начинает (§17.3.8, SUB-13) |
@@ -844,7 +885,20 @@ OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, 
 | capability `ask: {"version": 1}` (после MVP) | `clientCapabilities._meta.codelab` в `initialize` | клиент показывает вопросы `ask` (T-22) |
 | `_codelab/ask` (после MVP) | запрос агент → клиент; ответ `{outcome, answers}` | структурные вопросы, правило ответа `cancelled` после `session/cancel` (§17.11.7) |
 | `_meta.codelab.replayWindow: {"omittedRecords", "firstRecordId"}` (после 9, §17.13.2) | первое `agent_message_chunk` реплея окна | клиент показывает «загрузить раньше» без разбора текста; без расширения виден текст маркера |
-| `_meta.codelab.usage` или `_codelab/usage` — форма выбирается OpenSpec `add-usage-extension`, после этапа 9 | ответ `session/prompt` или уведомление агент → клиент | usage и стоимость хода и сессии для статус-строки клиента (L-11, §12.6, §16.3) |
+| capability `usage: {"version": 1}` (change `add-usage-extension`, D3) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize` | клиент понимает `_codelab/session/usage`; агент объявляет ключ всегда, когда отвечает блоком D9 |
+| `_codelab/session/usage` (change `add-usage-extension`, D1, D2; соответствие `15-Extensibility.md` — D17) | уведомление агент → клиент, только соединениям, объявившим `usage`; поводы `step`, `turn` (до ответа `session/prompt`), `compaction` | снимок usage шага, хода и сессии (`tokens`, `cost` десятичной строкой с `currency`, `steps`, `turns`, `partial`), заполнение контекста (`used`, `size`, `compactAt`) и `seq` сессии для идемпотентности; для строки статуса клиента (L-11, U-13, D-09, §12.6); новых корневых полей и видов `sessionUpdate` нет |
+
+Агрегаты `_codelab/session/usage` считает `UsageAccounting` (`codelab_agent_acp/lib/src/usage_accounting.dart`)
+на сессию сервера: шаг — из `StepEnded`, итог хода — из `TurnEnded.usage`, сессия — сумма итогов
+ходов; стоимость — в целых микродолларах, на проводе — десятичная строка (change
+`add-usage-extension`, D4, D9). Причины неполноты `partial` (D6): `noPrice` — у модели шага нет
+цен при ненулевых токенах (у итога хода — ещё дети с токенами и нулевой стоимостью); `beforeLoad` —
+у сессии, открытой через `session/load` журнала с ответами модели; `noUsage` — у ответа модели со
+`stopReason`, отличным от `error`, со всеми нулевыми счётчиками (`input`, `output`, `cacheRead`, `cacheWrite`): провайдер usage не прислал. Шаг,
+прерванный отменой посреди потока модели (`aborted`) без usage провайдера, тоже получает `noUsage` —
+решение пользователя 2026-11-17 (D26), итерация 4 change, задача 4.3. Шаг с ошибкой (`error`) `noUsage` не получает: ответа модели не
+было. Ядро для этого не меняется: `AgentLoop` уже эмитит `StepEnded` для `aborted` с usage,
+который провайдер успел прислать.
 
 Вход по подписке (`authMethods` и `authenticate`, §13.3, §17.10.6) — стандартные поля ACP, не
 расширение. Хуки и плагины (§17.14) новых расширений протокола не вводят.
@@ -878,6 +932,7 @@ sequenceDiagram
     M-->>S: финальный текст
     A-->>C: session/update agent_message_chunk
     S-->>A: TurnEnded completed
+    A-->>C: _codelab/session/usage trigger turn, если клиент объявил usage
     A-->>C: ответ id 7 stopReason end_turn
 ```
 
@@ -902,7 +957,8 @@ sequenceDiagram
     E->>C: terminal/release
     S-->>A: ToolCallFinished cancelled
     A-->>C: tool_call_update failed, outcome cancelled
-    S-->>A: TurnEnded cancelled
+    S-->>A: StepEnded и TurnEnded cancelled
+    A-->>C: _codelab/session/usage step, затем turn, если клиент объявил usage
     A-->>C: ответ id 9 stopReason cancelled
 ```
 
@@ -982,7 +1038,8 @@ sequenceDiagram
 * Golden-фикстуры (§14) на каждый метод и каждый вид `session/update`: `acp/initialize-capabilities`, `acp/session-new-modes-config`, `acp/session-load-replay`, `acp/session-list-cwd-filter`, `acp/prompt-text-end-turn`, `acp/prompt-tool-permission-allow`, `acp/prompt-tool-permission-reject-continues`, `acp/prompt-cancel-mid-tool`, `acp/prompt-max-turn-requests`, `acp/prompt-failed-provider-auth`, `acp/set-config-option-model`, `acp/errors-bad-frame-survives` (ACP-1, ACP-3, ACP-5, ACP-7).
 * После MVP: фикстуры управления сессиями `acp/session-rename`, `acp/session-fork`, `acp/session-rewind`, `acp/session-leaf-branch-changed`, `acp/session-commands-no-extension`, `acp/session-load-locked` (§17.6.16); steering — `acp/prompt-steer-during-tool`, `acp/steer-no-active-turn`, `acp/steer-returned-on-cancel`, `acp/initialize-steering-capability` (§17.7.11); LSP — `acp/tool-lsp-rename-permission`, `acp/tool-lsp-rename-permission-reject` (§17.8.14); провайдеры — `acp/authenticate-oauth`, `acp/slash-model-role` (§17.10.6, §17.10.5).
 * Тест исчерпывающей проекции: список подтипов `AgentEvent` ↔ таблица §13.7 (ACP-6).
-* Contract test: `AcpClientApplication` codelab-app через `InProcessAcpLink()` (копирование сообщений по умолчанию) против адаптера на scripted LLM.
+* Contract test: `AcpClientApplication` codelab-app через `InProcessAcpLink()` (копирование сообщений всегда) против адаптера на scripted LLM.
+* Тест пары `InProcessAcpLink` (§13.11): `codelab_acp_transports/test/in_process_acp_transport_test.dart` — сценарии требования «Пара транспортов в памяти» спецификации `agent-transports`: порядок и нереентерабельность доставки, буфер до первого подписчика, копия и отказ на не-JSON значении, закрытие с выбросом буфера.
 * Fuzz-тест кадров: мусор, неполный JSON, массив вместо объекта, неизвестный метод, ответ на неизвестный id — соединение живо, ход продолжается (ACP-4).
 * Тест порядка: медленный транспорт и 1 000 дельт — ответ `session/prompt` последний кадр хода (ACP-3).
 * Тест `session/new`: уведомлений до ответа нет (ACP-8); stdio-MCP в профиле `mobile` пропущен с логом; `sse` и неизвестный `type` пропущены с `mcp.server.skipped`, сессия создана; повторный `session/load` открытой сессии применяет новый набор серверов (D11).
@@ -993,6 +1050,7 @@ sequenceDiagram
 * `acp/config-model-options-from-endpoint` (golden, fake `/models`): `session/new` до ответа endpoint — опция `model` из конфига и кэша; после фонового обновления — один `config_option_update` с моделями endpoint в порядке §2.12.2; повторное обновление без изменений — уведомлений нет; модель текущей сессии, исчезнувшая из ответа, остаётся `currentValue` и в `options` (ACP-11, LLM-13).
 * `acp/config-effort-option` (golden): модель с рассуждением — опция `effort` третьей, `category: "thought_level"`, `currentValue` из `agent.effort`; `set_config_option effort=high` → ответ с полным снимком, запись `config_change`, следующий запрос несёт параметр рассуждения; смена на модель без рассуждения → опции `effort` нет, первый `agent_message_chunk` следующего хода — заметка §2.12.3 ровно один раз, в запросе параметра нет; `set_config_option effort` в этом состоянии → `-32602`; смена обратно → опция с `high`; `session/load` восстанавливает значение (ACP-10).
 * `acp/usage-and-redact-commands` (golden): `available_commands_update` содержит `usage` и `redact` сразу после `status`; `/usage` и `/redact layers` отвечают текстом §12.6.1 и §12.4.3 с `end_turn`; число записей журнала до и после не меняется, scripted LLM не вызвана (ACP-12).
+* Usage (change `add-usage-extension`, D13): фикстуры `acp/prompt-usage-steps`, `acp/prompt-usage-unpriced`, `acp/prompt-usage-cancelled`, `acp/compact-usage-context`, `acp/prompt-usage-compaction-off`, `acp/session-load-usage-partial`, у которых `extensions` содержит `usage` (D19 п. 8); ключ `usage` в `acp/initialize-codelab-extensions`; фикстуры без объявления `usage` кадров `_codelab/session/usage` не содержат. Модульно — `packages/dart/codelab_agent_acp/test/usage_bridge_test.dart` (агрегаты, причины `partial`, микродоллары) и `usage_projection_test.dart` (порядок кадров, `seq`, отмена посреди инструмента и посреди потока модели, сбой провайдера, переход сессии к новому соединению, `acp.usage.sent`). Отмена посреди потока без usage провайдера (`noUsage`, D26) проверяется только модульными тестами: шаг `aborted` без `session/cancel` клиента не является поведением ACP, и фикстуры для него нет.
 
 ---
 

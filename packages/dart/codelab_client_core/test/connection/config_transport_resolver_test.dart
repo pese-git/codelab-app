@@ -94,4 +94,26 @@ void main() {
       isFalse,
     );
   });
+
+  test('an embedded profile is pure data and is never supported by the '
+      'config resolver (acp-client-kit «Профили и резолверы транспорта», '
+      'D7)', () async {
+    final resolver = ConfigTransportResolver(
+      stdio: (_) => FakeAcpTransport(),
+      webSocket: (_) => FakeAcpTransport(),
+    );
+    const profile = ConnectionProfile.embedded(
+      id: 'embedded',
+      label: 'Embedded agent',
+      hostProfile: 'embedded-cli',
+    );
+
+    expect(profile, isA<EmbeddedProfile>());
+    expect((profile as EmbeddedProfile).hostProfile, 'embedded-cli');
+    expect(resolver.supports(profile), isFalse);
+    await expectLater(
+      resolver.open(profile, projectDirectory: '/work'),
+      throwsA(isA<UnsupportedConnectionProfileException>()),
+    );
+  });
 }

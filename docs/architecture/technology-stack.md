@@ -21,7 +21,7 @@
 
 | Область                    | Технология              |
 | -------------------------- | ----------------------- |
-| Язык                       | Dart                    |
+| Язык                       | Dart (минимальный SDK workspace — 3.10: `WebSocketException.httpStatusCode`, change `add-app-settings-shell`, D12; для `codelab_ui` и `codelab_desktop` фактически Dart 3.12 и Flutter 3.44: этого требует зависимость `gpt_markdown`, а `environment` пакетов не поднимается, чтобы не менять версию языка; change `add-desktop-markdown`, D10) |
 | UI                         | Flutter Desktop         |
 | Design system              | Fluent UI (`fluent_ui`) |
 | State management           | `flutter_bloc`          |
@@ -39,6 +39,11 @@
 | Lints                      | `flutter_lints`         |
 | Terminal UI (`codelab_cli`) | `dart_tui`             |
 | Разбор аргументов CLI (`codelab_agent`, `codelab_cli`) | `args` |
+| Чтение `config.yaml` и frontmatter агента (`codelab_agent_io`) | `yaml` |
+| Правка `config.yaml` с сохранением комментариев (`codelab_agent_io`) | `yaml_edit` |
+| Markdown ответа агента в ленте (`codelab_ui`, только `lib/src/rendering/`) | `gpt_markdown` (change [`add-desktop-markdown`](../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1; без Material-предка, свои builder'ы) |
+| Подсветка кода (`codelab_ui`, только `lib/src/rendering/`) | `val_highlight` (change `add-desktop-markdown`, D4) |
+| Открытие внешних ссылок (`codelab_desktop`, только `lib/core/platform/`) | `url_launcher` (change `add-desktop-markdown`, D5) |
 
 Технологии из этой таблицы считаются **утверждёнными решениями проекта**.
 
@@ -763,6 +768,165 @@ Architectural dependency rules важнее технической доступ�
 Проверка по §25: средствами SDK задача решается только своим разборщиком; competing framework нет; пакет чистый Dart (Linux, macOS, Windows, AOT `dart compile exe`), SDK `>=3.3`; native configuration нет; тестируется вызовом разбора без процесса (`serve_flags_test.dart`); security — пакет не читает окружение и файлы, значения флагов в справку не попадают; лицензия BSD-3-Clause, сопровождает команда Dart. Пакет уже был транзитивной зависимостью workspace.
 
 Версия: `^2.7.0` в `apps/codelab_agent/pubspec.yaml`, точная — в `pubspec.lock`.
+
+---
+
+## 20в. Конфигурация агента — `yaml` и `yaml_edit`; TOML не используется
+
+Единственный формат конфигурации Dart-агента — YAML 1.2 в строгом профиле (`config.yaml`; `docs/architecture/proposals/agent-core/15-configuration.md` §15.1, §15.5). Две технологии, обе в `codelab_agent_io`:
+
+| Технология | Назначение | Где используется |
+|---|---|---|
+| [`yaml`](https://pub.dev/packages/yaml) (publisher `dart.dev`) | чтение YAML с позициями узлов: файл, строка и столбец в сообщениях об ошибках; тот же разборщик читает frontmatter определений агентов и skills | `codelab_agent_io`: `ConfigLoader`, `yaml_reader`, загрузчик файлов проекта |
+| [`yaml_edit`](https://pub.dev/packages/yaml_edit) (publisher `dart.dev`) | запись конфига с сохранением комментариев, порядка и стиля ключей | `codelab_agent_io`: `ConfigWriter` (`codelab config set/unset`, `provider add`, страницы настроек) |
+
+1. **Назначение.** `yaml` даёт ошибкам конфигурации точное место в файле; `yaml_edit` позволяет командам и страницам настроек менять одну запись, не переписывая файл пользователя целиком.
+2. **Где не используются.** `codelab_agent_core` YAML не читает и разборщиков не импортирует (CFG-5): схема и валидатор — чистая функция ядра `CoreConfig.fromLayers` над уже разобранным деревом, поэтому ядро остаётся web-безопасным с зависимостями `http`, `meta`, `collection`, `async`, `crypto`. Клиенты получают чтение и запись конфига через мост `codelab_setup`, а не через прямую зависимость.
+3. **`toml` не используется.** `codelab.toml` Python-агента Dart-агент не читает и не переводит (решение пользователя 2026-10-29): агент только предупреждает, что нашёл старый файл, а перенос делается вручную по таблице §15.7. Пакет `toml` в зависимости не добавляется.
+4. **Влияние на architecture boundaries.** Нет: оба пакета — чистый Dart; allowlist зависимостей `codelab_agent_io` в `pubspec_allowlist_test.dart` содержит `yaml` и `yaml_edit`.
+5. **Заменяет ли существующую технологию.** Нет. `args` (раздел 20б) разбирает аргументы процесса, а не файлы конфигурации.
+
+Версии: `yaml: ^3.1.3`, `yaml_edit: ^2.2.4` в `packages/dart/codelab_agent_io/pubspec.yaml`, точные — в `pubspec.lock`.
+
+---
+
+## 20г. `codelab_desktop`: рендер терминала пользователя — `xterm2`
+
+**Статус: утверждено.** Решение пользователя 2026-11-11 (Q2, Q3). Пакет и версия выбраны спайком 1.1 — [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D15; запасной `xterm` не понадобился. В `pubspec.yaml` app пакеты попадают задачей 1.4 change.
+
+Технология: [`xterm2`](https://pub.dev/packages/xterm2) **5.4.0** — форк `xterm.dart`, виджет `TerminalView`. Модель экрана — отдельный пакет [`xterm2_core`](https://pub.dev/packages/xterm2_core) **1.0.0** на чистом Dart: автомат, буферы, парсер escape-последовательностей, кодирование ввода. Пин точных версий в `apps/codelab_desktop/pubspec.yaml`.
+
+1. **Назначение.** Эмуляция VT/xterm и отрисовка вкладок панели Terminal десктопа (D-28, `proposals/dart-agent-and-clients/12-3-desktop-display.md`, A16).
+2. **Где используется.** Только `apps/codelab_desktop/lib/features/terminal/`:
+   * `xterm2_core` — `application/` (модель экрана вкладки) и `presentation/`;
+   * `xterm2` (виджеты) — только `presentation/`.
+
+   Правила сторожа — D11 change.
+3. **Где не используется.**
+   * `codelab_ui` — организм `CodeLabTerminalPane` получает виджет терминала слотом;
+   * `codelab_client_*`, пакеты агента, `apps/codelab_cli`;
+   * лента: строки инструментов ACP `terminal/*` остаются текстом;
+   * обработчик ZMODEM (`zmodem`, транзитивно от `xterm2`, реэкспортируется `xterm2`) не подключается: `ZModemMux` — файловый обмен в обход политики (D3 change), импорт `package:zmodem/` запрещён сторожем.
+4. **Какую проблему решает.** Не писать свой парсер ANSI и рендер: escape-последовательности, широкие символы, альтернативный экран, scrollback, выделение, bracketed paste.
+5. **Влияние на architecture boundaries.**
+   * Application импортирует из пакетов терминала только чистый `xterm2_core` (`AGENTS.md` §6); `fvm dart run` без Flutter подтверждён спайком. Прямые импорты `package:xterm2/` и `package:flutter/` в application запрещены сторожем; транзитивно, через порты `lib/core/platform/`, application зависит от Flutter-пакета app — как принятый образец `dock_layout_store.dart` (D3 change).
+   * `TerminalView` работает внутри `FluentApp` без `MaterialApp` и без Material-виджетов; импорт `package:flutter/material.dart` есть только внутри самого `xterm2`, как библиотека SDK. Тема строится из `FluentTheme` (§7).
+   * **Буфер обмена (решение пользователя Q13).** Чтение и запись через OSC 52, 1337 и 5522 запрещены. Обработчики не оставлять `null`: `TerminalView.initState` иначе подставит системный буфер через `??=`. Политика модели вкладки:
+     * `clipboardDecoder: (_, _) => null`;
+     * `allowITerm2ClipboardCapture: false`, `allowKittyClipboard: false`;
+     * пустой `onClipboardStore`;
+     * `onClipboardQuery` → `null`.
+
+     Подробнее — D3 change. Выделение и Cmd+C/Cmd+V пользователя работают.
+   * Ссылки OSC 8 открываются после подтверждения только для `http`/`https` (решение Q14) через `url_launcher` за портом `lib/core/platform/` (решение Q16, D11 change). Пакет описан в §20е; `add-desktop-markdown`, если сольётся позже, ссылается на него.
+   * Запись в модель — порциями до 4 КБ не чаще кадра с бюджетом на кадр: один `write` на ~400 КБ держит UI isolate ~120 мс (D15). Без кадров (окно скрыто или свёрнуто) сброс идёт по таймеру с тем же бюджетом; неразобранный буфер вкладки ограничен ~8 МБ, переполнение отбрасывает самый старый вывод с пометкой `[output truncated]` (решение Q20, D3 change).
+   * Ответ эмулятора на CSI 21 t (отчёт заголовка окна) в `xterm2_core` 1.0.0 не выключается: текст OSC 2 из вывода может попасть во ввод shell (без Enter). Риск принят до флага в пакете (Risks change). Заголовок OSC 0/2 в подписи вкладки не используется (решение Q22).
+6. **Заменяет ли существующую технологию.** Нет.
+7. **Требуется ли migration.** Нет.
+8. **Требуется ли ADR.** Нет (Q3): технология затрагивает одну feature одного app и не меняет границ пакетов, state management и ACP — прецедент §20а.
+
+Рассмотренные кандидаты (pub.dev, 2026-11-11; сравнение — раздел Context design.md):
+
+| Пакет | Версия | Лицензия | Итог |
+|---|---|---|---|
+| `xterm2` + `xterm2_core` | 5.4.0 + 1.0.0 | MIT | **выбран** |
+| `xterm` | 4.0.0 | MIT | запасной, не понадобился: не обновлялся с 2024-02 |
+| `xterm3` | 6.4.0 | AGPL-3.0 | исключён: несовместим с MIT |
+| `kterm` | 1.6.0 | MIT | не выбран: kitty-графика, разбор изображений из вывода |
+| `terminal_view` | 0.5.0 | MIT | не выбран: нет отдельного чистого ядра |
+
+Проверка по §25:
+* **Desktop platforms.** Заявлены macOS, Linux, Windows; проверено на macOS (сборки app есть только для неё).
+* **SDK constraints.** `xterm2` — Flutter `>=3.27`, Dart `>=3.6`; собирается на Flutter 3.47 / Dart 3.13 (`.fvmrc`).
+* **Native configuration.** Нет.
+* **Testing.** Widget-тесты с настоящим `TerminalView` идут под `fvm flutter test` (спайк: `terminal_view_fluent_test.dart`).
+* **Security.** Вывод процесса — недоверенный поток: буфер обмена закрыт, вывод и ввод не логируются (`observability.md` §35).
+
+---
+
+## 20д. `codelab_desktop`: PTY для терминала пользователя — `pty2`
+
+**Статус: утверждено.** Решение пользователя 2026-11-11 (Q1, Q3). Пакет и версия выбраны спайком 1.1 — [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D15; запасной `flutter_pty` не понадобился.
+
+Вариант `Process.start` без PTY отклонён: без TTY не работают:
+* редактирование строки, история и Tab-дополнение;
+* сигнал Ctrl+C;
+* `sudo`, `ssh` и запрос пароля `git`;
+* полноэкранные программы;
+* построчный вывод программ на C.
+
+Технология: [`pty2`](https://pub.dev/packages/pty2) **0.8.1** — PTY на чистом Dart. C-код (`forkpty`, `setsid`) собирается хуком native assets; на Windows — ConPTY. Пин точной версии в `apps/codelab_desktop/pubspec.yaml`.
+
+1. **Назначение.** Запуск интерактивного shell пользователя (`$SHELL -l`) в псевдотерминале: ввод, вывод, размер окна, сигналы.
+2. **Где используется.** Только адаптер `apps/codelab_desktop/lib/core/platform/user_shell_launcher.dart` за портом `UserShellLauncher` (§24, `platform-integration.md` §8, §73). Правило сторожа — D11 change. **Сейчас** адаптер вызывает `pty2` на UI isolate, запись в PTY синхронная. **План после 1.0** (решение Q24 принято 2026-11-12, реализация отложена; терминал выпускается в 1.0 с известными ограничениями): адаптер держит `pty2` целиком в фоновом isolate — по одному на shell вкладки: старт, чтение, запись, `resize`, сигналы и ожидание выхода идут там, UI isolate обменивается с ним сообщениями (D2 change, «Фоновый isolate вкладки»; задача 2.13).
+3. **Где не используется.**
+   * ACP `terminal/*`: `IoTerminalProcessRunner` в `codelab_client_io` остаётся на `Process.start`;
+   * процесс агента (`StdioAcpTransport`);
+   * `apps/codelab_cli`;
+   * пакеты `packages/dart/*`.
+4. **Какую проблему решает.** `dart:io` не умеет PTY. Свой FFI-слой к `forkpty` и ConPTY — нативный код без сопровождения.
+5. **Влияние на architecture boundaries.** Нативный API не выходит за адаптер. Feature работает с портом и тестируется с fake. Пакет не попадает в `codelab_client_io`: у порта один потребитель, а native assets собирались бы и для CLI (D2 change).
+
+   Особенности API, которые адаптер скрывает (D2, D15):
+   * нет `pid`; по плану после 1.0 адаптер получает его обёрткой старта `/bin/sh -c '…; exec "$0" "$@"'` и шлёт `hangUp`/`kill` по нему из UI isolate (`Process.killPid`) в обход isolate вкладки (Q24, Q25);
+   * `write` синхронный: при полном буфере PTY (на macOS ~1 КБ ввода) он крутит `poll` на вызывающем isolate, пока программа не прочитает ввод. Сейчас это UI isolate — открытый риск, принятый для 1.0 как известная проблема (Risks change, «Синхронная запись в PTY»); по плану Q24 `pty2` уходит в isolate вкладки;
+   * ввод — `write(String)`, вывод — `Stream<String>`;
+   * код выхода ждёт isolate на каждый shell блокирующим FFI `waitpid`; Dart VM при остановке движка ждёт этот isolate, поэтому, пока shell жив, процесс app не завершается, а `Isolate.kill` ожидание не прерывает — штатный выход обязан сам завершить shell (D4, D15 п. 9 change);
+   * `kill(SIGHUP)` и `kill(SIGKILL)` шлются группе процесса, любой сигнал закрывает PTY-мастер;
+   * без `environment` ребёнок получает узкий набор переменных — адаптер передаёт `Platform.environment` целиком (Q9);
+   * ошибок старта нет (процесс выходит с `1`/`-1`) — адаптер проверяет файл и папку до `start`;
+   * код выхода иногда `-1` — адаптер отдаёт `null`, вкладка показывает «exited» без кода.
+6. **Заменяет ли существующую технологию.** Нет.
+7. **Требуется ли migration.** Нет.
+8. **Требуется ли ADR.** Нет (Q3); обоснование — как в §20г.
+
+Проверка по §24–§25:
+* **Desktop platforms.** `pty2` — macOS, Linux (`forkpty`), Windows (ConPTY; опциональная загрузка ConPTY из NuGet в app не включается). Проверено на macOS arm64: `fvm flutter build macos` debug и release, в бандле `pty2_unix.framework`.
+* **SDK constraints.** `pty2` требует Dart `>=3.11.0`. У `apps/codelab_desktop` нижняя граница поднимается с `>=3.8.0` до `>=3.11.0`; корень workspace и другие пакеты не меняются (D11 change, задача 1.4).
+* **Native dependencies.** C-компилятор при сборке: Xcode CLT на macOS, `cc` или `gcc` на Linux. Отдельной настройки Xcode или CocoaPods нет.
+* **Lifecycle.**
+  * Процесс принадлежит вкладке: закрытие — `SIGHUP`, через 2 с `SIGKILL`.
+  * Выход из app закрывает все вкладки: обработчик `AppLifecycleListener.onExitRequested` → `closeAll()`. Он обязателен — без него штатный выход зависает на `waitpid` `pty2` (решение пользователя 2026-11-12; D14, D15 п. 9 change).
+  * Крах или убийство app — `SIGHUP` от закрытия PTY-мастера, подтверждено спайком; при штатном выходе эта страховка не срабатывает (`concurrency.md` §45, `platform-integration.md` §23).
+  * Задание интерактивного shell с игнором `SIGHUP` после `SIGKILL` shell остаётся сиротой — поведение пользователя, как `nohup`.
+* **Threading.** Сейчас: чтение — в фоновых isolate `pty2` (без модели поток 585 КБ читается за 0,29 с), запись, `resize` и сигналы — на UI isolate; запись при полном буфере PTY блокирует UI isolate (открытый риск, принят для 1.0 как известная проблема). Разбор эмулятором — на UI isolate, порциями (§20г). План после 1.0 (Q24): весь `pty2` — в isolate вкладки, `UserShell.write` ставит строку в очередь и сразу возвращается; вывод проходит лишний переход между isolate, его стоимость под «Flood» меряет задача 2.13 change.
+* **Security.** Shell пользователя вне permission policy и containment (`permissions.md` §2), окружение app целиком (`platform-integration.md` §53, исключение).
+* **Testing.** Native assets собираются под `fvm flutter test` и `fvm dart test`; контрактный тест адаптера идёт на Dart VM в `feature/*`. На код выхода тесты не опираются.
+* **Maintenance.** 0.8.1 от 2026-11-10; активное сопровождение, но ломающие версии 0.6–0.8 вышли за две недели. Мера — пин точной версии, обновление — отдельным PR с контрактным тестом.
+
+### Транзитивные зависимости и лицензии терминала (§20г–§20д)
+
+Список ведётся здесь, а не в `THIRD_PARTY_NOTICES.md` (решение пользователя Q12): реестр — для воспроизведённых фрагментов. Это замыкание `dependencies` пакетов `xterm2`, `xterm2_core`, `pty2` по `pubspec.lock` спайка; лицензии взяты из тегов pub.dev и файлов `LICENSE`. Несовместимых с MIT нет. Источник — D15 change.
+
+| Пакет | Версия | Лицензия | Тянет | В lock workspace до change |
+|---|---|---|---|---|
+| `pty2` | 0.8.1 | MIT | прямая | нет |
+| `xterm2` | 5.4.0 | MIT | прямая | нет |
+| `xterm2_core` | 1.0.0 | MIT | прямая, `xterm2` | нет |
+| `zmodem` | 0.0.6 | MIT | `xterm2` | нет |
+| `quiver` | 3.2.2 | Apache-2.0 | `xterm2` | нет |
+| `equatable` | 2.1.0 | MIT | `xterm2` | нет |
+| `native_toolchain_c` | 0.19.6 | BSD-3-Clause | `pty2` (хук сборки) | нет |
+| `win32` | 6.4.0 | BSD-3-Clause | `pty2` (Windows) | нет |
+| `ffi_leak_tracker` | 0.1.2 | BSD-3-Clause | `win32` | нет |
+| `code_assets` | 2.2.0 | BSD-3-Clause | `pty2`, `native_toolchain_c` | 1.2.1 — поднимается (мажор) |
+| `hooks` | 2.2.0 | BSD-3-Clause | `pty2`, `code_assets` | 2.0.2 — поднимается |
+| `record_use` | 1.1.1 | BSD-3-Clause | `hooks` | 0.6.0 — поднимается |
+| `yaml` | 3.1.4 | MIT | `hooks` | 3.1.3 |
+| `characters`, `collection`, `convert`, `crypto`, `ffi`, `file`, `glob`, `logging`, `matcher`, `meta`, `path`, `platform`, `process`, `pub_semver`, `typed_data`, `async`, `boolean_selector`, `source_span`, `stack_trace`, `stream_channel`, `string_scanner`, `term_glyph`, `test_api` | см. D15 | BSD-3-Clause | разные | уже есть |
+
+Кроме замыкания, в lock workspace поднимается `objective_c` 9.5.0 → 9.6.4 (BSD-3-Clause, publisher `dart.dev`; сухой прогон спайка давал 9.6.3, при `melos bootstrap` разрешилась опубликованная 2026-11-11 версия 9.6.4): он тянется через существующие пакеты. Сборку app и тесты затронутых пакетов с новым lock проверяет задача 1.4 change.
+
+## 20е. `codelab_desktop`: открытие ссылок во внешнем приложении — `url_launcher`
+
+**Статус: утверждено.** Пакет введён change `add-desktop-markdown` (архив 2026-11-11, D5/D10; строка таблицы §1); терминал переиспользует его порт, правило сторожа и зависимость — решение пользователя 2026-11-11 (Q16), [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D11; задача 2.10.
+
+Технология: [`url_launcher`](https://pub.dev/packages/url_launcher) **6.3.3** (BSD-3-Clause, publisher `flutter.dev`). При слиянии терминала запись приведена к точному пину `6.3.3` (было `^6.3.3`; D11) и граница `flutter:` у app поднята до `>=3.41.0` — требование пакета.
+
+1. **Где.** Только порт `ExternalLinkOpener` и адаптер `UrlLauncherExternalLinkOpener` в `apps/codelab_desktop/lib/core/platform/external_link_opener.dart` (политика схем — `link_policy.dart`); импорт `package:url_launcher/` в остальном `lib` app запрещён сторожем (одно правило на оба потребителя).
+2. **Потребители.** Ссылки в ответе агента (markdown, политика `isOpenableLink`) и ссылки OSC 8 в терминале (Q14).
+3. **Безопасность терминала.** Первая линия — application (`terminalLinkDecision`: только `http`/`https`; адрес с bidi, нулевой шириной или управляющими C0/C1 — «нельзя» при любой схеме, Q21); диалог показывает нормализованный адрес — ровно тот, что уходит в порт; вторая линия — политика адаптера (`isOpenableLink`); адрес в журнал не пишется — только схема (`observability.md` §35). OSC 1337 `OpenURL` (`Terminal.onOpenUrl`) не подключается.
+4. **Заменяет ли существующую технологию.** Нет. **Migration** — нет. **ADR** — нет (Q3, прецедент §20а).
 
 ---
 

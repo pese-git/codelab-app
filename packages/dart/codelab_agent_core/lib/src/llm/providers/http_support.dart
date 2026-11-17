@@ -263,9 +263,28 @@ Future<http.StreamedResponse> _sendCancellable(
   return raceCancel(sent, cancel);
 }
 
-/// The response body as UTF-8 text that ends with [CancelledException] as
-/// soon as [cancel] fires; the subscription to the body is cancelled, which
-/// closes the connection of the host client (LLM-7, LLM-10).
+/// Тело потокового ответа провайдера как текст UTF-8, которое обрывается
+/// [CancelledException], как только срабатывает [cancel].
+///
+/// Почему: отмена хода должна доходить до HTTP-запроса — подписка на тело
+/// отменяется, и клиент хоста закрывает соединение (LLM-7, LLM-10). Ошибка
+/// тела при уже отменённом токене тоже подменяется отменой: настоящий клиент
+/// хоста (`IOClient`) по `abortTrigger` завершает поток тела ошибкой
+/// [http.RequestAbortedException], и она может дойти до разбора раньше
+/// нашего пути отмены. Без подмены её классифицировали бы как сетевой сбой
+/// (`connection failed`), и ход закончился бы `failed`, а не `cancelled`
+/// (требование «Отмена доходит до HTTP-запроса»). `abortTrigger` — это
+/// `cancel.onCancel`, поэтому к моменту такой ошибки токен уже отменён:
+/// проверки токена достаточно, тип ошибки не важен. Сбой тела без отмены
+/// проходит как есть и остаётся `network`.
+///
+/// Для чего: общий для провайдеров путь чтения тела, единственное место,
+/// где отмена превращается в терминальную ошибку потока.
+///
+/// Как использовать: провайдер вызывает после успешного `sendStreaming` и
+/// разбирает текст (SSE); [CancelledException] из потока `runProvider`
+/// превращает в `ErrorEvent` со `stopReason: aborted`. При `cancel == null`
+/// возвращается тело без обёртки.
 Stream<String> responseText(
   http.StreamedResponse response,
   CancelToken? cancel,
@@ -288,7 +307,13 @@ Stream<String> responseText(
     }
     subscription = text.listen(
       controller.add,
-      onError: controller.addError,
+      onError: (Object error, StackTrace stackTrace) {
+        if (cancel.isCancelled) {
+          controller.addError(CancelledException(cancel.reason), stackTrace);
+        } else {
+          controller.addError(error, stackTrace);
+        }
+      },
       onDone: controller.close,
     );
     cancel.onCancel.then((_) async {

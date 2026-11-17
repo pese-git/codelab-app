@@ -435,6 +435,48 @@ void main() {
     );
   });
 
+  // Сценарий workspace-architecture «http в мосте настроек» (change
+  // `add-provider-setup-ui`, D8, D20): `package:http/http.dart` web-безопасен и
+  // разрешён основному бареле, а клиент для `dart:io` — только `io.dart` и
+  // `lib/src/io/`.
+  test('allows package:http in the setup bridge but not its IO or browser '
+      'clients outside io.dart', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_setup_http_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    void write(String path, String text) => File(p.join(tmp.path, path))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(text);
+    write('lib/codelab_setup.dart', "import 'package:http/http.dart';\n");
+    write(
+      'lib/src/provider/provider_check.dart',
+      "import 'package:http/http.dart';\n"
+          "import 'package:http/io_client.dart';\n"
+          "import 'package:http/browser_client.dart';\n",
+    );
+    write('lib/io.dart', "import 'package:http/io_client.dart';\n");
+    write(
+      'lib/src/io/io_provider_check.dart',
+      "import 'package:http/io_client.dart';\n",
+    );
+
+    final violations = scanSetupBridge(tmp);
+
+    expect(violations, hasLength(2));
+    expect(
+      violations,
+      containsAll([
+        endsWith(
+          'lib/src/provider/provider_check.dart:2 -> '
+          'package:http/io_client.dart',
+        ),
+        endsWith(
+          'lib/src/provider/provider_check.dart:3 -> '
+          'package:http/browser_client.dart',
+        ),
+      ]),
+    );
+  });
+
   test('allows the IO barrel of the setup bridge only in run.dart of the '
       'terminal client', () {
     final tmp = Directory.systemTemp.createTempSync('guard_cli_setup_');
@@ -468,5 +510,1019 @@ void main() {
       violations.single,
       endsWith('lib/src/repl/repl.dart:1 -> package:codelab_setup/io.dart'),
     );
+  });
+
+  // IO-барель и тестовый сценарий встроенного агента в терминальном клиенте
+  // (design.md change `add-embedded-agent-mode`, D3; задача 3.4;
+  // workspace-architecture «IO-барель встроенного агента вне composition
+  // root»): `io.dart` — только `composition_root.dart`, `testing.dart` — только
+  // драйвер фикстур `lib/src/scenario/`.
+  List<String> scanCliEmbedded(Directory tmp) => [
+    for (final rule in rules.where(
+      (r) =>
+          r.dir == 'apps/codelab_cli/lib' &&
+          r.forbidden.any((f) => f.startsWith('package:codelab_embedded/')),
+    ))
+      ...scan(
+        tmp.path,
+        PackageRule(
+          'lib',
+          forbidden: rule.forbidden,
+          exclude: rule.exclude,
+          sealExclude: rule.sealExclude,
+        ),
+      ),
+  ];
+
+  void writeCli(Directory tmp, Map<String, String> files) {
+    files.forEach((file, content) {
+      File(p.join(tmp.path, 'lib', file))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(content);
+    });
+  }
+
+  test('allows the IO barrel of the embedded agent only in the composition '
+      'root of the terminal client', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_embedded_io_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_embedded/io.dart';\n";
+    writeCli(tmp, {
+      'src/composition_root.dart': import,
+      'src/run.dart': import,
+      'src/repl/repl.dart': import,
+      'src/scenario/agent_connector.dart': import,
+      // Барель не должен реэкспортировать мост наружу.
+      'codelab_cli.dart': "export 'package:codelab_embedded/io.dart';\n",
+    });
+
+    expect(
+      scanCliEmbedded(tmp),
+      unorderedEquals([
+        endsWith('lib/src/run.dart:1 -> package:codelab_embedded/io.dart'),
+        endsWith(
+          'lib/src/repl/repl.dart:1 -> package:codelab_embedded/io.dart',
+        ),
+        endsWith(
+          'lib/src/scenario/agent_connector.dart:1 -> '
+          'package:codelab_embedded/io.dart',
+        ),
+        endsWith('lib/codelab_cli.dart:1 -> package:codelab_embedded/io.dart'),
+      ]),
+    );
+  });
+
+  test('allows the scripted opener of the embedded agent only in the '
+      'fixture driver of the terminal client', () {
+    final tmp = Directory.systemTemp.createTempSync(
+      'guard_cli_embedded_testing_',
+    );
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_embedded/testing.dart';\n";
+    writeCli(tmp, {
+      'src/scenario/agent_connector.dart': import,
+      'src/composition_root.dart': import,
+      'src/run.dart': import,
+      'codelab_cli.dart': "export 'package:codelab_embedded/testing.dart';\n",
+    });
+
+    expect(
+      scanCliEmbedded(tmp),
+      unorderedEquals([
+        endsWith(
+          'lib/src/composition_root.dart:1 -> '
+          'package:codelab_embedded/testing.dart',
+        ),
+        endsWith('lib/src/run.dart:1 -> package:codelab_embedded/testing.dart'),
+        endsWith(
+          'lib/codelab_cli.dart:1 -> package:codelab_embedded/testing.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('the entry point bin/ of the terminal client imports neither the IO '
+      'barrel nor the scripted opener of the embedded agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_embedded_bin_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'bin', 'codelab.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'package:codelab_embedded/io.dart';\n"
+        "import 'package:codelab_embedded/testing.dart';\n"
+        "import 'package:codelab_embedded/codelab_embedded.dart';\n",
+      );
+    final rule = rules.singleWhere((r) => r.dir == 'apps/codelab_cli/bin');
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('bin', forbidden: rule.forbidden),
+    );
+
+    expect(violations, hasLength(2));
+    expect(
+      violations.first,
+      endsWith('bin/codelab.dart:1 -> package:codelab_embedded/io.dart'),
+    );
+  });
+
+  test('the main barrel of the embedded agent is allowed everywhere in the '
+      'terminal client', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_embedded_main_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeCli(tmp, {
+      'src/repl/repl.dart':
+          "import 'package:codelab_embedded/codelab_embedded.dart';\n",
+    });
+
+    expect(scanCliEmbedded(tmp), isEmpty);
+  });
+
+  // IO-барель и сценарий модели встроенного агента в десктопном клиенте
+  // (design.md change `add-embedded-agent-mode`, D3; задача 4.4;
+  // workspace-architecture «IO-барель встроенного агента вне composition
+  // root»; testing-quality «Тестовый сценарий не попадает в app»): `io.dart` —
+  // только `lib/app/`, `testing.dart` — нигде в `lib/`.
+  List<String> scanDesktopEmbedded(Directory tmp) => [
+    for (final rule in rules.where(
+      (r) =>
+          r.dir == 'apps/codelab_desktop/lib' &&
+          r.forbidden.any((f) => f.startsWith('package:codelab_embedded/')),
+    ))
+      ...scan(
+        tmp.path,
+        PackageRule(
+          'lib',
+          forbidden: rule.forbidden,
+          exclude: rule.exclude,
+          sealExclude: rule.sealExclude,
+        ),
+      ),
+  ];
+
+  void writeDesktop(Directory tmp, Map<String, String> files) {
+    files.forEach((file, content) {
+      File(p.join(tmp.path, 'lib', file))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(content);
+    });
+  }
+
+  test('allows the IO barrel of the embedded agent only in lib/app/ of the '
+      'desktop client', () {
+    final tmp = Directory.systemTemp.createTempSync(
+      'guard_desktop_embedded_io_',
+    );
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_embedded/io.dart';\n";
+    writeDesktop(tmp, {
+      'app/app_scope.dart': import,
+      'core/platform/x.dart': import,
+      'features/workbench/application/connection_cubit.dart': import,
+      'features/workbench/presentation/workbench_shell.dart': import,
+    });
+
+    expect(
+      scanDesktopEmbedded(tmp),
+      unorderedEquals([
+        endsWith(
+          'lib/core/platform/x.dart:1 -> package:codelab_embedded/io.dart',
+        ),
+        endsWith(
+          'lib/features/workbench/application/connection_cubit.dart:1 -> '
+          'package:codelab_embedded/io.dart',
+        ),
+        endsWith(
+          'lib/features/workbench/presentation/workbench_shell.dart:1 -> '
+          'package:codelab_embedded/io.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('forbids the scripted opener of the embedded agent everywhere in '
+      'lib/ of the desktop client, lib/app/ included', () {
+    final tmp = Directory.systemTemp.createTempSync(
+      'guard_desktop_embedded_testing_',
+    );
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_embedded/testing.dart';\n";
+    writeDesktop(tmp, {
+      'app/app_scope.dart': import,
+      'features/workbench/application/connection_cubit.dart': import,
+    });
+
+    expect(
+      scanDesktopEmbedded(tmp),
+      unorderedEquals([
+        endsWith(
+          'lib/app/app_scope.dart:1 -> package:codelab_embedded/testing.dart',
+        ),
+        endsWith(
+          'lib/features/workbench/application/connection_cubit.dart:1 -> '
+          'package:codelab_embedded/testing.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('the main barrel of the embedded agent is allowed everywhere in the '
+      'desktop client', () {
+    final tmp = Directory.systemTemp.createTempSync(
+      'guard_desktop_embedded_main_',
+    );
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeDesktop(tmp, {
+      'features/workbench/application/connection_cubit.dart':
+          "import 'package:codelab_embedded/codelab_embedded.dart';\n",
+    });
+
+    expect(scanDesktopEmbedded(tmp), isEmpty);
+  });
+
+  // IO-барель моста настроек в десктопном клиенте (design.md change
+  // `add-provider-setup-ui`, D20; workspace-architecture «IO-барель моста
+  // настроек вне composition root app», «dart:io в presentation настроек»):
+  // `codelab_setup/io.dart` — только `lib/app/`; `presentation/` настроек не
+  // знает ни его, ни `dart:io` (SETUP-9).
+  List<String> scanDesktopSetup(Directory tmp) {
+    final setupRules = rules.where(
+      (r) =>
+          r.dir.startsWith('apps/codelab_desktop/lib') &&
+          r.forbidden.any(
+            (f) => f == 'package:codelab_setup/io.dart' || f == 'dart:io',
+          ),
+    );
+    expect(
+      setupRules,
+      isNotEmpty,
+      reason: 'нужны правила codelab_setup/io.dart и dart:io для desktop',
+    );
+    return [
+      for (final rule in setupRules)
+        ...scan(
+          tmp.path,
+          PackageRule(
+            rule.dir == 'apps/codelab_desktop/lib' ? 'lib' : 'lib/presentation',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+  }
+
+  test('allows the IO barrel of the settings bridge only in lib/app/ of the '
+      'desktop client', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_desktop_setup_io_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_setup/io.dart';\n";
+    writeDesktop(tmp, {
+      'app/app_scope.dart': import,
+      'features/settings/application/provider_settings_cubit.dart': import,
+    });
+
+    expect(
+      scanDesktopSetup(tmp),
+      unorderedEquals([
+        endsWith(
+          'lib/features/settings/application/provider_settings_cubit.dart:1 '
+          '-> package:codelab_setup/io.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('forbids dart:io and the IO barrel of the settings bridge in the '
+      'settings presentation of the desktop client', () {
+    final tmp = Directory.systemTemp.createTempSync(
+      'guard_desktop_settings_presentation_',
+    );
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final presentation = Directory(p.join(tmp.path, 'lib', 'presentation'))
+      ..createSync(recursive: true);
+    File(p.join(presentation.path, 'page.dart')).writeAsStringSync(
+      "import 'dart:io';\n"
+      "import 'package:codelab_setup/io.dart';\n",
+    );
+    File(
+      p.join(presentation.path, 'ok.dart'),
+    ).writeAsStringSync("import 'dart:async';\n");
+    final presentationRule = rules.firstWhere(
+      (r) => r.dir == 'apps/codelab_desktop/lib/features/settings/presentation',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('lib', forbidden: presentationRule.forbidden),
+    );
+
+    expect(
+      violations,
+      unorderedEquals([
+        endsWith('lib/presentation/page.dart:1 -> dart:io'),
+        endsWith(
+          'lib/presentation/page.dart:2 -> package:codelab_setup/io.dart',
+        ),
+      ]),
+    );
+  });
+
+  // Встроенный агент `codelab_embedded` (design.md change
+  // `add-embedded-agent-mode`, D3): основной барель чист и не знает IO-пакет
+  // агента, `io.dart` и `testing.dart` вне запретов `webUnsafe`, но без ссылок
+  // снаружи (sealExclude). Пакета на момент итерации 1.7 ещё нет: правила
+  // проверяются на временном каталоге, а общий цикл выше краснеет по причине
+  // «пакет не существует» до задачи 1.9.
+  List<String> scanEmbedded(Directory tmp) {
+    final embeddedRules = rules.where(
+      (r) => r.dir == 'packages/dart/codelab_embedded',
+    );
+    expect(
+      embeddedRules,
+      hasLength(2),
+      reason: 'нужны два правила packages/dart/codelab_embedded',
+    );
+    return [
+      for (final rule in embeddedRules)
+        ...scan(
+          tmp.path,
+          PackageRule(
+            '.',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+  }
+
+  void writeLib(Directory tmp, String file, String content) {
+    File(p.join(tmp.path, 'lib', file))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(content);
+  }
+
+  test('reports the IO package of the agent in the main barrel of the '
+      'embedded agent only', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_agent_io/codelab_agent_io.dart';\n";
+    for (final file in [
+      'codelab_embedded.dart',
+      'src/agent.dart',
+      'io.dart',
+      'src/io/opener.dart',
+    ]) {
+      writeLib(tmp, file, import);
+    }
+
+    final violations = scanEmbedded(tmp);
+
+    expect(violations, hasLength(2));
+    expect(
+      violations,
+      containsAll([
+        endsWith(
+          'lib/codelab_embedded.dart:1 -> '
+          'package:codelab_agent_io/codelab_agent_io.dart',
+        ),
+        endsWith(
+          'lib/src/agent.dart:1 -> '
+          'package:codelab_agent_io/codelab_agent_io.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('reports dart:io and references to io.dart and testing.dart in the '
+      'main barrel of the embedded agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_io_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeLib(
+      tmp,
+      'codelab_embedded.dart',
+      "import 'dart:io';\nexport 'io.dart';\nexport 'testing.dart';\n",
+    );
+    writeLib(tmp, 'io.dart', "import 'dart:io';\n");
+    writeLib(tmp, 'testing.dart', "import 'dart:io';\n");
+
+    final violations = scanEmbedded(tmp);
+
+    expect(violations, hasLength(3));
+    expect(
+      violations.first,
+      endsWith('lib/codelab_embedded.dart:1 -> dart:io'),
+    );
+    expect(
+      violations,
+      containsAll([
+        endsWith('lib/codelab_embedded.dart:2 -> io.dart (excluded file)'),
+        endsWith('lib/codelab_embedded.dart:3 -> testing.dart (excluded file)'),
+      ]),
+    );
+  });
+
+  test('reports Flutter, UI and client packages in io.dart and testing.dart '
+      'of the embedded agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_ui_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const imports =
+        "import 'package:flutter/foundation.dart';\n"
+        "import 'package:fluent_ui/fluent_ui.dart';\n"
+        "import 'package:codelab_ui/codelab_ui.dart';\n"
+        "import 'package:codelab_client_core/codelab_client_core.dart';\n"
+        "import 'package:codelab_agent_io/codelab_agent_io.dart';\n";
+    writeLib(tmp, 'io.dart', imports);
+    writeLib(tmp, 'testing.dart', imports);
+
+    final violations = scanEmbedded(tmp);
+
+    // Четыре запрета на каждый из двух файлов; IO-пакет агента им разрешён.
+    expect(violations, hasLength(8));
+    expect(violations, isNot(contains(contains('package:codelab_agent_io/'))));
+  });
+
+  test('allows the ACP packages and the web-safe transports in the main '
+      'barrel of the embedded agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_acp_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeLib(
+      tmp,
+      'codelab_embedded.dart',
+      "import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';\n"
+          "import 'package:codelab_acp_transports/codelab_acp_transports.dart';\n"
+          "import 'package:codelab_agent_acp/codelab_agent_acp.dart';\n"
+          "import 'package:codelab_agent_mcp/codelab_agent_mcp.dart';\n"
+          "import 'package:codelab_agent_core/codelab_agent_core.dart';\n",
+    );
+
+    expect(scanEmbedded(tmp), isEmpty);
+  });
+
+  // Сценарий модели `LlmScript` (design.md change `add-embedded-agent-mode`,
+  // D8, задача 2.9): основной барель `codelab_agent_io` на него не ссылается,
+  // а `testing.dart` импортируют только бинарь, `codelab_embedded/lib/src/testing/`
+  // и тесты. Так сценарий структурно не попадает в рабочую сборку клиентов.
+  test('reports a reference to the scripted layer in the main barrel of the '
+      'IO package of the agent only', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_scripted_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(
+      p.join(tmp.path, 'pubspec.yaml'),
+    ).writeAsStringSync('name: codelab_agent_io\n');
+    writeLib(
+      tmp,
+      'codelab_agent_io.dart',
+      "export 'src/scripted/llm_script.dart';\n",
+    );
+    writeLib(tmp, 'src/config/loader.dart', "import '../scripted/x.dart';\n");
+    writeLib(tmp, 'testing.dart', "export 'src/scripted/llm_script.dart';\n");
+    writeLib(tmp, 'src/scripted/x.dart', "import '../env/y.dart';\n");
+    final ioRules = rules.where(
+      (r) => r.dir == 'packages/dart/codelab_agent_io' && r.exclude.isNotEmpty,
+    );
+    expect(ioRules, hasLength(1), reason: 'нет правила на сценарий модели');
+
+    final violations = [
+      for (final rule in ioRules)
+        ...scan(
+          tmp.path,
+          PackageRule(
+            '.',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+
+    expect(violations, hasLength(2));
+    expect(
+      violations,
+      containsAll([
+        endsWith(
+          'lib/codelab_agent_io.dart:1 -> src/scripted/llm_script.dart '
+          '(excluded file)',
+        ),
+        endsWith(
+          'lib/src/config/loader.dart:1 -> ../scripted/x.dart (excluded file)',
+        ),
+      ]),
+    );
+  });
+
+  test('allows agent_io/testing.dart only in the binary, the testing layer '
+      'of the embedded agent and tests', () {
+    const import = "import 'package:codelab_agent_io/testing.dart';\n";
+    final tmp = Directory.systemTemp.createTempSync('guard_scripted_use_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeLib(tmp, 'src/testing/scripted_opener.dart', import);
+    writeLib(tmp, 'src/io/opener.dart', import);
+    writeLib(tmp, 'src/assemble.dart', import);
+    writeLib(tmp, 'io.dart', import);
+
+    final embedded = [
+      for (final rule in rules.where(
+        (r) => r.dir == 'packages/dart/codelab_embedded/lib',
+      ))
+        ...scan(
+          tmp.path,
+          PackageRule(
+            'lib',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+
+    expect(embedded, hasLength(3));
+    expect(
+      embedded,
+      containsAll([
+        endsWith(
+          'lib/src/io/opener.dart:1 -> package:codelab_agent_io/testing.dart',
+        ),
+        endsWith(
+          'lib/src/assemble.dart:1 -> package:codelab_agent_io/testing.dart',
+        ),
+        endsWith('lib/io.dart:1 -> package:codelab_agent_io/testing.dart'),
+      ]),
+    );
+
+    // Мост настроек агента сценарий тоже не импортирует.
+    final setup = tmp.createTempSync('setup_');
+    writeLib(setup, 'io.dart', import);
+    final setupViolations = [
+      for (final rule in rules.where(
+        (r) => r.dir == 'packages/dart/codelab_setup',
+      ))
+        ...scan(
+          setup.path,
+          PackageRule(
+            '.',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+    expect(
+      setupViolations.single,
+      endsWith('lib/io.dart:1 -> package:codelab_agent_io/testing.dart'),
+    );
+  });
+
+  test('allows agent_mcp/testing.dart only in the testing layer of the '
+      'embedded agent', () {
+    const import = "import 'package:codelab_agent_mcp/testing.dart';\n";
+    final tmp = Directory.systemTemp.createTempSync('guard_mcp_testing_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    writeLib(tmp, 'src/testing/fake_mcp_http_host.dart', import);
+    writeLib(tmp, 'testing.dart', import);
+    writeLib(tmp, 'src/io/opener.dart', import);
+    writeLib(tmp, 'io.dart', import);
+    writeLib(tmp, 'src/assemble.dart', import);
+
+    final violations = [
+      for (final rule in rules.where(
+        (r) => r.dir == 'packages/dart/codelab_embedded/lib',
+      ))
+        ...scan(
+          tmp.path,
+          PackageRule(
+            'lib',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+
+    expect(violations, hasLength(3));
+    expect(
+      violations,
+      containsAll([
+        endsWith(
+          'lib/src/io/opener.dart:1 -> package:codelab_agent_mcp/testing.dart',
+        ),
+        endsWith('lib/io.dart:1 -> package:codelab_agent_mcp/testing.dart'),
+        endsWith(
+          'lib/src/assemble.dart:1 -> package:codelab_agent_mcp/testing.dart',
+        ),
+      ]),
+    );
+  });
+
+  // Дыра, найденная ревью итерации 2: правило первого уровня снимает запреты
+  // с `io.dart`, `src/io/` и `testing.dart` целиком, поэтому ссылки между ними
+  // оно не видит. Открыватель настольных хостов не должен тянуть сценарий
+  // модели (D8, D3) ни пакетным, ни относительным путём.
+  test('reports references from io.dart and src/io/ to the testing layer of '
+      'the embedded agent', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_embedded_seal_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(
+      p.join(tmp.path, 'pubspec.yaml'),
+    ).writeAsStringSync('name: codelab_embedded\n');
+    writeLib(
+      tmp,
+      'io.dart',
+      "export 'package:codelab_embedded/testing.dart';\n",
+    );
+    writeLib(
+      tmp,
+      'src/io/opener.dart',
+      "import '../testing/scripted_opener.dart';\n"
+          "import '../../testing.dart';\n",
+    );
+    writeLib(
+      tmp,
+      'testing.dart',
+      "export 'src/testing/scripted_opener.dart';\n",
+    );
+    writeLib(tmp, 'src/testing/scripted_opener.dart', '');
+    final rule = rules.singleWhere(
+      (r) => r.dir == 'packages/dart/codelab_embedded/lib',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule(
+        'lib',
+        forbidden: rule.forbidden,
+        exclude: rule.exclude,
+        sealExclude: rule.sealExclude,
+      ),
+    );
+
+    expect(violations, hasLength(3), reason: violations.join('\n'));
+    expect(violations, everyElement(endsWith('(excluded file)')));
+  });
+
+  // Терминал пользователя в десктопном клиенте (design.md change
+  // `add-integrated-terminal`, D11; задача 1.3): модель эмулятора `xterm2_core`
+  // — только feature `terminal`, виджеты `xterm2` — только её presentation,
+  // application без Flutter, PTY-пакет `pty2` — только адаптер процессов.
+  group('terminal of the desktop client (D11)', () {
+    // Правило десктопа из rules.dart, запрещающее [prefix] в [ruleDir];
+    // переносится на временный каталог ([scanDir]). Нет правила — тест красный.
+    PackageRule desktopRuleFor(
+      String prefix, {
+      String ruleDir = 'apps/codelab_desktop/lib',
+      String scanDir = 'lib',
+    }) {
+      final matching = rules.where(
+        (r) => r.dir == ruleDir && r.forbidden.contains(prefix),
+      );
+      expect(
+        matching,
+        hasLength(1),
+        reason: 'в rules.dart нет ровно одного правила $ruleDir для $prefix',
+      );
+      final rule = matching.single;
+      return PackageRule(
+        scanDir,
+        forbidden: rule.forbidden,
+        exclude: rule.exclude,
+        sealExclude: rule.sealExclude,
+      );
+    }
+
+    Directory tmpDesktop(String name, Map<String, String> files) {
+      final tmp = Directory.systemTemp.createTempSync(name);
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      files.forEach((file, content) {
+        File(p.join(tmp.path, 'lib', file))
+          ..createSync(recursive: true)
+          ..writeAsStringSync(content);
+      });
+      return tmp;
+    }
+
+    test('reports xterm2_core outside features/terminal/', () {
+      const import = "import 'package:xterm2_core/xterm2_core.dart';\n";
+      final tmp = tmpDesktop('guard_term_core_', {
+        'features/terminal/application/terminal_tabs_cubit.dart': import,
+        'features/terminal/presentation/terminal_pane.dart': import,
+        'features/workbench/application/workbench_cubit.dart': import,
+        'core/platform/x.dart': import,
+      });
+
+      final violations = scan(tmp.path, desktopRuleFor('package:xterm2_core/'));
+
+      expect(violations, hasLength(2), reason: violations.join('\n'));
+      expect(
+        violations,
+        containsAll([
+          endsWith(
+            'lib/features/workbench/application/workbench_cubit.dart:1 -> '
+            'package:xterm2_core/xterm2_core.dart',
+          ),
+          endsWith(
+            'lib/core/platform/x.dart:1 -> package:xterm2_core/xterm2_core.dart',
+          ),
+        ]),
+      );
+    });
+
+    test('reports xterm2 outside features/terminal/presentation/', () {
+      const import = "import 'package:xterm2/xterm2.dart';\n";
+      final tmp = tmpDesktop('guard_term_view_', {
+        'features/terminal/presentation/terminal_pane.dart': import,
+        'features/terminal/application/terminal_tabs_cubit.dart': import,
+        'features/workbench/presentation/workbench_shell.dart': import,
+      });
+
+      final violations = scan(tmp.path, desktopRuleFor('package:xterm2/'));
+
+      expect(violations, hasLength(2), reason: violations.join('\n'));
+      expect(
+        violations,
+        containsAll([
+          endsWith(
+            'lib/features/terminal/application/terminal_tabs_cubit.dart:1 -> '
+            'package:xterm2/xterm2.dart',
+          ),
+          endsWith(
+            'lib/features/workbench/presentation/workbench_shell.dart:1 -> '
+            'package:xterm2/xterm2.dart',
+          ),
+        ]),
+      );
+    });
+
+    test(
+      'reports the PTY package outside core/platform/user_shell_launcher.dart',
+      () {
+        const import = "import 'package:pty2/pty2.dart';\n";
+        final tmp = tmpDesktop('guard_term_pty_', {
+          'core/platform/user_shell_launcher.dart': import,
+          'features/terminal/application/terminal_tabs_cubit.dart': import,
+          'core/platform/working_directory_provider.dart': import,
+        });
+
+        final violations = scan(tmp.path, desktopRuleFor('package:pty2/'));
+
+        expect(violations, hasLength(2), reason: violations.join('\n'));
+        expect(
+          violations,
+          containsAll([
+            endsWith(
+              'lib/features/terminal/application/terminal_tabs_cubit.dart:1 -> '
+              'package:pty2/pty2.dart',
+            ),
+            endsWith(
+              'lib/core/platform/working_directory_provider.dart:1 -> '
+              'package:pty2/pty2.dart',
+            ),
+          ]),
+        );
+      },
+    );
+
+    // Задача 2.10 (D11, «`url_launcher` (Q16)»): открытие адреса — нативный
+    // API, зависимость разрешена только в `lib/core/platform/`.
+    test('reports url_launcher outside core/platform/', () {
+      const import = "import 'package:url_launcher/url_launcher.dart';\n";
+      final tmp = tmpDesktop('guard_term_url_', {
+        'core/platform/external_link_opener.dart': import,
+        'features/terminal/presentation/terminal_pane.dart': import,
+        'features/terminal/application/terminal_tabs_cubit.dart': import,
+      });
+
+      final violations = scan(
+        tmp.path,
+        desktopRuleFor('package:url_launcher/'),
+      );
+
+      expect(violations, hasLength(2), reason: violations.join('\n'));
+      expect(
+        violations,
+        containsAll([
+          endsWith(
+            'lib/features/terminal/presentation/terminal_pane.dart:1 -> '
+            'package:url_launcher/url_launcher.dart',
+          ),
+          endsWith(
+            'lib/features/terminal/application/terminal_tabs_cubit.dart:1 -> '
+            'package:url_launcher/url_launcher.dart',
+          ),
+        ]),
+      );
+    });
+
+    // Задача 2.0 (D11, правило 3): application терминала не знает Flutter.
+    // Правила в rules.dart нет, пока нет каталога (задача 2.2) — тест красный
+    // по причине «нет правила».
+    test('reports Flutter in features/terminal/application/', () {
+      const dir = 'apps/codelab_desktop/lib/features/terminal/application';
+      final tmp = tmpDesktop('guard_term_flutter_', {
+        'features/terminal/application/terminal_tabs_cubit.dart':
+            "import 'package:flutter/foundation.dart';\n"
+            "import 'package:flutter/widgets.dart';\n",
+        'features/terminal/application/terminal_tab.dart':
+            "import 'package:xterm2_core/xterm2_core.dart';\n",
+      });
+
+      final violations = scan(
+        tmp.path,
+        desktopRuleFor(
+          'package:flutter/',
+          ruleDir: dir,
+          scanDir: 'lib/features/terminal/application',
+        ),
+      );
+
+      expect(violations, hasLength(2), reason: violations.join('\n'));
+      expect(violations, everyElement(contains('terminal_tabs_cubit.dart')));
+    });
+
+    // Задача 2.0 (D11, правило 5; D3, «ZModem выключен»): `xterm.dart`
+    // реэкспортирует `zmodem.dart`, поэтому запрещены и сам пакет, и оба пути;
+    // presentation берёт виджеты из `package:xterm2/ui.dart`.
+    test('reports zmodem and the xterm2 entry points that re-export it', () {
+      final tmp = tmpDesktop('guard_term_zmodem_', {
+        'features/terminal/presentation/a.dart':
+            "import 'package:zmodem/zmodem.dart';\n",
+        'features/terminal/presentation/b.dart':
+            "import 'package:xterm2/xterm.dart';\n",
+        'features/terminal/presentation/c.dart':
+            "import 'package:xterm2/zmodem.dart';\n",
+        'features/terminal/presentation/ok.dart':
+            "import 'package:xterm2/ui.dart';\n",
+        'core/platform/d.dart': "import 'package:zmodem/zmodem.dart';\n",
+      });
+
+      final violations = scan(tmp.path, desktopRuleFor('package:zmodem/'));
+
+      expect(violations, hasLength(4), reason: violations.join('\n'));
+      expect(
+        violations,
+        containsAll([
+          endsWith('presentation/a.dart:1 -> package:zmodem/zmodem.dart'),
+          endsWith('presentation/b.dart:1 -> package:xterm2/xterm.dart'),
+          endsWith('presentation/c.dart:1 -> package:xterm2/zmodem.dart'),
+          endsWith('core/platform/d.dart:1 -> package:zmodem/zmodem.dart'),
+        ]),
+      );
+      expect(violations, isNot(contains(contains('ok.dart'))));
+    });
+
+    test(
+      'allows package:xterm2/ui.dart in features/terminal/presentation/',
+      () {
+        final tmp = tmpDesktop('guard_term_ui_', {
+          'features/terminal/presentation/terminal_pane.dart':
+              "import 'package:xterm2/ui.dart';\n",
+        });
+
+        expect(scan(tmp.path, desktopRuleFor('package:zmodem/')), isEmpty);
+        expect(scan(tmp.path, desktopRuleFor('package:xterm2/')), isEmpty);
+      },
+    );
+  });
+
+  // Markdown в ленте desktop (design.md change `add-desktop-markdown`, D2,
+  // D10): парсер и подсветка живут только в `codelab_ui/lib/src/rendering/`,
+  // Material/Cupertino и их производные запрещены в kit и app, а открытие
+  // внешних ссылок - только в `lib/core/platform/` app.
+  //
+  // Прогоняет все правила, чей `dir` - [ruleDir], на временном дереве
+  // [files] (путь относительно `lib/` -> содержимое) и возвращает нарушения.
+  List<String> scanMarkdownRules(String ruleDir, Map<String, String> files) {
+    final tmp = Directory.systemTemp.createTempSync('guard_markdown_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    files.forEach((path, content) {
+      File(p.join(tmp.path, 'lib', path))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(content);
+    });
+    final matched = rules.where((r) => r.dir == ruleDir).toList();
+    expect(matched, isNotEmpty, reason: 'нет правил для $ruleDir');
+    return [
+      for (final rule in matched)
+        ...scan(
+          tmp.path,
+          PackageRule(
+            'lib',
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+  }
+
+  test('allows the markdown parser and highlighter only in the rendering '
+      'layer of codelab_ui', () {
+    final violations = scanMarkdownRules('packages/flutter/codelab_ui/lib', {
+      'src/rendering/markdown.dart':
+          "import 'package:gpt_markdown/gpt_markdown.dart';\n"
+          "import 'package:val_highlight/val_highlight.dart';\n",
+      'src/feed/row.dart':
+          "import 'package:gpt_markdown/gpt_markdown.dart';\n"
+          "import 'package:val_highlight/val_highlight.dart';\n",
+    });
+
+    expect(
+      violations,
+      unorderedEquals([
+        endsWith(
+          'lib/src/feed/row.dart:1 -> package:gpt_markdown/gpt_markdown.dart',
+        ),
+        endsWith(
+          'lib/src/feed/row.dart:2 -> package:val_highlight/val_highlight.dart',
+        ),
+      ]),
+    );
+  });
+
+  test('forbids Material, Cupertino, highlight/latex widgets and SVG in '
+      'codelab_ui and the desktop app, even in the rendering layer', () {
+    const import =
+        "import 'package:material_ui/material_ui.dart';\n"
+        "import 'package:cupertino_ui/cupertino_ui.dart';\n"
+        "import 'package:val_highlight_flutter/val_highlight_flutter.dart';\n"
+        "import 'package:val_latex_flutter/val_latex_flutter.dart';\n"
+        "import 'package:flutter_svg/flutter_svg.dart';\n";
+    for (final dir in [
+      'packages/flutter/codelab_ui/lib',
+      'apps/codelab_desktop/lib',
+    ]) {
+      final violations = scanMarkdownRules(dir, {
+        'src/rendering/code_block.dart': import,
+        'features/x.dart': import,
+      });
+
+      expect(
+        violations,
+        hasLength(10),
+        reason: '$dir:\n${violations.join('\n')}',
+      );
+      expect(
+        violations,
+        containsAll([
+          endsWith(
+            'rendering/code_block.dart:1 -> package:material_ui/material_ui.dart',
+          ),
+          endsWith(
+            'rendering/code_block.dart:5 -> package:flutter_svg/flutter_svg.dart',
+          ),
+        ]),
+        reason: dir,
+      );
+    }
+  });
+
+  test('does not mistake val_highlight_flutter for the allowed '
+      'val_highlight in the rendering layer', () {
+    final violations = scanMarkdownRules('packages/flutter/codelab_ui/lib', {
+      'src/rendering/a.dart':
+          "import 'package:val_highlight/val_highlight.dart';\n"
+          "import 'package:val_highlight_flutter/val_highlight_flutter.dart';\n",
+    });
+
+    expect(violations.single, contains('package:val_highlight_flutter/'));
+  });
+
+  test('allows url_launcher only in the platform layer of the desktop app', () {
+    final violations = scanMarkdownRules('apps/codelab_desktop/lib', {
+      'core/platform/external_link_opener.dart':
+          "import 'package:url_launcher/url_launcher.dart';\n",
+      'features/workbench/link.dart':
+          "import 'package:url_launcher/url_launcher.dart';\n",
+    });
+
+    expect(
+      violations.single,
+      endsWith(
+        'features/workbench/link.dart:1 -> '
+        'package:url_launcher/url_launcher.dart',
+      ),
+    );
+  });
+
+  // Панель Files: чтение файлов — дело `ProjectFiles` kit и `IoProjectFiles`,
+  // а feature в app не знает `dart:io` (design.md change
+  // `add-file-preview-and-tree`, D10).
+  test('reports dart:io imported by the project files feature of the app', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_files_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'application', 'project_files_cubit.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("import 'dart:io';\n");
+    final rule = rules.singleWhere(
+      (r) => r.dir == 'apps/codelab_desktop/lib/features/project_files',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    expect(violations, hasLength(1), reason: violations.join('\n'));
+    expect(violations.single, endsWith('-> dart:io'));
   });
 }

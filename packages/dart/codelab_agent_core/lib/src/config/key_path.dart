@@ -54,7 +54,20 @@ int editDistance(String a, String b) {
   return previous[b.length];
 }
 
-/// Ближайший ключ с расстоянием ≤ 2 или `null`.
+/// Ближайший к [key] из [candidates] ключ для подсказки «did you mean».
+///
+/// Почему отдельная публичная функция: опечатку в ключе объясняют одним
+/// способом и валидатор ядра (неизвестный ключ файла), и хост, который сам
+/// разбирает вход вне схемы (предконфигурация провайдера
+/// `CODELAB_PROVIDER_CONFIG`, design.md change
+/// `add-config-writer-and-reload`, D3). Две копии расходились бы.
+///
+/// Для чего: порог расстояния Левенштейна ([editDistance]) не больше 2; дальше
+/// догадка вводила бы в заблуждение. При равенстве выигрывает первый
+/// кандидат.
+///
+/// Как использовать: `nearestKey('contex_window', fields)` — имя для текста
+/// `unknown key (did you mean <имя>?)`; `null` — подсказки нет, текст без неё.
 String? nearestKey(String key, Iterable<String> candidates) {
   String? best;
   var bestDistance = 3;
@@ -129,4 +142,94 @@ bool samePath(String a, String b) {
     }
   }
   return true;
+}
+
+/// Сегмент разобранного пути ключа: имя или выбор элемента списка.
+///
+/// Почему запись: `[github]` у `mcp.servers` — не ключ отображения, а выбор
+/// элемента по имени (или по номеру), и читатель пути обязан отличать их от
+/// сегмента `"[github]"` в кавычках (§15.4; design.md change
+/// `add-config-writer-and-reload`, D5).
+typedef KeyPathSegment = ({String value, bool isElement});
+
+/// Разбирает путь ключа, как его пишет [KeyPath]: сегменты через точку,
+/// сегмент в кавычках — одно имя (точка и двоеточие внутри не делят его),
+/// `[имя]` или `[n]` после сегмента — элемент списка.
+///
+/// Почему отдельная функция: реестр настроек (`lookup`) и
+/// `ConfigSnapshot.get` читают один и тот же формат, и две копии разбора
+/// расходились бы на ключах моделей вида `"qwen2.5-coder-32b"`.
+///
+/// Путь приходит от пользователя (`config set <key>`), поэтому разбор строгий
+/// и возвращает `null` для пустого пути, пустого сегмента (`a..b`, `.a`,
+/// `a.`), незакрытой кавычки или скобки, пустого `[]` и текста сразу после
+/// закрывающей кавычки или скобки: молча «починенный» путь указал бы на
+/// другой ключ, чем написал человек.
+List<KeyPathSegment>? splitKeyPath(String path) {
+  final out = <KeyPathSegment>[];
+  final buffer = StringBuffer();
+  // Сегмент начат (есть текст, кавычки или он следует за точкой).
+  var pending = false;
+  // Предыдущий символ закрыл кавычку или скобку: дальше только `.` или `[`.
+  var closed = false;
+
+  bool flush() {
+    if (!pending) {
+      // Пустой сегмент допустим только сразу после `]`.
+      return closed;
+    }
+    out.add((value: buffer.toString(), isElement: false));
+    buffer.clear();
+    pending = false;
+    return true;
+  }
+
+  for (var i = 0; i < path.length; i++) {
+    final char = path[i];
+    if (char == '"') {
+      if (buffer.isNotEmpty || pending || closed) {
+        return null;
+      }
+      final end = path.indexOf('"', i + 1);
+      if (end < 0) {
+        return null;
+      }
+      buffer.write(path.substring(i + 1, end));
+      pending = true;
+      closed = true;
+      i = end;
+    } else if (char == '.') {
+      if (!flush()) {
+        return null;
+      }
+      closed = false;
+      // После точки обязан идти сегмент: `a.` — ошибка.
+      if (i == path.length - 1) {
+        return null;
+      }
+    } else if (char == '[') {
+      if (pending) {
+        flush();
+      } else if (out.isEmpty) {
+        return null;
+      }
+      final end = path.indexOf(']', i);
+      if (end < 0 || end == i + 1) {
+        return null;
+      }
+      out.add((value: path.substring(i + 1, end), isElement: true));
+      closed = true;
+      i = end;
+    } else {
+      if (closed) {
+        return null;
+      }
+      buffer.write(char);
+      pending = true;
+    }
+  }
+  if (pending) {
+    flush();
+  }
+  return out.isEmpty ? null : out;
 }

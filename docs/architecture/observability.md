@@ -628,9 +628,32 @@ permissions
 platform
 persistence
 ui
+terminal
 ```
 
 Это помогает фильтровать diagnostics.
+
+`terminal` — панель Terminal десктопа (терминал пользователя; change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D9), логгер `codelab_desktop.terminal`. Ввод и вывод терминала **не логируются вовсе**: их нет в журнале, `LogBuffer`, debug log, пересылке логов, диагностике рабочего места и инспекторе. Редакция секретов (§13–§14) к ним не применяется, потому что редактировать нечего — содержимое не покидает экран. События — только метаданные:
+
+* `terminal.tab_opened` — `tab_id`, `session_id` (сессия-владелец вкладки, корреляционный идентификатор §16 `AGENTS.md`), `shell` (базовое имя исполняемого файла), `columns`, `rows`; остальные события ссылаются на вкладку по `tab_id`;
+* `terminal.tab_exited` — `tab_id`, `exit_code` (поля нет, если PTY-бэкенд кода не сообщил);
+* `terminal.tab_closed` — `tab_id`, `forced` (понадобился ли `kill` — и при закрытии вкладки, и при выходе из app);
+* `terminal.start_failed` — `tab_id`, `reason` — вариант ошибки старта (`shellNotFound`, `folderNotFound`, `ptyUnavailable`); для неожиданной ошибки — `reason: ptyUnavailable` и `error_type` (`runtimeType`) без текста и стека: текст `Error` может содержать путь;
+* `terminal.exit_wait_failed` — `tab_id`, `error_type` — имя типа ошибки ожидания выхода (`exitCode` порта завершился ошибкой; вкладка становится «exited» без кода);
+* `terminal.link_opened`, `terminal.link_refused` — только `scheme` (схема адреса ссылки OSC 8), без адреса; `link_refused` — и для запрещённой схемы, и для адреса с bidi, нулевой шириной или управляющими символами;
+* `terminal.close_all` — `count`, `forced`;
+* `terminal.signal_failed` — `tab_id`, `signal` (`hangup` или `kill`), `error_type`: сигнал вкладке бросил исключение, закрытие остальных продолжается;
+* `app.exit_requested` (компонент `app`) — ОС запросила выход, без полей;
+* `app.exit_close_failed` (компонент `app`) — `error_type`: закрытие при выходе бросило целиком, выход не отменяется;
+* `app.exit_closed` (компонент `app`) — `duration_ms`: закрытие root scope при выходе уложилось в предел;
+* `app.exit_timeout` (компонент `app`, `warning`) — `timeout_ms`, `pending` (имена всех незавершённых шагов, в том числе не начатых, из закрытого набора `terminal`, `cubits`, `workspace`, `embedded`, `migration_offer`, `transport`, `client`): предел выхода истёк, app всё равно выходит;
+* `app.shutdown_step_failed` (компонент `app`, `error`) — `step`, `error_type`: шаг закрытия root scope бросил, следующие шаги выполняются.
+
+События `app.exit_*` и `app.shutdown_step_failed` — change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D6. Ядро клиента пишет `terminal_processes_killed` — `count`, `reason` (`connection_closed` | `dispose`), без команд, путей и идентификаторов терминалов; событие пишется после отправки сигналов, сбой журнала не мешает завершению процессов. Ответ на `terminal/*`, не отправленный из-за смены соединения или закрытия ядра, виден как `event_ignored {reason: stale_generation, kind}` (`kind`: `terminal_create_result` или `terminal_response`; §20, D15 change).
+
+Уведомление `_codelab/session/usage` (change `add-usage-extension`, D14, D21 Т5, D22): клиентский слой `codelab_client_acp` пишет DEBUG `usage.received` — `session_id`, `seq`, `trigger` (только `step`, `turn` или `compaction`, любое другое значение — `other`; без токенов и денег; payload — только в трассировке `category=protocol`) и DEBUG `usage.dropped` — `reason` (уведомление без строкового `sessionId` отброшено до ядра клиента; без payload). Ядро клиента (`ClientWorkspace`, необязательный `Logger`) пишет DEBUG `usage.stale` — `session_id`, `seq`, `last_seq`, `connection_generation` (дубль или опоздание по правилу `seq`), DEBUG `usage.unknown_session` — `session_id`, `connection_generation` (снимок сессии, которой нет в рабочем пространстве) и WARNING `usage.decode_failed` — `session_id`, `field`, `reason`, `connection_generation`, не чаще раза на сессию и поле. Сумм, цен и текста уведомления в записях нет.
+
+Путей, окружения, аргументов и `toString()` исключений в них нет (§43–§45).
 
 ---
 
@@ -713,6 +736,8 @@ shutdown_completed
 ```
 
 Это помогает находить orphan resources.
+
+В CodeLab desktop эту роль играют `app.exit_requested` (shutdown_started), `terminal.close_all` и `terminal_processes_killed` (процессы закрыты), `embedded.close_timeout` и `app.exit_closed` / `app.exit_timeout {pending}` (shutdown_completed или что не успело); см. события компонента `app` выше.
 
 ---
 

@@ -12,7 +12,11 @@ void main() {
       layer(
         withValues(baseValues(), {
           'loop': {'empty_response_retries': 3},
-          'skills': {'max_skills': 100},
+          'skills': {
+            'operative': {
+              'lines': ['x'],
+            },
+          },
           'redact': {'enabled': true},
         }),
         source: '/h/config.yaml',
@@ -25,7 +29,11 @@ void main() {
     final warnings = warningsOf(result, 'config.key.not_applied');
     expect(
       [for (final w in warnings) w.key],
-      ['loop.empty_response_retries', 'skills.max_skills', 'redact.enabled'],
+      [
+        'loop.empty_response_retries',
+        'skills.operative.lines',
+        'redact.enabled',
+      ],
     );
     expect(warnings.first.source, '/h/config.yaml');
     expect(warnings.first.fields, {

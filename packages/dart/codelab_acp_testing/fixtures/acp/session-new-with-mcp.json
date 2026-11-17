@@ -70,10 +70,14 @@
             "read",
             "write",
             "edit",
-            "update_plan",
+            "task_create",
+            "task_update",
+            "task_list",
+            "task_get",
             "exec",
             "ls",
             "search",
+            "agent",
             "mcp__fake__echo",
             "mcp__old__echo"
           ]

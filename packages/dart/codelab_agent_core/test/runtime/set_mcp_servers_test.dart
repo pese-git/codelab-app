@@ -8,7 +8,18 @@ import '../mcp/fake_mcp_connector.dart';
 import '../permissions/fake_gate.dart';
 import '../tools/fake_tools.dart';
 
-const _base = ['read', 'write', 'edit', 'update_plan', 'ls', 'search'];
+const _base = [
+  'read',
+  'write',
+  'edit',
+  'task_create',
+  'task_update',
+  'task_list',
+  'task_get',
+  'ls',
+  'search',
+  'agent',
+];
 
 FakeTool _mcpTool(
   String name, {
@@ -167,7 +178,11 @@ void main() {
 
       expect(names(mcp.requests.single.servers), ['a']);
       expect(mcp.requests.single.cwd, '/proj');
-      expect(mcp.requests.single.reservedNames, _base.toSet());
+      // В зарезервированных именах — базовый реестр без `agent` (D36 Т5).
+      expect(
+        mcp.requests.single.reservedNames,
+        _base.where((n) => n != 'agent').toSet(),
+      );
       h.model.verify();
     });
 

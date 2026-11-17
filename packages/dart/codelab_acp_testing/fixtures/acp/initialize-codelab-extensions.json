@@ -1,0 +1,116 @@
+{
+  "id": "acp/initialize-codelab-extensions",
+  "spec": [
+    "02-Initialization.md#client-capabilities",
+    "02-Initialization.md#agent-capabilities",
+    "15-Extensibility.md#advertising-custom-capabilities",
+    "15-Extensibility.md#the-_meta-field"
+  ],
+  "description": "Редакция итерации 5 (change add-subagents-and-tasks, задачи 5.1, 5.2 и 5.4) с ключом usage в ответе агента (change add-usage-extension, итерация 1, D3, D18 Т8; кадр клиента с usage — задача 2.7, D21 Т7): клиент CodeLab объявляет в clientCapabilities._meta.codelab расширения tasks, subagents, subagentToolCalls и usage (согласие получать вызовы потомков деревом; клиентский прогон зеленеет с задачей 5.4); агент с включёнными субагентами (subagents.enabled, max_depth 3 по умолчанию) отвечает теми же полями, что в acp/initialize-capabilities, и блоком agentCapabilities._meta.codelab {subagents: {version: 1, maxDepth: 3}, subagentToolCalls: {version: 1}, tasks: {version: 1}, usage: {version: 1}}: адаптер умеет проецировать вызовы потомков (agent-acp-server «Клиент CodeLab объявил расширения, дерево вызовов (итерация 5)»; D9, D21, D36 Т12, D37, D45 Т9, D47 Т8).",
+  "goals": [
+    "C-20",
+    "C-05"
+  ],
+  "extensions": [
+    "capabilities",
+    "usage"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "skipInitialize": true
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "клиент объявляет fs, terminal и расширения CodeLab tasks, subagents, subagentToolCalls и usage (D9, D21 Т7)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "initializeId"
+        },
+        "method": "initialize",
+        "params": {
+          "$partial": {
+            "protocolVersion": 1,
+            "clientCapabilities": {
+              "fs": {
+                "readTextFile": true,
+                "writeTextFile": true
+              },
+              "terminal": true,
+              "_meta": {
+                "codelab": {
+                  "tasks": {
+                    "version": 1
+                  },
+                  "subagents": {
+                    "version": 1
+                  },
+                  "subagentToolCalls": {
+                    "version": 1
+                  },
+                  "usage": {
+                    "version": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ — как в acp/initialize-capabilities плюс блок объявлений агента: subagents с maxDepth — эффективной глубиной, то есть max_depth: 3 (вложенность итерации 4, D45 Т9), и subagentToolCalls — агент проецирует вызовы потомков (итерация 5, D47 Т12); usage — расширение учёта токенов и стоимости, агент объявляет его всегда (D3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${initializeId}",
+        "result": {
+          "protocolVersion": 1,
+          "agentCapabilities": {
+            "loadSession": true,
+            "promptCapabilities": {
+              "image": true,
+              "audio": false,
+              "embeddedContext": true
+            },
+            "mcpCapabilities": {
+              "http": true,
+              "sse": false
+            },
+            "sessionCapabilities": {
+              "list": {}
+            },
+            "_meta": {
+              "codelab": {
+                "subagents": {
+                  "version": 1,
+                  "maxDepth": 3
+                },
+                "subagentToolCalls": {
+                  "version": 1
+                },
+                "tasks": {
+                  "version": 1
+                },
+                "usage": {
+                  "version": 1
+                }
+              }
+            }
+          },
+          "agentInfo": {
+            "name": "codelab-agent",
+            "title": "CodeLab Agent",
+            "version": {
+              "$any": "0.1.0"
+            }
+          },
+          "authMethods": []
+        }
+      }
+    }
+  ]
+}

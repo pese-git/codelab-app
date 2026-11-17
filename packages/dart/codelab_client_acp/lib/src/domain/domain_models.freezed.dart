@@ -1210,7 +1210,12 @@ as String,cause: freezed == cause ? _self.cause : cause ,
 /// @nodoc
 mixin _$PromptTurn {
 
- PromptTurnId get id; SessionId get sessionId; List<ContentBlock> get prompt; PromptTurnStatus get status; StopReason? get stopReason; List<SessionUpdate> get updates; Map<ToolCallId, ToolCallRecord> get toolCalls; Map<ApprovalRequestId, ApprovalRequest> get approvals; String? get failureMessage;/// Типизированная причина сбоя хода; заполнена вместе с
+ PromptTurnId get id; SessionId get sessionId; List<ContentBlock> get prompt; PromptTurnStatus get status; StopReason? get stopReason;/// Лимит, из-за которого агент остановил ход при `max_turn_requests`
+/// (`_meta.codelab.budgetExceeded` ответа `session/prompt`): открытое
+/// множество строк — `steps`, `tokens`, `cost`, `duration`, `deadline` и
+/// будущие. `null` — причины нет (сторонний агент, другой `stopReason`,
+/// значение не строка). Change `add-usage-extension`, D10, D21 Т3.
+ String? get budgetExceeded; List<SessionUpdate> get updates; Map<ToolCallId, ToolCallRecord> get toolCalls; Map<ApprovalRequestId, ApprovalRequest> get approvals; String? get failureMessage;/// Типизированная причина сбоя хода; заполнена вместе с
 /// [failureMessage] (design D2 change `add-connection-and-error-states`).
  PromptFailure? get failure; DateTime? get startedAt; DateTime? get completedAt;
 /// Create a copy of PromptTurn
@@ -1223,16 +1228,16 @@ $PromptTurnCopyWith<PromptTurn> get copyWith => _$PromptTurnCopyWithImpl<PromptT
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PromptTurn&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&const DeepCollectionEquality().equals(other.prompt, prompt)&&(identical(other.status, status) || other.status == status)&&(identical(other.stopReason, stopReason) || other.stopReason == stopReason)&&const DeepCollectionEquality().equals(other.updates, updates)&&const DeepCollectionEquality().equals(other.toolCalls, toolCalls)&&const DeepCollectionEquality().equals(other.approvals, approvals)&&(identical(other.failureMessage, failureMessage) || other.failureMessage == failureMessage)&&(identical(other.failure, failure) || other.failure == failure)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PromptTurn&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&const DeepCollectionEquality().equals(other.prompt, prompt)&&(identical(other.status, status) || other.status == status)&&(identical(other.stopReason, stopReason) || other.stopReason == stopReason)&&(identical(other.budgetExceeded, budgetExceeded) || other.budgetExceeded == budgetExceeded)&&const DeepCollectionEquality().equals(other.updates, updates)&&const DeepCollectionEquality().equals(other.toolCalls, toolCalls)&&const DeepCollectionEquality().equals(other.approvals, approvals)&&(identical(other.failureMessage, failureMessage) || other.failureMessage == failureMessage)&&(identical(other.failure, failure) || other.failure == failure)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,sessionId,const DeepCollectionEquality().hash(prompt),status,stopReason,const DeepCollectionEquality().hash(updates),const DeepCollectionEquality().hash(toolCalls),const DeepCollectionEquality().hash(approvals),failureMessage,failure,startedAt,completedAt);
+int get hashCode => Object.hash(runtimeType,id,sessionId,const DeepCollectionEquality().hash(prompt),status,stopReason,budgetExceeded,const DeepCollectionEquality().hash(updates),const DeepCollectionEquality().hash(toolCalls),const DeepCollectionEquality().hash(approvals),failureMessage,failure,startedAt,completedAt);
 
 @override
 String toString() {
-  return 'PromptTurn(id: $id, sessionId: $sessionId, prompt: $prompt, status: $status, stopReason: $stopReason, updates: $updates, toolCalls: $toolCalls, approvals: $approvals, failureMessage: $failureMessage, failure: $failure, startedAt: $startedAt, completedAt: $completedAt)';
+  return 'PromptTurn(id: $id, sessionId: $sessionId, prompt: $prompt, status: $status, stopReason: $stopReason, budgetExceeded: $budgetExceeded, updates: $updates, toolCalls: $toolCalls, approvals: $approvals, failureMessage: $failureMessage, failure: $failure, startedAt: $startedAt, completedAt: $completedAt)';
 }
 
 
@@ -1243,7 +1248,7 @@ abstract mixin class $PromptTurnCopyWith<$Res>  {
   factory $PromptTurnCopyWith(PromptTurn value, $Res Function(PromptTurn) _then) = _$PromptTurnCopyWithImpl;
 @useResult
 $Res call({
- PromptTurnId id, SessionId sessionId, List<ContentBlock> prompt, PromptTurnStatus status, StopReason? stopReason, List<SessionUpdate> updates, Map<ToolCallId, ToolCallRecord> toolCalls, Map<ApprovalRequestId, ApprovalRequest> approvals, String? failureMessage, PromptFailure? failure, DateTime? startedAt, DateTime? completedAt
+ PromptTurnId id, SessionId sessionId, List<ContentBlock> prompt, PromptTurnStatus status, StopReason? stopReason, String? budgetExceeded, List<SessionUpdate> updates, Map<ToolCallId, ToolCallRecord> toolCalls, Map<ApprovalRequestId, ApprovalRequest> approvals, String? failureMessage, PromptFailure? failure, DateTime? startedAt, DateTime? completedAt
 });
 
 
@@ -1260,14 +1265,15 @@ class _$PromptTurnCopyWithImpl<$Res>
 
 /// Create a copy of PromptTurn
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? sessionId = null,Object? prompt = null,Object? status = null,Object? stopReason = freezed,Object? updates = null,Object? toolCalls = null,Object? approvals = null,Object? failureMessage = freezed,Object? failure = freezed,Object? startedAt = freezed,Object? completedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? sessionId = null,Object? prompt = null,Object? status = null,Object? stopReason = freezed,Object? budgetExceeded = freezed,Object? updates = null,Object? toolCalls = null,Object? approvals = null,Object? failureMessage = freezed,Object? failure = freezed,Object? startedAt = freezed,Object? completedAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as PromptTurnId,sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
 as SessionId,prompt: null == prompt ? _self.prompt : prompt // ignore: cast_nullable_to_non_nullable
 as List<ContentBlock>,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as PromptTurnStatus,stopReason: freezed == stopReason ? _self.stopReason : stopReason // ignore: cast_nullable_to_non_nullable
-as StopReason?,updates: null == updates ? _self.updates : updates // ignore: cast_nullable_to_non_nullable
+as StopReason?,budgetExceeded: freezed == budgetExceeded ? _self.budgetExceeded : budgetExceeded // ignore: cast_nullable_to_non_nullable
+as String?,updates: null == updates ? _self.updates : updates // ignore: cast_nullable_to_non_nullable
 as List<SessionUpdate>,toolCalls: null == toolCalls ? _self.toolCalls : toolCalls // ignore: cast_nullable_to_non_nullable
 as Map<ToolCallId, ToolCallRecord>,approvals: null == approvals ? _self.approvals : approvals // ignore: cast_nullable_to_non_nullable
 as Map<ApprovalRequestId, ApprovalRequest>,failureMessage: freezed == failureMessage ? _self.failureMessage : failureMessage // ignore: cast_nullable_to_non_nullable
@@ -1386,10 +1392,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  PromptFailure? failure,  DateTime? startedAt,  DateTime? completedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  String? budgetExceeded,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  PromptFailure? failure,  DateTime? startedAt,  DateTime? completedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _PromptTurn() when $default != null:
-return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.failure,_that.startedAt,_that.completedAt);case _:
+return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.budgetExceeded,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.failure,_that.startedAt,_that.completedAt);case _:
   return orElse();
 
 }
@@ -1407,10 +1413,10 @@ return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopRea
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  PromptFailure? failure,  DateTime? startedAt,  DateTime? completedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  String? budgetExceeded,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  PromptFailure? failure,  DateTime? startedAt,  DateTime? completedAt)  $default,) {final _that = this;
 switch (_that) {
 case _PromptTurn():
-return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.failure,_that.startedAt,_that.completedAt);}
+return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.budgetExceeded,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.failure,_that.startedAt,_that.completedAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -1424,10 +1430,10 @@ return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopRea
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  PromptFailure? failure,  DateTime? startedAt,  DateTime? completedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( PromptTurnId id,  SessionId sessionId,  List<ContentBlock> prompt,  PromptTurnStatus status,  StopReason? stopReason,  String? budgetExceeded,  List<SessionUpdate> updates,  Map<ToolCallId, ToolCallRecord> toolCalls,  Map<ApprovalRequestId, ApprovalRequest> approvals,  String? failureMessage,  PromptFailure? failure,  DateTime? startedAt,  DateTime? completedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _PromptTurn() when $default != null:
-return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.failure,_that.startedAt,_that.completedAt);case _:
+return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopReason,_that.budgetExceeded,_that.updates,_that.toolCalls,_that.approvals,_that.failureMessage,_that.failure,_that.startedAt,_that.completedAt);case _:
   return null;
 
 }
@@ -1439,7 +1445,7 @@ return $default(_that.id,_that.sessionId,_that.prompt,_that.status,_that.stopRea
 
 
 class _PromptTurn extends PromptTurn {
-  const _PromptTurn({required this.id, required this.sessionId, required final  List<ContentBlock> prompt, this.status = PromptTurnStatus.pending, this.stopReason, final  List<SessionUpdate> updates = const [], final  Map<ToolCallId, ToolCallRecord> toolCalls = const {}, final  Map<ApprovalRequestId, ApprovalRequest> approvals = const {}, this.failureMessage, this.failure, this.startedAt, this.completedAt}): _prompt = prompt,_updates = updates,_toolCalls = toolCalls,_approvals = approvals,super._();
+  const _PromptTurn({required this.id, required this.sessionId, required final  List<ContentBlock> prompt, this.status = PromptTurnStatus.pending, this.stopReason, this.budgetExceeded, final  List<SessionUpdate> updates = const [], final  Map<ToolCallId, ToolCallRecord> toolCalls = const {}, final  Map<ApprovalRequestId, ApprovalRequest> approvals = const {}, this.failureMessage, this.failure, this.startedAt, this.completedAt}): _prompt = prompt,_updates = updates,_toolCalls = toolCalls,_approvals = approvals,super._();
   
 
 @override final  PromptTurnId id;
@@ -1453,6 +1459,12 @@ class _PromptTurn extends PromptTurn {
 
 @override@JsonKey() final  PromptTurnStatus status;
 @override final  StopReason? stopReason;
+/// Лимит, из-за которого агент остановил ход при `max_turn_requests`
+/// (`_meta.codelab.budgetExceeded` ответа `session/prompt`): открытое
+/// множество строк — `steps`, `tokens`, `cost`, `duration`, `deadline` и
+/// будущие. `null` — причины нет (сторонний агент, другой `stopReason`,
+/// значение не строка). Change `add-usage-extension`, D10, D21 Т3.
+@override final  String? budgetExceeded;
  final  List<SessionUpdate> _updates;
 @override@JsonKey() List<SessionUpdate> get updates {
   if (_updates is EqualUnmodifiableListView) return _updates;
@@ -1491,16 +1503,16 @@ _$PromptTurnCopyWith<_PromptTurn> get copyWith => __$PromptTurnCopyWithImpl<_Pro
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PromptTurn&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&const DeepCollectionEquality().equals(other._prompt, _prompt)&&(identical(other.status, status) || other.status == status)&&(identical(other.stopReason, stopReason) || other.stopReason == stopReason)&&const DeepCollectionEquality().equals(other._updates, _updates)&&const DeepCollectionEquality().equals(other._toolCalls, _toolCalls)&&const DeepCollectionEquality().equals(other._approvals, _approvals)&&(identical(other.failureMessage, failureMessage) || other.failureMessage == failureMessage)&&(identical(other.failure, failure) || other.failure == failure)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PromptTurn&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&const DeepCollectionEquality().equals(other._prompt, _prompt)&&(identical(other.status, status) || other.status == status)&&(identical(other.stopReason, stopReason) || other.stopReason == stopReason)&&(identical(other.budgetExceeded, budgetExceeded) || other.budgetExceeded == budgetExceeded)&&const DeepCollectionEquality().equals(other._updates, _updates)&&const DeepCollectionEquality().equals(other._toolCalls, _toolCalls)&&const DeepCollectionEquality().equals(other._approvals, _approvals)&&(identical(other.failureMessage, failureMessage) || other.failureMessage == failureMessage)&&(identical(other.failure, failure) || other.failure == failure)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,sessionId,const DeepCollectionEquality().hash(_prompt),status,stopReason,const DeepCollectionEquality().hash(_updates),const DeepCollectionEquality().hash(_toolCalls),const DeepCollectionEquality().hash(_approvals),failureMessage,failure,startedAt,completedAt);
+int get hashCode => Object.hash(runtimeType,id,sessionId,const DeepCollectionEquality().hash(_prompt),status,stopReason,budgetExceeded,const DeepCollectionEquality().hash(_updates),const DeepCollectionEquality().hash(_toolCalls),const DeepCollectionEquality().hash(_approvals),failureMessage,failure,startedAt,completedAt);
 
 @override
 String toString() {
-  return 'PromptTurn(id: $id, sessionId: $sessionId, prompt: $prompt, status: $status, stopReason: $stopReason, updates: $updates, toolCalls: $toolCalls, approvals: $approvals, failureMessage: $failureMessage, failure: $failure, startedAt: $startedAt, completedAt: $completedAt)';
+  return 'PromptTurn(id: $id, sessionId: $sessionId, prompt: $prompt, status: $status, stopReason: $stopReason, budgetExceeded: $budgetExceeded, updates: $updates, toolCalls: $toolCalls, approvals: $approvals, failureMessage: $failureMessage, failure: $failure, startedAt: $startedAt, completedAt: $completedAt)';
 }
 
 
@@ -1511,7 +1523,7 @@ abstract mixin class _$PromptTurnCopyWith<$Res> implements $PromptTurnCopyWith<$
   factory _$PromptTurnCopyWith(_PromptTurn value, $Res Function(_PromptTurn) _then) = __$PromptTurnCopyWithImpl;
 @override @useResult
 $Res call({
- PromptTurnId id, SessionId sessionId, List<ContentBlock> prompt, PromptTurnStatus status, StopReason? stopReason, List<SessionUpdate> updates, Map<ToolCallId, ToolCallRecord> toolCalls, Map<ApprovalRequestId, ApprovalRequest> approvals, String? failureMessage, PromptFailure? failure, DateTime? startedAt, DateTime? completedAt
+ PromptTurnId id, SessionId sessionId, List<ContentBlock> prompt, PromptTurnStatus status, StopReason? stopReason, String? budgetExceeded, List<SessionUpdate> updates, Map<ToolCallId, ToolCallRecord> toolCalls, Map<ApprovalRequestId, ApprovalRequest> approvals, String? failureMessage, PromptFailure? failure, DateTime? startedAt, DateTime? completedAt
 });
 
 
@@ -1528,14 +1540,15 @@ class __$PromptTurnCopyWithImpl<$Res>
 
 /// Create a copy of PromptTurn
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? sessionId = null,Object? prompt = null,Object? status = null,Object? stopReason = freezed,Object? updates = null,Object? toolCalls = null,Object? approvals = null,Object? failureMessage = freezed,Object? failure = freezed,Object? startedAt = freezed,Object? completedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? sessionId = null,Object? prompt = null,Object? status = null,Object? stopReason = freezed,Object? budgetExceeded = freezed,Object? updates = null,Object? toolCalls = null,Object? approvals = null,Object? failureMessage = freezed,Object? failure = freezed,Object? startedAt = freezed,Object? completedAt = freezed,}) {
   return _then(_PromptTurn(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as PromptTurnId,sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
 as SessionId,prompt: null == prompt ? _self._prompt : prompt // ignore: cast_nullable_to_non_nullable
 as List<ContentBlock>,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as PromptTurnStatus,stopReason: freezed == stopReason ? _self.stopReason : stopReason // ignore: cast_nullable_to_non_nullable
-as StopReason?,updates: null == updates ? _self._updates : updates // ignore: cast_nullable_to_non_nullable
+as StopReason?,budgetExceeded: freezed == budgetExceeded ? _self.budgetExceeded : budgetExceeded // ignore: cast_nullable_to_non_nullable
+as String?,updates: null == updates ? _self._updates : updates // ignore: cast_nullable_to_non_nullable
 as List<SessionUpdate>,toolCalls: null == toolCalls ? _self._toolCalls : toolCalls // ignore: cast_nullable_to_non_nullable
 as Map<ToolCallId, ToolCallRecord>,approvals: null == approvals ? _self._approvals : approvals // ignore: cast_nullable_to_non_nullable
 as Map<ApprovalRequestId, ApprovalRequest>,failureMessage: freezed == failureMessage ? _self.failureMessage : failureMessage // ignore: cast_nullable_to_non_nullable
@@ -1582,10 +1595,18 @@ $PromptFailureCopyWith<$Res>? get failure {
 /// @nodoc
 mixin _$ApprovalRequest {
 
- ApprovalRequestId get id; SessionId get sessionId; PromptTurnId get turnId; ToolCallRecord get toolCall; List<PermissionOption> get options; ApprovalRiskLevel get riskLevel;/// Агент пометил запрос `_meta.codelab.critical: true` (в запросе или
+ ApprovalRequestId get id; SessionId get sessionId; PromptTurnId get turnId; ToolCallRecord get toolCall; List<PermissionOption> get options;/// Без классификации вид неизвестен — как у `kind` по умолчанию (`other`):
+/// безопасное значение по умолчанию требует явного одобрения (D27).
+ ApprovalRiskLevel get riskLevel;/// Агент пометил запрос `_meta.codelab.critical: true` (в запросе или
 /// в его `toolCall`): опасная команда, которую headless-политика
 /// `allow-all` не разрешает (design.md change `add-codelab-cli`, D9).
- bool get critical; ApprovalStatus get status; PermissionOptionId? get selectedOptionId; DateTime? get requestedAt; DateTime? get resolvedAt;
+ bool get critical;/// `_meta.codelab.subagent` `toolCall` запроса: спрашивает потомок, а не
+/// корень (D8, D43 п. 1). Хранится отдельно от
+/// `ToolCallRecord.subagentMeta`: тот же ключ в кадре вызова `agent`
+/// описывает сам вызов, и слияние сделало бы `exec` потомка «вызовом
+/// agent». Значения не проверяются (терпимый разбор — в
+/// `codelab_client_core`); `null` — запрос корня или стороннего агента.
+ Map<String, Object?>? get subagentRequester; ApprovalStatus get status; PermissionOptionId? get selectedOptionId; DateTime? get requestedAt; DateTime? get resolvedAt;
 /// Create a copy of ApprovalRequest
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1596,16 +1617,16 @@ $ApprovalRequestCopyWith<ApprovalRequest> get copyWith => _$ApprovalRequestCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ApprovalRequest&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.turnId, turnId) || other.turnId == turnId)&&(identical(other.toolCall, toolCall) || other.toolCall == toolCall)&&const DeepCollectionEquality().equals(other.options, options)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&(identical(other.critical, critical) || other.critical == critical)&&(identical(other.status, status) || other.status == status)&&(identical(other.selectedOptionId, selectedOptionId) || other.selectedOptionId == selectedOptionId)&&(identical(other.requestedAt, requestedAt) || other.requestedAt == requestedAt)&&(identical(other.resolvedAt, resolvedAt) || other.resolvedAt == resolvedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ApprovalRequest&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.turnId, turnId) || other.turnId == turnId)&&(identical(other.toolCall, toolCall) || other.toolCall == toolCall)&&const DeepCollectionEquality().equals(other.options, options)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&(identical(other.critical, critical) || other.critical == critical)&&const DeepCollectionEquality().equals(other.subagentRequester, subagentRequester)&&(identical(other.status, status) || other.status == status)&&(identical(other.selectedOptionId, selectedOptionId) || other.selectedOptionId == selectedOptionId)&&(identical(other.requestedAt, requestedAt) || other.requestedAt == requestedAt)&&(identical(other.resolvedAt, resolvedAt) || other.resolvedAt == resolvedAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,sessionId,turnId,toolCall,const DeepCollectionEquality().hash(options),riskLevel,critical,status,selectedOptionId,requestedAt,resolvedAt);
+int get hashCode => Object.hash(runtimeType,id,sessionId,turnId,toolCall,const DeepCollectionEquality().hash(options),riskLevel,critical,const DeepCollectionEquality().hash(subagentRequester),status,selectedOptionId,requestedAt,resolvedAt);
 
 @override
 String toString() {
-  return 'ApprovalRequest(id: $id, sessionId: $sessionId, turnId: $turnId, toolCall: $toolCall, options: $options, riskLevel: $riskLevel, critical: $critical, status: $status, selectedOptionId: $selectedOptionId, requestedAt: $requestedAt, resolvedAt: $resolvedAt)';
+  return 'ApprovalRequest(id: $id, sessionId: $sessionId, turnId: $turnId, toolCall: $toolCall, options: $options, riskLevel: $riskLevel, critical: $critical, subagentRequester: $subagentRequester, status: $status, selectedOptionId: $selectedOptionId, requestedAt: $requestedAt, resolvedAt: $resolvedAt)';
 }
 
 
@@ -1616,7 +1637,7 @@ abstract mixin class $ApprovalRequestCopyWith<$Res>  {
   factory $ApprovalRequestCopyWith(ApprovalRequest value, $Res Function(ApprovalRequest) _then) = _$ApprovalRequestCopyWithImpl;
 @useResult
 $Res call({
- ApprovalRequestId id, SessionId sessionId, PromptTurnId turnId, ToolCallRecord toolCall, List<PermissionOption> options, ApprovalRiskLevel riskLevel, bool critical, ApprovalStatus status, PermissionOptionId? selectedOptionId, DateTime? requestedAt, DateTime? resolvedAt
+ ApprovalRequestId id, SessionId sessionId, PromptTurnId turnId, ToolCallRecord toolCall, List<PermissionOption> options, ApprovalRiskLevel riskLevel, bool critical, Map<String, Object?>? subagentRequester, ApprovalStatus status, PermissionOptionId? selectedOptionId, DateTime? requestedAt, DateTime? resolvedAt
 });
 
 
@@ -1633,7 +1654,7 @@ class _$ApprovalRequestCopyWithImpl<$Res>
 
 /// Create a copy of ApprovalRequest
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? sessionId = null,Object? turnId = null,Object? toolCall = null,Object? options = null,Object? riskLevel = null,Object? critical = null,Object? status = null,Object? selectedOptionId = freezed,Object? requestedAt = freezed,Object? resolvedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? sessionId = null,Object? turnId = null,Object? toolCall = null,Object? options = null,Object? riskLevel = null,Object? critical = null,Object? subagentRequester = freezed,Object? status = null,Object? selectedOptionId = freezed,Object? requestedAt = freezed,Object? resolvedAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as ApprovalRequestId,sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
@@ -1642,7 +1663,8 @@ as PromptTurnId,toolCall: null == toolCall ? _self.toolCall : toolCall // ignore
 as ToolCallRecord,options: null == options ? _self.options : options // ignore: cast_nullable_to_non_nullable
 as List<PermissionOption>,riskLevel: null == riskLevel ? _self.riskLevel : riskLevel // ignore: cast_nullable_to_non_nullable
 as ApprovalRiskLevel,critical: null == critical ? _self.critical : critical // ignore: cast_nullable_to_non_nullable
-as bool,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
+as bool,subagentRequester: freezed == subagentRequester ? _self.subagentRequester : subagentRequester // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as ApprovalStatus,selectedOptionId: freezed == selectedOptionId ? _self.selectedOptionId : selectedOptionId // ignore: cast_nullable_to_non_nullable
 as PermissionOptionId?,requestedAt: freezed == requestedAt ? _self.requestedAt : requestedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,resolvedAt: freezed == resolvedAt ? _self.resolvedAt : resolvedAt // ignore: cast_nullable_to_non_nullable
@@ -1776,10 +1798,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( ApprovalRequestId id,  SessionId sessionId,  PromptTurnId turnId,  ToolCallRecord toolCall,  List<PermissionOption> options,  ApprovalRiskLevel riskLevel,  bool critical,  ApprovalStatus status,  PermissionOptionId? selectedOptionId,  DateTime? requestedAt,  DateTime? resolvedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( ApprovalRequestId id,  SessionId sessionId,  PromptTurnId turnId,  ToolCallRecord toolCall,  List<PermissionOption> options,  ApprovalRiskLevel riskLevel,  bool critical,  Map<String, Object?>? subagentRequester,  ApprovalStatus status,  PermissionOptionId? selectedOptionId,  DateTime? requestedAt,  DateTime? resolvedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ApprovalRequest() when $default != null:
-return $default(_that.id,_that.sessionId,_that.turnId,_that.toolCall,_that.options,_that.riskLevel,_that.critical,_that.status,_that.selectedOptionId,_that.requestedAt,_that.resolvedAt);case _:
+return $default(_that.id,_that.sessionId,_that.turnId,_that.toolCall,_that.options,_that.riskLevel,_that.critical,_that.subagentRequester,_that.status,_that.selectedOptionId,_that.requestedAt,_that.resolvedAt);case _:
   return orElse();
 
 }
@@ -1797,10 +1819,10 @@ return $default(_that.id,_that.sessionId,_that.turnId,_that.toolCall,_that.optio
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( ApprovalRequestId id,  SessionId sessionId,  PromptTurnId turnId,  ToolCallRecord toolCall,  List<PermissionOption> options,  ApprovalRiskLevel riskLevel,  bool critical,  ApprovalStatus status,  PermissionOptionId? selectedOptionId,  DateTime? requestedAt,  DateTime? resolvedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( ApprovalRequestId id,  SessionId sessionId,  PromptTurnId turnId,  ToolCallRecord toolCall,  List<PermissionOption> options,  ApprovalRiskLevel riskLevel,  bool critical,  Map<String, Object?>? subagentRequester,  ApprovalStatus status,  PermissionOptionId? selectedOptionId,  DateTime? requestedAt,  DateTime? resolvedAt)  $default,) {final _that = this;
 switch (_that) {
 case _ApprovalRequest():
-return $default(_that.id,_that.sessionId,_that.turnId,_that.toolCall,_that.options,_that.riskLevel,_that.critical,_that.status,_that.selectedOptionId,_that.requestedAt,_that.resolvedAt);}
+return $default(_that.id,_that.sessionId,_that.turnId,_that.toolCall,_that.options,_that.riskLevel,_that.critical,_that.subagentRequester,_that.status,_that.selectedOptionId,_that.requestedAt,_that.resolvedAt);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -1814,10 +1836,10 @@ return $default(_that.id,_that.sessionId,_that.turnId,_that.toolCall,_that.optio
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( ApprovalRequestId id,  SessionId sessionId,  PromptTurnId turnId,  ToolCallRecord toolCall,  List<PermissionOption> options,  ApprovalRiskLevel riskLevel,  bool critical,  ApprovalStatus status,  PermissionOptionId? selectedOptionId,  DateTime? requestedAt,  DateTime? resolvedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( ApprovalRequestId id,  SessionId sessionId,  PromptTurnId turnId,  ToolCallRecord toolCall,  List<PermissionOption> options,  ApprovalRiskLevel riskLevel,  bool critical,  Map<String, Object?>? subagentRequester,  ApprovalStatus status,  PermissionOptionId? selectedOptionId,  DateTime? requestedAt,  DateTime? resolvedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _ApprovalRequest() when $default != null:
-return $default(_that.id,_that.sessionId,_that.turnId,_that.toolCall,_that.options,_that.riskLevel,_that.critical,_that.status,_that.selectedOptionId,_that.requestedAt,_that.resolvedAt);case _:
+return $default(_that.id,_that.sessionId,_that.turnId,_that.toolCall,_that.options,_that.riskLevel,_that.critical,_that.subagentRequester,_that.status,_that.selectedOptionId,_that.requestedAt,_that.resolvedAt);case _:
   return null;
 
 }
@@ -1829,7 +1851,7 @@ return $default(_that.id,_that.sessionId,_that.turnId,_that.toolCall,_that.optio
 
 
 class _ApprovalRequest extends ApprovalRequest {
-  const _ApprovalRequest({required this.id, required this.sessionId, required this.turnId, required this.toolCall, required final  List<PermissionOption> options, this.riskLevel = ApprovalRiskLevel.readOnly, this.critical = false, this.status = ApprovalStatus.pending, this.selectedOptionId, this.requestedAt, this.resolvedAt}): _options = options,super._();
+  const _ApprovalRequest({required this.id, required this.sessionId, required this.turnId, required this.toolCall, required final  List<PermissionOption> options, this.riskLevel = ApprovalRiskLevel.unknown, this.critical = false, final  Map<String, Object?>? subagentRequester, this.status = ApprovalStatus.pending, this.selectedOptionId, this.requestedAt, this.resolvedAt}): _options = options,_subagentRequester = subagentRequester,super._();
   
 
 @override final  ApprovalRequestId id;
@@ -1843,11 +1865,34 @@ class _ApprovalRequest extends ApprovalRequest {
   return EqualUnmodifiableListView(_options);
 }
 
+/// Без классификации вид неизвестен — как у `kind` по умолчанию (`other`):
+/// безопасное значение по умолчанию требует явного одобрения (D27).
 @override@JsonKey() final  ApprovalRiskLevel riskLevel;
 /// Агент пометил запрос `_meta.codelab.critical: true` (в запросе или
 /// в его `toolCall`): опасная команда, которую headless-политика
 /// `allow-all` не разрешает (design.md change `add-codelab-cli`, D9).
 @override@JsonKey() final  bool critical;
+/// `_meta.codelab.subagent` `toolCall` запроса: спрашивает потомок, а не
+/// корень (D8, D43 п. 1). Хранится отдельно от
+/// `ToolCallRecord.subagentMeta`: тот же ключ в кадре вызова `agent`
+/// описывает сам вызов, и слияние сделало бы `exec` потомка «вызовом
+/// agent». Значения не проверяются (терпимый разбор — в
+/// `codelab_client_core`); `null` — запрос корня или стороннего агента.
+ final  Map<String, Object?>? _subagentRequester;
+/// `_meta.codelab.subagent` `toolCall` запроса: спрашивает потомок, а не
+/// корень (D8, D43 п. 1). Хранится отдельно от
+/// `ToolCallRecord.subagentMeta`: тот же ключ в кадре вызова `agent`
+/// описывает сам вызов, и слияние сделало бы `exec` потомка «вызовом
+/// agent». Значения не проверяются (терпимый разбор — в
+/// `codelab_client_core`); `null` — запрос корня или стороннего агента.
+@override Map<String, Object?>? get subagentRequester {
+  final value = _subagentRequester;
+  if (value == null) return null;
+  if (_subagentRequester is EqualUnmodifiableMapView) return _subagentRequester;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(value);
+}
+
 @override@JsonKey() final  ApprovalStatus status;
 @override final  PermissionOptionId? selectedOptionId;
 @override final  DateTime? requestedAt;
@@ -1863,16 +1908,16 @@ _$ApprovalRequestCopyWith<_ApprovalRequest> get copyWith => __$ApprovalRequestCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ApprovalRequest&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.turnId, turnId) || other.turnId == turnId)&&(identical(other.toolCall, toolCall) || other.toolCall == toolCall)&&const DeepCollectionEquality().equals(other._options, _options)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&(identical(other.critical, critical) || other.critical == critical)&&(identical(other.status, status) || other.status == status)&&(identical(other.selectedOptionId, selectedOptionId) || other.selectedOptionId == selectedOptionId)&&(identical(other.requestedAt, requestedAt) || other.requestedAt == requestedAt)&&(identical(other.resolvedAt, resolvedAt) || other.resolvedAt == resolvedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ApprovalRequest&&(identical(other.id, id) || other.id == id)&&(identical(other.sessionId, sessionId) || other.sessionId == sessionId)&&(identical(other.turnId, turnId) || other.turnId == turnId)&&(identical(other.toolCall, toolCall) || other.toolCall == toolCall)&&const DeepCollectionEquality().equals(other._options, _options)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&(identical(other.critical, critical) || other.critical == critical)&&const DeepCollectionEquality().equals(other._subagentRequester, _subagentRequester)&&(identical(other.status, status) || other.status == status)&&(identical(other.selectedOptionId, selectedOptionId) || other.selectedOptionId == selectedOptionId)&&(identical(other.requestedAt, requestedAt) || other.requestedAt == requestedAt)&&(identical(other.resolvedAt, resolvedAt) || other.resolvedAt == resolvedAt));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,sessionId,turnId,toolCall,const DeepCollectionEquality().hash(_options),riskLevel,critical,status,selectedOptionId,requestedAt,resolvedAt);
+int get hashCode => Object.hash(runtimeType,id,sessionId,turnId,toolCall,const DeepCollectionEquality().hash(_options),riskLevel,critical,const DeepCollectionEquality().hash(_subagentRequester),status,selectedOptionId,requestedAt,resolvedAt);
 
 @override
 String toString() {
-  return 'ApprovalRequest(id: $id, sessionId: $sessionId, turnId: $turnId, toolCall: $toolCall, options: $options, riskLevel: $riskLevel, critical: $critical, status: $status, selectedOptionId: $selectedOptionId, requestedAt: $requestedAt, resolvedAt: $resolvedAt)';
+  return 'ApprovalRequest(id: $id, sessionId: $sessionId, turnId: $turnId, toolCall: $toolCall, options: $options, riskLevel: $riskLevel, critical: $critical, subagentRequester: $subagentRequester, status: $status, selectedOptionId: $selectedOptionId, requestedAt: $requestedAt, resolvedAt: $resolvedAt)';
 }
 
 
@@ -1883,7 +1928,7 @@ abstract mixin class _$ApprovalRequestCopyWith<$Res> implements $ApprovalRequest
   factory _$ApprovalRequestCopyWith(_ApprovalRequest value, $Res Function(_ApprovalRequest) _then) = __$ApprovalRequestCopyWithImpl;
 @override @useResult
 $Res call({
- ApprovalRequestId id, SessionId sessionId, PromptTurnId turnId, ToolCallRecord toolCall, List<PermissionOption> options, ApprovalRiskLevel riskLevel, bool critical, ApprovalStatus status, PermissionOptionId? selectedOptionId, DateTime? requestedAt, DateTime? resolvedAt
+ ApprovalRequestId id, SessionId sessionId, PromptTurnId turnId, ToolCallRecord toolCall, List<PermissionOption> options, ApprovalRiskLevel riskLevel, bool critical, Map<String, Object?>? subagentRequester, ApprovalStatus status, PermissionOptionId? selectedOptionId, DateTime? requestedAt, DateTime? resolvedAt
 });
 
 
@@ -1900,7 +1945,7 @@ class __$ApprovalRequestCopyWithImpl<$Res>
 
 /// Create a copy of ApprovalRequest
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? sessionId = null,Object? turnId = null,Object? toolCall = null,Object? options = null,Object? riskLevel = null,Object? critical = null,Object? status = null,Object? selectedOptionId = freezed,Object? requestedAt = freezed,Object? resolvedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? sessionId = null,Object? turnId = null,Object? toolCall = null,Object? options = null,Object? riskLevel = null,Object? critical = null,Object? subagentRequester = freezed,Object? status = null,Object? selectedOptionId = freezed,Object? requestedAt = freezed,Object? resolvedAt = freezed,}) {
   return _then(_ApprovalRequest(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as ApprovalRequestId,sessionId: null == sessionId ? _self.sessionId : sessionId // ignore: cast_nullable_to_non_nullable
@@ -1909,7 +1954,8 @@ as PromptTurnId,toolCall: null == toolCall ? _self.toolCall : toolCall // ignore
 as ToolCallRecord,options: null == options ? _self._options : options // ignore: cast_nullable_to_non_nullable
 as List<PermissionOption>,riskLevel: null == riskLevel ? _self.riskLevel : riskLevel // ignore: cast_nullable_to_non_nullable
 as ApprovalRiskLevel,critical: null == critical ? _self.critical : critical // ignore: cast_nullable_to_non_nullable
-as bool,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
+as bool,subagentRequester: freezed == subagentRequester ? _self._subagentRequester : subagentRequester // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as ApprovalStatus,selectedOptionId: freezed == selectedOptionId ? _self.selectedOptionId : selectedOptionId // ignore: cast_nullable_to_non_nullable
 as PermissionOptionId?,requestedAt: freezed == requestedAt ? _self.requestedAt : requestedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,resolvedAt: freezed == resolvedAt ? _self.resolvedAt : resolvedAt // ignore: cast_nullable_to_non_nullable
@@ -1971,10 +2017,26 @@ $PermissionOptionIdCopyWith<$Res>? get selectedOptionId {
 /// @nodoc
 mixin _$ToolCallRecord {
 
- ToolCallId get id; String get title; ToolKind get kind; ToolCallStatus get status; ApprovalRiskLevel get riskLevel; List<ToolCallContent> get content; List<ToolCallLocation> get locations; Map<String, Object?>? get rawInput; Map<String, Object?>? get rawOutput;/// The call was unfinished when the client sent `session/cancel`. ACP
+ ToolCallId get id; String get title; ToolKind get kind; ToolCallStatus get status;/// Согласовано с `kind` по умолчанию (`other`) и `_riskForKind` (D27).
+ ApprovalRiskLevel get riskLevel; List<ToolCallContent> get content; List<ToolCallLocation> get locations; Map<String, Object?>? get rawInput; Map<String, Object?>? get rawOutput;/// The call was unfinished when the client sent `session/cancel`. ACP
 /// has no `cancelled` tool call status, so such a call is kept as
 /// [ToolCallStatus.failed] with this flag set.
- bool get cancelledByClient; DateTime? get startedAt; DateTime? get completedAt;
+ bool get cancelledByClient; DateTime? get startedAt; DateTime? get completedAt;/// `_meta.codelab.subagent` вызова `agent`, накопленный по кадрам: первый
+/// `tool_call` даёт `{id, type}`, финальное обновление — `summary` или
+/// `failure` (design.md change `add-subagents-and-tasks`, D24, D28).
+/// Значения не проверяются: терпимый разбор — у kit
+/// (`codelab_client_core`); `null` — вызов без признака (сторонний агент).
+ Map<String, Object?>? get subagentMeta;/// `_meta.codelab.outcome` последнего кадра, где он был: признак агента,
+/// как закончился неуспешный вызов (`cancelled`, `rejected`,
+/// `interrupted`, неизвестное). Снимается итоговым `completed`; поздний
+/// кадр без признака его не стирает (spec acp-client-kit «Отмена по
+/// признаку агента», design.md D41 п. 1). Значение не проверяется:
+/// терпимый разбор — у kit.
+ String? get outcome;/// `_meta.codelab.parentToolCallId` кадров `tool_call`/`tool_call_update` —
+/// id вызова родителя на проводе (design.md change
+/// `add-subagents-and-tasks`, D21, D47 Т9); `null` — вызов корня.
+/// Поздний кадр без поля родителя не стирает его (как `outcome`).
+ String? get parentToolCallId;
 /// Create a copy of ToolCallRecord
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1985,16 +2047,16 @@ $ToolCallRecordCopyWith<ToolCallRecord> get copyWith => _$ToolCallRecordCopyWith
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ToolCallRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.status, status) || other.status == status)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&const DeepCollectionEquality().equals(other.content, content)&&const DeepCollectionEquality().equals(other.locations, locations)&&const DeepCollectionEquality().equals(other.rawInput, rawInput)&&const DeepCollectionEquality().equals(other.rawOutput, rawOutput)&&(identical(other.cancelledByClient, cancelledByClient) || other.cancelledByClient == cancelledByClient)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ToolCallRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.status, status) || other.status == status)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&const DeepCollectionEquality().equals(other.content, content)&&const DeepCollectionEquality().equals(other.locations, locations)&&const DeepCollectionEquality().equals(other.rawInput, rawInput)&&const DeepCollectionEquality().equals(other.rawOutput, rawOutput)&&(identical(other.cancelledByClient, cancelledByClient) || other.cancelledByClient == cancelledByClient)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt)&&const DeepCollectionEquality().equals(other.subagentMeta, subagentMeta)&&(identical(other.outcome, outcome) || other.outcome == outcome)&&(identical(other.parentToolCallId, parentToolCallId) || other.parentToolCallId == parentToolCallId));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,title,kind,status,riskLevel,const DeepCollectionEquality().hash(content),const DeepCollectionEquality().hash(locations),const DeepCollectionEquality().hash(rawInput),const DeepCollectionEquality().hash(rawOutput),cancelledByClient,startedAt,completedAt);
+int get hashCode => Object.hash(runtimeType,id,title,kind,status,riskLevel,const DeepCollectionEquality().hash(content),const DeepCollectionEquality().hash(locations),const DeepCollectionEquality().hash(rawInput),const DeepCollectionEquality().hash(rawOutput),cancelledByClient,startedAt,completedAt,const DeepCollectionEquality().hash(subagentMeta),outcome,parentToolCallId);
 
 @override
 String toString() {
-  return 'ToolCallRecord(id: $id, title: $title, kind: $kind, status: $status, riskLevel: $riskLevel, content: $content, locations: $locations, rawInput: $rawInput, rawOutput: $rawOutput, cancelledByClient: $cancelledByClient, startedAt: $startedAt, completedAt: $completedAt)';
+  return 'ToolCallRecord(id: $id, title: $title, kind: $kind, status: $status, riskLevel: $riskLevel, content: $content, locations: $locations, rawInput: $rawInput, rawOutput: $rawOutput, cancelledByClient: $cancelledByClient, startedAt: $startedAt, completedAt: $completedAt, subagentMeta: $subagentMeta, outcome: $outcome, parentToolCallId: $parentToolCallId)';
 }
 
 
@@ -2005,7 +2067,7 @@ abstract mixin class $ToolCallRecordCopyWith<$Res>  {
   factory $ToolCallRecordCopyWith(ToolCallRecord value, $Res Function(ToolCallRecord) _then) = _$ToolCallRecordCopyWithImpl;
 @useResult
 $Res call({
- ToolCallId id, String title, ToolKind kind, ToolCallStatus status, ApprovalRiskLevel riskLevel, List<ToolCallContent> content, List<ToolCallLocation> locations, Map<String, Object?>? rawInput, Map<String, Object?>? rawOutput, bool cancelledByClient, DateTime? startedAt, DateTime? completedAt
+ ToolCallId id, String title, ToolKind kind, ToolCallStatus status, ApprovalRiskLevel riskLevel, List<ToolCallContent> content, List<ToolCallLocation> locations, Map<String, Object?>? rawInput, Map<String, Object?>? rawOutput, bool cancelledByClient, DateTime? startedAt, DateTime? completedAt, Map<String, Object?>? subagentMeta, String? outcome, String? parentToolCallId
 });
 
 
@@ -2022,7 +2084,7 @@ class _$ToolCallRecordCopyWithImpl<$Res>
 
 /// Create a copy of ToolCallRecord
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? kind = null,Object? status = null,Object? riskLevel = null,Object? content = null,Object? locations = null,Object? rawInput = freezed,Object? rawOutput = freezed,Object? cancelledByClient = null,Object? startedAt = freezed,Object? completedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? kind = null,Object? status = null,Object? riskLevel = null,Object? content = null,Object? locations = null,Object? rawInput = freezed,Object? rawOutput = freezed,Object? cancelledByClient = null,Object? startedAt = freezed,Object? completedAt = freezed,Object? subagentMeta = freezed,Object? outcome = freezed,Object? parentToolCallId = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as ToolCallId,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
@@ -2036,7 +2098,10 @@ as Map<String, Object?>?,rawOutput: freezed == rawOutput ? _self.rawOutput : raw
 as Map<String, Object?>?,cancelledByClient: null == cancelledByClient ? _self.cancelledByClient : cancelledByClient // ignore: cast_nullable_to_non_nullable
 as bool,startedAt: freezed == startedAt ? _self.startedAt : startedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,completedAt: freezed == completedAt ? _self.completedAt : completedAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,
+as DateTime?,subagentMeta: freezed == subagentMeta ? _self.subagentMeta : subagentMeta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,outcome: freezed == outcome ? _self.outcome : outcome // ignore: cast_nullable_to_non_nullable
+as String?,parentToolCallId: freezed == parentToolCallId ? _self.parentToolCallId : parentToolCallId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 /// Create a copy of ToolCallRecord
@@ -2127,10 +2192,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt,  Map<String, Object?>? subagentMeta,  String? outcome,  String? parentToolCallId)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ToolCallRecord() when $default != null:
-return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt);case _:
+return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt,_that.subagentMeta,_that.outcome,_that.parentToolCallId);case _:
   return orElse();
 
 }
@@ -2148,10 +2213,10 @@ return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_th
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt,  Map<String, Object?>? subagentMeta,  String? outcome,  String? parentToolCallId)  $default,) {final _that = this;
 switch (_that) {
 case _ToolCallRecord():
-return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt);}
+return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt,_that.subagentMeta,_that.outcome,_that.parentToolCallId);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -2165,10 +2230,10 @@ return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_th
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( ToolCallId id,  String title,  ToolKind kind,  ToolCallStatus status,  ApprovalRiskLevel riskLevel,  List<ToolCallContent> content,  List<ToolCallLocation> locations,  Map<String, Object?>? rawInput,  Map<String, Object?>? rawOutput,  bool cancelledByClient,  DateTime? startedAt,  DateTime? completedAt,  Map<String, Object?>? subagentMeta,  String? outcome,  String? parentToolCallId)?  $default,) {final _that = this;
 switch (_that) {
 case _ToolCallRecord() when $default != null:
-return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt);case _:
+return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_that.content,_that.locations,_that.rawInput,_that.rawOutput,_that.cancelledByClient,_that.startedAt,_that.completedAt,_that.subagentMeta,_that.outcome,_that.parentToolCallId);case _:
   return null;
 
 }
@@ -2180,13 +2245,14 @@ return $default(_that.id,_that.title,_that.kind,_that.status,_that.riskLevel,_th
 
 
 class _ToolCallRecord extends ToolCallRecord {
-  const _ToolCallRecord({required this.id, required this.title, this.kind = ToolKind.other, this.status = ToolCallStatus.pending, this.riskLevel = ApprovalRiskLevel.readOnly, final  List<ToolCallContent> content = const [], final  List<ToolCallLocation> locations = const [], final  Map<String, Object?>? rawInput, final  Map<String, Object?>? rawOutput, this.cancelledByClient = false, this.startedAt, this.completedAt}): _content = content,_locations = locations,_rawInput = rawInput,_rawOutput = rawOutput,super._();
+  const _ToolCallRecord({required this.id, required this.title, this.kind = ToolKind.other, this.status = ToolCallStatus.pending, this.riskLevel = ApprovalRiskLevel.unknown, final  List<ToolCallContent> content = const [], final  List<ToolCallLocation> locations = const [], final  Map<String, Object?>? rawInput, final  Map<String, Object?>? rawOutput, this.cancelledByClient = false, this.startedAt, this.completedAt, final  Map<String, Object?>? subagentMeta, this.outcome, this.parentToolCallId}): _content = content,_locations = locations,_rawInput = rawInput,_rawOutput = rawOutput,_subagentMeta = subagentMeta,super._();
   
 
 @override final  ToolCallId id;
 @override final  String title;
 @override@JsonKey() final  ToolKind kind;
 @override@JsonKey() final  ToolCallStatus status;
+/// Согласовано с `kind` по умолчанию (`other`) и `_riskForKind` (D27).
 @override@JsonKey() final  ApprovalRiskLevel riskLevel;
  final  List<ToolCallContent> _content;
 @override@JsonKey() List<ToolCallContent> get content {
@@ -2226,6 +2292,37 @@ class _ToolCallRecord extends ToolCallRecord {
 @override@JsonKey() final  bool cancelledByClient;
 @override final  DateTime? startedAt;
 @override final  DateTime? completedAt;
+/// `_meta.codelab.subagent` вызова `agent`, накопленный по кадрам: первый
+/// `tool_call` даёт `{id, type}`, финальное обновление — `summary` или
+/// `failure` (design.md change `add-subagents-and-tasks`, D24, D28).
+/// Значения не проверяются: терпимый разбор — у kit
+/// (`codelab_client_core`); `null` — вызов без признака (сторонний агент).
+ final  Map<String, Object?>? _subagentMeta;
+/// `_meta.codelab.subagent` вызова `agent`, накопленный по кадрам: первый
+/// `tool_call` даёт `{id, type}`, финальное обновление — `summary` или
+/// `failure` (design.md change `add-subagents-and-tasks`, D24, D28).
+/// Значения не проверяются: терпимый разбор — у kit
+/// (`codelab_client_core`); `null` — вызов без признака (сторонний агент).
+@override Map<String, Object?>? get subagentMeta {
+  final value = _subagentMeta;
+  if (value == null) return null;
+  if (_subagentMeta is EqualUnmodifiableMapView) return _subagentMeta;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(value);
+}
+
+/// `_meta.codelab.outcome` последнего кадра, где он был: признак агента,
+/// как закончился неуспешный вызов (`cancelled`, `rejected`,
+/// `interrupted`, неизвестное). Снимается итоговым `completed`; поздний
+/// кадр без признака его не стирает (spec acp-client-kit «Отмена по
+/// признаку агента», design.md D41 п. 1). Значение не проверяется:
+/// терпимый разбор — у kit.
+@override final  String? outcome;
+/// `_meta.codelab.parentToolCallId` кадров `tool_call`/`tool_call_update` —
+/// id вызова родителя на проводе (design.md change
+/// `add-subagents-and-tasks`, D21, D47 Т9); `null` — вызов корня.
+/// Поздний кадр без поля родителя не стирает его (как `outcome`).
+@override final  String? parentToolCallId;
 
 /// Create a copy of ToolCallRecord
 /// with the given fields replaced by the non-null parameter values.
@@ -2237,16 +2334,16 @@ _$ToolCallRecordCopyWith<_ToolCallRecord> get copyWith => __$ToolCallRecordCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ToolCallRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.status, status) || other.status == status)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&const DeepCollectionEquality().equals(other._content, _content)&&const DeepCollectionEquality().equals(other._locations, _locations)&&const DeepCollectionEquality().equals(other._rawInput, _rawInput)&&const DeepCollectionEquality().equals(other._rawOutput, _rawOutput)&&(identical(other.cancelledByClient, cancelledByClient) || other.cancelledByClient == cancelledByClient)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ToolCallRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.status, status) || other.status == status)&&(identical(other.riskLevel, riskLevel) || other.riskLevel == riskLevel)&&const DeepCollectionEquality().equals(other._content, _content)&&const DeepCollectionEquality().equals(other._locations, _locations)&&const DeepCollectionEquality().equals(other._rawInput, _rawInput)&&const DeepCollectionEquality().equals(other._rawOutput, _rawOutput)&&(identical(other.cancelledByClient, cancelledByClient) || other.cancelledByClient == cancelledByClient)&&(identical(other.startedAt, startedAt) || other.startedAt == startedAt)&&(identical(other.completedAt, completedAt) || other.completedAt == completedAt)&&const DeepCollectionEquality().equals(other._subagentMeta, _subagentMeta)&&(identical(other.outcome, outcome) || other.outcome == outcome)&&(identical(other.parentToolCallId, parentToolCallId) || other.parentToolCallId == parentToolCallId));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,title,kind,status,riskLevel,const DeepCollectionEquality().hash(_content),const DeepCollectionEquality().hash(_locations),const DeepCollectionEquality().hash(_rawInput),const DeepCollectionEquality().hash(_rawOutput),cancelledByClient,startedAt,completedAt);
+int get hashCode => Object.hash(runtimeType,id,title,kind,status,riskLevel,const DeepCollectionEquality().hash(_content),const DeepCollectionEquality().hash(_locations),const DeepCollectionEquality().hash(_rawInput),const DeepCollectionEquality().hash(_rawOutput),cancelledByClient,startedAt,completedAt,const DeepCollectionEquality().hash(_subagentMeta),outcome,parentToolCallId);
 
 @override
 String toString() {
-  return 'ToolCallRecord(id: $id, title: $title, kind: $kind, status: $status, riskLevel: $riskLevel, content: $content, locations: $locations, rawInput: $rawInput, rawOutput: $rawOutput, cancelledByClient: $cancelledByClient, startedAt: $startedAt, completedAt: $completedAt)';
+  return 'ToolCallRecord(id: $id, title: $title, kind: $kind, status: $status, riskLevel: $riskLevel, content: $content, locations: $locations, rawInput: $rawInput, rawOutput: $rawOutput, cancelledByClient: $cancelledByClient, startedAt: $startedAt, completedAt: $completedAt, subagentMeta: $subagentMeta, outcome: $outcome, parentToolCallId: $parentToolCallId)';
 }
 
 
@@ -2257,7 +2354,7 @@ abstract mixin class _$ToolCallRecordCopyWith<$Res> implements $ToolCallRecordCo
   factory _$ToolCallRecordCopyWith(_ToolCallRecord value, $Res Function(_ToolCallRecord) _then) = __$ToolCallRecordCopyWithImpl;
 @override @useResult
 $Res call({
- ToolCallId id, String title, ToolKind kind, ToolCallStatus status, ApprovalRiskLevel riskLevel, List<ToolCallContent> content, List<ToolCallLocation> locations, Map<String, Object?>? rawInput, Map<String, Object?>? rawOutput, bool cancelledByClient, DateTime? startedAt, DateTime? completedAt
+ ToolCallId id, String title, ToolKind kind, ToolCallStatus status, ApprovalRiskLevel riskLevel, List<ToolCallContent> content, List<ToolCallLocation> locations, Map<String, Object?>? rawInput, Map<String, Object?>? rawOutput, bool cancelledByClient, DateTime? startedAt, DateTime? completedAt, Map<String, Object?>? subagentMeta, String? outcome, String? parentToolCallId
 });
 
 
@@ -2274,7 +2371,7 @@ class __$ToolCallRecordCopyWithImpl<$Res>
 
 /// Create a copy of ToolCallRecord
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? kind = null,Object? status = null,Object? riskLevel = null,Object? content = null,Object? locations = null,Object? rawInput = freezed,Object? rawOutput = freezed,Object? cancelledByClient = null,Object? startedAt = freezed,Object? completedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? kind = null,Object? status = null,Object? riskLevel = null,Object? content = null,Object? locations = null,Object? rawInput = freezed,Object? rawOutput = freezed,Object? cancelledByClient = null,Object? startedAt = freezed,Object? completedAt = freezed,Object? subagentMeta = freezed,Object? outcome = freezed,Object? parentToolCallId = freezed,}) {
   return _then(_ToolCallRecord(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as ToolCallId,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
@@ -2288,7 +2385,10 @@ as Map<String, Object?>?,rawOutput: freezed == rawOutput ? _self._rawOutput : ra
 as Map<String, Object?>?,cancelledByClient: null == cancelledByClient ? _self.cancelledByClient : cancelledByClient // ignore: cast_nullable_to_non_nullable
 as bool,startedAt: freezed == startedAt ? _self.startedAt : startedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,completedAt: freezed == completedAt ? _self.completedAt : completedAt // ignore: cast_nullable_to_non_nullable
-as DateTime?,
+as DateTime?,subagentMeta: freezed == subagentMeta ? _self._subagentMeta : subagentMeta // ignore: cast_nullable_to_non_nullable
+as Map<String, Object?>?,outcome: freezed == outcome ? _self.outcome : outcome // ignore: cast_nullable_to_non_nullable
+as String?,parentToolCallId: freezed == parentToolCallId ? _self.parentToolCallId : parentToolCallId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

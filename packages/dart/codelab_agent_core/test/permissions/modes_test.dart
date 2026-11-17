@@ -36,6 +36,8 @@ void main() {
 
     test('an unknown candidate never fits, an unknown floor admits nothing '
         '(fail-closed)', () {
+      // agent-definitions «Неизвестный режим»: пол `standard` из сценария.
+      expect(unknown.fitsFloor(ModeId.standard), isFalse);
       expect(unknown.fitsFloor(ModeId.bypass), isFalse);
       expect(unknown.fitsFloor(unknown), isFalse);
       expect(ModeId.plan.fitsFloor(unknown), isFalse);
@@ -87,5 +89,18 @@ void main() {
     expect(ModeId.parse('accept-edits'), ModeId.acceptEdits);
     expect(() => ModeId.parse('autopilot'), throwsArgumentError);
     expect(() => ModeId.parse('code'), throwsArgumentError);
+  });
+
+  test('tryParse: main ids, old synonyms (§13.6), null for the rest', () {
+    for (final mode in ModeId.values) {
+      expect(ModeId.tryParse(mode.value), mode);
+    }
+    expect(ModeId.tryParse('architect'), ModeId.plan);
+    expect(ModeId.tryParse('debug'), ModeId.standard);
+    expect(ModeId.tryParse('acceptEdits'), ModeId.acceptEdits);
+    expect(ModeId.tryParse('code'), ModeId.bypass);
+    expect(ModeId.tryParse('autopilot'), isNull);
+    expect(ModeId.tryParse('turbo'), isNull);
+    expect(ModeId.tryParse(''), isNull);
   });
 }

@@ -358,6 +358,26 @@ void main() {
       );
     });
 
+    // agent-project-context «Кавычка в имени каталога»: в атрибуте блока
+    // `"` заменяется на `_`, а лог называет настоящий путь без экранирования.
+    test('a quote in a directory name: the block attribute is escaped, the '
+        'log has the real path', () async {
+      port.files = ProjectFiles(
+        context: [ContextFile(path: 'a"b/AGENTS.md', content: 'rule Q')],
+        contextRoot: ContextRoot.git,
+      );
+      final core = build();
+
+      final session = await core.runtime.createSession(
+        SessionSpec(cwd: '/work/a/a"b'),
+      );
+      final prompt = await firstPrompt(session);
+
+      expect(prompt, contains('<project-instructions path="a_b/AGENTS.md">'));
+      final log = logger.eventsOf('project_context.loaded').single;
+      expect(log.fields['files'], ['a"b/AGENTS.md']);
+    });
+
     test('truncated files are counted', () async {
       port.files = ProjectFiles(
         context: [

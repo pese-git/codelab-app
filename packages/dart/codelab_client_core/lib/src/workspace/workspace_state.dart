@@ -6,7 +6,9 @@ import '../connection/connection_profile.dart';
 import '../connection/connection_view.dart';
 import '../queue/prompt_queue.dart';
 import '../session/session_views.dart';
+import '../session/subagent_rows.dart';
 import '../transcript/transcript_item.dart';
+import '../usage/usage_models.dart';
 
 part 'workspace_state.freezed.dart';
 
@@ -31,6 +33,7 @@ abstract class WorkspaceState with _$WorkspaceState {
     @Default(ConnectionView.disconnected()) ConnectionView connection,
     ConnectionProfile? profile,
     String? projectDirectory,
+    String? agentDirectory,
     @Default([]) List<SessionSummaryView> sessions,
     SessionId? activeSessionId,
     @Default(false) bool hasMoreSessions,
@@ -62,6 +65,8 @@ abstract class SessionSummaryView with _$SessionSummaryView {
 /// Для чего: `SessionHandle.current` и поток `SessionHandle.view`.
 @freezed
 abstract class SessionView with _$SessionView {
+  const SessionView._();
+
   const factory SessionView({
     required int revision,
     required SessionStatusView status,
@@ -93,7 +98,22 @@ abstract class SessionView with _$SessionView {
     /// (design D4 change `add-connection-and-error-states`). Соединение
     /// хост проверяет сам — оно в `WorkspaceState.connection`.
     @Default(false) bool canRetry,
+
+    /// Строки панели Agents v1 (D33): вызовы `agent` сессии обходом
+    /// транскрипта в глубину; пусто без субагентов и у стороннего агента.
+    @Default(<SubagentRowView>[]) List<SubagentRowView> subagents,
+
+    /// Расход сессии по снимкам `_codelab/session/usage` (change
+    /// `add-usage-extension`, D8): без расширения агента — `unknown`, числа
+    /// не рисуются. Единственное поле, которое не выводится из `AcpSession`:
+    /// его ведёт `UsageFold`, а сбрасывают `session/load` и смена
+    /// соединения.
+    @Default(UsageView()) UsageView usage,
   }) = _SessionView;
+
+  /// Число строк [subagents] в состоянии [state] (счётчики заголовка панели).
+  int subagentCount(SubagentRowState state) =>
+      subagents.where((row) => row.state == state).length;
 }
 
 /// Статус сессии для UI и CLI.

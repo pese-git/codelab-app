@@ -6,9 +6,9 @@
 /// проекции остаются внутренними.
 library;
 
-import '../commands/slash_command.dart';
 import '../llm/messages.dart';
 import '../util/logger.dart';
+import 'command_display.dart';
 import 'records.dart';
 import 'session_store.dart';
 import 'tree.dart';
@@ -75,8 +75,7 @@ String? sessionTitleFrom(String text) {
 /// записи command»; D8). Неизвестный источник — текст сообщения.
 String _firstText(SessionRecord record) {
   final message = record as MessageRecord;
-  if (message.command case final command?
-      when command.source == SlashCommandSource.template.wire) {
+  if (message.command case final command? when command.showsTyped) {
     return command.displayText;
   }
   return message.message.content

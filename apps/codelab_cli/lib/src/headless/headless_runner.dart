@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_embedded/codelab_embedded.dart'
+    show EmbeddedAgentConfigException;
 
 import '../cli_args.dart';
 import '../render/sanitize.dart';
@@ -35,13 +37,15 @@ final class HeadlessRunner {
     ApprovePolicy approve = ApprovePolicy.reject,
     Duration? timeout,
     Duration cancelGrace = const Duration(seconds: 2),
+    SecretSource? tokenSource,
   }) : _workspace = workspace,
        _stdout = stdout,
        _stderr = stderr,
        _verbose = verbose,
        _approve = approve,
        _timeout = timeout,
-       _cancelGrace = cancelGrace;
+       _cancelGrace = cancelGrace,
+       _tokenSource = tokenSource;
 
   final ClientWorkspace _workspace;
   final StringSink _stdout;
@@ -56,6 +60,10 @@ final class HeadlessRunner {
   /// чем выйти без него (design.md, D13).
   final Duration _cancelGrace;
 
+  /// Источник токена профиля: по нему отказ рукопожатия называется «отверг
+  /// токен» или «требует токен» (`describeStartFailure`).
+  final SecretSource? _tokenSource;
+
   /// Элементы транскрипта до промпта (реплей загруженной сессии): их текст
   /// не выводится.
   final _before = <String>{};
@@ -65,6 +73,11 @@ final class HeadlessRunner {
 
   /// Вызовы инструментов и заметки, уже выведенные в stderr.
   final _reported = <String>{};
+
+  /// Операция со списком задач, ещё способная расти (последняя): строка
+  /// печатается, когда за ней пришёл другой видимый элемент или кончился ход,
+  /// как придержка в REPL (D27).
+  TaskOpsItem? _pendingOps;
 
   /// Одобрения, на которые политика уже ответила.
   final _decided = <ApprovalRequestId>{};
@@ -127,10 +140,19 @@ final class HeadlessRunner {
           resume: resume,
           last: continueLast,
         );
+      } on EmbeddedAgentConfigException {
+        // Невалидный конфиг встроенного агента — не сбой подключения (`1`), а
+        // ошибка использования: `runCodelab` печатает текст и даёт `64`
+        // (spec codelab-cli «Невалидный конфиг встроенного агента»).
+        rethrow;
       } on Object catch (error) {
         final message = error is SessionSetupError
             ? error.message
-            : describeFailure(error);
+            : await describeStartFailure(
+                error,
+                profile,
+                tokenSource: _tokenSource,
+              );
         _stderr.writeln(
           sanitizeTerminalText(
             error is SessionSetupError
@@ -176,6 +198,7 @@ final class HeadlessRunner {
       // Последняя ревизия могла прийти синхронно с ответом: выводим её до
       // итога, чтобы ответ не потерял хвост.
       _onView(session.current);
+      _flushTaskOps();
       if (!_endsWithNewline) {
         _stdout.writeln();
       }
@@ -227,6 +250,17 @@ final class HeadlessRunner {
     }
   }
 
+  /// Строка операций со списком задач в stderr, один раз на элемент.
+  void _flushTaskOps() {
+    final ops = _pendingOps;
+    if (ops == null) {
+      return;
+    }
+    _pendingOps = null;
+    _reported.add(ops.id);
+    _stderr.writeln(sanitizeTerminalText(ops.text));
+  }
+
   void _onView(SessionView view) {
     _decideApprovals(view);
     for (final item in view.transcript) {
@@ -237,6 +271,7 @@ final class HeadlessRunner {
         case AgentTextItem(:final id, :final text):
           final printed = _printed[id] ?? 0;
           if (text.length > printed) {
+            _flushTaskOps();
             final delta = text.substring(printed);
             _stdout.write(delta);
             _printed[id] = text.length;
@@ -248,6 +283,7 @@ final class HeadlessRunner {
           if (status == null || !_isFinal(status) || !_reported.add(id)) {
             continue;
           }
+          _flushTaskOps();
           final command = details?.command;
           _stderr.writeln(
             sanitizeTerminalText(
@@ -256,6 +292,7 @@ final class HeadlessRunner {
           );
         case NoticeItem(:final id):
           if (_reported.add(id)) {
+            _flushTaskOps();
             _noticePrinted = true;
             _stderr.writeln(
               sanitizeTerminalText('codelab: ${noticeText(item)}'),
@@ -264,6 +301,13 @@ final class HeadlessRunner {
         case UserItem() || ThoughtItem():
           // Мысли модели в headless не выводятся (`09-11`, H-01).
           continue;
+        case TaskOpsItem(:final id):
+          if (_pendingOps != null && _pendingOps!.id != id) {
+            _flushTaskOps();
+          }
+          if (!_reported.contains(id)) {
+            _pendingOps = item;
+          }
       }
     }
   }

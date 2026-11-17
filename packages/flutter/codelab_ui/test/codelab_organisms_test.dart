@@ -28,6 +28,18 @@ void main() {
     expect(CodeLabTranscriptPanel, isA<Type>());
     expect(CodeLabWorkbenchLayout, isA<Type>());
     expect(CodeLabWorkbenchShortcuts, isA<Type>());
+    expect(CodeLabSettingsNavigation, isA<Type>());
+    expect(CodeLabSettingsNavItem, isA<Type>());
+  });
+
+  // Задача 6.1c-3 change `add-provider-setup-ui` (Q32; spec agent-workbench-ui
+  // «Тег неизвестного риска одобрения»; design.md D27): вызов без вида или с
+  // видом `other` не помечается «только чтение». Красный до реализации.
+  test('CodeLabApprovalRisk.unknown has the tag "Unknown risk" with the '
+      'warning tone', () {
+    expect(CodeLabApprovalRisk.unknown.label, 'Unknown risk');
+    expect(CodeLabApprovalRisk.unknown.tone, CodeLabTone.warning);
+    expect(CodeLabApprovalRisk.values, contains(CodeLabApprovalRisk.unknown));
   });
 
   testWidgets('renders command palette default command list', (tester) async {
@@ -141,6 +153,30 @@ void main() {
     expect(openedPalette, isTrue);
     expect(previousInspector, isTrue);
     expect(nextInspector, isTrue);
+  });
+
+  testWidgets('routes Cmd/Ctrl+, to the settings callback', (tester) async {
+    var opened = 0;
+    await tester.pumpWidget(
+      FluentApp(
+        home: CodeLabWorkbenchShortcuts(
+          onOpenSettings: () => opened++,
+          child: const SizedBox(width: 320, height: 200),
+        ),
+      ),
+    );
+
+    for (final modifier in const [
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.metaLeft,
+    ]) {
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(LogicalKeyboardKey.comma);
+      await tester.sendKeyUpEvent(modifier);
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(opened, 2);
   });
 
   group('CodeLabApprovalPrompt', () {
@@ -1322,6 +1358,66 @@ void main() {
       tester.getTopLeft(find.text('/logs')).dy,
       lessThan(tester.getTopLeft(find.text('/new')).dy),
     );
+  });
+
+  testWidgets('CodeLabConnectionScreen shows the extra action of the host', (
+    tester,
+  ) async {
+    var pressed = 0;
+    await tester.pumpWidget(
+      FluentApp(
+        home: CodeLabConnectionScreen(
+          status: CodeLabConnectionStatus.failed,
+          transportLabel: 'Embedded agent',
+          profileLabel: 'Embedded agent',
+          description: 'No model provider is configured.',
+          onReconnect: () {},
+          extraAction: CodeLabButton(
+            key: const ValueKey('extra'),
+            label: 'Add provider',
+            onPressed: () => pressed++,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('extra')));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(pressed, 1);
+  });
+
+  testWidgets('with an extra action it is the only primary button', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FluentApp(
+        home: SizedBox(
+          width: 520,
+          child: CodeLabConnectionScreen(
+            status: CodeLabConnectionStatus.failed,
+            transportLabel: 'Embedded agent',
+            profileLabel: 'Embedded agent',
+            onConnect: () {},
+            onConfigureConnection: () {},
+            extraAction: CodeLabButton(
+              key: const ValueKey('extra'),
+              label: 'Add provider',
+              emphasis: CodeLabButtonEmphasis.primary,
+              onPressed: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final primaries = tester
+        .widgetList<CodeLabButton>(find.byType(CodeLabButton))
+        .where((b) => b.emphasis == CodeLabButtonEmphasis.primary);
+    expect(primaries.map((b) => b.label), ['Add provider']);
+    // Ширину ряда в тесте не проверить: шрифт Ahem шире настоящего. Ряд без
+    // переноса на ширине карточки — ручная проверка macOS.
+    expect(find.text('Connect'), findsOneWidget);
+    expect(find.text('Configure connection'), findsOneWidget);
   });
 }
 

@@ -135,7 +135,7 @@ stdout в режиме `--stdio` SHALL нести только кадры JSON-R
 
 Каталог моделей SHALL содержать модели всех провайдеров конфигурации, а запросы SHALL маршрутизироваться по провайдеру модели. Сессии SHALL храниться в `JsonlSessionStore` под `sessions.dir` (по умолчанию `$CODELAB_HOME/sessions`) с политикой `sessions.fsync`. Исключение — сценарий `--llm-script`: журнал SHALL вестись только по `--sessions-dir` (без него — в памяти), а явно заданные `sessions.dir` и `sessions.fsync` из `--config` НЕ SHALL применяться и SHALL давать по предупреждению `config.key.not_applied {key, source}` (решение пользователя 2026-10-30): сценарий не трогает `$CODELAB_HOME` и пользовательские журналы. Сужение `profile.agent-serve.*` SHALL применяться к профилю; расширение профиля SHALL быть ошибкой конфига.
 
-Невалидный конфиг SHALL завершать процесс кодом `64` до старта транспорта. В stderr и в лог `serve.config.invalid` SHALL выводиться каждая проблема с файлом, строкой, столбцом и путём ключа. Отсутствие модели по умолчанию (ни `agent.default_model`, ни `--provider` с `--model`, ни `--llm-script`) SHALL быть проблемой `agent.default_model: required`. Неизвестная переменная `CODELAB_*` SHALL давать предупреждение в лог. Значения `CODELAB_API_KEY`, ключей из `api_key_env` и подстановок `${ENV}` НЕ SHALL попадать в лог, текст ошибок и строковое представление опций.
+Невалидный конфиг SHALL завершать процесс кодом `64` до старта транспорта. В stderr и в лог `serve.config.invalid` SHALL выводиться каждая проблема с файлом, строкой, столбцом и путём ключа. Отсутствие любой модели (ни провайдера с моделью в слоях конфига, ни `--provider` с `--model`, ни `--llm-script`) SHALL быть проблемой `agent.default_model: no model is configured; add a provider with at least one model` с событием `config.model.none`; провайдер с моделью без `agent.default_model` — валидный конфиг, модель новой сессии выбирается требованием `agent-runtime` «Модель новой сессии». Бинарь без `--llm-script` SHALL передавать ядру файловую память последней модели `$CODELAB_HOME/state/last-model.json` (`agent-runtime` «Последняя выбранная модель»). Неизвестная переменная `CODELAB_*` SHALL давать предупреждение в лог. Значения `CODELAB_API_KEY`, ключей из `api_key_env` и подстановок `${ENV}` НЕ SHALL попадать в лог, текст ошибок и строковое представление опций.
 
 С `--llm-script` бинарь НЕ SHALL читать `$CODELAB_HOME/config.yaml`, проектные слои и не искать `codelab.toml`; `--config` SHALL читаться.
 
@@ -165,9 +165,13 @@ stdout в режиме `--stdio` SHALL нести только кадры JSON-R
 - **WHEN** бинарь запущен с `--model gpt` без `--provider`; во втором варианте — с `--model a/x --model b/y` без `--provider`
 - **THEN** в обоих вариантах код `64` и текст ошибки использования в stderr до загрузки конфига
 
-#### Scenario: Нет модели по умолчанию
-- **WHEN** бинарь запущен `serve --stdio` без `--provider`, без `--llm-script`, а ни один слой не задаёт `agent.default_model`
-- **THEN** код `64`, stderr содержит `agent.default_model: required`
+#### Scenario: Нет ни одной модели
+- **WHEN** бинарь запущен `serve --stdio` без `--provider`, без `--llm-script`, а ни один слой не объявляет провайдера с моделью
+- **THEN** код `64`, stderr содержит `agent.default_model: no model is configured; add a provider with at least one model`
+
+#### Scenario: Провайдер без модели по умолчанию
+- **WHEN** `config.yaml` объявляет только провайдера `gw` с моделью `m` без `agent.default_model`, а бинарь запущен `serve --stdio`
+- **THEN** транспорт стартует, `session/new` возвращает опцию `model` с `currentValue` `gw/m`
 
 #### Scenario: Относительный CODELAB_CONFIG
 - **WHEN** бинарь запущен с `CODELAB_CONFIG=.codelab/extra.yaml`
@@ -198,21 +202,162 @@ stdout в режиме `--stdio` SHALL нести только кадры JSON-R
 - **THEN** ход проходит, каталог `<tmp>` не изменён
 
 ### Requirement: Подкоманда config бинаря
-`codelab-agent config check [--cwd <dir>]` SHALL работать без запуска сервера, без открытия транспорта и без чтения stdin. Тексты, правила и коды выхода — общая реализация `ConfigCommands` (capability `agent-configuration`, требование «Подкоманда config check»); флагов `serve` у команды нет, окружение (включая `CODELAB_CONFIG`) учитывается. `codelab-agent config` без подкоманды, с неизвестной подкомандой, с лишними аргументами или с ошибкой разбора аргументов (неизвестный флаг, `--cwd` без значения) SHALL завершаться кодом `64` со справкой команды `config` в stderr. Общая справка бинаря (`serveUsage`, печатается при ошибке использования `serve`) SHALL упоминать `config check`.
+`codelab-agent config path|get|set|unset|check`, `codelab-agent provider add|list|remove` и `codelab-agent mcp add|list|remove` SHALL работать без запуска сервера, без открытия транспорта и без чтения stdin. Исключение — `provider add --api-key-stdin`: он читает ключ из stdin. Тексты, правила и коды выхода — общая реализация `ConfigCommands`, `ProviderCommands` и `McpServerCommands` (capability `agent-configuration`, требования «Подкоманда config check» и «Подкоманды записи и чтения конфига»). Флагов `serve` у этих команд нет; окружение, включая `CODELAB_CONFIG` и `CODELAB_PROVIDER_*`, учитывается.
+
+Ошибкой использования с кодом `64` и справкой команды в stderr SHALL завершаться:
+- `codelab-agent config`, `provider` или `mcp` без подкоманды;
+- неизвестная подкоманда (в том числе `config migrate`);
+- лишние или недостающие аргументы;
+- ошибка разбора аргументов: неизвестный флаг, флаг без значения.
+
+Присланные слова argv НЕ SHALL цитироваться в stderr у `config set`, `config unset`, `provider` и `mcp` (design.md change `add-config-writer-and-reload`, D6): ошибка разбора печатает фиксированную фразу `invalid arguments for config set` (`… config unset`, `… provider`, `… mcp`), неизвестная подкоманда и лишние аргументы — `unknown <cmd> arguments (<n>)`, где `<n>` — число лишних слов. У `config check|path|get` ошибка разбора МОЖЕТ печатать причину `package:args`.
+
+Общая справка бинаря (`serveUsage`, печатается при ошибке использования `serve`) SHALL упоминать `config`, `provider` и `mcp`.
 
 #### Scenario: Проверка без сервера
 - **WHEN** запускается `codelab-agent config check` в каталоге с валидным `config.yaml`
 - **THEN** stdout заканчивается `Config: valid`, код `0`, процесс не открывает транспорт ACP
 
+#### Scenario: Запись без сервера
+- **WHEN** запускается `codelab-agent config set budget.max_steps 10`
+- **THEN** код `0`, `$CODELAB_HOME/config.yaml` содержит `max_steps: 10`, комментарии файла сохранены, транспорт ACP не открыт
+
 #### Scenario: Неизвестная подкоманда
-- **WHEN** запускается `codelab-agent config set budget.max_steps 10` или `codelab-agent config migrate`
-- **THEN** код `64`, в stderr — справка подкоманды `config`; файл конфига не изменён
+- **WHEN** запускается `codelab-agent config migrate` или `codelab-agent mcp frob`
+- **THEN** код `64`, в stderr — справка соответствующей команды; файлы конфига не изменены
 
 #### Scenario: Ошибка разбора аргументов config
 - **WHEN** запускается `codelab-agent config check --bogus` или `codelab-agent config check --cwd` без значения
-- **THEN** код `64`, stderr содержит причину и справку команды `config` (`Usage: codelab-agent config check [--cwd <dir>]`), stdout пуст
+- **THEN** код `64`, stderr содержит причину и справку команды `config`, stdout пуст
 
-#### Scenario: Общая справка называет config check
+#### Scenario: Ошибка разбора аргументов записи не цитирует argv
+- **WHEN** запускается `codelab-agent config set budget.max_steps --sk-1`, `codelab-agent provider add gw --api-key sk-1` или `codelab-agent mcp frob`
+- **THEN** код `64`, stdout пуст, stderr содержит соответственно `invalid arguments for config set`, `invalid arguments for provider`, `unknown mcp arguments (1)` и справку команды; ни `sk-1`, ни `frob` в stderr нет
+
+#### Scenario: Общая справка называет подкоманды
 - **WHEN** бинарь запущен с неизвестным флагом `serve`, например `codelab-agent serve --stdio --bogus`
-- **THEN** код `64`, справка в stderr содержит `config check`
+- **THEN** код `64`, справка в stderr содержит `config`, `provider` и `mcp`
+
+### Requirement: Файлы проекта в бинаре
+`codelab-agent serve --stdio` SHALL передавать ядру `ProjectFilesLoader` из `codelab_agent_io` в `AgentCoreServices.projectFiles` (design.md change `add-agent-project-files`, D16). Пользовательская область — `$CODELAB_HOME` процесса. С `--llm-script` пользовательская область НЕ SHALL читаться, а проект SHALL считаться недоверенным (глобальный слой не читается); контекст проекта (`AGENTS.md` дерева `cwd`) SHALL читаться.
+
+`codelab-agent serve --ws` НЕ SHALL передавать загрузчик (решение пользователя 2026-10-30; D2, D16): клиент WebSocket выбирает `cwd` и может быть на другой машине, а чтение шло бы с файловой системы машины агента и отдавало бы удалённому клиенту инструкции любого каталога этой машины. Поэтому по WebSocket не читаются ни файлы проекта (`AGENTS.md`/`CLAUDE.md`, `.codelab/prompts`, `.codelab/agents`), ни файлы `$CODELAB_HOME` (`AGENTS.md`, `prompts/`, `agents/`). Это сужение по транспорту, как у MCP (`mcp.server.skipped`, design.md change `add-agent-mcp-client`, D3): хост SHALL один раз при запуске писать событие `project_files.skipped` (info) с полями `transport: ws` и `reason: "project files are not read over WebSocket"`.
+
+#### Scenario: Шаблон пользователя
+- **WHEN** `AgentHost.build` для `--stdio` получает временный `CODELAB_HOME` с `prompts/review.md` и создаёт сессию
+- **THEN** `session.commands` содержит `review`
+
+#### Scenario: Сценарий не читает CODELAB_HOME
+- **WHEN** `serve --stdio --llm-script` запускается во временном `cwd` с `AGENTS.md`, а `CODELAB_HOME` содержит `prompts/review.md` и `AGENTS.md`
+- **THEN** лог `project_context.loaded` называет только `AGENTS.md` из `cwd`, а `available_commands_update` после `session/new` содержит только встроенные команды сессии, без шаблона `review`
+
+#### Scenario: WebSocket не читает файлы проекта
+- **WHEN** `AgentHost.build` для `--ws` получает временный `CODELAB_HOME` с `AGENTS.md`, а сессия создаётся в `cwd` с `AGENTS.md`
+- **THEN** `AgentCoreServices.projectFiles` равен `null`, системный промпт не содержит секции `project_context`, лог содержит одно событие `project_files.skipped` с `transport: ws` и не содержит `project_context.loaded`
+
+### Requirement: Хранилище секретов в бинаре
+`AgentHost.build` SHALL создавать одно хранилище по `secrets.backend` загруженного конфига и окружению процесса, а над ним — один `SecretResolver` на процесс. Резолвер SHALL передаваться в функцию модели (`createRoutedStreamFunction`) и в `AgentCoreServices.secrets` (design.md, D11).
+- **`--debug-secrets`** — флаг `serve` без значения; он и `CODELAB_DEBUG_SECRETS=1` включают режим отладки резолвера (capability `agent-secrets`, «Диагностика обращений к секретам»). Режим НЕ SHALL менять уровень лога.
+- **`secrets.backend: keychain`** — проблема конфигурации «not supported yet» (capability `agent-secrets`): `serve` завершается кодом `64` до старта транспорта.
+- **`--llm-script`** SHALL использовать бэкенд `env` независимо от `secrets.backend`: `secrets.yaml` не читается, событие выбора — `secrets.backend.selected {backend: env, reason: forced by --llm-script}`.
+- **`secrets.backend: file`** SHALL давать при каждом старте предупреждение `secrets.backend.plaintext {path}` в лог и stderr.
+- **`serve --ws`** SHALL разрешать ключи провайдеров так же, как `--stdio`.
+
+Значения секретов НЕ SHALL попадать в stdout, stderr, лог, журнал сессии и кадры ACP.
+
+#### Scenario: Ключ провайдера из переменной переопределения
+- **WHEN** `codelab-agent serve --stdio` запускается с конфигом `providers.p.api_key_secret: codelab/p`, `CODELAB_SECRET_CODELAB_P=sk-test-0123456789abcdef` и локальным HTTP-сервером провайдера в тесте
+- **THEN** запрос к серверу несёт ключ, а stdout, stderr и файл лога не содержат `sk-test-0123456789abcdef`
+
+#### Scenario: Секрет не задан — ошибка хода
+- **WHEN** тот же конфиг без переменной, `secrets.backend: env`, клиент выполняет `session/prompt` с моделью `p/<model>`
+- **THEN** ответ `session/prompt` — JSON-RPC ошибка, текст которой содержит `API key secret codelab/p is not set. Run: codelab secret set codelab/p`; процесс продолжает работать
+
+#### Scenario: Режим отладки секретов
+- **WHEN** тот же запуск с `--debug-secrets` и переменной `CODELAB_SECRET_CODELAB_P`
+- **THEN** лог содержит `secrets.lookup` с `name: codelab/p`, `source: env`, `found: true` и не содержит значения
+
+#### Scenario: Бэкенд file при старте
+- **WHEN** `serve --stdio` запускается с глобальным `secrets.backend: file` во временном `CODELAB_HOME`
+- **THEN** лог содержит `secrets.backend.plaintext` с путём `<CODELAB_HOME>/secrets.yaml`, файл не создан, процесс работает
+
+#### Scenario: Сценарий не читает secrets.yaml
+- **WHEN** `serve --stdio --llm-script <file>` запускается с `--config`, где `secrets.backend: file`, а в `CODELAB_HOME` лежит `secrets.yaml`
+- **THEN** процесс стартует, ход сценария выполняется, файл не открывается, лог содержит `secrets.backend.selected` с `backend: env` и `reason: forced by --llm-script`
+
+### Requirement: Подкоманда secret бинаря
+`codelab-agent secret set|delete|list|migrate` SHALL работать без запуска сервера и без открытия транспорта. Тексты, правила и коды выхода даёт общая реализация `SecretCommands` (capability `agent-secrets`, «Подкоманды secret»). Разбор аргументов — `apps/codelab_agent/lib/src/cli/secret_cli.dart`. `codelab-agent secret` без подкоманды или с неизвестной подкомандой SHALL завершаться кодом `64`, сообщением `codelab-agent: secret needs a subcommand: set, delete, list or migrate` и справкой `secret` в stderr; ошибка разбора argv — кодом `64`, сообщением `codelab-agent: invalid arguments for secret` без присланных слов и справкой `secret`. Ошибки использования из `SecretCommands` (неверное имя, значение аргументом) бинарь SHALL дополнять справкой `secret`, ошибки значения — нет. Справка `secret` называет `codelab-agent`. Общая справка бинаря SHALL упоминать `secret set|delete|list|migrate`. Справка `secret` и справка `serve` (отдельного флага `--help` у `serve` нет: справка печатается в stderr при ошибке использования) SHALL содержать строку `Note: before 1.0, tool output, prompts and session logs are not redacted: secrets they contain reach the model provider and session files as is.` (решение пользователя 2026-11-04 R8-7; design.md change `add-config-literal-secrets-and-migrate`, D13). `secret migrate [--all | [--project] [--local]] [--cwd <dir>] [--dry-run] [--force]` SHALL разбираться в `secret_cli.dart` и вызывать `SecretCommands.migrate` (capability `agent-secrets`, «Подкоманда secret migrate»; design.md change `add-config-literal-secrets-and-migrate`, D7); `--project` и `--local` вместе допустимы; позиционные аргументы и `--all` вместе с любым из `--project`, `--local` — код `64`. stdin SHALL читаться только подкомандой `set`.
+
+#### Scenario: Неизвестная подкоманда
+- **WHEN** запускается `codelab-agent secret show codelab/openai`
+- **THEN** код `64`, stderr содержит `secret needs a subcommand` и справку `secret`, не содержит `codelab/openai`, stdout пуст, хранилище не вызывалось
+
+#### Scenario: list с бэкендом env
+- **WHEN** запускается `codelab-agent secret list` с `secrets.backend: env` во временном `CODELAB_HOME`
+- **THEN** первая строка stdout — `Backend: env`, код `0`
+
+#### Scenario: Секрет из файла переносится
+- **WHEN** `codelab-agent serve --stdio` с литеральным `providers.lm.api_key` стартует, а лог содержит `config.secret.in_file` с текстом `codelab secret migrate` без значения; затем выполняется `codelab-agent secret migrate` с `secrets.backend: file` и `serve` перезапускается
+- **THEN** миграция — код `0`; после перезапуска предупреждения нет, а ход провайдера `lm` получает ключ из хранилища
+
+#### Scenario: Предупреждение о 1.0 в справке
+- **WHEN** запускаются `codelab-agent serve` без аргументов и `codelab-agent secret` без подкоманды
+- **THEN** обе завершаются кодом `64`; stderr каждой со справкой содержит строку `Note: before 1.0, tool output, prompts and session logs are not redacted: secrets they contain reach the model provider and session files as is.`
+
+### Requirement: Флаги предконфигурации провайдера
+`codelab-agent serve` SHALL принимать `--provider-type <kind>` и `--provider-config <json | @путь>` (путь — относительно текущего каталога процесса). Они задают предконфигурацию провайдера слоем флагов по правилам capability `agent-configuration`, «Предконфигурация провайдера из окружения», и затеняют переменные `CODELAB_PROVIDER_*` (design.md change `add-config-writer-and-reload`, D3; CFG-12).
+
+Ошибка использования, код `64`, до старта транспорта:
+- задан только один из двух флагов;
+- флаги сочетаются с `--provider` или `--base-url` (текст `--provider-type cannot be combined with --provider`);
+- файл `@путь` не читается.
+
+Значение `--provider-config` НЕ SHALL попадать в лог, stderr и строковое представление опций. Справка `serve` SHALL рекомендовать форму `@путь`: JSON в argv виден другим пользователям через `ps`. Литеральный секретный заголовок в JSON флага — проблема `inlineSecret` (capability `agent-configuration`, «Предконфигурация провайдера из окружения»).
+
+Внутри слоя флагов предконфигурация SHALL применяться первой, `--model` — после неё.
+
+#### Scenario: Флаги затеняют переменные
+- **WHEN** окружение задаёт `CODELAB_PROVIDER_TYPE` и `CODELAB_PROVIDER_CONFIG` провайдера `env`, а запуск — `--provider-type anthropic --provider-config @p.json` с провайдером `a`
+- **THEN** каталог содержит модели `a`, но не `env`; лог содержит `config.preconfig.shadowed {by: "flags"}`
+
+#### Scenario: Сочетание с --provider
+- **WHEN** запуск — `serve --stdio --provider openai-compatible --base-url http://x --model m --provider-type anthropic --provider-config '{…}'`
+- **THEN** код `64` до чтения stdin, stderr содержит `--provider-type cannot be combined with --provider`
+
+### Requirement: Перезагрузка конфига в serve
+`codelab-agent serve --stdio` и `serve --ws` SHALL передавать ядру `FileConfigSource` корня запуска с окружением и флагами процесса и `modelsFor` над той же функцией модели и каталогом, что при старте (design.md change `add-config-writer-and-reload`, D13). Начальные `streamFunction` и `services.models` SHALL браться из одного вызова `modelsFor`. Оба хоста SHALL передавать `AgentCoreServices.agentConfigPaths` (PERM-11, D8). `serve --ws` SHALL собирать ядро с `configCommand: false`: команда `/config` по WebSocket не объявляется и не исполняется (R0-3), а перезагрузка по наблюдателю работает. При `config.watch: false` источник SHALL создаваться без наблюдателя. Со сценарием `--llm-script` источник НЕ SHALL передаваться. Источник SHALL закрываться после `runtime.dispose()` при остановке процесса.
+
+#### Scenario: Правка конфига работающего агента
+- **WHEN** `serve --stdio` работает с открытой сессией, и в `$CODELAB_HOME/config.yaml` добавляется модель провайдера
+- **THEN** клиент получает `config_option_update` с новой моделью не позже 5 с, процесс не перезапускался (`config_reload_process_test.dart`)
+
+#### Scenario: Битая правка
+- **WHEN** в работающий `serve --stdio` приходит ручная правка с `budget.max_steps: 0`
+- **THEN** клиент не получает кадров, лог содержит `config.reload.failed` с файлом, строкой и ключом, следующий ход работает по прежнему конфигу
+
+#### Scenario: WebSocket без /config
+- **WHEN** клиент подключается к `serve --ws` и создаёт сессию
+- **THEN** `available_commands_update` не содержит `config` и `mcp`; промпт `/config check` получает ответ `Unknown command: /config. Run /help to list commands.` без запроса к модели (`agent_host_ws_commands_test.dart`; capability `agent-slash-commands`, «Неизвестная команда»)
+
+#### Scenario: Сценарий без перезагрузки
+- **WHEN** `serve --stdio --llm-script s.yaml` работает, и меняется `--config` файл
+- **THEN** перезагрузки нет, команды `config` в `available_commands_update` нет
+
+### Requirement: Флаги stdin у mcp add бинаря
+`codelab-agent mcp add` SHALL разбирать флаги `--header-stdin <Name>`, `--header-scheme <Scheme>` и `--env-stdin <NAME>` и вызывать `McpServerCommands` (capability `agent-configuration`, «Значение заголовка или переменной mcp add из stdin»; design.md change `add-config-literal-secrets-and-migrate`, D11). Справка `mcp` SHALL перечислять эти флаги; stdin SHALL читаться только при одном из флагов `-stdin`. Ошибка разбора argv НЕ SHALL цитировать присланные слова.
+
+#### Scenario: Переменная из stdin
+- **WHEN** `secrets.backend: file`, вызывается `codelab-agent mcp add gh --type stdio --command gh-mcp --env-stdin GITHUB_TOKEN`, в stdin — значение токена
+- **THEN** код `0`; хранилище содержит `codelab/mcp/gh/github_token`; файл содержит `GITHUB_TOKEN: '${secret:codelab/mcp/gh/github_token}'`; значение не напечатано
+
+### Requirement: Проектный конфиг сессий в serve
+`codelab-agent serve --stdio` (кроме прогона `--llm-script`) SHALL передавать ядру порт `ProjectConfigLoader` — источник `serveConfigSource` с теми же окружением, флагами, `--config` и закреплённым доверием. Сессия вне корня запуска тогда получает конфигурацию и функцию модели своей папки (флаги запуска входят в её слои) (spec agent-runtime «Конфигурация сессии вне корня запуска»; design.md change `require-project-folder`, D21). Корень запуска по-прежнему задаёт ключи процесса (`HostSettings`). `serve --ws` порт НЕ SHALL передавать: по WebSocket `cwd` называет клиент, а проектные файлы бинарь по WebSocket не читает (requirement «Файлы проекта в бинаре»; design.md, Q18 (a)); сессия вне корня получает `withoutProject` и лог `config.session.outside_root`, как раньше.
+
+#### Scenario: serve обслуживает сессию другой папки
+- **WHEN** `codelab-agent serve --stdio` запущен в `/A`, доверенный проект `/B` задаёт `budget.max_steps: 3`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** бюджет хода этой сессии — 3 шага, а флаги запуска (`--model`, `--provider`) по-прежнему действуют как слой флагов
+
+#### Scenario: serve --ws не читает конфиг папки клиента
+- **WHEN** `codelab-agent serve --ws` запущен в `/A`, доверенный проект `/B` на машине агента задаёт `budget.max_steps: 3`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** проектные слои `/B` не читаются: сессия получает `withoutProject`, лог `config.session.outside_root`
 

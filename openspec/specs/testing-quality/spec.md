@@ -164,11 +164,15 @@ CodeLab SHALL проверять список и загрузку сессий �
 - **THEN** подключение в новом тесте не запускает восстановление сессий прошлого теста
 
 ### Requirement: Интеграционный тест палитры с командами агента
-CodeLab SHALL проверять команды агента в палитре интеграционным тестом `apps/codelab_desktop/integration_test/command_palette_flow_test.dart` (строка Must R-20 матрицы паритета) на scripted-агенте в режиме `withAvailableCommands` из `codelab_acp_testing`. Режим SHALL объявлять после `session/new` команды `compact` без `input` и `plan` с `input.hint` и отвечать на промпт `/compact` отчётом о сжатии. В режиме `CODELAB_E2E_AGENT=dart` тест SHALL пропускаться (`skip`, а не тег `scripted-only`: тег исключил бы единственный тест файла), пока бинарь `codelab-agent` объявляет пустой `availableCommands`. Тест SHALL покрывать открытие палитры по `Ctrl/Cmd+K`, вытеснение заглушки клиента, вставку команды в композер без `session/prompt`, отправку, нечёткий поиск inline-триггера `/` и выполнение команды клиента без `session/prompt`.
+CodeLab SHALL проверять команды агента в палитре интеграционным тестом `apps/codelab_desktop/integration_test/command_palette_flow_test.dart` (строка Must R-20 матрицы паритета) на scripted-агенте в режиме `withAvailableCommands` из `codelab_acp_testing`. Режим SHALL объявлять после `session/new` команды `compact` без `input` и `plan` с `input.hint` и отвечать на промпт `/compact` отчётом о сжатии. Файл SHALL содержать два теста (design.md change `add-agent-builtin-slash-commands`, D9): тест с тегом `scripted-only` — полный сценарий на scripted-агенте (вытеснение заглушки `/plan`, команда `plan` с `input.hint`); и тест без тега, который идёт во всех режимах (`scripted`, `dart`, `embedded`) и проверяет встроенную команду агента `compact`: вытеснение заглушки клиента `/compact`, вставку в композер без `session/prompt` и отправку промпта `/compact`. Ответ агента на `/compact` в разных режимах разный (отчёт scripted-агента; `Nothing to compact.` или `Compacted: …` у Dart-агента) и SHALL браться из помощника `integration_test/support/e2e_agent.dart`. Пропуск по `!isScripted` убирается: Dart-агент объявляет `compact` (capability `agent-slash-commands`, «Встроенные команды MVP»). Тест SHALL покрывать открытие палитры по `Ctrl/Cmd+K`, вытеснение заглушки клиента, вставку команды в композер без `session/prompt`, отправку, нечёткий поиск inline-триггера `/` и выполнение команды клиента без `session/prompt`.
 
 #### Scenario: Команда агента доходит до агента
 - **WHEN** агент объявил `compact`, пользователь открывает палитру `Ctrl/Cmd+K`, выбирает `compact` и отправляет промпт из композера
-- **THEN** до отправки агент не получил `session/prompt`, после отправки получил `session/prompt` с текстом `/compact`, а лента показывает реплику `/compact` и ответ агента об успешном сжатии
+- **THEN** до отправки агент не получил `session/prompt`, после отправки получил `session/prompt` с текстом `/compact`, а лента показывает реплику `/compact` и ответ агента на неё
+
+#### Scenario: Палитра против Dart-агента
+- **WHEN** тест без тега идёт в режиме `CODELAB_E2E_AGENT=dart` или `embedded`
+- **THEN** тест не пропускается: палитра показывает `/compact` агента вместо заглушки клиента, отправка даёт в ленте реплику `/compact` и ответ Dart-агента из помощника `e2e_agent.dart`
 
 #### Scenario: Команда клиента выполняется в app
 - **WHEN** пользователь выбирает в палитре `/new`
@@ -200,4 +204,29 @@ E2E-тесты `apps/codelab_cli/test/e2e/` SHALL запускать CLI как 
 #### Scenario: Ответ Python-агента
 - **WHEN** `cli/headless-print-basic` идёт с `CODELAB_E2E_AGENT=python` и установленным Python-агентом
 - **THEN** stdout содержит `Mock response`, код выхода `0`
+
+### Requirement: Встроенный режим в e2e и conformance
+Встроенный агент SHALL проверяться на трёх уровнях (design.md change `add-embedded-agent-mode`, D10):
+- **Пакет.** Тесты `packages/dart/codelab_embedded/test/` на Dart VM работают на `InProcessAcpLink`, временном `CODELAB_HOME` и `MockClient` провайдера и входят в `melos run test`.
+- **CLI.**
+  - E2E `apps/codelab_cli/test/e2e/` с `CODELAB_E2E_AGENT=embedded` запускают CLI из kernel тестовой точки входа `test/e2e/support/embedded_cli_main.dart`. Эта точка передаёт `runCodelab(…, embeddedOpener:)` открыватель `scriptedEmbeddedAgentOpener` со сценарием `test/e2e/llm_scripts/<сценарий>.json`, путь к которому задаёт переменная теста. Тесты с тегом `scripted-only` исключаются. Скрипт `melos run test:e2e:cli:embedded` входит в `melos run check` (Dart VM, `AGENTS.md` §21).
+  - Скрипт `melos run conformance:embedded` — `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded` — тоже входит в `check`.
+- **App.**
+  - Интеграционные тесты `apps/codelab_desktop/integration_test/` с `--dart-define=CODELAB_E2E_AGENT=embedded` подключаются типом `Embedded agent`. Поддержка `integration_test/support/e2e_agent.dart` передаёт `CodeLabBootstrap` scope с открывателем `scriptedEmbeddedAgentOpener`.
+  - `fs_flow_test` и `terminal_flow_test` в этом режиме пропускаются с причиной: встроенный агент не шлёт `fs/*` и `terminal/*`.
+  - Скрипт `melos run test:e2e:app:embedded` НЕ SHALL входить в `check` и в CI pull request. Его прогон на устройстве выполняется только в ветке `release/<version>` (`AGENTS.md` §21). В feature-ветке эти тесты SHALL проходить `fvm flutter analyze`.
+
+Рабочий код клиентов (`lib/`) НЕ SHALL импортировать `package:codelab_embedded/testing.dart`. Исключение — драйвер фикстур CLI `lib/src/scenario/`.
+
+#### Scenario: E2E CLI против встроенного агента
+- **WHEN** `cli/repl-permission-allow-once` идёт с `CODELAB_E2E_AGENT=embedded`
+- **THEN** блок одобрения показывает команду из сценария, `y` разрешает вызов, ход заканчивается выполненным вызовом, а дочерний процесс агента не запускается
+
+#### Scenario: check содержит встроенный режим
+- **WHEN** выполняется `fvm dart run melos run check`
+- **THEN** в шагах есть `test:e2e:cli:embedded` и `conformance:embedded`, и нет `test:e2e:app:embedded`
+
+#### Scenario: Тестовый сценарий не попадает в app
+- **WHEN** файл в `apps/codelab_desktop/lib/` импортирует `package:codelab_embedded/testing.dart`
+- **THEN** `fvm dart run melos run guard` падает и называет файл и строку
 

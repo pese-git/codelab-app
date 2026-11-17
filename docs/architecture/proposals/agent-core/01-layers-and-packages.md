@@ -118,7 +118,9 @@ packages/dart/codelab_agent_core/
                payload_builder.dart
     tools/     agent_tool.dart registry.dart executor.dart validator.dart pairing.dart
                path_lock.dart truncate.dart fence.dart unified_diff.dart glob.dart
-               builtin/ read.dart write.dart edit.dart ls.dart search.dart exec.dart update_plan.dart
+               builtin/ read.dart write.dart edit.dart ls.dart search.dart exec.dart
+               tasks/   TaskList и инструменты task_* (change add-subagents-and-tasks, §17.16;
+                        до него — builtin/update_plan.dart)
                language_servers.dart (после MVP: порт LanguageServerToolFactory, §17.8.2)
     permissions/ policy.dart modes.dart pattern.dart shell_lexer.dart critical_patterns.dart gate.dart
     session/   records.dart parse.dart tree.dart projections.dart session_store.dart

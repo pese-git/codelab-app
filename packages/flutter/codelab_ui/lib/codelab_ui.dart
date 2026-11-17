@@ -4,3 +4,4 @@ library;
 export 'src/atomics/atomics.dart';
 export 'src/molecules/molecules.dart';
 export 'src/organisms/organisms.dart';
+export 'src/rendering/rendering.dart';

@@ -52,7 +52,15 @@ CodeLab SHALL поддерживать сайдбар сессий/задач, c
 
 #### Scenario: Approval остаётся в истории после решения
 - **WHEN** пользователь выбирает опцию для approval, или turn отменяется с этим approval в статусе `cancelled`
-- **THEN** CodeLab не удаляет запись из transcript и не сбрасывает её к состоянию до approval — запись схлопывается в компактный маркер принятого решения (например, выбранная опция или "Cancelled"), остающийся видимым в истории
+- **THEN** CodeLab не удаляет запись из transcript и не сбрасывает её к состоянию до approval — запись схлопывается в компактный маркер принятого решения (выбранная опция или "Cancelled"), остающийся видимым в истории; если approval отменён, а тег статуса вызова уже читается "Cancelled", маркером служит этот тег и второй тег "Cancelled" не показывается (решение пользователя 2026-11-09, design.md change `add-provider-setup-ui`, Q38)
+
+#### Scenario: Отменённый ход с ожидающим approval — один тег Cancelled
+- **WHEN** пользователь отменяет ход, пока вызов инструмента ждёт решения approval (объявленный `tool_call` или вызов только из `session/request_permission`)
+- **THEN** строка вызова показывает один тег "Cancelled" — тег статуса; тега исхода approval рядом нет, тега "Queued" нет
+
+#### Scenario: Решённый approval рядом с другим статусом
+- **WHEN** approval решён выбором опции (`allowed`, `rejected`) или отменён, а вызов затем получил итоговый статус, отличный от "Cancelled" (например, поздний `completed`)
+- **THEN** строка показывает и тег исхода approval, и тег статуса вызова, как прежде
 
 #### Scenario: Лента автоскроллится к новому approval
 - **WHEN** появляется новый pending approval, и пользователь не проскроллил ленту transcript вверх (не читает более раннюю историю)
@@ -123,7 +131,7 @@ CodeLab SHALL поддерживать клавиатурную эргономи
 - **THEN** сайдбар сворачивается, а повторное нажатие разворачивает его; лента и текст композера при этом не теряются
 
 ### Requirement: Командная палитра открывается и выполняет доступные действия
-CodeLab SHALL открывать `CodeLabCommandPaletteSurface` при вызове shortcut'а командной палитры и SHALL выполнять `/new` (создание сессии) и `/reconnect` (переподключение активного transport) немедленно при выборе, закрывая палитру после этого.
+CodeLab SHALL открывать `CodeLabCommandPaletteSurface` при вызове shortcut'а командной палитры и SHALL выполнять `/new` (создание сессии) и `/reconnect` немедленно при выборе, закрывая палитру после этого. `/reconnect` SHALL выполнять то же действие, что «Restart agent» страницы «Connection», включая подтверждение при идущих ходах (spec app-settings «Блок «Behavior» страницы «Connection»»); подпись пункта — «Restart agent» для локального профиля и «Reconnect» для WebSocket (design.md change `require-project-folder`, D22, Q24 (a)).
 
 #### Scenario: Открытие командной палитры показывает surface
 - **WHEN** пользователь вызывает shortcut командной палитры (`Ctrl/Cmd+K`)
@@ -137,9 +145,13 @@ CodeLab SHALL открывать `CodeLabCommandPaletteSurface` при вызо�
 - **WHEN** командная палитра открыта, и пользователь выбирает `/new`
 - **THEN** CodeLab создаёт новую сессию через существующий флоу создания сессии и закрывает палитру
 
-#### Scenario: Выбор /reconnect переподключает активный transport
-- **WHEN** командная палитра открыта, и пользователь выбирает `/reconnect`
-- **THEN** CodeLab вызывает существующий флоу reconnect для активного transport и закрывает палитру
+#### Scenario: Выбор /reconnect перезапускает агента
+- **WHEN** командная палитра открыта, агент работает, ходов нет, и пользователь выбирает `/reconnect`
+- **THEN** CodeLab перезапускает агента выбранным профилем окна без диалога и закрывает палитру
+
+#### Scenario: /reconnect при идущем ходе
+- **WHEN** в сессии окна идёт ход, и пользователь выбирает `/reconnect` в палитре
+- **THEN** палитра закрыта и показан диалог подтверждения перезапуска; после «Cancel» агент и ход прежние
 
 #### Scenario: Выбор /logs открывает полноэкранный log viewer
 - **WHEN** командная палитра открыта, и пользователь выбирает `/logs`
@@ -253,14 +265,14 @@ CodeLab SHALL отправлять `session/set_config_option` при выбор
 - **THEN** CodeLab отображает его название и варианты как есть, присланные агентом, не подставляя названия локальных режимов `readOnly`/`ask`/`plan`/`autoEdits` из `approval-safety` и не смешивая эти два понятия
 
 ### Requirement: Workbench честно отражает спонтанную потерю соединения
-CodeLab SHALL отражать спонтанную (не инициированную явным `connect()`/`reconnect()`) потерю ACP-соединения как отдельное состояние `lost` в UI, отличное от неудачной попытки подключения `failed`, и SHALL очищать состояние активного запроса, которое больше не может считаться достоверным, вместо того чтобы бесконечно показывать `Connected` и зависший `running` turn.
+CodeLab SHALL отражать спонтанную (не вызванную стартом или перезапуском агента) потерю ACP-соединения как отдельное состояние `lost` в UI, отличное от неудачного старта `failed`, и SHALL очищать состояние активного запроса, которое больше не может считаться достоверным, вместо того чтобы бесконечно показывать `Connected` и зависший `running` turn.
 
 #### Scenario: Агент падает во время активной сессии
 - **WHEN** активное соединение (`connectionStatus == connected`) спонтанно теряется — например, дочерний процесс агента завершается неожиданно
 - **THEN** CodeLab переводит `connectionStatus` в `lost`, очищает `pendingApproval`, `isPromptSubmitting`, `canCancel`, `isRespondingToApproval` и `isRespondingToConfigOption`, и записывает диагностику с причиной
 
-#### Scenario: Explicit connect/reconnect failure не задваивается
-- **WHEN** пользователь явно вызывает `Connect`/`Reconnect`, и попытка завершается неудачей
+#### Scenario: Сбой старта или перезапуска не задваивается
+- **WHEN** старт агента по триггеру (требование «Агент стартует сам») или «Restart agent» завершается неудачей
 - **THEN** CodeLab переводит `connectionStatus` в `failed` и показывает ровно одну diagnostic-запись об этой неудаче — реакция на спонтанную потерю соединения не создаёт вторую, дублирующую запись для того же события
 
 #### Scenario: История сессии не теряется при потере соединения
@@ -294,37 +306,6 @@ CodeLab SHALL позволять пользователю менять шири�
 - **WHEN** пользователь изменил ширину дока и перезапустил CodeLab
 - **THEN** док открывается с той же шириной
 
-### Requirement: Connection profile is edited in a modal dialog
-CodeLab SHALL present the transport setup form (profile, command, args, environment for stdio; endpoint and token for WebSocket) inside a modal dialog rather than as a permanently visible panel in the main workbench pane. Working directory ("project") SHALL NOT be a field of this dialog — it is selected independently of the connection, via the "Open Project" picker (see "Project selection is independent of the connection type" below). For stdio, the dialog SHALL additionally present a "Run agent from project directory" toggle, defaulting to on, controlling whether the agent process is spawned with the currently selected project's directory as its OS-level working directory. The dialog SHALL be reachable both from a persistent "Configure connection" affordance in the command bar and from a compact "Configure connection" prompt on the empty/disconnected connection screen — the same label in both places, not two names for one action — and SHALL NOT open automatically on app start.
-
-#### Scenario: Opening the dialog from the command bar
-- **WHEN** a session is active (transcript non-empty) and user selects "Configure connection" in the command bar
-- **THEN** CodeLab opens the connection setup dialog over the current screen without navigating away from the active session
-
-#### Scenario: Opening the dialog from the empty connection screen
-- **WHEN** no transport is connected and user selects "Configure connection" on the connection screen
-- **THEN** CodeLab opens the same connection setup dialog, pre-filled with the current transport type and field values
-
-#### Scenario: Dialog does not open unprompted
-- **WHEN** CodeLab starts for the first time with no prior connection
-- **THEN** the connection setup dialog remains closed until the user explicitly opens it
-
-#### Scenario: Editing fields inside the dialog
-- **WHEN** user changes a field value while the dialog is open
-- **THEN** CodeLab applies the change to connection state immediately, the same way it does today for the inline form
-
-#### Scenario: Closing the dialog
-- **WHEN** user dismisses the dialog (close button or Esc)
-- **THEN** CodeLab returns to the workbench with the field values as last edited, without connecting or discarding them
-
-#### Scenario: stdio process runs from the project directory by default
-- **WHEN** transport is stdio, the "Run agent from project directory" toggle is on (default), and a project is selected (or none is, falling back to the current process directory)
-- **THEN** CodeLab spawns the agent process with that same directory as its OS-level working directory
-
-#### Scenario: stdio process spawn directory can be decoupled from the project
-- **WHEN** transport is stdio and the user turns off "Run agent from project directory"
-- **THEN** CodeLab spawns the agent process without an explicit working directory override (inherits CodeLab's own process directory), while the selected project's path is still sent as `cwd` in `session/new` for sessions created afterward
-
 ### Requirement: Схлопывание потоковых сообщений агента в transcript
 CodeLab SHALL отображать подряд идущие потоковые обновления одного и того же рода (`agent_message_chunk` либо `agent_thought_chunk`) в рамках одного prompt turn как единую, дописывающуюся запись transcript, а не как отдельную запись на каждое обновление. CodeLab SHALL начинать новую запись transcript всякий раз, когда между такими обновлениями встречается обновление turn другого рода, либо когда род потокового обновления меняется (сообщение ↔ размышление).
 
@@ -345,19 +326,31 @@ CodeLab SHALL отображать подряд идущие потоковые 
 - **THEN** CodeLab показывает уже полученную часть текста в соответствующей записи transcript, не дожидаясь завершения turn
 
 ### Requirement: Project selection is independent of the connection type
-CodeLab SHALL let the user select the working directory ("project") for sessions as an action independent of the transport connection, and SHALL apply the currently selected project to the next session created regardless of whether the active transport is stdio or WebSocket.
+CodeLab SHALL let the user select the working directory ("project") for sessions as an action independent of the connection profile, and SHALL apply the currently selected project to the next session created regardless of whether the window's profile is the embedded agent, stdio or WebSocket. A project is selected only explicitly: via "Open folder…", a recent project, or the project restored from the previous run's workspace snapshot. CodeLab SHALL NOT substitute the CodeLab process's own current directory (or any other implicit directory) for a project that has not been selected; without a selected project there is no directory for an agent or a session (requirement «Без выбранного проекта нет папки агента и сессий»; design.md change `require-project-folder`, D1, replacing Decision 1 of change `add-open-project-picker`). Whether a stdio agent process starts in its process root (the directory of the trigger that started it) SHALL be the `Run in the project folder` field of that stdio profile (`runInProjectDirectory`, default on in the "Add connection profile" dialog), not a separate workbench toggle (design.md change `add-app-settings-shell`, D6). The application has no separate profile check that would start an agent process outside these triggers, so the rule "no project — no directory" has no exception for it (design.md change `remove-test-connection`, D7, removing D7 of change `require-project-folder`).
 
 #### Scenario: Project applies to a WebSocket session
-- **WHEN** CodeLab is connected via WebSocket and the user creates a new session
+- **WHEN** the window's profile is a WebSocket profile and the user creates a new session
 - **THEN** CodeLab sends the currently selected project's path as `cwd` in `session/new`, the same as it would for stdio
 
-#### Scenario: No project selected falls back to the current process directory
-- **WHEN** the user creates a session and no project has been explicitly selected
-- **THEN** CodeLab uses the same fallback it uses today (the CodeLab process's own current directory) as the session's `cwd`
+#### Scenario: No project selected — no implicit directory
+- **WHEN** CodeLab was launched with the process working directory `/`, there is no workspace snapshot, and the user has not selected a project
+- **THEN** no `session/new` is sent, no agent process, embedded agent or WebSocket connection is started, and `WorkspaceState.projectDirectory` stays unset, so the next workspace snapshot does not record `/` as the project
 
-#### Scenario: Switching connection does not clear the selected project
-- **WHEN** the user reconnects or switches transport type while a project is selected
-- **THEN** the selected project remains the same, and is used for the next session created after the switch
+#### Scenario: Switching project keeps the agent and other sessions running
+- **WHEN** the agent runs with a session in `/work/a` that is in a turn, and the user selects the project `/work/b`
+- **THEN** the agent is not restarted, the turn in `/work/a` continues, the sidebar lists `/work/b`'s sessions from `session/list`, and the next session created gets `cwd` `/work/b`
+
+#### Scenario: stdio process runs from the project directory by default
+- **WHEN** the window's profile is a stdio profile with `Run in the project folder` on, and the agent is started by selecting the project `/work/app`
+- **THEN** CodeLab spawns the agent process with `/work/app` as its OS-level working directory
+
+#### Scenario: stdio process spawn directory can be decoupled from the project
+- **WHEN** the window's profile is a stdio profile with `Run in the project folder` off
+- **THEN** CodeLab spawns the agent process without an explicit working directory override, while each session's directory is still sent as `cwd` in `session/new`
+
+#### Scenario: No profile check starts an agent without a project
+- **WHEN** no project is selected, `profiles.json` contains a stdio profile `dev` with `Run in the project folder` on, and the user opens the "Connection" page and the "Add connection profile" dialog
+- **THEN** neither offers a "Test connection" action, and no agent process is started until a project is selected
 
 ### Requirement: "Open Project" offers native browse and recent projects
 CodeLab SHALL let the user switch projects from the sessions sidebar: recent project directories are shown as collapsed project groups for one-click reselection, and an "Open folder…" item opens the operating system's native folder-selection dialog.
@@ -570,10 +563,10 @@ CodeLab SHALL держать в виду конец ленты transcript, по�
 - **THEN** CodeLab прокручивает ленту к approval так же, как требует сценарий «Лента автоскроллится к новому approval»
 
 ### Requirement: Sessions sidebar lists the project's sessions from the agent
-When the agent declares `sessionCapabilities.list`, the sessions sidebar SHALL show the project's sessions from `session/list` after each successful connect or reconnect, after the sessions opened in this run and without duplicates. A session that is not open yet SHALL be shown with its title from the agent and a "not loaded" status. When the agent reports more sessions, the sidebar SHALL offer a "Load more sessions" control that fetches the next page.
+When the agent declares `sessionCapabilities.list`, the sessions sidebar SHALL show the project's sessions from `session/list` after each successful start or restart of the agent and after the project is switched while the agent runs (requirement «Агент стартует сам»; design.md change `require-project-folder`, D15), after the sessions opened in this run and without duplicates. A session that is not open yet SHALL be shown with its title from the agent and a "not loaded" status. When the agent reports more sessions, the sidebar SHALL offer a "Load more sessions" control that fetches the next page.
 
 #### Scenario: Sessions from the agent's journal
-- **WHEN** the user connects to an agent whose journal holds two sessions for the selected project
+- **WHEN** the agent starts for the selected project, and its journal holds two sessions for that project
 - **THEN** the sidebar lists both sessions with their titles and a "not loaded" status
 
 #### Scenario: More sessions than one page
@@ -581,7 +574,7 @@ When the agent declares `sessionCapabilities.list`, the sessions sidebar SHALL s
 - **THEN** the sidebar shows "Load more sessions", and selecting it appends the next page
 
 ### Requirement: Selecting a not-loaded session restores its transcript
-Selecting a "not loaded" session in the sidebar SHALL load it via `session/load` and make it the active session with the transcript replayed by the agent. If loading fails, the previously active session SHALL stay active and the failure SHALL be recorded as a diagnostic.
+Focusing a session that is not loaded in the current connection — "not loaded" or "detached" — SHALL start the window's agent if it is not running (requirement «Агент стартует сам»), load the session via `session/load` with the session's own `cwd`, and make it the active session with the transcript replayed by the agent. A running agent SHALL NOT be restarted for this, whatever the session's directory. If starting the agent or loading fails, the previously active session SHALL stay active, the sidebar row SHALL keep its status, and the failure SHALL be recorded as a diagnostic. Exception: when the running agent did not declare `loadSession`, focusing a "detached" session SHALL show it read-only with its transcript and the detached notice, as before this change, without a `session/load` attempt and without a diagnostic; when the agent is not running, the focus starts it first and then applies the same rule (design.md change `require-project-folder`, Q26 (a)).
 
 #### Scenario: Loading a session from the sidebar
 - **WHEN** the user selects a "not loaded" session
@@ -589,41 +582,57 @@ Selecting a "not loaded" session in the sidebar SHALL load it via `session/load`
 
 #### Scenario: Loading fails
 - **WHEN** the agent answers `session/load` with an error
-- **THEN** the active session does not change, the sidebar row stays "not loaded", and a diagnostic records the failure
+- **THEN** the active session does not change, the sidebar row keeps its status, and a diagnostic records the failure
+
+#### Scenario: Detached session with an agent without loadSession
+- **WHEN** the running agent did not declare `loadSession`, and the user selects a "detached" session
+- **THEN** the session becomes active and shows its transcript with the detached notice, no `session/load` is sent, no diagnostic is recorded, and prompts to it still fail without reaching the agent
+
+#### Scenario: Session of another folder loads into the running agent
+- **WHEN** the agent runs with process root `/work/a`, a turn is running in a session of `/work/a`, and the user selects a "detached" session with `cwd` `/work/b`
+- **THEN** the agent is not restarted, the turn in `/work/a` continues, and the session is loaded via `session/load` with `cwd` `/work/b`, becomes active and accepts prompts again
 
 ### Requirement: Workbench restores sessions after reconnect and restart
-After `Reconnect`, the workbench SHALL reload the open sessions so the active session's transcript matches the agent's replay; a session the agent cannot restore SHALL be shown as "detached" with a notice in its transcript, and prompts to it SHALL fail without reaching the agent. After an app restart, the workbench SHALL select the project from the previous run and, on the first successful connect, SHALL list the project's sessions and load the previously active session; when the agent cannot restore it, the workbench SHALL start a new session with a notice explaining why.
+After "Restart agent" (or "Reconnect" for WebSocket), the workbench SHALL reload the open sessions so the active session's transcript matches the agent's replay; a session the agent cannot restore SHALL be shown as "detached" with a notice in its transcript, and prompts to it SHALL fail without reaching the agent. After an app restart, the workbench SHALL select the project from the previous run, which starts the agent (requirement «Агент стартует сам»); on that first start it SHALL list the project's sessions and load the previously active session if its `cwd` is the snapshot's project. A previously active session with another `cwd` SHALL NOT be loaded automatically: it stays a "not loaded" row that the user can open explicitly. When the agent cannot restore the active session, the workbench SHALL start a new session in the project with a notice explaining why. A previous-run project that is a filesystem root (for example `/`, written by versions that substituted the process directory for an unselected project) SHALL NOT be selected: the workbench SHALL record a warning diagnostic, start without a project and without an agent, as it does for a previous-run project whose folder no longer exists (design.md change `require-project-folder`, D10, D16, D19).
 
 #### Scenario: Reconnect reloads the active session
-- **WHEN** a session with a finished turn is active and the user presses Reconnect to an agent that supports `session/load`
-- **THEN** after reconnecting the active session shows the same transcript, rebuilt from the agent's replay
+- **WHEN** a session with a finished turn is active and the user presses "Restart agent" with an agent that supports `session/load`
+- **THEN** after the restart the active session shows the same transcript, rebuilt from the agent's replay
 
 #### Scenario: Restart restores the previous session
-- **WHEN** the user restarts the app after working in a session and connects again with the same connection settings
-- **THEN** the previous project is selected, the sidebar lists the project's sessions, and the previously active session is loaded with its transcript
+- **WHEN** the user restarts the app after working in a session in `/work/app`
+- **THEN** `/work/app` is the selected project, the agent starts in `/work/app` without any Connect action, the previously active session is loaded with its transcript, and the sidebar lists the project's sessions
 
 #### Scenario: The agent cannot restore sessions
-- **WHEN** after a restart the user connects to an agent without `loadSession`
+- **WHEN** after a restart the window's agent has no `loadSession`
 - **THEN** the workbench starts a new session in the previous project and its transcript shows "The agent cannot restore sessions; a new session was started."
 
+#### Scenario: Snapshot project at the filesystem root is not restored
+- **WHEN** the workspace snapshot of the previous run has `projectDirectory` `/` and an active open session with `cwd` `/`, and the app starts
+- **THEN** no project is selected, no agent is started, a warning diagnostic names the reason, and after the user selects a project the snapshot's sessions are neither loaded nor written to the next snapshot
+
+#### Scenario: Active session with root cwd under a real project
+- **WHEN** the workspace snapshot has `projectDirectory` `/work/app` and the active open session `s2` with `cwd` `/`, and the app starts
+- **THEN** `/work/app` is the selected project, the agent starts in `/work/app`, no `session/load` or `session/new` is sent for `s2`, `s2` is listed as "not loaded", and the session pane shows the start screen; selecting `s2` asks for confirmation (requirement «Подтверждение открытия сессии в корне диска») and, after `Open`, loads it with `cwd` `/` without restarting the agent
+
 ### Requirement: Connection banner above a non-empty transcript
-When the transcript of the active session is not empty and the connection is `lost`, `failed` or `reconnecting`, the workbench SHALL show a banner above the transcript that states the connection status and its reason. The banner SHALL offer Reconnect and Connection settings while the connection is `lost` or `failed`, and SHALL show progress without a Reconnect action while it is `reconnecting`. The banner SHALL NOT be dismissible and SHALL disappear when the connection becomes `connected`. When the transcript is empty, the workbench SHALL keep showing the connection screen instead of the banner.
+When the transcript of the active session is not empty and the connection is `lost`, `failed` or `reconnecting`, the workbench SHALL show a banner above the transcript that states the connection status and its reason. The banner SHALL offer Retry and Connection settings while the connection is `lost` or `failed`, and SHALL show progress without a Retry action while it is `reconnecting`. After `failed`, Retry SHALL repeat the intent that started the agent; after `lost`, Retry SHALL start the agent again with the window's profile and the previous process root, and the open sessions SHALL be reloaded as after "Restart agent" (requirement «Агент стартует сам», trigger 4; design.md change `require-project-folder`, D13, D18). The banner SHALL NOT be dismissible and SHALL disappear when the connection becomes `connected`. When no session is in focus or its transcript is empty, the workbench SHALL show the start screen or the start failure screen instead of the banner (requirement «Empty session after connecting»).
 
 #### Scenario: The agent process exits during a session
 - **WHEN** the active session's transcript has entries and the agent process exits unexpectedly
-- **THEN** a "Connection to the agent lost" banner with the reason, a Reconnect action and a Connection settings action appears above the transcript, and the transcript entries stay visible
+- **THEN** a "Connection to the agent lost" banner with the reason, a Retry action and a Connection settings action appears above the transcript, and the transcript entries stay visible
 
-#### Scenario: Reconnect from the banner
-- **WHEN** the user selects Reconnect in the banner and the reconnect succeeds
-- **THEN** the banner shows "Reconnecting…" without the Reconnect action while reconnecting, and disappears once the connection is `connected`
+#### Scenario: Retry from the banner
+- **WHEN** the connection is `lost` and the user selects Retry in the banner, and the start succeeds
+- **THEN** the agent starts once with the window's profile, the banner shows progress without the Retry action while starting, and disappears once the connection is `connected`; the active session is loaded again via `session/load`
 
-#### Scenario: Reconnect from the banner fails
-- **WHEN** the user selects Reconnect in the banner and the attempt fails
-- **THEN** the banner shows "Could not connect to the agent" with the failure reason and offers Reconnect again
+#### Scenario: Retry from the banner fails
+- **WHEN** the user selects Retry in the banner and the attempt fails
+- **THEN** the banner shows "Could not connect to the agent" with the failure reason and offers Retry again
 
-#### Scenario: Empty transcript keeps the connection screen
-- **WHEN** the connection is lost while the active session's transcript is empty
-- **THEN** the workbench shows the connection screen with Reconnect and no banner
+#### Scenario: Empty transcript shows the failure screen
+- **WHEN** the start of the agent fails while the active session's transcript is empty or no session is in focus
+- **THEN** the session pane shows the start failure screen with the reason and Retry, and no banner
 
 ### Requirement: Failed turn notice with Retry
 A failed prompt turn SHALL be shown in the transcript as a notice whose title describes the failure class and whose body is the agent's message, with the raw error text available only in collapsed details. The title SHALL follow the agent's `errorClass`:
@@ -680,7 +689,7 @@ In `wide` the sidebar and the tool dock SHALL be columns. In `medium` the sideba
 - **THEN** the composer holds the same text and the transcript keeps its scroll position
 
 ### Requirement: App bar with palette search and connection badge
-CodeLab SHALL show an app bar with the app name, a search field labelled "Search or run a command" with the palette shortcut, toggles for the available tool panes, and a connection badge. Activating the search field SHALL open the command palette. The badge SHALL show the connection status; while the connection is lost or failed it SHALL offer Retry, which reconnects, and while disconnected it SHALL offer Connect. The app bar SHALL NOT show the agent binary path.
+CodeLab SHALL show an app bar with the app name, a search field labelled "Search or run a command" with the palette shortcut, toggles for the available tool panes, and a connection badge. Activating the search field SHALL open the command palette. The badge SHALL show the connection status; while the connection is lost or failed it SHALL offer Retry, which does the same as Retry in the connection banner (requirement «Connection banner above a non-empty transcript»). The badge SHALL NOT offer Connect in any state: the agent starts by the workbench triggers (requirement «Агент стартует сам»; design.md change `require-project-folder`, D18). The app bar SHALL NOT show the agent binary path.
 
 #### Scenario: Search field opens the palette
 - **WHEN** the user clicks the "Search or run a command" field
@@ -688,14 +697,18 @@ CodeLab SHALL show an app bar with the app name, a search field labelled "Search
 
 #### Scenario: Badge offers Retry after a lost connection
 - **WHEN** the agent process exits while connected
-- **THEN** the badge reads "Connection lost" and offers Retry, and choosing Retry starts a reconnect
+- **THEN** the badge reads "Connection lost" and offers Retry, and choosing Retry starts the agent again
 
 #### Scenario: Badge while connected
 - **WHEN** the connection is established
 - **THEN** the badge reads "Connected", no Connect button is shown, and the profile and transport are available in the badge tooltip
 
+#### Scenario: Badge before the agent starts
+- **WHEN** no project is selected and the agent has not started
+- **THEN** the badge shows the disconnected status without a Connect button
+
 ### Requirement: Sessions sidebar grouped by project
-The sessions sidebar SHALL show, from top to bottom, "New session" with its shortcut, a filter field, a "Projects" section with one group per project, "Open folder…", and "Settings" at the bottom. The selected project's group SHALL be expanded and list its sessions with their status and "Load more sessions"; recent projects SHALL be collapsed groups named after the folder. The filter SHALL narrow the listed sessions by title.
+The sessions sidebar SHALL show, from top to bottom, "New session" with its shortcut, a filter field, a "Projects" section with one group per project, "Open folder…", and "Settings" at the bottom. The selected project's group SHALL be expanded and list its sessions with their status and "Load more sessions"; recent projects SHALL be collapsed groups named after the folder. A session opened in this run SHALL be listed in the group of the project whose path equals its `cwd` (exact string match): one agent serves sessions of any folder, and a session of another project keeps running after the project is switched. A recent project's group that holds open sessions SHALL list them with their live status, and stays collapsed only while none of them is running, waiting for approval or failed; it SHALL NOT list that project's `session/list` rows until the project is selected. An open session whose `cwd` matches no group SHALL be listed in the selected project's group with its folder as the subtitle (design.md change `require-project-folder`, Q23 (a)). The filter SHALL narrow the listed sessions by title.
 
 #### Scenario: Groups by project
 - **WHEN** the selected project has three sessions and two other projects are in the recent list
@@ -708,6 +721,14 @@ The sessions sidebar SHALL show, from top to bottom, "New session" with its shor
 #### Scenario: Session status in the sidebar
 - **WHEN** a listed session is running a turn, waiting for approval, failed or not loaded
 - **THEN** its row shows the matching status, as in "Sessions sidebar shows live status for background sessions"
+
+#### Scenario: Running session of another project after switching
+- **WHEN** a turn is running in a session with `cwd` `/work/a`, `/work/a` is a recent project, and the user selects the project `/work/b`
+- **THEN** the `b` group lists `/work/b`'s sessions, the `a` group is expanded and lists the running session with its status, and the session is not listed under `b`
+
+#### Scenario: Open session without its project group
+- **WHEN** the selected project is `/work/app` and a session with `cwd` `/work/tools` (not a recent project) is open
+- **THEN** the session is listed in the `app` group with the subtitle `/work/tools`
 
 ### Requirement: Tool dock with closable pane tabs
 CodeLab SHALL host tool panes in a dock on the right, with one closable tab per open pane. Each available pane SHALL have a toggle in the app bar that opens it, makes it active, or closes it when it is already active. With no open panes the dock SHALL NOT be shown. The open panes, the active pane and the dock width SHALL persist across restarts. This change SHALL provide the Plan pane (the full plan checklist) and the Protocol pane; a pane without data SHALL NOT be offered.
@@ -736,11 +757,11 @@ The session pane SHALL have a header with the session title, a project chip name
 - **THEN** the header shows "Turn running", then "Waiting for approval", then "Turn running", and no turn state chip after the turn ends
 
 ### Requirement: Transcript reads as a conversation
-The transcript SHALL be laid out as a conversation in a column centred in the session pane, at most 760 px wide, without a frame around the transcript. A user message SHALL be a bubble aligned to the right, at most 78% of the column width, without a "You" label. An agent reply SHALL be plain text in the column without a card and without an "Agent" label. Consecutive rows SHALL be separated by spacing, not by per-row cards.
+The transcript SHALL be laid out as a conversation in a column centred in the session pane, at most 760 px wide, without a frame around the transcript. A user message SHALL be a bubble aligned to the right, at most 78% of the column width, without a "You" label. An agent reply SHALL be rendered markdown in the column (requirement "Markdown в ответе агента") without a card and without an "Agent" label. Consecutive rows SHALL be separated by spacing, not by per-row cards.
 
 #### Scenario: A prompt and its reply
 - **WHEN** the user sends "Render replies as markdown" and the agent answers "I'll split the transcript into typed rows."
-- **THEN** the transcript shows the prompt in a right-aligned bubble and the answer as plain text below it, and neither row shows a "You" or "Agent" label
+- **THEN** the transcript shows the prompt in a right-aligned bubble and the answer as a paragraph below it, and neither row shows a "You" or "Agent" label
 
 #### Scenario: Wide window keeps a readable column
 - **WHEN** the session pane is 1200 px wide
@@ -755,7 +776,7 @@ Each `agent_thought_chunk` segment SHALL be shown as a thought block distinct fr
 
 #### Scenario: Thought collapses when the reply starts
 - **WHEN** after the thought the agent streams `agent_message_chunk` updates
-- **THEN** the thought block collapses to its header "Thoughts", and the reply text is shown below it as plain text
+- **THEN** the thought block collapses to its header "Thoughts", and the reply is shown below it as rendered markdown
 
 #### Scenario: The user's choice wins
 - **WHEN** the user expands a finished thought block, scrolls it out of view and back
@@ -824,9 +845,472 @@ Transcript notices SHALL be styled by their kind. A failed turn notice SHALL be 
 - **THEN** the transcript shows "The agent cannot restore sessions; a new session was started." as a neutral note, not as an error
 
 ### Requirement: Empty session after connecting
-When the connection is established and the active session has no transcript items, the session pane SHALL show an empty state inviting the user to send the first message instead of the connection screen. The connection screen SHALL be shown only while the connection is not established.
+Without a session in focus, the session pane SHALL show a start screen instead of a connection screen: without a selected project — the text `Open a project to start a session.` and "Open folder…" (key `start-open-project`); with a selected project — `Start a new session in <folder name>.` and "New session" (key `start-new-session`), with the progress text `Starting <profile title>…` while the agent starts. When a session is in focus and has no transcript items and the agent runs, the session pane SHALL show an empty state inviting the user to send the first message. When starting the agent fails, the session pane SHALL show the failure reason with "Retry", which repeats the intent that started the agent, and "Connection settings". The workbench SHALL NOT offer a Connect action (design.md change `require-project-folder`, D18).
 
 #### Scenario: New session while connected
-- **WHEN** the connection is established and the user creates a new session
+- **WHEN** the agent runs and the user creates a new session
 - **THEN** the session pane shows the empty state with the composer focused, and no Connect button
+
+#### Scenario: Start screen without a project
+- **WHEN** no project is selected and no session is in focus
+- **THEN** the session pane shows `Open a project to start a session.` and "Open folder…" (`start-open-project`), and no Connect button
+
+#### Scenario: Start screen with a project
+- **WHEN** the project `/work/app` is selected and no session is in focus
+- **THEN** the session pane shows `Start a new session in app.` and "New session" (`start-new-session`); pressing it creates a session with `cwd` `/work/app`
+
+#### Scenario: Agent start fails
+- **WHEN** the user selects a project with the embedded agent and an invalid `config.yaml`
+- **THEN** the session pane shows the config problems and "Retry"; after the config is fixed, "Retry" (or any other start trigger) starts it
+
+### Requirement: Тип подключения «Встроенный агент»
+Встроенный агент SHALL быть первой строкой списка профилей страницы настроек «Connection» (spec app-settings «Список профилей на странице «Connection»»), а не типом в форме подключения (design.md change `add-app-settings-shell`, D6). У строки нет полей. Рабочая папка выбирается «Open Project», как у других профилей. Конфигурация агента берётся из `$CODELAB_HOME/config.yaml` и проектного `.codelab/config.yaml`, ключи — из хранилища секретов агента.
+
+Подключение SHALL строить профиль `ConnectionProfile.embedded(id: 'embedded', hostProfile: 'embedded-app-desktop')`, а транспорт ему даёт `EmbeddedTransportResolver`, зарегистрированный в composition root (`apps/codelab_desktop/lib/app/`). Виджеты и Cubit-ы НЕ SHALL импортировать `package:codelab_embedded/io.dart`.
+
+Без сохранённого выбора профиля по умолчанию профилем по умолчанию SHALL быть встроенный агент; профиль `default` из `profiles.json` app не учитывает (design.md change `add-app-settings-shell`, D5).
+
+Требования к поведению:
+- **Невалидная или отсутствующая конфигурация** встроенного агента SHALL переводить подключение в `ConnectionFailed` (design.md change `add-embedded-agent-mode`, D13, п. 2). Баннер соединения SHALL показывать текст `EmbeddedAgentConfigException`: проблемы загрузчика в форме `config check` и подсказку `Configure the embedded agent in <home>/config.yaml; check it with: codelab config check`. Значений секретов в нём нет.
+- **Нет ключа провайдера.** Подключение SHALL открываться. Первый ход с этим провайдером SHALL завершаться ошибкой провайдера с именем секрета без значения и показываться заметкой «Failed turn» (требование «Failed turn notice with Retry»), как у внешнего агента. Отдельной проверки готовности провайдера при подключении нет.
+- **Одобрения, очередь промптов, список сессий, отмена хода и транскрипт** встроенного агента SHALL работать теми же компонентами, что для внешнего агента.
+- **Обрыв соединения** (отказ встроенного агента, `ConnectionLost`) SHALL отображаться так же, как обрыв внешнего агента.
+- **«Restart agent» во время старта** встроенного агента SHALL прерывать прежнюю попытку без промежуточного `ConnectionFailed`: баннер соединения показывает подключение новой попытки, агент прерванной попытки освобождается резолвером (требование acp-client-kit «Явный автомат соединения»; design.md change `add-embedded-agent-mode`, D6; design.md change `require-project-folder`, Q25 (a)). Параллельные триггеры старта второй попытки не начинают (требование «Агент стартует сам»).
+- **Закрытие root scope** SHALL ждать остановки встроенного агента не дольше 10 s. По истечении приложение SHALL писать событие `embedded.close_timeout` уровня `warning` без текста ошибки и продолжать освобождение транспорта и `AcpClientApplication` (D9).
+
+#### Scenario: Выбор встроенного агента
+- **WHEN** работает stdio-профиль, пользователь нажимает «Use» в строке «Embedded agent» на странице «Connection», затем «Restart agent»
+- **THEN** CodeLab подключается к встроенному агенту без запуска дочернего процесса, а метка подключения — `Embedded agent`
+
+#### Scenario: Встроенный агент по умолчанию
+- **WHEN** CodeLab запускается впервые с пустым `CODELAB_HOME`, и пользователь выбирает проект через «Open folder…»
+- **THEN** CodeLab стартует встроенного агента
+
+#### Scenario: Нет конфигурации встроенного агента
+- **WHEN** `$CODELAB_HOME` не содержит `config.yaml`, и встроенный агент стартует при выборе проекта
+- **THEN** подключение в состоянии `ConnectionFailed`, баннер показывает проблему конфигурации и подсказку `Configure the embedded agent in <home>/config.yaml; check it with: codelab config check`, где `<home>` — путь `CODELAB_HOME`
+
+#### Scenario: Невалидный проектный конфиг встроенного агента
+- **WHEN** выбранный проект содержит `.codelab/config.yaml` с `budget.max_steps: 0`, и встроенный агент стартует при выборе проекта
+- **THEN** подключение в состоянии `ConnectionFailed`, баннер называет файл, строку и ключ `budget.max_steps` и содержит ту же подсказку
+
+#### Scenario: Нет ключа провайдера
+- **WHEN** `config.yaml` валиден и задаёт провайдера с `api_key_secret: codelab/p`, секрет `codelab/p` не задан, встроенный агент стартует при выборе проекта, и пользователь создаёт сессию и отправляет промпт
+- **THEN** подключение установлено, ход завершается заметкой «Failed turn» с ошибкой провайдера, называющей `codelab/p`, без значения секрета
+
+#### Scenario: Одобрение во встроенном режиме
+- **WHEN** встроенный агент спрашивает одобрение `write` в режиме `standard`, и пользователь выбирает вариант отказа в карточке одобрения
+- **THEN** файл не изменён, а строка вызова в транскрипте показывает отказ
+
+#### Scenario: Restart agent во время старта встроенного агента
+- **WHEN** встроенный агент стартует при выборе проекта, и, пока он ещё открывается, пользователь нажимает «Restart agent»
+- **THEN** баннер соединения не показывает `ConnectionFailed` прерванной попытки, подключение завершается исходом второй попытки, а агент первой попытки остановлен
+
+#### Scenario: Зависшая остановка встроенного агента
+- **WHEN** root scope закрывается, а остановка встроенного агента не завершается за 10 s
+- **THEN** в логе приложения есть `embedded.close_timeout` уровня `warning`, а транспорт и `AcpClientApplication` освобождены
+
+### Requirement: Перенос секретов встроенного агента
+Если встроенный агент открыт с `EmbeddedAgent.secretsInConfig == true`, рабочее место CodeLab SHALL показывать над транскриптом предупреждение уровня `warning` (Fluent `InfoBar`, как баннер соединения) с текстом `Secrets are stored in the agent config file.` и кнопкой `Migrate secrets` (решение пользователя 2026-11-04 R8-3; design.md change `add-config-literal-secrets-and-migrate`, D8). Подключение и работа агента при этом НЕ SHALL блокироваться. Закрытие предупреждения крестиком скрывает его до следующего подключения; `Close` после успешного переноса (`applied`) — тоже.
+
+`Migrate secrets` SHALL открывать диалог с планом переноса — строками отчёта `SecretMigrator` для папки, с которой открыт встроенный агент (`cwd` агента, а не текущая папка настроек; `--all`, `--dry-run`), без значений секретов:
+- бэкенд только для чтения → текст `Secrets cannot be stored: the env backend is read-only. Add secrets.backend: file to <home>/config.yaml, or set CODELAB_SECRET_* variables.` и только кнопка `Close`;
+- конфликт имени с хранилищем → текст конфликта и `Close`; замена существующего секрета в app НЕ SHALL предлагаться;
+- все находки только в файле `CODELAB_CONFIG` → строки плана и только `Close`;
+- пустой план → `Nothing to migrate.` и только `Close`;
+- иначе → `Migrate` и `Cancel`.
+
+Во время переноса диалог НЕ SHALL закрываться (`Esc` и щелчок вне диалога игнорируются); одновременно SHALL выполняться не больше одной операции плана или переноса.
+
+`Migrate` SHALL выполнять перенос тем же движком через порт приложения. Реализация — в composition root через `package:codelab_embedded/io.dart` с тем же `CODELAB_HOME`, `CODELAB_CONFIG` и окружением, что у открывателя встроенного агента; виджеты НЕ SHALL обращаться к файлам и хранилищу. Тексты `planFailed`/`applyFailed` и записи лога app SHALL строиться только из типизированного отчёта или имени типа исключения, НЕ из `error.toString()`. Подсказка для бэкенда `env` на Windows SHALL совпадать с веткой `secret set` (только переменные `CODELAB_SECRET_*`). После успеха диалог SHALL показывать `Secrets moved. Restart the embedded agent to use them.` и кнопку `Restart agent`, которая повторяет подключение тем же профилем; она SHALL быть недоступна, пока идёт ход в любой сессии встроенного агента (подсказка `Wait for the current turn to finish.`), и если за время переноса встроенный агент закрылся или сменился (подсказка `The embedded agent is no longer connected.`); `Close` тогда SHALL переходить по текущему состоянию предложения: нет агента со секретами — предупреждение скрыто, новый агент со секретами — предупреждение показано. Если перенос сорвался после того, как часть файлов уже перенесена (`movedAny`), диалог SHALL показывать перенесённое и предлагать `Restart agent`. Поздний результат плана или переноса после закрытия диалога или новой попытки SHALL отбрасываться. Лог app SHALL писать события `secret_migration.planned`, `secret_migration.applied`, `secret_migration.result_discarded`, `secret_migration.plan_failed`, `secret_migration.apply_failed` только с числами, id бэкенда и именами типов — без путей ключей, имён секретов и текстов.
+
+#### Scenario: Предупреждение и перенос
+- **WHEN** встроенный агент открыт с литеральным `api_key` в `<home>/config.yaml` и `secrets.backend: file`, пользователь нажимает `Migrate secrets`, затем `Migrate`
+- **THEN** диалог показал строку плана для `providers.<id>.api_key` без значения; после переноса файл содержит `api_key_secret`, а `Restart agent` переподключает встроенного агента, после чего предупреждения нет
+
+#### Scenario: Бэкенд env
+- **WHEN** то же, но `secrets.backend` не задан
+- **THEN** диалог показывает текст о бэкенде `env` и только `Close`; файл не изменён
+
+#### Scenario: Поздний результат
+- **WHEN** пользователь закрывает диалог, пока план ещё строится
+- **THEN** результат плана не меняет состояние Cubit и не открывает диалог снова
+
+#### Scenario: Окружение движка совпадает с агентом
+- **WHEN** приложение запущено с временными `CODELAB_HOME` и `CODELAB_CONFIG`, и пользователь открывает план
+- **THEN** план построен по тем же файлам, что открыватель встроенного агента (`app_scope.dart`), а не по `~/.codelab`
+
+#### Scenario: Папка агента, а не текущая папка
+- **WHEN** встроенный агент открыт для проекта `A`, пользователь переключает папку настроек на проект `B` без переподключения и нажимает `Migrate secrets`
+- **THEN** план построен по слоям проекта `A`; файлы проекта `B` не читались и не изменены
+
+#### Scenario: Диалог не закрывается во время переноса
+- **WHEN** порт `apply` ещё не завершён, а пользователь нажимает `Esc` и повторно `Migrate`
+- **THEN** диалог остаётся открытым в состоянии переноса, порт `apply` вызван один раз
+
+#### Scenario: Ход в другой сессии
+- **WHEN** перенос завершён (`applied`), а в неактивной сессии встроенного агента идёт ход
+- **THEN** `Restart agent` недоступна до конца хода
+
+#### Scenario: Агент сменился во время переноса
+- **WHEN** во время `applying` встроенный агент закрывается, а перенос затем завершается
+- **THEN** диалог показывает итог переноса, `Restart agent` недоступна с подсказкой `The embedded agent is no longer connected.`, а после `Close` предупреждение скрыто
+
+#### Scenario: Close после переноса
+- **WHEN** перенос завершён, и пользователь нажимает `Close`
+- **THEN** предупреждение `Secrets are stored in the agent config file.` не показывается до следующего подключения
+
+#### Scenario: Частичный перенос
+- **WHEN** перенос записал пользовательский файл и сорвался на проектном (`movedAny`)
+- **THEN** диалог показывает строки перенесённого и кнопку `Restart agent`
+
+#### Scenario: Пустой план
+- **WHEN** план не содержит ни одного пункта
+- **THEN** диалог показывает `Nothing to migrate.` и только `Close`
+
+#### Scenario: Лог без данных конфига
+- **WHEN** план и перенос выполнены для `providers.lm.api_key` с секретом `codelab/lm`
+- **THEN** лог app содержит `secret_migration.planned` и `secret_migration.applied` с числами и id бэкенда и не содержит `providers.lm`, `codelab/lm` и значения
+
+#### Scenario: Ошибка без текста исключения
+- **WHEN** порт бросает исключение, чей `toString()` содержит `sk-test-leak-0123456789`
+- **THEN** диалог и лог app показывают имя типа исключения и не содержат `sk-test-leak-0123456789`
+
+### Requirement: Отказ подключения из-за токена в workbench
+Если WebSocket-агент отклоняет рукопожатие со статусом 401 или 403 (`tokenRejectionStatus` kit, spec acp-client-kit «Отказ рукопожатия из-за токена»), баннер сбоя подключения в main pane и диагностика `ConnectionCubit` SHALL показывать причину `The agent rejected the token (HTTP <код>).`, если токен был отправлен, и `The agent requires a token (HTTP <код>).`, если нет (`describeConnectFailureByToken` kit отдаёт строчный текст без точки, app делает первую букву заглавной и ставит точку, как в D3; design.md change `add-provider-setup-ui`, D25), вместо общего `Failed to connect ACP transport.`. Остальные ошибки подключения SHALL показываться как раньше. Значение токена, его ссылка и имя переменной НЕ SHALL попадать в баннер, диагностику и журнал.
+
+#### Scenario: Отправленный токен отклонён
+- **WHEN** окно подключается к WebSocket-профилю с `tokenRef: env:DEVBOX_TOKEN` (переменная задана значением `sk-test-leak-0123456789`), а сервер отвечает на рукопожатие `401`
+- **THEN** баннер и диагностика содержат `The agent rejected the token (HTTP 401).` и не содержат маркера
+
+#### Scenario: Токена нет
+- **WHEN** окно подключается к WebSocket-профилю без токена (или с `secret:`, у которого нет значения), а сервер отвечает `403`
+- **THEN** баннер и диагностика содержат `The agent requires a token (HTTP 403).`
+
+#### Scenario: Прочие ошибки без изменений
+- **WHEN** сервер отвечает на рукопожатие `500` или порт закрыт
+- **THEN** баннер показывает прежний текст сбоя подключения, без слов о токене
+
+### Requirement: Встроенный агент без провайдера
+Если встроенный агент не открылся только потому, что нет ни одного провайдера с моделью (`providerSetupNeeded` моста `codelab_setup` истинно для снимка конфига, с которым он открывался: нет файла, нет провайдеров или у них нет моделей; spec client-agent-setup «Готовность провайдера»; без `agent.default_model` при провайдере с моделью агент открывается на первой модели, design.md change `optional-default-model`, D3), баннер соединения SHALL показывать `No model provider is configured for the embedded agent.` и действие «Add provider» (ключ `connection-banner-add-provider`) вместо сырого текста проблем (решение пользователя 2026-11-06; design.md change `add-provider-setup-ui`, D26). Признак SHALL определяться по типизированным проблемам загрузчика и составу слоёв конфига, а не по тексту. Прочие ошибки конфига встроенного агента SHALL показываться как раньше.
+
+«Add provider» SHALL открывать мастер провайдера (spec app-settings «Мастер провайдера в app») с целью `user` по умолчанию и неснимаемым «Make default». После `ConfigSaved` app SHALL повторять намерение, вызвавшее неудачный старт встроенного агента (как «Retry», требование «Агент стартует сам»; design.md change `require-project-folder`, D13), если с момента сбоя не начиналась новая попытка старта окна; если началась (с любым профилем), повтора НЕ SHALL быть. Отмена мастера SHALL оставлять баннер.
+
+#### Scenario: Новая установка
+- **WHEN** app с пустым `CODELAB_HOME` стартует встроенного агента при выборе проекта
+- **THEN** баннер показывает `No model provider is configured for the embedded agent.` и «Add provider», текста `no model is configured` (сырая проблема `config.model.none`, design.md change `optional-default-model`, D4) и `codelab config check` в нём нет
+
+#### Scenario: Провайдер добавлен из баннера
+- **WHEN** пользователь нажимает «Add provider» в баннере, проходит мастер и сохраняет провайдера
+- **THEN** `config.yaml` содержит провайдера и `agent.default_model` (мастер с неснимаемым «Make default» пишет ключ, D7; для старта агента ключ не обязателен), app повторяет старт встроенного агента, баннер исчезает, а модель видна в селекторе композера
+
+#### Scenario: Другой профиль за время мастера
+- **WHEN** мастер открыт из баннера, и пока он открыт, окно начинает старт stdio-профиля (диалог модальный, поэтому тест выбирает профиль `ConnectionCommands.use` и начинает старт `ConnectionCommands.restart`), затем пользователь сохраняет провайдера
+- **THEN** конфиг записан, повтора старта встроенного агента нет, агент окна — stdio-профиль, журнал содержит `provider_wizard.reconnect_skipped`
+
+#### Scenario: Прочая ошибка конфига
+- **WHEN** `config.yaml` задаёт провайдера и `agent.default_model`, но содержит `budget.max_steps: 0`; либо задаёт провайдера `gw` и `agent.default_model: gw/typo`, которой нет в каталоге
+- **THEN** баннер показывает прежний текст проблемы с подсказкой `codelab config check`, действия «Add provider» нет
+
+### Requirement: Тег неизвестного риска одобрения
+Строка вызова с ждущим одобрением SHALL показывать для клиентского уровня риска `unknown` тег `Unknown risk` тоном предупреждения, дополняя набор тегов требования «Tool call as a one-line row» (решение пользователя 2026-11-08, design.md change `add-provider-setup-ui`, Q32, D27).
+
+#### Scenario: MCP-инструмент с подсказкой «только чтение»
+- **WHEN** встроенный агент запрашивает разрешение на вызов MCP-инструмента, сервер которого объявил `readOnlyHint: true`
+- **THEN** строка вызова показывает подпись по имени инструмента и тег `Unknown risk`, а не `Read` и `Read-only`
+
+### Requirement: Заметка исхода хода в ленте
+Лента SHALL показывать `NoticeItem` вида `turnStopped` (spec acp-client-kit «Инкрементальная проекция транскрипта») строкой заметки после вывода хода, тем же видом, что заметку `emptyTurn` (design.md change `add-provider-setup-ui`, Q33, D27).
+
+#### Scenario: Молчаливый max_tokens
+- **WHEN** ход встроенного агента после размышлений завершается с `stopReason: max_tokens`
+- **THEN** лента показывает под размышлениями строку `The model reached its token limit, so the turn ended.`
+
+### Requirement: Ответ агента одним огороженным блоком
+Если весь текст ответа агента (`AgentTextItem`) без пробельных строк по краям — ровно один огороженный блок markdown, лента SHALL показывать его блоком кода по требованию «Блок кода в ответе агента»: без строк ограждения, с подписью языка, кнопкой «Copy», сохранением переводов строк и возможностью выделить текст; язык `text` не подсвечивается. Пока ход идёт и закрывающей строки ещё нет, содержимое SHALL показываться моноширинным блоком кода без подсветки, а не сырым текстом (DSK-6). Проза до или после блока и несколько блоков SHALL показываться как markdown (требование «Markdown в ответе агента»). Правило панели «Agent status» (spec app-settings, сценарий «Ответ /mcp list без внешнего ограждения») не меняется (решение пользователя 2026-11-11, design.md change `add-desktop-markdown`, D11; прежнее решение — Q37, D27 change `add-provider-setup-ui`).
+
+#### Scenario: Ответ /mcp list в ленте
+- **WHEN** встроенный агент отвечает на `/mcp list` текстом ```` ```text\nMCP servers (1)\n…\n``` ````
+- **THEN** лента показывает строки `MCP servers (1)` и таблицу моноширинным блоком кода с подписью `text` и кнопкой «Copy», строк ```` ```text ```` и ```` ``` ```` нет
+
+#### Scenario: Текст вокруг блока
+- **WHEN** ответ агента содержит прозу до или после огороженного блока или два блока
+- **THEN** лента показывает прозу как markdown, а каждый огороженный блок — блоком кода
+
+#### Scenario: Открывающая строка во время хода
+- **WHEN** ход идёт, и ответ пока состоит из строки ```` ```text ```` и одной строки вывода
+- **THEN** лента показывает строку вывода моноширинным блоком без подсветки, строки ```` ```text ```` нет
+
+### Requirement: Вызов смены режима и неизвестного вида в ленте
+Строка вызова вида `switch_mode` SHALL показывать метку `Mode` и деталь из `ToolRowView` (требование «Строка инструмента без сырого JSON» acp-client-kit). Строка вызова, чей строковый `kind` CodeLab не знает, SHALL выглядеть как строка вызова вида `other`. Пока у такого вызова ждёт одобрение, строка SHALL показывать тег `Unknown risk` (требование «Тег неизвестного риска одобрения», change `add-provider-setup-ui`) и варианты агента без изменений. Строка SHALL NOT показывать wire-имя вида (`switch_mode`, исходное незнакомое значение) (design.md change `tolerate-unknown-tool-kind`, D5, D7).
+
+#### Scenario: Выход из plan-режима ждёт одобрения
+- **WHEN** агент запрашивает разрешение на вызов `switch_mode` с `title` "Ready for implementation" и вариантами «Yes, and auto-accept all actions», «Yes, and manually accept actions», «No, stay in architect mode»
+- **THEN** строка вызова читается «Mode Ready for implementation», показывает тег `Unknown risk`, раскрыта с панелью решения из трёх вариантов агента и не содержит `switch_mode`
+
+#### Scenario: Вызов незнакомого вида ждёт одобрения
+- **WHEN** агент запрашивает разрешение на вызов, которого ещё нет в ходе, с `kind: "future_kind"` и `title` "Plan sync"
+- **THEN** строка вызова читается «Plan sync» с тегом `Unknown risk` и не содержит `future_kind`
+
+### Requirement: Markdown в ответе агента
+Лента SHALL рисовать текст ответа агента (`AgentTextItem.text`) как markdown без сырых маркеров разметки: заголовки, абзацы с курсивом, жирным, зачёркнутым и inline-кодом, маркированные и нумерованные списки с вложенностью, списки задач с неинтерактивным флажком Fluent, цитаты, таблицы, горизонтальная черта, блоки кода (требование «Блок кода в ответе агента») и формулы в `\(…\)` и `\[…\]`. Знак `$` SHALL оставаться обычным символом. Разбор SHALL выполнять пакет `gpt_markdown` внутри `codelab_ui` (`lib/src/rendering/`) со своими builder'ами и темой из `FluentTheme`, без Material-предка; ядро клиента и app НЕ SHALL разбирать markdown сами. HTML-теги SHALL показываться текстом как написаны и НЕ SHALL становиться элементами разметки, изображениями или ссылками. Цвета SHALL браться только из `FluentTheme`, тонов кита и палитры подсветки (DSK-19). Текст ответа SHALL выделяться мышью в пределах ответа без Material-предка и копироваться Cmd/Ctrl+C; по правому клику SHALL открываться меню Fluent с пунктами «Copy» и «Select all»; ответ НЕ SHALL быть остановкой обхода Tab. Если оценка глубины вложенности хотя бы одной строки ответа — все символы `>` строки, плюс все маркеры списка в любом месте строки, плюс половина колонок пробельных серий ведущего префикса из пробелов, табов (4 колонки), `>` и маркеров списка; строки делятся по `\n`, `\r`, U+2028, U+2029 и U+0085 и считаются в том числе внутри оград — больше предела (`kMaxMarkdownNestingDepth`, 32), ответ SHALL показываться моноширинным простым текстом с пометкой `Shown as plain text: nesting is too deep.` без разбора, и строка НЕ SHALL падать при пересборке. Промпт пользователя и мысли модели SHALL показываться как есть, без разметки (design.md change `add-desktop-markdown`, D1–D4, D7–D9, D14).
+
+#### Scenario: Ответ со smoke без сырых маркеров
+- **WHEN** агент отвечает текстом, где «Готово.» обрамлено `**`, `dart test` в строке обрамлено обратными кавычками, а ниже идёт огороженный блок с языком `bash` и строкой `dart test`
+- **THEN** лента показывает «Готово.» жирным, `dart test` в строке — inline-кодом, команду — блоком кода с подписью `bash`, а символов `**`, `` ` `` и строк ```` ``` ```` в ленте нет
+
+#### Scenario: Разметка в теме Fluent без Material
+- **WHEN** выполняется `acp_markdown_test.dart: renders headings lists tables quotes and inline code` в светлой и тёмной теме Fluent без Material-предка, с заголовками, вложенным списком, списком задач `[ ]`/`[x]`, таблицей и цитатой
+- **THEN** исключений нет, заголовки имеют разные стили, задача `[x]` показана отмеченным Fluent `Checkbox` без реакции на клик, таблица и цитата отрисованы, цвета блока кода в тёмной теме — из тёмной палитры
+
+#### Scenario: HTML показывается текстом
+- **WHEN** ответ содержит `<b>bold</b>` и `<img src="https://x.example/y.png">`
+- **THEN** лента показывает обе строки текстом как написаны, жирного начертания и изображения нет, сетевых запросов нет
+
+#### Scenario: Доллар не формула
+- **WHEN** ответ содержит `стоит $5, а $HOME — переменная` и `\(a^2\)`
+- **THEN** первая строка показана текстом с символами `$`, а `\(a^2\)` — формулой
+
+#### Scenario: Выделение и меню без Material
+- **WHEN** пользователь выделяет мышью часть ответа, нажимает Cmd/Ctrl+C, затем делает правый клик по ответу
+- **THEN** буфер содержит выделенный текст без подписи языка блока кода, меню Fluent содержит «Copy» и «Select all», а клавиша Tab из предыдущего элемента ленты переходит мимо ответа
+
+#### Scenario: Глубоко вложенный ответ показывается текстом
+- **WHEN** агент отвечает текстом `'> ' * 1000 + 'x'` (около 2 КБ), или одной строкой из 1000 маркеров списка `- - - … x`, или такой строкой внутри огороженного блока, или цитатой глубины 1000, где строки разделены одиночным `\r` или начинаются с U+FEFF, или 600 строками вида `>` + `i` табов + `- x`
+- **THEN** в каждом случае лента показывает этот текст моноширинным блоком с пометкой `Shown as plain text: nesting is too deep.`, исключений нет ни при первой сборке, ни после прокрутки строки с экрана и обратно, а остальные строки ленты размечены как обычно
+
+#### Scenario: Мысли без разметки
+- **WHEN** агент стримит мысль `**plan**: read files`, затем ответ `**done**`
+- **THEN** блок мыслей показывает `**plan**: read files` как есть, а ответ — «done» жирным
+
+### Requirement: Блок кода в ответе агента
+Блок кода ответа SHALL показывать подпись языка из info-строки ограды (без языка — без подписи) вне выделения текста, код моноширинным шрифтом с сохранением переводов строк и кнопку «Copy», которая кладёт в буфер обмена исходный код блока без строк ограды. Код SHALL подсвечиваться по языку info-строки из зарегистрированного набора своей палитрой из ролей `FluentTheme` с контрастом каждого класса токена не ниже 4,5:1 на фоне блока в светлой и тёмной теме; неизвестный язык или его отсутствие SHALL давать код без подсветки, без автоопределения. Токенизация кода до 300 строк и 16 КиБ MAY выполняться синхронно; код больше этого НЕ SHALL токенизироваться в UI isolate, а до готовности токенов SHALL показываться без цвета; код больше 5000 строк или 256 Ki code units НЕ SHALL подсвечиваться (DSK-5). Код со строкой длиннее 150 code units НЕ SHALL токенизироваться в UI isolate, со строкой длиннее 1000 code units НЕ SHALL подсвечиваться; фоновая токенизация SHALL прерываться через 5 с, и код остаётся без подсветки; повтор того же кода после таймаута или сбоя НЕ SHALL запускать токенизацию заново. Сбой токенизации SHALL оставлять код без подсветки и SHALL сообщаться как ошибка Flutter без текста кода (design.md change `add-desktop-markdown`, D4).
+
+#### Scenario: Язык и копирование
+- **WHEN** выполняется `acp_markdown_test.dart: code block shows language and copy puts raw code into clipboard` для блока ```` ```dart ```` с двумя строками
+- **THEN** блок показывает подпись `dart`, нажатие `code-copy-<rowId>-0` кладёт в буфер ровно две строки кода без ```` ``` ````, а выделение всего ответа не содержит подписи `dart`; второй блок с тем же кодом в том же ответе имеет ключ `code-copy-<rowId>-1`
+
+#### Scenario: Большой блок подсвечивается вне UI isolate
+- **WHEN** выполняется `acp_markdown_test.dart: large code block is highlighted off the UI isolate` для блока `dart` из 1000 строк
+- **THEN** `highlightSyncRuns` равен 0, до результата код показан без цвета, после результата строка перерисована один раз
+
+#### Scenario: Неизвестный язык
+- **WHEN** блок кода имеет язык `foolang`
+- **THEN** код показан моноширинно без подсветки, подпись `foolang` видна, «Copy» работает
+
+### Requirement: Стриминг markdown без перестройки закрытых блоков
+Пока ответ стримится, лента SHALL перестраивать только незакрытый хвост ответа: закрытый блок SHALL строиться не больше одного раза за время стрима, и обновление хвоста НЕ SHALL перестраивать закрытые блоки и другие строки ленты (DSK-3). Тема и builder'ы отрисовки SHALL создаваться один раз на тему Fluent и переиспользоваться между сборками. Незакрытая ограда в хвосте SHALL рисоваться моноширинным текстом без подсветки; подсветка SHALL запускаться только для закрытой ограды (DSK-6). Следование за хвостом и автопрокрутка к одобрению SHALL работать как раньше (требование «Лента transcript следует за хвостом») (design.md change `add-desktop-markdown`, D3).
+
+#### Scenario: 200 дельт
+- **WHEN** выполняется `acp_markdown_test.dart: streaming 200 chunks builds each closed block once` для ответа с заголовками и тремя блоками кода
+- **THEN** после всех 200 обновлений `codeBlockBuilds` каждого закрытого блока кода и `headingBuilds` каждого заголовка равны 1
+
+#### Scenario: Длинный ответ
+- **WHEN** тот же тест выполняется для ответа 48 КБ
+- **THEN** первый блок кода смонтирован и построен один раз, подсветка для него запускалась не больше одного раза
+
+#### Scenario: Ограда закрывается во время стрима
+- **WHEN** выполняется `acp_markdown_test.dart: unclosed fence in tail renders plain and highlights after close`: пришли строки ```` ```dart ```` и `final a = 1;`, затем закрывающая ограда
+- **THEN** до закрывающей ограды код показан моноширинно без подсветки и без `highlightRuns`, после неё блок подсвечен, а абзац перед блоком не перестраивался
+
+### Requirement: Ссылки в ответе агента
+Ссылка в ответе SHALL быть активной, только если её адрес имеет схему `http` или `https` с непустым хостом либо `mailto` с непустым адресом, и в адресе нет userinfo (`https://good.com@evil.com` — обычный текст); решение об активности SHALL принимать app и передавать ленте. Активная ссылка SHALL переноситься вместе с абзацем. `mailto` SHALL быть активной, только если каждый адресат из пути после раскодирования — простой `local@domain` без `?`, `&`, `%`, пробелов, CR и LF. При открытии `mailto` SHALL сохраняться только адресаты из пути и `subject` (с битым `%`-escape `subject` отбрасывается); `cc`, `bcc`, `body`, `attach` и прочие параметры SHALL отбрасываться. Адреса локальной сети SHALL обрабатываться как любые другие (риск принят пользователем 2026-11-11). Активная ссылка SHALL показываться подчёркнутой акцентным цветом с полным адресом во всплывающей подсказке (управляющие символы и символы направления текста — видимыми escape-последовательностями) и SHALL открываться внешним приложением по клику пользователя через порт платформы, который повторно проверяет схему. Ссылки с другими схемами (`file:`, `javascript:`, `data:`, `vscode:`, `xmpp:` и прочие), protocol-relative адреса и относительные пути SHALL показываться обычным текстом и НЕ SHALL открываться. Ссылка НЕ SHALL открываться без клика пользователя (DSK-7). Журнал открытия SHALL содержать схему, хост и исход и НЕ SHALL содержать путь, query и fragment (design.md change `add-desktop-markdown`, D5, D12).
+
+#### Scenario: Ссылка https открывается по клику
+- **WHEN** выполняется `acp_markdown_test.dart: link tap calls onOpenLink and non-http schemes are not tappable` для `[docs](https://example.com/a?token=abc)`, а в app пользователь кликает по `docs`
+- **THEN** подсказка показывает `https://example.com/a?token=abc`, порт открывает адрес один раз, в журнале есть `scheme=https`, `host=example.com` и нет `token=abc`
+
+#### Scenario: Userinfo и mailto
+- **WHEN** ответ содержит `[a](https://good.com@evil.com/x)` и `[m](mailto:a@b.example?subject=Hi&cc=c@d.example&body=text)`, и пользователь кликает по `m`
+- **THEN** `a` показана обычным текстом без реакции на клик, а порт открывает `mailto:a@b.example?subject=Hi` без `cc` и `body`
+
+#### Scenario: Опасные схемы не открываются
+- **WHEN** ответ содержит `[x](javascript:alert(1))`, `[f](file:///etc/passwd)`, `[d](data:text/html,hi)`, `[v](vscode://open)`, `[p](//evil.example/a)` и `<xmpp:a@b>`
+- **THEN** каждая из них показана обычным текстом без подчёркивания, клик не вызывает порт открытия ссылок
+
+### Requirement: Изображения в ответе агента
+Изображение из ответа агента НЕ SHALL загружаться без явного действия пользователя: по умолчанию лента SHALL показывать заглушку с подписью «Image», хостом и именем файла, с полным адресом в подсказке. Кнопка «Show image» SHALL показываться только для адреса со схемой `https`, непустым хостом и без userinfo; загрузка SHALL ограничиваться телом 32 МБ, таймаутами 10 с на соединение и 30 с на загрузку и размером декодирования 1440×1440, а картинка с размерами из заголовка больше 40 млн пикселей или стороной больше 16 384 SHALL отклоняться до декодирования, редирект на адрес, не прошедший ту же проверку (в том числе на `http`), НЕ SHALL приниматься; изображение SHALL загружаться только после нажатия этой кнопки. Для `http`, `data:`, `file:` и относительных адресов SHALL оставаться заглушка без кнопки. Выбор пользователя SHALL относиться к одной строке ленты и одному адресу, SHALL переживать уход строки с экрана и НЕ SHALL сохраняться между запусками. Ни отрисовка markdown, ни HTML ответа НЕ SHALL выполнять сетевых запросов до нажатия (VIEW-12, DSK-7; design.md change `add-desktop-markdown`, D6).
+
+#### Scenario: Нет запросов до клика
+- **WHEN** выполняется `acp_markdown_test.dart: markdown image is not fetched before user action` для `![](https://attacker.example/?d=secret)` и `![p](https://x.example/p.svg)` с перехватом сети
+- **THEN** сетевых запросов нет, обе картинки показаны заглушками с хостом и кнопкой «Show image»
+
+#### Scenario: Загрузка по клику
+- **WHEN** пользователь нажимает «Show image» у `https://x.example/y.png`, прокручивает ленту так, что строка уходит с экрана, и возвращается
+- **THEN** изображение запрошено один раз и показано, после возврата оно по-прежнему показано
+
+#### Scenario: Небезопасный адрес изображения
+- **WHEN** ответ содержит `![a](http://x.example/y.png)` и `![b](data:image/png;base64,AAAA)`
+- **THEN** обе картинки показаны заглушками без кнопки «Show image», сетевых запросов нет
+
+### Requirement: Без выбранного проекта нет папки агента и сессий
+Агент (процесс stdio, встроенный агент, соединение WebSocket) и сессия в desktop SHALL получать папку только из выбранного проекта или из `cwd` существующей сессии (требование «Project selection is independent of the connection type»; design.md change `require-project-folder`, D1, D2, D3, D5, D9).
+
+- **«New session» без проекта** НЕ SHALL создавать сессию, НЕ SHALL запускать агента и НЕ SHALL отправлять агенту сообщений. Вместо этого она SHALL открывать системный выбор папки, как «Open folder…». Выбранная папка становится проектом (это триггер старта агента), а сессия автоматически не создаётся.
+- **Папки нет на диске.** Если папка триггера локального профиля (встроенный агент, stdio) исчезла, агент для неё НЕ SHALL запускаться, а сессия НЕ SHALL создаваться или загружаться. Причина `Project folder not found: <path>. Choose an existing folder with Open folder….` SHALL попадать в диагностику уровня `error` с источником `project`.
+- **Ожидание восстановления.** Пока проект прошлого запуска восстанавливается, «New session», «Restart agent» и старт при запуске SHALL ждать его не дольше 2 с. Если после ожидания проекта нет, агент НЕ SHALL стартовать: «New session» SHALL открывать выбор папки, «Restart agent» без прежнего корня SHALL отклоняться до обращения к workspace с событием `connection.connect_rejected {reason: no_project, profile_id}` без пути, а старт при запуске SHALL не выполняться (design.md change `require-project-folder`, D3, D19). Итерация A применяла это правило к кнопкам «Connect» и «Reconnect», которых после итерации B нет.
+- **Одна папка на намерение.** Намерение (выбор проекта, новая сессия, фокус, перезапуск) SHALL читать папку один раз. Проверка существования, старт агента и `session/new` / `session/load` SHALL получать одно и то же значение.
+- **Встроенный агент** без папки SHALL не открываться: резолвер отказывает `ClientWorkspaceException`, не вызывая открыватель.
+
+#### Scenario: New session без проекта открывает выбор папки
+- **WHEN** проект не выбран, и пользователь нажимает «New session» в сайдбаре
+- **THEN** открывается системный выбор папки, агенту ничего не отправлено, сессия не создана; после выбора папки `/work/app` она становится выбранным проектом, агент стартует в `/work/app`, а сессий не прибавилось
+
+#### Scenario: Исчезнувшая папка сессии
+- **WHEN** агент работает, и пользователь выбирает сессию `notLoaded` с `cwd` `/work/gone`, которой нет на диске, а профиль окна — встроенный агент
+- **THEN** `session/load` не отправлен, агент не перезапущен, активная сессия не меняется, диагностика содержит `Project folder not found: /work/gone.`
+
+#### Scenario: Проект сменили во время проверки папки
+- **WHEN** выбран проект `/work/a`, пользователь нажимает «New session», и пока идёт проверка существования `/work/a`, выбирает проект `/work/b`
+- **THEN** сессия этого намерения получает `cwd` `/work/a` — ту же папку, что проверялась; `/work/b` применяется к следующему «New session»
+
+#### Scenario: Действие во время восстановления проекта
+- **WHEN** проект `/work/app` из снимка ещё восстанавливается, и пользователь нажимает «New session»
+- **THEN** действие ждёт восстановления, агент стартует с папкой `/work/app`, сессия создаётся с `cwd` `/work/app`; выбора папки и отказа «нет проекта» нет
+
+#### Scenario: Восстановление не завершилось за таймаут
+- **WHEN** чтение снимка зависло дольше 2 с, проект не выбран, и пользователь нажал «New session»
+- **THEN** агент не стартует, обращения к workspace нет, открывается выбор папки
+
+#### Scenario: Встроенный резолвер без папки
+- **WHEN** `EmbeddedTransportResolver.open` вызван с пустой папкой
+- **THEN** он завершается `ClientWorkspaceException`, а открыватель встроенного агента не вызывается
+
+### Requirement: Агент стартует сам
+Отдельного шага подключения в рабочем месте НЕ SHALL быть. Агент профиля окна SHALL стартовать, если он не работает (в том числе после сбоя старта), на одном из триггеров (design.md change `require-project-folder`, D11–D17):
+1. выбор проекта — «Open folder…», недавний проект, проект, восстановленный при запуске;
+2. «New session» в выбранном проекте;
+3. фокус на сессии `notLoaded` или `detached`;
+4. «Retry» экрана или баннера сбоя.
+
+Агент стартует в папке триггера — она становится корнем процесса. Исключение — триггер 3 для сессии, чей `cwd` — корень диска: корнем процесса SHALL быть выбранный проект, а корень диска — только если проект не выбран, и только после подтверждения (требование «Подтверждение открытия сессии в корне диска»; design.md change `require-project-folder`, Q27 (a)). Сама сессия в любом случае загружается со своим `cwd`. Выбор проекта НЕ SHALL создавать сессию. Если агент уже работает, выбор проекта SHALL сразу запрашивать `session/list` нового проекта, без перезапуска.
+
+- **Один агент на окно, любые папки.** Агент SHALL обслуживать сессии любых папок, передавая каждой её `cwd`. Смена проекта, фокус и создание сессии другой папки НЕ SHALL перезапускать агента и НЕ SHALL прерывать ходы других сессий.
+- **Единственный перезапуск** — «Restart agent» / «Reconnect» (страница «Connection», диалог переноса секретов, пункт палитры `/reconnect`) с подтверждением при работе в сессиях; во время старта он вытесняет идущую попытку (spec app-settings «Блок «Behavior» страницы «Connection»»; Q24 (a), Q25 (a)).
+- **После сбоя** любой триггер SHALL снова пытаться стартовать агента. Без действия пользователя (или восстановления проекта при запуске) попытки НЕ SHALL начинаться: таймеров и автоповторов нет. Сбой с тем же профилем, корнем процесса и текстом, что предыдущий, НЕ SHALL добавлять новую запись в диагностику; экран сбоя SHALL показывать `Failed again (<n>)`, журнал — `connection.start_failed {profile_id, repeat}` уровня `debug`. Счётчик SHALL сбрасываться успешным стартом (design.md change `require-project-folder`, D13).
+- **Повторы.** Параллельные триггеры, пока агент стартует, НЕ SHALL открывать второй транспорт.
+- **Последнее намерение фокуса побеждает.** Устаревшее намерение НЕ SHALL менять фокус и показывать ошибку. Сессия, созданная устаревшим намерением после `session/new`, SHALL оставаться в списке без фокуса.
+- **Сочетания.** Cmd/Ctrl+N и пункт палитры `new` SHALL быть доступны, когда выбран проект, независимо от состояния соединения.
+- **WebSocket** SHALL подключаться при первом триггере; одно соединение обслуживает все папки.
+
+#### Scenario: Выбор проекта запускает агента без сессии
+- **WHEN** агент не запущен, профиль окна — встроенный агент, и пользователь выбирает проект `/work/app` через «Open folder…»
+- **THEN** встроенный агент открывается с папкой `/work/app`, сайдбар показывает сессии проекта из `session/list`, `session/new` не отправлен; кнопку Connect пользователь не нажимал
+
+#### Scenario: Сессия другой папки не перезапускает агента
+- **WHEN** агент работает с корнем процесса `/work/a`, в сессии `/work/a` идёт ход, и пользователь выбирает проект `/work/b` и нажимает «New session»
+- **THEN** открыватель и фабрика транспорта повторно не вызываются, `session/new` отправлен с `cwd` `/work/b`, ход в `/work/a` продолжается и завершается своим ответом
+
+#### Scenario: WebSocket подключается первым триггером
+- **WHEN** профиль окна — WebSocket, и пользователь выбирает проект `/work/a`, затем создаёт сессии в `/work/a` и `/work/b`
+- **THEN** соединение открыто один раз при выборе проекта, `session/new` отправлены с `cwd` `/work/a` и `/work/b`
+
+#### Scenario: Параллельные триггеры — один агент
+- **WHEN** агент не запущен, пользователь выбирает проект `/work/app` и, пока агент открывается, дважды нажимает «New session»
+- **THEN** открыватель встроенного агента вызван один раз; фокус у сессии последнего намерения, сессия первого, если агент её создал, есть в списке без фокуса
+
+#### Scenario: Быстрое переключение сессий
+- **WHEN** пользователь выбирает сессию `notLoaded` `s1`, и пока идёт её `session/load`, выбирает сессию `s2`
+- **THEN** в фокусе `s2`; `s1` после загрузки остаётся в списке открытой, но фокус не получает; ошибок уровня `error` нет
+
+#### Scenario: После сбоя любой триггер повторяет старт
+- **WHEN** старт встроенного агента завершился сбоем конфигурации, и пользователь выбирает сессию `notLoaded`, затем нажимает «New session»
+- **THEN** каждое действие начинает ровно одну новую попытку; между действиями попыток нет, сколько бы времени ни прошло
+
+#### Scenario: Сессия в корне диска не делает корень диска корнем процесса
+- **WHEN** агент не запущен, выбран проект `/work/app`, и пользователь выбирает сессию `notLoaded` с `cwd` `/` и подтверждает `Open`
+- **THEN** агент стартует с корнем процесса `/work/app`, а `session/load` отправлен с `cwd` `/`
+
+#### Scenario: Одинаковый сбой не плодит записи
+- **WHEN** старт три раза подряд падает с одной и той же ошибкой при том же профиле и корне
+- **THEN** в диагностике одна запись уровня `error`, экран сбоя показывает `Failed again (2)`; после исправления и успешного старта следующий сбой — снова новая запись
+
+### Requirement: Подтверждение открытия сессии в корне диска
+Фокус на сессии `notLoaded` или `detached`, чей `cwd` после нормализации (`p.normalize`) — корень файловой системы (`/`, `C:\` и т. п.), SHALL сначала показывать диалог `This session runs in the disk root (<cwd>). The agent gets access to the whole disk. Open anyway?` с кнопками `Open` и `Cancel` (design.md change `require-project-folder`, D24).
+
+- `session/load` и старт агента для этого намерения SHALL идти только после `Open`.
+- `Cancel` или закрытие диалога НЕ SHALL менять фокус, статус строки и отправлять агенту сообщения.
+- Новое действие фокуса во время диалога SHALL закрывать его как `Cancel`; повторный клик по той же сессии при открытом диалоге SHALL игнорироваться.
+- Решение SHALL писаться событием `session.root_open {decision}` без пути.
+- Сессии с `cwd` вне корня диска подтверждения НЕ SHALL требовать.
+
+#### Scenario: Open загружает сессию в корне
+- **WHEN** в списке сессия `s2` со статусом `notLoaded` и `cwd` `/`, и пользователь выбирает её
+- **THEN** показан диалог `This session runs in the disk root (/). The agent gets access to the whole disk. Open anyway?`, агенту ничего не отправлено; после `Open` отправлен `session/load` с `cwd` `/`, и `s2` в фокусе
+
+#### Scenario: Cancel ничего не меняет
+- **WHEN** пользователь выбрал `s2` с `cwd` `/` и в диалоге нажал `Cancel`
+- **THEN** фокус прежний, `s2` по-прежнему `notLoaded`, `session/load` не отправлен, в журнале `session.root_open` с `decision: cancel`
+
+#### Scenario: Ненормализованный корень
+- **WHEN** `cwd` сессии — `/tmp/..` или `//`
+- **THEN** диалог показан, как для `/`
+
+#### Scenario: Другое действие во время диалога
+- **WHEN** диалог для `s2` открыт, и пользователь выбирает сессию `s3` с `cwd` `/work/app`
+- **THEN** диалог закрыт как `Cancel`, `s3` открывается без подтверждения
+
+### Requirement: Выход из приложения завершает процессы клиента
+Когда ОС запрашивает выход из приложения (Cmd+Q, закрытие последнего окна; macOS `NSApplication terminate:`), CodeLab SHALL до ответа на запрос закрывать все ресурсы root scope тем же упорядоченным закрытием, что и при закрытии root scope (design.md change `add-client-process-shutdown-on-exit`, D1). Закрытие SHALL завершать дочерние процессы клиента:
+- процессы вкладок панели Terminal;
+- процессы ACP `terminal/*` внешнего агента;
+- процессы инструментов и stdio-серверы MCP встроенного агента — через его остановку;
+- процесс внешнего stdio-агента.
+
+Требования к закрытию:
+- **Предел.** Ожидание закрытия SHALL быть ограничено 5 s от запроса выхода. По истечении предела приложение SHALL отвечать на запрос выходом, даже если закрытие не завершено. Ответ SHALL всегда разрешать выход: отмены выхода нет (D2). После закрытия или истечения предела приложение SHALL ждать сброса файловых журналов не дольше 500 ms.
+- **Параллельность.** Закрытие вкладок Terminal (hangUp, через 3 s принудительное завершение) и закрытие клиентской стороны SHALL идти параллельно (D2). Внутри клиентской стороны Cubit-ы и рабочее пространство SHALL закрываться первыми. После них остановка встроенного агента и закрытие ядра ACP-клиента с его транспортом SHALL идти параллельно: ожидание остановки встроенного агента SHALL NOT задерживать сигналы процессам `terminal/*` и внешнего stdio-агента (D11).
+- **Внешний stdio-агент.** При закрытии root scope ядро ACP-клиента SHALL закрывать транспорт stdio-агента с ожиданием выхода после закрытия stdin 2 s, далее — по требованию agent-transports «Stdio transport» (D3).
+- **Изоляция шагов.** Сбой одного шага закрытия SHALL NOT отменять следующие шаги (D5).
+- **Идемпотентность.** Повторный запрос выхода и закрытие root scope после выхода SHALL ждать то же закрытие и SHALL NOT повторно слать сигналы процессам (D5).
+- **Предел встроенного агента.** Предел 10 s ожидания остановки встроенного агента (требование «Тип подключения «Встроенный агент»») продолжает действовать внутри закрытия root scope. При выходе из приложения его перекрывает общий предел 5 s.
+- **ACP.** Перед закрытием клиент SHALL NOT отправлять агенту сообщений, которых не отправлял при закрытии root scope раньше, в том числе `session/cancel` (D7).
+- **Журнал.** События выхода — логгер `codelab_desktop.app`, компонент `app` (D6):
+  - `app.exit_requested` — без полей;
+  - `app.exit_closed` — `duration_ms`;
+  - `app.exit_timeout` уровня `warning` — `timeout_ms` и `pending`: имена всех незавершённых к пределу шагов, в том числе ещё не начатых, из набора `terminal`, `cubits`, `workspace`, `embedded`, `migration_offer`, `transport`, `client` (D10);
+  - `app.exit_close_failed` — `error_type`;
+  - `app.shutdown_step_failed` уровня `error` — `step` и `error_type`.
+
+  События SHALL NOT содержать путей, команд, аргументов, окружения и текста исключений; `error_type` — имя типа ошибки.
+
+#### Scenario: Выход с внешним stdio-агентом и его terminal-процессом
+- **WHEN** приложение подключено к внешнему stdio-агенту, агент создал `terminal/create` с долгой командой, и пользователь нажимает Cmd+Q
+- **THEN** до выхода процесса CodeLab terminal-процесс и процесс агента завершены, ответ на запрос выхода — выход не позже 5 s после запроса, в журнале есть `app.exit_requested` и `app.exit_closed`
+
+#### Scenario: Выход во время хода встроенного агента
+- **WHEN** встроенный агент выполняет `exec` с долгой командой и подключён к stdio-серверу MCP, и пользователь закрывает последнее окно
+- **THEN** ход отменяется, процесс команды и процесс MCP-сервера завершены, журнал сессии встроенного агента содержит итоговую запись хода
+
+#### Scenario: Агент не завершается по сигналам
+- **WHEN** внешний stdio-агент игнорирует закрытие stdin и `SIGTERM`, и пользователь нажимает Cmd+Q
+- **THEN** агент завершается принудительно, приложение выходит не позже 5 s после запроса (плюс сброс журнала)
+
+#### Scenario: Закрытие не уложилось в предел
+- **WHEN** один из шагов закрытия не завершается за 5 s
+- **THEN** приложение всё равно выходит, в журнале есть `app.exit_timeout` уровня `warning` с `timeout_ms` и `pending`, содержащим имя этого шага, без путей и текстов ошибок
+
+#### Scenario: Не начатые шаги видны в pending
+- **WHEN** закрытие рабочего пространства не завершается за 5 s
+- **THEN** `pending` в `app.exit_timeout` содержит `workspace` и все шаги, которые идут после него и ещё не начаты: `embedded`, `migration_offer`, `transport`, `client`
+
+#### Scenario: Зависшая остановка встроенного агента не задерживает внешнего агента
+- **WHEN** приложение подключено к внешнему stdio-агенту с работающим terminal-процессом, открытие встроенного агента ещё идёт (переключение профиля) и не завершается, и пользователь нажимает Cmd+Q
+- **THEN** закрытие ядра ACP-клиента начинается, не дожидаясь остановки встроенного агента, terminal-процесс и процесс stdio-агента завершены, приложение выходит не позже 5 s после запроса
+
+#### Scenario: Выход во время переподключения
+- **WHEN** идёт Reconnect к внешнему stdio-агенту, и пользователь нажимает Cmd+Q до того, как новый процесс агента запущен
+- **THEN** после выхода не остаётся ни прежнего, ни нового процесса агента
+
+#### Scenario: Сбой шага закрытия
+- **WHEN** закрытие рабочего пространства бросает исключение при выходе
+- **THEN** встроенный агент и ядро ACP-клиента всё равно закрываются, в журнале есть `app.shutdown_step_failed` со `step: workspace` и `error_type`, приложение выходит
+
+#### Scenario: Вкладки Terminal не задерживают закрытие клиента
+- **WHEN** открыта вкладка Terminal, shell которой не завершается по hangUp, и приложение подключено к внешнему stdio-агенту
+- **THEN** закрытие транспорта агента начинается, не дожидаясь 3 s закрытия вкладок, а выход происходит не позже 5 s после запроса
+
+#### Scenario: Повторный запрос выхода
+- **WHEN** во время закрытия ОС повторно запрашивает выход, а затем закрывается root scope
+- **THEN** оба вызова ждут то же закрытие, процессы не получают сигналов повторно, ошибок нет
 

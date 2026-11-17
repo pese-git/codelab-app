@@ -4,19 +4,166 @@ import 'package:flutter/widget_previews.dart';
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
 import 'codelab_activity_bar.dart';
+import 'codelab_agents_pane.dart';
 import 'codelab_app_bar.dart';
 import 'codelab_approval_prompt.dart';
 import 'codelab_command_palette_surface.dart';
 import 'codelab_connection_screen.dart';
+import 'codelab_file_preview.dart';
+import 'codelab_file_tree.dart';
 import 'codelab_progress_checklist.dart';
 import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
+import 'codelab_settings_navigation.dart';
+import 'codelab_start_screen.dart';
+import 'codelab_status_table.dart';
+import 'codelab_terminal_pane.dart';
 import 'codelab_tool_dock.dart';
 import 'codelab_transcript_panel.dart';
 import 'codelab_transcript_row.dart';
 import 'codelab_workbench_layout.dart';
 
 const codelabOrganismPreviewGroup = 'ACP organisms';
+
+@Preview(
+  name: 'Status table',
+  group: codelabOrganismPreviewGroup,
+  size: Size(820, 260),
+)
+Widget codelabStatusTablePreview() {
+  return const _AcpOrganismPreviewSurface(child: _StatusTableSample());
+}
+
+@Preview(
+  name: 'Status table dark',
+  group: codelabOrganismPreviewGroup,
+  size: Size(820, 260),
+  brightness: Brightness.dark,
+)
+Widget codelabStatusTableDarkPreview() {
+  return const _AcpOrganismPreviewSurface(
+    brightness: Brightness.dark,
+    child: _StatusTableSample(),
+  );
+}
+
+/// Пример панели «Agent status» (артборд `Mcp`): подключённый сервер, сбой с
+/// повтором и выключенный сервер без действия.
+class _StatusTableSample extends StatelessWidget {
+  const _StatusTableSample();
+
+  @override
+  Widget build(BuildContext context) {
+    return CodeLabStatusTable(
+      columns: const ['SERVER', 'STATE', 'TOOLS', 'LAST ERROR'],
+      rows: [
+        CodeLabStatusTableRow(
+          cells: const [
+            CodeLabStatusTableCell('github', mono: true),
+            CodeLabStatusTableCell('connected', tone: CodeLabStatusTone.active),
+            CodeLabStatusTableCell('42'),
+            CodeLabStatusTableCell('—', muted: true),
+          ],
+          action: CodeLabStatusTableAction(
+            label: 'Reconnect',
+            onPressed: codelabPreviewReconnect,
+          ),
+        ),
+        CodeLabStatusTableRow(
+          cells: const [
+            CodeLabStatusTableCell('postgres', mono: true),
+            CodeLabStatusTableCell(
+              'failed · retry in 24 s',
+              tone: CodeLabStatusTone.danger,
+            ),
+            CodeLabStatusTableCell('0'),
+            CodeLabStatusTableCell('ECONNREFUSED 127.0.0.1:5432', mono: true),
+          ],
+          action: CodeLabStatusTableAction(
+            label: 'Reconnect',
+            onPressed: codelabPreviewReconnect,
+          ),
+        ),
+        const CodeLabStatusTableRow(
+          cells: [
+            CodeLabStatusTableCell('playwright', mono: true),
+            CodeLabStatusTableCell('disabled', tone: CodeLabStatusTone.idle),
+            CodeLabStatusTableCell('—', muted: true),
+            CodeLabStatusTableCell('—', muted: true),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+@Preview(
+  name: 'Skills table',
+  group: codelabOrganismPreviewGroup,
+  size: Size(820, 300),
+)
+Widget codelabSkillsTablePreview() {
+  return const _AcpOrganismPreviewSurface(child: _SkillsTableSample());
+}
+
+/// Пример таблицы навыков (артборд `Extensions`, change `add-app-skills-page`,
+/// D12): описание второй строкой, теги, включённый и неактивный переключатели,
+/// недоверенный текст с видимым `U+202E`.
+class _SkillsTableSample extends StatelessWidget {
+  const _SkillsTableSample();
+
+  @override
+  Widget build(BuildContext context) {
+    return CodeLabStatusTable(
+      columns: const ['SKILL', 'SOURCE'],
+      columnFlex: const [3, 1],
+      rows: [
+        CodeLabStatusTableRow(
+          cells: const [
+            CodeLabStatusTableCell(
+              'review',
+              mono: true,
+              secondary: 'Review a pull request and summarize follow-ups.',
+              tags: [
+                CodeLabStatusTableTag('Overrides user skill'),
+                CodeLabStatusTableTag(
+                  '1 warning',
+                  tone: CodeLabTone.warning,
+                  tooltip: 'SKILL.md: unknown frontmatter key',
+                ),
+              ],
+              untrusted: true,
+            ),
+            CodeLabStatusTableCell('project'),
+          ],
+          toggle: CodeLabStatusTableToggle(
+            value: true,
+            label: 'Enable review',
+            onChanged: (_) {},
+          ),
+        ),
+        const CodeLabStatusTableRow(
+          cells: [
+            CodeLabStatusTableCell(
+              'deploy\u202Egpj',
+              mono: true,
+              secondary: 'Deploy from a file written by another agent.',
+              tags: [CodeLabStatusTableTag('Command only')],
+              untrusted: true,
+            ),
+            CodeLabStatusTableCell('~/.agents/skills'),
+          ],
+          toggle: CodeLabStatusTableToggle(
+            value: false,
+            label: 'Enable deploy',
+            onChanged: null,
+            tooltip: 'Set in project config; edit it there.',
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 @Preview(
   name: 'Transcript panel conversation',
@@ -42,7 +189,14 @@ Widget codelabTranscriptPanelPreview() {
           ),
           CodeLabAgentTextRow(
             id: 'agent-1',
-            text: 'I will inspect the workspace checks first.',
+            text:
+                'I will inspect the **workspace checks** first, starting with '
+                '`dart analyze`:\n\n```bash\nfvm dart analyze '
+                'packages/flutter/codelab_ui\n```',
+          ),
+          CodeLabAgentTextRow(
+            id: 'agent-block-1',
+            text: '```text\nMCP servers (1)\n  docs  connected  3 tools\n```',
           ),
           CodeLabToolCallRow(
             id: 'tool-1',
@@ -359,6 +513,133 @@ Widget codelabConnectionScreenPreview() {
   );
 }
 
+/// Стартовый экран панели сессии с проектом (change `require-project-folder`,
+/// D18): подсказка и «New session». Путь вымышленный.
+@Preview(
+  name: 'Start screen',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 240),
+)
+Widget codelabStartScreenPreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      height: 240,
+      child: CodeLabStartScreen(
+        message: 'Start a new session in app.',
+        actionLabel: 'New session',
+        onAction: codelabPreviewConnect,
+      ),
+    ),
+  );
+}
+
+/// Дерево файлов (артборд `Files`): раскрытая папка, ссылка наружу и строка
+/// «… N more». Пути вымышленные, без данных пользователя.
+@Preview(
+  name: 'File tree',
+  group: codelabOrganismPreviewGroup,
+  size: Size(320, 260),
+)
+Widget codelabFileTreePreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 320,
+      height: 260,
+      child: CodeLabFileTree(
+        selectedPath: 'lib/main.dart',
+        rows: const [
+          CodeLabFileTreeRowData(
+            relativePath: 'lib',
+            name: 'lib',
+            kind: CodeLabFileTreeRowKind.directory,
+            expanded: true,
+          ),
+          CodeLabFileTreeRowData(
+            relativePath: 'lib/main.dart',
+            name: 'main.dart',
+            kind: CodeLabFileTreeRowKind.file,
+            depth: 1,
+          ),
+          CodeLabFileTreeRowData(
+            relativePath: 'lib/#more',
+            name: '… 4980 more',
+            kind: CodeLabFileTreeRowKind.more,
+            depth: 1,
+          ),
+          CodeLabFileTreeRowData(
+            relativePath: 'docs',
+            name: 'docs',
+            kind: CodeLabFileTreeRowKind.directory,
+            loading: true,
+          ),
+          CodeLabFileTreeRowData(
+            relativePath: 'shared',
+            name: 'shared',
+            kind: CodeLabFileTreeRowKind.outsideLink,
+          ),
+          CodeLabFileTreeRowData(
+            relativePath: 'README.md',
+            name: 'README.md',
+            kind: CodeLabFileTreeRowKind.file,
+          ),
+        ],
+        onToggleDirectory: codelabPreviewFileTreeRow,
+        onOpenFile: codelabPreviewFileTreeRow,
+      ),
+    ),
+  );
+}
+
+/// Колбэк строк превью дерева: превью ничего не открывает.
+void codelabPreviewFileTreeRow(CodeLabFileTreeRowData row) {}
+
+/// Просмотр файла: текст с подсвеченной строкой и предупреждением о секретах.
+@Preview(
+  name: 'File preview',
+  group: codelabOrganismPreviewGroup,
+  size: Size(420, 260),
+)
+Widget codelabFilePreviewPreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 420,
+      height: 260,
+      child: CodeLabFilePreview(
+        relativePath: 'config/.env',
+        maybeSecret: true,
+        highlightLine: 2,
+        onCopyPath: codelabPreviewCopyPath,
+        content: const CodeLabFilePreviewContent.text(
+          'EXAMPLE_NAME=demo\nEXAMPLE_FLAG=true\n',
+        ),
+      ),
+    ),
+  );
+}
+
+/// Просмотр двоичного файла: только пометка с размером.
+@Preview(
+  name: 'File preview binary',
+  group: codelabOrganismPreviewGroup,
+  size: Size(420, 160),
+)
+Widget codelabFilePreviewBinaryPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 420,
+      height: 160,
+      child: CodeLabFilePreview(
+        relativePath: 'assets/logo.bin',
+        content: CodeLabFilePreviewContent.binary('24 KB'),
+      ),
+    ),
+  );
+}
+
+/// Колбэк «Copy path» превью: ничего не копирует.
+void codelabPreviewCopyPath(String relativePath) {}
+
 @Preview(
   name: 'Session sidebar',
   group: codelabOrganismPreviewGroup,
@@ -475,10 +756,133 @@ void codelabPreviewReconnect() {}
 
 void codelabPreviewEditProfile() {}
 
+@Preview(
+  name: 'Settings navigation',
+  group: codelabOrganismPreviewGroup,
+  size: Size(900, 420),
+)
+Widget codelabSettingsNavigationPreview() {
+  // `NavigationView` требует Navigator и локализации, поэтому превью
+  // собирается внутри собственного `FluentApp`.
+  return FluentApp(
+    debugShowCheckedModeBanner: false,
+    home: CodeLabSettingsNavigation(
+      items: const [
+        CodeLabSettingsNavItem(
+          id: 'connection',
+          title: 'Connection',
+          icon: FluentIcons.plug_connected,
+          group: 'Agent',
+        ),
+        CodeLabSettingsNavItem(
+          id: 'general',
+          title: 'General',
+          icon: FluentIcons.settings,
+          group: 'App',
+        ),
+      ],
+      selectedId: 'connection',
+      onSelected: (_) {},
+      onQueryChanged: (_) {},
+      onBack: () {},
+      child: const Padding(
+        padding: EdgeInsets.all(24),
+        child: CodeLabText('Page body', role: CodeLabTextRole.title),
+      ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Agents pane',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 360),
+)
+Widget codelabAgentsPanePreview() {
+  return _AcpOrganismPreviewSurface(
+    child: CodeLabAgentsPane(
+      counts: const {
+        CodeLabAgentRowState.running: 1,
+        CodeLabAgentRowState.done: 1,
+      },
+      selectedId: 'a1',
+      rows: const [
+        CodeLabAgentRow(
+          id: 'a1',
+          depth: 1,
+          type: 'review',
+          title: 'Review the change',
+          state: CodeLabAgentRowState.running,
+          time: '12s',
+          calls: '3 tool calls',
+        ),
+        CodeLabAgentRow(
+          id: 'a2',
+          depth: 2,
+          type: 'explore',
+          title: 'Find auth code',
+          state: CodeLabAgentRowState.done,
+          time: '19s',
+          calls: '2 tool calls',
+          tokens: '10.2k',
+        ),
+      ],
+      steps: const [
+        CodeLabToolCallRow(
+          id: 's1',
+          status: CodeLabToolCallStatus.succeeded,
+          label: 'Read',
+          detail: 'lib/auth.dart',
+        ),
+      ],
+    ),
+  );
+}
+
+@Preview(
+  name: 'Terminal pane',
+  group: codelabOrganismPreviewGroup,
+  size: Size(520, 260),
+)
+Widget codelabTerminalPanePreview() {
+  return _AcpOrganismPreviewSurface(
+    child: CodeLabTerminalPane(
+      tabs: const [
+        CodeLabTerminalTab(
+          id: 'a',
+          title: 'zsh',
+          statusLabel: 'Running',
+          statusTone: CodeLabTone.success,
+        ),
+        CodeLabTerminalTab(
+          id: 'b',
+          title: 'build',
+          statusLabel: 'Exited 1',
+          statusTone: CodeLabTone.warning,
+        ),
+      ],
+      activeTabId: 'a',
+      hasSession: true,
+      disclosure: 'Commands run with your permissions.',
+      onDisclosureClosed: codelabPreviewCancel,
+      content: const ColoredBox(
+        color: Color(0xFF1E1E1E),
+        child: SizedBox.expand(),
+      ),
+    ),
+  );
+}
+
 class _AcpOrganismPreviewSurface extends StatelessWidget {
-  const _AcpOrganismPreviewSurface({required this.child});
+  const _AcpOrganismPreviewSurface({
+    required this.child,
+    this.brightness = Brightness.light,
+  });
 
   final Widget child;
+
+  /// Тема превью: тёмный вариант нужен таблице с тегами и обводками (D19).
+  final Brightness brightness;
 
   @override
   Widget build(BuildContext context) {
@@ -493,7 +897,7 @@ class _AcpOrganismPreviewSurface extends StatelessWidget {
       child: Directionality(
         textDirection: TextDirection.ltr,
         child: FluentTheme(
-          data: FluentThemeData(),
+          data: FluentThemeData(brightness: brightness),
           child: Builder(
             builder: (context) {
               // Подсказки (`Tooltip`) сайдбара и app bar требуют `Overlay`, а

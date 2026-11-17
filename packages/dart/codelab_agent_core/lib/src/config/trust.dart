@@ -1,4 +1,6 @@
 import '../loop/turn_budget.dart';
+import '../skills/skills_config.dart';
+import '../subagents/subagents_config.dart';
 import 'config_issue.dart';
 import 'config_tree.dart';
 import 'key_path.dart';
@@ -66,10 +68,12 @@ import 'validate.dart' show configModeId;
   }
   // Эти разделы не читаются из проекта (слой 3) даже с доверием (§15.3:
   // «нет» в его столбце). `sessions` и `logging` определяют, куда агент
-  // пишет. У `config.local.yaml` столбец «да», но только для доверенного
-  // проекта: недоверенный подчиняется правилам слоя 3.
+  // пишет, `config` — как хост следит за файлами конфига (D7, change
+  // `add-config-writer-and-reload`). У `config.local.yaml` столбец «да», но
+  // только для доверенного проекта: недоверенный подчиняется правилам
+  // слоя 3.
   if (isProject || !trusted) {
-    for (final section in const ['sessions', 'logging', 'exec']) {
+    for (final section in const ['sessions', 'logging', 'exec', 'config']) {
       if (values.remove(section) != null) {
         warn(section, '$section is not read from a project config');
       }
@@ -103,6 +107,11 @@ import 'validate.dart' show configModeId;
     _restrictRedact(values, lower, warn);
     _lowerBudget(values, lower, warn);
     _lowerProjectContext(values, lower, warn);
+    _lowerSkills(values, lower, warn);
+    _lowerSubagents(values, lower, warn);
+  }
+  if (isProject || !trusted) {
+    _dropSkillRoots(values, warn);
   }
   if (!trusted || isProject) {
     _narrowMode(values, lower, warn);
@@ -309,6 +318,155 @@ void _lowerProjectContext(
       'tools.project_context.max_bytes',
       'a project config can only lower the project context budget; the '
           'limit of the global config is kept',
+    );
+  }
+}
+
+/// Ключи `skills.*` недоверенного проекта (design.md change
+/// `add-agent-skills`, D11, Q40, Q43).
+///
+/// Числовые ключи — только уменьшение: репозиторий не должен раздувать
+/// каталог навыков в каждом запросе; сравнение — с итогом слоёв ниже, а без
+/// значения там — с умолчанием `SkillsConfig`. Запреты пользователя проект не
+/// снимает: `enabled: true` поверх `false` нижних слоёв отбрасывается, а
+/// `disabled` объединяется с нижними слоями (как `permissions.deny`). Доверенный
+/// проект ограничен лишь границами схемы, как с `budget.*`.
+void _lowerSkills(
+  Map<String, Object?> values,
+  Map<String, Object?> lower,
+  void Function(String key, String reason) warn,
+) {
+  final skills = values['skills'];
+  if (skills is! Map<String, Object?>) {
+    return;
+  }
+  Object? at(Map<String, Object?> root, List<String> path) {
+    Object? node = root;
+    for (final name in path) {
+      node = node is Map<String, Object?> ? node[name] : null;
+    }
+    return node;
+  }
+
+  // Q43: запреты пользователя недоверенный проект не снимает. `enabled: true`
+  // поверх `false` нижних слоёв отбрасывается; `disabled` объединяется с
+  // нижними слоями (список при слиянии заменяется, как `permissions.deny`).
+  if (skills['enabled'] == true && at(lower, ['skills', 'enabled']) == false) {
+    skills.remove('enabled');
+    warn(
+      'skills.enabled',
+      'a project config cannot switch skills back on; the setting of the '
+          'global config is kept',
+    );
+  }
+  final ownDisabled = skills['disabled'];
+  if (ownDisabled is List<Object?>) {
+    final lowerDisabled = at(lower, ['skills', 'disabled']);
+    skills['disabled'] = [
+      if (lowerDisabled is List<Object?>) ...lowerDisabled,
+      for (final name in ownDisabled)
+        if (lowerDisabled is! List<Object?> || !lowerDisabled.contains(name))
+          name,
+    ];
+  }
+
+  const defaults = SkillsConfig();
+  final keys = <(List<String>, int)>[
+    (const ['max_skills'], defaults.maxSkills),
+    (const ['catalog_max_chars'], defaults.catalogMaxChars),
+    (const ['reattach', 'per_skill_tokens'], defaults.reattachPerSkillTokens),
+    (const ['reattach', 'total_tokens'], defaults.reattachTotalTokens),
+  ];
+  for (final (path, fallback) in keys) {
+    final value = at(skills, path);
+    if (value is! int) {
+      continue;
+    }
+    final below = at(lower, ['skills', ...path]);
+    if (value > (below is int ? below : fallback)) {
+      final parent = path.length == 1
+          ? skills
+          : skills[path.first] as Map<String, Object?>;
+      parent.remove(path.last);
+      warn(
+        'skills.${path.join('.')}',
+        'a project config can only lower the skills limits; the limit of the '
+            'global config is kept',
+      );
+    }
+  }
+}
+
+/// Ключи `subagents.*` недоверенного проекта: проект только ужесточает
+/// (design.md change `add-subagents-and-tasks`, D17; как `permissions`).
+///
+/// Меньшие числа и `enabled: false` применяются; бо́льшие числа и
+/// `enabled: true` поверх `false` нижних слоёв отбрасываются с событием
+/// `config.project.untrusted_key`. Сравнение — с итогом слоёв ниже, а без
+/// значения там — с умолчанием `SubagentsConfig`.
+void _lowerSubagents(
+  Map<String, Object?> values,
+  Map<String, Object?> lower,
+  void Function(String key, String reason) warn,
+) {
+  final section = values['subagents'];
+  if (section is! Map<String, Object?>) {
+    return;
+  }
+  final below = lower['subagents'] is Map<String, Object?>
+      ? lower['subagents'] as Map<String, Object?>
+      : const <String, Object?>{};
+  if (section['enabled'] == true && below['enabled'] == false) {
+    section.remove('enabled');
+    warn(
+      'subagents.enabled',
+      'a project config cannot switch subagents back on; the setting of the '
+          'global config is kept',
+    );
+  }
+  const defaults = SubagentsConfig();
+  final fallbacks = <String, Object?>{
+    'max_depth': defaults.maxDepth,
+    'max_concurrent': defaults.maxConcurrent,
+    'max_per_turn': defaults.maxPerTurn,
+    'max_steps': defaults.maxSteps,
+    'max_tokens': null,
+    'max_cost': null,
+    'max_duration': '10m',
+    'report_max_bytes': defaults.reportMaxBytes,
+    'progress_interval': '2s',
+    'heartbeat_interval': '15s',
+    'cancel_grace': '10s',
+  };
+  for (final MapEntry(:key, value: fallback) in fallbacks.entries) {
+    final own = section[key];
+    if (own == null) {
+      continue;
+    }
+    final limit = below[key] ?? fallback;
+    if (limit != null && _greater(own, limit)) {
+      section.remove(key);
+      warn(
+        'subagents.$key',
+        'a project config can only lower the subagent limits; the limit of '
+            'the global config is kept',
+      );
+    }
+  }
+}
+
+/// `skills.extra_roots` — согласие на чтение каталога вне проекта: даёт его
+/// пользователь, а не репозиторий (D11, Q27). Из `config.yaml` проекта
+/// отбрасывается всегда, из `config.local.yaml` — у недоверенного проекта.
+void _dropSkillRoots(
+  Map<String, Object?> values,
+  void Function(String key, String reason) warn,
+) {
+  final skills = values['skills'];
+  if (skills is Map<String, Object?> && skills.remove('extra_roots') != null) {
+    warn(
+      'skills.extra_roots',
+      'extra skill roots are set by the user, not by a project config',
     );
   }
 }

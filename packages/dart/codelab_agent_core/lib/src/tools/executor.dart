@@ -26,15 +26,23 @@ import 'validator.dart';
 /// `ToolCallStarted` пришли бы не по порядку (design.md, D14).
 ///
 /// Как использовать: цикл вызывает [announce] (шаг 1, `ToolCallStarted`),
-/// затем [complete] (шаги 1a–10, `ToolCallFinished`) или, для вызова
-/// последовательного пакета, оставшегося после отмены, [abandon].
+/// затем для каждого полученного handle ровно одно из двух: [complete]
+/// (шаги 1a–10, `ToolCallFinished`) или [abandon] — вызов последовательного
+/// пакета, оставшийся после отмены, и уже объявленные вызовы параллельного
+/// пакета, когда объявление следующего упало.
 abstract interface class ToolExecutor {
+  /// Объявляет вызов и занимает его место в очереди пути (TOOL-7).
+  ///
+  /// Если [announce] завершился исключением, handle вызывающему не
+  /// достаётся, поэтому реализация сама освобождает всё, что успела занять:
+  /// упавшее объявление не оставляет путь занятым.
   Future<ToolCallHandle> announce(ToolCall call, ToolInvocation invocation);
 
   Future<ToolExecutionOutcome> complete(ToolCallHandle handle);
 
   /// `cancelled` с текстом `Tool call was cancelled before it started`, без
-  /// исполнения.
+  /// исполнения. Место в очереди пути освобождается до эмита
+  /// `ToolCallFinished`, так что сбой эмита путь уже не держит.
   Future<ToolExecutionOutcome> abandon(ToolCallHandle handle);
 }
 
@@ -58,6 +66,13 @@ final class ToolInvocation {
        afterToolCall = List.unmodifiable(afterToolCall);
 
   final SessionId sessionId;
+
+  /// Токен отмены хода.
+  ///
+  /// Инвариант: токен живёт не дольше хода — цикл создаёт его заново на
+  /// каждый ход. Шаг 6 ждёт пути через `Future.any` с [CancelToken.onCancel],
+  /// и этот слушатель не снимается; на долгоживущем токене (сессии или
+  /// [CancelToken.none]) слушатели копились бы по одному на каждую правку.
   final CancelToken cancel;
 
   /// Имена схем текущего шага.
@@ -105,15 +120,18 @@ const cancelledBeforeStartText = 'Tool call was cancelled before it started';
 
 /// Реализация [ToolExecutor] над реестром и ограниченным env сессии.
 ///
-/// Как использовать: сессия создаёт один экземпляр; в нём живёт `PathLock`
-/// сессии, поэтому правки одного файла упорядочены во всех ходах.
+/// Как использовать: сессия создаёт один экземпляр. Очередь `PathLock` общая
+/// для дерева сессии: корень создаёт её, потомки получают ту же через
+/// [locks] (`ChildSessionSpec.locks`), поэтому правки одного файла
+/// упорядочены во всех ходах корня и его субагентов (§6.3.4).
 final class ToolCallExecutor implements ToolExecutor {
   ToolCallExecutor({
     required this.registry,
     required this.env,
     required this.services,
     this.unavailableText,
-  });
+    PathLock? locks,
+  }) : _locks = locks ?? PathLock();
 
   final ToolRegistry registry;
 
@@ -130,7 +148,10 @@ final class ToolCallExecutor implements ToolExecutor {
   /// Ограниченный env сессии (ENV-2).
   final ExecutionEnv env;
   final ToolServices services;
-  final _locks = PathLock();
+
+  /// Очередь путей: ребёнок получает очередь корня, поэтому параллельные
+  /// правки одного файла во всём дереве упорядочены (TOOL-7).
+  final PathLock _locks;
 
   @override
   Future<ToolCallHandle> announce(
@@ -180,32 +201,43 @@ final class ToolCallExecutor implements ToolExecutor {
       },
       null => null,
     };
-    var presentation = ToolPresentation(title: call.name);
-    if (tool != null) {
-      try {
-        presentation = await tool.present(call.arguments, context);
-        context.presentation = presentation;
-      } on Object catch (error, stack) {
-        services.logger.log(
-          LogLevel.debug,
-          'tool.present.error',
-          fields: {'tool': call.name, 'tool_call_id': call.id},
-          error: error,
-          stack: stack,
-        );
+    try {
+      var presentation = ToolPresentation(title: call.name);
+      if (tool != null) {
+        try {
+          presentation = await tool.present(call.arguments, context);
+          context.presentation = presentation;
+        } on Object catch (error, stack) {
+          services.logger.log(
+            LogLevel.debug,
+            'tool.present.error',
+            fields: {'tool': call.name, 'tool_call_id': call.id},
+            error: error,
+            stack: stack,
+          );
+        }
       }
+      await invocation.emit(
+        ToolCallStarted(
+          invocation.sessionId,
+          toolCallId: call.id,
+          tool: call.name,
+          kind: tool?.kindOf(call.arguments) ?? ToolKind.other,
+          title: presentation.title,
+          input: call.arguments,
+          locations: presentation.locations,
+          subagent: presentation.subagent,
+        ),
+      );
+    } on Object {
+      // Без handle тикет некому отпустить, а `PathLock` живёт всю сессию:
+      // путь остался бы занят для всех следующих вызовов. Отпускание не рвёт
+      // очередь — место освободится только после предыдущего держателя
+      // (TOOL-7). `emit` может бросить: `AgentEventSink` этого не запрещает,
+      // а `Agent.emit` пробрасывает ошибку подписчика.
+      lock?.release();
+      rethrow;
     }
-    await invocation.emit(
-      ToolCallStarted(
-        invocation.sessionId,
-        toolCallId: call.id,
-        tool: call.name,
-        kind: tool?.kindOf(call.arguments) ?? ToolKind.other,
-        title: presentation.title,
-        input: call.arguments,
-        locations: presentation.locations,
-      ),
-    );
     return ToolCallHandle._(call, invocation, tool, context, progress, lock);
   }
 
@@ -311,9 +343,21 @@ final class ToolCallExecutor implements ToolExecutor {
       return _valid(_error(cancelledText, ToolOutcome.cancelled));
     }
     // Шаг 6: блокировка пути и повторная проверка отмены после захвата.
+    // Ожидание прерывается отменой хода: иначе вызов за держателем, который
+    // уже захватил путь и не реагирует на отмену, получил бы `cancelled`
+    // только после того, как держатель отпустит путь. Тикет отпускает
+    // `complete` в `finally`, и место в очереди освобождается лишь после
+    // предыдущего держателя, поэтому прерванное ожидание не впускает
+    // следующего вызова раньше времени (TOOL-7).
     if (handle._lock case final lock?) {
-      await lock.acquired;
+      _logLock('tool.lock.wait', call);
+      await Future.any([lock.acquired, invocation.cancel.onCancel]);
       if (invocation.cancel.isCancelled) {
+        _logLock(
+          'tool.lock.cancelled',
+          call,
+          reason: _cancelReasonKind(invocation.cancel.reason),
+        );
         return _valid(_error(cancelledText, ToolOutcome.cancelled));
       }
     }
@@ -401,6 +445,39 @@ final class ToolCallExecutor implements ToolExecutor {
       diffs: result.diffs,
     );
   }
+
+  /// Debug-логи очереди пути (TOOL-7): `tool.lock.wait` — вызов дошёл до
+  /// захвата пути (пишется и тогда, когда путь свободен: синхронно узнать,
+  /// придётся ли ждать, нельзя), `tool.lock.cancelled` — ожидание прервано
+  /// отменой хода; у него есть поле `reason` — вид причины отмены.
+  ///
+  /// Путь в поля не пишется: он может быть чувствительным, а вызов и так
+  /// связан с путём через `tool_call_id` и событие `ToolCallStarted`
+  /// (минимально достаточный вариант, `observability.md` §43).
+  void _logLock(String event, ToolCall call, {String? reason}) =>
+      services.logger.log(
+        LogLevel.debug,
+        event,
+        fields: {'tool': call.name, 'tool_call_id': call.id, 'reason': ?reason},
+      );
+
+  /// Вид причины отмены для логов: `user`, `shutdown`, `storage_failure`,
+  /// `watchdog` или `other`.
+  ///
+  /// Ветка `watchdog` защитная: сторож (`withWatchdogs`) отменяет только
+  /// дочерний токен попытки запроса к модели, а отмена не поднимается от
+  /// ребёнка к родителю, поэтому до токена хода она сейчас не доходит.
+  ///
+  /// Почему вид, а не `toString()`: текст `StorageFailure` несёт ошибку
+  /// записи журнала, а в ней может оказаться путь (`observability.md` §43);
+  /// для разбора достаточно знать, кто отменил ход.
+  static String _cancelReasonKind(Object? reason) => switch (reason) {
+    UserCancel() => 'user',
+    ShutdownCancel() => 'shutdown',
+    StorageFailure() => 'storage_failure',
+    WatchdogFired() => 'watchdog',
+    _ => 'other',
+  };
 
   /// Логи §6.3.7: `tool.misuse.blocked` при первой блокировке ключа,
   /// `tool.misuse.warned` на каждое предупреждение.

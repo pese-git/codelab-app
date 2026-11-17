@@ -45,12 +45,16 @@ void main() {
         ModeChangeRecord,
         ConfigChangeRecord,
         PlanRecord,
+        TaskRecord,
         CompactionRecord,
         LabelRecord,
         SessionInfoRecord,
         CustomRecord,
         LeafRecord,
         CustomRecord,
+        SubagentRecord,
+        SubagentRecord,
+        SubagentRecord,
         MessageRecord,
       ],
     );
@@ -93,16 +97,35 @@ void main() {
 
     expect(
       [for (final e in plan.entries) e.status],
-      [PlanStatus.completed, PlanStatus.inProgress, PlanStatus.pending],
+      [TaskStatus.completed, TaskStatus.inProgress, TaskStatus.pending],
     );
     expect(
       [for (final e in plan.entries) e.priority],
-      [PlanPriority.high, PlanPriority.medium, PlanPriority.low],
+      [TaskPriority.high, TaskPriority.medium, TaskPriority.low],
     );
   });
 
+  // Сценарий «Golden-разбор» (agent-sessions «Формат журнала JSONL»): запись
+  // `task` читается в свой тип с полными снимками пунктов; `plan` старого
+  // формата читается рядом (D12).
+  test('a task record keeps full snapshots, actor and deleted ids', () {
+    final task = SessionRecord.fromJson(json(lines[12])) as TaskRecord;
+
+    expect(task.op, 'update');
+    expect(task.actor, isA<MainActor>());
+    expect(task.deleted, isEmpty);
+    final item = task.items.single;
+    expect(item.id, '2');
+    expect(item.subject, 'Fix the expectation');
+    expect(item.description, 'Change expect(1, 2) to expect(1, 1)');
+    expect(item.status, TaskStatus.completed);
+    expect(item.priority, TaskPriority.medium);
+    expect(item.owner, TaskOwner.main);
+    expect(item.blockedBy, ['1']);
+  });
+
   test('an unknown type is kept as unknown custom record', () {
-    final branch = SessionRecord.fromJson(json(lines[17])) as CustomRecord;
+    final branch = SessionRecord.fromJson(json(lines[18])) as CustomRecord;
 
     expect(branch.customType, 'unknown:branch');
     expect(branch.type, 'branch');
@@ -150,5 +173,53 @@ void main() {
       '{"type":"mode_change","id":"abcdefgh","parentId":null,'
       '"timestamp":"2026-10-21T08:00:00.005Z","modeId":"plan"}',
     );
+  });
+
+  // Журнал потомка: заголовок с `parent` отдельной фикстурой (agent-sessions
+  // «Формат журнала JSONL», сценарий «Golden-разбор»; change
+  // `add-subagents-and-tasks`, D7, D36 Т4); записи `subagent` — в журнале
+  // корня `all_records.jsonl`.
+  test('the child journal header with parent round-trips byte for byte', () {
+    final child = const LineSplitter().convert(
+      sessionFixture('child_journal_header.jsonl'),
+    );
+
+    final header = SessionHeader.fromJson(json(child.single));
+
+    expect(
+      header.parent?.sessionId,
+      const SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C'),
+    );
+    expect(
+      header.parent?.rootSessionId,
+      const SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C'),
+    );
+    expect(header.parent?.toolCallId, 'call_3');
+    expect(header.parent?.subagentId, 'sub_k3f9a1c2');
+    expect(header.parent?.agent, 'explore');
+    expect(header.parent?.depth, 1);
+    expect(jsonEncode(header.toJson()), child.single);
+  });
+
+  test('the subagent records of the root journal parse and round-trip', () {
+    final records = [
+      for (final line in lines.skip(1))
+        if (json(line)['type'] == 'subagent')
+          SessionRecord.fromJson(json(line)),
+    ].cast<SubagentRecord>();
+
+    expect(
+      [for (final r in records) r.status],
+      ['running', 'completed', 'cancelled'],
+    );
+    expect(records[1].toolCalls, 4);
+    expect(records[1].durationMs, 36770);
+    expect(records[2].childSessionId, isNull);
+    for (final r in records) {
+      expect(
+        jsonEncode(r.toJson()),
+        lines.firstWhere((l) => json(l)['id'] == r.id),
+      );
+    }
   });
 }

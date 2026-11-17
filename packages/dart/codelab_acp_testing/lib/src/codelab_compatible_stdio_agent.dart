@@ -32,6 +32,16 @@ enum CodelabCompatibleStdioAgentMode {
   /// `add-command-palette-agent-commands`).
   withAvailableCommands('with_available_commands'),
 
+  /// Агент для проверки markdown в ленте app: на промпт отвечает одним
+  /// `agent_message_chunk` с текстом `echo: <text>`, поэтому markdown из
+  /// промпта возвращается в ответе и попадает в отрисовку ленты.
+  ///
+  /// Почему отдельный режим: интеграционный тест ленты не должен
+  /// переиспользовать `withAvailableCommands`, отвечающий за команды палитры.
+  /// Как использовать: тест отправляет промпт с markdown и проверяет ленту
+  /// (change `add-desktop-markdown`, задача 5.1).
+  withMarkdownReply('with_markdown_reply'),
+
   /// Агент, у которого ход срывается: на `session/prompt` — JSON-RPC ошибка
   /// `-32603` с `data.codelab` класса `provider` (design D10 change
   /// `add-codelab-cli`).
@@ -56,7 +66,22 @@ enum CodelabCompatibleStdioAgentMode {
   /// `execute` (с вложенным `rawInput.env`) со статусом `completed`, затем
   /// `edit` с запросом одобрения; после ответа — `completed` или `failed`
   /// правки и ответ агента (design D10 change `add-codelab-cli`).
-  withToolCalls('with_tool_calls');
+  withToolCalls('with_tool_calls'),
+
+  /// Агент с расширением `_codelab/session/usage` (change `add-usage-extension`,
+  /// D2, D3, D7, D9; сверка D23 Т3).
+  ///
+  /// Почему: клиентские слои (CLI, desktop) проверяют строку статуса на
+  /// настоящем процессе агента, а числа должны быть детерминированы.
+  /// Для чего: в `initialize` объявляет `_meta.codelab.usage` версии 1; клиенту,
+  /// объявившему `usage` с целым `version == 1`, на каждом ходу шлёт два
+  /// снимка (`step`, затем `turn`) после чанка ответа и до ответа на
+  /// `session/prompt`; остальным клиентам не шлёт ничего. Ход 1: контекст
+  /// 18000 из 200000 (9 %), стоимость сессии `0.04`; ход 2 и далее: контекст
+  /// 170000 (85 %), пять счётчиков токенов, стоимость хода `0.05`.
+  /// Как использовать: тест `usage_agent_test.dart`, PTY-e2e CLI и
+  /// интеграционные тесты app запускают режим и читают числа выше.
+  withUsage('with_usage');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -95,6 +120,14 @@ const _terminalWaitRequestId = 'terminal-wait-1';
 const _terminalOutputRequestId = 'terminal-output-1';
 const _terminalKillRequestId = 'terminal-kill-1';
 var _currentModel = 'gpt-5';
+// Режим `with_usage` (D3): согласие клиента из `initialize` и состояние
+// счётчиков на сессию (D4, D7: `seq` общий на сессию, с 1).
+var _usageConsent = false;
+final _usageSeq = <String, int>{};
+final _usageTurns = <String, int>{};
+final _usageSessionMicros = <String, int>{};
+// Токены сессии — сумма ходов (D4 п. 4); ключи — счётчики `Usage`.
+final _usageSessionTokens = <String, Map<String, int>>{};
 var _planPromptCount = 0;
 var _queuedPromptDrainRequestCount = 0;
 var _sessionCounter = 0;
@@ -214,10 +247,28 @@ Future<void> main(List<String> args) async {
 
     switch (method) {
       case 'initialize':
+        final clientMeta =
+            ((message['params'] as Map?)?['clientCapabilities'] as Map?)?['_meta'];
+        final clientCodelab = clientMeta is Map ? clientMeta['codelab'] : null;
+        final clientUsage =
+            clientCodelab is Map ? clientCodelab['usage'] : null;
+        // D3: согласие — объект с `version`, равным целому числу 1
+        // (не 1.0, не "1"); JSON-число 1.0 в Dart разбирается как double.
+        _usageConsent = _mode == 'with_usage' &&
+            clientUsage is Map &&
+            clientUsage['version'] is int &&
+            clientUsage['version'] == 1;
         _writeResponse(id, {
           'protocolVersion': 1,
           'agentCapabilities': {
             'loadSession': _mode == 'with_session_list',
+            // D3: объявление только тому, кто прислал блок `_meta.codelab`.
+            if (_mode == 'with_usage' && clientCodelab is Map)
+              '_meta': {
+                'codelab': {
+                  'usage': {'version': 1},
+                },
+              },
             'mcpCapabilities': {'http': false, 'sse': false},
             'promptCapabilities': {
               'audio': false,
@@ -321,6 +372,25 @@ Future<void> main(List<String> args) async {
           _writeResponse(id, {'stopReason': 'end_turn'});
           break;
         }
+        if (_mode == 'with_usage') {
+          _handleUsagePrompt(id, sessionId);
+          break;
+        }
+        if (_mode == 'with_markdown_reply') {
+          // Эхо промпта одним фрагментом: markdown в тексте промпта
+          // возвращается как ответ агента (add-desktop-markdown, 5.1).
+          final text =
+              ((promptParams['prompt'] as List).first as Map)['text'] as String;
+          _writeNotification('session/update', {
+            'sessionId': sessionId,
+            'update': {
+              'sessionUpdate': 'agent_message_chunk',
+              'content': {'type': 'text', 'text': 'echo: $text'},
+            },
+          });
+          _writeResponse(id, {'stopReason': 'end_turn'});
+          break;
+        }
         if (_mode == 'crash_mid_prompt') {
           // Simulate the agent process dying unexpectedly while a turn is
           // running — no response, no notification, just gone. `exit()`
@@ -414,6 +484,12 @@ Future<void> main(List<String> args) async {
           // completed, so the same test can also confirm the section
           // disappears entirely once there is nothing left to show (see
           // add-plan-progress-checklist/design.md, Decisions).
+          //
+          // Сценарий имитирует план стороннего агента: entries без
+          // `_meta.codelab.task` — намеренно. Клиент обязан показывать такой
+          // план обычным чек-листом без id, владельца и блокеров
+          // (change `add-subagents-and-tasks`, acp-golden-fixtures «Клиент
+          // показывает план стороннего агента»).
           _planPromptCount += 1;
           final allCompleted = _planPromptCount >= 3;
           _writeNotification('session/update', {
@@ -981,6 +1057,86 @@ void _writeRequest(Object? id, String method, Map<String, Object?> params) {
 
 void _writeResponse(Object? id, Map<String, Object?> result) {
   stdout.writeln(jsonEncode({'jsonrpc': '2.0', 'id': id, 'result': result}));
+}
+
+/// Ход режима `with_usage`: чанк, снимок `step`, снимок `turn`, ответ (D7).
+void _handleUsagePrompt(Object? id, String sessionId) {
+  final turnNumber = (_usageTurns[sessionId] ?? 0) + 1;
+  _usageTurns[sessionId] = turnNumber;
+  final first = turnNumber == 1;
+  final turnMicros = first ? 40000 : 50000;
+  final sessionMicros = (_usageSessionMicros[sessionId] ?? 0) + turnMicros;
+  _usageSessionMicros[sessionId] = sessionMicros;
+  final tokens = first
+      ? {'input': 12000, 'output': 800, 'cacheRead': 5000, 'cacheWrite': 200}
+      : {
+          'input': 20000,
+          'output': 1500,
+          'cacheRead': 140000,
+          'cacheWrite': 8000,
+          'reasoning': 300,
+        };
+  // D4 п. 4: агрегат сессии — сумма ходов, как у настоящего агента; клиент
+  // сумм не считает (D8). `reasoning` попадает в сумму, только если его
+  // сообщил хотя бы один ход.
+  final sessionTokens = _usageSessionTokens.putIfAbsent(sessionId, () => {});
+  tokens.forEach((key, value) {
+    sessionTokens[key] = (sessionTokens[key] ?? 0) + value;
+  });
+
+  _writeNotification('session/update', {
+    'sessionId': sessionId,
+    'update': {
+      'sessionUpdate': 'agent_message_chunk',
+      'content': {'type': 'text', 'text': 'usage reply $turnNumber'},
+    },
+  });
+  if (_usageConsent) {
+    final turnId = 'usage-turn-$turnNumber';
+    for (final trigger in ['step', 'turn']) {
+      final seq = (_usageSeq[sessionId] ?? 0) + 1;
+      _usageSeq[sessionId] = seq;
+      _writeNotification('_codelab/session/usage', {
+        'sessionId': sessionId,
+        'seq': seq,
+        'trigger': trigger,
+        'turnId': turnId,
+        if (trigger == 'step')
+          'step': {
+            'index': 0,
+            'model': 'test/model',
+            'tokens': tokens,
+            'cost': _micros(turnMicros),
+          },
+        'turn': {
+          'steps': 1,
+          'tokens': tokens,
+          'cost': _micros(turnMicros),
+        },
+        'session': {
+          'turns': turnNumber,
+          'steps': turnNumber,
+          'tokens': Map<String, int>.of(sessionTokens),
+          'cost': _micros(sessionMicros),
+        },
+        'currency': 'USD',
+        'context': {
+          'used': first ? 18000 : 170000,
+          'size': 200000,
+          'compactAt': 160000,
+        },
+      });
+    }
+  }
+  _writeResponse(id, {'stopReason': 'end_turn'});
+}
+
+/// Микродоллары в десятичную строку D9: без хвостовых нулей, ноль — `"0"`.
+String _micros(int micros) {
+  final whole = micros ~/ 1000000;
+  final frac = (micros % 1000000).toString().padLeft(6, '0');
+  final trimmed = frac.replaceFirst(RegExp(r'0+$'), '');
+  return trimmed.isEmpty ? '$whole' : '$whole.$trimmed';
 }
 
 void _writeNotification(String method, Map<String, Object?> params) {

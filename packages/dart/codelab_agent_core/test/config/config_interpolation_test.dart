@@ -149,6 +149,9 @@ void main() {
       ).single;
       expect(issue.kind, ConfigIssueKind.value);
       expect(issue.message, 'variable GITHUB_TOKEN is not set');
+      // Структурный признак для писателя (R3, D5): не разбор текста.
+      expect(issue.event, 'config.variable.unset');
+      expect(issue.fields, {'variable': 'GITHUB_TOKEN'});
       expect(result.config, isNull);
     });
 

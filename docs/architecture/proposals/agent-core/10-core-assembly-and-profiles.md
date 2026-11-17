@@ -39,8 +39,9 @@ Capability — крупная возможность хоста, которая 
 | `userQuestions` (после MVP) | инструмент `ask` через `QuestionGate` (§17.11.7) | схема `ask` |
 | `userHooks` (после MVP) | запуск команд хуков `hooks.before_tool` и `hooks.after_tool` на машине агента (§17.14.2) | ничего; только тексты отказа и заметки хуков в результатах |
 
-Базовые инструменты `read`, `write`, `edit`, `update_plan` есть всегда: они работают поверх
-любого `ExecutionEnv`, включая `MemoryExecutionEnv`.
+Базовые инструменты `read`, `write`, `edit` и инструменты списка задач `task_create`,
+`task_update`, `task_list`, `task_get` (§17.16.3; до change `add-subagents-and-tasks` — `update_plan`)
+есть всегда: они работают поверх любого `ExecutionEnv`, включая `MemoryExecutionEnv`.
 
 ```dart
 enum HostCapability { shellExec, fileListing, mcp, compaction, sessionPersistence, interactiveApproval, projectContext,
@@ -81,13 +82,14 @@ final class AgentCoreServices {                    // всё внешнее, ч�
   final http.Client http;
   final SessionStore sessions;
   final PermissionGate? gate;                      // null → interactiveApproval off
-  final SecretStore? secrets;
+  final SecretResolver? secrets;                   // этап 8.9 (§17.5.2; change add-agent-secret-store, D3, D4): null → ключ провайдера не читается («the host has no secret resolver»), MCP-сервер со ссылкой — mcp.server.failed «no secret store»
   final McpConnector? mcp;                         // null → mcp off; McpClientConnector из codelab_agent_mcp (этап 8, ниже)
   final ProjectContextLoader? projectContext;      // читает AGENTS.md через env хоста
   final NetworkAddressResolver? resolver;          // после MVP (§17.1.2): null → проверка SSRF только по литералам
   final SpillStore? spills;                        // этап 3 (§17.4.2): null → outputSpill off
-  final ConfigSource? config;                      // после MVP (§17.5.2): null → живая перезагрузка и /config недоступны
-  final bool debugSecrets;                         // после MVP (§17.5.4): --debug-secrets или CODELAB_DEBUG_SECRETS=1
+  final ConfigSource? config;                      // этап 8.10 (§17.5.2; change add-config-writer-and-reload, D7, D8): null → живая перезагрузка и /config недоступны; задан → нужен modelsFor
+  final ModelCatalog? models;                      // каталог моделей начального снимка (§2.12.2); хост с ConfigSource берёт его из modelsFor(config).catalog (D8)
+  final AgentConfigPaths? agentConfigPaths;        // этап 8.10 (D8; OQ2): {paths, expansions, caseInsensitive} — пути PERM-11 (§7.6.1), HOME/CODELAB_HOME для exec, регистр ФС
   final SessionLeaseStore? leases;                 // после MVP (§17.6.8): null → lease только внутри процесса
   final ProcessProbe? processProbe;                // после MVP (§17.6.8): host, bootId, pid, isAlive для lease
   final LanguageServerToolFactory? languageServers;  // после MVP (§17.8.2): null → languageServers off
@@ -98,7 +100,7 @@ final class AgentCoreServices {                    // всё внешнее, ч�
   final ImagePreparer? images;                     // после MVP (§17.11.2.1): null → картинки не уменьшаются, лимиты как в MVP; desktop/CLI — IsolateImagePreparer из codelab_agent_images/io.dart, web — PureDartImagePreparer
   final ByteProcessLauncher? hookLauncher;         // после MVP (§17.14.2.2): null → userHooks off
   final List<CodelabPlugin> plugins;               // после MVP (§17.14.3.2): собранные в бинарь, по умолчанию const []
-  final RemoteAgentConnector? remoteAgents;        // после MVP (§17.15.2): A2aRemoteAgentConnector; null → типов a2a:* в task нет
+  final RemoteAgentConnector? remoteAgents;        // после MVP (§17.15.2): A2aRemoteAgentConnector; null → типов a2a:* в agent нет
   final Logger logger; final Clock clock; final IdGenerator ids;
   final String platform;                           // для system/base (§11.5): ядро не читает dart:io; хост — Platform.operatingSystem
   final Random random;                             // PKG-6: случайность (джиттер повторов) даёт хост; в тестах Random(42)
@@ -123,13 +125,15 @@ abstract interface class SecretStore {
 ```dart
 abstract interface class McpConnector {            // AgentCoreServices.mcp
   Set<String> get transports;                      // 'stdio', 'http' — для проверки HOST-3
-  Future<McpSessionTools> connect(McpConnectRequest request);   // sessionId, cwd, servers, reservedNames, logger, cancel
+  Future<McpSessionTools> connect(McpConnectRequest request);   // sessionId, cwd, servers, reservedNames, logger, cancel; с 8.10 — expandSecrets (McpSecretExpander: раскрытие ${secret:…} перед каждой попыткой, ошибка — McpSecretsException(reason); §17.5.4, D11)
 }
 abstract interface class McpSessionTools {         // объект MCP-части одной сессии
   List<AgentTool> get tools;                       // в порядке регистрации (§6.4)
-  List<McpServerSummary> get servers;              // для секции mcp (§11.5)
+  List<McpServerSummary> get servers;              // для секции mcp (§11.5); с 8.10 — все серверы сессии с состоянием (§17.5.2, D11)
   McpToolsUpdate? takeUpdate();                    // ожидающее tools/list_changed; ядро забирает на границе шага
-  Future<void> replaceServers(List<McpServerConfig> servers);   // повторный session/load (§13.5): полный список после слияния и фильтра ядра
+  Future<void> replaceServers(List<McpServerConfig> servers);   // повторный session/load (§13.5) и перезагрузка конфига (8.10, D10): полный список после слияния и фильтра ядра
+  Future<void> reconnect(String name);             // 8.10 (D11): /mcp reload <id>
+  Future<void> setEnabled(String name, bool enabled);   // 8.10 (D11): /mcp enable|disable, только эта сессия, в памяти
   Future<void> close();
 }
 abstract interface class McpTransport {            // транспорт уровня сообщений: одно сообщение — один JSON-текст
@@ -162,39 +166,137 @@ followed`, `connection failed: <runtimeType>`, `HTTP session expired`; в лог
 `replaceServers(servers)` получает полный желаемый список после слияния и фильтра ядра (серверы
 конфига, затем серверы клиента): серверы конфига не трогаются, совпавшие по `sameConnection`
 остаются, исчезнувшие закрываются, новые подключаются и занимают имена инструментов последними
-(коллизия отключает новый сервер), отключённый или не подключившийся сервер пробуется заново; сбой
-сервера — `mcp.server.failed`, а не исключение.
+(коллизия отключает новый сервер), отключённый коллизией или не подключившийся сервер пробуется
+заново; сбой сервера — `mcp.server.failed`, а не исключение. С 8.10 (change
+`add-config-writer-and-reload`, D10, D11) сервер прежний, только если совпали `sameConnection` и
+`McpServerConfig.enabled` (признак в `sameConnection` не входит): `true → false` закрывает сервер,
+`false → true` подключает новый; выключенный `setEnabled(name, false)` неизменённый сервер не
+будится — ручной выбор держится, пока элемент сервера не изменился; у сервера с ручным выбором изменением считается и правка сроков (R6-2). Супервизия
+(переподключение, состояния `McpServerSummary`, `Clock` и `Random` от хоста) — §17.5.7.
 
 Решения — `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md` (D3, D6).
 
-Реализации: связка ключей ОС в `codelab_agent_io` (Keychain, Secret Service, Credential Manager) и
-хранилище в памяти для тестов. Значения секретов никогда не попадают в логи: каждое прочитанное
-значение регистрируется в `Redactor` (§12.4).
+**Секреты (этап 8.9, change `add-agent-secret-store`, D3, D5, D13).** В `AgentCoreServices`
+лежит не `SecretStore`, а `SecretResolver` (§17.5.2): функцию модели хост строит раньше ядра
+(`createRoutedStreamFunction` вызывается до `buildAgentCore`), и резолвер нужен ей уже тогда, а
+переменные переопределения `CODELAB_SECRET_<…>` требуют окружения процесса, которого у ядра нет.
+Поэтому резолвер создаёт хост (`openHostSecrets` из `codelab_agent_io`, D15) и передаёт один и тот
+же объект в функцию модели и в `AgentCoreServices.secrets`; поля `debugSecrets` нет — режим отладки
+задаётся параметром `debug` резолвера (D3, D11). Хост без резолвера ключ провайдера не получает
+вовсе — ни из хранилища, ни прямым чтением окружения: `api_key_env` и `api_key_secret` дают ошибку
+хода `API key variable <VAR> cannot be read: the host has no secret resolver` (для секрета —
+`API key secret <name> cannot be read: …`), иначе чтение выпало бы из `secrets.lookup` и будущей
+регистрации в `Redactor` после 1.0 (D4). Поэтому каждый хост, которому нужен ключ, передаёт резолвер:
+настольные — через `openHostSecrets` (D15). `SecretStore` остаётся портом хранилища под
+резолвером; все хранилища реализуют расширение `DescribedSecretStore` (`backend` —
+`SecretBackendInfo`: id бэкенда, запись, причина, по которой `auto` не выбрал хранилище ОС).
 
-После MVP (§17.5.2, §17.5.4): все хранилища реализуют расширение `DescribedSecretStore`
-(`backend` — `SecretBackendInfo`: id бэкенда, запись, причина недоступности ОС-хранилища); к
-связке ключей добавляются бэкенды `env` (только чтение, `CODELAB_SECRET_<…>`) и `file` (открытый
-`$CODELAB_HOME/secrets.yaml`, только по явному `secrets.backend = "file"`). Ядро читает секреты
-только через `SecretResolver` (кэш, переопределение из окружения, регистрация в `Redactor`).
+Реализации в 1.0 (D5, D14): `env` (только чтение, `CODELAB_SECRET_<…>`) и `file` (открытый
+`$CODELAB_HOME/secrets.yaml`, `0600`, только по явному `secrets.backend: file`, не на Windows) в
+`codelab_agent_io` и `MemorySecretStore` ядра для тестов. Связка ключей ОС (Keychain, Secret
+Service, Credential Manager) — после 1.0, черновик `add-agent-os-secret-backends` (D13). Ядро
+читает секреты только через `SecretResolver` (кэш процесса, переопределение из окружения,
+single-flight). Регистрация каждого прочитанного значения в `Redactor` (§12.4) добавляется в ту же
+точку резолвера change редакции после 1.0 (P-10; решение пользователя 2026-11-04 R8-1, design.md
+change `add-config-literal-secrets-and-migrate`, D1); до него значения ключа и заголовков провайдера, в том
+числе литеральный `api_key` из файла конфига (§17.5.4), вычищаются из текстов ошибок через
+`ProviderConfig.secrets` (D10).
 
-Хост, который обслуживает сессии с разными `cwd`, держит один снимок `CoreConfig` на корень сессии
-(глобальный слой общий): проектные слои у каждого `cwd` свои, и правка проектного файла касается
-только сессий этого корня (§15.2, §17.5.6).
-
-**До снимков по корням (change `add-agent-configuration`, D9; снимки на каждый корень приходят с
-`ConfigSource` change 8.10).** `buildAgentCore` принимает один `CoreConfig` на процесс. Загрузчик
-читает проектные слои 3–4 для корня запуска хоста и возвращает два снимка: полный в
+**Снимок на корень запуска и конфигурация сессии другой папки (change `add-agent-configuration`, D9;
+8.10 — design.md change `add-config-writer-and-reload`, D8; порт `ProjectConfigLoader` — design.md
+change `require-project-folder`, D21).** `buildAgentCore` принимает один `CoreConfig` на процесс.
+Загрузчик читает проектные слои 3–4 для корня запуска хоста и возвращает два снимка: полный в
 `CoreConfig` и снимок без проектных слоёв в `CoreConfig.withoutProject`; `CoreConfig.projectRoot` —
-канонический корень запуска. `AgentRuntimeImpl` для `createSession` и `loadSession` берёт ключи
-сессии (`defaultModel`, `effort`, `permissions`, `budget`, `compaction`, `mcpServers`, `redact`) из
-`withoutProject`, если канонический `cwd` сессии не равен `projectRoot` (равенство, не
-вложенность), и пишет `config.session.outside_root` один раз на `cwd`. Ключи сборки (провайдеры и
-каталог, capability, сужение профиля, журналы) берутся из полного снимка. Так MCP-серверы и
-разрешения `allow` из `config.local.yaml` проекта `/A` не применяются к сессии в `/B`.
+канонический корень запуска. Сессия в корне (канонический `cwd` равен `projectRoot`: равенство, не
+вложенность) получает применённый снимок и функцию модели процесса. Для сессии другой папки есть два
+пути:
+- **с портом** `AgentCoreServices.projectConfig` (`ProjectConfigLoader.loadForProject(canonicalCwd)`)
+  `AgentRuntimeImpl` на каждый `createSession` и `loadSession`, без кэша, строит *тройку сессии* —
+  полный `CoreConfig` её папки, каталог и функцию модели (`modelsFor(CoreConfig сессии)`) — и держит
+  её до закрытия сессии; `withoutProject` такой сессии не используется. Порядок: `loadForProject` →
+  подстановка частей, отложенных до перезапуска, из применённого снимка (абзац «Отложенные правки в
+  сессиях другой папки» ниже) → `validateSnapshot` → `modelsFor`. Если у хоста нет `ConfigSource`,
+  подстановки нет: перезагрузки нет, ничего не отложено, и сессия получает загрузку как есть (без
+  `ConfigSource` у рантайма нет `values` применённого снимка — сравнение с пустой картой дало бы
+  ложный отказ и ложный `restart_pending`). Ошибка загрузки, подстановки, проверки
+  снимка или `modelsFor` — `ProjectConfigException`, сессия не создаётся (fail closed, §2 приоритет 1
+  корневого `AGENTS.md`; журнал новой сессии создаётся только после успешной конфигурации). Порт
+  требует `modelsFor` (`HostWiringException`);
+- **без порта** прежнее поведение: ключи сессии (`defaultModel`, `effort`, `permissions`, `budget`,
+  `compaction`, `mcpServers`, `redact`, `skills` — change `add-agent-skills`, Q44) берутся из `withoutProject`, пишется
+  `config.session.outside_root` один раз на `cwd`. Так выглядят сторонние хосты, сценарный
+  открыватель, `serve --llm-script` и `serve --ws` (Q18). Ключи сборки (провайдеры и каталог,
+  capability, сужение профиля, журналы) берутся из полного снимка процесса.
+
+`CoreConfig` строится на сессию, а `HostSettings` — на процесс: секреты и их бэкенд, журналы,
+логирование, профиль, `trusted_projects`, HTTP-клиент и резолвер секретов существуют в одном
+экземпляре, и ключи процесса из слоёв папки сессии игнорируются (`config.session.process_keys_ignored`).
+Так MCP-серверы и разрешения `allow` из `config.local.yaml` проекта `/A` не применяются к сессии в
+`/B`, а провайдер «This project only» проекта `/B` работает в сессиях `/B` без перезапуска. Ключ
+проектного провайдера привязан к адресу (D23, `15-configuration.md` §15.3).
+
+Ключ процесса приписывается папке, только если его задали её проектные слои: значение в `values`
+загрузки папки отличается от `withoutProjectValues` той же загрузки. С `values` применённого
+снимка ключ не сравнивается, поэтому правка глобального файла после старта не даёт ложного
+`process_keys_ignored`; у загрузки без проектных слоёв таких ключей нет (design.md change
+`defer-restart-keys-in-folder-sessions`, D8).
+
+**Отложенные правки в сессиях другой папки** (design.md change `defer-restart-keys-in-folder-sessions`,
+D1–D5, D9). `loadForProject` заново читает глобальные слои, поэтому без подстановки сессия другой
+папки получала бы сразу то, что перезагрузка корня откладывает до перезапуска (R0-1, R0-4, R6-1,
+§17.5.6). Подстановку делает внутренняя чистая функция ядра (`lib/src/config/`) теми же
+`planConfigReload` и `CoreConfig.withDeferred`, что и перезагрузка, — второй таблицы R0 нет:
+1. **База** — снимок без проекта применённого снимка, захваченного в начале открытия
+   (`withoutProject ?? config` и `withoutProjectValues ?? values`). Перезагрузка, завершившаяся во
+   время `loadForProject`, базу этого открытия не меняет.
+2. **План** — `planConfigReload(база, снимок без проекта загрузки папки)`: сравниваются только
+   глобальные слои, поэтому различия проектов (провайдер проекта, Q11) не откладываются. Нет
+   `withoutProjectValues` при наличии `withoutProject` — пустая карта для плана (fail closed).
+3. **Перекрытие** — по паре снимков самой загрузки папки, без второго чтения файлов: часть
+   перекрыта проектным слоем, если её лист (элемент) в полном снимке папки отличается от снимка без
+   проекта. Совпадение считается «не перекрыто», и часть берётся из базы (fail closed). Если у папки
+   нет проектных слоёв (`withoutProject == null`), перекрытия нет. Если у загрузки папки есть
+   `withoutProject`, но нет `withoutProjectValues`, пара неизвестна и ничто не считается
+   перекрытым (fail closed, D1, D9).
+   - **провайдер** (R0-4) перекрыт, только если каждый изменённый относительно базы лист группы
+     (`kind`, `base_url`, `headers`, `auth_header`, `api_key`, `api_key_env`, `api_key_secret`)
+     отличается в полном снимке папки; иначе группа — из базы целиком, модели — из папки, нового
+     провайдера в снимке сессии нет. Проект, задавший только `api_key_secret` при изменённом
+     глобальном `base_url`, не перекрывает группу: ключ проекта на новый адрес не уходит (D3).
+     Кандидаты — не только отложенные планом, но и провайдеры полного снимка папки, ключ которых
+     даёт только проектный слой (`providerWithKey(folder.values, id)`, D23 (a)): план по
+     глобальным `values` такой провайдер не видит. Если в группе базы ключа нет, запросы идут на
+     прежний адрес без ключа, ключ `providers.<id>` — в `restart_pending`. Проект, повторивший
+     `kind` нового глобального провайдера, его не перекрывает (листы равны), и провайдер
+     исключается (D1);
+   - **сервер** `mcp.servers[<name>]` (R0-1, R0-4, R6-1) перекрыт, если элемент полного снимка папки
+     отличается от элемента снимка без проекта; иначе — элемент базы или отсутствие;
+   - **`agent.default_model`**, отложенная вместе с новым провайдером, перекрыта по тому же
+     правилу; иначе — модель базы, неявная модель считается заново. Если модель базы вне каталога
+     прежних провайдеров (резервная модель снимка без проекта корня пришла из его проектного слоя),
+     `CoreConfig.withDeferred` считает модель неявной по итоговым провайдерам (D5);
+   - **раздел `permissions`** (R0-1): у папки без проектных слоёв — раздел базы; при проектных слоях
+     сессия не открывается — `ProjectConfigException` с проблемой по ключу `permissions`, источником
+     `config reload` и текстом `the global permissions changed after the agent started; restart the
+     agent to open sessions in this folder` (вариант (a1), D4). По листам раздел не подставляется:
+     правила доверия (`applyProjectTrust`) считаются относительно итога нижних слоёв, и по `values`
+     нельзя восстановить запреты проекта относительно прежнего глобального раздела.
+4. **Подстановка** — `CoreConfig.withDeferred(база, полный снимок папки, отфильтрованные части)`;
+   итог проходит `validateSnapshot` и `modelsFor`, проблема — отказ `ProjectConfigException`
+   (`config.session.project_invalid`). Непустая подстановка пишет `config.session.restart_pending`
+   (§12, таблица событий `config`). Итог функции — sealed `FolderSessionConfig`:
+   `FolderSessionAccepted(config, restartKeys)` или `FolderSessionRefused(problem)`. Снимок сессии
+   без вложенного `withoutProject` (`CoreConfig.withoutNestedProject`, `@internal`): сессия папки
+   его не читает, `forSessionCwd` нужен только корню, а после подстановки вложенный снимок мог
+   расходиться с основным и давать ложный отказ `validateSnapshot` (D2).
+
+Новое поле `DeferredConfigParts` ОБЯЗАНО получить правило перекрытия в этой функции; тест функции
+перечисляет поля и падает на поле без правила (D5). Функция синхронна и из бареля не экспортируется:
+публичный API ядра не меняется (D2). `pendingRestartKeys` открытие сессии не меняет (§17.5.6, D7).
 
 ```dart
 final class CoreConfig {                           // результат загрузки конфига (§15), уже провалидирован
-  final ModelCatalog models;                       // — ModelCatalog, §2.12.2
+  final ModelCatalog models;                       // — ModelCatalog, §2.12.2; в коде каталог приходит полем AgentCoreServices.models, у CoreConfig этого поля нет (сверено в 8.10, D8)
   final ModelId defaultModel; final PermissionsConfig permissions;
   final TurnBudget budget; final CompactionOverrides compaction;
   final ToolsConfig tools;                         // в том числе switches: List<ToolSwitch> (§6.3.8)
@@ -220,9 +322,38 @@ BuiltAgentCore buildAgentCore({
   required HostProfile profile,
   required AgentCoreServices services,
   required CoreConfig config,
-  @visibleForTesting StreamFunction? streamFunction, // только тесты и conformance (§14.9): ScriptedStreamFunction вместо шага 8 §10.7; хосты не передают
+  required StreamFunction streamFunction,          // функция модели начального снимка: хост строит её до сборки (createConfiguredStreamFunction), тесты и conformance — ScriptedStreamFunction (§14.9); так в коде с этапа 1 (сверено в 8.10, D8)
+  ConfiguredModels Function(CoreConfig config)? modelsFor,   // 8.10 (§17.5.2, D8): функция модели и каталог по снимку
+  bool configCommand = true,                        // 8.10 (D12, R0-3): false → /config не объявляется и не исполняется (serve --ws)
 });                                                // HostWiringException | ConfigException при ошибке
+typedef ConfiguredModels = ({StreamFunction stream, ModelCatalog catalog});
 ```
+
+**Перезагрузка конфига (этап 8.10; design.md change `add-config-writer-and-reload`, D8).** Если
+хост передал `services.config`, он обязан передать и `modelsFor`; иначе `buildAgentCore` бросает
+`HostWiringException`. `streamFunction` остаётся функцией модели начального снимка, начальный
+каталог — `AgentCoreServices.models`; `modelsFor` при сборке не вызывается, только на снимках,
+применённых перезагрузкой. Хост с источником берёт начальные функцию и каталог из одного вызова того
+же замыкания (`final models = modelsFor(config)`, затем `streamFunction: models.stream`,
+`services.models: models.catalog`) — одна дорога для старта и перезагрузки (D8, «`modelsFor` и
+`streamFunction` при сборке»). Без источника `modelsFor` не нужен. `modelsFor` — замыкание хоста над `createConfiguredStreamFunction(config,
+llm, secrets:)` и `StaticModelCatalog(config.providers)`: `http.Client` и сервисы LLM принадлежат
+хосту (PKG-6), а `--llm-script` подставляет сценарий, поэтому ядро функцию модели не пересобирает
+само, а вызывает `modelsFor` на каждом применённом снимке. Подписку на `ConfigSource.changes`
+создаёт `buildAgentCore`, владеет ею рантайм, отменяет `dispose()`. `AgentRuntime` получает
+`reloadConfig()`, `checkConfig()` и `configStatus()` (§17.5.2, §17.5.6). Хост без источника
+(`--llm-script`, `scriptedEmbeddedAgentOpener`, мобильный и web) перезагрузки и команды `/config`
+не имеет (D13); `serve --ws` перезагрузку имеет, а `/config` — нет (`configCommand: false`, R0-3).
+
+**Пути конфигурации агента (этап 8.10, OQ2; D8).** Хост передаёт политике разрешений полем
+`agentConfigPaths` значение `AgentConfigPaths`: значения `HOME` и `CODELAB_HOME` для раскрытия в
+`exec`, признак ФС без учёта регистра и канонические абсолютные пути (ссылки раскрыты по самому
+глубокому существующему предку): файлы, которые наблюдает `ConfigWatcher`
+(`$CODELAB_HOME/config.yaml`, файл `--config`/`CODELAB_CONFIG`, `<корень запуска>/.codelab/config*.yaml`,
+`$CODELAB_HOME/secrets.yaml`), и каталоги `$CODELAB_HOME/agents`, `prompts`. Строит их одна функция
+`agentConfigPathsFor` (`codelab_agent_io`), поэтому наблюдаемые и защищаемые файлы совпадают. Поле
+лежит в сервисах, а не в `HostProfile`: это данные запуска процесса, а не возможность платформы.
+Правки этих путей критические по PERM-11 (§7.6.1).
 
 ## 10.4. Профили
 
@@ -296,7 +427,7 @@ web-инструменты всегда `untrusted`, профиль это не 
 | `search` | как `read` по пути каждого совпадения; если хоть одно совпадение `untrusted` — весь результат `untrusted` | `trusted` |
 | `exec` с сетевой командой (список ниже) | `untrusted` | — |
 | прочий `exec` | `trusted` | — |
-| `update_plan` | `trusted` | `trusted` |
+| `task_create`, `task_update`, `task_list`, `task_get` (§17.16.3; до change `add-subagents-and-tasks` — `update_plan`) | `trusted` | `trusted` |
 | `lsp` `diagnostics`, `symbols`, `rename` (после MVP, §17.8.7) | как `read`: `untrusted` для путей из `tools.untrusted_paths` | — |
 | `lsp` `definition`, `references` (после MVP) | как `search`: хоть одна позиция вне `cwd` или в `tools.untrusted_paths` — весь результат `untrusted` | — |
 | `lsp` `hover` (после MVP) | всегда `untrusted`: документация может прийти из чужого пакета | — |
@@ -323,7 +454,8 @@ buildAgentCore(profile, services, config, streamFunction):
      services.projectContext == null → projectContext := off("загрузчик контекста проекта не передан")
      baseEnv не реализует DirectoryListing → fileListing := off("env без листинга каталога")
      после MVP: tools.web.enabled = false → network := off("выключено конфигом") (§17.1.5);
-       skills.enabled = false → skills := off("выключено конфигом") (§17.2.8);
+       skills.enabled capability не сужает: это ключ сессии, false даёт сессии пустой снимок навыков
+         (§17.2.8; Q44, Q45 change `add-agent-skills`); skills сужает только profile.<name>.skills;
        services.spills == null → outputSpill := off("хранилище выноса не передано");
        tools.spill.enabled = false → outputSpill := off("выключено конфигом") (§17.4.6);
        services.languageServers == null → languageServers := off("фабрика языковых серверов не передана");
@@ -347,16 +479,17 @@ buildAgentCore(profile, services, config, streamFunction):
      outputSpill фабрика создаёт SpillService на сессию и кладёт его в ToolServices.spill;
      при включённой backgroundJobs — JobManager на сессию в ToolServices.jobs (§17.9.2.2)
 5. реестр инструментов:
-     a. базовые: read, write, edit, update_plan
+     a. базовые: read, write, edit, task_create, task_update, task_list, task_get — над TaskList сессии
+        в ToolServices.tasks (§17.16.2; до change add-subagents-and-tasks — update_plan)
      b. shellExec → exec;  fileListing → ls, search
      c. mcp → McpConnector: инструменты серверов подключаются на сессию (session/new, §13) и кладутся
         в реестр сессии поверх базового (§6.4)
      d. после MVP: network и tools.web.enabled → web_fetch, web_search (после ls/search, до MCP, §17.1.2);
         skills → skill (на сессию, если SkillCatalog.modelVisible не пуст, §17.2.3);
-        subagents.enabled → task (на сессию, enum типов из определений агентов, §17.3.2; при
+        subagents.enabled → agent (на сессию, enum типов из определений агентов, §17.3.2; при
           services.remoteAgents — и типы a2a:<имя> из a2a.agents, §17.15.3);
-        subagents.background → ещё task_status, task_cancel (§17.3.8);
-        subagents.follow_ups → ещё task_send, task_resume, task_observe (§17.3.8.1; run_in_background в их схемах — только при subagents.background);
+        subagents.background → ещё agent_status, agent_cancel (§17.3.8);
+        subagents.follow_ups → ещё agent_send, agent_resume, agent_observe (§17.3.8.1; run_in_background в их схемах — только при subagents.background);
         languageServers → lsp (на сессию: LanguageServerToolFactory.openSession, после web_fetch и
           web_search, до MCP; хук сессии afterToolCall ставится после хуков хоста, §17.8.2, §5.2);
         backgroundJobs → параметр run_in_background у exec, job_output, job_kill (вместе с exec, §17.9.2.3);
@@ -369,19 +502,23 @@ buildAgentCore(profile, services, config, streamFunction):
      e. дубликат имени → HostWiringException (HOST-5); MCP-коллизия при подключении → сервер
         отключается с причиной, сессия продолжает работу
      f. выключенные инструменты (§6.3.8): удалить из реестра инструменты с toolEnabled == false;
-        выключение task удаляет task_status, task_cancel, task_send, task_resume, task_observe; выключение exec — job_output, job_kill;
+        выключение agent удаляет agent_status, agent_cancel, agent_send, agent_resume, agent_observe; выключение exec — job_output, job_kill;
         on для отсутствующего встроенного → ConfigException; plan.disabledTools := имя → source
      g. после MVP: ToolLoadPlan сессии (tools.load, tools.mounted; §17.11.9) — какие схемы видимы
 6. разрешения: PermissionPolicyFactory(mode: config.permissions.mode ?? profile.defaultMode (конфиг заменяет режим профиля, §10.5), gate,
      rules: PolicyRules(toolPolicies: config.permissions.tools, denyPatterns: config.permissions.deny)); политика ставится первым beforeToolCall-хуком (PERM-1);
      вторым — после MVP SessionHooks.before при включённой userHooks (§17.14.2.3);
      хуки хоста из SessionSpec.extraBeforeToolCall (например, ACP markInProgress, §13.7) — последними;
-       у загруженной сессии — из SessionHostPorts.extraBeforeToolCall по тому же правилу
+       у загруженной сессии — из SessionHostPorts.extraBeforeToolCall по тому же правилу;
+       те же хуки — последними и у потомков субагентов, с цепочкой toolCallId (§17.3.3; D48 п. 1 change add-subagents-and-tasks)
      afterToolCall: хуки хоста из SessionSpec.extraAfterToolCall — первыми, затем (после MVP) SessionHooks.after (§17.14.2.3), затем хук сессии языковых серверов (§17.8.5)
 7. промпт: секции в фиксированном порядке (§11.5), только для включённых capability (HOST-4)
-8. LLM: stream := streamFunction (если передан, только тесты) иначе createStreamFunction(ProviderConfig из config.models,
+8. LLM: stream := streamFunction — обязательный параметр: функцию начального снимка хост строит до
+       сборки (createConfiguredStreamFunction(ProviderConfig из config.models,
        CoreLlmServices(services.http, services.clock, services.random, services.logger,
-         diagnostics: services.llmDiagnostics; §2.10));
+         diagnostics: services.llmDiagnostics; §2.10))), тесты — ScriptedStreamFunction;
+     services.config != null и modelsFor == null → HostWiringException; modelsFor при сборке не
+       вызывается — только на снимках, применённых перезагрузкой (D8 change add-config-writer-and-reload);
      ModelCatalog стартует из кэша и конфига без сети, refresh() запускается в фоне (§2.12.2)
 9. runtime := AgentRuntime(env factory, tools, permissions, prompts, stream, sessions,
                            compaction: включено ли, budget, logger, clock, ids)
@@ -464,6 +601,7 @@ flowchart TD
 
 * Тест матрицы: для каждого профиля список схем инструментов, секций промпта и slash-команд совпадает с golden-файлом `test/host/profiles/<profile>.golden.json` (HOST-1, HOST-4).
 * Тест паритета профилей: один сценарий на scripted LLM («прочитай файл, измени, покажи план») даёт одинаковую последовательность `AgentEvent` в `agent-serve` (на fake ACP-клиенте), `embedded-app-desktop` и `embedded-cli` — различаются только env и gate.
+  Паритет — свойство ядра, а не хоста, поэтому тест живёт в тестах ядра: [`packages/dart/codelab_agent_core/test/host/profile_event_parity_test.dart`](../../../../packages/dart/codelab_agent_core/test/host/profile_event_parity_test.dart). Ядро собирается напрямую `buildAgentCore` с одинаковыми env и gate на всех трёх прогонах; сервер ACP и транспорт в сравнение не входят. Расхождение хостов на уровне ACP (бинарь `codelab-agent` и `codelab_embedded`) ловит прогон корпуса фикстур `codelab test-scenario --agent embedded` рядом с прогоном против бинаря (`openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md`, D1 (в)).
 * Тест «включено без сервиса» → исключение с именем сервиса (HOST-3); тест расширения `mcp` в `mobile` до `stdio` → исключение (HOST-2).
 * Тест коллизии: два встроенных инструмента с одним именем → ошибка сборки; MCP-сервер с инструментом-дубликатом → сервер отключён, сессия создана (HOST-5).
 * Тест-сторож: в `apps/codelab_agent` и `codelab_embedded` нет `ToolRegistry(`, `Agent(` и `AgentRuntime(` вне `buildAgentCore` (HOST-6).

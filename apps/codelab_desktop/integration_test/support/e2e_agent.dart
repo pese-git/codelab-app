@@ -3,11 +3,31 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show ConnectionProfile, ProfileSecrets, parseShellWords;
+import 'package:codelab_client_io/codelab_client_io.dart'
+    show JsonFileProfileStore;
+import 'package:codelab_desktop/app/app_scope.dart';
+import 'package:codelab_desktop/app/client_profile_secrets.dart';
+import 'package:codelab_desktop/app/codelab_app_widget.dart';
+import 'package:codelab_desktop/app/connection_environment.dart';
+import 'package:codelab_desktop/app/embedded_logger.dart';
+import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_embedded/codelab_embedded.dart'
+    show EmbeddedAgent, LogLevel, Logger;
+// Сценарий модели — только для тестов: рабочий код app его не импортирует
+// (сторож, design.md change `add-embedded-agent-mode`, D3, D8).
+import 'package:codelab_embedded/testing.dart';
+import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Какой агент стоит за e2e-тестами app.
-enum E2eAgentKind { scripted, dart }
+///
+/// [embedded] — встроенный агент в процессе app: тип подключения «Embedded
+/// agent», сценарий модели `scriptedEmbeddedAgentOpener` (design.md change
+/// `add-embedded-agent-mode`, D8, D10).
+enum E2eAgentKind { scripted, dart, embedded }
 
 /// Тег тестов, которые проверяют поведение именно scripted-агента; в режиме
 /// `dart` прогон идёт с `--exclude-tags scripted-only` (`dart_test.yaml`).
@@ -25,8 +45,10 @@ const scriptedOnly = 'scripted-only';
 /// одобрения, маркер сырых аргументов).
 ///
 /// Как использовать: `final launch = await E2eAgent.current.launch(tempDir,
-/// mode: …)`; [E2eLaunch.command] и [E2eLaunch.args] вводятся в поля
-/// `transport-field-Command` и `transport-field-Args`. Режим без сценария
+/// mode: …)` сохраняет профиль агента в `profiles.json` временного
+/// `CODELAB_HOME` этого теста, а `launch.connect(tester, shellCubit)` выбирает
+/// его на странице «Connection» (design.md change `add-app-settings-shell`,
+/// D6, D7; форма подключения и диалог удалены). Режим без сценария
 /// Dart-агента — [StateError]: такой тест помечается [scriptedOnly].
 final class E2eAgent {
   E2eAgent._(this.kind);
@@ -38,6 +60,7 @@ final class E2eAgent {
     )) {
       'scripted' => E2eAgentKind.scripted,
       'dart' => E2eAgentKind.dart,
+      'embedded' => E2eAgentKind.embedded,
       final other => throw ArgumentError.value(other, 'CODELAB_E2E_AGENT'),
     },
   );
@@ -46,12 +69,224 @@ final class E2eAgent {
 
   bool get isScripted => kind == E2eAgentKind.scripted;
 
+  /// Режим сценария для теста встроенной команды `compact`.
+  ///
+  /// Почему: scripted-агент объявляет `compact` только в режиме
+  /// `withAvailableCommands`; Dart-агент и встроенный объявляют её сами
+  /// (capability `agent-slash-commands`), им хватает обычного сценария
+  /// (design.md change `add-agent-builtin-slash-commands`, D9, tasks 3.2).
+  CodelabCompatibleStdioAgentMode get compactMode => isScripted
+      ? CodelabCompatibleStdioAgentMode.withAvailableCommands
+      : CodelabCompatibleStdioAgentMode.normal;
+
+  /// Режим сценария для теста markdown в ленте (change `add-desktop-markdown`,
+  /// задача 5.1).
+  ///
+  /// Почему один режим для всех агентов: scripted-агент в режиме `withMarkdownReply`
+  /// отвечает `echo: <промпт>`, а Dart-агент и встроенный отвечают одним и тем
+  /// же текстом из `llm_scripts/with_markdown_reply.json` (тот же markdown, что
+  /// [markdownPrompt]); тест не зависит от того, чей это ответ.
+  CodelabCompatibleStdioAgentMode get markdownMode =>
+      CodelabCompatibleStdioAgentMode.withMarkdownReply;
+
+  /// Промпт, который scripted-агент возвращает как ответ; для остальных
+  /// агентов ответ задаёт сценарий модели с тем же текстом.
+  static const markdownPrompt = '''Here is the report:
+
+# Release notes
+
+- first item
+- second item
+
+| Name | Value |
+|---|---|
+| alpha | 1 |
+
+```dart
+void main() {
+  print('hi');
+}
+```
+
+![](https://x.example/y.png)''';
+
+  /// Ответ агента на `/compact` в новой сессии.
+  ///
+  /// Почему различается: scripted-агент отвечает отчётом о сжатии, а у
+  /// Dart-агента история новой сессии пуста, и ответ — `Nothing to compact.`
+  /// (Q10, Q11 (а) design.md). Тест `command_palette_flow_test` берёт ожидание
+  /// отсюда.
+  String get compactReply =>
+      isScripted ? 'Compacted the conversation.' : 'Nothing to compact.';
+
+  /// Пропустить тесты `fs/*` и `terminal/*` во встроенном режиме.
+  ///
+  /// Причина: встроенные профили исполняют файлы и команды локально, а не
+  /// через ACP-методы клиента `fs/*` и `terminal/*`, поэтому эти тесты там
+  /// нечего проверять (design.md change `add-embedded-agent-mode`, D4, D10).
+  /// `skip` у `testWidgets` — `bool`, причина записана здесь.
+  bool get skipFsAndTerminal => kind == E2eAgentKind.embedded;
+
+  /// Суффикс описания теста `fs/*` и `terminal/*`: при пропуске причина видна
+  /// в выводе раннера (у `skip: true` её нет).
+  String get skipNote => skipFsAndTerminal
+      ? ' [skipped: the embedded agent runs files and commands locally, not '
+            'through ACP fs/* and terminal/*]'
+      : '';
+
+  /// Пропустить тест, который проверяет запуск дочернего stdio-процесса
+  /// агента (записи `Starting stdio ACP agent:` / `Stdio ACP agent started:`).
+  ///
+  /// Причина: встроенный агент работает в процессе app и подключается без
+  /// дочернего процесса, поэтому этих записей у него нет; своё подключение он
+  /// пишет как `Starting embedded ACP agent:` (design.md change
+  /// `add-embedded-agent-mode`, D8, D10).
+  bool get skipStdioProcess => kind == E2eAgentKind.embedded;
+
+  /// Суффикс описания stdio-теста: при пропуске причина видна в выводе
+  /// раннера.
+  String get skipStdioProcessNote => skipStdioProcess
+      ? ' [skipped: the embedded agent starts no stdio child process]'
+      : '';
+
+  /// Пропустить тесты, которым нужен процесс `codelab-agent serve --ws`:
+  /// есть только в режиме `dart`; у scripted-агента сервера WebSocket нет, у
+  /// встроенного — тоже.
+  bool get skipWebSocketAgent => kind != E2eAgentKind.dart;
+
+  /// Токен WebSocket-агента, которого запускает [startWebSocketAgent]: app
+  /// читает его из этой переменной окружения по ссылке `env:` профиля (D13).
+  static const webSocketTokenVariable = 'CODELAB_E2E_WS_TOKEN';
+
+  /// Временный `CODELAB_HOME` теста: в нём `profiles.json` с профилем агента.
+  /// Создаётся лениво (тест может вызвать [launch] раньше [bootstrap]) и
+  /// удаляется в конце теста; перезапуск app внутри теста видит те же профили.
+  Directory? _home;
+
+  Directory get _homeDirectory {
+    final existing = _home;
+    if (existing != null) {
+      return existing;
+    }
+    final created = Directory.systemTemp.createTempSync('codelab_app_home_');
+    _home = created;
+    addTearDown(() {
+      _home = null;
+      if (created.existsSync()) {
+        created.deleteSync(recursive: true);
+      }
+    });
+    return created;
+  }
+
+  /// Путь к `profiles.json` временного `CODELAB_HOME`: тесты диалога
+  /// «Add connection profile» проверяют, что записал app (общий файл с CLI).
+  String get profilesPath => '${_homeDirectory.path}/profiles.json';
+
+  /// Сохраняет [profile] в `profiles.json` временного `CODELAB_HOME`.
+  Future<void> saveProfile(ConnectionProfile profile) => JsonFileProfileStore(
+    '${_homeDirectory.path}/profiles.json',
+  ).save(profile);
+
+  /// Данные следующего подключения встроенного агента: их задаёт [launch], а
+  /// открыватель scope читает в момент подключения. Поэтому порядок
+  /// `bootstrap()` и `launch()` любой, а перезапуск app внутри теста
+  /// (повторный `bootstrap()`) подключается с теми же данными. Сбрасывает их
+  /// `addTearDown`, который регистрирует [launch]: данные прошлого теста не
+  /// попадают в подключение нового.
+  _EmbeddedSetup? _embeddedSetup;
+
+  /// Корень приложения теста.
+  ///
+  /// Почему не `const CodeLabBootstrap(child: CodeLabApp())` в каждом тесте:
+  /// во встроенном режиме root scope должен получить открыватель со сценарием
+  /// (шов `createCodeLabRootScope(embeddedOpener:)`, D9); в остальных режимах
+  /// остаётся прежний корень.
+  ///
+  /// Как использовать: `await tester.pumpWidget(E2eAgent.current.bootstrap())`.
+  /// Каждый вызов создаёт новый root scope, поэтому перезапуск app в тесте
+  /// закрывает прежний `closeCodeLabRootScope()`.
+  Widget bootstrap({ProfileSecrets? profileSecrets}) =>
+      _bootstrap(profileSecrets);
+
+  /// Окружение app теста: временный `CODELAB_HOME` и токен WebSocket-агента.
+  Map<String, String> get _environment => {
+    ...Platform.environment,
+    'CODELAB_HOME': _homeDirectory.path,
+    webSocketTokenVariable: E2eWebSocketAgent.token,
+  };
+
+  /// Открывает хранилище секретов `file` во временном `CODELAB_HOME` теста
+  /// (design.md change `add-provider-setup-ui`, D3, D4; задача 1.15).
+  ///
+  /// Почему тест включает `file` сам: пользовательский слой `secrets.backend`
+  /// app не пишет (D3), а бэкенд по умолчанию — `env`, только для чтения.
+  /// Настоящие `~/.codelab` и хранилище ОС не затрагиваются. Результат
+  /// передаётся в `bootstrap(profileSecrets:)`; повторный вызов даёт ещё одно
+  /// чтение того же хранилища — так тест проверяет, что записал app.
+  Future<ProfileSecrets> openFileSecrets() async {
+    final home = _homeDirectory.path;
+    // Бэкенд `file` требует закрытый от группы `$CODELAB_HOME`.
+    await Process.run('/bin/chmod', ['700', home]);
+    final config = File('$home/config.yaml');
+    if (!config.existsSync()) {
+      config.writeAsStringSync('secrets:\n  backend: file\n');
+    }
+    return openProfileSecrets(
+      environment: ConnectionEnvironment.of(_environment),
+      logger: CodeLabEmbeddedLogger(),
+    );
+  }
+
+  /// Один корень для всех режимов: окружение app задаёт `CODELAB_HOME` с
+  /// профилями теста и токен WebSocket-агента (D7, D15); открыватель со
+  /// сценарием нужен только встроенному режиму (D9).
+  Widget _bootstrap(ProfileSecrets? profileSecrets) => CodeLabBootstrap(
+    scope: createCodeLabRootScope(
+      embeddedOpener: kind == E2eAgentKind.embedded ? _embeddedOpener : null,
+      environment: _environment,
+      profileSecrets: profileSecrets,
+    ),
+    child: const CodeLabApp(),
+  );
+
+  /// Открыватель, который строит агента по данным последнего [launch]:
+  /// сценарий `integration_test/llm_scripts/<режим>.json` с тем же набором
+  /// режимов разрешений, моделей и журнала, что флаги бинаря
+  /// ([_dartFlags]).
+  Future<EmbeddedAgent> _embeddedOpener({
+    required String cwd,
+    required String hostProfile,
+  }) {
+    final setup = _embeddedSetup;
+    if (setup == null) {
+      throw StateError('E2eAgent.launch must run before the first connect');
+    }
+    return scriptedEmbeddedAgentOpener(
+      llm: setup.llm,
+      codelabHome: setup.home,
+      permissionMode: setup.permissionMode,
+      sessionsDir: setup.sessionsDir,
+      models: setup.models,
+      logger: _SilentLogger(),
+    )(cwd: cwd, hostProfile: hostProfile);
+  }
+
   /// scripted: пишет агента из `codelab_acp_testing` в [tempDir]; dart: ничего не
   /// пишет, сценарий — `integration_test/llm_scripts/<mode.wireName>.json`.
+  ///
+  /// [script] — имя сценария модели без `.json`, отдельное от [mode]: режим
+  /// задаёт только настройки агента (режим разрешений, модели, журнал), а
+  /// сценарий по умолчанию носит имя режима. Нужен тесту, чьего режима нет в
+  /// `CodelabCompatibleStdioAgentMode` (панель Agents: сценарий
+  /// `agents_pane.json` с режимом `withPermissionRequest`; change
+  /// `add-subagents-and-tasks`, D49 Т12). Для `scripted` не действует:
+  /// scripted-агент сценарии `llm_scripts/` не читает.
   Future<E2eLaunch> launch(
     Directory tempDir, {
     CodelabCompatibleStdioAgentMode mode =
         CodelabCompatibleStdioAgentMode.normal,
+    String? script,
   }) async {
     switch (kind) {
       case E2eAgentKind.scripted:
@@ -63,7 +298,7 @@ final class E2eAgent {
           'CODELAB_E2E_DART',
           defaultValue: 'dart',
         );
-        return E2eLaunch._(
+        return await _launched(
           command: _absolute(dart),
           args: '${_noSpaces(agent.path)} serve --stdio',
           // До первого промпта сессия называется «New session», а не по id
@@ -83,16 +318,16 @@ final class E2eAgent {
             '(melos run test:e2e:app:dart-agent)',
           );
         }
-        final script = File(
-          'integration_test/llm_scripts/${mode.wireName}.json',
+        final scriptPath = File(
+          'integration_test/llm_scripts/${script ?? mode.wireName}.json',
         ).absolute.path;
-        return E2eLaunch._(
+        return await _launched(
           command: _noSpaces(File(bin).absolute.path),
           args: [
             'serve',
             '--stdio',
             '--llm-script',
-            _noSpaces(script),
+            _noSpaces(scriptPath),
             ..._dartFlags(mode, tempDir),
           ].join(' '),
           sessionLabel: equals('New session'),
@@ -102,7 +337,55 @@ final class E2eAgent {
           ],
           rawInputMarker: 'timeout',
         );
+      case E2eAgentKind.embedded:
+        _embeddedSetup = _EmbeddedSetup.of(mode, tempDir, script: script);
+        // Сброс в конце теста, а не в `bootstrap()`: тест вправе вызвать
+        // `launch()` до `bootstrap()` и перезапустить app внутри себя
+        // (session_list_load_flow_test).
+        addTearDown(() => _embeddedSetup = null);
+        return E2eLaunch._(
+          command: '',
+          args: '',
+          profileId: 'embedded',
+          embedded: true,
+          sessionLabel: equals('New session'),
+          // Ожидания те же, что у бинаря `--llm-script`: один и тот же
+          // сценарий модели (D8).
+          models: const [
+            (value: 'scripted/gpt-5', name: 'gpt-5'),
+            (value: 'scripted/gpt-4', name: 'gpt-4'),
+          ],
+          rawInputMarker: 'timeout',
+        );
     }
+  }
+
+  /// Профиль внешнего stdio-агента теста: пишется в `profiles.json` и
+  /// выбирается на странице «Connection» ([E2eLaunch.connect]).
+  Future<E2eLaunch> _launched({
+    required String command,
+    required String args,
+    required Matcher sessionLabel,
+    required List<({String value, String name})> models,
+    required String rawInputMarker,
+  }) async {
+    await saveProfile(
+      ConnectionProfile.stdio(
+        id: E2eLaunch.profileIdOfExternal,
+        label: 'E2E agent',
+        command: command,
+        args: parseShellWords(args),
+        runInProjectDirectory: true,
+      ),
+    );
+    return E2eLaunch._(
+      command: command,
+      args: args,
+      profileId: E2eLaunch.profileIdOfExternal,
+      sessionLabel: sessionLabel,
+      models: models,
+      rawInputMarker: rawInputMarker,
+    );
   }
 
   /// Запускает `codelab-agent serve --ws` со сценарием
@@ -115,10 +398,10 @@ final class E2eAgent {
   /// обрыве решает сам агент (`detachGrace` ноль, change
   /// `cancel-turn-on-ws-disconnect`), а не смерть процесса, как у stdio.
   ///
-  /// Как использовать: адрес [E2eWebSocketAgent.endpoint] и
-  /// [E2eWebSocketAgent.token] вводятся в поля `transport-field-Endpoint` и
-  /// `transport-field-Token`; процесс останавливается в `addTearDown` через
-  /// [E2eWebSocketAgent.stop].
+  /// Как использовать: агент получает профиль в `profiles.json`
+  /// ([E2eWebSocketAgent.connect] выбирает его на странице «Connection»;
+  /// токен app читает из переменной окружения [webSocketTokenVariable]);
+  /// процесс останавливается в `addTearDown` через [E2eWebSocketAgent.stop].
   Future<E2eWebSocketAgent> startWebSocketAgent(
     Directory tempDir, {
     required String script,
@@ -127,7 +410,7 @@ final class E2eAgent {
       throw StateError('a WebSocket agent needs CODELAB_E2E_AGENT=dart');
     }
     const bin = String.fromEnvironment('CODELAB_E2E_AGENT_BIN');
-    const token = 'e2e-ws-token';
+    const token = E2eWebSocketAgent.token;
     final process = await Process.start(
       File(bin).absolute.path,
       [
@@ -162,7 +445,16 @@ final class E2eAgent {
         throw StateError('codelab-agent --ws did not listen: $stderr');
       },
     );
-    return E2eWebSocketAgent._(process, listening, token);
+    final agent = E2eWebSocketAgent._(process, listening);
+    await saveProfile(
+      ConnectionProfile.webSocket(
+        id: E2eWebSocketAgent.profileId,
+        label: 'E2E WebSocket',
+        uri: Uri.parse(agent.endpoint),
+        tokenRef: 'env:$webSocketTokenVariable',
+      ),
+    );
+    return agent;
   }
 
   /// Флаги бинаря по таблице контракта: режим разрешений даёт тот же
@@ -177,34 +469,50 @@ final class E2eAgent {
   static List<String> _dartFlags(
     CodelabCompatibleStdioAgentMode mode,
     Directory tempDir,
+  ) {
+    final settings = _modeSettings(mode);
+    return [
+      if (settings.permissionMode != null) ...[
+        '--permission-mode',
+        settings.permissionMode!,
+      ],
+      for (final model in settings.models) ...['--model', model],
+      if (settings.sessions) ...[
+        '--sessions-dir',
+        _noSpaces('${tempDir.absolute.path}/agent-sessions'),
+      ],
+    ];
+  }
+
+  /// Единая таблица режимов сценария для бинаря Dart-агента (флаги) и
+  /// встроенного агента (параметры `scriptedEmbeddedAgentOpener`): режим без
+  /// сценария падает одинаково — [StateError], а не молча без настроек.
+  static _ModeSettings _modeSettings(
+    CodelabCompatibleStdioAgentMode mode,
   ) => switch (mode) {
     CodelabCompatibleStdioAgentMode.normal ||
     CodelabCompatibleStdioAgentMode.withPlan ||
-    CodelabCompatibleStdioAgentMode.echoesCwd => const [],
-    CodelabCompatibleStdioAgentMode.withConfigOptions => const [
-      '--model',
-      'gpt-5',
-      '--model',
-      'gpt-4',
-    ],
+    CodelabCompatibleStdioAgentMode.withMarkdownReply ||
+    // Режим `withUsage` (задача 3.8 change `add-usage-extension`): настройки
+    // по умолчанию; цены модели и `contextWindow` задаёт сценарий
+    // `llm_scripts/with_usage.json` (D23 Т2).
+    CodelabCompatibleStdioAgentMode.withUsage ||
+    CodelabCompatibleStdioAgentMode.echoesCwd => const _ModeSettings(),
+    CodelabCompatibleStdioAgentMode.withConfigOptions => const _ModeSettings(
+      models: ['gpt-5', 'gpt-4'],
+    ),
     CodelabCompatibleStdioAgentMode.withPermissionRequest ||
     CodelabCompatibleStdioAgentMode.withQueuedPromptDrain ||
-    CodelabCompatibleStdioAgentMode.withConcurrentSessions => const [
-      '--permission-mode',
-      'standard',
-    ],
-    CodelabCompatibleStdioAgentMode.withFsAccess => const [
-      '--permission-mode',
-      'accept-edits',
-    ],
-    CodelabCompatibleStdioAgentMode.withTerminalExecution => const [
-      '--permission-mode',
-      'bypass',
-    ],
-    CodelabCompatibleStdioAgentMode.withSessionList => [
-      '--sessions-dir',
-      _noSpaces('${tempDir.absolute.path}/agent-sessions'),
-    ],
+    CodelabCompatibleStdioAgentMode.withConcurrentSessions =>
+      const _ModeSettings(permissionMode: 'standard'),
+    CodelabCompatibleStdioAgentMode.withFsAccess => const _ModeSettings(
+      permissionMode: 'accept-edits',
+    ),
+    CodelabCompatibleStdioAgentMode.withTerminalExecution =>
+      const _ModeSettings(permissionMode: 'bypass'),
+    CodelabCompatibleStdioAgentMode.withSessionList => const _ModeSettings(
+      sessions: true,
+    ),
     final other => throw StateError(
       '${other.name} has no Dart agent scenario: tag the test '
       '$scriptedOnly',
@@ -231,16 +539,28 @@ final class E2eLaunch {
   E2eLaunch._({
     required this.command,
     required this.args,
+    required this.profileId,
     required this.sessionLabel,
     required this.models,
     required this.rawInputMarker,
+    this.embedded = false,
   });
 
-  /// Поле `transport-field-Command`.
+  /// Id профиля внешнего stdio-агента в `profiles.json`.
+  static const profileIdOfExternal = 'e2e-agent';
+
+  /// Встроенный агент: профиля в файле нет, на странице «Connection» нажимается
+  /// «Connect» в строке «Embedded agent».
+  final bool embedded;
+
+  /// Команда профиля.
   final String command;
 
-  /// Поле `transport-field-Args`.
+  /// Аргументы профиля одной строкой (разбираются как в shell).
   final String args;
+
+  /// Id строки страницы «Connection», которую выбирает [connect].
+  final String profileId;
 
   /// Метка новой сессии в списке.
   final Matcher sessionLabel;
@@ -250,6 +570,26 @@ final class E2eLaunch {
 
   /// Текст, который есть только в сырых аргументах вызова (`rawInput`).
   final String rawInputMarker;
+
+  /// Подключается к агенту теста: открывает «Connection», нажимает «Use» в
+  /// строке профиля, затем выбирает проект ([project]; он и стартует агента),
+  /// ждёт исхода и возвращается на рабочее место (D20 change
+  /// `require-project-folder`).
+  ///
+  /// Почему общий шаг: запуск внешнего агента — профиль из `profiles.json`,
+  /// встроенного — строка «Embedded agent» (D5, D6). Реальный процесс не
+  /// гарантирует кадров для `pumpAndSettle`, поэтому исход читается из
+  /// Cubit-а, а не ждётся по кадрам.
+  Future<void> connect(
+    WidgetTester tester,
+    CodeLabShellCubit shellCubit, {
+    String? project,
+  }) => connectProfileViaSettings(
+    tester,
+    shellCubit,
+    profileId,
+    project: project,
+  );
 
   /// Текстовые виджеты, совпавшие с [sessionLabel].
   Finder get sessionLabelFinder => find.byWidgetPredicate(
@@ -263,18 +603,34 @@ final class E2eLaunch {
 /// Процесс `codelab-agent serve --ws`, запущенный тестом
 /// ([E2eAgent.startWebSocketAgent]).
 final class E2eWebSocketAgent {
-  E2eWebSocketAgent._(this._process, this.port, this.token);
+  E2eWebSocketAgent._(this._process, this.port);
+
+  /// Токен сервера; app получает его из переменной окружения
+  /// [E2eAgent.webSocketTokenVariable] по ссылке профиля.
+  static const token = 'e2e-ws-token';
+
+  /// Id профиля агента в `profiles.json`.
+  static const profileId = 'e2e-ws';
 
   final Process _process;
 
   /// Порт, который сервер выбрал для `--port 0`.
   final int port;
 
-  /// Bearer-токен сервера: поле `transport-field-Token`.
-  final String token;
-
-  /// Поле `transport-field-Endpoint`.
   String get endpoint => 'ws://127.0.0.1:$port/acp';
+
+  /// «Use» строки профиля агента на странице «Connection», затем выбор
+  /// проекта [project] (триггер старта).
+  Future<void> connect(
+    WidgetTester tester,
+    CodeLabShellCubit shellCubit, {
+    String? project,
+  }) => connectProfileViaSettings(
+    tester,
+    shellCubit,
+    profileId,
+    project: project,
+  );
 
   /// SIGTERM и ожидание выхода, чтобы процесс не пережил тест.
   Future<void> stop() async {
@@ -287,4 +643,164 @@ final class E2eWebSocketAgent {
       },
     );
   }
+}
+
+/// Лог встроенного агента в e2e-тестах не нужен: журнал app и транскрипт
+/// проверяются сами.
+final class _SilentLogger implements Logger {
+  @override
+  bool isEnabled(LogLevel level) => false;
+
+  @override
+  void log(
+    LogLevel level,
+    String event, {
+    Map<String, Object?> fields = const {},
+    Object? error,
+    StackTrace? stack,
+  }) {}
+}
+
+/// Настройки сценария одного режима: режим разрешений, каталог моделей и
+/// журнал сессий (`--sessions-dir` бинаря, change
+/// `add-llm-script-session-store`, D4: без него сессии `--llm-script` живут в
+/// памяти и агент не объявляет `loadSession`).
+final class _ModeSettings {
+  const _ModeSettings({
+    this.permissionMode,
+    this.models = const [],
+    this.sessions = false,
+  });
+
+  final String? permissionMode;
+  final List<String> models;
+  final bool sessions;
+}
+
+/// Сценарий и настройки встроенного агента для одного режима теста.
+///
+/// Почему: у встроенного агента нет флагов командной строки, а те же режимы
+/// разрешений, моделей и журнала, что у `codelab-agent serve --stdio`
+/// (`E2eAgent._dartFlags`), задаются параметрами `scriptedEmbeddedAgentOpener`.
+/// Режим без сценария Dart-агента — [StateError]: такой тест помечается
+/// `scripted-only` и в этом режиме исключается.
+final class _EmbeddedSetup {
+  _EmbeddedSetup._({
+    required this.llm,
+    required this.home,
+    required this.permissionMode,
+    required this.sessionsDir,
+    required this.models,
+  });
+
+  factory _EmbeddedSetup.of(
+    CodelabCompatibleStdioAgentMode mode,
+    Directory tempDir, {
+    String? script,
+  }) {
+    // Таблица режимов — общая с бинарём; неизвестный режим падает здесь же.
+    final settings = E2eAgent._modeSettings(mode);
+    final scriptFile = File(
+      'integration_test/llm_scripts/${script ?? mode.wireName}.json',
+    );
+    if (!scriptFile.existsSync()) {
+      throw StateError(
+        '${mode.name} has no model script ${scriptFile.path}: tag the test '
+        '$scriptedOnly',
+      );
+    }
+    final json =
+        jsonDecode(scriptFile.readAsStringSync()) as Map<String, Object?>;
+    return _EmbeddedSetup._(
+      llm: json['llm']! as Map<String, Object?>,
+      // Путь вводится не в форму, а передаётся открывателю: пробелы не мешают.
+      home: '${tempDir.absolute.path}/codelab-home',
+      permissionMode: settings.permissionMode,
+      sessionsDir: settings.sessions
+          ? '${tempDir.absolute.path}/agent-sessions'
+          : null,
+      models: [for (final model in settings.models) 'scripted/$model'],
+    );
+  }
+
+  final Map<String, Object?> llm;
+  final String home;
+  final String? permissionMode;
+  final String? sessionsDir;
+  final List<String> models;
+}
+
+/// «Use» профиля [profileId] на странице «Connection», затем выбор проекта
+/// (он и стартует агента) и ожидание исхода старта.
+///
+/// Почему: ручного Connect нет — агент стартует по триггерам (D13), а «Use»
+/// только выбирает профиль для следующего старта (D18). Порядок важен: выбор
+/// проекта до «Use» стартовал бы профиль по умолчанию (встроенный агент), а не
+/// агента теста (design.md change `require-project-folder`, D20). Ожидание —
+/// опросом Cubit-а до 10 секунд, а не `pumpAndSettle`: реальный процесс или
+/// сокет не держит кадры.
+///
+/// Как использовать: [project] — папка, которую тест выбирает проектом (она
+/// и есть триггер старта); без неё берётся временная папка (`ensureProject`),
+/// а если проект уже выбран — старт делает триггер запуска (`startOnLaunch`).
+Future<void> connectProfileViaSettings(
+  WidgetTester tester,
+  CodeLabShellCubit shellCubit,
+  String profileId, {
+  String? project,
+}) async {
+  await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+  await tester.pumpAndSettle();
+  final use = find.byKey(ValueKey('connection-profile-use-$profileId'));
+  // У уже выбранного профиля (например, профиля по умолчанию) вместо «Use»
+  // метка «Selected».
+  if (use.evaluate().isNotEmpty) {
+    await tester.tap(use);
+    await tester.pump();
+  }
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(CodeLabSettingsNavigation.backKey));
+  await tester.pumpAndSettle();
+  if (project != null) {
+    unawaited(shellCubit.selectProject(project));
+  } else if (shellCubit.state.selectedProjectPath == null) {
+    await ensureProject(tester, shellCubit);
+  } else {
+    unawaited(shellCubit.startOnLaunch());
+  }
+  await tester.pump();
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (shellCubit.state.connectionStatus !=
+          CodeLabConnectionStatus.connected &&
+      shellCubit.state.connectionStatus != CodeLabConnectionStatus.failed &&
+      DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.pumpAndSettle();
+}
+
+/// Выбирает временную папку проектом, если проект ещё не выбран.
+///
+/// Почему: без выбранного проекта агент не стартует (require-project-folder,
+/// D1, D13), а тесты, которым папка не важна, раньше полагались на папку
+/// процесса. Выбор проекта и есть триггер старта агента.
+///
+/// Для чего: тестам подключения нужна лишь существующая папка, а не
+/// конкретный проект; временная папка удаляется по завершении теста.
+///
+/// Как использовать: вызывается перед подключением; тесты, которым нужен
+/// конкретный проект, выбирают его сами раньше.
+Future<void> ensureProject(
+  WidgetTester tester,
+  CodeLabShellCubit shellCubit,
+) async {
+  if (shellCubit.state.selectedProjectPath != null) {
+    return;
+  }
+  final dir = await tester.runAsync(
+    () => Directory.systemTemp.createTemp('codelab_e2e_project_'),
+  );
+  final created = dir!;
+  addTearDown(() => created.delete(recursive: true));
+  await shellCubit.selectProject(created.path);
 }

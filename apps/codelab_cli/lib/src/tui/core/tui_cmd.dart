@@ -1,5 +1,7 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
+import 'package:codelab_setup/codelab_setup.dart'
+    show ConfigLayer, ProviderSetupEvent;
 
 /// Команда ядра экрана — описание действия, которое исполняет адаптер.
 ///
@@ -117,4 +119,51 @@ final class RespondCmd extends TuiCmd {
 
   @override
   String toString() => 'RespondCmd($approvalId, $optionId)';
+}
+
+/// Событие мастера провайдера для автомата `ProviderSetupFlow`.
+///
+/// Эффект отдаёт его владельцу подписки на `flow.states`
+/// (`TuiCommandContext.runWizard`); значение ключа едет внутри события
+/// (`StoreSecret`) и в `toString` не попадает (design.md change
+/// `add-provider-setup-ui`, D17).
+final class WizardEventCmd extends TuiCmd {
+  const WizardEventCmd(this.event, {required this.overlayId});
+
+  final ProviderSetupEvent event;
+
+  /// Номер оверлея, который отправил событие: адаптер отдаёт событие только
+  /// автомату этого оверлея (D21).
+  final int overlayId;
+
+  @override
+  String toString() => 'WizardEventCmd(${event.runtimeType})';
+}
+
+/// Записать или сбросить ключ экрана настроек: [raw] — введённая строка
+/// (`null` — сброс), [layer] — слой записи (`settingWriteLayerOf`).
+///
+/// Запись делает эффект через `applySetting` и отвечает `SettingsAppliedMsg`
+/// с исходом и новым снимком; [overlayId] защищает от позднего ответа чужого
+/// экрана (D21).
+final class ApplySettingCmd extends TuiCmd {
+  const ApplySettingCmd(
+    this.overlayId,
+    this.key, {
+    this.raw,
+    required this.layer,
+    this.explicitLayer = false,
+  });
+
+  final int overlayId;
+  final String key;
+  final String? raw;
+  final ConfigLayer layer;
+
+  /// Слой выбран явно (ctrl+u → `user`): правило «ключ слоя `local`/`project`
+  /// без цели не пишется в `user`» снимается (D17).
+  final bool explicitLayer;
+
+  @override
+  String toString() => 'ApplySettingCmd($key, ${layer.name})';
 }

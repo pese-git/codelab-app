@@ -126,7 +126,7 @@ Centering the proto file as the normative source ensures protocol neutrality, re
 
 ### 2.1. Requirements Language
 
-The keywords "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in [RFC 2119](https://tools.ietf.org/html/rfc2119).
+The keywords "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
 
 ### 2.2. Core Concepts
 
@@ -220,7 +220,7 @@ Retrieves the current state (including status, artifacts, and optionally history
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | id  |	string  |	Yes |	The resource ID of the task to retrieve. |
 | historyLength |	integer |	No |	The maximum number of most recent messages from the task's history to retrieve. An unset value means the client does not impose any limit. A value of zero is a request to not include any messages. The server MUST NOT return more messages than the provided value, but MAY apply a lower limit. |
 
@@ -245,7 +245,7 @@ Parameters for listing tasks with optional filtering criteria.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | contextId |	string |	No |	Filter tasks by context ID to get tasks from a specific conversation or session. |
 | status |	TaskState |	No |	Filter tasks by their current status state. |
 | pageSize |	integer |	No |	The maximum number of tasks to return. The service may return fewer than this value. If unspecified, at most 50 tasks will be returned. The minimum value is 1. The maximum value is 100. |
@@ -297,7 +297,7 @@ Represents a request for the CancelTask method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | id |	string |	Yes |	The resource ID of the task to cancel. |
 | metadata |	object |	No |	A flexible key-value map for passing additional context or parameters. |
 
@@ -323,7 +323,7 @@ Establishes a streaming connection to receive updates for an existing task.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | id |	string |	Yes |	The resource ID of the task to subscribe to. |
 
 
@@ -352,12 +352,21 @@ Creates a push notification configuration for a task to receive asynchronous upd
 **Inputs:**
 
 
-[{{ proto_to_table("TaskPushNotificationConfig") }}](Error: Message CreateTaskPushNotificationConfigRequest not found.)
+A container associating a push notification configuration with a specific task.
+
+| Field |	Type |	Required |	Description |
+|-------|------|-----------|--------------|
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
+| id |	string |	No |	The push notification configuration details. A unique identifier (e.g. UUID) for this push notification configuration. |
+| taskId |	string |	No |	The ID of the task this configuration is associated with. |
+| url |	string |	Yes |	The URL where the notification should be sent. |
+| token	| string |	No |	A token unique for this task or session. |
+| authentication |	AuthenticationInfo |	No |	Authentication information required to send the notification. |
 
 
 **Outputs:**
 
-- [`PushNotificationConfig`](#431-pushnotificationconfig): Created configuration with assigned ID
+- [`TaskPushNotificationConfig`](#431-taskpushnotificationconfig): Created configuration with assigned ID
 
 **Errors:**
 
@@ -376,13 +385,13 @@ Retrieves an existing push notification configuration for a task.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | taskId |	string |	Yes |	The parent task resource ID. |
 | id |	string |	Yes |	The resource ID of the configuration to retrieve. |
 
 **Outputs:**
 
-- [`PushNotificationConfig`](#431-pushnotificationconfig): The requested configuration
+- [`TaskPushNotificationConfig`](#431-taskpushnotificationconfig): The requested configuration
 
 **Errors:**
 
@@ -401,7 +410,7 @@ Retrieves all push notification configurations for a task.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | taskId |	string |	Yes |	The parent task resource ID. |
 | pageSize |	integer |	No |	The maximum number of configurations to return. |
 | pageToken |	string |	No |	A page token received from a previous ListTaskPushNotificationConfigsRequest call. |
@@ -432,7 +441,7 @@ Removes a push notification configuration for a task.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | taskId |	string |	Yes |	The parent task resource ID. |
 | id |	string |	Yes |	The resource ID of the configuration to delete. |
 
@@ -458,7 +467,7 @@ Retrieves a potentially more detailed version of the Agent Card after the client
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 
 
 **Outputs:**
@@ -489,7 +498,7 @@ Represents a request for the SendMessage method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | message |	Message |	Yes |	The message to send to the agent. |
 | configuration |	SendMessageConfiguration |	No |	Configuration for the send request. |
 | metadata |	object |	No |	A flexible key-value map for passing additional context or parameters. |
@@ -546,7 +555,7 @@ The `historyLength` parameter appears in multiple operations and controls how mu
 
 #### 3.2.5. Metadata
 
-A flexible key-value map for passing additional context or parameters with operations. Metadata keys and are strings and values can be any valid value that can be represented in JSON. [`Extensions`](#46-extensions) can be used to strongly type metadata values for specific use cases.
+A flexible key-value map for passing additional context or parameters with operations. Metadata keys must be strings, and values can be any valid JSON value. [Extensions](#46-extensions) can be used to strongly type metadata values for specific use cases.
 
 #### 3.2.6 Service Parameters
 
@@ -615,7 +624,7 @@ All error responses in the A2A protocol, regardless of binding, **MUST** convey 
 
 1. **Error Code**: A machine-readable identifier for the error type (e.g., string code, numeric code, or protocol-specific status)
 2. **Error Message**: A human-readable description of the error
-3. **Error Details** (optional): An array of objects providing additional structured information about the error. Each object in the array **MUST** include a `@type` key that identifies the object's type (using [ProtoJSON `Any` representation](https://protobuf.dev/programming-guides/json)). Well-known types from the [`google.rpc` error model](https://cloud.google.com/apis/design/errors#error_model) (e.g., `ErrorInfo`, `BadRequest`) **SHOULD** be used where applicable. Error details may be used for:
+3. **Error Details** (optional): An array of objects providing additional structured information about the error. Each object in the array **MUST** include a `@type` key that identifies the object's type (using [ProtoJSON `Any` representation](https://protobuf.dev/programming-guides/json/)). Well-known types from the [`google.rpc` error model](https://cloud.google.com/apis/design/errors#error_model) (e.g., `ErrorInfo`, `BadRequest`) **SHOULD** be used where applicable. Error details may be used for:
     - Affected fields or parameters
     - Contextual information (e.g., task ID, timestamp)
     - Suggestions for resolution
@@ -745,7 +754,7 @@ The A2A protocol provides three complementary mechanisms for clients to receive 
 - Client does not maintain persistent connection
 - Asynchronous delivery, client must be reachable via HTTP
 - Best for: Server-to-server integrations, long-running tasks, event-driven architectures
-- Operations: Create ([Section 3.1.7](#317-create-push-notification-config)), Get ([Section 3.1.8](#76-taskspushnotificationconfigget)), List ([Section 3.1.9](#319-list-push-notification-configs)), Delete ([Section 3.1.10](#3110-delete-push-notification-config))
+- Operations: Create ([Section 3.1.7](#317-create-push-notification-config)), Get ([Section 3.1.8](#318-get-push-notification-config)), List ([Section 3.1.9](#319-list-push-notification-configs)), Delete ([Section 3.1.10](#3110-delete-push-notification-config))
 - Event types: TaskStatusUpdateEvent ([Section 4.2.1](#421-taskstatusupdateevent)), TaskArtifactUpdateEvent ([Section 4.2.2](#422-taskartifactupdateevent)), WebHook payloads ([Section 4.3](#43-push-notification-objects))
 - Requires `AgentCard.capabilities.pushNotifications` to be `true`
 - Regardless of the protocol binding being used by the agent, WebHook calls use plain HTTP and the JSON payloads as defined in the HTTP protocol binding
@@ -986,9 +995,18 @@ A task delta where an artifact has been generated.
 ### 4.3. Push Notification Objects
 
 
-#### 4.3.1. PushNotificationConfig
+#### 4.3.1. TaskPushNotificationConfig
 
-[{{ proto_to_table("PushNotificationConfig") }}](Error: Message PushNotificationConfig not found.)
+A container associating a push notification configuration with a specific task.
+
+| Field |	Type |	Required |	Description |
+|-------|------|-----------|--------------|
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
+| id |	string |	No |	The push notification configuration details. A unique identifier (e.g. UUID) for this push notification configuration. |
+| taskId |	string |	No |	The ID of the task this configuration is associated with. |
+| url |	string |	Yes |	The URL where the notification should be sent. |
+| token	| string |	No |	A token unique for this task or session. |
+| authentication |	AuthenticationInfo |	No |	Authentication information required to send the notification. |
 
 
 #### 4.3.2. AuthenticationInfo
@@ -1033,7 +1051,7 @@ The webhook payload is a [`StreamResponse`](#323-stream-response) object contain
 
 **Authentication:**
 
-The agent MUST include authentication credentials in the request headers as specified in the [`PushNotificationConfig.authentication`](#432-authenticationinfo) field. The format follows standard HTTP authentication patterns (Bearer tokens, Basic auth, etc.).
+The agent MUST include authentication credentials in the request headers as specified in the [`TaskPushNotificationConfig.authentication`](#432-authenticationinfo) field. The format follows standard HTTP authentication patterns (Bearer tokens, Basic auth, etc.).
 
 **Client Responsibilities:**
 
@@ -1136,8 +1154,9 @@ Declares a combination of a target URL, transport and protocol version for inter
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| url |	string |	Yes |	The URL where this interface is available. Must be a valid absolute HTTPS URL in production. Example: "https://api.example.com/a2a/v1", "https://grpc.example.com/a2a" |
+| url |	string |	Yes |	The URL or address where this interface is available. For HTTP-based transports, must be a valid absolute HTTPS URL in production. For gRPC, the address should be in the format "hostname:port". Example: "https://api.example.com/a2a/v1", "grpc.example.com:443" |
 | protocolBinding |	string |	Yes |	The protocol binding supported at this URL. This is an open form string, to be easily extended for other protocol bindings. The core ones officially supported are JSONRPC, GRPC and HTTP+JSON. |
+| tenant |	string |	No |	Optional. An opaque string used for routing requests to a specific agent or tenant when multiple agents are served behind a single A2A endpoint. When set, clients MUST include this value in the `tenant` field of all request messages sent to this interface. The server is responsible for interpreting the value and routing requests accordingly; the protocol does not define its format or semantics. |
 | protocolVersion |	string |	Yes |	The version of the A2A protocol this interface exposes. Use the latest supported minor version per major version. Examples: "0.3", "1.0" |
 
 
@@ -1669,11 +1688,11 @@ Authorization: Bearer token
 HTTP/1.1 200 OK
 Content-Type: text/event-stream
 
-data: {"task": {"id": "task-uuid", "status": {"state": "TASK_STATE_WORKING"}}}
+data: {"task": {"id": "task-uuid", "contextId": "context-uuid", "status": {"state": "TASK_STATE_WORKING"}}}
 
-data: {"artifactUpdate": {"taskId": "task-uuid", "artifact": {"parts": [{"text": "# Climate Change Report\n\n"}]}}}
+data: {"artifactUpdate": {"taskId": "task-uuid", "contextId": "context-uuid", "artifact": {"parts": [{"text": "# Climate Change Report\n\n"}]}}}
 
-data: {"statusUpdate": {"taskId": "task-uuid", "status": {"state": "TASK_STATE_COMPLETED"}}}
+data: {"statusUpdate": {"taskId": "task-uuid", "contextId": "context-uuid", "status": {"state": "TASK_STATE_COMPLETED"}}}
 ```
 
 ### 6.3. Multi-Turn Interaction
@@ -2257,6 +2276,16 @@ If using in-band credential exchange, we recommend adhering to the following sec
 - Credentials SHOULD be bound to the agent which originated the request, such that only this agent is able to use the credentials. This ensures that credentials propagating through a chain of A2A requests are only usable by the requesting agent.
 - Credentials containing sensitive information SHOULD be only readable by the agent which originated the request, such as by encrypting the credential.
 
+#### 7.6.4 In-Task Authorization Scope
+
+The `TASK_STATE_AUTH_REQUIRED` state signals that additional authorization is required to continue processing a Task. The A2A protocol does not define the scope, representation, validity, or revocation semantics of the authorization decision or credential obtained in response to this state.
+
+Agents MUST NOT treat the `TASK_STATE_AUTH_REQUIRED` state transition, by itself, as authorization for any particular operation. The meaning and scope of any resulting authorization decision or credential MUST be defined by the agent's implementation, by the credential issuer, or by an A2A extension.
+
+If an implementation requires authorization for specific operations, it is responsible for defining how the authorized operation is identified and how that authorization is checked before the operation is performed.
+
+A credential or authorization decision obtained while a Task is in `TASK_STATE_AUTH_REQUIRED` MUST NOT be assumed to authorize subsequent messages on the Task unless that behavior is explicitly defined by the implementation, credential issuer, or extension.
+
 ## 8. Agent Discovery: The Agent Card
 
 
@@ -2296,11 +2325,11 @@ Clients **MUST** follow these rules:
 
 ### 8.4. Agent Card Signing
 
-Agent Cards **MAY** be digitally signed using JSON Web Signature (JWS) as defined in [RFC 7515](https://tools.ietf.org/html/rfc7515) to ensure authenticity and integrity. Signatures allow clients to verify that an Agent Card has not been tampered with and originates from the claimed provider.
+Agent Cards **MAY** be digitally signed using JSON Web Signature (JWS) as defined in [RFC 7515](https://datatracker.ietf.org/doc/html/rfc7515) to ensure authenticity and integrity. Signatures allow clients to verify that an Agent Card has not been tampered with and originates from the claimed provider.
 
 #### 8.4.1. Canonicalization Requirements
 
-Before signing, the Agent Card content **MUST** be canonicalized using the JSON Canonicalization Scheme (JCS) as defined in [RFC 8785](https://tools.ietf.org/html/rfc8785). This ensures consistent signature generation and verification across different JSON implementations.
+Before signing, the Agent Card content **MUST** be canonicalized using the JSON Canonicalization Scheme (JCS) as defined in [RFC 8785](https://datatracker.ietf.org/doc/html/rfc8785). This ensures consistent signature generation and verification across different JSON implementations.
 
 **Canonicalization Rules:**
 
@@ -2319,40 +2348,61 @@ Before signing, the Agent Card content **MUST** be canonicalized using the JSON 
 
 **Example of Default Value Removal:**
 
-Original Agent Card fragment:
+Original Agent Card:
 
 ```json
 {
   "name": "Example Agent",
-  "description": "",
+  "description": "An example agent that echoes messages.",
+  "supportedInterfaces": [
+    {
+      "url": "https://example.com/a2a/v1",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "version": "1.0.0",
   "capabilities": {
     "streaming": false,
     "pushNotifications": false,
     "extensions": []
   },
-  "skills": []
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["text/plain"],
+  "skills": [
+    {
+      "id": "echo",
+      "name": "Echo",
+      "description": "Echoes the input.",
+      "tags": ["echo"]
+    }
+  ]
 }
 ```
 
 Applying the canonicalization rules:
 
 - `name`: "Example Agent" - REQUIRED field → **include**
-- `description`: "" - REQUIRED field → **include**
+- `description`: "An example agent that echoes messages." - REQUIRED field → **include**
+- `supportedInterfaces`: array - REQUIRED field → **include**
+- `version`: "1.0.0" - REQUIRED field → **include**
 - `capabilities`: object - REQUIRED field → **include** (after processing children)
     - `streaming`: false - optional field, present in JSON (explicitly set) → **include**
     - `pushNotifications`: false - optional field, present in JSON (explicitly set) → **include**
     - `extensions`: [] - repeated field (not REQUIRED) with empty array → **omit**
-- `skills`: [] - REQUIRED field → **include**
+- `defaultInputModes`: ["text/plain"] - REQUIRED field → **include**
+- `defaultOutputModes`: ["text/plain"] - REQUIRED field → **include**
+- `skills`: array - REQUIRED field → **include**
 
 After applying RFC 8785:
 
 ```json
-{"capabilities":{"pushNotifications":false,"streaming":false},"description":"","name":"Example Agent","skills":[]}
+{"capabilities":{"pushNotifications":false,"streaming":false},"defaultInputModes":["text/plain"],"defaultOutputModes":["text/plain"],"description":"An example agent that echoes messages.","name":"Example Agent","skills":[{"description":"Echoes the input.","id":"echo","name":"Echo","tags":["echo"]}],"supportedInterfaces":[{"protocolBinding":"JSONRPC","protocolVersion":"1.0","url":"https://example.com/a2a/v1"}],"version":"1.0.0"}
 ```
 
 #### 8.4.2. Signature Format
 
-Signatures use the JSON Web Signature (JWS) format as defined in [RFC 7515](https://tools.ietf.org/html/rfc7515). The [`AgentCardSignature`](#447-agentcardsignature) object represents JWS components using three fields:
+Signatures use the JSON Web Signature (JWS) format as defined in [RFC 7515](https://datatracker.ietf.org/doc/html/rfc7515). The [`AgentCardSignature`](#447-agentcardsignature) object represents JWS components using three fields:
 
 - **`protected`** (required, string): Base64url-encoded JSON object containing the JWS Protected Header
 - **`signature`** (required, string): Base64url-encoded signature value
@@ -2458,7 +2508,7 @@ Clients verifying Agent Card signatures **MUST**:
       }
     }
   },
-  "security": [{ "google": ["openid", "profile", "email"] }],
+  "securityRequirements": [{ "schemes": { "google": { "list": ["openid", "profile", "email"] } } }],
   "defaultInputModes": ["application/json", "text/plain"],
   "defaultOutputModes": ["application/json", "image/png"],
   "skills": [
@@ -2517,7 +2567,7 @@ Agent Card content changes infrequently relative to the frequency at which clien
 
 #### 8.6.2. Client Requirements
 
-- Clients **SHOULD** honor HTTP caching semantics as defined in [RFC 9111](https://www.rfc-editor.org/rfc/rfc9111) when fetching Agent Cards
+- Clients **SHOULD** honor HTTP caching semantics as defined in [RFC 9111](https://datatracker.ietf.org/doc/html/rfc9111) when fetching Agent Cards
 - When a cached Agent Card has expired, clients **SHOULD** use conditional requests (`If-None-Match` with the stored `ETag`, or `If-Modified-Since`) to avoid re-downloading unchanged cards
 - When the server does not include caching headers, clients **MAY** apply an implementation-specific default cache duration
 
@@ -2841,7 +2891,7 @@ response, err := client.SendMessage(ctx, request)
 
 
 
-| Field |	Type |	Required |	Description |
+| Method |	Request |	Response |	Description |
 |-------|------|-----------|--------------|
 | SendMessage |	SendMessageRequest |	SendMessageResponse |	Sends a message to an agent. |
 | SendStreamingMessage |	SendMessageRequest |	stream StreamResponse |	Sends a streaming message to an agent, allowing for real-time interaction and status updates. Streaming version of SendMessage |
@@ -2869,7 +2919,7 @@ Represents a request for the SendMessage method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | message |	Message |	Yes |	The message to send to the agent. |
 | configuration |	SendMessageConfiguration |	No |	Configuration for the send request. |
 | metadata |	object |	No |	A flexible key-value map for passing additional context or parameters. |
@@ -2895,14 +2945,14 @@ Represents a request for the SendMessage method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | message |	Message |	Yes |	The message to send to the agent. |
 | configuration |	SendMessageConfiguration |	No |	Configuration for the send request. |
 | metadata |	object |	No |	A flexible key-value map for passing additional context or parameters. |
 
 
 
-**Response:** Server streaming [`StreamResponse`](#stream-response) objects.
+**Response:** Server streaming [`StreamResponse`](#323-stream-response) objects.
 
 #### 10.4.3. GetTask
 
@@ -2914,7 +2964,7 @@ Represents a request for the GetTask method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | id |	string |	Yes |	The resource ID of the task to retrieve. |
 | historyLength |	integer |	No |	The maximum number of most recent messages from the task's history to retrieve. An unset value means the client does not impose any limit. A value of zero is a request to not include any messages. The server MUST NOT return more messages than the provided value, but MAY apply a lower limit. |
 
@@ -2931,7 +2981,7 @@ Parameters for listing tasks with optional filtering criteria.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | contextId |	string |	No |	Filter tasks by context ID to get tasks from a specific conversation or session. |
 | status |	TaskState |	No |	Filter tasks by their current status state. |
 | pageSize |	integer |	No |	The maximum number of tasks to return. The service may return fewer than this value. If unspecified, at most 50 tasks will be returned. The minimum value is 1. The maximum value is 100. |
@@ -2963,7 +3013,7 @@ Represents a request for the CancelTask method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | id |	string |	Yes |	The resource ID of the task to cancel. |
 | metadata |	object |	No |	A flexible key-value map for passing additional context or parameters. |
 
@@ -2980,23 +3030,20 @@ Represents a request for the SubscribeToTask method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | id |	string |	Yes |	The resource ID of the task to subscribe to. |
 
 
 
-**Response:** Server streaming [`StreamResponse`](#stream-response) objects.
+**Response:** Server streaming [`StreamResponse`](#323-stream-response) objects.
 
 #### 10.4.7. CreateTaskPushNotificationConfig
 
 Creates a push notification configuration for a task.
 
-**Request:**
+**Request:** See [`TaskPushNotificationConfig`](#431-taskpushnotificationconfig) object definition.
 
-[{{ proto_to_table("CreateTaskPushNotificationConfigRequest") }}](Error: Message CreateTaskPushNotificationConfigRequest not found.)
-
-
-**Response:** See [`PushNotificationConfig`](#431-pushnotificationconfig) object definition.
+**Response:** See [`TaskPushNotificationConfig`](#431-taskpushnotificationconfig) object definition.
 
 #### 10.4.8. GetTaskPushNotificationConfig
 
@@ -3008,13 +3055,13 @@ Represents a request for the GetTaskPushNotificationConfig method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | taskId |	string |	Yes	| The parent task resource ID. |
 | id |	string |	Yes |	The resource ID of the configuration to retrieve. |
 
 
 
-**Response:** See [`PushNotificationConfig`](#431-pushnotificationconfig) object definition.
+**Response:** See [`TaskPushNotificationConfig`](#431-taskpushnotificationconfig) object definition.
 
 #### 10.4.9. ListTaskPushNotificationConfigs
 
@@ -3026,7 +3073,7 @@ Represents a request for the ListTaskPushNotificationConfigs method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | taskId |	string |	Yes |	The parent task resource ID. |
 | pageSize |	integer |	No |	The maximum number of configurations to return. 
 | pageToken	| string |	No |	A page token received from a previous ListTaskPushNotificationConfigsRequest call. |
@@ -3052,7 +3099,7 @@ Represents a request for the DeleteTaskPushNotificationConfig method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | taskId |	string |	Yes |	The parent task resource ID. |
 | id |	string |	Yes |	The resource ID of the configuration to delete. |
 
@@ -3069,7 +3116,7 @@ Represents a request for the GetExtendedAgentCard method.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID, provided as a path parameter. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 
 
 **Response:** See [`AgentCard`](#441-agentcard) object definition.
@@ -3084,7 +3131,7 @@ A container associating a push notification configuration with a specific task.
 
 | Field |	Type |	Required |	Description |
 |-------|------|-----------|--------------|
-| tenant |	string |	No |	Optional. Tenant ID. |
+| tenant |	string |	No |	Optional. Opaque routing identifier. Must match the `tenant` value from the selected `AgentInterface` in the Agent Card when that field is set. |
 | id |	string |	No |	The push notification configuration details. A unique identifier (e.g. UUID) for this push notification configuration. |
 | taskId |	string |	No |	The ID of the task this configuration is associated with. |
 | url |	string |	Yes |	The URL where the notification should be sent. |
@@ -3558,7 +3605,7 @@ When implementing push notifications, both agents (as webhook callers) and clien
 **Configuration Security:**
 
 - Webhook URLs **SHOULD** use HTTPS to protect payload confidentiality in transit
-- Authentication tokens in [`PushNotificationConfig`](#431-pushnotificationconfig) **SHOULD** be treated as secrets and rotated periodically
+- Authentication tokens in [`TaskPushNotificationConfig`](#431-taskpushnotificationconfig) **SHOULD** be treated as secrets and rotated periodically
 - Agents **SHOULD** securely store push notification configurations and credentials
 - Clients **SHOULD** use unique, single-purpose tokens for each push notification configuration
 
@@ -3898,7 +3945,7 @@ For **Clients** upgrading from pre-0.3.x:
 
 1. Update parsers to expect wrapper objects with member names as discriminators
 2. When constructing requests, use the new wrapper format
-3. Implement version detection based on the agent's `protocolVersions` in the `AgentCard`
+3. Implement version detection based on `protocolVersion` in the agent's `supportedInterfaces` entries
 4. Consider maintaining backward compatibility by detecting and handling both formats during a transition period
 
 For **Servers** upgrading from pre-0.3.x:
@@ -3906,7 +3953,7 @@ For **Servers** upgrading from pre-0.3.x:
 1. Update serialization logic to emit wrapper objects
 2. **Breaking:** The `kind` field is no longer part of the protocol and should not be emitted
 3. Update deserialization to expect wrapper objects with member names
-4. Ensure the `AgentCard` declares the correct `protocolVersions` (e.g., ["1.0"] or later)
+4. Ensure each `AgentInterface` in the `AgentCard` declares the correct `protocolVersion` (e.g., "1.0" or later)
 
 **Rationale:**
 

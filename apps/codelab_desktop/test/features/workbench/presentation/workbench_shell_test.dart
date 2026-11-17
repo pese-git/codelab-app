@@ -2,17 +2,23 @@
 // `redesign-workbench-shell`; spec agent-workbench-ui «Layout workbench»,
 // «Layout class follows the window width», «Клавиатурный десктопный UX»).
 
+import 'dart:async';
+
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
-import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
+import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_desktop/features/workbench/presentation/workbench_shell.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:structured_log_flutter/structured_log_flutter.dart'
+    show LogBuffer;
 
 import '../../../support/test_app_scope.dart';
+import '../../../support/start_agent.dart';
 
 void main() {
   void setWindow(WidgetTester tester, Size size) {
@@ -26,20 +32,25 @@ void main() {
     WidgetTester tester,
     CodeLabTestBinding binding,
   ) async {
-    await tester.pumpWidget(binding.bootstrap(child: const CodeLabApp()));
+    await tester.pumpWidget(
+      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+    );
     await tester.pump();
     return binding.scope.resolve<CodeLabShellCubit>();
   }
 
   Future<void> tearDownApp(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScope();
+    await closeCodeLabRootScopeInTest();
   }
 
   testWidgets('a 1440 px window shows the app bar, sidebar, session pane and '
       'the open Plan pane left to right', (tester) async {
     setWindow(tester, const Size(1440, 900));
-    final cubit = await pumpApp(tester, CodeLabTestBinding());
+    final cubit = await pumpApp(
+      tester,
+      CodeLabTestBinding(project: '/workspace'),
+    );
 
     cubit.togglePane(ToolPane.plan);
     // Состояние фасада доходит до `BlocBuilder` через поток — нужен кадр.
@@ -65,7 +76,7 @@ void main() {
   testWidgets('resizing across layout classes keeps the composer draft '
       '(MOB-3)', (tester) async {
     setWindow(tester, const Size(1440, 900));
-    await pumpApp(tester, CodeLabTestBinding());
+    await pumpApp(tester, CodeLabTestBinding(project: '/workspace'));
 
     await tester.enterText(
       find.byKey(const ValueKey('composer-text-box')),
@@ -86,7 +97,10 @@ void main() {
   testWidgets('Cmd/Ctrl+B collapses the sidebar in a wide window and opens '
       'it over the content in a narrow one', (tester) async {
     setWindow(tester, const Size(1440, 900));
-    final cubit = await pumpApp(tester, CodeLabTestBinding());
+    final cubit = await pumpApp(
+      tester,
+      CodeLabTestBinding(project: '/workspace'),
+    );
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
@@ -119,7 +133,10 @@ void main() {
   testWidgets('in a narrow window a pane toggle re-opens a dismissed dock '
       'instead of closing the pane', (tester) async {
     setWindow(tester, const Size(1100, 900));
-    final cubit = await pumpApp(tester, CodeLabTestBinding());
+    final cubit = await pumpApp(
+      tester,
+      CodeLabTestBinding(project: '/workspace'),
+    );
     toggle(tester, ToolPane.plan);
     await tester.pump();
     await tester.pump();
@@ -151,11 +168,12 @@ void main() {
     setWindow(tester, const Size(1440, 900));
     final agent = FakeAcpTransport();
     final binding = CodeLabTestBinding(
+      project: '/workspace',
       transport: FakeAcpTransport(),
       stdioTransportFactory: (_) => agent,
     );
     final cubit = await pumpApp(tester, binding);
-    await tester.runAsync(() => cubit.connect());
+    await tester.runAsync(() => cubit.startWith());
     await tester.pump();
     agent.drainSentMessages();
 
@@ -190,7 +208,10 @@ void main() {
     testWidgets('no overflow at ${size.width.toInt()}x${size.height.toInt()} '
         'with the composer visible', (tester) async {
       setWindow(tester, size);
-      final cubit = await pumpApp(tester, CodeLabTestBinding());
+      final cubit = await pumpApp(
+        tester,
+        CodeLabTestBinding(project: '/workspace'),
+      );
       cubit.togglePane(ToolPane.protocol);
       await tester.pump();
       await tester.pump();
@@ -201,4 +222,851 @@ void main() {
       await tearDownApp(tester);
     });
   }
+
+  // Переход в настройки и обратно (задача 1.3 change
+  // `add-app-settings-shell`; spec app-settings «Переход в настройки и
+  // обратно»; DSK-24). Набор `available` в тестах задаёт `settingsPages`.
+  group('settings navigation', () {
+    const withConnection = SettingsPages(available: {SettingsPage.connection});
+    final settingsNav = find.byKey(const ValueKey('settings-nav-connection'));
+
+    Future<void> pressWithControl(
+      WidgetTester tester,
+      LogicalKeyboardKey key,
+    ) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> createSession(
+      WidgetTester tester,
+      CodeLabShellCubit cubit,
+      FakeAcpTransport agent,
+      String id,
+    ) async {
+      unawaited(cubit.createSession());
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      final request = agent.sentMessages
+          .whereType<JsonRpcRequest>()
+          .singleWhere((r) => r.method == sessionNewMethod);
+      agent.emitInbound(
+        JsonRpcMessage.response(id: request.id, result: {'sessionId': id}),
+      );
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+    }
+
+    testWidgets('Ctrl+, opens the settings screen on Connection', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(
+        tester,
+        CodeLabTestBinding(
+          project: '/workspace',
+          settingsPages: withConnection,
+        ),
+      );
+      expect(settingsNav, findsNothing);
+
+      await pressWithControl(tester, LogicalKeyboardKey.comma);
+
+      expect(settingsNav, findsOneWidget);
+      // Первое открытие: выбран пункт Connection (spec app-settings).
+      final view = tester.widget<NavigationView>(find.byType(NavigationView));
+      expect(view.pane!.selected, 0);
+      expect(
+        view.pane!.effectiveItems.first.key,
+        const ValueKey('settings-nav-connection'),
+      );
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Cmd+, opens the settings screen too', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(
+        tester,
+        CodeLabTestBinding(
+          project: '/workspace',
+          settingsPages: withConnection,
+        ),
+      );
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.comma);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pumpAndSettle();
+
+      expect(settingsNav, findsOneWidget);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('the Settings button in the sidebar opens the settings '
+        'screen', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(
+        tester,
+        CodeLabTestBinding(
+          project: '/workspace',
+          settingsPages: withConnection,
+        ),
+      );
+
+      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+      await tester.pumpAndSettle();
+
+      expect(settingsNav, findsOneWidget);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Esc returns to the same session with the same composer '
+        'text', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      final agent = FakeAcpTransport();
+      final binding = CodeLabTestBinding(
+        project: '/workspace',
+        transport: FakeAcpTransport(),
+        stdioTransportFactory: (_) => agent,
+        settingsPages: withConnection,
+      );
+      final cubit = await pumpApp(tester, binding);
+      await tester.runAsync(() => cubit.startWith());
+      await tester.pump();
+      agent.drainSentMessages();
+      await createSession(tester, cubit, agent, 'session-B');
+      await tester.enterText(
+        find.byKey(const ValueKey('composer-text-box')),
+        'unsent draft',
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+      await tester.pumpAndSettle();
+      expect(settingsNav, findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(settingsNav, findsNothing);
+      expect(cubit.state.activeSessionId, 'session-B');
+      expect(find.text('unsent draft'), findsOneWidget);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('workbench shortcuts work again after returning from '
+        'settings', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(
+        tester,
+        CodeLabTestBinding(
+          project: '/workspace',
+          settingsPages: withConnection,
+        ),
+      );
+      await pressWithControl(tester, LogicalKeyboardKey.comma);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(settingsNav, findsNothing);
+
+      await pressWithControl(tester, LogicalKeyboardKey.comma);
+
+      expect(settingsNav, findsOneWidget);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Ctrl+, on the settings screen changes nothing', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(
+        tester,
+        CodeLabTestBinding(
+          project: '/workspace',
+          settingsPages: withConnection,
+        ),
+      );
+      await pressWithControl(tester, LogicalKeyboardKey.comma);
+
+      await pressWithControl(tester, LogicalKeyboardKey.comma);
+
+      expect(settingsNav, findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(settingsNav, findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('the Back button returns to the workbench', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(
+        tester,
+        CodeLabTestBinding(
+          project: '/workspace',
+          settingsPages: withConnection,
+        ),
+      );
+      await pressWithControl(tester, LogicalKeyboardKey.comma);
+
+      await tester.tap(find.byKey(CodeLabSettingsNavigation.backKey));
+      await tester.pumpAndSettle();
+
+      expect(settingsNav, findsNothing);
+      expect(find.byType(CodeLabPromptComposer), findsOneWidget);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('with no available pages Ctrl+, and Settings open nothing: '
+        'there is no empty settings screen (SETUP-17)', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(
+        tester,
+        CodeLabTestBinding(
+          project: '/workspace',
+          settingsPages: const SettingsPages(available: {}),
+        ),
+      );
+
+      await pressWithControl(tester, LogicalKeyboardKey.comma);
+      expect(settingsNav, findsNothing);
+      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+      await tester.pumpAndSettle();
+      expect(settingsNav, findsNothing);
+      expect(find.byType(CodeLabPromptComposer), findsOneWidget);
+
+      await tearDownApp(tester);
+    });
+
+    testWidgets('in the production build Settings opens the Connection '
+        'page', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(tester, CodeLabTestBinding(project: '/workspace'));
+
+      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+      await tester.pumpAndSettle();
+
+      expect(settingsNav, findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('connection-profile-row-embedded')),
+        findsOneWidget,
+      );
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Esc on the workbench during a turn cancels the turn and '
+        'does not open settings', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      final agent = FakeAcpTransport();
+      final binding = CodeLabTestBinding(
+        project: '/workspace',
+        transport: FakeAcpTransport(),
+        stdioTransportFactory: (_) => agent,
+        settingsPages: withConnection,
+      );
+      final cubit = await pumpApp(tester, binding);
+      await tester.runAsync(() => cubit.startWith());
+      await tester.pump();
+      agent.drainSentMessages();
+      await createSession(tester, cubit, agent, 'session-1');
+
+      unawaited(cubit.submitPrompt('long task'));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+      await tester.pump();
+      final prompt = agent.sentMessages.whereType<JsonRpcRequest>().singleWhere(
+        (r) => r.method == sessionPromptMethod,
+      );
+      expect(cubit.state.canCancel, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+
+      expect(
+        agent.sentMessages.whereType<JsonRpcNotification>().where(
+          (n) => n.method == sessionCancelMethod,
+        ),
+        hasLength(1),
+      );
+      expect(settingsNav, findsNothing);
+
+      // Ответ агента снимает таймер запроса, иначе тест оставит его висеть.
+      agent.emitInbound(
+        JsonRpcMessage.response(
+          id: prompt.id,
+          result: const {'stopReason': 'cancelled'},
+        ),
+      );
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+      await tearDownApp(tester);
+    });
+  });
+
+  // Фокус и одобрения под экраном настроек (ревью итерации 1, H1, M2, L4).
+  group('settings screen and the hidden workbench', () {
+    const withConnection = SettingsPages(available: {SettingsPage.connection});
+    final settingsNav = find.byKey(const ValueKey('settings-nav-connection'));
+
+    /// Кадры вместо `pumpAndSettle`: при ходе или одобрении индикаторы
+    /// анимируются бесконечно, и `pumpAndSettle` не завершается.
+    Future<void> frames(WidgetTester tester) async {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    Future<void> settle(WidgetTester tester) async {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+    }
+
+    Future<void> pressCtrl(WidgetTester tester, LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await frames(tester);
+    }
+
+    Future<void> createSession(
+      WidgetTester tester,
+      CodeLabShellCubit cubit,
+      FakeAcpTransport agent,
+      String id,
+    ) async {
+      agent.drainSentMessages();
+      unawaited(cubit.createSession());
+      await settle(tester);
+      final request = agent.sentMessages
+          .whereType<JsonRpcRequest>()
+          .singleWhere((r) => r.method == sessionNewMethod);
+      agent.emitInbound(
+        JsonRpcMessage.response(id: request.id, result: {'sessionId': id}),
+      );
+      await settle(tester);
+    }
+
+    /// Ход в активной сессии: запрос разрешения привязывается к ходу.
+    Future<void> startTurn(WidgetTester tester, CodeLabShellCubit cubit) async {
+      unawaited(cubit.submitPrompt('run a command'));
+      await settle(tester);
+    }
+
+    void askPermission(FakeAcpTransport agent, String sessionId, int id) {
+      agent.emitInbound(
+        JsonRpcMessage.request(
+          id: JsonRpcId.integer(id),
+          method: sessionRequestPermissionMethod,
+          params: RequestPermissionRequest(
+            sessionId: SessionId(sessionId),
+            toolCall: ToolCallUpdate(
+              toolCallId: ToolCallId('call-$id'),
+              title: 'Run echo',
+              kind: ToolKind.execute,
+              status: ToolCallStatus.inProgress,
+              rawInput: const {'command': 'echo hi'},
+            ),
+            options: const [
+              PermissionOption(
+                optionId: PermissionOptionId('allow-once'),
+                name: 'Allow once',
+                kind: PermissionOptionKind.allowOnce,
+              ),
+              PermissionOption(
+                optionId: PermissionOptionId('reject-once'),
+                name: 'Reject',
+                kind: PermissionOptionKind.rejectOnce,
+              ),
+            ],
+          ).toJson(),
+        ),
+      );
+    }
+
+    Future<(CodeLabShellCubit, FakeAcpTransport)> connected(
+      WidgetTester tester,
+    ) async {
+      setWindow(tester, const Size(1440, 900));
+      final agent = FakeAcpTransport();
+      final binding = CodeLabTestBinding(
+        project: '/workspace',
+        transport: FakeAcpTransport(),
+        stdioTransportFactory: (_) => agent,
+        // Встроенный агент не открывается: Space и Enter на странице
+        // «Connection» могут нажать его «Connect», а тестовая сборка по
+        // умолчанию даёт падающий открыватель (`CodeLabTestBinding`).
+        settingsPages: withConnection,
+      );
+      final cubit = await pumpApp(tester, binding);
+      await tester.runAsync(() => cubit.startWith());
+      await tester.pump();
+      return (cubit, agent);
+    }
+
+    Future<void> tabMany(WidgetTester tester, int times) async {
+      for (var i = 0; i < times; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+    }
+
+    int responsesTo(FakeAcpTransport agent) =>
+        agent.sentMessages.whereType<JsonRpcResponse>().length;
+
+    testWidgets('Esc after opening settings during a turn leaves settings '
+        'without session/cancel', (tester) async {
+      final (cubit, agent) = await connected(tester);
+      await createSession(tester, cubit, agent, 'session-1');
+      unawaited(cubit.submitPrompt('long task'));
+      await settle(tester);
+      await tester.pump();
+      final prompt = agent.sentMessages.whereType<JsonRpcRequest>().singleWhere(
+        (r) => r.method == sessionPromptMethod,
+      );
+      expect(cubit.state.canCancel, isTrue);
+
+      await pressCtrl(tester, LogicalKeyboardKey.comma);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await frames(tester);
+
+      expect(settingsNav, findsNothing);
+      expect(
+        agent.sentMessages.whereType<JsonRpcNotification>().where(
+          (n) => n.method == sessionCancelMethod,
+        ),
+        isEmpty,
+      );
+      agent.emitInbound(
+        JsonRpcMessage.response(
+          id: prompt.id,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await settle(tester);
+      await tearDownApp(tester);
+    });
+
+    // Тесты Tab/Space/Enter ниже проверяют сквозное поведение клавиш. Саму
+    // защиту (исключение рабочего места из фокуса) доказывает детерминированный
+    // тест «workbench nodes cannot take focus under settings».
+    testWidgets('workbench nodes cannot take focus under settings (H1)', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(
+        tester,
+        CodeLabTestBinding(
+          project: '/workspace',
+          settingsPages: withConnection,
+        ),
+      );
+      final composer = tester
+          .widget<TextBox>(
+            find.byKey(
+              const ValueKey('composer-text-box'),
+              skipOffstage: false,
+            ),
+          )
+          .focusNode!;
+      await pressCtrl(tester, LogicalKeyboardKey.comma);
+      expect(settingsNav, findsOneWidget);
+
+      composer.requestFocus();
+      await tester.pump();
+
+      expect(composer.hasFocus, isFalse);
+      expect(composer.canRequestFocus, isFalse);
+      expect(FocusManager.instance.primaryFocus, isNot(same(composer)));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(composer.canRequestFocus, isTrue);
+      composer.requestFocus();
+      await tester.pump();
+      expect(composer.hasFocus, isTrue);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Tab, Space and Enter on the settings screen never answer a '
+        'pending approval', (tester) async {
+      final (cubit, agent) = await connected(tester);
+      await createSession(tester, cubit, agent, 'session-1');
+      await startTurn(tester, cubit);
+      askPermission(agent, 'session-1', 701);
+      await settle(tester);
+      await tester.pump();
+      expect(find.byType(CodeLabApprovalPrompt), findsOneWidget);
+      final before = responsesTo(agent);
+
+      await pressCtrl(tester, LogicalKeyboardKey.comma);
+      expect(settingsNav, findsOneWidget);
+      // Число Tab не подгоняется под раскладку страницы: Tab нажимается с
+      // верхней границей, пока фокус не окажется на переключателе
+      // профиля по умолчанию (Space и Enter на нём безвредны;
+      // «Connect on start» удалён, D19). На каждом шаге
+      // проверяется, что фокус не ушёл в скрытое рабочее место (H1
+      // итерации 1).
+      var onTarget = false;
+      for (var i = 0; i < 80 && !onTarget; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        final context = FocusManager.instance.primaryFocus?.context;
+        expect(context, isNotNull);
+        expect(
+          context!.findAncestorWidgetOfExactType<CodeLabShell>(),
+          isNull,
+          reason: 'focus left the settings screen for the workbench',
+        );
+        context.visitAncestorElements((element) {
+          if (element.widget.key ==
+              const ValueKey(
+                'connection-profile-default-codelab_desktop.stdio',
+              )) {
+            onTarget = true;
+          }
+          return !onTarget;
+        });
+      }
+      expect(
+        onTarget,
+        isTrue,
+        reason: 'Tab never reached the default profile radio',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+
+      expect(responsesTo(agent), before);
+      expect(settingsNav, findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await frames(tester);
+      await tearDownApp(tester);
+    });
+
+    // Q23 (B2.5): ход в папке `/workspace` остаётся виден в своей раскрытой
+    // группе со статусом после перехода в другой проект.
+    testWidgets('a running session of the previous folder stays visible in '
+        'its expanded group after the move to another project', (tester) async {
+      final (cubit, agent) = await connected(tester);
+      await createSession(tester, cubit, agent, 'session-1');
+      await startTurn(tester, cubit);
+      await tester.runAsync(() => cubit.selectProject('/workspace'));
+      final title = cubit.state.sessions.single.title;
+
+      await tester.runAsync(() => cubit.selectProject('/other'));
+      await settle(tester);
+      await tester.pump();
+
+      expect(
+        find.descendant(
+          of: find.byType(CodeLabSessionSidebar),
+          matching: find.text(title),
+        ),
+        findsWidgets,
+      );
+      expect(cubit.state.sessionFolders['session-1'], '/workspace');
+    });
+
+    // Q24: пункт палитры /reconnect для локального профиля называется
+    // «Restart agent» и во время хода открывает диалог D22.
+    testWidgets('/reconnect in the palette is Restart agent for a local '
+        'profile and shows the D22 dialog during a turn', (tester) async {
+      final (cubit, agent) = await connected(tester);
+      await createSession(tester, cubit, agent, 'session-1');
+      await startTurn(tester, cubit);
+
+      cubit.openCommandPalette();
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Restart agent'), findsWidgets);
+      expect(find.text('Reconnect'), findsNothing);
+
+      cubit.selectCommand(
+        cubit.state.paletteActions.firstWhere((a) => a.id == 'reconnect'),
+      );
+      await settle(tester);
+      await tester.pump();
+
+      expect(cubit.state.pendingRestart, isNotNull);
+      expect(
+        find.byKey(const ValueKey('restart-agent-dialog')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('restart-agent-cancel')));
+      await tester.pump(const Duration(seconds: 1));
+      await tearDownApp(tester);
+    });
+
+    // B2.5, D22: диалог «Restart agent» рисуется по состоянию Cubit-а и над
+    // рабочим местом, и над страницей настроек; «Cancel» ничего не меняет.
+    testWidgets('the Restart agent dialog is drawn by the Cubit state over '
+        'the workbench and over settings; Cancel changes nothing', (
+      tester,
+    ) async {
+      final (cubit, agent) = await connected(tester);
+      await createSession(tester, cubit, agent, 'session-1');
+      await startTurn(tester, cubit);
+
+      await tester.runAsync(() => cubit.restartAgent());
+      await settle(tester);
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('restart-agent-dialog')),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('This interrupts 1 running session'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('restart-agent-cancel')));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const ValueKey('restart-agent-dialog')), findsNothing);
+      expect(cubit.state.connectionStatus, CodeLabConnectionStatus.connected);
+
+      await pressCtrl(tester, LogicalKeyboardKey.comma);
+      expect(settingsNav, findsOneWidget);
+      await tester.runAsync(() => cubit.restartAgent());
+      await settle(tester);
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('restart-agent-dialog')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('restart-agent-cancel')));
+      await tester.pump(const Duration(seconds: 1));
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Tab then Enter on the settings screen does not send the '
+        'composer draft', (tester) async {
+      final (cubit, agent) = await connected(tester);
+      await createSession(tester, cubit, agent, 'session-1');
+      await tester.enterText(
+        find.byKey(const ValueKey('composer-text-box')),
+        'draft',
+      );
+      await tester.pump();
+      agent.drainSentMessages();
+
+      await pressCtrl(tester, LogicalKeyboardKey.comma);
+      await tabMany(tester, 25);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await settle(tester);
+      await settle(tester);
+      expect(
+        tester
+            .widget<TextBox>(
+              find.byKey(
+                const ValueKey('composer-text-box'),
+                skipOffstage: false,
+              ),
+            )
+            .controller!
+            .text,
+        'draft',
+      );
+
+      expect(
+        agent.sentMessages.whereType<JsonRpcRequest>().where(
+          (r) => r.method == sessionPromptMethod,
+        ),
+        isEmpty,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      // В полёте остаются таймеры запросов; без паузы они переживают дерево.
+      await tester.pump(const Duration(seconds: 10));
+      await tearDownApp(tester);
+    });
+
+    testWidgets('returning from settings restores focus to the composer', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(
+        tester,
+        CodeLabTestBinding(
+          project: '/workspace',
+          settingsPages: withConnection,
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('composer-text-box')));
+      await tester.pump();
+      FocusNode composerFocus() => tester
+          .widget<TextBox>(
+            find.byKey(
+              const ValueKey('composer-text-box'),
+              skipOffstage: false,
+            ),
+          )
+          .focusNode!;
+      expect(composerFocus().hasFocus, isTrue);
+
+      await pressCtrl(tester, LogicalKeyboardKey.comma);
+      expect(composerFocus().hasFocus, isFalse);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await frames(tester);
+
+      expect(composerFocus().hasFocus, isTrue);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Esc returns to session B after the active session became C', (
+      tester,
+    ) async {
+      final (cubit, agent) = await connected(tester);
+      await createSession(tester, cubit, agent, 'session-B');
+      await createSession(tester, cubit, agent, 'session-C');
+      cubit.selectSession('session-B');
+      await tester.pump();
+      await tester.pump();
+
+      await pressCtrl(tester, LogicalKeyboardKey.comma);
+      cubit.selectSession('session-C');
+      await tester.pump();
+      await tester.pump();
+      expect(cubit.state.activeSessionId, 'session-C');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await frames(tester);
+
+      expect(cubit.state.activeSessionId, 'session-B');
+      await tearDownApp(tester);
+    });
+  });
+
+  // D24: сессию в корне диска открывают только после подтверждения.
+  group('the disk root session dialog', () {
+    late CodeLabTestBinding rootBinding;
+
+    Future<(CodeLabShellCubit, FakeAcpTransport)> withRootSession(
+      WidgetTester tester,
+    ) async {
+      final agent = FakeAcpTransport()
+        ..initializeAgentCapabilities = const AgentCapabilities(
+          loadSession: true,
+          sessionCapabilities: SessionCapabilities(
+            list: SessionListCapabilities(),
+          ),
+        );
+      final binding = CodeLabTestBinding(
+        project: '/workspace',
+        stdioTransportFactory: (_) => agent,
+      );
+      rootBinding = binding;
+      final cubit = await pumpApp(tester, binding);
+      final listed = agent.sent.firstWhere(
+        (m) => m is JsonRpcRequest && m.method == sessionListMethod,
+      );
+      await tester.runAsync(() async {
+        // Проект восстановлен до подключения: ожидания (и его таймера) нет.
+        await binding.scope
+            .resolve<CodeLabShellParts>()
+            .settings
+            .projectRestored;
+        final connecting = cubit.startWith();
+        final request = await listed as JsonRpcRequest;
+        agent.emitInbound(
+          JsonRpcMessage.response(
+            id: request.id,
+            result: const ListSessionsResponse(
+              sessions: [
+                SessionInfo(sessionId: SessionId('s-root'), cwd: '/tmp/..'),
+              ],
+            ).toJson(),
+          ),
+        );
+        await connecting;
+      });
+      await tester.pump();
+      await tester.pump();
+      return (cubit, agent);
+    }
+
+    bool loaded(FakeAcpTransport agent) => agent.sentMessages.any(
+      (m) => m is JsonRpcRequest && m.method == sessionLoadMethod,
+    );
+
+    testWidgets('shows the question with the normalized cwd and sends '
+        'nothing; Cancel closes it', (tester) async {
+      final (cubit, agent) = await withRootSession(tester);
+
+      cubit.selectSession('s-root');
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.text(
+          'This session runs in the disk root (/). The agent gets access to '
+          'the whole disk. Open anyway?',
+        ),
+        findsOneWidget,
+      );
+      expect(loaded(agent), isFalse);
+
+      await tester.tap(find.byKey(const ValueKey('root-session-cancel')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('root-session-dialog')), findsNothing);
+      expect(loaded(agent), isFalse);
+      expect(cubit.state.activeSessionId, isNull);
+      await tester.pump(const Duration(seconds: 2));
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Esc closes the question as Cancel: no dialog, no '
+        'session/load', (tester) async {
+      final (cubit, agent) = await withRootSession(tester);
+      cubit.selectSession('s-root');
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('root-session-dialog')), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('root-session-dialog')), findsNothing);
+      expect(loaded(agent), isFalse);
+      final events = rootBinding.scope.resolve<LogBuffer>().entries.value.where(
+        (e) => e['event'] == 'session.root_open',
+      );
+      expect(events.single['decision'], 'cancel');
+      await tester.pump(const Duration(seconds: 2));
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Open sends session/load with the root cwd', (tester) async {
+      final (cubit, agent) = await withRootSession(tester);
+      cubit.selectSession('s-root');
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('root-session-open')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('root-session-dialog')), findsNothing);
+      expect(loaded(agent), isTrue);
+      // Ответ агента закрывает запрос и его таймер.
+      final load = agent.sentMessages.whereType<JsonRpcRequest>().singleWhere(
+        (r) => r.method == sessionLoadMethod,
+      );
+      expect(LoadSessionRequest.fromJson(load.params).cwd, '/tmp/..');
+      agent.emitInbound(
+        JsonRpcMessage.response(id: load.id, result: const <String, Object?>{}),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      await tearDownApp(tester);
+    });
+  });
 }

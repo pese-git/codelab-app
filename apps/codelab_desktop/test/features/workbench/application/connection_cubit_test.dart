@@ -1,0 +1,1234 @@
+// `ConnectionCubit`: подключение по профилю (задачи 2.3 и 2.4 change
+// `add-app-settings-shell`; agent-workbench-ui «Тип подключения «Встроенный
+// агент»», app-settings «Блок «Behavior»»; design.md D5, D6, D8, D13, D17).
+//
+// Cubit собирается из настоящих частей рабочего места поверх
+// `ClientWorkspace` с записывающим резолвером: проверяется профиль, который
+// Cubit отдаёт рабочему пространству, состояние и события, а не транспорт.
+// Прежний тест формы встроенного агента (задача 4.1 change
+// `add-embedded-agent-mode`) переписан под выбор профиля: исходы прежние.
+
+import 'dart:async';
+
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
+import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_client_acp/codelab_client_acp.dart';
+import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
+import 'package:codelab_desktop/app/embedded_transport_resolver.dart';
+import 'package:codelab_desktop/app/provider_setup_offer.dart';
+import 'package:codelab_desktop/core/platform/connection_preferences.dart';
+import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
+import 'package:codelab_desktop/features/settings/application/connection_commands.dart';
+import 'package:codelab_desktop/features/settings/application/default_profile_resolver.dart';
+import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
+import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_embedded/codelab_embedded.dart'
+    show EmbeddedAgentConfigException;
+import 'package:codelab_ui/codelab_ui.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../support/in_memory_profile_store.dart';
+import '../../../support/recording_logger.dart';
+
+/// Резолвер, который запоминает профили и отдаёт фейковый транспорт.
+final class _RecordingResolver implements TransportResolver {
+  final profiles = <ConnectionProfile>[];
+
+  /// Id профилей, открытие которых падает (недоступный агент).
+  final failFor = <String>{};
+
+  /// Ошибка открытия по id профиля: отказ рукопожатия, а не `StateError`.
+  final failWith = <String, Object>{};
+
+  /// Профили, которых ни один резолвер не поддерживает: kit отклоняет их
+  /// до публикации `connecting`.
+  final unsupported = <String>{};
+
+  /// Открытые транспорты по порядку: тест обрывает соединение первого.
+  final transports = <FakeAcpTransport>[];
+
+  /// Открытие этих профилей висит, пока не завершится future (рукопожатие).
+  final holds = <String, Future<void>>{};
+
+  @override
+  bool supports(ConnectionProfile profile) => !unsupported.contains(profile.id);
+
+  @override
+  Future<AcpTransport> open(
+    ConnectionProfile profile, {
+    required String projectDirectory,
+  }) async {
+    profiles.add(profile);
+    await holds[profile.id];
+    final failure = failWith[profile.id];
+    if (failure != null) {
+      throw failure;
+    }
+    if (failFor.contains(profile.id)) {
+      throw StateError('agent ${profile.id} is unavailable');
+    }
+    final transport = FakeAcpTransport();
+    transports.add(transport);
+    return transport;
+  }
+}
+
+final class _NoPicker implements ProjectFolderPicker {
+  @override
+  Future<String?> pickFolder({String? initialDirectory}) async => null;
+}
+
+final class _NoRecentProjects implements RecentProjectsStore {
+  @override
+  Future<List<RecentProject>> load() async => const [];
+
+  @override
+  Future<void> record(String path) async {}
+}
+
+const _stdio = ConnectionProfile.stdio(
+  id: 'dev',
+  label: 'Dev',
+  command: 'codelab-agent',
+  args: ['serve', '--stdio'],
+  runInProjectDirectory: true,
+);
+
+/// Хранилище токенов профилей в памяти для проверки предупреждения D13.
+final class _Secrets implements ProfileSecrets {
+  _Secrets([this.values = const {}]);
+
+  final Map<String, String> values;
+
+  @override
+  ProfileSecretBackend get backend =>
+      const ProfileSecretBackend(id: 'file', writable: true);
+
+  @override
+  Future<List<String>> names() async => values.keys.toList();
+
+  @override
+  Future<bool> isSet(String name) async => values.containsKey(name);
+
+  @override
+  Future<String?> read(String name) async => values[name];
+
+  @override
+  Future<ProfileSecretWrite> store(String name, SecretText value) async =>
+      const Stored();
+
+  @override
+  Future<ProfileSecretDelete> delete(String name) async => const Deleted();
+}
+
+void main() {
+  late CodeLabShellParts parts;
+  late _RecordingResolver resolver;
+  late RecordingLogger shellLog;
+  late RecordingLogger eventLog;
+  late ClientWorkspace workspace;
+
+  CodeLabShellParts build({
+    TransportResolver? realResolver,
+    DirectoryExists? directoryExists,
+    List<ConnectionProfile> stored = const [],
+    ProfileSecretSource? tokenSecrets,
+    ProviderSetupOffer? providerSetupOffer,
+    bool alsoRecording = false,
+    String? project = '/work/app',
+  }) {
+    resolver = _RecordingResolver();
+    shellLog = RecordingLogger();
+    eventLog = RecordingLogger();
+    final application = AcpClientApplication(transport: FakeAcpTransport());
+    workspace = ClientWorkspace(
+      backend: AcpClientBackend(application),
+      resolvers: [realResolver ?? resolver, if (alsoRecording) resolver],
+    );
+    const preferences = SharedPreferencesConnectionPreferences();
+    parts = CodeLabShellParts.build(
+      initialProfile: embeddedConnectionProfile,
+      application: application,
+      workspace: workspace,
+      projectFolderPicker: _NoPicker(),
+      recentProjectsStore: _NoRecentProjects(),
+      directoryExists: directoryExists ?? (_) async => true,
+      defaultProfiles: DefaultProfileResolver(
+        store: InMemoryProfileStore(stored),
+        preferences: preferences,
+      ),
+      logger: shellLog,
+      eventLogger: eventLog,
+      tokenSecrets: tokenSecrets,
+      providerSetupOffer: providerSetupOffer,
+    );
+    addTearDown(parts.close);
+    // Неявной папки нет (require-project-folder D1): проект выбран явно.
+    // Выбор меняет состояние синхронно, до первого `await` внутри. Триггер
+    // старта при выборе проекта (D13) отключён: тесты этого файла стартуют
+    // агента явно через [start] и проверяют именно выбранный профиль (D20).
+    parts.settings.bindProjectStart(null);
+    if (project != null) {
+      unawaited(parts.settings.selectProject(project));
+    }
+    return parts;
+  }
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  /// Прежний `connect([profile])` в терминах D18 и D22 (D20): «Use» профиля и
+  /// старт агента в выбранном проекте. Если агент уже работает или стартует,
+  /// прежний `connect` вытеснял его — это «Restart agent», который во время
+  /// старта вытесняет попытку без диалога (Q25). Ожидания исхода те же.
+  Future<void> start([ConnectionProfile? profile]) async {
+    if (profile != null) {
+      await parts.connection.use(profile);
+    }
+    final status = parts.connection.state.connectionStatus;
+    if (status == CodeLabConnectionStatus.connected ||
+        status == CodeLabConnectionStatus.connecting ||
+        status == CodeLabConnectionStatus.reconnecting) {
+      await parts.connection.restart();
+    } else {
+      await parts.connection.startAgent(parts.settings.projectDirectory!);
+    }
+  }
+
+  test('a new install: the profile of the window is the embedded agent with '
+      'the label and the detail of D9', () async {
+    build();
+    await pumpEventQueue();
+
+    final connection = parts.connection.state;
+    expect(connection.profile, embeddedConnectionProfile);
+    expect(connection.selectedProfileLabel, 'Embedded agent');
+    expect(
+      connection.selectedConnectionDetail,
+      'codelab_embedded (embedded-app-desktop)',
+    );
+    expect(parts.connection, isA<ConnectionCommands>());
+  });
+
+  test('connect() without a profile connects the default one: the embedded '
+      'agent without a saved choice (D5)', () async {
+    build(stored: [_stdio]);
+
+    await start();
+
+    expect(resolver.profiles, [
+      const ConnectionProfile.embedded(
+        id: 'embedded',
+        label: 'Embedded agent',
+        hostProfile: 'embedded-app-desktop',
+      ),
+    ]);
+  });
+
+  test('connect() without a profile connects the saved default and shows '
+      'it before the first connect', () async {
+    SharedPreferences.setMockInitialValues({
+      'codelab.connection.default_profile': 'dev',
+    });
+    build(stored: [_stdio]);
+    await pumpEventQueue();
+
+    expect(parts.connection.state.profile.id, 'dev');
+    expect(parts.connection.state.selectedProfileLabel, 'Dev');
+
+    await start();
+
+    expect(resolver.profiles.single.id, 'dev');
+  });
+
+  test('connect(profile) makes it the profile of the window and a later '
+      'reconnect() uses the same profile', () async {
+    build(stored: [_stdio]);
+
+    await start(_stdio);
+    await parts.connection.restart();
+
+    expect(parts.connection.state.shownProfile, _stdio);
+    expect(resolver.profiles, [_stdio, _stdio]);
+    expect(
+      parts.connection.state.connectionStatus,
+      CodeLabConnectionStatus.connected,
+    );
+  });
+
+  test('connect(embedded) hands EmbeddedProfile(embedded-app-desktop) to '
+      'the workspace', () async {
+    build();
+
+    await start(embeddedConnectionProfile);
+
+    expect(resolver.profiles, [embeddedConnectionProfile]);
+  });
+
+  test(
+    'invalid or missing config of the embedded agent is ConnectionFailed '
+    'and the banner is the bare problem text, without the class name',
+    () async {
+      build(
+        realResolver: EmbeddedTransportResolver(
+          ({required cwd, required hostProfile}) async =>
+              throw EmbeddedAgentConfigException(
+                const [],
+                home: '/home/u/.codelab',
+              ),
+        ),
+      );
+
+      await start(embeddedConnectionProfile);
+
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.failed,
+      );
+      final message = parts.connection.state.connectionMessage!;
+      expect(
+        message,
+        startsWith(
+          'Configure the embedded agent in /home/u/.codelab/config.yaml',
+        ),
+      );
+      expect(message, contains('check it with: codelab config check'));
+      expect(message, isNot(contains('EmbeddedAgentConfigException')));
+    },
+  );
+
+  test('a missing project folder stops the embedded connection before the '
+      'resolver is asked: the agent is local, like stdio', () async {
+    build(directoryExists: (_) async => false);
+
+    await start(embeddedConnectionProfile);
+
+    expect(
+      parts.connection.state.connectionStatus,
+      CodeLabConnectionStatus.failed,
+    );
+    expect(parts.connection.state.connectionMessage, contains('/work/app'));
+    expect(resolver.profiles, isEmpty);
+  });
+
+  group('token reference (D13)', () {
+    test('an unsupported reference connects without a token; the warning '
+        'names the profile and never the reference (M2)', () async {
+      build();
+      final profile = ConnectionProfile.webSocket(
+        id: 'devbox',
+        label: 'Devbox',
+        uri: Uri.parse('wss://devbox:7420/acp'),
+        tokenRef: 'sk-test-leak-0123456789',
+      );
+
+      await start(profile);
+
+      expect(resolver.profiles, [profile]);
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+      // ignore: avoid_print
+      print(
+        'DBG ${shellLog.entries.map((e) => e['event'])} ${eventLog.entries}',
+      );
+      final warning = shellLog.entries.singleWhere(
+        (e) => '${e['event']}'.contains('not supported in this version'),
+      );
+      // Формулировка не попадает под `SecretRedactor` (`\bToken\s+…`).
+      expect(
+        warning['event'],
+        'The token-reference format of profile devbox is not supported in '
+        'this version; connecting without a token.',
+      );
+      expect(warning['level'], 'warning');
+      expect(
+        '${shellLog.entries}${eventLog.entries}',
+        isNot(contains('sk-test-leak-0123456789')),
+      );
+    });
+
+    ConnectionProfile secretProfile() => ConnectionProfile.webSocket(
+      id: 'ci',
+      label: 'CI',
+      uri: Uri.parse('wss://ci:7420/acp'),
+      tokenRef: 'secret:codelab/ws-ci',
+    );
+
+    test(
+      'a secret: reference without a value warns before connecting: the '
+      'diagnostic and the event name only the profile id (D13, D18)',
+      () async {
+        build(tokenSecrets: ProfileSecretSource(const {}, stored: _Secrets()));
+
+        await start(secretProfile());
+
+        expect(
+          parts.connection.state.connectionStatus,
+          CodeLabConnectionStatus.connected,
+        );
+        // Текст сравнивается целиком: формулировка kit без «token <слово>»,
+        // иначе `SecretRedactor` затёр бы слово как пару «Token <значение>».
+        final warning = shellLog.entries.singleWhere(
+          (e) => e['event'] == secretMissingWarning('ci'),
+        );
+        expect(warning['level'], 'warning');
+        final event = eventLog.entries.singleWhere(
+          (e) => e['event'] == 'connection_profile.token_secret_missing',
+        );
+        expect(event.keys.toSet(), {'event', 'level', 'profile_id'});
+        expect(event['profile_id'], 'ci');
+        expect(
+          '${shellLog.entries}${eventLog.entries}',
+          isNot(contains('ws-ci')),
+        );
+      },
+    );
+
+    test('a secret that is set raises no warning', () async {
+      build(
+        tokenSecrets: ProfileSecretSource(
+          const {},
+          stored: _Secrets({'codelab/ws-ci': 'x'}),
+        ),
+      );
+
+      await start(secretProfile());
+
+      expect(
+        shellLog.entries.where(
+          (e) => '${e['event']}'.contains('no stored secret value'),
+        ),
+        isEmpty,
+      );
+      expect(
+        eventLog.entries.where(
+          (e) => e['event'] == 'connection_profile.token_secret_missing',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('an env reference raises no warning', () async {
+      build();
+
+      await start(
+        ConnectionProfile.webSocket(
+          id: 'devbox',
+          label: 'Devbox',
+          uri: Uri.parse('wss://devbox:7420/acp'),
+          tokenRef: 'env:DEVBOX_TOKEN',
+        ),
+      );
+
+      expect(
+        shellLog.entries.where(
+          (e) => '${e['event']}'.contains('not supported in this version'),
+        ),
+        isEmpty,
+      );
+    });
+  });
+
+  // «Connect on start» удалён (D19): восстановленный проект — триггер
+  // запуска, ключ `connect_on_start` больше не читается. Прежняя группа
+  // переписана на `startOnLaunch` с теми же ожиданиями исхода.
+  group('Start on launch (D19)', () {
+    const saved = {'codelab.connection.default_profile': 'dev'};
+
+    test(
+      'with a project: starts the default profile, logs the event with '
+      'the profile id and type only; a repeat joins the running agent',
+      () async {
+        SharedPreferences.setMockInitialValues(saved);
+        build(stored: [_stdio]);
+
+        await parts.connection.startOnLaunch();
+        await parts.connection.startOnLaunch();
+
+        expect(resolver.profiles, [_stdio]);
+        final event = eventLog.entries.singleWhere(
+          (e) => e['event'] == 'connection.start_on_launch',
+        );
+        expect(event['profile_id'], 'dev');
+        expect(event.values.join(), isNot(contains('/')));
+      },
+    );
+
+    test('the saved key connect_on_start=true is not read: it changes '
+        'nothing without the launch trigger', () async {
+      SharedPreferences.setMockInitialValues({
+        ...saved,
+        'codelab.connection.connect_on_start': true,
+      });
+      build(stored: [_stdio]);
+      await pumpEventQueue();
+
+      expect(resolver.profiles, isEmpty);
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.disconnected,
+      );
+    });
+
+    test('without a project: no transport is asked and the status stays '
+        'disconnected', () async {
+      SharedPreferences.setMockInitialValues(saved);
+      build(stored: [_stdio], project: null);
+
+      await parts.connection.startOnLaunch();
+
+      expect(resolver.profiles, isEmpty);
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.disconnected,
+      );
+    });
+
+    test('a start chosen by the user first wins: the launch trigger joins '
+        'it instead of racing', () async {
+      SharedPreferences.setMockInitialValues(saved);
+      build(stored: [_stdio]);
+
+      final launch = parts.connection.startOnLaunch();
+      await start(embeddedConnectionProfile);
+      await launch;
+
+      expect(resolver.profiles.length, 1);
+    });
+
+    test(
+      'a failure is an ordinary ConnectionFailed, without retries',
+      () async {
+        build(
+          realResolver: EmbeddedTransportResolver(
+            ({required cwd, required hostProfile}) async =>
+                throw EmbeddedAgentConfigException(const [], home: '/h'),
+          ),
+        );
+
+        await parts.connection.startOnLaunch();
+
+        expect(
+          parts.connection.state.connectionStatus,
+          CodeLabConnectionStatus.failed,
+        );
+      },
+    );
+  });
+
+  group('details in the diagnostics (L1)', () {
+    test('stdio shows the command only, without arguments', () async {
+      build();
+
+      await start(
+        const ConnectionProfile.stdio(
+          id: 'dev',
+          label: 'Dev',
+          command: 'codelab-agent',
+          args: ['serve', '--token-arg-leak'],
+        ),
+      );
+
+      final texts = [for (final e in shellLog.entries) '${e['event']}'];
+      expect(texts, contains('Starting stdio ACP agent: codelab-agent.'));
+      expect(texts.join(), isNot(contains('leak')));
+      expect(parts.connection.state.selectedConnectionDetail, 'codelab-agent');
+    });
+
+    test('WebSocket shows scheme://host:port only: no userinfo, path or '
+        'query', () async {
+      build();
+
+      await start(
+        ConnectionProfile.webSocket(
+          id: 'devbox',
+          label: 'Devbox',
+          uri: Uri.parse('wss://u:p@devbox:7420/acp?t=sk-leak-0123'),
+        ),
+      );
+
+      final texts = [for (final e in shellLog.entries) '${e['event']}'];
+      expect(
+        texts,
+        contains('Connecting WebSocket ACP agent: wss://devbox:7420.'),
+      );
+      for (final hidden in const ['u:p', '/acp', 'sk-leak']) {
+        expect(texts.join(), isNot(contains(hidden)));
+      }
+      expect(
+        parts.connection.state.selectedConnectionDetail,
+        'wss://devbox:7420',
+      );
+    });
+  });
+
+  group('attempt number after every await (M1, AGENTS.md §9)', () {
+    final remote = ConnectionProfile.webSocket(
+      id: 'remote',
+      label: 'Remote',
+      uri: Uri.parse('wss://remote:1/acp'),
+    );
+
+    test('a slow folder check of attempt A does not connect over B', () async {
+      final gate = Completer<bool>();
+      build(directoryExists: (_) => gate.future);
+
+      final a = start(_stdio);
+      await pumpEventQueue();
+      await start(remote);
+      gate.complete(true);
+      await a;
+
+      expect(resolver.profiles, [remote]);
+      expect(workspace.current.profile?.id, 'remote');
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+    });
+
+    test('a missing folder found by the stale attempt A does not set '
+        'failed', () async {
+      final gate = Completer<bool>();
+      build(directoryExists: (_) => gate.future);
+
+      final a = start(_stdio);
+      await pumpEventQueue();
+      await start(remote);
+      gate.complete(false);
+      await a;
+
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+      expect(parts.connection.state.connectionMessage, isNull);
+    });
+
+    test('the same for reconnect(): a stale reconnect does not replace '
+        'the newer connection', () async {
+      final gate = Completer<bool>();
+      var calls = 0;
+      build(
+        directoryExists: (_) => ++calls == 1 ? Future.value(true) : gate.future,
+      );
+      await start(_stdio);
+      resolver.profiles.clear();
+
+      final stale = parts.connection.restart();
+      await pumpEventQueue();
+      await start(remote);
+      gate.complete(true);
+      await stale;
+
+      expect(resolver.profiles, [remote]);
+      expect(workspace.current.profile?.id, 'remote');
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+    });
+  });
+
+  group('the window profile changes only after an accepted connect (L5)', () {
+    // D18/D22: «Restart agent» перезапускает ВЫБРАННЫЙ профиль, а прежнее
+    // «профиль, который держал workspace» — это `runningProfile` («Current»).
+    // Ожидание изменено: перезапуск идёт выбранным `dev`, а профиль работающего
+    // (принятого) агента остаётся встроенным до успеха.
+    test('Restart agent after a failed start restarts the selected profile; '
+        'the running profile stays the accepted one', () async {
+      build(stored: [_stdio]);
+      await start(embeddedConnectionProfile);
+      resolver.failFor.add('dev');
+
+      await start(_stdio);
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.failed,
+      );
+      resolver.profiles.clear();
+      await parts.connection.restart();
+
+      expect(resolver.profiles.map((p) => p.id), ['dev']);
+      expect(parts.connection.state.runningProfile, embeddedConnectionProfile);
+      expect(parts.connection.state.shownProfile, embeddedConnectionProfile);
+    });
+
+    test('the profile is replaced on success', () async {
+      build(stored: [_stdio]);
+      await start(embeddedConnectionProfile);
+
+      await start(_stdio);
+
+      expect(parts.connection.state.shownProfile, _stdio);
+    });
+  });
+
+  group('rejection before the workspace is asked (safety LOW)', () {
+    test('a missing folder for B while A is connected keeps the status '
+        'connected, the reason goes to connectionMessage, and losing A '
+        'is still noticed', () async {
+      var calls = 0;
+      build(directoryExists: (_) async => ++calls == 1);
+      await start(_stdio);
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+
+      await start(
+        const ConnectionProfile.stdio(id: 'b', label: 'B', command: 'b'),
+      );
+
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+      // Нит: при живом соединении причина — только в диагностике, баннер
+      // ошибки не ложится поверх рабочего соединения.
+      expect(parts.connection.state.connectionMessage, isNull);
+      expect(
+        [for (final e in shellLog.entries) '${e['event']}'].join('\n'),
+        contains('Project folder not found: /work/app'),
+      );
+      expect(parts.connection.state.shownProfile, _stdio);
+
+      resolver.transports.first.fail(
+        const AcpTransportException(
+          code: AcpTransportErrorCode.disconnected,
+          message: 'agent exited',
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.lost,
+      );
+    });
+
+    test(
+      'an empty command for B while A is connected keeps connected',
+      () async {
+        build();
+        await start(_stdio);
+
+        await start(
+          const ConnectionProfile.stdio(id: 'b', label: 'B', command: ' '),
+        );
+
+        expect(
+          parts.connection.state.connectionStatus,
+          CodeLabConnectionStatus.connected,
+        );
+      },
+    );
+
+    test(
+      'without a live connection the rejection is failed, as before',
+      () async {
+        build(directoryExists: (_) async => false);
+
+        await start(_stdio);
+
+        expect(
+          parts.connection.state.connectionStatus,
+          CodeLabConnectionStatus.failed,
+        );
+      },
+    );
+  });
+
+  group('restart target (MEDIUM-A, MEDIUM-B)', () {
+    // D18: цель перезапуска — выбранный профиль («Selected»), работающий
+    // агент («Current») — `runningProfile`; до первого выбора выбранный —
+    // профиль по умолчанию.
+    test('before the first start it is the selected profile; Restart retries '
+        'it', () async {
+      build(stored: [_stdio]);
+      expect(parts.connection.restartTarget, embeddedConnectionProfile);
+      expect(parts.connection.runningProfile, isNull);
+      resolver.failFor.add('dev');
+
+      await start(_stdio);
+
+      expect(parts.connection.restartTarget, _stdio);
+      expect(parts.connection.runningProfile, isNull);
+      resolver.failFor.clear();
+      resolver.profiles.clear();
+      await parts.connection.restart();
+      expect(resolver.profiles, [_stdio]);
+    });
+
+    test('after an accepted start the running profile stays on it when a '
+        'later start of another profile fails, and the stream announces '
+        'changes', () async {
+      build(stored: [_stdio]);
+      final seen = <String?>[];
+      final sub = parts.connection.restartTargets.listen(
+        (profile) => seen.add(profile?.id),
+      );
+      addTearDown(sub.cancel);
+      await start(embeddedConnectionProfile);
+      resolver.failFor.add('dev');
+
+      await start(_stdio);
+      await pumpEventQueue();
+
+      expect(parts.connection.restartTarget, _stdio);
+      expect(parts.connection.runningProfile, embeddedConnectionProfile);
+      expect(seen, contains('dev'));
+    });
+  });
+
+  group('title of a CLI profile with a long label (LOW)', () {
+    const cli = ConnectionProfile.stdio(
+      id: 'py',
+      label: 'stdio:python -m "codelab agent" --stdio',
+      command: 'python',
+      args: ['-m', 'codelab agent', '--stdio'],
+    );
+
+    test('the label of the window is the id, not the command line', () async {
+      build(stored: [cli]);
+
+      await start(cli);
+
+      expect(parts.connection.state.selectedProfileLabel, 'py');
+      expect(parts.connection.state.selectedConnectionDetail, 'python');
+    });
+  });
+
+  group('a rejected intent does not preempt an attempt already in the kit '
+      '(safety MEDIUM)', () {
+    final remote = ConnectionProfile.webSocket(
+      id: 'remote',
+      label: 'Remote',
+      uri: Uri.parse('wss://remote:1/acp'),
+    );
+
+    test('A (WebSocket handshake pending) → Connect B without a folder → A '
+        'completes: connected, the target is A, losing A gives lost', () async {
+      build(directoryExists: (_) async => false);
+      final handshake = Completer<void>();
+      resolver.holds['remote'] = handshake.future;
+
+      final a = start(remote);
+      await pumpEventQueue();
+      await start(_stdio); // нет папки: отказ
+      expect(
+        parts.connection.state.connectionStatus,
+        isNot(CodeLabConnectionStatus.failed),
+        reason: 'A is still connecting; B must not show failed over it',
+      );
+      handshake.complete();
+      await a;
+
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+      // D18: B выбран («Selected»), A принят и работает («Current»).
+      expect(parts.connection.runningProfile, remote);
+      expect(parts.connection.restartTarget, _stdio);
+      expect(workspace.current.profile?.id, 'remote');
+
+      resolver.transports.first.fail(
+        const AcpTransportException(
+          code: AcpTransportErrorCode.disconnected,
+          message: 'agent exited',
+        ),
+      );
+      await pumpEventQueue();
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.lost,
+      );
+    });
+
+    test('an empty command of B does not preempt A either', () async {
+      build();
+      final handshake = Completer<void>();
+      resolver.holds['remote'] = handshake.future;
+
+      final a = start(remote);
+      await pumpEventQueue();
+      await start(
+        const ConnectionProfile.stdio(id: 'b', label: 'B', command: ' '),
+      );
+      handshake.complete();
+      await a;
+
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+      expect(parts.connection.runningProfile, remote);
+    });
+  });
+  group('a token rejected by the agent (HTTP 401/403)', () {
+    const marker = 'sk-test-leak-9f3a';
+    final remote = ConnectionProfile.webSocket(
+      id: 'remote',
+      label: 'Remote',
+      uri: Uri.parse('wss://remote:1/acp'),
+      tokenRef: 'secret:codelab/ws-remote',
+    );
+    Object rejection(int status) => AcpTransportException(
+      code: AcpTransportErrorCode.startFailed,
+      message: 'Failed to start ACP transport.',
+      cause: AcpWebSocketHandshakeRejected(status),
+    );
+
+    ProfileSecretSource withToken() => ProfileSecretSource(
+      const {},
+      stored: _Secrets({'codelab/ws-remote': marker}),
+    );
+
+    String logged() => '${shellLog.entries}${eventLog.entries}';
+
+    test('connect: the banner and the diagnostic say the token was rejected, '
+        'not the generic text; the token value is nowhere', () async {
+      build(tokenSecrets: withToken());
+      resolver.failWith['remote'] = rejection(401);
+
+      await start(remote);
+      await pumpEventQueue();
+
+      final state = parts.connection.state;
+      expect(state.connectionStatus, CodeLabConnectionStatus.failed);
+      expect(
+        state.connectionMessage,
+        'The agent rejected the token (HTTP 401).',
+      );
+      expect(logged(), contains('The agent rejected the token (HTTP 401).'));
+      expect(logged(), isNot(contains('AcpWebSocketHandshakeRejected')));
+      expect('$state${logged()}', isNot(contains(marker)));
+    });
+
+    test('without a token the text says the agent requires one', () async {
+      build(tokenSecrets: ProfileSecretSource(const {}, stored: _Secrets()));
+      resolver.failWith['remote'] = rejection(403);
+
+      await start(remote);
+      await pumpEventQueue();
+
+      expect(
+        parts.connection.state.connectionMessage,
+        'The agent requires a token (HTTP 403).',
+      );
+    });
+
+    test('reconnect keeps the same text', () async {
+      build(tokenSecrets: withToken());
+      await start(remote);
+      resolver.failWith['remote'] = rejection(401);
+
+      await parts.connection.restart();
+      await pumpEventQueue();
+
+      expect(
+        parts.connection.state.connectionMessage,
+        'The agent rejected the token (HTTP 401).',
+      );
+      expect(logged(), contains('The agent rejected the token (HTTP 401).'));
+      expect(logged(), isNot(contains(marker)));
+    });
+
+    test('another failure is shown as before: the exact kit text', () async {
+      build(tokenSecrets: withToken());
+      resolver.failWith['remote'] = rejection(500);
+
+      await start(remote);
+      await pumpEventQueue();
+
+      final kit = workspace.current.connection;
+      expect(kit, isA<ConnectionFailed>());
+      expect(
+        parts.connection.state.connectionMessage,
+        (kit as ConnectionFailed).message,
+      );
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.failed,
+      );
+    });
+
+    test('a later attempt rejected before the kit publishes connecting does '
+        'not keep the token text of the previous one', () async {
+      build(tokenSecrets: withToken());
+      resolver.failWith['remote'] = rejection(401);
+      await start(remote);
+      await pumpEventQueue();
+      resolver.unsupported.add('nope');
+
+      await start(
+        const ConnectionProfile.stdio(id: 'nope', label: 'Nope', command: 'x'),
+      );
+      await pumpEventQueue();
+
+      final message = parts.connection.state.connectionMessage;
+      expect(message, contains('No transport resolver supports'));
+      expect(message, isNot(contains('token')));
+    });
+
+    test('the banner text is cleared when the kit goes to connecting and '
+        'connected', () async {
+      build(tokenSecrets: withToken());
+      resolver.failWith['remote'] = rejection(401);
+      await start(remote);
+      await pumpEventQueue();
+      expect(parts.connection.state.connectionMessage, isNotNull);
+
+      resolver.failWith.clear();
+      final handshake = Completer<void>();
+      resolver.holds['remote'] = handshake.future;
+      final next = start(remote);
+      await pumpEventQueue();
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connecting,
+      );
+      expect(parts.connection.state.connectionMessage, isNull);
+
+      handshake.complete();
+      await next;
+      await pumpEventQueue();
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+      expect(parts.connection.state.connectionMessage, isNull);
+    });
+
+    test(
+      'the banner text is cleared when the kit goes to reconnecting',
+      () async {
+        build(tokenSecrets: withToken());
+        await start(remote);
+        resolver.failWith['remote'] = rejection(401);
+        await parts.connection.restart();
+        await pumpEventQueue();
+        expect(parts.connection.state.connectionMessage, isNotNull);
+
+        resolver.failWith.clear();
+        final handshake = Completer<void>();
+        resolver.holds['remote'] = handshake.future;
+        final next = parts.connection.restart();
+        await pumpEventQueue();
+        expect(
+          parts.connection.state.connectionStatus,
+          CodeLabConnectionStatus.reconnecting,
+        );
+        expect(parts.connection.state.connectionMessage, isNull);
+        handshake.complete();
+        await next;
+      },
+    );
+
+    test('a superseded attempt does not overwrite the current one', () async {
+      build(tokenSecrets: withToken());
+      final handshake = Completer<void>();
+      resolver.holds['remote'] = handshake.future;
+      resolver.failWith['remote'] = rejection(401);
+
+      final a = start(remote);
+      await pumpEventQueue();
+      await start(embeddedConnectionProfile);
+      handshake.complete();
+      await a;
+      await pumpEventQueue();
+
+      expect(
+        parts.connection.state.connectionStatus,
+        CodeLabConnectionStatus.connected,
+      );
+      expect(parts.connection.state.connectionMessage, isNull);
+    });
+  });
+
+  // Метка «нужен провайдер» (задача 3.12 change `add-provider-setup-ui`;
+  // agent-workbench-ui «Встроенный агент без провайдера»; design.md D21,
+  // D26): метка принадлежит попытке встроенного агента, любая новая попытка
+  // её сбрасывает, переподключение после мастера — только при той же метке.
+  group('provider setup notice (D26)', () {
+    late ProviderSetupOffer offer;
+    late bool needed;
+    late bool embeddedBroken;
+    Future<void>? openerGate;
+
+    void buildWithOffer({DirectoryExists? directoryExists}) {
+      offer = ProviderSetupOffer();
+      build(
+        directoryExists: directoryExists,
+        realResolver: EmbeddedTransportResolver(
+          ({required cwd, required hostProfile}) async {
+            await openerGate;
+            return embeddedBroken
+                ? throw EmbeddedAgentConfigException(
+                    const [],
+                    home: '/home/u/.codelab',
+                  )
+                : throw StateError('not reached in this group');
+          },
+          setupOffer: offer,
+          providerSetupNeeded: (cwd) async => needed,
+        ),
+        providerSetupOffer: offer,
+        alsoRecording: true,
+      );
+    }
+
+    setUp(() {
+      needed = true;
+      embeddedBroken = true;
+      openerGate = null;
+    });
+
+    test('a failed embedded attempt with the flag publishes the notice with '
+        'the folder; the raw message stays for the diagnostics', () async {
+      buildWithOffer();
+
+      await start(embeddedConnectionProfile);
+
+      final state = parts.connection.state;
+      expect(state.connectionStatus, CodeLabConnectionStatus.failed);
+      expect(state.providerSetupNotice, isNotNull);
+      expect(state.providerSetupNotice!.cwd, '/work/app');
+    });
+
+    test('no flag: no notice, the message is the same as before', () async {
+      needed = false;
+      buildWithOffer();
+
+      await start(embeddedConnectionProfile);
+
+      expect(parts.connection.state.providerSetupNotice, isNull);
+      expect(
+        parts.connection.state.connectionMessage,
+        contains('codelab config check'),
+      );
+    });
+
+    test(
+      'any new attempt resets the notice, even to another profile',
+      () async {
+        buildWithOffer();
+        await start(embeddedConnectionProfile);
+        expect(parts.connection.state.providerSetupNotice, isNotNull);
+
+        await start(_stdio);
+
+        expect(parts.connection.state.providerSetupNotice, isNull);
+      },
+    );
+
+    test('a reconnect also resets it', () async {
+      buildWithOffer();
+      await start(embeddedConnectionProfile);
+      final first = parts.connection.state.providerSetupNotice;
+      expect(first, isNotNull);
+
+      await parts.connection.restart();
+
+      // Новая попытка встроенного агента снова не удалась: метка новая.
+      final second = parts.connection.state.providerSetupNotice;
+      expect(second, isNotNull);
+      expect(identical(first, second), isFalse);
+    });
+
+    test('a failure of attempt A during the preliminary awaits of attempt B '
+        'leaves no notice'
+        '', () async {
+      final openerRelease = Completer<void>();
+      final dirRelease = Completer<void>();
+      openerGate = openerRelease.future;
+      var dirChecks = 0;
+      buildWithOffer(
+        directoryExists: (_) async {
+          if (++dirChecks == 2) {
+            await dirRelease.future;
+          }
+          return true;
+        },
+      );
+
+      final a = start(embeddedConnectionProfile);
+      await pumpEventQueue();
+      // B стартует и застревает в проверке папки, до своего номера попытки.
+      final b = start(_stdio);
+      await pumpEventQueue();
+      openerRelease.complete();
+      await a;
+      await pumpEventQueue();
+
+      expect(parts.connection.state.providerSetupNotice, isNull);
+
+      dirRelease.complete();
+      await b;
+    });
+
+    test('providerSetupGuard runs one action at a time; the second call '
+        'is ignored while the first is open', () async {
+      buildWithOffer();
+      final release = Completer<void>();
+      var runs = 0;
+
+      final first = parts.connection.runProviderSetup(() async {
+        runs++;
+        await release.future;
+      });
+      final second = parts.connection.runProviderSetup(() async => runs++);
+      await second;
+      expect(runs, 1);
+
+      release.complete();
+      await first;
+      await parts.connection.runProviderSetup(() async => runs++);
+      expect(runs, 2);
+    });
+
+    int embeddedStarts() => shellLog.entries
+        .where((e) => '${e['event']}'.startsWith('Starting embedded ACP agent'))
+        .length;
+
+    test('connectAfterProviderSetup connects the embedded profile when the '
+        'notice is still the same, and logs the reconnect', () async {
+      buildWithOffer();
+      await start(embeddedConnectionProfile);
+      final notice = parts.connection.state.providerSetupNotice!;
+      expect(embeddedStarts(), 1);
+
+      await parts.connection.connectAfterProviderSetup(notice);
+
+      expect(embeddedStarts(), 2);
+      expect(
+        eventLog.entries.map((e) => e['event']),
+        contains('provider_wizard.reconnect'),
+      );
+    });
+
+    test('connectAfterProviderSetup does nothing when another attempt started '
+        'meanwhile, and logs the skip', () async {
+      buildWithOffer();
+      await start(embeddedConnectionProfile);
+      final notice = parts.connection.state.providerSetupNotice!;
+
+      await start(_stdio);
+      await parts.connection.connectAfterProviderSetup(notice);
+
+      expect(embeddedStarts(), 1);
+      expect(
+        eventLog.entries.map((e) => e['event']),
+        contains('provider_wizard.reconnect_skipped'),
+      );
+      expect(
+        eventLog.entries.map((e) => e['event']),
+        isNot(contains('provider_wizard.reconnect')),
+      );
+    });
+  });
+}

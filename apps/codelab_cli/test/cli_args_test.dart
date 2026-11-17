@@ -28,6 +28,21 @@ void main() {
     expect(options.agent, 'py');
   });
 
+  test('--debug-secrets is a flag without a value, off by default '
+      '(spec «Встроенный агент в CLI», D5)', () {
+    expect(parseCliArgs(['-p', 'hi']).debugSecrets, isFalse);
+    expect(
+      parseCliArgs([
+        '--debug-secrets',
+        '-a',
+        'embedded',
+        '-p',
+        'hi',
+      ]).debugSecrets,
+      isTrue,
+    );
+  });
+
   test('-f selects the headless mode with a prompt file', () {
     expect(parseCliArgs(['-f', 'task.md']).promptFile, 'task.md');
     expect(parseCliArgs(['-f', '-']).command, CliCommand.headless);
@@ -147,11 +162,10 @@ void main() {
     }
   });
 
+  // `provider` и `mcp` убраны из списка: теперь это зарегистрированные
+  // подкоманды (change `add-config-writer-and-reload`, D6).
   test('subcommands of later stages are unknown commands', () {
     for (final command in [
-      'provider',
-      'mcp',
-      'secret',
       'sessions',
       'update',
       'login',
@@ -185,6 +199,54 @@ void main() {
     expect(parseCliArgs(['-h']).command, CliCommand.help);
   });
 
+  // Алиас `codelab serve` (change `retire-python-agent`, задача 1.1; D8;
+  // spec codelab-cli «Алиас codelab serve»).
+  group('serve alias', () {
+    test('serve as the first word hands every other word to the agent', () {
+      final options = parseCliArgs(['serve', '--stdio', '--port', '1']);
+
+      expect(options.command, CliCommand.serveAlias);
+      expect(options.positional, ['--stdio', '--port', '1']);
+    });
+
+    test('serve without flags is the alias too (Q2)', () {
+      final options = parseCliArgs(['serve']);
+
+      expect(options.command, CliCommand.serveAlias);
+      expect(options.positional, isEmpty);
+    });
+
+    test('--help after serve belongs to codelab-agent, not to codelab', () {
+      final options = parseCliArgs(['serve', '--help']);
+
+      expect(options.command, CliCommand.serveAlias);
+      expect(options.positional, ['--help']);
+    });
+
+    test('codelab flags after serve are not parsed by codelab', () {
+      final options = parseCliArgs(['serve', '-p', 'x', '--agent', 'y']);
+
+      expect(options.command, CliCommand.serveAlias);
+      expect(options.positional, ['-p', 'x', '--agent', 'y']);
+    });
+
+    test('serve not in the first place is the first REPL message', () {
+      for (final args in [
+        ['--', 'serve'],
+        ['-v', 'serve'],
+      ]) {
+        final options = parseCliArgs(args);
+
+        expect(options.command, CliCommand.repl, reason: '$args');
+        expect(options.positional, ['serve'], reason: '$args');
+      }
+    });
+
+    test('the usage text does not mention the alias (task 1.8)', () {
+      expect(cliUsage(), isNot(contains('codelab serve')));
+    });
+  });
+
   test('the usage text lists the MVP flags and no later ones', () {
     final text = cliUsage();
 
@@ -212,6 +274,22 @@ void main() {
     expect(options.agent, 'stdio:agent');
     expect(options.filter, 'acp/session-*');
     expect(options.timeout, const Duration(seconds: 10));
+  });
+
+  // Task 1.10 change `switch-default-agent-to-dart`; D8.
+  test('test-scenario --junit takes a file and is listed in the help', () {
+    final options = parseCliArgs([
+      'test-scenario',
+      'x',
+      '-a',
+      'stdio:agent',
+      '--junit',
+      'out/r.xml',
+    ]);
+
+    expect(options.junit, 'out/r.xml');
+    expect(parseCliArgs(['test-scenario', 'x']).junit, isNull);
+    expect(cliUsage(), contains('--junit <file>'));
   });
 
   test('test-scenario without --timeout waits 30s for a frame', () {
@@ -253,5 +331,84 @@ void main() {
 
   test('an unknown --ui value is a usage error', () {
     expect(() => parseCliArgs(['--ui', 'full']), throwsA(isA<UsageError>()));
+  });
+
+  // Клиентские флаги и необязательный id `provider add` (design.md change
+  // `add-provider-setup-ui`, D15, Q13; задача 4.1).
+  group('provider add: мастер и клиентские флаги', () {
+    test('--preset, --skip-check и --yes разбираются', () {
+      final sub = parseCliArgs([
+        'provider',
+        'add',
+        'gw',
+        '--preset',
+        'custom-openai',
+        '--skip-check',
+        '--yes',
+      ]).subcommand!;
+
+      expect(sub.name, 'add');
+      expect(sub.rest, ['gw']);
+      expect(sub.option('preset'), 'custom-openai');
+      expect(sub.flag('skip-check'), isTrue);
+      expect(sub.flag('yes'), isTrue);
+    });
+
+    test('без клиентских флагов они выключены', () {
+      final sub = parseCliArgs(['provider', 'add', 'gw']).subcommand!;
+
+      expect(sub.option('preset'), isNull);
+      expect(sub.flag('skip-check'), isFalse);
+      expect(sub.flag('yes'), isFalse);
+    });
+
+    test('provider add без id разбирается: мастеру на TTY id не нужен', () {
+      final options = parseCliArgs(['provider', 'add']);
+
+      expect(options.command, CliCommand.provider);
+      expect(options.subcommand!.name, 'add');
+      expect(options.subcommand!.rest, isEmpty);
+    });
+
+    test('provider add без id, но с --preset, тоже разбирается', () {
+      final sub = parseCliArgs([
+        'provider',
+        'add',
+        '--preset',
+        'openai',
+      ]).subcommand!;
+
+      expect(sub.rest, isEmpty);
+      expect(sub.option('preset'), 'openai');
+    });
+
+    test('два слова после add — прежняя ошибка 64 без цитирования', () {
+      expect(
+        () => parseCliArgs(['provider', 'add', 'a', 'sk-test-leak-0123456789']),
+        throwsA(
+          isA<UsageError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              'unknown provider arguments (1)',
+              isNot(contains('sk-test-leak')),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('remove по-прежнему требует id', () {
+      expect(
+        () => parseCliArgs(['provider', 'remove']),
+        throwsA(
+          isA<UsageError>().having(
+            (e) => e.message,
+            'message',
+            'provider remove needs the provider id',
+          ),
+        ),
+      );
+    });
   });
 }

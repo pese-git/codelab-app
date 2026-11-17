@@ -307,6 +307,28 @@ void main() {
     });
   });
 
+  group('turn stopped notice', () {
+    // design D27, Q33: заметка `turnStopped` — обычная заметка kit-а, REPL
+    // печатает её префиксом заметки, без новой логики CLI.
+    test('is a note line, not an error line', () {
+      final r = renderer();
+      r.render(
+        _view(const [
+          NoticeItem(
+            id: 't1/stopped',
+            kind: NoticeKind.turnStopped,
+            text: 'The model reached its token limit, so the turn ended.',
+          ),
+        ]),
+      );
+
+      expect(
+        out.toString(),
+        'note: The model reached its token limit, so the turn ended.\n',
+      );
+    });
+  });
+
   group('history', () {
     test('skip marks the transcript as printed', () {
       final r = renderer();

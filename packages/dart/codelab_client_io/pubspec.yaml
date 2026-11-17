@@ -16,6 +16,7 @@ dependencies:
     path: ../codelab_client_acp
   codelab_client_core:
     path: ../codelab_client_core
+  path: ^1.9.0
 
 dev_dependencies:
   codelab_acp_testing:

@@ -44,7 +44,16 @@ final class ApprovalPrompt {
 
   List<String> get block {
     final command = _command();
+    final requester = approval.subagent;
     return [
+      // Спрашивает потомок: путь и заголовок его задачи идут первыми, чтобы
+      // человек видел, чьё действие разрешает (D27 п. 4, D43; spec
+      // codelab-cli «Одобрение в REPL»). Прежние строки блока остаются.
+      if (requester != null) ...[
+        '${sanitizeTerminalText(requester.pathText)} wants to run',
+        if (requester.description.isNotEmpty)
+          '  task: ${_firstLine(requester.description)}',
+      ],
       'Permission: ${sanitizeTerminalText(title)} '
           '(${_risk(approval.risk)}${approval.critical ? ', critical' : ''})',
       if (command != null) '  command: $command',
@@ -105,6 +114,8 @@ final class ApprovalPrompt {
 
   static String _risk(ApprovalRiskLevel risk) => switch (risk) {
     ApprovalRiskLevel.readOnly => 'read-only',
+    // Вид `other`/без вида: не «только чтение» (D27, Q32).
+    ApprovalRiskLevel.unknown => 'unknown risk',
     ApprovalRiskLevel.localWrite => 'local write',
     ApprovalRiskLevel.network => 'network',
     ApprovalRiskLevel.shell => 'shell',
@@ -120,6 +131,9 @@ final class ApprovalPrompt {
         return title;
       }
     }
-    return 'tool call';
+    // Запрос потомка лежит у строки `agent` корня (D43 п. 2), своей строки
+    // вызова в ленте нет: берём заголовок из самого запроса (с префиксом D8).
+    final own = approval.toolTitle;
+    return own == null || own.isEmpty ? 'tool call' : own;
   }
 }

@@ -122,13 +122,17 @@ const fullJobs = [
   CiJob('test', 'test'),
   CiJob(
     'conformance',
-    'protocol-conformance conformance:client conformance:agent',
+    'protocol-conformance conformance:client conformance:agent '
+        'conformance:embedded',
   ),
   CiJob('guard', 'guard prompts:check'),
   CiJob('web-compile', 'web-compile'),
   // Тесты CLI против scripted-агента идут внутри `test`, здесь — те же
   // тесты против codelab-agent (change add-cli-e2e-agent-matrix).
   CiJob('e2e-cli-dart', 'test:e2e:cli:dart-agent'),
+  // То же против встроенного агента: CLI из тестовой точки входа со
+  // сценарием модели (change add-embedded-agent-mode, D10).
+  CiJob('e2e-cli-embedded', 'test:e2e:cli:embedded'),
 ];
 
 /// Корпус фикстур ACP на каждый ACP-слой: прогоняется, если слой затронут.
@@ -141,8 +145,19 @@ const _conformance = {
 /// Пакеты, без которых не собирается бинарь CLI-e2e или сам CLI.
 const _cliE2e = {'codelab_cli', 'codelab_agent'};
 
+/// Пакеты, от которых зависит CLI со встроенным агентом: корпус фикстур и
+/// e2e `embedded` играет CLI (`conformance:embedded`, `test:e2e:cli:embedded`).
+const _embeddedCli = {'codelab_cli', 'codelab_embedded'};
+
 /// Точка входа `web-compile` собирает ядро агента и его зависимости.
 const _webSmoke = 'codelab_agent_core';
+
+/// Матрица целей: документ, который разбирает `parity_evidence_test` сторожа.
+///
+/// Почему: разбор (`switch-default-agent-to-dart`, D2) ломается от правки
+/// таблицы, а правка только документации обычно не запускает ни одного джоба —
+/// поломка вскрылась бы лишь ночью (D7).
+const _parityMatrix = 'docs/architecture/proposals/agent-parity-goals.md';
 
 /// Считает джобы CI для [changedFiles] (пути от корня репозитория).
 ///
@@ -150,7 +165,8 @@ const _webSmoke = 'codelab_agent_core';
 /// * [fullReason] задан (push, `release/*`, ночной запуск) или изменён файл
 ///   вне пакетов workspace и вне документации — полный прогон [fullJobs];
 /// * только документация (`docs/`, `openspec/`, `.claude/`, `*.md` в корне,
-///   `AGENTS.md`, `README.md` и `CHANGELOG.md` пакетов) — без джобов;
+///   `AGENTS.md`, `README.md` и `CHANGELOG.md` пакетов) — без джобов, кроме
+///   матрицы целей [_parityMatrix]: её правка добавляет `guard` (D7);
 /// * иначе `format` по всему репозиторию (он быстрый), `analyze` и `test`
 ///   для затронутых пакетов, `guard` всегда, остальное — по границе.
 CiScope ciScope({
@@ -164,7 +180,9 @@ CiScope ciScope({
 
   final changed = <String>{};
   final outside = <String>[];
+  var matrixChanged = false;
   for (final file in changedFiles) {
+    if (file == _parityMatrix) matrixChanged = true;
     if (_isDocumentation(file)) continue;
     final owner = packages
         .where((pkg) => file.startsWith('${pkg.dir}/'))
@@ -182,13 +200,19 @@ CiScope ciScope({
       reason: 'changed outside workspace packages: ${outside.join(', ')}',
     );
   }
-  if (changed.isEmpty) return const CiScope(full: false, jobs: []);
+  if (changed.isEmpty) {
+    return CiScope(
+      full: false,
+      jobs: [if (matrixChanged) const CiJob('guard', 'guard')],
+    );
+  }
 
   final affected = _withDependents(changed, packages);
   final scoped = (affected.toList()..sort()).join(',');
   final conformance = [
     for (final entry in _conformance.entries)
       if (affected.contains(entry.key)) entry.value,
+    if (affected.any(_embeddedCli.contains)) 'conformance:embedded',
   ];
   final webDependencies = _withDependencies({_webSmoke}, packages);
 
@@ -211,6 +235,8 @@ CiScope ciScope({
         const CiJob('web-compile', 'web-compile'),
       if (affected.any(_cliE2e.contains))
         const CiJob('e2e-cli-dart', 'test:e2e:cli:dart-agent'),
+      if (affected.any(_embeddedCli.contains))
+        const CiJob('e2e-cli-embedded', 'test:e2e:cli:embedded'),
     ],
   );
 }

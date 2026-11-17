@@ -469,6 +469,82 @@ void main() {
     });
   });
 
+  // Бывший `preformatted` (6.1i-1): огороженный ответ теперь частный случай
+  // markdown (change `add-desktop-markdown`, D11) — тот же вид без строк
+  // ограды, плюс подпись языка и «Copy».
+  group('single fenced agent reply (6.1i-1, D11)', () {
+    testWidgets('a fenced row is a code block without fence lines', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel(const [
+          CodeLabAgentTextRow(
+            id: 'agent-1',
+            text: '```text\nMCP servers (1)\n  a  ok\n```',
+          ),
+        ]),
+      );
+
+      expect(
+        find.textContaining('MCP servers (1)', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.textContaining('```', findRichText: true), findsNothing);
+      expect(find.text('text'), findsOneWidget);
+      expect(find.byType(CodeLabCodeBlock), findsOneWidget);
+    });
+
+    testWidgets('a plain row is not a code block', (tester) async {
+      await tester.pumpWidget(
+        _panel(const [CodeLabAgentTextRow(id: 'agent-1', text: 'Hello')]),
+      );
+
+      expect(find.byType(CodeLabCodeBlock), findsNothing);
+      expect(find.text('Hello'), findsOneWidget);
+    });
+  });
+
+  group('tool call tags of a cancelled call (6.1j-2)', () {
+    int cancelledTags() => find.text('Cancelled').evaluate().length;
+
+    testWidgets('a cancelled call without an outcome tag shows one tag', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel(const [
+          CodeLabToolCallRow(
+            id: 'tool-1',
+            status: CodeLabToolCallStatus.cancelled,
+            label: 'Run',
+          ),
+        ]),
+      );
+
+      expect(cancelledTags(), 1);
+    });
+
+    testWidgets('a cancelled call and a late-done outcome keep both tags', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _panel([
+          CodeLabToolCallRow(
+            id: 'tool-1',
+            status: CodeLabToolCallStatus.succeeded,
+            label: 'Run',
+            approval: CodeLabTranscriptApproval.resolved(
+              label: 'Cancelled',
+              outcome: CodeLabApprovalOutcome.cancelled,
+            ),
+          ),
+        ]),
+      );
+
+      expect(cancelledTags(), 1);
+      expect(find.text('Done'), findsOneWidget);
+    });
+  });
+
   group('notices', () {
     testWidgets('an info notice is a neutral line, not an InfoBar', (
       tester,

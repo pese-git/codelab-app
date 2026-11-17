@@ -18,7 +18,10 @@ final class HostSettings {
     this.fsync,
     this.logLevel,
     this.logFile,
+    this.secretsBackend,
     this.profileNarrowing = const {},
+    this.configWatch,
+    this.configPollInterval,
   });
 
   /// `sessions.dir` (путь, `~` раскрыт).
@@ -33,6 +36,23 @@ final class HostSettings {
 
   /// `logging.file`, только явно заданный (OQ5 (а)).
   final String? logFile;
+
+  /// `secrets.backend`: `auto` | `env` | `file` (`keychain` — проблема
+  /// конфигурации, хранилища ОС появятся после 1.0; design.md change
+  /// `add-agent-secret-store`, D7). Читается из пользовательского слоя и
+  /// `--config`: проект переключить хранилище на открытый файл не может.
+  /// `null` — ключ не задан, действует `auto`. Строкой: перечисление живёт в
+  /// `codelab_agent_io`. Потребитель — хост (`openHostSecrets`).
+  final String? secretsBackend;
+
+  /// `config.watch`: следить ли за файлами конфига (D7). `null` — ключ не
+  /// задан, хост применяет `true`. Потребитель — хост (`FileConfigSource`);
+  /// ключ `restartRequired`, наблюдатель создаётся один раз.
+  final bool? configWatch;
+
+  /// `config.poll_interval` (`1s..60s`): период опроса там, где событий
+  /// файловой системы нет (D7). `null` — хост применяет `2s`.
+  final Duration? configPollInterval;
 
   /// `profile.<name>.<capability>`: уже проверенное сужение (расширение
   /// профиля — проблема конфигурации, а не исключение сборки).

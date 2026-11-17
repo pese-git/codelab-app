@@ -61,15 +61,19 @@ final class StringMapNode extends SchemaNode {
 ///
 /// [named] — схема значений по произвольному имени (`providers.<id>`);
 /// [nameFormat] проверяет имя; [nameLabel] называет его в сообщении.
-/// [rejectsInlineSecrets] — секция, в которой ключи `api_key`, `token` и т. п.
-/// дают `inlineSecret` (CFG-2).
+/// [toleratesInlineSecrets] — секция, в которой ключи `inlineSecretKeys`
+/// (`api_key`, `token`, …), не описанные в [fields], не дают проблемы схемы:
+/// литерал в файле — предупреждение `config.secret.in_file` и не применяется,
+/// а не отказ загрузки (CFG-9, пункт 1; design.md change
+/// `add-config-literal-secrets-and-migrate`, D4, R8-4). Ключ, описанный в
+/// [fields] (`providers.<id>.api_key`), проверяется как обычный.
 final class SectionNode extends SchemaNode {
   const SectionNode(
     this.fields, {
     this.named,
     this.nameFormat,
     this.nameLabel = 'name',
-    this.rejectsInlineSecrets = false,
+    this.toleratesInlineSecrets = false,
     super.applied,
   });
 
@@ -77,7 +81,12 @@ final class SectionNode extends SchemaNode {
   final SchemaNode? named;
   final RegExp? nameFormat;
   final String nameLabel;
-  final bool rejectsInlineSecrets;
+
+  /// Секция терпит литеральные ключи секретов вне [fields]: схема не даёт
+  /// проблемы, а находку превращает в предупреждение `config.secret.in_file`
+  /// слой поиска секретов (CFG-9; D4, R8-4). По умолчанию `false`: в прочих
+  /// секциях неизвестный ключ остаётся проблемой схемы.
+  final bool toleratesInlineSecrets;
 }
 
 /// Список отображений (`mcp.servers`, `exec.secrets`); [keyField] — поле
@@ -115,9 +124,6 @@ final class AgentsNode extends SchemaNode {
 /// Виды провайдеров §15.4 (DF-15: без подмены mock-провайдером).
 const providerKinds = ['openai-compatible', 'anthropic', 'gemini'];
 
-/// Секреты значением (CFG-2, §17.5.4, пункт 1).
-const inlineSecretKeys = {'api_key', 'apiKey', 'token', 'secret', 'password'};
-
 const _opaque = OpaqueNode();
 const _str = ScalarNode(ScalarType.string);
 const _int = ScalarNode(ScalarType.integer);
@@ -136,8 +142,6 @@ const _strListU = ListNode(ScalarType.string, applied: false);
 const afterMvpSections = [
   'llm',
   'images',
-  'skills',
-  'subagents',
   'jobs',
   'hooks',
   'plugins',
@@ -145,8 +149,6 @@ const afterMvpSections = [
   'memory',
   'steering',
   'lsp',
-  'secrets',
-  'config',
 ];
 
 /// Слои редакции секретов §12.4.3.
@@ -245,6 +247,33 @@ final SectionNode rootSchema = SectionNode({
     'history': _opaque,
     'spill': _opaque,
   }),
+  // Навыки (change `add-agent-skills`, D11): ключи с потребителем;
+  // `operative` остаётся без потребителя до K-06.
+  'skills': SectionNode({
+    'enabled': _bool,
+    'extra_roots': ListNode(ScalarType.string),
+    'disabled': ListNode(ScalarType.string),
+    'max_skills': _int,
+    'catalog_max_chars': _int,
+    'reattach': SectionNode({'per_skill_tokens': _int, 'total_tokens': _int}),
+    'operative': _opaque,
+  }),
+  // Субагенты (change `add-subagents-and-tasks`, D17): базовый этап; ключи
+  // следующих этапов в схему не входят (CFG-5).
+  'subagents': SectionNode({
+    'enabled': _bool,
+    'max_depth': _int,
+    'max_concurrent': _int,
+    'max_per_turn': _int,
+    'max_steps': _int,
+    'max_tokens': _int,
+    'max_cost': ScalarNode(ScalarType.float),
+    'max_duration': _dur,
+    'report_max_bytes': _int,
+    'progress_interval': _dur,
+    'heartbeat_interval': _dur,
+    'cancel_grace': _dur,
+  }),
   'loop': SectionNode({
     'empty_response_retries': _intU,
     'misuse': SectionNode({
@@ -312,11 +341,20 @@ final SectionNode rootSchema = SectionNode({
     'block': _opaque,
     'command_rewrite': _opaque,
   }),
+  // Хранилище секретов (этап 8.9, design.md change `add-agent-secret-store`,
+  // D7). Допустимость значения проверяет `resolve.dart`: текст проблемы
+  // `expected one of: auto, keychain, env, file` задан спецификацией и
+  // отличается от общего текста `allowed`.
+  'secrets': SectionNode({'backend': _str}),
   'profile': SectionNode(
     {},
     named: SectionNode({}, named: ProfileValueNode(), nameLabel: 'capability'),
     nameLabel: 'profile name',
   ),
+  // Наблюдение за файлами конфига (change `add-config-writer-and-reload`, D7):
+  // `config.*` читают слои `user`, `projectLocal` и `--config`; допустимость
+  // `poll_interval` (`1s..60s`) проверяет `resolve.dart`.
+  'config': SectionNode({'watch': _bool, 'poll_interval': _dur}),
   for (final name in afterMvpSections) name: _opaque,
 });
 
@@ -333,7 +371,7 @@ const SectionNode _mcpServerSchema = SectionNode({
   'enabled': _bool,
   'connect_timeout': _dur,
   'call_timeout': _dur,
-}, rejectsInlineSecrets: true);
+}, toleratesInlineSecrets: true);
 
 const SectionNode _providerSchema = SectionNode({
   'kind': ScalarNode(
@@ -342,6 +380,10 @@ const SectionNode _providerSchema = SectionNode({
     allowedLabel: 'provider kind',
   ),
   'base_url': _str,
+  // Литеральный ключ из файла (R8-4, D4): работает как ключ провайдера и
+  // сопровождается предупреждением `config.secret.in_file`, кроме ссылки
+  // `${VAR}`/`${secret:x}` (R8-8): она раскрывается как в заголовках.
+  'api_key': _str,
   'api_key_env': _str,
   'api_key_secret': _str,
   'auth_header': _str,
@@ -376,7 +418,7 @@ const SectionNode _providerSchema = SectionNode({
   'stall_key_rotations': _opaque,
   'stall_base_delay': _opaque,
   'stall_max_delay': _opaque,
-}, rejectsInlineSecrets: true);
+}, toleratesInlineSecrets: true);
 
 const SectionNode _modelSchema = SectionNode({
   'context_window': _int,

@@ -1,6 +1,9 @@
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
+import 'subagent_views.dart';
+import 'task_ops.dart';
+import 'tool_call_tree.dart';
 import 'transcript_item.dart';
 
 /// Инкрементальная проекция транскрипта одной сессии.
@@ -47,6 +50,10 @@ final class TranscriptProjector {
       _turns.clear();
       changed = true;
     }
+    // План, действовавший к началу хода: разница первой операции со списком
+    // задач хода считается от него (acp-client-kit «Операции со списком
+    // задач в ленте»).
+    List<PlanEntry>? prior;
     for (final (index, turn) in turns.indexed) {
       if (index < _turns.length && _turns[index].turnId != turn.id) {
         _turns.removeRange(index, _turns.length);
@@ -55,7 +62,8 @@ final class TranscriptProjector {
       if (index == _turns.length) {
         _turns.add(_TurnProjection(turn.id));
       }
-      changed = _turns[index].apply(turn) || changed;
+      changed = _turns[index].apply(turn, prior) || changed;
+      prior = _turns[index].lastPlan ?? prior;
     }
     if (!changed) {
       return false;
@@ -73,7 +81,7 @@ List<PendingApprovalView> pendingApprovalViews(AcpSession session) => [
   for (final turn in session.turns)
     for (final approval in turn.approvals.values)
       if (approval.status == ApprovalStatus.pending)
-        _approvalView(approval, _earliestPendingApprovalId(turn))!
+        _approvalView(turn, approval, _earliestPendingApprovalId(turn))!
             as PendingApprovalView,
 ];
 
@@ -86,11 +94,17 @@ List<PendingApprovalView> pendingApprovalViews(AcpSession session) => [
 ///
 /// Для чего: тест свойства «инкрементальная проекция == пересчёт» и разовый
 /// показ сессии без истории изменений.
-List<TranscriptItem> projectTranscript(AcpSession session) => [
-  for (final turn in session.turns) ..._rebuildTurn(turn),
-];
+List<TranscriptItem> projectTranscript(AcpSession session) {
+  final items = <TranscriptItem>[];
+  List<PlanEntry>? prior;
+  for (final turn in session.turns) {
+    items.addAll(_rebuildTurn(turn, prior));
+    prior = lastPlanOf(turn, prior);
+  }
+  return items;
+}
 
-List<TranscriptItem> _rebuildTurn(PromptTurn turn) {
+List<TranscriptItem> _rebuildTurn(PromptTurn turn, List<PlanEntry>? prior) {
   final items = <TranscriptItem>[];
   final user = _userItem(turn);
   if (user != null) {
@@ -99,6 +113,7 @@ List<TranscriptItem> _rebuildTurn(PromptTurn turn) {
 
   final agent = <TranscriptItem>[];
   final seen = <ToolCallId>{};
+  final announced = _announcedIds(turn);
   final focused = _earliestPendingApprovalId(turn);
   _StreamKind? runKind;
   var runStart = 0;
@@ -118,7 +133,7 @@ List<TranscriptItem> _rebuildTurn(PromptTurn turn) {
       case ToolCallSessionUpdate(:final toolCall):
         flush();
         if (seen.add(toolCall.toolCallId)) {
-          agent.add(_toolItem(turn, toolCall.toolCallId, focused));
+          agent.add(_toolItem(turn, toolCall.toolCallId, focused, announced));
         }
       case ToolCallUpdateSessionUpdate():
         flush();
@@ -140,11 +155,14 @@ List<TranscriptItem> _rebuildTurn(PromptTurn turn) {
     }
   }
   flush();
-  agent.addAll(_unannouncedApprovalItems(turn, seen, focused));
+  final body = [...buildToolCallTree(agent, taskOperationsOf(turn, prior))];
+  body.addAll(_unannouncedApprovalItems(turn, seen, focused, announced));
 
   items
-    ..addAll(agent)
-    ..addAll(_notices(turn, hasAgentItems: agent.isNotEmpty));
+    ..addAll(body)
+    // `body` уже включает одобрения без `tool_call`: ход с ними не пустой
+    // (так же считает инкрементальная проекция).
+    ..addAll(_notices(turn, hasAgentItems: body.isNotEmpty));
   return items;
 }
 
@@ -164,6 +182,11 @@ final class _TurnProjection {
   final _toolPositions = <ToolCallId, int>{};
   var _processed = 0;
 
+  /// Последний `plan` этого хода (`null` — хода без плана) и признак плана
+  /// со списком задач: без него разница операций не считается.
+  List<PlanEntry>? lastPlan;
+  var _taskPlanSeen = false;
+
   /// Открытый отрезок потокового текста: вид, индекс первого обновления,
   /// накопленный текст и позиция элемента (`null`, пока текст пуст).
   _StreamKind? _runKind;
@@ -173,7 +196,7 @@ final class _TurnProjection {
 
   List<TranscriptItem> items = const [];
 
-  bool apply(PromptTurn turn) {
+  bool apply(PromptTurn turn, List<PlanEntry>? prior) {
     if (identical(turn, _turn)) {
       return false;
     }
@@ -192,21 +215,31 @@ final class _TurnProjection {
     // обновления: так их показывал и прежний пересчёт
     // (embed-approval-in-thread/design.md, Decision 1).
     final focused = _earliestPendingApprovalId(turn);
+    final announced = _toolPositions.keys.toSet();
     for (final MapEntry(key: toolCallId, value: position)
         in _toolPositions.entries) {
-      final next = _toolItem(turn, toolCallId, focused);
+      final next = _toolItem(turn, toolCallId, focused, announced);
       if (next != _body[position]) {
         _body[position] = next;
       }
     }
 
-    final unannounced = _unannouncedApprovalItems(turn, {
-      ..._toolPositions.keys,
-    }, focused);
+    final unannounced = _unannouncedApprovalItems(
+      turn,
+      {...announced},
+      focused,
+      announced,
+    );
     final hasAgentItems = _body.isNotEmpty || unannounced.isNotEmpty;
+    // Дерево вызовов потомков строится из плоского `_body` на каждом
+    // применении: родитель может прийти позже ребёнка (D21, D47 Т9).
+    final body = buildToolCallTree(
+      _body,
+      _taskPlanSeen ? taskOperationsOf(turn, prior) : const {},
+    );
     items = [
       ?_user,
-      ..._body,
+      ...body,
       ...unannounced,
       ..._notices(turn, hasAgentItems: hasAgentItems),
     ];
@@ -230,6 +263,10 @@ final class _TurnProjection {
         });
       case ToolCallUpdateSessionUpdate():
         _closeRun();
+      case PlanUpdate(:final entries, :final meta):
+        _closeRun();
+        lastPlan = entries;
+        _taskPlanSeen = _taskPlanSeen || hasTaskChangeCall(meta);
       default:
         final kind = _StreamKind.of(update);
         if (kind == null) {
@@ -271,6 +308,8 @@ final class _TurnProjection {
     _body.clear();
     _toolPositions.clear();
     _processed = 0;
+    lastPlan = null;
+    _taskPlanSeen = false;
     _closeRun();
   }
 }
@@ -330,10 +369,19 @@ UserItem? _userItem(PromptTurn turn) {
 String _toolItemId(PromptTurnId turnId, ToolCallId toolCallId) =>
     '${turnId.value}/tool-${toolCallId.value}';
 
+/// Id вызовов, объявленных `tool_call` хода: у вызова потомка без дерева
+/// их нет, и его запрос не заводит строки, пока есть строка корня (D43 п. 2);
+/// с деревом (итерация 5) вызов потомка объявлен и стоит вложенной строкой.
+Set<ToolCallId> _announcedIds(PromptTurn turn) => {
+  for (final update in turn.updates)
+    if (update case ToolCallSessionUpdate(:final toolCall)) toolCall.toolCallId,
+};
+
 TranscriptItem _toolItem(
   PromptTurn turn,
   ToolCallId toolCallId,
   ApprovalRequestId? focused,
+  Set<ToolCallId> announced,
 ) {
   final record = turn.toolCalls[toolCallId];
   return TranscriptItem.toolCall(
@@ -341,8 +389,125 @@ TranscriptItem _toolItem(
     toolCallId: toolCallId,
     title: record?.title ?? toolCallId.value,
     details: record == null ? null : _callView(record),
-    approval: _approvalView(_approvalFor(turn, toolCallId), focused),
+    approval: _approvalView(turn, _approvalFor(turn, toolCallId), focused),
+    childApprovals: [
+      for (final approval in turn.approvals.values)
+        if (_hostRowOf(turn, approval, announced) == toolCallId)
+          _approvalView(turn, approval, focused)!,
+    ],
   );
+}
+
+/// Строка `agent` корня, под которой стоит блок одобрения потомка, или `null`.
+///
+/// Почему: панель решения у запроса потомка одна — блок под строкой корня
+/// (PERM-4, D43 п. 2, D47 Т9). Без дерева вызовов (клиент без согласия) у
+/// запроса потомка нет своих кадров `tool_call`, и отдельная строка навсегда
+/// осталась бы `pending`, поэтому одобрение переезжает под строку корня, если
+/// она есть в ходе; иначе `null` — вызов остаётся прежним элементом «только
+/// запрос» в конце хода. С деревом (итерация 5) вызов потомка объявлен своим
+/// `tool_call` и стоит вложенной строкой: блок с панелью — у верхнего предка
+/// дерева, а вложенная строка показывает только ожидание и исход (то же
+/// одобрение лежит в её `approval`).
+ToolCallId? _hostRowOf(
+  PromptTurn turn,
+  ApprovalRequest approval,
+  Set<ToolCallId> announced,
+) {
+  final requester = approval.subagentRequester;
+  if (parseSubagentRequester(requester) == null) {
+    return null;
+  }
+  final own = approval.toolCall.id;
+  if (announced.contains(own)) {
+    return _treeRootOf(turn, own, announced);
+  }
+  final parent = requester?['parentToolCallId'];
+  if (parent is! String) {
+    return null;
+  }
+  final host = ToolCallId(parent);
+  return announced.contains(host) ? host : null;
+}
+
+/// Верхний предок вызова [id] в дереве хода или `null`, если вызов сам на
+/// верхнем уровне (родителя нет, он неизвестен или родители зациклены).
+///
+/// Совпадает с раскладкой `buildToolCallTree`: неизвестный родитель — верхний
+/// уровень (D21).
+ToolCallId? _treeRootOf(
+  PromptTurn turn,
+  ToolCallId id,
+  Set<ToolCallId> announced,
+) {
+  // Та же карта, что у `buildToolCallTree`: вызов цикла A↔B остаётся на
+  // верхнем уровне и в обеих раскладках, иначе одно одобрение получило бы две
+  // панели (PERM-4).
+  final parents = effectiveToolCallParents({
+    for (final callId in announced)
+      callId: turn.toolCalls[callId]?.parentToolCallId,
+  });
+  ToolCallId? root;
+  var cursor = id;
+  for (var parent = parents[cursor]; parent != null; parent = parents[cursor]) {
+    root = parent;
+    cursor = parent;
+  }
+  return root;
+}
+
+/// Тип вызова `agent` по записи: `subagentCall.type` → `rawInput.type`.
+String? _agentTypeOf(ToolCallRecord? record) {
+  final byCall = parseSubagentCall(record?.subagentMeta)?.type;
+  final byInput = record?.rawInput?['type'];
+  return byCall ?? (byInput is String && byInput.isNotEmpty ? byInput : null);
+}
+
+/// Спрашивающий потомок запроса с цепочкой типов для пути (D27, D43 п. 4).
+///
+/// Корень цепочки: `subagentCall.type` → `rawInput.type` → неизвестно. С
+/// деревом вызовов (D47 Т9) промежуточные звенья берутся подъёмом по
+/// `parentToolCallId` от вызова запроса; не найденное деревом звено остаётся
+/// `…`, без дерева путь прежний.
+SubagentRequester? _requesterOf(PromptTurn turn, ApprovalRequest approval) {
+  final raw = approval.subagentRequester;
+  final parsed = parseSubagentRequester(raw);
+  if (parsed == null || parsed.depth <= 1) {
+    return parsed;
+  }
+  final rootType = _agentTypeOf(
+    turn.toolCalls[ToolCallId(parsed.parentToolCallId)],
+  );
+  final withRoot = parsed.withRootType(rootType);
+
+  // Предки вызова запроса, ближайший первым.
+  final ancestors = <ToolCallId>[];
+  var cursor = approval.toolCall.id;
+  while (ancestors.length < parsed.depth) {
+    final parent = turn.toolCalls[cursor]?.parentToolCallId;
+    if (parent == null) {
+      break;
+    }
+    cursor = ToolCallId(parent);
+    ancestors.add(cursor);
+  }
+  if (ancestors.isEmpty) {
+    return withRoot;
+  }
+  // Предок k стоит на позиции `depth - 1 - k` пути; последняя позиция —
+  // спрашивающий, его тип берётся из запроса.
+  final chain = List<String>.filled(parsed.depth, '…');
+  chain[parsed.depth - 1] = parsed.type;
+  chain[0] = rootType ?? '…';
+  for (var k = 1; k < ancestors.length; k++) {
+    final position = parsed.depth - 1 - k;
+    if (position < 0) {
+      break;
+    }
+    chain[position] =
+        _agentTypeOf(turn.toolCalls[ancestors[k]]) ?? chain[position];
+  }
+  return withRoot.withChainTypes(chain);
 }
 
 /// Одобрения вызовов, о которых агент не объявлял `tool_call`.
@@ -350,22 +515,80 @@ TranscriptItem _toolItem(
 /// ACP разрешает `session/request_permission` для вызова без `tool_call`;
 /// одобрение должно быть видно, поэтому такой вызов встаёт в конец хода —
 /// место, которое ни одно событие не задало точнее.
+///
+/// Отмена хода: запись вызова пришла из `session/request_permission`, поэтому
+/// `cancelTurn` её не помечает (`cancelledByClient` ставится только объявленным
+/// `tool_call`) и вызов остался бы `queued`/`running`. Статус берётся из живой
+/// записи хода (`turn.toolCalls`), а не из снимка в одобрении: поздний
+/// `tool_call_update` ходу в `cancelling` ещё принимается. Вызов становится
+/// `cancelled`, только если одобрение отменено, ход в `cancelling` или уже
+/// завершён (`completed`, `failed`, `cancelled` и прочие; ход может закрыться
+/// ошибкой или `end_turn` вместо `stopReason: cancelled`), статус записи
+/// нетерминален (`pending`, `inProgress`) и она не помечена
+/// `cancelledByClient` (D27, Q38: один тег «Cancelled» в app). После
+/// завершения хода нетерминальный вызов с отменённым одобрением тоже
+/// показывается `cancelled`: он так и не исполнился. Отмена одобрения
+/// отдельной командой при идущем ходе, терминальные `completed`/`failed` и
+/// одобрения, выбранные до отмены, статус не меняют.
+///
+/// Запрос потомка при строке корня сюда не попадает: его одобрение лежит в
+/// `ToolCallItem.childApprovals` строки корня (D43 п. 2). [announced] —
+/// вызовы, объявленные `tool_call` хода.
 List<TranscriptItem> _unannouncedApprovalItems(
   PromptTurn turn,
   Set<ToolCallId> seen,
   ApprovalRequestId? focused,
+  Set<ToolCallId> announced,
 ) => [
   for (final approval in turn.approvals.values)
-    if (seen.add(approval.toolCall.id))
+    if (_hostRowOf(turn, approval, announced) == null &&
+        seen.add(approval.toolCall.id))
       TranscriptItem.toolCall(
         id: _toolItemId(turn.id, approval.toolCall.id),
         toolCallId: approval.toolCall.id,
         title: approval.toolCall.title,
-        details: _callView(approval.toolCall),
-        approval: _approvalView(approval, focused),
+        details: _callView(
+          _cancelledWithTurn(turn, approval),
+          subagent: _requesterOf(turn, approval),
+        ),
+        approval: _approvalView(turn, approval, focused),
       ),
 ];
 
+/// Запись вызова без `tool_call` для показа: при отмене хода вместе с
+/// одобрением нетерминальный вызов помечается отменённым (см.
+/// [_unannouncedApprovalItems]).
+ToolCallRecord _cancelledWithTurn(PromptTurn turn, ApprovalRequest approval) {
+  final record = turn.toolCalls[approval.toolCall.id] ?? approval.toolCall;
+  // `cancelling` или завершённый ход: после отмены ход может закрыться не
+  // `stopReason: cancelled`, а ошибкой `session/prompt` (`failed`) или
+  // нарушившим ACP `end_turn` (`completed`).
+  final turnCancelled =
+      turn.status == PromptTurnStatus.cancelling || turn.isTerminal;
+  final nonTerminal =
+      record.status == ToolCallStatus.pending ||
+      record.status == ToolCallStatus.inProgress;
+  if (approval.status == ApprovalStatus.cancelled &&
+      turnCancelled &&
+      nonTerminal &&
+      !record.cancelledByClient) {
+    return record.copyWith(cancelledByClient: true);
+  }
+  return record;
+}
+
+/// Заметки конца хода: `emptyTurn`, `turnStopped` и `error`.
+///
+/// Почему: ход не должен заканчиваться молча (D27, Q33), а причину берём
+/// только из `stopReason` ответа на `session/prompt`.
+///
+/// Ограничение: после `session/load` у ходов реплея нет `stopReason` — ACP его
+/// в реплее не передаёт (`03-Session Setup.md`, «Loading a Session»), а исход
+/// хода клиент не хранит. Поэтому у таких ходов нет `turnStopped`; ход реплея
+/// без вывода агента по-прежнему получает `emptyTurn` («stopReason unknown»).
+/// Это принятое решение, а не дефект проекции: D27,
+/// Q36 (а); сценарий spec `acp-client-kit` «Реплей session/load без заметки
+/// исхода». Живой ход после загрузки получает заметку как обычно.
 List<TranscriptItem> _notices(
   PromptTurn turn, {
   required bool hasAgentItems,
@@ -374,13 +597,23 @@ List<TranscriptItem> _notices(
   // дал бы вторую строку «Completed with stopReason unknown» — у такого хода
   // нет stopReason (spec `acp-client-kit`: `error` для сорвавшегося хода,
   // `emptyTurn` — для завершённого без вывода агента).
+  // Ход, остановленный по лимиту или отказом, объясняет заметка `turnStopped`
+  // ниже — она заменяет `emptyTurn` (D27, Q33).
   if (!hasAgentItems &&
       turn.isTerminal &&
-      turn.status != PromptTurnStatus.failed)
+      turn.status != PromptTurnStatus.failed &&
+      _stoppedNoticeText(turn) == null)
     TranscriptItem.notice(
       id: '${turn.id.value}/completed',
       kind: NoticeKind.emptyTurn,
       text: 'Completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
+    ),
+  if (turn.status != PromptTurnStatus.failed &&
+      _stoppedNoticeText(turn) != null)
+    TranscriptItem.notice(
+      id: '${turn.id.value}/stopped',
+      kind: NoticeKind.turnStopped,
+      text: _stoppedNoticeText(turn)!,
     ),
   if (turn.status == PromptTurnStatus.failed && turn.failureMessage != null)
     TranscriptItem.notice(
@@ -392,24 +625,59 @@ List<TranscriptItem> _notices(
     ),
 ];
 
-ToolCallView _callView(ToolCallRecord record) => ToolCallView(
-  kind: record.kind,
-  status: switch (record.status) {
-    _ when record.cancelledByClient => ToolCallStatusView.cancelled,
-    ToolCallStatus.pending => ToolCallStatusView.queued,
-    ToolCallStatus.inProgress => ToolCallStatusView.running,
-    ToolCallStatus.completed => ToolCallStatusView.succeeded,
-    ToolCallStatus.failed => ToolCallStatusView.failed,
+/// Лимиты бюджета хода, которые заметка называет по имени (D10 change
+/// `add-usage-extension`): значения `BudgetLimit.name` агента CodeLab.
+/// Незнакомое значение (открытое множество) даёт прежний текст — подставлять
+/// в заметку произвольную строку от агента нельзя.
+const _knownBudgetLimits = {'steps', 'tokens', 'cost', 'duration', 'deadline'};
+
+/// Текст заметки исхода хода (D27, Q33); `null` — заметка не нужна.
+/// Смысл причин — `docs/protocols/acp/protocol/05-Prompt Turn.md`.
+///
+/// Принимает ход, а не только `stopReason`: при `max_turn_requests` агент
+/// CodeLab называет исчерпанный лимит (`PromptTurn.budgetExceeded`, D10,
+/// D21 Т6). Функция общая для инкрементальной проекции и эталона
+/// `projectTranscript`, поэтому они остаются равными.
+String? _stoppedNoticeText(PromptTurn turn) => switch (turn.stopReason) {
+  StopReason.maxTokens =>
+    'The model reached its token limit, so the turn ended.',
+  StopReason.maxTurnRequests => switch (turn.budgetExceeded) {
+    final limit? when _knownBudgetLimits.contains(limit) =>
+      'The turn stopped: budget exceeded: $limit.',
+    _ => 'The turn reached the limit of model requests.',
   },
-  command: _command(record),
-  rawInput: record.rawInput,
-  paths: [for (final location in record.locations) location.path],
-  textOutput: [
-    for (final item in record.content)
-      if (item case ToolCallContentBlock(content: TextContent(:final text)))
-        text,
-  ],
-);
+  StopReason.refusal => 'The agent refused to continue.',
+  StopReason.endTurn || StopReason.cancelled || null => null,
+};
+
+ToolCallView _callView(ToolCallRecord record, {SubagentRequester? subagent}) =>
+    ToolCallView(
+      kind: record.kind,
+      status: switch (record.status) {
+        _ when record.cancelledByClient => ToolCallStatusView.cancelled,
+        // Агент сообщил исход: `failed` + `outcome: cancelled` — отмена для
+        // любого вызова; прочие значения остаются `failed` (D41 п. 1).
+        ToolCallStatus.failed when record.outcome == 'cancelled' =>
+          ToolCallStatusView.cancelled,
+        ToolCallStatus.pending => ToolCallStatusView.queued,
+        ToolCallStatus.inProgress => ToolCallStatusView.running,
+        ToolCallStatus.completed => ToolCallStatusView.succeeded,
+        ToolCallStatus.failed => ToolCallStatusView.failed,
+      },
+      command: _command(record),
+      rawInput: record.rawInput,
+      paths: [for (final location in record.locations) location.path],
+      textOutput: [
+        for (final item in record.content)
+          if (item case ToolCallContentBlock(content: TextContent(:final text)))
+            text,
+      ],
+      subagentCall: parseSubagentCall(record.subagentMeta),
+      subagentSummary: parseSubagentSummary(record.subagentMeta),
+      subagentFailure: parseSubagentFailure(record.subagentMeta),
+      subagent: subagent,
+      parentToolCallId: record.parentToolCallId,
+    );
 
 String? _command(ToolCallRecord record) {
   final command = record.rawInput?['command'];
@@ -445,6 +713,7 @@ ApprovalRequestId? _earliestPendingApprovalId(PromptTurn turn) {
 }
 
 ApprovalStateView? _approvalView(
+  PromptTurn turn,
   ApprovalRequest? approval,
   ApprovalRequestId? focused,
 ) {
@@ -455,6 +724,7 @@ ApprovalStateView? _approvalView(
     return ApprovalStateView.resolved(
       label: _resolvedLabel(approval),
       outcome: _resolvedOutcome(approval),
+      subagent: _requesterOf(turn, approval),
     );
   }
   return ApprovalStateView.pending(
@@ -466,6 +736,8 @@ ApprovalStateView? _approvalView(
     options: approval.options,
     focused: approval.id == focused,
     critical: approval.critical,
+    subagent: _requesterOf(turn, approval),
+    toolTitle: approval.toolCall.title,
   );
 }
 

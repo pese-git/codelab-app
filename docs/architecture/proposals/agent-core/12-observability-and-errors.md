@@ -8,7 +8,7 @@
 
 Сбои агента — обычная часть работы: сеть рвётся, модель отказывает, команда падает. Ядро
 различает три класса ошибок, у каждого своя форма и свой путь к пользователю. Всё, что уходит
-в лог, журнал сессии и события, проходит редакцию секретов. ACP-адаптер ведёт protocol trace,
+в лог, журнал сессии и события, проходит редакцию секретов — после 1.0 (§12.4; решение пользователя 2026-11-04 R8-1); до 1.0 действуют правило лога §12.3 и вычистка `ProviderConfig.secrets` из текстов ошибок провайдера. ACP-адаптер ведёт protocol trace,
 по которому восстанавливается любой сеанс.
 
 ## 12.2. Контракт: три класса ошибок
@@ -46,6 +46,8 @@
 | `exec` с кодом 1 | окружение | результат-ошибка с выводом и кодом; ход продолжается |
 | в профиле `mobile` включён `shellExec` | конфигурация | `HostWiringException` при `buildAgentCore`, агент не стартует |
 | 429 без свободного ключа и резервной модели (после MVP, §17.10.4.1) | работа | `AgentError(cls: provider, errorClass: rateLimited, rateLimit: …)`, текст `Rate limit reached for openai/gpt-4.1: too many requests. Resets in 3 h.`; тело ответа — только лог debug |
+| `api_key_secret: codelab/openai`, секрет не задан ни в хранилище, ни в `CODELAB_SECRET_CODELAB_OPENAI` (с этапа 8.9; change `add-agent-secret-store`, D4) | работа | при первом запросе к провайдеру, без HTTP-запроса: `AgentError(cls: provider, errorClass: auth)`, текст `API key secret codelab/openai is not set. Run: codelab secret set codelab/openai`; хранилище недоступно — `… cannot be read: <backend> is unavailable (<reason>). Set CODELAB_SECRET_CODELAB_OPENAI or fix the secret store`. Цепочка провайдера не кэшируется: следующий ход разрешает ключ заново. ACP — тот же путь, что у 401 (§13.8) |
+| в конфиге `secrets.backend: keychain` (в 1.0; change `add-agent-secret-store`, D7) | конфигурация | проблема `secrets.backend: keychain is not supported yet (supported: auto, env, file)`; бинарь — stderr и код `64` до старта транспорта |
 | в конфиге неизвестный ключ `compaction.reserve_token` | конфигурация | `ConfigLoadResult.issues` с `ConfigIssue(kind: unknownKey)`, текст `config.yaml:3:3: compaction.reserve_token: unknown key (did you mean reserve_tokens?)`; бинарь — stderr и код `64` до старта транспорта, `orThrow()` — `ConfigException` |
 
 ## 12.3. Контракт: Logger
@@ -64,7 +66,7 @@ final class LogRecord {           // то, что получает sink хост
 ```
 
 `Logger` — порт: ядро пишет в него, хост решает, куда (stderr для `codelab-agent serve --stdio`,
-файл `$CODELAB_HOME/logs/agent.log`, лог-панель codelab-app). stdout в режиме stdio занят ACP —
+файл лога, если он задан (§12.3.1), лог-панель codelab-app). stdout в режиме stdio занят ACP —
 писать туда логи запрещено.
 
 `event` — стабильное имя в формате `<область>.<действие>` или `<область>.<объект>.<действие>`
@@ -74,7 +76,7 @@ final class LogRecord {           // то, что получает sink хост
 |---|---|
 | `llm` | `llm.request.start`, `llm.request.end`, `llm.retry`, `llm.fallback`, `llm.finish_reason.unknown` (§2.7) |
 | `turn` | `turn.start`, `turn.end`, `turn.budget_exceeded` |
-| `tool` | `tool.start`, `tool.end`, `tool.validation_failed`, `tool.validate.error` (`debug`; `tool`, `tool_call_id` — исключение при валидации, §6.3.1 шаг 3), `tool.pairing_repaired`, `tool.misuse.warned`, `tool.misuse.blocked` (§6.3.7) |
+| `tool` | `tool.start`, `tool.end`, `tool.validation_failed`, `tool.validate.error` (`debug`; `tool`, `tool_call_id` — исключение при валидации, §6.3.1 шаг 3), `tool.present.error` (`debug`; `tool`, `tool_call_id`, исключение — в `error` и `stack` записи — сбой `present()` инструмента при объявлении; вызов продолжается с заголовком по имени инструмента, §6.3.1), `tool.pairing_repaired`, `tool.misuse.warned`, `tool.misuse.blocked` (§6.3.7), `tool.lock.wait`, `tool.lock.cancelled` (`debug`; поля `tool` и `tool_call_id`, у `tool.lock.cancelled` ещё `reason` — вид причины отмены; путь не пишется. Подход к захвату пути и прерывание ожидания отменой хода, §6.3.1 шаг 6, TOOL-7), `tool.abandon.error` (`warning`; `session_id`, `tool`, `tool_call_id`, `error_class` (`runtimeType` исключения, change `add-subagents-and-tasks` D41), исключение — в `error` и `stack` записи — по записи на каждый упавший `abandon` при откате объявленных вызовов группы: после упавшего объявления или при отмене хода до исполнения группы; места в очереди пути к этому моменту уже отпущены; ход завершается `failed` — с исходной ошибкой объявления или с первой ошибкой отката при отмене; сбой самого логгера глотается, §5.5 шаги 3a и 3c, §5.5.1, §6.3.1 «Фазы и откат») |
 | `tools` | `tools.switch.no_match` (§6.3.8) |
 | `loop` | `loop.empty_response`, `loop.empty_response.stopped` (§5.4.1) |
 | `prompts` | `prompts.override` (§11.6.1) |
@@ -84,7 +86,7 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp` | `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (`trace`), `mcp.servers.replace_failed`, `mcp.tools.changed`, `mcp.tools.refresh_failed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (`debug`) (этап 8, поля ниже) |
 | `acp` | `acp.frame.in`, `acp.frame.out`, `acp.frame.bad`, `acp.cancel.no_turn`, `acp.prompt.rejected`, `acp.detached`, `acp.client_capabilities.absent` (§13.2), `acp.terminal.release_failed` (§13.9) |
 | `host` | `host.plan`, `host.config.loaded`, `serve.config.invalid` (бинарь `serve`, ошибка загрузки конфига) |
-| `config` | `config.env.unknown`, `config.project.untrusted_key` (§15.3), `config.key.not_applied` (§15.5), `config.provider.key_missing`, `config.secret.unavailable`, `config.file.ignored`, `config.legacy_found` (§15.7), `config.session.outside_root` (§10.3); таблица ниже |
+| `config` | `config.env.unknown`, `config.project.untrusted_key` (§15.3), `config.key.not_applied` (§15.5), `config.provider.key_missing`, `config.file.ignored`, `config.legacy_found` (§15.7), `config.session.outside_root`, `config.session.project`, `config.session.project_invalid`, `config.session.process_keys_ignored`, `config.session.restart_pending` (§10.3); таблица ниже |
 
 События `mcp.*` (этап 8; `openspec/changes/archive/2026-10-29-add-agent-mcp-client/design.md`, D13). `session_id` есть
 всегда, `server` — `name` сервера:
@@ -96,7 +98,7 @@ final class LogRecord {           // то, что получает sink хост
 | `mcp.server.connect` | info | `transport`, `era`, `protocol_version`, `server_info` (`name`/`version`, только для диагностики), `tools`, `duration_ms` |
 | `mcp.server.failed` | warning | `transport`, `reason` (≤ 200 символов, правила ниже) |
 | `mcp.server.closed` | info | `transport`, `exit_code` (stdio) или `reason` (HTTP: `HTTP session expired`); пишет транспорт через логгер сессии из `McpTransportFactory.open` |
-| `mcp.server.stderr` | trace | `line` (≤ 4 КиБ); пишет транспорт через логгер сессии. Уровень trace, а не debug: профиль `--stdio` по умолчанию включает debug, а логгер хоста секреты не редактирует (до 8.11) |
+| `mcp.server.stderr` | trace | `line` (≤ 4 КиБ); пишет транспорт через логгер сессии. Уровень trace, а не debug: профиль `--stdio` по умолчанию включает debug, а логгер хоста секреты не редактирует (редакция — после 1.0, §12.4) |
 | `mcp.servers.replace_failed` | warning | `error` (`runtimeType`) — `AgentSession.setMcpServers` бросил при `session/load` открытой сессии (§13.5) |
 | `mcp.tools.changed` | info | `added`, `removed` |
 | `mcp.tools.refresh_failed` | warning | `reason` (`tools/list failed (code N)`, `no answer to tools/list`) — перечитывание `tools/list` после `list_changed` не удалось, прежний набор инструментов остаётся |
@@ -108,7 +110,7 @@ final class LogRecord {           // то, что получает sink хост
 События `config.*` и загрузки конфига (change `add-agent-configuration`, D16; новые отмечены).
 Значения ключей, переменных и секретов в поля не попадают: только пути ключей, имена переменных и
 секретов, источники и пути файлов. Каждое событие предупреждения загрузки (`config.*` ниже, кроме
-`config.session.outside_root`, и `mcp.server.skipped`) несёт также поле `message` — английский текст
+`config.session.*`, и `mcp.server.skipped`) несёт также поле `message` — английский текст
 `ConfigIssue.message` без значений, та же строка, что печатает `config check`:
 
 | Событие | Уровень | Поля |
@@ -117,20 +119,37 @@ final class LogRecord {           // то, что получает sink хост
 | `serve.config.invalid` | error | `issues` — список `{source, line, column, key, kind}`; те же строки в stderr, код выхода `64` |
 | `config.env.unknown` | warning | `message` |
 | `config.project.untrusted_key` (новое) | warning | `key`, `source`; в том числе смягчение `permissions.mode` и `trusted_projects` в проектном слое (§15.3) |
+| `config.secret.in_file` (8.11) | warning | `key`, `source`; литеральный секрет в файле конфига, текст по шаблону §17.5.4 без значения (решение пользователя 2026-11-04 R8-4, design.md change `add-config-literal-secrets-and-migrate`, D4) |
 | `config.key.not_applied` (новое) | warning | `key`, `source`; ключ без потребителя или раздел «после MVP», один раз на лист за загрузку (§15.5) |
 | `config.provider.key_missing` (новое) | warning | `provider`, `variable` |
-| `config.secret.unavailable` (новое) | warning | `key` |
 | `config.file.ignored` (новое) | warning | `path`, `hint` (`config.yml` рядом с `config.yaml`) |
 | `config.legacy_found` (новое) | warning | `files` (только пути; содержимое файла не читается, §15.7) |
 | `config.session.outside_root` (новое) | info | `session_id`, `cwd`, `config_root`; пишется логгером сессии, один раз на нормализованный `cwd` (§10.3) |
+| `config.session.project` | info | `session_id`, `cwd`, `process_root`, `trusted`; сессия другой папки при хосте с портом `ProjectConfigLoader`, один раз на каноническую папку (§10.3). `process_root` — канонический корень процесса (`CoreConfig.projectRoot` применённого снимка): относительно него папка «другая», а конфигурация сессии читается из слоёв `cwd`. Поле `config_root` переименовано в `process_root` (design.md change `defer-restart-keys-in-folder-sessions`, D6) |
+| `config.session.project_invalid` | error | `cwd`, `issues` (`source`, `line`, `column`, `key`, `kind`; без текстов и значений) — отказ в сессии другой папки, в том числе по отложенной правке `permissions.*` при проектных слоях папки (D4 того же change) |
+| `config.session.process_keys_ignored` | warning | `session_id`, `keys` (ключи показа, без значений); один раз на папку. Ключ процесса приписывается папке, только если `values` её загрузки отличается от `withoutProjectValues` той же загрузки; с применённым снимком не сравнивается, поэтому глобальная правка после старта предупреждения не даёт (D8 того же change) |
+| `config.session.restart_pending` (новое) | warning | `session_id`, `cwd`, `keys` — отсортированные ключи показа частей, подставленных из применённого снимка (`providers.<id>`, `mcp.servers[<name>]`, `agent.default_model`, листья `permissions.*`), как у `config.reload.restart_required`, без значений; на каждое открытие сессии другой папки с непустой подстановкой (§10.3, D6 того же change) |
 | `mcp.server.skipped` | info | `server`, `reason: "disabled in config"` (новая причина для `enabled: false`), `message` |
 
 Прежние `config.legacy_ignored`, `config.legacy_key_dropped` и `config.legacy_active` удалены:
-`codelab.toml` не читается (§15.7).
+`codelab.toml` не читается (§15.7). `config.secret.unavailable` (заглушка 8.5 для ссылок на
+секреты) снято на этапе 8.9: ссылки разрешаются при запросе и подключении, а не при загрузке
+(change `add-agent-secret-store`, D4, D10).
+
+События `secrets.*` (этап 8.9, §17.5.4; change `add-agent-secret-store`, D10). Значение секрета, его
+длина, префикс и хеш в поля не попадают никогда, в том числе при `--debug-secrets` (CFG-10):
+
+| Событие | Уровень | Поля | Когда |
+|---|---|---|---|
+| `secrets.lookup` | info | `name`, `purpose` (путь ключа конфига), `source` (`cache`, `env` или id бэкенда), `found` | только `--debug-secrets` / `CODELAB_DEBUG_SECRETS=1`, на каждое обращение к `SecretResolver`; уровень лога режим не меняет |
+| `secrets.backend.selected` | info | `backend`, `path` (`secrets.yaml` или `null`), `reason` (у `auto` — причина выбора `env`; у явного выбора — `configured: secrets.backend: env` или `configured: secrets.backend: file`; у `codelab-agent serve --llm-script` — `backend: env`, `reason: forced by --llm-script`) | выбор бэкенда, один раз на процесс |
+| `secrets.backend.unavailable` | warning | `backend`, `reason` | отказ хранилища при чтении (например, `file` по правам), один раз на пару `(backend, reason)` |
+| `secrets.backend.plaintext` | warning | `path` | бэкенд `file`, при каждом старте хоста |
+| `secrets.file.refused` | warning | `path`, `mode` (восьмеричная строка) или `reason`: `symlink`, `home_symlink`, `home_writable` (с `mode`), `home_owner`, `tmp_dir_symlink`, `tmp_dir_mode`, `wide_after_write` (с `removed`), `too_large` | отказ бэкенда `file`: права `secrets.yaml` шире `0600`, ссылка, `$CODELAB_HOME` — ссылка, с записью для группы/остальных или чужого владельца, небезопасный `.secrets-tmp`, широкие права после записи, которые `chmod 600` не исправил, файл больше 1 МиБ при чтении; один раз на процесс и путь независимо от причины |
 
 В поля НЕ попадают значения `env`, `headers`, `args`, `Mcp-Session-Id`, `Mcp-Param-*`, тела запросов
 и ответов; причины ошибок транспорта формирует наш код, без текста заголовков (OBS-инварианты,
-тест `mcp_logs_no_secrets_test.dart`). Редакция секретов MCP в журнале — 8.11.
+тест `mcp_logs_no_secrets_test.dart`). Редакция секретов MCP в журнале — после 1.0 (§12.4, R8-1).
 
 `reason` событий `mcp.server.skipped`, `mcp.server.failed` и `mcp.tools.refresh_failed` содержит
 только текст нашего кода: `message` и `data` ошибки сервера, неизвестный `resultType` и
@@ -162,8 +181,40 @@ final class LogRecord {           // то, что получает sink хост
 порта; в поле `message` — только тип исключения). Коды содержимого шаблонов (D3): `unknown_key`,
 `invalid_value`, `empty_body`, `too_large` — `error`; `invalid_name`, `reserved_name` — `warning`;
 `shadowed`, `untrusted_project` — `info`; запись `*.md`, которая не обычный файл (FIFO, сокет,
-устройство), — `unreadable` (`warning`). Коды определений агентов (D10): `invalid_value`, `unknown_key`, `empty_body`, `too_large`, `duplicate` (на каждый файл, оба пути в сообщении) — `error`; `shadowed`, `untrusted_project` — `info`. Путь в `project_files.diagnostic` и `project_context.loaded` не
+устройство), — `unreadable` (`warning`). Ошибки frontmatter шаблонов и определений (D3, пункт 1):
+`syntax` (незакрытый `---`, неверный YAML) и `profile` (нарушение строгого профиля CFG-21: якорь,
+тег, повторяющийся ключ) — `error`, с путём, строкой и столбцом в координатах файла. Коды определений агентов (D10): `invalid_value`, `unknown_key`, `empty_body`, `too_large`, `duplicate` (на каждый файл, оба пути в сообщении) — `error`; `shadowed`, `untrusted_project` — `info`. Путь в `project_files.diagnostic` и `project_context.loaded` не
 экранируется, в отличие от атрибута `path` блока в промпте (§11.5).
+
+Этап 8.10 (design.md change `add-config-writer-and-reload`, D14; имена — agent-core §17.5.9).
+Значения ключей, подстановок и секретов не пишутся ни в одно поле; `keys` — пути ключей:
+
+| Событие | Уровень | Поля |
+|---|---|---|
+| `config.preconfig.shadowed` | info | `by: "flags"` — флаги `--provider-type`/`--provider-config` затенили `CODELAB_PROVIDER_*` |
+| `config.write` | info | `path`, `keys` |
+| `config.write.stale_lock` | warning | `path`, `age_ms` — lock старше 10 с удалён |
+| `config.watch.debounce` | debug | `path` — замечено событие ФС по наблюдаемому файлу, debounce (пере)запущен |
+| `config.watch.fallback` | info | `path`, `reason` (`runtimeType`) — ошибка потока событий, файл переведён на опрос |
+| `config.watch.failed` | warning | `path`, `error_class` — исключение опроса, опрос продолжается |
+| `config.reload.applied` | info | `keys`, `restart_required` |
+| `config.reload.noop` | debug | — |
+| `config.reload.failed` | error | `sources`, `issues` (`source`, `line`, `column`, `key`, `kind`) или `error_class` — сбой перезагрузки, запущенной сигналом |
+| `config.reload.restart_required` | warning | `keys`; в том числе ключи, ослабляющие права (R0-1): `permissions.*`, `trusted_projects`, `mcp.servers[<name>]` новых и изменённых stdio-серверов; правки, способные направить секрет на другой адрес (R0-4): `providers.<id>`, `mcp.servers[<name>]` HTTP-серверов с подстановкой `${…}`, ссылки на модели нового отложенного провайдера |
+| `config.reload.model_orphaned` | info | `session_id`, `model` (`provider/model`) — модель сессии исчезла из каталога, сессия работает на прежней функции; один раз на сессию и модель |
+| `mcp.server.state` | debug | `session_id`, `server`, `from`, `to` |
+| `mcp.server.retry` | info | `session_id`, `server`, `attempt`, `delay_ms` |
+| `command.builtin` | info | `session_id`, `name`, `subcommand` (без аргументов) |
+| `command.builtin.cancelled` | info | `session_id`, `name`, `subcommand` — встроенная команда отменена `session/cancel` или закрытием сессии |
+| `command.builtin.failed` | warning | `session_id`, `name`, `subcommand`, `error_class` (`runtimeType`) — исключение внутри встроенной команды; ход завершён `AgentError` + `TurnEnded(failed)`, текст исключения не пишется (D12) |
+| `config.check.failed` | warning | `session_id`, `error_class` (`runtimeType`) — загрузка у `/config check` бросила исключение; текст исключения не пишется |
+
+С 8.10 `mcp.server.failed` пишется на 1-м и каждом 10-м подряд сбое сервера, `mcp.server.retry` — на
+остальных, `mcp.server.connect` — при каждом успешном подключении, в том числе повторном; причины —
+тексты кода CodeLab, без текстов сервера (D11). Сбой ручного действия `/mcp` (`reconnect`, `setEnabled`) — тоже
+`mcp.server.failed` по прежней схеме `{session_id, server, transport, reason}` с добавленным полем
+`action` (`reconnect` | `enable` | `disable`) и `reason: "MCP action failed: <runtimeType>"` (D12). `logging.level` в 1.0 — `restartRequired` (OQ5):
+уровень логгера принадлежит хосту, а канала «хост, примени новые настройки хоста» в ядре нет.
 
 После MVP (§17) добавляются области:
 
@@ -173,9 +224,6 @@ final class LogRecord {           // то, что получает sink хост
 | `skills` | `skills.load`, `skills.catalog.truncated`, `skills.operative.dropped`, `skills.operative.truncated` (§17.2) |
 | `subagent` | `subagent.start`, `subagent.end`, `subagent.type_overridden`, `subagent.cancel_grace_exceeded`, `subagent.approval_unavailable` (§17.3), `subagent.follow_up` {`subagentId`, `run`, `kind`: `send` \| `resume`}, `subagent.follow_up_rejected` {`subagentId`, `reason`}, `subagent.observe` {`subagentId`, `last`} (§17.3.8.1) |
 | `spill` | `spill.write`, `spill.failed`, `spill.missing`, `spill.orphan_deleted` (§17.4) |
-| `config` | `config.reload.applied`, `config.reload.failed`, `config.reload.noop`, `config.reload.restart_required`, `config.preconfig.shadowed`, `config.write` (§17.5) |
-| `secrets` | `secrets.lookup` (только `--debug-secrets`), `secrets.backend.unavailable`, `secrets.backend.plaintext` (§17.5.4) |
-| `mcp` (дополнение) | `mcp.server.state`, `mcp.server.retry` (§17.5.7); `mcp.tools.changed` уже в MVP |
 | `session` (дополнение) | `session.lease.takeover`, `session.lease.lost`, `session.branch_summary.failed`, `session.fork.start`, `session.fork.end`, `session.fork.failed` (§17.6); `session.sealed` (info), `session.sealed.dropped` (warning, один раз на вид записи), `session.title_probe` (debug) (§8.5.1, §8.10.1); `session.search` (debug: `scope`, `terms` — число, `scanned`, `hits`, `truncated`, `skipped`, `durationMs`; без текста запроса и сниппетов) (§17.6.17) |
 | `steer` | `steer.accepted`, `steer.refused` (§17.7.3.1) |
 | `lsp` | `lsp.server.start`, `lsp.server.ready`, `lsp.server.stop`, `lsp.server.crash`, `lsp.server.failed`, `lsp.server.stderr` (`debug`), `lsp.request.timeout`, `lsp.frame.bad`, `lsp.sync.failed`, `lsp.edit.rollback` (§17.8.10) |
@@ -233,20 +281,24 @@ final class LogRecord {           // то, что получает sink хост
 редакции (§12.4): `Logger` редактирует запись один раз и раздаёт готовый `LogRecord` всем sink.
 
 **Путь** — первое заданное значение: флаг `--log-file <path>` → переменная `CODELAB_LOG_FILE` →
-ключ `logging.file` (по умолчанию `$CODELAB_HOME/logs/agent.log`, §15.4). Флаг и переменная есть у
-`codelab-agent serve` (`--stdio` и `--ws`) и у `codelab` (встроенный агент пишет в этот файл; лог
-клиента — по правилам клиента, [`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §9.11).
+ключ `logging.file` (§15.4). Значения по умолчанию нет: если ни одно не задано, файл не пишется и
+каталог `$CODELAB_HOME/logs` не создаётся (design.md change `add-agent-configuration`, OQ5 (а);
+`openspec/specs/agent-binary`; `HostSettings.logFile` равен `null`, пока ключ не задан). Файл лога
+открывает только `codelab-agent serve` (`--stdio` и `--ws`; `serve_config.dart`, `logSettings`). У
+`codelab` флага `--log-file` нет, а встроенный агент в `codelab` и app `logging.file` пока не
+применяет — после MVP (E-16, [план этапа 6](../dart-agent-and-clients/09-11-stage-6-cli-mvp.md));
+лог клиента — по правилам клиента ([`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §9.11).
 `~` раскрывается, относительный путь — от рабочего каталога процесса.
-До этапа 8 бинарь `codelab-agent` конфиг не читает (§15.6), поэтому значения по умолчанию
-`logging.file` у него нет: файл пишется, только если задан флаг или переменная (OpenSpec change
-`add-codelab-agent-binary`, design.md D5).
+До этапа 8 бинарь `codelab-agent` конфиг не читал (§15.6) и писал файл, только если задан флаг или
+переменная (OpenSpec change `add-codelab-agent-binary`, design.md D5); с чтением конфига добавился
+явно заданный `logging.file`, но не значение по умолчанию.
 
 | Хост | Основной sink | Файл |
 |---|---|---|
 | `codelab-agent serve --stdio` | stderr | путь выше |
 | `codelab-agent serve --ws` | stderr | путь выше |
-| `codelab` (встроенный агент) | нет (терминал занят интерфейсом) | путь выше |
-| codelab-app (встроенный агент) | лог-панель | `logging.file` (флаг и переменная не читаются) |
+| `codelab` (встроенный агент) | нет (терминал занят интерфейсом) | после MVP (E-16, план этапа 6): `--log-file` нет, `logging.file` не применяется |
+| codelab-app (встроенный агент) | лог-панель | после MVP (E-16): `logging.file` не применяется, флаг и переменная не читаются |
 
 **Правила.**
 
@@ -255,9 +307,10 @@ final class LogRecord {           // то, что получает sink хост
    `--log-file cannot point to stdout: stdout carries the ACP protocol`.
 2. Открытие при старте, до создания runtime: каталоги создаются с правами `0700`, новый файл —
    `0600`, режим дописывания (`O_APPEND`); существующий файл дописывается, не обрезается.
-3. Не удалось открыть путь из флага или переменной → ошибка запуска, код `64`, текст
-   `cannot open log file <path>: <причина ОС>`. Не удалось открыть путь из конфига (в том числе
-   по умолчанию) → warning `log.file.open_failed {path, reason}` в основной sink, работа без файла.
+3. Не удалось открыть путь — из флага, переменной или `logging.file` — → ошибка запуска, код `64`,
+   текст `cannot open log file <path>: <причина ОС>` (`openspec/specs/agent-binary`: «неоткрываемый
+   путь — ошибка использования»). Предупреждения `log.file.open_failed` и работы без файла нет:
+   значения по умолчанию, которое могло бы не открыться, тоже нет.
 4. Формат файла — JSON Lines, одна запись — одна строка:
    `{"ts":"<ISO-8601 UTC>","level":"info","event":"turn.end", <поля записи>, "error":…, "stack":…}`;
    ключи `ts`, `level`, `event` первыми, затем поля в порядке вставки, `error` и `stack` — только
@@ -281,6 +334,23 @@ $ CODELAB_LOG_FILE=/tmp/agent.log codelab-agent serve --stdio --log-file ./debug
 
 ## 12.4. Алгоритм: редакция секретов
 
+> **После 1.0** (решение пользователя 2026-11-04, R8-1; design.md change `add-config-literal-secrets-and-migrate`, D1, D2). До 1.0
+> Dart-агент работает «как Claude Code»: вывод инструментов, промпт пользователя, запрос к
+> провайдеру, журнал сессии и кадры ACP **не редактируются**. §12.4–§12.4.3 описывают цель
+> P-10 после 1.0 и в 1.0 не реализуются; упоминания «8.11» в них относятся к прежнему плану.
+> В 1.0 действуют: вычистка `ProviderConfig.secrets` (в том числе литерального `api_key`) из
+> текстов ошибок провайдера (`redactSecrets`), правило лога §12.3 (на `info` и выше нет текстов
+> сообщений и аргументов; значения секретов не пишутся ни в одно событие), предупреждение о
+> секрете в файле конфига и запрет записи литерала (CFG-9, §17.5.4). Находки ревью и решения
+> первой версии change (OQ1, OQ4, OQ5) — вход будущего change: design.md, раздел «Перенесено
+> после 1.0». Ключи `redact.*` до него — `config.key.not_applied`.
+>
+> Таблица шаблонов ниже уже используется в 8.11 для распознавания литералов в конфиге
+> (`config/inline_secrets.dart`, design.md change `add-config-literal-secrets-and-migrate`, D3) с отступлениями реализации: JWT — заголовок
+> не длиннее 256 символов, поиск без `RegExp`; схема «URL с паролем» — не длиннее 31 символа; пробелы
+> между частями — `\s{0,16}`; PEM — метка `{0,32}`, участок до строки `END`; части имени
+> «присваивания секрета» — не длиннее 64 символов.
+
 `Redactor` применяется **перед** логом, перед записью в журнал сессии, перед payload
 `AgentError`, перед отправкой текста результата инструмента модели (секрет из вывода `env` не
 должен уйти провайдеру) и (с этапа 3) перед записью файла выноса (§17.4.3, SPL-3): файл
@@ -288,13 +358,22 @@ $ CODELAB_LOG_FILE=/tmp/agent.log codelab-agent serve --stdio --log-file ./debug
 
 Источники «точных» секретов:
 
-1. значения из `SecretStore` (ключи провайдеров, токены MCP-серверов);
+1. значения из `SecretStore` (ключи провайдеров, токены MCP-серверов) — только через `SecretResolver` (п. 4);
 2. значения переменных окружения, чьи имена совпадают с `(?i)(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH)` и длина значения ≥ 8;
 3. значения заголовков `Authorization`, `X-Api-Key`, `Api-Key` из конфигурации MCP и провайдеров;
 4. после MVP (§17.5.3, §17.5.4): каждое значение, полученное через `SecretResolver`
    (`api_key_secret`, `api_key_env`, подстановка `${secret:<name>}` в `headers`/`env`,
    переопределение `CODELAB_SECRET_<…>`), и все значения `headers` предконфигурации из окружения
    (`CODELAB_PROVIDER_CONFIG`).
+
+**До 8.11** (change `add-agent-secret-store`, D10, п. 3). Хранилище секретов (8.9) появляется
+раньше `Redactor` (8.11), поэтому пункт 4 в 8.9 ещё не выполняется. Единственная дорога к
+значениям — `SecretResolver`; change 8.11 добавляет в его конструктор `Redactor` и вызов
+`addExactSecret` до возврата найденного значения — точка одна, сигнатуры вызывающих не меняются.
+До этого значения ключа и заголовков провайдера защищены существующей вычисткой
+`ProviderConfig.secrets` из текстов ошибок провайдера, а значения MCP-заголовков и `env` до
+коннектора не логируются. Остаточный риск — модель сама выведет секрет, прочитанный
+инструментом; он тот же, что для `api_key_env` сегодня, и закрывается 8.11.
 
 Шаблоны известных форматов (пишутся для CodeLab, расширяются через OpenSpec):
 
@@ -524,6 +603,10 @@ Exempt tools: write, edit, mcp__files__write_file
 
 ## 12.5. Protocol trace
 
+**Статус: после MVP.** Ключи `logging.trace` и `logging.trace_payload` схема читает, но не применяет
+(`applied: false`, предупреждение `config.key.not_applied`); trace-файл не пишется. Кадры ACP для
+проверки совместимости берутся из журнала клиента (Q11 change `switch-default-agent-to-dart`).
+
 ACP-адаптер пишет каждый JSON-RPC-кадр в trace-sink хоста (по умолчанию — файл
 `$CODELAB_HOME/logs/acp-trace.jsonl`, ротация по 10 МиБ, 3 файла). Одна строка — один кадр:
 
@@ -544,7 +627,7 @@ ACP-адаптер пишет каждый JSON-RPC-кадр в trace-sink хо�
 | `duration_ms` | для ответа — время от запроса с тем же id |
 | `error_code` | код JSON-RPC ошибки ответа или `null` |
 | `bytes` | размер кадра в UTF-8 |
-| `payload` | **только** при `logging.trace_payload = true` и только в debug-сборке; после `redactJson` |
+| `payload` | **только** при `logging.trace_payload = true` и только в debug-сборке; после `redactJson` (после 1.0, §12.4; до 1.0 payload пишется как есть — только в debug при явном флаге) |
 
 В release-сборке `trace_payload` игнорируется с предупреждением в лог (`AGENTS.md` §16).
 
@@ -562,10 +645,12 @@ final class TurnUsage {
 
 `TurnEnded.usage` — сумма `usage` всех шагов хода, включая неудачные попытки (§2.4) и вызовы
 суммаризатора при аварийном сжатии (отдельной строкой `compactionUsage`). `ModelRequested`
-несёт оценку токенов запроса (§9.3). В ACP usage не передаётся (стандартного поля нет); он
-пишется в лог `turn.end`. Форма передачи клиенту (`_meta` в ответе `session/prompt`, отдельное
-уведомление или иная) решается OpenSpec change `add-usage-extension` после этапа 9 (§16.3,
-dart-agent-and-clients §12.1.5).
+несёт оценку токенов запроса (§9.3). Usage пишется в лог `turn.end`. Стандартного поля для usage в
+ACP нет, поэтому клиенту его передаёт расширение CodeLab — уведомление `_codelab/session/usage`
+(change `add-usage-extension`, D1–D6; §13.12): снимок шага, хода и сессии и заполнения контекста,
+только соединению, объявившему `usage`. Агрегаты считает адаптер ACP на сессию сервера; итог хода —
+`TurnEnded.usage`. Вызовы суммаризатора в сумму сессии этого уведомления не входят до change
+`add-usage-ledger` (там — `summaries`, §12.6.1).
 
 ### 12.6.1. Журнал usage сессии (L-29)
 
@@ -677,14 +762,14 @@ Ledger: rebuilt from journal (214 records)
 ## 12.7. Инварианты
 
 1. **OBS-1.** Ни один публичный метод ядра не бросает для ожидаемых сбоев провайдера, сети и окружения.
-2. **OBS-2.** Секреты не попадают в лог, журнал сессии, protocol trace, payload `AgentError` и в текст результата инструмента, отправляемый модели.
+2. **OBS-2.** Секреты не попадают в лог, журнал сессии, protocol trace, payload `AgentError` и в текст результата инструмента, отправляемый модели. *После 1.0 (§12.4, R8-1); в 1.0 OBS-2 действует для лога и текстов ошибок провайдера.*
 3. **OBS-3.** Каждая запись лога о вызове инструмента содержит `session_id`, `turn_id` и `tool_call_id`.
 4. **OBS-4.** Ошибки fire-and-forget операций (фоновое сжатие, запись журнала, отправка уведомления) логируются, а не теряются.
-5. **OBS-5.** Редакция идемпотентна и применяется до сохранения, а не при показе.
+5. **OBS-5.** Редакция идемпотентна и применяется до сохранения, а не при показе. *После 1.0 (§12.4, R8-1).*
 6. **OBS-6.** В release-сборке protocol trace не содержит payload кадров.
 7. **OBS-7.** Файловый sink лога (§12.3.1) получает те же записи после той же редакции, что основной sink; ни один sink не пишет в stdout процесса с ACP по stdio.
-8. **OBS-8.** Послойная редакция сохраняет число переводов строк текста; перекрывающиеся совпадения решает слой с более высоким приоритетом; белый список не отменяет слои `exact` и `credential_files`.
-9. **OBS-9.** Результаты `write`, `edit` и инструментов из `redact.exempt_tools` не редактируются ни перед журналом, ни перед провайдером; все остальные точки таблицы §12.4.2 редактируются всегда, в том числе при `redact.enabled = false` слоем `exact`.
+8. **OBS-8.** Послойная редакция сохраняет число переводов строк текста; перекрывающиеся совпадения решает слой с более высоким приоритетом; белый список не отменяет слои `exact` и `credential_files`. *После 1.0 (§12.4, R8-1).*
+9. **OBS-9.** Результаты `write`, `edit` и инструментов из `redact.exempt_tools` не редактируются ни перед журналом, ни перед провайдером; все остальные точки таблицы §12.4.2 редактируются всегда, в том числе при `redact.enabled = false` слоем `exact`. *После 1.0 (§12.4, R8-1).*
 10. **OBS-10.** `usage.json` — чистая функция байтов журнала: одинаковый журнал даёт побайтово одинаковый файл; ядро не читает его для решений; файл, не совпадающий с журналом по `source`, пересчитывается до показа.
 
 ## 12.8. Обоснование решения
@@ -718,17 +803,19 @@ Ledger: rebuilt from journal (214 records)
 
 ## 12.9. Как проверить
 
-* Тест с секретом в env, в аргументах команды и в выводе `exec`: лог, JSONL, trace, `AgentError` и запрос к модели (scripted LLM записывает payload) не содержат значения (OBS-2).
+* После 1.0 (§12.4, R8-1): тест с секретом в env, в аргументах команды и в выводе `exec`: лог, JSONL, trace, `AgentError` и запрос к модели (scripted LLM записывает payload) не содержат значения (OBS-2).
 * Табличный тест `redact` на каждый шаблон: позитивные и негативные примеры (`sk-` в слове `task-list` не трогается), идемпотентность (OBS-5).
 * Тест-перехватчик `Logger` в сценариях с инструментами: у каждой записи `tool.*` есть корреляционные поля (OBS-3).
+* `parallel_edit_test.dart`, приёмник событий ломается после `ToolCallStarted` первого вызова параллельной группы: ровно одна запись `tool.abandon.error` с `tool_call_id` этого вызова и `error_class` — типом исключения, исключение — в поле `error` записи, путь свободен для следующего хода (§5.5.1, TOOL-7).
+* `batch_cancel_abandon_failure_test.dart`: при отмене эмит `ToolCallFinished` бросает на обоих вызовах группы — записи `tool.abandon.error` для `c1` и `c2` по порядку; при сбое объявления — запись только для упавшего отката `c1`; логгер, бросающий на `tool.abandon.error`, не меняет исход хода (§5.5.1, LOOP-1, TOOL-7).
 * Тест «сбой записи журнала»: fake `SessionStore` бросает на `append` → запись `session.append.failed` в лог, `AgentError(storage)`, `TurnEnded(failed)` (OBS-4, SES-8).
 * Тест «провайдер отвечает 500 на все 4 попытки» (`transient_retries: 3`): `prompt()` не бросает, `TurnResult.reason == failed` (OBS-1).
 * Тест release-конфигурации trace: `trace_payload = true` в release → payload отсутствует, предупреждение в логе (OBS-6).
-* `cli/log-file-tee-redacted` (`log_file_tee_test.dart`, процесс `codelab-agent serve --stdio`): с секретом в окружении и `--log-file <tmp>` — каждая запись stderr есть в файле в том же порядке, значения секрета нет ни там, ни там; stdout содержит только JSON-RPC-кадры; `CODELAB_LOG_FILE` без флага — файл по переменной; флаг и переменная вместе — побеждает флаг; `--log-file -` → код `64`; путь в несуществующем каталоге без прав → код `64`; повторный запуск дописывает файл (OBS-7).
-* `core/redaction-before-journal` (`redaction_points_test.dart`): секрет в промпте пользователя, в выводе `exec`, в `.env`, прочитанном `read`, и в выводе фоновой задачи — журнал, лог, файл выноса и payload scripted LLM не содержат значения; секрет, зарегистрированный `addExactSecret` после записи истории, заменяется в следующем запросе к модели, но не в журнале (OBS-2, OBS-9).
-* `core/redaction-preserves-line-count` (`redaction_layers_test.dart`): табличный тест на каждый слой и каждую пару перекрывающихся слоёв — победитель по приоритету; многострочный PEM внутри результата `read` с номерами строк — число строк и номера следующих строк не меняются; `redact(redact(x)) == redact(x)` на всём корпусе; git SHA и UUID не трогаются слоями 3–7, но точный секрет вида UUID заменяется; `entropy` выключен по умолчанию (OBS-5, OBS-8).
-* `core/redaction-write-results-exempt` (`redaction_exempt_test.dart`): `write` и `edit` с содержимым `API_KEY=sk-…` — результат, `diff` в журнале и аргументы в payload следующего шага без маркеров; тот же текст в результате `exec` заменён; MCP-инструмент из `redact.exempt_tools` не редактируется, не указанный — редактируется (OBS-9).
-* `redact_command_test.dart`: `/redact stats` и `/redact layers` дают фиксированный текст §12.4.3, без значений; `/redact` без аргумента — `Usage: /redact stats | layers`; ни одной записи в журнале.
+* `cli/log-file-tee-redacted` (`log_file_tee_test.dart`, процесс `codelab-agent serve --stdio`; проверка отсутствия значения секрета, попавшего в лог через редакцию, — после 1.0, §12.4): с секретом в окружении и `--log-file <tmp>` — каждая запись stderr есть в файле в том же порядке, значения секрета нет ни там, ни там; stdout содержит только JSON-RPC-кадры; `CODELAB_LOG_FILE` без флага — файл по переменной; флаг и переменная вместе — побеждает флаг; `--log-file -` → код `64`; путь в несуществующем каталоге без прав → код `64`; повторный запуск дописывает файл (OBS-7).
+* После 1.0 (R8-1): `core/redaction-before-journal` (`redaction_points_test.dart`): секрет в промпте пользователя, в выводе `exec`, в `.env`, прочитанном `read`, и в выводе фоновой задачи — журнал, лог, файл выноса и payload scripted LLM не содержат значения; секрет, зарегистрированный `addExactSecret` после записи истории, заменяется в следующем запросе к модели, но не в журнале (OBS-2, OBS-9).
+* После 1.0 (R8-1): `core/redaction-preserves-line-count` (`redaction_layers_test.dart`): табличный тест на каждый слой и каждую пару перекрывающихся слоёв — победитель по приоритету; многострочный PEM внутри результата `read` с номерами строк — число строк и номера следующих строк не меняются; `redact(redact(x)) == redact(x)` на всём корпусе; git SHA и UUID не трогаются слоями 3–7, но точный секрет вида UUID заменяется; `entropy` выключен по умолчанию (OBS-5, OBS-8).
+* После 1.0 (R8-1): `core/redaction-write-results-exempt` (`redaction_exempt_test.dart`): `write` и `edit` с содержимым `API_KEY=sk-…` — результат, `diff` в журнале и аргументы в payload следующего шага без маркеров; тот же текст в результате `exec` заменён; MCP-инструмент из `redact.exempt_tools` не редактируется, не указанный — редактируется (OBS-9).
+* После 1.0 (R8-1): `redact_command_test.dart`: `/redact stats` и `/redact layers` дают фиксированный текст §12.4.3, без значений; `/redact` без аргумента — `Usage: /redact stats | layers`; ни одной записи в журнале.
 * `core/usage-ledger-rebuild-deterministic` (`usage_ledger_test.dart`): журнал с ветками, fork, субагентом и сжатием — `rebuild` дважды даёт одинаковые байты; удалённый `usage.json` восстанавливается побайтово тем же; дописанная запись делает файл устаревшим, `/usage` пересчитывает; обрезанный ремонтом хвост — тоже; `inherited` у fork равен сумме скопированных шагов; поля `spill` не влияют на результат; вывод `/usage` совпадает с golden-текстом (OBS-10).
 
 ---

@@ -137,7 +137,12 @@ $trust''');
       final session = await host.core.runtime.createSession(
         SessionSpec(cwd: project),
       );
-      return [for (final c in session.commands) c.name];
+      // Встроенные `config` и `mcp` идут первыми (D12); здесь проверяются
+      // только шаблоны.
+      return [
+        for (final c in session.commands)
+          if (c.source == SlashCommandSource.template) c.name,
+      ];
     }
 
     expect(await commandsOf(trusted: false), ['review']);

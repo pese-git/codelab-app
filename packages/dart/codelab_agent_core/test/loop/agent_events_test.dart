@@ -16,12 +16,17 @@ String kindOf(AgentEvent event) => switch (event) {
   ToolCallFinished() => 'tool.finish',
   ToolPairingRepaired() => 'pairing',
   StepEnded() => 'step.end',
-  PlanUpdated() => 'plan',
+  TaskListChanged() => 'task_list',
   ModeChanged() => 'mode',
   AgentError() => 'error',
   TurnEnded() => 'turn.end',
   ContextCompacted() => 'compacted',
   SessionTitleChanged() => 'title',
+  ModelOptionsChanged() => 'model.options',
+  SubagentStarted() => 'subagent.start',
+  SubagentProgress() => 'subagent.progress',
+  SubagentFinished() => 'subagent.finish',
+  SubagentActivity() => 'subagent.activity',
 };
 
 void main() {

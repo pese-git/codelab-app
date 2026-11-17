@@ -1,0 +1,366 @@
+{
+  "id": "acp/prompt-subagent-tool-call",
+  "spec": [
+    "08-Tool Calls.md#creating",
+    "08-Tool Calls.md#updating",
+    "08-Tool Calls.md#status",
+    "15-Extensibility.md#the-_meta-field"
+  ],
+  "description": "Модель вызывает agent с типом explore; ребёнок делает три вызова ls и сдаёт отчёт. Клиент видит один вызов: tool_call kind think с _meta.codelab.subagent {id, type} в первом кадре (D28), in_progress, хотя бы одну строку прогресса и completed с телом отчёта без обёртки и с _meta.codelab.subagent.summary {toolCalls, tokens, durationMs} (D24); ни одного tool_call с id вызова ребёнка (change add-subagents-and-tasks, задачи 2.1, 2.8; agent-acp-server «Вызов agent», «Итог субагента»).",
+  "goals": [
+    "C-06"
+  ],
+  "extensions": [
+    "subagent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "files": {
+      "lib/auth.dart": "void login() {}\n",
+      "lib/session.dart": "void saveToken() {}\n",
+      "test/auth_test.dart": "void main() {}\n"
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "авторизац"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "agent",
+              "arguments": {
+                "type": "explore",
+                "description": "Find auth code",
+                "prompt": "Find where authentication is implemented and report the file paths."
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "Find where authentication"
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_1",
+              "name": "ls",
+              "arguments": {
+                "path": "lib"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 1000,
+          "output": 40
+        }
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_2",
+              "name": "ls",
+              "arguments": {
+                "path": "test"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 1300,
+          "output": 60
+        }
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "toolResult": {
+            "toolCallId": "call_2",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_3",
+              "name": "ls",
+              "arguments": {
+                "path": "."
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse",
+        "usage": {
+          "input": 1600,
+          "output": 50
+        }
+      },
+      {
+        "expect": {
+          "systemPrompt": {
+            "$textContains": "You are a subagent"
+          },
+          "toolResult": {
+            "toolCallId": "call_3",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Authentication lives in lib/auth.dart (login) and lib/session.dart (token storage); the tests are in test/auth_test.dart."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 2100,
+          "output": 250
+        }
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "text": "Авторизация описана в отчёте субагента."
+          }
+        ],
+        "stopReason": "stop"
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Узнай, где в проекте реализована авторизация"
+            }
+          ]
+        }
+      },
+      "note": "пользователь просит разобраться; модель поручает работу субагенту"
+    },
+    {
+      "dir": "a2c",
+      "note": "D28: с первого кадра вызов опознаётся по _meta.codelab.subagent {id, type}; id резервируется до ToolCallStarted",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_1",
+            "title": "Subagent explore: Find auth code",
+            "kind": "think",
+            "status": "pending",
+            "rawInput": {
+              "type": "explore",
+              "description": "Find auth code",
+              "prompt": "Find where authentication is implemented and report the file paths."
+            },
+            "_meta": {
+              "codelab": {
+                "subagent": {
+                  "id": {
+                    "$capture": "subagentId"
+                  },
+                  "type": "explore"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "repeat": "+",
+      "note": "строка прогресса заменяет предыдущую (content обновления заменяет коллекцию); число обновлений не фиксируется, нужна хотя бы одна",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "in_progress",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": {
+                    "$contains": "explore · "
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "отчёт — тело без обёртки <subagent-report> и без ограды; D24: summary с точными toolCalls и токенами ребёнка (4 запроса к модели: 6000 входных, 400 выходных), durationMs недетерминирован; вызовов ребёнка (call_1…call_3) клиент не видит",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_1",
+            "status": "completed",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "Authentication lives in lib/auth.dart (login) and lib/session.dart (token storage); the tests are in test/auth_test.dart."
+                }
+              }
+            ],
+            "_meta": {
+              "codelab": {
+                "subagent": {
+                  "id": "${subagentId}",
+                  "summary": {
+                    "toolCalls": 3,
+                    "tokens": {
+                      "input": 6000,
+                      "output": 400
+                    },
+                    "durationMs": {
+                      "$any": 48000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "repeat": "+",
+      "match": {
+        "$text": "Авторизация описана в отчёте субагента."
+      },
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "optional": true,
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

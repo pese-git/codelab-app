@@ -1,0 +1,179 @@
+{
+  "id": "acp/tool-kind-unknown-tolerated",
+  "spec": [
+    "08-Tool Calls.md#creating",
+    "08-Tool Calls.md#updating",
+    "08-Tool Calls.md#requesting-permission",
+    "12-Session Model.md#exiting-plan-modes",
+    "17-Schema.md#toolkind",
+    "05-Prompt Turn.md#4-check-for-completion"
+  ],
+  "description": "Посреди хода агент присылает tool_call и tool_call_update с видом kind, которого нет в схеме (future_kind), затем tool_call и session/request_permission с видом switch_mode; клиент сводит незнакомый вид к other, не ломает ход, доводит запрос разрешения до пользователя (ответ selected, а не cancelled) и принимает ответ session/prompt (требование acp-protocol-client «Неизвестный вид вызова инструмента»). Агент таких видов не порождает — только роль client.",
+  "roles": [
+    "client"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard"
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "note": "пользователь отправляет промпт",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "${sessionId}",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Привет"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_future",
+            "title": "Future tool",
+            "kind": "future_kind",
+            "status": "pending"
+          }
+        }
+      },
+      "note": "вид, которого нет в 17-Schema.md"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_future",
+            "kind": "future_kind",
+            "status": "completed"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call",
+            "toolCallId": "call_switch_mode_001",
+            "title": "Ready for implementation",
+            "kind": "switch_mode",
+            "status": "pending"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "permId"
+        },
+        "method": "session/request_permission",
+        "params": {
+          "sessionId": "${sessionId}",
+          "toolCall": {
+            "toolCallId": "call_switch_mode_001",
+            "title": "Ready for implementation",
+            "kind": "switch_mode",
+            "status": "pending",
+            "content": [
+              {
+                "type": "content",
+                "content": {
+                  "type": "text",
+                  "text": "## Implementation Plan..."
+                }
+              }
+            ]
+          },
+          "options": [
+            {
+              "optionId": "code",
+              "name": "Yes, and auto-accept all actions",
+              "kind": "allow_always"
+            },
+            {
+              "optionId": "ask",
+              "name": "Yes, and manually accept actions",
+              "kind": "allow_once"
+            },
+            {
+              "optionId": "reject",
+              "name": "No, stay in architect mode",
+              "kind": "reject_once"
+            }
+          ]
+        }
+      },
+      "note": "запрос разрешения на смену режима (12-Session Model.md#exiting-plan-modes)"
+    },
+    {
+      "dir": "c2a",
+      "note": "тест в хуке выбирает reject_once — смена режима не нужна",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${permId}",
+        "result": {
+          "outcome": {
+            "outcome": "selected",
+            "optionId": "reject"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "${sessionId}",
+          "update": {
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "call_switch_mode_001",
+            "status": "failed"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

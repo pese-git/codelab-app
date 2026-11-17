@@ -160,6 +160,8 @@ void main() {
         'duration_ms',
       },
       'mcp.server.failed': {'transport', 'reason'},
+      'mcp.server.retry': {'attempt', 'delay_ms'},
+      'mcp.server.state': {'from', 'to'},
       'mcp.tools.changed': {'added', 'removed'},
       'mcp.tools.refresh_failed': {'reason'},
       'mcp.tool.invalid': {'tool', 'reason'},

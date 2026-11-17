@@ -254,4 +254,75 @@ void main() {
       }
     });
   });
+
+  group('env -S / --split-string (PERM-11, §7.6.1)', () {
+    test('значение разбирается как текст sh -c', () {
+      for (final command in [
+        "env -S 'rm x'",
+        "env --split-string='rm x'",
+        "env -S'rm x'",
+        "env -iS 'rm x'",
+      ]) {
+        expect(_allNames(command), contains('rm'), reason: command);
+      }
+    });
+
+    test('обычный env не добавляет команд', () {
+      expect(_allNames('env FOO=1 ls'), ['ls']);
+    });
+  });
+
+  group('env -S: границы разбора (ревью)', () {
+    test('остаток после значения -S не разбирается как опции env', () {
+      expect(_allNames('env -S rm -rf /'), contains('rm'));
+      expect(_allNames("env -S'' rm -rf /"), contains('rm'));
+      expect(_allNames('env --split-string= rm -rf /'), contains('rm'));
+    });
+
+    test('значение с опциями env даёт команду', () {
+      expect(_allNames("env -S '-i rm x'"), contains('rm'));
+      expect(_allNames("env -S '-S rm x'"), contains('rm'));
+    });
+  });
+
+  group('env -S: токенизатор значения (PERM-11, §7.6.1)', () {
+    test('метасимволы shell в значении — данные аргументов', () {
+      for (final command in [
+        "env -S 'rm ; -rf x'",
+        "env -S 'rm & -rf x'",
+        "env -S 'rm | -rf x'",
+        "env -S 'rm <<x -rf'",
+      ]) {
+        expect(_allNames(command).whereType<String>(), ['rm'], reason: command);
+      }
+    });
+  });
+
+  group(r"ANSI-C строки $'…'", () {
+    List<String> words(String c) =>
+        parseShell(c).pipelines.first.stages.first.words;
+
+    test('escape-последовательности раскрываются', () {
+      expect(words(r"echo $'a\nb'"), ['echo', 'a\nb']);
+      expect(words(r"echo $'a\x20b\101A'"), ['echo', 'a bAA']);
+      expect(words(r"echo $'it\'s'"), ['echo', "it's"]);
+      expect(words(r"echo $'\q'"), ['echo', r'\q']);
+    });
+
+    test('байтовые escape декодируются как UTF-8', () {
+      expect(words(r"echo $'\320\241'"), ['echo', 'С']);
+      expect(words(r"echo $'\xd0\xa1x\xd0\xb5'"), ['echo', 'Сxе']);
+      for (final bad in [r"echo $'\xd0\u0041\xa1'", r"echo $'\xff'"]) {
+        expect(() => parseShell(bad), throwsA(isA<ShellParseException>()));
+      }
+      expect(words(r"echo $'\562m'"), ['echo', 'rm']);
+    });
+
+    test('незакрытая строка неразбираема', () {
+      expect(
+        () => parseShell(r"echo $'abc"),
+        throwsA(isA<ShellParseException>()),
+      );
+    });
+  });
 }

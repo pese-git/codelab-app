@@ -1,6 +1,7 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart' show SecretRedactor;
 
+import 'subagent_views.dart';
 import 'transcript_item.dart';
 
 /// Строка вызова инструмента для отображения: метка, деталь, вторая строка.
@@ -14,9 +15,41 @@ import 'transcript_item.dart';
 /// change `redesign-transcript-rows`).
 ///
 /// Как использовать: строится форматтером по [ToolCallItem]; [detail] может
-/// быть пустой строкой, [secondary] — `null`.
+/// быть пустой строкой, [secondary] — `null`. Строка вызова `agent`
+/// (`ToolCallView.subagentCall`, D28) дополнительно несёт [progress],
+/// [report], [summary] и [summaryShort] (design.md change
+/// `add-subagents-and-tasks`, D24, D27); у остальных вызовов они `null`.
 final class ToolRowView {
-  const ToolRowView({required this.label, this.detail = '', this.secondary});
+  const ToolRowView({
+    required this.label,
+    this.detail = '',
+    this.secondary,
+    this.progress,
+    this.report,
+    this.summary,
+    this.summaryShort,
+    this.runningCounter,
+  });
+
+  /// Последняя строка прогресса, пока вызов `agent` идёт; иначе `null`.
+  final String? progress;
+
+  /// Текст отчёта субагента после завершения вызова (тело `content`);
+  /// секреты маскируются, переводы строк сохраняются. Иначе `null`.
+  final String? report;
+
+  /// Строка итога `N tool calls · N.Nk tokens · <время>` из
+  /// `subagentSummary`; `null` без итога.
+  final String? summary;
+
+  /// Сокращённый вид итога `N tool calls · N.Nk · <время>` (D27).
+  final String? summaryShort;
+
+  /// Счётчик работающего `agent` без токенов: `5 tool calls` / `1 tool call`
+  /// (Q15, D25); формат как у [summaryShort]. `null` у завершённого вызова,
+  /// у других вызовов и пока вызовов потомков нет. Хост показывает
+  /// `summaryShort ?? runningCounter`.
+  final String? runningCounter;
 
   /// Метка по виду вызова: `Read`, `Edit`, `Run`… или `title` у `other`.
   final String label;
@@ -32,13 +65,29 @@ final class ToolRowView {
       other is ToolRowView &&
       other.label == label &&
       other.detail == detail &&
-      other.secondary == secondary;
+      other.secondary == secondary &&
+      other.progress == progress &&
+      other.report == report &&
+      other.summary == summary &&
+      other.summaryShort == summaryShort &&
+      other.runningCounter == runningCounter;
 
   @override
-  int get hashCode => Object.hash(label, detail, secondary);
+  int get hashCode => Object.hash(
+    label,
+    detail,
+    secondary,
+    progress,
+    report,
+    summary,
+    summaryShort,
+    runningCounter,
+  );
 
   @override
-  String toString() => 'ToolRowView($label, $detail, $secondary)';
+  String toString() =>
+      'ToolRowView($label, $detail, $secondary, progress: $progress, '
+      'report: $report, summary: $summary, summaryShort: $summaryShort, runningCounter: $runningCounter)';
 }
 
 /// Строит [ToolRowView] по вызову инструмента.
@@ -59,6 +108,9 @@ abstract final class ToolRowFormatter {
 
   static ToolRowView format(ToolCallItem item, {required String cwd}) {
     final view = item.details;
+    if (view?.subagentCall case final call?) {
+      return _agentRow(item, view!, call);
+    }
     final kind = view?.kind ?? ToolKind.other;
     final label = _labelOf(kind, item.title);
     var detail = _clean(_detailOf(kind, view, item.title, cwd: cwd));
@@ -79,6 +131,50 @@ abstract final class ToolRowFormatter {
     );
   }
 
+  /// Строка вызова `agent` (D28): заголовок `<type>: <description>` строится
+  /// из структурированных полей, а не разбором `title`; описание — из
+  /// `rawInput.description` (метка `Subagent`, деталь `<type>: <description>`).
+  /// Без описания `title` показывается как есть целиком (метка — он сам,
+  /// деталь пуста), без какой-либо проверки текста агента (D27, D33): тип при
+  /// этом не дублируется, потому что `title` его уже несёт. Пустой `title` —
+  /// метка `Subagent`, деталь `<type>`.
+  static ToolRowView _agentRow(
+    ToolCallItem item,
+    ToolCallView view,
+    SubagentCallView call,
+  ) {
+    final description = _string(view.rawInput?['description']);
+    final title = item.title.trim();
+    final byTitle = description == null && title.isNotEmpty;
+    final running =
+        view.status == ToolCallStatusView.queued ||
+        view.status == ToolCallStatusView.running;
+    final texts = [
+      for (final text in view.textOutput)
+        if (text.trim().isNotEmpty) text,
+    ];
+    return ToolRowView(
+      label: byTitle ? _clean(title) : 'Subagent',
+      detail: byTitle
+          ? ''
+          : _clean(
+              description == null ? call.type : '${call.type}: $description',
+            ),
+      secondary: view.status == ToolCallStatusView.failed
+          ? _firstLine(view.textOutput)
+          : null,
+      progress: running && texts.isNotEmpty ? _clean(texts.last) : null,
+      report: !running && texts.isNotEmpty
+          ? _redactor.redactText(texts.join('\n').trim())
+          : null,
+      summary: view.subagentSummary?.text,
+      summaryShort: view.subagentSummary?.shortText,
+      runningCounter: running && item.subtreeCalls > 0
+          ? subagentCallsText(item.subtreeCalls)
+          : null,
+    );
+  }
+
   static String _labelOf(ToolKind kind, String title) => switch (kind) {
     ToolKind.read => 'Read',
     ToolKind.edit => 'Edit',
@@ -88,6 +184,9 @@ abstract final class ToolRowFormatter {
     ToolKind.execute => 'Run',
     ToolKind.fetch => 'Fetch',
     ToolKind.think => 'Think',
+    // Смена режима сессии (`switch_mode`, ACP `17-Schema.md`); wire-имя в
+    // строку не попадает (D7 change `tolerate-unknown-tool-kind`).
+    ToolKind.switchMode => 'Mode',
     ToolKind.other => title.trim().isEmpty ? 'Tool' : title.trim(),
   };
 
@@ -155,6 +254,11 @@ abstract final class ToolRowFormatter {
           (_, final d?) => d,
           _ => '',
         };
+      case ToolKind.switchMode:
+        // Полей `rawInput` для `switch_mode` ACP не определяет, догадок об их
+        // именах нет: деталь пуста, и общее правило §12.1.6 подставляет
+        // `title` вызова (D7 change `tolerate-unknown-tool-kind`).
+        return '';
       case ToolKind.other:
         for (final key in const [
           'command',

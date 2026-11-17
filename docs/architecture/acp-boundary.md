@@ -1042,6 +1042,7 @@ abstract interface class AcpClient {
 | Permission abstraction | `codelab_client_acp` / application |
 | UI state               | BLoC/Cubit                      |
 | Rendering              | `codelab_ui` / `codelab_desktop`        |
+| Agent-side ACP server (проекция ядра в протокол) | `codelab_agent_acp` (раздел 49) |
 
 ---
 
@@ -1140,3 +1141,30 @@ ACP field renamed
 ```
 
 Если небольшое protocol изменение требует широких изменений presentation layer, следует проверить качество ACP boundary.
+
+---
+
+## 49. Агентская сторона ACP boundary
+
+Выше описана клиентская сторона. У ACP-соединения есть и вторая — агентская: CodeLab сам умеет быть ACP-агентом. Её владелец — `codelab_agent_acp`.
+
+### Кто за что отвечает
+
+| Responsibility | Owner |
+|---|---|
+| Проекция событий ядра (`AgentEvent`) в `session/update`, ответы на `initialize`, `session/new`, `session/load`, `session/prompt` | `codelab_agent_acp` (`AcpAgentServer`) |
+| Wire-модели и кодек | `codelab_acp_protocol` (общий для обеих сторон) |
+| Транспорт: stdio, WebSocket, пара в памяти `InProcessAcpLink` | `codelab_acp_transports`; IO-транспорты подставляет хост |
+| Запросы агента к клиенту (`fs/*`, `terminal/*`, `session/request_permission`) | `codelab_agent_acp` отправляет, клиент исполняет и решает |
+| Правила разрешений и containment путей | ядро (`codelab_agent_core`), не адаптер |
+
+Правила:
+
+* Адаптер берёт методы, поля и значения только из `codelab_acp_protocol` и `docs/protocols/acp/protocol/`. Всё сверх них — `_meta.codelab.*`, `data.codelab` или методы `_codelab/*`, и каждое расширение вводит OpenSpec change (`AGENTS.md` §3.4, ACP-1, ACP-2).
+* Ядро ACP не знает. Оно отдаёт `AgentEvent`; адаптер проецирует их, и каждый подтип либо проецируется, либо явно помечен «не передаётся» (ACP-6).
+* Порядок на проводе: ответ на `session/prompt` идёт после последнего `session/update` хода, ответ на `session/load` — после реплея (ACP-3); после `session/cancel` ход завершается `stopReason: cancelled` (ACP-5), а сбой хода не выдаётся за `end_turn` (ACP-7).
+* Плохой кадр не закрывает соединение и не прерывает активные ходы (ACP-4); ошибки JSON-RPC несут причину в `data.codelab.reason`, собственных кодов нет.
+* Агент не выбирает транспорт сам (PKG-3): stdio и WebSocket подставляет `apps/codelab_agent`, пару `InProcessAcpLink` — `codelab_embedded`. Для клиента встроенный агент — обычный ACP-агент, отличается только транспорт, поэтому клиентский слой (`codelab_client_acp`) не знает, встроен агент или нет.
+* Встроенному агенту клиентские `fs/*` и `terminal/*` не нужны: он работает в процессе клиента, и `AcpServerConfig.localEnv` подставляет локальное окружение. Containment (`BoundedEnv`) и разрешения при этом остаются теми же, что у внешнего агента.
+
+Подробно: `docs/architecture/proposals/agent-core/13-acp-adapter.md` (правила протокольного уровня §13.10, инварианты ACP-1…ACP-12 §13.14).

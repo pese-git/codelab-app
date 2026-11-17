@@ -12,7 +12,8 @@ import 'fake_gate.dart';
 /// сессии — встроенный или MCP — не исполняется, пока политика не
 /// разрешила вызов.
 void main() {
-  test('with a rejecting gate no tool of the session executes', () async {
+  test('core/no-tool-bypasses-gate: with a rejecting gate no tool of the '
+      'session executes', () async {
     final memory = MemoryExecutionEnv(cwd: '/proj');
     final shell = FakeShellEnv(memory, (_, _) async {
       throw StateError('exec must not run');
@@ -37,14 +38,7 @@ void main() {
               ('exec', {'command': 'echo hi'}),
               ('ls', {'path': '.'}),
               ('search', {'pattern': 'x'}),
-              (
-                'update_plan',
-                {
-                  'entries': [
-                    {'content': 'c', 'priority': 'low', 'status': 'pending'},
-                  ],
-                },
-              ),
+              ('task_create', {'subject': 'c', 'priority': 'low'}),
               ('mcp__fake__read_only', <String, Object?>{}),
               ('mcp__fake__delete', <String, Object?>{}),
               ('mcp__fake__fetch', <String, Object?>{}),

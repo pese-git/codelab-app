@@ -105,12 +105,12 @@ codelab [опции] [первое сообщение]        REPL (первое
 codelab -p "<промпт>" [опции]             headless: один ход, вывод в stdout, код выхода
 codelab sessions [--cwd <dir>] [--json]   список сессий агента для папки
 codelab profiles list|show <id>|add <id> ...|remove <id>
-codelab test-scenario <путь>... --agent <профиль> [опции]
+codelab test-scenario <путь>... [--agent <профиль>] [опции]
 codelab config get|set|unset|path|check ...   конфиг встроенного агента (§12.4.8); в 8.5 — только check [--cwd <dir>]
 codelab config export-providers|import-providers ...   обмен провайдерами без секретов (agent-core §17.14.4)
 codelab provider add|list|remove ...          провайдеры; add без флагов на TTY — мастер (§12.4.4)
 codelab mcp add|list|remove ...               MCP-серверы в конфиге
-codelab secret set|delete|list ...            хранилище секретов
+codelab secret set|delete|list|migrate ...    секреты агента (8.9: бэкенды env и file; migrate — 8.11)
 codelab update [--check] [--channel stable|beta|pinned] [--version <x.y.z>] [--allow-downgrade] [--yes]   самообновление (после MVP, §12.6.4)
 codelab login <provider> [--device] [--no-browser] [--timeout <duration>]   вход по подписке (после MVP, agent-core §17.10.6)
 codelab logout <provider>                     удалить токен входа (после MVP, agent-core §17.10.6)
@@ -120,9 +120,9 @@ codelab --version | --help
 
 Подкоманды `config`, `provider`, `mcp` и `secret` по этапам: `config check [--cwd <dir>]` — этап 8,
 задача 8.5 (проверка; `get|path` — позже; план сборки встроенного агента в `config check` — этап 7,
-задача 7.6); `secret set|delete|list` — этап 8, задача 8.9 (нужна MVP);
-`config set|unset`, `provider add|list|remove`, `mcp add|list|remove` — этап 8, задача 8.10
-(Should — не блокирует MVP); мастер `provider add` — этап 9 (задача 9.6, Should);
+задача 7.6); `secret set|delete|list` — этап 8, задача 8.9 (нужна MVP); `secret migrate` и флаги `mcp add --header-stdin|--env-stdin` — задача 8.11 (Should; design.md change `add-config-literal-secrets-and-migrate`, D7, D11);
+`config path|get|set|unset`, `provider add|list|remove`, `mcp add|list|remove` — этап 8, задача 8.10
+(Should — не блокирует MVP; change `add-config-writer-and-reload`, D6); мастер `provider add` — этап 9 (задача 9.6, Should);
 `config export-providers|import-providers` — после MVP (E-14). До своего этапа подкоманда не
 регистрируется (`codelab <команда>` → код 64 `Unknown command`). Это общая реализация ядра
 (agent-core-architecture §17.5.4, §17.5.5: флаги `--project`/`--local`, тексты, коды выхода
@@ -136,10 +136,76 @@ D12). В 8.5 создаётся минимальный пакет `codelab_setup
 иначе текущий каталог. Путь передаётся загрузчику как есть, канонизирует его загрузчик, поэтому
 вывод и код двух бинарей совпадают и для относительного пути с `..`. Проверяется окружение процесса
 `codelab`, профиль подключения не учитывается: флаги подключения и запроса (`-a`/`--agent`, `-m`/`--model`, `--mode`, `-r`/`--resume`, `-c`/`--continue`, `-p`/`--print`, `-f`/`--prompt-file`, `--approve`, `--timeout`, `--ui`)
-вместе с `config` — ошибка использования `--<flag> does not apply to config check`, код 64. `codelab config` без подкоманды — код 64 и
-`config needs a subcommand: codelab config check [--cwd <dir>]`; остальные подкоманды `config` до своих
-задач дают код 64 `Unknown command config <sub>`. `package:codelab_setup/io.dart` импортируется в
+вместе с `config` — ошибка использования `--<flag> does not apply to config <sub>` (`config check`, `config set` и т. д.), код 64; то же для `provider` и `mcp` (с 8.10). `codelab config` без подкоманды — код 64 и
+`config needs a subcommand: codelab config check [--cwd <dir>]` (с 8.10 — `codelab config path|get|set|unset|check`, D6 change `add-config-writer-and-reload`); неизвестные подкоманды `config` дают код 64
+`Unknown command config <sub>`. У `provider list` и `mcp list` есть `--cwd` подкоманды (порядок тот же: `--cwd` подкоманды, общий `-C/--cwd`, текущий каталог); у `provider add|remove` и `mcp add|remove` его нет — папка проекта — общий `-C/--cwd`, иначе текущий каталог. Неизвестная подкоманда `provider`/`mcp` — код 64 и `unknown <cmd> arguments (<n>)` без цитирования слова, как у `codelab-agent`. `package:codelab_setup/io.dart` импортируется в
 `apps/codelab_cli/lib/src` только из `run.dart` (сторож).
+
+`codelab secret set|delete|list` (этап 8, задача 8.9; change `add-agent-secret-store`, D1, D7, D8)
+регистрируется так же, как `config check`: `CliCommand.secret` в `cli_args.dart`, вызов в `run.dart`
+через `package:codelab_setup/io.dart`, который реэкспортирует `SecretCommands` из
+`codelab_agent_io`. CLI только разбирает аргументы своим `package:args`; тексты, правила и коды
+выхода — в `SecretCommands`, поэтому stdout, stderr и код совпадают с `codelab-agent secret`
+(agent-core-architecture §17.5.4, абзац «CLI»). Бэкенд подкоманды берут из `secrets.backend` в
+`$CODELAB_HOME/config.yaml` и файле `CODELAB_CONFIG` — и только этот ключ, без полной загрузки
+конфига: невалидный конфиг не блокирует `secret set`, который его чинит (литерал в файле с 8.11
+конфиг не ломает, а даёт предупреждение — R8-4). **В 1.0 запись возможна только с `secrets.backend: file`** (открытый `$CODELAB_HOME/secrets.yaml`,
+`0600`, только macOS и Linux): `auto` в 1.0 — бэкенд `env` (только чтение `CODELAB_SECRET_*`), и
+`secret set` отвечает кодом 1 с подсказкой `secrets.backend: file` или переменной; на Windows
+доступен только `env`; хранилища ОС — после 1.0 (черновик `add-agent-os-secret-backends`). `set`
+читает значение только из stdin (с TTY — без эха), значение аргументом — код 64. Флаги подключения
+и запроса вместе с `secret` — код 64, как у `config`; `codelab secret` без подкоманды или с неизвестной
+подкомандой — код 64 и `codelab: secret needs a subcommand: set, delete, list or migrate`, ошибка разбора
+argv — код 64 и `codelab: invalid arguments for secret`; присланные слова не цитируются (среди них
+может быть значение секрета). Ошибки использования (неверное имя, значение аргументом, argv) идут со
+справкой `secret`, ошибки значения (пустое, многострочное, не UTF-8, длинное, коллизия) — без неё;
+недопустимый `CODELAB_CONFIG` подкоманды пропускают с `warning: CODELAB_CONFIG ignored: <reason>`
+(D8). Подкоманды не запускают агента, не создают `sessions/`, `profiles.json` и
+`cli_history`; файл `secrets.yaml` пишут только `set`, `delete` и `migrate` при бэкенде `file`,
+создаёт — только запись (`set`, `migrate`). Сторож и `cliAllowlist` не меняются: `codelab_setup/io.dart` по-прежнему
+импортируется только из `run.dart`.
+
+`secret migrate [--all | [--project] [--local]] [--cwd <dir>] [--dry-run] [--force]` (8.11; design.md change
+`add-config-literal-secrets-and-migrate`, D7) переносит в хранилище литеральные секреты, о которых предупреждает
+загрузка конфига (CFG-9, пп. 1–3; решение пользователя 2026-11-04 R8-4), и заменяет их в файлах
+ссылками; регистрируется так же (`SecretCommands.migrate` через `codelab_setup/io.dart`). Её `--cwd` —
+флаг подкоманды после `migrate`; `-C`/`--cwd` верхнего уровня вместе с `secret` по-прежнему код 64.
+`codelab mcp add` получает флаги `--header-stdin <Name> [--header-scheme <Scheme>]` и `--env-stdin <NAME>`
+(8.11, D11): значение из stdin уходит в хранилище, в файл — `${secret:…}` в одинарных кавычках, один
+флаг на вызов; порядок — кандидат, коллизия имени, `checkStore`, stdin, секрет, конфиг. Справка
+`secret` и общая `codelab --help` несут строку `Note: before 1.0, tool output, prompts and session
+logs are not redacted: …` (R8-7, D13; константа `before1Note` из основного бареля `codelab_setup`).
+
+`codelab config path|get|set|unset`, `codelab provider add|list|remove` и `codelab mcp add|list|remove`
+(этап 8, задача 8.10; design.md change `add-config-writer-and-reload`, D6) регистрируются так же,
+как `config check` и `secret`: подкоманды в `cli_args.dart`, вызов в `run.dart` через
+`package:codelab_setup/io.dart`, который реэкспортирует `ConfigCommands`, `ProviderCommands` и
+`McpServerCommands` из `codelab_agent_io` вместе с их опциями. CLI только разбирает аргументы;
+тексты, правила и коды выхода (`0`/`1`/`64`) — в общей реализации, поэтому stdout, stderr, коды и
+записанные байты совпадают с `codelab-agent config|provider|mcp`, кроме имени бинаря в справке
+использования (agent-core-architecture §17.5.5). Слой записи по умолчанию — `user`, `--project` и `--local` —
+для `cwd` (`--cwd` подкоманды там, где он есть — `config path|get|set|unset|check`, `provider list`,
+`mcp list`, — иначе общий `-C`/`--cwd`, иначе текущий каталог); `config get` без `--layer` читает итог
+(`merged`). Ошибка разбора argv у `config set|unset`, `provider` и `mcp` — код 64 и фиксированная
+фраза `invalid arguments for config <sub>` (`… provider`, `… mcp`) без цитирования слов argv, как у
+`secret`: значение `config set` может начинаться с `-`, а ключ могли передать флагом. `config get` не
+раскрывает подстановки `${VAR}` и `${secret:…}` ни при каком `--layer`; `config get` и `provider list`
+маскируют литеральные секреты (`<redacted>`; с 8.11 — и литеральный `api_key`, ссылку п. 3 и
+элементы `mcp.servers[*].args`, D5 change `add-config-literal-secrets-and-migrate`), значения из
+окружения (`<from env:…>`), userinfo URL и значения секретных query-параметров; неразбираемый URL — `<redacted>` (R0-2, R4-5 change
+`add-config-writer-and-reload`). При
+`ConfigConflictException` подкоманда один раз перечитывает файл и повторяет правки; второй
+конфликт — код `1`. `provider add --api-key-stdin` читает ключ скрытым вводом `StdinSecretInput`, как
+`secret set`, сохраняет его через `SecretAdmin` и пишет в конфиг только имя `codelab/<id>`; значение
+не попадает в stdout, `profiles.json`, `cli_history` и лог; любой флаг ключа заменяет источник ключа
+провайдера целиком (R4-4). `provider add` без обязательных флагов
+(`--kind`, `--model`, `--context-window`) в 8.10 — код 64 и на TTY, stderr перечисляет все недостающие
+флаги одной строкой: мастер добавит change
+`add-provider-setup-ui`, не меняя флаговую форму. Флаги подключения и запроса вместе с этими
+подкомандами — код 64, как у `config check`; `codelab config` без подкоманды — `config needs a
+subcommand: codelab config path|get|set|unset|check`. `codelab --help` перечисляет `provider` и
+`mcp`. Агентская команда `/mcp` в REPL доступна по своему имени, агентская `/config` — как
+`/agent:config` (клиентская `/config` имеет приоритет). Сторож и `cliAllowlist` не меняются.
 
 Скрипт прогона Terminal-Bench (`tool/bench/`, H-06) вызывает обычный `codelab -f …
 --output-format stream-json --approve allow-all` только внутри контейнера задачи
@@ -176,7 +242,7 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 
 | Флаг | Сокращение | Значение | По умолчанию |
 |---|---|---|---|
-| `--agent <профиль>` | `-a` | `embedded`; id профиля из `profiles.json`; `stdio:<команда> [аргументы]`; `ws://…` или `wss://…` | `embedded` (с этапа 7); до этапа 7 — профиль `default` из `profiles.json`; если файла или профиля `default` нет — код 64 и `No default agent profile. Pass --agent or run "codelab profiles add default stdio:<command>".` (агент не запускается, `embedded` до этапа 7 → код 64 `Embedded agent is not available in this build.`) |
+| `--agent <профиль>` | `-a` | `embedded` (алиас `default`, change `add-app-settings-shell`, D21); id профиля из `profiles.json`; `stdio:<команда> [аргументы]`; `ws://…` или `wss://…` | `embedded` всегда (change `add-app-settings-shell`, D21; до него — профиль `default`, если есть, иначе `embedded`, D13 change `add-embedded-agent-mode`); без `--agent` `profiles.json` не читается, битый `profiles.json` → код 64 с причиной только при `-a <id>` |
 | `--cwd <dir>` | `-C` | рабочая папка сессии | текущая папка |
 | `--model <id>` | `-m` | значение опции конфигурации `model` после создания сессии; после MVP сильнее модели, запомненной для папки (U-27, §12.6.9), и не запоминается | из агента |
 | `--mode <id>` | | значение опции конфигурации `mode` | из агента |
@@ -193,7 +259,7 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 | `--include-acp` | | change `add-cli-stream-json`; только с `--output-format stream-json`: строки `acp` с исходными кадрами после редакции (§12.5.3); иначе код 64 | выключено |
 | `--input-format text\|stream-json` | | change `add-cli-stream-json`; `text` — промпт из `-p`, `-f` или stdin; `stream-json` зарезервирован → код 64 (§12.5.2) | `text` |
 | `--approve <политика>` | | headless: `reject` (отклонять всё), `read-only` (разрешать once только вызовы вида `read`, остальное отклонять), `allow-all` (разрешать once всё, кроме запросов с `_meta.codelab.critical: true`; печатает предупреждение в stderr) | `reject` |
-| `--permission-mode <режим>` | | этап 7 (нужен встроенный агент; у `codelab-agent serve` тот же флаг — этап 4); `accept-edits` — после MVP (P-06). Режим встроенного агента: `plan`, `ask`, `standard`, `accept-edits`, `bypass`, `autopilot` (только с `-p`) (agent-core-architecture §7.7, §13.6); на внешнего агента не влияет | `standard` |
+| `--permission-mode <режим>` | | отдельный change после `add-embedded-agent-mode` (D13, п. 6; до него — `permissions.mode` конфига); нужен встроенный агент; у `codelab-agent serve` тот же флаг — этап 4; `accept-edits` — после MVP (P-06). Режим встроенного агента: `plan`, `ask`, `standard`, `accept-edits`, `bypass`, `autopilot` (только с `-p`) (agent-core-architecture §7.7, §13.6); на внешнего агента не влияет | `standard` |
 | `--timeout <длительность>` | | headless: предел на ход (`90s`, `10m`); по истечении — `session/cancel` | без предела |
 | `--deadline <длительность\|время>` | | после MVP (C-15): дедлайн сессии; `90s`, `45m`, `1h30m`, ISO-8601 или `HH:MM`; CLI отправляет `/timer until <ISO>` до первого промпта; агент без `/timer` — предупреждение и `session/cancel` в срок (agent-core-architecture §17.12.5) | без срока |
 | `--drain-timeout <длительность>` | | после MVP (H-05, этап 9+); headless: сколько ждать фоновую работу агента (субагенты, фоновые команды — agent-core-architecture §17.9) после ответа на `session/prompt`; `0` — не ждать (agent-core-architecture §17.3.9) | `60s` (`subagents.drain_timeout`) |
@@ -207,10 +273,11 @@ codelab trajectory export [<sessionId>|--last] [--cwd <dir>] [--out <file>] [--l
 | `--ui line\|tui` | | построчный REPL или полноэкранный TUI (U-12, change `add-cli-tui`, §12.2.1, §12.2.7); `tui` требует TTY на stdin и stdout и не сочетается с `-p`/`-f` (код 64) | `line` (`ui.mode` в `cli.yaml` — после MVP) |
 | `--attach <файл>` | | вложение к первому промпту (REPL) или к промпту `-p`; флаг можно повторять (U-14, после MVP, §12.2.8) | — |
 | `--trace-file <файл>` | | change `add-cli-stream-json` (общий отвод кадров с `--include-acp`); protocol trace (JSON-RPC кадры с редакцией секретов) в файл | выключено |
-| `--log-file <файл>` | | этап 7, Should (E-16; встроенного агента в CLI до этапа 7 нет, у `codelab-agent serve` флаг — этап 4); лог встроенного агента (JSON Lines, с редакцией секретов) дописывается в файл; переменная `CODELAB_LOG_FILE`; флаг сильнее переменной, переменная сильнее `logging.file` (agent-core-architecture §12.3.1) | `logging.file` (`~/.codelab/logs/agent.log`) |
-| `--verbose` | `-v` | диагностика соединения в stderr | выключено |
+| `--log-file <файл>` | | отдельный change после `add-embedded-agent-mode` (D13, п. 6), Should (E-16; встроенного агента в CLI до этапа 7 нет, у `codelab-agent serve` флаг — этап 4); лог встроенного агента (JSON Lines, с редакцией секретов) дописывается в файл; переменная `CODELAB_LOG_FILE`; флаг сильнее переменной, переменная сильнее `logging.file` (agent-core-architecture §12.3.1) | `logging.file` (значения по умолчанию нет, §12.3.1) |
+| `--verbose` | `-v` | диагностика соединения в stderr; со встроенным агентом — и его лог | выключено |
+| `--debug-secrets` | | этап 7 (P-17; change `add-embedded-agent-mode`): встроенный агент пишет событие `secrets.lookup` на каждое обращение к секретам, без значений, в stderr и без `--verbose` (D13, п. 9 того change); `CODELAB_DEBUG_SECRETS=1` действует так же; на внешнего агента не влияет (change `add-agent-secret-store`, D15) | выключено |
 | `--debug-llm-snapshot[=headers\|body]` | | после MVP (L-27): встроенный агент пишет снимки зависших запросов к LLM (`logging.llm_snapshot`, agent-core-architecture §17.10.10) | выключено |
-| `--config <файл>` | | этап 7 (загрузчик 8.5); конфигурация встроенного агента, `.yaml` или `.yml` | `~/.codelab/config.yaml` + `.codelab/config.yaml` |
+| `--config <файл>` | | отдельный change после `add-embedded-agent-mode` (D13, п. 6; до него — `CODELAB_CONFIG`; загрузчик 8.5); конфигурация встроенного агента, `.yaml` или `.yml` | `~/.codelab/config.yaml` + `.codelab/config.yaml` |
 
 Headless (`-p`, `-f`) передаёт `_meta.codelab.sealOnClose: true` в `session/new`/`session/load` и объявляет `clientCapabilities._meta.codelab.jobBoard: true`; после итоговой строки закрывает соединение — сессия запечатывается (S-15, agent-core-architecture §8.5.1).
 
@@ -356,7 +423,7 @@ Enter без выбора ничего не делает: варианта «п�
 |---|---|
 | `0` | `stopReason: end_turn` и ответ не пустой (заметка о пустом ответе — тоже ответ, agent-core-architecture §5.4.1) |
 | `1` | ошибка хода (ошибка JSON-RPC на `session/prompt`, ошибка провайдера), `end_turn` без единого `agent_message_chunk`, `max_tokens`, `max_turn_requests`, `refusal`, не удалось подключиться к агенту, агент завершился; после MVP — ответ с `_meta.codelab.held` (agent-core-architecture §17.12.4) |
-| `64` | ошибка использования: неизвестный флаг, нет промпта, неверное значение `--agent`; битый конфиг (agent-core-architecture §13.10) |
+| `64` | ошибка использования: неизвестный флаг, нет промпта, неверное значение `--agent`, битый `profiles.json`; битый конфиг (agent-core-architecture §13.10), в том числе невалидный конфиг встроенного агента — текст `EmbeddedAgentConfigException` в stderr (change `add-embedded-agent-mode`, D5) |
 | `130` | отмена: SIGINT или `--timeout` (`stopReason: cancelled`), или срок `--deadline` у агента без `/timer` |
 | `143` | SIGTERM: ход отменён, транспорт закрыт |
 
@@ -376,7 +443,7 @@ Enter без выбора ничего не делает: варианта «п�
 **Драйвер фикстур.**
 
 ```text
-codelab test-scenario <файл-или-папка>... --agent <профиль>
+codelab test-scenario <файл-или-папка>... [--agent <профиль>]
     [--filter <glob по id>] [--timeout 30s] [--junit <out.xml>] [--update-golden]
 ```
 
@@ -392,8 +459,13 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
    диффом ожидаемого и фактического кадра.
 5. С `--update-golden` — записать фактические кадры агента в фикстуру (только для своего агента).
 
-Вывод: строка `PASS|FAIL|SKIP <id> (<время>)` на фикстуру и итог. Код выхода: `0` — все прошли,
-`1` — есть `FAIL`, `64` — ошибка использования.
+Без `--agent` агент выбирается как во всём CLI: всегда встроенный; `--agent default` — алиас
+`--agent embedded` (design.md change `add-app-settings-shell`, D21; правило одно, D13, п. 7 change
+`add-embedded-agent-mode`).
+
+Вывод: строка `PASS|FAIL|SKIP <id> (<время>)` на фикстуру и итог. Код выхода: `0` — нет `FAIL` и
+сыграна хотя бы одна фикстура, `1` — есть `FAIL` или не сыграна ни одна фикстура (все пропущены,
+фильтр пуст; D13, п. 10), `64` — ошибка использования.
 
 **OpenSpec change.** Этап делится на change (решение владельца проекта, design.md change
 `add-codelab-cli`, D1):
@@ -429,8 +501,14 @@ codelab test-scenario <файл-или-папка>... --agent <профиль>
 * `melos run test:e2e:cli:dart-agent` — те же тесты без `scripted-only` зелёные против Dart-агента
   (входит в `check`, джоб CI `e2e-cli-dart`); `melos run test:e2e:cli:python-agent` — тесты обычного
   хода зелёные против Python-агента локально (в CI Python-агента нет).
-* `codelab -p hi` с пустым `CODELAB_HOME` (нет `profiles.json`) — код 64 и подсказка
-  `codelab profiles add default …`; агент не запускается.
+* `codelab -p hi` без `--agent`: при профиле `default` в `profiles.json` ход проводит он; без
+  профиля `default` — встроенный агент, как с `-a embedded` (с этапа 7; design.md change
+  `add-embedded-agent-mode`, D13, п. 1). *Изменено change `add-app-settings-shell`, D21: без `--agent`
+  и с `-a default` — всегда встроенный агент; id `default` зарезервирован, старая запись `default` в
+  `profiles.json` игнорируется с предупреждением в stderr, удаляется `codelab profiles remove default`.* С пустым `CODELAB_HOME` (нет `profiles.json` и
+  `config.yaml`) — код 64, проблема конфигурации встроенного агента и подсказка
+  `Configure the embedded agent in <home>/config.yaml; check it with: codelab config check`;
+  агент не запускается. До этапа 7 — код 64 и подсказка `codelab profiles add default …`.
 * `cli/headless-exit-codes`: ошибка провайдера → `1`, `session/cancel` по `--timeout` → `130`,
   неизвестный флаг → `64`, SIGTERM → `143`.
 * change `add-cli-stream-json`: `cli/headless-stream-json-golden` — вывод совпадает с golden-файлом `test/e2e/golden/stream_json_basic.ndjson`.

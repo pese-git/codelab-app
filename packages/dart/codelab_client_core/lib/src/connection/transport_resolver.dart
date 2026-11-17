@@ -17,6 +17,12 @@ import 'secret_source.dart';
 /// Как использовать: composition root регистрирует резолверы в
 /// `ClientWorkspace(resolvers: ...)`. [open] может бросить исключение — оно
 /// становится `ConnectionFailed` и уходит вызывающему `connect`.
+///
+/// Параметр `projectDirectory` метода [open] — **корень процесса агента**
+/// (`WorkspaceState.agentDirectory`, D11/D15 change `require-project-folder`):
+/// папка триггера, которым агент стартовал, а не обязательно выбранный проект.
+/// Имя параметра сохранено ради совместимости публичного API kit и CLI; у
+/// `connect` корень процесса совпадает с папкой проекта.
 abstract interface class TransportResolver {
   bool supports(ConnectionProfile profile);
 
@@ -59,6 +65,9 @@ final class ConfigTransportResolver implements TransportResolver {
   bool supports(ConnectionProfile profile) => switch (profile) {
     StdioProfile() => stdio != null,
     WebSocketProfile() => webSocket != null,
+    // Встроенный агент собирает хост своим резолвером (D7): здесь нет ни
+    // процесса, ни сокета, а ядра агента kit не знает.
+    EmbeddedProfile() => false,
   };
 
   @override
@@ -87,6 +96,8 @@ final class ConfigTransportResolver implements TransportResolver {
         }
         final token = tokenRef == null ? null : await secrets?.read(tokenRef);
         return factory(WebSocketAcpTransportConfig(uri: uri, token: token));
+      case EmbeddedProfile():
+        throw UnsupportedConnectionProfileException(profile);
     }
   }
 }

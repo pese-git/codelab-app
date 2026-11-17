@@ -3,6 +3,9 @@ import 'dart:typed_data';
 
 import '../../env/execution_env.dart';
 import '../../llm/messages.dart';
+import '../../skills/skill_block.dart';
+import '../../skills/skill_catalog.dart';
+import '../../util/posix_path.dart';
 import '../../util/result.dart';
 import '../../prompts/prompts.g.dart';
 import '../agent_tool.dart';
@@ -37,7 +40,44 @@ const _imageTypes = {
 /// `BinaryFiles`, а модель шага принимает картинки
 /// (`ToolContext.supportsImages`); иначе — текст ошибки. Вывод усекается
 /// самим инструментом с уведомлением, как продолжить.
+///
+/// Доверие к файлам навыков (design.md change `add-agent-skills`, D9, D17;
+/// решение Q30): файл в каталоге загруженного навыка (кроме `evals/`) — того
+/// же доверия, что тело `SKILL.md`: вывод не огораживается даже при
+/// сегментах `vendor`/`node_modules`, а теги `skill` в нём экранируются. Каталоги
+/// берутся из снимка [skills]; [root] — канонический корень сессии для
+/// относительных путей (`outputTrust` контекста не получает, поэтому рантайм
+/// создаёт экземпляр на сессию). Без снимка инструмент прежний.
 final class ReadTool extends AgentTool {
+  ReadTool({SkillCatalog? skills, this.root})
+    : skills = skills ?? SkillCatalog.empty;
+
+  final SkillCatalog skills;
+
+  /// Корень сессии; `null` — относительный путь в навыки не попадает.
+  final String? root;
+
+  /// Путь в каталоге загруженного навыка вне `evals/` — один предикат для
+  /// `outputTrust` и `execute`. Сравнение лексическое: путь через другую форму
+  /// корня получает прежнюю политику (безопасная сторона).
+  bool _inSkill(String path) {
+    if (skills.skills.isEmpty) {
+      return false;
+    }
+    final abs = normalizePath(root ?? '/', path);
+    if (abs == null) {
+      return false;
+    }
+    for (final skill in skills.skills) {
+      if (isInside(skill.dir, abs) && abs != skill.dir) {
+        final first = abs.substring(skill.dir.length + 1).split('/').first;
+        // `Evals/` на файловой системе без учёта регистра — тот же каталог.
+        return first.toLowerCase() != 'evals';
+      }
+    }
+    return false;
+  }
+
   @override
   String get name => 'read';
 
@@ -79,7 +119,8 @@ final class ReadTool extends AgentTool {
   /// которым модель не подчиняется (§6.3.6).
   @override
   ContentTrust outputTrust(Map<String, Object?> args) =>
-      isUntrustedPath(pathPattern('${args['path']}', ''))
+      !_inSkill('${args['path']}') &&
+          isUntrustedPath(pathPattern('${args['path']}', ''))
       ? ContentTrust.untrusted
       : ContentTrust.trusted;
 
@@ -132,7 +173,8 @@ final class ReadTool extends AgentTool {
     final String text;
     switch (await ctx.env.readText(path, line: offset, limit: limit + 1)) {
       case Ok(:final value):
-        text = value;
+        // Q30: инструкция навыка не должна закрыть свой блок тегом.
+        text = _inSkill(path) ? escapeSkillTags(value) : value;
       case Err(:final error):
         return errorResult(fileErrorText(error, ctx, path));
     }

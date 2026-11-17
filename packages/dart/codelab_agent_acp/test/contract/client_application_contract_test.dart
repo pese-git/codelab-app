@@ -4,6 +4,7 @@ import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show AgentMessageChunk, ContentBlock, PermissionOptionId, TextContent;
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_agent_acp/codelab_agent_acp.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart'
     hide ContentBlock, SessionId, TextContent;
@@ -15,8 +16,9 @@ import '../support/server_harness.dart'
 
 /// Contract test этапа 4 (задача 10.1; dart-agent-and-clients §9.9, задача
 /// 4.7): настоящий `AcpClientApplication` против `AcpAgentServer` через
-/// `InProcessAcpLink` на scripted-модели — тот же код клиента, что в
-/// codelab-app, без процессов и сокетов.
+/// продуктовый `InProcessAcpLink` (`codelab_acp_transports`) на
+/// scripted-модели — тот же код клиента, что в codelab-app, без процессов и
+/// сокетов.
 void main() {
   late _Pair pair;
   _Pair? started;

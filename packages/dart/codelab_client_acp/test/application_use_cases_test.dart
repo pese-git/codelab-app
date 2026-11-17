@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:test/test.dart';
 
 void main() {
+  _approvalRiskGroup();
+
   late FakeAcpTransport transport;
   late AcpClientApplication client;
 
@@ -1783,6 +1787,75 @@ Future<void> _createSession(
   result.getOrElse((failure) => fail('$failure'));
 }
 
+// Риск запроса одобрения учитывает известный вызов хода (review 6b, L-1; D27):
+// запрос без `kind` берёт вид известного вызова, а известный риск не снижается.
+void _approvalRiskGroup() {
+  group('approval risk with a known tool call', () {
+    late FakeAcpTransport transport;
+    late AcpClientApplication client;
+
+    setUp(() async {
+      transport = FakeAcpTransport();
+      await transport.start();
+      client = AcpClientApplication(transport: transport);
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+      unawaited(
+        SendPrompt(client)(
+          const SendPromptCommand(
+            sessionId: SessionId('session-1'),
+            prompt: [ContentBlock.text(text: 'hello')],
+          ),
+        ).run(),
+      );
+      await _pump();
+    });
+    tearDown(() async {
+      await client.dispose();
+      await transport.close();
+    });
+
+    void toolCall(ToolKind kind) => transport.emitInbound(
+      JsonRpcMessage.notification(
+        method: sessionUpdateMethod,
+        params: SessionNotification(
+          sessionId: const SessionId('session-1'),
+          update: SessionUpdate.toolCall(
+            toolCall: ToolCall(
+              toolCallId: const ToolCallId('tool-1'),
+              title: 'Lookup',
+              kind: kind,
+            ),
+          ),
+        ).toJson(),
+      ),
+    );
+
+    ApprovalRequest? approval() => client
+        .sessionById(const SessionId('session-1'))
+        ?.turns
+        .single
+        .approvals[const ApprovalRequestId('permission-42')];
+
+    test('a request with only toolCallId takes the kind of the known call', () {
+      toolCall(ToolKind.execute);
+      transport.emitInbound(_permissionRequest(kind: null, title: 'Lookup'));
+
+      expect(approval()?.riskLevel, ApprovalRiskLevel.shell);
+      expect(approval()?.toolCall.kind, ToolKind.execute);
+    });
+
+    test('a softer kind in the request does not lower a known unknown', () {
+      toolCall(ToolKind.other);
+      transport.emitInbound(
+        _permissionRequest(kind: ToolKind.read, title: 'Lookup'),
+      );
+
+      expect(approval()?.riskLevel, ApprovalRiskLevel.unknown);
+    });
+  });
+}
+
 Future<void> _pump() => Future<void>.delayed(Duration.zero);
 
 JsonRpcNotification _sessionUpdate(SessionUpdate update) {
@@ -1796,7 +1869,12 @@ JsonRpcNotification _sessionUpdate(SessionUpdate update) {
       as JsonRpcNotification;
 }
 
-JsonRpcRequest _permissionRequest({int id = 42, String toolCallId = 'tool-1'}) {
+JsonRpcRequest _permissionRequest({
+  int id = 42,
+  String toolCallId = 'tool-1',
+  ToolKind? kind = ToolKind.execute,
+  String title = 'Run command',
+}) {
   return JsonRpcMessage.request(
         id: JsonRpcId.integer(id),
         method: sessionRequestPermissionMethod,
@@ -1804,8 +1882,8 @@ JsonRpcRequest _permissionRequest({int id = 42, String toolCallId = 'tool-1'}) {
           sessionId: const SessionId('session-1'),
           toolCall: ToolCallUpdate(
             toolCallId: ToolCallId(toolCallId),
-            title: 'Run command',
-            kind: ToolKind.execute,
+            title: title,
+            kind: kind,
           ),
           options: const [
             PermissionOption(

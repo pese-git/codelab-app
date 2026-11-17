@@ -1,12 +1,27 @@
+import '../config/config_source.dart';
+import '../config/project_config.dart';
 import '../env/execution_env.dart';
 import '../llm/model_catalog.dart';
+import '../llm/stream_function.dart';
+import 'last_model_store.dart';
 import '../mcp/mcp_connector.dart';
+import '../permissions/agent_config_paths.dart';
 import '../permissions/gate.dart';
 import '../project/project_files.dart';
+import '../secrets/secret_resolver.dart';
+import '../skills/skill_files.dart';
 import '../session/session_store.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
 import '../util/logger.dart';
+
+/// Функция модели и каталог, которые хост строит по `CoreConfig`
+/// (design.md change `add-config-writer-and-reload`, D8).
+///
+/// Почему запись: `http.Client` и сервисы LLM принадлежат хосту (PKG-6), ядро
+/// их не создаёт. Хост с источником конфига собирает пару одним замыканием
+/// `modelsFor` для старта и для каждой применённой перезагрузки.
+typedef ConfiguredModels = ({StreamFunction stream, ModelCatalog catalog});
 
 /// Всё внешнее, что хост передаёт ядру (`agent-core-architecture` §10.3).
 ///
@@ -27,6 +42,13 @@ final class AgentCoreServices {
     this.models,
     this.mcp,
     this.projectFiles,
+    this.skillFiles,
+    this.hostFiles,
+    this.secrets,
+    this.config,
+    this.projectConfig,
+    this.agentConfigPaths,
+    this.lastModel,
   });
 
   /// Local | ACP client | memory (tests).
@@ -50,6 +72,13 @@ final class AgentCoreServices {
   /// `Platform.operatingSystem`.
   final String platform;
 
+  /// Файловая система процесса агента для корней только для чтения (design.md
+  /// change `add-agent-skills`, D5, D17): из неё `read`/`ls` берут файлы
+  /// каталогов навыков вне рабочей папки. `null` — корней нет, навыки вне
+  /// рабочей папки читаются только как `outsideWorkspace`. Хост передаёт
+  /// локальное окружение процесса, не клиентское.
+  final ExecutionEnv? hostFiles;
+
   /// Каталог моделей для опции `model` и смены модели сессии (§2.12.2,
   /// §13.6). `null` — каталог из одной `CoreConfig.defaultModel`: тесты и
   /// хосты без конфига провайдеров (design.md change
@@ -67,4 +96,61 @@ final class AgentCoreServices {
   /// промпт, позже — шаблоны команд и определения агентов. `null` — файлов
   /// проекта нет (web, мобильные хосты, тесты): поведение прежнее.
   final ProjectFilesSource? projectFiles;
+
+  /// Чтение навыков при создании и загрузке сессии (design.md change
+  /// `add-agent-skills`, D1, D16): отдельная фаза, параллельная файлам
+  /// проекта, со своим таймаутом. `null` — навыков нет (`serve --ws`, web,
+  /// тесты): порт не вызывается, сессия без навыков.
+  final SkillFilesSource? skillFiles;
+
+  /// Резолвер секретов хоста (design.md change `add-agent-secret-store`, D3,
+  /// D4): ядро берёт через него значения `${secret:…}` в `env` и `headers`
+  /// MCP-серверов конфигурации перед подключением. Хост передаёт тот же
+  /// резолвер, что и в `createRoutedStreamFunction(…, secrets:)`: функцию
+  /// модели он строит раньше ядра, а для переменных `CODELAB_SECRET_*` нужно
+  /// окружение процесса, которого у ядра нет. `null` — секретов нет (web без
+  /// хранилища, тесты): сервер со ссылкой не подключается, причина
+  /// `no secret store`.
+  final SecretResolver? secrets;
+
+  /// Источник конфигурации работающего агента (design.md change
+  /// `add-config-writer-and-reload`, D7, D8).
+  ///
+  /// Почему порт сервисов: файлы и наблюдатель — забота хоста, а ядро только
+  /// подписывается на сигнал и вызывает загрузку. `null` — перезагрузки нет:
+  /// подписки, `reloadConfig`/`checkConfig` и команды `/config` нет
+  /// (`--llm-script`, тесты, мобильные и web-хосты). С источником
+  /// `buildAgentCore` требует `modelsFor` (`HostWiringException`). Владелец —
+  /// хост: он закрывает источник после `runtime.dispose()`.
+  final ConfigSource? config;
+
+  /// Порт загрузки конфигурации папки сессии (design.md change
+  /// `require-project-folder`, D21).
+  ///
+  /// Почему отдельное поле, а не часть [config]: у хоста бывает одно без
+  /// другого. Источник перезагружает корень запуска, а порт даёт сессии
+  /// другой папки её собственный `CoreConfig` и функцию модели. `null` —
+  /// сессия вне корня получает `CoreConfig.withoutProject` (`serve --ws`,
+  /// `--llm-script`, сценарный открыватель, сторонние хосты, Q18).
+  /// С портом `buildAgentCore` требует `modelsFor` (`HostWiringException`)
+  /// и передаёт его рантайму, даже если [config] не задан.
+  final ProjectConfigLoader? projectConfig;
+
+  /// Пути конфигурации агента для PERM-11 (design.md change
+  /// `add-config-writer-and-reload`, D8; `agent-core-architecture` §7.6.1):
+  /// то, что агент перечитывает на лету, модель не правит без человека.
+  /// Хост строит значение одной функцией (`agentConfigPathsFor` пакета
+  /// `codelab_agent_io`) из тех же входов, что источник конфига. Почему поле
+  /// сервисов, а не `HostProfile`: пути — данные запуска процесса, профиль
+  /// описывает возможности платформы. `null` — хост пути не передал
+  /// (`--llm-script`, web, тесты): действует список §7.6.1 относительно
+  /// корня сессии.
+  final AgentConfigPaths? agentConfigPaths;
+
+  /// Память последней явно выбранной модели (design.md change
+  /// `optional-default-model`, D6, D8). `null` — памяти нет: шаг 2 выбора
+  /// модели пропускается, запись не выполняется. Хосты с `dart:io` дают
+  /// `FileLastModelStore`; `--llm-script`, сценарные открыватели, web и
+  /// тесты оставляют `null`.
+  final LastModelStore? lastModel;
 }

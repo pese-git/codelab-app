@@ -52,8 +52,18 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | 2 | глобальный конфиг | `$CODELAB_HOME/config.yaml` (по умолчанию `~/.codelab/config.yaml`) | пользователь |
 | 3 | проектный конфиг | `<cwd>/.codelab/config.yaml` | репозиторий (коммитится) |
 | 4 | локальный проектный конфиг | `<cwd>/.codelab/config.local.yaml` | пользователь (обычно в `.gitignore`); пока проект не в `trusted_projects`, подчиняется тем же правилам доверия, что слой 3 (§15.3) |
-| 5 | переменные окружения `CODELAB_*`; после MVP — первой в слое предконфигурация провайдера `CODELAB_PROVIDER_*` (§17.5.3) | §15.6 | окружение запуска |
-| 6 | флаги командной строки | §15.6 | запуск |
+| 5 | дополнительный файл `--config <path>` / `CODELAB_CONFIG` (ниже) | путь из флага или переменной | тот, кто запускает агента |
+| 6 | переменные окружения `CODELAB_*`; с этапа 8.10 первой в слое — предконфигурация провайдера `CODELAB_PROVIDER_*` (§17.5.3) | §15.6 | окружение запуска |
+| 7 | флаги командной строки; с этапа 8.10 первой в слое — предконфигурация `--provider-type`/`--provider-config` (§17.5.3) | §15.6 | запуск |
+
+Слои 3–4 берутся от `<cwd>/.codelab/`. Для корня запуска хоста их читает стартовая загрузка; для
+сессии другой папки хост с портом `ProjectConfigLoader` читает слои *её* папки тем же загрузчиком на
+каждое открытие сессии (change `require-project-folder`, D21); слои 1–2 и 5–7 общие. Относительный
+`--config` разрешается от корня запуска, а не от папки сессии.
+
+Нумерация совпадает со спецификацией agent-configuration, требование «Слои конфигурации и их
+порядок», и с D3 change `add-config-writer-and-reload` (до этапа 8.10 здесь файл `--config`
+назывался слоем 4а, окружение — слоем 5, флаги — слоем 6).
 
 `CODELAB_HOME` — корень глобального состояния: конфиг, сессии (§8.9), логи. По умолчанию
 `~/.codelab`; на мобильных платформах и web — каталог документов приложения (задаёт хост).
@@ -69,7 +79,7 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 Файлы `codelab.toml` Python-агента в этой таблице отсутствуют: агент их не читает. Если нет ни
 одного YAML-файла слоёв 2–4 и не задан `--config`, загрузчик пишет одно предупреждение
 `config.legacy_found` (§15.7).
-Дополнительный слой 4а — `--config <path>` / `CODELAB_CONFIG` — читается всегда, когда задан,
+Слой 5 — `--config <path>` / `CODELAB_CONFIG` — читается всегда, когда задан,
 и не подчиняется правилам доверия §15.3: файл назвал тот, кто запускает агента. Поэтому
 `CODELAB_CONFIG` — только абсолютный путь (относительный — ошибка использования: переменная
 переживает смену каталога, и путь от корня склонированного репозитория обошёл бы доверие), а
@@ -109,16 +119,18 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | `tools.web.enabled = false`; уменьшение `tools.web.fetch_max_bytes`, `fetch_timeout`, `max_redirects` (после MVP, §17.1.6) | да | да | — |
 | `tools.web.allow_private_network`, `tools.web.user_agent`, `tools.web.search.*` (после MVP) | нет | да | проект в `trusted_projects` |
 | `permissions.tools.web_fetch = "allow"` (после MVP) | нет — как любое `allow` | да | проект в `trusted_projects` |
-| `skills.enabled = false`, `skills.disabled`, уменьшение `skills.max_skills` и `skills.catalog_max_chars`, `skills.operative.enabled = false` (после MVP, §17.2.8) | да | да | — |
-| `skills.extra_roots`, `prompts.templates_dirs` (после MVP) | нет | да | — (согласие даёт только пользователь) |
+| `skills.enabled = false`, `skills.disabled`, уменьшение `skills.max_skills`, `skills.catalog_max_chars` и `skills.reattach.*` (change `add-agent-skills`, §17.2.8); `skills.operative.enabled = false` (после 1.0, K-06) | да | да | — |
+| увеличение `skills.max_skills`, `skills.catalog_max_chars`, `skills.reattach.*` (change `add-agent-skills`, Q40) | да — только уменьшение (как `budget.*`) | да | увеличение — проект в `trusted_projects` |
+| `skills.enabled = true` поверх `false` нижних слоёв; `skills.disabled` (change `add-agent-skills`, Q43) | `enabled = true` отбрасывается, `disabled` объединяется с нижними слоями (как `permissions.deny`) | так же | проект в `trusted_projects` |
+| `skills.extra_roots` (change `add-agent-skills`), `prompts.templates_dirs` (после MVP) | нет | да, только для доверенного проекта | — (согласие даёт только пользователь) |
 | `skills.operative.lines`, `skills.operative.max_tokens` (после MVP) | нет | да | проект в `trusted_projects` |
-| каталоги `.codelab/skills`, `.codelab/prompts` (после MVP) | нет | — | проект в `trusted_projects` |
+| корни навыков `.codelab/skills`, `.agents/skills` от `cwd` до корня git (change `add-agent-skills`), каталог `.codelab/prompts` | нет | — | проект в `trusted_projects` |
 | `subagents.*` (после MVP, §17.3.10) | только ужесточение (меньшие лимиты, `enabled = false`; `follow_ups = false`, уменьшение `max_follow_ups`, `max_resumes`, но не включение и не увеличение, §17.3.8.1) | да | — |
 | `tools.spill.enabled = false`; уменьшение любых ключей `tools.spill.*` (этап 3, §17.4.8) | да | да | — |
 | увеличение ключей `tools.spill.*` (этап 3) | нет | да | глобальный конфиг или проект в `trusted_projects` |
-| `secrets.*` (после MVP, §17.5.9) | нет | нет | только глобальный конфиг; из обоих проектных слоёв отбрасывается всегда с `config.project.untrusted_key` (`ignored: secrets is read only from the global config`) |
+| `secrets.*` (с этапа 8.9, §17.5.9; change `add-agent-secret-store`, D7) | нет | нет | только пользовательский конфиг и `--config`/`CODELAB_CONFIG`; из обоих проектных слоёв отбрасывается всегда с `config.project.untrusted_key` (`ignored: secrets is read only from the global config`) |
 | `config.*` (после MVP) | нет | да | — |
-| `${secret:<name>}` в `headers`, `env` (после MVP, §17.5.4) | нет (подстановка — литерал с предупреждением) | да | проект в `trusted_projects` |
+| `${secret:<name>}` в `headers`, `env` (с этапа 8.9, §17.5.4) | нет: `providers` и `mcp.servers` недоверенного проекта отбрасываются целиком, ссылка до резолвера не доходит (change `add-agent-secret-store`, D4) | да | проект в `trusted_projects`; у провайдеров и HTTP-серверов MCP — ещё привязка к origin (ниже, «Группа провайдера и привязка ключа к адресу»; changes `require-project-folder`, D23, и `bind-mcp-secrets-to-origin`, D1–D4); stdio-серверам MCP достаточно доверия, но `${secret:…}` в `env` stdio-сервера закоммиченного `config.yaml` даёт предупреждение `config.mcp.stdio_secret_reference` (D12) |
 | `steering.enabled = false`; уменьшение `steering.max_steps`, `steering.max_pending`, `steering.max_bytes` (после MVP, §17.7.7) | да (только ужесточение) | да | — |
 | увеличение лимитов `steering.*` (после MVP) | нет | да | проект в `trusted_projects` |
 | `lsp.enabled = false`, `lsp.servers.<id>.enabled = false`; уменьшение `lsp.max_servers`, таймаутов, `max_open_documents`, `rename_max_files`; `diagnostics_after_edit` (после MVP, §17.8.10) | да | да | — |
@@ -141,14 +153,60 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 | `a2a.agents.<имя>.enabled = false`; уменьшение `a2a.client.*` (после MVP) | да | да | — |
 | `a2a.server.*` (после MVP, §17.15.4) | нет | нет | только глобальный конфиг и флаги `serve --a2a` |
 
+**Группа провайдера и привязка ключа к адресу** (design.md change `require-project-folder`, D23, Q14,
+Q16, Q17). «Доверенный проект» не означает «отдать проекту ключи пользователя», поэтому для
+`providers.*` проектных слоёв действуют два правила — для корня процесса и для папки любой сессии:
+1. *Группа целиком из одного слоя.* Поля `kind`, `base_url`, `headers`, `api_key`, `api_key_env`,
+   `api_key_secret`, `auth_header` образуют группу «адрес и аутентификация». Если их задают несколько
+   слоёв и среди них есть проектный, верхний слой `T`, задающий хоть одно её поле, задаёт
+   аутентификацию (`headers`, `api_key`, `api_key_env`, `api_key_secret`, `auth_header`) один: чего `T`
+   не задал, того нет. Поля адреса (`kind`, `base_url`), которых `T` не задал, берутся из слияния
+   непроектных слоёв ниже `T`; адрес проектного слоя ниже `T` не наследуется (Q21 (a)). Ссылка или
+   литерал нижнего слоя к адресу проекта не наследуется.
+2. *Ссылка на ключ привязана к origin.* `api_key_secret`, `api_key_env`, `${secret:…}` и `${ENV}` в
+   `headers` и `api_key`, а также `${ENV}` в `base_url` из проектного слоя разрешаются, только если
+   (a) заданы в `config.local.yaml` доверенного проекта либо (b) глобальные слои связывают ту же
+   ссылку (вид и имя) с тем же origin `scheme://host:port` (порт по умолчанию схемы подставляется,
+   `base_url` по умолчанию для `kind` учитывается). Иначе ссылка не раскрывается и не читается,
+   провайдер остаётся в каталоге с ошибкой правила (`CoreConfig.providerProblems`), ход с его моделью
+   завершается без HTTP-запроса, при загрузке пишется `config.provider.key_unbound`.
+3. *HTTP-серверы MCP проектных слоёв* (change `bind-mcp-secrets-to-origin`, D1–D7; Q1–Q5 (a)).
+   Правило группы для `mcp.servers` выполняет слияние по `name`: элемент верхнего слоя заменяет
+   нижний целиком, поэтому заголовки и ссылки нижнего слоя к `url` проекта не наследуются.
+   Ссылки `${secret:…}` и `${ENV}` в `headers.*` и `${ENV}` в `url` сервера `type: http` из
+   проектного слоя разрешаются по тем же условиям (a) и (b), что ключ провайдера; origin — по `url`.
+   Привязку (b) дают ссылки глобальных провайдеров и глобальных HTTP-серверов MCP (одно множество
+   `ProviderKeyBinding`); глобальные stdio-серверы её не дают. Иначе ссылки не раскрываются и не
+   читаются, их значения в сервер не попадают, а сервер остаётся в `CoreConfig.mcpServers` с
+   `McpServerConfig.blockedReason` (`key bound to another address: move the server to
+   config.local.yaml or the user config (<reference>)`): коннектор не открывает транспорт, сервер
+   в `failed` с этим `lastError`; при загрузке пишется `config.mcp.key_unbound {server, source,
+   reference_kind}`. В `url` правило судит только `${ENV}`: `${secret:…}` там по-прежнему проблема
+   загрузки (§15.5, п. 7). Имя ссылки в `lastError` печатается, только если оно проходит правило
+   имени и не похоже на значение секрета, иначе — `a reference`. Stdio-серверы правило не судит
+   (Q1 (a)): команда проекта — произвольный код от имени пользователя, их граница — доверие. Но
+   stdio-сервер слоя `project` (закоммиченный `config.yaml`, не `config.local.yaml`) со ссылкой
+   `${secret:…}` в `env` даёт одно предупреждение на сервер `config.mcp.stdio_secret_reference
+   {server, source}` (ключ `mcp.servers[<server>]`, без имени и значения секрета; текст
+   `a stdio server from the committed project config receives a secret reference; it runs as you,
+   so move it to config.local.yaml if you did not write it`), его показывают журнал загрузки и
+   `config check` (D12). Пересмотр Q1 обязателен при включении хранилищ ОС (change
+   `add-agent-os-secret-backends`).
+
 После MVP новые ключи провайдеров (§17.10.12: `preset`, `auth`, `key_rotation`, `key_cooldown`,
 кварки, `overflow_phrases`, `models.<m>.tools`) — внутри `providers.*`, а `logging.llm_snapshot` —
 внутри `logging.*`: новых правил доверия они не добавляют. Ключи `compaction.engine` и
 `compaction.structured.*` (§17.13.4) покрыты строкой `compaction.*`, а `sessions.window.*` и
 `sessions.segments.*` (§17.13.2) — строкой `sessions.*`.
 
-Слои 5 и 6 (окружение, флаги и после MVP предконфигурация провайдера `CODELAB_PROVIDER_*`,
-§17.5.3) правилам доверия не подчиняются: их задаёт тот, кто запускает агента.
+Слои 5–7 (`--config`/`CODELAB_CONFIG`, окружение, флаги и с этапа 8.10 предконфигурация
+провайдера `CODELAB_PROVIDER_*`, §17.5.3) правилам доверия не подчиняются: их задаёт тот, кто
+запускает агента.
+
+С живой перезагрузкой (этап 8.10) доверие закреплено на стартовом снимке до перезапуска:
+`CoreConfig.fromLayers(pinnedTrustedProjects:)` оценивает проектные слои и строит
+`CoreConfig.trustedProjects` по списку начальной загрузки, а новое значение `trusted_projects`
+ждёт перезапуска (§17.5.6; design.md change `add-config-writer-and-reload`, D8).
 
 `trusted_projects` — массив только абсолютных путей (`~` раскрывается; относительный — ошибка
 `expected an absolute path` на `trusted_projects[i]`) в **глобальном** слое (`user` или `appStorage`).
@@ -160,6 +218,24 @@ final class ConfigPosition { final int line, column; }   // нумерация �
 (`ignored: trusted_projects is read only from the global config`), а в слое `--config` — ошибка. Ключ из слоя 3 (и из слоя 4 недоверенного проекта), который
 требует доверия, без него не ошибка, а предупреждение `config.project.untrusted_key` с именем
 ключа: репозиторий не может сломать запуск, но и не может расширить права агента.
+
+**Ссылки проектных файлов** (с этапа 8.10, задача 8.5; design.md change
+`add-config-writer-and-reload`, D5, п. 5, D7). Перед чтением слоёв 3 и 4 загрузчик берёт реальный
+путь существующего файла от ОС (`realpath`, `resolveSymbolicLinksSync`), проверяет его и открывает
+именно его, а не лексический путь; посегментный разбор с несозданным хвостом — только у
+`ConfigWriter`. Разделитель — `/` на POSIX (`\` — символ имени), `/` и `\` на Windows. Код проверки
+общий у писателя, загрузчика и наблюдателя (`config_link_containment.dart`). Реальный путь вне
+канонического `<cwd>/.codelab` (в том числе `.codelab` — ссылка наружу; сравнение по сегментам)
+не читается: проблема загрузки `syntax` с путём файла слоя и текстом `the config file resolves
+outside <cwd>/.codelab/; symbolic links of a project config must stay inside .codelab` (цель не
+называется). Ошибка раскрытия — всегда проблема: цикл — `too many symbolic links: <path>`, `..` в
+несуществующем хвосте — `invalid path: <path>`. Без проблемы — только висячая ссылка с целью
+снаружи: слой отсутствует. Наблюдатель (§17.5.6) содержимое цели снаружи не читает, цель не
+замеряет (`lstat`/`readlink` звеньев допустимы) и на её каталог — и на `.codelab`-ссылку наружу —
+не подписывается; отпечаток `blocked` отличим от отсутствия и при опросе. Висячая ссылка наружу,
+чья цель появилась позже, сигнала не даёт (граница). Слой 2 (dotfiles) и слой 5 не ограничиваются. Почему: иначе ссылка
+репозитория `.codelab/config.yaml -> ../../other/.codelab/config.yaml` подставляла бы в проект чужой
+файл (spec agent-configuration «Ссылки проектных слоёв при чтении»).
 
 ## 15.4. Схема MVP
 
@@ -187,9 +263,9 @@ providers:
 | `kind` | `"openai-compatible"` \| `"anthropic"` \| `"gemini"` | обязателен, если нет `preset` | адаптер (§2.5, §17.10.3) |
 | `base_url` | string | для `anthropic` — `https://api.anthropic.com`; для `gemini` — `https://generativelanguage.googleapis.com`; для `openai-compatible` обязателен | эндпоинт |
 | `api_key_env` | string | нет | имя переменной окружения с ключом (`[A-Za-z_][A-Za-z0-9_]*`, иначе `expected an environment variable name`) |
-| `api_key_secret` | string | нет | имя секрета в `SecretStore` (keychain) |
+| `api_key_secret` | string | нет | имя секрета (правило `SecretNames`, §17.5.2); значение читает `SecretResolver` при первом запросе к провайдеру, а не загрузка (этап 8.9; change `add-agent-secret-store`, D2, D4) |
 | `auth_header` | string | `Authorization` (Bearer) / `x-api-key` | имя заголовка ключа |
-| `headers` | map string→string | `{}` | дополнительные заголовки; допускают `${ENV}`, после MVP — `${secret:<name>}` (§17.5.4) |
+| `headers` | map string→string | `{}` | дополнительные заголовки; допускают `${ENV}` и с этапа 8.9 — `${secret:<name>}` (шаблон, раскрывается при первом запросе; §15.5, п. 7; §17.5.4) |
 | `connect_timeout` | duration | `llm.timeouts.connect` (`"30s"`) | заголовки ответа не пришли (§2.4) |
 | `idle_timeout` | duration | `llm.timeouts.idle` (`"120s"`) | пауза между событиями SSE |
 | `rate_limit_retries` | int | `llm.retry.rate_limit_retries` (`3`) | бюджет повторов при 429, не считая первой попытки: `RetryPolicy.rateLimitRetries` (§2.10) |
@@ -209,19 +285,40 @@ providers:
 | `stall_retries`, `stall_key_rotations` | int | `llm.retry.stall_retries`, `.stall_key_rotations` | после MVP: переопределение `llm.retry.*` на провайдера (§17.10.10.1) |
 | `stall_base_delay`, `stall_max_delay` | duration | `llm.retry.stall_base_delay`, `.stall_max_delay` | после MVP: переопределение `llm.retry.*` на провайдера (§17.10.10.1) |
 
-Ключ API **нельзя** писать в конфиг значением: ключ `api_key` — ошибка
-`ConfigException("providers.openai.api_key: ключи не хранятся в конфиге, используйте api_key_env или api_key_secret")`.
+Ключ API **не записывается** в конфиг значением: писатель, подкоманды CLI и страницы настроек
+отклоняют литерал (`ConfigInlineSecretException`, `suggestedSecretName`). Литерал, вписанный в
+**файл** руками, с 8.11 — **предупреждение**, а не ошибка (решение пользователя 2026-11-04 R8-4;
+design.md change `add-config-literal-secrets-and-migrate`, D4). Литеральный `api_key` работает как ключ провайдера, а загрузка пишет
+`config.secret.in_file` по единому шаблону (§17.5.4): `providers.openai.api_key: a secret is stored in
+the config file; move it to the secret store: codelab secret migrate` — без значения. `api_key: "${VAR}"`
+и `api_key: "${secret:<name>}"` — ссылка, а не литерал: раскрывается как в заголовках, без
+предупреждения, `secret migrate` её не трогает (решение пользователя 2026-11-04 R8-8, design.md change `add-config-literal-secrets-and-migrate`, D4).
+Литерал от 8 символов вычищается из текстов ошибок провайдера (более короткий, вроде `ollama`, — нет);
+литерал с управляющими или не-ASCII символами — проблема загрузки без значения (`api_key must be
+printable ASCII`); смесь литерала и ссылки в `api_key` — `api_key may use ${secret:…} only as the whole
+value` (§17.5.4). `api_key` вместе с `api_key_env` или
+`api_key_secret` у одного провайдера после слияния слоёв — проблема загрузки `api_key, api_key_env and
+api_key_secret are mutually exclusive`: конфликт источников (решение пользователя 2026-11-04 R8-6). До
+8.11 (с этапа 8.9) литеральный `api_key` был проблемой `inlineSecret`. В предконфигурации из окружения
+(§17.5.3) он ею остаётся. Оговорка D25 (change `require-project-folder`): слитое дерево учитывает
+правило группы провайдера (§15.3), поэтому пара «литерал в `user` + ссылка в `project`/`local`»
+конфликта R8-6 не даёт — поля аутентификации слоёв ниже проектного к нему не наследуются; конфликт
+остаётся между глобальными слоями (`user`, `--config`/`CODELAB_CONFIG`) и внутри одного слоя.
 Без `api_key_env` и `api_key_secret` запросы идут без ключа (локальные Ollama, LM Studio).
 Провайдер `cli` из флагов (`--provider`, §15.6) получает `api_key_env: CODELAB_API_KEY`, только
 если переменная задана и непуста, а слой флагов заменяет `providers.cli` целиком: `headers` и
 ссылки на ключ одноимённого провайдера из файлов не уходят на адрес `--base-url`
 (change `add-agent-configuration`, D4).
-`api_key_env` и `api_key_secret` взаимоисключающие: оба сразу — `ConfigException`. После MVP
-правило о встроенном секрете расширено (CFG-9, §17.5.4): кроме `api_key` отклоняются ключи
-`apiKey`, `token`, `secret`, `password` в `providers.*`, `tools.web.search.backends.*` и
-`mcp.servers.*`, литеральные значения `headers.*` и `mcp.servers.*.env.*`, похожие на ключ по
-шаблонам §12.4, и ключ, вписанный в `api_key_env`/`api_key_secret` вместо имени; ошибка —
-`ConfigInlineSecretException` с подсказкой `codelab secret set <name>`.
+`api_key_env` и `api_key_secret` взаимоисключающие: оба сразу — `ConfigException`. Ключи `apiKey`,
+`token`, `secret`, `password` в `providers.*` и в элементах `mcp.servers` в файле дают то же
+предупреждение и не применяются (CFG-9, п. 1, §17.5.4; подсказка `codelab secret set <name>` с
+именем `SecretNames.suggestFor`); в `tools.web.search.backends.*` — вместе с инструментом поиска
+(§17.1.6). С 8.11 предупреждение дают и литеральные части `headers.*` и `mcp.servers.*.env.*` по
+шаблонам §12.4 — в том числе смешанное `Bearer sk-… ${X}` (R1-1) и DSN, разрезанный подстановкой —
+и ключ, вписанный в `api_key_env`/`api_key_secret`/`${secret:…}` вместо имени (CFG-9, пп. 2–3). Такая
+ссылка не разрешается: ошибка хода говорит, что делать, и значения не содержит (design.md change `add-config-literal-secrets-and-migrate`, D3, D4). Для ключей
+недоверенного проекта, которые доверие и так отбрасывает, предупреждения нет. Перенос всех
+находок — `codelab secret migrate` (§17.5.5; D7).
 
 **`providers.<id>.models.<model>`** — `<model>` — id модели у провайдера: один ключ YAML, даже
 если в нём есть `.` или `/` (`gpt-4o`, `qwen2.5-coder-32b`, `org/model`); с `:` или пробелом,
@@ -236,8 +333,8 @@ providers:
 | `name` | string | id модели | имя в селекторе `model` (§13.6) |
 | `image` | bool | `false` | принимает картинки |
 | `reasoning` | bool | `false` | поддерживает рассуждения |
-| `cost_input`, `cost_output` | float | нет | цена за 1 млн токенов, USD |
-| `cost_cache_read`, `cost_cache_write` | float | нет | то же для кеша |
+| `cost_input`, `cost_output` | float ≥ 0, конечное | нет | цена за 1 млн токенов, USD; отрицательное, `.nan` или `.inf` — проблема ключа (change `add-usage-extension`, D20) |
+| `cost_cache_read`, `cost_cache_write` | float ≥ 0, конечное | нет | то же для кеша |
 | `hidden_reasoning` | bool | нет | закрытое рассуждение: длинный таймаут простоя до первого контента (§2.10.5) |
 | `thinking_mode` | `"adaptive"` \| `"budget"` | нет (§2.12.2; безопасное значение `adaptive`) | форма рассуждения у Anthropic: `budget` — для Claude 4.5 и старше (§2.8, §2.12.3) |
 | `tools` | bool | нет (§2.12.2) | после MVP: `false` — вызов инструментов через промпт (§17.10.11) |
@@ -246,10 +343,28 @@ providers:
 
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
-| `default_model` | string `"provider/model"` | обязателен | модель новой сессии; должна быть в каталоге |
+| `default_model` | string `"provider/model"` | нет | явная модель новой сессии; если задана — должна быть в каталоге, иначе ошибка без отката. Без ключа модель выбирается правилом ниже (change `optional-default-model`) |
 | `fallback` | string[] | `[]` | цепочка `withFallback` (§2.10.3) после `default_model` |
 | `summary_model` | string? | `null` | модель суммаризатора (§9.7): `null` → роль `smol` (§17.10.5), иначе модель сессии; порядок — переопределение роли `smol` на сессию, `agent.summary_model`, `llm.roles.smol.models`, модель сессии |
 | `effort` | `"low"` \| `"medium"` \| `"high"` | `"medium"` | начальное значение опции сессии `effort` (§2.12.3, §13.6) |
+
+**Модель новой сессии без `agent.default_model`** (change `optional-default-model`, D1–D7; идея
+порядка — поведение OpenCode в описании пользователя, https://opencode.ai/docs/models/, код не
+изучался и не копировался):
+
+1. явная `agent.default_model` любого слоя (файлы, `CODELAB_CONFIG`, `CODELAB_MODEL`,
+   `CODELAB_PROVIDER_*`, флаги `serve`) — источник `config`;
+2. последняя модель, явно выбранная пользователем (`$CODELAB_HOME/state/last-model.json`, порт
+   ядра `LastModelStore`), если она есть в каталоге сессии — источник `last-used`; только для
+   `createSession` без модели;
+3. первая модель первого доступного провайдера в порядке `providers` — источник `first-provider`.
+   Доступен провайдер с моделью, без `providerProblems` (переменная `api_key_env` задана) и без
+   `UnusableKeyRef`; `api_key_secret` хранилище при выборе не читает. Нет доступных — первая
+   модель первого провайдера с моделями.
+
+Нет ни одной модели — проблема `agent.default_model` (вид `value`, событие `config.model.none`,
+`no model is configured; add a provider with at least one model`). `CoreConfig.defaultModel` —
+модель шагов 1 или 3, `CoreConfig.defaultModelSource` — её источник; шаг 2 выполняет рантайм.
 
 **`llm.roles.<role>`** (после MVP, цель L-10) — `<role>`: `default` (основная), `smol` (сжатие,
 заголовок сессии, исследование), `slow` (ревью), `plan`, `subagent`, `vision` (разбор изображений,
@@ -392,8 +507,8 @@ providers:
 |---|---|---|---|
 | `name` | string | обязателен | префикс инструментов `mcp__<name>__` |
 | `type` | `"stdio"` \| `"http"` | обязателен | транспорт |
-| `command`, `args`, `env` | string, string[], map string→string | — | для `stdio`; `${ENV}` допустим в `args` и значениях `env`; после MVP в значениях `env` — и `${secret:<name>}` (§17.5.4) |
-| `url`, `headers` | string, map string→string | — | для `http`; `${ENV}` допустим; после MVP в значениях `headers` — и `${secret:<name>}` |
+| `command`, `args`, `env` | string, string[], map string→string | — | для `stdio`; `${ENV}` допустим в `args` и значениях `env`; с этапа 8.9 в значениях `env` — и `${secret:<name>}` (раскрывается перед подключением; в `args` — проблема конфига, §15.5, п. 7; §17.5.4) |
+| `url`, `headers` | string, map string→string | — | для `http`; `${ENV}` допустим; с этапа 8.9 в значениях `headers` — и `${secret:<name>}` (в `url` — проблема конфига, §15.5, п. 7) |
 | `enabled` | bool | `true` | выключение сервера без удаления |
 | `connect_timeout` | duration | `"10s"` | подключение при создании сессии |
 | `call_timeout` | duration | `"10m"`; допустимо `1s..24h`, иначе ошибка | срок одного вызова `tools/call` этого сервера; `McpClientConnector` берёт `server.callTimeout ?? options.callTimeout` (change `add-agent-configuration`, D10). У серверов из `session/new` ключа нет: в ACP такого параметра нет, у них действует умолчание коннектора |
@@ -445,9 +560,10 @@ web-инструменты: `enabled` (`false` — capability `network` off), `f
 (`brave` \| `tavily`), `url`, `method`, `api_key_secret` или `api_key_env` (значение ключа в конфиге —
 `ConfigException`, как CFG-2) и поля разбора. Подробно — §17.1.6.
 
-**`skills`**, **`skills.operative`** (после MVP) — `enabled`, `extra_roots` (только слои 2 и 4),
-`disabled`, `max_skills` (`200`), `catalog_max_chars` (`8000`); пины — `enabled`, `max_tokens`
-(`2048`), `lines`. Подробно — §17.2.8.
+**`skills`** (change `add-agent-skills`) — `enabled`, `extra_roots` (только слои 2 и 4),
+`disabled`, `max_skills` (`200`), `catalog_max_chars` (`8000`), `reattach.per_skill_tokens` (`5000`),
+`reattach.total_tokens` (`25000`); **`skills.operative`** (после 1.0, K-06; до него —
+`config.key.not_applied`) — пины `enabled`, `max_tokens` (`2048`), `lines`. Подробно — §17.2.8.
 
 **`subagents`** (после MVP) — `enabled` (`true`), `max_concurrent` (`3`), `max_per_turn` (`10`),
 бюджет ребёнка `max_steps` (`30`), `max_tokens`, `max_cost`, `max_duration` (`"10m"`),
@@ -530,29 +646,35 @@ capability `memory` off), `max_notes` (`500`, `10..10000`, на scope), `note_ma
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
 | `level` | `"trace"`…`"error"` | `"info"` | уровень `Logger` |
-| `file` | path | `$CODELAB_HOME/logs/agent.log` | sink логов; переопределяется `--log-file` и `CODELAB_LOG_FILE` (§12.3.1) |
-| `trace` | bool | `true` | protocol trace (§12.5) |
-| `trace_payload` | bool | `false` | payload кадров; только debug-сборка |
+| `file` | path | — (файл не пишется) | sink логов; переопределяется `--log-file` и `CODELAB_LOG_FILE` (§12.3.1); без значения каталог `$CODELAB_HOME/logs` не создаётся (OQ5 (а) change `add-agent-configuration`) |
+| `trace` | bool | `true` | protocol trace (§12.5); после MVP: ключ читается, не применяется (`config.key.not_applied`; Q11 change `switch-default-agent-to-dart`) |
+| `trace_payload` | bool | `false` | payload кадров; только debug-сборка; после MVP: ключ читается, не применяется (`config.key.not_applied`; Q11 change `switch-default-agent-to-dart`) |
 | `llm_snapshot` | `"off"` \| `"headers"` \| `"body"` | `"off"` | после MVP: снимок запроса при зависании (§17.10.10) |
 
-**`secrets`** (после MVP, §17.5.4) — только глобальный конфиг.
+**`secrets`** (с этапа 8.9, §17.5.4; change `add-agent-secret-store`, D7) — только пользовательский
+конфиг и `--config`/`CODELAB_CONFIG`; из проектных слоёв отбрасывается (§15.3), поэтому репозиторий
+не может переключить агента на открытый файл. Потребитель — хост (`HostSettings.secretsBackend`).
 
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
-| `backend` | `"auto"` \| `"keychain"` \| `"env"` \| `"file"` | `"auto"` | хранилище секретов: ОС-хранилище, если доступно, иначе `env`; `file` — открытый `$CODELAB_HOME/secrets.yaml` с правами `0600` |
+| `backend` | `"auto"` \| `"keychain"` \| `"env"` \| `"file"` | `"auto"` | хранилище секретов. В 1.0: `auto` — `env` на всех ОС, без проб и процессов, `file` не выбирает никогда (CFG-11); `env` — только переменные `CODELAB_SECRET_<…>`; `file` — открытый `$CODELAB_HOME/secrets.yaml` с правами `0600`, на Windows — проблема конфигурации `file backend is not supported on Windows; use env with CODELAB_SECRET_* variables` (добавляет `ConfigLoader`, D7, D14); `keychain` — проблема конфигурации `secrets.backend: keychain is not supported yet (supported: auto, env, file)`, значение остаётся в схеме для хранилищ ОС после 1.0 (черновик `add-agent-os-secret-backends`, D13). Другое значение — проблема `value` `expected one of: auto, keychain, env, file` |
 
-**`config`** (после MVP, §17.5.6) — слои 2 и 4.
+**`config`** (с этапа 8.10, §17.5.6; design.md change `add-config-writer-and-reload`, D7) — слои 2, 4
+и `--config`/`CODELAB_CONFIG`; в проектном слое 3 раздел отбрасывается с
+`config.project.untrusted_key`. Ключи применяются (потребитель — `FileConfigSource` хоста) и оба
+`restartRequired`: наблюдатель создаётся один раз при старте.
 
 | Ключ | Тип | По умолчанию | Смысл |
 |---|---|---|---|
-| `watch` | bool | `true` | наблюдение за файлами конфига и живая перезагрузка |
+| `watch` | bool | `true` | наблюдение за файлами конфига и живая перезагрузка; `false` — источник без наблюдателя, `/config reload` работает |
 | `poll_interval` | duration | `"2s"` | период опроса, где события ФС недоступны; `1s..60s` |
 
 **`profile.<name>`** — сужение встроенного профиля (§10.2): ключи — имена capability в
 snake_case, значения — `"off"` или список транспортов. Пример:
 `profile.agent-serve.mcp = ["http"]`, `shell_exec = "off"` (в файле `off` пишется в кавычках, чтобы
-читатель YAML 1.1 не принял его за логическое значение). После MVP — также `network = "off"`
-(§17.1.5), `skills = "off"` (§17.2), `language_servers = "off"` (§17.8.10), `background_jobs = "off"`
+читатель YAML 1.1 не принял его за логическое значение); `skills = "off"` — известная capability
+(change `add-agent-skills`, §17.2). После MVP — также `network = "off"`
+(§17.1.5), `language_servers = "off"` (§17.8.10), `background_jobs = "off"`
 (§17.9.12), `memory = "off"`, `user_questions = "off"` (§17.11) и `user_hooks = "off"` (§17.14.2).
 `<name>` — только встроенные профили (§10.4), другое имя — `unknownKey`; неизвестная capability —
 `unknownKey`, capability после MVP — `config.key.not_applied`. Расширение — `HostWiringException`,
@@ -565,6 +687,10 @@ change `add-agent-configuration`).
 loadConfig(cwd, env, flags):
 1. layers := [defaults]
 2. для пути в [global, project, projectLocal, flags.config?]:
+     project, projectLocal (§15.3, «Ссылки проектных файлов»): реальный путь существующего файла
+       от ОС; вне канонического <cwd>/.codelab → ConfigIssue(syntax) с путём слоя, файл не
+       читается; ошибка раскрытия (цикл, invalid path) → ConfigIssue(syntax) всегда; висячая
+       ссылка с целью снаружи → как отсутствующий файл; открывается проверенный реальный путь
      если файла нет: слои global, project, projectLocal → пропустить;
        явно названный flags.config (--config / CODELAB_CONFIG) → ConfigIssue(syntax,
        "cannot read the file", источник --config | CODELAB_CONFIG); CODELAB_CONFIG только
@@ -581,15 +707,21 @@ loadConfig(cwd, env, flags):
      auth.toml, codelab.local.toml (§15.7) без чтения: найден хотя бы один → одно
      предупреждение config.legacy_found {files} на процесс и cwd; YAML найден → предупреждения нет
 3. для каждого слоя: validateKeys(layer, schema)          // строгость, ниже; позиции — из positions
-     после MVP: проверка встроенных секретов (CFG-9, §17.5.4) → ConfigInlineSecretException
+     секреты в файле (CFG-9, пп. 1–3, §17.5.4; с 8.11 — R8-4): findInlineSecrets(layer) →
+       предупреждение config.secret.in_file на находку (кроме ключей недоверенного проекта,
+       отбрасываемых шагом 4); api_key вместе с api_key_env/api_key_secret → ConfigException;
+       предконфигурация (слой 6) — проблема inlineSecret, как с 8.10
 4. для слоёв 3–4: применить правила доверия §15.3
 5. merged := merge(layers) по правилам §15.2
-6. interpolate(merged)                                    // ${ENV}, после MVP — ${secret:<name>}; ниже
-7. после MVP: слой предконфигурации envPreconfigLayer(env, flags) (§17.5.3) — первым в слое 5,
+6. interpolate(merged)                                    // ${ENV}; ${secret:<name>} — шаблон без чтения (с 8.9, D4); ниже
+7. с этапа 8.10: предконфигурация envPreconfigLayer(env, flags) (§17.5.3) — первой в слое 6
+     (переменные) или 7 (флаги),
      с той же строгой проверкой шагов 3 и 6, без правил доверия
    applyEnv(merged, env); applyFlags(merged, flags)       // §15.6
 8. семантическая проверка:
-     default_model, fallback, summary_model (если задан) и после MVP llm.roles.*.models существуют в каталоге моделей
+     default_model (если задан), fallback, summary_model (если задан) и после MVP llm.roles.*.models существуют в каталоге моделей
+     default_model не задан → модель первого доступного провайдера (§15.4, `agent`); ни одной модели → проблема
+       agent.default_model с событием config.model.none
      у каждого openai-compatible провайдера есть base_url
      providers.<id>.kind — известный вид, иначе ошибка со списком видов (подмены mock нет, DF-15)
      api_key_env указывает на существующую переменную → иначе предупреждение (не ошибка:
@@ -654,8 +786,8 @@ loadConfig(cwd, env, flags):
 `agent.summary_model`, `permissions.timeout`, `model_catalog.*`, `providers.*.list_models*`,
 `logging.trace*`, `redact.*` и др.), проверяется по схеме, а явно заданный даёт одно предупреждение
 `config.key.not_applied {key, source}` на каждый явно заданный лист за загрузку; значение по умолчанию предупреждения не
-даёт. Раздел верхнего уровня «после MVP» (`llm`, `images`, `skills`, `subagents`, `jobs`, `hooks`,
-`plugins`, `a2a`, `memory`, `steering`, `lsp`, `secrets`, `config` и др.) распознаётся по имени и
+даёт. Раздел верхнего уровня «после MVP» (`llm`, `images`, `subagents`, `jobs`, `hooks`,
+`plugins`, `a2a`, `memory`, `steering`, `lsp` и др.; `secrets` получил схему в 8.9, `config` — в 8.10, D7 change `add-config-writer-and-reload`, `skills` — в change `add-agent-skills`, кроме подраздела `skills.operative`) распознаётся по имени и
 даёт то же предупреждение без проверки типов: его схему введёт change, который добавит потребителя.
 Ключ, которого нет ни в схеме, ни в списке разделов после MVP, — `unknownKey` (CFG-1). Ошибка на
 документированном ключе сломала бы старт пользователю, который следует документу, а тихий приём
@@ -710,20 +842,38 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 5. Результат подстановки повторно не раскрывается.
 6. Значения, полученные подстановкой в `headers` и `env`, добавляются в набор точных секретов
    редактора (§12.4).
-7. После MVP (§17.5.4): в значениях `providers.*.headers.*`, `mcp.servers.*.headers.*` и
-   `mcp.servers.*.env.*` допустима форма `${secret:<name>}`, где `<name>` соответствует
-   `SecretNames.pattern`; неверное имя — `ConfigException` на загрузке. Значение берётся из
-   `SecretResolver` при подключении сервера или запросе к провайдеру, а не при загрузке;
-   отсутствующий секрет — ошибка подключения с текстом `secret <name> is not set`. В
-   недоверенном проектном слое 3 форма остаётся литералом с предупреждением (§15.3).
+7. С этапа 8.9 (§17.5.4; change `add-agent-secret-store`, D2, D4): в значениях
+   `providers.*.headers.*`, `mcp.servers.*.headers.*` и `mcp.servers.*.env.*` допустима форма
+   `${secret:<name>}`, где `<name>` проходит правило `SecretNames` (§17.5.2); неверное имя —
+   проблема `value` с путём ключа на загрузке, текст называет правило, а не значение.
+   `${secret:…}` в остальных ключах с `${ENV}` — `mcp.servers.*.args[*]`, `mcp.servers.*.url`,
+   `providers.*.base_url` — проблема `value` `secret references ${secret:…} are allowed only in
+   env and headers values`, конфиг невалиден: argv виден через `ps`, а URL попадает в логи и
+   тексты ошибок, поэтому ссылка не раскрывается и не остаётся молчаливым литералом. Загрузка
+   секрет не читает: значение с `${secret:…}` хранится **шаблоном** `SecretTemplate` — списком
+   частей «литерал» и «ссылка», уже после раскрытия `${ENV}` и `$${`. Строкой его хранить нельзя:
+   литерал `$${secret:x}` после раскрытия неотличим от ссылки и раскрылся бы повторно (п. 5). У
+   провайдера шаблоны лежат в `CatalogProvider.headerTemplates`, у MCP-сервера конфига — в
+   `McpServerConfig.secretValues`. Значение берёт `SecretResolver`: у провайдера — при первом
+   запросе, у MCP-сервера конфига — перед подключением к сессии. Ненайденный секрет: провайдер —
+   ошибка хода класса `auth` без HTTP-запроса (`… is not set. Run: codelab secret set <name>`),
+   MCP-сервер — `mcp.server.failed {server, transport, reason}` с причиной `secret <name> is not
+   set`, сессия создаётся без его инструментов; с 8.10 значение раскрывается перед каждой попыткой
+   подключения, и сервер остаётся в сессии в `failed` с повтором по расписанию (§17.5.4, §17.5.7); заголовки после раскрытия идут в порядке файла. `${secret:…}` в серверах `session/new.mcpServers` от клиента ACP — литерал: иначе клиент
+   мог бы вытянуть любой секрет хранилища на свой адрес. Недоверенный проект до резолвера ссылку
+   не доводит: его `providers` и `mcp.servers` отбрасываются целиком (§15.3).
+8. Ссылки HTTP-сервера MCP и провайдера из проектного слоя, не привязанные к адресу (§15.3,
+   «Группа провайдера и привязка ключа к адресу»), — в том числе `${ENV}` в `url`, `base_url` и
+   `headers` — не раскрываются: значение переменной не читается и в конфиг не попадает (changes
+   `require-project-folder`, D23, Q16 (a), и `bind-mcp-secrets-to-origin`, D4, Q4 (a)).
 
 ## 15.6. Переменные окружения и флаги
 
 | Переменная | Флаг | Ключ |
 |---|---|---|
-| `CODELAB_HOME` | — | корень состояния; по умолчанию `~/.codelab`. Значение `~` или `~/…` (тильду не раскрыла оболочка: unit launchd/systemd, `env` профиля, кавычки) раскрывается в домашний каталог — `HOME`, иначе `USERPROFILE`, — тем же правилом, что `trusted_projects` (§15.3). Прочие формы с `~` в начале (`~user/…`, `~\…`) — ошибка использования `CODELAB_HOME: ~user is not supported, use an absolute path`, код `64`; `~`/`~/…` без домашнего каталога — ошибка использования `CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an absolute path`, код `64`; одинаково у агента и CLI. Одно правило у `codelabHomeOf` (агент) и `CodelabHome` (CLI) (change `add-agent-project-files`, D17) |
-| `CODELAB_CONFIG` | `--config <path>` | дополнительный файл (слой 4а) с приоритетом выше слоя 4, флаг сильнее переменной; расширение `.yaml` или `.yml`, иначе ошибка использования; для `.toml` — `--config needs a .yaml file; codelab.toml is not supported, see agent-core-architecture §15.7` (без подсказки `migrate`: команды нет). `CODELAB_CONFIG` — только абсолютный путь (относительный — ошибка использования, текст называет переменную); `--config` может быть относительным — от текущего каталога процесса. Отсутствующий файл — проблема конфига `cannot read the file`, код `64` (§15.2) |
-| `CODELAB_MODEL` | `--model <provider/model>` | `agent.default_model`; без `--provider` выбирает модель из конфига, а `--model gpt` без косой черты — ошибка использования `--model needs <provider>/<model> without --provider`; повтор `--model` без `--provider` — ошибка использования `--model can be repeated only together with --provider`. Нет модели ни во флагах, ни в конфиге, ни в `--llm-script` — проблема `agent.default_model: required`, код `64` |
+| `CODELAB_HOME` | — | корень состояния; по умолчанию `~/.codelab`. Значение `~` или `~/…` (тильду не раскрыла оболочка: unit launchd/systemd, `env` профиля, кавычки) раскрывается в домашний каталог — `HOME`, иначе `USERPROFILE`, — тем же правилом, что `trusted_projects` (§15.3). Прочие формы с `~` в начале (`~user/…`, `~\…`) — ошибка использования `CODELAB_HOME: ~user is not supported, use an absolute path`, код `64`; `~`/`~/…` без домашнего каталога — ошибка использования `CODELAB_HOME: cannot expand ~ without HOME or USERPROFILE, use an absolute path`, код `64`; одинаково у агента и CLI. Пустое значение — как незаданное. Со сценарием `--llm-script` `$CODELAB_HOME` не читается, поэтому значение не раскрывается и не проверяется (кода `64` нет, D16). Одно правило у `codelabHomeOf` (агент) и `CodelabHome` (CLI) (change `add-agent-project-files`, D17) |
+| `CODELAB_CONFIG` | `--config <path>` | дополнительный файл (слой 5) с приоритетом выше слоя 4, флаг сильнее переменной; расширение `.yaml` или `.yml`, иначе ошибка использования; для `.toml` — `--config needs a .yaml file; codelab.toml is not supported, see agent-core-architecture §15.7` (без подсказки `migrate`: команды нет). `CODELAB_CONFIG` — только абсолютный путь (относительный — ошибка использования, текст называет переменную); `--config` может быть относительным — от текущего каталога процесса. Отсутствующий файл — проблема конфига `cannot read the file`, код `64` (§15.2) |
+| `CODELAB_MODEL` | `--model <provider/model>` | `agent.default_model`; без `--provider` выбирает модель из конфига, а `--model gpt` без косой черты — ошибка использования `--model needs <provider>/<model> without --provider`; повтор `--model` без `--provider` — ошибка использования `--model can be repeated only together with --provider`. Нет ни одной модели ни во флагах, ни в конфиге (ни у одного провайдера нет моделей), ни в `--llm-script` — проблема `agent.default_model: no model is configured; add a provider with at least one model` с событием `config.model.none`, код `64`; без `agent.default_model` при провайдере с моделью — первая модель первого доступного провайдера (§15.5, шаг 8; change `optional-default-model`, D1–D4) |
 | — | `--provider <openai-compatible\|anthropic>` (с этапа 4) | провайдер из флагов с id `cli`: `providers.cli.kind`; с ним `--model <model>` — id модели этого провайдера (`agent.default_model = "cli/<model>"`), флаг можно повторять: первое значение — модель по умолчанию, все — модели `providers.cli.models`. Слой флагов заменяет `providers.cli` из файлов целиком, а не сливается с ним по полям (§15.4) |
 | — | `--base-url <url>` (с этапа 4) | `providers.cli.base_url` |
 | `CODELAB_API_KEY` | — (с этапа 4) | ключ провайдера `cli`: `providers.cli.api_key_env = "CODELAB_API_KEY"`, только если переменная задана и непуста (иначе провайдер без ключа, как Ollama и LM Studio на этапе 4); значение в флаги и логи не попадает |
@@ -743,11 +893,11 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 | — | `--role <role>=<provider/model>` (после MVP, L-10; можно повторять; в том числе `--role vision=<provider/model>`, §17.11.5) | `llm.roles.<role>.models = ["<provider/model>"]` на прогон |
 | — | `--drain-timeout <duration>` (после MVP, только `codelab -p`, H-05) | `subagents.drain_timeout` (§17.3.9); `0` — не ждать |
 | — | `--max-wakes <n>` (после MVP, только `codelab -p`, H-05) | `subagents.max_wakes` (§17.3.9); `0` — не будить |
-| `CODELAB_PROVIDER_TYPE` | `--provider-type <kind>` (после MVP, L-25) | тип провайдера предконфигурации (§17.5.3) |
-| `CODELAB_PROVIDER_CONFIG` | `--provider-config <json \| @путь>` (после MVP) | JSON провайдера предконфигурации; флаги затеняют обе переменные |
-| `CODELAB_PROVIDER_CONFIG_BASE64` | — (после MVP) | тот же JSON в base64; вместе с `CODELAB_PROVIDER_CONFIG` — ошибка |
-| `CODELAB_SECRET_<ИМЯ>` | — (после MVP, P-12) | переопределение секрета по имени, `SecretNames.envOverride` (§17.5.4) |
-| `CODELAB_DEBUG_SECRETS=1` | `--debug-secrets` (после MVP, P-17) | лог каждого обращения к секретам без значений |
+| `CODELAB_PROVIDER_TYPE` | `--provider-type <kind>` (этап 8.10, L-25; флаг только у `serve`) | тип провайдера предконфигурации (§17.5.3): `openai-compatible` или `anthropic` |
+| `CODELAB_PROVIDER_CONFIG` | `--provider-config <json \| @путь>` (этап 8.10; путь — от текущего каталога процесса) | JSON провайдера предконфигурации; флаги затеняют обе переменные (`config.preconfig.shadowed {by: "flags"}`); один флаг без другого, нечитаемый `@путь` и сочетание с `--provider`/`--base-url` — ошибка использования `64` (design.md change `add-config-writer-and-reload`, D3) |
+| `CODELAB_PROVIDER_CONFIG_BASE64` | — (этап 8.10) | тот же JSON в base64 (стандартный или URL-safe алфавит, `=` необязательны); вместе с `CODELAB_PROVIDER_CONFIG` — проблема конфига |
+| `CODELAB_SECRET_<ИМЯ>` | — (с этапа 8.9, P-12; change `add-agent-secret-store`, D3) | переопределение секрета по имени, `SecretNames.envOverride` (§17.5.4): побеждает хранилище при любом `secrets.backend`; при `auto`/`env` в 1.0 — единственный источник секретов |
+| `CODELAB_DEBUG_SECRETS=1` | `--debug-secrets` (с этапа 8.9, P-17, флаг `serve`; change `add-agent-secret-store`, D10, D11) | событие `secrets.lookup {name, purpose, source, found}` на каждое обращение, без значения, длины, префикса и хеша (CFG-10); уровень лога не меняет; другие значения переменной — как незаданная |
 | — | `--debug-llm-snapshot[=headers\|body]` (после MVP, L-27) | `logging.llm_snapshot` |
 | `CODELAB_DEBUG_LLM_SNAPSHOT` | — | `logging.llm_snapshot` |
 
@@ -755,9 +905,14 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 конфига; это абзац о прежнем минимуме). Бинарь `codelab-agent` этапа 4 файлы конфига (§15.2) не читает: провайдер, модель и ключ задаются `--provider`, `--base-url`,
 `--model` и `CODELAB_API_KEY`, режим — `--permission-mode`, остальные ключи — значения по
 умолчанию §15.4 (dart-agent-and-clients §9.9, задача 4.6). На этапе 8 YAML-конфиг (§15.2–§15.5)
-заменяет этот минимум, а флаги остаются переопределениями слоя 6. Флаги `--provider` и
-`--provider-type`/`--provider-config` (после MVP, §17.5.3) взаимоисключающие: оба сразу — ошибка
-использования.
+заменяет этот минимум, а флаги остаются переопределениями слоя 7. Флаги `--provider`/`--base-url` и
+`--provider-type`/`--provider-config` (этап 8.10, §17.5.3) взаимоисключающие: вместе — ошибка
+использования `64` `--provider-type cannot be combined with --provider` (D3, OQ6 change
+`add-config-writer-and-reload`). Внутри слоя флагов предконфигурация применяется первой, `--model` —
+после неё; `CODELAB_MODEL` (слой окружения) предконфигурации флагов проигрывает. Справка рекомендует
+`--provider-config @путь`: JSON в argv виден в `ps`; литеральный секретный заголовок в JSON —
+проблема `inlineSecret` (§17.5.3, §17.5.5). Предконфигурацию из переменных одинаково видят `serve`, встроенный
+агент и `config check`: она часть слоя переменных `ConfigLoader`; у встроенного агента флагов нет.
 
 Других переменных `CODELAB_*` ядро не читает; неизвестная переменная с префиксом `CODELAB_`
 даёт предупреждение (опечатка не должна молча игнорироваться). Переменные семейства
@@ -766,7 +921,9 @@ skills (§17.2.2); набор и типы полей frontmatter задают и
 передаёт процессу вырезанные секреты (после MVP, §17.12.6). Не дают предупреждения и переменные
 клиентов: `CODELAB_AGENT_TOKEN` (токен WebSocket-подключения CLI,
 [`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §9.11) и `CODELAB_POWER_HELPER`
-(только тестовая сборка, [`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §12.6.6). Переменные
+(только тестовая сборка, [`dart-agent-and-clients.md`](../dart-agent-and-clients.md) §12.6.6), а также
+`CODELAB_SERVE_ALIAS_ACTIVE` — маркер переходного алиаса `codelab serve`, которым CLI отмечает
+запущенного через алиас агента (change `retire-python-agent`, Q10; ядро его не читает, имя — деталь реализации CLI, а не контракт, D7). Переменные
 пула ключей `NAME_2`… для `api_key_env` (после MVP, §17.10.4) — не `CODELAB_*`, правила
 предупреждений не меняются. Тестовая
 переменная `CODELAB_TEST_SECRET_STORE=<каталог>` (файловое хранилище секретов для E2E клиентов,
@@ -816,15 +973,16 @@ warning: /work/demo/codelab.toml: codelab.toml is not used by the Dart agent. Mo
 ```
 
 Код выхода от предупреждения не меняется, в счётчик `Config: invalid (issues: <n>)` оно не входит. Агент без `config.yaml` и без флагов провайдера
-стартует с ошибкой `agent.default_model: required` (код `64`), и предупреждение стоит рядом в stderr.
+стартует с ошибкой `agent.default_model: no model is configured; …` (код `64`, событие `config.model.none`), и предупреждение стоит рядом в stderr.
 
 **Как переносить.** Ключ из столбца «Новый ключ» записывается в `config.yaml` по схеме §15.4;
 строки с прочерком не переносятся. Отдельных правил для старых ключей нет: файл `config.yaml`
 проходит обычную строгую проверку (§15.5), поэтому неизвестный ключ, вид провайдера вне
 `openai-compatible | anthropic | gemini` и определения агентов в YAML (`agents.definitions`, DF-12)
 дают ошибку, а не подмену значением по умолчанию или провайдером `mock` (DF-15). Литеральный ключ API в
-конфиг не переносят (CFG-2): `api_key = "${VAR}"` превращается в `api_key_env: VAR`, а литерал
-хранится в переменной окружения или в хранилище секретов.
+конфиг не переносят (CFG-2): `api_key = "${VAR}"` превращается в `api_key_env: VAR` (с 8.11 допустима и
+форма `api_key: "${VAR}"` — ссылка, R8-8; `api_key_env` предпочтительнее), а литерал хранится в
+переменной окружения или в хранилище секретов.
 
 **Таблица соответствия** (для ручного переноса; своя запись схемы, не алгоритм чтения):
 
@@ -875,8 +1033,8 @@ warning: /work/demo/codelab.toml: codelab.toml is not used by the Dart agent. Mo
 Определение проекта с тем же `name` заменяет глобальное. Файлы читаются при создании и загрузке
 сессии; изменения действуют в новых сессиях.
 
-Встроенные профили сессии `architect` и `review` (§17.12.2) загружаются первыми; файл с тем же
-`name` и `scope` `session` или `both` заменяет профиль.
+После MVP встроенные профили сессии `architect` и `review` (§17.12.2) загружаются первыми; файл с тем же
+`name` и `scope` `session` или `both` заменяет профиль. На этапе 8.8 встроенных профилей нет.
 
 **Формат файла.** YAML-frontmatter между строками `---`, затем тело — инструкции агента.
 
@@ -904,7 +1062,7 @@ Do not modify files.
 | `model` | string | нет | `"<provider>/<model>"` из конфига (§15.4); неизвестная модель — ошибка определения |
 | `mode` | string | нет | `plan`, `ask`, `standard`, `accept-edits`, `bypass` (§13.6); `autopilot` запрещён (CFG-4) |
 | `tools` | string[] | нет | список имён инструментов; `*` в конце — префиксный шаблон (`mcp__github__*`); без поля — все инструменты профиля (для субагента — все инструменты родителя, §17.3.3) |
-| `scope` | `session` \| `subagent` \| `both` | нет | после MVP: где определение доступно — опция `agent` сессии, тип в `task` (§17.3.2) или оба; по умолчанию `both` |
+| `scope` | `session` \| `subagent` \| `both` | нет | после MVP: где определение доступно — опция `agent` сессии, тип в `agent` (§17.3.2) или оба; по умолчанию `both` |
 | тело | text | да | непустое; не больше 32 КиБ |
 
 Неизвестное поле frontmatter — ошибка определения (как CFG-1). Разбор — полноценный YAML
@@ -927,8 +1085,10 @@ final class AgentDefinition {
   final AgentScope scope;                   // после MVP: по умолчанию both (§17.3.2)
   final ModelRole? role;                    // после MVP: роль модели (L-10), если model не задана; только у встроенных типов
 }
-// SessionSpec получает список определений; ACP-адаптер строит из него опцию `agent`
-// (определения со scope session | both), TaskTool — enum типов (scope subagent | both, §17.3.2).
+// Определения сессии приходят из порта хоста ProjectFilesSource при createSession/loadSession
+// (parseAgentDefinitions → AgentSession.agents, design.md change add-agent-project-files, D1, D10);
+// ACP-адаптер строит из AgentSession.agents опцию `agent` (scope session | both),
+// после MVP SubagentTool — enum типов (scope subagent | both, §17.3.2).
 ```
 
 **Алгоритм применения.**
@@ -981,7 +1141,7 @@ selectAgent(session, name):            // session/set_config_option agent=<name>
 `mode`, `model`, `thought_level` (`13-Session Config Options.md`, «Option Categories»); своя
 категория `_codelab_*` была бы расширением протокола (design.md change `add-agent-project-files`,
 D12). Опция идёт после `mode`, `model`, `effort`. Опция присутствует, только если загружено хотя бы
-одно определение со `scope` `session` или `both` (со встроенными профилями — всегда). Выбранный агент пишется в
+одно определение со `scope` `session` или `both` (после MVP, со встроенными профилями — всегда). Выбранный агент пишется в
 журнал записью `config_change` (§8) и восстанавливается при `session/load`.
 
 **Инварианты.**
@@ -1001,7 +1161,7 @@ D12). Опция идёт после `mode`, `model`, `effort`. Опция пр�
   промпт с секцией профиля, модель и режим из файла, схемы только `read`, `search`, `ls` и
   инструментов `mcp__github__*`; вызов `write` → отказ; возврат к `default` восстанавливает всё
   (CFG-7, CFG-8).
-* `acp/set-config-option-agent`: `config_option_update` содержит согласованные `agent`, `model`, `mode`.
+* `acp/set-config-option-agent`: `current_mode_update` до ответа, ответ на `session/set_config_option` содержит согласованные `agent`, `model`, `mode`, `config_option_update` не отправляется (ACP-11); края опции — `codelab_agent_acp/test/config_options_agent_test.dart`.
 
 ## 15.9. Полный пример
 
@@ -1058,7 +1218,7 @@ permissions:
     - "exec:git push --force"
     - "write:.env"
   tools:
-    update_plan: allow
+    task_update: allow         # до change add-subagents-and-tasks — update_plan (§17.16.3)
     mcp__github__create_issue: ask
 
 budget:
@@ -1152,7 +1312,7 @@ compaction:
 ## 15.10. Инварианты
 
 1. **CFG-1.** Неизвестный ключ, неверный тип и незаданная переменная в `${…}` — ошибка при старте с файлом, строкой, столбцом и путём ключа.
-2. **CFG-2.** Ключ API не хранится в конфиге значением; только `api_key_env` или `api_key_secret`.
+2. **CFG-2.** Ключ API не записывается в конфиг значением (писатель, CLI и клиенты пишут только `api_key_env` или `api_key_secret`); литерал, вписанный в файл руками, загружается с предупреждением `config.secret.in_file` и подсказкой `secret migrate` (решение пользователя 2026-11-04 R8-4, design.md change `add-config-literal-secrets-and-migrate`, D4).
 3. **CFG-3.** Проектный конфиг без доверия не может расширить права агента: разрешающие правила, MCP-серверы, провайдеры и промпты из него игнорируются с предупреждением; режим одобрения — только ужесточается.
 4. **CFG-4.** `autopilot` включается только флагом запуска.
 5. **CFG-5.** Ядро получает только провалидированный `CoreConfig` и не читает файлы конфига; разборщики YAML (`yaml`, `yaml_edit`) живут только в `codelab_agent_io`; TOML агент не разбирает.

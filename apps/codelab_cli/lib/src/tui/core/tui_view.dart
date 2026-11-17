@@ -5,8 +5,11 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 import '../../render/ansi.dart';
 import '../../strings.dart';
 import 'frame.dart';
+import '../../render/usage_segments.dart';
 import 'status_line.dart';
+import 'overlay_view.dart';
 import 'tui_chrome.dart';
+import 'tui_overlay.dart';
 import 'tui_model.dart';
 
 /// Кадр полноэкранного режима по модели экрана.
@@ -30,7 +33,8 @@ Frame render(TuiModel model, TuiChrome chrome) {
   final color = model.color;
   final lines = <String>[];
 
-  final picker = model.overlay == null
+  final modal = isModalOverlay(model.overlay);
+  final picker = model.overlay is! PickerOverlay
       ? const <String>[]
       : (chrome.picker ?? const <String>[]).take(model.size.rows ~/ 2).toList();
   final transcript = transcriptLines(model);
@@ -49,10 +53,21 @@ Frame render(TuiModel model, TuiChrome chrome) {
   }
 
   final (int, int)? cursor;
-  if (approvalOf(model) case final prompt?) {
-    lines.addAll(approvalLines(model, prompt));
+  if (modal) {
+    // Модальный экран вместо зоны одобрения и композера (spec codelab-tui
+    // «Кадр TUI»); ожидающее одобрение видно в статус-строке.
+    final overlay = model.overlay!;
+    final top = lines.length;
+    lines.addAll(overlayLinesOf(overlay, width: width, rows: model.size.rows));
+    final at = overlayCursorOf(overlay);
+    cursor = at == null ? null : (top + at.$1, min(at.$2, width - 1));
+  } else if (approvalOf(model) case final prompt?) {
+    lines
+      ..addAll(taskBlockLines(model))
+      ..addAll(approvalLines(model, prompt));
     cursor = null;
   } else {
+    lines.addAll(taskBlockLines(model));
     cursor = _composer(model, lines);
   }
 
@@ -60,13 +75,33 @@ Frame render(TuiModel model, TuiChrome chrome) {
     lines.add(_fitHints(chrome.hints ?? '', width));
   }
 
-  final status = statusLine(statusInfoOf(model, chrome), width);
-  lines.add(color ? '$sgrDim$status$sgrReset' : status);
+  final layout = statusLayout(statusInfoOf(model, chrome), width);
+  lines.add(color ? _dimStatus(layout) : layout.text);
 
   return Frame([
     for (final line in lines.take(model.size.rows))
       fitLine(line, width, color: color),
   ], cursor: cursor);
+}
+
+/// Приглушённая статус-строка; сегмент контекста от 80 % подсвечен внутри
+/// неё (жёлтый, от 95 % красный; D12), затем снова приглушение. SGR не
+/// входят в ширину: раскладка уже уложена в ширину без них.
+String _dimStatus(StatusLayout layout) {
+  final text = layout.text;
+  final start = layout.contextStart;
+  final end = layout.contextEnd;
+  final accent = switch (layout.contextLevel) {
+    UsageLevel.warning => sgrYellow,
+    UsageLevel.danger => sgrRed,
+    _ => null,
+  };
+  if (start == null || end == null || accent == null) {
+    return '$sgrDim$text$sgrReset';
+  }
+  return '$sgrDim${text.substring(0, start)}$accent'
+      '${text.substring(start, end)}$sgrReset$sgrDim'
+      '${text.substring(end)}$sgrReset';
 }
 
 /// Строки композера в [lines]; результат — курсор кадра после набранного.
@@ -109,13 +144,7 @@ List<String> _window(TuiModel model, List<String> lines, int height) {
 /// категории (как `/mode` и `/model`), очередь kit и время хода.
 StatusInfo statusInfoOf(TuiModel model, TuiChrome chrome) {
   final session = model.session;
-  String? option(String name) {
-    final options = session?.configOptions ?? const <ConfigOptionView>[];
-    // Так же ищет `/mode` и `/model`: по id, затем по категории.
-    return (options.where((o) => o.id == name).firstOrNull ??
-            options.where((o) => o.category == name).firstOrNull)
-        ?.currentValue;
-  }
+  String? option(String name) => sessionOptionValue(session, name);
 
   final started = model.turnStartedAt;
   return StatusInfo(
@@ -123,10 +152,12 @@ StatusInfo statusInfoOf(TuiModel model, TuiChrome chrome) {
     mode: option('mode'),
     model: option('model'),
     queued: session?.queue.length ?? 0,
+    approvalPending: isModalOverlay(model.overlay) && approvalOf(model) != null,
     spinner: model.running ? chrome.spinner : null,
     elapsed: model.running && started != null
         ? chrome.now.difference(started)
         : null,
+    usage: session?.usage,
   );
 }
 

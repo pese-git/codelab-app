@@ -89,6 +89,39 @@ void main() {
     });
   });
 
+  // Страж D8 change `add-agent-skills`: команда навыка — обычная команда
+  // агента с именем `skill:<name>`, роутер не знает про навыки отдельно.
+  group('skill commands', () {
+    const skills = [
+      AgentCommandView(
+        name: 'skill:release-notes',
+        description: 'Release notes',
+        hint: 'version',
+      ),
+    ];
+
+    test('/skill:<name> with arguments goes to the agent as is', () {
+      expect(
+        router.route('/skill:release-notes v1.2', agentCommands: skills),
+        const AgentPromptRoute('/skill:release-notes v1.2'),
+      );
+    });
+
+    test('a skill the agent did not declare is unknown', () {
+      expect(
+        route('/skill:release-notes v1.2'),
+        const UnknownCommandRoute('skill:release-notes'),
+      );
+    });
+
+    test('Tab completes /skill:re to the full name with a space', () {
+      expect(
+        router.complete('/skill:re', agentCommands: skills).replacement,
+        '/skill:release-notes ',
+      );
+    });
+  });
+
   group('complete', () {
     Completion complete(String line) =>
         router.complete(line, agentCommands: _agent);

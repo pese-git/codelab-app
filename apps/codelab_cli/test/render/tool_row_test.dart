@@ -46,6 +46,27 @@ void main() {
     expect(row, startsWith('⊘ '));
   });
 
+  // 6.1j-1 (D27, Q38): вызов без `tool_call`, отменённый вместе с ходом, kit
+  // отдаёт со статусом `cancelled` и отменённым одобрением; значок остаётся `⊘`.
+  test('a cancelled approval on a cancelled call keeps the cancelled icon', () {
+    for (final status in [
+      ToolCallStatusView.queued,
+      ToolCallStatusView.cancelled,
+    ]) {
+      final row = toolRow(
+        _call(
+          status,
+          approval: const ResolvedApprovalView(
+            label: 'Cancelled',
+            outcome: ApprovalOutcomeView.cancelled,
+          ),
+        ),
+      );
+
+      expect(row, startsWith('⊘ '), reason: '$status');
+    }
+  });
+
   test('ASCII icons replace UTF-8 ones', () {
     String ascii(ToolCallStatusView status) =>
         toolRow(_call(status), unicode: false).substring(0, 2);

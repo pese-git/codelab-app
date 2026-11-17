@@ -10,7 +10,10 @@ import 'json_file.dart';
 ///
 /// Как использовать: `JsonFileProfileStore('<home>/.codelab/profiles.json')`;
 /// формат — `{"version": 1, "profiles": [...]}`. Нет файла — пустой список;
-/// битый файл или неизвестный вид профиля — `FormatException`.
+/// битый файл или неизвестный вид профиля — `FormatException`. [save]
+/// отклоняет `EmbeddedProfile` и зарезервированный id (`reservedProfileIds`)
+/// `ArgumentError`, файл при этом не меняется; [load] возвращает прежнюю
+/// запись `default` как есть, а [remove] её удаляет (D21).
 final class JsonFileProfileStore implements ProfileStore {
   JsonFileProfileStore(this.path);
 
@@ -32,12 +35,35 @@ final class JsonFileProfileStore implements ProfileStore {
       throw FormatException('Expected a "profiles" list in $path.');
     }
     return [
-      for (final profile in profiles) _decode(profile as Map<String, Object?>),
+      for (final profile in profiles)
+        if (profile is Map<String, Object?>)
+          _decodeChecked(profile)
+        else
+          throw FormatException('Expected a profile object in $path.'),
     ];
   }
 
   @override
   Future<void> save(ConnectionProfile profile) async {
+    // Встроенный агент выбирается словом `embedded`, а не записью (D7).
+    // Проверка до чтения файла: файл при отказе не меняется.
+    if (profile is EmbeddedProfile) {
+      throw ArgumentError.value(
+        profile.id,
+        'profile',
+        'an embedded profile is built in and is not saved',
+      );
+    }
+    // `embedded` и `default` — имена встроенного агента (design.md change
+    // `add-app-settings-shell`, D21). Проверка тоже до чтения файла. Старая
+    // запись `default` в файле остаётся и удаляется только `remove`.
+    if (isReservedProfileId(profile.id)) {
+      throw ArgumentError.value(
+        profile.id,
+        'profile',
+        'the id is reserved for the built-in agent',
+      );
+    }
     final profiles = [...await load()];
     final index = profiles.indexWhere((stored) => stored.id == profile.id);
     if (index == -1) {
@@ -85,7 +111,24 @@ final class JsonFileProfileStore implements ProfileStore {
       'uri': profile.uri.toString(),
       'tokenRef': ?profile.tokenRef,
     },
+    // `save` отклоняет такой профиль раньше (D7): сюда он не доходит.
+    EmbeddedProfile() => throw ArgumentError.value(
+      profile.id,
+      'profile',
+      'an embedded profile is not stored',
+    ),
   };
+
+  /// Структурно битая запись (нет `id`, `args` не список, …) — тот же
+  /// `FormatException`, что у неизвестного типа, а не `TypeError`: хост
+  /// превращает его в понятную ошибку (CLI — код `64`).
+  ConnectionProfile _decodeChecked(Map<String, Object?> json) {
+    try {
+      return _decode(json);
+    } on TypeError {
+      throw FormatException('Invalid profile record in $path.');
+    }
+  }
 
   ConnectionProfile _decode(Map<String, Object?> json) =>
       switch (json['type']) {

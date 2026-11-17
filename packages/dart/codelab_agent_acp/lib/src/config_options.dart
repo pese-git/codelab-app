@@ -9,7 +9,9 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 ///
 /// Как использовать: [sessionModes] и [sessionConfigOptions] строят
 /// значения `modes` и `configOptions` по текущему состоянию сессии;
-/// [parseModeId] и [parseEffort] разбирают значения клиента.
+/// [parseEffort] разбирает значение клиента; режим по id и синониму разбирает
+/// `ModeId.tryParse` ядра — одна таблица синонимов с командой `/mode`
+/// (design.md change `add-agent-builtin-slash-commands`, D6).
 
 /// Режим сессии на проводе: id, имя и описание для клиента. Тексты видит
 /// пользователь в селекторе клиента, поэтому они английские (§11.7).
@@ -59,19 +61,6 @@ acp.SessionModeState sessionModes(AgentSession session) => acp.SessionModeState(
       ),
   ],
 );
-
-/// Устаревшие id режимов: принимаются на входе, наружу не уходят (§13.6).
-const _modeSynonyms = {
-  'architect': ModeId.plan,
-  'debug': ModeId.standard,
-  'acceptEdits': ModeId.acceptEdits,
-  'code': ModeId.bypass,
-};
-
-/// Режим по id клиента или его синониму; `null` — значения нет в списке.
-ModeId? parseModeId(String value) =>
-    ModeId.values.where((mode) => mode.value == value).firstOrNull ??
-    _modeSynonyms[value];
 
 /// Уровень рассуждения по значению опции `effort`; `null` — значения нет.
 ReasoningEffort? parseEffort(String value) =>

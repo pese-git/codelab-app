@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:meta/meta.dart';
@@ -71,6 +72,10 @@ final class JsonlSessionStore implements SessionStore {
   /// нужен.
   final _paths = <SessionId, String>{};
 
+  /// Пути журналов потомков: отдельно от [_paths], чтобы `open` и `list` их
+  /// не находили (D7).
+  final _childPaths = <SessionId, String>{};
+
   /// Открытые дескрипторы; живут до [close] или до ошибки операции.
   final _handles = <String, RandomAccessFile>{};
 
@@ -99,6 +104,116 @@ final class JsonlSessionStore implements SessionStore {
   }
 
   @override
+  Future<String> createChild(SessionHeader header) async {
+    final parent =
+        header.parent ??
+        (throw ArgumentError.value(
+          header.parent,
+          'header.parent',
+          'a child journal needs the parent link',
+        ));
+    if (_childPaths.containsKey(header.id) || await _find(header.id) != null) {
+      throw StateError('session ${header.id.value} already exists');
+    }
+    final rootPath =
+        _paths[parent.rootSessionId] ??
+        await _find(parent.rootSessionId) ??
+        (throw SessionNotFound(parent.rootSessionId));
+    final stamp = formatJournalTime(
+      header.created,
+    ).replaceAll(':', '-').replaceAll('.', '-');
+    // Журналы потомков любой глубины лежат плоско в `subagents/` корня:
+    // вложенные каталоги дали бы путь длиннее 260 символов Windows (D7).
+    final path =
+        '${rootPath.substring(0, rootPath.length - '.jsonl'.length)}'
+        '/subagents/${stamp}_${header.id.value}.jsonl';
+    final line = _encode(header.toJson());
+    await writeQueue.run(path, () async {
+      final file = File(path);
+      await file.parent.create(recursive: true);
+      if (await file.exists()) {
+        throw StateError('session ${header.id.value} already exists');
+      }
+      await _write(path, line, durable: true);
+    });
+    _childPaths[header.id] = path;
+    return _keyOf(path);
+  }
+
+  @override
+  Future<SessionSnapshot> openChild(
+    String journal, {
+    required SessionId rootSessionId,
+  }) async {
+    final (:id, :path) = _childAddress(journal, rootSessionId);
+    final snapshot = await writeQueue.run(path, () async {
+      await _drop(path);
+      final file = File(path);
+      if (!await file.exists() || !await _insideRoot(file)) {
+        throw SessionNotFound(id);
+      }
+      final parsed = await _parse(file, id);
+      if (parsed.snapshot.header.id != id) {
+        throw SessionNotFound(id);
+      }
+      await _repair(file, id, parsed);
+      return parsed.snapshot;
+    });
+    _childPaths[id] = path;
+    return snapshot;
+  }
+
+  /// Снимок журнала потомка для реплея дерева: те же проверки адреса, корня,
+  /// заголовка и ссылки, что у [openChild], но файл и дескрипторы не
+  /// трогаются (design.md change `add-subagents-and-tasks`, D47 Т5).
+  ///
+  /// Почему: на `session/load` открытой сессии потомок, переживший
+  /// `cancel_grace`, может ещё писать в этот журнал; `_drop`, `_repair` и
+  /// регистрация пути [_childPaths] ему навредили бы. Чтение идёт в очереди
+  /// записи пути, поэтому снимок не видит наполовину записанную строку;
+  /// оборванная последняя строка в любом случае пропускается разбором.
+  @override
+  Future<SessionSnapshot> openChildReadOnly(
+    String journal, {
+    required SessionId rootSessionId,
+  }) async {
+    final (:id, :path) = _childAddress(journal, rootSessionId);
+    return writeQueue.run(path, () async {
+      final file = File(path);
+      if (!await file.exists() || !await _insideRoot(file)) {
+        throw SessionNotFound(id);
+      }
+      final parsed = await _parse(file, id);
+      if (parsed.snapshot.header.id != id) {
+        throw SessionNotFound(id);
+      }
+      return parsed.snapshot;
+    });
+  }
+
+  /// Адрес журнала потомка из записи журнала корня, то есть из данных на
+  /// диске: выход за `root` и чужие файлы исключаются проверкой формы
+  /// (`<слаг>/<метка>_<id корня>/subagents/<метка>_<id>.jsonl`); общая для
+  /// [openChild] и [openChildReadOnly].
+  ({SessionId id, String path}) _childAddress(
+    String journal,
+    SessionId rootSessionId,
+  ) {
+    final segments = journal.split('/');
+    final id = segments.isEmpty ? null : _idOf(journal);
+    if (id == null ||
+        journal.startsWith('/') ||
+        journal.contains(r'\') ||
+        segments.contains('..') ||
+        segments.length < 3 ||
+        segments[segments.length - 2] != 'subagents' ||
+        !segments[segments.length - 3].endsWith('_${rootSessionId.value}')) {
+      throw SessionNotFound(id ?? SessionId(journal));
+    }
+    return (id: id, path: '$root/$journal');
+  }
+
+  @override
   Future<void> append(
     SessionId id,
     SessionRecord record, {
@@ -106,13 +221,13 @@ final class JsonlSessionStore implements SessionStore {
   }) async {
     // Строка кодируется один раз и до очереди (§8.5, шаг 1).
     final line = _encode(record.toJson());
-    final path = await _pathOf(id);
+    final path = _childPaths[id] ?? await _pathOf(id);
     await writeQueue.run(path, () => _write(path, line, durable: durable));
   }
 
   @override
   Future<void> flush(SessionId id) async {
-    final path = await _pathOf(id);
+    final path = _childPaths[id] ?? await _pathOf(id);
     await writeQueue.run(path, () async {
       final handle = _handles[path];
       if (handle == null || fsync == FsyncPolicy.never) {
@@ -179,11 +294,24 @@ final class JsonlSessionStore implements SessionStore {
 
   @override
   Future<void> close(SessionId id) async {
-    final path = _paths[id] ?? await _find(id);
+    final path = _childPaths[id] ?? _paths[id] ?? await _find(id);
     if (path == null) {
       return;
     }
     await writeQueue.run(path, () => _drop(path));
+  }
+
+  /// Файл (с учётом ссылок на него и на каталоги пути) лежит внутри [root]:
+  /// `subagents/` — каталог данных, и подложенная в нём ссылка не должна
+  /// вести чтение и ремонт (переписывание) за пределы хранилища.
+  Future<bool> _insideRoot(File file) async {
+    try {
+      final base = await Directory(root).resolveSymbolicLinks();
+      final real = await file.resolveSymbolicLinks();
+      return real.startsWith('$base${Platform.pathSeparator}');
+    } on FileSystemException {
+      return false;
+    }
   }
 
   /// Одна строка JSON без переводов строк внутри (§8.5, шаг 1).
@@ -232,19 +360,61 @@ final class JsonlSessionStore implements SessionStore {
     }
   }
 
+  /// Чтение и разбор журнала при `session/load` идут в `Isolate.run`.
+  ///
+  /// Почему: файл в тысячи записей читается, декодируется из UTF-8 и
+  /// разбирается построчно, а встроенный агент живёт в одном isolate с UI
+  /// клиента (design.md change `add-embedded-agent-mode`, D11;
+  /// `docs/architecture/concurrency.md`): без переноса `session/load` отнимал
+  /// бы кадры. Поведение и результат те же, что при разборе на месте
+  /// (`jsonl_replay_isolate_test.dart`).
+  ///
+  /// Как устроено: в isolate уходят только пересылаемые значения (путь,
+  /// `SessionId`, `cwd` из кеша, время создания), а обратно — `ParsedJournal`
+  /// (записи, карантин, строки) и исключения разбора вроде
+  /// `SessionOpenException`; они остаются теми же типами у вызывающего. Логгер
+  /// хоста в isolate не передаётся (это закрытие над приёмником, его нельзя
+  /// переслать), поэтому единственное событие разбора `session.leaf.healed`
+  /// пишется здесь по отчёту о ремонте. Сжатие контекста в isolate не
+  /// переносится (D11).
   Future<ParsedJournal> _parse(File file, SessionId id) async {
-    final text = utf8.decode(await file.readAsBytes(), allowMalformed: true);
     final cached = (await _readIndex())[_keyOf(file.path)];
-    // Синтез отсутствующего заголовка (§8.6, шаг 3b): cwd — из кеша
-    // сводок по имени файла, created — mtime.
-    return parseSessionLines(
-      text,
-      id: id,
-      cwd: cached?.summary.cwd ?? '',
-      created: (await file.lastModified()).toUtc(),
-      logger: _logger,
+    final parsed = await _readAndParse(
+      file.path,
+      id,
+      // Синтез отсутствующего заголовка (§8.6, шаг 3b): cwd — из кеша
+      // сводок по имени файла, created — mtime.
+      cached?.summary.cwd ?? '',
+      (await file.lastModified()).toUtc(),
     );
+    if (parsed.snapshot.repair.healedLeafFrom case final from?) {
+      _logger?.log(
+        LogLevel.warning,
+        'session.leaf.healed',
+        fields: {
+          'session_id': id.value,
+          'from': from,
+          'to': parsed.snapshot.leafId,
+        },
+      );
+    }
+    return parsed;
   }
+
+  /// Статический, чтобы замыкание `Isolate.run` не захватило `this`: у
+  /// хранилища есть открытые дескрипторы и логгер, которые не пересылаются.
+  static Future<ParsedJournal> _readAndParse(
+    String path,
+    SessionId id,
+    String cwd,
+    DateTime created,
+  ) => Isolate.run(() async {
+    final text = utf8.decode(
+      await File(path).readAsBytes(),
+      allowMalformed: true,
+    );
+    return parseSessionLines(text, id: id, cwd: cwd, created: created);
+  });
 
   /// Шаги 5a–5b §8.6: карантин и единственное переписывание файла (SES-1).
   Future<void> _repair(File file, SessionId id, ParsedJournal parsed) async {

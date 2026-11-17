@@ -53,7 +53,8 @@ const fixtureFormatKeys = <String, Set<String>>{
   'terminalCommand': {'output', 'exitCode'},
   'frame': {'dir', 'frame', 'unordered', 'note', 'optional', 'repeat', 'match'},
   'llm': {'model', 'steps'},
-  'llmModel': {'provider', 'modelId', 'contextWindow'},
+  'llmModel': {'provider', 'modelId', 'contextWindow', 'cost'},
+  'llmModelCost': {'input', 'output', 'cacheRead', 'cacheWrite'},
   'llmStep': {
     'expect',
     'reply',
@@ -456,6 +457,28 @@ final class FixtureLlmScript {
       r.string(model, modelPath, 'provider');
       r.string(model, modelPath, 'modelId');
       r.integer(model, modelPath, 'contextWindow');
+      // Цены модели сценария (change `add-usage-extension`, D18 Т8, D19 п. 6;
+      // §14.7): доллары за 10^6 токенов, как `ModelCost` ядра.
+      final cost = r.object(model, modelPath, 'cost');
+      if (cost != null) {
+        final costPath = '$modelPath.cost';
+        r.closed(cost, costPath, 'llmModelCost');
+        // Цена не меньше нуля: иначе у потребителя стоимость шага
+        // бессмысленна (D19 п. 6); схема `_schema.json` — `minimum: 0`. Не
+        // конечные числа (`1e999` в тексте JSON) отсекает раньше
+        // канонизация в начале `fromJson` («is not JSON», путь `$`).
+        for (final key in ['input', 'output', 'cacheRead', 'cacheWrite']) {
+          final price = r.number(
+            cost,
+            costPath,
+            key,
+            required: key == 'input' || key == 'output',
+          );
+          if (price != null && price < 0) {
+            r.fail('$costPath.$key', 'must not be negative');
+          }
+        }
+      }
     }
     final steps = r.list(json, path, 'steps', required: true)!;
     return FixtureLlmScript(
@@ -888,6 +911,19 @@ final class _Reader {
       fail('$path${_key(key)}', 'must be an integer');
     }
     return value as int?;
+  }
+
+  num? number(
+    Map<String, Object?> json,
+    String path,
+    String key, {
+    bool required = false,
+  }) {
+    final value = _field(json, path, key, required: required);
+    if (value != null && value is! num) {
+      fail('$path${_key(key)}', 'must be a number');
+    }
+    return value as num?;
   }
 
   bool? boolean(Map<String, Object?> json, String path, String key) {

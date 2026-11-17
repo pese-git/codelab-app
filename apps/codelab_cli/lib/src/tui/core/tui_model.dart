@@ -1,13 +1,17 @@
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 
+import '../../render/ansi.dart';
+import '../../render/plan_format.dart';
 import '../../render/terminal_renderer.dart';
 import '../../repl/approval_prompt.dart';
-import '../../repl/picker_spec.dart';
 import '../../repl/repl_command.dart';
 import 'composer.dart';
 import 'frame.dart';
+import 'overlay_view.dart';
 import 'transcript_lines.dart';
+import 'tui_overlay.dart';
 
 /// Размер терминала в колонках и строках.
 final class TerminalSize {
@@ -76,6 +80,8 @@ final class TuiModel {
     this.commands = const [],
     this.overlay,
     this.detailsFor,
+    this.tasksHidden = false,
+    this.detailsExpanded = false,
   });
 
   factory TuiModel.initial({
@@ -113,8 +119,15 @@ final class TuiModel {
   final bool color;
   final String cwd;
   final List<ReplCommand> commands;
-  final PickerSpec? overlay;
+  final TuiOverlay? overlay;
   final ApprovalRequestId? detailsFor;
+
+  /// Блок списка задач свёрнут до одной строки (Ctrl+T, D26).
+  final bool tasksHidden;
+
+  /// Строки `agent` раскрыты: вызовы потомков и отчёт (Ctrl+O, D48 п. 2).
+  /// Общий переключатель на все строки; между запусками не сохраняется.
+  final bool detailsExpanded;
 
   /// Идёт ли ход: клавиши Esc и Ctrl+C отменяют его.
   bool get running => switch (session?.status) {
@@ -131,8 +144,10 @@ final class TuiModel {
     ThoughtsMode? thoughts,
     DateTime? Function()? turnStartedAt,
     DateTime? Function()? lastInterrupt,
-    PickerSpec? Function()? overlay,
+    TuiOverlay? Function()? overlay,
     ApprovalRequestId? Function()? detailsFor,
+    bool? tasksHidden,
+    bool? detailsExpanded,
   }) => TuiModel._(
     profile: profile,
     size: size ?? this.size,
@@ -150,6 +165,8 @@ final class TuiModel {
     commands: commands,
     overlay: overlay == null ? this.overlay : overlay(),
     detailsFor: detailsFor == null ? this.detailsFor : detailsFor(),
+    tasksHidden: tasksHidden ?? this.tasksHidden,
+    detailsExpanded: detailsExpanded ?? this.detailsExpanded,
   );
 }
 
@@ -164,6 +181,7 @@ List<String> transcriptLines(TuiModel model) => model.layout.lines(
   thoughts: model.thoughts,
   unicode: model.unicode,
   color: model.color,
+  expandDetails: model.detailsExpanded,
 );
 
 /// Одобрение, которого ждёт идущий ход; `null` — композер открыт.
@@ -225,11 +243,44 @@ List<String> _wrapEntries(String hint, int width) {
 /// Сколько строк занимает низ экрана: зона одобрения или композер (не
 /// больше 10 строк, дальше он прокручивается).
 int composerRows(TuiModel model) {
+  if (isModalOverlay(model.overlay)) {
+    return overlayHeight(model);
+  }
   final prompt = approvalOf(model);
   if (prompt != null) {
     return approvalLines(model, prompt).length;
   }
   return model.composer.lines.length > 10 ? 10 : model.composer.lines.length;
+}
+
+/// Строки блока списка задач над композером (D26, артборд C16).
+///
+/// Почему: список задач — рабочий инструмент хода, а не событие ленты, и
+/// должен оставаться на виду, пока агент работает; Ctrl+T прячет его до одной
+/// строки. Для чего: заголовок `Tasks <c>/<n> done · ctrl+t hide` (скрытый —
+/// `… · ctrl+t show`) и строки пунктов в формате REPL; пустой список (до
+/// первого `plan`) блока не даёт. Длинный список обрезается по трети экрана
+/// строкой `… +N more`, чтобы не вытеснить транскрипт и композер.
+List<String> taskBlockLines(TuiModel model) {
+  final plan = model.session?.plan ?? const <PlanEntryView>[];
+  if (plan.isEmpty || isModalOverlay(model.overlay)) {
+    return const [];
+  }
+  final done = plan.where((e) => e.status == PlanEntryStatus.completed).length;
+  final summary = 'Tasks $done/${plan.length} done';
+  final width = model.size.columns;
+  String dim(String line) => model.color ? '$sgrDim$line$sgrReset' : line;
+  if (model.tasksHidden) {
+    return [dim('$summary · ctrl+t show')];
+  }
+  final room = (model.size.rows ~/ 3 - 1).clamp(1, plan.length);
+  final shown = plan.length > room ? room - 1 : plan.length;
+  return [
+    dim('$summary · ctrl+t hide'),
+    for (final entry in plan.take(shown))
+      for (final line in wrapLine('  ${planEntryText(entry)}', width)) line,
+    if (shown < plan.length) dim('  … +${plan.length - shown} more'),
+  ];
 }
 
 /// Видна ли строка подсказок: при высоте меньше 15 строк — нет; в зоне
@@ -244,6 +295,7 @@ int transcriptHeight(TuiModel model) {
   final height =
       model.size.rows -
       composerRows(model) -
+      taskBlockLines(model).length -
       (hintsVisible(model) ? 1 : 0) -
       1 -
       (model.scroll.follow ? 0 : 1);
@@ -258,3 +310,12 @@ int newSinceHold(TuiModel model) {
   final count = transcriptLines(model).length - model.scroll.holdTotal;
   return count < 0 ? 0 : count;
 }
+
+/// Высота модального экрана в строках кадра.
+int overlayHeight(TuiModel model) => model.overlay == null
+    ? 0
+    : overlayLinesOf(
+        model.overlay!,
+        width: model.size.columns,
+        rows: model.size.rows,
+      ).length;

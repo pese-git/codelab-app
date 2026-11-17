@@ -80,8 +80,10 @@ const clientIoAllowlist = {
 /// «Автоматический сторож границ пакетов»; design.md change `add-codelab-cli`,
 /// D3): клиентский слой, ACP-пакеты, тестовый пакет для `test-scenario`,
 /// `args`, `dart_tui` для полноэкранного режима и мост `codelab_setup` для
-/// `codelab config check` (change `add-agent-configuration`, D14). Пакетов
-/// агента и Flutter здесь нет: к агенту CLI ходит только по ACP.
+/// `codelab config check` (change `add-agent-configuration`, D14) и мост
+/// встроенного агента `codelab_embedded` (change `add-embedded-agent-mode`,
+/// D3). Пакетов агента и Flutter здесь нет: к агенту CLI ходит по ACP, а
+/// встроенного получает через мост.
 const cliAllowlist = {
   'codelab_client_core',
   'codelab_client_io',
@@ -89,6 +91,7 @@ const cliAllowlist = {
   'codelab_acp_protocol',
   'codelab_acp_transports',
   'codelab_acp_testing',
+  'codelab_embedded',
   'codelab_setup',
   'dart_tui',
   'args',
@@ -100,10 +103,61 @@ const cliAllowlist = {
 /// Допустимые зависимости моста настроек `codelab_setup` (workspace-
 /// architecture «Автоматический сторож границ пакетов»; design.md change
 /// `add-agent-configuration`, D14): ядро агента, его IO-пакет (используется
-/// только в `lib/io.dart`) и `meta`. Мост — единственное место, через которое
-/// клиенты (CLI, desktop) достают конфигурацию агента, не импортируя
-/// `package:codelab_agent_*` сами.
-const setupAllowlist = {'codelab_agent_core', 'codelab_agent_io', 'meta'};
+/// только в `lib/io.dart`), `http` и `meta`. Мост — единственное место, через
+/// которое клиенты (CLI, desktop) достают конфигурацию агента, не импортируя
+/// `package:codelab_agent_*` сами. `http` — проверка `/models` мастером и
+/// страницей Providers (`HttpProviderCheck`; design.md change
+/// `add-provider-setup-ui`, D8, D20); `IOClient` разрешён только `io.dart`.
+const setupAllowlist = {
+  'codelab_agent_core',
+  'codelab_agent_io',
+  'http',
+  'meta',
+};
+
+/// Допустимые зависимости моста встроенного агента `codelab_embedded`
+/// (workspace-architecture «Автоматический сторож границ пакетов»; design.md
+/// change `add-embedded-agent-mode`, D3): сторона агента целиком (ядро, IO,
+/// ACP-сервер, MCP) и ACP-пакеты для пары `InProcessAcpLink`; `codelab_acp_protocol`
+/// нужен для `Implementation` в `agentInfo`. Клиентских пакетов и Flutter нет:
+/// клиенты зависят от моста, а не он от них.
+const embeddedAllowlist = {
+  'codelab_agent_core',
+  'codelab_agent_io',
+  'codelab_agent_acp',
+  'codelab_agent_mcp',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'http',
+  'meta',
+  'async',
+};
+
+/// Допустимые пакеты монорепо в зависимостях desktop-клиента `codelab-app`
+/// (workspace-architecture «Автоматический сторож границ пакетов», сценарий
+/// «Пакет агента в зависимостях app»; design.md change
+/// `add-embedded-agent-mode`, D3).
+///
+/// Почему: клиенты НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*`; агент
+/// приходит в app только через мост `codelab_embedded`. Решения R4-3 и R6-2
+/// (design.md, таблица Open Questions): проверяются лишь пакеты `codelab_*`, сторонние зависимости app
+/// (`flutter_bloc`, `fluent_ui` и т.п.) не ограничиваются. Настройки агента
+/// приходят в app мостом `codelab_setup` (design.md change
+/// `add-provider-setup-ui`, D20), `codelab_agent_io` рядом с ним по-прежнему
+/// запрещён.
+///
+/// Как использовать: из `dependencies` `apps/codelab_desktop/pubspec.yaml`
+/// берутся ключи с префиксом `codelab_` и сверяются с этим множеством.
+const desktopAllowlist = {
+  'codelab_client_acp',
+  'codelab_client_core',
+  'codelab_client_io',
+  'codelab_acp_protocol',
+  'codelab_acp_transports',
+  'codelab_embedded',
+  'codelab_setup',
+  'codelab_ui',
+};
 
 final _section = RegExp(r'^(\w+):\s*(?:#.*)?$');
 final _key = RegExp(r'^  ([a-zA-Z0-9_]+):');
@@ -123,6 +177,20 @@ Set<String> dependencyKeys(String pubspec) {
   }
   return keys;
 }
+
+/// Зависимости `codelab_*` из `dependencies` app, не входящие в
+/// [desktopAllowlist].
+///
+/// Почему: рабочий и негативный тест обязаны проходить через один и тот же
+/// код, иначе негативный кейс не доказывает работу сторожа. Сторонние
+/// зависимости не проверяются (R6-2, design.md change
+/// `add-embedded-agent-mode`, D3).
+///
+/// Как использовать: передать текст `pubspec.yaml`; пустое множество значит,
+/// что нарушений нет, иначе в нём имена лишних пакетов.
+Set<String> desktopViolations(String pubspec) => dependencyKeys(
+  pubspec,
+).where((k) => k.startsWith('codelab_')).toSet().difference(desktopAllowlist);
 
 void main() {
   final root = repoRoot();
@@ -245,18 +313,44 @@ dependencies: # allowlist
     expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
   });
 
-  test('reports http in the dependencies of the setup bridge', () {
-    // Мост не ходит в сеть до появления мастера провайдера (этап 7):
-    // `http` в allowlist не входит (change `add-agent-configuration`, D14).
+  test('reports dio in the dependencies of the setup bridge', () {
+    // `http` теперь разрешён (проверка `/models`, change
+    // `add-provider-setup-ui`, D8, D20), поэтому негативный пример — любой
+    // другой HTTP-клиент.
     const pubspec = '''
 name: codelab_setup
 dependencies: # allowlist
   codelab_agent_core:
     path: ../codelab_agent_core
-  http: ^1.5.0
+  dio: ^5.0.0
 ''';
 
-    expect(dependencyKeys(pubspec).difference(setupAllowlist), {'http'});
+    expect(dependencyKeys(pubspec).difference(setupAllowlist), {'dio'});
+  });
+
+  test('the setup bridge may depend on http', () {
+    // Сценарий workspace-architecture «http в мосте настроек».
+    const pubspec = '''
+name: codelab_setup
+dependencies: # allowlist
+  codelab_agent_core:
+    path: ../codelab_agent_core
+  codelab_agent_io:
+    path: ../codelab_agent_io
+  http: ^1.5.0
+  meta: ^1.16.0
+''';
+
+    expect(setupAllowlist, contains('http'));
+    expect(dependencyKeys(pubspec).difference(setupAllowlist), isEmpty);
+  });
+
+  test('the terminal client may depend on the embedded agent bridge', () {
+    // Мост встроенного агента (design.md change `add-embedded-agent-mode`,
+    // D3): клиент получает агента через него, а не через `codelab_agent_*`.
+    expect(cliAllowlist, contains('codelab_embedded'));
+    expect(cliAllowlist, isNot(contains('codelab_agent_core')));
+    expect(cliAllowlist, isNot(contains('codelab_agent_acp')));
   });
 
   test('the terminal client may depend on the setup bridge', () {
@@ -277,5 +371,101 @@ dev_dependencies:
 ''';
 
     expect(dependencyKeys(pubspec).difference(coreAllowlist), {'path'});
+  });
+
+  test('codelab_embedded depends only on its allowlist', () {
+    final pubspec = File(
+      p.join(root, 'packages/dart/codelab_embedded/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = dependencyKeys(pubspec).difference(embeddedAllowlist);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test(
+    'reports a client package in the dependencies of the embedded agent',
+    () {
+      // Клиенты зависят от моста, обратная зависимость создала бы цикл
+      // (design.md change `add-embedded-agent-mode`, D3).
+      const pubspec = '''
+name: codelab_embedded
+dependencies: # allowlist
+  codelab_agent_core:
+    path: ../codelab_agent_core
+  codelab_agent_acp:
+    path: ../codelab_agent_acp
+  codelab_client_core:
+    path: ../codelab_client_core
+''';
+
+      expect(dependencyKeys(pubspec).difference(embeddedAllowlist), {
+        'codelab_client_core',
+      });
+    },
+  );
+
+  test('apps/codelab_desktop depends only on allowed codelab_* packages', () {
+    final pubspec = File(
+      p.join(root, 'apps/codelab_desktop/pubspec.yaml'),
+    ).readAsStringSync();
+
+    final extra = desktopViolations(pubspec);
+
+    expect(extra, isEmpty, reason: 'not in allowlist: ${extra.join(', ')}');
+  });
+
+  test('reports an agent package in the dependencies of the desktop app', () {
+    // Пакет агента в `dependencies` app (workspace-architecture, сценарий
+    // «Пакет агента в зависимостях app»): агент приходит только через мост.
+    const pubspec = '''
+name: codelab_desktop
+dependencies: # allowlist
+  flutter_bloc: ^9.0.0
+  codelab_embedded:
+    path: ../../packages/dart/codelab_embedded
+  codelab_agent_core:
+    path: ../../packages/dart/codelab_agent_core
+''';
+
+    final extra = desktopViolations(pubspec);
+
+    expect(extra, {'codelab_agent_core'});
+  });
+
+  test('the desktop app may depend on the settings bridge, not on the agent '
+      'IO package', () {
+    // workspace-architecture, сценарий «Мост настроек в зависимостях app»
+    // (design.md change `add-provider-setup-ui`, D20): `codelab_setup` и
+    // `codelab_embedded` — разрешённые мосты, `codelab_agent_io` рядом с ними
+    // по-прежнему нарушение.
+    const bridges = '''
+name: codelab_desktop
+dependencies: # allowlist
+  codelab_embedded:
+    path: ../../packages/dart/codelab_embedded
+  codelab_setup:
+    path: ../../packages/dart/codelab_setup
+''';
+    const withAgentIo = '''
+name: codelab_desktop
+dependencies: # allowlist
+  codelab_setup:
+    path: ../../packages/dart/codelab_setup
+  codelab_agent_io:
+    path: ../../packages/dart/codelab_agent_io
+''';
+
+    expect(desktopViolations(bridges), isEmpty);
+    expect(desktopViolations(withAgentIo), {'codelab_agent_io'});
+    expect(desktopAllowlist, contains('codelab_setup'));
+  });
+
+  test('the desktop app depends on the settings bridge in pubspec.yaml', () {
+    final pubspec = File(
+      p.join(root, 'apps/codelab_desktop/pubspec.yaml'),
+    ).readAsStringSync();
+
+    expect(dependencyKeys(pubspec), contains('codelab_setup'));
   });
 }

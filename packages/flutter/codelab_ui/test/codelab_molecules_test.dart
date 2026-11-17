@@ -905,6 +905,44 @@ void main() {
       expect(find.text('Reconnect'), findsOneWidget);
     });
 
+    testWidgets('an extra action sits before the standard ones (the host '
+        'decides what it does; change add-provider-setup-ui, D26)', (
+      tester,
+    ) async {
+      var pressed = 0;
+      await tester.pumpWidget(
+        FluentApp(
+          home: ScaffoldPage(
+            content: CodeLabConnectionBanner(
+              status: CodeLabConnectionBannerStatus.failed,
+              message: 'No model provider is configured.',
+              onReconnect: () {},
+              extraAction: CodeLabButton(
+                key: const ValueKey('extra'),
+                label: 'Add provider',
+                emphasis: CodeLabButtonEmphasis.primary,
+                onPressed: () => pressed++,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Add provider'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('extra'))).dx,
+        lessThan(tester.getTopLeft(find.text('Reconnect')).dx),
+      );
+      await tester.tap(find.byKey(const ValueKey('extra')));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(pressed, 1);
+      // Основная кнопка одна: «Reconnect» с extra-действием не accent.
+      final primaries = tester
+          .widgetList<CodeLabButton>(find.byType(CodeLabButton))
+          .where((b) => b.emphasis == CodeLabButtonEmphasis.primary);
+      expect(primaries.map((b) => b.label), ['Add provider']);
+    });
+
     testWidgets('reconnecting shows progress without actions', (tester) async {
       await tester.pumpWidget(host(CodeLabConnectionBannerStatus.reconnecting));
 

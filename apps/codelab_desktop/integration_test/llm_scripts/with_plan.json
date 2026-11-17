@@ -17,25 +17,10 @@
           {
             "toolCall": {
               "id": "call_1",
-              "name": "update_plan",
+              "name": "task_create",
               "arguments": {
-                "entries": [
-                  {
-                    "content": "Read auth module and locate token refresh call sites",
-                    "priority": "medium",
-                    "status": "completed"
-                  },
-                  {
-                    "content": "Run melos analyze to confirm no new lint issues",
-                    "priority": "high",
-                    "status": "in_progress"
-                  },
-                  {
-                    "content": "Open PR for review",
-                    "priority": "low",
-                    "status": "pending"
-                  }
-                ]
+                "subject": "Read auth module and locate token refresh call sites",
+                "priority": "medium"
               }
             }
           }
@@ -46,6 +31,90 @@
         "expect": {
           "toolResult": {
             "toolCallId": "call_1",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_2",
+              "name": "task_create",
+              "arguments": {
+                "subject": "Run melos analyze to confirm no new lint issues",
+                "priority": "high"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_2",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_3",
+              "name": "task_create",
+              "arguments": {
+                "subject": "Open PR for review",
+                "priority": "low"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_3",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_4",
+              "name": "task_update",
+              "arguments": {
+                "id": "1",
+                "status": "completed"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_4",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_5",
+              "name": "task_update",
+              "arguments": {
+                "id": "2",
+                "status": "in_progress"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_5",
             "isError": false
           }
         },
@@ -66,26 +135,11 @@
         "reply": [
           {
             "toolCall": {
-              "id": "call_2",
-              "name": "update_plan",
+              "id": "call_6",
+              "name": "task_update",
               "arguments": {
-                "entries": [
-                  {
-                    "content": "Read auth module and locate token refresh call sites",
-                    "priority": "medium",
-                    "status": "completed"
-                  },
-                  {
-                    "content": "Run melos analyze to confirm no new lint issues",
-                    "priority": "high",
-                    "status": "in_progress"
-                  },
-                  {
-                    "content": "Open PR for review",
-                    "priority": "low",
-                    "status": "pending"
-                  }
-                ]
+                "id": "2",
+                "description": "Keep going on the analyze step"
               }
             }
           }
@@ -95,7 +149,7 @@
       {
         "expect": {
           "toolResult": {
-            "toolCallId": "call_2",
+            "toolCallId": "call_6",
             "isError": false
           }
         },
@@ -116,26 +170,11 @@
         "reply": [
           {
             "toolCall": {
-              "id": "call_3",
-              "name": "update_plan",
+              "id": "call_7",
+              "name": "task_update",
               "arguments": {
-                "entries": [
-                  {
-                    "content": "Read auth module and locate token refresh call sites",
-                    "priority": "medium",
-                    "status": "completed"
-                  },
-                  {
-                    "content": "Run melos analyze to confirm no new lint issues",
-                    "priority": "high",
-                    "status": "completed"
-                  },
-                  {
-                    "content": "Open PR for review",
-                    "priority": "low",
-                    "status": "completed"
-                  }
-                ]
+                "id": "2",
+                "status": "completed"
               }
             }
           }
@@ -145,7 +184,28 @@
       {
         "expect": {
           "toolResult": {
-            "toolCallId": "call_3",
+            "toolCallId": "call_7",
+            "isError": false
+          }
+        },
+        "reply": [
+          {
+            "toolCall": {
+              "id": "call_8",
+              "name": "task_update",
+              "arguments": {
+                "id": "3",
+                "status": "completed"
+              }
+            }
+          }
+        ],
+        "stopReason": "toolUse"
+      },
+      {
+        "expect": {
+          "toolResult": {
+            "toolCallId": "call_8",
             "isError": false
           }
         },

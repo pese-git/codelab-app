@@ -137,24 +137,24 @@ void main() {
     expect(record.attempt, 2);
   });
 
-  test('plan, mode and title records', () async {
+  test('task, mode and title records', () async {
     await feed([
-      PlanUpdated(
+      TaskListChanged(
         id,
-        entries: const [
-          PlanEntry(
-            content: 'step',
-            priority: PlanPriority.high,
-            status: PlanStatus.inProgress,
-          ),
-        ],
+        items: [TaskItem(id: '1', subject: 'step')],
+        change: TaskChange(
+          op: 'create',
+          actor: const MainActor(),
+          changed: [TaskItem(id: '1', subject: 'step')],
+          deleted: const [],
+        ),
       ),
       const ModeChanged(id, mode: ModeId.plan),
       SessionTitleChanged(id, title: 'Go', updatedAt: at),
     ]);
 
-    final [plan, mode, info] = [for (final a in store.appended) a.record];
-    expect((plan as PlanRecord).entries.single.status, PlanStatus.inProgress);
+    final [task, mode, info] = [for (final a in store.appended) a.record];
+    expect((task as TaskRecord).items.single.subject, 'step');
     expect((mode as ModeChangeRecord).modeId, 'plan');
     expect((info as SessionInfoRecord).title, 'Go');
     expect(info.source, 'auto');

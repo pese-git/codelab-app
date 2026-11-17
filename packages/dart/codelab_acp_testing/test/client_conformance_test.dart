@@ -437,6 +437,158 @@ void main() {
     expect(result.client!.sessions, isEmpty);
   });
 
+  group('объявление клиента в handshake — подмножество (D21 Т7, Q15 (б))', () {
+    // Клиент CodeLab объявляет `tasks`, `subagents`, `subagentToolCalls`
+    // (и `usage` после задачи 2.8); `setup.clientCapabilities._meta.codelab`
+    // фикстуры перечисляет только нужные ей ключи.
+    AcpFixture withCodelab(Map<String, Object?> codelab) => _fixture(
+      _promptTextEndTurn,
+      setup: {
+        'cwd': '/work/demo',
+        'clientCapabilities': {
+          '_meta': {'codelab': codelab},
+        },
+      },
+    );
+
+    test('лишние ключи объявления клиента допустимы', () async {
+      final result = await _run(
+        withCodelab({
+          'subagents': {'version': 1},
+        }),
+      );
+
+      expect(result.skipped, isFalse);
+      expect(
+        result.client!.sessions.single.turns.single.status,
+        PromptTurnStatus.completed,
+      );
+    });
+
+    test(
+      'указанный ключ, которого клиент не объявил, — несовпадение',
+      () async {
+        await expectLater(
+          _run(
+            withCodelab({
+              'futureExtension': {'version': 1},
+            }),
+          ),
+          throwsA(isA<ClientFixtureFailure>()),
+        );
+      },
+    );
+
+    test('указанный ключ с другим значением — несовпадение', () async {
+      await expectLater(
+        _run(
+          withCodelab({
+            'subagents': {'version': 2},
+          }),
+        ),
+        throwsA(isA<ClientFixtureFailure>()),
+      );
+    });
+  });
+
+  // Регрессия нестабильности CI (как у агентского драйвера): граница
+  // необязательного кадра и хвоста `repeat` — по содержимому, а не по окну
+  // тишины. Клиент может отправить кадр позже `quietPeriod` на медленном CI;
+  // такой кадр не должен доставаться следующему обязательному кадру.
+  // Реальные задержки здесь допустимы (testing.md §20): окно драйвера тоже
+  // идёт по реальным часам, а порядок кадров задан сроками таймеров
+  // (150 мс × номер), и при новом драйвере исход от них не зависит.
+  group('a late client frame', () {
+    Map<String, Object?> note(String method, {bool optional = false}) => {
+      'dir': 'c2a',
+      if (optional) 'optional': true,
+      'frame': {
+        'jsonrpc': '2.0',
+        'method': method,
+        'params': {'sessionId': 's1'},
+      },
+    };
+
+    /// Клиент-заглушка: на ожидаемый кадр с индексом-ключом отправляет кадры
+    /// [sends] с паузой 150 мс перед каждым — дольше окна тишины 30 мс, как
+    /// у медленного CI.
+    Future<void> play(
+      List<Map<String, Object?>> frames,
+      Map<int, List<String>> sends,
+    ) => runClientFixture<Object>(
+      _fixture(frames, setup: {'cwd': '/work/demo', 'skipInitialize': true}),
+      (env) {
+        unawaited(env.transport.start());
+        return Object();
+      },
+      onBeforeExpect: (step) {
+        final methods = sends[step.frame.index] ?? const <String>[];
+        for (final (i, method) in methods.indexed) {
+          step.track(
+            Future<void>.delayed(
+              Duration(milliseconds: 150 * (i + 1)),
+              () => step.environment.transport.send(
+                JsonRpcMessage.notification(
+                  method: method,
+                  params: {'sessionId': 's1'},
+                ),
+              ),
+            ),
+          );
+        }
+      },
+      quietPeriod: const Duration(milliseconds: 30),
+    );
+
+    test('is absorbed by the optional frame before it', () async {
+      await play(
+        [note('session/cancel', optional: true), note('_test/next')],
+        {
+          0: ['session/cancel'],
+          1: ['_test/next'],
+        },
+      );
+    });
+
+    test('an optional repeated c2a frame absorbs at most one frame '
+        '(§14.10)', () async {
+      await expectLater(
+        play(
+          [
+            {...note('session/cancel', optional: true), 'repeat': '+'},
+            note('_test/next'),
+          ],
+          {
+            0: ['session/cancel', 'session/cancel'],
+            1: ['_test/next'],
+          },
+        ),
+        throwsA(
+          isA<ClientFixtureFailure>().having(
+            (f) => f.toString(),
+            'toString',
+            // Второй `session/cancel` (300 мс) приходит после `_test/next`
+            // (~180 мс): шаблон уже закрыт, кадр лишний.
+            allOf(contains('unexpected frames'), contains('session/cancel')),
+          ),
+        ),
+      );
+    });
+
+    test('joins the tail of a required repeated frame', () async {
+      await play(
+        [
+          {...note('session/cancel'), 'repeat': '+'},
+          note('_test/next'),
+        ],
+        {
+          0: ['session/cancel', 'session/cancel'],
+          1: ['_test/next'],
+        },
+      );
+    });
+  });
+
   group('FixtureTerminalProcessRunner', () {
     test('a script with exitCode exits at once with its output', () async {
       final runner = FixtureTerminalProcessRunner({

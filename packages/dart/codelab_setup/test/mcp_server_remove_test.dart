@@ -1,0 +1,696 @@
+import 'package:codelab_setup/codelab_setup.dart';
+import 'package:test/test.dart';
+
+import 'support/mcp_snapshots.dart';
+import 'support/provider_setup_fakes.dart';
+
+/// Удаление MCP-сервера и «Disable here» / «Enable here» (client-agent-setup
+/// «Порядок записи провайдера»; design.md change `add-provider-setup-ui`, D11,
+/// решения Q21, Q22; SETUP-24): секрет удаляется только после `ConfigSaved` и
+/// только если на него не осталось ссылок `${secret:…}`; кандидаты — только
+/// секреты, на которые ссылался удалённый элемент. Префикс
+/// `codelab/mcp/<name>/` не используется: `SecretNames.forMcp` приводит имя к
+/// нижнему регистру, и у `GitHub` и `github` он общий.
+///
+/// Ожидаемый API (задача 5.8): `McpServerRemover({config, keys})` с
+/// `remove(snapshot, name:)` и `enableHere(snapshot, name:)`;
+/// `McpServerCommitter.disableHere`; исходы `McpServerRemoved`,
+/// `McpServerRemovalNotSaved`, `McpServerRemovalRefused`.
+void main() {
+  const authorization = 'codelab/mcp/github/authorization';
+  const token = 'codelab/mcp/github/token';
+
+  late List<String> journal;
+  late FakeProviderKeys keys;
+  late FakeConfigStore config;
+  late McpServerRemover remover;
+  late McpServerCommitter committer;
+
+  AgentConfigSnapshot twoServers({
+    String authorizationRef = '\${secret:$authorization}',
+  }) => mcpSnapshot(
+    user: [
+      httpServer('github', headers: {'Authorization': authorizationRef}),
+      httpServer('GitHub', headers: {'X-Token': '\${secret:$token}'}),
+    ],
+  );
+
+  void rebuild() {
+    remover = McpServerRemover(config: config, keys: keys);
+    committer = McpServerCommitter(config: config, keys: keys);
+  }
+
+  setUp(() {
+    journal = [];
+    keys = FakeProviderKeys(stored: {authorization, token});
+    config = FakeConfigStore(journal);
+    config.snapshotValue = freshMcpSnapshot();
+    rebuild();
+    // Свежий снимок после записи: оба сервера, `github` уже без заголовка.
+    config.snapshotValue = freshMcpSnapshot(
+      user: [
+        httpServer('GitHub', headers: {'X-Token': '\${secret:$token}'}),
+      ],
+    );
+  });
+
+  group('удаление с секретами (Q22; сценарий «Удаление с секретами»)', () {
+    test('RemoveMcpServer пишется в слой сервера; удаляется только секрет '
+        'удалённого элемента, секрет сервера GitHub остаётся', () async {
+      final snapshot = twoServers();
+
+      final outcome = await remover.remove(snapshot, name: 'github');
+
+      expect(outcome, isA<McpServerRemoved>());
+      final applied = config.applied.single;
+      expect(applied.base, snapshot.layers[ConfigLayer.user]);
+      expect(applied.edits, [const RemoveMcpServer('github')]);
+      expect(keys.journal.where((j) => j.startsWith('delete')), [
+        'delete $authorization',
+      ]);
+      expect(keys.storedNames, contains(token));
+      expect((outcome as McpServerRemoved).secrets, {
+        authorization: SecretCleanup.deleted,
+      });
+    });
+
+    test('секрет удаляется только после ConfigSaved: apply раньше delete в '
+        'общем журнале', () async {
+      remover = McpServerRemover(
+        config: config,
+        keys: _OrderedKeys(keys, journal),
+      );
+
+      await remover.remove(twoServers(), name: 'github');
+
+      expect(journal, ['apply', 'delete $authorization']);
+    });
+
+    test('отказ записи: оба секрета на месте, удаления не было', () async {
+      config.outcome = const ConfigConflict('/h/config.yaml');
+
+      final outcome = await remover.remove(twoServers(), name: 'github');
+
+      expect(outcome, isA<McpServerRemovalNotSaved>());
+      expect(keys.journal.where((j) => j.startsWith('delete')), isEmpty);
+      expect(keys.storedNames, containsAll([authorization, token]));
+    });
+
+    test('исключение apply: тип без текста, секреты на месте', () async {
+      config.throwOnApply = StateError('boom');
+
+      final outcome = await remover.remove(twoServers(), name: 'github');
+
+      expect(outcome, isA<McpServerRemovalNotSaved>());
+      expect((outcome as McpServerRemovalNotSaved).errorType, 'StateError');
+      expect(keys.journal.where((j) => j.startsWith('delete')), isEmpty);
+    });
+
+    test('секрет, на который ссылается другой сервер, не удаляется', () async {
+      // Свежий снимок после записи: другой сервер ссылается на тот же секрет.
+      config.snapshotValue = freshMcpSnapshot(
+        user: [
+          httpServer('other', headers: {'X': '\${secret:$authorization}'}),
+        ],
+      );
+
+      final outcome = await remover.remove(twoServers(), name: 'github');
+
+      expect((outcome as McpServerRemoved).secrets, {
+        authorization: SecretCleanup.stillReferenced,
+      });
+      expect(keys.journal.where((j) => j.startsWith('delete')), isEmpty);
+    });
+
+    test('ссылку на секрет нашёл свежий снимок, а не исходный: перечитывание '
+        'после записи (SETUP-24)', () async {
+      final fresh = freshMcpSnapshot(
+        projectLocal: [
+          httpServer('late', headers: {'X': '\${secret:$authorization}'}),
+        ],
+      );
+      config.snapshotValue = fresh;
+
+      final outcome = await remover.remove(twoServers(), name: 'github');
+
+      expect(
+        (outcome as McpServerRemoved).secrets[authorization],
+        SecretCleanup.stillReferenced,
+      );
+    });
+
+    test(
+      'свежий снимок не получен: секрет не удаляется, исход failed',
+      () async {
+        config.snapshotValue = null;
+
+        final outcome = await remover.remove(twoServers(), name: 'github');
+
+        expect((outcome as McpServerRemoved).secrets, {
+          authorization: SecretCleanup.failed,
+        });
+        expect(keys.journal.where((j) => j.startsWith('delete')), isEmpty);
+      },
+    );
+
+    group('fail-safe свежего снимка: ссылки слоя не видны (SETUP-24)', () {
+      AgentConfigSnapshot fresh({
+        required bool withUser,
+        ConfigIssueKind? issue,
+      }) {
+        final base = freshMcpSnapshot(user: [httpServer('GitHub')]);
+        return AgentConfigSnapshot(
+          cwd: base.cwd,
+          layers: {
+            for (final e in base.layers.entries)
+              if (withUser || e.key != ConfigLayer.user) e.key: e.value,
+          },
+          loaded: ConfigLoadResult(
+            issues: [
+              if (issue != null)
+                ConfigIssue(
+                  kind: issue,
+                  key: '',
+                  source: '/h/config.yaml',
+                  message: 'bad',
+                ),
+            ],
+          ),
+          origins: base.origins,
+          secrets: base.secrets,
+        );
+      }
+
+      test('нет читаемого слоя user (проблем в issues нет): failed, delete '
+          'не вызывается', () async {
+        config.snapshotValue = fresh(withUser: false);
+
+        final outcome = await remover.remove(twoServers(), name: 'github');
+
+        expect((outcome as McpServerRemoved).secrets, {
+          authorization: SecretCleanup.failed,
+        });
+        expect(keys.journal.where((j) => j.startsWith('delete')), isEmpty);
+      });
+
+      test('issue вида profile при читаемом слое user: failed, delete не '
+          'вызывается', () async {
+        config.snapshotValue = fresh(
+          withUser: true,
+          issue: ConfigIssueKind.profile,
+        );
+
+        final outcome = await remover.remove(twoServers(), name: 'github');
+
+        expect((outcome as McpServerRemoved).secrets, {
+          authorization: SecretCleanup.failed,
+        });
+        expect(keys.journal.where((j) => j.startsWith('delete')), isEmpty);
+      });
+
+      test('контроль: читаемый user без проблем — секрет удаляется', () async {
+        config.snapshotValue = fresh(withUser: true);
+
+        final outcome = await remover.remove(twoServers(), name: 'github');
+
+        expect((outcome as McpServerRemoved).secrets, {
+          authorization: SecretCleanup.deleted,
+        });
+      });
+    });
+
+    test(
+      'хранилище отказало в удалении: сервер удалён, исход failed',
+      () async {
+        keys.deletion = SecretDeletion.failed;
+
+        final outcome = await remover.remove(twoServers(), name: 'github');
+
+        expect(outcome, isA<McpServerRemoved>());
+        expect((outcome as McpServerRemoved).secrets, {
+          authorization: SecretCleanup.failed,
+        });
+      },
+    );
+
+    test('секрета уже нет: alreadyAbsent', () async {
+      keys.deletion = SecretDeletion.notSet;
+
+      final outcome = await remover.remove(twoServers(), name: 'github');
+
+      expect(
+        (outcome as McpServerRemoved).secrets[authorization],
+        SecretCleanup.alreadyAbsent,
+      );
+    });
+
+    test(
+      'в кандидаты попадают ссылки env и headers, но не литералы и не '
+      r'${VAR}; ссылка внутри текста (Bearer ${secret:…}) тоже кандидат',
+      () async {
+        final snapshot = mcpSnapshot(
+          user: [
+            stdioServer(
+              'gh',
+              env: {
+                'A': '\${secret:codelab/mcp/gh/a}',
+                'B': '\${PG_URL}',
+                'C': 'plain',
+              },
+            ),
+            httpServer(
+              'gh2',
+              headers: {
+                'Authorization': 'Bearer \${secret:codelab/mcp/gh2/auth}',
+              },
+            ),
+          ],
+        );
+        keys = FakeProviderKeys(
+          stored: {'codelab/mcp/gh/a', 'codelab/mcp/gh2/auth'},
+        );
+        config.snapshotValue = freshMcpSnapshot();
+        rebuild();
+
+        final first = await remover.remove(snapshot, name: 'gh');
+        final second = await remover.remove(snapshot, name: 'gh2');
+
+        expect((first as McpServerRemoved).secrets.keys, ['codelab/mcp/gh/a']);
+        expect((second as McpServerRemoved).secrets.keys, [
+          'codelab/mcp/gh2/auth',
+        ]);
+      },
+    );
+
+    test('Remove трогает только секреты пространства codelab/mcp/<name>/: '
+        'ручной \${secret:shared} остаётся (kept), хранилище не '
+        'трогается', () async {
+      keys = FakeProviderKeys(stored: {authorization, 'shared'});
+      rebuild();
+      config.snapshotValue = freshMcpSnapshot();
+      final snapshot = mcpSnapshot(
+        user: [
+          httpServer(
+            'github',
+            headers: {
+              'Authorization': '\${secret:$authorization}',
+              'X-Shared': '\${secret:shared}',
+            },
+          ),
+        ],
+      );
+
+      final outcome = await remover.remove(snapshot, name: 'github');
+
+      expect((outcome as McpServerRemoved).secrets, {
+        authorization: SecretCleanup.deleted,
+        'shared': SecretCleanup.kept,
+      });
+      expect(keys.journal.where((j) => j.startsWith('delete')), [
+        'delete $authorization',
+      ]);
+      expect(keys.storedNames, contains('shared'));
+    });
+
+    test(
+      'чужое пространство того же вида (codelab/mcp/other/x) тоже kept',
+      () async {
+        keys = FakeProviderKeys(stored: {'codelab/mcp/other/x'});
+        rebuild();
+        config.snapshotValue = freshMcpSnapshot();
+        final snapshot = mcpSnapshot(
+          user: [
+            httpServer(
+              'github',
+              headers: {'X': '\${secret:codelab/mcp/other/x}'},
+            ),
+          ],
+        );
+
+        final outcome = await remover.remove(snapshot, name: 'github');
+
+        expect((outcome as McpServerRemoved).secrets, {
+          'codelab/mcp/other/x': SecretCleanup.kept,
+        });
+        expect(keys.journal.where((j) => j.startsWith('delete')), isEmpty);
+      },
+    );
+
+    test('сервер без секретов: ни одного обращения к хранилищу', () async {
+      final outcome = await remover.remove(
+        mcpSnapshot(user: [httpServer('plain')]),
+        name: 'plain',
+      );
+
+      expect((outcome as McpServerRemoved).secrets, isEmpty);
+      expect(keys.journal, isEmpty);
+    });
+
+    test('сервер слоя 3 удалить нельзя; неизвестный — отказ', () async {
+      final project = await remover.remove(
+        mcpSnapshot(project: [stdioServer('playwright')]),
+        name: 'playwright',
+      );
+      final unknown = await remover.remove(mcpSnapshot(), name: 'nope');
+
+      expect(
+        (project as McpServerRemovalRefused).reason,
+        McpServerRefusal.notEditable,
+      );
+      expect(
+        (unknown as McpServerRemovalRefused).reason,
+        McpServerRefusal.unknownServer,
+      );
+      expect(config.applied, isEmpty);
+    });
+  });
+
+  group('«Disable here» / «Enable here» для сервера слоя 3 (Q21)', () {
+    // Файл `config.local.yaml` читается (пока пуст): слой в снимке есть.
+    final project = mcpSnapshot(
+      project: [stdioServer('playwright', command: 'pw')],
+      projectLocal: const [],
+    );
+    const access = EditableSettings(
+      ConfigPaths(codelabHome: '/h', projectDir: mcpCwd),
+    );
+
+    test('disableHere пишет {name, enabled: false} в projectLocal, проектный '
+        'файл не затрагивается', () async {
+      final outcome = await committer.disableHere(
+        project,
+        'playwright',
+        access: access,
+      );
+
+      expect(outcome, isA<McpServerWritten>());
+      final applied = config.applied.single;
+      expect(applied.edits, [
+        const UpsertMcpServer({'name': 'playwright', 'enabled': false}),
+      ]);
+      expect(applied.base.target, const ConfigTarget.projectLocal(mcpCwd));
+    });
+
+    test('нечитаемый config.local.yaml (слоя нет в снимке) — отказ '
+        'layerUnreadable, а не ConfigConflict', () async {
+      final unreadable = mcpSnapshot(
+        project: [stdioServer('playwright', command: 'pw')],
+      );
+
+      final outcome = await committer.disableHere(
+        unreadable,
+        'playwright',
+        access: access,
+      );
+
+      expect(
+        (outcome as McpServerRefused).reason,
+        McpServerRefusal.layerUnreadable,
+      );
+      expect(config.applied, isEmpty);
+    });
+
+    test('профиль без цели projectLocal (папка проекта неизвестна) — отказ '
+        'noProjectTarget, запись не идёт (D5, SETUP-3)', () async {
+      final outcome = await committer.disableHere(
+        project,
+        'playwright',
+        access: const EditableSettings(ConfigPaths(codelabHome: '/h')),
+      );
+
+      expect(
+        (outcome as McpServerRefused).reason,
+        McpServerRefusal.noProjectTarget,
+      );
+      expect(config.applied, isEmpty);
+    });
+
+    test('disableHere только для сервера слоя 3: user-сервер и неизвестный — '
+        'отказ', () async {
+      final user = await committer.disableHere(
+        mcpSnapshot(user: [httpServer('u')]),
+        'u',
+        access: access,
+      );
+      final unknown = await committer.disableHere(
+        project,
+        'nope',
+        access: access,
+      );
+
+      expect((user as McpServerRefused).reason, McpServerRefusal.notProject);
+      expect(
+        (unknown as McpServerRefused).reason,
+        McpServerRefusal.unknownServer,
+      );
+      expect(config.applied, isEmpty);
+    });
+
+    test('enableHere удаляет переопределение: RemoveMcpServer из '
+        'projectLocal', () async {
+      final disabled = mcpSnapshot(
+        project: [stdioServer('playwright', command: 'pw')],
+        projectLocal: [
+          {'name': 'playwright', 'enabled': false},
+        ],
+      );
+
+      final outcome = await remover.enableHere(disabled, name: 'playwright');
+
+      expect(outcome, isA<McpServerWritten>());
+      final applied = config.applied.single;
+      expect(applied.edits, [const RemoveMcpServer('playwright')]);
+      expect(applied.base, disabled.layers[ConfigLayer.projectLocal]);
+    });
+
+    test('enableHere без переопределения «disabled here» — отказ, запись не '
+        'идёт', () async {
+      final outcome = await remover.enableHere(project, name: 'playwright');
+
+      expect(
+        (outcome as McpServerRefused).reason,
+        McpServerRefusal.notDisabledHere,
+      );
+      expect(config.applied, isEmpty);
+    });
+
+    test('enableHere не трогает полное переопределение пользователя', () async {
+      final full = mcpSnapshot(
+        project: [stdioServer('playwright')],
+        projectLocal: [stdioServer('playwright', command: 'mine')],
+      );
+
+      final outcome = await remover.enableHere(full, name: 'playwright');
+
+      expect(outcome, isA<McpServerRefused>());
+      expect(config.applied, isEmpty);
+    });
+
+    test('конфликт записи пробрасывается без автоповтора (SETUP-6)', () async {
+      config.outcome = const ConfigConflict('/w/.codelab/config.local.yaml');
+
+      final outcome = await committer.disableHere(
+        project,
+        'playwright',
+        access: access,
+      );
+
+      expect((outcome as McpServerNotWritten).outcome, isA<ConfigConflict>());
+      expect(config.applied, hasLength(1));
+    });
+  });
+
+  group('кандидаты на удаление: McpServerRemover.secretCandidatesOf (Q30, '
+      'design.md D11 «Уточнения по красным тестам 5b», Q22)', () {
+    // Одна реализация правила: подтверждение удаления в app показывает ровно
+    // те секреты, которые `remove` затем попробует удалить. Кандидат — секрет
+    // пространства `codelab/mcp/<name>/` из `${secret:…}` в `env` и `headers`
+    // удалённого элемента. «Ещё нужен другому серверу» (`stillReferenced`)
+    // решает `remove` по свежему снимку после записи, поэтому такой секрет
+    // остаётся кандидатом (в подтверждении страница честно предупреждает, что
+    // он может уцелеть).
+
+    List<String> candidates(AgentConfigSnapshot snapshot, String name) =>
+        McpServerRemover.secretCandidatesOf(snapshot, name);
+
+    test('только секреты пространства страницы из env и headers: чужие '
+        r'(${secret:shared}), литералы и ${VAR} не кандидаты', () {
+      final snapshot = mcpSnapshot(
+        user: [
+          stdioServer(
+            'gh',
+            env: {
+              'A': '\${secret:codelab/mcp/gh/a}',
+              'B': '\${PG_URL}',
+              'C': 'plain',
+              'D': '\${secret:shared}',
+            },
+          ),
+        ],
+      );
+
+      expect(candidates(snapshot, 'gh'), ['codelab/mcp/gh/a']);
+    });
+
+    test('env и headers вместе, по порядку, ссылка внутри текста тоже '
+        'кандидат, повторы схлопнуты', () {
+      final snapshot = mcpSnapshot(
+        user: [
+          httpServer(
+            'gh',
+            headers: {
+              'Authorization': 'Bearer \${secret:codelab/mcp/gh/auth}',
+              'X-Again': '\${secret:codelab/mcp/gh/auth}',
+              'X-Other': '\${secret:codelab/mcp/gh/other}',
+            },
+            extra: {
+              'env': {'E': '\${secret:codelab/mcp/gh/env}'},
+            },
+          ),
+        ],
+      );
+
+      expect(candidates(snapshot, 'gh'), [
+        'codelab/mcp/gh/env',
+        'codelab/mcp/gh/auth',
+        'codelab/mcp/gh/other',
+      ]);
+    });
+
+    test('ручной секрет вне codelab/mcp/<name>/ не кандидат, в том числе '
+        'чужое пространство того же вида', () {
+      final snapshot = mcpSnapshot(
+        user: [
+          httpServer(
+            'github',
+            headers: {
+              'A': '\${secret:my/own/token}',
+              'B': '\${secret:codelab/mcp/other/x}',
+            },
+          ),
+        ],
+      );
+
+      expect(candidates(snapshot, 'github'), isEmpty);
+    });
+
+    test('пространство общее у GitHub и github: регистр имени не важен', () {
+      final snapshot = mcpSnapshot(
+        user: [
+          httpServer('GitHub', headers: {'X': '\${secret:$token}'}),
+        ],
+      );
+
+      expect(candidates(snapshot, 'GitHub'), [token]);
+    });
+
+    test('секрет, на который ссылается другой сервер, остаётся кандидатом: '
+        'stillReferenced решает remove, а не список', () async {
+      final snapshot = twoServers(authorizationRef: '\${secret:$token}');
+      // Свежий снимок после записи: `GitHub` ещё ссылается на общий секрет.
+      config.snapshotValue = freshMcpSnapshot(
+        user: [
+          httpServer('GitHub', headers: {'X-Token': '\${secret:$token}'}),
+        ],
+      );
+      keys = FakeProviderKeys(stored: {token});
+      rebuild();
+
+      final listed = candidates(snapshot, 'github');
+      final outcome = await remover.remove(snapshot, name: 'github');
+
+      expect(listed, [token]);
+      expect((outcome as McpServerRemoved).secrets, {
+        token: SecretCleanup.stillReferenced,
+      });
+    });
+
+    test('совпадает с не-kept ключами McpServerRemoved.secrets для тех же '
+        'входов', () async {
+      keys = FakeProviderKeys(stored: {authorization, 'shared'});
+      rebuild();
+      config.snapshotValue = freshMcpSnapshot();
+      final snapshot = mcpSnapshot(
+        user: [
+          httpServer(
+            'github',
+            headers: {
+              'Authorization': '\${secret:$authorization}',
+              'X-Shared': '\${secret:shared}',
+              'X-Var': '\${TOKEN}',
+            },
+          ),
+        ],
+      );
+
+      final listed = candidates(snapshot, 'github');
+      final outcome = await remover.remove(snapshot, name: 'github');
+
+      final removed = (outcome as McpServerRemoved).secrets;
+      expect(removed.keys, containsAll([authorization, 'shared']));
+      expect(listed, [
+        for (final e in removed.entries)
+          if (e.value != SecretCleanup.kept) e.key,
+      ]);
+    });
+
+    test('сервер без ссылок и неизвестное имя — пустой список', () {
+      final snapshot = mcpSnapshot(user: [httpServer('plain')]);
+
+      expect(candidates(snapshot, 'plain'), isEmpty);
+      expect(candidates(snapshot, 'nope'), isEmpty);
+    });
+
+    test('сервер слоя 3 не удаляется, поэтому кандидатов нет (как remove: '
+        'notEditable)', () {
+      final snapshot = mcpSnapshot(
+        project: [
+          stdioServer('pw', env: {'K': '\${secret:codelab/mcp/pw/k}'}),
+        ],
+        projectLocal: const [],
+      );
+
+      expect(candidates(snapshot, 'pw'), isEmpty);
+    });
+
+    test('чистая функция: хранилища конфига и ключей не трогаются', () {
+      candidates(twoServers(), 'github');
+
+      expect(config.applied, isEmpty);
+      expect(keys.journal, isEmpty);
+      expect(journal, isEmpty);
+    });
+  });
+}
+
+/// Порт ключей, который пишет `delete` в общий журнал вместе с `apply`
+/// хранилища конфига: порядок «конфиг → секрет» (SETUP-24) виден одним
+/// списком.
+final class _OrderedKeys implements ProviderKeys {
+  _OrderedKeys(this._inner, this._journal);
+
+  final FakeProviderKeys _inner;
+  final List<String> _journal;
+
+  @override
+  SecretBackendInfo get backend => _inner.backend;
+
+  @override
+  String? get readOnlyHint => _inner.readOnlyHint;
+
+  @override
+  Future<bool> stored(String name) => _inner.stored(name);
+
+  @override
+  Future<SecretValue?> read(String name) => _inner.read(name);
+
+  @override
+  Future<ProviderKeyWrite> write(String name, SecretValue value) =>
+      _inner.write(name, value);
+
+  @override
+  Future<SecretDeletion> delete(String name) {
+    _journal.add('delete $name');
+    return _inner.delete(name);
+  }
+}

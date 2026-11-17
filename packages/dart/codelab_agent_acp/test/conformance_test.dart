@@ -74,6 +74,54 @@ void main() {
     }
   });
 
+  // acp-golden-fixtures «Фикстуры файлов проекта этапа 8»: сервер
+  // `mcp.servers` с `command`, которого нет среди `setup.mcp`, или с
+  // `type` не `stdio` — громкий провал, а не запуск настоящего процесса.
+  test('the factory rejects an mcp.servers entry that is not a fake', () async {
+    for (final (server, fragment) in <(Map<String, Object?>, String)>[
+      (
+        {'name': 'x', 'type': 'stdio', 'command': 'npx'},
+        'config.mcp.servers[0].command',
+      ),
+      (
+        {'name': 'x', 'type': 'http', 'command': 'fake'},
+        'config.mcp.servers[0].type',
+      ),
+      (
+        {'name': 'x', 'type': 'stdio', 'command': 'fake', 'url': 'u'},
+        'config.mcp.servers[0].url',
+      ),
+    ]) {
+      final source = loadFixtureCorpus().firstWhere(
+        (f) => f.id == 'acp/session-new-with-mcp',
+      );
+      final json =
+          jsonDecode(File(source.sourcePath!).readAsStringSync())
+              as Map<String, Object?>;
+      json['id'] = 'acp/mcp-config-not-fake';
+      (json['setup']! as Map<String, Object?>)['config'] = {
+        'mcp': {
+          'servers': [server],
+        },
+      };
+      final fixture = AcpFixture.fromJson(
+        json,
+        fileName: 'mcp-config-not-fake.json',
+      );
+
+      await expectLater(
+        runAgentFixture(fixture, startAgent),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains(fragment),
+          ),
+        ),
+      );
+    }
+  });
+
   // acp-golden-fixtures «Формат golden-фикстуры ACP», сценарий «Лишний
   // вызов MCP-сервера»: `after.mcpCalls` проверяет `verify()` фабрики.
   test(
@@ -135,6 +183,10 @@ Future<AgentUnderTest> startAgent(
   // читают, а настоящий `~/.codelab` разработчика не должен влиять на кадры
   // (design.md change `add-agent-project-files`, D15, D16).
   final home = Directory.systemTemp.createTempSync('agent_fixture_home_');
+  final projectFiles = ProjectFilesLoader(
+    home: home.path,
+    local: LocalExecutionEnv(cwd: setup.cwd),
+  );
   final core = buildAgentCore(
     profile: HostProfile.of(setup.profile),
     services: AgentCoreServices(
@@ -145,17 +197,21 @@ Future<AgentUnderTest> startAgent(
       clock: clock,
       ids: SequentialIdGenerator(),
       sessions: store,
-      projectFiles: ProjectFilesLoader(
-        home: home.path,
-        local: LocalExecutionEnv(cwd: setup.cwd),
-      ),
+      // Один загрузчик отдаёт и файлы проекта, и навыки (design.md change
+      // `add-agent-skills`, D3, D16): фикстуры `acp/skill-*` кладут навыки в
+      // `setup.files` под `.codelab/skills/`.
+      projectFiles: projectFiles,
+      skillFiles: projectFiles,
       models: FixedModelCatalog(config.models),
       // Коннектор есть всегда: `mcpCapabilities.http` в `initialize` зависит
       // от него (design.md change `add-agent-mcp-client`, D11), а серверы
       // фикстуры берутся из `setup.mcp`.
       mcp: McpClientConnector(
         transports: McpTransports(
-          stdio: mcp.transports,
+          // Серверы конфига идут к fake-серверу по `command`, серверы клиента
+          // — по `name` (acp-golden-fixtures «Фикстуры файлов проекта этапа
+          // 8»).
+          stdio: _ConfigServerRouting(mcp.transports),
           // HTTP-сервер фикстуры — настоящий `StreamableHttpTransport` на
           // `MockClient` над `FakeMcpServer` (D15, задача 9.5).
           http: StreamableHttpTransportFactory(
@@ -172,6 +228,8 @@ Future<AgentUnderTest> startAgent(
       budget: config.budget,
       compaction: config.compaction,
       trustedProjects: config.trustedProjects,
+      mcpServers: config.mcpServers,
+      skills: config.skills,
       permissions: PermissionsConfig(
         mode: setup.mode == null ? null : ModeId.parse(setup.mode!),
       ),
@@ -231,7 +289,10 @@ final class _HostGate implements PermissionGate {
 /// Фрагмент конфига фикстуры (§15) в объёме, который читают фикстуры
 /// этапов 0 и 4: `agent.default_model`, `agent.effort`, `budget.max_steps`,
 /// `budget.max_tokens`, `compaction.keep_recent_tokens`,
+/// `compaction.enabled` (выключает автосжатие; change `add-usage-extension`,
+/// D18 Т8, фикстура `acp/prompt-usage-compaction-off`),
 /// `providers.<id>.models.<model>` (`context_window`, `reasoning`),
+/// `skills` (`enabled`, `disabled`, `max_skills`, `catalog_max_chars`),
 /// `trusted_projects` (список путей, `${cwd}` — временный `cwd` прогона:
 /// доверие проекту, файлы которого лежат в `setup.files`; фикстуры этапа 8,
 /// design.md change `add-agent-project-files`, D15).
@@ -245,6 +306,8 @@ final class _FixtureConfig {
     required this.budget,
     required this.compaction,
     required this.trustedProjects,
+    required this.mcpServers,
+    required this.skills,
   });
 
   factory _FixtureConfig.parse(AgentFixtureSetup setup) {
@@ -253,7 +316,9 @@ final class _FixtureConfig {
       'agent',
       'budget',
       'compaction',
+      'mcp',
       'providers',
+      'skills',
       'trusted_projects',
     }, 'config');
     final agent = _object(config['agent'], 'config.agent');
@@ -261,12 +326,21 @@ final class _FixtureConfig {
     final budget = _object(config['budget'], 'config.budget');
     _keys(budget, const {'max_steps', 'max_tokens'}, 'config.budget');
     final compaction = _object(config['compaction'], 'config.compaction');
-    _keys(compaction, const {'keep_recent_tokens'}, 'config.compaction');
+    _keys(compaction, const {
+      'keep_recent_tokens',
+      'enabled',
+    }, 'config.compaction');
     final llmModel = _object(setup.llm?['model'], 'llm.model');
     final scripted = _model(
       llmModel['provider'] as String? ?? 'scripted',
       llmModel['modelId'] as String? ?? 'scripted-1',
-      {'context_window': llmModel['contextWindow'] ?? 32768},
+      {
+        'context_window': llmModel['contextWindow'] ?? 32768,
+        // Цены модели сценария (`llm.model.cost`, доллары за 10^6 токенов;
+        // change `add-usage-extension`, D18 Т8): без поля цены неизвестны и
+        // `ModelRef.cost == null`.
+        'cost': llmModel['cost'],
+      },
     );
     // Каталог — модели конфига; модель llm.model входит в него, только
     // если она модель по умолчанию (нет agent.default_model).
@@ -325,6 +399,8 @@ final class _FixtureConfig {
     };
     return _FixtureConfig(
       trustedProjects: trusted,
+      mcpServers: _mcpServers(config['mcp'], setup),
+      skills: _skills(config['skills']),
       defaultModel: defaultModel,
       models: models,
       effort: switch (agent['effort']) {
@@ -334,6 +410,7 @@ final class _FixtureConfig {
       },
       compaction: CompactionOverrides(
         keepRecentTokens: compaction['keep_recent_tokens'] as int?,
+        enabled: compaction['enabled'] as bool? ?? true,
       ),
       budget: TurnBudget(
         maxSteps: budget['max_steps'] as int? ?? 50,
@@ -349,6 +426,98 @@ final class _FixtureConfig {
   final CompactionOverrides compaction;
   final List<String> trustedProjects;
 
+  /// Серверы `mcp.servers` (`origin: config`) для `CoreConfig.mcpServers`.
+  final List<McpServerConfig> mcpServers;
+
+  /// Раздел `skills` для `CoreConfig.skills`.
+  final SkillsConfig skills;
+
+  /// Ключ `skills` (acp-golden-fixtures «Фикстуры навыков»; design.md change
+  /// `add-agent-skills`, D11): `enabled`, `disabled`, `max_skills`,
+  /// `catalog_max_chars`.
+  ///
+  /// `extra_roots` драйвер не принимает: корень вне временного `cwd` сделал
+  /// бы прогон зависимым от файлов разработчика — громкий провал, как у
+  /// прочих неподдержанных ключей.
+  static SkillsConfig _skills(Object? raw) {
+    final skills = _object(raw, 'config.skills');
+    _keys(skills, const {
+      'enabled',
+      'disabled',
+      'max_skills',
+      'catalog_max_chars',
+    }, 'config.skills');
+    const defaults = SkillsConfig();
+    return SkillsConfig(
+      enabled: skills['enabled'] as bool? ?? defaults.enabled,
+      disabled: [...?(skills['disabled'] as List<Object?>?)?.cast<String>()],
+      maxSkills: skills['max_skills'] as int? ?? defaults.maxSkills,
+      catalogMaxChars:
+          skills['catalog_max_chars'] as int? ?? defaults.catalogMaxChars,
+    );
+  }
+
+  /// Ключ `mcp.servers` (design.md change `add-config-writer-and-reload`,
+  /// D12; acp-golden-fixtures «Фикстуры файлов проекта этапа 8»).
+  ///
+  /// Почему так строго: сервер конфига фикстуры подключается только к
+  /// fake-серверу из `setup.mcp`. Другой `command` или `type` — громкий
+  /// провал, иначе фикстура запускала бы настоящий процесс или молча
+  /// теряла сервер. Поля элемента: `name`, `type` (`stdio`), `command`,
+  /// `args`, `env`, `enabled`.
+  static List<McpServerConfig> _mcpServers(
+    Object? raw,
+    AgentFixtureSetup setup,
+  ) {
+    final mcp = _object(raw, 'config.mcp');
+    _keys(mcp, const {'servers'}, 'config.mcp');
+    final servers = switch (mcp['servers']) {
+      null => const <Object?>[],
+      final List<Object?> list => list,
+      final value => throw FormatException('config.mcp.servers: $value'),
+    };
+    return [
+      for (final (index, item) in servers.indexed)
+        _mcpServer(_object(item, 'config.mcp.servers[$index]'), index, setup),
+    ];
+  }
+
+  static McpServerConfig _mcpServer(
+    Map<String, Object?> item,
+    int index,
+    AgentFixtureSetup setup,
+  ) {
+    final path = 'config.mcp.servers[$index]';
+    _keys(item, const {
+      'name',
+      'type',
+      'command',
+      'args',
+      'env',
+      'enabled',
+    }, path);
+    if (item['type'] != 'stdio') {
+      throw FormatException(
+        '$path.type: the fixture driver supports only "stdio"',
+      );
+    }
+    final command = item['command'];
+    if (command is! String || !setup.mcp.containsKey(command)) {
+      throw FormatException(
+        '$path.command: must be the name of a setup.mcp fake server '
+        '(${setup.mcp.keys.join(', ')}), got $command',
+      );
+    }
+    return McpStdioServerConfig(
+      name: item['name']! as String,
+      command: command,
+      args: [...?(item['args'] as List<Object?>?)?.cast<String>()],
+      env: {...?(item['env'] as Map<String, Object?>?)?.cast<String, String>()},
+      origin: McpServerOrigin.config,
+      enabled: item['enabled'] as bool? ?? true,
+    );
+  }
+
   static ModelRef _model(
     String provider,
     String id,
@@ -361,6 +530,16 @@ final class _FixtureConfig {
     contextWindow: fields['context_window'] as int? ?? 32768,
     maxOutputTokens: 4096,
     supportsReasoning: fields['reasoning'] as bool? ?? false,
+    cost: switch (fields['cost']) {
+      null => null,
+      final Map<String, Object?> cost => ModelCost(
+        input: (cost['input']! as num).toDouble(),
+        output: (cost['output']! as num).toDouble(),
+        cacheRead: (cost['cacheRead'] as num? ?? 0).toDouble(),
+        cacheWrite: (cost['cacheWrite'] as num? ?? 0).toDouble(),
+      ),
+      final value => throw FormatException('llm.model.cost: $value'),
+    },
   );
 
   static Map<String, Object?> _object(Object? value, String path) =>
@@ -468,5 +647,45 @@ final class _FixtureMcp {
         );
       }
     }
+  }
+}
+
+/// Направляет stdio-сервер конфига к fake-серверу по `command`, а сервер
+/// клиента ACP — по `name`, как раньше.
+///
+/// Почему: `FakeMcpTransportFactory` ищет fake по имени сервера, а фикстура
+/// `mcp.servers` называет fake в `command` (acp-golden-fixtures «Фикстуры
+/// файлов проекта этапа 8»), и имя сервера конфига может отличаться от него.
+final class _ConfigServerRouting implements McpTransportFactory {
+  _ConfigServerRouting(this._inner);
+
+  final McpTransportFactory _inner;
+
+  @override
+  Set<String> get transports => _inner.transports;
+
+  @override
+  Future<McpTransport> open(
+    McpServerConfig server, {
+    required String cwd,
+    required CancelToken cancel,
+    required Logger logger,
+  }) {
+    final routed = switch (server) {
+      McpStdioServerConfig(origin: McpServerOrigin.config) =>
+        McpStdioServerConfig(
+          name: server.command,
+          command: server.command,
+          args: server.args,
+          env: server.env,
+          origin: server.origin,
+          connectTimeout: server.connectTimeout,
+          callTimeout: server.callTimeout,
+          secretValues: server.secretValues,
+          enabled: server.enabled,
+        ),
+      _ => server,
+    };
+    return _inner.open(routed, cwd: cwd, cancel: cancel, logger: logger);
   }
 }

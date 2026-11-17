@@ -1,13 +1,16 @@
+import 'package:meta/meta.dart' show internal;
 import '../llm/model_catalog.dart';
 import '../llm/model_ref.dart';
 import '../loop/turn_budget.dart';
 import '../mcp/mcp_server_config.dart';
 import '../permissions/modes.dart';
 import '../permissions/policy.dart';
+import '../skills/skills_config.dart';
+import '../subagents/subagents_config.dart';
 import '../tools/agent_tool.dart' show ToolTier;
 import 'config_issue.dart';
 import 'config_tree.dart';
-import 'key_path.dart';
+import 'key_path.dart' show samePath;
 import 'redact_settings.dart';
 import 'resolve.dart';
 import 'schema.dart' show defaultProjectContextMaxBytes;
@@ -17,6 +20,31 @@ import 'schema.dart' show defaultProjectContextMaxBytes;
 // не возникает. Публичный API прежний.
 export 'schema.dart'
     show defaultProjectContextMaxBytes, maxProjectContextMaxBytes;
+
+/// Откуда взялась модель по умолчанию (design.md change
+/// `optional-default-model`, D1).
+///
+/// Почему enum ядра: источник нужен логам (`session.model.selected`, §16),
+/// `config check` и правилу выбора модели сессии ([selectSessionModel]), а
+/// рантайм и хосты не должны разбирать строки.
+///
+/// Значения: [config] — явная `agent.default_model` любого слоя (побеждает
+/// всё и проверяется строго); [lastUsed] — последняя явно выбранная
+/// пользователем модель (даёт только рантайм, в `CoreConfig` её не бывает);
+/// [firstProvider] — первая модель первого доступного провайдера. Проводные
+/// имена в логах и `config check`: `config`, `last-used`, `first-provider`
+/// ([wireName]). Идея порядка выбора — поведение OpenCode в описании
+/// пользователя (код не изучался и не воспроизводится, design.md, Context).
+enum DefaultModelSource {
+  config('config'),
+  lastUsed('last-used'),
+  firstProvider('first-provider');
+
+  const DefaultModelSource(this.wireName);
+
+  /// Имя в логах, событиях и выводе `config check`.
+  final String wireName;
+}
 
 /// Часть конфигурации, относящаяся к разрешениям (`agent-core-architecture`
 /// §7, §15.3, §15.4).
@@ -51,6 +79,88 @@ final class PermissionsConfig {
   final Set<ToolTier> extraDeniedTiers;
 }
 
+/// Отложенные до перезапуска части `CoreConfig` в структурированном виде
+/// (design.md change `add-config-writer-and-reload`, D8, «Пересборка снимка
+/// с отложенными ключами»; R0-1).
+///
+/// Почему не строки ключей: `CoreConfig.withDeferred` раньше разбирал ключи
+/// показа обратно в имена, а имя сервера с `[`, `]`, `"` не разбирается:
+/// разбор давал `null`, и новый stdio-сервер оставался в снимке (fail-open).
+/// Имена и идентификаторы берёт `planConfigReload` из самих снимков.
+///
+/// Как использовать: `planConfigReload` возвращает значение в
+/// `ConfigReloadPlan.deferred` (объединение по полному снимку и снимку без
+/// проекта); рантайм передаёт его в [CoreConfig.withDeferred]. Сессия другой
+/// папки получает такое значение от `deferForFolderSession` (design.md change
+/// `defer-restart-keys-in-folder-sessions`, D2–D5): каждому полю там
+/// соответствует правило перекрытия проектным слоем. Тесты строят значение
+/// напрямую.
+final class DeferredConfigParts {
+  const DeferredConfigParts({
+    this.providers = const {},
+    this.servers = const {},
+    this.disabledServers = const {},
+    this.disabledServersWithoutProject = const {},
+    this.permissions = false,
+    this.defaultModel = false,
+  });
+
+  /// Идентификаторы провайдеров, чья группа адреса и аутентификации (и
+  /// ссылки на модели нового провайдера) остаётся прежней.
+  final Set<String> providers;
+
+  /// Имена серверов `mcp.servers`: прежний элемент того же имени, а нового
+  /// нет — он исключается.
+  final Set<String> servers;
+
+  /// Подмножество [servers]: сервер выключен этой же правкой, а правка его
+  /// соединения отложена (R6-1). В снимке остаётся прежний элемент с
+  /// `enabled: false`: выключение действует сразу, `/mcp enable` подключит
+  /// прежние параметры.
+  final Set<String> disabledServers;
+
+  /// То же для снимка без проекта: выключение применяется только в том
+  /// снимке, чей план его дал (проектный слой может выключить сервер только в
+  /// полном снимке).
+  final Set<String> disabledServersWithoutProject;
+
+  /// Отложенные части для снимка без проекта: его собственный набор
+  /// выключаемых серверов.
+  DeferredConfigParts get forWithoutProject => DeferredConfigParts(
+    providers: providers,
+    servers: servers,
+    disabledServers: disabledServersWithoutProject,
+    disabledServersWithoutProject: disabledServersWithoutProject,
+    permissions: permissions,
+    defaultModel: defaultModel,
+  );
+
+  /// Весь раздел `permissions` берётся прежним.
+  final bool permissions;
+
+  /// `agent.default_model` остаётся прежней.
+  final bool defaultModel;
+
+  bool get isEmpty =>
+      providers.isEmpty && servers.isEmpty && !permissions && !defaultModel;
+
+  /// Объединение: отложенное в любом из снимков откладывается в обоих.
+  /// Исключение — `disabledServers` и `disabledServersWithoutProject`: они
+  /// описывают снимок, чей план их дал, и здесь суммируются только как набор
+  /// имён; `planConfigReload` задаёт их по снимкам отдельно (R6-1).
+  DeferredConfigParts union(DeferredConfigParts other) => DeferredConfigParts(
+    providers: {...providers, ...other.providers},
+    servers: {...servers, ...other.servers},
+    disabledServers: {...disabledServers, ...other.disabledServers},
+    disabledServersWithoutProject: {
+      ...disabledServersWithoutProject,
+      ...other.disabledServersWithoutProject,
+    },
+    permissions: permissions || other.permissions,
+    defaultModel: defaultModel || other.defaultModel,
+  );
+}
+
 /// Проверенная конфигурация ядра.
 ///
 /// Почему одно значение: сборка ядра (`buildAgentCore`) и все сессии
@@ -65,6 +175,7 @@ final class PermissionsConfig {
 final class CoreConfig {
   const CoreConfig({
     required this.defaultModel,
+    this.defaultModelSource = DefaultModelSource.config,
     this.permissions = const PermissionsConfig(),
     this.budget = const TurnBudget(),
     this.compaction = const CompactionOverrides(),
@@ -74,9 +185,12 @@ final class CoreConfig {
     this.providerProblems = const {},
     this.redact = const RedactSettings(),
     this.projectContextMaxBytes = defaultProjectContextMaxBytes,
+    this.skills = const SkillsConfig(),
+    this.subagents = const SubagentsConfig(),
     this.trustedProjects = const [],
     this.projectRoot,
     this.withoutProject,
+    this.withoutProjectValues,
   });
 
   /// Проверяет слои от низшего приоритета к высшему и собирает конфигурацию
@@ -86,18 +200,253 @@ final class CoreConfig {
   /// уже разобранным деревом (CFG-5); мобильный и web-хосты передают слои
   /// без позиций и получают ту же проверку.
   ///
-  /// Как использовать: [environment] — переменные для `${ENV}` и
-  /// `api_key_env`; [projectRoot] — канонический корень проектных слоёв
-  /// (доверие §15.3 и [withoutProject], D9). Исключений не бросает: либо
-  /// `config` без проблем, либо непустой `issues`.
+  /// Как использовать: [environment] — переменные для `${ENV}` и проверки
+  /// `api_key_env` (само значение ключа загрузка не читает, D4);
+  /// [projectRoot] — канонический корень проектных слоёв (доверие §15.3 и
+  /// [withoutProject], D9). Исключений не бросает: либо `config` без проблем,
+  /// либо непустой `issues`.
+  ///
+  /// [collectAll] (R3-1, решение 2026-11-03; design.md change
+  /// `add-config-writer-and-reload`, D5) — режим писателя: ошибка проверки
+  /// слоя не обрывает следующие ступени, ключи с ошибкой исключаются, а в
+  /// `issues` попадают проблемы всех ступеней, включая каскадные. Обычная
+  /// загрузка (`false`) не меняется.
+  ///
+  /// [pinnedTrustedProjects] (design.md change `add-config-writer-and-reload`,
+  /// D8, «Пересборка снимка с отложенными ключами») — закреплённый список
+  /// доверия: по нему, а не по `trusted_projects` слоёв, оцениваются проектные
+  /// слои 3–4 и заполняется `trustedProjects` полного снимка и
+  /// `withoutProject`. Почему в ядре: доверие решает, какие ключи проектных
+  /// слоёв войдут в дерево, и после слияния этого не восстановить. Хост
+  /// передаёт `initial.config.trustedProjects` на каждой перезагрузке; новое
+  /// значение ключа попадает только в `ConfigLoadResult.values`. `null` —
+  /// доверие по слоям, как при старте. Элементы уже канонические (список
+  /// стартового снимка), повторно не раскрываются.
   static ConfigLoadResult fromLayers(
     List<ConfigTree> layers, {
     required Map<String, String> environment,
     String? projectRoot,
-  }) =>
-      resolveConfig(layers, environment: environment, projectRoot: projectRoot);
+    bool collectAll = false,
+    List<String>? pinnedTrustedProjects,
+  }) => resolveConfig(
+    layers,
+    environment: environment,
+    projectRoot: projectRoot,
+    collectAll: collectAll,
+    pinnedTrustedProjects: pinnedTrustedProjects,
+  );
+
+  /// Подставляет в [next] отложенные до перезапуска части из [previous]
+  /// (design.md change `add-config-writer-and-reload`, D8, «Пересборка
+  /// снимка с отложенными ключами», звено 2).
+  ///
+  /// Почему в ядре и чистой функцией: какие части отложить, видно только
+  /// после сравнения с применённым снимком (R0-1, R0-4), а подстановка
+  /// работает над `CoreConfig` и его [withoutProject]; `HostSettings` и
+  /// `values` лежат в `ConfigLoadResult`, их подставляет рантайм.
+  ///
+  /// [deferred] — структурированные части (имена серверов и идентификаторы
+  /// провайдеров из снимков, а не разбор ключей показа): `permissions`
+  /// целиком прежние, `defaultModel` прежняя, сервер из `servers` — прежний
+  /// элемент того же имени (нового нет — он исключается), провайдер из
+  /// `providers` — группа адреса и аутентификации прежняя (`CatalogProvider`
+  /// собирается из прежних `config`, `key` и `headerTemplates` и новых
+  /// `models`, запись `providerProblems` прежняя; нового провайдера
+  /// [previous] не знает — он исключается). Остальное ([trustedProjects],
+  /// бюджет, сжатие, `effort`) берётся из [next]: доверие уже закреплено
+  /// `fromLayers(pinnedTrustedProjects:)`.
+  ///
+  /// [withoutProjectValues] — `values` снимка без проекта после подстановки
+  /// (`ConfigReloadPlan.appliedWithoutProjectValues`); по умолчанию — из
+  /// [next]. Следующая перезагрузка сравнивает с ними (R0-1).
+  ///
+  /// Как использовать: рантайм вызывает после `planConfigReload` и затем
+  /// проверяет итог [validateSnapshot].
+  ///
+  /// Неявная модель (`defaultModelSource == firstProvider`, design.md change
+  /// `optional-default-model`, D10) не откладывается отдельно: она
+  /// пересчитывается заново по итоговым провайдерам, из которых уже
+  /// исключены отложенные новые. Иначе провайдер, вставленный перед прежним,
+  /// стал бы моделью до перезапуска, а [validateSnapshot] отклонил бы всю
+  /// перезагрузку. Снимок без проекта подставляется
+  /// тем же способом относительно `previous.withoutProject` (или `previous`,
+  /// если у прежнего снимка проектных слоёв не было).
+  static CoreConfig withDeferred(
+    CoreConfig previous,
+    CoreConfig next,
+    DeferredConfigParts deferred, {
+    Map<String, Object?>? withoutProjectValues,
+  }) {
+    if (deferred.isEmpty) {
+      return withoutProjectValues == null
+          ? next
+          : next._copyWith(
+              withoutProject: next.withoutProject,
+              withoutProjectValues: withoutProjectValues,
+            );
+    }
+    final providers = deferred.providers;
+    final servers = deferred.servers;
+    final oldProviders = {for (final p in previous.providers) p.config.name: p};
+    final oldServers = {for (final s in previous.mcpServers) s.name: s};
+    final problems = {...next.providerProblems};
+    for (final id in providers) {
+      problems.remove(id);
+      if (previous.providerProblems[id] case final problem?) {
+        problems[id] = problem;
+      }
+    }
+    final bare = next.withoutProject;
+    final finalProviders = [
+      for (final provider in next.providers)
+        if (!providers.contains(provider.config.name))
+          provider
+        else if (oldProviders[provider.config.name] case final old?)
+          CatalogProvider(
+            old.config,
+            models: provider.models,
+            key: old.key,
+            headerTemplates: old.headerTemplates,
+          ),
+    ];
+    // D10: неявная модель считается заново по итоговым провайдерам, иначе
+    // отложенный новый провайдер, вставленный перед прежним, стал бы моделью
+    // и `validateSnapshot` отклонил бы всю перезагрузку. Явная модель — по
+    // прежним правилам (`deferred.defaultModel`).
+    // Прежняя модель вне каталога прежних провайдеров (снимок без проекта
+    // корня, чья резервная модель пришла из проектного слоя, `_resolve`,
+    // `fallbackModel`): вернуть её значило бы получить снимок, который не
+    // проходит `validateSnapshot`. Тогда модель считается неявной по итоговым
+    // провайдерам — как у сессии без `agent.default_model`.
+    final previousKnown = previous.providers.any(
+      (p) =>
+          p.config.name == previous.defaultModel.provider &&
+          p.models.containsKey(previous.defaultModel.id),
+    );
+    final keepPrevious = deferred.defaultModel && previousKnown;
+    final implicit =
+        (!deferred.defaultModel &&
+                next.defaultModelSource == DefaultModelSource.firstProvider) ||
+            (deferred.defaultModel && !previousKnown)
+        ? implicitDefaultModel(finalProviders, problems, next.effort)
+        : null;
+    return next._copyWith(
+      defaultModel: keepPrevious ? previous.defaultModel : implicit,
+      defaultModelSource: keepPrevious
+          ? previous.defaultModelSource
+          : (implicit != null && deferred.defaultModel
+                ? DefaultModelSource.firstProvider
+                : null),
+      permissions: deferred.permissions ? previous.permissions : null,
+      mcpServers: [
+        for (final server in next.mcpServers)
+          if (!servers.contains(server.name))
+            server
+          else if (deferred.disabledServers.contains(server.name))
+            ?oldServers[server.name]?.withEnabled(false)
+          else
+            ?oldServers[server.name],
+      ],
+      providers: finalProviders,
+      providerProblems: problems,
+      withoutProject: bare == null
+          ? null
+          : withDeferred(
+              previous.withoutProject ?? previous,
+              bare,
+              deferred.forWithoutProject,
+            ),
+      withoutProjectValues: withoutProjectValues,
+    );
+  }
+
+  /// Тот же снимок без вложенного [withoutProject].
+  ///
+  /// Почему: конфигурацию сессии другой папки читают напрямую, а вложенный
+  /// снимок без проекта нужен только `forSessionCwd` корня. После подстановки
+  /// отложенного для папки он мог бы оказаться несогласованным (проект папки
+  /// задал `agent.default_model`, а вложенный снимок ссылается на исключённого
+  /// провайдера) и дал бы ложный отказ `validateSnapshot`.
+  ///
+  /// Для чего и как: только внутри пакета (`deferForFolderSession`), поэтому
+  /// `@internal`; не часть публичного API.
+  @internal
+  CoreConfig withoutNestedProject() => _copyWith(withoutProject: null);
+
+  /// Единственное место, где `CoreConfig` копируется поле за полем: новое
+  /// поле нельзя забыть в одной из точек подстановки. `null` — поле берётся
+  /// у этого снимка; [withoutProject] подставляется всегда (его `null` значит
+  /// «снимка нет»).
+  CoreConfig _copyWith({
+    ModelRef? defaultModel,
+    DefaultModelSource? defaultModelSource,
+    PermissionsConfig? permissions,
+    List<McpServerConfig>? mcpServers,
+    List<CatalogProvider>? providers,
+    Map<String, String>? providerProblems,
+    required CoreConfig? withoutProject,
+    Map<String, Object?>? withoutProjectValues,
+  }) => CoreConfig(
+    defaultModel: defaultModel ?? this.defaultModel,
+    defaultModelSource: defaultModelSource ?? this.defaultModelSource,
+    permissions: permissions ?? this.permissions,
+    budget: budget,
+    compaction: compaction,
+    effort: effort,
+    mcpServers: mcpServers ?? this.mcpServers,
+    providers: providers ?? this.providers,
+    providerProblems: providerProblems ?? this.providerProblems,
+    redact: redact,
+    projectContextMaxBytes: projectContextMaxBytes,
+    skills: skills,
+    subagents: subagents,
+    trustedProjects: trustedProjects,
+    projectRoot: projectRoot,
+    withoutProject: withoutProject,
+    withoutProjectValues: withoutProjectValues ?? this.withoutProjectValues,
+  );
+
+  /// Семантическая проверка снимка после подстановки отложенных частей
+  /// (D8, шаг 5): модель по умолчанию должна быть в каталоге провайдеров.
+  ///
+  /// Почему повторно: `fromLayers` проверил новый снимок целиком, но
+  /// [withDeferred] мог вернуть прежнюю ссылку на модель, которой в новых
+  /// моделях провайдера уже нет. Отложенная ссылка на модель нового
+  /// провайдера эту проверку не роняет: она откладывается вместе с
+  /// провайдером.
+  ///
+  /// Возвращает проблемы (пусто — снимок годится); значений в тексте нет.
+  /// Проверяются и [withoutProject]. Рантайм при непустом результате
+  /// возвращает итог `failed`.
+  List<ConfigIssue> validateSnapshot() {
+    final issues = <ConfigIssue>[];
+    final ref = '${defaultModel.provider}/${defaultModel.id}';
+    final known = providers.any(
+      (p) =>
+          p.config.name == defaultModel.provider &&
+          p.models.containsKey(defaultModel.id),
+    );
+    if (!known) {
+      issues.add(
+        ConfigIssue(
+          kind: ConfigIssueKind.value,
+          key: 'agent.default_model',
+          source: 'config reload',
+          message: '$ref is not in the model catalog',
+        ),
+      );
+    }
+    if (withoutProject case final bare?) {
+      issues.addAll(bare.validateSnapshot());
+    }
+    return issues;
+  }
 
   final ModelRef defaultModel;
+
+  /// Источник [defaultModel]: `config` или `firstProvider` (D1). По умолчанию
+  /// `config` — хосты и тесты, задающие модель напрямую, считают её явной.
+  final DefaultModelSource defaultModelSource;
 
   /// Уровень рассуждения новой сессии (`agent.effort`, §2.12.3, §15.4);
   /// доходит до запроса только у модели с рассуждением.
@@ -117,9 +466,11 @@ final class CoreConfig {
   /// (`createRoutedStreamFunction`, D11).
   final List<CatalogProvider> providers;
 
-  /// Провайдер → причина, по которой его ключ недоступен (`api_key_env` не
-  /// задана, секрет не читается, D8). Выбор такой модели даёт ошибку хода без
-  /// HTTP-запроса.
+  /// Провайдер → причина, по которой его ключ недоступен заранее:
+  /// переменная `api_key_env` не задана (быстрый отказ, D4). Выбор такой
+  /// модели даёт ошибку хода без HTTP-запроса. Записей о секретах здесь нет:
+  /// `api_key_secret` и `${secret:…}` разрешаются при первом запросе
+  /// (design.md change `add-agent-secret-store`, D4).
   final Map<String, String> providerProblems;
 
   /// Проверенные ключи `redact.*`.
@@ -130,6 +481,15 @@ final class CoreConfig {
   /// `add-agent-project-files`, D5). Runtime передаёт его порту файлов
   /// проекта и `assembleProjectContext`.
   final int projectContextMaxBytes;
+
+  /// Раздел `skills` (capability `agent-skills`, design.md change
+  /// `add-agent-skills`, D11).
+  final SkillsConfig skills;
+
+  /// Раздел `subagents` (change `add-subagents-and-tasks`, D17): лимиты
+  /// читаются при каждом `spawn`, `enabled` и `max_depth` — при создании
+  /// сессии (D22, D37).
+  final SubagentsConfig subagents;
 
   /// Канонические корни `trusted_projects` глобального слоя (~ раскрыт,
   /// symlink раскрыт `ConfigLoader`). Runtime сравнивает с ними канонический
@@ -144,6 +504,17 @@ final class CoreConfig {
 
   /// Снимок без проектных слоёв для сессий вне [projectRoot] (D9, OQ1 (а)).
   final CoreConfig? withoutProject;
+
+  /// Плоская карта листьев [withoutProject] (как `ConfigLoadResult.values`
+  /// полного снимка); `null` — снимка без проекта нет.
+  ///
+  /// Почему здесь, а не в `ConfigLoadResult`: значения нужны перезагрузке
+  /// конфигурации, чтобы сравнить второй снимок (R0-1: правка слоя, скрытая
+  /// проектным слоем в полном снимке, видна только в нём), и должны ехать
+  /// вместе с самим снимком через любой адаптер источника конфигурации.
+  /// Заполняет `fromLayers`; потребитель — `planConfigReload`. Без значений
+  /// сравнение считает карту пустой (fail closed: расхождение откладывается).
+  final Map<String, Object?>? withoutProjectValues;
 
   /// Конфигурация сессии с данным [cwd]: полная для сессии в [projectRoot] и
   /// [withoutProject] для любой другой. Сравнивается равенство путей, а не

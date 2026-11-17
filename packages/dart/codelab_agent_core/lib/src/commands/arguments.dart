@@ -75,6 +75,13 @@ List<String> splitArguments(String raw) {
 /// Значения подставляются в выходной буфер и дальше не сканируются, поэтому
 /// `$1` со значением `$ARGUMENTS` остаётся текстом (D8, «безопасность
 /// подстановки»).
+///
+/// Экранирование (design.md change `add-agent-skills`, D8, D18; решения Q7,
+/// Q15 (а)): `\$` и `$$` дают литерал `$` и плейсхолдером не считаются;
+/// `\\` копируется как есть, оба символа, а следующий `$…` разбирается
+/// обычным правилом (до change `\` ничего не значил, и `\\$1` в шаблоне
+/// давал `\\x` — рабочие шаблоны и пути Windows не ломаются); `\` перед
+/// другим символом и в конце тела остаётся литералом.
 String _scan(
   String body,
   String Function(String name, int? index) onPlaceholder,
@@ -83,6 +90,20 @@ String _scan(
   var i = 0;
   while (i < body.length) {
     final c = body[i];
+    if (c == r'\' && i + 1 < body.length) {
+      final next = body[i + 1];
+      if (next == r'$') {
+        out.write(r'$');
+        i += 2;
+      } else if (next == r'\') {
+        out.write(r'\\');
+        i += 2;
+      } else {
+        out.write(c);
+        i++;
+      }
+      continue;
+    }
     if (c != r'$' || i + 1 >= body.length) {
       out.write(c);
       i++;
@@ -107,7 +128,7 @@ String _scan(
   return out.toString();
 }
 
-/// Тело содержит `$ARGUMENTS` или `$1`…`$9` (не экранированные `$$`).
+/// Тело содержит `$ARGUMENTS` или `$1`…`$9` (не экранированные `$$` и `\$`).
 bool usesPlaceholders(String body) {
   var found = false;
   _scan(body, (name, index) {
@@ -117,21 +138,39 @@ bool usesPlaceholders(String body) {
   return found;
 }
 
-/// Подставляет аргументы в [body] одним проходом слева направо (§17.2.6).
+/// Подстановка без хвоста: [text] и признак, что в теле был плейсхолдер.
 ///
-/// `$ARGUMENTS` → [raw] как введён; `$1`…`$9` → [args] (нет аргумента —
-/// пустая строка); `$$` → `$`; `$` перед другим символом остаётся. Если в теле
-/// нет ни одного плейсхолдера, а [raw] не пуст, к телу дописывается
-/// `\n\nARGUMENTS: <raw>`, чтобы введённое не потерялось. `{{…}}` тела не
-/// обрабатываются.
-String substituteArguments(String body, String raw, List<String> args) {
+/// Почему отдельно от [substituteArguments]: навыку хвост `ARGUMENTS:` нужен
+/// после блока, вне `<skill>`, и не входит в содержимое активации (D18,
+/// `ActiveSkill.content`). Внутренняя функция, в барель не экспортируется.
+({String text, bool usedPlaceholders}) substitutePlaceholders(
+  String body,
+  String raw,
+  List<String> args,
+) {
   var used = false;
-  final result = _scan(body, (name, index) {
+  final text = _scan(body, (name, index) {
     used = true;
     if (index == null) {
       return raw;
     }
     return index <= args.length ? args[index - 1] : '';
   });
-  return !used && raw.isNotEmpty ? '$result\n\nARGUMENTS: $raw' : result;
+  return (text: text, usedPlaceholders: used);
+}
+
+/// Хвост для тела без плейсхолдеров: `''` при пустом [raw], иначе
+/// `\n\nARGUMENTS: <raw>`, чтобы введённое не потерялось (D8, D18).
+String argumentsTail(String raw) => raw.isEmpty ? '' : '\n\nARGUMENTS: $raw';
+
+/// Подставляет аргументы в [body] одним проходом слева направо (§17.2.6).
+///
+/// `$ARGUMENTS` → [raw] как введён; `$1`…`$9` → [args] (нет аргумента —
+/// пустая строка); `$$` и `\$` → `$`; `$` перед другим символом остаётся.
+/// Если в теле нет ни одного плейсхолдера, а [raw] не пуст, к телу
+/// дописывается [argumentsTail]. `{{…}}` тела не обрабатываются. Публичная
+/// функция для шаблонов; навыки зовут [substitutePlaceholders] (D18).
+String substituteArguments(String body, String raw, List<String> args) {
+  final r = substitutePlaceholders(body, raw, args);
+  return r.usedPlaceholders ? r.text : '${r.text}${argumentsTail(raw)}';
 }

@@ -16,12 +16,51 @@ export 'src/commands/command_template.dart'
         reservedCommandNames;
 export 'src/commands/expand_command.dart';
 export 'src/commands/slash_command.dart';
+export 'src/config/config_edit.dart';
 export 'src/config/config_issue.dart';
+export 'src/config/config_reload_plan.dart'
+    show ConfigReloadPlan, planConfigReload;
+export 'src/config/config_source.dart';
 export 'src/config/config_tree.dart';
 export 'src/config/core_config.dart';
 export 'src/config/host_settings.dart';
-export 'src/config/key_path.dart' show KeyPath;
+export 'src/config/project_config.dart';
+// Привязка ссылок проектного провайдера и HTTP-сервера MCP к адресу (D23;
+// change `bind-mcp-secrets-to-origin`, D3): мигратор `codelab_agent_io`
+// проверяет по ней, можно ли перенести ссылку из закоммиченного `config.yaml`
+// в `config.local.yaml` (D26, C5.6, D7). Остальное в файле — внутренности
+// загрузки.
+export 'src/config/provider_binding.dart'
+    show
+        ProviderKeyBinding,
+        ProviderReference,
+        ProviderReferenceKind,
+        mcpServerOrigin,
+        mcpServerReferences,
+        providerOrigin,
+        providerReferences,
+        referencesIn;
+export 'src/config/secret_references.dart';
+export 'src/config/inline_secrets.dart'
+    show
+        InlineSecretFinding,
+        InlineSecretKind,
+        findInlineSecrets,
+        hasInlineSecret,
+        literalSecretTag;
+export 'src/config/key_path.dart'
+    show KeyPath, KeyPathSegment, nearestKey, splitKeyPath;
+export 'src/config/mask_url.dart'
+    show
+        displaySafeConfigValue,
+        hidesConfigLiteral,
+        maskMcpArgs,
+        maskUrl,
+        opaqueMask,
+        redactedMask;
 export 'src/config/redact_settings.dart';
+export 'src/config/secret_name_rule.dart';
+export 'src/config/settings_registry.dart' hide coveringDescriptors;
 export 'src/env/bounded_env.dart' show BoundedEnv;
 export 'src/env/execution_env.dart';
 export 'src/env/listing_overlay_env.dart';
@@ -29,10 +68,13 @@ export 'src/env/memory_env.dart'
     show MemoryExecutionEnv, decodeUtf8Strict, sliceLines;
 export 'src/host/build_agent_core.dart';
 export 'src/host/host_profile.dart';
+export 'src/host/last_model_store.dart';
 export 'src/host/services.dart';
 export 'src/llm/decorators/fallback.dart';
 export 'src/llm/decorators/retry.dart' show RetryPolicy, withTransientRetry;
 export 'src/llm/decorators/watchdog.dart';
+export 'src/llm/builtin_models.dart'
+    show builtinModelInfo, safeDefaultContextWindow;
 export 'src/llm/errors.dart';
 export 'src/llm/event_stream.dart';
 export 'src/llm/events.dart';
@@ -60,23 +102,54 @@ export 'src/loop/loop_config.dart'
 export 'src/loop/turn_budget.dart';
 export 'src/mcp/mcp_connector.dart';
 export 'src/mcp/mcp_server_config.dart';
+export 'src/mcp/mcp_server_name.dart';
+export 'src/mcp/mcp_status_port.dart';
 export 'src/mcp/mcp_tool_name.dart';
 export 'src/mcp/mcp_transport.dart';
+export 'src/permissions/agent_config_paths.dart' show AgentConfigPaths;
 export 'src/permissions/gate.dart';
 export 'src/permissions/modes.dart';
 export 'src/permissions/pattern.dart';
 export 'src/permissions/policy.dart' show PolicyRules;
 export 'src/project/project_context.dart';
+export 'src/project/project_extensions.dart';
 export 'src/project/project_files.dart';
+export 'src/skills/skill_catalog.dart';
+export 'src/skills/skill_files.dart';
+export 'src/skills/skill_root_entry.dart';
+export 'src/subagents/subagent_model.dart'
+    show
+        SubagentCallRef,
+        SubagentFailure,
+        SubagentId,
+        SubagentReport,
+        SubagentRequestRef,
+        SubagentSnapshot,
+        SubagentState,
+        SubagentWait,
+        SubagentsInfo;
+export 'src/subagents/subagents_config.dart' show SubagentsConfig;
+export 'src/skills/skills_config.dart';
 export 'src/runtime/agent_runtime.dart' show AgentRuntime, coreAgentVersion;
 export 'src/runtime/agent_session.dart';
+export 'src/runtime/config_reload.dart';
+export 'src/runtime/select_session_model.dart';
+export 'src/secrets/before_1_note.dart';
+export 'src/secrets/memory_secret_store.dart';
+export 'src/secrets/secret_lookup.dart';
+export 'src/secrets/secret_names.dart';
+export 'src/secrets/secret_resolver.dart';
+export 'src/secrets/secret_store.dart';
+export 'src/secrets/secret_template.dart';
 export 'src/session/memory_session_store.dart';
 export 'src/session/parse.dart';
 export 'src/session/records.dart';
+export 'src/subagents/subagent_report.dart' show failureWire;
 export 'src/session/session_store.dart';
 export 'src/session/slug.dart';
 export 'src/session/summary.dart';
 export 'src/tools/agent_tool.dart';
+export 'src/tools/tasks/task_list.dart';
 export 'src/tools/schema_shape.dart' show schemaKeywordViolations;
 export 'src/util/canonical_json.dart' show canonicalJson;
 export 'src/util/clock.dart' show Clock, ClockTimer, SystemClock;

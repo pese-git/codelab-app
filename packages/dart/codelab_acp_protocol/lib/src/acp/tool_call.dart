@@ -26,6 +26,19 @@ sealed class ToolCallId with _$ToolCallId {
   String toJson() => value;
 }
 
+/// Вид вызова инструмента (`ToolKind`, `17-Schema.md`).
+///
+/// Почему: вид в ACP — подсказка клиенту для отображения и оценки риска, а не
+/// управляющее поле, и перечень может расти вперёд (design.md change
+/// `tolerate-unknown-tool-kind`, D1). Строгий разбор терял бы вызов целиком и
+/// отменял бы запрос разрешения из-за незнакомого значения.
+///
+/// Для чего: единый разбор вида для `tool_call`, `tool_call_update` и
+/// `session/request_permission`.
+///
+/// Как использовать: `ToolKind.fromJson(raw)`; незнакомая строка даёт [other].
+/// Исходное значение при `toJson` теряется (D3); узнать его до разбора можно
+/// через [unrecognizedToolKind].
 enum ToolKind {
   read('read'),
   edit('edit'),
@@ -35,27 +48,66 @@ enum ToolKind {
   execute('execute'),
   think('think'),
   fetch('fetch'),
+
+  /// Смена режима сессии (`switch_mode`, `17-Schema.md`; D2). Например,
+  /// выход из plan-режима (`12-Session Model.md`, «Exiting plan modes»).
+  switchMode('switch_mode'),
   other('other');
 
   const ToolKind(this.wireName);
 
+  /// Значение поля `kind` на wire.
   final String wireName;
 
+  /// Разбирает вид вызова мягко (D1).
+  ///
+  /// Строка из перечисления даёт соответствующее значение; любая другая
+  /// строка, включая пустую, — [other]: ACP трактует `other` как вид по
+  /// умолчанию, а будущие виды схемы не должны ломать клиент. Не-строка
+  /// нарушает форму схемы (вид — union строк), а не «будущее значение», поэтому
+  /// остаётся ошибкой [JsonRpcProtocolException.invalidShape]. `null` сюда не
+  /// передаётся: его обрабатывают вызывающие `parseToolCall*Json`.
   static ToolKind fromJson(Object? value) {
-    if (value is String) {
-      for (final kind in ToolKind.values) {
-        if (kind.wireName == value) {
-          return kind;
-        }
+    if (value is! String) {
+      throw JsonRpcProtocolException.invalidShape('toolKind must be a string.');
+    }
+    for (final kind in ToolKind.values) {
+      if (kind.wireName == value) {
+        return kind;
       }
     }
-
-    throw JsonRpcProtocolException.invalidShape(
-      'toolKind has an unsupported value.',
-    );
+    return ToolKind.other;
   }
 
   String toJson() => wireName;
+}
+
+/// Исходное значение `kind` сырого объекта вызова, если его нет в [ToolKind].
+///
+/// Почему: после мягкого разбора (D1) незнакомый вид неотличим от явного
+/// `other`, а протокольный слой не должен писать в журнал (`acp-boundary.md`),
+/// поэтому правило «что считается известным видом» живёт здесь, рядом с
+/// перечнем (D4).
+///
+/// Для чего: клиент по результату пишет WARN в журнал.
+///
+/// Как использовать: передайте сырой объект `update` или `toolCall`. Результат
+/// `null`, если нет поля, оно `null`, вид известный, значение не строка или
+/// аргумент не объект.
+String? unrecognizedToolKind(Object? toolCall) {
+  if (toolCall is! Map) {
+    return null;
+  }
+  final kind = toolCall['kind'];
+  if (kind is! String) {
+    return null;
+  }
+  for (final known in ToolKind.values) {
+    if (known.wireName == kind) {
+      return null;
+    }
+  }
+  return kind;
 }
 
 enum ToolCallStatus {

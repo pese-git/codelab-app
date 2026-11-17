@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'shell_cubit_characterization/harness.dart';
 import '../../../support/transcript_rows.dart';
+import '../../../support/start_agent.dart';
 
 const _withListAndLoad = AgentCapabilities(
   loadSession: true,
@@ -25,7 +26,7 @@ void main() {
   /// Подключается и отвечает на первый `session/list` страницей [page].
   Future<void> connectListing(ShellHarness h, ListSessionsResponse page) async {
     final list = h.nextSent(sessionListMethod);
-    final connecting = h.cubit.connect();
+    final connecting = h.cubit.startWith();
     final request = await list as JsonRpcRequest;
     h.agent.emitInbound(
       JsonRpcMessage.response(id: request.id, result: page.toJson()),
@@ -168,7 +169,7 @@ void main() {
       await h.connect();
       await h.createSession('s-a');
 
-      await h.cubit.reconnect();
+      await h.cubit.restartAgent();
       await h.settle();
 
       expect(rows(h).single.$2, CodeLabSessionStatus.detached);

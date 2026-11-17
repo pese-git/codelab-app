@@ -81,6 +81,13 @@ final class TuiInput {
         'd' => Key.ctrlD,
         'e' => Key.ctrlE,
         'l' => Key.ctrlL,
+        // Ctrl+O — раскрыть строки `agent` (`toggle_details`, D48 п. 2).
+        'o' => Key.ctrlO,
+        'r' => Key.ctrlR,
+        // Ctrl+T (0x14) — переключатель списка задач (D26, задача 1.7):
+        // без этой строки клавиша терялась до карты клавиш, хотя ядро
+        // экрана и `KeyBindings.tui` её знают.
+        't' => Key.ctrlT,
         'u' => Key.ctrlU,
         _ => null,
       };

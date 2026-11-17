@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 
 import '../cancel/cancel_token.dart';
+import '../config/core_config.dart';
 import '../llm/messages.dart';
 import '../llm/model_ref.dart';
 import '../llm/stream_function.dart';
@@ -267,6 +268,11 @@ final class AgentLoopConfig {
     this.estimateTokens,
     this.emergencyCompact,
     this.contextWindowCap,
+    this.contextEstimator,
+    this.compaction,
+    this.subagentUsage,
+    this.onOwnUsage,
+    this.ancestorBudget,
   }) : beforeToolCall = List.unmodifiable(beforeToolCall),
        afterToolCall = List.unmodifiable(afterToolCall);
 
@@ -322,10 +328,54 @@ final class AgentLoopConfig {
   /// `effectiveContextWindow(model, cap)` (CMP-6).
   final int? contextWindowCap;
 
+  /// Оценщик заполнения контекста для `StepEnded.context` (design.md change
+  /// `add-usage-extension`, D5, D18 Т2, Q10 (а)).
+  ///
+  /// Отдельное поле от [estimateTokens]: проверка перед запросом и аварийное
+  /// сжатие включаются только с capability `compaction`, а заполнение нужно
+  /// и при выключенном автосжатии. `null` — `StepEnded.context == null`.
+  final EstimateTokens? contextEstimator;
+
+  /// Параметры автосжатия для порога `StepEnded.context.compactAt` (D5);
+  /// `null` — автосжатие выключено, `compactAt == null`. Проверку `afterTurn`
+  /// цикл не выполняет — её делает сессия.
+  final CompactionOverrides? compaction;
+
+  /// Usage потомков хода на сейчас, транзитивно (SUB-11; change
+  /// `add-subagents-and-tasks`, D4, D36 Т8). Входит в `TurnEnded.usage`,
+  /// `TurnEnded.subagentUsage` и в проверку `maxTokens`/`maxCost` на границе
+  /// шага: родитель не обходит бюджет, раздав работу детям. `null` — потомков
+  /// нет.
+  final Usage Function()? subagentUsage;
+
+  /// Собственный usage хода (без потомков) после каждого шага и нулевой в
+  /// начале хода: по нему дерево считает остаток бюджета корня для потомков.
+  final void Function(Usage own)? onOwnUsage;
+
+  /// Проверка бюджета предков на границе шага потомка: лимит, исчерпанный у
+  /// любого из них, или `null` (D4). У корня — `null`.
+  final BudgetLimit? Function()? ancestorBudget;
+
+  /// Копия с другой моделью, очередями, бюджетом хода или ограничением окна.
+  ///
+  /// [budget] и [contextWindowCap] нужны живой перезагрузке конфигурации
+  /// (`budget.*`, `compaction.*` — со следующего хода; design.md change
+  /// `add-config-writer-and-reload`, D8). [contextWindowCap] — запись
+  /// `(value: …)`, чтобы можно было сбросить ограничение в `null`.
+  /// [compaction] — тоже запись `(value: …)`: `(value: null)` выключает
+  /// `compactAt` в `StepEnded.context` при выключенном автосжатии, а без
+  /// аргумента значение сохраняется (add-usage-extension, D18).
   AgentLoopConfig copyWith({
     ModelRef? model,
     MessageQueue<SteeringItem>? steering,
     MessageQueue<Message>? followUp,
+    TurnBudget? budget,
+    ({int? value})? contextWindowCap,
+    EstimateTokens? contextEstimator,
+    ({CompactionOverrides? value})? compaction,
+    Usage Function()? subagentUsage,
+    void Function(Usage own)? onOwnUsage,
+    BudgetLimit? Function()? ancestorBudget,
   }) => AgentLoopConfig(
     sessionId: sessionId,
     model: model ?? this.model,
@@ -333,7 +383,7 @@ final class AgentLoopConfig {
     executor: executor,
     clock: clock,
     ids: ids,
-    budget: budget,
+    budget: budget ?? this.budget,
     transformContext: transformContext,
     beforeToolCall: beforeToolCall,
     afterToolCall: afterToolCall,
@@ -349,6 +399,13 @@ final class AgentLoopConfig {
     logger: logger,
     estimateTokens: estimateTokens,
     emergencyCompact: emergencyCompact,
-    contextWindowCap: contextWindowCap,
+    contextWindowCap: contextWindowCap == null
+        ? this.contextWindowCap
+        : contextWindowCap.value,
+    contextEstimator: contextEstimator ?? this.contextEstimator,
+    compaction: compaction == null ? this.compaction : compaction.value,
+    subagentUsage: subagentUsage ?? this.subagentUsage,
+    onOwnUsage: onOwnUsage ?? this.onOwnUsage,
+    ancestorBudget: ancestorBudget ?? this.ancestorBudget,
   );
 }

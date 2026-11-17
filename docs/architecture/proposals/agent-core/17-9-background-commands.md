@@ -200,13 +200,13 @@ running until it exits, you stop it with job_kill, or the session ends. When it 
 a notice. Its output is kept outside of the conversation; read it with job_output.
 ```
 
-**Решение: отдельные `job_output` и `job_kill`, а не `task_status`/`task_cancel`.** У субагента
+**Решение: отдельные `job_output` и `job_kill`, а не `agent_status`/`agent_cancel`.** У субагента
 и у задачи разные результаты: отчёт против потока байтов с позициями и хвостом; общий инструмент
 потребовал бы взаимоисключающих параметров (`offset`, `tail` бессмысленны для субагента) и
 двух форм ответа. Кроме того, `task_*` есть только при `subagents.background`, а задачи — при
 `backgroundJobs`, и одна возможность не должна зависеть от другой. Форма заимствована целиком:
-`job_output` без `id` — список, как `task_status` без `id`; `wait_seconds` — тот же диапазон;
-`job_kill` не спрашивает разрешения (уровень `read`; кроме режима `ask`, где по §7.3 спрашивается и он), как `task_cancel`. Человеку оба вида фоновой работы видны в
+`job_output` без `id` — список, как `agent_status` без `id`; `wait_seconds` — тот же диапазон;
+`job_kill` не спрашивает разрешения (уровень `read`; кроме режима `ask`, где по §7.3 спрашивается и он), как `agent_cancel`. Человеку оба вида фоновой работы видны в
 одной команде `/tasks` (§17.9.11).
 
 **Тексты результатов** (английские, фиксированы; `<d>` — длительность в секундах с одним знаком

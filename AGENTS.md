@@ -186,6 +186,7 @@ AI-agent обязан интерпретировать эти формулиро
     │   ├── codelab_agent_acp/
     │   ├── codelab_agent_mcp/
     │   ├── codelab_setup/
+    │   ├── codelab_embedded/
     │   └── codelab_architecture_tests/
     └── flutter/
         └── codelab_ui/
@@ -200,13 +201,15 @@ AI-agent обязан интерпретировать эти формулиро
 * `codelab_client_core` — общий клиентский слой без UI для app и CLI, web-безопасный: рабочее пространство, соединение, сессии, транскрипт, очередь промптов, одобрения, опции и команды агента, инспектор, диагностика, порты хранилищ; владелец клиентского состояния — Cubit-ы app только отображают его; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_client_io` — `dart:io`-адаптеры клиентского слоя: файлы, процессы, рабочая папка, настоящие транспорты (`ioTransportResolver`), JSON-хранилища профилей и недавних проектов; без Flutter; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_agent_core` — встраиваемое ядро Dart-агента на чистом Dart (LLM, цикл, инструменты, разрешения, сессии); правила — во вложенном `AGENTS.md` пакета.
-* `codelab_agent_io` — `dart:io`-реализации портов ядра агента: файлы, процессы, журналы сессий, загрузка конфигурации (`ConfigLoader`) и общие подкоманды `config` (`ConfigCommands`); правила — во вложенном `AGENTS.md` пакета.
+* `codelab_agent_io` — `dart:io`-реализации портов ядра агента: файлы, процессы, журналы сессий, загрузка конфигурации (`ConfigLoader`), файлы проекта (`ProjectFilesLoader`: `AGENTS.md`, шаблоны команд, определения агентов) и общие подкоманды `config` (`ConfigCommands`); правила — во вложенном `AGENTS.md` пакета.
 * `codelab_agent_acp` — ACP-сервер агента: проекция `AgentRuntime` в протокол; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_agent_mcp` — MCP-клиент агента без `dart:io`: протокол MCP, streamable HTTP на внедрённом `http.Client`, проекция MCP-инструментов в инструменты ядра; stdio-процесс сервера приходит портом ядра из `codelab_agent_io`; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_setup` — мост настроек Dart-агента для клиентов: основной барель реэкспортирует чистые типы конфигурации ядра, `lib/io.dart` — общие подкоманды `config` из `codelab_agent_io` (`codelab config check`); клиенты получают их отсюда, а не из `package:codelab_agent_*`; правила — во вложенном `AGENTS.md` пакета.
+* `codelab_embedded` — мост встроенного Dart-агента для клиентов (ADR-0002: мост между сторонами без префикса `codelab_agent_`): хост ядра, который собирает агента через `buildAgentCore` и `AcpAgentServer` и соединяет его с клиентом парой `InProcessAcpLink` в процессе клиента; основной барель web-безопасен, `lib/io.dart` — настольный открыватель (конфигурация, секреты, журнал сессий, MCP), `lib/testing.dart` — сценарный открыватель для тестов; клиенты получают агента отсюда, а не из `package:codelab_agent_*`; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_architecture_tests` — только тесты: сторож импортов и allowlist зависимостей ядра (`melos run guard`).
 * `codelab_ui` — Fluent UI widgets рабочего места CodeLab.
-* `apps/codelab_desktop` — десктопный клиент; `apps/codelab_agent` — бинарь Dart-агента `codelab-agent serve --stdio | --ws`; `apps/codelab_cli` — терминальный клиент `codelab` на чистом Dart (REPL, headless `-p`, драйвер фикстур `test-scenario`, `config check`) поверх `codelab_client_core`; правила — во вложенном `AGENTS.md` приложения.
+* `apps/codelab_desktop` — десктопный клиент; `apps/codelab_agent` — бинарь Dart-агента `codelab-agent serve --stdio | --ws`; `apps/codelab_cli` — терминальный клиент `codelab` на чистом Dart (REPL, headless `-p`, драйвер фикстур `test-scenario`, `config check`, переходный алиас `codelab serve`) поверх `codelab_client_core`; правила — во вложенном `AGENTS.md` приложения.
+* Роли исполняемых файлов: `codelab` — терминальный клиент (`apps/codelab_cli`), `codelab-agent` — Dart-агент как отдельный процесс (`apps/codelab_agent`). Профиль подключения по умолчанию в app и CLI — встроенный агент (`codelab_embedded`, в процессе клиента); `default` — его алиас, внешний агент выбирается явно (профиль, `stdio:…`, `ws://…`). Python-агент не входит в monorepo и заморожен; политика заморозки и удаления — change `retire-python-agent` (границы — `docs/architecture/proposals/dart-agent-and-clients/09-14-stage-9-switch-default.md`).
 
 Правила:
 
@@ -219,7 +222,8 @@ AI-agent обязан интерпретировать эти формулиро
 * `codelab_ui` НЕ ДОЛЖЕН содержать application/business logic.
 * `codelab_acp_testing` МОЖЕТ использоваться другими пакетами только как `dev_dependency`. Единственное исключение — `apps/codelab_cli`: команда `test-scenario` проигрывает фикстуры в рабочем бинаре, поэтому пакет — обычная зависимость, а импорт `package:codelab_acp_testing/` разрешён только из `lib/src/scenario/` (проверяет сторож; `openspec/changes/archive/2026-10-28-add-codelab-cli/design.md`, D3).
 * `package:codelab_acp_transports/codelab_acp_transports.dart` ДОЛЖЕН оставаться web-безопасным; IO-транспорты (`StdioAcpTransport`, `WebSocketAcpTransport`) импортируются из `package:codelab_acp_transports/io.dart` только composition root и тестами.
-* Клиенты (`apps/*`) НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` напрямую.
+* Клиенты (`apps/*`) НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` напрямую. Агентскую сторону клиенты получают только через мосты `codelab_setup` и `codelab_embedded`; пакеты `codelab_agent_*` НЕ ДОЛЖНЫ появляться в `dependencies` `apps/codelab_desktop` и `apps/codelab_cli` (allowlist сторожа, `pubspec_allowlist_test.dart`).
+* `package:codelab_embedded/codelab_embedded.dart` ДОЛЖЕН оставаться web-безопасным. `package:codelab_embedded/io.dart` ДОЛЖЕН импортироваться только composition root клиента (`apps/codelab_cli/lib/src/composition_root.dart`, `apps/codelab_desktop/lib/app/`) и тестами. `package:codelab_embedded/testing.dart` ДОЛЖЕН импортироваться только тестами и `apps/codelab_cli/lib/src/scenario/` (драйвер фикстур `test-scenario`); в `lib/` `apps/codelab_desktop` его импорт ЗАПРЕЩЁН — сценарий модели не попадает в релизную сборку app. Проверяет сторож (`openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md`, D3).
 * Границы пакетов проверяет тест-сторож `packages/dart/codelab_architecture_tests` (`melos run guard`): правило нового пакета добавляется в `test/support/rules.dart` вместе с пакетом.
 
 Архитектура Dart-агента — `docs/architecture/proposals/agent-core-architecture.md` (принята ADR-0001); план по этапам — `docs/architecture/proposals/dart-agent-and-clients.md`, дорожная карта — `docs/architecture/proposals/delivery-roadmap.md`.

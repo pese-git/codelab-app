@@ -3,6 +3,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -18,9 +19,47 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// пользователя. Хранилище в памяти живёт до следующего `setUp`, поэтому тест
 /// перезапуска, пересобирающий `Scope` внутри одного теста, по-прежнему
 /// проверяет, что данные переживают `Scope`.
+///
+/// Ещё перед каждым тестом задаёт окну логический размер [e2eWindowSize].
+/// Почему: окно app по умолчанию — 800×600 (`MainMenu.xib`), это класс
+/// `narrow`, где сайдбар уходит в выдвижное меню (`CodeLabLayoutClass`,
+/// порог `mediumMinWidth`), и тесты, которые нажимают кнопки сайдбара и
+/// дока, зависели бы от размера окна на машине разработчика. Размер меняется
+/// у настоящего окна через канал `codelab/e2e_window` (`MainFlutterWindow`,
+/// только debug), а не подменой `physicalSize` вида: подмена расходилась с
+/// поверхностью окна, и на macOS окно было чёрным весь тест.
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
-  setUp(() {
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    await _resizeWindow(e2eWindowSize);
   });
   await testMain();
+}
+
+/// Логический размер окна e2e-тестов: класс `wide` (от 1280), сайдбар и док
+/// стоят колонками, как на типичном экране ноутбука.
+const e2eWindowSize = Size(1440, 900);
+
+const _windowChannel = MethodChannel('codelab/e2e_window');
+
+/// Просит платформу поменять размер окна и ждёт, пока Flutter получит новые
+/// метрики вида (не дольше 5 с). Если экран меньше [size], macOS ужмёт окно,
+/// и тест упадёт на ожидании с понятной причиной, а не на поиске кнопки.
+Future<void> _resizeWindow(Size size) async {
+  await _windowChannel.invokeMethod<void>('setContentSize', {
+    'width': size.width,
+    'height': size.height,
+  });
+  final view =
+      TestWidgetsFlutterBinding.instance.platformDispatcher.implicitView!;
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  Size logical() => view.physicalSize / view.devicePixelRatio;
+  while (logical() != size && DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  if (logical() != size) {
+    throw StateError(
+      'e2e window is ${logical()}, expected $size: the screen may be too small',
+    );
+  }
 }

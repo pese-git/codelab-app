@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../secrets/secret_template.dart';
 import '../util/logger.dart';
 import 'builtin_models.dart';
 import 'model_ref.dart';
@@ -84,15 +85,95 @@ abstract interface class ModelCatalog {
   Future<void> refresh({bool force = false});
 }
 
+/// Ссылка на ключ провайдера из конфига (design.md change
+/// `add-agent-secret-store`, D4).
+///
+/// Почему ссылка, а не значение: загрузка конфига — чистая синхронная функция
+/// и секрет не читает; ключ берёт `createRoutedStreamFunction` при первом
+/// запросе через `SecretResolver`. Так хранилище не опрашивается ради
+/// провайдеров, которыми сейчас не пользуются.
+///
+/// Для чего: sealed-тип различает источники ключа (`api_key_env`,
+/// `api_key_secret`); `null` в [CatalogProvider.key] — провайдер без ключа
+/// (локальные Ollama, LM Studio).
+///
+/// Как использовать: конфиг создаёт ссылку при загрузке, хост передаёт
+/// `{id: ref}` в `createRoutedStreamFunction(keys: …)`; значение хост не
+/// читает.
+sealed class ProviderKeyRef {
+  const ProviderKeyRef();
+}
+
+/// `api_key_env`: имя переменной окружения хоста.
+///
+/// Почему отдельная ветка: переменная читается синхронно через
+/// `SecretResolver.env` (источник `env` в диагностике, P-17), а не из
+/// хранилища. Как использовать: создаёт загрузка конфига по `api_key_env`.
+final class EnvKeyRef extends ProviderKeyRef {
+  const EnvKeyRef(this.variable);
+
+  final String variable;
+}
+
+/// `api_key_secret`: имя секрета (правило `SecretNames`).
+///
+/// Почему отдельная ветка: секрет идёт по цепочке резолвера (кэш,
+/// переопределение `CODELAB_SECRET_*`, хранилище; D3). Как использовать:
+/// создаёт загрузка конфига по `api_key_secret`.
+final class SecretKeyRef extends ProviderKeyRef {
+  const SecretKeyRef(this.name);
+
+  final String name;
+}
+
+/// Ссылка на ключ, в которую вписан сам ключ вместо имени (CFG-9, пункт 3;
+/// design.md change `add-config-literal-secrets-and-migrate`, D4).
+///
+/// Почему маркер, а не ссылка: значение вроде `api_key_env: ghp_…` как *имя*
+/// попало бы в тексты ошибок, события и `secrets.lookup` — туда, где имена
+/// печатаются. Поэтому загрузка не строит [EnvKeyRef]/[SecretKeyRef], а
+/// кладёт маркер без значения.
+///
+/// Для чего: `createRoutedStreamFunction` по маркеру завершает ход ошибкой
+/// `auth` без HTTP-запроса и без обращения к хранилищу; `config check`,
+/// `config.provider.key_missing` и `providerProblems` его не видят.
+///
+/// Как использовать: создаёт только загрузка конфига. [keyPath] — путь ключа
+/// (`providers.<id>.api_key_env`), он и попадает в текст ошибки.
+final class UnusableKeyRef extends ProviderKeyRef {
+  const UnusableKeyRef(this.keyPath);
+
+  /// Путь ключа конфига с вписанным ключом (`providers.<id>.api_key_env`);
+  /// только он, без значения, попадает в текст ошибки `auth` (D4, R8-4).
+  final String keyPath;
+}
+
 /// A provider with the models its config declares, in config order.
+///
+/// [key] и [headerTemplates] — ссылки на секреты, которые разрешаются при
+/// первом запросе (D4); [config] хранит только готовые значения:
+/// `ProviderConfig.apiKey` у провайдера со ссылкой `null`, а заголовки со
+/// ссылками в `ProviderConfig.headers` не попадают.
 final class CatalogProvider {
-  const CatalogProvider(this.config, {this.models = const {}});
+  const CatalogProvider(
+    this.config, {
+    this.models = const {},
+    this.key,
+    this.headerTemplates = const {},
+  });
 
   final ProviderConfig config;
 
   /// Model id at the provider → explicit values of the config
   /// (`providers.<id>.models.<model>`, §15.4).
   final Map<String, ModelInfo> models;
+
+  /// Ключ провайдера; `null` — провайдер без ключа.
+  final ProviderKeyRef? key;
+
+  /// Заголовок → шаблон со ссылками `${secret:<name>}` (только заголовки, у
+  /// которых они есть, в порядке конфига).
+  final Map<String, SecretTemplate> headerTemplates;
 }
 
 /// Catalog of the models from the config or the binary flags, resolved by
@@ -184,7 +265,7 @@ final class StaticModelCatalog implements ModelCatalog {
   }
 
   _Fields _resolveFields(ModelId id, ModelInfo override) {
-    final builtIn = _lookupBuiltIn(id.model);
+    final builtIn = lookupModelInfo(_builtIn, id.model);
     final provenance = <String, ModelInfoSource>{};
     T pick<T>(String field, T? Function(ModelInfo info) read, T fallback) {
       for (final (source, info) in [
@@ -205,7 +286,11 @@ final class StaticModelCatalog implements ModelCatalog {
     }
 
     return _Fields(
-      contextWindow: pick('contextWindow', (i) => i.contextWindow, 32000),
+      contextWindow: pick(
+        'contextWindow',
+        (i) => i.contextWindow,
+        safeDefaultContextWindow,
+      ),
       maxOutputTokens: pick('maxOutputTokens', (i) => i.maxOutputTokens, 4096),
       cost: pick<ModelCost?>('cost', (i) => i.cost, null),
       supportsImages: pick('supportsImages', (i) => i.supportsImages, false),
@@ -222,33 +307,6 @@ final class StaticModelCatalog implements ModelCatalog {
       ),
       provenance: provenance,
     );
-  }
-
-  /// Exact id; then the longest key that is a prefix of the id followed by
-  /// `-` or the end (`claude-opus-5-5` finds `claude-opus-5-5-20260101`);
-  /// then the same for the part after the last `/`.
-  ModelInfo? _lookupBuiltIn(String model) {
-    for (final candidate in {
-      model,
-      model.substring(model.lastIndexOf('/') + 1),
-    }) {
-      if (_builtIn[candidate] case final info?) {
-        return info;
-      }
-      String? best;
-      for (final key in _builtIn.keys) {
-        final fits =
-            candidate.startsWith(key) &&
-            (candidate.length == key.length || candidate[key.length] == '-');
-        if (fits && (best == null || key.length > best.length)) {
-          best = key;
-        }
-      }
-      if (best != null) {
-        return _builtIn[best];
-      }
-    }
-    return null;
   }
 }
 

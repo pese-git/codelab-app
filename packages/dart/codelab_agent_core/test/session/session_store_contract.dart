@@ -5,6 +5,11 @@ import 'package:test/test.dart';
 /// SessionStore», «Список сессий и автоматический заголовок»): его
 /// проходят `MemorySessionStore` и `JsonlSessionStore`.
 ///
+/// Группа `createChild` — журнал потомка (agent-sessions «Список задач из
+/// журнала», сценарий «Дочерние журналы не в списке сессий»; design.md change
+/// `add-subagents-and-tasks`, D7, D36 Т4): охраняет `createChild` порта и типизированное
+/// поле `parent` (`SessionParent`) заголовка `SessionHeader`.
+///
 /// [make] создаёт пустое хранилище перед каждым тестом.
 void sessionStoreContract(Future<SessionStore> Function() make) {
   late SessionStore store;
@@ -167,6 +172,324 @@ void sessionStoreContract(Future<SessionStore> Function() make) {
       await expectLater(
         store.list(cursor: 'not-a-cursor'),
         throwsA(isA<InvalidCursor>()),
+      );
+    });
+  });
+
+  group('createChild', () {
+    const rootId = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0R');
+    const childId = SessionId('01JB8Q3A1D2E3F4G5H6J7K8M9N');
+
+    SessionHeader childHeader({
+      SessionId id = childId,
+      SessionParent? parent = const SessionParent(
+        sessionId: rootId,
+        rootSessionId: rootId,
+        toolCallId: 'call_3',
+        subagentId: 'sub_k3f9a1c2',
+        agent: 'explore',
+        depth: 1,
+      ),
+    }) => SessionHeader(
+      id: id,
+      cwd: '/work/demo',
+      created: t0,
+      agent: const AgentInfo(name: 'codelab-agent', version: '0.1.0'),
+      parent: parent,
+    );
+
+    Future<void> seedRoot() async {
+      await store.create(headerOf(rootId.value, '/work/demo', t0));
+      await store.append(rootId, userRecord('aaaaaaaa', null, t0, 'root task'));
+    }
+
+    test('возвращает непрозрачный адрес журнала для записи subagent', () async {
+      await seedRoot();
+
+      final address = await store.createChild(childHeader());
+
+      expect(address, isNotEmpty);
+    });
+
+    test('append, flush и close работают по id ребёнка', () async {
+      await seedRoot();
+      await store.createChild(childHeader());
+
+      await store.append(childId, userRecord('cccccccc', null, t0, 'sub task'));
+      await store.append(
+        childId,
+        userRecord('dddddddd', 'cccccccc', t0, 'more'),
+        durable: true,
+      );
+      await store.flush(childId);
+      await store.close(childId);
+    });
+
+    test('open с id ребёнка — SessionNotFound (D7: `-32002`)', () async {
+      await seedRoot();
+      await store.createChild(childHeader());
+
+      await expectLater(store.open(childId), throwsA(isA<SessionNotFound>()));
+    });
+
+    test('list не видит дочерний журнал и не меняет сводку родителя', () async {
+      await seedRoot();
+      final before = await store.list();
+      await store.createChild(childHeader());
+      await store.append(childId, userRecord('cccccccc', null, t0, 'sub task'));
+
+      final page = await store.list();
+
+      expect(page.items.map((s) => s.id), [rootId]);
+      expect(page.items.single.title, before.items.single.title);
+      expect(page.items.single.messageCount, before.items.single.messageCount);
+      expect((await store.list(cwd: '/work/demo')).items, hasLength(1));
+    });
+
+    test('заголовок без parent — ошибка вызова, журнал не создан', () async {
+      await seedRoot();
+
+      await expectLater(
+        store.createChild(childHeader(parent: null)),
+        throwsA(anyOf(isA<ArgumentError>(), isA<StateError>())),
+      );
+      await expectLater(
+        store.append(childId, userRecord('cccccccc', null, t0, 'x')),
+        throwsA(isA<SessionNotFound>()),
+      );
+    });
+
+    test('повторный createChild с тем же id — StateError', () async {
+      await seedRoot();
+      await store.createChild(childHeader());
+
+      await expectLater(store.createChild(childHeader()), throwsStateError);
+    });
+
+    test('два ребёнка одного корня с разными id живут отдельно', () async {
+      await seedRoot();
+      const second = SessionId('01JB8Q3A1D2E3F4G5H6J7K8M9P');
+      final a = await store.createChild(childHeader());
+      final b = await store.createChild(
+        childHeader(
+          id: second,
+          parent: const SessionParent(
+            sessionId: rootId,
+            rootSessionId: rootId,
+            toolCallId: 'call_4',
+            subagentId: 'sub_z9y8x7w6',
+            agent: 'review',
+            depth: 1,
+          ),
+        ),
+      );
+
+      expect(a, isNot(b));
+      expect((await store.list()).items, hasLength(1));
+    });
+  });
+
+  // Задача 4.4 (design.md change `add-subagents-and-tasks`, D45 Т7): лечение
+  // читает журнал потомка по адресу из записи `subagent`.
+  group('openChild', () {
+    const rootId = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0R');
+    const childId = SessionId('01JB8Q3A1D2E3F4G5H6J7K8M9N');
+
+    SessionHeader childHeader() => SessionHeader(
+      id: childId,
+      cwd: '/work/demo',
+      created: t0,
+      agent: const AgentInfo(name: 'codelab-agent', version: '0.1.0'),
+      parent: const SessionParent(
+        sessionId: rootId,
+        rootSessionId: rootId,
+        toolCallId: 'call_3',
+        subagentId: 'sub_k3f9a1c2',
+        agent: 'explore',
+        depth: 1,
+      ),
+    );
+
+    Future<String> seedChild() async {
+      await store.create(headerOf(rootId.value, '/work/demo', t0));
+      await store.append(rootId, userRecord('aaaaaaaa', null, t0, 'root task'));
+      final address = await store.createChild(childHeader());
+      await store.append(childId, userRecord('cccccccc', null, t0, 'sub task'));
+      await store.append(
+        childId,
+        userRecord('dddddddd', 'cccccccc', t0, 'more'),
+        durable: true,
+      );
+      return address;
+    }
+
+    test('возвращает снимок журнала ребёнка: заголовок с parent и записи '
+        'по порядку', () async {
+      final address = await seedChild();
+
+      final snapshot = await store.openChild(address, rootSessionId: rootId);
+
+      expect(snapshot.header.id, childId);
+      expect(snapshot.header.parent?.subagentId, 'sub_k3f9a1c2');
+      expect(snapshot.header.parent?.depth, 1);
+      expect(snapshot.records.map((r) => r.id), ['cccccccc', 'dddddddd']);
+      expect(snapshot.leafId, 'dddddddd');
+    });
+
+    test('после openChild append по id ребёнка работает, open по id ребёнка '
+        'по-прежнему SessionNotFound, list не видит журнал', () async {
+      final address = await seedChild();
+      await store.openChild(address, rootSessionId: rootId);
+
+      await store.append(
+        childId,
+        userRecord('eeeeeeee', 'dddddddd', t0, 'after heal'),
+      );
+      await store.flush(childId);
+
+      final again = await store.openChild(address, rootSessionId: rootId);
+      expect(again.records.map((r) => r.id), [
+        'cccccccc',
+        'dddddddd',
+        'eeeeeeee',
+      ]);
+      await expectLater(store.open(childId), throwsA(isA<SessionNotFound>()));
+      expect((await store.list()).items.map((s) => s.id), [rootId]);
+    });
+
+    test('адрес без журнала — SessionNotFound', () async {
+      await seedChild();
+
+      await expectLater(
+        store.openChild(
+          'subagents/${rootId.value}/NOSUCHSESSION.jsonl',
+          rootSessionId: rootId,
+        ),
+        throwsA(isA<SessionNotFound>()),
+      );
+    });
+
+    test('журнал чужого корня — SessionNotFound: адрес принадлежит дереву '
+        'только своего корня', () async {
+      final address = await seedChild();
+
+      await expectLater(
+        store.openChild(
+          address,
+          rootSessionId: const SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0S'),
+        ),
+        throwsA(isA<SessionNotFound>()),
+      );
+    });
+  });
+
+  // Change `add-subagents-and-tasks`, D47 Т5, Т6: реплей дерева читает
+  // журнал потомка без записи и без права записи ребёнка; группа охраняет
+  // `openChildReadOnly` порта.
+  group('openChildReadOnly', () {
+    const rootId = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0R');
+    const childId = SessionId('01JB8Q3A1D2E3F4G5H6J7K8M9N');
+
+    SessionHeader childHeader() => SessionHeader(
+      id: childId,
+      cwd: '/work/demo',
+      created: t0,
+      agent: const AgentInfo(name: 'codelab-agent', version: '0.1.0'),
+      parent: const SessionParent(
+        sessionId: rootId,
+        rootSessionId: rootId,
+        toolCallId: 'call_3',
+        subagentId: 'sub_k3f9a1c2',
+        agent: 'explore',
+        depth: 1,
+      ),
+    );
+
+    Future<String> seedChild() async {
+      await store.create(headerOf(rootId.value, '/work/demo', t0));
+      final address = await store.createChild(childHeader());
+      await store.append(childId, userRecord('cccccccc', null, t0, 'sub task'));
+      await store.append(
+        childId,
+        userRecord('dddddddd', 'cccccccc', t0, 'more'),
+        durable: true,
+      );
+      return address;
+    }
+
+    test('снимок совпадает со снимком openChild: заголовок с parent, записи '
+        'по порядку, лист', () async {
+      final address = await seedChild();
+
+      final readOnly = await store.openChildReadOnly(
+        address,
+        rootSessionId: rootId,
+      );
+      final healing = await store.openChild(address, rootSessionId: rootId);
+
+      expect(readOnly.header.id, childId);
+      expect(readOnly.header.parent?.subagentId, 'sub_k3f9a1c2');
+      expect(readOnly.header.parent?.depth, 1);
+      expect(readOnly.records.map((r) => r.id), ['cccccccc', 'dddddddd']);
+      expect(readOnly.leafId, 'dddddddd');
+      expect(
+        readOnly.records.map((r) => r.id),
+        healing.records.map((r) => r.id),
+      );
+    });
+
+    test('живой журнал остаётся живым: после чтения append по id ребёнка '
+        'работает, а следующее чтение видит дописанное', () async {
+      final address = await seedChild();
+      await store.openChildReadOnly(address, rootSessionId: rootId);
+
+      await store.append(
+        childId,
+        userRecord('eeeeeeee', 'dddddddd', t0, 'written later'),
+      );
+      await store.flush(childId);
+
+      final again = await store.openChildReadOnly(
+        address,
+        rootSessionId: rootId,
+      );
+      expect(again.records.map((r) => r.id), [
+        'cccccccc',
+        'dddddddd',
+        'eeeeeeee',
+      ]);
+    });
+
+    test('чтение ничего не открывает снаружи: open по id ребёнка по-прежнему '
+        'SessionNotFound, list его не видит', () async {
+      final address = await seedChild();
+      await store.openChildReadOnly(address, rootSessionId: rootId);
+
+      await expectLater(store.open(childId), throwsA(isA<SessionNotFound>()));
+      expect((await store.list()).items.map((s) => s.id), [rootId]);
+    });
+
+    test('адрес без журнала — SessionNotFound', () async {
+      await seedChild();
+
+      await expectLater(
+        store.openChildReadOnly(
+          'subagents/${rootId.value}/NOSUCHSESSION.jsonl',
+          rootSessionId: rootId,
+        ),
+        throwsA(isA<SessionNotFound>()),
+      );
+    });
+
+    test('журнал чужого корня — SessionNotFound', () async {
+      final address = await seedChild();
+
+      await expectLater(
+        store.openChildReadOnly(
+          address,
+          rootSessionId: const SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0S'),
+        ),
+        throwsA(isA<SessionNotFound>()),
       );
     });
   });

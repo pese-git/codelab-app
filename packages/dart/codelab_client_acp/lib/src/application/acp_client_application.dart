@@ -4,6 +4,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 
 import '../domain/approval_policy.dart';
+import '../domain/codelab_extensions.dart';
 import '../domain/domain_models.dart';
 import '../domain/fs_access.dart';
 import '../domain/logger.dart';
@@ -13,6 +14,7 @@ import '../domain/state_machines.dart';
 import '../domain/terminal_access.dart';
 import '../infrastructure/structured_log_logger.dart';
 import 'application_models.dart';
+import 'usage_notification.dart';
 
 final class AcpClientApplicationException implements Exception {
   const AcpClientApplicationException(this.message, {this.cause});
@@ -161,7 +163,7 @@ final class AcpClientApplication {
   /// сессии вместо применения к прежнему состоянию; [loadSession] после
   /// ответа раскладывает их в ходы (`SessionStateMachine.replayHistory`) и
   /// убирает буфер при любом исходе запроса.
-  final _sessionReplays = <SessionId, List<SessionUpdate>>{};
+  final _sessionReplays = <SessionId, List<_BufferedUpdate>>{};
 
   /// Число `session/new` в полёте и обновления неизвестных сессий, пришедшие
   /// за это время.
@@ -178,7 +180,7 @@ final class AcpClientApplication {
   /// остаётся, буфер очищается — обновления так и не созданных сессий
   /// отбрасываются, как прежде.
   var _sessionsBeingCreated = 0;
-  final _earlyUpdates = <SessionId, List<SessionUpdate>>{};
+  final _earlyUpdates = <SessionId, List<_BufferedUpdate>>{};
 
   /// Сессии, чей ход прервала замена транспорта.
   ///
@@ -188,9 +190,12 @@ final class AcpClientApplication {
   /// `stopReason`, и прерванный ход выглядел бы «завершённым неизвестно как»
   /// (design D2 change `cancel-turn-on-ws-disconnect`).
   ///
-  /// Для чего: [_replaceTransport] добавляет сессии с активным ходом;
-  /// успешный [loadSession] помечает последний ход реплея отменённым и
-  /// убирает id, [sendPrompt] — тоже убирает. Ошибка `session/load` отметку
+  /// Для чего: метку ставят [reconnect] до фабрики транспорта (с откатом у
+  /// сессий с идущим ходом при сбое фабрики, D22 change
+  /// `require-project-folder`) и [_replaceTransport] для сессий с активным
+  /// ходом. Успешный [loadSession] помечает последний ход реплея отменённым
+  /// и убирает id. [sendPrompt] снимает метку в начале нового хода и при
+  /// ответе с `stopReason` не `cancelled`. Ошибка `session/load` метку
   /// сохраняет до следующей загрузки.
   final _interruptedTurns = <SessionId>{};
 
@@ -217,11 +222,40 @@ final class AcpClientApplication {
     logCategoryKey: protocolTraceLogCategory,
   });
   final _sessionController = StreamController<AcpSession>.broadcast(sync: true);
+
+  /// Снимки `_codelab/session/usage` (D8, D21 Т2); владелец — ядро клиента,
+  /// закрывается в [dispose]. `sync: true`, как у [sessionChanges]: порядок
+  /// доставки совпадает с порядком кадров.
+  final _usageController = StreamController<UsageNotification>.broadcast(
+    sync: true,
+  );
   final _diagnosticController = StreamController<DiagnosticEntry>.broadcast(
     sync: true,
   );
   final _connectionStateController =
       StreamController<ClientConnectionState>.broadcast(sync: true);
+
+  /// Ядро закрыто: ставится первым синхронным действием [dispose] (D12 change
+  /// `add-client-process-shutdown-on-exit`).
+  ///
+  /// Почему флаг, а не состояние: это окончательный односторонний переход,
+  /// который операции, уже идущие в другом `Future` (Connect, Reconnect,
+  /// старт `terminal/create`), проверяют после каждого `await`, чтобы не
+  /// привязать и не запустить транспорт и не оставить процесс без владельца.
+  var _disposed = false;
+
+  /// Мемоизированный проход [dispose]: повторный вызов ждёт тот же `Future`.
+  Future<void>? _disposing;
+
+  /// Незавершённые старты `terminal/create` (D12): [dispose] ждёт их, чтобы
+  /// процесс, запущенный в момент закрытия, был завершён, а не осиротел.
+  final _pendingTerminalStarts = <Future<void>>{};
+
+  /// Массовые завершения terminal-процессов, запущенные разрывом соединения
+  /// (D4, D12): [dispose] ждёт их так же, как старты. Иначе выход в течение
+  /// 2 с после Reconnect или падения агента не дождался бы `SIGKILL` процессу,
+  /// игнорирующему `SIGTERM`. Элемент убирает сам завершившийся `Future`.
+  final _pendingTerminalKills = <Future<void>>{};
 
   late StreamSubscription<JsonRpcMessage> _inboundSubscription;
   late StreamSubscription<AcpTransportEvent> _eventSubscription;
@@ -246,6 +280,15 @@ final class AcpClientApplication {
   int get generation => _generation;
 
   Stream<AcpSession> get sessionChanges => _sessionController.stream;
+
+  /// Принятые уведомления `_codelab/session/usage` с сырыми `params` и
+  /// поколением соединения (change `add-usage-extension`, D8, D21 Т2).
+  ///
+  /// Почему отдельный поток, а не часть [AcpSession]: расход не участвует в
+  /// автомате хода (D7) и разбирается ядром клиента в одной реализации.
+  /// Кадры прежнего транспорта сюда не попадают — их отбрасывает
+  /// `_bindTransport` до маршрутизации.
+  Stream<UsageNotification> get usageNotifications => _usageController.stream;
 
   Stream<DiagnosticEntry> get diagnosticChanges => _diagnosticController.stream;
 
@@ -296,8 +339,17 @@ final class AcpClientApplication {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    for (final update in early) {
-      session = SessionStateMachine.applyUpdate(session, update).stateOrThrow;
+    // Признак незнакомого вида лежит рядом с обновлением и доходит до домена
+    // (D9 change `tolerate-unknown-tool-kind`). Обновление вызова здесь всё
+    // равно будет отброшено: у новой сессии нет хода, а `_applyUpdate`
+    // отбрасывает обновления вызовов без хода; признак сохраняется ради
+    // единообразия с реплеем.
+    for (final buffered in early) {
+      session = SessionStateMachine.applyUpdate(
+        session,
+        buffered.update,
+        toolKindUnrecognized: buffered.toolKindUnrecognized,
+      ).stateOrThrow;
     }
 
     _storeSession(session);
@@ -307,7 +359,7 @@ final class AcpClientApplication {
   Future<AcpSession> loadSession(LoadSessionCommand command) async {
     // Буфер заводится до отправки: реплей может прийти раньше, чем `await`
     // вернёт управление.
-    final replay = <SessionUpdate>[];
+    final replay = <_BufferedUpdate>[];
     _sessionReplays[command.sessionId] = replay;
     final LoadSessionResponse response;
     try {
@@ -338,8 +390,14 @@ final class AcpClientApplication {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
-      replay,
+      [for (final buffered in replay) buffered.update],
       nextTurnId: () => PromptTurnId('turn-${_nextTurnId++}'),
+      // Индексы признака стабильны: буфер реплея — список только для
+      // добавления, которым владеет одна загрузка (D9).
+      toolKindUnrecognizedAt: {
+        for (var i = 0; i < replay.length; i++)
+          if (replay[i].toolKindUnrecognized) i,
+      },
     );
     // Ответ приходит после реплея и описывает итоговое состояние сессии,
     // поэтому его режимы и опции главнее обновлений из реплея.
@@ -458,9 +516,17 @@ final class AcpClientApplication {
         ),
       );
       _requireCurrentGeneration(generation);
+      // Метку снимает лишь ответ с `stopReason` не `cancelled`: честно
+      // законченный в окне `reconnect` ход не прерван, реплей покажет его
+      // ответ. Отменённый агентом (выгрузка) остаётся с меткой; ошибка
+      // запроса (ветка `catch` ниже) тоже считается прерыванием.
+      if (response.stopReason != StopReason.cancelled) {
+        _interruptedTurns.remove(command.sessionId);
+      }
       final completedSession = SessionStateMachine.completeTurn(
         _requireSession(command.sessionId),
         stopReason: response.stopReason,
+        budgetExceeded: _budgetExceededOf(response),
         completedAt: DateTime.now(),
       ).stateOrThrow;
 
@@ -546,6 +612,13 @@ final class AcpClientApplication {
     return cancelled.turns.last;
   }
 
+  /// Переподключение на транспорт из фабрики.
+  ///
+  /// Параллельные вызовы не сериализуются здесь: это забота вызывающего.
+  /// Kit вытесняет устаревшую попытку номером `_attempt`
+  /// (`ClientWorkspace._reconnect`, `_isStale`), а `open` встроенного агента
+  /// сериализует `EmbeddedTransportResolver` (`_tail`). Откат метки при сбое
+  /// фабрики закрывает основные случаи наложения.
   Future<ClientConnectionState> reconnect(ReconnectCommand command) async {
     final createTransport = command.transportFactory ?? _reconnectTransport;
     if (createTransport == null) {
@@ -554,10 +627,41 @@ final class AcpClientApplication {
       );
     }
 
-    await _replaceTransport(
-      await createTransport(),
-      closeTimeout: command.closeTimeout,
-    );
+    // Фабрика транспорта может долго открывать нового агента и при этом
+    // освобождать прежнего (встроенный агент, D22 change
+    // `require-project-folder`): выгрузка отменяет ход, и ответ
+    // `session/prompt` приходит до `_replaceTransport`. Метка ставится до
+    // фабрики, иначе ход закончился бы раньше замены и после `session/load`
+    // (реплей без `stopReason`) показался бы «unknown», а не отменённым.
+    final marked = _markActiveTurnsInterrupted();
+    _logInterruptMark('turn_interrupt_marked', marked);
+    final AcpTransport replacement;
+    try {
+      replacement = await createTransport();
+    } on Object {
+      // Откат только у сессий, чей ход ещё идёт: он остался на прежнем
+      // транспорте, и чужая метка перезагрузила бы его отменённым без
+      // причины. Ход, уже закончившийся в окне фабрики (выгрузка старого
+      // агента отменила его, `_openSerialized` встроенного агента падает
+      // позже), сохраняет метку: следующий `reconnect` загрузит его
+      // отменённым, а не «unknown». Так же сохраняется метка, поставленная
+      // обработчиком обрыва в этом окне.
+      final rollback = {
+        for (final id in marked)
+          if (_sessions[id]?.activeTurn != null) id,
+      };
+      _interruptedTurns.removeAll(rollback);
+      _logInterruptMark('turn_interrupt_mark_rolled_back', rollback);
+      rethrow;
+    }
+    // Ядро закрыли, пока фабрика открывала транспорт: привязывать и запускать
+    // его нельзя (иначе stdio-процесс агента осиротеет), только закрыть
+    // (D12 change `add-client-process-shutdown-on-exit`).
+    if (_disposed) {
+      await _closeUnusedTransport(replacement);
+      throw const AcpClientApplicationException('ACP application disposed.');
+    }
+    await _replaceTransport(replacement, closeTimeout: command.closeTimeout);
 
     return _establishConnection();
   }
@@ -586,6 +690,11 @@ final class AcpClientApplication {
         cause: error,
       );
     }
+    // Процесс агента завершает сам транспорт: [dispose] уже вызвал его
+    // `close`, и мемоизированное закрытие подхватило запуск (D12, D13).
+    if (_disposed) {
+      throw const AcpClientApplicationException('ACP application disposed.');
+    }
 
     _transitionConnection(const ConnectionStateEvent.initialize());
 
@@ -602,6 +711,7 @@ final class AcpClientApplication {
               writeTextFile: _textFileWriter != null,
             ),
             terminal: _terminalProcessRunner != null,
+            meta: codelabClientExtensionsMeta,
           ),
         ),
       );
@@ -675,39 +785,94 @@ final class AcpClientApplication {
     // every connect()/reconnect(), ...), see design.md, Decision 6.
     if (_connectionState is ClientConnectionDisconnected ||
         _connectionState is ClientConnectionFailed) {
-      unawaited(_killAllTerminalProcesses());
+      final killing = _killAllTerminalProcesses(
+        _TerminalKillReason.connectionClosed,
+      );
+      _pendingTerminalKills.add(killing);
+      // `_killAllTerminalProcesses` ошибок не бросает (сбои изолированы), так
+      // что `unawaited` не теряет ошибок (§12).
+      unawaited(
+        killing.whenComplete(() => _pendingTerminalKills.remove(killing)),
+      );
     }
   }
+
+  /// Помечает сессии с идущим ходом прерванными и возвращает те, что
+  /// помечены впервые, чтобы вызывающий мог снять метку при отказе.
+  ///
+  /// Почему общий метод: метка нужна и до открытия нового транспорта
+  /// ([reconnect]), и при самой замене ([_replaceTransport]) (D2 change
+  /// `cancel-turn-on-ws-disconnect`).
+  void _logInterruptMark(String event, Set<SessionId> ids) {
+    for (final id in ids) {
+      _logger
+          .bind({logComponentKey: clientComponent})
+          .withCorrelation(
+            connectionGeneration: _generation,
+            sessionId: id.value,
+          )
+          .debug(event);
+    }
+  }
+
+  Set<SessionId> _markActiveTurnsInterrupted() => {
+    for (final session in _sessions.values)
+      if (session.activeTurn != null && _interruptedTurns.add(session.id))
+        session.id,
+  };
 
   Future<void> _replaceTransport(
     AcpTransport transport, {
     Duration? closeTimeout,
   }) async {
-    // Bump the generation before yielding on any await below so that
-    // operations still in flight on the old transport observe the new
-    // generation as soon as their continuation resumes, even if that
-    // continuation is scheduled while this method is still tearing down
-    // the old transport.
+    // Поколение растёт до первого `await` ниже: операции, ещё идущие на
+    // старом транспорте, увидят новое поколение, как только продолжатся,
+    // даже если их продолжение запланировано, пока этот метод закрывает
+    // старый транспорт (§9, поздние события).
     _generation++;
     // Ход, шедший в момент замены, агент отменил вместе с соединением; ход
     // остаётся `running` до `session/load`, который и покажет его
     // отменённым (D2 change `cancel-turn-on-ws-disconnect`).
-    for (final session in _sessions.values) {
-      if (session.activeTurn != null) {
-        _interruptedTurns.add(session.id);
-      }
-    }
+    _markActiveTurnsInterrupted();
+    // Одобрения и карты запросов снимаются синхронно, до первого `await`:
+    // иначе ответ пользователя успел бы уйти в старый транспорт, а одобрение
+    // потом стало бы `cancelled` (агент получил бы allow, состояние —
+    // cancelled), а устаревший id попал бы в `_handledPermissionRequests` и
+    // проглотил бы запрос нового соединения с тем же JSON-RPC id (ровно один
+    // ответ, AGENTS.md §10).
+    _dropPendingApprovals('ACP transport was replaced.');
+    _pendingPermissionRequests.clear();
+    _handledPermissionRequests.clear();
     await _inboundSubscription.cancel();
     await _eventSubscription.cancel();
     _failPendingRequests(
       const AcpClientApplicationException('ACP transport was replaced.'),
     );
-    _pendingPermissionRequests.clear();
-    _handledPermissionRequests.clear();
     await _transport.close(timeout: closeTimeout);
+
+    // [dispose] мог прийти, пока закрывался прежний транспорт: новый не
+    // привязывается и не запускается (D12 change
+    // `add-client-process-shutdown-on-exit`).
+    if (_disposed) {
+      await _closeUnusedTransport(transport);
+      throw const AcpClientApplicationException('ACP application disposed.');
+    }
 
     _transport = transport;
     _bindTransport();
+  }
+
+  /// Закрывает транспорт, который так и не был привязан к ядру.
+  ///
+  /// Почему ошибки глотаются: исключение закрытия не должно заслонять
+  /// причину отказа подключения («ядро закрыто»); `close()` не запущенного
+  /// транспорта мгновенный (D12).
+  Future<void> _closeUnusedTransport(AcpTransport transport) async {
+    try {
+      await transport.close();
+    } on Object {
+      // Нечего делать: транспорт не использовался и не принадлежит ядру.
+    }
   }
 
   Future<ApprovalRequest> respondToPermission(
@@ -759,7 +924,32 @@ final class AcpClientApplication {
     return resolved.turns.last.approvals[command.approvalId]!;
   }
 
-  Future<void> dispose() async {
+  /// Закрывает ядро клиента: снимает подписки, завершает terminal-процессы и
+  /// закрывает транспорт.
+  ///
+  /// Почему параллельно: завершение процесса может занять до ~2 s
+  /// (`SIGTERM` → `SIGKILL`), закрытие stdio-транспорта — ещё до 2+2 s; вместе
+  /// друг за другом они выходят за общий предел выхода приложения (D4 change
+  /// `add-client-process-shutdown-on-exit`). Порядок между ними ACP не
+  /// задаёт, а входящая подписка снята до обоих шагов — агент уже не пришлёт
+  /// `terminal/*`.
+  ///
+  /// Почему мемоизирован и окончателен (D12): вызов может прийти во время
+  /// Connect, Reconnect или старта `terminal/create`. Первым синхронным
+  /// действием ставится флаг «закрыто»; идущие операции видят его после
+  /// своего `await`, не привязывают новый транспорт, не регистрируют
+  /// запущенный процесс и завершаются `AcpClientApplicationException`.
+  /// Повторный вызов возвращает тот же `Future`.
+  ///
+  /// Как использовать: composition root передаёт [closeTimeout] — предел
+  /// корректного закрытия транспорта (`AcpTransport.close(timeout:)`); без
+  /// него поведение прежнее. Повторный вызов не шлёт сигналов: реестр пуст.
+  Future<void> dispose({Duration? closeTimeout}) {
+    _disposed = true;
+    return _disposing ??= _dispose(closeTimeout);
+  }
+
+  Future<void> _dispose(Duration? closeTimeout) async {
     await _inboundSubscription.cancel();
     await _eventSubscription.cancel();
     _failPendingRequests(
@@ -767,10 +957,15 @@ final class AcpClientApplication {
     );
     _pendingPermissionRequests.clear();
     _handledPermissionRequests.clear();
-    await _killAllTerminalProcesses();
-    await _transport.close();
+    await Future.wait([
+      _killAllTerminalProcesses(_TerminalKillReason.dispose),
+      Future.wait(_pendingTerminalStarts.toList(growable: false)),
+      Future.wait(_pendingTerminalKills.toList(growable: false)),
+      _transport.close(timeout: closeTimeout),
+    ]);
     await _diagnosticController.close();
     await _sessionController.close();
+    await _usageController.close();
     await _connectionStateController.close();
   }
 
@@ -911,14 +1106,84 @@ final class AcpClientApplication {
   /// with [eventGeneration] (the stale event's own generation), not the
   /// current one, so it can be told apart from the connection that
   /// superseded it.
-  void _logStaleEvent(String kind, int eventGeneration) {
+  ///
+  /// Для устаревших ответов на `terminal/*` вызывающий добавляет [method] и
+  /// [requestId] запроса (§16): без них нельзя понять, какой запрос остался
+  /// без ответа. Оба поля — не секреты.
+  void _logStaleEvent(
+    String kind,
+    int eventGeneration, {
+    String? method,
+    JsonRpcId? requestId,
+  }) {
     _logger
         .bind({logComponentKey: transportComponent})
         .withCorrelation(connectionGeneration: eventGeneration)
         .debug(
           'event_ignored',
-          context: {'reason': 'stale_generation', 'kind': kind},
+          context: {
+            'reason': 'stale_generation',
+            'kind': kind,
+            'method': ?method,
+            'request_id': ?requestId?.toJsonValue().toString(),
+          },
         );
+  }
+
+  /// Снимает ожидающие одобрения: запрос принадлежит оборванному соединению.
+  ///
+  /// Почему: ответ на `session/request_permission` возможен только в том
+  /// соединении, которое его прислало (D22 change `require-project-folder`);
+  /// без снятия сессия, не восстановленная в новом соединении, навсегда
+  /// сохраняла бы одобрение, на которое некуда ответить, а позднее решение
+  /// ушло бы в чужое соединение (AGENTS.md §9, §10).
+  ///
+  /// Для чего: источник истины сессии — одобрение становится `cancelled`
+  /// (ход возвращается из `awaitingApproval`), поэтому проекции хостов,
+  /// `respondToPermission` и `session/load` видят одно состояние. Следующий
+  /// `session/load` пересоберёт ход по реплею агента. Журнал содержит только
+  /// идентификаторы, без аргументов вызова.
+  void _dropPendingApprovals(String reason) {
+    final dropped = <(AcpSession, ApprovalRequest)>[];
+    for (final session in _sessions.values.toList(growable: false)) {
+      var updated = session;
+      for (final turn in session.turns) {
+        for (final approval in turn.approvals.values) {
+          if (approval.status != ApprovalStatus.pending) {
+            continue;
+          }
+          final result = SessionStateMachine.cancelApproval(
+            updated,
+            approvalId: approval.id,
+            resolvedAt: DateTime.now(),
+          );
+          if (result is AppliedStateTransition<AcpSession>) {
+            updated = result.state;
+            dropped.add((session, approval));
+          }
+        }
+      }
+      if (!identical(updated, session)) {
+        _storeSession(updated);
+      }
+    }
+    // Журнал пишется после цикла: `_recordDiagnostic` пересохраняет сессии из
+    // `_sessions`, и запись внутри цикла была бы затёрта последующим
+    // `_storeSession(updated)` копией без неё.
+    for (final (session, approval) in dropped) {
+      _recordDiagnostic(
+        message: 'Pending permission request dropped: $reason',
+        severity: DiagnosticSeverity.warning,
+        source: 'application.permission',
+        sessionId: session.id.value,
+        toolCallId: approval.toolCall.id.value,
+        context: {
+          'sessionId': session.id.value,
+          'approvalId': approval.id.value,
+          'toolCallId': approval.toolCall.id.value,
+        },
+      );
+    }
   }
 
   void _failPendingRequests(Object error) {
@@ -950,6 +1215,8 @@ final class AcpClientApplication {
         unawaited(_handleReleaseTerminalRequest(message));
       case JsonRpcNotification(method: sessionUpdateMethod):
         _handleSessionUpdate(message);
+      case JsonRpcNotification(method: usageNotificationMethod):
+        _handleUsageNotification(message);
       case JsonRpcNotification():
         // A notification gets no reply, so an unknown one (e.g. a custom
         // `_vendor/...` extension) is simply not our concern.
@@ -1054,6 +1321,15 @@ final class AcpClientApplication {
         return;
       }
 
+      // До проверки активного хода: запрос, отвеченный `cancelled` из-за
+      // отсутствия хода, тоже фиксируется (D4).
+      final toolKindUnrecognized = _logUnrecognizedToolKind(
+        rawToolCall: _rawField(request.params, 'toolCall'),
+        method: request.method,
+        sessionId: permissionRequest.sessionId.value,
+        toolCallId: permissionRequest.toolCall.toolCallId.value,
+      );
+
       final session = _sessions[permissionRequest.sessionId];
       final activeTurn = session?.activeTurn;
       // A cancelling turn answers late permission requests `cancelled` like
@@ -1066,7 +1342,11 @@ final class AcpClientApplication {
         return;
       }
 
-      final toolCall = _toolCallRecordFromUpdate(permissionRequest.toolCall);
+      final toolCall = _toolCallRecordFromUpdate(
+        permissionRequest.toolCall,
+        known: activeTurn.toolCalls[permissionRequest.toolCall.toolCallId],
+        toolKindUnrecognized: toolKindUnrecognized,
+      );
       final approval = ApprovalRequest(
         id: approvalId,
         sessionId: permissionRequest.sessionId,
@@ -1074,6 +1354,9 @@ final class AcpClientApplication {
         toolCall: toolCall,
         options: permissionRequest.options,
         riskLevel: toolCall.riskLevel,
+        // Ключ `subagent` в запросе — сведения о спрашивающем потомке, не о
+        // вызове `agent` (D43 п. 1): в `toolCall.subagentMeta` не попадает.
+        subagentRequester: subagentMetaOf(permissionRequest.toolCall.meta),
         critical:
             _isCritical(permissionRequest.meta) ||
             _isCritical(permissionRequest.toolCall.meta),
@@ -1285,17 +1568,26 @@ final class AcpClientApplication {
     }
   }
 
-  /// Handles an incoming `terminal/create` request — no approval step (see
-  /// `openspec/changes/add-acp-terminal-client-support/design.md`,
-  /// Decision 1): working-directory containment is the only gate, same
-  /// position as `fs/*` (see [_handleReadTextFileRequest]). The process is
-  /// started and its [TerminalId] returned immediately, without waiting for
-  /// completion — per ACP, `terminal/wait_for_exit` is a separate call.
+  /// Обрабатывает входящий `terminal/create`: запускает процесс и сразу
+  /// возвращает его [TerminalId], не дожидаясь завершения.
+  ///
+  /// Почему без approval: для `terminal/*` собственного гейта нет, вместо него
+  /// обязателен containment `cwd` рабочей папкой сессии (`AGENTS.md` §10;
+  /// `add-acp-terminal-client-support/design.md`, Decision 2). Выход за
+  /// границы отклоняется до запуска. Ожидание завершения — отдельный вызов
+  /// `terminal/wait_for_exit`.
+  ///
+  /// Если за время старта ядро закрыто или соединение сменилось, процесс
+  /// завершается, в реестр не попадает, ответа нет, а в журнал пишется
+  /// `event_ignored` с методом и id запроса (D12, D15, §9).
   Future<void> _handleCreateTerminalRequest(JsonRpcRequest request) async {
+    // Поколение запроса: ответ уходит только в его соединение (D15).
+    final generation = _generation;
     final runner = _terminalProcessRunner;
     if (runner == null) {
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalCreateMethod,
         error: const AcpProtocolError.internalError(
           'terminal/create is not supported by this client.',
@@ -1311,6 +1603,7 @@ final class AcpClientApplication {
       if (session == null) {
         await _sendAcpMethodError(
           request.id,
+          generation: generation,
           method: terminalCreateMethod,
           error: AcpProtocolError.invalidAcpParams(
             method: terminalCreateMethod,
@@ -1327,19 +1620,49 @@ final class AcpClientApplication {
               workingDirectory: session.cwd,
             );
 
-      final handle = await runner.start(
-        command: createRequest.command,
-        args: createRequest.args,
-        env: {
-          for (final variable in createRequest.env)
-            variable.name: variable.value,
-        },
-        cwd: resolvedCwd,
-        outputByteLimit: createRequest.outputByteLimit,
-      );
+      // Старт и возможное завершение «опоздавшего» процесса — один `Future`
+      // в [_pendingTerminalStarts]: [dispose] ждёт его, иначе процесс,
+      // запущенный после очистки реестра, остался бы без владельца (D12).
+      final startSettled = Completer<void>();
+      _pendingTerminalStarts.add(startSettled.future);
+      final TerminalId terminalId;
+      try {
+        final handle = await runner.start(
+          command: createRequest.command,
+          args: createRequest.args,
+          env: {
+            for (final variable in createRequest.env)
+              variable.name: variable.value,
+          },
+          cwd: resolvedCwd,
+          outputByteLimit: createRequest.outputByteLimit,
+        );
 
-      final terminalId = _newTerminalId(request.id);
-      (_terminals[createRequest.sessionId] ??= {})[terminalId] = handle;
+        // Ядро закрыто или соединение сменилось, пока процесс стартовал:
+        // реестр уже очищен, регистрировать нельзя, ответ некому.
+        if (_disposed || generation != _generation) {
+          // Сначала запускаем завершение, потом журнал в `try`: сбой
+          // логгера не должен оставить процесс без владельца (D15).
+          final killing = _killIsolated(handle);
+          try {
+            _logStaleEvent(
+              'terminal_create_result',
+              generation,
+              method: terminalCreateMethod,
+              requestId: request.id,
+            );
+          } on Object {
+            // Намеренно пусто: см. комментарий выше.
+          }
+          await killing;
+          return;
+        }
+        terminalId = _newTerminalId(request.id);
+        (_terminals[createRequest.sessionId] ??= {})[terminalId] = handle;
+      } finally {
+        startSettled.complete();
+        _pendingTerminalStarts.remove(startSettled.future);
+      }
 
       _recordDiagnostic(
         message: 'Started terminal process via terminal/create.',
@@ -1354,7 +1677,9 @@ final class AcpClientApplication {
         },
       );
 
-      await _sendTracedMessage(
+      await _sendTerminalResponse(
+        generation,
+        terminalCreateMethod,
         encodeAcpResponse(
           id: request.id,
           method: terminalCreateMethod,
@@ -1370,6 +1695,7 @@ final class AcpClientApplication {
       );
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalCreateMethod,
         error: AcpProtocolError.invalidAcpParams(
           method: terminalCreateMethod,
@@ -1379,6 +1705,7 @@ final class AcpClientApplication {
     } on TerminalStartFailure catch (error) {
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalCreateMethod,
         error: AcpProtocolError.internalError(error.message),
       );
@@ -1392,6 +1719,7 @@ final class AcpClientApplication {
       );
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalCreateMethod,
         error: AcpProtocolError.internalError(
           'Failed to start terminal: $error',
@@ -1400,10 +1728,18 @@ final class AcpClientApplication {
     }
   }
 
+  /// Обрабатывает входящий `terminal/output`: отдаёт накопленный вывод и, если
+  /// процесс вышел, статус выхода.
+  ///
+  /// Ответ принадлежит соединению запроса: устаревший ответ не отправляется
+  /// (D15, §9). Неизвестный [TerminalId] — `invalidAcpParams`.
   Future<void> _handleTerminalOutputRequest(JsonRpcRequest request) async {
+    // Поколение запроса: ответ уходит только в его соединение (D15).
+    final generation = _generation;
     if (_terminalProcessRunner == null) {
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalOutputMethod,
         error: const AcpProtocolError.internalError(
           'terminal/output is not supported by this client.',
@@ -1420,7 +1756,9 @@ final class AcpClientApplication {
         outputRequest.terminalId,
       );
 
-      await _sendTracedMessage(
+      await _sendTerminalResponse(
+        generation,
+        terminalOutputMethod,
         encodeAcpResponse(
           id: request.id,
           method: terminalOutputMethod,
@@ -1434,6 +1772,7 @@ final class AcpClientApplication {
     } on UnknownTerminalFailure catch (error) {
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalOutputMethod,
         error: AcpProtocolError.invalidAcpParams(
           method: terminalOutputMethod,
@@ -1450,6 +1789,7 @@ final class AcpClientApplication {
       );
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalOutputMethod,
         error: AcpProtocolError.internalError(
           'Failed to read terminal output: $error',
@@ -1458,10 +1798,19 @@ final class AcpClientApplication {
     }
   }
 
+  /// Обрабатывает входящий `terminal/wait_for_exit`: отвечает после выхода
+  /// процесса его кодом или сигналом.
+  ///
+  /// Почему отдельно от `create`: ACP делит запуск и ожидание. Пока процесс
+  /// работает, соединение могло смениться — тогда ответ не отправляется
+  /// (D15, §9). Неизвестный [TerminalId] — `invalidAcpParams`.
   Future<void> _handleWaitForTerminalExitRequest(JsonRpcRequest request) async {
+    // Поколение запроса: ответ уходит только в его соединение (D15).
+    final generation = _generation;
     if (_terminalProcessRunner == null) {
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalWaitForExitMethod,
         error: const AcpProtocolError.internalError(
           'terminal/wait_for_exit is not supported by this client.',
@@ -1493,7 +1842,9 @@ final class AcpClientApplication {
           'running.',
         ),
       };
-      await _sendTracedMessage(
+      await _sendTerminalResponse(
+        generation,
+        terminalWaitForExitMethod,
         encodeAcpResponse(
           id: request.id,
           method: terminalWaitForExitMethod,
@@ -1506,6 +1857,7 @@ final class AcpClientApplication {
     } on UnknownTerminalFailure catch (error) {
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalWaitForExitMethod,
         error: AcpProtocolError.invalidAcpParams(
           method: terminalWaitForExitMethod,
@@ -1522,6 +1874,7 @@ final class AcpClientApplication {
       );
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalWaitForExitMethod,
         error: AcpProtocolError.internalError(
           'Failed to wait for terminal exit: $error',
@@ -1530,14 +1883,21 @@ final class AcpClientApplication {
     }
   }
 
-  /// Handles an incoming `terminal/kill` request. Killing an already-exited
-  /// process is a no-op, not an error (`TerminalProcessHandle.kill` itself
-  /// guarantees the atomicity — see design.md, Risks) — the `terminalId`
-  /// remains valid afterwards for `output`/`wait_for_exit`/`release`.
+  /// Обрабатывает входящий `terminal/kill`: завершает процесс, не удаляя
+  /// [TerminalId] из реестра.
+  ///
+  /// Почему не ошибка для вышедшего процесса: `TerminalProcessHandle.kill`
+  /// для него no-op и сам гарантирует атомарность (design.md, Risks).
+  /// `SIGTERM`, затем `SIGKILL` не позже ~2 с (D4). Ответ уходит только в
+  /// соединение запроса (D15, §9). После kill агент всё ещё читает вывод и
+  /// должен вызвать `terminal/release`.
   Future<void> _handleKillTerminalCommandRequest(JsonRpcRequest request) async {
+    // Поколение запроса: ответ уходит только в его соединение (D15).
+    final generation = _generation;
     if (_terminalProcessRunner == null) {
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalKillMethod,
         error: const AcpProtocolError.internalError(
           'terminal/kill is not supported by this client.',
@@ -1556,7 +1916,9 @@ final class AcpClientApplication {
 
       await handle.kill();
 
-      await _sendTracedMessage(
+      await _sendTerminalResponse(
+        generation,
+        terminalKillMethod,
         encodeAcpResponse(
           id: request.id,
           method: terminalKillMethod,
@@ -1566,6 +1928,7 @@ final class AcpClientApplication {
     } on UnknownTerminalFailure catch (error) {
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalKillMethod,
         error: AcpProtocolError.invalidAcpParams(
           method: terminalKillMethod,
@@ -1582,6 +1945,7 @@ final class AcpClientApplication {
       );
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalKillMethod,
         error: AcpProtocolError.internalError(
           'Failed to kill terminal: $error',
@@ -1590,14 +1954,20 @@ final class AcpClientApplication {
     }
   }
 
-  /// Handles an incoming `terminal/release` request. Unlike `kill`, this
-  /// removes the [TerminalId] from the session's registry entirely — every
-  /// later `terminal/*` call with this id, including another `release`,
-  /// then sees it as [UnknownTerminalFailure] (design.md, Decision 3).
+  /// Обрабатывает входящий `terminal/release`: завершает процесс и удаляет
+  /// [TerminalId] из реестра сессии.
+  ///
+  /// В отличие от `kill`, любой следующий вызов с этим id, включая повторный
+  /// `release`, даёт [UnknownTerminalFailure] (design.md, Decision 3). Запись
+  /// удаляется только если в ней тот же handle: пока `kill()` шёл, Reconnect
+  /// мог очистить реестр, а новый агент — создать процесс с тем же id (D15, §9).
   Future<void> _handleReleaseTerminalRequest(JsonRpcRequest request) async {
+    // Поколение запроса: ответ уходит только в его соединение (D15).
+    final generation = _generation;
     if (_terminalProcessRunner == null) {
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalReleaseMethod,
         error: const AcpProtocolError.internalError(
           'terminal/release is not supported by this client.',
@@ -1615,9 +1985,17 @@ final class AcpClientApplication {
       );
 
       await handle.kill();
-      _terminals[releaseRequest.sessionId]?.remove(releaseRequest.terminalId);
+      // За время `kill()` Reconnect мог очистить реестр, а новый агент —
+      // создать процесс с тем же `terminalId` (id запросов нумеруются заново):
+      // удаляем запись только если в ней всё ещё наш handle (D15, §9).
+      final sessionTerminals = _terminals[releaseRequest.sessionId];
+      if (identical(sessionTerminals?[releaseRequest.terminalId], handle)) {
+        sessionTerminals!.remove(releaseRequest.terminalId);
+      }
 
-      await _sendTracedMessage(
+      await _sendTerminalResponse(
+        generation,
+        terminalReleaseMethod,
         encodeAcpResponse(
           id: request.id,
           method: terminalReleaseMethod,
@@ -1627,6 +2005,7 @@ final class AcpClientApplication {
     } on UnknownTerminalFailure catch (error) {
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalReleaseMethod,
         error: AcpProtocolError.invalidAcpParams(
           method: terminalReleaseMethod,
@@ -1643,6 +2022,7 @@ final class AcpClientApplication {
       );
       await _sendAcpMethodError(
         request.id,
+        generation: generation,
         method: terminalReleaseMethod,
         error: AcpProtocolError.internalError(
           'Failed to release terminal: $error',
@@ -1678,47 +2058,112 @@ final class AcpClientApplication {
     return TerminalId('term-${requestId.toJsonValue()}');
   }
 
-  /// Kills every terminal process across every session, without releasing
-  /// their registry entries — mirrors `terminal/kill`'s own semantics
-  /// (design.md, Decision 6): this is a connection-teardown safety net
-  /// (spontaneous disconnect/failure, a fresh `connect()`/`reconnect()`
-  /// tearing down the previous connection, or [dispose]), not a graceful
-  /// `terminal/release` on the agent's behalf.
-  Future<void> _killAllTerminalProcesses() async {
-    if (_terminals.isEmpty) {
-      return;
-    }
-
+  /// Завершает terminal-процессы всех сессий, не освобождая их записи в
+  /// реестре как `terminal/release`.
+  ///
+  /// Почему: страховка при разрыве соединения (самопроизвольный обрыв, новый
+  /// `connect()`/`reconnect()` поверх прежнего) и при [dispose], а не
+  /// корректный `terminal/release` от имени агента (design.md, Decision 6
+  /// `add-acp-terminal-client-support`).
+  ///
+  /// Как работает (D15 change `add-client-process-shutdown-on-exit`): реестр
+  /// очищается один раз; сначала запускаются все `kill()`, затем в `try`
+  /// пишется событие журнала, затем ожидаются `kill()`. Так сбой логгера не
+  /// оставит процессы живыми (реестр уже пуст, повторный вызов их не найдёт)
+  /// и не выйдет исключением из [dispose]. Событие `terminal_processes_killed`
+  /// содержит только число и причину — без команд, `cwd` и `terminalId` (D6).
+  Future<void> _killAllTerminalProcesses(_TerminalKillReason reason) async {
     final handles = _terminals.values
         .expand((session) => session.values)
         .toList(growable: false);
     _terminals.clear();
+    if (handles.isEmpty) {
+      return;
+    }
 
-    // Each kill is isolated so one adapter failure can't stop the rest from
-    // being attempted, and so this fire-and-forget cleanup (called via
-    // `unawaited` from `_transitionConnection`) never surfaces an unhandled
-    // async error.
-    await Future.wait(
-      handles.map((handle) async {
-        try {
-          await handle.kill();
-        } on Object catch (error) {
-          _recordDiagnostic(
-            message: 'Failed to kill a terminal process during teardown.',
-            severity: DiagnosticSeverity.warning,
-            source: 'application.terminal',
-            cause: error,
+    final kills = [for (final handle in handles) _killIsolated(handle)];
+    try {
+      _logger
+          .bind({logComponentKey: clientComponent})
+          .withCorrelation(connectionGeneration: _generation)
+          .info(
+            'terminal_processes_killed',
+            context: {'count': handles.length, 'reason': reason.logName},
           );
-        }
-      }),
+    } on Object {
+      // Писать о сбое журнала некуда (как в `CodeLabRootLifecycle._step`,
+      // D5): процессы уже завершаются, выход не должен упасть из-за логгера.
+    }
+    await Future.wait(kills);
+  }
+
+  /// Завершает один процесс, изолируя сбой адаптера.
+  ///
+  /// Почему: сбой одного `kill()` не должен помешать остальным, а
+  /// fire-and-forget вызов из `_transitionConnection` не должен порождать
+  /// необработанную асинхронную ошибку. Первый `kill()` вызывается
+  /// синхронно, до первого `await`.
+  Future<void> _killIsolated(TerminalProcessHandle handle) async {
+    try {
+      await handle.kill();
+    } on Object catch (error) {
+      _recordDiagnostic(
+        message: 'Failed to kill a terminal process during teardown.',
+        severity: DiagnosticSeverity.warning,
+        source: 'application.terminal',
+        cause: error,
+      );
+    }
+  }
+
+  /// Отправляет ответ на `terminal/*`, только если он ещё нужен (D15).
+  ///
+  /// Почему: обработчики `kill`/`release`/`wait_for_exit` ждут процесс, и за
+  /// это время Reconnect может заменить транспорт. Нумерация JSON-RPC id у
+  /// нового агента начинается заново, поэтому ответ старого соединения мог бы
+  /// подменить результат чужого запроса (`AGENTS.md` §9). После [dispose]
+  /// ответ уходит в закрытый транспорт и порождает ложную диагностику.
+  ///
+  /// [method] и id ответа попадают в запись `event_ignored` (§16): по ним
+  /// видно, какой именно запрос остался без ответа; секретов в них нет.
+  Future<void> _sendTerminalResponse(
+    int generation,
+    String method,
+    JsonRpcResponse message,
+  ) {
+    if (_isStaleTerminalResponse(generation, method, message.id)) {
+      return Future<void>.value();
+    }
+    return _sendTracedMessage(message);
+  }
+
+  /// `true` и запись `event_ignored`, если ответ принадлежит закрытому ядру
+  /// или прежнему соединению ([generation] — поколение запроса).
+  bool _isStaleTerminalResponse(int generation, String method, JsonRpcId id) {
+    if (!_disposed && generation == _generation) {
+      return false;
+    }
+    _logStaleEvent(
+      'terminal_response',
+      generation,
+      method: method,
+      requestId: id,
     );
+    return true;
   }
 
   Future<void> _sendAcpMethodError(
     JsonRpcId id, {
     required String method,
     required AcpProtocolError error,
+    int? generation,
   }) async {
+    // Ошибка на `terminal/*` тоже принадлежит соединению запроса (D15);
+    // [generation] передают только обработчики `terminal/*`.
+    if (generation != null &&
+        _isStaleTerminalResponse(generation, method, id)) {
+      return;
+    }
     try {
       await _sendTracedMessage(
         JsonRpcMessage.response(id: id, error: error.toJsonRpcError()),
@@ -1744,27 +2189,57 @@ final class AcpClientApplication {
     try {
       final sessionNotification =
           decodeAcpNotificationParams(notification) as SessionNotification;
+      final update = sessionNotification.update;
+      // Признак считается один раз по сырым params и едет рядом с
+      // обновлением через буферы реплея и раннего применения (D4, D9). Запись
+      // журнала пишется при приёме, до буферов: реплей тоже фиксируется.
+      var toolKindUnrecognized = false;
+      final toolCallId = switch (update) {
+        ToolCallSessionUpdate(:final toolCall) => toolCall.toolCallId,
+        ToolCallUpdateSessionUpdate(:final toolCallUpdate) =>
+          toolCallUpdate.toolCallId,
+        _ => null,
+      };
+      if (toolCallId != null) {
+        final recognizedAsUnknown = _logUnrecognizedToolKind(
+          rawToolCall: _rawField(notification.params, 'update'),
+          method: notification.method,
+          sessionId: sessionNotification.sessionId.value,
+          toolCallId: toolCallId.value,
+          sessionUpdate: update is ToolCallSessionUpdate
+              ? 'tool_call'
+              : 'tool_call_update',
+        );
+        // `tool_call` признак не получает: его вид — `other` без записи, на
+        // которую можно опереться (D9).
+        toolKindUnrecognized =
+            recognizedAsUnknown && update is ToolCallUpdateSessionUpdate;
+      }
+      final buffered = (
+        update: update,
+        toolKindUnrecognized: toolKindUnrecognized,
+      );
+
+      final replay = _sessionReplays[sessionNotification.sessionId];
       // Реплей загружаемой сессии идёт в буфер, даже если сессия с тем же id
       // уже есть: история заменит прежнее состояние после ответа.
-      final replay = _sessionReplays[sessionNotification.sessionId];
       if (replay != null) {
-        replay.add(sessionNotification.update);
+        replay.add(buffered);
         return;
       }
 
       final session = _sessions[sessionNotification.sessionId];
       if (session == null) {
         if (_sessionsBeingCreated > 0) {
-          (_earlyUpdates[sessionNotification.sessionId] ??= []).add(
-            sessionNotification.update,
-          );
+          (_earlyUpdates[sessionNotification.sessionId] ??= []).add(buffered);
         }
         return;
       }
 
       final next = SessionStateMachine.applyUpdate(
         session,
-        sessionNotification.update,
+        update,
+        toolKindUnrecognized: toolKindUnrecognized,
       ).stateOrThrow;
       _storeSession(next);
     } on Object catch (error) {
@@ -1776,6 +2251,68 @@ final class AcpClientApplication {
         context: {'method': notification.method, 'params': notification.params},
       );
     }
+  }
+
+  /// Поле сырого объекта `params` (`update` / `toolCall`) или `null`.
+  ///
+  /// Почему сырой payload: после мягкого разбора (D1) незнакомый вид в DTO
+  /// неотличим от явного `other`, поэтому признак «вид незнаком» считается по
+  /// исходным данным (D4).
+  Object? _rawField(Object? params, String name) =>
+      params is Map ? params[name] : null;
+
+  /// Пишет одну запись WARN, если сырой `kind` вызова незнаком клиенту, и
+  /// возвращает, был ли он незнаком.
+  ///
+  /// Почему журнал, а не [_recordDiagnostic]: деградация (вид сведён к
+  /// `other`, D1) не мешает работе, а диагностика сессий добавляла бы запись
+  /// каждой сессии и публиковала состояние на каждое такое сообщение — по той
+  /// же причине, что и у [_skipUnsupportedSessionUpdate]. Уровень WARN, а не
+  /// DEBUG: клиент не пропускает данные, а меняет их смысл, и это должно быть
+  /// видно в release-журнале без трассировки (D4; `observability.md` §8).
+  ///
+  /// Без payload (`observability.md` §11): только корреляция и усечённое
+  /// до 64 символов значение вида, пропущенное через [SecretRedactor].
+  /// Полный кадр остаётся в developer-only protocol-трассировке.
+  ///
+  /// Как использовать: вызывать сразу после успешного разбора, до ветвления
+  /// на буферы и проверку активного хода; [sessionUpdate] — только для
+  /// `session/update`.
+  bool _logUnrecognizedToolKind({
+    required Object? rawToolCall,
+    required String method,
+    required String sessionId,
+    required String toolCallId,
+    String? sessionUpdate,
+  }) {
+    final rawKind = unrecognizedToolKind(rawToolCall);
+    if (rawKind == null) {
+      return false;
+    }
+    // Сначала маскирование по полной строке, затем усечение (D4): обратный
+    // порядок разрезал бы секрет (PEM-блок) до того, как шаблон его узнает, и
+    // фрагмент ушёл бы в журнал без маскирования.
+    final redacted = _redactor.redactText(rawKind);
+    final truncated = redacted.length > 64
+        ? redacted.substring(0, 64)
+        : redacted;
+    _logger
+        .bind({logComponentKey: protocolComponent})
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: sessionId,
+          toolCallId: toolCallId,
+        )
+        .warning(
+          'Unknown ACP tool kind treated as other.',
+          context: {
+            'source': 'application.protocol',
+            'method': method,
+            'sessionUpdate': ?sessionUpdate,
+            'toolKind': truncated,
+          },
+        );
+    return true;
   }
 
   /// A `session/update` of a kind this client does not model (e.g.
@@ -1887,6 +2424,7 @@ final class AcpClientApplication {
           // `sendPrompt` ждал бы вечно, а ход оставался `running` (design D2
           // change `add-connection-and-error-states`).
           _failPendingRequests(AcpConnectionLostException(error.message));
+          _dropPendingApprovals('ACP connection was lost.');
         }
       case AcpTransportStateChanged():
         break;
@@ -1901,6 +2439,7 @@ final class AcpClientApplication {
     if (pending == null) {
       throw const StateTransitionException('permission request is not pending');
     }
+    final generation = _generation;
 
     try {
       await _sendTracedMessage(
@@ -1929,8 +2468,12 @@ final class AcpClientApplication {
       );
     }
 
-    _pendingPermissionRequests.remove(approvalId);
-    _handledPermissionRequests.add(approvalId);
+    // Соединение могло смениться, пока уходил ответ: карты уже очищены для
+    // нового соединения, и устаревший id в них не возвращается.
+    if (generation == _generation) {
+      _pendingPermissionRequests.remove(approvalId);
+      _handledPermissionRequests.add(approvalId);
+    }
   }
 
   void _sendCancelledPermissionResponse(JsonRpcId requestId) {
@@ -2057,18 +2600,41 @@ final class AcpClientApplication {
     return ApprovalRequestId('permission-${requestId.toJsonValue()}');
   }
 
-  ToolCallRecord _toolCallRecordFromUpdate(ToolCallUpdate update) {
-    final riskLevel = ApprovalPolicy.classifyToolCallUpdate(update);
+  /// Запись вызова для запроса одобрения; [known] — запись хода с тем же
+  /// `toolCallId`. Риск считает общее правило `ApprovalPolicy` (review 6b,
+  /// L-1): запрос без `kind` берёт вид известного вызова, а риск не ниже
+  /// уже известного.
+  ///
+  /// [toolKindUnrecognized] (D9 change `tolerate-unknown-tool-kind`): вид в
+  /// запросе был незнаком кодеку и сведён к `other`; метка берётся из [known]
+  /// (без записи — `other`), а риск по-прежнему `max(риск записи, unknown)`
+  /// из `kind: other` в DTO. Явный `other` агента признака не получает и
+  /// перезаписывает вид.
+  ToolCallRecord _toolCallRecordFromUpdate(
+    ToolCallUpdate update, {
+    ToolCallRecord? known,
+    bool toolKindUnrecognized = false,
+  }) {
+    final riskLevel = ApprovalPolicy.classifyToolCallUpdateWithin(
+      known,
+      update,
+    );
     return ToolCallRecord(
       id: update.toolCallId,
       title: update.title ?? update.toolCallId.value,
-      kind: update.kind ?? ToolKind.other,
+      kind: toolKindUnrecognized && known != null
+          ? known.kind
+          : update.kind ?? known?.kind ?? ToolKind.other,
       status: update.status ?? ToolCallStatus.pending,
       riskLevel: riskLevel,
       content: update.content ?? const [],
       locations: update.locations ?? const [],
       rawInput: update.rawInput,
       rawOutput: update.rawOutput,
+      // Итог вызова `agent` переносится из известной записи, а ключ запроса —
+      // нет: он описывает спрашивающего потомка (D43 п. 1).
+      subagentMeta: known?.subagentMeta,
+      parentToolCallId: known?.parentToolCallId,
     );
   }
 
@@ -2106,6 +2672,73 @@ final class AcpClientApplication {
     }
 
     return session;
+  }
+
+  /// Причина остановки по бюджету из `_meta.codelab.budgetExceeded` ответа
+  /// (D10, D21 Т3); не строка или чужая форма — `null`, без ошибки: сторонний
+  /// агент вправе не слать расширение. Значение — открытое множество, поэтому
+  /// не сверяется со списком известных лимитов; осмысленна лишь при
+  /// `max_turn_requests`, что проверяет автомат хода.
+  String? _budgetExceededOf(PromptResponse response) {
+    final codelab = response.meta?['codelab'];
+    if (codelab is! Map) {
+      return null;
+    }
+    final value = codelab['budgetExceeded'];
+    return value is String ? value : null;
+  }
+
+  /// Маршрут `_codelab/session/usage` (D8, D14, D21 Т2, Т5): передаёт
+  /// `sessionId` и сырые `params` подписчику, ничего не разбирая и не
+  /// отвечая (у уведомления нет id).
+  ///
+  /// Без строкового `params.sessionId` кадр отбрасывается DEBUG-записью без
+  /// payload: полный текст — только в трассировке протокола, которая уже
+  /// пишет каждое входящее сообщение (`observability.md`).
+  void _handleUsageNotification(JsonRpcNotification notification) {
+    final params = notification.params;
+    final sessionId = params is Map ? params['sessionId'] : null;
+    if (params is! Map || sessionId is! String) {
+      _logger
+          .bind({logComponentKey: protocolComponent})
+          .withCorrelation(connectionGeneration: _generation)
+          .debug('usage.dropped', context: {'reason': 'missing_session_id'});
+      return;
+    }
+    final seq = params['seq'];
+    final trigger = params['trigger'];
+    // В журнал — только элемент закрытого множества: строка с провода может
+    // быть сколь угодно длинной или содержать лишнее (D14, §16).
+    final loggedTrigger = trigger is! String
+        ? null
+        : const {'step', 'turn', 'compaction'}.contains(trigger)
+        ? trigger
+        : 'other';
+    _logger
+        .bind({logComponentKey: protocolComponent})
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: sessionId,
+        )
+        .debug(
+          'usage.received',
+          context: {
+            // Размер записи ограничен: `seq` — целое, `trigger` — элемент
+            // закрытого множества (`step`/`turn`/`compaction`/`other`); суммы,
+            // цены и произвольные строки провода в журнал не попадают.
+            if (seq is int) 'seq': seq,
+            'trigger': ?loggedTrigger,
+          },
+        );
+    if (!_usageController.isClosed) {
+      _usageController.add(
+        UsageNotification(
+          sessionId: SessionId(sessionId),
+          params: Map<String, Object?>.from(params),
+          generation: _generation,
+        ),
+      );
+    }
   }
 
   void _storeSession(AcpSession session) {
@@ -2188,3 +2821,26 @@ PromptFailure _promptFailureOf(Object error) => switch (error) {
   ),
   _ => PromptFailure.unknown(message: '$error'),
 };
+
+/// Обновление сессии в буфере (реплей `session/load`, ранние обновления) вместе
+/// с признаком «вид вызова был незнаком кодеку» (D9 change
+/// `tolerate-unknown-tool-kind`): признак считается один раз по сырым params
+/// при приёме и не теряется, пока обновление ждёт применения.
+typedef _BufferedUpdate = ({SessionUpdate update, bool toolKindUnrecognized});
+
+/// Причина массового завершения terminal-процессов (D15).
+///
+/// Почему enum, а не строка: закрытый набор значений, который попадает в
+/// журнал как поле `reason` события `terminal_processes_killed`.
+enum _TerminalKillReason {
+  /// Разрыв или замена соединения.
+  connectionClosed('connection_closed'),
+
+  /// Закрытие ядра клиента ([AcpClientApplication.dispose]).
+  dispose('dispose');
+
+  const _TerminalKillReason(this.logName);
+
+  /// Значение поля `reason` в журнале.
+  final String logName;
+}

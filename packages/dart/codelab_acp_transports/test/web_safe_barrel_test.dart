@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_acp_transports/io.dart';
 import 'package:test/test.dart';
 
@@ -46,6 +47,7 @@ void main() {
   for (final entry in [
     'lib/codelab_acp_transports.dart',
     'lib/src/transport_configs.dart',
+    'lib/src/in_process_acp_transport.dart',
   ]) {
     test('$entry does not reach dart:io', () {
       expect(File(entry).existsSync(), isTrue, reason: '$entry is missing');
@@ -53,6 +55,17 @@ void main() {
       expect(hits, isEmpty, reason: hits.join('\n'));
     });
   }
+
+  test('the main barrel exposes the in-memory pair', () {
+    final link = InProcessAcpLink();
+    addTearDown(() async {
+      await link.client.close();
+      await link.agent.close();
+    });
+    expect(<Type>[InProcessAcpTransport], hasLength(1));
+    expect(link.client, isA<AcpTransport>());
+    expect(link.agent, isA<InProcessAcpTransport>());
+  });
 
   test('io.dart exposes the dart:io transports', () {
     expect(<Type>[StdioAcpTransport, WebSocketAcpTransport], hasLength(2));

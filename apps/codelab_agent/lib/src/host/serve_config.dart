@@ -1,8 +1,8 @@
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_io/codelab_agent_io.dart';
+import 'package:codelab_agent_io/testing.dart';
 
 import '../cli/serve_args.dart';
-import 'llm_script.dart';
 
 /// Загружает конфигурацию `serve`: файлы, переменные и флаги (`agent-core-
 /// architecture` §15.2, §15.6; design.md change `add-agent-configuration`,
@@ -29,16 +29,23 @@ ConfigLoadResult loadServeConfig(
 }) {
   var flags = options.flags;
   if (options.llmScript case final path?) {
-    flags = _withScriptedProviders(
-      flags,
-      LlmScript.modelsOf(path, models: options.models),
-    );
+    try {
+      flags = withScriptedProviders(
+        flags,
+        LlmScript.modelsOf(path, models: options.models),
+      );
+    } on LlmScriptException catch (error) {
+      // Сценарий разбирает `codelab_agent_io` (D8 change
+      // `add-embedded-agent-mode`); для бинаря это ошибка использования.
+      throw UsageError(error.message);
+    }
   }
   try {
     return (loader ?? ConfigLoader()).load(
       cwd: cwd,
       environment: options.environment,
       flags: flags,
+      preconfigFlags: options.preconfig,
       extraConfig: options.configPath,
       scripted: options.llmScript != null,
       // Переменная токена WebSocket названа флагом — не опечатка (D13).
@@ -47,6 +54,43 @@ ConfigLoadResult loadServeConfig(
   } on ConfigUsageException catch (error) {
     throw UsageError(error.message);
   }
+}
+
+/// Источник конфига живого `serve`: те же параметры загрузки, что у
+/// [loadServeConfig] (design.md change `add-config-writer-and-reload`, D7,
+/// D13; agent-binary «Перезагрузка конфига в serve»).
+///
+/// Почему рядом с [loadServeConfig]: перезагрузка обязана читать слои теми же
+/// корнем, окружением, флагами, предконфигурацией, файлом `--config` и
+/// известными переменными, что стартовая загрузка, иначе «перезагрузка»
+/// дала бы другой конфиг, чем при старте. Параметры собраны в одном файле,
+/// чтобы разойтись они не могли.
+///
+/// Как использовать: после успешного [loadServeConfig] и только без
+/// `--llm-script` (сценарий не читает файлы — источника у него нет);
+/// [initial] — этот результат, [cwd] — тот же корень. Конструктор сам
+/// запускает наблюдатель, поэтому создавать источник нужно непосредственно
+/// перед сборкой ядра, а владелец (`AgentHost`) закрывает его
+/// `await source.close()` после `runtime.dispose()`.
+FileConfigSource serveConfigSource(
+  ServeOptions options, {
+  required ConfigLoadResult initial,
+  required String cwd,
+  required Clock clock,
+  required Logger logger,
+}) {
+  assert(options.llmScript == null, 'the script run has no config source');
+  return FileConfigSource(
+    initial: initial,
+    cwd: cwd,
+    environment: options.environment,
+    flags: options.flags,
+    preconfigFlags: options.preconfig,
+    extraConfig: options.configPath,
+    knownVariables: {options.tokenEnv},
+    clock: clock,
+    logger: logger,
+  );
 }
 
 /// Уровень и файл лога после загрузки конфига: флаг сильнее переменной,
@@ -65,55 +109,4 @@ ConfigLoadResult loadServeConfig(
     return (level: options.logLevel, file: options.logFile);
   }
   return (level: host.logLevel ?? LogLevel.info, file: host.logFile);
-}
-
-/// Дополняет слой флагов провайдерами и моделью сценария.
-///
-/// Схема требует `agent.default_model` из каталога провайдеров; у сценария
-/// каталог — его собственные модели, поэтому каждая становится моделью
-/// провайдера с её окном контекста и лимитом ответа.
-ConfigTree _withScriptedProviders(ConfigTree flags, List<ModelRef> models) {
-  final providers = <String, Map<String, Object?>>{};
-  for (final model in models) {
-    final entry = providers.putIfAbsent(
-      model.provider,
-      () => {
-        'kind': 'openai-compatible',
-        'base_url': model.baseUrl.toString(),
-        'models': <String, Object?>{},
-      },
-    );
-    (entry['models']! as Map<String, Object?>)[model.id] = {
-      'context_window': model.contextWindow,
-      'max_output_tokens': model.maxOutputTokens,
-    };
-  }
-  return ConfigTree(
-    kind: flags.kind,
-    source: flags.source,
-    values: {
-      ...flags.values,
-      'providers': providers,
-      'agent': {'default_model': '${models.first.provider}/${models.first.id}'},
-    },
-    positions: flags.positions,
-  );
-}
-
-/// Пишет предупреждения загрузки конфига в лог.
-///
-/// Почему одна функция: валидный конфиг пишет их при сборке хоста, а
-/// невалидный — при отчёте об ошибках, и оба пути обязаны давать одни и те же
-/// события (D16). Неизвестные `CODELAB_*` распознаёт `ConfigLoader` и кладёт
-/// их в те же `warnings` событием `config.env.unknown` (D13), поэтому каждое
-/// предупреждение пишется ровно один раз. Предупреждение — событие со своим
-/// именем; в `message` нет значений ключей.
-void logStartupWarnings(Logger logger, ConfigLoadResult loaded) {
-  for (final warning in loaded.warnings) {
-    logger.log(
-      warning.level,
-      warning.event ?? 'config.warning',
-      fields: {...warning.fields, 'message': warning.message},
-    );
-  }
 }

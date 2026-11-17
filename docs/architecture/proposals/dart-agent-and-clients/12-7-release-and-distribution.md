@@ -305,9 +305,22 @@ Actions из тега, подписанное происхождение, кот
 
 * **Версии** — semver: `X.Y.Z` для `stable`, `X.Y.Z-beta.N` для `beta`. Ломающее изменение CLI,
   конфигурации или `stream-json` (§12.5) — major; новая цель или команда — minor.
+  Исключение — переходный алиас: команда, помеченная в `CHANGELOG.md` первой `stable`, где она
+  есть, как «deprecated, will be removed», не входит в контракт стабильного CLI и снимается
+  minor-версией, но не patch-версией. Сейчас это одна команда — `codelab serve` → `codelab-agent
+  serve`; она снимается первой minor-версией после условия удаления Python-агента (change
+  `retire-python-agent`, D11; решение пользователя 2026-11-10, Q3).
 * **CHANGELOG.md** в формате Keep a Changelog: раздел `## [X.Y.Z] - YYYY-MM-DD` обязателен для
   тега; `RELEASE_NOTES.md` релиза — этот раздел. Раздел «Privacy» — при любой правке
   `PRIVACY.md`.
+* **«Известные ограничения» до 1.0** (решение пользователя 2026-11-04 R8-7; design.md change
+  `add-config-literal-secrets-and-migrate`, D13). `CHANGELOG.md` в репозитории пока нет: его и
+  раздел «Известные ограничения» создаёт ветка `release/<version>`, а не `feature/*`. Раздел
+  обязателен в каждом выпуске до 1.0 и в `RELEASE_NOTES.md` и называет:
+  * вывод инструментов, промпты и журналы сессий не редактируются: секреты в них уходят провайдеру
+    модели и в файлы сессий как есть (редакция P-10 — после 1.0, R8-1);
+  * литеральный секрет в файле конфига — предупреждение `config.secret.in_file`, а не ошибка;
+    перенос в хранилище — `codelab secret migrate` (или кнопка `Migrate secrets` в codelab-app).
 * **Тег.** Мейнтейнер ставит `git tag -a vX.Y.Z` на зелёный коммит `main` и пушит.
 
 `.github/workflows/release.yml` (на `push: tags: ['v*']`):

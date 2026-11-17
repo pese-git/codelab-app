@@ -144,6 +144,8 @@ codelab_ui
 
 Фактический `pubspec.yaml` должен быть не шире необходимого dependency graph.
 
+Матрица относится к клиентской стороне. Пакеты агентской стороны (`codelab_agent_*`) и мосты `codelab_setup`, `codelab_embedded` описаны в разделе 53.
+
 ---
 
 ## 5. `codelab_acp_protocol`
@@ -1717,3 +1719,50 @@ Cubit
 Архитектурные boundaries важнее структуры директорий.
 
 Структура директорий должна отражать архитектуру, а не заменять её.
+
+---
+
+## 53. Агентская сторона: пакеты агента и мосты
+
+Встроенный Dart-агент — второй хост ядра рядом с бинарём `codelab-agent`. Он живёт в пакетах `codelab_agent_*`; клиенты (`codelab_desktop`, `codelab_cli`) получают его через мосты. Имена пакетов подчиняются ADR-0002: `codelab_<сторона>_<слой>`, мосты между сторонами префикса `codelab_agent_` не получают.
+
+### Пакеты агента
+
+| Пакет | Ответственность | Зависимости (кроме Dart SDK) |
+|---|---|---|
+| `codelab_agent_core` | ядро на чистом Dart: LLM, цикл, инструменты, разрешения, сессии, схема и валидатор конфигурации; web-безопасно (PKG-1) | только `http`, `meta`, `collection`, `async`, `crypto` (PKG-2) |
+| `codelab_agent_io` | реализации портов ядра на `dart:io`: файлы и процессы, журналы сессий, `ConfigLoader`, хранилища секретов, файлы проекта | `codelab_agent_core`, `yaml`, `yaml_edit`, `async`, `meta` |
+| `codelab_agent_mcp` | MCP-клиент без `dart:io`; stdio-процесс сервера приходит портом ядра из `codelab_agent_io` | `codelab_agent_core`, `http`, `async`, `meta` |
+| `codelab_agent_acp` | проекция `AgentRuntime` в ACP-сервер `AcpAgentServer` над любым `AcpTransport` | `codelab_agent_core`, `codelab_acp_protocol`, `codelab_acp_transports`, `async`, `meta` |
+| `apps/codelab_agent` | бинарь `codelab-agent serve --stdio \| --ws`; composition root агента как процесса | пакеты агента, `codelab_acp_*`, `args`, `http`, `async`, `meta` |
+
+Правила направления:
+
+* ядро не знает ни одного другого пакета проекта и не импортирует `dart:io`; всё внешнее приходит портами от хоста (PKG-1, PKG-6);
+* `codelab_agent_acp` и `codelab_agent_mcp` не импортируют `dart:io` и друг друга; IO-транспорты и процессы им передаёт хост;
+* ядро собирается только через `buildAgentCore` (HOST-6): `ToolRegistry(`, `Agent(`, `AgentRuntime(` в хостах запрещены;
+* `codelab_agent_*` не зависят от клиентских пакетов, `codelab_ui` и приложений.
+
+### Мосты к клиентам
+
+Клиенты НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` (`AGENTS.md` §5; allowlist сторожа). Агентская сторона приходит только через два моста:
+
+* `codelab_setup` — настройка агента: чистые типы конфигурации ядра (основной барель, web-безопасный) и общие подкоманды `config`, `secret`, `provider`, `mcp` из `codelab_agent_io` (`lib/io.dart`). Через него клиенты читают и редактируют `config.yaml`, не зная о `ConfigLoader`.
+* `codelab_embedded` — встроенный агент: хост ядра, который собирает агента через `buildAgentCore` и `AcpAgentServer` и соединяет его с клиентом парой `InProcessAcpLink` в процессе клиента. Точки входа: `codelab_embedded.dart` (web-безопасная), `io.dart` (настольный открыватель: конфигурация, секреты, журнал сессий, MCP), `testing.dart` (сценарный открыватель для тестов). Правила импорта `io.dart` и `testing.dart` — в `AGENTS.md` §5 и в сторже.
+
+```text
+apps/codelab_desktop ─┐                      ┌─ codelab_setup ──── codelab_agent_core (типы)
+apps/codelab_cli ─────┤  только через мосты ─┤                  └─ codelab_agent_io (io.dart)
+                      │                      └─ codelab_embedded ─ codelab_agent_acp ─ codelab_agent_core
+                      │                                          ├─ codelab_agent_mcp
+                      │                                          └─ codelab_agent_io (io.dart)
+apps/codelab_agent ──────── пакеты агента напрямую (composition root процесса)
+```
+
+Клиент по-прежнему говорит с агентом только по ACP: встроенный агент отличается от внешнего лишь транспортом (`InProcessAcpLink` вместо stdio или WebSocket), а не контрактом. Поэтому клиентский код не ветвится по виду агента (`docs/architecture/acp-boundary.md`).
+
+### Где проверяется
+
+* границы импортов и allowlist зависимостей — `melos run guard` (`packages/dart/codelab_architecture_tests`, правила в `test/support/rules.dart`);
+* web-безопасность ядра и основных барелей мостов `codelab_embedded` и `codelab_setup` (web-smoke точки входа) — `melos run web-compile`;
+* новый пакет агентской стороны получает правило сторожа вместе с пакетом (раздел 43).

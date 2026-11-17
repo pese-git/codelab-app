@@ -161,7 +161,7 @@ You are working as a code reviewer. In this session your job is to find defects 
   `agent=review` и вызов `write` в `standard` → запрос разрешения, как без профиля (LS-1, LS-2).
 * `builtin_profiles_test.dart`: оба профиля загружены без файлов; `~/.codelab/agents/review.md`
   со `scope: session` заменяет встроенный профиль, а со `scope: subagent` — нет; тип субагента
-  `review` (§17.3.2) остаётся в `enum` инструмента `task`.
+  `review` (§17.3.2) остаётся в `enum` инструмента `agent`.
 * `prompt_profile_texts_test.dart`: тела профилей не упоминают имён инструментов (сторож §11.10).
 
 ## 17.12.3. Супервизия зависшего инструмента (C-09)
@@ -186,7 +186,7 @@ final class ToolCallStuck extends AgentEvent {
 }
 
 // AgentTool (§6.2), после MVP:
-bool get heartbeat => true;      // false — у task (у ребёнка свой прогресс, §17.3.7)
+bool get heartbeat => true;      // false — у agent (у ребёнка свой прогресс, §17.3.7)
 
 final class HeartbeatConfig {    // ToolExecutor получает при сборке сессии (§10.7)
   const HeartbeatConfig({this.after = const Duration(seconds: 10),
@@ -259,7 +259,7 @@ superviseExecute(call, tool, ctx):
   инструмент работает 35 с → heartbeat с `elapsed` 10, 20, 30 с и ни одного после
   `ToolCallFinished`; ожидание разрешения 60 с перед исполнением не даёт heartbeat и не входит в
   `elapsed`; тишина 120 с → один `ToolCallStuck`, вывод на 125 с сбрасывает `sinceOutput`, второго
-  `ToolCallStuck` нет; два параллельных вызова — независимые последовательности; `task` — без
+  `ToolCallStuck` нет; два параллельных вызова — независимые последовательности; `agent` — без
   heartbeat; `stuck_after: 0` — без `ToolCallStuck` (LS-3, LS-4, LS-5).
 * `acp/tool-heartbeat-title`: кадры `in_progress` с `title` `… (running 10 s)`, финальный кадр
   восстанавливает исходный `title`; у внешнего `exec` `content` с терминалом не перезаписан.

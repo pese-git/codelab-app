@@ -19,6 +19,8 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' show FluentIcons, VoidCallback;
 
+import 'agents_pane_data.dart';
+
 /// Модели инспектора — модели kit (`InspectorProjection`, design D9);
 /// прежние имена остаются для виджетов и тестов.
 typedef CodeLabInspectorCategory = InspectorCategory;
@@ -127,17 +129,18 @@ CodeLabSessionStatus _sessionStatusOf(SessionLifecycleStatus status) =>
 /// kit превращаются в модели `codelab_ui` (DSK-1).
 ///
 /// Для чего: id строк — позиционные (`prompt-N`, `agent-N`, `thought-N`,
-/// `tool-N`, `prompt-error-N`, `session-notice-N`, `notice-N`), как до переноса проекции
-/// в kit: на них опираются тесты, и по ним лента хранит ручное раскрытие.
+/// `tool-N`, `prompt-error-N`, `session-notice-N`, `notice-N`), как до
+/// переноса проекции в kit: на них опираются тесты, и по ним лента хранит
+/// ручное раскрытие.
 /// Строку вызова собирает `ToolRowFormatter` с [cwd] сессии.
 ///
-/// Как использовать: [isRunning] — сессия выполняет ход; последние мысли
-/// идущего хода стримятся (design D4). [approvalsEnabled] гасит кнопки
-/// одобрения, пока ответ на другое одобрение в полёте. [onRetry] — повтор
-/// последнего сорвавшегося хода; хост передаёт его, только когда повтор
-/// возможен (`SessionView.canRetry` и соединение установлено, design D4
-/// change `add-connection-and-error-states`), и кнопка Retry появляется у
-/// последней заметки о сбое.
+/// Как использовать: [isRunning] — сессия выполняет ход; последние мысли и
+/// ответ идущего хода стримятся (design D4; `add-desktop-markdown` D3).
+/// [approvalsEnabled] гасит кнопки одобрения, пока ответ на другое одобрение
+/// в полёте. [onRetry] — повтор последнего сорвавшегося хода; хост передаёт
+/// его, только когда повтор возможен (`SessionView.canRetry` и соединение
+/// установлено, design D4 change `add-connection-and-error-states`), и кнопка
+/// Retry появляется у последней заметки о сбое.
 List<CodeLabTranscriptRow> transcriptRowsOf(
   List<TranscriptItem> transcript, {
   required String cwd,
@@ -156,9 +159,14 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
           id: 'prompt-${index + 1}',
           text: text,
         ),
+        // Ответ — одна строка с текстом как есть: markdown, в том числе ответ
+        // одним огороженным блоком (`/mcp list`), разбирает и рисует кит
+        // (change `add-desktop-markdown`, D3, D11); `streaming` — последний
+        // элемент идущего хода, как у мыслей.
         AgentTextItem(:final text) => CodeLabAgentTextRow(
           id: 'agent-${index + 1}',
           text: text,
+          streaming: isRunning && index == transcript.length - 1,
         ),
         ThoughtItem(:final text) => CodeLabThoughtRow(
           id: 'thought-${index + 1}',
@@ -196,14 +204,27 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
             severity: CodeLabNoticeSeverity.info,
             body: text,
           ),
+        // Заметка исхода хода (Q33, D27): лимит токенов, лимит запросов,
+        // отказ агента — информационная строка, как `emptyTurn`.
+        NoticeItem(kind: NoticeKind.turnStopped, :final text) =>
+          CodeLabNoticeRow(
+            id: 'notice-${index + 1}',
+            severity: CodeLabNoticeSeverity.info,
+            body: text,
+          ),
         NoticeItem(kind: NoticeKind.emptyTurn, :final text) => CodeLabNoticeRow(
           id: 'notice-${index + 1}',
           severity: CodeLabNoticeSeverity.info,
           body: text,
         ),
+        // Тихая строка операций со списком задач (D27): текст даёт kit.
+        final TaskOpsItem ops => CodeLabTaskOpsRow(
+          id: 'task-ops-${index + 1}',
+          text: ops.text,
+        ),
         final ToolCallItem call => _toolCallRowOf(
           call,
-          id: 'tool-${index + 1}',
+          id: _toolRowIdOf(call, index),
           cwd: cwd,
           approvalsEnabled: approvalsEnabled,
           onApprovalSelected: onApprovalSelected,
@@ -212,29 +233,119 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
   ];
 }
 
+/// Id строки ленты верхнего уровня для вызова [call] на позиции [index].
+///
+/// Вызов, объявленный только запросом субагента (строки корня нет, D43 п. 2),
+/// несёт стабильный id элемента транскрипта: индекс сдвигается, когда строка
+/// корня появляется позже. Тот же id нужен панели Agents (`topRowIds`), чтобы
+/// найти строку ленты по пути элементов kit.
+String _toolRowIdOf(ToolCallItem call, int index) =>
+    _isSubagentRequested(call) ? call.id : 'tool-${index + 1}';
+
+/// Строка вызова ленты; [nested] — строка потомка внутри дерева `agent`.
+///
+/// Почему [nested]: панель решения принадлежит блоку под строкой корня
+/// (`childApprovals`, D27 п. 4, D47 Т9), а у вложенной строки ожидающее
+/// одобрение даёт лишь пометку «ждёт решения»: две панели одного запроса
+/// дали бы два набора кнопок на одно решение (PERM-4). Решённое одобрение
+/// остаётся тегом исхода и на своём месте в дереве.
 CodeLabToolCallRow _toolCallRowOf(
   ToolCallItem call, {
   required String id,
   required String cwd,
   required bool approvalsEnabled,
   required ApprovalOptionChosen onApprovalSelected,
+  bool nested = false,
 }) {
   final view = ToolRowFormatter.format(call, cwd: cwd);
   final details = call.details;
+  // Вызов `agent` опознан kit с первого кадра (D28): компактная строка D27.
+  // Заголовок «Subagent <type>: <description>» и итог готовит kit
+  // (`ToolRowFormatter`), маппер только переносит их; отчёт — в раскрытие.
+  final isSubagent = details?.subagentCall != null;
+  final approval = call.approval;
+  final waitsRootDecision = nested && approval is PendingApprovalView;
+  CodeLabToolCallRow rowOf(ToolCallItem child) => _toolCallRowOf(
+    child,
+    id: child.id,
+    cwd: cwd,
+    approvalsEnabled: approvalsEnabled,
+    onApprovalSelected: onApprovalSelected,
+    nested: true,
+  );
   return CodeLabToolCallRow(
     id: id,
     status: _toolCallStatusOf(details?.status ?? ToolCallStatusView.queued),
-    label: view.label,
-    detail: view.detail,
+    label: isSubagent ? '${view.label} ${view.detail}'.trim() : view.label,
+    detail: isSubagent ? '' : view.detail,
     secondary: view.secondary,
-    output: details?.textOutput ?? const [],
-    approval: _transcriptApprovalOf(
-      call.approval,
-      enabled: approvalsEnabled,
-      onSelected: onApprovalSelected,
-    ),
+    output: isSubagent
+        ? [if (view.report case final report?) ...report.split('\n')]
+        : details?.textOutput ?? const [],
+    subagent: isSubagent
+        ? CodeLabSubagentCall(
+            stats: view.summaryShort ?? view.runningCounter,
+            progress: view.progress,
+            // Хвост — готовый срез kit (D25, D47 Т9). Kit строит его
+            // независимо от статуса, а показывает строка только у работающего
+            // вызова; итог завершённого берётся из `summary`. Операция со
+            // списком задач — тихая строка (D48 п. 3).
+            tail: [
+              for (final tailed in call.tail.calls)
+                switch (call.tail.operations[tailed.toolCallId]) {
+                  final TaskOpsItem ops => CodeLabTaskOpsRow(
+                    id: tailed.id,
+                    text: ops.text,
+                  ),
+                  null => rowOf(tailed),
+                },
+            ],
+            tailMore: call.tail.moreCount,
+          )
+        : null,
+    approval: waitsRootDecision
+        ? null
+        : _transcriptApprovalOf(
+            approval,
+            callStatus: details?.status,
+            enabled: approvalsEnabled,
+            onSelected: onApprovalSelected,
+          ),
+    awaitsRootDecision: waitsRootDecision,
+    // Одобрения потомков — блоки под строкой корня (D27 п. 4, D43 п. 2).
+    childApprovals: [
+      for (final child in call.childApprovals)
+        ?_transcriptApprovalOf(
+          child,
+          callStatus: null,
+          enabled: approvalsEnabled,
+          onSelected: onApprovalSelected,
+        ),
+    ],
+    // Дерево вызовов потомков (D24, D47 Т11): id вложенных строк — id
+    // элементов kit (`<ход>/tool-<цепочка>`), не зависят от индекса и годятся
+    // ключом раскрытия в `TranscriptViewCubit`. Операции со списком задач
+    // потомка — те же тихие строки (D48 п. 3).
+    children: [
+      for (final child in call.children)
+        switch (child) {
+          final ToolCallItem nestedCall => rowOf(nestedCall),
+          final TaskOpsItem ops => CodeLabTaskOpsRow(
+            id: ops.id,
+            text: ops.text,
+          ),
+          _ => null,
+        },
+    ].nonNulls.toList(),
   );
 }
+
+/// Одобрение вызова пришло от субагента (`subagent` у ожидающего и решённого).
+bool _isSubagentRequested(ToolCallItem call) => switch (call.approval) {
+  PendingApprovalView(:final subagent) ||
+  ResolvedApprovalView(:final subagent) => subagent != null,
+  null => false,
+};
 
 /// Чип хода в шапке панели сессии (требование «Session pane header»):
 /// идущий ход с ожидающим одобрением — «Waiting for approval».
@@ -275,20 +386,28 @@ String? _failureBodyOf(PromptFailure? failure) => switch (failure) {
   AgentPromptFailure(:final message) ||
   RequestPromptFailure(:final message) ||
   UnknownPromptFailure(:final message) => message,
-  ConnectionLostPromptFailure() =>
-    'Reconnect to continue working with the agent.',
+  ConnectionLostPromptFailure() => 'Retry to continue working with the agent.',
   null => null,
 };
 
 /// Одобрение встроено в строку вызова: ожидающее — интерактивная карточка,
 /// решённое — тег исхода (embed-approval-in-thread/design.md,
 /// Decisions 1–3).
+///
+/// [callStatus] — статус вызова строки: при отменённом одобрении и статусе
+/// `cancelled` тега исхода нет, строку маркирует тег статуса (Q38, D27).
 CodeLabTranscriptApproval? _transcriptApprovalOf(
   ApprovalStateView? approval, {
+  required ToolCallStatusView? callStatus,
   required bool enabled,
   required ApprovalOptionChosen onSelected,
 }) => switch (approval) {
   null => null,
+  // Ход отменён, пока вызов ждал решения: тег статуса уже читается
+  // «Cancelled», второй такой же тег исхода не нужен (Q38, D27).
+  ResolvedApprovalView(outcome: ApprovalOutcomeView.cancelled)
+      when callStatus == ToolCallStatusView.cancelled =>
+    null,
   ResolvedApprovalView(:final label, :final outcome) =>
     CodeLabTranscriptApproval.resolved(
       label: label,
@@ -298,6 +417,7 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
         ApprovalOutcomeView.cancelled => CodeLabApprovalOutcome.cancelled,
         ApprovalOutcomeView.unknown => CodeLabApprovalOutcome.unknown,
       },
+      requesterLine: _requesterLineOf(approval.subagent),
     ),
   PendingApprovalView() => CodeLabTranscriptApproval.pending(
     risk: _approvalRiskOf(approval.risk),
@@ -307,11 +427,59 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
     enabled: enabled,
     shortcutsEnabled: approval.focused,
     onOptionSelected: (optionId) => onSelected(approval, optionId),
+    requesterLine: _requesterLineOf(approval.subagent),
+    requesterHint: approval.subagent?.description,
+    callTitle: approval.subagent == null ? null : _callTitleOf(approval),
+    // Цель «Go to approval» панели Agents: лента прокручивается к блоку по
+    // id запроса (D49 Т7). Решение по-прежнему принимается только в ленте.
+    targetId: approval.approvalId.value,
   ),
 };
 
+/// Заголовок вызова потомка для блока, без дубля команды.
+///
+/// Почему: заголовок вызова `exec` после срезания префикса равен самой
+/// команде, и блок показывал её дважды (ручной прогон, задача 3.5a, D44 п. 4).
+/// UI не решает, что считать дублем, поэтому сравнение здесь: совпадение с
+/// командой после обрезки пробелов — заголовка нет. У write/edit команда
+/// пуста, и заголовок («Write NOTES.md») остаётся единственным видимым путём.
+String? _callTitleOf(PendingApprovalView approval) {
+  final title = _titleWithoutRequesterPrefix(
+    approval.toolTitle,
+    approval.subagent!,
+  );
+  if (title == null) return null;
+  final command = approval.command?.trim();
+  return command != null && command.isNotEmpty && command == title.trim()
+      ? null
+      : title;
+}
+
+/// Заголовок вызова потомка без префикса `[тип: описание] ` (D8).
+///
+/// Почему: путь и описание задачи блок уже показывает строкой «review wants
+/// to run» и подсказкой, префикс их дублирует; нужны инструмент и путь файла
+/// («Write .codelab/config.yaml»), которых иначе не видно без раскрытия `{}`.
+/// Режется ровно известный префикс из `type` и `description` запроса:
+/// описание пишет модель, и поиск первой `"] "` дал бы подмену видимого пути
+/// (`x] Write README.md]`). Иной заголовок показывается целиком.
+String? _titleWithoutRequesterPrefix(
+  String? title,
+  SubagentRequester requester,
+) {
+  if (title == null) return null;
+  final prefix = '[${requester.type}: ${requester.description}] ';
+  return title.startsWith(prefix) ? title.substring(prefix.length) : title;
+}
+
+/// Строка «review › explore wants to run»: путь готовит kit (`pathText`,
+/// D43 п. 4), маппер только добавляет действие.
+String? _requesterLineOf(SubagentRequester? requester) =>
+    requester == null ? null : '${requester.pathText} wants to run';
+
 CodeLabApprovalRisk _approvalRiskOf(ApprovalRiskLevel risk) => switch (risk) {
   ApprovalRiskLevel.readOnly => CodeLabApprovalRisk.readOnly,
+  ApprovalRiskLevel.unknown => CodeLabApprovalRisk.unknown,
   ApprovalRiskLevel.localWrite => CodeLabApprovalRisk.localWrite,
   ApprovalRiskLevel.network => CodeLabApprovalRisk.network,
   ApprovalRiskLevel.shell => CodeLabApprovalRisk.shell,
@@ -382,23 +550,86 @@ CodeLabCommandAction _agentCommandAction(AgentCommandView command) =>
       hint: command.hint,
     );
 
+/// Действие палитры «Files»: открывает или закрывает панель Files дока.
+///
+/// Почему отдельно от `CodeLabCommandAction.defaults`: пункт есть только когда
+/// панель доступна (локальная папка сессии и привязка `ProjectFiles`), а
+/// `defaults` — фиксированный набор `codelab_ui` (spec workspace-file-browser
+/// «Панель Files в доке инструментов»; design.md change
+/// `add-file-preview-and-tree`, D7). Отдельной «группы Go to» у палитры нет:
+/// пункт стоит в общем списке после команд app.
+const _filesAction = CodeLabCommandAction(
+  id: 'files',
+  label: 'Files',
+  slashCommand: '/files',
+  description: 'Go to the project files panel.',
+  icon: FluentIcons.folder,
+);
+
+/// Действие палитры «Agents»: открывает панель Agents дока.
+///
+/// Почему отдельно от `CodeLabCommandAction.defaults`: пункт есть только когда
+/// у сессии в фокусе есть строка субагента (панель доступна), как у «Files»
+/// (design.md change `add-subagents-and-tasks`, D49 Т11; spec
+/// agent-workbench-ui «Панель Agents v1»). Совпадение с командой агента
+/// `/agents` разрешает `CommandCatalog` (D3 change
+/// `add-command-palette-agent-commands`).
+const _agentsAction = CodeLabCommandAction(
+  id: 'agents',
+  label: 'Agents',
+  slashCommand: '/agents',
+  description: 'Go to the subagents panel.',
+  icon: FluentIcons.robot,
+);
+
+HostCommand _hostCommandOf(CodeLabCommandAction action) => HostCommand(
+  id: action.id,
+  name: action.slashCommand.substring(1),
+  label: action.label,
+  description: action.description,
+  isAvailable: action.isAvailable,
+);
+
 /// Шесть команд app как команды хоста каталога: имя — `slashCommand` без
 /// `/`, связь с иконкой — `id` (D2 change `add-command-palette-agent-commands`).
 final List<HostCommand> _paletteHostCommands = List.unmodifiable([
-  for (final action in CodeLabCommandAction.defaults)
-    HostCommand(
-      id: action.id,
-      name: action.slashCommand.substring(1),
-      label: action.label,
-      description: action.description,
-      isAvailable: action.isAvailable,
-    ),
+  for (final action in CodeLabCommandAction.defaults) _hostCommandOf(action),
 ]);
+
+final List<HostCommand> _paletteHostCommandsWithFiles = List.unmodifiable([
+  ..._paletteHostCommands,
+  _hostCommandOf(_filesAction),
+]);
+
+final List<HostCommand> _paletteHostCommandsWithAgents = List.unmodifiable([
+  ..._paletteHostCommands,
+  _hostCommandOf(_agentsAction),
+]);
+
+final List<HostCommand> _paletteHostCommandsWithFilesAndAgents =
+    List.unmodifiable([
+      ..._paletteHostCommands,
+      _hostCommandOf(_filesAction),
+      _hostCommandOf(_agentsAction),
+    ]);
 
 /// Каталог палитры для команд агента активной сессии: команды app и
 /// [agentCommands] с правилами kit (конфликты имён, поиск — D3, D4).
-CommandCatalog paletteCatalogOf(List<AgentCommandView> agentCommands) =>
-    CommandCatalog(host: _paletteHostCommands, agent: agentCommands);
+/// [filesAvailable] добавляет пункт «Files» (панель доступна, D7),
+/// [agentsAvailable] — пункт «Agents» (у сессии есть субагенты, D49 Т11).
+CommandCatalog paletteCatalogOf(
+  List<AgentCommandView> agentCommands, {
+  bool filesAvailable = false,
+  bool agentsAvailable = false,
+}) => CommandCatalog(
+  host: switch ((filesAvailable, agentsAvailable)) {
+    (true, true) => _paletteHostCommandsWithFilesAndAgents,
+    (true, false) => _paletteHostCommandsWithFiles,
+    (false, true) => _paletteHostCommandsWithAgents,
+    (false, false) => _paletteHostCommands,
+  },
+  agent: agentCommands,
+);
 
 /// Полный список палитры в порядке каталога.
 List<CodeLabCommandAction> paletteActionsOf(CommandCatalog catalog) => [
@@ -414,10 +645,132 @@ List<CodeLabCommandAction> searchPaletteActions(
 CodeLabCommandAction _paletteActionOf(CatalogCommand command) =>
     switch (command) {
       HostCatalogCommand(:final command) =>
-        CodeLabCommandAction.defaults.firstWhere(
-          (action) => action.id == command.id,
-        ),
+        command.id == _filesAction.id
+            ? _filesAction
+            : command.id == _agentsAction.id
+            ? _agentsAction
+            : CodeLabCommandAction.defaults.firstWhere(
+                (action) => action.id == command.id,
+              ),
       AgentCatalogCommand(:final command) => _agentCommandAction(command),
+    };
+
+/// Данные панели Agents из `SessionView` сессии в фокусе (D33, D49 Т8).
+///
+/// Почему здесь: строки считает kit (`SessionView.subagents`), а app только
+/// связывает их с лентой: id вызова верхнего уровня → id его строки, id
+/// элемента → ожидающее одобрение (для шагов дерева) и заголовки пунктов
+/// плана для подсказок `#N`. Время не считается — оно зависит от часов виджета
+/// (`agentRowsOf`).
+///
+/// `null` или сессия без субагентов дают [AgentsPaneData.empty]: панель
+/// недоступна.
+AgentsPaneData agentsPaneDataOf(SessionView? view) {
+  if (view == null || view.subagents.isEmpty) {
+    return AgentsPaneData.empty;
+  }
+  final topRowIds = <String, String>{};
+  for (final (index, item) in view.transcript.indexed) {
+    if (item is ToolCallItem) {
+      topRowIds[item.id] = _toolRowIdOf(item, index);
+    }
+  }
+  final pending = <String, String>{};
+  void walk(List<TranscriptItem> items) {
+    for (final item in items) {
+      if (item is! ToolCallItem) {
+        continue;
+      }
+      if (item.approval case PendingApprovalView(:final approvalId)) {
+        pending[item.id] = approvalId.value;
+      }
+      walk(item.children);
+    }
+  }
+
+  walk(view.transcript);
+  return AgentsPaneData(
+    rows: view.subagents,
+    planTitles: {for (final entry in view.plan) ?entry.taskId: entry.content},
+    busy:
+        view.status == SessionStatusView.running ||
+        view.status == SessionStatusView.cancelling,
+    topRowIds: Map.unmodifiable(topRowIds),
+    pendingApprovals: Map.unmodifiable(pending),
+    counts: {
+      for (final state in SubagentRowState.values)
+        state: view.subagentCount(state),
+    },
+  );
+}
+
+/// Строки панели Agents: готовые тексты по данным [data] и часам [now].
+///
+/// Почему тексты здесь: `codelab_ui` ничего не форматирует
+/// (`codelab_ui/AGENTS.md` §2), а формат берётся у kit — тот же, что у итога
+/// в ленте (D24, D49 Т9, Т10).
+///
+/// Время: у терминальной строки — длительность из итога; у работающей —
+/// `now − startedAt`, но только пока сессия занята, иначе времени нет и строка
+/// просто `running` (D50 п. 2). Поля без данных остаются `null`: заглушек нет.
+List<CodeLabAgentRow> agentRowsOf(
+  AgentsPaneData data, {
+  required DateTime now,
+}) => [
+  for (final row in data.rows)
+    CodeLabAgentRow(
+      id: row.toolCallId.value,
+      depth: row.depth,
+      type: row.type,
+      title: row.title,
+      state: _agentRowStateOf(row.state),
+      time: _agentTimeOf(row, busy: data.busy, now: now),
+      calls: row.toolCalls == null ? null : subagentCallsText(row.toolCalls!),
+      tokens: row.summary == null ? null : '${row.summary!.tokensText} tokens',
+      lastAction: row.lastAction,
+      items: [
+        for (final id in row.taskIds)
+          CodeLabAgentItemRef(label: '#$id', hint: data.planTitles[id]),
+      ],
+    ),
+];
+
+String? _agentTimeOf(
+  SubagentRowView row, {
+  required bool busy,
+  required DateTime now,
+}) {
+  if (row.summary case final summary?) {
+    return summary.durationText;
+  }
+  final started = row.startedAt;
+  final running =
+      row.state == SubagentRowState.running ||
+      row.state == SubagentRowState.awaitingApproval;
+  if (!running || !busy || started == null) {
+    return null;
+  }
+  final elapsed = now.difference(started);
+  return formatSubagentDuration(elapsed.isNegative ? Duration.zero : elapsed);
+}
+
+/// Счётчики заголовка панели Agents по состояниям: числа считает kit
+/// (`SessionView.subagentCount`), здесь только соответствие состояний kit
+/// состояниям виджета — то же, что в [agentRowsOf]. Нулевые опускает сам
+/// организм.
+Map<CodeLabAgentRowState, int> agentCountsOf(AgentsPaneData data) => {
+  for (final state in SubagentRowState.values)
+    _agentRowStateOf(state): data.counts[state] ?? 0,
+};
+
+CodeLabAgentRowState _agentRowStateOf(SubagentRowState state) =>
+    switch (state) {
+      SubagentRowState.running => CodeLabAgentRowState.running,
+      SubagentRowState.awaitingApproval =>
+        CodeLabAgentRowState.waitingForApproval,
+      SubagentRowState.completed => CodeLabAgentRowState.done,
+      SubagentRowState.failed => CodeLabAgentRowState.failed,
+      SubagentRowState.cancelled => CodeLabAgentRowState.cancelled,
     };
 
 /// План сессии из kit: `SessionView.plan` в записях виджета.
@@ -430,6 +783,9 @@ List<CodeLabPlanEntry>? planEntriesOf(List<PlanEntryView> plan) => plan.isEmpty
     : [
         for (final entry in plan)
           CodeLabPlanEntry(
+            taskId: entry.taskId,
+            ownerLabel: entry.ownerLabel,
+            blockedBy: entry.openBlockers,
             content: entry.content,
             status: switch (entry.status) {
               PlanEntryStatus.pending => CodeLabPlanEntryStatus.pending,
@@ -475,35 +831,75 @@ String projectNameOf(String path) {
 /// Группы проектов сайдбара: выбранный проект раскрыт с сессиями, остальные
 /// недавние — свёрнутыми группами (change `redesign-workbench-shell`, D4).
 ///
+/// Один агент обслуживает сессии разных папок (`require-project-folder`, D11,
+/// Q23): открытая сессия попадает в группу проекта с тем же путём. Папку
+/// сессии даёт [sessionFolders] (`cwd` из `WorkspaceState`), а не подпись
+/// строки. Группа не выбранного проекта раскрывается, пока в ней сессия идёт,
+/// ждёт одобрения или упала: ход в `/work/a` остаётся виден со статусом после
+/// перехода в `/work/b`. Сессии без своей группы остаются под выбранным
+/// проектом; их `subtitle` — полный путь — показывает, откуда они.
+///
 /// Выбранный проект, которого нет среди недавних, всё равно идёт первой
 /// группой; без выбранного проекта сессии попадают в группу «No project».
 List<CodeLabSidebarProject> sidebarProjectsOf({
   required String? selectedProjectPath,
   required List<CodeLabSessionListItem> sessions,
   required List<CodeLabRecentProject> recentProjects,
+  Map<String, String> sessionFolders = const {},
 }) {
   final selected = selectedProjectPath;
+  final otherPaths = {
+    for (final recent in recentProjects)
+      if (recent.path != selected) recent.path,
+  };
+  final byPath = <String, List<CodeLabSessionListItem>>{};
+  final underSelected = <CodeLabSessionListItem>[];
+  for (final session in sessions) {
+    final folder = sessionFolders[session.id];
+    if (folder != null && otherPaths.contains(folder)) {
+      (byPath[folder] ??= []).add(session);
+    } else {
+      underSelected.add(session);
+    }
+  }
+  bool attention(List<CodeLabSessionListItem> items) => items.any(
+    (s) =>
+        s.status == CodeLabSessionStatus.running ||
+        s.status == CodeLabSessionStatus.awaitingApproval ||
+        s.status == CodeLabSessionStatus.failed,
+  );
   return [
     CodeLabSidebarProject(
       path: selected ?? '',
       name: selected == null ? 'No project' : projectNameOf(selected),
       current: true,
-      sessions: sessions,
+      sessions: underSelected,
     ),
     for (final recent in recentProjects)
       if (recent.path != selected)
         CodeLabSidebarProject(
           path: recent.path,
           name: projectNameOf(recent.path),
+          expanded: attention(byPath[recent.path] ?? const []),
+          sessions: byPath[recent.path] ?? const [],
         ),
   ];
 }
 
 /// Значение опции режима для чипа шапки сессии — по категории `mode` из
 /// ACP; без такой опции чипа нет (change `redesign-workbench-shell`, D7).
-String? modeLabelOf(List<ConfigOptionView> options) {
+String? modeLabelOf(List<ConfigOptionView> options) =>
+    _selectedLabelOf(options, 'mode');
+
+/// Подпись модели для строки статуса — по категории `model` из ACP, тем же
+/// правилом, что [modeLabelOf] (D23 Т1: имя выбранного значения, иначе
+/// `currentValue`).
+String? modelLabelOf(List<ConfigOptionView> options) =>
+    _selectedLabelOf(options, 'model');
+
+String? _selectedLabelOf(List<ConfigOptionView> options, String category) {
   for (final option in options) {
-    if (option.category != 'mode') {
+    if (option.category != category) {
       continue;
     }
     for (final value in option.values) {
@@ -514,6 +910,140 @@ String? modeLabelOf(List<ConfigOptionView> options) {
     return option.currentValue;
   }
   return null;
+}
+
+/// Данные строки статуса под композером из `SessionView` (change
+/// `add-usage-extension`, D11, D23 Т1; spec `agent-workbench-ui` «Строка
+/// статуса сессии под композером»).
+///
+/// Почему: виджет `CodeLabSessionStatusBar` ничего не считает, а числа и
+/// «~» — политика kit. Здесь только состав сегментов: числа форматирует
+/// общая функция `usage_format.dart` (D24, Q16 (а)), своих правил формата и
+/// суммирования у маппера нет.
+///
+/// Как использовать: `ActiveSessionCubit` зовёт при каждой ревизии
+/// `SessionHandle.view`. `unknown` даёт «usage: —»; `awaiting` — только
+/// индикатор во время хода; `reported` — токены хода, стоимость и контекст.
+/// `busy` задан только для `awaiting` и пока ход идёт или отменяется
+/// (`running`/`cancelling`, D23 Т9 п. 2): у `reported` числа
+/// остаются на месте между шагами хода.
+CodeLabSessionStatusData sessionStatusDataOf(SessionView view) {
+  final usage = view.usage;
+  final modelLabel = modelLabelOf(view.configOptions);
+  final modeLabel = modeLabelOf(view.configOptions);
+  switch (usage.support) {
+    case UsageSupport.unknown:
+      return CodeLabSessionStatusData(
+        modelLabel: modelLabel,
+        modeLabel: modeLabel,
+        usage: const CodeLabStatusSegment(
+          label: 'usage: —',
+          tooltip: 'agent does not report usage',
+        ),
+      );
+    case UsageSupport.awaiting:
+      return CodeLabSessionStatusData(
+        modelLabel: modelLabel,
+        modeLabel: modeLabel,
+        busy:
+            view.status == SessionStatusView.running ||
+            view.status == SessionStatusView.cancelling,
+      );
+    case UsageSupport.reported:
+      return CodeLabSessionStatusData(
+        modelLabel: modelLabel,
+        modeLabel: modeLabel,
+        usage: _usageSegmentOf(usage.lastTurn),
+        cost: _costSegmentOf(usage.lastTurn, usage.session),
+        context: _contextSegmentOf(usage.context),
+      );
+  }
+}
+
+/// Токены хода: `<вход> → <выход>`, вход = `input + cacheRead + cacheWrite`
+/// (D11). Подсказка — пять счётчиков точными числами и причины неполноты.
+/// Нулевые токены хода (`0 → 0`) сегмент не рисуют (D23 Т9 п. 4):
+/// ноль вместо «ничего не пришло» вводил бы в заблуждение.
+CodeLabStatusSegment? _usageSegmentOf(UsageTotals? turn) {
+  if (turn == null) {
+    return null;
+  }
+  final tokens = turn.tokens;
+  final input = usageInputTokens(tokens);
+  if (input == 0 && tokens.output == 0) {
+    return null;
+  }
+  final mark = usageTokensPartial(turn.partial) ? '~' : '';
+  final lines = [
+    'input ${tokens.input}',
+    'output ${tokens.output}',
+    'cache read ${tokens.cacheRead}',
+    'cache write ${tokens.cacheWrite}',
+    if (tokens.reasoning != null) 'reasoning ${tokens.reasoning}',
+  ];
+  final reasons = [
+    for (final reason in UsagePartial.values)
+      if (turn.partial.contains(reason)) _partialReasonOf(reason),
+  ];
+  return CodeLabStatusSegment(
+    label:
+        '$mark${formatUsageTokens(input)} → '
+        '${formatUsageTokens(tokens.output)}',
+    tooltip: [
+      lines.join(' · '),
+      if (reasons.isNotEmpty) 'approximate: ${reasons.join(', ')}',
+    ].join('\n'),
+  );
+}
+
+String _partialReasonOf(UsagePartial reason) => switch (reason) {
+  UsagePartial.noUsage => 'agent sent no usage for some steps',
+  UsagePartial.noPrice => 'price unknown for some steps',
+  UsagePartial.beforeLoad => 'before the session was loaded',
+};
+
+/// `<стоимость хода> · session <стоимость сессии>` (D11, Q19 (а)); «~» — по
+/// правилу kit перед суммой, чья полнота под вопросом (D6).
+CodeLabStatusSegment? _costSegmentOf(UsageTotals? turn, UsageTotals? session) {
+  final turnCost = turn?.cost;
+  final sessionCost = session?.cost;
+  if (turnCost == null && sessionCost == null) {
+    return turn == null
+        ? null
+        : const CodeLabStatusSegment(label: '—', tooltip: 'price unknown');
+  }
+  final turnText = turnCost == null
+      ? '—'
+      : '${usageCostPartial(turn!.partial) ? '~' : ''}'
+            '${formatUsageMoney(turnCost)}';
+  if (sessionCost == null) {
+    return CodeLabStatusSegment(label: turnText);
+  }
+  final mark = usageCostPartial(session!.partial) ? '~' : '';
+  return CodeLabStatusSegment(
+    label: '$turnText · session $mark${formatUsageMoney(sessionCost)}',
+  );
+}
+
+/// `<N>% context[ · compaction soon]`; тон — по уровню kit (D24, Q17 (а)).
+CodeLabStatusSegment? _contextSegmentOf(ContextFillView? context) {
+  if (context == null) {
+    return null;
+  }
+  final fill = usageContextOf(context);
+  if (fill == null) {
+    return null;
+  }
+  return CodeLabStatusSegment(
+    label:
+        '${fill.label} context'
+        '${context.compactionSoon ? ' · compaction soon' : ''}',
+    tone: switch (fill.level) {
+      UsageLevel.normal => CodeLabTone.neutral,
+      UsageLevel.warning => CodeLabTone.warning,
+      UsageLevel.danger => CodeLabTone.danger,
+    },
+  );
 }
 
 /// Подсказка бейджа соединения: профиль, транспорт и команда или адрес —

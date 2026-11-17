@@ -15,7 +15,8 @@ final _packageName = RegExp(r'^name:\s*(\S+)', multiLine: true);
 /// `import`/`export`/`part` and every alternative of a conditional import.
 List<String> scan(String root, PackageRule rule) {
   final base = p.normalize(p.join(root, rule.dir));
-  final scansLib = !p.split(rule.dir).contains('lib');
+  final scansLib =
+      !p.split(rule.dir).contains('lib') && !p.split(rule.dir).contains('bin');
   final dir = Directory(scansLib ? p.join(base, 'lib') : base);
   final package = _findPackage(base);
   final violations = <String>[];

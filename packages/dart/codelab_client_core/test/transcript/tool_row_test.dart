@@ -227,4 +227,33 @@ void main() {
       );
     });
   });
+
+  // Смена режима и вызов незнакомого вида (change `tolerate-unknown-tool-kind`,
+  // D7; acp-client-kit «Строка инструмента без сырого JSON»).
+  group('mode switch and unknown kind', () {
+    test('a mode switch shows the Mode label and the title as detail', () {
+      expect(
+        _format(ToolKind.switchMode, title: 'Ready for implementation'),
+        const ToolRowView(label: 'Mode', detail: 'Ready for implementation'),
+      );
+    });
+
+    test('a call of kind other is labelled by its title with no detail', () {
+      expect(
+        _format(ToolKind.other, title: 'Plan sync'),
+        const ToolRowView(label: 'Plan sync'),
+      );
+    });
+
+    test('no row exposes wire names of kinds', () {
+      for (final row in [
+        _format(ToolKind.switchMode, title: 'Ready for implementation'),
+        _format(ToolKind.other, title: 'Plan sync'),
+      ]) {
+        final text = '${row.label} ${row.detail} ${row.secondary ?? ''}';
+        expect(text, isNot(contains('switch_mode')));
+        expect(text, isNot(contains('future_kind')));
+      }
+    });
+  });
 }

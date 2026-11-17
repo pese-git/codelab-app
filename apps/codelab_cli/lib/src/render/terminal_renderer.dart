@@ -5,8 +5,10 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 import '../strings.dart';
 import 'ansi.dart';
 import 'output_surface.dart';
+import 'plan_format.dart';
 import 'sanitize.dart';
 import 'tool_row.dart';
+import 'usage_segments.dart';
 
 /// Показ мыслей модели: `/thoughts dim|collapsed|hidden` (§12.2.3).
 ///
@@ -68,6 +70,9 @@ final class TerminalRenderer {
   final _toolStarted = <String, DateTime>{};
   final _toolDone = <String>{};
 
+  /// Напечатанные строки исхода одобрений потомков (`<id элемента>#<номер>`).
+  final _childPrinted = <String>{};
+
   /// Напечатанные промпты и заметки.
   final _lines = <String>{};
 
@@ -77,6 +82,25 @@ final class TerminalRenderer {
   String? _openThought;
 
   var _plan = const <PlanEntryView>[];
+
+  /// Строка прогресса `agent` на экране без перевода строки (только `ansi`,
+  /// D27): следующий вывод сначала стирает её, а обновление пишет поверх.
+  /// [_progressText] — что на ней сейчас.
+  var _progressOpen = false;
+  String? _progressText;
+
+  /// Операция со списком задач, ещё способная расти (последний элемент), и
+  /// уже напечатанные. [_pendingDepth] — глубина дерева, где она стоит: 0 —
+  /// верхний уровень, больше — вложенная операция потомка (D48 п. 3).
+  TaskOpsItem? _pendingOps;
+  var _pendingDepth = 0;
+  final _opsPrinted = <String>{};
+
+  /// Когда вызов потомка впервые попал в рендер: время его итоговой строки.
+  /// Вызовы потомков не печатаются до завершения (прогресс на месте у них
+  /// не обновляется), поэтому `_toolStarted` — «уже напечатан» — для времени
+  /// не годится.
+  final _childSeen = <String, DateTime>{};
 
   /// Элемент, текст которого дописывается сейчас: следующий элемент
   /// начинается с новой строки.
@@ -101,6 +125,7 @@ final class TerminalRenderer {
       _seen[item.id] = item;
       switch (item) {
         case UserItem(:final id, :final text):
+          _flushTaskOps();
           if (!_raw && _lines.add(id)) {
             _closeThought();
             _line(
@@ -108,17 +133,35 @@ final class TerminalRenderer {
             );
           }
         case ThoughtItem():
+          _flushTaskOps();
           _thought(item);
         case AgentTextItem():
+          _flushTaskOps();
           _text(item);
         case ToolCallItem():
           _tool(item);
+          _childOutcomes(item);
+          _subtree(item, 1);
+        case TaskOpsItem():
+          _holdOps(item, 0);
         case NoticeItem(:final id, :final kind):
+          _flushTaskOps();
           if (_lines.add(id)) {
             _closeThought();
             final prefix = kind == NoticeKind.error ? errorPrefix : notePrefix;
             _line(sanitizeTerminalText('$prefix${noticeText(item)}'), _raw);
           }
+      }
+    }
+    // Придержанная операция закончила расти, если после неё в транскрипте
+    // есть что-то, кроме скрытых бегущих `think`: они ещё могут стать
+    // следующей операцией и влиться в тот же элемент.
+    // Вложенная операция потомка так не проверяется: её соседей в транскрипте
+    // верхнего уровня нет, она ждёт следующей печатной строки или конца хода.
+    if (_pendingOps case final pending? when _pendingDepth == 0) {
+      final at = view.transcript.indexWhere((item) => item.id == pending.id);
+      if (view.transcript.skip(at + 1).any((item) => !_isHiddenCall(item))) {
+        _flushTaskOps();
       }
     }
     if (!_samePlan(view.plan)) {
@@ -129,22 +172,118 @@ final class TerminalRenderer {
     }
   }
 
+  /// Бегущий вызов `think` без ожидающего одобрения: не печатается до
+  /// завершения (spec codelab-cli «Субагенты и список задач в REPL»).
+  bool _isHiddenCall(TranscriptItem item) =>
+      item is ToolCallItem &&
+      !_toolStarted.containsKey(item.id) &&
+      item.details?.kind == ToolKind.think &&
+      // Вызов `agent`, опознанный с первого кадра (D28), печатается сразу:
+      // у него своё правило прогресса и итога.
+      item.details?.subagentCall == null &&
+      !isFinalToolCall(item) &&
+      item.approval is! PendingApprovalView;
+
+  /// Тихая строка операций со списком задач: приглушённая, без значка
+  /// статуса и времени (D27).
+  void _flushTaskOps() {
+    final ops = _pendingOps;
+    if (ops == null) {
+      return;
+    }
+    _pendingOps = null;
+    _opsPrinted.add(ops.id);
+    _closeThought();
+    final text = sanitizeTerminalText(ops.text);
+    _line(
+      _styled(
+        _pendingDepth == 0 ? text : '${_stepPrefix(_pendingDepth)}$text',
+        sgrDim,
+      ),
+      _raw,
+    );
+  }
+
+  /// Придерживает операцию [item] глубины [depth], пока она может расти.
+  ///
+  /// Подряд идущие операции растут в одном элементе, а напечатанную строку не
+  /// переписать: последний элемент придерживается, пока за ним не пришёл
+  /// другой или не кончился ход (D27). У потомка то же правило действует
+  /// среди соседей одного родителя (D48 п. 3).
+  void _holdOps(TaskOpsItem item, int depth) {
+    if (_opsPrinted.contains(item.id)) {
+      return;
+    }
+    if (_pendingOps?.id != item.id) {
+      _flushTaskOps();
+    }
+    _pendingOps = item;
+    _pendingDepth = depth;
+  }
+
+  /// Отступ и маркер строки потомка глубины [depth]: два пробела на уровень и
+  /// `↳ ` (на `raw` и без UTF-8 — `> `, чтобы строка не ломала поток; D48
+  /// п. 3).
+  String _stepPrefix(int depth) =>
+      '${'  ' * depth}${_raw || !unicode ? '> ' : '↳ '}';
+
+  /// Строки потомков [parent] под его строкой — вложенно, по глубине [depth]
+  /// (acp-client-kit «Дерево вызовов потомков», D21, D47 Т10).
+  ///
+  /// Почему: вызов потомка печатается один раз строкой завершения, а
+  /// прогресс потомков на месте не обновляется — терминал умеет только
+  /// дописывать (D48 п. 3). Строки внука идут раньше строки его `agent`:
+  /// так шаги следуют хронологии завершения.
+  void _subtree(ToolCallItem parent, int depth) {
+    for (final child in parent.children) {
+      switch (child) {
+        case ToolCallItem():
+          _subtree(child, depth + 1);
+          _childLine(child, depth);
+        case TaskOpsItem():
+          _holdOps(child, depth);
+        default:
+      }
+    }
+  }
+
+  /// Строка завершения вызова потомка; бегущий вызов не печатается.
+  ///
+  /// Вложенный `agent` — одна строка с итогом в скобках (его печатает
+  /// `toolRow`), без отчёта и без времени: время уже в итоге (D48 п. 4).
+  void _childLine(ToolCallItem item, int depth) {
+    final now = _clock();
+    final seen = _childSeen.putIfAbsent(item.id, () => now);
+    if (_toolDone.contains(item.id) || !isFinalToolCall(item)) {
+      return;
+    }
+    _toolDone.add(item.id);
+    _toolStarted[item.id] = seen;
+    _flushTaskOps();
+    _closeThought();
+    final row = toolRow(
+      item,
+      unicode: unicode,
+      elapsed: item.details?.subagentCall == null ? now.difference(seen) : null,
+    );
+    _line('${_stepPrefix(depth)}$row', _raw);
+  }
+
   /// План целиком: заголовок и строка на запись (`[x]`, `[~]`, `[ ]`); на
   /// [OutputSurface.raw] — в stderr. Для изменения плана и `/plan`.
   void printPlan(List<PlanEntryView> plan) {
     _closeThought();
     _line(planHeader, _raw);
     for (final entry in plan) {
-      _line(
-        '  ${_planMark(entry.status)} ${sanitizeTerminalText(entry.content)}',
-        _raw,
-      );
+      _line('  ${planEntryText(entry)}', _raw);
     }
   }
 
   /// Ход закончился: свёрнутые мысли получают итоговую строку, открытая
   /// строка закрывается переводом строки.
   void finishTurn() {
+    _clearProgress();
+    _flushTaskOps();
     _closeThought();
     if (!_atLineStart) {
       _out.write('\n');
@@ -158,6 +297,25 @@ final class TerminalRenderer {
   /// строки в stdout, а на [OutputSurface.raw] — в stderr, чтобы stdout
   /// оставался ответом агента.
   void line(String text) => _line(text, _raw);
+
+  /// Строка статуса после хода: режим, модель, контекст, токены и стоимость
+  /// (D12, Q9 (б), Q18 (а)).
+  ///
+  /// Почему отдельный метод, а не [line]: на [OutputSurface.raw] её не
+  /// печатают вовсе (ни в stdout, ни в stderr — stdout это данные для
+  /// скриптов), а [line] на `raw` пишет в stderr. На `ansi` строка
+  /// приглушена, на `plain` без SGR. Зовёт `ReplSession.onOutcome` после
+  /// строки отмены или сбоя; без данных (нет режима, модели и usage)
+  /// ничего не печатает.
+  void afterTurnStatus(SessionView view) {
+    if (_raw) {
+      return;
+    }
+    final text = afterTurnStatusLine(view);
+    if (text != null) {
+      _line(_styled(text, sgrDim));
+    }
+  }
 
   /// Печатает уже загруженную сессию целиком, с промптами пользователя
   /// (`--continue`, `/resume`).
@@ -180,14 +338,39 @@ final class TerminalRenderer {
           if (isFinalToolCall(item)) {
             _toolDone.add(id);
           }
+          for (final (index, _) in childOutcomeLines(item)) {
+            _childPrinted.add('$id#$index');
+          }
+          _skipSubtree(item, now);
         case UserItem(:final id) || NoticeItem(:final id):
           _lines.add(id);
+        case TaskOpsItem(:final id):
+          _opsPrinted.add(id);
       }
     }
+    _pendingOps = null;
     _plan = view.plan;
   }
 
+  /// Считает вложенные строки [parent] напечатанными (для [skip]).
+  void _skipSubtree(ToolCallItem parent, DateTime now) {
+    for (final child in parent.children) {
+      switch (child) {
+        case ToolCallItem(:final id):
+          _toolStarted[id] = now;
+          if (isFinalToolCall(child)) {
+            _toolDone.add(id);
+          }
+          _skipSubtree(child, now);
+        case TaskOpsItem(:final id):
+          _opsPrinted.add(id);
+        default:
+      }
+    }
+  }
+
   void _text(AgentTextItem item) {
+    _clearProgress();
     final printed = _printed[item.id] ?? 0;
     if (item.text.length <= printed) {
       return;
@@ -210,6 +393,7 @@ final class TerminalRenderer {
   }
 
   void _thought(ThoughtItem item) {
+    _clearProgress();
     if (_raw || thoughts == ThoughtsMode.hidden) {
       _printed[item.id] = item.text.length;
       return;
@@ -240,25 +424,118 @@ final class TerminalRenderer {
   void _tool(ToolCallItem item) {
     final now = _clock();
     final started = _toolStarted[item.id];
+    // Бегущий `think` не печатается до завершения: операцию со списком задач
+    // kit опознаёт только по завершённому вызову, а напечатанную строку не
+    // стереть (spec codelab-cli «Субагенты и список задач в REPL»). Вызов с
+    // ожидающим одобрением виден всегда.
+    if (started == null && _isHiddenCall(item)) {
+      return;
+    }
     if (started == null) {
       _toolStarted[item.id] = now;
       if (isFinalToolCall(item)) {
         _toolDone.add(item.id);
       }
+      _flushTaskOps();
       _closeThought();
+      if (isFinalToolCall(item)) {
+        // Реплей завершённого вызова с деревом: шаги потомков раньше итоговой
+        // строки и отчёта, как они шли бы вживую.
+        _subtree(item, 1);
+        _flushTaskOps();
+      }
       _line(toolRow(item, unicode: unicode), _raw);
+      if (isFinalToolCall(item)) {
+        _agentReport(item);
+      } else {
+        _agentProgress(item);
+      }
       return;
     }
-    if (_toolDone.contains(item.id) || !isFinalToolCall(item)) {
+    if (_toolDone.contains(item.id)) {
+      return;
+    }
+    if (!isFinalToolCall(item)) {
+      _agentProgress(item);
       return;
     }
     _toolDone.add(item.id);
+    _flushTaskOps();
     _closeThought();
     _line(
       toolRow(item, unicode: unicode, elapsed: now.difference(started)),
       _raw,
     );
+    _agentReport(item);
   }
+
+  /// Строки исхода одобрений потомков под строкой `agent` корня: по одной на
+  /// решение, один раз (D43 п. 2; отдельной строки вызова потомка нет).
+  void _childOutcomes(ToolCallItem item) {
+    for (final (index, text) in childOutcomeLines(item)) {
+      if (_childPrinted.add('${item.id}#$index')) {
+        _flushTaskOps();
+        _closeThought();
+        _line(text, _raw);
+      }
+    }
+  }
+
+  /// Строка прогресса вызова `agent` на месте — только на `ansi` (D27): на
+  /// `plain` и `raw` вывод строится построчно и прогресс не печатается.
+  void _agentProgress(ToolCallItem item) {
+    if (_surface != OutputSurface.ansi || item.details?.subagentCall == null) {
+      return;
+    }
+    final progress = ToolRowFormatter.format(item, cwd: '').progress;
+    if (progress == null || progress == _progressText) {
+      return;
+    }
+    _progressText = progress;
+    if (_progressOpen) {
+      _out.write(clearCurrentLine);
+    } else if (!_atLineStart) {
+      _out.write('\n');
+    }
+    _out.write('  ${sanitizeTerminalText(progress)}');
+    _progressOpen = true;
+    _atLineStart = false;
+    _openId = null;
+  }
+
+  /// Стирает открытую строку прогресса: курсор — в начале пустой строки.
+  void _clearProgress() {
+    if (!_progressOpen) {
+      return;
+    }
+    _out.write(clearCurrentLine);
+    _progressOpen = false;
+    _progressText = null;
+    _atLineStart = true;
+  }
+
+  /// Отчёт субагента под итоговой строкой вызова: до [_maxReportLines] строк
+  /// с отступом и, если их больше, `… (<n> more lines)` (D27). Сторонний
+  /// вызов без признака отчёта не получает.
+  void _agentReport(ToolCallItem item) {
+    if (item.details?.subagentCall == null) {
+      return;
+    }
+    final report = ToolRowFormatter.format(item, cwd: '').report;
+    if (report == null) {
+      return;
+    }
+    final lines = report.split('\n');
+    for (final line in lines.take(_maxReportLines)) {
+      _line('  ${sanitizeTerminalText(line)}', _raw);
+    }
+    if (lines.length > _maxReportLines) {
+      _line('  … (${lines.length - _maxReportLines} more lines)', _raw);
+    }
+  }
+
+  /// Предел строк отчёта субагента в построчном выводе (D27).
+  static const _maxReportLines = 20;
 
   /// Итоговая строка свёрнутых мыслей, если они ещё открыты.
   void _closeThought() {
@@ -273,6 +550,7 @@ final class TerminalRenderer {
 
   /// Целая строка [text]: в stdout с новой строки или в stderr ([toErr]).
   void _line(String text, [bool toErr = false]) {
+    _clearProgress();
     if (toErr) {
       _err.writeln(text);
       return;
@@ -303,12 +581,6 @@ final class TerminalRenderer {
     }
     return true;
   }
-
-  static String _planMark(PlanEntryStatus status) => switch (status) {
-    PlanEntryStatus.completed => '[x]',
-    PlanEntryStatus.inProgress => '[~]',
-    PlanEntryStatus.pending => '[ ]',
-  };
 }
 
 /// Текст заметки для человека: у сорвавшегося хода — причина агента из

@@ -587,6 +587,9 @@ mcp:
             'CODELAB_PROVIDER_Y': 'b',
             'CODELAB_REDACTED_Z': 'c',
             'CODELAB_AGENT_TOKEN': 't',
+            // Маркер алиаса `codelab serve` (change `retire-python-agent`, Q10):
+            // агент, запущенный через алиас, видит его всегда.
+            'CODELAB_SERVE_ALIAS_ACTIVE': '1',
             'OTHER': 'd',
           },
         );
@@ -613,6 +616,38 @@ mcp:
           ['CODELAB_A', 'CODELAB_B'],
         );
       });
+
+      // §15.6, D14 change add-agent-secret-store: тестовое хранилище известно
+      // только в сборке с `-DCODELAB_ALLOW_TEST_SECRETS=true`; вариант с
+      // define проверяет процессный тест `codelab_embedded` (задача 2.3 change
+      // `add-embedded-agent-mode`).
+      test(
+        'CODELAB_TEST_SECRET_STORE in a normal build is a warning with the '
+        'name only; the directory is not created',
+        () {
+          write('$home/config.yaml', provider);
+          final store = '${root.path}/test-secrets';
+
+          final result = load(
+            environment: {'CODELAB_TEST_SECRET_STORE': store},
+          );
+
+          expect(result.issues, isEmpty);
+          final warning = unknown(result).single;
+          expect(warning.level, LogLevel.warning);
+          expect(warning.fields['name'], 'CODELAB_TEST_SECRET_STORE');
+          expect(
+            warning.message,
+            'unknown environment variable CODELAB_TEST_SECRET_STORE',
+          );
+          expect(warning.toString(), isNot(contains(store)));
+          expect(Directory(store).existsSync(), isFalse);
+        },
+        skip: const bool.fromEnvironment('CODELAB_ALLOW_TEST_SECRETS')
+            ? 'сборка с CODELAB_ALLOW_TEST_SECRETS: покрыто процессным тестом '
+                  'codelab_embedded/test/io/test_secret_store_process_test.dart'
+            : false,
+      );
 
       test('the token variable named by the host is not a typo', () {
         write('$home/config.yaml', provider);
@@ -647,6 +682,75 @@ mcp:
       );
 
       expect(result.issues.single.key, 'permissions.mode');
+    });
+  });
+
+  // agent-secrets «Бэкенд file», сценарий «file на Windows» (design.md change
+  // `add-agent-secret-store`, D7, D14): ядро платформу не знает, проблему
+  // добавляет загрузчик; платформа подменяется параметром `platform`.
+  group('secrets.backend: file on Windows', () {
+    ConfigLoadResult loadWith(String backend, {String? platform}) {
+      write('$home/config.yaml', '$provider\nsecrets:\n  backend: $backend\n');
+      return loader.load(
+        cwd: cwd,
+        environment: {'CODELAB_HOME': home},
+        platform: platform,
+      );
+    }
+
+    test('is a configuration problem naming the key and the file', () {
+      final result = loadWith('file', platform: 'windows');
+
+      expect(result.config, isNull);
+      expect(result.host, isNull);
+      final issue = result.issues.single;
+      expect(issue.kind, ConfigIssueKind.value);
+      expect(issue.key, 'secrets.backend');
+      expect(issue.source, '$home/config.yaml');
+      expect(issue.line, 12);
+      expect(
+        issue.message,
+        'file backend is not supported on Windows; use env with '
+        'CODELAB_SECRET_* variables',
+      );
+      expect(
+        issue.toString(),
+        contains(
+          'secrets.backend: file backend is not supported on Windows; use env '
+          'with CODELAB_SECRET_* variables',
+        ),
+      );
+    });
+
+    test('is accepted on macOS and Linux', () {
+      for (final platform in ['macos', 'linux', null]) {
+        final result = loadWith('file', platform: platform);
+
+        expect(result.issues, isEmpty, reason: '$platform');
+        expect(result.host!.secretsBackend, 'file');
+      }
+    });
+
+    test('auto and env are accepted on Windows', () {
+      for (final backend in ['auto', 'env']) {
+        final result = loadWith(backend, platform: 'windows');
+
+        expect(result.issues, isEmpty, reason: backend);
+        expect(result.host!.secretsBackend, backend);
+      }
+    });
+
+    test('a scripted run is not affected: the script never uses the file', () {
+      write('$home/config.yaml', '$provider\nsecrets:\n  backend: file\n');
+      final result = loader.load(
+        cwd: cwd,
+        environment: {'CODELAB_HOME': home},
+        platform: 'windows',
+        scripted: true,
+        flags: flagsOf(_values()),
+      );
+
+      expect(result.issues, isEmpty);
     });
   });
 

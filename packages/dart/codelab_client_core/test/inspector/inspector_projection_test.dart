@@ -104,4 +104,60 @@ void main() {
       contains(const InspectorDetail(label: 'Stop reason', value: 'end_turn')),
     );
   });
+
+  // Неизвестный уровень риска (design D27, Q32; spec acp-client-kit
+  // «Неизвестный уровень риска вызова»): вызов вида `other` или без вида
+  // инспектор показывает как `unknown`, а не как «только чтение».
+  test('a tool call of kind other shows risk unknown', () async {
+    final handle = await agent.newSession('s-1');
+    await agent.prompt(handle, 'go');
+    agent.update('s-1', {
+      'sessionUpdate': 'tool_call',
+      'toolCallId': 'call-1',
+      'title': 'Lookup',
+      'kind': 'other',
+      'status': 'in_progress',
+    });
+
+    final toolCall = inspector
+        .project(session('s-1'))
+        .firstWhere((entry) => entry.category == InspectorCategory.toolCall);
+
+    expect(toolCall.risk, 'unknown');
+  });
+
+  test('a tool call without kind shows risk unknown', () async {
+    final handle = await agent.newSession('s-1');
+    await agent.prompt(handle, 'go');
+    agent.update('s-1', {
+      'sessionUpdate': 'tool_call',
+      'toolCallId': 'call-1',
+      'title': 'Lookup',
+      'status': 'in_progress',
+    });
+
+    final toolCall = inspector
+        .project(session('s-1'))
+        .firstWhere((entry) => entry.category == InspectorCategory.toolCall);
+
+    expect(toolCall.risk, 'unknown');
+  });
+
+  test('a read tool call still shows risk readOnly', () async {
+    final handle = await agent.newSession('s-1');
+    await agent.prompt(handle, 'go');
+    agent.update('s-1', {
+      'sessionUpdate': 'tool_call',
+      'toolCallId': 'call-1',
+      'title': 'Read',
+      'kind': 'read',
+      'status': 'in_progress',
+    });
+
+    final toolCall = inspector
+        .project(session('s-1'))
+        .firstWhere((entry) => entry.category == InspectorCategory.toolCall);
+
+    expect(toolCall.risk, 'readOnly');
+  });
 }

@@ -23,9 +23,18 @@ final class CommandTemplate {
 
   /// Имя файла без `.md`: `^[a-z0-9][a-z0-9-]{0,63}$`.
   final String name;
+
+  /// Описание для списка команд клиента (`description` из frontmatter).
   final String description;
+
+  /// Подсказка ввода из `argument-hint`; `null` — поле не задано.
   final String? argumentHint;
+
+  /// Тело шаблона с плейсхолдерами; подставляется при разворачивании команды.
   final String body;
+
+  /// Область файла: проект или пользователь (D4); при совпадении имён проект
+  /// заменяет пользователя.
   final ExtensionScope scope;
 
   /// Путь файла для диагностик и `config check`.
@@ -39,6 +48,12 @@ final class CommandTemplate {
 }
 
 /// Результат [parseCommandTemplates].
+///
+/// Почему пара: файл с ошибкой не прерывает загрузку, поэтому принятые
+/// шаблоны и диагностики об отброшенных возвращаются вместе (D3, D6).
+///
+/// Как использовать: рантайм берёт [templates] для команд сессии, а
+/// [diagnostics] пишет в лог `project_files.diagnostic`.
 final class TemplateParseResult {
   TemplateParseResult(
     List<CommandTemplate> templates,
@@ -48,16 +63,19 @@ final class TemplateParseResult {
 
   /// Принятые шаблоны в байтовом порядке имён.
   final List<CommandTemplate> templates;
+
+  /// Диагностика отброшенных и спорных шаблонов без текста файлов (D14).
   final List<ExtensionDiagnostic> diagnostics;
 }
 
 /// Имена, которые шаблон занять не может: встроенные команды §13.4 и `skill`
 /// (design.md D7, SKL-7).
 ///
-/// Почему резервируется весь список заранее, хотя встроенных команд ещё нет:
-/// иначе шаблон `status.md` работал бы до change встроенных команд и молча
-/// перестал бы после; встроенная команда не должна меняться от файла в
-/// репозитории.
+/// Почему список зарезервирован целиком: встроенная команда не должна менять
+/// смысл от файла в репозитории (SKL-7), в том числе команда, которая не
+/// объявлена в этой сессии (`/compact` без capability `compaction`): шаблон
+/// `compact.md` не подменит её, а слово останется неизвестной командой
+/// (change `add-agent-builtin-slash-commands`, D3, Q4).
 const reservedCommandNames = <String>{
   'compact',
   'mode',

@@ -215,7 +215,7 @@ void main() {
   });
 
   group('buildReplay', () {
-    test('messages, calls with metadata, plan, mode and title', () {
+    test('messages, calls with metadata, task list, mode and title', () {
       final s = snapshot([
         user('u1', null, text: 'go'),
         answer(
@@ -251,9 +251,10 @@ void main() {
         MessageEnded,
         ToolCallStarted,
         ToolCallFinished,
-        PlanUpdated,
         ModeChanged,
         SessionTitleChanged,
+        // Список ветки — один снимок после истории (§17.16.6).
+        TaskListChanged,
       ]);
       final started = events.whereType<ToolCallStarted>().single;
       expect(started.toolCallId, 'c1');

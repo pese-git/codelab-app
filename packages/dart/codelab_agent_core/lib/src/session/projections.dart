@@ -12,16 +12,23 @@
 /// [summarize] для списка.
 library;
 
-import '../commands/slash_command.dart';
 import '../llm/messages.dart';
 import '../llm/usage.dart';
 import '../loop/agent_events.dart';
 import '../permissions/modes.dart';
 import '../prompts/prompts.g.dart';
+import '../skills/reattach.dart';
+import '../skills/skill_catalog.dart';
+import '../skills/skills_config.dart';
+import '../subagents/subagent_model.dart';
+import '../subagents/subagent_report.dart';
+import '../tools/fence.dart';
 import '../tools/agent_tool.dart';
+import '../tools/tasks/task_list.dart';
 import '../util/clock.dart';
 import '../util/ids.dart';
 import '../util/logger.dart';
+import 'command_display.dart';
 import 'ids.dart';
 import 'records.dart';
 import 'session_store.dart';
@@ -53,6 +60,51 @@ final class LlmContextProjection {
   final CompactionRecord? lastCompaction;
 }
 
+/// Записи активной ветки [path], которые видит модель: последнее сжатие,
+/// сохранённая часть до него и всё после (§8.7, CMP-9).
+///
+/// Почему отдельная функция: контекст модели и `activeSkills` (какие навыки
+/// ещё в контексте, design.md change `add-agent-skills`, D15) обязаны резать
+/// путь одинаково, иначе повтор активации опирался бы на записи, которых
+/// модель уже не видит. [compactionIndex] — индекс последней записи
+/// `compaction` в [path] (`-1` — сжатий нет, путь возвращается как есть).
+/// Потерянный якорь `firstKeptId` пишет предупреждение и оставляет только
+/// записи после сжатия.
+({CompactionRecord? compaction, List<SessionRecord> kept}) keptPath(
+  List<SessionRecord> path, {
+  required int compactionIndex,
+  Logger? logger,
+}) {
+  if (compactionIndex < 0) {
+    return (compaction: null, kept: path);
+  }
+  final compaction = path[compactionIndex] as CompactionRecord;
+  final firstKept = path.indexWhere((r) => r.id == compaction.firstKeptId);
+  // Прошлые записи compaction внутри сохранённой части заменены последним
+  // резюме: оно обновляет их (CMP-9), повторять их не нужно.
+  final before = firstKept >= 0 && firstKept < compactionIndex
+      ? [
+          for (final r in path.sublist(firstKept, compactionIndex))
+            if (r is! CompactionRecord) r,
+        ]
+      : const <SessionRecord>[];
+  if (firstKept < 0) {
+    logger?.log(
+      LogLevel.warning,
+      'session.compaction.lost_anchor',
+      fields: {'first_kept_id': compaction.firstKeptId},
+    );
+  }
+  return (
+    compaction: compaction,
+    kept: [compaction, ...before, ...path.sublist(compactionIndex + 1)],
+  );
+}
+
+/// Индекс последней записи `compaction` в [path] или `-1`.
+int lastCompactionIndex(List<SessionRecord> path) =>
+    path.lastIndexWhere((r) => r is CompactionRecord);
+
 /// Сообщения активной ветки для модели (§8.7).
 ///
 /// После последнего сжатия записи до `firstKeptId` заменяются резюме.
@@ -61,9 +113,18 @@ final class LlmContextProjection {
 /// несжатого контекста — без обнуления сжатие запускалось бы снова и снова.
 /// Ремонт парности здесь не делается: он применяется только к payload
 /// запроса (§6.3).
+///
+/// [skillCatalog] и [skillsConfig] включают приложение навыков после резюме
+/// (design.md change `add-agent-skills`, D15, D20): одно сообщение
+/// пользователя с блоками навыков из `compaction.skills`, производное и в
+/// журнал не пишется. `skillCatalog == null` — приложения нет, проекция
+/// побайтово прежняя. Расхождение отпечатка пишет предупреждение
+/// `skills.reattach.changed` в [logger].
 LlmContextProjection buildLlmContext(
   SessionSnapshot snapshot, {
   Logger? logger,
+  SkillCatalog? skillCatalog,
+  SkillsConfig skillsConfig = const SkillsConfig(),
 }) {
   final path = pathToLeaf(snapshot, logger: logger);
   ModelChangeRecord? model;
@@ -84,28 +145,11 @@ LlmContextProjection buildLlmContext(
         break;
     }
   }
-  var kept = path;
-  CompactionRecord? compaction;
-  if (compactionIndex >= 0) {
-    compaction = path[compactionIndex] as CompactionRecord;
-    final firstKept = path.indexWhere((r) => r.id == compaction!.firstKeptId);
-    // Прошлые записи compaction внутри сохранённой части заменены
-    // последним резюме: оно обновляет их (CMP-9), повторять их не нужно.
-    final before = firstKept >= 0 && firstKept < compactionIndex
-        ? [
-            for (final r in path.sublist(firstKept, compactionIndex))
-              if (r is! CompactionRecord) r,
-          ]
-        : const <SessionRecord>[];
-    if (firstKept < 0) {
-      logger?.log(
-        LogLevel.warning,
-        'session.compaction.lost_anchor',
-        fields: {'first_kept_id': compaction.firstKeptId},
-      );
-    }
-    kept = [compaction, ...before, ...path.sublist(compactionIndex + 1)];
-  }
+  final (:compaction, :kept) = keptPath(
+    path,
+    compactionIndex: compactionIndex,
+    logger: logger,
+  );
   final position = {for (final (i, r) in path.indexed) r.id: i};
   final messages = <Message>[];
   for (final record in kept) {
@@ -116,7 +160,11 @@ LlmContextProjection buildLlmContext(
               ? message.copyWith(usage: Usage.zero)
               : message,
         );
-      case CompactionRecord(:final summary, :final timestamp):
+      case CompactionRecord(
+        :final summary,
+        :final timestamp,
+        skills: final recorded,
+      ):
         messages.add(
           UserMessage([
             TextContent(
@@ -124,6 +172,28 @@ LlmContextProjection buildLlmContext(
             ),
           ], timestamp: timestamp),
         );
+        if (skillCatalog != null && recorded != null) {
+          final result = reattachSkills(recorded, skillCatalog, skillsConfig);
+          for (final skill in result.attached) {
+            if (skill.fingerprintChanged) {
+              logger?.log(
+                LogLevel.warning,
+                'skills.reattach.changed',
+                fields: {
+                  'session_id': snapshot.header.id.value,
+                  'name': skill.skill.name,
+                },
+              );
+            }
+          }
+          if (result.attached.isNotEmpty) {
+            messages.add(
+              UserMessage([
+                TextContent(renderReattachedMessage(result)),
+              ], timestamp: timestamp),
+            );
+          }
+        }
       default:
         break;
     }
@@ -146,33 +216,68 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
   final session = snapshot.header.id;
   final calls = <String, ToolCall>{};
   final events = <AgentEvent>[];
-  for (final record in pathToLeaf(snapshot, logger: logger)) {
+  final path = pathToLeaf(snapshot, logger: logger);
+  // Последняя запись `subagent` по вызову `agent`: из неё реплей берёт id и
+  // тип (первый кадр, D28) и итог (D24).
+  final children = <String, SubagentRecord>{
+    for (final record in path)
+      if (record is SubagentRecord) record.toolCallId: record,
+  };
+  for (final record in path) {
     switch (record) {
       case MessageRecord(message: final ToolResultMessage result):
         final call = calls[result.toolCallId];
         final meta = record.toolMeta;
-        events
-          ..add(
-            ToolCallStarted(
+        final child = result.toolName == 'agent'
+            ? children[result.toolCallId]
+            : null;
+        events.add(
+          ToolCallStarted(
+            session,
+            toolCallId: result.toolCallId,
+            tool: result.toolName,
+            kind: meta?.kind ?? ToolKind.other,
+            title: meta?.title ?? result.toolName,
+            input: call?.arguments ?? const {},
+            locations: meta?.locations ?? const [],
+            subagent: child == null
+                ? null
+                : SubagentCallRef(id: child.subagentId, type: child.agent),
+          ),
+        );
+        if (child != null && child.status != 'running') {
+          final failure = parseFailure(child.failure);
+          events.add(
+            SubagentFinished(
               session,
-              toolCallId: result.toolCallId,
-              tool: result.toolName,
-              kind: meta?.kind ?? ToolKind.other,
-              title: meta?.title ?? result.toolName,
-              input: call?.arguments ?? const {},
-              locations: meta?.locations ?? const [],
-            ),
-          )
-          ..add(
-            ToolCallFinished(
-              session,
-              toolCallId: result.toolCallId,
-              outcome: _outcome(record.outcome, result),
-              content: result.content,
-              diffs: [?record.diff],
-              interrupted: record.outcome == 'interrupted',
+              subagentId: child.subagentId,
+              parentToolCallId: child.toolCallId,
+              agent: child.agent,
+              description: child.description,
+              status: switch (child.status) {
+                'completed' => SubagentState.completed,
+                'cancelled' => SubagentState.cancelled,
+                _ => SubagentState.failed,
+              },
+              failure: failure.failure,
+              budgetExceeded: failure.limit,
+              usage: child.usage ?? Usage.zero,
+              toolCalls: child.toolCalls ?? 0,
+              duration: Duration(milliseconds: child.durationMs ?? 0),
+              report: child.report ?? '',
             ),
           );
+        }
+        events.add(
+          ToolCallFinished(
+            session,
+            toolCallId: result.toolCallId,
+            outcome: _outcome(record.outcome, result),
+            content: result.content,
+            diffs: [?record.diff],
+            interrupted: record.outcome == 'interrupted',
+          ),
+        );
       case MessageRecord(:final message):
         if (message is UserMessage && !isUserWords(record, logger: logger)) {
           continue;
@@ -187,9 +292,7 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
         // трогаем, его развёртку знает только его автор (agent-sessions «Поле
         // записи command»).
         final shown = switch (record.command) {
-          final command?
-              when command.source == SlashCommandSource.template.wire &&
-                  message is UserMessage =>
+          final command? when command.showsTyped && message is UserMessage =>
             UserMessage([
               TextContent(command.displayText),
               ...message.content.skip(1),
@@ -199,8 +302,6 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
         events
           ..add(MessageStarted(session, message: shown))
           ..add(MessageEnded(session, message: shown));
-      case PlanRecord(:final entries):
-        events.add(PlanUpdated(session, entries: entries));
       case ModeChangeRecord(:final modeId):
         if (ModeId.values.where((m) => m.value == modeId).firstOrNull
             case final mode?) {
@@ -223,7 +324,92 @@ List<AgentEvent> buildReplay(SessionSnapshot snapshot, {Logger? logger}) {
         break;
     }
   }
+  // Реплей плана (`agent-core/17-16-task-list.md` §17.16.6): после истории
+  // уходит один снимок списка активной ветки, если список непуст или в ветке
+  // была хоть одна запись task/plan — иначе клиент, продолжающий показывать
+  // прежний список, не узнал бы, что он опустел. Это не операция модели:
+  // `op: restore`, журнал его не пишет.
+  final state = buildTaskList(snapshot, logger: logger);
+  if (state.items.isNotEmpty ||
+      path.any((r) => r is TaskRecord || r is PlanRecord)) {
+    events.add(
+      TaskListChanged(
+        session,
+        items: state.items,
+        change: TaskChange(
+          op: TaskChange.restoreOp,
+          actor: const MainActor(),
+          changed: state.items,
+          deleted: const [],
+        ),
+      ),
+    );
+  }
   return events;
+}
+
+/// Список задач и счётчик id из журнала (`agent-core/17-16-task-list.md`
+/// §17.16.6; change `add-subagents-and-tasks`, D12, D29).
+///
+/// Почему чистая функция над снимком: список выводится из журнала
+/// детерминированно, поэтому после `session/load` и смены ветки он равен
+/// списку до закрытия (TSK-6, TSK-7), а восстановление ничего не пишет.
+///
+/// Что считается: `items` — свёртка записей **активной ветки** по порядку
+/// (`task` вставляет или заменяет пункты и убирает `deleted`; запись `plan`
+/// старого формата заменяет весь список пунктами «1»…«n» с `owner: main`);
+/// `nextId` — максимум id, выданных во **всём журнале** (все ветки: `items` и
+/// `deleted` записей `task`, число entries записей `plan`), плюс 1. Счётчик
+/// по одной ветке выдал бы снова id, занятый на покинутой ветке (TSK-3).
+({List<TaskItem> items, int nextId}) buildTaskList(
+  SessionSnapshot snapshot, {
+  Logger? logger,
+}) {
+  // Dart-словарь хранит порядок вставки: замена пункта оставляет его место.
+  final items = <TaskId, TaskItem>{};
+  for (final record in pathToLeaf(snapshot, logger: logger)) {
+    switch (record) {
+      case TaskRecord(items: final changed, :final deleted):
+        for (final item in changed) {
+          items[item.id] = item;
+        }
+        deleted.forEach(items.remove);
+      case PlanRecord(:final entries):
+        items.clear();
+        for (final (i, entry) in entries.indexed) {
+          items['${i + 1}'] = TaskItem(
+            id: '${i + 1}',
+            subject: entry.content,
+            status: entry.status,
+            priority: entry.priority,
+          );
+        }
+      default:
+        break;
+    }
+  }
+  var issued = 0;
+  void note(TaskId id) {
+    final n = int.tryParse(id);
+    if (n != null && n > issued) {
+      issued = n;
+    }
+  }
+
+  for (final record in snapshot.records) {
+    switch (record) {
+      case TaskRecord(items: final changed, :final deleted):
+        changed.map((i) => i.id).forEach(note);
+        deleted.forEach(note);
+      case PlanRecord(:final entries):
+        if (entries.length > issued) {
+          issued = entries.length;
+        }
+      default:
+        break;
+    }
+  }
+  return (items: List.unmodifiable(items.values), nextId: issued + 1);
 }
 
 ToolOutcome _outcome(String? outcome, ToolResultMessage result) =>
@@ -284,19 +470,42 @@ List<MessageRecord> healInterruptedTurn(
   for (final call in findInterruptedCalls(snapshot)) {
     final id = newRecordId(ids, taken.contains);
     taken.add(id);
+    // Вызов `agent` с итоговой записью `subagent`: сбой случился между
+    // записью итога и записью результата — отчёт не теряется, вызов не
+    // повторяется (S-13; `17-3-subagents.md` §17.3.6, «Прерывание»).
+    final done = call.name == 'agent'
+        ? _lastSubagentRecord(snapshot, call.id)
+        : null;
+    final finished = done != null && done.status != 'running';
+    final isFailure = finished && done.status != 'completed';
     healed.add(
       MessageRecord(
         id: id,
         parentId: parent,
         timestamp: now,
-        outcome: 'interrupted',
+        outcome: finished
+            ? switch (done.status) {
+                'completed' => 'completed',
+                'cancelled' => 'cancelled',
+                _ => 'failed',
+              }
+            : 'interrupted',
         toolMeta:
             meta[call.id] ?? ToolMeta(title: call.name, kind: ToolKind.other),
         message: ToolResultMessage(
           toolCallId: call.id,
           toolName: call.name,
-          content: const [TextContent(interruptedResultText)],
-          isError: true,
+          content: [
+            TextContent(
+              finished
+                  ? fenceUntrusted(
+                      wrapSubagentReport(_reportOf(done), withSteps: false),
+                      source: 'agent',
+                    )
+                  : interruptedResultText,
+            ),
+          ],
+          isError: finished ? isFailure : true,
           timestamp: now,
         ),
       ),
@@ -304,4 +513,75 @@ List<MessageRecord> healInterruptedTurn(
     parent = id;
   }
   return healed;
+}
+
+/// Последняя запись `subagent` активной ветки для вызова [toolCallId].
+SubagentRecord? _lastSubagentRecord(
+  SessionSnapshot snapshot,
+  String toolCallId,
+) {
+  SubagentRecord? last;
+  for (final record in pathToLeaf(snapshot)) {
+    if (record is SubagentRecord && record.toolCallId == toolCallId) {
+      last = record;
+    }
+  }
+  return last;
+}
+
+/// Отчёт, восстановленный из итоговой записи `subagent`.
+SubagentReport _reportOf(SubagentRecord record) {
+  final failure = parseFailure(record.failure);
+  return SubagentReport(
+    id: record.subagentId,
+    agent: record.agent,
+    status: switch (record.status) {
+      'completed' => SubagentState.completed,
+      'cancelled' => SubagentState.cancelled,
+      _ => SubagentState.failed,
+    },
+    failure: failure.failure,
+    budgetExceeded: failure.limit,
+    text: record.report ?? '',
+    truncated: record.truncated,
+    toolCalls: record.toolCalls ?? 0,
+    usage: record.usage ?? Usage.zero,
+    duration: Duration(milliseconds: record.durationMs ?? 0),
+  );
+}
+
+/// Записи `subagent{status: failed, failure: interrupted}` для вызовов
+/// `agent` без результата, чья последняя запись — `running` (S-13).
+///
+/// Ребёнок после сбоя не перезапускается: журнал честно фиксирует, что он
+/// прерван. Записи — шаблоны без `id`, родителя и времени: вызывающий вызывает
+/// функцию до [healInterruptedTurn] и дописывает их после синтетических
+/// результатов через `SessionWriter.append`; рекурсивное лечение журнала самого ребёнка —
+/// задача 4.4.
+List<SubagentRecord> interruptedSubagentRecords(SessionSnapshot snapshot) {
+  final out = <SubagentRecord>[];
+  for (final call in findInterruptedCalls(snapshot)) {
+    final last = call.name == 'agent'
+        ? _lastSubagentRecord(snapshot, call.id)
+        : null;
+    if (last == null || last.status != 'running') {
+      continue;
+    }
+    out.add(
+      SubagentRecord(
+        id: '',
+        parentId: null,
+        timestamp: DateTime.fromMillisecondsSinceEpoch(0),
+        subagentId: last.subagentId,
+        toolCallId: last.toolCallId,
+        agent: last.agent,
+        description: last.description,
+        childSessionId: last.childSessionId,
+        journal: last.journal,
+        status: 'failed',
+        failure: 'interrupted',
+      ),
+    );
+  }
+  return out;
 }
