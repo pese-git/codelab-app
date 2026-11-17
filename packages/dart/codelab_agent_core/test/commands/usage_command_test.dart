@@ -307,11 +307,17 @@ void main() {
     );
 
     /// Сессия, загруженная из журнала, собранного вручную.
+    ///
+    /// [discarded] — записи учёта отброшенных проходов сжатия (change
+    /// `fix-discarded-compaction-usage`, D1): пары (модель, usage); они идут
+    /// после записи `compaction`. [written] `false` — без записи `compaction`.
     Future<List<String>> usageOf(
       List<Usage> subagents,
       String summaryModel,
-      Usage summaryUsage,
-    ) async {
+      Usage summaryUsage, {
+      List<(String, Usage)> discarded = const [],
+      bool written = true,
+    }) async {
       await open([]);
       final at = DateTime.utc(2026);
       const id = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0B');
@@ -371,21 +377,42 @@ void main() {
           ),
         );
       }
-      await add(
-        (i, p) => CompactionRecord(
-          id: i,
-          parentId: p,
-          timestamp: at,
-          summary: 'summary',
-          firstKeptId: 'r0000000',
-          tokensBefore: 900,
-          tokensAfter: 100,
-          details: {
-            'summaryModel': summaryModel,
-            'usage': summaryUsage.toJson(),
-          },
-        ),
-      );
+      if (written) {
+        await add(
+          (i, p) => CompactionRecord(
+            id: i,
+            parentId: p,
+            timestamp: at,
+            summary: 'summary',
+            firstKeptId: 'r0000000',
+            tokensBefore: 900,
+            tokensAfter: 100,
+            details: {
+              'summaryModel': summaryModel,
+              'usage': summaryUsage.toJson(),
+            },
+          ),
+        );
+      }
+      for (final (model, usage) in discarded) {
+        await add(
+          (i, p) => CustomRecord(
+            id: i,
+            parentId: p,
+            timestamp: at,
+            customType: 'codelab.compaction_discarded',
+            data: {
+              'reason': 'no reduction',
+              'trigger': 'manual',
+              'pass': 1,
+              'tokensBefore': 3043,
+              'tokensAfter': 3567,
+              'summaryModel': model,
+              'usage': usage.toJson(),
+            },
+          ),
+        );
+      }
       session = await h.core.runtime.loadSession(id, const SessionHostPorts());
       return (await ask('/usage')).text.split('\n');
     }
@@ -489,6 +516,92 @@ void main() {
       );
       expect(line(lines, 'Total:'), startsWith('Total: input ~1000,'));
       expect(line(lines, '  test/priced:'), contains('input 1000,'));
+    });
+
+    // Отброшенные вызовы суммаризатора (change `fix-discarded-compaction-usage`,
+    // D3, D4; сценарии «/usage после /compact без выигрыша», «Без отброшенных
+    // вызовов»).
+    const discardedUsage = Usage(
+      input: 764,
+      output: 171,
+      cost: UsageCost(input: 0.0001146, output: 0.0001026),
+    );
+
+    test('after a /compact without gain: Summaries shows the number of '
+        'discarded calls; the usage counts them (scenario "/usage после '
+        '/compact без выигрыша")', () async {
+      final lines = await usageOf(
+        const [],
+        'test/priced',
+        Usage.zero,
+        written: false,
+        discarded: const [('test/priced', discardedUsage)],
+      );
+
+      expect(
+        line(lines, 'Summaries:'),
+        'Summaries: 1 (1 discarded), input 764, output 171, cache read 0, '
+        'cache write 0, cost \$0.0002',
+      );
+      expect(
+        line(lines, 'Total:'),
+        startsWith('Total: input 1764, output 271, cache read 2000'),
+      );
+    });
+
+    test('a written and a discarded call: the count is both, in brackets '
+        'only the discarded ones', () async {
+      final lines = await usageOf(
+        const [],
+        'test/priced',
+        summary,
+        discarded: const [('test/priced', discardedUsage)],
+      );
+
+      expect(
+        line(lines, 'Summaries:'),
+        startsWith('Summaries: 2 (1 discarded), input 1664, output 291,'),
+      );
+    });
+
+    test('without discarded calls the line is as before', () async {
+      final lines = await usageOf(const [], 'test/priced', summary);
+
+      expect(line(lines, 'Summaries:'), startsWith('Summaries: 1, input 900,'));
+      expect(line(lines, 'Summaries:'), isNot(contains('discarded')));
+    });
+
+    test('a discarded call of a model without a price: Summaries cost '
+        'unknown, as for a written call (D2)', () async {
+      final lines = await usageOf(
+        const [],
+        'test/free',
+        Usage.zero,
+        written: false,
+        discarded: const [('test/free', Usage(input: 764, output: 171))],
+      );
+
+      expect(
+        line(lines, 'Summaries:'),
+        startsWith('Summaries: 1 (1 discarded)'),
+      );
+      expect(line(lines, 'Summaries:'), endsWith('cost unknown'));
+    });
+
+    test('a discarded call without usage: ~ before input, like a written '
+        'one (the step rule)', () async {
+      final lines = await usageOf(
+        const [],
+        'test/priced',
+        Usage.zero,
+        written: false,
+        discarded: const [('test/priced', Usage())],
+      );
+
+      expect(
+        line(lines, 'Summaries:'),
+        startsWith('Summaries: 1 (1 discarded), input ~0,'),
+      );
     });
 
     test('with zero counters the lines are absent', () async {

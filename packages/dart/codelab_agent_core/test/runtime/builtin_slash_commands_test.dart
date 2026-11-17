@@ -123,14 +123,20 @@ void main() {
     });
 
     test('a summary longer than the region: the same text, one summary '
-        'request, no compaction record (scenario "/compact без выигрыша", '
-        'CMP-10, D4)', () async {
-      // Резюме в пять раз длиннее региона: проход не даёт выигрыша.
+        'request, no compaction record, one accounting record (scenario '
+        '"/compact без выигрыша", CMP-10, D1, D4)', () async {
+      // Резюме в пять раз длиннее региона: проход не даёт выигрыша. Ответ
+      // суммаризатора платный: usage должен лечь в запись учёта.
       final rig = await _Rig.create(
         steps: [
           textStep('a' * 8000),
           textStep('b' * 16000),
-          textStep('x' * 80000),
+          {
+            'reply': [
+              {'text': 'x' * 80000},
+            ],
+            'usage': const Usage(input: 764, output: 171).toJson(),
+          },
         ],
       );
       final session = await rig.session();
@@ -142,11 +148,26 @@ void main() {
       expect(reply.text, 'Nothing to compact.');
       expect(rig.summaryCalls, 1);
       final after = await rig.records(session);
-      expect(after.length, before.length);
+      // Характеризационная правка (change `fix-discarded-compaction-usage`,
+      // D1, R2): раньше число записей не менялось. Теперь добавилась ровно
+      // одна — запись учёта; записей `compaction` по-прежнему нет.
+      expect(after.length, before.length + 1);
       expect(after.whereType<CompactionRecord>(), isEmpty);
+      final record = after.last as CustomRecord;
+      expect(record.customType, 'codelab.compaction_discarded');
+      final data = record.data! as Map;
+      expect(data['trigger'], 'manual');
+      expect(data['reason'], 'no reduction');
+      expect((data['usage']! as Map)['input'], 764);
+      expect((data['usage']! as Map)['output'], 171);
       expect(reply.events.whereType<ContextCompacted>(), isEmpty);
       expect(reply.result.reason, TurnEndReason.completed);
-      expect(rig.logger.eventsOf('compaction.skipped'), hasLength(1));
+      // Usage суммаризатора в ход не входит (D2 change `add-usage-ledger`).
+      expect(reply.result.usage, Usage.zero);
+      final ended = reply.events.whereType<TurnEnded>().single;
+      expect(ended.usage, Usage.zero);
+      final skipped = rig.logger.eventsOf('compaction.skipped').single;
+      expect(skipped.fields['usage_record_id'], record.id);
     });
 
     test('a running background afterTurn is awaited first: no two '

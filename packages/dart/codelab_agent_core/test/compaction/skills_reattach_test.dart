@@ -1051,7 +1051,19 @@ void main() {
 
         expect(out, isA<NothingToCompact>());
         expect((out as NothingToCompact).reason, 'no reduction');
-        expect(rig.store.appended, isEmpty);
+        // Характеризационная правка (change `fix-discarded-compaction-usage`,
+        // D1, R2): раньше тут было «журнал не менялся». Теперь единственная
+        // новая запись — служебная запись учёта; записей `compaction` нет.
+        final written = rig.store.appended.single.record;
+        expect(
+          written,
+          isA<CustomRecord>().having(
+            (r) => r.customType,
+            'customType',
+            'codelab.compaction_discarded',
+          ),
+        );
+        expect(rig.compactionRecords, isEmpty);
         expect(rig.logger.eventsOf('skills.reattached'), isEmpty);
         final skipped = rig.logger.eventsOf('compaction.skipped').single;
         expect(skipped.fields['reason'], 'no reduction');
