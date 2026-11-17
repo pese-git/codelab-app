@@ -2,9 +2,7 @@
 // `add-usage-ledger`; spec acp-client-kit «Журнал usage сессии в клиенте»:
 // разбор ответа, «Журнал загружен»; design.md, D6, D10).
 //
-// Красные тесты: `UsageLedgerDecoder.decode` — заглушка (задача 3.9).
-//
-// Формы, которые задаёт этот тест (имена — исполнителю 3.9, design D10):
+// Формы, которые задаёт этот тест (design D10):
 //   * `UsageLedgerDecoder().decode(result, onWarning: (field, reason) {...})`
 //     — `UsageLedgerView?`, как `UsageDecoder.decode`: без исключений, `null`
 //     — ответ отброшен;
@@ -462,6 +460,112 @@ void main() {
 
       expect(warnings, isNotEmpty);
       expect(warnings.map((w) => '$w'), everyElement(isNot(contains(_leak))));
+    });
+  });
+
+  group('agent strings are cleaned before a terminal shows them', () {
+    // Хосты печатают `title`, `model`, `reason` и `toolCallIds` в терминал:
+    // ESC, OSC и BEL не должны проходить (§16, TUI-11).
+    const evil = 'a\u001b]0;pwned\u0007b\u001b[31mc\u009bd\u007fe\tf\ng';
+    bool hasControl(String text) =>
+        text.runes.any((c) => c < 0x20 || (c >= 0x7f && c <= 0x9f));
+
+    test(
+      'title, model, reason and toolCallIds carry no control characters',
+      () {
+        final view = decode(
+          _result({
+            'ledger': {'status': 'rebuilt', 'reason': evil, 'records': 1},
+            'turns': [
+              {
+                'index': 1,
+                'title': evil,
+                'total': {'steps': 1, 'tokens': _tokens()},
+                'steps': [
+                  {
+                    'index': 0,
+                    'model': evil,
+                    'tokens': _tokens(),
+                    'toolCallIds': [evil],
+                  },
+                ],
+              },
+            ],
+          }),
+        )!;
+
+        final turn = view.turns.single;
+        for (final text in [
+          turn.title!,
+          turn.steps.single.model!,
+          view.reason!,
+          turn.steps.single.toolCallIds.single,
+        ]) {
+          expect(hasControl(text), isFalse, reason: text);
+          expect(text, startsWith('a'));
+          expect(text, endsWith('g'));
+        }
+      },
+    );
+
+    test('a plain space is kept', () {
+      final view = decode(
+        _result({
+          'turns': [
+            {
+              'index': 1,
+              'title': 'Render agent replies',
+              'total': {'steps': 1, 'tokens': _tokens()},
+            },
+          ],
+        }),
+      )!;
+
+      expect(view.turns.single.title, 'Render agent replies');
+    });
+
+    test('lengths are capped in runes: title 64, model 128, reason 64, '
+        'tool call id 128', () {
+      final view = decode(
+        _result({
+          'ledger': {'status': 'rebuilt', 'reason': '€' * 200},
+          'turns': [
+            {
+              'index': 1,
+              'title': '€' * 200,
+              'total': {'steps': 1, 'tokens': _tokens()},
+              'steps': [
+                {
+                  'index': 0,
+                  'model': '€' * 300,
+                  'tokens': _tokens(),
+                  'toolCallIds': ['€' * 300],
+                },
+              ],
+            },
+          ],
+        }),
+      )!;
+
+      final turn = view.turns.single;
+      expect(turn.title!.runes, hasLength(64));
+      expect(turn.steps.single.model!.runes, hasLength(128));
+      expect(view.reason!.runes, hasLength(64));
+      expect(turn.steps.single.toolCallIds.single.runes, hasLength(128));
+    });
+
+    test('model of the models table is cleaned and capped too', () {
+      final view = decode(
+        _result({
+          'models': [
+            {'model': '\u001b[2J${'m' * 300}', 'steps': 1, 'tokens': _tokens()},
+          ],
+        }),
+      )!;
+
+      final model = view.models.single.model;
+      expect(hasControl(model), isFalse);
+      expect(model.runes, hasLength(128));
     });
   });
 

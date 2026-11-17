@@ -578,6 +578,45 @@ void main() {
       expect(agent.workspace.current.sessions, before.sessions);
     });
 
+    test('a failed reload of an open session leaves the reset in place: the '
+        'old numbers do not come back, the ledger is idle '
+        '(R10, «Сорвавшаяся загрузка открытой сессии»)', () async {
+      final session = await connected(
+        const AgentCapabilities(
+          loadSession: true,
+          meta: {
+            'codelab': {
+              'usage': {'version': 1},
+              'usageLedger': {'version': 1},
+            },
+          },
+        ),
+      );
+      agent.usage(usageParams(sessionId: 's-1', seq: 5, sessionTokens: 50));
+      expect(session.current.usage.support, UsageSupport.reported);
+
+      final load = agent.next(sessionLoadMethod);
+      final loading = agent.workspace.loadSession(
+        const SessionId('s-1'),
+        cwd: '/work',
+      );
+      final failure = expectLater(loading, throwsA(anything));
+      agent.transport.emitInbound(
+        JsonRpcMessage.response(
+          id: (await load).id,
+          error: JsonRpcError(code: -32002, message: 'Session not found'),
+        ),
+      );
+      await failure;
+      await pumpEventQueue();
+
+      final usage = session.current.usage;
+      expect(usage.support, UsageSupport.awaiting);
+      expect(usage.session, isNull);
+      expect(usage.lastSeq, 0);
+      expect(session.current.usageLedger, isA<UsageLedgerIdle>());
+    });
+
     test('a snapshot of a session that is not loading is still dropped at '
         'once', () async {
       await connected(usageLoadCapabilities);

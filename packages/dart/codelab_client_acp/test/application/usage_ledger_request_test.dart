@@ -3,9 +3,6 @@
 // журнала usage»: «Агент объявил журнал», «Агент без ключа», «Ошибка
 // агента»; design.md, D7, D9).
 //
-// Красные тесты: `CodelabExtensions.usageLedger` не разбирается, а
-// `AcpClientApplication.requestUsageLedger` — заглушка (задача 3.8).
-//
 // Формы, которые задаёт этот тест (design D9 имён не фиксирует):
 //   * `requestUsageLedger(sessionId:, rebuild:)` возвращает
 //     `UsageLedgerReply` (`result` — сырой объект, `generation`);

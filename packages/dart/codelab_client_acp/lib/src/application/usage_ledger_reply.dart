@@ -14,12 +14,13 @@ const usageLedgerMethod = '_codelab/session/usage/ledger';
 /// (`AGENTS.md` §9).
 ///
 /// Как использовать: читать [result] как есть; не мутировать.
-///
-/// ЗАГЛУШКА красных тестов 3.1: поведение метода — задача 3.8.
 final class UsageLedgerReply {
-  const UsageLedgerReply({required this.result, required this.generation});
+  UsageLedgerReply({
+    required Map<String, Object?> result,
+    required this.generation,
+  }) : result = Map.unmodifiable(result);
 
-  /// Объект JSON из `result` ответа без разбора.
+  /// Объект JSON из `result` ответа без разбора (неизменяемая копия).
   final Map<String, Object?> result;
 
   /// Поколение соединения на момент отправки запроса.

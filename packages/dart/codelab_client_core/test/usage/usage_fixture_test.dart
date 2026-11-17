@@ -37,14 +37,11 @@ Future<SessionView> _runWithWorkspace(String fixtureId) async {
       // `ClientWorkspace.refreshUsageLedger` (design.md change
       // `add-usage-ledger`, D10: `refreshUsageLedger(sessionId, {rebuild})`), а
       // не прямым вызовом приложения: состояние `SessionView.usageLedger`
-      // ведёт рабочее пространство. До задачи 3.9 операции нет — вызов через
-      // `dynamic`, чтобы файл компилировался и остальные тесты шли.
+      // ведёт рабочее пространство.
       if (step.expected['method'] == '_codelab/session/usage/ledger') {
         step.track(
-          Future<Object?>.sync(
-            () => (workspace as dynamic).refreshUsageLedger(
-              const SessionId(standardFixtureSessionId),
-            ),
+          workspace.refreshUsageLedger(
+            const SessionId(standardFixtureSessionId),
           ),
         );
         return;
@@ -98,20 +95,16 @@ void main() {
   // Роль `client` фикстуры `acp/usage-ledger-request` (change
   // `add-usage-ledger`, задача 3.5; spec acp-golden-fixtures «Клиентский
   // прогон журнала»; design.md D10): после ответа `SessionView.usageLedger` —
-  // `loaded` с одним ходом и двумя шагами. Красный до задачи 3.9: поля
-  // `usageLedger` и операции `refreshUsageLedger` ещё нет, поэтому чтение
-  // через `dynamic` (имена по D10: состояние `loaded(view)`, `view.turns`,
-  // у хода `steps`).
+  // `loaded` с одним ходом и двумя шагами.
   test('acp/usage-ledger-request: the ledger state is loaded with one turn '
       'and two steps', () async {
     final view = await _runWithWorkspace('acp/usage-ledger-request');
 
-    final state = (view as dynamic).usageLedger as Object;
-    expect(state.runtimeType.toString(), contains('Loaded'));
-    final ledger = (state as dynamic).view as dynamic;
+    final state = view.usageLedger;
+    expect(state, isA<UsageLedgerLoaded>());
+    final ledger = (state as UsageLedgerLoaded).view;
     expect(ledger.seq, 3);
-    final turns = ledger.turns as List;
-    expect(turns, hasLength(1));
-    expect(((turns.single as dynamic).steps as List), hasLength(2));
+    expect(ledger.turns, hasLength(1));
+    expect(ledger.turns.single.steps, hasLength(2));
   });
 }

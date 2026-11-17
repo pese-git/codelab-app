@@ -13,8 +13,6 @@ enum UsageLedgerStatus { upToDate, rebuilt, inMemory, notSaved }
 /// Почему отдельно от `UsageTotals`: у шага свой состав — модель и вызовы
 /// инструментов, по которым хост подписывает шаг по транскрипту (D6:
 /// `toolCallIds` у шага всегда, пустой список без вызовов).
-///
-/// ЗАГЛУШКА красных тестов 3.2/3.3: модель — задача 3.9.
 @freezed
 abstract class UsageLedgerStep with _$UsageLedgerStep {
   const factory UsageLedgerStep({

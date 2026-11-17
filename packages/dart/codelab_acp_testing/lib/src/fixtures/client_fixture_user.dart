@@ -52,7 +52,7 @@ final class ClientFixtureUser {
 
   /// Сырые результаты запроса журнала `_codelab/session/usage/ledger` по
   /// порядку (change `add-usage-ledger`, D9, задача 3.5) и его сбои.
-  final usageLedgerResults = <Object?>[];
+  final usageLedgerResults = <UsageLedgerReply>[];
   final usageLedgerErrors = <Object>[];
 
   void act(ClientFixtureStep<AcpClientApplication> step) {
@@ -93,17 +93,18 @@ final class ClientFixtureUser {
           ),
         );
       case '_codelab/session/usage/ledger':
-        // Операция клиента появится в задаче 3.8 (D9: `sessionId`, `rebuild`;
-        // результат — сырой объект и поколение). До неё вызов через `dynamic`:
-        // `NoSuchMethodError` — сбой, кадра нет, прогон красный (задача 3.5).
+        // Прямой вызов операции клиента (D9): сырой результат и поколение.
         final params = expected['params']! as Map<String, Object?>;
         step.track(
-          Future<Object?>.sync(
-            () => (app as dynamic).requestUsageLedger(
-              sessionId: _session.id,
-              rebuild: params['rebuild'] == true,
-            ),
-          ).then<void>(usageLedgerResults.add, onError: usageLedgerErrors.add),
+          app
+              .requestUsageLedger(
+                sessionId: _session.id,
+                rebuild: params['rebuild'] == true,
+              )
+              .then<void>(
+                usageLedgerResults.add,
+                onError: usageLedgerErrors.add,
+              ),
         );
       case 'session/cancel':
         step.track(app.cancelTurn(CancelTurnCommand(sessionId: _session.id)));

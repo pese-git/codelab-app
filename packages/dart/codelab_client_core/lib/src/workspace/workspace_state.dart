@@ -112,8 +112,12 @@ abstract class SessionView with _$SessionView {
     @Default(UsageView()) UsageView usage,
 
     /// Журнал usage сессии по запросу `_codelab/session/usage/ledger`
-    /// (change `add-usage-ledger`, D10). ЗАГЛУШКА красных тестов 3.3: поле
-    /// всегда `unavailable`, ведение состояния — задача 3.9.
+    /// (change `add-usage-ledger`, D10): `unavailable` — агент не объявил
+    /// `usageLedger`, `idle` — не запрашивали или сброшен переподключением и
+    /// `session/load`, затем `loading`, `loaded` или `failed`. Не выводится из
+    /// `AcpSession`: состояние ведёт `ClientWorkspace.refreshUsageLedger`;
+    /// со снимками `usage` kit журнал не складывает (хост сравнивает
+    /// `view.seq` с `usage.lastSeq`).
     @Default(UsageLedgerState.unavailable()) UsageLedgerState usageLedger,
   }) = _SessionView;
 

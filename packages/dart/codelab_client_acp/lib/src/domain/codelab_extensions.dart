@@ -80,6 +80,7 @@ final class CodelabExtensions {
       subagents: subagents != null,
       subagentToolCalls: known('subagentToolCalls') != null,
       usage: known('usage') != null,
+      usageLedger: known('usageLedger') != null,
       subagentsMaxDepth: maxDepth is int && maxDepth > 0 ? maxDepth : null,
     );
   }
@@ -95,8 +96,6 @@ final class CodelabExtensions {
   /// Агент объявил `usageLedger: {"version": 1}` и отвечает на
   /// `_codelab/session/usage/ledger` (change `add-usage-ledger`, D7, D9).
   /// Клиент ключ НЕ объявляет: запрос шлёт он сам.
-  ///
-  /// ЗАГЛУШКА красных тестов 3.1: разбор ключа — задача 3.8.
   final bool usageLedger;
 
   /// `subagents.maxDepth`; `null` — не объявлено или неверной формы.

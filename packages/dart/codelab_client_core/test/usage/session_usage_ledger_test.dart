@@ -3,9 +3,6 @@
 // клиенте»: «Агент без журнала», «Журнал загружен», «Слияние вызовов»,
 // «Ответ старого соединения», «Ошибка агента»; design.md, D10, D12).
 //
-// Красные тесты: `ClientWorkspace.refreshUsageLedger` — заглушка, а
-// `SessionView.usageLedger` всегда `unavailable` (задача 3.9).
-//
 // Формы (согласованы с тестами фикстуры 3.5): `refreshUsageLedger(id,
 // {rebuild})`; `SessionView.usageLedger` — `UsageLedgerUnavailable | Idle |
 // Loading(previous) | Loaded(view) | Failed(reason, previous)`;
@@ -189,14 +186,106 @@ void main() {
       expect(ledgerRequests(agent.transport), hasLength(2));
       expect((state() as UsageLedgerLoaded).view.seq, 2);
     });
+
+    test('rebuild wins in the opposite order too: true first, then false '
+        '(scenario «Слияние вызовов»)', () async {
+      await connected(_ledgerCapabilities);
+      final (first, request) = await refresh();
+      final second = agent.workspace.refreshUsageLedger(_sid, rebuild: true);
+      final third = agent.workspace.refreshUsageLedger(_sid);
+      await pumpEventQueue();
+      expect(ledgerRequests(agent.transport), hasLength(1));
+
+      final next = agent.next(_ledgerMethod);
+      agent.respond(request, _ledger(seq: 1));
+      final merged = await next;
+
+      expect(merged.params, {'sessionId': 's-1', 'rebuild': true});
+      agent.respond(merged, _ledger(seq: 2));
+      await Future.wait([first, second, third]);
+
+      expect(ledgerRequests(agent.transport), hasLength(2));
+      expect((state() as UsageLedgerLoaded).view.seq, 2);
+    });
+
+    test('a merged call is dropped when the connection changed: reconnect to '
+        'an agent without usageLedger gives unavailable, no frame '
+        '(review: re-check before the merged request)', () async {
+      await connected(_ledgerCapabilities);
+      final seen = <UsageLedgerState>[];
+      final sub = session.view.listen((v) => seen.add(v.usageLedger));
+      addTearDown(sub.cancel);
+      final (first, _) = await refresh();
+      unawaited(first.then((_) {}, onError: (_) {}));
+      final second = agent.workspace.refreshUsageLedger(_sid);
+
+      agent.restartAgent(capabilities: usageLoadCapabilities);
+      final load = agent.next(sessionLoadMethod);
+      final reconnecting = agent.workspace.reconnect();
+      agent.respond(await load, const <String, Object?>{});
+      await reconnecting;
+      await second;
+      await pumpEventQueue();
+
+      expect(state(), isA<UsageLedgerUnavailable>());
+      expect(ledgerRequests(agent.transport), isEmpty);
+      // Ни `failed`, ни записи об отказе: слитый вызов не доходит до запроса.
+      expect(seen.whereType<UsageLedgerFailed>(), isEmpty);
+      expect(agent.logger.where('usage.ledger.failed'), isEmpty);
+    });
+
+    test('a merged call of the old connection is dropped after reconnect to '
+        'an agent with usageLedger: idle, no frame', () async {
+      await connected(_ledgerCapabilities);
+      final (first, _) = await refresh();
+      unawaited(first.then((_) {}, onError: (_) {}));
+      final second = agent.workspace.refreshUsageLedger(_sid);
+
+      agent.restartAgent(capabilities: _ledgerCapabilities);
+      final load = agent.next(sessionLoadMethod);
+      final reconnecting = agent.workspace.reconnect();
+      agent.respond(await load, const <String, Object?>{});
+      await reconnecting;
+      await second;
+      await pumpEventQueue();
+
+      expect(state(), isA<UsageLedgerIdle>());
+      expect(ledgerRequests(agent.transport), isEmpty);
+    });
+
+    test('a merged call after dispose sends no frame and completes', () async {
+      await connected(_ledgerCapabilities);
+      final (first, request) = await refresh();
+      final second = agent.workspace.refreshUsageLedger(_sid);
+      unawaited(first.then((_) {}, onError: (_) {}));
+
+      await agent.workspace.dispose();
+      agent.respond(request, _ledger(seq: 1));
+      await second;
+      await pumpEventQueue();
+
+      expect(ledgerRequests(agent.transport), hasLength(1));
+    });
+
+    test('a call for an unknown session fails with ClientWorkspaceException '
+        'and sends no frame (scenario «Журнал неизвестной сессии»)', () async {
+      await connected(_ledgerCapabilities);
+
+      await expectLater(
+        agent.workspace.refreshUsageLedger(const SessionId('ghost')),
+        throwsA(isA<ClientWorkspaceException>()),
+      );
+      await pumpEventQueue();
+
+      expect(ledgerRequests(agent.transport), isEmpty);
+    });
   });
 
   group('stale replies (D10, §9)', () {
     test('a reply after reconnect is dropped, usage.ledger.stale, state is '
         'idle (scenario «Ответ старого соединения»)', () async {
       await connected(_ledgerCapabilities);
-      final old = agent.transport;
-      final (done, request) = await refresh();
+      final (done, _) = await refresh();
       unawaited(done.then((_) {}, onError: (_) {}));
 
       agent.restartAgent(capabilities: _ledgerCapabilities);
@@ -204,15 +293,19 @@ void main() {
       final reconnecting = agent.workspace.reconnect();
       agent.respond(await load, const <String, Object?>{});
       await reconnecting;
-      old.emitInbound(
-        JsonRpcMessage.response(id: request.id, result: _ledger(seq: 9)),
-      );
       await pumpEventQueue();
 
+      // Старый транспорт закрыт, ответ по нему прийти не может: ожидавший
+      // запрос завершается ошибкой замены соединения и считается устаревшим.
       expect(state(), isA<UsageLedgerIdle>());
       final stale = agent.logger.where('usage.ledger.stale').single;
       expect(stale.level, 'debug');
       expect(stale.context['session_id'], 's-1');
+      // Только корреляция, без данных ответа (§16).
+      expect(
+        stale.context.keys.toSet().intersection({'seq', 'turns', 'result'}),
+        isEmpty,
+      );
     });
 
     test('a reply after session/load of the same session is dropped', () async {
@@ -297,6 +390,42 @@ void main() {
       expect(fields.toSet(), hasLength(fields.length));
       expect(warnings.first.context['session_id'], 's-1');
     });
+
+    test('a reply for another session is failed(decode) with a mismatch '
+        'warning without the value', () async {
+      await connected(_ledgerCapabilities);
+      final (done, request) = await refresh();
+
+      agent.respond(request, _ledger(seq: 4, sessionId: 'other-session'));
+      await done;
+
+      final failed = state() as UsageLedgerFailed;
+      expect(failed.reason.kind, UsageLedgerFailureKind.decode);
+      final warning = agent.logger.where('usage.ledger.decode_failed').single;
+      expect(warning.level, 'warning');
+      expect(warning.context['field'], 'sessionId');
+      expect(warning.context['reason'], 'mismatch');
+      expect(
+        warning.context.values.map((v) => '$v'),
+        everyElement(isNot(contains('other-session'))),
+      );
+    });
+
+    test(
+      'a reply that is not an object is failed(decode), not request',
+      () async {
+        await connected(_ledgerCapabilities);
+        final (done, request) = await refresh();
+
+        agent.respond(request, const <Object?>[1, 2]);
+        await done;
+
+        expect(
+          (state() as UsageLedgerFailed).reason.kind,
+          UsageLedgerFailureKind.decode,
+        );
+      },
+    );
   });
 
   group('reset', () {

@@ -471,15 +471,37 @@ final class AcpClientApplication {
   /// `add-usage-ledger`, D6, D7, D9).
   ///
   /// Без объявленного агентом `usageLedger` кадр не отправляется:
-  /// [AcpClientApplicationException]. Ошибка JSON-RPC агента — та же
+  /// [AcpClientApplicationException]. Ошибка JSON-RPC агента — то же
   /// исключение с `cause` `JsonRpcError` (код — `cause.code`), соединение
   /// остаётся живым. [rebuild] уходит на провод только при `true`.
   ///
-  /// ЗАГЛУШКА красных тестов 3.1: реализация — задача 3.8.
+  /// Почему сырой путь: `_codelab/session/usage/ledger` — расширение CodeLab,
+  /// его нет в реестре методов ACP, а форму результата разбирает ядро клиента
+  /// (D9; `codelab_client_core/AGENTS.md` §5). Поколение берётся ДО
+  /// отправки: ответ, пришедший после `reconnect`, потребитель отличает по
+  /// нему (`AGENTS.md` §9). Ожидающий запрос при замене транспорта
+  /// завершается ошибкой — потребитель считает её устаревшим исходом.
   Future<UsageLedgerReply> requestUsageLedger({
     required SessionId sessionId,
     bool rebuild = false,
-  }) => throw UnimplementedError('add-usage-ledger, задача 3.8');
+  }) async {
+    final state = _connectionState;
+    if (state is! ClientConnectionReady ||
+        !state.codelabExtensions.usageLedger) {
+      throw const AcpClientApplicationException(
+        'The ACP agent does not support _codelab/session/usage/ledger.',
+      );
+    }
+    final generation = _generation;
+    final result = await _sendRawRequest(
+      method: usageLedgerMethod,
+      params: <String, Object?>{
+        'sessionId': sessionId.value,
+        if (rebuild) 'rebuild': true,
+      },
+    );
+    return UsageLedgerReply(result: result, generation: generation);
+  }
 
   Future<AcpSession> setSessionConfigOption(
     SetSessionConfigOptionCommand command,
@@ -984,18 +1006,37 @@ final class AcpClientApplication {
     await _connectionStateController.close();
   }
 
-  Future<T> _sendRequest<T>({
+  Future<T> _sendRequest<T>({required String method, required Object params}) =>
+      _exchange<T>(
+        method: method,
+        frame: (id) => encodeAcpRequest(id: id, method: method, params: params),
+      );
+
+  /// Запрос расширения CodeLab вне реестра методов ACP: [params] — готовый
+  /// объект JSON, результат возвращается как есть (`Map`), без кодека.
+  Future<Map<String, Object?>> _sendRawRequest({
     required String method,
-    required Object params,
+    required Map<String, Object?> params,
+  }) => _exchange<Map<String, Object?>>(
+    method: method,
+    frame: (id) =>
+        JsonRpcMessage.request(id: id, method: method, params: params),
+    raw: true,
+  );
+
+  /// Общая часть запроса: регистрация ожидания, отправка кадра [frame],
+  /// таймаут и ожидание ответа.
+  Future<T> _exchange<T>({
+    required String method,
+    required JsonRpcMessage Function(JsonRpcId id) frame,
+    bool raw = false,
   }) async {
     final id = JsonRpcId.integer(_nextRequestId++);
-    final pending = _PendingAcpRequest(method);
+    final pending = _PendingAcpRequest(method, raw: raw);
     _pendingRequests[id] = pending;
 
     try {
-      await _sendTracedMessage(
-        encodeAcpRequest(id: id, method: method, params: params),
-      );
+      await _sendTracedMessage(frame(id));
     } on Object catch (error) {
       _pendingRequests.remove(id);
       _recordDiagnostic(
@@ -1302,6 +1343,16 @@ final class AcpClientApplication {
     }
 
     try {
+      if (pending.raw) {
+        final result = response.result;
+        if (result is! Map) {
+          throw JsonRpcProtocolException.invalidShape(
+            'the result of ${pending.method} must be an object.',
+          );
+        }
+        pending.complete(Map<String, Object?>.from(result));
+        return;
+      }
       pending.complete(
         decodeAcpResponseResult(method: pending.method, response: response),
       );
@@ -2765,7 +2816,7 @@ final class AcpClientApplication {
 }
 
 final class _PendingAcpRequest {
-  _PendingAcpRequest(this.method) {
+  _PendingAcpRequest(this.method, {this.raw = false}) {
     // Ответ может прийти, пока кадр запроса ещё отправляется: синхронный
     // транспорт доставляет его до того, как `_sendRequest` начнёт ждать
     // [future]. Без слушателя ошибка ответа стала бы необработанной; `ignore`
@@ -2774,6 +2825,9 @@ final class _PendingAcpRequest {
   }
 
   final String method;
+
+  /// Расширение вне реестра ACP: результат не декодируется кодеком.
+  final bool raw;
   final _completer = Completer<Object>();
 
   Future<Object> get future => _completer.future;
