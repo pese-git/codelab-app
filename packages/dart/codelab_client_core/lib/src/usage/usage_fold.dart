@@ -60,12 +60,15 @@ final class UsageFold {
   /// Возвращает `null` для дубля и опоздания: состояние и ревизия не меняются.
   ///
   /// [receivedAt] — момент применения по часам вызывающего (D9, «Часы»):
-  /// свёртка чистая и `DateTime.now` не зовёт. Заглушка задачи 3.1: параметр
-  /// необязательный, пока существующие вызовы не обновлены (задача 3.2).
+  /// свёртка чистая и `DateTime.now` не зовёт; обязателен, чтобы вызывающий не
+  /// забыл часы рабочего пространства. Бюджет хода (D9, «Свёртка») ведётся по
+  /// `turnId`: снимок с `budget` заменяет его; тот же ход без `budget` его
+  /// сохраняет (снимок `turn` лишь ставит `ended`); новый ход без `budget`
+  /// стирает; снимок без `turnId` не трогает.
   UsageFold? apply(
     UsageSnapshot snapshot, {
     required int generation,
-    DateTime? receivedAt,
+    required DateTime receivedAt,
   }) {
     final known = this.generation;
     if (known != null && generation < known) {
@@ -89,7 +92,43 @@ final class UsageFold {
         session: snapshot.session,
         context: snapshot.context,
         lastSeq: snapshot.seq,
+        budget: _budgetAfter(snapshot, receivedAt),
       ),
     );
+  }
+
+  /// Бюджет после [snapshot] (D9, «Свёртка», Q11 (а)). Сравнение «тот же или
+  /// новый ход» — с `turnId` текущего бюджета: пока он не `null`, совпадает с
+  /// [turnId] свёртки.
+  TurnBudgetView? _budgetAfter(UsageSnapshot snapshot, DateTime receivedAt) {
+    final current = view.budget;
+    final turnId = snapshot.turnId;
+    if (turnId == null) {
+      // compaction, compactionDiscarded, load и незнакомый повод: ход не
+      // менялся, бюджет прежний.
+      return current;
+    }
+    // `ended` липкий в пределах хода: поздний `step` с бюджетом после итога
+    // того же `turnId` (нарушение агентом) не «оживляет» ход (D9, Q11 (а)).
+    final ended =
+        snapshot.trigger == UsageTrigger.turn ||
+        (current?.turnId == turnId && current!.ended);
+    final fresh = snapshot.budget;
+    if (fresh != null) {
+      return TurnBudgetView(
+        turnId: turnId,
+        receivedAt: receivedAt,
+        ended: ended,
+        steps: fresh.steps,
+        tokens: fresh.tokens,
+        cost: fresh.cost,
+        duration: fresh.duration,
+      );
+    }
+    if (current != null && current.turnId == turnId) {
+      // Тот же ход без `budget`: числа прежние; итог хода лишь помечается.
+      return ended ? current.copyWith(ended: true) : current;
+    }
+    return null;
   }
 }

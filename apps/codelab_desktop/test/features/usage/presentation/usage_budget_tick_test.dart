@@ -1,4 +1,4 @@
-// Красные widget-тесты задачи 3.3 change `add-desktop-usage-pane`: тик блока
+// Widget-тесты задачи 3.3 change `add-desktop-usage-pane`: тик блока
 // `Turn budget` в `WorkbenchUsagePane(clock:)` (agent-workbench-ui «Бюджет
 // хода в панели Usage»: «Время идёт между шагами», «Таймер только при
 // показанной панели», «Начало нового хода»; design.md, D9, Q11 (а); образец —
@@ -207,6 +207,12 @@ final class _Scene {
   /// Присылает снимок usage и берёт его `receivedAt` за начало отсчёта часов
   /// виджета (сдвиг сбрасывается).
   Future<void> snapshot(Map<String, Object?> params) async {
+    // Построение при применении снимка идёт до того, как тест узнает его
+    // `receivedAt`: часы виджета на этот момент ставятся на настоящее время
+    // (часы kit в графе app — `DateTime.now`), иначе сдвиг прошлого снимка
+    // дал бы `now − receivedAt` в секунды и подпись «0:08» вместо «0:04».
+    _base = DateTime.now();
+    offset = Duration.zero;
     agent.emitInbound(
       JsonRpcMessage.notification(
         method: '_codelab/session/usage',

@@ -13,6 +13,9 @@ import 'package:test/test.dart';
 
 const _sessionId = SessionId('s-1');
 
+/// Момент применения: эти тесты бюджет не проверяют (D9).
+final _at = DateTime.utc(2026, 11, 18);
+
 Map<String, Object?> _tokens([int input = 100, int output = 10]) => {
   'input': input,
   'output': output,
@@ -89,13 +92,14 @@ void main() {
           ),
         ),
         generation: 1,
+        receivedAt: _at,
       )!;
 
       final discarded = UsageDecoder().decode(
         _discardedParams(5),
         onWarning: (_, _) {},
       )!;
-      fold = fold.apply(discarded, generation: 1)!;
+      fold = fold.apply(discarded, generation: 1, receivedAt: _at)!;
 
       expect(fold.view.lastSeq, 5);
       expect(fold.view.lastTurn, turn);

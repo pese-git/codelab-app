@@ -91,6 +91,111 @@ final class UsageDecoder {
       turn: turn,
       session: session,
       context: _context(params['context'], onWarning),
+      // `budget` бывает только у снимков с ходом (D7): у `compaction`, `load`
+      // и `compactionDiscarded` поле, если агент его всё же прислал, не
+      // читается — свёртка всё равно не стала бы его применять.
+      budget: turnId == null
+          ? null
+          : _budget(params['budget'], currency, onWarning),
+    );
+  }
+
+  /// Поле `budget` снимка (D9, «Разбор»): подполя разбираются независимо,
+  /// неверное отбрасывается с предупреждением `budget.<подполе>`; без единого
+  /// известного подполя результат `null`. Незнакомые ключи молча игнорируются
+  /// (будущий `deadline`, D7).
+  UsageBudget? _budget(
+    Object? raw,
+    UsageCurrency currency,
+    UsageWarn onWarning,
+  ) {
+    if (raw == null) {
+      return null;
+    }
+    if (raw is! Map) {
+      onWarning('budget', 'wrong_type');
+      return null;
+    }
+    final budget = UsageBudget(
+      steps: _count(raw, 'steps', 'used', 'limit', onWarning, _countOf),
+      tokens: _count(raw, 'tokens', 'used', 'limit', onWarning, _countOf),
+      cost: _cost(raw['cost'], currency, onWarning),
+      duration: _count(
+        raw,
+        'duration',
+        'usedMs',
+        'limitMs',
+        onWarning,
+        (used, limit) => BudgetDuration(usedMs: used, limitMs: limit),
+      ),
+    );
+    final empty =
+        budget.steps == null &&
+        budget.tokens == null &&
+        budget.cost == null &&
+        budget.duration == null;
+    return empty ? null : budget;
+  }
+
+  static BudgetCount _countOf(int used, int limit) =>
+      BudgetCount(used: used, limit: limit);
+
+  /// Подполе-пара целых ≥ 0 (`steps`, `tokens`, `duration`); `null` — подполя
+  /// нет или оно неверно (предупреждение без сырого значения, §16).
+  T? _count<T>(
+    Map<Object?, Object?> budget,
+    String name,
+    String usedKey,
+    String limitKey,
+    UsageWarn onWarning,
+    T Function(int used, int limit) make,
+  ) {
+    final raw = budget[name];
+    if (raw == null) {
+      return null;
+    }
+    final used = raw is Map ? usageCount(raw[usedKey]) : null;
+    final limit = raw is Map ? usageCount(raw[limitKey]) : null;
+    if (used == null || limit == null) {
+      onWarning('budget.$name', 'wrong_type');
+      return null;
+    }
+    return make(used, limit);
+  }
+
+  /// Подполе `cost`: `limit` — обязательные деньги, `used` — необязательные
+  /// (нет `used` — цена неизвестна, D7). Правило денег и валюты — общее со
+  /// стоимостью агрегатов (`parseUsageMicros`, [UsageCurrency]); без валюты
+  /// подполе отбрасывается тем же предупреждением `currency`.
+  BudgetCost? _cost(Object? raw, UsageCurrency currency, UsageWarn onWarning) {
+    if (raw == null) {
+      return null;
+    }
+    if (raw is! Map) {
+      onWarning('budget.cost', 'wrong_type');
+      return null;
+    }
+    final rawLimit = raw['limit'];
+    if (rawLimit == null) {
+      onWarning('budget.cost', 'wrong_type');
+      return null;
+    }
+    final limitMicros = rawLimit is String ? parseUsageMicros(rawLimit) : null;
+    final rawUsed = raw['used'];
+    final usedMicros = rawUsed is String ? parseUsageMicros(rawUsed) : null;
+    if (limitMicros == null || (rawUsed != null && usedMicros == null)) {
+      onWarning('budget.cost', 'wrong_format');
+      return null;
+    }
+    final code = currency.forCost();
+    if (code == null) {
+      return null;
+    }
+    return BudgetCost(
+      used: usedMicros == null
+          ? null
+          : Money(micros: usedMicros, currency: code),
+      limit: Money(micros: limitMicros, currency: code),
     );
   }
 

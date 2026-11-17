@@ -12,6 +12,7 @@ import 'package:codelab_desktop/app/client_profile_secrets.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/connection_environment.dart';
 import 'package:codelab_desktop/app/embedded_logger.dart';
+import 'package:codelab_desktop/core/platform/usage_csv_saver.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgent, LogLevel, Logger;
@@ -206,8 +207,14 @@ void main() {
   /// Как использовать: `await tester.pumpWidget(E2eAgent.current.bootstrap())`.
   /// Каждый вызов создаёт новый root scope, поэтому перезапуск app в тесте
   /// закрывает прежний `closeCodeLabRootScope()`.
-  Widget bootstrap({ProfileSecrets? profileSecrets}) =>
-      _bootstrap(profileSecrets);
+  ///
+  /// [usageCsvSaver] — шов порта сохранения CSV панели Usage (change
+  /// `add-desktop-usage-pane`, задача 3.5): без него приёмка открыла бы
+  /// системный диалог, который тест не закроет.
+  Widget bootstrap({
+    ProfileSecrets? profileSecrets,
+    UsageCsvSaver? usageCsvSaver,
+  }) => _bootstrap(profileSecrets, usageCsvSaver);
 
   /// Окружение app теста: временный `CODELAB_HOME` и токен WebSocket-агента.
   Map<String, String> get _environment => {
@@ -241,11 +248,15 @@ void main() {
   /// Один корень для всех режимов: окружение app задаёт `CODELAB_HOME` с
   /// профилями теста и токен WebSocket-агента (D7, D15); открыватель со
   /// сценарием нужен только встроенному режиму (D9).
-  Widget _bootstrap(ProfileSecrets? profileSecrets) => CodeLabBootstrap(
+  Widget _bootstrap(
+    ProfileSecrets? profileSecrets,
+    UsageCsvSaver? usageCsvSaver,
+  ) => CodeLabBootstrap(
     scope: createCodeLabRootScope(
       embeddedOpener: kind == E2eAgentKind.embedded ? _embeddedOpener : null,
       environment: _environment,
       profileSecrets: profileSecrets,
+      usageCsvSaver: usageCsvSaver,
     ),
     child: const CodeLabApp(),
   );

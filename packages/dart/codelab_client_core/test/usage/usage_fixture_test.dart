@@ -111,8 +111,7 @@ void main() {
   // Роль `client` фикстуры `acp/prompt-usage-budget` (change
   // `add-desktop-usage-pane`, задача 3.1; spec acp-golden-fixtures «Клиентский
   // прогон», design.md D7, D9, Q11 (а)): после снимка `turn` бюджет хода
-  // итоговый. Роль `client` добавляет задача 3.1a; пока её нет, драйвер
-  // пропускает фикстуру и первая проверка падает с причиной пропуска.
+  // итоговый.
   test('acp/prompt-usage-budget: the budget after the turn snapshot is '
       'final with steps, tokens and cost, without duration', () async {
     final view = await _runWithWorkspace('acp/prompt-usage-budget');
