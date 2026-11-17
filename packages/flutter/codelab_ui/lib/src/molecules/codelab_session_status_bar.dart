@@ -135,9 +135,20 @@ class CodeLabSessionStatusData {
 /// композером, передав [data] из маппера приложения. Ключи сегментов:
 /// `status-bar-usage`, `status-bar-cost`, `status-bar-context`.
 class CodeLabSessionStatusBar extends StatelessWidget {
-  const CodeLabSessionStatusBar({required this.data, super.key});
+  const CodeLabSessionStatusBar({required this.data, this.onTap, super.key});
 
   final CodeLabSessionStatusData data;
+
+  /// Клик по строке: открыть панель Usage (change `add-desktop-usage-pane`,
+  /// D6, R9).
+  ///
+  /// Почему необязательный: без доступной панели строка остаётся прежней,
+  /// некликабельной. Для чего: вся строка — вход в панель; курсор-рука,
+  /// фокус клавиатуры, Enter и Space. Как использовать: app передаёт колбэк,
+  /// только когда панель Usage доступна.
+  ///
+  /// Заглушка задачи 1.6 (красные тесты): поведение — задача 1.7.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

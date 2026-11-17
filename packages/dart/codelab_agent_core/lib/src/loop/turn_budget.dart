@@ -24,3 +24,21 @@ final class TurnBudget {
 
 /// The limit that stopped a turn; `deadline` is set after MVP (§17.12.5).
 enum BudgetLimit { steps, tokens, cost, duration, deadline }
+
+/// ЗАГЛУШКА задачи 2.1 (change `add-desktop-usage-pane`, D8): только для
+/// компиляции красных тестов; реализацию и документацию даёт задача 2.2.
+final class BudgetProgress {
+  const BudgetProgress({
+    required this.limits,
+    required this.steps,
+    required this.tokens,
+    required this.cost,
+    required this.active,
+  });
+
+  final TurnBudget limits;
+  final int steps;
+  final int tokens;
+  final double? cost;
+  final Duration active;
+}

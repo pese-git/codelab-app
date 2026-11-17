@@ -152,3 +152,9 @@ bool usageTokensPartial(Set<UsagePartial> partial) =>
 
 /// Стоимость неполна при любой причине (D6, D24).
 bool usageCostPartial(Set<UsagePartial> partial) => partial.isNotEmpty;
+
+/// Точная десятичная запись суммы для экспорта (D5 change
+/// `add-desktop-usage-pane`; acp-client-kit «Точная запись суммы usage»).
+///
+/// Заглушка задачи 1.2: реализация — задача 1.3.
+String formatUsageMoneyExact(Money money) => throw UnimplementedError();

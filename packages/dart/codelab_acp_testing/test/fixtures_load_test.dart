@@ -138,6 +138,9 @@ const _usageFixtures = {
   'acp/prompt-usage-cancelled',
   'acp/compact-usage-context',
   'acp/prompt-usage-compaction-off',
+  // change `add-desktop-usage-pane`, задача 2.3 (D7): роль `agent`; клиентскую
+  // роль добавляет итерация 3.
+  'acp/prompt-usage-budget',
 };
 
 /// Фикстуры change `add-usage-ledger` (design.md D11; acp-golden-fixtures

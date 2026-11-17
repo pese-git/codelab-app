@@ -18,6 +18,7 @@ export 'codelab_status_table.dart';
 export 'codelab_terminal_pane.dart';
 export 'codelab_tool_dock.dart';
 export 'codelab_tool_call_tile.dart';
+export 'codelab_usage_pane.dart';
 export 'codelab_transcript_notice.dart';
 export 'codelab_transcript_panel.dart';
 export 'codelab_transcript_row.dart';

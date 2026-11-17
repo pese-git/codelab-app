@@ -2,6 +2,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show CommandCatalog;
 import 'package:codelab_ui/codelab_ui.dart';
 
+import '../../usage/application/usage_pane_data.dart';
 import 'agents_pane_data.dart';
 import 'connection_cubit.dart' show ProviderSetupNotice, RestartConfirmation;
 import 'sessions_cubit.dart' show PendingRootSession;
@@ -56,6 +57,7 @@ final class CodeLabShellState {
     this.transcriptShowRequest,
     this.sessionMode,
     this.statusBar,
+    this.usage = UsagePaneData.empty,
     required this.agentCommands,
     required this.commandCatalog,
     required this.composerDraft,
@@ -186,6 +188,14 @@ final class CodeLabShellState {
 
   /// Строка статуса под композером (D11); `null` — строки нет.
   final CodeLabSessionStatusData? statusBar;
+
+  /// Данные панели Usage сессии в фокусе (change `add-desktop-usage-pane`,
+  /// D1). Заглушка задачи 1.4: фасад заполняет их в задаче 1.5.
+  final UsagePaneData usage;
+
+  /// Панель Usage предлагается: у сессии в фокусе есть `usageLedger` или
+  /// живые снимки `usage` (D10). Решает application, а не виджет.
+  bool get usageAvailable => usage.available;
   final double sessionsPaneWidth;
   final double dockWidth;
 
@@ -251,6 +261,7 @@ final class CodeLabShellState {
     Object? transcriptShowRequest = _unset,
     Object? sessionMode = _unset,
     Object? statusBar = _unset,
+    UsagePaneData? usage,
     List<CodeLabCommandAction>? agentCommands,
     CommandCatalog? commandCatalog,
     String? composerDraft,
@@ -327,6 +338,7 @@ final class CodeLabShellState {
       statusBar: identical(statusBar, _unset)
           ? this.statusBar
           : statusBar as CodeLabSessionStatusData?,
+      usage: usage ?? this.usage,
       agentCommands: agentCommands ?? this.agentCommands,
       commandCatalog: commandCatalog ?? this.commandCatalog,
       composerDraft: composerDraft ?? this.composerDraft,

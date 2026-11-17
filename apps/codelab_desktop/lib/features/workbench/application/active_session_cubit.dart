@@ -17,6 +17,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 
+import '../../usage/application/usage_pane_data.dart';
 import 'agents_pane_data.dart';
 import 'shell_part.dart';
 import 'ui_mappers.dart';
@@ -42,6 +43,7 @@ final class ActiveSessionState {
     this.sessionMode,
     this.turnState,
     this.statusBar,
+    this.usage = UsagePaneData.empty,
   });
 
   static const _emptyInspectorEntry = CodeLabInspectorEntry(
@@ -106,6 +108,11 @@ final class ActiveSessionState {
   /// D11, D23 Т1); `null` — нет `SessionView` показываемой сессии, строки нет.
   final CodeLabSessionStatusData? statusBar;
 
+  /// Данные панели Usage сессии в фокусе (change `add-desktop-usage-pane`,
+  /// D1): собираются в той же подписке `_onView`, что и [statusBar].
+  /// Заглушка задачи 1.4: заполняет задача 1.5.
+  final UsagePaneData usage;
+
   static const Object _unset = Object();
 
   ActiveSessionState _copyWith({
@@ -127,6 +134,7 @@ final class ActiveSessionState {
     Object? sessionMode = _unset,
     Object? turnState = _unset,
     Object? statusBar = _unset,
+    UsagePaneData? usage,
   }) => ActiveSessionState(
     sessionId: sessionId ?? this.sessionId,
     transcriptRows: transcriptRows ?? this.transcriptRows,
@@ -157,6 +165,7 @@ final class ActiveSessionState {
     statusBar: identical(statusBar, _unset)
         ? this.statusBar
         : statusBar as CodeLabSessionStatusData?,
+    usage: usage ?? this.usage,
   );
 }
 
@@ -526,6 +535,15 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       (view) => _onView(handle.id.value, view),
     );
   }
+
+  /// Панель Usage показана или скрыта (вкладка активна и док виден): сигнал
+  /// виджета `WorkbenchUsagePane` из `initState` и `dispose` (design.md
+  /// change `add-desktop-usage-pane`, D1, D3). Показ запускает автоматический
+  /// запрос журнала по правилу `ledgerRefreshNeeded`.
+  ///
+  /// Заглушка задачи 1.4 (красные тесты `ledger_refresh_test.dart`):
+  /// реализация — задача 1.5.
+  void usagePaneShown(bool shown) => throw UnimplementedError();
 
   void _onView(String sessionId, SessionView view) {
     // Поздняя ревизия сессии, которую уже не показывают, не трогает строку.

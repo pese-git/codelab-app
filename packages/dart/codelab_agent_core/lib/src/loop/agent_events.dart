@@ -202,7 +202,15 @@ final class ContextFill {
 }
 
 final class StepEnded extends AgentEvent {
-  const StepEnded(super.sessionId, {required this.result, this.context});
+  const StepEnded(
+    super.sessionId, {
+    required this.result,
+    this.context,
+    this.budget,
+  });
+
+  /// ЗАГЛУШКА 2.1: прогресс бюджета (D8); заполняет задача 2.2.
+  final BudgetProgress? budget;
 
   final StepResult result;
 
@@ -446,7 +454,11 @@ final class TurnEnded extends AgentEvent {
     this.budgetExceeded,
     this.held,
     this.subagentUsage,
+    this.budget,
   });
+
+  /// ЗАГЛУШКА 2.1: прогресс бюджета (D8); заполняет задача 2.2.
+  final BudgetProgress? budget;
 
   final TurnEndReason reason;
 
