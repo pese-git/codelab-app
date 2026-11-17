@@ -224,11 +224,11 @@
 
 ## 4. Закрытие
 
-- [ ] 4.1 Ручная проверка в отладочной сборке macOS и CLI со встроенным агентом и реальным провайдером, изолированный `CODELAB_HOME`:
+- [x] 4.1 Ручная проверка в отладочной сборке macOS и CLI со встроенным агентом и реальным провайдером, изолированный `CODELAB_HOME`:
   - два хода, перезапуск, загрузка — сумма без «~» до первого хода;
   - `/usage`, `/usage rebuild`; удалённый `usage.json` восстановлен;
   - `/compact` — сумма выросла на суммаризатор;
   - в выводе и журналах нет ключа провайдера.
   
   Итог — в design.md.
-- [ ] 4.2 `agent-parity-goals.md`: L-29 закрыт (тесты и фикстуры); `delivery-roadmap.md` — change влит, следующий `add-desktop-usage-pane`. Сверка документов архитектуры с кодом.
+- [x] 4.2 `agent-parity-goals.md`: L-29 закрыт (тесты и фикстуры); `delivery-roadmap.md` — change влит, следующий `add-desktop-usage-pane`. Сверка документов архитектуры с кодом. *Итог 2026-11-17:* сверены с кодом трёх итераций имена и места (`UsageLedgerStore`, `JsonlUsageLedgerStore`, `buildUsageLedger`, `SummaryResult`, `requestUsageLedger`/`UsageLedgerReply`, `refreshUsageLedger`, `UsageLedgerView`, `UsageLedgerDecoder`, `UsageLedgerFailure`), события лога агента и kit (`usage.ledger.*`, `acp.usage.ledger*`, `acp.usage.seeded`, `acp.usage.seed_failed`, `acp.usage.load_snapshot_failed`), ключ `usageLedger`, метод, `subagentRuns`, `summaryCalls`, `modelsWithoutPrice`; расхождений с §12.6.1, §13.5, §13.12, 09-compaction, 12-1-view-model не найдено. Итог 4.1 — design.md, D16.
