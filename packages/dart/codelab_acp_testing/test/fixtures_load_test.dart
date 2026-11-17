@@ -142,8 +142,7 @@ const _usageFixtures = {
 
 /// Фикстуры change `add-usage-ledger` (design.md D11; acp-golden-fixtures
 /// «Фикстуры журнала usage»): метки `usage` и `usageLedger` (FIX-4), роль
-/// `agent` (клиентскую роль `acp/usage-ledger-request` добавляет задача 3.5,
-/// чтобы `conformance:client` не краснел между PR), ссылки `spec` на
+/// `agent` (у `acp/usage-ledger-request` ещё и `client`, задача 3.5), ссылки `spec` на
 /// `15-Extensibility.md`. `acp/session-load-usage-full` заменяет
 /// `acp/session-load-usage-partial` (D13 change `add-usage-extension`).
 const _usageLedgerFixtures = {
@@ -223,7 +222,14 @@ void main() {
         containsAll(['usage', 'usageLedger']),
         reason: fixture.id,
       );
-      expect(fixture.roles, {FixtureRole.agent}, reason: fixture.id);
+      // Клиентскую роль `acp/usage-ledger-request` добавила задача 3.5.
+      expect(
+        fixture.roles,
+        fixture.id == 'acp/usage-ledger-request'
+            ? {FixtureRole.agent, FixtureRole.client}
+            : {FixtureRole.agent},
+        reason: fixture.id,
+      );
       expect(
         fixture.spec.any((s) => s.startsWith('15-Extensibility.md')),
         isTrue,

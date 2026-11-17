@@ -14,6 +14,7 @@ import '../domain/state_machines.dart';
 import '../domain/terminal_access.dart';
 import '../infrastructure/structured_log_logger.dart';
 import 'application_models.dart';
+import 'usage_ledger_reply.dart';
 import 'usage_notification.dart';
 
 final class AcpClientApplicationException implements Exception {
@@ -465,6 +466,20 @@ final class AcpClientApplication {
       nextCursor: response.nextCursor,
     );
   }
+
+  /// Запрос журнала usage сессии `_codelab/session/usage/ledger` (change
+  /// `add-usage-ledger`, D6, D7, D9).
+  ///
+  /// Без объявленного агентом `usageLedger` кадр не отправляется:
+  /// [AcpClientApplicationException]. Ошибка JSON-RPC агента — та же
+  /// исключение с `cause` `JsonRpcError` (код — `cause.code`), соединение
+  /// остаётся живым. [rebuild] уходит на провод только при `true`.
+  ///
+  /// ЗАГЛУШКА красных тестов 3.1: реализация — задача 3.8.
+  Future<UsageLedgerReply> requestUsageLedger({
+    required SessionId sessionId,
+    bool rebuild = false,
+  }) => throw UnimplementedError('add-usage-ledger, задача 3.8');
 
   Future<AcpSession> setSessionConfigOption(
     SetSessionConfigOptionCommand command,

@@ -204,6 +204,29 @@ final _stateChecks = <String, _StateCheck>{
     expect(usage.last.params['trigger'], 'turn');
     expect(usage.map((u) => u.generation).toSet(), hasLength(1));
   },
+  // Запрос журнала usage (change `add-usage-ledger`, задача 3.5; spec
+  // acp-golden-fixtures «Клиентский прогон журнала»; design.md D7, D9):
+  // клиент после хода отправил `_codelab/session/usage/ledger` с теми же
+  // параметрами, что в фикстуре (драйвер сверяет кадр), и получил сырой
+  // результат: один ход, два шага. Красный до задачи 3.8: операции
+  // `AcpClientApplication.requestUsageLedger` ещё нет, кадр не уходит.
+  'acp/usage-ledger-request': (user, _) {
+    expect(user.usageLedgerErrors, isEmpty);
+    final raw = user.usageLedgerResults.single as dynamic;
+    // Результат — пара «сырой объект и поколение» (D9); читаем объект.
+    final Map<Object?, Object?> result = raw.result as Map<Object?, Object?>;
+    expect(result['seq'], 3);
+    expect((result['total'] as Map)['steps'], 2);
+    expect(result['turns'], hasLength(1));
+    expect(
+      (((result['turns'] as List).single as Map)['steps'] as List),
+      hasLength(2),
+    );
+    expect(raw.generation, isA<int>());
+    // Запрос не меняет автомат хода.
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    expect(_usageOf(user).map((u) => u.params['seq']), [1, 2, 3]);
+  },
   // Вызов `agent` (change `add-subagents-and-tasks`, задача 2.1; spec
   // acp-golden-fixtures, acp-client-kit «Итог и хвост субагента»): клиент
   // видит ровно один вызов `think`, опознанный с первого кадра по

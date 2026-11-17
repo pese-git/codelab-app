@@ -194,6 +194,18 @@ abstract interface class ClientWorkspace {
   /// Дожидается записи снимка, начатой до вызова; без хранилища — сразу.
   Future<void> flushSnapshot();
 
+  /// Запрашивает журнал usage сессии [id] (`_codelab/session/usage/ledger`,
+  /// change `add-usage-ledger`, D10) и ведёт `SessionView.usageLedger`.
+  ///
+  /// Без объявленного `usageLedger` запрос не уходит, состояние остаётся
+  /// `unavailable`. На сессию — не больше одного запроса в полёте; вызовы
+  /// во время полёта сливаются в один следующий, `rebuild` побеждает. Ответ
+  /// применяется, только если не сменились поколение соединения и поколение
+  /// загрузки сессии. Ошибки агента не бросаются: они — состояние `failed`.
+  ///
+  /// ЗАГЛУШКА красных тестов 3.3: реализация — задача 3.9.
+  Future<void> refreshUsageLedger(SessionId id, {bool rebuild = false});
+
   /// Исходы ходов всех сессий — и отправленных хостом, и ушедших из
   /// очереди сами; доставляются синхронно.
   Stream<PromptOutcome> get promptOutcomes;
@@ -698,6 +710,10 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
   @override
   SessionHandle? session(SessionId id) => _handles[id];
+
+  @override
+  Future<void> refreshUsageLedger(SessionId id, {bool rebuild = false}) =>
+      throw UnimplementedError('add-usage-ledger, задача 3.9');
 
   @override
   Future<SessionHandle> loadSession(SessionId id, {required String cwd}) {

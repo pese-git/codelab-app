@@ -39,6 +39,7 @@ Future<void> main() async {
   Future<PtyProcess> tui(
     CodelabCompatibleStdioAgentMode mode, {
     List<String> args = const [],
+    String ui = 'tui',
   }) async {
     launch = await E2eCliAgent.current.launch(dir, mode: mode);
     return PtyProcess.start(
@@ -53,7 +54,7 @@ Future<void> main() async {
         '--cwd',
         dir.path,
         '--ui',
-        'tui',
+        ui,
         ...args,
       ],
       columns: 120,
@@ -110,6 +111,77 @@ Future<void> main() async {
       expect(text, isNot(contains(r'$0')));
     },
     skip: skip ?? agentSkip,
+    tags: scriptedOnly,
+  );
+
+  // change `add-usage-ledger`, задача 3.7 (D8, D10; acp-client-kit «Снимок
+  // load до регистрации сессии»). Scripted-агент `with_usage` отвечает на
+  // `session/load` и сразу шлёт снимок `trigger: "load"` для незнакомой ему
+  // сессии как для журнала из двух ходов (3.9); строка статуса после хода
+  // без «~» (причина `beforeLoad` не должна появляться).
+  //
+  // ВАЖНО: на scripted-агенте этот тест ЗЕЛЁНЫЙ уже сейчас: ответ и снимок
+  // приходят одним куском вывода, и порядок обработки не воспроизводит
+  // D10 (на Dart-агенте они приходят раздельно). Он — регрессионный, как и
+  // предполагал tasks.md; красным остаётся `cli/resume-last-session`
+  // (`headless_exit_codes_test.dart`, `test:e2e:cli:dart-agent`):
+  // `usage.unknown_session` уходит в stdout. Детерминированно порядок
+  // воспроизводит `codelab_client_core/test/usage/session_usage_test.dart`.
+  test(
+    'cli/resume-usage: --resume — снимок load не теряется, строка без «~»',
+    () async {
+      final pty = await tui(
+        CodelabCompatibleStdioAgentMode.withUsage,
+        args: ['--resume', 'listed-session-1', '--verbose', 'hello'],
+        ui: 'line',
+      );
+      await pty.waitFor('usage reply 3');
+      await pty.waitFor('↑');
+      pty.write('\x04');
+      expect(await pty.exitCode, 0);
+
+      final text = pty.text;
+      expect(text, isNot(contains('usage.unknown_session')));
+      expect(text, isNot(contains('~')));
+      expect(text, matches(RegExp(r'↑\S+ ↓\S+')));
+    },
+    skip: skip ?? agentSkip,
+    tags: scriptedOnly,
+  );
+
+  // Тот же снимок `load` на headless-пути: журнал kit по умолчанию уходит
+  // в stdout, поэтому запись `usage.unknown_session` испортила бы вывод `-p`.
+  // Регрессионный на scripted-агенте (см. комментарий выше).
+  test(
+    'cli/resume-usage: headless --resume — в stdout только ответ, '
+    'без usage.unknown_session',
+    () async {
+      launch = await E2eCliAgent.current.launch(
+        dir,
+        mode: CodelabCompatibleStdioAgentMode.withUsage,
+      );
+
+      final result = await CliProcess.run(
+        [
+          '--agent',
+          launch.agent,
+          '--cwd',
+          dir.path,
+          '--resume',
+          'listed-session-1',
+          '-p',
+          'hello',
+        ],
+        environment: {
+          'CODELAB_HOME': '${dir.path}/codelab',
+          ...launch.environment,
+        },
+      );
+
+      expect(result.exitCode, 0, reason: '$result');
+      expect(result.stdout, 'usage reply 3\n');
+    },
+    skip: agentSkip,
     tags: scriptedOnly,
   );
 }

@@ -46,6 +46,13 @@ enum UsageTrigger {
   turn,
   compaction,
 
+  /// Снимок после `session/load` (change `add-usage-ledger`, D8, D10): без
+  /// `turnId`, меняет `session` и `context`, `lastTurn` не меняет.
+  ///
+  /// ЗАГЛУШКА красных тестов 3.4: значение есть, а разбор строки `load` в
+  /// `UsageDecoder` ещё отдаёт `unknown` — задача 3.9.
+  load,
+
   /// Незнакомое значение: снимок принимается как снимок без шага (D2).
   unknown,
 }

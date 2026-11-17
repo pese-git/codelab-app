@@ -5,7 +5,7 @@
     "15-Extensibility.md#advertising-custom-capabilities",
     "15-Extensibility.md#custom-notifications"
   ],
-  "description": "Запрос журнала usage (change add-usage-ledger, D6, D7, D11; роль agent — задача 2.5, роль client — задача 3.5): клиент объявил clientCapabilities._meta.codelab.usage; ход из двух шагов модели с ценами (вызов task_create call_1, затем текст) даёт снимки _codelab/session/usage seq 1–3, как в acp/prompt-usage-steps. Затем клиент шлёт _codelab/session/usage/ledger, и агент отвечает по D6: seq равен seq последнего снимка (3), total совпадает с session снимка turn, один ход с подписью (начало промпта) и двумя шагами, у первого шага toolCallIds [call_1], одна строка models. Фабрика агентского прогона даёт порт usage.json на файле во временном каталоге (метка usageLedger), поэтому первое чтение — ledger.status rebuilt с причиной missing; число записей журнала не фиксируется.",
+  "description": "Запрос журнала usage (change add-usage-ledger, D6, D7, D11; роли agent (задача 2.5) и client (задача 3.5); в клиентском прогоне handshake драйвера объявляет в ответе агента usageLedger по метке extensions): клиент объявил clientCapabilities._meta.codelab.usage; ход из двух шагов модели с ценами (вызов task_create call_1, затем текст) даёт снимки _codelab/session/usage seq 1–3, как в acp/prompt-usage-steps. Затем клиент шлёт _codelab/session/usage/ledger, и агент отвечает по D6: seq равен seq последнего снимка (3), total совпадает с session снимка turn, один ход с подписью (начало промпта) и двумя шагами, у первого шага toolCallIds [call_1], одна строка models. Фабрика агентского прогона даёт порт usage.json на файле во временном каталоге (метка usageLedger), поэтому первое чтение — ledger.status rebuilt с причиной missing; число записей журнала не фиксируется.",
   "goals": [
     "L-29",
     "L-11"
@@ -16,7 +16,8 @@
     "usageLedger"
   ],
   "roles": [
-    "agent"
+    "agent",
+    "client"
   ],
   "setup": {
     "cwd": "/work/demo",
