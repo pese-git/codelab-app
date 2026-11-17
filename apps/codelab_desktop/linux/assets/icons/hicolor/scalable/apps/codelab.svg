@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#1A7FE0"/>
+  <stop offset="1" stop-color="#003E8A"/>
+</linearGradient></defs><rect x="64" y="64" width="896" height="896" rx="190" fill="url(#bg)"/><g transform="translate(512 512) scale(1.05) translate(-512 -523)">
+  <!-- Знак CodeLab без фона: колба (Lab) с промптом агента >_ (Code).
+       Единственный исходник формы; варианты под платформы собирает
+       tool/brand/generate_app_icons.py. Центр знака — (512, 523). -->
+  <defs>
+    <linearGradient id="glyph-liquid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7FE3FF"/>
+      <stop offset="1" stop-color="#34B6F0"/>
+    </linearGradient>
+    <clipPath id="glyph-flask">
+      <path d="M436 300 V452 L292 704 Q268 752 320 756 H704 Q756 752 732 704 L588 452 V300 Z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#glyph-flask)">
+    <rect x="200" y="560" width="624" height="260" fill="url(#glyph-liquid)"/>
+  </g>
+  <path d="M436 300 V452 L292 704 Q268 752 320 756 H704 Q756 752 732 704 L588 452 V300"
+        fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linejoin="round" stroke-linecap="round"/>
+  <line x1="404" y1="290" x2="620" y2="290" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round"/>
+  <path d="M424 606 L480 652 L424 698" fill="none" stroke="#003E8A" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="516" y1="698" x2="598" y2="698" stroke="#003E8A" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="540" cy="500" r="20" fill="#7FE3FF"/>
+  <circle cx="490" cy="420" r="13" fill="#7FE3FF" opacity=".8"/>
+</g></svg>

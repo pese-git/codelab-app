@@ -1,0 +1,20 @@
+# Ярлык CodeLab для пакетов Linux (deb, flatpak, snap); ставится в
+# share/applications. Имя файла и StartupWMClass совпадают с APPLICATION_ID
+# из linux/CMakeLists.txt: по ним GNOME и KDE связывают окно с ярлыком и
+# показывают иконку Icon=codelab из share/icons/hicolor. При смене
+# APPLICATION_ID переименовать файл и поправить StartupWMClass.
+# Exec — имя бинаря (BINARY_NAME); пакет ставит его в PATH или подменяет
+# путь при сборке. См. docs/design/brand/README.md.
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=CodeLab
+GenericName=AI Agent Client
+Comment=Work with AI coding agents over the Agent Client Protocol
+Exec=codelab_desktop
+Icon=codelab
+Terminal=false
+Categories=Development;IDE;
+Keywords=ACP;agent;AI;code;
+StartupNotify=true
+StartupWMClass=com.example.codelab_desktop
