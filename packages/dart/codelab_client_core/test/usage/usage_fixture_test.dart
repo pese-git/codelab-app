@@ -107,4 +107,30 @@ void main() {
     expect(ledger.turns, hasLength(1));
     expect(ledger.turns.single.steps, hasLength(2));
   });
+
+  // Роль `client` фикстуры `acp/prompt-usage-budget` (change
+  // `add-desktop-usage-pane`, задача 3.1; spec acp-golden-fixtures «Клиентский
+  // прогон», design.md D7, D9, Q11 (а)): после снимка `turn` бюджет хода
+  // итоговый. Роль `client` добавляет задача 3.1a; пока её нет, драйвер
+  // пропускает фикстуру и первая проверка падает с причиной пропуска.
+  test('acp/prompt-usage-budget: the budget after the turn snapshot is '
+      'final with steps, tokens and cost, without duration', () async {
+    final view = await _runWithWorkspace('acp/prompt-usage-budget');
+
+    final budget = view.usage.budget;
+    expect(budget, isNotNull);
+    expect(budget!.ended, isTrue);
+    expect(budget.steps, const BudgetCount(used: 2, limit: 50));
+    expect(budget.tokens, const BudgetCount(used: 3400, limit: 200000));
+    expect(
+      budget.cost,
+      const BudgetCost(
+        used: Money(micros: 28200, currency: 'USD'),
+        limit: Money(micros: 500000, currency: 'USD'),
+      ),
+    );
+    expect(budget.duration, isNull);
+    // Свёртка закончилась на снимке `turn` (seq 3), как у prompt-usage-steps.
+    expect(view.usage.lastSeq, 3);
+  });
 }

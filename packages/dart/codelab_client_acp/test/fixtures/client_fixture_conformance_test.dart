@@ -204,6 +204,19 @@ final _stateChecks = <String, _StateCheck>{
     expect(usage.last.params['trigger'], 'turn');
     expect(usage.map((u) => u.generation).toSet(), hasLength(1));
   },
+  // Бюджет хода (change `add-desktop-usage-pane`, задача 3.1a; spec
+  // acp-golden-fixtures «Клиентский прогон», D7): как у `prompt-usage-steps`,
+  // но каждый снимок `step`/`turn` несёт `budget` в сырых `params`. Разбор
+  // `SessionView.usage.budget` проверяет `codelab_client_core`
+  // (`usage_fixture_test.dart`); здесь — только доставка ядром клиента.
+  'acp/prompt-usage-budget': (user, _) {
+    expect(_lastTurn(user).status, PromptTurnStatus.completed);
+    final usage = _usageOf(user);
+    expect(usage.map((u) => u.params['seq']), [1, 2, 3]);
+    expect(usage.last.params['trigger'], 'turn');
+    expect(usage.map((u) => u.params['budget']), everyElement(isA<Map>()));
+    expect(usage.map((u) => u.generation).toSet(), hasLength(1));
+  },
   // Запрос журнала usage (change `add-usage-ledger`, задача 3.5; spec
   // acp-golden-fixtures «Клиентский прогон журнала»; design.md D7, D9):
   // клиент после хода отправил `_codelab/session/usage/ledger` с теми же

@@ -5,7 +5,7 @@
     "15-Extensibility.md#advertising-custom-capabilities",
     "05-Prompt Turn.md#4-check-for-completion"
   ],
-  "description": "Бюджет хода в usage (change add-desktop-usage-pane, D7, Q5; задача 2.3, пока роль только agent — роль client добавляет итерация 3): как acp/prompt-usage-steps, но конфигурация агента задаёт budget.max_tokens 200000 и budget.max_cost 0.5 (max_steps по умолчанию 50), поэтому снимки step (seq 1 и 2) и turn (seq 3) несут поле budget. steps.used — 1, 2 и 2; tokens.used — input + output своих шагов без кэша (1500, 3400, 3400); cost.used — десятичная строка из микродолларов (0.0111, 0.0282, 0.0282); cost.limit — round(0.5 × 10^6) микродолларов, строка 0.5; duration нет (max_duration не задан). Валюта currency есть, как и в остальных снимках. Существующие usage-фикстуры не меняются: в их конфигурации лимитов кроме шагов нет.",
+  "description": "Бюджет хода в usage (change add-desktop-usage-pane, D7, Q5; задачи 2.3 и 3.1a; роль client — D21 Т7 change add-usage-extension: клиентский драйвер сверяет _meta.codelab как подмножество, а поле budget уведомления идёт сырыми params, поэтому правки kit для доставки не нужно): как acp/prompt-usage-steps, но конфигурация агента задаёт budget.max_tokens 200000 и budget.max_cost 0.5 (max_steps по умолчанию 50), поэтому снимки step (seq 1 и 2) и turn (seq 3) несут поле budget. steps.used — 1, 2 и 2; tokens.used — input + output своих шагов без кэша (1500, 3400, 3400); cost.used — десятичная строка из микродолларов (0.0111, 0.0282, 0.0282); cost.limit — round(0.5 × 10^6) микродолларов, строка 0.5; duration нет (max_duration не задан). Валюта currency есть, как и в остальных снимках. Существующие usage-фикстуры не меняются: в их конфигурации лимитов кроме шагов нет.",
   "goals": [
     "L-11"
   ],
@@ -14,7 +14,8 @@
     "usage"
   ],
   "roles": [
-    "agent"
+    "agent",
+    "client"
   ],
   "setup": {
     "cwd": "/work/demo",

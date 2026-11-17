@@ -480,4 +480,385 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('Turn budget', () {
+    // Красные тесты задачи 3.3 change `add-desktop-usage-pane`
+    // (agent-workbench-ui «Бюджет хода в панели Usage»; design.md D9):
+    // блок `Turn budget` между карточками и `Per turn`. Виджет ничего не
+    // считает: заголовок, подписи, подсказки, тон и доля заполнения полосы
+    // приходят готовыми (`codelab_ui/AGENTS.md` §2). Единственная «логика» —
+    // раскладка: заполнение полосы ограничивается 100 % и тогда, когда
+    // приложение прислало больше.
+    //
+    // Ключи (рабочие, при расхождении переименовать здесь и в заглушке):
+    // блок `usage-budget`, заголовок `usage-budget-title`, строка
+    // `usage-budget-<id>` (`steps`, `tokens`, `cost`, `time`), дорожка
+    // `usage-budget-<id>-track`, заполнение `usage-budget-<id>-fill`,
+    // пояснение под блоком `usage-budget-note`. Тон выше нейтрального
+    // рисуется плашкой `CodeLabBadge` вокруг подписи — как у карточек.
+    CodeLabUsageBudget budget({
+      String title = 'This turn',
+      List<CodeLabUsageBudgetRow>? rows,
+    }) => CodeLabUsageBudget(
+      title: title,
+      rows:
+          rows ??
+          const [
+            CodeLabUsageBudgetRow(
+              id: 'steps',
+              label: 'Steps',
+              value: '3 / 50',
+              fill: 0.06,
+            ),
+            CodeLabUsageBudgetRow(
+              id: 'tokens',
+              label: 'Tokens',
+              value: '92.0k / 200.0k',
+              fill: 0.46,
+              hint: 'input + output, including subagents',
+            ),
+            CodeLabUsageBudgetRow(
+              id: 'cost',
+              label: 'Cost',
+              value: r'$0.41 / $0.50',
+              fill: 0.82,
+              tone: CodeLabTone.warning,
+            ),
+            CodeLabUsageBudgetRow(
+              id: 'time',
+              label: 'Time',
+              value: '3:00 / 10:00',
+              fill: 0.3,
+            ),
+          ],
+      footnote:
+          'When a limit is hit, the turn stops at the next step boundary.',
+    );
+
+    Widget paneWith(CodeLabUsageBudget? value) => _pane(
+      CodeLabUsagePane(
+        title: 'This session',
+        cards: _cards,
+        turns: _turns,
+        budget: value,
+      ),
+    );
+
+    Finder row(String id) => find.byKey(ValueKey('usage-budget-$id'));
+
+    testWidgets('показывает заголовок, подписи строк и пояснение из данных', (
+      tester,
+    ) async {
+      await tester.pumpWidget(paneWith(budget()));
+
+      expect(_in('usage-budget', find.text('This turn')), findsOneWidget);
+      expect(find.byKey(const ValueKey('usage-budget-title')), findsOneWidget);
+      for (final (id, label, value) in const [
+        ('steps', 'Steps', '3 / 50'),
+        ('tokens', 'Tokens', '92.0k / 200.0k'),
+        ('cost', 'Cost', r'$0.41 / $0.50'),
+        ('time', 'Time', '3:00 / 10:00'),
+      ]) {
+        expect(
+          _in('usage-budget-$id', find.text(label)),
+          findsOneWidget,
+          reason: id,
+        );
+        expect(
+          _in('usage-budget-$id', find.text(value)),
+          findsOneWidget,
+          reason: id,
+        );
+      }
+      expect(
+        _in(
+          'usage-budget',
+          find.text(
+            'When a limit is hit, the turn stops at the next step boundary.',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('usage-budget-note')), findsOneWidget);
+    });
+
+    testWidgets('заголовок `Last turn` берётся из данных как есть', (
+      tester,
+    ) async {
+      await tester.pumpWidget(paneWith(budget(title: 'Last turn')));
+
+      expect(_in('usage-budget', find.text('Last turn')), findsOneWidget);
+      expect(find.text('This turn'), findsNothing);
+    });
+
+    testWidgets('строки только по присутствующим подполям, в порядке данных', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        paneWith(
+          budget(
+            rows: const [
+              CodeLabUsageBudgetRow(
+                id: 'steps',
+                label: 'Steps',
+                value: '3 / 50',
+                fill: 0.06,
+              ),
+              CodeLabUsageBudgetRow(
+                id: 'time',
+                label: 'Time',
+                value: '3:00 / 10:00',
+                fill: 0.3,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(row('steps'), findsOneWidget);
+      expect(row('time'), findsOneWidget);
+      expect(row('tokens'), findsNothing);
+      expect(row('cost'), findsNothing);
+      expect(
+        tester.getTopLeft(row('steps')).dy,
+        lessThan(tester.getTopLeft(row('time')).dy),
+      );
+    });
+
+    testWidgets('блок стоит между карточками и `Per turn`', (tester) async {
+      await tester.pumpWidget(paneWith(budget()));
+
+      final cards = tester.getTopLeft(
+        find.byKey(const ValueKey('usage-card-turns')),
+      );
+      final block = tester.getTopLeft(
+        find.byKey(const ValueKey('usage-budget')),
+      );
+      final perTurn = tester.getTopLeft(find.text('Per turn'));
+      expect(block.dy, greaterThan(cards.dy));
+      expect(block.dy, lessThan(perTurn.dy));
+    });
+
+    testWidgets('без бюджета блока нет', (tester) async {
+      await tester.pumpWidget(paneWith(null));
+
+      expect(find.byKey(const ValueKey('usage-budget')), findsNothing);
+      expect(find.text('This turn'), findsNothing);
+      expect(find.text('Last turn'), findsNothing);
+    });
+
+    testWidgets('заполнение полосы — доля из данных от ширины дорожки', (
+      tester,
+    ) async {
+      await tester.pumpWidget(paneWith(budget()));
+
+      double ratio(String id) {
+        final track = tester.getSize(
+          find.byKey(ValueKey('usage-budget-$id-track')),
+        );
+        final fill = tester.getSize(
+          find.byKey(ValueKey('usage-budget-$id-fill')),
+        );
+        return fill.width / track.width;
+      }
+
+      expect(ratio('steps'), closeTo(0.06, 0.01));
+      expect(ratio('tokens'), closeTo(0.46, 0.01));
+      expect(ratio('cost'), closeTo(0.82, 0.01));
+    });
+
+    testWidgets('больше 100 %: полоса не шире дорожки, подпись — как пришла', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        paneWith(
+          budget(
+            rows: const [
+              CodeLabUsageBudgetRow(
+                id: 'cost',
+                label: 'Cost',
+                value: r'$0.52 / $0.50',
+                fill: 1.4,
+                tone: CodeLabTone.danger,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final track = tester.getSize(
+        find.byKey(const ValueKey('usage-budget-cost-track')),
+      );
+      final fill = tester.getSize(
+        find.byKey(const ValueKey('usage-budget-cost-fill')),
+      );
+      expect(fill.width, closeTo(track.width, 0.5));
+      expect(
+        _in('usage-budget-cost', find.text(r'$0.52 / $0.50')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('полная полоса при доле 1 и пустая при доле 0', (tester) async {
+      await tester.pumpWidget(
+        paneWith(
+          budget(
+            rows: const [
+              CodeLabUsageBudgetRow(
+                id: 'cost',
+                label: 'Cost',
+                value: r'$0.00 / $0.00',
+                fill: 1,
+                tone: CodeLabTone.danger,
+              ),
+              CodeLabUsageBudgetRow(
+                id: 'steps',
+                label: 'Steps',
+                value: '0 / 50',
+                fill: 0,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final full = tester.getSize(
+        find.byKey(const ValueKey('usage-budget-cost-fill')),
+      );
+      final fullTrack = tester.getSize(
+        find.byKey(const ValueKey('usage-budget-cost-track')),
+      );
+      final empty = tester.getSize(
+        find.byKey(const ValueKey('usage-budget-steps-fill')),
+      );
+      expect(full.width, closeTo(fullTrack.width, 0.5));
+      expect(empty.width, 0);
+    });
+
+    testWidgets('тон из данных: warning и danger — плашка того же тона, '
+        'нейтральная строка — без плашки', (tester) async {
+      await tester.pumpWidget(
+        paneWith(
+          budget(
+            rows: const [
+              CodeLabUsageBudgetRow(
+                id: 'steps',
+                label: 'Steps',
+                value: '3 / 50',
+                fill: 0.06,
+              ),
+              CodeLabUsageBudgetRow(
+                id: 'tokens',
+                label: 'Tokens',
+                value: '170.0k / 200.0k',
+                fill: 0.85,
+                tone: CodeLabTone.warning,
+              ),
+              CodeLabUsageBudgetRow(
+                id: 'cost',
+                label: 'Cost',
+                value: r'$0.52 / $0.50',
+                fill: 1,
+                tone: CodeLabTone.danger,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      CodeLabBadge? badge(String id) => tester
+          .widgetList<CodeLabBadge>(
+            find.descendant(
+              of: find.byKey(ValueKey('usage-budget-$id')),
+              matching: find.byType(CodeLabBadge),
+            ),
+          )
+          .firstOrNull;
+
+      expect(badge('steps'), isNull);
+      expect(badge('tokens')?.tone, CodeLabTone.warning);
+      expect(badge('tokens')?.label, '170.0k / 200.0k');
+      expect(badge('cost')?.tone, CodeLabTone.danger);
+      expect(badge('cost')?.label, r'$0.52 / $0.50');
+    });
+
+    testWidgets('подсказка строки Tokens — в Tooltip, а строка без подсказки '
+        'её не имеет', (tester) async {
+      await tester.pumpWidget(paneWith(budget()));
+
+      expect(
+        _in(
+          'usage-budget-tokens',
+          find.byWidgetPredicate(
+            (w) =>
+                w is Tooltip &&
+                w.message == 'input + output, including subagents',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(_in('usage-budget-steps', find.byType(Tooltip)), findsNothing);
+    });
+
+    testWidgets('Cost без израсходованной суммы: подпись и пояснение строки '
+        'приходят готовыми и без тона', (tester) async {
+      await tester.pumpWidget(
+        paneWith(
+          budget(
+            rows: const [
+              CodeLabUsageBudgetRow(
+                id: 'cost',
+                label: 'Cost',
+                value: r'— / $0.50',
+                fill: 0,
+                note: 'not checked: price unknown',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(_in('usage-budget-cost', find.text(r'— / $0.50')), findsOneWidget);
+      expect(
+        _in('usage-budget-cost', find.text('not checked: price unknown')),
+        findsOneWidget,
+      );
+      expect(_in('usage-budget-cost', find.byType(CodeLabBadge)), findsNothing);
+    });
+
+    testWidgets('смена данных (тик времени) обновляет подпись без смены '
+        'остальных строк', (tester) async {
+      await tester.pumpWidget(paneWith(budget()));
+      expect(find.text('3:00 / 10:00'), findsOneWidget);
+
+      await tester.pumpWidget(
+        paneWith(
+          budget(
+            rows: const [
+              CodeLabUsageBudgetRow(
+                id: 'steps',
+                label: 'Steps',
+                value: '3 / 50',
+                fill: 0.06,
+              ),
+              CodeLabUsageBudgetRow(
+                id: 'time',
+                label: 'Time',
+                value: '3:05 / 10:00',
+                fill: 0.31,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('3:00 / 10:00'), findsNothing);
+      expect(
+        _in('usage-budget-time', find.text('3:05 / 10:00')),
+        findsOneWidget,
+      );
+      expect(_in('usage-budget-steps', find.text('3 / 50')), findsOneWidget);
+    });
+  });
 }

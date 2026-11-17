@@ -138,6 +138,84 @@ abstract class ContextFillView with _$ContextFillView {
   }
 }
 
+/// Пара «израсходовано / лимит» целых для `steps` и `tokens` бюджета хода
+/// (change `add-desktop-usage-pane`, D9).
+///
+/// Почему: подполя бюджета на проводе — целые ≥ 0, как и считает цикл агента
+/// (D7); клиент ничего не досчитывает.
+///
+/// Для чего: подполя [UsageBudget.steps] и [UsageBudget.tokens].
+///
+/// Заглушка задачи 3.1: тип объявлен, разбор — задача 3.2.
+@freezed
+abstract class BudgetCount with _$BudgetCount {
+  const factory BudgetCount({required int used, required int limit}) =
+      _BudgetCount;
+}
+
+/// Стоимость в бюджете хода (D9): лимит обязателен, израсходованное — нет.
+///
+/// Почему `used` необязателен: у модели без цен агент `cost.used` не шлёт
+/// (цена неизвестна, D7) — хост покажет «—», а не `$0`.
+@freezed
+abstract class BudgetCost with _$BudgetCost {
+  const factory BudgetCost({Money? used, required Money limit}) = _BudgetCost;
+}
+
+/// Время хода в бюджете (D9): миллисекунды без ожидания одобрения.
+@freezed
+abstract class BudgetDuration with _$BudgetDuration {
+  const factory BudgetDuration({required int usedMs, required int limitMs}) =
+      _BudgetDuration;
+}
+
+/// Разобранное поле `budget` одного снимка (D9): только подполя провода,
+/// без `turnId`, момента применения и признака итога.
+///
+/// Почему отдельно от [TurnBudgetView]: декодер чист и не знает ни часов, ни
+/// свёртки; момент и `ended` добавляет `UsageFold` (D9, «Часы»).
+///
+/// Для чего: [UsageSnapshot.budget]. Хотя бы одно подполе непусто —
+/// иначе `budget` считается отсутствующим (D9, «Разбор»).
+@freezed
+abstract class UsageBudget with _$UsageBudget {
+  const factory UsageBudget({
+    BudgetCount? steps,
+    BudgetCount? tokens,
+    BudgetCost? cost,
+    BudgetDuration? duration,
+  }) = _UsageBudget;
+}
+
+/// Бюджет хода для отображения (`UsageView.budget`, D9, решение Q5 (а), Q11).
+///
+/// Почему: панель Usage показывает Steps/Tokens/Cost/Time хода относительно
+/// лимитов; kit держит снимок и момент его применения, а оценку времени между
+/// снимками делает хост по [receivedAt] (kit `DateTime.now` не зовёт).
+///
+/// Для чего: [UsageView.budget]; `null` — у хода лимитов нет или агент
+/// бюджет не шлёт. Каждое подполе необязательно (агент шлёт заданные лимиты).
+///
+/// Как использовать: хост читает подполя и [ended]: `This turn` и тик —
+/// только при `!ended`, иначе `Last turn` (Q11 (а)).
+@freezed
+abstract class TurnBudgetView with _$TurnBudgetView {
+  const factory TurnBudgetView({
+    /// Ход снимка, из которого взят бюджет.
+    required String turnId,
+
+    /// Момент применения снимка по часам рабочего пространства (D9).
+    required DateTime receivedAt,
+
+    /// Итог хода: бюджет взят из снимка `turn` (Q11 (а)).
+    required bool ended,
+    BudgetCount? steps,
+    BudgetCount? tokens,
+    BudgetCost? cost,
+    BudgetDuration? duration,
+  }) = _TurnBudgetView;
+}
+
 /// Расход сессии для отображения (`SessionView.usage`, D8).
 ///
 /// Почему: расход — не часть автомата хода; хосты (desktop, CLI) только
@@ -162,6 +240,10 @@ abstract class UsageView with _$UsageView {
 
     /// `seq` последнего применённого снимка; 0 — снимков нет.
     @Default(0) int lastSeq,
+
+    /// Бюджет хода (D9): `null` — лимитов нет, агент поле не слал или оно
+    /// сброшено (новый ход без `budget`, смена соединения, `session/load`).
+    TurnBudgetView? budget,
   }) = _UsageView;
 }
 
@@ -178,6 +260,7 @@ final class UsageSnapshot {
     this.turnId,
     this.turn,
     this.context,
+    this.budget,
   });
 
   final SessionId sessionId;
@@ -191,4 +274,8 @@ final class UsageSnapshot {
   final UsageTotals? turn;
   final UsageTotals session;
   final ContextFillView? context;
+
+  /// Разобранное поле `budget` (D9); `null` — поля нет или оно пустое.
+  /// Есть только у `step` и `turn`.
+  final UsageBudget? budget;
 }

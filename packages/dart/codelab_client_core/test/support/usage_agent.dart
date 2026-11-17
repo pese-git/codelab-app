@@ -91,9 +91,18 @@ final class RecordingLogger implements Logger {
 
 /// Агент для тестов usage: рабочее пространство с журналом [logger].
 final class UsageAgent {
-  UsageAgent({AgentCapabilities capabilities = const AgentCapabilities()}) {
+  /// [clock] — часы рабочего пространства (`ClientWorkspace(clock:)`): по
+  /// ним kit ставит `receivedAt` бюджета хода (design.md change
+  /// `add-desktop-usage-pane`, D9); по умолчанию — `DateTime.now`.
+  UsageAgent({
+    AgentCapabilities capabilities = const AgentCapabilities(),
+    this.clock,
+  }) {
     transport.initializeAgentCapabilities = capabilities;
   }
+
+  /// Внедрённые часы рабочего пространства; `null` — системные.
+  final DateTime Function()? clock;
 
   /// Транспорт текущего «процесса» агента; резолвер читает его при каждом
   /// открытии, поэтому [restartAgent] подменяет агента для `reconnect`.
@@ -122,6 +131,7 @@ final class UsageAgent {
       ),
     ],
     logger: logger,
+    clock: clock,
   );
   FakeAcpTransport? _opened;
 
