@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#1A7FE0"/>
+  <stop offset="1" stop-color="#003E8A"/>
+</linearGradient></defs><g transform="translate(512 512) scale(0.85) translate(-512 -523)">
+  <!-- Одноцветный знак для тематических иконок Android 13+: система берёт
+       только альфа-канал, поэтому промпт >_ вырезан из жидкости маской. -->
+  <defs>
+    <clipPath id="mono-flask">
+      <path d="M436 300 V452 L292 704 Q268 752 320 756 H704 Q756 752 732 704 L588 452 V300 Z"/>
+    </clipPath>
+    <mask id="mono-prompt">
+      <rect width="1024" height="1024" fill="#FFFFFF"/>
+      <path d="M424 606 L480 652 L424 698" fill="none" stroke="#000000" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+      <line x1="516" y1="698" x2="598" y2="698" stroke="#000000" stroke-width="34" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <g clip-path="url(#mono-flask)" mask="url(#mono-prompt)">
+    <rect x="200" y="560" width="624" height="260" fill="#FFFFFF"/>
+  </g>
+  <path d="M436 300 V452 L292 704 Q268 752 320 756 H704 Q756 752 732 704 L588 452 V300"
+        fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linejoin="round" stroke-linecap="round"/>
+  <line x1="404" y1="290" x2="620" y2="290" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round"/>
+  <circle cx="540" cy="500" r="20" fill="#FFFFFF"/>
+  <circle cx="490" cy="420" r="13" fill="#FFFFFF"/>
+</g></svg>

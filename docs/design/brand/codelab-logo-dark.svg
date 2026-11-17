@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -24 1728 368"><g transform="scale(0.3125)"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#1A7FE0"/>
+  <stop offset="1" stop-color="#003E8A"/>
+</linearGradient></defs><rect x="0" y="0" width="1024" height="1024" rx="200" fill="url(#bg)"/><g transform="translate(512 512) scale(1.15) translate(-512 -523)">
+  <!-- Знак CodeLab без фона: колба (Lab) с промптом агента >_ (Code).
+       Единственный исходник формы; варианты под платформы собирает
+       tool/brand/generate_app_icons.py. Центр знака — (512, 523). -->
+  <defs>
+    <linearGradient id="glyph-liquid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7FE3FF"/>
+      <stop offset="1" stop-color="#34B6F0"/>
+    </linearGradient>
+    <clipPath id="glyph-flask">
+      <path d="M436 300 V452 L292 704 Q268 752 320 756 H704 Q756 752 732 704 L588 452 V300 Z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#glyph-flask)">
+    <rect x="200" y="560" width="624" height="260" fill="url(#glyph-liquid)"/>
+  </g>
+  <path d="M436 300 V452 L292 704 Q268 752 320 756 H704 Q756 752 732 704 L588 452 V300"
+        fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linejoin="round" stroke-linecap="round"/>
+  <line x1="404" y1="290" x2="620" y2="290" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round"/>
+  <path d="M424 606 L480 652 L424 698" fill="none" stroke="#003E8A" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="516" y1="698" x2="598" y2="698" stroke="#003E8A" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="540" cy="500" r="20" fill="#7FE3FF"/>
+  <circle cx="490" cy="420" r="13" fill="#7FE3FF" opacity=".8"/>
+</g></g><g transform="translate(405 -40)">
+  <!-- Надпись «CodeLab» линиями, без шрифта: толщина 30 и скруглённые концы
+       как у колбы в codelab-glyph.svg, поэтому знак и надпись читаются одним
+       почерком и не зависят от установленных шрифтов и их лицензий.
+       Сетка: прописные 100..300, строчные 150..300, базовая линия y=300.
+       Цвета задают классы: .code — «Code», .lab — «Lab» (акцент #005FB8);
+       генератор логотипа подменяет их для тёмной темы. -->
+  <style>.code{stroke:#FFFFFF}.lab{stroke:#4CC2FF}</style>
+  <g fill="none" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <g class="code">
+      <path d="M170.7 129.3 A100 100 0 1 0 170.7 270.7"/>
+      <circle cx="295" cy="225" r="75"/>
+      <circle cx="485" cy="225" r="75"/>
+      <path d="M560 100 V300"/>
+      <path d="M595 225 H745 A75 75 0 1 0 723 278"/>
+    </g>
+    <g class="lab">
+      <path d="M800 100 V300 H890"/>
+      <circle cx="990" cy="225" r="75"/>
+      <path d="M1065 150 V300"/>
+      <path d="M1110 100 V300"/>
+      <circle cx="1185" cy="225" r="75"/>
+    </g>
+  </g>
+</g></svg>
