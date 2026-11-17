@@ -13,6 +13,23 @@ final class RecordingStore implements SessionStore {
   /// While `true`, [append] throws without writing.
   var failAppends = false;
 
+  /// Пока не `null`, [append] ждёт его завершения до записи: тест удерживает
+  /// запись и отпускает её сам (SES-16, CMP-12). Каждая запись берёт замок,
+  /// действовавший на момент вызова.
+  Future<void>? appendGate;
+
+  /// Ограничивает [appendGate] записями, для которых вернулось `true`
+  /// (`null` — замок на каждой записи).
+  bool Function(SessionRecord record)? gateWhen;
+
+  /// Сколько записей сейчас ждут [appendGate]: тест дожидается, что запись
+  /// дошла до хранилища, не прибегая к таймерам.
+  var waiting = 0;
+
+  /// Сколько ближайших записей упадут (после [appendGate]) и перестанут
+  /// падать сами: сбой одной записи в очереди писателя (SES-16).
+  var failNextAppends = 0;
+
   @override
   Future<void> create(SessionHeader header) => inner.create(header);
 
@@ -37,6 +54,19 @@ final class RecordingStore implements SessionStore {
     SessionRecord record, {
     bool durable = false,
   }) async {
+    final gate = appendGate;
+    if (gate != null && (gateWhen?.call(record) ?? true)) {
+      waiting++;
+      try {
+        await gate;
+      } finally {
+        waiting--;
+      }
+    }
+    if (failNextAppends > 0) {
+      failNextAppends--;
+      throw StateError('disk full');
+    }
     if (failAppends) {
       throw StateError('disk full');
     }

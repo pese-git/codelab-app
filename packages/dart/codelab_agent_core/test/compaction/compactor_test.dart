@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/compaction/compactor.dart';
@@ -7,6 +9,7 @@ import 'package:codelab_agent_core/src/compaction/settings.dart';
 import 'package:codelab_agent_core/src/compaction/summarizer.dart';
 import 'package:codelab_agent_core/src/session/projections.dart';
 import 'package:codelab_agent_core/src/session/session_writer.dart';
+import 'package:codelab_agent_core/src/session/tree.dart';
 import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 
@@ -686,6 +689,326 @@ void main() {
       throwsA(isA<CancelledException>()),
     );
     expect(store.inner.textOf(sid), before);
+  });
+
+  // CMP-12, SES-16: запись сжатия ложится на текущий лист
+  // (change `fix-config-change-during-background-compaction`, D2, D3).
+  group('record goes to the current leaf (CMP-12)', () {
+    /// Записи состояния, которые сессия пишет, пока резюме ещё считается.
+    final stateRecords =
+        <(String, SessionRecord Function(String id, String? parent))>[
+          (
+            'mode_change',
+            (id, parent) => ModeChangeRecord(
+              id: id,
+              parentId: parent,
+              timestamp: DateTime.utc(2026),
+              modeId: 'plan',
+            ),
+          ),
+          (
+            'model_change',
+            (id, parent) => ModelChangeRecord(
+              id: id,
+              parentId: parent,
+              timestamp: DateTime.utc(2026),
+              provider: 'test',
+              modelId: 'model-2',
+            ),
+          ),
+          (
+            'config_change effort',
+            (id, parent) => ConfigChangeRecord(
+              id: id,
+              parentId: parent,
+              timestamp: DateTime.utc(2026),
+              optionId: 'effort',
+              value: 'high',
+            ),
+          ),
+          (
+            'config_change agent',
+            (id, parent) => ConfigChangeRecord(
+              id: id,
+              parentId: parent,
+              timestamp: DateTime.utc(2026),
+              optionId: 'agent',
+              value: 'reviewer',
+            ),
+          ),
+          (
+            'session_info',
+            (id, parent) => SessionInfoRecord(
+              id: id,
+              parentId: parent,
+              timestamp: DateTime.utc(2026),
+              title: 'Title',
+              source: 'auto',
+            ),
+          ),
+        ];
+
+    /// Суммаризатор, который ждёт [release] после старта; [started] —
+    /// запрос резюме ушёл.
+    Summarizer held(
+      String text, {
+      required Completer<void> started,
+      required Completer<void> release,
+    }) => (request, cancel) async {
+      if (!started.isCompleted) {
+        started.complete();
+      }
+      await release.future;
+      return text;
+    };
+
+    Future<void> pump() async {
+      for (var i = 0; i < 40; i++) {
+        await Future<void>.value();
+      }
+    }
+
+    for (final (name, build) in stateRecords) {
+      test('$name during the summary stays on the active branch', () async {
+        // Контрольный прогон без смены: те же числа.
+        await journal(twoTurns());
+        LlmContextProjection? controlRebuilt;
+        final control =
+            await run(fixed('summary'), onCompacted: (p) => controlRebuilt = p)
+                as Compacted;
+
+        await journal(twoTurns());
+        final leafBefore = writer.snapshot.leafId;
+        final started = Completer<void>();
+        final release = Completer<void>();
+        LlmContextProjection? rebuilt;
+        final future = run(
+          held('summary', started: started, release: release),
+          onCompacted: (p) => rebuilt = p,
+        );
+        await started.future;
+        final change = await writer.append(
+          (id, parent, at) => build(id, parent),
+        );
+        release.complete();
+        final outcome = await future as Compacted;
+
+        expect(change.parentId, leafBefore);
+        expect(outcome.record.parentId, change.id);
+        expect(writer.snapshot.leafId, outcome.record.id);
+        expect(
+          pathToLeaf(writer.snapshot).map((r) => r.id),
+          containsAllInOrder([change.id, outcome.record.id]),
+        );
+        expect(outcome.tokensBefore, control.tokensBefore);
+        expect(outcome.tokensAfter, control.tokensAfter);
+        expect(outcome.record.firstKeptId, control.record.firstKeptId);
+        expect(outcome.record.summary, control.record.summary);
+        // Сообщения после перестроения те же, что без смены: записи
+        // состояния не меняют контекст модели.
+        expect(rebuilt!.messages, hasLength(controlRebuilt!.messages.length));
+        expect(
+          [for (final m in rebuilt!.messages) m.toJson()],
+          [for (final m in controlRebuilt!.messages) m.toJson()],
+        );
+        expect(
+          writer.snapshot.records.map((r) => r.id).toSet(),
+          hasLength(writer.snapshot.records.length),
+        );
+      });
+    }
+
+    test('a message during the summary is stale: nothing is written', () async {
+      await journal(twoTurns());
+      final started = Completer<void>();
+      final release = Completer<void>();
+      var rebuilt = 0;
+      final future = run(
+        held('secret summary', started: started, release: release),
+        onCompacted: (_) => rebuilt++,
+      );
+      await started.future;
+      await writer.append(
+        (id, parent, at) => MessageRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          message: UserMessage(const [TextContent('late')], timestamp: at),
+        ),
+      );
+      release.complete();
+
+      final outcome = await future;
+
+      expect(outcome, isA<NothingToCompact>());
+      expect((outcome as NothingToCompact).reason, 'stale');
+      expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
+      expect(events.whereType<ContextCompacted>(), isEmpty);
+      expect(rebuilt, 0);
+      final skipped = logger.eventsOf('compaction.skipped').single;
+      expect(skipped.level, LogLevel.warning);
+      expect(skipped.fields['session_id'], sid.value);
+      expect(skipped.fields['trigger'], 'afterTurn');
+      expect(skipped.fields['pass'], 1);
+      expect(skipped.fields['reason'], 'stale');
+      expect(skipped.fields['blocking_type'], 'message');
+      expect(skipped.toString(), isNot(contains('secret summary')));
+    });
+
+    test('an unknown record kind is stale too (fail-closed)', () async {
+      await journal(twoTurns());
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final future = run(held('s', started: started, release: release));
+      await started.future;
+      await writer.append(
+        (id, parent, at) => CustomRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          customType: 'host',
+        ),
+      );
+      release.complete();
+
+      final outcome = await future;
+
+      expect((outcome as NothingToCompact).reason, 'stale');
+      expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
+      expect(
+        logger.eventsOf('compaction.skipped').single.fields['blocking_type'],
+        'custom',
+      );
+    });
+
+    test('a record id taken during the summary gets a new id', () async {
+      await journal(twoTurns());
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final future = run(held('s', started: started, release: release));
+      await started.future;
+      final change = await writer.append(
+        (id, parent, at) => ModeChangeRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          modeId: 'plan',
+        ),
+      );
+      // Предусловие: id записи сжатия (первый id генератора компактора) уже
+      // занят записью состояния.
+      expect(change.id, '00000001');
+      release.complete();
+
+      final record = (await future as Compacted).record;
+
+      expect(record.id, isNot(change.id));
+      expect(record.parentId, change.id);
+      expect(
+        writer.snapshot.records.map((r) => r.id).toSet(),
+        hasLength(writer.snapshot.records.length),
+      );
+    });
+
+    test('a parentId cycle on the way to the start leaf is stale, not a '
+        'hang', () async {
+      await journal(twoTurns());
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final future = run(held('s', started: started, release: release));
+      await started.future;
+      ModeChangeRecord loop(String id, String parent) => ModeChangeRecord(
+        id: id,
+        parentId: parent,
+        timestamp: DateTime.utc(2026),
+        modeId: 'plan',
+      );
+      await writer.appendBuilt(loop('x', 'y'));
+      await writer.appendBuilt(loop('y', 'x'));
+      release.complete();
+
+      final outcome = await future;
+
+      expect((outcome as NothingToCompact).reason, 'stale');
+      expect(
+        logger.eventsOf('compaction.skipped').single.fields['blocking_type'],
+        'missing',
+      );
+    });
+
+    test('stale on the second pass keeps the first Compacted', () async {
+      await journal(longChain());
+      final started = Completer<void>();
+      final release = Completer<void>();
+      var calls = 0;
+
+      final future = run((request, cancel) async {
+        calls++;
+        if (calls == 1) {
+          return 'x' * 400;
+        }
+        started.complete();
+        await release.future;
+        return 'y' * 40;
+      });
+      await started.future;
+      await writer.append(
+        (id, parent, at) => MessageRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          message: UserMessage(const [TextContent('late')], timestamp: at),
+        ),
+      );
+      release.complete();
+      final outcome = await future;
+
+      expect(outcome, isA<Compacted>());
+      expect(
+        writer.snapshot.records.whereType<CompactionRecord>(),
+        hasLength(1),
+      );
+      final skipped = logger.eventsOf('compaction.skipped').single.fields;
+      expect(skipped['pass'], 2);
+      expect(skipped['reason'], 'stale');
+      expect(skipped['blocking_type'], 'message');
+    });
+
+    test('cancel while the record waits in the queue writes nothing '
+        '(CMP-3, CMP-4)', () async {
+      await journal(twoTurns());
+      final source = CancelTokenSource();
+      final gate = Completer<void>();
+      store.appendGate = gate.future;
+      // Смена режима держит очередь писателя на хранилище.
+      final change = writer.append(
+        (id, parent, at) => ModeChangeRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          modeId: 'plan',
+        ),
+      );
+      final summarized = Completer<void>();
+      final future = run((request, cancel) async {
+        summarized.complete();
+        return 'summary';
+      }, cancel: source.token);
+      final outcome = expectLater(future, throwsA(isA<CancelledException>()));
+      await summarized.future;
+      await pump();
+      // Предусловие: резюме готово, смена держит очередь на хранилище, записи
+      // сжатия нет; отмена срабатывает уже в построителе после отпускания.
+      expect(store.waiting, 1);
+      expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
+      source.cancel(const UserCancel());
+      gate.complete();
+      await change;
+
+      await outcome;
+      expect(writer.snapshot.records.whereType<CompactionRecord>(), isEmpty);
+      expect(events.whereType<ContextCompacted>(), isEmpty);
+    });
   });
 }
 

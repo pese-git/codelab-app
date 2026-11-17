@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_core/src/session/tree.dart';
 import 'package:codelab_agent_core/src/session/session_writer.dart';
 import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
@@ -215,4 +218,83 @@ void main() {
       expect(failures, hasLength(1));
     },
   );
+
+  /// SES-16, design.md change `fix-config-change-during-background-compaction`,
+  /// D1: родитель и id вычисляются в очереди писателя.
+  group('serialized writes (SES-16)', () {
+    ModeChangeRecord mode(String id, String? parent, String value) =>
+        ModeChangeRecord(
+          id: id,
+          parentId: parent,
+          timestamp: at,
+          modeId: value,
+        );
+
+    test('concurrent appends form a chain', () async {
+      final gate = Completer<void>();
+      store.appendGate = gate.future;
+
+      final a = writer.append((id, parent, t) => mode(id, parent, 'plan'));
+      final b = writer.append((id, parent, t) => mode(id, parent, 'agent'));
+      gate.complete();
+      final first = await a;
+      final second = await b;
+
+      expect(first.parentId, isNull);
+      expect(second.parentId, first.id);
+      expect(writer.snapshot.leafId, second.id);
+      expect(pathToLeaf(writer.snapshot).map((r) => r.id), [
+        first.id,
+        second.id,
+      ]);
+    });
+
+    test('a failed write does not stop the queue', () async {
+      final gate = Completer<void>();
+      store.appendGate = gate.future;
+      store.failNextAppends = 1;
+
+      final a = writer.append((id, parent, t) => mode(id, parent, 'plan'));
+      final failed = expectLater(a, throwsA(isA<StateError>()));
+      final b = writer.append((id, parent, t) => mode(id, parent, 'agent'));
+      gate.complete();
+      await failed;
+      final second = await b;
+
+      expect(second.parentId, isNull);
+      expect(writer.snapshot.records.map((r) => r.id), [second.id]);
+      expect(writer.snapshot.leafId, second.id);
+    });
+
+    test(
+      'appendWith builds the record from the snapshot in the queue',
+      () async {
+        final gate = Completer<void>();
+        store.appendGate = gate.future;
+        SessionSnapshot? seen;
+
+        final a = writer.append((id, parent, t) => mode(id, parent, 'plan'));
+        final b = writer.appendWith<ModeChangeRecord>((current) {
+          seen = current;
+          return mode('b-id', current.leafId, 'agent');
+        });
+        expect(seen, isNull, reason: 'builder waits for the queue');
+        gate.complete();
+        final first = await a;
+        final second = await b;
+
+        expect(seen!.leafId, first.id);
+        expect(second!.parentId, first.id);
+        expect(writer.snapshot.leafId, 'b-id');
+      },
+    );
+
+    test('appendWith with a null record writes nothing', () async {
+      final result = await writer.appendWith<ModeChangeRecord>((_) => null);
+
+      expect(result, isNull);
+      expect(store.appended, isEmpty);
+      expect(writer.snapshot.records, isEmpty);
+    });
+  });
 }
