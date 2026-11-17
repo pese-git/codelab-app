@@ -51,7 +51,7 @@ Future<CompactionOutcome> compact({required SessionWriter writer, required Compa
     required Clock clock, required CancelToken cancel, required AgentEventSink emit,
     void Function(LlmContextProjection p)? onCompacted,   // сессия заменяет транскрипт до ContextCompacted
     String? focus,                     // только при trigger == manual
-    String? summaryModel, Logger? logger});
+    Logger? logger});                     // summaryModel не передаётся: модель — SummaryResult.model (change add-usage-ledger, D4)
 sealed class CompactionOutcome {}      // Compacted(record, before, after) | NothingToCompact(reason) | CompactionFailed(error)
                                        // Compacted.record — CompactionRecord или (после MVP) HideRecord (§17.13.4)
 enum CompactionTrigger { afterTurn, preflight, overflow, manual }
@@ -366,7 +366,7 @@ compact(snapshot, trigger, summarize, settings, cancel, focus):
                       вернуть CompactionFailed; журнал и транскрипт не меняются (CMP-3)
 7. cancel.throwIfCancelled()                   // отмена после ответа модели тоже не пишет запись
 8. rec := compaction(summary, firstKeptId: region[cut.firstKeptIndex].id, tokensBefore: before,
-                     tokensAfter: 0, details: fileOps + splitTurn + summaryModel
+                     tokensAfter: 0, details: fileOps + splitTurn + summaryModel (из SummaryResult.model)
                      + usage ответа суммаризатора — details.usage, §12.6.1; change add-usage-ledger, D4)
 9. projected := buildLlmContext(snapshot + rec); after := estimateContextTokens(projected)
    rec.tokensAfter := after

@@ -30,14 +30,14 @@
 - первая строка — `Session usage: <turns> turns, <steps> steps`; сессия без шагов — одна строка `Session usage: no model requests yet`;
 - `Total: <usage>`; `By model:` и по строке `  <provider>/<model>: <n> steps, <usage>` на модель в лексикографическом порядке; `Subagents: <runs> runs, <usage>` и `Summaries: <count>, <usage>` — только при ненулевом счётчике;
 - шаблон `<usage>` — `input <n>, output <n>, cache read <n>, cache write <n>[, reasoning <n>], cost <cost>`; `reasoning` — только если значение есть;
-- `<cost>` — одно правило для строк `Total`, `By model`, `Subagents` и `Summaries`: `$x.xxxx`, если цена известна у всех частей строки с ненулевыми токенами; `~$x.xxxx`, если у части (`noPrice`); `unknown`, если ни у одной (решение Q7 (а)); части — шаги, прогоны субагентов и записи суммаризатора, цена прогона и записи — по правилу «Журнал usage сессии»; при `noUsage` перед числом `input` ставится `~`;
+- `<cost>` — одно правило для строк `Total`, `By model`, `Subagents` и `Summaries`: `unknown`, если цены нет ни у одной части строки (решение Q7 (а)); иначе `$x.xxxx`, а при любой причине неполноты строки (`noUsage` или `noPrice`) — `~$x.xxxx`; части — шаги, прогоны субагентов и вызовы суммаризатора, цена прогона и вызова — по правилу «Журнал usage сессии»; вызов суммаризатора со всеми нулевыми счётчиками — `noUsage`, как шаг; прогон субагента `noUsage` не получает (у записи `subagent` нет `stopReason`, нулевой usage может означать ребёнка без обращения к модели), поэтому строка `Subagents` не получает `input ~`; при `noUsage` перед числом `input` ставится `~`;
 - последняя строка — одна из `Ledger: up to date (<n> records)`, `Ledger: rebuilt from journal (<n> records)`, `Ledger: rebuilt in memory (<n> records)`, `Ledger: rebuilt, not saved (<причина ОС на английском>)`.
 
 Блоков `By branch` и `Inherited from fork` в этой версии нет (design.md change `add-usage-ledger`, D1 п. 8).
 
-#### Scenario: /usage после двух ходов
-- **WHEN** в сессии два хода по одному шагу на модели с ценами, файла `usage.json` нет, и приходит `/usage`
-- **THEN** ответ начинается строкой `Session usage: 2 turns, 2 steps`, строка `Total` равна сумме шагов, последняя строка — `Ledger: rebuilt from journal (<n> records)`; в каталоге сессии появился `usage.json`; модель не вызвана, журнал без новых записей, кадров `_codelab/session/usage` нет (фикстура `acp/slash-usage`)
+#### Scenario: /usage после хода с двумя шагами
+- **WHEN** в сессии один ход с двумя шагами на модели с ценами, ядро собрано с `UsageLedgerStore`, файла `usage.json` нет, и приходит `/usage`
+- **THEN** ответ начинается строкой `Session usage: 1 turns, 2 steps`, строка `Total` равна сумме шагов, последняя строка — `Ledger: rebuilt from journal (<n> records)`; в каталоге сессии появился `usage.json`; модель не вызвана, журнал без новых записей, кадров `_codelab/session/usage` нет (фикстура `acp/slash-usage`)
 
 #### Scenario: Повторный /usage
 - **WHEN** сразу после предыдущего сценария снова приходит `/usage`
@@ -54,6 +54,14 @@
 #### Scenario: Цена субагентов и суммаризатора
 - **WHEN** в сессии два прогона субагентов, один с ненулевой стоимостью, другой с токенами и нулевой стоимостью, и одно сжатие, чья `summaryModel` в каталоге без цен
 - **THEN** строка `Subagents` заканчивается `cost ~$x.xxxx`, строка `Summaries` — `cost unknown`; строка `Total` — `cost ~$x.xxxx`
+
+#### Scenario: Суммаризатор без usage
+- **WHEN** в сессии один шаг на модели с ценами и одно сжатие, чей вызов суммаризатора на модели с ценами вернул все нулевые счётчики
+- **THEN** строка `Summaries` — `Summaries: 1, input ~0, output 0, cache read 0, cache write 0, cost ~$0.0000`; строка `Total` — с `input ~` и `cost ~$x.xxxx`
+
+#### Scenario: Субагент без usage
+- **WHEN** в сессии один прогон субагента со всеми нулевыми счётчиками (ребёнок отменён до обращения к модели)
+- **THEN** строка `Subagents` — `Subagents: 1 runs, input 0, …` без `~` перед `input`
 
 #### Scenario: Неверный аргумент
 - **WHEN** приходит `/usage now`

@@ -62,7 +62,7 @@
 
 ### 1a. Красные тесты
 
-- [ ] 1.1 `[agent]` `codelab_agent_core/test/usage/usage_ledger_test.dart` (новый) — свёртка на снимках, собранных вручную (`SessionSnapshot` из записей):
+- [x] 1.1 `[agent]` `codelab_agent_core/test/usage/usage_ledger_test.dart` (новый) — свёртка на снимках, собранных вручную (`SessionSnapshot` из записей):
   - два хода — ходы и шаги, `toolCallIds`, номера шагов с 0;
   - `steer` не открывает ход, `loop_note` — не шаг;
   - `noUsage` у ответа без usage, но не у `error`; шаг только с кэш-токенами — без `noUsage`;
@@ -76,7 +76,7 @@
   - в сериализации нет текстов ответов и аргументов.
   
   Отчёт: модели без цен по каталогу сессии; модель, которой нет в каталоге, — без цены (agent-sessions «Журнал usage сессии»; D1, D2, Q4, Q9). Красный.
-- [ ] 1.2 `[agent]` `codelab_agent_core/test/usage/usage_ledger_report_test.dart` (новый, на фейковом `UsageLedgerStore` в памяти):
+- [x] 1.2 `[agent]` `codelab_agent_core/test/usage/usage_ledger_report_test.dart` (новый, на фейковом `UsageLedgerStore` в памяти):
   - файл отсутствует — `missing`, записан;
   - повтор — `upToDate` без записи;
   - дописанная запись — `stale`; битый JSON и `version: 2` — `invalid`; `rebuild` — `explicit`;
@@ -88,14 +88,14 @@
   - лог `usage.ledger.rebuild` с `reason`, `records`, `duration_ms`.
   
   (agent-sessions «Файл usage.json и порт UsageLedgerStore»; D3). Красный.
-- [ ] 1.3 `[agent]` `codelab_agent_core/test/compaction/compaction_usage_test.dart` (новый, на `ScriptedStreamFunction`):
+- [x] 1.3 `[agent]` `codelab_agent_core/test/compaction/compaction_usage_test.dart` (новый, на `ScriptedStreamFunction`):
   - `/compact` — `details.usage` и модель в записи, `ContextCompacted.usage` и модель;
   - два прохода сжатия — два события;
   - аварийное сжатие посреди хода — `TurnEnded.usage` без суммаризатора;
   - реплей старой записи без `details.usage` — `usage == null`.
   
   Существующие тесты `Summarizer` правятся под новый тип результата (agent-compaction «Usage суммаризатора»; D4, Q6). Красный.
-- [ ] 1.4 `[agent]` `codelab_agent_core/test/commands/usage_command_test.dart` (новый):
+- [x] 1.4 `[agent]` `codelab_agent_core/test/commands/usage_command_test.dart` (новый):
   - `/usage` после двух ходов — текст D5 построчно;
   - повтор — `up to date`; `/usage rebuild`;
   - модель без цен — `cost unknown`, частичная цена — `~$`, `noUsage` — `input ~`;
@@ -107,12 +107,12 @@
   - журнал без записей команды.
   
   `builtin_commands_test` и тест списка команд: `usage` после `status` (agent-slash-commands «Команда /usage», «Список команд сессии»; D5, Q7). Красный.
-- [ ] 1.5 `[agent]` `codelab_agent_io/test/session/usage_ledger_store_test.dart` (новый, во временном каталоге): запись в `<журнал без .jsonl>/usage.json` через `.tmp` и `rename`; чтение отсутствующего — `null`; удалённый файл восстанавливается побайтово тем же; каталог без прав на запись — типизированная ошибка без падения процесса; путь не выходит за `sessions/` (agent-sessions «Удалённый файл восстанавливается»; D3, D13). Красный.
-- [ ] 1.6 `[protocol]` Фикстура `acp/slash-usage` (роль `agent`, метки `usage`, `usageLedger`), конструкция по `acp/slash-help`; ожидание текста `/usage`. Без правки 24 фикстур со списком команд: они меняются в 2.8 вместе с проекцией (D11, R9). Красная в `conformance:agent`.
+- [x] 1.5 `[agent]` `codelab_agent_io/test/session/usage_ledger_store_test.dart` (новый, во временном каталоге): запись в `<журнал без .jsonl>/usage.json` через `.tmp` и `rename`; чтение отсутствующего — `null`; удалённый файл восстанавливается побайтово тем же; каталог без прав на запись — типизированная ошибка без падения процесса; путь не выходит за `sessions/` (agent-sessions «Удалённый файл восстанавливается»; D3, D13). Красный.
+- [x] 1.6 `[protocol]` Фикстура `acp/slash-usage` (роль `agent`, метки `usage`, `usageLedger`), конструкция по `acp/slash-help`; ожидание текста `/usage`. Красная в `conformance:agent`. *Сверка с кодом итерации 1:* список команд строит ядро, поэтому в этой итерации уже правлены 7 фикстур с явным списком (`available-commands-no-tools`, `prompt-template-command`, `skill-command-listed`, `skill-invoke`, `skill-tool-load`, `slash-help`, `slash-mcp-list`) и текст `/help` в `slash-help` и `slash-mode-plan` (D11, R9).
 
 ### 1b. Реализация
 
-- [ ] 1.7 `[agent]` `codelab_agent_core/lib/src/usage/`:
+- [x] 1.7 `[agent]` `codelab_agent_core/lib/src/usage/`:
   - свёртка `buildUsageLedger` (D1), модель журнала и сериализация формата v1 (D3);
   - отчёт с моделями без цены по `AgentSession.models` (D2);
   - порт `UsageLedgerStore` в `host/services.dart` (необязательный);
@@ -121,10 +121,10 @@
   - барель; doc-комментарии по-русски со ссылками на D1–D3, OBS-10.
   
   Тесты 1.1, 1.2 зелёные; `web-compile`, `guard`.
-- [ ] 1.8 `[agent]` `Summarizer` с результатом (текст, usage, модель); реализация рантайма берёт usage и модель из `AssistantMessage`; `compact` пишет `details.usage`; `ContextCompacted` получает `usage` и модель; реплей — `null` без `details.usage` (D4). Тест 1.3 зелёный; существующие тесты сжатия и агентские фикстуры `acp/slash-compact`, `acp/compact-usage-context` без изменений кадров.
-- [ ] 1.9 `[agent]` `/usage [rebuild]` в `commands/builtin_commands.dart`: объявление §13.4, место после `status`, текст D5 с правилами Q7. Тест 1.4 зелёный.
-- [ ] 1.10 `[agent]` `codelab_agent_io`: реализация `UsageLedgerStore` по каталогу сессии `JsonlSessionStore` (§8.9); `apps/codelab_agent` (`serve`) и настольный открыватель `codelab_embedded/lib/io.dart` передают порт в `AgentCoreServices`; основной барель `codelab_embedded` и сценарный открыватель порт не получают (`inMemory`). Тест 1.5 зелёный; `guard`, `web-compile` (барель `codelab_embedded`).
-- [ ] 1.11 `[protocol]` `conformance:agent` для `acp/slash-usage` зелёный. Агентская фабрика `codelab_agent_acp/test/conformance_test.dart` передаёт порт во временном каталоге, если фикстура его требует.
+- [x] 1.8 `[agent]` `Summarizer` с результатом (текст, usage, модель); реализация рантайма берёт usage и модель из `AssistantMessage`; `compact` пишет `details.usage`; `ContextCompacted` получает `usage` и модель; реплей — `null` без `details.usage` (D4). Тест 1.3 зелёный; существующие тесты сжатия и агентские фикстуры `acp/slash-compact`, `acp/compact-usage-context` без изменений кадров.
+- [x] 1.9 `[agent]` `/usage [rebuild]` в `commands/builtin_commands.dart`: объявление §13.4, место после `status`, текст D5 с правилами Q7. Тест 1.4 зелёный.
+- [x] 1.10 `[agent]` `codelab_agent_io`: реализация `UsageLedgerStore` по каталогу сессии `JsonlSessionStore` (§8.9); `apps/codelab_agent` (`agent_host.dart`: `serve` и сценарный режим `--llm-script` — при `--sessions-dir`, на том же `JsonlSessionStore`, что журнал; без `--sessions-dir` сессии в памяти и `/usage` — `rebuilt in memory`; так `test-scenario` проигрывает `acp/slash-usage` против бинаря — сверка с кодом итерации 1) и настольный открыватель `codelab_embedded/lib/io.dart` передают порт в `AgentCoreServices`; сценарный открыватель — только с файловым журналом `sessionsDir` (сверка с кодом итерации 1); основной барель `codelab_embedded` порт не получает (`inMemory`). Тест 1.5 зелёный; `guard`, `web-compile` (барель `codelab_embedded`).
+- [x] 1.11 `[protocol]` `conformance:agent` для `acp/slash-usage` зелёный. Агентская фабрика `codelab_agent_acp/test/conformance_test.dart` передаёт настоящий порт во временном каталоге; `acp/slash-usage` ждёт `Ledger: rebuilt from journal` (D11).
 
 ## 2. Протокол (итерация 2)
 
@@ -166,7 +166,7 @@
   
   Тесты 2.1, 2.2, 2.4 зелёные.
 - [ ] 2.7 `[protocol]` Засев `UsageAccounting` отчётом в памяти при создании моста веткой `session/load` вместо `markLoadedFromJournal`. Снимок `trigger: "load"` через `Reply.after` после ответа `session/load`, в том числе при `reattach`: только объявившим `usage` и только при ненулевых шагах. Слагаемое суммаризатора по `ContextCompacted.usage` (не в ход). `noPrice` суммаризатора по каталогу. Лог `acp.usage.seeded`. `UsagePartial.beforeLoad` остаётся в перечислении, но мостом CodeLab не ставится. Тест 2.3 зелёный.
-- [ ] 2.8 `[protocol]` `codelab_acp_testing`: `usage` в списке команд 24 фикстур с `available_commands_update` агента одним механическим изменением (R9). Scripted-агент `codelab_compatible_stdio_agent.dart` в режиме `with_usage` шлёт снимок `load` после ответа `session/load` — для e2e клиентов в 3.6, 3.7. Фикстуры 2.5 и `acp/slash-usage` зелёные в `conformance:agent`, `conformance:embedded`; `protocol-conformance`; `test:e2e:cli:dart-agent`.
+- [ ] 2.8 `[protocol]` `codelab_acp_testing` (сужено по сверке с кодом итерации 1: списки команд уже правлены в 1.6, R9). Scripted-агент `codelab_compatible_stdio_agent.dart` в режиме `with_usage` шлёт снимок `load` после ответа `session/load` — для e2e клиентов в 3.6, 3.7. Фикстуры 2.5 и `acp/slash-usage` зелёные в `conformance:agent`, `conformance:embedded`; `protocol-conformance`; `test:e2e:cli:dart-agent`.
 
 ## 3. Клиент (итерация 3)
 
