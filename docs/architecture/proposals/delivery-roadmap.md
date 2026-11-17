@@ -292,7 +292,8 @@ macOS и Linux, ручная проверка Windows откладывается
 
 **Вопросы до соответствующих строк.** Форма расширения usage (`add-usage-extension`) — до U-13 и
 D-09 — решена пользователем 2026-11-13: уведомление `_codelab/session/usage` (change
-`add-usage-extension`, design.md D1, D17); затем `add-usage-ledger`, `add-desktop-usage-pane`,
+`add-usage-extension`, design.md D1, D17); затем `add-usage-ledger` (открыт и влит 2026-11-17, решения Q1–Q9 —
+пользователь 2026-11-17: запрос `_codelab/session/usage/ledger`, снимок `load`, `usage.json`, `/usage`), `add-desktop-usage-pane`,
 `add-session-deadline`; обобщение «разрешить всегда» до префикса команды или маски пути; порог Terminal-Bench
 (H-06); публикация ядра и корпуса фикстур на pub.dev; вопросы A2A (§16.3 ядра) — до E-22;
 передача токена WebSocket из web-сборки — этап 10; подстройка OSC 52 — после U-28; индекс
@@ -383,7 +384,9 @@ E-15, L-25; P-10 — после 1.0, R8-1), то есть все задачи «
 
 1. Usage и стоимость: L-11, L-29, U-13, D-09 — четыре changes по порядку: `add-usage-extension`
    (контракт `_codelab/session/usage`, строка статуса desktop, статус-строка CLI и TUI, причина
-   бюджета в заметке хода), `add-usage-ledger` (L-29, `/usage`), `add-desktop-usage-pane`
+   бюджета в заметке хода), `add-usage-ledger` (L-29: журнал `usage.json`, `/usage [rebuild]`, запрос
+   истории `_codelab/session/usage/ledger`, полная сумма после `session/load`, суммаризатор в сумме
+   сессии; влит 2026-11-17), `add-desktop-usage-pane` (следующий)
    (панель Usage, CSV, прогресс бюджета), `add-session-deadline` (C-15, `/timer`).
 2. Полноэкранный TUI и ввод: U-12, U-24, U-36, U-37.
 3. Вложения: U-14, D-12.
@@ -608,6 +611,7 @@ Definition of Done и правки ленты по ручной регресси
 | `add-provider-setup-ui` (создан) | страницы Providers (05) и MCP servers (05b), мастер провайдера (06) в app и CLI, первый запуск CLI (C5), `/settings` (C13), токен профиля в хранилище секретов агента (20, R-12 в app), ребро `codelab_desktop → codelab_setup`; без хранилищ ОС и onboarding | M4 (D-05, U-17), M5 (L-24, E-13, U-19) |
 | `add-app-onboarding` (рабочее имя) | onboarding app (07, D-11) поверх того же `ProviderSetupFlow` — после `add-app-navigation-shell` (решение Q3 change `add-provider-setup-ui`) | M5 |
 | `add-usage-extension` (открыт 2026-11-13) | уведомление `_codelab/session/usage`: usage шага, хода и сессии, заполнение контекста; строка статуса desktop и CLI; затем `add-usage-ledger`, `add-desktop-usage-pane` и Timeline (A14) | M5 |
+| `add-usage-ledger` (открыт 2026-11-17, влит; следующий — `add-desktop-usage-pane`) | журнал usage сессии (L-29): свёртка журнала, `usage.json`, `/usage [rebuild]`, запрос `_codelab/session/usage/ledger` с ходами и шагами, полная сумма после `session/load` (снимок `load`), суммаризатор в сумме сессии; затем `add-desktop-usage-pane` | M5 |
 | `add-subagents-and-tasks` (создан 2026-11-09, решения 2026-11-10 и 2026-11-12) | этапы 1 и 2 субагентов и список задач (§6.4): `agent`, вложенность до 3, запрос ребёнка, `task_*` вместо `update_plan`, `_meta.codelab.subagent`, `_meta.codelab.task`, схема объявлений `_meta.codelab` в `initialize`; строка `agent`, пометка запроса ребёнка, чек-лист с id в app и CLI; этап 2 — `_meta.codelab.parentToolCallId` и шаги потомков деревом; панель Agents v1 в доке app (итерация 5b, Q13) | M4 |
 | `add-subagent-board` | `_codelab/subagents/*` (§17.3.7) в панели Agents v1 (A15) и вид `tasks` CLI | M5 (второй этап пула, §6.4) |
 | `add-background-jobs` (уже назван) | `_codelab/jobs/*` (§17.9.11) на той же доске | M5 |

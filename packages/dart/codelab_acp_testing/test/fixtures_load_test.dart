@@ -100,6 +100,7 @@ const _stage8ProjectFilesFixtures = {
 const _slashCommandFixtures = {
   'acp/slash-compact',
   'acp/slash-help',
+  'acp/slash-usage',
   'acp/slash-mode-plan',
 };
 
@@ -137,7 +138,18 @@ const _usageFixtures = {
   'acp/prompt-usage-cancelled',
   'acp/compact-usage-context',
   'acp/prompt-usage-compaction-off',
-  'acp/session-load-usage-partial',
+};
+
+/// Фикстуры change `add-usage-ledger` (design.md D11; acp-golden-fixtures
+/// «Фикстуры журнала usage»): метки `usage` и `usageLedger` (FIX-4), роль
+/// `agent` (у `acp/usage-ledger-request` ещё и `client`, задача 3.5), ссылки `spec` на
+/// `15-Extensibility.md`. `acp/session-load-usage-full` заменяет
+/// `acp/session-load-usage-partial` (D13 change `add-usage-extension`).
+const _usageLedgerFixtures = {
+  'acp/usage-ledger-request',
+  'acp/usage-ledger-rebuild',
+  'acp/session-load-usage-full',
+  'acp/compact-usage-summary',
 };
 
 /// Блок `agentCapabilities._meta.codelab` ответа `initialize` фикстуры.
@@ -169,6 +181,7 @@ void main() {
       ..._toolKindFixtures,
       ..._tasksFixtures,
       ..._usageFixtures,
+      ..._usageLedgerFixtures,
     });
   });
 
@@ -196,6 +209,49 @@ void main() {
     }
   });
 
+  // acp-golden-fixtures «Фикстуры журнала usage» (change `add-usage-ledger`,
+  // D11): метки `usage` и `usageLedger`, роль только `agent`, ссылка на
+  // `15-Extensibility.md`; `acp/slash-usage` — тоже с обеими метками, но без
+  // объявления `usage` клиентом (ход без снимков).
+  test('the usage ledger fixtures carry both labels, the agent role and an '
+      'extensibility spec link', () {
+    final ids = {..._usageLedgerFixtures, 'acp/slash-usage'};
+    for (final fixture in corpus.where((f) => ids.contains(f.id))) {
+      expect(
+        fixture.extensions,
+        containsAll(['usage', 'usageLedger']),
+        reason: fixture.id,
+      );
+      // Клиентскую роль `acp/usage-ledger-request` добавила задача 3.5.
+      expect(
+        fixture.roles,
+        fixture.id == 'acp/usage-ledger-request'
+            ? {FixtureRole.agent, FixtureRole.client}
+            : {FixtureRole.agent},
+        reason: fixture.id,
+      );
+      expect(
+        fixture.spec.any((s) => s.startsWith('15-Extensibility.md')),
+        isTrue,
+        reason: fixture.id,
+      );
+    }
+    for (final fixture in corpus.where(
+      (f) => _usageLedgerFixtures.contains(f.id),
+    )) {
+      final caps = fixture.setup.clientCapabilities as Map?;
+      final codelab = (caps?['_meta'] as Map?)?['codelab'] as Map?;
+      expect(codelab?['usage'], {
+        'version': 1,
+      }, reason: '${fixture.id}: the client must declare usage');
+    }
+    // `acp/session-load-usage-partial` удалена: сумма после загрузки полная.
+    expect(
+      corpus.map((f) => f.id),
+      isNot(contains('acp/session-load-usage-partial')),
+    );
+  });
+
   // D18 Т8: `acp/prompt-usage-steps`, `-unpriced` и `-cancelled` идут и во
   // встроенном агенте (`conformance:embedded`, `codelab-agent serve --stdio`),
   // поэтому без `setup.config` и `setup.sessions`; цены задаёт `llm.model.cost`.
@@ -221,7 +277,6 @@ void main() {
       byId['acp/prompt-usage-compaction-off']!.setup.config,
       containsPair('compaction', {'enabled': false}),
     );
-    expect(byId['acp/session-load-usage-partial']!.setup.sessions, isNotEmpty);
     final priced = byId['acp/prompt-usage-steps']!.llm!.model!;
     expect(priced['cost'], isA<Map>());
     expect(
@@ -316,12 +371,19 @@ void main() {
     // change `add-usage-extension`, задача 1.5: ответ агента несёт `usage`
     // (D3), метка `usage` — в `extensions` (FIX-4). Кадр клиента ниже не
     // меняется до задачи 2.7 (D18 Т8).
-    expect(fixture.extensions, containsAll(['capabilities', 'usage']));
+    // change `add-usage-ledger`, задача 2.5 (D7): в ответе агента ещё и
+    // `usageLedger`, метка `usageLedger` — в `extensions`; кадр клиента не
+    // меняется (клиент `usageLedger` не объявляет).
+    expect(
+      fixture.extensions,
+      containsAll(['capabilities', 'usage', 'usageLedger']),
+    );
     expect(_agentCodelabBlock(fixture), {
       'subagents': {'version': 1, 'maxDepth': 3},
       'subagentToolCalls': {'version': 1},
       'tasks': {'version': 1},
       'usage': {'version': 1},
+      'usageLedger': {'version': 1},
     });
     final request = fixture.frames
         .where((f) => f.direction == FrameDirection.c2a)

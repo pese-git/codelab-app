@@ -14,6 +14,7 @@ import '../mcp/mcp_server_config.dart';
 import '../permissions/gate.dart';
 import '../permissions/modes.dart';
 import '../tools/tasks/task_list.dart';
+import '../usage/usage_ledger_report.dart';
 import '../util/logger.dart';
 
 /// Публичный API сессии (`agent-core-architecture` §5.6).
@@ -68,7 +69,7 @@ abstract interface class AgentSession {
   Future<void> setEffort(ReasoningEffort effort);
 
   /// Команды сессии: сначала встроенные в порядке §13.4 — `compact`, `mode`,
-  /// `model`, `status`, `config`, `mcp`, `help` (design.md changes
+  /// `model`, `status`, `usage`, `config`, `mcp`, `help` (design.md changes
   /// `add-config-writer-and-reload`, D12, и `add-agent-builtin-slash-commands`,
   /// D2), затем команды шаблонов проекта и пользователя в байтовом порядке имён
   /// (design.md change `add-agent-project-files`, D7, D9).
@@ -131,8 +132,8 @@ abstract interface class AgentSession {
   /// доставлены подписчикам [events], не ставящим подписку на паузу, — так
   /// мост ACP строит ответ на `session/prompt` по `TurnEnded` (ACP-3).
   ///
-  /// Встроенные команды (`compact`, `mode`, `model`, `status`, `config`, `mcp`,
-  /// `help`; первый текстовый блок, слово до первого пробельного символа)
+  /// Встроенные команды (`compact`, `mode`, `model`, `status`, `usage`, `config`,
+  /// `mcp`, `help`; первый текстовый блок, слово до первого пробельного символа)
   /// исполняются здесь же, без модели и без записи промпта в журнал (CFG-18):
   /// события `TurnStarted`, одно сообщение агента, `TurnEnded(completed)`;
   /// отмена — `TurnEnded(cancelled)` без текста, сбой — `AgentError` и
@@ -171,6 +172,22 @@ abstract interface class AgentSession {
   /// Для чтения: пункты меняют только инструменты `task_*`, а открытие сессии
   /// и смена ветки восстанавливают список из журнала.
   TaskList get tasks;
+
+  /// Отчёт журнала usage сессии: ходы, шаги, модели, субагенты и суммаризатор
+  /// плюс состояние файла `usage.json` и модели без цены (design.md change
+  /// `add-usage-ledger`, D2, D3).
+  ///
+  /// Свежий файл (`version == 1`, `source` совпадает с журналом) не
+  /// переписывается; иначе свёртка пересчитывается и пишется через порт
+  /// `UsageLedgerStore`. [rebuild] — пересчёт всегда. На сессию идёт не
+  /// больше одной операции с записью: параллельные вызовы делят результат, а
+  /// `rebuild` во время обычной даёт одну новую операцию после неё; `close()`
+  /// ждёт начатую запись. Сбой записи — статус `notSaved`, не исключение.
+  Future<UsageLedgerReport> usageLedger({bool rebuild = false});
+
+  /// Свёртка в памяти без чтения и записи файла: засев суммы сессии на
+  /// `session/load` (D8).
+  Future<UsageLedgerReport> usageLedgerInMemory();
 
   /// События журнала активной ветки для `session/load` (§8.3, D4).
   Iterable<AgentEvent> replay();

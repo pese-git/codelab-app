@@ -6,14 +6,15 @@
     "15-Extensibility.md#advertising-custom-capabilities",
     "15-Extensibility.md#the-_meta-field"
   ],
-  "description": "Редакция итерации 5 (change add-subagents-and-tasks, задачи 5.1, 5.2 и 5.4) с ключом usage в ответе агента (change add-usage-extension, итерация 1, D3, D18 Т8; кадр клиента с usage — задача 2.7, D21 Т7): клиент CodeLab объявляет в clientCapabilities._meta.codelab расширения tasks, subagents, subagentToolCalls и usage (согласие получать вызовы потомков деревом; клиентский прогон зеленеет с задачей 5.4); агент с включёнными субагентами (subagents.enabled, max_depth 3 по умолчанию) отвечает теми же полями, что в acp/initialize-capabilities, и блоком agentCapabilities._meta.codelab {subagents: {version: 1, maxDepth: 3}, subagentToolCalls: {version: 1}, tasks: {version: 1}, usage: {version: 1}}: адаптер умеет проецировать вызовы потомков (agent-acp-server «Клиент CodeLab объявил расширения, дерево вызовов (итерация 5)»; D9, D21, D36 Т12, D37, D45 Т9, D47 Т8).",
+  "description": "Редакция итерации 5 (change add-subagents-and-tasks, задачи 5.1, 5.2 и 5.4) с ключом usage в ответе агента (change add-usage-extension, итерация 1, D3, D18 Т8; кадр клиента с usage — задача 2.7, D21 Т7): клиент CodeLab объявляет в clientCapabilities._meta.codelab расширения tasks, subagents, subagentToolCalls и usage (согласие получать вызовы потомков деревом; клиентский прогон зеленеет с задачей 5.4); агент с включёнными субагентами (subagents.enabled, max_depth 3 по умолчанию) отвечает теми же полями, что в acp/initialize-capabilities, и блоком agentCapabilities._meta.codelab {subagents: {version: 1, maxDepth: 3}, subagentToolCalls: {version: 1}, tasks: {version: 1}, usage: {version: 1}}: адаптер умеет проецировать вызовы потомков (agent-acp-server «Клиент CodeLab объявил расширения, дерево вызовов (итерация 5)»; D9, D21, D36 Т12, D37, D45 Т9, D47 Т8). Редакция change add-usage-ledger (задача 2.5, D7): блок агента несёт ещё usageLedger: {version: 1}; клиент ключ usageLedger не объявляет, клиентский прогон не меняется.",
   "goals": [
     "C-20",
     "C-05"
   ],
   "extensions": [
     "capabilities",
-    "usage"
+    "usage",
+    "usageLedger"
   ],
   "setup": {
     "cwd": "/work/demo",
@@ -63,7 +64,7 @@
     },
     {
       "dir": "a2c",
-      "note": "ответ — как в acp/initialize-capabilities плюс блок объявлений агента: subagents с maxDepth — эффективной глубиной, то есть max_depth: 3 (вложенность итерации 4, D45 Т9), и subagentToolCalls — агент проецирует вызовы потомков (итерация 5, D47 Т12); usage — расширение учёта токенов и стоимости, агент объявляет его всегда (D3)",
+      "note": "ответ — как в acp/initialize-capabilities плюс блок объявлений агента: subagents с maxDepth — эффективной глубиной, то есть max_depth: 3 (вложенность итерации 4, D45 Т9), и subagentToolCalls — агент проецирует вызовы потомков (итерация 5, D47 Т12); usage — расширение учёта токенов и стоимости, агент объявляет его всегда (D3); usageLedger — агент принимает запрос _codelab/session/usage/ledger, объявляет всегда (change add-usage-ledger, D7)",
       "frame": {
         "jsonrpc": "2.0",
         "id": "${initializeId}",
@@ -96,6 +97,9 @@
                   "version": 1
                 },
                 "usage": {
+                  "version": 1
+                },
+                "usageLedger": {
                   "version": 1
                 }
               }

@@ -618,16 +618,40 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    `lastTurn` агрегатом `turn` (тот же `turnId` — ход идёт); снимок без `turnId` `lastTurn` не меняет;
    новый `turnId` без разобранного `turn` — `lastTurn` пуст (change `add-usage-extension`, D22 п. 2).
    `session` и `context` меняет каждый снимок. Клиент ничего не суммирует и
-   окно модели не оценивает: сумму сессии считает агент (после `session/load` она неполная — причина
-   `beforeLoad`, полная — change `add-usage-ledger`). Деньги приходят десятичной строкой и хранятся в
+   окно модели не оценивает: сумму сессии считает агент. Агент CodeLab после change `add-usage-ledger`
+   засевает её свёрткой журнала при `session/load` и сразу после ответа шлёт снимок `trigger: "load"`
+   (D8); причину `beforeLoad` ставят только другие или старые агенты. Деньги приходят десятичной строкой и хранятся в
    целых микроединицах: сумма дробных долларов в `double` накапливает ошибку. Целая часть — не более
    9 цифр, чтобы микроединицы оставались точным целым и на web; большее значение — цена неизвестна
    (D9, D22 п. 3). `session/load`
-   сбрасывает `usage` сессии в `awaiting` или `unknown`. Смена соединения сбрасывает `lastSeq` по
+   сбрасывает `usage` сессии в `awaiting` или `unknown` в начале загрузки, до отправки запроса, а не по
+   ответу: так снимок `load`, пришедший после ответа, не стирается, в каком бы порядке kit ни обработал
+   ответ и уведомление. Снимок для сессии, которая загружается, но ещё не зарегистрирована в рабочем
+   пространстве, ждёт регистрации (хранится последний по `seq`; при сбое загрузки — отброс с
+   `usage.unknown_session`). `UsageTrigger.load` `lastTurn` не меняет (change `add-usage-ledger`, D10). Смена соединения сбрасывает `lastSeq` по
    *поколению уведомления*, а не по началу `reconnect` в kit (`suspend()`): старый агент ещё может
    прислать снимок после начала `reconnect`, а новый агент начнёт с `seq: 1` (change
    `add-usage-extension`, D21 Т2, Т4). Свёртка — чистый класс без зависимости от `ClientWorkspace`;
    её же использует тест корпуса фикстур.
+3a. **Журнал usage** (change `add-usage-ledger`, D6, D10). История по ходам и шагам — запросом
+   `_codelab/session/usage/ledger`, если агент объявил `usageLedger`. `SessionView.usageLedger` —
+   закрытая иерархия `unavailable` / `idle` / `loading(previous?)` / `loaded(view)` /
+   `failed(reason, previous?)`. `ClientWorkspace.refreshUsageLedger(sessionId, {rebuild})`: на сессию
+   один запрос в полёте, вызовы во время полёта сливаются в один следующий (`rebuild` побеждает);
+   ответ старого поколения соединения или старой загрузки сессии отбрасывается (`usage.ledger.stale`);
+   переподключение и `session/load` сбрасывают состояние в `idle` или `unavailable`. Разбор —
+   `UsageLedgerDecoder` с теми же правилами денег, валюты и причин, что `UsageDecoder` (общий разбор
+   агрегата). Шаг несёт `toolCallIds`: хост подписывает шаг по транскрипту. Kit журнал со снимками не
+   сливает и сам не суммирует; когда обновлять, решает хост по `usageLedger.seq` и `usage.lastSeq`
+   (панель Usage — change `add-desktop-usage-pane`). Возможности агента kit берёт не только из
+   результата `connect`, но и из потока состояний соединения (прогон фикстур, где хост сам ведёт
+   `AcpClientApplication`): заменяется весь набор возможностей, а состояние usage и журнала
+   сбрасывается в `unavailable` или `idle` только в `connect`/`reconnect` kit. Слитый следующий запрос
+   перед отправкой заново проверяет объявление, `dispose`, эпоху и поколение; `sessionId` ответа
+   сверяется с запрошенным (`decode`, `mismatch`); строки агента (`title`, `model`, `ledger.reason`,
+   `toolCallIds`) очищаются от C0/C1 и ограничиваются длиной (`title` — 64 руны). Сессия, которой
+   нет в рабочем пространстве, — `Future.error(ClientWorkspaceException)`. Сорвавшийся
+   `session/load` прежние числа usage не восстанавливает (change `add-usage-ledger`, R10).
 4. **Без расширения** `UsageSupport.unknown`: сегменты токенов, стоимости и контекста отсутствуют
    (не «0»). Это обычный режим со сторонним агентом. `awaiting` — агент объявил `usage`, снимков ещё
    нет. `compaction soon` — только при известном `compactAt` (порог автосжатия) и
@@ -860,7 +884,14 @@ Setext-заголовки, HTML, сноски и ссылки-определен
 * `usage/usage_fixture_test.dart` (change `add-usage-extension`, задача 2.7b; `runClientFixture`, как
   `transcript/transcript_projector_test.dart`): после `acp/prompt-usage-steps` — `reported`,
   `lastTurn` и `session` равны последнему снимку фикстуры, клиент не шлёт кадров в ответ на
-  уведомления; заметка хода `acp/prompt-turn-budget-exceeded` — `The turn stopped: budget exceeded: tokens.`
+  уведомления; заметка хода `acp/prompt-turn-budget-exceeded` — `The turn stopped: budget exceeded: tokens.`;
+  после `acp/usage-ledger-request` (change `add-usage-ledger`, задача 3.5) — `usageLedger` `loaded`, один
+  ход, два шага.
+* `usage/usage_ledger_decoder_test.dart`, `usage/session_usage_ledger_test.dart` (change
+  `add-usage-ledger`, задачи 3.2, 3.3): форма ответа журнала, деньги и причины, отказ без
+  обязательных полей; `unavailable`/`idle`/`loading`/`loaded`/`failed`, слияние вызовов, отброс
+  ответа старого поколения. `usage/session_usage_test.dart` (задача 3.4): снимок `load` не стирается
+  сбросом загрузки и ждёт регистрации сессии.
 * `attachments/prompt_content_builder_test.dart`: PNG с расширением `.jpg` → `image/png`; без
   `image` в возможностях → `resource_link` и пометка; `embeddedContext` → `resource`; путь вне
   `cwd` без подтверждения не отправлен; одиннадцатое вложение → `tooMany`; `.env` →

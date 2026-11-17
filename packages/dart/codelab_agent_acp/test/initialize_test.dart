@@ -177,6 +177,7 @@ void main() {
         'subagentToolCalls': {'version': 1},
         'tasks': {'version': 1},
         'usage': {'version': 1},
+        'usageLedger': {'version': 1},
       },
     });
     // Стандартные поля блок не меняет (D9).
@@ -213,6 +214,7 @@ void main() {
         'subagentToolCalls': {'version': 1},
         'tasks': {'version': 1},
         'usage': {'version': 1},
+        'usageLedger': {'version': 1},
       },
     };
     expect(caps['_meta'], withToolCalls);
@@ -244,6 +246,7 @@ void main() {
         'subagentToolCalls': {'version': 1},
         'tasks': {'version': 1},
         'usage': {'version': 1},
+        'usageLedger': {'version': 1},
       },
     });
   });
@@ -278,6 +281,7 @@ void main() {
           'subagentToolCalls': {'version': 1},
           'tasks': {'version': 1},
           'usage': {'version': 1},
+          'usageLedger': {'version': 1},
         },
       });
     },
@@ -344,6 +348,92 @@ void main() {
     expect(((caps['_meta']! as Map)['codelab'] as Map)['usage'], {
       'version': 1,
     });
+  });
+
+  // change `add-usage-ledger`, задача 2.1 (D7): ключ `usageLedger` агент
+  // объявляет всегда, когда отвечает блоком `_meta.codelab`, — «Клиент
+  // CodeLab объявил расширения (usageLedger)»; без `_meta.codelab` блока нет.
+  test('usageLedger is declared whatever the client declared '
+      '(usageLedger)', () async {
+    h = await ServerHarness.start();
+
+    final response = await h.initialize(
+      clientCapabilities: {
+        'terminal': true,
+        '_meta': {
+          'codelab': {
+            'tasks': {'version': 1},
+            'usage': {'version': 1},
+          },
+        },
+      },
+    );
+
+    final caps =
+        response.resultMap['agentCapabilities']! as Map<String, Object?>;
+    expect(((caps['_meta']! as Map)['codelab'] as Map)['usageLedger'], {
+      'version': 1,
+    });
+  });
+
+  test('a client _meta.codelab with no keys still gets the usageLedger key '
+      '(usageLedger)', () async {
+    h = await ServerHarness.start();
+
+    final response = await h.initialize(
+      clientCapabilities: {
+        'terminal': true,
+        '_meta': {'codelab': <String, Object?>{}},
+      },
+    );
+
+    final caps =
+        response.resultMap['agentCapabilities']! as Map<String, Object?>;
+    expect(((caps['_meta']! as Map)['codelab'] as Map)['usageLedger'], {
+      'version': 1,
+    });
+  });
+
+  // «Клиент объявил usageLedger (usageLedger)»: ключ клиента ни на что не
+  // влияет, ответ тот же, что при пустом `_meta.codelab`; метод запроса
+  // шлёт клиент, а агенту знать о нём не нужно (D7).
+  test('a client usageLedger key changes nothing (usageLedger)', () async {
+    h = await ServerHarness.start();
+    final plain = await h.initialize(
+      clientCapabilities: {
+        'terminal': true,
+        '_meta': {'codelab': <String, Object?>{}},
+      },
+    );
+    await h.dispose();
+
+    h = await ServerHarness.start();
+    final declared = await h.initialize(
+      clientCapabilities: {
+        'terminal': true,
+        '_meta': {
+          'codelab': {
+            'usageLedger': {'version': 1},
+          },
+        },
+      },
+    );
+
+    expect(declared.error, isNull);
+    expect(declared.result, plain.result);
+  });
+
+  // Без `_meta.codelab` блока нет вообще, значит нет и `usageLedger`:
+  // сторонний клиент не получает расширений CodeLab (§13.2, D7).
+  test('a client without _meta.codelab gets no usageLedger key '
+      '(usageLedger)', () async {
+    h = await ServerHarness.start();
+
+    final response = await h.initialize();
+
+    final caps =
+        response.resultMap['agentCapabilities']! as Map<String, Object?>;
+    expect(caps, isNot(contains('_meta')));
   });
 
   // «Объявление usage не той версии (usage)» и правило D3: согласие на

@@ -17,6 +17,8 @@ import '../transcript/transcript_item.dart';
 import '../transcript/transcript_projector.dart';
 import '../usage/usage_decoder.dart';
 import '../usage/usage_fold.dart';
+import '../usage/usage_ledger_decoder.dart';
+import '../usage/usage_ledger_models.dart';
 import '../usage/usage_models.dart';
 import 'client_workspace_exception.dart';
 import 'workspace_state.dart';
@@ -194,6 +196,16 @@ abstract interface class ClientWorkspace {
   /// Дожидается записи снимка, начатой до вызова; без хранилища — сразу.
   Future<void> flushSnapshot();
 
+  /// Запрашивает журнал usage сессии [id] (`_codelab/session/usage/ledger`,
+  /// change `add-usage-ledger`, D10) и ведёт `SessionView.usageLedger`.
+  ///
+  /// Без объявленного `usageLedger` запрос не уходит, состояние остаётся
+  /// `unavailable`. На сессию — не больше одного запроса в полёте; вызовы
+  /// во время полёта сливаются в один следующий, `rebuild` побеждает. Ответ
+  /// применяется, только если не сменились поколение соединения и поколение
+  /// загрузки сессии. Ошибки агента не бросаются: они — состояние `failed`.
+  Future<void> refreshUsageLedger(SessionId id, {bool rebuild = false});
+
   /// Исходы ходов всех сессий — и отправленных хостом, и ушедших из
   /// очереди сами; доставляются синхронно.
   Stream<PromptOutcome> get promptOutcomes;
@@ -344,6 +356,23 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   /// Сессии, загружаемые через `session/load`: их следующий снимок из ядра —
   /// реплей, и проекция транскрипта строится заново (design D4).
   final _reloading = <SessionId>{};
+
+  /// Снимки `_codelab/session/usage`, пришедшие для сессии, которую ещё
+  /// грузят и которой нет в рабочем пространстве (change `add-usage-ledger`,
+  /// D10): порядок потока сессий и потока уведомлений ядра клиента не
+  /// гарантирован (§9), поэтому снимок `trigger: "load"` ждёт регистрации
+  /// сессии. Хранится последний по `seq`; применяется в [_track], при сбое
+  /// загрузки отбрасывается с `usage.unknown_session`.
+  final _pendingUsage = <SessionId, _PendingUsage>{};
+
+  /// Запросы журнала usage в полёте по сессиям: слияние вызовов (D10).
+  final _ledgerFlights = <SessionId, _LedgerFlight>{};
+
+  /// Пары «сессия, поле», по которым `usage.ledger.decode_failed` уже записан
+  /// (не чаще раза на сессию и поле); очищается со сбросом соединения.
+  final _ledgerWarned = <String>{};
+
+  static const _ledgerDecoder = UsageLedgerDecoder();
 
   late final StreamSubscription<ClientConnectionState> _connectionSubscription;
   late final StreamSubscription<AcpSession> _sessionSubscription;
@@ -700,6 +729,190 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   SessionHandle? session(SessionId id) => _handles[id];
 
   @override
+  Future<void> refreshUsageLedger(SessionId id, {bool rebuild = false}) {
+    final handle = _handles[id];
+    if (handle == null) {
+      return Future.error(
+        ClientWorkspaceException('Unknown session ${id.value}.'),
+      );
+    }
+    // Без объявленного `usageLedger` кадр не уходит, состояние — `unavailable`.
+    if (!_ledgerDeclared || _disposed) {
+      return Future.value();
+    }
+    final flight = _ledgerFlights[id];
+    if (flight != null) {
+      // Вызов во время полёта сливается в один следующий запрос; `rebuild`
+      // побеждает (D10).
+      flight.queuedRebuild = flight.queuedRebuild || rebuild;
+      // Контекст последнего слитого вызова: перед запросом он сверяется с
+      // текущим (соединение и загрузка сессии могли смениться за полёт).
+      flight.queuedEpoch = handle.ledgerEpoch;
+      flight.queuedGeneration = _backend.generation;
+      return (flight.queued ??= Completer<void>()).future;
+    }
+    return _driveLedger(handle, rebuild);
+  }
+
+  /// Цикл запросов журнала сессии: текущий, затем (если во время него были
+  /// вызовы) один слитый следующий.
+  Future<void> _driveLedger(_SessionHandle handle, bool rebuild) async {
+    final flight = _ledgerFlights[handle.id] = _LedgerFlight();
+    var next = rebuild;
+    Completer<void>? waiter;
+    try {
+      while (true) {
+        try {
+          await _requestLedger(handle, next);
+        } finally {
+          waiter?.complete();
+        }
+        waiter = flight.queued;
+        if (waiter == null) {
+          return;
+        }
+        next = flight.queuedRebuild;
+        final epoch = flight.queuedEpoch;
+        final generation = flight.queuedGeneration;
+        flight.queued = null;
+        flight.queuedRebuild = false;
+        // Слитый запрос уходит, только если условия вызова всё ещё верны
+        // (D10, §9): не закрыто рабочее пространство, не сменились эпоха
+        // журнала и поколение соединения. Иначе ожидающие завершаются без
+        // кадра, а состояние — `idle` или `unavailable`, не `failed`.
+        // Проверка `_ledgerDeclared` ЗАЩИТНАЯ и дублирует проверку поколения:
+        // возможности агента меняются только с новым `Ready`, а каждый
+        // `connect`/`reconnect` ядра клиента сначала заменяет транспорт и
+        // увеличивает поколение, поэтому объявление не может пропасть при том
+        // же поколении. Оставлена на случай будущего источника возможностей
+        // без смены поколения; отдельного теста у неё нет (недостижима).
+        if (_disposed ||
+            !_ledgerDeclared ||
+            handle.ledgerEpoch != epoch ||
+            _backend.generation != generation) {
+          if (!_disposed) {
+            _logger
+                .withCorrelation(
+                  sessionId: handle.id.value,
+                  connectionGeneration: _backend.generation,
+                )
+                .debug('usage.ledger.stale');
+            if (handle.ledgerEpoch == epoch) {
+              handle.setLedger(handle.ledgerBase());
+            }
+          }
+          waiter.complete();
+          return;
+        }
+      }
+    } finally {
+      _ledgerFlights.remove(handle.id);
+      flight.queued?.complete();
+    }
+  }
+
+  /// Один запрос журнала: `loading` → `loaded` | `failed` | отброс как
+  /// устаревшего (поколение соединения или загрузка сессии сменились).
+  Future<void> _requestLedger(_SessionHandle handle, bool rebuild) async {
+    final id = handle.id;
+    final epoch = handle.ledgerEpoch;
+    final generation = _backend.generation;
+    final log = _logger.withCorrelation(
+      sessionId: id.value,
+      connectionGeneration: generation,
+    );
+    handle.setLedger(UsageLedgerState.loading(previous: handle.ledgerView));
+    log.debug('usage.ledger.requested', context: {'rebuild': rebuild});
+
+    bool stale() =>
+        handle.ledgerEpoch != epoch || _backend.generation != generation;
+    void drop() {
+      log.debug('usage.ledger.stale');
+      // Сброс уже вернул `idle`; если соединение сменилось, а сброс ещё не
+      // дошёл (ошибка ожидавшего запроса приходит раньше), не оставляем
+      // вечный `loading`.
+      if (handle.ledgerEpoch == epoch) {
+        handle.setLedger(handle.ledgerBase());
+      }
+    }
+
+    final UsageLedgerReply reply;
+    try {
+      reply = await _backend.requestUsageLedger(
+        sessionId: id,
+        rebuild: rebuild,
+      );
+    } on Object catch (error) {
+      if (stale() || _disposed) {
+        if (!_disposed) {
+          drop();
+        }
+        return;
+      }
+      final cause = error is AcpClientApplicationException ? error.cause : null;
+      final code = cause is JsonRpcError ? cause.code : null;
+      // Ответ не объектом ядро клиента отвергает как нарушение формы: для
+      // хоста это сбой разбора, а не сбой запроса.
+      final malformed = cause is JsonRpcProtocolException;
+      handle.setLedger(
+        UsageLedgerState.failed(
+          UsageLedgerFailure(
+            kind: malformed
+                ? UsageLedgerFailureKind.decode
+                : code == null
+                ? UsageLedgerFailureKind.request
+                : UsageLedgerFailureKind.agentError,
+            code: code,
+          ),
+          previous: handle.ledgerView,
+        ),
+      );
+      log.warning(
+        'usage.ledger.failed',
+        context: {
+          'code': ?code,
+          if (code == null) 'reason': malformed ? 'malformed' : 'request',
+        },
+      );
+      return;
+    }
+    if (stale() || reply.generation != _backend.generation || _disposed) {
+      if (!_disposed) {
+        drop();
+      }
+      return;
+    }
+    void warn(String field, String reason) {
+      if (_ledgerWarned.add('${id.value}|$field')) {
+        log.warning(
+          'usage.ledger.decode_failed',
+          context: {'field': field, 'reason': reason},
+        );
+      }
+    }
+
+    final view = _ledgerDecoder.decode(reply.result, onWarning: warn);
+    // Ответ о другой сессии не применяется (значение в запись не попадает).
+    if (view != null && view.sessionId != id) {
+      warn('sessionId', 'mismatch');
+    }
+    if (view == null || view.sessionId != id) {
+      handle.setLedger(
+        UsageLedgerState.failed(
+          const UsageLedgerFailure(kind: UsageLedgerFailureKind.decode),
+          previous: handle.ledgerView,
+        ),
+      );
+      return;
+    }
+    handle.setLedger(UsageLedgerState.loaded(view));
+    log.debug(
+      'usage.ledger.received',
+      context: {'seq': view.seq, 'turns': view.turns.length},
+    );
+  }
+
+  @override
   Future<SessionHandle> loadSession(SessionId id, {required String cwd}) {
     final inFlight = _loading[id];
     if (inFlight != null) {
@@ -741,6 +954,10 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
   Future<SessionHandle> _load(SessionId id, String cwd) async {
     _reloading.add(id);
+    // Сброс расхода и журнала — В НАЧАЛЕ загрузки, до отправки запроса (D10):
+    // снимок `load` приходит после ответа, но может быть обработан раньше
+    // обновления сессии по ответу, и сброс по ответу его стёр бы.
+    _handles[id]?.beginLoad();
     try {
       final session = await _backend.loadSession(
         LoadSessionCommand(sessionId: id, cwd: cwd),
@@ -763,6 +980,17 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       rethrow;
     } finally {
       _reloading.remove(id);
+      // Сессия не зарегистрирована (сбой загрузки): ожидавший снимок
+      // отбрасывается, состояние рабочего пространства не меняется (D10).
+      final dropped = _pendingUsage.remove(id);
+      if (dropped != null) {
+        _logger
+            .withCorrelation(
+              sessionId: id.value,
+              connectionGeneration: dropped.generation,
+            )
+            .debug('usage.unknown_session');
+      }
     }
   }
 
@@ -940,6 +1168,12 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   }
 
   void _handleConnectionState(ClientConnectionState connectionState) {
+    // Возможности агента берутся и из потока состояний: хост может вести
+    // `AcpClientApplication` сам (прогон фикстур), без `connect` kit, а
+    // объявление `usage` и `usageLedger` нужно операциям kit (D10).
+    if (connectionState is ClientConnectionReady) {
+      _capabilities = _capabilitiesOf(connectionState);
+    }
     final wasConnected = _current.connection is Connected;
     final view = _viewFor(connectionState);
     // Сбой явного connect/reconnect сообщает вызывающий; здесь — только
@@ -981,6 +1215,10 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   /// Объявил ли агент текущего соединения `usage` (D3, D21 Т4).
   bool get _usageDeclared => CodelabExtensions.parse(_capabilities.meta).usage;
 
+  /// Объявил ли агент текущего соединения `usageLedger` (D7, D10).
+  bool get _ledgerDeclared =>
+      CodelabExtensions.parse(_capabilities.meta).usageLedger;
+
   /// Новое соединение — новый агент: расход каждой открытой сессии
   /// сбрасывается, даже если сессию новое соединение не загрузило
   /// (`detached`). Сброс идёт здесь, по готовому `initialize` нового
@@ -995,6 +1233,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   /// новый агент снова вправе получить одну запись `usage.decode_failed`.
   void _resetUsage() {
     _usageWarned.clear();
+    _ledgerWarned.clear();
     for (final handle in _handles.values) {
       handle.resetUsage();
     }
@@ -1010,7 +1249,9 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       sessionId: sessionId,
       connectionGeneration: notification.generation,
     );
-    if (handle == null) {
+    final loading =
+        handle == null && _reloading.contains(notification.sessionId);
+    if (handle == null && !loading) {
       log.debug('usage.unknown_session');
       return;
     }
@@ -1026,6 +1267,20 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       },
     );
     if (snapshot == null) {
+      return;
+    }
+    if (handle == null) {
+      // Загрузка идёт, сессии ещё нет: хранится последний снимок по `seq`.
+      final waiting = _pendingUsage[notification.sessionId];
+      if (waiting == null ||
+          notification.generation > waiting.generation ||
+          (notification.generation == waiting.generation &&
+              snapshot.seq > waiting.snapshot.seq)) {
+        _pendingUsage[notification.sessionId] = _PendingUsage(
+          snapshot,
+          notification.generation,
+        );
+      }
       return;
     }
     final lastSeq = handle.current.usage.lastSeq;
@@ -1073,9 +1328,15 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       isConnected: () => _current.connection is Connected,
       clock: clock,
       usageDeclared: () => _usageDeclared,
+      ledgerDeclared: () => _ledgerDeclared,
     );
     _handles[session.id] = handle;
     _order.insert(0, session.id);
+    // Снимок `load`, пришедший до регистрации сессии (D10).
+    final waiting = _pendingUsage.remove(session.id);
+    if (waiting != null) {
+      handle.applyUsage(waiting.snapshot, generation: waiting.generation);
+    }
     return handle;
   }
 
@@ -1166,6 +1427,26 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   }
 }
 
+/// Ожидающий регистрации сессии снимок usage с поколением соединения (D10).
+final class _PendingUsage {
+  const _PendingUsage(this.snapshot, this.generation);
+
+  final UsageSnapshot snapshot;
+  final int generation;
+}
+
+/// Запрос журнала usage в полёте и слитый следующий (D10).
+final class _LedgerFlight {
+  /// Ждущие слитые вызовы; `null` — следующего запроса нет.
+  Completer<void>? queued;
+  bool queuedRebuild = false;
+
+  /// Эпоха журнала сессии и поколение соединения на момент последнего
+  /// слитого вызова.
+  int queuedEpoch = 0;
+  int queuedGeneration = 0;
+}
+
 /// [RestoreHost] поверх закрытых операций рабочего пространства.
 final class _RestoreHostAdapter implements RestoreHost {
   _RestoreHostAdapter(this._workspace);
@@ -1230,6 +1511,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     required bool Function() isConnected,
     required DateTime Function() clock,
     required bool Function() usageDeclared,
+    required bool Function() ledgerDeclared,
   }) : id = session.id,
        cwd = session.cwd,
        _session = session,
@@ -1240,6 +1522,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
        _isConnected = isConnected,
        _clock = clock,
        _usageDeclared = usageDeclared,
+       _ledgerDeclared = ledgerDeclared,
        _usage = UsageFold.initial(declared: usageDeclared()) {
     _projector.apply(session);
     _current = _sessionFields(
@@ -1247,6 +1530,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
         revision: 0,
         status: SessionStatusView.idle,
         usage: _usage.view,
+        usageLedger: ledgerBase(),
       ),
       session,
     );
@@ -1285,6 +1569,14 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   /// Объявил ли агент текущего соединения `usage`: читается при каждом
   /// сбросе, потому что соединение меняется быстрее сессии.
   final bool Function() _usageDeclared;
+
+  /// Объявил ли агент текущего соединения `usageLedger` (D7, D10).
+  final bool Function() _ledgerDeclared;
+
+  /// Номер «эпохи» журнала: растёт при сбросе (смена соединения,
+  /// `session/load`). Ответ запроса, отправленного в прежней эпохе, не
+  /// применяется (D10, §9).
+  int ledgerEpoch = 0;
 
   /// Свёртка снимков расхода сессии (D8, D21 Т4); в `SessionView` попадает
   /// её `view`. Не выводится из `AcpSession`, поэтому `_sessionFields` поле
@@ -1615,26 +1907,59 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     _projector.reset();
     _session = session;
     _projector.apply(session);
-    // `session/load` — новая точка отсчёта расхода: агент считает сумму
-    // заново (после загрузки — только по ходам после неё, `beforeLoad`, D6).
-    _usage = UsageFold.initial(declared: _usageDeclared());
+    // Расход и журнал сброшены в начале загрузки ([beginLoad], D10): снимок
+    // `load` мог прийти и быть применён до этого обновления.
     _publish(
       _sessionFields(
-        _current.copyWith(revision: _current.revision + 1, usage: _usage.view),
+        _current.copyWith(revision: _current.revision + 1),
         session,
       ),
     );
   }
 
-  /// Сброс расхода при смене соединения (D21 Т2, Т4); ревизия растёт, только
+  /// Начало `session/load` этой сессии: расход и журнал usage — в исходное
+  /// состояние (агент считает сумму заново, D8, D10); ревизия растёт, только
   /// если вид изменился.
+  void beginLoad() => resetUsage();
+
+  /// Сброс расхода и журнала при смене соединения или `session/load`
+  /// (D21 Т2, Т4; change `add-usage-ledger`, D10); ревизия растёт, только если
+  /// вид изменился.
   void resetUsage() {
     _usage = UsageFold.initial(declared: _usageDeclared());
-    if (_usage.view == _current.usage) {
+    ledgerEpoch++;
+    final next = _current.copyWith(
+      usage: _usage.view,
+      usageLedger: ledgerBase(),
+    );
+    if (next == _current) {
+      return;
+    }
+    _publish(next.copyWith(revision: _current.revision + 1));
+  }
+
+  /// Состояние журнала без запросов: `idle` или `unavailable` по объявлению
+  /// соединения.
+  UsageLedgerState ledgerBase() => _ledgerDeclared()
+      ? const UsageLedgerState.idle()
+      : const UsageLedgerState.unavailable();
+
+  /// Журнал, показанный последним (`loaded`, а при `loading` и `failed` —
+  /// предыдущий), если был.
+  UsageLedgerView? get ledgerView => switch (_current.usageLedger) {
+    UsageLedgerLoaded(:final view) => view,
+    UsageLedgerLoading(:final previous) => previous,
+    UsageLedgerFailed(:final previous) => previous,
+    _ => null,
+  };
+
+  /// Публикует [state] журнала одной ревизией.
+  void setLedger(UsageLedgerState state) {
+    if (state == _current.usageLedger) {
       return;
     }
     _publish(
-      _current.copyWith(revision: _current.revision + 1, usage: _usage.view),
+      _current.copyWith(revision: _current.revision + 1, usageLedger: state),
     );
   }
 

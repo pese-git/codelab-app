@@ -61,6 +61,7 @@ void main() {
     expect(codelabBlock(response.resultMap), {
       'tasks': {'version': 1},
       'usage': {'version': 1},
+      'usageLedger': {'version': 1},
     });
   });
 
@@ -77,6 +78,7 @@ void main() {
       'subagentToolCalls': {'version': 1},
       'tasks': {'version': 1},
       'usage': {'version': 1},
+      'usageLedger': {'version': 1},
     });
 
     source.put('subagents.enabled', false);
@@ -87,6 +89,7 @@ void main() {
     expect(codelabBlock(after), {
       'tasks': {'version': 1},
       'usage': {'version': 1},
+      'usageLedger': {'version': 1},
     });
     // Ответ первого соединения — значение, а не живая ссылка.
     expect(codelabBlock(before.resultMap), {
@@ -94,6 +97,7 @@ void main() {
       'subagentToolCalls': {'version': 1},
       'tasks': {'version': 1},
       'usage': {'version': 1},
+      'usageLedger': {'version': 1},
     });
   });
 
@@ -114,6 +118,7 @@ void main() {
       'subagentToolCalls': {'version': 1},
       'tasks': {'version': 1},
       'usage': {'version': 1},
+      'usageLedger': {'version': 1},
     });
   });
 }

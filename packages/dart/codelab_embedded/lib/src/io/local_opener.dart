@@ -94,6 +94,14 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
     ], home: home);
   }
 
+  // Журналы сессий; тот же объект даёт путь файла `usage.json` (change
+  // `add-usage-ledger`, D3, D13).
+  final journals = openHostSessions(
+    codelabHome: home,
+    settings: settings,
+    clock: clock,
+    logger: logger,
+  );
   // Ресурсы — только после успешной загрузки конфига и выбора хранилища.
   final owned = httpClient == null;
   final http = httpClient ?? web.Client();
@@ -130,12 +138,8 @@ EmbeddedAgentOpener localEmbeddedAgentOpener({
         baseEnv: env,
         localEnv: (sessionCwd) =>
             LocalExecutionEnv(cwd: sessionCwd, hostEnvironment: environment),
-        sessions: openHostSessions(
-          codelabHome: home,
-          settings: settings,
-          clock: clock,
-          logger: logger,
-        ),
+        sessions: journals,
+        usageLedger: JsonlUsageLedgerStore(journals),
         secrets: secrets,
         http: http,
         closeHttpOnDispose: owned,

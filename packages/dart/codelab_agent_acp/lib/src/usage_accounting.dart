@@ -35,6 +35,17 @@ bool codelabKeyAgreed(Map<String, Object?>? meta, String key) {
 bool usageConsent(acp.ClientCapabilities capabilities) =>
     codelabKeyAgreed(capabilities.meta, 'usage');
 
+/// Результат запроса журнала с числами для лога (D12): ходы и шаги журнала.
+typedef UsageLedgerResult = ({
+  Map<String, Object?> result,
+  int turns,
+  int steps,
+});
+
+/// Метод запроса клиент → агент с историей usage сессии (design.md change
+/// `add-usage-ledger`, D6: имя с `_`, ответ с тем же `id`).
+const usageLedgerMethod = '_codelab/session/usage/ledger';
+
 /// Метод уведомления агент → клиент с usage сессии (design.md change
 /// `add-usage-extension`, D1, D17: имя с `_`, без `id`).
 const usageNotificationMethod = '_codelab/session/usage';
@@ -100,6 +111,13 @@ final class _Totals {
   }
 
   _Totals copy() => _Totals()..merge(this);
+
+  void clear() {
+    input = output = cacheRead = cacheWrite = steps = micros = 0;
+    reasoning = null;
+    priced = false;
+    partial.clear();
+  }
 
   Map<String, Object?> tokensJson() => {
     'input': input,
@@ -181,12 +199,66 @@ List<String>? _partialJson(Set<UsagePartial> partial) {
 final class UsageAccounting {
   UsageAccounting({this.beforeLoad = false});
 
-  /// Сессия открыта через `session/load` с ответами модели в журнале: ранние
-  /// ходы в сумму не вошли (D6, Q7 (а)); только у моста, созданного
-  /// `session/load`, и не меняется при `reattach`.
+  /// Причина `beforeLoad` (D6, Q7 (а)): сумма сессии неполна, ранние ходы не
+  /// вошли. После `session/load` агент CodeLab её не ставит — сумма полная
+  /// (change `add-usage-ledger`, D8, [seed]). Исключение — откат: если засев
+  /// журналом не удался, мост ставит `beforeLoad`, и клиент видит честную
+  /// «неполную сумму» (Migration Plan, D15). Значение остаётся в протоколе v1
+  /// для других агентов.
   bool beforeLoad;
 
   var _seq = 0;
+
+  /// `seq` последнего потраченного снимка; `0` — снимков не было (D6: поле
+  /// `seq` ответа журнала).
+  int get seq => _seq;
+
+  /// Число шагов завершённых ходов: засев (все шаги журнала) плюс шаги ходов
+  /// этого сервера. Шагов в журнале сверх этого числа — шаги идущего хода
+  /// (`running`, D6): шаг записывается в журнал раньше `StepEnded`, например
+  /// пока ход ждёт разрешения инструмента. Счёт по шагам, а не по ходам:
+  /// ход от уведомления субагента сливается в журнале с предыдущим (R2), и
+  /// число ходов расходится навсегда, а шаги суммируются точно.
+  int get completedSteps => _completed.steps;
+
+  /// В сумме сессии есть хотя бы один шаг: без них снимок `load` не нужен
+  /// (D8, «Загрузка сессии без шагов»).
+  bool get hasSteps => _completed.steps > 0 || (_open?.steps ?? 0) > 0;
+
+  /// Usage суммаризатора: входит в сумму сессии, но не в ход, не в `turns` и
+  /// не в `steps` (D4, Q6 (а)).
+  final _summaries = _Totals();
+
+  /// Засевает агрегаты отчётом журнала при открытии сессии `session/load`
+  /// (D8): итоги завершённых ходов, их число, причины `noUsage` и `noPrice` и
+  /// суммаризатор. Те же функции, что строят ответ запроса журнала, поэтому
+  /// `session` снимка `load` равен `total` ответа по построению.
+  ///
+  /// Как использовать: один раз, сразу после `attach` моста, созданного
+  /// `session/load`; повторный `session/load` открытой сессии (`reattach`)
+  /// не пересевает.
+  void seed(UsageLedgerProjection projection) {
+    _completed
+      ..clear()
+      ..merge(projection._completed);
+    _completedTurns = projection.turns;
+    _summaries
+      ..clear()
+      ..merge(projection._summaries);
+  }
+
+  /// Учитывает вызов суммаризатора (`ContextCompacted.usage`): [priced] —
+  /// у модели ответа в каталоге есть цена. Нулевой usage ничего не меняет;
+  /// ненулевые токены без цены дают `noPrice` (D4).
+  void summarizerEnded(Usage usage, {required bool priced}) {
+    final tokens =
+        usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+    final known = priced && _micros(usage) != null;
+    _summaries.addUsage(usage, priced: known && tokens > 0);
+    if (!known && tokens > 0) {
+      _summaries.partial.add(UsagePartial.noPrice);
+    }
+  }
 
   /// Итоги завершённых ходов, где были шаги, и их число (D19 п. 3).
   final _completed = _Totals();
@@ -361,6 +433,16 @@ final class UsageAccounting {
     );
   }
 
+  /// Снимок `load` (D8): сумма сессии после `session/load`; `context` — если
+  /// мосту известно заполнение (повторная загрузка живой сессии), `turnId`,
+  /// `step` и `turn` нет.
+  Map<String, Object?> loadSnapshot(String sessionId) => _snapshot(
+    sessionId,
+    'load',
+    session: _sessionJson(),
+    context: _contextJson(_lastContext),
+  );
+
   /// Сессия: итоги завершённых ходов плюс идущий ход (D4 п. 4); `turns`
   /// считает и текущий ход, если в нём уже были шаги (D19 п. 3).
   Map<String, Object?> _sessionJson() {
@@ -371,6 +453,7 @@ final class UsageAccounting {
       session.merge(running);
       turns += 1;
     }
+    session.merge(_summaries);
     if (beforeLoad) {
       session.partial.add(UsagePartial.beforeLoad);
     }
@@ -407,4 +490,330 @@ final class UsageAccounting {
       'context': ?context,
     };
   }
+}
+
+/// Проекция отчёта журнала usage в форму D6 и в засев агрегатов (design.md
+/// change `add-usage-ledger`, D2, D6, D8).
+///
+/// Почему один класс на два применения: сумма сессии снимка `load` и `total`
+/// ответа журнала обязаны совпадать (D8, инвариант), а проще всего это
+/// гарантировать, строя оба из одних и тех же объектов: те же микродоллары
+/// (`_micros`), та же печать денег (`_costString`), те же причины.
+///
+/// Для чего: `UsageLedgerReport` ядра хранит сырые `Usage` (доллары `double`)
+/// и множество моделей без цены; перевод в микродоллары и причины `partial`
+/// делает адаптер (D2, Q4). Правила цены те же, что у живых снимков: часть с
+/// моделью с ценами и нулём токенов — с ценой `0` (D20 change
+/// `add-usage-extension`), субагенты судятся по каждому прогону (D2).
+///
+/// Как использовать: [UsageLedgerProjection.of] по отчёту
+/// `AgentSession.usageLedger` (запрос журнала, [result]) или
+/// `usageLedgerInMemory` (засев, `UsageAccounting.seed`).
+final class UsageLedgerProjection {
+  UsageLedgerProjection._({
+    required UsageLedgerReport report,
+    required this.turns,
+    required this.steps,
+    required this.hasCost,
+    required _Totals completed,
+    required _Totals summaries,
+    required List<Map<String, Object?>> turnsJson,
+    required List<Map<String, Object?>> modelsJson,
+    required Map<String, Object?>? subagentsJson,
+    required Map<String, Object?>? summariesJson,
+  }) : _report = report,
+       _completed = completed,
+       _summaries = summaries,
+       _turnsJson = turnsJson,
+       _modelsJson = modelsJson,
+       _subagentsJson = subagentsJson,
+       _summariesJson = summariesJson;
+
+  /// Строит проекцию отчёта.
+  factory UsageLedgerProjection.of(UsageLedgerReport report) {
+    final ledger = report.ledger;
+    final noPrice = report.noPriceModels;
+    final completed = _Totals();
+    final turnsJson = <Map<String, Object?>>[];
+    final modelPartial = <String, Set<UsagePartial>>{};
+    var turnUsage = const Usage();
+    var turnSteps = 0;
+    var index = 0;
+    for (final turn in ledger.turns) {
+      index += 1;
+      turnUsage += turn.usage;
+      turnSteps += turn.steps.length;
+      final stepsJson = <Map<String, Object?>>[];
+      final partial = <UsagePartial>{};
+      var anyPriced = false;
+      for (final (i, step) in turn.steps.indexed) {
+        final tokens = _tokenSum(step.usage);
+        // Модель с ценами при нуле токенов — с ценой `0`, как у живого шага.
+        final priced =
+            !noPrice.contains(step.model) && _micros(step.usage) != null;
+        final reasons = <UsagePartial>{
+          if (step.noUsage) UsagePartial.noUsage,
+          if (!priced && tokens > 0) UsagePartial.noPrice,
+        };
+        final totals = _Totals()..addUsage(step.usage, priced: priced);
+        partial.addAll(reasons);
+        modelPartial.putIfAbsent(step.model, () => {}).addAll(reasons);
+        anyPriced = anyPriced || priced;
+        stepsJson.add({
+          'index': i,
+          'model': step.model,
+          'tokens': totals.tokensJson(),
+          if (priced) 'cost': _costString(totals.micros),
+          'partial': ?_partialJson(reasons),
+          'toolCallIds': step.toolCallIds,
+        });
+      }
+      Map<String, Object?>? subagents;
+      if (turn.subagents case final group?) {
+        // Цена по каждому прогону хода (D2): токены при нулевой стоимости —
+        // «без цены», иначе «с ценой».
+        final judged = _judgeRuns(turn.subagentRuns, group.usage);
+        anyPriced = anyPriced || judged.priced;
+        if (judged.unpriced) {
+          partial.add(UsagePartial.noPrice);
+        }
+        subagents = _groupJson('runs', group.count, group.usage, judged);
+      }
+      final turnPriced = anyPriced && _micros(turn.usage) != null;
+      final total = _Totals()
+        ..addUsage(turn.usage, priced: turnPriced)
+        ..steps = turn.steps.length
+        ..partial.addAll(partial);
+      if (anyPriced && !turnPriced) {
+        total.partial.add(UsagePartial.noPrice);
+      }
+      completed.merge(total);
+      turnsJson.add({
+        'index': index,
+        if (turn.title.isNotEmpty) 'title': turn.title,
+        'total': {
+          'steps': total.steps,
+          'tokens': total.tokensJson(),
+          if (total.priced) 'cost': _costString(total.micros),
+          'partial': ?_partialJson(total.partial),
+        },
+        'steps': stepsJson,
+        'subagents': ?subagents,
+      });
+    }
+
+    // Суммаризатор: цена по модели каждого вызова (D2, D4).
+    final summaries = _Totals();
+    Map<String, Object?>? summariesJson;
+    var summariesUsage = const Usage();
+    if (ledger.summaries case final group?) {
+      var unpriced = false;
+      var priced = false;
+      for (final call in ledger.summaryCalls) {
+        if (_tokenSum(call.usage) == 0) {
+          continue;
+        }
+        final known =
+            call.model != null &&
+            !noPrice.contains(call.model) &&
+            _micros(call.usage) != null;
+        if (known) {
+          priced = true;
+        } else {
+          unpriced = true;
+        }
+      }
+      summariesUsage = group.usage;
+      final judged = (priced: priced, unpriced: unpriced);
+      summaries.addUsage(
+        group.usage,
+        priced: priced && _micros(group.usage) != null,
+      );
+      if (unpriced) {
+        summaries.partial.add(UsagePartial.noPrice);
+      }
+      summariesJson = _groupJson('count', group.count, group.usage, judged);
+    }
+
+    // Всё, что журнал насчитал сверх перечисленных ходов и суммаризатора: шаги
+    // до первых слов пользователя, шаги вне пути до листа (D1 п. 8). Модели
+    // таких шагов в ходах не видны, поэтому цена — по моделям журнала: все с
+    // ценами — «с ценой», все без — «без цены», смесь — по ненулевой
+    // стоимости остатка (как эвристика субагентов).
+    final rest = _minus(_minus(ledger.total, turnUsage), summariesUsage);
+    final restTokens = _tokenSum(rest);
+    final extraSteps = ledger.steps - turnSteps;
+    if (restTokens > 0 || extraSteps > 0) {
+      final allPriced = ledger.byModel.every((m) => !noPrice.contains(m.model));
+      final nonePriced = ledger.byModel.every((m) => noPrice.contains(m.model));
+      final priced =
+          !nonePriced &&
+          (allPriced || rest.cost.total > 0) &&
+          _micros(rest) != null;
+      completed.addUsage(rest, priced: priced);
+      completed.steps += extraSteps > 0 ? extraSteps : 0;
+      if (!priced && restTokens > 0) {
+        completed.partial.add(UsagePartial.noPrice);
+      }
+    }
+
+    // Субагенты сессии: цена по каждому прогону (D2); usage уже в ходах.
+    Map<String, Object?>? subagentsJson;
+    if (ledger.subagents case final group?) {
+      final judged = _judgeRuns(ledger.subagentRuns, group.usage);
+      if (judged.unpriced) {
+        completed.partial.add(UsagePartial.noPrice);
+      }
+      subagentsJson = _groupJson('runs', group.count, group.usage, judged);
+    }
+
+    final modelsJson = [
+      for (final model in ledger.byModel)
+        () {
+          final priced = !noPrice.contains(model.model);
+          final totals = _Totals()..addUsage(model.usage, priced: priced);
+          return <String, Object?>{
+            'model': model.model,
+            'steps': model.steps,
+            'tokens': totals.tokensJson(),
+            if (totals.priced) 'cost': _costString(totals.micros),
+            'partial': ?_partialJson({...?modelPartial[model.model]}),
+          };
+        }(),
+    ];
+
+    return UsageLedgerProjection._(
+      report: report,
+      turns: ledger.turns.length,
+      steps: completed.steps,
+      // `cost` есть где-либо в результате, только если он есть у `total`: цена
+      // хода, шага, модели и групп входит в сумму завершённых ходов или
+      // суммаризатора. Один источник вместо флагов у каждого места.
+      hasCost: completed.priced || summaries.priced,
+      completed: completed,
+      summaries: summaries,
+      turnsJson: turnsJson,
+      modelsJson: modelsJson,
+      subagentsJson: subagentsJson,
+      summariesJson: summariesJson,
+    );
+  }
+
+  final UsageLedgerReport _report;
+  final _Totals _completed;
+  final _Totals _summaries;
+  final List<Map<String, Object?>> _turnsJson;
+  final List<Map<String, Object?>> _modelsJson;
+  final Map<String, Object?>? _subagentsJson;
+  final Map<String, Object?>? _summariesJson;
+
+  /// Число ходов со шагами и число шагов журнала по всем записям файла.
+  final int turns;
+  final int steps;
+
+  /// В результате есть хотя бы одно `cost`: тогда нужен `currency` (D6).
+  /// Собирается по признакам цены при построении, без разбора результата.
+  final bool hasCost;
+
+  /// `total` ответа: весь журнал плюс суммаризатор (D6).
+  Map<String, Object?> get totalJson {
+    final total = _completed.copy()..merge(_summaries);
+    return total.toJson(turns: turns);
+  }
+
+  /// Результат `_codelab/session/usage/ledger` (D6).
+  ///
+  /// [seq] — `UsageAccounting.seq` моста, [running] — последний ход идёт.
+  /// `reason` — только у `rebuilt`; `currency` — если в результате есть
+  /// хоть одно `cost`.
+  Map<String, Object?> result({
+    required String sessionId,
+    required int seq,
+    required bool running,
+  }) {
+    final report = _report;
+    final turnsJson = [
+      for (final (i, turn) in _turnsJson.indexed)
+        if (running && i == _turnsJson.length - 1)
+          {...turn, 'running': true}
+        else
+          turn,
+    ];
+    return {
+      'sessionId': sessionId,
+      'seq': seq,
+      'ledger': {
+        'status': report.state.name,
+        if (report.state == UsageLedgerFileState.rebuilt)
+          'reason': ?report.reason?.name,
+        'records': report.ledger.records,
+      },
+      'total': totalJson,
+      'turns': turnsJson,
+      'models': _modelsJson,
+      'subagents': ?_subagentsJson,
+      'summaries': ?_summariesJson,
+      if (hasCost) 'currency': 'USD',
+    };
+  }
+}
+
+int _tokenSum(Usage u) => u.input + u.output + u.cacheRead + u.cacheWrite;
+
+/// Разность `a − b` по токенам и категориям стоимости; отрицательное
+/// (погрешность `double`, лишний вычитаемый) обрезается до нуля.
+Usage _minus(Usage a, Usage b) {
+  int sub(int x, int y) => x > y ? x - y : 0;
+  double subCost(double x, double y) => x - y > 1e-9 ? x - y : 0;
+  return Usage(
+    input: sub(a.input, b.input),
+    output: sub(a.output, b.output),
+    cacheRead: sub(a.cacheRead, b.cacheRead),
+    cacheWrite: sub(a.cacheWrite, b.cacheWrite),
+    cost: UsageCost(
+      input: subCost(a.cost.input, b.cost.input),
+      output: subCost(a.cost.output, b.cost.output),
+      cacheRead: subCost(a.cost.cacheRead, b.cost.cacheRead),
+      cacheWrite: subCost(a.cost.cacheWrite, b.cost.cacheWrite),
+    ),
+  );
+}
+
+/// Цена прогонов субагентов по каждому прогону (D2): токены при нулевой
+/// стоимости — «без цены» (`unpriced`), токены с ненулевой стоимостью — «с
+/// ценой» (`priced`); прогон без токенов на цену не влияет. Без списка
+/// прогонов (старая свёртка) — по сумме группы.
+({bool priced, bool unpriced}) _judgeRuns(List<Usage> runs, Usage fallback) {
+  var priced = false;
+  var unpriced = false;
+  for (final run in runs.isEmpty ? [fallback] : runs) {
+    if (_tokenSum(run) == 0) {
+      continue;
+    }
+    if (run.cost.total == 0) {
+      unpriced = true;
+    } else {
+      priced = true;
+    }
+  }
+  return (priced: priced, unpriced: unpriced);
+}
+
+/// Группа без шагов — субагенты (`runs`) или суммаризатор (`count`): токены,
+/// `cost` при известной цене хотя бы у одной части с токенами, `noPrice` при
+/// неизвестной (D2, D6).
+Map<String, Object?> _groupJson(
+  String countKey,
+  int count,
+  Usage usage,
+  ({bool priced, bool unpriced}) judged,
+) {
+  final totals = _Totals()
+    ..addUsage(usage, priced: judged.priced && _micros(usage) != null);
+  return {
+    countKey: count,
+    'tokens': totals.tokensJson(),
+    if (totals.priced) 'cost': _costString(totals.micros),
+    'partial': ?_partialJson({if (judged.unpriced) UsagePartial.noPrice}),
+  };
 }

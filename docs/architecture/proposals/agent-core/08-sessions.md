@@ -132,7 +132,7 @@ final class SessionHeader {
 | `config_change` | `optionId`, `value` | нет | смена опции конфигурации, кроме `mode` и `model` (у них свои записи); после MVP `optionId` `model_role.<role>` со значением `provider/model` или `null` — переопределение роли на сессию (§17.10.5) |
 | `plan` | `entries[]`: `content`, `priority`, `status` | нет | старый формат, только чтение: до change `add-subagents-and-tasks` — полный снимок плана после `update_plan`; после change не пишется, но читается всегда — в свёртке `buildTaskList` заменяет весь список пунктами `"1"…"n"` (§17.16.6) |
 | `task` | `op` (`create` \| `update` \| `delete` \| `assign`), `actor` (`main` или id субагента), `items` (полные снимки изменённых пунктов), `deleted` (удалённые id) | нет | change `add-subagents-and-tasks`: одна запись на `TaskListChanged`, кроме `op: restore` (восстановление из ветки не пишется, TSK-1), только в журнале корневой сессии; список восстанавливается свёрткой `buildTaskList` активной ветки, счётчик id — по всему журналу (§17.16.6) |
-| `compaction` | `summary`, `firstKeptId`, `tokensBefore`, `tokensAfter`, `details?` (после MVP — также `details.usage`: usage суммаризатора в форме `usage` §8.2.3, читается журналом usage §12.6.1) | user-сообщение с резюме вместо записей до `firstKeptId` (§8.7) | сжатие (§9) |
+| `compaction` | `summary`, `firstKeptId`, `tokensBefore`, `tokensAfter`, `details?` (с change `add-usage-ledger`, D4, — также `details.usage`: usage суммаризатора в форме `usage` §8.2.3 и его модель в `summaryModel`, читается журналом usage §12.6.1; у записей до change поля нет) | user-сообщение с резюме вместо записей до `firstKeptId` (§8.7) | сжатие (§9) |
 | `label` | `targetId`, `label?` | нет | закладка на запись; `null` или пустая строка снимает метку |
 | `leaf` | `targetId` | нет | перемещение активного листа (MVP); после §17.6 ядро её не пишет, но читает по правилу §8.4 |
 | `branch` | `targetId`, `fromLeafId`, `reason` (`"switch"` \| `"rewind"` \| `"checkpoint"`; `checkpoint` — после MVP, откат к метке, §17.11.6), `summaryStatus` (`"generated"` \| `"skipped"` \| `"failed"`), `summary?`, `details` (с `details.usage` при сгенерированной сводке, §12.6.1; при `reason: "checkpoint"` — `details.checkpoint: {label, rewindToolCallId}`) | user-сообщение со сводкой покинутой ветки и/или заметкой о неоткатанных эффектах либо ничего (§8.7, шаг 6) | после MVP: переключение ветки или перемотка (§17.6.2); `parentId` равен `targetId`, лист после записи — её `id` |
@@ -832,7 +832,7 @@ $CODELAB_HOME/                              по умолчанию ~/.codelab (
       2026-10-21T08-00-00-000Z_01JB8Q2W6R9T3M5K7N1P4X8Z0C/subagents/*.jsonl   журналы субагентов (после MVP, §17.3.6)
       2026-10-21T08-00-00-000Z_01JB8Q2W6R9T3M5K7N1P4X8Z0C/spills/<n>.txt      вынесенные результаты инструментов (с этапа 3, §17.4)
       2026-10-21T08-00-00-000Z_01JB8Q2W6R9T3M5K7N1P4X8Z0C/spills/job_<id>.log  журналы вывода фоновых команд (после MVP, §17.9.4)
-      2026-10-21T08-00-00-000Z_01JB8Q2W6R9T3M5K7N1P4X8Z0C/usage.json              журнал usage, производный, можно удалить (после MVP, §12.6.1)
+      2026-10-21T08-00-00-000Z_01JB8Q2W6R9T3M5K7N1P4X8Z0C/usage.json              журнал usage, производный, можно удалить (change `add-usage-ledger`, §12.6.1)
       2026-10-21T08-00-00-000Z_01JB8Q2W6R9T3M5K7N1P4X8Z0C/segments/<seq:06>.jsonl  сегменты журнала после первого (после MVP, §17.13.2)
       2026-10-21T08-00-00-000Z_01JB8Q2W6R9T3M5K7N1P4X8Z0C/index/records.idx, segments.json   индекс смещений, производный, можно удалить (после MVP, §17.13.2)
     index.json                                 кеш сводок для session/list (§8.10), можно удалить
@@ -851,7 +851,7 @@ $CODELAB_HOME/                              по умолчанию ~/.codelab (
   кеш игнорируется и пересоздаётся. Отсюда же берётся `cwd` при синтезе заголовка (§8.6, шаг 3b).
 * Каталог `sessions/` новый: Python-агент хранил JSON-сессии в `$CODELAB_HOME/data/sessions`,
   форматы не пересекаются, оба агента могут жить рядом (§16).
-* Каталог сессии `<файл журнала без .jsonl>/` (`spills/` — с этапа 3; после MVP — `subagents/`, журналы вывода задач в `spills/`, `usage.json`) принадлежит
+* Каталог сессии `<файл журнала без .jsonl>/` (`spills/` — с этапа 3; `usage.json` — с change `add-usage-ledger` через порт `UsageLedgerStore`, §12.6.1; после MVP — `subagents/`, журналы вывода задач в `spills/`) принадлежит
   журналу. Удаление сессии любой операцией хоста ДОЛЖНО удалять его целиком вместе с `.jsonl`,
   `.corrupt` и `.lease` (§17.4.7, §17.6.8). Файл `<stem>.lease` шаблон `sessions/*/*.jsonl` не
   видит.

@@ -137,6 +137,13 @@
                 "description": "Show the model, mode, working directory and MCP servers"
               },
               {
+                "name": "usage",
+                "description": "Show token usage and cost of the session",
+                "input": {
+                  "hint": "[rebuild]"
+                }
+              },
+              {
                 "name": "mcp",
                 "description": "List, reload, enable or disable MCP servers",
                 "input": {

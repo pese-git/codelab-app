@@ -94,6 +94,7 @@ agent:
       'mode',
       'model',
       'status',
+      'usage',
       'config',
       'mcp',
       'help',
@@ -106,7 +107,14 @@ agent:
     await peer.openSession(temp.path);
     await pumpEventQueue();
 
-    expect(commandNames(peer), ['compact', 'mode', 'model', 'status', 'help']);
+    expect(commandNames(peer), [
+      'compact',
+      'mode',
+      'model',
+      'status',
+      'usage',
+      'help',
+    ]);
   });
 
   test('--ws: "/config check" is not executed and not sent to the model: '
