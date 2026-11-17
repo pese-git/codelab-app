@@ -82,7 +82,7 @@ final class LogRecord {           // то, что получает sink хост
 | `prompts` | `prompts.override` (§11.6.1) |
 | `permission` | `permission.request`, `permission.decision`, `permission.denied` |
 | `session` | `session.create`, `session.open`, `session.repair`, `session.leaf.healed`, `session.append.failed`, `session.cycle`, `session.broken_link`, `session.compaction.lost_anchor` (§8.7); после MVP `session.origin.unknown` {`origin`} (§8.2.5) |
-| `compaction` | `compaction.done` (`info`; `session_id`, `trigger`, `pass`, `tokens_before`, `tokens_after`, `split_turn` — записанный проход), `compaction.skipped` (`info`; `session_id`, `trigger`, `pass`, `reason`: `no cut point` — нет среза, без оценок; `no reduction` — нет выигрыша, CMP-10, плюс `tokens_before`, `tokens_after`; `stale` — между листом начала прохода и текущим записано не состояние сессии, CMP-12, без оценок, уровень `warning` (исход недостижим — сигнал о новом пути записи), плюс `blocking_type` — вид первой мешающей записи, только тип; текста резюме нет), `compaction.failed` (`warning` из компактора — ошибка суммаризатора, поля `session_id`, `trigger`, `error`; `error` — неожиданное исключение фонового сжатия `afterTurn` в `AgentSession`, поля `session_id`, `trigger`, исключение — в `error` и `stack` записи), `compaction.anchor` (`debug`; `session_id`, `tokens`, `raw`, `source`: `compaction` | `load` — фиксация якоря на последнее сжатие в `AgentSession`; текстов нет) (§9.3, §9.8; changes `fix-compaction-estimate-and-no-gain`, D3, и `anchor-context-estimate-after-compaction`, D9, и `fix-config-change-during-background-compaction`, D3) |
+| `compaction` | `compaction.done` (`info`; `session_id`, `trigger`, `pass`, `tokens_before`, `tokens_after`, `split_turn` — записанный проход), `compaction.skipped` (`info`; `session_id`, `trigger`, `pass`, `reason`: `no cut point` — нет среза, без оценок; `no reduction` — нет выигрыша, CMP-10, плюс `tokens_before`, `tokens_after`; `stale` — между листом начала прохода и текущим записано не состояние сессии, CMP-12, без оценок, уровень `warning` (исход недостижим — сигнал о новом пути записи), плюс `blocking_type` — вид первой мешающей записи, только тип; при `no reduction` и `stale` суммаризатор уже оплачен, и лог дополнительно несёт `usage_record_id` — id записи учёта `custom` `codelab.compaction_discarded` (§8.2.4, §9.8, CMP-13) и `summary_model` (всегда); токенов и денег нет; текста резюме нет), `compaction.failed` (`warning` из компактора — ошибка суммаризатора, поля `session_id`, `trigger`, `error`; `error` — неожиданное исключение фонового сжатия `afterTurn` в `AgentSession`, поля `session_id`, `trigger`, исключение — в `error` и `stack` записи), `compaction.anchor` (`debug`; `session_id`, `tokens`, `raw`, `source`: `compaction` | `load` — фиксация якоря на последнее сжатие в `AgentSession`; текстов нет) (§9.3, §9.8; changes `fix-compaction-estimate-and-no-gain`, D3, и `anchor-context-estimate-after-compaction`, D9, и `fix-config-change-during-background-compaction`, D3, и `fix-discarded-compaction-usage`, D6) |
 | `mcp` | `mcp.server.skipped`, `mcp.server.era`, `mcp.server.connect`, `mcp.server.failed`, `mcp.server.closed`, `mcp.server.stderr` (`trace`), `mcp.servers.replace_failed`, `mcp.tools.changed`, `mcp.tools.refresh_failed`, `mcp.tool.invalid`, `mcp.tool.description_truncated`, `mcp.call.cancelled`, `mcp.call.timeout`, `mcp.message.ignored` (`debug`) (этап 8, поля ниже) |
 | `acp` | `acp.frame.in`, `acp.frame.out`, `acp.frame.bad`, `acp.cancel.no_turn`, `acp.prompt.rejected`, `acp.detached`, `acp.client_capabilities.absent` (§13.2), `acp.terminal.release_failed` (§13.9) |
 | `host` | `host.plan`, `host.config.loaded`, `serve.config.invalid` (бинарь `serve`, ошибка загрузки конфига) |
@@ -647,7 +647,9 @@ final class TurnUsage {
 `TurnEnded.usage` — сумма `usage` всех шагов хода, включая неудачные попытки (§2.4), и usage детей
 хода (`subagentUsage`). Вызовы суммаризатора в ход не входят, в том числе при аварийном сжатии
 посреди хода: их usage несёт `ContextCompacted.usage` и запись `compaction` (`details.usage`, §9),
-и он входит в сумму сессии (change `add-usage-ledger`, D4). `ModelRequested` несёт оценку токенов
+а у отброшенного прохода — `CompactionDiscarded.usage` и запись учёта `custom`
+`codelab.compaction_discarded` (§8.2.4, §9.8, CMP-13), и он входит в сумму сессии (changes
+`add-usage-ledger`, D4, и `fix-discarded-compaction-usage`). `ModelRequested` несёт оценку токенов
 запроса (§9.3). Стандартного поля для usage в ACP нет, поэтому клиенту его передаёт расширение
 CodeLab — уведомление `_codelab/session/usage` (change `add-usage-extension`, D1–D6; §13.12):
 снимок шага, хода и сессии и заполнения контекста, только соединению, объявившему `usage`.
@@ -691,7 +693,7 @@ String?`, `write(SessionId, String)`; §10, `AgentCoreServices`); реализа
                         "noUsage": false, "toolCallIds": ["call_1"]}],
              "subagents": {"runs": 1, "usage": {"…": "…"}}}],
   "subagents": {"runs": 2, "usage": {"…": "…"}},
-  "summaries": {"count": 1, "usage": {"…": "…"}, "models": ["openai/gpt-4o"]}
+  "summaries": {"count": 2, "discarded": 1, "usage": {"…": "…"}, "models": ["openai/gpt-4o"]}
 }
 ```
 
@@ -702,6 +704,11 @@ String?`, `write(SessionId, String)`; §10, `AgentCoreServices`); реализа
 `subagentRuns` и `summaryCalls` — usage и модель каждого прогона и вызова суммаризатора для правила
 цены; в файл они не пишутся. Отчёт всегда строится из снимка журнала, а файл читается только для
 проверки свежести и статуса.
+
+`summaries.discarded` — сколько вызовов суммаризатора из `count` отброшено: компактор их оплатил, но
+сжатие не записал (CMP-10, CMP-12; запись учёта §8.2.4). Ключ идёт сразу после `count` и пишется
+только при ненулевом значении; версия файла остаётся 1: отчёт и засев содержимое файла не читают, а
+читатели v1 незнакомый ключ пропускают (change `fix-discarded-compaction-usage`, D3, Q3 (а)).
 
 **Алгоритм свёртки** (чистая функция записей `SessionSnapshot`):
 
@@ -718,6 +725,10 @@ build(snapshot):
       subagents.runs += 1; subagents.usage += u; total += u      // журналы детей не читаются
    c. compaction с details.usage → summaries.count += 1; summaries.usage += u; total += u;
       summaries.models += details.summaryModel (различные, по алфавиту); u — сумма всех запросов прохода
+   c''. custom с customType "codelab.compaction_discarded", data и data.usage — объекты (§8.2.4) →
+      то же, что 2c, по data.usage и data.summaryModel, плюс summaries.discarded += 1; при любом
+      data.reason; data неверной формы — запись пропускается без причины неполноты
+      (change fix-discarded-compaction-usage, D3)
    c'. после MVP: toolResult с auxUsage {model, usage} (inspect_image, §17.11.5) →
       total += usage; byModel[model] += usage; шагом не считается
    d. прочие записи и поля (spill, diff, toolMeta, outcome) не влияют
@@ -785,12 +796,14 @@ By model:
   anthropic/claude-sonnet-4: 7 steps, input 20400, output 1200, cache read 102000, cache write 41000, cost $0.1585
   openai/gpt-4o: 30 steps, input 100000, output 7000, cache read 800000, cache write 0, cost $0.4500
 Subagents: 2 runs, input 400, output 0, cache read 0, cache write 0, cost $0.0010
-Summaries: 1, input 2100, output 340, cache read 0, cache write 0, cost $0.0068
+Summaries: 2 (1 discarded), input 2100, output 340, cache read 0, cache write 0, cost $0.0068
 Ledger: rebuilt from journal (214 records)
 ```
 
 Правила строк: `Total` — сумма шагов, субагентов и суммаризатора; `By model` — только шаги, по
-алфавиту; `Subagents` и `Summaries` — только при ненулевом счётчике; вызов суммаризатора со всеми нулевыми счётчиками —
+алфавиту; `Subagents` и `Summaries` — только при ненулевом счётчике; в строке `Summaries` после числа вызовов
+` (<n> discarded)` — только при ненулевом `summaries.discarded`, отброшенные вызовы — части строк
+`Summaries` и `Total` по тому же правилу цены (change `fix-discarded-compaction-usage`, D4); вызов суммаризатора со всеми нулевыми счётчиками —
 `noUsage`, как шаг, и даёт «~» строкам `Summaries` и `Total` (`input ~0`, `cost ~$0.0000` у модели
 с ценами); строк по ходам нет (таблица
 ходов — панель Usage). Блоки `By branch` и `Inherited from fork` появятся вместе с деревом сессии

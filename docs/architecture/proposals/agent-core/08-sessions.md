@@ -137,7 +137,7 @@ final class SessionHeader {
 | `leaf` | `targetId` | нет | перемещение активного листа (MVP); после §17.6 ядро её не пишет, но читает по правилу §8.4 |
 | `branch` | `targetId`, `fromLeafId`, `reason` (`"switch"` \| `"rewind"` \| `"checkpoint"`; `checkpoint` — после MVP, откат к метке, §17.11.6), `summaryStatus` (`"generated"` \| `"skipped"` \| `"failed"`), `summary?`, `details` (с `details.usage` при сгенерированной сводке, §12.6.1; при `reason: "checkpoint"` — `details.checkpoint: {label, rewindToolCallId}`) | user-сообщение со сводкой покинутой ветки и/или заметкой о неоткатанных эффектах либо ничего (§8.7, шаг 6) | после MVP: переключение ветки или перемотка (§17.6.2); `parentId` равен `targetId`, лист после записи — её `id` |
 | `session_info` | `title?`, `source?` | нет | заголовок сессии; последняя запись с непустым `title` выигрывает. После MVP `source`: `"auto"` (по умолчанию, поле отсутствует) \| `"user"`; заголовок с `source: "user"` автоматика не перезаписывает (§17.6.4, SESM-6) |
-| `custom` | `customType`, `data` | нет | данные хоста; неизвестный `customType` сохраняется и игнорируется |
+| `custom` | `customType`, `data` | нет | данные хоста; неизвестный `customType` сохраняется и игнорируется. Известные `customType` ядра — ниже, после таблицы |
 | `subagent` | `subagentId`, `toolCallId`, `agent`, `description`, `childSessionId?`, `journal?`, `status`, `failure?`, `report?`, `usage?`, `toolCalls?`, `durationMs?`, `background?`, `remote?` (`{agent, contextId, taskId, state}`) | нет | после MVP (база — change `add-subagents-and-tasks`): связь с журналом субагента и его итоговый отчёт, в журнале **прямого** родителя (запись о внуке — в журнале ребёнка); последняя запись с данным `subagentId` выигрывает (§17.3.6); `remote` — у удалённого A2A-агента (§17.15.3) |
 | `job` | `jobId`, `toolCallId`, `command`, `cwd`, `kind` (`"local"` \| `"terminal"`), `status` (`"running"` \| `"exited"` \| `"killed"` \| `"timed_out"` \| `"lost"` \| `"interrupted"`), `exitCode?`, `signal?`, `killedBy?`, `notice?`, `pid?`, `procStart?`, `host?`, `terminalId?`, `log?` (`{path, bytes?, lines?, trust, source}`), `startedAt`, `endedAt?`, `maxDurationMs`, `yielded?` | нет | после MVP: состояние фоновой команды; последняя запись с данным `jobId` выигрывает; задачи принадлежат процессу, а не ветке — восстановление читает записи `job` по всем веткам (§17.9.10) |
 | `memory_recall` | `noteIds`, `text` | user-сообщение с `text` | после MVP: заметки памяти перед сообщением пользователя (§17.11.4); реплей пропускает |
@@ -147,6 +147,14 @@ final class SessionHeader {
 | `response_review` | `targetId`, `decision` (`"approved"`), `note?` | нет | после MVP: `/approve` (§17.12.4) |
 | `hide` | `n`, `mode` (`"elide"` \| `"fold"`), `items?` (`[{targetId, tool, tokens, isError, preview?, spillPath?}]`), `from?`, `to?`, `records?`, `tokens?`, `turns?`, `merges?`, `tokensBefore`, `tokensAfter` | маркеры вместо скрытых записей (§17.13.4) | после MVP: структурное сжатие (K-05) |
 | `pin` | `targetIds`, `by` (`"model"`), `toolCallId?` | нет | после MVP: записи, которые структурное сжатие не скрывает (§17.13.4) |
+
+**Известные `customType` ядра.** Читатель, который их не знает, сохраняет запись и игнорирует её
+по общему правилу `custom`; в контекст модели и в реплей они не попадают.
+
+| `customType` | `data` | Кто пишет | Кто читает |
+|---|---|---|---|
+| `codelab.cwd_changed` | `from`, `to` | `loadSession` с `cwd`, отличным от заголовка (§13.5, шаг 2) | ядро не читает; след смены рабочей папки для диагностики |
+| `codelab.compaction_discarded` | `usage` (форма `usage` §8.2.3; сумма запросов прохода), `summaryModel` (`<provider>/<id>`; ядро пишет всегда, свёртка терпит отсутствие — модель «неизвестна»), `reason` (`"no reduction"` \| `"stale"`), `trigger`, `pass`, `tokensBefore`, `tokensAfter`; текста резюме нет | компактор, когда суммаризатор ответил, а сжатие не записано по CMP-10 или CMP-12 (§9.8, CMP-13; change `fix-discarded-compaction-usage`, D1) | журнал usage: вызов суммаризатора в `summaries` и `discarded` при любом `reason` (§12.6.1) |
 
 Строка `segment` (после MVP, §17.13.2) — не служебная запись, а заголовок сегмента журнала
 (§8.2.1): в дерево не входит и в таблице выше не значится.

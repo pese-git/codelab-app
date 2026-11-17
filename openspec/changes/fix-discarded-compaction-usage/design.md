@@ -4,15 +4,21 @@
 
 ### Как устроено сейчас
 
-Код сверен с веткой `origin/feature/add-usage-ledger`. В неё уже влит `fix-compaction-estimate-and-no-gain`, коммит `e954ee24`.
+Код сверен с `develop` после слияния PR #346 (`1c033fd4`, задача 0.2а). В `develop` уже влиты `fix-compaction-estimate-and-no-gain`, `anchor-context-estimate-after-compaction` (CMP-11, якорь оценки на последнее сжатие; D9 «порог по `max(after, H(после))`» снят) и `fix-config-change-during-background-compaction` (SES-16, CMP-12, `appendWith`, исход `stale`). Все три не архивированы.
 
 **Компактор** (`codelab_agent_core/lib/src/compaction/compactor.dart`, `compact`). Один проход:
 1. регион и точка среза; без среза — `compaction.skipped` с `reason: "no cut point"`, суммаризатор не вызывается;
 2. `summarize(...)` → `SummaryResult` (`text`, `usage`, `model`). Если проход делает несколько запросов (разрезанный ход), `usage` — их сумма (D4 change `add-usage-ledger`);
 3. `cancel.throwIfCancelled()`;
 4. выбор навыков и согласованная оценка `after`;
-5. если `after >= before` — лог `compaction.skipped` (`reason: "no reduction"`, `tokens_before`, `tokens_after`) и `return done ?? const NothingToCompact('no reduction')`. На этой ветке `result.usage` и `result.model` теряются;
-6. иначе запись `compaction` с `details.summaryModel` и `details.usage`, затем `ContextCompacted(usage, model)`.
+5. если `after >= before` (порог и выигрыш — по согласованному `after`) — лог `compaction.skipped` (`reason: "no reduction"`, `tokens_before`, `tokens_after`) и `return done ?? const NothingToCompact('no reduction')`. Это проверка до очереди писателя, по снимку начала прохода. На этой ветке `result.usage` и `result.model` теряются;
+6. иначе запись `compaction` с `details.summaryModel` и `details.usage` через `writer.appendWith` (CMP-12). В построителе, уже в очереди писателя:
+   - отменённый токен → `null`, затем `cancel.throwIfCancelled()` → `CancelledException`;
+   - между листом начала прохода и текущим листом есть запись не из списка состояния (`model_change`, `mode_change`, `config_change`, `session_info`) или лист начала прохода не на пути → `null`, лог `compaction.skipped` уровня `warning` с `reason: "stale"` и `blocking_type`, `return done ?? const NothingToCompact('stale')`. По D3 того change исход в текущем ядре недостижим, это защита на будущее;
+   - иначе запись ложится на текущий лист;
+7. после записи — `onCompacted` (якорь CMP-11), `ContextCompacted(usage, model)`, лог `compaction.done`.
+
+Где суммаризатор уже оплачен, а записи `compaction` нет: `no reduction` (шаг 5), `stale` (шаг 6), отмена в очереди (шаг 6), а также отмена сразу после ответа (шаг 3). Сбой суммаризатора (`CompactionFailed`) usage не возвращает. Без среза (`no cut point`) суммаризатор не вызывается.
 
 Все четыре триггера — `manual` (`/compact`), `afterTurn` (фон после хода), `preflight` и `overflow` (аварийный путь цикла) — идут через один `compact` (`AgentSession._compact`). Различается только реакция на исход: `/compact` отвечает `Nothing to compact.`, `_emergency` возвращает `null` («сжатие не помогло», CMP-8), `afterTurn` молча завершается. Если отбросить проход внутри `compact`, этого достаточно для всех путей.
 
@@ -62,15 +68,20 @@
 ```
 
 Правила:
-- **Когда.** Только на ветке «нет выигрыша»: после ответа суммаризатора, после проверки отмены и после выбора навыков. Без среза (`no cut point`) суммаризатор не вызывался, и записи нет. Сбой суммаризатора (`CompactionFailed`) и отмена записи не дают (R3, Q5). В цепочке проходов (CMP-5) отброшенным может быть только последний проход вызова `compact`: после него `compact` возвращает исход. Поэтому записей учёта на один вызов не больше одной. Записанные раньше проходы, как и прежде, дают свои записи `compaction`.
+- **Когда.** На ветке «нет выигрыша» (шаг 5) и при исходе `stale` (шаг 6; решение пользователя Q6 (а)). Для `stale` запись идёт отдельным `append` после того, как `appendWith` вернул `null` и отмена проверена; `data.reason: "stale"`, родитель — текущий лист. Общие условия: после ответа суммаризатора, после проверки отмены и после выбора навыков. Без среза (`no cut point`) суммаризатор не вызывался, и записи нет. Сбой суммаризатора (`CompactionFailed`), отмена сразу после ответа и отмена в очереди писателя (CMP-12) записи не дают (R3, Q5). В цепочке проходов (CMP-5) отброшенным может быть только последний проход вызова `compact`: после него `compact` возвращает исход. Поэтому записей учёта на один вызов не больше одной. Записанные раньше проходы, как и прежде, дают свои записи `compaction`.
 - **Поля `data`.**
-  - `usage` и `summaryModel` — те же имена и та же форма, что у `compaction.details` (форма `usage` — §8.2.3). Свёртка читает обе записи одним правилом (D3). `usage` — сумма всех запросов прохода (D4 change `add-usage-ledger`). `summaryModel` опускается, если модель ответа неизвестна (`SummaryResult.model == null`).
+  - `usage` и `summaryModel` — те же имена и та же форма, что у `compaction.details` (форма `usage` — §8.2.3). Свёртка читает обе записи одним правилом (D3). `usage` — сумма всех запросов прохода (D4 change `add-usage-ledger`). `summaryModel` пишется всегда: `SummaryResult.model` в ядре — непустая `String` (D11).
   - `reason` — `"no reduction"`. Поле задел под R3: другие значения сможет ввести отдельный change, свёртка учитывает запись при любом `reason`.
   - `trigger`, `pass`, `tokensBefore`, `tokensAfter` — для диагностики. Ядро на них не опирается.
   - Текста резюме нет: он не нужен ни учёту, ни диагностике, а в журнале был бы второй копией пересказа пользовательских данных.
 - **Место в дереве** — по общему правилу §8.4: `parentId` — текущий лист, лист после записи — её `id`. Проекция контекста от этого не меняется: `buildLlmContext` пропускает `custom` (§8.7, шаг 6), якорь оценки ищется только среди ответов модели (§9.3), `healInterruptedTurn` записи не видит (§8.8). Следующее сжатие может получить эту запись в регион. Суммаризатор берёт из региона только `message`, а точка среза ставится по границам сообщений — так же уже лежат в регионах `model_change` и `custom` `codelab.cwd_changed`. Это проверяет тест (задача 1.1).
-- **Запись** — обычный `append` без `durable`. Запись производная от уже потраченных денег, а не точка восстановления. По политике `checkpoints` (§8.5) она сбросится на ближайшем `TurnEnded`. При отключении питания до сброса теряется только учёт.
+- **Запись** — `SessionWriter.append` без `durable`, а не `appendWith`.
+  - Родитель, id и время вычисляются в очереди писателя по листу после предыдущих записей (SES-16). Смена конфигурации, пришедшая во время резюме, остаётся на активной ветке перед записью учёта.
+  - Проверка CMP-12 записи учёта не нужна: запись не даёт сообщений контексту и не уводит другие записи с активной ветки.
+  - Запись учёта — последнее, что пишет вызов `compact`. Поэтому она не может оказаться между листом начала прохода и записью `compaction` того же вызова и не даёт `stale`. Следующий вызов берёт лист начала прохода заново.
+  - Без `durable`, потому что запись производная от уже потраченных денег, а не точка восстановления. По политике `checkpoints` (§8.5) она сбросится на ближайшем `TurnEnded`. При отключении питания до сброса теряется только учёт.
 - **Сбой записи** обрабатывается как сбой записи `compaction` на соседней ветке: исключение уходит из `compact` (SES-8). `/compact` завершается ошибкой хода. `afterTurn` пишет `compaction.failed`. Аварийный путь завершает ход `failed`. Особого «тихого» пути нет: продолжать сессию с неработающим журналом нельзя (SES-8).
+- **Инвариант CMP-13** (`09-compaction.md` §9.9, задача 0.3): каждый оплаченный вызов суммаризатора, после которого сжатие не записано (`no reduction`, `stale`), оставляет ровно одну запись учёта и одно `CompactionDiscarded`; проекция, транскрипт и якорь от неё не меняются.
 - **Совместимость чтения.** Старое ядро (`develop` до change и код `add-usage-ledger`) читает `custom` с незнакомым `customType` и игнорирует его (§8.2.4). Сессия открывается, контекст тот же, учёт прежний (без вызова). Разбор журнала и `SessionRecord` не меняются.
 
 *Альтернативы* (вопрос Q1):
@@ -90,7 +101,7 @@
 final class CompactionDiscarded extends AgentEvent {
   final int tokensBefore, tokensAfter; // согласованная оценка прохода (D1 change fix-compaction-…)
   final Usage usage;                   // сумма запросов прохода
-  final String? model;                 // `<provider>/<id>`, как `ContextCompacted.model`
+  final String model;                  // `<provider>/<id>` из `SummaryResult.model` (non-null, D11)
 }
 ```
 
@@ -134,8 +145,8 @@ final class CompactionDiscarded extends AgentEvent {
 
 ### D6. Наблюдаемость
 
-- `compaction.skipped` с `reason: "no reduction"` (каталог §12.3, change `fix-compaction-estimate-and-no-gain`, D3) получает поля:
-  - `summary_model` — если модель известна;
+- `compaction.skipped` с `reason: "no reduction"` или `"stale"` (каталог §12.3; changes `fix-compaction-estimate-and-no-gain`, D3, и `fix-config-change-during-background-compaction`) получает поля:
+  - `summary_model` — всегда (`SummaryResult.model` non-null, D11);
   - `usage_record_id` — id записи D1 для связи лога с журналом (§16, correlation id).
   
   Лог пишется после успешной записи. Токенов и денег в логе нет, как в `compaction.done`. Текста резюме нет, как и раньше.
@@ -158,9 +169,9 @@ final class CompactionDiscarded extends AgentEvent {
 - `agent-compaction` «Сжатие без выигрыша не применяется» — `fix-compaction-estimate-and-no-gain`;
 - «Usage суммаризатора», `agent-sessions` «Журнал usage сессии», «Файл usage.json и порт UsageLedgerStore», `agent-slash-commands` «Команда /usage», `agent-acp-server` «Уведомление `_codelab/session/usage`» и «Запрос `_codelab/session/usage/ledger`» — `add-usage-ledger`.
 
-В `openspec/specs/` этого worktree их нет, а `add-usage-ledger` в нём отсутствует целиком. Поэтому все дельты — **ADDED**-требования в тех же capability. Каждое называет требование, которое уточняет, и говорит, что меняется. Так `openspec validate fix-discarded-compaction-usage --strict` проходит до слияния PR #346, и текст чужого change не пересобирается заранее: R1 change `add-usage-ledger` показал, как дорого держать пересобранные копии в синхроне.
+Все они — в активных, ещё не архивированных changes, и в `openspec/specs/` их нет. Поэтому все дельты — **ADDED**-требования в тех же capability. Каждое называет требование, которое уточняет, и говорит, что меняется. Так `openspec validate fix-discarded-compaction-usage --strict` проходит независимо от порядка архивации, и текст чужого change не пересобирается заранее: R1 change `add-usage-ledger` показал, как дорого держать пересобранные копии в синхроне.
 
-Цена решения — противоречие при архивации. «Сжатие без выигрыша не применяется» говорит «журнал и транскрипт не меняются» и в сценарии «журнал побайтово не изменился», а ADDED-требование этого change дописывает запись учёта. Поэтому архивация идёт в порядке `fix-compaction-estimate-and-no-gain` → `add-usage-ledger` → этот change. Перед архивацией этого change задача 5.2 переводит уточняющие ADDED-требования в MODIFIED поверх уже архивированного текста, если основная спецификация иначе останется противоречивой.
+Цена решения — противоречие при архивации. «Сжатие без выигрыша не применяется» говорит «журнал и транскрипт не меняются» и в сценарии «журнал побайтово не изменился», а ADDED-требование этого change дописывает запись учёта. Поэтому архивация идёт в порядке `fix-compaction-estimate-and-no-gain` → `anchor-context-estimate-after-compaction` и `fix-config-change-during-background-compaction` → `add-usage-ledger` → этот change. Перед архивацией этого change задача 5.2 переводит уточняющие ADDED-требования в MODIFIED поверх уже архивированного текста, если основная спецификация иначе останется противоречивой.
 
 ### D9. Пакеты, зависимости, безопасность
 
@@ -178,6 +189,19 @@ final class CompactionDiscarded extends AgentEvent {
 - Containment и разрешения не затрагиваются: путей, команд и инструментов нет. Запись пишет ядро, модель её содержимое не задаёт.
 - Секреты: в записи только числа, имя модели и триггер. Ключей и текстов нет.
 
+### D11. Сверка с `develop` после слияния PR #346 (задача 0.2а, 2026-11-17)
+
+Сверено по коду `develop` (`1c033fd4`):
+- **`add-usage-ledger` влит без расхождений с D1–D5.** Есть `SummaryResult.usage` и `model`, `ContextCompacted(usage, model)`, `buildUsageLedger` с веткой `CompactionRecord(:final details)`, `UsageLedgerGroup {count, usage, models}`, `UsageAccounting.summarizerEnded(usage, priced:)`, `compactionSnapshot(sessionId, tokensAfter)`, строка `Summaries: <count>, …` в `usage_report_text.dart`. Задачи 1.3 и 2.2 ложатся на эти имена.
+- **`anchor-context-estimate-after-compaction`.** Порог CMP-5 и выбор навыков сравниваются по согласованному `after`, якорь `CompactionAnchor` меняется только в `onCompacted`. Отброшенный проход `onCompacted` не вызывает, поэтому якорь прежний. Запись учёта сообщений не даёт, `compactionCovered` и якорь от неё не зависят. `tokensBefore` события `CompactionDiscarded` по-прежнему равен текущей оценке контекста на той же шкале, что `context.used` снимков (D5). Конфликта нет.
+- **`fix-config-change-during-background-compaction`.**
+  - Запись учёта совместима с `appendWith` и SES-16. Она пишется отдельным `append` в ту же очередь (D1 «Запись»), а `appendWith` для неё не нужен.
+  - `stale` — второе место, где суммаризатор оплачен, а записи нет. Принятые Q1–Q5 его не покрывали, поэтому был задан вопрос Q6. Решение пользователя Q6 (а): запись учёта пишется так же, как для `no reduction`, с `reason: "stale"` (D1).
+  - Отмена в очереди писателя (CMP-12, шаг 1) — та же отмена после ответа, что R3. Остаётся вне scope по Q5 (а).
+- **Дельты.** Все три changes пишут ADDED-требования в `agent-compaction`, `agent-sessions` и `agent-runtime`. Имена требований этого change не совпадают с их требованиями. По смыслу пересечение одно: «Запись сжатия ложится на текущий лист» (CMP-12) говорит о записи `compaction`, этот change — о записи `custom`. Противоречия нет. Проверено и `openspec validate --strict`.
+- **`SummaryResult.model` — non-null `String`** (сверка красной фазы 1.1, 2026-11-17). Поэтому запись учёта всегда несёт `data.summaryModel`, `CompactionDiscarded.model` — `String`, лог `compaction.skipped` всегда несёт `summary_model`. Это согласование с кодом, а не новое решение. Свёртка (D3) по-прежнему терпит запись учёта без `summaryModel` — модель «неизвестна», как у записи `compaction` без `summaryModel` (D2 change `add-usage-ledger`): это защита от ручной правки журнала и чужих писателей. Сценарий «Запись неверной формы» остаётся.
+- **Документы.** Задача 0.3 правит те же разделы, что эти changes (§9.8 шаги 9а и 10, каталог `compaction.skipped`). Правка ложится поверх их текста в `develop`.
+
 ### D10. Итерации
 
 Одна ветка `feature/fix-discarded-compaction-usage`, один PR в `develop` после слияния PR #346 и перебазирования. Красные тесты коммитятся до кода, только по просьбе пользователя. Порядок задач:
@@ -190,7 +214,7 @@ final class CompactionDiscarded extends AgentEvent {
 
 ## Risks / Trade-offs
 
-- **R1. Зависимость от двух невлитых или неархивированных changes.** Ветка создана от `develop` без `add-usage-ledger`. Код опирается на `SummaryResult`, `ContextCompacted.usage`, `buildUsageLedger`, `UsageAccounting.summarizerEnded`, `UsageLedgerGroup`. Реализация начинается только после слияния PR #346 и перебазирования. Если ревью PR #346 изменит эти имена или D4/D8, задача 0.1 сверяет D1–D5 с влитым кодом до красных тестов.
+- **R1. Зависимость от неархивированных changes.** PR #346 влит, ветка обновлена merge-коммитом `08ffb64a` от `develop`. Код опирается на `SummaryResult`, `ContextCompacted.usage`, `buildUsageLedger`, `UsageAccounting.summarizerEnded`, `UsageLedgerGroup` и `SessionWriter.append` (SES-16). Сверка — D11 (задача 0.2а выполнена). Если до реализации эти changes снова поменяют компактор или свёртку, сверку нужно повторить.
 - **R2. Меняется наблюдаемое правило CMP-10 «журнал побайтово не изменился».** Тесты change `fix-compaction-estimate-and-no-gain` (`compactor_test.dart` «Резюме длиннее региона», «Второй проход без выигрыша», `builtin_slash_commands_test.dart` «/compact без выигрыша», `overflow_then_compact_test.dart` «Аварийное сжатие без выигрыша») проверяют пустой `store.appended` или отсутствие новых записей. Они переписываются намеренно: теперь там ровно одна запись `custom` учёта, а проекция, транскрипт и записи `compaction` не меняются. Это характеризационная правка (исключение (а) TDD ядра), каждая — со ссылкой на D1.
 - **R3. Смешанные версии.** Журнал с записью учёта, открытый старым кодом: вызов не учитывается, как до change. Ошибки нет. Если старый код при этом запишет `usage.json` без `discarded`, новый код покажет верные числа: отчёт строится из журнала, а файл обновится при следующем дописывании журнала. До этого файл на диске занижен — это касается только внешних читателей файла.
 - **R4. Повторные отброшенные проходы `afterTurn`.** Если после хода оценка снова выше порога, а резюме опять не даёт выигрыша, каждый ход платит за вызов суммаризатора. Change это не исправляет, но делает видимым: `Summaries: n (k discarded)`. Ограничение — отдельная задача компактора, например не повторять проход, пока регион не вырос.
@@ -209,7 +233,8 @@ final class CompactionDiscarded extends AgentEvent {
 - **Q2 (а)** — отброшенные вызовы считаются в `summaries` и показываются полем `summaries.discarded`; в `/usage` строка `Summaries: n (k discarded)` (D3, D4, D5);
 - **Q3 (а)** — `usage.json` остаётся версии 1 (D3);
 - **Q4 (а)** — снимок `_codelab/session/usage` с поводом `trigger: "compactionDiscarded"` (D5);
-- **Q5 (а)** — R3 change `add-usage-ledger` вне scope, его закроет отдельный change.
+- **Q5 (а)** — R3 change `add-usage-ledger` вне scope, его закроет отдельный change;
+- **Q6 (а)** (ответ после сверки D11) — при исходе `stale` запись учёта, событие и снимок те же, что при `no reduction`, с `data.reason: "stale"`.
 
 Ниже — исходные формулировки вопросов, сохранены для истории решения.
 
@@ -236,6 +261,13 @@ final class CompactionDiscarded extends AgentEvent {
 **Q5. Закрывать ли заодно R3 change `add-usage-ledger` — отмену после ответа суммаризатора?**
 - (а) Нет, вне scope. Запись с `reason` допускает это расширение отдельным change. **Рекомендация:** запись после отмены пересекается с закрытием сессии (фоновое `afterTurn` отменяется при `close`, писатель журнала закрывается), это отдельный разбор гонок по `AGENTS.md` §9 и §12. Для сбоя суммаризатора (`CompactionFailed`) нужен ещё и usage в контракте ошибки `Summarizer`.
 - (б) Да, только отмену после ответа: запись `reason: "cancelled"`, если сессия не закрывается. Нужны правило «запись после отмены» и тесты гонки с `close`.
+
+### Q6 (задан после сверки D11)
+
+**Q6. Писать ли запись учёта при исходе `stale` (CMP-12)?** Здесь суммаризатор тоже оплачен, а записи `compaction` нет (D11). Q1 спрашивал только про проход без выигрыша.
+- (а) Да, по тому же правилу D1, с `data.reason: "stale"`, событием `CompactionDiscarded` и снимком `compactionDiscarded`. Запись идёт отдельным `append` после того, как `appendWith` вернул `null`, родитель — текущий лист. Свёртка учитывает запись при любом `reason` (D1), формат не меняется. Цена — одна ветка кода и тест с подставным журналом: в текущем ядре `stale` недостижим. **Рекомендация:** учёт оплаченного вызова не должен зависеть от того, почему сжатие не записано. Когда новый путь записи сделает `stale` достижимым (лог `warning`), деньги не потеряются молча.
+- (б) Нет, только `no reduction`. Исход в текущем ядре недостижим; учёт `stale` — вместе с тем change, который сделает его достижимым.
+- (в) Нет, но объединить с R3 в отдельный change «все оплаченные вызовы без записи» (`stale`, отмена после ответа и в очереди, сбой).
 
 ## Open Questions
 

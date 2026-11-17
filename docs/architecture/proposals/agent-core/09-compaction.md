@@ -506,15 +506,15 @@ compact(snapshot, trigger, summarize, settings, cancel, focus, anchor):
    rawAfter := estimateTokens(projected)                                  // без якоря
    after := estimateAfterCompaction(before, rawBefore, rawAfter)         // §9.3
    rec.tokensAfter := after
-9а. если after >= before → нет выигрыша (CMP-10): лог compaction.skipped(reason: "no reduction"), запись не пишется,
-   транскрипт не меняется, ContextCompacted нет; вернуть NothingToCompact("no reduction")
-   (на следующем проходе — Compacted прошлого прохода)
+9а. если after >= before → нет выигрыша (CMP-10): запись compaction не пишется, транскрипт не меняется,
+   ContextCompacted нет; учёт вызова — discarded("no reduction") (ниже); лог compaction.skipped(reason:
+   "no reduction"); вернуть NothingToCompact("no reduction") (на следующем проходе — Compacted прошлого прохода)
 10. appendWith(durable: true, current →       // в очереди писателя, §8.5; CMP-12
       отменён → null, затем CancelledException (CMP-3, CMP-4)
       между snapshot.leafId и current.leafId только model_change, mode_change, config_change,
         session_info → rec с parentId := current.leafId (id заново, если занят)
-      иначе → null: лог warning compaction.skipped(reason: "stale", blocking_type), вернуть NothingToCompact("stale")
-        (на следующем проходе — Compacted прошлого прохода))
+      иначе → null: учёт вызова — discarded("stale") (ниже); лог warning compaction.skipped(reason: "stale",
+        blocking_type), вернуть NothingToCompact("stale") (на следующем проходе — Compacted прошлого прохода))
     // только теперь сжатие существует
 11. onCompacted(projected): транскрипт Agent := projected.messages (usage обнулён, §8.7) и
     якорь сжатия сессии := compactionAnchorOf(projected, промпт и схемы на старте compact) —
@@ -524,6 +524,13 @@ compact(snapshot, trigger, summarize, settings, cancel, focus, anchor):
     // usage суммаризатора входит в сумму сессии, но не в TurnEnded.usage, даже при аварийном
     // сжатии посреди хода (§12.6; change add-usage-ledger, D4); реплей записи без details.usage — usage: null
 13. если after > threshold и проходов < 3 → повторить с шага 3 (CMP-5); before := after
+
+discarded(reason):                            // суммаризатор оплачен, сжатие не записано (CMP-13)
+   u := append(custom{customType: "codelab.compaction_discarded",   // SessionWriter.append, не durable;
+              data: {reason, trigger, pass, tokensBefore: before,   // родитель — лист в очереди (SES-16),
+                     tokensAfter: after, summaryModel, usage}})     // проверки CMP-12 нет
+   emit CompactionDiscarded(tokensBefore: before, tokensAfter: after, usage: summary.usage, model: summary.model)
+   // лог compaction.skipped этого прохода получает usage_record_id: u.id и summary_model
 ```
 
 Проход после успешного: `NothingToCompact` (нет среза или нет выигрыша) или `CompactionFailed` не отменяют уже записанное —
@@ -549,8 +556,24 @@ compact(snapshot, trigger, summarize, settings, cancel, focus, anchor):
 `emergencyCompact` возвращает `null`, цикл завершает шаг ошибкой `overflow`, вызов засчитан в
 CMP-8. Для `afterTurn` отдельной защиты нет: пока регион мал, суммаризатор вызывается после
 каждого хода, как и раньше, но бесполезной записи нет; каждый новый ход сдвигает срез и растит
-регион. Usage вызова суммаризатора без записи в v1 не учитывается — как и с записью (change
-`add-usage-extension`, D4 п. 6).
+регион.
+
+Учёт отброшенного вызова (`discarded`; change `fix-discarded-compaction-usage`, D1, D2, D6; CMP-13).
+При исходах `no reduction` (шаг 9а) и `stale` (шаг 10) суммаризатор уже ответил и оплачен, а записи
+`compaction`, которая несла бы `details.usage`, нет. Поэтому компактор дописывает служебную запись
+`custom` с `customType: "codelab.compaction_discarded"` (§8.2.4): `data.usage` и `data.summaryModel`
+(те же имена и форма, что у `compaction.details`; `usage` — сумма запросов прохода), `reason`
+(`"no reduction"` или `"stale"`), `trigger`, `pass`, `tokensBefore`, `tokensAfter`; текста резюме нет.
+Запись идёт обычным `append` без `durable`: родитель, id и время — в очереди писателя (SES-16); проверка
+CMP-12 ей не нужна, потому что `custom` не даёт сообщений проекции (§8.7, шаг 6) и якорь сжатия не
+трогает. Это последняя запись вызова `compact`, поэтому `stale` у того же вызова она не создаёт. При
+`stale` запись пишется после того, как `appendWith` вернул `null` и отмена проверена. Затем —
+событие `CompactionDiscarded` (§5, каталог событий) и лог `compaction.skipped` с `usage_record_id`
+и `summary_model`. `onCompacted` не вызывается, якорь прежний. Usage вызова входит в сумму сессии и
+журнал usage (`summaries`, `discarded`; §12.6.1), но не в `TurnEnded.usage`. Без среза суммаризатор
+не вызывался — записи нет; сбой суммаризатора, отмена после ответа и отмена в очереди писателя записи
+тоже не дают (R3 change `add-usage-ledger`, вне scope). Сбой записи уходит из `compact`, как сбой
+записи `compaction` (SES-8). Реплей записи событий не даёт.
 
 `tokensAfter` считается до записи по снимку с ещё не записанной записью — запись пишется
 один раз и уже с итоговым числом.
@@ -587,7 +610,9 @@ sequenceDiagram
     M-->>K: текст резюме
     K->>K: проекция с новой записью, tokensAfter (§9.3)
     alt tokensAfter >= tokensBefore
-        K-->>S: NothingToCompact no reduction, журнал не тронут
+        K->>J: append custom codelab.compaction_discarded (usage)
+        K-->>S: emit CompactionDiscarded
+        K-->>S: NothingToCompact no reduction, записи compaction нет
     else есть выигрыш
         K->>J: append compaction, durable
         J-->>K: ok
@@ -608,9 +633,10 @@ sequenceDiagram
 7. **CMP-7.** Последние `keepRecentUserTurns` сообщений пользователя (записей с `isUserWords`, §8.2.5; по умолчанию одно) попадают в контекст дословно — в хвосте или, при разрезанном ходе, цитатой в резюме.
 8. **CMP-8.** В пределах одного хода аварийное сжатие (`preflight` и `overflow`) выполняется не более одного раза.
 9. **CMP-9.** Открытые просьбы предыдущего резюме передаются суммаризатору при каждом следующем сжатии (`previousSummary`).
-10. **CMP-10.** Записанное сжатие уменьшает оценку контекста: `tokensAfter < tokensBefore`; проход без выигрыша не пишет запись и не меняет транскрипт.
+10. **CMP-10.** Записанное сжатие уменьшает оценку контекста: `tokensAfter < tokensBefore`; проход без выигрыша не пишет запись `compaction` и не меняет транскрипт и проекцию — в журнал попадает только запись учёта CMP-13.
 11. **CMP-11.** Сразу после записанного сжатия оценка контекста, которую видят `preflight`, `ModelRequested`, `StepEnded` без usage, `afterTurn` и следующий проход компактора, равна `tokensAfter` записи; до первого ответа с usage она — `tokensAfter` плюс эвристика изменившейся части (хвост, промпт, схемы).
 12. **CMP-12.** Запись `compaction` ложится на текущий лист: записи состояния сессии (`model_change`, `mode_change`, `config_change`, `session_info`), сделанные во время прохода, остаются на активной ветке до неё; если между листом начала прохода и текущим есть запись другого вида, сжатие не записывается (`stale`).
+13. **CMP-13.** Каждый оплаченный вызов суммаризатора, после которого сжатие не записано по CMP-10 (`no reduction`) или CMP-12 (`stale`), оставляет в журнале ровно одну запись `custom` `codelab.compaction_discarded` с `data.usage` и событие `CompactionDiscarded`; проекция контекста, транскрипт и якорь от неё не меняются (change `fix-discarded-compaction-usage`).
 
 ## 9.10. Обоснование решения
 
@@ -653,8 +679,8 @@ sequenceDiagram
 * Регрессионный тест согласованной оценки: якорный usage меньше эвристики промпта и схем →
   `tokensAfter < tokensBefore` и `tokensAfter == tokensBefore + H(после) − H(до)`; без якоря —
   прежние числа; `tokensBefore` второго прохода равен `tokensAfter` первого (CMP-5, CMP-10).
-* Тест сжатия без выигрыша: резюме длиннее региона → `NothingToCompact('no reduction')`, журнал
-  побайтово не изменился, `ContextCompacted` нет, лог `compaction.skipped`; `/compact` отвечает
+* Тест сжатия без выигрыша: резюме длиннее региона → `NothingToCompact('no reduction')`, записи
+  `compaction` нет, единственная новая запись — учёт CMP-13, проекция та же, `ContextCompacted` нет, лог `compaction.skipped`; `/compact` отвечает
   `Nothing to compact.`; второй проход без выигрыша оставляет `Compacted` первого (CMP-10).
 * Тест порога по согласованной оценке: после прохода `after` не выше порога, а `H(после)` выше →
   второго прохода нет, суммаризатор вызван один раз; выброс навыков по окну решает по `after`
@@ -677,6 +703,14 @@ sequenceDiagram
   сжатия — разница эвристик схем; неудачное и отменённое сжатие якорь не меняют (D3, D5, D7).
 * Тест лога `compaction.skipped`: `reason: "no cut point"` без оценок, `reason: "no reduction"` с
   `tokens_before`/`tokens_after`; навыки не выбрасываются ради выигрыша (D3, D6).
+* Тест учёта отброшенного вызова (CMP-13; change `fix-discarded-compaction-usage`, задача 1.1): `/compact` без
+  выигрыша → запись `custom` `codelab.compaction_discarded` с `data.usage`, `summaryModel`, `reason: "no reduction"`,
+  `trigger`, `pass` и без резюме, `CompactionDiscarded`, лог с `usage_record_id`; второй проход без выигрыша →
+  `compaction`, затем запись учёта с `pass: 2`; аварийный путь → `trigger: "overflow"`, `TurnEnded.usage` без
+  суммаризатора; `stale` на подставном журнале (`appendWith` → `null`) → запись с `reason: "stale"` на текущем
+  листе; нет среза, сбой, отмена после ответа и в очереди → записи нет; `mode_change` во время резюме остаётся на
+  активной ветке перед записью учёта (SES-16); запись учёта в регионе следующего сжатия не меняет срез и запрос;
+  реплей события не даёт.
 * Тест одной функции окна: `cap = 50 000` при окне модели 128 000 → порог, preflight и значение для индикатора считаются от 50 000 (CMP-6).
 * Тест смены конфигурации во время сжатия: суммаризатор удержан, во время резюме записан `mode_change` (`model_change`, `config_change`, `session_info`) → запись `compaction` с родителем — этой записью, оценки те же; записано сообщение или неизвестная запись → `NothingToCompact('stale')`, лог `compaction.skipped(reason: "stale", blocking_type)` уровня `warning`; отмена, пока запись ждёт очереди писателя → `CancelledException`, записи нет. Сквозной: `setMode`/`setModel`/`setEffort`/`setAgent` во время `afterTurn`, `/compact` и аварийного сжатия → после `loadSession` значение смены восстановлено (CMP-12, SES-16).
 

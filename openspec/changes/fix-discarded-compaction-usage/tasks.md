@@ -12,7 +12,7 @@
 2. слияние PR #346 (`add-usage-ledger`) в `develop`;
 3. перебазирование ветки `feature/fix-discarded-compaction-usage` на `develop`.
 
-Порядок: 0.2а → 0.3 → 0.4 → 1.1 → 1.2 → 1.3 → 2.1 → 2.2 → 3.1 → 4 → 5. Одна ветка, один PR в `develop`.
+Порядок: 0.2б → 0.3 → 0.4 → 1.1 → 1.2 → 1.3 → 2.1 → 2.2 → 3.1 → 4 → 5. Одна ветка, один PR в `develop`.
 
 Проверки — только затронутое (корневой `AGENTS.md` §21); полный `melos run check` — по просьбе пользователя.
 
@@ -20,15 +20,17 @@
 
 - [x] 0.1 OpenSpec change: `proposal.md`, `design.md` (D1–D10, Q1–Q5), дельты `agent-compaction`, `agent-sessions`, `agent-slash-commands`, `agent-acp-server`, `acp-golden-fixtures`; `openspec validate fix-discarded-compaction-usage --strict`.
 - [x] 0.2 Ответы пользователя на Q1–Q5 — в design.md (раздел «Решения пользователя 2026-11-17») и в дельты; пометки «до решения пользователя» заменены на «решение пользователя Qn». *Итог 2026-11-17:* все ответы — (а), совпадают с рекомендациями.
-- [ ] 0.2а После перебазирования на `develop` с `add-usage-ledger` сверить D1–D5 с влитым кодом: `SummaryResult`, `ContextCompacted.usage`, `buildUsageLedger`, `UsageLedgerGroup`, `UsageAccounting.summarizerEnded`, `compactionSnapshot`. Расхождения — в design.md до красных тестов (R1).
-- [ ] 0.3 `[agent]` Документы ядра по принятым ответам (архитектор; «сначала документ»):
+- [x] 0.2а После перебазирования на `develop` с `add-usage-ledger` сверить D1–D5 с влитым кодом: `SummaryResult`, `ContextCompacted.usage`, `buildUsageLedger`, `UsageLedgerGroup`, `UsageAccounting.summarizerEnded`, `compactionSnapshot`. Расхождения — в design.md до красных тестов (R1). *Итог 2026-11-17 (`develop` `1c033fd4`):* имена `add-usage-ledger` совпадают; учтены `anchor-context-estimate-after-compaction` и `fix-config-change-during-background-compaction` (SES-16, CMP-12) — design.md, D11; новый вопрос Q6 (`stale`).
+- [x] 0.2б Ответ пользователя на Q6 — в design.md и дельты `agent-compaction`. *Итог 2026-11-17:* Q6 (а) — запись учёта и при `stale`; тест — в 1.1.
+- [x] 0.3 `[agent]` Документы ядра по принятым ответам (архитектор; «сначала документ»):
   - `agent-core/08-sessions.md` §8.2.4 — строка `custom`: известный `customType` `codelab.compaction_discarded` с полями `data` (D1), рядом с `codelab.cwd_changed`;
   - `09-compaction.md` §9.8 — шаг «нет выигрыша»: запись учёта, `CompactionDiscarded`, поля лога; §9.9 — CMP-10 «кроме записи учёта»; §9.11 — тесты задачи 1.1;
   - `05-agent-loop.md` — каталог событий: `CompactionDiscarded` (D2);
   - `12-observability-and-errors.md` — §12.3, каталог `compaction`: поля `usage_record_id`, `summary_model` у `compaction.skipped` (D6); §12.6.1 — шаг 2c свёртки, ключ `summaries.discarded`, строка `Summaries` (D3, D4).
-- [ ] 0.4 `[protocol]` `agent-core/13-acp-adapter.md`:
+- [x] 0.4 `[protocol]` `agent-core/13-acp-adapter.md`:
   - таблица проекции событий — `CompactionDiscarded`: кадров `session/update` нет, снимок `compactionDiscarded`;
   - §13.12 — повод `compactionDiscarded`, `summaries.discarded` в ответе журнала (D5).
+  - *Итог 0.3–0.4 (архитектор, 2026-11-17):* `08-sessions.md` §8.2.4 — таблица известных `customType` (`codelab.cwd_changed`, `codelab.compaction_discarded`); `09-compaction.md` §9.8 — шаги 9а и 10 вызывают `discarded(reason)`, абзац «Учёт отброшенного вызова», диаграмма; §9.9 — CMP-10 уточнён, новый инвариант **CMP-13**; §9.11 — тест учёта; `05-agent-loop.md` — `CompactionDiscarded` в коде событий и таблице, порядок «запись → событие»; `12-observability-and-errors.md` — каталог `compaction.skipped` (`usage_record_id`, `summary_model`), §12.6, §12.6.1 (шаг 2c'', `summaries.discarded`, строка `Summaries`); `13-acp-adapter.md` — строка `CompactionDiscarded`, §13.12 (повод, `summaries.discarded`, сумма сессии).
 
 ## 1. Ядро (`codelab_agent_core`)
 
@@ -36,7 +38,9 @@
   - `test/compaction/compactor_test.dart`:
     - «/compact без выигрыша записывает учёт»: резюме `'x' * 20000` с usage `{input: 764, output: 171}` и моделью. Ожидается одна запись `custom` `codelab.compaction_discarded` с полями `data` по D1 и без `summary`; сообщения `buildLlmContext` до и после равны; `CompactionDiscarded` с теми же usage и моделью; `ContextCompacted` нет; лог `compaction.skipped` с `usage_record_id` и `summary_model`;
     - «Второй проход без выигрыша»: запись `compaction`, затем запись учёта с `pass: 2`; по одному `ContextCompacted` и `CompactionDiscarded`;
-    - «Нет точки среза», «Сбой и отмена»: записи учёта и события нет;
+    - «Нет точки среза», «Сбой и отмена» (включая отмену в очереди писателя, CMP-12): записи учёта и события нет;
+    - «Устаревший проход» (CMP-12, Q6 (а)): подставной журнал, где во время ответа суммаризатора на активную ветку дописано сообщение, и `appendWith` записи `compaction` возвращает `null`. Ожидается `NothingToCompact('stale')`, одна запись учёта с `reason: "stale"` на текущем листе, `CompactionDiscarded`, лог `compaction.skipped` с `usage_record_id`;
+    - «Смена режима во время резюме прохода без выигрыша» (SES-16): `mode_change` на активной ветке перед записью учёта;
     - «Запись учёта в регионе следующего сжатия»: после записи учёта следующий `compact` даёт ту же точку среза и тот же `SummaryRequest.region`, что без неё.
   - `test/runtime/builtin_slash_commands_test.dart`, «/compact без выигрыша»: ответ `Nothing to compact.`, в журнале одна запись учёта, `TurnEnded.usage` без суммаризатора.
   - `test/compaction/overflow_then_compact_test.dart`, «Аварийное сжатие без выигрыша»: запись учёта с `trigger: "overflow"`, `TurnEnded(failed)`, `TurnEnded.usage` без суммаризатора.
@@ -46,7 +50,7 @@
 - [ ] 1.2 `[agent]` Характеризационная правка тестов change `fix-compaction-estimate-and-no-gain`, которые проверяют неизменный журнал при проходе без выигрыша (design.md, R2; исключение (а) TDD ядра): `compactor_test.dart` «Резюме длиннее региона», «Второй проход без выигрыша», «Навыки не выбрасываются ради выигрыша», `builtin_slash_commands_test.dart` «/compact без выигрыша», `overflow_then_compact_test.dart` «Аварийное сжатие без выигрыша». Ожидание «журнал не изменился» заменяется на «единственная новая запись — учёт D1; записей `compaction` нет; проекция и транскрипт те же». Каждая правка — с комментарием-ссылкой на D1 этого change.
 - [ ] 1.3 `[agent]` Реализация 1.1–1.2:
   - `lib/src/loop/agent_events.dart`: `CompactionDiscarded` с doc-комментарием (почему, для чего, как; D2); экспорт в барели;
-  - `lib/src/compaction/compactor.dart`: на ветке `after >= before` — `writer.append` записи `CustomRecord` (D1), затем `emit(CompactionDiscarded(...))`, затем лог `compaction.skipped` с `usage_record_id`, `summary_model`; doc-комментарии `compact` и `NothingToCompact` обновить;
+  - `lib/src/compaction/compactor.dart`: на ветке `after >= before` и после `null` от `appendWith` при `stale` — `writer.append` (не `appendWith`) записи `CustomRecord` с соответствующим `reason` (D1), затем `emit(CompactionDiscarded(...))`, затем лог `compaction.skipped` с `usage_record_id`, `summary_model`; doc-комментарии `compact` и `NothingToCompact` обновить;
   - исчерпывающие `switch` по `AgentEvent` в ядре (`session_writer.dart` и др.) — ветка без действия;
   - `lib/src/usage/usage_ledger.dart`: разбор записи учёта в `buildUsageLedger`, `UsageLedgerGroup.discarded`, ключ `discarded` в сериализации `usage.json` (D3);
   - `lib/src/usage/usage_report_text.dart`: строка `Summaries` (D4);
@@ -89,7 +93,7 @@
 
 - [ ] 5.1 Сверка документов 0.3–0.4 с кодом: имена события, полей записи и лога, текст `/usage`.
 - [ ] 5.2 Подготовка к архивации (design.md, D8). Порядок: `fix-compaction-estimate-and-no-gain` → `add-usage-ledger` → этот change. Если к этому моменту уточняемые требования уже в `openspec/specs/`, ADDED-требования перевести в MODIFIED:
-  - `agent-compaction` «Сжатие без выигрыша не применяется» — убрать «журнал не меняется» для отброшенного прохода;
+  - `agent-compaction` «Сжатие без выигрыша не применяется» — убрать «журнал не меняется» для отброшенного прохода; порядок архивации учитывает и `anchor-context-estimate-after-compaction`, `fix-config-change-during-background-compaction` (D11);
   - «Журнал usage сессии»;
   - «Команда /usage»;
   - «Уведомление `_codelab/session/usage`» — новый повод в списке.

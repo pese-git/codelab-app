@@ -4,7 +4,7 @@
 Свёртка журнала usage (требование «Журнал usage сессии» change `add-usage-ledger`) SHALL считать вызовом суммаризатора, кроме записи `compaction` с `details.usage`, ещё запись `custom` с `customType: "codelab.compaction_discarded"`, у которой `data` и `data.usage` — объекты (design.md change `fix-discarded-compaction-usage`, D3; решения пользователя Q1 (а), Q2 (а)). Такой вызов SHALL:
 - входить в `summaries.count`, `summaries.usage`, `summaries.models` (по `data.summaryModel`) и в итог сессии;
 - не входить ни в ход, ни в модели;
-- получать цену и причины `noUsage` и `noPrice` по тем же правилам, что вызов из записи `compaction`.
+- получать цену и причины `noUsage` и `noPrice` по тем же правилам, что вызов из записи `compaction`; запись без `data.summaryModel` (ядро её так не пишет, но журнал могли править вручную) учитывается с моделью «неизвестна», как запись `compaction` без `summaryModel`.
 
 Группа суммаризатора SHALL нести число отброшенных вызовов `discarded`. Запись с `data` или `data.usage` неверной формы SHALL пропускаться без причины неполноты.
 
