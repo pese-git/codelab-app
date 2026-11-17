@@ -212,6 +212,26 @@ void main() {
     expect(find.byKey(const ValueKey('usage-step-2-0')), findsNothing);
   });
 
+  testWidgets('the subagents line of an expanded turn goes after its steps '
+      '(D2 item 4)', (tester) async {
+    await tester.pumpWidget(_pane(_full()));
+    final collapsed = tester.getTopLeft(find.text('subagents · 2 runs'));
+    final turnTop = tester.getTopLeft(
+      find.byKey(const ValueKey('usage-turn-2')),
+    );
+    expect(collapsed.dy, greaterThan(turnTop.dy));
+
+    await tester.tap(find.byKey(const ValueKey('usage-turn-2')));
+    await tester.pump();
+
+    final note = tester.getTopLeft(find.text('subagents · 2 runs'));
+    final lastStep = tester.getTopLeft(
+      find.byKey(const ValueKey('usage-step-2-1')),
+    );
+    expect(find.text('subagents · 2 runs'), findsOneWidget);
+    expect(note.dy, greaterThan(lastStep.dy));
+  });
+
   testWidgets('the model of a step is the tooltip of its row', (tester) async {
     await tester.pumpWidget(_pane(_full()));
     await tester.tap(find.byKey(const ValueKey('usage-turn-2')));
@@ -296,7 +316,9 @@ void main() {
       '-32603',
     );
     await tester.tap(find.byKey(const ValueKey('usage-retry')));
-    await tester.pump();
+    // Кнопка Fluent сбрасывает нажатие по таймеру 100 мс (как в
+    // `codelab_molecules_test.dart`): без этого тест кончается с живым Timer.
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(retries, 1);
   });
@@ -336,7 +358,8 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('usage-rebuild')));
     await tester.tap(find.byKey(const ValueKey('usage-export')));
-    await tester.pump();
+    // Таймер сброса нажатия кнопки Fluent, 100 мс.
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(rebuilds, 1);
     expect(exports, 1);

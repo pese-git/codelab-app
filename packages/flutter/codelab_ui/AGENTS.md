@@ -23,10 +23,10 @@
 
 ## 3. Слои
 
-* `atomics/` — без составных частей кита: `CodeLabText` с ролями, `CodeLabBadge`, `CodeLabMonospaceBlock`.
+* `atomics/` — без составных частей кита: `CodeLabText` с ролями, `CodeLabBadge`, `CodeLabMonospaceBlock`, `CodeLabPressable` (нажимаемая область без таймеров кнопки Fluent: курсор, наведение, фокус, Enter/Space; внутренняя деталь — барелем не экспортируется, её используют `CodeLabAgentsPane`, `CodeLabUsagePane` и `CodeLabSessionStatusBar`).
 * `molecules/` — из атомов: `CodeLabKeyValueList`, `CodeLabStepBreadcrumb`, `CodeLabThoughtBlock`, `CodeLabToolCallSummary`.
 * `rendering/` — отрисовка ответа агента как markdown: `CodeLabMarkdown`, `CodeLabMarkdownConfig`, `CodeLabMarkdownScope`, `CodeLabCodeBlock`, счётчики `CodeLabMarkdownStats`. Импортирует только `atomics/`; его импортируют `organisms/`. Единственный слой, где разрешены `gpt_markdown` и `val_highlight`.
-* `organisms/` — ленты, плитки, таблицы, панели: `CodeLabTranscriptPanel`, `CodeLabToolCallTile`, `CodeLabApprovalPrompt`, `CodeLabStatusTable`.
+* `organisms/` — ленты, плитки, таблицы, панели: `CodeLabTranscriptPanel`, `CodeLabToolCallTile`, `CodeLabApprovalPrompt`, `CodeLabStatusTable`, `CodeLabUsagePane`.
 * Импорт — только вниз по слоям; экспорт — через барели слоёв (`atomics.dart`, `molecules.dart`, `organisms.dart`) и `lib/codelab_ui.dart`. Новый атом — при втором употреблении (как `CodeLabMonospaceBlock`, D19), не «на вырост» (корневой `AGENTS.md` §13).
 
 ## 4. Отдельные виджеты
@@ -35,6 +35,8 @@
 * **`CodeLabMonospaceBlock`** — текст как есть, моноширинно (`CodeLabTextRole.mono`), с переносом, рамкой и выделением; не меняет и не разбирает текст. Употребление: ответ `/mcp` в панели «Agent status» (SETUP-11, Q34). Ответ агента в ленте он больше не рисует: огороженный ответ — блок кода `CodeLabCodeBlock` внутри markdown (D11).
 
 * **`CodeLabTerminalPane`** — панель Terminal дока: вкладки с тегом статуса, «+», пустое состояние, `InfoBar` предупреждения и слот `content`. Виджет терминала (рендер `xterm2`) в кит не импортируется — его передаёт app в слот; подпись и тон тега, состояние «нет сессии» и сами вкладки — готовые данные от вызывающего, процессов и логики в ките нет (`add-integrated-terminal`, D3).
+* **`CodeLabUsagePane`** — панель Usage дока: четыре карточки сводки, таблицы `Per turn` (ход раскрывается до шагов; строка `subagents · N runs` раскрытого хода идёт после шагов) и `Per model`, строка состояния журнала, заметки с `Retry`, кнопки `Rebuild from log` и `Export CSV`. Все значения — готовые строки (`CodeLabUsageCard`, `CodeLabUsageRow`, `CodeLabUsageNote`), тон `warning` карточки решает вызывающий; кит ничего не считает, не форматирует и не пишет файлы — нажатия уходят колбэками (`add-desktop-usage-pane`, D2, D6).
+* **`CodeLabSessionStatusBar.onTap`** — необязательный клик по строке статуса (открыть панель Usage); `null` — строка некликабельна. Какую панель открыть и доступна ли она, решает app (D6, D10).
 
 ## 5. Тоны и риски
 

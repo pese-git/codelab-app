@@ -28,6 +28,10 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(CodeLabSessionStatusBar), findsOneWidget);
 
+    await tester.pumpWidget(codelabSessionStatusBarClickablePreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabSessionStatusBar), findsOneWidget);
+
     await tester.pumpWidget(codelabConnectionBannerPreview());
     expect(tester.takeException(), isNull);
 
@@ -148,6 +152,14 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(CodeLabAgentsPane), findsOneWidget);
     expect(find.text('Review the change'), findsOneWidget);
+
+    // Панель Usage (change `add-desktop-usage-pane`, D1): превью на готовых
+    // строках; сброс дерева — по той же причине, что у панели Agents.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(codelabUsagePanePreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabUsagePane), findsOneWidget);
+    expect(find.text('This session'), findsOneWidget);
 
     await tester.pumpWidget(codelabApprovalPromptPreview());
     expect(tester.takeException(), isNull);

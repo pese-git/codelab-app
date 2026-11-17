@@ -733,4 +733,49 @@ void main() {
       expect(data.busy, isFalse);
     });
   });
+
+  group('Тон карточек: «немая» карточка не жёлтая (D2 п. 2)', () {
+    UsagePaneData silent({Money? cost}) => _of(
+      _view(
+        ledger: UsageLedgerState.loaded(
+          _ledger(
+            total: _totals(_none, cost: cost, partial: {UsagePartial.noUsage}),
+          ),
+        ),
+      ),
+    );
+
+    test('Input и Output со значением «—» не approximate', () {
+      final d = silent();
+
+      expect(_card(d, 'input').value, '—');
+      expect(_card(d, 'input').approximate, isFalse);
+      expect(_card(d, 'output').value, '—');
+      expect(_card(d, 'output').approximate, isFalse);
+    });
+
+    test(
+      'Cost со значением «—» не approximate, со значением — approximate',
+      () {
+        expect(_card(silent(), 'cost').value, '—');
+        expect(_card(silent(), 'cost').approximate, isFalse);
+        expect(_card(silent(cost: _usd(1000000)), 'cost').value, r'~$1.00');
+        expect(_card(silent(cost: _usd(1000000)), 'cost').approximate, isTrue);
+      },
+    );
+
+    test('Input со значением и неполной суммой остаётся approximate', () {
+      final d = _of(
+        _view(
+          ledger: UsageLedgerState.loaded(
+            _ledger(
+              total: _totals(_tokens(100, 20), partial: {UsagePartial.noUsage}),
+            ),
+          ),
+        ),
+      );
+
+      expect(_card(d, 'input').approximate, isTrue);
+    });
+  });
 }

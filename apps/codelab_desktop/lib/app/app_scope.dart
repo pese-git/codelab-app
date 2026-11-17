@@ -698,6 +698,10 @@ final class CodeLabPresentationModule extends Module {
             tokenSecrets: currentScope.resolve<ProfileSecretSource>(),
             eventLogger: _settingsLogger(),
             providerSetupOffer: currentScope.resolve<ProviderSetupOffer>(),
+            // Панель Usage: порт сохранения CSV и события `usage_pane.*`
+            // (change `add-desktop-usage-pane`, D5, D13).
+            usageCsvSaver: currentScope.resolve<UsageCsvSaver>(),
+            usageLogger: _usageLogger(),
           ),
         )
         .singleton();
@@ -947,6 +951,13 @@ List<TransportResolver> _transportResolvers(Scope scope) => [
   // `ConfigTransportResolver` профиль `embedded` не поддержан (D7).
   scope.resolve<EmbeddedTransportResolver>(),
 ];
+
+/// Логгер событий панели Usage (`usage_pane.refresh`, `usage_pane.export`):
+/// категория `application`, компонент `usage` (change
+/// `add-desktop-usage-pane`, D13).
+Logger _usageLogger() => StructuredLogLogger(
+  'codelab_desktop.usage',
+).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'usage'});
 
 /// Структурный логгер событий настроек (design.md change
 /// `add-app-settings-shell`, D17): категория `application`, компонент

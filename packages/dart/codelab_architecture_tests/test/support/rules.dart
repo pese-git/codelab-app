@@ -351,6 +351,14 @@ const rules = [
     'apps/codelab_desktop/lib/features/terminal/application',
     forbidden: ['package:flutter/'],
   ),
+  // Application панели Usage не знает Flutter и `dart:io` (design.md change
+  // `add-desktop-usage-pane`, D12; задача 1.1): правило обновления журнала и
+  // сборка CSV остаются чистыми, а запись файла — только порт
+  // `lib/core/platform/usage_csv_saver.dart`.
+  PackageRule(
+    'apps/codelab_desktop/lib/features/usage/application',
+    forbidden: ['package:flutter/', 'dart:io'],
+  ),
   // ZModem выключен (D3, D11 правило 5): `xterm.dart` реэкспортирует
   // `zmodem.dart`, поэтому запрещены пакет и оба пути; presentation берёт
   // `TerminalView` из `package:xterm2/ui.dart`.

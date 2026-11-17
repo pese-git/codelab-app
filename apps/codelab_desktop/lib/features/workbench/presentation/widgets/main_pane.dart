@@ -172,7 +172,11 @@ class WorkbenchMainPane extends StatelessWidget {
         // стартовом экране, где «usage» говорить не о чем (D23 Т1, D11).
         if (state.activeSessionId != null && state.statusBar != null) ...[
           const SizedBox(height: 6),
-          CodeLabSessionStatusBar(data: state.statusBar!),
+          CodeLabSessionStatusBar(
+            data: state.statusBar!,
+            // Клик открывает панель Usage только когда она доступна (D6, D10).
+            onTap: state.usageAvailable ? cubit.openUsagePane : null,
+          ),
         ],
       ],
     );

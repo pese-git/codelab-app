@@ -156,5 +156,23 @@ bool usageCostPartial(Set<UsagePartial> partial) => partial.isNotEmpty;
 /// Точная десятичная запись суммы для экспорта (D5 change
 /// `add-desktop-usage-pane`; acp-client-kit «Точная запись суммы usage»).
 ///
-/// Заглушка задачи 1.2: реализация — задача 1.3.
-String formatUsageMoneyExact(Money money) => throw UnimplementedError();
+/// Почему: CSV и другие экспорты не должны терять точность округления
+/// `formatUsageMoney`; сумма записывается без символа и кода валюты (валюта —
+/// отдельная колонка), чтобы разбор давал исходные микроединицы.
+///
+/// Для чего: обратимая запись `Money.micros` (1 000 000 микро = 1 единица):
+/// целая часть, при ненулевой дробной — точка и до шести цифр без хвостовых
+/// нулей; без экспоненты и локали. Отрицательная сумма (не бывает по D9)
+/// записывается как нуль, как и в [formatUsageMoney].
+///
+/// Как использовать: `formatUsageMoneyExact(totals.cost!)` → `2.26`, `0.000041`,
+/// `0`. Только целочисленная арифметика, web-безопасно.
+String formatUsageMoneyExact(Money money) {
+  final micros = money.micros < 0 ? 0 : money.micros;
+  final whole = micros ~/ 1000000;
+  final fraction = (micros % 1000000)
+      .toString()
+      .padLeft(6, '0')
+      .replaceFirst(RegExp(r'0+$'), '');
+  return fraction.isEmpty ? '$whole' : '$whole.$fraction';
+}

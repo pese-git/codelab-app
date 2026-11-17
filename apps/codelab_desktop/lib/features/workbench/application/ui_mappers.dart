@@ -596,38 +596,57 @@ final List<HostCommand> _paletteHostCommands = List.unmodifiable([
   for (final action in CodeLabCommandAction.defaults) _hostCommandOf(action),
 ]);
 
-final List<HostCommand> _paletteHostCommandsWithFiles = List.unmodifiable([
-  ..._paletteHostCommands,
-  _hostCommandOf(_filesAction),
-]);
+/// Действие палитры «Usage»: открывает панель Usage дока.
+///
+/// Почему отдельно от `CodeLabCommandAction.defaults`: пункт есть только когда
+/// панель доступна (у агента есть `usage` или `usageLedger`, D10), как у
+/// «Agents». Команда называется `/usage-pane`, а не `/usage`: у агента CodeLab
+/// есть своя команда `/usage` (change `add-usage-ledger`, D5), и каталог
+/// показывает команду хоста рядом с одноимённой командой агента (design.md
+/// change `add-desktop-usage-pane`, D11).
+const _usageAction = CodeLabCommandAction(
+  id: 'usage-pane',
+  label: 'Usage',
+  slashCommand: '/usage-pane',
+  description: 'Go to the usage panel.',
+  icon: FluentIcons.chart,
+);
 
-final List<HostCommand> _paletteHostCommandsWithAgents = List.unmodifiable([
-  ..._paletteHostCommands,
-  _hostCommandOf(_agentsAction),
-]);
+/// Команды хоста для сочетания необязательных пунктов (D11): один построитель
+/// вместо перебора сочетаний. Результат кэшируется по сочетанию, чтобы каталог
+/// не получал новый список на каждое состояние рабочего места.
+final Map<int, List<HostCommand>> _hostCommandsCache = {};
 
-final List<HostCommand> _paletteHostCommandsWithFilesAndAgents =
-    List.unmodifiable([
-      ..._paletteHostCommands,
-      _hostCommandOf(_filesAction),
-      _hostCommandOf(_agentsAction),
-    ]);
+List<HostCommand> _paletteHostCommandsOf({
+  required bool files,
+  required bool agents,
+  required bool usage,
+}) => _hostCommandsCache.putIfAbsent(
+  (files ? 1 : 0) | (agents ? 2 : 0) | (usage ? 4 : 0),
+  () => List.unmodifiable([
+    ..._paletteHostCommands,
+    if (files) _hostCommandOf(_filesAction),
+    if (agents) _hostCommandOf(_agentsAction),
+    if (usage) _hostCommandOf(_usageAction),
+  ]),
+);
 
 /// Каталог палитры для команд агента активной сессии: команды app и
 /// [agentCommands] с правилами kit (конфликты имён, поиск — D3, D4).
 /// [filesAvailable] добавляет пункт «Files» (панель доступна, D7),
-/// [agentsAvailable] — пункт «Agents» (у сессии есть субагенты, D49 Т11).
+/// [agentsAvailable] — пункт «Agents» (у сессии есть субагенты, D49 Т11),
+/// [usageAvailable] — пункт «Usage» (панель Usage доступна, D10, D11).
 CommandCatalog paletteCatalogOf(
   List<AgentCommandView> agentCommands, {
   bool filesAvailable = false,
   bool agentsAvailable = false,
+  bool usageAvailable = false,
 }) => CommandCatalog(
-  host: switch ((filesAvailable, agentsAvailable)) {
-    (true, true) => _paletteHostCommandsWithFilesAndAgents,
-    (true, false) => _paletteHostCommandsWithFiles,
-    (false, true) => _paletteHostCommandsWithAgents,
-    (false, false) => _paletteHostCommands,
-  },
+  host: _paletteHostCommandsOf(
+    files: filesAvailable,
+    agents: agentsAvailable,
+    usage: usageAvailable,
+  ),
   agent: agentCommands,
 );
 
@@ -649,6 +668,8 @@ CodeLabCommandAction _paletteActionOf(CatalogCommand command) =>
             ? _filesAction
             : command.id == _agentsAction.id
             ? _agentsAction
+            : command.id == _usageAction.id
+            ? _usageAction
             : CodeLabCommandAction.defaults.firstWhere(
                 (action) => action.id == command.id,
               ),

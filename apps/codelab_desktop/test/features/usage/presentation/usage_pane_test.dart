@@ -20,7 +20,9 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/core/platform/usage_csv_saver.dart';
+import 'package:codelab_desktop/features/usage/presentation/workbench_usage_pane.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,7 +62,7 @@ Map<String, Object?> _snapshot({int seq = 1}) => {
   'sessionId': 's1',
   'seq': seq,
   'trigger': 'turn',
-  'turnId': 'turn-1',
+  'turnId': 'turn-$seq',
   'turn': {'steps': 1, 'tokens': _tokens(100, 20), 'cost': '0.5'},
   'session': {
     'turns': 1,
@@ -523,7 +525,7 @@ void main() {
 
     testWidgets('отказ в диалоге: ни файла, ни заметки', (tester) async {
       final scene = await opened(tester);
-      scene.saver.outcome = UsageCsvSaveOutcome.cancelled;
+      scene.saver.result = const UsageCsvCancelled();
 
       await scene.tapKey('usage-export');
 
@@ -538,11 +540,70 @@ void main() {
       tester,
     ) async {
       final scene = await opened(tester);
-      scene.saver.outcome = UsageCsvSaveOutcome.failed;
+      scene.saver.result = const UsageCsvFailed('FileSystemException');
 
       await scene.tapKey('usage-export');
 
       expect(find.text("Couldn't save the file."), findsOneWidget);
+
+      await scene.close();
+    });
+
+    testWidgets('заметка о сбое записи сбрасывается при смене сессии в '
+        'фокусе (D5)', (tester) async {
+      final scene = await opened(tester);
+      scene.saver.result = const UsageCsvFailed('FileSystemException');
+      await scene.tapKey('usage-export');
+      expect(find.text("Couldn't save the file."), findsOneWidget);
+
+      await scene.newSession('s2');
+
+      expect(scene.cubit.state.activeSessionId, 's2');
+      expect(find.text("Couldn't save the file."), findsNothing);
+
+      await scene.close();
+    });
+  });
+
+  group('счётчик экземпляров панели (D3)', () {
+    testWidgets('два экземпляра, старый размонтирован: автообновление после '
+        'хода всё ещё уходит', (tester) async {
+      final scene = await _Scene.open(tester);
+      await scene.newSession('s1');
+      await scene.snapshot();
+      final showFirst = ValueNotifier<bool>(true);
+      addTearDown(showFirst.dispose);
+      await tester.pumpWidget(
+        scene.binding.bootstrap(
+          child: FluentApp(
+            home: BlocProvider<CodeLabShellCubit>.value(
+              value: scene.cubit,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: showFirst,
+                builder: (context, first, _) => Column(
+                  children: [
+                    if (first)
+                      const Expanded(
+                        child: WorkbenchUsagePane(key: ValueKey('first')),
+                      ),
+                    const Expanded(
+                      child: WorkbenchUsagePane(key: ValueKey('second')),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await scene.flush();
+      await scene.answerLedger(_ledger());
+      expect(scene.ledgerRequests, hasLength(1));
+
+      showFirst.value = false;
+      await scene.flush();
+      await scene.snapshot(seq: 2);
+      expect(scene.ledgerRequests, hasLength(2));
 
       await scene.close();
     });

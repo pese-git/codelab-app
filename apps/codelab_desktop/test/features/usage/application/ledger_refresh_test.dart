@@ -20,6 +20,8 @@ import 'package:codelab_desktop/features/workbench/application/active_session_cu
 import 'package:codelab_desktop/features/workbench/application/shell_part.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/fake_usage_csv_saver.dart';
+
 const _tokens = TokenCounts(input: 1, output: 1, cacheRead: 0, cacheWrite: 0);
 
 UsageLedgerView _ledgerView(int seq, {String session = 'a'}) => UsageLedgerView(
@@ -69,6 +71,10 @@ final class _Workspace extends Fake implements ClientWorkspace {
   final Map<String, _Handle> handles = {};
   final List<({String session, bool rebuild})> requests = [];
 
+  /// Настоящий kit публикует `loading` в `view` синхронно, внутри
+  /// `refreshUsageLedger`; двойник повторяет это, когда задан.
+  void Function(String session)? publishLoading;
+
   @override
   SessionHandle? session(SessionId id) => handles[id.value];
 
@@ -77,6 +83,7 @@ final class _Workspace extends Fake implements ClientWorkspace {
 
   @override
   Future<void> refreshUsageLedger(SessionId id, {bool rebuild = false}) async {
+    publishLoading?.call(id.value);
     requests.add((session: id.value, rebuild: rebuild));
   }
 }
@@ -176,6 +183,7 @@ void main() {
         changes: ShellChanges(),
         workspace: workspace,
         diagnostics: ShellDiagnostics(),
+        usageCsvSaver: FakeUsageCsvSaver(),
       );
     });
 
@@ -210,7 +218,7 @@ void main() {
     });
 
     test('журнал загружен (seq 7), ход идёт и завершается: ровно один '
-        'запрос после перехода в idle, во время хода — ни одного', () {
+        'запрос после перехода в idle, во время хода — ни одного', () async {
       a.emit(
         _view(2, ledger: UsageLedgerState.loaded(_ledgerView(7)), lastSeq: 7),
       );
@@ -234,17 +242,19 @@ void main() {
           lastSeq: 10,
         ),
       );
+      await pumpEventQueue();
       expect(workspace.requests, isEmpty, reason: 'во время хода запросов нет');
 
       a.emit(
         _view(5, ledger: UsageLedgerState.loaded(_ledgerView(7)), lastSeq: 10),
       );
+      await pumpEventQueue();
 
       expect(workspace.requests, [(session: 'a', rebuild: false)]);
     });
 
     test('журнал не догоняет снимки: второй запрос для того же lastSeq не '
-        'уходит, новый снимок открывает следующий', () {
+        'уходит, новый снимок открывает следующий', () async {
       cubit.show(_session('a'));
       cubit.usagePaneShown(true);
       expect(workspace.requests, hasLength(1));
@@ -256,11 +266,13 @@ void main() {
       a.emit(
         _view(3, ledger: UsageLedgerState.loaded(_ledgerView(9)), lastSeq: 10),
       );
+      await pumpEventQueue();
       expect(workspace.requests, hasLength(1));
 
       a.emit(
         _view(4, ledger: UsageLedgerState.loaded(_ledgerView(9)), lastSeq: 11),
       );
+      await pumpEventQueue();
 
       expect(workspace.requests, hasLength(2));
     });
@@ -305,6 +317,26 @@ void main() {
       expect(workspace.requests, isEmpty);
     });
 
+    test('переподключение сбрасывает журнал в idle: ровно один новый '
+        'автозапрос при том же lastSeq (D3)', () async {
+      cubit.show(_session('a'));
+      cubit.usagePaneShown(true);
+      expect(workspace.requests, hasLength(1));
+
+      a.emit(_view(2, ledger: const UsageLedgerState.loading()));
+      a.emit(
+        _view(3, ledger: UsageLedgerState.loaded(_ledgerView(10)), lastSeq: 10),
+      );
+      expect(workspace.requests, hasLength(1));
+
+      // Kit сбросил журнал при переподключении; lastSeq тот же.
+      a.emit(_view(4));
+      a.emit(_view(5));
+      await pumpEventQueue();
+
+      expect(workspace.requests, hasLength(2), reason: 'один новый запрос');
+    });
+
     test('смена сессии в фокусе: данные панели — сессии B, запрос уходит '
         'для B, поздняя ревизия A ничего не меняет', () {
       cubit.show(_session('a'));
@@ -322,6 +354,25 @@ void main() {
       expect(cubit.state.usage, same(before));
       expect(workspace.requests, hasLength(1));
       expect(b.id.value, 'b');
+    });
+
+    test('запрос из реакции на ревизию не публикует `loading` внутри '
+        'доставки этой ревизии (re-entrant add в broadcast-поток)', () async {
+      cubit.show(_session('a'));
+      cubit.usagePaneShown(true);
+      await pumpEventQueue();
+      workspace.requests.clear();
+      workspace.publishLoading = (id) => a.emit(
+        _view(10, ledger: const UsageLedgerState.loading(), lastSeq: 11),
+      );
+
+      a.emit(
+        _view(9, ledger: UsageLedgerState.loaded(_ledgerView(10)), lastSeq: 11),
+      );
+      await pumpEventQueue();
+
+      expect(workspace.requests, [(session: 'a', rebuild: false)]);
+      expect(cubit.state.usage.busy, isTrue, reason: 'loading дошёл до панели');
     });
   });
 }

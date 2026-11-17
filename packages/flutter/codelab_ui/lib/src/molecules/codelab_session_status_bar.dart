@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../atomics/codelab_pressable.dart';
 
 /// Один сегмент строки статуса сессии: готовая подпись, подсказка и тон.
 ///
@@ -145,9 +146,8 @@ class CodeLabSessionStatusBar extends StatelessWidget {
   /// Почему необязательный: без доступной панели строка остаётся прежней,
   /// некликабельной. Для чего: вся строка — вход в панель; курсор-рука,
   /// фокус клавиатуры, Enter и Space. Как использовать: app передаёт колбэк,
-  /// только когда панель Usage доступна.
-  ///
-  /// Заглушка задачи 1.6 (красные тесты): поведение — задача 1.7.
+  /// только когда панель Usage доступна. Кликабельная строка становится
+  /// остановкой Tab после композера (R9); без [onTap] фокуса у неё нет.
   final VoidCallback? onTap;
 
   @override
@@ -188,11 +188,29 @@ class CodeLabSessionStatusBar extends StatelessWidget {
         ),
     ];
     // Wrap, а не Row: в узком окне сегменты переносятся, не переполняя строку.
-    return Wrap(
+    final row = Wrap(
       spacing: 12,
       runSpacing: 4,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: items,
+    );
+    if (onTap == null) {
+      return row;
+    }
+    return CodeLabPressable(
+      onPressed: onTap,
+      builder: (context, hovered, focused) => DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          color: hovered
+              ? FluentTheme.of(context).resources.subtleFillColorSecondary
+              : null,
+          border: focused
+              ? Border.all(color: FluentTheme.of(context).accentColor)
+              : null,
+        ),
+        child: row,
+      ),
     );
   }
 }

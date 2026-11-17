@@ -13,10 +13,18 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         PromptQueued,
         SessionHandle,
         SessionStatusView,
-        SessionView;
+        SessionView,
+        ToolCallItem,
+        TranscriptItem,
+        UsageLedgerIdle,
+        UsageLedgerState,
+        UsageView;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 
+import '../../../core/platform/usage_csv_saver.dart';
+import '../../usage/application/ledger_refresh.dart';
+import '../../usage/application/usage_csv.dart';
 import '../../usage/application/usage_pane_data.dart';
 import 'agents_pane_data.dart';
 import 'shell_part.dart';
@@ -110,7 +118,6 @@ final class ActiveSessionState {
 
   /// Данные панели Usage сессии в фокусе (change `add-desktop-usage-pane`,
   /// D1): собираются в той же подписке `_onView`, что и [statusBar].
-  /// Заглушка задачи 1.4: заполняет задача 1.5.
   final UsagePaneData usage;
 
   static const Object _unset = Object();
@@ -188,8 +195,14 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     required super.changes,
     required ClientWorkspace workspace,
     required ShellDiagnostics diagnostics,
+    required UsageCsvSaver usageCsvSaver,
+    Logger? usageLogger,
+    DateTime Function()? clock,
   }) : _workspace = workspace,
        _diagnostics = diagnostics,
+       _usageCsvSaver = usageCsvSaver,
+       _usageLogger = usageLogger,
+       _clock = clock ?? DateTime.now,
        super(const ActiveSessionState()) {
     // Исход хода любой сессии — отправленного отсюда и ушедшего из очереди
     // kit: очередь могла сдвинуться.
@@ -200,6 +213,15 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
 
   final ClientWorkspace _workspace;
   final ShellDiagnostics _diagnostics;
+
+  /// Порт сохранения CSV панели Usage (D5); `app_scope` привязывает его
+  /// всегда, тесты передают двойник.
+  final UsageCsvSaver _usageCsvSaver;
+
+  /// События `usage_pane.refresh` и `usage_pane.export` (D13): логгер
+  /// `codelab_desktop.usage`; без секретов, путей, подписей и чисел.
+  final Logger? _usageLogger;
+  final DateTime Function() _clock;
   late final StreamSubscription<PromptOutcome> _outcomeSubscription;
   StreamSubscription<SessionView>? _viewSubscription;
   SessionHandle? _watchedHandle;
@@ -246,9 +268,13 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         canCancel: view?.status == SessionStatusView.running,
         turnState: turnStateOf(view),
         statusBar: view == null ? null : sessionStatusDataOf(view),
+        usage: _usageOf(id, view, session.cwd),
       ),
     );
     _watchView(id);
+    if (view != null) {
+      _refreshLedgerIfNeeded(id, view, reason: 'seq');
+    }
   }
 
   /// Показывает только что созданную сессию: лента пуста, ход не идёт.
@@ -272,9 +298,13 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         canCancel: false,
         turnState: null,
         statusBar: view == null ? null : sessionStatusDataOf(view),
+        usage: _usageOf(id, view, session.cwd),
       ),
     );
     _watchView(id);
+    if (view != null) {
+      _refreshLedgerIfNeeded(id, view, reason: 'seq');
+    }
   }
 
   /// Выбрана сессия, которой нет в ядре клиента: показывать нечего, кроме
@@ -296,6 +326,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         canCancel: false,
         turnState: null,
         statusBar: null,
+        usage: _usageOf(sessionId, null, ''),
       ),
     );
     _watchView(null);
@@ -537,13 +568,239 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   }
 
   /// Панель Usage показана или скрыта (вкладка активна и док виден): сигнал
-  /// виджета `WorkbenchUsagePane` из `initState` и `dispose` (design.md
+  /// виджета `WorkbenchUsagePane` из `initState` (`true`) и `dispose`
+  /// (`false`); экземпляры считаются, показана — пока их больше нуля (design.md
   /// change `add-desktop-usage-pane`, D1, D3). Показ запускает автоматический
   /// запрос журнала по правилу `ledgerRefreshNeeded`.
   ///
-  /// Заглушка задачи 1.4 (красные тесты `ledger_refresh_test.dart`):
-  /// реализация — задача 1.5.
-  void usagePaneShown(bool shown) => throw UnimplementedError();
+  /// Почему здесь, а не в виджете: правило «когда обновлять» — политика
+  /// application, а Cubit уже держит единственную подписку на
+  /// `SessionHandle.view` (`AGENTS.md` §9).
+  void usagePaneShown(bool shown) {
+    final before = _usagePaneInstances;
+    _usagePaneInstances = shown ? before + 1 : (before > 0 ? before - 1 : 0);
+    // Автозапрос только при появлении первого экземпляра: пока смонтирован
+    // хотя бы один, панель показана.
+    if (!shown || before > 0) {
+      return;
+    }
+    final id = state.sessionId;
+    final view = id == null ? null : _handle(id)?.current;
+    if (id != null && view != null) {
+      _refreshLedgerIfNeeded(id, view, reason: 'shown');
+    }
+  }
+
+  /// Запрашивает журнал usage показываемой сессии вне автоматического
+  /// правила: `Retry` панели (`rebuild: false`, причина `retry`) и
+  /// `Rebuild from log` (`rebuild: true`, причина `manual`) — D3. Слияние с
+  /// идущим запросом и защиту от поздних ответов делает kit.
+  Future<void> refreshUsageLedger({bool rebuild = false}) async {
+    final id = state.sessionId;
+    if (id == null || _handle(id) == null) {
+      return;
+    }
+    await _requestLedger(
+      id,
+      rebuild: rebuild,
+      reason: rebuild ? 'manual' : 'retry',
+    );
+  }
+
+  /// Сохраняет CSV журнала, показанного в панели (D5): строит его
+  /// `buildUsageCsv`, предлагает имя `codelab-usage-<sessionId>-<дата>.csv`
+  /// и отдаёт порту. Отказ в диалоге — [UsageCsvCancelled] без заметки; сбой
+  /// порта или записи — [UsageCsvFailed] с классом ошибки.
+  ///
+  /// В журнал идёт `usage_pane.export` с исходом (`saved`, `cancelled`,
+  /// `failed` + `error_class`) и числом ходов и шагов: путь, подписи, токены
+  /// и деньги в запись не попадают (D13, `AGENTS.md` §16). Отказ в диалоге
+  /// тоже событие: это решение пользователя, а не отсутствие действия.
+  ///
+  /// Без события возвращается [UsageCsvCancelled] только когда экспортировать
+  /// нечего (нет сессии или журнала; кнопка в этом состоянии скрыта): порт
+  /// не вызывался, диалога не было, значит, и исхода для журнала нет.
+  Future<UsageCsvSaveResult> exportUsageCsv() async {
+    final id = state.sessionId;
+    final data = state.usage;
+    final ledger = data.ledger;
+    if (id == null || !data.canExport || ledger == null) {
+      return const UsageCsvCancelled();
+    }
+    UsageCsvSaveResult result;
+    try {
+      result = await _usageCsvSaver.save(
+        suggestedName: _csvNameOf(id, _clock()),
+        csv: buildUsageCsv(data),
+      );
+    } on Object catch (error) {
+      // Порт обязан возвращать UsageCsvFailed; непредвиденное исключение
+      // не должно терять класс ошибки и ронять панель.
+      result = UsageCsvFailed(error.runtimeType.toString());
+    }
+    _usageLogger?.info(
+      'usage_pane.export',
+      context: {
+        'outcome': result.outcome,
+        'turns': ledger.turns.length,
+        'steps': ledger.turns.fold<int>(0, (n, turn) => n + turn.steps.length),
+        if (result case UsageCsvFailed(:final errorClass))
+          'error_class': errorClass,
+      },
+    );
+    return result;
+  }
+
+  /// `codelab-usage-<первые 8 символов sessionId>-<yyyyMMdd-HHmm>.csv`; id
+  /// сессии приходит от агента, поэтому в имени остаются только безопасные
+  /// символы.
+  static String _csvNameOf(String sessionId, DateTime now) {
+    final safe = sessionId
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')
+        .padRight(1, '_');
+    final short = safe.length > 8 ? safe.substring(0, 8) : safe;
+    String two(int value) => value.toString().padLeft(2, '0');
+    final date =
+        '${now.year.toString().padLeft(4, '0')}${two(now.month)}${two(now.day)}';
+    return 'codelab-usage-$short-$date-${two(now.hour)}${two(now.minute)}.csv';
+  }
+
+  /// Число смонтированных экземпляров `WorkbenchUsagePane` (сигнал
+  /// [usagePaneShown]); `> 0` — панель показана. Счётчик, а не флаг: при
+  /// пересборке дока `initState` нового экземпляра может прийти раньше
+  /// `dispose` старого, и флаг «погас» бы, хотя панель на экране.
+  int _usagePaneInstances = 0;
+  bool get _usagePaneShown => _usagePaneInstances > 0;
+
+  /// Сессия, для которой ведётся учёт автоматических запросов журнала, и
+  /// значение `usage.lastSeq`, для которого запрос уже уходил (D3 п. 4).
+  String? _ledgerSession;
+  int? _requestedForSeq;
+
+  /// Журнал на прошлой ревизии был `idle`: возврат в `idle` из другого
+  /// состояния (переподключение, загрузка сессии) открывает ровно один новый
+  /// автозапрос, даже если `lastSeq` не изменился.
+  bool? _ledgerWasIdle;
+
+  /// Кэш данных панели: пересчёт только при смене входов (D1). Ревизии
+  /// ленты на каждый фрагмент ответа usage и журнал не меняют, а разбор
+  /// журнала и индекс вызовов не нужны повторять на каждый из них.
+  String? _usageSession;
+  UsageView? _usageInput;
+  UsageLedgerState? _usageLedgerInput;
+  String _usageCwd = '';
+  UsagePaneData _usageCached = UsagePaneData.empty;
+
+  /// Вызовы ленты, по которым собраны подписи шагов: сравниваются по
+  /// identity. Длины ленты мало — `tool_call_update` меняет вызов без новой
+  /// записи, и подписи шагов (`UsageStepLabeler`) должны обновиться.
+  List<ToolCallItem> _usageCalls = const [];
+
+  bool _sameUsageCalls(List<TranscriptItem> transcript) {
+    var index = 0;
+    for (final item in transcript) {
+      if (item is! ToolCallItem) {
+        continue;
+      }
+      if (index >= _usageCalls.length || !identical(_usageCalls[index], item)) {
+        return false;
+      }
+      index++;
+    }
+    return index == _usageCalls.length;
+  }
+
+  UsagePaneData _usageOf(String sessionId, SessionView? view, String cwd) {
+    if (view == null) {
+      _usageSession = null;
+      return _usageCached = UsagePaneData.empty;
+    }
+    if (_usageSession == sessionId &&
+        _usageCwd == cwd &&
+        identical(_usageInput, view.usage) &&
+        identical(_usageLedgerInput, view.usageLedger) &&
+        _sameUsageCalls(view.transcript)) {
+      return _usageCached;
+    }
+    _usageSession = sessionId;
+    _usageCwd = cwd;
+    _usageInput = view.usage;
+    _usageLedgerInput = view.usageLedger;
+    _usageCalls = [
+      for (final item in view.transcript)
+        if (item is ToolCallItem) item,
+    ];
+    return _usageCached = usagePaneDataOf(view, cwd: cwd);
+  }
+
+  /// Автоматический запрос журнала по правилу D3 (`ledgerRefreshNeeded`).
+  ///
+  /// [deferred] — вызов идёт из реакции на ревизию `SessionHandle.view`
+  /// ([_onView]). Kit публикует `loading` синхронно, в начале
+  /// `refreshUsageLedger`, а broadcast-поток запрещает `add` внутри доставки
+  /// события (`Cannot fire new event`), поэтому запрос уходит микрозадачей,
+  /// уже после доставки ревизии.
+  void _refreshLedgerIfNeeded(
+    String sessionId,
+    SessionView view, {
+    required String reason,
+    bool deferred = false,
+  }) {
+    if (_ledgerSession != sessionId) {
+      _ledgerSession = sessionId;
+      _requestedForSeq = null;
+      _ledgerWasIdle = null;
+    }
+    final idle = view.usageLedger is UsageLedgerIdle;
+    if (idle && _ledgerWasIdle == false) {
+      _requestedForSeq = null;
+    }
+    _ledgerWasIdle = idle;
+    if (!ledgerRefreshNeeded(
+      paneShown: _usagePaneShown,
+      status: view.status,
+      ledger: view.usageLedger,
+      lastSeq: view.usage.lastSeq,
+      requestedForSeq: _requestedForSeq,
+    )) {
+      return;
+    }
+    _requestedForSeq = view.usage.lastSeq;
+    if (deferred) {
+      unawaited(
+        Future<void>.microtask(
+          () => _requestLedger(sessionId, rebuild: false, reason: reason),
+        ),
+      );
+      return;
+    }
+    unawaited(_requestLedger(sessionId, rebuild: false, reason: reason));
+  }
+
+  Future<void> _requestLedger(
+    String sessionId, {
+    required bool rebuild,
+    required String reason,
+  }) async {
+    _usageLogger?.debug(
+      'usage_pane.refresh',
+      context: {'session_id': sessionId, 'rebuild': rebuild, 'reason': reason},
+    );
+    try {
+      await _workspace.refreshUsageLedger(
+        SessionId(sessionId),
+        rebuild: rebuild,
+      );
+    } on Object catch (error) {
+      // Сбой запроса kit уже отражает состоянием `failed`; сюда доходит
+      // только непредвиденное исключение, его нельзя терять (`AGENTS.md` §12).
+      _diagnostics.record(
+        'Failed to request the usage ledger: ${error.runtimeType}',
+        severity: DiagnosticSeverity.warning,
+        source: 'usage',
+      );
+    }
+  }
 
   void _onView(String sessionId, SessionView view) {
     // Поздняя ревизия сессии, которую уже не показывают, не трогает строку.
@@ -551,9 +808,11 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       return;
     }
     final data = sessionStatusDataOf(view);
-    if (data != state.statusBar) {
-      emit(state._copyWith(statusBar: data));
+    final usage = _usageOf(sessionId, view, _shown?.cwd ?? '');
+    if (data != state.statusBar || !identical(usage, state.usage)) {
+      emit(state._copyWith(statusBar: data, usage: usage));
     }
+    _refreshLedgerIfNeeded(sessionId, view, reason: 'seq', deferred: true);
   }
 
   @override

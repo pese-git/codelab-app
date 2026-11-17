@@ -209,7 +209,8 @@ final class StepEnded extends AgentEvent {
     this.budget,
   });
 
-  /// ЗАГЛУШКА 2.1: прогресс бюджета (D8); заполняет задача 2.2.
+  /// Прогресс бюджета хода после шага (D8): тем же значением цикл решает
+  /// остановку. `null` — событие собрано вне цикла (например, в тестах).
   final BudgetProgress? budget;
 
   final StepResult result;
@@ -457,7 +458,8 @@ final class TurnEnded extends AgentEvent {
     this.budget,
   });
 
-  /// ЗАГЛУШКА 2.1: прогресс бюджета (D8); заполняет задача 2.2.
+  /// Итоговый прогресс бюджета хода (D8), включая usage потомков; `null` —
+  /// событие собрано вне цикла (отмена, сбой до цикла).
   final BudgetProgress? budget;
 
   final TurnEndReason reason;

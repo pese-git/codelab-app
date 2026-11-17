@@ -302,6 +302,12 @@ void main() {
       expect(titleCell('Fix, "quoted"'), '"Fix, ""quoted"""');
     });
 
+    test('одиночный CR внутри значения: поле в кавычках', () {
+      // Табличный редактор считает голый CR концом записи; без кавычек
+      // подпись хода разорвала бы строку CSV (RFC 4180, D5).
+      expect(titleCell('Fix\rbuild'), '"Fix\rbuild"');
+    });
+
     test('обычный текст кавычек не получает', () {
       expect(titleCell('Fix the build'), 'Fix the build');
     });
@@ -335,6 +341,53 @@ void main() {
       final csv = _csvOf(_ledger(total: _totals(_tokens(5, 3))));
 
       expect(_lines(csv).last, 'total,,,,,5,3,0,0,,,,');
+    });
+  });
+
+  group('«немая» строка без usage (D5, DSK-11)', () {
+    test('шаг без usage при цене 0: токены, cost и currency пустые, '
+        'как «—» в панели', () {
+      final csv = _csvOf(
+        _ledger(
+          turns: [
+            UsageLedgerTurn(
+              index: 1,
+              total: _totals(
+                _tokens(0, 0),
+                cost: _usd(0),
+                partial: {UsagePartial.noUsage},
+              ),
+              steps: [
+                UsageLedgerStep(
+                  index: 0,
+                  tokens: _tokens(0, 0),
+                  cost: _usd(0),
+                  partial: const {UsagePartial.noUsage},
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      expect(_lines(csv)[1], 'turn,1,,,,,,,,,,,noUsage');
+      expect(_lines(csv)[2], 'step,1,1,reply,,,,,,,,,noUsage');
+    });
+
+    test('ход с ценами и usage остаётся с деньгами', () {
+      final csv = _csvOf(
+        _ledger(
+          turns: [
+            UsageLedgerTurn(
+              index: 1,
+              total: _totals(_tokens(10, 2), cost: _usd(41)),
+              steps: const [],
+            ),
+          ],
+        ),
+      );
+
+      expect(_lines(csv)[1], 'turn,1,,,,10,2,0,0,,0.000041,USD,');
     });
   });
 }

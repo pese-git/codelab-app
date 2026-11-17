@@ -190,7 +190,7 @@ final class CodeLabShellState {
   final CodeLabSessionStatusData? statusBar;
 
   /// Данные панели Usage сессии в фокусе (change `add-desktop-usage-pane`,
-  /// D1). Заглушка задачи 1.4: фасад заполняет их в задаче 1.5.
+  /// D1); собирает `ActiveSessionCubit`, виджеты только читают.
   final UsagePaneData usage;
 
   /// Панель Usage предлагается: у сессии в фокусе есть `usageLedger` или

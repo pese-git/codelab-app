@@ -249,4 +249,27 @@ void main() {
     expect(first.limits.maxDuration, isNull);
     expect(first.tokens, 15);
   });
+
+  // Сбой модели на шаге N: StepEnded уже посчитал этот шаг, итог хода обязан
+  // совпасть с ним (иначе клиент видит ход на шаг короче, чем UsageAccounting).
+  test(
+    'ошибка модели на шаге: TurnEnded.budget.steps == последний StepEnded',
+    () async {
+      final h = await LoopHarness.create(
+        tools: [FakeTool('probe')],
+        llm: script([
+          _probeStep('c1'),
+          {
+            'error': {'class': 'server', 'message': 'boom'},
+          },
+        ]),
+      );
+
+      await h.run([user('go')]);
+
+      final steps = [for (final p in _stepProgress(h)) p!.steps];
+      expect(steps, [1, 2]);
+      expect(h.events.whereType<TurnEnded>().single.budget!.steps, steps.last);
+    },
+  );
 }

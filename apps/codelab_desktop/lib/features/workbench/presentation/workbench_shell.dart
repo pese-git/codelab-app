@@ -14,6 +14,7 @@ import '../application/sessions_cubit.dart' show PendingRootSession;
 import '../../project_files/presentation/project_files_pane.dart';
 import '../../terminal/application/terminal_tabs_cubit.dart';
 import '../../terminal/presentation/terminal_pane.dart';
+import '../../usage/presentation/workbench_usage_pane.dart';
 import '../application/shell_cubit.dart';
 import '../application/ui_mappers.dart'
     show connectionTooltipOf, sidebarProjectsOf;
@@ -44,6 +45,9 @@ class CodeLabShell extends StatelessWidget {
   /// the layout»). Agents — тоже вычисляется: панель есть, пока у сессии в
   /// фокусе есть хотя бы одна строка субагента (`CodeLabShellState.
   /// agentsAvailable`, design.md change `add-subagents-and-tasks`, D49 Т11).
+  /// Usage — тоже вычисляется: панель есть, пока у сессии в фокусе есть
+  /// `usageLedger` или живые снимки usage (`CodeLabShellState.usageAvailable`,
+  /// design.md change `add-desktop-usage-pane`, D1, D10).
   /// Terminal входит, только если на платформе есть PTY
   /// (`add-integrated-terminal`, D12): без него переключателя нет.
   static List<ToolPane> _availablePanesOf(
@@ -53,6 +57,7 @@ class CodeLabShell extends StatelessWidget {
     if (state.projectFilesAvailable) ToolPane.files,
     ToolPane.plan,
     if (state.agentsAvailable) ToolPane.agents,
+    if (state.usageAvailable) ToolPane.usage,
     ToolPane.protocol,
     if (terminal) ToolPane.terminal,
   ];
@@ -209,6 +214,7 @@ class CodeLabShell extends StatelessWidget {
                                   ToolPane.files => const ProjectFilesPane(),
                                   ToolPane.agents =>
                                     const WorkbenchAgentsPane(),
+                                  ToolPane.usage => const WorkbenchUsagePane(),
                                   ToolPane.plan =>
                                     CodeLabProgressChecklist.list(
                                       entries: state.currentPlan ?? const [],

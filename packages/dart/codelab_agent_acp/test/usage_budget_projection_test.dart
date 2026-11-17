@@ -1,5 +1,6 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show JsonRpcNotification;
+import 'package:codelab_agent_acp/src/usage_accounting.dart';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:test/test.dart';
 
@@ -221,6 +222,78 @@ void main() {
       expect(frame['currency'], 'USD');
     }
   });
+
+  // Невалидный `max_cost` (NaN, ±inf, отрицательный, больше предела
+  // микродолларов) показать нельзя: подполя `cost` нет, остальной бюджет
+  // остаётся, проекция не бросает (D7, D9).
+  for (final (name, maxCost) in [
+    ('NaN', double.nan),
+    ('+inf', double.infinity),
+    ('huge', 1e300),
+  ]) {
+    test('$name max_cost with max_tokens: budget without cost', () async {
+      final sessionId = await ready(
+        budget: TurnBudget(maxTokens: 200000, maxCost: maxCost),
+        defaultModel: priced,
+        steps: twoSteps(),
+      );
+
+      await h.prompt(sessionId, 'Составь список задач');
+
+      final frames = usageOf(h.client);
+      expect(frames.map((f) => f['trigger']), ['step', 'step', 'turn']);
+      for (final frame in frames) {
+        final budget = asMap(frame['budget']);
+        expect(budget, isNot(contains('cost')));
+        expect(budget['steps'], isNotNull);
+        expect(asMap(budget['tokens'])['limit'], 200000);
+      }
+    });
+
+    test('$name max_cost alone: no budget', () async {
+      final sessionId = await ready(
+        budget: TurnBudget(maxCost: maxCost),
+        defaultModel: priced,
+        steps: twoSteps(),
+      );
+
+      await h.prompt(sessionId, 'Составь список задач');
+
+      final frames = usageOf(h.client);
+      expect(frames.map((f) => f['trigger']), ['step', 'step', 'turn']);
+      for (final frame in frames) {
+        expect(frame, isNot(contains('budget')));
+      }
+    });
+  }
+
+  // Отрицательный и -inf лимиты цикл исчерпывает сразу (до первого шага), так
+  // что снимков не будет; проекцию проверяем напрямую.
+  for (final (name, maxCost) in [
+    ('-inf', double.negativeInfinity),
+    ('negative', -1.0),
+    ('NaN', double.nan),
+    ('huge', 1e300),
+  ]) {
+    test('budgetJson with $name max_cost does not throw', () {
+      BudgetProgress progress(TurnBudget limits) => BudgetProgress(
+        limits: limits,
+        steps: 1,
+        tokens: 10,
+        cost: 0.01,
+        active: Duration.zero,
+      );
+
+      final withTokens = budgetJson(
+        progress(TurnBudget(maxTokens: 1000, maxCost: maxCost)),
+      );
+      expect(withTokens, isNotNull);
+      expect(withTokens, isNot(contains('cost')));
+      expect(withTokens, contains('steps'));
+      expect(withTokens, contains('tokens'));
+      expect(budgetJson(progress(TurnBudget(maxCost: maxCost))), isNull);
+    });
+  }
 
   // Без лимитов, кроме шагов, поля нет: иначе все существующие usage-фикстуры
   // получили бы лишний ключ (D7; фикстура `acp/prompt-usage-steps`).
