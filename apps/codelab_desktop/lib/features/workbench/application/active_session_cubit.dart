@@ -691,6 +691,12 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   String _usageCwd = '';
   UsagePaneData _usageCached = UsagePaneData.empty;
 
+  /// Статус сессии и признак ожидающих одобрений входят в ключ кэша: от них
+  /// зависят заголовок `This turn` / `Last turn` и признак тика блока
+  /// `Turn budget`, а `usage` при этом не меняется (D9).
+  SessionStatusView? _usageStatus;
+  bool _usageApprovals = false;
+
   /// Вызовы ленты, по которым собраны подписи шагов: сравниваются по
   /// identity. Длины ленты мало — `tool_call_update` меняет вызов без новой
   /// записи, и подписи шагов (`UsageStepLabeler`) должны обновиться.
@@ -719,6 +725,8 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         _usageCwd == cwd &&
         identical(_usageInput, view.usage) &&
         identical(_usageLedgerInput, view.usageLedger) &&
+        _usageStatus == view.status &&
+        _usageApprovals == view.pendingApprovals.isNotEmpty &&
         _sameUsageCalls(view.transcript)) {
       return _usageCached;
     }
@@ -726,6 +734,8 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     _usageCwd = cwd;
     _usageInput = view.usage;
     _usageLedgerInput = view.usageLedger;
+    _usageStatus = view.status;
+    _usageApprovals = view.pendingApprovals.isNotEmpty;
     _usageCalls = [
       for (final item in view.transcript)
         if (item is ToolCallItem) item,

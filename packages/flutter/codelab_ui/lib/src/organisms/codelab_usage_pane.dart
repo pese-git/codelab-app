@@ -92,8 +92,6 @@ class CodeLabUsageNote {
 /// полосы, виджет ограничивает её диапазоном 0..1; [tone] выше нейтрального
 /// рисуется плашкой вокруг [value]; [hint] — подсказка строки; [note] —
 /// строка под подписью (`not checked: price unknown`).
-///
-/// Заглушка задачи 3.3: блок пока не рисуется (реализация — задача 3.4).
 class CodeLabUsageBudgetRow {
   const CodeLabUsageBudgetRow({
     required this.id,
@@ -121,8 +119,6 @@ class CodeLabUsageBudgetRow {
 /// решает application по статусу сессии и признаку «итог хода» (Q11 (а)).
 /// Как использовать: передаётся в [CodeLabUsagePane.budget]; `null` — блока
 /// нет. Блок стоит между карточками и `Per turn`.
-///
-/// Заглушка задачи 3.3 (см. [CodeLabUsageBudgetRow]).
 class CodeLabUsageBudget {
   const CodeLabUsageBudget({
     required this.title,
@@ -150,7 +146,8 @@ class CodeLabUsageBudget {
 /// даёт вызывающий. Ключи: `usage-rebuild`, `usage-export`,
 /// `usage-ledger-status`, `usage-card-<id>`, `usage-turn-<id>`,
 /// `usage-step-<id>`, `usage-model-<n>`, `usage-retry`, `usage-note`,
-/// `usage-progress`.
+/// `usage-progress`, блок бюджета — `usage-budget`, `usage-budget-title`,
+/// `usage-budget-<id>`, `usage-budget-note`.
 class CodeLabUsagePane extends StatefulWidget {
   const CodeLabUsagePane({
     required this.title,
@@ -184,7 +181,7 @@ class CodeLabUsagePane extends StatefulWidget {
   final List<CodeLabUsageRow> models;
 
   /// Блок `Turn budget` между карточками и `Per turn`; `null` — блока нет
-  /// (D9). Заглушка задачи 3.3: пока не рисуется.
+  /// (D9).
   final CodeLabUsageBudget? budget;
 
   /// Журнала для показа ещё нет: вместо таблиц индикатор (`usage-progress`).
@@ -285,6 +282,7 @@ class _CodeLabUsagePaneState extends State<CodeLabUsagePane> {
               onRetry: widget.onRetry,
             ),
           if (widget.cards.isNotEmpty) _CardGrid(cards: widget.cards),
+          if (widget.budget case final budget?) _BudgetView(budget: budget),
           if (widget.turns.isNotEmpty)
             _Table(
               title: 'Per turn',
@@ -313,6 +311,128 @@ class _CodeLabUsagePaneState extends State<CodeLabUsagePane> {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Блок `Turn budget`: заголовок, полосы лимитов и пояснение (D9).
+///
+/// Раскладка, не логика: полосе из данных остаётся только ограничить долю
+/// диапазоном 0..1. Ключи: `usage-budget`, `usage-budget-title`,
+/// `usage-budget-<id>` (+ `-track`, `-fill`), `usage-budget-note`.
+class _BudgetView extends StatelessWidget {
+  const _BudgetView({required this.budget});
+
+  final CodeLabUsageBudget budget;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: const ValueKey('usage-budget'),
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CodeLabText(
+            escapeForDisplay(budget.title),
+            key: const ValueKey('usage-budget-title'),
+            role: CodeLabTextRole.strong,
+          ),
+          for (final row in budget.rows) _BudgetRowView(row: row),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: CodeLabText(
+              escapeForDisplay(budget.footnote),
+              key: const ValueKey('usage-budget-note'),
+              role: CodeLabTextRole.caption,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BudgetRowView extends StatelessWidget {
+  const _BudgetRowView({required this.row});
+
+  final CodeLabUsageBudgetRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    // Данные могут прислать долю вне диапазона (больше 100 %, NaN): полоса
+    // не должна выходить за дорожку и ронять раскладку.
+    final fill = row.fill.isNaN ? 0.0 : row.fill.clamp(0.0, 1.0);
+    final barColor = switch (row.tone) {
+      CodeLabTone.danger => Colors.red,
+      CodeLabTone.warning => Colors.orange,
+      _ => theme.accentColor,
+    };
+    final value = escapeForDisplay(row.value);
+    Widget content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: CodeLabText(
+                escapeForDisplay(row.label),
+                role: CodeLabTextRole.body,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (row.tone == CodeLabTone.neutral)
+              CodeLabText(value, role: CodeLabTextRole.body, maxLines: 1)
+            else
+              CodeLabBadge(label: value, tone: row.tone),
+          ],
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          key: ValueKey('usage-budget-${row.id}-track'),
+          height: 6,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: theme.resources.controlStrongFillColorDefault.withValues(
+                alpha: 0.25,
+              ),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: fill,
+                heightFactor: 1,
+                child: DecoratedBox(
+                  key: ValueKey('usage-budget-${row.id}-fill'),
+                  decoration: BoxDecoration(
+                    color: barColor,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (row.note case final note?)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: CodeLabText(
+              escapeForDisplay(note),
+              role: CodeLabTextRole.caption,
+            ),
+          ),
+      ],
+    );
+    if (row.hint case final hint?) {
+      content = Tooltip(message: escapeForDisplay(hint), child: content);
+    }
+    return Padding(
+      key: ValueKey('usage-budget-${row.id}'),
+      padding: const EdgeInsets.only(top: 8),
+      child: content,
     );
   }
 }

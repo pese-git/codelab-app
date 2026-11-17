@@ -202,8 +202,8 @@ final class UsagePaneData {
   final List<UsagePaneTurn> turns;
   final List<UsagePaneModel> models;
 
-  /// Блок `Turn budget` (D9); `null` — блока нет. Заглушка задачи 3.3:
-  /// `usagePaneDataOf` его пока не заполняет (задача 3.4).
+  /// Блок `Turn budget` (D9); `null` — блока нет. Источник — `usage.budget`,
+  /// а не журнал, поэтому блок есть и у агента без журнала (D10).
   final UsageBudgetData? budget;
   final bool canRebuild;
   final bool canExport;
@@ -451,6 +451,7 @@ UsagePaneData usagePaneDataOf(SessionView? view, {required String cwd}) {
     cards: cards,
     turns: turns,
     models: models,
+    budget: usageBudgetDataOf(view),
     canRebuild: ledgerAvailable && state is! UsageLedgerLoading,
     canExport: ledger != null,
   );

@@ -1,5 +1,6 @@
 import 'package:codelab_ui/codelab_ui.dart';
 
+import '../application/usage_budget.dart';
 import '../application/usage_pane_data.dart';
 
 /// Карточки панели Usage в модели `codelab_ui` (design.md change
@@ -61,8 +62,32 @@ List<CodeLabUsageRow> usageModelRowsOf(UsagePaneData data) => [
 /// Блок `Turn budget` в модели кита на момент [now] (D9): тон переводится в
 /// `CodeLabTone`, Time пересчитывает `usageBudgetRowsAt`. `null` — блока нет.
 ///
-/// Заглушка задачи 3.3: всегда `null` (реализация — задача 3.4).
+/// Почему здесь: кит не знает `UsageBudgetData` (`codelab_ui/AGENTS.md` §1);
+/// решения (тон, заголовок, тик) приняты в application, здесь только перевод.
 CodeLabUsageBudget? usageBudgetViewOf(
   UsagePaneData data, {
   required DateTime now,
-}) => null;
+}) {
+  final budget = data.budget;
+  if (budget == null) return null;
+  return CodeLabUsageBudget(
+    title: budget.title,
+    rows: [
+      for (final row in usageBudgetRowsAt(budget, now: now))
+        CodeLabUsageBudgetRow(
+          id: row.id,
+          label: row.label,
+          value: row.value,
+          fill: row.fill,
+          tone: switch (row.tone) {
+            UsageBudgetTone.neutral => CodeLabTone.neutral,
+            UsageBudgetTone.warning => CodeLabTone.warning,
+            UsageBudgetTone.danger => CodeLabTone.danger,
+          },
+          hint: row.hint,
+          note: row.note,
+        ),
+    ],
+    footnote: usageBudgetFootnote,
+  );
+}

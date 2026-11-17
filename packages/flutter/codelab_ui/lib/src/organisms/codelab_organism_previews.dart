@@ -849,6 +849,39 @@ Widget codelabUsagePanePreview() {
             detail: 'avg 2.3 steps per turn',
           ),
         ],
+        budget: const CodeLabUsageBudget(
+          title: 'This turn',
+          footnote:
+              'When a limit is hit, the turn stops at the next step boundary.',
+          rows: [
+            CodeLabUsageBudgetRow(
+              id: 'steps',
+              label: 'Steps',
+              value: '3 / 50',
+              fill: 0.06,
+            ),
+            CodeLabUsageBudgetRow(
+              id: 'tokens',
+              label: 'Tokens',
+              value: '92.0k / 200.0k',
+              fill: 0.46,
+              hint: 'input + output, including subagents',
+            ),
+            CodeLabUsageBudgetRow(
+              id: 'cost',
+              label: 'Cost',
+              value: r'$0.41 / $0.50',
+              fill: 0.82,
+              tone: CodeLabTone.warning,
+            ),
+            CodeLabUsageBudgetRow(
+              id: 'time',
+              label: 'Time',
+              value: '3:00 / 10:00',
+              fill: 0.3,
+            ),
+          ],
+        ),
         turns: const [
           CodeLabUsageRow(
             id: '3',

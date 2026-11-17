@@ -145,8 +145,6 @@ abstract class ContextFillView with _$ContextFillView {
 /// (D7); клиент ничего не досчитывает.
 ///
 /// Для чего: подполя [UsageBudget.steps] и [UsageBudget.tokens].
-///
-/// Заглушка задачи 3.1: тип объявлен, разбор — задача 3.2.
 @freezed
 abstract class BudgetCount with _$BudgetCount {
   const factory BudgetCount({required int used, required int limit}) =

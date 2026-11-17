@@ -5,13 +5,10 @@
 // «Сброс при переподключении и загрузке»; design.md, D7, D9, решение
 // Q11 (а); `12-1-view-model.md` §12.1.5 п. 3b).
 //
-// Красные тесты: разбор `budget` в `UsageDecoder` и свёртка в `UsageFold`
-// (задача 3.2) ещё не написаны, поэтому `UsageSnapshot.budget` и
-// `UsageView.budget` всегда `null`. Заглушки типов (`TurnBudgetView`,
-// `BudgetCount`, `BudgetCost`, `BudgetDuration`, `UsageBudget`) и параметр
-// `UsageFold.apply(receivedAt:)` объявлены, чтобы файл компилировался.
+// Покрывает разбор `budget` в `UsageDecoder` и свёртку в `UsageFold`
+// (D9) и параметр `UsageFold.apply(receivedAt:)`.
 //
-// Формы, которые задаёт этот тест (имена типов — на усмотрение 3.2, D9):
+// Формы, которые фиксирует этот тест (D9):
 //   * `UsageSnapshot.budget` — `UsageBudget?` (подполя провода без `turnId`,
 //     момента и `ended`);
 //   * `UsageView.budget` — `TurnBudgetView?`: `turnId`, `receivedAt`, `ended`
@@ -330,6 +327,27 @@ void main() {
       );
     });
 
+    test('a snapshot without turnId (compaction, compactionDiscarded, load) '
+        'ignores budget: not parsed, no warnings even for a broken one', () {
+      // D7: `budget` бывает только у снимков с ходом. Свёртка такой бюджет
+      // всё равно отбросила бы, но разбор лишнего поля дал бы ложные записи
+      // `usage.decode_failed` у снимков уровня сессии.
+      for (final trigger in ['compaction', 'compactionDiscarded', 'load']) {
+        for (final budget in <Object>[_fullBudget(), 'broken']) {
+          final warned = <(String, String)>[];
+
+          final snapshot = _decode(
+            _params(trigger: trigger, turnId: null, budget: budget),
+            warned,
+          );
+
+          expect(snapshot, isNotNull, reason: '$trigger $budget');
+          expect(snapshot!.budget, isNull, reason: '$trigger $budget');
+          expect(warned, isEmpty, reason: '$trigger $budget');
+        }
+      }
+    });
+
     test('budget is not an object: no budget, one warning field budget, the '
         'snapshot is applied (сценарий «Бюджет не объект»)', () {
       for (final bad in <Object>['full', 5, true, <Object?>[]]) {
@@ -494,6 +512,22 @@ void main() {
       fold = _apply(fold, _snap(3, turnId: 'B', budget: _budgetA));
       expect(fold.view.budget!.turnId, 'B');
       expect(fold.view.budget!.ended, isFalse);
+    });
+
+    test('ended is sticky for the same turnId: a late step with budget after '
+        'the turn snapshot keeps ended true (нарушение агентом, D9)', () {
+      var fold = _apply(
+        UsageFold.initial(declared: true),
+        _snap(1, turnId: 'A', budget: _budgetA),
+      );
+      fold = _apply(
+        fold,
+        _snap(2, trigger: UsageTrigger.turn, turnId: 'A', budget: _budgetA2),
+      );
+      fold = _apply(fold, _snap(3, turnId: 'A', budget: _budgetA));
+
+      expect(fold.view.budget!.turnId, 'A');
+      expect(fold.view.budget!.ended, isTrue);
     });
 
     test('a turn snapshot of the same turn without budget sets ended and '

@@ -1,11 +1,10 @@
-// Красные тесты задачи 3.3 change `add-desktop-usage-pane`: данные блока
+// Тесты задачи 3.3 change `add-desktop-usage-pane`: данные блока
 // `Turn budget` панели Usage (agent-workbench-ui «Бюджет хода в панели
 // Usage»: «Прогресс во время хода», «Время идёт между шагами», «Начало
 // нового хода», «Цена неизвестна», «После хода», «Бюджет у агента без
 // журнала», «Без лимитов»; design.md, D9, D10, Q5 (а), Q11 (а), R2, R8).
 //
-// Формы (рабочие, при расхождении переименовать здесь и в заглушке
-// `usage_budget.dart`): `UsagePaneData.budget` (`UsageBudgetData`: `title`,
+// Формы (см. `usage_budget.dart`): `UsagePaneData.budget` (`UsageBudgetData`: `title`,
 // `rows` — Steps, Tokens, Cost, `time` — исходные числа Time, `ticking`),
 // чистые `usageBudgetRowsAt(budget, now:)` и `formatUsageDuration(ms)`.
 // Источник — `SessionView.usage.budget` (kit, D9): статус сессии и
@@ -288,6 +287,30 @@ void main() {
       expect(edge.tone, UsageBudgetTone.warning);
     });
 
+    test('числа около 2^62 с провода: тон без переполнения умножения', () {
+      const limit = (1 << 62) + (1 << 61);
+      const edge = limit - limit ~/ 5;
+      // used·5 переполнило бы int64 и дало бы ложный нейтральный/warning.
+      expect(_steps(edge, limit).tone, UsageBudgetTone.warning);
+      expect(_steps(edge - 1, limit).tone, UsageBudgetTone.neutral);
+      expect(_steps(limit, limit).tone, UsageBudgetTone.danger);
+      expect(_steps(1 << 61, limit).tone, UsageBudgetTone.neutral);
+    });
+
+    test('граница warning равна ceil(4·L/5) на малых лимитах', () {
+      for (var limit = 0; limit <= 12; limit++) {
+        for (var used = 0; used < limit; used++) {
+          expect(
+            _steps(used, limit).tone,
+            used * 5 >= limit * 4
+                ? UsageBudgetTone.warning
+                : UsageBudgetTone.neutral,
+            reason: '$used / $limit',
+          );
+        }
+      }
+    });
+
     test('Cost: `\$0.41 / \$0.50` — warning (сценарий «Прогресс»)', () {
       expect(_row(_data(_budget()), 'cost').tone, UsageBudgetTone.warning);
     });
@@ -533,6 +556,20 @@ void main() {
       expect(
         time(running(ended: true), const Duration(seconds: 5)),
         '3:00 / 10:00',
+      );
+    });
+
+    test('usedMs около 2^63−1: сложение насыщается, не уходит в минус', () {
+      const max = 0x7fffffffffffffff;
+      final data = _data(
+        _budget(
+          duration: const BudgetDuration(usedMs: max - 100, limitMs: max),
+        ),
+        status: SessionStatusView.running,
+      );
+      expect(
+        time(data, const Duration(seconds: 5)),
+        '${formatUsageDuration(max)} / ${formatUsageDuration(max)}',
       );
     });
 

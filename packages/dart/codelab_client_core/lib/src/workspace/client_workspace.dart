@@ -1966,7 +1966,13 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   /// Применяет [snapshot] соединения поколения [generation]; `false` —
   /// дубль или опоздание, ревизия не растёт (D7, VIEW-6).
   bool applyUsage(UsageSnapshot snapshot, {required int generation}) {
-    final next = _usage.apply(snapshot, generation: generation);
+    // Момент применения — по часам рабочего пространства (D9, «Часы»); у
+    // снимка, отложенного до регистрации сессии, это время применения.
+    final next = _usage.apply(
+      snapshot,
+      generation: generation,
+      receivedAt: _clock(),
+    );
     if (next == null) {
       return false;
     }

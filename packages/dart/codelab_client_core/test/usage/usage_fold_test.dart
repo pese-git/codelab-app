@@ -12,6 +12,9 @@ import 'package:test/test.dart';
 
 const _sessionId = SessionId('s1');
 
+/// Момент применения: эти тесты бюджет не проверяют (D9).
+final _at = DateTime.utc(2026, 11, 18);
+
 const _zeroTotals = UsageTotals(
   tokens: TokenCounts(input: 0, output: 0, cacheRead: 0, cacheWrite: 0),
 );
@@ -47,8 +50,9 @@ void main() {
       fold = fold.apply(
         _turnSnapshot(1, turnId: 't1', turn: _turnA),
         generation: 1,
+        receivedAt: _at,
       )!;
-      fold = fold.apply(_turnSnapshot(2), generation: 1)!;
+      fold = fold.apply(_turnSnapshot(2), generation: 1, receivedAt: _at)!;
 
       expect(fold.view.lastTurn, _turnA);
     });
@@ -58,10 +62,12 @@ void main() {
       fold = fold.apply(
         _turnSnapshot(1, turnId: 't1', turn: _turnA),
         generation: 1,
+        receivedAt: _at,
       )!;
       fold = fold.apply(
         _turnSnapshot(2, turnId: 't1', turn: _turnB),
         generation: 1,
+        receivedAt: _at,
       )!;
 
       expect(fold.view.lastTurn, _turnB);
@@ -72,8 +78,13 @@ void main() {
       fold = fold.apply(
         _turnSnapshot(1, turnId: 't1', turn: _turnA),
         generation: 1,
+        receivedAt: _at,
       )!;
-      fold = fold.apply(_turnSnapshot(2, turnId: 't2'), generation: 1)!;
+      fold = fold.apply(
+        _turnSnapshot(2, turnId: 't2'),
+        generation: 1,
+        receivedAt: _at,
+      )!;
 
       expect(fold.view.lastTurn, isNull);
     });
@@ -84,11 +95,11 @@ void main() {
         'старого (D7, D21 Т2: счёт нового агента начинается заново)', () {
       var fold = UsageFold.initial(declared: true);
       for (var seq = 1; seq <= 5; seq++) {
-        fold = fold.apply(_snapshot(seq), generation: 1)!;
+        fold = fold.apply(_snapshot(seq), generation: 1, receivedAt: _at)!;
       }
       expect(fold.view.lastSeq, 5);
 
-      final next = fold.apply(_snapshot(1), generation: 2);
+      final next = fold.apply(_snapshot(1), generation: 2, receivedAt: _at);
 
       expect(next, isNotNull);
       expect(next!.generation, 2);
@@ -99,20 +110,23 @@ void main() {
     test('снимок старого поколения отбрасывается после применения нового, '
         'даже с бо́льшим seq (D7, D21 Т2, Т4)', () {
       var fold = UsageFold.initial(declared: true);
-      fold = fold.apply(_snapshot(1), generation: 1)!;
-      fold = fold.apply(_snapshot(1), generation: 2)!;
+      fold = fold.apply(_snapshot(1), generation: 1, receivedAt: _at)!;
+      fold = fold.apply(_snapshot(1), generation: 2, receivedAt: _at)!;
 
-      expect(fold.apply(_snapshot(1), generation: 1), isNull);
-      expect(fold.apply(_snapshot(9), generation: 1), isNull);
+      expect(fold.apply(_snapshot(1), generation: 1, receivedAt: _at), isNull);
+      expect(fold.apply(_snapshot(9), generation: 1, receivedAt: _at), isNull);
     });
 
     test('дубль и опоздание в том же поколении отбрасываются (D7)', () {
       var fold = UsageFold.initial(declared: true);
-      fold = fold.apply(_snapshot(3), generation: 1)!;
+      fold = fold.apply(_snapshot(3), generation: 1, receivedAt: _at)!;
 
-      expect(fold.apply(_snapshot(3), generation: 1), isNull);
-      expect(fold.apply(_snapshot(2), generation: 1), isNull);
-      expect(fold.apply(_snapshot(4), generation: 1), isNotNull);
+      expect(fold.apply(_snapshot(3), generation: 1, receivedAt: _at), isNull);
+      expect(fold.apply(_snapshot(2), generation: 1, receivedAt: _at), isNull);
+      expect(
+        fold.apply(_snapshot(4), generation: 1, receivedAt: _at),
+        isNotNull,
+      );
     });
   });
 

@@ -27,12 +27,17 @@ import 'usage_pane_view.dart';
 /// `initState` шлёт `usagePaneShown(true)`, `dispose` — `false`; фасад
 /// считает экземпляры, поэтому пересборка дока с двумя экземплярами на миг
 /// показ не гасит.
+///
+/// Тик блока `Turn budget` (D9): `Timer.periodic` раз в секунду перестраивает
+/// панель, пока `UsageBudgetData.ticking` истинно; решение «тикать ли»
+/// принимает application, виджет ему следует. Таймер живёт, только пока
+/// панель смонтирована, и отменяется при смене условия и в `dispose`.
 class WorkbenchUsagePane extends StatefulWidget {
   const WorkbenchUsagePane({this.clock, super.key});
 
   /// Часы блока `Turn budget` (D9): `null` — `DateTime.now`. Тесты внедряют
   /// один поддельный источник для часов kit (`receivedAt`) и виджета (`now`),
-  /// как `WorkbenchAgentsPane.clock`. Заглушка задачи 3.3: пока не читается.
+  /// как `WorkbenchAgentsPane.clock`.
   final DateTime Function()? clock;
 
   @override
@@ -49,17 +54,40 @@ class _WorkbenchUsagePaneState extends State<WorkbenchUsagePane> {
   /// Экспорт идёт: вторая кнопка не нужна, пока диалог открыт.
   bool _exporting = false;
 
+  /// Тик Time блока `Turn budget`; `null` — не нужен (D9).
+  Timer? _ticker;
+
   @override
   void initState() {
     super.initState();
     _cubit = context.read<CodeLabShellCubit>();
     _cubit.usagePaneShown(true);
+    _syncTicker(_cubit.state.usage.budget?.ticking ?? false);
   }
 
   @override
   void dispose() {
+    _ticker?.cancel();
     _cubit.usagePaneShown(false);
     super.dispose();
+  }
+
+  /// Включает или отменяет таймер по признаку из данных; повторный вызов с тем
+  /// же значением ничего не меняет, поэтому второго таймера не бывает.
+  void _syncTicker(bool ticking) {
+    if (ticking == (_ticker != null)) {
+      return;
+    }
+    if (!ticking) {
+      _ticker?.cancel();
+      _ticker = null;
+      return;
+    }
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   Future<void> _export() async {
@@ -85,10 +113,20 @@ class _WorkbenchUsagePaneState extends State<WorkbenchUsagePane> {
   Widget build(BuildContext context) {
     // Заметка о сбое записи относится к сессии, в фокусе которой был экспорт:
     // при смене сессии она сбрасывается.
-    return BlocListener<CodeLabShellCubit, CodeLabShellState>(
-      listenWhen: (previous, current) =>
-          previous.activeSessionId != current.activeSessionId,
-      listener: (context, state) => setState(() => _saveFailed = false),
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<CodeLabShellCubit, CodeLabShellState>(
+          listenWhen: (previous, current) =>
+              previous.activeSessionId != current.activeSessionId,
+          listener: (context, state) => setState(() => _saveFailed = false),
+        ),
+        BlocListener<CodeLabShellCubit, CodeLabShellState>(
+          listenWhen: (previous, current) =>
+              previous.usage.budget?.ticking != current.usage.budget?.ticking,
+          listener: (context, state) =>
+              _syncTicker(state.usage.budget?.ticking ?? false),
+        ),
+      ],
       child: BlocBuilder<CodeLabShellCubit, CodeLabShellState>(
         buildWhen: (previous, current) => previous.usage != current.usage,
         builder: (context, state) {
@@ -97,6 +135,14 @@ class _WorkbenchUsagePaneState extends State<WorkbenchUsagePane> {
             child: CodeLabUsagePane(
               title: 'This session',
               cards: usageCardsOf(data),
+              // Часы спрашиваются, только когда блок есть: без бюджета
+              // панель от них не зависит.
+              budget: data.budget == null
+                  ? null
+                  : usageBudgetViewOf(
+                      data,
+                      now: (widget.clock ?? DateTime.now)(),
+                    ),
               statusLine: data.statusLine,
               turns: usageTurnRowsOf(data),
               models: usageModelRowsOf(data),
