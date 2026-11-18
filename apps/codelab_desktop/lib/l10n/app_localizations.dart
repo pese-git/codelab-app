@@ -595,6 +595,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics'**
   String get settingsSearchKeywordsGeneral;
+
+  /// Заголовок секции страницы General со строками запуска и файлов.
+  ///
+  /// In en, this message translates to:
+  /// **'Startup and files'**
+  String get settingsGeneralSectionStartup;
+
+  /// Подпись строки-переключателя: открывать ли при запуске проект прошлого запуска и его открытые сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'Reopen the last project and its tabs'**
+  String get settingsGeneralReopenTitle;
+
+  /// Пояснение строки «Reopen the last project and its tabs».
+  ///
+  /// In en, this message translates to:
+  /// **'On: open the last project and its open sessions. Off: start with recent projects in the sidebar. Applies at the next start.'**
+  String get settingsGeneralReopenDescription;
+
+  /// Предупреждение на странице General, когда значение настройки запуска не удалось записать; кнопка Retry повторяет запись.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save this setting. The previous value applies at the next start.'**
+  String get settingsGeneralStartupSaveFailed;
 }
 
 class _AppLocalizationsDelegate

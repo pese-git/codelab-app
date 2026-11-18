@@ -35,6 +35,7 @@ import 'package:codelab_desktop/core/platform/startup_preferences.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_rows.dart';
+import 'package:codelab_desktop/features/settings/application/startup_settings_cubit.dart';
 import 'package:codelab_desktop/features/settings/presentation/general_page.dart';
 import 'package:codelab_desktop/features/settings/presentation/settings_shell.dart';
 import 'package:codelab_desktop/l10n/app_localizations.dart';
@@ -380,6 +381,7 @@ void main() {
   group('Agent defaults на Cubit-двойнике', () {
     late AppLanguageCubit language;
     late FakeAgentDefaultsCubit cubit;
+    late StartupSettingsCubit startup;
 
     /// Страница «General» в дереве, как его собирает `CodeLabApp`: язык
     /// выбирает `AppLanguageCubit`, а `FluentApp` не пересоздаётся.
@@ -402,11 +404,14 @@ void main() {
       addTearDown(language.close);
       cubit = FakeAgentDefaultsCubit(state);
       addTearDown(cubit.close);
+      startup = StartupSettingsCubit(preferences: _StartupPort());
+      addTearDown(startup.close);
       await tester.pumpWidget(
         MultiBlocProvider(
           providers: [
             BlocProvider<AppLanguageCubit>.value(value: language),
             BlocProvider<AgentDefaultsCubit>.value(value: cubit),
+            BlocProvider<StartupSettingsCubit>.value(value: startup),
           ],
           child: BlocBuilder<AppLanguageCubit, AppLanguageState>(
             buildWhen: (a, b) => a.locale != b.locale,
@@ -459,8 +464,8 @@ void main() {
         expect(find.text(en.settingsGeneralSectionInterface), findsOneWidget);
         // Строки без поведения не показываются (SETUP-17, D8, D17), блок без
         // видимых строк скрыт вместе с заголовком.
-        expect(find.text('Startup and files'), findsNothing);
-        expect(key('settings-general-reopen-last-project'), findsNothing);
+        // «Startup and files» есть со строкой «Reopen…» (итерация 3), строки
+        // «Show ignored files» (итерация 4) и «About» (итерация 5) ещё нет.
         expect(key('settings-general-show-ignored'), findsNothing);
         expect(key('settings-general-about'), findsNothing);
         for (final hidden in [
@@ -1028,7 +1033,14 @@ void main() {
         );
         expect(row('budget.max_steps'), findsNothing);
         expect(find.byType(TextBox), findsNothing);
-        expect(find.byType(ToggleSwitch), findsNothing);
+        // Переключатель строки «Reopen…» вне блока Agent defaults.
+        expect(
+          find.descendant(
+            of: key('settings-general-agent-defaults'),
+            matching: find.byType(ToggleSwitch),
+          ),
+          findsNothing,
+        );
         expect(key('settings-general-language'), findsOneWidget);
       });
 
@@ -1048,11 +1060,15 @@ void main() {
         addTearDown(language.close);
         cubit = FakeAgentDefaultsCubit(const AgentDefaultsLoading());
         addTearDown(cubit.close);
+        startup = StartupSettingsCubit(preferences: _StartupPort());
+        addTearDown(startup.close);
         await tester.pumpWidget(
           MultiBlocProvider(
             providers: [
               BlocProvider<AppLanguageCubit>.value(value: language),
               BlocProvider<AgentDefaultsCubit>.value(value: cubit),
+              BlocProvider<StartupSettingsCubit>.value(value: startup),
+              BlocProvider<StartupSettingsCubit>.value(value: startup),
             ],
             child: localizedFluentApp(
               const ScaffoldPage(

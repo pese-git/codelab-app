@@ -84,9 +84,9 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - «Выключено — снимок нового запуска пишется»;
   - сбой чтения — как при включённом, событие `app.reopen_last_project_unreadable`;
   - `app.reopen_last_project_skipped`.
-- [ ] 3.4 `[desktop]` Реализация 3.3: `core/platform/startup_preferences.dart` (`StartupPreferences`, `SharedPreferencesStartupPreferences`), `SettingsCubit._restoreProject` читает порт до восстановления, привязка в `app_scope.dart`, шов `createCodeLabRootScope(startupPreferences:)`. 3.3 зелёный.
+- [x] 3.4 `[desktop]` Реализация 3.3: `core/platform/startup_preferences.dart` (`StartupPreferences`, `SharedPreferencesStartupPreferences`), `SettingsCubit._restoreProject` читает порт до восстановления, привязка в `app_scope.dart`, шов `createCodeLabRootScope(startupPreferences:)`. 3.3 зелёный.
 - [x] 3.5 `[desktop]` Красный: `test/features/settings/application/startup_settings_cubit_test.dart` и дополнение `general_page_test.dart` — строка `settings-general-reopen-last-project`, сценарий «Переключение не трогает текущую работу», сбой записи с «Retry» (`settings-general-reopen-last-project-retry`), событие `settings.reopen_last_project_changed`.
-- [ ] 3.6 `[desktop]` Реализация 3.5: `StartupSettingsCubit`, строка в блоке «Startup and files», ARB. 3.5 зелёный.
+- [x] 3.6 `[desktop]` Реализация 3.5: `StartupSettingsCubit`, строка в блоке «Startup and files», ARB. 3.5 зелёный.
 
 ## 4. Итерация 4 — «Show ignored files» (после итерации 3 `add-file-preview-and-tree`)
 

@@ -75,6 +75,7 @@ import '../features/settings/application/embedded_profile.dart';
 import '../features/settings/application/profiles_unavailable.dart';
 import '../features/settings/application/agent_defaults_cubit.dart';
 import '../features/settings/application/agents_modes_cubit.dart';
+import '../features/settings/application/startup_settings_cubit.dart';
 import '../features/settings/application/mcp_settings_cubit.dart';
 import '../features/settings/application/skills_settings_cubit.dart';
 import '../features/settings/application/provider_settings_cubit.dart';
@@ -120,7 +121,7 @@ Scope createCodeLabRootScope({
   // языке. Без шва — `en` (тесты и хосты без предпочтения).
   AppLanguageStart? language,
   AppLanguagePreferences? languagePreferences,
-  // Шов порта настроек запуска (D9); заглушка итерации 3, привязка — задача 3.4.
+  // Шов порта настроек запуска (D9).
   StartupPreferences? startupPreferences,
   CodeLabTransportFactory? transportFactory,
   CodeLabStdioTransportFactory? stdioTransportFactory,
@@ -181,6 +182,7 @@ Scope createCodeLabRootScope({
         localFolderOpener: localFolderOpener,
         projectFolderPicker: projectFolderPicker,
         usageCsvSaver: usageCsvSaver,
+        startupPreferences: startupPreferences,
       ),
       CodeLabConnectionModule(
         environment: connectionEnvironment,
@@ -517,7 +519,9 @@ final class CodeLabPlatformModule extends Module {
     LocalFolderOpener? localFolderOpener,
     this.projectFolderPicker,
     this.usageCsvSaver,
-  }) : _userShellLauncher = userShellLauncher,
+    StartupPreferences? startupPreferences,
+  }) : _startupPreferences = startupPreferences,
+       _userShellLauncher = userShellLauncher,
        _externalLinkOpener = externalLinkOpener,
        _localFolderOpener = localFolderOpener;
 
@@ -536,6 +540,11 @@ final class CodeLabPlatformModule extends Module {
   /// D8): без него — адаптер на `url_launcher`.
   final LocalFolderOpener? _localFolderOpener;
 
+  /// Порт настройки «Reopen the last project and its tabs»; шов тестов
+  /// (`createCodeLabRootScope(startupPreferences:)`, change
+  /// `add-app-general-page`, D9): без него — `shared_preferences`.
+  final StartupPreferences? _startupPreferences;
+
   /// Системный выбор папки; тесты подменяют его, чтобы не открывать диалог.
   final ProjectFolderPicker? projectFolderPicker;
 
@@ -551,6 +560,11 @@ final class CodeLabPlatformModule extends Module {
   void builder(Scope currentScope) {
     // Проверка папки проекта до восстановления и подключения.
     bind<DirectoryExists>().toInstance(directoryExists);
+    // Настройки запуска app: читает `SettingsCubit` до восстановления
+    // проекта, пишет страница «General» (D9).
+    bind<StartupPreferences>().toInstance(
+      _startupPreferences ?? const SharedPreferencesStartupPreferences(),
+    );
     const textFileIo = IoTextFileIo();
     bind<TextFileReader>().toInstance(textFileIo);
     bind<TextFileWriter>().toInstance(textFileIo);
@@ -778,6 +792,8 @@ final class CodeLabPresentationModule extends Module {
             // (change `add-desktop-usage-pane`, D5, D13).
             usageCsvSaver: currentScope.resolve<UsageCsvSaver>(),
             usageLogger: _usageLogger(),
+            startupPreferences: currentScope.resolve<StartupPreferences>(),
+            appLogger: codeLabAppLogger(),
           ),
         )
         .singleton();
@@ -965,6 +981,14 @@ final class CodeLabPresentationModule extends Module {
         logger: _settingsLogger(),
       );
     });
+    // Строка «Reopen the last project and its tabs» страницы «General»
+    // (change `add-app-general-page`, D9): новый Cubit на каждое открытие.
+    bind<StartupSettingsCubit>().toProvide(
+      () => StartupSettingsCubit(
+        preferences: currentScope.resolve<StartupPreferences>(),
+        logger: _settingsLogger(),
+      ),
+    );
     // Страница «MCP servers»: новый Cubit на каждое открытие (D11); сессия
     // настроек и доступ — те же, что у «Providers», порт состояния MCP
     // встроенного агента берётся у резолвера текущего соединения (D12).
@@ -1392,6 +1416,7 @@ final class CodeLabDependencies {
     required this.createSkillsSettingsCubit,
     required this.createAgentsModesCubit,
     required this.createAgentDefaultsCubit,
+    required this.createStartupSettingsCubit,
     required this.openEmbeddedWizard,
     this.projectFilesCubit,
   });
@@ -1442,6 +1467,11 @@ final class CodeLabDependencies {
   /// Создаёт Cubit блока «Agent defaults» страницы «General»; страница владеет
   /// им и закрывает (design.md change `add-app-general-page`, D7).
   final AgentDefaultsCubit Function() createAgentDefaultsCubit;
+
+  /// Создаёт Cubit строки «Reopen the last project and its tabs» страницы
+  /// «General»; страница владеет им и закрывает (design.md change
+  /// `add-app-general-page`, D9).
+  final StartupSettingsCubit Function() createStartupSettingsCubit;
 
   /// Открывает мастер встроенного агента из баннера соединения; владелец
   /// закрывает Cubit после диалога (design.md change `add-provider-setup-ui`,
@@ -1542,6 +1572,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     createSkillsSettingsCubit: _scope.resolve<SkillsSettingsCubit>,
     createAgentsModesCubit: _scope.resolve<AgentsModesCubit>,
     createAgentDefaultsCubit: _scope.resolve<AgentDefaultsCubit>,
+    createStartupSettingsCubit: _scope.resolve<StartupSettingsCubit>,
     openEmbeddedWizard: _scope.resolve<EmbeddedWizardOpener>(),
     projectFilesCubit: _projectFilesCubitOf(_scope),
   );

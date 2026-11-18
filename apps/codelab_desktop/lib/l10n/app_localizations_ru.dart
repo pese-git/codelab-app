@@ -305,4 +305,19 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsSearchKeywordsGeneral =>
       'язык, бюджет, шаги, сжатие, субагент, уровень журнала, запуск, открывать, игнорируемые, о программе, версия, лицензия, диагностика';
+
+  @override
+  String get settingsGeneralSectionStartup => 'Запуск и файлы';
+
+  @override
+  String get settingsGeneralReopenTitle =>
+      'Открывать последний проект и его вкладки';
+
+  @override
+  String get settingsGeneralReopenDescription =>
+      'Включено: открывать последний проект и его открытые сессии. Выключено: начинать с недавних проектов в боковой панели. Применяется при следующем запуске.';
+
+  @override
+  String get settingsGeneralStartupSaveFailed =>
+      'Не удалось сохранить настройку. При следующем запуске действует прежнее значение.';
 }

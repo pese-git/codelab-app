@@ -302,4 +302,19 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsSearchKeywordsGeneral =>
       'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics';
+
+  @override
+  String get settingsGeneralSectionStartup => 'Startup and files';
+
+  @override
+  String get settingsGeneralReopenTitle =>
+      'Reopen the last project and its tabs';
+
+  @override
+  String get settingsGeneralReopenDescription =>
+      'On: open the last project and its open sessions. Off: start with recent projects in the sidebar. Applies at the next start.';
+
+  @override
+  String get settingsGeneralStartupSaveFailed =>
+      'Couldn\'t save this setting. The previous value applies at the next start.';
 }

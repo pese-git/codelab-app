@@ -29,8 +29,14 @@ final class StartupLoad {
 /// Порт хранения настроек запуска app (design.md change
 /// `add-app-general-page`, D9).
 ///
-/// Заглушка итерации 3 (красные тесты 3.3): методы ничего не читают и не
-/// пишут. Реализация — задача 3.4.
+/// Почему отдельный порт: настройка принадлежит окну app, а не агенту и не
+/// профилю, поэтому `config.yaml` и `profiles.json` не трогаются (образец —
+/// `AppLanguagePreferences`).
+///
+/// Как использовать: `load` читает значение до восстановления проекта и НЕ
+/// бросает: сбой хранилища и нечитаемое значение дают «включено» с признаком,
+/// иначе повреждённый файл настроек мешал бы запуску. `save(true)` удаляет
+/// ключ; ошибки записи порт не скрывает — их показывает страница («Retry»).
 abstract interface class StartupPreferences {
   Future<StartupLoad> load();
 
@@ -38,16 +44,43 @@ abstract interface class StartupPreferences {
 }
 
 /// [StartupPreferences] в `shared_preferences` под ключом
-/// [kReopenLastProjectKey]. Заглушка итерации 3 (задача 3.4).
+/// [kReopenLastProjectKey].
+///
+/// Небулево значение читается как «включено» и НЕ перезаписывается: данные
+/// пользователя не портятся молча (AGENTS.md §2).
 final class SharedPreferencesStartupPreferences implements StartupPreferences {
   /// [open] — шов тестов: по умолчанию `SharedPreferences.getInstance`.
   const SharedPreferencesStartupPreferences({
     Future<SharedPreferences> Function() open = SharedPreferences.getInstance,
-  });
+  }) : _open = open;
+
+  final Future<SharedPreferences> Function() _open;
 
   @override
-  Future<StartupLoad> load() async => const StartupLoad(true);
+  Future<StartupLoad> load() async {
+    final Object? value;
+    try {
+      final prefs = await _open();
+      // `get`, а не `getBool`: небулево значение не должно бросать `TypeError`
+      // и ронять запуск.
+      value = prefs.get(kReopenLastProjectKey);
+    } on Object catch (error) {
+      return StartupLoad(true, readFailure: error.runtimeType.toString());
+    }
+    return switch (value) {
+      null => const StartupLoad(true),
+      final bool enabled => StartupLoad(enabled),
+      _ => const StartupLoad(true, storedValueInvalid: true),
+    };
+  }
 
   @override
-  Future<void> save(bool reopenLastProject) async {}
+  Future<void> save(bool reopenLastProject) async {
+    final prefs = await _open();
+    if (reopenLastProject) {
+      await prefs.remove(kReopenLastProjectKey);
+    } else {
+      await prefs.setBool(kReopenLastProjectKey, false);
+    }
+  }
 }

@@ -16,6 +16,7 @@ import '../../../app/language/app_language_cubit.dart';
 import '../../../core/platform/app_language_preferences.dart';
 import '../../../l10n/l10n.dart';
 import '../application/agent_defaults_cubit.dart';
+import '../application/startup_settings_cubit.dart';
 import 'agent_setting_labels.dart';
 
 /// Тело страницы «General» для таблицы `settingsPageBuilders`.
@@ -41,6 +42,7 @@ class GeneralPageHost extends StatefulWidget {
 
 class _GeneralPageHostState extends State<GeneralPageHost> {
   AgentDefaultsCubit? _cubit;
+  StartupSettingsCubit? _startup;
 
   @override
   void didChangeDependencies() {
@@ -49,18 +51,29 @@ class _GeneralPageHostState extends State<GeneralPageHost> {
       final cubit = codeLabDependenciesOf(context).createAgentDefaultsCubit();
       _cubit = cubit;
       unawaited(cubit.reload());
+      final startup = codeLabDependenciesOf(
+        context,
+      ).createStartupSettingsCubit();
+      _startup = startup;
+      unawaited(startup.load());
     }
   }
 
   @override
   void dispose() {
     unawaited(_cubit?.close());
+    unawaited(_startup?.close());
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) =>
-      BlocProvider.value(value: _cubit!, child: const GeneralPage());
+  Widget build(BuildContext context) => MultiBlocProvider(
+    providers: [
+      BlocProvider<AgentDefaultsCubit>.value(value: _cubit!),
+      BlocProvider<StartupSettingsCubit>.value(value: _startup!),
+    ],
+    child: const GeneralPage(),
+  );
 }
 
 /// Страница настроек «General»: умолчания агента и язык интерфейса (артборд
@@ -153,6 +166,7 @@ class GeneralPage extends StatelessWidget {
               ),
             ],
           ),
+          const _StartupSection(),
         ],
       ),
     );
@@ -642,4 +656,53 @@ class _TextEditorState extends State<_TextEditor> {
     enabled: widget.enabled,
     onSubmitted: (_) => _commit(),
   );
+}
+
+/// Блок «Startup and files»: строка «Reopen the last project and its tabs»
+/// (design.md change `add-app-general-page`, D9).
+///
+/// Для чего: только отображение [StartupSettingsState]. Строки «Show ignored
+/// files» и «About» появятся вместе со своим поведением (SETUP-17). Значение
+/// применяется при следующем запуске, поэтому текущую работу переключение не
+/// трогает.
+class _StartupSection extends StatelessWidget {
+  const _StartupSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final cubit = context.read<StartupSettingsCubit>();
+    return BlocBuilder<StartupSettingsCubit, StartupSettingsState>(
+      builder: (context, state) => CodeLabSettingsSection(
+        title: l10n.settingsGeneralSectionStartup,
+        children: [
+          if (state.saveFailed)
+            InfoBar(
+              key: const ValueKey(
+                'settings-general-reopen-last-project-save-failed',
+              ),
+              // Только типизированный исход: текста исключения нет (D9).
+              title: Text(l10n.settingsGeneralStartupSaveFailed),
+              severity: InfoBarSeverity.warning,
+              action: Button(
+                key: const ValueKey(
+                  'settings-general-reopen-last-project-retry',
+                ),
+                onPressed: () => unawaited(cubit.retry()),
+                child: Text(l10n.settingsLanguageSaveRetry),
+              ),
+            ),
+          CodeLabSettingsRow(
+            key: const ValueKey('settings-general-reopen-last-project'),
+            title: l10n.settingsGeneralReopenTitle,
+            description: l10n.settingsGeneralReopenDescription,
+            trailing: ToggleSwitch(
+              checked: state.reopenLastProject,
+              onChanged: (value) => unawaited(cubit.select(value)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

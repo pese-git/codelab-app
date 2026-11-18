@@ -382,5 +382,21 @@
   "settingsSearchKeywordsGeneral": "language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics",
   "@settingsSearchKeywordsGeneral": {
     "description": "Ключевые слова поиска по настройкам для страницы General, через запятую; на русском — переводы английских слов."
+  },
+  "settingsGeneralSectionStartup": "Startup and files",
+  "@settingsGeneralSectionStartup": {
+    "description": "Заголовок секции страницы General со строками запуска и файлов."
+  },
+  "settingsGeneralReopenTitle": "Reopen the last project and its tabs",
+  "@settingsGeneralReopenTitle": {
+    "description": "Подпись строки-переключателя: открывать ли при запуске проект прошлого запуска и его открытые сессии."
+  },
+  "settingsGeneralReopenDescription": "On: open the last project and its open sessions. Off: start with recent projects in the sidebar. Applies at the next start.",
+  "@settingsGeneralReopenDescription": {
+    "description": "Пояснение строки «Reopen the last project and its tabs»."
+  },
+  "settingsGeneralStartupSaveFailed": "Couldn't save this setting. The previous value applies at the next start.",
+  "@settingsGeneralStartupSaveFailed": {
+    "description": "Предупреждение на странице General, когда значение настройки запуска не удалось записать; кнопка Retry повторяет запись."
   }
 }
