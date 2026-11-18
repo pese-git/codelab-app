@@ -10,8 +10,10 @@
 /// полной историей (`fetch-depth: 0`). Пустой `--packages` нужен потому, что
 /// `dart run` на чистом checkout разрешает весь pub workspace, а для него
 /// нужен Flutter SDK из FVM; локально можно `fvm dart run tool/ci/affected.dart`. Пишет
-/// `matrix=<json>` в `$GITHUB_OUTPUT` и таблицу в `$GITHUB_STEP_SUMMARY`; без
-/// этих переменных — в stdout, для локальной проверки.
+/// `matrix=<json>` и `site=<true|false>` (джоб сайта, change `add-astro-site`,
+/// D13) в `$GITHUB_OUTPUT`, таблицу и строку `site: yes/no` — в
+/// `$GITHUB_STEP_SUMMARY`; без этих переменных — в stdout, для локальной
+/// проверки.
 library;
 
 import 'dart:convert';
@@ -64,6 +66,8 @@ Future<void> main(List<String> args) async {
                 'affected: ${_list(scope.affected)}.',
     )
     ..writeln()
+    ..writeln('site: ${scope.site ? 'yes' : 'no'}')
+    ..writeln()
     ..writeln('| job | scripts | packages |')
     ..writeln('|---|---|---|');
   for (final job in scope.jobs) {
@@ -73,7 +77,7 @@ Future<void> main(List<String> args) async {
   }
   if (scope.jobs.isEmpty) summary.writeln('| — | documentation only | — |');
 
-  _append('GITHUB_OUTPUT', 'matrix=$matrix\n');
+  _append('GITHUB_OUTPUT', 'matrix=$matrix\nsite=${scope.site}\n');
   _append('GITHUB_STEP_SUMMARY', summary.toString());
 }
 

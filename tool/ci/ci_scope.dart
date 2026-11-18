@@ -14,6 +14,11 @@
 /// Как использовать: CI вызывает `tool/ci/affected.dart`, который читает граф
 /// через [readWorkspace], берёт изменённые файлы из `git diff` и передаёт их в
 /// [ciScope]. Тесты — `codelab_architecture_tests/test/ci_scope_test.dart`.
+///
+/// У охвата два измерения: Dart-матрица [CiScope.jobs] и признак джоба сайта
+/// [CiScope.site] (`site/`, ADR-0003; change `add-astro-site`, D13). Сайт
+/// собирается из документации репозитория, поэтому его запускают и правки
+/// документов, которые Dart-джобов не запускают.
 library;
 
 import 'dart:io';
@@ -115,9 +120,15 @@ final class CiScope {
   final Set<String> affected;
   final String? reason;
 
-  /// Нужен ли джоб `site` (change `add-astro-site`, D13).
+  /// Нужен ли джоб `site` — сборка и проверка сайта (change
+  /// `add-astro-site`, D13; ADR-0003).
   ///
-  /// Заготовка под красные тесты задачи 1.1: расчёт — задача 1.2.
+  /// Почему отдельный признак, а не строка матрицы: джобу сайта не нужны FVM
+  /// и Flutter из шага `prepare`, и его запускают файлы, которые Dart-матрицу
+  /// не меняют (документация, `site/`).
+  ///
+  /// Для чего: `affected.dart` пишет его в `$GITHUB_OUTPUT` как `site=…`,
+  /// а `ci.yml` запускает по нему джоб `site`. В полном прогоне всегда `true`.
   final bool site;
 }
 
@@ -186,28 +197,36 @@ const _parityMatrix = 'docs/architecture/proposals/agent-parity-goals.md';
 ///
 /// Правила (`AGENTS.md` §21):
 /// * [fullReason] задан (push, `release/*`, ночной запуск) или изменён файл
-///   вне пакетов workspace и вне документации — полный прогон [fullJobs];
+///   вне пакетов workspace, вне документации и вне `site/` — полный прогон
+///   [fullJobs] и джоб сайта;
 /// * только документация (`docs/`, `openspec/`, `.claude/`, `*.md` в корне,
 ///   `AGENTS.md`, `README.md` и `CHANGELOG.md` пакетов) — без джобов, кроме
 ///   матрицы целей [_parityMatrix]: её правка добавляет `guard` (D7);
 /// * иначе `format` по всему репозиторию (он быстрый), `analyze` и `test`
 ///   для затронутых пакетов, `guard` всегда, остальное — по границе.
+///
+/// Независимо от матрицы [CiScope.site] — `true`, если хотя бы один файл
+/// влияет на сайт ([_affectsSite], D13). Файлы `site/` Dart-матрицу не
+/// меняют: правка только сайта не запускает Dart-джобов.
 CiScope ciScope({
   required List<WorkspacePackage> packages,
   required Iterable<String> changedFiles,
   String? fullReason,
 }) {
   if (fullReason != null) {
-    return CiScope(full: true, jobs: fullJobs, reason: fullReason);
+    return CiScope(full: true, jobs: fullJobs, reason: fullReason, site: true);
   }
 
+  final site = changedFiles.any(_affectsSite);
   final changed = <String>{};
   var l10nChanged = false;
   final outside = <String>[];
   var matrixChanged = false;
   for (final file in changedFiles) {
     if (file == _parityMatrix) matrixChanged = true;
-    if (_isDocumentation(file)) continue;
+    // Файлы сайта не принадлежат pub workspace (ADR-0003), но и не «вне
+    // пакетов»: иначе правка `site/` давала бы полный Dart-прогон (D13).
+    if (_isDocumentation(file) || file.startsWith('site/')) continue;
     final owner = packages
         .where((pkg) => file.startsWith('${pkg.dir}/'))
         .firstOrNull;
@@ -225,12 +244,14 @@ CiScope ciScope({
       full: true,
       jobs: fullJobs,
       reason: 'changed outside workspace packages: ${outside.join(', ')}',
+      site: true,
     );
   }
   if (changed.isEmpty) {
     return CiScope(
       full: false,
       jobs: [if (matrixChanged) const CiJob('guard', 'guard')],
+      site: site,
     );
   }
 
@@ -247,6 +268,7 @@ CiScope ciScope({
     full: false,
     changed: changed,
     affected: affected,
+    site: site,
     jobs: [
       const CiJob('format', 'check-format'),
       CiJob('analyze', 'analyze:packages', packages: scoped),
@@ -281,6 +303,37 @@ bool _isDocumentation(String file) {
   final name = file.split('/').last;
   if (!file.contains('/')) return name.endsWith('.md');
   return const {'AGENTS.md', 'README.md', 'CHANGELOG.md'}.contains(name);
+}
+
+/// Влияет ли [file] на сборку сайта — запускать ли джоб `site` (D13).
+///
+/// Почему: сайт строит страницы из документации репозитория и переводит её
+/// относительные ссылки (D3, D5), поэтому сломать его может не только
+/// `site/`, но и правка опубликованного документа или перенос файла, на
+/// который документ ссылается. Шаблоны — path-фильтр из решения
+/// пользователя плюс весь `openspec/**`: точный разбор ссылок на Dart был бы
+/// второй реализацией плагина сайта (D13, ответ на Q6).
+///
+/// Для чего: единственный предикат «файл сайта» для [ciScope]; на
+/// Dart-матрицу он не влияет — её по-прежнему решает [_isDocumentation] и
+/// владелец-пакет.
+bool _affectsSite(String file) {
+  if (file.startsWith('site/') ||
+      file.startsWith('docs/') ||
+      file.startsWith('openspec/')) {
+    return true;
+  }
+  final parts = file.split('/');
+  if (parts.first == 'apps' && parts.length >= 3) {
+    // `apps/*/README.md` и `apps/*/doc/**`.
+    return (parts.length == 3 && parts[2] == 'README.md') || parts[2] == 'doc';
+  }
+  if (parts.first == 'packages') {
+    // `packages/**/README.md` и `packages/**/doc/**`.
+    return parts.last == 'README.md' ||
+        parts.sublist(1, parts.length - 1).contains('doc');
+  }
+  return false;
 }
 
 /// [roots] и все пакеты, которые от них зависят, транзитивно.
