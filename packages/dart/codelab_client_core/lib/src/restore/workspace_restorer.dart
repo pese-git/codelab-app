@@ -1,6 +1,7 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
 import '../diagnostics/diagnostics.dart';
+import '../transcript/transcript_item.dart';
 import '../workspace/client_workspace.dart';
 import '../workspace/workspace_state.dart';
 import 'workspace_snapshot.dart';
@@ -24,8 +25,14 @@ abstract interface class RestoreHost {
   void activate(SessionId id);
 
   /// Создаёт сессию в [cwd], делает её активной и добавляет в её транскрипт
-  /// уведомление `reconnected` с текстом [notice].
-  Future<SessionHandle> newSessionWithNotice(String cwd, String notice);
+  /// уведомление `reconnected` с текстом [notice] и типизированной причиной
+  /// [reason] (D6 change `add-desktop-localization`: хост строит текст на
+  /// своём языке по причине, а не по [notice]).
+  Future<SessionHandle> newSessionWithNotice(
+    String cwd,
+    String notice, {
+    required SessionRestoreReason reason,
+  });
 
   void report(WorkspaceDiagnostic diagnostic);
 }
@@ -146,6 +153,9 @@ final class WorkspaceRestorer {
         await _host.newSessionWithNotice(
           project,
           'The agent cannot restore sessions; a new session was started.',
+          reason: const SessionRestoreReason(
+            SessionRestoreCause.agentCannotRestore,
+          ),
         );
       } else {
         try {
@@ -157,6 +167,10 @@ final class WorkspaceRestorer {
             project,
             'Session ${active.value} could not be restored; '
             'a new session was started.',
+            reason: SessionRestoreReason(
+              SessionRestoreCause.restoreFailed,
+              sessionId: active,
+            ),
           );
         }
       }

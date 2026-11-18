@@ -96,7 +96,9 @@ sealed class TranscriptItem with _$TranscriptItem {
   ///
   /// [failure] заполнен только у [NoticeKind.error]: по нему хост строит
   /// заголовок заметки, а [text] остаётся нейтральной строкой для CLI
-  /// (design D3 change `add-connection-and-error-states`).
+  /// (design D3 change `add-connection-and-error-states`). [reason] — причина
+  /// заметок `emptyTurn`, `turnStopped`, `detached`, `reconnected` (D6 change
+  /// `add-desktop-localization`); у остальных `null`.
   const factory TranscriptItem.notice({
     required String id,
     required NoticeKind kind,
@@ -328,14 +330,24 @@ enum NoticeKind {
   reconnected,
 }
 
-/// ЗАГЛУШКА задачи 3.1 change `add-desktop-localization` (D6): типизированная
-/// причина заметки, по которой хост строит текст на своём языке. Поведение
-/// (заполнение в проекции и рабочем пространстве) — задача 3.2.
+/// Типизированная причина заметки (D6 change `add-desktop-localization`).
+///
+/// Почему: `NoticeItem.text` английский, а хост с другим языком не должен
+/// разбирать строку ядра. Ядро остаётся без локали и `intl`.
+///
+/// Для чего: поле `NoticeItem.reason` у видов `emptyTurn`, `turnStopped`,
+/// `detached`, `reconnected` (у `error` — `failure`, у остальных `null`).
+/// Проекция с нуля и инкрементальная дают равные причины.
+///
+/// Как использовать: хост разбирает `switch` по наследникам и строит текст
+/// сам; `text` остаётся для CLI и не меняется (spec acp-client-kit
+/// «Типизированная причина заметки транскрипта»).
 sealed class NoticeReason {
   const NoticeReason();
 }
 
-/// ЗАГЛУШКА (3.1): причина `emptyTurn` — `stopReason` хода или `null`.
+/// Причина `emptyTurn`: `stopReason` хода, `null` — исход неизвестен
+/// (например, реплей `session/load`).
 final class EmptyTurnReason extends NoticeReason {
   const EmptyTurnReason(this.stopReason);
 
@@ -349,8 +361,9 @@ final class EmptyTurnReason extends NoticeReason {
   int get hashCode => Object.hash(EmptyTurnReason, stopReason);
 }
 
-/// ЗАГЛУШКА (3.1): причина `turnStopped` — `stopReason` и известный лимит
-/// бюджета (`null` для незнакомого или отсутствующего).
+/// Причина `turnStopped`: `stopReason` и [budgetLimit] — имя лимита из
+/// известного набора (`steps`, `tokens`, `cost`, `duration`, `deadline`);
+/// `null` для незнакомого или отсутствующего, как и в тексте.
 final class TurnStoppedReason extends NoticeReason {
   const TurnStoppedReason(this.stopReason, {this.budgetLimit});
 
@@ -367,12 +380,11 @@ final class TurnStoppedReason extends NoticeReason {
   int get hashCode => Object.hash(TurnStoppedReason, stopReason, budgetLimit);
 }
 
-/// ЗАГЛУШКА (3.1): причина восстановления сессии для `detached` и
-/// `reconnected`.
+/// Почему сессию не удалось привязать к новому соединению.
 enum SessionRestoreCause { agentCannotRestore, restoreFailed }
 
-/// ЗАГЛУШКА (3.1): причина `detached` и `reconnected`; [sessionId] — у
-/// причины с сессией.
+/// Причина `detached` и `reconnected`; [sessionId] — у `restoreFailed`:
+/// сессия, которую не удалось восстановить.
 final class SessionRestoreReason extends NoticeReason {
   const SessionRestoreReason(this.cause, {this.sessionId});
 
