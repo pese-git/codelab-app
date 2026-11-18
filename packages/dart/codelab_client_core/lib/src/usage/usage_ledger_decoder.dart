@@ -105,11 +105,11 @@ final class UsageLedgerDecoder {
       sessionId: SessionId(sessionId),
       seq: seq,
       total: total,
-      // Число ходов берётся из того же разбора агрегата, что и у живых
-      // снимков (D2): у `turns` одно правило, предупреждение уже выдано.
-      // Если `total.turns` не разобрался, число ходов — по записям журнала
-      // (тест usage_totals_turns_test: «turnCount does not change»).
-      turnCount: total.turns ?? turns.length,
+      // Разбор `total.turns` общий с живыми снимками (D2: у `turns` одно
+      // правило, предупреждение уже выдано). `turnCount` по-прежнему равен
+      // `total.turns`, а при неразобранном поле — 0: kit сам число ходов не
+      // выводит (D2, спецификация acp-client-kit).
+      turnCount: total.turns ?? 0,
       status: status,
       reason: reason,
       records: records,
