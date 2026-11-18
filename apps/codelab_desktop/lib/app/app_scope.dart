@@ -104,10 +104,9 @@ import 'navigation/settings_page_store.dart';
 import 'connection_environment.dart';
 import 'secret_migration_offer.dart';
 
-import 'language/app_language_cubit.dart'
-    show AppLanguageCubit, AppLanguageState, AppStrings;
+import 'language/app_language_cubit.dart' show AppLanguageCubit, AppStrings;
+import 'language/app_language_start.dart';
 import '../core/platform/app_language_preferences.dart';
-import '../l10n/app_localizations.dart' show lookupAppLocalizations;
 
 part 'app_scope.module.cherrypick.g.dart';
 
@@ -117,7 +116,7 @@ Scope createCodeLabRootScope({
   // Начальное состояние языка (шов D2, `add-desktop-localization`): `main`
   // читает предпочтение до `runApp`, поэтому первый кадр сразу на нужном
   // языке. Без шва — `en` (тесты и хосты без предпочтения).
-  AppLanguageState? language,
+  AppLanguageStart? language,
   AppLanguagePreferences? languagePreferences,
   CodeLabTransportFactory? transportFactory,
   CodeLabStdioTransportFactory? stdioTransportFactory,
@@ -463,25 +462,18 @@ final class CodeLabLoggingLifecycle implements Disposable {
 /// Как использовать: `createCodeLabRootScope(language:, languagePreferences:)`;
 /// тесты подставляют язык `CodeLabTestBinding(locale:)`.
 final class CodeLabLanguageModule extends Module {
-  CodeLabLanguageModule({AppLanguageState? language, this.preferences})
-    : language = language ?? _defaultLanguage();
+  CodeLabLanguageModule({AppLanguageStart? language, this.preferences})
+    : language = language ?? AppLanguageStart.fallback;
 
-  final AppLanguageState language;
+  final AppLanguageStart language;
   final AppLanguagePreferences? preferences;
-
-  static AppLanguageState _defaultLanguage() => AppLanguageState(
-    preference: AppLanguagePreference.en,
-    locale: const Locale('en'),
-    strings: lookupAppLocalizations(const Locale('en')),
-  );
 
   @override
   void builder(Scope currentScope) {
     final appLogger = codeLabAppLogger();
     final cubit = AppLanguageCubit(
       preferences:
-          preferences ??
-          SharedPreferencesAppLanguagePreferences(logger: appLogger),
+          preferences ?? const SharedPreferencesAppLanguagePreferences(),
       preference: language.preference,
       locale: language.locale,
       logger: _settingsLogger(),
@@ -496,6 +488,18 @@ final class CodeLabLanguageModule extends Module {
         'locale': language.locale.toLanguageTag(),
       },
     );
+    // Диагностика чтения приходит швом из `main`, где журнала ещё нет; без
+    // значений ключа и текста исключения (D13).
+    if (language.storedValueInvalid) {
+      appLogger.warning('app.language_preference_invalid');
+    }
+    final readFailure = language.readFailure;
+    if (readFailure != null) {
+      appLogger.warning(
+        'app.language_preference_read_failed',
+        context: {'error_class': readFailure},
+      );
+    }
     bind<AppLanguageCubit>().toInstance(cubit);
     bind<AppStrings>().toInstance(cubit);
   }
@@ -1231,6 +1235,8 @@ final class CodeLabRootLifecycle implements Disposable {
     'migration_offer',
     'transport',
     'client',
+    // Отдельная ветвь: ждёт запись выбора языка до 3 с (D2, D10).
+    'language',
   ];
 
   /// Общий проход закрытия: повторный `dispose()` ждёт его, а не возвращается
@@ -1239,7 +1245,8 @@ final class CodeLabRootLifecycle implements Disposable {
 
   /// Имена ещё не завершённых шагов, включая не начатые, в порядке закрытого
   /// набора: `terminal`, `cubits`, `workspace`, `embedded`, `migration_offer`,
-  /// `transport`, `client` (D5, D10). Пуст до [dispose] и после прохода.
+  /// `transport`, `client`, `language` (D5, D10; `language` — только если у
+  /// lifecycle есть Cubit языка). Пуст до [dispose] и после прохода.
   final List<String> _pendingSteps = [];
 
   /// Шаги, которые не завершились к моменту вызова, в том числе не начатые
@@ -1259,8 +1266,12 @@ final class CodeLabRootLifecycle implements Disposable {
   Future<void> _dispose() async {
     // Первым синхронным действием — до любого `await`: не начатые шаги тоже
     // «не завершены» (D10).
-    _pendingSteps.addAll(_shutdownSteps);
-    await Future.wait([_closeTerminal(), _closeClient()]);
+    _pendingSteps.addAll(
+      _shutdownSteps.where(
+        (step) => step != 'language' || _languageCubit != null,
+      ),
+    );
+    await Future.wait([_closeTerminal(), _closeClient(), _closeLanguage()]);
   }
 
   /// Ветка терминала: `closeAll()` шлёт `hangUp`, через 3 с `kill` и
@@ -1272,6 +1283,15 @@ final class CodeLabRootLifecycle implements Disposable {
     await _terminalTabsCubit.close();
   });
 
+  /// Ветка языка: `close()` Cubit-а ждёт запись выбора до 3 с, поэтому она
+  /// идёт параллельно и не отнимает время у рабочего пространства, агента и
+  /// транспорта при общем пределе выхода 5 с; зависшая запись видна в
+  /// [pendingSteps] как `language` (D2, D10).
+  Future<void> _closeLanguage() async {
+    final cubit = _languageCubit;
+    if (cubit != null) await _step('language', cubit.close);
+  }
+
   /// Клиентская ветка: Cubit-ы отписываются до закрытия рабочего
   /// пространства, оно — до ядра клиента; затем агентская и ACP-подветви идут
   /// параллельно (D2, D5, D11).
@@ -1280,7 +1300,6 @@ final class CodeLabRootLifecycle implements Disposable {
       await _navigationCubit.close();
       await _secretMigrationCubit.close();
       await _shellCubit.close();
-      await _languageCubit?.close();
     });
     await _step('workspace', _workspace.dispose);
     await Future.wait([_closeEmbedded(), _closeAcp()]);
@@ -1453,7 +1472,7 @@ class CodeLabBootstrap extends StatefulWidget {
   final Widget child;
 
   /// Начальное состояние языка из `main` (D2); без него — `en`.
-  final AppLanguageState? language;
+  final AppLanguageStart? language;
   final Scope? scope;
 
   /// Хранилище секретов, открытое в `main` (`openProfileSecrets`); без него

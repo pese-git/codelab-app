@@ -36,6 +36,42 @@ void main() {
       expect(settingsPageBuilders, contains(SettingsPage.general));
     });
 
+    testWidgets('в ru английский заголовок страницы тоже находится поиском', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        localizedFluentApp(
+          locale: const Locale('ru'),
+          SettingsShell(
+            pages: const SettingsPages(
+              available: {SettingsPage.connection, SettingsPage.general},
+            ),
+            selected: SettingsPage.general,
+            onSelected: (_) {},
+            onBack: () {},
+            builders: {
+              for (final page in SettingsPage.values)
+                page: (_) => Text('body of ${page.slug}'),
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(CodeLabSettingsNavigation.searchKey),
+        'connection',
+      );
+      await tester.pumpAndSettle();
+
+      expect(_nav(SettingsPage.connection), findsOneWidget);
+      expect(_nav(SettingsPage.general), findsNothing);
+    });
+
     testWidgets('заголовки групп и страниц пересобираются при смене языка', (
       tester,
     ) async {

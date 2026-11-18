@@ -7,7 +7,6 @@
 // AGENTS.md §2).
 
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
-import '../../support/recording_logger.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -24,19 +23,19 @@ void main() {
 
   test('нет ключа — system', () async {
     await seed({});
-    expect(await preferences.load(), AppLanguagePreference.system);
+    expect((await preferences.load()).preference, AppLanguagePreference.system);
   });
 
   test('en и ru читаются как есть', () async {
     await seed({kAppLanguageKey: 'en'});
-    expect(await preferences.load(), AppLanguagePreference.en);
+    expect((await preferences.load()).preference, AppLanguagePreference.en);
     await seed({kAppLanguageKey: 'ru'});
-    expect(await preferences.load(), AppLanguagePreference.ru);
+    expect((await preferences.load()).preference, AppLanguagePreference.ru);
   });
 
   test('незнакомое значение — system, ключ не перезаписывается', () async {
     await seed({kAppLanguageKey: 'fr'});
-    expect(await preferences.load(), AppLanguagePreference.system);
+    expect((await preferences.load()).preference, AppLanguagePreference.system);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString(kAppLanguageKey), 'fr');
   });
@@ -55,38 +54,55 @@ void main() {
     await preferences.save(AppLanguagePreference.system);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.containsKey(kAppLanguageKey), isFalse);
-    expect(await preferences.load(), AppLanguagePreference.system);
+    expect((await preferences.load()).preference, AppLanguagePreference.system);
   });
 
-  group('предупреждение app.language_preference_invalid (D13)', () {
-    test('незнакомое значение пишет warning без значения ключа', () async {
+  group('диагностика чтения (D13)', () {
+    test('незнакомое значение: system и признак storedValueInvalid', () async {
       await seed({kAppLanguageKey: 'fr'});
-      final logger = RecordingLogger();
 
-      await SharedPreferencesAppLanguagePreferences(logger: logger).load();
+      final load = await preferences.load();
 
-      final warning = logger.entries.singleWhere(
-        (e) => e['event'] == 'app.language_preference_invalid',
-      );
-      expect(warning['level'], 'warning');
-      expect(warning.values.whereType<String>().join(), isNot(contains('fr')));
+      expect(load.preference, AppLanguagePreference.system);
+      expect(load.storedValueInvalid, isTrue);
+      expect(load.readFailure, isNull);
     });
 
-    test('допустимые значения и отсутствие ключа ничего не пишут', () async {
-      final logger = RecordingLogger();
-      final preferences = SharedPreferencesAppLanguagePreferences(
-        logger: logger,
+    test('нестроковое значение не роняет чтение: system и признак', () async {
+      await seed({kAppLanguageKey: 1});
+
+      final load = await preferences.load();
+
+      expect(load.preference, AppLanguagePreference.system);
+      expect(load.storedValueInvalid, isTrue);
+      // Ключ при этом не перезаписывается.
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.get(kAppLanguageKey), 1);
+    });
+
+    test('сбой хранилища не бросает: system и имя типа ошибки', () async {
+      final failing = SharedPreferencesAppLanguagePreferences(
+        open: () => Future.error(const FormatException('/secret/path')),
       );
+
+      final load = await failing.load();
+
+      expect(load.preference, AppLanguagePreference.system);
+      expect(load.readFailure, 'FormatException');
+      expect(load.storedValueInvalid, isFalse);
+    });
+
+    test('допустимые значения и отсутствие ключа — без признаков', () async {
       for (final value in <Map<String, Object>>[
         {},
         {kAppLanguageKey: 'en'},
         {kAppLanguageKey: 'ru'},
       ]) {
         await seed(value);
-        await preferences.load();
+        final load = await preferences.load();
+        expect(load.storedValueInvalid, isFalse);
+        expect(load.readFailure, isNull);
       }
-
-      expect(logger.entries, isEmpty);
     });
   });
 }

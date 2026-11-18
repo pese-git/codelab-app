@@ -81,11 +81,13 @@ final class AppLanguageCubit extends Cubit<AppLanguageState>
     List<Locale> Function()? systemLocales,
     Logger? logger,
     Logger? appLogger,
+    Duration closeWriteTimeout = const Duration(seconds: 3),
   }) : _preferences = preferences,
        _systemLocales =
            systemLocales ?? (() => PlatformDispatcher.instance.locales),
        _logger = logger,
        _appLogger = appLogger ?? logger,
+       _closeWriteTimeout = closeWriteTimeout,
        super(
          AppLanguageState(
            preference: preference,
@@ -102,11 +104,18 @@ final class AppLanguageCubit extends Cubit<AppLanguageState>
   /// идут в [_logger].
   final Logger? _appLogger;
 
+  /// Сколько `close()` ждёт запись выбора в полёте (D2, `concurrency.md` §47а).
+  final Duration _closeWriteTimeout;
+
   /// Подписчики [changes]; считаются для события `app.locale_applied`.
   final _listeners = <MultiStreamController<AppLocalizations>>[];
 
   /// Номер последнего выбора: запись с меньшим номером обогнана.
   int _latest = 0;
+
+  /// `close()` начат: новые выборы и подписки не принимаются, а записи в
+  /// полёте состояние не публикуют (D2).
+  bool _closing = false;
   int _inFlight = 0;
   Future<void> _tail = Future<void>.value();
 
@@ -115,8 +124,8 @@ final class AppLanguageCubit extends Cubit<AppLanguageState>
 
   @override
   late final Stream<AppLocalizations> changes = Stream.multi((controller) {
-    if (isClosed) {
-      controller.close();
+    if (isClosed || _closing) {
+      unawaited(controller.close());
       return;
     }
     _listeners.add(controller);
@@ -128,9 +137,10 @@ final class AppLanguageCubit extends Cubit<AppLanguageState>
   /// Повторный выбор того же значения ничего не делает, кроме повторной записи
   /// после сбоя. Завершается, когда запись этого выбора закончена.
   Future<void> select(AppLanguagePreference preference) {
-    if (isClosed) return Future<void>.value();
+    if (isClosed || _closing) return Future<void>.value();
     if (preference == state.preference && !state.saveFailed) {
-      return Future<void>.value();
+      // Тот же выбор: ждём запись, которая ещё идёт, а не «готово» раньше неё.
+      return _tail;
     }
     final token = ++_latest;
     final locale = resolveAppLocale(preference, _systemLocales());
@@ -182,18 +192,35 @@ final class AppLanguageCubit extends Cubit<AppLanguageState>
         'settings.language_save_failed',
         context: {'error_class': error.runtimeType.toString()},
       );
-      if (!isClosed && token == _latest) {
+      if (!isClosed && !_closing && token == _latest) {
         emit(state.copyWith(saveFailed: true));
       }
     }
   }
 
+  /// Закрывает владельца: сначала флаг, затем слушатели, затем ждёт запись в
+  /// полёте не дольше [_closeWriteTimeout] и только потом закрывает Cubit.
+  ///
+  /// Почему не `await controller.close()`: у подписчика на паузе `done` не
+  /// приходит, и закрытие root scope повисло бы (`concurrency.md` §47а).
+  /// Запись ждём, чтобы последний выбор пользователя дошёл до хранилища до
+  /// выхода из app; состояние после этого не публикуется.
   @override
   Future<void> close() async {
+    _closing = true;
     for (final controller in List.of(_listeners)) {
-      await controller.close();
+      unawaited(controller.close());
     }
     _listeners.clear();
+    await _tail.timeout(
+      _closeWriteTimeout,
+      // Запись не успела: выбор мог не дойти до хранилища. Только срок — без
+      // выбора и текста ошибки (`AGENTS.md` §16).
+      onTimeout: () => _logger?.warning(
+        'settings.language_save_timeout',
+        context: {'timeout_ms': _closeWriteTimeout.inMilliseconds},
+      ),
+    );
     return super.close();
   }
 }

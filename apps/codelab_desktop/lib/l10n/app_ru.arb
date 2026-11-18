@@ -18,5 +18,6 @@
   "settingsPageCodeAndWebTitle": "Код и веб",
   "settingsPageAppearanceTitle": "Оформление",
   "settingsPageKeyboardTitle": "Клавиатура",
-  "settingsGeneralSectionInterface": "Интерфейс"
+  "settingsGeneralSectionInterface": "Интерфейс",
+  "settingsLanguageSaveRetry": "Повторить"
 }

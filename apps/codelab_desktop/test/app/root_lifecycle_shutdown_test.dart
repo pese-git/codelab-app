@@ -18,6 +18,9 @@ import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgent, LogLevel, Logger;
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/embedded_transport_resolver.dart';
+import 'package:codelab_desktop/app/language/app_language_cubit.dart';
+import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:codelab_desktop/app/secret_migration_offer.dart';
 import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
 import 'package:codelab_desktop/features/terminal/application/terminal_tabs_cubit.dart';
@@ -121,6 +124,18 @@ const _embeddedProfile = EmbeddedProfile(
   label: 'E',
   hostProfile: 'default',
 );
+
+/// Порт языка, у которого запись зависает до `gate`.
+final class _HangingLanguagePreferences implements AppLanguagePreferences {
+  final gate = Completer<void>();
+
+  @override
+  Future<AppLanguageLoad> load() async =>
+      const AppLanguageLoad(AppLanguagePreference.system);
+
+  @override
+  Future<void> save(AppLanguagePreference preference) => gate.future;
+}
 
 void main() {
   late _SpyTransport transport;
@@ -298,6 +313,79 @@ void main() {
       tabs.gate.complete();
       await disposing;
       expect(lifecycle.pendingSteps, isEmpty);
+    });
+  });
+
+  // `add-desktop-localization`, D2, D10: закрытие `AppLanguageCubit` ждёт запись
+  // выбора до 3 с, поэтому идёт отдельной параллельной ветвью со своим шагом
+  // `language`, а не в шаге `cubits` перед workspace, агентом и транспортом.
+  group('шаг language (D2, D10)', () {
+    late _HangingLanguagePreferences preferences;
+    late AppLanguageCubit languageCubit;
+    late CodeLabRootLifecycle withLanguage;
+
+    setUp(() {
+      preferences = _HangingLanguagePreferences();
+      languageCubit = AppLanguageCubit(
+        preferences: preferences,
+        preference: AppLanguagePreference.system,
+        locale: const Locale('en'),
+        closeWriteTimeout: const Duration(seconds: 30),
+      );
+      final scope = binding.scope;
+      withLanguage = CodeLabRootLifecycle(
+        application: AcpClientApplication(transport: transport),
+        transport: transport,
+        workspace: workspace,
+        embedded: scope.resolve<EmbeddedTransportResolver>(),
+        embeddedCloseSettings: scope.resolve<EmbeddedCloseSettings>(),
+        shellCubit: scope.resolve<CodeLabShellCubit>(),
+        secretMigrationCubit: scope.resolve<SecretMigrationCubit>(),
+        secretMigrationOffer: scope.resolve<SecretMigrationOffer>(),
+        navigationCubit: scope.resolve<NavigationCubit>(),
+        terminalTabsCubit: tabs,
+        languageCubit: languageCubit,
+        logger: logger,
+      );
+      tabs.gate.complete();
+    });
+
+    tearDown(() async {
+      if (!preferences.gate.isCompleted) preferences.gate.complete();
+      await withLanguage.dispose();
+    });
+
+    test('зависшая запись языка не задерживает workspace, агента и '
+        'транспорт; pendingSteps называет language', () async {
+      unawaited(languageCubit.select(AppLanguagePreference.ru));
+
+      final disposing = withLanguage.dispose();
+      await pumpEventQueue();
+
+      expect(workspace.disposeCalls, 1);
+      expect(transport.state, AcpTransportState.closed);
+      expect(withLanguage.pendingSteps, ['language']);
+
+      preferences.gate.complete();
+      await disposing.timeout(const Duration(seconds: 5));
+      expect(withLanguage.pendingSteps, isEmpty);
+    });
+
+    test('без Cubit языка шага language нет', () {
+      // `lifecycle` верхнего уровня собран без `languageCubit`.
+      final disposing = lifecycle.dispose();
+
+      // Вкладки уже освобождены в `setUp` группы.
+      expect(lifecycle.pendingSteps, isNot(contains('language')));
+      return disposing;
+    });
+
+    test('сразу после dispose() language — в закрытом наборе последним', () {
+      final disposing = withLanguage.dispose();
+
+      expect(withLanguage.pendingSteps.last, 'language');
+      expect(withLanguage.pendingSteps, hasLength(8));
+      return disposing;
     });
   });
 

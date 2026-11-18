@@ -1,4 +1,3 @@
-import 'package:codelab_client_acp/codelab_client_acp.dart' show Logger;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Ключ `shared_preferences`: язык интерфейса app (`en`/`ru`; для `system`
@@ -11,17 +10,41 @@ const kAppLanguageKey = 'codelab.app.language';
 /// `resolveAppLocale` (`add-desktop-localization`, D2).
 enum AppLanguagePreference { system, en, ru }
 
+/// Результат чтения сохранённого языка.
+///
+/// Почему не голое значение: чтение идёт в `main` до `runApp`, когда журнал
+/// ещё не настроен (`configureCodeLabLogging` — в root scope). Диагностику
+/// поэтому несёт результат, а событие пишет `CodeLabLanguageModule` рядом с
+/// `app.locale_resolved` (`add-desktop-localization`, D13).
+///
+/// [storedValueInvalid] — в ключе лежит незнакомое или нестроковое значение;
+/// [readFailure] — имя типа ошибки хранилища (текст исключения не хранится:
+/// в нём бывают пути). В обоих случаях [preference] — `system`.
+final class AppLanguageLoad {
+  const AppLanguageLoad(
+    this.preference, {
+    this.storedValueInvalid = false,
+    this.readFailure,
+  });
+
+  final AppLanguagePreference preference;
+  final bool storedValueInvalid;
+  final String? readFailure;
+}
+
 /// Порт хранения выбранного языка интерфейса.
 ///
 /// Почему отдельный порт: язык — настройка app, а не профиля и не агента, поэтому
 /// `config.yaml` и `profiles.json` не трогаются (add-desktop-localization, D2;
 /// образец — `ConnectionPreferences`).
 ///
-/// Как использовать: `load` читает значение до `runApp`; `save(system)`
-/// удаляет ключ. Ошибки хранилища порт не скрывает — вызывающий
-/// (`AppLanguageCubit`) выставляет `saveFailed`.
+/// Как использовать: `load` читает значение до `runApp` и НЕ бросает: сбой
+/// хранилища даёт `system` и [AppLanguageLoad.readFailure], иначе повреждённый
+/// файл настроек не давал бы запустить app. `save(system)` удаляет ключ;
+/// ошибки записи порт не скрывает — вызывающий (`AppLanguageCubit`)
+/// выставляет `saveFailed`.
 abstract interface class AppLanguagePreferences {
-  Future<AppLanguagePreference> load();
+  Future<AppLanguageLoad> load();
 
   Future<void> save(AppLanguagePreference preference);
 }
@@ -29,36 +52,46 @@ abstract interface class AppLanguagePreferences {
 /// [AppLanguagePreferences] в `shared_preferences` под ключом
 /// [kAppLanguageKey].
 ///
-/// Незнакомое сохранённое значение читается как `system` и НЕ
+/// Незнакомое или нестроковое сохранённое значение читается как `system` и НЕ
 /// перезаписывается: данные пользователя не портятся молча (`AGENTS.md` §2).
 final class SharedPreferencesAppLanguagePreferences
     implements AppLanguagePreferences {
-  const SharedPreferencesAppLanguagePreferences({Logger? logger})
-    : _logger = logger;
+  /// [open] — шов тестов: по умолчанию `SharedPreferences.getInstance`.
+  const SharedPreferencesAppLanguagePreferences({
+    Future<SharedPreferences> Function() open = SharedPreferences.getInstance,
+  }) : _open = open;
 
-  final Logger? _logger;
+  final Future<SharedPreferences> Function() _open;
 
   @override
-  Future<AppLanguagePreference> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(kAppLanguageKey);
+  Future<AppLanguageLoad> load() async {
+    final SharedPreferences prefs;
+    final Object? value;
+    try {
+      prefs = await _open();
+      // `get`, а не `getString`: нестроковое значение не должно бросать
+      // `TypeError` и ронять запуск.
+      value = prefs.get(kAppLanguageKey);
+    } on Object catch (error) {
+      return AppLanguageLoad(
+        AppLanguagePreference.system,
+        readFailure: error.runtimeType.toString(),
+      );
+    }
     return switch (value) {
-      'en' => AppLanguagePreference.en,
-      'ru' => AppLanguagePreference.ru,
-      null => AppLanguagePreference.system,
-      _ => _invalid(),
+      'en' => const AppLanguageLoad(AppLanguagePreference.en),
+      'ru' => const AppLanguageLoad(AppLanguagePreference.ru),
+      null => const AppLanguageLoad(AppLanguagePreference.system),
+      _ => const AppLanguageLoad(
+        AppLanguagePreference.system,
+        storedValueInvalid: true,
+      ),
     };
-  }
-
-  /// Незнакомое значение: предупреждение без самого значения (D13) и `system`.
-  AppLanguagePreference _invalid() {
-    _logger?.warning('app.language_preference_invalid');
-    return AppLanguagePreference.system;
   }
 
   @override
   Future<void> save(AppLanguagePreference preference) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _open();
     switch (preference) {
       case AppLanguagePreference.system:
         await prefs.remove(kAppLanguageKey);

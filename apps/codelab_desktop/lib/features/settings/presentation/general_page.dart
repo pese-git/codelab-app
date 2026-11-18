@@ -47,6 +47,13 @@ class GeneralPage extends StatelessWidget {
               key: const ValueKey('settings-language-save-failed'),
               title: Text(l10n.settingsLanguageSaveFailed),
               severity: InfoBarSeverity.warning,
+              // Повтор записи: `RadioGroup` не вызывает `onChanged` для уже
+              // выбранного значения, поэтому отдельная кнопка.
+              action: Button(
+                key: const ValueKey('settings-language-save-retry'),
+                onPressed: () => unawaited(cubit.select(state.preference)),
+                child: Text(l10n.settingsLanguageSaveRetry),
+              ),
             ),
             const SizedBox(height: 12),
           ],

@@ -9,5 +9,5 @@ class CodeLabLocalizationsRu extends CodeLabLocalizations {
   CodeLabLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
-  String get codeLabApprovalAwaiting => 'Ожидает решения';
+  String get codeLabApprovalAwaiting => 'Ждёт одобрения';
 }

@@ -3,6 +3,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../../app/navigation/settings_page.dart';
+import '../../../l10n/app_localizations_en.dart';
 import '../../../l10n/l10n.dart';
 import '../application/settings_search_index.dart';
 import 'agents_modes_page.dart';
@@ -121,7 +122,10 @@ class _SettingsShellState extends State<SettingsShell> {
     final matches = SettingsSearchIndex.search(
       widget.pages.visible,
       _query,
-      titleOf: (page) => settingsPageTitleOf(l10n, page),
+      titlesOf: (page) => {
+        settingsPageTitleOf(l10n, page),
+        settingsPageTitleOf(AppLocalizationsEn(), page),
+      },
     );
     final body = builders[widget.selected];
 

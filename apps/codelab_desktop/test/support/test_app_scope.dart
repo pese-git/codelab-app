@@ -1,12 +1,9 @@
 import 'dart:convert';
 
 import 'package:codelab_desktop/app/app_scope.dart';
-import 'package:codelab_desktop/app/language/app_language_cubit.dart'
-    show AppLanguageState;
+import 'package:codelab_desktop/app/language/app_language_start.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart'
     show AppLanguagePreference, AppLanguagePreferences;
-import 'package:codelab_desktop/l10n/app_localizations.dart'
-    show lookupAppLocalizations;
 import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snapshot_store.dart'
     show kWorkspaceSnapshotPrefsKey;
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
@@ -113,6 +110,11 @@ final class CodeLabTestBinding {
     // Язык первого кадра (D9): по умолчанию `en`, поэтому существующие
     // проверки текстов на английском не меняются.
     Locale locale = const Locale('en'),
+    // Выбор пользователя в начальном состоянии; по умолчанию `system`, как
+    // без сохранённого значения (язык при этом задаёт [locale]).
+    AppLanguagePreference languagePreference = AppLanguagePreference.system,
+    // Целиком начальный язык с диагностикой чтения (события `app.*`).
+    AppLanguageStart? languageStart,
     // Порт хранения языка: тесты сбоя записи подставляют двойник; без него
     // запись идёт в `shared_preferences` (мок в памяти).
     AppLanguagePreferences? languagePreferences,
@@ -137,13 +139,9 @@ final class CodeLabTestBinding {
     });
     scope = createCodeLabRootScope(
       languagePreferences: languagePreferences,
-      language: AppLanguageState(
-        preference: locale.languageCode == 'ru'
-            ? AppLanguagePreference.ru
-            : AppLanguagePreference.en,
-        locale: locale,
-        strings: lookupAppLocalizations(locale),
-      ),
+      language:
+          languageStart ??
+          AppLanguageStart(preference: languagePreference, locale: locale),
       transportFactory: () => this.transport,
       stdioTransportFactory: stdioTransportFactory,
       webSocketTransportFactory: webSocketTransportFactory,

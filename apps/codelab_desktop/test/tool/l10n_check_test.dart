@@ -70,4 +70,37 @@ void main() {
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
+
+  test('arb-dir с .. отклоняется: каталог вне пакета не читается', () async {
+    final package = _copyPackage();
+    final config = File(p.join(package.path, 'l10n.yaml'));
+    config.writeAsStringSync(
+      config.readAsStringSync().replaceFirst(
+        'arb-dir: lib/l10n',
+        'arb-dir: ../outside',
+      ),
+    );
+
+    final result = await _check(package);
+
+    expect(result.exitCode, isNot(0));
+    expect('${result.stdout}${result.stderr}', contains('arb-dir'));
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test('лишний закоммиченный *_localizations*.dart: проверка падает и '
+      'называет файл', () async {
+    final package = _copyPackage();
+    final l10n = p.join(package.path, 'lib', 'l10n');
+    File(
+      p.join(l10n, 'app_localizations_en.dart'),
+    ).copySync(p.join(l10n, 'app_localizations_de.dart'));
+
+    final result = await _check(package);
+
+    expect(result.exitCode, isNot(0));
+    expect(
+      '${result.stdout}${result.stderr}',
+      contains('app_localizations_de.dart'),
+    );
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }
