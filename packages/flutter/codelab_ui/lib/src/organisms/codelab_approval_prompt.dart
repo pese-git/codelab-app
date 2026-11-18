@@ -217,12 +217,25 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [allow, reject, ?viewRawInput, scopeSelector],
             )
+          // Кнопки решения стоят в `Wrap` внутри `Expanded`: подписи на русском
+          // длиннее английских (`add-desktop-localization`, D8, R4), и ряд из
+          // двух кнопок и правой группы на ширине ленты 696 px переполнялся на
+          // 16 px. Теперь при нехватке места «Reject» переносится на вторую
+          // строку, подписи не обрезаются, порядок и привязка решений те же.
           : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                allow,
-                const SizedBox(width: 4),
-                reject,
-                const Spacer(),
+                Expanded(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [allow, reject],
+                    ),
+                  ),
+                ),
                 ?viewRawInput,
                 const SizedBox(width: 4),
                 scopeSelector,

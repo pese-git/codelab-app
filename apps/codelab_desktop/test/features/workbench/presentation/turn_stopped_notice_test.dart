@@ -9,6 +9,7 @@
 
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/workbench/application/ui_mappers.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,6 +30,7 @@ void main() {
       cwd: '/work',
       approvalsEnabled: true,
       onApprovalSelected: (_, _) {},
+      l10n: AppLocalizationsEn(),
     );
 
     tester.view.physicalSize = const Size(900, 700);

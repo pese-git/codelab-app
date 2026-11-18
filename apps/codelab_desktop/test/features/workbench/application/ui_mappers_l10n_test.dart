@@ -205,6 +205,22 @@ void main() {
       );
     });
 
+    test(
+      'restoreFailed без id сессии: тело — text ядра, не пустая подстановка',
+      () {
+        const noId = SessionRestoreReason(SessionRestoreCause.restoreFailed);
+
+        expect(
+          detached(noId, _ru).body,
+          'The agent cannot restore sessions after reconnecting.',
+        );
+        expect(
+          reconnected(noId, _ru).body,
+          'The agent cannot restore sessions; a new session was started.',
+        );
+      },
+    );
+
     test('на en заголовок и тело прежние', () {
       expect(detached(cannot, _en).title, 'Session detached');
       expect(
@@ -253,7 +269,7 @@ void main() {
       // Все пять строк — вне глоссария.
       expect(
         title(const PromptFailure.agent(errorClass: 'auth', message: 'm')),
-        'Агенту не удалось войти у провайдера модели',
+        'Агенту не удалось авторизоваться у провайдера модели',
       );
       expect(
         title(const PromptFailure.agent(errorClass: 'timeout', message: 'm')),
@@ -267,11 +283,11 @@ void main() {
       );
       expect(
         title(const PromptFailure.agent(errorClass: 'overflow', message: 'm')),
-        'Диалог слишком длинный для модели',
+        'Переписка слишком длинная для модели',
       );
       expect(
         title(const PromptFailure.connectionLost()),
-        'Связь с агентом потеряна',
+        'Подключение к агенту потеряно',
       );
       expect(title(null), 'Агенту не удалось завершить ход');
     });
@@ -592,6 +608,59 @@ void main() {
         }
       },
     );
+
+    group('перезапуск локального агента (localRestart, Q24)', () {
+      test('ru: подпись «Перезапустить агента», английские подпись и описание '
+          'restart в searchAliases; поиск `restart` находит пункт', () {
+        final catalog = paletteCatalogOf(
+          const [],
+          l10n: _ru,
+          localRestart: true,
+        );
+        final restart = host(catalog, 'reconnect');
+
+        expect(restart.label, 'Перезапустить агента');
+        expect(
+          restart.description,
+          'Перезапустить агента выбранным профилем и перезагрузить открытые '
+          'сессии.',
+        );
+        expect(restart.searchAliases, [
+          'Restart agent',
+          'Restart the agent with the selected profile and reload open '
+              'sessions.',
+        ]);
+        expect(searchPaletteActions(catalog, 'restart').map((a) => a.id), [
+          'reconnect',
+        ]);
+        expect(
+          searchPaletteActions(catalog, 'перезапустить').first.id,
+          'reconnect',
+        );
+      });
+
+      test('en: «Restart agent» без дополнительных строк; поиск `restart` и '
+          'слова `reconnect` по имени команды работают', () {
+        final catalog = paletteCatalogOf(
+          const [],
+          l10n: _en,
+          localRestart: true,
+        );
+        final restart = host(catalog, 'reconnect');
+
+        expect(restart.label, 'Restart agent');
+        expect(restart.searchAliases, isEmpty);
+        expect(searchPaletteActions(catalog, 'restart').first.id, 'reconnect');
+        expect(
+          searchPaletteActions(catalog, 'reconnect').first.id,
+          'reconnect',
+        );
+        expect(
+          searchPaletteActions(catalog, '/reconnect').first.id,
+          'reconnect',
+        );
+      });
+    });
 
     test('en → ru → en: строки не дублируются и не смешиваются', () {
       final first = paletteCatalogOf(const [], l10n: _en);

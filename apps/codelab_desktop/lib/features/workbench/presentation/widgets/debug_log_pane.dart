@@ -1,38 +1,39 @@
 import 'dart:math' as math;
 
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:structured_log_flutter/structured_log_flutter.dart';
 import 'package:structured_log_fluent/structured_log_fluent.dart';
+import 'package:structured_log_flutter/structured_log_flutter.dart';
 
-/// Height below which the docked panel scrolls instead of shrinking further.
+import '../../../../l10n/l10n.dart';
+
+/// Высота, ниже которой закреплённая панель прокручивается, а не сжимается.
 ///
-/// `FluentLogViewer`'s toolbar cannot compress: at the panel's possible
-/// widths (always below its master-detail breakpoint) the viewer needs
-/// ~100px of height, and the panel's own header another ~44px. Measured
-/// against `structured_log_fluent` 0.1.2+1 with some headroom; a widget test
-/// fails if a newer version needs more, so this cannot silently drift.
-/// Without it a short window (or the transient first frame, before the
-/// real window size is known) paints a RenderFlex overflow.
+/// Почему: панель инструментов `FluentLogViewer` не сжимается — при
+/// возможной ширине панели (всегда ниже порога master-detail) просмотрщику
+/// нужно около 100 px высоты, а заголовку панели — ещё около 44 px. Значение
+/// измерено на `structured_log_fluent` 0.1.2+1 с запасом; виджет-тест падает,
+/// если новая версия потребует больше, так что значение не уплывёт молча.
+/// Без него низкое окно (или промежуточный первый кадр, пока размер окна ещё
+/// неизвестен) рисует переполнение `RenderFlex`.
 const kDebugLogPaneMinHeight = 170.0;
 
-/// Docked, always-visible debug log panel — a sibling of
-/// [WorkbenchInspectorPane], not nested inside it
-/// (`replace-debug-log-panel-with-fluent/design.md`, Decision 2/4).
+/// Закреплённая, всегда видимая панель журнала отладки — соседка
+/// [WorkbenchInspectorPane], а не вложена в неё
+/// (`replace-debug-log-panel-with-fluent/design.md`, решения 2 и 4).
 ///
-/// The header (title + "Expand") is CodeLab's own docking chrome; the body
-/// is `structured_log_fluent`'s embeddable [FluentLogViewer] as-is — search,
-/// category selector (auto-shown once 2+ categories are present, e.g. once
-/// protocol-trace events start arriving), level filter, pause/clear, and a
-/// responsive master-detail split all come from the package, not
-/// reimplemented here (see the TZ that requested `LogCategoryComboBox`/the
-/// embeddable-widget split, both landed in `structured_log_fluent`
-/// `0.1.0-dev.3`/`.4`).
+/// Почему так: заголовок (название и «Expand») — собственная оболочка дока
+/// CodeLab, а тело — встраиваемый [FluentLogViewer] пакета
+/// `structured_log_fluent` как есть: поиск, выбор категории (появляется, когда
+/// категорий две и больше, например с началом протокольной трассы), фильтр
+/// уровней, пауза/очистка и адаптивное разделение master-detail приходят из
+/// пакета и здесь не переписываются (ТЗ на `LogCategoryComboBox` и
+/// встраиваемый виджет вошло в `structured_log_fluent` `0.1.0-dev.3`/`.4`).
 ///
-/// Reads from the same [LogBuffer] as the full-screen viewer opened via
-/// [onExpand], but keeps its own [LogViewerController] — search/level/
-/// category filter state is local to this panel, not shared with the
-/// full-screen view (Decision 4's "two controllers, one buffer"
-/// clarification).
+/// Как использовать: читает тот же [LogBuffer], что и полноэкранный просмотр,
+/// открываемый по [onExpand], но держит свой [LogViewerController]: поиск,
+/// уровень и категория принадлежат этой панели и с полноэкранным видом не
+/// делятся (уточнение решения 4 «два контроллера, один буфер»). Заголовок и
+/// подсказка кнопки — по каталогу, содержимое журнала не переводится (D7).
 class WorkbenchDebugLogPane extends StatefulWidget {
   const WorkbenchDebugLogPane({
     required this.logBuffer,
@@ -93,12 +94,12 @@ class _WorkbenchDebugLogPaneState extends State<WorkbenchDebugLogPane> {
                     children: [
                       Expanded(
                         child: Text(
-                          'Debug log',
+                          context.l10n.workbenchDebugLogTitle,
                           style: theme.typography.subtitle,
                         ),
                       ),
                       Tooltip(
-                        message: 'Expand',
+                        message: context.l10n.workbenchDebugLogExpand,
                         child: IconButton(
                           icon: const Icon(FluentIcons.full_screen),
                           onPressed: widget.onExpand,

@@ -2,6 +2,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../l10n/l10n.dart';
 import '../../application/secret_migration_cubit.dart';
 
 /// Предупреждение «секреты лежат в файле конфига» и вход в диалог переноса.
@@ -43,11 +44,12 @@ class SecretMigrationBanner extends StatelessWidget {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: InfoBar(
-            title: const Text(secretsInConfigWarning),
+            // Предупреждение безопасности (D14): секреты лежат в файле.
+            title: Text(context.l10n.secretMigrationWarning),
             severity: InfoBarSeverity.warning,
             isLong: true,
             action: CodeLabButton(
-              label: 'Migrate secrets',
+              label: context.l10n.secretMigrationMigrateSecrets,
               icon: FluentIcons.permissions,
               emphasis: CodeLabButtonEmphasis.primary,
               onPressed: () => _openDialog(context, cubit),
@@ -75,16 +77,6 @@ class SecretMigrationBanner extends StatelessWidget {
     result.whenComplete(cubit.closeDialog);
   }
 }
-
-/// Текст предупреждения (agent-workbench-ui «Перенос секретов встроенного
-/// агента»).
-const secretsInConfigWarning = 'Secrets are stored in the agent config file.';
-
-/// Подсказка `Restart agent`, когда агент уже закрыт или сменился.
-const restartAgentGone = 'The embedded agent is no longer connected.';
-
-/// Подсказка недоступной `Restart agent`: ход ещё идёт.
-const restartWaitsForTurn = 'Wait for the current turn to finish.';
 
 /// Диалог переноса секретов: план, перенос и итог.
 ///
@@ -114,32 +106,40 @@ class SecretMigrationDialog extends StatelessWidget {
       listener: (context, state) => Navigator.of(context).maybePop(),
       builder: (context, state) {
         final cubit = context.read<SecretMigrationCubit>();
+        final l10n = context.l10n;
         Widget close(String label) =>
             CodeLabButton(label: label, onPressed: cubit.closeDialog);
         final (Widget body, List<Widget> actions) = switch (state) {
           SecretMigrationPlanning() => (
-            const _Progress('Building the migration plan…'),
-            [close('Close')],
+            _Progress(l10n.secretMigrationPlanning),
+            [close(l10n.commonClose)],
           ),
           SecretMigrationApplying() => (
-            const _Progress('Moving secrets…'),
+            _Progress(l10n.secretMigrationApplying),
             const <Widget>[],
           ),
-          SecretMigrationPlanFailed(:final message) => (
-            Text(message),
-            [close('Close')],
+          SecretMigrationPlanFailed(:final failure) => (
+            Text(_failureText(failure, l10n.secretMigrationPlanFailed, l10n)),
+            [close(l10n.commonClose)],
           ),
           // Частичный сбой: часть файлов уже переписана — показываем
           // перенесённое и, как после успеха, предлагаем перезапуск.
           SecretMigrationApplyFailed(
-            :final message,
+            :final failure,
             :final items,
             :final movedAny,
             :final canRestart,
             :final agentGone,
           ) =>
             (
-              _PlanLines(items: items, lead: message),
+              _PlanLines(
+                items: items,
+                lead: _failureText(
+                  failure,
+                  l10n.secretMigrationApplyFailed,
+                  l10n,
+                ),
+              ),
               [
                 if (movedAny)
                   _RestartButton(
@@ -150,12 +150,12 @@ class SecretMigrationDialog extends StatelessWidget {
                       cubit.closeDialog();
                     },
                   ),
-                close('Close'),
+                close(l10n.commonClose),
               ],
             ),
-          SecretMigrationPlanReady() => _planReady(state, cubit, close),
+          SecretMigrationPlanReady() => _planReady(state, cubit, close, l10n),
           SecretMigrationApplied(:final canRestart, :final agentGone) => (
-            const Text(_movedText),
+            Text(l10n.secretMigrationMoved),
             [
               _RestartButton(
                 canRestart: canRestart,
@@ -165,7 +165,7 @@ class SecretMigrationDialog extends StatelessWidget {
                   cubit.closeDialog();
                 },
               ),
-              close('Close'),
+              close(l10n.commonClose),
             ],
           ),
           // Диалог закрывается слушателем; пустой кадр до его срабатывания.
@@ -181,7 +181,7 @@ class SecretMigrationDialog extends StatelessWidget {
           canPop: state is! SecretMigrationApplying,
           child: ContentDialog(
             constraints: const BoxConstraints(maxWidth: 640, maxHeight: 480),
-            title: const Text('Migrate secrets'),
+            title: Text(l10n.secretMigrationMigrateSecrets),
             content: body,
             actions: actions,
           ),
@@ -192,39 +192,49 @@ class SecretMigrationDialog extends StatelessWidget {
 
   /// Пустой план (`exitCode 0`, пунктов нет): объясняем, а не показываем
   /// пустое тело диалога.
-  static const _nothingToMigrate = 'Nothing to migrate.';
-
-  static const _movedText =
-      'Secrets moved. Restart the embedded agent to use them.';
+  /// Текст сбоя: отчёт порта — как есть (D7), непредвиденное исключение —
+  /// сообщение каталога с именем типа ([withClass], D5).
+  static String _failureText(
+    SecretMigrationFailure failure,
+    String Function(String errorClass) withClass,
+    AppLocalizations l10n,
+  ) => switch (failure) {
+    SecretMigrationPortProblem(:final text) => text,
+    SecretMigrationUnexpected(:final errorClass) => withClass(errorClass),
+  };
 
   (Widget, List<Widget>) _planReady(
     SecretMigrationPlanReady state,
     SecretMigrationCubit cubit,
     Widget Function(String) close,
+    AppLocalizations l10n,
   ) {
     final detail = state.detail;
     // Блокирующие случаи: объясняющий текст и только `Close`.
     if (state.readOnlyBackend && detail != null) {
-      return (Text(detail), [close('Close')]);
+      return (Text(detail), [close(l10n.commonClose)]);
     }
     if (state.nameConflict) {
-      return (_PlanLines(items: state.items, lead: detail), [close('Close')]);
+      return (
+        _PlanLines(items: state.items, lead: detail),
+        [close(l10n.commonClose)],
+      );
     }
     if (!state.canApply) {
       return (
-        _PlanLines(items: state.items, empty: _nothingToMigrate),
-        [close('Close')],
+        _PlanLines(items: state.items, empty: l10n.secretMigrationNothing),
+        [close(l10n.commonClose)],
       );
     }
     return (
       _PlanLines(items: state.items),
       [
         CodeLabButton(
-          label: 'Migrate',
+          label: l10n.secretMigrationMigrate,
           emphasis: CodeLabButtonEmphasis.primary,
           onPressed: cubit.migrate,
         ),
-        close('Cancel'),
+        close(l10n.commonCancel),
       ],
     );
   }
@@ -292,8 +302,9 @@ class _RestartButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final button = CodeLabButton(
-      label: 'Restart agent',
+      label: l10n.commonRestartAgent,
       icon: FluentIcons.refresh,
       emphasis: CodeLabButtonEmphasis.primary,
       onPressed: canRestart ? onPressed : null,
@@ -301,7 +312,9 @@ class _RestartButton extends StatelessWidget {
     return canRestart
         ? button
         : Tooltip(
-            message: agentGone ? restartAgentGone : restartWaitsForTurn,
+            message: agentGone
+                ? l10n.secretMigrationAgentGone
+                : l10n.secretMigrationWaitForTurn,
             child: button,
           );
   }

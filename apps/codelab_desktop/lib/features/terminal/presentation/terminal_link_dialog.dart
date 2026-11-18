@@ -1,14 +1,12 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
+import '../../../l10n/l10n.dart';
+
 /// Ключи диалога ссылки OSC 8 (контракт тестов `terminal_link_test.dart`).
 const terminalLinkDialogKey = ValueKey('terminal-link-dialog');
 const terminalLinkAddressKey = ValueKey('terminal-link-address');
 const terminalLinkOpenKey = ValueKey('terminal-link-open');
 const terminalLinkCancelKey = ValueKey('terminal-link-cancel');
-
-/// Сообщение отказа для схем, кроме `http`/`https` (spec `integrated-terminal`
-/// «Ссылки в выводе терминала»).
-const terminalLinkRefusal = 'Only http and https links can be opened.';
 
 /// Показывает диалог подтверждения ссылки OSC 8 и возвращает `true`, только
 /// если пользователь нажал «Open».
@@ -32,7 +30,7 @@ Future<bool> showTerminalLinkDialog(
     context: context,
     builder: (context) => ContentDialog(
       key: terminalLinkDialogKey,
-      title: const Text('Open link?'),
+      title: Text(context.l10n.terminalLinkTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,7 +38,9 @@ Future<bool> showTerminalLinkDialog(
           SelectableText(uri, key: terminalLinkAddressKey),
           if (!canOpen) ...[
             const SizedBox(height: 8),
-            const Text(terminalLinkRefusal),
+            // Отказ для схем, кроме `http`/`https` (spec `integrated-terminal`
+            // «Ссылки в выводе терминала»; метка security, D14).
+            Text(context.l10n.terminalLinkRefusal),
           ],
         ],
       ),
@@ -48,13 +48,13 @@ Future<bool> showTerminalLinkDialog(
         Button(
           key: terminalLinkCancelKey,
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.commonCancel),
         ),
         if (canOpen)
           FilledButton(
             key: terminalLinkOpenKey,
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Open'),
+            child: Text(context.l10n.commonOpen),
           ),
       ],
     ),

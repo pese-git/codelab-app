@@ -17,8 +17,10 @@ import 'package:codelab_desktop/core/platform/limited_network_image.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/core/platform/recent_projects_store.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/app_strings.dart';
 import '../../../support/recording_logger.dart';
 import '../../../support/start_agent.dart';
 
@@ -66,6 +68,7 @@ void main() {
     agent = FakeAcpTransport();
     application = AcpClientApplication(transport: FakeAcpTransport());
     cubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       stdioTransportFactory: (_) => agent,
@@ -144,7 +147,7 @@ void main() {
       await cubit.openExternalLink(Uri.parse('https://example.com/a'));
 
       expect(linkEvent()['outcome'], 'failed');
-      expect(cubit.state.linkNote, "Couldn't open the link.");
+      expect(cubit.state.linkNote, ShellLinkNote.openFailed);
     });
 
     test('userinfo links never reach the port', () async {
@@ -195,7 +198,7 @@ void main() {
 
       await cubit.openExternalLink(Uri.parse('https://example.com/a'));
 
-      expect(cubit.state.linkNote, "Couldn't open the link.");
+      expect(cubit.state.linkNote, ShellLinkNote.openFailed);
       expect(linkEvent()['outcome'], 'failed');
     });
 

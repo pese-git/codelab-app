@@ -47,7 +47,10 @@ Future<LiveScene> _openTerminal(
 void main() {
   testWidgets('вкладка: заголовок и тег «Выполняется», предупреждение '
       'панели (security)', (tester) async {
-    final scene = await _openTerminal(tester, FakeUserShellLauncher());
+    final scene = await _openTerminal(
+      tester,
+      FakeUserShellLauncher()..shellsExitOnHangUp = true,
+    );
 
     final pane = scene.textOf(find.byType(CodeLabTerminalPane));
     expect(pane, contains('Терминал 1'));
@@ -65,7 +68,7 @@ void main() {
   });
 
   testWidgets('завершённый shell: тег с кодом выхода', (tester) async {
-    final launcher = FakeUserShellLauncher();
+    final launcher = FakeUserShellLauncher()..shellsExitOnHangUp = true;
     final scene = await _openTerminal(tester, launcher);
 
     launcher.shells.single.exit(3);

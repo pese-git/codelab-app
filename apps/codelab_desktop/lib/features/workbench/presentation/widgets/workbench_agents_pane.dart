@@ -4,6 +4,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../l10n/l10n.dart';
 import '../../application/shell_cubit.dart';
 import '../../application/ui_mappers.dart' show agentCountsOf, agentRowsOf;
 
@@ -84,6 +85,7 @@ class _WorkbenchAgentsPaneState extends State<WorkbenchAgentsPane> {
         final rows = agentRowsOf(
           state.agents,
           now: (widget.clock ?? DateTime.now)(),
+          l10n: context.l10n,
         );
         final selected = state.selectedAgentId;
         return CodeLabAgentsPane(

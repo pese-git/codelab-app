@@ -29,8 +29,6 @@ import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
-import 'package:codelab_desktop/features/workbench/application/secret_migration_cubit.dart';
-import 'package:codelab_desktop/features/workbench/application/secret_migration_runner.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_desktop/l10n/app_localizations_ru.dart';
@@ -69,20 +67,10 @@ final class _NoRecentProjects implements RecentProjectsStore {
   Future<void> record(String path) async {}
 }
 
-final class _Runner implements SecretMigrationRunner {
-  @override
-  Future<SecretMigrationOutcome> plan(String cwd) async =>
-      throw StateError('boom');
-
-  @override
-  Future<SecretMigrationOutcome> apply(String cwd) async =>
-      throw StateError('boom');
-}
-
 /// Части рабочего места на управляемом порте языка и агент-двойник.
 final class _Scene {
   _Scene(this.strings) {
-    final application = AcpClientApplication(transport: FakeAcpTransport());
+    application = AcpClientApplication(transport: FakeAcpTransport());
     workspace = ClientWorkspace(
       backend: AcpClientBackend(application),
       resolvers: [_FixedResolver(agent)],
@@ -104,6 +92,7 @@ final class _Scene {
   }
 
   final TestAppStrings strings;
+  late final AcpClientApplication application;
   final agent = FakeAcpTransport();
   late final ClientWorkspace workspace;
   late final CodeLabShellParts parts;
@@ -203,24 +192,42 @@ void main() {
       expect(scene.parts.sessions.state, same(sessions));
       expect(scene.parts.activeSession.state, same(active));
     });
+  });
 
-    test('SecretMigrationCubit: одна подписка, отмена в close(), событие '
-        'после close не меняет состояние', () async {
-      final cubit = SecretMigrationCubit(
-        runner: _Runner(),
-        turnActivity: const Stream<bool>.empty(),
-        strings: strings,
-      );
+  group('фасад CodeLabShellCubit', () {
+    test(
+      'палитра берёт каталог текущего языка при пересчёте за частями '
+      '(D4, R1): подписи команд хоста и поиск по английской подписи',
+      () async {
+        final scene = _Scene(strings);
+        final facade = CodeLabShellCubit(
+          application: scene.application,
+          workspace: scene.workspace,
+          parts: scene.parts,
+          projectFolderPicker: _NoPicker(),
+          recentProjectsStore: _NoRecentProjects(),
+        );
+        addTearDown(facade.close);
+        String labelOf() => facade.state.paletteActions
+            .firstWhere((action) => action.id == 'new')
+            .label;
+        expect(labelOf(), 'New session');
 
-      expect(strings.subscriberCount, 1);
-      final before = cubit.state;
-      await cubit.close();
-      expect(strings.hasListener, isFalse);
+        strings.emit(AppLocalizationsRu());
+        await pumpEventQueue();
 
-      strings.emit(AppLocalizationsRu());
-      await pumpEventQueue();
-      expect(cubit.state, same(before));
-    });
+        expect(labelOf(), 'Новая сессия');
+        // Английская подпись по-прежнему находит команду (searchAliases).
+        expect(
+          facade.state.searchPalette('session').map((action) => action.id),
+          contains('new'),
+        );
+
+        strings.emit(AppLocalizationsEn());
+        await pumpEventQueue();
+        expect(labelOf(), 'New session');
+      },
+    );
   });
 
   group('ConnectionCubit', () {
@@ -376,30 +383,6 @@ void main() {
         scene.parts.activeSession.state.inspectorEntries.length,
         inspector,
       );
-    });
-  });
-
-  group('SecretMigrationCubit', () {
-    test('разовое сообщение типизировано: смена языка не переписывает '
-        'состояние сбоя плана', () async {
-      final cubit = SecretMigrationCubit(
-        runner: _Runner(),
-        turnActivity: const Stream<bool>.empty(),
-        strings: strings,
-      );
-      addTearDown(cubit.close);
-      cubit.setOffered('/work/app');
-      cubit.openPlan();
-      await pumpEventQueue();
-      final failed = cubit.state;
-      expect(failed, isA<SecretMigrationPlanFailed>());
-
-      strings.emit(AppLocalizationsRu());
-      await pumpEventQueue();
-
-      // Исход события не пересобирается из входов — его текст строит
-      // presentation по типизированной причине (D5, правило 1).
-      expect(cubit.state, same(failed));
     });
   });
 }

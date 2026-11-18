@@ -389,8 +389,11 @@ mcp:
         cubit.openPlan();
         await pumpEventQueue();
         final planFailed = cubit.state as SecretMigrationPlanFailed;
-        expect(planFailed.message, contains('_Leaky'));
-        expect(planFailed.message, isNot(contains('sk-test-leak-0123456789')));
+        expect(planFailed.failure, const SecretMigrationUnexpected('_Leaky'));
+        expect(
+          '${planFailed.failure}',
+          isNot(contains('sk-test-leak-0123456789')),
+        );
 
         cubit.closeDialog();
         // Перенос возможен только из применимого плана; для текста ошибки
@@ -407,8 +410,11 @@ mcp:
         applying.migrate();
         await pumpEventQueue();
         final applyFailed = applying.state as SecretMigrationApplyFailed;
-        expect(applyFailed.message, contains('_Leaky'));
-        expect(applyFailed.message, isNot(contains('sk-test-leak-0123456789')));
+        expect(applyFailed.failure, const SecretMigrationUnexpected('_Leaky'));
+        expect(
+          '${applyFailed.failure}',
+          isNot(contains('sk-test-leak-0123456789')),
+        );
 
         final failures = logger.entries.where((e) => e['level'] == 'warning');
         expect(failures, hasLength(2));

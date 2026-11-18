@@ -5,17 +5,12 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:xterm2/ui.dart' show TerminalStyle, TerminalView;
 
+import '../../../l10n/l10n.dart';
 import '../application/terminal_tabs_cubit.dart';
 import '../application/terminal_tabs_state.dart';
 import 'terminal_link_dialog.dart';
 import 'terminal_tab_view.dart';
 import 'terminal_theme.dart';
-
-/// Предупреждение панели (spec `integrated-terminal` «Терминал вне одобрений
-/// агента»); показывается, пока пользователь не закроет его (Q7).
-const _disclosureText =
-    "Commands here run as you, outside the agent's approval flow. "
-    'Output is shown as is and is not redacted for secrets.';
 
 /// Внутренний отступ области терминала.
 ///
@@ -43,15 +38,19 @@ class WorkbenchTerminalPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<TerminalTabsCubit>();
+    final l10n = context.l10n;
     return BlocBuilder<TerminalTabsCubit, TerminalTabsState>(
       builder: (context, state) {
         final activeId = state.activeTabId;
         final model = activeId == null ? null : cubit.terminalOf(activeId);
         return CodeLabTerminalPane(
-          tabs: [for (final tab in state.tabs) terminalTabViewOf(tab)],
+          tabs: [for (final tab in state.tabs) terminalTabViewOf(tab, l10n)],
           activeTabId: activeId,
           hasSession: state.hasSession,
-          disclosure: state.disclosureShown ? null : _disclosureText,
+          // Предупреждение панели (spec `integrated-terminal` «Терминал вне
+          // одобрений агента»; метка security, D14): показывается, пока
+          // пользователь не закроет его (Q7).
+          disclosure: state.disclosureShown ? null : l10n.terminalDisclosure,
           onSelected: cubit.selectTab,
           onClosed: cubit.closeTab,
           onNewTab: () => unawaited(cubit.newTab()),

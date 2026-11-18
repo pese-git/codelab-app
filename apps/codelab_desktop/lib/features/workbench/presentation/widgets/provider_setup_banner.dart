@@ -4,14 +4,9 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../../../../app/app_scope.dart';
+import '../../../../l10n/l10n.dart';
 import '../../../settings/presentation/provider_wizard_dialog.dart';
 import '../../application/shell_cubit.dart';
-
-/// Текст баннера соединения, когда встроенному агенту не настроен провайдер
-/// (spec agent-workbench-ui «Встроенный агент без провайдера»; design.md change
-/// `add-provider-setup-ui`, D26). Тот же текст, что первая строка мастера CLI.
-const noProviderMessage =
-    'No model provider is configured for the embedded agent.';
 
 /// Кнопка «Add provider» баннера соединения (ключ
 /// `connection-banner-add-provider`).
@@ -28,7 +23,7 @@ Widget providerSetupAction(
   ProviderSetupNotice notice,
 ) => CodeLabButton(
   key: const ValueKey('connection-banner-add-provider'),
-  label: 'Add provider',
+  label: context.l10n.workbenchAddProvider,
   icon: FluentIcons.add,
   emphasis: CodeLabButtonEmphasis.primary,
   onPressed: () => unawaited(

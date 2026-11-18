@@ -1,5 +1,8 @@
 import 'package:codelab_ui/codelab_ui.dart';
 
+import '../../../core/platform/user_shell_launcher.dart'
+    show UserShellStartFailure;
+import '../../../l10n/app_localizations.dart';
 import '../application/terminal_tab.dart';
 
 /// Превращает состояние вкладки в готовые строки и тон тега статуса.
@@ -10,25 +13,35 @@ import '../application/terminal_tab.dart';
 ///
 /// Как использовать: панель зовёт её на каждую вкладку состояния Cubit.
 /// Текст ошибки старта не показывается: берётся только вариант
-/// `UserShellStartFailure.message`, без путей (D9).
-CodeLabTerminalTab terminalTabViewOf(TerminalTab tab) {
+/// `UserShellStartFailure`, без путей (D9), и подпись по каталогу [l10n]
+/// (`add-desktop-localization`, D5 п. 4: текст собирает presentation).
+CodeLabTerminalTab terminalTabViewOf(TerminalTab tab, AppLocalizations l10n) {
   final (label, tone) = switch (tab.status) {
-    TerminalTabStarting() => ('Starting', CodeLabTone.neutral),
-    TerminalTabRunning() => ('Running', CodeLabTone.success),
+    TerminalTabStarting() => (l10n.terminalStatusStarting, CodeLabTone.neutral),
+    TerminalTabRunning() => (l10n.terminalStatusRunning, CodeLabTone.success),
     TerminalTabExited(:final exitCode) when exitCode == 0 => (
-      'Exited 0',
+      l10n.terminalStatusExitedWithCode(0),
       CodeLabTone.neutral,
     ),
     TerminalTabExited(:final exitCode) when exitCode != null => (
-      'Exited $exitCode',
+      l10n.terminalStatusExitedWithCode(exitCode),
       CodeLabTone.warning,
     ),
-    TerminalTabExited() => ('Exited', CodeLabTone.neutral),
-    TerminalTabFailed(:final reason) => (reason.message, CodeLabTone.danger),
+    TerminalTabExited() => (l10n.terminalStatusExited, CodeLabTone.neutral),
+    TerminalTabFailed(:final reason) => (
+      switch (reason) {
+        UserShellStartFailure.shellNotFound =>
+          l10n.terminalFailureShellNotFound,
+        UserShellStartFailure.folderNotFound =>
+          l10n.terminalFailureFolderNotFound,
+        UserShellStartFailure.ptyUnavailable => l10n.terminalFailureUnavailable,
+      },
+      CodeLabTone.danger,
+    ),
   };
   return CodeLabTerminalTab(
     id: tab.id,
-    title: tab.title,
+    title: l10n.terminalTabTitle(tab.number),
     statusLabel: label,
     statusTone: tone,
   );

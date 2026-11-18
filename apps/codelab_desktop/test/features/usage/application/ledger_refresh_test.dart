@@ -18,8 +18,10 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/usage/application/ledger_refresh.dart';
 import 'package:codelab_desktop/features/workbench/application/active_session_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_part.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/app_strings.dart';
 import '../../../support/fake_usage_csv_saver.dart';
 
 const _tokens = TokenCounts(input: 1, output: 1, cacheRead: 0, cacheWrite: 0);
@@ -184,6 +186,7 @@ void main() {
         workspace: workspace,
         diagnostics: ShellDiagnostics(),
         usageCsvSaver: FakeUsageCsvSaver(),
+        strings: FixedAppStrings(AppLocalizationsEn()),
       );
     });
 

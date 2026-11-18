@@ -5,12 +5,16 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show
         ClientWorkspace,
         SessionStatusView,
+        SessionSummaryView,
         WebSocketProfile,
         WorkspaceState,
         describeFailure;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 
+import '../../../app/language/app_language_cubit.dart' show AppStrings;
+import '../../../l10n/app_localizations.dart';
+import '../../../l10n/app_localizations_en.dart';
 import 'active_session_cubit.dart';
 import 'connection_cubit.dart';
 import 'project_paths.dart';
@@ -25,10 +29,10 @@ typedef PendingRootSession = ({String sessionId, String cwd});
 /// Список сессий и выбранная сессия.
 final class SessionsState {
   const SessionsState({
+    required this.currentSessionLabel,
+    required this.currentSessionDetail,
     this.sessions = const [],
     this.activeSessionId,
-    this.currentSessionLabel = 'No active session',
-    this.currentSessionDetail = 'Open a project to start a session.',
     this.hasMoreSessions = false,
     this.pendingRootSession,
   });
@@ -45,6 +49,9 @@ final class SessionsState {
   /// У агента есть следующая страница сессий.
   final bool hasMoreSessions;
   final String? activeSessionId;
+
+  /// Название и подпись текущей сессии для шапки. Без сессии — тексты app
+  /// на языке каталога; пересобираются по событию `AppStrings.changes`.
   final String currentSessionLabel;
   final String currentSessionDetail;
 }
@@ -74,6 +81,12 @@ final class SessionsState {
 /// `ClientWorkspace`: рабочее пространство подписано на `sessionChanges`
 /// раньше, поэтому `SessionView` kit к обработчику уже обновлён (design D6).
 /// Изменение списка и показываемой сессии — один пакет [ShellChanges].
+///
+/// Язык (`add-desktop-localization`, D5): строки сайдбара и подпись текущей
+/// сессии — функция `(снимки сессий, язык)`. Cubit хранит не готовые строки,
+/// а снимки `AcpSession` и сводки агента и собирает строки при каждом
+/// изменении и при смене языка; одна подписка на `AppStrings.changes` создана
+/// в конструкторе и отменяется в `close()`.
 final class SessionsCubit extends ShellPartCubit<SessionsState> {
   SessionsCubit({
     required super.changes,
@@ -83,6 +96,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
     required ConnectionCubit connection,
     required SettingsCubit settings,
     required ActiveSessionCubit activeSession,
+    required AppStrings strings,
     Logger? eventLogger,
   }) : _application = application,
        _workspace = workspace,
@@ -90,8 +104,15 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
        _connection = connection,
        _settings = settings,
        _activeSession = activeSession,
+       _strings = strings,
        _eventLogger = eventLogger,
-       super(const SessionsState()) {
+       super(
+         SessionsState(
+           currentSessionLabel: strings.current.workbenchNoActiveSession,
+           currentSessionDetail: strings.current.workbenchOpenProjectHint,
+         ),
+       ) {
+    _languageSubscription = strings.changes.listen(_handleLanguage);
     _sessionSubscription = _application.sessionChanges.listen(
       _handleSessionChange,
     );
@@ -104,7 +125,11 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
   final ConnectionCubit _connection;
   final SettingsCubit _settings;
   final ActiveSessionCubit _activeSession;
+  final AppStrings _strings;
   final Logger? _eventLogger;
+  late final StreamSubscription<AppLocalizations> _languageSubscription;
+
+  AppLocalizations get _l10n => _strings.current;
 
   /// Источник истины для [SessionsState.pendingRootSession]: каждый `emit`
   /// списка переносит его в новое состояние.
@@ -112,11 +137,12 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
   late final StreamSubscription<AcpSession> _sessionSubscription;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
 
-  /// Строки открытых сессий, последняя изменившаяся первой.
-  var _open = const <CodeLabSessionListItem>[];
+  /// Снимки открытых сессий, последняя изменившаяся первой. Строки сайдбара
+  /// собираются из них в [_rows] с текущим языком (D5 п. 1).
+  var _openSessions = const <AcpSession>[];
 
   /// Неоткрытые сессии агента и их `cwd` для `session/load`.
-  var _available = const <CodeLabSessionListItem>[];
+  var _availableSummaries = const <SessionSummaryView>[];
   var _availableCwd = const <String, String>{};
 
   /// Открытые сессии, которые новое соединение не знает.
@@ -277,7 +303,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
           SessionsState(
             sessions: state.sessions,
             activeSessionId: sessionId,
-            currentSessionLabel: selected?.title ?? untitledSessionTitle,
+            currentSessionLabel: selected?.title ?? _l10n.commonNewSession,
             currentSessionDetail: selected?.subtitle ?? sessionId,
             hasMoreSessions: _hasMore,
             pendingRootSession: _pendingRoot,
@@ -286,7 +312,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
         _activeSession.showMissing(sessionId);
         return;
       }
-      final item = sessionListItemOf(session);
+      final item = sessionListItemOf(session, l10n: _l10n);
       emit(_activated(item, session, sessions: _rows(), hasMore: _hasMore));
       _activeSession.show(session);
     });
@@ -394,9 +420,55 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
 
   @override
   Future<void> close() async {
+    await _languageSubscription.cancel();
     await _sessionSubscription.cancel();
     await _workspaceSubscription.cancel();
     return super.close();
+  }
+
+  /// Смена языка: строки сайдбара и подпись текущей сессии пересобираются из
+  /// сохранённых снимков; фокус, список и вопрос D24 не меняются. После
+  /// `close` событие игнорируется (D5 п. 3).
+  void _handleLanguage(AppLocalizations l10n) {
+    if (isClosed) return;
+    final rows = _rows();
+    final active = state.activeSessionId;
+    final label = switch (active) {
+      null => (
+        title: l10n.workbenchNoActiveSession,
+        detail: l10n.workbenchOpenProjectHint,
+      ),
+      final id => _titleOf(id, rows, l10n),
+    };
+    emit(
+      SessionsState(
+        sessions: rows,
+        activeSessionId: active,
+        currentSessionLabel: label.title,
+        currentSessionDetail: label.detail,
+        hasMoreSessions: _hasMore,
+        pendingRootSession: _pendingRoot,
+      ),
+    );
+  }
+
+  /// Название и подпись сессии [id] для шапки: тем же правилом, что при
+  /// выборе ([_activated] и `_select`).
+  ({String title, String detail}) _titleOf(
+    String id,
+    List<CodeLabSessionListItem> rows,
+    AppLocalizations l10n,
+  ) {
+    final session = _openSessions.where((s) => s.id.value == id).firstOrNull;
+    if (session != null) {
+      final item = sessionListItemOf(session, l10n: l10n);
+      return (title: item.title, detail: item.subtitle ?? session.id.value);
+    }
+    final row = rows.where((item) => item.id == id).firstOrNull;
+    return (
+      title: row?.title ?? l10n.commonNewSession,
+      detail: row?.subtitle ?? id,
+    );
   }
 
   /// Загружает сессию агента и показывает её.
@@ -429,8 +501,9 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
         : await _settings.missingProjectDirectory(cwd);
     if (isClosed) return;
     if (missing != null) {
+      // В журнал — английский текст независимо от языка интерфейса (D5 п. 6).
       _diagnostics.record(
-        projectFolderMissingMessage(missing),
+        projectFolderMissingMessage(missing, AppLocalizationsEn()),
         severity: DiagnosticSeverity.error,
         source: 'project',
       );
@@ -497,9 +570,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
       return;
     }
     _workspaceRows = rows;
-    _available = [
-      for (final summary in available) sessionListItemOfSummary(summary),
-    ];
+    _availableSummaries = available;
     _availableCwd = {
       for (final summary in available) summary.id.value: summary.cwd,
     };
@@ -540,9 +611,14 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
 
   /// Открытые строки (с `detached` из kit), затем неоткрытые, без повторов.
   List<CodeLabSessionListItem> _rows() {
-    final openIds = {for (final row in _open) row.id};
+    final l10n = _l10n;
+    final open = [
+      for (final session in _openSessions)
+        sessionListItemOf(session, l10n: l10n),
+    ];
+    final openIds = {for (final row in open) row.id};
     return [
-      for (final row in _open)
+      for (final row in open)
         _detached.contains(row.id)
             ? CodeLabSessionListItem(
                 id: row.id,
@@ -552,8 +628,9 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
                 updatedLabel: row.updatedLabel,
               )
             : row,
-      for (final row in _available)
-        if (!openIds.contains(row.id)) row,
+      for (final summary in _availableSummaries)
+        if (!openIds.contains(summary.id.value))
+          sessionListItemOfSummary(summary, l10n: l10n),
     ];
   }
 
@@ -577,8 +654,11 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
   /// Поднимает строку [session] в начало списка; с [activate] — ещё и
   /// делает её показываемой.
   void _showFirst(AcpSession session, {required bool activate}) {
-    final item = sessionListItemOf(session);
-    _open = [item, ..._open.where((other) => other.id != item.id)];
+    final item = sessionListItemOf(session, l10n: _l10n);
+    _openSessions = [
+      session,
+      ..._openSessions.where((other) => other.id != session.id),
+    ];
     final sessions = _rows();
     emit(
       activate

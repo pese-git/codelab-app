@@ -5,10 +5,11 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../../../../core/platform/link_policy.dart';
+import '../../../../l10n/l10n.dart';
 import '../../application/shell_cubit.dart';
+import '../../application/ui_mappers.dart' show projectNameOf;
 import '../workbench_shell.dart'
     show openConnectionSettings, selectPaletteCommand;
-import '../../application/ui_mappers.dart' show projectNameOf;
 import 'provider_setup_banner.dart';
 
 class WorkbenchMainPane extends StatelessWidget {
@@ -73,14 +74,16 @@ class WorkbenchMainPane extends StatelessWidget {
     final notice = state.connectionStatus == CodeLabConnectionStatus.failed
         ? state.providerSetupNotice
         : null;
+    // Текст «нет провайдера» — текст app по каталогу; причина сбоя иначе
+    // приходит из состояния готовой (ядро клиента или отказ app, D5).
     final connectionMessage = notice == null
         ? state.connectionMessage
-        : noProviderMessage;
+        : context.l10n.workbenchNoProviderConfigured;
     final Widget content;
     if (showConnectionScreen) {
       content = startFailed
           ? _failureScreen(context, connectionMessage, notice)
-          : _startScreen();
+          : _startScreen(context);
     } else {
       // Политику ссылок и изображений ответа агента принимает app (D2, D5,
       // D6): кит получает функции-решения и колбэки действий пользователя.
@@ -107,8 +110,8 @@ class WorkbenchMainPane extends StatelessWidget {
           onExpansionChanged: (change) =>
               cubit.setTranscriptRowExpanded(change.rowId, change.expanded),
           emptyLabel: state.activeSessionId == null
-              ? 'Start a new session to talk to the agent.'
-              : 'Send a message to start.',
+              ? context.l10n.workbenchTranscriptEmptyNoSession
+              : context.l10n.workbenchTranscriptEmptySession,
         ),
       );
     }
@@ -126,7 +129,7 @@ class WorkbenchMainPane extends StatelessWidget {
               status: status,
               message: connectionMessage,
               onReconnect: cubit.retryStart,
-              reconnectLabel: 'Retry',
+              reconnectLabel: context.l10n.commonRetry,
               onConfigureConnection: () => openConnectionSettings(context),
               extraAction: notice == null
                   ? null
@@ -138,7 +141,10 @@ class WorkbenchMainPane extends StatelessWidget {
           // Платформа отказала открыть ссылку из ответа (D5).
           if (state.linkNote case final note?) ...[
             InfoBar(
-              title: Text(note),
+              title: Text(switch (note) {
+                ShellLinkNote.openFailed =>
+                  context.l10n.workbenchLinkOpenFailed,
+              }),
               severity: InfoBarSeverity.warning,
               onClose: cubit.dismissLinkNote,
             ),
@@ -190,7 +196,8 @@ class WorkbenchMainPane extends StatelessWidget {
     ProviderSetupNotice? notice,
   ) {
     final repeat = state.connectionRepeat;
-    final reason = connectionMessage ?? 'Could not start the agent.';
+    final l10n = context.l10n;
+    final reason = connectionMessage ?? l10n.workbenchConnectionStartFailed;
     return LayoutBuilder(
       builder: (context, constraints) {
         return SingleChildScrollView(
@@ -213,7 +220,7 @@ class WorkbenchMainPane extends StatelessWidget {
                   // Причина сбоя видна и до первой записи ленты, а не только
                   // в баннере над ней.
                   description: repeat > 0
-                      ? '$reason Failed again ($repeat)'
+                      ? l10n.workbenchConnectionFailedAgain(reason, repeat)
                       : reason,
                   extraAction: notice == null
                       ? null
@@ -221,7 +228,7 @@ class WorkbenchMainPane extends StatelessWidget {
                   // С «Add provider» третья кнопка перенесла бы ряд на вторую
                   // строку, а «Retry» после записи провайдера даёт баннер.
                   onReconnect: notice == null ? cubit.retryStart : null,
-                  reconnectLabel: 'Retry',
+                  reconnectLabel: l10n.commonRetry,
                   onConfigureConnection: () => openConnectionSettings(context),
                 ),
               ),
@@ -235,12 +242,13 @@ class WorkbenchMainPane extends StatelessWidget {
   /// Стартовый экран без сессии в фокусе (D18): без проекта — «Open
   /// folder…», с проектом — «New session»; пока агент стартует — индикатор
   /// `Starting <profile>…`.
-  Widget _startScreen() {
+  Widget _startScreen(BuildContext context) {
+    final l10n = context.l10n;
     final project = state.selectedProjectPath;
     final starting =
         state.connectionStatus == CodeLabConnectionStatus.connecting ||
         state.connectionStatus == CodeLabConnectionStatus.reconnecting;
-    final busy = starting ? 'Starting ${state.profileLabel}…' : null;
+    final busy = starting ? l10n.workbenchStarting(state.profileLabel) : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -248,15 +256,17 @@ class WorkbenchMainPane extends StatelessWidget {
         Expanded(
           child: project == null
               ? CodeLabStartScreen(
-                  message: 'Open a project to start a session.',
-                  actionLabel: 'Open folder…',
+                  message: l10n.workbenchOpenProjectHint,
+                  actionLabel: l10n.workbenchOpenFolder,
                   actionKey: const ValueKey('start-open-project'),
                   onAction: () => unawaited(cubit.browseForProject()),
                   busyLabel: busy,
                 )
               : CodeLabStartScreen(
-                  message: 'Start a new session in ${projectNameOf(project)}.',
-                  actionLabel: 'New session',
+                  message: l10n.workbenchStartNewSessionIn(
+                    projectNameOf(project),
+                  ),
+                  actionLabel: l10n.commonNewSession,
                   actionKey: const ValueKey('start-new-session'),
                   onAction: () => unawaited(cubit.createSession()),
                   busyLabel: busy,

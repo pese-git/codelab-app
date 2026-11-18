@@ -129,7 +129,8 @@ String buildUsageCsv(UsagePaneData data) {
 /// Подписи шагов по `(ход, индекс шага)` из строк панели.
 Map<(int, int), String> _stepTitlesOf(UsagePaneData data) => {
   for (final turn in data.turns)
-    for (final step in turn.steps) (step.turn, step.index): step.title,
+    for (final step in turn.steps)
+      (step.turn, step.index): step.title.englishText,
 };
 
 /// Причины неполноты через `;` в порядке `noUsage`, `noPrice`, `beforeLoad`.

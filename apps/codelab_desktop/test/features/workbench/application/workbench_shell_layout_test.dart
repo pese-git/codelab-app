@@ -7,6 +7,7 @@ import 'package:codelab_desktop/core/platform/dock_layout_store.dart';
 import 'package:codelab_desktop/features/workbench/application/layout_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_part.dart';
 import 'package:codelab_desktop/features/workbench/application/ui_mappers.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -159,6 +160,7 @@ void main() {
           CodeLabRecentProject(path: '/work/codelab-app'),
           CodeLabRecentProject(path: '/work/notes-app'),
         ],
+        l10n: AppLocalizationsEn(),
       );
 
       expect(projects.map((p) => p.name), ['codelab-app', 'notes-app']);
@@ -173,6 +175,7 @@ void main() {
         selectedProjectPath: null,
         sessions: sessions,
         recentProjects: const [],
+        l10n: AppLocalizationsEn(),
       );
 
       expect(projects.single.name, 'No project');

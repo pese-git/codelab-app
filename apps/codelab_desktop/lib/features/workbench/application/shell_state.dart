@@ -8,6 +8,13 @@ import 'connection_cubit.dart' show ProviderSetupNotice, RestartConfirmation;
 import 'sessions_cubit.dart' show PendingRootSession;
 import 'ui_mappers.dart';
 
+/// Заметка над лентой о сбое действия фасада (D5): типизированное разовое
+/// сообщение, текст собирает presentation.
+enum ShellLinkNote {
+  /// Платформа отказала открыть ссылку из ответа агента.
+  openFailed,
+}
+
 /// Состояние рабочего места в прежней форме — то, что читают виджеты,
 /// интеграционные и характеризационные тесты.
 ///
@@ -71,7 +78,6 @@ final class CodeLabShellState {
     this.hasMoreSessions = false,
     this.pendingRootSession,
     this.sessionFolders = const {},
-    this.restartsRemote = false,
     required this.currentPlan,
     required this.queuedPrompts,
   });
@@ -116,8 +122,9 @@ final class CodeLabShellState {
   final Set<String> shownImages;
 
   /// Заметка для InfoBar над лентой после неудачного открытия ссылки (D5);
-  /// `null` — заметки нет.
-  final String? linkNote;
+  /// `null` — заметки нет. Типизирована: текст собирает presentation по
+  /// каталогу, а не фасад (`add-desktop-localization`, D5).
+  final ShellLinkNote? linkNote;
 
   /// Чип состояния хода в шапке; `null` — сессия свободна.
   final CodeLabTurnState? turnState;
@@ -215,11 +222,6 @@ final class CodeLabShellState {
   /// строки (Q23): сайдбар раскладывает по ним сессии разных папок.
   final Map<String, String> sessionFolders;
 
-  /// Перезапускается удалённый агент (WebSocket): пункт палитры `/reconnect`
-  /// называется «Reconnect», для локального — «Restart agent» (Q24), как
-  /// `ConnectionSettingsState.restartTitle`.
-  final bool restartsRemote;
-
   /// Отличает «не передан» от «явно `null`» для [currentPlan] в [copyWith].
   static const Object _unset = Object();
 
@@ -275,7 +277,6 @@ final class CodeLabShellState {
     bool? hasMoreSessions,
     Object? pendingRootSession = _unset,
     Map<String, String>? sessionFolders,
-    bool? restartsRemote,
     Object? currentPlan = _unset,
     List<CodeLabQueuedPrompt>? queuedPrompts,
   }) {
@@ -303,7 +304,7 @@ final class CodeLabShellState {
       shownImages: shownImages ?? this.shownImages,
       linkNote: identical(linkNote, _unset)
           ? this.linkNote
-          : linkNote as String?,
+          : linkNote as ShellLinkNote?,
       // `null` здесь — «сессия свободна», а не «не менять».
       turnState: identical(turnState, _unset)
           ? this.turnState
@@ -353,7 +354,6 @@ final class CodeLabShellState {
       recentProjects: recentProjects ?? this.recentProjects,
       hasMoreSessions: hasMoreSessions ?? this.hasMoreSessions,
       sessionFolders: sessionFolders ?? this.sessionFolders,
-      restartsRemote: restartsRemote ?? this.restartsRemote,
       pendingRootSession: identical(pendingRootSession, _unset)
           ? this.pendingRootSession
           : pendingRootSession as PendingRootSession?,
@@ -365,32 +365,17 @@ final class CodeLabShellState {
   }
 
   /// Полный список палитры: команды клиента, затем команды агента; команда
-  /// агента вытесняет одноимённую недоступную команду клиента (D3).
+  /// агента вытесняет одноимённую недоступную команду клиента (D3). Подписи
+  /// команд хоста уже на языке каталога: пункт `reconnect` для локального
+  /// агента называется «Restart agent» (Q24, D22) — это решает
+  /// `paletteCatalogOf` по типу профиля (`add-desktop-localization`, D4).
   List<CodeLabCommandAction> get paletteActions =>
-      _restartLabelled(paletteActionsOf(commandCatalog));
+      paletteActionsOf(commandCatalog);
 
   /// Команды палитры под запрос пользователя, лучшие — первыми (D4); её
   /// получают палитра `Ctrl/Cmd+K` и inline-триггер композера.
   List<CodeLabCommandAction> searchPalette(String query) =>
-      _restartLabelled(searchPaletteActions(commandCatalog, query));
-
-  /// Подпись пункта `reconnect` по типу профиля (Q24): для локального агента
-  /// это единственный перезапуск «Restart agent» (D22).
-  List<CodeLabCommandAction> _restartLabelled(
-    List<CodeLabCommandAction> actions,
-  ) => restartsRemote
-      ? actions
-      : [
-          for (final action in actions)
-            action.id == 'reconnect'
-                ? action.copyWith(
-                    label: 'Restart agent',
-                    description:
-                        'Restart the agent with the selected profile and '
-                        'reload open sessions.',
-                  )
-                : action,
-        ];
+      searchPaletteActions(commandCatalog, query);
 
   String get selectedProfileLabel => profileLabel;
 

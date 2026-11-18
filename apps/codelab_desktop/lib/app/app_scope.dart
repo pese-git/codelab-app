@@ -774,6 +774,9 @@ final class CodeLabPresentationModule extends Module {
             // (change `add-desktop-usage-pane`, D5, D13).
             usageCsvSaver: currentScope.resolve<UsageCsvSaver>(),
             usageLogger: _usageLogger(),
+            // Язык интерфейса: Cubit-ы рабочего места с текстом подписаны на
+            // порт в конструкторе (`add-desktop-localization`, D5).
+            strings: currentScope.resolve<AppStrings>(),
           ),
         )
         .singleton();

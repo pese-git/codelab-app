@@ -39,10 +39,12 @@ import 'package:codelab_client_acp/codelab_client_acp.dart'
     show ApprovalRequestId;
 import 'package:codelab_desktop/features/usage/presentation/workbench_usage_pane.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_desktop/l10n/app_localizations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/l10n_app.dart';
 import '../../../support/start_agent.dart';
 import '../../../support/test_app_scope.dart';
 
@@ -146,6 +148,8 @@ final class _Scene {
     await tester.pumpWidget(
       binding.bootstrap(
         child: FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: BlocProvider<CodeLabShellCubit>.value(
             value: cubit,
             child: ScaffoldPage(

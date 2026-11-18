@@ -79,10 +79,7 @@ Future<LiveScene> _openLive(WidgetTester tester) async {
     ),
     listed: const {'s-old': '/work/app'},
     projectFiles: _files(),
-    userShellLauncher: FakeUserShellLauncher(),
-    // Широкое окно: в тестовом шрифте Ahem ряд кнопок одобрения на `ru`
-    // не помещается в 696 px ленты при окне 1440 px (находка задачи 3.3).
-    size: const Size(2000, 1000),
+    userShellLauncher: FakeUserShellLauncher()..shellsExitOnHangUp = true,
   );
   await scene.newSession('s1');
 
@@ -141,7 +138,11 @@ void main() {
     // Сайдбар: статусы сессий и подписи строк.
     expect(find.text('Не загружена'), findsOneWidget);
     expect(find.text('Ждёт одобрения'), findsWidgets);
-    expect(find.text('Активна'), findsOneWidget);
+    // Подпись `updatedLabel` кит не рисует — проверка по данным строки.
+    expect(
+      scene.cubit.state.sessions.map((s) => s.updatedLabel),
+      contains('Активна'),
+    );
 
     await expectNoStaleLanguage(tester, from: en, to: ru);
     await scene.close();
@@ -200,7 +201,9 @@ void main() {
     await scene.selectLanguage(AppLanguagePreference.ru);
 
     // Язык действительно сменился (иначе проверка ввода ничего не доказывает).
-    expect(_transcript(scene), contains('Модель достигла лимита токенов'));
+    // Лента виртуализирована: после длинного ответа заметка вне видимой
+    // части, поэтому язык проверяется по сайдбару.
+    expect(find.text('Не загружена'), findsOneWidget);
     expect(
       tester.widget<EditableText>(composer).controller.text,
       'unsent draft',
@@ -260,7 +263,14 @@ void main() {
 
     await scene.selectLanguage(AppLanguagePreference.ru);
 
-    expect(find.text('Подключение к агенту потеряно'), findsOneWidget);
+    // Тот же текст у заголовка заметки сбоя в ленте (решение 2026-11-19).
+    expect(
+      find.descendant(
+        of: find.byType(CodeLabConnectionBanner),
+        matching: find.text('Подключение к агенту потеряно'),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.descendant(
         of: find.byType(CodeLabConnectionBanner),
@@ -268,7 +278,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(_transcript(scene), contains('Связь с агентом потеряна'));
+    expect(_transcript(scene), contains('Подключение к агенту потеряно'));
     await expectNoStaleLanguage(tester, from: en, to: ru);
 
     await scene.selectLanguage(AppLanguagePreference.en);

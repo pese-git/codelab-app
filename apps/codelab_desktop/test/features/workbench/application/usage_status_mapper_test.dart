@@ -23,6 +23,7 @@
 
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/workbench/application/ui_mappers.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -77,7 +78,7 @@ UsageView _reported({
 );
 
 CodeLabSessionStatusData _of(UsageView usage) =>
-    sessionStatusDataOf(_view(usage: usage));
+    sessionStatusDataOf(_view(usage: usage), l10n: AppLocalizationsEn());
 
 CodeLabSessionStatusData _context(ContextFillView context) => _of(
   _reported(
@@ -91,12 +92,21 @@ void main() {
   group('model and mode', () {
     test('the model is the selected value of the option of category model', () {
       final data = _view();
-      expect(sessionStatusDataOf(data).modelLabel, 'GPT-5');
-      expect(sessionStatusDataOf(data).modeLabel, 'Standard');
+      expect(
+        sessionStatusDataOf(data, l10n: AppLocalizationsEn()).modelLabel,
+        'GPT-5',
+      );
+      expect(
+        sessionStatusDataOf(data, l10n: AppLocalizationsEn()).modeLabel,
+        'Standard',
+      );
     });
 
     test('without options there are no labels; unknown value is shown raw', () {
-      final empty = sessionStatusDataOf(_view(options: const []));
+      final empty = sessionStatusDataOf(
+        _view(options: const []),
+        l10n: AppLocalizationsEn(),
+      );
       expect(empty.modelLabel, isNull);
       expect(empty.modeLabel, isNull);
 
@@ -112,6 +122,7 @@ void main() {
             ),
           ],
         ),
+        l10n: AppLocalizationsEn(),
       );
       expect(raw.modelLabel, 'custom-x');
     });
@@ -131,7 +142,10 @@ void main() {
     test('awaiting: no usage segments; busy only while the turn runs', () {
       const awaiting = UsageView(support: UsageSupport.awaiting);
 
-      final idle = sessionStatusDataOf(_view(usage: awaiting));
+      final idle = sessionStatusDataOf(
+        _view(usage: awaiting),
+        l10n: AppLocalizationsEn(),
+      );
       expect(idle.usage, isNull);
       expect(idle.cost, isNull);
       expect(idle.context, isNull);
@@ -139,6 +153,7 @@ void main() {
 
       final running = sessionStatusDataOf(
         _view(usage: awaiting, status: SessionStatusView.running),
+        l10n: AppLocalizationsEn(),
       );
       expect(running.usage, isNull);
       expect(running.busy, isTrue);
@@ -150,6 +165,7 @@ void main() {
           usage: const UsageView(support: UsageSupport.awaiting),
           status: SessionStatusView.cancelling,
         ),
+        l10n: AppLocalizationsEn(),
       );
       expect(cancelling.busy, isTrue);
     });
@@ -164,6 +180,7 @@ void main() {
             usage: _reported(lastTurn: const UsageTotals(tokens: _noCache)),
             status: status,
           ),
+          l10n: AppLocalizationsEn(),
         );
         expect(data.busy, isFalse, reason: status.name);
       }

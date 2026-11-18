@@ -17,8 +17,10 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/core/platform/usage_csv_saver.dart';
 import 'package:codelab_desktop/features/workbench/application/active_session_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_part.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/app_strings.dart';
 import '../../../support/fake_usage_csv_saver.dart';
 import '../../../support/recording_logger.dart';
 
@@ -136,6 +138,7 @@ void main() {
     diagnostics: ShellDiagnostics(),
     usageCsvSaver: port,
     usageLogger: logger,
+    strings: FixedAppStrings(AppLocalizationsEn()),
   );
 
   setUp(() {
@@ -275,7 +278,7 @@ void main() {
       a.emit(_view(2, transcript: [_call('lib/a.dart')]));
       cubit.show(_session('a'));
       final before = cubit.state.usage.turns.single.steps.first.title;
-      expect(before, contains('a.dart'));
+      expect(before.englishText, contains('a.dart'));
 
       // Ревизия с теми же usage и журналом (идентичные объекты) и ленты той
       // же длины: изменился только вызов.
@@ -284,7 +287,7 @@ void main() {
       );
 
       expect(
-        cubit.state.usage.turns.single.steps.first.title,
+        cubit.state.usage.turns.single.steps.first.title.englishText,
         contains('b.dart'),
       );
     });

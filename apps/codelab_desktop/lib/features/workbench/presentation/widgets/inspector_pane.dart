@@ -1,6 +1,7 @@
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
+import '../../../../l10n/l10n.dart';
 import '../../application/shell_cubit.dart';
 
 class WorkbenchInspectorPane extends StatelessWidget {
@@ -21,9 +22,12 @@ class WorkbenchInspectorPane extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(12, 10, 8, 8),
-            child: CodeLabText('Inspector', role: CodeLabTextRole.subtitle),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
+            child: CodeLabText(
+              context.l10n.workbenchInspectorTitle,
+              role: CodeLabTextRole.subtitle,
+            ),
           ),
           Expanded(
             child: ListView(
@@ -62,7 +66,7 @@ class _InspectorEntryCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                CodeLabBadge(label: _categoryLabel, tone: _tone),
+                CodeLabBadge(label: _categoryLabel(context.l10n), tone: _tone),
                 const SizedBox(width: 8),
                 Expanded(
                   child: CodeLabText(
@@ -87,7 +91,10 @@ class _InspectorEntryCard extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   if (entry.risk != null)
-                    CodeLabBadge(label: 'Risk ${entry.risk}', tone: _riskTone),
+                    CodeLabBadge(
+                      label: context.l10n.workbenchInspectorRisk(entry.risk!),
+                      tone: _riskTone,
+                    ),
                   if (entry.status != null)
                     CodeLabBadge(
                       label: entry.status!,
@@ -103,11 +110,17 @@ class _InspectorEntryCard extends StatelessWidget {
             ],
             if (entry.rawInput != null) ...[
               const SizedBox(height: 8),
-              _InspectorRawBlock(label: 'Raw input', value: entry.rawInput!),
+              _InspectorRawBlock(
+                label: context.l10n.workbenchInspectorRawInput,
+                value: entry.rawInput!,
+              ),
             ],
             if (entry.rawOutput != null) ...[
               const SizedBox(height: 8),
-              _InspectorRawBlock(label: 'Raw output', value: entry.rawOutput!),
+              _InspectorRawBlock(
+                label: context.l10n.workbenchInspectorRawOutput,
+                value: entry.rawOutput!,
+              ),
             ],
           ],
         ),
@@ -115,12 +128,15 @@ class _InspectorEntryCard extends StatelessWidget {
     );
   }
 
-  String get _categoryLabel {
+  String _categoryLabel(AppLocalizations l10n) {
     return switch (entry.category) {
-      CodeLabInspectorCategory.approval => 'Approval',
-      CodeLabInspectorCategory.toolCall => 'Tool',
-      CodeLabInspectorCategory.protocol => 'Protocol',
-      CodeLabInspectorCategory.diagnostic => 'Diagnostic',
+      CodeLabInspectorCategory.approval =>
+        l10n.workbenchInspectorCategoryApproval,
+      CodeLabInspectorCategory.toolCall => l10n.workbenchInspectorCategoryTool,
+      CodeLabInspectorCategory.protocol =>
+        l10n.workbenchInspectorCategoryProtocol,
+      CodeLabInspectorCategory.diagnostic =>
+        l10n.workbenchInspectorCategoryDiagnostic,
     };
   }
 

@@ -15,6 +15,7 @@ import 'dart:convert';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' show SessionId;
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
         ConnectionProfile,
@@ -30,6 +31,8 @@ import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart'
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
+import '../../support/l10n_app.dart';
+import 'package:codelab_desktop/l10n/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
@@ -420,6 +423,8 @@ void main() {
       addTearDown(cubit.close);
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: BlocProvider.value(
             value: cubit,
             child: const ScaffoldPage(

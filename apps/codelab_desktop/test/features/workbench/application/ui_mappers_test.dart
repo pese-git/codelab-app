@@ -2,11 +2,12 @@
 // change `extract-acp-client-kit`): значения совпадают с теми, что
 // `CodeLabShellCubit` строил до разделения на Cubit-ы.
 
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
-import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
-import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_desktop/features/workbench/application/ui_mappers.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
+import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' show FluentIcons;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -62,6 +63,7 @@ CodeLabToolCallRow _rowOf(ToolKind kind, String title) {
     cwd: '/work',
     approvalsEnabled: true,
     onApprovalSelected: (_, _) {},
+    l10n: AppLocalizationsEn(),
   );
   return rows.single as CodeLabToolCallRow;
 }
@@ -94,6 +96,7 @@ void main() {
         'id', () {
       final item = sessionListItemOf(
         const AcpSession(id: SessionId('session-1'), cwd: '/work'),
+        l10n: AppLocalizationsEn(),
       );
 
       expect(item.id, 'session-1');
@@ -118,10 +121,16 @@ void main() {
       );
 
       expect(
-        sessionListItemOf(withPrompt('  Fix the\n failing   tests ')).title,
+        sessionListItemOf(
+          withPrompt('  Fix the\n failing   tests '),
+          l10n: AppLocalizationsEn(),
+        ).title,
         'Fix the failing tests',
       );
-      final long = sessionListItemOf(withPrompt('a' * 80)).title;
+      final long = sessionListItemOf(
+        withPrompt('a' * 80),
+        l10n: AppLocalizationsEn(),
+      ).title;
       expect(long, '${'a' * 60}…');
     });
 
@@ -134,6 +143,7 @@ void main() {
               title: '  Fix tests  ',
               status: status,
             ),
+            l10n: AppLocalizationsEn(),
           );
 
       expect(of(SessionLifecycleStatus.active).title, 'Fix tests');
@@ -164,6 +174,7 @@ void main() {
         title: '  Fix tests  ',
         updatedAt: DateTime(2026, 10, 26, 9, 5),
       ),
+      l10n: AppLocalizationsEn(),
     );
 
     expect(row.id, 's-old');
@@ -178,6 +189,7 @@ void main() {
           cwd: '/work',
           status: SessionStatusView.notLoaded,
         ),
+        l10n: AppLocalizationsEn(),
       ).title,
       'Session s-x',
     );
@@ -215,6 +227,7 @@ void main() {
         cwd: '/work',
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
+        l10n: AppLocalizationsEn(),
       );
 
       expect(rows.map((row) => row.id), [
@@ -261,6 +274,7 @@ void main() {
         isRunning: isRunning,
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
+        l10n: AppLocalizationsEn(),
       );
 
       expect(
@@ -305,6 +319,7 @@ void main() {
         cwd: '/work',
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
+        l10n: AppLocalizationsEn(),
       );
 
       final approval =
@@ -326,6 +341,7 @@ void main() {
         cwd: '/work',
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
+        l10n: AppLocalizationsEn(),
       );
 
       final notice = rows.single as CodeLabNoticeRow;
@@ -368,6 +384,7 @@ void main() {
         approvalsEnabled: false,
         onApprovalSelected: (approval, optionId) =>
             chosen.add((approval.approvalId, approval.sessionId, optionId)),
+        l10n: AppLocalizationsEn(),
       );
 
       final approval =
@@ -419,6 +436,7 @@ void main() {
         cwd: '/work',
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
+        l10n: AppLocalizationsEn(),
       ).cast<CodeLabNoticeRow>();
 
       expect(rows.map((row) => row.id), [
@@ -450,6 +468,7 @@ void main() {
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
         isRunning: isRunning,
+        l10n: AppLocalizationsEn(),
       );
 
       test('a /mcp list reply keeps its text and fences for the kit '
@@ -507,6 +526,7 @@ void main() {
           approvalsEnabled: true,
           onApprovalSelected: (_, _) {},
           isRunning: true,
+          l10n: AppLocalizationsEn(),
         );
 
         final replies = rows.whereType<CodeLabAgentTextRow>().toList();
@@ -542,6 +562,7 @@ void main() {
                 cwd: '/work',
                 approvalsEnabled: true,
                 onApprovalSelected: (_, _) {},
+                l10n: AppLocalizationsEn(),
               ).single
               as CodeLabToolCallRow;
 
@@ -604,6 +625,7 @@ void main() {
         cwd: '/work',
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
+        l10n: AppLocalizationsEn(),
       );
 
       final resolved =
@@ -628,6 +650,7 @@ void main() {
         cwd: '/work',
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
+        l10n: AppLocalizationsEn(),
       );
 
       expect(
@@ -798,6 +821,7 @@ void main() {
         cwd: '/workspace',
         approvalsEnabled: true,
         onApprovalSelected: (_, _) {},
+        l10n: AppLocalizationsEn(),
       );
 
       expect(rows.single, isA<CodeLabTaskOpsRow>());
@@ -843,11 +867,13 @@ void main() {
           description: 'Create a plan',
           hint: 'what to plan',
         ),
-      ]);
+      ], l10n: AppLocalizationsEn());
 
       test('the six app commands are the host commands of the catalog', () {
         expect(
-          paletteActionsOf(paletteCatalogOf(const [])),
+          paletteActionsOf(
+            paletteCatalogOf(const [], l10n: AppLocalizationsEn()),
+          ),
           CodeLabCommandAction.defaults,
         );
       });
@@ -956,6 +982,7 @@ void main() {
           CodeLabRecentProject(path: '/work/b'),
           CodeLabRecentProject(path: '/work/a'),
         ],
+        l10n: AppLocalizationsEn(),
       );
 
       final selected = groups.first;

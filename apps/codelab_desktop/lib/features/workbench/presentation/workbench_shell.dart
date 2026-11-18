@@ -10,11 +10,12 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 import '../../../app/app_scope.dart';
 import '../../../app/navigation/navigation_cubit.dart';
 import '../../../app/navigation/settings_page.dart';
-import '../application/sessions_cubit.dart' show PendingRootSession;
+import '../../../l10n/l10n.dart';
 import '../../project_files/presentation/project_files_pane.dart';
 import '../../terminal/application/terminal_tabs_cubit.dart';
 import '../../terminal/presentation/terminal_pane.dart';
 import '../../usage/presentation/workbench_usage_pane.dart';
+import '../application/sessions_cubit.dart' show PendingRootSession;
 import '../application/shell_cubit.dart';
 import '../application/ui_mappers.dart'
     show connectionTooltipOf, sidebarProjectsOf;
@@ -170,6 +171,7 @@ class CodeLabShell extends StatelessWidget {
                       sessions: state.sessions,
                       recentProjects: state.recentProjects,
                       sessionFolders: state.sessionFolders,
+                      l10n: context.l10n,
                     ),
                     activeSessionId: state.activeSessionId,
                     onSessionSelected: (id) {
@@ -320,21 +322,20 @@ class _RootSessionDialog extends StatelessWidget {
         child: Center(
           child: ContentDialog(
             key: const ValueKey('root-session-dialog'),
-            title: const Text('Open session in the disk root?'),
-            content: Text(
-              'This session runs in the disk root (${pending.cwd}). '
-              'The agent gets access to the whole disk. Open anyway?',
-            ),
+            // Предупреждение безопасности (D14): текст сохраняет «весь диск» и
+            // «всё равно»; путь — плейсхолдер.
+            title: Text(context.l10n.workbenchRootSessionTitle),
+            content: Text(context.l10n.workbenchRootSessionBody(pending.cwd)),
             actions: [
               FilledButton(
                 key: const ValueKey('root-session-open'),
                 onPressed: cubit.confirmRootSession,
-                child: const Text('Open'),
+                child: Text(context.l10n.commonOpen),
               ),
               Button(
                 key: const ValueKey('root-session-cancel'),
                 onPressed: cubit.cancelRootSession,
-                child: const Text('Cancel'),
+                child: Text(context.l10n.commonCancel),
               ),
             ],
           ),
