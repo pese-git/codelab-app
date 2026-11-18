@@ -79,5 +79,149 @@
   "settingsLanguageSaveRetry": "Retry",
   "@settingsLanguageSaveRetry": {
     "description": "Кнопка в предупреждении о сбое записи языка на странице General: повторить запись выбранного языка."
+  },
+  "agentSettingLabel_budget_max_steps": "Max steps",
+  "@agentSettingLabel_budget_max_steps": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_budget_max_steps": "Model requests per turn.",
+  "@agentSettingDescription_budget_max_steps": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_budget_max_tokens": "Max tokens",
+  "@agentSettingLabel_budget_max_tokens": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_budget_max_tokens": "Sum of input and output tokens per turn.",
+  "@agentSettingDescription_budget_max_tokens": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_budget_max_cost": "Max cost",
+  "@agentSettingLabel_budget_max_cost": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_budget_max_cost": "USD per turn; works only with known prices.",
+  "@agentSettingDescription_budget_max_cost": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_budget_max_duration": "Max duration",
+  "@agentSettingLabel_budget_max_duration": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_budget_max_duration": "Turn time without waiting for approvals.",
+  "@agentSettingDescription_budget_max_duration": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_enabled": "Subagents",
+  "@agentSettingLabel_subagents_enabled": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_enabled": "Let the agent start subagents (new sessions only).",
+  "@agentSettingDescription_subagents_enabled": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_depth": "Max depth",
+  "@agentSettingLabel_subagents_max_depth": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_depth`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_depth": "How deep subagents may nest (new sessions only).",
+  "@agentSettingDescription_subagents_max_depth": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_depth`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_concurrent": "Max concurrent",
+  "@agentSettingLabel_subagents_max_concurrent": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_concurrent`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_concurrent": "Subagents working at the same time in one session tree.",
+  "@agentSettingDescription_subagents_max_concurrent": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_concurrent`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_per_turn": "Max per turn",
+  "@agentSettingLabel_subagents_max_per_turn": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_per_turn`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_per_turn": "Subagents started per turn of the session.",
+  "@agentSettingDescription_subagents_max_per_turn": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_per_turn`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_steps": "Max steps",
+  "@agentSettingLabel_subagents_max_steps": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_steps": "Model requests of one subagent.",
+  "@agentSettingDescription_subagents_max_steps": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_tokens": "Max tokens",
+  "@agentSettingLabel_subagents_max_tokens": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_tokens": "Input and output tokens of one subagent.",
+  "@agentSettingDescription_subagents_max_tokens": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_cost": "Max cost",
+  "@agentSettingLabel_subagents_max_cost": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_cost": "USD of one subagent; works only with known prices.",
+  "@agentSettingDescription_subagents_max_cost": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_duration": "Max duration",
+  "@agentSettingLabel_subagents_max_duration": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_duration": "Time of one subagent without waiting for approvals.",
+  "@agentSettingDescription_subagents_max_duration": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_report_max_bytes": "Report size",
+  "@agentSettingLabel_subagents_report_max_bytes": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.report_max_bytes`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_report_max_bytes": "Largest report a subagent returns, in bytes.",
+  "@agentSettingDescription_subagents_report_max_bytes": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.report_max_bytes`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_progress_interval": "Progress interval",
+  "@agentSettingLabel_subagents_progress_interval": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.progress_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_progress_interval": "Shortest pause between progress lines of a subagent call.",
+  "@agentSettingDescription_subagents_progress_interval": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.progress_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_heartbeat_interval": "Heartbeat interval",
+  "@agentSettingLabel_subagents_heartbeat_interval": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.heartbeat_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_heartbeat_interval": "Pause after which a silent subagent call reports that it is alive.",
+  "@agentSettingDescription_subagents_heartbeat_interval": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.heartbeat_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_cancel_grace": "Cancel grace",
+  "@agentSettingLabel_subagents_cancel_grace": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.cancel_grace`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_cancel_grace": "How long a call waits for subagents to stop after a cancel.",
+  "@agentSettingDescription_subagents_cancel_grace": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.cancel_grace`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_compaction_enabled": "Automatic compaction",
+  "@agentSettingLabel_compaction_enabled": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `compaction.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_compaction_enabled": "Compact the context automatically when it grows.",
+  "@agentSettingDescription_compaction_enabled": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `compaction.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_logging_level": "Log level",
+  "@agentSettingLabel_logging_level": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `logging.level`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_logging_level": "Verbosity of the agent log.",
+  "@agentSettingDescription_logging_level": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `logging.level`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
   }
 }

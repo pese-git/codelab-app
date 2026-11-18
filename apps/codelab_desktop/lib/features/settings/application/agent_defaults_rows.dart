@@ -50,20 +50,114 @@ final class AgentDefaultsGroup {
   final List<AgentDefaultsRow> rows;
 }
 
-/// Заглушка итерации 2 (красные тесты 2.1): реализация — задача 2.2.
-SettingsPageOwner? settingsPageOwnerOf(String descriptorKey) => null;
+/// Ключи блока «Agent defaults» (D2): бюджет хода, сжатие контекста, все 12
+/// ключей субагентов и уровень журнала.
+///
+/// Почему перечислены поимённо, а не `subagents.*`: новый ключ раздела
+/// `subagents` не должен молча появиться на странице; без строки в таблице
+/// его ловит тест полноты.
+const _generalKeys = {
+  'budget.max_steps',
+  'budget.max_tokens',
+  'budget.max_cost',
+  'budget.max_duration',
+  'compaction.enabled',
+  'subagents.enabled',
+  'subagents.max_depth',
+  'subagents.max_concurrent',
+  'subagents.max_per_turn',
+  'subagents.max_steps',
+  'subagents.max_tokens',
+  'subagents.max_cost',
+  'subagents.max_duration',
+  'subagents.report_max_bytes',
+  'subagents.progress_interval',
+  'subagents.heartbeat_interval',
+  'subagents.cancel_grace',
+  'logging.level',
+};
 
-/// Заглушка итерации 2 (красные тесты 2.1): реализация — задача 2.2.
+/// Ключи, у которых есть своя страница или правка запрещена (D2).
+const _otherOwners = <String, SettingsPageOwner>{
+  'agent.default_model': SettingsPageOwner.providers,
+  'permissions.mode': SettingsPageOwner.agentsAndModes,
+  'agent.effort': SettingsPageOwner.agentsAndModes,
+  'mcp.servers': SettingsPageOwner.mcpServers,
+  'permissions.deny': SettingsPageOwner.permissionsAndTools,
+  'permissions.tools': SettingsPageOwner.permissionsAndTools,
+  'trusted_projects': SettingsPageOwner.trustBoundary,
+};
+
+/// Порядок разделов реестра на странице (D2).
+const _sectionOrder = ['Budget', 'Agent', 'Subagents', 'Logging'];
+
+/// Владелец ключа реестра по шаблону дескриптора (`providers.*.base_url`,
+/// а не `providers.local.base_url`); `null` — ключа нет в таблице.
+///
+/// Для чего: единая таблица классификации D2. Тест полноты обходит
+/// `SettingsRegistry.all` и падает на ключе `scope: shared`, у которого здесь
+/// `null`, поэтому новый ключ реестра не появится на «General» без решения.
+/// Ключи `providers.*` относятся к «Providers» по префиксу: у них один
+/// владелец и мастера с порядком «секрет → конфиг» (SETUP-24).
+SettingsPageOwner? settingsPageOwnerOf(String descriptorKey) {
+  if (_generalKeys.contains(descriptorKey)) {
+    return SettingsPageOwner.general;
+  }
+  if (descriptorKey.startsWith('providers.*.')) {
+    return SettingsPageOwner.providers;
+  }
+  return _otherOwners[descriptorKey];
+}
+
+/// Строит группы блока «Agent defaults» из строк `settingFieldsOf`.
+///
+/// Для чего: оставляет только ключи владельца `general`, группирует по
+/// разделу реестра в порядке Budget, Agent, Subagents, Logging (раздел
+/// неизвестного порядка идёт после них), внутри группы сохраняет порядок
+/// входа (порядок реестра, как у `/settings`). Пустые группы не создаются.
+/// Отказ в правке и перекрытие проектным слоем берутся из правила моста
+/// `settingEditRefusalOf` (D6), а не решаются в виджете.
 List<AgentDefaultsGroup> agentDefaultsGroupsOf(
   Iterable<SettingFieldView> fields,
-) => const [];
+) {
+  final bySection = <String, List<AgentDefaultsRow>>{};
+  for (final field in fields) {
+    if (settingsPageOwnerOf(field.descriptor.key) !=
+        SettingsPageOwner.general) {
+      continue;
+    }
+    bySection
+        .putIfAbsent(field.descriptor.section, () => [])
+        .add(
+          AgentDefaultsRow(
+            field: field,
+            refusal: settingEditRefusalOf(field),
+            overriddenBy: switch (field.source?.kind) {
+              ConfigSourceKind.project => 'project',
+              ConfigSourceKind.projectLocal => 'local',
+              _ => null,
+            },
+          ),
+        );
+  }
+  final sections = [
+    ..._sectionOrder.where(bySection.containsKey),
+    ...bySection.keys.where((s) => !_sectionOrder.contains(s)),
+  ];
+  return [
+    for (final section in sections)
+      AgentDefaultsGroup(section: section, rows: bySection[section]!),
+  ];
+}
 
-/// Идентификатор сообщения ARB с подписью ключа реестра (D2).
-///
-/// Заглушка итерации 2: реализация — задача 2.2.
-String agentSettingLabelId(String descriptorKey) => '';
+String _idSuffix(String descriptorKey) => descriptorKey.replaceAll('.', '_');
 
-/// Идентификатор сообщения ARB с описанием ключа реестра (D2).
-///
-/// Заглушка итерации 2: реализация — задача 2.2.
-String agentSettingDescriptionId(String descriptorKey) => '';
+/// Идентификатор сообщения ARB с подписью ключа реестра: приложение
+/// переводит подпись по ключу (`SettingDescriptor.label` это допускает, D2).
+String agentSettingLabelId(String descriptorKey) =>
+    'agentSettingLabel_${_idSuffix(descriptorKey)}';
+
+/// Идентификатор сообщения ARB с описанием ключа реестра (вторая строка
+/// строки страницы, D2).
+String agentSettingDescriptionId(String descriptorKey) =>
+    'agentSettingDescription_${_idSuffix(descriptorKey)}';

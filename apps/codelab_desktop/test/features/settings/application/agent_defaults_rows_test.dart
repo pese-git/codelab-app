@@ -16,14 +16,13 @@ import 'package:codelab_desktop/features/settings/application/agent_defaults_row
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Ключи блока `general` в порядке реестра (D2): 4 бюджета, сжатие, 12 ключей
-/// субагентов, уровень журнала.
+/// Ключи блока `general` в порядке реестра (D2): 4 бюджета, 12 ключей
+/// субагентов, сжатие, уровень журнала.
 const _generalKeys = [
   'budget.max_steps',
   'budget.max_tokens',
   'budget.max_cost',
   'budget.max_duration',
-  'compaction.enabled',
   'subagents.enabled',
   'subagents.max_depth',
   'subagents.max_concurrent',
@@ -36,6 +35,7 @@ const _generalKeys = [
   'subagents.progress_interval',
   'subagents.heartbeat_interval',
   'subagents.cancel_grace',
+  'compaction.enabled',
   'logging.level',
 ];
 
@@ -211,7 +211,7 @@ void main() {
         [
           _generalKeys.sublist(0, 4),
           ['compaction.enabled'],
-          _generalKeys.sublist(5, 17),
+          _generalKeys.sublist(4, 16),
           ['logging.level'],
         ],
       );

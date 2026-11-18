@@ -49,7 +49,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - у каждого ключа `general` тип из набора редакторов D5;
   - английские сообщения ARB подписи и описания совпадают с `label` и `description` реестра;
   - группировка Budget, Agent, Subagents, Logging и порядок реестра внутри группы.
-- [ ] 2.2 `[desktop]` Реализация 2.1: `features/settings/application/agent_defaults_rows.dart`, сообщения подписей ключей в `app_en.arb` и `app_ru.arb`. 2.1 зелёный, `l10n:check` зелёный.
+- [x] 2.2 `[desktop]` Реализация 2.1: `features/settings/application/agent_defaults_rows.dart`, сообщения подписей ключей в `app_en.arb` и `app_ru.arb`. 2.1 зелёный, `l10n:check` зелёный.
 - [x] 2.3 `[desktop]` Красный: `test/features/settings/application/agent_defaults_cubit_test.dart` на настоящем `FileAgentConfigStore` во временной папке (`test/support/modes_fixture.dart`). Требования «…доступ и строки» и «…запись», все сценарии данных:
   - «Строки из своего подмножества», «WebSocket-агент» (локальный файл не читается), «Битый конфиг»;
   - «Смена лимита шагов», «Неверное число» (значения нет в подсказке и событиях), «Ключ с перезапуском», «Перекрытие проектным файлом», «Значение из окружения», «Сброс поля», «Конфликт записи», «Смена подключения во время записи»;
@@ -57,7 +57,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - правка во время новой загрузки — `save_failed` с `outcome: stale`;
   - повторная правка во время `saving` игнорируется;
   - события «Запись без значения в журнале».
-- [ ] 2.4 `[desktop]` Реализация 2.3: `AgentDefaultsCubit`, `AgentDefaultsState` (D7), фабрика `CodeLabDependencies.createAgentDefaultsCubit` в `lib/app/app_scope.dart` на `ProviderSettingsOpener`. 2.3 зелёный.
+- [x] 2.4 `[desktop]` Реализация 2.3: `AgentDefaultsCubit`, `AgentDefaultsState` (D7), фабрика `CodeLabDependencies.createAgentDefaultsCubit` в `lib/app/app_scope.dart` на `ProviderSettingsOpener`. 2.3 зелёный.
 - [ ] 2.5 `[desktop]` Красный: `test/features/settings/presentation/general_page_test.dart` на Cubit-двойнике:
   - сценарий «Порядок блоков» (без «About» до итерации 5) и «Поиск по ключевому слову»;
   - ключи `settings-general-*` требования «…доступ и строки»;

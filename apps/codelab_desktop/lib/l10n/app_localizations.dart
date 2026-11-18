@@ -217,6 +217,222 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry'**
   String get settingsLanguageSaveRetry;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max steps'**
+  String get agentSettingLabel_budget_max_steps;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Model requests per turn.'**
+  String get agentSettingDescription_budget_max_steps;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max tokens'**
+  String get agentSettingLabel_budget_max_tokens;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Sum of input and output tokens per turn.'**
+  String get agentSettingDescription_budget_max_tokens;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max cost'**
+  String get agentSettingLabel_budget_max_cost;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'USD per turn; works only with known prices.'**
+  String get agentSettingDescription_budget_max_cost;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max duration'**
+  String get agentSettingLabel_budget_max_duration;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn time without waiting for approvals.'**
+  String get agentSettingDescription_budget_max_duration;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Subagents'**
+  String get agentSettingLabel_subagents_enabled;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Let the agent start subagents (new sessions only).'**
+  String get agentSettingDescription_subagents_enabled;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_depth`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max depth'**
+  String get agentSettingLabel_subagents_max_depth;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_depth`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'How deep subagents may nest (new sessions only).'**
+  String get agentSettingDescription_subagents_max_depth;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_concurrent`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max concurrent'**
+  String get agentSettingLabel_subagents_max_concurrent;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_concurrent`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Subagents working at the same time in one session tree.'**
+  String get agentSettingDescription_subagents_max_concurrent;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_per_turn`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max per turn'**
+  String get agentSettingLabel_subagents_max_per_turn;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_per_turn`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Subagents started per turn of the session.'**
+  String get agentSettingDescription_subagents_max_per_turn;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max steps'**
+  String get agentSettingLabel_subagents_max_steps;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Model requests of one subagent.'**
+  String get agentSettingDescription_subagents_max_steps;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max tokens'**
+  String get agentSettingLabel_subagents_max_tokens;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Input and output tokens of one subagent.'**
+  String get agentSettingDescription_subagents_max_tokens;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max cost'**
+  String get agentSettingLabel_subagents_max_cost;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'USD of one subagent; works only with known prices.'**
+  String get agentSettingDescription_subagents_max_cost;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Max duration'**
+  String get agentSettingLabel_subagents_max_duration;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Time of one subagent without waiting for approvals.'**
+  String get agentSettingDescription_subagents_max_duration;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.report_max_bytes`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Report size'**
+  String get agentSettingLabel_subagents_report_max_bytes;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.report_max_bytes`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Largest report a subagent returns, in bytes.'**
+  String get agentSettingDescription_subagents_report_max_bytes;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.progress_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Progress interval'**
+  String get agentSettingLabel_subagents_progress_interval;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.progress_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Shortest pause between progress lines of a subagent call.'**
+  String get agentSettingDescription_subagents_progress_interval;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.heartbeat_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Heartbeat interval'**
+  String get agentSettingLabel_subagents_heartbeat_interval;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.heartbeat_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause after which a silent subagent call reports that it is alive.'**
+  String get agentSettingDescription_subagents_heartbeat_interval;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.cancel_grace`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel grace'**
+  String get agentSettingLabel_subagents_cancel_grace;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.cancel_grace`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'How long a call waits for subagents to stop after a cancel.'**
+  String get agentSettingDescription_subagents_cancel_grace;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `compaction.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic compaction'**
+  String get agentSettingLabel_compaction_enabled;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `compaction.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Compact the context automatically when it grows.'**
+  String get agentSettingDescription_compaction_enabled;
+
+  /// Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `logging.level`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Log level'**
+  String get agentSettingLabel_logging_level;
+
+  /// Строка блока Agent defaults страницы General: описание ключа конфигурации агента `logging.level`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Verbosity of the agent log.'**
+  String get agentSettingDescription_logging_level;
 }
 
 class _AppLocalizationsDelegate
