@@ -106,6 +106,7 @@ final class CiScope {
     this.changed = const {},
     this.affected = const {},
     this.reason,
+    this.site = false,
   });
 
   final bool full;
@@ -113,6 +114,11 @@ final class CiScope {
   final Set<String> changed;
   final Set<String> affected;
   final String? reason;
+
+  /// Нужен ли джоб `site` (change `add-astro-site`, D13).
+  ///
+  /// Заготовка под красные тесты задачи 1.1: расчёт — задача 1.2.
+  final bool site;
 }
 
 /// Джобы полного прогона — те же шаги, что у `melos run check`.

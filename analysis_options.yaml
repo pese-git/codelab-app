@@ -11,6 +11,8 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
+    # Сайт на Astro вне pub workspace: без Dart-кода, с node_modules (ADR-0003, D1).
+    - site/**
 
 linter:
   rules:

@@ -13,7 +13,11 @@ model: haiku
 3. тесты изменённых пакетов: `fvm dart test` (или `fvm flutter test` для Flutter-пакетов) в каталоге пакета;
 4. Melos-скрипты по границе из §21: `guard`, `conformance:*`/`protocol-conformance`, `prompts:check`, `test:e2e:cli:dart-agent`, `web-compile` — только те, чьё условие выполнено.
 
-Изменены только `docs/`, `openspec/`, `*.md` — кодовые проверки не запускай, только `openspec validate --strict`, если менялся `openspec/`.
+5. Сайт (`site/`, ADR-0003): `cd site && npm ci && npm run verify` —
+   - если изменён `site/**` или ветка сайта в `tool/ci/` — обязательно; нет Node — «НЕ ЗАПУСКАЛСЯ: нет Node»;
+   - если изменены опубликованные документы (`docs/user/`, `docs/ops/`, `apps/*/README.md`, `apps/*/doc/`, `packages/*/*/README.md`, `packages/*/*/doc/`) или `openspec/` и Node установлен — тоже; без Node — «НЕ ЗАПУСКАЛСЯ: нет Node», в CI это проверит джоб `site`.
+
+Изменены только `docs/`, `openspec/`, `*.md` — Dart-проверки не запускай, только `openspec validate --strict`, если менялся `openspec/`, и шаг 5 для опубликованных документов.
 
 Полная проверка — только если оркестратор передал явную просьбу пользователя, вызван `/check` без аргументов или ветка — `release/*` (там полный прогон обязателен, AGENTS.md §21):
 ```bash
