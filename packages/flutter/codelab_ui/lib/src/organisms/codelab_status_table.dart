@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import '../rendering/escape_for_display.dart';
 
 /// Ячейка строки [CodeLabStatusTable].
@@ -181,7 +182,7 @@ class CodeLabStatusTable extends StatelessWidget {
   const CodeLabStatusTable({
     required this.columns,
     required this.rows,
-    this.actionsLabel = 'Actions',
+    this.actionsLabel,
     this.columnFlex,
     super.key,
   }) : assert(
@@ -195,8 +196,9 @@ class CodeLabStatusTable extends StatelessWidget {
   /// Строки таблицы.
   final List<CodeLabStatusTableRow> rows;
 
-  /// Скрытая подпись колонки действий для чтения с экрана.
-  final String actionsLabel;
+  /// Скрытая подпись колонки действий для чтения с экрана; `null` — текст кита
+  /// («Actions»/«Действия», `add-desktop-localization`, D4).
+  final String? actionsLabel;
 
   /// Веса ширины колонок (без колонки действий); `null` — все равны 1.
   ///
@@ -366,27 +368,35 @@ class CodeLabStatusTable extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          line([
-            for (final title in columns)
-              // Заголовок не переносится по пробелу («LAST / ERROR»). Ширину
-              // колонок подбирает владелец через [columnFlex]; многоточие с
-              // подсказкой — запасной вариант для совсем узкой колонки, где
-              // и по весам заголовок не помещается. Длинные значения ячеек не обрезаем,
-              // они переносятся.
-              Tooltip(
-                message: title,
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: mono.copyWith(
-                    color: secondary,
-                    fontWeight: FontWeight.w600,
+          line(
+            [
+              for (final title in columns)
+                // Заголовок не переносится по пробелу («LAST / ERROR»). Ширину
+                // колонок подбирает владелец через [columnFlex]; многоточие с
+                // подсказкой — запасной вариант для совсем узкой колонки, где
+                // и по весам заголовок не помещается. Длинные значения ячеек не обрезаем,
+                // они переносятся.
+                Tooltip(
+                  message: title,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: mono.copyWith(
+                      color: secondary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-          ], Semantics(label: actionsLabel, child: const SizedBox(height: 18))),
+            ],
+            Semantics(
+              label:
+                  actionsLabel ??
+                  codeLabStringsOf(context).codeLabStatusTableActions,
+              child: const SizedBox(height: 18),
+            ),
+          ),
           for (final row in rows)
             KeyedSubtree(
               key: row.key,

@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 
 /// Состояние соединения, о котором сообщает [CodeLabConnectionBanner].
 enum CodeLabConnectionBannerStatus {
@@ -39,7 +40,7 @@ class CodeLabConnectionBanner extends StatelessWidget {
     required this.status,
     this.message,
     this.onReconnect,
-    this.reconnectLabel = 'Reconnect',
+    this.reconnectLabel,
     this.onConfigureConnection,
     this.extraAction,
     super.key,
@@ -50,8 +51,9 @@ class CodeLabConnectionBanner extends StatelessWidget {
   final VoidCallback? onReconnect;
 
   /// Подпись кнопки повтора; хост без ручного Connect передаёт `Retry`
-  /// (design.md change `require-project-folder`, D18).
-  final String reconnectLabel;
+  /// (design.md change `require-project-folder`, D18). `null` — текст кита
+  /// («Reconnect»/«Переподключиться», `add-desktop-localization`, D4).
+  final String? reconnectLabel;
   final VoidCallback? onConfigureConnection;
   final Widget? extraAction;
 
@@ -59,12 +61,13 @@ class CodeLabConnectionBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final reconnecting = status == CodeLabConnectionBannerStatus.reconnecting;
     final reason = message;
+    final strings = codeLabStringsOf(context);
     return InfoBar(
       title: Text(switch (status) {
-        CodeLabConnectionBannerStatus.lost => 'Connection to the agent lost',
-        CodeLabConnectionBannerStatus.failed =>
-          'Could not connect to the agent',
-        CodeLabConnectionBannerStatus.reconnecting => 'Reconnecting…',
+        CodeLabConnectionBannerStatus.lost => strings.codeLabBannerLost,
+        CodeLabConnectionBannerStatus.failed => strings.codeLabBannerFailed,
+        CodeLabConnectionBannerStatus.reconnecting =>
+          strings.codeLabBannerReconnecting,
       }),
       content: reason == null || reconnecting
           ? null
@@ -87,7 +90,7 @@ class CodeLabConnectionBanner extends StatelessWidget {
                 ?extraAction,
                 if (onReconnect != null)
                   CodeLabButton(
-                    label: reconnectLabel,
+                    label: reconnectLabel ?? strings.codeLabActionReconnect,
                     icon: FluentIcons.refresh,
                     // Основная кнопка одна: с действием хоста оно и есть
                     // основное, «Reconnect» — обычная.
@@ -98,7 +101,7 @@ class CodeLabConnectionBanner extends StatelessWidget {
                   ),
                 if (onConfigureConnection != null)
                   CodeLabButton(
-                    label: 'Connection settings',
+                    label: strings.codeLabBannerConnectionSettings,
                     icon: FluentIcons.settings,
                     onPressed: onConfigureConnection,
                   ),

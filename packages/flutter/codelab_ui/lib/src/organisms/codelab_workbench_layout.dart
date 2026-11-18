@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../atomics/codelab_resize_handle.dart';
+import '../l10n/strings.dart';
 
 /// Класс раскладки рабочего места по ширине окна.
 ///
@@ -144,6 +145,7 @@ class CodeLabWorkbenchLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final layoutClass = CodeLabLayoutClass.ofContext(context);
+    final strings = codeLabStringsOf(context);
     final dock = this.dock;
     final collapsed = sidebarCollapsed && layoutClass.sidebarAsColumn;
 
@@ -158,7 +160,11 @@ class CodeLabWorkbenchLayout extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Slot(slotKey: appBarKey, label: 'App bar', child: appBar),
+              _Slot(
+                slotKey: appBarKey,
+                label: strings.codeLabLayoutAppBar,
+                child: appBar,
+              ),
               SizedBox(height: gap),
               Expanded(
                 child: LayoutBuilder(
@@ -176,7 +182,7 @@ class CodeLabWorkbenchLayout extends StatelessWidget {
                                   : sidebarWidth,
                               child: _Slot(
                                 slotKey: sidebarKey,
-                                label: 'Sessions sidebar',
+                                label: strings.codeLabLayoutSessionsSidebar,
                                 child: sidebar,
                               ),
                             ),
@@ -192,7 +198,7 @@ class CodeLabWorkbenchLayout extends StatelessWidget {
                             key: _sessionCellKey,
                             child: _Slot(
                               slotKey: sessionPaneKey,
-                              label: 'Session pane',
+                              label: strings.codeLabLayoutSessionPane,
                               child: sessionPane,
                             ),
                           ),
@@ -209,7 +215,7 @@ class CodeLabWorkbenchLayout extends StatelessWidget {
                               width: dockWidth,
                               child: _Slot(
                                 slotKey: dockKey,
-                                label: 'Tool dock',
+                                label: strings.codeLabLayoutToolDock,
                                 child: dock,
                               ),
                             ),
@@ -226,7 +232,7 @@ class CodeLabWorkbenchLayout extends StatelessWidget {
                           onDismiss: onSidebarOverlayDismiss,
                           child: _Slot(
                             slotKey: sidebarKey,
-                            label: 'Sessions sidebar',
+                            label: strings.codeLabLayoutSessionsSidebar,
                             child: sidebar,
                           ),
                         ),
@@ -239,7 +245,7 @@ class CodeLabWorkbenchLayout extends StatelessWidget {
                           onDismiss: onDockOverlayDismiss,
                           child: _Slot(
                             slotKey: dockKey,
-                            label: 'Tool dock',
+                            label: strings.codeLabLayoutToolDock,
                             child: dock,
                           ),
                         ),

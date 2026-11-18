@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/codelab_text.dart';
+import '../l10n/strings.dart';
 
 /// Где располагается навигация настроек относительно страницы.
 ///
@@ -138,7 +139,12 @@ class _CodeLabSettingsNavigationState extends State<CodeLabSettingsNavigation> {
 
     if (items.isEmpty && query.isNotEmpty) {
       // Пустой результат поиска: строка вместо пунктов, а не пустая панель.
-      paneItems.add(_label(context, 'No settings match "$query"'));
+      paneItems.add(
+        _label(
+          context,
+          codeLabStringsOf(context).codeLabSettingsNoMatch(query),
+        ),
+      );
     }
 
     return NavigationView(
@@ -147,7 +153,7 @@ class _CodeLabSettingsNavigationState extends State<CodeLabSettingsNavigation> {
           key: CodeLabSettingsNavigation.backKey,
           onPressed: widget.onBack,
         ),
-        title: const CodeLabText('Settings'),
+        title: CodeLabText(codeLabStringsOf(context).codeLabSettingsTitle),
       ),
       pane: NavigationPane(
         displayMode: widget.mode == CodeLabSettingsNavMode.left
@@ -161,7 +167,7 @@ class _CodeLabSettingsNavigationState extends State<CodeLabSettingsNavigation> {
           child: TextBox(
             key: CodeLabSettingsNavigation.searchKey,
             controller: _controller,
-            placeholder: 'Find a setting',
+            placeholder: codeLabStringsOf(context).codeLabSettingsFind,
             onChanged: (value) {
               setState(() {});
               widget.onQueryChanged(value);

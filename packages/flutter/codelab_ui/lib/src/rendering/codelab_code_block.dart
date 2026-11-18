@@ -4,6 +4,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import 'codelab_code_highlighter.dart';
 import 'codelab_code_theme.dart';
 import 'codelab_markdown_row.dart';
@@ -243,7 +244,7 @@ class _CodeLabCodeBlockState extends State<CodeLabCodeBlock> {
                       if (widget.closed)
                         CodeLabButton(
                           key: CodeLabCodeBlock.copyKey(_id, _index),
-                          label: 'Copy',
+                          label: codeLabStringsOf(context).codeLabActionCopy,
                           icon: FluentIcons.copy,
                           emphasis: CodeLabButtonEmphasis.subtle,
                           onPressed: _copy,

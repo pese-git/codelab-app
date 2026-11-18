@@ -14,6 +14,7 @@ import 'codelab_step_breadcrumb.dart';
 import 'codelab_tool_call_summary.dart';
 import 'codelab_view_mode.dart';
 import '../atomics/atomics.dart';
+import '../l10n/codelab_localizations.dart';
 
 const codelabMoleculePreviewGroup = 'ACP molecules';
 
@@ -174,6 +175,7 @@ Widget codelabConnectionBannerPreview() {
     child: Localizations(
       locale: const Locale('en'),
       delegates: const [
+        CodeLabLocalizations.delegate,
         FluentLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
       ],

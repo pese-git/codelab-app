@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import 'codelab_markdown_config.dart';
 import 'codelab_markdown_nesting.dart';
 import 'codelab_markdown_row.dart';
@@ -152,6 +153,7 @@ final _noHandles = _NoHandleSelectionControls();
 /// `closeAfterClick: false`, потому что Fluent закрывал бы пункт через
 /// `Navigator.pop`, а меню живёт в оверлее выделения, не в маршруте.
 Widget _buildContextMenu(BuildContext context, SelectableRegionState state) {
+  final strings = codeLabStringsOf(context);
   // Меню прижимается к границам оверлея: у правого и нижнего краёв окна оно
   // иначе выходило бы за экран.
   return CustomSingleChildLayout(
@@ -168,7 +170,7 @@ Widget _buildContextMenu(BuildContext context, SelectableRegionState state) {
           children: [
             MenuFlyoutItem(
               leading: const Icon(FluentIcons.copy),
-              text: const Text('Copy'),
+              text: Text(strings.codeLabActionCopy),
               closeAfterClick: false,
               onPressed: state.copyEnabled
                   ? () {
@@ -182,7 +184,7 @@ Widget _buildContextMenu(BuildContext context, SelectableRegionState state) {
             ).build(context),
             MenuFlyoutItem(
               leading: const Icon(FluentIcons.select_all),
-              text: const Text('Select all'),
+              text: Text(strings.codeLabMarkdownSelectAll),
               closeAfterClick: false,
               onPressed: state.selectAllEnabled
                   ? () {
@@ -238,7 +240,7 @@ class _PlainFallback extends StatelessWidget {
       CodeLabMonospaceBlock(text),
       const SizedBox(height: 4),
       CodeLabText(
-        'Shown as plain text: nesting is too deep.',
+        codeLabStringsOf(context).codeLabMarkdownNestingTooDeep,
         role: CodeLabTextRole.caption,
         color: FluentTheme.of(context).resources.textFillColorSecondary,
       ),

@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import '../molecules/molecules.dart';
 
 class CodeLabCommandPaletteSurface extends StatefulWidget {
@@ -8,7 +9,7 @@ class CodeLabCommandPaletteSurface extends StatefulWidget {
     this.actions = CodeLabCommandAction.defaults,
     this.initialQuery = '/',
     this.selectedActionId,
-    this.emptyLabel = 'No matching commands',
+    this.emptyLabel,
     this.onActionSelected,
     this.showSearchField = true,
     this.queryOverride,
@@ -26,7 +27,10 @@ class CodeLabCommandPaletteSurface extends StatefulWidget {
   final List<CodeLabCommandAction> actions;
   final String initialQuery;
   final String? selectedActionId;
-  final String emptyLabel;
+
+  /// Текст пустого результата; `null` — текст кита («No matching commands»,
+  /// `add-desktop-localization`, D4).
+  final String? emptyLabel;
   final ValueChanged<CodeLabCommandAction>? onActionSelected;
 
   /// When `false`, the surface does not render its own [TextBox] and
@@ -135,8 +139,8 @@ class _AcpCommandPaletteSurfaceState
               : MainAxisSize.min,
           children: [
             if (widget.showSearchField) ...[
-              const CodeLabText(
-                'Command palette',
+              CodeLabText(
+                codeLabStringsOf(context).codeLabPaletteTitle,
                 role: CodeLabTextRole.subtitle,
               ),
               const SizedBox(height: 10),
@@ -159,7 +163,8 @@ class _AcpCommandPaletteSurfaceState
                 child: Center(
                   key: CodeLabCommandPaletteSurface.emptyKey,
                   child: CodeLabText(
-                    widget.emptyLabel,
+                    widget.emptyLabel ??
+                        codeLabStringsOf(context).codeLabPaletteEmpty,
                     role: CodeLabTextRole.caption,
                   ),
                 ),
@@ -185,7 +190,10 @@ class _AcpCommandPaletteSurfaceState
         Padding(
           key: CodeLabCommandPaletteSurface.agentSectionHeaderKey,
           padding: const EdgeInsets.symmetric(vertical: 4),
-          child: CodeLabText('From agent', role: CodeLabTextRole.caption),
+          child: CodeLabText(
+            codeLabStringsOf(context).codeLabPaletteAgentSection,
+            role: CodeLabTextRole.caption,
+          ),
         ),
         const SizedBox(height: 6),
         for (final action in agentActions) ...[
@@ -302,8 +310,10 @@ class _AcpCommandActionRow extends StatelessWidget {
                               ),
                               if (unavailable) ...[
                                 const SizedBox(width: 8),
-                                const CodeLabBadge(
-                                  label: 'Coming soon',
+                                CodeLabBadge(
+                                  label: codeLabStringsOf(
+                                    context,
+                                  ).codeLabActionComingSoon,
                                   tone: CodeLabTone.warning,
                                 ),
                               ],

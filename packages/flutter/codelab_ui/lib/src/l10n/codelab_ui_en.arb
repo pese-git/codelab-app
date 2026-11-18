@@ -2,6 +2,669 @@
   "@@locale": "en",
   "codeLabApprovalAwaiting": "Awaiting approval",
   "@codeLabApprovalAwaiting": {
-    "description": "Подпись ожидающего решения одобрения в ките. Шаблон каталога кита: остальные сообщения добавляются в итерации 2."
+    "description": "Тег вызова, который ждёт решения корня, и бейдж шага субагента. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabApprovalAllow": "Allow",
+  "@codeLabApprovalAllow": {
+    "description": "Кнопка решения «разрешить» в полосе одобрения. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabApprovalReject": "Reject",
+  "@codeLabApprovalReject": {
+    "description": "Кнопка решения «отклонить» в полосе одобрения. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabApprovalScopeOnce": "Only this time",
+  "@codeLabApprovalScopeOnce": {
+    "description": "Охват решения: один раз. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabApprovalScopeAlways": "Always",
+  "@codeLabApprovalScopeAlways": {
+    "description": "Охват решения: постоянно, пункт выпадающего списка охвата. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabApprovalViewRawInput": "View raw input",
+  "@codeLabApprovalViewRawInput": {
+    "description": "Подсказка и подпись для скринридера значка, который показывает исходные параметры вызова. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabApprovalHideRawInput": "Hide raw input",
+  "@codeLabApprovalHideRawInput": {
+    "description": "Подсказка значка, когда исходные параметры уже показаны. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabApprovalNoSuchOption": "The agent offers no such option",
+  "@codeLabApprovalNoSuchOption": {
+    "description": "Подсказка недоступной кнопки решения: у агента нет варианта для выбранного охвата. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabApprovalSelected": "Selected",
+  "@codeLabApprovalSelected": {
+    "description": "Бейдж выбранного варианта в группе вариантов одобрения."
+  },
+  "codeLabApprovalToneInfo": "Info",
+  "@codeLabApprovalToneInfo": {
+    "description": "Бейдж нейтрального варианта в группе вариантов одобрения."
+  },
+  "codeLabApprovalToneOption": "Option",
+  "@codeLabApprovalToneOption": {
+    "description": "Бейдж варианта-акцента в группе вариантов одобрения."
+  },
+  "codeLabApprovalToneSafe": "Safe",
+  "@codeLabApprovalToneSafe": {
+    "description": "Бейдж безопасного варианта в группе вариантов одобрения. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabApprovalToneReview": "Review",
+  "@codeLabApprovalToneReview": {
+    "description": "Бейдж варианта, который стоит проверить, в группе вариантов одобрения. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabApprovalToneRisk": "Risk",
+  "@codeLabApprovalToneRisk": {
+    "description": "Бейдж рискованного варианта в группе вариантов одобрения. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabRiskReadOnly": "Read-only",
+  "@codeLabRiskReadOnly": {
+    "description": "Тег риска вызова: действие только читает. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabRiskUnknown": "Unknown risk",
+  "@codeLabRiskUnknown": {
+    "description": "Тег риска вызова, когда агент не сообщил вид действия. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabRiskLocalWrite": "Local write",
+  "@codeLabRiskLocalWrite": {
+    "description": "Тег риска вызова: запись в локальные файлы. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabRiskNetwork": "Network",
+  "@codeLabRiskNetwork": {
+    "description": "Тег риска вызова: обращение к сети. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabRiskShell": "Shell",
+  "@codeLabRiskShell": {
+    "description": "Тег риска вызова: выполнение команды в оболочке. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabRiskDestructive": "Destructive",
+  "@codeLabRiskDestructive": {
+    "description": "Тег риска вызова: действие может необратимо удалить или изменить данные. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabCallQueued": "Queued",
+  "@codeLabCallQueued": {
+    "description": "Статус вызова инструмента: вызов поставлен в очередь и ещё не выполняется."
+  },
+  "codeLabCallRunning": "Running",
+  "@codeLabCallRunning": {
+    "description": "Статус вызова инструмента: выполняется."
+  },
+  "codeLabCallDone": "Done",
+  "@codeLabCallDone": {
+    "description": "Статус вызова инструмента: успешно завершён."
+  },
+  "codeLabCallFailed": "Failed",
+  "@codeLabCallFailed": {
+    "description": "Статус вызова инструмента: завершился ошибкой."
+  },
+  "codeLabCallCancelled": "Cancelled",
+  "@codeLabCallCancelled": {
+    "description": "Статус вызова инструмента: отменён."
+  },
+  "codeLabCallShowLess": "Show less",
+  "@codeLabCallShowLess": {
+    "description": "Ссылка под командой вызова: скрыть длинную команду."
+  },
+  "codeLabCallShowFullCommand": "Show full command",
+  "@codeLabCallShowFullCommand": {
+    "description": "Ссылка под командой вызова: показать команду без обрезки."
+  },
+  "codeLabCallMoreToolCalls": "{count, plural, other{+{count} more tool calls}}",
+  "@codeLabCallMoreToolCalls": {
+    "description": "Строка под хвостом вызовов субагента: сколько вызовов не поместилось. Плейсхолдер count — число скрытых вызовов.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "codeLabTranscriptNoticeDetails": "Details",
+  "@codeLabTranscriptNoticeDetails": {
+    "description": "Подпись раскрывающегося блока подробностей в заметке ленты."
+  },
+  "codeLabTranscriptEmpty": "No transcript yet",
+  "@codeLabTranscriptEmpty": {
+    "description": "Текст пустой ленты сессии, когда в ней ещё нет строк."
+  },
+  "codeLabSessionRunning": "Running",
+  "@codeLabSessionRunning": {
+    "description": "Бейдж сессии в боковой панели: идёт ход."
+  },
+  "codeLabSessionApproval": "Approval",
+  "@codeLabSessionApproval": {
+    "description": "Бейдж сессии в боковой панели: ждёт решения об одобрении."
+  },
+  "codeLabSessionFailed": "Failed",
+  "@codeLabSessionFailed": {
+    "description": "Бейдж сессии в боковой панели: ход завершился ошибкой."
+  },
+  "codeLabSessionCancelled": "Cancelled",
+  "@codeLabSessionCancelled": {
+    "description": "Бейдж сессии в боковой панели: ход отменён."
+  },
+  "codeLabSessionNotLoaded": "Not loaded",
+  "@codeLabSessionNotLoaded": {
+    "description": "Бейдж сессии в боковой панели: сессия есть в списке агента, но не загружена в клиент."
+  },
+  "codeLabSessionDetached": "Detached",
+  "@codeLabSessionDetached": {
+    "description": "Бейдж сессии в боковой панели: сессия потеряла связь с процессом агента."
+  },
+  "codeLabConnectionIdle": "Idle",
+  "@codeLabConnectionIdle": {
+    "description": "Статус соединения в строке подключения: подключение ещё не начиналось."
+  },
+  "codeLabConnectionConnecting": "Connecting",
+  "@codeLabConnectionConnecting": {
+    "description": "Статус соединения в строке подключения: идёт подключение."
+  },
+  "codeLabConnectionConnected": "Connected",
+  "@codeLabConnectionConnected": {
+    "description": "Статус соединения: установлено. Строка подключения и бейдж app bar."
+  },
+  "codeLabConnectionReconnecting": "Reconnecting",
+  "@codeLabConnectionReconnecting": {
+    "description": "Статус соединения в строке подключения: идёт переподключение."
+  },
+  "codeLabConnectionDisconnected": "Disconnected",
+  "@codeLabConnectionDisconnected": {
+    "description": "Статус соединения: нет подключения. Строка подключения и бейдж app bar."
+  },
+  "codeLabConnectionLost": "Connection lost",
+  "@codeLabConnectionLost": {
+    "description": "Статус соединения: установленное соединение оборвалось. Строка подключения и бейдж app bar."
+  },
+  "codeLabConnectionFailed": "Failed",
+  "@codeLabConnectionFailed": {
+    "description": "Статус соединения в строке подключения: подключиться не удалось."
+  },
+  "codeLabAppBarConnecting": "Connecting…",
+  "@codeLabAppBarConnecting": {
+    "description": "Подпись бейджа соединения в app bar во время подключения."
+  },
+  "codeLabAppBarReconnecting": "Reconnecting…",
+  "@codeLabAppBarReconnecting": {
+    "description": "Подпись бейджа соединения в app bar во время переподключения."
+  },
+  "codeLabAppBarConnectionFailed": "Connection failed",
+  "@codeLabAppBarConnectionFailed": {
+    "description": "Подпись бейджа соединения в app bar, когда подключиться не удалось."
+  },
+  "codeLabBannerLost": "Connection to the agent lost",
+  "@codeLabBannerLost": {
+    "description": "Заголовок баннера над лентой: соединение с агентом оборвалось."
+  },
+  "codeLabBannerFailed": "Could not connect to the agent",
+  "@codeLabBannerFailed": {
+    "description": "Заголовок баннера над лентой: подключиться к агенту не удалось."
+  },
+  "codeLabBannerReconnecting": "Reconnecting…",
+  "@codeLabBannerReconnecting": {
+    "description": "Заголовок баннера над лентой во время переподключения."
+  },
+  "codeLabBannerConnectionSettings": "Connection settings",
+  "@codeLabBannerConnectionSettings": {
+    "description": "Кнопка баннера: открыть настройки подключения."
+  },
+  "codeLabConnectionScreenConfigure": "Configure connection",
+  "@codeLabConnectionScreenConfigure": {
+    "description": "Кнопка экрана подключения: открыть настройки подключения."
+  },
+  "codeLabActionSend": "Send",
+  "@codeLabActionSend": {
+    "description": "Кнопка отправки сообщения в композере."
+  },
+  "codeLabActionCancel": "Cancel",
+  "@codeLabActionCancel": {
+    "description": "Кнопка отмены хода в композере."
+  },
+  "codeLabActionCopy": "Copy",
+  "@codeLabActionCopy": {
+    "description": "Кнопка копирования блока кода и пункт контекстного меню выделения."
+  },
+  "codeLabActionCopyPath": "Copy path",
+  "@codeLabActionCopyPath": {
+    "description": "Кнопка копирования относительного пути файла в просмотре файла."
+  },
+  "codeLabActionRetry": "Retry",
+  "@codeLabActionRetry": {
+    "description": "Кнопка повтора подключения в app bar."
+  },
+  "codeLabActionReconnect": "Reconnect",
+  "@codeLabActionReconnect": {
+    "description": "Кнопка переподключения по умолчанию в баннере и на экране подключения."
+  },
+  "codeLabActionConnect": "Connect",
+  "@codeLabActionConnect": {
+    "description": "Кнопка подключения в app bar и на экране подключения."
+  },
+  "codeLabActionEdit": "Edit",
+  "@codeLabActionEdit": {
+    "description": "Подсказка кнопки изменения сообщения в очереди промптов."
+  },
+  "codeLabActionSendNow": "Send now",
+  "@codeLabActionSendNow": {
+    "description": "Подсказка кнопки немедленной отправки сообщения из очереди промптов."
+  },
+  "codeLabActionDelete": "Delete",
+  "@codeLabActionDelete": {
+    "description": "Подсказка кнопки удаления сообщения из очереди промптов."
+  },
+  "codeLabActionClearAll": "Clear all",
+  "@codeLabActionClearAll": {
+    "description": "Подсказка кнопки очистки всей очереди промптов."
+  },
+  "codeLabActionGoToApproval": "Go to approval",
+  "@codeLabActionGoToApproval": {
+    "description": "Ссылка в панели Agents: перейти к вызову, который ждёт одобрения."
+  },
+  "codeLabActionShowInTranscript": "Show in transcript",
+  "@codeLabActionShowInTranscript": {
+    "description": "Ссылка в панели Agents: показать строку субагента в ленте."
+  },
+  "codeLabActionComingSoon": "Coming soon",
+  "@codeLabActionComingSoon": {
+    "description": "Бейдж команды палитры, которая ещё не реализована."
+  },
+  "codeLabComposerPlaceholder": "Message the agent",
+  "@codeLabComposerPlaceholder": {
+    "description": "Подсказка в пустом поле ввода композера."
+  },
+  "codeLabStatusBarTurnInProgress": "Turn in progress",
+  "@codeLabStatusBarTurnInProgress": {
+    "description": "Подпись индикатора занятого хода в строке статуса для скринридера."
+  },
+  "codeLabThoughtThinkingSemantics": "Thinking",
+  "@codeLabThoughtThinkingSemantics": {
+    "description": "Подпись для скринридера заголовка блока размышлений, пока модель размышляет."
+  },
+  "codeLabThoughtThinking": "Thinking…",
+  "@codeLabThoughtThinking": {
+    "description": "Заголовок блока размышлений, пока модель размышляет."
+  },
+  "codeLabThoughtThoughts": "Thoughts",
+  "@codeLabThoughtThoughts": {
+    "description": "Заголовок завершённого блока размышлений."
+  },
+  "codeLabTurnRunning": "Turn running",
+  "@codeLabTurnRunning": {
+    "description": "Чип в шапке сессии: ход идёт."
+  },
+  "codeLabTurnWaitingApproval": "Waiting for approval",
+  "@codeLabTurnWaitingApproval": {
+    "description": "Чип в шапке сессии: ход ждёт решения об одобрении."
+  },
+  "codeLabTurnCancelling": "Cancelling…",
+  "@codeLabTurnCancelling": {
+    "description": "Чип в шапке сессии: ход отменяется."
+  },
+  "codeLabPlanTitle": "Plan",
+  "@codeLabPlanTitle": {
+    "description": "Заголовок секции плана в панели активности."
+  },
+  "codeLabPlanCurrent": "Current:",
+  "@codeLabPlanCurrent": {
+    "description": "Метка перед текущей задачей плана в свёрнутой секции."
+  },
+  "codeLabPlanLeft": "{count} left",
+  "@codeLabPlanLeft": {
+    "description": "Сколько задач плана ждёт выполнения, в свёрнутой секции плана.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "codeLabPlanTasks": "{count, plural, other{{count} Tasks}}",
+  "@codeLabPlanTasks": {
+    "description": "Число задач плана, пока ни одна не выполнена. Плейсхолдер count — число задач.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "codeLabPlanClear": "Clear plan",
+  "@codeLabPlanClear": {
+    "description": "Подсказка кнопки скрытия плана."
+  },
+  "codeLabPlanBlockedBy": "blocked by {ids}",
+  "@codeLabPlanBlockedBy": {
+    "description": "Подпись задачи плана, которая ждёт другие задачи. ids — список вида «#1, #2», не переводить.",
+    "placeholders": {
+      "ids": {
+        "type": "String"
+      }
+    }
+  },
+  "codeLabPlanPriorityHigh": "High",
+  "@codeLabPlanPriorityHigh": {
+    "description": "Тег приоритета задачи плана: высокий."
+  },
+  "codeLabPlanPriorityMedium": "Medium",
+  "@codeLabPlanPriorityMedium": {
+    "description": "Тег приоритета задачи плана: средний."
+  },
+  "codeLabPlanPriorityLow": "Low",
+  "@codeLabPlanPriorityLow": {
+    "description": "Тег приоритета задачи плана: низкий."
+  },
+  "codeLabQueueTitle": "Queue",
+  "@codeLabQueueTitle": {
+    "description": "Заголовок секции очереди промптов в панели активности."
+  },
+  "codeLabQueueCount": "{count} queued",
+  "@codeLabQueueCount": {
+    "description": "Сколько сообщений стоит в очереди промптов.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "codeLabSidebarNewSession": "New session",
+  "@codeLabSidebarNewSession": {
+    "description": "Кнопка создания сессии в боковой панели."
+  },
+  "codeLabSidebarNewSessionTooltip": "New session ({shortcut})",
+  "@codeLabSidebarNewSessionTooltip": {
+    "description": "Подсказка свёрнутой кнопки создания сессии. shortcut — сочетание клавиш, не переводить.",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "codeLabSidebarSearchSessions": "Search sessions",
+  "@codeLabSidebarSearchSessions": {
+    "description": "Подсказка в поле поиска по сессиям."
+  },
+  "codeLabSidebarProjects": "Projects",
+  "@codeLabSidebarProjects": {
+    "description": "Заголовок списка проектов в боковой панели."
+  },
+  "codeLabSidebarOpenFolder": "Open folder…",
+  "@codeLabSidebarOpenFolder": {
+    "description": "Кнопка выбора папки проекта в боковой панели и её подсказка в свёрнутом режиме."
+  },
+  "codeLabSidebarSettings": "Settings",
+  "@codeLabSidebarSettings": {
+    "description": "Кнопка перехода в настройки в боковой панели и её подсказка."
+  },
+  "codeLabSidebarNoSessions": "No sessions yet",
+  "@codeLabSidebarNoSessions": {
+    "description": "Текст проекта без сессий в боковой панели."
+  },
+  "codeLabSidebarNoMatchingSessions": "No matching sessions",
+  "@codeLabSidebarNoMatchingSessions": {
+    "description": "Текст проекта, в котором ни одна сессия не подошла под поиск."
+  },
+  "codeLabSidebarLoadMore": "Load more sessions",
+  "@codeLabSidebarLoadMore": {
+    "description": "Кнопка догрузки следующей страницы списка сессий."
+  },
+  "codeLabAppBarSearch": "Search or run a command",
+  "@codeLabAppBarSearch": {
+    "description": "Подпись поля app bar, которое открывает палитру команд."
+  },
+  "codeLabAppBarSearchTooltip": "Search or run a command ({shortcut})",
+  "@codeLabAppBarSearchTooltip": {
+    "description": "Подсказка кнопки поиска в узком app bar. shortcut — сочетание клавиш, не переводить.",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "codeLabPaletteTitle": "Command palette",
+  "@codeLabPaletteTitle": {
+    "description": "Заголовок поверхности палитры команд."
+  },
+  "codeLabPaletteEmpty": "No matching commands",
+  "@codeLabPaletteEmpty": {
+    "description": "Текст палитры, когда ни одна команда не подошла под запрос."
+  },
+  "codeLabPaletteAgentSection": "From agent",
+  "@codeLabPaletteAgentSection": {
+    "description": "Заголовок секции команд, объявленных агентом, в палитре команд."
+  },
+  "codeLabPaneFiles": "Files",
+  "@codeLabPaneFiles": {
+    "description": "Название панели дока: дерево файлов проекта."
+  },
+  "codeLabPaneDiff": "Diff",
+  "@codeLabPaneDiff": {
+    "description": "Название панели дока: различия файлов."
+  },
+  "codeLabPaneTerminal": "Terminal",
+  "@codeLabPaneTerminal": {
+    "description": "Название панели дока: терминал."
+  },
+  "codeLabPanePlan": "Plan",
+  "@codeLabPanePlan": {
+    "description": "Название панели дока: план хода."
+  },
+  "codeLabPaneTimeline": "Timeline",
+  "@codeLabPaneTimeline": {
+    "description": "Название панели дока: хронология сессии."
+  },
+  "codeLabPaneAgents": "Agents",
+  "@codeLabPaneAgents": {
+    "description": "Название панели дока: субагенты сессии."
+  },
+  "codeLabPaneUsage": "Usage",
+  "@codeLabPaneUsage": {
+    "description": "Название панели дока: расход токенов и стоимость."
+  },
+  "codeLabPaneBranches": "Branches",
+  "@codeLabPaneBranches": {
+    "description": "Название панели дока: ветки сессии."
+  },
+  "codeLabPaneProtocol": "Protocol",
+  "@codeLabPaneProtocol": {
+    "description": "Название панели дока: протокол ACP."
+  },
+  "codeLabTerminalNoSession": "Open a session to use the terminal",
+  "@codeLabTerminalNoSession": {
+    "description": "Текст панели Terminal, когда нет открытой сессии."
+  },
+  "codeLabTerminalNew": "New terminal",
+  "@codeLabTerminalNew": {
+    "description": "Кнопка панели Terminal без вкладок: открыть первый терминал."
+  },
+  "codeLabAgentsTitle": "Subagents",
+  "@codeLabAgentsTitle": {
+    "description": "Начало заголовка панели Agents, после него идут счётчики состояний."
+  },
+  "codeLabAgentsSteps": "Steps",
+  "@codeLabAgentsSteps": {
+    "description": "Заголовок дерева шагов выбранного субагента."
+  },
+  "codeLabAgentsStateRunning": "running",
+  "@codeLabAgentsStateRunning": {
+    "description": "Слово состояния субагента в строке панели Agents: выполняется. Строчные буквы."
+  },
+  "codeLabAgentsStateWaiting": "waiting for approval",
+  "@codeLabAgentsStateWaiting": {
+    "description": "Слово состояния субагента: ждёт решения об одобрении. Строчные буквы."
+  },
+  "codeLabAgentsStateDone": "done",
+  "@codeLabAgentsStateDone": {
+    "description": "Слово состояния субагента: завершён. Строчные буквы."
+  },
+  "codeLabAgentsStateFailed": "failed",
+  "@codeLabAgentsStateFailed": {
+    "description": "Слово состояния субагента: завершился ошибкой. Строчные буквы."
+  },
+  "codeLabAgentsStateCancelled": "cancelled",
+  "@codeLabAgentsStateCancelled": {
+    "description": "Слово состояния субагента: отменён. Строчные буквы."
+  },
+  "codeLabAgentsCountRunning": "{count, plural, other{{count} running}}",
+  "@codeLabAgentsCountRunning": {
+    "description": "Счётчик в заголовке панели Agents: сколько субагентов выполняется.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "codeLabAgentsCountWaiting": "{count, plural, other{{count} waiting for approval}}",
+  "@codeLabAgentsCountWaiting": {
+    "description": "Счётчик в заголовке панели Agents: сколько субагентов ждёт одобрения.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "codeLabAgentsCountDone": "{count} done",
+  "@codeLabAgentsCountDone": {
+    "description": "Счётчик в заголовке панели Agents: сколько субагентов завершено.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "codeLabAgentsCountFailed": "{count} failed",
+  "@codeLabAgentsCountFailed": {
+    "description": "Счётчик в заголовке панели Agents: сколько субагентов завершилось ошибкой.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "codeLabAgentsCountCancelled": "{count} cancelled",
+  "@codeLabAgentsCountCancelled": {
+    "description": "Счётчик в заголовке панели Agents: сколько субагентов отменено.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "codeLabFileBinary": "Binary file ({sizeLabel})",
+  "@codeLabFileBinary": {
+    "description": "Текст просмотра файла, который не текст. sizeLabel — готовый размер от app, например «12 KB».",
+    "placeholders": {
+      "sizeLabel": {
+        "type": "String"
+      }
+    }
+  },
+  "codeLabFileTooLarge": "File too large to preview ({sizeLabel})",
+  "@codeLabFileTooLarge": {
+    "description": "Текст просмотра файла, когда файл больше предела просмотра. sizeLabel — готовый размер от app.",
+    "placeholders": {
+      "sizeLabel": {
+        "type": "String"
+      }
+    }
+  },
+  "codeLabFileSecretWarning": "This file may contain secrets.",
+  "@codeLabFileSecretWarning": {
+    "description": "Предупреждение над просмотром файла, чьё имя похоже на файл с секретами. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabFileOutsideLink": "outside, not opened",
+  "@codeLabFileOutsideLink": {
+    "description": "Подпись ссылки дерева файлов, которая ведёт за пределы проекта и не открывается. Метка security (D14): перевод не смягчает смысл. "
+  },
+  "codeLabUsageLoading": "Loading usage history",
+  "@codeLabUsageLoading": {
+    "description": "Подпись индикатора загрузки панели Usage для скринридера."
+  },
+  "codeLabUsageRebuild": "Rebuild from log",
+  "@codeLabUsageRebuild": {
+    "description": "Кнопка панели Usage: пересобрать учёт расхода из журнала сессий."
+  },
+  "codeLabUsageExportCsv": "Export CSV",
+  "@codeLabUsageExportCsv": {
+    "description": "Кнопка панели Usage: выгрузить расход в файл CSV. CSV — название формата, не переводить."
+  },
+  "codeLabUsagePerTurn": "Per turn",
+  "@codeLabUsagePerTurn": {
+    "description": "Заголовок таблицы расхода по ходам в панели Usage."
+  },
+  "codeLabUsagePerModel": "Per model",
+  "@codeLabUsagePerModel": {
+    "description": "Заголовок таблицы расхода по моделям в панели Usage."
+  },
+  "codeLabUsageColumnInput": "Input",
+  "@codeLabUsageColumnInput": {
+    "description": "Заголовок столбца входных токенов в таблицах Usage. Короткий."
+  },
+  "codeLabUsageColumnOutput": "Output",
+  "@codeLabUsageColumnOutput": {
+    "description": "Заголовок столбца выходных токенов в таблицах Usage. Короткий."
+  },
+  "codeLabUsageColumnCost": "Cost",
+  "@codeLabUsageColumnCost": {
+    "description": "Заголовок столбца стоимости в таблицах Usage. Короткий."
+  },
+  "codeLabUsageRunning": "running",
+  "@codeLabUsageRunning": {
+    "description": "Тег строки хода, который ещё идёт, в таблице Usage. Строчные буквы."
+  },
+  "codeLabLayoutAppBar": "App bar",
+  "@codeLabLayoutAppBar": {
+    "description": "Подпись для скринридера области app bar в раскладке рабочего места."
+  },
+  "codeLabLayoutSessionsSidebar": "Sessions sidebar",
+  "@codeLabLayoutSessionsSidebar": {
+    "description": "Подпись для скринридера области боковой панели сессий."
+  },
+  "codeLabLayoutSessionPane": "Session pane",
+  "@codeLabLayoutSessionPane": {
+    "description": "Подпись для скринридера области сессии с лентой и композером."
+  },
+  "codeLabLayoutToolDock": "Tool dock",
+  "@codeLabLayoutToolDock": {
+    "description": "Подпись для скринридера области дока инструментов."
+  },
+  "codeLabSettingsTitle": "Settings",
+  "@codeLabSettingsTitle": {
+    "description": "Заголовок окна настроек в строке заголовка навигации настроек."
+  },
+  "codeLabSettingsFind": "Find a setting",
+  "@codeLabSettingsFind": {
+    "description": "Подсказка в поле поиска по настройкам."
+  },
+  "codeLabSettingsNoMatch": "No settings match \"{query}\"",
+  "@codeLabSettingsNoMatch": {
+    "description": "Строка вместо пунктов навигации настроек, когда поиск ничего не нашёл. query — текст запроса пользователя, не переводить.",
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "codeLabStatusTableActions": "Actions",
+  "@codeLabStatusTableActions": {
+    "description": "Подпись для скринридера столбца действий таблицы состояния."
+  },
+  "codeLabMarkdownSelectAll": "Select all",
+  "@codeLabMarkdownSelectAll": {
+    "description": "Пункт контекстного меню выделения ответа агента."
+  },
+  "codeLabMarkdownNestingTooDeep": "Shown as plain text: nesting is too deep.",
+  "@codeLabMarkdownNestingTooDeep": {
+    "description": "Пояснение под блоком, который не удалось разобрать как markdown из-за глубокой вложенности."
+  },
+  "codeLabMarkdownTaskDone": "Task done",
+  "@codeLabMarkdownTaskDone": {
+    "description": "Подпись для скринридера отмеченного флажка списка задач в ответе агента."
+  },
+  "codeLabMarkdownTaskOpen": "Task open",
+  "@codeLabMarkdownTaskOpen": {
+    "description": "Подпись для скринридера неотмеченного флажка списка задач в ответе агента."
+  },
+  "codeLabMarkdownImage": "Image",
+  "@codeLabMarkdownImage": {
+    "description": "Начало подписи заглушки изображения в ответе агента, дальше идут хост и имя файла."
+  },
+  "codeLabMarkdownShowImage": "Show image",
+  "@codeLabMarkdownShowImage": {
+    "description": "Кнопка заглушки изображения: загрузить и показать картинку."
   }
 }

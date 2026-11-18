@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
+import '../l10n/strings.dart';
 import 'codelab_code_block.dart';
 import 'codelab_code_highlighter.dart';
 import 'codelab_markdown_row.dart';
@@ -137,7 +138,9 @@ class CodeLabMarkdownConfig {
         child: Checkbox(
           checked: checked,
           onChanged: null,
-          semanticLabel: checked ? 'Task done' : 'Task open',
+          semanticLabel: checked
+              ? codeLabStringsOf(context).codeLabMarkdownTaskDone
+              : codeLabStringsOf(context).codeLabMarkdownTaskOpen,
         ),
       ),
       const SizedBox(width: 8),

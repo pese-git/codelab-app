@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:codelab_ui/codelab_ui.dart' show CodeLabLocalizations;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -53,7 +54,12 @@ class CodeLabApp extends StatelessWidget {
         builder: (context, language) => FluentApp(
           title: 'CodeLab',
           locale: language.locale,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          // Делегат кита рядом с делегатами app: тексты `codelab_ui` берутся из
+          // его каталога, а без делегата кит остался бы на английском (D4).
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            CodeLabLocalizations.delegate,
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: _CodeLabHome(startOnLaunch: startOnLaunch),
         ),

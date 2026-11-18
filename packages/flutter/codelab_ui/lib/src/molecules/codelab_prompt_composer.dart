@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import '../organisms/codelab_command_palette_surface.dart';
 import 'codelab_command_action.dart';
 import 'codelab_config_option.dart';
@@ -17,7 +18,7 @@ class CodeLabPromptComposer extends StatefulWidget {
     this.onCancel,
     this.initialPrompt = '',
     this.draftRevision = 0,
-    this.placeholder = 'Message the agent',
+    this.placeholder,
     this.isSubmitting = false,
     this.canCancel = false,
     this.enabled = true,
@@ -47,7 +48,10 @@ class CodeLabPromptComposer extends StatefulWidget {
   /// осталось бы пустым (найдено e2e R-20, change
   /// `add-command-palette-agent-commands`).
   final int draftRevision;
-  final String placeholder;
+
+  /// Подсказка пустого поля; `null` — текст кита («Message the agent»,
+  /// `add-desktop-localization`, D4).
+  final String? placeholder;
 
   /// Shows the Send button's loading spinner. Purely visual — it does not
   /// disable typing or submitting: [onSubmit] must stay reachable while a
@@ -160,7 +164,9 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
             enabled: widget.enabled,
             minLines: 1,
             maxLines: 4,
-            placeholder: widget.placeholder,
+            placeholder:
+                widget.placeholder ??
+                codeLabStringsOf(context).codeLabComposerPlaceholder,
             suffix: _buildCommandHintSuffix(),
             onSubmitted: (_) => _submit(),
           ),
@@ -168,7 +174,7 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
         const SizedBox(width: 8),
         CodeLabButton(
           key: const ValueKey('composer-send-button'),
-          label: 'Send',
+          label: codeLabStringsOf(context).codeLabActionSend,
           icon: FluentIcons.send,
           emphasis: CodeLabButtonEmphasis.primary,
           isLoading: widget.isSubmitting,
@@ -178,7 +184,7 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
           const SizedBox(width: 8),
           CodeLabButton(
             key: const ValueKey('composer-cancel-button'),
-            label: 'Cancel',
+            label: codeLabStringsOf(context).codeLabActionCancel,
             icon: FluentIcons.cancel,
             onPressed: widget.enabled ? widget.onCancel : null,
           ),

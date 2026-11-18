@@ -228,4 +228,20 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('превью на русском показывает перевод кита, а текст агента нет', (
+    tester,
+  ) async {
+    await tester.pumpWidget(codelabApprovalPromptRuPreview());
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Разрешить'), findsOneWidget);
+    expect(find.text('Отклонить'), findsOneWidget);
+    expect(find.text('Allow'), findsNothing);
+    // Причина запроса приходит от агента и не переводится (D7).
+    expect(
+      find.text('The agent wants to verify the Flutter UI package.'),
+      findsOneWidget,
+    );
+  });
 }

@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 
 /// Что показывает просмотр файла (закрытая иерархия).
 ///
@@ -207,9 +208,15 @@ class _CodeLabFilePreviewState extends State<CodeLabFilePreview> {
       case CodeLabFilePreviewLoading():
         return const Center(child: CodeLabProgressIndicator());
       case CodeLabFilePreviewBinary(:final sizeLabel):
-        return _Notice('Binary file ($sizeLabel)', color: muted);
+        return _Notice(
+          codeLabStringsOf(context).codeLabFileBinary(sizeLabel),
+          color: muted,
+        );
       case CodeLabFilePreviewTooLarge(:final sizeLabel):
-        return _Notice('File too large to preview ($sizeLabel)', color: muted);
+        return _Notice(
+          codeLabStringsOf(context).codeLabFileTooLarge(sizeLabel),
+          color: muted,
+        );
       case CodeLabFilePreviewFailed(:final message):
         return _Notice(message, color: Colors.warningPrimaryColor);
       case CodeLabFilePreviewText():
@@ -293,7 +300,7 @@ class _PathRow extends StatelessWidget {
           if (onCopyPath != null)
             CodeLabButton(
               key: const ValueKey('file-preview-copy-path'),
-              label: 'Copy path',
+              label: codeLabStringsOf(context).codeLabActionCopyPath,
               icon: FluentIcons.copy,
               emphasis: CodeLabButtonEmphasis.subtle,
               onPressed: () => onCopyPath!(relativePath),
@@ -309,10 +316,10 @@ class _SecretWarning extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const KeyedSubtree(
-      key: ValueKey('file-preview-secret-warning'),
+    return KeyedSubtree(
+      key: const ValueKey('file-preview-secret-warning'),
       child: InfoBar(
-        title: Text('This file may contain secrets.'),
+        title: Text(codeLabStringsOf(context).codeLabFileSecretWarning),
         severity: InfoBarSeverity.warning,
       ),
     );

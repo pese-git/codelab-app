@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import 'codelab_markdown_row.dart';
 import 'codelab_markdown_scope.dart';
 import 'codelab_markdown_stats.dart';
@@ -148,6 +149,7 @@ class _Placeholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final resources = FluentTheme.of(context).resources;
+    final strings = codeLabStringsOf(context);
     final uri = Uri.tryParse(url);
     // Хост и имя файла приходят из недоверенного адреса: показываются с
     // видимыми escape-последовательностями (D5, R4).
@@ -178,7 +180,11 @@ class _Placeholder extends StatelessWidget {
               const SizedBox(width: 8),
               Flexible(
                 child: CodeLabText(
-                  ['Image', host, name].where((s) => s.isNotEmpty).join(' · '),
+                  [
+                    strings.codeLabMarkdownImage,
+                    host,
+                    name,
+                  ].where((s) => s.isNotEmpty).join(' · '),
                   role: CodeLabTextRole.caption,
                 ),
               ),
@@ -187,7 +193,7 @@ class _Placeholder extends StatelessWidget {
                 // Кнопка не входит в выделение ответа.
                 SelectionContainer.disabled(
                   child: CodeLabButton(
-                    label: 'Show image',
+                    label: strings.codeLabMarkdownShowImage,
                     emphasis: CodeLabButtonEmphasis.subtle,
                     onPressed: onShow,
                   ),

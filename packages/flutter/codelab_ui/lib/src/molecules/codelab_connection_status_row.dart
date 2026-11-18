@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 
 enum CodeLabConnectionStatus {
   idle,
@@ -36,7 +37,10 @@ class CodeLabConnectionStatusRow extends StatelessWidget {
         // Гибкий, как и подписи профиля: в окне телефона (390 px) строка
         // иначе переполнялась (change `redesign-workbench-shell`, 5.3).
         Flexible(
-          child: CodeLabStatusIndicator(label: _statusLabel, tone: _statusTone),
+          child: CodeLabStatusIndicator(
+            label: _statusLabel(context),
+            tone: _statusTone,
+          ),
         ),
         const SizedBox(width: 10),
         CodeLabBadge(label: transportLabel, tone: CodeLabTone.accent),
@@ -64,15 +68,18 @@ class CodeLabConnectionStatusRow extends StatelessWidget {
     );
   }
 
-  String get _statusLabel {
+  String _statusLabel(BuildContext context) {
+    final strings = codeLabStringsOf(context);
     return switch (status) {
-      CodeLabConnectionStatus.idle => 'Idle',
-      CodeLabConnectionStatus.connecting => 'Connecting',
-      CodeLabConnectionStatus.connected => 'Connected',
-      CodeLabConnectionStatus.reconnecting => 'Reconnecting',
-      CodeLabConnectionStatus.disconnected => 'Disconnected',
-      CodeLabConnectionStatus.lost => 'Connection lost',
-      CodeLabConnectionStatus.failed => 'Failed',
+      CodeLabConnectionStatus.idle => strings.codeLabConnectionIdle,
+      CodeLabConnectionStatus.connecting => strings.codeLabConnectionConnecting,
+      CodeLabConnectionStatus.connected => strings.codeLabConnectionConnected,
+      CodeLabConnectionStatus.reconnecting =>
+        strings.codeLabConnectionReconnecting,
+      CodeLabConnectionStatus.disconnected =>
+        strings.codeLabConnectionDisconnected,
+      CodeLabConnectionStatus.lost => strings.codeLabConnectionLost,
+      CodeLabConnectionStatus.failed => strings.codeLabConnectionFailed,
     };
   }
 

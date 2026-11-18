@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
 import '../atomics/codelab_pressable.dart';
+import '../l10n/strings.dart';
 
 /// Один сегмент строки статуса сессии: готовая подпись, подсказка и тон.
 ///
@@ -168,9 +169,11 @@ class CodeLabSessionStatusBar extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
       if (data.busy)
-        const CodeLabProgressIndicator(
+        CodeLabProgressIndicator(
           size: 14,
-          semanticLabel: 'Turn in progress',
+          semanticLabel: codeLabStringsOf(
+            context,
+          ).codeLabStatusBarTurnInProgress,
         )
       else ...[
         if (data.usage != null)

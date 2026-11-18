@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 
 /// Данные одной вкладки терминала для [CodeLabTerminalPane].
 ///
@@ -82,18 +83,22 @@ class CodeLabTerminalPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    final strings = codeLabStringsOf(context);
     final text = disclosure;
     final Widget body;
     if (!hasSession) {
-      body = const _Empty(
+      body = _Empty(
         child: CodeLabText(
-          'Open a session to use the terminal',
+          strings.codeLabTerminalNoSession,
           role: CodeLabTextRole.body,
         ),
       );
     } else if (tabs.isEmpty) {
       body = _Empty(
-        child: Button(onPressed: onNewTab, child: const Text('New terminal')),
+        child: Button(
+          onPressed: onNewTab,
+          child: Text(strings.codeLabTerminalNew),
+        ),
       );
     } else {
       body = content;

@@ -5,7 +5,7 @@
 // `FluentApp` получает язык из `AppLanguageCubit`, а при смене языка не
 // пересоздаётся: меняется только `locale`, поэтому State виджетов (ввод
 // композера, фокус) сохраняется. Делегат кита `CodeLabLocalizations`
-// появляется в задаче 1.8; его проверка добавляется вместе с ним.
+// подключён задачей 2.3: тексты `codelab_ui` переводятся вместе с app.
 
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/language/app_language_cubit.dart';
@@ -58,6 +58,23 @@ void main() {
     );
     final context = tester.element(find.byType(CodeLabPromptComposer));
     expect(FluentLocalizations.of(context), isNotNull);
+    // Делегат кита рядом с делегатами app (D4, задача 2.3).
+    expect(app.localizationsDelegates, contains(CodeLabLocalizations.delegate));
+    expect(CodeLabLocalizations.of(context), isNotNull);
+  });
+
+  testWidgets('язык ru переводит и тексты кита: название панели дока', (
+    tester,
+  ) async {
+    final binding = CodeLabTestBinding(
+      project: '/workspace',
+      locale: const Locale('ru'),
+    );
+    await pumpApp(tester, binding);
+
+    final context = tester.element(find.byType(CodeLabPromptComposer));
+    expect(CodeLabLocalizations.of(context)!.localeName, 'ru');
+    expect(toolPaneTitleOf(context, ToolPane.files), 'Файлы');
   });
 
   testWidgets('CodeLabTestBinding() даёт en в первом кадре', (tester) async {

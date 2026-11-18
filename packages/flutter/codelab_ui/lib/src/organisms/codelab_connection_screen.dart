@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import '../molecules/molecules.dart';
 
 class CodeLabConnectionScreen extends StatelessWidget {
@@ -12,7 +13,7 @@ class CodeLabConnectionScreen extends StatelessWidget {
     this.description,
     this.onConnect,
     this.onReconnect,
-    this.reconnectLabel = 'Reconnect',
+    this.reconnectLabel,
     this.onConfigureConnection,
     this.extraAction,
     this.isBusy = false,
@@ -28,8 +29,9 @@ class CodeLabConnectionScreen extends StatelessWidget {
   final VoidCallback? onReconnect;
 
   /// Подпись кнопки повтора: хост без ручного Connect называет её `Retry`
-  /// (design.md change `require-project-folder`, D18); по умолчанию прежняя.
-  final String reconnectLabel;
+  /// (design.md change `require-project-folder`, D18); `null` — текст кита
+  /// («Reconnect»/«Переподключиться», `add-desktop-localization`, D4).
+  final String? reconnectLabel;
   final VoidCallback? onConfigureConnection;
 
   /// Действие хоста без знания о его смысле (например, «Add provider»,
@@ -40,6 +42,7 @@ class CodeLabConnectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = codeLabStringsOf(context);
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
@@ -97,19 +100,19 @@ class CodeLabConnectionScreen extends StatelessWidget {
                     ?extraAction,
                     if (onConfigureConnection != null)
                       CodeLabButton(
-                        label: 'Configure connection',
+                        label: strings.codeLabConnectionScreenConfigure,
                         icon: FluentIcons.settings,
                         onPressed: isBusy ? null : onConfigureConnection,
                       ),
                     if (onReconnect != null)
                       CodeLabButton(
-                        label: reconnectLabel,
+                        label: reconnectLabel ?? strings.codeLabActionReconnect,
                         icon: FluentIcons.refresh,
                         onPressed: isBusy ? null : onReconnect,
                       ),
                     if (onConnect != null)
                       CodeLabButton(
-                        label: 'Connect',
+                        label: strings.codeLabActionConnect,
                         icon: FluentIcons.plug_connected,
                         // Основная кнопка одна: с действием хоста оно и есть
                         // основное, «Connect» — обычная.

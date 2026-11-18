@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 
 import '../atomics/atomics.dart';
 import '../atomics/codelab_pressable.dart';
+import '../l10n/strings.dart';
 import '../rendering/escape_for_display.dart';
 
 /// Карточка сводки панели Usage (`usage-card-<id>`; design.md change
@@ -225,6 +226,7 @@ class _CodeLabUsagePaneState extends State<CodeLabUsagePane> {
   @override
   Widget build(BuildContext context) {
     final widget = this.widget;
+    final strings = codeLabStringsOf(context);
     final progress = widget.loading || widget.refreshing;
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -243,12 +245,12 @@ class _CodeLabUsagePaneState extends State<CodeLabUsagePane> {
                 ),
               ),
               if (progress)
-                const Padding(
-                  padding: EdgeInsets.only(right: 8),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
                   child: CodeLabProgressIndicator(
-                    key: ValueKey('usage-progress'),
+                    key: const ValueKey('usage-progress'),
                     size: 14,
-                    semanticLabel: 'Loading usage history',
+                    semanticLabel: strings.codeLabUsageLoading,
                   ),
                 ),
             ],
@@ -263,13 +265,13 @@ class _CodeLabUsagePaneState extends State<CodeLabUsagePane> {
                   if (widget.showRebuild)
                     CodeLabButton(
                       key: const ValueKey('usage-rebuild'),
-                      label: 'Rebuild from log',
+                      label: strings.codeLabUsageRebuild,
                       onPressed: widget.onRebuild,
                     ),
                   if (widget.showExport)
                     CodeLabButton(
                       key: const ValueKey('usage-export'),
-                      label: 'Export CSV',
+                      label: strings.codeLabUsageExportCsv,
                       onPressed: widget.onExport,
                     ),
                 ],
@@ -297,7 +299,7 @@ class _CodeLabUsagePaneState extends State<CodeLabUsagePane> {
           if (widget.budget case final budget?) _BudgetView(budget: budget),
           if (widget.turns.isNotEmpty)
             _Table(
-              title: 'Per turn',
+              title: strings.codeLabUsagePerTurn,
               rows: widget.turns,
               children: [
                 for (final turn in widget.turns)
@@ -310,7 +312,7 @@ class _CodeLabUsagePaneState extends State<CodeLabUsagePane> {
             ),
           if (widget.models.isNotEmpty)
             _Table(
-              title: 'Per model',
+              title: strings.codeLabUsagePerModel,
               rows: widget.models,
               children: [
                 for (final (index, model) in widget.models.indexed)
@@ -595,8 +597,7 @@ List<double> _measureColumns(BuildContext context, List<CodeLabUsageRow> rows) {
   }
 
   final widths = [
-    for (final header in const ['Input', 'Output', 'Cost'])
-      measure(header, caption),
+    for (final header in _columnTitles(context)) measure(header, caption),
   ];
   void visit(CodeLabUsageRow row, TextStyle? style) {
     final values = [row.input, row.output, row.cost];
@@ -614,6 +615,18 @@ List<double> _measureColumns(BuildContext context, List<CodeLabUsageRow> rows) {
   }
   // Запас в долю пикселя: округление раскладки не должно переносить значение.
   return [for (final w in widths) w.ceilToDouble() + 1 + _columnGap];
+}
+
+/// Заголовки числовых столбцов таблиц Usage на языке интерфейса: Input,
+/// Output, Cost. Одна функция на измерение ширины и на отрисовку, чтобы
+/// столбец вмещал именно показанный заголовок (русский длиннее, D8).
+List<String> _columnTitles(BuildContext context) {
+  final strings = codeLabStringsOf(context);
+  return [
+    strings.codeLabUsageColumnInput,
+    strings.codeLabUsageColumnOutput,
+    strings.codeLabUsageColumnCost,
+  ];
 }
 
 /// Таблица с заголовком секции и подписями столбцов.
@@ -645,11 +658,7 @@ class _Table extends StatelessWidget {
                 Expanded(
                   child: CodeLabText(title, role: CodeLabTextRole.strong),
                 ),
-                for (final (i, column) in const [
-                  'Input',
-                  'Output',
-                  'Cost',
-                ].indexed)
+                for (final (i, column) in _columnTitles(context).indexed)
                   SizedBox(
                     width: widths[i],
                     child: CodeLabText(
@@ -769,10 +778,10 @@ class _RowCells extends StatelessWidget {
                 ),
               Expanded(child: label),
               if (row.running)
-                const Padding(
-                  padding: EdgeInsets.only(left: 4),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
                   child: CodeLabBadge(
-                    label: 'running',
+                    label: codeLabStringsOf(context).codeLabUsageRunning,
                     tone: CodeLabTone.accent,
                   ),
                 ),

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/services.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 
 typedef CodeLabApprovalOptionSelected = void Function(String optionId);
 
@@ -260,7 +261,7 @@ class _AcpApprovalOptionTile extends StatelessWidget {
                       if (option.tone != CodeLabTone.neutral) ...[
                         const SizedBox(width: 8),
                         CodeLabBadge(
-                          label: _toneLabel(option.tone),
+                          label: _toneLabel(context, option.tone),
                           tone: option.tone,
                         ),
                       ],
@@ -296,16 +297,22 @@ class _SelectionBadge extends StatelessWidget {
       return const SizedBox(height: 22);
     }
 
-    return const CodeLabBadge(label: 'Selected', tone: CodeLabTone.success);
+    return CodeLabBadge(
+      label: codeLabStringsOf(context).codeLabApprovalSelected,
+      tone: CodeLabTone.success,
+    );
   }
 }
 
-String _toneLabel(CodeLabTone tone) {
+/// Подпись тона варианта одобрения на языке интерфейса (метка security: смысл
+/// «Safe»/«Risk» не должен смягчаться переводом, D14).
+String _toneLabel(BuildContext context, CodeLabTone tone) {
+  final strings = codeLabStringsOf(context);
   return switch (tone) {
-    CodeLabTone.neutral => 'Info',
-    CodeLabTone.accent => 'Option',
-    CodeLabTone.success => 'Safe',
-    CodeLabTone.warning => 'Review',
-    CodeLabTone.danger => 'Risk',
+    CodeLabTone.neutral => strings.codeLabApprovalToneInfo,
+    CodeLabTone.accent => strings.codeLabApprovalToneOption,
+    CodeLabTone.success => strings.codeLabApprovalToneSafe,
+    CodeLabTone.warning => strings.codeLabApprovalToneReview,
+    CodeLabTone.danger => strings.codeLabApprovalToneRisk,
   };
 }

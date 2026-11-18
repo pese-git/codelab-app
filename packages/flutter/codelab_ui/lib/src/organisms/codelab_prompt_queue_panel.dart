@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import 'codelab_activity_bar.dart';
 
 /// A prompt submitted while the session couldn't accept a new turn, held
@@ -50,16 +51,23 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = codeLabStringsOf(context);
     return Row(
       children: [
-        const Expanded(
-          child: CodeLabText('Queue', role: CodeLabTextRole.caption),
+        Expanded(
+          child: CodeLabText(
+            strings.codeLabQueueTitle,
+            role: CodeLabTextRole.caption,
+          ),
         ),
-        CodeLabText('$count queued', role: CodeLabTextRole.caption),
+        CodeLabText(
+          strings.codeLabQueueCount(count),
+          role: CodeLabTextRole.caption,
+        ),
         const SizedBox(width: 8),
         CodeLabIconButton(
           icon: FluentIcons.chrome_close,
-          tooltip: 'Clear all',
+          tooltip: strings.codeLabActionClearAll,
           onPressed: onClearAll,
         ),
       ],
@@ -120,6 +128,7 @@ class _EntryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = codeLabStringsOf(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -136,17 +145,17 @@ class _EntryRow extends StatelessWidget {
         const SizedBox(width: 4),
         CodeLabIconButton(
           icon: FluentIcons.edit,
-          tooltip: 'Edit',
+          tooltip: strings.codeLabActionEdit,
           onPressed: onEdit,
         ),
         CodeLabIconButton(
           icon: FluentIcons.send,
-          tooltip: 'Send now',
+          tooltip: strings.codeLabActionSendNow,
           onPressed: onSendNow,
         ),
         CodeLabIconButton(
           icon: FluentIcons.delete,
-          tooltip: 'Delete',
+          tooltip: strings.codeLabActionDelete,
           tone: CodeLabTone.danger,
           onPressed: onDelete,
         ),

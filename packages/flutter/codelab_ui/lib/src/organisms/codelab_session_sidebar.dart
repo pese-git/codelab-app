@@ -1,6 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/codelab_localizations.dart';
+import '../l10n/strings.dart';
 
 typedef CodeLabSessionSelected = void Function(String sessionId);
 
@@ -110,7 +112,7 @@ class CodeLabSessionSidebar extends StatefulWidget {
     this.onLoadMore,
     this.onOpenFolder,
     this.onSettings,
-    this.emptyLabel = 'No sessions yet',
+    this.emptyLabel,
     super.key,
   });
 
@@ -141,7 +143,10 @@ class CodeLabSessionSidebar extends StatefulWidget {
   final VoidCallback? onLoadMore;
   final VoidCallback? onOpenFolder;
   final VoidCallback? onSettings;
-  final String emptyLabel;
+
+  /// Текст проекта без сессий; `null` — текст кита («No sessions yet»,
+  /// `add-desktop-localization`, D4).
+  final String? emptyLabel;
 
   @override
   State<CodeLabSessionSidebar> createState() => _CodeLabSessionSidebarState();
@@ -191,6 +196,7 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
   }
 
   Widget _buildOpen(CodeLabSidebarProject? current) {
+    final strings = codeLabStringsOf(context);
     final query = _filter.text.trim().toLowerCase();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -200,7 +206,7 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
           child: _PaneRow(
             key: CodeLabSessionSidebar.newSessionKey,
             icon: FluentIcons.add,
-            label: 'New session',
+            label: strings.codeLabSidebarNewSession,
             trailing: widget.newSessionShortcut,
             onPressed: widget.onNewSession,
           ),
@@ -210,16 +216,19 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
           child: TextBox(
             key: CodeLabSessionSidebar.filterKey,
             controller: _filter,
-            placeholder: 'Search sessions',
+            placeholder: strings.codeLabSidebarSearchSessions,
             suffix: const Padding(
               padding: EdgeInsets.only(right: 8),
               child: Icon(FluentIcons.search, size: 12),
             ),
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(14, 4, 12, 4),
-          child: CodeLabText('Projects', role: CodeLabTextRole.strong),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 12, 4),
+          child: CodeLabText(
+            strings.codeLabSidebarProjects,
+            role: CodeLabTextRole.strong,
+          ),
         ),
         Expanded(
           child: ListView(
@@ -239,13 +248,13 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
               _PaneRow(
                 key: CodeLabSessionSidebar.openFolderKey,
                 icon: FluentIcons.open_folder_horizontal,
-                label: 'Open folder…',
+                label: strings.codeLabSidebarOpenFolder,
                 onPressed: widget.onOpenFolder,
               ),
               _PaneRow(
                 key: CodeLabSessionSidebar.settingsKey,
                 icon: FluentIcons.settings,
-                label: 'Settings',
+                label: strings.codeLabSidebarSettings,
                 onPressed: widget.onSettings,
               ),
             ],
@@ -256,6 +265,7 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
   }
 
   List<Widget> _projectGroup(CodeLabSidebarProject project, String query) {
+    final strings = codeLabStringsOf(context);
     final expanded =
         (project.current && !_currentCollapsed) || project.expanded;
     final sessions = [
@@ -287,7 +297,9 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
           Padding(
             padding: const EdgeInsets.fromLTRB(38, 6, 8, 6),
             child: CodeLabText(
-              query.isEmpty ? widget.emptyLabel : 'No matching sessions',
+              query.isEmpty
+                  ? widget.emptyLabel ?? strings.codeLabSidebarNoSessions
+                  : strings.codeLabSidebarNoMatchingSessions,
               role: CodeLabTextRole.caption,
             ),
           ),
@@ -303,7 +315,7 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
             child: _PaneRow(
               key: CodeLabSessionSidebar.loadMoreKey,
               icon: FluentIcons.chevron_down_med,
-              label: 'Load more sessions',
+              label: strings.codeLabSidebarLoadMore,
               onPressed: widget.onLoadMore,
             ),
           ),
@@ -312,13 +324,16 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
   }
 
   Widget _buildCompact(CodeLabSidebarProject? current) {
+    final strings = codeLabStringsOf(context);
     return Column(
       children: [
         const SizedBox(height: 6),
         _CompactButton(
           key: CodeLabSessionSidebar.newSessionKey,
           icon: FluentIcons.add,
-          tooltip: 'New session (${widget.newSessionShortcut})',
+          tooltip: strings.codeLabSidebarNewSessionTooltip(
+            widget.newSessionShortcut,
+          ),
           onPressed: widget.onNewSession,
         ),
         const Divider(),
@@ -340,13 +355,13 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
         _CompactButton(
           key: CodeLabSessionSidebar.openFolderKey,
           icon: FluentIcons.open_folder_horizontal,
-          tooltip: 'Open folder…',
+          tooltip: strings.codeLabSidebarOpenFolder,
           onPressed: widget.onOpenFolder,
         ),
         _CompactButton(
           key: CodeLabSessionSidebar.settingsKey,
           icon: FluentIcons.settings,
-          tooltip: 'Settings',
+          tooltip: strings.codeLabSidebarSettings,
           onPressed: widget.onSettings,
         ),
         const SizedBox(height: 6),
@@ -433,7 +448,7 @@ class _SessionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    final badge = _statusBadge(session.status);
+    final badge = _statusBadge(codeLabStringsOf(context), session.status);
     final row = HoverButton(
       key: CodeLabSessionSidebar.sessionKey(session.id),
       onPressed: onSelected,
@@ -517,14 +532,17 @@ class _CompactButton extends StatelessWidget {
 
 /// Бейдж статуса только у заметных состояний: обычная и завершённая сессия
 /// бейджа не получают, как на артборде Main.
-String? _statusBadge(CodeLabSessionStatus status) => switch (status) {
+String? _statusBadge(
+  CodeLabLocalizations strings,
+  CodeLabSessionStatus status,
+) => switch (status) {
   CodeLabSessionStatus.idle || CodeLabSessionStatus.completed => null,
-  CodeLabSessionStatus.running => 'Running',
-  CodeLabSessionStatus.awaitingApproval => 'Approval',
-  CodeLabSessionStatus.failed => 'Failed',
-  CodeLabSessionStatus.cancelled => 'Cancelled',
-  CodeLabSessionStatus.notLoaded => 'Not loaded',
-  CodeLabSessionStatus.detached => 'Detached',
+  CodeLabSessionStatus.running => strings.codeLabSessionRunning,
+  CodeLabSessionStatus.awaitingApproval => strings.codeLabSessionApproval,
+  CodeLabSessionStatus.failed => strings.codeLabSessionFailed,
+  CodeLabSessionStatus.cancelled => strings.codeLabSessionCancelled,
+  CodeLabSessionStatus.notLoaded => strings.codeLabSessionNotLoaded,
+  CodeLabSessionStatus.detached => strings.codeLabSessionDetached,
 };
 
 CodeLabTone _statusTone(CodeLabSessionStatus status) => switch (status) {
