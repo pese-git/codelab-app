@@ -185,7 +185,7 @@ void main() {
       await running;
 
       expect(
-        p.h.executor.services.approvalWait.total,
+        p.h.executor.services.approvalWait.totalAt(clock.now()),
         const Duration(seconds: 42),
       );
     },

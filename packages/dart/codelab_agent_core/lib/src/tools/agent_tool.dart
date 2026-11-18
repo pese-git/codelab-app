@@ -179,16 +179,55 @@ final class ToolServices {
   final TaskList tasks;
 }
 
-/// Sum of the waits for `PermissionGate` in the current turn.
+/// Счётчик времени ожидания человека в текущем ходе корня.
+///
+/// Почему: параллельная группа инструментов запрашивает одобрения одновременно,
+/// а сумма длительностей вычитала из времени хода больше настенного времени;
+/// кроме того, открытое ожидание должно останавливать время хода сразу, а не
+/// после ответа (`agent-loop` «Бюджет хода», `fix-usage-pane-live-cards` D6,
+/// Q3 (а), Q4 (а); `05-agent-loop.md` §5.2).
+///
+/// Для чего: итог — длина объединения интервалов ожидания, поэтому
+/// пересекающиеся ожидания считаются один раз.
+///
+/// Как использовать: `PermissionPolicy` вызывает [begin] перед запросом и
+/// [end] в `finally` (отмена тоже закрывает ожидание); цикл читает
+/// [totalAt] с текущим временем; в начале хода вызывается [reset]. Счётчик
+/// потомка свой, ожидание потомка время корня не останавливает.
 final class ApprovalWaitMeter {
-  var _total = Duration.zero;
+  var _closed = Duration.zero;
+  var _open = 0;
+  DateTime? _busySince;
 
-  Duration get total => _total;
+  /// Начало ожидания в момент [at]; вложенные и параллельные допустимы.
+  void begin(DateTime at) {
+    if (_open == 0) _busySince = at;
+    _open++;
+  }
 
-  void add(Duration wait) => _total += wait;
+  /// Конец одного ранее начатого ожидания в момент [at]; лишний вызов
+  /// без пары игнорируется.
+  void end(DateTime at) {
+    if (_open == 0) return;
+    _open--;
+    if (_open == 0) {
+      _closed += at.difference(_busySince!);
+      _busySince = null;
+    }
+  }
 
-  /// Called by the loop at the start of a turn.
-  void reset() => _total = Duration.zero;
+  /// Суммарное ожидание на момент [now]: закрытые отрезки плюс открытый.
+  Duration totalAt(DateTime now) {
+    final since = _busySince;
+    return since == null ? _closed : _closed + now.difference(since);
+  }
+
+  /// Вызывается циклом в начале хода.
+  void reset() {
+    _closed = Duration.zero;
+    _open = 0;
+    _busySince = null;
+  }
 }
 
 final class ToolExecutionResult {

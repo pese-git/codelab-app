@@ -99,6 +99,12 @@ abstract class UsageTotals with _$UsageTotals {
     /// Число шагов модели агрегата (`steps`; 0, если агент не прислал).
     @Default(0) int steps,
 
+    /// Число ходов агрегата (`turns`); `null` — агент не прислал или прислал
+    /// не целое >= 0 (design.md change `fix-usage-pane-live-cards`, D2).
+    /// У агрегата `turn` поля нет. Kit ходы не считает: значение приходит
+    /// готовым, а хост без него показывает только шаги.
+    int? turns,
+
     /// Причины неполноты (D6); пусто — сумма полная.
     @Default(<UsagePartial>{}) Set<UsagePartial> partial,
   }) = _UsageTotals;

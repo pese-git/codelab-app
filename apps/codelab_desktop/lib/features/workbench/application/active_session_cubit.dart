@@ -4,6 +4,7 @@ import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
         AgentCommandView,
+        ApprovalWaitView,
         ClientWorkspace,
         ClientWorkspaceException,
         Connected,
@@ -691,16 +692,29 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   String _usageCwd = '';
   UsagePaneData _usageCached = UsagePaneData.empty;
 
-  /// Статус сессии и признак ожидающих одобрений входят в ключ кэша: от них
-  /// зависят заголовок `This turn` / `Last turn` и признак тика блока
-  /// `Turn budget`, а `usage` при этом не меняется (D9).
+  /// Статус сессии и ожидания одобрений корня входят в ключ кэша: от них
+  /// зависят заголовок `This turn` / `Last turn`, признак тика и Time блока
+  /// `Turn budget`, а `usage` при этом не меняется (D9 change
+  /// `add-desktop-usage-pane`). Ожидания сравниваются по значению (D5 change
+  /// `fix-usage-pane-live-cards`): новая ревизия на каждый фрагмент ответа
+  /// их не меняет, а ответ на одобрение закрывает интервал и ключ меняет.
+  /// Одобрение потомка в `approvalWaits` не входит и ключ не трогает.
   SessionStatusView? _usageStatus;
-  bool _usageApprovals = false;
+  List<ApprovalWaitView> _usageWaits = const [];
 
   /// Вызовы ленты, по которым собраны подписи шагов: сравниваются по
   /// identity. Длины ленты мало — `tool_call_update` меняет вызов без новой
   /// записи, и подписи шагов (`UsageStepLabeler`) должны обновиться.
   List<ToolCallItem> _usageCalls = const [];
+
+  bool _sameUsageWaits(List<ApprovalWaitView> waits) {
+    if (identical(_usageWaits, waits)) return true;
+    if (_usageWaits.length != waits.length) return false;
+    for (var i = 0; i < waits.length; i++) {
+      if (_usageWaits[i] != waits[i]) return false;
+    }
+    return true;
+  }
 
   bool _sameUsageCalls(List<TranscriptItem> transcript) {
     var index = 0;
@@ -726,7 +740,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         identical(_usageInput, view.usage) &&
         identical(_usageLedgerInput, view.usageLedger) &&
         _usageStatus == view.status &&
-        _usageApprovals == view.pendingApprovals.isNotEmpty &&
+        _sameUsageWaits(view.approvalWaits) &&
         _sameUsageCalls(view.transcript)) {
       return _usageCached;
     }
@@ -735,7 +749,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     _usageInput = view.usage;
     _usageLedgerInput = view.usageLedger;
     _usageStatus = view.status;
-    _usageApprovals = view.pendingApprovals.isNotEmpty;
+    _usageWaits = view.approvalWaits;
     _usageCalls = [
       for (final item in view.transcript)
         if (item is ToolCallItem) item,

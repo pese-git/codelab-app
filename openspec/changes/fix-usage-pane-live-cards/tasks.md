@@ -58,7 +58,7 @@
 - [ ] 1.1 `[client]` Красные тесты kit, `codelab_client_core/test/usage/` (файл по образцу `usage_decoder_test.dart`):
   - `session.turns` 3 → `UsageTotals.turns` 3; строка `"3"` и `-1` → `null` и одно предупреждение `usage.decode_failed` с `field: session.turns`, снимок применён; без поля и у агрегата `turn` → `null` (acp-client-kit «Usage сессии», сценарий «Число ходов сессии»; D2);
   - `UsageLedgerView.turnCount` и `total` журнала после перехода на общий разбор прежние (тесты `usage_ledger_decoder_test.dart` зелёные без правки ожиданий, кроме нового поля `total.turns`).
-- [ ] 1.2 `[client]` Реализация: `UsageTotals.turns` (`usage_models.dart`, `build_runner` для freezed), разбор в `parseUsageTotals` (`usage_parsing.dart`), барель. Ожидания существующих тестов kit и `apps/codelab_cli`, которые сравнивают `UsageTotals` целиком, получают `turns`. Проверки: `web-compile`, `conformance:client`, `fvm dart test` в `apps/codelab_cli`, `test:e2e:cli:dart-agent`.
+- [x] 1.2 `[client]` Реализация: `UsageTotals.turns` (`usage_models.dart`, `build_runner` для freezed), разбор в `parseUsageTotals` (`usage_parsing.dart`), барель. Ожидания существующих тестов kit и `apps/codelab_cli`, которые сравнивают `UsageTotals` целиком, получают `turns`. Проверки: `web-compile`, `conformance:client`, `fvm dart test` в `apps/codelab_cli`, `test:e2e:cli:dart-agent`.
 - [ ] 1.3 `[desktop]` Красные тесты:
   1. `apps/codelab_desktop/test/features/usage/application/usage_pane_data_test.dart`, источник карточек (agent-workbench-ui «Панель Usage», сценарии «Карточки во время хода», «Карточки после ответа журнала», «Журнал отстал после сбоя», «Агент без журнала»; D1, D2):
      - `ledger.seq ≥ usage.lastSeq` → `total` журнала, `<` → `usage.session`;
@@ -69,7 +69,7 @@
   2. тот же файл, Cost пустой сессии (сценарий «Пустая сессия»; D8, Q6 (а)): `—` и `no usage yet`, без тона, `price unknown` и `$0.00` нет. При нулевых шагах с причиной `noUsage` или с ненулевыми токенами — прежнее правило;
   3. тот же файл, строка состояния (сценарии «Журнал пересобран после хода», «Rebuild from log»; D7, Q5 (а)): `stale` и `missing` → `Ledger: up to date · N records` и подсказка `refreshed from the session journal (<reason>)`; `invalid`, `explicit`, незнакомая причина → `rebuilt from journal (<reason>) · N records` без подсказки;
   4. `packages/flutter/codelab_ui/test/codelab_usage_pane_test.dart`: подсказка строки состояния — `Tooltip` из данных; без подсказки `Tooltip` нет.
-- [ ] 1.4 `[desktop]` Реализация:
+- [x] 1.4 `[desktop]` Реализация:
   1. `features/usage/application/usage_pane_data.dart`: выбор агрегата карточек (D1), Turns · steps по `turns` (D2);
   2. там же: Cost пустой сессии (D8);
   3. там же: `_statusLineOf` и поле подсказки в `UsagePaneData` (D7); `codelab_ui` — необязательная подсказка строки состояния в `CodeLabUsagePane` (`escapeForDisplay`, как у остальных подсказок), превью; маппер `presentation/usage_pane_view.dart`;
@@ -84,7 +84,7 @@
   - одно ожидание — прежнее значение (сценарий «Ожидание одобрения не тратит время хода»);
   - ожидание потомка не входит в счётчик корня (Q4 (а), поведение не меняется);
   - модульные тесты счётчика: пересекающиеся, вложенные и последовательные ожидания, `reset()`, отмена ожидания (закрытие в `finally`).
-- [ ] 2.2 `[agent]` Реализация: `ApprovalWaitMeter` — объединение ожиданий (`tools/agent_tool.dart`), пара «начать — закончить» в `permissions/policy.dart` вместо `add`. Барель; allowlist PKG-2 не меняется. Проверки: `web-compile`, `fvm dart test` в `codelab_agent_core`, `fvm dart analyze` в `codelab_agent_acp` и `codelab_embedded`.
+- [x] 2.2 `[agent]` Реализация: `ApprovalWaitMeter` — объединение ожиданий (`tools/agent_tool.dart`), пара «начать — закончить» в `permissions/policy.dart` вместо `add`. Барель; allowlist PKG-2 не меняется. Проверки: `web-compile`, `fvm dart test` в `codelab_agent_core`, `fvm dart analyze` в `codelab_agent_acp` и `codelab_embedded`.
 - [ ] 2.3 `[client]` Красные тесты kit, `codelab_client_core/test/` (рядом с тестами `pendingApprovals`), — acp-client-kit «Ожидания одобрений корня хода», все сценарии; D3:
   - метки `requestedAt` и `resolvedAt` равны меткам домена, порядок по `requestedAt`;
   - ожидающее — `resolvedAt == null`;
@@ -93,7 +93,7 @@
   - отмена хода и потеря соединения закрывают интервал;
   - решённое без `resolvedAt` не входит;
   - равенство по значению между ревизиями без изменения одобрений.
-- [ ] 2.4 `[client]` Реализация: вид ожиданий (freezed) и поле `SessionView`, проекция из `AcpSession` рядом с `pendingApprovalViews` (`transcript_projector.dart`) на общем разборе `subagentRequester`; барель; `build_runner`. Проверки: `web-compile`, `test:e2e:cli:dart-agent`.
+- [x] 2.4 `[client]` Реализация: вид ожиданий (freezed) и поле `SessionView`, проекция из `AcpSession` рядом с `pendingApprovalViews` (`transcript_projector.dart`) на общем разборе `subagentRequester`; барель; `build_runner`. Проверки: `web-compile`, `test:e2e:cli:dart-agent`.
 - [ ] 2.5 `[desktop]` Красные тесты (agent-workbench-ui «Бюджет хода в панели Usage»; D4, D5):
   - `test/features/usage/application/usage_budget_test.dart`, Time на момент `now`:
     - сценарии «Время идёт между шагами», «Одобрение не откатывает время» (`0:05` стоит, после ответа `0:08`), «Два одобрения одновременно» (`0:04`), «Одобрение субагента» (`3:05`, тик), «Отмена хода» (`3:07`), «Начало нового хода»;
@@ -108,8 +108,8 @@
     - `cancelling` тикает до снимка `turn`.
     
     Часы виджета — от `receivedAt` kit со сдвигом (D9 change `add-desktop-usage-pane`, «Тик»). Метки одобрений берутся из `SessionView` теста.
-- [ ] 2.6 `[desktop]` Реализация: `features/usage/application/usage_budget.dart` — интервалы и признак «живой» в `UsageBudgetData`, формула в `usageBudgetRowsAt`, признак тика (D4); `ActiveSessionCubit._usageOf` — ключ кэша по списку ожиданий (D5); `apps/codelab_desktop/AGENTS.md` («Блок Turn budget и тик»). Проверки: `fvm flutter analyze`, `fvm flutter test` в `apps/codelab_desktop`.
-- [ ] 2.7 `[desktop]` `integration_test/usage_pane_flow_test.dart` (приёмка `release/*`): сверить ожидания с D1 (scripted-агент без журнала уже показывает живые карточки; Dart-агент и встроенный после хода — журнал). Правка — только если ожидания меняются. В `feature/*` — только `fvm flutter analyze` (AGENTS.md §21).
+- [x] 2.6 `[desktop]` Реализация: `features/usage/application/usage_budget.dart` — интервалы и признак «живой» в `UsageBudgetData`, формула в `usageBudgetRowsAt`, признак тика (D4); `ActiveSessionCubit._usageOf` — ключ кэша по списку ожиданий (D5); `apps/codelab_desktop/AGENTS.md` («Блок Turn budget и тик»). Проверки: `fvm flutter analyze`, `fvm flutter test` в `apps/codelab_desktop`.
+- [x] 2.7 `[desktop]` `integration_test/usage_pane_flow_test.dart` (приёмка `release/*`): сверить ожидания с D1 (scripted-агент без журнала уже показывает живые карточки; Dart-агент и встроенный после хода — журнал). Правка — только если ожидания меняются. В `feature/*` — только `fvm flutter analyze` (AGENTS.md §21).
 
 ## 3. Закрытие (итерация 3)
 

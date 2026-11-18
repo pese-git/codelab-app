@@ -1,6 +1,7 @@
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
+import '../session/session_views.dart';
 import 'subagent_views.dart';
 import 'task_ops.dart';
 import 'tool_call_tree.dart';
@@ -84,6 +85,38 @@ List<PendingApprovalView> pendingApprovalViews(AcpSession session) => [
         _approvalView(turn, approval, _earliestPendingApprovalId(turn))!
             as PendingApprovalView,
 ];
+
+/// Ожидания одобрений корня последнего хода, по `requestedAt`.
+///
+/// Почему: Time панели Usage вычитает время, когда корень ждёт пользователя;
+/// ожидание потомка время корня не останавливает (design.md change
+/// `fix-usage-pane-live-cards`, D3, решение Q4 (а)).
+///
+/// Для чего: `SessionView.approvalWaits`. В список входят одобрения только
+/// корня (`subagentRequester` не разбирается — тем же правилом, что у
+/// `PendingApprovalView.subagent`) с известным `requestedAt`. Решённое
+/// одобрение без `resolvedAt` пропускается: хост принял бы его за ожидающее
+/// и заморозил Time. Предыдущие ходы не нужны: их ожидания закончились до
+/// `receivedAt` бюджета идущего хода.
+List<ApprovalWaitView> approvalWaitViews(AcpSession session) {
+  if (session.turns.isEmpty) {
+    return const [];
+  }
+  final waits = <ApprovalWaitView>[
+    for (final approval in session.turns.last.approvals.values)
+      if (approval.requestedAt != null &&
+          parseSubagentRequester(approval.subagentRequester) == null &&
+          (approval.status == ApprovalStatus.pending ||
+              approval.resolvedAt != null))
+        ApprovalWaitView(
+          requestedAt: approval.requestedAt!,
+          resolvedAt: approval.status == ApprovalStatus.pending
+              ? null
+              : approval.resolvedAt,
+        ),
+  ]..sort((a, b) => a.requestedAt.compareTo(b.requestedAt));
+  return List.unmodifiable(waits);
+}
 
 /// Транскрипт сессии, пересчитанный с нуля по всем ходам.
 ///

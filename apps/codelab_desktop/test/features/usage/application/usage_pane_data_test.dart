@@ -1137,6 +1137,14 @@ void main() {
       }
     });
 
+    test('нулевые шаги, токены нули, но reasoning > 0 — `price unknown`, не '
+        '`no usage yet`', () {
+      final d = emptyOf(_totals(_tokens(0, 0, reasoning: 5), steps: 0));
+
+      expect(_card(d, 'cost').value, '—');
+      expect(_card(d, 'cost').detail, 'price unknown');
+    });
+
     test('шаги есть, токены нули, цены нет — `price unknown`, не `no usage '
         'yet`', () {
       final d = emptyOf(_totals(_none, steps: 1));

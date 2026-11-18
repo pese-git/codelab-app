@@ -296,6 +296,20 @@ void main() {
       expect(tooltips.single.message, isNot(contains('\u001b')));
       expect(tooltips.single.message, contains(r'\u001b'));
     });
+
+    testWidgets(
+      'подсказка с bidi-символом U+202E экранируется в Tooltip.message',
+      (tester) async {
+        await tester.pumpWidget(
+          _pane(_full(statusHint: 'refreshed \u202Eevil')),
+        );
+
+        final tooltips = statusTooltips(tester);
+        expect(tooltips, hasLength(1));
+        expect(tooltips.single.message, isNot(contains('\u202E')));
+        expect(tooltips.single.message, contains(r'\u202e'));
+      },
+    );
   });
 
   testWidgets('the model of a step is the tooltip of its row', (tester) async {

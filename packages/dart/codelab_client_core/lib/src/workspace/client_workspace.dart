@@ -2023,6 +2023,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
           AgentCommandView.of(command),
       ],
       pendingApprovals: pendingApprovalViews(session),
+      approvalWaits: approvalWaitViews(session),
       plan: plan,
     );
   }

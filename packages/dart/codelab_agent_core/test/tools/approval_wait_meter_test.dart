@@ -109,6 +109,34 @@ void main() {
     expect(meter.totalAt(at(30)), Duration.zero);
   });
 
+  test('end без пары игнорируется и не портит последующий учёт', () {
+    // Убивает мутацию «удалён `if (_open == 0) return;` в end»: без защиты
+    // счётчик ушёл бы в минус, и следующая пара begin/end не закрылась бы.
+    meter.end(at(5));
+
+    expect(meter.totalAt(at(6)), Duration.zero);
+
+    meter
+      ..begin(at(10))
+      ..end(at(20));
+
+    expect(meter.totalAt(at(20)), s(10));
+    expect(meter.totalAt(at(100)), s(10));
+  });
+
+  test('reset() при открытом ожидании сбрасывает счётчик открытых', () {
+    // Убивает мутацию «удалён `_open = 0;` в reset»: остаток открытых
+    // ожиданий не дал бы следующему end закрыть отрезок, и итог рос бы.
+    meter
+      ..begin(at(0))
+      ..reset()
+      ..begin(at(100))
+      ..end(at(110));
+
+    expect(meter.totalAt(at(110)), s(10));
+    expect(meter.totalAt(at(500)), s(10));
+  });
+
   test('счётчики корня и потомка независимы (Q4 (а))', () {
     // У потомка свой `ToolServices` и свой счётчик: ожидание одобрения
     // потомка время корня не останавливает.

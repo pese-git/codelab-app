@@ -82,7 +82,9 @@ void main() {
       ToolContext ctx,
     ) async {
       await h.clock.elapse(const Duration(seconds: 60));
-      ctx.services.approvalWait.add(const Duration(seconds: 60));
+      ctx.services.approvalWait
+        ..begin(h.clock.now().subtract(const Duration(seconds: 60)))
+        ..end(h.clock.now());
       return null;
     }
 

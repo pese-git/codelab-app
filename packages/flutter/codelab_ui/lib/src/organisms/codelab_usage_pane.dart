@@ -144,7 +144,7 @@ class CodeLabUsageBudget {
 /// Как использовать: слот `ToolPane.usage` дока; app (`WorkbenchUsagePane`)
 /// передаёт карточки, строки и колбэки. Высота панели — по содержимому: прокрутку
 /// даёт вызывающий. Ключи: `usage-rebuild`, `usage-export`,
-/// `usage-ledger-status`, `usage-card-<id>`, `usage-turn-<id>`,
+/// `usage-ledger-status` (с необязательной подсказкой `statusHint`), `usage-card-<id>`, `usage-turn-<id>`,
 /// `usage-step-<id>`, `usage-model-<n>`, `usage-retry`, `usage-note`,
 /// `usage-progress`, блок бюджета — `usage-budget`, `usage-budget-title`,
 /// `usage-budget-<id>`, `usage-budget-note`.
@@ -153,6 +153,7 @@ class CodeLabUsagePane extends StatefulWidget {
     required this.title,
     this.cards = const [],
     this.statusLine,
+    this.statusHint,
     this.turns = const [],
     this.models = const [],
     this.budget,
@@ -173,6 +174,14 @@ class CodeLabUsagePane extends StatefulWidget {
 
   /// Строка состояния журнала (`usage-ledger-status`); `null` — нет.
   final String? statusLine;
+
+  /// Подсказка строки состояния (`Tooltip`); `null` — подсказки нет.
+  ///
+  /// Почему: штатное обновление ленивого кэша журнала показывается как
+  /// `up to date`, а причина остаётся рядом (`fix-usage-pane-live-cards`, D7).
+  /// Текст приходит готовым и проходит `escapeForDisplay`: причина — строка
+  /// агента. Без [statusLine] не используется.
+  final String? statusHint;
 
   /// Строки `Per turn` в порядке показа (от нового к старому).
   final List<CodeLabUsageRow> turns;
@@ -269,10 +278,13 @@ class _CodeLabUsagePaneState extends State<CodeLabUsagePane> {
           if (widget.statusLine case final line?)
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: CodeLabText(
-                line,
-                key: const ValueKey('usage-ledger-status'),
-                role: CodeLabTextRole.caption,
+              child: _withHint(
+                widget.statusHint,
+                CodeLabText(
+                  escapeForDisplay(line),
+                  key: const ValueKey('usage-ledger-status'),
+                  role: CodeLabTextRole.caption,
+                ),
               ),
             ),
           for (final (index, note) in widget.notes.indexed)
@@ -805,3 +817,9 @@ class _RowCells extends StatelessWidget {
     );
   }
 }
+
+/// Оборачивает [child] в `Tooltip`, если подсказка есть (D7); текст проходит
+/// `escapeForDisplay`, как остальные подсказки панели.
+Widget _withHint(String? hint, Widget child) => hint == null
+    ? child
+    : Tooltip(message: escapeForDisplay(hint), child: child);

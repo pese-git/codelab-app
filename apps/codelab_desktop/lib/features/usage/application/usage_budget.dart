@@ -16,6 +16,7 @@ library;
 
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
+        ApprovalWaitView,
         BudgetCost,
         SessionStatusView,
         SessionView,
@@ -64,13 +65,16 @@ final class UsageBudgetRow {
   final String? note;
 }
 
-/// Исходные числа Time для пересчёта на момент `now` (D9, «Время между
-/// снимками»).
+/// Исходные числа Time для пересчёта на момент `now` (D9 change
+/// `add-desktop-usage-pane`, «Время между снимками»; D4 change
+/// `fix-usage-pane-live-cards`).
 final class UsageBudgetTime {
   const UsageBudgetTime({
     required this.usedMs,
     required this.limitMs,
     required this.receivedAt,
+    this.waits = const [],
+    this.live = false,
   });
 
   final int usedMs;
@@ -78,6 +82,16 @@ final class UsageBudgetTime {
 
   /// Момент применения снимка по часам рабочего пространства.
   final DateTime receivedAt;
+
+  /// Ожидания одобрений корня текущего хода (`SessionView.approvalWaits`):
+  /// их объединение вычитается из времени между снимками, потому что цикл
+  /// агента на ожидании часы хода не считает (D4, Q2 (б)). Ожидание без
+  /// `resolvedAt` идёт до `now`.
+  final List<ApprovalWaitView> waits;
+
+  /// Бюджет живой: сессия `running` или `cancelling`, итогового снимка нет.
+  /// Только тогда Time растёт между снимками; иначе это `usedMs` как есть.
+  final bool live;
 }
 
 /// Блок `Turn budget` в данных панели (`UsagePaneData.budget`; `null` — блока
@@ -99,8 +113,10 @@ final class UsageBudgetData {
   /// Time; `null` — в `budget` нет `duration`.
   final UsageBudgetTime? time;
 
-  /// Таймер нужен: сессия `running`, одобрений нет, `budget` не итоговый и
-  /// есть `duration`. Он же включает добавку `now − receivedAt` к Time.
+  /// Таймер нужен: бюджет живой (`running` или `cancelling`, не итоговый),
+  /// есть `duration` и нет ожидающего одобрения корня. При ожидании корня
+  /// Time стоит, поэтому таймер не нужен; одобрение потомка тик не
+  /// останавливает (D4, Q4 (а)). Он же включает добавку к Time.
   final bool ticking;
 }
 
@@ -187,12 +203,15 @@ UsageBudgetData? usageBudgetDataOf(SessionView view) {
   final active =
       status == SessionStatusView.running ||
       status == SessionStatusView.cancelling;
+  // Живой бюджет: Time считается между снимками (D4). `cancelling` тоже
+  // живой: цикл считает время до `TurnEnded`.
+  final live = active && !budget.ended;
   final steps = budget.steps;
   final tokens = budget.tokens;
   final cost = budget.cost;
   final duration = budget.duration;
   return UsageBudgetData(
-    title: active && !budget.ended ? 'This turn' : 'Last turn',
+    title: live ? 'This turn' : 'Last turn',
     rows: [
       if (steps != null)
         _rowOf(
@@ -221,21 +240,58 @@ UsageBudgetData? usageBudgetDataOf(SessionView view) {
             usedMs: duration.usedMs,
             limitMs: duration.limitMs,
             receivedAt: budget.receivedAt,
+            waits: view.approvalWaits,
+            live: live,
           ),
     ticking:
-        status == SessionStatusView.running &&
-        view.pendingApprovals.isEmpty &&
-        !budget.ended &&
-        duration != null,
+        live &&
+        duration != null &&
+        !view.approvalWaits.any((wait) => wait.resolvedAt == null),
   );
 }
 
 /// Наибольшее значение int64 (литерал, а не `1 << 63`: тот уходит в минус).
 const _maxInt = 0x7fffffffffffffff;
 
-/// Строки блока в порядке Steps, Tokens, Cost, Time на момент [now]: Time —
-/// `usedMs + (now − receivedAt)`, если [UsageBudgetData.ticking] (отрицательная
-/// разность — ноль), иначе `usedMs`. Чистая: часы приходят аргументом.
+/// Миллисекунды, которые объединение ожиданий [waits] занимает на отрезке
+/// `(receivedAt, now]`. Пересекающиеся интервалы считаются один раз — как в
+/// ядре после D6; открытое ожидание идёт до [now]. Целочисленно, без `double`.
+int _waitedMs(
+  List<ApprovalWaitView> waits,
+  DateTime receivedAt,
+  DateTime now,
+  int elapsed,
+) {
+  final spans = <(int, int)>[];
+  for (final wait in waits) {
+    final start = wait.requestedAt.difference(receivedAt).inMilliseconds;
+    final end = (wait.resolvedAt ?? now).difference(receivedAt).inMilliseconds;
+    // Обрезка по границам отрезка: ожидание до `receivedAt` уже учтено в
+    // `usedMs` снимка, после `now` — ещё не наступило.
+    final from = start < 0 ? 0 : start;
+    final to = end > elapsed ? elapsed : end;
+    if (to > from) spans.add((from, to));
+  }
+  spans.sort((a, b) => a.$1.compareTo(b.$1));
+  var total = 0;
+  var coveredTo = 0;
+  for (final (from, to) in spans) {
+    final begin = from > coveredTo ? from : coveredTo;
+    if (to > begin) {
+      total += to - begin;
+      coveredTo = to;
+    }
+  }
+  return total;
+}
+
+/// Строки блока в порядке Steps, Tokens, Cost, Time на момент [now].
+///
+/// Time живого бюджета — `usedMs + max(0, (now − receivedAt) − |W ∩
+/// (receivedAt, now]|)`, где `W` — объединение ожиданий одобрений корня
+/// (D4 change `fix-usage-pane-live-cards`): пока одобрение ждёт, Time стоит, а
+/// после ответа не прыгает вперёд на время ожидания. Не живой бюджет —
+/// `usedMs`. Чистая: часы приходят аргументом.
 List<UsageBudgetRow> usageBudgetRowsAt(
   UsageBudgetData budget, {
   required DateTime now,
@@ -243,11 +299,13 @@ List<UsageBudgetRow> usageBudgetRowsAt(
   final time = budget.time;
   if (time == null) return budget.rows;
   var used = time.usedMs;
-  if (budget.ticking) {
+  if (time.live) {
     final elapsed = now.difference(time.receivedAt).inMilliseconds;
-    // Насыщающее сложение: usedMs с провода может быть около 2^63−1.
     if (elapsed > 0) {
-      used = used > _maxInt - elapsed ? _maxInt : used + elapsed;
+      final add =
+          elapsed - _waitedMs(time.waits, time.receivedAt, now, elapsed);
+      // Насыщающее сложение: usedMs с провода может быть около 2^63−1.
+      if (add > 0) used = used > _maxInt - add ? _maxInt : used + add;
     }
   }
   return [

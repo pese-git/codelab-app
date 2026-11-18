@@ -6,6 +6,23 @@ import '../transcript/subagent_views.dart';
 
 part 'session_views.freezed.dart';
 
+/// Ожидание одобрения корня хода: интервал `[requestedAt, resolvedAt]`.
+///
+/// Почему: Time панели Usage не должно расти, пока ход стоит на одобрении
+/// пользователя (design.md change `fix-usage-pane-live-cards`, D3, D4).
+///
+/// Для чего: `SessionView.approvalWaits`; метки ставит домен
+/// `codelab_client_acp`, kit их только переносит. `resolvedAt == null` —
+/// одобрение ещё ожидает. Значение сравнивается по значению, чтобы ключ кэша
+/// панели не менялся с каждой ревизией `SessionView`.
+@freezed
+abstract class ApprovalWaitView with _$ApprovalWaitView {
+  const factory ApprovalWaitView({
+    required DateTime requestedAt,
+    DateTime? resolvedAt,
+  }) = _ApprovalWaitView;
+}
+
 /// Опция конфигурации сессии (`session/new`, `config_option_update`,
 /// ответ `session/set_config_option`) для отображения.
 ///

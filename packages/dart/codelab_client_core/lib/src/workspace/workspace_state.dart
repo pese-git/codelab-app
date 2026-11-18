@@ -89,6 +89,11 @@ abstract class SessionView with _$SessionView {
     /// Запросы `session/request_permission`, ждущие ответа пользователя.
     @Default([]) List<PendingApprovalView> pendingApprovals,
 
+    /// Ожидания одобрений корня текущего хода (design.md change
+    /// `fix-usage-pane-live-cards`, D3): хост вычитает их из Time. Список
+    /// неизменяемый и сравнивается по значению.
+    @Default(<ApprovalWaitView>[]) List<ApprovalWaitView> approvalWaits,
+
     /// План последнего `plan` сессии в порядке агента; каждое обновление
     /// заменяет его целиком (design.md change `add-codelab-cli`, D14).
     @Default([]) List<PlanEntryView> plan,
