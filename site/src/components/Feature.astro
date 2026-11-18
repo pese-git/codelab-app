@@ -1,0 +1,50 @@
+---
+/**
+ * Одна возможность продукта на странице возможностей.
+ *
+ * Почему: возможность — действие пользователя и результат со ссылкой на
+ * раздел руководства, где она описана подробно (skill `codelab-site`,
+ * раздел 2; design.md add-astro-site, D9). Снимок берётся из
+ * `apps/<приложение>/doc/images/` через `astro:assets`, без копии в `site/`.
+ *
+ * Для чего: карточка с заголовком, текстом, ссылкой и необязательным снимком.
+ *
+ * Как использовать: `<Feature title="…" docPath="…#якорь" linkText="…"
+ * image={png} alt="…" caption="…">текст</Feature>`; `docPath` — путь
+ * документа от корня репозитория с якорем, адрес строит `pageUrl`.
+ */
+import type { ImageMetadata } from 'astro';
+import { Image } from 'astro:assets';
+
+import { pageUrl } from '../lib/urls';
+
+interface Props {
+  readonly title: string;
+  /** Путь документа от корня репозитория, можно с якорем. */
+  readonly docPath: string;
+  readonly linkText: string;
+  readonly image?: ImageMetadata;
+  readonly alt?: string;
+  readonly caption?: string;
+}
+
+const { title, docPath, linkText, image, alt = '', caption } = Astro.props;
+const [path = '', anchor] = docPath.split('#');
+const href = pageUrl(path, import.meta.env.BASE_URL) + (anchor ? `#${anchor}` : '');
+---
+
+<li class:list={['feature', { 'with-image': image }]}>
+  <div>
+    <h2 class="t-subtitle">{title}</h2>
+    <p><slot /></p>
+    <p><a href={href}>{linkText}</a></p>
+  </div>
+  {
+    image && (
+      <figure>
+        <Image src={image} alt={alt} widths={[640, 960]} sizes="(min-width: 900px) 640px, 100vw" />
+        {caption && <figcaption>{caption}</figcaption>}
+      </figure>
+    )
+  }
+</li>

@@ -1,0 +1,116 @@
+---
+/**
+ * Возможности CodeLab app: `/features/app/`.
+ *
+ * Почему: витрина настольного приложения (design.md add-astro-site, D9).
+ * Каждое утверждение проверяемо по документации приложения
+ * (`apps/codelab_desktop/README.md`, `doc/user-guide.md`); снимки — из
+ * `apps/codelab_desktop/doc/images/` через `astro:assets`, без копий (skill
+ * `codelab-site`, раздел 2). Тексты — черновик для проверки фактов
+ * `docs-writer` (tasks.md 7.2).
+ *
+ * Для чего: что пользователь делает в приложении и куда читать дальше.
+ *
+ * Как использовать: правка текста — по отчёту проверки фактов; новая
+ * возможность — `<Feature>` со ссылкой на раздел руководства.
+ */
+import filesPane from '../../../../apps/codelab_desktop/doc/images/files-pane-preview.png';
+import providerWizard from '../../../../apps/codelab_desktop/doc/images/provider-wizard-api-type.png';
+import sidebarProjects from '../../../../apps/codelab_desktop/doc/images/sidebar-projects.png';
+import terminalPane from '../../../../apps/codelab_desktop/doc/images/terminal-pane.png';
+import workbench from '../../../../apps/codelab_desktop/doc/images/workbench-new-session.png';
+import Feature from '../../components/Feature.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { pageUrl } from '../../lib/urls';
+
+const base = import.meta.env.BASE_URL;
+const guide = 'apps/codelab_desktop/doc/user-guide.md';
+---
+
+<BaseLayout
+  title="CodeLab app"
+  description="CodeLab app — настольное приложение для работы с AI-агентом над папкой проекта."
+  current="features"
+>
+  <h1 class="t-title">CodeLab app</h1>
+  <p class="lead t-body-large">
+    Настольное приложение для работы с AI-агентом над папкой проекта: сессии по проектам, лента переписки, одобрение
+    действий агента, файлы проекта, терминал и настройки агента в одном окне.
+  </p>
+  <p class="lead">
+    По умолчанию приложение запускает встроенного агента в своём процессе; внешний агент подключается профилем.
+    Сейчас приложение собирается и проверяется для macOS. Установщика нет: приложение собирается из исходников —
+    <a href={pageUrl('docs/user/run-from-source.md', base) + '#4-запуск-app'}>запуск из исходников</a>.
+  </p>
+
+  <ul class="features">
+    <Feature
+      title="Проекты и сессии"
+      docPath={`${guide}#открыть-проект-и-переключаться-между-проектами`}
+      linkText="Как открыть проект и переключаться между проектами"
+      image={sidebarProjects}
+      alt="Боковая панель: список Projects с проектом demo, кнопки Open folder… и Settings"
+      caption="Боковая панель с недавними проектами."
+    >
+      Вы открываете папку проекта, и приложение запускает в ней встроенного агента. Сессии сгруппированы по проектам в
+      боковой панели. При следующем запуске приложение открывает последний проект само.
+    </Feature>
+    <Feature
+      title="Сессия с агентом"
+      docPath={`${guide}#вести-сессию-с-агентом`}
+      linkText="Как вести сессию с агентом"
+      image={workbench}
+      alt="Пустая сессия в проекте demo: поле ввода, под ним режим Standard и модель"
+      caption="Новая сессия: в шапке — проект и режим, под полем ввода — режим и модель."
+    >
+      Ответ появляется в ленте по мере того, как агент его пишет: текст, размышления, вызовы инструментов и их
+      результаты. Пока агент отвечает, следующее сообщение встаёт в очередь и уходит само, когда ход закончится.
+    </Feature>
+    <Feature
+      title="Разрешения на действия агента"
+      docPath={`${guide}#отвечать-на-запросы-разрешений`}
+      linkText="Как отвечать на запросы разрешений"
+    >
+      Перед записью файла, командой оболочки или сетевым запросом агент спрашивает разрешение прямо в строке вызова в
+      ленте. Вы видите тег риска и команду или путь и отвечаете «Allow» или «Reject» кнопкой или сочетанием клавиш.
+      Решение относится только к этому вызову.
+    </Feature>
+    <Feature
+      title="Файлы проекта"
+      docPath={`${guide}#смотреть-файлы-проекта`}
+      linkText="Как смотреть файлы проекта"
+      image={filesPane}
+      alt="Панель Files: дерево проекта demo и просмотр файла README.md с номерами строк"
+      caption="Дерево проекта и выбранный файл только для чтения."
+    >
+      Панель «Files» показывает дерево папки проекта и текст выбранного файла с номерами строк. Файлы в ней только
+      читаются.
+    </Feature>
+    <Feature
+      title="Терминал в папке сессии"
+      docPath={`${guide}#работать-в-терминале`}
+      linkText="Как работать в терминале"
+      image={terminalPane}
+      alt="Панель Terminal: вкладка Terminal 1 со статусом Running и напоминанием над ней"
+      caption="Вкладка терминала и напоминание, что терминал работает мимо агента."
+    >
+      Панель «Terminal» — оболочка в папке текущей сессии. Команды в ней выполняются от вашего имени, мимо агента и
+      его одобрений. У каждой сессии свои вкладки.
+    </Feature>
+    <Feature
+      title="Подключение провайдера модели"
+      docPath={`${guide}#подключить-провайдера-модели`}
+      linkText="Как подключить провайдера модели"
+      image={providerWizard}
+      alt="Мастер Add provider на шаге API type: OpenAI, Anthropic, OpenRouter, Ollama и совместимые серверы"
+      caption="Первый шаг мастера — тип API."
+    >
+      Мастер «Add provider» подключает OpenAI, Anthropic, OpenRouter, Ollama или совместимый сервер. Он проходит по
+      шагам: тип API, адрес, ключ, проверка — приложение запрашивает у сервера список моделей — и выбор модели.
+    </Feature>
+  </ul>
+
+  <p>
+    Всё о приложении — в <a href={pageUrl('apps/codelab_desktop/README.md', base)}>документации CodeLab app</a>.
+  </p>
+</BaseLayout>

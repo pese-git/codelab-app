@@ -1,0 +1,92 @@
+---
+/**
+ * Возможности агента `codelab-agent`: `/features/agent/`.
+ *
+ * Почему: витрина агента (design.md add-astro-site, D9). У
+ * `apps/codelab_agent` пока нет README и `doc/` (ответ на Q5), поэтому
+ * страница ссылается на `docs/user/zed.md`, `docs/user/configuration.md`,
+ * `docs/user/README.md` и `docs/ops/`. Факты — из этих документов; тексты —
+ * черновик для проверки фактов `docs-writer` (tasks.md 7.2).
+ *
+ * Для чего: что делает агент как отдельная программа и куда читать дальше.
+ *
+ * Как использовать: когда у `apps/codelab_agent` появится документация,
+ * ссылки переводятся на неё.
+ */
+import Feature from '../../components/Feature.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { pageUrl } from '../../lib/urls';
+
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout
+  title="Агент codelab-agent"
+  description="codelab-agent — агент CodeLab как отдельная программа для подключения к ACP-клиентам, например к Zed."
+  current="features"
+>
+  <h1 class="t-title">Агент <code>codelab-agent</code></h1>
+  <p class="lead t-body-large">
+    Агент CodeLab как отдельная программа. Он подключается к клиенту по протоколу ACP (Agent Client Protocol),
+    например к Zed.
+  </p>
+  <p class="lead">
+    В CodeLab app и <code>codelab</code> тот же агент встроен: отдельная программа для них не нужна.
+    <code>codelab-agent</code> нужен, когда агент подключается к стороннему клиенту или работает как отдельный
+    процесс. Установщика нет: агент собирается из исходников —
+    <a href={pageUrl('docs/user/run-from-source.md', base) + '#2-сборка-cli-и-агента'}>запуск из исходников</a>.
+  </p>
+
+  <ul class="features">
+    <Feature title="Агент в Zed" docPath="docs/user/zed.md" linkText="Как подключить агента к Zed">
+      Zed запускает <code>codelab-agent</code> процессом и общается с ним по ACP через stdin и stdout. Руководство
+      показывает, как добавить агента в настройки Zed; пример настроек ещё не подтверждён проверкой по чек-листу Zed.
+    </Feature>
+    <Feature
+      title="Настройки слоями"
+      docPath="docs/user/configuration.md#слои-конфигурации"
+      linkText="Слои конфигурации"
+    >
+      Агент собирает настройки из файлов <code>config.yaml</code>: глобального в <code>CODELAB_HOME</code> и
+      проектного в папке проекта; поздний слой перекрывает ранний. Встроенный агент и <code>codelab-agent</code>
+      читают одни и те же файлы.
+    </Feature>
+    <Feature
+      title="Проектным настройкам доверяют не полностью"
+      docPath="docs/user/configuration.md#слои-конфигурации"
+      linkText="Что читается из настроек проекта"
+    >
+      Проектный файл приходит из репозитория. Пока проект не назван доверенным в глобальном конфиге, провайдеры,
+      MCP-серверы и промпты из него не читаются, а разрешения можно только ужесточить.
+    </Feature>
+    <Feature
+      title="Ключ API вне настроек клиента"
+      docPath="docs/user/configuration.md#шаг-2-задайте-ключ-api"
+      linkText="Как задать ключ API"
+    >
+      Ключ API берётся из переменной окружения или из хранилища секретов, поэтому в настройки клиента его писать не
+      нужно. Значения из хранилища секретов и ключи API агент не логирует.
+    </Feature>
+    <Feature
+      title="Разрешения по режиму"
+      docPath="docs/user/zed.md#разрешения-и-режимы"
+      linkText="Режимы разрешений"
+    >
+      Агент спрашивает у клиента разрешение на правки и команды по правилам режима. Новая сессия стартует в режиме
+      <code>standard</code>: чтение — без вопросов, правки и команды — с разрешением.
+    </Feature>
+    <Feature
+      title="Журналы сессий"
+      docPath="docs/user/zed.md#если-что-то-не-работает"
+      linkText="Где журналы и логи"
+    >
+      Каждый разговор записывается в журнал сессии в каталоге <code>CODELAB_HOME</code>, по подкаталогу на папку
+      проекта. Логи агент пишет в stderr, а в файл — только если это задано флагом или конфигурацией.
+    </Feature>
+  </ul>
+
+  <p>
+    Где лежат файлы агента — <a href={pageUrl('docs/ops/codelab-home.md', base)}>каталог <code>CODELAB_HOME</code></a>.
+    Сборка и эксплуатация — <a href={pageUrl('docs/ops/README.md', base)}>документация по эксплуатации</a>.
+  </p>
+</BaseLayout>

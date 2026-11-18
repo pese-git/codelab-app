@@ -11,10 +11,12 @@
     "check": "ASTRO_TELEMETRY_DISABLED=1 astro check",
     "test": "vitest run",
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
-    "verify": "npm run check:versions && npm run check && npm run test && npm run build",
+    "check:links": "node scripts/check-links.mjs",
+    "verify": "npm run check:versions && npm run check && npm run test && npm run build && npm run check:links",
     "check:versions": "node scripts/check-exact-versions.mjs"
   },
   "dependencies": {
+    "@astrojs/markdown-remark": "7.3.9",
     "astro": "7.4.12",
     "mermaid": "12.3.0",
     "unist-util-visit": "5.2.0"

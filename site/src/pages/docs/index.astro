@@ -1,0 +1,43 @@
+---
+/**
+ * Оглавление документации: `/docs/`.
+ *
+ * Почему: документы сгруппированы по расположению файла — «Пользователю»,
+ * «Эксплуатация», группы приложений, «Пакеты» (design.md add-astro-site, D9);
+ * пустая группа не показывается.
+ *
+ * Для чего: вход в документацию из шапки и с главной.
+ *
+ * Как использовать: страница строится из коллекции `docs` без ручного списка.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { buildNav } from '../../lib/nav';
+import { loadDocs } from '../../lib/site-docs';
+
+const sections = buildNav(await loadDocs());
+---
+
+<BaseLayout
+  title="Документация"
+  description="Документация CodeLab: руководства пользователя, эксплуатация, CodeLab app и терминальный клиент codelab."
+  current="docs"
+>
+  <h1 class="t-title">Документация</h1>
+  <p class="lead t2">Документы собраны из репозитория CodeLab и сгруппированы по разделам.</p>
+  <ul class="toc-groups">
+    {
+      sections.map((section) => (
+        <li class="card">
+          <h2 class="t-subtitle">{section.title}</h2>
+          <ul>
+            {section.items.map((item) => (
+              <li>
+                <a href={item.url}>{item.title}</a>
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))
+    }
+  </ul>
+</BaseLayout>

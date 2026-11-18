@@ -1,0 +1,86 @@
+/*
+ * Визуальные токены сайта CodeLab.
+ *
+ * Почему: сайт выглядит как приложение — те же цвета, шрифты, радиусы и
+ * тени Fluent (design.md add-astro-site, D8; project-site «Оформление и темы»).
+ * Имена и значения совпадают с `.fx` и `.fx.dark` в
+ * `docs/design/claude-design/fluent.css`; акцент — из `Appearance.dc.html`;
+ * источник каждого значения — таблица skill `codelab-site`, раздел 3.
+ * Расхождение с `fluent.css` — дефект ревью.
+ *
+ * Для чего: единственное место цветов сайта; компоненты берут только
+ * `var(--…)`, «магических» цветов в них нет.
+ *
+ * Как использовать: значение каждой пары — `light-dark(светлая, тёмная)`.
+ * Тему выбирает `color-scheme` корня: по умолчанию системная
+ * (`prefers-color-scheme`), класс `light` или `dark` на `<html>` — выбор
+ * читателя, который ставит встроенный скрипт до первой отрисовки
+ * (`src/components/ThemeInit.astro`). Одна запись на токен вместо двух блоков
+ * не даёт светлой и тёмной теме разойтись по набору токенов.
+ */
+:root {
+  color-scheme: light dark;
+
+  /* Поверхности и обводки — fluent.css `.fx`, `.fx.dark`. */
+  --mica: light-dark(#F3F3F3, #202020);
+  --layer: light-dark(#F9F9F9, #272727);
+  --card: light-dark(#FFFFFF, #2B2B2B);
+  --card2: light-dark(#F9F9F9, #242424);
+  --stroke: light-dark(#E5E5E5, #363636);
+  --divider: light-dark(#EBEBEB, #333333);
+  --control: light-dark(#FFFFFF, #2D2D2D);
+  --cstroke: light-dark(#E0E0E0, #3A3A3A);
+  --cstroke2: light-dark(#C4C4C4, #303030);
+
+  /* Текст и состояния элементов. */
+  --text: light-dark(#1A1A1A, #FFFFFF);
+  --text2: light-dark(#5C5C5C, #C8C8C8);
+  --hover: light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.06));
+  --sel: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.08));
+
+  /* Статусы. */
+  --ok: light-dark(#0F7B0F, #6CCB5F);
+  --warn: light-dark(#9D5D00, #FCE100);
+  --bad: light-dark(#C42B1C, #FF99A4);
+  --ok-bg: light-dark(#DFF6DD, #393D1B);
+  --warn-bg: light-dark(#FFF4CE, #433519);
+  --bad-bg: light-dark(#FDE7E9, #442726);
+  --info-bg: light-dark(#F6F6F6, #2B2B2B);
+
+  /* Код и подсветка синтаксиса (их же значения — в темах Shiki). */
+  --code-bg: light-dark(#F6F6F6, #1E1E1E);
+  --code-fg: light-dark(#1A1A1A, #E6E6E6);
+  --code-muted: light-dark(#5C5C5C, #A8A8A8);
+  --syn-k: light-dark(#8A2BB0, #D6A2F5);
+  --syn-s: light-dark(#0F7B0F, #8FD48A);
+  --syn-t: light-dark(#005FB8, #82C8FF);
+  --syn-c: light-dark(#5C5C5C, #A8A8A8);
+  --syn-n: light-dark(#9D5D00, #F2C26B);
+
+  /* Тени. */
+  --shadow-card: 0 1px 2px light-dark(rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.3));
+  --shadow-flyout: 0 8px 16px light-dark(rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.4));
+
+  /* Акцент — Appearance.dc.html: palette() от #0078D4 и темы Fluent Light/Dark. */
+  --accent: light-dark(#0060AA, #73B5E7);
+  --accent-weak: light-dark(#E0EFFA, #193348);
+  --on-accent: light-dark(#FFFFFF, #000000);
+  --accent-text: light-dark(#005FB8, #60CDFF);
+
+  /* Шрифты — системные стеки: текст из fluent.css `.fx`, код — из
+     codelab_ui/lib/src/atomics/codelab_text.dart. Веб-шрифты не грузятся. */
+  --font-text: 'Segoe UI Variable Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: Menlo, 'SF Mono', Consolas, 'Cascadia Mono', 'DejaVu Sans Mono', 'Courier New', monospace;
+
+  /* Радиусы Fluent: контролы и карточки. */
+  --radius-control: 4px;
+  --radius-card: 8px;
+}
+
+:root.light {
+  color-scheme: light;
+}
+
+:root.dark {
+  color-scheme: dark;
+}

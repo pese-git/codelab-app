@@ -1,0 +1,83 @@
+---
+/**
+ * Страница документа из репозитория: `/docs/<путь>/`.
+ *
+ * Почему: документация собирается из файлов репозитория на месте, адрес
+ * выводится из пути (design.md add-astro-site, D3, D4); рядом — навигация
+ * группы (D9), оглавление по `##` и ссылка на исходный файл на GitHub
+ * (tasks.md 4.5).
+ *
+ * Для чего: одна страница на каждый документ allowlist. Скрипт mermaid
+ * подключается только при блоке ```` ```mermaid ```` в исходнике (D7).
+ *
+ * Как использовать: маршрут строит Astro из `getStaticPaths`; новый документ
+ * allowlist получает страницу без правки этого файла.
+ */
+import { render } from 'astro:content';
+
+import MermaidScript from '../../components/MermaidScript.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { buildNav, navGroup } from '../../lib/nav';
+import { loadDocs, type SiteDoc } from '../../lib/site-docs';
+import { repoUrl, resolveRepoRef } from '../../site.config';
+
+export async function getStaticPaths() {
+  const docs = await loadDocs();
+  return docs.map((doc) => ({ params: { path: doc.routePath }, props: { doc, docs } }));
+}
+
+interface Props {
+  readonly doc: SiteDoc;
+  readonly docs: readonly SiteDoc[];
+}
+
+const { doc, docs } = Astro.props;
+const { Content, headings } = await render(doc.entry);
+const group = buildNav(docs).find((section) => section.title === navGroup(doc.repoPath).title);
+const toc = headings.filter((heading) => heading.depth === 2);
+// Блок mermaid начинается ограждением из трёх и более обратных кавычек или тильд.
+const hasMermaid = /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/m.test(doc.entry.body ?? '');
+const sourceUrl = `${repoUrl}/blob/${resolveRepoRef()}/${doc.repoPath}`;
+---
+
+<BaseLayout title={doc.title} description={doc.description} current={doc.repoPath === 'docs/user/run-from-source.md' ? 'install' : 'docs'}>
+  <div class="doc-layout">
+    {
+      group && (
+        <nav class="doc-nav" aria-label={`Документы раздела ${group.title}`}>
+          <p class="doc-nav-title">{group.title}</p>
+          <ul>
+            {group.items.map((item) => (
+              <li>
+                <a href={item.url} aria-current={item.repoPath === doc.repoPath ? 'page' : undefined}>
+                  {item.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )
+    }
+    <article class="prose">
+      <Content />
+      <p class="doc-source t2">
+        <a href={sourceUrl}>Исходный файл на GitHub</a> — <code>{doc.repoPath}</code>
+      </p>
+    </article>
+    {
+      toc.length > 0 && (
+        <nav class="doc-toc" aria-label="На этой странице">
+          <p class="doc-toc-title">На этой странице</p>
+          <ul>
+            {toc.map((heading) => (
+              <li>
+                <a href={`#${heading.slug}`}>{heading.text}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )
+    }
+  </div>
+  {hasMermaid && <MermaidScript />}
+</BaseLayout>

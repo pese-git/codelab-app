@@ -1,0 +1,25 @@
+---
+/**
+ * Встроенный скрипт темы в `<head>` — единственный встроенный скрипт сайта.
+ *
+ * Почему: выбор читателя должен примениться до первой отрисовки, иначе
+ * страница мигнёт системной темой (design.md add-astro-site, D8;
+ * project-site «Оформление и темы», сценарий «Системная тёмная тема»).
+ * Модуль из сборки грузится позже, поэтому скрипт встроен. Его текст
+ * неизменен — хэш можно будет внести в CSP хостинга (D11).
+ *
+ * Для чего: читает `localStorage['codelab-site-theme']` и ставит класс
+ * `light` или `dark` на `<html>`; без ключа тему задаёт
+ * `prefers-color-scheme` через `color-scheme` в `tokens.css`. Ключ и классы —
+ * те же, что в `src/scripts/theme-state.ts`.
+ *
+ * Как использовать: `<ThemeInit />` первым в `<head>` макета.
+ */
+---
+
+<script is:inline>
+  try {
+    var choice = localStorage.getItem('codelab-site-theme');
+    if (choice === 'light' || choice === 'dark') document.documentElement.classList.add(choice);
+  } catch (e) {}
+</script>
