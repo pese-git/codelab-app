@@ -127,7 +127,7 @@ Change `add-desktop-localization` (D1–D5, D7, D9, D12). Языки `en` и `ru
 * **Без Flutter.** `features/usage/application` и `features/terminal/application` отдают типизированные значения, текст собирает presentation. Ядро клиента текст не переводит: app не разбирает английскую строку ядра, а строит текст по типизированной причине (D6).
 * **Не переводится (D7).** Содержимое Debug log и Inspector, протокольные значения (`stopReason`, `kind`, методы, ключи `budget.*`), `config.yaml`, `CODELAB_HOME`, `secret:`/`env:`, команды и slash-команды, имена провайдеров и продуктов, клавиши, тексты от агента и бэкенда секретов (подставляются плейсхолдером как есть). Названия языков — эндонимы. Текст интерфейса в журнал не попадает.
 * **Параллельные changes (D12).** Строки в экранах, которые затрагивают другие активные changes, пишутся сразу ключами ARB с `en` и `ru`, а не литералами; итерация экрана в начале сверяет свой список строк с `develop`.
-* **Тесты.** Локаль по умолчанию — `en` (`CodeLabTestBinding(locale:)`, `localizedFluentApp`), поэтому существующие `find.text` на английском не меняются; смену языка проверяет `expectNoStaleLanguage` (`test/support/l10n_mix.dart`). `integration_test/` запускается на `en` (`E2eLaunch` пишет язык до старта).
+* **Тесты.** Локаль по умолчанию — `en` (`CodeLabTestBinding(locale:)`, `localizedFluentApp`), поэтому существующие `find.text` на английском не меняются; смену языка проверяет `expectNoStaleLanguage` (`test/support/l10n_mix.dart`). `integration_test/` запускается на `en` (`integration_test/flutter_test_config.dart` в `setUp` кладёт `codelab.app.language = en` в подменённое хранилище `SharedPreferences`).
 
 ## Тесты
 

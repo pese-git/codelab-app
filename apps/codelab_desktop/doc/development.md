@@ -44,6 +44,8 @@ flowchart LR
 | `lib/main.dart` | точка входа: каталог логов, первое открытие хранилища секретов, `runApp` |
 | `lib/app/app_scope.dart` | composition root: `createCodeLabRootScope` (модули Cherrypick и швы тестов), `CodeLabBootstrap`, `CodeLabDependencies`, `CodeLabRootLifecycle` |
 | `lib/app/codelab_app_widget.dart` | `CodeLabApp`: `FluentApp`, провайдеры Cubit-ов, переключение рабочего места и настроек, запуск агента после первого кадра |
+| `lib/app/language/` | `AppLanguageCubit`: язык интерфейса (System, English, Русский), `AppStrings` в корневой области; `app_language_start.dart` — `AppLanguageStart`, начальный язык и диагностика чтения, которые `main` передаёт в composition root; `CodeLabApp` меняет только `locale` у `FluentApp` |
+| `lib/l10n/` | каталоги gen-l10n: `app_en.arb` (шаблон) и `app_ru.arb`, сгенерированный `app_localizations*.dart` (коммитится); настройка — `l10n.yaml` |
 | `lib/app/navigation/` | `NavigationCubit`: переход рабочее место ↔ настройки, страницы настроек |
 | `lib/app/embedded_transport_resolver.dart`, `embedded_logger.dart` | открытие и закрытие встроенного агента, логгер агента → журнал приложения |
 | `lib/app/connection_environment.dart` | окружение процесса и путь к `profiles.json` |
@@ -82,17 +84,18 @@ flowchart TD
 - `createCodeLabRootScope` ставит модули в порядке: журнал, фабрики транспортов, встроенный агент, платформа, профили и секреты, презентация, затем сгенерированные контракты Cherrypick (`app_scope.module.cherrypick.g.dart`, хранится в git). Параметры функции (`embeddedOpener`, `environment`, `profileStore`, `userShellLauncher`, `projectFiles` и другие) — швы тестов: в рабочей сборке они пустые.
 - `ClientWorkspace` получает два резолвера транспорта (`_transportResolvers` в `app_scope.dart`): `ConfigTransportResolver` из `codelab_client_core` для профилей `stdio` и WebSocket — на фабриках приложения `CodeLabStdioTransportFactory` и `CodeLabWebSocketTransportFactory` (`StdioAcpTransport`, `WebSocketAcpTransport`) и источнике токенов `SecretSource`, — и `EmbeddedTransportResolver` для встроенного агента (`localEmbeddedAgentOpener` из `package:codelab_embedded/io.dart`). Тот же список служит проверке профиля и списку типов в диалоге профиля.
 - Агент стартует не при сборке scope, а после первого кадра (`startOnLaunch`), и только если восстановлен проект.
-- При выходе `AppExitHandler` вызывает весь `CodeLabRootLifecycle.dispose()`: параллельно закрываются вкладки терминала и клиентская ветка (рабочее пространство, встроенный агент, ядро клиента). Через 5 с (`AppExitHandler.exitTimeout`) обработчик отвечает `exit` и пишет `app.exit_timeout` с полем `pending` — незавершёнными шагами из `_shutdownSteps` (`terminal`, `cubits`, `workspace`, `embedded`, `migration_offer`, `transport`, `client`). Предел 10 с на закрытие встроенного агента (`defaultEmbeddedCloseTimeout`, событие `embedded.close_timeout`) действует внутри `dispose()` и при выходе не наступает: раньше срабатывает предел 5 с.
+- При выходе `AppExitHandler` вызывает весь `CodeLabRootLifecycle.dispose()`: параллельно закрываются вкладки терминала, клиентская ветка (рабочее пространство, встроенный агент, ядро клиента) и запись языка. Через 5 с (`AppExitHandler.exitTimeout`) обработчик отвечает `exit` и пишет `app.exit_timeout` с полем `pending` — незавершёнными шагами из `_shutdownSteps` (`terminal`, `cubits`, `workspace`, `embedded`, `migration_offer`, `transport`, `client`, `language`; последний — отдельная параллельная ветвь, которая ждёт запись выбранного языка до 3 с и есть, только если у lifecycle есть Cubit языка). Предел 10 с на закрытие встроенного агента (`defaultEmbeddedCloseTimeout`, событие `embedded.close_timeout`) действует внутри `dispose()` и при выходе не наступает: раньше срабатывает предел 5 с.
 
 Состояние и переходы — [state-management.md](../../../docs/architecture/state-management.md), [session-lifecycle.md](../../../docs/architecture/session-lifecycle.md), [concurrency.md](../../../docs/architecture/concurrency.md).
 
 ## Как добавить страницу настроек
 
-1. Добавьте значение в `SettingsPage` (`lib/app/navigation/settings_page.dart`), если его ещё нет: группа, заголовок, `slug` (ключ навигации — `settings-nav-<slug>`).
+1. Добавьте значение в `SettingsPage` (`lib/app/navigation/settings_page.dart`), если его ещё нет: группа, `slug` (ключ навигации — `settings-nav-<slug>`).
 2. Напишите Cubit в `lib/features/settings/application/` и страницу в `lib/features/settings/presentation/`. Файлы и процессы — только через порт, реализацию которого собирает `lib/app/`.
 3. Зарегистрируйте построитель страницы в `settingsPageBuilders` (`lib/features/settings/presentation/settings_shell.dart`) и фабрику Cubit-а в `CodeLabDependencies` (`lib/app/app_scope.dart`).
 4. Включите страницу в `defaultSettingsPages` (`lib/app/default_settings_pages.dart`): страница из набора обязана иметь построитель.
-5. Добавьте стабильные `ValueKey` для элементов, которые нажимают тесты.
+5. Добавьте заголовок страницы в `settingsPageTitleOf` (`lib/features/settings/presentation/settings_titles.dart`) и строки в оба каталога `lib/l10n/app_en.arb` и `app_ru.arb`.
+6. Добавьте стабильные `ValueKey` для элементов, которые нажимают тесты.
 
 Поведение настроек задаёт спецификация [app-settings](../../../openspec/specs/app-settings/spec.md); новая страница с новым поведением начинается с OpenSpec change.
 
@@ -105,7 +108,7 @@ fvm flutter test
 
 | Каталог | Что | Где запускается |
 |---|---|---|
-| `test/` | модульные и виджет-тесты: Cubit-ы, мапперы, виджеты на двойниках (`test/support/`: `InMemoryProfileStore`, `FakeProfileSecrets`, `FakeUserShellLauncher`, `FakeProjectFiles` и другие) | `fvm flutter test`; входит в `melos run test` и `melos run check` |
+| `test/` | модульные и виджет-тесты: Cubit-ы, мапперы, виджеты на двойниках (`test/support/`: `InMemoryProfileStore`, `FakeProfileSecrets`, `FixedAppStrings` и `TestAppStrings` (`test/support/app_strings.dart`: порт языка с неизменным каталогом и управляемый для тестов смены языка), `FakeUserShellLauncher`, `FakeProjectFiles` и другие) | `fvm flutter test`; входит в `melos run test` и `melos run check` |
 | `integration_test/` | сценарии на настоящем приложении macOS против scripted-агента, Dart-агента или встроенного агента со сценарием модели (`integration_test/llm_scripts/`) | скрипты `test:e2e:app:*`, только в ветке `release/<version>` |
 | `test_driver/app.dart` | точка входа для ручного управления приложением через `flutter_driver` | вручную |
 
@@ -117,7 +120,8 @@ fvm flutter test
 
 - `fvm dart format --set-exit-if-changed <файлы>` и `fvm flutter analyze` в `apps/codelab_desktop`;
 - `fvm flutter test` в `apps/codelab_desktop`, а при изменении виджетов `codelab_ui` — и в `packages/flutter/codelab_ui`;
-- `fvm dart run melos run guard` — при изменении `pubspec.yaml` и импортов между пакетами.
+- `fvm dart run melos run guard` — при изменении `pubspec.yaml` и импортов между пакетами;
+- `fvm dart run melos run l10n:check` — при изменении `.arb`-каталогов: скрипт перегенерирует каталоги во временной копии и сверяет с рабочими. После правки `.arb` выполните `fvm flutter gen-l10n` в `apps/codelab_desktop` (в `packages/flutter/codelab_ui` — для каталога кита `lib/src/l10n/`) и закоммитьте результат; скрипт входит в `melos run check`.
 
 Без сгенерированного кода (`*.freezed.dart`) тесты и запуск падают; как его создать — в [запуске из исходников](../../../docs/user/run-from-source.md#1-подготовка). Уровни тестов — [testing.md](../../../docs/architecture/testing.md).
 
