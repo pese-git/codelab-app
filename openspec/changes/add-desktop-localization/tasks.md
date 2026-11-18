@@ -52,7 +52,7 @@
   - `app_locale_test.dart`: `resolveAppLocale` — явный `en`/`ru`; `system` с `ru-RU`, `de-DE`, пустым списком, с `ru` вторым языком; до итерации 6 `system` с `ru-RU` даёт `en` (D2; сценарии «По умолчанию — язык системы», «Незнакомый язык системы», «Явный выбор сильнее системы»);
   - `app_language_preferences_test.dart`: чтение `en`/`ru`/нет ключа/`fr` → `system` без перезаписи; `save(system)` удаляет ключ (сценарий «Незнакомое значение в хранилище»);
   - `l10n_catalogs_test.dart` (desktop): ключи `en` = `ru`, плейсхолдеры совпадают, у `plural` в `ru` формы `one|few|many|other` (сценарий «Каталоги согласованы»; D3).
-- [ ] 1.2 `[desktop]` Каталоги и разрешение:
+- [x] 1.2 `[desktop]` Каталоги и разрешение:
   - `pubspec.yaml` (`flutter_localizations`, `intl: any`, `generate: true`), `l10n.yaml`, `lib/l10n/app_en.arb`, `app_ru.arb`, сгенерированный код, `lib/l10n/l10n.dart` (`context.l10n`);
   - `lib/app/language/app_locale.dart` (`resolveAppLocale`), `lib/core/platform/app_language_preferences.dart` (порт и `SharedPreferencesAppLanguagePreferences`).
 - [ ] 1.3 `[desktop]` Красные тесты `AppLanguageCubit` и порта `AppStrings` (D2, D9; сценарии «Сбой записи», «Два выбора подряд», «Закрытый компонент не реагирует на смену языка»):
