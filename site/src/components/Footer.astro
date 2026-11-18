@@ -1,0 +1,21 @@
+---
+/**
+ * Подвал сайта: лицензия и репозиторий.
+ *
+ * Почему: tasks.md add-astro-site, 4.3 — лицензия MIT со ссылкой на
+ * `LICENSE` на GitHub и ссылка на репозиторий. Ревизия ссылки — та же, что
+ * у ссылок документов на GitHub (`resolveRepoRef`, D5).
+ *
+ * Для чего: общий подвал всех страниц.
+ *
+ * Как использовать: `<Footer />` в конце `<body>` макета.
+ */
+import { repoUrl, resolveRepoRef } from '../site.config';
+
+const repoRef = resolveRepoRef();
+---
+
+<footer class="site-footer">
+  <span>CodeLab распространяется по <a href={`${repoUrl}/blob/${repoRef}/LICENSE`}>лицензии MIT</a>.</span>
+  <a href={repoUrl}>Исходный код на GitHub</a>
+</footer>

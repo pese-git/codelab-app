@@ -1,0 +1,21 @@
+---
+/**
+ * Новости выпусков: `/news/`.
+ *
+ * Почему: новость — одна на выпуск, от новой к старой; без новостей страница
+ * собирается и показывает пустое состояние (design.md add-astro-site, D10;
+ * project-site «Новости выпусков», сценарий «Новостей нет»).
+ *
+ * Для чего: полный список новостей.
+ *
+ * Как использовать: новости — файлы `src/content/news/<version>.md`, их пишет
+ * `docs-writer` в `release/<version>`.
+ */
+import NewsList from '../../components/NewsList.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Новости" description="Новости выпусков CodeLab." current="news">
+  <h1 class="t-title">Новости выпусков</h1>
+  <NewsList />
+</BaseLayout>

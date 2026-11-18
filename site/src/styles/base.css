@@ -1,0 +1,665 @@
+/*
+ * Базовые стили сайта: типографика Fluent, раскладка, документ, код, фокус.
+ *
+ * Почему: сайт — статический HTML и CSS без CSS-фреймворка (design.md
+ * add-astro-site, D2, D8); шкала шрифтов — FluentTheme.typography из
+ * `fluent.css` (caption 12/16, body 14/20, body large 18/24, subtitle 20/28,
+ * title 28/36, title large 40/52), радиусы — 4 px у контролов и 8 px у
+ * карточек (skill `codelab-site`, раздел 3).
+ *
+ * Для чего: общие правила всех страниц; цвета — только токены `tokens.css`.
+ *
+ * Как использовать: подключается макетом `src/layouts/BaseLayout.astro`.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--mica);
+  color: var(--text);
+  font-family: var(--font-text);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: var(--accent-text);
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Видимый фокус у всех интерактивных элементов (skill, раздел 7). */
+:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+}
+
+/* Типографика Fluent. */
+.t-caption {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.t-body-large {
+  font-size: 18px;
+  line-height: 24px;
+}
+
+.t-subtitle {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.t-title {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+}
+
+.t-title-large {
+  font-size: 40px;
+  line-height: 52px;
+  font-weight: 600;
+}
+
+.t2 {
+  color: var(--text2);
+}
+
+/* Ссылка «к содержанию»: первая в порядке фокуса, видна только в фокусе. */
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -48px;
+  z-index: 10;
+  padding: 6px 12px;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.skip-link:focus {
+  top: 8px;
+}
+
+/* Шапка: как NavigationAppBar приложения. */
+.site-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 600 9px/1 var(--font-mono);
+}
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.nav-link,
+.nav-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.nav-link:hover,
+.nav-menu > summary:hover {
+  background: var(--hover);
+}
+
+.nav-link[aria-current='page'] {
+  background: var(--sel);
+}
+
+.nav-menu {
+  position: relative;
+}
+
+.nav-menu > summary {
+  list-style: none;
+}
+
+.nav-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-menu > summary::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+/* Выпадающее меню — как MenuFlyout. */
+.nav-menu-list {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-flyout);
+}
+
+.nav-menu-list a {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav-menu-list a:hover {
+  background: var(--hover);
+}
+
+/* Кнопка — как Button Fluent. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--cstroke);
+  border-bottom-color: var(--cstroke2);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  font: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--card2);
+}
+
+.btn.accent {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--on-accent);
+}
+
+.theme-toggle[hidden] {
+  display: none;
+}
+
+/* Основная область. */
+.site-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+}
+
+.site-main:focus {
+  outline: none;
+}
+
+.page-narrow {
+  max-width: 820px;
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--stroke);
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* Карточки — как Card Fluent. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 16px 0 32px;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  background: var(--card);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.card h2,
+.card h3 {
+  margin: 0;
+}
+
+.card p {
+  margin: 0;
+}
+
+.card .card-link {
+  margin-top: auto;
+}
+
+.lead {
+  max-width: 720px;
+  margin: 8px 0 24px;
+}
+
+.section-title {
+  margin: 40px 0 8px;
+}
+
+/* Возможности продукта. */
+.features {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 24px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feature {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 20px;
+  background: var(--card);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.feature h2 {
+  margin: 0;
+}
+
+.feature p {
+  margin: 0;
+}
+
+.feature figure {
+  margin: 0;
+}
+
+.feature figure img {
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-control);
+}
+
+.feature figcaption {
+  margin-top: 6px;
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+@media (min-width: 900px) {
+  .feature.with-image {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    align-items: start;
+  }
+}
+
+/* Документация: навигация группы | документ | оглавление страницы. */
+.doc-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+
+@media (min-width: 900px) {
+  .doc-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 1200px) {
+  .doc-layout {
+    grid-template-columns: 220px minmax(0, 1fr) 200px;
+  }
+}
+
+.doc-nav ul,
+.doc-toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-nav-title,
+.doc-toc-title {
+  margin: 0 0 4px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.doc-nav a,
+.doc-toc a {
+  position: relative;
+  display: block;
+  padding: 6px 12px;
+  border-radius: var(--radius-control);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.doc-nav a:hover,
+.doc-toc a:hover {
+  background: var(--hover);
+}
+
+/* Текущая страница — как выбранный элемент NavigationView. */
+.doc-nav a[aria-current='page'] {
+  background: var(--sel);
+}
+
+.doc-nav a[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  margin-top: -8px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.doc-toc a {
+  padding: 4px 12px;
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+@media (max-width: 1199px) {
+  .doc-toc {
+    display: none;
+  }
+}
+
+.doc-source {
+  margin-top: 32px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* Текст документа — как acp-md приложения. */
+.prose {
+  max-width: 820px;
+  overflow-wrap: break-word;
+}
+
+.prose h1 {
+  margin: 0 0 16px;
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+}
+
+.prose h2 {
+  margin: 32px 0 8px;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.prose h3 {
+  margin: 24px 0 8px;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.prose h4 {
+  margin: 20px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.prose p,
+.prose ul,
+.prose ol,
+.prose table,
+.prose pre,
+.prose details,
+.prose blockquote {
+  margin: 0 0 12px;
+}
+
+.prose li + li {
+  margin-top: 4px;
+}
+
+.prose blockquote {
+  padding: 4px 16px;
+  border-left: 3px solid var(--stroke);
+  color: var(--text2);
+}
+
+.prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.prose th,
+.prose td {
+  padding: 6px 10px;
+  border: 1px solid var(--stroke);
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  background: var(--card2);
+  font-weight: 600;
+}
+
+.prose :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: var(--radius-control);
+  background: var(--sel);
+  font-size: 13px;
+}
+
+.prose kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--cstroke);
+  border-bottom-color: var(--cstroke2);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  font-size: 12px;
+}
+
+.prose img {
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-control);
+}
+
+.prose pre {
+  padding: 10px 14px;
+  overflow-x: auto;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-control);
+  background: var(--code-bg);
+  color: var(--code-fg);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/*
+ * Shiki с двумя темами пишет цвета в `--shiki-light*` и `--shiki-dark*`
+ * (`defaultColor: false`, D8); тема выбирается тем же `light-dark()`, что и
+ * токены, поэтому код переключается вместе с сайтом.
+ */
+.prose pre.astro-code {
+  background-color: light-dark(var(--shiki-light-bg), var(--shiki-dark-bg));
+  color: light-dark(var(--shiki-light), var(--shiki-dark));
+}
+
+.prose pre.astro-code span {
+  color: light-dark(var(--shiki-light), var(--shiki-dark));
+  font-style: var(--shiki-light-font-style);
+  font-weight: var(--shiki-light-font-weight);
+}
+
+/* Исходник mermaid без JavaScript и при ошибке отрисовки (D7). */
+.prose pre.mermaid-source {
+  white-space: pre;
+}
+
+.prose pre.mermaid-source[hidden] {
+  display: none;
+}
+
+.mermaid-diagram {
+  margin: 0 0 12px;
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-control);
+  background: var(--card);
+}
+
+.mermaid-diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.mermaid-error {
+  margin: -4px 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-control);
+  background: var(--bad-bg);
+  color: var(--text);
+}
+
+/* Оглавление /docs/ и списки новостей. */
+.toc-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.toc-groups ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.empty-state {
+  padding: 16px 20px;
+  border: 1px dashed var(--cstroke2);
+  border-radius: var(--radius-card);
+  color: var(--text2);
+}
+
+@media (max-width: 600px) {
+  .site-main {
+    padding: 24px 16px 40px;
+  }
+
+  .t-title-large {
+    font-size: 28px;
+    line-height: 36px;
+  }
+}

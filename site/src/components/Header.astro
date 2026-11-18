@@ -1,0 +1,52 @@
+---
+/**
+ * Шапка сайта: логотип, меню разделов и переключатель темы.
+ *
+ * Почему: разделы и пункт «Установка» заданы design.md add-astro-site, D9;
+ * вид — NavigationAppBar приложения (D8). «Установка» ведёт на документ
+ * `docs/user/run-from-source.md`: своей копии команд у сайта нет.
+ *
+ * Для чего: навигация между главной, страницами возможностей, документацией
+ * и новостями. «Возможности» — `<details>`: меню работает с клавиатуры и без
+ * JavaScript.
+ *
+ * Как использовать: `<Header current="docs" />`; `current` отмечает раздел
+ * через `aria-current`. Все адреса — `withBase` (D12).
+ */
+import { pageUrl, withBase } from '../lib/urls';
+
+interface Props {
+  readonly current?: 'home' | 'features' | 'install' | 'docs' | 'news';
+}
+
+const { current } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const ariaCurrent = (section: Props['current']) => (section === current ? 'page' : undefined);
+---
+
+<header class="site-header">
+  <a class="brand" href={withBase('', base)}>
+    <span class="brand-logo" aria-hidden="true">CL</span>
+    <span>CodeLab</span>
+  </a>
+  <nav class="site-nav" aria-label="Разделы сайта">
+    <details class="nav-menu">
+      <summary aria-current={ariaCurrent('features')}>Возможности</summary>
+      <ul class="nav-menu-list">
+        <li><a href={withBase('features/app/', base)}>CodeLab app</a></li>
+        <li><a href={withBase('features/cli/', base)}>Терминальный клиент codelab</a></li>
+        <li><a href={withBase('features/agent/', base)}>Агент codelab-agent</a></li>
+      </ul>
+    </details>
+    <a class="nav-link" href={pageUrl('docs/user/run-from-source.md', base)} aria-current={ariaCurrent('install')}>
+      Установка
+    </a>
+    <a class="nav-link" href={withBase('docs/', base)} aria-current={ariaCurrent('docs')}>Документация</a>
+    <a class="nav-link" href={withBase('news/', base)} aria-current={ariaCurrent('news')}>Новости</a>
+  </nav>
+  <button class="btn theme-toggle" type="button" data-theme-toggle hidden>Тема</button>
+</header>
+
+<script>
+  import '../scripts/theme';
+</script>

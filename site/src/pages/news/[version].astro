@@ -1,0 +1,44 @@
+---
+/**
+ * Страница новости выпуска: `/news/<version>/`.
+ *
+ * Почему: у каждой новости своя страница (design.md add-astro-site, D10;
+ * project-site «Новости выпусков», сценарий «Новость выпуска»). Ссылки в
+ * тексте новости — адреса сайта; их проверяет `check-links`, а не
+ * `repoLinks` (D10).
+ *
+ * Для чего: заголовок, дата, версия и текст новости.
+ *
+ * Как использовать: маршрут строит Astro из коллекции `news`; `orderNews`
+ * ломает сборку на повторе версии.
+ */
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { orderNews } from '../../lib/news';
+import { withBase } from '../../lib/urls';
+
+export async function getStaticPaths() {
+  const news = orderNews(await getCollection('news'));
+  return news.map((item) => ({ params: { version: item.data.version }, props: { item } }));
+}
+
+interface Props {
+  readonly item: CollectionEntry<'news'>;
+}
+
+const { item } = Astro.props;
+const { Content } = await render(item);
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout title={item.data.title} description={item.data.summary} current="news">
+  <article class="prose">
+    <p class="t-caption t2"><a href={withBase('news/', base)}>Новости выпусков</a></p>
+    <h1>{item.data.title}</h1>
+    <p class="t-caption t2">
+      <time datetime={item.data.date}>{item.data.date}</time> · версия {item.data.version}
+    </p>
+    <Content />
+  </article>
+</BaseLayout>

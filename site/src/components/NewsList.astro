@@ -1,0 +1,50 @@
+---
+/**
+ * Список новостей выпусков от новой к старой.
+ *
+ * Почему: один и тот же список показывают `/news/` (все) и главная (три
+ * последние); порядок и проверку дубликатов версии делает `orderNews`
+ * (design.md add-astro-site, D10; project-site «Новости выпусков»).
+ *
+ * Для чего: карточки новостей или пустое состояние «Выпусков пока нет»
+ * (сценарий «Новостей нет»).
+ *
+ * Как использовать: `<NewsList limit={3} headingLevel={3} />`; без `limit` —
+ * все новости.
+ */
+import { getCollection } from 'astro:content';
+
+import { orderNews } from '../lib/news';
+import { withBase } from '../lib/urls';
+
+interface Props {
+  readonly limit?: number;
+  readonly headingLevel?: 2 | 3;
+}
+
+const { limit, headingLevel = 2 } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const all = orderNews(await getCollection('news'));
+const news = limit === undefined ? all : all.slice(0, limit);
+const Heading = `h${headingLevel}` as 'h2' | 'h3';
+---
+
+{
+  news.length === 0 ? (
+    <p class="empty-state">Выпусков пока нет.</p>
+  ) : (
+    <ul class="news-list">
+      {news.map((item) => (
+        <li class="card">
+          <Heading class="t-subtitle">
+            <a href={withBase(`news/${item.data.version}/`, base)}>{item.data.title}</a>
+          </Heading>
+          <p class="t-caption t2">
+            <time datetime={item.data.date}>{item.data.date}</time> · версия {item.data.version}
+          </p>
+          <p>{item.data.summary}</p>
+        </li>
+      ))}
+    </ul>
+  )
+}

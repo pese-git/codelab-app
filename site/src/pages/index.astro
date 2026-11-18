@@ -1,19 +1,90 @@
 ---
-// Временная главная каркаса (tasks.md add-astro-site, 2.2): одна страница,
-// чтобы проверить `npm ci --ignore-scripts` и сборку. Настоящая главная —
-// задача 4.6 (D9).
+/**
+ * Главная: `/`.
+ *
+ * Почему: что такое CodeLab, три продукта карточками, «Установка» и
+ * последние новости (design.md add-astro-site, D9; project-site «Разделы
+ * сайта», сценарий «Главная ведёт к продуктам и установке»). Шаги установки
+ * названы словами, команды живут только в `docs/user/run-from-source.md`
+ * («один факт — одно место»). Факты — `docs/user/README.md`; тексты —
+ * черновик для проверки фактов `docs-writer` (tasks.md 7.2).
+ *
+ * Для чего: вход на сайт и маршруты к страницам возможностей и документации.
+ *
+ * Как использовать: правка текста — по отчёту проверки фактов.
+ */
+import NewsList from '../components/NewsList.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { pageUrl, withBase } from '../lib/urls';
+
+const base = import.meta.env.BASE_URL;
+const install = pageUrl('docs/user/run-from-source.md', base);
+
+const products = [
+  {
+    title: 'CodeLab app',
+    text: 'Настольное приложение: сессии по проектам, лента переписки, одобрение действий агента, файлы проекта и терминал в одном окне.',
+    href: withBase('features/app/', base),
+  },
+  {
+    title: 'codelab',
+    code: true,
+    text: 'Терминальный клиент: диалог с агентом в построчном или полноэкранном режиме, один запрос из скрипта или CI, настройка агента.',
+    href: withBase('features/cli/', base),
+  },
+  {
+    title: 'codelab-agent',
+    code: true,
+    text: 'Агент CodeLab как отдельная программа: подключается к любому ACP-клиенту, например к Zed.',
+    href: withBase('features/agent/', base),
+  },
+];
 ---
 
-<!doctype html>
-<html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CodeLab</title>
-  </head>
-  <body>
-    <main>
-      <h1>CodeLab</h1>
-    </main>
-  </body>
-</html>
+<BaseLayout
+  title="CodeLab"
+  plainTitle
+  description="CodeLab — рабочее место для работы с AI-агентами по протоколу ACP: настольное приложение, терминальный клиент и агент."
+  current="home"
+>
+  <h1 class="t-title-large">CodeLab</h1>
+  <p class="lead t-body-large">
+    Рабочее место для работы с AI-агентами по протоколу ACP (Agent Client Protocol). Агент работает в папке проекта
+    и спрашивает разрешение на опасные действия по правилам режима.
+  </p>
+  <p class="lead">
+    CodeLab app и <code>codelab</code> — клиенты. По умолчанию они запускают встроенного агента внутри своего
+    процесса, отдельная программа для этого не нужна. <code>codelab-agent</code> — тот же агент для сторонних
+    клиентов.
+  </p>
+
+  <h2 class="t-subtitle section-title">Продукты</h2>
+  <ul class="cards">
+    {
+      products.map((product) => (
+        <li class="card">
+          <h3 class="t-subtitle">{product.code ? <code>{product.title}</code> : product.title}</h3>
+          <p class="t2">{product.text}</p>
+          <a class="card-link" href={product.href}>
+            Возможности {product.code ? <code>{product.title}</code> : product.title}
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+
+  <h2 class="t-subtitle section-title" id="install">Установка</h2>
+  <p class="lead">
+    Установщика пока нет: <code>codelab</code>, <code>codelab-agent</code> и CodeLab app собираются из репозитория.
+    Понадобятся FVM, а для app на macOS — Xcode с командной строкой. Шаги: подготовить репозиторий, собрать CLI и
+    агента, запустить CLI или app.
+  </p>
+  <p>
+    <a class="btn accent" href={install}>Установка и быстрый старт</a>
+    <a class="btn" href={withBase('docs/', base)}>Вся документация</a>
+  </p>
+
+  <h2 class="t-subtitle section-title">Новости</h2>
+  <NewsList limit={3} headingLevel={3} />
+  <p><a href={withBase('news/', base)}>Все новости выпусков</a></p>
+</BaseLayout>

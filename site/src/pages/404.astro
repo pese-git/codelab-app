@@ -1,0 +1,31 @@
+---
+/**
+ * Страница «не найдено»: `/404.html`.
+ *
+ * Почему: раздел D9 design.md add-astro-site; статический хостинг отдаёт
+ * этот файл на любой несуществующий адрес. Ссылки — через `withBase`: файл
+ * может открыться по любому адресу внутри `base` (D12).
+ *
+ * Для чего: вернуть читателя на главную или в документацию.
+ *
+ * Как использовать: собирается Astro в `dist/404.html` без настройки.
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { withBase } from '../lib/urls';
+
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout title="Страница не найдена">
+  <div class="page-narrow">
+    <h1 class="t-title">Страница не найдена</h1>
+    <p class="lead t2">
+      По этому адресу ничего нет. Возможно, документ переименовали: адрес страницы повторяет путь файла в
+      репозитории.
+    </p>
+    <p>
+      <a class="btn accent" href={withBase('', base)}>На главную</a>
+      <a class="btn" href={withBase('docs/', base)}>Документация</a>
+    </p>
+  </div>
+</BaseLayout>
