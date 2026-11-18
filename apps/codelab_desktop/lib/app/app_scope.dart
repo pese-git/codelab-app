@@ -104,11 +104,16 @@ import 'navigation/settings_page_store.dart';
 import 'connection_environment.dart';
 import 'secret_migration_offer.dart';
 
+import 'language/app_language_cubit.dart' show AppLanguageState;
+
 part 'app_scope.module.cherrypick.g.dart';
 
 typedef CodeLabTransportFactory = AcpTransport Function();
 
 Scope createCodeLabRootScope({
+  // ЗАГЛУШКА красных тестов задачи 1.5: начальное состояние языка (шов D2,
+  // `add-desktop-localization`); реализация — задача 1.6.
+  AppLanguageState? language,
   CodeLabTransportFactory? transportFactory,
   CodeLabStdioTransportFactory? stdioTransportFactory,
   CodeLabWebSocketTransportFactory? webSocketTransportFactory,
