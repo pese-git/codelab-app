@@ -28,3 +28,8 @@ enum ToolPane {
   final String label;
   final IconData icon;
 }
+
+// ЗАГЛУШКА красной фазы задачи 2.1 change `add-desktop-localization`: только
+// сигнатура из D4, без логики. Задача 2.2 заменяет тело на выбор из каталога
+// кита (`codeLabStringsOf(context)`) и убирает поле `label`.
+String toolPaneTitleOf(BuildContext context, ToolPane pane) => pane.label;
