@@ -4,7 +4,7 @@ import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/language/app_language_cubit.dart'
     show AppLanguageState;
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart'
-    show AppLanguagePreference;
+    show AppLanguagePreference, AppLanguagePreferences;
 import 'package:codelab_desktop/l10n/app_localizations.dart'
     show lookupAppLocalizations;
 import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snapshot_store.dart'
@@ -113,6 +113,9 @@ final class CodeLabTestBinding {
     // Язык первого кадра (D9): по умолчанию `en`, поэтому существующие
     // проверки текстов на английском не меняются.
     Locale locale = const Locale('en'),
+    // Порт хранения языка: тесты сбоя записи подставляют двойник; без него
+    // запись идёт в `shared_preferences` (мок в памяти).
+    AppLanguagePreferences? languagePreferences,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
     // а у плагина в тестах нет реализации канала: без моков каждая загрузка
@@ -133,6 +136,7 @@ final class CodeLabTestBinding {
       ...preferences,
     });
     scope = createCodeLabRootScope(
+      languagePreferences: languagePreferences,
       language: AppLanguageState(
         preference: locale.languageCode == 'ru'
             ? AppLanguagePreference.ru
