@@ -9,9 +9,11 @@
 /// (design.md change `add-agent-core-permission-policy`, D6; `AGENTS.md` §5).
 ///
 /// Для чего: [findCritical] — шаг 3 алгоритма `decide` политики разрешений;
+/// рабочий каталог команды (`cd`, `pushd`, `popd`, связки, блоки) ведёт
+/// `exec_dir_walk.dart` (§7.6.2), здесь остаются сами правила для сегмента;
 /// [isAgentConfigPath] — общая проверка путей §7.6.1 для `exec` и для
 /// `write`/`edit` (живёт в `agent_config_rules.dart`, здесь реэкспорт). Здесь
-/// остаются таблица §7.6 и обход сегментов; правила конфигурации агента —
+/// остаются таблица §7.6 и проверка сегмента; правила конфигурации агента —
 /// `agent_config_rules.dart`, маски — `shell_glob.dart`, разбор аргументов —
 /// `command_args.dart`.
 ///
@@ -23,6 +25,8 @@ import '../util/posix_path.dart';
 import 'agent_config_paths.dart';
 import 'agent_config_rules.dart';
 import 'command_args.dart';
+import 'exec_dir_walk.dart';
+import 'shell_dir_state.dart';
 import 'shell_lexer.dart';
 
 // `policy.dart` и тесты берут проверку проектных путей отсюда (§7.6.1).
@@ -54,6 +58,12 @@ final class CriticalMatch {
   String toString() => 'CriticalMatch($label)';
 }
 
+/// Наибольшая длина команды `exec`, которую разбирает [findCritical] (D17,
+/// M2): 128 KiB. Проверка идёт до разбора: полный проход по строке до
+/// мегабайта с вложенными подстановками стоит секунды в UI-изоляте, а
+/// проходов два (канонизация ссылок). Длиннее — `unparsable command`.
+const maxExecCommandLength = 128 * 1024;
+
 /// Метка сломанной или слишком глубокой команды (§7.6, правило 8; D6).
 const unparsableCommandLabel = 'unparsable command';
 
@@ -71,6 +81,9 @@ const _downloadExecute = 'download and execute';
 const _shutdown = 'host shutdown or reboot';
 const _killAll = 'kill of init or all processes';
 const _agentConfig = 'write to agent configuration';
+
+/// Команда критична только из-за неизвестного рабочего каталога (§7.6.2, D9).
+const _unknownDir = 'write in unknown working directory';
 const _gitPush = 'git force push or remote branch deletion';
 const _gitRewrite = 'git history rewrite';
 
@@ -90,6 +103,7 @@ const _tableOrder = [
   _shutdown,
   _killAll,
   _agentConfig,
+  _unknownDir,
   _gitPush,
   _gitRewrite,
 ];
@@ -111,7 +125,8 @@ final forkBomb = RegExp(r'(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&');
 /// нормализуются цели правила `write to agent configuration` (§7.6.1) и
 /// относительные пути защищённых целей. [commandCwd] — каталог, в котором
 /// запускается команда (аргумент `cwd` инструмента `exec`), по умолчанию
-/// [cwd]; `cd` внутри команды сдвигает его для следующих слов. [agentConfig] —
+/// [cwd]; `cd`, `pushd` и `popd` внутри команды сдвигают его, а обход ведёт
+/// множество вариантов каталога, включая «неизвестно» (§7.6.2). [agentConfig] —
 /// пути конфигурации агента от хоста (PERM-11, D8) в пересчитанном виде:
 /// запись в них, жёсткая ссылка на них и подмена их каталогов-предков
 /// совпадают с тем же правилом `write to agent configuration`.
@@ -121,6 +136,9 @@ CriticalMatch? findCritical(
   String? commandCwd,
   AgentConfigScope? agentConfig,
 }) {
+  if (command.length > maxExecCommandLength) {
+    return const CriticalMatch([unparsableCommandLabel]);
+  }
   final ShellScript script;
   try {
     script = parseShell(command);
@@ -147,7 +165,17 @@ CriticalMatch? findCritical(
   }
   var unparsable = false;
   try {
-    _walk(script, root, config, start, found);
+    ExecDirWalk(
+      config: config,
+      context: DirContext.of(command, script, config),
+      checkIndependent: (segment, out) => _checkIndependent(segment, root, out),
+      checkAt: (segment, dir, out) =>
+          _checkAtDirectory(segment, root, config, dir, out),
+      unknownCritical: (segment) => writesInUnknownDirectory(segment, config),
+      found: found,
+      agentConfigLabel: _agentConfig,
+      unknownLabel: _unknownDir,
+    ).run(script, start);
   } on ShellParseException {
     // Правила обхода тоже могут счесть команду неразбираемой (слишком
     // длинный кластер флагов, `touchesConfig`): fail closed, правило 8.
@@ -165,53 +193,6 @@ CriticalMatch? findCritical(
 }
 
 final _functionDefinition = RegExp(r'(^|[\s;&|{(])[A-Za-z_][\w.:-]*\s*\(\s*\)');
-
-/// Обходит сегменты по порядку записи и ведёт текущий каталог: `cd` сдвигает
-/// его для следующих сегментов, поэтому `cd ~/.codelab && echo x > config.yaml`
-/// пишет в защищаемый файл (§7.6.1). Подоболочка и подстановка получают копию
-/// каталога; ошибка в оценке `cd` (неизвестная переменная) каталог не меняет.
-void _walk(
-  ShellScript script,
-  String root,
-  ConfigCheck config,
-  String dir,
-  Set<String> found,
-) {
-  var current = dir;
-  for (final pipeline in script.pipelines) {
-    for (final segment in pipeline.stages) {
-      // `env -C DIR cmd` / `sudo -D DIR cmd` запускают команду в DIR, но
-      // следующие сегменты остаются в прежнем каталоге.
-      final launcherDir = segment.launcherDir;
-      final here = launcherDir == null
-          ? current
-          : config.cdTarget([launcherDir], current) ?? current;
-      _checkSegment(segment, root, config, here, found);
-      // Вложенный текст исполняется после присваиваний и лаунчеров внешнего
-      // сегмента и после всего, что выполнено раньше. E1 навыков он получает
-      // только как `sh|bash|dash -c` без startup-файлов (Q47). Изменения
-      // окружения во вложенном тексте (`eval "export X=1"`) остаются и для
-      // следующих сегментов: fail closed.
-      final outerEnvironment = config.environmentAssigned;
-      if (segment.nested.isNotEmpty &&
-          (segment.launcherWords.isNotEmpty ||
-              !ConfigCheck.nestedKeepsSkillExceptions(segment))) {
-        config.environmentAssigned = true;
-      }
-      for (final nested in segment.nested) {
-        _walk(nested, root, config, here, found);
-      }
-      config.environmentAssigned =
-          outerEnvironment || config.environmentAssigned;
-      // Сам сегмент учитывается после вложенного текста: он влияет на
-      // следующие сегменты, а не на собственный вложенный.
-      config.noteEnvironment(segment);
-      if (const {'cd', 'pushd'}.contains(segment.commandName)) {
-        current = config.cdTarget(segment.arguments, current) ?? current;
-      }
-    }
-  }
-}
 
 const _downloaders = {'curl', 'wget', 'fetch'};
 const _interpreters = {
@@ -296,13 +277,10 @@ void _checkPipeline(ShellPipeline pipeline, Set<String> found) {
   }
 }
 
-void _checkSegment(
-  ShellSegment segment,
-  String root,
-  ConfigCheck config,
-  String dir,
-  Set<String> found,
-) {
+/// Правила таблицы §7.6, которым рабочий каталог не нужен: сравнение идёт с
+/// [root] и с литералами. Обход вызывает их один раз на сегмент, а не на
+/// каждый вариант каталога (D17, A6).
+void _checkIndependent(ShellSegment segment, String root, Set<String> found) {
   final name = segment.commandName;
   final args = segment.arguments;
   if (segment.privileged) {
@@ -321,14 +299,6 @@ void _checkSegment(
   }
   if (writes.common.any(_isSshPath)) {
     found.add(_sshConfig);
-  }
-  if (writes.agentConfig.any((t) => config.isConfig(t, dir)) ||
-      writes.directories.any((t) => config.isConfigDirectory(t, dir)) ||
-      replacesConfigAncestor(segment, config, dir) ||
-      hardLinksConfig(segment, config, dir) ||
-      touchesConfig(segment, config, dir) ||
-      writesViaBroadDirectory(segment, config, dir)) {
-    found.add(_agentConfig);
   }
   if (_executesNested.contains(name) &&
       segment.nested.any(
@@ -379,11 +349,30 @@ void _checkSegment(
       }
     case 'git':
       _checkGit(args, found);
-      if (gitWipesTree(args, config, dir)) {
-        found.add(_agentConfig);
-      }
     case final String n when _isFormatCommand(n, args, root):
       found.add(_format);
+  }
+}
+
+/// Правила записи в конфигурацию агента (`write to agent configuration`,
+/// §7.6.1) для сегмента в каталоге [dir]: относительные пути считаются от него.
+void _checkAtDirectory(
+  ShellSegment segment,
+  String root,
+  ConfigCheck config,
+  String dir,
+  Set<String> found,
+) {
+  final writes = _WriteTargets.of(segment);
+  if (writes.agentConfig.any((t) => config.isConfig(t, dir)) ||
+      writes.directories.any((t) => config.isConfigDirectory(t, dir)) ||
+      replacesConfigAncestor(segment, config, dir) ||
+      hardLinksConfig(segment, config, dir) ||
+      touchesConfig(segment, config, dir) ||
+      writesViaBroadDirectory(segment, config, dir) ||
+      segment.commandName == 'git' &&
+          gitWipesTree(segment.arguments, config, dir)) {
+    found.add(_agentConfig);
   }
 }
 

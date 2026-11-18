@@ -494,4 +494,172 @@ void main() {
       }
     });
   });
+
+  // Спецификация `agent-permissions`, сценарии «Зарезервированные слова не
+  // прячут команду» и «Заголовки составных команд не считаются командами»
+  // (change `harden-exec-cwd-tracking`, D10).
+  group('зарезервированные слова и trap (D10)', () {
+    const rm = 'recursive delete of a protected path';
+    const privileged = 'privileged command; host shutdown or reboot';
+
+    test('команда под if, while, for и ! проверяется как без обёртки', () {
+      for (final MapEntry(key: command, value: label) in {
+        'if true; then rm -rf /; fi': rm,
+        'if false; then :; else rm -rf ~; fi': rm,
+        'if false; then :; elif true; then rm -rf /; fi': rm,
+        'while true; do rm -rf /; done': rm,
+        'until false; do rm -rf /; done': rm,
+        'for d in a b; do sudo reboot; done': privileged,
+        'select d in a b; do sudo reboot; done': privileged,
+        '! rm -rf /': rm,
+        'if ! true; then rm -rf /; fi': rm,
+        'if true\nthen\n  rm -rf /\nfi': rm,
+      }.entries) {
+        expect(findCritical(command)?.label, label, reason: command);
+      }
+    });
+
+    // Действие `trap`, не меняющее каталог, проверяется в конце во всех
+    // состояниях строки без «неизвестно» (D17, A8): метки строки как без
+    // обёртки.
+    test('trap: действие проверяется как без обёртки', () {
+      for (final command in [
+        "trap 'rm -rf /' EXIT",
+        "trap -- 'rm -rf /' INT TERM",
+      ]) {
+        expect(findCritical(command)?.labels, [rm], reason: command);
+      }
+    });
+
+    test('заголовки составных команд и обычные тела не критичны', () {
+      for (final command in [
+        'for f in a.txt b.txt; do cat "\$f"; done',
+        'if test -f a; then echo yes; fi',
+        'while read l; do echo "\$l"; done < in.txt',
+        'if [ -f a ]; then echo yes; else echo no; fi',
+        'trap - EXIT',
+        "trap '' INT",
+        'trap -p',
+        'f() { echo hi; }',
+      ]) {
+        expect(findCritical(command), isNull, reason: command);
+      }
+    });
+
+    test('перенаправление после done и } проверяется как запись', () {
+      expect(
+        findCritical('while read l; do echo x; done > /dev/sda')?.label,
+        'write to a disk device',
+      );
+      expect(
+        findCritical('{ echo x; } > /dev/sda')?.label,
+        'write to a disk device',
+      );
+    });
+
+    test('case, лишние слова и незакрытые блоки — unparsable command', () {
+      for (final command in [
+        'case x in a) rm -rf /;; esac',
+        'fi',
+        '{ a',
+        'then a',
+      ]) {
+        expect(findCritical(command)?.labels, ['unparsable command']);
+      }
+    });
+  });
+
+  group('ревью: for без in, незакрытые и лишние слова', () {
+    test('for NAME do … и select NAME do … — заголовок закрывает do', () {
+      for (final command in [
+        'for x do rm -rf /; done',
+        'select x do rm -rf /; done',
+        'for x in a b; do rm -rf /; done',
+      ]) {
+        expect(
+          findCritical(command)?.label,
+          'recursive delete of a protected path',
+          reason: command,
+        );
+      }
+      expect(
+        findCritical(
+          'set -- 1; for x do touch .codelab/config.yaml; done',
+        )?.labels,
+        ['write to agent configuration'],
+      );
+      expect(findCritical(r'for x do echo $x; done'), isNull);
+    });
+
+    test('лишнее слово в заголовке for — unparsable command', () {
+      for (final command in [
+        'for x y; do a; done',
+        'for ((i=0; i<3; i++)); do a; done',
+        'if a; then b; done',
+        'do a',
+        '{ a; } b',
+        '! ! a',
+        'time { echo x; }',
+      ]) {
+        expect(findCritical(command)?.labels, [
+          'unparsable command',
+        ], reason: command);
+      }
+    });
+
+    test('popd с пустым стеком не прячет команду', () {
+      expect(findCritical('popd && rm -rf /')?.labels, [
+        'recursive delete of a protected path',
+      ]);
+      expect(findCritical('popd && make'), isNull);
+    });
+  });
+
+  // N1, N2: подстановки внутри `${…}` и `$((…))`, присваивания `+=`/`[i]=`.
+  group('ревью: подстановки в скобочных раскрытиях и арифметике', () {
+    const rm = 'recursive delete of a protected path';
+
+    test('команда внутри раскрытия и арифметики исполняется оболочкой', () {
+      for (final command in [
+        r'echo ${x:-$(rm -rf /)}',
+        r'echo ${x:-`rm -rf /`}',
+        r'echo "${x:-$(rm -rf /)}"',
+        r'echo ${x:-${y:-$(rm -rf /)}}',
+        r'echo ${x:-\}$(rm -rf /)}',
+        r"echo ${x:-'}'$(rm -rf /)}",
+        r'echo $(( $(rm -rf /) 0 ))',
+        r'echo $(( `rm -rf /` ))',
+        r'echo $((1 + $(rm -rf /)))',
+      ]) {
+        expect(findCritical(command)?.labels, [rm], reason: command);
+      }
+    });
+
+    test('подстановка с подоболочкой, а не арифметика', () {
+      expect(findCritical(r'echo $((rm -rf /) )')?.labels, [rm]);
+    });
+
+    test('обычные раскрытия и арифметика не критичны', () {
+      for (final command in [
+        r'echo $((1+2))',
+        r'echo $(( (1+2)*3 ))',
+        r'echo $((i + 1))',
+        r'echo ${x:-default}',
+        r'echo ${x:-${y}}',
+        r'echo ${x#*/}',
+      ]) {
+        expect(findCritical(command), isNull, reason: command);
+      }
+    });
+
+    test('незакрытое раскрытие — unparsable command', () {
+      expect(findCritical(r'echo ${x:-$(ls)')?.labels, ['unparsable command']);
+    });
+
+    test('a+=1 и a[0]=1 перед командой — присваивания (N2)', () {
+      for (final command in ['a+=1 rm -rf /', 'a[0]=1 rm -rf /']) {
+        expect(findCritical(command)?.labels, [rm], reason: command);
+      }
+    });
+  });
 }

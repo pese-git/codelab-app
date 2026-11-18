@@ -625,11 +625,15 @@ void main() {
         'env GIT_WORK_TREE=/tmp/x git status',
         'export GIT_DIR=/tmp/x',
       ]);
+      // Изменено change `harden-exec-cwd-tracking` (D8, D9): переменная-
+      // команда запускается программой в неизвестном каталоге, и команда не
+      // из белого списка чтения (`vim`, `lesspipe`) там критична с меткой
+      // `write in unknown working directory`. Прежние ожидания
+      // `EDITOR=vim git commit` и `LESSOPEN="|lesspipe %s" less x`
+      // перенесены в `exec_working_dir_test.dart`.
       await _expectOrdinary([
         'PAGER=less git log',
-        'EDITOR=vim git commit',
         'GIT_PAGER=cat git log',
-        'LESSOPEN="|lesspipe %s" less x',
         'export EDITOR=vim',
         'FOO=bar make',
       ]);

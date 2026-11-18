@@ -535,6 +535,45 @@ void main() {
       ]);
     });
 
+    // §7.6.2 «Исключения навыков», D11 change `harden-exec-cwd-tracking`:
+    // E1 действует только при известном каталоге и не снимает правило
+    // «неизвестно» — неизвестный каталог может быть `~/.codelab`.
+    test('D11: E1 does not lift the unknown working directory', () async {
+      const py = '$pdf/scripts/x.py';
+      await h.expectOrdinary([
+        'cd $pdf && python3 scripts/x.py',
+        'python3 $py',
+      ]);
+      // Цель `cd` неизвестна, E1 здесь действует (нет подстановки), но
+      // неизвестный каталог может быть `~/.codelab`.
+      await h.exec(r'cd "$X" && python3 ' + py);
+      expect(
+        h.gate.requests.single.reason,
+        'critical command: write in unknown working directory',
+      );
+      expect(h.gate.requests.single.allowAlwaysOffered, isFalse);
+      // Подстановка в `cd` отключает E1 (Q47): путь скрипта в защищаемом
+      // корне виден в команде, метка прежняя, команда критична.
+      await h.exec('cd "\$(mktemp -d)" && python3 $py');
+      expect(
+        h.gate.requests.last.reason,
+        'critical command: write to agent configuration',
+      );
+    });
+
+    // §7.6.1, E1(4): `{` и `}` — зарезервированные слова и отключают E1.
+    // Лексер change `harden-exec-cwd-tracking` разбирает группу как блок,
+    // поэтому слово `{` больше не видно как сегмент: обход ставит признак
+    // сам (D6).
+    test('Q47: a group braces disable E1 like other reserved words', () async {
+      const py = '$pdf/scripts/x.py';
+      await h.expectCritical([
+        '{ python3 $py; }',
+        '{ cat /dev/null; }; python3 $py',
+      ]);
+      await h.expectOrdinary(['(cat /dev/null); python3 $py']);
+    });
+
     test('Q47: a nested -c text keeps E1 only for sh/bash/dash with plain '
         '-c (startup files and zsh disable it)', () async {
       const py = '$pdf/scripts/x.py';

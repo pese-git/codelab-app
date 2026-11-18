@@ -11,12 +11,22 @@
 ///
 /// Для чего: превращает строку команды в дерево [ShellScript] — конвейеры,
 /// стадии, слова без кавычек и лаунчеров, перенаправления и вложенные
-/// команды. Это не интерпретатор: переменные не раскрываются, а `cd` не
-/// меняет каталог.
+/// команды. Это не интерпретатор: переменные не раскрываются и каталог не
+/// ведётся — рабочий каталог команды считает обход `exec_dir_walk.dart` по
+/// дереву [ShellScript.commands] (связки, отрицание, блоки) и по
+/// происхождению вложенного текста [ShellOrigin] (§7.6.2, change
+/// `harden-exec-cwd-tracking`, D2, D6–D8).
+///
+/// Зарезервированные слова в позиции команды (`if`, `then`, `elif`, `else`,
+/// `fi`, `while`, `until`, `do`, `done`, `for`, `select`, `function`, `!`)
+/// снимаются, заголовок `for`/`select` командой не считается, `case`
+/// неразбираем (D10).
 ///
 /// Как использовать: `parseShell(command)`; ошибка разбора или вложенность
 /// глубже [maxShellNesting] дают [ShellParseException], которую
 /// `findCritical` превращает в шаблон `unparsable command` (правило 8).
+/// Плоские [ShellScript.pipelines] и [ShellScript.allSegments] остаются
+/// для правил таблицы §7.6; структуру блоков даёт [ShellScript.commands].
 library;
 
 import 'dart:convert';
@@ -27,6 +37,15 @@ import 'dart:convert';
 /// сделать сколь угодно глубокой. Верхний уровень — глубина 0; каждая
 /// подстановка, аргумент `-c` или `eval` прибавляет единицу.
 const maxShellNesting = 4;
+
+/// Наибольшая глубина вложенных блоков `( )`, `{ }`, `if`, циклов (D17, M2).
+///
+/// Почему: обход блоков рекурсивен, а строка приходит от модели; `{ ` ×10000
+/// иначе давало бы `StackOverflowError` вместо `unparsable command`.
+const maxShellBlockDepth = 64;
+
+/// Наибольшая вложенность раскрытий `${…}` (D18, C4): разбор рекурсивен.
+const _maxExpansionDepth = 64;
 
 /// Команду нельзя разобрать: незакрытая кавычка или подстановка, лишняя `)`,
 /// перенаправление без цели или вложенность глубже [maxShellNesting].
@@ -109,6 +128,10 @@ final class ShellSegment {
     this.riskyEnvironment = false,
     this.launcherWords = const [],
     this.commandTextIndex,
+    this.launchers = const [],
+    this.lookupOnly = false,
+    this.commandWordGlob = false,
+    this.commandWordSplit = false,
   });
 
   /// Слова без кавычек, начиная с имени команды; пустой список у сегмента
@@ -152,6 +175,29 @@ final class ShellSegment {
   /// путь (PERM-11: `bash -c 'rm "$0"' <путь с пробелом>`).
   final int? commandTextIndex;
 
+  /// Имена снятых лаунчеров по порядку (`env`, `sudo`, `time`, `command`,
+  /// …); присваивания `NAME=…` и значения опций сюда не входят. Нужны обходу
+  /// каталога: `command cd` и `builtin cd` — встроенный `cd`, `time cd`
+  /// объединяет состояния, остальные лаунчеры запускают внешнюю программу,
+  /// которая каталог оболочки не меняет (change `harden-exec-cwd-tracking`,
+  /// D7).
+  final List<String> launchers;
+
+  /// Среди снятых `command` есть `-v`/`-V`: команда только ищется и ничего не
+  /// исполняет (`command -v cd`, `command -p command -v cd`), каталог не
+  /// меняется (D17, A3).
+  final bool lookupOnly;
+
+  /// В первом слове команды есть незакавыченные `*?[{`: оболочка раскроет его
+  /// в другое слово, имя команды заранее неизвестно (D17, A2). Слова `[` и
+  /// `[[` не в счёт.
+  final bool commandWordGlob;
+
+  /// Первое слово команды может разбиться на слова при раскрытии: до первой
+  /// `/` в нём есть незакавыченное раскрытие, кроме `HOME` и `CODELAB_HOME`
+  /// (D17, A2).
+  final bool commandWordSplit;
+
   /// Базовое имя команды (`/bin/rm` → `rm`) или `null` без слов.
   String? get commandName => words.isEmpty ? null : baseName(words.first);
 
@@ -171,19 +217,161 @@ final class ShellPipeline {
   final List<ShellSegment> stages;
 }
 
+/// Откуда взят текст вложенной команды (change `harden-exec-cwd-tracking`,
+/// D8, §7.6.2).
+///
+/// Почему: каталог, в котором исполнится вложенный текст, зависит от того,
+/// кто его исполняет: подоболочка и новый процесс получают копию состояния,
+/// `eval` продолжает текущую оболочку, а `git`, `find -execdir` и `trap`
+/// запускают его в каталоге, которого обход не знает.
+///
+/// Для чего: обход `exec_dir_walk.dart` выбирает по значению начальное
+/// состояние вложенного обхода и то, выходят ли его смены каталога наружу.
+enum ShellOrigin {
+  /// Строка команды целиком.
+  root,
+
+  /// `$( … )`, `` ` … ` ``, `<( … )`, `>( … )`: подоболочка, наружу ничего
+  /// не выходит.
+  substitution,
+
+  /// Новый процесс в каталоге родителя: `sh -c`, `env -S`, `watch`,
+  /// `script -c`, `find -exec`/`-ok`, `rg --pre`.
+  command,
+
+  /// `eval`: текущая оболочка, смены каталога действуют дальше.
+  eval,
+
+  /// Каталог исполнения неизвестен: опции и переменные `git`,
+  /// переменные-команды (`GIT_PAGER`, `EDITOR`, …), `find -execdir`/`-okdir`,
+  /// `trap`.
+  foreign,
+}
+
+/// Связка конвейера со следующим (D2).
+///
+/// Почему: `cd X && make` исполняет `make` только после успешного `cd`, а
+/// `cd X; make` — всегда; без различия связок либо теряется точность, либо
+/// пропускается неудачный `cd` (пример 6 proposal).
+enum ShellConnector {
+  /// `;`, перевод строки или конец блока.
+  sequence,
+
+  /// `&&`: следующий конвейер — после успеха.
+  and,
+
+  /// `||`: следующий конвейер — после неуспеха.
+  or,
+
+  /// `&`: в фон (подоболочка) уходит весь and-or список, а не последний
+  /// конвейер (`A && B &` — `{ A && B; } &`), следующая команда идёт сразу.
+  background,
+}
+
+/// Вид блока составной команды (D6).
+enum ShellBlockKind {
+  /// `( … )`: подоболочка.
+  subshell,
+
+  /// `{ …; }`: группа в текущей оболочке.
+  group,
+
+  /// `if … fi`: условие, `then` и `else` — одна последовательность.
+  conditional,
+
+  /// `while`/`until`/`for`/`select … done`.
+  loop,
+
+  /// Тело функции: `name() { … }`, `function name { … }`.
+  function,
+}
+
+/// Стадия конвейера: простая команда или блок.
+///
+/// Почему sealed: обход обязан разобрать оба вида; новый вид стадии без
+/// ветки в обходе — ошибка компиляции, а не пропуск проверки.
+sealed class ShellStage {
+  const ShellStage();
+}
+
+/// Простая команда — стадия-сегмент.
+final class ShellSimple extends ShellStage {
+  /// Создаётся лексером.
+  const ShellSimple(this.segment);
+
+  /// Сегмент.
+  final ShellSegment segment;
+}
+
+/// Блок составной команды как стадия конвейера (D6).
+///
+/// Для чего: хранит [body] — команды блока по порядку — и перенаправления,
+/// стоящие после закрывающего слова (`done < in.txt`, `} > out`): они
+/// относятся к блоку и проверяются в состоянии на выходе (D10).
+final class ShellBlock extends ShellStage {
+  /// Создаётся лексером.
+  ShellBlock(this.kind, this.body, {this.variable});
+
+  /// Переменная цикла `for NAME`/`select NAME`: цикл её записывает (D17, A5).
+  final String? variable;
+
+  /// Вид блока.
+  final ShellBlockKind kind;
+
+  /// Команды блока.
+  final List<ShellCommand> body;
+
+  ShellSegment? _redirections;
+
+  /// Сегмент из одних перенаправлений после закрывающего слова или `null`.
+  ShellSegment? get redirections => _redirections;
+}
+
+/// Конвейер дерева команд со связкой и отрицанием (D2).
+///
+/// Почему отдельно от плоского [ShellPipeline]: плоский вид сохранён для
+/// правил таблицы §7.6 (`curl … | sh`), а модель каталога нуждается в
+/// структуре: какая связка за конвейером, под `!` ли он, какие стадии —
+/// блоки.
+final class ShellCommand {
+  /// Создаётся лексером.
+  const ShellCommand(this.stages, {required this.next, required this.negated});
+
+  /// Стадии слева направо.
+  final List<ShellStage> stages;
+
+  /// Связка с командой, которая идёт следом; у последней команды уровня —
+  /// [ShellConnector.sequence].
+  final ShellConnector next;
+
+  /// Перед конвейером стоит `!`.
+  final bool negated;
+}
+
 /// Разобранная команда или вложенная команда.
 ///
 /// Для чего: корень дерева разбора; [allSegments] и [allPipelines] обходят
 /// и вложенные команды, поэтому `echo $(rm -rf /)` проверяется так же, как
-/// `rm -rf /`.
+/// `rm -rf /`. [commands] — то же дерево со связками и блоками для обхода
+/// каталога; сегменты в обоих видах — одни и те же объекты.
 ///
 /// Как использовать: получать из [parseShell].
 final class ShellScript {
   /// Создаётся лексером.
-  const ShellScript(this.pipelines);
+  const ShellScript(
+    this.pipelines, {
+    this.commands = const [],
+    this.origin = ShellOrigin.root,
+  });
 
-  /// Конвейеры этого уровня в порядке записи.
+  /// Конвейеры этого уровня в порядке записи; блоки уплощены.
   final List<ShellPipeline> pipelines;
+
+  /// Команды этого уровня со связками, отрицанием и блоками (D2, D6).
+  final List<ShellCommand> commands;
+
+  /// Откуда взят текст (D8).
+  final ShellOrigin origin;
 
   /// Сегменты этого уровня без вложенных.
   Iterable<ShellSegment> get segments =>
@@ -231,12 +419,35 @@ String baseName(String path) {
 /// Shell, у которых аргумент после `-c` — команда (§7.6, правило 3).
 const shellNames = {'sh', 'bash', 'zsh', 'dash', 'ksh'};
 
-final _assignment = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*=');
+/// Слово-присваивание: `NAME=`, `NAME+=`, `NAME[i]=`, `NAME[i]+=` (D17, A5).
+///
+/// Почему шире `NAME=`: `a+=1 rm -rf /` и `a[0]=x cmd` — те же префиксные
+/// присваивания, иначе слово `a+=1` читалось бы как имя команды.
+final assignmentWord = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=');
+
+/// Имя переменной в слове-присваивании или операнде (`GIT_EDITOR+=x` →
+/// `GIT_EDITOR`).
+final variableNamePattern = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*');
 final _redirect = RegExp(r'(\d*)(&>>|&>|>>|>\||>&|>|<<<|<<-|<<|<>|<&|<)');
 
 /// Слово до снятия кавычек вместе с вложенными командами из него.
 final class _Word {
-  _Word(this.value, {required this.quoted, required this.nested});
+  _Word(
+    this.value, {
+    required this.quoted,
+    required this.nested,
+    this.glob = false,
+    this.splitRisk = false,
+  });
+
+  /// До первой литеральной `/` есть незакавыченное раскрытие, кроме `$HOME`,
+  /// `${HOME}`, `$CODELAB_HOME`, `${CODELAB_HOME}`: значение с пробелом
+  /// разобьётся на слова, и слово может оказаться `cd` (D17, A2).
+  final bool splitRisk;
+
+  /// В слове есть незакавыченные `*`, `?`, `[` или `{`: оболочка раскроет его
+  /// в другие слова, и имя команды заранее неизвестно (D17, A2).
+  final bool glob;
 
   final String value;
 
@@ -259,24 +470,25 @@ final class _Lexer {
   /// Here-document, тела которых начинаются со следующего перевода строки.
   final _heredocs = <({String delimiter, bool stripTabs})>[];
 
-  ShellScript parse(int depth) => _script(depth, nested: false);
+  ShellScript parse(int depth, {ShellOrigin origin = ShellOrigin.root}) =>
+      _script(depth, nested: false, origin: origin);
 
-  ShellScript _script(int depth, {required bool nested}) {
+  ShellScript _script(
+    int depth, {
+    required bool nested,
+    ShellOrigin origin = ShellOrigin.root,
+  }) {
     if (depth > maxShellNesting) {
       throw const ShellParseException(
         'nesting is deeper than $maxShellNesting',
       );
     }
-    final builder = _ScriptBuilder(depth);
-    var parens = 0;
+    final builder = _ScriptBuilder(depth, origin);
     while (true) {
       _skipBlanks();
       if (pos >= src.length) {
         if (nested) {
           throw const ShellParseException('unclosed command substitution');
-        }
-        if (parens > 0) {
-          throw const ShellParseException('unclosed parenthesis');
         }
         return builder.finish();
       }
@@ -285,14 +497,13 @@ final class _Lexer {
         _skipComment();
       } else if (c == '\n') {
         pos++;
-        builder.endPipeline();
+        builder.endPipeline(ShellConnector.sequence);
         _skipHeredocBodies();
       } else if (c == ')') {
         pos++;
-        if (parens > 0) {
-          parens--;
+        if (builder.insideBlock) {
           // `(a; b) | c`: конец подоболочки завершает стадию, но не конвейер.
-          builder.endStage();
+          builder.closeBlock(')');
         } else if (nested) {
           return builder.finish();
         } else {
@@ -300,37 +511,72 @@ final class _Lexer {
         }
       } else if (c == '(') {
         pos++;
-        parens++;
-        // `f()` — определение функции; `( … )` в начале стадии — подоболочка
-        // внутри того же конвейера.
-        if (!builder.segmentIsEmpty) {
-          builder.endPipeline();
-        }
-      } else if (_at('&&') || _at('||')) {
+        _openParen(builder);
+      } else if (_at('&&')) {
         pos += 2;
-        builder.endPipeline();
+        builder.endPipeline(ShellConnector.and);
+      } else if (_at('||')) {
+        pos += 2;
+        builder.endPipeline(ShellConnector.or);
       } else if (_at('|&')) {
         pos += 2;
-        builder.endStage();
+        builder.pipe();
       } else if (c == '|') {
         pos++;
-        builder.endStage();
+        builder.pipe();
       } else if (c == ';') {
         // `;;`, `;&` и `;;&` — разделители веток `case`.
         pos++;
         while (pos < src.length && (src[pos] == ';' || src[pos] == '&')) {
           pos++;
         }
-        builder.endPipeline();
+        builder.endPipeline(ShellConnector.sequence);
       } else if (_redirectAt() case final match?) {
         _readRedirection(match, depth, builder);
       } else if (c == '&') {
         pos++;
-        builder.endPipeline();
+        builder.endPipeline(ShellConnector.background);
       } else {
         builder.addWord(_readWord(depth));
       }
     }
+  }
+
+  /// Скобка `(` после пробелов: определение функции `f()`, подоболочка или
+  /// `for ((`, которую разобрать нельзя.
+  ///
+  /// Почему здесь: решение зависит от следующего символа (`)` сразу за `(`
+  /// — пустые скобки определения), а не только от состояния построителя.
+  void _openParen(_ScriptBuilder builder) {
+    if (builder.inHeader) {
+      // Арифметический `for ((i=0; i<n; i++))` содержит `;`, которые
+      // оборвали бы заголовок: fail closed (D10).
+      throw const ShellParseException('arithmetic for is not supported');
+    }
+    final closes = _nextNonBlankIs(')');
+    if (!builder.segmentIsEmpty) {
+      if (builder.canBeFunctionName && closes) {
+        // `f ( )`: имя функции — слово перед скобками; в дереве его нет.
+        pos = src.indexOf(')', pos) + 1;
+        builder.beginFunction();
+        return;
+      }
+      builder.endPipeline(ShellConnector.sequence);
+    }
+    if (builder.pendingFunction && closes) {
+      // `function f()`: пустые скобки после имени.
+      pos = src.indexOf(')', pos) + 1;
+      return;
+    }
+    builder.openBlock(ShellBlockKind.subshell, ')');
+  }
+
+  bool _nextNonBlankIs(String char) {
+    var i = pos;
+    while (i < src.length && (src[i] == ' ' || src[i] == '\t')) {
+      i++;
+    }
+    return i < src.length && src[i] == char;
   }
 
   bool _at(String s) => src.startsWith(s, pos);
@@ -428,6 +674,9 @@ final class _Lexer {
     final nested = <ShellScript>[];
     final start = pos;
     var quoted = false;
+    var glob = false;
+    var slashSeen = false;
+    var splitRisk = false;
     while (pos < src.length) {
       final c = src[pos];
       if (c == '\\') {
@@ -460,21 +709,38 @@ final class _Lexer {
         // равна `"…"`, поэтому `$` перед кавычкой пропускается.
         pos++;
       } else if (c == r'$') {
+        // Хост знает значения `HOME` и `CODELAB_HOME`, слов в них нет.
+        if (!slashSeen && _hostVariable.matchAsPrefix(src, pos) == null) {
+          splitRisk = true;
+        }
         _readDollar(buffer, nested, depth);
       } else if (c == '`') {
+        splitRisk = splitRisk || !slashSeen;
         _readBackticks(buffer, nested, depth);
       } else if (pos == start && _atProcessSubstitution()) {
         pos += 2;
-        nested.add(_script(depth + 1, nested: true));
+        nested.add(
+          _script(depth + 1, nested: true, origin: ShellOrigin.substitution),
+        );
         buffer.write(src.substring(start, pos));
       } else if (_isMeta(c)) {
         break;
       } else {
+        if (c == '*' || c == '?' || c == '[' || c == '{') {
+          glob = true;
+        }
+        slashSeen = slashSeen || c == '/';
         buffer.write(c);
         pos++;
       }
     }
-    return _Word(buffer.toString(), quoted: quoted, nested: nested);
+    return _Word(
+      buffer.toString(),
+      quoted: quoted,
+      nested: nested,
+      glob: glob,
+      splitRisk: splitRisk,
+    );
   }
 
   /// ANSI-C строка `$'…'`: escape-последовательности (`\n`, `\t`, `\xHH`,
@@ -649,7 +915,7 @@ final class _Lexer {
         buffer.write(c);
         pos++;
       } else if (c == r'$') {
-        _readDollar(buffer, nested, depth);
+        _readDollar(buffer, nested, depth, inQuotes: true);
       } else if (c == '`') {
         _readBackticks(buffer, nested, depth);
       } else {
@@ -659,37 +925,146 @@ final class _Lexer {
     }
   }
 
-  /// `$( … )` — вложенная команда; `$(( … ))` и `${ … }` — не команды,
-  /// их текст остаётся в слове как есть (переменные не раскрываются).
-  void _readDollar(StringBuffer buffer, List<ShellScript> nested, int depth) {
+  /// `$( … )` — вложенная команда; `${ … }` и `$(( … ))` — раскрытия, внутри
+  /// которых тоже исполняются подстановки (`${x:-$(rm -rf /)}`,
+  /// `$(( $(rm -rf /) 0 ))`). Переменные не раскрываются, текст остаётся в
+  /// слове как есть (change `harden-exec-cwd-tracking`, N1).
+  ///
+  /// [inQuotes] — вызов из двойных кавычек: там `${…}` с одинарной кавычкой
+  /// или `$'…'` внутри bash и dash читают по-разному, поэтому разбор отказывает
+  /// (D18, C2).
+  void _readDollar(
+    StringBuffer buffer,
+    List<ShellScript> nested,
+    int depth, {
+    bool inQuotes = false,
+  }) {
     final start = pos;
     if (_at(r'$((')) {
-      pos += 1;
-      var open = 0;
-      while (true) {
-        if (pos >= src.length) {
-          throw const ShellParseException('unclosed arithmetic expansion');
-        }
-        final c = src[pos++];
-        if (c == '(') {
-          open++;
-        } else if (c == ')' && --open == 0) {
-          break;
-        }
+      final end = _arithmeticEnd();
+      if (end > 0) {
+        pos = end;
+      } else {
+        // Не арифметика: `$((rm -rf /) )` оболочка читает как `$( (…) )` —
+        // подстановку с подоболочкой. Тело разбирается как команда.
+        pos += 2;
+        nested.add(
+          _script(depth + 1, nested: true, origin: ShellOrigin.substitution),
+        );
       }
     } else if (_at(r'$(')) {
       pos += 2;
-      nested.add(_script(depth + 1, nested: true));
+      nested.add(
+        _script(depth + 1, nested: true, origin: ShellOrigin.substitution),
+      );
     } else if (_at(r'${')) {
-      final end = src.indexOf('}', pos);
-      if (end < 0) {
-        throw const ShellParseException('unclosed parameter expansion');
-      }
-      pos = end + 1;
+      _readBraced(nested, depth, inQuotes: inQuotes);
     } else {
       pos++;
     }
     buffer.write(src.substring(start, pos));
+  }
+
+  /// Индекс после `))`, если `$((` — арифметика без подстановок внутри, иначе
+  /// `-1`: тогда тело разбирается как команда.
+  ///
+  /// Почему: арифметика внутри исполняет `$(…)` и обратные кавычки, а при
+  /// несмежных `) )` оболочка вообще читает скобки как подстановку с
+  /// подоболочкой; любое сомнение — путь «команда» (fail closed).
+  int _arithmeticEnd() {
+    var depth = 2;
+    for (var i = pos + 3; i < src.length; i++) {
+      final c = src[i];
+      // Подстановки, кавычки, `\`, `${` и `#` внутри арифметики: оболочки
+      // читают их по-разному, любое сомнение — путь «команда» (D18, C3).
+      if (c == '`' ||
+          c == "'" ||
+          c == '"' ||
+          c == '\\' ||
+          c == '#' ||
+          c == r'$' && i + 1 < src.length && '({'.contains(src[i + 1])) {
+        return -1;
+      }
+      if (c == '(') {
+        depth++;
+      } else if (c == ')') {
+        depth--;
+        if (depth == 1) {
+          return i + 1 < src.length && src[i + 1] == ')' ? i + 2 : -1;
+        }
+      }
+    }
+    return -1;
+  }
+
+  /// `${ … }` с учётом `\}`, кавычек и вложенных подстановок: `}` внутри
+  /// кавычек или после `\` тело не закрывает, а `$(…)`, `` `…` `` и `${…}`
+  /// внутри разбираются (N1).
+  ///
+  /// Вложенность раскрытий ограничена [_maxExpansionDepth] (D18, C4); `$'…'`
+  /// разбирается как ANSI-C строка (C1); в двойных кавычках ([inQuotes])
+  /// одинарная кавычка и `$'` — ошибка разбора (C2).
+  void _readBraced(
+    List<ShellScript> nested,
+    int depth, {
+    required bool inQuotes,
+  }) {
+    if (++_expansionDepth > _maxExpansionDepth) {
+      throw const ShellParseException('expansions are nested too deeply');
+    }
+    try {
+      _readBracedBody(nested, depth, inQuotes: inQuotes);
+    } finally {
+      _expansionDepth--;
+    }
+  }
+
+  var _expansionDepth = 0;
+
+  void _readBracedBody(
+    List<ShellScript> nested,
+    int depth, {
+    required bool inQuotes,
+  }) {
+    pos += 2;
+    final sink = StringBuffer();
+    while (true) {
+      if (pos >= src.length) {
+        throw const ShellParseException('unclosed parameter expansion');
+      }
+      final c = src[pos];
+      if (c == '}') {
+        pos++;
+        return;
+      }
+      if (c == '\\') {
+        pos += 2;
+      } else if (c == "'") {
+        if (inQuotes) {
+          throw const ShellParseException('quote in a quoted expansion');
+        }
+        final end = src.indexOf("'", pos + 1);
+        if (end < 0) {
+          throw const ShellParseException('unclosed single quote');
+        }
+        pos = end + 1;
+      } else if (c == '"') {
+        _readDoubleQuoted(sink, nested, depth);
+      } else if (c == r'$' && _at(r"$'")) {
+        if (inQuotes) {
+          throw const ShellParseException('ANSI-C quote in a quoted expansion');
+        }
+        _readAnsiC(sink);
+      } else if (c == r'$' && _at(r'$"')) {
+        pos++;
+      } else if (c == r'$') {
+        _readDollar(sink, nested, depth, inQuotes: inQuotes);
+      } else if (c == '`') {
+        _readBackticks(sink, nested, depth);
+      } else {
+        pos++;
+      }
+    }
   }
 
   /// Обратные кавычки: тело без экранирования `` \` ``, `\$`, `\\`
@@ -718,34 +1093,184 @@ final class _Lexer {
         pos++;
       }
     }
-    nested.add(_Lexer(inner.toString()).parse(depth + 1));
+    nested.add(
+      _Lexer(
+        inner.toString(),
+      ).parse(depth + 1, origin: ShellOrigin.substitution),
+    );
     buffer.write(src.substring(start, pos));
   }
 }
 
+/// Кадр открытого блока: команды, собранные внутри него.
+///
+/// Почему: дерево [ShellScript.commands] строится тем же проходом, что и
+/// плоские конвейеры, а блок закрывается только парным словом (`)`, `}`,
+/// `fi`, `done`), поэтому открытые блоки лежат в стеке (D6).
+final class _Frame {
+  _Frame(this.kind, this.closer);
+
+  /// Вид блока; `null` у корня.
+  final ShellBlockKind? kind;
+
+  /// Слово, которым блок закрывается: `)`, `}`, `fi`, `done`.
+  final String closer;
+
+  final commands = <ShellCommand>[];
+
+  /// Стадии конвейера, который собирается сейчас.
+  var stages = <ShellStage>[];
+
+  /// Перед собираемым конвейером стоит `!`.
+  var negated = false;
+
+  /// Переменная заголовка `for`/`select`.
+  String? variable;
+}
+
 /// Собирает сегменты и конвейеры одного уровня разбора.
+///
+/// Почему две структуры: плоские [ShellScript.pipelines] нужны правилам
+/// таблицы §7.6 и существующим тестам, а дерево [ShellScript.commands] —
+/// обходу рабочего каталога (§7.6.2). Они строятся из одних событий и делят
+/// одни объекты [ShellSegment], поэтому расходиться им не из-за чего.
+/// Исключение: имя функции в `f()` есть только в плоском виде (сегмент `f`),
+/// в дереве его нет.
 final class _ScriptBuilder {
-  _ScriptBuilder(this.depth);
+  _ScriptBuilder(this.depth, this.origin);
 
   final int depth;
+  final ShellOrigin origin;
+
+  // Плоский вид.
   final _pipelines = <ShellPipeline>[];
   var _stages = <ShellSegment>[];
   var _words = <_Word>[];
   var _redirections = <ShellRedirection>[];
   var _nested = <ShellScript>[];
 
+  // Дерево: стек блоков и состояние разбора составных команд.
+  final _frames = [_Frame(null, '')];
+  _Frame get _frame => _frames.last;
+
+  /// Только что закрыт блок: перенаправления дальше принадлежат ему, а слово
+  /// без разделителя — ошибка.
+  var _afterBlock = false;
+
+  /// За `f()` или `function f` ждём тело функции.
+  var _pendingFunction = false;
+  var _expectFunctionName = false;
+
+  /// Читается заголовок `for`/`select`: его слова командой не считаются.
+  var _inHeader = false;
+  var _headerNested = <ShellScript>[];
+
+  /// 0 — ждём имя переменной, 1 — после имени (`in` или `do`), 2 — список
+  /// после `in`.
+  var _headerStage = 0;
+
   bool get segmentIsEmpty => _words.isEmpty && _redirections.isEmpty;
+  bool get insideBlock => _frames.length > 1;
+  bool get inHeader => _inHeader;
+  bool get pendingFunction => _pendingFunction;
+
+  /// Единственное слово сегмента может быть именем функции: `f` перед `()`.
+  bool get canBeFunctionName =>
+      _words.length == 1 &&
+      _redirections.isEmpty &&
+      !_inHeader &&
+      !_afterBlock &&
+      !_words.single.quoted &&
+      !assignmentWord.hasMatch(_words.single.value);
 
   void addWord(_Word word) {
-    // `{` и `}` в позиции команды — границы группы, а не слова (правило 1).
-    if (!word.quoted &&
-        (word.value == '{' || word.value == '}') &&
-        _words.isEmpty) {
-      endStage();
+    if (_inHeader) {
+      _headerWord(word);
       return;
+    }
+    if (_expectFunctionName) {
+      _expectFunctionName = false;
+      _pendingFunction = true;
+      return;
+    }
+    // Зарезервированное слово — только в пустом сегменте: после
+    // перенаправления (`>/dev/null ! cd /tmp`) оболочка читает его как имя
+    // команды (D17, H1).
+    if (segmentIsEmpty && !word.quoted && _reservedWord(word.value)) {
+      return;
+    }
+    if (_afterBlock) {
+      throw const ShellParseException('unexpected word after a block');
     }
     _words.add(word);
     _nested.addAll(word.nested);
+  }
+
+  /// Зарезервированное слово в позиции команды (D10): снимается и меняет
+  /// стек блоков. `true` — слово обработано.
+  bool _reservedWord(String word) {
+    switch (word) {
+      case '!':
+        if (_frame.negated) {
+          throw const ShellParseException('double negation');
+        }
+        _frame.negated = true;
+      case 'if':
+        openBlock(ShellBlockKind.conditional, 'fi');
+      case 'while' || 'until':
+        openBlock(ShellBlockKind.loop, 'done');
+      case 'for' || 'select':
+        openBlock(ShellBlockKind.loop, 'done');
+        _inHeader = true;
+        _headerStage = 0;
+        _headerNested = [];
+      case 'then' || 'elif' || 'else':
+        _separator('fi');
+      case 'do':
+        _separator('done');
+      case 'fi' || 'done' || '}':
+        closeBlock(word);
+      case '{':
+        openBlock(ShellBlockKind.group, '}');
+      case 'function':
+        _expectFunctionName = true;
+      case 'case' || 'esac':
+        // `case` не разбирается, как и раньше (`)` ветки): fail closed.
+        throw const ShellParseException('case is not supported');
+      default:
+        return false;
+    }
+    return true;
+  }
+
+  /// Слово заголовка `for`/`select` (D10, D17 B1): имя, затем `in` со списком
+  /// или сразу `do`. Подстановки в списке остаются вложенными командами,
+  /// остальное — данные. Любое другое слово — ошибка разбора: иначе заголовок
+  /// съел бы тело.
+  void _headerWord(_Word word) {
+    final plain = word.quoted ? null : word.value;
+    switch (_headerStage) {
+      case 0:
+        _frame.variable = word.value;
+        _headerStage = 1;
+      case 1 when plain == 'in':
+        _headerStage = 2;
+      case 1 || 2 when plain == 'do':
+        endPipeline(ShellConnector.sequence);
+        _separator('done');
+      case 2:
+        _headerNested.addAll(word.nested);
+      default:
+        throw const ShellParseException('unexpected word in a for header');
+    }
+  }
+
+  /// `then`, `elif`, `else`, `do` — продолжение блока: условие и ветки
+  /// проходят одну последовательность (D6).
+  void _separator(String closer) {
+    if (!insideBlock || _frame.closer != closer || _afterBlock) {
+      throw ShellParseException('unexpected separator for $closer');
+    }
   }
 
   void addRedirection(ShellRedirection redirection, List<ShellScript> nested) {
@@ -753,31 +1278,138 @@ final class _ScriptBuilder {
     _nested.addAll(nested);
   }
 
+  /// Открывает блок [kind], который закроет слово [closer].
+  void openBlock(ShellBlockKind kind, String closer) {
+    if (_afterBlock) {
+      throw const ShellParseException('unexpected block after a block');
+    }
+    if (_frames.length > maxShellBlockDepth) {
+      // Обход рекурсивен: без предела глубокие блоки дают StackOverflowError.
+      throw const ShellParseException('blocks are nested too deeply');
+    }
+    final effective = _pendingFunction ? ShellBlockKind.function : kind;
+    _pendingFunction = false;
+    _frames.add(_Frame(effective, closer));
+  }
+
+  /// Закрывает блок словом [closer] (`)`, `}`, `fi`, `done`).
+  void closeBlock(String closer) {
+    if (!insideBlock || _frame.closer != closer || _inHeader) {
+      throw ShellParseException('unexpected $closer');
+    }
+    // `(a; b) | c`: закрытие блока завершает стадию, но не конвейер.
+    endStage();
+    _treeEndCommand(ShellConnector.sequence);
+    final frame = _frames.removeLast();
+    _frame.stages.add(
+      ShellBlock(frame.kind!, frame.commands, variable: frame.variable),
+    );
+    _afterBlock = true;
+  }
+
+  /// `f()`: единственное слово сегмента — имя функции, его в дереве нет.
+  /// Плоский вид сохраняет сегмент `f`, как до разбора блоков.
+  void beginFunction() {
+    _stages.add(_segment());
+    _pipelines.add(ShellPipeline(_stages));
+    _stages = [];
+    _words = [];
+    _redirections = [];
+    _nested = [];
+    _pendingFunction = true;
+  }
+
+  /// `|` и `|&`: завершает стадию, следующая стадия — того же конвейера.
+  void pipe() {
+    endStage();
+    _afterBlock = false;
+  }
+
   void endStage() {
     if (!segmentIsEmpty) {
-      _stages.add(_segment());
+      final segment = _segment();
+      _stages.add(segment);
+      _addToTree(segment);
     }
     _words = [];
     _redirections = [];
     _nested = [];
   }
 
-  void endPipeline() {
+  void _addToTree(ShellSegment segment) {
+    if (_afterBlock &&
+        segment.words.isEmpty &&
+        _frame.stages.lastOrNull is ShellBlock) {
+      // `done < in.txt`, `} > out`: перенаправления относятся к блоку (D10).
+      final block = _frame.stages.last as ShellBlock;
+      if (block._redirections == null) {
+        block._redirections = segment;
+        return;
+      }
+    }
+    _frame.stages.add(ShellSimple(segment));
+  }
+
+  /// Завершает конвейер связкой [connector] со следующим (D2).
+  void endPipeline(ShellConnector connector) {
+    if (_inHeader) {
+      _endHeader();
+    }
     endStage();
     if (_stages.isNotEmpty) {
       _pipelines.add(ShellPipeline(_stages));
       _stages = [];
     }
+    _treeEndCommand(connector);
+  }
+
+  /// Заголовок `for`/`select` кончился: подстановки из него остаются
+  /// сегментом без слов, остальное в дерево не попадает.
+  void _endHeader() {
+    if (_headerStage == 0) {
+      throw const ShellParseException('for without a variable name');
+    }
+    _inHeader = false;
+    if (_headerNested.isNotEmpty) {
+      final segment = ShellSegment(
+        words: const [],
+        nested: List.unmodifiable(_headerNested),
+      );
+      _stages.add(segment);
+      _frame.stages.add(ShellSimple(segment));
+    }
+    _headerNested = [];
+  }
+
+  void _treeEndCommand(ShellConnector connector) {
+    final frame = _frame;
+    if (frame.stages.isNotEmpty) {
+      frame.commands.add(
+        ShellCommand(frame.stages, next: connector, negated: frame.negated),
+      );
+      frame.stages = [];
+    }
+    frame.negated = false;
+    _afterBlock = false;
   }
 
   ShellScript finish() {
-    endPipeline();
-    return ShellScript(_pipelines);
+    if (insideBlock) {
+      throw const ShellParseException('unclosed block');
+    }
+    endPipeline(ShellConnector.sequence);
+    return ShellScript(
+      _pipelines,
+      commands: _frames.single.commands,
+      origin: origin,
+    );
   }
 
   ShellSegment _segment() {
     final all = [for (final word in _words) word.value];
-    final (:privileged, :start, :split) = _stripLaunchers(all);
+    final (:privileged, :start, :split, :launchers, :lookup) = _stripLaunchers(
+      all,
+    );
     final words = all.sublist(start);
     // При `env -S` слова от опции `-S` и дальше — вложенная команда, а не
     // префикс лаунчеров: пути и присваивания считаются по словам до неё.
@@ -789,24 +1421,33 @@ final class _ScriptBuilder {
     // `export`/`declare`. Значение переменной-команды — вложенный текст.
     final assigned = [
       for (final w in prefix)
-        if (_assignment.hasMatch(w)) w,
-      if (words.isNotEmpty && _declarations.contains(baseName(words.first)))
+        if (assignmentWord.hasMatch(w)) w,
+      if (words.isNotEmpty &&
+          declarationCommands.contains(baseName(words.first)))
         for (final w in words.skip(1))
-          if (_assignment.hasMatch(w)) w,
+          if (assignmentWord.hasMatch(w)) w,
     ];
     // `env -S 'cmd'` — значение исполняется как строка команды (§7.6.1).
     if (split != null) {
-      nested.add(_Lexer(_envSplitText(all, split)).parse(depth + 1));
+      nested.add(
+        _Lexer(
+          _envSplitText(all, split),
+        ).parse(depth + 1, origin: ShellOrigin.command),
+      );
     }
     for (final w in assigned) {
       final eq = w.indexOf('=');
-      final key = w.substring(0, eq);
+      final key = variableNamePattern.firstMatch(w)![0]!;
       if (_riskyEnvironment.hasMatch(key)) {
         risky = true;
-      } else if (_commandEnvironment.contains(key)) {
+      } else if (commandEnvironmentVariables.contains(key)) {
         final value = w.substring(eq + 1).replaceFirst(RegExp(r'^\|+'), '');
         if (value.isNotEmpty) {
-          nested.add(_Lexer(value).parse(depth + 1));
+          // Пейджер и редактор запускает программа, возможно, из корня
+          // рабочего дерева, а не из каталога оболочки (D8).
+          nested.add(
+            _Lexer(value).parse(depth + 1, origin: ShellOrigin.foreign),
+          );
         }
       }
     }
@@ -815,13 +1456,26 @@ final class _ScriptBuilder {
       if (shellNames.contains(name)) {
         final i = _shellCommandIndex(words);
         if (i != null) {
-          nested.add(_Lexer(words[i]).parse(depth + 1));
+          nested.add(
+            _Lexer(words[i]).parse(depth + 1, origin: ShellOrigin.command),
+          );
         }
       } else if (name == 'eval' && words.length > 1) {
-        nested.add(_Lexer(words.sublist(1).join(' ')).parse(depth + 1));
+        nested.add(
+          _Lexer(
+            words.sublist(1).join(' '),
+          ).parse(depth + 1, origin: ShellOrigin.eval),
+        );
+      } else if (name == 'trap') {
+        // Действие `trap` исполнится позже, в неизвестном состоянии (D8).
+        if (_trapAction(words) case final action?) {
+          nested.add(
+            _Lexer(action).parse(depth + 1, origin: ShellOrigin.foreign),
+          );
+        }
       } else {
-        for (final text in _commandOptionValues(name, words)) {
-          nested.add(_Lexer(text).parse(depth + 1));
+        for (final (:text, :origin) in _commandOptionValues(name, words)) {
+          nested.add(_Lexer(text).parse(depth + 1, origin: origin));
         }
       }
     }
@@ -838,8 +1492,30 @@ final class _ScriptBuilder {
           words.isNotEmpty && shellNames.contains(baseName(words.first))
           ? _shellCommandIndex(words)
           : null,
+      launchers: List.unmodifiable(launchers),
+      lookupOnly: lookup,
+      commandWordSplit: start < _words.length && _words[start].splitRisk,
+      commandWordGlob:
+          start < _words.length &&
+          _words[start].glob &&
+          const {'[', '[['}.contains(_words[start].value) == false,
     );
   }
+}
+
+/// Действие `trap ACTION SIGNAL…` или `null`: опции (`-p`, `-l`) и `--`
+/// пропускаются, `-` и пустая строка — сброс и игнорирование, а не команда.
+String? _trapAction(List<String> words) {
+  var i = 1;
+  while (i < words.length && words[i].startsWith('-') && words[i] != '-') {
+    if (words[i++] == '--') {
+      break;
+    }
+  }
+  if (i >= words.length || words[i] == '-' || words[i].isEmpty) {
+    return null;
+  }
+  return words[i];
 }
 
 /// Значения опций снятых лаунчеров, важные для путей: каталог (`env -C`,
@@ -851,7 +1527,7 @@ final class _ScriptBuilder {
   String? launcher;
   for (var i = 0; i < prefix.length; i++) {
     final word = prefix[i];
-    if (!word.startsWith('-') && !_assignment.hasMatch(word)) {
+    if (!word.startsWith('-') && !assignmentWord.hasMatch(word)) {
       launcher = baseName(word);
       continue;
     }
@@ -946,20 +1622,59 @@ int? _shellCommandIndex(List<String> words) {
   return null;
 }
 
+final _hostVariable = RegExp(
+  r'\$(\{(HOME|CODELAB_HOME)\}|(HOME|CODELAB_HOME)(?![A-Za-z0-9_]))',
+);
+
+final _lookupOption = RegExp(r'^-[A-Za-z]*[vV]');
+
+/// Лаунчеры, которые снимает [_stripLaunchers] и имена которых сохраняются
+/// в [ShellSegment.launchers] (D7). `su` — сама команда и сюда не входит.
+const _launcherNames = {
+  'sudo',
+  'doas',
+  'pkexec',
+  'env',
+  'nohup',
+  'builtin',
+  'nice',
+  'time',
+  'command',
+  'exec',
+  'timeout',
+  'stdbuf',
+  'xargs',
+};
+
 /// Снимает присваивания и лаунчеры с опциями из начала сегмента (§7.6,
 /// правило 5) и возвращает индекс настоящей команды.
-({bool privileged, int start, _EnvScan? split}) _stripLaunchers(
-  List<String> words,
-) {
+({
+  bool privileged,
+  int start,
+  _EnvScan? split,
+  List<String> launchers,
+  bool lookup,
+})
+_stripLaunchers(List<String> words) {
   var privileged = false;
+  var lookup = false;
   var i = 0;
+  // Имена снятых лаунчеров (D7): `command cd` — встроенный `cd`, `env cd` —
+  // внешняя программа.
+  final launchers = <String>[];
   while (i < words.length) {
     final word = words[i];
-    if (_assignment.hasMatch(word)) {
+    if (assignmentWord.hasMatch(word)) {
       i++;
       continue;
     }
-    switch (baseName(word)) {
+    final name = baseName(word);
+    if (_launcherNames.contains(name)) {
+      // Лаунчер с путём (`/usr/bin/command`) — внешняя программа, а не
+      // встроенная команда оболочки (D17, A3).
+      launchers.add(word.contains('/') ? 'external $name' : name);
+    }
+    switch (name) {
       case 'sudo':
         privileged = true;
         i = _skipOptions(
@@ -976,12 +1691,24 @@ int? _shellCommandIndex(List<String> words) {
         i = _skipOptions(words, i + 1, const {'--user'});
       case 'su':
         // `su` — сама команда: её аргументы — опции, а не другая команда.
-        return (privileged: true, start: i, split: null);
+        return (
+          privileged: true,
+          start: i,
+          split: null,
+          launchers: launchers,
+          lookup: lookup,
+        );
       case 'env':
         final scan = _scanEnv(words, i + 1);
         if (scan.splitAt != null) {
           // После значения `-S` команда внутри него (см. [_envSplitText]).
-          return (privileged: privileged, start: words.length, split: scan);
+          return (
+            privileged: privileged,
+            start: words.length,
+            split: scan,
+            launchers: launchers,
+            lookup: lookup,
+          );
         }
         i = scan.next;
       case 'nohup' || 'builtin':
@@ -996,7 +1723,11 @@ int? _shellCommandIndex(List<String> words) {
           const {'--format', '--output'},
         );
       case 'command':
-        i = _skipOptions(words, i + 1, const {});
+        final next = _skipOptions(words, i + 1, const {});
+        lookup =
+            lookup ||
+            words.sublist(i + 1, next).any((o) => _lookupOption.hasMatch(o));
+        i = next;
       case 'exec':
         i = _skipOptions(words, i + 1, const {'-a'});
       case 'timeout':
@@ -1034,10 +1765,22 @@ int? _shellCommandIndex(List<String> words) {
           },
         );
       default:
-        return (privileged: privileged, start: i, split: null);
+        return (
+          privileged: privileged,
+          start: i,
+          split: null,
+          launchers: launchers,
+          lookup: lookup,
+        );
     }
   }
-  return (privileged: privileged, start: i, split: null);
+  return (
+    privileged: privileged,
+    start: i,
+    split: null,
+    launchers: launchers,
+    lookup: lookup,
+  );
 }
 
 /// Длинные опции `env` (GNU coreutils): общий список для разбора опций и
@@ -1372,7 +2115,15 @@ final _gitCommandKey = RegExp(
 /// `rg --pre CMD`, `find -exec|-execdir|-ok|-okdir CMD … ;|+`. Каждое
 /// разбирается как вложенный текст той же семантикой, что `sh -c`, поэтому
 /// его сегменты проходят все правила PERM-11 и §7.6 (R5-4, повторное ревью).
-Iterable<String> _commandOptionValues(String? name, List<String> words) sync* {
+///
+/// Вместе с текстом возвращается [ShellOrigin] (D8): `git` запускает команду
+/// из корня рабочего дерева, `find -execdir` — из каждого найденного
+/// каталога ([ShellOrigin.foreign]); `rg --pre`, `watch`, `script -c`,
+/// `find -exec`/`-ok` идут в каталоге самого процесса ([ShellOrigin.command]).
+Iterable<({String text, ShellOrigin origin})> _commandOptionValues(
+  String? name,
+  List<String> words,
+) sync* {
   switch (name) {
     case 'git':
       for (var i = 1; i < words.length && words[i].startsWith('-'); i++) {
@@ -1384,7 +2135,10 @@ Iterable<String> _commandOptionValues(String? name, List<String> words) sync* {
           final eq = value.indexOf('=');
           if (eq > 0 && _gitCommandKey.hasMatch(value.substring(0, eq))) {
             final command = value.substring(eq + 1);
-            yield command.startsWith('!') ? command.substring(1) : command;
+            yield (
+              text: command.startsWith('!') ? command.substring(1) : command,
+              origin: ShellOrigin.foreign,
+            );
           }
         } else if (const {
           '-C',
@@ -1398,9 +2152,12 @@ Iterable<String> _commandOptionValues(String? name, List<String> words) sync* {
     case 'rg':
       for (var i = 1; i < words.length; i++) {
         if (words[i] == '--pre' && i + 1 < words.length) {
-          yield words[++i];
+          yield (text: words[++i], origin: ShellOrigin.command);
         } else if (words[i].startsWith('--pre=')) {
-          yield words[i].substring('--pre='.length);
+          yield (
+            text: words[i].substring('--pre='.length),
+            origin: ShellOrigin.command,
+          );
         }
       }
     case 'watch':
@@ -1417,20 +2174,26 @@ Iterable<String> _commandOptionValues(String? name, List<String> words) sync* {
         }
       }
       if (command.isNotEmpty) {
-        yield command.join(' ');
+        yield (text: command.join(' '), origin: ShellOrigin.command);
       }
     case 'script':
       for (var i = 1; i < words.length; i++) {
         if ((words[i] == '-c' || words[i] == '--command') &&
             i + 1 < words.length) {
-          yield words[++i];
+          yield (text: words[++i], origin: ShellOrigin.command);
         } else if (words[i].startsWith('--command=')) {
-          yield words[i].substring('--command='.length);
+          yield (
+            text: words[i].substring('--command='.length),
+            origin: ShellOrigin.command,
+          );
         }
       }
     case 'find':
       for (var i = 1; i < words.length; i++) {
         if (const {'-exec', '-execdir', '-ok', '-okdir'}.contains(words[i])) {
+          final origin = words[i].endsWith('dir')
+              ? ShellOrigin.foreign
+              : ShellOrigin.command;
           final command = <String>[];
           for (i++; i < words.length; i++) {
             if (words[i] == ';' || words[i] == '+') {
@@ -1439,7 +2202,7 @@ Iterable<String> _commandOptionValues(String? name, List<String> words) sync* {
             command.add(words[i]);
           }
           if (command.isNotEmpty) {
-            yield command.join(' ');
+            yield (text: command.join(' '), origin: origin);
           }
         }
       }
@@ -1448,11 +2211,20 @@ Iterable<String> _commandOptionValues(String? name, List<String> words) sync* {
 
 /// Встроенные команды, задающие переменные окружения следующим командам
 /// цепочки (`export GIT_PAGER=…; git log`).
-const _declarations = {'export', 'declare', 'typeset', 'readonly', 'local'};
+const declarationCommands = {
+  'export',
+  'declare',
+  'typeset',
+  'readonly',
+  'local',
+};
 
 /// Переменные, значение которых программы исполняют как команду (pager,
 /// редакторы, ssh, askpass, `LESSOPEN`): разбираются как вложенный `sh -c`.
-const _commandEnvironment = {
+///
+/// Публичны: обход каталога узнаёт косвенную запись такой переменной
+/// (`read EDITOR`, `printf -v`; D17, L1).
+const commandEnvironmentVariables = {
   'GIT_PAGER', 'PAGER', 'GIT_EXTERNAL_DIFF', 'GIT_EDITOR', 'EDITOR', 'VISUAL',
   'GIT_SEQUENCE_EDITOR', 'GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_ASKPASS',
   'SSH_ASKPASS', 'LESSOPEN', 'LESSCLOSE', //
