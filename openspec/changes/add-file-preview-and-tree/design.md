@@ -251,7 +251,7 @@ Widget-тесты не трогают настоящую файловую сис
 
 ## Migration Plan
 
-Миграции данных нет. Новый ключ `shared_preferences` не вводится до итерации 3 (`codelab.file_browser.show_ignored`). Ключ `codelab.sidebar.tab` из прежней редакции §12.6.8 не вводится: сайдбар остаётся списком сессий.
+Миграции данных нет. Новый ключ `shared_preferences` не вводится до итерации 3 (`codelab.file_browser.show_ignored`). Владелец значения — `ShowIgnoredFilesCubit` в root scope поверх порта `FileBrowserPreferences`: его же использует строка «Show ignored files» страницы «General» (change `add-app-general-page`, D10; уточнение 2026-11-19). Ключ `codelab.sidebar.tab` из прежней редакции §12.6.8 не вводится: сайдбар остаётся списком сессий.
 
 ## Open Questions
 

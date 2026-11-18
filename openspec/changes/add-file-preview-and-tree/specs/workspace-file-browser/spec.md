@@ -120,11 +120,15 @@ CodeLab SHALL предлагать панель Files в доке инструм
 - **THEN** просмотр показывает предупреждение «This file may contain secrets.»
 
 ### Requirement: Игнорируемые записи по `.gitignore`
-Браузер SHALL скрывать записи, которые исключают правила `.git/info/exclude` корня и файлов `.gitignore` каждой папки на пути (файл правил до 256 КиБ). Поддерживаются `#`, `!`, `/` в начале и конце, `*`, `?`, `**`, классы `[…]`, `\` перед `#` и `!`; глобальный `core.excludesFile` НЕ SHALL читаться. Переключатель «Show ignored files» SHALL показывать такие записи приглушёнными; его значение SHALL сохраняться в `shared_preferences` под `codelab.file_browser.show_ignored` (по умолчанию выключен) (design.md change `add-file-preview-and-tree`, Q4; `dart-agent-and-clients` §12.6.8, шаг 4).
+Браузер SHALL скрывать записи, которые исключают правила `.git/info/exclude` корня и файлов `.gitignore` каждой папки на пути (файл правил до 256 КиБ). Поддерживаются `#`, `!`, `/` в начале и конце, `*`, `?`, `**`, классы `[…]`, `\` перед `#` и `!`; глобальный `core.excludesFile` НЕ SHALL читаться. Переключатель «Show ignored files» SHALL показывать такие записи приглушёнными; его значение SHALL сохраняться в `shared_preferences` под `codelab.file_browser.show_ignored` (по умолчанию выключен) (design.md change `add-file-preview-and-tree`, Q4; `dart-agent-and-clients` §12.6.8, шаг 4). Значение SHALL иметь одного владельца в app: переключатель панели и строка «Show ignored files» страницы «General» (change `add-app-general-page`) SHALL менять одно значение, и смена в одном месте SHALL сразу применяться в другом.
 
 #### Scenario: `build/` скрыт по `.gitignore`
 - **WHEN** в корне `.gitignore` со строкой `build/` и папка `build`
 - **THEN** дерево не показывает `build`, а после включения «Show ignored files» показывает её приглушённой
+
+#### Scenario: Одно значение на панель и «General»
+- **WHEN** панель Files открыта, и значение `codelab.file_browser.show_ignored` меняется с другой точки app
+- **THEN** переключатель `file-tree-show-ignored` и дерево сразу показывают новое значение без перезапуска и без второй записи ключа
 
 #### Scenario: Отрицание правила
 - **WHEN** `.gitignore` содержит `*.log` и `!keep.log`
