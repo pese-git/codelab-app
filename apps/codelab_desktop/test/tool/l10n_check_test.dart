@@ -103,4 +103,44 @@ void main() {
       contains('app_localizations_de.dart'),
     );
   }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test(
+    'отличие только в форматировании не считается устаревшим кодом',
+    () async {
+      // В CI встроенное форматирование gen-l10n могло не сработать (несовпадение
+      // версий ядра Dart), и сырой вывод отличался от отформатированного
+      // рабочего файла только переносами.
+      final package = _copyPackage();
+      final file = File(
+        p.join(package.path, 'lib', 'l10n', 'app_localizations_en.dart'),
+      );
+      final text = file.readAsStringSync();
+      final collapsed = text.replaceAll('=>\n      ', '=> ');
+      expect(collapsed, isNot(text), reason: 'в файле есть перенос после =>');
+      file.writeAsStringSync(collapsed);
+
+      final result = await _check(package);
+
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  test('вывод называет первую отличающуюся строку: номер, ожидаемое и '
+      'фактическое', () async {
+    final package = _copyPackage();
+    final arb = File(p.join(package.path, 'lib', 'l10n', 'app_en.arb'));
+    arb.writeAsStringSync(
+      arb.readAsStringSync().replaceFirst('"Language"', '"Interface language"'),
+    );
+
+    final result = await _check(package);
+
+    final output = '${result.stdout}${result.stderr}';
+    expect(output, contains('app_localizations_en.dart'));
+    expect(output, matches(RegExp(r'строка \d+')));
+    expect(output, contains("'Language'"));
+    expect(output, contains("'Interface language'"));
+    expect(output.length, lessThan(2000), reason: 'без больших дампов');
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }

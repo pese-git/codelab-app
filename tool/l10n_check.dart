@@ -107,6 +107,30 @@ Future<bool> _check(Directory package) async {
       return false;
     }
 
+    // Нормализация: встроенное форматирование gen-l10n может не сработать (в CI
+    // оно падало с «Invalid kernel binary format version» при расхождении версий
+    // Dart), и сырой вывод тогда отличается от отформатированного рабочего
+    // файла одними переносами. Обе стороны прогоняются через один форматтер.
+    final committedDir = Directory(p.join(temp.path, 'committed'))
+      ..createSync();
+    for (final file in sourceArb.listSync().whereType<File>()) {
+      if (_isGenerated(p.basename(file.path))) {
+        file.copySync(p.join(committedDir.path, p.basename(file.path)));
+      }
+    }
+    for (final dir in [tempArb, committedDir]) {
+      final format = await Process.run('fvm', [
+        'dart',
+        'format',
+        dir.path,
+      ], workingDirectory: temp.path);
+      if (format.exitCode != 0) {
+        stderr.write('${format.stdout}${format.stderr}');
+        stderr.writeln('l10n_check: dart format завершился с ошибкой');
+        return false;
+      }
+    }
+
     var ok = true;
     final fresh = tempArb
         .listSync()
@@ -122,8 +146,7 @@ Future<bool> _check(Directory package) async {
     final expected = {for (final file in fresh) p.basename(file.path)};
     for (final file in sourceArb.listSync().whereType<File>()) {
       final name = p.basename(file.path);
-      if (RegExp(r'_localizations(_\w+)?\.dart$').hasMatch(name) &&
-          !expected.contains(name)) {
+      if (_isGenerated(name) && !expected.contains(name)) {
         stderr.writeln('l10n_check: лишний файл ${file.path}');
         ok = false;
       }
@@ -133,13 +156,52 @@ Future<bool> _check(Directory package) async {
       if (!committed.existsSync()) {
         stderr.writeln('l10n_check: нет файла ${committed.path}');
         ok = false;
-      } else if (committed.readAsStringSync() != file.readAsStringSync()) {
-        stderr.writeln('l10n_check: устарел ${committed.path}');
-        ok = false;
+      } else {
+        final diff = _firstDifference(
+          File(
+            p.join(committedDir.path, p.basename(file.path)),
+          ).readAsLinesSync(),
+          file.readAsLinesSync(),
+        );
+        if (diff != null) {
+          stderr.writeln('l10n_check: устарел ${committed.path}');
+          stderr.writeln(diff);
+          ok = false;
+        }
       }
     }
     return ok;
   } finally {
     temp.deleteSync(recursive: true);
   }
+}
+
+/// Файл сгенерированного кода локализации (`*_localizations*.dart`).
+bool _isGenerated(String name) =>
+    RegExp(r'_localizations(_\w+)?\.dart$').hasMatch(name);
+
+/// Первая отличающаяся строка: номер, ожидаемое (рабочий файл) и фактическое
+/// (после генерации); `null` — файлы совпали. Строки усечены: полного дампа
+/// файла в выводе не должно быть.
+String? _firstDifference(List<String> expected, List<String> actual) {
+  final count = expected.length < actual.length
+      ? expected.length
+      : actual.length;
+  for (var i = 0; i < count; i++) {
+    if (expected[i] != actual[i]) return _describe(i, expected[i], actual[i]);
+  }
+  if (expected.length == actual.length) return null;
+  return _describe(
+    count,
+    count < expected.length ? expected[count] : '<конец файла>',
+    count < actual.length ? actual[count] : '<конец файла>',
+  );
+}
+
+String _describe(int index, String expected, String actual) {
+  String cut(String line) =>
+      line.length <= 160 ? line : '${line.substring(0, 160)}…';
+  return '  строка ${index + 1}\n'
+      '    в рабочем файле: ${cut(expected)}\n'
+      '    после генерации: ${cut(actual)}';
 }
