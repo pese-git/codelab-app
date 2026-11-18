@@ -106,7 +106,11 @@ final class AgentDefaultsBanner {
 /// `config.yaml` не разбирается или нарушает схему: записи нет
 /// (`settings-general-agent-unreadable`).
 final class AgentDefaultsUnreadable extends AgentDefaultsState {
-  const AgentDefaultsUnreadable({required this.problems, this.banner});
+  const AgentDefaultsUnreadable({
+    required this.problems,
+    this.banner,
+    this.configHome = _defaultConfigHome,
+  });
 
   /// Проблемы загрузчика с путём ключа, по строке на проблему.
   final List<String> problems;
@@ -114,6 +118,9 @@ final class AgentDefaultsUnreadable extends AgentDefaultsState {
   /// Баннер записи, после которой перечитать не удалось; `null` — записи не
   /// было.
   final AgentDefaultsBanner? banner;
+
+  /// Метка `$CODELAB_HOME` для текста `Saved to <home>/config.yaml.`
+  final String configHome;
 }
 
 /// Блок готов к правкам; запись — флаг [saving] (D7: одна запись за раз).
@@ -123,6 +130,7 @@ final class AgentDefaultsReady extends AgentDefaultsState {
     this.banner,
     this.saving = false,
     this.fieldErrors = const {},
+    this.configHome = _defaultConfigHome,
   });
 
   /// Строки по разделам реестра: Budget, Agent, Subagents, Logging.
@@ -137,4 +145,13 @@ final class AgentDefaultsReady extends AgentDefaultsState {
   /// Ключи, чей введённый текст не разобран; подсказку формата страница
   /// строит по типу и границам дескриптора. Значение не хранится (CFG-10).
   final Set<String> fieldErrors;
+
+  /// Метка `$CODELAB_HOME` для текста InfoBar `settings-general-shared-info`
+  /// (`<home>/config.yaml`): путь с `~` вместо домашнего каталога, как его
+  /// строит `homePathLabel`. Заполняет Cubit, страница путей не вычисляет
+  /// (AGENTS.md §11).
+  final String configHome;
 }
+
+/// Метка по умолчанию: `$CODELAB_HOME` без переопределения.
+const _defaultConfigHome = '~/.codelab';

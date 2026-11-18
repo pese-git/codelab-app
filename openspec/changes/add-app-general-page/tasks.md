@@ -58,7 +58,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - повторная правка во время `saving` игнорируется;
   - события «Запись без значения в журнале».
 - [x] 2.4 `[desktop]` Реализация 2.3: `AgentDefaultsCubit`, `AgentDefaultsState` (D7), фабрика `CodeLabDependencies.createAgentDefaultsCubit` в `lib/app/app_scope.dart` на `ProviderSettingsOpener`. 2.3 зелёный.
-- [ ] 2.5 `[desktop]` Красный: `test/features/settings/presentation/general_page_test.dart` на Cubit-двойнике:
+- [x] 2.5 `[desktop]` Красный: `test/features/settings/presentation/general_page_test.dart` на Cubit-двойнике:
   - сценарий «Порядок блоков» (без «About» до итерации 5) и «Поиск по ключевому слову»;
   - ключи `settings-general-*` требования «…доступ и строки»;
   - редакторы по типу;
