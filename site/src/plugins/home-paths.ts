@@ -10,17 +10,25 @@
  * ссылок документа; маски и поиск — `src/lib/home-paths.ts`, их же читает
  * `check-links` (D6).
  *
- * Как использовать: `remarkHomePaths` в remark-плагинах процессора Markdown.
- * Нарушение — `file.fail` с путём файла и строкой узла.
+ * Как использовать: `[remarkHomePaths, { repoRoot }]` в remark-плагинах
+ * процессора Markdown. Нарушение — `file.fail` с путём файла от корня
+ * репозитория и строкой узла, как у `repoLinks` (D5).
  */
 import type { Root } from 'mdast';
 import { visit } from 'unist-util-visit';
 import type { VFile } from 'vfile';
 
 import { findHomePaths } from '../lib/home-paths';
+import { repoPath } from '../lib/repo-path';
 
-export function remarkHomePaths() {
+export interface HomePathsOptions {
+  /** Абсолютный путь корня репозитория: от него считается путь в сообщении. */
+  readonly repoRoot: string;
+}
+
+export function remarkHomePaths({ repoRoot }: HomePathsOptions) {
   return (tree: Root, file: VFile): void => {
+    const path = repoPath(repoRoot, file.path);
     visit(tree, (node) => {
       const texts: string[] = [];
       if ('value' in node && typeof node.value === 'string') texts.push(node.value);
@@ -31,7 +39,8 @@ export function remarkHomePaths() {
         // Строка — первая строка узла: для блока кода это строка ограждения,
         // по ней автор находит блок; сам путь назван в сообщении.
         file.fail(
-          `Personal home directory path "${found.path}" in ${file.path}: ` +
+          `Personal home directory path "${found.path}" ` +
+            `in ${path}:${node.position?.start.line ?? '?'}: ` +
             'mask the user name as "user" or "me" (codelab-docs §7, D11)',
           node,
           'codelab-site:home-paths',

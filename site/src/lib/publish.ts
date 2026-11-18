@@ -60,8 +60,16 @@ const excludes = publishPatterns
   .filter((p) => p.startsWith('!'))
   .map((p) => globToRegExp(p.slice(1)));
 
-/** Опубликован ли файл [repoPath] (путь от корня репозитория). */
+/**
+ * Опубликован ли файл [repoPath] (путь от корня репозитория).
+ *
+ * Путь с сегментами `.`, `..` или пустым — не опубликован: звёздочка шаблона
+ * совпала бы с `..`, и `docs/user/../backlog/x.md` прошёл бы allowlist, хотя
+ * ведёт в неопубликованный каталог (D3, D11). Вызывающие передают уже
+ * нормализованный путь.
+ */
 export function isPublished(repoPath: string): boolean {
+  if (repoPath.split('/').some((s) => s === '' || s === '.' || s === '..')) return false;
   return includes.some((re) => re.test(repoPath)) && !excludes.some((re) => re.test(repoPath));
 }
 

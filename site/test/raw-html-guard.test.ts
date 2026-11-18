@@ -20,7 +20,7 @@ async function render(markdown: string, withMermaid = false): Promise<string> {
   if (withMermaid) processor.use(remarkMermaidBlocks);
   const result = await processor
     .use(remarkRehype, { allowDangerousHtml: true })
-    .use(rehypeRawHtmlGuard)
+    .use(rehypeRawHtmlGuard, { repoRoot: '/repo' })
     .use(rehypeStringify, { allowDangerousHtml: true })
     .process(new VFile({ path: doc, value: markdown }));
   return String(result);
@@ -102,5 +102,13 @@ describe('rehypeRawHtmlGuard: допустимое', () => {
     const html = await render('```mermaid\nflowchart LR\n  A --> B\n```\n', true);
     expect(html).toMatch(/<pre\b[^>]*class="mermaid-source"/);
     expect(html).toContain('data-mermaid');
+  });
+});
+
+describe('rehypeRawHtmlGuard: формат сообщения', () => {
+  it('путь файла от корня репозитория и строка, без абсолютного пути', async () => {
+    const error = await render('# Руководство\n\n<script>alert(1)</script>\n').catch((e: unknown) => e);
+    expect((error as Error).message).toContain('in docs/user/guide.md:3');
+    expect((error as Error).message).not.toContain('/repo/');
   });
 });

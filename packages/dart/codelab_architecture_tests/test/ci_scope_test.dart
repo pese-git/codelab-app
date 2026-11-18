@@ -345,6 +345,16 @@ void main() {
       expect(scope.jobs, isEmpty);
     });
 
+    test('README.md приложения запускает сайт без Dart-джобов: это '
+        'документация, а не файл кода приложения', () {
+      final scope = _scope(['apps/codelab_cli/README.md']);
+
+      expect(scope.site, isTrue);
+      expect(scope.full, isFalse);
+      expect(scope.changed, isEmpty);
+      expect(scope.jobs, isEmpty);
+    });
+
     test('код пакета без документации не запускает сайт, матрица '
         'прежняя', () {
       final scope = _scope([

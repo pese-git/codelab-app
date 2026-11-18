@@ -7,7 +7,7 @@
 //
 // Для чего: единая точка настроек Astro — адреса со слэшем на конце и каталожный
 // формат страниц (D4), доступ Vite к документам вне `site/` (D3), конвейер
-// Markdown с плагинами D5, D7, D11, подсветка кода темами из токенов (D8) и
+// Markdown с плагинами D5, D7, D10, D11, подсветка кода темами из токенов (D8) и
 // подмена `elkjs` (D2, D7).
 //
 // Как использовать: `SITE_BASE=/codelab-app/ npm run build`; без переменных —
@@ -20,6 +20,7 @@ import { defineConfig } from 'astro/config';
 
 import { remarkHomePaths } from './src/plugins/home-paths.ts';
 import { remarkMermaidBlocks } from './src/plugins/mermaid-blocks.ts';
+import { remarkNewsBase } from './src/plugins/news-base.ts';
 import { onlyPublished } from './src/plugins/only-published.ts';
 import { rehypeRawHtmlGuard } from './src/plugins/raw-html-guard.ts';
 import { remarkRepoLinks } from './src/plugins/repo-links.ts';
@@ -72,7 +73,10 @@ export default defineConfig({
       smartypants: false,
       remarkPlugins: [
         remarkMermaidBlocks,
-        remarkHomePaths,
+        [remarkHomePaths, { repoRoot }],
+        // Только новости: корневые адреса сайта получают `base` (D10, D12);
+        // документы репозитория плагин пропускает.
+        [remarkNewsBase, { repoRoot, base }],
         // Только документы репозитория: ссылки новостей — адреса сайта, их
         // проверяет `check-links` (D5, D10).
         [
@@ -80,7 +84,7 @@ export default defineConfig({
           { repoRoot, repoUrl, repoRef: resolveRepoRef(), base },
         ],
       ],
-      rehypePlugins: [rehypeRawHtmlGuard],
+      rehypePlugins: [[rehypeRawHtmlGuard, { repoRoot }]],
     }),
     shikiConfig: {
       // Две свои темы из токенов `--syn-*` и `--code-*`; без цвета по

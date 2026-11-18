@@ -41,8 +41,33 @@ const textExtensions = new Set(['.html', '.js', '.mjs', '.css', '.json', '.txt',
  */
 const elkMarker = 'org.eclipse.elk';
 
-/** Атрибуты тега со ссылками: `href`, `src`, `srcset`. */
-const linkAttribute = /\s(href|src|srcset)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
+/** Атрибуты тега со ссылками: `href`, `src`, `srcset`, `data`, `action`, `poster`. */
+const linkAttribute = /\s(href|src|srcset|data|action|poster)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
+
+/**
+ * Атрибуты, которые загружают ресурс только у своего элемента: `data` у
+ * `object`, `action` у `form`, `poster` у `video`. Проверяются так же, как
+ * `src` (D2, D6): у других элементов это не адрес.
+ */
+const attributeOwners = new Map([
+  ['data', 'object'],
+  ['action', 'form'],
+  ['poster', 'video'],
+]);
+
+/**
+ * Схемы, по которым читатель может перейти из `<a>`: остальные (`javascript:`,
+ * `data:`, `vbscript:`, `file:` и прочие) выполняют код или открывают не
+ * страницу, поэтому в собранном сайте это нарушение (D6, D11).
+ */
+const navigationSchemes = new Set(['http:', 'https:', 'mailto:']);
+
+/**
+ * Элементы, которым разрешён адрес `data:`: встроенное изображение не
+ * обращается к чужому хосту. У `script`, `iframe`, `object`, `link` и других
+ * `data:` — исполняемое или встраиваемое содержимое в обход проверок (D2, D8).
+ */
+const dataUrlTags = new Set(['img', 'source']);
 const idAttribute = /\sid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
 const relAttribute = /\srel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i;
 // Теги целиком; значения атрибутов в кавычках могут содержать `>`.
@@ -83,6 +108,34 @@ function walk(dir, prefix = '') {
     else if (entry.isFile()) result.push(path);
   }
   return result;
+}
+
+/**
+ * Адреса кандидатов `srcset`.
+ *
+ * Почему не разбиение по запятой: запятая есть внутри адреса `data:`
+ * (`data:image/png;base64,…`). Как в алгоритме HTML: адрес — подряд идущие
+ * непробельные символы; запятые на его конце — разделитель, иначе
+ * дескрипторы (`1x`, `640w`) читаются до запятой.
+ */
+function srcsetUrls(value) {
+  const urls = [];
+  let i = 0;
+  while (i < value.length) {
+    while (i < value.length && /[\s,]/.test(value[i])) i++;
+    if (i >= value.length) break;
+    let end = i;
+    while (end < value.length && !/\s/.test(value[end])) end++;
+    let url = value.slice(i, end);
+    i = end;
+    if (/,+$/.test(url)) {
+      url = url.replace(/,+$/, '');
+    } else {
+      while (i < value.length && value[i] !== ',') i++;
+    }
+    if (url !== '') urls.push(url);
+  }
+  return urls;
 }
 
 /** Значение атрибута из результата регулярного выражения с тремя видами кавычек. */
@@ -135,11 +188,10 @@ export function checkDist({ dist, base, expectedPages = [] }) {
 
       for (const attr of attrs.matchAll(linkAttribute)) {
         const name = attr[1].toLowerCase();
+        const owner = attributeOwners.get(name);
+        if (owner !== undefined && owner !== tagName) continue;
         const value = attrValue(attr, 2).trim();
-        const links =
-          name === 'srcset'
-            ? value.split(',').map((candidate) => candidate.trim().split(/\s+/)[0] ?? '').filter(Boolean)
-            : [value];
+        const links = name === 'srcset' ? srcsetUrls(value) : [value];
         for (const link of links) {
           const problem = checkLink({ tagName, rel, link, file, pageUrlOf });
           if (problem) problems.push({ file, link, message: problem });
@@ -153,12 +205,21 @@ export function checkDist({ dist, base, expectedPages = [] }) {
    */
   function checkLink({ tagName, rel, link, file, pageUrlOf }) {
     if (link === '') return undefined;
-    const external = link.startsWith('//') || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(link);
+    // Браузер убирает табуляции и переводы строк из адреса: `java\tscript:`
+    // для него — `javascript:`, поэтому схема ищется после той же очистки.
+    const scheme = /^([A-Za-z][A-Za-z0-9+.-]*:)/.exec(link.replace(/[\t\n\r]/g, ''))?.[1]?.toLowerCase();
+    const external = link.startsWith('//') || scheme !== undefined;
     if (external) {
-      // Переход по ссылке `<a>` — решение читателя, а не запрос страницы;
-      // внешние адреса не запрашиваются (D6).
-      if (tagName === 'a') return undefined;
-      if (link.startsWith('data:')) return undefined;
+      if (tagName === 'a') {
+        // Переход по ссылке `<a>` — решение читателя, а не запрос страницы;
+        // внешние адреса не запрашиваются (D6). Но только по схемам перехода.
+        if (scheme === undefined || navigationSchemes.has(scheme)) return undefined;
+        return `scheme "${scheme}" is not allowed in <a>: only http:, https:, mailto:, site and relative addresses (D6, D11)`;
+      }
+      if (scheme === 'data:') {
+        if (dataUrlTags.has(tagName)) return undefined;
+        return `scheme "data:" is not allowed in <${tagName}>: only <img> and <source> may embed data: (D2, D8)`;
+      }
       if (tagName === 'link' && rel.some((r) => nonFetchingRel.has(r))) return undefined;
       return `third-party resource <${tagName}> is not allowed: the site must not request other hosts (D2, D8)`;
     }
@@ -193,6 +254,18 @@ export function checkDist({ dist, base, expectedPages = [] }) {
     }
   }
 
+  // Обратная проверка D14: каждая страница `docs/` выведена из опубликованного
+  // файла. Страница без такого файла — путь в обход allowlist (D3, D11).
+  for (const file of html.keys()) {
+    if (!file.startsWith('docs/') || !file.endsWith('/index.html') || file === 'docs/index.html') continue;
+    if (sourceOfPage(file) === undefined) {
+      problems.push({
+        file,
+        message: 'page under docs/ does not come from a file in the publish allowlist (D3, D14)',
+      });
+    }
+  }
+
   for (const file of files) {
     if (!textExtensions.has(extname(file))) continue;
     const content = html.get(file) ?? readFileSync(join(dist, file), 'utf8');
@@ -211,6 +284,23 @@ export function checkDist({ dist, base, expectedPages = [] }) {
   }
 
   return problems;
+}
+
+/**
+ * Опубликованный файл, из которого получена страница [file] `docs/…/index.html`;
+ * `undefined`, если такого нет.
+ *
+ * Почему перебор кандидатов: `pageUrl` (D4) отбрасывает `.md` и `README`, а
+ * источникам `docs/*` не добавляет второй `docs/`. Поэтому у страницы
+ * `docs/<p>/` четыре возможных источника: `<p>.md`, `<p>/README.md`,
+ * `docs/<p>.md`, `docs/<p>/README.md`. Источник засчитывается, только если он
+ * в allowlist и `pageUrl` даёт ровно эту страницу.
+ */
+function sourceOfPage(file) {
+  const page = file.slice(0, -'index.html'.length);
+  const path = page.slice('docs/'.length, -1);
+  const candidates = [`${path}.md`, `${path}/README.md`, `docs/${path}.md`, `docs/${path}/README.md`];
+  return candidates.find((candidate) => isPublished(candidate) && pageUrl(candidate, '/') === `/${page}`);
 }
 
 /** Приводит `SITE_BASE` к виду `/…/` — так же, как `astro.config.mjs` (D12). */

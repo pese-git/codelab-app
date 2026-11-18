@@ -70,3 +70,15 @@ describe('isPublished', () => {
     expect(isPublished(path)).toBe(false);
   });
 });
+
+describe('isPublished: сегменты пути', () => {
+  it.each([
+    'docs/user/../backlog/x.md',
+    'docs/user/./x.md',
+    'docs/user//x.md',
+    'apps/../docs/backlog/README.md',
+    'packages/dart/../../docs/architecture/README.md',
+  ])('%s — не опубликован', (path) => {
+    expect(isPublished(path)).toBe(false);
+  });
+});

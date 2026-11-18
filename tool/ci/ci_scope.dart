@@ -226,7 +226,7 @@ CiScope ciScope({
     if (file == _parityMatrix) matrixChanged = true;
     // Файлы сайта не принадлежат pub workspace (ADR-0003), но и не «вне
     // пакетов»: иначе правка `site/` давала бы полный Dart-прогон (D13).
-    if (_isDocumentation(file) || file.startsWith('site/')) continue;
+    if (_isDocumentation(file) || file.startsWith(_siteDir)) continue;
     final owner = packages
         .where((pkg) => file.startsWith('${pkg.dir}/'))
         .firstOrNull;
@@ -305,6 +305,12 @@ bool _isDocumentation(String file) {
   return const {'AGENTS.md', 'README.md', 'CHANGELOG.md'}.contains(name);
 }
 
+/// Каталог Astro-проекта сайта вне pub workspace (ADR-0003; D1, D13).
+///
+/// Для чего: один литерал для [_affectsSite] и для [ciScope], где файлы сайта
+/// исключаются из Dart-матрицы: переименование каталога правится в одном месте.
+const _siteDir = 'site/';
+
 /// Влияет ли [file] на сборку сайта — запускать ли джоб `site` (D13).
 ///
 /// Почему: сайт строит страницы из документации репозитория и переводит её
@@ -318,7 +324,7 @@ bool _isDocumentation(String file) {
 /// Dart-матрицу он не влияет — её по-прежнему решает [_isDocumentation] и
 /// владелец-пакет.
 bool _affectsSite(String file) {
-  if (file.startsWith('site/') ||
+  if (file.startsWith(_siteDir) ||
       file.startsWith('docs/') ||
       file.startsWith('openspec/')) {
     return true;
