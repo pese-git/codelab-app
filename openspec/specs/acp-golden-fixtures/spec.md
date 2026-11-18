@@ -294,7 +294,8 @@ Scripted-модель субагента SHALL задаваться тем же 
 | `acp/prompt-usage-cancelled` | `agent` | все |
 | `acp/compact-usage-context` | `agent` | только `conformance:agent` |
 | `acp/prompt-usage-compaction-off` | `agent` | только `conformance:agent` |
-| `acp/session-load-usage-partial` | `agent` | только `conformance:agent` |
+
+Фикстура `acp/session-load-usage-partial` из D13 заменена фикстурой `acp/session-load-usage-full` (change `add-usage-ledger`, design.md, D11; требование «Фикстуры журнала usage»).
 
 Фикстуры «все» SHALL обходиться без `setup.config` и `setup.sessions`, чтобы их проигрывали и встроенный агент, и `codelab-agent serve --stdio`. `acp/compact-usage-context` SHALL задавать `setup.config.compaction.keep_recent_tokens: 512` (как `acp/slash-compact`): с порогом по умолчанию короткая история не сжимается (design.md, D19 п. 1).
 

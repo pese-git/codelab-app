@@ -43,7 +43,8 @@
 - `MessageStarted` (с `origin` служебного сообщения), `MessageDelta`, `ThoughtDelta`, `MessageEnded`;
 - `ToolCallStarted` (с необязательным `subagent` — `SubagentCallRef(id, type)` у вызова `agent`, из `ToolPresentation.subagent`; change `add-subagents-and-tasks`, D28), `ToolCallProgress`, `ToolCallFinished` (с `outcome`, `diffs` и признаком `interrupted` у синтетического результата реплея), `ToolPairingRepaired`;
 - `StepEnded`, `ModeChanged`, `AgentError`, `TurnEnded`;
-- `ContextCompacted(tokensBefore, tokensAfter)` — сжатие уже записано в журнал (§9.8);
+- `ContextCompacted(tokensBefore, tokensAfter, usage?, model?)` — сжатие уже записано в журнал (§9.8); `usage` и `model` (`<provider>/<id>`) — usage и модель вызова суммаризатора, `null` у реплея старой записи без `details.usage`; в `TurnEnded.usage` не входят (design.md change `add-usage-ledger`, D4);
+- `CompactionDiscarded(tokensBefore, tokensAfter, usage, model)` — оплаченный вызов суммаризатора, после которого сжатие не записано (`no reduction`, `stale`): учёт записан в журнал, проекция и транскрипт не меняются; реплей события не даёт (CMP-13; design.md change `fix-discarded-compaction-usage`, D2);
 - `SessionTitleChanged(title, updatedAt)` — событие уровня `AgentSession`, заголовок записан в журнал (§8.3);
 - `TaskListChanged(items, change)` — список задач дерева изменился (§17.16.2); заменяет `PlanUpdated`, которого в иерархии больше нет (change `add-subagents-and-tasks`, D13);
 - `SubagentStarted`, `SubagentProgress`, `SubagentFinished` — события уровня `AgentSession` родителя о его ребёнке (§17.3.2);
