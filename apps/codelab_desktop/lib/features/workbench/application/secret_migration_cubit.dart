@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:codelab_client_acp/codelab_client_acp.dart' show Logger;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import 'secret_migration_runner.dart';
 
 /// Состояние переноса секретов встроенного агента.
@@ -168,6 +169,9 @@ final class SecretMigrationCubit extends Cubit<SecretMigrationState> {
     required Stream<bool> turnActivity,
     Stream<String?>? offered,
     Logger? logger,
+    // ЗАГЛУШКА задачи 3.3 change `add-desktop-localization` (D5): порт языка
+    // принят, но Cubit на него не подписывается; поведение — задача 3.4.
+    AppStrings? strings,
   }) : _runner = runner,
        _logger = logger,
        super(const SecretMigrationHidden()) {
