@@ -22,12 +22,33 @@ import '../../../support/test_app_scope.dart';
 
 /// Порт хранения, у которого запись всегда падает.
 final class _FailingPreferences implements AppLanguagePreferences {
-  @override
-  Future<AppLanguagePreference> load() async => AppLanguagePreference.system;
+  final saves = <AppLanguagePreference>[];
 
   @override
-  Future<void> save(AppLanguagePreference preference) =>
-      Future.error(StateError('disk is read-only: /secret/path'));
+  Future<AppLanguageLoad> load() async =>
+      const AppLanguageLoad(AppLanguagePreference.system);
+
+  @override
+  Future<void> save(AppLanguagePreference preference) {
+    saves.add(preference);
+    return Future.error(StateError('disk is read-only: /secret/path'));
+  }
+}
+
+/// Первая запись падает, следующие идут в настоящее хранилище.
+final class _FailsOncePreferences implements AppLanguagePreferences {
+  final _real = const SharedPreferencesAppLanguagePreferences();
+  var _failed = false;
+
+  @override
+  Future<AppLanguageLoad> load() => _real.load();
+
+  @override
+  Future<void> save(AppLanguagePreference preference) {
+    if (_failed) return _real.save(preference);
+    _failed = true;
+    return Future.error(StateError('disk is read-only'));
+  }
 }
 
 void main() {
@@ -133,34 +154,83 @@ void main() {
 
     await choose(tester, 'settings-language-ru');
     expect(
-      await const SharedPreferencesAppLanguagePreferences().load(),
+      (await const SharedPreferencesAppLanguagePreferences().load()).preference,
       AppLanguagePreference.ru,
     );
 
     await choose(tester, 'settings-language-system');
     expect(
-      await const SharedPreferencesAppLanguagePreferences().load(),
+      (await const SharedPreferencesAppLanguagePreferences().load()).preference,
       AppLanguagePreference.system,
     );
   });
 
   testWidgets('сбой записи: язык применён, ошибка на новом языке без текста '
       'исключения', (tester) async {
-    final binding = await openGeneral(
-      tester,
-      languagePreferences: _FailingPreferences(),
-    );
+    final failing = _FailingPreferences();
+    final binding = await openGeneral(tester, languagePreferences: failing);
 
     await choose(tester, 'settings-language-ru');
+
+    // Выбранная радиокнопка — ru, хотя запись не удалась.
+    expect(
+      tester
+          .widget<RadioGroup<AppLanguagePreference>>(
+            find.byType(RadioGroup<AppLanguagePreference>),
+          )
+          .groupValue,
+      AppLanguagePreference.ru,
+    );
 
     expect(
       binding.scope.resolve<AppLanguageCubit>().state.locale,
       const Locale('ru'),
     );
     expect(find.text(ru.settingsLanguageSaveFailed), findsOneWidget);
+    // Кнопка Retry — на русском.
+    expect(find.text(ru.settingsLanguageSaveRetry), findsOneWidget);
+    expect(find.text(en.settingsLanguageSaveRetry), findsNothing);
     expect(find.text(en.settingsLanguageSaveFailed), findsNothing);
     expect(find.textContaining('/secret/path'), findsNothing);
     expect(find.textContaining('read-only'), findsNothing);
     await expectNoStaleLanguage(tester, from: en, to: ru);
+  });
+
+  testWidgets('кнопка Повторить в предупреждении повторяет запись выбранного '
+      'языка', (tester) async {
+    final failing = _FailingPreferences();
+    await openGeneral(tester, languagePreferences: failing);
+    await choose(tester, 'settings-language-ru');
+    expect(failing.saves, [AppLanguagePreference.ru]);
+
+    expect(find.text(ru.settingsLanguageSaveRetry), findsOneWidget);
+    await tester.tap(key('settings-language-save-retry'));
+    await tester.pumpAndSettle();
+
+    expect(failing.saves, [AppLanguagePreference.ru, AppLanguagePreference.ru]);
+  });
+
+  testWidgets('Retry после сбоя: запись проходит, ключ ru, ошибка скрыта, '
+      'интерфейс на русском', (tester) async {
+    final binding = await openGeneral(
+      tester,
+      languagePreferences: _FailsOncePreferences(),
+    );
+    await choose(tester, 'settings-language-ru');
+    expect(key('settings-language-save-failed'), findsOneWidget);
+
+    await tester.tap(key('settings-language-save-retry'));
+    await tester.pumpAndSettle();
+
+    expect(key('settings-language-save-failed'), findsNothing);
+    expect(
+      (await const SharedPreferencesAppLanguagePreferences().load()).preference,
+      AppLanguagePreference.ru,
+    );
+    expect(
+      binding.scope.resolve<AppLanguageCubit>().state.locale,
+      const Locale('ru'),
+    );
+    expect(find.text(ru.settingsLanguageTitle), findsWidgets);
   });
 }

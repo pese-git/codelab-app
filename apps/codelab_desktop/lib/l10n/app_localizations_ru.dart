@@ -65,4 +65,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsGeneralSectionInterface => 'Интерфейс';
+
+  @override
+  String get settingsLanguageSaveRetry => 'Повторить';
 }

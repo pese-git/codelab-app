@@ -18,6 +18,8 @@
 
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 Future<void> main(List<String> args) async {
   final packages = <String>[];
   for (var i = 0; i < args.length; i++) {
@@ -31,8 +33,8 @@ Future<void> main(List<String> args) async {
   if (packages.isEmpty) {
     final root = File.fromUri(Platform.script).parent.parent.path;
     packages.addAll([
-      '$root/apps/codelab_desktop',
-      '$root/packages/flutter/codelab_ui',
+      p.join(root, 'apps', 'codelab_desktop'),
+      p.join(root, 'packages', 'flutter', 'codelab_ui'),
     ]);
   }
 
@@ -51,7 +53,7 @@ Future<void> main(List<String> args) async {
 
 /// Проверяет один пакет; `true` — код актуален или пакет без каталога.
 Future<bool> _check(Directory package) async {
-  final config = File('${package.path}/l10n.yaml');
+  final config = File(p.join(package.path, 'l10n.yaml'));
   if (!config.existsSync()) {
     stdout.writeln('l10n_check: ${package.path}: нет l10n.yaml, пропущен');
     return true;
@@ -65,25 +67,34 @@ Future<bool> _check(Directory package) async {
     return false;
   }
 
+  // Каталог ARB — внутри пакета: `..` или абсолютный путь вывели бы чтение и
+  // сравнение за его пределы.
+  if (p.isAbsolute(arbDir) || !p.isWithin('.', p.normalize(arbDir))) {
+    stderr.writeln(
+      'l10n_check: ${config.path}: arb-dir «$arbDir» должен быть внутри пакета',
+    );
+    return false;
+  }
+
   final temp = Directory.systemTemp.createTempSync('l10n_check_');
   try {
     // Во временный каталог идут только входы генерации: pubspec, настройки и
     // ARB. Сгенерированные файлы там появятся заново.
     for (final name in ['pubspec.yaml', 'l10n.yaml']) {
-      File('${package.path}/$name').copySync('${temp.path}/$name');
+      File(p.join(package.path, name)).copySync(p.join(temp.path, name));
     }
-    final tempArb = Directory('${temp.path}/$arbDir')
+    final tempArb = Directory(p.join(temp.path, arbDir))
       ..createSync(recursive: true);
-    final sourceArb = Directory('${package.path}/$arbDir');
+    final sourceArb = Directory(p.join(package.path, arbDir));
     for (final file in sourceArb.listSync().whereType<File>()) {
       if (file.path.endsWith('.arb')) {
-        file.copySync('${tempArb.path}/${_name(file.path)}');
+        file.copySync(p.join(tempArb.path, p.basename(file.path)));
       }
     }
 
     // `untranslated-messages-file` пишется в `build/`: gen-l10n сам каталог не
     // создаёт и падает.
-    Directory('${temp.path}/build').createSync();
+    Directory(p.join(temp.path, 'build')).createSync();
     final generated = await Process.run('fvm', [
       'flutter',
       'gen-l10n',
@@ -106,8 +117,19 @@ Future<bool> _check(Directory package) async {
       stderr.writeln('l10n_check: ${package.path}: gen-l10n ничего не создал');
       return false;
     }
+    // Сверка наборов: закоммиченный `*_localizations*.dart`, которого генерация
+    // не создаёт (удалённый язык), тоже устарел.
+    final expected = {for (final file in fresh) p.basename(file.path)};
+    for (final file in sourceArb.listSync().whereType<File>()) {
+      final name = p.basename(file.path);
+      if (RegExp(r'_localizations(_\w+)?\.dart$').hasMatch(name) &&
+          !expected.contains(name)) {
+        stderr.writeln('l10n_check: лишний файл ${file.path}');
+        ok = false;
+      }
+    }
     for (final file in fresh) {
-      final committed = File('${sourceArb.path}/${_name(file.path)}');
+      final committed = File(p.join(sourceArb.path, p.basename(file.path)));
       if (!committed.existsSync()) {
         stderr.writeln('l10n_check: нет файла ${committed.path}');
         ok = false;
@@ -121,5 +143,3 @@ Future<bool> _check(Directory package) async {
     temp.deleteSync(recursive: true);
   }
 }
-
-String _name(String path) => path.substring(path.lastIndexOf('/') + 1);

@@ -211,6 +211,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Interface'**
   String get settingsGeneralSectionInterface;
+
+  /// Кнопка в предупреждении о сбое записи языка на странице General: повторить запись выбранного языка.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get settingsLanguageSaveRetry;
 }
 
 class _AppLocalizationsDelegate

@@ -75,5 +75,9 @@
   "settingsGeneralSectionInterface": "Interface",
   "@settingsGeneralSectionInterface": {
     "description": "Заголовок секции страницы General, в которой выбирается язык интерфейса."
+  },
+  "settingsLanguageSaveRetry": "Retry",
+  "@settingsLanguageSaveRetry": {
+    "description": "Кнопка в предупреждении о сбое записи языка на странице General: повторить запись выбранного языка."
   }
 }

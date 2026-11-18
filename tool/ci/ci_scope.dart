@@ -156,10 +156,12 @@ const _embeddedCli = {'codelab_cli', 'codelab_embedded'};
 /// их правка запускает `l10n:check` (change add-desktop-localization, D3).
 const _l10nPackages = {'codelab_desktop', 'codelab_ui'};
 
-/// Файл каталога локализации или его сгенерированного кода.
+/// Файл каталога локализации, его сгенерированного кода или настроек
+/// генерации (`pubspec.yaml`: `generate`, `flutter_localizations`, `intl`).
 bool _isL10nFile(String file) {
   final name = file.split('/').last;
   return name == 'l10n.yaml' ||
+      name == 'pubspec.yaml' ||
       name.endsWith('.arb') ||
       RegExp(r'_localizations(_\w+)?\.dart$').hasMatch(name);
 }

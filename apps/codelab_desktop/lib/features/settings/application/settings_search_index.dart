@@ -9,7 +9,7 @@ import '../../../app/navigation/settings_page.dart';
 /// поиска по значениям настроек нет.
 ///
 /// Как использовать: `SettingsSearchIndex.search(visiblePages, query,
-/// titleOf: …)`;
+/// titlesOf: …)`;
 /// совпадение — по подстроке без учёта регистра с заголовком страницы или её
 /// ключевыми словами. Пустой запрос возвращает все страницы. Ключевые слова
 /// новой страницы добавляются в [keywords] вместе со страницей.
@@ -54,13 +54,14 @@ final class SettingsSearchIndex {
     ],
   };
 
-  /// [titleOf] даёт заголовок страницы на текущем языке: поиск идёт по тому,
-  /// что видит пользователь (`add-desktop-localization`, D5, п. 8); ключевые
-  /// слова — английские и от языка не зависят.
+  /// [titlesOf] даёт заголовки страницы, по которым ищем: на текущем языке
+  /// (то, что видит пользователь) и английский (его знают из документации и
+  /// `codelab config`) — `add-desktop-localization`, D5, п. 8. Ключевые слова
+  /// английские и от языка не зависят.
   static List<SettingsPage> search(
     Iterable<SettingsPage> visible,
     String query, {
-    required String Function(SettingsPage page) titleOf,
+    required Iterable<String> Function(SettingsPage page) titlesOf,
   }) {
     final needle = query.trim().toLowerCase();
     if (needle.isEmpty) {
@@ -68,7 +69,9 @@ final class SettingsSearchIndex {
     }
     return [
       for (final page in visible)
-        if (titleOf(page).toLowerCase().contains(needle) ||
+        if (titlesOf(
+              page,
+            ).any((title) => title.toLowerCase().contains(needle)) ||
             (keywords[page] ?? const []).any(
               (word) => word.toLowerCase().contains(needle),
             ))

@@ -65,4 +65,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsGeneralSectionInterface => 'Interface';
+
+  @override
+  String get settingsLanguageSaveRetry => 'Retry';
 }

@@ -7,10 +7,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'app/app_scope.dart';
-import 'app/language/app_language_cubit.dart' show AppLanguageState;
-import 'app/language/app_locale.dart';
+import 'app/language/app_language_start.dart';
 import 'core/platform/app_language_preferences.dart';
-import 'l10n/app_localizations.dart' show lookupAppLocalizations;
 import 'app/client_profile_secrets.dart';
 import 'app/codelab_app_widget.dart';
 import 'app/connection_environment.dart';
@@ -31,12 +29,11 @@ Future<void> main() async {
   final profileSecrets = await openSecrets();
 
   // Язык читается до `runApp`: первый кадр сразу на нужном языке, без мигания
-  // английского (add-desktop-localization, D2).
-  final preference = await SharedPreferencesAppLanguagePreferences(
-    logger: codeLabAppLogger(),
-  ).load();
-  final locale = resolveAppLocale(
-    preference,
+  // английского (add-desktop-localization, D2). `load` не бросает; журнал здесь
+  // ещё не настроен, поэтому диагностику чтения несёт шов и пишет её
+  // `CodeLabLanguageModule` (D13).
+  final language = AppLanguageStart.fromLoad(
+    await const SharedPreferencesAppLanguagePreferences().load(),
     WidgetsBinding.instance.platformDispatcher.locales,
   );
 
@@ -45,11 +42,7 @@ Future<void> main() async {
       logDirectoryPath: logDirectoryPath,
       profileSecrets: profileSecrets,
       profileSecretsOpener: openSecrets,
-      language: AppLanguageState(
-        preference: preference,
-        locale: locale,
-        strings: lookupAppLocalizations(locale),
-      ),
+      language: language,
       child: const CodeLabApp(),
     ),
   );

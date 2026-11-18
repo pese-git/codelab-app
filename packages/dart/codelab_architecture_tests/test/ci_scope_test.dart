@@ -255,6 +255,9 @@ void main() {
       'apps/codelab_desktop/lib/l10n/app_localizations_ru.dart',
       'packages/flutter/codelab_ui/lib/src/l10n/codelab_ui_en.arb',
       'packages/flutter/codelab_ui/l10n.yaml',
+      // `generate`, `flutter_localizations` и `intl` задают генерацию.
+      'apps/codelab_desktop/pubspec.yaml',
+      'packages/flutter/codelab_ui/pubspec.yaml',
       'packages/flutter/codelab_ui/lib/src/l10n/codelab_localizations.dart',
     ]) {
       final jobs = _byName(_scope([file]));

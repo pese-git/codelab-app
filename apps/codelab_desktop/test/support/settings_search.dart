@@ -14,5 +14,5 @@ List<SettingsPage> searchSettings(
 ) => SettingsSearchIndex.search(
   visible,
   query,
-  titleOf: (page) => settingsPageTitleOf(AppLocalizationsEn(), page),
+  titlesOf: (page) => [settingsPageTitleOf(AppLocalizationsEn(), page)],
 );

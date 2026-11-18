@@ -7,6 +7,8 @@ environment:
 dev_dependencies:
   lints: ^6.0.0
   melos: ^8.3.0
+  # Скрипт tool/l10n_check.dart (change add-desktop-localization, D3).
+  path: ^1.9.0
 
 workspace:
   - apps/codelab_agent
