@@ -11,6 +11,11 @@ import 'embedded_agent_config.dart';
 
 /// Версия пакета в `agentInfo`: тот же агент, что у бинаря `codelab-agent`.
 ///
+/// Экспортируется основным барелем: страница «General» desktop показывает
+/// версию встроенного агента в «About» без запуска агента (change
+/// `add-app-general-page`, D11). Тест `embedded_agent_version_test.dart`
+/// держит её равной `agentInfo.version` ответа `initialize`.
+///
 /// Парная константа — `agentVersion` в
 /// `apps/codelab_agent/lib/src/host/agent_host.dart`; значения должны
 /// совпадать. Импортировать её отсюда нельзя (пакет не зависит от приложений),

@@ -286,8 +286,11 @@ void main() {
       unawaited(
         agent
             .next(sessionLoadMethod)
-            .then(
+            .then<void>(
               (request) => agent.respond(request, const <String, Object?>{}),
+              // Поток закрывается при dispose, если session/load не пришёл —
+              // это и есть ожидаемое поведение.
+              onError: (Object _) {},
             ),
       );
       await agent.start();
@@ -305,7 +308,13 @@ void main() {
       agent.workspace.startWithoutRestore();
       agent.workspace.selectProject('/work/other');
       await agent.workspace.flushSnapshot();
+      // Подключение после записи: сессии прошлого снимка не возвращаются ни в
+      // `session/load`, ни в следующую запись (иначе тест проходил бы и на
+      // обычном восстановлении, которое «чужой» проект тоже отменяет).
+      await agent.start(projectDirectory: '/work/other');
+      await agent.workspace.flushSnapshot();
 
+      expect(sentMethods(), [initializeMethod]);
       expect(_savedWindow(store)['projectDirectory'], '/work/other');
       expect(_savedWindow(store)['openSessions'], isEmpty);
       expect(_savedWindow(store)['activeSessionId'], isNull);
@@ -318,8 +327,14 @@ void main() {
 
       agent.workspace.startWithoutRestore();
       agent.workspace.selectProject('/work');
+      // Даём незавершённому чтению снимка (на заглушке) шанс отработать до
+      // записи: пустая операция должна переживать и это.
+      await Future<void>.value();
+      await agent.workspace.flushSnapshot();
+      await agent.start();
       await agent.workspace.flushSnapshot();
 
+      expect(sentMethods(), [initializeMethod]);
       expect(_savedWindow(store)['projectDirectory'], '/work');
       expect(_savedWindow(store)['openSessions'], isEmpty);
       expect(_savedWindow(store)['activeSessionId'], isNull);

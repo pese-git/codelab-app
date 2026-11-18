@@ -22,6 +22,7 @@ final class EmbeddedWebSmokeReport {
     required this.transportState,
     required this.unknownSessionStatus,
     required this.mcpStates,
+    required this.agentVersion,
   });
 
   final String profile;
@@ -35,6 +36,10 @@ final class EmbeddedWebSmokeReport {
   /// Имена `McpServerState` и сводка `McpServerSummary` основного бареля:
   /// реэкспорт без `dart:io` проверяет сама компиляция в JS и Wasm.
   final List<String> mcpStates;
+
+  /// Константа основного бареля `embeddedAgentVersion` (change
+  /// `add-app-general-page`, D11): читается без запуска агента.
+  final String agentVersion;
 }
 
 /// Клиент без сети: запрос к провайдеру в smoke не уходит.
@@ -102,6 +107,7 @@ Future<EmbeddedWebSmokeReport> runEmbeddedWebSmoke() async {
       for (final state in McpServerState.values)
         '${const McpServerSummary(name: 'x', toolCount: 0).name}:${state.name}',
     ],
+    agentVersion: embeddedAgentVersion,
   );
   await agent.dispose();
   return report;

@@ -88,4 +88,52 @@ void main() {
 
     expect(sentMethods(), [initializeMethod]);
   });
+
+  test('повторный restoreProject не читает снимок второй раз и возвращает тот '
+      'же проект', () async {
+    final counting = _CountingStore(_snapshot);
+    final other = KitAgent(capabilities: _withLoad, snapshots: counting);
+    addTearDown(other.dispose);
+
+    expect(await other.workspace.restoreProject(), '/work');
+    // Снимок между вызовами меняется: второй вызов не должен его увидеть.
+    counting.value = null;
+    expect(await other.workspace.restoreProject(), '/work');
+
+    expect(counting.reads, 1);
+  });
+
+  test('одновременные restoreProject читают снимок один раз', () async {
+    final counting = _CountingStore(_snapshot);
+    final other = KitAgent(capabilities: _withLoad, snapshots: counting);
+    addTearDown(other.dispose);
+
+    final results = await Future.wait([
+      other.workspace.restoreProject(),
+      other.workspace.restoreProject(),
+    ]);
+
+    expect(results, ['/work', '/work']);
+    expect(counting.reads, 1);
+  });
+}
+
+/// Хранилище, считающее чтения: «повторный вызов — пустая операция».
+final class _CountingStore implements WorkspaceSnapshotStore {
+  _CountingStore(this.value);
+
+  String? value;
+  var reads = 0;
+
+  @override
+  Future<String?> read() async {
+    reads++;
+    return value;
+  }
+
+  @override
+  Future<void> write(String snapshot) async => value = snapshot;
+
+  @override
+  Future<void> clear() async => value = null;
 }

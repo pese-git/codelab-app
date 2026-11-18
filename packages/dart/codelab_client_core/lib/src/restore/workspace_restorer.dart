@@ -65,13 +65,62 @@ final class WorkspaceRestorer {
   String? _snapshotProject;
 
   var _started = false;
+
+  /// Хост уже выбрал способ старта — [readProject] или [skip]; второй вызов
+  /// любого из них пуст (spec acp-client-kit «Старт без восстановления
+  /// рабочего пространства», D9 change `add-app-general-page`).
+  var _startChosen = false;
+
+  /// Старт без восстановления выполнен: снимок не читается и не
+  /// восстанавливается.
+  var _skipped = false;
+
+  /// Результат первого [readProject]; задан — значит, читать повторно нельзя.
+  Future<String?>? _projectRead;
   WorkspaceSnapshot? _written;
   WorkspaceSnapshot? _wanted;
   Future<void>? _writing;
 
+  /// Старт без восстановления (D9): снимок прошлого запуска не читается, и
+  /// первое подключение ничего по нему не восстанавливает, но запись снимка
+  /// разрешена с этого момента.
+  ///
+  /// Почему запись разрешена: иначе при выключенной настройке «открывать
+  /// последний проект» снимок не писался бы, и её включение вернуло бы проект
+  /// двухдневной давности. Первая запись заменяет старый снимок текущим.
+  ///
+  /// Вызов после [readProject] (или повторный) — пустая операция.
+  void skip() {
+    if (_startChosen) {
+      return;
+    }
+    _startChosen = true;
+    _skipped = true;
+    _started = true;
+    _restoring = null;
+    _snapshotProject = null;
+    _pending.clear();
+  }
+
   /// Шаг 1: читает снимок и возвращает его проект; битый снимок или
   /// неизвестная версия — диагностика, снимок удаляется.
-  Future<String?> readProject() async {
+  ///
+  /// После [skip] ничего не читает и возвращает `null`: снимок прошлого
+  /// запуска отменён.
+  ///
+  /// Повторный и одновременный вызовы возвращают результат первого без
+  /// повторного чтения (spec acp-client-kit «Старт без восстановления
+  /// рабочего пространства»: повторный вызов — пустая операция); единственный
+  /// вызывающий — `SettingsCubit` desktop — зовёт его один раз.
+  Future<String?> readProject() {
+    if (_skipped) {
+      return Future<String?>.value();
+    }
+    return _projectRead ??= _readProject();
+  }
+
+  Future<String?> _readProject() async {
+    _startChosen = true;
     _started = true;
     final String? json;
     try {

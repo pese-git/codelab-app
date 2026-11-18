@@ -184,6 +184,9 @@ List<String> _settingRows(AgentConfigSnapshot snapshot) {
     'type:${kind.type == SettingType.enumeration}',
     'scope:${kind.scope == SettingScope.shared}',
     'bad:${parsed != null}',
+    // Правила правки строк (change `add-app-general-page`, D6).
+    'refusal:${settingKeyEditRefusalOf('trusted_projects') is TrustBoundarySetting}',
+    'rows:${rows.where((r) => settingEditRefusalOf(r) == null).isNotEmpty}',
   ];
 }
 

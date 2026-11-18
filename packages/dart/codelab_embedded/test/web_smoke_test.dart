@@ -16,6 +16,7 @@ void main() {
     expect(report.toolNames, isNot(contains('exec')));
     expect(report.transportState, AcpTransportState.idle);
     expect(report.unknownSessionStatus, isNull);
+    expect(report.agentVersion, isNotEmpty);
     expect(report.mcpStates, [
       'x:connecting',
       'x:connected',

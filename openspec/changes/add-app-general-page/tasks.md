@@ -38,19 +38,19 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - «Обычный ключ можно править»;
   - неизвестный ключ и ключ `fileOnly` — `UnknownSetting`;
   - `trusted_projects` — `TrustBoundarySetting`.
-- [ ] 1.2 `[agent]` Реализация 1.1: `lib/src/views/setting_edit_rules.dart` (D6), экспорт из основного бареля; web-smoke (`test/web_smoke/main.dart`) вызывает `settingEditRefusalOf`. `packages/dart/codelab_setup/AGENTS.md` §1 — строка о правилах. 1.1 зелёный, `web-compile` зелёный.
+- [x] 1.2 `[agent]` Реализация 1.1: `lib/src/views/setting_edit_rules.dart` (D6), экспорт из основного бареля; web-smoke (`test/web_smoke/main.dart`) вызывает `settingEditRefusalOf`. `packages/dart/codelab_setup/AGENTS.md` §1 — строка о правилах. 1.1 зелёный, `web-compile` зелёный.
 - [ ] 1.3 `[client]` Красный: `apps/codelab_cli/test/setup/settings_rows_test.dart` — сценарий «Тексты CLI не меняются»: все четыре текста отказа `/settings` для каждой ветки `SettingEditRefusal` побайтно, в том числе источники `config` и `env`.
-- [ ] 1.4 `[client]` Реализация 1.3: `settings_rows.dart` строит тексты по ветке моста, удаляет `isTrustBoundary`, `isSecretKey`, `isExternalSource`. `settingWriteLayerOf` и `applySetting` не меняются (D6). 1.3 и прежние тесты `/settings` REPL и TUI зелёные, `test:e2e:cli:dart-agent` зелёный.
+- [x] 1.4 `[client]` Реализация 1.3: `settings_rows.dart` строит тексты по ветке моста, удаляет `isTrustBoundary`, `isSecretKey`, `isExternalSource`. `settingWriteLayerOf` и `applySetting` не меняются (D6). 1.3 и прежние тесты `/settings` REPL и TUI зелёные, `test:e2e:cli:dart-agent` зелёный.
 
 ## 2. Итерация 2 — блок «Agent defaults»
 
-- [ ] 2.1 `[desktop]` Красный: `test/features/settings/application/agent_defaults_rows_test.dart` (требование «…доступ и строки», сценарий «Новый ключ реестра без решения»; D2, D5):
+- [x] 2.1 `[desktop]` Красный: `test/features/settings/application/agent_defaults_rows_test.dart` (требование «…доступ и строки», сценарий «Новый ключ реестра без решения»; D2, D5):
   - каждый ключ `SettingsRegistry.all` со `scope: shared` есть в таблице классификации;
   - у каждого ключа `general` тип из набора редакторов D5;
   - английские сообщения ARB подписи и описания совпадают с `label` и `description` реестра;
   - группировка Budget, Agent, Subagents, Logging и порядок реестра внутри группы.
 - [ ] 2.2 `[desktop]` Реализация 2.1: `features/settings/application/agent_defaults_rows.dart`, сообщения подписей ключей в `app_en.arb` и `app_ru.arb`. 2.1 зелёный, `l10n:check` зелёный.
-- [ ] 2.3 `[desktop]` Красный: `test/features/settings/application/agent_defaults_cubit_test.dart` на настоящем `FileAgentConfigStore` во временной папке (`test/support/modes_fixture.dart`). Требования «…доступ и строки» и «…запись», все сценарии данных:
+- [x] 2.3 `[desktop]` Красный: `test/features/settings/application/agent_defaults_cubit_test.dart` на настоящем `FileAgentConfigStore` во временной папке (`test/support/modes_fixture.dart`). Требования «…доступ и строки» и «…запись», все сценарии данных:
   - «Строки из своего подмножества», «WebSocket-агент» (локальный файл не читается), «Битый конфиг»;
   - «Смена лимита шагов», «Неверное число» (значения нет в подсказке и событиях), «Ключ с перезапуском», «Перекрытие проектным файлом», «Значение из окружения», «Сброс поля», «Конфликт записи», «Смена подключения во время записи»;
   - поздний снимок после `reload`, смены папки фокуса и `close()` — `agent_defaults.load_discarded`;
@@ -77,7 +77,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - «Снимок не восстанавливается» — `session/load` нет, сессий снимка в списке нет;
   - «Снимок пишется по ходу работы»;
   - повторный и перекрёстный вызовы `restoreProject` и `startWithoutRestore` — пустая операция.
-- [ ] 3.2 `[client]` Реализация 3.1: `ClientWorkspace.startWithoutRestore()`, `WorkspaceRestorer.skip()` (запись разрешена, `_restoring` пуст, снимок не читается; D9). Фейки `ClientWorkspace` в тестах app и CLI получают метод. 3.1 зелёный.
+- [x] 3.2 `[client]` Реализация 3.1: `ClientWorkspace.startWithoutRestore()`, `WorkspaceRestorer.skip()` (запись разрешена, `_restoring` пуст, снимок не читается; D9). Фейки `ClientWorkspace` в тестах app и CLI получают метод. 3.1 зелёный.
 - [ ] 3.3 `[desktop]` Красный: `test/core/platform/startup_preferences_test.dart` — `load` не бросает (сбой хранилища и небулево значение дают `true` и признак), `save(true)` удаляет ключ, `save(false)` пишет `false`. `test/features/workbench/application/settings_cubit_startup_test.dart` — сценарии app-settings «Открытие последнего проекта при запуске»:
   - «По умолчанию проект прошлого запуска открывается»;
   - «Выключено — старт без проекта» (проект не выбран, `startOnLaunch` агента не стартует, `startWithoutRestore` вызван ровно раз);
@@ -96,7 +96,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 ## 5. Итерация 5 — «About»
 
 - [x] 5.1 `[agent]` Красный: `packages/dart/codelab_embedded/test/embedded_agent_version_test.dart` — сценарий embedded-agent «Константа совпадает с agentInfo» (сценарный открыватель, `initialize`); web-smoke читает константу.
-- [ ] 5.2 `[agent]` Реализация 5.1: экспорт `embeddedAgentVersion` из `lib/codelab_embedded.dart`, строка в `packages/dart/codelab_embedded/AGENTS.md`. 5.1 зелёный, `web-compile` зелёный.
+- [x] 5.2 `[agent]` Реализация 5.1: экспорт `embeddedAgentVersion` из `lib/codelab_embedded.dart`, строка в `packages/dart/codelab_embedded/AGENTS.md`. 5.1 зелёный, `web-compile` зелёный.
 - [ ] 5.3 `[desktop]` Красный: `test/app/build_version_test.dart` — `codelabDesktopVersion` равен `version` из `pubspec.yaml`, `kCodeLabReleaseNotesUrl` начинается с `repoUrl` из `site/src/site.config.ts`. `test/app/legal_assets_test.dart` — сценарии licensing-and-attribution «Копия разошлась с корнем» и «Строка лицензии из ресурса». `test/core/platform/build_info_test.dart` — отображение `Abi` и ОС на `macOS arm64`, `Linux x64`, `Windows x64`.
 - [ ] 5.4 `[desktop]` Реализация 5.3: `lib/app/build_version.dart`, `core/platform/build_info.dart`, `assets/legal/` и раздел `flutter: assets:` в `pubspec.yaml`. 5.3 зелёный.
 - [ ] 5.5 `[desktop]` Красный: `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` — `dart:ffi` в `apps/codelab_desktop/lib` вне `lib/core/platform/build_info.dart` запрещён (D1).

@@ -21,6 +21,7 @@ library;
 export 'package:codelab_agent_core/codelab_agent_core.dart'
     show LogLevel, Logger, McpServerState, McpServerSummary, McpStatusPort;
 
+export 'src/assemble.dart' show embeddedAgentVersion;
 export 'src/create_embedded_agent.dart' show createEmbeddedAgent;
 export 'src/embedded_agent.dart' show EmbeddedAgent, EmbeddedAgentOpener;
 export 'src/embedded_agent_config.dart'

@@ -26,6 +26,8 @@ void main() {
       'type:true',
       'scope:true',
       'bad:true',
+      'refusal:true',
+      'rows:true',
     ]);
     expect(report.mcp, [
       'upsert:docs',
