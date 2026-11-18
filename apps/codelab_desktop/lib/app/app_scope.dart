@@ -74,6 +74,7 @@ import '../features/settings/application/default_profile_resolver.dart';
 import '../features/settings/application/embedded_profile.dart';
 import '../features/settings/application/profiles_unavailable.dart';
 import '../features/settings/application/agent_defaults_cubit.dart';
+import '../features/settings/application/about_diagnostics.dart';
 import '../features/settings/application/agents_modes_cubit.dart';
 import '../features/settings/application/startup_settings_cubit.dart';
 import '../features/settings/application/mcp_settings_cubit.dart';
@@ -123,6 +124,8 @@ Scope createCodeLabRootScope({
   AppLanguagePreferences? languagePreferences,
   // Шов порта настроек запуска (D9).
   StartupPreferences? startupPreferences,
+  // Данные раздела «About» (D11); заглушка итерации 5, привязка — задача 5.10.
+  AboutInfo? aboutInfo,
   CodeLabTransportFactory? transportFactory,
   CodeLabStdioTransportFactory? stdioTransportFactory,
   CodeLabWebSocketTransportFactory? webSocketTransportFactory,

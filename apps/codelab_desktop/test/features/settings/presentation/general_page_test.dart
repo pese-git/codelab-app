@@ -26,6 +26,8 @@
 // Редакторы ищутся по типу виджета внутри строки (`ToggleSwitch`, `ComboBox`,
 // `TextBox`), своих ключей у них нет.
 
+import 'dart:io';
+
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/language/app_language_cubit.dart';
 import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
@@ -33,6 +35,10 @@ import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
 import 'package:codelab_desktop/core/platform/startup_preferences.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_desktop/app/build_version.dart';
+import 'package:codelab_desktop/core/platform/external_link_opener.dart';
+import 'package:codelab_desktop/core/platform/local_folder_opener.dart';
+import 'package:codelab_desktop/features/settings/application/about_diagnostics.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_rows.dart';
 import 'package:codelab_desktop/features/settings/application/startup_settings_cubit.dart';
@@ -44,10 +50,17 @@ import 'package:codelab_desktop/l10n/app_localizations_ru.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart'
+    show LicenseEntryWithLineBreaks, LicenseRegistry;
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:structured_log_flutter/structured_log_flutter.dart'
+    show LogBuffer;
 
+import '../../../support/fake_external_link_opener.dart';
+import '../../../support/fake_local_folder_opener.dart';
 import '../../../support/l10n_app.dart';
 import '../../../support/l10n_mix.dart';
 import '../../../support/settings_search.dart';
@@ -210,6 +223,9 @@ void main() {
     AppLanguagePreferences? languagePreferences,
     StartupPreferences? startupPreferences,
     Map<String, Object> preferences = const {},
+    AboutInfo? aboutInfo,
+    ExternalLinkOpener? externalLinkOpener,
+    LocalFolderOpener? localFolderOpener,
   }) async {
     final binding = CodeLabTestBinding(
       project: '/workspace',
@@ -219,6 +235,9 @@ void main() {
       languagePreferences: languagePreferences,
       startupPreferences: startupPreferences,
       preferences: preferences,
+      aboutInfo: aboutInfo,
+      externalLinkOpener: externalLinkOpener,
+      localFolderOpener: localFolderOpener,
     );
     await tester.pumpWidget(
       binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
@@ -467,14 +486,12 @@ void main() {
         // «Startup and files» есть со строкой «Reopen…» (итерация 3), строки
         // «Show ignored files» (итерация 4) и «About» (итерация 5) ещё нет.
         expect(key('settings-general-show-ignored'), findsNothing);
-        expect(key('settings-general-about'), findsNothing);
         for (final hidden in [
           'When I press Enter during a turn',
           'Sidebar opens on',
           'Send crash reports',
           'Privacy policy',
           'Privacy',
-          'About',
         ]) {
           expect(find.text(hidden), findsNothing, reason: hidden);
         }
@@ -1543,7 +1560,7 @@ void main() {
     }
 
     testWidgets('блок «Startup and files» со строкой и подписью идёт после '
-        'Interface; строки Show ignored files и About ещё нет', (tester) async {
+        'Interface; строки Show ignored files ещё нет', (tester) async {
       await openGeneral(tester);
 
       expect(key(rowKey), findsOneWidget);
@@ -1561,7 +1578,6 @@ void main() {
         lessThan(tester.getTopLeft(key(rowKey)).dy),
       );
       expect(key('settings-general-show-ignored'), findsNothing);
-      expect(key('settings-general-about'), findsNothing);
       expect(toggle(), findsOneWidget);
       expect(checked(tester), isTrue);
     });
@@ -1689,6 +1705,390 @@ void main() {
       );
       expect(key(failedKey), findsOneWidget);
       await expectNoStaleLanguage(tester, from: en, to: ru);
+    });
+  });
+
+  // --- Раздел «About» (задача 5.9 change `add-app-general-page`; spec
+  // app-settings «Раздел «About» страницы «General»», «Диагностика для отчёта
+  // без секретов и путей», «События журнала страницы «General»»; design.md
+  // D11–D14, D17). Страница идёт через настоящее дерево app, порты ссылок и
+  // каталогов, данные `AboutInfo` и буфер обмена — двойники. -----------------
+
+  group('About (D11–D14)', () {
+    const logDir = '/tmp/about-logs-marker';
+    final root = File('../../LICENSE').readAsLinesSync();
+    final about = AboutInfo(
+      version: '0.1.0',
+      os: 'macOS',
+      arch: 'arm64',
+      embeddedAgentVersion: '0.1.0',
+      licenseName: 'MIT',
+      licenseCopyright: root[2],
+      configHome: '~/.codelab-about',
+      logDirectory: logDir,
+      thirdPartyNotices: File(
+        '../../THIRD_PARTY_NOTICES.md',
+      ).readAsStringSync(),
+    );
+
+    late FakeExternalLinkOpener links;
+    late FakeLocalFolderOpener folders;
+    late CodeLabTestBinding binding;
+    late List<String> clipboard;
+
+    Future<void> openAbout(WidgetTester tester) async {
+      links = FakeExternalLinkOpener();
+      folders = FakeLocalFolderOpener();
+      clipboard = [];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            clipboard.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      binding = await openGeneral(
+        tester,
+        aboutInfo: about,
+        externalLinkOpener: links,
+        localFolderOpener: folders,
+      );
+    }
+
+    Future<void> expand(WidgetTester tester) async {
+      expect(key('settings-general-about'), findsOneWidget);
+      await tester.ensureVisible(key('settings-general-about'));
+      await tester.tap(find.text('CodeLab 0.1.0'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> press(WidgetTester tester, String buttonKey) async {
+      expect(key(buttonKey), findsOneWidget);
+      await tester.ensureVisible(key(buttonKey));
+      await tester.tap(key(buttonKey));
+      await tester.pumpAndSettle();
+    }
+
+    Iterable<Map<String, Object?>> aboutEvents() => binding.scope
+        .resolve<LogBuffer>()
+        .entries
+        .value
+        .where((e) => e['event'] == 'settings.about_action');
+
+    testWidgets('заголовок: версия сборки, ОС, архитектура и версия '
+        'встроенного агента; Channel и Signed by нет', (tester) async {
+      await openAbout(tester);
+
+      expect(key('settings-general-about'), findsOneWidget);
+      expect(find.text('CodeLab 0.1.0'), findsOneWidget);
+      expect(find.text('macOS arm64 · embedded agent 0.1.0'), findsOneWidget);
+      expect(find.text('Channel'), findsNothing);
+      expect(find.text('Signed by'), findsNothing);
+      // «About» идёт после блока «Startup and files».
+      expect(
+        tester.getTopLeft(key('settings-general-reopen-last-project')).dy,
+        lessThan(tester.getTopLeft(key('settings-general-about')).dy),
+      );
+    });
+
+    testWidgets('развёрнутый раздел: лицензия, папка настроек, четыре кнопки '
+        'и InfoBar об обновлениях', (tester) async {
+      await openAbout(tester);
+
+      await expand(tester);
+
+      expect(find.text('License'), findsOneWidget);
+      expect(find.text('MIT'), findsOneWidget);
+      expect(find.text(root[2]), findsOneWidget);
+      expect(find.text('Config folder'), findsOneWidget);
+      expect(find.text('~/.codelab-about'), findsOneWidget);
+      for (final k in [
+        'settings-general-about-copy-diagnostics',
+        'settings-general-about-third-party',
+        'settings-general-about-release-notes',
+        'settings-general-about-open-logs',
+      ]) {
+        expect(key(k), findsOneWidget, reason: k);
+      }
+      final updates = tester.widget<InfoBar>(
+        key('settings-general-about-updates'),
+      );
+      expect(updates.severity, InfoBarSeverity.info);
+      expect(
+        find.text(
+          'Updates come from the installer or your package manager — the app '
+          'does not update itself.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Channel'), findsNothing);
+      expect(find.text('Signed by'), findsNothing);
+      expect(find.text('Privacy policy'), findsNothing);
+      expect(find.text('Send crash reports'), findsNothing);
+    });
+
+    group('Third-party notices', () {
+      testWidgets('диалог офлайн: запись из THIRD_PARTY_NOTICES.md и список '
+          'лицензий пакетов', (tester) async {
+        LicenseRegistry.addLicense(
+          () => Stream.value(
+            const LicenseEntryWithLineBreaks(['marker_pkg_5_9'], 'Marker text'),
+          ),
+        );
+        await openAbout(tester);
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-third-party');
+
+        expect(key('settings-general-third-party-dialog'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: key('settings-general-third-party-dialog'),
+            matching: find.textContaining('JetBrains Mono', findRichText: true),
+          ),
+          findsWidgets,
+        );
+        expect(
+          find.descendant(
+            of: key('settings-general-third-party-dialog'),
+            matching: find.text('marker_pkg_5_9'),
+          ),
+          findsOneWidget,
+        );
+        final opened = aboutEvents().where((e) => e['action'] == 'third_party');
+        expect(opened.single['outcome'], 'opened');
+      });
+    });
+
+    group('Release notes', () {
+      testWidgets('открываются через порт один раз с адресом CHANGELOG.md', (
+        tester,
+      ) async {
+        expect(kCodeLabReleaseNotesUrl, isNotEmpty);
+        await openAbout(tester);
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-release-notes');
+
+        expect(links.opened, [Uri.parse(kCodeLabReleaseNotesUrl)]);
+        expect(key('settings-general-about-open-failed'), findsNothing);
+        final event = aboutEvents().single;
+        expect(event['action'], 'release_notes');
+        expect(event['outcome'], 'opened');
+      });
+
+      testWidgets('сбой: InfoBar без адреса и текста исключения', (
+        tester,
+      ) async {
+        await openAbout(tester);
+        links.outcome = ExternalLinkOutcome.failed;
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-release-notes');
+
+        expect(key('settings-general-about-open-failed'), findsOneWidget);
+        expect(find.text("Couldn't open the release notes."), findsOneWidget);
+        expect(find.textContaining('CHANGELOG'), findsNothing);
+        expect(aboutEvents().single['outcome'], 'failed');
+      });
+
+      testWidgets('схема вне политики порта: тот же InfoBar, исход '
+          'rejected_scheme', (tester) async {
+        await openAbout(tester);
+        links.outcome = ExternalLinkOutcome.rejectedScheme;
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-release-notes');
+
+        expect(find.text("Couldn't open the release notes."), findsOneWidget);
+        expect(aboutEvents().single['outcome'], 'rejected_scheme');
+      });
+    });
+
+    group('Open log folder', () {
+      testWidgets('каталог журналов открывается без создания', (tester) async {
+        await openAbout(tester);
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-open-logs');
+
+        expect(folders.calls, [(directory: logDir, create: false)]);
+        expect(key('settings-general-about-open-failed'), findsNothing);
+        final event = aboutEvents().single;
+        expect(event['action'], 'open_logs');
+        expect(event['outcome'], 'opened');
+      });
+
+      testWidgets('не открылся: InfoBar без пути', (tester) async {
+        await openAbout(tester);
+        folders.outcome = FolderOpenOutcome.failed;
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-open-logs');
+
+        expect(key('settings-general-about-open-failed'), findsOneWidget);
+        expect(find.text("Couldn't open the log folder."), findsOneWidget);
+        expect(find.textContaining('about-logs-marker'), findsNothing);
+        expect(aboutEvents().single['outcome'], 'failed');
+      });
+
+      testWidgets('каталога нет: тот же InfoBar, исход missing', (
+        tester,
+      ) async {
+        await openAbout(tester);
+        folders.outcome = FolderOpenOutcome.missing;
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-open-logs');
+
+        expect(find.text("Couldn't open the log folder."), findsOneWidget);
+        expect(aboutEvents().single['outcome'], 'missing');
+      });
+    });
+
+    group('Copy diagnostics', () {
+      testWidgets('кладёт в буфер фиксированный текст и показывает '
+          'подтверждение', (tester) async {
+        await openAbout(tester);
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-copy-diagnostics');
+
+        expect(clipboard, hasLength(1));
+        final lines = clipboard.single.trim().split('\n');
+        expect(lines, hasLength(7));
+        expect(lines[0], 'CodeLab 0.1.0');
+        expect(lines[1], 'OS: macOS arm64');
+        expect(lines[2], 'Embedded agent: 0.1.0');
+        expect(lines[3], 'UI language: en (preference: system)');
+        expect(
+          lines[4],
+          matches(
+            RegExp(
+              r'^Connection: (embedded|stdio|websocket) · '
+              r'(connecting|connected|reconnecting|failed|disconnected)$',
+            ),
+          ),
+        );
+        expect(
+          lines[5],
+          matches(
+            RegExp(
+              r'^Agent settings: (editable|remote-read-only|not-managed)$',
+            ),
+          ),
+        );
+        expect(lines[6], matches(RegExp(r'^Config folder: (default|custom)$')));
+        expect(find.text('Diagnostics copied.'), findsOneWidget);
+        final event = aboutEvents().single;
+        expect(event['action'], 'copy_diagnostics');
+        expect(event['outcome'], 'copied');
+      });
+
+      testWidgets('в буфере нет путей, адресов и значений конфигурации', (
+        tester,
+      ) async {
+        await openAbout(tester);
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-copy-diagnostics');
+
+        expect(clipboard, hasLength(1));
+        final text = clipboard.single;
+        expect(text, isNotEmpty);
+        for (final leak in [
+          'about-logs-marker',
+          '.codelab-about',
+          '/workspace',
+          'http',
+          '://',
+          root[2],
+        ]) {
+          expect(text, isNot(contains(leak)), reason: leak);
+        }
+      });
+
+      testWidgets('на русском: подписи английские, язык в строке', (
+        tester,
+      ) async {
+        await openAbout(tester);
+        await choose(tester, 'settings-language-ru');
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-copy-diagnostics');
+
+        expect(clipboard, hasLength(1));
+        expect(clipboard.single, contains('UI language: ru (preference: ru)'));
+        expect(clipboard.single, isNot(matches(RegExp(r'[А-Яа-яЁё]'))));
+        expect(find.text('Diagnostics copied.'), findsNothing);
+        expect(find.text('Диагностика скопирована.'), findsOneWidget);
+      });
+
+      testWidgets('события журнала без путей и адресов', (tester) async {
+        await openAbout(tester);
+        await expand(tester);
+        folders.outcome = FolderOpenOutcome.failed;
+
+        await press(tester, 'settings-general-about-open-logs');
+        await press(tester, 'settings-general-about-release-notes');
+        await press(tester, 'settings-general-about-copy-diagnostics');
+
+        expect(aboutEvents(), hasLength(3));
+        final text = aboutEvents().toList().toString();
+        expect(text, isNot(contains('about-logs-marker')));
+        expect(text, isNot(contains('github.com')));
+        expect(text, isNot(contains('CHANGELOG')));
+      });
+    });
+
+    group('смена языка с открытым About', () {
+      testWidgets('раздел, InfoBar сбоя и подписи не оставляют английского', (
+        tester,
+      ) async {
+        await openAbout(tester);
+        folders.outcome = FolderOpenOutcome.failed;
+        await expand(tester);
+        await press(tester, 'settings-general-about-open-logs');
+        expect(key('settings-general-about-open-failed'), findsOneWidget);
+
+        await choose(tester, 'settings-language-ru');
+
+        expect(find.text("Couldn't open the log folder."), findsNothing);
+        expect(key('settings-general-about-open-failed'), findsOneWidget);
+        expect(find.text('License'), findsNothing);
+        expect(find.text('Config folder'), findsNothing);
+        // Версия и название продукта не переводятся (глоссарий §2).
+        expect(find.text('CodeLab 0.1.0'), findsOneWidget);
+        await expectNoStaleLanguage(tester, from: en, to: ru);
+      });
+
+      testWidgets('открытый диалог сторонних уведомлений тоже переводится', (
+        tester,
+      ) async {
+        await openAbout(tester);
+        await expand(tester);
+        await press(tester, 'settings-general-about-third-party');
+        expect(key('settings-general-third-party-dialog'), findsOneWidget);
+
+        await tester.runAsync(
+          () => binding.scope.resolve<AppLanguageCubit>().select(
+            AppLanguagePreference.ru,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(key('settings-general-third-party-dialog'), findsOneWidget);
+        expect(find.text('Third-party notices'), findsNothing);
+        await expectNoStaleLanguage(tester, from: en, to: ru);
+      });
     });
   });
 }
