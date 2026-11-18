@@ -351,6 +351,14 @@ const rules = [
     'apps/codelab_desktop/lib/features/terminal/application',
     forbidden: ['package:flutter/'],
   ),
+  // Application панели Usage не знает Flutter и `dart:io` (design.md change
+  // `add-desktop-usage-pane`, D12; задача 1.1): правило обновления журнала и
+  // сборка CSV остаются чистыми, а запись файла — только порт
+  // `lib/core/platform/usage_csv_saver.dart`.
+  PackageRule(
+    'apps/codelab_desktop/lib/features/usage/application',
+    forbidden: ['package:flutter/', 'dart:io'],
+  ),
   // ZModem выключен (D3, D11 правило 5): `xterm.dart` реэкспортирует
   // `zmodem.dart`, поэтому запрещены пакет и оба пути; presentation берёт
   // `TerminalView` из `package:xterm2/ui.dart`.
@@ -395,6 +403,11 @@ const rules = [
   // `core/platform/` app; Cubit-ы и виджеты идут через `ExternalLinkOpener`
   // (D5; `platform-integration.md`). Тот же порт открывает ссылки OSC 8
   // терминала (change `add-integrated-terminal`, D11, Q16) — второго правила нет.
+  // Открытие каталогов — второй порт `core/platform/`, `LocalFolderOpener`
+  // (changes `add-app-skills-page`, D8, и `add-settings-agents-modes`, D20.3,
+  // D21): его используют страницы «Skills & extensions» и «Agents & modes»;
+  // политика `ExternalLinkOpener` к путям из настроек не подходит. Правило то
+  // же, второго порта и второго правила нет.
   PackageRule(
     'apps/codelab_desktop/lib',
     forbidden: ['package:url_launcher/'],

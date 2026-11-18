@@ -51,14 +51,10 @@ EmbeddedAgentOpener scriptedEmbeddedAgentOpener({
   final forcedProfile = hostProfile;
   return ({required String cwd, required String hostProfile}) async {
     final profile = forcedProfile ?? hostProfile;
-    final store = CwdTrackingStore(switch (sessionsDir) {
-      final root? => JsonlSessionStore(
-        root: root,
-        clock: clock,
-        logger: logger,
-      ),
-      null => MemorySessionStore(),
-    });
+    final files = sessionsDir == null
+        ? null
+        : JsonlSessionStore(root: sessionsDir, clock: clock, logger: logger);
+    final store = CwdTrackingStore(files ?? MemorySessionStore());
     final script = LlmScript.fromJson(
       llm,
       models: [for (final id in models) ModelId(id)],
@@ -101,6 +97,9 @@ EmbeddedAgentOpener scriptedEmbeddedAgentOpener({
         baseEnv: env,
         localEnv: (sessionCwd) => LocalExecutionEnv(cwd: sessionCwd),
         sessions: store,
+        // Порт `usage.json` — только при файловом журнале (design.md change
+        // `add-usage-ledger`, D3, D11): иначе `/usage` строит отчёт в памяти.
+        usageLedger: files == null ? null : JsonlUsageLedgerStore(files),
         secrets: openHostSecrets(
           codelabHome: codelabHome,
           environment: environment,

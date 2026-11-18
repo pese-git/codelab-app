@@ -15,6 +15,8 @@ import 'package:codelab_desktop/features/workbench/application/active_session_cu
 import 'package:codelab_desktop/features/workbench/application/shell_part.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/fake_usage_csv_saver.dart';
+
 /// Сессия с управляемым потоком `view`; `emit` публикует новую ревизию.
 final class _Handle extends Fake implements SessionHandle {
   _Handle(String id, this._current) : id = SessionId(id);
@@ -81,6 +83,7 @@ void main() {
       changes: ShellChanges(),
       workspace: workspace,
       diagnostics: ShellDiagnostics(),
+      usageCsvSaver: FakeUsageCsvSaver(),
     );
   });
 

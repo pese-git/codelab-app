@@ -1,9 +1,7 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
 import 'usage_models.dart';
-
-/// Допустимый код валюты (ISO 4217): три заглавные латинские буквы.
-final RegExp _isoCurrency = RegExp(r'^[A-Z]{3}$');
+import 'usage_parsing.dart';
 
 /// Разбор параметров `_codelab/session/usage` версии 1 (D2, D8, D9).
 ///
@@ -46,36 +44,15 @@ final class UsageDecoder {
       return null;
     }
 
-    // Валюта нужна только стоимости; читается один раз для обоих агрегатов.
-    // Формат — ISO 4217 `^[A-Z]{3}$`: значение уходит в строки статуса
-    // хостов, и произвольный текст агента (в том числе управляющие символы)
-    // туда не допускается. Поле необязательное, как и при отсутствии валюты:
-    // снимок не отбрасывается, стоимость пропадает, причина — `wrong_format`
-    // (без сырого значения).
-    final currency = params['currency'];
-    String? currencyText;
-    var currencyWarned = false;
-    if (currency is String) {
-      if (_isoCurrency.hasMatch(currency)) {
-        currencyText = currency;
-      } else {
-        currencyWarned = true;
-        onWarning('currency', 'wrong_format');
-      }
-    }
-    String? currencyFor() {
-      if (currencyText == null && !currencyWarned) {
-        currencyWarned = true;
-        onWarning('currency', 'required_with_cost');
-      }
-      return currencyText;
-    }
+    // Валюта читается один раз для обоих агрегатов (общее правило с журналом
+    // usage, D10): неверный формат — стоимости нет, снимок применяется.
+    final currency = UsageCurrency(params['currency'], onWarning);
 
-    final session = _totals(
+    final session = parseUsageTotals(
       params['session'],
       'session',
       required: true,
-      currencyFor: currencyFor,
+      currency: currency,
       onWarning: onWarning,
     );
     if (session == null) {
@@ -91,11 +68,11 @@ final class UsageDecoder {
     }
 
     final turn = params.containsKey('turn')
-        ? _totals(
+        ? parseUsageTotals(
             params['turn'],
             'turn',
             required: false,
-            currencyFor: currencyFor,
+            currency: currency,
             onWarning: onWarning,
           )
         : null;
@@ -107,98 +84,118 @@ final class UsageDecoder {
         'step' => UsageTrigger.step,
         'turn' => UsageTrigger.turn,
         'compaction' => UsageTrigger.compaction,
+        'load' => UsageTrigger.load,
         _ => UsageTrigger.unknown,
       },
       turnId: turnId,
       turn: turn,
       session: session,
       context: _context(params['context'], onWarning),
+      // `budget` бывает только у снимков с ходом (D7): у `compaction`, `load`
+      // и `compactionDiscarded` поле, если агент его всё же прислал, не
+      // читается — свёртка всё равно не стала бы его применять.
+      budget: turnId == null
+          ? null
+          : _budget(params['budget'], currency, onWarning),
     );
   }
 
-  /// Агрегат [name] (`turn` или `session`); `null` при [required] — снимок
-  /// отброшен, иначе — поля нет.
-  UsageTotals? _totals(
+  /// Поле `budget` снимка (D9, «Разбор»): подполя разбираются независимо,
+  /// неверное отбрасывается с предупреждением `budget.<подполе>`; без единого
+  /// известного подполя результат `null`. Незнакомые ключи молча игнорируются
+  /// (будущий `deadline`, D7).
+  UsageBudget? _budget(
     Object? raw,
-    String name, {
-    required bool required,
-    required String? Function() currencyFor,
-    required void Function(String field, String reason) onWarning,
-  }) {
-    if (raw == null && !required) {
+    UsageCurrency currency,
+    UsageWarn onWarning,
+  ) {
+    if (raw == null) {
       return null;
     }
     if (raw is! Map) {
-      onWarning(name, required ? 'required' : 'wrong_type');
+      onWarning('budget', 'wrong_type');
       return null;
     }
-    final tokens = _tokens(raw['tokens']);
-    if (tokens == null) {
-      onWarning('$name.tokens', required ? 'required' : 'wrong_type');
-      return null;
-    }
-
-    final steps = raw['steps'];
-    if (steps != null && (steps is! int || steps < 0)) {
-      onWarning('$name.steps', 'wrong_type');
-    }
-
-    Money? cost;
-    final rawCost = raw['cost'];
-    if (rawCost != null) {
-      final micros = rawCost is String ? parseMicros(rawCost) : null;
-      final currency = micros == null ? null : currencyFor();
-      if (micros == null) {
-        onWarning('$name.cost', 'wrong_format');
-      } else if (currency != null) {
-        cost = Money(micros: micros, currency: currency);
-      }
-    }
-
-    final partial = <UsagePartial>{};
-    final rawPartial = raw['partial'];
-    if (rawPartial is List) {
-      for (final reason in rawPartial) {
-        // Незнакомые причины и не строки — молча (D2, правила совместимости).
-        for (final known in UsagePartial.values) {
-          if (reason == known.name) {
-            partial.add(known);
-          }
-        }
-      }
-    } else if (rawPartial != null) {
-      onWarning('$name.partial', 'wrong_type');
-    }
-
-    return UsageTotals(
-      tokens: tokens,
-      cost: cost,
-      steps: steps is int && steps >= 0 ? steps : 0,
-      partial: Set.unmodifiable(partial),
+    final budget = UsageBudget(
+      steps: _count(raw, 'steps', 'used', 'limit', onWarning, _countOf),
+      tokens: _count(raw, 'tokens', 'used', 'limit', onWarning, _countOf),
+      cost: _cost(raw['cost'], currency, onWarning),
+      duration: _count(
+        raw,
+        'duration',
+        'usedMs',
+        'limitMs',
+        onWarning,
+        (used, limit) => BudgetDuration(usedMs: used, limitMs: limit),
+      ),
     );
+    final empty =
+        budget.steps == null &&
+        budget.tokens == null &&
+        budget.cost == null &&
+        budget.duration == null;
+    return empty ? null : budget;
   }
 
-  TokenCounts? _tokens(Object? raw) {
+  static BudgetCount _countOf(int used, int limit) =>
+      BudgetCount(used: used, limit: limit);
+
+  /// Подполе-пара целых ≥ 0 (`steps`, `tokens`, `duration`); `null` — подполя
+  /// нет или оно неверно (предупреждение без сырого значения, §16).
+  T? _count<T>(
+    Map<Object?, Object?> budget,
+    String name,
+    String usedKey,
+    String limitKey,
+    UsageWarn onWarning,
+    T Function(int used, int limit) make,
+  ) {
+    final raw = budget[name];
+    if (raw == null) {
+      return null;
+    }
+    final used = raw is Map ? usageCount(raw[usedKey]) : null;
+    final limit = raw is Map ? usageCount(raw[limitKey]) : null;
+    if (used == null || limit == null) {
+      onWarning('budget.$name', 'wrong_type');
+      return null;
+    }
+    return make(used, limit);
+  }
+
+  /// Подполе `cost`: `limit` — обязательные деньги, `used` — необязательные
+  /// (нет `used` — цена неизвестна, D7). Правило денег и валюты — общее со
+  /// стоимостью агрегатов (`parseUsageMicros`, [UsageCurrency]); без валюты
+  /// подполе отбрасывается тем же предупреждением `currency`.
+  BudgetCost? _cost(Object? raw, UsageCurrency currency, UsageWarn onWarning) {
+    if (raw == null) {
+      return null;
+    }
     if (raw is! Map) {
+      onWarning('budget.cost', 'wrong_type');
       return null;
     }
-    final input = _count(raw['input']);
-    final output = _count(raw['output']);
-    final cacheRead = _count(raw['cacheRead']);
-    final cacheWrite = _count(raw['cacheWrite']);
-    if (input == null ||
-        output == null ||
-        cacheRead == null ||
-        cacheWrite == null) {
+    final rawLimit = raw['limit'];
+    if (rawLimit == null) {
+      onWarning('budget.cost', 'wrong_type');
       return null;
     }
-    return TokenCounts(
-      input: input,
-      output: output,
-      cacheRead: cacheRead,
-      cacheWrite: cacheWrite,
-      // `reasoning` необязателен: неверный тип — поля просто нет.
-      reasoning: _count(raw['reasoning']),
+    final limitMicros = rawLimit is String ? parseUsageMicros(rawLimit) : null;
+    final rawUsed = raw['used'];
+    final usedMicros = rawUsed is String ? parseUsageMicros(rawUsed) : null;
+    if (limitMicros == null || (rawUsed != null && usedMicros == null)) {
+      onWarning('budget.cost', 'wrong_format');
+      return null;
+    }
+    final code = currency.forCost();
+    if (code == null) {
+      return null;
+    }
+    return BudgetCost(
+      used: usedMicros == null
+          ? null
+          : Money(micros: usedMicros, currency: code),
+      limit: Money(micros: limitMicros, currency: code),
     );
   }
 
@@ -213,14 +210,14 @@ final class UsageDecoder {
       onWarning('context', 'wrong_type');
       return null;
     }
-    final used = _count(raw['used']);
+    final used = usageCount(raw['used']);
     if (used == null) {
       onWarning('context', 'wrong_type');
       return null;
     }
     int? optional(String key) {
       final value = raw[key];
-      final count = _count(value);
+      final count = usageCount(value);
       if (value != null && count == null) {
         onWarning('context.$key', 'wrong_type');
       }
@@ -234,26 +231,6 @@ final class UsageDecoder {
     );
   }
 
-  /// Целое ≥ 0 или `null`.
-  static int? _count(Object? value) =>
-      value is int && value >= 0 ? value : null;
-
-  /// Деньги D9 → микроединицы; `null` — строка не по формату.
-  ///
-  /// Формат `^(0|[1-9][0-9]*)(\.[0-9]{1,6})?$`: без знака, экспоненты и
-  /// больше 6 знаков. Целая часть ограничена 9 цифрами: `micros` держится в
-  /// 2^53 и на web, где `int` — число с плавающей точкой; миллиарда
-  /// долларов за сессию достаточно (предел — решение D22: точное целое на web). Разбор целочисленный — без
-  /// `double`, поэтому строка и число совпадают точно.
-  static int? parseMicros(String text) {
-    final match = _moneyPattern.firstMatch(text);
-    if (match == null) {
-      return null;
-    }
-    final whole = int.parse(match.group(1)!);
-    final fraction = (match.group(2) ?? '').padRight(6, '0');
-    return whole * 1000000 + int.parse(fraction);
-  }
+  /// Публичный API: деньги D9 → микроединицы; делегирует [parseUsageMicros].
+  static int? parseMicros(String text) => parseUsageMicros(text);
 }
-
-final _moneyPattern = RegExp(r'^(0|[1-9][0-9]{0,8})(?:\.([0-9]{1,6}))?$');

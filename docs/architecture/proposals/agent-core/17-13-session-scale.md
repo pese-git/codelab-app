@@ -655,9 +655,10 @@ Fold покрывает только целые ходы, elide меняет т�
 ### Алгоритм: проход сжатия
 
 ```text
-structuredCompact(snapshot, trigger, settings, st, cancel):
+structuredCompact(snapshot, trigger, settings, st, cancel, anchor):
 1  trigger ∈ {afterTurn, manual} и идёт ход → дождаться конца хода (§9.8, шаг 1)
-2  w := effectiveContextWindow; P := buildLlmContext(snapshot); before := estimateContextTokens(P)
+2  w := effectiveContextWindow; P := buildLlmContext(snapshot)
+   before := estimateContextTokens(P, compaction: anchor)    // якоря usage и последнего сжатия, §9.3
    target := floor(w × st.targetFraction); threshold := compactionThreshold(w, settings)
    trigger != manual и before ≤ threshold → NothingToCompact
    before ≤ target → NothingToCompact("already below target")
@@ -689,12 +690,17 @@ structuredCompact(snapshot, trigger, settings, st, cancel):
    наименьшее число, после которого бюджет соблюдён; merges := их номера; turns := []
 8  ничего не выбрано → NothingToCompact
 9  recs := [hideA?, hideB…, hideC?] с n подряд; projected := buildLlmContext(snapshot + recs);
-   after := estimateContextTokens(projected); у каждой записи tokensBefore/tokensAfter —
-   оценки до и после неё
+   after := estimateAfterCompaction(before, H(P), H(projected)) — согласованная оценка §9.3
+   (usage-якоря в projected нет); у каждой записи tokensBefore/tokensAfter — оценки до и после неё
+   той же функцией; after >= before → NothingToCompact("no reduction"), записей нет (CMP-10)
 10 cancel.throwIfCancelled(); append каждой записи (durable) — только теперь скрытие существует
-11 транскрипт := projected.messages; emit ContextCompacted(before, after); лог info
+11 транскрипт := projected.messages тем же методом сессии, что меняет якорь сжатия (§8.7);
+   запись hide якорем не служит — якорь остаётся от последней записи compaction и не
+   пересчитывается, поэтому цикл видит anchor.tokens + H(projected) − anchor.raw = after;
+   emit ContextCompacted(before, after); лог info
    compaction.structured.pass {trigger, elided, folded, merged, before, after}
-12 after > threshold: st.fallbackClassic → классический compact() §9.8 на новом снимке
+12 after > threshold (цикл видит то же число через якорь сжатия, §9.3; change
+   anchor-context-estimate-after-compaction, D8): st.fallbackClassic → классический compact() §9.8 на новом снимке
    (лог compaction.structured.fallback); иначе AgentError(cls: compaction, "Context is still over
    the limit after hiding old records.") и правило CMP-5 о трёх проходах
 ```

@@ -14,6 +14,7 @@ import 'package:codelab_agent_core/codelab_agent_core.dart';
 import '../config/config_loader.dart' show codelabHomeOf, userHomeOf;
 import '../env/local_execution_env.dart';
 import 'project_files_loader.dart';
+import 'project_trust.dart';
 import 'skill_roots.dart';
 
 /// Предел каждой фазы по умолчанию: как `_projectFilesTimeout` рантайма
@@ -62,20 +63,13 @@ Future<ProjectExtensions> loadProjectExtensions({
   final shown = Directory(cwd).absolute.path;
   try {
     final local = LocalExecutionEnv(cwd: shown, hostEnvironment: environment);
-    final String canonical;
-    final bool trusted;
-    switch (await local.realpath(shown)) {
-      case Ok(:final value):
-        canonical = value;
-        // `trustedProjects` уже канонические (хостовая форма), а форма ядра на
-        // Windows использует `/`: сравниваем после приведения `\\` к `/`.
-        trusted = config.trustedProjects.any(
-          (r) => r.replaceAll('\\', '/') == value,
-        );
-      case Err():
-        canonical = local.cwd;
-        trusted = false;
-    }
+    // Канонизацию и доверие считает одна функция, общая с мостом страницы
+    // настроек (SETUP-8, D20.2 change `add-settings-agents-modes`).
+    final (cwd: canonical, :trusted) = await projectTrustAt(
+      config: config,
+      folder: shown,
+      environment: environment,
+    );
     final codelabHome = codelabHomeOf(environment);
     final userHome = userHomeOf(environment);
     final loader = ProjectFilesLoader(

@@ -21,6 +21,7 @@ String kindOf(AgentEvent event) => switch (event) {
   AgentError() => 'error',
   TurnEnded() => 'turn.end',
   ContextCompacted() => 'compacted',
+  CompactionDiscarded() => 'compaction.discarded',
   SessionTitleChanged() => 'title',
   ModelOptionsChanged() => 'model.options',
   SubagentStarted() => 'subagent.start',

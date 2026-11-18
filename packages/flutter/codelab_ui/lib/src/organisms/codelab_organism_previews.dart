@@ -21,6 +21,7 @@ import 'codelab_terminal_pane.dart';
 import 'codelab_tool_dock.dart';
 import 'codelab_transcript_panel.dart';
 import 'codelab_transcript_row.dart';
+import 'codelab_usage_pane.dart';
 import 'codelab_workbench_layout.dart';
 
 const codelabOrganismPreviewGroup = 'ACP organisms';
@@ -28,7 +29,7 @@ const codelabOrganismPreviewGroup = 'ACP organisms';
 @Preview(
   name: 'Status table',
   group: codelabOrganismPreviewGroup,
-  size: Size(820, 260),
+  size: Size(820, 320),
 )
 Widget codelabStatusTablePreview() {
   return const _AcpOrganismPreviewSurface(child: _StatusTableSample());
@@ -37,7 +38,7 @@ Widget codelabStatusTablePreview() {
 @Preview(
   name: 'Status table dark',
   group: codelabOrganismPreviewGroup,
-  size: Size(820, 260),
+  size: Size(820, 320),
   brightness: Brightness.dark,
 )
 Widget codelabStatusTableDarkPreview() {
@@ -83,6 +84,19 @@ class _StatusTableSample extends StatelessWidget {
             label: 'Reconnect',
             onPressed: codelabPreviewReconnect,
           ),
+        ),
+        const CodeLabStatusTableRow(
+          cells: [
+            CodeLabStatusTableCell('filesystem', mono: true),
+            // Длинный статус переносится на вторую строку (`maxLines: 3`).
+            CodeLabStatusTableCell(
+              'failed · retry in 24 s after the connection was refused',
+              tone: CodeLabStatusTone.danger,
+              maxLines: 3,
+            ),
+            CodeLabStatusTableCell('—', muted: true),
+            CodeLabStatusTableCell('—', muted: true),
+          ],
         ),
         const CodeLabStatusTableRow(
           cells: [
@@ -788,6 +802,130 @@ Widget codelabSettingsNavigationPreview() {
       child: const Padding(
         padding: EdgeInsets.all(24),
         child: CodeLabText('Page body', role: CodeLabTextRole.title),
+      ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Usage pane',
+  group: codelabOrganismPreviewGroup,
+  size: Size(440, 640),
+)
+Widget codelabUsagePanePreview() {
+  return _AcpOrganismPreviewSurface(
+    child: SingleChildScrollView(
+      child: CodeLabUsagePane(
+        title: 'This session',
+        statusLine: 'Ledger: up to date · 12 records',
+        statusHint: 'refreshed from the session journal (stale)',
+        showRebuild: true,
+        showExport: true,
+        onRebuild: codelabPreviewCancel,
+        onExport: codelabPreviewCancel,
+        cards: const [
+          CodeLabUsageCard(
+            id: 'input',
+            title: 'Input',
+            value: '184.2k',
+            detail: 'cache read 121.0k · write 18.4k',
+          ),
+          CodeLabUsageCard(
+            id: 'output',
+            title: 'Output',
+            value: '9.8k',
+            detail: 'reasoning 1.2k',
+          ),
+          CodeLabUsageCard(
+            id: 'cost',
+            title: 'Cost',
+            value: r'~$2.26',
+            detail: 'agent sent no usage for some steps',
+            tone: CodeLabTone.warning,
+          ),
+          CodeLabUsageCard(
+            id: 'turns',
+            title: 'Turns · steps',
+            value: '3 · 7',
+            detail: 'avg 2.3 steps per turn',
+          ),
+        ],
+        budget: const CodeLabUsageBudget(
+          title: 'This turn',
+          footnote:
+              'When a limit is hit, the turn stops at the next step boundary.',
+          rows: [
+            CodeLabUsageBudgetRow(
+              id: 'steps',
+              label: 'Steps',
+              value: '3 / 50',
+              fill: 0.06,
+            ),
+            CodeLabUsageBudgetRow(
+              id: 'tokens',
+              label: 'Tokens',
+              value: '92.0k / 200.0k',
+              fill: 0.46,
+              hint: 'input + output, including subagents',
+            ),
+            CodeLabUsageBudgetRow(
+              id: 'cost',
+              label: 'Cost',
+              value: r'$0.41 / $0.50',
+              fill: 0.82,
+              tone: CodeLabTone.warning,
+            ),
+            CodeLabUsageBudgetRow(
+              id: 'time',
+              label: 'Time',
+              value: '3:00 / 10:00',
+              fill: 0.3,
+            ),
+          ],
+        ),
+        turns: const [
+          CodeLabUsageRow(
+            id: '3',
+            label: '3 · “Fix the build”',
+            input: '41.0k',
+            output: '2.1k',
+            cost: r'$0.0041',
+            running: true,
+            children: [
+              CodeLabUsageRow(
+                id: '3-0',
+                label: 'step 1 · Read lib/main.dart',
+                input: '20.0k',
+                output: '600',
+                cost: r'$0.002',
+                hint: 'openai/gpt-5',
+              ),
+              CodeLabUsageRow(
+                id: '3-1',
+                label: 'step 2 · reply',
+                input: '21.0k',
+                output: '1.5k',
+                cost: r'$0.0021',
+              ),
+            ],
+          ),
+          CodeLabUsageRow(
+            id: '2',
+            label: '2',
+            input: '—',
+            output: '—',
+            cost: '—',
+          ),
+        ],
+        models: const [
+          CodeLabUsageRow(
+            id: 'openai/gpt-5',
+            label: 'openai / gpt-5',
+            input: '184.2k',
+            output: '9.8k',
+            cost: r'$2.26',
+          ),
+        ],
       ),
     ),
   );

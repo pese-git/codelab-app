@@ -108,4 +108,28 @@ void main() {
       });
     }
   }
+
+  // `budget.max_cost` / `subagents.max_cost`: `nan` и `inf` из TOML/YAML
+  // раньше проходили проверку `<= 0` и молча отключали бюджет стоимости.
+  for (final path in ['budget', 'subagents']) {
+    for (final (name, value) in <(String, num)>[
+      ('бесконечность', double.infinity),
+      ('минус бесконечность', double.negativeInfinity),
+      ('NaN', double.nan),
+    ]) {
+      test('$path.max_cost: $name отклоняется', () {
+        final result = load([
+          layer({
+            path: {'max_cost': value},
+          }),
+        ]);
+
+        expect(
+          issuesAt(result, '$path.max_cost'),
+          hasLength(1),
+          reason: result.issues.join('\n'),
+        );
+      });
+    }
+  }
 }

@@ -1,3 +1,4 @@
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 
 /// Источник данных kit: соединение и сессии одного агента.
@@ -25,6 +26,10 @@ abstract interface class AgentBackend {
   /// транспорта реализация отбрасывает сама, как и для остальных потоков.
   Stream<UsageNotification> get usageNotifications;
 
+  /// Поколение текущего соединения (растёт при замене транспорта): по нему
+  /// kit отличает ответ запроса старого соединения (`AGENTS.md` §9).
+  int get generation;
+
   Future<ClientConnectionState> connect(AcpTransport transport);
 
   Future<ClientConnectionState> reconnect(ReconnectCommand command);
@@ -48,6 +53,14 @@ abstract interface class AgentBackend {
   Future<AcpSession> setSessionConfigOption(
     SetSessionConfigOptionCommand command,
   );
+
+  /// Журнал usage сессии `_codelab/session/usage/ledger` (change
+  /// `add-usage-ledger`, D9): сырой результат и поколение отправки; только
+  /// при объявленном агентом `usageLedger`, иначе — исключение без кадра.
+  Future<UsageLedgerReply> requestUsageLedger({
+    required SessionId sessionId,
+    bool rebuild = false,
+  });
 }
 
 /// [AgentBackend] поверх `AcpClientApplication`.
@@ -75,6 +88,9 @@ final class AcpClientBackend implements AgentBackend {
   @override
   Stream<UsageNotification> get usageNotifications =>
       _application.usageNotifications;
+
+  @override
+  int get generation => _application.generation;
 
   @override
   Future<ClientConnectionState> connect(AcpTransport transport) =>
@@ -113,4 +129,10 @@ final class AcpClientBackend implements AgentBackend {
   Future<AcpSession> setSessionConfigOption(
     SetSessionConfigOptionCommand command,
   ) => _application.setSessionConfigOption(command);
+
+  @override
+  Future<UsageLedgerReply> requestUsageLedger({
+    required SessionId sessionId,
+    bool rebuild = false,
+  }) => _application.requestUsageLedger(sessionId: sessionId, rebuild: rebuild);
 }

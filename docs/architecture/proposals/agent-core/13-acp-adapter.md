@@ -93,7 +93,7 @@ Change `add-subagents-and-tasks` объявляет `subagents: {"version": 1, "
 агент проецирует вызовы потомков; design.md change, D36, Т12) и
 `tasks: {"version": 1}` (§17.16.5). Change `add-usage-extension` добавляет `usage: {"version": 1}` — всегда, когда агент
 отвечает блоком; уведомление `_codelab/session/usage` получает только соединение, объявившее
-`clientCapabilities._meta.codelab.usage` с `version`, равным целому JSON-числу `1` (правило согласования D9; §13.12). Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
+`clientCapabilities._meta.codelab.usage` с `version`, равным целому JSON-числу `1` (правило согласования D9; §13.12). Change `add-usage-ledger` добавляет `usageLedger: {"version": 1}` — тоже всегда, когда агент отвечает блоком: агент принимает запрос `_codelab/session/usage/ledger` (§13.12); клиент этот ключ не объявляет. Дальше: `subagentBoard` (§17.3.7), `subagentWake` — агент поддерживает пробуждение
 (§17.3.8), `sessionTree: {"version": 1}` — методы `_codelab/session/*`
 (§17.6.10), `steering: {"maxBytes", "maxPending"}` — метод `_codelab/session/steer`, только при
 `steering.enabled` (§17.7.2.2), `jobs: {"version": 1}` — методы `_codelab/jobs/*` (§17.9.11), `sessionSearch: {"version": 1, "maxLimit": 50, "scopes": ["cwd", "all"]}` — метод `_codelab/session/search`, только при `sessions.search.enabled` и `sessionPersistence`; `"all"` — только при `sessions.search.allow_all` (§17.6.17). Это единственное исключение из правила «ровно эти поля»:
@@ -211,7 +211,7 @@ Change `add-subagents-and-tasks` объявляет `subagents: {"version": 1, "
 {"name":"tasks","description":"List, cancel or show output of background subagents and jobs","input":{"hint":"[cancel <id> | output <id>]"}}
 ```
 
-Элемент `model` с подсказкой `--role` — после MVP (§17.10.5); в MVP подсказка `provider/model`.
+Элемент `model` с подсказкой `--role` — после MVP (§17.10.5); в MVP подсказка `provider/model`. Команда `usage` реализована change `add-usage-ledger` (D5): в списке сразу после `status`, текст ответа — §12.6.1.
 
 Контент промпта: `text` → `TextContent`; `image` → `ImageContent`; `resource` с `text` →
 `TextContent` вида `<resource uri="file:///work/demo/a.dart">…</resource>`; `resource` с `blob`
@@ -315,6 +315,15 @@ Change `add-subagents-and-tasks` объявляет `subagents: {"version": 1, "
    ведётся на соединение (§13.9), поэтому значение id может совпасть с id первого запроса;
    ответ, пришедший по старому соединению, до нового запроса не доходит, а решение принимается
    один раз (PERM-4; change `add-subagents-and-tasks`, D44).
+8a. Usage (change `add-usage-ledger`, D8). Если `session/load` создал мост сессии (шаг 4), адаптер
+   засевает агрегаты usage сессии сервера свёрткой журнала, построенной в памяти без `usage.json`
+   (§12.6.1): итоги ходов, число ходов и шагов, `noUsage`, `noPrice`, субагенты и суммаризатор;
+   лог debug `acp.usage.seeded`. Причину `beforeLoad` агент CodeLab больше не ставит. Повторный
+   `session/load` (шаг 3) агрегаты не пересевает. После ответа шага 7 (через `Reply.after`)
+   соединение, объявившее `usage`, получает `_codelab/session/usage` с `trigger: "load"` —
+   `session` и `context`, если он известен мосту; без `turnId`, `step`, `turn`. Если шагов в сумме
+   сессии нет, снимка нет. Снимок идёт после ответа, а не в конце реплея: клиент сбрасывает usage
+   сессии при загрузке, и снимок до ответа он мог бы стереть (решение Q3 (а)).
 9. По `TurnEnded` переподключённого хода ответ на исходный `session/prompt` отправить некуда
    (его соединение закрыто). Адаптер отправляет новому соединению `session_info_update` с
    `_meta.codelab.turnEnded: {"stopReason": "..."}` (расширение, §13.12), при сбое хода —
@@ -439,7 +448,7 @@ Slash-команды приходят обычным `session/prompt` с тек�
 
 * `/compact [<указание>]` — ручное сжатие с триггером `manual` (§9.5; непустой текст после имени —
   `SummaryRequest.focus`, §9.2); идущее фоновое сжатие `afterTurn` команда ждёт. Итог —
-  `Compacted: <X> → <Y> tokens.` (§13.7), пустой регион — `Nothing to compact.`; отказ — событие
+  `Compacted: <X> → <Y> tokens.` (§13.7), нечего сжимать (нет среза или нет выигрыша, CMP-10, §9.8) — `Nothing to compact.`; отказ — событие
   `AgentError(compaction)` и `TurnEnded(failed)` без сообщения, мост отвечает `-32603` (§13.8);
   отмена во время резюме — `stopReason: cancelled`, записи `compaction` нет. Объявляется только
   при capability `compaction`.
@@ -594,7 +603,8 @@ change `switch-default-agent-to-dart`); до него `/<server>:<prompt>` — �
 | `SessionTitleChanged` | `session_info_update` | `title`, `updatedAt`; после MVP — всем подключённым соединениям (§17.6.4) |
 | `BranchChanged` (после MVP) | `session_info_update` | при объявленном `sessionTree` — `_meta.codelab.branchChanged: {leafId, fromLeafId, reason}`, всем подключённым; без расширения не передаётся (ответ команды предлагает перезагрузить сессию, §17.6.10) |
 | `SessionAccessChanged` (после MVP) | `session_info_update` | при объявленном `sessionTree` — `_meta.codelab.readOnly: {owner}` или `null` (`leaseAvailable`); лог `session.lease.lost` при `leaseLost`/`foreignWrite` (§17.6.8) |
-| `ContextCompacted` | — | лог; при `/compact` — `agent_message_chunk` с итогом `Compacted: 118400 → 21950 tokens.`; соединениям, объявившим `usage`, — `_codelab/session/usage` с `trigger: "compaction"` (change `add-usage-extension`) |
+| `ContextCompacted` | — | лог; при `/compact` — `agent_message_chunk` с итогом `Compacted: 118400 → 21950 tokens.`; соединениям, объявившим `usage`, — `_codelab/session/usage` с `trigger: "compaction"` (change `add-usage-extension`); `usage` суммаризатора из события входит в сумму сессии, но не в ход (change `add-usage-ledger`, D4) |
+| `CompactionDiscarded` (change `fix-discarded-compaction-usage`, D2, D5) | — | кадров `session/update` нет (при `/compact` ответ — `Nothing to compact.`, как при любом `NothingToCompact`); `usage` суммаризатора входит в сумму сессии по правилу цены `ContextCompacted`, но не в ход; соединениям, объявившим `usage`, — `_codelab/session/usage` с `trigger: "compactionDiscarded"`: без `turnId`, `step`, `turn`, `context.used` = `tokensBefore` события, `size` и `compactAt` — последнего `StepEnded` (без шагов `context` нет); отправляется и при нулевом usage — сумма тогда не растёт, причины `noUsage` у суммаризатора нет (R8 change `fix-discarded-compaction-usage`); для `stale` `used` — оценка начала прохода, реальное заполнение может быть выше; снимок и `Nothing to compact.` — в любом порядке, оба до ответа `session/prompt` |
 | `SubagentStarted`, `SubagentFinished` (после MVP) | — | лог `subagent.start` / `subagent.end`; при согласованной доске — `_codelab/subagents/update` (§17.3.7); у прогона `run ≥ 2` — те же кадры; title вызова `agent_send`/`agent_resume` — `… (follow-up <run>)` / `… (resume <run>)` (§17.3.8.1) |
 | `SubagentProgress` (после MVP) | — | только доска `_codelab/subagents/update`; строку прогресса уже несёт `ToolCallProgress(agent)` (§17.3.7) |
 | `SubagentActivity` (change `add-subagents-and-tasks`) | — или `tool_call`/`tool_call_update` | клиенту с `subagentToolCalls` — вызовы потомков с `_meta.codelab.parentToolCallId` (§17.3.7, «Шаги потомков деревом»); остальным — не отправляется (SUB-12) |
@@ -886,14 +896,18 @@ OpenSpec change `add-dart-agent-acp-server` (design.md, D10); фикстуры, 
 | `_codelab/ask` (после MVP) | запрос агент → клиент; ответ `{outcome, answers}` | структурные вопросы, правило ответа `cancelled` после `session/cancel` (§17.11.7) |
 | `_meta.codelab.replayWindow: {"omittedRecords", "firstRecordId"}` (после 9, §17.13.2) | первое `agent_message_chunk` реплея окна | клиент показывает «загрузить раньше» без разбора текста; без расширения виден текст маркера |
 | capability `usage: {"version": 1}` (change `add-usage-extension`, D3) | `clientCapabilities._meta.codelab`, `agentCapabilities._meta.codelab` в `initialize` | клиент понимает `_codelab/session/usage`; агент объявляет ключ всегда, когда отвечает блоком D9 |
-| `_codelab/session/usage` (change `add-usage-extension`, D1, D2; соответствие `15-Extensibility.md` — D17) | уведомление агент → клиент, только соединениям, объявившим `usage`; поводы `step`, `turn` (до ответа `session/prompt`), `compaction` | снимок usage шага, хода и сессии (`tokens`, `cost` десятичной строкой с `currency`, `steps`, `turns`, `partial`), заполнение контекста (`used`, `size`, `compactAt`) и `seq` сессии для идемпотентности; для строки статуса клиента (L-11, U-13, D-09, §12.6); новых корневых полей и видов `sessionUpdate` нет |
+| `_codelab/session/usage` (change `add-usage-extension`, D1, D2; соответствие `15-Extensibility.md` — D17) | уведомление агент → клиент, только соединениям, объявившим `usage`; поводы `step`, `turn` (до ответа `session/prompt`), `compaction`, `load` (после ответа `session/load`, change `add-usage-ledger`, D8), `compactionDiscarded` (проход сжатия отброшен после оплаченного вызова суммаризатора, change `fix-discarded-compaction-usage`, D5; клиент v1 принимает его как незнакомый повод — снимок без шага) | снимок usage шага, хода и сессии (`tokens`, `cost` десятичной строкой с `currency`, `steps`, `turns`, `partial`), заполнение контекста (`used`, `size`, `compactAt`) и `seq` сессии для идемпотентности; для строки статуса клиента (L-11, U-13, D-09, §12.6); необязательное поле `budget` в снимках `step` и `turn` — прогресс бюджета хода C-13 (`steps`, `tokens`, `cost`, `duration` с `used` и `limit`) из `StepEnded`/`TurnEnded` (§5.2), только при заданных `max_tokens`, `max_cost` или `max_duration`, в снимках `compaction`, `compactionDiscarded` и `load` его нет, без смены версии `usage` по правилу совместимости D2 change `add-usage-extension` (change `add-desktop-usage-pane`, D7); невалидный `max_cost` (NaN, бесконечность, отрицательный, не представимый целыми микродолларами) — подполя `cost` нет, а без других необязательных лимитов нет и поля `budget`; новых корневых полей и видов `sessionUpdate` нет |
+| capability `usageLedger: {"version": 1}` (change `add-usage-ledger`, D7) | `agentCapabilities._meta.codelab` в `initialize` | агент принимает `_codelab/session/usage/ledger`; объявляется всегда, когда агент отвечает блоком D9; клиент ключ не объявляет |
+| `_codelab/session/usage/ledger` (change `add-usage-ledger`, D6; соответствие «Custom Requests» `15-Extensibility.md`: имя с `_`, ответ с тем же `id`, поддержка объявлена ключом) | запрос клиент → агент `{sessionId, rebuild?}`; ответ `{sessionId, seq, ledger, total, turns, models, subagents?, summaries?, currency?}`; `summaries` с необязательным целым `discarded` — число отброшенных вызовов суммаризатора, только при ненулевом значении, без смены `usageLedger.version` (change `fix-discarded-compaction-usage`, D5) | журнал usage сессии по ходам и шагам (§12.6.1) для панели Usage (D-09, L-29); деньги и причины — правила `_codelab/session/usage`; незнакомая сессия — `-32002`, сбой свёртки — `-32603` с `data.codelab.reason: "usageLedgerFailed"`; агент без ключа отвечает `-32601`; одновременные запросы сессии склеиваются в одно построение, присоединившийся пишет debug `acp.usage.ledger.coalesced {session_id, rebuild}` (без токенов, денег и подписей) |
 
 Агрегаты `_codelab/session/usage` считает `UsageAccounting` (`codelab_agent_acp/lib/src/usage_accounting.dart`)
-на сессию сервера: шаг — из `StepEnded`, итог хода — из `TurnEnded.usage`, сессия — сумма итогов
-ходов; стоимость — в целых микродолларах, на проводе — десятичная строка (change
+на сессию сервера: шаг — из `StepEnded`, итог хода — из `TurnEnded.usage`, сессия — засев свёрткой
+журнала при `session/load` (§13.5, шаг 8a), плюс итоги ходов, плюс usage суммаризатора из
+`ContextCompacted.usage` и `CompactionDiscarded.usage` (changes `add-usage-ledger`, D4, D8, и `fix-discarded-compaction-usage`, D5; засев берёт отброшенные вызовы из свёртки, и «засев = `total`» держится); стоимость — в целых микродолларах, на проводе — десятичная строка (change
 `add-usage-extension`, D4, D9). Причины неполноты `partial` (D6): `noPrice` — у модели шага нет
 цен при ненулевых токенах (у итога хода — ещё дети с токенами и нулевой стоимостью); `beforeLoad` —
-у сессии, открытой через `session/load` журнала с ответами модели; `noUsage` — у ответа модели со
+агент CodeLab после change `add-usage-ledger` не ставит: сумма сессии после `session/load` засевается
+свёрткой журнала (§13.5, шаг 8a); значение остаётся в протоколе v1 для других агентов; `noUsage` — у ответа модели со
 `stopReason`, отличным от `error`, со всеми нулевыми счётчиками (`input`, `output`, `cacheRead`, `cacheWrite`): провайдер usage не прислал. Шаг,
 прерванный отменой посреди потока модели (`aborted`) без usage провайдера, тоже получает `noUsage` —
 решение пользователя 2026-11-17 (D26), итерация 4 change, задача 4.3. Шаг с ошибкой (`error`) `noUsage` не получает: ответа модели не
@@ -982,6 +996,7 @@ sequenceDiagram
     A-->>C: plan, current_mode_update, config_option_update
     A-->>C: available_commands_update, session_info_update
     A-->>C: ответ modes и configOptions
+    A-->>C: _codelab/session/usage trigger load, если клиент объявил usage и в сумме есть шаги
 ```
 
 ## 13.14. Инварианты
@@ -1049,8 +1064,10 @@ sequenceDiagram
 * Тест кодов выхода `codelab -p` на каждую строку таблицы §13.10.
 * `acp/config-model-options-from-endpoint` (golden, fake `/models`): `session/new` до ответа endpoint — опция `model` из конфига и кэша; после фонового обновления — один `config_option_update` с моделями endpoint в порядке §2.12.2; повторное обновление без изменений — уведомлений нет; модель текущей сессии, исчезнувшая из ответа, остаётся `currentValue` и в `options` (ACP-11, LLM-13).
 * `acp/config-effort-option` (golden): модель с рассуждением — опция `effort` третьей, `category: "thought_level"`, `currentValue` из `agent.effort`; `set_config_option effort=high` → ответ с полным снимком, запись `config_change`, следующий запрос несёт параметр рассуждения; смена на модель без рассуждения → опции `effort` нет, первый `agent_message_chunk` следующего хода — заметка §2.12.3 ровно один раз, в запросе параметра нет; `set_config_option effort` в этом состоянии → `-32602`; смена обратно → опция с `high`; `session/load` восстанавливает значение (ACP-10).
-* `acp/usage-and-redact-commands` (golden): `available_commands_update` содержит `usage` и `redact` сразу после `status`; `/usage` и `/redact layers` отвечают текстом §12.6.1 и §12.4.3 с `end_turn`; число записей журнала до и после не меняется, scripted LLM не вызвана (ACP-12).
-* Usage (change `add-usage-extension`, D13): фикстуры `acp/prompt-usage-steps`, `acp/prompt-usage-unpriced`, `acp/prompt-usage-cancelled`, `acp/compact-usage-context`, `acp/prompt-usage-compaction-off`, `acp/session-load-usage-partial`, у которых `extensions` содержит `usage` (D19 п. 8); ключ `usage` в `acp/initialize-codelab-extensions`; фикстуры без объявления `usage` кадров `_codelab/session/usage` не содержат. Модульно — `packages/dart/codelab_agent_acp/test/usage_bridge_test.dart` (агрегаты, причины `partial`, микродоллары) и `usage_projection_test.dart` (порядок кадров, `seq`, отмена посреди инструмента и посреди потока модели, сбой провайдера, переход сессии к новому соединению, `acp.usage.sent`). Отмена посреди потока без usage провайдера (`noUsage`, D26) проверяется только модульными тестами: шаг `aborted` без `session/cancel` клиента не является поведением ACP, и фикстуры для него нет.
+* `acp/slash-usage` (golden, change `add-usage-ledger`, D11): `available_commands_update` содержит `usage` сразу после `status`; `/usage` отвечает текстом §12.6.1 с `end_turn`, `/usage x` — `Usage: /usage [rebuild]`; число записей журнала до и после не меняется, scripted LLM не вызвана, кадров `_codelab/session/usage` нет (ACP-12). После MVP `acp/usage-and-redact-commands` добавит `redact` и `/redact layers` (§12.4.3).
+* Бюджет хода в usage (change `add-desktop-usage-pane`, D7): фикстура `acp/prompt-usage-budget` (роли `agent`, `client`, метка `usage`) — `budget` в снимках `step` и `turn` при `max_tokens` и `max_cost`; существующие usage-фикстуры не меняются (лимитов, кроме шагов, в них нет). Модульно — `codelab_agent_acp/test/usage_budget_projection_test.dart` (в том числе: снимок `compactionDiscarded` без `budget`), `codelab_agent_core/test/loop/turn_budget_progress_test.dart`; клиентская роль фикстуры и разбор поля в kit — `codelab_client_core/test/usage/usage_fixture_test.dart`, `usage/usage_budget_test.dart` (§12.1.5 п. 3b dart-agent-and-clients).
+* Журнал usage (change `add-usage-ledger`, D11): фикстуры `acp/usage-ledger-request` (роли `agent`, `client`), `acp/usage-ledger-rebuild`, `acp/session-load-usage-full`, `acp/compact-usage-summary` с метками `usage` и `usageLedger`; ключ `usageLedger` в `acp/initialize-codelab-extensions`. Модульно — `codelab_agent_acp/test/usage_ledger_request_test.dart` (форма ответа, `seq`, ошибки, запрос во время хода), `usage_ledger_seed_test.dart` (засев равен свёртке, снимок `load`, суммаризатор в сумме), `usage_ledger_size_test.dart` (замер 1 000 × 40).
+* Usage (change `add-usage-extension`, D13): фикстуры `acp/prompt-usage-steps`, `acp/prompt-usage-unpriced`, `acp/prompt-usage-cancelled`, `acp/compact-usage-context`, `acp/prompt-usage-compaction-off`, `acp/session-load-usage-partial` (заменена `acp/session-load-usage-full` change `add-usage-ledger`), у которых `extensions` содержит `usage` (D19 п. 8); ключ `usage` в `acp/initialize-codelab-extensions`; фикстуры без объявления `usage` кадров `_codelab/session/usage` не содержат. Модульно — `packages/dart/codelab_agent_acp/test/usage_bridge_test.dart` (агрегаты, причины `partial`, микродоллары) и `usage_projection_test.dart` (порядок кадров, `seq`, отмена посреди инструмента и посреди потока модели, сбой провайдера, переход сессии к новому соединению, `acp.usage.sent`). Отмена посреди потока без usage провайдера (`noUsage`, D26) проверяется только модульными тестами: шаг `aborted` без `session/cancel` клиента не является поведением ACP, и фикстуры для него нет.
 
 ---
 

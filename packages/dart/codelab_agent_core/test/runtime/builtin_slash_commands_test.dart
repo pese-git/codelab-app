@@ -122,6 +122,54 @@ void main() {
       expect((await rig.records(session)).length, before.length);
     });
 
+    test('a summary longer than the region: the same text, one summary '
+        'request, no compaction record, one accounting record (scenario '
+        '"/compact без выигрыша", CMP-10, D1, D4)', () async {
+      // Резюме в пять раз длиннее региона: проход не даёт выигрыша. Ответ
+      // суммаризатора платный: usage должен лечь в запись учёта.
+      final rig = await _Rig.create(
+        steps: [
+          textStep('a' * 8000),
+          textStep('b' * 16000),
+          {
+            'reply': [
+              {'text': 'x' * 80000},
+            ],
+            'usage': const Usage(input: 764, output: 171).toJson(),
+          },
+        ],
+      );
+      final session = await rig.session();
+      await rig.history(session);
+      final before = await rig.records(session);
+
+      final reply = await rig.ask(session, '/compact');
+
+      expect(reply.text, 'Nothing to compact.');
+      expect(rig.summaryCalls, 1);
+      final after = await rig.records(session);
+      // Характеризационная правка (change `fix-discarded-compaction-usage`,
+      // D1, R2): раньше число записей не менялось. Теперь добавилась ровно
+      // одна — запись учёта; записей `compaction` по-прежнему нет.
+      expect(after.length, before.length + 1);
+      expect(after.whereType<CompactionRecord>(), isEmpty);
+      final record = after.last as CustomRecord;
+      expect(record.customType, 'codelab.compaction_discarded');
+      final data = record.data! as Map;
+      expect(data['trigger'], 'manual');
+      expect(data['reason'], 'no reduction');
+      expect((data['usage']! as Map)['input'], 764);
+      expect((data['usage']! as Map)['output'], 171);
+      expect(reply.events.whereType<ContextCompacted>(), isEmpty);
+      expect(reply.result.reason, TurnEndReason.completed);
+      // Usage суммаризатора в ход не входит (D2 change `add-usage-ledger`).
+      expect(reply.result.usage, Usage.zero);
+      final ended = reply.events.whereType<TurnEnded>().single;
+      expect(ended.usage, Usage.zero);
+      final skipped = rig.logger.eventsOf('compaction.skipped').single;
+      expect(skipped.fields['usage_record_id'], record.id);
+    });
+
     test('a running background afterTurn is awaited first: no two '
         'compactions of one branch at once (D5, §9.5)', () async {
       final rig = await _Rig.create(
@@ -617,6 +665,81 @@ void main() {
         (await rig.records(session)).whereType<CompactionRecord>(),
         hasLength(1),
       );
+    });
+
+    // Q9 (change `fix-discarded-compaction-usage`): отмена после проверки
+    // выигрыша запись учёта не отменяет — вызов оплачен, учёт доводится до
+    // конца, как запись `compaction` в соседнем тесте.
+    List<Map<String, Object?>> noGainSteps() => [
+      textStep('a' * 8000),
+      textStep('b' * 16000),
+      {
+        'reply': [
+          {'text': 'x' * 80000},
+        ],
+        'usage': const Usage(input: 764, output: 171).toJson(),
+      },
+    ];
+
+    test('/compact without gain: cancel while the accounting record waits '
+        'in the writer queue — the record and CompactionDiscarded are there, '
+        'the answer is Nothing to compact., end_turn (Q9)', () async {
+      final rig = await _Rig.create(steps: noGainSteps());
+      final session = await rig.session();
+      await rig.history(session);
+      rig.gate.arm((r) => r is CustomRecord);
+
+      final command = rig.ask(session, '/compact');
+      await rig.gate.reached;
+      await session.cancel();
+      await pumpEventQueue();
+      rig.gate.release();
+      final reply = await command;
+
+      expect(reply.result.reason, TurnEndReason.completed);
+      expect(reply.text, 'Nothing to compact.');
+      expect(reply.events.whereType<CompactionDiscarded>(), hasLength(1));
+      expect(reply.events.whereType<ContextCompacted>(), isEmpty);
+      expect(reply.events.last, isA<TurnEnded>());
+      final records = await rig.records(session);
+      expect(records.whereType<CompactionRecord>(), isEmpty);
+      final discarded = records.whereType<CustomRecord>().single;
+      expect(discarded.customType, 'codelab.compaction_discarded');
+    });
+
+    test('a background afterTurn without gain and close(): close waits for '
+        'it, the accounting record is in the journal, no error (Q9)', () async {
+      final rig = await _Rig.create(
+        steps: [
+          textStep('a' * 8000),
+          // Выше порога afterTurn: фоновое сжатие стартует.
+          textStep('b' * 100000),
+          {
+            'reply': [
+              {'text': 'x' * 400000},
+            ],
+            'usage': const Usage(input: 764, output: 171).toJson(),
+          },
+        ],
+      );
+      final session = await rig.session();
+      rig.gate.arm((r) => r is CustomRecord);
+      await session.prompt(const [TextContent('first task')]);
+      await session.prompt(const [TextContent('second task')]);
+      await rig.gate.reached;
+
+      final closing = session.close();
+      await pumpEventQueue();
+      rig.gate.release();
+      await closing;
+
+      final records = await rig.records(session);
+      final discarded = records.whereType<CustomRecord>().single;
+      expect(discarded.customType, 'codelab.compaction_discarded');
+      expect((discarded.data! as Map)['trigger'], 'afterTurn');
+      expect(records.whereType<CompactionRecord>(), isEmpty);
+      expect(rig.logger.eventsOf('compaction.failed'), isEmpty);
+      expect(rig.logger.eventsOf('compaction.skipped'), hasLength(1));
     });
 
     test('close() while /mode waits in the queue of changes behind a held '

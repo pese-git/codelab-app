@@ -62,6 +62,7 @@ import '../core/platform/external_link_opener.dart';
 import '../core/platform/local_folder_opener.dart';
 import '../core/platform/limited_network_image.dart';
 import '../core/platform/project_folder_picker.dart';
+import '../core/platform/usage_csv_saver.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
 import '../core/platform/user_shell_launcher.dart';
@@ -71,6 +72,7 @@ import '../features/settings/application/connection_settings_cubit.dart';
 import '../features/settings/application/default_profile_resolver.dart';
 import '../features/settings/application/embedded_profile.dart';
 import '../features/settings/application/profiles_unavailable.dart';
+import '../features/settings/application/agents_modes_cubit.dart';
 import '../features/settings/application/mcp_settings_cubit.dart';
 import '../features/settings/application/skills_settings_cubit.dart';
 import '../features/settings/application/provider_settings_cubit.dart';
@@ -92,6 +94,7 @@ import 'embedded_logger.dart';
 import 'embedded_mcp_status_source.dart';
 import 'embedded_secret_migration_runner.dart';
 import 'embedded_transport_resolver.dart';
+import 'agent_definitions_loader.dart';
 import 'provider_settings_session.dart';
 import 'provider_setup_offer.dart';
 import 'provider_setup_probe.dart';
@@ -124,6 +127,7 @@ Scope createCodeLabRootScope({
   ExternalLinkOpener? externalLinkOpener,
   LocalFolderOpener? localFolderOpener,
   ProjectFolderPicker? projectFolderPicker,
+  UsageCsvSaver? usageCsvSaver,
   ProjectFiles? projectFiles,
   bool projectFilesEnabled = true,
 }) {
@@ -159,6 +163,7 @@ Scope createCodeLabRootScope({
         externalLinkOpener: externalLinkOpener,
         localFolderOpener: localFolderOpener,
         projectFolderPicker: projectFolderPicker,
+        usageCsvSaver: usageCsvSaver,
       ),
       CodeLabConnectionModule(
         environment: connectionEnvironment,
@@ -438,6 +443,7 @@ final class CodeLabPlatformModule extends Module {
     ExternalLinkOpener? externalLinkOpener,
     LocalFolderOpener? localFolderOpener,
     this.projectFolderPicker,
+    this.usageCsvSaver,
   }) : _userShellLauncher = userShellLauncher,
        _externalLinkOpener = externalLinkOpener,
        _localFolderOpener = localFolderOpener;
@@ -460,6 +466,11 @@ final class CodeLabPlatformModule extends Module {
   /// Системный выбор папки; тесты подменяют его, чтобы не открывать диалог.
   final ProjectFolderPicker? projectFolderPicker;
 
+  /// Сохранение CSV панели Usage; шов тестов
+  /// (`createCodeLabRootScope(usageCsvSaver:)`, change `add-desktop-usage-pane`,
+  /// D5): без него — адаптер на `file_selector`.
+  final UsageCsvSaver? usageCsvSaver;
+
   /// Проверка папки проекта; тесты с вымышленными путями подменяют её.
   final DirectoryExists directoryExists;
 
@@ -477,7 +488,8 @@ final class CodeLabPlatformModule extends Module {
     bind<ExternalLinkOpener>().toInstance(
       _externalLinkOpener ?? const UrlLauncherExternalLinkOpener(),
     );
-    // Открытие каталогов страницы «Skills & extensions» (D8): отдельный порт,
+    // Открытие каталогов страниц «Skills & extensions» (D8) и «Agents & modes»
+    // (D20.3, D21): один порт на двух потребителей, отдельный порт,
     // потому что `ExternalLinkOpener` по политике открывает только
     // `http`/`https`/`mailto`.
     bind<LocalFolderOpener>().toInstance(
@@ -487,6 +499,9 @@ final class CodeLabPlatformModule extends Module {
     bind<ImageProviderFor>().toInstance(defaultImageProviderFor);
     bind<ProjectFolderPicker>().toInstance(
       projectFolderPicker ?? const FileSelectorProjectFolderPicker(),
+    );
+    bind<UsageCsvSaver>().toInstance(
+      usageCsvSaver ?? const FileSelectorUsageCsvSaver(),
     );
     bind<RecentProjectsStore>().toInstance(
       const SharedPreferencesRecentProjectsStore(),
@@ -686,6 +701,10 @@ final class CodeLabPresentationModule extends Module {
             tokenSecrets: currentScope.resolve<ProfileSecretSource>(),
             eventLogger: _settingsLogger(),
             providerSetupOffer: currentScope.resolve<ProviderSetupOffer>(),
+            // Панель Usage: порт сохранения CSV и события `usage_pane.*`
+            // (change `add-desktop-usage-pane`, D5, D13).
+            usageCsvSaver: currentScope.resolve<UsageCsvSaver>(),
+            usageLogger: _usageLogger(),
           ),
         )
         .singleton();
@@ -842,6 +861,22 @@ final class CodeLabPresentationModule extends Module {
             currentScope.resolve<CodeLabShellCubit>().retryStart(),
       );
     });
+    // Страница «Agents & modes»: новый Cubit на каждое открытие (D11); сессия
+    // настроек и доступ — те же, что у «Providers» (D2).
+    bind<AgentsModesCubit>().toProvide(() {
+      final environment = currentScope.resolve<ConnectionEnvironment>();
+      return AgentsModesCubit(
+        workspace: currentScope.resolve<ClientWorkspace>(),
+        defaultProfile: currentScope.resolve<DefaultProfileResolver>().resolve,
+        open: openSettings,
+        environment: environment.variables,
+        codelabHome: environment.codelabHome,
+        projectDirectory: () => _focusFolder(currentScope),
+        logger: _settingsLogger(),
+        loadDefinitions: loadAgentDefinitionsForPage,
+        folderOpener: currentScope.resolve<LocalFolderOpener>(),
+      );
+    });
     // Страница «MCP servers»: новый Cubit на каждое открытие (D11); сессия
     // настроек и доступ — те же, что у «Providers», порт состояния MCP
     // встроенного агента берётся у резолвера текущего соединения (D12).
@@ -935,6 +970,13 @@ List<TransportResolver> _transportResolvers(Scope scope) => [
   // `ConfigTransportResolver` профиль `embedded` не поддержан (D7).
   scope.resolve<EmbeddedTransportResolver>(),
 ];
+
+/// Логгер событий панели Usage (`usage_pane.refresh`, `usage_pane.export`):
+/// категория `application`, компонент `usage` (change
+/// `add-desktop-usage-pane`, D13).
+Logger _usageLogger() => StructuredLogLogger(
+  'codelab_desktop.usage',
+).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'usage'});
 
 /// Структурный логгер событий настроек (design.md change
 /// `add-app-settings-shell`, D17): категория `application`, компонент
@@ -1235,6 +1277,7 @@ final class CodeLabDependencies {
     required this.createProviderSettingsCubit,
     required this.createMcpSettingsCubit,
     required this.createSkillsSettingsCubit,
+    required this.createAgentsModesCubit,
     required this.openEmbeddedWizard,
     this.projectFilesCubit,
   });
@@ -1274,6 +1317,10 @@ final class CodeLabDependencies {
   /// Создаёт Cubit страницы «Skills & extensions»; страница владеет им и
   /// закрывает (change `add-app-skills-page`, D6).
   final SkillsSettingsCubit Function() createSkillsSettingsCubit;
+
+  /// Создаёт Cubit страницы «Agents & modes»; страница владеет им и закрывает
+  /// (design.md change `add-settings-agents-modes`, D11).
+  final AgentsModesCubit Function() createAgentsModesCubit;
 
   /// Открывает мастер встроенного агента из баннера соединения; владелец
   /// закрывает Cubit после диалога (design.md change `add-provider-setup-ui`,
@@ -1366,6 +1413,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     createProviderSettingsCubit: _scope.resolve<ProviderSettingsCubit>,
     createMcpSettingsCubit: _scope.resolve<McpSettingsCubit>,
     createSkillsSettingsCubit: _scope.resolve<SkillsSettingsCubit>,
+    createAgentsModesCubit: _scope.resolve<AgentsModesCubit>,
     openEmbeddedWizard: _scope.resolve<EmbeddedWizardOpener>(),
     projectFilesCubit: _projectFilesCubitOf(_scope),
   );

@@ -525,4 +525,194 @@ void main() {
       );
     }
   });
+
+  // «Отброшенный проход сжатия» (change `fix-discarded-compaction-usage`, D5,
+  // CMP-13): суммаризатор оплачен, а `compaction` не записан — usage входит
+  // в сумму сессии снимком `compactionDiscarded` без хода. Каталог фальшивой
+  // сессии без цен, поэтому цена здесь — `noPrice`; ветка с ценами идёт через
+  // настоящее ядро (`usage_ledger_seed_test.dart`, фикстура
+  // `acp/compact-no-gain-usage`).
+  group('a discarded compaction pass', () {
+    CompactionDiscarded discarded({
+      Usage usage = const Usage(input: 900, output: 120),
+      int tokensBefore = 120,
+      int tokensAfter = 150,
+    }) => CompactionDiscarded(
+      root,
+      tokensBefore: tokensBefore,
+      tokensAfter: tokensAfter,
+      usage: usage,
+      model: 'scripted/scripted-1',
+    );
+
+    StepEnded stepWithContext() => StepEnded(
+      root,
+      result: step().result,
+      context: const ContextFill(used: 120, window: 32000, compactAt: 24000),
+    );
+
+    Map<String, Object?> asMap(Object? value) =>
+        (value! as Map).cast<String, Object?>();
+
+    test('sends a snapshot without turn fields; session has the summarizer, '
+        'turns and steps do not change, used is tokensBefore', () async {
+      await open();
+      startTurn();
+      session.emit(stepWithContext());
+      endTurn(step().result.usage);
+      usage.clear();
+
+      session.emit(discarded(tokensBefore: 120, tokensAfter: 130));
+      await pump();
+
+      final frame = usage.single;
+      expect(frame['trigger'], 'compactionDiscarded');
+      expect(frame['seq'], 3);
+      expect(
+        frame.keys.toSet().intersection({'turnId', 'step', 'turn'}),
+        isEmpty,
+      );
+      final total = asMap(frame['session']);
+      expect(total['turns'], 1);
+      expect(total['steps'], 1);
+      expect(asMap(total['tokens'])['input'], 1000);
+      expect(asMap(total['tokens'])['output'], 140);
+      expect(total['partial'], ['noPrice']);
+      expect(frame['context'], {
+        'used': 120,
+        'size': 32000,
+        'compactAt': 24000,
+      });
+      expect(log.last, 'usage:compactionDiscarded');
+    });
+
+    test('used is tokensBefore of the event, not of the last step', () async {
+      await open();
+      startTurn();
+      session.emit(stepWithContext());
+      endTurn(step().result.usage);
+      usage.clear();
+
+      session.emit(discarded(tokensBefore: 777, tokensAfter: 800));
+      await pump();
+
+      expect(asMap(usage.single['context'])['used'], 777);
+    });
+
+    test('without a known fill there is no context', () async {
+      await open();
+
+      session.emit(discarded());
+      await pump();
+
+      expect(usage.single['trigger'], 'compactionDiscarded');
+      expect(usage.single, isNot(contains('context')));
+    });
+
+    test(
+      'a zero usage still sends the snapshot, the sum does not grow',
+      () async {
+        await open();
+        startTurn();
+        session.emit(stepWithContext());
+        endTurn(step().result.usage);
+        usage.clear();
+
+        session.emit(discarded(usage: Usage.zero));
+        await pump();
+
+        final frame = usage.single;
+        expect(frame['trigger'], 'compactionDiscarded');
+        final total = asMap(frame['session']);
+        expect(asMap(total['tokens'])['input'], 100);
+        expect(asMap(total['tokens'])['output'], 20);
+      },
+    );
+
+    test('a client that did not declare usage gets no frames, the sum is kept '
+        'for later snapshots', () async {
+      final bridge = await open(declare: false);
+
+      session.emit(discarded());
+      await pump();
+      expect(usage, isEmpty);
+
+      // Сумма копится независимо от согласия: новый владелец, объявивший
+      // `usage`, видит её в следующем снимке (Q11 (а)).
+      bridge.detach(const Duration(seconds: 1));
+      bridge.reattach(
+        owner: Object(),
+        requests: channel.requests,
+        capabilities: const acp.ClientCapabilities(
+          terminal: true,
+          meta: {
+            'codelab': {
+              'usage': {'version': 1},
+            },
+          },
+        ),
+        sink: (_) {},
+        usageSink: (frame) => usage.add(
+          ((frame as acp.JsonRpcNotification).params! as Map)
+              .cast<String, Object?>(),
+        ),
+      );
+      startTurn();
+      session.emit(stepWithContext());
+      await pump();
+
+      expect(usage.single['trigger'], 'step');
+      expect(asMap(asMap(usage.single['session'])['tokens'])['input'], 1000);
+    });
+
+    test('the sum stays in the session: the next step snapshot keeps it, '
+        'the turn does not', () async {
+      await open();
+      session.emit(discarded());
+      startTurn();
+      session.emit(stepWithContext());
+      await pump();
+
+      final stepFrame = usage.last;
+      expect(stepFrame['trigger'], 'step');
+      expect(asMap(asMap(stepFrame['turn'])['tokens'])['input'], 100);
+      expect(asMap(asMap(stepFrame['session'])['tokens'])['input'], 1000);
+    });
+
+    test('acp.usage.sent has trigger compactionDiscarded, no turn_id and no '
+        'tokens', () async {
+      await open();
+
+      session.emit(discarded());
+      await pump();
+
+      final record = channel.logger.eventsOf('acp.usage.sent').single;
+      expect(record.fields['trigger'], 'compactionDiscarded');
+      expect(record.fields, isNot(contains('turn_id')));
+      expect(
+        record.fields.keys.toSet().intersection({'tokens', 'cost'}),
+        isEmpty,
+      );
+    });
+
+    test('a recorded compaction keeps its trigger', () async {
+      await open();
+
+      session.emit(
+        const ContextCompacted(root, tokensBefore: 1000, tokensAfter: 100),
+      );
+      await pump();
+
+      expect(usage.single['trigger'], 'compaction');
+    });
+
+    test('no session/update frame', () async {
+      await open();
+
+      session.emit(discarded());
+      await pump();
+
+      expect(log.where((l) => !l.startsWith('usage:')), isEmpty);
+    });
+  });
 }

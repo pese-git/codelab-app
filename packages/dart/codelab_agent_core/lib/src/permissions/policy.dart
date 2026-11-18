@@ -374,7 +374,9 @@ final class PermissionPolicy {
       },
     );
     final clock = ctx.services.clock;
-    final started = clock.now();
+    // Ожидание человека открывается сразу и закрывается в `finally` (в том
+    // числе при отмене): открытое ожидание останавливает время хода (D6).
+    ctx.services.approvalWait.begin(clock.now());
     PermissionDecision decision;
     try {
       decision = await raceCancel(
@@ -400,7 +402,7 @@ final class PermissionPolicy {
     } on CancelledException {
       decision = PermissionDecision.cancelled;
     } finally {
-      ctx.services.approvalWait.add(clock.now().difference(started));
+      ctx.services.approvalWait.end(clock.now());
     }
     logger.log(
       LogLevel.debug,

@@ -9,11 +9,17 @@ class CodeLabStatusIndicator extends StatelessWidget {
   const CodeLabStatusIndicator({
     required this.label,
     this.tone = CodeLabStatusTone.idle,
+    this.maxLines = 1,
     super.key,
   });
 
   final String label;
   final CodeLabStatusTone tone;
+
+  /// Сколько строк занимает подпись до многоточия; `1` — как в узкой строке
+  /// панели «Agent status». Длинные подписи получают 2–3 строки
+  /// вместо обрезки.
+  final int maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +36,11 @@ class CodeLabStatusIndicator extends StatelessWidget {
           // Подпись сжимается с многоточием, когда индикатор стоит в узкой
           // строке (change `redesign-workbench-shell`, 5.3).
           Flexible(
-            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            child: Text(
+              label,
+              maxLines: maxLines,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ],

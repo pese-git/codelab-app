@@ -29,6 +29,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../support/fake_usage_csv_saver.dart';
 import '../../../support/in_memory_profile_store.dart';
 import '../../../support/recording_logger.dart';
 
@@ -153,6 +154,7 @@ void main() {
       application: application,
       workspace: workspace,
       projectFolderPicker: _NoPicker(),
+      usageCsvSaver: FakeUsageCsvSaver(),
       recentProjectsStore: _NoRecentProjects(),
       directoryExists: directoryExists ?? (_) async => true,
       defaultProfiles: DefaultProfileResolver(

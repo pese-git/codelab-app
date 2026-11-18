@@ -15,6 +15,8 @@
 // решения Q16 (а). Только целые, без `double` и локали (web-безопасность).
 
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_client_core/src/usage/usage_parsing.dart'
+    show parseUsageMicros;
 import 'package:test/test.dart';
 
 Money _usd(int micros) => Money(micros: micros, currency: 'USD');
@@ -170,6 +172,57 @@ void main() {
         ),
         limit,
       );
+    });
+  });
+
+  // Задача 1.2 change `add-desktop-usage-pane` (D5; acp-client-kit «Точная
+  // запись суммы usage»). Красные тесты: реализация — задача 1.3, пока
+  // `formatUsageMoneyExact` — заглушка.
+  group('formatUsageMoneyExact', () {
+    for (final (micros, text) in [
+      (2260000, '2.26'),
+      (41, '0.000041'),
+      (0, '0'),
+      (1, '0.000001'),
+      (1000000, '1'),
+      (1200000, '1.2'),
+      (100000, '0.1'),
+      (999999999999999, '999999999.999999'),
+    ]) {
+      test('$micros микро → $text', () {
+        expect(formatUsageMoneyExact(_usd(micros)), text);
+      });
+    }
+
+    test('без символа и кода валюты', () {
+      final text = formatUsageMoneyExact(
+        const Money(micros: 1200000, currency: 'EUR'),
+      );
+      expect(text, '1.2');
+      expect(text, isNot(contains(RegExp(r'[^0-9.]'))));
+    });
+
+    test('без хвостовых нулей и экспоненты', () {
+      for (final micros in [10, 1000, 500000, 123450, 1000000000]) {
+        final text = formatUsageMoneyExact(_usd(micros));
+        expect(text, matches(RegExp(r'^(0|[1-9][0-9]*)(\.[0-9]*[1-9])?$')));
+      }
+    });
+
+    test('обратимость: разбор cost даёт исходные микроединицы', () {
+      for (final micros in [
+        0,
+        1,
+        41,
+        999999,
+        1000000,
+        2260000,
+        1234567,
+        999999999999999,
+      ]) {
+        final text = formatUsageMoneyExact(_usd(micros));
+        expect(parseUsageMicros(text), micros, reason: text);
+      }
     });
   });
 }

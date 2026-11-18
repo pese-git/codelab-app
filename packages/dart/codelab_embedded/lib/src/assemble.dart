@@ -75,6 +75,7 @@ Future<EmbeddedAgent> assembleEmbeddedAgent({
       clock: services.clock,
       ids: services.ids,
       sessions: services.sessions,
+      usageLedger: services.usageLedger,
       platform: services.platform,
       models: models,
       secrets: services.secrets,

@@ -1,0 +1,533 @@
+{
+  "id": "acp/session-load-usage-full",
+  "spec": [
+    "15-Extensibility.md#custom-notifications",
+    "15-Extensibility.md#advertising-custom-capabilities",
+    "05-Prompt Turn.md#4-check-for-completion",
+    "03-Session Setup.md#loading-a-session"
+  ],
+  "description": "Полная сумма сессии после session/load (change add-usage-ledger, D8, Q3 (а); заменяет acp/session-load-usage-partial change add-usage-extension): журнал из setup.sessions с двумя ходами по ответу модели (10+5 и 20+10 токенов, стоимость в записях) загружается в новом сервере: реплей, ответ на session/load, затем снимок _codelab/session/usage с trigger load и полной суммой (turns 2, steps 2, без beforeLoad; turnId, step и turn нет, context неизвестен). Затем ход продолжает сумму: seq 2 и 3, session.turns 3. Handshake фикстуры создаёт отдельную сессию; загружается сессия из журнала.",
+  "goals": [
+    "L-11",
+    "L-29"
+  ],
+  "extensions": [
+    "usage",
+    "usageLedger"
+  ],
+  "roles": [
+    "agent"
+  ],
+  "setup": {
+    "cwd": "/work/demo",
+    "profile": "agent-serve",
+    "mode": "standard",
+    "clientCapabilities": {
+      "fs": {
+        "readTextFile": true,
+        "writeTextFile": true
+      },
+      "terminal": true,
+      "_meta": {
+        "codelab": {
+          "usage": {
+            "version": 1
+          }
+        }
+      }
+    },
+    "sessions": {
+      "01JB8Q2W6R9T3M5K7N1P4X8Z0C": [
+        {
+          "type": "session",
+          "version": 1,
+          "id": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "cwd": "${cwd}",
+          "created": "2026-10-25T10:00:00.000Z",
+          "agent": {
+            "name": "codelab-agent",
+            "version": "0.1.0"
+          }
+        },
+        {
+          "type": "model_change",
+          "id": "r0",
+          "parentId": null,
+          "timestamp": "2026-10-25T10:00:00.000Z",
+          "provider": "scripted",
+          "modelId": "scripted-1"
+        },
+        {
+          "type": "message",
+          "id": "r1",
+          "parentId": "r0",
+          "timestamp": "2026-10-25T10:00:01.000Z",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Привет"
+              }
+            ],
+            "timestamp": "2026-10-25T10:00:01.000Z"
+          }
+        },
+        {
+          "type": "message",
+          "id": "r2",
+          "parentId": "r1",
+          "timestamp": "2026-10-25T10:00:02.000Z",
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Здравствуйте."
+              }
+            ],
+            "model": {
+              "provider": "scripted",
+              "id": "scripted-1"
+            },
+            "usage": {
+              "input": 10,
+              "output": 5,
+              "cost": {
+                "input": 3e-05,
+                "output": 7.5e-05
+              }
+            },
+            "stopReason": "stop",
+            "timestamp": "2026-10-25T10:00:02.000Z"
+          }
+        },
+        {
+          "type": "message",
+          "id": "r3",
+          "parentId": "r2",
+          "timestamp": "2026-10-25T10:00:03.000Z",
+          "message": {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Расскажи ещё"
+              }
+            ],
+            "timestamp": "2026-10-25T10:00:03.000Z"
+          }
+        },
+        {
+          "type": "message",
+          "id": "r4",
+          "parentId": "r3",
+          "timestamp": "2026-10-25T10:00:04.000Z",
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Вот рассказ."
+              }
+            ],
+            "model": {
+              "provider": "scripted",
+              "id": "scripted-1"
+            },
+            "usage": {
+              "input": 20,
+              "output": 10,
+              "cost": {
+                "input": 6e-05,
+                "output": 0.00015
+              }
+            },
+            "stopReason": "stop",
+            "timestamp": "2026-10-25T10:00:04.000Z"
+          }
+        }
+      ]
+    }
+  },
+  "llm": {
+    "model": {
+      "provider": "scripted",
+      "modelId": "scripted-1",
+      "contextWindow": 32768,
+      "cost": {
+        "input": 3,
+        "output": 15,
+        "cacheRead": 0.3,
+        "cacheWrite": 3.75
+      }
+    },
+    "steps": [
+      {
+        "expect": {
+          "lastMessage": {
+            "role": "user",
+            "$textContains": "Ещё"
+          }
+        },
+        "reply": [
+          {
+            "text": "Вот ответ."
+          }
+        ],
+        "stopReason": "stop",
+        "usage": {
+          "input": 100,
+          "output": 50
+        }
+      }
+    ]
+  },
+  "frames": [
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "loadId"
+        },
+        "method": "session/load",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "cwd": "${cwd}",
+          "mcpServers": []
+        }
+      },
+      "note": "сессия из журнала с ответом модели загружается через session/load"
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Привет"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Здравствуйте."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "user_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Расскажи ещё"
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": "Вот рассказ."
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "current_mode_update",
+            "currentModeId": "standard"
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "config_option_update",
+            "configOptions": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": {
+              "$any": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ session/load — после реплея (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${loadId}",
+        "result": {
+          "modes": {
+            "$any": {
+              "availableModes": [
+                {
+                  "id": "standard",
+                  "name": "Standard"
+                }
+              ],
+              "currentModeId": "standard"
+            }
+          },
+          "configOptions": {
+            "$any": []
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "note": "D8: снимок load — после ответа на session/load, а не в конце реплея; session — полная сумма журнала (turns 2, steps 2), partial без beforeLoad; context неизвестен мосту, turnId, step и turn нет",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "seq": 1,
+          "trigger": "load",
+          "session": {
+            "turns": 2,
+            "steps": 2,
+            "tokens": {
+              "input": 30,
+              "output": 15,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.000315"
+          },
+          "currency": "USD"
+        }
+      }
+    },
+    {
+      "dir": "c2a",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": {
+          "$capture": "promptId"
+        },
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "prompt": [
+            {
+              "type": "text",
+              "text": "Ещё раз"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "agent_message_chunk",
+            "content": {
+              "type": "text",
+              "text": {
+                "$any": true
+              }
+            }
+          }
+        }
+      },
+      "repeat": "+",
+      "match": {
+        "$text": "Вот ответ."
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "seq": 2,
+          "trigger": "step",
+          "turnId": {
+            "$capture": "turnId"
+          },
+          "step": {
+            "index": 0,
+            "model": "scripted/scripted-1",
+            "tokens": {
+              "input": 100,
+              "output": 50,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.00105"
+          },
+          "turn": {
+            "steps": 1,
+            "tokens": {
+              "input": 100,
+              "output": 50,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.00105"
+          },
+          "session": {
+            "turns": 3,
+            "steps": 3,
+            "tokens": {
+              "input": 130,
+              "output": 65,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.001365"
+          },
+          "currency": "USD",
+          "context": {
+            "used": 150,
+            "size": 32768,
+            "compactAt": 24576
+          }
+        }
+      }
+    },
+    {
+      "dir": "a2c",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "_codelab/session/usage",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "seq": 3,
+          "trigger": "turn",
+          "turnId": "${turnId}",
+          "turn": {
+            "steps": 1,
+            "tokens": {
+              "input": 100,
+              "output": 50,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.00105"
+          },
+          "session": {
+            "turns": 3,
+            "steps": 3,
+            "tokens": {
+              "input": 130,
+              "output": 65,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "cost": "0.001365"
+          },
+          "currency": "USD",
+          "context": {
+            "used": 150,
+            "size": 32768,
+            "compactAt": 24576
+          }
+        }
+      },
+      "note": "session.turns 3: два хода журнала и новый (D8); beforeLoad нет"
+    },
+    {
+      "dir": "a2c",
+      "note": "агент может назвать сессию после первого хода",
+      "frame": {
+        "jsonrpc": "2.0",
+        "method": "session/update",
+        "params": {
+          "sessionId": "01JB8Q2W6R9T3M5K7N1P4X8Z0C",
+          "update": {
+            "sessionUpdate": "session_info_update",
+            "title": {
+              "$any": "Fixture"
+            },
+            "updatedAt": "<ts>"
+          }
+        }
+      },
+      "optional": true
+    },
+    {
+      "dir": "a2c",
+      "note": "ответ последним кадром хода (ACP-3)",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": "${promptId}",
+        "result": {
+          "stopReason": "end_turn"
+        }
+      }
+    }
+  ]
+}

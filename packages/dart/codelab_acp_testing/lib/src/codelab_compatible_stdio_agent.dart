@@ -79,9 +79,30 @@ enum CodelabCompatibleStdioAgentMode {
   /// `session/prompt`; остальным клиентам не шлёт ничего. Ход 1: контекст
   /// 18000 из 200000 (9 %), стоимость сессии `0.04`; ход 2 и далее: контекст
   /// 170000 (85 %), пять счётчиков токенов, стоимость хода `0.05`.
+  /// `session/load` (change `add-usage-ledger`, D8, задача 2.8): агент
+  /// объявляет `loadSession` и отвечает пустым результатом без истории; если
+  /// сессия неизвестна, считает её журналом из двух прежних ходов (как
+  /// после ходов 1 и 2 выше), а клиенту, объявившему `usage`, после ответа
+  /// шлёт снимок `trigger: "load"` с полной суммой этих ходов (без `turnId`,
+  /// `step`, `turn` и `context`); следующий ход — третий.
   /// Как использовать: тест `usage_agent_test.dart`, PTY-e2e CLI и
   /// интеграционные тесты app запускают режим и читают числа выше.
-  withUsage('with_usage');
+  withUsage('with_usage'),
+
+  /// Как [withUsage] плюс поле `budget` в снимках `step` и `turn` (change
+  /// `add-desktop-usage-pane`, D7, D13 `add-usage-extension`; задача 2.4).
+  ///
+  /// Почему отдельный режим: поле `budget` — надстройка v1, а числа
+  /// [withUsage] опираются на готовые тесты CLI и app, поэтому их нельзя
+  /// менять. Для чего: приёмка панели Usage видит блок «Turn budget» на
+  /// настоящем процессе агента с детерминированными числами. Как
+  /// использовать: так же, как [withUsage]. Лимиты агента: `max_tokens`
+  /// 200000, `max_cost` `0.5`, `max_duration` 600000 мс, `max_steps` 50.
+  /// Израсходовано (снимки `step` и `turn` хода совпадают): шаг 1;
+  /// токены — `input + output` хода без кэша (ход 1 — 12800, ход 2 —
+  /// 21500); стоимость — стоимость хода (`0.04`, `0.05`); время — 1500 мс.
+  /// Остальное — как у [withUsage]; `session/load` бюджета не несёт.
+  withUsageBudget('with_usage_budget');
 
   const CodelabCompatibleStdioAgentMode(this.wireName);
 
@@ -112,6 +133,8 @@ import 'dart:convert';
 import 'dart:io';
 
 const _mode = '__CODELAB_TEST_AGENT_MODE__';
+// `with_usage_budget` отличается от `with_usage` только полем `budget`.
+final _usageMode = _mode == 'with_usage' || _mode == 'with_usage_budget';
 const _permissionRequestId = 'perm-1';
 const _fsReadRequestId = 'fs-read-1';
 const _fsWriteRequestId = 'fs-write-1';
@@ -120,8 +143,9 @@ const _terminalWaitRequestId = 'terminal-wait-1';
 const _terminalOutputRequestId = 'terminal-output-1';
 const _terminalKillRequestId = 'terminal-kill-1';
 var _currentModel = 'gpt-5';
-// Режим `with_usage` (D3): согласие клиента из `initialize` и состояние
-// счётчиков на сессию (D4, D7: `seq` общий на сессию, с 1).
+// Режимы `with_usage` и `with_usage_budget` (D3): согласие клиента из
+// `initialize` и состояние счётчиков на сессию (D4, D7: `seq` общий на
+// сессию, с 1).
 var _usageConsent = false;
 final _usageSeq = <String, int>{};
 final _usageTurns = <String, int>{};
@@ -254,16 +278,16 @@ Future<void> main(List<String> args) async {
             clientCodelab is Map ? clientCodelab['usage'] : null;
         // D3: согласие — объект с `version`, равным целому числу 1
         // (не 1.0, не "1"); JSON-число 1.0 в Dart разбирается как double.
-        _usageConsent = _mode == 'with_usage' &&
+        _usageConsent = _usageMode &&
             clientUsage is Map &&
             clientUsage['version'] is int &&
             clientUsage['version'] == 1;
         _writeResponse(id, {
           'protocolVersion': 1,
           'agentCapabilities': {
-            'loadSession': _mode == 'with_session_list',
+            'loadSession': _mode == 'with_session_list' || _usageMode,
             // D3: объявление только тому, кто прислал блок `_meta.codelab`.
-            if (_mode == 'with_usage' && clientCodelab is Map)
+            if (_usageMode && clientCodelab is Map)
               '_meta': {
                 'codelab': {
                   'usage': {'version': 1},
@@ -372,7 +396,7 @@ Future<void> main(List<String> args) async {
           _writeResponse(id, {'stopReason': 'end_turn'});
           break;
         }
-        if (_mode == 'with_usage') {
+        if (_usageMode) {
           _handleUsagePrompt(id, sessionId);
           break;
         }
@@ -798,6 +822,11 @@ Future<void> main(List<String> args) async {
           }
         }
         _writeResponse(id, <String, Object?>{});
+      case 'session/load' when _usageMode:
+        _handleUsageLoad(
+          id,
+          (message['params'] as Map<String, Object?>)['sessionId'] as String,
+        );
       case 'session/cancel':
         // Уведомление: ответа нет (`07-Prompt Turn.md`, «Cancellation»).
         // Ход, который ждёт отмены, завершается `cancelled`.
@@ -1059,7 +1088,45 @@ void _writeResponse(Object? id, Map<String, Object?> result) {
   stdout.writeln(jsonEncode({'jsonrpc': '2.0', 'id': id, 'result': result}));
 }
 
-/// Ход режима `with_usage`: чанк, снимок `step`, снимок `turn`, ответ (D7).
+/// `session/load` режима `with_usage` (design.md change `add-usage-ledger`,
+/// D8): ответ, затем снимок `load` с полной суммой журнала. Истории нет, а
+/// сессия, которой агент ещё не видел, считается журналом из двух ходов —
+/// сумма равна ходам 1 и 2 [_handleUsagePrompt]. Снимок уходит после ответа
+/// и только клиенту, объявившему `usage`.
+void _handleUsageLoad(Object? id, String sessionId) {
+  if (!_usageTurns.containsKey(sessionId)) {
+    _usageTurns[sessionId] = 2;
+    _usageSessionMicros[sessionId] = 90000;
+    _usageSessionTokens[sessionId] = {
+      'input': 32000,
+      'output': 2300,
+      'cacheRead': 145000,
+      'cacheWrite': 8200,
+      'reasoning': 300,
+    };
+  }
+  _writeResponse(id, <String, Object?>{});
+  final turns = _usageTurns[sessionId]!;
+  if (_usageConsent && turns > 0) {
+    final seq = (_usageSeq[sessionId] ?? 0) + 1;
+    _usageSeq[sessionId] = seq;
+    _writeNotification('_codelab/session/usage', {
+      'sessionId': sessionId,
+      'seq': seq,
+      'trigger': 'load',
+      'session': {
+        'turns': turns,
+        'steps': turns,
+        'tokens': Map<String, int>.of(_usageSessionTokens[sessionId]!),
+        'cost': _micros(_usageSessionMicros[sessionId]!),
+      },
+      'currency': 'USD',
+    });
+  }
+}
+
+/// Ход режимов `with_usage` и `with_usage_budget`: чанк, снимок `step`,
+/// снимок `turn`, ответ (D7); в `with_usage_budget` снимки несут `budget`.
 void _handleUsagePrompt(Object? id, String sessionId) {
   final turnNumber = (_usageTurns[sessionId] ?? 0) + 1;
   _usageTurns[sessionId] = turnNumber;
@@ -1125,6 +1192,19 @@ void _handleUsagePrompt(Object? id, String sessionId) {
           'size': 200000,
           'compactAt': 160000,
         },
+        // D7 change `add-desktop-usage-pane`: у снимков `step` и `turn`
+        // хода данные бюджета совпадают, как у настоящего агента на
+        // границе единственного шага.
+        if (_mode == 'with_usage_budget')
+          'budget': {
+            'steps': {'used': 1, 'limit': 50},
+            'tokens': {
+              'used': tokens['input']! + tokens['output']!,
+              'limit': 200000,
+            },
+            'cost': {'used': _micros(turnMicros), 'limit': '0.5'},
+            'duration': {'usedMs': 1500, 'limitMs': 600000},
+          },
       });
     }
   }

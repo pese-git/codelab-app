@@ -33,6 +33,7 @@ import 'slash_command.dart';
 const _maxUserRunes = 64;
 
 const _configUsage = 'Usage: /config reload | /config check';
+const _usageUsage = 'Usage: /usage [rebuild]';
 const _mcpUsage =
     'Usage: /mcp list | /mcp reload [<id>] | /mcp enable <id> | '
     '/mcp disable <id>';
@@ -46,6 +47,7 @@ enum BuiltinName {
   mode,
   model,
   status,
+  usage,
   config,
   mcp,
   help;
@@ -54,7 +56,7 @@ enum BuiltinName {
   /// всегда доводится до конца, а ответ строится по факту (D14).
   bool get changesState => switch (this) {
     compact || mode || model => true,
-    status || config || mcp || help => false,
+    status || usage || config || mcp || help => false,
   };
 }
 
@@ -138,6 +140,7 @@ final class BuiltinCommands {
     this.configStatus,
     this.compactNow,
     required this.mcpDeclared,
+    required this.usageReport,
     required this.servers,
     required this.reconnect,
     required this.setEnabled,
@@ -172,6 +175,11 @@ final class BuiltinCommands {
 
   /// Команда `mcp` объявлена (capability `mcp` профиля).
   final bool mcpDeclared;
+
+  /// Текст `/usage` по отчёту журнала usage сессии; `rebuild` — пересчёт
+  /// всегда (design.md change `add-usage-ledger`, D5). Команда объявлена
+  /// всегда: без порта файла отчёт строится в памяти.
+  final Future<String> Function(bool rebuild) usageReport;
 
   /// Живая сводка серверов сессии (`McpSessionTools.servers`), не кэш.
   final List<McpServerSummary> Function() servers;
@@ -261,6 +269,12 @@ final class BuiltinCommands {
       description: 'Show the model, mode, working directory and MCP servers',
       source: SlashCommandSource.builtin,
     ),
+    const SlashCommand(
+      name: 'usage',
+      description: 'Show token usage and cost of the session',
+      source: SlashCommandSource.builtin,
+      inputHint: '[rebuild]',
+    ),
     if (config)
       const SlashCommand(
         name: 'config',
@@ -304,6 +318,7 @@ final class BuiltinCommands {
       'mode' => BuiltinName.mode,
       'model' => BuiltinName.model,
       'status' => BuiltinName.status,
+      'usage' => BuiltinName.usage,
       'help' => BuiltinName.help,
       'config' when reloadConfig != null => BuiltinName.config,
       'mcp' when mcpDeclared => BuiltinName.mcp,
@@ -345,6 +360,10 @@ final class BuiltinCommands {
       BuiltinName.model =>
         arg.isEmpty ? 'show' : (_isModelArg(arg) ? 'set' : 'unknown'),
       BuiltinName.compact => 'run',
+      BuiltinName.usage =>
+        args.isEmpty
+            ? 'show'
+            : (args.join(' ') == 'rebuild' ? 'rebuild' : 'usage'),
       // `status` и `help`: аргументы игнорируются (D7).
       BuiltinName.status || BuiltinName.help => 'show',
     };
@@ -399,6 +418,7 @@ final class BuiltinCommands {
       BuiltinName.mode => BuiltinText(await _mode(c, cancel)),
       BuiltinName.model => BuiltinText(await _model(c, cancel)),
       BuiltinName.status => BuiltinText(_status()),
+      BuiltinName.usage => BuiltinText(await _usage(c)),
       BuiltinName.help => BuiltinText(_help()),
     },
   };
@@ -448,6 +468,14 @@ final class BuiltinCommands {
     cancel.throwIfCancelled();
     return 'Model: ${await setModel(arg)}.';
   }
+
+  /// `/usage [rebuild]` (design.md change `add-usage-ledger`, D5): неверный
+  /// аргумент даёт строку использования, журнал при этом не строится.
+  Future<String> _usage(BuiltinCall call) async => switch (call.subcommand) {
+    'show' => await usageReport(false),
+    'rebuild' => await usageReport(true),
+    _ => _usageUsage,
+  };
 
   /// `/status`: четыре строки, `Config` и `Restart required` — только при
   /// объявленной `/config` (D7, Q2, R0-3).

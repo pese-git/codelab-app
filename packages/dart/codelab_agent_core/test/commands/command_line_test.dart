@@ -31,6 +31,7 @@ void main() {
     BuiltinCommands commands() => BuiltinCommands(
       compactNow: (focus, cancel) async => throw UnimplementedError(),
       mcpDeclared: false,
+      usageReport: (rebuild) async => '',
       servers: () => const [],
       reconnect: (id, cancelled) async {},
       setEnabled: (id, enabled, cancelled) async {},

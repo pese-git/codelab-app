@@ -49,6 +49,7 @@ final class CodelabExtensions {
     this.subagents = false,
     this.subagentToolCalls = false,
     this.usage = false,
+    this.usageLedger = false,
     this.subagentsMaxDepth,
   });
 
@@ -79,6 +80,7 @@ final class CodelabExtensions {
       subagents: subagents != null,
       subagentToolCalls: known('subagentToolCalls') != null,
       usage: known('usage') != null,
+      usageLedger: known('usageLedger') != null,
       subagentsMaxDepth: maxDepth is int && maxDepth > 0 ? maxDepth : null,
     );
   }
@@ -90,6 +92,11 @@ final class CodelabExtensions {
   /// Агент объявил `usage: {"version": 1}` и шлёт `_codelab/session/usage`
   /// (D3). Та же оговорка про `1.0` на web, что и у остальных ключей.
   final bool usage;
+
+  /// Агент объявил `usageLedger: {"version": 1}` и отвечает на
+  /// `_codelab/session/usage/ledger` (change `add-usage-ledger`, D7, D9).
+  /// Клиент ключ НЕ объявляет: запрос шлёт он сам.
+  final bool usageLedger;
 
   /// `subagents.maxDepth`; `null` — не объявлено или неверной формы.
   final int? subagentsMaxDepth;

@@ -83,7 +83,7 @@ final class AgentLoopConfig {
   final ApprovalWaitMeter? approvalWait;             // тот же счётчик, что ToolServices.approvalWait; maxDuration
                                                      // считает время хода минус его прирост с начала хода
   final Logger? logger;                              // логи цикла (loop.empty_response, §5.4.1)
-  final int Function(LlmContext)? estimateTokens;    // оценка payload (§9)
+  final int Function(LlmContext)? estimateTokens;    // оценка payload (§9.3); рантайм — с якорем сжатия сессии
   final Future<LoopContext?> Function(EmergencyCause cause, CancelToken cancel)? emergencyCompact;
                                                      // один аварийный вызов сжатия за ход, общий для preflight и overflow (CMP-8)
   final int? contextWindowCap;                       // окно preflight = effectiveContextWindow(model, cap) (CMP-6)
@@ -147,8 +147,31 @@ enum BudgetLimit { steps, tokens, cost, duration, deadline }   // deadline — �
 **Бюджет хода.** Проверяется на границе шага: после `StepEnded` и до следующего запроса к модели.
 Исполняемый инструмент не прерывается. Лимит исчерпан, когда значение его достигло (`>=`): при
 `maxTokens: 1000` ход, потративший ровно 1000 токенов, следующего шага не делает. Время ожидания
-одобрения (`PermissionGate`) вычитается из `maxDuration`. При превышении ход завершается `TurnEnded(reason: completed, budgetExceeded: limit)`;
+одобрения (`PermissionGate`) вычитается из `maxDuration`. Вычитается настенное время, в которое шло
+хотя бы одно ожидание: одобрения вызовов одной параллельной группы ждут одновременно, и сумма их
+длительностей вычла бы одно время дважды — время хода уменьшалось бы, а лимит растягивался.
+`ApprovalWaitMeter` поэтому считает объединение ожиданий (счётчик открытых ожиданий и момент, когда
+он стал больше нуля), а политика открывает ожидание перед `gate.request` и закрывает его в `finally`
+(change `fix-usage-pane-live-cards`, D6; решение пользователя 2026-11-18, Q3 (а)). Объединение
+вычитает и работу параллельного инструмента, который выполняется, пока соседний вызов той же группы
+ждёт одобрения (прежняя сумма вычитала то же и больше, регрессии нет). Поэтому модель может
+растянуть настенное время хода парой «долгий разрешённый `execute` + вызов с одобрением», пока
+пользователь не отвечает; лимит `maxDuration` такой ход не остановит (design.md change, R6). Ожидание
+одобрения потомка в счётчик корня не входит: у потомка свои `ToolServices` и свой счётчик, поэтому
+время корня, пока ждёт одобрение потомка, идёт (Q4 (а); клиент показывает так же, §12.3 A17 п. 6).
+При превышении ход завершается `TurnEnded(reason: completed, budgetExceeded: limit)`;
 ACP-адаптер отдаёт `stopReason: max_turn_requests`, а вид лимита — в `_meta` (расширение через OpenSpec).
+
+**Прогресс бюджета** (change `add-desktop-usage-pane`, D8). `StepEnded` и `TurnEnded` несут прогресс
+бюджета хода (`BudgetProgress`; имя — реализации): лимиты `TurnBudget` хода и израсходованное к
+событию — завершённые шаги корня, токены `input + output` своих шагов и потомков (без кэша),
+стоимость той же суммы или `null`, если у текущей модели нет цен, и время хода без ожидания
+одобрения. Прогресс и проверку LOOP-12 считает одна функция, поэтому значение в `StepEnded` — то,
+по которому на этой границе шага решается остановка. Поле заполняется при любых лимитах; передавать
+ли его клиенту, решает адаптер (§13.12, поле `budget` в `_codelab/session/usage`).
+Шаг, ответ модели которого — ошибка, тоже уходит в `StepEnded` и считается завершённым, хотя ход
+на нём заканчивается: `TurnEnded.budget.steps` равно числу отправленных `StepEnded` хода. Иначе итог
+хода был бы на шаг короче снимков `step`, которые уже видел клиент.
 
 **Сборка payload** (каждый запрос, транскрипт не меняется — LOOP-7):
 
@@ -163,7 +186,7 @@ ACP-адаптер отдаёт `stopReason: max_turn_requests`, а вид ли�
 2. Ремонт парности вызовов (§6.3.3); непустой отчёт → событие `ToolPairingRepaired`.
 3. Если есть заметка `Revise` — добавить `UserMessage([TextContent(note)])` в конец payload.
 3a. После MVP: если у сессии есть дедлайн (§17.12.5) — `UserMessage([TextContent(deadline.timeLeftLine(now))])` последним сообщением payload; в транскрипт не входит.
-4. Оценка размера `estimateTokens(LlmContext)`; если больше окна `effectiveContextWindow(model, cap: contextWindowCap)` — один вызов `emergencyCompact(preflight, …)` за ход (CMP-8) и пересборка с шага 1; если сжатие не помогло или его нет — синтетический `AssistantMessage(stopReason: error, errorClass: overflow, errorMessage: 'context window exhausted')` без обращения к провайдеру и без `ModelRequested`.
+4. Оценка размера `estimateTokens(LlmContext)`; если больше окна `effectiveContextWindow(model, cap: contextWindowCap)` — один вызов `emergencyCompact(preflight, …)` за ход (CMP-8) и пересборка с шага 1; если сжатие не помогло или его нет — синтетический `AssistantMessage(stopReason: error, errorClass: overflow, errorMessage: 'context window exhausted')` без обращения к провайдеру и без `ModelRequested`. Оценщик передаёт рантайм: оценка сессии с якорями usage и последнего сжатия (§9.3, «Якорь на последнее сжатие»), поэтому сразу после сжатия проверка видит `tokensAfter` записи плюс изменившуюся часть (CMP-11); сигнатура `estimateTokens` при этом не меняется, и цикл о журнале и записях `compaction` не знает.
 5. `LlmContext(systemPrompt, messages, tools.map(toSchema))` → `ModelRequested` → `stream(...)`.
 
 `systemPrompt` и `tools` берутся из текущего `LoopContext` и между шагами меняются только через
@@ -206,7 +229,8 @@ final class ModeChanged extends AgentEvent { final ModeId mode; }
 final class CommandsChanged extends AgentEvent { final List<SlashCommand> commands; }
 final class ConfigOptionChanged extends AgentEvent { final String optionId, value; }   // уровень AgentSession (§8.3)
 final class SessionTitleChanged extends AgentEvent { final String title; final DateTime updatedAt; }   // уровень AgentSession (§8.3)
-final class ContextCompacted extends AgentEvent { final int tokensBefore, tokensAfter; }
+final class ContextCompacted extends AgentEvent { final int tokensBefore, tokensAfter; final Usage? usage; final String? model; } // model — '<provider>/<id>' // usage, model — суммаризатор, change add-usage-ledger, D4; в TurnEnded.usage не входит
+final class CompactionDiscarded extends AgentEvent { final int tokensBefore, tokensAfter; final Usage usage; final String model; } // суммаризатор оплачен, сжатие не записано (no reduction, stale; §9.8, CMP-13); change fix-discarded-compaction-usage, D2; в TurnEnded.usage не входит, реплей не даёт
 final class AgentError extends AgentEvent { final AgentErrorClass cls; final LlmErrorClass? errorClass; final String message; final bool retrying; final RateLimitInfo? rateLimit; }   // rateLimit — после MVP (§17.10.4.1)
                                                   // errorClass — только при cls == provider (§2.2)
 final class TurnEnded extends AgentEvent {
@@ -275,7 +299,8 @@ final class SlashCommand {
 | `StepEnded` | шаг завершён | ответ модели, результаты в порядке вызовов; заполнение контекста после шага (`used`, `window`, `compactAt` — порог автосжатия или `null`; change `add-usage-extension`, D5) |
 | `TaskListChanged` | после change `add-subagents-and-tasks`: операция `task_*` или назначение пункта субагенту (`assign`) изменила список задач, до `ToolCallFinished` вызова (§17.16.5), или список восстановлен из новой ветки после `BranchChanged` (`op: restore`, без записи `task`, §17.16.6); до change — `PlanUpdated` от `update_plan` | `items` (весь список), `change` |
 | `ModeChanged`, `CommandsChanged` | смена режима, списка slash-команд | новое значение |
-| `ContextCompacted` | сжатие записано в журнал (§9) | `tokensBefore`, `tokensAfter` |
+| `ContextCompacted` | сжатие записано в журнал (§9) | `tokensBefore`, `tokensAfter`, `usage` и `model` суммаризатора (`null` у реплея записи без `details.usage`; change `add-usage-ledger`, D4) |
+| `CompactionDiscarded` | проход сжатия отброшен (`no reduction`, CMP-10, или `stale`, CMP-12) после оплаченного ответа суммаризатора; запись учёта `custom` `codelab.compaction_discarded` уже в журнале (§9.8, CMP-13) | `tokensBefore`, `tokensAfter` прохода, `usage` и `model` суммаризатора; в `TurnEnded.usage` не входит; реплей события не даёт (change `fix-discarded-compaction-usage`, D2) |
 | `SubagentStarted`, `SubagentProgress`, `SubagentFinished` | после MVP: эмитит `SubagentManager` сессии родителя, не цикл (§17.3.2) | идентификаторы ребёнка, снимок прогресса, итог |
 | `BranchChanged` | после MVP: эмитит `AgentSession` после записи `branch` — переключение ветки или перемотка (§17.6.5); у читателя в режиме только чтения — после перечитывания снимка (§17.6.8) | `leafId`, `fromLeafId`, `reason` |
 | `SessionAccessChanged` | после MVP: эмитит `AgentSession` при потере lease, чужой записи или освобождении lease владельцем (§17.6.8) | `access`, `owner?`, `reason` |
@@ -858,7 +883,7 @@ final class TurnResult { final TurnEndReason reason; final Usage usage; final Bu
 
 `AgentSession` подписывается на `Agent` первым слушателем и пишет в журнал на `MessageEnded`
 и `ModeChanged` («хост сохраняет, цикл эмитит»); запись `compaction` пишет компактор до события
-`ContextCompacted` (§9.8); затем события уходят в
+`ContextCompacted`, запись учёта отброшенного прохода — до `CompactionDiscarded` (§9.8); затем события уходят в
 `events`. Поток `events` широковещательный; поздний подписчик получает события текущего хода с
 начала (буфер одного хода). `prompt()` очищает grants разрешений на ход (PERM-8), редактирует
 текстовые блоки пользователя (`Redactor.redact` с `RedactionPoint.userInput`, §12.4.1) до записи в
@@ -942,6 +967,8 @@ final class TurnResult { final TurnEndReason reason; final Usage usage; final Bu
 * `payload_immutability_test.dart`: транскрипт до и после запроса с ремонтом пар и `transformContext` отличается только новыми сообщениями (LOOP-7).
 * `duplicate_tool_ids_test.dart`: провайдер дважды присылает `call_1` в разных шагах → второй получает `call_1_2` уже в первом `MessageStarted` (LOOP-11).
 * `budget_test.dart`: по шагам (`maxSteps: 2`), токенам и времени (с `FakeClock`) ход останавливается на границе шага с нужным `budgetExceeded`; ожидание одобрения не входит во время (LOOP-12).
+* `tools/approval_wait_meter_test.dart` (change `fix-usage-pane-live-cards`, D6; §5.2 «Бюджет хода»): `одно ожидание — его длительность (прежнее поведение)`; `пересекающиеся ожидания считаются объединением, не суммой`; `одновременные ожидания параллельной группы — одно время`; `вложенные ожидания — длительность внешнего`; `непересекающиеся ожидания — сумма; зазор не считается`; `открытое ожидание входит в итог на момент чтения (D6)`; `после закрытия последнего ожидания итог перестаёт расти`; `итог не убывает между чтениями при закрытии одного из двух`; `reset() обнуляет сумму и открытые ожидания (новый ход)`; `end без пары игнорируется и не портит последующий учёт`; `reset() при открытом ожидании сбрасывает счётчик открытых`; `счётчики корня и потомка независимы (Q4 (а))`.
+* `loop/turn_budget_parallel_approvals_test.dart` (тот же change, сценарии `agent-loop` «Параллельные одобрения вычитаются один раз» и «Ожидание одобрения не тратит время хода»; `FakeClock`): `два одновременных одобрения по 60 с, шаг 61 с: active 1 с`; `частично пересекающиеся ожидания 0–30 с и 0–60 с: вычитается 60 с, а не 90 с`; `время хода не убывает между границами шагов, maxDuration срабатывает вовремя`; `непересекающиеся ожидания разных шагов вычитаются как сумма`; `одно ожидание — прежнее значение, maxDuration не срабатывает`.
 * `final_response_hook_test.dart`: `Revise` даёт ещё один шаг с заметкой в payload, но не в транскрипте; лимит ревизий; `Hold` помечает `TurnEnded.held` (LOOP-13).
 * `prompt_while_running_test.dart`: второй `prompt()` → `StateError` (LOOP-10).
 * `empty_completion_test.dart` — критерий матрицы **`core/empty-completion-retried`** (C-07), scripted `StreamFunction`: (а) ответы «пусто», «только thinking», `Done.` → три шага, две подсказки с точным текстом §5.4.1 и `LoopNudgeOrigin(emptyResponse, 1)`, `(…, 2)`; payload шага 2 не содержит пустых `assistant` и содержит обе подсказки; транскрипт содержит пустые ответы; `TurnEnded(completed)`; (б) три пустых ответа → заметка `[Stopped: the model returned an empty response (attempts: 3). Send a message to continue.]` как `MessageStarted`/`MessageDelta`/`MessageEnded` без `StepStarted`, `TurnEnded(completed)`, `beforeFinalResponse` не вызван ни разу; (в) `emptyResponseRetries: 0` → заметка после первого пустого ответа; (г) `maxSteps: 2` и два пустых ответа → `budgetExceeded: steps`, заметки нет; (д) пустой ответ, текст с вызовом, пустой ответ → счётчик сброшен, подсказки обе с `attempt: 1`; (е) после записи в `MemorySessionStore` и `loadSession` payload следующего хода побайтово равен payload живой сессии, реплей не содержит подсказок и содержит заметку (LOOP-14, LOOP-15).

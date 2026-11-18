@@ -455,18 +455,21 @@ void main() {
     return update['availableCommands'] as List<Object?>;
   }
 
-  test('without mcp and config the list is compact, mode, model, status, '
-      'help (D2)', () async {
-    h = await ServerHarness.start();
-    await h.initialize();
+  test(
+    'without mcp and config the list is compact, mode, model, status, usage, '
+    'help (D2)',
+    () async {
+      h = await ServerHarness.start();
+      await h.initialize();
 
-    await newSession('/work/demo');
+      await newSession('/work/demo');
 
-    expect(await announcedCommands(), [
-      ...builtinCommandsBeforeConfig,
-      builtinHelpCommand,
-    ]);
-  });
+      expect(await announcedCommands(), [
+        ...builtinCommandsBeforeConfig,
+        builtinHelpCommand,
+      ]);
+    },
+  );
 
   test('with the mcp capability the list holds the builtin mcp '
       '(scenario "Режимы и опции новой сессии")', () async {

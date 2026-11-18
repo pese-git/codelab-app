@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:codelab_agent_core/codelab_agent_core.dart';
 import 'package:codelab_agent_core/src/compaction/compactor.dart' as engine;
 import 'package:codelab_agent_core/src/compaction/compactor.dart'
-    show CompactionOutcome, CompactionTrigger, Compacted;
+    show CompactionOutcome, CompactionTrigger, Compacted, NothingToCompact;
 import 'package:codelab_agent_core/src/compaction/estimate.dart';
 import 'package:codelab_agent_core/src/compaction/settings.dart';
 import 'package:codelab_agent_core/src/prompts/prompts.g.dart';
@@ -18,10 +18,14 @@ import 'package:codelab_agent_core/testing.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
+import '../host/core_harness.dart' show inMemoryJournal, noExec;
+import '../permissions/fake_gate.dart';
 import '../session/journal_lines.dart' as j;
 import '../session/recording_store.dart';
 import '../skills/skills_support.dart';
 import '../support/models.dart';
+import 'anchor_support.dart';
+import 'region.dart' show summaryOf;
 
 /// Навыки после сжатия — тесты итерации 4, задачи 4.1–4.5 (change
 /// `add-agent-skills`: agent-compaction «Навыки после сжатия», agent-skills
@@ -1016,6 +1020,71 @@ void main() {
       expect(out.tokensAfter - estimate(without), greaterThan(2900));
     });
 
+    test(
+      'D6: the estimate is below the threshold, but the only reason '
+      'there is no gain is the skills message: NothingToCompact('
+      "'no reduction'), no record, no skills.reattached, the active skills "
+      'are as before (change fix-compaction-estimate-and-no-gain, D3, D6)',
+      () async {
+        final catalog = catalogOf([validSkill('big', body: rows(300))]);
+        final rig = _Rig(sid, settings);
+        // Регион — давний ход почти без текста: убираются лишь вызов навыка и
+        // его результат (тело ≈ 3 000 токенов), а возвращается то же тело в
+        // сообщении навыков плюс резюме с обёрткой — «после» не меньше «до».
+        final chain = _Chain(catalog)
+          ..user(40)
+          ..load('big')
+          ..say(30)
+          ..user(30)
+          ..say(2500);
+        await rig.open(chain.records);
+        final activeBefore = [
+          for (final a in activeSkills(
+            rig.writer.snapshot,
+            catalog,
+            const SkillsConfig(),
+          ))
+            a.name,
+        ];
+
+        final out = await rig.compact(catalog, bigWindow);
+
+        expect(out, isA<NothingToCompact>());
+        expect((out as NothingToCompact).reason, 'no reduction');
+        // Характеризационная правка (change `fix-discarded-compaction-usage`,
+        // D1, R2): раньше тут было «журнал не менялся». Теперь единственная
+        // новая запись — служебная запись учёта; записей `compaction` нет.
+        final written = rig.store.appended.single.record;
+        expect(
+          written,
+          isA<CustomRecord>().having(
+            (r) => r.customType,
+            'customType',
+            'codelab.compaction_discarded',
+          ),
+        );
+        expect(rig.compactionRecords, isEmpty);
+        expect(rig.logger.eventsOf('skills.reattached'), isEmpty);
+        final skipped = rig.logger.eventsOf('compaction.skipped').single;
+        expect(skipped.fields['reason'], 'no reduction');
+        expect(
+          skipped.fields['tokens_after'] as int,
+          lessThan(compactionThreshold(bigWindow, settings)),
+          reason:
+              'below the threshold: the skills are not dropped by the window',
+        );
+        expect(activeBefore, ['big']);
+        expect(
+          activeSkills(
+            rig.writer.snapshot,
+            catalog,
+            const SkillsConfig(),
+          ).map((a) => a.name),
+          activeBefore,
+        );
+      },
+    );
+
     // Решение Q49 (б), D20 «M2»: навык, из-за которого оценка выше порога,
     // не запускает новый проход, а выбрасывается по окну с конца списка.
     test('CMP-5 and the window: a skill that lifts the estimate above the '
@@ -1064,6 +1133,75 @@ void main() {
       expect(log.fields['names'], isEmpty);
       expect(log.fields['dropped_window'], 1);
       expect(withSkill.context(catalog).messages, hasLength(3));
+    });
+
+    // Заменил тест D9 предшественника (`fix-compaction-estimate-and-no-gain`,
+    // «навык выбрасывается, если H(after) с ним выше порога»): D9 снят, окно
+    // решает по согласованному `after` (change
+    // `anchor-context-estimate-after-compaction`, D8, CMP-11).
+    test('D8: the window drop compares after only: with the skill after is '
+        'within the threshold, H(after) is not — the skill is NOT dropped, '
+        'one record, dropped_window 0 (change '
+        'anchor-context-estimate-after-compaction, D8, CMP-5)', () async {
+      final catalog = catalogOf([validSkill('mid', body: rows(100))]);
+      // Длинный промпт и якорь ниже эвристики: согласованное «после» с
+      // навыком укладывается в порог (6 144), эвристика проекции — нет.
+      final prompt = 'p' * 12000;
+      _Chain build({Usage usage = Usage.zero}) => _Chain(catalog)
+        ..user(40)
+        ..load('mid')
+        ..say(2000)
+        ..user(30)
+        ..say(2500, usage: usage);
+      final probe = _Rig(sid, settings);
+      await probe.open(build().records);
+      final hBefore = estimateTokens(
+        probe.context(catalog).messages,
+        systemPrompt: prompt,
+      );
+      final rig = _Rig(sid, settings);
+      await rig.open(
+        build(usage: Usage(input: hBefore - 2000, output: 0)).records,
+      );
+      final threshold = compactionThreshold(smallWindow, settings);
+
+      final out =
+          await rig.compact(catalog, smallWindow, systemPrompt: prompt)
+              as Compacted;
+
+      final withSkill = estimateTokens(
+        buildLlmContext(
+          rig.writer.snapshot.withRecord(
+            CompactionRecord(
+              id: 'probe',
+              parentId: rig.writer.snapshot.leafId,
+              timestamp: DateTime.utc(2026),
+              summary: 'S',
+              firstKeptId: out.record.firstKeptId,
+              tokensBefore: 0,
+              tokensAfter: 0,
+              skills: [
+                CompactionSkill(
+                  name: 'mid',
+                  fingerprint: sha(catalog.skills.single.body),
+                ),
+              ],
+            ),
+            'probe',
+          ),
+          skillCatalog: catalog,
+        ).messages,
+        systemPrompt: prompt,
+      );
+      expect(withSkill, greaterThan(threshold), reason: 'H(after) with skill');
+      expect(rig.compactionRecords, hasLength(1));
+      expect(out.record.toJson()['skills'], [
+        {'name': 'mid', 'fingerprint': sha(catalog.skills.single.body)},
+      ]);
+      expect(out.tokensAfter, lessThanOrEqualTo(threshold));
+      final log = rig.logger.eventsOf('skills.reattached').single;
+      expect(log.fields['names'], ['mid']);
+      expect(log.fields['dropped_window'], 0);
     });
 
     test('a small window: two skills of ~2000 tokens; the oldest is dropped '
@@ -1128,10 +1266,13 @@ void main() {
       final rig = _Rig(sid, settings);
       await rig.open(chain.records);
 
+      // CMP-10 / D1: проход с резюме длиннее региона не записывается, поэтому
+      // каждое резюме короче своего региона (раньше тут было `'x' * 16000`),
+      // а оценка после первого прохода всё равно выше порога: нужны проходы.
       await rig.compact(
         catalog,
         smallWindow,
-        summary: 'x' * 16000, // само резюме выше порога: нужны проходы
+        summaryAt: (call) => call == 1 ? 'x' * 400 : 'y' * 40,
       );
 
       expect(rig.compactionRecords.length, greaterThanOrEqualTo(2));
@@ -1265,6 +1406,118 @@ void main() {
       },
     );
   });
+
+  // CMP-11, D4 (change `anchor-context-estimate-after-compaction`): сообщение
+  // навыков после резюме входит в `tokensAfter` и в `raw` якоря сжатия, но
+  // не в хвост — оценка следующего запроса не считает его дважды.
+  group('the skills message is counted once after the compaction (D4, '
+      'CMP-11)', () {
+    test('ModelRequested.estimatedTokens of the next request is tokensAfter '
+        'plus the new message', () async {
+      final port = FakeSkillPort()
+        ..files = SkillFiles(skills: [validSkill('big', body: rows(80))]);
+      final clock = FakeClock();
+      final scripted = ScriptedStreamFunction.fromJson({
+        'steps': [
+          {
+            'reply': [
+              {
+                'toolCall': {
+                  'id': 'c1',
+                  'name': 'skill',
+                  'arguments': {'name': 'big'},
+                },
+              },
+            ],
+            'usage': {'input': 1500, 'output': 20},
+          },
+          {
+            'reply': [
+              {'text': 'a' * 8000},
+            ],
+            'usage': {'input': 3000, 'output': 20},
+          },
+          {
+            'reply': [
+              {'text': 'b' * 8000},
+            ],
+            'usage': {'input': 7500, 'output': 20},
+          },
+          {
+            'reply': [
+              {'text': '## Summary'},
+            ],
+          },
+          {
+            'reply': [
+              {'text': 'Done.'},
+            ],
+          },
+        ],
+      }, clock: clock);
+      final store = MemorySessionStore();
+      final contexts = <LlmContext>[];
+      final core = buildAgentCore(
+        profile: HostProfile.of(
+          'agent-serve',
+        ).narrowed({...inMemoryJournal, ...noExec}),
+        services: AgentCoreServices(
+          baseEnv: MemoryExecutionEnv(cwd: '/proj'),
+          gate: FakeGate(),
+          logger: RecordingLogger(clock: clock),
+          clock: clock,
+          ids: SequentialIdGenerator(),
+          sessions: store,
+          skillFiles: port,
+          projectFiles: AnchorAgents(4000),
+        ),
+        config: CoreConfig(
+          defaultModel: modelWithWindow(16384),
+          compaction: anchorCompaction,
+          permissions: const PermissionsConfig(mode: ModeId.bypass),
+        ),
+        streamFunction: (ref, context, {cancel}) {
+          contexts.add(context);
+          return scripted.call(ref, context, cancel: cancel);
+        },
+      );
+      addTearDown(core.runtime.dispose);
+      final session = await core.runtime.createSession(
+        SessionSpec(cwd: '/proj'),
+      );
+      final events = <AgentEvent>[];
+      session.events.listen(events.add);
+      await session.prompt(const [TextContent('first task')]);
+      await session.prompt(const [TextContent('second task')]);
+
+      // Следующий prompt дожидается фонового сжатия.
+      await session.prompt(const [TextContent('third task')]);
+
+      final record = (await store.open(
+        session.id,
+      )).records.whereType<CompactionRecord>().single;
+      expect(
+        record.toJson()['skills'],
+        isNotNull,
+        reason: 'the premise: the skill is in the compaction record',
+      );
+      final request = contexts.lastWhere((c) => c.tools.isNotEmpty);
+      expect(
+        request.messages.where((m) => textOf(m).contains('<skill name="big"')),
+        hasLength(1),
+        reason: 'the premise: the skills message is in the context',
+      );
+      final requested = firstRequestOfTurn(events, 2);
+      expect(requested, isNotNull);
+      final tail = UserMessage([
+        const TextContent('third task'),
+      ], timestamp: DateTime.utc(2026));
+      expect(
+        requested!.estimatedTokens,
+        record.tokensAfter + estimateMessageTokens(tail),
+      );
+    });
+  });
 }
 
 const _systemPrompt = 'You are CodeLab.';
@@ -1375,11 +1628,11 @@ final class _Chain {
   );
 
   /// Ответ модели размером в [tokens].
-  void say(int tokens) => _add(
+  void say(int tokens, {Usage usage = Usage.zero}) => _add(
     AssistantMessage(
       content: [TextContent('a' * ((tokens - 4) * 4))],
       model: testModel,
-      usage: Usage.zero,
+      usage: usage,
       stopReason: StopReason.stop,
       timestamp: _at,
     ),
@@ -1512,16 +1765,18 @@ final class _Rig {
     SkillsConfig skills = const SkillsConfig(),
     void Function(LlmContextProjection)? onCompacted,
     String summary = 'S',
+    String Function(int call)? summaryAt,
+    String systemPrompt = _systemPrompt,
   }) => engine.compact(
     writer: writer,
     trigger: CompactionTrigger.manual,
     summarize: (request, cancel) async {
       summaries++;
-      return summary;
+      return summaryOf(summaryAt?.call(summaries) ?? summary);
     },
     settings: settings,
     window: window,
-    systemPrompt: _systemPrompt,
+    systemPrompt: systemPrompt,
     tools: const [],
     ids: SequentialIdGenerator(prefix: 'cmp'),
     clock: FakeClock(),

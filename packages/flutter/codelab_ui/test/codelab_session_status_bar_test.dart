@@ -17,17 +17,18 @@
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _usageKey = ValueKey('status-bar-usage');
 const _costKey = ValueKey('status-bar-cost');
 const _contextKey = ValueKey('status-bar-context');
 
-Widget _bar(CodeLabSessionStatusData data) => FluentApp(
+Widget _bar(CodeLabSessionStatusData data, {VoidCallback? onTap}) => FluentApp(
   home: ScaffoldPage(
     content: Align(
       alignment: Alignment.bottomCenter,
-      child: CodeLabSessionStatusBar(data: data),
+      child: CodeLabSessionStatusBar(data: data, onTap: onTap),
     ),
   ),
 );
@@ -182,6 +183,106 @@ void main() {
     expect(find.byKey(_usageKey), findsNothing);
     expect(find.byKey(_costKey), findsNothing);
     expect(find.byKey(_contextKey), findsNothing);
+  });
+
+  // Клик по строке (change `add-desktop-usage-pane`, D6, R9; agent-workbench-ui
+  // «Строка статуса сессии под композером», сценарии «Клик открывает панель
+  // Usage» и «Строка без данных некликабельна»). Колбэк приходит от app
+  // только при доступной панели; виджет не решает, когда строка кликабельна.
+  group('onTap (D6)', () {
+    const data = CodeLabSessionStatusData(
+      modelLabel: 'GPT-5',
+      usage: CodeLabStatusSegment(label: '12.3k → 1.2k', tooltip: 'exact'),
+    );
+    final bar = find.byType(CodeLabSessionStatusBar);
+    final clickCursor = find.descendant(
+      of: bar,
+      matching: find.byWidgetPredicate(
+        (w) => w is MouseRegion && w.cursor == SystemMouseCursors.click,
+      ),
+    );
+
+    testWidgets('a click on the row calls onTap', (tester) async {
+      var taps = 0;
+      await tester.pumpWidget(_bar(data, onTap: () => taps++));
+
+      await tester.tap(find.text('GPT-5'));
+      await tester.pump();
+
+      expect(taps, 1);
+    });
+
+    testWidgets('the gap between segments is part of the row too', (
+      tester,
+    ) async {
+      var taps = 0;
+      await tester.pumpWidget(_bar(data, onTap: () => taps++));
+      final model = tester.getRect(find.text('GPT-5'));
+      final usage = tester.getRect(find.byKey(_usageKey));
+      final gap = Offset((model.right + usage.left) / 2, model.center.dy);
+
+      await tester.tapAt(gap);
+      await tester.pump();
+
+      expect(taps, 1);
+    });
+
+    testWidgets('a click on a segment also calls onTap and keeps its '
+        'tooltip', (tester) async {
+      var taps = 0;
+      await tester.pumpWidget(_bar(data, onTap: () => taps++));
+
+      await tester.tap(_in(_usageKey, find.text('12.3k → 1.2k')));
+      await tester.pump();
+
+      expect(taps, 1);
+      expect(_tooltipOf(tester, _usageKey), 'exact');
+    });
+
+    testWidgets('the row shows the hand cursor', (tester) async {
+      await tester.pumpWidget(_bar(data, onTap: () {}));
+
+      expect(clickCursor, findsWidgets);
+    });
+
+    testWidgets('Enter and Space on the focused row call onTap', (
+      tester,
+    ) async {
+      var taps = 0;
+      await tester.pumpWidget(_bar(data, onTap: () => taps++));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(taps, 1);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+      expect(taps, 2);
+    });
+
+    testWidgets('without onTap the row is not clickable: no hand cursor and '
+        'no focus stop', (tester) async {
+      await tester.pumpWidget(_bar(data));
+
+      expect(clickCursor, findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final focus = FocusManager.instance.primaryFocus;
+      expect(
+        focus == null ||
+            find
+                .descendant(
+                  of: bar,
+                  matching: find.byWidget(focus.context!.widget),
+                )
+                .evaluate()
+                .isEmpty,
+        isTrue,
+        reason: 'the row must not take keyboard focus without onTap',
+      );
+    });
   });
 
   test('data compares by value', () {

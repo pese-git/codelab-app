@@ -617,17 +617,84 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    сессии в текущем поколении соединения; дубли и опоздания отбрасываются. Каждый снимок с `turnId` заменяет
    `lastTurn` агрегатом `turn` (тот же `turnId` — ход идёт); снимок без `turnId` `lastTurn` не меняет;
    новый `turnId` без разобранного `turn` — `lastTurn` пуст (change `add-usage-extension`, D22 п. 2).
-   `session` и `context` меняет каждый снимок. Клиент ничего не суммирует и
-   окно модели не оценивает: сумму сессии считает агент (после `session/load` она неполная — причина
-   `beforeLoad`, полная — change `add-usage-ledger`). Деньги приходят десятичной строкой и хранятся в
+   `session` и `context` меняет каждый снимок. Число ходов агрегата (`session.turns`) kit хранит в
+   `UsageTotals.turns`: целое ≥ 0 — значение, иной тип или отрицательное — `null` с
+   `usage.decode_failed` (`field: <агрегат>.turns`), без поля — `null`; у агрегата `turn` поля нет.
+   Kit число ходов сам не выводит и из журнала не берёт (change `fix-usage-pane-live-cards`, D2;
+   панель Usage строит по нему карточку Turns · steps из живых снимков, §12.3 A17 п. 3). Клиент ничего не суммирует и
+   окно модели не оценивает: сумму сессии считает агент. Агент CodeLab после change `add-usage-ledger`
+   засевает её свёрткой журнала при `session/load` и сразу после ответа шлёт снимок `trigger: "load"`
+   (D8); причину `beforeLoad` ставят только другие или старые агенты. Деньги приходят десятичной строкой и хранятся в
    целых микроединицах: сумма дробных долларов в `double` накапливает ошибку. Целая часть — не более
    9 цифр, чтобы микроединицы оставались точным целым и на web; большее значение — цена неизвестна
    (D9, D22 п. 3). `session/load`
-   сбрасывает `usage` сессии в `awaiting` или `unknown`. Смена соединения сбрасывает `lastSeq` по
+   сбрасывает `usage` сессии в `awaiting` или `unknown` в начале загрузки, до отправки запроса, а не по
+   ответу: так снимок `load`, пришедший после ответа, не стирается, в каком бы порядке kit ни обработал
+   ответ и уведомление. Снимок для сессии, которая загружается, но ещё не зарегистрирована в рабочем
+   пространстве, ждёт регистрации (хранится последний по `seq`; при сбое загрузки — отброс с
+   `usage.unknown_session`). `UsageTrigger.load` `lastTurn` не меняет (change `add-usage-ledger`, D10). Смена соединения сбрасывает `lastSeq` по
    *поколению уведомления*, а не по началу `reconnect` в kit (`suspend()`): старый агент ещё может
    прислать снимок после начала `reconnect`, а новый агент начнёт с `seq: 1` (change
    `add-usage-extension`, D21 Т2, Т4). Свёртка — чистый класс без зависимости от `ClientWorkspace`;
    её же использует тест корпуса фикстур.
+3a. **Журнал usage** (change `add-usage-ledger`, D6, D10). История по ходам и шагам — запросом
+   `_codelab/session/usage/ledger`, если агент объявил `usageLedger`. `SessionView.usageLedger` —
+   закрытая иерархия `unavailable` / `idle` / `loading(previous?)` / `loaded(view)` /
+   `failed(reason, previous?)`. `ClientWorkspace.refreshUsageLedger(sessionId, {rebuild})`: на сессию
+   один запрос в полёте, вызовы во время полёта сливаются в один следующий (`rebuild` побеждает);
+   ответ старого поколения соединения или старой загрузки сессии отбрасывается (`usage.ledger.stale`);
+   переподключение и `session/load` сбрасывают состояние в `idle` или `unavailable`. Разбор —
+   `UsageLedgerDecoder` с теми же правилами денег, валюты и причин, что `UsageDecoder` (общий разбор
+   агрегата). Шаг несёт `toolCallIds`: хост подписывает шаг по транскрипту. Kit журнал со снимками не
+   сливает и сам не суммирует; когда обновлять, решает хост по `usageLedger.seq` и `usage.lastSeq`
+   (панель Usage desktop — change `add-desktop-usage-pane`, D3: автоматический запрос, пока панель
+   показана и сессия свободна, при `seq` журнала меньше `usage.lastSeq`, не больше одного на
+   значение `lastSeq`, после `failed` — без автоповтора; §12.3 A17). Возможности агента kit берёт не только из
+   результата `connect`, но и из потока состояний соединения (прогон фикстур, где хост сам ведёт
+   `AcpClientApplication`): заменяется весь набор возможностей, а состояние usage и журнала
+   сбрасывается в `unavailable` или `idle` только в `connect`/`reconnect` kit. Слитый следующий запрос
+   перед отправкой заново проверяет объявление, `dispose`, эпоху и поколение; `sessionId` ответа
+   сверяется с запрошенным (`decode`, `mismatch`); строки агента (`title`, `model`, `ledger.reason`,
+   `toolCallIds`) очищаются от C0/C1 и ограничиваются длиной (`title` — 64 руны). Сессия, которой
+   нет в рабочем пространстве, — `Future.error(ClientWorkspaceException)`. Сорвавшийся
+   `session/load` прежние числа usage не восстанавливает (change `add-usage-ledger`, R10).
+3b. **Бюджет хода** (C-13, change `add-desktop-usage-pane`, D7–D9; решение пользователя Q5 (а)).
+   Снимки `step` и `turn` агента CodeLab несут необязательное поле `budget`, если у хода задан
+   хотя бы один из лимитов `max_tokens`, `max_cost`, `max_duration`: `steps` `{used, limit}` всегда,
+   `tokens` `{used, limit}`, `cost` `{used?, limit}` (десятичные строки; `used` нет, если у модели
+   нет цен — цикл тогда лимит не проверяет), `duration` `{usedMs, limitMs}` — только заданные.
+   Числа считает цикл агента тем же правилом, что проверку бюджета (токены — `input + output` с
+   потомками, без кэша; время — без ожидания одобрения), поэтому клиент их не пересчитывает.
+   `UsageDecoder` кладёт поле в `UsageView.budget` (`TurnBudgetView`): подполя необязательны (агент
+   шлёт только заданные лимиты), деньги — правилом `cost` (`cost.used` нет — цена неизвестна; без
+   `currency` — общее предупреждение `currency`/`required_with_cost`), незнакомые ключи — молча.
+   Неверное подполе — подполя нет, `usage.decode_failed` с `field: budget.<подполе>`; `budget` не
+   объект — `field: budget`; без единого известного подполя `budget` считается отсутствующим.
+   `budget` читается только у снимка с `turnId`: у снимка без `turnId` (в том числе с `turnId`
+   неверного типа) поле не разбирается и предупреждений `budget*` не даёт.
+   `ended` — «итог хода» (снимок с поводом `turn`; решение пользователя Q11 (а)); снимок `turn` того же
+   хода без `budget` ставит `ended` при прежних числах; `ended` липкий для того же `turnId` — снимок
+   `step` того же хода после итогового `turn` обновляет числа, но `ended` не снимает. `turnId` и `receivedAt` — момент применения: `UsageFold` чистый, его передаёт вызывающий
+   (`apply(…, receivedAt:)`) по часам рабочего пространства (`ClientWorkspace(clock:)`). Свёртка:
+   снимок с `turnId` и `budget` заменяет его; тот же `turnId` без `budget` — не меняет; новый `turnId`
+   без `budget` — `null`; снимок без `turnId` (`compaction`, `compactionDiscarded`, `load`,
+   незнакомый повод) — не меняет; переподключение и `session/load` сбрасывают его вместе с `usage`.
+   Время между снимками досчитывает хост по `receivedAt` и ожиданиям одобрений корня (п. 3c;
+   §12.3 A17 п. 6); kit `DateTime.now` в проекции не зовёт. Лимит стоимости от 10⁹ USD kit не
+   разбирает (9 цифр целой части) — подполя `cost` нет (design.md change, D9).
+3c. **Ожидания одобрений корня хода** (change `fix-usage-pane-live-cards`, D3; решения пользователя
+   2026-11-18, Q2 (б), Q4 (а)). `SessionView.approvalWaits` — интервалы `requestedAt` /
+   `resolvedAt?` одобрений последнего хода сессии по порядку `requestedAt`. Метки ставит домен
+   `codelab_client_acp` (`ApprovalRequest.requestedAt` при приходе `session/request_permission`,
+   `resolvedAt` при ответе, завершении или отмене хода и потере соединения); kit своих меток не
+   ставит. Входят только одобрения корня: запрос, `subagentRequester` которого разбирается как
+   спрашивающий потомок (правило `PendingApprovalView.subagent`), не входит — у потомка в цикле
+   свой счётчик ожиданий, и время корня его ожидание не останавливает. Ожидающее —
+   `resolvedAt == null`; решённое без `resolvedAt` не входит. Список и элементы — freezed-значения,
+   хост сравнивает их по значению (ключ кэша панели Usage). Часы: `receivedAt` — по часам рабочего
+   пространства, метки одобрений — `DateTime.now` в `codelab_client_acp`; в app и CLI это одни
+   системные часы, поэтому формулу времени проверяют тесты маппера хоста на собранном вручную
+   `SessionView`, а тест kit — перенос меток из домена.
 4. **Без расширения** `UsageSupport.unknown`: сегменты токенов, стоимости и контекста отсутствуют
    (не «0»). Это обычный режим со сторонним агентом. `awaiting` — агент объявил `usage`, снимков ещё
    нет. `compaction soon` — только при известном `compactAt` (порог автосжатия) и
@@ -650,6 +717,9 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    * контекст: без `size`, при `size ≤ 0` или `used = 0` — сегмента нет; иначе целый процент вниз
      (`79.6 %` → `79%`), `<1%` при нулевом проценте, больше 100 % — как есть; уровень по тому же
      проценту: ≥ 80 — `warning`, ≥ 95 — `danger`. Цвет и тон выбирает хост.
+   * точная запись для экспорта (`formatUsageMoneyExact`, change `add-desktop-usage-pane`, D5):
+     форма `cost` на проводе — целая часть, точка, до 6 знаков без хвостовых нулей, ноль — `0`,
+     без символа валюты; разбор строки даёт исходные микроединицы (CSV панели Usage, §12.3 A17).
    Состав сегментов — у хостов: desktop §12.3.3 (A7), CLI §12.2.6.
 5. **Ветка git.** `GitBranchProbe.branchOf(cwd)` вызывается при открытии сессии, после каждого
    хода и не чаще раза в 5 с; результат кэшируется. Реализация в `codelab_client_io` читает
@@ -860,7 +930,43 @@ Setext-заголовки, HTML, сноски и ссылки-определен
 * `usage/usage_fixture_test.dart` (change `add-usage-extension`, задача 2.7b; `runClientFixture`, как
   `transcript/transcript_projector_test.dart`): после `acp/prompt-usage-steps` — `reported`,
   `lastTurn` и `session` равны последнему снимку фикстуры, клиент не шлёт кадров в ответ на
-  уведомления; заметка хода `acp/prompt-turn-budget-exceeded` — `The turn stopped: budget exceeded: tokens.`
+  уведомления; заметка хода `acp/prompt-turn-budget-exceeded` — `The turn stopped: budget exceeded: tokens.`;
+  после `acp/usage-ledger-request` (change `add-usage-ledger`, задача 3.5) — `usageLedger` `loaded`, один
+  ход, два шага.
+* `usage/usage_ledger_decoder_test.dart`, `usage/session_usage_ledger_test.dart` (change
+  `add-usage-ledger`, задачи 3.2, 3.3): форма ответа журнала, деньги и причины, отказ без
+  обязательных полей; `unavailable`/`idle`/`loading`/`loaded`/`failed`, слияние вызовов, отброс
+  ответа старого поколения. `usage/session_usage_test.dart` (задача 3.4): снимок `load` не стирается
+  сбросом загрузки и ждёт регистрации сессии.
+* `usage/usage_format_test.dart` (change `add-desktop-usage-pane`, задача 1.2):
+  `formatUsageMoneyExact` — `2.26`, `0.000041`, `0`, `999999999.999999`, обратимость разбором `cost`.
+  `usage/usage_budget_test.dart` (задача 3.1): разбор `budget`, подполя и предупреждения
+  `budget.<подполе>`, свёртка по `turnId` (в том числе `compactionDiscarded`), `receivedAt` по часам
+  рабочего пространства, сброс при переподключении и `session/load`; клиентская роль
+  `acp/prompt-usage-budget` — в `usage/usage_fixture_test.dart`.
+* `usage/usage_totals_turns_test.dart` (change `fix-usage-pane-live-cards`, задача 1.1; п. 3, D2):
+  группа `UsageDecoder` — `session.turns 3 is kept; steps stay as they were`, `zero turns is a value,
+  not an absence`, `session.turns as <вид>: null, one wrong_type warning, the snapshot is applied`,
+  `without the field turns is null and there is no warning`, `the turn aggregate carries no turns: null
+  without a warning`, `turn.turns of a wrong type is named by its own aggregate`, `the warning does not
+  carry the raw value (AGENTS.md §10)`; группа `UsageLedgerDecoder (the shared aggregate parser, D2)` —
+  `total.turns is kept, turnCount is still the number of turns`, `total.turns wins over the number of
+  ledger records: …`, `total.turns of a wrong type: null, turnCount is the former 0 …`; группа
+  `SessionView.usage` — `a live snapshot with turns 3 and steps 7 gives usage.session.turns 3; the turn
+  aggregate has none (scenario «Число ходов сессии»)`, `turns as a string: null, the snapshot is
+  applied, one usage.decode_failed with field session.turns and no raw value; …`.
+* `approvals/approval_waits_test.dart` (change `fix-usage-pane-live-cards`, задача 2.3; п. 3c, D3):
+  группа `root approvals of the current turn` — метки домена, порядок по приходу, ожидающее с
+  `resolvedAt == null`, пустой список до запроса, ответ закрывает интервал; группа `a child request
+  (scenario «Одобрение субагента»)` — запрос потомка не входит в `approvalWaits`, но есть в
+  `pendingApprovals`, рядом с запросом корня в списке только корень, решённый запрос потомка тоже не
+  входит; группа `turn boundaries` — `a new turn starts with an empty list (scenario «Новый ход»)`,
+  отмена хода и потеря соединения закрывают ожидающий интервал меткой домена; группа
+  `approvalWaitViews on a hand-built session` — решённое без `resolvedAt` не входит, ожидающее с
+  оставшейся меткой `resolvedAt` даёт `null`, без `requestedAt` не входит, порядок по `requestedAt`,
+  только последний ход, равенство по значению; группа `revisions without a change of the approvals` —
+  `agent chunks after a request leave approvalWaits equal by value (scenario «Ревизия без изменения
+  ожиданий»)`.
 * `attachments/prompt_content_builder_test.dart`: PNG с расширением `.jpg` → `image/png`; без
   `image` в возможностях → `resource_link` и пометка; `embeddedContext` → `resource`; путь вне
   `cwd` без подтверждения не отправлен; одиннадцатое вложение → `tooMany`; `.env` →

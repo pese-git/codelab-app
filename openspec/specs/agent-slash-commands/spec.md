@@ -1,7 +1,7 @@
 # agent-slash-commands Specification
 
 ## Purpose
-Шаблоны промптов и встроенные команды Dart-агента. Шаблоны — `*.md` из `$CODELAB_HOME/prompts/` и, только для доверенного проекта, из `<cwd>/.codelab/prompts/`: они публикуются клиенту через `available_commands_update`, а `/name args` разворачивается одним проходом подстановки `$ARGUMENTS` и `$1..$9`. Встроенные команды MVP идут в списке первыми, в порядке `compact` (только при capability `compaction`), `mode`, `model`, `status`, `config` (только при источнике конфигурации и `configCommand: true`, у `serve --ws` её нет), `mcp` (только при capability `mcp`), `help`, и исполняются без модели: `/compact [focus]` сжимает историю, `/mode` и `/model` меняют режим и модель, `/status` и `/help` показывают состояние и список команд. Команды, меняющие состояние, отвечают по факту применения; при `session/cancel` ответ на проводе — `cancelled`. Список команд сессии строится при открытии и перезагрузкой конфигурации не меняется. Зарезервированные имена не переопределяются. Слово после `/` без встроенной команды и шаблона — неизвестная команда: агент отвечает `Unknown command: /x. Run /help to list commands.`, модель не вызывается; необъявленные `/config` и `/mcp` — тоже неизвестные команды. Журнал сессии хранит исходную команду шаблона (`MessageRecord.command`) для реплея и заголовка. MCP prompts как команды — после MVP (строка E-24 матрицы целей). Решения — `design.md` архивных change `add-agent-project-files` (D7–D9), `add-config-writer-and-reload` (D9, D12) и `2026-11-10-add-agent-builtin-slash-commands` (D1–D14, Q1–Q11), `agent-core-architecture` §13.4, §13.6, §17.2, §17.5.6, §17.5.7.
+Шаблоны промптов и встроенные команды Dart-агента. Шаблоны — `*.md` из `$CODELAB_HOME/prompts/` и, только для доверенного проекта, из `<cwd>/.codelab/prompts/`: они публикуются клиенту через `available_commands_update`, а `/name args` разворачивается одним проходом подстановки `$ARGUMENTS` и `$1..$9`. Встроенные команды MVP идут в списке первыми, в порядке `compact` (только при capability `compaction`), `mode`, `model`, `status`, `usage` (всегда; change `2026-11-18-add-usage-ledger`, D5), `config` (только при источнике конфигурации и `configCommand: true`, у `serve --ws` её нет), `mcp` (только при capability `mcp`), `help`, и исполняются без модели: `/compact [focus]` сжимает историю, `/mode` и `/model` меняют режим и модель, `/status` и `/help` показывают состояние и список команд, `/usage` — отчёт журнала usage сессии. Команды, меняющие состояние, отвечают по факту применения; при `session/cancel` ответ на проводе — `cancelled`. Список команд сессии строится при открытии и перезагрузкой конфигурации не меняется. Зарезервированные имена не переопределяются. Слово после `/` без встроенной команды и шаблона — неизвестная команда: агент отвечает `Unknown command: /x. Run /help to list commands.`, модель не вызывается; необъявленные `/config` и `/mcp` — тоже неизвестные команды. После шаблонов в списке идут команды навыков `skill:<name>` (capability `agent-skills`); `/help` помечает их ` (skill)`, `/skill:<нет такого>` отвечает `Unknown skill: <name>. Run /help to list commands.`; шаблоны и тела навыков разворачиваются общей подстановкой, где литерал `$` записывается как `$$` или `\$` (change `2026-11-18-add-agent-skills`, D8, D18). Журнал сессии хранит исходную команду шаблона (`MessageRecord.command`) для реплея и заголовка. MCP prompts как команды — после MVP (строка E-24 матрицы целей). Решения — `design.md` архивных change `add-agent-project-files` (D7–D9), `add-config-writer-and-reload` (D9, D12) и `2026-11-10-add-agent-builtin-slash-commands` (D1–D14, Q1–Q11), `agent-core-architecture` §13.4, §13.6, §17.2, §17.5.6, §17.5.7.
 ## Requirements
 ### Requirement: Каталоги шаблонов команд и доверие
 Шаблоны команд SHALL читаться из `*.md` первого уровня, без рекурсии:
@@ -39,7 +39,7 @@
 - **THEN** команды `help` из шаблона нет, есть диагностика `reserved_name`, промпт `/help` не разворачивается этим файлом
 
 ### Requirement: Список команд сессии
-`AgentSession.commands` SHALL возвращать сначала встроенные команды сессии (требования «Встроенные команды MVP» и «Встроенные команды config и mcp») в порядке §13.4 — `compact`, `mode`, `model`, `status`, `config`, `mcp`, `help`; отсутствующая команда пропускается, порядок остальных не меняется (design.md change `add-agent-builtin-slash-commands`, D2), — затем команды шаблонов `SlashCommand {name, description, inputHint, source: template}` в байтовом порядке имён. `inputHint` шаблона SHALL быть `argument-hint`, иначе `"arguments"`, если тело содержит `$ARGUMENTS` или `$1`…`$9`, иначе `null`. Список строится при открытии сессии и НЕ SHALL меняться до её закрытия, в том числе при перезагрузке конфигурации (design.md change `add-config-writer-and-reload`, D9). Инструменты модели в список НЕ SHALL попадать (R-07).
+`AgentSession.commands` SHALL возвращать сначала встроенные команды сессии (требования «Встроенные команды MVP» и «Встроенные команды config и mcp») в порядке §13.4 — `compact`, `mode`, `model`, `status`, `usage`, `config`, `mcp`, `help` (`usage` — change `add-usage-ledger`, D5); отсутствующая команда пропускается, порядок остальных не меняется (design.md change `add-agent-builtin-slash-commands`, D2), — затем команды шаблонов `SlashCommand {name, description, inputHint, source: template}` в байтовом порядке имён, затем команды навыков `skill:<name>` (`source: skill`) для навыков с `user-invocable` в байтовом порядке имён навыков (capability `agent-skills`, «Команды навыков»; design.md change `add-agent-skills`, D8). `inputHint` шаблона SHALL быть `argument-hint`, иначе `"arguments"`, если тело содержит `$ARGUMENTS` или `$1`…`$9`, иначе `null`; `inputHint` навыка — `argument-hint`, иначе `"arguments"`. Список строится при открытии сессии и НЕ SHALL меняться до её закрытия, в том числе при перезагрузке конфигурации (design.md change `add-config-writer-and-reload`, D9). Инструменты модели, в том числе `skill`, в список НЕ SHALL попадать (R-07, SKL-6).
 
 #### Scenario: Подсказка ввода
 - **WHEN** у `review.md` нет `argument-hint`, а тело содержит `$1`, у `test.md` нет ни подсказки, ни плейсхолдеров
@@ -47,11 +47,15 @@
 
 #### Scenario: Встроенные команды идут первыми
 - **WHEN** ядро собрано с `ConfigSource`, capability `compaction` и capability `mcp`, а у сессии есть шаблон `review`
-- **THEN** список — `compact`, `mode`, `model`, `status`, `config`, `mcp`, `help`, `review`
+- **THEN** список — `compact`, `mode`, `model`, `status`, `usage`, `config`, `mcp`, `help`, `review`
 
 #### Scenario: Без capability compaction и без конфига
 - **WHEN** ядро собрано без `ConfigSource`, с выключенными capability `compaction` и `mcp`, шаблонов нет
-- **THEN** список — `mode`, `model`, `status`, `help`
+- **THEN** список — `mode`, `model`, `status`, `usage`, `help`
+
+#### Scenario: Навыки после шаблонов
+- **WHEN** ядро собрано без `ConfigSource`, с выключенными capability `compaction` и `mcp`, у сессии есть шаблон `review`, навыки `release-notes` (с `argument-hint: "<from-tag> <to-tag>"`) и `flutter-golden` (без подсказки) и навык `internal` с `user-invocable: false`
+- **THEN** список — `mode`, `model`, `status`, `usage`, `help`, `review`, `skill:flutter-golden` (`inputHint: "arguments"`), `skill:release-notes` (`inputHint: "<from-tag> <to-tag>"`); `skill:internal` и `skill` в списке нет
 
 #### Scenario: Перезагрузка не меняет список
 - **WHEN** после открытия сессии перезагрузка добавляет проект в `trusted_projects`, и у проекта есть `.codelab/prompts/fix.md`
@@ -64,10 +68,12 @@
 - `$ARGUMENTS` → остаток строки как введён (`raw`: после ведущих пробелов, без завершающего `\r?\n`);
 - `$1`…`$9` → аргументы `splitArguments`, отсутствующий — пустая строка;
 - `$$` → `$`;
+- `\$` → `$`; `\$1` и `\$ARGUMENTS` поэтому остаются литералами `$1` и `$ARGUMENTS` (design.md change `add-agent-skills`, D8; решения пользователя Q7, Q15 (а)): литерал `$` записывается и как `$$`, и как `\$` — в шаблонах и в телах навыков;
+- `\` перед любым другим символом остаётся литералом; `\\` копируется как два символа, и следующий за ним `$…` разбирается обычным правилом (`\\$1` → `\\` и первый аргумент) — так шаблоны с `\\` до этого change не меняют смысла (design.md change `add-agent-skills`, D18);
 - `$10` → первый аргумент и `0`;
 - `$` перед другим символом остаётся литералом.
 
-Подставленные значения НЕ SHALL сканироваться повторно; `{{…}}` в теле не обрабатывается. Без плейсхолдеров в теле при непустом `raw` SHALL дописываться `\n\nARGUMENTS: <raw>`. `splitArguments`: разделитель — пробельные символы; `"…"` и `'…'` группируют слово; внутри `"…"` экранируются `\"` и `\\`; вне кавычек `\` даёт следующий символ; незакрытая кавычка закрывается концом ввода (D8). Разбор НЕ SHALL исполнять shell и читать файлы (SKL-8).
+Те же правила подстановки SHALL разворачивать тела навыков (`/skill:<name>`, capability `agent-skills`, «Команды навыков»); у навыка хвост `ARGUMENTS:` идёт после блока навыка, а не внутри него, и в содержимое активации не входит. Подставленные значения НЕ SHALL сканироваться повторно; `{{…}}` в теле не обрабатывается. Без плейсхолдеров в теле (`\$…` плейсхолдером не считается) при непустом `raw` SHALL дописываться `\n\nARGUMENTS: <raw>`. `splitArguments`: разделитель — пробельные символы; `"…"` и `'…'` группируют слово; внутри `"…"` экранируются `\"` и `\\`; вне кавычек `\` даёт следующий символ; незакрытая кавычка закрывается концом ввода (D8). Разбор НЕ SHALL исполнять shell и читать файлы (SKL-8).
 
 #### Scenario: Шаблон с аргументами
 - **WHEN** тело `review.md` — `Review $1 focusing on $2. All: $ARGUMENTS`, а промпт — `/review lib/parser "error handling"`
@@ -96,6 +102,26 @@
 #### Scenario: Наблюдаемость
 - **WHEN** разворачивается `/review secret-token-123`
 - **THEN** лог `command.expanded` содержит `name: review`, `source: template`, `args_bytes` и не содержит `secret-token-123`
+
+#### Scenario: Литерал доллара через обратную косую
+- **WHEN** тело шаблона — `cost \$1, arg $1`, а промпт — `/t x`
+- **THEN** модель получает `cost $1, arg x`
+
+#### Scenario: Литерал доллара удвоением
+- **WHEN** тело шаблона — `cost $$1, arg $1`, а промпт — `/t x`
+- **THEN** модель получает `cost $1, arg x`
+
+#### Scenario: Литерал доллара в навыке
+- **WHEN** тело навыка `notes` — `Use \$HOME and $$PATH; topic: $1`, а промпт — `/skill:notes cache`
+- **THEN** блок навыка содержит `Use $HOME and $PATH; topic: cache`
+
+#### Scenario: Обратная косая перед обратной косой
+- **WHEN** тело шаблона — `a\\$1`, а промпт — `/t x`
+- **THEN** модель получает `a\\x`
+
+#### Scenario: Отсутствующий аргумент
+- **WHEN** тело — `[$1|$2]`, а промпт — `/t a`
+- **THEN** модель получает `[a|]`: отсутствующий аргумент — пустая строка, как до этого change (у Claude Code плейсхолдер остался бы текстом — сознательное отличие, design.md change `add-agent-skills`, решение Q28)
 
 ### Requirement: Исходный текст команды в журнале
 Запись `message` сообщения пользователя, полученного разворачиванием, SHALL нести поле записи `command: {"source": "template", "name": <имя>, "args": <raw>}`. Модель поле НЕ SHALL видеть. `replay()` для такой записи SHALL отдавать первым блоком текст `/<name>` (или `/<name> <args>` при непустом `args`), затем остальные блоки сообщения, кроме развёрнутого текста.
@@ -329,7 +355,7 @@
 - **THEN** текущий режим — `plan`, текущая модель — выбранная; реплей не содержит `user_message_chunk` с текстами `/mode plan` и `/model …`
 
 ### Requirement: Неизвестная команда
-Если первый текстовый блок промпта начинается с `/`, слово до первого пробельного символа соответствует `^[A-Za-z0-9][A-Za-z0-9:_-]*$`, но не является ни объявленной в сессии встроенной командой, ни именем шаблона, `AgentSession.prompt` НЕ SHALL отправлять промпт модели и SHALL отвечать без модели одним сообщением агента `Unknown command: /<name>. Run /help to list commands.` (`agent-core-architecture` §13.6, правило 3; §17.2.6, шаг 7; R-08); `<name>` обрезается до 64 символов по рунам. Ход — по общим правилам встроенных команд: `TurnEnded` с `endTurn`, ни промпт, ни ответ в журнал не пишутся, слот хода занят на время ответа. Лог — `command.unknown {session_id, name_bytes}` (info), без имени и аргументов: имя пришло от пользователя (`AGENTS.md` §16).
+Если первый текстовый блок промпта начинается с `/`, слово до первого пробельного символа соответствует `^[A-Za-z0-9][A-Za-z0-9:_-]*$`, но не является ни объявленной в сессии встроенной командой, ни именем шаблона, ни командой навыка (слово с префиксом `skill:` и непустым именем при включённой capability `skills` и непустом снимке навыков сессии обрабатывает требование «Команды навыков» capability `agent-skills`: ответ на отсутствующий навык — `Unknown skill: <name>. Run /help to list commands.`; без capability, с пустым снимком или с пустым именем — неизвестная команда этого требования), `AgentSession.prompt` НЕ SHALL отправлять промпт модели и SHALL отвечать без модели одним сообщением агента `Unknown command: /<name>. Run /help to list commands.` (`agent-core-architecture` §13.6, правило 3; §17.2.6, шаг 7; R-08); `<name>` обрезается до 64 символов по рунам. Ход — по общим правилам встроенных команд: `TurnEnded` с `endTurn`, ни промпт, ни ответ в журнал не пишутся, слот хода занят на время ответа. Лог — `command.unknown {session_id, name_bytes}` (info), без имени и аргументов: имя пришло от пользователя (`AGENTS.md` §16).
 
 Слово, которое не соответствует регулярному выражению (`/usr/bin/foo`), и блок с ведущим пробелом командой не являются и уходят модели без изменений (требование «Разворачивание команды»). Имя MCP prompt (`<server>:<prompt>`) в этой версии неизвестная команда: MCP prompts — вне этой спецификации (строка матрицы E-24).
 
@@ -344,4 +370,69 @@
 #### Scenario: Длинное имя обрезается
 - **WHEN** приходит `/` и имя из 100 символов `a`
 - **THEN** ответ содержит `/` и ровно 64 символа `a`, лог `command.unknown` не содержит имени
+
+#### Scenario: skill без навыков
+- **WHEN** capability `skills` выключена, и приходит `/skill:release-notes`; во втором варианте capability включена, но навыков у сессии нет
+- **THEN** в обоих вариантах ответ — ровно `Unknown command: /skill:release-notes. Run /help to list commands.`, модель не вызвана, лог `command.unknown`
+
+### Requirement: Команда /usage
+`AgentSession` SHALL объявлять и исполнять встроенную команду `usage` всегда, независимо от capability профиля и наличия порта `UsageLedgerStore` (design.md change `add-usage-ledger`, D5). Объявление — `{"name":"usage","description":"Show token usage and cost of the session","input":{"hint":"[rebuild]"}}` (§13.4). Распознавание, события хода без шагов модели, журнал (ни промпт, ни ответ не пишутся; ACP-12), слот хода, отмена и доставка событий — по общим правилам требования «Встроенные команды config и mcp». Команда только читает: отмена до ответа даёт `TurnEnded` с `cancelled` без сообщения; запись `usage.json`, начатая до отмены, доводится до конца.
+
+Аргумент: пустой — отчёт по журналу usage (capability `agent-sessions`, «Журнал usage сессии»: свежий файл или пересчёт); `rebuild` — пересчёт всегда; иной — ответ `Usage: /usage [rebuild]`, журнал usage не строится.
+
+Текст — фиксированные английские строки §12.6.1 с правками change: строки соединяются `\n`, после последней `\n` нет; числа — целые без разделителей; стоимость — `$` и 4 знака после точки:
+- первая строка — `Session usage: <turns> turns, <steps> steps`; сессия без шагов — одна строка `Session usage: no model requests yet`;
+- `Total: <usage>`; `By model:` и по строке `  <provider>/<model>: <n> steps, <usage>` на модель в лексикографическом порядке; `Subagents: <runs> runs, <usage>` и `Summaries: <count>, <usage>` — только при ненулевом счётчике; при ненулевом числе отброшенных вызовов строка суммаризатора — `Summaries: <count> (<n> discarded), <usage>` (требование «Отброшенные вызовы в отчёте /usage»; change `fix-discarded-compaction-usage`, D4);
+- шаблон `<usage>` — `input <n>, output <n>, cache read <n>, cache write <n>[, reasoning <n>], cost <cost>`; `reasoning` — только если значение есть;
+- `<cost>` — одно правило для строк `Total`, `By model`, `Subagents` и `Summaries`: `unknown`, если цены нет ни у одной части строки (решение Q7 (а)); иначе `$x.xxxx`, а при любой причине неполноты строки (`noUsage` или `noPrice`) — `~$x.xxxx`; части — шаги, прогоны субагентов и вызовы суммаризатора, цена прогона и вызова — по правилу «Журнал usage сессии»; вызов суммаризатора со всеми нулевыми счётчиками — `noUsage`, как шаг; прогон субагента `noUsage` не получает (у записи `subagent` нет `stopReason`, нулевой usage может означать ребёнка без обращения к модели), поэтому строка `Subagents` не получает `input ~`; при `noUsage` перед числом `input` ставится `~`;
+- последняя строка — одна из `Ledger: up to date (<n> records)`, `Ledger: rebuilt from journal (<n> records)`, `Ledger: rebuilt in memory (<n> records)`, `Ledger: rebuilt, not saved (<причина ОС на английском>)`.
+
+Блоков `By branch` и `Inherited from fork` в этой версии нет (design.md change `add-usage-ledger`, D1 п. 8).
+
+#### Scenario: /usage после хода с двумя шагами
+- **WHEN** в сессии один ход с двумя шагами на модели с ценами, ядро собрано с `UsageLedgerStore`, файла `usage.json` нет, и приходит `/usage`
+- **THEN** ответ начинается строкой `Session usage: 1 turns, 2 steps`, строка `Total` равна сумме шагов, последняя строка — `Ledger: rebuilt from journal (<n> records)`; в каталоге сессии появился `usage.json`; модель не вызвана, журнал без новых записей, кадров `_codelab/session/usage` нет (фикстура `acp/slash-usage`)
+
+#### Scenario: Повторный /usage
+- **WHEN** сразу после предыдущего сценария снова приходит `/usage`
+- **THEN** последняя строка — `Ledger: up to date (<n> records)`, текст выше неё тот же
+
+#### Scenario: /usage rebuild
+- **WHEN** приходит `/usage rebuild` при свежем файле
+- **THEN** последняя строка — `Ledger: rebuilt from journal (<n> records)`, в логе `usage.ledger.rebuild` с `reason: explicit`
+
+#### Scenario: Модель без цен
+- **WHEN** все шаги сессии — на модели без цен в каталоге
+- **THEN** у каждой строки usage — `cost unknown`; `$0.0000` в ответе нет
+
+#### Scenario: Цена субагентов и суммаризатора
+- **WHEN** в сессии два прогона субагентов, один с ненулевой стоимостью, другой с токенами и нулевой стоимостью, и одно сжатие, чья `summaryModel` в каталоге без цен
+- **THEN** строка `Subagents` заканчивается `cost ~$x.xxxx`, строка `Summaries` — `cost unknown`; строка `Total` — `cost ~$x.xxxx`
+
+#### Scenario: Суммаризатор без usage
+- **WHEN** в сессии один шаг на модели с ценами и одно сжатие, чей вызов суммаризатора на модели с ценами вернул все нулевые счётчики
+- **THEN** строка `Summaries` — `Summaries: 1, input ~0, output 0, cache read 0, cache write 0, cost ~$0.0000`; строка `Total` — с `input ~` и `cost ~$x.xxxx`
+
+#### Scenario: Субагент без usage
+- **WHEN** в сессии один прогон субагента со всеми нулевыми счётчиками (ребёнок отменён до обращения к модели)
+- **THEN** строка `Subagents` — `Subagents: 1 runs, input 0, …` без `~` перед `input`
+
+#### Scenario: Неверный аргумент
+- **WHEN** приходит `/usage now`
+- **THEN** ответ — ровно `Usage: /usage [rebuild]`, журнал usage не строился
+
+#### Scenario: Ядро без порта
+- **WHEN** ядро собрано без `UsageLedgerStore`, и приходит `/usage`
+- **THEN** последняя строка — `Ledger: rebuilt in memory (<n> records)`
+
+### Requirement: Отброшенные вызовы в отчёте /usage
+Строка суммаризатора команды `/usage` (требование «Команда /usage» change `add-usage-ledger`) SHALL иметь вид `Summaries: <count> (<n> discarded), <usage>`, где `<n>` — число отброшенных вызовов группы (требование `agent-sessions` «Отброшенные вызовы суммаризатора в журнале usage»; design.md change `fix-discarded-compaction-usage`, D4; решение пользователя Q2 (а)). Часть ` (<n> discarded)` SHALL выводиться только при ненулевом `<n>`. Без неё строка прежняя. Правило `<cost>` и `~` не меняется, отброшенные вызовы — части строки `Summaries` и `Total`. Ответ `/compact` на проход без выигрыша остаётся `Nothing to compact.`
+
+#### Scenario: /usage после /compact без выигрыша
+- **WHEN** в сессии один ход на модели с ценами, затем `/compact` отброшен по CMP-10 с usage суммаризатора `{input: 764, output: 171}` на модели с ценами, и приходит `/usage`
+- **THEN** ответ содержит строку `Summaries: 1 (1 discarded), input 764, output 171, cache read 0, cache write 0, cost $x.xxxx`; строка `Total` включает вызов (`usage_report_text_test.dart`, `builtin_slash_commands_test.dart`)
+
+#### Scenario: Без отброшенных вызовов
+- **WHEN** в сессии одно записанное сжатие с usage и ни одного отброшенного
+- **THEN** строка — `Summaries: 1, <usage>` без скобок, как до change
 

@@ -202,7 +202,16 @@ final class ContextFill {
 }
 
 final class StepEnded extends AgentEvent {
-  const StepEnded(super.sessionId, {required this.result, this.context});
+  const StepEnded(
+    super.sessionId, {
+    required this.result,
+    this.context,
+    this.budget,
+  });
+
+  /// Прогресс бюджета хода после шага (D8): тем же значением цикл решает
+  /// остановку. `null` — событие собрано вне цикла (например, в тестах).
+  final BudgetProgress? budget;
 
   final StepResult result;
 
@@ -383,9 +392,56 @@ final class ContextCompacted extends AgentEvent {
     super.sessionId, {
     required this.tokensBefore,
     required this.tokensAfter,
+    this.usage,
+    this.model,
   });
 
   final int tokensBefore, tokensAfter;
+
+  /// Usage вызова суммаризатора (design.md change `add-usage-ledger`, D4).
+  /// `null` — у реплея старой записи без `details.usage`. В `TurnEnded.usage`
+  /// не входит; учитывается в сумме сессии и в `summaries` журнала.
+  final Usage? usage;
+
+  /// Модель ответа суммаризатора, `<provider>/<id>` (D4); `null` вместе с
+  /// [usage] у старой записи.
+  final String? model;
+}
+
+/// Оплаченный вызов суммаризатора, после которого сжатие не записано
+/// (CMP-13; design.md change `fix-discarded-compaction-usage`, D2).
+///
+/// Почему отдельное событие: [ContextCompacted] означает «сжатие записано» и
+/// несёт `used = tokensAfter`; у прохода без выигрыша (CMP-10) или устаревшего
+/// (CMP-12) записи `compaction` нет, но запрос к модели уже оплачен. Флаг в
+/// [ContextCompacted] заставил бы ветвиться всех его потребителей.
+///
+/// Для чего: хост (мост ACP) добавляет [usage] в сумму сессии, не меняя
+/// транскрипт и заполнение контекста. В `TurnEnded.usage` вызов не входит.
+///
+/// Как использовать: компактор эмитит событие после записи учёта
+/// `codelab.compaction_discarded` в журнал; реплей его не даёт — после
+/// загрузки сумму даёт свёртка журнала. Потребители, которым учёт не нужен,
+/// пропускают ветку.
+final class CompactionDiscarded extends AgentEvent {
+  const CompactionDiscarded(
+    super.sessionId, {
+    required this.tokensBefore,
+    required this.tokensAfter,
+    required this.usage,
+    required this.model,
+  });
+
+  /// Согласованные оценки прохода (CMP-5, D1 change
+  /// `fix-compaction-estimate-and-no-gain`); `tokensAfter >= tokensBefore`
+  /// у `no reduction`.
+  final int tokensBefore, tokensAfter;
+
+  /// Usage вызова суммаризатора: сумма запросов прохода.
+  final Usage usage;
+
+  /// Модель ответа, `<provider>/<id>`, как у [ContextCompacted.model].
+  final String model;
 }
 
 /// Заголовок сессии записан в журнал (событие уровня `AgentSession`,
@@ -435,7 +491,12 @@ final class TurnEnded extends AgentEvent {
     this.budgetExceeded,
     this.held,
     this.subagentUsage,
+    this.budget,
   });
+
+  /// Итоговый прогресс бюджета хода (D8), включая usage потомков; `null` —
+  /// событие собрано вне цикла (отмена, сбой до цикла).
+  final BudgetProgress? budget;
 
   final TurnEndReason reason;
 

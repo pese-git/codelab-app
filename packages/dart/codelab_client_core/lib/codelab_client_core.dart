@@ -38,6 +38,8 @@ export 'src/transcript/subagent_views.dart';
 export 'src/transcript/tool_row.dart';
 export 'src/transcript/transcript_item.dart';
 export 'src/usage/usage_decoder.dart';
+export 'src/usage/usage_ledger_decoder.dart';
+export 'src/usage/usage_ledger_models.dart';
 export 'src/usage/usage_fold.dart';
 export 'src/usage/usage_format.dart';
 export 'src/usage/usage_models.dart';

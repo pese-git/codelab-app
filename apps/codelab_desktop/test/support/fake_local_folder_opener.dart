@@ -25,9 +25,19 @@ final class FakeLocalFolderOpener implements LocalFolderOpener {
   /// Каталоги всех вызовов `open` в порядке вызова.
   final List<String> opened = [];
 
+  /// Вызовы `open`: каталог и признак `create` (страница «Agents & modes»).
+  final List<({String directory, bool create})> calls = [];
+
+  /// Платформа и порт не вызывались.
+  bool get untouched => calls.isEmpty;
+
   @override
-  Future<FolderOpenOutcome> open(String directory) async {
+  Future<FolderOpenOutcome> open(
+    String directory, {
+    bool create = false,
+  }) async {
     opened.add(directory);
+    calls.add((directory: directory, create: create));
     return outcomes.isEmpty ? outcome : outcomes.removeAt(0);
   }
 }

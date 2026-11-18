@@ -1,11 +1,14 @@
 import 'dart:convert';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart';
+import 'package:codelab_agent_core/src/compaction/estimate.dart';
 import 'package:codelab_agent_core/testing.dart';
 import 'package:test/test.dart';
 
+import '../compaction/anchor_support.dart';
 import '../host/core_harness.dart';
 import '../permissions/fake_gate.dart';
+import '../session/journal_lines.dart' as j;
 import '../session/recording_store.dart';
 
 /// `createSession`, `loadSession` и `replay` с журналом (agent-runtime
@@ -186,5 +189,169 @@ void main() {
     );
     expect(h.model.requests, isEmpty);
     expect(h.logger.eventsOf('session.append.failed'), isNotEmpty);
+  });
+
+  /// Якорь сжатия после загрузки (design.md change
+  /// `anchor-context-estimate-after-compaction`, D5; agent-compaction
+  /// «Загрузка сессии после сжатия», «Несколько сжатий и ветки», CMP-11):
+  /// якорь фиксируется по проекции, которой восстановлен транскрипт, а не
+  /// хранится в журнале.
+  group('the compaction anchor after loadSession (D5)', () {
+    const id = SessionId('01JB8Q2W6R9T3M5K7N1P4X8Z0C');
+
+    UserMessage newMessage(String text) =>
+        UserMessage([TextContent(text)], timestamp: DateTime.utc(2026));
+
+    /// Загружает [lines] в новую сессию и возвращает оценку первого запроса
+    /// хода `new request` вместе с контекстом запроса.
+    Future<(int? estimated, LlmContext request)> loadAndAsk(
+      List<String> lines,
+    ) async {
+      final store = MemorySessionStore()
+        ..putText(
+          id,
+          j.journal([j.header(id: id.value, cwd: '/proj'), ...lines]),
+        );
+      final h = anchorHarness([turn('ok')], sessions: store);
+      final loaded = await h.core.runtime.loadSession(
+        id,
+        const SessionHostPorts(),
+      );
+      final events = <AgentEvent>[];
+      loaded.events.listen(events.add);
+
+      await loaded.prompt(const [TextContent('new request')]);
+
+      final estimated = firstRequestOfTurn(events, 0)?.estimatedTokens;
+      final request = h.requestedContexts.first;
+      await h.core.runtime.dispose();
+      return (estimated, request);
+    }
+
+    List<String> branchWithCompaction(int tokensAfter) => [
+      j.user('u1', null, text: 'old ${'o' * 6000}'),
+      j.answer('a1', 'u1'),
+      j.user('u2', 'a1', text: 'kept request'),
+      j.answer('a2', 'u2'),
+      j.compaction('k1', 'a2', firstKept: 'u2', tokensAfter: tokensAfter),
+    ];
+
+    test('a compaction as the last event of the branch: the first request '
+        'is estimated by tokensAfter plus the new message', () async {
+      // Сжатие реальной сессией: `/compact` пишет запись последним событием.
+      final store = MemorySessionStore();
+      final first = anchorHarness([
+        turn('a' * 8000, input: 3000),
+        turn('b' * 8000, input: 7500),
+        turn('## Summary'),
+      ], sessions: store);
+      final created = await first.core.runtime.createSession(
+        SessionSpec(cwd: '/proj'),
+      );
+      await created.prompt(const [TextContent('first task')]);
+      await created.prompt(const [TextContent('second task')]);
+      await created.prompt(const [TextContent('/compact')]);
+      await first.core.runtime.dispose();
+      final record = (await store.open(
+        created.id,
+      )).records.whereType<CompactionRecord>().single;
+
+      final second = anchorHarness([turn('ok')], sessions: store);
+      final loaded = await second.core.runtime.loadSession(
+        created.id,
+        const SessionHostPorts(),
+      );
+      final events = <AgentEvent>[];
+      loaded.events.listen(events.add);
+      await loaded.prompt(const [TextContent('new request')]);
+
+      final estimated = firstRequestOfTurn(events, 0)?.estimatedTokens;
+      expect(
+        estimated,
+        record.tokensAfter + estimateMessageTokens(newMessage('new request')),
+      );
+      // Предпосылка: чистая эвристика дала бы другое число.
+      expect(heuristicOf(second.requestedContexts.first), isNot(estimated));
+      await second.core.runtime.dispose();
+    });
+
+    test('two branches: the later compaction lies on the inactive branch — '
+        'the anchor is from the record of the active one', () async {
+      final (estimated, request) = await loadAndAsk([
+        j.user('u1', null, text: 'old ${'o' * 6000}'),
+        j.answer('a1', 'u1'),
+        j.user('u2', 'a1', text: 'kept request'),
+        j.answer('a2', 'u2'),
+        // Активная ветка: сжатие k1 (tokensAfter 900) и слова после него.
+        j.compaction('k1', 'a2', firstKept: 'u2', tokensAfter: 900),
+        j.user('uA', 'k1', text: 'after the compaction'),
+        // Неактивная ветка, записанная позже: своё сжатие (tokensAfter 4000).
+        j.user('u2b', 'a1', text: 'other request'),
+        j.answer('a2b', 'u2b'),
+        j.compaction('k2', 'a2b', firstKept: 'u2b', tokensAfter: 4000),
+        // Возврат на активную ветку.
+        j.leaf('l1', 'k2', target: 'uA'),
+      ]);
+
+      expect(
+        estimated,
+        900 +
+            estimateMessageTokens(newMessage('after the compaction')) +
+            estimateMessageTokens(newMessage('new request')),
+      );
+      expect(heuristicOf(request), isNot(estimated));
+    });
+
+    test('tokensAfter 0 in the journal is not an anchor: the plain '
+        'heuristic (D6)', () async {
+      final (estimated, request) = await loadAndAsk(branchWithCompaction(0));
+
+      expect(estimated, heuristicOf(request));
+    });
+
+    test('the log compaction.anchor with source load; none without a '
+        'compaction', () async {
+      final store = MemorySessionStore()
+        ..putText(
+          id,
+          j.journal([
+            j.header(id: id.value, cwd: '/proj'),
+            ...branchWithCompaction(700),
+          ]),
+        );
+      final h = anchorHarness(const [], sessions: store);
+
+      await h.core.runtime.loadSession(id, const SessionHostPorts());
+
+      final log = h.logger.eventsOf('compaction.anchor').single;
+      expect(log.level, LogLevel.debug);
+      expect(log.fields.keys, {'session_id', 'tokens', 'raw', 'source'});
+      expect(log.fields['tokens'], 700);
+      expect(log.fields['source'], 'load');
+      await h.core.runtime.dispose();
+
+      final plain = MemorySessionStore()
+        ..putText(
+          id,
+          j.journal([
+            j.header(id: id.value, cwd: '/proj'),
+            j.user('u1', null),
+            j.answer('a1', 'u1'),
+          ]),
+        );
+      final p = anchorHarness(const [], sessions: plain);
+      await p.core.runtime.loadSession(id, const SessionHostPorts());
+      expect(p.logger.eventsOf('compaction.anchor'), isEmpty);
+      await p.core.runtime.dispose();
+    });
+
+    test('a journal without a compaction: the plain heuristic', () async {
+      final (estimated, request) = await loadAndAsk([
+        j.user('u1', null, text: 'hello'),
+        j.answer('a1', 'u1'),
+      ]);
+
+      expect(estimated, heuristicOf(request));
+    });
   });
 }

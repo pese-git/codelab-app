@@ -1525,4 +1525,38 @@ void main() {
     expect(violations, hasLength(1), reason: violations.join('\n'));
     expect(violations.single, endsWith('-> dart:io'));
   });
+
+  // Application панели Usage не знает Flutter и `dart:io` (design.md change
+  // `add-desktop-usage-pane`, D12; задача 1.1): правило обновления журнала и
+  // CSV остаются чистыми, запись файла — только порт `lib/core/platform/`.
+  test(
+    'reports Flutter and dart:io imported by the usage pane application',
+    () {
+      final tmp = Directory.systemTemp.createTempSync('guard_usage_app_');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      File(p.join(tmp.path, 'lib', 'usage_csv.dart'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          "import 'dart:io';\n"
+          "import 'package:flutter/widgets.dart';\n"
+          "import 'dart:async';\n",
+        );
+      final rule = rules.singleWhere(
+        (r) => r.dir == 'apps/codelab_desktop/lib/features/usage/application',
+      );
+
+      final violations = scan(
+        tmp.path,
+        PackageRule('.', forbidden: rule.forbidden),
+      );
+
+      expect(
+        violations,
+        unorderedEquals([
+          endsWith('lib/usage_csv.dart:1 -> dart:io'),
+          endsWith('lib/usage_csv.dart:2 -> package:flutter/widgets.dart'),
+        ]),
+      );
+    },
+  );
 }

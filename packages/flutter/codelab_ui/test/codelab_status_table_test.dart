@@ -313,6 +313,90 @@ void main() {
   });
 
   _skillsTableTests();
+
+  testWidgets('an untrusted tone cell with maxLines: 3 wraps and shows '
+      'invisible characters (D20.4)', (tester) async {
+    await tester.pumpWidget(
+      FluentApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 420,
+            child: CodeLabStatusTable(
+              columns: const ['NAME', 'STATUS'],
+              rows: const [
+                CodeLabStatusTableRow(
+                  cells: [
+                    CodeLabStatusTableCell('a', mono: true),
+                    CodeLabStatusTableCell(
+                      'By x\u202egpj',
+                      tone: CodeLabStatusTone.warning,
+                      maxLines: 3,
+                      untrusted: true,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final finder = find.text('By x\\u202egpj');
+    expect(finder, findsOneWidget);
+    expect(
+      tester.renderObject<RenderParagraph>(finder).didExceedMaxLines,
+      isFalse,
+    );
+    expect(find.textContaining('\u202e'), findsNothing);
+  });
+
+  testWidgets('a tone cell with maxLines wraps its label, the default cuts it '
+      '(the MCP table keeps one line)', (tester) async {
+    const long = 'Not loaded: duplicate name';
+    await tester.pumpWidget(
+      FluentApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 420,
+            child: CodeLabStatusTable(
+              columns: const ['NAME', 'STATUS'],
+              rows: const [
+                CodeLabStatusTableRow(
+                  cells: [
+                    CodeLabStatusTableCell('cut', mono: true),
+                    CodeLabStatusTableCell(
+                      long,
+                      tone: CodeLabStatusTone.danger,
+                    ),
+                  ],
+                ),
+                CodeLabStatusTableRow(
+                  cells: [
+                    CodeLabStatusTableCell('wrapped', mono: true),
+                    CodeLabStatusTableCell(
+                      long,
+                      tone: CodeLabStatusTone.danger,
+                      maxLines: 6,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final paragraphs = tester
+        .renderObjectList<RenderParagraph>(find.text(long))
+        .toList();
+    expect(paragraphs, hasLength(2));
+    expect(paragraphs.first.didExceedMaxLines, isTrue);
+    expect(paragraphs.last.didExceedMaxLines, isFalse);
+  });
 }
 
 // Красные тесты 3.1 change `add-app-skills-page` (D12, D13): аддитивное

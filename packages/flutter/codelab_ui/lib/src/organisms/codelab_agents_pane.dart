@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../atomics/codelab_pressable.dart';
 import '../rendering/escape_for_display.dart';
 import 'codelab_compact_call_line.dart';
 import 'codelab_tool_call_tile.dart';
@@ -233,7 +234,7 @@ class _AgentRowView extends StatelessWidget {
       container: true,
       button: true,
       selected: selected,
-      child: _Pressable(
+      child: CodeLabPressable(
         key: CodeLabAgentsPane.rowKey(row.id),
         onPressed: onSelect == null ? null : () => onSelect!(row.id),
         builder: (context, hovered, focused) {
@@ -358,54 +359,6 @@ class _ItemLabel extends StatelessWidget {
   }
 }
 
-/// Нажимаемая область без таймеров: строка панели и действия-ссылки.
-///
-/// Почему не `HoverButton`/`HyperlinkButton`: их `onTapUp` держит отложенный
-/// сброс нажатия, и каждый тап оставляет в тесте незавершённый `Timer`.
-/// Для чего: клик, наведение и клавиатура (Enter/Space через `ActivateIntent`)
-/// на строке и ссылке; `null` в [onPressed] — область не реагирует.
-class _Pressable extends StatefulWidget {
-  const _Pressable({required this.builder, this.onPressed, super.key});
-
-  final VoidCallback? onPressed;
-  final Widget Function(BuildContext context, bool hovered, bool focused)
-  builder;
-
-  @override
-  State<_Pressable> createState() => _PressableState();
-}
-
-class _PressableState extends State<_Pressable> {
-  bool _hovered = false;
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final onPressed = widget.onPressed;
-    return FocusableActionDetector(
-      enabled: onPressed != null,
-      mouseCursor: onPressed == null
-          ? MouseCursor.defer
-          : SystemMouseCursors.click,
-      onShowHoverHighlight: (value) => setState(() => _hovered = value),
-      onShowFocusHighlight: (value) => setState(() => _focused = value),
-      actions: {
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (_) {
-            onPressed?.call();
-            return null;
-          },
-        ),
-      },
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: widget.builder(context, _hovered, _focused),
-      ),
-    );
-  }
-}
-
 /// Действие-ссылка строки панели: только переход к ленте, решения нет.
 class _ActionLink extends StatelessWidget {
   const _ActionLink({required this.label, required this.onPressed, super.key});
@@ -420,7 +373,7 @@ class _ActionLink extends StatelessWidget {
       button: true,
       label: label,
       excludeSemantics: true,
-      child: _Pressable(
+      child: CodeLabPressable(
         onPressed: onPressed,
         builder: (context, hovered, focused) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),

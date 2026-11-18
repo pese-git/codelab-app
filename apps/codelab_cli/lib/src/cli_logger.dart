@@ -2,19 +2,21 @@ import 'package:codelab_client_acp/codelab_client_acp.dart';
 
 import 'render/sanitize.dart';
 
-/// [Logger] ядра клиента (`AcpClientApplication`) для CLI.
+/// [Logger] ядра клиента (`AcpClientApplication`) и kit (`ClientWorkspace`)
+/// для CLI.
 ///
-/// Почему: логгер ядра по умолчанию пишет JSON в stdout процесса, а stdout
-/// headless — данные для скриптов: в нём только ответ агента (H-01;
-/// design.md change `add-codelab-cli`, D9). CLI пишет лог только в stderr и
-/// только с `--verbose`.
+/// Почему: логгеры ядра и kit по умолчанию (`StructuredLogLogger`) пишут JSON
+/// в stdout процесса, а stdout headless — данные для скриптов: в нём только
+/// ответ агента (H-01; design.md change `add-codelab-cli`, D9). CLI пишет
+/// лог только в stderr и только с `--verbose`.
 ///
 /// Для чего: одна строка `[уровень] событие ключ=значение…` на запись с
 /// уровня `info`; контекст проходит `SecretRedactor`, как логи app
 /// (`AGENTS.md` §16).
 ///
-/// Как использовать: composition root передаёт `CliLogger(stderr)` при
-/// `--verbose`, иначе `CliLogger.silent()`.
+/// Как использовать: composition root создаёт один `CliLogger(stderr)` при
+/// `--verbose`, иначе `CliLogger.silent()`, и передаёт его и ядру клиента, и
+/// `ClientWorkspace`.
 final class CliLogger implements Logger {
   CliLogger(StringSink sink) : this._(sink, const {});
 

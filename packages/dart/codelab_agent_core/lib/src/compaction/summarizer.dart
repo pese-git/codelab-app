@@ -21,6 +21,7 @@ import '../llm/events.dart';
 import '../llm/messages.dart';
 import '../llm/model_ref.dart';
 import '../llm/stream_function.dart';
+import '../llm/usage.dart';
 import '../loop/agent_events.dart';
 import '../prompts/prompts.g.dart';
 import '../session/records.dart';
@@ -64,9 +65,30 @@ final class SummaryRequest {
   final String? focus;
 }
 
+/// Результат суммаризатора: резюме, usage вызовов модели и модель ответа
+/// (design.md change `add-usage-ledger`, D4, Q6).
+///
+/// Почему не просто строка: токены суммаризатора тратятся вне хода, и без
+/// usage в результате они выпадали из суммы сессии (R2 change
+/// `add-usage-extension`). [usage] — сумма usage всех запросов прохода
+/// (разрезанный ход делает два запроса: резюме региона и контекст хода);
+/// [model] — `<provider>/<id>` модели, ответившей на запрос (строка, а не
+/// `ModelRef`: реплей берёт её из `details.summaryModel`).
+final class SummaryResult {
+  const SummaryResult({
+    required this.text,
+    required this.usage,
+    required this.model,
+  });
+
+  final String text;
+  final Usage usage;
+  final String model;
+}
+
 /// Генератор резюме; бросает [CompactionFailure] или `CancelledException`.
 typedef Summarizer =
-    Future<String> Function(SummaryRequest request, CancelToken cancel);
+    Future<SummaryResult> Function(SummaryRequest request, CancelToken cancel);
 
 /// Резюме не получено: ошибка модели или пустой ответ (§9.7, шаги 5, 7).
 final class CompactionFailure implements Exception {
@@ -83,6 +105,14 @@ const _resultLimit = 4000;
 const _resultKeep = 1500;
 
 final _epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+
+/// Накопитель usage и модели одного прохода суммаризатора.
+final class _Spent {
+  _Spent(this.model);
+
+  var usage = Usage.zero;
+  String model;
+}
 
 /// Слова пользователя разрезанного хода цитируются не длиннее (CMP-7).
 const _quoteLimit = 2000;
@@ -103,7 +133,7 @@ Summarizer modelSummarizer({
   final s = settings ?? CompactionSettings.forWindow(window);
   final budget = math.max(window - s.reserveTokens, window ~/ 2);
 
-  Future<String> ask(String text, CancelToken cancel) async {
+  Future<String> ask(String text, CancelToken cancel, _Spent spent) async {
     final events = stream(
       model,
       LlmContext(
@@ -123,6 +153,11 @@ Summarizer modelSummarizer({
       }
     }
     final message = answer ?? await events.result;
+    // Токены потрачены, даже если резюме не годится: итог прохода без записи
+    // их всё равно не учтёт (R3), но сумма запросов прохода остаётся честной.
+    spent
+      ..usage += message.usage
+      ..model = '${message.model.provider}/${message.model.id}';
     if (message.stopReason == StopReason.aborted || cancel.isCancelled) {
       throw CancelledException(cancel.reason);
     }
@@ -141,6 +176,9 @@ Summarizer modelSummarizer({
   }
 
   return (request, cancel) async {
+    // Usage и модель копятся по всем запросам одного прохода (D4); состояние
+    // локально для вызова, поэтому параллельные вызовы не мешают друг другу.
+    final spent = _Spent('${model.provider}/${model.id}');
     final files = request.fileOps;
     final focus = request.focus == null
         ? ''
@@ -163,21 +201,25 @@ Summarizer modelSummarizer({
                     'previousSummary': request.previousSummary!,
                   }),
             cancel,
+            spent,
           );
     final prefix = request.turnPrefix;
+    SummaryResult done(String text) =>
+        SummaryResult(text: text, usage: spent.usage, model: spent.model);
     if (prefix == null) {
-      return main;
+      return done(main);
     }
     final context = await ask(
       Prompts.compactionTurnContext.render({
         'transcript': _withinBudget(prefix, budget),
       }),
       cancel,
+      spent,
     );
     final turn =
         '## Current turn context (split turn)\n\n'
         'User request, verbatim:\n\n${_quote(_userText(prefix))}\n\n$context';
-    return main.isEmpty ? turn : '$main\n\n---\n\n$turn';
+    return done(main.isEmpty ? turn : '$main\n\n---\n\n$turn');
   };
 }
 

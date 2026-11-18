@@ -22,14 +22,33 @@ Future<SessionView> _runWithWorkspace(String fixtureId) async {
   );
   late ClientFixtureUser user;
   late ClientWorkspace workspace;
-  final result = await runClientFixture<AcpClientApplication>(fixture, (env) {
-    user = ClientFixtureUser(env);
-    workspace = ClientWorkspace(
-      backend: AcpClientBackend(user.app),
-      resolvers: const [],
-    );
-    return user.app;
-  }, onBeforeExpect: (step) => user.act(step));
+  final result = await runClientFixture<AcpClientApplication>(
+    fixture,
+    (env) {
+      user = ClientFixtureUser(env);
+      workspace = ClientWorkspace(
+        backend: AcpClientBackend(user.app),
+        resolvers: const [],
+      );
+      return user.app;
+    },
+    onBeforeExpect: (step) {
+      // Запрос журнала в рабочем пространстве идёт через
+      // `ClientWorkspace.refreshUsageLedger` (design.md change
+      // `add-usage-ledger`, D10: `refreshUsageLedger(sessionId, {rebuild})`), а
+      // не прямым вызовом приложения: состояние `SessionView.usageLedger`
+      // ведёт рабочее пространство.
+      if (step.expected['method'] == '_codelab/session/usage/ledger') {
+        step.track(
+          workspace.refreshUsageLedger(
+            const SessionId(standardFixtureSessionId),
+          ),
+        );
+        return;
+      }
+      user.act(step);
+    },
+  );
   addTearDown(() async {
     await workspace.dispose();
     await user.app.dispose();
@@ -56,7 +75,9 @@ void main() {
     const money = Money(micros: 28200, currency: 'USD');
     const totals = UsageTotals(tokens: tokens, cost: money, steps: 2);
     expect(usage.lastTurn, totals);
-    expect(usage.session, totals);
+    // Агрегат `session` фикстуры несёт `turns` (change
+    // `fix-usage-pane-live-cards`, D2, задача 1.2), агрегат `turn` — нет.
+    expect(usage.session, totals.copyWith(turns: 1));
     expect(
       usage.context,
       const ContextFillView(used: 14700, size: 32768, compactAt: 24576),
@@ -71,5 +92,46 @@ void main() {
       (notice) => notice.kind == NoticeKind.turnStopped,
     );
     expect(notices.single.text, 'The turn stopped: budget exceeded: tokens.');
+  });
+
+  // Роль `client` фикстуры `acp/usage-ledger-request` (change
+  // `add-usage-ledger`, задача 3.5; spec acp-golden-fixtures «Клиентский
+  // прогон журнала»; design.md D10): после ответа `SessionView.usageLedger` —
+  // `loaded` с одним ходом и двумя шагами.
+  test('acp/usage-ledger-request: the ledger state is loaded with one turn '
+      'and two steps', () async {
+    final view = await _runWithWorkspace('acp/usage-ledger-request');
+
+    final state = view.usageLedger;
+    expect(state, isA<UsageLedgerLoaded>());
+    final ledger = (state as UsageLedgerLoaded).view;
+    expect(ledger.seq, 3);
+    expect(ledger.turns, hasLength(1));
+    expect(ledger.turns.single.steps, hasLength(2));
+  });
+
+  // Роль `client` фикстуры `acp/prompt-usage-budget` (change
+  // `add-desktop-usage-pane`, задача 3.1; spec acp-golden-fixtures «Клиентский
+  // прогон», design.md D7, D9, Q11 (а)): после снимка `turn` бюджет хода
+  // итоговый.
+  test('acp/prompt-usage-budget: the budget after the turn snapshot is '
+      'final with steps, tokens and cost, without duration', () async {
+    final view = await _runWithWorkspace('acp/prompt-usage-budget');
+
+    final budget = view.usage.budget;
+    expect(budget, isNotNull);
+    expect(budget!.ended, isTrue);
+    expect(budget.steps, const BudgetCount(used: 2, limit: 50));
+    expect(budget.tokens, const BudgetCount(used: 3400, limit: 200000));
+    expect(
+      budget.cost,
+      const BudgetCost(
+        used: Money(micros: 28200, currency: 'USD'),
+        limit: Money(micros: 500000, currency: 'USD'),
+      ),
+    );
+    expect(budget.duration, isNull);
+    // Свёртка закончилась на снимке `turn` (seq 3), как у prompt-usage-steps.
+    expect(view.usage.lastSeq, 3);
   });
 }

@@ -21,7 +21,7 @@ final scriptedModel = ModelRef(
 /// Встроенные команды в кадре `available_commands_update` (agent-slash-commands
 /// «Встроенные команды MVP», «Список команд сессии»; design.md change
 /// `add-agent-builtin-slash-commands`, D2): порядок `compact`, `mode`,
-/// `model`, `status`, `config`, `mcp`, `help`, затем шаблоны. Профиль
+/// `model`, `status`, `usage`, `config`, `mcp`, `help`, затем шаблоны. Профиль
 /// `agent-serve` включает capability `compaction`; `config` и `mcp` тест
 /// вставляет сам между [builtinCommandsBeforeConfig] и [builtinHelpCommand].
 const builtinCommandsBeforeConfig = <Map<String, Object?>>[
@@ -43,6 +43,13 @@ const builtinCommandsBeforeConfig = <Map<String, Object?>>[
   {
     'name': 'status',
     'description': 'Show the model, mode, working directory and MCP servers',
+  },
+  // Сразу после `status` (design.md change `add-usage-ledger`, D5); команда
+  // есть всегда, независимо от порта журнала usage.
+  {
+    'name': 'usage',
+    'description': 'Show token usage and cost of the session',
+    'input': {'hint': '[rebuild]'},
   },
 ];
 
@@ -116,6 +123,13 @@ final class ServerHarness {
   /// [slow] — агентский конец отдаёт каждый кадр с задержкой: проверка
   /// порядка «уведомления → ответ» на медленном транспорте (ACP-3).
   ///
+  /// [usageLedger] — порт файла журнала usage (design.md change
+  /// `add-usage-ledger`, D3): без него отчёт журнала — `inMemory`.
+  ///
+  /// [wrapLogger] — обёртка над логгером ядра и сервера: тест заставляет
+  /// запись определённого события бросить исключение (сбой в `after:` ответа).
+  /// `ServerHarness.logger` остаётся внутренним `RecordingLogger`.
+  ///
   /// [defaultModel] и [compaction] — модель по умолчанию (например, с ценами
   /// `ModelCost`) и пороги сжатия для `CoreConfig`, когда нет
   /// [configSource] и [rootConfig] (design.md change `add-usage-extension`,
@@ -144,9 +158,14 @@ final class ServerHarness {
     AgentRuntime Function(AgentRuntime inner)? wrapRuntime,
     ModelRef? defaultModel,
     CompactionOverrides compaction = const CompactionOverrides(),
+    UsageLedgerStore? usageLedger,
+    Logger Function(RecordingLogger inner)? wrapLogger,
   }) async {
     final clock = FakeClock();
-    final logger = RecordingLogger();
+    final recording = RecordingLogger();
+    final Logger logger = wrapLogger == null
+        ? recording
+        : wrapLogger(recording);
     final store = sessions ?? JournalStore();
     final model = ScriptedStreamFunction.fromJson({
       'steps': steps,
@@ -172,6 +191,7 @@ final class ServerHarness {
         clock: clock,
         ids: SequentialIdGenerator(),
         sessions: store,
+        usageLedger: usageLedger,
         models: initial == null ? models : catalogOf(initial),
         config: configSource,
         projectConfig: projectConfig,
@@ -222,7 +242,7 @@ final class ServerHarness {
       core,
       server,
       client,
-      logger,
+      recording,
       store,
       clock,
       model,
@@ -372,20 +392,31 @@ final class TestClient {
   }
 
   /// Запрос с новым числовым id; ответ — по этому id.
-  Future<JsonRpcResponse> request(String method, [Object? params]) {
+  ///
+  /// [timeout] — сколько ждать ответ; замер журнала usage на 40 000 шагов
+  /// (`usage_ledger_size_test.dart`) ждёт дольше обычных пяти секунд.
+  Future<JsonRpcResponse> request(
+    String method, [
+    Object? params,
+    Duration timeout = const Duration(seconds: 5),
+  ]) {
     final id = JsonRpcId.integer(_nextId++);
     return send(
       JsonRpcMessage.request(id: id, method: method, params: params)
           as JsonRpcRequest,
+      timeout,
     );
   }
 
   /// Отправляет запрос как есть и ждёт ответ на его id.
-  Future<JsonRpcResponse> send(JsonRpcRequest request) async {
+  Future<JsonRpcResponse> send(
+    JsonRpcRequest request, [
+    Duration timeout = const Duration(seconds: 5),
+  ]) async {
     final completer = Completer<JsonRpcResponse>();
     _pending[request.id] = completer;
     await transport.send(request);
-    return completer.future.timeout(const Duration(seconds: 5));
+    return completer.future.timeout(timeout);
   }
 
   Future<void> notify(String method, [Object? params]) => transport.send(
@@ -478,6 +509,30 @@ final class TestClient {
 final class JournalStore implements SessionStore {
   final inner = MemorySessionStore();
 
+  /// Готовые снимки журналов: `open` отдаёт их без `append` по одной записи.
+  /// Нужны замеру `usage_ledger_size_test.dart`: 80 000 записей через
+  /// `MemorySessionStore.append` (копия списка на запись) строились бы
+  /// минутами, а замеряется не запись журнала, а ответ по нему.
+  final prebuilt = <SessionId, SessionSnapshot>{};
+
+  /// Ворота записи: пока задан, `append` ждёт его завершения. Так тест
+  /// держит ход начавшимся (`turnActive`), а его запись `user` — ещё не в
+  /// журнале (`usage_ledger_request_test.dart`, `running`).
+  Completer<void>? appendGate;
+
+  /// Выборочные ворота: пока заданы, `append` записи, для которой
+  /// [holdWhen] истинно, ждёт [releaseHeld]; [heldReached] завершается, когда
+  /// запись дошла до ворот. Так тест ставит «команда уже оплатила вызов, а
+  /// запись учёта ещё идёт» без пауз (гонки отмены, change
+  /// `fix-discarded-compaction-usage`, Q9).
+  bool Function(SessionRecord record)? holdWhen;
+  final _heldGate = Completer<void>();
+  final _heldReached = Completer<void>();
+
+  Future<void> get heldReached => _heldReached.future;
+
+  void releaseHeld() => _heldGate.complete();
+
   @override
   Future<void> create(SessionHeader header) => inner.create(header);
 
@@ -501,13 +556,25 @@ final class JournalStore implements SessionStore {
     SessionId id,
     SessionRecord record, {
     bool durable = false,
-  }) => inner.append(id, record, durable: durable);
+  }) async {
+    if (appendGate case final gate?) {
+      await gate.future;
+    }
+    if (holdWhen?.call(record) ?? false) {
+      if (!_heldReached.isCompleted) {
+        _heldReached.complete();
+      }
+      await _heldGate.future;
+    }
+    await inner.append(id, record, durable: durable);
+  }
 
   @override
   Future<void> flush(SessionId id) => inner.flush(id);
 
   @override
-  Future<SessionSnapshot> open(SessionId id) => inner.open(id);
+  Future<SessionSnapshot> open(SessionId id) async =>
+      prebuilt[id] ?? await inner.open(id);
 
   @override
   Future<SessionPage> list({String? cwd, String? cursor, int pageSize = 50}) =>

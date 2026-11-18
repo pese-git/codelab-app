@@ -14,6 +14,15 @@ import 'loop_harness.dart';
 ///
 /// Тесты красные, пока в ядре нет `StepEnded.context` (`ContextFill`) и полей
 /// `AgentLoopConfig.contextEstimator` / `AgentLoopConfig.compaction`.
+/// Оценщик цикла без якоря сжатия: сессии нет, значит и сжатия нет
+/// (замена удалённого `estimateLlmContext`; D3 change
+/// `anchor-context-estimate-after-compaction`).
+int _estimate(LlmContext c) => estimateContextTokens(
+  c.messages,
+  systemPrompt: c.systemPrompt,
+  tools: c.tools,
+);
+
 void main() {
   /// Шаг с usage, который служит якорем оценки (agent-loop, «Шаг с
   /// инструментом»: `input 41000, cacheRead 9000, output 600`).
@@ -41,7 +50,7 @@ void main() {
         [user('go')],
         config: h
             .config(contextWindowCap: 20000)
-            .copyWith(contextEstimator: estimateLlmContext),
+            .copyWith(contextEstimator: _estimate),
       );
 
       final result = out.added.whereType<ToolResultMessage>().single;
@@ -58,7 +67,7 @@ void main() {
 
       await h.runTurn([
         user('go'),
-      ], config: h.config().copyWith(contextEstimator: estimateLlmContext));
+      ], config: h.config().copyWith(contextEstimator: _estimate));
 
       expect(stepEnds(h).first.context!.window, testModel.contextWindow);
     });
@@ -84,7 +93,7 @@ void main() {
 
       await h.runTurn([
         user('go'),
-      ], config: h.config().copyWith(contextEstimator: estimateLlmContext));
+      ], config: h.config().copyWith(contextEstimator: _estimate));
 
       final ended = stepEnds(h).single;
       expect(ended.context, isNotNull);
@@ -105,7 +114,7 @@ void main() {
           config: h
               .config(contextWindowCap: 20000)
               .copyWith(
-                contextEstimator: estimateLlmContext,
+                contextEstimator: _estimate,
                 compaction: (value: overrides),
               ),
         );
@@ -141,7 +150,7 @@ void main() {
 
         await h.runTurn([
           user('go'),
-        ], config: h.config().copyWith(contextEstimator: estimateLlmContext));
+        ], config: h.config().copyWith(contextEstimator: _estimate));
 
         final fill = stepEnds(h).first.context!;
         expect(fill.used, greaterThan(0));
@@ -158,13 +167,9 @@ void main() {
       final tiny = modelWithWindow(256);
       final h = await LoopHarness.create(llm: script([textStep('hi')]));
 
-      await h.runTurn(
-        [user('go')],
-        config: h.config().copyWith(
-          model: tiny,
-          contextEstimator: estimateLlmContext,
-        ),
-      );
+      await h.runTurn([
+        user('go'),
+      ], config: h.config().copyWith(model: tiny, contextEstimator: _estimate));
 
       final fill = stepEnds(h).single.context!;
       expect(fill.window, 256);
@@ -188,7 +193,7 @@ void main() {
             prepareNextStep: (step) async =>
                 StepUpdate(model: modelWithWindow(100000)),
           )
-          .copyWith(contextEstimator: estimateLlmContext),
+          .copyWith(contextEstimator: _estimate),
     );
 
     final ends = stepEnds(h);
@@ -206,7 +211,7 @@ void main() {
         [user('go')],
         config: withEstimator
             ? cfg.copyWith(
-                contextEstimator: estimateLlmContext,
+                contextEstimator: _estimate,
                 compaction: (value: const CompactionOverrides()),
               )
             : cfg,

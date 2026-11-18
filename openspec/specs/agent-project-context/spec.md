@@ -1,17 +1,19 @@
 # agent-project-context Specification
 
 ## Purpose
-Инструкции проекта в системном промпте Dart-агента: ядро `codelab_agent_core` объявляет порт `ProjectFilesSource`, а `codelab_agent_io` (`ProjectFilesLoader`) читает `AGENTS.md` от `cwd` вверх до корня git (`CLAUDE.md` — алиас только без `AGENTS.md`) и кладёт их в секцию `project-context` с бюджетом `tools.project_context.max_bytes`. Чтение ограничено двухшаговой границей (каталог — по корню области, файлы — через `BoundedEnv` реального каталога), лимитами на число и размер файлов и таймаутом; доверие fail-closed: без канонического `cwd` или `PathResolver` проект недоверенный. По WebSocket файлы проекта не читаются. Решения и обоснования — `design.md` архивного change `add-agent-project-files` (D1–D17) и `agent-core-architecture` §11.5, §17.2.2.
+Инструкции проекта в системном промпте Dart-агента: ядро `codelab_agent_core` объявляет порт `ProjectFilesSource`, а `codelab_agent_io` (`ProjectFilesLoader`) читает `AGENTS.md` от `cwd` вверх до корня git (`CLAUDE.md` — алиас только без `AGENTS.md`) и кладёт их в секцию `project-context` с бюджетом `tools.project_context.max_bytes`. Чтение ограничено двухшаговой границей (каталог — по корню области, файлы — через `BoundedEnv` реального каталога), лимитами на число и размер файлов и таймаутом; доверие fail-closed: без канонического `cwd` или `PathResolver` проект недоверенный. По WebSocket файлы проекта не читаются. Тот же `ProjectFilesLoader` реализует порт навыков `SkillFilesSource` (capability `agent-skills`): файлы навыков читаются отдельной фазой со своим таймаутом и кодами диагностик (change `2026-11-18-add-agent-skills`, D1). Решения и обоснования — `design.md` архивного change `add-agent-project-files` (D1–D17) и `agent-core-architecture` §11.5, §17.2.2.
 ## Requirements
 ### Requirement: Порт файлов проекта
 Ядро SHALL объявлять порт `ProjectFilesSource` с методом `load(ProjectFilesQuery)` и необязательное поле `AgentCoreServices.projectFiles` (design.md change `add-agent-project-files`, D1). Запрос: канонический `cwd` сессии, признак `projectTrusted`, `contextMaxBytes`, токен отмены. Результат `ProjectFiles` содержит сырые файлы контекста, файлы шаблонов и определений (frontmatter — `ConfigTree` с позициями, тело, строка начала тела) и список `ExtensionDiagnostic {path, line?, column?, level, code, message}`.
 
-Реализация `ProjectFilesLoader` SHALL жить в `codelab_agent_io`. Порт НЕ SHALL бросать исключений для ошибок файлов: каждая ошибка — диагностика. Без порта (`null`) сессия SHALL создаваться без файлов проекта, как до этого change. Хост, который по своему транспорту файлы проекта не читает, порт не передаёт (`codelab-agent serve --ws`, agent-binary «Файлы проекта в бинаре»).
+Реализация `ProjectFilesLoader` SHALL жить в `codelab_agent_io`; тот же класс реализует порт навыков `SkillFilesSource` (capability `agent-skills`, «Порт файлов навыков»; design.md change `add-agent-skills`, D1) с той же границей, лимитами и кодами диагностик, а навыки загружаются отдельной фазой со своим таймаутом. Порт НЕ SHALL бросать исключений для ошибок файлов: каждая ошибка — диагностика. Без порта (`null`) сессия SHALL создаваться без файлов проекта, как до этого change. Хост, который по своему транспорту файлы проекта не читает, порт не передаёт (`codelab-agent serve --ws`, agent-binary «Файлы проекта в бинаре»).
 
 Коды и уровни диагностик (D3, D6) SHALL быть такими:
-- `warning` — `outside_root` (путь вне корня области), `not_utf8` (файл не в UTF-8), `limit_exceeded` для предела 100 файлов `*.md` в каталоге шаблонов или агентов (лишние отброшены), `unreadable` (файл не открылся или не прочитался, нет `PathResolver` у окружения, после открытия путь или тип изменились), `timeout` (загрузка не уложилась в таймаут фазы);
-- `info` — `shadowed` (файл перекрыт другим), `limit_exceeded` для предела 64 уровней обхода к корню git;
+- `warning` — `outside_root` (путь вне корня области), `not_utf8` (файл не в UTF-8), `limit_exceeded` для предела 100 файлов `*.md` в каталоге шаблонов или агентов и предела 1000 подкаталогов в корне навыков (лишние отброшены), `unreadable` (файл не открылся или не прочитался, нет `PathResolver` у окружения, после открытия путь или тип изменились), `timeout` (загрузка не уложилась в таймаут фазы), `unresolved_root` (элемент `skills.extra_roots` на `~` без домашнего каталога, решение Q41), `untrusted_project` для относительного элемента `skills.extra_roots` недоверенного проекта (корни навыков и каталоги файлов проекта недоверенного проекта дают `untrusted_project` уровня `info` — ожидаемое состояние, а не ошибка настройки; capability `agent-skills`, «Корни навыков, приоритет и согласие»);
+- `info` — `shadowed` (файл контекста, шаблон или определение перекрыты другим; перекрытие навыков порт не выдаёт: `warning` `shadowed` навыка даёт ядро при построении каталога, capability `agent-skills`, «Корни навыков, приоритет и согласие», решения Q21, Q39), `limit_exceeded` для предела 64 уровней обхода к корню git;
 - `error` — `unexpected` (непредвиденное исключение порта).
+
+Уровень диагностики и уровень записи лога различаются: событие `project_files.diagnostic` для диагностик `error` и `warning` SHALL писаться с уровнем лога `warning`, для `info` — с уровнем `debug` (так устроен рантайм); поэтому сценарий «Исключение порта не ломает сессию» говорит об уровне лога `warning` у диагностики `error` `unexpected`.
 
 Загрузка SHALL ограничиваться таймаутом фазы 5 с (D6). Ядро SHALL ждать первым из трёх событий — результата порта, отмены рантайма и таймаута:
 - отмена (`dispose()` рантайма) — сессия НЕ SHALL создаваться, результат порта выбрасывается;
@@ -33,11 +35,16 @@
 - **WHEN** `AgentRuntime.dispose()` вызывается, пока фейковый `ProjectFilesSource` ещё не завершил `load`
 - **THEN** `createSession` завершается отменой, сессия не создаётся, поздний результат порта выбрасывается
 
+#### Scenario: Один загрузчик для двух портов
+- **WHEN** хост `--stdio` собирает ядро
+- **THEN** `AgentCoreServices.projectFiles` и `AgentCoreServices.skillFiles` — один и тот же объект `ProjectFilesLoader`
+
 ### Requirement: Граница чтения файлов проекта
 `ProjectFilesLoader` SHALL читать файлы с локальной файловой системы процесса агента через `BoundedEnv`, корень которого — корень своей области (D2):
 - корень git-репозитория или `cwd` — для контекста;
 - `<cwd>/.codelab/prompts` и `<cwd>/.codelab/agents` — для файлов проекта;
-- `$CODELAB_HOME` — для файлов пользователя.
+- `$CODELAB_HOME` — для файлов пользователя;
+- для каталогов навыков — каждый корень навыков: `<уровень>/.codelab/skills` и `<уровень>/.agents/skills` на уровнях от `cwd` до корня git-репозитория (поиск корня — тот же, что у инструкций проекта; решение Q22), `$CODELAB_HOME/skills`, `~/.agents/skills` и каждый элемент `skills.extra_roots`; файлы навыка (`SKILL.md` и перечисление сопутствующих) — через `BoundedEnv` с корнем в реальном пути каталога навыка (capability `agent-skills`, «Корни навыков и согласие»).
 
 Env сессии ACP (`AcpClientExecutionEnv`) для этих файлов НЕ SHALL использоваться. Путь, чей `realpath` вне корня области, SHALL отклоняться до чтения с диагностикой `outside_root`. Единственная операция вне границы — проверка существования записи `.git` у предков `cwd`, без чтения содержимого.
 
@@ -58,6 +65,10 @@ Env сессии ACP (`AcpClientExecutionEnv`) для этих файлов НЕ
 #### Scenario: Чтение не идёт через клиента ACP
 - **WHEN** ACP-клиент создаёт сессию в каталоге с `AGENTS.md`
 - **THEN** до ответа `session/new` агент не отправляет клиенту `fs/read_text_file`, а системный промпт первого хода содержит правила файла
+
+#### Scenario: Сопутствующий файл-ссылка наружу
+- **WHEN** в каталоге навыка `$CODELAB_HOME/skills/notes` файл `ref.md` — symlink на `$CODELAB_HOME/config.yaml`
+- **THEN** навык загружен, `ref.md` нет в списке его сопутствующих файлов, содержимое `config.yaml` не читалось
 
 ### Requirement: Поиск инструкций проекта
 Загрузчик SHALL искать от канонического `cwd` вверх первый каталог с записью `.git` (каталог или файл; символическая ссылка `.git` маркером не считается — её цель лежит вне границы чтения), не дальше 64 уровней. Найденный каталог — корень, иначе корень — `cwd`. На каждом уровне от корня до `cwd` SHALL читаться `AGENTS.md`, а если его нет — `CLAUDE.md` (алиас; при обоих `CLAUDE.md` даёт диагностику `info` `shadowed`). Дополнительно SHALL читаться `$CODELAB_HOME/AGENTS.md`. Файлы SHALL читаться для доверенного и недоверенного проекта одинаково (D4). При `contextMaxBytes == 0` файлы контекста не читаются.

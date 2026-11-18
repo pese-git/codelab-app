@@ -238,7 +238,7 @@ final class _ClientRun<C> {
 
   Future<void> play(C client) async {
     final frames = [
-      if (!fixture.setup.skipInitialize) ..._handshake(fixture.setup),
+      if (!fixture.setup.skipInitialize) ..._handshake(fixture),
       ...fixture.frames,
     ];
     if (!fixture.setup.skipInitialize) {
@@ -522,7 +522,8 @@ final class _ClientRun<C> {
 /// Как использовать: вызывается только драйвером клиентского прогона.
 /// Полное объявление клиента точно проверяют фикстуры с явным кадром
 /// `initialize` и `initialize_codelab_request_test.dart`.
-List<FixtureFrame> _handshake(FixtureSetup setup) {
+List<FixtureFrame> _handshake(AcpFixture fixture) {
+  final setup = fixture.setup;
   FixtureFrame frame(
     int index,
     FrameDirection dir,
@@ -557,7 +558,17 @@ List<FixtureFrame> _handshake(FixtureSetup setup) {
       'id': r'${initializeId}',
       'result': {
         'protocolVersion': 1,
-        'agentCapabilities': <String, Object?>{},
+        'agentCapabilities': <String, Object?>{
+          // Метка `usageLedger` (FIX-4): агент объявляет запрос журнала, без
+          // чего клиент его не шлёт (design.md change `add-usage-ledger`, D7,
+          // D9; acp-golden-fixtures «Клиентский прогон журнала»).
+          if (fixture.extensions.contains('usageLedger'))
+            '_meta': {
+              'codelab': {
+                'usageLedger': {'version': 1},
+              },
+            },
+        },
       },
     }),
     frame(-2, FrameDirection.c2a, 'handshake: session/new', {

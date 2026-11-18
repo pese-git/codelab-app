@@ -51,9 +51,17 @@ final class Compacted extends CompactionOutcome {
   final int tokensBefore, tokensAfter;
 }
 
+/// Сжимать нечего: `no cut point` — нет среза, `no reduction` — резюме не
+/// уменьшает оценку контекста (CMP-10; журнал получает только запись учёта
+/// CMP-13), `stale` — пока шло резюме, в журнале
+/// появилась запись, с которой посчитанная запись сжатия была бы неверной
+/// (CMP-12); причина видна в логе `compaction.skipped`. Хосты отвечают на все
+/// причины одинаково (`/compact` — `Nothing to compact.`), аварийный путь
+/// трактует как «сжатие не помогло».
 final class NothingToCompact extends CompactionOutcome {
   const NothingToCompact(this.reason);
 
+  /// `no cut point`, `no reduction` или `stale`.
   final String reason;
 }
 
@@ -77,10 +85,40 @@ const maxCompactionPasses = 3;
 /// выбрасываются из записи вместо нового прохода (Q49 (б), D20 «M2»).
 /// `skillCatalog == null` — навыков нет, поведение прежнее.
 ///
-/// Первый проход без среза — [NothingToCompact]. Пока оценка после прохода
-/// выше порога, идёт следующий (не больше [maxCompactionPasses]); его
-/// [NothingToCompact] или [CompactionFailed] не отменяют уже записанное, и
-/// результатом остаётся [Compacted] прошлого прохода.
+/// Порог CMP-5 и выброс навыков по окну сравнивают согласованное «после»
+/// (design.md change `anchor-context-estimate-after-compaction`, D8): сессия
+/// сразу после записи фиксирует якорь сжатия, и `preflight`, `afterTurn` и
+/// `ModelRequested` видят ровно это число (CMP-11) — сравнивать с порогом
+/// эвристику проекции незачем. [anchor] — якорь последнего сжатия сессии:
+/// «до» первого прохода берётся от него, если в контексте нет ответа с usage,
+/// иначе шкала рвалась бы на стыке двух сжатий.
+///
+/// Запись ложится на текущий лист (CMP-12, change
+/// `fix-config-change-during-background-compaction`, D2, D3): пока суммаризатор
+/// отвечал, сессия могла записать смену режима, модели, `effort` или агента.
+/// Запись пишется через [SessionWriter.appendWith] в очереди писателя: если
+/// между листом начала прохода и текущим только записи состояния
+/// ([_isStateRecord]), запись сжатия перестраивается с `parentId` — текущим
+/// листом (числа прохода верны: такие записи не дают сообщений контексту);
+/// иначе — исход `stale`, запись не пишется, проход не повторяется.
+///
+/// Первый проход без среза, без выигрыша или устаревший — [NothingToCompact]
+/// (причины `no cut point`, `no reduction` и `stale`; все пишут лог
+/// `compaction.skipped` с `reason`). Проход без выигрыша — когда
+/// согласованная оценка после него не меньше оценки до (`after >= before`,
+/// CMP-10, D3): запись `compaction` не пишется.
+///
+/// Суммаризатор в этих двух исходах уже оплачен, поэтому вместо записи
+/// `compaction` пишется служебная запись учёта (`compactionDiscardedCustomType`)
+/// и эмитится `CompactionDiscarded` (CMP-13, change
+/// `fix-discarded-compaction-usage`, D1, D2); лог `compaction.skipped`
+/// получает `usage_record_id` и `summary_model`. Без среза, при сбое и отмене
+/// суммаризатор не оплачен или результат утерян (R3) — записи учёта нет.
+/// Оценка «после» — [estimateAfterCompaction] (D1), «до» следующего прохода —
+/// «после» прошлого (D2). Пока «после» выше порога (CMP-5), идёт
+/// следующий проход (не больше [maxCompactionPasses]); его [NothingToCompact]
+/// или [CompactionFailed] не отменяют уже записанное, и результатом остаётся
+/// [Compacted] прошлого прохода.
 Future<CompactionOutcome> compact({
   required SessionWriter writer,
   required CompactionTrigger trigger,
@@ -95,10 +133,10 @@ Future<CompactionOutcome> compact({
   required AgentEventSink emit,
   void Function(LlmContextProjection projection)? onCompacted,
   String? focus,
-  String? summaryModel,
   Logger? logger,
   SkillCatalog? skillCatalog,
   SkillsConfig skillsConfig = const SkillsConfig(),
+  CompactionAnchor? anchor,
 }) async {
   LlmContextProjection project(SessionSnapshot snapshot, {Logger? log}) =>
       buildLlmContext(
@@ -111,16 +149,99 @@ Future<CompactionOutcome> compact({
     p.messages,
     systemPrompt: systemPrompt,
     tools: tools,
+    compaction: anchor,
   );
+  // Эвристика без якоря: из её разницы строится согласованное «после» (D1).
+  int raw(LlmContextProjection p) =>
+      estimateTokens(p.messages, systemPrompt: systemPrompt, tools: tools);
   final session = writer.snapshot.header.id;
   final threshold = compactionThreshold(window, settings);
   Compacted? done;
+
+  /// Учёт оплаченного вызова отброшенного прохода (CMP-13, D1, D2, D6):
+  /// запись `custom`, затем событие, затем лог `compaction.skipped`.
+  ///
+  /// Через `append`, а не `appendWith`: родитель — лист в очереди писателя
+  /// (SES-16), проверка CMP-12 записи без сообщений не нужна. Не `durable`:
+  /// запись производна от уже потраченных денег, не точка восстановления.
+  /// Сбой записи уходит из `compact` (SES-8).
+  Future<void> discard({
+    required int pass,
+    required String reason,
+    required int before,
+    required int after,
+    required SummaryResult result,
+    LogLevel level = LogLevel.info,
+    Map<String, Object?> extra = const {},
+  }) async {
+    final record = await writer.append(
+      (id, parent, at) => CustomRecord(
+        id: id,
+        parentId: parent,
+        timestamp: at,
+        customType: compactionDiscardedCustomType,
+        data: {
+          'reason': reason,
+          'trigger': trigger.name,
+          'pass': pass,
+          'tokensBefore': before,
+          'tokensAfter': after,
+          'summaryModel': result.model,
+          'usage': result.usage.toJson(),
+        },
+      ),
+    );
+    await emit(
+      CompactionDiscarded(
+        session,
+        tokensBefore: before,
+        tokensAfter: after,
+        usage: result.usage,
+        model: result.model,
+      ),
+    );
+    logger?.log(
+      level,
+      'compaction.skipped',
+      fields: {
+        'session_id': session.value,
+        'trigger': trigger.name,
+        'pass': pass,
+        'reason': reason,
+        'tokens_before': before,
+        'tokens_after': after,
+        ...extra,
+        'usage_record_id': record.id,
+        'summary_model': result.model,
+      },
+    );
+  }
+
   for (var pass = 0; pass < maxCompactionPasses; pass++) {
     final snapshot = writer.snapshot;
-    final before = estimate(project(snapshot, log: logger));
+    final projectionBefore = project(snapshot, log: logger);
+    // «До» первого прохода — с якорем на usage или на прошлое сжатие (D8).
+    // Следующие проходы берут «после» прошлого: в проекции уже нет якоря
+    // (§8.7), и пересчёт дал бы чистую эвристику — ту же ошибку, что D1
+    // убирает (D2).
+    final before = done?.tokensAfter ?? estimate(projectionBefore);
+    final rawBefore = raw(projectionBefore);
     final (:region, :last) = compactionRegion(snapshot, logger: logger);
     final cut = findCutPoint(region, settings);
     if (cut == null) {
+      // Видимая причина «сжимать нечего» (как `no reduction` ниже): без лога
+      // оператор не отличал пустой регион от сжатия, которое не дало выигрыша.
+      // Полей оценок нет: проход до них не дошёл (D3).
+      logger?.log(
+        LogLevel.info,
+        'compaction.skipped',
+        fields: {
+          'session_id': session.value,
+          'trigger': trigger.name,
+          'pass': pass + 1,
+          'reason': 'no cut point',
+        },
+      );
       return done ?? const NothingToCompact('no cut point');
     }
     final end = cut.splitTurn ? cut.turnStartIndex : cut.firstKeptIndex;
@@ -132,9 +253,9 @@ Future<CompactionOutcome> compact({
               .toList()
         : null;
     final files = _fileOps([...summarized, ...?prefix], last);
-    final String summary;
+    final SummaryResult result;
     try {
-      summary = await summarize(
+      result = await summarize(
         SummaryRequest(
           region: summarized,
           previousSummary: last?.summary,
@@ -176,26 +297,40 @@ Future<CompactionOutcome> compact({
       'readFiles': files.read,
       'modifiedFiles': files.modified,
       'splitTurn': cut.splitTurn,
-      'summaryModel': ?summaryModel,
+      // Модель и usage суммаризатора (design.md change `add-usage-ledger`,
+      // D4): формат журнала не меняется, поле `usage` описано в §8.2.4.
+      'summaryModel': result.model,
+      'usage': result.usage.toJson(),
     };
     CompactionRecord withFields({
       List<CompactionSkill> skills = const [],
       int tokensAfter = 0,
+      String? id,
+      String? parentId,
     }) => CompactionRecord(
-      id: recordId,
-      parentId: snapshot.leafId,
+      id: id ?? recordId,
+      parentId: parentId ?? snapshot.leafId,
       timestamp: recordTime,
-      summary: summary,
+      summary: result.text,
       firstKeptId: firstKeptId,
       tokensBefore: before,
       tokensAfter: tokensAfter,
       details: details,
       skills: skills.isEmpty ? null : skills,
     );
+    // Согласованное «после» проекции с ещё не записанной записью (D1): идёт
+    // в запись, событие, лог, проверку выигрыша и порог (D8). Эвристика
+    // проекции без якоря нужна только для разницы с `rawBefore`.
     int estimateWith(List<CompactionSkill> skills) {
       final draft = withFields(skills: skills);
-      return estimate(project(snapshot.withRecord(draft, leafAfter(draft))));
+      return estimateAfterCompaction(
+        before: before,
+        rawBefore: rawBefore,
+        rawAfter: raw(project(snapshot.withRecord(draft, leafAfter(draft)))),
+      );
     }
+
+    bool overThreshold(int after) => after > threshold;
 
     // Навыки записи (D15, D20): активные до сжатия, кроме тех, чья последняя
     // активация осталась в хвосте после нового `firstKeptId` — их блок и так
@@ -208,29 +343,102 @@ Future<CompactionOutcome> compact({
     // из-за сообщения навыков (без него укладывается), нового прохода не
     // будет — давние навыки выбрасываются с конца, пока оценка не уложится.
     // Если не укладывается и без них, работает обычный CMP-5. Решение лежит в
-    // самой записи, поэтому проекция и `activeSkills` окна не знают.
+    // самой записи, поэтому проекция и `activeSkills` окна не знают. Сравнение
+    // с порогом — по согласованному `after` (D8), как у CMP-5.
     var skills = candidates;
-    var after = estimateWith(skills);
+    var estimated = estimateWith(skills);
     if (skills.isNotEmpty &&
-        after > threshold &&
-        estimateWith(const []) <= threshold) {
-      while (skills.isNotEmpty && after > threshold) {
+        overThreshold(estimated) &&
+        !overThreshold(estimateWith(const []))) {
+      while (skills.isNotEmpty && overThreshold(estimated)) {
         skills = skills.sublist(0, skills.length - 1);
-        after = estimateWith(skills);
+        estimated = estimateWith(skills);
       }
     }
+    final after = estimated;
     final droppedWindow = skillCatalog == null
         ? 0
         : _attachedCount(candidates, skillCatalog, skillsConfig) -
               _attachedCount(skills, skillCatalog, skillsConfig);
-    // tokensAfter — по проекции с ещё не записанной записью и с приложенным
-    // сообщением навыков (CMP-5): запись пишется один раз и уже с итоговым
-    // числом (§9.8, шаг 9).
-    final record = withFields(skills: skills, tokensAfter: after);
-    await writer.appendBuilt(record, durable: true);
+    // Нет выигрыша (CMP-10, D3): запись, которая не уменьшает оценку, только
+    // заменяет дословный текст пересказом. Проверка — после выбора навыков и
+    // до записи; навыки ради выигрыша не выбрасываются (D6), их активации
+    // остаются в контексте как были.
+    if (after >= before) {
+      await discard(
+        pass: pass + 1,
+        reason: 'no reduction',
+        before: before,
+        after: after,
+        result: result,
+      );
+      return done ?? const NothingToCompact('no reduction');
+    }
+    // tokensAfter — согласованная оценка (D1) по проекции с ещё не записанной
+    // записью и с приложенным сообщением навыков (CMP-5): запись пишется один
+    // раз и уже с итоговым числом (§9.8, шаг 9).
+    // Запись — в очереди писателя и по текущему снимку (CMP-12, D2): пока шло
+    // резюме, сессия могла дописать смену конфигурации, и запись на прежнем
+    // листе увела бы её на боковую ветку.
+    var stale = false;
+    var cancelledInQueue = false;
+    String? blockingType;
+    final record = await writer.appendWith<CompactionRecord>((current) {
+      // Отмена, пришедшая, пока запись ждала очереди, тоже не пишет (CMP-3).
+      if (cancel.isCancelled) {
+        cancelledInQueue = true;
+        return null;
+      }
+      final blocking = _blockingBetween(current, snapshot.leafId);
+      if (blocking != null) {
+        stale = true;
+        blockingType = blocking;
+        return null;
+      }
+      return withFields(
+        skills: skills,
+        tokensAfter: after,
+        id: current.byId.containsKey(recordId)
+            ? newRecordId(ids, current.byId.containsKey)
+            : recordId,
+        parentId: current.leafId,
+      );
+    }, durable: true);
+    if (record == null) {
+      // Отмену проверяет только решение построителя (`cancelledInQueue`):
+      // отмена, пришедшая после `stale`, учёт не отменяет — вызов оплачен
+      // (Q9, CMP-13). Проверка токена здесь расходилась бы с этим правилом.
+      if (cancelledInQueue) {
+        cancel.throwIfCancelled();
+      }
+      assert(stale, 'appendWith returned null for a reason other than stale');
+      // `warning`: в текущем ядре исход недостижим (design.md, D3), его
+      // появление — сигнал о новом пути записи. В лог идёт только вид записи.
+      // Суммаризатор оплачен, поэтому учёт пишется и здесь (Q6 (а)).
+      await discard(
+        pass: pass + 1,
+        reason: 'stale',
+        before: before,
+        after: after,
+        result: result,
+        level: LogLevel.warning,
+        extra: {'blocking_type': blockingType},
+      );
+      return done ?? const NothingToCompact('stale');
+    }
+    // Проекция — по снимку писателя после записи: якорь сессии берёт из неё
+    // `tokensAfter` и `compactionCovered` перестроенной записи, они те же, что
+    // посчитал проход (записи состояния между листами сообщений не дают,
+    // CMP-12), поэтому якорь верен и при перестроении.
     onCompacted?.call(project(writer.snapshot, log: logger));
     await emit(
-      ContextCompacted(session, tokensBefore: before, tokensAfter: after),
+      ContextCompacted(
+        session,
+        tokensBefore: before,
+        tokensAfter: after,
+        usage: result.usage,
+        model: result.model,
+      ),
     );
     if (skillCatalog != null && candidates.isNotEmpty) {
       _logReattached(
@@ -256,11 +464,45 @@ Future<CompactionOutcome> compact({
       },
     );
     done = Compacted(record, before, after);
-    if (after <= threshold) {
+    if (!overThreshold(estimated)) {
       break;
     }
   }
   return done!;
+}
+
+/// Записи состояния сессии: между листом начала прохода и текущим могут лежать
+/// только они (CMP-12, D2). Они не дают сообщений в `buildLlmContext` (§8.7,
+/// шаг 6) и не влияют на `activeSkills`, поэтому оценки прохода и
+/// `firstKeptId` остаются верными. Список закрытый: новый вид записи
+/// (`branch`, `memory_recall`, …) даёт `stale`, а не неверную запись
+/// (fail-closed, R5); добавлять вид сюда — после проверки, что он не меняет
+/// сообщения контекста.
+bool _isStateRecord(SessionRecord record) =>
+    record is ModelChangeRecord ||
+    record is ModeChangeRecord ||
+    record is ConfigChangeRecord ||
+    record is SessionInfoRecord;
+
+/// Вид первой записи на пути от листа [current] к [from] (лист начала
+/// прохода), которая не является записью состояния ([_isStateRecord]);
+/// `null` — между ними только состояние, запись сжатия ложится на лист.
+/// `missing` — [from] на пути не найден (обрыв ссылки или цикл `parentId`).
+String? _blockingBetween(SessionSnapshot current, String? from) {
+  var id = current.leafId;
+  // Предел шагов — число записей: цикл `parentId` испорченного журнала не
+  // должен зациклить проход.
+  for (var steps = 0; id != from; steps++) {
+    final record = id == null ? null : current.byId[id];
+    if (record == null || steps > current.records.length) {
+      return 'missing';
+    }
+    if (!_isStateRecord(record)) {
+      return record.type;
+    }
+    id = record.parentId;
+  }
+  return null;
 }
 
 /// Элементы `compaction.skills` для [draft] (запись без `skills`) на снимке

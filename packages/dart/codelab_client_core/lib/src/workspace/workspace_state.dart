@@ -8,6 +8,7 @@ import '../queue/prompt_queue.dart';
 import '../session/session_views.dart';
 import '../session/subagent_rows.dart';
 import '../transcript/transcript_item.dart';
+import '../usage/usage_ledger_models.dart';
 import '../usage/usage_models.dart';
 
 part 'workspace_state.freezed.dart';
@@ -88,6 +89,11 @@ abstract class SessionView with _$SessionView {
     /// Запросы `session/request_permission`, ждущие ответа пользователя.
     @Default([]) List<PendingApprovalView> pendingApprovals,
 
+    /// Ожидания одобрений корня текущего хода (design.md change
+    /// `fix-usage-pane-live-cards`, D3): хост вычитает их из Time. Список
+    /// неизменяемый и сравнивается по значению.
+    @Default(<ApprovalWaitView>[]) List<ApprovalWaitView> approvalWaits,
+
     /// План последнего `plan` сессии в порядке агента; каждое обновление
     /// заменяет его целиком (design.md change `add-codelab-cli`, D14).
     @Default([]) List<PlanEntryView> plan,
@@ -109,6 +115,15 @@ abstract class SessionView with _$SessionView {
     /// его ведёт `UsageFold`, а сбрасывают `session/load` и смена
     /// соединения.
     @Default(UsageView()) UsageView usage,
+
+    /// Журнал usage сессии по запросу `_codelab/session/usage/ledger`
+    /// (change `add-usage-ledger`, D10): `unavailable` — агент не объявил
+    /// `usageLedger`, `idle` — не запрашивали или сброшен переподключением и
+    /// `session/load`, затем `loading`, `loaded` или `failed`. Не выводится из
+    /// `AcpSession`: состояние ведёт `ClientWorkspace.refreshUsageLedger`;
+    /// со снимками `usage` kit журнал не складывает (хост сравнивает
+    /// `view.seq` с `usage.lastSeq`).
+    @Default(UsageLedgerState.unavailable()) UsageLedgerState usageLedger,
   }) = _SessionView;
 
   /// Число строк [subagents] в состоянии [state] (счётчики заголовка панели).

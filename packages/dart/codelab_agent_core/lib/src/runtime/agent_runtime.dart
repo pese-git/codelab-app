@@ -78,6 +78,9 @@ import '../tools/path_lock.dart';
 import '../tools/registry.dart';
 import '../tools/tasks/task_list.dart';
 import '../tools/tasks/task_tools.dart' show TaskUpdateTool;
+import '../usage/usage_ledger_keeper.dart';
+import '../usage/usage_ledger_report.dart';
+import '../usage/usage_report_text.dart';
 import '../util/logger.dart';
 import '../util/result.dart';
 import '../host/host_profile.dart';
@@ -784,7 +787,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
           id,
         );
       }
-      await session._restoreHistory();
+      final history = await session._restoreHistory();
       final base = _agentBaseOf(snapshot, scope.applied.catalog);
       await session._restoreAgent(
         restored.config['agent'],
@@ -792,6 +795,15 @@ final class AgentRuntimeImpl implements AgentRuntime {
         baseModel:
             base.model ??
             _resolve(scope.applied, settings.defaultModel, effort),
+      );
+      // Якорь сжатия — после `_restoreAgent`: промпт и схемы агента журнала
+      // известны только теперь, а `raw` обязан считаться по ним (D5).
+      session._adoptProjection(
+        history,
+        systemPrompt: session._agent.systemPrompt,
+        tools: session._schemas,
+        transcript: true,
+        source: 'load',
       );
       if (cwd != null && cwd != header) {
         await session._writer.append(
@@ -1854,7 +1866,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         logger: logger,
         // Без capability compaction — поведение этапа 2: размер не
         // проверяется, overflow — обычная ошибка шага.
-        estimateTokens: compaction ? estimateLlmContext : null,
+        estimateTokens: compaction ? (c) => session._estimate(c) : null,
         emergencyCompact: compaction
             ? (cause, cancel) => session._emergency(cause, cancel)
             : null,
@@ -1862,7 +1874,7 @@ final class AgentRuntimeImpl implements AgentRuntime {
         // Заполнение контекста для `StepEnded.context` нужно и без
         // автосжатия (add-usage-extension, D5, Q10 (а)); `compactAt` — только
         // при включённой capability `compaction`.
-        contextEstimator: estimateLlmContext,
+        contextEstimator: (c) => session._estimate(c),
         compaction: compaction ? settings.compaction : null,
         // Usage детей входит в бюджет хода корня (SUB-11, D36 Т8).
         subagentUsage: subagentManager == null
@@ -3011,10 +3023,21 @@ final class _Session implements AgentSession {
       logger: logger,
       onFailure: _onStorageFailure,
     );
+    _usage = UsageLedgerKeeper(
+      sessionId: id,
+      store: services.usageLedger,
+      logger: logger,
+      clock: services.clock,
+      snapshot: () => _writer.snapshot,
+      catalog: () => _catalog,
+      isClosed: () => _closed,
+    );
     // Писатель — первый подписчик агента: запись идёт до того, как событие
     // увидят остальные (§8.3, SES-8).
     _agent.subscribe(_onEvent);
     _builtin = BuiltinCommands(
+      usageReport: (rebuild) async =>
+          formatUsageReport(await _usage.report(rebuild: rebuild)),
       reloadConfig: reloadConfig,
       checkConfig: () async {
         try {
@@ -3074,6 +3097,16 @@ final class _Session implements AgentSession {
 
   /// Исполнитель встроенных команд `/config` и `/mcp` (D12).
   late final BuiltinCommands _builtin;
+
+  /// Операции отчёта журнала usage (design.md change `add-usage-ledger`, D3).
+  late final UsageLedgerKeeper _usage;
+
+  @override
+  Future<UsageLedgerReport> usageLedger({bool rebuild = false}) =>
+      _usage.report(rebuild: rebuild);
+
+  @override
+  Future<UsageLedgerReport> usageLedgerInMemory() => _usage.inMemory();
 
   /// Слот хода занят встроенной командой: второй `prompt` отклоняется так
   /// же, как во время хода модели (D12, «Слот хода и ход модели»). Отдельный
@@ -3236,6 +3269,73 @@ final class _Session implements AgentSession {
   /// Фоновое сжатие после хода: следующий [prompt] ждёт его (§9.5).
   Future<void>? _background;
   CancelTokenSource? _backgroundCancel;
+
+  /// Якорь на последнее сжатие активной ветки (§9.3; design.md change
+  /// `anchor-context-estimate-after-compaction`, D3).
+  ///
+  /// Почему поле сессии: цикл и оценщик не знают журнала, а после сжатия в
+  /// контексте нет ответа с usage — без якоря оценка падала бы на
+  /// эвристику, завышающую промпт и схемы. Меняется только в
+  /// [_adoptProjection] (синхронно с заменой транскрипта; при аварийном сжатии
+  /// транскрипт цикл заменит сам, а якорь нужен до следующей оценки
+  /// `preflight`) и при загрузке в `AgentRuntimeImpl.loadSession` (D5);
+  /// `null` — сжатия нет или `tokensAfter ≤ 0` (D6). Правило (R3): операция,
+  /// которая строит транскрипт из журнала внутри открытой сессии, обязана
+  /// менять и якорь — через [_adoptProjection].
+  CompactionAnchor? _compactionAnchor;
+
+  /// Единый оценщик сессии: `preflight`, `ModelRequested`, `StepEnded`,
+  /// `afterTurn` и «до» компактора считают одной функцией с якорем сжатия
+  /// (CMP-11, D3).
+  int _estimate(LlmContext c) => estimateContextTokens(
+    c.messages,
+    systemPrompt: c.systemPrompt,
+    tools: c.tools,
+    compaction: _compactionAnchor,
+  );
+
+  /// Принимает проекцию журнала: якорь сжатия и (если [transcript]) транскрипт
+  /// агента — вместе, в одном синхронном методе (R3, D3).
+  ///
+  /// Почему один метод: если транскрипт строится из журнала, а якорь остаётся
+  /// прежним, оценка считала бы новый контекст от старого `tokensAfter`.
+  /// Вызывают: колбэк сжатия `afterTurn` и `manual` (`transcript: true`),
+  /// аварийное сжатие (`transcript: false` — транскрипт цикл заменит сам после
+  /// хода, а якорь нужен до следующей оценки `preflight`) и загрузка сессии
+  /// после `_restoreAgent`. [systemPrompt] и [tools] — те, по которым считался
+  /// `tokensAfter` (снятые на старте `_compact`, а при загрузке — агента
+  /// журнала): `raw` якоря обязан считаться по ним (D1, D7).
+  /// [source] — `compaction` или `load` для лога `compaction.anchor`.
+  void _adoptProjection(
+    LlmContextProjection p, {
+    required String systemPrompt,
+    required List<ToolSchema> tools,
+    required bool transcript,
+    required String source,
+  }) {
+    if (transcript) {
+      _agent.replaceTranscript(_withModel(p.messages));
+    }
+    final anchor = compactionAnchorOf(
+      p,
+      systemPrompt: systemPrompt,
+      tools: tools,
+    );
+    _compactionAnchor = anchor;
+    if (anchor != null) {
+      // Только числа: тексты резюме и сообщений в лог не идут (§16).
+      _logger.log(
+        LogLevel.debug,
+        'compaction.anchor',
+        fields: {
+          'session_id': id.value,
+          'tokens': anchor.tokens,
+          'raw': anchor.raw,
+          'source': source,
+        },
+      );
+    }
+  }
 
   /// Сборка системного промпта для нового режима.
   final String Function(String cwd, ModeId mode, AgentDefinition? agent)
@@ -4268,6 +4368,8 @@ final class _Session implements AgentSession {
         stack: stack,
       );
     }
+    // Начатая запись `usage.json` доходит до конца (D3), как запись журнала.
+    await _usage.settle();
     await _services.sessions.close(id);
     if (!_live.isClosed) {
       await _live.close();
@@ -4434,22 +4536,19 @@ final class _Session implements AgentSession {
     }
   }
 
-  /// Транскрипт и план из журнала после ремонта (§8.7).
+  /// История и план из журнала после ремонта (§8.7).
   ///
-  /// Список задач восстанавливается из ветки журнала без публикации и без
+  /// Транскрипт здесь не ставится: его вместе с якорем сжатия принимает
+  /// [_adoptProjection] после `_restoreAgent` (D5, R3). Список задач восстанавливается из ветки журнала без публикации и без
   /// записи (`agent-core/17-16-task-list.md` §17.16.6, TSK-6, D29): клиент
-  /// получит его реплеем.
-  Future<void> _restoreHistory() async {
+  /// получит его реплеем. Возвращает проекцию журнала для [_adoptProjection].
+  Future<LlmContextProjection> _restoreHistory() async {
     final snapshot = _writer.snapshot;
-    _agent.replaceTranscript(
-      _withModel(
-        buildLlmContext(
-          snapshot,
-          logger: _logger,
-          skillCatalog: skills,
-          skillsConfig: skillsConfig,
-        ).messages,
-      ),
+    final projection = buildLlmContext(
+      snapshot,
+      logger: _logger,
+      skillCatalog: skills,
+      skillsConfig: skillsConfig,
     );
     final state = buildTaskList(snapshot, logger: _logger);
     await _tools.tasks.restore(
@@ -4457,6 +4556,7 @@ final class _Session implements AgentSession {
       nextId: state.nextId,
       announce: false,
     );
+    return projection;
   }
 
   @override
@@ -4491,11 +4591,17 @@ final class _Session implements AgentSession {
   Future<CompactionOutcome> _compact(
     CompactionTrigger trigger,
     CancelToken cancel, {
-    required void Function(LlmContextProjection projection) onCompacted,
+    required bool adoptTranscript,
+    void Function(LlmContextProjection projection)? onCompacted,
     String? focus,
   }) {
     final model = _agent.config.model;
     final settings = _settings;
+    // Промпт и схемы фиксируются на старте: компактор считает `tokensAfter` по
+    // ним, поэтому и `raw` якоря — по ним, даже если режим сменится, пока идёт
+    // фоновое сжатие (D1, D7).
+    final systemPrompt = _agent.systemPrompt;
+    final tools = _schemas;
     return compact(
       writer: _writer,
       trigger: trigger,
@@ -4508,18 +4614,29 @@ final class _Session implements AgentSession {
       ),
       settings: settings,
       window: _window,
-      systemPrompt: _agent.systemPrompt,
-      tools: _schemas,
+      systemPrompt: systemPrompt,
+      tools: tools,
       ids: _services.ids,
       clock: _services.clock,
       cancel: cancel,
       emit: _sessionEvent,
-      onCompacted: onCompacted,
+      // Якорь и транскрипт меняются синхронно, без `await` между ними (D3);
+      // каждый проход вызывает колбэк, остаётся якорь последнего записанного.
+      onCompacted: (p) {
+        _adoptProjection(
+          p,
+          systemPrompt: systemPrompt,
+          tools: tools,
+          transcript: adoptTranscript,
+          source: 'compaction',
+        );
+        onCompacted?.call(p);
+      },
       focus: focus,
-      summaryModel: '${model.provider}/${model.id}',
       logger: _logger,
       skillCatalog: skills,
       skillsConfig: skillsConfig,
+      anchor: _compactionAnchor,
     );
   }
 
@@ -4536,7 +4653,7 @@ final class _Session implements AgentSession {
     return _compact(
       CompactionTrigger.manual,
       cancel,
-      onCompacted: (p) => _agent.replaceTranscript(_withModel(p.messages)),
+      adoptTranscript: true,
       focus: focus,
     );
   }
@@ -4567,6 +4684,7 @@ final class _Session implements AgentSession {
           ? CompactionTrigger.preflight
           : CompactionTrigger.overflow,
       cancel,
+      adoptTranscript: false,
       onCompacted: (p) => projection = p,
     );
     if (outcome is! Compacted || projection == null) {
@@ -4589,6 +4707,7 @@ final class _Session implements AgentSession {
       _agent.messages,
       systemPrompt: _agent.systemPrompt,
       tools: _schemas,
+      compaction: _compactionAnchor,
     );
     if (!shouldCompact(tokens, _window, _settings)) {
       return;
@@ -4606,7 +4725,7 @@ final class _Session implements AgentSession {
       await _compact(
         CompactionTrigger.afterTurn,
         cancel,
-        onCompacted: (p) => _agent.replaceTranscript(_withModel(p.messages)),
+        adoptTranscript: true,
       );
     } on CancelledException {
       // Сессия закрывается: журнал не тронут (CMP-3).
