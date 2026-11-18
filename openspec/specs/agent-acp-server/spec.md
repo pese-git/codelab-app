@@ -322,6 +322,8 @@ ACP-сервер Dart-агента: пакет `codelab_agent_acp` проеци�
 - change `add-subagents-and-tasks`: блок `agentCapabilities._meta.codelab` (`subagents`, `subagentToolCalls`, `tasks`), `_meta.codelab.task` у entries `plan`, `_meta.codelab.subagent` у `toolCall` в `session/request_permission`, у первого `tool_call` вызова `agent` (`id`, `type`) и у его финального `tool_call_update` (`summary`, при `failed` — `failure`), `_meta.codelab.parentToolCallId` у `tool_call`/`tool_call_update` вызовов потомков (только клиенту с `subagentToolCalls`).
 - change `add-usage-extension`: ключ `usage` блока `agentCapabilities._meta.codelab` и уведомление агент → клиент `_codelab/session/usage` (только соединению, объявившему `clientCapabilities._meta.codelab.usage`).
 - change `add-usage-ledger`: ключ `usageLedger` блока `agentCapabilities._meta.codelab`, запрос клиент → агент `_codelab/session/usage/ledger` и значение `trigger: "load"` уведомления `_codelab/session/usage`.
+- change `fix-discarded-compaction-usage`: значение `trigger: "compactionDiscarded"` уведомления `_codelab/session/usage` и необязательное целое `summaries.discarded` ответа `_codelab/session/usage/ledger` — без смены версий `usage` и `usageLedger` (design.md change `fix-discarded-compaction-usage`, D5).
+- change `add-desktop-usage-pane`: необязательное поле `budget` снимков `step` и `turn` уведомления `_codelab/session/usage` — без смены версии `usage` (design.md change `add-desktop-usage-pane`, D7).
 
 Каждое расширение SHALL быть перечислено в §13.12 документа ядра со ссылкой на свой change. Новых методов и корневых полей ACP сервер НЕ SHALL вводить (`15-Extensibility.md`).
 
