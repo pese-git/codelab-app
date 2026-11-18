@@ -21,6 +21,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter/painting.dart' show ImageProvider;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import '../../../app/provider_setup_offer.dart';
 import '../../../core/platform/dock_layout_store.dart';
 import '../../../core/platform/external_link_opener.dart';
@@ -103,6 +104,9 @@ final class CodeLabShellParts {
     ProviderSetupOffer? providerSetupOffer,
     required UsageCsvSaver usageCsvSaver,
     Logger? usageLogger,
+    // ЗАГЛУШКА задачи 3.3 change `add-desktop-localization` (D5): порт языка
+    // принят, но Cubit-ы на него не подписываются; поведение — задача 3.4.
+    AppStrings? strings,
   }) {
     final changes = ShellChanges();
     final diagnostics = ShellDiagnostics(logger: logger);

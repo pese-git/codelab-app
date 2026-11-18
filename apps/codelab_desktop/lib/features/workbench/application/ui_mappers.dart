@@ -19,6 +19,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' show FluentIcons, VoidCallback;
 
+import '../../../l10n/app_localizations.dart';
 import 'agents_pane_data.dart';
 
 /// Модели инспектора — модели kit (`InspectorProjection`, design D9);
@@ -58,7 +59,12 @@ const _promptTitleMaxLength = 60;
 /// начало первого промпта, а у сессии без промптов — [untitledSessionTitle];
 /// id сессии (ULID) пользователю ничего не говорит и в названии не
 /// показывается.
-CodeLabSessionListItem sessionListItemOf(AcpSession session) {
+CodeLabSessionListItem sessionListItemOf(
+  AcpSession session, {
+  // ЗАГЛУШКА задачи 3.3 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 3.4.
+  AppLocalizations? l10n,
+}) {
   final title = session.title?.trim().isNotEmpty == true
       ? session.title!.trim()
       : _firstPromptTitle(session) ?? untitledSessionTitle;
@@ -90,7 +96,12 @@ String? _firstPromptTitle(AcpSession session) {
 /// (`session/list` или снимок прошлого запуска; design D7 change
 /// `add-session-list-and-reload`): заголовок агента или `Session <id>`,
 /// подзаголовок — `cwd`, подпись — время последнего изменения.
-CodeLabSessionListItem sessionListItemOfSummary(SessionSummaryView summary) {
+CodeLabSessionListItem sessionListItemOfSummary(
+  SessionSummaryView summary, {
+  // ЗАГЛУШКА задачи 3.3 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 3.4.
+  AppLocalizations? l10n,
+}) {
   final title = summary.title?.trim();
   final updated = summary.updatedAt?.toLocal();
   return CodeLabSessionListItem(
@@ -148,6 +159,9 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
   required ApprovalOptionChosen onApprovalSelected,
   bool isRunning = false,
   VoidCallback? onRetry,
+  // ЗАГЛУШКА задачи 3.3 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 3.4.
+  AppLocalizations? l10n,
 }) {
   final lastErrorIndex = transcript.lastIndexWhere(
     (item) => item is NoticeItem && item.kind == NoticeKind.error,
@@ -364,7 +378,12 @@ CodeLabTurnState? turnStateOf(SessionView? view) => switch (view?.status) {
 /// сбоя от агента (`data.codelab.errorClass`) — говорит. Незнакомый класс и
 /// сбой без класса получают общий заголовок: словарь классов растёт на
 /// стороне агента.
-String failureTitleOf(PromptFailure? failure) => switch (failure) {
+String failureTitleOf(
+  PromptFailure? failure, {
+  // ЗАГЛУШКА задачи 3.3 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 3.4.
+  AppLocalizations? l10n,
+}) => switch (failure) {
   AgentPromptFailure(errorClass: 'auth') =>
     'The agent could not sign in to the model provider',
   AgentPromptFailure(errorClass: 'network' || 'timeout' || 'server') =>
@@ -641,6 +660,9 @@ CommandCatalog paletteCatalogOf(
   bool filesAvailable = false,
   bool agentsAvailable = false,
   bool usageAvailable = false,
+  // ЗАГЛУШКА задачи 3.3 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 3.4.
+  AppLocalizations? l10n,
 }) => CommandCatalog(
   host: _paletteHostCommandsOf(
     files: filesAvailable,
@@ -867,6 +889,9 @@ List<CodeLabSidebarProject> sidebarProjectsOf({
   required List<CodeLabSessionListItem> sessions,
   required List<CodeLabRecentProject> recentProjects,
   Map<String, String> sessionFolders = const {},
+  // ЗАГЛУШКА задачи 3.3 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 3.4.
+  AppLocalizations? l10n,
 }) {
   final selected = selectedProjectPath;
   final otherPaths = {
@@ -948,7 +973,12 @@ String? _selectedLabelOf(List<ConfigOptionView> options, String category) {
 /// `busy` задан только для `awaiting` и пока ход идёт или отменяется
 /// (`running`/`cancelling`, D23 Т9 п. 2): у `reported` числа
 /// остаются на месте между шагами хода.
-CodeLabSessionStatusData sessionStatusDataOf(SessionView view) {
+CodeLabSessionStatusData sessionStatusDataOf(
+  SessionView view, {
+  // ЗАГЛУШКА задачи 3.3 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 3.4.
+  AppLocalizations? l10n,
+}) {
   final usage = view.usage;
   final modelLabel = modelLabelOf(view.configOptions);
   final modeLabel = modeLabelOf(view.configOptions);
