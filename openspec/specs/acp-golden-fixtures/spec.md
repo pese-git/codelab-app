@@ -231,3 +231,169 @@ Golden-фикстура ACP SHALL быть JSON-файлом `packages/dart/code
 - **WHEN** клиентский драйвер получает одну из этих фикстур
 - **THEN** он её пропускает с причиной «роль только agent»
 
+### Requirement: Фикстуры навыков
+Корпус SHALL содержать фикстуры с ролью `agent`, целью `E-06` и ссылками `spec` на `14-Slash Commands.md`, `08-Tool Calls.md` и, для скрипта, `10-Terminal.md` (design.md change `add-agent-skills`, D7, D8; `agent-core-architecture` §17.2.12). Навыки задаются `setup.files` под `.codelab/skills/` доверенного проекта (`setup.config.trusted_projects: ["${cwd}"]`); агентский драйвер SHALL принимать ключ `skills` в `setup.config`:
+- `acp/skill-command-listed` (критерий E-06) — два навыка, один с `user-invocable: false`, у другого `argument-hint`: `available_commands_update` после `session/new` содержит после встроенных команд `skill:<name>` только вызываемого навыка с `input.hint` из `argument-hint`; имени `skill` и других инструментов модели в списке нет (SKL-6, R-07);
+- `acp/skill-invoke` — `session/prompt` с `/skill:release-notes v1.2 v1.3`: scripted-модель получает сообщение пользователя с блоком навыка и подставленными аргументами (фикстура сверяет тело после `dir="…/.codelab/skills/release-notes">`; преамбулу `invoked.md` и сообщение целиком проверяет тест ядра — матчер `$textContains` не подставляет `${cwd}`); затем `session/load` — реплей содержит `user_message_chunk` с `/skill:release-notes v1.2 v1.3`, а не обёртку; затем в загруженной сессии `/skill:nope` — один `agent_message_chunk` `Unknown skill: nope. Run /help to list commands.` и `stopReason: end_turn` без запроса к модели (design.md change `add-agent-skills`, D18: порядок проверяет ветку `skill:` после `session/load`; то, что ответ `Unknown skill` не пишется в журнал, проверяют тесты ядра);
+- `acp/skill-tool-load` — модель вызывает `skill` с `{"name":"release-notes"}`: `tool_call` с `kind: read`, заголовком `Load skill release-notes` и `locations` с путём `SKILL.md` навыка; в режиме `standard` вызов уровня `read` выполняется без `session/request_permission`; `tool_call_update` `completed` содержит тело в блоке `<skill …>`; следующий запрос модели содержит этот результат; второй вызов `skill` с тем же именем завершается строкой повтора `Skill "release-notes" is already loaded in this conversation; follow the instructions above.` (решение Q10);
+- `acp/skill-script-exec` (решения Q17, Q24 (а)) — навык проекта `.codelab/skills/pdf` со `scripts/extract.py`; модель вызывает `exec` с `python3 scripts/extract.py` и `cwd` — каталог навыка: `session/request_permission` с обычными вариантами уровня `exec`, включая `allow_always` (критического шаблона нет); после `allow_once` — `terminal/create` с `cwd` каталога навыка и `tool_call_update` `completed` с выводом; вторым шагом — рекомендованный путь (Q26): `exec` с `python3 <cwd>/.codelab/skills/pdf/scripts/extract.py` и `cwd` рабочей папки — тот же обычный вопрос уровня `exec` без критического шаблона (Q25) и `terminal/create` с `cwd` рабочей папки.
+
+Все уведомления хода SHALL идти до ответа на `session/prompt` (ACP-3). Клиентский драйвер SHALL пропускать эти фикстуры с причиной «роль только agent»; драйверы встроенного агента и бинаря `codelab-agent` пропускают их с причиной `setup.config`, как прочие фикстуры с `setup.config`.
+
+#### Scenario: Список команд с навыками в корпусе
+- **WHEN** агентский драйвер проигрывает `acp/skill-command-listed`
+- **THEN** кадры совпадают с фикстурой, список команд содержит ровно один элемент с префиксом `skill:`
+
+#### Scenario: Неизвестный навык без модели
+- **WHEN** агентский драйвер проигрывает `acp/skill-invoke`
+- **THEN** на `/skill:nope` scripted-модель не получила запроса, ответ — `end_turn`
+
+### Requirement: Фикстуры субагентов и списка задач
+Корпус SHALL содержать фикстуры change `add-subagents-and-tasks` с объявленными `extensions` (FIX-4; имена по используемым данным: `capabilities` — блок `_meta.codelab` в `initialize`, `task` — `_meta.codelab.task`, `subagent` — `_meta.codelab.subagent`) и ссылками `spec` на `11-Agent Plan.md`, `15-Extensibility.md`, `08-Tool Calls.md` и `02-Initialization.md`:
+
+| Фикстура | Роли | Цели |
+|---|---|---|
+| `acp/initialize-codelab-extensions` | `agent`, `client` | схема объявления |
+| `acp/prompt-task-plan` | `agent`, `client` | C-20, C-05 |
+| `acp/session-load-legacy-plan` | `agent` | C-05; журнал старого формата задаётся `setup.sessions` |
+| `acp/prompt-subagent-tool-call` | `agent`, `client` | C-06 |
+| `acp/prompt-subagent-permission` | `agent`, `client` | C-06, P-02 |
+| `acp/prompt-subagent-nested-permission` | `agent` | C-06 |
+| `acp/prompt-subagent-tool-tree` | `agent`, `client` | C-06, этап 2 (`extensions`: `capabilities`, `subagent`, `parentToolCallId`) |
+| `acp/session-load-subagent-tool-tree` | `agent`, `client` | C-06, этап 2; журналы корня и ребёнка задаются `setup.sessions` |
+
+Изменения существующих фикстур:
+- `acp/prompt-update-plan` SHALL остаться в корпусе только с ролью `client`: клиент по-прежнему показывает план агента без `_meta`;
+- `acp/initialize-capabilities` SHALL остаться вариантом «клиент без `_meta`» с ролью `agent`;
+- клиентские фикстуры, в которых kit отправляет `initialize`, SHALL ожидать `clientCapabilities._meta.codelab` и объявлять `extensions`;
+- фикстуры с ожидаемыми схемами запроса к модели SHALL ожидать `task_*` вместо `update_plan`;
+- первый `tool_call` вызова `agent` в фикстурах субагентов (те же пять, включая реплей) SHALL ожидать `_meta.codelab.subagent` с `type` и `id` через `$capture` (D28);
+- финальный `tool_call_update` вызова `agent` в фикстурах субагентов (`acp/prompt-subagent-tool-call`, `acp/prompt-subagent-permission`, `acp/prompt-subagent-nested-permission`, `acp/prompt-subagent-tool-tree`, реплей `acp/session-load-subagent-tool-tree`) SHALL ожидать `_meta.codelab.subagent.summary` с точными `toolCalls` и токенами scripted-модели; `durationMs` сравнивается через `$any` (время недетерминировано).
+
+Scripted-модель субагента SHALL задаваться тем же блоком `llm.steps`, что и модель корня. Шаги ребёнка различаются проверкой `expect` по системному промпту или первому сообщению ребёнка; нового формата фикстуры не вводится.
+
+#### Scenario: Расширение не объявлено
+- **WHEN** фикстура `acp/prompt-task-plan` не перечисляет `task` в `extensions`
+- **THEN** тест загрузки корпуса падает (FIX-4)
+
+#### Scenario: Клиент показывает план стороннего агента
+- **WHEN** клиентский драйвер проигрывает `acp/prompt-update-plan`
+- **THEN** `SessionView.plan` дважды заменяется тремя пунктами без `taskId`
+
+#### Scenario: Агентский прогон запроса ребёнка
+- **WHEN** агентский драйвер проигрывает `acp/prompt-subagent-permission` против встроенного агента и `codelab-agent serve --stdio`
+- **THEN** кадры совпадают в обоих режимах, включая `toolCallId` `call_1/call_1` и `_meta.codelab.subagent`
+
+### Requirement: Фикстуры расширения usage
+Корпус SHALL содержать фикстуры change `add-usage-extension`, у которых `extensions` содержит `usage` (FIX-4; фикстура с инструментом `task_create` несёт ещё `task`) и ссылками `spec` на `15-Extensibility.md` и `05-Prompt Turn.md` (design.md, D13):
+
+| Фикстура | Роли | Режимы агентского прогона |
+|---|---|---|
+| `acp/prompt-usage-steps` | `agent`, `client` | все |
+| `acp/prompt-usage-unpriced` | `agent` | все |
+| `acp/prompt-usage-cancelled` | `agent` | все |
+| `acp/compact-usage-context` | `agent` | только `conformance:agent` |
+| `acp/prompt-usage-compaction-off` | `agent` | только `conformance:agent` |
+| `acp/session-load-usage-partial` | `agent` | только `conformance:agent` |
+
+Фикстуры «все» SHALL обходиться без `setup.config` и `setup.sessions`, чтобы их проигрывали и встроенный агент, и `codelab-agent serve --stdio`. `acp/compact-usage-context` SHALL задавать `setup.config.compaction.keep_recent_tokens: 512` (как `acp/slash-compact`): с порогом по умолчанию короткая история не сжимается (design.md, D19 п. 1).
+
+В каждой из них кадр `initialize` клиента SHALL объявлять `clientCapabilities._meta.codelab.usage`. Значения `turnId` SHALL сравниваться через `$capture`, `seq`, токены, стоимость и порядок причин `partial` — точно; `context.used` после шага с инструментом и после сжатия МОЖЕТ сверяться матчером `$any`; scripted-модель SHALL задавать usage шагов в `llm.steps` и цены модели в `llm.model.cost` (объект формата `llmModelCost`: `input`, `output`, необязательные `cacheRead`, `cacheWrite`, доллары за 10⁶ токенов; design.md, D18 Т8, D19 п. 6). Значения `llmModelCost` SHALL быть неотрицательными конечными числами: неизвестный ключ, не число или отрицательное число SHALL давать `FixtureFormatException` с путём поля (`$.llm.model.cost.<ключ>`) при загрузке корпуса; число, которое разбор JSON превращает в бесконечность (`1e999`), отсекает раньше разбора полей канонизация `AcpFixture.fromJson` — `FixtureFormatException` с путём `$` («is not JSON»). Тот же формат читает `--llm-script` (`LlmScript`, требование `agent-binary` «Сценарий --llm-script»): неверное значение SHALL быть ошибкой загрузки сценария с путём поля, а не молчаливым «цен нет» (design.md, D20).
+
+Изменения существующих фикстур:
+- `acp/initialize-codelab-extensions` SHALL ожидать `usage: {"version": 1}` в `clientCapabilities._meta.codelab` и в `agentCapabilities._meta.codelab` и объявлять расширение `usage`;
+- фикстуры с ролью `client` и явным кадром `initialize` клиента (`acp/initialize-codelab-extensions`, `acp/session-load-interrupted-turn`, `acp/session-new-modes-config`, `acp/set-config-option-model`) SHALL ожидать полное объявление клиента с `usage` в `clientCapabilities._meta.codelab`;
+- клиентский драйвер в стандартном handshake SHALL сверять `_meta.codelab` из `setup.clientCapabilities` как подмножество объявления клиента: каждый указанный ключ — точно, лишние ключи клиента допустимы; агентский драйвер по-прежнему отправляет `setup.clientCapabilities` как есть (design.md, Q15 (б), D21 Т7);
+- `acp/prompt-turn-budget-exceeded` SHALL проигрываться и клиентским драйвером;
+- фикстуры, где клиент не объявляет `usage`, НЕ SHALL получать кадров `_codelab/session/usage`.
+
+#### Scenario: Расширение не объявлено
+- **WHEN** фикстура `acp/prompt-usage-steps` не перечисляет `usage` в `extensions`
+- **THEN** тест загрузки корпуса падает (FIX-4)
+
+#### Scenario: Неверная цена модели в фикстуре
+- **WHEN** фикстура задаёт `llm.model.cost: {"input": -1, "output": 2}`, другая — `{"input": "1", "output": 2}`, третья — `{"input": 1e999, "output": 2}`
+- **THEN** загрузка каждой падает с `FixtureFormatException`: у первых двух путь — `$.llm.model.cost.input`, у третьей — `$` («is not JSON»: канонизация `AcpFixture.fromJson` отсекает не конечное число раньше разбора полей)
+
+#### Scenario: Неверная цена в --llm-script
+- **WHEN** `codelab-agent serve --stdio --llm-script` получает файл с `llm.model.cost.output: -0.5`
+- **THEN** процесс завершается ошибкой использования (код `64`) с путём `llm.model.cost.output`; запуска без цен нет
+
+#### Scenario: Агентский прогон во всех режимах
+- **WHEN** агентский драйвер проигрывает `acp/prompt-usage-steps` против встроенного агента и `codelab-agent serve --stdio`
+- **THEN** кадры совпадают в обоих режимах, включая `seq` и десятичные строки `cost`
+
+#### Scenario: Сжатие только в агентском прогоне
+- **WHEN** встроенный агент или `codelab-agent serve --stdio` проигрывают корпус
+- **THEN** `acp/compact-usage-context` пропускается как фикстура с `setup.config`, а в `conformance:agent` снимок `compaction` и чанк «Compacted…» сверяются без фиксированного порядка
+
+#### Scenario: Клиентский прогон
+- **WHEN** клиентский драйвер проигрывает `acp/prompt-usage-steps`
+- **THEN** `SessionView.usage` после хода — `reported`, `lastTurn` и `session` равны значениям последнего снимка, клиент не отправляет кадров в ответ на уведомления (проверка `SessionView` — тестом `codelab_client_core` на том же драйвере, доставка снимков ядром клиента — `conformance:client`; design.md, D21 Т7)
+
+#### Scenario: Причина бюджета у клиента
+- **WHEN** клиентский драйвер проигрывает `acp/prompt-turn-budget-exceeded`
+- **THEN** итог prompt turn ядра клиента несёт причину `tokens`, а заметка хода в транскрипте kit — `The turn stopped: budget exceeded: tokens.` (design.md, D21 Т7)
+
+#### Scenario: Объявление клиента в handshake — подмножество
+- **WHEN** клиентский драйвер проигрывает фикстуру без `skipInitialize` с `setup.clientCapabilities._meta.codelab: {"usage": {"version": 1}}`, а клиент объявляет `tasks`, `subagents`, `subagentToolCalls` и `usage`
+- **THEN** кадр `initialize` клиента совпадает; если клиент не объявил `usage` или объявил его с другим значением, кадр не совпадает
+
+### Requirement: Фикстуры журнала usage
+Корпус SHALL содержать фикстуры design.md change `add-usage-ledger`, D11, с метками `usage` и `usageLedger` в `extensions` (FIX-4) и ссылками `spec` на `15-Extensibility.md`:
+- `acp/slash-usage` (`agent`) — `usage` в `available_commands_update` сразу после `status`; `/usage` после хода с двумя шагами — текст отчёта с `end_turn` без `_codelab/session/usage`; `/usage x` — `Usage: /usage [rebuild]`;
+- `acp/usage-ledger-request` (`agent`, `client`) — ход с двумя шагами и вызовом инструмента, затем `_codelab/session/usage/ledger` и его результат;
+- `acp/usage-ledger-rebuild` (`agent`) — запрос с `rebuild: true`, `ledger.status: "rebuilt"`, `reason: "explicit"`;
+- `acp/session-load-usage-full` (`agent`) — `session/load` журнала с двумя ходами: реплей, ответ, затем снимок `trigger: "load"` с полной суммой без `beforeLoad`, затем ход; заменяет `acp/session-load-usage-partial`;
+- `acp/compact-usage-summary` (`agent`) — `/compact` со сценарным ответом суммаризатора с usage: снимок `compaction` с суммой сессии, включающей суммаризатор; затем запрос журнала с `summaries.count: 1`; только агентский прогон, как `acp/compact-usage-context`.
+
+`acp/initialize-codelab-extensions` SHALL ожидать `usageLedger` в ответе агента; `acp/session-load-interrupted-turn` SHALL ожидать после ответа на `session/load` кадр `_codelab/session/usage` с `trigger: "load"` и нести метку `usage` (design.md, D15 п. 8); фикстуры с `available_commands_update` агента SHALL ожидать `usage` в списке команд после `status`. Правка этих ожиданий ссылается на change `add-usage-ledger` (требование «Правила изменения фикстур»). Фикстуры без меток `usage` и `usageLedger` НЕ SHALL содержать `_codelab/session/usage/ledger`.
+
+#### Scenario: Агентский прогон журнала
+- **WHEN** `conformance:agent` проигрывает `acp/usage-ledger-request`
+- **THEN** результат запроса совпадает с фикстурой, включая `seq`, `toolCallIds` и строки стоимости
+
+#### Scenario: Клиентский прогон журнала
+- **WHEN** `conformance:client` проигрывает `acp/usage-ledger-request`
+- **THEN** клиент отправляет запрос с теми же параметрами, а `SessionView.usageLedger` после ответа — `loaded` с одним ходом и двумя шагами
+
+#### Scenario: Полная сумма после загрузки
+- **WHEN** `conformance:agent` проигрывает `acp/session-load-usage-full`
+- **THEN** снимок `trigger: "load"` идёт после ответа на `session/load`, `session.partial` не содержит `beforeLoad`
+
+### Requirement: Фикстура отброшенного прохода сжатия
+Корпус SHALL содержать фикстуру `acp/compact-no-gain-usage` с ролью `agent`, метками `usage` и `usageLedger` в `extensions` и ссылкой `spec` на `15-Extensibility.md` (design.md change `fix-discarded-compaction-usage`, D7). Сценарий фикстуры:
+1. клиент объявил `usage`;
+2. ход с одним шагом на модели с ценами;
+3. `/compact` со сценарным ответом суммаризатора длиннее региона и с usage.
+
+Ожидаемые кадры SHALL быть такими:
+- `agent_message_chunk` `Nothing to compact.` и `_codelab/session/usage` с `trigger: "compactionDiscarded"` и суммой сессии, включающей суммаризатор, — в любом порядке (блок `unordered`, как в `acp/compact-usage-summary`);
+- затем ответ `end_turn`;
+- ответ на запрос `_codelab/session/usage/ledger` с `summaries.count: 1` и `summaries.discarded: 1`.
+
+Фикстура SHALL проигрываться только в `conformance:agent`, как `acp/compact-usage-summary`. Существующие фикстуры SHALL оставаться без изменений.
+
+#### Scenario: Агентский прогон
+- **WHEN** `melos run conformance:agent` проигрывает `acp/compact-no-gain-usage` против настоящего ядра со scripted-моделью
+- **THEN** кадры совпадают с фикстурой после нормализации, включая то, что сообщение агента и снимок `compactionDiscarded` (в любом порядке) предшествуют ответу `session/prompt`
+
+#### Scenario: Корпус не меняется
+- **WHEN** прогоняются существующие фикстуры сжатия (`acp/slash-compact`, `acp/compact-usage-context`, `acp/compact-usage-summary`, `acp/compaction-long-session-continues`)
+- **THEN** они зелёные без правок: ни в одной проход не отбрасывается
+
+### Requirement: Фикстура бюджета хода в usage
+Корпус SHALL содержать фикстуру `acp/prompt-usage-budget` с ролями `agent` и `client`, метками `usage` в `extensions` и ссылками `spec` на `15-Extensibility.md` (design.md change `add-desktop-usage-pane`, D7): клиент объявил `usage`; конфигурация агента (`setup.config`) задаёт `budget.max_tokens` и `budget.max_cost`; ход из двух шагов модели с ценами; снимки `step` и `turn` несут `budget` с `steps`, `tokens` и `cost`. Агентская роль сверяет форму и значения поля; клиентская — что `UsageView.budget` после снимка `turn` равен итогу из кадра. Существующие фикстуры с меткой `usage` НЕ SHALL меняться: в их конфигурации нет лимитов, кроме шагов.
+
+#### Scenario: Агентский прогон
+- **WHEN** `conformance:agent` проигрывает `acp/prompt-usage-budget`
+- **THEN** каждый снимок `step` и `turn` содержит `budget` с ожидаемыми `used` и `limit`, и снимков без `budget` в ходе нет
+
+#### Scenario: Клиентский прогон
+- **WHEN** клиентский драйвер проигрывает `acp/prompt-usage-budget`
+- **THEN** после кадра снимка `turn` `SessionView.usage.budget` несёт `steps`, `tokens.used`, `tokens.limit`, `cost.used` и `cost.limit` из кадра и не несёт `duration`, а клиент не отправляет кадров в ответ на уведомления (проверка `SessionView` — тестом `codelab_client_core` на том же драйвере, `test/usage/usage_fixture_test.dart`; доставка снимков ядром клиента — `conformance:client`; как у `acp/prompt-usage-steps`, D21 Т7 change `add-usage-extension`)
+
+#### Scenario: Существующие фикстуры
+- **WHEN** агентский драйвер проигрывает `acp/prompt-usage-steps`
+- **THEN** кадры совпадают без правки фикстуры: поля `budget` нет
+

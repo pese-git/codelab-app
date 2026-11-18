@@ -247,7 +247,7 @@ macOS и Linux, ручная проверка Windows откладывается
 2026-10-29, change `add-agent-configuration`); незавершённые задачи «Should — не блокирует MVP»
 (3.8, часть 7.5 для D-05, 8.10, 8.11); выбранные Should (§6.1); нефункциональные документы (§6.3).
 Первая задача вехи — навыки E-06 (§6.1, строка 11): change
-[`add-agent-skills`](../../../openspec/changes/add-agent-skills/proposal.md) реализуется сразу после
+[`add-agent-skills`](../../../openspec/changes/archive/2026-11-18-add-agent-skills/proposal.md) реализуется сразу после
 ворот MVP (итерация 4 change `switch-default-agent-to-dart`) и до выпуска 9.4 (решение пользователя
 2026-11-12, Q1–Q3 design.md change). Сделано (§6.1, строка 11; страница app — M5, экран 24 §10.1).
 Переключение может сначала выйти `beta`-релизом; первый `stable` выпускается только вместе с
@@ -366,10 +366,10 @@ changes остаются открытыми до выполнения полно
 | 8 | Ежедневное удобство | U-27, U-28, H-08, D-17 | модель по папке, копирование из TUI, мысли в headless, поиск сессий |
 | 9 | Субагенты и задачи (этапы 1 и 2, панель Agents v1) | C-06, C-20; меняется Must C-05; D-25 — частично (панель v1) | решения пользователя 2026-11-09 и 2026-11-10: цель — поведение уровня Claude Code, путь — поэтапный; базовый этап (§6.4, этап 1) закладывает то, что дорого переделывать потом: вложенность до 3, состояния и журнал ребёнка, запрос разрешения ребёнка, список задач (`task_*`) вместо `update_plan` и его проекцию в ACP `plan`; этап 2 показывает шаги потомков деревом; решение 2026-11-12 (Q13): облегчённая панель Agents v1 в доке app над теми же данными, без нового протокола (change `add-subagents-and-tasks`, итерация 5b) |
 | 10 | Терминал в app | D-28 (итерации 1–2 change `add-integrated-terminal`; Q24 и итерация 3 — после 1.0) | команды вроде `git` и `melos` рядом с ходом агента без переключения окна; выпускается с известными ограничениями (D14 change, решение пользователя 2026-11-12) |
-| 11 | Навыки | E-06 | повторяемые инструкции команды и пользователя подгружаются моделью по задаче, а не копируются в каждый промпт; формат `SKILL.md` общий с другими агентами. **Сделано** (E-06): реализовано change [`add-agent-skills`](../../../openspec/changes/add-agent-skills/tasks.md), итерации 1–5 (PR #308, #310, #311, #313, #318); страница app — вне этого change (Q8), см. экран 24 в §10.1; известные пределы — design.md change `add-agent-skills`, раздел «Risks / Trade-offs»: `--approve allow-all` одобряет вопросы PERM-11 по корням навыков (будущий change `mark-agent-config-edits-critical`, PR #315), пути хоста `skills.extra_roots` — снимок запуска, не обновляются при перезагрузке, доверие `read` к файлам навыка решается лексически (Q30), пути сессии PERM-11 без фазы навыков не защищены (Q46) |
+| 11 | Навыки | E-06 | повторяемые инструкции команды и пользователя подгружаются моделью по задаче, а не копируются в каждый промпт; формат `SKILL.md` общий с другими агентами. **Сделано** (E-06): реализовано change [`add-agent-skills`](../../../openspec/changes/archive/2026-11-18-add-agent-skills/tasks.md), итерации 1–5 (PR #308, #310, #311, #313, #318); страница app — вне этого change (Q8), см. экран 24 в §10.1; известные пределы — design.md change `add-agent-skills`, раздел «Risks / Trade-offs»: `--approve allow-all` одобряет вопросы PERM-11 по корням навыков (будущий change `mark-agent-config-edits-critical`, PR #315), пути хоста `skills.extra_roots` — снимок запуска, не обновляются при перезагрузке, доверие `read` к файлам навыка решается лексически (Q30), пути сессии PERM-11 без фазы навыков не защищены (Q46) |
 
 Строка 11 добавлена решением пользователя 2026-11-12 (Q1 change
-[`add-agent-skills`](../../../openspec/changes/add-agent-skills/design.md)): навыки перенесены из пула 1.x
+[`add-agent-skills`](../../../openspec/changes/archive/2026-11-18-add-agent-skills/design.md)): навыки перенесены из пула 1.x
 (бывший пункт 9 §6.2) и делаются **первыми** после ворот MVP, до выпуска 9.4, хотя стоят в таблице
 последними (номера групп 1–8 не меняются: на них ссылаются changes). Архитектура закладывается
 для всей группы навыков (E-18, E-19, K-06), реализуется только E-06.
@@ -386,8 +386,8 @@ E-15, L-25; P-10 — после 1.0, R8-1), то есть все задачи «
    (контракт `_codelab/session/usage`, строка статуса desktop, статус-строка CLI и TUI, причина
    бюджета в заметке хода), `add-usage-ledger` (L-29: журнал `usage.json`, `/usage [rebuild]`, запрос
    истории `_codelab/session/usage/ledger`, полная сумма после `session/load`, суммаризатор в сумме
-   сессии; влит 2026-11-17), `add-desktop-usage-pane` (открыт 2026-11-17, завершён 2026-11-18: итерации 1–4,
-   архивация — после `add-usage-extension` и `add-usage-ledger`)
+   сессии; влит 2026-11-17), `add-desktop-usage-pane` (открыт 2026-11-17, завершён 2026-11-18: итерации 1–4;
+   все три архивированы 2026-11-18)
    (панель Usage в доке, CSV, клик по строке статуса, прогресс бюджета C-13 полем `budget`), `add-session-deadline` (C-15, `/timer`) — следующий.
 2. Полноэкранный TUI и ввод: U-12, U-24, U-36, U-37.
 3. Вложения: U-14, D-12.
@@ -611,9 +611,9 @@ Definition of Done и правки ленты по ручной регресси
 | `add-app-navigation-shell` | остальные ветки `AppDestination` (Boot, Onboarding, ProjectPicker, оверлеи) и сочетания A13 вне настроек — вместе с их экранами | M3–M5, по экранам |
 | `add-provider-setup-ui` (создан) | страницы Providers (05) и MCP servers (05b), мастер провайдера (06) в app и CLI, первый запуск CLI (C5), `/settings` (C13), токен профиля в хранилище секретов агента (20, R-12 в app), ребро `codelab_desktop → codelab_setup`; без хранилищ ОС и onboarding | M4 (D-05, U-17), M5 (L-24, E-13, U-19) |
 | `add-app-onboarding` (рабочее имя) | onboarding app (07, D-11) поверх того же `ProviderSetupFlow` — после `add-app-navigation-shell` (решение Q3 change `add-provider-setup-ui`) | M5 |
-| `add-usage-extension` (открыт 2026-11-13) | уведомление `_codelab/session/usage`: usage шага, хода и сессии, заполнение контекста; строка статуса desktop и CLI; затем `add-usage-ledger`, `add-desktop-usage-pane` и Timeline (A14) | M5 |
-| `add-usage-ledger` (открыт 2026-11-17, влит; следующий — `add-desktop-usage-pane`, открыт 2026-11-17, завершён 2026-11-18; затем `add-session-deadline`) | журнал usage сессии (L-29): свёртка журнала, `usage.json`, `/usage [rebuild]`, запрос `_codelab/session/usage/ledger` с ходами и шагами, полная сумма после `session/load` (снимок `load`), суммаризатор в сумме сессии; затем `add-desktop-usage-pane` | M5 |
-| `add-subagents-and-tasks` (создан 2026-11-09, решения 2026-11-10 и 2026-11-12) | этапы 1 и 2 субагентов и список задач (§6.4): `agent`, вложенность до 3, запрос ребёнка, `task_*` вместо `update_plan`, `_meta.codelab.subagent`, `_meta.codelab.task`, схема объявлений `_meta.codelab` в `initialize`; строка `agent`, пометка запроса ребёнка, чек-лист с id в app и CLI; этап 2 — `_meta.codelab.parentToolCallId` и шаги потомков деревом; панель Agents v1 в доке app (итерация 5b, Q13) | M4 |
+| `add-usage-extension` (открыт 2026-11-13, архивирован 2026-11-18) | уведомление `_codelab/session/usage`: usage шага, хода и сессии, заполнение контекста; строка статуса desktop и CLI; затем `add-usage-ledger`, `add-desktop-usage-pane` и Timeline (A14) | M5 |
+| `add-usage-ledger` (открыт 2026-11-17, влит; следующий — `add-desktop-usage-pane`, открыт 2026-11-17, завершён 2026-11-18; оба архивированы 2026-11-18; затем `add-session-deadline`) | журнал usage сессии (L-29): свёртка журнала, `usage.json`, `/usage [rebuild]`, запрос `_codelab/session/usage/ledger` с ходами и шагами, полная сумма после `session/load` (снимок `load`), суммаризатор в сумме сессии; затем `add-desktop-usage-pane` | M5 |
+| `add-subagents-and-tasks` (создан 2026-11-09, решения 2026-11-10 и 2026-11-12, архивирован 2026-11-18) | этапы 1 и 2 субагентов и список задач (§6.4): `agent`, вложенность до 3, запрос ребёнка, `task_*` вместо `update_plan`, `_meta.codelab.subagent`, `_meta.codelab.task`, схема объявлений `_meta.codelab` в `initialize`; строка `agent`, пометка запроса ребёнка, чек-лист с id в app и CLI; этап 2 — `_meta.codelab.parentToolCallId` и шаги потомков деревом; панель Agents v1 в доке app (итерация 5b, Q13) | M4 |
 | `add-subagent-board` | `_codelab/subagents/*` (§17.3.7) в панели Agents v1 (A15) и вид `tasks` CLI | M5 (второй этап пула, §6.4) |
 | `add-background-jobs` (уже назван) | `_codelab/jobs/*` (§17.9.11) на той же доске | M5 |
 | `add-redaction-settings` | страница «Redaction», `RedactionPreview` (§12.4.9) | M5 |

@@ -809,7 +809,7 @@ stateDiagram-v2
 Цели — E-01 (цепочка `AGENTS.md`), E-06 (навыки), E-07 (шаблоны команд). Решения и сценарии —
 change [`add-app-skills-page`](../../../../openspec/changes/add-app-skills-page/design.md) (D1–D16,
 решения пользователя Q1–Q6 от 2026-11-15); правила навыков агента — change
-[`add-agent-skills`](../../../../openspec/changes/add-agent-skills/design.md) и
+[`add-agent-skills`](../../../../openspec/changes/archive/2026-11-18-add-agent-skills/design.md) и
 [`agent-core-architecture` §17.2](../agent-core/17-2-skills-and-templates.md). Hooks (E-09),
 Plugins (E-10), переопределение системного промпта (E-08) и context-файлы других агентов (E-17) на
 странице не показываются: в агенте их нет, строки появятся с их changes.
