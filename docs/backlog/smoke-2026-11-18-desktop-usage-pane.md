@@ -15,16 +15,19 @@
 
 **Статус 2026-11-18:** открыт OpenSpec change `fix-usage-pane-live-cards` (`openspec/changes/fix-usage-pane-live-cards/`). Причины в коде — его design.md, раздел «Причины в коде». Решения пользователя 2026-11-18 (Q1–Q6 — все по рекомендации): SMK-44 и SMK-45 закрываются тем же change. SMK-44 — не дефект агента: `usage.json` пишется лениво, и после каждого хода он устарел по дизайну. SMK-45 — `cost` нет уже в ответе агента: у агрегата без шагов цены нет. При сверке найден дефект ядра, связанный с SMK-43: ожидания параллельных одобрений вычитаются из времени хода дважды (Q3).
 
+**Статус 2026-11-18 (закрытие):** change `fix-usage-pane-live-cards` влит в `develop` (PR #358). Ручная проверка на desktop прошла (design.md change, раздел «Итог ручной проверки»): SMK-42…SMK-45 закрыты. Новое наблюдение той же проверки — SMK-46.
+
 Приоритеты и колонки — как в [smoke-2026-10-30.md](smoke-2026-10-30.md).
 
 ## Сводка
 
 | ID | P | Тип | Область | Кратко | OpenSpec | Issue |
 |---|---|---|---|---|---|---|
-| SMK-42 | P2 | ux | desktop | Во время хода карточки Input, Output, Cost панели Usage отстают от живых снимков | да, `fix-usage-pane-live-cards` (Q1) | — |
-| SMK-43 | P3 | ux | desktop, agent | Время бюджета откатывается назад, когда агент запрашивает одобрение | да, `fix-usage-pane-live-cards` (Q2–Q4) | — |
-| SMK-44 | P3 | ux | desktop | Строка журнала `rebuilt from journal (stale)` после каждого хода | да, `fix-usage-pane-live-cards` (Q5 (а)) | — |
-| SMK-45 | P3 | ux | desktop | Cost `—` и `price unknown` у пустой сессии с моделью с ценами | да, `fix-usage-pane-live-cards` (Q6 (а)) | — |
+| SMK-42 | P2 | ux | desktop | ~~Во время хода карточки Input, Output, Cost панели Usage отстают от живых снимков~~ **Закрыто** change `fix-usage-pane-live-cards` (PR #358) | да, `fix-usage-pane-live-cards` (Q1) | — |
+| SMK-43 | P3 | ux | desktop, agent | ~~Время бюджета откатывается назад, когда агент запрашивает одобрение~~ **Закрыто** change `fix-usage-pane-live-cards` (PR #358) | да, `fix-usage-pane-live-cards` (Q2–Q4) | — |
+| SMK-44 | P3 | ux | desktop | ~~Строка журнала `rebuilt from journal (stale)` после каждого хода~~ **Закрыто** change `fix-usage-pane-live-cards` (PR #358) | да, `fix-usage-pane-live-cards` (Q5 (а)) | — |
+| SMK-45 | P3 | ux | desktop | ~~Cost `—` и `price unknown` у пустой сессии с моделью с ценами~~ **Закрыто** change `fix-usage-pane-live-cards` (PR #358) | да, `fix-usage-pane-live-cards` (Q6 (а)) | — |
+| SMK-46 | P3 | ux | desktop | Длинная подпись хода в `Per turn` подходит вплотную к столбцу Input | нет | — |
 
 ## Карточки
 
@@ -57,6 +60,8 @@
 
 Не смешивать журнал и снимки в одной карточке: двойной учёт (R8 change `add-usage-ledger`).
 
+**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/fix-usage-pane-live-cards/design.md) (PR #358; D1, D2, решение пользователя Q1 (в)): карточки берутся из `total` журнала при `ledger.seq ≥ usage.lastSeq`, иначе из живых снимков `usage.session`. Карточка Turns · steps — по `UsageTotals.turns`. Ручная проверка 2026-11-18: во время хода карточки совпадают со строкой статуса, после хода — с `Per turn` и `Per model`. Регресс — группа `источник карточек: свежий из двух (D1, Q1 (в))` в `apps/codelab_desktop/test/features/usage/application/usage_pane_data_test.dart` и `packages/dart/codelab_client_core/test/usage/usage_totals_turns_test.dart`.
+
 ### SMK-43. Время бюджета откатывается при запросе одобрения (P3)
 
 **Где:**
@@ -81,6 +86,8 @@
 клиент знает сам (время применения запроса kit). Проверить в спецификации kit, есть ли этот момент в
 `SessionView`; если нет — добавить в дельту `acp-client-kit`. Поле ACP для этого не нужно.
 
+**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/fix-usage-pane-live-cards/design.md) (PR #358; D3–D6, решения пользователя Q2 (б), Q3 (а), Q4 (а)). Сделано иначе, чем предлагала карточка: Time вычитает объединение ожиданий одобрений корня (`SessionView.approvalWaits`), поэтому не откатывается и после ответа не прыгает. Во время `cancelling` Time идёт, одобрение потомка тик не останавливает. В ядре `ApprovalWaitMeter` считает объединение ожиданий, а не сумму. Ручная проверка 2026-11-18: одно и два одобрения, отмена — без отката. Регресс — `usage_budget_test.dart` и `usage_budget_tick_test.dart` в `apps/codelab_desktop/test/features/usage/`, `packages/dart/codelab_client_core/test/approvals/approval_waits_test.dart`, `packages/dart/codelab_agent_core/test/tools/approval_wait_meter_test.dart`, `test/loop/turn_budget_parallel_approvals_test.dart`, `test/permissions/approval_wait_policy_test.dart`.
+
 ### SMK-44. `rebuilt from journal (stale)` после каждого хода (P3)
 
 **Где:** строка состояния журнала панели Usage (`usage-ledger-status`, §12.3 A17 п. 3); причина `stale` даёт
@@ -95,6 +102,8 @@
 `up to date` (причина остаётся в подсказке) или переименовать подпись. Причины `stale` на проводе меняться не
 должны: их читает и `/usage`.
 
+**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/fix-usage-pane-live-cards/design.md) (PR #358; D7, решение пользователя Q5 (а)): `stale` и `missing` показываются как `Ledger: up to date · N records`, причина — в подсказке `refreshed from the session journal (<reason>)`. `invalid`, `explicit` и незнакомая причина — как раньше. Ручная проверка 2026-11-18: строка после каждого хода — `up to date`, «Rebuild from log» — `(explicit)`. Подсказку глазами не подтвердили (синтетическое наведение подсказок Flutter не показывает), её проверяет группа `подсказка строки состояния журнала (D7)` в `packages/flutter/codelab_ui/test/codelab_usage_pane_test.dart`.
+
 ### SMK-45. Cost `—` у пустой сессии с моделью с ценами (P3)
 
 **Где:** `apps/codelab_desktop/lib/features/usage/application/usage_pane_data.dart` — вторая строка карточки
@@ -107,3 +116,40 @@ Cost `price unknown` при `total.cost == null`; правило DSK-11 «неи
 **Что сделать (тот же change):** сначала выяснить, кто даёт `null`: агент в `total` журнала пустой сессии или
 маппер панели. Затем решить, показывать ли `$0.00` у сессии без шагов. DSK-11 при этом не нарушается: ноль
 здесь известен.
+
+**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/fix-usage-pane-live-cards/design.md) (PR #358; D8, решение пользователя Q6 (а)). `null` даёт агент: у агрегата без шагов нет ни `cost`, ни `currency`. Поэтому `$0.00` не показывается: валюта неизвестна. У агрегата без шагов, без `cost`, с нулевыми токенами и без причин неполноты карточка Cost показывает `—` и `no usage yet`. Ручная проверка 2026-11-18 это подтвердила. Регресс — группа `Cost пустой сессии (D8, Q6 (а); «Пустая сессия»)` в `usage_pane_data_test.dart`.
+
+### SMK-46. Подпись хода в `Per turn` подходит вплотную к столбцу Input (P3)
+
+**Где:**
+- `packages/flutter/codelab_ui/lib/src/organisms/codelab_usage_pane.dart` — `_RowCells` (подпись в `Expanded`,
+  `maxLines: 2`, `TextOverflow.ellipsis`, следом `SizedBox` столбцов Input, Output, Cost) и `_measureColumns`
+  (ширина столбца — по самому широкому значению плюс `_columnGap`);
+- design.md change `add-desktop-usage-pane`, D16 (ширина столбцов по значениям, `aa3e1277`); §12.3 A17 п. 3.
+
+**Шаги:** панель Usage открыта в доке обычной ширины; промпт с длинным текстом, чтобы подпись хода
+`N · “<title>”` в `Per turn` не помещалась в одну строку; смотреть строку хода сразу после конца хода.
+
+**Факт:** ручная проверка change `fix-usage-pane-live-cards` 2026-11-18. На одном кадре конец подписи хода
+подошёл к значению Input вплотную, без зазора: «…the project7.5k». На следующих кадрах подпись переносилась
+правильно. Строка тогда сменилась с `running` на итоговую, и журнал после хода обновился.
+
+**Почему важно:** подпись и число читаются как одно значение, и пользователь может прочитать неверное число
+токенов. Данные верные, дефект только в раскладке.
+
+**Гипотезы причины (проверить, прежде чем править):**
+- зазор `_columnGap` входит в ширину столбца справа от значения, а между подписью (`Expanded`) и первым столбцом
+  Input зазора нет. Подпись, которая заняла всю ширину `Expanded`, стоит вплотную к числу. Пометка `running`
+  даёт отступ, только пока ход идёт;
+- на кадре смены данных ширина столбцов уже пересчитана по новым значениям (`_measureColumns` в `build` таблицы),
+  а перенос и многоточие подписи ещё рассчитаны по прежней ширине. Это предположение наблюдателя, его надо
+  подтвердить или отвергнуть: ширины и ячейки строятся в одном `build`, через `_ColumnWidths`.
+
+**Критерий проверки:** widget-тест `codelab_ui` на узком доке. Подпись хода из длинного `title`, значения Input
+разной ширины, смена данных `running` → итог. Тест проверяет, что на каждом кадре правый край текста подписи
+левее левого края значения Input хотя бы на заданный зазор и что overflow нет. Ручная проверка — тот же сценарий
+на отладочной сборке desktop.
+
+**Что сделать:** implementation-only правка `codelab_ui`, если причина — отсутствующий зазор: отступ между
+подписью и первым числовым столбцом. Поведение и данные панели не меняются, OpenSpec change не нужен. Если
+причина в пересчёте ширин, сначала — тест-воспроизведение.

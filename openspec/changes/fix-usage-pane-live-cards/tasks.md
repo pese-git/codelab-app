@@ -115,7 +115,7 @@
 
 ## 3. Закрытие (итерация 3)
 
-- [ ] 3.1 Ручная проверка на отладочной сборке desktop (macOS), как задача 4.1 change `add-desktop-usage-pane`:
+- [x] 3.1 Ручная проверка на отладочной сборке desktop (macOS), как задача 4.1 change `add-desktop-usage-pane`:
   - встроенный агент, модель с ценами (OpenRouter `openai/gpt-4o-mini`), `budget.max_cost` и `budget.max_duration` в изолированном `CODELAB_HOME`;
   - ключ провайдера — только переменной окружения.
   
@@ -128,13 +128,39 @@
   - отмена хода во время шага — Time не откатывается.
   
   Ключ провайдера не попадает в журналы приложения, файлы сессии и CSV (`sk-or-` — 0). Итог — в design.md (раздел «Итог ручной проверки»).
-- [ ] 3.2 Сверка документов с кодом (задачи 0.3–0.5), строки таблиц тестов A17 и §12.1.10. Бэклог `docs/backlog/smoke-2026-11-18-desktop-usage-pane.md`: SMK-42…SMK-45 — «Закрыто change `fix-usage-pane-live-cards`» (или иной статус по ответам Q5, Q6). Новые наблюдения ручной проверки — карточками бэклога.
+
+  *Итог 2026-11-18* (отладочная сборка macOS, HEAD `f6cf64bb` = `4d93ec6b`; `budget.max_cost: 0.05`, `budget.max_duration: 10m`): все шесть сценариев прошли. Подробности — в design.md, раздел «Итог ручной проверки».
+  - SMK-45: Cost `—` и `no usage yet`.
+  - SMK-42: во время хода карточки совпадают со строкой статуса, после хода — с `Per turn` и `Per model` (7.5k / 67 / $0.0008).
+  - SMK-44: `Ledger: up to date · N records` после каждого хода, «Rebuild from log» — `(explicit) · 8 records`.
+  - SMK-43: Time стоит во время ожидания и не прыгает после ответа.
+  - Два одобрения одной группы: итог `0:06` при ~16 с ожиданий, ожидания вычтены один раз.
+  - Отмена: Time без отката.
+  
+  `sk-or-` — 0 файлов в `CODELAB_HOME`, журнале приложения и папке проекта.
+  
+  Не подтверждено глазами (покрыто тестами): подсказка строки журнала — синтетическое наведение подсказок Flutter не показывает; CSV не выгружался — нужен системный диалог, сборка CSV этим change не менялась.
+  
+  Отступление: app открыл последний недавний проект, а не новую папку; журналы сессий — в изолированном `CODELAB_HOME`.
+  
+  Новое наблюдение — SMK-46 (задача 3.2).
+- [x] 3.2 Сверка документов с кодом (задачи 0.3–0.5), строки таблиц тестов A17 и §12.1.10. Бэклог `docs/backlog/smoke-2026-11-18-desktop-usage-pane.md`: SMK-42…SMK-45 — «Закрыто change `fix-usage-pane-live-cards`» (или иной статус по ответам Q5, Q6). Новые наблюдения ручной проверки — карточками бэклога.
+
+  *Итог 2026-11-18* (сверка с `develop` `4d93ec6b`):
+  - A17 `12-3-desktop-display.md` (пп. 1, 3, 6), §12.1.5 пп. 3, 3b, 3c `12-1-view-model.md`, §5.2 `agent-core/05-agent-loop.md` и псевдокод `ask` §7.4 `agent-core/07-permissions.md` совпадают с кодом. Уточнено условие `no usage yet` в A17 п. 3: ещё «без `cost`» и нулевой `reasoning`, как в `_noUsageYet`.
+  - В строке `usage_budget_tick_test.dart` таблицы A17 возвращено настоящее имя прежнего теста. Новые тесты получили свои строки с группами и именами из файлов: `usage_pane_data_test.dart` (три строки), `codelab_usage_pane_test.dart` (подсказка строки журнала), `usage_pane_test.dart`, `usage_budget_test.dart` (три строки), `usage_budget_tick_test.dart`.
+  - §12.1.10 — `usage/usage_totals_turns_test.dart` и `approvals/approval_waits_test.dart`.
+  - Тесты ядра — в «Как проверить» документов ядра: §5.9 `05-agent-loop.md` (`tools/approval_wait_meter_test.dart`, `loop/turn_budget_parallel_approvals_test.dart`) и §7.11 `07-permissions.md` (`permissions/approval_wait_policy_test.dart`).
+  - Бэклог `docs/backlog/smoke-2026-11-18-desktop-usage-pane.md`: SMK-42…SMK-45 — «Закрыто change `fix-usage-pane-live-cards` (PR #358)» в сводке и в карточках. Новая карточка SMK-46 (P3, ux, desktop): подпись хода в `Per turn` подходит вплотную к столбцу Input; гипотезы причины и критерий проверки — в карточке.
+  - `delivery-roadmap.md`: change завершён, архивация — по просьбе пользователя.
 
 ## Definition of Done
 
-- Ответы на Q1–Q6 записаны в design.md, дельты им соответствуют, `openspec validate fix-usage-pane-live-cards --strict` проходит.
-- Все сценарии дельт `agent-workbench-ui`, `acp-client-kit`, `agent-loop` покрыты тестами; каждый тест сначала был красным.
-- Проверки §21 затронутого выполнены и перечислены в описании PR. Явно указано, что полный `melos run check` не запускался (если не запускался).
-- Документы архитектуры (A17, §12.1.5, §5.2) и `apps/codelab_desktop/AGENTS.md` совпадают с кодом. Документация пакетов и пользователя обновлена через `docs-writer`, если описанное менялось.
-- Ручная проверка 3.1 выполнена, итог в design.md, статусы бэклога обновлены.
-- Провод ACP и фикстуры не менялись. Allowlist ядра (PKG-2), граф `README.md` и правила сторожа не менялись.
+Сверено 2026-11-18 по `develop` `4d93ec6b` и описанию PR #358.
+
+- [x] Ответы на Q1–Q6 записаны в design.md, дельты им соответствуют, `openspec validate fix-usage-pane-live-cards --strict` проходит.
+- [x] Все сценарии дельт `agent-workbench-ui`, `acp-client-kit`, `agent-loop` покрыты тестами (строки таблиц A17, §12.1.10, §5.9, §7.11). Каждый тест сначала был красным: красные тесты — коммит `303e7a5a`, код — `b95747f0`.
+- [x] Проверки §21 затронутого выполнены и перечислены в описании PR #358. Там же явно указано, что полный `melos run check` не запускался.
+- [x] Документы архитектуры (A17, §12.1.5, §5.2, §7.4) и `apps/codelab_desktop/AGENTS.md` совпадают с кодом (задача 3.2). Руководство пользователя desktop (`apps/codelab_desktop/doc/user-guide.md`) обновлено в PR #358.
+- [x] Ручная проверка 3.1 выполнена, итог в design.md, статусы бэклога обновлены (SMK-42…SMK-45 закрыты, SMK-46 заведена).
+- [x] Провод ACP и фикстуры не менялись. Allowlist ядра (PKG-2), граф `README.md` и правила сторожа не менялись: в PR #358 нет правок `pubspec.yaml`, `README.md` и `rules.dart`.

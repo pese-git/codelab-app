@@ -944,6 +944,29 @@ Setext-заголовки, HTML, сноски и ссылки-определен
   `budget.<подполе>`, свёртка по `turnId` (в том числе `compactionDiscarded`), `receivedAt` по часам
   рабочего пространства, сброс при переподключении и `session/load`; клиентская роль
   `acp/prompt-usage-budget` — в `usage/usage_fixture_test.dart`.
+* `usage/usage_totals_turns_test.dart` (change `fix-usage-pane-live-cards`, задача 1.1; п. 3, D2):
+  группа `UsageDecoder` — `session.turns 3 is kept; steps stay as they were`, `zero turns is a value,
+  not an absence`, `session.turns as <вид>: null, one wrong_type warning, the snapshot is applied`,
+  `without the field turns is null and there is no warning`, `the turn aggregate carries no turns: null
+  without a warning`, `turn.turns of a wrong type is named by its own aggregate`, `the warning does not
+  carry the raw value (AGENTS.md §10)`; группа `UsageLedgerDecoder (the shared aggregate parser, D2)` —
+  `total.turns is kept, turnCount is still the number of turns`, `total.turns wins over the number of
+  ledger records: …`, `total.turns of a wrong type: null, turnCount is the former 0 …`; группа
+  `SessionView.usage` — `a live snapshot with turns 3 and steps 7 gives usage.session.turns 3; the turn
+  aggregate has none (scenario «Число ходов сессии»)`, `turns as a string: null, the snapshot is
+  applied, one usage.decode_failed with field session.turns and no raw value; …`.
+* `approvals/approval_waits_test.dart` (change `fix-usage-pane-live-cards`, задача 2.3; п. 3c, D3):
+  группа `root approvals of the current turn` — метки домена, порядок по приходу, ожидающее с
+  `resolvedAt == null`, пустой список до запроса, ответ закрывает интервал; группа `a child request
+  (scenario «Одобрение субагента»)` — запрос потомка не входит в `approvalWaits`, но есть в
+  `pendingApprovals`, рядом с запросом корня в списке только корень, решённый запрос потомка тоже не
+  входит; группа `turn boundaries` — `a new turn starts with an empty list (scenario «Новый ход»)`,
+  отмена хода и потеря соединения закрывают ожидающий интервал меткой домена; группа
+  `approvalWaitViews on a hand-built session` — решённое без `resolvedAt` не входит, ожидающее с
+  оставшейся меткой `resolvedAt` даёт `null`, без `requestedAt` не входит, порядок по `requestedAt`,
+  только последний ход, равенство по значению; группа `revisions without a change of the approvals` —
+  `agent chunks after a request leave approvalWaits equal by value (scenario «Ревизия без изменения
+  ожиданий»)`.
 * `attachments/prompt_content_builder_test.dart`: PNG с расширением `.jpg` → `image/png`; без
   `image` в возможностях → `resource_link` и пометка; `embeddedContext` → `resource`; путь вне
   `cwd` без подтверждения не отправлен; одиннадцатое вложение → `tooMany`; `.env` →
