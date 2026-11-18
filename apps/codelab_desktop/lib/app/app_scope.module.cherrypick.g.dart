@@ -55,6 +55,7 @@ final class $CodeLabRootLifecycleModuleContract
             currentScope.resolve<SecretMigrationOffer>(),
             currentScope.resolve<NavigationCubit>(),
             currentScope.resolve<TerminalTabsCubit>(),
+            currentScope.resolve<AppLanguageCubit>(),
           ),
         )
         .singleton();

@@ -7,6 +7,7 @@
 // AGENTS.md §2).
 
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
+import '../../support/recording_logger.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,5 +56,37 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.containsKey(kAppLanguageKey), isFalse);
     expect(await preferences.load(), AppLanguagePreference.system);
+  });
+
+  group('предупреждение app.language_preference_invalid (D13)', () {
+    test('незнакомое значение пишет warning без значения ключа', () async {
+      await seed({kAppLanguageKey: 'fr'});
+      final logger = RecordingLogger();
+
+      await SharedPreferencesAppLanguagePreferences(logger: logger).load();
+
+      final warning = logger.entries.singleWhere(
+        (e) => e['event'] == 'app.language_preference_invalid',
+      );
+      expect(warning['level'], 'warning');
+      expect(warning.values.whereType<String>().join(), isNot(contains('fr')));
+    });
+
+    test('допустимые значения и отсутствие ключа ничего не пишут', () async {
+      final logger = RecordingLogger();
+      final preferences = SharedPreferencesAppLanguagePreferences(
+        logger: logger,
+      );
+      for (final value in <Map<String, Object>>[
+        {},
+        {kAppLanguageKey: 'en'},
+        {kAppLanguageKey: 'ru'},
+      ]) {
+        await seed(value);
+        await preferences.load();
+      }
+
+      expect(logger.entries, isEmpty);
+    });
   });
 }

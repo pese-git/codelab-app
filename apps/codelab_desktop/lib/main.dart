@@ -7,6 +7,10 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'app/app_scope.dart';
+import 'app/language/app_language_cubit.dart' show AppLanguageState;
+import 'app/language/app_locale.dart';
+import 'core/platform/app_language_preferences.dart';
+import 'l10n/app_localizations.dart' show lookupAppLocalizations;
 import 'app/client_profile_secrets.dart';
 import 'app/codelab_app_widget.dart';
 import 'app/connection_environment.dart';
@@ -26,11 +30,26 @@ Future<void> main() async {
   );
   final profileSecrets = await openSecrets();
 
+  // Язык читается до `runApp`: первый кадр сразу на нужном языке, без мигания
+  // английского (add-desktop-localization, D2).
+  final preference = await SharedPreferencesAppLanguagePreferences(
+    logger: codeLabAppLogger(),
+  ).load();
+  final locale = resolveAppLocale(
+    preference,
+    WidgetsBinding.instance.platformDispatcher.locales,
+  );
+
   runApp(
     CodeLabBootstrap(
       logDirectoryPath: logDirectoryPath,
       profileSecrets: profileSecrets,
       profileSecretsOpener: openSecrets,
+      language: AppLanguageState(
+        preference: preference,
+        locale: locale,
+        strings: lookupAppLocalizations(locale),
+      ),
       child: const CodeLabApp(),
     ),
   );

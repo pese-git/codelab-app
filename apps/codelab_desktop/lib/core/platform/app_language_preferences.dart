@@ -1,3 +1,4 @@
+import 'package:codelab_client_acp/codelab_client_acp.dart' show Logger;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Ключ `shared_preferences`: язык интерфейса app (`en`/`ru`; для `system`
@@ -32,16 +33,27 @@ abstract interface class AppLanguagePreferences {
 /// перезаписывается: данные пользователя не портятся молча (`AGENTS.md` §2).
 final class SharedPreferencesAppLanguagePreferences
     implements AppLanguagePreferences {
-  const SharedPreferencesAppLanguagePreferences();
+  const SharedPreferencesAppLanguagePreferences({Logger? logger})
+    : _logger = logger;
+
+  final Logger? _logger;
 
   @override
   Future<AppLanguagePreference> load() async {
     final prefs = await SharedPreferences.getInstance();
-    return switch (prefs.getString(kAppLanguageKey)) {
+    final value = prefs.getString(kAppLanguageKey);
+    return switch (value) {
       'en' => AppLanguagePreference.en,
       'ru' => AppLanguagePreference.ru,
-      _ => AppLanguagePreference.system,
+      null => AppLanguagePreference.system,
+      _ => _invalid(),
     };
+  }
+
+  /// Незнакомое значение: предупреждение без самого значения (D13) и `system`.
+  AppLanguagePreference _invalid() {
+    _logger?.warning('app.language_preference_invalid');
+    return AppLanguagePreference.system;
   }
 
   @override
