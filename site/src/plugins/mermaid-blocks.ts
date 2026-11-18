@@ -13,13 +13,48 @@
  * дублируется.
  *
  * Как использовать: `remarkMermaidBlocks` в remark-плагинах процессора Markdown.
- *
- * Состояние: заглушка красных тестов задачи 3.5 (tasks.md); реализация — 3.6.
  */
-import type { Root } from 'mdast';
+import type { Data, Parent, Root, Text } from 'mdast';
+import { visit } from 'unist-util-visit';
+
+/**
+ * Узел исходника схемы. Свой тип, а не `paragraph`: плагины, которые правят
+ * текст абзацев (например, типографские кавычки), не должны менять синтаксис
+ * схемы.
+ */
+export interface MermaidSource extends Parent {
+  type: 'mermaidSource';
+  children: Text[];
+  data: Data;
+}
+
+declare module 'mdast' {
+  interface RootContentMap {
+    mermaidSource: MermaidSource;
+  }
+  interface BlockContentMap {
+    mermaidSource: MermaidSource;
+  }
+}
 
 export function remarkMermaidBlocks() {
-  return (_tree: Root): void => {
-    throw new Error('not implemented');
+  return (tree: Root): void => {
+    visit(tree, 'code', (node, index, parent) => {
+      if (node.lang !== 'mermaid' || parent === undefined || index === undefined) return;
+      const text: Text = { type: 'text', value: node.value };
+      const replacement: MermaidSource = {
+        type: 'mermaidSource',
+        children: [text],
+        data: {
+          hName: 'pre',
+          hProperties: { className: ['mermaid-source'], dataMermaid: '' },
+          // hChildren фиксирует исходник для HTML: даже если более поздний
+          // remark-плагин изменит текстовый узел, схема уйдёт в браузер как есть.
+          hChildren: [{ type: 'text', value: node.value }],
+        },
+      };
+      if (node.position) replacement.position = node.position;
+      parent.children.splice(index, 1, replacement);
+    });
   };
 }

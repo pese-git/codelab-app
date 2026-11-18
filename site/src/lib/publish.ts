@@ -13,14 +13,72 @@
  * Как использовать: `isPublished('docs/user/README.md')` — путь от корня
  * репозитория с прямыми слэшами. Новый источник — строка в константе и
  * строка в требовании `project-site` «Публикуемые источники документации».
- *
- * Состояние: заглушка красных тестов задачи 3.1 (tasks.md); реализация — 3.2.
  */
 
-/** Шаблоны glob публикуемых файлов от корня репозитория (D3). */
-export const publishPatterns: readonly string[] = [];
+/**
+ * Шаблоны glob публикуемых файлов от корня репозитория (D3).
+ *
+ * Шаблон с `!` исключает файлы: `AGENTS.md` — инструкции для агентов, а не
+ * документация, и не публикуется даже внутри `doc/` (D3). Формат совместим с
+ * загрузчиком `glob` Astro, поэтому константа передаётся ему как есть.
+ */
+export const publishPatterns: readonly string[] = [
+  'docs/user/**/*.md',
+  'docs/ops/**/*.md',
+  'apps/*/README.md',
+  'apps/*/doc/**/*.md',
+  'packages/*/*/README.md',
+  'packages/*/*/doc/**/*.md',
+  '!**/AGENTS.md',
+];
+
+/**
+ * Переводит шаблон glob в регулярное выражение.
+ *
+ * Почему свой разбор: шаблоны — узкое подмножество glob (звёздочка внутри
+ * сегмента и двойная звёздочка для любой глубины каталогов), а библиотека
+ * ради шести строк была бы лишней зависимостью (D2).
+ */
+function globToRegExp(pattern: string): RegExp {
+  let source = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i]!;
+    if (pattern.startsWith('**/', i)) {
+      source += '(?:[^/]+/)*';
+      i += 2;
+    } else if (char === '*') {
+      source += '[^/]*';
+    } else {
+      source += char.replace(/[\\^$.+?()[\]{}|]/g, '\\$&');
+    }
+  }
+  return new RegExp(`^${source}$`);
+}
+
+const includes = publishPatterns.filter((p) => !p.startsWith('!')).map(globToRegExp);
+const excludes = publishPatterns
+  .filter((p) => p.startsWith('!'))
+  .map((p) => globToRegExp(p.slice(1)));
 
 /** Опубликован ли файл [repoPath] (путь от корня репозитория). */
-export function isPublished(_repoPath: string): boolean {
-  throw new Error('not implemented');
+export function isPublished(repoPath: string): boolean {
+  return includes.some((re) => re.test(repoPath)) && !excludes.some((re) => re.test(repoPath));
+}
+
+/**
+ * Каталоги, с которых начинаются шаблоны публикации (`docs/user`, `apps`, …).
+ *
+ * Для чего: `check-links` обходит только их, чтобы вывести список ожидаемых
+ * страниц из allowlist, а не задавать его вручную (D14), и не сканировать
+ * весь репозиторий.
+ */
+export function publishRoots(): string[] {
+  const roots = publishPatterns
+    .filter((p) => !p.startsWith('!'))
+    .map((p) => {
+      const segments = p.split('/');
+      const firstGlob = segments.findIndex((s) => s.includes('*'));
+      return segments.slice(0, firstGlob === -1 ? segments.length - 1 : firstGlob).join('/');
+    });
+  return [...new Set(roots)];
 }
