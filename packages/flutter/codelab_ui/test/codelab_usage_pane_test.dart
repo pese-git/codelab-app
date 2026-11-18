@@ -108,10 +108,12 @@ CodeLabUsagePane _full({
   List<CodeLabUsageRow> models = _models,
   bool showRebuild = true,
   bool showExport = true,
+  String? statusHint,
 }) => CodeLabUsagePane(
   title: 'This session',
   cards: _cards,
   statusLine: 'Ledger: up to date · 12 records',
+  statusHint: statusHint,
   turns: turns,
   models: models,
   loading: loading,
@@ -231,6 +233,69 @@ void main() {
     );
     expect(find.text('subagents · 2 runs'), findsOneWidget);
     expect(note.dy, greaterThan(lastStep.dy));
+  });
+
+  // Задача 1.3 (4) change `fix-usage-pane-live-cards` (design.md, D7, Q5 (а)):
+  // подсказка строки состояния журнала приходит из данных
+  // (`CodeLabUsagePane.statusHint`) и выводится через `escapeForDisplay`,
+  // как остальные подсказки панели; без подсказки `Tooltip` у строки нет.
+  group('подсказка строки состояния журнала (D7)', () {
+    /// `Tooltip` вокруг строки состояния или внутри её ключа: где именно
+    /// стоит ключ, тест не навязывает.
+    List<Tooltip> statusTooltips(WidgetTester tester) {
+      final key = find.byKey(const ValueKey('usage-ledger-status'));
+      return [
+        ...tester.widgetList<Tooltip>(
+          find.ancestor(of: key, matching: find.byType(Tooltip)),
+        ),
+        ...tester.widgetList<Tooltip>(
+          find.descendant(of: key, matching: find.byType(Tooltip)),
+        ),
+      ];
+    }
+
+    testWidgets('statusHint — Tooltip строки состояния, текст строки прежний', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _pane(_full(statusHint: 'refreshed from the session journal (stale)')),
+      );
+
+      final tooltips = statusTooltips(tester);
+      expect(tooltips, hasLength(1));
+      expect(
+        tooltips.single.message,
+        'refreshed from the session journal (stale)',
+      );
+      expect(
+        _in(
+          'usage-ledger-status',
+          find.text('Ledger: up to date · 12 records'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('без statusHint у строки состояния нет Tooltip', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_pane(_full()));
+
+      expect(find.byKey(const ValueKey('usage-ledger-status')), findsOneWidget);
+      expect(statusTooltips(tester), isEmpty);
+    });
+
+    testWidgets('подсказка проходит escapeForDisplay: причина — строка агента, '
+        'управляющие символы не доходят до экрана', (tester) async {
+      await tester.pumpWidget(
+        _pane(_full(statusHint: 'refreshed (a\u001b[31mb)')),
+      );
+
+      final tooltips = statusTooltips(tester);
+      expect(tooltips, hasLength(1));
+      expect(tooltips.single.message, isNot(contains('\u001b')));
+      expect(tooltips.single.message, contains(r'\u001b'));
+    });
   });
 
   testWidgets('the model of a step is the tooltip of its row', (tester) async {

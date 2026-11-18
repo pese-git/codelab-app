@@ -422,6 +422,84 @@ void main() {
       await scene.close();
     });
 
+    // Задача 1.3 change `fix-usage-pane-live-cards` (D7, Q5 (а)): штатное
+    // обновление ленивого кэша (`stale`, `missing`) выглядит как `up to date`,
+    // причина — в подсказке строки; `invalid` и `explicit` видны, без подсказки.
+    testWidgets('«Журнал пересобран после хода»: stale — `Ledger: up to date`, '
+        'причина в подсказке; invalid — строка `rebuilt from journal`, без '
+        'подсказки', (tester) async {
+      final scene = await _Scene.open(tester);
+      await scene.newSession('s1');
+      await scene.snapshot();
+      await scene.openByToggle();
+
+      await scene.answerLedger(_ledger(status: 'rebuilt', reason: 'stale'));
+
+      expect(
+        scene.textOf(scene.key('usage-ledger-status')),
+        'Ledger: up to date · 3 records',
+      );
+      Iterable<Tooltip> hints() => tester.widgetList<Tooltip>(
+        find.ancestor(
+          of: scene.key('usage-ledger-status'),
+          matching: find.byType(Tooltip),
+        ),
+      );
+      expect(hints().map((t) => t.message), [
+        'refreshed from the session journal (stale)',
+      ]);
+
+      await scene.tapKey('usage-rebuild');
+      await scene.answerLedger(_ledger(status: 'rebuilt', reason: 'invalid'));
+
+      expect(
+        scene.textOf(scene.key('usage-ledger-status')),
+        'rebuilt from journal (invalid) · 3 records',
+      );
+      expect(hints(), isEmpty);
+
+      await scene.close();
+    });
+
+    // Сценарии «Карточки во время хода» и «Карточки после ответа журнала» на
+    // уровне экрана (D1): после нового снимка при отставшем журнале карточки
+    // показывают живую сумму, а после ответа журнала — его `total`.
+    testWidgets(
+      '«Карточки во время хода»: снимок поднял lastSeq выше журнала — '
+      'карточки из снимка, таблица остаётся на журнале',
+      (tester) async {
+        final scene = await _Scene.open(tester);
+        await scene.newSession('s1');
+        await scene.snapshot();
+        await scene.openByToggle();
+        await scene.answerLedger(_ledger());
+        expect(scene.textOf(scene.key('usage-card-turns')), contains('1 · 1'));
+
+        // Снимок seq 2: в сумме сессии два хода и три шага.
+        scene.agent.emitInbound(
+          JsonRpcMessage.notification(
+            method: '_codelab/session/usage',
+            params: {
+              ..._snapshot(seq: 2),
+              'session': {
+                'turns': 2,
+                'steps': 3,
+                'tokens': _tokens(300, 60),
+                'cost': '0.9',
+              },
+            },
+          ),
+        );
+        await scene.flush();
+
+        expect(scene.textOf(scene.key('usage-card-turns')), contains('2 · 3'));
+        expect(scene.textOf(scene.key('usage-card-input')), contains('300'));
+        expect(scene.key('usage-turn-1'), findsOneWidget);
+
+        await scene.close();
+      },
+    );
+
     testWidgets('«Сбой загрузки журнала»: заметка и Retry, повторного '
         'запроса без действия пользователя нет, Retry шлёт один', (
       tester,
