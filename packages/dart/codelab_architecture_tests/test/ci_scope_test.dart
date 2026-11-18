@@ -291,6 +291,122 @@ void main() {
     );
   });
 
+  // Второе измерение охвата — джоб сайта (change add-astro-site, D13;
+  // project-site «Проверка сайта в CI»). Признак `site` не меняет
+  // Dart-матрицу: те же файлы дают те же джобы, что и до change.
+  group('site (add-astro-site, D13)', () {
+    List<Map<String, String>> matrix(CiScope scope) => [
+      for (final job in scope.jobs) job.toJson(),
+    ];
+
+    test('только файлы site/ запускают сайт без Dart-джобов: они не '
+        '«вне пакетов»', () {
+      for (final files in [
+        ['site/src/pages/index.astro'],
+        ['site/.nvmrc'],
+        ['site/package-lock.json'],
+      ]) {
+        final scope = _scope(files);
+
+        expect(scope.site, isTrue, reason: '$files');
+        expect(scope.full, isFalse, reason: '$files');
+        expect(scope.jobs, isEmpty, reason: '$files');
+      }
+    });
+
+    test('опубликованная документация docs/ запускает сайт без '
+        'Dart-джобов', () {
+      final scope = _scope(['docs/user/configuration.md']);
+
+      expect(scope.site, isTrue);
+      expect(scope.full, isFalse);
+      expect(scope.jobs, isEmpty);
+    });
+
+    test('doc/ приложения запускает сайт, а Dart-матрица прежняя — '
+        'это файл пакета codelab_cli', () {
+      final scope = _scope(['apps/codelab_cli/doc/user-guide.md']);
+      // Та же матрица, что у правки кода того же пакета: классификация
+      // `apps/*/doc/**` для Dart-джобов не меняется.
+      final code = _scope(['apps/codelab_cli/lib/a.dart']);
+
+      expect(scope.site, isTrue);
+      expect(scope.full, isFalse);
+      expect(scope.changed, {'codelab_cli'});
+      expect(matrix(scope), matrix(code));
+      expect(matrix(scope), isNotEmpty);
+    });
+
+    test('README.md пакета запускает сайт без Dart-джобов', () {
+      final scope = _scope(['packages/dart/codelab_setup/README.md']);
+
+      expect(scope.site, isTrue);
+      expect(scope.full, isFalse);
+      expect(scope.jobs, isEmpty);
+    });
+
+    test('код пакета без документации не запускает сайт, матрица '
+        'прежняя', () {
+      final scope = _scope([
+        'packages/dart/codelab_agent_core/lib/src/loop.dart',
+      ]);
+      final jobs = _byName(scope);
+
+      expect(scope.site, isFalse);
+      expect(scope.full, isFalse);
+      expect(jobs.keys, [
+        'format',
+        'analyze',
+        'test',
+        'conformance',
+        'guard',
+        'web-compile',
+        'e2e-cli-dart',
+        'e2e-cli-embedded',
+      ]);
+      expect(jobs['guard']!.scripts, 'guard prompts:check');
+    });
+
+    test('openspec/ запускает сайт без Dart-джобов, в том числе перенос '
+        'change в архив (D13, ответ на Q6)', () {
+      for (final files in [
+        ['openspec/specs/x/spec.md'],
+        [
+          'openspec/changes/add-x/proposal.md',
+          'openspec/changes/archive/2026-11-18-add-x/proposal.md',
+        ],
+      ]) {
+        final scope = _scope(files);
+
+        expect(scope.site, isTrue, reason: '$files');
+        expect(scope.full, isFalse, reason: '$files');
+        expect(scope.jobs, isEmpty, reason: '$files');
+      }
+    });
+
+    test('.claude/ и корневой CHANGELOG.md не запускают ни сайт, ни '
+        'Dart-джобы', () {
+      for (final file in ['.claude/agents/x.md', 'CHANGELOG.md']) {
+        final scope = _scope([file]);
+
+        expect(scope.site, isFalse, reason: file);
+        expect(scope.full, isFalse, reason: file);
+        expect(scope.jobs, isEmpty, reason: file);
+      }
+    });
+
+    test('полный прогон всегда включает сайт', () {
+      final explicit = _scope(['docs/x.md'], fullReason: 'push to develop');
+      final outside = _scope(['.github/workflows/ci.yml']);
+
+      for (final scope in [explicit, outside]) {
+        expect(scope.full, isTrue);
+        expect(scope.site, isTrue);
+        expect(scope.jobs.map((j) => j.job), fullJobs.map((j) => j.job));
+      }
+    });
+  });
+
   test('a package pubspec lists workspace dependencies only', () {
     final package = WorkspacePackage.fromPubspec(
       'apps/codelab_cli',

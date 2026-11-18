@@ -27,3 +27,8 @@ pubspec_overrides.yaml
 .fvm/*
 !.fvm/
 !.fvm/fvm_config.json
+
+# Сайт CodeLab (site/, ADR-0003; design.md add-astro-site, D1)
+site/node_modules/
+site/dist/
+site/.astro/
