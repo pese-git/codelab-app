@@ -47,6 +47,7 @@ flowchart LR
 | `lib/src/composition_root.dart` | `buildCliRuntime`: `AcpClientApplication`, `ClientWorkspace`, резолверы транспортов; единственное место импорта `package:codelab_embedded/io.dart` |
 | `lib/src/embedded_transport_resolver.dart` | резолвер встроенного агента: открывает и закрывает агента по профилю `embedded` |
 | `lib/src/embedded_logger.dart`, `lib/src/cli_logger.dart` | логгеры агента и клиента в stderr при `--verbose` |
+| `lib/src/cli_io.dart` | шов потоков и признаков терминала (`CliIo`, `ProcessCliIo`): тесты подставляют буферы |
 | `lib/src/exit_codes.dart` | коды выхода `0`, `1`, `64`, `130`, `143` |
 | `lib/src/home.dart` | `CodelabHome`: `CODELAB_HOME`, `profiles.json`, `cli_history` |
 | `lib/src/signals.dart` | `SIGINT`/`SIGTERM` через шов `SignalSeam` |
