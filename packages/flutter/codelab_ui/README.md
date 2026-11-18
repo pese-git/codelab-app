@@ -56,7 +56,7 @@ flowchart LR
 | `CodeLabTone` | `neutral`, `accent`, `success`, `warning`, `danger` |
 | `CodeLabTextRole` | `title`, `subtitle`, `body`, `strong`, `caption`, `mono` |
 
-Цвет не единственный носитель смысла: тег всегда содержит текст. Пары «подпись и тон» для `CodeLabApprovalRisk` (включая `unknown` — `Unknown risk`, тон `warning`) и `CodeLabToolCallStatus` зафиксированы внутри кита. Какой риск или статус показать, решает приложение.
+Цвет не единственный носитель смысла: тег всегда содержит текст. Пары «подпись и тон» для `CodeLabApprovalRisk` (включая `unknown`, тон `warning`) и `CodeLabToolCallStatus` зафиксированы внутри кита; подпись берётся из каталога языка (см. «Локализация»). Какой риск или статус показать, решает приложение.
 
 ## Как использовать
 
@@ -79,10 +79,38 @@ Widget build(BuildContext context) {
 
 Виджет вызывается внутри `FluentApp` (или `FluentTheme`) и `Directionality`. Без темы `FluentTheme.of` не найдёт данных.
 
+## Локализация
+
+Кит показывает текст на английском и русском (`en`, `ru`). Каталог сообщений лежит в `lib/src/l10n/`: `codelab_ui_en.arb` — шаблон, `codelab_ui_ru.arb` — перевод, рядом сгенерированный `CodeLabLocalizations`. В барель он выходит только как `CodeLabLocalizations` (делегат и список языков); внутри кита текст берёт `codeLabStringsOf(context)`.
+
+Хост добавляет делегат кита в `localizationsDelegates` своего `FluentApp`, как это делает `apps/codelab_desktop/lib/app/codelab_app_widget.dart`:
+
+```dart
+FluentApp(
+  localizationsDelegates: const [
+    ...AppLocalizations.localizationsDelegates,
+    CodeLabLocalizations.delegate,
+  ],
+  supportedLocales: AppLocalizations.supportedLocales,
+  // ...
+)
+```
+
+Без делегата в дереве кит показывает английский. Поэтому тесты и превью с обычным `FluentApp` работают без настройки.
+
+Что важно знать при вызове виджетов:
+
+- Параметры с текстом по умолчанию — `placeholder`, `emptyLabel`, `reconnectLabel`, `actionsLabel` — имеют тип `String?`. При `null` показывается перевод из каталога; явная строка показывается как есть, без перевода.
+- Названия панелей дока: `toolPaneTitleOf(context, pane)`. Поля `label` у `ToolPane` нет.
+- Подпись риска на языке интерфейса: `CodeLabApprovalRisk.labelOf(context)`. Поле `label` и `CodeLabApprovalPrompt.noSuchOption` — английские эталоны для тестов.
+- Не переводятся клавиши и сочетания, идентификаторы, `ValueKey` и строки, которые передают приложение и агент.
+
+Правка текстов: измени `codelab_ui_en.arb` и `codelab_ui_ru.arb` (у каждого сообщения `en` есть `@key.description`), затем в `packages/flutter/codelab_ui` выполни `fvm flutter gen-l10n`. Сгенерированный код коммитится; устаревший код ловит `melos run l10n:check`. Русские формулировки — по `docs/architecture/l10n-glossary.md`. Правила каталога — в [`AGENTS.md`](AGENTS.md), раздел про локализацию.
+
 ## Как добавить виджет
 
 1. Определи слой. Атом при втором употреблении, а не «на вырост». Составной из атомов — `molecules/`. Лента, панель, экран — `organisms/`.
-2. Данные виджета — готовые значения: строки, перечисления, `CodeLabTone`, колбэки. Не принимай модели ACP или клиентского ядра, не импортируй `dart:io`.
+2. Данные виджета — готовые значения: строки, перечисления, `CodeLabTone`, колбэки. Собственные подписи виджета добавляй в каталог (см. «Локализация»), а не литералом в коде. Не принимай модели ACP или клиентского ядра, не импортируй `dart:io`.
 3. Экспортируй файл из барели слоя (`atomics.dart`, `molecules.dart` или `organisms.dart`).
 4. Добавь превью на фиктивных данных в `codelab_molecule_previews.dart` или `codelab_organism_previews.dart`. Превью — функция с аннотацией `@Preview(name:, group:, size:)`, которая возвращает виджет в оболочке с `FluentTheme`. Без секретов и настоящих путей.
 5. Добавь вызов превью в `test/codelab_previews_test.dart`.
