@@ -6,6 +6,8 @@
 
 1. [`codelab` — терминальный клиент](../../apps/codelab_cli/doc/operations.md) — сборка, запуск без участия человека (`-p`) в скриптах и CI, файлы в `CODELAB_HOME`, переменные окружения, коды выхода, проверка агента фикстурами (`test-scenario`).
 2. [CodeLab app — настольное приложение](../../apps/codelab_desktop/doc/operations.md) — сборка для macOS, подпись и entitlements, данные вне `CODELAB_HOME`, логи, переменные окружения, сеть.
-3. [Каталог `CODELAB_HOME`](codelab-home.md) — где лежит каталог и какие файлы в нём общие для `codelab` и app.
+3. [`codelab-agent` — агент как процесс](../../apps/codelab_agent/doc/operations.md) — сборка, `serve --stdio` и `serve --ws`, флаги, токен и сеть, логи, коды выхода.
+4. [Каталог `CODELAB_HOME`](codelab-home.md) — где лежит каталог и какие файлы в нём общие для `codelab`, app и `codelab-agent`.
+5. [Переменные окружения `CODELAB_*`](environment.md) — единая таблица переменных для всех трёх программ.
 
 Сборка из исходников общая для всех приложений — [запуск из исходников](../user/run-from-source.md). Файлы конфигурации агента и секреты — [настройка агента](../user/configuration.md).

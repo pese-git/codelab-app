@@ -84,7 +84,7 @@ Config: invalid (issues: 1)
 
 ## Файлы
 
-По умолчанию файлы клиента и встроенного агента лежат в каталоге `CODELAB_HOME`; исключение — слои конфигурации проекта. Где лежит каталог и какие файлы в нём общие с CodeLab app (`config.yaml`, `profiles.json`, `secrets.yaml`, `sessions/`), — в [каталоге `CODELAB_HOME`](../../../docs/ops/codelab-home.md). Здесь — только то, что относится к `codelab`.
+По умолчанию файлы клиента и встроенного агента лежат в каталоге `CODELAB_HOME`; исключение — слои конфигурации проекта. Где лежит каталог и какие файлы в нём общие с CodeLab app (`config.yaml`, `profiles.json`, `secrets.yaml`, `sessions/`), — в [каталоге `CODELAB_HOME`](../../../docs/ops/codelab-home.md). Токен внешнего агента `ws://…` — `CODELAB_AGENT_TOKEN`, если профиль не задаёт другую ссылку, — тоже там. Здесь — только то, что относится к `codelab`.
 
 | Где | Что | Кто пишет |
 |---|---|---|
@@ -106,14 +106,11 @@ local: ~/projects/demo/.codelab/config.local.yaml (missing)
 
 ## Переменные окружения
 
+Переменные `CODELAB_*` (`CODELAB_HOME`, `CODELAB_CONFIG`, `CODELAB_SECRET_<ИМЯ>`, `CODELAB_AGENT_TOKEN`, `CODELAB_DEBUG_SECRETS` и другие) общие для приложений CodeLab — их таблица в [переменных окружения](../../../docs/ops/environment.md). Здесь — только то, что относится к `codelab`.
+
 | Переменная | Для чего |
 |---|---|
-| `CODELAB_HOME`, `HOME`, `USERPROFILE` | каталог настроек и данных — правило в [каталоге `CODELAB_HOME`](../../../docs/ops/codelab-home.md#где-лежит-каталог) |
-| `CODELAB_CONFIG` | абсолютный путь к дополнительному файлу конфигурации (слой 5) |
-| `CODELAB_SECRET_<ИМЯ>` | значение секрета без файла хранилища, подходит для CI; правило имени — в [шаге 2 настройки](../../../docs/user/configuration.md#шаг-2-задайте-ключ-api) |
 | переменная из `api_key_env` провайдера | ключ API провайдера |
-| `CODELAB_AGENT_TOKEN` | токен для агента по WebSocket, если профиль не задаёт другую ссылку |
-| `CODELAB_DEBUG_SECRETS=1` | то же, что `--debug-secrets` |
 | `NO_COLOR` (непустая), `TERM=dumb` | вывод без цветов |
 | `LC_ALL`, `LC_CTYPE`, `LANG` | значение с `UTF-8` включает символы Unicode в выводе |
 
@@ -129,7 +126,7 @@ local: ~/projects/demo/.codelab/config.local.yaml (missing)
 ## Логи и диагностика
 
 - `--verbose` (`-v`) пишет в stderr диагностику соединения, журнал клиентского слоя (например, предупреждение о битом снимке расхода токенов) и лог встроенного агента. Без него эти строки никуда не пишутся, и stderr headless содержит только сообщения хода.
-- `--debug-secrets` или `CODELAB_DEBUG_SECRETS=1` пишет в stderr, какие секреты искал встроенный агент: имя, назначение, источник и найден ли секрет. Значения не печатаются. На внешнего агента флаг не влияет.
+- `--debug-secrets` (или `CODELAB_DEBUG_SECRETS=1`) пишет в stderr, какие секреты искал встроенный агент: имя, назначение, источник и найден ли секрет. Значения не печатаются. На внешнего агента флаг не влияет.
 - Файл лога `codelab` не ведёт. Журналы сессий встроенного агента — в `$CODELAB_HOME/sessions/` (или в `sessions.dir`, если он задан).
 - Если встроенный агент не остановился за 10 секунд после выхода, `codelab` пишет `codelab: the embedded agent did not stop in 10 s` и всё равно завершается.
 
@@ -174,7 +171,8 @@ SKIP acp/prompt-max-turn-requests (0.0s)
 …
 SKIP acp/prompt-update-plan (0.0s)
     acp/prompt-update-plan has roles [client] without "agent"
-21 passed, 0 failed, 5 skipped
+…
+21 passed, 0 failed, 6 skipped
 ```
 
 - Аргументы — файлы фикстур или каталоги с ними. `--filter` — шаблон id фикстур, `--timeout` — ожидание кадра агента (по умолчанию `30s`).
@@ -186,7 +184,7 @@ SKIP acp/prompt-update-plan (0.0s)
 
 ## Переходная команда `codelab serve`
 
-`codelab serve …` запускает отдельный бинарь `codelab-agent` с теми же аргументами: сначала из каталога, где лежит `codelab`, затем из `PATH`. Код выхода — код агента; если `codelab-agent` не найден — `1`. Команда временная и в `codelab --help` не указана. Что использовать вместо неё — в [переходе с Python-агента](../../../docs/user/migrating-from-python-agent.md#профили-и-скрипты-с-codelab-serve).
+`codelab serve …` запускает отдельный бинарь `codelab-agent` с теми же аргументами: сначала из каталога, где лежит `codelab`, затем из `PATH`. Перед запуском `codelab` пишет в stderr `codelab: "codelab serve" is deprecated and will be removed in a future release; use "codelab-agent serve" instead.` Код выхода — код агента; если `codelab-agent` не найден — `1`. Команда временная и в `codelab --help` не указана. Что использовать вместо неё — в [переходе с Python-агента](../../../docs/user/migrating-from-python-agent.md#профили-и-скрипты-с-codelab-serve).
 
 ## Смотрите также
 

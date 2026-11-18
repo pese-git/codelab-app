@@ -8,24 +8,27 @@ Monorepo CodeLab на Dart и Flutter: desktop-клиент (`apps/codelab_deskt
 
 | Путь | Что это |
 |---|---|
-| `apps/codelab_desktop` | Flutter Desktop клиент ACP |
-| `apps/codelab_agent` | бинарь Dart-агента: `codelab-agent serve --stdio \| --ws` |
-| `packages/dart/codelab_acp_protocol` | типизированные модели ACP JSON-RPC, кодеки и валидация |
-| `packages/dart/codelab_acp_transports` | транспорты ACP; `io.dart` — stdio и WebSocket |
-| `packages/dart/codelab_acp_testing` | fake-транспорты, фикстуры и помощники conformance-тестов |
-| `packages/dart/codelab_client_acp` | протокольный клиент `AcpClientApplication`: domain, состояние и use cases |
-| `packages/dart/codelab_client_core` | общий клиентский слой без UI и IO для desktop и CLI: рабочее пространство, соединение, сессии, транскрипт |
-| `packages/dart/codelab_client_io` | `dart:io`-адаптеры клиента: файлы, процессы, транспорты, хранилища профилей |
-| `packages/dart/codelab_agent_core` | встраиваемое ядро Dart-агента на чистом Dart: LLM, цикл, инструменты, разрешения, сессии |
-| `packages/dart/codelab_agent_io` | `dart:io`-реализации портов ядра агента: файлы, процессы, журналы сессий |
-| `packages/dart/codelab_agent_acp` | ACP-сервер агента: проекция `AgentRuntime` в протокол |
-| `packages/dart/codelab_agent_mcp` | MCP-клиент агента: dual-era JSON-RPC, streamable HTTP, проекция инструментов MCP в `AgentTool` |
-| `packages/dart/codelab_setup` | мост настроек агента для клиентов: реэкспорт чистых типов конфигурации и общих подкоманд `config`, мастер провайдера (`ProviderSetupFlow`, пресеты, проверка `/models`), модели страниц Providers и MCP servers и их запись (`ProviderSetupCommitter`, `McpServerCommitter`, `McpServerRemover`); `io.dart` — `ClientSecretAccess` и IO-адаптеры |
-| `packages/dart/codelab_embedded` | мост встроенного агента для клиентов: агент в процессе клиента через `InProcessAcpLink`; основной барель web-безопасен, `io.dart` — настольный открыватель, `testing.dart` — сценарий модели для тестов |
-| `packages/dart/codelab_architecture_tests` | сторож границ пакетов и схемы имён (`melos run guard`) |
-| `packages/flutter/codelab_ui` | Fluent UI виджеты рабочего места |
+| [`apps/codelab_desktop`](apps/codelab_desktop/README.md) | Flutter Desktop клиент ACP |
+| [`apps/codelab_cli`](apps/codelab_cli/README.md) | терминальный клиент `codelab` на чистом Dart: REPL, headless `-p`, драйвер фикстур `test-scenario`, `config check` |
+| [`apps/codelab_agent`](apps/codelab_agent/README.md) | бинарь Dart-агента: `codelab-agent serve --stdio \| --ws` |
+| [`packages/dart/codelab_acp_protocol`](packages/dart/codelab_acp_protocol/README.md) | типизированные модели ACP JSON-RPC, кодеки и валидация |
+| [`packages/dart/codelab_acp_transports`](packages/dart/codelab_acp_transports/README.md) | транспорты ACP; `io.dart` — stdio и WebSocket |
+| [`packages/dart/codelab_acp_testing`](packages/dart/codelab_acp_testing/README.md) | fake-транспорты, фикстуры и помощники conformance-тестов |
+| [`packages/dart/codelab_client_acp`](packages/dart/codelab_client_acp/README.md) | протокольный клиент `AcpClientApplication`: domain, состояние и use cases |
+| [`packages/dart/codelab_client_core`](packages/dart/codelab_client_core/README.md) | общий клиентский слой без UI и IO для desktop и CLI, web-безопасный: рабочее пространство, соединение, сессии, транскрипт, очередь промптов, одобрения, инспектор |
+| [`packages/dart/codelab_client_io`](packages/dart/codelab_client_io/README.md) | `dart:io`-адаптеры клиента: файлы, процессы, транспорты, хранилища профилей |
+| [`packages/dart/codelab_agent_core`](packages/dart/codelab_agent_core/README.md) | встраиваемое ядро Dart-агента на чистом Dart: LLM, цикл, инструменты, разрешения, сессии |
+| [`packages/dart/codelab_agent_io`](packages/dart/codelab_agent_io/README.md) | `dart:io`-реализации портов ядра агента: файлы, процессы, журналы сессий, загрузка конфигурации (`ConfigLoader`), файлы проекта (`AGENTS.md`, шаблоны команд, определения агентов), общие подкоманды `config` |
+| [`packages/dart/codelab_agent_acp`](packages/dart/codelab_agent_acp/README.md) | ACP-сервер агента: проекция `AgentRuntime` в протокол |
+| [`packages/dart/codelab_agent_mcp`](packages/dart/codelab_agent_mcp/README.md) | MCP-клиент агента без `dart:io`: протокол MCP, streamable HTTP, проекция инструментов MCP в инструменты ядра; stdio-процесс сервера приходит портом из `codelab_agent_io` |
+| [`packages/dart/codelab_setup`](packages/dart/codelab_setup/README.md) | мост настроек агента для клиентов: реэкспорт чистых типов конфигурации и общих подкоманд `config`, мастер провайдера (`ProviderSetupFlow`, пресеты, проверка `/models`), модели страниц Providers и MCP servers и их запись (`ProviderSetupCommitter`, `McpServerCommitter`, `McpServerRemover`); `io.dart` — `ClientSecretAccess` и IO-адаптеры |
+| [`packages/dart/codelab_embedded`](packages/dart/codelab_embedded/README.md) | мост встроенного агента для клиентов: агент в процессе клиента через `InProcessAcpLink`; основной барель web-безопасен, `io.dart` — настольный открыватель, `testing.dart` — сценарий модели для тестов |
+| [`packages/dart/codelab_architecture_tests`](packages/dart/codelab_architecture_tests/README.md) | сторож границ пакетов и схемы имён (`melos run guard`) |
+| [`packages/flutter/codelab_ui`](packages/flutter/codelab_ui/README.md) | Fluent UI виджеты рабочего места |
 | `openspec/` | спецификации поведения и активные изменения |
 | `docs/` | архитектура, спецификация ACP, интеграции |
+
+Документация пакета и приложения — `README.md` в его каталоге; сквозные руководства — [`docs/user/README.md`](docs/user/README.md) и [`docs/ops/README.md`](docs/ops/README.md).
 
 ### Граф зависимостей
 
