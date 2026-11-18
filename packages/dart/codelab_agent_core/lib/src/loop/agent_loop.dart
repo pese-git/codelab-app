@@ -82,7 +82,8 @@ final class _Turn {
     : _transcript = [..._context.messages],
       _misuse = MisuseBreaker(_config.misuse),
       _startedAt = _config.clock.now(),
-      _waitAtStart = _config.approvalWait?.total ?? Duration.zero {
+      _waitAtStart =
+          _config.approvalWait?.totalAt(_config.clock.now()) ?? Duration.zero {
     for (final message in _transcript) {
       if (message is AssistantMessage) {
         _usedIds.addAll(message.toolCalls.map((c) => c.id));
@@ -332,7 +333,8 @@ final class _Turn {
   BudgetProgress _progress(int steps) {
     final total = _usage + _childUsage;
     final waited =
-        (_config.approvalWait?.total ?? Duration.zero) - _waitAtStart;
+        (_config.approvalWait?.totalAt(_config.clock.now()) ?? Duration.zero) -
+        _waitAtStart;
     return BudgetProgress(
       limits: _config.budget,
       steps: steps,

@@ -174,10 +174,18 @@ UsageTotals? parseUsageTotals(
   if (steps != null && (steps is! int || steps < 0)) {
     onWarning('$name.steps', 'wrong_type');
   }
+  // D2 change `fix-usage-pane-live-cards`: `turns` читается у любого
+  // агрегата; неверный тип — `null` и предупреждение без сырого значения
+  // (AGENTS.md §10, §16), снимок применяется.
+  final turns = raw['turns'];
+  if (turns != null && (turns is! int || turns < 0)) {
+    onWarning('$name.turns', 'wrong_type');
+  }
   return UsageTotals(
     tokens: tokens,
     cost: parseUsageCost(raw, name, currency, onWarning),
     steps: steps is int && steps >= 0 ? steps : 0,
+    turns: turns is int && turns >= 0 ? turns : null,
     partial: parseUsagePartial(raw, name, onWarning),
   );
 }

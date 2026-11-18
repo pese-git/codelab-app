@@ -795,6 +795,28 @@ void main() {
       expect(at(data, 65), '0:08 / 10:00');
     });
 
+    test('ожидания не по порядку `requestedAt`: объединение считается так же, '
+        'как при сортированном списке (D4)', () {
+      // Поздний интервал первым, ранний пересекающийся — вторым. Без сортировки
+      // по началу ранний интервал целиком «поглотился» бы уже покрытым концом.
+      final sorted = running(
+        waits: [
+          _wait(const Duration(seconds: 2), const Duration(seconds: 12)),
+          _wait(const Duration(seconds: 8), const Duration(seconds: 20)),
+        ],
+      );
+      final shuffled = running(
+        waits: [
+          _wait(const Duration(seconds: 8), const Duration(seconds: 20)),
+          _wait(const Duration(seconds: 2), const Duration(seconds: 12)),
+        ],
+      );
+
+      // Объединение — [2, 20] с = 18 с; Time = 3 + 30 − 18 = 0:15.
+      expect(at(sorted, 30), '0:15 / 10:00');
+      expect(at(shuffled, 30), '0:15 / 10:00');
+    });
+
     test('Time не убывает на всём пути: тик, ожидание, ответ, тик', () {
       final waits = [
         _wait(const Duration(seconds: 2), const Duration(seconds: 62)),

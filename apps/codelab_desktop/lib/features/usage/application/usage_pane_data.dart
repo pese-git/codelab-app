@@ -165,6 +165,7 @@ final class UsagePaneData {
     this.notice = UsagePaneNotice.none,
     this.failureHint,
     this.statusLine,
+    this.statusHint,
     this.cards = const [],
     this.turns = const [],
     this.models = const [],
@@ -196,6 +197,14 @@ final class UsagePaneData {
   /// Строка состояния журнала (`usage-ledger-status`); `null` — нечего
   /// показывать.
   final String? statusLine;
+
+  /// Подсказка строки состояния: причина штатной пересборки кэша журнала
+  /// (`stale`, `missing`), показанной как `up to date` (D7 change
+  /// `fix-usage-pane-live-cards`); `null` — подсказки нет.
+  final String? statusHint;
+
+  /// Карточки сводки: все четыре из одного агрегата — свежего из журнала и
+  /// живых снимков (D1 того же change).
   final List<UsagePaneCard> cards;
 
   /// Ходы от нового к старому.
@@ -262,6 +271,24 @@ String _averageOf(int steps, int turns) {
   return '${tenths ~/ 10}.${tenths % 10}';
 }
 
+/// «Расхода ещё нет»: ни шагов, ни токенов, ни цены, ни причин неполноты
+/// (D8, Q6 (а) change `fix-usage-pane-live-cards`).
+///
+/// Почему: у пустой сессии на проводе нет `cost`, и `price unknown` называл бы
+/// модель безценной, хотя ходов просто не было. `$0.00` тоже нельзя: клиент не
+/// знает ни валюты, ни того, есть ли у модели цены (DSK-11, VIEW-6).
+bool _noUsageYet(UsageTotals total) {
+  final tokens = total.tokens;
+  return total.steps == 0 &&
+      total.cost == null &&
+      total.partial.isEmpty &&
+      tokens.input == 0 &&
+      tokens.output == 0 &&
+      tokens.cacheRead == 0 &&
+      tokens.cacheWrite == 0 &&
+      (tokens.reasoning ?? 0) == 0;
+}
+
 List<UsagePaneCard> _cardsOf(UsageTotals total, {required int? turnCount}) {
   final tokens = total.tokens;
   final partial = total.partial;
@@ -305,7 +332,9 @@ List<UsagePaneCard> _cardsOf(UsageTotals total, {required int? turnCount}) {
                 '${formatUsageMoney(total.cost!)}',
       detail: reasons.isNotEmpty
           ? reasons.join(', ')
-          : (total.cost == null ? 'price unknown' : null),
+          : (total.cost == null
+                ? (_noUsageYet(total) ? 'no usage yet' : 'price unknown')
+                : null),
       approximate: total.cost != null && usageCostPartial(partial),
     ),
     UsagePaneCard(
@@ -372,19 +401,37 @@ UsagePaneModel _groupOf(String label, UsageLedgerGroup group, String detail) =>
       detail: detail,
     );
 
-String? _statusLineOf(UsageLedgerView ledger) {
+/// Причины пересборки, которые при `rebuilt` считаются штатным обновлением
+/// ленивого кэша `usage.json` (D3 change `add-usage-ledger`), а не сбоем.
+const _routineRebuildReasons = {'stale', 'missing'};
+
+/// Строка состояния журнала и подсказка к ней (D7, Q5 (а)).
+///
+/// `stale` и `missing` — путь ленивого кэша: после пересборки файл свеж, и
+/// пользователь видит то же, что при `upToDate`; причина уходит в подсказку.
+/// `invalid`, `explicit` и незнакомая причина видны в строке: это битый файл
+/// или действие пользователя («Rebuild from log»).
+({String? line, String? hint}) _statusOf(UsageLedgerView ledger) {
   final records = ledger.records;
   final tail = records == null
       ? ''
       : ' · $records ${records == 1 ? 'record' : 'records'}';
+  final reason = ledger.reason;
   return switch (ledger.status) {
-    UsageLedgerStatus.upToDate => 'Ledger: up to date$tail',
-    UsageLedgerStatus.rebuilt =>
-      'rebuilt from journal'
-          '${ledger.reason == null ? '' : ' (${ledger.reason})'}$tail',
-    UsageLedgerStatus.inMemory => 'in memory',
-    UsageLedgerStatus.notSaved => 'not saved',
-    null => null,
+    UsageLedgerStatus.upToDate => (line: 'Ledger: up to date$tail', hint: null),
+    UsageLedgerStatus.rebuilt when _routineRebuildReasons.contains(reason) => (
+      line: 'Ledger: up to date$tail',
+      hint: 'refreshed from the session journal ($reason)',
+    ),
+    UsageLedgerStatus.rebuilt => (
+      line:
+          'rebuilt from journal'
+          '${reason == null ? '' : ' ($reason)'}$tail',
+      hint: null,
+    ),
+    UsageLedgerStatus.inMemory => (line: 'in memory', hint: null),
+    UsageLedgerStatus.notSaved => (line: 'not saved', hint: null),
+    null => (line: null, hint: null),
   };
 }
 
@@ -411,10 +458,16 @@ UsagePaneData usagePaneDataOf(SessionView? view, {required String cwd}) {
   };
   final failed = state is UsageLedgerFailed ? state.reason : null;
   final session = view.usage.session;
-  final cards = ledger != null
+  // D1 (Q1 (в)): карточки целиком из одного свежего агрегата. Журнал свеж,
+  // если не отстаёт от снимков по `seq` (признак D3 change
+  // `add-desktop-usage-pane`); отставший журнал уступает живым снимкам, а при
+  // их отсутствии (`awaiting`, пустая сессия) остаётся единственным
+  // источником. Журнал и снимок не складываются (R8 change `add-usage-ledger`).
+  final ledgerFresh = ledger != null && ledger.seq >= view.usage.lastSeq;
+  final cards = ledger != null && (ledgerFresh || session == null)
       ? _cardsOf(ledger.total, turnCount: ledger.turnCount)
       : session != null
-      ? _cardsOf(session, turnCount: null)
+      ? _cardsOf(session, turnCount: session.turns)
       : const <UsagePaneCard>[];
 
   var turns = const <UsagePaneTurn>[];
@@ -436,6 +489,7 @@ UsagePaneData usagePaneDataOf(SessionView? view, {required String cwd}) {
         _groupOf('Summaries', group, '${group.count}'),
     ];
   }
+  final status = ledger == null ? null : _statusOf(ledger);
   return UsagePaneData(
     available: true,
     ledgerAvailable: ledgerAvailable,
@@ -447,7 +501,8 @@ UsagePaneData usagePaneDataOf(SessionView? view, {required String cwd}) {
     failureHint: failed == null
         ? null
         : (failed.code?.toString() ?? failed.kind.name),
-    statusLine: ledger == null ? null : _statusLineOf(ledger),
+    statusLine: status?.line,
+    statusHint: status?.hint,
     cards: cards,
     turns: turns,
     models: models,

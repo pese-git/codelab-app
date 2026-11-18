@@ -75,7 +75,9 @@ void main() {
     const money = Money(micros: 28200, currency: 'USD');
     const totals = UsageTotals(tokens: tokens, cost: money, steps: 2);
     expect(usage.lastTurn, totals);
-    expect(usage.session, totals);
+    // Агрегат `session` фикстуры несёт `turns` (change
+    // `fix-usage-pane-live-cards`, D2, задача 1.2), агрегат `turn` — нет.
+    expect(usage.session, totals.copyWith(turns: 1));
     expect(
       usage.context,
       const ContextFillView(used: 14700, size: 32768, compactAt: 24576),

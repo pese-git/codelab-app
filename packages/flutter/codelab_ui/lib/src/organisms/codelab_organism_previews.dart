@@ -818,6 +818,7 @@ Widget codelabUsagePanePreview() {
       child: CodeLabUsagePane(
         title: 'This session',
         statusLine: 'Ledger: up to date · 12 records',
+        statusHint: 'refreshed from the session journal (stale)',
         showRebuild: true,
         showExport: true,
         onRebuild: codelabPreviewCancel,

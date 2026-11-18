@@ -307,6 +307,25 @@ void main() {
       ]);
     });
 
+    test('a pending approval with a leftover resolvedAt is listed as '
+        'pending: resolvedAt is null (a stale mark of a previous state must '
+        'not freeze the meter, D3)', () {
+      final waits = approvalWaitViews(
+        sessionOf([
+          _turn('t-1', [
+            _approval(
+              'a',
+              requestedAt: t0,
+              resolvedAt: t0.add(const Duration(seconds: 4)),
+            ),
+          ]),
+        ]),
+      );
+
+      expect(waits, [ApprovalWaitView(requestedAt: t0)]);
+      expect(waits.single.resolvedAt, isNull);
+    });
+
     test('an approval without requestedAt is not listed (the source needs '
         'a known requestedAt)', () {
       final waits = approvalWaitViews(
@@ -359,8 +378,11 @@ void main() {
             _approval(
               'child',
               requestedAt: t0,
+              // Домен хранит внутренний объект `_meta.codelab.subagent`
+              // (`subagentMetaOf`), а не весь `_meta.codelab`.
               subagentRequester:
-                  _requesterMeta()['codelab'] as Map<String, Object?>,
+                  (_requesterMeta()['codelab'] as Map)['subagent']
+                      as Map<String, Object?>,
             ),
           ]),
         ]),

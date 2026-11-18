@@ -144,6 +144,7 @@ class _WorkbenchUsagePaneState extends State<WorkbenchUsagePane> {
                       now: (widget.clock ?? DateTime.now)(),
                     ),
               statusLine: data.statusLine,
+              statusHint: data.statusHint,
               turns: usageTurnRowsOf(data),
               models: usageModelRowsOf(data),
               loading: data.busy && data.ledger == null,

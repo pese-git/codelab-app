@@ -213,8 +213,12 @@ void main() {
             _turnRows.evaluate().isNotEmpty,
         'the rebuild must finish with the turn still listed',
       );
-      // Сбой пересборки показал бы заметку; статус журнала — один из трёх
-      // текстов маппера (`usage_pane_data.dart`).
+      // Сбой пересборки показал бы заметку; статус журнала — один из текстов
+      // маппера (`usage_pane_data.dart`): штатное обновление кэша (`stale`,
+      // `missing`) выглядит как `up to date`, явная пересборка — `rebuilt from
+      // journal (explicit)` (D7 change `fix-usage-pane-live-cards`).
+      // Карточки после хода берутся из журнала, у scripted-агента без журнала
+      // — из живых снимков (D1); числа карточек здесь не сверяются.
       expect(find.byKey(const ValueKey('usage-note')), findsNothing);
       final status = tester.widget<Text>(
         find.descendant(

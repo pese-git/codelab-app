@@ -175,6 +175,16 @@ void main() {
       expect(warnings, isEmpty);
     });
 
+    test('total.turns wins over the number of ledger records: 3 with two '
+        'records kept (D2: kit does not merge the ledger with snapshots, the '
+        'records fallback is only for an unparsed total.turns)', () {
+      final view = decode(3)!;
+
+      expect(view.turns, hasLength(2));
+      expect(view.total.turns, 3);
+      expect(view.turnCount, 3);
+    });
+
     test('total.turns of a wrong type: null, turnCount does not change', () {
       final view = decode('2')!;
 
